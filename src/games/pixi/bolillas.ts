@@ -33,6 +33,7 @@ import {
   cercaDe,
   chispasDe,
   coloresCanica,
+  dibujarCanica,
   dibujoDe,
   escalaChipDe,
   flashDe,
@@ -115,10 +116,35 @@ function entrada3Vacia(): EntradaBolillas {
   };
 }
 
+/**
+ * `?trazos=<grupos>`: el interruptor de diagnóstico de la sala, sin interfaz y sin ningún efecto cuando el parámetro no
+ * está. Existe porque hay dos artefactos que se ven en el teléfono y no en el navegador sin placa (los rayos de color y
+ * los contornos blancos sobre dos canicas): con esto la sala apaga un grupo por vez y el reporte dice cuál lo hace.
+ * Los grupos: `fondo` (la tierra, la tiza y las marcas de la pegadora), `canica` (el vidrio de las canicas), `mano` (la
+ * mano de la ñati y su canica de mano), `sombra`, `anuncio` (el anillo de la diana y sus rayas), `linea` (la punteada
+ * negra del anuncio, S28), `fx` (polvo, chispas, estallido y estelas del cierre), `chips` (las fichas con nombre) y
+ * `todo` (apaga la escena entera). Se combinan con comas: `?trazos=canica,fx`. Diagnóstico: se saca cuando el artefacto
+ * esté identificado.
+ */
+const TRAZOS = new Set(
+  (typeof location === "undefined" ? "" : new URLSearchParams(location.search).get("trazos") ?? "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean),
+);
+
+/** Si el grupo se dibuja en este arranque: `?trazos=<grupo>` lo apaga, y nada más cambia. */
+const traza = (grupo: string): boolean => !TRAZOS.has("todo") && !TRAZOS.has(grupo);
+
 const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> => ({
   id: "bolillas",
   textos: TEXTOS,
   plan: planBolillas,
+  // Sin el foco de la casa: la sala leyó el resplandor del cierre como «esa bola blanca que sale al final está feo».
+  // El foco está dimensionado sobre un cuerpo de persona (el radio de `momentos.foco`, ~40 unidades) y acá quien gana es
+  // un vidrio de 18 px: sus rayos y sus ondas se comen el escenario para señalar algo que ya se ve. Sin foco, el cartel
+  // sale como salía antes de que existiera, con su propio destello (`DefJuego.foco`).
+  foco: false,
 
   arma(k, plan, previa) {
     const { S } = k;
@@ -186,7 +212,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     if (v3) {
       fondo.visible = false;
       S.bg.visible = false;
-    }
+    } else if (!traza("fondo")) fondo.visible = false;
     const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
     const sacudidas = previa?.sacudidas ?? new Set<string>();
     return { fondo, mundo, sombra, fx, mano, anuncio, chips: new Map(), bol: new Map(), sacudidas, m, escala, v3, entrada3 };
@@ -210,36 +236,45 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     if (digo) {
       const wa = aMundo(e.m, digo.tiro.impacto);
       const rA = digo.anillo * e.m.e * (1 + 0.22 * digo.pulso);
-      e.anuncio
-        .circle(wa.x, wa.y, rA)
-        .stroke({ width: Math.max(1.5, 0.2 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: (0.4 + 0.55 * digo.pulso) * (S.dark ? 0.9 : 1) });
-      for (const ray of digo.rayas) {
-        const caja = Math.cos(ray.a);
-        const saba = Math.sin(ray.a);
+      if (traza("anuncio")) {
         e.anuncio
-          .moveTo(wa.x + caja * ray.de * e.m.e, wa.y + saba * ray.de * e.m.e)
-          .lineTo(wa.x + caja * ray.hasta * e.m.e, wa.y + saba * ray.hasta * e.m.e)
-          .stroke({ width: Math.max(2, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: ray.color, alpha: 0.55 + 0.4 * digo.pulso, cap: "round" });
+          .circle(wa.x, wa.y, rA)
+          .stroke({ width: Math.max(1.5, 0.2 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: (0.4 + 0.55 * digo.pulso) * (S.dark ? 0.9 : 1) });
+        for (const ray of digo.rayas) {
+          const caja = Math.cos(ray.a);
+          const saba = Math.sin(ray.a);
+          e.anuncio
+            .moveTo(wa.x + caja * ray.de * e.m.e, wa.y + saba * ray.de * e.m.e)
+            .lineTo(wa.x + caja * ray.hasta * e.m.e, wa.y + saba * ray.hasta * e.m.e)
+            .stroke({ width: Math.max(2, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: ray.color, alpha: 0.55 + 0.4 * digo.pulso, cap: "round" });
+        }
       }
-      // La línea punteada negra (S28): qué canica va a golpear la que sale. Tramos del idioma de la casa (mitad
-      // pintura, mitad aire), finos y negros para que se lean sobre la tierra sin tapar la escena.
+      // La línea punteada negra (S28): qué canica va a golpear la que sale. Guiones parejos del arte puro (siempre el
+      // mismo largo y el mismo aire, apartados del vidrio de las dos canicas), con el mismo grosor y punta redonda.
       // Un halo claro debajo y el trazo negro encima: sobre la tierra oscura el negro solo no se lee (S30).
-      for (const [de, hasta] of digo.linea) {
-        const wd = aMundo(e.m, de);
-        const wh = aMundo(e.m, hasta);
-        e.anuncio
-          .moveTo(wd.x, wd.y)
-          .lineTo(wh.x, wh.y)
-          .stroke({ width: Math.max(3, 0.46 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: 0.3 + 0.3 * digo.pulso, cap: "round" });
-        e.anuncio
-          .moveTo(wd.x, wd.y)
-          .lineTo(wh.x, wh.y)
-          .stroke({ width: Math.max(2, 0.26 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0x14100c, alpha: 0.65 + 0.35 * digo.pulso, cap: "round" });
+      if (traza("linea")) {
+        for (const [de, hasta] of digo.linea) {
+          const wd = aMundo(e.m, de);
+          const wh = aMundo(e.m, hasta);
+          e.anuncio
+            .moveTo(wd.x, wd.y)
+            .lineTo(wh.x, wh.y)
+            .stroke({ width: Math.max(3, 0.34 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: 0.26 + 0.26 * digo.pulso, cap: "round" });
+          e.anuncio
+            .moveTo(wd.x, wd.y)
+            .lineTo(wh.x, wh.y)
+            .stroke({ width: Math.max(2, 0.2 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0x14100c, alpha: 0.72 + 0.28 * digo.pulso, cap: "round" });
+        }
       }
     }
 
     // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
     if (!en3d) e.sombra.clear();
+    // El interruptor de diagnóstico (`?trazos=`): apaga capas enteras sin tocar lo que se dibuja.
+    e.sombra.visible = traza("sombra");
+    e.fx.visible = traza("fx");
+    e.mano.visible = traza("mano");
+    e.anuncio.visible = traza("anuncio") || traza("linea");
 
     // Las canicas de los que juegan: adentro en su lugar, la golpeada volando hasta la tiza, la ganadora titilando.
     // Con el 3D enchufado las dibuja three.js; acá quedan los chips con cara y nombre, sobre la misma proyección.
@@ -257,23 +292,27 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       if (!en3d) {
         let g = e.bol.get(slot);
         if (!g) {
-          g = canica(0.5 * e.m.e * CANICA_R * CANICA_ESCALA, coloresCanica(slot));
+          g = canica(0.5 * e.m.e * CANICA_R * CANICA_ESCALA, coloresCanica(slot), INK);
           e.bol.set(slot, g);
           e.mundo.addChild(g);
         }
-        g.visible = dib != null;
+        // El vidrio se dibuja centrado en sus propias coordenadas (`dibujarCanica`): el nodo va en el punto de la canica
+        // y no hay ninguna altura que compensar.
+        g.visible = dib != null && traza("canica");
         if (dib && w) {
           // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
           g.rotation = dib.estado === "titila" ? titilazo(uTitila) : 0;
           // La palpitación del golpe: la canica que acaba de recibir uno —la mía con la mano, la del enemigo con la mía.
           g.scale.set(1 + 0.22 * palpitoDe(d, slot, t));
-          g.position.set(w.x, w.y - rr * 1.08);
+          g.position.set(w.x, w.y);
           // El velo de la salida: la que cruza la tiza se apaga en un parpadeo y no se vuelve a ver (S25).
           g.alpha = dib.velo;
           // La sombra blanda en la tierra: se va con su canica (S25).
-          e.sombra
-            .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
-            .fill({ color: 0x000000, alpha: 0.2 * dib.velo });
+          if (traza("sombra")) {
+            e.sombra
+              .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
+              .fill({ color: 0x000000, alpha: 0.2 * dib.velo });
+          }
         }
       }
 
@@ -289,7 +328,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       // salió del dibujo (S25), `seVe` la apaga y su ficha tampoco se ve.
       chip.visible = fichas.includes(persona) && seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
       chip.scale.set(1);
-      if (w) chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
+      // El interruptor de diagnóstico (`?trazos=chips`): las fichas son un grupo aparte del resto.
+      if (!traza("chips")) chip.visible = false;
+      if (w) chip.position.set(w.x - chip.width / 2, w.y - rr - chip.height * 0.85);
     });
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
@@ -308,21 +349,23 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       const rr = 0.42 * e.m.e * CANICA_R * CANICA_ESCALA;
       let tirador = e.bol.get(-1);
       if (!tirador) {
-        tirador = canica(rr, coloresCanica(-1));
+        tirador = canica(rr, coloresCanica(-1), INK);
         e.bol.set(-1, tirador);
         e.mundo.addChild(tirador);
       }
-      const enMano = canicaDeManoDe(d, t);
+      const enMano = traza("mano") ? canicaDeManoDe(d, t) : null;
       if (enMano) {
         const w = aMundo(e.m, enMano.p);
-        tirador.position.set(w.x, w.y - rr * 1.08);
+        tirador.position.set(w.x, w.y);
         tirador.rotation = 0;
         tirador.scale.set(1);
         tirador.alpha = enMano.velo;
         tirador.visible = true;
-        e.sombra
-          .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
-          .fill({ color: 0x000000, alpha: 0.2 * enMano.velo });
+        if (traza("sombra")) {
+          e.sombra
+            .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
+            .fill({ color: 0x000000, alpha: 0.2 * enMano.velo });
+        }
       } else {
         tirador.visible = false;
       }
@@ -492,18 +535,13 @@ export const bolillasPixi = crearJuego<Datos, Escena>(definicion());
 const anfitrion3D: Anfitrion = { ...anfitrionTinkazo, montar: (baliza, listo, alSaltar, o) => mountPixi(baliza, listo, alSaltar, { music: o.musica, transparente: true }) };
 export const bolillasPixi3D = (tres: Montaje3D<EntradaBolillas>): Lanzador => crearJuego<Datos, Escena>(definicion(tres), anfitrion3D);
 
-/** Una canica de vidrio, en píxeles de mundo: el cuerpo translúcido, la llama adentro y el brillo arriba. */
-function canica(r: number, arte: ArteCanica): Graphics {
+/**
+ * Una canica de vidrio, en píxeles de mundo: el cuerpo translúcido, la llama adentro y el brillo arriba. El dibujo entero
+ * está centrado en `(0, 0)` (`dibujarCanica`), así que la escena pone este nodo en el punto de la canica y nada más: no
+ * hay ninguna altura que compensar, y ningún arco hereda el punto de la forma anterior (el bug de dibujo de S13).
+ */
+function canica(r: number, arte: ArteCanica, tinta: number): Graphics {
   const g = new Graphics();
-  // El vidrio: cuerpo y borde que refracta (un anillo más oscuro por dentro).
-  g.circle(0, r, r).fill(arte.base);
-  g.circle(0, r, r * 0.78).stroke({ width: Math.max(1, r * 0.2), color: arte.oscuro, alpha: 0.35 });
-  // La llama remolinando adentro: dos vueltas del color del fuego.
-  g.arc(0, r, r * 0.56, 0.4, 2.6).stroke({ width: Math.max(1, r * 0.3), color: arte.llama, alpha: 0.7, cap: "round" });
-  g.arc(0, r, r * 0.3, 2.9, 5.2).stroke({ width: Math.max(1, r * 0.24), color: arte.llama2, alpha: 0.6, cap: "round" });
-  // El brillo del vidrio, arriba a la izquierda.
-  g.circle(-r * 0.3, r - r * 0.35, r * 0.28).fill({ color: 0xffffff, alpha: 0.5 });
-  // El contorno de la casa.
-  g.circle(0, r, r).stroke({ width: Math.max(1, r * 0.3), color: INK });
+  dibujarCanica(g, r, arte, tinta);
   return g;
 }

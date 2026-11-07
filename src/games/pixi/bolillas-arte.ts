@@ -32,7 +32,10 @@ import {
  * estrella, líneas de velocidad y micro-sacudida, más dramático que las chispas
  * de vidrio de S13, que siguen en el mismo golpe.
  *
- * Todo lo que dibuja (el cómo) vive en la escena; esto dice cuánto y dónde.
+ * Todo lo que dibuja (el cómo) vive en la escena; esto dice cuánto y dónde. La excepción es el vidrio de una canica
+ * (`dibujarCanica`): se dibuja acá, contra el `Pincel` que le pasa la escena, porque su orden de trazos es justamente lo
+ * que no puede volver a romperse (ver `arranqueDeArco`), y así se prueba en Node mirando los trazos que recibe el
+ * renderer.
  */
 
 /** La semilla fija del show: la misma tierra y la misma tiza en cualquier equipo. */
@@ -155,6 +158,98 @@ export function coloresCanica(slot: number): ArteCanica {
   return { base, llama, llama2, oscuro: oscurece(base, 0.42) };
 }
 
+/* ------------------------------------------- el vidrio de una canica, centrado en (0, 0) */
+
+/**
+ * Una vuelta de la llama del vidrio: el radio (en radios del vidrio), el tramo angular que recorre, el ancho de su
+ * trazo y a cuál de las dos llamas del asiento pertenece.
+ */
+export interface VueltaLlama {
+  r: number;
+  de: number;
+  hasta: number;
+  ancho: number;
+  alfa: number;
+  cual: "llama" | "llama2";
+}
+
+/**
+ * Las dos vueltas de la llama, concéntricas con el cuerpo de la canica: el remolino que hace que dos canicas del
+ * mismo tamaño no se confundan aunque no se lea el nombre.
+ */
+export const VUELTAS: readonly VueltaLlama[] = [
+  { r: 0.56, de: 0.4, hasta: 2.6, ancho: 0.3, alfa: 0.7, cual: "llama" },
+  { r: 0.3, de: 2.9, hasta: 5.2, ancho: 0.24, alfa: 0.6, cual: "llama2" },
+];
+
+/** El aro que refracta por dentro del vidrio (en radios del vidrio): su radio, su ancho y su velo. */
+export const ARO_VIDRIO = { r: 0.78, ancho: 0.2, alfa: 0.35 } as const;
+/** El brillo del vidrio, arriba a la izquierda: dónde, cuánto mide y cuánto se ve, en radios del vidrio. */
+export const BRILLO_VIDRIO = { x: -0.3, y: -0.35, r: 0.28, alfa: 0.5 } as const;
+/** El contorno de la casa, encima de todo, en radios del vidrio. */
+export const CONTORNO_VIDRIO = 0.3;
+
+/**
+ * El punto donde arranca un arco del vidrio: el `moveTo` que le da su subcamino propio.
+ *
+ * Existe por un bug de dibujo que la sala vio en el teléfono y no en el navegador sin placa: el `Graphics` de PixiJS
+ * arranca cada subcamino en el último punto de la forma anterior (`_initNextPathLocation`), así que un `arc()` sin
+ * `moveTo` se dibuja **unido** a lo que hubiera antes —un trazo de vidrio que cruza la canica— y, cuando la forma
+ * anterior era un `circle()`, el punto que hereda queda en `undefined` y el trazo sale con un vértice no finito
+ * (geometría basura, que cada placa pinta como quiere). Con el arranque explícito, ningún arco hereda nada.
+ */
+export function arranqueDeArco(radio: number, desde: number): Pun {
+  return { x: Math.cos(desde) * radio, y: Math.sin(desde) * radio };
+}
+
+/**
+ * Lo mínimo que sabe dibujar el vidrio de una canica: el `Graphics` de PixiJS (`bolillas.ts`) o el doble que anota los
+ * trazos en la prueba. Estructural a propósito: este módulo no importa PixiJS ni toca el DOM (se prueba en Node).
+ */
+export interface Pincel {
+  circle(x: number, y: number, r: number): void;
+  arc(x: number, y: number, r: number, de: number, hasta: number): void;
+  moveTo(x: number, y: number): void;
+  fill(estilo: unknown): void;
+  stroke(estilo: unknown): void;
+}
+
+/**
+ * El vidrio de una canica (S13), **centrado en (0, 0)**: el cuerpo, el aro que refracta, las dos vueltas de la llama,
+ * el brillo y el contorno de la casa. La escena pone el nodo en el punto de la canica y no compensa ninguna altura;
+ * todas las formas se miden desde el centro del vidrio.
+ *
+ * Cada arco arranca con su `moveTo` (`arranqueDeArco`): es lo que impide que un trazo del vidrio se una con la forma
+ * anterior y que aparezcan vértices no finitos en la geometría (ver la nota de `arranqueDeArco`). Puro: la escena solo
+ * le pasa su `Graphics` y los colores.
+ */
+export function dibujarCanica(pincel: Pincel, r: number, arte: ArteCanica, tinta: number): void {
+  // El vidrio: cuerpo y su aro que refracta (un anillo más oscuro por dentro).
+  pincel.circle(0, 0, r);
+  pincel.fill(arte.base);
+  pincel.circle(0, 0, r * ARO_VIDRIO.r);
+  pincel.stroke({ width: Math.max(1, r * ARO_VIDRIO.ancho), color: arte.oscuro, alpha: ARO_VIDRIO.alfa });
+  // La llama remolinando adentro: cada vuelta con su subcamino, concéntrica con el vidrio.
+  for (const vuelta of VUELTAS) {
+    const radio = r * vuelta.r;
+    const arranque = arranqueDeArco(radio, vuelta.de);
+    pincel.moveTo(arranque.x, arranque.y);
+    pincel.arc(0, 0, radio, vuelta.de, vuelta.hasta);
+    pincel.stroke({
+      width: Math.max(1, r * vuelta.ancho),
+      color: vuelta.cual === "llama" ? arte.llama : arte.llama2,
+      alpha: vuelta.alfa,
+      cap: "round",
+    });
+  }
+  // El brillo del vidrio, arriba a la izquierda.
+  pincel.circle(r * BRILLO_VIDRIO.x, r * BRILLO_VIDRIO.y, r * BRILLO_VIDRIO.r);
+  pincel.fill({ color: 0xffffff, alpha: BRILLO_VIDRIO.alfa });
+  // El contorno de la casa.
+  pincel.circle(0, 0, r);
+  pincel.stroke({ width: Math.max(1, r * CONTORNO_VIDRIO), color: tinta });
+}
+
 /* ------------------------------------------- el tamaño del dibujo de una canica (S17) */
 
 /** El aire que la siembra del plan deja como mínimo entre dos canicas vecinas (lo verifica la prueba del S17). */
@@ -173,6 +268,13 @@ export const CANICA_ESCALA = Math.min(2, SIEMBRA_AIRE / (2 * CANICA_R));
 
 /** El radio con que se dibuja una canica, en unidades del círculo: su radio del plan, agrandado por la casa (S17, S20). */
 export const RADIO_DIBUJO = CANICA_R * CANICA_ESCALA;
+
+/**
+ * El radio con que la escena dibuja de verdad el vidrio de una canica, en unidades del círculo: el `rr` de
+ * `bolillas.ts` (`0.5 * CANICA_R * CANICA_ESCALA`, o sea la mitad de `RADIO_DIBUJO`, que mide el diámetro).
+ * Sirve para las cosas que tienen que apartarse del vidrio —los guiones del anuncio (S28)— sin adivinar el tamaño.
+ */
+export const RADIO_VIDRIO = RADIO_DIBUJO / 2;
 
 /* ------------------------------------- la canica que sale del juego (S25) */
 
@@ -765,7 +867,50 @@ export function punteadoDe(a: Pun, b: Pun, paso: number): [Pun, Pun][] {
   }) as [Pun, Pun][];
 }
 
-/* ----------------------------------------------- el anuncio de la diana (S19) */
+/* --------------------------------------------------- el anuncio de la diana (S19) */
+
+/** El paso de la línea del anuncio (S28), en radios del vidrio: un guión más su aire. */
+export const GUION_PASO = 4.2;
+/** Lo que el paso se pinta: un poco más de la mitad, para que el guión se lea como guión. */
+export const GUION_PARTE = 0.6;
+/** Cuánto se aparta la línea de cada canica, en radios del vidrio: el guión no se monta sobre el vidrio (S28). */
+export const GUION_AIRE = 1.2;
+/** Lo más que el apartado puede comerse de una punta: así una línea corta siempre deja tinta. */
+export const GUION_AIRE_TOPE = 0.2;
+
+/**
+ * Los guiones de la línea del anuncio (S28), parejos: todos del mismo largo, con el mismo aire entre uno y otro y
+ * apartados de las dos puntas por `recorte` —el aire sobre las canicas—. A diferencia de `punteadoDe` (que reparte el
+ * trazo entero, así que el guión se estira con el largo de la línea), acá el guión es siempre el mismo: la línea se lee
+ * igual en cualquier tiro y en cualquier pantalla. El recorte nunca se come más de `GUION_AIRE_TOPE` de la línea por
+ * punta, así una línea entre dos canicas vecinas siempre deja al menos un guión; una línea más corta que un guión deja
+ * uno solo, y una de largo cero no deja ninguno. Pura y determinista: mismos puntos, mismos guiones.
+ */
+export function guionesDe(a: Pun, b: Pun, paso: number, recorte = 0): [Pun, Pun][] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largo = Math.hypot(dx, dy);
+  if (!(largo > 0)) return [];
+  const aparta = Math.min(Math.max(0, recorte), largo * GUION_AIRE_TOPE);
+  const desde = aparta;
+  const hasta = largo - aparta;
+  if (!(hasta - desde > 0)) return [];
+  const periodo = Math.max(1e-6, paso);
+  const guion = periodo * Math.min(1, Math.max(0.05, GUION_PARTE));
+  const ux = dx / largo;
+  const uy = dy / largo;
+  const punto = (s: number): Pun => ({ x: a.x + ux * s, y: a.y + uy * s });
+  const out: [Pun, Pun][] = [];
+  for (let s = desde; s < hasta && out.length < 64; s += periodo) {
+    const e = Math.min(hasta, s + guion);
+    // Un muñón no se pinta: mejor un aire más largo que un guión mocho (la línea queda pareja).
+    if (e - s < guion * 0.35) break;
+    out.push([punto(s), punto(e)]);
+  }
+  // Más corta que un guión: queda uno, del largo que haya (nunca una línea sin tinta).
+  if (!out.length) out.push([punto(desde), punto(hasta)]);
+  return out;
+}
 
 /** Los colores del aguayo que ya usa la casa, para las rayas del anillo. */
 export const AGUAYO = [0xe93d9c, 0xffc629, 0x00a896] as const;
@@ -791,9 +936,9 @@ export interface AnuncioDiana {
   /** Las rayas del anillo, alrededor de la diana. */
   rayas: Rayita[];
   /**
-   * La línea punteada que dice QUÉ canica va a golpear (S28): los tramos pintados del idioma de la casa, desde la
-   * canica de quien tira (`choque`) hasta la del enemigo que va a salir (`empuje.donde`). Negra y fina: se lee sobre
-   * la tierra y no tapa la escena.
+   * La línea punteada que dice QUÉ canica va a golpear (S28): los guiones parejos del idioma de la casa, desde la
+   * canica de quien tira (`choque`) hasta la del enemigo que va a salir (`empuje.donde`), apartados del vidrio de las
+   * dos para no montarse encima (`GUION_AIRE`). Negra y fina: se lee sobre la tierra y no tapa la escena.
    */
   linea: [Pun, Pun][];
 }
@@ -830,7 +975,7 @@ export function anuncioDeDiana(d: Pick<Datos, "tiros"> & { ganador: number }, t:
         hasta: anillo + largo,
         color: AGUAYO[j % AGUAYO.length] as number,
       })),
-      linea: punteadoDe(tiro.choque, tiro.empuje.donde, CANICA_R * CANICA_ESCALA * 1.6),
+      linea: guionesDe(tiro.choque, tiro.empuje.donde, RADIO_VIDRIO * GUION_PASO, RADIO_VIDRIO * GUION_AIRE),
     };
   }
   return null;
