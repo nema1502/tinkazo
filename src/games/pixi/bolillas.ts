@@ -39,11 +39,11 @@ import {
   flashDe,
   golpesDe,
   manoDe,
+  nombreCorto,
   persecucionDe,
   palpitoDe,
   polvoDe,
   punteadoDe,
-  tierraManchas,
   titilazo,
   tizaCirculo,
   type ArteCanica,
@@ -165,11 +165,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // La tierra sembrada: manchas de tono, siempre las mismas (la semilla del show).
     const tierraOscura = S.dark ? 0x2c2013 : 0xc2a273;
     const tierraClara = S.dark ? 0x49361f : 0xe3c69b;
-    for (const mancha of tierraManchas(SEMILLA_FIJA)) {
-      fondo
-        .circle(m.cx + mancha.x * m.e, m.cy + mancha.y * m.e, Math.max(1, mancha.r * m.e))
-        .fill({ color: mancha.oscuro ? tierraOscura : tierraClara, alpha: mancha.a });
-    }
+    // La tierra va lisa: las manchas decorativas se agrandaban con el zoom del cierre y tapaban la escena.
     // El suelo pisado: adentro de la tiza la tierra queda más lisa (y más clara).
     fondo.circle(m.cx, m.cy, CIRCULO_R * m.e * 0.995).fill({ color: S.dark ? 0x4a3624 : 0xc9a877, alpha: 0.35 });
     // La tiza dibujada a mano alzada: un trazo con sus ondas, y el eco de la doble línea.
@@ -323,7 +319,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
 
       let chip = e.chips.get(persona);
       if (!chip) {
-        chip = k.S.chip(k.nombres[persona] ?? "", e.escala);
+        chip = k.S.chip(nombreCorto(k.nombres[persona] ?? ""), e.escala);
         e.chips.set(persona, chip);
         e.mundo.addChild(chip);
       }

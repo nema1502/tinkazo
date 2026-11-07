@@ -1069,3 +1069,17 @@ export function persecucionDe(
   }));
   return { peso, p: trayectoriaDe(d, ultimo.mio, t).p, dir: { ...ultimo.empuje.dir }, estelas };
 }
+
+/* --------------------------------------------------- el nombre de la ficha (S33) */
+
+/**
+ * El nombre corto de una ficha: el primer nombre y las iniciales del resto («Guido SV»), para que la etiqueta no tape
+ * media escena cuando hay mucha gente. Un solo nombre queda entero; un nombre vacío, vacío.
+ */
+export function nombreCorto(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter((p) => p.length > 0);
+  const primero = partes[0] ?? "";
+  if (!primero) return "";
+  const iniciales = partes.slice(1).map((p) => (p[0] ?? "").toUpperCase()).join("");
+  return iniciales ? `${primero} ${iniciales}` : primero;
+}
