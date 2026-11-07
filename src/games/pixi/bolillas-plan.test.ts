@@ -509,7 +509,7 @@ describe("Bolillas: la cámara quieta de la troya (S29)", () => {
     for (const n of LISTAS) {
       const plan = planBolillas(contexto(n, ganadoresDe(n)));
       const ultimo = plan.datos.tiros.at(-1);
-      expect(plan.momentos.tomas.map((toma) => toma.desde), `con ${n}`).toEqual([T_INTRO, ultimo?.tMano]);
+      expect((plan.momentos.tomas ?? []).map((toma) => toma.desde), `con ${n}`).toEqual([T_INTRO, ultimo?.tMano]);
     }
   });
 });
