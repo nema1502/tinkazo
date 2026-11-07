@@ -51,17 +51,29 @@ import {
   TIZA_ONDA,
   TIZA_PUNTOS,
   T_DESVIO,
+  ARO_VIDRIO,
+  BRILLO_VIDRIO,
+  CONTORNO_VIDRIO,
+  GUION_AIRE,
+  GUION_AIRE_TOPE,
+  GUION_PARTE,
+  GUION_PASO,
+  VUELTAS,
+  RADIO_VIDRIO,
   anuncioDeDiana,
+  arranqueDeArco,
   cadenaDe,
   cadenaDeTiro,
   canicaDeManoDe,
   coloresCanica,
+  dibujarCanica,
   dibujoDe,
   efectosDe,
   chispasDe,
   estalloDe,
   flashDe,
   golpesDe,
+  guionesDe,
   largadaDe,
   manoDe,
   palpitoDe,
@@ -73,6 +85,7 @@ import {
   type AnuncioDiana,
   type CanicaDeMano,
   type Estallido,
+  type Pincel,
 } from "./bolillas-arte";
 import { VENTANA, eventosDe } from "./bolillas-sonido";
 
@@ -166,6 +179,101 @@ describe("bolillas: las canicas de vidrio", () => {
     expect(coloresCanica(-1)).toEqual(coloresCanica(-1));
     const bases = new Set(Array.from({ length: 12 }, (_, s) => coloresCanica(s).base));
     expect(bases.has(coloresCanica(-1).base)).toBe(false);
+  });
+});
+
+/** Un trazo del vidrio, anotado por el pincel de prueba: qué se pidió y con qué números. */
+interface Trazo {
+  op: "circle" | "arc" | "moveTo" | "fill" | "stroke";
+  args: number[];
+  estilo?: { width?: number; color?: number; alpha?: number; cap?: string };
+}
+
+/** El doble de `Graphics`: anota los trazos del vidrio en vez de dibujarlos (sin PixiJS ni DOM, como los helpers). */
+function pincelDePrueba(): { pincel: Pincel; trazos: Trazo[] } {
+  const trazos: Trazo[] = [];
+  const pincel: Pincel = {
+    circle: (x, y, r) => void trazos.push({ op: "circle", args: [x, y, r] }),
+    arc: (x, y, r, de, hasta) => void trazos.push({ op: "arc", args: [x, y, r, de, hasta] }),
+    moveTo: (x, y) => void trazos.push({ op: "moveTo", args: [x, y] }),
+    fill: (estilo) => void trazos.push({ op: "fill", args: [], estilo: estilo as Trazo["estilo"] }),
+    stroke: (estilo) => void trazos.push({ op: "stroke", args: [], estilo: estilo as Trazo["estilo"] }),
+  };
+  return { pincel, trazos };
+}
+
+describe("bolillas: el vidrio se dibuja centrado en la canica (S13)", () => {
+  const r = 9.2;
+  const arte = coloresCanica(4);
+  const { pincel, trazos } = pincelDePrueba();
+  dibujarCanica(pincel, r, arte, 0x1a1a1a);
+  const formas = trazos.filter((t) => t.op === "circle" || t.op === "arc");
+
+  it("todas las formas se miden desde el centro del vidrio: nada de dibujar en (0, r) y compensar el nodo", () => {
+    expect(formas.length).toBeGreaterThanOrEqual(5);
+    for (const forma of formas) {
+      const [x, y] = forma.args as [number, number];
+      expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+      // El brillo es la única forma descentrada (va arriba a la izquierda) y se mide en radios del vidrio.
+      const esBrillo = Math.abs(x - r * BRILLO_VIDRIO.x) < 1e-9 && Math.abs(y - r * BRILLO_VIDRIO.y) < 1e-9;
+      if (!esBrillo) {
+        expect(x, "una forma descentrada del vidrio").toBe(0);
+        expect(y, "una forma descentrada del vidrio: el nodo ya va en la canica").toBe(0);
+      }
+    }
+  });
+
+  it("cada arco del vidrio arranca en su propio punto: ningún trazo se une con la forma anterior", () => {
+    trazos.forEach((trazo, i) => {
+      if (trazo.op !== "arc") return;
+      const [x, y, radio, de] = trazo.args as [number, number, number, number];
+      const antes = trazos[i - 1] as Trazo;
+      const arranque = arranqueDeArco(radio, de);
+      // El PixiJS arranca el subcamino en el último punto de la forma anterior: el `moveTo` se lo da el arte.
+      expect(antes?.op, "un arco sin su moveTo delante").toBe("moveTo");
+      expect(antes?.args[0]).toBeCloseTo(arranque.x, 9);
+      expect(antes?.args[1]).toBeCloseTo(arranque.y, 9);
+      expect(x).toBe(0);
+      expect(y).toBe(0);
+      // Y el arco se cierra con su trazo, antes de la forma siguiente.
+      expect((trazos[i + 1] as Trazo)?.op).toBe("stroke");
+      expect((trazos[i + 2] as Trazo | undefined)?.op).not.toBe("stroke");
+    });
+  });
+
+  it("no hay números no finitos: la geometría del vidrio es toda dibujable", () => {
+    for (const trazo of trazos) for (const n of trazo.args) expect(Number.isFinite(n), `${trazo.op} ${trazo.args.join(",")}`).toBe(true);
+  });
+
+  it("el vidrio entero cabe en la canica: ni un trazo se va del radio de su cuerpo", () => {
+    const tope = r * (1 + CONTORNO_VIDRIO / 2) + 1e-9;
+    for (const forma of formas) {
+      const [x, y, radio] = forma.args as [number, number, number];
+      expect(Math.hypot(x, y) + radio).toBeLessThanOrEqual(tope);
+    }
+    // Y las dos llamas son concéntricas con el cuerpo: giran alrededor del mismo centro que el vidrio.
+    expect(VUELTAS.length).toBeGreaterThanOrEqual(2);
+    for (const vuelta of VUELTAS) expect(vuelta.r).toBeLessThan(1);
+  });
+
+  it("la escena 2D dibuja el vidrio con el arte y lo apoya en el punto de la canica, sin corrimiento", () => {
+    const f = codigo("bolillas.ts");
+    expect(f).toMatch(/dibujarCanica\(/);
+    // Ya no hay arte de la canica dibujado en (0, r) con el nodo corrido 1,08 radios para compensar.
+    expect(f).not.toMatch(/circle\(0, r, r\)/);
+    expect(f).not.toMatch(/1\.08/);
+  });
+});
+
+describe("bolillas: el interruptor de diagnóstico de la sala (?trazos=)", () => {
+  it("sin el parámetro no apaga nada, y cada grupo es una capa de la escena", () => {
+    const f = codigo("bolillas.ts");
+    // Sin `?trazos=` el conjunto queda vacío (y en Node, sin `location`, también): ningún efecto.
+    expect(f).toMatch(/typeof location === "undefined" \? ""/);
+    expect(f).toMatch(/const traza = \(grupo: string\): boolean => !TRAZOS\.has\("todo"\) && !TRAZOS\.has\(grupo\)/);
+    for (const grupo of ["fondo", "canica", "mano", "sombra", "anuncio", "linea", "fx", "chips"]) {
+      expect(f, `el grupo ${grupo}`).toContain(`traza("${grupo}")`);
+    }
   });
 });
 
@@ -947,6 +1055,61 @@ describe("el anuncio de la diana (S19, S28)", () => {
     const tiro = d.tiros[2] as Tiro;
     const t = tiro.t - ANUNCIO_DIANA / 3;
     expect(anuncioDeDiana(d, t)?.linea).toEqual(anuncioDeDiana(datosDe(18, [3]), t)?.linea);
+  });
+
+  it("los guiones son parejos: todos del mismo largo y con el mismo aire entre uno y otro", () => {
+    const tramos = guionesDe({ x: 0, y: 0 }, { x: 1, y: 0 }, 0.13);
+    expect(tramos.length).toBeGreaterThanOrEqual(4);
+    const guion = 0.13 * GUION_PARTE;
+    for (const [a, b] of tramos) expect(Math.abs((b.x - a.x) - guion)).toBeLessThan(1e-9);
+    for (let i = 1; i < tramos.length; i++) {
+      const aire = (tramos[i] as [Pun, Pun])[0].x - (tramos[i - 1] as [Pun, Pun])[1].x;
+      expect(Math.abs(aire - 0.13 * (1 - GUION_PARTE))).toBeLessThan(1e-9);
+    }
+    // Y el guión no se estira con el largo de la línea: la mitad de larga, los mismos guiones.
+    const corta = guionesDe({ x: 0, y: 0 }, { x: 0.5, y: 0 }, 0.13);
+    for (const [a, b] of corta) expect(Math.abs((b.x - a.x) - guion)).toBeLessThan(1e-9);
+    expect(guionesDe({ x: 0, y: 0 }, { x: 1, y: 0 }, 0.13)).toEqual(tramos);
+  });
+
+  it("la línea se aparta del vidrio de las dos canicas, y nunca se come la tinta", () => {
+    const desde = { x: 0, y: 0 };
+    const hasta = { x: 0.9, y: 0 };
+    const tramos = guionesDe(desde, hasta, 0.13, 0.06);
+    expect((tramos[0] as [Pun, Pun])[0].x).toBeCloseTo(0.06, 9);
+    expect((tramos[tramos.length - 1] as [Pun, Pun])[1].x).toBeLessThanOrEqual(0.9 - 0.06 + 1e-9);
+    // Entre dos canicas pegadas el apartado no se come la línea: siempre queda un guión.
+    const pegada = guionesDe(desde, { x: 0.14, y: 0 }, 0.13, 0.06);
+    expect(pegada.length).toBe(1);
+    const [a, b] = pegada[0] as [Pun, Pun];
+    expect(a.x).toBeLessThanOrEqual(0.14 * GUION_AIRE_TOPE + 1e-9);
+    expect(b.x).toBeGreaterThan(a.x);
+    expect(b.x).toBeLessThanOrEqual(0.14 * (1 - GUION_AIRE_TOPE) + 1e-9);
+    // Y una línea de largo cero no deja nada.
+    expect(guionesDe(desde, desde, 0.13)).toEqual([]);
+  });
+
+  it("la línea del anuncio usa los guiones parejos y no se monta sobre las dos canicas (S28)", () => {
+    const d = datosDe(18, [3]);
+    for (const tiro of d.tiros) {
+      const anuncio = anuncioDeDiana(d, tiro.t - ANUNCIO_DIANA / 2);
+      if (!anuncio) continue;
+      const dx = tiro.empuje.donde.x - tiro.choque.x;
+      const dy = tiro.empuje.donde.y - tiro.choque.y;
+      const largo = Math.hypot(dx, dy);
+      const ax = dx / largo;
+      const ay = dy / largo;
+      const proy = (p: Pun): number => (p.x - tiro.choque.x) * ax + (p.y - tiro.choque.y) * ay;
+      const aparta = Math.min(GUION_AIRE * RADIO_VIDRIO, largo * GUION_AIRE_TOPE);
+      expect(proy((anuncio.linea[0] as [Pun, Pun])[0])).toBeCloseTo(aparta, 9);
+      const ultimo = anuncio.linea[anuncio.linea.length - 1] as [Pun, Pun];
+      expect(largo - proy(ultimo[1])).toBeGreaterThanOrEqual(aparta - 1e-9);
+      // Todos los guiones, del mismo largo (guiones parejos, no tramos estirados).
+      const guion = RADIO_VIDRIO * GUION_PASO * GUION_PARTE;
+      for (const [a, b] of anuncio.linea) {
+        expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeLessThanOrEqual(guion + 1e-9);
+      }
+    }
   });
 });
 

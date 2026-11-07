@@ -1066,7 +1066,9 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             malla.scale.set(raya.hasta - raya.de, 1, CANICA_R * CANICA_ESCALA * 0.3);
           }
           for (const m of matsAguayo) m.opacity = 0.65 + 0.3 * digo.pulso;
-          // La línea punteada negra (S28): del choque a la diana, con el pulso del anuncio.
+          // La línea punteada negra (S28): del choque a la diana, con el pulso del anuncio. Los guiones los da
+          // `guionesDe` en el arte puro (parejos y apartados del vidrio de las dos canicas); acá solo se ponen. El ancho
+          // de las dos capas es el del 2D, para que la línea se vea igual en los dos motores.
           grupoLinea.visible = true;
           matLinea.opacity = 0.75 + 0.25 * digo.pulso;
           matLineaHalo.opacity = 0.35 + 0.3 * digo.pulso;
@@ -1084,10 +1086,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             const medio = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
             par.halo.position.set(medio.x, 0.004, medio.y);
             par.halo.rotation.y = giro;
-            par.halo.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.8);
+            par.halo.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.34);
             par.malla.position.set(medio.x, 0.005, medio.y);
             par.malla.rotation.y = giro;
-            par.malla.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.42);
+            par.malla.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.2);
           }
         } else {
           grupoLinea.visible = false;
