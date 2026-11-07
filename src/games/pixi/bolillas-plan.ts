@@ -659,7 +659,10 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
       const m = mapeoDe(p);
       const s = aMundo(m, c);
       const z = Math.max(0.3, k.cam.toScreen(1, 0, p.w, p.h).x - k.cam.toScreen(0, 0, p.w, p.h).x);
-      return { x: s.x, y: s.y, r: 40 * p.k * z };
+      // El foco se mide sobre la canica, no sobre un cuerpo de persona: con 40 unidades el resplandor del cierre se
+      // comía la escena en el teléfono (S32). Acá quien gana es un vidrio chico.
+      // El vidrio se dibuja al doble de su radio del plan (S20) y el foco lo rodea con aire.
+      return { x: s.x, y: s.y, r: CANICA_R * 2 * 2.4 * m.e * z };
     },
   };
 
