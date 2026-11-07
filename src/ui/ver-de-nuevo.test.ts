@@ -48,14 +48,16 @@ vi.mock("./gamecard", () => ({ CARD_SECONDS: 5, showGameCard: () => null }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ address: "GAAA" }) }));
 vi.mock("./qr", () => ({ pintarQrDelComprobante: async () => undefined }));
 vi.mock("./leyenda", () => ({ pintarLeyenda: () => undefined }));
-vi.mock("./participants", () => ({ setList: () => undefined }));
+vi.mock("./participants", () => ({ setList: () => undefined, listaVinoDeLuma: () => false }));
 vi.mock("./premios", () => ({ marcarSalio: () => undefined, olvidarSalieron: () => undefined, ponerPremio: () => undefined }));
 vi.mock("../games/engine", () => ({ usePixi: () => false }));
 vi.mock("../games/lore", () => ({ loreFor: () => null }));
 vi.mock("../games/overlay", () => ({ seguirEnPantallaCompleta: () => undefined }));
 vi.mock("../music", () => ({ startMusic: () => undefined, stopMusic: () => undefined }));
 vi.mock("../sound", () => ({ beep: () => undefined, note: () => undefined, sonidoDelJuego: () => undefined }));
-vi.mock("../enlace-corto", () => ({ acortar: async () => "", alAcortar: () => undefined, cortoGuardado: () => null, rutaDe: () => "" }));
+// "Mis sorteos" no es de esta prueba: el comprobante se arma igual.
+vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => undefined }));
+vi.mock("../enlace-corto", () => ({ acortar: async () => "", alAcortar: () => undefined, cortoGuardado: () => null, rutaDe: () => "", ponerLogoDeRuta: () => undefined }));
 // El motor de respaldo: el "juego" solo anota con qué lo llamaron y termina.
 vi.mock("../games/race", () => ({
   stadiumRace: (names: string[], winners: number[], beacon: { round: number }, fin: () => void) => {
@@ -80,6 +82,10 @@ beforeEach(() => {
   h.orden = [];
   h.alElegir = null;
   document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><div id="winner-cards">Carla</div><div id="leyenda-box"></div><div id="lore-box"></div><button id="btn-replay"></button><button id="btn-otro-juego"></button>`;
+  // jsdom no implementa el desplazamiento suave de `reveal`.
+  Element.prototype.scrollIntoView = () => undefined;
+  // Cada prueba arranca con la página a la vista, como una pestaña abierta.
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("sin red: verDeNuevo no la toca"));
   history.replaceState(null, "", "/?instant=1");
 });
@@ -157,5 +163,135 @@ describe("ver de nuevo con otro juego", () => {
     expect(h.juego).toHaveBeenCalledTimes(1);
     terminar();
     vi.doUnmock("../games/race");
+  });
+});
+
+/**
+ * Volver de la pestaña con la coronación puesta (S27).
+ *
+ * En el celular, minimizar y volver deja el retrato del ganador en un cuadro
+ * vacío: el navegador se queda sin lo que tenía dibujado y la tarjeta queda con
+ * el marco blanco y nada adentro (y, en el lienzo, con un rectángulo de relleno).
+ * Al volver, el resultado se repinta desde lo que ya está decidido.
+ */
+function cuerpoDelResultado(): void {
+  // El resultado tal como queda en la página después del show (`index.html`, `reveal`).
+  document.body.innerHTML = `
+    <section id="sec-draw">
+      <div class="winner-box" id="winner-box">
+        <span class="winner-logo" id="winner-logo"></span>
+        <div id="winner-cards"></div>
+        <p class="note" id="sin-sello-nota"></p>
+        <section id="again-row">
+          <h3 id="again-t"></h3><p id="again-left"></p>
+          <div id="again-acciones">
+            <button id="btn-again-sin"></button><button id="btn-proof"></button><button id="btn-again-nueva"></button>
+          </div>
+          <p id="again-sigue"></p>
+        </section>
+        <button id="btn-replay"></button>
+        <p class="note" id="motion-note"></p>
+        <p id="proof"></p><a id="drand-link"></a>
+        <a id="btn-whatsapp"></a><a id="btn-email"></a>
+        <div id="qr-box"><p class="kicker"></p><img id="qr-img" /></div>
+        <button id="btn-otro-juego"></button>
+      </div>
+    </section>
+    <div id="leyenda-box"></div><div id="lore-box"></div>`;
+  document.getElementById("winner-box")!.style.display = "block";
+}
+
+/** El resultado de verdad: la coronación que pinta `reveal` al terminar el show. */
+async function mostrarLaCoronacion(): Promise<void> {
+  cuerpoDelResultado();
+  const { app } = await import("../state");
+  const { reveal } = await import("./draw");
+  reveal(app.frozen!.names, app.drawn!.winners, app.drawn!.beacon, app.frozen!.listHash);
+}
+
+/** El celular: se va a otra app (la página queda escondida) y vuelve. */
+function irseYOtraVez(): void {
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+const retrato = (): HTMLImageElement | null => document.querySelector<HTMLImageElement>("#winner-cards img");
+
+describe("la coronación al volver de la pestaña", () => {
+  it("el retrato que el navegador dejó vacío vuelve a pintarse, con el mismo ganador y el mismo comprobante", async () => {
+    await prepararEstado();
+    await mostrarLaCoronacion();
+    expect(document.querySelectorAll(".winner-card")).toHaveLength(1);
+    expect(retrato()?.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
+    // Así vuelve del fondo en el celular: el cuadro con su marco y sin la cara.
+    retrato()!.removeAttribute("src");
+    irseYOtraVez();
+    await vi.waitFor(() => expect(retrato()?.getAttribute("src") ?? "").toMatch(/^data:image\/svg\+xml,/));
+    expect(document.querySelectorAll(".winner-card")).toHaveLength(1);
+    expect(document.querySelector(".winner-name")?.textContent).toBe("Carla");
+    const proof = document.getElementById("proof")?.textContent ?? "";
+    expect(proof).toContain("round=777");
+    expect(proof.match(/count=3/g)).toHaveLength(1);
+    // Se repinta lo decidido: no se sortea, no se graba, no se vuelve a contar.
+    expect(h.drawOnChain).not.toHaveBeenCalled();
+    expect(h.juego).not.toHaveBeenCalled();
+    expect(h.contar).not.toHaveBeenCalled();
+  });
+
+  it("volver dos veces no duplica la tarjeta, no reinicia el sorteo ni pierde el comprobante", async () => {
+    const { drawn } = await prepararEstado();
+    await mostrarLaCoronacion();
+    irseYOtraVez();
+    irseYOtraVez();
+    const proof = document.getElementById("proof")?.textContent ?? "";
+    expect(document.querySelectorAll(".winner-card")).toHaveLength(1);
+    expect(document.querySelectorAll(".winner-name")).toHaveLength(1);
+    expect(proof.match(/count=3/g)).toHaveLength(1);
+    expect(proof.match(/round=777/g)).toHaveLength(1);
+    // El resultado es el mismo objeto: nada se volvió a sortear.
+    const { app } = await import("../state");
+    expect(app.drawn).toBe(drawn);
+    expect(h.juego).not.toHaveBeenCalled();
+  });
+
+  it("volver con el show corriendo no toca el resultado ni monta otro juego", async () => {
+    await prepararEstado();
+    const { app } = await import("../state");
+    cuerpoDelResultado();
+    // Todavía no hay resultado: la tarjeta no está en pantalla.
+    app.drawn = null;
+    document.getElementById("winner-cards")!.textContent = "todavía jugando";
+    document.getElementById("winner-box")!.style.display = "none";
+    irseYOtraVez();
+    expect(document.getElementById("winner-cards")?.textContent).toBe("todavía jugando");
+    expect(h.juego).not.toHaveBeenCalled();
+  });
+
+  it("la primera pasada es la de siempre: una tarjeta con su retrato y el comprobante", async () => {
+    await prepararEstado();
+    await mostrarLaCoronacion();
+    expect(document.querySelectorAll(".winner-card")).toHaveLength(1);
+    expect(retrato()?.getAttribute("src")).toMatch(/^data:image\/svg\+xml,/);
+    expect(retrato()?.getAttribute("alt")).toBe("");
+    expect(document.querySelector(".winner-name")?.textContent).toBe("Carla");
+    const proof = document.getElementById("proof")?.textContent ?? "";
+    expect(proof).toContain("Draw: quicknet round=777");
+    expect(proof).toContain("count=3");
+  });
+
+  it("si aun así el navegador no pinta el retrato, la tarjeta no queda con el cuadro vacío", async () => {
+    await prepararEstado();
+    await mostrarLaCoronacion();
+    // El navegador avisa que no pudo: la imagen queda con su marco y sin nada adentro.
+    retrato()!.dispatchEvent(new Event("error"));
+    expect(retrato()).toBeNull();
+    const emblema = document.querySelector("#winner-cards .winner-card svg");
+    expect(emblema).not.toBeNull();
+    // El mismo dibujo de la persona (su color y su patrón), adentro del documento.
+    expect(emblema?.innerHTML).toContain('fill="#');
+    expect(emblema?.querySelectorAll("rect").length).toBeGreaterThan(6);
+    expect(document.querySelector(".winner-name")?.textContent).toBe("Carla");
   });
 });

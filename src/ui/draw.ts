@@ -584,40 +584,9 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   pintarNotaDelJuego();
   // Este premio ya salió: en el próximo sorteo queda marcado entre las opciones.
   marcarSalio(prize);
-  // "No está" solo si queda con quién volver a sortear: dos personas, como
-  // en "Otro premio".
-  const reemplazo = names.length - winners.length >= 2;
-  $("winner-cards").innerHTML = winners
-    .map((i, k) => {
-      const name = names[i] ?? "";
-      const tag = prize
-        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` #${k + 1}` : ""}</p>`
-        : winners.length > 1
-          ? `<p class="winner-prize">#${k + 1}</p>`
-          : "";
-      return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
-        <img src="${avatar(name, 128)}" alt="" />
-        <div>
-          <p class="winner-name" id="wn-${k}">${esc(name)}</p>
-          ${tag}
-          ${reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k)}</div>` : ""}
-        </div>
-      </div>`;
-    })
-    .join(" ");
-  const proof = $("proof");
-  proof.textContent =
-    `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
-  const drawTx = app.drawn?.drawTx;
-  if (drawTx) {
-    proof.append(", ");
-    const a = document.createElement("a");
-    a.href = txUrl(drawTx);
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = t("onChain") + " ↗";
-    proof.appendChild(a);
-  }
+  // Las tarjetas y el comprobante, en un solo lugar: al volver de la pestaña se
+  // repintan con esta misma función (`refrescarElResultado`).
+  pintarElResultado(names, winners, beacon, listHash);
   const url = roundUrl(beacon.round);
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
@@ -652,6 +621,126 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
     enfocarDespues(principal);
   } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
   else enfocarDespues(principal);
+}
+
+/**
+ * El retrato del ganador, listo para el `src` de la tarjeta.
+ *
+ * Lleva la marca `data-retrato` porque es lo único del resultado que el
+ * navegador tiene que pintar por su cuenta: si no puede, `cuidarRetratos` lo
+ * reemplaza por el mismo emblema dibujado en el documento.
+ */
+const retratoHtml = (nombre: string, lado: number): string => `<img src="${avatar(nombre, lado)}" alt="" data-retrato />`;
+
+/**
+ * El mismo emblema, dibujado adentro del documento.
+ *
+ * Es la salida cuando el navegador no pudo pintar la imagen y la tarjeta quedó
+ * con el marco y nada adentro (S27). Un SVG en línea no se decodifica: lo pinta
+ * el motor de la página, como el texto. El marco de la tarjeta vive en la hoja
+ * de estilos y apunta a `img`, así que va dibujado acá, con el tamaño que tenía
+ * la imagen que falló (es 64, 48 o 44 según la pantalla).
+ */
+function emblemaEnLinea(nombre: string, lado: number): string {
+  const dato = avatar(nombre, lado);
+  const svg = decodeURIComponent(dato.slice(dato.indexOf(",") + 1)).replace("<svg ", `<svg style="display:block;width:100%;height:100%" `);
+  return `<span class="winner-retrato" role="img" style="display:inline-block;box-sizing:border-box;flex:0 0 auto;width:${lado}px;height:${lado}px;border:2px solid #191919;background:#fff">${svg}</span>`;
+}
+
+/**
+ * Que ninguna tarjeta quede con el cuadro vacío: si el retrato no se pudo
+ * pintar, el emblema pasa al documento, con el tamaño que tenía la imagen.
+ */
+function cuidarRetratos(nombres: readonly string[]): void {
+  for (const [k, img] of [...document.querySelectorAll<HTMLImageElement>("#winner-cards img[data-retrato]")].entries()) {
+    const reponer = (): void => {
+      const lado = Math.round(img.getBoundingClientRect().width) || 64;
+      img.insertAdjacentHTML("afterend", emblemaEnLinea(nombres[k] ?? "", lado));
+      img.remove();
+    };
+    img.addEventListener("error", reponer, { once: true });
+    // Ya "completa" y sin ancho es el cuadro vacío: la imagen existe, pero no
+    // hay nada que pintar.
+    if (img.complete && img.naturalWidth === 0) reponer();
+  }
+}
+
+/**
+ * Las tarjetas del ganador y la línea del comprobante: lo que queda cuando el
+ * show termina. Se reescribe entero desde lo que ya está decidido, así volver
+ * de la pestaña puede repintarlo sin repetir nada de lo que pasó antes (S27).
+ */
+function pintarElResultado(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
+  const prize = app.frozen?.prize ?? "";
+  // "No está" solo si queda con quién volver a sortear: dos personas, como
+  // en "Otro premio".
+  const reemplazo = names.length - winners.length >= 2;
+  $("winner-cards").innerHTML = winners
+    .map((i, k) => {
+      const name = names[i] ?? "";
+      const tag = prize
+        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` #${k + 1}` : ""}</p>`
+        : winners.length > 1
+          ? `<p class="winner-prize">#${k + 1}</p>`
+          : "";
+      return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
+        ${retratoHtml(name, 128)}
+        <div>
+          <p class="winner-name" id="wn-${k}">${esc(name)}</p>
+          ${tag}
+          ${reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k)}</div>` : ""}
+        </div>
+      </div>`;
+    })
+    .join(" ");
+  cuidarRetratos(winners.map((i) => names[i] ?? ""));
+  const proof = $("proof");
+  proof.textContent =
+    `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
+  const drawTx = app.drawn?.drawTx;
+  if (drawTx) {
+    proof.append(", ");
+    const a = document.createElement("a");
+    a.href = txUrl(drawTx);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = t("onChain") + " ↗";
+    proof.appendChild(a);
+  }
+}
+
+/**
+ * Volver a la pestaña con la coronación puesta (S27).
+ *
+ * El navegador de un celular se queda sin lo que tenía dibujado cuando la
+ * pestaña pasa un rato en segundo plano: el retrato del ganador —una imagen—
+ * vuelve como el cuadro vacío de su marco, y la coronación queda rota. Se
+ * repinta lo mismo que ya está decidido: los mismos ganadores, el mismo
+ * comprobante (y, si alguien tenía abierta la pregunta de «No está», vuelve a
+ * su botón). No sortea, no graba, no cuenta, no vuelve a revelar y no toca el
+ * historial. Con el show corriendo, o sin resultado, no hace nada.
+ */
+export function refrescarElResultado(): void {
+  const { frozen, drawn } = app;
+  const caja = document.getElementById("winner-box");
+  const tarjetas = document.getElementById("winner-cards");
+  if (!frozen || !drawn || !caja || !tarjetas?.childElementCount) return;
+  // La tarjeta escondida es un resultado que ya no está en pantalla (el próximo
+  // sorteo empezó): no hay nada que repintar.
+  if (caja.style.display === "none") return;
+  pintarElResultado(frozen.names, drawn.winners, drawn.beacon, frozen.listHash);
+}
+
+// Volver de otra app (`visibilitychange`) y volver con el botón de atrás, desde
+// la página guardada sin recargar (`pageshow` con `persisted`), son las dos
+// formas en que la coronación aparece sin que nadie haya tocado nada.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refrescarElResultado();
+  });
+  addEventListener("pageshow", (e) => {
+    if ((e as PageTransitionEvent).persisted) refrescarElResultado();
+  });
 }
 
 /** Abre el resultado en grande en el mismo instante, si `pantalla.ts` ya bajó (siempre, salvo un wifi muy lento). */
