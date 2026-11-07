@@ -57,6 +57,11 @@ const PRIMER_TIRO = 2;
 const ENTRE_TIROS = 1.6;
 const ANTES_CASI = 2.4;
 const GOLPE_EN = 3.4;
+/**
+ * El choque del cierre se juega en cámara lenta (S31): su rodado y su salida se estiran este factor y el casi
+ * arranca más tarde, así la sala ve el golpe entre las dos últimas canicas. Todo lo demás queda igual.
+ */
+export const LENTO_FINAL = 2;
 
 /** Lo que mide la fuerza de una salida, en unidades del círculo por segundo. */
 const FUERZA_MIN = 0.9;
@@ -483,7 +488,9 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
     const mio = elegido;
     const choque = { ...(vivo[mio] as Pun) };
     const emp = empujeDe(choque, donde, quietaEmpuje(mio));
-    const vueloEmpuje = acotar(modulo(restar(emp.hasta, choque)) / RODADA_VEL, RODADA_MIN, RODADA_MAX);
+    // El cierre en cámara lenta: el último turno estira su rodado y su salida (S31).
+    const lento = ultimo ? LENTO_FINAL : 1;
+    const vueloEmpuje = acotar((modulo(restar(emp.hasta, choque)) / RODADA_VEL) * lento, RODADA_MIN * lento, RODADA_MAX * lento);
     const tMano = t - vueloEmpuje;
     // La mano entra desde afuera sin rozar a nadie: ni a mi canica (es a la que apunta) ni a quien ya salió.
     const quietaMano = dentro.filter((s) => s !== mio).map((s) => vivo[s] as Pun);
@@ -505,7 +512,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
       choque,
       empuje: { dir: emp.dir, donde, hasta: emp.hasta, vuelo: vueloEmpuje },
       impacto: donde,
-      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: modulo(restar(sal.tiza, donde)) / fuerza },
+      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: (modulo(restar(sal.tiza, donde)) / fuerza) * lento },
       deflexion: defo,
       mano: { hasta: { ...defo.hasta } },
     };
@@ -518,7 +525,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
     const desde = { ...(vivo[slot] as Pun) };
     const premios = canicas.filter((i) => ganados.has(i) && i !== ganador).map((i) => vivo[asientoDe(i)] as Pun);
     const r = titilaDe(desde, premios, ctx.rng);
-    return { t: (tiros.at(-1)?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + ANTES_CASI, ganador, slot, desde, dir: r.dir, titila: r.titila };
+    return { t: (tiros.at(-1)?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + ANTES_CASI + (LENTO_FINAL - 1) * 1.2, ganador, slot, desde, dir: r.dir, titila: r.titila };
   })();
   const duracion = casi.t + GOLPE_EN;
 

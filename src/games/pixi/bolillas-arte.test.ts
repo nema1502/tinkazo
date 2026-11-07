@@ -30,6 +30,8 @@ import {
   ESTALLO_ALFA_LINEA,
   ESTALLO_LINEAS,
   ESTALLO_PUNTAS,
+  ESTALLO_LENTO,
+  ESTALLO_PUNTA_TOPE,
   ESTALLO_VIDA,
   FLASH_ALFA,
   LIMITE_EN_JUEGO,
@@ -945,5 +947,22 @@ describe("el anuncio de la diana (S19, S28)", () => {
     const tiro = d.tiros[2] as Tiro;
     const t = tiro.t - ANUNCIO_DIANA / 3;
     expect(anuncioDeDiana(d, t)?.linea).toEqual(anuncioDeDiana(datosDe(18, [3]), t)?.linea);
+  });
+});
+
+describe("el estallido del cierre en cámara lenta (S31)", () => {
+  it("el golpe final dura más que los demás, con la misma geometría", () => {
+    const d = datosDe(12, [3]);
+    const ultimo = d.tiros.at(-1);
+    expect(ultimo).toBeDefined();
+    if (!ultimo) return;
+    const final = golpesDe(d, ultimo.t).find((g) => g.tipo === "canica" && g.t === ultimo.t);
+    const anterior = d.tiros.length > 1 ? golpesDe(d, (d.tiros.at(-2) as Tiro).t).find((g) => g.tipo === "canica") : null;
+    expect(final?.estallo).toBeTruthy();
+    if (!final?.estallo) return;
+    expect(final.estallo.vida).toBeCloseTo(ESTALLO_VIDA * ESTALLO_LENTO, 6);
+    if (anterior?.estallo) expect(final.estallo.vida).toBeGreaterThan(anterior.estallo.vida);
+    // La lentitud es de tiempo, no de tamaño: la punta sigue dentro del tope de dos canicas.
+    expect(final.estallo.punta).toBeLessThanOrEqual(ESTALLO_PUNTA_TOPE + 1e-9);
   });
 });
