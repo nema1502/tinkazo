@@ -426,7 +426,7 @@ describe("el acercamiento a la ganadora: la bolilla gira, la cámara llega (S14)
     // Y el peso del acercamiento es la misma cuenta del 2D: una sola, para las dos escenas.
     expect(cercaDe(CASI_D, CASI_D.casi.t + 1.3)).toBeGreaterThan(0);
     expect(cercaDe(CASI_D, CASI_D.casi.t + 1.3)).toBeLessThan(1);
-    expect(cercaDe(CASI_D, CASI_D.duracion)).toBe(0);
+    expect(cercaDe(CASI_D, CASI_D.duracion)).toBe(1);
   });
 });
 

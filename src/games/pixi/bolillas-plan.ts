@@ -636,10 +636,18 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
         ),
       },
     ],
-    // La tensión mira al círculo entero: la última canica titila sobre la tiza y la sala lo ve sin leer nada.
+    // La tensión sigue a la canica que gana (S32): la toma se queda con ella —rodando al aro y titilando— hasta el
+    // final del show, así la animación termina con la bolilla en grande y no volviendo al plano entero.
     tension: {
       desde: casi.t - 2.2,
-      toma: planoSobre((k) => [cajaDelCirculo(k.pantalla())], { margen: 22, zoomMax: 1.6 }),
+      toma: planoSobre(
+        (k, tt) => {
+          const p = k.pantalla();
+          const q = trayectoriaDe({ posiciones, tiros, casi, duracion }, asientoDe(ganador), tt).p;
+          return [cajaDeCanica(p, q)];
+        },
+        { margen: 40, zoomMax: 2.6 },
+      ),
     },
     // La meta de este juego es el círculo: ninguna toma la suelta.
     meta: (k) => cajaDelCirculo(k.pantalla()),

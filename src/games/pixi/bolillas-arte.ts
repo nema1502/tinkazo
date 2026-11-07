@@ -1002,10 +1002,8 @@ export function cercaDe(d: Pick<Datos, "casi" | "duracion">, t: number): number 
   };
   if (t <= t0) return 0;
   if (t < t1) return suave((t - t0) / CERCA_ENTRA);
-  const vuelve = Math.max(0.3, CERCA_VUELVE);
-  const s1 = Math.max(t1, d.duracion - vuelve);
-  if (t < s1) return 1;
-  return t >= d.duracion ? 0 : 1 - suave((t - s1) / Math.max(0.001, d.duracion - s1));
+  // La toma se queda hasta el final: el show termina con la canica que gana en grande, sin volver al plano entero.
+  return 1;
 }
 
 /* ------------------------------------- la persecución de la ganadora (S24) */
