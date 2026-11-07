@@ -58,10 +58,11 @@ const ENTRE_TIROS = 1.6;
 const ANTES_CASI = 2.4;
 const GOLPE_EN = 3.4;
 /**
- * El choque del cierre se juega en cámara lenta (S31): su rodado y su salida se estiran este factor y el casi
- * arranca más tarde, así la sala ve el golpe entre las dos últimas canicas. Todo lo demás queda igual.
+ * El choque del cierre se juega en cámara lenta (S31): el rodado de mi canica se estira `LENTO_FINAL` y la salida
+ * del enemigo `LENTO_SALIDA`, y el casi espera a que el golpe se vea. Todo lo demás queda igual.
  */
-export const LENTO_FINAL = 2;
+export const LENTO_FINAL = 3;
+export const LENTO_SALIDA = 2.2;
 
 /** Lo que mide la fuerza de una salida, en unidades del círculo por segundo. */
 const FUERZA_MIN = 0.9;
@@ -512,7 +513,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
       choque,
       empuje: { dir: emp.dir, donde, hasta: emp.hasta, vuelo: vueloEmpuje },
       impacto: donde,
-      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: (modulo(restar(sal.tiza, donde)) / fuerza) * lento },
+      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: (modulo(restar(sal.tiza, donde)) / fuerza) * (ultimo ? LENTO_SALIDA : 1) },
       deflexion: defo,
       mano: { hasta: { ...defo.hasta } },
     };
@@ -525,7 +526,10 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
     const desde = { ...(vivo[slot] as Pun) };
     const premios = canicas.filter((i) => ganados.has(i) && i !== ganador).map((i) => vivo[asientoDe(i)] as Pun);
     const r = titilaDe(desde, premios, ctx.rng);
-    return { t: (tiros.at(-1)?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + ANTES_CASI + (LENTO_FINAL - 1) * 1.2, ganador, slot, desde, dir: r.dir, titila: r.titila };
+    const ultimoTiro = tiros.at(-1);
+    // El casi arranca cuando el golpe ya se vio: si la salida del enemigo se estiró, se espera a que cruce.
+    const espera = Math.max(ANTES_CASI, (ultimoTiro?.salida.vuelo ?? 0) + 1.2);
+    return { t: (ultimoTiro?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + espera, ganador, slot, desde, dir: r.dir, titila: r.titila };
   })();
   const duracion = casi.t + GOLPE_EN;
 

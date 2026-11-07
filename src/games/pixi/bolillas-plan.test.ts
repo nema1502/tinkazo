@@ -10,6 +10,7 @@ import {
   CANICA_R,
   CANICAS_MAX,
   LENTO_FINAL,
+  LENTO_SALIDA,
   CIRCULO_R,
   PEGADORA_DIST,
   T_INTRO,
@@ -528,11 +529,11 @@ describe("Bolillas: el cierre en cámara lenta (S31)", () => {
       expect(normal, `con ${n}: el rodado sin la lentitud`).toBeLessThanOrEqual(0.46 + 1e-9);
       // La salida del enemigo, igual: la geometría del plan dividida por la fuerza y multiplicada por la lentitud.
       const largo = modulo(restar(ultimo.salida.tiza, ultimo.empuje.donde));
-      expect(ultimo.salida.vuelo, `con ${n}: la salida estirada`).toBeCloseTo((largo / ultimo.salida.fuerza) * LENTO_FINAL, 6);
+      expect(ultimo.salida.vuelo, `con ${n}: la salida estirada`).toBeCloseTo((largo / ultimo.salida.fuerza) * LENTO_SALIDA, 6);
       // Y el casi espera a que el golpe se vea.
       const espera = d.casi.t - ultimo.t;
-      expect(espera, `con ${n}: el casi arranca después del golpe`).toBeGreaterThanOrEqual(ultimo.salida.vuelo + 0.8);
-      expect(espera).toBeGreaterThan(3);
+      expect(espera, `con ${n}: el casi arranca después del golpe`).toBeGreaterThanOrEqual(ultimo.salida.vuelo + 1.2 - 1e-9);
+      expect(espera, `con ${n}: y nunca antes de lo que ya esperaba`).toBeGreaterThanOrEqual(2.4 - 1e-9);
     }
   });
 });
