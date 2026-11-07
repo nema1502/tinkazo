@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CANICA_R } from "../pixi/bolillas-plan";
+import { CANICA_R, CIRCULO_R } from "../pixi/bolillas-plan";
 import type { Mapeo, Tiro } from "../pixi/bolillas-plan";
 import { trayectoriaDe } from "../pixi/bolillas-plan";
 import { crearMapa } from "./camara";
@@ -12,11 +12,12 @@ import { CANICA_ESCALA } from "../pixi/bolillas-arte";
 import {
   ESTALLIDO_ENEMIGO, ESTALLIDO_MANO, ESTRELLA_PUNTAS, LINEAS_N, SACUDIDA_MAX, T_DESVIO, TIRADOR,
   LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, giroDelCasi, GIRO_ALTO,
+  DESTELLO_ALFA, DESTELLO_RADIO_TOPE, DESTELLO_VIDA, destelloDe,
   estallidoDe, estallidosDe, lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseSacudida,
   posePersecucion, poseTiro, rodadoDe, rodadoDelTurno, sacudidaDe, teeterDelCasi, titileo, ventanaCadena,
   type EntradaBolillas, type Estallido,
 } from "./bolillas-3d";
-import { cercaDe } from "../pixi/bolillas-arte";
+import { cercaDe, dibujoDe, LIMITE_EN_JUEGO, RADIO_DIBUJO } from "../pixi/bolillas-arte";
 
 /**
  * Bolillas en 3D no decide nada: dibuja lo que el plan puro (`pixi/bolillas-plan.ts`) ya puso. Estas pruebas cuidan
@@ -392,10 +393,15 @@ describe("el acercamiento a la ganadora: la bolilla gira, la cámara llega (S14)
     const lugar = lugarDelMundo(mapa, pant.mapeo);
     for (const t of [20.2, 20.9, 21.6, 22.3, 23.1]) {
       const pose = poseDelCerca(CASI_D, t, lugar, 1.3);
-      // La mira cae sobre la canica (dónde la pone `trayectoriaDe`, que es la cuenta que dibuja la vista).
+      // La mira cae sobre la canica tal como se dibuja (S25): el punto del plan, apretado adentro de la tiza con aire
+      // para su cuerpo doblado cuando el plan la deja sobre el aro.
       const p = trayectoriaDe(CASI_D, 1, t).p;
-      expect(pose.mira[0]).toBeCloseTo(lugar.px + lugar.K * p.x, 4);
-      expect(pose.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * p.y, 4);
+      const dib = dibujoDe(CASI_D, 1, t)?.p ?? p;
+      expect(pose.mira[0]).toBeCloseTo(lugar.px + lugar.K * dib.x, 4);
+      expect(pose.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * dib.y, 4);
+      expect(Math.hypot(dib.x, dib.y) + RADIO_DIBUJO).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
+      // Adentro del aire, el dibujo es el punto del plan: la cámara no se corre de la canica.
+      if (Math.hypot(p.x, p.y) <= LIMITE_EN_JUEGO) expect(dib).toEqual(p);
       expect(pose.mira[1]).toBeGreaterThan(0);
       // Cerca, pero nunca adentro del vidrio: a entre media y una canica y media de largo.
       const lejos = Math.hypot(pose.pos[0] - pose.mira[0], pose.pos[2] - pose.mira[2]) / lugar.K;
@@ -509,7 +515,8 @@ describe("el acercamiento a la ganadora con la cadena nueva (S14/S23)", () => {
     expect(arranque.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * CASI_EMPUJADA.casi.desde.y, 4);
     const llegada = poseDelCerca(CASI_EMPUJADA, CASI_EMPUJADA.casi.t + LLEGADA_TITILA, lugar, 1.3);
     expect(llegada.mira[0]).toBeCloseTo(lugar.px + lugar.K * CASI_EMPUJADA.casi.titila.x, 4);
-    expect(llegada.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * CASI_EMPUJADA.casi.titila.y, 4);
+    // Llega a la tiza, dibujada adentro con aire para el cuerpo doblado (S25): la cámara mira a la canica que se ve.
+    expect(llegada.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * LIMITE_EN_JUEGO, 4);
     // El `casi.desde` no es la siembra: la cadena la dejó en otro lado.
     const siembra = CASI_EMPUJADA.posiciones[1] as { x: number; y: number };
     expect(Math.hypot(CASI_EMPUJADA.casi.desde.x - siembra.x, CASI_EMPUJADA.casi.desde.y - siembra.y)).toBeGreaterThan(0.1);
@@ -575,6 +582,74 @@ describe("el cableado: registrado en el 3D, apagado en el selector (D3)", () => 
   });
 });
 
+describe("S26 en 3D: el estallido de pelea chico y legible", () => {
+  const R = CANICA_R * CANICA_ESCALA;
+
+  it("la estrella no pasa de dos canicas de ancho y las líneas no se van del golpe", () => {
+    for (const golpe of ["mano", "enemigo"] as const) {
+      const t0 = golpe === "mano" ? TIRO.tMano : TIRO.t;
+      const vida = golpe === "mano" ? ESTALLIDO_MANO : ESTALLIDO_ENEMIGO;
+      for (const u of [0, 0.2, 0.5, 0.9]) {
+        const est = estallidoDe(TIRO, golpe, t0 + u * vida) as Estallido;
+        expect(est.radio, `${golpe} a ${u}`).toBeLessThanOrEqual(2 * R);
+        for (const p of est.puntas) expect(p.largo).toBeLessThanOrEqual(2 * R);
+        for (const l of est.lineas) expect(l.hasta).toBeLessThanOrEqual(2.2 * R);
+      }
+    }
+  });
+
+  it("los dos golpes siguen distintos, pero los dos cortos: el grande es el más grande y el más largo", () => {
+    const medioMano = estallidoDe(TIRO, "mano", TIRO.tMano + ESTALLIDO_MANO * 0.45) as Estallido;
+    const medioEnemigo = estallidoDe(TIRO, "enemigo", TIRO.t + ESTALLIDO_ENEMIGO * 0.45) as Estallido;
+    expect(medioEnemigo.radio).toBeGreaterThan(medioMano.radio);
+    expect(ESTALLIDO_ENEMIGO).toBeGreaterThan(ESTALLIDO_MANO);
+    // Un parpadeo de manga, no una nube que se queda.
+    expect(ESTALLIDO_ENEMIGO).toBeLessThanOrEqual(0.5);
+    expect(ESTALLIDO_MANO).toBeLessThanOrEqual(0.35);
+  });
+
+  it("el destello del vidrio sobre la canica golpeada es chico y corto, como el del 2D", () => {
+    // Nace en el golpe y se apaga exacto al final de su vida.
+    expect(destelloDe(0).alfa).toBe(DESTELLO_ALFA);
+    expect(destelloDe(1).alfa).toBe(0);
+    expect(destelloDe(2).alfa).toBe(0);
+    // Pico en la mitad: ni el radio ni el velo se van de su tope.
+    const pico = destelloDe(0.5);
+    expect(pico.r).toBeLessThanOrEqual(DESTELLO_RADIO_TOPE * CANICA_R * CANICA_ESCALA);
+    expect(pico.r).toBeGreaterThan(CANICA_R * CANICA_ESCALA);
+    expect(pico.alto).toBeGreaterThan(0);
+    expect(destelloDe(0.5).alfa).toBeLessThan(DESTELLO_ALFA);
+    expect(DESTELLO_VIDA).toBeLessThanOrEqual(0.25);
+    // Determinista y sin azar.
+    expect(destelloDe(0.3)).toEqual(destelloDe(0.3));
+  });
+
+  it("la vista dibuja el destello y las líneas más suaves, sin tapar la tierra", () => {
+    const src = fuente("bolillas-3d.ts");
+    // Los velos del centro, las puntas y las líneas salen de constantes acotadas (S26).
+    expect(src).toMatch(/ESTALLO_VELO_CENTRO/);
+    expect(src).toMatch(/ESTALLO_VELO_PUNTA/);
+    expect(src).toMatch(/ESTALLO_VELO_LINEA/);
+    expect(src).not.toContain("Math.random");
+  });
+});
+
+describe("S25 en 3D: la canica eliminada sale del dibujo como en el 2D", () => {
+  it("la vista apaga la malla y su sombra con la cuenta pura de la salida, y olvida su lugar para el chip", () => {
+    const src = fuente("bolillas-3d.ts");
+    // Una sola cuenta para las dos escenas: el dibujo de la canica sale de `bolillas-arte.ts`.
+    expect(src).toMatch(/dibujoDe\(/);
+    expect(src).toMatch(/if \(!dib\)/);
+    // Sin dibujo no hay malla, ni sombra, ni lugar para proyectar el chip.
+    expect(src).toMatch(/c\.grupo\.visible = false/);
+    expect(src).toMatch(/c\.sombra\.visible = false/);
+    expect(src).toMatch(/puestos\.delete\(slot\)/);
+    // Y la canica que se va se apaga de verdad: el vidrio baja su opacidad con el velo del arte.
+    expect(src).toMatch(/dib\.velo/);
+    expect(src).not.toContain("Math.random");
+  });
+});
+
 describe("la persecución de la ganadora (S24)", () => {
   it("la cámara se mete detrás de su canica, baja y mirando por delante del empuje", () => {
     const lugar = { px: 100, pz: 200, K: 300, Kz: 260 };
@@ -594,5 +669,14 @@ describe("la persecución de la ganadora (S24)", () => {
     // Más abierto que la mirada del director, para que la persecución se sienta.
     expect(pose.fov).toBeGreaterThan(0.9);
     expect(pose.giro).toBe(0);
+  });
+});
+
+describe("la línea del anuncio (S28)", () => {
+  it("el anuncio de la diana dibuja también la línea punteada negra", () => {
+    const src = fuente("bolillas-3d.ts");
+    expect(src).toMatch(/digo\.linea/);
+    expect(src).toMatch(/grupoLinea/);
+    expect(src).toMatch(/0x14100c/);
   });
 });
