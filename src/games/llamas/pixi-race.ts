@@ -1319,7 +1319,7 @@ export async function llamasPixi(
    * para el golpe de la meta) y, como antes, no pasa de 1,6 (1,35 en vertical).
    * Hasta el 21 de octubre de 2026 se medía solo a la ganadora, y con tres o
    * cuatro llamas quedaba cortada contra el borde del celular mientras el
-   * cartel tapaba a la del carril de arriba (feedback de Alejandro, 19 de octubre).
+   * cartel tapaba a la del carril de arriba (devolución de una prueba, 19 de octubre).
    */
   function planoCorona(): Vista {
     const zona = zonaCorona(12 * G.u);

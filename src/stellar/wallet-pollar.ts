@@ -479,6 +479,15 @@ class PollarWallet implements SubmittingWallet {
     return outcome.signedXdr;
   }
 
+  /**
+   * Cuánto se recibiría al cargar saldo por la rampa de Pollar (`rampa-pollar.ts`). Solo pregunta el precio: no firma, no
+   * crea ninguna orden y no pasa por `atenderFirmas`. El cliente no sale de esta clase.
+   */
+  async cotizarRampa(body: unknown): Promise<unknown> {
+    const client = await this.#ensureClient();
+    return client.quoteRamp(body as Parameters<PollarClient["quoteRamp"]>[0]);
+  }
+
   /* ------------------------------------------------ proteger la cuenta (la recuperación) */
 
   /** ¿Se puede usar el desbloqueo del aparato (huella, rostro o PIN) para proteger la cuenta? */

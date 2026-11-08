@@ -838,9 +838,9 @@ describe("kit de marca: impresos y sponsors", () => {
     for (const n of PARED) expect(html, n).toContain(`/marca/${n}.png`);
     for (const [id] of SPONSOR_REDES) expect(html, id).toContain(`/marca/redes-${id}-`);
     for (const n of ["rollup-85x200", "rollup-100x200", "banner-mesa-120x40"]) for (const e of ["pdf", "svg"]) expect(html, n).toContain(`/marca/${n}-{l}.${e}`);
-    // El logo y el afiche del evento viven solo en el bloque del DevFest Tarija, que enlaza a la página oficial
-    // del evento: las piezas de Tinkazo para sponsors siguen sin logos de terceros.
-    const sinDevfest = html.replace(/<section class="marca-devfest"[\s\S]*?<\/section>/, "");
+    // El logo y el afiche del evento viven solo en la sección de eventos (el bloque del DevFest Tarija enlaza a la
+    // página oficial del evento): las piezas de Tinkazo para sponsors siguen sin logos de terceros.
+    const sinDevfest = html.replace(/<section class="marca-eventos"[\s\S]*?<\/section>/, "");
     expect(sinDevfest).not.toMatch(/devfest[^"]*\.(svg|png|jpg|webp)|gdg[^"]*\.(svg|png|jpg|webp)/i);
     expect(html).toContain('href="https://gdg.community.dev/events/details/google-gdg-tarija-presents-devfest-tarija-2026/"');
     const claves = Object.keys(T.es).filter(k => /^ma(Sp|Imp)/.test(k));

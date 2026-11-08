@@ -135,6 +135,84 @@ for (let i = 0; i < 125; i++) {
 }
 check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 && rapido >= 7, `entraron ${ok}, frenados ${rapido}`);
 
+// 6b. Los equipos: el registro con cuenta de equipos.html. El tope por minuto de los nombres ya se gastó: se espera a que pase.
+{
+  await sleep(61_000 - (Date.now() % 60_000));
+  const A = `G${"A".repeat(55)}`;
+  const B = `G${"B".repeat(55)}`;
+  const EVENTO = `G${"C".repeat(55)}`;
+  const config = { modo: "sorteo", evento: "space-apps-scz-2026", cuenta: EVENTO };
+  const json = { "Content-Type": "application/json" };
+  const putConfig = (tok, cuerpo) => fetch(`${base}/v1/sala/${id}/config`, { method: "PUT", headers: { ...json, ...(tok ? auth(tok) : SITIO) }, body: JSON.stringify(cuerpo) });
+  const altaEquipo = (cuenta, d, headers = SITIO) => fetch(`${base}/v1/sala/${id}/equipos`, { method: "POST", headers: { ...json, ...headers }, body: JSON.stringify({ cuenta, d }) });
+  const equiposCifrados = async (nombre, integrantes) => cifrar(clave, JSON.stringify({ n: nombre, i: integrantes }));
+
+  check("sin token no se arma el registro (403)", (await putConfig(null, config)).status === 403);
+  check("una configuración mala da 400 (un modo que no existe, una cuenta que no es)", (await putConfig(token, { ...config, modo: "sena" })).status === 400 && (await putConfig(token, { ...config, cuenta: "GMALA" })).status === 400);
+  const antes = await (await fetch(`${base}/v1/sala/${id}/publico`, { headers: SITIO })).json();
+  check("antes de armarlo, la sala dice que no hay registro", antes.config === null && antes.equipos === 0, JSON.stringify(antes));
+  check("anotar un equipo sin registro armado da 409", (await altaEquipo(A, await equiposCifrados("Cóndores", ["Ana", "Beto"]))).status === 409);
+  check("con el token se arma el registro (204)", (await putConfig(token, config)).status === 204);
+  const publico = await (await fetch(`${base}/v1/sala/${id}/publico`, { headers: SITIO })).json();
+  check("cualquiera con el enlace ve cómo es el registro, sin token", publico.config?.modo === "sorteo" && publico.config?.cuenta === EVENTO && publico.equipos === 0, JSON.stringify(publico));
+
+  check("anotar sin el origen del sitio da 403", (await altaEquipo(A, await equiposCifrados("X", ["a", "b"]), {})).status === 403);
+  check("anotar con una cuenta que no es da 400", (await altaEquipo("GMALA", await equiposCifrados("X", ["a", "b"]))).status === 400);
+  check("anotar con datos que no son un equipo cifrado da 400", (await altaEquipo(A, "hola mundo!")).status === 400);
+
+  const lleg = p3.msgs.length;
+  const alta = await altaEquipo(A, await equiposCifrados("Los Cóndores", ["Ana", "Beto", "Carla"]));
+  const altaJson = await alta.json();
+  check("un equipo se anota (201) y con sorteo propio queda como solicitud", alta.status === 201 && altaJson.estado === "solicitud" && Number.isInteger(altaJson.n), JSON.stringify(altaJson));
+  check("la pantalla recibe el equipo al instante, con la cuenta en claro y lo demás cifrado", await esperar(() => p3.msgs.slice(lleg).some((m) => m.t === "equipo" && m.cuenta === A && !JSON.stringify(m).includes("Cóndores"))));
+  const re = await (await altaEquipo(A, await equiposCifrados("Los Cóndores 2", ["Ana", "Beto"]))).json();
+  check("la misma cuenta otra vez cambia los datos y conserva el número y el estado", re.n === altaJson.n && re.estado === "solicitud", JSON.stringify(re));
+  const segundo = await (await altaEquipo(B, await equiposCifrados("Pumas", ["Dani", "Eva"]))).json();
+  check("otra cuenta es otro equipo, con otro número", segundo.n !== altaJson.n);
+
+  check("sin token no se leen los equipos (403)", (await fetch(`${base}/v1/sala/${id}/equipos?desde=0`, { headers: SITIO })).status === 403);
+  const todos = await (await fetch(`${base}/v1/sala/${id}/equipos?desde=0`, { headers: auth(token) })).json();
+  check("con el token se leen, cifrados", todos.length === 2 && !JSON.stringify(todos).includes("Pumas") && !JSON.stringify(todos).includes("Cóndores"), `${todos.length} equipos`);
+  const delA = todos.find((e) => e.cuenta === A);
+  check("y se descifran con la clave que solo tiene el QR", JSON.parse(await descifrar(clave, delA.d)).n === "Los Cóndores 2");
+  const vMax = Math.max(...todos.map((e) => e.v));
+
+  const unoA = await (await fetch(`${base}/v1/sala/${id}/equipos/${A}`, { headers: SITIO })).json();
+  check("el celular del equipo pregunta en qué punto está, sin token", unoA.n === altaJson.n && unoA.estado === "solicitud", JSON.stringify(unoA));
+  check("una cuenta que no se anotó da 404", (await fetch(`${base}/v1/sala/${id}/equipos/G${"D".repeat(55)}`, { headers: SITIO })).status === 404);
+
+  const putEstado = (tok, n, estado) => fetch(`${base}/v1/sala/${id}/equipos/${n}`, { method: "PUT", headers: { ...json, ...(tok ? auth(tok) : SITIO) }, body: JSON.stringify({ estado }) });
+  check("sin token no se cambia el estado (403)", (await putEstado(null, altaJson.n, "aceptado")).status === 403);
+  check("un estado que no existe (la seña ya no está) da 400", (await putEstado(token, altaJson.n, "sena")).status === 400);
+  const l2 = p3.msgs.length;
+  check("con el token se acepta (204)", (await putEstado(token, altaJson.n, "aceptado")).status === 204);
+  check("la pantalla se entera del cambio", await esperar(() => p3.msgs.slice(l2).some((m) => m.t === "equipo" && m.cuenta === A && m.estado === "aceptado")));
+  const aceptado = await (await fetch(`${base}/v1/sala/${id}/equipos/${A}`, { headers: SITIO })).json();
+  check("y el celular del equipo lo ve", aceptado.estado === "aceptado");
+  const cambio = await (await fetch(`${base}/v1/sala/${id}/equipos?desde=${vMax}`, { headers: auth(token) })).json();
+  check("consultar desde la última versión trae solo lo que cambió", cambio.length === 1 && cambio[0].cuenta === A && cambio[0].estado === "aceptado", JSON.stringify(cambio.map((e) => e.estado)));
+  check("un equipo que no existe da 404 al cambiarle el estado", (await putEstado(token, 9999, "cupon")).status === 404);
+
+  const l3 = p3.msgs.length;
+  check("sin token no se quita un equipo (403)", (await fetch(`${base}/v1/sala/${id}/equipos/${segundo.n}`, { method: "DELETE", headers: SITIO })).status === 403);
+  check("con el token se quita (204)", (await fetch(`${base}/v1/sala/${id}/equipos/${segundo.n}`, { method: "DELETE", headers: auth(token) })).status === 204);
+  check("la pantalla se entera", await esperar(() => p3.msgs.slice(l3).some((m) => m.t === "equipo-quitado" && m.n === segundo.n)));
+  check("y ya no figura (404)", (await fetch(`${base}/v1/sala/${id}/equipos/${B}`, { headers: SITIO })).status === 404);
+
+  // Una sala nueva sin registro no deja anotar a nadie.
+  const r3 = await crear();
+  if (r3.status === 201) {
+    const s3 = await r3.json();
+    const sinRegistro = await fetch(`${base}/v1/sala/${s3.id}/equipos`, { method: "POST", headers: { ...json, ...SITIO }, body: JSON.stringify({ cuenta: A, d: await equiposCifrados("X", ["a", "b"]) }) });
+    check("una sala sin registro armado no deja anotar (409)", sinRegistro.status === 409);
+    await fetch(`${base}/v1/sala/${s3.id}/config`, { method: "PUT", headers: { ...json, ...auth(s3.token) }, body: JSON.stringify({ ...config, modo: "cupon" }) });
+    const directo = await (await fetch(`${base}/v1/sala/${s3.id}/equipos`, { method: "POST", headers: { ...json, ...SITIO }, body: JSON.stringify({ cuenta: A, d: await equiposCifrados("X", ["a", "b"]) }) })).json();
+    check("con el cupón gratis el equipo queda aceptado directamente", directo.estado === "aceptado", JSON.stringify(directo));
+    await fetch(`${base}/v1/sala/${s3.id}`, { method: "DELETE", headers: auth(s3.token) });
+    check("al cerrar la sala se van también los equipos (404)", (await fetch(`${base}/v1/sala/${s3.id}/equipos/${A}`, { headers: SITIO })).status === 404);
+  } else console.log("NO PROBADO el cupón gratis: el cupo de salas no dejó crear otra", r3.status);
+}
+
 // 7. Cerrar la sala.
 check("sin token no se cierra", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: SITIO })).status === 403);
 check("con el token se cierra (204)", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: auth(token) })).status === 204);

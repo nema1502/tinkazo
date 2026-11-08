@@ -1865,6 +1865,51 @@
     @keyframes acct-in { from { opacity: 0; transform: translateY(10px); } }
   }
   @media (prefers-reduced-motion: reduce) { .acct-x { transition: none; } }
+  /* Cargá tu saldo, monedas, tiendita, plan del equipo y canjear: las pantallas de la cuenta que salen detrás de
+     VITE_RAMPA, VITE_MONEDAS y VITE_PLAN_EQUIPO. Son del mismo molde que el panel (encabezado y pie fijos, cuerpo que
+     se recorre); el pie lleva la acción principal, siempre a la vista. */
+  .dlg-h { flex: 1; min-width: 0; font-size: 18px; font-weight: 800; line-height: 1.25; }
+  .dlg-pie { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; border-top: var(--bw) solid var(--ink); background: var(--paper); }
+  .dlg-estado { min-height: 1.4em; font-size: 16px; line-height: 1.4; color: var(--ink2); overflow-wrap: anywhere; }
+  .dlg-estado:empty { display: none; }
+  .dlg-estado.ok { color: var(--teal-ink); font-weight: 700; }
+  .dlg-estado a { color: inherit; text-underline-offset: 3px; }
+  .dlg-main {
+    min-height: 48px; padding: 0 20px; background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink);
+    box-shadow: var(--sh-sm); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer;
+  }
+  .dlg-main:disabled { background: var(--card); color: var(--muted); box-shadow: none; cursor: default; }
+  .saldo-lead { font-size: 16px; line-height: 1.5; color: var(--ink2); }
+  .saldo-pasos { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 1.5; }
+  .saldo-nota { margin: 0; }
+  .saldo-dir {
+    display: block; font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 700; line-height: 1.4;
+    background: var(--paper); border: 2px solid var(--ink); padding: 10px 12px; overflow-wrap: anywhere; user-select: all;
+  }
+  .saldo-qr { align-self: center; background: #fff; border: 2px solid var(--ink); width: 176px; height: 176px; image-rendering: pixelated; }
+  .saldo-bs {
+    min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 16px;
+    background: var(--field, var(--paper)); color: var(--ink); border: 2px solid var(--ink);
+  }
+  .saldo-aviso { font-size: 16px; line-height: 1.4; color: var(--teal-ink); }
+  .mon-saldo { font-size: 24px; line-height: 1.2; }
+  .mon-sub { font-size: 16px; font-weight: 800; margin-top: 4px; }
+  .mon-reglas, .tienda-lista, .plan-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 16px; line-height: 1.4; }
+  .plan-lista { list-style: disc; padding-left: 1.3em; }
+  .mon-regla.hecha { color: var(--ink2); }
+  .mon-nota { margin-top: 0; }
+  .tienda-item { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .tienda-estado { color: var(--ink2); }
+  .tienda-item.alcanza .tienda-estado { color: var(--teal-ink); font-weight: 700; }
+  .tienda-qr { align-self: center; background: #fff; border: 2px solid var(--ink); width: 176px; height: 176px; image-rendering: pixelated; }
+  .plan-et { margin-top: 4px; }
+  .plan-vence { font-size: 16px; line-height: 1.4; }
+  .canje-saldo { font-size: 18px; font-weight: 800; min-height: 1.4em; }
+  .canje-items { display: flex; flex-direction: column; gap: 6px; }
+  .canje-item { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; border: 2px solid var(--ink); background: var(--paper); font-size: 16px; cursor: pointer; }
+  .canje-item input { width: 22px; height: 22px; flex: none; accent-color: var(--magenta); }
+  .canje-item.no-alcanza { color: var(--muted); border-style: dashed; cursor: default; }
+  .canje-video { width: 100%; max-height: 240px; background: #000; object-fit: cover; }
   /* UX 19-oct: siguiente */
   /* El indicador de pasos, arriba de la herramienta: una barra de progreso fina partida en cuatro tramos (1 Lista,
      2 Sellar, 3 Sortear, 4 Compartir), con el nombre debajo de cada uno. No es nada para apretar: sin bordes, sin
@@ -2510,3 +2555,58 @@
   body[data-ensayo="1"] .luma-ayuda, body[data-demo="1"] .luma-ayuda { display: none !important; }
   /* Qué sigue después del resultado: una línea, sin botón. */
   .again-sigue { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }
+
+  /* Ganadores y premios (src/ui/panel-ganadores.ts): una fila por ganador, con el estado de su pago a la derecha. */
+  .pagos { margin-top: 18px; }
+  .gan { padding: 16px 18px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  /* En verificar la sección ya es el bloque: el panel va sin marco propio. */
+  .block .gan { padding: 0; background: none; border: 0; box-shadow: none; }
+  .gan-titulo { font-size: 18px; font-weight: 800; text-wrap: balance; }
+  .gan-premio { margin-top: 2px; font-size: 16px; color: var(--ink2); overflow-wrap: anywhere; }
+  .gan-resumen { margin-top: 4px; font-size: 16px; font-weight: 700; }
+  .gan-barra { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  .gan-buscar { flex: 1 1 220px; min-width: 0; min-height: 48px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  .gan-buscar[hidden], .gan-actualizar[hidden], .gan-vertodos[hidden], .gan-nadie[hidden], .gan-fila[hidden], .gan-det[hidden], .gan-pagar[hidden] { display: none; }
+  .gan-actualizar, .gan-vertodos, .gan-pagar, .gan-form button { min-height: 48px; font-size: 16px; }
+  .gan-vertodos { margin-top: 12px; }
+  .gan-lista { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+  .gan-fila {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 12px; row-gap: 4px; align-items: center;
+    padding: 10px 12px; background: var(--paper); border: 2px solid var(--ink);
+  }
+  .gan-n { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 16px; font-weight: 700; color: var(--ink2); }
+  .gan-quien { min-width: 0; font-size: 16px; overflow-wrap: anywhere; }
+  .gan-cuenta { color: var(--ink2); font-size: 16px; }
+  .gan-est {
+    justify-self: end; max-width: 11rem; padding: 4px 10px; text-align: right; font-size: 16px; font-weight: 800; line-height: 1.25;
+    color: var(--ink); background: var(--card); border: 2px solid var(--ink);
+  }
+  .gan-est.pagado { background: var(--teal); color: var(--on-accent); }
+  .gan-est.pendiente { background: var(--yellow); color: var(--on-accent); }
+  .gan-est.vencido { background: var(--magenta); color: var(--on-accent); }
+  .gan-est.sin-consulta { border-style: dashed; }
+  .gan-est.cargando, .gan-est.en-mano { font-weight: 700; }
+  .gan-det { grid-column: 2 / -1; font-size: 16px; color: var(--ink2); overflow-wrap: anywhere; }
+  .gan-enlace { color: var(--ink); font-weight: 700; }
+  .gan-pagar { grid-column: 2 / -1; justify-self: start; }
+  .gan-pago { grid-column: 1 / -1; }
+  .gan-pago:empty { display: none; }
+  .gan-nadie { margin: 12px 0 0; }
+  .gan-nota { margin-top: 12px; }
+  .gan-form { display: grid; gap: 10px; margin-top: 6px; padding: 12px; background: var(--card); border: 2px dashed var(--ink); }
+  .gan-campo { display: grid; gap: 4px; }
+  .gan-campo input { min-height: 48px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  .gan-ayuda, .gan-explica { margin: 0; }
+  .gan-msg { margin: 0; font-size: 16px; font-weight: 700; overflow-wrap: anywhere; }
+  .gan-msg:empty { display: none; }
+  .gan-msg.bad { color: var(--magenta-ink); }
+  .gan-copia { width: 100%; padding: 8px 10px; font-size: 16px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); overflow-wrap: anywhere; }
+  .gan-copia[hidden], .gan-afuera[hidden], .gan-form a[hidden], .gan-campo[hidden], .gan-form button[hidden] { display: none; }
+  .gan-afuera summary { min-height: 48px; display: flex; align-items: center; font-weight: 800; font-size: 16px; cursor: pointer; }
+  @media (max-width: 460px) {
+    .gan { padding: 12px; }
+    .gan-fila { column-gap: 10px; padding: 10px; }
+    .gan-est { max-width: 8.5rem; padding: 4px 8px; }
+    .gan-form .row > button, .gan-pagar { flex: 1 1 100%; }
+    .gan-pagar { justify-self: stretch; }
+  }

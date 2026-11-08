@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
+import { etiquetaDe } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
@@ -77,11 +78,12 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     (varios && premio ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>` : "") +
     (lista
       ? `<ol class="pantalla-lista">${drawn.winners
-          .map((i, k) => `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">#${k + 1}</span><span class="pantalla-nombre">${esc(frozen.names[i] ?? "")}</span></li>`)
+          .map((i, k) => `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">#${k + 1}</span><span class="pantalla-nombre">${esc(etiquetaDe(frozen.names[i] ?? ""))}</span></li>`)
           .join("")}</ol>`
       : drawn.winners
           .map((i, k) => {
-            const nombre = frozen.names[i] ?? "";
+            // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
+            const nombre = etiquetaDe(frozen.names[i] ?? "");
             const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
             return (
               `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +

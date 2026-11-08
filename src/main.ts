@@ -24,6 +24,8 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { equiposActivo } from "./equipos/bandera";
+import { reponerEtiquetas } from "./equipos/etiquetas";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -211,6 +213,11 @@ initWalletUI();
 initEnsayo();
 // El modo stand, si se recargó en él.
 initStandSala();
+// Los equipos con cupón (bandera VITE_EQUIPOS, apagada por defecto): sin la bandera no se agrega nada.
+if (equiposActivo()) {
+  reponerEtiquetas();
+  void import("./ui/equipos-sala").then((m) => m.initEquiposSala());
+}
 initStand();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });

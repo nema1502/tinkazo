@@ -1,6 +1,6 @@
 # La sala del stand
 
-Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee un QR, escriba su nombre o apodo en el celular y lo vea aparecer en la pantalla grande. **Solo alimenta rondas de ejemplo** (el modo stand del sitio): esos nombres nunca van a un sorteo sellado ni a un comprobante.
+Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee un QR, escriba su nombre o apodo en el celular y lo vea aparecer en la pantalla grande. **Solo alimenta rondas de ejemplo** (el modo stand del sitio): esos nombres nunca van a un sorteo sellado ni a un comprobante. La única excepción son los **equipos de un evento** (ver [más abajo](#los-equipos-de-un-evento-registro-con-cuenta)): ahí lo que va a la lista sellada es la cuenta pública del equipo, que se anota con su consentimiento; el nombre del equipo y los de sus integrantes siguen cifrados y no salen de la sala.
 
 Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `workers/enlaces`), en la misma cuenta: un error de despliegue acá no puede tumbar los enlaces de los comprobantes. La cuenta, en cambio, comparte los 100.000 pedidos por día del plan gratis (ver [Plan y gasto](#plan-y-gasto)).
 
@@ -23,6 +23,24 @@ Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `
 | `GET /<id>` | La página del celular: un HTML con su CSS y su JS adentro, en español y en inglés. Sin bajar el sitio, sin depender de Vercel y sin CORS | |
 
 Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N}`, `{"t":"nombre","n","d"}`, `{"t":"quitado","n"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+
+### Los equipos de un evento (registro con cuenta)
+
+La misma sala sirve para que los equipos de un evento (Space Apps y parecidos) se anoten con su cuenta de Stellar desde el celular de su encargado: la página `equipos.html` del sitio (no la de este Worker) abre el QR, y habla con estos pedidos desde `tinkazo.app`. Detrás de la bandera `VITE_EQUIPOS` del sitio; el Worker no sabe de banderas: sin registro armado, nadie puede anotar nada (`409`).
+
+| Pedido | Qué hace | Límite |
+| --- | --- | --- |
+| `PUT /v1/sala/<id>/config` | Quien organiza arma el registro: `{"modo","evento","cuenta"}`. `modo` es `cupon` (el equipo queda anotado y recibe el cupón gratis) o `sorteo` (pide participar, quien organiza lo acepta y tiene que haber hecho un sorteo con su cuenta). Con el token. `204` | 1.000 bytes |
+| `GET /v1/sala/<id>/publico` | Sin token: `{"config","equipos"}` (cuántos hay). Es lo que lee la página del celular antes de pedir nada | |
+| `POST /v1/sala/<id>/equipos` | `{"cuenta","d"}`: la cuenta `G…` en claro (es pública) y los datos del equipo cifrados con la clave del QR (de 30 a 1.100 bytes). Solo desde el sitio. `201 {"n","estado"}`; con la misma cuenta cambia los datos y conserva el número y el estado | 200 por sala; 120 por minuto por sala (los mismos de los nombres) |
+| `GET /v1/sala/<id>/equipos?desde=V` | Con el token: los equipos que cambiaron desde la versión `V` (`[{"n","cuenta","d","estado","v"}]`). `v` sube con cada alta o cambio de estado | |
+| `GET /v1/sala/<id>/equipos/<cuenta>` | Sin token: `{"n","estado"}` de ese equipo, o `404`. Lo pregunta el celular del encargado cada 15 s mientras la página está a la vista | |
+| `PUT /v1/sala/<id>/equipos/<n>` | Con el token: `{"estado"}`, uno de `solicitud`, `aceptado`, `sorteo`, `cupon`. `204` | |
+| `DELETE /v1/sala/<id>/equipos/<n>` | Con el token: saca un equipo. `204` | |
+
+Mensajes nuevos del socket: `{"t":"equipo","v","n","cuenta","d","estado"}` (alta o cambio) y `{"t":"equipo-quitado","n"}`. El nombre del equipo y los de sus integrantes nunca llegan en claro: la cuenta es lo único que este servicio ve de un equipo. Una sala creada antes de este cambio no tiene la tabla de equipos; se crea al configurar el registro. Se borra con la sala (10 horas, o «Cerrar la sala»).
+
+Qué significa cada estado y cuándo lo cambia la pantalla de quien organiza (con lo que lee de la cadena: los pagos de la cuenta del evento y los sellos del contrato por organizador) está en `src/equipos/estado.ts`.
 
 **Los topes viven en los objetos, porque ahí son exactos:** 400 nombres por sala (exacto, en SQLite) y 120 por minuto (en memoria: si el objeto se desaloja a mitad de un minuto, ese minuto caben otros 120; solo frena el ritmo, el de 400 no se reinicia); 5 salas por dirección por hora (en IPv6, por bloque /64) y 100 por día en un objeto aparte (`Cupos`), los dos en su SQLite: dormirse o reiniciarse no los pone en cero. El límite es por sala y no por dirección porque todo un recinto puede salir por una sola IP.
 

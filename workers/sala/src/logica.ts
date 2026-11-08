@@ -130,3 +130,75 @@ export function iguales(a: string, b: string): boolean {
 export function diaUtc(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
+
+/* ------------------------------------------------------------ los equipos */
+
+/**
+ * Los equipos de un evento (Space Apps y parecidos): cada equipo se anota desde el
+ * celular de su encargado con su cuenta de Stellar. La cuenta es pública y viaja en
+ * claro; el nombre del equipo y los de sus integrantes viajan cifrados con la clave
+ * del QR, como los nombres de la sala: este servicio no puede leerlos.
+ */
+
+/** Una cuenta de Stellar: la letra G y 55 caracteres en base 32. No se comprueba su suma de control: eso lo hace quien la usa. */
+export const ES_CUENTA = /^G[A-Z2-7]{55}$/;
+/** Equipos por sala. Los cupones se mandan de a 100 por transacción; con 200 caben en dos. */
+export const MAX_EQUIPOS = 200;
+/** Lo que mide, como mucho, un equipo cifrado: el nombre del equipo y hasta cinco integrantes. */
+export const MAX_BYTES_EQUIPO = 1100;
+export const MIN_BYTES_EQUIPO = 13 + 16 + 1;
+export const MAX_CARACTERES_EQUIPO = Math.ceil((MAX_BYTES_EQUIPO * 4) / 3);
+/** Lo más que pesa el cuerpo de un alta de equipo (la cuenta y el texto cifrado). */
+export const MAX_CUERPO_EQUIPO = 2000;
+/** Lo más que pesa la configuración que manda quien organiza. */
+export const MAX_CUERPO_CONFIG = 1000;
+
+/**
+ * En qué punto está un equipo. Lo cambia solo quien tiene el token de la sala (la pantalla de quien organiza).
+ *  - `solicitud`: pidió participar y quien organiza todavía no lo aceptó (solo en el modo «sorteo»);
+ *  - `aceptado`: puede recibir su cupón (modo «cupon»), o tiene que hacer primero un sorteo con Tinkazo (modo «sorteo»);
+ *  - `sorteo`: ya hizo un sorteo con su cuenta, y puede recibir su cupón;
+ *  - `cupon`: ya recibió su cupón.
+ */
+export const ESTADOS_EQUIPO = ["solicitud", "aceptado", "sorteo", "cupon"] as const;
+export type EstadoEquipo = (typeof ESTADOS_EQUIPO)[number];
+export const esEstadoEquipo = (x: unknown): x is EstadoEquipo => typeof x === "string" && (ESTADOS_EQUIPO as readonly string[]).includes(x);
+
+/** Si es un equipo cifrado bien formado: base64url, del largo que puede tener. No lo descifra: nadie acá puede. */
+export function equipoCifradoValido(s: unknown): s is string {
+  if (typeof s !== "string" || s.length === 0 || s.length > MAX_CARACTERES_EQUIPO || !ES_BASE64URL.test(s)) return false;
+  const bytes = Math.floor((s.length * 3) / 4);
+  return bytes >= MIN_BYTES_EQUIPO && bytes <= MAX_BYTES_EQUIPO;
+}
+
+/**
+ * Cómo se arma el registro:
+ *  - «cupon»: el equipo queda anotado y recibe un cupón gratis (el de reserva, sin requisito);
+ *  - «sorteo»: el equipo pide participar, quien organiza lo acepta, y para recibir el cupón tiene que haber hecho
+ *    antes al menos un sorteo con Tinkazo desde su propia cuenta, en la misma red del evento.
+ */
+export interface ConfigEquipos {
+  modo: "cupon" | "sorteo";
+  /** El identificador corto del evento, sin espacios. */
+  evento: string;
+  /** La cuenta del evento: la que reparte los cupones. */
+  cuenta: string;
+}
+
+const ES_EVENTO = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** La nota de un cupón es `tk:cupon:` más el evento, y una nota de texto de Stellar mide, como mucho, 28 bytes. */
+export const MAX_EVENTO = 19;
+
+/** La configuración tal como la manda la pantalla, o `null` si algo no cuadra. Lo que sobra se descarta. */
+export function validarConfigEquipos(x: unknown): ConfigEquipos | null {
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  const modo = o.modo;
+  if (modo !== "cupon" && modo !== "sorteo") return null;
+  const evento = o.evento;
+  if (typeof evento !== "string" || evento.length < 3 || evento.length > MAX_EVENTO || !ES_EVENTO.test(evento)) return null;
+  const cuenta = o.cuenta;
+  if (typeof cuenta !== "string" || !ES_CUENTA.test(cuenta)) return null;
+  return { modo, evento, cuenta };
+}

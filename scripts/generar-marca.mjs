@@ -9,8 +9,11 @@ import { deflateSync } from "node:zlib";
 import { grupo, rects, chunk, texto, negra, seminegra, mover, rect, circulo, redondeado, llamaCmds, anchoLlama, TEMAS, num, aD, rutaSvg, rasterizar, pngRgba, pdf, zip } from "./marca/base.mjs";
 import { generarPiezas } from "./marca/piezas.mjs";
 import { generarColeccion } from "./marca/coleccion.mjs";
+import { EVENTOS_QR } from "./marca/eventos.mjs";
 const destino = new URL("../public/marca/", import.meta.url);
 mkdirSync(destino, { recursive: true });
+// Las carpetas de los eventos: su QR se escribe en public/marca/<carpeta>/ (ver scripts/marca/eventos.mjs).
+for (const e of EVENTOS_QR) mkdirSync(new URL(`${e.carpeta}/`, destino), { recursive: true });
 writeFileSync(new URL("llama.svg", destino), `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">\n  ${grupo}\n</svg>\n`);
 const n = 2048;
 function pixeles(color) {

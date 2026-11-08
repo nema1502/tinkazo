@@ -276,6 +276,16 @@ Pedido: "letras chiquitas, horribles, ilegibles; el juego no se lee, se juega". 
 - **Aplicado:** se subieron a 14 px las 24 reglas de `styles.css` y los tres `font:` abreviados, y el `style` de `index.html`; la etiqueta repetida junto a los nombres usa `max(14px, 0,72em)`. No se sacó texto: nada de lo que había era redundante para quien lee la pantalla.
 - **Cómo se mide:** `pnpm audit:letra` (o `node scripts/audit-legible.mjs --paginas`) hace tres cosas. Lee `styles.css` y los `<style>` y `style=""` de las páginas y falla por cada `font-size` o `font:` por debajo del piso (alcanza lo que el DOM no abre: Mis sorteos, el panel de la cuenta, el importador). Abre las once páginas y mide la letra real de cada texto visible. Y recorre el sorteo de demostración (la lista, sellada y esperando, ronda lista y resultado) en cada pantalla. `--histograma` imprime cuántos textos hay de cada tamaño; `--reglas paginas=14:18` cambia el piso; `--pantallas`, `--solo-paginas` y `--temas` acotan la corrida (unos 12 minutos por tema y siete pantallas).
 
+## Ganadores y premios pagados (6 de noviembre de 2026)
+
+Con la bandera `VITE_PAGOS` prendida (apagada en producción, ver [premios.md](premios.md)), debajo de "Siguiente premio" aparece el panel de ganadores: una fila por ganador con su puesto, su nombre o su cuenta acortada y el estado de su premio a la derecha (Pagado, Pendiente, Vencido, Sin consulta o "Lo entrega quien organiza"). Reglas:
+
+- **No compite con la acción principal.** "Siguiente premio" o "Compartir el resultado" siguen siendo lo único magenta de la pantalla. "Pagar premio", "Actualizar", "Ver los N ganadores" y "Firmar y pagar" son secundarios (`ghost`). El panel va debajo, nunca entre el ganador y la acción principal.
+- **Una consulta al abrir y un botón "Actualizar"**, sin reintentos. El estado lo dice con palabras, no solo con el color.
+- **Celular:** cada fila es una tarjeta chica, con el estado a la derecha y el detalle (cuánto, cuándo, hasta cuándo hay plazo) debajo. Blancos de toque de 48 px y letra de 16 px.
+- **Con más de diez ganadores**, un buscador por nombre y diez filas a la vista; "Ver los N ganadores" muestra el resto.
+- **Sin tecnicismos:** la nota del pago es "la nota"; el pago listo para firmar afuera va plegado.
+
 ## Cuando la red falla
 
 El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM por el estado de la red (no por Tinkazo), el patrocinador de la comisión tiene un tope, y lo único que veía quien sorteaba era un error genérico, después de esperar. Desde ese día la app mira la red **antes** de que la sala espere (`src/stellar/chequeo-red.ts`, la pantalla en `src/ui/red.ts`) y, cuando algo anda mal, dice **una frase y ofrece una sola acción**. Nada de "RPC", "fee" ni "XLM" en lo que se lee.

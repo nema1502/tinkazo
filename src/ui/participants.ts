@@ -12,6 +12,7 @@ import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
 import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { contarUnaVez } from "../contar";
+import { etiquetaDe } from "../equipos/etiquetas";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
@@ -59,7 +60,7 @@ export function cerrarLista(si: boolean): void {
 export function renderNames(): void {
   const names = parseNames();
   $("names").innerHTML = names
-    .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
+    .map((n) => `<i><img src="${avatar(etiquetaDe(n), 44)}" alt="" loading="lazy" />${esc(etiquetaDe(n))}</i>`)
     .join("");
   $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || listaCerrada();
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.

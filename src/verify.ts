@@ -26,6 +26,8 @@ import { pintarFranja } from "./ui/logo-franja";
 import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
+// Solo la bandera: el panel de ganadores y sus textos se cargan únicamente si está prendida.
+import { pagosActivos } from "./stellar/pagos-bandera";
 
 /**
  * Página de verificación.
@@ -444,6 +446,7 @@ function contar(proof: Proof, r: Revision): void {
       ...(atestiguado && proof.id && proof.net && !delHistorial ? { numero: proof.id, red: proof.net } : {}),
       ...(delHistorial && proof.net ? { red: proof.net } : {}),
     });
+    pintarPagos(r, premio);
     // Los otros sellos se traen al final y sin bloquear. Si muestran la misma
     // lista sellada más de una vez, el verde baja a amarillo (`pintarSellos`).
     // Con el sello del historial no se traen: se leen del estado del contrato, que ya no
@@ -478,6 +481,15 @@ function contar(proof: Proof, r: Revision): void {
     verdict("partial", "vVerdictPartial", t("vVerdictPartialDetail"));
     if (primeraVez) contarFin("yellow");
   }
+}
+
+/**
+ * El panel de ganadores con el estado de cada premio, leído de la red (src/ui/pagos-comprobante.ts). Detrás de la
+ * bandera: apagada, esta página no baja nada de eso.
+ */
+function pintarPagos(r: Revision, premio: string): void {
+  if (!pagosActivos()) return;
+  void import("./ui/pagos-comprobante").then((m) => m.mostrarPagosDelComprobante(r, premio)).catch(() => undefined);
 }
 
 /** Cuántos sellos se listan como mucho. Los que repiten la lista entran siempre. */

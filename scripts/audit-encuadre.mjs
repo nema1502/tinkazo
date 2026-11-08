@@ -3,7 +3,7 @@
  * El auditor de encuadre de la carrera: ¿la ganadora se ve entera, y el cartel
  * no tapa a nadie?
  *
- * Lo pidió el feedback de Alejandro (Vaquita y Pollar, 19 de octubre de 2026):
+ * Lo pidió una devolución de prueba (19 de octubre de 2026):
  * "¿probaron esto en mobile?". Con tres o cuatro personas cada llama mide más de
  * dos carriles de alto, y al final la ganadora quedaba cortada contra el borde
  * del celular y el cartel del ganador tapaba a la llama del carril de arriba.

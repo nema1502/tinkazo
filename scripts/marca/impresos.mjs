@@ -12,6 +12,8 @@ import { Lienzo, escribir, medir, caja, etiqueta, franja, banderines, confeti, p
 import { logo } from "./logos.mjs";
 import { titular, heroLlama } from "./redes.mjs";
 import { COLECCION, stickerColeccion } from "./coleccion.mjs";
+import { matrizQr, ZONA } from "./qr.mjs";
+import { URL_DEVFEST } from "./eventos.mjs";
 
 export const URL_SITIO = "https://tinkazo.app";
 export const INSTAGRAM = "@tinkazo.app";
@@ -31,11 +33,13 @@ export const TEXTO_IMPRESO = {
     frase: ["Sorteos que", "cualquiera puede", "comprobar"], frase2: ["Sorteos que cualquiera", "puede comprobar"],
     escanea: "Escaneá y probá", gratis: "Participar es gratis", juegos: "Juegos de Bolivia",
     sponsor: ["Somos sponsor del", "DevFest Tarija"], fecha: "28 de noviembre de 2026", fraseCorta: "Sorteos que cualquiera puede comprobar",
+    reservar: ["Escaneá para", "reservar tu lugar"],
   },
   en: {
     frase: ["Draws anyone", "can check"], frase2: ["Draws anyone", "can check"],
     escanea: "Scan and try it", gratis: "Entry is free", juegos: "Games from Bolivia",
     sponsor: ["Proud sponsor of", "DevFest Tarija"], fecha: "November 28, 2026", fraseCorta: "Draws anyone can check",
+    reservar: ["Scan to", "save your seat"],
   },
 };
 
@@ -273,10 +277,27 @@ export const SPONSOR_FORMATOS = [
 /** Los formatos que además salen con capturas de los juegos, para que quien organiza tenga dos estilos para elegir. */
 export const SPONSOR_CON_JUEGOS = ["sponsor-post", "sponsor-historia", "sponsor-panoramica"];
 
+/** El borde de la placa blanca del QR, en las imágenes para redes. */
+const BORDE_QR = 4;
+/** Lo que mide la placa del QR de `url` cuando cada módulo mide `modulo` píxeles (zona tranquila de 4 módulos incluida). */
+const ladoQr = (url, modulo, borde = BORDE_QR) => (matrizQr(url).n + 2 * ZONA) * modulo + 2 * borde;
+/** La leyenda del QR («Escaneá para reservar tu lugar») en dos renglones. Devuelve la caja que ocupó. */
+function leyendaQr(l, { t, x, y, tam, maximo, ancla = "l" }) {
+  let yy = y, x0 = Infinity, x1 = -Infinity;
+  const e = Math.min(tam, ...t.reservar.map((s) => maximo / medir(s, 1, { font: negra })));
+  for (const s of t.reservar) {
+    const r = escribir(l, { s, x, y: yy, tam: e, ancla, font: negra, color: "tinta" });
+    x0 = Math.min(x0, r.x0); x1 = Math.max(x1, r.x1);
+    yy += e * 1.28;
+  }
+  return { x0, x1, y0: y - e * 0.72, y1: yy - e * 0.28 };
+}
+
 /**
  * Las imágenes para anunciar que somos sponsor del DevFest Tarija. Planas, en los dos temas y los dos idiomas, en dos
  * estilos: "personajes" (el sapo, el guajojó, el toborochi y la llama de la colección de stickers) y "juegos" (capturas
- * de los juegos con su nombre; hace falta `fotos`, de cargarFotosRed).
+ * de los juegos con su nombre; hace falta `fotos`, de cargarFotosRed). La publicación, la historia y la panorámica,
+ * que son las que se comparten por Instagram y WhatsApp, llevan el QR del enlace para reservar lugar en el DevFest.
  */
 export function escenaSponsor(id, tema, lang, estilo = "personajes", fotos = null) {
   const juegos = estilo === "juegos";
@@ -296,48 +317,53 @@ export function escenaSponsor(id, tema, lang, estilo = "personajes", fotos = nul
     franja(l, { y: f.h - 24 * k, h: 24 * k });
     banderines(l, { x0: 0, x1: f.w, y: 46 * k, n: 10, alto: 62 * k, sag: 12, hilo: 4 });
     // En la historia, lo importante queda entre los 250 px de arriba y los 340 de abajo que tapa la app.
-    const yLogo = alto ? 170 : 290, aLogo = alto ? 76 : 104;
+    const yLogo = alto ? 170 : 270, aLogo = alto ? 76 : 104;
     const lg = LOGO({ x: centrado(aLogo), y: yLogo, alto: aLogo, disp: "horizontal", url: true });
-    const ti = TI({ lineas: t.sponsor, x: f.w / 2, y: lg.y + lg.h + (alto ? 56 : 90), ancho: 900, altoMax: alto ? 300 : 360, ancla: "c" });
-    const fe = etiqueta(l, { s: t.fecha, x: f.w / 2, y: ti.y1 + (alto ? 40 : 64), tam: 40 * k, fill: "turquesa", sombraCol: "tinta", ancla: "c" });
-    const hy = fe.y + fe.h + (alto ? 46 : 80), hh = alto ? (juegos ? 390 : 300) : 520;
+    const ti = TI({ lineas: t.sponsor, x: f.w / 2, y: lg.y + lg.h + (alto ? 56 : 62), ancho: 900, altoMax: alto ? 300 : 360, ancla: "c" });
+    const fe = etiqueta(l, { s: t.fecha, x: f.w / 2, y: ti.y1 + (alto ? 40 : 46), tam: 40 * k, fill: "turquesa", sombraCol: "tinta", ancla: "c" });
+    // Abajo va el QR de la inscripción, así que los personajes o las capturas van en una sola fila.
+    const hy = fe.y + fe.h + (alto ? 46 : 44), hh = alto ? (juegos ? 250 : 230) : (juegos ? 190 : 230);
     let hb;
     if (juegos) {
       hb = grillaJuegos(l, alto
-        ? { ids: JUEGOS_FOTO, lang, x: 56, y: hy, w: f.w - 112, h: hh, cols: 3, g: 22, fotos, tam: 21 }
-        : { ids: ["race", "oruro", "guajojo", "toborochi"], lang, x: 70, y: hy, w: f.w - 140, h: hh, cols: 2, g: 26, fotos, tam: 26 });
-    } else if (alto) {
+        ? { ids: JUEGOS_FOTO, lang, x: 56, y: hy, w: f.w - 112, h: hh, cols: 3, g: 22, fotos, tam: 20 }
+        : { ids: ["race", "oruro", "guajojo", "toborochi"], lang, x: 50, y: hy, w: f.w - 100, h: hh, cols: 4, g: 16, fotos, tam: 15 });
+    } else {
       const fs = filaStickers(l, { ids: PERSONAJES, lang, x: 60, y: hy, w: f.w - 120, h: hh, g: 22 });
       hb = [60, fs.y0, f.w - 120, fs.y1 - fs.y0];
-    } else {
-      const a = filaStickers(l, { ids: PERSONAJES.slice(0, 2), lang, x: 110, y: hy, w: f.w - 220, h: hh / 2 - 10, g: 40 });
-      const b = filaStickers(l, { ids: PERSONAJES.slice(2), lang, x: 110, y: hy + hh / 2 + 10, w: f.w - 220, h: hh / 2 - 10, g: 40 });
-      hb = [110, a.y0, f.w - 220, b.y1 - a.y0];
     }
-    const fy = hy + hh + (alto ? 84 : 120);
-    const fr = escribir(l, { s: t.fraseCorta, x: f.w / 2, y: fy, tam: 36 * k, maximo: 900, ancla: "c", font: seminegra, color: "tinta" });
-    const ig = etiqueta(l, { s: INSTAGRAM, x: f.w / 2, y: fy + 34 * k, tam: 32 * k, fill: "magenta", sombraCol: "tinta", ancla: "c" });
-    confeti(l, { rng, n: alto ? 24 : 32, area: [16, 130 * k, f.w - 32, f.h - 260 * k], evitar: [caja2(lg), caja2(ti), caja2(fe), hb, [fr.x0 - 24, fy - 50, fr.ancho + 48, 70], caja2(ig)], tam: [12, 26] });
+    const fy = hy + hh + (alto ? 56 : 54);
+    const fr = escribir(l, { s: t.fraseCorta, x: f.w / 2, y: fy, tam: 34 * k, maximo: 900, ancla: "c", font: seminegra, color: "tinta" });
+    // El QR a la izquierda y, al lado, la leyenda y el Instagram.
+    const mod = alto ? 5 : 7, lado = ladoQr(URL_DEVFEST, mod), qx = alto ? 90 : 80, qy = fy + (alto ? 34 : 38);
+    placaQr(l, { texto: URL_DEVFEST, x: qx, y: qy, lado, borde: BORDE_QR, sombra: 8, sombraCol: "magenta" });
+    const rx = qx + lado + 40, rw = f.w - 60 - rx;
+    const le = leyendaQr(l, { t, x: rx, y: qy + lado * (alto ? 0.26 : 0.27), tam: alto ? 54 : 58, maximo: rw });
+    const ig = etiqueta(l, { s: INSTAGRAM, x: rx, y: le.y1 + (alto ? 30 : 40), tam: 30 * k, fill: "magenta", sombraCol: "tinta" });
+    const qrCaja = [qx - 20, qy - 20, lado + 48, lado + 48];
+    confeti(l, { rng, n: alto ? 24 : 32, area: [16, 130 * k, f.w - 32, f.h - 260 * k], evitar: [caja2(lg), caja2(ti), caja2(fe), hb, [fr.x0 - 24, fy - 50, fr.ancho + 48, 70], qrCaja, [rx - 20, le.y0 - 20, rw + 40, ig.y + ig.h - le.y0 + 50]], tam: [12, 26] });
   } else if (id === "sponsor-panoramica") {
-    // Panorámica: el anuncio a la izquierda y los cuatro personajes, dos y dos, a la derecha.
+    // Panorámica: el anuncio a la izquierda, con una fila de personajes o capturas, y el QR de la inscripción a la derecha.
     franja(l, { h: 18 });
     franja(l, { y: f.h - 18, h: 18 });
     const x0 = 64, ancho = 560;
-    const lg = LOGO({ x: x0, y: 70, alto: 64, disp: "horizontal", url: true });
-    const ti = TI({ lineas: t.sponsor, x: x0, y: lg.y + lg.h + 40, ancho, altoMax: 250 });
-    const fe = etiqueta(l, { s: t.fecha, x: x0, y: ti.y1 + 30, tam: 30, fill: "turquesa", sombraCol: "tinta" });
-    const ig = etiqueta(l, { s: INSTAGRAM, x: x0, y: fe.y + fe.h + 22, tam: 28, fill: "magenta", sombraCol: "tinta" });
-    const xs = 680, ws = f.w - xs - 50, hs = (f.h - 140) / 2;
+    const lg = LOGO({ x: x0, y: 64, alto: 64, disp: "horizontal", url: true });
+    const ti = TI({ lineas: t.sponsor, x: x0, y: lg.y + lg.h + 34, ancho, altoMax: 250 });
+    const fe = etiqueta(l, { s: t.fecha, x: x0, y: ti.y1 + 22, tam: 28, fill: "turquesa", sombraCol: "tinta" });
+    const ig = etiqueta(l, { s: INSTAGRAM, x: x0, y: fe.y + fe.h + 16, tam: 26, fill: "magenta", sombraCol: "tinta" });
+    const hy = ig.y + ig.h + 24, hh = f.h - 18 - 24 - hy;
     let hb;
     if (juegos) {
-      const gj = grillaJuegos(l, { ids: JUEGOS_FOTO, lang, x: xs - 20, y: 50, w: ws + 30, h: f.h - 100, cols: 2, g: 18, fotos, tam: 17, sombra: 6 });
+      const gj = grillaJuegos(l, { ids: ["race", "wheel"], lang, x: x0, y: hy, w: ancho, h: hh, cols: 2, g: 24, fotos, tam: 14, borde: 3, sombra: 5 });
       hb = [gj[0] - 10, gj[1] - 10, gj[2] + 20, gj[3] + 20];
     } else {
-      const a = filaStickers(l, { ids: PERSONAJES.slice(0, 2), lang, x: xs, y: 60, w: ws, h: hs, g: 24 });
-      const b = filaStickers(l, { ids: PERSONAJES.slice(2), lang, x: xs, y: 80 + hs, w: ws, h: hs, g: 24 });
-      hb = [xs - 10, a.y0 - 10, ws + 20, b.y1 - a.y0 + 20];
+      const fs = filaStickers(l, { ids: PERSONAJES, lang, x: x0, y: hy, w: ancho, h: hh, g: 14 });
+      hb = [x0 - 10, fs.y0 - 10, ancho + 20, fs.y1 - fs.y0 + 20];
     }
-    confeti(l, { rng, n: 18, area: [16, 24, f.w - 32, f.h - 48], evitar: [caja2(lg), caja2(ti), caja2(fe), caja2(ig), hb], tam: [10, 20] });
+    const lado = ladoQr(URL_DEVFEST, 6), qx = 700 + (f.w - 64 - 700 - lado) / 2, qy = 40;
+    placaQr(l, { texto: URL_DEVFEST, x: qx, y: qy, lado, borde: BORDE_QR, sombra: 8, sombraCol: "magenta" });
+    const le = leyendaQr(l, { t, x: qx + lado / 2, y: qy + lado + 56, tam: 38, maximo: lado + 40, ancla: "c" });
+    confeti(l, { rng, n: 14, area: [16, 24, f.w - 32, f.h - 48], evitar: [caja2(lg), caja2(ti), caja2(fe), caja2(ig), hb, [qx - 20, qy - 20, lado + 48, lado + 48], [le.x0 - 20, le.y0 - 20, le.x1 - le.x0 + 40, le.y1 - le.y0 + 40]], tam: [10, 20] });
   } else {
     // Las cabeceras: la foto de perfil tapa la esquina de abajo a la izquierda, así que todo arranca después de los 430 px.
     // El banner ancho para la web del evento no tiene foto encima: arranca en el borde.

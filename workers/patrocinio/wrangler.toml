@@ -31,3 +31,7 @@ RED = "testnet"
 # llave del Worker va como secreto, y las billeteras de fondos que abren las cuentas de la app. En mainnet se reemplazan.
 CUENTA_PATROCINADORA = "GALXYDWHICOPBU5PYAVKNFOT7EDSHUAKJPQPPV5OUAVRDTCVHXBPIPOH"
 PATROCINADORES_APP = "GAYWGZ4P5NHJU2UL7TGWSP6ZF5BYEBZ4WP7TZDBDZ3FXUN5DHGAMDGKU,GBTRBMOZGP362SI2IV6X4GYHDWPQCCVGM4IXJBQ7D6M7HSNINIC5NS5M"
+# El Worker de la cuenta, de donde se averigua si una cuenta tiene el plan del equipo (sube su cupo de 20 a 50 sellos por mes).
+# Vacío: no se pregunta y todas tienen el cupo de siempre. Se carga al desplegar, cuando el Worker de la cuenta ya está arriba.
+# Por ejemplo: CUENTA_URL = "https://cuenta.tinkazo.app"
+CUENTA_URL = ""

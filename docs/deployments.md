@@ -175,7 +175,7 @@ git add scripts/vigilar-red.base.json && git commit            # paso 4
 ```
 
 **Latido.** Si el detector mismo calla (el cron se saltea o GitHub desactiva el workflow) no llega ningún correo: por eso el último paso de `vigilar-red.yml` hace `curl` a la dirección del secreto `HEALTHCHECK_URL`, también cuando la corrida falla; sin el secreto no hace nada.
-En healthchecks.io el chequeo va con período de 30 minutos y gracia de 90, para que mande un correo si pasan 2 horas sin latido; el secreto se carga con `gh secret set HEALTHCHECK_URL --repo nema1502/tinkazo` (el chequeo lo crea Nicolás).
+En healthchecks.io el chequeo va con período de 30 minutos y gracia de 90, para que mande un correo si pasan 2 horas sin latido; el secreto se carga con `gh secret set HEALTHCHECK_URL --repo nema1502/tinkazo` (el chequeo lo crea quien dirige el proyecto).
 
 ## Cómo desplegar
 

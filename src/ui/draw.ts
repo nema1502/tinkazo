@@ -30,8 +30,11 @@ import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import { contar, contarPractica, errorContable, refDe } from "../contar";
+import { acreditarEnSegundoPlano } from "../stellar/monedas-eventos";
 import { ponerTextoDelSello } from "./sin-sello-textos";
 import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
+import { etiquetaConCuenta, etiquetaDe, paraMostrar } from "../equipos/etiquetas";
+import { pagosActivos } from "../stellar/pagos-bandera";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -226,6 +229,9 @@ export async function draw(): Promise<void> {
       // Quedó grabado: la tarjeta sigue con la cuenta de la sala, y después el juego.
       grabado();
       contar("draw_confirmed", { network: network.name });
+      // El primer sorteo de la cuenta suma monedas (detrás de VITE_MONEDAS; el demo y el ensayo no cuentan: no graban).
+      const cuenta = sinGrabar() ? undefined : currentSession()?.address;
+      if (cuenta) acreditarEnSegundoPlano(cuenta, "primer_sorteo");
     } else {
       winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
     }
@@ -440,6 +446,8 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
  * pasa a anunciar el que se juega.
  */
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
+  // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
+  names = paraMostrar(names);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
@@ -587,7 +595,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // en "Otro premio".
   const reemplazo = names.length - winners.length >= 2;
   // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
-  $("winner-cards").innerHTML = htmlDeGanadores({ names, winners, prize, reemplazo, avatar });
+  // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
+  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar });
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
@@ -616,6 +625,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
+  // Premios pagados (detrás de la bandera): el panel de ganadores con el estado de cada pago y "Pagar premio".
+  if (pagosActivos()) void import("./pagos-resultado").then((m) => m.mostrarPagosDelResultado()).catch(() => undefined);
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
@@ -836,6 +847,12 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
   limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
+  // El panel de ganadores y pagos del sorteo anterior (pagos-resultado.ts) no se queda para el siguiente.
+  const pagosBox = document.getElementById("pagos-box");
+  if (pagosBox) {
+    pagosBox.replaceChildren();
+    pagosBox.style.display = "none";
+  }
   quitarLogoDelResultado();
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
@@ -1033,7 +1050,7 @@ function mensajeDelSorteo(): string {
   if (!app.frozen || !app.drawn) return "";
   const { names, prize } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const lista = winners.map((i) => names[i] ?? "");
+  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
   // Sin sello: que lo diga también lo que se pega en el grupo, y que no prometa lo que no se puede comprobar.
   const sinSello = !!app.frozen.sinSello && app.frozen.raffleId === undefined;
@@ -1066,7 +1083,7 @@ export function shareProof(): void {
   const enlace = proofLink || roundUrl(d.beacon.round);
   const datos = {
     enlace,
-    ganadores: d.winners.map((i) => f.names[i] ?? ""),
+    ganadores: d.winners.map((i) => etiquetaDe(f.names[i] ?? "")),
     total: f.names.length,
     premio: f.prize,
     fecha: f.ts,
@@ -1088,7 +1105,7 @@ export function shareProof(): void {
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const prize = app.frozen?.prize ?? "";
   // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
-  const lista = winners.map((i) => names[i] ?? "");
+  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
   const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
   // Al ganador de un sorteo sin sello tampoco se le dice que nadie lo eligió a dedo ni que lo revise: no se puede comprobar.
   const sinSello = !!app.frozen?.sinSello && app.frozen.raffleId === undefined;
