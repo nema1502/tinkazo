@@ -10,8 +10,18 @@ import { grupo, rects, chunk, texto, negra, seminegra, mover, rect, circulo, red
 import { generarPiezas } from "./marca/piezas.mjs";
 import { generarColeccion } from "./marca/coleccion.mjs";
 import { EVENTOS_QR } from "./marca/eventos.mjs";
+import { generarQrClave } from "./marca/qr-clave.mjs";
 const destino = new URL("../public/marca/", import.meta.url);
 mkdirSync(destino, { recursive: true });
+// `node scripts/generar-marca.mjs --solo qr` regenera únicamente los QR clave (public/marca/qr/) y su ZIP, sin tocar nada más:
+// ni los stickers de la colección ni los kits. Sirve para cambiar un destino sin rehacer todo lo demás.
+const iSolo = process.argv.indexOf("--solo");
+if (iSolo > 0) {
+  if (process.argv[iSolo + 1] !== "qr") { console.error("--solo " + process.argv[iSolo + 1] + ": grupo desconocido (hoy solo \"qr\")"); process.exit(1); }
+  const qr = generarQrClave(new URL("qr/", destino));
+  console.log("QR clave: tinkazo-qr.zip con " + qr.archivos + " archivos (" + (qr.zip / 1048576).toFixed(2) + " MB).");
+  process.exit(0);
+}
 // Las carpetas de los eventos: su QR se escribe en public/marca/<carpeta>/ (ver scripts/marca/eventos.mjs).
 for (const e of EVENTOS_QR) mkdirSync(new URL(`${e.carpeta}/`, destino), { recursive: true });
 writeFileSync(new URL("llama.svg", destino), `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">\n  ${grupo}\n</svg>\n`);
@@ -246,5 +256,8 @@ writeFileSync(new URL("tinkazo-kit-sponsor.zip", destino), zip(entradasSponsor))
 
 // La colección de stickers con personaje va aparte, con su propio ZIP: public/marca/coleccion/.
 const coleccion = generarColeccion(new URL("coleccion/", destino));
-console.log(`Colección: ${coleccion.stickers} stickers y tinkazo-stickers.zip con ${coleccion.archivosZip} archivos; la letra más chica a 5 cm mide ${coleccion.capMin[1].toFixed(2)} mm (${coleccion.capMin[0]}).`);
+// Los QR clave: los códigos solos y tinkazo-qr.zip, con la etiqueta y las tarjetas que ya están en public/marca/qr/.
+const qrClave = generarQrClave(new URL("qr/", destino));
+console.log("QR clave: tinkazo-qr.zip con " + qrClave.archivos + " archivos (" + (qrClave.zip / 1048576).toFixed(2) + " MB).");
+console.log(`Colección: ${coleccion.stickers} stickers, tinkazo-stickers.zip con ${coleccion.archivosZip} archivos y tinkazo-stickers-png.zip con ${coleccion.archivosPng}; la letra más chica a 5 cm mide ${coleccion.capMin[1].toFixed(2)} mm (${coleccion.capMin[0]}) y la de tinkazo.app, ${coleccion.capSello.toFixed(2)} mm.`);
 console.log(`Marca: llama, 4 logos (SVG y PNG de 2048), 2 sellos en trazos, 6 stickers (SVG y PDF), ${piezas.length} piezas nuevas (logos con dirección, stickers, hojas, redes, afiches, portada, impresos y sponsors), tinkazo-kit-marca.zip con ${entradas.length} archivos y tinkazo-kit-sponsor.zip con ${entradasSponsor.length} y tinkazo-kit-impresos.zip con ${entradasImpresos.length}.`);

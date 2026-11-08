@@ -3,3 +3,5 @@
 public/marca/* -text
 public/marca/llama.svg text
 public/marca/llama-oscuro.svg text
+# Los QR clave también: los SVG y el ZIP se comparan byte a byte con lo que genera scripts/marca/qr-clave.mjs.
+public/marca/qr/* -text

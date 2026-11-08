@@ -95,7 +95,7 @@ export const PERSONAJES = ["dev-mi-llama", "guajojo", "toborochi", "llama-corazo
 function filaStickers(l, { ids, lang, x, y, w, h, g }) {
   const piezas = ids.map((id) => {
     const st = COLECCION.find((c) => c.id === id);
-    const base = stickerColeccion(st, st.langs ? null : lang, 5, 0);
+    const base = stickerColeccion(st, st.langs ? null : lang, 5, 0, { sello: false });
     return { formas: base.formas.filter((f) => f.capa !== "corte" && f.fill), w: base.w, h: base.h };
   });
   // La escala que hace entrar la fila: el alto pedido, o lo que permita el ancho.
