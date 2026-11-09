@@ -8,7 +8,8 @@ normal de46px y4.083984px de separación. No se cambió presentación: el audito
 mide la barra real y verifica el área segura. Pasan69tests focalizados y los dos
 focos reducidos con nombres largos introducidos antes del sorteo. Los gates
 actuales pasan: tipos,155archivos/3161tests/4opt-in omitidos, build y glosario.
-El primer commit sigue pendiente. La revisión inicial detectó una letra
+Primer commit verificado: `1ec815c05611b54caa6771cd9b0bedb4534a2600`.
+La revisión inicial detectó una letra
 preplaca inferior al mínimo existente y siete corridas sin identidad de fuente.
 
 El padre reprodujo B1 en navegador:18de98renders con letra aproximada11.11px,
@@ -321,5 +322,54 @@ Se conserva el timeout de Teleférico320×600 en job90: venció40s antes del res
 con101renders, sin cambiar fuente, reloj ni límite. No se atribuye una causa de
 rendimiento probada ni se oculta aquel intento. La re-revisión independiente de
 los hallazgos reportados fue aceptada (recheck `mvyn9j8d-z-j406`): B1/B2/B3
-resueltos, S3/S5/S6 conformes, sin ejecuciones propias nuevas. El padre guarda el
-primer commit español antes de investigar el zoom.
+resueltos, S3/S5/S6 conformes, sin ejecuciones propias nuevas. El padre guardó el
+primer commit español `1ec815c05611b54caa6771cd9b0bedb4534a2600` antes de
+investigar el zoom; ese orden quedó cumplido.
+
+
+## Alcance de la preparación del arnés
+
+El auditor de esta evidencia prepara una cuenta/lista simulada: antes de congelar
+retira `locked`/`aria-disabled` y oculta `#gate`. Por tanto, la geometría, el
+protocolo conservado y el acceso público posterior al resultado no constituyen
+una prueba de entrada pública completa ni de sellado real. El muestreo específico
+de ganador activo sólo instrumenta Piñata/Teleférico; no acredita otros juegos.
+Esta limitación no se oculta ni se corrige ampliando el primer commit. El
+descubrimiento del segundo bug usa el ensayo público mediante controles visibles,
+sin desbloqueo del DOM; su lista fija y ausencia de comprobante limitan su alcance.
+
+## Segundo arreglo: acercamientos finales pendientes de aceptación
+
+El usuario autorizó nuevos planos finales para Carrera, Sapo y Ruleta; no se
+presentan los planos anteriores como tres defectos de zoom demostrados. La matriz
+pública prevista tiene48casos. Los cuatro casos completos conservados identifican
+su propia fuente; los intentos parciales o fallidos siguen registrados como tales.
+No hay segundo commit ni PR del arreglo mientras falten matriz y revisión.
+
+La corrida pública de Carrera#349 llegó al HTML y al verificador7/7 dentro del
+límite, pero dos cuadros de entrada del cartel incumplieron la separación4px:
+−4.5100366 y1.8200279. La medición usa AABBs conservadoras; no certifica el contorno
+raster exacto. La corrección local mueve la separación existente al callback
+optativo `trasCorona`, después de avanzar el cartel al cuadro actual. Sólo Carrera
+lo registra. No se modifica Stage, cámara, director, Sapo, selección, ritmo, reloj,
+ni el límite40s. Las pruebas por la interfaz pública `crearJuego` reproducen las
+cajas fallidas antes del cambio; después pasan junto con la preservación sin hook.
+Esa prueba aislada no sustituye la corrida pública posterior ni la matriz completa.
+
+El diagnóstico trazado de Race/Wheel y el contraste de grabación conservan todos
+los fallos. WheelENlargo completó sin parche de rendimiento. Race con grabación
+apagada cerró en35s, pero cambiaron ronda, ganador y carga no controlada: eso no
+demuestra la causa histórica. No se aplica ni se afirma una optimización de
+rendimiento; esa causa sigue sin demostrarse y bloquea la aceptación pedida.
+
+La revisión independiente focalizada de fuente terminó sin defecto grave
+establecido ni pedido de otro lote de corrección. La suite posterior pasa
+161archivos/3188tests, con4opt-in omitidos; tipos, build y glosario pasan.
+La corrida pública posterior conserva492cuadros,70activos y25de sostén tras la
+entrada, sin fallos geométricos muestreados: menor separación3.999947px dentro del
+epsilon existente. Se revisó su captura de sostén. Sin embargo, el estadio no
+cerró dentro de40s: no se alcanzaron el HTML final ni su verificación pública.
+No se convierte esa evidencia parcial en un caso completo. La matriz conserva
+4casos históricos completos de48, con9intentos y5claves; sus fuentes originales
+no se reasignan al candidato actual. El segundo arreglo queda bloqueado según
+la instrucción explícita de reportar el bloqueo si la causa sigue sin demostrar.
