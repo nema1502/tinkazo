@@ -1,7 +1,7 @@
 import { CanvasSource, Texture } from "pixi.js";
 import { T, getLang, t } from "../../../i18n";
 import { musicCue, type MusicStyle } from "../../../music";
-import { beep, fanfare, note } from "../../../sound";
+import { beep, fanfare, hum, note, wind } from "../../../sound";
 import { paceFactor, params, setGameLength } from "../../../state";
 import type { Emblema } from "../../emblemas";
 import { cargarEmblemas, emblemaCanvas, emblemasListos } from "../../emblemas-dibujo";
@@ -81,6 +81,8 @@ export const anfitrionTinkazo: Anfitrion = {
     nota: (grado) => note(grado),
     fanfarria: () => fanfare(),
     despues: (ms, fn) => void setTimeout(fn, ms),
+    viento: (dur, vol, hz0, hz1, semilla) => wind(dur, vol, hz0, hz1, semilla),
+    zumbido: (hz, dur, vol0, vol1) => hum(hz, dur, vol0, vol1),
   },
   emblemas: {
     cargar: () => cargarEmblemas(),

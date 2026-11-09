@@ -70,6 +70,21 @@ describe("enviarYConfirmar: mandar la misma y saber cómo terminó", () => {
     expect((await enviarYConfirmar({ enviar, consultar, venceEn: r.cierre() + 60, ...r })).estado).toBe("entro");
   });
 
+  it("un ERROR definitivo (el cupo agotado del portero) después de un corte es un no: no se queda preguntando", async () => {
+    const r = reloj();
+    const enviar = vi.fn<() => Promise<RespuestaEnvio>>().mockRejectedValueOnce(corte()).mockResolvedValue({ status: "ERROR", codigo: "portero-cupo-cuenta", definitivo: true });
+    const consultar = vi.fn(async (): Promise<RespuestaConsulta> => ({ status: "NOT_FOUND", cierre: r.cierre() }));
+    expect(await enviarYConfirmar({ enviar, consultar, venceEn: r.cierre() + 600, sinRedMs: 600_000, ...r })).toEqual({ estado: "rechazada", codigo: "portero-cupo-cuenta" });
+  });
+
+  it("pero un ERROR definitivo cuando la red ya la había tomado se sigue preguntando", async () => {
+    const r = reloj();
+    const enviar = vi.fn<() => Promise<RespuestaEnvio>>().mockResolvedValueOnce({ status: "PENDING" }).mockResolvedValue({ status: "ERROR", codigo: "portero-fondo", definitivo: true });
+    let preguntas = 0;
+    const consultar = vi.fn(async (): Promise<RespuestaConsulta> => (++preguntas < 8 ? { status: "NOT_FOUND", cierre: r.cierre() } : { status: "SUCCESS", cierre: r.cierre() }));
+    expect((await enviarYConfirmar({ enviar, consultar, venceEn: r.cierre() + 120, reenviarCadaMs: 3000, ...r })).estado).toBe("entro");
+  });
+
   it("TRY_AGAIN_LATER con la transacción ya aplicada (medido en la testnet): pregunta y la encuentra", async () => {
     const r = reloj();
     const enviar = vi.fn(async (): Promise<RespuestaEnvio> => ({ status: "TRY_AGAIN_LATER" }));

@@ -1,14 +1,16 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
-import { anchoringAvailable } from "../stellar/config";
-import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { anchoringAvailable, topeDeGanadores } from "../stellar/config";
+import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
+import { MAX_WINNERS } from "../protocol/select";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
 import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
+import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { contarUnaVez } from "../contar";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
 
@@ -22,6 +24,9 @@ let cerrada = false;
 
 /** La lista no se puede tocar: se está sellando o ya está sellada. */
 const listaCerrada = (): boolean => cerrada || !!app.frozen;
+
+/** "Lista de 20 personas", junto al cuadro. */
+const cuentaDeLista = (n: number): string => (n === 1 ? t("listaCuentaUna") : t("listaCuenta").replace("{n}", String(n)));
 
 /**
  * Cierra la lista a los cambios, o la vuelve a abrir.
@@ -41,7 +46,7 @@ export function cerrarLista(si: boolean): void {
   cerrada = si;
   $<HTMLTextAreaElement>("ta").disabled = si;
   $<HTMLInputElement>("prize").disabled = si;
-  $<HTMLSelectElement>("nw").disabled = si;
+  bloquearGanadores(si);
   for (const id of ["csv", "csv-luma", "btn-pegar"]) $<HTMLInputElement>(id).disabled = si;
   $<HTMLButtonElement>("btn-recuperar").disabled = si;
   // Los orígenes se ven apagados: ya no cargan nada (styles.css).
@@ -60,6 +65,8 @@ export function renderNames(): void {
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
+  // Las bases de antes de sellar: con lista y sin sellar. Después las reemplazan las de siempre.
+  $("rules-pre-row").style.display = names.length >= 2 && !listaCerrada() ? "" : "none";
   const vacia = names.length === 0 && !listaCerrada();
   // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
   // Y "Cargar ejemplo" es para quien llega sin lista: con nombres en el cuadro,
@@ -71,7 +78,7 @@ export function renderNames(): void {
   // En su lugar está el ensayo, que no graba nada (`#btn-ensayo`, ensayo.ts).
   $("btn-sample").style.display = anchoringAvailable || !vacia ? "none" : "";
   const ensayo = document.getElementById("btn-ensayo");
-  if (ensayo) ensayo.style.display = anchoringAvailable && vacia && !enEnsayo() ? "" : "none";
+  if (ensayo) ensayo.style.display = anchoringAvailable && vacia && !enPractica() ? "" : "none";
   // Con la lista vacía, lo único de color es "Pegar lista": es lo que toca. Con
   // la lista ya cargada vuelve a ser un origen más y lo de color es "Sellar",
   // que mientras falten nombres queda apagado y sin color (diseño del onboarding).
@@ -85,7 +92,7 @@ export function renderNames(): void {
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? t("sigLista").replace("{n}", String(names.length)) : "";
+    cuenta.textContent = names.length ? cuentaDeLista(names.length) : "";
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
@@ -96,8 +103,8 @@ export function renderNames(): void {
 }
 
 /**
- * Debajo de "Sellar la lista", lo que se va a sellar: "20 personas · 1 ganador
- * · Termo. Al sellar, la lista queda cerrada." Sellar es público y no se
+ * Debajo de "Sellar la lista", lo que se va a sellar: "20 personas, 1 ganador,
+ * Termo. Al sellar, la lista queda cerrada." Sellar es público y no se
  * deshace: que se lea antes (diseño del onboarding, pantalla 3). Lo vuelven a
  * escribir el premio, "Cuántos ganan" y el idioma.
  */
@@ -109,9 +116,10 @@ function pintarResumen(n = parseNames().length): void {
     return;
   }
   const L = T[getLang()];
-  const k = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, n);
+  const k = Math.min(ganadoresPedidos(), n);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
-  el.textContent = L.sellarResumen(n, k, premio);
+  // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
+  el.textContent = L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio);
   el.style.display = "";
 }
 
@@ -147,17 +155,18 @@ export function bindParticipants(): void {
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
   $("prize").addEventListener("input", guardarPronto);
   $("prize-chips").addEventListener("click", guardarPronto);
-  $("nw").addEventListener("change", guardarPronto);
+  // El campo es un número: se escribe (`input`) y se confirma al salir (`change`). Los atajos mandan `change`.
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, guardarPronto);
   // El resumen de debajo de "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
-  $("nw").addEventListener("change", () => pintarResumen());
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, () => pintarResumen());
   onLangChange(() => {
     pintarResumen();
     const cuenta = document.getElementById("lista-cuenta");
     const n = parseNames().length;
-    if (cuenta && n) cuenta.textContent = t("sigLista").replace("{n}", String(n));
+    if (cuenta && n) cuenta.textContent = cuentaDeLista(n);
   });
   addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
@@ -290,6 +299,9 @@ let origenLista: OrigenLista | null = null;
 /** De dónde viene el archivo o la tabla que se está cargando: la ventana de importar no lo sabe. */
 let origenArchivo: "paste" | "csv" | "luma" = "csv";
 let contarLuego = 0;
+/** Si la lista que se está sorteando vino de Luma: el resultado le dice qué sigue en Luma (draw.ts, showAgain). */
+let vinoDeLuma = false;
+export const listaVinoDeLuma = (): boolean => vinoDeLuma;
 
 /**
  * Anota de dónde vino el último cambio de la lista. Una lista pegada o
@@ -298,6 +310,7 @@ let contarLuego = 0;
  */
 function anotarOrigen(origen: OrigenLista, ya: boolean): void {
   origenLista = origen;
+  vinoDeLuma = origen === "luma";
   window.clearTimeout(contarLuego);
   if (ya) contarLista();
   else contarLuego = window.setTimeout(contarLista, 3000);
@@ -470,7 +483,7 @@ function showSummary(): void {
   const r = lastResult;
   // Las filas que no se pudieron leer siguen a la vista después de cerrar la ventana.
   $("csv-note").textContent = L.impSummary(r.source === "luma", r.picked, r.total, r.mode, r.hand) +
-    (r.skipped ? ` · ${L.impSkippedShort(r.skipped)}` : "");
+    (r.skipped ? `, ${L.impSkippedShort(r.skipped)}` : "");
   $("csv-pick").style.display = "";
 }
 
@@ -552,7 +565,7 @@ export function guardarBorrador(): void {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
     if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
-    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: $<HTMLSelectElement>("nw").value }));
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos() }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
   }
@@ -592,7 +605,8 @@ export function reponerBorrador(): void {
   setList(b.texto);
   if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
   const nw = Number(b.nw);
-  if (Number.isInteger(nw) && nw >= 1 && nw <= 32) $<HTMLSelectElement>("nw").value = String(nw);
+  // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
   if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 

@@ -13,6 +13,11 @@ import { T_CROWN, T_HOLD, T_LOCK, T_WIND } from "./wheel-beats";
  *   flecha, lo dice `adelante.lugar`: el juego (`wheel.ts`) mide en qué parte de la
  *   pantalla cae el gajo de la flecha, que depende de la cámara y el plan no la conoce.
  * - **progreso**: la hora sobre la hora del cartel, como De pie.
+ * - **progresoVisible**: solo desde `T_HOLD`, cuando la rueda ya casi se frena para
+ *   trabarse. Antes gira, a fondo o arrastrándose, y el tiempo no se ve en algo que
+ *   gira: la primera medición dijo «mucho» con el progreso en 0,60, y la segunda, con
+ *   la rueda ya arrastrándose desde `T_CREEP` (al 57 %), dijo «mucho» o «empieza» en 16
+ *   de 16. Con el cartel, también.
  * - **paso**: que la rueda empezó a girar (`empezo`, y pasada la ventana `nada`),
  *   el amague de la parada falsa (`casi`), la traba (`freno`) y el cartel (`gano`).
  *   Que la flecha pase de un gajo a otro no cuenta: es la rueda girando.
@@ -35,8 +40,8 @@ export interface PlanDeLaRuleta {
 
 /** La rueda gira: «alrededor». La flecha, arriba de la rueda, es dónde se ve quién va adelante. */
 export const SENTIDO_RULETA = "alrededor" as const;
-/** Cuánto de un gajo, pegado al borde, cuenta como «cerca» del vecino. */
-export const CERCA_DEL_BORDE = 0.12;
+/** Cuánto de un gajo, pegado al borde, cuenta como «cerca» del vecino: la punta de la flecha es ancha y a 390 px de ancho señala a los dos (era 0,12). */
+export const CERCA_DEL_BORDE = 0.2;
 /** «Qué acaba de pasar» es lo de hace tres segundos o menos; pasado eso, «nada nuevo». */
 export const VENTANA = 3;
 
@@ -77,6 +82,7 @@ export function respuestasRuleta(p: PlanDeLaRuleta, t: number): Respuestas {
     adelante: { quienes, lugar: "arriba" },
     hacia: SENTIDO_RULETA,
     progreso: Math.min(1, tt / T_CROWN),
+    progresoVisible: tt >= T_HOLD,
     paso,
   };
 }

@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "nota": "Lo que Tinkazo no puede decir. Cada patron es una expresion regular (sin bordes: se agregan solos; palabra entera, sin distinguir mayusculas ni tildes). Una palabra de una lengua no cae en la otra, asi que es y en se aplican juntos. No estan a proposito: ficha (la tarjeta con el nombre en la carrera), premio, ruleta (juego del selector). Las excepciones llevan su motivo y su fecha; las marcadas pendiente aprueban pero se listan en el resumen hasta que alguien las arregle.",
+  "apuesta": {
+    "motivo": "huele a apuesta o a casino",
+    "es": [
+      "apuestas?",
+      "apostar",
+      "apuesto",
+      "apostas",
+      "apostá",
+      "apostado",
+      "casinos?",
+      "jackpot",
+      "plata",
+      "dinero en efectivo",
+      "tragamonedas",
+      "tragaperras",
+      "dados?",
+      "cartas de p[oó]ker",
+      "p[oó]ker",
+      "slots?"
+    ],
+    "en": [
+      "bets?",
+      "betting",
+      "gambl[a-z]*",
+      "casinos?",
+      "chips",
+      "cash",
+      "dice",
+      "poker",
+      "slot machines?",
+      "slots?",
+      "jackpot"
+    ]
+  },
+  "vocabulario": {
+    "reglas": [
+      {
+        "id": "de-pie",
+        "alcance": "de-pie",
+        "motivo": "en los juegos de quedar de pie nadie queda eliminado ni pierde: se sienta o sale",
+        "es": [
+          "eliminad[oa]s?",
+          "elimina[a-z]*",
+          "perdi[oó]",
+          "perdiste",
+          "perdieron",
+          "fuera"
+        ],
+        "en": [
+          "eliminated",
+          "eliminates?",
+          "you lose",
+          "you lost",
+          "(?:knocked|knocks?|knock) (?:[a-z]+ ){0,2}out",
+          "(?:is|are|was|were|you're|got|gets) out",
+          "out of the (?:game|round)"
+        ]
+      },
+      {
+        "id": "ensayo-stand",
+        "alcance": "ensayo-stand",
+        "motivo": "en el ensayo y en el stand no hay premio: se dice sale o salio, no gana",
+        "es": [
+          "gana",
+          "ganan",
+          "gan[oó]",
+          "ganaron",
+          "ganador",
+          "ganadora",
+          "ganadores",
+          "ganadoras"
+        ],
+        "en": [
+          "wins",
+          "won",
+          "winner",
+          "winners"
+        ]
+      },
+      {
+        "id": "stand-relator",
+        "alcance": "relator",
+        "motivo": "el relator de un juego se lee tambien en una ronda de stand, donde nadie gana: lo que no es cartel ni cierre dice sale o salio",
+        "es": [
+          "gana",
+          "ganan",
+          "gan[oó]",
+          "ganaron",
+          "ganador",
+          "ganadora",
+          "ganadores",
+          "ganadoras"
+        ],
+        "en": [
+          "wins",
+          "won",
+          "winner",
+          "winners"
+        ]
+      },
+      {
+        "id": "punto-medio",
+        "alcance": "todo",
+        "motivo": "el punto medio suena a texto escrito por maquina: se escribe como frase",
+        "es": [
+          "·"
+        ],
+        "en": []
+      },
+      {
+        "id": "tecnicismos",
+        "alcance": "show",
+        "motivo": "durante el sorteo y en las tarjetas nada de drand, hashes ni firmas: lo tecnico va en comprobar, como funciona y seguridad",
+        "es": [
+          "drand",
+          "hash(?:es)?",
+          "sha(?:-?[0-9]+)?",
+          "bytes?",
+          "firmas?",
+          "bls",
+          "ledgers?",
+          "xdr"
+        ],
+        "en": [
+          "signatures?",
+          "signed"
+        ]
+      }
+    ]
+  },
+  "excepciones": [
+    {
+      "archivo": "src/i18n.ts",
+      "clave": "freeRule",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/i18n.ts",
+      "clave": "faq1a",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/i18n.ts",
+      "clave": "tmQ1T",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/i18n.ts",
+      "clave": "tmQ1B",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/i18n.ts",
+      "clave": "prNeverBody",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "index.html",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "terminos.html",
+      "regla": "apuesta",
+      "motivo": "el texto legal niega que sea una apuesta: dice lo que Tinkazo no es",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/games/pixi/stage.ts",
+      "regla": "stand-relator",
+      "motivo": "el cartel de quien gana ya tiene su rama de stand (SALIO / PICKED); estas son las del sorteo de verdad",
+      "fecha": "2026-11-02"
+    },
+    {
+      "archivo": "src/games/llamas/carrera-textos.ts",
+      "regla": "stand-relator",
+      "clave": "carMeta",
+      "motivo": "la rama de stand ya dice «Sale quien llegue a la meta»; «Gana» es la del sorteo de verdad, que solo se dice cuando enStand() es falso",
+      "fecha": "2026-11-02"
+    }
+  ]
+}

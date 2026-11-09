@@ -170,13 +170,6 @@
     cursor: not-allowed; background: var(--muted); color: var(--paper);
     box-shadow: 2px 2px 0 var(--ink); transform: none;
   }
-  /* Sin cuenta, el botón de sellar se ve apagado pero se lee: aria-disabled (y
-     no `disabled`) para que un lector de pantalla lo encuentre y lo explique la
-     línea de abajo. Gris claro con letra oscura: 7,1 a 1 en claro y 6,6 en oscuro. */
-  button.primary[aria-disabled="true"] {
-    cursor: not-allowed; background: var(--line); color: var(--ink2);
-    box-shadow: 2px 2px 0 var(--ink); transform: none;
-  }
   a.primary.cta { display: inline-block; text-decoration: none; }
   button.ghost, a.ghost {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -190,7 +183,7 @@
      que está en una red de pruebas, y confundirla con la de verdad sería lo
      peor que puede pasar. */
   .netbadge {
-    font-family: ui-monospace, Consolas, monospace; font-size: 13px; text-transform: uppercase;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase;
     letter-spacing: 0.12em; font-weight: 800; border: 2px solid var(--ink);
     box-shadow: var(--sh-sm); background: var(--orange);
     color: var(--on-accent); padding: 5px 11px;
@@ -269,9 +262,13 @@
     min-height: 48px; border: 0; border-radius: 12px; cursor: pointer;
     background: var(--magenta); color: var(--on-accent); font-family: inherit; font-size: 17px; font-weight: 800;
   }
-  .login-go:disabled { opacity: 0.45; cursor: default; }
+  /* Apagado: gris con letra del color de lo secundario, sin transparencia (rosa a medias con letra oscura quedaba por debajo de 4,5:1). */
+  .login-go:disabled { opacity: 1; cursor: default; background: var(--field); color: var(--ink2); border: 1px solid var(--line); }
   .login-err { font-size: 16px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
   .login-err.ok { color: var(--teal-ink); }
+  .login-note { margin: -2px 0 0; font-size: 16px; color: var(--ink2); text-align: center; line-height: 1.4; }
+  /* Una nota que avisa, no una falla en rojo: en su caja, apartada del texto de ayuda para que no parezcan un solo párrafo. */
+  .login-note.login-aviso { margin: 12px 0 0; padding: 10px 12px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 12px; }
   .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 16px; font-weight: 600; color: var(--muted); }
   .login-or::before, .login-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
   .login-opts { display: flex; flex-direction: column; gap: 10px; }
@@ -282,8 +279,9 @@
     transition: border-color 0.12s, background 0.12s;
   }
   .login-opt:hover { border-color: var(--ink2); background: var(--card); }
+  .login-opt:disabled { opacity: 0.45; cursor: default; }
   .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
-  .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
   /* Google primero y grande: es lo que va a tomar casi todo el mundo (diseño del onboarding). */
   /* Ancho completo, como las demás filas: un botón no se estira solo y fuera de `.login-opts` quedaba de 218 px, pegado a la izquierda. */
   .login-opt.login-google { width: 100%; box-sizing: border-box; min-height: 56px; font-size: 17px; font-weight: 800; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
@@ -318,8 +316,19 @@
     padding: 10px 18px; font-size: 16px; font-weight: 700; width: max-content; max-width: min(92vw, 520px); text-align: center;
   }
   .wallet-notice.bad { background: var(--orange); color: #191919; }
+  /* El error que se queda: la frase y, debajo, los botones en una fila, separados entre sí y del texto. */
+  .wallet-notice.bad { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 12px; }
+  .wallet-notice.bad p { margin: 0; overflow-wrap: anywhere; line-height: 1.35; }
+  .wallet-notice-acciones { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+  .wallet-notice-acciones button { min-height: 44px; padding-inline: 10px; font-size: 15px; white-space: nowrap; }
+  /* Dentro de la tarjeta de ingreso (wallet-ui.ts): en el flujo, debajo de la X, sin flotar. */
+  .wallet-notice.bad.en-tarjeta {
+    position: static; transform: none; width: auto; max-width: none; z-index: auto;
+    margin: 28px 0 16px; box-shadow: none;
+  }
   /* Con una ventana abierta (la de ingreso), el aviso de un error va arriba: abajo tapaba el campo del correo y el botón que él mismo recomienda. */
-  body:has(.modal-back) .wallet-notice:not(.arriba) { bottom: auto; top: max(12px, env(safe-area-inset-top, 0px)); }
+  .wallet-notice.bad.en-tarjeta.bajo-boton { margin: 10px 0 0; }
+  body:has(.modal-back) .wallet-notice:not(.arriba):not(.en-tarjeta) { bottom: auto; top: max(12px, env(safe-area-inset-top, 0px)); }
   /* El que salió bien, dentro de la página (arriba de la lista): no tapa ningún control (wallet-ui.ts). */
   .wallet-notice.arriba {
     position: static; transform: none; width: auto; max-width: none; margin: 0 0 14px; z-index: auto;
@@ -389,19 +398,18 @@
   .check.working { border-left-color: var(--purple); opacity: 0.65; }
   .check.ok b::before { content: "✓ "; color: var(--teal); }
   .check.bad b::before { content: "✗ "; color: var(--orange); }
-  .check.pending b::before { content: "· "; }
+  .check.pending b::before { content: "○ "; }
   .check.working b::before { content: "… "; }
   .steps-code {
     background: var(--paper); border: 2px solid var(--ink); padding: 14px; overflow-x: auto;
-    font: 12px/1.7 ui-monospace, Consolas, monospace; color: var(--ink2); white-space: pre; margin-top: 12px;
+    font: 14px/1.7 ui-monospace, Consolas, monospace; color: var(--ink2); margin-top: 12px;
   }
-  /* En el celular las líneas largas (la huella, el enlace a la ronda) se
-     cortaban contra el borde, sin ninguna señal de que el bloque se podía
-     correr de costado (revisión visual, 21 de octubre de 2026). Ahí se parten:
-     el salto es solo de pantalla, y lo que se copia sigue siendo una línea. */
-  @media (max-width: 760px) {
-    .steps-code { white-space: pre-wrap; overflow-wrap: anywhere; }
-  }
+  /* Las líneas largas (la huella, el enlace a la ronda) se parten en vez de
+     cortarse contra el borde o correrse de costado: antes solo en el celular, y
+     en escritorio con otra tipografía monoespaciada, más ancha, el bloque se
+     pasaba de su caja. El salto es solo de pantalla, y lo que se copia sigue
+     siendo una línea. */
+  .steps-code { white-space: pre-wrap; overflow-wrap: anywhere; }
   .chip {
     border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
     font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
@@ -428,6 +436,10 @@
     text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left;
   }
   .enlace:hover { color: var(--ink); }
+  /* Para opinar: lo último del resultado, un enlace como los demás (feedback.ts). Parejo en dos líneas en el
+     celular, sin una palabra sola abajo. */
+  .feedback-fin { margin-top: 18px; font-weight: 500; text-wrap: balance; }
+  .feedback-fin[hidden] { display: none; }
   /* La espera de la ronda.
      Son los diez segundos en que la lista ya está cerrada y el número que la
      va a decidir todavía no existe: es el momento en que este producto es
@@ -461,12 +473,15 @@
   .rules-text { white-space: pre-wrap; margin: 0 0 14px; }
   .pick-label { margin-top: 18px; margin-bottom: 8px; }
   .gamepick { display: flex; gap: 10px; flex-wrap: wrap; }
+  .ver3d { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; margin: 12px 0 0; }
+  .ver3d[hidden] { display: none; }
+  .ver3d .note { margin: 0; flex: 1 1 220px; }
   .gamepick button {
     border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); padding: 9px 16px;
     font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
-  /* La miniatura de cada juego, dentro de su botón.
+  /* La miniatura de cada juego, dentro de su botón: una captura real del juego, una por tema.
      A 54x30 px no hay dibujo que se vea: una llama medía nueve píxeles y un
      cohete eran dos rectángulos. El botón pasa a ser una tarjeta con la escena
      arriba y el nombre abajo, que es lo que hace que dé ganas de tocarlo. */
@@ -475,11 +490,18 @@
     flex-direction: column; gap: 8px; padding: 8px 8px 10px; width: 132px;
     align-items: stretch; text-align: center;
   }
-  .gamepick .thumb {
-    width: 100%; height: 66px; border: 2px solid var(--ink); display: block;
+  .gamepick .sel-img {
+    width: 100%; height: auto; aspect-ratio: 16 / 9; border: 2px solid var(--ink); display: block; background: var(--field);
     transition: transform 120ms;
   }
-  .gamepick button:hover:not(:disabled) .thumb { transform: scale(1.04); }
+  .gamepick .sel-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .gamepick .sel-osc { display: block; }
+    :root:not([data-theme="light"]) .gamepick .sel-cla { display: none; }
+  }
+  :root[data-theme="dark"] .gamepick .sel-osc { display: block; }
+  :root[data-theme="dark"] .gamepick .sel-cla { display: none; }
+  .gamepick button:hover:not(:disabled) .sel-img { transform: scale(1.04); }
   .gamepick button.on { transform: rotate(-1deg) translate(-1px, -1px); box-shadow: var(--sh); }
   .gamepick button:disabled {
     cursor: not-allowed; background: var(--paper); color: var(--muted);
@@ -493,8 +515,10 @@
     text-transform: uppercase; line-height: 1.4; padding: 1px 6px;
     background: var(--teal); color: var(--on-accent); border: 2px solid var(--ink);
   }
-  .gamepick .rec-nota { display: block; font-size: 11px; line-height: 1.35; font-weight: 600; color: var(--ink2); }
+  .gamepick .rec-nota { display: block; font-size: 14px; line-height: 1.35; font-weight: 600; color: var(--ink2); }
   .gamepick button.atenuado:not(.on) { color: var(--muted); border-style: dashed; box-shadow: none; }
+  /* Un juego que no encaja con la cantidad de personas se ve apagado también en la captura: con el dibujo a todo color el borde punteado solo no alcanza. */
+  .gamepick button.atenuado:not(.on) .sel-img { opacity: 0.55; filter: saturate(0.7); }
   .gamepick button.atenuado:not(.on) .rec-nota { color: var(--muted); }
   .gamepick button.on .rec-nota { color: var(--on-purple); }
   #rec-head { margin: 4px 0 10px; }
@@ -517,7 +541,7 @@
   .kpis > div:nth-child(1) b { color: var(--magenta-ink); }
   .kpis > div:nth-child(2) b { color: var(--teal-ink); }
   .kpis > div:nth-child(3) b { color: var(--purple-ink); }
-  .kpis span { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
+  .kpis span { font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
   .names { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .names i { font-style: normal; border: 2px solid var(--ink); background: var(--paper); padding: 3px 11px 3px 4px; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
   .names i img { width: 22px; height: 22px; border: 1.5px solid var(--ink); background: #fff; }
@@ -564,6 +588,28 @@
   #winner-cards > .winner-card:only-child .ausente { width: auto; min-width: 0; }
   .ausente-btn { text-wrap: balance; }
   .ausente-btn:focus-visible { outline: 3px solid #191919; outline-offset: 2px; }
+  /* Con más de seis ganadores (src/ui/resultado-ganadores.ts): el primero en su tarjeta y los demás en una lista de
+     renglones cortos, número, nombre y «No está». En columnas donde hay lugar y de a uno en el celular. Cada columna
+     mide 380 px o más: con 300 px (tres columnas a 1366 y a 1920) "Valeria Vargas" se partía en dos renglones en casi
+     todos los nombres, y 100 ganadores eran 4.500 px de página. */
+  .winner-lista-t { margin-top: 22px; font-size: var(--letra-prin); font-weight: 800; }
+  .winner-lista-premio { margin-top: 4px; font-size: var(--letra-sec); }
+  .winner-lista-premio span { color: var(--ink2); }
+  .winner-lista {
+    list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
+  }
+  .winner-fila {
+    display: flex; align-items: center; gap: 4px 10px; min-width: 0; padding: 6px 10px;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  .winner-num { flex: 0 0 auto; min-width: 3.2ch; font: 800 16px/1.2 ui-monospace, Consolas, monospace; }
+  .winner-fila .winner-name { flex: 1 1 0; min-width: 0; font-size: clamp(20px, 2.2vw, 30px); font-weight: 900; line-height: 1.15; }
+  .winner-fila .ausente { flex: 0 0 auto; width: auto; min-width: 0; margin: 0; }
+  /* La pregunta de confirmar ocupa el renglón entero, debajo del nombre. */
+  .winner-fila:has(.ausente-q) { grid-column: 1 / -1; flex-wrap: wrap; }
+  .winner-fila:has(.ausente-q) .ausente { flex: 1 1 100%; }
+  @media (max-width: 460px) { .winner-fila { padding: 6px 8px; } .winner-fila .winner-name { font-size: 20px; } }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
@@ -571,7 +617,7 @@
   .qr p { font-size: 16px; margin-top: 6px; max-width: 140px; }
   .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 16px; color: var(--ink2); }
   footer { border-top: var(--bw) solid var(--ink); margin-top: 44px; }
-  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
   /* El pie lleva emoji, y en versalitas con mucho espaciado quedan feos. */
   footer .bar [data-i="footR"] { text-transform: none; letter-spacing: 0.04em; font-size: 16px; }
   .note { font-size: 16px; color: var(--muted); margin-top: 10px; }
@@ -603,7 +649,7 @@
   .gc-caja { position: relative; width: 100%; max-width: 1100px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: clamp(10px, 2.4vh, 24px); }
   .gc-kicker {
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;
-    font-size: clamp(13px, 2.2vh, 20px); background: #00a896; color: #10101c; padding: 6px 14px; box-shadow: 4px 4px 0 #000;
+    font-size: clamp(14px, 2.2vh, 20px); background: #00a896; color: #10101c; padding: 6px 14px; box-shadow: 4px 4px 0 #000;
   }
   .gc-nombre { font-size: clamp(42px, min(10vw, 13vh), 140px); line-height: 1.05; font-weight: 900; letter-spacing: -0.02em; }
   .gc-nombre span { background: #ffc629; color: #10101c; padding: 0 0.16em; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: 6px 6px 0 #000; }
@@ -614,7 +660,7 @@
   .gc-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
   .gc-chips span {
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
-    font-size: clamp(12px, 2vh, 18px); border: 3px solid #f6efe2; padding: 6px 12px;
+    font-size: clamp(14px, 2vh, 18px); border: 3px solid #f6efe2; padding: 6px 12px;
   }
   .gc-honesta { font-size: clamp(15px, min(2.4vw, 3vh), 26px); line-height: 1.3; color: rgba(246, 239, 226, 0.86); max-width: 34em; text-wrap: balance; }
   /* Abajo, lejos del Saltar del estadio, que va arriba a la derecha: en el
@@ -630,7 +676,7 @@
   .gc-graba {
     position: absolute; top: clamp(18px, 3.4vh, 32px); left: 16px; right: 16px; margin: 0;
     display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px;
-    font-size: clamp(13px, min(1.9vw, 2.4vh), 20px); font-weight: 700; line-height: 1.3; color: rgba(246, 239, 226, 0.86); text-align: center;
+    font-size: clamp(14px, min(1.9vw, 2.4vh), 20px); font-weight: 700; line-height: 1.3; color: rgba(246, 239, 226, 0.86); text-align: center;
   }
   .gc-graba .cortina-puntos { margin: 0; gap: 8px; }
   .gc-graba .cortina-puntos i { width: 11px; height: 11px; border-color: #f6efe2; }
@@ -665,7 +711,7 @@
   .st-round {
     background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 6px 14px; font-family: ui-monospace, Consolas, monospace;
-    font-size: clamp(11px, 1.15vw, 18px); letter-spacing: 0.12em;
+    font-size: clamp(14px, 1.15vw, 18px); letter-spacing: 0.12em;
     text-transform: uppercase; color: var(--ink); font-weight: 700;
   }
   .st-actions { display: flex; gap: 8px; }
@@ -716,7 +762,7 @@
     .langs button { padding: 4px 7px; min-width: 44px; }
     .bar { gap: 10px; padding: 12px 14px; }
     .auth { gap: 6px; }
-    .netbadge { font-size: 12px; padding: 5px 8px; letter-spacing: 0.08em; }
+    .netbadge { font-size: 14px; padding: 5px 8px; letter-spacing: 0.08em; }
     .gamepick button { width: calc(50% - 6px); }
   }
 
@@ -761,12 +807,15 @@
     background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); border-left: 8px solid var(--yellow);
   }
+  /* "¿Primera vez?" ya ofrece el ensayo: con ella a la vista, "o probá con un ejemplo" de más abajo sobra. */
+  #primera-vez:not([style*="none"]) ~ #btn-ensayo { display: none !important; }
   .gate p { flex: 1 1 220px; font-size: 16px; font-weight: 700; line-height: 1.45; padding: 4px 0; }
   .gate button { min-height: 44px; }
   .gate.retomando p { color: var(--ink2); }
   /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
-     armar la lista antes de conectar. Solo el botón de sellar queda apagado
-     (`aria-disabled`, más arriba) y esta línea dice qué falta. */
+     armar la lista antes de conectar. El botón de sellar sigue con el color de la
+     casa y dice "Entrar para sellar" (`aria-disabled` es la marca de que abre la
+     entrada y no sella); esta línea de abajo tranquiliza: la gente no necesita cuenta. */
   .sellar-sin-cuenta { display: none; margin: 10px 0 0; font-size: 16px; font-weight: 700; color: var(--ink2); }
   .body.locked .sellar-sin-cuenta { display: block; }
 
@@ -847,13 +896,13 @@
     padding: 5px 12px; border: 2px solid var(--ink); background: var(--card); box-shadow: var(--sh-sm);
     font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
   }
-  .espera-pie { font-size: clamp(13px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
+  .espera-pie { font-size: clamp(14px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
   .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
   .espera-ensayo {
-    font-size: clamp(13px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;
+    font-size: clamp(14px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;
     background: var(--yellow); color: #191919; border: 2px solid #191919; box-shadow: 3px 3px 0 #191919; padding: 4px 12px;
   }
-  .espera-id { font-size: clamp(13px, 1.5vw, 18px); font-weight: 800; }
+  .espera-id { font-size: clamp(14px, 1.5vw, 18px); font-weight: 800; }
   /* Cuando nace el número, en el lugar de la cuenta y con su alto (lo mide
      espera.ts: los nombres no saltan): la línea de la cortina mientras se
      sortea, o una sola acción grande, lanzar o reintentar (21 de octubre de 2026). */
@@ -865,6 +914,7 @@
   .espera-sigue .cortina-t { font-size: clamp(22px, 3.4vw, 44px); color: var(--ink); max-width: 26ch; }
   .espera-motivo { font-size: clamp(18px, 2.6vw, 34px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   button.primary.espera-accion { font-size: clamp(22px, 3.6vw, 44px); padding: 0.4em 1.2em; min-height: 64px; max-width: 100%; }
+  button.espera-accion-2 { font-size: clamp(14px, 1.8vw, 22px); min-height: 44px; max-width: 100%; }
   @keyframes espera-cinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   html:has(.espera) { overflow: hidden; }
   @media (prefers-reduced-motion: reduce) {
@@ -937,6 +987,7 @@
   /* Sobre el morado del final de la portada y de la demo, el enlace va del color de la letra de ahí. */
   .demo-fin .hero-ctas .enlace, .portada-fin .enlace, .ensayo-fin .enlace:hover,
   .demo-fin .hero-ctas .enlace:hover, .portada-fin .enlace:hover { color: var(--on-purple); }
+  .demo-fin .cta-entrar { padding-inline: 20px; }
   .portada-fin .hero-otras { margin-top: 10px; }
 
   /* La primera vez, una línea sin botones de color (onboarding.ts). */
@@ -953,6 +1004,13 @@
     background: none; border: 0; color: var(--ink2); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer;
   }
   .pv-x:hover { color: var(--ink); }
+  /* En un celular entra en una línea: "¿Primera vez? Probalo con un ejemplo" y su X (390 px). */
+  @media (max-width: 480px) {
+    .primera-vez { padding-left: 10px; gap: 0; }
+    .primera-vez p, .primera-vez .enlace { font-size: 14px; }
+    /* La X está centrada en sus 44 px: el texto puede entrar en la parte vacía de su izquierda. */
+    .primera-vez p { margin-right: -20px; }
+  }
   .pegar-ayuda { margin: -4px 0 10px; }
   .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); }
   /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
@@ -1006,7 +1064,7 @@
   .como-tarjeta[data-paso="3"] .como-n { background: var(--teal); }
   .como-tarjeta[data-paso="4"] .como-n { background: var(--orange); }
   /* Con `.como-tarjeta` adelante: `.como-tarjeta p` le ponía el color de la letra de la tarjeta (1,18 a 1 en oscuro, audit-ui). */
-  .como-tarjeta .como-aca { display: none; position: absolute; top: 14px; right: 12px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #191919; background: var(--yellow); padding: 2px 6px; border: 2px solid var(--ink); }
+  .como-tarjeta .como-aca { display: none; position: absolute; top: 14px; right: 12px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #191919; background: var(--yellow); padding: 2px 6px; border: 2px solid var(--ink); }
   .como-tarjeta.aca .como-aca { display: block; }
   .como-tarjeta h4 { font-size: 17px; font-weight: 900; line-height: 1.25; }
   .como-tarjeta p { font-size: 16px; line-height: 1.45; color: var(--ink2); }
@@ -1039,7 +1097,7 @@
   body[data-mapa="1"] :is(#btn-pegar, #btn-freeze, #btn-draw, #btn-again-sin, #btn-proof)::before {
     position: absolute; top: -12px; left: -12px; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px;
     border-radius: 50%; background: var(--yellow); color: #191919; border: 2px solid var(--ink);
-    font: 900 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; pointer-events: none;
+    font: 900 14px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; pointer-events: none;
   }
   body[data-mapa="1"] #btn-pegar::before { content: "1"; content: "1" / ""; }
   body[data-mapa="1"] #btn-freeze::before { content: "2"; content: "2" / ""; }
@@ -1064,6 +1122,9 @@
   /* Notas sueltas: párrafos cortos con título, en dos columnas cuando entra. */
   /* Cuatro en una fila en pantalla ancha: con 300 px de mínimo quedaba una sola abajo. */
   .notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 18px 0 10px; }
+  /* Las de Términos, con textos de largos muy distintos: de a dos y cada una de su alto. En cuatro columnas
+     las cortas quedaban a medio llenar, estiradas hasta el alto de la más larga. */
+  .notas.notas-largas { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: start; }
   .nota { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 18px 20px; }
   .nota h3 { font-size: 17px; font-weight: 800; text-wrap: balance; }
   .nota p { font-size: 16px; color: var(--ink2); margin-top: 8px; }
@@ -1164,7 +1225,7 @@
   .imp-rows li.off img { opacity: 0.45; }
   .imp-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
   .imp-badge {
-    font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 7px; white-space: nowrap;
+    font: 700 14px/1 ui-monospace, Consolas, monospace; padding: 4px 7px; white-space: nowrap;
     border: 2px solid var(--ink); background: var(--paper); color: var(--ink2);
   }
   .imp-badge.came { background: var(--teal); color: var(--on-accent); }
@@ -1261,9 +1322,12 @@
   .hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 6px; }
   .hero-ctas .ghost { min-height: 52px; font-size: 16px; padding: 0 22px; display: inline-flex; align-items: center; text-decoration: none; }
   .hero-note { margin-top: 10px; }
+  /* Los dos enlaces de la portada ("Otras formas de entrar" y "¿Cómo sé que es justo?") quedaban a 80 px uno del otro,
+     con un hueco donde antes había una nota: se juntan sin achicar el blanco de toque de ninguno. */
+  .hero-portada .hero-note { margin-top: -28px; }
 
   /* Las secciones de la portada. */
-  .portada-sec { margin: 0 0 56px; }
+  .portada-sec { margin: 0 0 56px; scroll-margin-top: 28px; }
   .portada-sec > .kicker { display: block; margin-bottom: 8px; }
   .portada-sec h2.sec-t { font-size: clamp(24px, 3.4vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
   .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: var(--letra-sec); }
@@ -1272,16 +1336,24 @@
 
   /* Los ocho juegos del selector, cada uno con su miniatura animada: tocarlo
      abre la demo. En cuatro columnas, dos filas parejas; en un celular, dos. */
-  .portada-juegos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  .portada-juegos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
   .portada-juegos a {
     display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: var(--letra-sec); line-height: 1.15;
     min-height: 44px; transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
   .portada-juegos a:hover { transform: translate(-2px, -2px); box-shadow: var(--sh); }
-  .portada-juegos canvas.thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); }
+  /* La captura de cada juego, una por tema: se ve la del tema efectivo del sitio (el del sistema o el que se elige con data-theme), no solo la del sistema. */
+  .portada-juegos .pj-img { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); background: var(--field); }
+  .portada-juegos .pj-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .portada-juegos .pj-osc { display: block; }
+    :root:not([data-theme="light"]) .portada-juegos .pj-cla { display: none; }
+  }
+  :root[data-theme="dark"] .portada-juegos .pj-osc { display: block; }
+  :root[data-theme="dark"] .portada-juegos .pj-cla { display: none; }
   .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-  @media (max-width: 640px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 759px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* Tarjetas: por qué confiar y para quién. */
   .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 18px; }
@@ -1296,18 +1368,17 @@
   .cards3 article:nth-child(4n+2) .ico { background: var(--orange); }
   .cards3 article:nth-child(4n+3) .ico { background: var(--teal); }
   .cards3 article:nth-child(4n+4) .ico { background: var(--yellow); }
+  /* La tarjeta única de confianza: a todo el ancho, con la marca a un lado y la frase en letra más grande. Con el
+     texto debajo de la marca, a 1366 px quedaban dos renglones sueltos en una caja de mil píxeles. */
+  .cards3 .conf-unica { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; align-items: start; }
+  .cards3 .conf-unica .ico { grid-row: 1 / span 2; margin-top: 2px; }
+  .cards3 .conf-unica h3 { margin-top: 0; }
+  .cards3 .conf-unica p { font-size: clamp(16px, 1.5vw, 19px); max-width: 78ch; }
+  @media (max-width: 560px) { .cards3 .conf-unica { display: block; } .cards3 .conf-unica h3 { margin-top: 12px; } }
+  /* Sin una palabra sola en el último renglón de los títulos y de los textos de lectura (portada y páginas de lectura; la herramienta no). */
+  body:not([data-vista="app"]) main :is(h2, h3, summary) { text-wrap: balance; }
+  body:not([data-vista="app"]) main :is(p, li) { text-wrap: pretty; }
   .sec-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 14px; font-weight: 800; color: var(--ink); }
-
-  /* Los números, medidos. */
-  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); margin-top: 18px; }
-  .cifras > div { padding: 18px 20px; border-right: 2px dashed var(--ink); }
-  .cifras > div:last-child { border-right: 0; }
-  .cifras b { display: block; font-size: 30px; font-weight: 900; line-height: 1; }
-  .cifras span { display: block; margin-top: 6px; font-size: var(--letra-sec); color: var(--ink2); }
-  @media (max-width: 560px) {
-    .cifras > div { border-right: 0; border-bottom: 2px dashed var(--ink); }
-    .cifras > div:last-child { border-bottom: 0; }
-  }
 
   /* Preguntas frecuentes. */
   .faq { margin-top: 18px; display: grid; gap: 10px; max-width: 820px; }
@@ -1327,15 +1398,9 @@
   .portada-fin .hero-ctas { justify-content: center; margin-top: 16px; }
   .portada-fin .ghost { background: var(--card); color: var(--ink); }
 
-  /* La barra de la herramienta: el título y las pestañas. */
+  /* La barra de la herramienta: el título y, debajo, los pasos. */
   .appbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 22px; }
   .appbar h2 { font-size: clamp(24px, 3.2vw, 32px); font-weight: 900; }
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tabs button {
-    min-height: 44px; padding: 0 18px; font-weight: 800; font-size: 16px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); box-shadow: var(--sh-sm); cursor: pointer; font-family: inherit;
-  }
-  .tabs button[aria-selected="true"] { background: var(--yellow); color: #191919; }
   .appbar-links a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 16px; color: var(--ink2); }
   #hist-vacio { display: none; }
   body[data-tab="historial"] #sec-history[style*="none"] + #hist-vacio { display: block; }
@@ -1355,23 +1420,23 @@
   .linea p { color: var(--ink2); font-size: 16px; margin-top: 6px; }
   .guarda { width: 100%; max-width: 820px; border-collapse: collapse; margin-top: 18px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); font-size: 14px; }
   .guarda th, .guarda td { text-align: left; padding: 12px 14px; border-bottom: 2px dashed var(--ink); vertical-align: top; }
-  .guarda th { font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .guarda th { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
   .guarda tr:last-child td { border-bottom: 0; }
   @media (max-width: 560px) {
     .guarda thead { display: none; }
     .guarda tr { display: block; border-bottom: 2px dashed var(--ink); padding: 8px 0; }
     .guarda tr:last-child { border-bottom: 0; }
     .guarda td { display: block; border: 0; padding: 4px 14px; }
-    .guarda td::before { content: attr(data-label); display: block; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+    .guarda td::before { content: attr(data-label); display: block; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
   }
 
   /* Mis sorteos: cada sorteo, una tarjeta con su estado y una acción. */
   .hist-list { display: grid; gap: 14px; margin: 4px 0 16px; }
   /* El aviso de que la lista de la cadena se cortó: legible, pegado a la lista y sin competir con las acciones. */
-  .hist-truncado { margin: 0 0 12px; font-size: 13px; color: var(--ink2); }
+  .hist-truncado { margin: 0 0 12px; font-size: 14px; color: var(--ink2); }
   .hist-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 16px; }
   .hc-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }
+  .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }
   .hist-card.hecho .hc-estado { background: var(--teal); }
   .hc-fecha { font-size: 15px; color: var(--ink2); }
   .hist-card h3 { font-size: 18px; font-weight: 900; margin-top: 8px; }
@@ -1459,6 +1524,8 @@
 
   /* El hero muestra el producto: una partida de verdad, con la llama encima. */
   .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; }
+  /* A 64 px el título de doce palabras caía en tres renglones y dejaba "grande." solo en el de abajo (1920x1080): a 56 entra en dos. */
+  .hero-portada h1 { font-size: clamp(38px, 6.4vw, 56px); }
   .hero-shot { position: relative; display: block; }
   .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
   .hero-shot:hover img { transform: rotate(0deg) scale(1.01); }
@@ -1502,62 +1569,98 @@
   /* El ensayo (src/ui/ensayo.ts): la herramienta de verdad con una lista de
      ejemplo, que nunca graba nada. Se ve que es un ensayo: una banda arriba que
      acompaña al bajar, la línea que guía debajo de los pasos, su final en el
-     resultado y, en el estadio, "ENSAYO · no se graba" donde va el número. */
-  .ensayo-banda, .ensayo-fin { display: none; }
-  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda {
+     resultado y, en el estadio, "ENSAYO: no se graba" donde va el número. */
+  .ensayo-banda, .ensayo-fin, .stand-banda, .stand-fin { display: none; }
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-    position: sticky; top: 0; z-index: 9; margin: 22px 0 0; padding: 10px 14px;
+    position: sticky; top: 0; z-index: 12; margin: 22px 0 0; padding: 10px 14px;
     background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
   }
   /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
      Y lo que la página lleva a la vista se para debajo de la banda, no detrás. */
-  body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
+  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
   @media (min-width: 1101px) {
-    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { top: var(--cab-alto, 0px); }
-    body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { top: var(--cab-alto, 0px); }
+    body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
   }
-  .ensayo-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
-  .ensayo-banda button.ghost { min-height: 44px; }
+  .ensayo-banda p, .stand-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
+  .ensayo-banda button.ghost, .stand-banda button.ghost { min-height: 44px; }
   /* En el celular, en un renglón y chica: acompaña al bajar y no se come la pantalla (390x664 con Safari). */
   @media (max-width: 760px) {
-    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { flex-wrap: nowrap; gap: 8px; padding: 6px 6px 6px 12px; margin-top: 14px; }
-    .ensayo-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
-    .ensayo-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: nowrap; gap: 8px; padding: 6px 6px 6px 12px; margin-top: 14px; }
+    .ensayo-banda p, .stand-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
+    .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
+  }
+  /* En un celular angosto el texto llegaba a tres líneas con el botón al lado: el texto arriba y el botón abajo, en una línea cada uno. */
+  @media (max-width: 480px) {
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: wrap; gap: 4px; padding: 6px 8px 8px; }
+    .ensayo-banda p, .stand-banda p { flex: 1 1 100%; font-size: 14px; line-height: 1.25; }
+    .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 1 1 100%; min-height: 44px; }
   }
   .ensayo-guia[hidden] { display: none; }
-  body:not([data-ensayo="1"]) .ensayo-guia { display: none; }
-  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
-    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); border-left: 8px solid var(--yellow); font-weight: 700; font-size: 16px; line-height: 1.45;
+  body:not([data-ensayo="1"]):not([data-stand="1"]) .ensayo-guia { display: none; }
+  /* Texto simple debajo del indicador: sin caja ni bordes, que no compita con el botón. */
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]), body[data-stand="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
+    display: block; margin: -8px 0 18px; padding: 0; color: var(--ink); font-weight: 600; font-size: 16px; line-height: 1.45;
   }
-  /* El recordatorio de crear la cuenta: una frase debajo de la línea que guía, solo en el ensayo (aviso-cuenta.ts). */
-  .aviso-cuenta[hidden], body:not([data-ensayo="1"]) .aviso-cuenta { display: none; }
-  body[data-ensayo="1"][data-tab="nuevo"] .aviso-cuenta:not([hidden]) {
-    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); border-left: 8px solid var(--teal); font-weight: 700; font-size: 16px; line-height: 1.45;
-  }
-  /* En el renglón, pero con su blanco de toque de 44 px. */
-  .aviso-cuenta .enlace { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; margin: 0; font-size: 16px; vertical-align: middle; }
-  body[data-ensayo="1"] .ensayo-fin {
+  body[data-ensayo="1"] .ensayo-fin, body[data-stand="1"] .stand-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
-  .ensayo-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
-  .ensayo-fin p { font-size: 16px; line-height: 1.5; }
-  .ensayo-fin .row { margin-top: 14px; }
-  .ensayo-fin button { min-height: 48px; }
-  .ensayo-fin .enlace { color: var(--on-purple); }
+  .ensayo-fin h3, .stand-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .ensayo-fin p, .stand-fin p { font-size: 16px; line-height: 1.5; }
+  .ensayo-fin .row, .stand-fin .row { margin-top: 14px; }
+  .ensayo-fin button, .stand-fin button { min-height: 48px; }
+  .ensayo-fin .enlace, .stand-fin .enlace { color: var(--on-purple); }
   /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
      las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
   body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] .mas-origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
   body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
-  body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel { display: none !important; }
+  body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel, body[data-ensayo="1"] #btn-stand { display: none !important; }
+  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto. */
+  body[data-stand="1"] #gate, body[data-stand="1"] #seed-label, body[data-stand="1"] #btn-ensayo, body[data-stand="1"] #btn-stand, body[data-stand="1"] #btn-sample,
+  body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
+  body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
+  body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
+  body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
+  /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
+  .stand-sala { display: none; }
+  body[data-stand="1"] .stand-sala { display: block; margin: 0 0 18px; padding: 16px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .stand-sala h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .stand-sala h4 { font-size: 17px; font-weight: 900; margin: 14px 0 4px; }
+  .stand-sala button { min-height: 48px; }
+  .stand-sala .mini { min-height: 44px; }
+  .stand-sala [hidden] { display: none !important; }
+  .ss-error { margin-top: 10px; font-weight: 700; font-size: 16px; line-height: 1.4; }
+  .ss-qr { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; }
+  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto; }
+  .ss-lado { flex: 1 1 220px; min-width: 0; }
+  .ss-estado { font-weight: 800; font-size: 16px; }
+  .ss-estado[data-estado="sondeo"] { color: var(--bad, #b3261e); }
+  .ss-cuenta { font-size: 28px; font-weight: 900; margin: 6px 0 12px; line-height: 1.15; }
+  .ss-nombres, .ss-revisar ul { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; max-height: 28vh; overflow: auto; }
+  .ss-nombres li, .ss-revisar li { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--ink); background: var(--paper); padding: 2px 4px 2px 10px; font-size: 16px; font-weight: 600; }
+  .ss-nombre { overflow-wrap: anywhere; }
+  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. */
+  .stand-sala.grande { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 60; margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: center; justify-content: center; padding: 16px 20px; background: var(--paper); text-align: center; }
+  .stand-sala.grande #sala-abierta { display: flex; flex-direction: column; align-items: center; }
+  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; }
+  .stand-sala.grande .ss-qr img { width: min(560px, 62vh, 90vw) !important; height: min(560px, 62vh, 90vw) !important; }
+  .stand-sala.grande .ss-lado { flex: 0 0 auto; text-align: center; }
+  .stand-sala.grande .ss-lado .row { justify-content: center; }
+  .stand-sala.grande .ss-cuenta { margin: 2px 0 8px; font-size: clamp(22px, 4vh, 28px); }
+  .ss-titqr { display: none; font-weight: 900; font-size: clamp(24px, 4.6vh, 40px); line-height: 1.15; margin: 0 0 10px; }
+  .stand-sala.grande .ss-titqr { display: block; }
+  /* Con el QR en toda la pantalla no hay otra barra de desplazamiento detrás. */
+  html:has(.stand-sala.grande) { overflow: hidden; }
+  .ss-rep { font-style: normal; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border: 2px solid currentColor; padding: 0 4px; color: var(--magenta-ink); }
+  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada { display: none; }
   /* El cuadro se lee, pero no se escribe. */
   body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
   /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
-  body[data-ensayo="1"] #st-round { font-size: 0; padding: 0; border: 0; box-shadow: none; background: none; }
-  body[data-ensayo="1"] #st-round::after {
+  body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { font-size: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+  body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after {
     content: attr(data-ens); display: inline-block; font-size: clamp(14px, 1.9vw, 26px); font-weight: 900; letter-spacing: 0.08em;
     background: var(--yellow); color: #191919; border: 2px solid #191919; box-shadow: 3px 3px 0 #191919; padding: 6px 14px;
   }
@@ -1578,7 +1681,7 @@
   .sala-nombres { margin: 0; padding: 0 0 0 2.2em; column-width: 10.5em; column-gap: 2.6em; overflow-y: auto; font-size: 20px; font-weight: 700; line-height: 1.45; }
   .sala-nombres li { break-inside: avoid; }
   .sala-nombres li.rep, .lista-nombres li.rep { color: var(--magenta-ink); }
-  .sala-nombres li em, .lista-nombres li em { font-style: normal; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.08em; border: 2px solid currentColor; padding: 0 4px; margin-left: 4px; }
+  .sala-nombres li em, .lista-nombres li em { font-style: normal; font-size: max(14px, 0.72em); text-transform: uppercase; letter-spacing: 0.08em; border: 2px solid currentColor; padding: 0 4px; margin-left: 4px; }
   .sala-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; align-self: start; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 14px; }
   .sala-qr img { max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; }
   .sala-qr p { font-weight: 800; font-size: 15px; }
@@ -1605,6 +1708,15 @@
   .pantalla-llevan b { font-weight: 900; }
   .pantalla.muchos .pantalla-llevan { grid-column: 1 / -1; }
   .pantalla.muchos .pantalla-ganadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: max(6px, 0.2em) max(10px, 0.4em); align-items: stretch; }
+  /* Con más de doce ganadores: una lista de renglones cortos, número y nombre, en tantas columnas como entren. pantalla.ts
+     baja la letra (--letra) hasta que entren todos; si ni a la letra mínima caben, la lista se desplaza. */
+  .pantalla.lista .pantalla-body { align-items: start; overflow-y: auto; }
+  .pantalla.lista .pantalla-ganadores { display: block; }
+  .pantalla.lista .pantalla-llevan { margin-bottom: 0.4em; }
+  .pantalla-lista { list-style: none; margin: 0; padding: 0; columns: 11em; column-gap: 0.9em; }
+  .pantalla-fila { display: flex; align-items: baseline; gap: 0.35em; break-inside: avoid; padding: 0.08em 0; border-bottom: 2px solid var(--ink); }
+  .pantalla-num { flex: 0 0 auto; min-width: 3.1ch; font: 800 0.55em/1.2 ui-monospace, Consolas, monospace; color: var(--ink2); }
+  .pantalla-fila .pantalla-nombre { display: block; flex: 1 1 0; min-width: 0; font-size: 1em; line-height: 1.12; }
   .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
   /* El tamaño lo fija pantalla.ts al dibujarlo, con módulos enteros: estirado por CSS se rompía. */
   .pantalla-qr img { max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; }
@@ -1636,6 +1748,11 @@
   details.tecnico { margin: 8px 0 10px; }
   details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
   details.tecnico[open] summary { color: var(--ink2); }
+  /* Que se vea que se abre: sin la marca parecía un rótulo más y nadie tocaba el plegado. */
+  details.tecnico summary { list-style: none; }
+  details.tecnico summary::-webkit-details-marker { display: none; }
+  details.tecnico summary::before { content: "+"; font-size: 18px; line-height: 1; margin-right: 10px; letter-spacing: 0; }
+  details.tecnico[open] summary::before { content: "\2212"; }
 
   /* UX 19-oct: panel
      El panel de la cuenta es una ventana de tres partes: el encabezado (la cara,
@@ -1749,45 +1866,28 @@
   }
   @media (prefers-reduced-motion: reduce) { .acct-x { transition: none; } }
   /* UX 19-oct: siguiente */
-  /* El indicador de pasos, arriba de la herramienta: 1 Lista, 2 Sellar, 3
-     Sortear, 4 Compartir. Discreto: el actual resaltado, los hechos con ✓. Lo
-     arma `src/ui/siguiente.ts`. En la demo no va: se hace sola. */
-  .pasos { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 6px; order: 2; flex: 1 0 100%; min-width: 0; }
-  .pasos li {
-    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 700; letter-spacing: 0.06em;
-    text-transform: uppercase; color: var(--muted);
-  }
-  .pasos li + li::before { content: ""; width: 14px; margin-right: 1px; border-top: 2px dashed var(--muted); }
-  .p-n {
-    display: grid; place-items: center; width: 24px; height: 24px; flex: none;
-    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); font-weight: 800;
-  }
-  .pasos li.actual { color: var(--ink); }
-  .pasos li.actual .p-n { background: var(--yellow); color: #191919; box-shadow: 2px 2px 0 var(--ink); transform: rotate(-3deg); }
+  /* El indicador de pasos, arriba de la herramienta: una barra de progreso fina partida en cuatro tramos (1 Lista,
+     2 Sellar, 3 Sortear, 4 Compartir), con el nombre debajo de cada uno. No es nada para apretar: sin bordes, sin
+     sombra, sin números ni giro, sin cursor de mano. Se distingue también sin color: el hecho va lleno y con ✓, el
+     actual lleno, más oscuro y con el nombre en negrita, y lo que falta es una línea fina y el nombre apagado.
+     Lo arma `src/ui/siguiente.ts`. En la demo no va: se hace sola. */
+  .pasos { list-style: none; margin: 8px 0 0; padding: 0; display: flex; gap: 6px; flex: 1 0 100%; min-width: 0; cursor: default; }
+  .pasos li { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 15px; font-weight: 400; line-height: 1.3; color: var(--muted); }
+  .p-b { display: block; height: 3px; margin: 2.5px 0; background: var(--muted); }
+  .p-nombre { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-n { margin-right: 4px; }
+  .p-n:empty { display: none; }
   .pasos li.hecho { color: var(--ink2); }
-  .pasos li.hecho .p-n { background: var(--teal); color: #191919; }
-  .appbar > .tabs { order: 1; }
-  @media (min-width: 960px) {
-    .pasos { order: 0; flex: 0 1 auto; }
-  }
-  @media (max-width: 480px) {
-    .pasos { gap: 4px; justify-content: space-between; }
-    .pasos li { gap: 4px; font-size: 13px; letter-spacing: 0.02em; }
-    .pasos li + li::before { width: 6px; margin-right: 0; }
-    .p-n { width: 20px; height: 20px; font-size: 13px; }
-  }
-  /* Un celular de 360 px o menos: con la letra de 13 px (la mínima de docs/ux.md) los guiones entre un paso y otro
-     ya no entran, y el indicador quedaba pegado al borde derecho (2 px de margen a 360 y a 320). Sin ellos entra
-     dentro de su caja. A 375 px y más siguen. */
-  @media (max-width: 370px) {
-    .pasos li + li::before { display: none; }
-  }
-  /* Y a 320 px, además, la letra sin espaciado y los números un poco más chicos: la letra no baja de 13 px. */
-  @media (max-width: 340px) {
-    .pasos { gap: 2px; }
-    .pasos li { gap: 2px; letter-spacing: 0; }
-    .p-n { width: 18px; height: 18px; }
+  .pasos li.hecho .p-b { height: 8px; margin: 0; background: var(--teal-ink); }
+  .pasos li.actual { color: var(--ink); font-weight: 800; }
+  .pasos li.actual .p-b { height: 8px; margin: 0; background: var(--ink); }
+  /* Un celular de 350 px o menos: no entran los cuatro nombres. Queda el del paso actual, que se ensancha; los
+     otros siguen para el lector de pantalla. */
+  @media (max-width: 350px) {
+    .pasos li.actual { flex-grow: 2; }
+    .pasos li:not(.actual) .p-nombre {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
   }
   body[data-demo="1"] .pasos { display: none !important; }
 
@@ -1810,7 +1910,7 @@
   .sig-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; }
   .sig-paso {
     margin: 0; min-width: 0; min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
+    font-size: 14px; font-weight: 700; color: var(--ink2);
   }
   #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
   /* Aire abajo: el pie y lo último de la página llegan a verse enteros por encima
@@ -1823,7 +1923,7 @@
   @media (max-width: 560px) and (min-height: 521px) {
     .siguiente { padding: 8px 14px max(10px, env(safe-area-inset-bottom, 0px)); }
     .sig-in { flex-direction: column; align-items: stretch; gap: 6px; }
-    .sig-paso { text-align: center; font-size: 13px; }
+    .sig-paso { text-align: center; font-size: 14px; }
     #sig-btn { width: 100%; }
   }
   /* Un celular acostado: la barra, finita y en un renglón. */
@@ -1854,7 +1954,7 @@
   .wait-num { grid-area: n; margin: 2px 0 0; gap: 14px; }
   .wait-num b { font-size: clamp(22px, 3.2vw, 34px); }
   .wait-num span { font-size: clamp(26px, 4.4vw, 40px); padding: 0 10px; }
-  .wait-id { grid-area: i; justify-self: start; margin: 4px 0 2px; font-size: clamp(13px, 1.4vw, 17px); padding: 5px 10px; max-width: 100%; }
+  .wait-id { grid-area: i; justify-self: start; margin: 4px 0 2px; font-size: clamp(14px, 1.4vw, 17px); padding: 5px 10px; max-width: 100%; }
   .wait-line { grid-area: l; max-width: 92ch; font-size: 16px; line-height: 1.45; }
   #btn-espera { grid-area: b; align-self: start; }
   @media (max-width: 560px) {
@@ -1888,6 +1988,9 @@
   #sec-frozen .pick-label { margin-top: 20px; }
   #sec-frozen .ajustes { margin-top: 16px; }
   #sec-frozen .rules-row { margin: 14px 0 6px; }
+  /* Las bases de antes de sellar: abajo de "Sellar la lista", chicas, sin competir con ella. */
+  #sec-participants .rules-pre-row { margin: 8px 0 0; }
+  #sec-participants .rules-pre-row .mini { min-height: 48px; }
   #sec-frozen .kpis { margin-top: 16px; border: 2px solid var(--ink); }
   #sec-frozen .kpis > div { padding: 12px 18px; }
   #sec-frozen .kpis b { font-size: 24px; }
@@ -1963,6 +2066,8 @@
   }
   .premio-chips button:hover:not(:disabled) { background: var(--card); color: var(--ink); }
   .premio-chips button[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
+  /* El elegido sigue amarillo con el mouse encima: sin esto, apenas se lo tocaba el amarillo se iba y parecía no elegido. */
+  .premio-chips button[aria-pressed="true"]:hover:not(:disabled) { background: var(--yellow); color: var(--on-accent); }
   /* Ya salió en esta sentada: sigue disponible (puede haber dos libros), pero se nota. */
   .premio-chips button.salio:not([aria-pressed="true"]) { border-style: dashed; color: var(--muted); }
   .premio-chips button:disabled { cursor: default; color: var(--muted); }
@@ -1974,6 +2079,20 @@
     .premio-chips { gap: 6px; }
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
+
+  /* «Cuántos ganan» (src/ui/ganadores.ts): el rótulo, un número y los atajos de lo común (1, 2, 3, 5 y 10), pegados.
+     Si no entran en un renglón (320 px) pasan al de abajo todos juntos: el campo nunca queda cortado. Los atajos son
+     los chips de los premios, con el mismo blanco de toque. */
+  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .nw-grupo > label { margin: 0; }
+  #nw {
+    box-sizing: border-box; width: 84px; min-height: 44px; padding: 9px 8px; text-align: center;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); font-weight: 800; font-size: 16px;
+  }
+  #nw:disabled { cursor: not-allowed; color: var(--muted); }
+  .nw-atajos { margin: 0; gap: 6px; }
+  .nw-atajos button { min-width: 44px; padding: 0 12px; }
+  .nw-nota { margin-top: 8px; }
 
   /* ================================================================ La letra grande
      24 de octubre de 2026. La gente lo ve en un proyector gigante
@@ -2017,13 +2136,24 @@
   }
   .rec-sel-nota { font-size: 16px; font-weight: 700; color: var(--ink2); margin: 8px 0 0; }
   .rec-sel-nota:empty { display: none; }
+  /* Mientras corre el show el selector no se toca: apagado (inert) y con su motivo arriba. Con el resultado puesto sirve para verlo de nuevo con otro juego. */
+  .juego-nota { font-size: 16px; font-weight: 700; color: var(--ink); margin: 8px 0 10px; }
+  .juego-nota[hidden] { display: none; }
+  /* Al ir al selector, la nota queda arriba y a la vista, no detrás de la cabecera fija ni de la banda del ensayo. */
+  .juego-nota { scroll-margin-top: 12px; }
+  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--banda-alto, 0px) + 12px); }
+  @media (min-width: 1101px) {
+    .juego-nota { scroll-margin-top: 109px; }
+    body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 12px); }
+  }
+  .gamepick[inert] { opacity: 0.55; cursor: not-allowed; }
   #rec-head { font-size: 16px; }
   .ajustes button, .ajustes select { font-size: 16px; }
 
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .tabs button, .enlace, .gate button, .langs button { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, #nw { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector
@@ -2034,9 +2164,9 @@
   .stadium { height: 100vh; height: 100dvh; overscroll-behavior: none; touch-action: none; }
   .stadium canvas { touch-action: none; }
   #st-round { display: none; }
-  /* "ENSAYO · no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
-  body[data-ensayo="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
-  body[data-ensayo="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
+  /* "ENSAYO: no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
+  body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
+  body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
   .st-brand > span:last-child { display: none; }
   .st-brand { padding: 4px 6px; }
   .st-top {
@@ -2056,10 +2186,10 @@
     .st-top { flex-wrap: nowrap; row-gap: 0; padding-top: max(10px, env(safe-area-inset-top, 0px)); }
     .st-actions button { padding: 8px 14px; }
     /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
-       dos se partía en cuatro renglones ("ENSAYO / · NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
-    body[data-ensayo="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
-    body[data-ensayo="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
-    body[data-ensayo="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
+       dos se partía en cuatro renglones ("ENSAYO: / NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
+    body[data-ensayo="1"] .st-top, body[data-stand="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
+    body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
+    body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
   }
 
   /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */
@@ -2089,6 +2219,13 @@
   /* El juego, en la espera en grande: "Juego: Carrera de llamas" y, aparte, "Cambiar de juego" (secundario: la acción
      principal sigue siendo una sola). El selector queda detrás de esta capa y se elige sin salir (26 de octubre de 2026). */
   .espera-top-acc { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+  /* A 320 px la calcomanía de arriba pasaba a tres renglones y, con "Volver a la página", tapaba la etiqueta del ensayo. */
+  @media (max-width: 380px) {
+    .espera-top .sticker { font-size: 14px; letter-spacing: 0.02em; padding: 6px 10px; }
+    .espera-top-acc { gap: 8px; }
+    .espera-top .ghost { padding: 6px 10px; }
+    .espera-ensayo { margin-top: 36px; }
+  }
   .espera-juego { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; }
   .espera-juego.en-flujo { margin-top: clamp(2px, 1vh, 10px); }
   /* En una pantalla ancha va arriba, junto a "Volver a la página", sin gastar alto (en una laptop a 100 %, 632 px, no sobra);
@@ -2125,12 +2262,12 @@
   @media (max-height: 560px) {
     .espera { padding-top: 64px; padding-bottom: 12px; gap: 4px; }
     .espera-top { top: 0; left: 0; right: 0; padding: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: var(--paper); }
-    .espera-top .sticker { padding: 4px 12px; font-size: 13px; letter-spacing: 0.02em; max-width: 48vw; }
+    .espera-top .sticker { padding: 4px 12px; font-size: 14px; letter-spacing: 0.02em; max-width: 48vw; }
     .espera-top .ghost { min-height: 44px; white-space: nowrap; }
     /* En la barra, solo "Cambiar de juego": el nombre del juego no entra y el botón abre la lista con el actual marcado. */
     .espera-juego.en-barra .espera-juego-n { display: none; }
     .espera-premio { font-size: clamp(18px, 6vh, 30px); }
-    .espera-ensayo { font-size: clamp(13px, 3.4vh, 20px); padding: 2px 10px; }
+    .espera-ensayo { font-size: clamp(14px, 3.4vh, 20px); padding: 2px 10px; }
     .espera-reloj { font-size: clamp(52px, 20vmin, 340px); }
     .espera-t { font-size: clamp(16px, 4vh, 28px); }
     .espera-cinta span { font-size: clamp(16px, 4.4vh, 28px); padding: 2px 12px; }
@@ -2240,7 +2377,7 @@
      su nombre de pila y por dónde entró. El correo, nunca. */
   .auth { gap: 10px; }
   /* Las páginas de lectura: "es / en" y la cuenta, juntos (src/pagina.ts), como en la herramienta. */
-  .pg-lado { display: flex; gap: 14px; align-items: center; }
+  .pg-lado, .header-lado { display: flex; gap: 14px; align-items: center; }
   /* El lugar del chip se reserva antes de que llegue (el JS lo pinta unos cientos de milisegundos después, con una conexión lenta):
      sin esto, "es / en" saltaba hasta 120 px a la izquierda cuando aparecía. */
   #wallet-box:empty { min-width: 110px; min-height: 44px; }
@@ -2277,7 +2414,7 @@
   .cc-nombre { max-width: 13ch; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 800; color: var(--ink); line-height: 1.15; }
   /* La cuenta de prueba y Freighter ya se llaman por su vía: una sola línea, con lugar para la palabra entera. */
   .cc-txt.sin-via .cc-nombre { max-width: 17ch; }
-  .cc-via { font-size: 13px; font-weight: 700; color: var(--ink2); line-height: 1.15; }
+  .cc-via { font-size: 14px; font-weight: 700; color: var(--ink2); line-height: 1.15; }
   .cc-via-l { display: none; }
   /* Debajo del nombre, la frase entera ("Entraste con Google") donde sobra lugar (la cabecera de dos filas, y la de una
      fila desde 1440 px) y la palabra sola donde no: entre 1101 y 1439 px la fila lleva siete enlaces. */
@@ -2314,6 +2451,24 @@
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
     }
   }
+  /* A 320 px, logo e identidad comparten la primera fila sin reducir los blancos de toque.
+     La segunda fila conserva Sortear, Mis sorteos y Más, también en inglés. */
+  @media (max-width: 460px) {
+    header .bar { column-gap: 8px; }
+    header .wordmark { gap: 6px; }
+    .header-lado, .pg-lado { gap: 6px; flex: none; }
+    header .langs { gap: 2px; }
+    header .cuenta-chip { min-width: 44px; }
+    header .topnav { margin: 0; padding-inline: 0; }
+    header .topnav a, header .topnav .mas-btn { padding-inline: 7px; }
+    /* La advertencia completa sigue en la página y en el panel. En el chip, el borde
+       doble distingue la red incorrecta; la insignia conserva su texto accesible. */
+    header .auth .netbadge.bad {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+    header .auth .netbadge.bad + .hello { border-left: 7px double var(--orange); }
+  }
   /* La cuenta que acaba de abrirse aparece con un pulso corto, y sin movimiento queda el aro quieto un instante. */
   .cuenta-chip.recien { animation: cc-recien 1.4s ease-out 1; }
   @keyframes cc-recien {
@@ -2335,3 +2490,23 @@
     content: ""; display: inline-block; vertical-align: -0.12em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
     border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%; animation: cc-gira 0.8s linear infinite;
   }
+
+  /* Luma a la vista y su "?" (src/ui/luma-ayuda.ts, 2 de noviembre de 2026): un origen más, sin el color de la casa ni el de la acción del paso. */
+  #origenes label.chip.luma-chip, #origenes button.chip.luma-q {
+    background: var(--paper); color: var(--ink); transform: none; box-shadow: none;
+  }
+  #origenes button.chip.luma-q {
+    min-width: 44px; padding: 5px 0; font-size: 18px; letter-spacing: 0; font-weight: 900; border-radius: 50%;
+  }
+  #origenes button.chip.luma-q[aria-expanded="true"] { background: var(--yellow); color: #191919; }
+  .lista-cerrada #origenes label.chip.luma-chip { color: var(--muted); border-style: dashed; cursor: not-allowed; }
+  .lista-cerrada #origenes button.luma-q, .lista-cerrada .luma-ayuda { display: none; }
+  .luma-ayuda { margin: -4px 0 14px; padding: 12px 16px; background: var(--card); border: 2px dashed var(--ink2); }
+  .luma-ayuda[hidden] { display: none; }
+  .luma-t { font-weight: 800; font-size: 16px; margin: 0 0 6px; }
+  .luma-ayuda ol { margin: 0; padding-left: 22px; font-size: 16px; line-height: 1.45; }
+  .luma-ayuda li + li { margin-top: 6px; }
+  .luma-ayuda .note { margin: 8px 0 0; }
+  body[data-ensayo="1"] .luma-ayuda, body[data-demo="1"] .luma-ayuda { display: none !important; }
+  /* Qué sigue después del resultado: una línea, sin botón. */
+  .again-sigue { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }

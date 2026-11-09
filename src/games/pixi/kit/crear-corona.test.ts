@@ -8,7 +8,7 @@ import type { PixiStage } from "../stage";
 // Exercise the public creator/host boundary, not a copy of the frame loop.
 vi.mock("./anfitrion", () => ({ CHIP_SCALE: 2, anfitrionTinkazo: {} }));
 vi.mock("./director", () => ({ crearDirector: () => ({ cuadro: vi.fn(), golpe: vi.fn() }) }));
-vi.mock("./marcador-vista", () => ({ crearMarcadorVista: () => ({ pintar: vi.fn(), rearmar: vi.fn() }) }));
+vi.mock("./marcador-vista", () => ({ crearMarcadorVista: () => ({ pintar: vi.fn(), rearmar: vi.fn(), ocultar: vi.fn() }) }));
 
 async function fixture(previousBottom: number, currentBottom: number, bodyY: number, bodyHeight: number, hook: boolean) {
   const body = new Graphics().rect(0, 0, 70, bodyHeight).fill(0xffffff);

@@ -152,30 +152,3 @@ export function claveDelAviso(c: Extract<EstadoCuenta, { estado: "dentro" }>): s
   if (c.via === "freighter") return "cuentaAvisoFreighter";
   return "cuentaAvisoPrueba";
 }
-
-/* ------------------------------------------------------------ el recordatorio suave */
-
-/**
- * ¿Se le recuerda, mientras explora, que puede crear la cuenta? Solo en el ensayo y en la demo (no graban nada y no
- * piden cuenta), sin sesión, **una sola vez por sesión** y nunca entre el sello y el último resultado: ahí la
- * persona está mirando el sorteo y nada se le pone enfrente. Va en la banda que ya existe, como una frase más, sin
- * ventana ni color de la casa.
- *
- * "Una vez" es una vez que empieza y termina: mientras la persona sigue en la lista, la frase se queda (`esteAviso`);
- * al sellar se va y no vuelve en esa pestaña, ni al recargar (`yaSeAviso`, que guarda `aviso-cuenta.ts`).
- */
-export function debeAvisar(e: {
-  enEnsayoODemo: boolean;
-  conSesion: boolean;
-  /** Ya se le mostró antes en esta pestaña (guardado: vale aunque se recargue). */
-  yaSeAviso: boolean;
-  /** Se le está mostrando ahora, en esta visita a la página. */
-  esteAviso: boolean;
-  /** La lista está sellada y falta el último resultado (esperando, sorteando o mirando al ganador). */
-  sellada: boolean;
-  /** Hay una ventana abierta (ingreso, cuenta, tutorial): no se le suma nada encima. */
-  ventanaAbierta: boolean;
-}): boolean {
-  if (!e.enEnsayoODemo || e.conSesion || e.sellada || e.ventanaAbierta) return false;
-  return e.esteAviso || !e.yaSeAviso;
-}

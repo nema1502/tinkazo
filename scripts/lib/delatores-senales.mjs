@@ -91,6 +91,11 @@ export const MARCADORES = {
   cChoWobble: /^¡(.+ se tambalea|Ojo con .+)!$/u,
   cChoHold: /^¡(.+ aguanta|.+ no se soltó|Por un pelo, .+)!$/u,
   cChoBack: /^¡(.+ se había soltado, y vuelve|.+ vuelve a la rueda)!$/u,
+  // El Toborochi.
+  tobColibri: /^¡Llega el colibrí!$/u,
+  tobHilo: /^¡.+ cuelga de un hilo!$/u,
+  tobEngancha: /^¡.+ se agarró más abajo!$/u,
+  tobPremio: /^¡Se va .+, con premio!$/u,
   // El teleférico.
   cTelDoor: /^(¡Se abre la puerta de .+!|¿Se baja .+\?|¡.+ está en la puerta!)$/u,
   cTelSlip: /^¡(SE SUELTA LA DE .+|.+ se va cable abajo|Resbala la cabina de .+)!$/u,
@@ -154,6 +159,8 @@ export function preparar(tr, cfg = {}) {
   // Cómo llevaba la cámara la escena a la pantalla en cada cuadro (con `escena`
   // en el grabador): el origen y los dos ejes, por la hora del cuadro.
   const escena = new Map((tr.escena ?? []).map((f) => [T(f[0]), f.slice(1)]));
+  // El brillo del farolito de cada persona, cuadro a cuadro (con `faroles` en el grabador).
+  const faroles = (tr.faroles ?? []).map((f) => ({ t: T(f[0]), a: f.slice(1) }));
   const revelado = tr.revelado != null ? T(tr.revelado) : (frames.at(-1)?.t ?? 0);
   const primera = new Array(n).fill(null);
   const ultima = new Array(n).fill(null);
@@ -165,7 +172,7 @@ export function preparar(tr, cfg = {}) {
   }
   const todos = Array.from({ length: n }, (_, i) => i);
   const arco = marks.find((m) => m.k === "arco")?.v ?? "?";
-  const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, revelado, primera, ultima, arco, tiempos: {} };
+  const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, faroles, revelado, primera, ultima, arco, tiempos: {} };
   P.corte = Math.min(cuando(P, cfg.corte) ?? revelado, revelado);
   // Con `afuera`, quién sale y cuándo lo dice también el relator: en los
   // juegos donde los nombres no se ven todo el tiempo (el trueque, la piñata)
@@ -874,6 +881,39 @@ export function afueraEntrada(P) {
   return fuera;
 }
 
+/**
+ * El Guajojó: cada persona lleva un farolito, y su brillo lo anota el juego
+ * (`window.__faroles`). Si el de quien gana brilla distinto desde el arranque,
+ * la sala aprende el final mirando el más brillante. El 4 de noviembre de 2026
+ * el de la ganadora brillaba a 1 y el de los demás de pie a 0,8, desde el
+ * primer cuadro.
+ *
+ * - `farol`: en tres momentos del show (un cuarto, la mitad y tres cuartos, hasta
+ *   el cartel), gana el que lleva el farolito más brillante entre los que siguen
+ *   de pie. Si varios empatan, el primero de la lista: con todos iguales, que es
+ *   lo que tiene que pasar, la regla no sabe nada y acierta lo que el azar.
+ */
+export function senalesFarol(P) {
+  if (!P.faroles.length) return {};
+  const reglas = {};
+  let visto = null;
+  for (const [nombre, frac] of [["cuarto", 0.25], ["mitad", 0.5], ["tres-cuartos", 0.75]]) {
+    const t = frac * P.revelado;
+    const f = P.faroles.reduce((m, x) => (Math.abs(x.t - t) < Math.abs(m.t - t) ? x : m));
+    const C = P.vivos(f.t);
+    if (C.length < 2 || !C.includes(P.w)) {
+      reglas[nombre] = null;
+      continue;
+    }
+    const tope = Math.max(...C.map((i) => f.a[i] ?? 0));
+    const primero = C.find((i) => Math.abs((f.a[i] ?? 0) - tope) < 0.005);
+    reglas[nombre] = apuesta([primero], C, P.w);
+    visto ??= f.t;
+  }
+  if (visto !== null) P.tiempos.farol = visto;
+  return { farol: reglas };
+}
+
 /* ================================================================== juegos */
 
 /**
@@ -885,7 +925,7 @@ export function afueraEntrada(P) {
  * - `arranque`: cuándo y en qué orden se mira dónde arranca cada uno.
  * - `salta`: si en el mano a mano se salta (Oruro).
  * - `afuera`: quién sale y cuándo, si no se deduce de la pantalla (el trueque).
- * - `numeros`, `trazos`, `escena`: qué más tiene que grabar la página.
+ * - `numeros`, `trazos`, `escena`, `faroles`: qué más tiene que grabar la página.
  * - `especificas`: las señales propias del juego.
  */
 export const JUEGOS = {
@@ -966,6 +1006,18 @@ export const JUEGOS = {
     arranque: { desde: { clave: "cChoCount", mas: 1 }, orden: "angulo" },
     especificas: [linea("tambalea", ["cChoWobble", "cChoHold"]), linea("vuelve", ["cChoBack"])],
   },
+  // El Toborochi: decide la llegada del colibrí; hasta ahí, nada tiene que adivinar a las dos últimas.
+  toborochi: {
+    candidatos: "visibles",
+    corte: { clave: "tobColibri" },
+    especificas: [linea("hilo", ["tobHilo"]), linea("engancha", ["tobEngancha"]), linea("premio", ["tobPremio"])],
+  },
+  // El Guajojó: el farolito de cada persona, anotado por el juego, no puede decir quién gana.
+  guajojo: {
+    candidatos: "visibles",
+    faroles: true,
+    especificas: [senalesFarol],
+  },
   teleferico: {
     candidatos: "visibles",
     corte: { clave: "cTelDock" },
@@ -986,7 +1038,7 @@ export const JUEGOS = {
 /** Lo que tiene que grabar la página para un juego. */
 export const grabarPara = (juego) => {
   const c = JUEGOS[juego] ?? {};
-  return { numeros: !!c.numeros, trazos: c.trazos ?? [], escena: !!c.escena };
+  return { numeros: !!c.numeros, trazos: c.trazos ?? [], escena: !!c.escena, faroles: !!c.faroles };
 };
 
 /**

@@ -17,6 +17,8 @@
  * veces.
  */
 
+import { errorKey, textoDelError } from "../stellar/errores";
+
 /** Las esperas entre intentos: cinco intentos en total. */
 export const ESPERAS_DEL_SORTEO_MS = [2000, 4000, 8000, 16000] as const;
 /** Pasado este tiempo desde el primer intento no se espera más: la sala está mirando. */
@@ -62,6 +64,16 @@ export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<Fin
 
 /** Las claves de error (`errorKey`) con las que vale la pena volver a probar el sorteo. */
 export const SORTEO_REINTENTABLE = new Set(["rpcDown", "offline", "busy", "unconfirmed", "roundNotReady", "unknown"]);
+
+/**
+ * Si con este error vale la pena volver a pedir la firma del sorteo. Una co-firma pendiente de Pollar
+ * (`pollar-pending`) se clasifica como "sin confirmar", pero no se reintenta: sigue viva en el SDK y volver a firmar
+ * apilaría otra solicitud mientras la primera espera, con el aviso de red caída frente a la sala. La persona decide
+ * si vuelve a apretar, y el sorteo sale una sola vez por sello de todos modos.
+ */
+export function sorteoReintentable(e: unknown): boolean {
+  return !/pollar-pending/.test(textoDelError(e)) && SORTEO_REINTENTABLE.has(errorKey(e));
+}
 
 /**
  * La línea que ve la sala mientras se vuelve a probar, según lo que pasó (la

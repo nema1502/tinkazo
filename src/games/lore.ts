@@ -50,13 +50,16 @@ export interface Lore {
 export const LORE: Record<string, Lore[]> = {
   any: [
     {
-      // "tinkazo. I. 1. m. Bo. tinca, presentimiento." y
-      // "tincazo. Golpe que se da haciendo resbalar con violencia, sobre la
-      //  yema del pulgar, el envés de la última falange de otro dedo."
+      // Entrada "tincazo": "I. 1. Golpe que se da haciendo resbalar con
+      //  violencia, sobre la yema del pulgar, el envés de la última falange de
+      //  otro dedo de la misma mano" y "II. 1. m. Bo. tinca, presentimiento".
+      // La entrada "tinkazo" (asale.org/damer/tinkazo) solo trae "Bo. tinca,
+      // presentimiento": el golpecito está únicamente en "tincazo". La tarjeta
+      // admite un solo enlace, así que cita la que sostiene las dos frases.
       q: "loreTinkazoQ",
       a: "loreTinkazoA",
-      href: "https://www.asale.org/damer/tinkazo",
-      src: "asale.org · Diccionario de americanismos",
+      href: "https://www.asale.org/damer/tincazo",
+      src: "Diccionario de americanismos, tincazo (asale.org)",
       hue: "magenta",
     },
     {
@@ -98,7 +101,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreHaltQ",
       a: "loreHaltA",
       href: "https://stellar.org/blog/developers/may-15th-network-halt",
-      src: "stellar.org · informe del 15 de mayo de 2019",
+      src: "Informe del 15 de mayo de 2019 (stellar.org)",
       hue: "orange",
       tecnica: true,
     },
@@ -107,7 +110,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreCloseQ",
       a: "loreCloseA",
       href: "https://stellar.org/blog/developers/announcing-protocol-23",
-      src: "stellar.org · Protocolo 23",
+      src: "Protocolo 23 (stellar.org)",
       hue: "teal",
       tecnica: true,
     },
@@ -120,7 +123,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreSorobanQ",
       a: "loreSorobanA",
       href: "https://stellar.org/blog/developers/soroban-a-new-smart-contract-standard",
-      src: "stellar.org · por qué Soroban",
+      src: "Por qué Soroban (stellar.org)",
       hue: "orange",
       tecnica: true,
     },
@@ -130,7 +133,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreAirdropQ",
       a: "loreAirdropA",
       href: "https://stellar.org/blog/foundation-news/keybase-stellar-lumens-spacedrop",
-      src: "stellar.org · el airdrop de Keybase",
+      src: "El airdrop de Keybase (stellar.org)",
       hue: "magenta",
       tecnica: true,
     },
@@ -142,7 +145,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreStroopQ",
       a: "loreStroopA",
       href: "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
-      src: "developers.stellar.org · comisiones",
+      src: "Comisiones (developers.stellar.org)",
       hue: "yellow",
       tecnica: true,
     },
@@ -155,7 +158,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "lorePasanakuQ",
       a: "lorePasanakuA",
       href: "https://www.asale.org/damer/aguayo",
-      src: "asale.org · Diccionario de americanismos",
+      src: "Diccionario de americanismos (asale.org)",
       hue: "orange",
     },
     {
@@ -163,7 +166,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreTrustlineQ",
       a: "loreTrustlineA",
       href: "https://developers.stellar.org/docs/learn/fundamentals/lumens",
-      src: "developers.stellar.org · reservas",
+      src: "Reservas (developers.stellar.org)",
       hue: "teal",
       tecnica: true,
     },
@@ -172,7 +175,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreAguayoQ",
       a: "loreAguayoA",
       href: "https://www.asale.org/damer/aguayo",
-      src: "asale.org · Diccionario de americanismos",
+      src: "Diccionario de americanismos (asale.org)",
       hue: "yellow",
     },
   ],
@@ -185,7 +188,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreTelefericoQ",
       a: "loreTelefericoA",
       href: "https://www.doppelmayr.com/en/reference-projects/reference-project-mi-teleferico/",
-      src: "doppelmayr.com · Mi Teleférico",
+      src: "Mi Teleférico (doppelmayr.com)",
       hue: "teal",
     },
   ],
@@ -197,18 +200,22 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreOruroQ",
       a: "loreOruroA",
       href: "https://ich.unesco.org/en/RL/carnival-of-oruro-00003",
-      src: "ich.unesco.org · Carnaval de Oruro",
+      src: "Carnaval de Oruro (ich.unesco.org)",
       hue: "purple",
     },
   ],
   pinata: [
     {
       // "Acolman: cuatro siglos de posadas y tradicionales piñatas": la piñata
-      //  llegó en 1586 con los agustinos de Acolman y las misas de aguinaldo.
+      //  "En la segunda mitad del siglo XVI, los frailes agustinos llegaron a la
+      //  región de Acolman [...] instauraron las misas de aguinaldo" y la piñata
+      //  "originalmente [era] una olla de barro [...] provista de siete picos";
+      //  "Fue en Acolman, hace más de cuatro siglos, donde estas figuras se
+      //  popularizaron". La página no trae el año 1586.
       q: "lorePinataQ",
       a: "lorePinataA",
       href: "https://www.inah.gob.mx/foto-del-dia/acolman-cuatro-siglos-de-posadas-y-tradicionales-pinatas",
-      src: "inah.gob.mx · Acolman",
+      src: "Acolman (inah.gob.mx)",
       hue: "magenta",
     },
   ],
@@ -220,7 +227,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreTotoraQ",
       a: "loreTotoraA",
       href: "https://www.asale.org/damer/totora",
-      src: "asale.org · Diccionario de americanismos",
+      src: "Diccionario de americanismos (asale.org)",
       hue: "teal",
     },
   ],
@@ -248,7 +255,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreChoQ",
       a: "loreChoA",
       href: "https://www.educa.com.bo/danzas/chovena",
-      src: "educa.com.bo · Danzas de Bolivia",
+      src: "Danzas de Bolivia (educa.com.bo)",
       hue: "orange",
     },
   ],
@@ -263,7 +270,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreTruequeQ",
       a: "loreTruequeA",
       href: "https://www.opinion.com.bo/articulo/cochabamba/pongo-k-asa-confital-trueque-mantiene-vigencia-region-andina/20211120211759843995.html",
-      src: "opinion.com.bo · Pongo K'asa y Confital (2021)",
+      src: "Pongo K'asa y Confital, 2021 (opinion.com.bo)",
       hue: "orange",
     },
   ],
@@ -274,7 +281,7 @@ export const LORE: Record<string, Lore[]> = {
       q: "loreTrompoQ",
       a: "loreTrompoA",
       href: "https://www.asale.org/damer/trompo",
-      src: "asale.org · Diccionario de americanismos",
+      src: "Diccionario de americanismos (asale.org)",
       hue: "orange",
     },
   ],

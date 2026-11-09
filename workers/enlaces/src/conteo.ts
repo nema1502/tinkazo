@@ -21,8 +21,15 @@ import deployments from "../../../src/stellar/deployments.json";
 export const REDES = ["mainnet", "testnet"] as const;
 
 /**
+ * Por qué dijo que no el portero del patrocinio (`src/stellar/patrocinador.ts`): el motivo de su respuesta, para
+ * contar cuántos sellos se frenaron por cupo, por fondo o por otra causa. Una prueba compara esta lista con la
+ * traducción de `src/contar.ts`.
+ */
+export const ERRORES_DEL_PORTERO = ["cupo-cuenta", "cupo-ip", "fondo", "apagado", "config", "cuenta-ajena", "no-permitida", "fee-alta", "portero-red"] as const;
+
+/**
  * Por qué falló un sello o un sorteo: las claves de `errorKey`
- * (`src/stellar/errores.ts`). Una prueba compara esta lista con `errores.ts`.
+ * (`src/stellar/errores.ts`) y los motivos del portero. Una prueba compara esta lista con `errores.ts`.
  */
 export const ERRORES = [
   "unconfirmed",
@@ -40,10 +47,27 @@ export const ERRORES = [
   "noFunds",
   "userRejected",
   "wallet",
+  /** Pollar 0.12: la cuenta no firma hasta tener una forma de recuperarla. */
+  "recoveryRequired",
+  /** Pollar 0.12: la firma pidió confirmación y nadie la atendió, o no era la que la persona pidió. */
+  "confirmation",
+  /** Quien paga la comisión por la persona (Pollar) se quedó sin con qué: no es de su cuenta. */
+  "sponsorEmpty",
+  /** Pollar 0.12: la co-firma de la cuenta no se aprobó (la rechazó quien aprueba, o la transacción no coincidía). */
+  "cosignRejected",
   "rpcDown",
   "offline",
+  /** Los motivos del portero del patrocinio: ver `ERRORES_DEL_PORTERO`. */
+  ...ERRORES_DEL_PORTERO,
   "unknown",
 ] as const;
+
+/**
+ * De dónde llegó quien sortea: la marca `?o=` de la dirección a la que entró. Una palabra de esta lista y nada más:
+ * la portada (`home`, también cuando no trae marca), las páginas de aula, de meetups, de ruleta y de eventos, y el
+ * comprobante o el video de otro sorteo. Dice de qué enlace vino, nunca quién es.
+ */
+export const ORIGENES = ["home", "aula", "meetup", "ruleta", "eventos", "proof", "video"] as const;
 
 /** El tamaño de una lista, en tramos: nunca la cantidad exacta. */
 export const TAMANOS = ["2-9", "10-49", "50-199", "200+"] as const;
@@ -66,30 +90,49 @@ export const EVENTOS = {
   /** Prueba: el ensayo (`practice`) o la demo (`demo`) llegaron al ganador. Con `tutorial_open`, lo único que sale de la práctica. */
   practice_done: { p: { kind: ["practice", "demo"] }, o: {}, ref: "no" },
   /** Conecta: la primera cuenta conectada de la pestaña, por la vía. Retomar una sesión no cuenta. */
-  account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: {}, ref: "no" },
+  account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: { from: ORIGENES }, ref: "no" },
   /** Prepara: la primera lista de dos o más de la pestaña: pegada, escrita a mano, de un archivo o de Luma. */
   list_ready: { p: { source: ["paste", "typed", "csv", "luma"], size: TAMANOS }, o: {}, ref: "no" },
   /** Muestra: "Mostrar la lista a la sala". */
   list_shown: { p: {}, o: {}, ref: "no" },
   /** Sella: se pidió sellar con cuenta, se confirmó o falló. La verdad del sello es la cadena (`sealed`). */
   seal_sent: { p: { network: REDES }, o: {}, ref: "no" },
-  seal_confirmed: { p: { network: REDES }, o: {}, ref: "no" },
+  seal_confirmed: { p: { network: REDES }, o: { from: ORIGENES }, ref: "no" },
   seal_failed: { p: { network: REDES, error: ERRORES }, o: {}, ref: "no" },
   /** Sortea: el sorteo anclado quedó grabado o no se pudo grabar. La verdad es la cadena (`drawn`). */
   draw_confirmed: { p: { network: REDES }, o: {}, ref: "no" },
   draw_failed: { p: { network: REDES, error: ERRORES }, o: {}, ref: "no" },
   /** Comparte: se copia o se comparte el mensaje, se avisa al ganador, se muestra el QR en grande o se comparte un evento (sin referencia). */
   share: { p: { channel: ["copy", "native", "whatsapp", "email", "qr_big", "event"] }, o: {}, ref: "opcional" },
-  /** Abre un comprobante (con su referencia) o un enlace de evento (sin ella): por el enlace largo, el corto o el QR. */
-  proof_open: { p: { via: ["long", "short", "qr"] }, o: {}, ref: "opcional" },
+  /** Abre un comprobante (con su referencia) o un enlace de evento (sin ella): por el enlace largo, el corto, el QR o el video de otro sorteo. */
+  proof_open: { p: { via: ["long", "short", "qr", "video"] }, o: {}, ref: "opcional" },
   /** Verifica: cómo terminó la verificación de un sorteo anclado. */
   proof_verdict: { p: { verdict: ["green", "yellow", "red", "error"] }, o: {}, ref: "siempre" },
+  /** Opinión opcional: una referencia admisible no prueba que el sorteo exista. */
+  proof_trust: { p: { answer: ["yes", "no", "unsure"] }, o: {}, ref: "siempre" },
+  /** Quien sortea pasa al siguiente en la revelación de a uno: solo que pasó, no a quién. */
+  reveal_next: { p: {}, o: {}, ref: "no" },
+  /** Quien sortea marca "No está" a un ganador y se saca a otra persona: solo que pasó, no a quién. */
+  absent_marked: { p: {}, o: {}, ref: "no" },
+  /** Se guardó una lista para volver a usarla en este navegador. La lista no sale del navegador. */
+  list_saved: { p: {}, o: {}, ref: "no" },
+  /** Se volvió a usar una lista guardada, y hace cuánto se había usado: el mismo día, en la última semana o antes. */
+  list_reused: { p: { age: ["same_day", "week", "older"] }, o: {}, ref: "no" },
+  /** Se probó el show con la lista propia, sin ganador y sin grabar nada. Sale también de la práctica. */
+  preview_own_list: { p: {}, o: {}, ref: "no" },
+  /** Se armó el video del resultado: en qué formato, y si salió, falló o el equipo no puede hacerlo. */
+  video_made: { p: { format: ["mp4", "webm"], result: ["ok", "fail", "unsupported"] }, o: {}, ref: "no" },
+  /** Se mandó el video: con el menú de compartir del equipo, o se descargó. */
+  video_shared: { p: { channel: ["native", "download"] }, o: {}, ref: "no" },
+  /** Quien miró un comprobante o un video tocó "Hacer mi sorteo": desde cuál de los dos. */
+  proof_cta: { p: { from: ["proof", "video"] }, o: {}, ref: "no" },
 } as const satisfies Readonly<Record<string, Regla>>;
 
 type Spec = typeof EVENTOS;
 export type Evento = keyof Spec;
 export type Red = (typeof REDES)[number];
 export type ClaveDeError = (typeof ERRORES)[number];
+export type Origen = (typeof ORIGENES)[number];
 export type Tamano = (typeof TAMANOS)[number];
 type ValoresDe<M> = { -readonly [K in keyof M]: M[K] extends readonly (infer V)[] ? V : never };
 /** Las propiedades de un evento, con sus valores de la lista cerrada. */
@@ -160,6 +203,28 @@ export function validarRef(x: unknown, oficiales: Readonly<Record<Red, readonly 
 }
 
 /**
+ * Referencia admisible para una opinión, no prueba de existencia ni de verificación.
+ * Conserva la validación de forma y admite anteriores solo con ultimoId válido.
+ * No importa oficiales.ts: su configuración de página depende de Vite.
+ */
+export function validarRefConfianza(x: unknown): Ref | null {
+  const oficiales: Record<Red, string[]> = { mainnet: [], testnet: [] };
+  for (const net of REDES) {
+    const d = deployments[net] as { contractId?: string; anteriores?: { contractId: string; ultimoId?: number }[] } | null;
+    if (d?.contractId) oficiales[net].push(d.contractId);
+    for (const a of d?.anteriores ?? []) {
+      if (Number.isSafeInteger(a.ultimoId) && (a.ultimoId as number) >= 0) oficiales[net].push(a.contractId);
+    }
+  }
+  const ref = validarRef(x, oficiales);
+  if (!ref) return null;
+  const d = deployments[ref.net] as { contractId?: string; anteriores?: { contractId: string; ultimoId?: number }[] } | null;
+  if (d?.contractId === ref.contract) return ref;
+  const anterior = d?.anteriores?.find((a) => a.contractId === ref.contract);
+  return anterior && BigInt(ref.id) <= BigInt(anterior.ultimoId as number) ? ref : null;
+}
+
+/**
  * Valida un conteo ya leído como JSON: `{ e, p?, ref? }`. Rechaza cualquier
  * campo, evento, propiedad o valor que no esté en la lista cerrada, una
  * propiedad que falta, y una referencia donde no va, mal formada o de un
@@ -184,7 +249,7 @@ export function validarConteo(x: unknown, oficiales: Readonly<Record<Red, readon
   let ref: Ref | null = null;
   if (x.ref !== undefined) {
     if (regla.ref === "no") return no("ref");
-    ref = validarRef(x.ref, oficiales);
+    ref = e === "proof_trust" ? validarRefConfianza(x.ref) : validarRef(x.ref, oficiales);
     if (!ref) return no("ref");
   } else if (regla.ref === "siempre") return no("ref");
   return { ok: true, conteo: { e: e as Evento, p, ref } };

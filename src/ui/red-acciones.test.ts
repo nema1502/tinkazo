@@ -134,6 +134,14 @@ describe("caso 4: sin saldo", () => {
     expect(p).toMatchObject({ frase: "redSinSaldo", principal: "cargar-saldo", secundarias: ["seguir-sin-sello"], bloquea: true });
   });
 
+  it("si se quedó sin con qué pagar quien paga por la persona (Pollar) y ella no tiene cómo pagar, no es su cuenta: no le dice que le falta saldo", () => {
+    const d = diag("sin-saldo", "rojo", { red: "mainnet", pagador: "patrocinado" });
+    const p = panelDe(d, ctx({ red: "mainnet", grifo: false, saldoXlm: 0 }));
+    expect(p).toMatchObject({ frase: "redSinSaldoPatrocinio", principal: "reintentar", secundarias: ["seguir-sin-sello"], bloquea: true });
+    expect(respuestaDelBoton(d, p)).toEqual({ clave: "redSinSaldoPatrocinio", nivel: "rojo" });
+  });
+
+
   it("mainnet, la cuenta no alcanza: 'Seguir sin sello' y nada más (no hay grifo)", () => {
     const p = panelDe(diag("sin-saldo", "rojo", { red: "mainnet", pagador: "propio", saldoXlm: 0.01, costoXlm: 0.09 }), ctx({ red: "mainnet", grifo: false, saldoXlm: 0.01, costoXlm: 0.09 }));
     expect(p).toMatchObject({ principal: "seguir-sin-sello", secundarias: [] });

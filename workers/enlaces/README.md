@@ -3,6 +3,7 @@
 Un Worker de Cloudflare en `c.tinkazo.app` que guarda el comprobante de un sorteo detrás de un id de 8 caracteres, para que el enlace que se comparte por WhatsApp sea corto y su QR se lea bien desde una foto. Lleva también el [contador anónimo del embudo](#el-contador-anónimo-del-embudo): cuántas veces se usa cada paso del sorteo, por día, sin nada de nadie.
 
 - **Lo que guarda son bytes opacos.** El navegador cifra el comprobante antes de mandarlo, y la clave viaja en el fragmento del enlace (`tinkazo.app/c/<id>#<clave>`), que el navegador nunca envía al servidor. Tinkazo no puede leer los nombres.
+- **Desde el 2 de noviembre de 2026 puede incluir un logo, y al Worker no le cambia nada.** Lo cifrado pasa de `{"v":1,"u":"…"}` a `{"v":1,"u":"…","l":{"t":"image/webp","b":"<base64>"}}`: el logo de la comunidad de quien armó el enlace (`src/logo.ts`, hasta 48 KB). Sigue siendo `v` 1, el tope de 256 KB y los 2.000 por día no cambian, y el Worker no se vuelve a desplegar: son bytes que no puede leer. Un corto con logo pesa unas siete veces más que sin él (de unos 3 KB a unos 25 KB), así que 5 GB siguen siendo unos 200.000 enlaces. Borrar a pedido un logo ofensivo o falso es borrar ese enlace corto: el sorteo y su enlace largo siguen.
 - **No hay que confiar en él para verificar.** La página del comprobante vuelve a calcular el sello de la lista y lo compara con el que está en Stellar. Si el servicio se cae, un enlace corto ya compartido no abre mientras dure la caída; el enlace largo de siempre sigue funcionando, y quien organiza lo tiene en Mis sorteos («Ver comprobante»), en el equipo donde sorteó.
 - **No vence.** Un enlace queda guardado para que el sorteo se pueda volver a comprobar. La interfaz no ofrece borrarlo: hacerlo cortaba la verificación de todos los que ya lo tenían (el grupo de WhatsApp, el QR de la foto, el del proyector), podía parecer que se quería esconder un resultado y se tocaba sin querer. Si alguien necesita que se borre, por ejemplo porque alguien de la lista lo pide, escribe a hola@tinkazo.app y lo borra Tinkazo (ver [Borrar a pedido](#borrar-a-pedido)).
 - **Dónde guarda:** Durable Objects con SQLite, en la misma cuenta de Cloudflare. Son consistentes apenas escriben (un enlace recién creado abre al instante en cualquier país) y entran en el plan gratis: 5 GB por cuenta, 100.000 filas escritas y 5 millones leídas por día. Los enlaces se reparten en 62 objetos según el primer carácter del id, porque en el plan gratis cada objeto llega a 1 GB, y un objeto aparte lleva los cupos. No usa R2: para activarlo, Cloudflare pide cargar un medio de pago.
@@ -72,16 +73,29 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 | --- | --- | --- |
 | `tutorial_open` | Se abre "¿Cómo se usa?" | `step` (1 a 4); `from`, opcional: `offer`, `button`, `menu`, `end` |
 | `practice_done` | El ensayo o la demo llegaron al ganador | `kind`: `practice`, `demo` |
-| `account_connected` | La primera cuenta conectada de la pestaña (retomar una sesión no cuenta) | `kind`: `google`, `email`, `freighter`, `test` |
+| `account_connected` | La primera cuenta conectada de la pestaña (retomar una sesión no cuenta) | `kind`: `google`, `email`, `freighter`, `test`; `from`, opcional: el origen (abajo) |
 | `list_ready` | La primera lista de dos o más de la pestaña, puesta por la persona | `source`: `paste`, `typed`, `csv`, `luma`; `size`: `2-9`, `10-49`, `50-199`, `200+` |
 | `list_shown` | "Mostrar la lista a la sala" | — |
-| `seal_sent`, `seal_confirmed`, `seal_failed` | Se pide sellar con cuenta, se confirma o falla | `network`: `mainnet`, `testnet`; en la falla, `error`: la clave de `errorKey` (`src/stellar/errores.ts`) |
+| `seal_sent`, `seal_confirmed`, `seal_failed` | Se pide sellar con cuenta, se confirma o falla | `network`: `mainnet`, `testnet`; en la falla, `error`: la clave de `errorKey` (`src/stellar/errores.ts`); al confirmar, `from`, opcional: el origen (abajo) |
 | `draw_confirmed`, `draw_failed` | El sorteo anclado queda grabado o no se pudo grabar | `network`; en la falla, `error` (las mismas claves) |
 | `share` | Se copia o se comparte el mensaje, se avisa al ganador o se muestra el QR en grande | `channel`: `copy`, `native`, `whatsapp`, `email`, `qr_big`, `event`; `ref` si el sorteo está anclado (un evento va sin `ref`) |
-| `proof_open` | Se abre un comprobante anclado (con `ref`) o un enlace de evento (sin `ref`) | `via`: `long`, `short`, `qr` |
+| `proof_open` | Se abre un comprobante anclado (con `ref`) o un enlace de evento (sin `ref`) | `via`: `long`, `short`, `qr`, `video` |
 | `proof_verdict` | Termina la verificación de un comprobante anclado | `verdict`: `green`, `yellow`, `red`, `error`; `ref` siempre |
+| `proof_trust` | Respuesta opcional después de comprobar, incluso si la comprobación queda roja o incompleta; servicio del sitio aún apagado | `answer`: `yes`, `no`, `unsure`; `ref` siempre |
+| `reveal_next` | Quien sortea pasa al siguiente en la revelación de a uno | — |
+| `absent_marked` | Quien sortea marca "No está" y se saca a otra persona | — |
+| `list_saved` | Se guarda una lista para volver a usarla en el mismo navegador | — |
+| `list_reused` | Se vuelve a usar una lista guardada | `age`: `same_day`, `week`, `older` |
+| `preview_own_list` | Se prueba el show con la lista propia, sin ganador y sin grabar (sale también de la demo y del ensayo) | — |
+| `video_made` | Se arma el video del resultado | `format`: `mp4`, `webm`; `result`: `ok`, `fail`, `unsupported` |
+| `video_shared` | Se manda o se descarga el video | `channel`: `native`, `download` |
+| `proof_cta` | Quien miró un comprobante o un video toca "Hacer mi sorteo" | `from`: `proof`, `video` |
+
+**El origen** (`from` en `account_connected` y en `seal_confirmed`) es de qué enlace llegó quien sortea: la marca `?o=` de la dirección a la que entró, una palabra de la lista cerrada `ORIGENES`: `home` (la portada, y lo que se asume sin marca), `aula`, `meetup`, `ruleta`, `eventos`, `proof` (el comprobante de otro sorteo) y `video`. La pestaña la recuerda mientras vive, y `conOrigen` la pone dentro de un enlace para que siga al cambiar de navegador en los enlaces que la usen; no lleva nada de nadie. `?o=qr` y `?o=short` son otra cosa: dicen por dónde se abrió un comprobante (`via`).
 
 `ref` es `{"net", "contract", "id"}`: la red, el contrato y el número del sorteo, que ya son públicos en la cadena, y el contrato tiene que ser el oficial de esa red en `src/stellar/deployments.json`: un sorteo de otro contrato (un enlace fabricado) no se cuenta. Por eso, **cuando cambia `deployments.json` (el contrato de mainnet), el Worker se vuelve a desplegar**: hasta entonces, nada de mainnet con referencia entra. Ningún evento de antes del sello lleva nada que identifique a nadie. Lo que no está en la lista no se cuenta: por ejemplo, "Bajar la foto" del diálogo de compartir.
+
+**Excepción exclusiva de `proof_trust`:** admite también contratos anteriores oficiales de `deployments.json`, solo con `ultimoId` entero seguro no negativo y un número de sorteo dentro de ese tope. El resto de los eventos conserva referencias del contrato vigente. Esta admisibilidad no demuestra que exista el sorteo: no se añade ninguna consulta a Stellar. Un POST válido repetido suma otra vez, sin idempotencia ni unicidad de personas.
 
 **Lo que guarda:** una fila por día (UTC), evento, propiedades y sorteo, con cuántas veces pasó. Nada más: ni el evento suelto, ni la hora, ni la dirección IP, ni el navegador, ni cookies, ni un identificador de persona, de equipo o de sesión. Cada conteo se escribe al llegar, una fila escrita por conteo: con el tope de 20.000 por día, el contador no puede usar más de una quinta parte de las 100.000 filas escritas por día de la cuenta, y los enlaces siguen teniendo las suyas. Juntarlos en memoria y escribir una vez por minuto, como sugiere §4.8, se probó el 22 de octubre y se descartó: un objeto quieto se apaga antes de su alarma y pierde lo que tenía, sin aviso, justo cuando hay poco movimiento. Fuera de la cadena no hay nada que una un paso con el siguiente, a propósito: el seguimiento por cuenta (cuánto tarda alguien en hacer su primer sorteo, quién vuelve) sale de la cadena, con el script de métricas.
 
@@ -95,7 +109,19 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 
 **Lo que los topes no cuidan:** en el plan gratis, la cuenta de Cloudflare tiene 100.000 pedidos por día para todos sus Workers, y un conteo rechazado también es un pedido. Pasado eso, `c.tinkazo.app` deja de abrir enlaces y QR hasta la medianoche UTC. Por eso, antes de encenderlo, una de dos, que decide quien mantiene el proyecto (§4.8): Workers Paid (US$5 por mes; 10 millones de pedidos por mes) o una regla de límite de pedidos de Cloudflare delante de `/v1/contar`.
 
-**Del lado del sitio** (`src/contar.ts`): solo en `tinkazo.app` (ni localhost, ni las vistas previas, ni los auditores), ni desde un navegador automatizado (`navigator.webdriver`), ni si el navegador pide que no lo sigan (`globalPrivacyControl` o `doNotTrack`). En la demo (`?demo=`) y en el ensayo salen solo `practice_done` y `tutorial_open`. Un verde de un contrato que no es oficial se cuenta como `red` (y el Worker, igual, no lo suma). Se manda con `navigator.sendBeacon` y un cuerpo de texto: sin consulta previa (CORS), sin esperar respuesta y sin frenar nada; si falla, no pasa nada. El QR de un comprobante lleva `?o=qr` antes del `#`, y la página del enlace corto pasa `?o=short`, para saber por dónde se abrió; la página lo saca de la dirección al abrir. Los términos lo cuentan (`tmMore2`, en `terminos.html` y `src/i18n.ts`).
+**Del lado del sitio** (`src/contar.ts`): solo en `tinkazo.app` (ni localhost, ni las vistas previas, ni los auditores), ni desde un navegador automatizado (`navigator.webdriver`), ni si el navegador pide que no lo sigan (`globalPrivacyControl` o `doNotTrack`). En la demo (`?demo=`) y en el ensayo salen solo `practice_done`, `tutorial_open` y `preview_own_list`. Un verde de un contrato que no es oficial se cuenta como `red` (y el Worker, igual, no lo suma). Se manda con `navigator.sendBeacon` y un cuerpo de texto: sin consulta previa (CORS), sin esperar respuesta y sin frenar nada; si falla, no pasa nada. El QR de un comprobante lleva `?o=qr` antes del `#`, y la página del enlace corto pasa `?o=short`, para saber por dónde se abrió; la página lo saca de la dirección al abrir. Los términos lo cuentan (`tmMore2`, en `terminos.html` y `src/i18n.ts`).
+
+### Respuestas de confianza: preparadas y apagadas
+
+El emisor explícito (`src/respuestas-confianza.ts`) reutiliza las guardas del embudo, pero **no usa beacon**: usa fetch CORS legible, sin credenciales ni referente. Solo confirma POST 204; sin confirmación no reintenta solo y advierte que reintentar podría contar dos veces. Una marca de confirmación por sorteo se guarda en el navegador (`localStorage`), una respuesta por navegador y por sorteo, y nunca viaja en la solicitud. No representa una identidad.
+
+El POST existente espera `Contador.sumar` y devuelve 204 solo con `ok`, sin cambiar SQL ni desactivar output gates. La [documentación de SQLite Durable Objects](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) describe que las salidas de red esperan las escrituras anteriores; un fallo reinicia el objeto y descarta salidas. No se usa `allowUnconfirmed`. El booleano de beacon no prueba almacenamiento.
+
+`SERVICIO_CONFIANZA` en `src/confianza-activacion.ts` está vacío, independiente de `CONTADOR`, que se enciende aparte. Los términos ES/EN describen el servicio en futuro, apagado y sin fecha nueva. Activarlo espera la protección de cuota **y** el despliegue del Worker; esta implementación no autoriza ninguno.
+
+Totales de solo lectura: `node scripts/conteos-confianza.mjs --desde AAAA-MM-DD --hasta AAAA-MM-DD` desde la raíz. Ambas fechas son obligatorias, reales e inclusivas UTC. Ventanas disjuntas de hasta 92 días; solo se subdivide 413 `muchas`, sin cambiar el GET de fechas ni el rechazo de más de 5.000 filas. Un error cancela stdout entero (exit 1). Publica red, contrato, número, Sí/No/No sé y respuestas recibidas, nunca personas únicas. El día actual puede retrasarse cinco minutos por caché. Ver `--help`. Las pruebas del script corren con `pnpm exec vitest run scripts/lib/conteos-confianza.test.mjs`.
+
+Prueba HTTP nueva, **solo en Wrangler local aislado**, antes de reutilizar sus rangos de caché: `node probar-confianza.mjs http://localhost:8792`. Conserva también `probar.mjs` para la regresión de enlaces cortos.
 
 ### Desplegarlo y encenderlo
 
@@ -111,8 +137,8 @@ curl -s https://c.tinkazo.app/v1/conteos                          # [] mientras 
 
 2. Lo que cuida los 100.000 pedidos por día (de arriba): Workers Paid o la regla de límite de pedidos delante de `c.tinkazo.app/v1/contar`.
 
-3. En `src/contar.ts`, `CONTADOR = "https://c.tinkazo.app/v1/contar"`, y en el mismo commit la fecha de los términos (`tmMore4`, en `src/i18n.ts` en los dos idiomas y en `terminos.html`, y el `lastmod` de `terminos.html` en `public/sitemap.xml`): el día en que empieza a contar.
+3. Subir el sitio. En `src/contar.ts` ya está `CONTADOR = "https://c.tinkazo.app/v1/contar"`, y `tmMore2` y `tmMore4` (en `src/i18n.ts` en los dos idiomas y en `terminos.html`) ya dicen que se cuenta. Si el sitio sube en otro día que el 4 de noviembre de 2026, cambiar la fecha de `tmMore4` en esos tres lugares y el `lastmod` de `terminos.html` en `public/sitemap.xml`: el día en que empieza a contar. El sitio sube después del Worker, nunca antes: antes de eso, cada conteo cae en el Worker viejo y gasta un pedido del tope.
 
 Después de subir el sitio, para ver que cuenta: abrir `https://tinkazo.app/?demo=wheel` en un navegador que no pida "no seguir" y, cuando salga el ganador, `GET /v1/conteos` tiene que traer un `practice_done` con `kind: demo` del día (hasta 5 minutos después, por la memoria de las consultas).
 
-Para apagarlo: `CONTADOR = ""` en el sitio, sin tocar el Worker. Borrar lo contado no tiene camino en la API, a propósito: se haría con un despliegue que vacíe la tabla.
+Para apagarlo: `CONTADOR = ""` en el sitio, sin tocar el Worker, y en el mismo cambio los términos (`tmMore2` y `tmMore4`) vuelven a decir que todavía no se cuenta nada: una prueba vigila que digan lo mismo. Borrar lo contado no tiene camino en la API, a propósito: se haría con un despliegue que vacíe la tabla.

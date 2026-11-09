@@ -43,6 +43,14 @@ export const CONTRACT_ERRORS: Record<number, string> = {
 };
 
 /**
+ * Cuántos ganadores admitían los contratos hasta el que sube el tope a 300 (el de testnet del 25 de octubre de 2026
+ * todavía lo tiene). Con más pedidos, el contrato devuelve el error 4 aunque la lista alcance: no es que sobren
+ * ganadores, es que esa red todavía no llega. La clave sigue siendo `badWinnerCount` (el contador de errores la cuenta
+ * como lo que es, el error 4); quien muestra el mensaje (`anchorErrorText`) lo cambia si sabe cuántos se pidieron.
+ */
+export const TOPE_DE_LOS_CONTRATOS_VIEJOS = 32;
+
+/**
  * La cuenta existe y no tiene con qué pagar la comisión. Cada quien lo cuenta a
  * su manera: la red dice `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`),
  * Pollar lo guarda como `txInsufficientBalance` y le agrega "Insufficient XLM to
@@ -68,6 +76,33 @@ export const SIN_CUENTA = /account not found|tx_?no_?account/i;
 const CUENTA_NO_LISTA = /account-not-ready/;
 
 /**
+ * Pollar 0.12 (24 de octubre de 2026), tres cosas que antes no existían:
+ *
+ * - `SDK_WALLET_RECOVERY_REQUIRED`: la cuenta de Pollar en mainnet es de Turnkey y, hasta que tenga una forma de
+ *   recuperarla (una llave de acceso, un código por correo u otro aparato), no firma nada. Se arregla en el paso
+ *   "Protegé tu cuenta" (`ui/proteger-cuenta.ts`), no con otro intento.
+ * - `SDK_CONFIRMATION_UNAVAILABLE` y `SDK_CONFIRMATION_DECLINED`: la firma pide confirmación y nadie la atendió, o la
+ *   rechazamos nosotros (`wallet-pollar.ts` solo confirma el sello y el sorteo que la persona acaba de pedir).
+ * - `SDK_CREDITS_INSUFFICIENT`, `SDK_BILLING_OVERDUE` y `FUND_XLM_FAILED`: a quien paga el servicio se le acabó con qué
+ *   pagar. No es de la persona. (Pollar dice "Users see a generic message pointing to app support".)
+ *
+ * Van antes que `CANCELO`: el rechazo del SDK trae "the user declined the transaction" en el detalle.
+ */
+const RECUPERACION = /SDK_WALLET_RECOVERY_REQUIRED/;
+const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
+/**
+ * La cuenta de Turnkey (mainnet) co-firma cada operación, y la co-firma no se aprobó: `SDK_COSIGN_REJECTED` (la rechazó quien
+ * aprueba, y el SDK la arma con el estado de la solicitud) o `SDK_COSIGN_VERIFICATION_FAILED` (la transacción no coincidía con
+ * lo que se iba a firmar y el SDK no la aprobó). Es una respuesta, no un corte, y repetir da lo mismo: no se reintenta solo,
+ * porque cada intento pediría otra aprobación. En `errorKey` se mira antes que `CANCELO`: el detalle puede decir
+ * "rejected" o "declined".
+ */
+const COFIRMA_NO_APROBADA = /SDK_COSIGN_(?:REJECTED|VERIFICATION_FAILED)/;
+const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
+/** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
+const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
+
+/**
  * La persona dijo que no. Freighter: "The user rejected this request." (código
  * -4), y antes "User declined access". La espera de la cuenta cancelada porque
  * se cerró la sesión cuenta igual.
@@ -85,23 +120,26 @@ const BILLETERA = /wallet-rejected|wallet encountered an internal error|Wallet n
 
 /**
  * Se mandó y no se sabe cómo terminó: quedó en la cola (`DUPLICATE`), la
- * espera se acabó con la transacción todavía viva, o el resultado no llegó.
+ * espera se acabó con la transacción todavía viva, el resultado no llegó, o Pollar
+ * lo dice con sus palabras (`TX_SUBMIT_UNCONFIRMED`, y `pollar-pending` cuando la
+ * co-firma sigue pendiente).
  * Ver `envio.ts`: un sello nunca se vuelve a mandar sin antes saber esto.
  *
  * `envio-lento` es el tope de un envío que no contestó (`enviarYConfirmar`): el
  * pedido pudo haber llegado. No va con los cortes de red a propósito: un corte
  * de red antes de mandar nada se reintenta solo (`sello-seguro.ts`), y esto no.
  */
-const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|envio-lento|pollar-pending|for transaction to complete, but it did not/;
+const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|envio-lento|pollar-pending|TX_SUBMIT_UNCONFIRMED|for transaction to complete, but it did not/;
 
 /**
  * La red no la tomó y hay que volver a probar: ocupada (`TRY_AGAIN_LATER`, o un
- * 429 del RPC), la secuencia corrida, la ventana vencida, o una comisión por
- * encima del tope de quien la paga (Pollar, `TX_FEE_LIMIT_EXCEEDED`, cuando la
- * red sube las comisiones). Va antes que la red caída: el rechazo del SDK
+ * 429 del RPC), demasiados pedidos seguidos a Pollar (`RATE_LIMITED`), la secuencia
+ * corrida, la ventana vencida, o una comisión por encima del tope de quien la paga
+ * (Pollar, `TX_FEE_LIMIT_EXCEEDED`, cuando la red sube las comisiones). Va antes que
+ * la red caída: el rechazo del SDK
  * empieza con "Sending the transaction to the network failed!".
  */
-const OCUPADA = /TRY_AGAIN_LATER|tx_?bad_?seq|TX_BAD_SEQUENCE|tx_?too_?late|tx-EXPIRED|TX_FEE_LIMIT_EXCEEDED|status code 429|HTTP 429/i;
+const OCUPADA = /TRY_AGAIN_LATER|tx_?bad_?seq|TX_BAD_SEQUENCE|tx_?too_?late|tx-EXPIRED|TX_FEE_LIMIT_EXCEEDED|RATE_LIMITED|status code 429|HTTP 429/i;
 
 /**
  * Entró a un ledger y falló sin decir por qué (el SDK no puede leer el
@@ -235,10 +273,12 @@ export function textoDelError(e: unknown): string {
 export function esDeRed(e: unknown): boolean {
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
+  // El portero que no llegó a la red es un corte más; sus otros no son una respuesta, no un corte.
+  if (esNoDelPortero(e)) return e.motivo === "red" || e.motivo === "interno";
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
-  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto)) return false;
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
 }
 
@@ -259,13 +299,79 @@ function sinInternet(): boolean {
 }
 
 /**
+ * El portero del patrocinio (`patrocinador.ts`) no pagó. Se reconoce por el nombre y la forma, sin importar ese
+ * archivo: la pantalla clasifica sin bajar nada más.
+ */
+interface NoDelPortero {
+  motivo: string;
+  que?: string;
+  razon?: string;
+}
+export function esNoDelPortero(e: unknown): e is NoDelPortero & Error {
+  const x = e as { name?: unknown; motivo?: unknown; estado?: unknown } | null;
+  return !!x && typeof x === "object" && x.name === "ErrorPortero" && typeof x.motivo === "string" && typeof x.estado === "number";
+}
+
+/**
+ * Los no del portero que la persona tiene que saber, con su pantalla (`errAnchor.portero*`): se acabó lo que se
+ * cubre (el cupo de la cuenta, el fondo, el servicio que no contesta o está apagado) o esta cuenta no entra.
+ * Los demás (la simulación dice que va a fallar, la comisión pedida quedó corta, la ventana venció, la red del
+ * portero) se cuentan como cualquier error de la red: ver `errorKey`.
+ */
+export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena"]);
+/** Lo que dice `razon` cuando el problema no es de la cuenta sino de la transacción o del sitio: no es "esta cuenta no puede". */
+const RAZONES_QUE_NO_SON_DE_LA_CUENTA = new Set(["restaurar", "tamano", "xdr"]);
+export const esNoQueBloquea = (e: unknown): boolean =>
+  esNoDelPortero(e) && MOTIVOS_QUE_BLOQUEAN.has(e.motivo) && !(e.razon === "fee-alta" || e.razon === "ventana" || (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)));
+
+function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): string | null {
+  switch (e.motivo) {
+    case "cupo-cuenta":
+      return e.que === "sorteos" ? "porteroCupoSorteos" : "porteroCupoSellos";
+    case "cupo-ip":
+    case "fondo":
+    case "apagado":
+    case "cerrado":
+      return "porteroFondo";
+    case "origen":
+      // Abrir el sitio desde un origen que el servicio no conoce es un problema nuestro, no de la cuenta.
+      return "unknown";
+    case "no-permitida":
+    case "cuenta-ajena":
+      // Una comisión pedida de más o una ventana vencida se arreglan armando de nuevo: es "la red ocupada".
+      if (e.razon === "fee-alta" || e.razon === "ventana") return "busy";
+      // El estado archivado del contrato, una transacción demasiado grande o un XDR que no se lee no son de la cuenta.
+      if (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)) return "unknown";
+      return "porteroAjena";
+    case "fee-alta":
+    case "rechazada":
+      return "busy";
+    case "red":
+    case "interno":
+      return (contexto.enLinea ?? !sinInternet()) ? "rpcDown" : "offline";
+    default:
+      // `fallaria` trae el error del contrato en el mensaje: lo lee el resto de `errorKey`.
+      return null;
+  }
+}
+
+/**
  * Traduce un error de una invocación a la clave de su mensaje
  * (`errAnchor.<clave>`). `contexto.enLinea` dice si hay internet; si no se
  * pasa, se le pregunta al navegador.
  */
-export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): string {
+export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean } = {}): string {
   if (esIncierto(e)) return "unconfirmed";
+  if (esNoDelPortero(e)) {
+    const clave = claveDelPortero(e, contexto);
+    if (clave) return clave;
+  }
   const texto = textoDelError(e);
+  if (RECUPERACION.test(texto)) return "recoveryRequired";
+  if (CONFIRMACION.test(texto)) return "confirmation";
+  if (COFIRMA_NO_APROBADA.test(texto)) return "cosignRejected";
+  if (SERVICIO_SIN_FONDOS.test(texto)) return "sponsorEmpty";
+  if (CUENTA_ABRIENDOSE.test(texto)) return "accountNotReady";
   const m = /Error\(Contract,\s*#(\d+)\)/.exec(texto);
   if (m?.[1]) {
     const named = CONTRACT_ERRORS[Number(m[1])];
@@ -276,6 +382,9 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): stri
   if (/Error\(Crypto,/.test(texto)) return "invalidSignature";
   if (CUENTA_NO_LISTA.test(texto)) return "accountNotReady";
   if (COMISION_CORTA.test(texto)) return "busy";
+  // Con una cuenta que no paga la comisión por sí misma (Pollar patrocina), quedarse sin saldo es del servicio, no de la
+  // persona: decirle "tu cuenta no tiene saldo" la manda a cargar XLM a una cuenta que nunca los necesitó.
+  if (SIN_SALDO.test(texto) && contexto.patrocinada) return "sponsorEmpty";
   if (SIN_SALDO.test(texto) || SIN_CUENTA.test(texto)) return "noFunds";
   if (CANCELO.test(texto)) return "userRejected";
   if (BILLETERA.test(texto)) return "wallet";

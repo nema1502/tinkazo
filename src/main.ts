@@ -4,27 +4,37 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
 import { initPlegables } from "./ui/plegable";
+import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
-import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
-import { contarPractica } from "./contar";
+import { montarGanadores, ponerGanadores } from "./ui/ganadores";
+import { MAX_WINNERS } from "./protocol/select";
+import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
+import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
-import { initAvisoCuenta } from "./ui/aviso-cuenta";
+import { initStand, salirDelStand } from "./ui/stand";
+import { initStandSala } from "./ui/stand-sala";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
-import { enEnsayo } from "./ensayo-modo";
+import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
+import { iniciarFeedback, origenDelResultado } from "./feedback";
 import { initMenuMas } from "./ui/menu";
 import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
+import { logoParaSellar } from "./logo-guardado";
+import { iniciarLogo } from "./ui/logo-ui";
+import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
+import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
@@ -33,6 +43,9 @@ const INGRESAR = MARCA_INGRESAR;
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
 if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+
+// De qué enlace se llegó (`?o=aula`, `?o=video`…), para el contador del embudo (src/contar.ts).
+recordarOrigen();
 
 // Textos que no viven en atributos data-i.
 onLangChange(() => {
@@ -67,7 +80,7 @@ $("btn-freeze").addEventListener("click", () => {
 const paceSel = $<HTMLSelectElement>("pace");
 paceSel.value = currentPace();
 /**
- * Las etiquetas llevan la duración: "Normal · 30 s".
+ * Las etiquetas llevan la duración: "Normal, 30 s".
  *
  * El selector dejó de ser un multiplicador y pasó a ser un objetivo de
  * segundos, y eso sólo sirve si se ve. El número sale de `PACES`, así que no
@@ -77,7 +90,7 @@ function paceLabels(): void {
   for (const o of paceSel.options) {
     const p = o.value as Pace;
     const base = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-    o.textContent = `${base} · ${paceSeconds(p)} s`;
+    o.textContent = `${base}, ${paceSeconds(p)} s`;
   }
 }
 onLangChange(paceLabels);
@@ -118,6 +131,7 @@ $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) 
 setTimeout(() => void import("./ui/sala").catch(() => undefined), 4000);
 $("btn-reverify").addEventListener("click", () => void reverify());
 $("btn-replay").addEventListener("click", replayAnimation);
+$("btn-otro-juego").addEventListener("click", elegirOtroJuegoParaVer);
 $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $("btn-recuperar").addEventListener("click", recuperarLista);
@@ -128,6 +142,7 @@ $("btn-proof").addEventListener("pointerdown", adelantarCorto);
 $("winner-cards").addEventListener("click", alTocarGanadores);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
+$<HTMLButtonElement>("btn-rules-pre").addEventListener("click", (e) => void copyRulesPre(e.currentTarget as HTMLButtonElement));
 $("btn-proof").addEventListener("click", shareProof);
 // El contador del embudo (src/contar.ts): avisarle al ganador también es compartir.
 $("btn-whatsapp").addEventListener("click", () => contarCompartido("whatsapp"));
@@ -160,6 +175,7 @@ $("btn-compartir").addEventListener("click", () => {
 });
 compartirLabel();
 onLangChange(compartirLabel);
+iniciarVer3D();
 /** La vibración, solo donde el celular la ofrece: prendida por defecto, apagable. */
 const vibrarLabel = (): void => {
   const b = $("btn-vibrar");
@@ -179,26 +195,40 @@ if (vibracionDisponible()) {
 $("st-skip").addEventListener("click", skipGame);
 // Los botones del estadio se esconden solos: en el proyector no son parte del juego.
 iniciarControlesDelEstadio();
+// El logo de la comunidad: el botón arriba de sellar y la pieza del estadio (no es parte del sorteo).
+iniciarLogo();
+iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+montarGanadores();
+// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
+cerrarSalidaDelStand();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
-// El recordatorio de crear la cuenta, solo en el ensayo y una vez por sesión.
-initAvisoCuenta();
+// El modo stand, si se recargó en él.
+initStandSala();
+initStand();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
+// Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
+iniciarCupo();
 ingresarSiLoPidio();
 initMenuMas();
+iniciarFeedback(
+  () => app.game,
+  () => origenDelResultado(new URLSearchParams(location.search).has("demo"), enEnsayo()),
+);
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
 initSiguiente({ segundos: secondsToRound });
 // "¿Cómo se usa?" y la oferta de la primera vez, que miran en qué paso se está.
 initTutorial();
-initOnboarding(() => abrirTutorial("offer"));
+initOnboarding();
+initLumaAyuda();
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
@@ -208,9 +238,9 @@ initOnboarding(() => abrirTutorial("offer"));
  * login. "/" es siempre la portada, también con la cuenta abierta; la
  * herramienta se abre cuando se pide: "Sortear", "Mis sorteos", el botón
  * grande, o volver de elegir una cuenta (que deja una marca en la sesión del
- * navegador y sobrevive al redirect de Google). Tiene dos pestañas: el sorteo
- * nuevo y los sorteos de esa cuenta, que se traen de la cadena en cualquier
- * equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
+ * navegador y sobrevive al redirect de Google). Tiene dos vistas, que se
+ * eligen desde la cabecera: el sorteo nuevo y los sorteos de esa cuenta, que se
+ * traen de la cadena en cualquier equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
  */
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
@@ -218,8 +248,6 @@ function initVistas(): void {
   const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
-    $("tab-nuevo").setAttribute("aria-selected", String(!hist));
-    $("tab-hist").setAttribute("aria-selected", String(hist));
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
     const app = body.dataset.vista === "app";
     for (const [href, on] of [["/#sortear", app && !hist], ["/#mis-sorteos", app && hist]] as const) {
@@ -256,14 +284,6 @@ function initVistas(): void {
   setVista(deApp ? "app" : "portada");
   porHash();
   addEventListener("hashchange", () => void porHash());
-  $("tab-nuevo").addEventListener("click", () => {
-    history.replaceState(null, "", "#sortear");
-    setVista("app", "nuevo");
-  });
-  $("tab-hist").addEventListener("click", () => {
-    history.replaceState(null, "", "#mis-sorteos");
-    setVista("app", "historial");
-  });
   $("hist-entrar").addEventListener("click", () => {
     void import("./ui/wallet-ui").then((w) => void w.openPicker());
   });
@@ -276,6 +296,11 @@ function initVistas(): void {
       if (enEnsayo()) {
         e.preventDefault();
         salirDelEnsayo({ conMiLista: true });
+        return;
+      }
+      if (enStand()) {
+        e.preventDefault();
+        void salirDelStand();
         return;
       }
       // Con la cuenta adentro, a la herramienta, como siempre.
@@ -334,8 +359,10 @@ function initVistas(): void {
         boton.style.minWidth = `${Math.ceil(r.width)}px`;
         boton.style.minHeight = `${Math.ceil(r.height)}px`;
       }
-      el.dataset.i = clave;
-      el.textContent = t(clave);
+      // En el recuadro del final de la demo (angosto) va la versión corta: "Entrar con Google y sortear" se partía en tres renglones.
+      const k = clave === "ctaGoogle" && boton?.hasAttribute("data-cta-corto") ? "ctaGoogleCorto" : clave;
+      el.dataset.i = k;
+      el.textContent = t(k);
       if (!boton) continue;
       if (ocupado) boton.setAttribute("aria-busy", "true");
       else {
@@ -378,7 +405,7 @@ function ingresarSiLoPidio(): void {
   } catch {
     return;
   }
-  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enEnsayo() && !currentSession()) pedirEntrar();
+  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enPractica() && !currentSession()) pedirEntrar();
 }
 
 /**
@@ -389,7 +416,7 @@ function ingresarSiLoPidio(): void {
 function avisarQueYaEntro(): void {
   const n = parseNames().length;
   const linea = document.getElementById("ya-entraste");
-  if (!linea || n < 2 || app.frozen || enEnsayo()) return;
+  if (!linea || n < 2 || app.frozen || enPractica()) return;
   linea.dataset.n = String(n);
   linea.textContent = t("yaEntraste").replace("{n}", String(n));
   linea.style.display = "";
@@ -422,7 +449,7 @@ async function autoDemo(mode: string): Promise<void> {
   // ganadores: hubo un sorteo de dos en el que el juego anunciaba uno solo.
   const nw = Number(params.get("nw"));
   const sel = document.getElementById("nw");
-  if (nw >= 1 && nw <= 32 && sel instanceof HTMLSelectElement) sel.value = String(nw);
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS && sel instanceof HTMLInputElement) ponerGanadores(nw);
   await freeze();
   setGame((GAMES.find((g) => g === mode) ?? "race") as Game);
   // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
@@ -467,14 +494,16 @@ async function poseScene(): Promise<void> {
     : base;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
   // auditar cómo anuncia cada juego a cada ganador.
-  const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
+  const premios = Math.max(1, Math.min(L.length, MAX_WINNERS, Math.floor(Number(params.get("nw")) || 1)));
   // Quiénes ganan: los de siempre, repartidos por la lista, o con
   // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
   // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena
   // fija lo lee; un sorteo de verdad no pasa por acá (src/pose.ts). Se carga
   // aparte: quien entra a sortear no lo descarga.
   const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
-  app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
+  // Con `?logo=prueba`, la escena fija lleva el logo de prueba: así se mide el estadio con logo.
+  const logoPose = logoParaSellar();
+  app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977, ...(logoPose ? { logo: logoPose } : {}) };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   // Para los auditores: la lista y los ganadores de esta escena, tal cual.
   (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W3 };
@@ -516,9 +545,6 @@ async function poseScene(): Promise<void> {
 
 renderNames();
 unlockAudioOnGesture();
-// Cada juego muestra en su botón lo que hace. Los nombres solos no le dicen
-// nada a quien llega por primera vez.
-void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
 // Siempre se aplica el diccionario al cargar, también en español: si no, el
 // texto que se ve sale del markup y los dos archivos se separan sin que se note.
 setLang(initialLang());

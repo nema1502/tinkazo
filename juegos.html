@@ -1,15 +1,19 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="titJuegos" data-desc-clave="descJuegos">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Los juegos de Tinkazo</title>
-<meta name="description" content="Ocho formas de contar un sorteo en pantalla grande. Ninguna decide nada: el ganador ya salió del número público. Cada juego solo lo cuenta." />
+<title>Juegos para sortear en pantalla grande: ruleta y más</title>
+<meta name="description" content="Ruleta de nombres, carrera de llamas, trompo y más formas de mostrar un sorteo en pantalla grande. Ninguna decide: el resultado ya salió de un número público." />
 <link rel="canonical" href="https://tinkazo.app/juegos.html" />
-<meta property="og:title" content="Los juegos de Tinkazo" />
-<meta property="og:description" content="Ocho formas de contar un sorteo en pantalla grande. Ninguna decide nada: el ganador ya salió del número público." />
+<link rel="alternate" hreflang="es" href="https://tinkazo.app/juegos.html" />
+<link rel="alternate" hreflang="en" href="https://tinkazo.app/juegos.html?lang=en" />
+<link rel="alternate" hreflang="x-default" href="https://tinkazo.app/juegos.html" />
+<meta property="og:title" content="Tinkazo reveals: ten ways to show the result" />
+<meta property="og:description" content="Ten animated reveals for a big screen. None decides anything: a public number already fixed the winner. Diez animaciones para pantalla grande; ninguna decide." />
 <meta property="og:type" content="website" />
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<meta property="og:locale" content="es_BO" />
+<meta property="og:locale:alternate" content="en_US" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/juegos.html" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -17,9 +21,15 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Tinkazo reveals: ten ways to show the result" />
+<meta name="twitter:description" content="Ten animated reveals for a big screen. None decides anything: a public number already fixed the winner. Diez animaciones para pantalla grande; ninguna decide." />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://tinkazo.app/juegos.html#webpage","url":"https://tinkazo.app/juegos.html","name":"Juegos para sortear en pantalla grande: ruleta y más","description":"Ruleta de nombres, carrera de llamas, trompo y más formas de mostrar un sorteo en pantalla grande. Ninguna decide: el resultado ya salió de un número público.","inLanguage":"es","isPartOf":{"@id":"https://tinkazo.app/#website"},"breadcrumb":{"@id":"https://tinkazo.app/juegos.html#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://tinkazo.app/juegos.html#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Tinkazo","item":"https://tinkazo.app/"},{"@type":"ListItem","position":2,"name":"Juegos","item":"https://tinkazo.app/juegos.html"}]}]}</script>
 </head>
 <body>
 <header>
@@ -28,6 +38,7 @@
     <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
@@ -37,7 +48,6 @@
           <a href="/precios.html" data-i="navPrecios">Precios</a>
         </div>
       </div>
-      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
     </nav>
     <nav class="langs" aria-label="idioma">
       <button id="l-es" class="on">es</button>
@@ -49,7 +59,7 @@
 <main>
   <section class="hero" style="padding: 48px 0 8px">
     <div class="hero-copy">
-      <span class="sticker" data-i="jgKicker">Ocho juegos</span>
+      <span class="sticker" data-i="jgKicker">Diez juegos</span>
       <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="jgTitle">El sorteo se mira</h1>
       <p class="lead" data-i="jgLead">Cuando arranca la animación, el ganador ya está decidido: salió del número público del faro. El juego solo lo cuenta. Cada uno pasa veinte comprobaciones antes de entrar, y la que importa es que el nombre en pantalla sea el que fijó el protocolo.</p>
     </div>
@@ -136,6 +146,26 @@
         <p data-i="jgOruB">El Carnaval de Oruro, por fraternidades: cada grupo de la lista baila lo suyo (Diablada, Morenada, Caporales, Tinkus o Llamerada) y pasa frente al palco con el nombre de cada uno. En cada cuadra se queda una fraternidad entera, y en la última se quedan de a varios hasta el contrapunto frente al Socavón. Hasta doscientas.</p>
       </div>
     </article>
+    <article class="juego">
+      <picture>
+        <source srcset="/juegos/guajojo-light.webp" media="(prefers-color-scheme: light)" />
+        <img src="/juegos/guajojo.webp" width="900" height="506" loading="lazy" alt="Guajojó" />
+      </picture>
+      <div class="juego-txt">
+        <span class="num" style="background:var(--orange)" data-i="jgGuajojoN">Guajojó</span>
+        <p data-i="jgGuajojoB">Un sendero del monte de noche. Mientras canta el guajojó, todos caminan; cuando calla, quietos: sus ojos amarillos barren el sendero y al que hace crujir una rama lo escucha y se sienta. Gana quien llega de pie al amanecer. Hasta doscientas.</p>
+      </div>
+    </article>
+    <article class="juego">
+      <picture>
+        <source srcset="/juegos/toborochi-light.webp" media="(prefers-color-scheme: light)" />
+        <img src="/juegos/toborochi.webp" width="900" height="506" loading="lazy" alt="El Toborochi" />
+      </picture>
+      <div class="juego-txt">
+        <span class="num" style="background:var(--magenta)" data-i="jgToborochiN">El Toborochi</span>
+        <p data-i="jgToborochiB">El toborochi en flor, el árbol de Santa Cruz. Los nombres llegan de a ocho y el surazo se va llevando las flores de a poco, hasta que quedan las finalistas. El colibrí se posa en quien gana. Hasta doscientas.</p>
+      </div>
+    </article>
   </section>
 
   <section style="padding: 6px 0 34px">
@@ -154,13 +184,18 @@
     <a href="/juegos.html" data-i="navJuegos">Juegos</a>
     <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
     <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/marca.html" data-i="navMarca">Marca</a>
     <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
     <a href="/precios.html" data-i="navPrecios">Precios</a>
     <a href="/terminos.html" data-i="navTerminos">Términos</a>
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
     <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="/ruleta-de-nombres.html" data-i="navRuleta">Ruleta de nombres</a>
+    <a href="/sorteo-para-eventos.html" data-i="navEventos">Sorteo para eventos</a>
     <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+    <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
+    <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>

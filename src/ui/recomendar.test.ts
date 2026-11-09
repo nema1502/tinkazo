@@ -1,15 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar, type Recomendacion } from "./recomendar";
+import { AGUJEROS_SAPO, CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, cabenLosPremios, juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { FINALISTAS } from "../games/llamas/carrera-base";
+import { SAPO_MAX } from "../games/pixi/sapo-plan";
+import { MAX_WINNERS } from "../protocol/select";
 import type { Game } from "../state";
 
 describe("los textos de la recomendación, en es y en en", () => {
   it("cada nota que puede salir tiene su frase en los dos idiomas", () => {
     const claves = new Set<string>(["recBadge", "recHead"]);
-    for (let n = 1; n <= 210; n++) for (const premios of [1, 9]) for (const r of recomendar(n, premios).games) if (r.note) claves.add(r.note);
+    for (let n = 1; n <= 210; n++) for (const premios of [1, 9, 13, MAX_WINNERS]) for (const r of recomendar(n, premios).games) if (r.note) claves.add(r.note);
     for (const l of ["es", "en"] as const) {
       const faltan = [...claves].filter((k) => {
         const v = T[l][k];
@@ -43,8 +45,8 @@ describe("el selector y su recomendación hablan de los mismos juegos", () => {
     expect(SELECTOR).not.toContain("tombola");
   });
 
-  it("son los ocho que quedaron el 26 de octubre de 2026 (De pie y El Trueque salieron), de las salas chicas a las grandes", () => {
-    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"]);
+  it("son los ocho del 26 de octubre de 2026 (De pie y El Trueque salieron) y, desde el 2 de noviembre, el Guajojó y El Toborochi, de las salas chicas a las grandes", () => {
+    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"]);
   });
 
   it("el Aguayo y la Constelación salen del selector, y el 26 de octubre de 2026 también De pie y El Trueque", () => {
@@ -85,13 +87,13 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(grupos(1)).toEqual({
       encajan: [],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena", "teleferico", "oruro"],
+      no: ["race", "sapo", "trompo", "chovena", "teleferico", "oruro", "guajojo", "toborochi"],
     });
   });
 
   it("con 2, la mesa y la carrera y el trompo encajan (ninguno ideal); chovena, De pie, El Trueque, teleférico y La Entrada no llegan", () => {
     expect(grupos(2)).toEqual({
-      encajan: ["sapo", "race", "trompo"],
+      encajan: ["sapo", "race", "trompo", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["chovena", "teleferico", "oruro"],
     });
@@ -99,7 +101,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 8, el ideal de la carrera, el sapo y el trompo va primero, y chovena y De pie encajan justo en el mínimo", () => {
     expect(grupos(8)).toEqual({
-      encajan: ["sapo", "race", "trompo", "chovena"],
+      encajan: ["sapo", "race", "trompo", "guajojo", "toborochi", "chovena"],
       neutral: ["pinata", "wheel"],
       no: ["teleferico", "oruro"],
     });
@@ -107,7 +109,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 12, chovena, el sapo, la carrera (el pelotón) y el trompo están en su ideal, y El Trueque entra por su mínimo", () => {
     expect(grupos(12)).toEqual({
-      encajan: ["chovena", "sapo", "race", "trompo"],
+      encajan: ["chovena", "sapo", "race", "trompo", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["teleferico", "oruro"],
     });
@@ -115,7 +117,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 16, teleférico entra por su mínimo, y el sapo por la clasificatoria; El Trueque los pasa por puntaje", () => {
     expect(grupos(16)).toEqual({
-      encajan: ["chovena", "race", "sapo", "teleferico"],
+      encajan: ["chovena", "race", "guajojo", "toborochi", "sapo", "teleferico"],
       neutral: ["pinata", "wheel"],
       no: ["trompo", "oruro"],
     });
@@ -123,7 +125,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 30, El Trueque, chovena, teleférico y la carrera (el pelotón entero) están en su ideal; La Entrada entra por su mínimo y va al final; la ruleta sigue, neutral, hasta 200", () => {
     expect(grupos(30)).toEqual({
-      encajan: ["chovena", "teleferico", "race", "sapo", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "guajojo", "toborochi", "sapo", "oruro"],
       neutral: ["pinata", "wheel"],
       no: ["trompo"],
     });
@@ -131,7 +133,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 50, chovena y teleférico están en su ideal, y la carrera y La Entrada también encajan; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
-      encajan: ["chovena", "teleferico", "race", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo"],
     });
@@ -139,7 +141,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 100, teleférico en su ideal; la carrera, con sus tandas, y La Entrada también encajan; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
-      encajan: ["teleferico", "race", "oruro"],
+      encajan: ["teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo", "chovena"],
     });
@@ -147,7 +149,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 200, teleférico, la carrera y La Entrada llegan justo a su máximo, y la piñata y la ruleta también", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["teleferico", "race", "oruro"],
+      encajan: ["teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo", "chovena"],
     });
@@ -163,12 +165,14 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(juego("oruro", 201)).toMatchObject({ fits: false, note: "rec.oruro.largo" });
   });
 
-  it("La Entrada, sin ideal ni puntaje, va al final de los recomendados y nunca es el primero si otro encaja", () => {
+  it("La Entrada, el Guajojó y El Toborochi, sin puntaje, van al final de los recomendados cuando no están en su ideal, y La Entrada nunca es la primera si otra encaja", () => {
+    const sinPuntaje = ["oruro", "guajojo", "toborochi"];
     for (let n = 2; n <= 200; n++) {
-      const encajan = recomendar(n).games.filter((r) => r.fits === true).map((r) => r.game);
-      const finales = encajan.filter((g) => g === "oruro");
+      const rec = recomendar(n).games.filter((r) => r.fits === true);
+      const encajan = rec.map((r) => r.game);
+      const finales = rec.filter((r) => sinPuntaje.includes(r.game) && !r.ideal).map((r) => r.game);
       expect(encajan.slice(encajan.length - finales.length), `n=${n}`).toEqual(finales);
-      if (encajan.length > finales.length) expect(finales, `n=${n}`).not.toContain(encajan[0]);
+      if (encajan.length > 1) expect(encajan[0], `n=${n}`).not.toBe("oruro");
     }
   });
 
@@ -251,7 +255,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 describe("rangoVisible: lo que dice la tarjeta del selector bajo el nombre", () => {
   it("va del mínimo (2 si el juego no tiene) al máximo", () => {
     expect(Object.fromEntries(SELECTOR.map((g) => [g, rangoVisible(g)]))).toEqual({
-      race: "2–200", sapo: "2–40", trompo: "2–14", chovena: "8–80", pinata: "2–200", wheel: "2–200", teleferico: "16–200", oruro: "30–200",
+      race: "2–200", sapo: "2–40", trompo: "2–14", chovena: "8–80", pinata: "2–200", wheel: "2–200", teleferico: "16–200", oruro: "30–200", guajojo: "2–200", toborochi: "2–200",
     });
   });
 
@@ -380,7 +384,7 @@ describe("la carrera y los premios: cada premio es un carril de la recta", () =>
   it("con ocho premios o menos la carrera encaja como siempre; con nueve o más, no, y dice por qué", () => {
     for (const n of [12, 20, 60, 200]) {
       for (const premios of [undefined, 1, 4, 8]) expect(carrera(n, premios).fits, `${n} personas, ${premios} premios`).toBe(true);
-      for (const premios of [9, 12, 32]) {
+      for (const premios of [9, 12, 32, 50, MAX_WINNERS]) {
         const r = carrera(n, premios);
         expect(r.fits, `${n} personas, ${premios} premios`).toBe(false);
         expect(r.note).toBe("rec.race.premios");
@@ -409,5 +413,74 @@ describe("la carrera y los premios: cada premio es un carril de la recta", () =>
     // Con uno, como siempre.
     expect(juegoPorDefecto(20)).toBe("race");
     expect(juegoPorDefecto(20, 8)).toBe("race");
+  });
+});
+
+describe("el sapo y los premios: cada premio es un agujero de la final", () => {
+  const sapo = (n: number, premios?: number): Recomendacion => recomendar(n, premios).games.find((r) => r.game === "sapo") as Recomendacion;
+
+  it("los agujeros de acá son los del sapo (este módulo no puede importar su medida: viaja con la portada)", () => {
+    expect(AGUJEROS_SAPO).toBe(SAPO_MAX);
+  });
+
+  it("hasta doce premios el sapo encaja como siempre; con trece o más, no, y dice por qué", () => {
+    for (const n of [12, 20, 40]) {
+      for (const premios of [undefined, 1, 3, 12]) expect(sapo(n, premios).fits, `${n} personas, ${premios} premios`).toBe(true);
+      for (const premios of [13, 20, 32, 40]) {
+        if (premios > n) continue;
+        const r = sapo(n, premios);
+        expect(r.fits, `${n} personas, ${premios} premios`).toBe(false);
+        expect(r.note).toBe("rec.sapo.premios");
+        expect(r.args).toEqual([n, premios, 12]);
+      }
+    }
+    expect((T.es["rec.sapo.premios"] as (...a: number[]) => string)(20, 13, 12)).toBe("Con 13 premios no entra: la mesa del sapo tiene 12 agujeros.");
+    expect((T.en["rec.sapo.premios"] as (...a: number[]) => string)(20, 13, 12)).toContain("13 prizes");
+  });
+
+  it("con trece premios o más no queda elegido el sapo, ni de siempre ni de siguiente", () => {
+    for (const n of [13, 20, 30, 40]) {
+      expect(juegoPorDefecto(n, 13), `${n} personas`).not.toBe("sapo");
+      for (const actual of SELECTOR) expect(juegoSiguiente(n, actual, 13), `${n} personas, después de ${actual}`).not.toBe("sapo");
+    }
+  });
+});
+
+describe("muchos ganadores: hasta cien, con los juegos que los cuentan", () => {
+  it("cabenLosPremios: la carrera hasta ocho, el sapo hasta doce, el resto cualquier cantidad", () => {
+    expect(cabenLosPremios("race", 8)).toBe(true);
+    expect(cabenLosPremios("race", 9)).toBe(false);
+    expect(cabenLosPremios("sapo", 12)).toBe(true);
+    expect(cabenLosPremios("sapo", 13)).toBe(false);
+    for (const g of SELECTOR) {
+      if (g === "race" || g === "sapo") continue;
+      expect(cabenLosPremios(g, MAX_WINNERS), g).toBe(true);
+    }
+  });
+
+  it("con 33, 50 y 100 ganadores: la carrera y el sapo salen, y siempre queda algo que encaja", () => {
+    for (const [n, premios] of [[33, 33], [50, 33], [60, 50], [100, 50], [100, 100], [150, 100], [200, 100]] as const) {
+      const r = recomendar(n, premios).games;
+      for (const g of ["race", "sapo"] as const) {
+        const x = r.find((y) => y.game === g) as Recomendacion;
+        expect(x.fits, `${g}: ${n} personas, ${premios} ganadores`).toBe(false);
+      }
+      const buenos = r.filter((x) => x.fits === true);
+      expect(buenos.length, `${n} personas, ${premios} ganadores`).toBeGreaterThan(0);
+      for (const x of buenos) expect(cabenLosPremios(x.game, premios), `${x.game} con ${premios}`).toBe(true);
+      // Lo que queda elegido y lo que sigue cuentan todos los premios.
+      expect(cabenLosPremios(juegoPorDefecto(n, premios), premios), `por defecto con ${n}/${premios}`).toBe(true);
+      for (const actual of SELECTOR) expect(cabenLosPremios(juegoSiguiente(n, actual, premios), premios), `después de ${actual}, ${n}/${premios}`).toBe(true);
+    }
+  });
+
+  it("si ningún juego encaja con la cantidad de personas, igual no queda uno que no cuente los premios", () => {
+    for (const premios of [9, 13, MAX_WINNERS]) expect(cabenLosPremios(juegoPorDefecto(500, premios), premios), `${premios} premios`).toBe(true);
+    expect(juegoPorDefecto(500, 1)).toBe(JUEGO_DE_SIEMPRE);
+  });
+
+  it("con el máximo de ganadores y todos en la lista (el modo orden), la ruleta sigue siendo una opción", () => {
+    const ruleta = recomendar(200, MAX_WINNERS).games.find((r) => r.game === "wheel") as Recomendacion;
+    expect(ruleta.fits).not.toBe(false);
   });
 });

@@ -27,6 +27,9 @@ export const REGLAS = {
   proyector: { nombre: "proyector", ancho: 1920, alto: 1080, celular: false, secundario: 28, principal: 48 },
   celular: { nombre: "celular", ancho: 390, alto: 844, celular: true, secundario: 16, principal: 22 },
   herramienta: { nombre: "herramienta", secundario: 16, principal: 22 },
+  // El piso de las páginas de lectura y de la herramienta en todas las pantallas (`--paginas`). Se midió el
+  // 1 de noviembre de 2026: ver `docs/ux.md`, «La letra, con la cifra medida».
+  paginas: { nombre: "páginas", secundario: 14, principal: 18 },
 };
 
 /**
@@ -61,15 +64,45 @@ export const FACTOR_MAYUSCULAS = 1.35;
 
 /** `proyector=28:48,celular=16:22,herramienta=16:22`: otra regla, sin tocar el código. */
 export function reglasDe(texto = "") {
-  const r = { proyector: { ...REGLAS.proyector }, celular: { ...REGLAS.celular }, herramienta: { ...REGLAS.herramienta } };
+  const r = { proyector: { ...REGLAS.proyector }, celular: { ...REGLAS.celular }, herramienta: { ...REGLAS.herramienta }, paginas: { ...REGLAS.paginas } };
   for (const par of texto.split(",").filter(Boolean)) {
-    const m = /^(proyector|celular|herramienta)=(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(par.trim());
-    if (!m) throw new Error(`regla mal escrita: «${par}» (se espera proyector=28:48, celular=16:22 o herramienta=16:22)`);
+    const m = /^(proyector|celular|herramienta|paginas)=(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(par.trim());
+    if (!m) throw new Error(`regla mal escrita: «${par}» (se espera proyector=28:48, celular=16:22, herramienta=16:22 o paginas=14:18)`);
     r[m[1]].secundario = Number(m[2]);
     r[m[1]].principal = Number(m[3]);
   }
   return r;
 }
+
+/**
+ * Las páginas que se miden con `--paginas` (las de lectura, la herramienta y las que abre un enlace), con
+ * la ruta que se abre. `{LIBRE}` y `{EVENTO}` se arman en el auditor con un comprobante sin red.
+ */
+export const PAGINAS = [
+  ["index", "/"],
+  ["juegos", "/juegos.html"],
+  ["historia", "/historia.html"],
+  ["seguridad", "/seguridad.html"],
+  ["precios", "/precios.html"],
+  ["terminos", "/terminos.html"],
+  ["como-funciona", "/como-funciona.html"],
+  ["marca", "/marca.html"],
+  ["lista", "/lista.html"],
+  ["verificar", "/verificar.html#{LIBRE}"],
+  ["evento", "/evento.html#{EVENTO}"],
+  ["c", "/c.html"],
+];
+
+/** Las pantallas de `docs/ux.md` y los anchos de celular que no cubren: [nombre, ancho, alto, celular]. */
+export const PANTALLAS = [
+  ["laptop-100", 1362, 632, false],
+  ["escritorio", 1280, 720, false],
+  ["tablet-h", 1024, 560, false],
+  ["celular-h", 844, 390, true],
+  ["celular", 390, 844, true],
+  ["zoom-200", 681, 316, false],
+  ["celular-320", 320, 640, true],
+];
 
 export const minimoPara = (tamano, principal) => (principal ? tamano.principal : tamano.secundario);
 
@@ -88,8 +121,11 @@ const mediana = (xs) => {
  * son para la sala se juzgan con ella y solo los marcados `sala` (el nombre del
  * ganador) con la del tamaño. Sin ella, todos con la del tamaño: así se juzga el
  * DOM del estadio, que es todo para la sala.
+ *
+ * `factorMayusculas` es lo que vale la letra en mayúsculas: 1.35 para el estadio y
+ * 1 en las páginas (`--paginas`), donde 13 px son 13 px aunque sean mayúsculas.
  */
-export function evaluarDom(textos, tamano, herramienta = null) {
+export function evaluarDom(textos, tamano, herramienta = null, factorMayusculas = FACTOR_MAYUSCULAS) {
   const vistos = new Map();
   for (const t of textos) {
     const k = `${t.ruta}|${t.texto}`;
@@ -101,7 +137,7 @@ export function evaluarDom(textos, tamano, herramienta = null) {
   for (const t of unicos) {
     const deHerramienta = !!herramienta && !t.sala;
     const minimo = minimoPara(deHerramienta ? herramienta : tamano, t.principal);
-    if ((t.mayusculas ? t.px * FACTOR_MAYUSCULAS : t.px) >= minimo - TOLERANCIA) continue;
+    if ((t.mayusculas ? t.px * factorMayusculas : t.px) >= minimo - TOLERANCIA) continue;
     const k = `${t.ruta}|${t.px.toFixed(1)}|${t.principal ? "p" : "s"}|${deHerramienta ? "h" : "r"}|${t.mayusculas ? "m" : "n"}`;
     const g = grupos.get(k) ?? { ruta: t.ruta, px: t.px, minimo, principal: !!t.principal, herramienta: deHerramienta, mayusculas: !!t.mayusculas, textos: [], caja: { x: t.x, y: t.y, w: t.w, h: t.h } };
     g.textos.push(t.texto);

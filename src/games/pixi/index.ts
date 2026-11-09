@@ -1,4 +1,6 @@
 import { playableGame, type Beacon, type Game } from "../../state";
+import { sonidoDelJuego } from "../../sound";
+import { usa3D } from "../engine";
 import { JUEGOS } from "./kit/catalogo";
 import { PixiInitError, warmPixi } from "./stage";
 
@@ -14,6 +16,17 @@ type Launch = (names: string[], winners: readonly number[], beacon: Beacon, done
 const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   // Los del kit se cargan desde su catálogo: un juego nuevo no toca este archivo.
   ...Object.fromEntries(JUEGOS.map((j) => [j.id, j.cargar])),
+  // La carrera, y su 3D (three.js se trae solo ahí; si no baja, la de siempre).
+  race: async () => {
+    const carrera = await import("../llamas/carrera");
+    if (!usa3D("race")) return carrera.carreraPixi;
+    try {
+      const v = await import("../llamas/carrera-3d");
+      return carrera.carreraPixi3D(v.crearVista3D);
+    } catch {
+      return carrera.carreraPixi;
+    }
+  },
   wheel: async () => (await import("./wheel")).wheelPixi,
   tombola: async () => (await import("./tombola")).tombolaPixi,
   trompo: async () => (await import("./trompo")).trompoPixi,
@@ -42,7 +55,9 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
  * Ver `preloadGame` en `../engine.ts`.
  */
 export async function preloadPixi(game: Game): Promise<void> {
-  await Promise.all([PIXI[game]?.(), warmPixi()]);
+  // Si el juego va a verse en 3D, también baja su módulo (three.js viaja en un trozo propio que se comparte entre juegos).
+  const tres = usa3D(game) && game !== "race" ? import("../tres/registro").then((m) => m.precargar3D(game)).catch(() => undefined) : undefined;
+  await Promise.all([PIXI[game]?.(), warmPixi(), tres]);
 }
 
 /** `true` si el juego tiene versión en PixiJS. */
@@ -59,6 +74,8 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   game = playableGame(game, names.length, names, winners);
   const load = PIXI[game];
   if (!load) return false;
+  // Los sonidos de archivo del juego: si el sorteo ya los pidió, no hace nada (la escena fija y las repeticiones no pasan por la tarjeta).
+  sonidoDelJuego(game, false);
   // Lo que PixiJS pide recién al arrancar baja a la par del trozo del juego, no
   // después. Con el juego precargado ya está (ver `preloadPixi`); en frío (la
   // escena fija, o un sorteo que no alcanzó a precargarlo) era un viaje más a la
@@ -69,7 +86,9 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   // y no aparecía ni el juego ni el ganador.
   let launch: Awaited<ReturnType<typeof load>>;
   try {
-    launch = await load();
+    // El 3D (src/games/tres/README.md): si le toca al juego y tiene versión, esa; si no baja, el 2D de siempre.
+    const en3D = usa3D(game) && game !== "race" ? await import("../tres/registro").then((m) => m.lanzador3D(game)).catch(() => null) : null;
+    launch = en3D ?? (await load());
   } catch {
     return false;
   }

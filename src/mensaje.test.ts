@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 
 const enlace = "https://tinkazo.app/verificar.html#rEJEMPLO";
-const pie = { es: "Sorteado con Tinkazo · https://tinkazo.app", en: "Drawn with Tinkazo · https://tinkazo.app" } as const;
+const pie = { es: "Sorteado con Tinkazo: https://tinkazo.app", en: "Drawn with Tinkazo: https://tinkazo.app" } as const;
 
 /**
  * El mensaje que se pega en el grupo. Lo dice quién ganó, entre cuántos, el

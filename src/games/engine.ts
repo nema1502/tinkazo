@@ -1,4 +1,6 @@
-import { params, playableGame, type Game } from "../state";
+import { paraCompartir, params, playableGame, ver3DGuardado, type Game } from "../state";
+import { aptoPorDefecto3D, permite3D, quiere3D, type Entorno3D } from "./permite3d";
+import { ofrece3D } from "./tres/ofrecidos";
 
 /**
  * Qué motor dibuja los juegos.
@@ -13,6 +15,43 @@ import { params, playableGame, type Game } from "../state";
 export function usePixi(): boolean {
   if (params.get("motor") === "clasico") return false;
   return hasWebGL();
+}
+
+/**
+ * `true` si hay que dibujar este juego en 3D en este equipo. Desde el 4 de noviembre de 2026 es lo que la sala ve por
+ * defecto en los juegos que ganaron la comparación a ciegas (`JUEGOS_CON_3D`): se apaga con el interruptor del selector
+ * (queda guardado en este navegador), con `?motor=clasico` (o `2d`, o `pixi`), y no corre donde `permite3D` no lo deja.
+ * `?motor=3d` lo pide en cualquier juego que tenga versión, esté o no en la lista. La regla vive en `quiere3D`
+ * (`permite3d.ts`), que se prueba sola.
+ */
+export function usa3D(juego: Game): boolean {
+  const motor = params.get("motor");
+  if (motor === "3d") return puede3D();
+  if (!ofrece3D(juego)) return false;
+  return quiere3D({ motor, guardado: ver3DGuardado(), apto: aptoPorDefecto3D(entorno3D(), juego) }) && puede3D();
+}
+
+/** `true` si este equipo y esta conexión aguantan el 3D: lo que decide si el selector ofrece el interruptor. */
+export function puede3D(): boolean {
+  return permite3D(entorno3D());
+}
+
+function entorno3D(): Entorno3D {
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string }; deviceMemory?: number };
+  let reducido = false;
+  try {
+    reducido = matchMedia("(prefers-reduced-data: reduce)").matches;
+  } catch {
+    reducido = false;
+  }
+  return {
+    webgl: hasWebGL(),
+    ahorroDeDatos: reducido || nav.connection?.saveData === true,
+    conexion: nav.connection?.effectiveType ?? null,
+    compartir: paraCompartir(),
+    memoriaGB: nav.deviceMemory ?? null,
+    nucleos: nav.hardwareConcurrency ?? null,
+  };
 }
 
 let webgl: boolean | null = null;

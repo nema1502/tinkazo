@@ -5,10 +5,18 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
+import { capRecent, conTitulo, enVuelo, juntar, layoutLabels, listaAdentro, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { createPile, shouldSettle, type Pile } from "./pinata-monton";
-import { planPalos } from "./pinata-plan";
+import { calendarioDePalos } from "./pinata-plan";
+import { ASOMA_DESPUES, respuestasPinata } from "./pinata-nino";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D, Vista3D } from "../tres/tipos";
+import type { Caramelo3D, EntradaPinata } from "../tres/pinata-3d-tipos";
 
 /**
  * Piñata.
@@ -93,10 +101,10 @@ interface Candy {
 const SLIDE = 0.18;
 interface Swing { at: number; miss: boolean; drop: number[]; done: boolean }
 
-export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaPinata>): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
@@ -122,14 +130,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   // se apuran (de 1,9 a 0,75 s entre uno y otro): con un palo parejo cada 2,3 s
   // reales la sala no sentía que la piñata estaba por ceder (7 de octubre de 2026).
   const base = clamp(5 + Math.floor(n / 6), 5, 9);
-  const swings: Swing[] = [];
-  let tH = T_HANG + 0.5;
-  let given = 0;
-  for (const p of planPalos(fallOrder.length, base, story.arc === "remontada")) {
-    swings.push({ at: tH, miss: p.miss, drop: p.miss ? [] : fallOrder.slice(given, given + p.take), done: false });
-    given += p.take;
-    tH += p.wait;
-  }
+  const calendario = calendarioDePalos(fallOrder, base, story.arc === "remontada", T_HANG);
+  const swings: Swing[] = calendario.palos.map((p) => ({ ...p, done: false }));
+  const tH = calendario.fin;
   const nHits = swings.filter((s) => !s.miss).length;
   const T_BREAK = tH + (story.arc === "duelo" ? 1.2 : 0.6);
   // Rota la piñata, el cartel llega enseguida: el caramelo ganador cae más
@@ -221,6 +224,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   };
   /** Dónde está parado el chico (x del mundo), cuánto caminó y qué tan rápido va: las piernas se mueven con eso. */
   let kidX = NaN, kidWalk = 0, kidSpeed = 0;
+  /** Lo que `drawKid` puso en el cuadro (el ángulo del palo, el mareo, el paso): el 3D lo dibuja tal cual. */
+  const kidPose = { a: 0, dizzy: 0, gait: 0, amp: 0 };
+  /** La vista 3D, si está prendida y arrancó. Con ella, el 2D apaga su fondo, su piso y sus figuras (`apagar2D`). */
+  let v3: Vista3D<EntradaPinata> | null = null;
+  let winBig = 0;
   /**
    * Dónde se para el chico para pegarle: a la izquierda de la piñata, a la
    * distancia justa para que el palo la alcance. `py` es la altura de la
@@ -545,6 +553,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let pile!: Graphics;
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
+  let counterMarcas!: Graphics;
+  /** El contador con su fila de marcas, y lo que ocupa la fila de alto (con su aire): lo que los nombres no pueden tapar. */
+  let counterRoot!: Container;
+  let marcasH = 0;
   let chipLayer!: Container;
   /**
    * La lista de los caídos: una fila por nombre, la más nueva arriba a la
@@ -558,10 +570,19 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
    */
   let faceLayer!: Container;
   const candyFaces = new Map<number, Sprite>();
+  type Fila = { c: Container; bg: Graphics; sq: Graphics; tx: ReturnType<PixiStage["text"]> };
+  /** Los que cayeron (a la derecha) y los que siguen adentro (a la izquierda, o en el mismo lugar en un celular): cada lista con su título. */
   let lista!: ListaGeo;
-  let listaRows: { c: Container; bg: Graphics; sq: Graphics; tx: ReturnType<PixiStage["text"]> }[] = [];
+  let listaRows: Fila[] = [];
   let listaMore!: ReturnType<PixiStage["text"]>;
-  let listaKey = -1, listaHl = false;
+  let listaTit!: ReturnType<PixiStage["text"]>;
+  let listaKey = "";
+  let listaAd!: ListaGeo;
+  let listaAdRows: Fila[] = [];
+  const listaPlacas = new Map<ReturnType<PixiStage["text"]>, Graphics>();
+  let listaAdTit!: ReturnType<PixiStage["text"]>;
+  /** Los rectángulos de las listas que se ven, para que los nombres que vuelan no las pisen. */
+  let listasVistas: Rect[] = [];
   /** Cuándo cayó el último caramelo (para resaltarlo en la lista). */
   let lastDropAt = -9;
   const chipOf = new Map<number, Container>();
@@ -694,9 +715,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     counterBox = new Graphics();
     counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
-    const box = new Container();
-    box.addChild(counterBox, counter);
-    box.position.set(22 * k, S.top() + 10 * k);
+    counterMarcas = new Graphics();
+    counterRoot = new Container();
+    counterRoot.addChild(counterBox, counter, counterMarcas);
+    counterRoot.position.set(22 * k, S.top() + 10 * k);
+    const box = counterRoot;
     chipLayer = new Container();
     moreBg = new Graphics();
     moreTxt = S.text("", { fontFamily: MONO, fontSize: Math.max(14 * k * (g.w <= 520 ? 1.35 : 1.15), LEGIBLE.sec * k), fontWeight: "800", fill: INK });
@@ -718,27 +741,53 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       anchoLista = Math.max(anchoLista, medida.width);
     }
     medida.destroy();
-    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone, letra: letraLista, ancho: anchoLista });
+    // En un celular la fila de marcas ocupa casi todo el ancho de arriba y la columna de la derecha empieza debajo de ella.
+    marcasH = reservaDeMarcas(n, k, g.w).alto;
+    lista = conTitulo(listaCaidos({ w: g.w, k, top: S.top() + (phone ? marcasH : 0), floor: g.floor, phone, letra: letraLista, ancho: anchoLista }));
+    // La de los que siguen adentro: en escritorio, del lado contrario, debajo del contador y de su fila de marcas; en un
+    // celular no hay lugar para las dos y va donde la de los caídos (se muestra una u otra).
+    listaAd = phone ? lista : listaAdentro({ w: g.w, k, floor: g.floor, letra: letraLista, ancho: anchoLista, abajoDe: S.top() + 10 * k + medidasContador(k).alto + marcasH });
     const listaCont = new Container();
-    listaRows = [];
-    for (let i = 0; i < lista.cap; i++) {
-      const c = new Container();
-      const bg = new Graphics();
-      const sq = new Graphics();
-      const tx = S.text("", { fontSize: lista.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    const filas = (geo: ListaGeo): Fila[] => {
+      const rows: Fila[] = [];
+      for (let i = 0; i < geo.cap; i++) {
+        const c = new Container();
+        const bg = new Graphics();
+        const sq = new Graphics();
+        const tx = S.text("", { fontSize: geo.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
+        tx.anchor.set(0, 0.5);
+        tx.position.set(geo.rowH * 0.85, geo.rowH / 2);
+        c.addChild(bg, sq, tx);
+        c.position.set(geo.x + (i % geo.cols) * geo.colW, geo.y + Math.floor(i / geo.cols) * geo.rowH);
+        c.visible = false;
+        listaCont.addChild(c);
+        rows.push({ c, bg, sq, tx });
+      }
+      return rows;
+    };
+    listaRows = filas(lista);
+    listaAdRows = phone ? listaRows : filas(listaAd);
+    const titulo = (geo: ListaGeo): ReturnType<PixiStage["text"]> => {
+      const tx = S.text("", { fontSize: geo.letra, fontWeight: "900", fill: S.dark ? CREAM : INK });
       tx.anchor.set(0, 0.5);
-      tx.position.set(lista.rowH * 0.85, lista.rowH / 2);
-      c.addChild(bg, sq, tx);
-      c.position.set(lista.x + (i % lista.cols) * lista.colW, lista.y + Math.floor(i / lista.cols) * lista.rowH);
-      c.visible = false;
-      listaCont.addChild(c);
-      listaRows.push({ c, bg, sq, tx });
-    }
+      tx.position.set(geo.x + 4 * k, geo.y - geo.rowH / 2);
+      tx.visible = false;
+      // La placa del título: sobre los banderines del celular la letra sola daba 1,9 a 1.
+      const placa = new Graphics();
+      placa.visible = false;
+      listaPlacas.set(tx, placa);
+      listaCont.addChild(placa, tx);
+      return tx;
+    };
+    listaPlacas.clear();
+    listaTit = titulo(lista);
+    listaAdTit = phone ? listaTit : titulo(listaAd);
     listaMore = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
     listaMore.position.set(lista.x + 4 * k, lista.y + lista.h + 4 * k);
     listaCont.addChild(listaMore);
     S.hud.addChild(listaCont);
-    listaKey = -1;
+    listaKey = "";
+    listasVistas = [];
     // El montón se vuelve a armar con la pantalla nueva, en el orden en que se
     // asentaron: cada caramelo queda en el montón de esta pantalla, no donde
     // estaba en la anterior.
@@ -757,10 +806,19 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       c.y = g.floor - sz * 0.62 - spot.base;
     }
     for (const c of candies) c.drawn = false;
+    apagar2D();
+  }
+  /** Con el 3D, el fondo, el patio, la piñata, el chico y los caramelos los dibuja el 3D; quedan en el 2D las caras, la estrella del golpe, las listas y los nombres. */
+  function apagar2D(): void {
+    if (!v3) return;
+    S.bg.visible = false;
+    for (const x of [wall, garland, rope, pin, pieces, candyG, pile, glow, kid]) x.renderable = false;
   }
   build();
   const crownUI = S.crown(names, winners);
   S.onResize(build);
+  v3 = enchufar3D(S, tres);
+  apagar2D();
   /**
    * La toma de la colgada: la piñata que sube y el chico al que le dan
    * vueltas, los dos en cuadro; al final se arrima a la piñata, que es donde
@@ -876,6 +934,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const up = -Math.PI / 2 + 0.3;
     const ready = ease.inOutCubic(clamp((tAll - (T_HANG - 0.2)) / 0.45, 0, 1));
     const a = broken ? -1.25 : up + (angle(f) - up) * ready;
+    kidPose.a = a;
+    kidPose.dizzy = dizzy;
+    kidPose.gait = gait;
+    kidPose.amp = amp;
     kidStick.clear();
     kidFx.clear();
     // La estela: dos palos fantasma un poco atrás en el arco, solo al pegar.
@@ -933,12 +995,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
    * otros tantos lo empujan; la tira de cinco nombres apagados no alcanzaba.
    */
   function drawLista(): void {
-    // Con el cartel del ganador, la lista se va: el cartel tiene el lugar.
+    // Con el cartel del ganador, las listas se van: el cartel tiene el lugar.
     if (phase === "crown" || phase === "dead") {
-      if (listaKey !== -2) {
-        listaKey = -2;
-        listaRows.forEach((r) => (r.c.visible = false));
-        listaMore.visible = false;
+      if (listaKey !== "oculta") {
+        listaKey = "oculta";
+        for (const r of [...listaRows, ...listaAdRows]) r.c.visible = false;
+        listaMore.visible = listaTit.visible = listaAdTit.visible = false;
+        for (const pl of listaPlacas.values()) pl.visible = false;
+        listasVistas = [];
       }
       return;
     }
@@ -946,20 +1010,65 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Rota la piñata, sin resaltar: la rival en amarillo mientras baja el caramelo
     // que gana se leía como la ganadora, y el amarillo es del cartel.
     const hl = len > 0 && tAll - lastDropAt < 1.2 && !brokeDone;
-    if (len === listaKey && hl === listaHl) return;
-    listaKey = len;
-    listaHl = hl;
-    const shown = fallen.slice(-lista.cap).reverse();
+    // Quienes siguen adentro, por su puesto en la lista (no se barajan al caer otro). Con uno solo no hay lista:
+    // es la ganadora, y su nombre escrito antes del cartel la delataba.
+    const adentro = inside().map((c) => c.idx).sort((x, y) => x - y);
+    const verAdentro = adentro.length > 1 && adentro.length <= listaAd.cap && !brokeDone;
+    const phone = lista.phone;
+    // En un celular se muestra una de las dos (la de adentro mientras entre); en escritorio, las dos.
+    const verCaidos = !(phone && verAdentro);
+    const clave = `${verAdentro ? adentro.join(",") : "-"}|${verCaidos ? len : "-"}|${hl}`;
+    if (clave === listaKey) return;
+    listaKey = clave;
     const fondo = S.dark ? 0x221a33 : 0xffffff;
-    listaRows.forEach((r, i) => {
-      const id = shown[i];
-      r.c.visible = id !== undefined;
-      if (id === undefined) return;
-      r.tx.text = etiqueta(names[id] ?? "", listaMax(lista.phone));
-      r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
-      r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
-    });
-    listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
+    const placaDe = (tx: ReturnType<PixiStage["text"]>): void => {
+      const pl = listaPlacas.get(tx);
+      if (!pl) return;
+      // Con aire de sobra: lo que rodea al texto a tres píxeles tiene que ser la placa y no el borde ni el papel picado de atrás.
+      const mx = Math.max(8, 8 * G().k), my = Math.max(6, 6 * G().k);
+      pl.clear().roundRect(tx.x - mx, tx.y - tx.height / 2 - my, tx.width + 2 * mx, tx.height + 2 * my, 4).fill(fondo).stroke({ width: 2, color: INK });
+      pl.visible = tx.visible;
+    };
+    const pintar = (rows: Fila[], geo: ListaGeo, ids: number[], resalta: boolean, apagada: boolean): void => {
+      rows.forEach((r, i) => {
+        const id = ids[i];
+        r.c.visible = id !== undefined;
+        if (id === undefined) return;
+        // El fondo de la fila es siempre opaco (en un celular dejaba ver el papel picado) y lo apagado es solo la letra. La fila
+        // resaltada va con tinta sin alfa: crema sobre mostaza daba 1,8 a 1.
+        const marcada = i === 0 && resalta;
+        r.c.alpha = 1;
+        r.tx.alpha = apagada && !marcada ? 0.78 : 1;
+        r.tx.style.fill = marcada || !S.dark ? INK : CREAM;
+        r.tx.text = etiqueta(names[id] ?? "", listaMax(phone));
+        r.bg.clear().roundRect(0, 0, geo.colW - 4, geo.rowH - 3, 4).fill(marcada ? YELLOW : fondo).stroke({ width: 2, color: INK });
+        r.sq.clear().rect(4, 4, geo.rowH * 0.3, geo.rowH - 11).fill(S.color(id));
+      });
+    };
+    // En un celular las dos listas comparten filas: se apagan todas y se pinta la que toca.
+    for (const r of listaRows) r.c.visible = false;
+    for (const r of listaAdRows) r.c.visible = false;
+    const vistas: Rect[] = [];
+    listaTit.visible = listaAdTit.visible = false;
+    for (const pl of listaPlacas.values()) pl.visible = false;
+    listaMore.visible = false;
+    if (verCaidos) {
+      pintar(listaRows, lista, fallen.slice(-lista.cap).reverse(), hl, true);
+      listaTit.text = t("cPinListaOut");
+      listaTit.visible = len > 0;
+      placaDe(listaTit);
+      listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
+      listaMore.visible = true;
+      if (len > 0) vistas.push({ x: lista.x, y: lista.y - lista.rowH, w: lista.w, h: lista.h + lista.rowH });
+    }
+    if (verAdentro) {
+      pintar(listaAdRows, listaAd, adentro, false, false);
+      listaAdTit.text = t("cPinLeft");
+      listaAdTit.visible = true;
+      placaDe(listaAdTit);
+      vistas.push({ x: listaAd.x, y: listaAd.y - listaAd.rowH, w: listaAd.w, h: (Math.min(adentro.length, listaAd.cap) + 1) * listaAd.rowH });
+    }
+    listasVistas = vistas;
   }
 
   function draw(now: number): void {
@@ -1088,12 +1197,15 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       placeFace(c, sz, 1);
     }
     // El caramelo del susto se asoma por la rajadura y vuelve a entrar.
+    asoma3D.ver = false;
     if (story.arc === "susto" && peekC.inside && tAll >= T_PEEK && tAll < T_PEEK + 1.2) {
       const f = Math.sin(Math.PI * ((tAll - T_PEEK) / 1.2));
       drawCandy(candyG, p.x + g.R * 0.2, p.y + g.R * (0.7 + 0.5 * f), sz * 1.4, 0.3 * Math.sin(now * 12), S.color(peekIdx), 1);
+      Object.assign(asoma3D, { ver: true, x: p.x + g.R * 0.2, y: p.y + g.R * (0.7 + 0.5 * f), tam: sz * 1.4, rot: 0.3 * Math.sin(tAll * 12), color: S.color(peekIdx) });
     }
     if (!winC.inside) {
       const big = sz * (1.8 + (phase === "crown" ? 0.6 * ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1)) : 0));
+      winBig = big;
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
       drawCandy(winnerCandy, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
       placeFace(winC, big, 1);
@@ -1105,10 +1217,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     drawLista();
     drawLabels(p, g, sz);
-    counter.text =`${t("cPinLeft")}  ${inside().length} / ${n}`;
+    // «QUEDAN 8 DE 18» y, debajo, una marca por persona: un chico cuenta las encendidas sin leer.
+    // Queda 1 hasta el golpe: en 0 el cartel aún no llegó y la cuenta decía "0 de 18" delante de quien gana.
+    const adentroAhora = Math.max(1, inside().length);
+    counter.text = textoMarcador(t("marcadorQuedan"), adentroAhora, { de: t("marcadorDe"), cuantos: n });
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(counterMarcas, { total: n, quedan: adentroAhora, k, w: g.w });
     // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
     // dice nada, y en un celular el cartel la tapaba a medias.
     if (counter.parent) counter.parent.visible = phase !== "crown";
@@ -1146,7 +1262,6 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Nunca por debajo de la regla de la letra de la sala (28 px en 1080, 16 en un celular): 0,85 y 0,9 daban 15,2 y 25,9.
     const piso = escalaChipLegible(S.u());
     const scaleFly = Math.max(phone ? 1 : 1.15, piso);
-    const scaleSide = Math.max(phone ? 0.85 : 0.9, piso);
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
@@ -1155,19 +1270,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       items.push({ id: key, x, y, w: d.w, h: d.h, priority, ignoreBlocked });
       alphaOf.set(key, alpha);
     };
-    // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
-    // Con uno solo no: rota la piñata, la lista con un nombre era el ganador
-    // escrito tres segundos antes del cartel.
-    const adentro = inside();
-    if (adentro.length <= 6 && adentro.length > 1 && !brokeDone && story.arc !== "tapada") {
-      let colTop = S.top() + 62 * k;
-      adentro.forEach((c, i) => {
-        const key = c.idx;
-        chipFor(key, names[c.idx] ?? "", scaleSide);
-        put(key, 10 * k, colTop, 900 - i, 1, true);
-        colTop += (chipDim.get(key) as { h: number }).h + 2 * k;
-      });
-    }
+    // Los que quedan adentro tienen su lista (`drawLista`), con el nombre de cada uno.
     // La ganadora lleva su nombre recién con el golpe del piso: su caramelo toca
     // el suelo y ahí se lee de quién es, un momento antes del cartel. Antes no
     // lo llevaba nunca, y en la tapada con mucha gente su nombre no se leía
@@ -1228,10 +1331,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const k1 = cam.toScreen(kidX + 26 * g.ks, g.ky + 4 * g.ks, g.w, g.h);
     // El chico y la cuenta no se tapan nunca: si no hay lugar, el nombre no sale.
     const kidRect = { x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) };
-    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + medidasContador(k).aire + 5 * k, h: medidasContador(k).alto + 5 * k };
+    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: Math.max(counter.width + medidasContador(k).aire, reservaDeMarcas(n, k, g.w).ancho) + 5 * k, h: medidasContador(k).alto + 5 * k + marcasH };
     // La lista de los caídos tampoco se tapa: los nombres en vuelo buscan otro lugar.
-    const listaRect = { x: lista.x, y: lista.y, w: lista.w, h: lista.h };
-    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, listaRect])) {
+    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, ...listasVistas])) {
       if (o.id === -100000) {
         moreBadge.visible = true;
         moreBadge.position.set(o.x, o.y);
@@ -1245,6 +1347,20 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       ch.position.set(o.x, o.y + d.h / 2);
     }
   }
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen adentro, cuánto falta y qué pasó. Solo lee.
+  exponerNino({
+    forma: "de-pie",
+    duracion: T_CROWN,
+    t: () => tAll,
+    verdad: () => {
+      // Adónde mirar: la piñata mientras sigue colgada, y el caramelo de quien gana cuando ya cayó. Lo decide la cámara, que el plan no conoce.
+      const q = winC.inside ? pinPos() : { x: winC.x, y: winC.y };
+      const s = cam.toScreen(q.x, q.y, S.sw(), S.sh());
+      const asoma = story.arc === "susto" ? { idx: peekIdx, desde: T_PEEK + ASOMA_DESPUES } : null;
+      return respuestasPinata({ n, ganador: winnerIdx, rival: rivalIdx, palos: swings, tRotura: T_BREAK, tCartel: T_CROWN, asoma }, tAll, lugarDe(s.x, s.y, S.sw(), S.sh()));
+    },
+  });
 
   // Para el auditor de emoción: el caramelo ganador y su nombre, en la pantalla.
   S.ganadorEn(() => {
@@ -1269,6 +1385,49 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     return { x: b.x, y: b.y, w: b.width, h: b.height };
   }, () => ({ activa: winC.touch >= 0 || phase === "crown", tiempo: tAll, fase: phase }));
 
+  /* ---------------------------------------------------------------- el 3D */
+  // Lo que se le pasa a la vista en cada cuadro (`src/games/tres/pinata-3d.ts`): lo que este archivo ya calculó, en píxeles
+  // del mundo 2D. No lleva quién gana: la ganadora es un caramelo más hasta que se dibuja grande, después de la rotura.
+  const car3D: Caramelo3D[] = candies.map((_, i) => ({ dentro: true, x: 0, y: 0, rot: 0, color: S.color(i), tam: 0, ganadora: false }));
+  const asoma3D = { ver: false, x: 0, y: 0, tam: 0, rot: 0, color: 0 };
+  const mundo3D = { piso: 0, R: 0, k: 1, ks: 1, ky: 0, top: 0, restY: 0 };
+  const olla3D = { x: 0, y: 0, rot: 0, escX: 1, escY: 1, ver: true, grietas: 0 };
+  const cuerda3D = { x: 0, y: 0 };
+  const chico3D = { x: 0, vueltas: 0, inclina: 0, paso: 0, amp: 0, palo: 0, mareo: 0, remera: S.color(3) };
+  function frame3D(): void {
+    if (!v3) return;
+    const g = G();
+    const p = pinPos();
+    const sz = candySize();
+    Object.assign(mundo3D, { piso: g.floor, R: g.R, k: g.k, ks: g.ks, ky: g.ky, top: S.top(), restY: g.restY });
+    Object.assign(olla3D, { x: p.x, y: p.y, rot: pin.rotation, escX: pin.scale.x, escY: pin.scale.y, ver: !brokeDone, grietas: crackLevel });
+    cuerda3D.x = g.ax;
+    cuerda3D.y = g.ay - 200 * g.k;
+    Object.assign(chico3D, { x: kidX, vueltas: tAll < SPIN_T0 ? 0 : spinAt(tAll), inclina: kid.rotation, paso: kidPose.gait, amp: kidPose.amp, palo: kidPose.a, mareo: kidPose.dizzy });
+    for (const c of candies) {
+      const o = car3D[c.idx] as Caramelo3D;
+      o.dentro = c.inside;
+      if (c.inside) continue;
+      o.x = c.x;
+      o.y = c.y;
+      o.rot = c.rot;
+      o.ganadora = c === winC;
+      o.tam = c === winC ? winBig : sz;
+    }
+    v3.frame({
+      ...entradaBase(S, tAll),
+      fase: phase === "dead" ? "crown" : phase,
+      mundo: mundo3D,
+      olla: olla3D,
+      cuerda: cuerda3D,
+      chico: chico3D,
+      car: car3D,
+      asoma: asoma3D,
+      rotura: brokeDone ? tAll - T_BREAK : -1,
+      corona: tAll - T_CROWN,
+    });
+  }
+
   S.run((dt, now) => {
     tAll += dt;
     phase = tAll < T_HANG ? "hang" : tAll < T_BREAK ? "hits" : tAll < T_CROWN ? "break" : "crown";
@@ -1291,6 +1450,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
+    frame3D();
     if (tHold >= WINNER_HOLD) {
       phase = "dead";
       S.cleanup();

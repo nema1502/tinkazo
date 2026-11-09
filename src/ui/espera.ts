@@ -1,4 +1,5 @@
 import { esc } from "../dom";
+import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
 import { app, avatar } from "../state";
 import { beep, note } from "../sound";
@@ -177,7 +178,7 @@ function relevo(): "show" | "resultado" | null {
 }
 
 /**
- * La fila "Juego: Carrera de llamas · Cambiar de juego". Va dos veces y el CSS muestra una: en la barra de arriba
+ * La fila "Juego: Carrera de llamas, Cambiar de juego". Va dos veces y el CSS muestra una: en la barra de arriba
  * cuando la pantalla es ancha (una laptop o un proyector, donde cada renglón de alto cuenta), y abajo del todo cuando no.
  */
 function juegoHtml(juegos: OpcionDeJuego[], lugar: "barra" | "flujo"): string {
@@ -211,7 +212,7 @@ function opcionesHtml(juegos: OpcionDeJuego[]): string {
       (j) =>
         `<button type="button" class="espera-juego-op" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
         `<span class="espera-juego-nombre">${j.recomendado ? `<i aria-hidden="true">★</i> ` : ""}${esc(j.nombre)}</span>` +
-        (j.recomendado ? `<span class="sr-only"> · ${esc(t("recBadge"))}</span>` : "") +
+        (j.recomendado ? `<span class="sr-only">, ${esc(t("recBadge"))}</span>` : "") +
         (j.rango ? `<small>${esc(j.rango)}</small>` : "") +
         `</button>`,
     )
@@ -386,10 +387,17 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   };
 
   /** Una sola acción, grande: lanzar el sorteo o reintentarlo. Con el foco, para seguir con Enter. */
-  const accion = (a: Fase, texto: string, boton: string): void => {
-    pasar(a, `<p class="espera-motivo" role="${a === "fallo" ? "alert" : "status"}">${esc(texto)}</p><button class="primary espera-accion" type="button">${esc(boton)}</button>`);
+  const accion = (a: Fase, texto: string, boton: string, hacer = sortear, segunda?: AccionError): void => {
+    pasar(a, `<p class="espera-motivo" role="${a === "fallo" ? "alert" : "status"}">${esc(texto)}</p><button class="primary espera-accion" type="button">${esc(boton)}</button>${segunda ? `<button class="ghost mini espera-accion-2" type="button">${esc(segunda.texto)}</button>` : ""}`);
     const b = sigue?.querySelector<HTMLButtonElement>(".espera-accion");
-    b?.addEventListener("click", sortear);
+    // La segunda salida deja anotado el cambio y sigue por el mismo camino que la principal.
+    if (segunda) {
+      sigue?.querySelector<HTMLButtonElement>(".espera-accion-2")?.addEventListener("click", () => {
+        segunda.ejecutar();
+        hacer();
+      });
+    }
+    b?.addEventListener("click", hacer);
     b?.focus({ preventScroll: true });
   };
 
@@ -401,7 +409,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const alError = (e: Event): void => {
     if (fase !== "sorteando") return;
     e.preventDefault();
-    accion("fallo", String((e as CustomEvent<string>).detail ?? ""), t("drawRetry"));
+    const evento = e as EventoError;
+    accion("fallo", String(evento.detail ?? ""), evento.accion?.texto ?? t("drawRetry"), evento.accion?.ejecutar ?? sortear, evento.segunda);
   };
   document.addEventListener("tinkazo:error", alError);
   // El sello entró tarde (el reintento de "Seguir sin sello", `freeze.ts`): el pie deja de decir que no se puede comprobar.
@@ -414,6 +423,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const yo = {
     nacio: (): void => {
       if (fase !== "cuenta") return;
+      // Con Freighter la persona aprueba el sorteo en su ventana. Con Pollar (o la cuenta de prueba) no hay otra
+      // aprobación: el clic en "Sellar la lista" ya cubre el sorteo de esa lista y se lanza solo cuando nace la ronda.
       if (sorteo.aMano()) accion("lanzar", t("espAprobar"), t("draw"));
       else sortear();
     },

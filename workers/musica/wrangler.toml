@@ -1,0 +1,20 @@
+# La música de los juegos, solo para el sitio, en m.tinkazo.app (ver README.md).
+# Camino por defecto: las camas son archivos propios del Worker (Workers Static Assets, gratis),
+# en la carpeta camas/ que NUNCA se versiona (subir.mjs --copiar la llena antes de desplegar).
+# Cuando R2 esté habilitado en la cuenta, el otro camino es wrangler.r2.toml.
+# Un script aparte de los otros: un error de despliegue acá no puede tumbar enlaces, sala ni portero.
+# Se despliega con: node subir.mjs --copiar --desde <carpeta>  y después  npx wrangler@4 deploy   (desde esta carpeta)
+name = "tinkazo-musica"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+# Dominio propio: Cloudflare crea el registro DNS y el certificado al desplegar.
+routes = [{ pattern = "m.tinkazo.app", custom_domain = true }]
+
+# run_worker_first: el código corre antes que los archivos, así la puerta por Origin se aplica siempre;
+# sin esto, Cloudflare entregaría los mp3 a cualquiera que sepa la dirección.
+[assets]
+directory = "./camas"
+binding = "ASSETS"
+run_worker_first = true

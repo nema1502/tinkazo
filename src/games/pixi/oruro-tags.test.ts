@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MAX_LABEL_ITEMS, layoutLabels, type LabelItem } from "./pinata-labels";
 import {
-  MAX_TAGS, OUT_HOLD, OUT_FADE, ROLL_MAX_DURATION, counterText, estimateTagSize, idHash, outTreatment, planRollCall, rollCallAt, rollCallSlot, selectTags, tagBudget, tagName, type TagCandidate,
+  MAX_TAGS, OUT_HOLD, OUT_FADE, ROLL_MAX_DURATION, estimateTagSize, idHash, outTreatment, planRollCall, rollCallAt, rollCallSlot, selectTags, tagBudget, tagName, type TagCandidate,
 } from "./oruro-tags";
 
 const cand = (id: number, depth: number, extra: Partial<TagCandidate> = {}): TagCandidate => ({
@@ -151,16 +151,6 @@ describe("selection + layoutLabels", () => {
   it("never overlaps and stays in bounds on a phone with 18 devils", () => run(390, 844, 100, 118, 1.2 * 0.93, 18));
   it("never overlaps and stays in bounds in landscape with 18 devils", () => run(844, 390, 82, 106, 1.17, 18));
   it("holds with 200 devils", () => run(390, 844, 100, 118, 1.2 * 0.93, 200));
-});
-
-describe("counterText", () => {
-  it("keeps the label, the alive count and the total", () => {
-    expect(counterText("EN LA COMPARSA", 18, 18)).toBe("EN LA COMPARSA  18 / 18");
-    const s2 = counterText("LEFT", 7, 18);
-    expect(s2).toContain("LEFT");
-    expect(s2).toContain("7");
-    expect(s2).toContain("/ 18");
-  });
 });
 
 describe("tie-break and name guards", () => {

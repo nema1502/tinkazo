@@ -1,0 +1,91 @@
+TINKAZO, FRASES DE LOS STICKERS
+===============================
+Para copiar en un pie de foto, una placa de video o un cartel. Siempre se escribe Tinkazo, con K. Instagram: @tinkazo.app
+
+LOS DIEZ JUEGOS, PARA COLECCIONAR
+  1/10 Carrera de llamas: A TODA LLAMA
+  2/10 Ruleta: VUELTA Y VUELTA
+  3/10 Piñata: DALE, DALE, DALE
+  4/10 Trompo: MANO A MANO
+  5/10 Sapo: ¡ADENTRO!
+  6/10 Guajojó: Te estoy viendo
+      El guajojó es el pájaro de la noche del oriente boliviano, el de los ojos grandes.
+  7/10 Toborochi: Panza llena, corazón contento
+      El toborochi es el árbol panzón de Santa Cruz, con flores rosadas.
+  8/10 Chovena: Nadie se suelta
+      La chovena es una danza en ronda, de la mano.
+  9/10 La Entrada: Con mi comparsa
+      La Entrada es el desfile de las fraternidades del Carnaval de Oruro. En inglés, comparsa es crew.
+  10/10 Teleférico: Todos arriba
+      El teleférico de La Paz y El Alto, con cabinas del color de cada línea.
+
+LA LLAMA
+  Llama de mi corazón
+  Despertame cuando salga mi nombre
+  ¡Salió mi nombre!
+  Nadie se queda afuera
+  HECHO EN BOLIVIA
+  Con K de Tinkazo
+
+FRASES
+  VERIFICALO VOS
+  APTHAPI: cada uno trae algo
+      El apthapi es la comida del altiplano donde cada uno trae algo y se comparte en el suelo, sobre un aguayo.
+  Hasta la cacharpaya
+      La cacharpaya es la fiesta de despedida: el cierre del carnaval o de un evento.
+  TODOS ADENTRO
+  Sin trampa, con cariño
+
+PARA DEVS
+  Funciona en mi llama
+  404: llama no encontrada
+  git commit -m "llama"
+  Mi sorteo tiene tests
+  Hola, mundo
+
+-------------------------------------------------------------------------------
+
+TINKAZO, STICKER SAYINGS
+========================
+To copy into a caption, a video title card or a sign. It is always written Tinkazo, with a K. Instagram: @tinkazo.app
+
+THE TEN GAMES, TO COLLECT
+  1/10 Llama race: FULL LLAMA AHEAD
+  2/10 Wheel: ROUND AND ROUND
+  3/10 Piñata: SWING, SWING, SWING
+  4/10 Spinning top: HEAD TO HEAD
+  5/10 Frog toss: RIGHT IN!
+  6/10 Guajojó: I see you
+      The guajojó is the night bird of eastern Bolivia, the one with the big eyes.
+  7/10 Toborochi: Full belly, happy heart
+      The toborochi is the pot-bellied tree of Santa Cruz, with pink flowers.
+  8/10 Chovena: No one lets go
+      The chovena is a circle dance, hand in hand.
+  9/10 La Entrada: With my crew
+      La Entrada is the parade of the dance groups of the Oruro Carnival.
+  10/10 Cable car: All aboard
+      The cable car of La Paz and El Alto, with cabins in the color of each line.
+
+THE LLAMA
+  My llama, my heart
+  Wake me up when they call my name
+  They called my name!
+  No one is left out
+  MADE IN BOLIVIA
+  Tinkazo, with a K
+
+SAYINGS
+  DON'T TRUST, VERIFY
+  APTHAPI: everyone brings something
+      An apthapi is the Andean shared meal where everyone brings something and it is laid out on a woven cloth.
+  See you at the cacharpaya
+      The cacharpaya is the farewell party that closes a carnival or an event.
+  EVERYONE'S IN
+  No tricks, all heart
+
+FOR DEVELOPERS
+  Works on my llama
+  404: llama not found
+  git commit -m "llama"
+  My draw has tests
+  Hello, world

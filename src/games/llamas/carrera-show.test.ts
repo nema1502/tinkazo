@@ -209,7 +209,8 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     const sd = Math.sqrt(hayPrimera * (1 / 8) * (7 / 8));
     expect(Math.abs(primeraEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
     expect(Math.abs(ultimaEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
-    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.95);
+    // Las líneas de los obstáculos ocupan algunos huecos de la recta: la tribuna grita en el 93 % de las rondas o más.
+    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.93);
   });
 
   it("\"Busquen su nombre\" se dice con todas las cantidades (también con hasta 30) y \"Ya se ve la meta\" solo cuando la meta entra", () => {
@@ -252,6 +253,11 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     expect(Object.keys(TEXTOS_CARRERA.en).sort()).toEqual(Object.keys(TEXTOS_CARRERA.es).sort());
     expect(TEXTOS_CARRERA.es.carRotuloMeta).toBe("META");
     expect(TEXTOS_CARRERA.en.carRotuloMeta).toBe("FINISH");
+  });
+
+  it("el rótulo de quien va primera en el celular existe en los dos idiomas y es una sola palabra (ADELANTE / AHEAD)", () => {
+    expect(TEXTOS_CARRERA.es.carRotuloPunta).toBe("ADELANTE");
+    expect(TEXTOS_CARRERA.en.carRotuloPunta).toBe("AHEAD");
   });
 
   it("tres tiempos por tramo: qué pasó (una echada), qué pasa (quién va adelante) y qué sigue (el terreno)", () => {

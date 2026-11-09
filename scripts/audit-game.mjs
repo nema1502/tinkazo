@@ -35,7 +35,7 @@ const outDir = opt("--out", "docs/capturas");
 const lead = opt("--lead", "3");
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` audita el juego en el motor anterior. El nuevo usa la placa de video.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const conMotor = motor ? `&motor=${motor}` : "";
 

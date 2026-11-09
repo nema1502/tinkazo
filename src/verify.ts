@@ -16,11 +16,14 @@ import { network, shortAddress, txUrl } from "./stellar/config";
 import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
 import { leerRegistro } from "./stellar/registro";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
-import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
+import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
+import { tomarLogoEntrante } from "./enlace-corto";
+import { pintarFranja } from "./ui/logo-franja";
+import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 
@@ -114,6 +117,9 @@ function repintarDetalles(): void {
  * fuera la lista original. Eso es `partial`, y es justo lo que compra anclar.
  */
 function verdict(state: "ok" | "partial" | "bad" | "working", titleKey: string, detail: string): void {
+  // El logo de quien armó el enlace corto, debajo del veredicto y solo en verde o amarillo: nunca decide nada.
+  estadoDelVeredicto = state;
+  pintarFranja(logoDelEnlace, state);
   const box = $("verdict");
   box.className = `verdict ${state}`;
   $("verdict-kicker").textContent = t(
@@ -155,6 +161,13 @@ const DEPENDENCIAS = {
 
 /** El enlace tal como se verificó: compartir manda este, aunque después cambie el fragmento. */
 let enlaceVerificado = "";
+/**
+ * El logo que trajo el enlace corto (`c.ts` lo dejó para esta ruta), si trajo
+ * uno. Un enlace largo, o uno corto sin logo, abre sin él, con el mismo veredicto.
+ */
+const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
+/** El último estado del veredicto: compartir lleva el logo solo en verde o amarillo, como la franja. */
+let estadoDelVeredicto: "ok" | "partial" | "bad" | "working" = "working";
 /** Lo que se está mostrando, para volver a contarlo en otro idioma o cuando llegan los otros sellos. */
 let actual: { proof: Proof; r: Revision } | null = null;
 
@@ -205,6 +218,7 @@ async function main(): Promise<void> {
   actual = { proof, r: revision };
   pintarComprobaciones(proof, revision);
   contar(proof, revision);
+  if (ref) montarConfianza($("confianza"), ref);
   // Después del resultado y de las comprobaciones, la leyenda del juego (si el enlace trae `?juego=`).
   pintarLaLeyenda();
 }
@@ -226,7 +240,7 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   set(
     "vCheckList",
     tiene("lista-deforme", "lista-cambiada", "cantidad") ? "bad" : r.ancla.tipo !== "libre" && !sello && !delHistorial ? "pending" : "ok",
-    `${r.nombres.length} · ${r.huella.slice(0, 16)}…`,
+    `${r.nombres.length}, ${r.huella.slice(0, 16)}…`,
   );
   $("v-hash").textContent = `list_hash = ${r.huella}`;
 
@@ -235,11 +249,11 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
     const contrato = typeof proof.contract === "string" ? shortAddress(proof.contract) : "—";
     if (r.ancla.tipo === "deforme") set("vCheckOfficial", "bad", () => t("vAnchorBrokenShort"));
     else if (r.ancla.tipo === "ajeno" || tiene("codigo-ajeno", "contrato-ajeno")) {
-      set("vCheckOfficial", "bad", () => `${contrato} · ${t("vNotOfficialShort")}`);
-    } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato} · ${r.registro.wasm.slice(0, 12)}…`);
+      set("vCheckOfficial", "bad", () => `${contrato}, ${t("vNotOfficialShort")}`);
+    } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato}, ${r.registro.wasm.slice(0, 12)}…`);
     // Sin el contrato en la cadena no se lee su código: queda la dirección, que es de la lista oficial.
-    else if (delHistorial) set("vCheckOfficial", "ok", () => `${contrato} · ${t("vOfficialAddress")}`);
-    else set("vCheckOfficial", "pending", () => `${contrato} · ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
+    else if (delHistorial) set("vCheckOfficial", "ok", () => `${contrato}, ${t("vOfficialAddress")}`);
+    else set("vCheckOfficial", "pending", () => `${contrato}, ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
 
     if (r.ancla.tipo !== "oficial" || tiene("codigo-ajeno")) set("vCheckChain", "bad", () => t("vNotOfficialShort"));
     else if (r.falta === "sin-cadena") {
@@ -256,9 +270,9 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
     } else if (tiene("registro-incoherente")) set("vCheckChain", "bad", () => t("vRecordOdd"));
     // El contrato ya no guarda el sorteo y lo respalda su transacción. El número del sorteo no viaja
     // en ella, así que no se afirma: se dice de dónde sale el sello y con qué código se lo reconoce.
-    else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")} · ${codigoDelSello(delHistorial)}`);
+    else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")}, ${codigoDelSello(delHistorial)}`);
     else if (sello && !resultado) set("vCheckChain", "pending", () => t("vNotDrawnYet"));
-    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id} · ${proof.net}`);
+    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id}, ${proof.net}`);
 
     // La ronda tiene que haber nacido después del sello, con la hora de la cadena.
     const alSellar = sello ? { round: sello.round, en: sello.sealedAt } : delHistorial ? { round: delHistorial.round, en: delHistorial.closedAt } : null;
@@ -275,7 +289,7 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   if (r.firma === null) set("vCheckRound", "bad", () => t(r.falta === "sin-ronda" ? "vRoundUnreachable" : "vBadSignature"));
   else {
     const rondaBien = r.firmaOk && !tiene("ronda", "firma-registro");
-    set("vCheckRound", rondaBien ? "ok" : "bad", `${proof.round} · ${r.firma.slice(0, 16)}…`);
+    set("vCheckRound", rondaBien ? "ok" : "bad", `${proof.round}, ${r.firma.slice(0, 16)}…`);
   }
 
   // ------------------------------------------------------------ 4. la semilla
@@ -287,7 +301,10 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   // --------------------------------------------- 5. el ganador, recomputado
   if (r.semilla !== null) {
     const bien = r.ganadores.length > 0 && !tiene("ganadores", "lista-deforme", "lista-cambiada", "cantidad");
-    set("vCheckWinner", bien ? "ok" : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
+    // Anclado y sin el sello leído (ni del contrato ni de su transacción), cuántos ganadores había no se sabe: lo que se
+    // rehizo es un solo nombre y no está atestiguado, así que no lleva el visto bueno (queda pendiente, como la lista).
+    const sinSello = r.ancla.tipo === "oficial" && !sello && !delHistorial;
+    set("vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
   }
 
   // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
@@ -316,7 +333,7 @@ const hora = (s: number): string =>
  */
 function pintarIdentidad(proof: Proof, delHistorial: SelloDelHistorial | null): void {
   if (!delHistorial) return;
-  $("v-net").textContent = `${String(proof.net ?? "")} · ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
+  $("v-net").textContent = `${String(proof.net ?? "")}, ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
 }
 
 /**
@@ -390,6 +407,8 @@ function contar(proof: Proof, r: Revision): void {
     // transacción). Se dice por qué, en simple, y que eso no prueba que el sorteo no exista.
     if (r.falta === "sin-historial") {
       verdict("working", "vVerdictUnknown", t(porQueSinHistorial(r)));
+      // Dónde mirar la transacción del sello sin pasar por acá: un explorador y los archivos de historia.
+      pintarTecnico(detalleSinHistorial(r, proof));
       if (primeraVez) contarFin("error");
       return;
     }
@@ -397,7 +416,9 @@ function contar(proof: Proof, r: Revision): void {
     // organizador, pero tampoco se muestra un ganador que nadie atestiguó: con la
     // red cortada (el wifi del evento), un comprobante inventado salía con su
     // tarjeta, su premio y el botón de compartir (escépticos, 22 de octubre de 2026).
+    // Si el comprobante trae el hash del sello, tampoco el historial contestó (si no, sería verde).
     verdict("working", "vVerdictUnknown", t("vVerdictUnknownDetail"));
+    pintarTecnico(detalleSinHistorial(r, proof));
     if (primeraVez) contarFin("error");
     return;
   }
@@ -440,6 +461,7 @@ function contar(proof: Proof, r: Revision): void {
         "ok",
         "vVerdictOkChain",
         t(proof.net === "testnet" ? "vVerdictOkHistoryDetailTest" : "vVerdictOkHistoryDetail")
+          .replace("{m}", t(porQueDelHistorial(r)))
           .replace("{f}", fechaLarga(delHistorial.closedAt, getLang()))
           .replace("{c}", codigoDelSello(delHistorial)),
       );
@@ -531,8 +553,8 @@ function pintarSellos(): void {
   const fuera = found.elsewhere ?? [];
   const cerca = found.cercanos ?? [];
   const ajena = (r: ChainRaffle, clave: string, fuerte: boolean): string =>
-    `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)} · ${esc(t(clave))} · ` +
-    `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))} · ${esc(t("vSealsRound"))} ${r.round}</p>`;
+    `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)}: ${esc(t(clave))}, ` +
+    `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))}, ${esc(t("vSealsRound"))} ${r.round}</p>`;
   const fueraHtml = fuera.map((r) => ajena(r, "vSealsElsewhere", true)).join("") + cerca.map((r) => ajena(r, "vSealsNear", false)).join("");
   $("v-seals-list").innerHTML = fueraHtml + shown
     .map((r) => {
@@ -542,12 +564,12 @@ function pintarSellos(): void {
       const when = r.sealedAt
         ? new Date(r.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US")
         : "";
-      const mark = rep ? ` · ⚠ ${esc(t("vSealsAgain"))}` : like ? ` · ${esc(t("vSealsSameCount"))}` : "";
+      const mark = rep ? `, ⚠ ${esc(t("vSealsAgain"))}` : like ? `, ${esc(t("vSealsSameCount"))}` : "";
       return (
         `<p class="entity"${yo || rep ? ' style="font-weight:800"' : ""}>` +
-        `#${esc(r.id)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""}${mark} · ` +
-        `${r.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${r.round} · ` +
-        `${esc(when)} · ${esc(r.listHash.slice(0, 16))}…</p>`
+        `#${esc(r.id)}${yo ? `, ${esc(t("vSealsThis"))}` : ""}${mark}: ` +
+        `${r.count} ${esc(t("vSealsPeople"))}, ${esc(t("vSealsRound"))} ${r.round}, ` +
+        `${esc(when)}, ${esc(r.listHash.slice(0, 16))}…</p>`
       );
     })
     .join("");
@@ -665,7 +687,7 @@ function renderList(proof: Proof): void {
   };
   input.addEventListener("input", buscarAhora);
   // Lo que dice el enlace, tal cual: si no es de Tinkazo, lo dice el veredicto.
-  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")} · #${String(proof.id ?? "")}` : t("noAnchor");
+  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")}, #${String(proof.id ?? "")}` : t("noAnchor");
 }
 
 function renderResult(
@@ -693,7 +715,7 @@ function renderResult(
     })
     .join(" ");
   $("v-proof").textContent =
-    `round=${r.ronda} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${extra.fromChain ? " · on-chain ✓" : ""}`;
+    `round=${r.ronda}, signature=${signature.slice(0, 20)}…, randomness=${randomness.slice(0, 20)}…, winners=[${winners.join(",")}]${extra.fromChain ? ", on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
   // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó
   // (sin la consulta: el idioma o el tema de quien lo mira no viajan); el mensaje y
@@ -714,6 +736,8 @@ function renderResult(
       ...(extra.numero && extra.red ? { ref: refDe(proof) } : {}),
       // Compartirlo otra vez no lo vuelve verificable: el mensaje y la foto dicen que se hizo sin sello.
       ...(esSinSello(proof) ? { sinSello: true } : {}),
+      // El logo del enlace, para la foto y el mismo corto (src/logo.ts).
+      ...(logoDelEnlace && (estadoDelVeredicto === "ok" || estadoDelVeredicto === "partial") ? { logo: logoDelEnlace } : {}),
     });
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
   if (r.ancla.tipo === "oficial") {

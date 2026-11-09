@@ -68,7 +68,7 @@ describe("el mensaje de un sorteo sin sello", () => {
 
   it("es: la forma exacta", () => {
     expect(mensajeDeSorteo("es", { ganadores: ["Ana"], total: 12, premio: "", enlace, sinSello: true })).toBe(
-      `Ganó Ana, entre 12 personas.\nSin sello: no se puede comprobar.\nPara ver la lista y la cuenta, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `Ganó Ana, entre 12 personas.\nSin sello: no se puede comprobar.\nPara ver la lista y la cuenta, entrá acá: ${enlace}\n\nSorteado con Tinkazo: https://tinkazo.app`,
     );
   });
 });
@@ -130,25 +130,25 @@ describe("evento con un sorteo sellado y uno sin sello", () => {
   const sorteos = [sellado, sinSello];
 
   it("los renglones: el sin sello lo dice, el sellado no", () => {
-    expect(lineasDeEvento("es", sorteos)).toEqual(["Polera: Gabriela Flores", "Libro: Ana · Sin sello: no se puede comprobar."]);
-    expect(lineasDeEvento("en", sorteos)).toEqual(["Polera: Gabriela Flores", "Libro: Ana · No seal: it can't be checked."]);
+    expect(lineasDeEvento("es", sorteos)).toEqual(["Polera: Gabriela Flores", "Libro: Ana. Sin sello: no se puede comprobar."]);
+    expect(lineasDeEvento("en", sorteos)).toEqual(["Polera: Gabriela Flores", "Libro: Ana. No seal: it can't be checked."]);
   });
 
   it("el mensaje: no dice verificable ni verificarlos, y cuenta cuántos van sin sello", () => {
     const lineas = lineasDeEvento("es", sorteos);
     const es = mensajeDeEvento("es", { titulo: "Meetup", sorteos: 2, enlaces: enlaceEvento, lineas, sinSello: 1 });
     expect(es).toBe(
-      `Meetup (2 sorteos), 1 sin sello.\nPolera: Gabriela Flores\nLibro: Ana · Sin sello: no se puede comprobar.\nPara ver cada sorteo, entrá acá:\n${enlaceEvento}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `Meetup (2 sorteos), 1 sin sello.\nPolera: Gabriela Flores\nLibro: Ana. Sin sello: no se puede comprobar.\nPara ver cada sorteo, entrá acá:\n${enlaceEvento}\n\nSorteado con Tinkazo: https://tinkazo.app`,
     );
     expect(es).not.toMatch(/verific/i);
     const en = mensajeDeEvento("en", { titulo: "Meetup", sorteos: 2, enlaces: enlaceEvento, lineas: lineasDeEvento("en", sorteos), sinSello: 1 });
-    expect(en.startsWith("Meetup (2 draws), 1 without a seal.\nPolera: Gabriela Flores\nLibro: Ana · No seal: it can't be checked.\nTo see each draw, open this link:\n")).toBe(true);
+    expect(en.startsWith("Meetup (2 draws), 1 without a seal.\nPolera: Gabriela Flores\nLibro: Ana. No seal: it can't be checked.\nTo see each draw, open this link:\n")).toBe(true);
     expect(en).not.toMatch(/verif/i);
   });
 
   it("con uno solo, sin sello: ni verificable ni verificarlo", () => {
     const m = mensajeDeEvento("es", { titulo: "Meetup", sorteos: 1, enlaces: enlaceEvento, lineas: lineasDeEvento("es", [sinSello]), sinSello: 1 });
-    expect(m.startsWith("Meetup (1 sorteo), sin sello.\nLibro: Ana · Sin sello: no se puede comprobar.\nPara ver el sorteo, entrá acá:\n")).toBe(true);
+    expect(m.startsWith("Meetup (1 sorteo), sin sello.\nLibro: Ana. Sin sello: no se puede comprobar.\nPara ver el sorteo, entrá acá:\n")).toBe(true);
     expect(m).not.toMatch(/verific/i);
     const en = mensajeDeEvento("en", { titulo: "Meetup", sorteos: 1, enlaces: enlaceEvento, lineas: lineasDeEvento("en", [sinSello]), sinSello: 1 });
     expect(en.startsWith("Meetup (1 draw), no seal.\n")).toBe(true);
@@ -176,7 +176,7 @@ describe("evento con un sorteo sellado y uno sin sello", () => {
   it("el enlace del evento lleva la marca de cada sorteo, y el paquete completo lo dice", async () => {
     const r = await paqueteDeEvento("Meetup", sorteos, "es", BASE);
     expect(r).not.toBeNull();
-    expect(r?.mensaje).toContain("Libro: Ana · Sin sello: no se puede comprobar.");
+    expect(r?.mensaje).toContain("Libro: Ana. Sin sello: no se puede comprobar.");
     expect(r?.mensaje).toContain("Polera: Gabriela Flores\n");
     expect(r?.mensaje).not.toMatch(/verific/i);
     const enlaceDelEvento = r?.partes[0]?.enlace ?? "";

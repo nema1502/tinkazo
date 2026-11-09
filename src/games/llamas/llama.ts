@@ -2,6 +2,7 @@ import { Container, Graphics, type Text } from "pixi.js";
 import type { Estadio } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW } from "../pixi/stage";
 import { BORLA_RADIO } from "./carrera-forma";
+import { posturaObstaculo } from "./llama-obstaculos";
 
 export { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO } from "./carrera-forma";
 
@@ -128,6 +129,15 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
         lean = -0.12 * Math.sin(Math.PI * m.p * 3);
         marca.visible = true;
         marca.text = "?!";
+      } else if (posturaObstaculo(m)) {
+        const o = posturaObstaculo(m);
+        if (o?.patas) legA = o.patas.map((a) => -a);
+        lean = o?.lean ?? lean;
+        cuelloRot = o?.cuelloRot ?? cuelloRot;
+        if (o?.aviso) {
+          marca.visible = true;
+          marca.text = o.aviso;
+        }
       } else if (m?.kind === "echada") {
         // Se echa: baja el cuerpo, pliega las patas, se pone gris y levanta polvo. Queda así.
         plegada = Math.min(1, m.p);
@@ -145,7 +155,7 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
         }
       }
       const fases = [ph, ph + 0.9, ph + Math.PI, ph + Math.PI + 0.9];
-      const rigida = m?.kind === "plantada" || speed < 0.1;
+      const rigida = m?.kind === "plantada" || posturaObstaculo(m)?.rigida === true || speed < 0.1;
       patas.forEach((l, i) => {
         l.hip.rotation = plegada ? lerp(legA[i] ?? 0, i % 2 ? 1.25 : -1.25, plegada) : (legA[i] ?? 0);
         l.knee.rotation = plegada ? plegada * (i % 2 ? -1.9 : 1.9) : rigida ? 0 : Math.max(0, -Math.cos(fases[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);
@@ -177,5 +187,41 @@ export function crearBorla(): Container {
   g.circle(0, -2, BORLA_RADIO).fill(YELLOW).stroke({ width: 3, color: INK });
   g.circle(-4.5, -7, 4.2).fill({ color: CREAM, alpha: 0.85 });
   c.addChild(halo, g);
+  return c;
+}
+
+/**
+ * La manta amarilla del líder (carrera nueva): una capa que flamea en el lomo, de la nuca hacia atrás, con rombos de aguayo. Vuela de una
+ * llama a otra cuando se pierde la punta. Se apoya en el origen (el lomo, atrás del cuello) y `flamea(t)` la mueve con la hora: sin azar.
+ */
+export function crearManta(): Container & { flamea(t: number): void } {
+  const c = new Container() as Container & { flamea(t: number): void };
+  const g = new Graphics();
+  c.addChild(g);
+  c.flamea = (t: number): void => {
+    g.clear();
+    const ph = t * 11;
+    const N = 6;
+    const arriba: number[] = [];
+    const abajo: number[] = [];
+    for (let i = 0; i <= N; i++) {
+      const f = i / N;
+      arriba.push(-i * 6.5, -5 + Math.sin(ph - i * 0.9) * 2.6 * f);
+    }
+    for (let i = N; i >= 0; i--) {
+      const f = i / N;
+      abajo.push(-i * 6.5 - 3 * f, 12 + 5 * f + Math.sin(ph - i * 0.9 + 1.2) * 4 * f);
+    }
+    g.poly([...arriba, ...abajo]).fill(YELLOW).stroke({ width: 2.2, color: INK, join: "round" });
+    // Los rombos del aguayo: tres, sobre la tela, que siguen su ondulación.
+    for (let k = 0; k < 3; k++) {
+      const f = (k + 0.7) / 3.6;
+      const x = -f * N * 6.5;
+      const y = 3.5 + Math.sin(ph - f * N * 0.9 + 0.6) * 2.4 * f;
+      const r = 3.4 - k * 0.5;
+      g.poly([x, y - r, x + r, y, x, y + r, x - r, y]).fill(k % 2 ? 0x2f9e44 : 0xd94b3b).stroke({ width: 1, color: INK });
+    }
+  };
+  c.flamea(0);
   return c;
 }

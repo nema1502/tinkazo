@@ -80,7 +80,7 @@ function textosPorPagina(): Plugin {
 
         const T = await diccionario();
         const claves = new Set<string>();
-        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
         for (const k of delHtml) {
           if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
             this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);
@@ -106,14 +106,14 @@ function textosPorPagina(): Plugin {
 /**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
- * hacer clic se muestra al instante. Solo esas nueve: son livianas y no tienen
+ * hacer clic se muestra al instante. Solo esas once: son livianas y no tienen
  * efectos. Las tres de sorteo (meetup, clase y verificable) son de lectura como
  * las demás. La herramienta no, que arranca audio, sesiones y miniaturas, y el
  * contador de visitas espera a que la página se muestre (`analytics.ts`). Los
  * navegadores sin speculation rules ignoran el bloque.
  */
 function adelantarLectura(): Plugin {
-  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable"];
+  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "ruleta-de-nombres", "sorteo-para-eventos"];
   const reglas = {
     prerender: [{ where: { href_matches: paginas.map((p) => `/${p}.html`) }, eagerness: "moderate" }],
   };
@@ -194,10 +194,14 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
         if (kb <= limiteKb) continue;
         const ids = Object.keys(trozo.modules);
         const soloSdk = ids.length > 0 && ids.every((id) => delSdk.test(id));
-        if (soloSdk && !alAbrir.has(trozo.fileName)) continue;
+        // three.js (el 3D de src/games/tres/) pesa unos 505 kB y se baja solo con el 3D prendido: mientras ninguna página lo pida al abrirse, no se avisa.
+        const soloTres = ids.length > 0 && ids.every((id) => /[\\/]node_modules[\\/]three[\\/]/.test(id));
+        if ((soloSdk || soloTres) && !alAbrir.has(trozo.fileName)) continue;
         this.warn(
-          soloSdk
-            ? `${trozo.fileName} es el SDK de Stellar (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use.`
+          soloSdk || soloTres
+            ? soloTres
+              ? `${trozo.fileName} es three.js (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use el 3D.`
+              : `${trozo.fileName} es el SDK de Stellar (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use.`
             : `${trozo.fileName} pesa ${kb.toFixed(0)} kB minificado, más de ${limiteKb} kB: si no hace falta al abrir la página, que se baje con import() cuando se use.`,
         );
       }
@@ -218,17 +222,22 @@ export default defineConfig({
     // El de 500 kB lo da `avisoDeTrozosGrandes`, que sabe cuál es el SDK de Stellar.
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
+      // three.js en un trozo con nombre propio: todos los juegos en 3D (src/games/tres/) comparten el mismo y se baja una sola vez.
+      output: { manualChunks: (id: string) => (/[\\/]node_modules[\\/]three[\\/]/.test(id) ? "three" : undefined) },
       input: {
         index: resolve(__dirname, "index.html"),
         verificar: resolve(__dirname, "verificar.html"),
         precios: resolve(__dirname, "precios.html"),
         juegos: resolve(__dirname, "juegos.html"),
         historia: resolve(__dirname, "historia.html"),
+        marca: resolve(__dirname, "marca.html"),
         seguridad: resolve(__dirname, "seguridad.html"),
         "como-funciona": resolve(__dirname, "como-funciona.html"),
         "sorteo-para-meetup": resolve(__dirname, "sorteo-para-meetup.html"),
         "sorteo-en-clase": resolve(__dirname, "sorteo-en-clase.html"),
         "sorteo-verificable": resolve(__dirname, "sorteo-verificable.html"),
+        "ruleta-de-nombres": resolve(__dirname, "ruleta-de-nombres.html"),
+        "sorteo-para-eventos": resolve(__dirname, "sorteo-para-eventos.html"),
         lista: resolve(__dirname, "lista.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),

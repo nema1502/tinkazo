@@ -142,6 +142,12 @@ export interface Plan<P> {
   normal?: number | null;
   /** Datos que quedan anotados para los auditores (`data-*` del lienzo). */
   marcas?: Readonly<Record<string, string>>;
+  /**
+   * Lo que el cartel de quien gana ya dice, para que no se repita encima. `sinAnuncio`: con un solo premio el relator no
+   * repite el nombre del cartel (con varios sí, y dice a todos). `sinMarcador`: en el celular, donde el cartel cae sobre el
+   * contador de arriba, el contador se va al caer el golpe.
+   */
+  alCoronar?: { sinAnuncio?: boolean; sinMarcador?: boolean };
   /** Lo propio del juego: el kit no lo mira. */
   datos: P;
 }

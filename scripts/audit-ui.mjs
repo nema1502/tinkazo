@@ -263,7 +263,7 @@ const NOMBRES = [
 ];
 async function sembrarHistorial(page) {
   await page.eval(`(async () => {
-    const dir = document.querySelector('#wallet-box .hello').title.split(' · ').pop();
+    const dir = document.querySelector('#wallet-box .hello').title.split(': ').pop();
     const lista = ${JSON.stringify(NOMBRES)}.map((n, i) => ({
       organizer: dir, listHash: 'a'.repeat(64), count: 20 + i, numWinners: 1, round: 100 + i,
       sealedAt: 1760000000 + (10 - i) * 86400, prize: n,
@@ -649,18 +649,21 @@ async function resaltadoTapa(page) {
 
 /**
  * La lista sin cuenta (la puerta cerrada). Lo que se lee tiene que leerse: la
- * carga, los premios y las etiquetas no se apagan. Solo el botón de sellar
- * queda con aria-disabled, y una línea visible dice qué falta.
+ * carga, los premios y las etiquetas no se apagan. El botón de sellar sigue con el
+ * color de la casa y dice "Entrar para sellar" (lleva aria-disabled: abre la
+ * entrada y no sella), y una línea visible dice que la gente no necesita cuenta.
  */
 const SIN_CUENTA = `JSON.stringify((() => {
   const opacidad = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 1; return o; };
-  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#prize-chips button', 'label.chip.live']
+  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#nw-atajos button', '#prize-chips button', 'label.chip.live']
     .map(s => document.querySelector(s)).filter(e => e && opacidad(e) < 1).map(e => e.id || e.className || e.tagName);
   const sellar = document.getElementById('btn-freeze');
   const linea = document.getElementById('sellar-sin-cuenta');
   return {
     apagados,
     ariaSellar: sellar ? sellar.getAttribute('aria-disabled') : null,
+    textoSellar: sellar ? sellar.textContent.trim() : '',
+    principalSellar: !!sellar && sellar.classList.contains('primary'),
     lineaVisible: !!linea && getComputedStyle(linea).display !== 'none',
     lineaTexto: linea ? linea.textContent.trim() : '',
   };
@@ -895,7 +898,7 @@ async function run() {
           await sinSesionGuardada(sinCuenta);
           await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-          await sinCuenta.waitFor(`!!document.querySelector('#gate button') && !!document.getElementById('btn-sample')`, 20000);
+          await sinCuenta.waitFor(`!!document.querySelector('#wallet-box button') && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
           await sleep(900);
           const f = JSON.parse(await sinCuenta.eval(SIN_CUENTA));
@@ -905,9 +908,9 @@ async function run() {
             f.apagados.join(", "),
           );
           check(
-            `${etiqueta} ${tema}: sin cuenta, el botón de sellar queda aria-disabled y con su línea`,
-            f.ariaSellar === "true" && f.lineaVisible && f.lineaTexto === "Entrá con tu cuenta para sellar",
-            `aria-disabled ${f.ariaSellar} · línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
+            `${etiqueta} ${tema}: sin cuenta, "Entrar para sellar" es la acción principal y su línea tranquiliza`,
+            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && f.lineaTexto === "Tu gente no necesita crear cuenta.",
+            `aria-disabled ${f.ariaSellar}, "${f.textoSellar}", principal ${f.principalSellar}, línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));
           check(
@@ -919,9 +922,10 @@ async function run() {
           if (p.movil) {
             check(`${etiqueta} ${tema}: sin cuenta, blancos de toque de 44 px`, sq.toques.length === 0, sq.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
           }
-          // La cuenta, en una línea con su botón (desde el 22 de octubre de 2026 no es una caja).
-          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), boton: !!document.querySelector('#gate button:not(.primary)') })"));
-          check(`${etiqueta} ${tema}: sin cuenta, la cuenta es una línea con su botón secundario`, g.boton && g.alto <= (p.w <= 400 ? 130 : 80), `${g.alto} px`);
+          // Nada pide entrar encima de "Pegar lista" (1 de noviembre de 2026): la cuenta se pide con el chip "Entrar" de la
+          // cabecera, que es secundario, y con "Entrar para sellar".
+          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector('#wallet-box button'); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })"));
+          check(`${etiqueta} ${tema}: sin cuenta, la puerta no se ve y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
           // La cuenta, siempre a la vista: "Entrar", "Retomando…" y las páginas de lectura.
           await chipsFueraYRetomando(browser, sinCuenta, p, tema);
           await tutorialEnLaPagina(sinCuenta, etiqueta, tema, p.w <= 760);
@@ -967,7 +971,7 @@ async function run() {
         if (dentro.hay) {
           check(
             `${etiqueta} ${tema}: con la cuenta adentro, el chip es el de la cuenta (cara con su ✓), sin imagen rota, y su título termina en la dirección`,
-            dentro.estado === "dentro" && dentro.cara && dentro.visto && !dentro.fotoRota && /· G[A-Z0-9]{20,}$/.test(dentro.titulo) && /Cuenta de prueba|Test account/.test(dentro.aria),
+            dentro.estado === "dentro" && dentro.cara && dentro.visto && !dentro.fotoRota && /: G[A-Z0-9]{20,}$/.test(dentro.titulo) && /Cuenta de prueba|Test account/.test(dentro.aria),
             `${dentro.estado} · "${dentro.texto}" · ${dentro.aria}`,
           );
           check(`${etiqueta} ${tema}: al entrar se anuncia a los lectores de pantalla`, !!dentro.avisoVivo && /cuenta de prueba|test account/i.test(dentro.avisoVivo.texto) && dentro.avisoVivo.rol === "status", dentro.avisoVivo ? `"${dentro.avisoVivo.texto}"` : "no hay #cuenta-aviso");
@@ -1005,32 +1009,51 @@ async function run() {
           }
           check(`${etiqueta}: la lista se congela`, cong.ok, cong.ok ? "" : `la pantalla decía: "${estado}"`);
           if (cong.ok) {
-            // Primero a la vista y después a medir: las miniaturas sólo se
-            // animan cuando el selector está en pantalla, que es lo que hace
-            // que no gasten batería mientras nadie las mira.
+            // Las miniaturas son capturas reales del juego, una por tema: a la vista
+            // (las de debajo cargan al llegar), cada botón enciende solo la de su tema,
+            // sin imagen rota. Esperar un poco: son perezosas.
             await page.eval(`document.querySelector('.gamepick').scrollIntoView({block:'center'})`);
             await sleep(1500);
-            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
-              const c = cv.getContext('2d');
-              return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
-            }))`);
-            await sleep(700);
-            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
-              const c = cv.getContext('2d');
-              return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
-            }))`);
-            const a = JSON.parse(t1);
-            const bb = JSON.parse(t2);
+            const mini = JSON.parse(await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => {
+              const vis = [...b.querySelectorAll('img.sel-img')].filter((i) => getComputedStyle(i).display !== 'none');
+              const i = vis[0];
+              return { id: b.id, visibles: vis.length, cargada: !!i && i.complete && i.naturalWidth > 0, claro: !!i && /-light\.webp$/.test(i.getAttribute('src') || ''), ancho: i ? Math.round(i.getBoundingClientRect().width) : 0, alto: i ? Math.round(i.getBoundingClientRect().height) : 0 };
+            }))`));
             // Contra los botones del selector, no contra un número escrito a
             // mano: eran seis, y al sumar juegos el auditor fallaba solo.
             const botones = Number(await page.eval(`[...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).length`));
-            check(`${etiqueta}: hay una miniatura por juego`, a.length === botones && botones > 0, `${a.length} de ${botones}`);
-            const quietas = a.filter((v, k) => v === bb[k]).length;
-            check(
-              `${etiqueta}: las miniaturas están animadas`,
-              a.length > 0 && quietas === 0,
-              quietas ? `${quietas} no se mueven` : "",
-            );
+            check(`${etiqueta}: hay una miniatura por juego`, mini.length === botones && botones > 0 && mini.every((m) => m.visibles === 1), `${mini.filter((m) => m.visibles === 1).length} de ${botones}`);
+            const rotas = mini.filter((m) => !m.cargada);
+            check(`${etiqueta}: las miniaturas cargan, ninguna rota`, rotas.length === 0, rotas.map((m) => m.id).join(", "));
+            const deOtroTema = mini.filter((m) => m.claro !== (tema === "light"));
+            check(`${etiqueta}: cada miniatura es la del tema ${tema}`, deOtroTema.length === 0, deOtroTema.map((m) => m.id).join(", "));
+            const sinTamano = mini.filter((m) => m.ancho < 60 || m.alto < 30);
+            check(`${etiqueta}: las miniaturas se ven de un tamaño legible`, sinTamano.length === 0, sinTamano.map((m) => `${m.id} ${m.ancho}x${m.alto}`).join(", "));
+            // El interruptor «En 3D / En 2D»: con la carrera elegida, los equipos que pueden lo muestran prendido (el 3D es lo que
+            // se ve por defecto), tocarlo pasa a 2D y lo guarda como apagado, y volver a tocarlo lo prende. Dos capturas.
+            await sleep(200);
+            // Al sellar se abre la espera en grande, que tapa la página: «Volver a la página» la cierra y deja ver el selector.
+            await page.eval(`document.querySelector('[data-volver]')?.click()`);
+            await sleep(500);
+            await page.eval(`(() => { const c = document.getElementById('btn-cambiar'); if (c && c.getBoundingClientRect().width > 0) c.click(); })()`);
+            await sleep(300);
+            await page.eval(`document.getElementById('g-race').click(); document.getElementById('ver3d-row').scrollIntoView({block:'center'})`);
+            await sleep(400);
+            const sw = async () => JSON.parse(await page.eval(`JSON.stringify((() => { const f = document.getElementById('ver3d-row'), b = document.getElementById('btn-3d'); const r = b.getBoundingClientRect(); return { visible: !f.hidden && f.getBoundingClientRect().width > 0 && f.getBoundingClientRect().height > 0, texto: b.textContent.trim(), pulsado: b.getAttribute('aria-pressed'), etiqueta: b.getAttribute('aria-label'), guardado: localStorage.getItem('tinkazo.ver3d'), ancho: Math.round(r.width), alto: Math.round(r.height), scrollY: Math.round(scrollY), arriba: Math.round(f.getBoundingClientRect().top), alto_ventana: innerHeight, encima: (() => { const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e ? (e.closest('[id]') || e).id : null; })() }; })())`));
+            const a0 = await sw();
+            check(`${etiqueta}: el interruptor de 3D aparece prendido por defecto y a la vista (nada lo tapa)`, a0.visible && (a0.encima === "btn-3d" || a0.encima === "ver3d-row") && a0.pulsado === "true" && a0.guardado === null && /^(En 3D|In 3D)$/.test(a0.texto), JSON.stringify(a0));
+            await page.screenshot(join(outDir, `ui-3d-prendido-${etiqueta}-${tema}.png`));
+            await page.eval(`document.getElementById('btn-3d').click()`);
+            await sleep(300);
+            const a1 = await sw();
+            check(`${etiqueta}: apagar el 3D lo deja en 2D y guardado`, a1.pulsado === "false" && a1.guardado === "0" && /^(En 2D|In 2D)$/.test(a1.texto), JSON.stringify(a1));
+            await page.screenshot(join(outDir, `ui-3d-apagado-${etiqueta}-${tema}.png`));
+            await page.eval(`document.getElementById('btn-3d').click()`);
+            await sleep(300);
+            const a2 = await sw();
+            check(`${etiqueta}: volver a prenderlo lo guarda prendido`, a2.pulsado === "true" && a2.guardado === "1", JSON.stringify(a2));
+            await page.eval(`localStorage.removeItem('tinkazo.ver3d')`);
+            await page.eval(`document.getElementById('g-race').click()`);
             await sleep(200);
             await page.screenshot(join(outDir, `ui-juegos-${etiqueta}.png`));
           }

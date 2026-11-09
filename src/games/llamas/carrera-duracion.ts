@@ -1,4 +1,5 @@
-import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, TARJETA, T_NOMBRES, T_VUELO } from "./carrera-base";
+import { FIJOS, FINALISTAS, PELOTON_MAX, TARJETA, T_NOMBRES, T_VUELO } from "./carrera-base";
+import { RECTA_MEDIA } from "./carrera-ritmo";
 import { ENTRE_FINAL, durTanda, grupoDeTandas, pasanPorTanda, tandasPara } from "./carrera-tandas";
 import { duracionGrupo } from "./carrera-tiempos";
 
@@ -24,7 +25,7 @@ export const tSalidaDe = (n: number): number => (n > PELOTON_MAX ? T_VUELO + tan
 /** Cuánto dura la carrera con `n` personas, sin estirar, hasta que cruza la ganadora (el promedio de los cuatro arcos). */
 export function duracionNominal(n: number): number {
   const g = grupoDe(n);
-  return tSalidaDe(n) + duracionGrupo(Math.max(0, g - FINALISTAS)) + DUR_FINAL * 1.014;
+  return tSalidaDe(n) + duracionGrupo(Math.max(0, g - FINALISTAS)) + RECTA_MEDIA;
 }
 
 /** Lo que promete "Normal" con `n` personas, en segundos de show: lo que dura la carrera más lo que no se estira y la tarjeta. */

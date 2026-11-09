@@ -1,4 +1,5 @@
 import deployments from "./deployments.json";
+import { MAX_WINNERS } from "../protocol/select";
 
 /**
  * Configuración de red. La red se elige en tiempo de build con
@@ -60,7 +61,27 @@ export interface NetworkConfig {
   explorerBase: string;
   /** Friendbot solo existe en testnet: habilita la cuenta invitada. */
   friendbotUrl: string | null;
+  /** Cuántos ganadores admite el contrato vigente de esta red (ver `topeDeLaRed`). */
+  maxWinners: number;
 }
+
+/**
+ * Cuántos ganadores por sorteo admite el contrato vigente de una red.
+ *
+ * El protocolo permite hasta `MAX_WINNERS` (300), pero cada contrato desplegado es inmutable y trae el tope de su
+ * versión: el de testnet de hoy admite 32 y devolvería el error 4 con 33. Lo que cada red admite se declara en
+ * `deployments.json` (`maxWinners`, en la entrada vigente), y el sitio no ofrece más que eso: así no se promete en
+ * producción un tope que la red todavía no tiene. Sin el dato, vale el del protocolo, que es el del contrato que sale de
+ * este repositorio: un despliegue nuevo con `MAX_WINNERS` = 300 no necesita declararlo. Nunca pasa de `MAX_WINNERS`
+ * ni baja de 1.
+ */
+export function topeDeLaRed(despliegue: { maxWinners?: unknown } | null | undefined): number {
+  const m = despliegue?.maxWinners;
+  return typeof m === "number" && Number.isInteger(m) && m >= 1 ? Math.min(m, MAX_WINNERS) : MAX_WINNERS;
+}
+
+/** Mainnet en la lista oficial. Hoy es `null`: el tipo del JSON no deja leerle campos, así que se lee como lo que será. */
+const mainnetEnLista = (deployments as unknown as { mainnet?: { contractId?: string; rpcUrl?: string; maxWinners?: number } | null }).mainnet;
 
 const NETWORKS: Record<NetworkName, NetworkConfig> = {
   testnet: {
@@ -70,14 +91,16 @@ const NETWORKS: Record<NetworkName, NetworkConfig> = {
     contractId: deployments.testnet?.contractId ?? null,
     explorerBase: "https://stellar.expert/explorer/testnet",
     friendbotUrl: "https://friendbot.stellar.org",
+    maxWinners: topeDeLaRed(deployments.testnet),
   },
   mainnet: {
     name: "mainnet",
-    rpcUrl: RPC_URLS.mainnet,
+    rpcUrl: mainnetEnLista?.rpcUrl ?? RPC_URLS.mainnet,
     networkPassphrase: "Public Global Stellar Network ; September 2015",
-    contractId: null,
+    contractId: mainnetEnLista?.contractId ?? null,
     explorerBase: "https://stellar.expert/explorer/public",
     friendbotUrl: null,
+    maxWinners: topeDeLaRed(mainnetEnLista),
   },
 };
 
@@ -88,6 +111,9 @@ function pickNetwork(): NetworkConfig {
 }
 
 export const network = pickNetwork();
+
+/** Cuántos ganadores se pueden pedir en esta red: lo que admite su contrato (ver `topeDeLaRed`). */
+export const topeDeGanadores = (): number => network.maxWinners;
 
 /** El anclaje en Stellar solo se ofrece si hay contrato en la red configurada. */
 export const anchoringAvailable = network.contractId !== null;

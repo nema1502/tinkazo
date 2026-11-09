@@ -11,6 +11,9 @@ import {
   nivelesDe,
   nombreLegible,
   planNombres,
+  separarEtiquetas,
+  SEPARACION_ETIQUETA_MAX,
+  SOLAPE_ETIQUETA_MAX,
   tamanoLetra,
   unidadDe,
   type Nivel,
@@ -185,5 +188,74 @@ describe("nombres: el zoom no los baja del mínimo", () => {
     const zoom = 0.62;
     const f = compensarZoom(24, zoom, 28);
     expect(24 * f * zoom).toBeCloseTo(28, 5);
+  });
+});
+
+describe("separarEtiquetas: dos nombres no se encapan", () => {
+  const zona = { y0: 40, y1: 700 };
+  const caja = (x: number, y: number, prioridad = 0) => ({ x, y, w: 160, h: 40, prioridad });
+  const aplicar = (es: readonly { x: number; y: number; w: number; h: number; prioridad: number }[], vedas: { x: number; y: number; w: number; h: number }[] = []) => {
+    const s = separarEtiquetas(es, zona, vedas);
+    return es.map((e, i) => ({ ...e, y: e.y + (s[i]?.dy ?? 0), callar: s[i]?.callar ?? false }));
+  };
+  const area = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }): number =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+  it("las que no se pisan quedan donde estaban", () => {
+    const s = separarEtiquetas([caja(0, 100), caja(0, 200), caja(300, 100)], zona);
+    expect(s).toEqual([{ dy: 0, callar: false }, { dy: 0, callar: false }, { dy: 0, callar: false }]);
+  });
+
+  it("la de menor prioridad es la que se corre, y la destacada se queda", () => {
+    const s = separarEtiquetas([caja(0, 100, 1), caja(20, 110, 5)], zona);
+    expect(s[1]).toEqual({ dy: 0, callar: false });
+    expect(s[0]?.dy).not.toBe(0);
+    expect(Math.abs(s[0]?.dy ?? 0)).toBeLessThanOrEqual(SEPARACION_ETIQUETA_MAX * 40);
+  });
+
+  it("después de separar, ningún par pasa del solape permitido y nadie se corre más del máximo", () => {
+    // Un racimo de siete nombres casi en el mismo lugar, como el de la copa del Toborochi.
+    const racimo = Array.from({ length: 7 }, (_, i) => caja(100 + (i % 3) * 30, 300 + (i % 2) * 15, i));
+    const fin = aplicar(racimo).filter((e) => !e.callar);
+    for (let i = 0; i < fin.length; i++) {
+      for (let j = i + 1; j < fin.length; j++) {
+        const a = fin[i] as (typeof fin)[number];
+        const b = fin[j] as (typeof fin)[number];
+        expect(area(a, b)).toBeLessThanOrEqual(SOLAPE_ETIQUETA_MAX * Math.min(a.w * a.h, b.w * b.h) + 1e-9);
+      }
+    }
+    racimo.forEach((e, i) => {
+      const f = aplicar(racimo)[i] as (typeof fin)[number];
+      if (!f.callar) expect(Math.abs(f.y - e.y)).toBeLessThanOrEqual(SEPARACION_ETIQUETA_MAX * e.h + 1e-9);
+    });
+    // Los de más prioridad son los que no se callan.
+    expect(aplicar(racimo)[6]?.callar).toBe(false);
+  });
+
+  it("si no cabe, se calla ese nombre en vez de encimarlo", () => {
+    const apretado = { y0: 100, y1: 140 };
+    const s = separarEtiquetas([caja(0, 100, 2), caja(0, 100, 1)], apretado);
+    expect(s[0]).toEqual({ dy: 0, callar: false });
+    expect(s[1]?.callar).toBe(true);
+  });
+
+  it("nunca sale de la zona", () => {
+    const fin = aplicar(Array.from({ length: 6 }, (_, i) => caja(0, 40 + i * 3, i)));
+    for (const f of fin) if (!f.callar) {
+      expect(f.y).toBeGreaterThanOrEqual(zona.y0 - 1e-9);
+      expect(f.y + f.h).toBeLessThanOrEqual(zona.y1 + 1e-9);
+    }
+  });
+
+  it("una veda (el contador y sus marcas) no se tapa: el nombre baja justo debajo de ella", () => {
+    const veda = { x: 0, y: 40, w: 200, h: 110 };
+    const [f] = aplicar([caja(10, 60, 3)], [veda]);
+    expect(f?.callar).toBe(false);
+    expect(f?.y).toBeGreaterThanOrEqual(veda.y + veda.h);
+  });
+
+  it("es determinista: la misma entrada da lo mismo", () => {
+    const racimo = Array.from({ length: 9 }, (_, i) => caja(50 + (i % 4) * 20, 200 + (i % 3) * 10, i % 3));
+    expect(separarEtiquetas(racimo, zona)).toEqual(separarEtiquetas(racimo, zona));
   });
 });

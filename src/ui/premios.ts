@@ -124,7 +124,7 @@ function pintar(): void {
       const ya = usados.has(clave(o.texto));
       const texto = esc(o.texto);
       const clases = [o.reciente ? "reciente" : "", ya ? "salio" : ""].filter(Boolean).join(" ");
-      const aviso = [o.reciente ? t("prizeRecent") : "", ya ? t("prizeUsed") : ""].filter(Boolean).join(" · ");
+      const aviso = [o.reciente ? t("prizeRecent") : "", ya ? t("prizeUsed") : ""].filter(Boolean).join(", ");
       return (
         `<button type="button" class="${clases}" data-premio="${texto}" aria-pressed="${esElegido(campo.value, o.texto)}"` +
         `${aviso ? ` title="${aviso}"` : ""}${campo.disabled ? " disabled" : ""}>` +

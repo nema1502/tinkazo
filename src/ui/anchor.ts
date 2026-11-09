@@ -41,7 +41,7 @@ const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
  * el botón apenas se aprieta, antes que nada ("Preparando el sello…", ver
  * `clienteListo`).
  */
-export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying";
+export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "covering";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -101,9 +101,16 @@ export interface OpcionesDeSello {
   pagarConMiCuenta?: boolean;
 }
 
+/**
+ * La última firma salió pagando la persona con su cuenta ("sellar con mi cuenta", `red.ts`) y no el patrocinador. Sirve
+ * para que, si falta saldo, el mensaje sea el de siempre (cargale XLM) y no "no es por tu cuenta" (`cuentaPatrocinada`).
+ */
+let pagaLaPersona = false;
+
 /** Registra el sello en el contrato. Exige la firma del organizador. Nunca en la demo ni en el ensayo. */
 export function sealOnChain(args: SealArgs, onStep: OnStep, opciones: OpcionesDeSello = {}): Promise<SealResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
+  pagaLaPersona = !!opciones.pagarConMiCuenta;
   return conFondos(() => sellar(args, onStep, opciones), onStep);
 }
 
@@ -519,16 +526,18 @@ export function drawOnChain(
   raffleId: bigint,
   signature96: Uint8Array,
   onStep: OnStep,
+  opciones: OpcionesDeSello = {},
 ): Promise<DrawResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
-  return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
+  pagaLaPersona = !!opciones.pagarConMiCuenta;
+  return conFondos(() => sortear(raffleId, signature96, onStep, opciones), onStep);
 }
 
-function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
-  return conUnSoloRpc(() => sortearEnUnRpc(raffleId, signature96, onStep));
+function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep, opciones: OpcionesDeSello): Promise<DrawResult> {
+  return conUnSoloRpc(() => sortearEnUnRpc(raffleId, signature96, onStep, opciones));
 }
 
-async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
+async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep: OnStep, opciones: OpcionesDeSello): Promise<DrawResult> {
   const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
   const client = await armar(() => getClient());
   onStep("simulating");
@@ -544,7 +553,7 @@ async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep:
   );
   onStep("signing", await costoVisible(tx));
 
-  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SORTEO_MS);
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SORTEO_MS, undefined, { pagarConMiCuenta: !!opciones.pagarConMiCuenta });
   if (delegated) {
     const d = unwrap<{ winners: number[]; randomness: Uint8Array }>(delegated.value);
     return { winners: [...d.winners], randomness: toHex(d.randomness), txHash: delegated.hash };
@@ -582,6 +591,22 @@ export async function readDraw(
   return { winners: [...d.winners], randomness: toHex(d.randomness as unknown as Uint8Array) };
 }
 
+/**
+ * Un vacío puede ser estado archivado, no inexistencia. Solo un número todavía
+ * no asignado por el contador del mismo contrato confirma que nunca existió.
+ */
+export async function existenciaDelSorteo(raffleId: bigint): Promise<"ausente" | "existe" | "desconocida"> {
+  try {
+    const { getClient } = await import("../stellar/contract");
+    const client = await getClient();
+    if ((await client.get_raffle({ raffle_id: raffleId })).result) return "existe";
+    const siguiente = (await client.next_id()).result;
+    return typeof siguiente === "bigint" && siguiente > 0n && raffleId >= siguiente ? "ausente" : "desconocida";
+  } catch {
+    return "desconocida";
+  }
+}
+
 /** Los métodos que devuelven `Result` traen un envoltorio con `unwrap`. */
 function unwrap<T>(value: unknown): T {
   if (value && typeof value === "object" && "unwrap" in value) {
@@ -602,6 +627,7 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
   preparing: "txPreparing",
   verifying: "txVerifying",
   retrying: "txRetrying",
+  covering: "txCubriendo",
 };
 
 /**
@@ -647,7 +673,8 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
     const net = document.createElement("span");
     net.className = "kicker";
     net.style.marginLeft = "8px";
-    net.textContent = network.name;
+    // En la red de prueba dice "Modo prueba", como la cabecera: "testnet" no le dice nada a quien sortea.
+    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
     host.appendChild(net);
   }
 }
@@ -687,25 +714,57 @@ export function selloSinGrabar(e: unknown): boolean {
  * Mensaje de error de una invocación, ya traducido. Clasifica sin el SDK de
  * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
  * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
+ * `ganadores`, si se sabe, es cuántos se pidieron al sellar: con el error de cantidad
+ * de ganadores dice si la red todavía admite menos de lo pedido (`errores.ts`).
  */
-export async function anchorErrorText(e: unknown): Promise<string> {
+export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
-    const { errorKey } = await import("../stellar/errores");
-    const clave = "errAnchor." + errorKey(e);
-    const texto = t(clave);
-    return texto && texto !== clave ? texto : t("errAnchor.unknown");
+    const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
+    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
+    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
+    // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
+    // habla de "sellar" y al sortear confundía).
+    if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // El error de cantidad con más ganadores de los que admitían los contratos viejos: no sobran ganadores, la red todavía no llega.
+    // La clave del error (para el contador y el detalle) sigue siendo la del contrato; solo cambia lo que se lee.
+    if (tipo === "badWinnerCount" && (ganadores ?? 0) > TOPE_DE_LOS_CONTRATOS_VIEJOS) tipo = "badWinnerCountViejo";
+    const clave = "errAnchor." + tipo;
+    let texto = t(clave);
+    if (!texto || texto === clave) return t("errAnchor.unknown");
+    // El cupo dice cuándo vuelve; si el día no es uno que se pueda decir, "primero del mes que viene".
+    if (esNoDelPortero(e) && texto.includes("{fecha}")) {
+      const { fechaOCercana } = await import("../stellar/patrocinador");
+      texto = texto.replaceAll("{fecha}", fechaOCercana((e as unknown as { liberaEn?: unknown }).liberaEn, getLang(), t("errAnchor.cupoPronto")));
+    }
+    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto")).replaceAll("{tope}", String(TOPE_DE_LOS_CONTRATOS_VIEJOS));
+    // Con el sorteo sin hacer, no se pierde: queda en Mis sorteos para sortearlo después.
+    return paso === "sorteo" && (tipo === "porteroFondoSorteo" || tipo === "porteroCupoSorteos") ? `${dicho} ${t("sorteoMasTarde")}` : dicho;
   } catch {
     return sinConexion();
   }
 }
 
 /**
- * Si ni siquiera se pudo bajar el módulo que clasifica el error, es que no hay
- * conexión: la página no alcanza ni sus propios archivos. Se dice eso, con lo
- * que ya está en la página.
+ * La cuenta que firma no paga la comisión por sí misma: la paga el patrocinador (Pollar). Con ella, quedarse sin saldo es
+ * del servicio y no de la persona, y el mensaje no le puede decir "tu cuenta no tiene saldo" (`errAnchor.sponsorEmpty`).
+ * Si la persona eligió pagar con su cuenta, el saldo que falta es el suyo: el mensaje de siempre, que dice qué hacer.
+ */
+export async function cuentaPatrocinada(): Promise<boolean> {
+  if (pagaLaPersona) return false;
+  try {
+    const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+    return submitsItself(activeWallet());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Si no se pudo bajar el clasificador no se deduce una causa. Solo el estado
+ * sin conexión confirmado por el navegador permite atribuirlo a internet.
  */
 const sinConexion = (): string =>
-  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.rpcDown");
+  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.unknown");
 
 /**
  * Escribe el error en `status`, con el detalle plegado debajo (`detalle-error.ts`).
@@ -713,12 +772,12 @@ const sinConexion = (): string =>
  * igual queda el mensaje: medido el 21 de octubre de 2026 con DevTools sin red,
  * sin esto el sellado terminaba sin decir nada.
  */
-export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
+export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo", ganadores?: number): Promise<void> {
   try {
-    await (await import("./detalle-error")).mostrarError(status, e, paso);
+    await (await import("./detalle-error")).mostrarError(status, e, paso, ganadores);
   } catch {
     limpiarDetalle(status.id);
-    status.textContent = sinConexion();
+    status.textContent = await anchorErrorText(e, paso, ganadores);
   }
 }
 

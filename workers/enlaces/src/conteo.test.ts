@@ -8,6 +8,7 @@ import {
   type Evento,
   MAX_CUERPO,
   OFICIALES,
+  ORIGENES,
   claveDeProps,
   claveDeRef,
   contratoOficial,
@@ -175,6 +176,86 @@ describe("la lista cerrada del contador", () => {
       }),
     );
     expect(largo).toBeLessThan(MAX_CUERPO / 2);
+  });
+});
+
+describe("los eventos del aula y el origen", () => {
+  it("cada evento nuevo entra con cada valor de su lista", () => {
+    const buenos: unknown[] = [
+      { e: "reveal_next" },
+      { e: "absent_marked" },
+      { e: "list_saved" },
+      { e: "preview_own_list" },
+      ...["same_day", "week", "older"].map((age) => ({ e: "list_reused", p: { age } })),
+      ...["mp4", "webm"].flatMap((format) => ["ok", "fail", "unsupported"].map((result) => ({ e: "video_made", p: { format, result } }))),
+      ...["native", "download"].map((channel) => ({ e: "video_shared", p: { channel } })),
+      ...["proof", "video"].map((from) => ({ e: "proof_cta", p: { from } })),
+      { e: "proof_open", p: { via: "video" } },
+      { e: "proof_open", p: { via: "video" }, ref: REF },
+    ];
+    for (const x of buenos) expect(validarConteo(x), JSON.stringify(x)).toMatchObject({ ok: true });
+  });
+
+  it("el origen es una palabra de la lista, en la entrada y al sellar, y puede faltar", () => {
+    expect([...ORIGENES]).toEqual(["home", "aula", "meetup", "ruleta", "eventos", "proof", "video"]);
+    for (const from of ORIGENES) {
+      expect(validarConteo({ e: "seal_confirmed", p: { network: "mainnet", from } }), from).toMatchObject({ ok: true });
+      expect(validarConteo({ e: "account_connected", p: { kind: "google", from } }), from).toMatchObject({ ok: true });
+    }
+    expect(validarConteo({ e: "seal_confirmed", p: { network: "mainnet" } })).toMatchObject({ ok: true });
+    expect(validarConteo({ e: "seal_confirmed", p: { from: "aula" } })).toEqual({ ok: false, motivo: "falta" });
+  });
+
+  it("rechaza lo que no está en la lista", () => {
+    const casos: Array<[unknown, string]> = [
+      [{ e: "list_reused" }, "falta"],
+      [{ e: "list_reused", p: { age: "yesterday" } }, "valor"],
+      [{ e: "list_reused", p: { age: "same_day", lista: "x" } }, "prop"],
+      [{ e: "video_made", p: { format: "mp4" } }, "falta"],
+      [{ e: "video_made", p: { format: "gif", result: "ok" } }, "valor"],
+      [{ e: "video_made", p: { format: "mp4", result: "timeout" } }, "valor"],
+      [{ e: "video_shared", p: { channel: "whatsapp" } }, "valor"],
+      [{ e: "proof_cta", p: { from: "home" } }, "valor"],
+      [{ e: "proof_cta" }, "falta"],
+      [{ e: "proof_open", p: { via: "aula" } }, "valor"],
+      [{ e: "seal_confirmed", p: { network: "mainnet", from: "https://ejemplo.org" } }, "valor"],
+      [{ e: "seal_confirmed", p: { network: "mainnet", from: "qr" } }, "valor"],
+      [{ e: "account_connected", p: { kind: "google", from: "Aula 3B" } }, "valor"],
+      [{ e: "reveal_next", p: { quien: "Ana" } }, "prop"],
+      [{ e: "absent_marked", nombre: "Ana" }, "campo"],
+      [{ e: "list_saved", p: { nombre: "Primero B" } }, "prop"],
+      [{ e: "preview_own_list", p: { size: "10-49" } }, "prop"],
+      [{ e: "reveal_next", ref: REF }, "ref"],
+      [{ e: "video_made", p: { format: "mp4", result: "ok" }, ref: REF }, "ref"],
+    ];
+    for (const [x, motivo] of casos) expect(validarConteo(x), JSON.stringify(x)).toEqual({ ok: false, motivo });
+  });
+});
+
+describe("respuestas de confianza", () => {
+  it("acepta tres respuestas y anteriores solo dentro de ultimoId; no cambia otros eventos", () => {
+    for (const answer of ["yes", "no", "unsure"]) {
+      expect(validarConteo({ e: "proof_trust", p: { answer }, ref: REF }).ok).toBe(true);
+      for (const anterior of deployments.testnet.anteriores) {
+        const ref = { ...REF, contract: anterior.contractId, id: String(anterior.ultimoId) };
+        expect(validarConteo({ e: "proof_trust", p: { answer }, ref }).ok).toBe(true);
+        expect(validarConteo({ e: "proof_trust", p: { answer }, ref: { ...ref, id: String(anterior.ultimoId + 1) } }).ok).toBe(false);
+        for (const [e, p] of [["share", { channel: "copy" }], ["proof_open", { via: "qr" }], ["proof_verdict", { verdict: "red" }]]) {
+          expect(validarConteo({ e, p, ref }).ok).toBe(false);
+          expect(validarConteo({ e, p, ref: REF }).ok).toBe(true);
+        }
+      }
+    }
+  });
+  it("rechaza propiedades, respuestas y referencias inválidas", () => {
+    for (const x of [
+      { e: "proof_trust", p: { answer: "yes" } },
+      { e: "proof_trust", p: { answer: "maybe" }, ref: REF },
+      { e: "proof_trust", p: { answer: "yes", who: "x" }, ref: REF },
+      { e: "proof_trust", p: {}, ref: REF },
+      { e: "proof_trust", p: { answer: "yes" }, ref: { ...REF, id: "0" } },
+      { e: "proof_trust", p: { answer: "yes" }, ref: { ...REF, timestamp: 1 } },
+    ]) expect(validarConteo(x).ok).toBe(false);
   });
 });
 

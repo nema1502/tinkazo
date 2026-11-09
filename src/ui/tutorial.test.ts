@@ -19,9 +19,9 @@ describe("el tutorial y el contador", () => {
     const desde = /abrirTutorial\(desde: ([^=]+) =/.exec(fuente)?.[1] ?? "";
     const valores = [...desde.matchAll(/"(\w+)"/g)].map((m) => m[1]);
     expect(valores.sort()).toEqual([...EVENTOS.tutorial_open.o.from].sort());
-    // El menú y el final del ensayo o de la demo llegan por la dirección (main.ts); la oferta y el botón, por su clic.
+    // El menú y el final del ensayo o de la demo llegan por la dirección (main.ts); el botón, por su clic. "offer" sigue en
+    // la lista del servicio de conteo, pero la oferta de primera vez ya no abre el tutorial: ofrece el ensayo.
     expect(main).toContain('m.abrirTutorial(h === "#como-se-usa-fin" ? "end" : "menu")');
-    expect(main).toContain('abrirTutorial("offer")');
     expect(fuente).toContain('abrirTutorial("button")');
   });
 });

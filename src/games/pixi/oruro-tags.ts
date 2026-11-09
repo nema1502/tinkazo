@@ -24,9 +24,6 @@ export function idHash(id: number): number {
   return (h >>> 0) / 4294967296;
 }
 
-/** The HUD counter, e.g. "EN LA COMPARSA  18 / 18". */
-export const counterText = (label: string, alive: number, total: number): string => `${label}  ${alive} / ${total}`;
-
 export interface TagCandidate {
   id: number;
   /** Screen anchor of the devil's head. */

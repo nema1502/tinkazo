@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_FALLAS, emitirJson, esResumen, leerResumen, normalizar, quiereJson, resumenDe } from "./resumen.mjs";
-import { BOTON_APAGADO_JS, FUERA_DEL_SELECTOR, LOS_DIEZ, SELECTOR, detalleDelBoton, juegosDe } from "./juegos.mjs";
+import { BOTON_APAGADO_JS, FUERA_DEL_SELECTOR, LOS_DOCE, SELECTOR, detalleDelBoton, juegosDe } from "./juegos.mjs";
 import { MAX_DESTELLOS, comprobacionesDePantalla, hayHallazgo } from "./pantalla-comprobaciones.mjs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -100,19 +100,19 @@ describe("leer el resumen de la salida de un auditor", () => {
 
 describe("los juegos de un `todos`", () => {
   it("son los ocho del selector, sin ninguno de los que salieron", () => {
-    expect(SELECTOR).toHaveLength(8);
+    expect(SELECTOR).toHaveLength(10);
     expect(juegosDe("todos")).toEqual(SELECTOR);
     expect(juegosDe()).toEqual(SELECTOR);
     for (const j of FUERA_DEL_SELECTOR) expect(SELECTOR).not.toContain(j);
   });
 
-  it("«diez» suma De pie y El Trueque, que salieron del selector pero siguen auditándose", () => {
-    expect(LOS_DIEZ).toHaveLength(10);
-    expect(juegosDe("diez")).toEqual([...SELECTOR, "quien", "trueque"]);
-    expect(new Set(LOS_DIEZ).size).toBe(10);
+  it("«doce» suma De pie y El Trueque, que salieron del selector pero siguen auditándose", () => {
+    expect(LOS_DOCE).toHaveLength(12);
+    expect(juegosDe("doce")).toEqual([...SELECTOR, "quien", "trueque"]);
+    expect(new Set(LOS_DOCE).size).toBe(12);
   });
 
-  it("cada auditor que acepta «todos» resuelve el pedido con juegosDe, así «diez» funciona en todos", async () => {
+  it("cada auditor que acepta «todos» resuelve el pedido con juegosDe, así «doce» funciona en todos", async () => {
     const { readFileSync } = await import("node:fs");
     for (const f of ["audit-emocion", "audit-delatores", "audit-identidad", "audit-legible", "audit-mezcla", "audit-rigor", "audit-sound", "audit-pantalla"]) {
       const src = readFileSync(new URL(`../${f}.mjs`, import.meta.url), "utf8");
@@ -127,7 +127,7 @@ describe("los juegos de un `todos`", () => {
 
   it("devuelve una copia: tocar el resultado no cambia la lista de todos", () => {
     juegosDe("todos").pop();
-    expect(SELECTOR).toHaveLength(8);
+    expect(SELECTOR).toHaveLength(10);
   });
 });
 
@@ -183,9 +183,9 @@ describe("el detalle de la comprobación 7 de audit-game (el botón del selector
 describe("las comprobaciones de pantalla", () => {
   const bien = { juego: "race", res: "1920x1080", tema: "dark", ok: true, destellos: { peorPorSegundo: 1 }, contraste: { sinContorno: [], medidos: 12 } };
 
-  it("un juego sano da dos comprobaciones aprobadas", () => {
+  it("un juego sano da tres comprobaciones aprobadas", () => {
     const c = comprobacionesDePantalla(bien);
-    expect(c).toHaveLength(2);
+    expect(c).toHaveLength(3);
     expect(c.every((x) => x.ok)).toBe(true);
     expect(c[0].name).toContain("race 1920x1080 dark");
     expect(hayHallazgo(bien)).toBe(false);
@@ -194,7 +194,7 @@ describe("las comprobaciones de pantalla", () => {
   it("más de tres destellos por segundo, o un texto sin contorno, fallan", () => {
     const mal = { ...bien, destellos: { peorPorSegundo: MAX_DESTELLOS + 1 }, contraste: { sinContorno: [{}], medidos: 3 } };
     const c = comprobacionesDePantalla(mal);
-    expect(c.map((x) => x.ok)).toEqual([false, false]);
+    expect(c.map((x) => x.ok)).toEqual([false, false, true]);
     expect(hayHallazgo(mal)).toBe(true);
     expect(hayHallazgo({ ...bien, destellos: { peorPorSegundo: MAX_DESTELLOS } })).toBe(false);
   });

@@ -1,3 +1,4 @@
+import { enStand } from "../../ensayo-modo";
 import type { Textos } from "../pixi/kit";
 
 /**
@@ -14,10 +15,12 @@ import type { Textos } from "../pixi/kit";
  */
 export const TEXTOS_CARRERA: Textos = {
   es: {
-    carMeta: "¡Gana quien llegue a la meta!",
+    // En una ronda de stand nadie gana: sale quien llegue a la meta.
+    carMeta: () => (enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
     carBusquen: "¡Busquen su nombre!",
     carSalida: "¡Salida!",
     carRotuloMeta: "META",
+    carRotuloPunta: "ADELANTE",
     carTramo: (terreno: string) => `¡Ahora, ${terreno}!`,
     carCuesta: "la cuesta",
     carBarro: "el barro",
@@ -37,16 +40,21 @@ export const TEXTOS_CARRERA: Textos = {
     carAprieta: "¡Aprietan los dos!",
     carCuela: "¡Alguien se cuela!",
     carHinchada: (n: string) => `¡Vamos, ${n}!`,
+    carAlud: "¡Caen piedras del cerro!",
+    carValla: "¡A saltar la valla!",
+    carSaltoMal: "¡Alguien salta mal!",
+    carRafaga: "¡Ráfaga del altiplano!",
     carFoto: "¡Foto finish!",
     carTanda: "¡Siguiente tanda!",
     carPasa: (n: string) => `¡Pasa ${n}!`,
     carCierraTanda: "¡Se cierra el portón!",
   },
   en: {
-    carMeta: "Whoever reaches the finish wins!",
+    carMeta: () => (enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
     carBusquen: "Find your name!",
     carSalida: "Go!",
     carRotuloMeta: "FINISH",
+    carRotuloPunta: "AHEAD",
     carTramo: (terreno: string) => `Now, ${terreno}!`,
     carCuesta: "the hill",
     carBarro: "the mud",
@@ -66,6 +74,10 @@ export const TEXTOS_CARRERA: Textos = {
     carAprieta: "Both push!",
     carCuela: "Someone sneaks in!",
     carHinchada: (n: string) => `Go, ${n}!`,
+    carAlud: "Rocks fall off the hill!",
+    carValla: "Jump the fence!",
+    carSaltoMal: "Someone botches the jump!",
+    carRafaga: "A gust off the highlands!",
     carFoto: "Photo finish!",
     carTanda: "Next heat!",
     carPasa: (n: string) => `${n} gets through!`,

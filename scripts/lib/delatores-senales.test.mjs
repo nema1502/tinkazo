@@ -26,6 +26,7 @@ import {
   afueraTrueque,
   afueraPinata,
   senalesEntrada,
+  senalesFarol,
 } from "./delatores-senales.mjs";
 
 const NOMBRES = ["María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas", "Elena Condori", "Pablo Gutiérrez"];
@@ -90,6 +91,15 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     const re = MARCADORES[clave];
     expect(re, `falta el marcador de ${clave}`).toBeInstanceOf(RegExp);
     for (const s of variantes(clave, args)) expect(s).toMatch(re);
+  });
+
+  it("las del Toborochi coinciden con lo que dice el juego", async () => {
+    const { TEXTOS } = await import("../../src/games/pixi/toborochi-textos.ts");
+    expect(TEXTOS.es.colibri).toMatch(MARCADORES.tobColibri);
+    expect(TEXTOS.es.hilo("Ana Vargas")).toMatch(MARCADORES.tobHilo);
+    expect(TEXTOS.es.engancha("Ana Vargas")).toMatch(MARCADORES.tobEngancha);
+    expect(TEXTOS.es.conPremio("Ana Vargas")).toMatch(MARCADORES.tobPremio);
+    expect(TEXTOS.es.conPremio("Ana Vargas")).not.toMatch(MARCADORES.tobHilo);
   });
 
   it("las que llevan un número", () => {
@@ -606,6 +616,41 @@ describe("La Entrada", () => {
   });
 });
 
+describe("El Guajojó: el farolito", () => {
+  // Cada persona está en pantalla todo el show, y el juego anota el brillo de su farolito en cada cuadro.
+  const conFaroles = (ganador, brillo) => {
+    const tr = traza({ ganador, pos: todosEnFila });
+    tr.faroles = tr.frames.map((f) => [f[0], ...NOMBRES.map((_, i) => brillo(i, f[0]))]);
+    return preparar(tr, JUEGOS.guajojo);
+  };
+
+  it("si el farolito de quien gana brilla más desde el arranque, la regla acierta siempre", () => {
+    const P = conFaroles(5, (i) => (i === 5 ? 1 : 0.8));
+    const r = senalesFarol(P).farol;
+    for (const k of ["cuarto", "mitad", "tres-cuartos"]) expect(r[k], k).toEqual({ acierta: true, azar: 1 / 8 });
+    expect(P.tiempos.farol).toBeLessThan(P.revelado / 2);
+  });
+
+  it("con todos iguales, que es lo correcto, no sabe nada: apuesta por el primero de la lista", () => {
+    const r = senalesFarol(conFaroles(5, () => 0.8)).farol;
+    expect(r.mitad).toEqual({ acierta: false, azar: 1 / 8 });
+    const g = senalesFarol(conFaroles(0, () => 0.8)).farol;
+    expect(g.mitad).toEqual({ acierta: true, azar: 1 / 8 });
+  });
+
+  it("un farol apenas distinto de los demás (menos de 0,005) no cuenta como más brillante", () => {
+    const r = senalesFarol(conFaroles(5, (i) => (i === 5 ? 0.803 : 0.8))).farol;
+    expect(r.mitad.acierta).toBe(false);
+  });
+
+  it("sin lo que anota el juego no hay señal, y las señales de una semilla la incluyen", () => {
+    expect(senalesFarol(preparar(traza({ pos: todosEnFila }), JUEGOS.guajojo))).toEqual({});
+    const tr = traza({ ganador: 5, pos: todosEnFila });
+    tr.faroles = tr.frames.map((f) => [f[0], ...NOMBRES.map((_, i) => (i === 5 ? 1 : 0.8))]);
+    expect(senales(tr, "guajojo").senales.farol.mitad.acierta).toBe(true);
+  });
+});
+
 describe("los juegos", () => {
   // Los ocho del selector, y los cinco que salieron pero siguen abriendo con ?demo= (De pie, El Trueque, la tómbola, el aguayo y la constelación).
   const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro", "tombola", "pasanaku", "stellar"];
@@ -621,11 +666,12 @@ describe("los juegos", () => {
   });
 
   it("qué graba la página para cada uno", () => {
-    expect(grabarPara("tombola")).toEqual({ numeros: true, trazos: [], escena: false });
+    expect(grabarPara("tombola")).toEqual({ numeros: true, trazos: [], escena: false, faroles: false });
     expect(grabarPara("quien").trazos).toHaveLength(1);
-    expect(grabarPara("trueque")).toEqual({ numeros: false, trazos: [{ color: 0xf6efe2, capa: 1 }], escena: true });
-    expect(grabarPara("race")).toEqual({ numeros: false, trazos: [], escena: false });
-    expect(grabarPara("otro")).toEqual({ numeros: false, trazos: [], escena: false });
+    expect(grabarPara("trueque")).toEqual({ numeros: false, trazos: [{ color: 0xf6efe2, capa: 1 }], escena: true, faroles: false });
+    expect(grabarPara("race")).toEqual({ numeros: false, trazos: [], escena: false, faroles: false });
+    expect(grabarPara("otro")).toEqual({ numeros: false, trazos: [], escena: false, faroles: false });
+    expect(grabarPara("guajojo")).toEqual({ numeros: false, trazos: [], escena: false, faroles: true });
   });
 
   it("todas las señales de una semilla, con el arco y el corte", () => {

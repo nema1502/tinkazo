@@ -29,3 +29,18 @@ Thumbs.db
 # Las imágenes del README sí.
 docs/capturas/*
 !docs/capturas/readme/
+
+# Estado local de wrangler dev
+.wrangler/
+.dev.vars
+
+# La música de archivo no viaja con el repositorio (ver public/sonidos/LICENCIA.md)
+public/sonidos/*/musica*.mp3
+
+# La música de los juegos nunca se versiona (workers/musica/README.md)
+workers/musica/camas/
+# El kit de marca se versiona aunque sea zip: lo bajan los organizadores desde marca.html
+!public/marca/tinkazo-kit-marca.zip
+!public/marca/coleccion/tinkazo-stickers.zip
+!public/marca/tinkazo-kit-sponsor.zip
+!public/marca/tinkazo-kit-impresos.zip

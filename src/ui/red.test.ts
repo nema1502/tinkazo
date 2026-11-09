@@ -93,7 +93,7 @@ const h = vi.hoisted(() => ({
   puede: true,
 }));
 
-vi.mock("./wallet-ui", () => ({ canAnchor: () => h.puede, currentSession: () => (h.puede ? { address: DIR } : null) }));
+vi.mock("./wallet-ui", () => ({ canAnchor: () => h.puede, claveDeSellar: () => "freeze", currentSession: () => (h.puede ? { address: DIR } : null) }));
 vi.mock("./anchor", () => ({ limpiarDetalle: () => undefined }));
 vi.mock("./detalle-error", () => ({ ponerDetalle: () => undefined }));
 vi.mock("./siguiente", () => ({ verError: () => undefined }));
@@ -174,7 +174,26 @@ async function cargar() {
   return { r, app, sellar };
 }
 
+/**
+ * Los temporizadores de verdad que dejó cada prueba (el chequeo de fondo a los 900 ms, la vigilancia de
+ * 60 s): el módulo se vuelve a cargar en cada prueba, pero el documento de mentira es el mismo, y un
+ * temporizador viejo que se dispara a mitad de otra prueba le borra la caja. Se cancelan al terminar.
+ */
+const sueltos: Array<{ t: ReturnType<typeof setTimeout>; i: boolean }> = [];
+const setTimeoutReal = globalThis.setTimeout;
+const setIntervalReal = globalThis.setInterval;
+
 beforeEach(() => {
+  vi.stubGlobal("setTimeout", ((...a: Parameters<typeof setTimeout>) => {
+    const t = setTimeoutReal(...a);
+    sueltos.push({ t, i: false });
+    return t;
+  }) as typeof setTimeout);
+  vi.stubGlobal("setInterval", ((...a: Parameters<typeof setInterval>) => {
+    const t = setIntervalReal(...a);
+    sueltos.push({ t, i: true });
+    return t;
+  }) as typeof setInterval);
   montar();
   h.red.name = "testnet";
   h.wallet = pollar();
@@ -186,6 +205,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  for (const { t, i } of sueltos.splice(0)) (i ? clearInterval : clearTimeout)(t);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -367,13 +387,14 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
     expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
   });
 
-  it("caso 4 sin saldo propio: solo 'Seguir sin sello'", async () => {
+  it("caso 4 sin saldo propio: no es su cuenta, se puede volver a probar o seguir sin sello", async () => {
     h.xlmBalance.mockResolvedValue(0);
     red(principal());
     const { r } = await cargar();
     await r.mostrarSinSaldo();
-    expect(boton().textContent).toBe("Seguir sin sello");
-    expect(caja().botones()).toHaveLength(0);
+    expect(frase()).toContain("no es por tu cuenta");
+    expect(boton().textContent).toBe("Probar ahora");
+    expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
   });
 
   it("caso 4 con Freighter y sin saldo: tampoco hay grifo, 'Seguir sin sello'", async () => {
@@ -395,7 +416,7 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
   });
 });
 
-describe("caso 2: Stellar no contesta", () => {
+describe("caso 2: el registro no contesta", () => {
   const caidos = (): Record<string, RpcDeMentira> => ({ [SDF as string]: { anda: "cortado" }, [ANKR]: { anda: "503" } });
 
   it("lo dice con la cuenta atrás, 'Probar ahora' es la acción, y vuelve a probar solo", async () => {
@@ -403,16 +424,16 @@ describe("caso 2: Stellar no contesta", () => {
     red(caidos());
     const { r } = await cargar();
     expect(await r.chequearAntesDeSellar()).toBe(false);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15.");
     expect(boton().textContent).toBe("Probar ahora");
     expect(caja().botones()).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(5000);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:10.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:10.");
     const antes = falsa.pedidos.length;
     await vi.advanceTimersByTimeAsync(10_000);
     // Llegó a cero: volvió a mirar solo.
     await vi.waitFor(() => expect(falsa.pedidos.length).toBeGreaterThan(antes));
-    await vi.waitFor(() => expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15."));
+    await vi.waitFor(() => expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15."));
   });
 
   it("tres intentos sin respuesta: 'Seguir sin sello' pasa a ser la principal y 'Probar ahora' queda aparte", async () => {
@@ -425,7 +446,7 @@ describe("caso 2: Stellar no contesta", () => {
       await vi.waitFor(() => expect(falsa.pedidos.length).toBeGreaterThanOrEqual(8 * (i + 2)));
       await vi.waitFor(() => expect(boton().disabled).toBe(false));
     }
-    await vi.waitFor(() => expect(frase()).toBe("Stellar no contesta."));
+    await vi.waitFor(() => expect(frase()).toBe("El registro no contesta."));
     expect(boton().textContent).toBe("Seguir sin sello");
     expect(caja().botones().map((b) => b.textContent)).toEqual(["Probar ahora"]);
     // Ya no vuelve a probar sola.
@@ -449,7 +470,7 @@ describe("caso 2: Stellar no contesta", () => {
     red(caidos());
     const { r, sellar } = await cargar();
     hayLista();
-    await esperar(() => expect(frase()).toContain("Stellar no contesta"));
+    await esperar(() => expect(frase()).toContain("El registro no contesta"));
     red(bien());
     expect(r.alApretarSellar()).toBe(true);
     await esperar(() => expect(visible()).toBe(false));
@@ -466,7 +487,7 @@ describe("caso 2: Stellar no contesta", () => {
     // ...y después se cortó: el sello falla, y en vez de un error genérico se ve el caso 2.
     red(caidos());
     expect(await r.verLaRedTrasFallar()).toBe(true);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15.");
     expect(boton().textContent).toBe("Probar ahora");
   });
 
@@ -533,7 +554,7 @@ describe("caso 5: el protocolo cambió", () => {
     const { r } = await cargar();
     expect(await r.chequearAntesDeSellar()).toBe(true);
     expect(caja().className).toContain("amarillo");
-    expect(frase()).toBe("Stellar cambió algo y Tinkazo todavía no se puso al día. Se puede sellar igual.");
+    expect(frase()).toBe("La red cambió algo y Tinkazo todavía no se puso al día. Se puede sellar igual.");
     expect(boton().textContent).toBe("Sellar la lista");
   });
 

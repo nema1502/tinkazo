@@ -2,6 +2,7 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
+import { logoComun, logoPorHuella } from "../logo-guardado";
 import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
@@ -93,6 +94,12 @@ export interface Entry {
    * (salvo que el sello haya entrado a tiempo, y entonces esto se apaga). Mis sorteos lo dice.
    */
   sinSello?: boolean;
+  /**
+   * La huella del logo con el que se selló, si había uno (`logo.ts`). Solo
+   * nombra al logo en este navegador: si no está en el mapa, no hay logo y
+   * nada da error. Los sorteos de antes no la traen.
+   */
+  logo?: string;
 }
 
 /**
@@ -339,6 +346,11 @@ const comoPrincipal = (clave: string): string =>
 /** El título de un evento sin nombre: "Sorteos del 20 de octubre de 2026". */
 const tituloDeGrupo = (g: Entry[]): string => t("histGrupoT").replace("{f}", fechaLarga(g[0]?.sealedAt ?? 0, getLang()));
 
+/** La huella del logo con el que se selló el sorteo de este comprobante, si este equipo lo anotó con logo. */
+function logoDeLaEntrada(enlace: string): string | undefined {
+  return readAll().find((e) => e.proof === enlace)?.logo;
+}
+
 /** El comprobante y los ganadores de cada sorteo de un grupo: lo que pide el enlace de evento. */
 async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
   const out: SorteoDelEvento[] = [];
@@ -389,7 +401,7 @@ function pintarPendiente(list: Entry[]): void {
     caja.textContent = "";
     return;
   }
-  const que = `${e.prize || t("histDraw")} · ${e.count} ${t("histPeople")}`;
+  const que = `${e.prize || t("histDraw")}, ${e.count} ${t("histPeople")}`;
   caja.innerHTML =
     `<span>${esc(t("pendienteT").replace("{que}", que))}</span>` +
     `<button class="mini" type="button" data-retomar-pendiente>${esc(t("pendienteBtn"))}</button>`;
@@ -438,7 +450,8 @@ function enlazarRearmado(): void {
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
     if (comparte) {
       const g = eventosPintados[Number(comparte.dataset.evento)];
-      if (g) void sorteosDeEntradas(g).then((sorteos) => compartirEvento(tituloDeGrupo(g), sorteos));
+      // El logo del grupo, si todos sus sorteos se sellaron con el mismo.
+      if (g) void sorteosDeEntradas(g).then((sorteos) => compartirEvento(tituloDeGrupo(g), sorteos, getLang(), logoComun(g.map((e) => e.logo))));
       return;
     }
     const nombra = el.closest<HTMLButtonElement>("[data-nombrar]");
@@ -450,7 +463,7 @@ function enlazarRearmado(): void {
     const compartir = el.closest<HTMLButtonElement>("[data-compartir]");
     if (compartir) {
       const fila = pintadas[Number(compartir.dataset.compartir)];
-      if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners);
+      if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners, getLang(), logoPorHuella(fila.logo));
       return;
     }
     const b = el.closest<HTMLElement>("[data-rearmar]");
@@ -657,7 +670,7 @@ const marcaSinSello = (e: Entry | undefined): string =>
 function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   const titulo = e.prize || t("histDraw");
   const ganadores = e.winners ?? [];
-  const quien = `${e.id ? `#${esc(e.id)} · ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
+  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
   const nombre = t("evnSumarA").replace("{s}", titulo).replace("{e}", ev.nombre);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
@@ -770,7 +783,7 @@ function enlazarEventos(): void {
     const compartir = el.closest<HTMLButtonElement>("[data-evento-compartir]");
     if (compartir) {
       const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
-      if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos));
+      if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos, getLang(), logoComun(ev.sorteos.map((s) => logoDeLaEntrada(s.enlace)))));
       return;
     }
     const borrar = el.closest<HTMLButtonElement>("[data-evento-borrar]");
@@ -793,7 +806,7 @@ function enlazarEventos(): void {
     const compartirEnlace = el.closest<HTMLButtonElement>("[data-compartir-enlace]");
     if (compartirEnlace) {
       const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
-      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
+      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores, getLang(), logoPorHuella(logoDeLaEntrada(r.s.enlace)));
     }
   });
   // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".
@@ -882,7 +895,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
   const titulo = e.prize || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
   const id = e.id ? `#${esc(e.id)}` : t("histLocal");
-  const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
+  const origen = e.fromChain ? `, ${esc(t("histFromChain"))}` : "";
   const enCadena = e.drawTx ?? e.sealTx;
   const acciones: string[] = [];
   if (!hecho && e.names?.length) acciones.push(`<button ${comoPrincipal(`retomar:${i}`)} data-retomar="${i}">${esc(t("histResume"))}</button>`);
@@ -911,7 +924,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
-    `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+    `<p class="hc-meta">${esc(id)}, ${e.count} ${esc(t("histPeople"))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`
   );

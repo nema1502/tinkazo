@@ -956,8 +956,9 @@ describe("los nombres de los tipos de costo en el aviso", () => {
     expect(fieldLabel(MEM, "[10].linear_term")).toBe("mem[10] verifyEd25519Sig.linear_term");
     expect(fieldLabel(CPU, "[0].ext")).toBe("cpu[0] wasmInsnExec.ext");
     expect(fieldLabel(CPU, "[85].const_term")).toBe("cpu[85] bn254G1Msm.const_term");
+    expect(fieldLabel(CPU, "[94].const_term")).toBe("cpu[94] verifyMlDsa87Sig.const_term");
     // Un índice que la lista no conoce se imprime como hasta ahora.
-    expect(fieldLabel(CPU, "[86].const_term")).toBe("[86].const_term");
+    expect(fieldLabel(CPU, "[95].const_term")).toBe("[95].const_term");
     expect(fieldLabel(MEM, "[200].const_term")).toBe("[200].const_term");
     // Otros parámetros, aunque sean listas, y un campo suelto.
     expect(fieldLabel("otra_lista", "[9].const_term")).toBe("[9].const_term");
@@ -999,14 +1000,14 @@ describe("los nombres de los tipos de costo en el aviso", () => {
       `${CPU}: cpu[9] computeEd25519PubKey.const_term 1 -> 5; cpu[10] verifyEd25519Sig.const_term 1 -> 6; cpu[10] verifyEd25519Sig.linear_term 2 -> 7`,
     );
     expect(describeChange(byName[MEM])).toBe(`${MEM}: mem[9] computeEd25519PubKey.const_term 1 -> 8`);
-    // Con ledger de cambio y una lista más larga que la de nombres (86), el índice sin nombre sale como número.
-    const full = list(86);
+    // Con ledger de cambio y una lista más larga que la de nombres (95), el índice sin nombre sale como número.
+    const full = list(95);
     const [change] = diffParams({ [CPU]: full }, { [CPU]: [...full, { ext: "v0", const_term: "3", linear_term: "4" }] }).map((c) => ({
       ...c,
       ledger: 5_402_084,
       minutesAgo: 120,
     }));
-    expect(describeChange(change)).toBe(`${CPU} (ledger 5.402.084, hace 2 h): [86].ext (ausente) -> v0; [86].const_term (ausente) -> 3; [86].linear_term (ausente) -> 4`);
+    expect(describeChange(change)).toBe(`${CPU} (ledger 5.402.084, hace 2 h): [95].ext (ausente) -> v0; [95].const_term (ausente) -> 3; [95].linear_term (ausente) -> 4`);
   });
 
   it("el texto corta a tres campos con «y N más», y el JSON trae todos, cada uno con su nombre", async () => {

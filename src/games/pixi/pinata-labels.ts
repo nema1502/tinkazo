@@ -173,3 +173,27 @@ export function listaCaidos(p: { w: number; k: number; top: number; floor: numbe
   const rows = Math.min(20, Math.max(3, avail));
   return { x, y, colW, rowH, letra, cols, rows, cap: cols * rows, w: cols * colW, h: rows * rowH, phone: p.phone };
 }
+
+/**
+ * A una lista le deja un renglón arriba para su título («ADENTRO», «AFUERA»): baja un renglón y
+ * pierde uno de los de abajo (nunca menos de dos). El título va en `y - rowH`.
+ */
+export function conTitulo(g: ListaGeo): ListaGeo {
+  const rows = Math.max(2, g.rows - 1);
+  return { ...g, y: g.y + g.rowH, rows, cap: g.cols * rows, h: rows * g.rowH };
+}
+
+/**
+ * La lista de quienes siguen adentro, del lado contrario a la de los caídos: una columna a la
+ * izquierda, con el mismo renglón y la misma letra, debajo del contador y de su fila de marcas
+ * (`abajoDe` es hasta dónde llegan, en píxeles de pantalla) y con su título arriba.
+ */
+export function listaAdentro(p: { w: number; k: number; floor: number; letra?: number; ancho?: number; abajoDe: number }): ListaGeo {
+  const k = Math.max(0.01, fin(p.k, 1));
+  const g = listaCaidos({ w: p.w, k, top: 0, floor: p.floor, phone: true, letra: p.letra, ancho: p.ancho });
+  const x = 22 * k;
+  const y = fin(p.abajoDe) + g.rowH + 6 * k;
+  const avail = Math.floor((fin(p.floor) - 14 * k - y) / g.rowH);
+  const rows = Math.min(20, Math.max(2, avail));
+  return { ...g, x, y, cols: 1, rows, cap: rows, w: g.colW, h: rows * g.rowH, phone: false };
+}

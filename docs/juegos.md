@@ -60,7 +60,7 @@ La lista y la ronda llegan con cada sorteo, y los momentos dependen de las dos: 
 2. **Kit.** `node scripts/nuevo-juego.mjs <id> [--nombre "El Guajojó"]` crea el juego, y primero se escribe el plan con sus pruebas, después la escena, las tomas y el guion en es y en. Pasa con `pnpm typecheck` y `pnpm test`.
 3. **Batería.** `audit-game` 20/20, `rigor`, `identidad` (con 8, todos; con 18, nueve de cada diez), `emocion`, `sound`, `mezcla`, `pantalla`, `delatores` y la de física si hay choques. Pasa con todo APROBADO y los JSON guardados.
 4. **Revisión visual.** Capturas en escritorio y celular, en los dos temas; cada hallazgo se verifica antes de arreglarlo. Pasa sin nada grave.
-5. **Selector.** `node scripts/nuevo-juego.mjs --encender <id>`: pide la captura (`capturas-juegos.mjs <id> --en 6.5`), la historia sin borrador y con fuente primaria verificada, el rango y la batería guardada en JSON; después se suman la ficha de `juegos.html` y la fila de la tabla de abajo. Con `pnpm check:paginas`, `pnpm check:lore` y la aprobación de quien mantiene el proyecto.
+5. **Selector.** `node scripts/nuevo-juego.mjs --encender <id>`: pide la captura de la página de juegos (`capturas-juegos.mjs <id> --en 6.5`), las dos imágenes del selector y de la portada (`public/juegos/selector/<id>.webp` y `-light.webp`, 320x180, y `public/juegos/portada/<id>.webp` y `-light.webp`, 640x360, con `--limpia`, el mejor momento del juego y un `--recorte` si hace falta; ver la cabecera de `capturas-juegos.mjs`), la historia sin borrador y con fuente primaria verificada, el rango y la batería guardada en JSON; después se suman su botón con las dos imágenes en `index.html`, su tarjeta de El show en la portada, la ficha de `juegos.html` y la fila de la tabla de abajo. Con `pnpm check:paginas`, `pnpm check:lore` y la aprobación de quien mantiene el proyecto.
 
 ### El generador
 
@@ -90,19 +90,19 @@ Los parámetros de la URL funcionan solos: `?instant` lo resuelve el estadio, y 
 
 ### La regla del niño, en el kit
 
-Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, para un niño de 5 a 9 años: el de 9 lee nombres pero no el relator, el de 5 no lee nada. La regla: **cualquier cuadro del juego, sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
+Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola vara: lo entiende alguien de 7 años o más. Ese chico lee nombres pero no el relator, y entender no quiere decir infantil: el juego tiene que gustarle a la sala entera. La regla: **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien, cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma (quién va adelante, quiénes siguen, qué está señalado, quién tiene más).** La forma es una por juego (`carrera`, `de-pie`, `rueda` o `acumulacion`, en `catalogo.ts`) y se elige por la pregunta que contestaría un chico mirando un cuadro. El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
 
 | Qué pide la regla | Dónde vive en el kit |
 |---|---|
-| **Un solo contador**, en la misma esquina en todos los juegos, que solo baja y llega a 1 con el golpe; ningún otro número en el relator ni en un cartel | `marcador.ts`: el plan declara `marcador(t)` y `crearJuego` lo dibuja arriba a la izquierda ("QUEDAN 18"), así ningún juego puede tener otro. `problemasDeMarcador` |
+| **Un solo contador**, en la misma esquina en todos los juegos, que solo baja y llega a 1 con el golpe; ningún otro número en el relator ni en un cartel | `marcador.ts`: el plan declara `marcador(t)` y `crearJuego` lo dibuja arriba a la izquierda ("QUEDAN 18"), así ningún juego puede tener otro. En los de quedar de pie el número lleva el total y la misma palabra en todos ("QUEDAN 5 DE 18", `textoMarcador`), y debajo una **fila de marcas**, una por persona (`disposicionDeMarcas` y `pintarMarcas`): encendidas las que siguen, apagadas las que salieron, para que un chico las cuente sin leer. Las marcas miden la letra del contador por 0,8 y nunca menos de 12 px, van en una o dos filas sobre una placa de tinta (igual en los dos temas), y con más de 40 personas se deja el número solo. `problemasDeMarcador` |
 | **El nombre pegado al cuerpo** y, cuando alguien sale, su nombre legible donde pasó; nunca una fila aparte de emblemas | `nombres.ts`: `pegarAlCuerpo`, `estaPegado` (a lo sumo un cuarto del alto del cuerpo), `nombreDeSalida` y `enFilaAparte` |
 | **La persona es una figura con cara y nombre**, no un emblema de 30 px | `figuras.ts`: cada `Figura` lleva su `nombre`; `tamanoMinimoFigura` (56 px de diseño, nunca menos de 40) y `cuantasCaben` (con más gente, por tandas); `Kit.escalaDeFigura()` da la escala del chip del estadio |
 | **Un solo sentido** de avance, **la meta en todo cuadro** y el cartel nunca encima del ganador | `director.ts`: `plan.sentido`; `momentos.meta` y `guardarMeta` no dejan que ninguna toma la suelte; con el golpe la cámara protege a quien gana debajo del cartel (`tapaAlGanador`, `cajaDelFoco`) aunque el plan no lo pida |
 | **El relator, de seis palabras o menos**, un nombre, ningún número | `guion.ts`: `validarGuion(líneas, duración, { nino: true, nombres })` y `problemasDeLinea` |
 | **Cada hecho se ve en el cuerpo a los 0,3 s de su línea**, dos salidas van a 1 s o más, y salir no suena a fracaso | `LineaGuion.hecho`, `POSE_MAX` y `SALIDAS_APARTE` (en `respuestas.ts`); `sonido.salida()`, un solo tono suave igual en todos |
-| **Las respuestas, en cada instante**: quién va adelante, hacia dónde, cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.verdad()` para `audit-nino`, que saca tres capturas sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
+| **Las respuestas, en cada instante**: lo propio de la forma (`adelante.quienes`), adónde mirar (`adelante.lugar`), cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.forma` y `window.__nino.verdad()` (y, si su pantalla muestra grupos y no personas, `window.__nino.grupos`) para `audit-nino`, que saca una foto y una tira de tres cuadros sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
 
-`nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: qué es ir adelante, hacia dónde, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase, ni `audit-nino` mismo.
+`nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: su forma, qué es ir adelante, adónde se mira, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase.
 
 ### Lo que el kit no abstrae
 
@@ -138,6 +138,7 @@ Vale la pena solo si la mecánica visual es distinta de verdad. La prueba: si ha
 5. Enlazar el botón en `src/main.ts` y despachar el juego en `src/ui/draw.ts`.
 6. Escribir `docs/juegos/<nombre>.md` siguiendo el modelo de la Carrera Stellar.
 7. Pasar la auditoría.
+8. Pasar [la boleta](#la-boleta): un juego entra al selector con las nueve filas de la boleta en verde más dos vetos humanos, el cultural (quien organiza el proyecto, con la tarjeta y su fuente leídas) y el del momento (una revisión de la experiencia con capturas reales y la rúbrica de ganas de volver, con sus hallazgos verificados).
 
 ## La auditoría
 
@@ -151,7 +152,7 @@ node scripts/audit-identidad.mjs <juego>
 
 **El auditor de identificación** (desde el 4 de octubre de 2026) mide si cada participante llega a leer su nombre en pantalla antes de que salga el ganador, con 8, 18 y 50 personas: con `?auditar=identidad`, el estadio anota la primera vez que se ve cada nombre entero, legible (un alto de al menos 2,6 % de la pantalla, la regla de la letra; hasta el 26 de octubre de 2026 era 1,6 %) y sin confundirse con otro. Pide que con 8 se vean todos, y con 18 nueve de cada diez, en los juegos que prometen esas cantidades; con 50, informa. Nació de la tómbola, donde salía el número de la bola ganadora y nadie sabía de quién era.
 
-Donde `<juego>` es el valor de `?demo=`: uno de los ocho del selector (`race`, `sapo`, `trompo`, `chovena`, `pinata`, `wheel`, `teleferico`, `oruro`) o uno de los que salieron de él (al final de esta página; entre ellos `quien` y `trueque`). El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: uno de los diez del selector (`race`, `sapo`, `trompo`, `chovena`, `pinata`, `wheel`, `teleferico`, `oruro`, `guajojo`, `toborochi`) o uno de los que salieron de él (al final de esta página; entre ellos `quien` y `trueque`). El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -194,14 +195,14 @@ pnpm audit:todo --simular                         # muestra qué correría y cu�
 
 `scripts/audit-todo.mjs` levanta `vite preview` sobre `dist/` en el primer puerto libre desde el 4180 (o usa `--base`), corre los auditores de a dos Chrome como máximo, cada uno con su `CDP_PORT` (9680 y 9690; `--cdp` cambia el primero), y al terminar junta lo que cada uno dejó en un archivo: `docs/capturas/auditorias/<fecha-hora>.json` (esa carpeta no se versiona), con la salida entera de cada corrida en una carpeta al lado. Imprime un resumen de a lo sumo 20 líneas: aprobadas sobre total por auditor y las fallas, las de los que fallaron primero. Un auditor que se cae sin dejar su resumen cuenta como una falla: la batería no se da por buena si alguien se calló. Apaga solo lo que lanzó, por PID, nunca todos los Chrome; y corta lo que pasa del triple de su tiempo medido más cinco minutos.
 
-**Los niveles** (decisión D6 del plan): en cada cambio, a mano, lo que toca al cambio (`--solo`); antes de subir, el mínimo de abajo; de noche, la batería sin opciones. Sin `--solo` corren los de nivel `siempre`. La mezcla de sonido solo con `--noche`: mide la señal real y se desafina con la máquina cargada (el golpe del ganador dio de −59 a +6 LU entre dos builds iguales), así que corre sola, igual que el sonido. La física solo con `--fisica`: sirve a juegos que ya no están en el selector. `--juegos trompo,oruro` limita los auditores de juegos a esos, y `--todos-los-juegos` suma los que salieron del selector (`tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`, `quien`, `trueque`): sin la opción, un `todos` son los ocho del selector (`scripts/lib/juegos.mjs`).
+**Los niveles** (decisión D6 del plan): en cada cambio, a mano, lo que toca al cambio (`--solo`); antes de subir, el mínimo de abajo; de noche, la batería sin opciones. Sin `--solo` corren los de nivel `siempre`. La mezcla de sonido solo con `--noche`: mide la señal real y se desafina con la máquina cargada (el golpe del ganador dio de −59 a +6 LU entre dos builds iguales), así que corre sola, igual que el sonido. La física solo con `--fisica`: sirve a juegos que ya no están en el selector. `--juegos trompo,oruro` limita los auditores de juegos a esos, y `--todos-los-juegos` suma los que salieron del selector (`tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`, `quien`, `trueque`): sin la opción, un `todos` son los diez del selector (`scripts/lib/juegos.mjs`).
 
 **Qué corre según lo que cambió** (estimado con los tiempos de la corrida del 22 de octubre de 2026):
 
 | Cambió | Corré | Tarda |
 |---|---|---|
 | Un juego | `--solo audit-game,audit-rigor,audit-identidad,audit-delatores --juegos <juego>`, y la revisión visual si el cambio es visual | unos 10 min |
-| Un juego nuevo, rediseñado o pasado al kit | lo de arriba y [`audit-nino <juego>`](#la-prueba-del-niño), con un modelo que describa las fotos (no corre solo: necesita al describidor) | unos minutos de fotos (6 s por corrida en De pie), más la descripción |
+| Un juego nuevo, rediseñado o pasado al kit | lo de arriba y [`audit-nino <juego>`](#la-prueba-del-niño), con un modelo que describa las fotos (no corre solo: necesita al describidor) | unos minutos de imágenes (6 s por corrida en De pie), más la descripción |
 | `stage.ts` o `camera.ts` | `--solo audit-game,audit-identidad,audit-rigor,audit-encuadre` | cerca de 1 h |
 | La interfaz | `--solo audit-ui,check-paginas,check-glosario` | 5 min |
 | Antes de subir | `--solo smoke,audit-ui,audit-flujo` más lo de arriba | 25 min |
@@ -242,7 +243,8 @@ Corre en los dos tamaños y los dos temas, y está pensado para menos de 4 minut
 La nota de la investigación de los auditores encontró tres repeticiones. Esto se hizo con cada una:
 
 - **`audit-pantalla` entró a `audit-rigor` como un grupo**: misma corrida, un solo Chrome, las mismas reglas (`scripts/lib/pantalla-comprobaciones.mjs`). Por cada juego, después de las comprobaciones de siempre, mide los destellos (a lo sumo tres por segundo) y que todo texto de contraste bajo lleve contorno. `--sin-pantalla` lo saltea; `--pantalla-res 1280x720,1920x1080` y `--pantalla-temas dark,light` miran más. `audit-pantalla.mjs` sigue sirviendo solo (con `--clip` y `--compartir`) y la batería lo corre con `--solo audit-pantalla`.
-- **Lo que salió del selector dejó de entrar en un `todos`**: rigor, identidad, emoción, sonido, mezcla, pantalla y delatores toman sus juegos de `scripts/lib/juegos.mjs`, los diez del selector de entonces (hoy son ocho). `tombola`, `pasanaku` y `stellar` se piden por nombre o con `pnpm audit:todo --todos-los-juegos`. Pantalla, de paso, se salteaba El Trueque; ese día pasó a mirarlo y, desde el 26 de octubre de 2026, con El Trueque fuera del selector, también se pide por nombre. **«diez»** (`audit-rigor.mjs diez`, `audit-legible.mjs diez`, y así en emoción, identidad, mezcla, sonido, pantalla y delatores) mira los ocho del selector más De pie y El Trueque, que salieron pero siguen abriendo con su juego, su letra y su golpe de cámara: todos los auditores resuelven el pedido con `juegosDe` de `scripts/lib/juegos.mjs`, y una prueba lo comprueba. Un `todos` sigue siendo los ocho.
+- **El borde no se come la letra** (`bordeSeCome` en `scripts/lib/pantalla-comprobaciones.mjs`, medido por `audit-pantalla` y por eso también dentro de `audit-rigor`): un texto de Pixi falla si su borde es del mismo tono que la letra (los dos oscuros, los dos claros, o colores a menos de 80 de distancia) y su ancho en pantalla, con la escala real con que se dibuja, pasa del 8 % del tamaño de la letra en pantalla; el detalle dice el texto, los dos tamaños y el porcentaje. Existe por la ficha amarilla de la carrera (2 de noviembre de 2026): la letra de tinta llevaba un borde de tinta de `max(3, fs/9)`, un 13 % de la letra, y los nombres se fundían en una mancha. Un contorno normal (letra crema con borde de tinta) no entra: los tonos son distintos. Por lo mismo, un trazo cuenta como contorno del texto de contraste bajo solo si es oscuro, de 1,5 px en pantalla y contrasta al menos 3 a 1 con la letra (`esContorno`): la tinta con borde de tinta ya no pasa por "texto con contorno".
+- **Lo que salió del selector dejó de entrar en un `todos`**: rigor, identidad, emoción, sonido, mezcla, pantalla y delatores toman sus juegos de `scripts/lib/juegos.mjs`, los diez del selector de entonces (hoy son diez, con el Guajojó y El Toborochi). `tombola`, `pasanaku` y `stellar` se piden por nombre o con `pnpm audit:todo --todos-los-juegos`. Pantalla, de paso, se salteaba El Trueque; ese día pasó a mirarlo y, desde el 26 de octubre de 2026, con El Trueque fuera del selector, también se pide por nombre. **«doce»** (`audit-rigor.mjs doce`, `audit-legible.mjs doce`, y así en emoción, identidad, mezcla, sonido, pantalla y delatores) mira los diez del selector más De pie y El Trueque, que salieron pero siguen abriendo con su juego, su letra y su golpe de cámara: todos los auditores resuelven el pedido con `juegosDe` de `scripts/lib/juegos.mjs`, y una prueba lo comprueba. Un `todos` son los diez del selector (hasta el 2 de noviembre de 2026 el pedido de los doce se llamaba «diez»).
 - **`audit-espera` y `audit-detalles` se quedan.** La nota decía que `audit-flujo` y `audit-ui` los cubrían. Comparando lo que afirma cada `check(` de los cuatro (espera 24, detalles 35, flujo y ui unas 70 plantillas de nombre), no es así: ninguno de los temas de abajo aparece en flujo ni en ui, así que quitarlos era perder comprobaciones.
 
 | Lo que mira | Está en | ¿Lo mira `audit-flujo` o `audit-ui`? |
@@ -266,43 +268,169 @@ La nota de la investigación de los auditores encontró tres repeticiones. Esto 
 
 Las mismas comprobaciones por juego, en menos juegos: lo que se pierde son las de `tombola`, `pasanaku` y `stellar`, que se piden por nombre. Los conteos están fijados en `scripts/lib/bateria-recortes.test.mjs`. La tabla es la del 25 de octubre de 2026, con el selector de diez de entonces: desde el 26, con ocho juegos, un `todos` mira 56 escenas sin la mezcla y 64 con ella, y los auditores de rigor, identidad, emoción, sonido y mezcla pasan de diez juegos a ocho.
 
+## El auditor de palabras
+
+```bash
+node scripts/audit-palabras.mjs [juego|todos|sitio] [--json]   # pnpm audit:palabras
+```
+
+Sin Chrome ni red, en dos segundos, y entra en la batería con nivel `siempre`. Lee todo lo que alguien puede leer: el diccionario de `src/i18n.ts` en los dos idiomas (cada clave sabe de qué juego o pantalla es), los textos dentro de `src/games/**` y de las pantallas, las tarjetas de historia y los HTML de lectura. Falla por lo que Tinkazo no puede decir, con dos listas en `scripts/lib/palabras-prohibidas.json`:
+
+- **`apuesta`**: apuesta, apostar, casino, jackpot, plata, dinero en efectivo, tragamonedas, slot, dados, póker, bet, betting, gambling, chips, cash, dice. No están, a propósito, lo que Tinkazo usa: ficha (la tarjeta con el nombre en la carrera), premio y ruleta. Las palabras se aplican por idioma: «dice» es español de todos los días y recién en inglés es una palabra prohibida.
+- **`vocabulario`**: en los juegos de quedar de pie (Guajojó, Toborochi, piñata, sapo, ¿Quién es? y El Trueque) nunca eliminado, perdió o fuera, ni su forma en inglés; en las cadenas del ensayo y del stand nunca gana, ganó o ganador (se dice «sale» o «salió»), y lo mismo para los relatores dentro de `src/games/**`; en nada visible el punto medio; y en las cadenas de los juegos y las tarjetas nada de drand, hash, SHA, bytes, firma, BLS, ledger ni XDR (las tarjetas marcadas `tecnica` en `lore.ts` no salen en el show y no cuentan).
+
+**Calibración del 2 de noviembre de 2026.** La primera corrida dio 77 hallazgos y casi todos eran falsos: «dice» como verbo, «out» en «step out» o «came out of the draw», «slot» en el mensaje de un error de programación, las tarjetas técnicas. Quedó «out» solo cuando eliminar (`knocked out`, `is out`, `out of the game`), el filtro de mensajes de `Error(`, y los textos de cada tarjeta técnica salen del alcance. Dos hallazgos eran reales y se arreglaron con un cambio de palabra: el cierre del ensayo decía «ganador» y la piñata en inglés decía «knocks a few out».
+
+**Las excepciones** viven en el mismo JSON, cada una con su motivo y su fecha: los textos legales que niegan que Tinkazo sea una apuesta («no es para apuestas»), el cartel de quien gana con su rama de stand, y la descripción del juego Ledger, que habla de lo que es. Una excepción que ya no cubre nada hace fallar al auditor completo: la lista se limpia. Las marcadas `pendiente` aprueban pero salen en el resumen con una línea; hoy es una: el relator de la carrera dice «Gana quien llegue a la meta» también en una ronda de stand, y arreglarlo pide una variante por modo en el texto de la carrera.
+
 ## La prueba del niño
 
-La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.
+La regla del niño (26 de octubre de 2026, con la forma desde el 2 de noviembre; [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien, cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma (quién va adelante, quiénes siguen, qué está señalado, quién tiene más)**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las imágenes y la verdad del plan, un modelo que solo ve las imágenes las describe, y un juez compara.
+
+**La segunda vuelta (2 de noviembre de 2026).** La primera medición real dijo que la prueba no estaba sana: el control positivo, la ruleta, reprobaba 0 de 8. Lo que mostró: `falta` no se ve en algo que gira (el modelo dijo «mucho» con el progreso en 0,60 en 10 de 16), `mirar` al 25 % falla en todas las formas porque casi nada se mueve y nadie va adelante, la verdad de `mirar` se mezclaba con una dirección (la carrera nueva decía «derecha» y el modelo contestaba «abajo», una zona) y `olor` daba «sí, parece casino» en 38 de 48 fotos de la ruleta porque una rueda que gira «parece» apuesta aunque no haya nada de casino en pantalla. Por eso cambió el diseño de la prueba, no el de los juegos: `falta` solo decide donde se ve, el arco pide en cada momento lo que ahí se puede ver, `mirar` es siempre una zona de la pantalla y `olor` pregunta por cosas. Los números de la corrida nueva, en el historial de la rama.
+
+Lo que mostró la segunda medición (18 personas, 8 semillas, 1080 y 390), una línea por cosa:
+
+- La ruleta seguía reprobando por tres defectos de la prueba y no del juego: `falta` decidía con la rueda arrastrándose (16 de 16 mal), «alrededor» nunca valía en una rueda (`mirar` 0 de 48) y la flecha ancha en el borde y una tarjeta con el nombre se leían mal. Con los tres arreglados dio 7 de 8, justo, y la carrera de hoy 0 de 8.
+- El olor a apuesta pasó de 38 «sí» de 48 en la ruleta a 48 de 48 «no» en todos: preguntar por cosas dibujadas funcionó.
+- Guajojó 0 de 8 y Toborochi 0 de 8: fallaba solo `falta` (verdad de 0,76 a 0,82, el modelo decía «mitad»: el contador decía «EN EL MONTE 5» sin el total) y, en el Toborochi, `mirar` 1 de 16 (la verdad es «arriba», donde están las flores, y el modelo mira los nombres de «abajo» o el «centro»).
+- La carrera nueva 0 de 8: `mirar` 6 de 16 (la zona de la llama que va primera no es una sola) y `propia` 8 de 16, casi todo a 390.
+
+**La tercera vuelta (2 de noviembre de 2026).** Tres decisiones, dos en la prueba y una en los juegos:
+
+1. **`mirar` decide solo en la carrera y en la rueda.** En de pie y en acumulación no hay un solo lugar adonde mirar (la acción está arriba y los nombres abajo): se pregunta y se informa, pero no decide. Donde decide, vale la zona vecina (`ZONAS_VECINAS` en `scripts/lib/nino.mjs`): la declarada o una que la toque.
+2. **En de pie, `falta` se ve solo si el contador muestra el total.** El contador de los juegos del kit dice «EN EL MONTE 5 DE 18» (`textoMarcador`), y el del sapo («EN JUEGO 14 DE 18», «AGUJEROS 12 DE 18») y el del teleférico («QUEDAN 4 DE 18») también. Es presentación: el plan no se tocó. Los de «x / 18» ya lo decían.
+3. **`propia` en la carrera nueva a 390 no se afloja en la prueba.** Es un hallazgo real de la carrera: en el celular el modelo no distingue quién va adelante (ver abajo).
+
+Resultado de la tercera medición (carpeta privada `nino-2nov-v3`; los controles con 8 semillas):
+
+| | Semillas que pasan de 8 | La falla típica |
+|---|---|---|
+| Ruleta (control positivo) | 8 | ninguna: `mirar` 16 de 16, `propia` 16 de 16. La prueba aprueba con margen |
+| Carrera de hoy (control negativo) | 4 | solo `propia` a 390 al 60 % (4 de 8): dice un nombre que no es el que va adelante; `mirar` 16 de 16 y `falta` 16 de 16. Reprueba, pero con 4 de 8 y no con 0 de 8: con el cartel y el contador a la vista falla solo lo que de verdad no se ve |
+| Carrera nueva | 1 | `propia` 9 de 16 (a 1080, 7 de 8; a 390, 2 de 8): dice el nombre de la llama de arriba, no el de la que lleva la ficha amarilla. `mirar` 16 de 16 y `falta` 14 de 16 |
+| Guajojó | 0 | `falta` 0 de 16: lee «5 DE 18» y contesta «mitad» o «mucho» con la verdad en 0,76 a 0,82 |
+| Toborochi | 0 | `falta` 1 de 16: igual, «mitad» con «5 DE 18» |
+| El sapo | 8 | ninguna: `falta` no decide (al 60 % todavía no se ve) y `propia` 16 de 16 |
+| El trompo | 3 | `propia` a 390 (3 de 8; a 1080, 8 de 8): nombra a alguien que no sigue |
+| La chovena | 6 | `propia` 12 de 16: nombra a quienes no siguen |
+| La piñata | 0 | `propia` 0 de 16: la lista de la derecha es de quienes ya cayeron y quienes siguen adentro no tienen nombre en pantalla |
+| El teleférico | 0 | `propia` 0 de 16: el cartel de la cabina dice un grupo («Vicuñas ×4») y no los nombres de quienes siguen arriba |
+| Oruro | 3 | `propia` 7 de 16: nombra comparsas («Vicuñas», «Tojos») y no personas |
+
+Lo que dejó la tercera:
+
+- **El total en el contador no alcanzó para `falta`.** Con «EN EL MONTE 5 DE 18» el modelo lee el número y contesta «mitad» o «mucho», no «poco»: parece leer «5 de 18» como lo hecho y no como lo que queda. Con «QUEDAN 5 DE 18» y la fila de marcas, en la cuarta vuelta, el guajojó pasó de 0 a 7 de 8 y el toborochi a 8 de 8.
+- **La ficha de quien va adelante, en la carrera nueva, a 390 px.** En el celular el modelo contesta `propia` bien 2 de 8 al 60 %: la llama con la ficha amarilla va a media pista y la del nombre de arriba parece la de adelante. Queda sin arreglar a propósito.
+- **`propia` en de pie pide nombres.** En la piñata, el teleférico y Oruro lo que se lee son nombres de otras cosas (los que cayeron, grupos, comparsas): quienes siguen no tienen su nombre a la vista.
+- **El olor a apuesta.** 48 de 48 «no» en todos menos el teleférico, 4 de 48 «sí»: las tarjetas de la cabina con tres emblemas y «×3» se leen como un carrete de tragamonedas, y la moneda dorada con el número, como una ficha.
+
+**La cuarta vuelta (2 de noviembre de 2026).** Ahora los hallazgos eran de los juegos y no de la prueba, y se arreglaron en presentación (el plan no se tocó: mismas salidas, tiempos y ganadores):
+
+1. **El contador de los de pie dice cuántos quedan y se ve sin leer.** «EN EL MONTE 5 DE 18» no alcanzó (el modelo contestaba «mitad»). Pasó a «QUEDAN 5 DE 18» en todos (guajojó, toborochi, ¿Quién es?, sapo, teleférico, trompo, piñata y Oruro) y debajo lleva una fila de marcas, una por persona: encendidas las que siguen, apagadas las que salieron.
+2. **Quienes siguen tienen su nombre a la vista.** La piñata suma la lista «ADENTRO» frente a la de «AFUERA»; en el teleférico el nombre de quien ya se bajó se ve apagado y con una raya roja (se lo tomaba por uno que sigue).
+
+**La chovena vuelve con su presentación nueva (2 de noviembre de 2026).** Con el contador, los nombres de quienes siguen durante el corte y la raya roja, la prueba del niño pasaba 8 de 8, pero el auditor de delatores encontró que la cámara se quedaba sobre quien gana el 80 % del tiempo de la recta final con 18 personas (107 de 134 rondas; el azar es 50 %), y con la de antes da 58 %. La cámara no había cambiado: el delator estaba en la posición de los dos nombres de la final. El auditor mide qué nombre queda más cerca del medio de la pantalla, y la fila de marcas junto al contador ocupa el lugar del nombre que está a la izquierda; el juego acomodaba primero el nombre de la ganadora, así que ella se quedaba con el lugar del medio y el de la rival, corrido o más abajo (cuando la ganadora estaba a la izquierda, 23 de 23 veces era la más cercana al medio). Ahora los dos nombres se acomodan de izquierda a derecha, sin mirar quién gana: el que cede el lugar es el de la izquierda, gane o no. Con 18 personas la cámara queda sobre quien gana el 44,5 % del tiempo (89 de 200 rondas; el espejo exacto del lado de la ganadora, 55,5 % a la derecha, dentro del azar) y con 8, el 54,1 % (20 de 37); ningún delator. La prueba del niño sigue en 8 de 8 semillas. El plan no se tocó. La regla que queda: en la final, el orden en que se acomodan los nombres lo decide la pantalla y nunca el resultado.
+3. **Grupos.** En el teleférico (cabinas) y en Oruro (comparsas) la pantalla muestra grupos y no personas: el juego declara en `__nino.grupos` el grupo de cada persona y el juez acepta, para «quiénes siguen», el nombre de un grupo que siga en juego, con las mismas tolerancias de nombres. Si todos los que siguen son de un solo grupo alcanza con decirlo, y un «no se ve» de más al lado no resta. `FORMA_DECIDIDA` no se tocó.
+
+Resultado de la cuarta medición (carpeta privada `nino-2nov-v4`; 18 personas, 8 semillas, 1080 y 390; controles con 8 semillas):
+
+| | Semillas que pasan de 8 | La falla típica |
+|---|---|---|
+| Ruleta (control positivo) | 8 | ninguna |
+| Carrera de hoy (control negativo) | 3 | `propia` a 390: reprueba, la prueba está sana |
+| Guajojó | 7 | una semilla: `propia` 14 de 16 (antes 0 de 8 semillas) |
+| Toborochi | 8 | ninguna (antes 0) |
+| La piñata | 8 | ninguna (antes 0) |
+| La chovena | 8 | ninguna (antes 6); con los dos nombres de la final en el orden de la pantalla, sin delator |
+| El sapo | 8 | ninguna (antes 8) |
+| Oruro | 8 | con el juez de grupos (antes 3; 5 antes de aceptar el «no se ve» de más) |
+| El teleférico | 6 | a 390, con tres en juego, el modelo nombra a quienes se bajaron (`propia` 14 de 16; antes 0 de 8 semillas) |
+
+### Lo que la prueba encontró en los juegos
+
+Hallazgos que se dejan sin arreglar a propósito, o que quedan abiertos:
+
+- **La carrera nueva a 390 px.** Quien va adelante no se distingue: la ficha amarilla va a media pista y el modelo nombra a la llama de más arriba (`propia` 2 de 8 a 390, contra 7 de 8 a 1080). No se tocó.
+- **El trompo a 390 px.** `propia` 3 de 8 a 390 y 8 de 8 a 1080. No se tocó, ni se repitió la medición en esta vuelta.
+- **El olor a apuesta del teleférico.** 2 a 4 de 48 dicen «sí»: la tarjeta de la cabina con tres emblemas y «×3» se lee como un carrete de tragamonedas, y la moneda dorada con el número como una ficha. No se tocó.
+- **La carrera de hoy como control.** Pasó de 0 a 3 o 4 de 8 y sigue reprobando; si alguna vez aprueba, el arco quedó blando.
+- **El teleférico a 390.** Quedan dos semillas con el nombre de quienes ya se bajaron leído como el de quienes siguen, aun con la raya roja.
+
+Hasta el 1 de noviembre la prueba hacía las mismas cuatro preguntas a todos (quién va ganando, hacia dónde, cuánto falta, qué pasó): eran la forma de una carrera. En un juego de quedar de pie no hay «quién va ganando» al 25 %, porque los que siguen están todos igual, y por eso Guajojó y Toborochi daban 0 de 4 con finales que sí se entendían. La prueba no estaba mal: estaba incompleta. Ahora cada juego declara su **forma** y la pregunta propia sale de ella.
 
 ```bash
 pnpm preview --port 4192 &
 CDP_PORT=9692 node scripts/audit-nino.mjs <juego|todos> --personas 18 --semillas 8 --base http://localhost:4192
 # el describidor lee preguntas.json con scripts/prompt-nino.md y escribe respuestas-modelo.json
 node scripts/audit-nino.mjs --juzgar docs/capturas/nino/<juego> [--json]
-# el caso de control: la carrera de hoy, la que no se entendía, tiene que reprobar
-CDP_PORT=9692 node scripts/audit-nino.mjs --control --semillas 2 --base http://localhost:4192
-node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
+# los dos controles: la carrera de hoy tiene que reprobar y la ruleta tiene que aprobar
+CDP_PORT=9692 node scripts/audit-nino.mjs --controles --semillas 2 --base http://localhost:4192
+node scripts/audit-nino.mjs --controles --juzgar docs/capturas/nino
 ```
 
-1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela al 25 % y al 60 % de su duración y un segundo después del golpe. En cada parada esconde el subtítulo y saca dos fotos: **con letras** (la edad de 9 años, que lee nombres) y **sin letras** (la de 5, que no lee nada: mientras `window.__nino.sinLetras` esté prendido el estadio no dibuja ningún texto del motor, y el auditor esconde la barra de arriba). Son 12 fotos por semilla. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por foto, un id sin sentido, la variante y las cuatro preguntas, en un orden que no es el del show: ni el juego, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
-2. **Describir.** Un modelo que solo ve las fotos (uno barato; si una foto falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `adelante`, `hacia`, `falta` y `paso`.
-3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las fotos para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores.
+**Las formas.** Una por juego, en `catalogo.ts` (los del kit) y en el gancho de la ruleta y de la carrera, que la exponen en `window.__nino.forma`. Las de hoy: carrera = la carrera de llamas (con y sin `carrera=nueva`) y los cohetes; de pie = todos los demás menos la ruleta: Guajojó, Toborochi, la piñata, el sapo, el trompo, la chovena, el teleférico, Oruro, ¿Quién es? y El Trueque; rueda = la ruleta; acumulación = ninguno por ahora. La tabla de referencia es `FORMA_DECIDIDA` (`scripts/lib/nino.mjs`). Hoy exponen `__nino` la ruleta, la carrera, los del kit y los que siguen en esta tabla; los demás declararán su forma cuando lo hagan.
 
-**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %) y `sinLetras`. Los juegos del kit lo dejan solos con `crearJuego`. La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada.
+| Juego | Forma | Cómo la expone | Por qué esa forma |
+|---|---|---|---|
+| El sapo | de pie | expone el gancho: `sapo-nino.ts`, desde el plan (la clasificatoria, los tiros y sus horas), sin cambiar el show | Los nombres se tachan en la clasificatoria y, con varios premios, quien gana una medalla deja de seguir: un chico ve gente que sale y quienes quedan. La argolla casi siempre está en la mano o en el aire, no apunta a un nombre: no es una rueda. Adónde mirar lo mide el juego: la grilla, la argolla, el agujero o la mesa |
+| El trompo | de pie | expone el gancho: `trompo-nino.ts`, desde las horas de los golpes que el juego ya planeó, sin cambiar el show | Los trompos se sacan del ruedo uno a uno hasta que baila el último: un chico mira quiénes siguen girando. El trompo no apunta a nadie, así que no es una rueda (la tabla de referencia decía «rueda» y se cambió). Una tanda de salidas a menos de un segundo cuenta como un solo hecho |
+| La chovena | de pie | expone el gancho: `chovena-nino.ts`, desde la línea de tiempo planeada (los cortes de la música y quiénes se sueltan en cada uno), sin cambiar el show | En cada corte se sueltan unos y se van a sentar, y baila hasta el final el último: nadie suma nada, así que no es una acumulación (la tabla de referencia decía «acumulación» y se cambió). El contador de arriba cuenta cuántos quedan en la rueda. Lo común a los juegos de salir de a uno está en `de-pie-nino.ts` |
+| La piñata | de pie | expone el gancho: `pinata-nino.ts`, desde el calendario de palos que el juego ya planeó (`pinata-plan.ts`), sin cambiar el show | Cada nombre es un caramelo adentro: con cada palo caen unos y quedan afuera, y gana el último que sigue adentro. Un chico mira quiénes siguen adentro; la piñata no apunta a nadie (no es una rueda) y nadie va primero (no es una carrera). Los palos al aire no son un hecho (no sale nadie), y varios palos a menos de un segundo cuentan como una sola tanda. Adónde mirar lo mide el juego: la piñata colgada y, ya rota, el caramelo de quien gana |
+| El teleférico | de pie | expone el gancho: `cablecar-nino.ts`, desde el plan (`cablecar-plan.ts`: las paradas, quién se baja en cada una y el giro de cada arco), sin cambiar el show | El convoy sube parejo, todas las cabinas a la vez: nadie va adelante de nadie, y la cabina de la punta no es la que gana (la tabla de referencia decía «carrera» y se cambió). Lo que cambia es quién sigue arriba: en cada estación se baja un grupo entero, en la última se bajan de a uno, y suben dos. La puerta es un `casi`; la mordaza y el apagón, un `freno`. Adónde mirar lo mide el juego: las cabinas que todavía llevan gente y, con el golpe, la de quien gana |
+| Oruro (La Entrada) | de pie | expone el gancho: `oruro-nino.ts`, desde el plan (`entrada-plan.ts`: los arcos, el contrapunto y los giros), sin cambiar el show | La comparsa avanza por la calle y en cada arco se queda en la vereda una fraternidad entera (en la última, de a varios): un chico ve quiénes se quedan y quiénes siguen bailando, hasta que quedan dos frente al Socavón y uno cae. Nada ni nadie señala un nombre, así que no es una rueda (la tabla de referencia decía «rueda» y se cambió). El amague de la remontada y el susto de la máscara son un `casi`; el trastabillón, un `freno`. Adónde mirar lo mide el juego: dónde caen en pantalla los que siguen bailando |
 
-**Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada, `hacia` «arriba» y una ventana de 4 s; con las de abajo, 2 de 2):
 
-- **La zona** en que está quien va adelante no es del plan: depende de la cámara. La mide el juego donde cae en la pantalla (`lugarDe`, con el tercio del medio como centro): la ruleta, el gajo bajo la flecha; la carrera, la llama de la que va primera en la pista y de la ganadora.
-- **`hacia`.** La ruleta gira: «alrededor». La flecha, adónde mirar, es la zona de `adelante`.
+**Las cinco preguntas.** Cuatro son de todos y una es propia de la forma:
+
+| Pregunta | Qué se contesta | La verdad |
+|---|---|---|
+| `gano`: ¿ya se sabe quién ganó? (un nombre señalado o en una tarjeta no alcanza: tiene que verse que ganó) | `no`, o `si` y el nombre tal como se lee | `no` mientras la hora del juego es menor que la duración; después `si` y el nombre de quien gana. Un `si` antes del golpe es una falla grave: la presentación delata |
+| `falta`: ¿cuánto falta? | empieza, mucho, mitad, poco, termino | `progreso` del plan; solo decide donde `progresoVisible` es verdadero (ver abajo) |
+| `paso`: ¿qué acaba de pasar? | empezo, salio, adelante, freno, casi, gano, nada | `paso` del plan |
+| `mirar`: ¿en qué parte de la imagen está pasando lo importante ahora? (en la tira, el cuadro de la derecha) | una zona: arriba, abajo, izquierda, derecha, centro, o alrededor si gira. Decide solo en la carrera y la rueda; en de pie y en acumulación se pregunta y se informa | `adelante.lugar` cuando `adelante.quienes` no está vacío (la zona donde cae en la pantalla quien va adelante, que mide el juego con la cámara); si está vacío, la `zonaAccion` que declara el juego, y sin ella, `centro`. Nunca una dirección. En la rueda, que gira, «alrededor» también vale |
+| `propia`, según la forma | carrera: ¿quién va adelante? (un nombre). De pie: ¿quiénes siguen en juego? (dos nombres que se lean). Rueda: ¿qué nombre está señalado ahora? (uno). Acumulación: ¿quién tiene más? (uno) | un nombre entre `adelante.quienes` (dos distintos, entre quienes siguen, de pie) |
+
+`mirar` reemplaza a `hacia`, que era de carrera: el plan lo sigue declarando para las pruebas de la cámara, pero la prueba ya no lo pregunta. Aparte va `olor`, que no entra en el veredicto, y que pregunta por cosas y no por sensaciones: «¿se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Escribí si o no, y qué viste». La verdad es `no`. Se pregunta en toda foto y no solo en la final, porque si no la pregunta delataría cuál es la última. Aprueba si todas dicen `no`; sale en el JSON como `olor` y la boleta lo lee de ahí.
+
+**Las dos imágenes de cada parada.**
+
+1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela tres veces en cada parada (al 25 % y al 60 % de su duración, y un segundo después del golpe): 0,6 s antes, 0,3 s antes y en el momento. Esconde el subtítulo y saca los tres cuadros **con los nombres** (la vara de 7 años o más, que los lee).
+   - **La foto** es el cuadro del momento: para `gano`, `falta`, `propia` y `olor`.
+   - **La tira** son los tres cuadros del mismo tamaño, uno al lado del otro de izquierda a derecha: para `paso` y `mirar`. Un chico mira movimiento y una foto quieta no lo muestra. Se arma dentro del mismo Chrome, en una pestaña en blanco con un canvas que dibuja los tres cuadros (de 960 px de ancho, como mucho) y exporta un PNG: sin dependencias.
+   - Son 12 imágenes por semilla y tamaño: 3 paradas, 2 imágenes. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por imagen, un id sin sentido, cuántos cuadros tiene y las preguntas que le tocan, en un orden que no es el del show: ni el juego, ni la forma, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
+2. **Describir.** Un modelo que solo ve las imágenes (uno barato; si una falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `gano`, `falta`, `paso`, `mirar`, `propia`, `olor`, `quien` y `vi`.
+3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las imágenes para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores, con `datos.olor`.
+
+**El veredicto es por arco, no por foto.** Una corrida de un tamaño pasa si:
+
+- al 25 %: solo `gano` = no (la obligatoria: si no, la presentación delata);
+- al 60 %: `propia` bien, `mirar` bien solo en la carrera y en la rueda y, si `progresoVisible`, `falta` a 0,2 o menos;
+- al final: `gano` = si con el nombre bien y `paso` = gano.
+
+Lo demás se informa pero no decide, y un `si` antes del golpe hace fallar la corrida. Al 25 % casi nada se mueve y nadie va adelante, así que ahí `mirar`, `paso`, `falta` y `propia` se informan. Una semilla pasa si pasan sus dos tamaños, y el juego con 7 de cada 8 semillas (con 2 semillas, las 2).
+
+**`falta` solo cuenta donde se ve.** La verdad suma `progresoVisible` por momento. La carrera lo pone en `true` siempre (la meta está a la vista). De pie y acumulación, desde que salió alguien: lo visible es cuántos quedan, así que la verdad de `falta` es la fracción de quienes tenían que salir que ya salieron, no el tiempo. La rueda, solo desde que casi se traba (`T_HOLD` en la ruleta, el 82 %): antes gira, a fondo o arrastrándose (con `T_CREEP`, el 57 %, el modelo dijo «mucho» o «empieza» en 16 de 16 fotos), y el tiempo no se ve en algo que gira. Donde es `false`, `falta` se informa pero no decide. Los juegos del kit lo reciben por forma (`verdadDelNino`, en `respuestas.ts`) y pueden afinarlo declarando el suyo en `respuestas(t)`.
+
+**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `forma`, `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, `progresoVisible`, `zonaAccion` si el juego la declara, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego` (la forma sale de su entrada del catálogo). La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada. En los juegos de quedar de pie, `adelante.quienes` es el conjunto de quienes siguen en juego. Donde la pantalla muestra grupos y no personas (las cabinas del teleférico, las comparsas de Oruro), el juego declara además `grupos`: el nombre del grupo de cada persona, por su puesto en la lista (`Grupos` y `problemasDeGrupos` en `kit/respuestas.ts`). Es presentación: no cambia el plan.
+
+**Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada y una ventana de 4 s; con las de abajo, 2 de 2):
+
+- **La zona** en que está lo que se sigue no es del plan: depende de la cámara. La mide el juego donde cae en la pantalla (`lugarDe`, con el tercio del medio como centro): la ruleta, el gajo bajo la flecha; la carrera, la llama de la que va primera en la pista y de la ganadora. Es lo que contesta `mirar`.
+- **La ruleta gira.** Adónde mirar, la flecha, es la zona de `adelante`; lo que da vueltas es la rueda.
 - **«Qué acaba de pasar»** es de hace 3 s o menos; pasado eso, `nada`. Que la flecha pase de un gajo a otro no es un hecho: es la rueda.
 
-**Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red):
+**Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red; no cambiaron):
 
-- Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera.
-- Sin letras, la zona exacta: puede nombrar dos, no más. «Hacia», igual o una parte de la diagonal, y nunca también el sentido contrario.
-- «Falta»: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
-- «Paso»: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
-- Una foto pasa con 3 de 4; en la final «hacia» no cuenta y las otras tres son obligatorias. Una corrida (una semilla: los dos tamaños y las dos edades) pasa si pasan todas sus fotos, y el juego con 7 de cada 8 corridas (con 2 semillas, las 2).
+- Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera. En «quiénes siguen», dos nombres distintos y los dos entre los que siguen.
+- `mirar`, igual a la zona declarada o a una que la toque (el centro toca a las cuatro; la derecha, a centro, arriba y abajo; arriba, a centro, izquierda y derecha; y así), y nunca diciendo también la contraria; en la rueda, «alrededor» también vale. Solo decide en la carrera y la rueda (ver abajo).
+- La flecha de la ruleta es ancha: si cae a una quinta parte de un gajo del borde, cuentan los dos gajos como señalados.
+- `falta`: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
+- `paso`: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
 
-**El control.** `--control` corre la carrera de producción de hoy. Si la prueba la aprueba, la prueba está mal: con `--control --juzgar` el éxito es que **no** apruebe.
+**Los dos controles.** Para saber que la prueba misma anda. `--control` corre la carrera de producción de hoy, la que no se entendía: tiene que **reprobar**. `--control-positivo` corre la ruleta: tiene que **aprobar**. `--controles` corre los dos y, al juzgar, dice «prueba sana» solo si el negativo reprueba y el positivo aprueba; si alguno se da vuelta, sale con error y lo dice: se rompió la prueba, no el juego.
 
-**Primera corrida (26 de octubre de 2026)**, 18 personas, 2 semillas, los dos tamaños y las dos edades (24 fotos por juego):
+**Primera corrida (26 de octubre de 2026)**, con las cuatro preguntas de entonces. Queda como historia: 18 personas, 2 semillas, los dos tamaños y las dos edades de entonces (24 fotos por juego; desde el 1 de noviembre de 2026 es una sola vara y son 12):
 
 | | Ruleta | Carrera de hoy (control) |
 |---|---|---|
@@ -310,7 +438,7 @@ node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
 | Fotos que pasan | 24 de 24 | 12 de 24 |
 | Lo que falla | `falta`: no se ve en ninguna de las 16 fotos del 25 % y del 60 %; pasan con 3 de 4 justos | `paso` (dicen «nada» donde se acaba de echar alguien o de abrir los carriles), `adelante` (el cartel grande va sobre quien ya salió) y `falta`; la final, con su cartel, pasa |
 
-**Comprobaciones.** Con la prueba, las 40 comprobaciones (20 de `audit-game` y 20 de `audit-rigor`) pasan a 42: N1 (9 años, con letras) y N2 (5 años, sin letras). La regla pide 47; las otras cinco (la meta en cada cuadro, el sentido fijo, un solo número fuera del cartel, el hecho en el cuerpo a los 0,3 s, cinco clases y un panel) siguen por hacer, y `problemasDeRespuestas` ya cubre las del plan.
+**Comprobaciones.** Con la prueba, las 40 comprobaciones (20 de `audit-game` y 20 de `audit-rigor`) pasan a 41: N1 (se entiende a los 7 años; la N2, la de 5 años sin letras, se quitó con la vara de 7). La regla pide 46; las otras cinco (la meta en cada cuadro, el sentido fijo, un solo número fuera del cartel, el hecho en el cuerpo a los 0,3 s, cinco clases y un panel) siguen por hacer, y `problemasDeRespuestas` ya cubre las del plan.
 
 ## El auditor de mezcla
 
@@ -384,7 +512,7 @@ Cuando el selector tenía doce juegos, el auditor exigente midió treinta segund
 
 ## El sonido
 
-Todo el sonido sale de [`src/sound.ts`](../src/sound.ts) y no hay archivos de audio: son osciladores. Eso trae tres reglas que no son gusto sino límite del aparato y del oído, y que existen porque durante un tiempo no estuvieron escritas y los seis juegos se degradaron a la vez.
+Todo el sonido sale de [`src/sound.ts`](../src/sound.ts). Los juegos disparan osciladores (`beep`, `beepFor`, `hum`, `wind`, `fanfare`) y, desde el 4 de noviembre de 2026, el banco de [`src/sonidos/banco.ts`](../src/sonidos/banco.ts) hace sonar un archivo en lugar del oscilador cuando el disparo se parece a uno que tiene archivo ([abajo](#los-sonidos-de-archivo)). La partitura sigue siendo de osciladores y de la escala: lo que sigue vale para las dos cosas. Eso trae tres reglas que no son gusto sino límite del aparato y del oído, y que existen porque durante un tiempo no estuvieron escritas y los seis juegos se degradaron a la vez.
 
 **Registro.** El parlante de un proyector, de un portátil o de una barra de sala chica se cae por debajo de unos 120 Hz y se vuelve un silbido fino por encima de unos 3 kHz. El rango útil son los **grados 0 a 20 de `note()`**, o sea 131 Hz a 2093 Hz. Lo que está fuera de ahí está escrito y no se oye: hubo golpes de clímax a 70 y a 90 Hz que nadie escuchó nunca.
 
@@ -398,6 +526,51 @@ Y cuatro obligaciones:
 - **Lo que tiene que durar una fase va con `beepFor`,** que mide en segundos **del juego**. `beep` mide en segundos reales, y el selector de duración divide el `dt`: un zumbido de 0,7 s puesto a tapar un apretón de 1,4 s dejaba 2,4 s de silencio en modo épico, justo en el momento de más tensión.
 - **Lo que le habla a una persona va en segundos reales:** la cuenta regresiva y el sostén del cartel del ganador. Lo que tarda alguien en leer un nombre proyectado no cambia porque el organizador elija "épica". El cartel se sostiene 3 segundos reales; menos que eso corta la reacción de la sala por la mitad.
 - **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
+
+El silencio también es sonido. `audit-sound` marca los huecos de más de 4 s (la escena se siente muerta), pero **el cuarto de segundo sin nada que termina en el golpe es a propósito** y no cuenta como defecto: lo que se le pide (de 0,2 a 0,6 s) lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos).
+
+### Los sonidos de archivo
+
+**Apagados desde el 4 de noviembre de 2026** (`ARCHIVOS_PRENDIDOS` en `banco.ts`): la primera tanda se subió sin que nadie la escuchara y, escuchada, no estaba a la altura. Mientras no haya un banco elegido con oídos, los juegos suenan con los instrumentos de siempre y la música de archivo ni se pide. `?sonidoarchivo=1` los prende para escucharlos; `audit-sound --con-banco` lo agrega solo.
+
+Los juegos no se tocaron: ninguno dice qué está pasando, todos disparan `beep(frecuencia, duración, onda, volumen)`. El banco mira esos cuatro datos (más el grado de la escala) y decide, en tres capas:
+
+1. **Las reglas del juego** (`JUEGOS_CON_BANCO` en `banco.ts`): una firma (onda, rango de volumen, de duración y de grado) que identifica un momento de un juego y apunta a su efecto: el casco de la llama, el palo contra la piñata, el choque de los trompos, la ficha que cae en la boca del sapo, la clavija de la ruleta, el bombo de Oruro, el cable del teleférico, el grillo del Guajojó. Una regla puede apagar los disparos vecinos que ya van dentro del archivo (la rotura de la piñata trae la lluvia de caramelos). Cada juego tiene además el efecto de su ganador, que reemplaza el acorde de `fanfare()`.
+2. **El golpe**: todo remate grave y fuerte suena a impacto.
+3. **Las voces**: lo demás suena con un instrumento de verdad en lugar de la onda (kalimba por el triángulo, madera por el cuadrado, campana por el seno, zampoña por el diente de sierra), afinado con la velocidad de reproducción para que la nota siga siendo la de la escala. Cada instrumento tiene una nota grave y una aguda (`-lo` y `-hi`), con su altura medida en `src/sonidos/archivos.ts`.
+
+Lo que no cambia: el reloj del juego manda y no hay azar (la variante de un efecto sale de un contador que se reinicia con cada sorteo, así que la misma ronda suena igual); los archivos pasan por el mismo bus que los osciladores, así que el silenciador, el techo y el paso bajo valen igual; con `?instant=1`, movimiento reducido o la demo todo se comporta como antes. **Si el archivo no llegó** (sin red, todavía bajando, ahorro de datos o `prefers-reduced-data`) suena el oscilador de siempre, sin error ni hueco. Los archivos de un juego se piden cuando se sabe qué juego es (`sonidoDelJuego` en `draw.ts`), antes de la tarjeta de "cómo se juega", y pesan menos de 450 KB por juego, voces comunes incluidas (mp3 mono a 64 kbps, efectos de 3 s o menos).
+
+**La música de archivo es opcional y no viaja con el repositorio** (`public/sonidos/LICENCIA.md`). Si existe `public/sonidos/<juego>/musica.mp3` y la dirección trae `?musicaarchivo=1`, el bucle reemplaza las capas del charango, el beat y la zampoña (la tensión le abre el brillo y le sube el volumen; el silencio de antes del ganador, el corte de las sorpresas y el remate siguen siendo los de siempre; al volver a la pestaña retoma en el punto que toca). En tinkazo.app (y www.tinkazo.app) la cama baja de nuestro servicio (`src/sonidos/musica-remota.ts`, m.tinkazo.app), que solo la entrega al sitio; en cualquier otro host, o con ahorro de datos, no se pide. Sin el archivo, suena la música de osciladores. La chovena nunca la usa: sus bailarines pisan en el tiempo de su propia música.
+
+Cómo se regeneran los sonidos: [`public/sonidos/PROMPTS.md`](../public/sonidos/PROMPTS.md) y `scripts/sonidos/` (`generar.mjs` baja las variantes del servicio, `procesar.py` elige, normaliza, codifica y escribe `archivos.ts`). `pnpm test` mira que todo lo que el banco nombra exista, que los pesos entren y que no haya música en el índice.
+
+**Los auditores** miran lo mismo con archivos: `audit-sound` engancha también `AudioBufferSourceNode`, y un archivo lleva anotada la nota que reemplaza (`__beep`), así que la afinación, el registro, el volumen, los huecos y los golpes repetidos se miden igual; cuenta cuántos disparos sonaron con archivo y, con `--con-banco`, exige que haya sonado el banco. `audit-mezcla` no cambia (mide la señal), y con `--grabar <carpeta> --etiqueta antes|despues` guarda en un WAV los 20 segundos que terminan 4 s después del cartel del ganador, para escuchar lo mismo antes y después de un cambio de sonido.
+
+## La pestaña escondida
+
+El caso real de un meetup: quien organiza cambia a Zoom o a WhatsApp en el medio del show y vuelve. El navegador frena una pestaña que no se ve: no hay cuadros de animación y los temporizadores pasan a uno por segundo.
+
+**Cómo se porta el show.** Se frena y sigue. El bucle del estadio (`stage.ts`) acota el tiempo de cada cuadro a 0,05 s, así que la hora del juego no corre mientras la pestaña está escondida y, al volver, sigue desde el mismo punto. El golpe no puede caer escondido ni saltarse: el show dura lo de siempre más lo que estuvo escondida (medido, 10 s escondida suman 10,0 a 10,4 s), el cartel se ve entero y el ganador es el del plan. Lo único que corría con el reloj de la página era la música: su secuenciador (`tick` de `src/music.ts`) es un temporizador de 40 ms, y a un tic por segundo programaba de golpe todo lo atrasado, un racimo de unos setenta sonidos por segundo mientras estaba escondida y, según en qué punto del segundo se volviera, otro al volver. Desde el 2 de noviembre de 2026 salta en silencio los pasos que quedaron más de 40 ms en el pasado y retoma en el que corresponde a la hora.
+
+**La comprobación.** El grupo `pestaña` de `audit-rigor`, con el reloj de verdad y sin red (la escena fija). Por juego, tres corridas: una de control, otra que esconde la pestaña 10 s al 50 % del show y otra que la esconde justo antes del golpe. Esconder es abrir una segunda pestaña y pasarla al frente. Exige:
+
+| Comprobación | Qué se mide |
+|---|---|
+| Se esconde, se vuelve y el show cierra solo | `visibilitychange` a escondida y de vuelta, y el estadio se va |
+| El ganador en pantalla es el del plan | El cartel apareció y lo último que dijo el relator nombra al ganador de la escena |
+| Cero excepciones | Las de la página y las no atrapadas |
+| El cartel está a la vista y se queda su tiempo normal | Que no se apague antes de cerrar, y que lo que lo vio la sala (sin contar el rato escondida) sea al menos el 90 % de lo que dura sin esconder nada |
+| Sin ráfaga de sonidos atrasados | A lo sumo 3 sonidos que arranquen más de 250 ms en el pasado de la hora del audio, desde que se esconde hasta medio segundo después de volver. Se cuentan los atrasados y no todos: la música sola mete unos treinta y cinco osciladores por medio segundo. Con 250 ms no cuenta el tirón suelto del hilo (un paso, hasta 0,22 s), y sin el arreglo de la música el racimo sí: de 300 a 550 en 10 s, con atrasos de 0,3 a 1,1 s |
+
+```bash
+node scripts/audit-rigor.mjs <juego> --solo-pestana            # solo este grupo, con el ritmo rápido
+node scripts/audit-rigor.mjs <juego> --solo-pestana --pestana-ritmo normal
+node scripts/audit-rigor.mjs <juego> --pestana-capturas <carpeta>   # tres imágenes por escondida
+node scripts/audit-rigor.mjs todos --sin-pestana                # el resto, sin este grupo
+```
+
+Las pruebas de la lógica de juicio, sin red, están en `scripts/lib/pestana.test.mjs`. Lo que no cubre: el Chrome del auditor va silenciado, y un Chrome de verdad no frena los temporizadores de una pestaña que está sonando; Safari y Firefox sí los frenan. Para el efecto se mide el peor caso. Tampoco mira el celular con la pantalla apagada ni una escondida más larga que 10 s.
 
 ## El director de emoción
 
@@ -476,6 +649,38 @@ Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en
 
 La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (el duelo, del 1.º al 4.º; la tapada, del 3.º al 6.º; la remontada, del 5.º al 8.º; el susto, 1.ª o 2.ª si el tropiezo viene después de la mitad y 7.ª u 8.ª si ya tropezó, mitad y mitad) de modo que cada puesto sale una de cada ocho veces (`audit-delatores race` lo mide a nivel del plan con chi cuadrado), y la curva de la ganadora se corrige por bisección hasta ocuparlo, repetida hasta que valen todos los puestos a la vez. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
 
+### El ritmo de los hechos
+
+```bash
+node scripts/audit-emocion.mjs <juego>                 # corre con los demás grupos; informativo
+node scripts/audit-emocion.mjs <juego> --solo-ritmo    # nada más el ritmo
+node scripts/audit-emocion.mjs <juego> --ritmo-estricto  # las cuatro pasan a ser compuertas
+```
+
+Cuatro renglones de «lo que el auditor no puede ver» eran de ojo y ahora se miden, con el plan del juego y no con la pantalla. Un grupo más de `audit-emocion` (se saltea con `--sin-ritmo`; `--semillas-ritmo`, 4 por defecto) corre el show entero con el reloj en turbo y `?auditar=nino`, y en cada cuadro de juego anota los cambios de `window.__nino.verdad().paso` (la línea de tiempo de los hechos: cada cambio de `paso.tipo` distinto de `nada`, en el segundo `desde` que dice el plan), los subtítulos que se ven, los osciladores que suenan (con el enganche de `audit-sound`) y el cuadro del golpe. Se mide:
+
+1. **Un hecho nuevo cada 1,5 a 2,5 s, y nunca más de 4 s sin uno.** La mediana de los huecos entre hechos (contados desde el segundo cero hasta quien gana) tiene que caer en la banda, y ningún hueco pasa de 4 s. Se informan la mediana, el máximo y cuántos huecos pasan de 4 s.
+2. **Los primeros 3 s son llamada de atención, no información.** Ningún hecho `salio`, `adelante`, `freno` ni `casi` antes de los 3 s. `empezo` sí puede estar.
+3. **Silencio antes del golpe.** El último efecto que suena antes del golpe termina entre 0,2 y 0,6 s antes de él. La música no se mide: se agenda con el reloj del audio y no con el del juego, y con el reloj en turbo no coincide con el golpe.
+4. **«Última pasada» saca a alguien.** Si un subtítulo dice «última» (o «last», «final»; «la recta final» no cuenta) y en los 3 s siguientes no hay un hecho `salio` ni `gano`, fue una pasada vacía.
+
+**Es informativo.** Los ocho juegos del selector no se diseñaron con estas cifras, y una medición nueva no pone en rojo la batería: las cuatro se imprimen por juego como tabla y van en el JSON como `datos.ritmo`. Con `--ritmo-estricto` pasan a ser compuertas, y ahí un juego que no deja medir una regla (sin plan a la vista, o sin efectos antes del golpe) no la cumple: una compuerta no deja pasar lo que no ve. Quien dirige decide cuándo se endurece.
+
+**Qué juegos se pueden medir.** Los que dejan `window.__nino`: los del kit (`crearJuego`) y, de los viejos, la carrera y la ruleta. Los otros solo tienen medido el silencio antes del golpe y la cadencia de sus subtítulos; para el resto falta que el juego exponga su plan (`exponerNino`).
+
+**Lo que midió la primera vez** (2 de noviembre de 2026, 4 semillas y 18 personas por juego; huecos entre hechos en mediana y máximo, cuántos huecos pasan de 4 s en las 4 semillas, información antes de los 3 s, silencio antes del golpe en mediana y rango, «última» vacías):
+
+| Juego | Huecos | > 4 s | Info < 3 s | Silencio antes del golpe | «Última» vacías |
+|---|---|---|---|---|---|
+| Carrera de llamas | 2,3 s / 7,8 s | 15 | 0 | 0,0 s | 0 de 0 |
+| Carrera de llamas (nueva) | 2,4 s / 8,3 s | 14 | 0 | 0,0 s | 0 de 0 |
+| Ruleta | 1,2 s / 15,6 s | 4 | 0 | 0,8 s (0,0 a 1,3 s) | 0 de 0 |
+| Guajojó | 3,3 s / 10,5 s | 16 | 0 | 0,0 s | 0 de 0 |
+| Toborochi | 4,1 s / 8,1 s | 15 | 0 | 0,0 s | 0 de 0 |
+| Sapo, trompo, chovena, piñata, teleférico, Oruro | sin plan a la vista | | | 0,0 a 0,2 s (la piñata, hasta 0,8 s) | sin medir |
+
+Lo que cuenta la tabla: ningún juego da información en los primeros 3 s, y ningún subtítulo de «última» quedó vacío, pero tampoco hubo ninguno que juzgar (0 de 0: la regla 4 todavía no tuvo a quién mirar; «la recta final» de la carrera no cuenta). La mediana de los huecos cae en la banda solo en las dos carreras (2,3 y 2,4 s); en todos los medibles hay huecos de más de 4 s. El silencio de un cuarto de segundo antes del golpe hoy casi no existe: en la mayoría el último efecto (una nota de tensión) termina pegado al golpe. Y los hechos del plan son más ralos que los subtítulos: en el Guajojó y el Toborochi el plan declara un hecho cada 3 a 4 s y la sala lee un subtítulo cada 1,2 a 1,6 s; la regla pide que el cuerpo del juego, y no solo la frase, tenga algo nuevo que mostrar.
+
 ### El auditor de choques
 
 ```bash
@@ -520,6 +725,7 @@ Ningún ganador se narra como perdedor, y cada premio tiene su momento (7 de oct
 - **Un co-ganador que sale antes del final, sale con premio.** En el trompo y el aguayo, los juegos que cuentan la historia del primer premio, el relator dice "¡Óscar Limachi sale, pero con premio!" y lo nombra siempre, aunque haya mucha gente. La Chovena y el teleférico ya lo hacían, y el sapo tiene un turno por premio. La piñata (desde el 20 de octubre de 2026) y La Entrada (desde el 21) dicen el premio y no el nombre ("¡Sale con premio!", "Se quedan 3, uno con premio"), y el nombre se lee recién en el cartel (lista "Chicos" de la sección 10 de la auditoría de juegos).
 - **El cartel de la corona.** Cada ganador va con su cara, el primer premio más grande, y los demás entran de a uno, cada uno con su golpe: dos notas, más graves cuanto más abajo en la lista. Con más de tres, tres nombres y "y 2 más", igual que el relator. Con un solo premio el cartel no cambia.
 - **Para auditarlo sin red:** la escena fija acepta `?nw=N` (`?pose=trompo&nw=3`). El primer ganador es el de siempre y los demás quedan repartidos por la lista.
+- **Hasta cuántos premios cuenta cada juego** (6 de noviembre de 2026, con el tope del contrato en 300). La carrera, hasta ocho (un carril de la recta final por premio), y el sapo, hasta doce (un agujero de la final por premio: con trece, `planQualifier` rechaza el sorteo y el juego se cierra sin mostrar nada). Con más, el selector los atenúa y dice por qué (`rec.race.premios`, `rec.sapo.premios`) y el juego que queda elegido, y el que sigue después de cada premio, es otro (`Rango.premios` en `src/ui/recomendar.ts`). Los demás cuentan cualquier cantidad: la ruleta sortea al primero y el resto sale en el cartel («y 297 más»), y en los de eliminación los demás premiados se van «con premio». Los planes de La Entrada, el teleférico, Guajojó y Toborochi se probaron con 50, 100 y 200 premios sin que falle ninguno; cómo se ve cada show con tantos premiados todavía no se miró en un navegador.
 
 ## Los cierres
 
@@ -537,22 +743,57 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 ## Lo que el auditor no puede ver
 
-El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
+El ritmo de la animación, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente, y el ritmo de los hechos, el de emoción. Lo que sigue no, y lo revisás vos antes de subirlo (con las marcas de lo que ya se mide):
 
-- ¿Se entiende quién va ganando sin leer texto? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto sin letras y la verdad del plan.
+- ¿Se entiende qué pasa sin leer el relator? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto, la tira y la verdad del plan.
 - ¿Se lee desde el fondo de la sala, proyectado?
 - ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La ventana útil en modo normal son 24 a 34 segundos: menos y la sala no llega a girar la cabeza, más y se va.
-- ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad?
-- ¿Los primeros 3 segundos son llamada de atención y no información? Entre el clic y "todos mirando" hay gente hablando; lo que se cuente ahí se lo pierde media sala.
-- ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe.
-- ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie.
+- ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad? Ya no es de ojo: lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos), con la línea de tiempo del plan.
+- ¿Los primeros 3 segundos son llamada de atención y no información? Entre el clic y "todos mirando" hay gente hablando; lo que se cuente ahí se lo pierde media sala. También lo mide el ritmo de los hechos.
+- ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe. Lo mide el ritmo de los hechos (de 0,2 a 0,6 s, sobre los efectos).
+- ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie. Lo mide el ritmo de los hechos: un subtítulo de «última» sin un hecho `salio` ni `gano` en los 3 s siguientes es una pasada vacía.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
-- ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido.
+- ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear el máximo de ganadores (trescientos) entre ellos pasa desapercibido.
 - ¿El ganador queda claro al final, sin ambigüedad?
+
+## La boleta
+
+Un solo veredicto por juego, con las nueve cosas que un juego tiene que demostrar, armado con lo que los auditores ya dejan en su línea JSON. Un juego entra al selector con las nueve filas en verde más dos vetos humanos: el cultural y el del momento.
+
+```bash
+pnpm audit:todo --boleta <juego>                       # corre lo que alimenta la boleta y la arma
+node scripts/boleta.mjs <juego> --de docs/capturas/auditorias/<fecha>.json   # la arma sola con JSON ya guardados
+```
+
+Escribe `docs/capturas/boletas/<juego>.md` (no se versiona, como las auditorías) y, con `--json`, una línea `{"auditor":"boleta","objetivo":<juego>,"aprobadas":N,"total":9,…}`. Sale con 1 si no aprueba. `--de` acepta varios archivos separados por coma, el informe de la batería o líneas de resumen sueltas (la de `audit-nino --juzgar --json`); `--delatores <archivo>` suma el Bayes máximo del detalle de `audit-delatores --json <archivo>`.
+
+| # | Dimensión | De dónde sale | Verde si |
+|---|---|---|---|
+| 1 | Justicia | `audit-delatores` (aprobado y el Bayes máximo en %), `audit-rigor` (cero `Math.random`), `audit-game` (comprobación 2: el ganador es el del protocolo) | las tres |
+| 2 | Comprensión | `audit-nino` (corridas que pasan sobre el total) | el juego pasa |
+| 3 | Identificación | `audit-identidad` (con 8, con 18 y con 50) | 100 % con 8, 90 % o más con 18 |
+| 4 | Momento | `audit-emocion` y el veto del momento | todas las de emoción y el veto en ok |
+| 5 | Sala y proyector | `audit-legible`, `audit-mezcla` (si corrió), destellos y contorno de `audit-rigor` | todo aprobado; la mezcla sin correr se muestra gris, no roja |
+| 6 | Sin olor a apuesta | `audit-palabras` grupo `apuesta` y la pregunta `olor` de `audit-nino` | cero hallazgos |
+| 7 | Verdad y respeto | `check-lore` para la tarjeta del juego, `audit-palabras` grupo `vocabulario` y el veto cultural | fuente viva, cero hallazgos, veto ok |
+| 8 | Robustez | `audit-rigor` (2, 60 y 200 personas, fugas, saltar), `audit-game` (celular, temas, inglés), `smoke` | todo aprobado |
+| 9 | Ganas de volver | la revisión de la experiencia, con la rúbrica de 10 criterios (puntaje sobre 30), leído de `docs/boletas-vetos.json` | 24 o más sobre 30 y sin patrón oscuro; sin entrada, pendiente (gris) |
+
+**Verde, rojo y gris.** Cada fila junta partes. Una parte es verde si pasó, roja si falló y gris si no hay dato: el auditor no corrió, todavía no existe o falta un veto. La fila es roja si alguna parte lo es, gris si no hay rojas pero sí grises, y verde solo si todas lo son. Una fila gris no es verde: la boleta aprueba únicamente con las nueve en verde. Como el resumen de un auditor trae solo lo que falló, «pasó» quiere decir que la corrida existe y ninguna falla le toca al juego (en una corrida de `todos`, las fallas con el prefijo de otro juego no cuentan). `audit:todo --boleta <juego>` corre además `audit-palabras <juego>` (sin Chrome); sus fallas se llaman `apuesta: <unidad>` o `vocabulario: <unidad>` y cada juego toma las de su unidad. La pregunta del olor de `audit-nino` queda en la fila 6: la fila 2 no la cuenta como falta de comprensión, y si no hubo respuestas la parte queda gris.
+
+**Los vetos humanos** viven en `docs/boletas-vetos.json` (versionado, chico): `{ "<juego>": { "cultural": { "ok": true, "fecha": "2026-11-02", "nota": "tarjeta y fuente leídas" }, "momento": { "ok": false }, "volver": { "puntaje": 24, "de": 30, "fecha": "2026-11-02", "patronOscuro": false, "nota": "…" } } }`. Sin entrada, la fila dice «pendiente». Los escribe a mano quien organiza el proyecto; la boleta solo los lee.
+
+**Lo que la boleta no tiene todavía.** La línea JSON de un auditor trae aprobadas, total y fallas, no cada cifra: el Bayes máximo solo está en el detalle de delatores (y solo de la recta de la carrera), y los porcentajes de identificación no están en ninguna línea. Donde falta la cifra, la celda dice «sin cifra» o «sin auditor» y la fila queda gris o verde con esa nota; los auditores no se tocaron para sacar más.
+
+## Qué juegos se ven en 3D por defecto
+
+Desde el 4 de noviembre de 2026, seis juegos del selector se ven en 3D sin que nadie toque nada, porque su versión en 3D ganó la comparación a ciegas: la carrera de llamas, el trompo, la piñata, El Toborochi, el sapo y el Guajojó (la lista es `JUEGOS_CON_3D` en `src/games/tres/ofrecidos.ts`; los otros cuatro siguen en PixiJS 2D). Se vuelve al 2D con el interruptor «En 3D / En 2D» bajo el selector (la elección se recuerda en ese navegador y si alguien lo apagó queda apagado), con `?motor=clasico` o `?motor=2d` en la dirección. El 3D no corre, sin aviso, en un equipo sin WebGL, con ahorro de datos, con conexión de 3G o menos, con el modo para compartir ni en los más justos (2 GB o 2 núcleos o menos); ahí el show es el 2D y el interruptor no aparece. La carrera, que fue la que midió más pesado, arranca sola en 3D recién con más de 4 núcleos y más de 4 GB (el interruptor sigue y la prende a mano). La demo (`?demo=`) y la escena fija (`?pose=`) siguen la misma regla. Detalle de la regla y de las medidas en [motores.md](motores.md).
+
+**Los auditores y el 3D.** `audit-game`, `audit-rigor`, `audit-identidad` y `audit-sound` ya no mandan `?motor=pixi` si no se les dice: miran lo que ve la sala, o sea el 3D en esos seis juegos. `--motor pixi` mira el 2D de esos juegos, `--motor 3d` fuerza el 3D en cualquiera que tenga versión y `--motor clasico` el motor anterior. El resto (choques, física, encuadre, delatores, legible, niño, pantalla, emoción) siguen con `--motor pixi` por defecto. `?instant=1` se salta el show, así que tampoco hay 3D. Para medir cuadros por segundo con la CPU frenada cuatro veces, `node scripts/medir-3d.mjs` (la compuerta: 30 cuadros por segundo y el 95 % bajo 70 ms con 18 y con 60 personas en un celular de 390 por 844).
 
 ## Juegos actuales
 
-Los ocho del selector, en su orden: el de la auditoría de juegos, de las salas chicas a las grandes. **De pie y El Trueque salieron del selector el 26 de octubre de 2026** (decisión del proyecto: El Trueque no pasa la prueba del niño y De pie es un juego de leer que un chico de cinco años no sigue; la prueba del niño pide que cualquier cuadro de un juego diga, sin leer, quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar): siguen abriendo con `?demo=quien` y `?demo=trueque` (De pie vive sobre el kit: `crearJuego`, el primero en migrar, el 26 de octubre de 2026), sus archivos no se tocan, sus botones quedan en `index.html` apagados (`hidden`: `audit-game` dice «apagado»), y salieron de `SELECTOR` en `src/ui/recomendar.ts` y `scripts/lib/juegos.mjs` y de `RANGOS`. Con la lista sellada, el selector los reordena según cuántas personas hay ([`src/ui/recomendar.ts`](../src/ui/recomendar.ts)).
+Los diez del selector, en su orden: los ocho de la auditoría de juegos, de las salas chicas a las grandes, y al final el Guajojó y El Toborochi (entraron el 2 de noviembre de 2026, después de pasar la batería, la prueba de justicia y la prueba del niño). **De pie y El Trueque salieron del selector el 26 de octubre de 2026** (decisión del proyecto: El Trueque no pasa la prueba del niño y De pie es un juego de leer que un chico de cinco años no sigue; la prueba del niño pide que cualquier cuadro de un juego diga, sin leer, quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar): siguen abriendo con `?demo=quien` y `?demo=trueque` (De pie vive sobre el kit: `crearJuego`, el primero en migrar, el 26 de octubre de 2026), sus archivos no se tocan, sus botones quedan en `index.html` apagados (`hidden`: `audit-game` dice «apagado»), y salieron de `SELECTOR` en `src/ui/recomendar.ts` y `scripts/lib/juegos.mjs` y de `RANGOS`. Con la lista sellada, el selector los reordena según cuántas personas hay ([`src/ui/recomendar.ts`](../src/ui/recomendar.ts)).
 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
@@ -564,8 +805,10 @@ Los ocho del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | La Entrada (antes Carnaval de Oruro) | `oruro` | Módulo propio (solo motor nuevo), por fraternidades | 200, pensado de 30 a 200 | [la-entrada.md](juegos/la-entrada.md) |
+| Guajojó | `guajojo` | Kit de juegos (`crearJuego`), motor PixiJS | 200, ideal de 8 a 30 | [guajojo.md](juegos/guajojo.md): el sendero del monte de noche, el palo seco que abre los ojos, el crac y el amanecer |
+| El Toborochi | `toborochi` | Kit de juegos (`crearJuego`), motor PixiJS | 200, ideal de 8 a 40 | [toborochi.md](juegos/toborochi.md): el árbol de Santa Cruz en flor, el surazo que se lleva flores y el colibrí que se posa en una |
 
-**El selector quedó en diez** el 21 de octubre de 2026, con la auditoría de juegos: entró El Trueque, la fusión del Aguayo y la Constelación, y esos dos salieron. La tómbola había salido el 20, cuando el selector empezó a recomendar según la cantidad de personas. **Y quedó en ocho el 26 de octubre de 2026,** cuando salieron De pie y El Trueque (arriba). Todos siguen abriendo con `?demo=` y conservan su captura (`public/juegos/<juego>.webp`, que también es el fondo de su tarjeta de cómo se juega), pero salieron de la página de juegos y de la portada, igual que los que salieron antes: la página muestra lo que se puede elegir. Si la ruleta está elegida y hay más de doscientas personas, el sorteo sigue pasando a la tómbola, aunque no tenga botón (`showFrozen` en `src/ui/freeze.ts` y `playableGame` en `src/state.ts`).
+**El selector quedó en diez** el 21 de octubre de 2026, con la auditoría de juegos: entró El Trueque, la fusión del Aguayo y la Constelación, y esos dos salieron. La tómbola había salido el 20, cuando el selector empezó a recomendar según la cantidad de personas. **Y quedó en ocho el 26 de octubre de 2026,** cuando salieron De pie y El Trueque (arriba). **Volvió a diez el 2 de noviembre de 2026**, cuando entraron el Guajojó y El Toborochi. Todos siguen abriendo con `?demo=` y conservan su captura (`public/juegos/<juego>.webp`, que también es el fondo de su tarjeta de cómo se juega), pero salieron de la página de juegos y de la portada, igual que los que salieron antes: la página muestra lo que se puede elegir. Si la ruleta está elegida y hay más de doscientas personas, el sorteo sigue pasando a la tómbola, aunque no tenga botón (`showFrozen` en `src/ui/freeze.ts` y `playableGame` en `src/state.ts`).
 
 **Luz roja, luz verde salió del selector** el 5 de octubre de 2026, cuando entró la Chovena: cubría la misma necesidad (parar y seguir), pero sin nombre boliviano, con la sombra de una serie de apuestas y con un Faro que era un concepto técnico escondido.
 
@@ -582,3 +825,5 @@ Los ocho del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Constelación Stellar (salió el 21 de octubre de 2026; la reemplaza El Trueque) | `stellar` | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | De pie, antes ¿Quién es? (salió el 26 de octubre de 2026) | `quien` | [quien-es.md](juegos/quien-es.md) |
 | El Trueque (salió el 26 de octubre de 2026) | `trueque` | [trueque.md](juegos/trueque.md) |
+
+**En camino al selector:** ninguno por ahora. Un juego nuevo nace apagado (`?demo=<id>` lo abre) y entra con `node scripts/nuevo-juego.mjs --encender <juego>` al pasar la batería y con el sí de quien mantiene el proyecto.

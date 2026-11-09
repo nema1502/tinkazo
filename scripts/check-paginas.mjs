@@ -23,7 +23,7 @@ const base = (() => {
   return i >= 0 && args[i + 1] ? args[i + 1] : "http://localhost:4173";
 })();
 
-const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable"];
+const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "ruleta-de-nombres", "sorteo-para-eventos", "marca"];
 const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },
@@ -89,7 +89,9 @@ try {
       // abajo figuran como no cargadas sin estar rotas. Y se baja de a una
       // pantalla, como quien lee: saltando directo al final, en un celular
       // las del medio de una página larga nunca entraban en pantalla.
-      for (let i = 0; i < 40; i++) {
+      // Hasta 90 pantallas: la página de marca mide unas 44 en un celular, y con 40
+      // las imágenes del final quedaban sin pedir y se contaban como rotas.
+      for (let i = 0; i < 90; i++) {
         const fin = await page.eval("window.scrollBy(0, window.innerHeight); window.innerHeight + window.scrollY >= document.body.scrollHeight - 2");
         await sleep(120);
         if (fin === true || fin === "true") break;
@@ -119,7 +121,7 @@ try {
       // arriba y no contra un número: con un número, agregar una página
       // obligaba a acordarse de cambiarlo acá.
       const faltan = PAGINAS.filter((p) => !r.enlaces.includes(`/${p}.html`));
-      check(faltan.length === 0 && r.enlaces.length === PAGINAS.length + 1, `${etiqueta}: el pie lleva a todas`, faltan.length ? `falta ${faltan.join(", ")}` : `${r.enlaces.length} enlaces`);
+      check(faltan.length === 0 && r.enlaces.length === PAGINAS.length + 3, `${etiqueta}: el pie lleva a todas`, faltan.length ? `falta ${faltan.join(", ")}` : `${r.enlaces.length} enlaces`);
       if (como === "celular") check(r.toque, `${etiqueta}: blancos de toque de 44 px`);
       check(page.exceptions.length === 0, `${etiqueta}: sin excepciones`, page.exceptions[0] ?? "");
     }

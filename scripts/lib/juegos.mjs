@@ -9,10 +9,10 @@ import { readFileSync } from "node:fs";
  */
 
 /**
- * Los ocho del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir.
+ * Los diez del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir (el Guajojó y El Toborochi entraron el 2 de noviembre de 2026).
  * De pie y El Trueque salieron el 26 de octubre de 2026 (siguen abriendo con `?demo=`).
  */
-export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"];
+export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"];
 
 /**
  * Los que salieron del selector y siguen abriendo con `?demo=`. No entran en un
@@ -56,18 +56,18 @@ export function juegosDelKit(raiz = new URL("../..", import.meta.url)) {
 }
 
 /**
- * Los diez que hoy se pueden abrir y se auditan por completo: los ocho del selector y los dos que salieron el 26 de
- * octubre de 2026 (De pie y El Trueque, que siguen con su juego, su letra y su golpe de cámara). Un `todos` mira los ocho;
- * `diez` mira estos.
+ * Los doce que hoy se pueden abrir y se auditan por completo: los diez del selector y los dos que salieron el 26 de
+ * octubre de 2026 (De pie y El Trueque, que siguen con su juego, su letra y su golpe de cámara). Un `todos` mira los diez;
+ * `doce` mira estos (hasta el 2 de noviembre de 2026 eran ocho más dos y se pedían con «diez»).
  */
-export const LOS_DIEZ = [...SELECTOR, "quien", "trueque"];
+export const LOS_DOCE = [...SELECTOR, "quien", "trueque"];
 
 /**
- * Los juegos de un pedido: "todos" son los del selector; "diez", los del selector más los dos que salieron (De pie y El
+ * Los juegos de un pedido: "todos" son los del selector; "doce", los del selector más los dos que salieron (De pie y El
  * Trueque), para que ningún juego que todavía abre se quede sin auditar; una lista con comas, esos.
  */
 export function juegosDe(cual) {
   if (!cual || cual === "todos") return [...SELECTOR];
-  if (cual === "diez") return [...LOS_DIEZ];
+  if (cual === "doce") return [...LOS_DOCE];
   return String(cual).split(",").map((j) => j.trim()).filter(Boolean);
 }

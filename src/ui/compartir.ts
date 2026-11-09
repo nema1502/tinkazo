@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
-import { acortar } from "../enlace-corto";
+import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
+import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
@@ -78,6 +79,11 @@ export interface DatosSorteo {
   ref?: Ref | undefined;
   /** Se siguió sin sello: el mensaje y la foto lo dicen, para que nadie crea que se puede comprobar. */
   sinSello?: boolean;
+  /**
+   * El logo de la comunidad con el que se selló (`logo.ts`): va en la foto y,
+   * cifrado, en el enlace corto. No cambia el mensaje ni el comprobante.
+   */
+  logo?: Logo;
 }
 
 /**
@@ -108,13 +114,13 @@ type ConMarca = Parameters<typeof esSinSello>[0];
 /**
  * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
  * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
- * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores ·
+ * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores.
  * Sin sello: no se puede comprobar."
  */
 export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
     const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`;
-    return esSinSello(s) ? `${linea} · ${cad(lang, "redSinSelloEtiqueta")}` : linea;
+    return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
 }
 
@@ -152,7 +158,7 @@ function fechaLarga(lang: Lang, segundos?: number): string {
   );
 }
 
-/** El rótulo de arriba: "Sorteo #278 · red de prueba · 21 de octubre de 2026", o "Resultado del sorteo" si no se ancló. */
+/** El rótulo de arriba: "Sorteo #278, red de prueba, 21 de octubre de 2026", o "Resultado del sorteo" si no se ancló. */
 function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
   return [
     d.numero ? rellenar(cad(lang, "fotoNumero"), { n: d.numero }) : cad(lang, "imgKicker"),
@@ -162,13 +168,15 @@ function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
     fechaLarga(lang, d.fecha),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(", ");
 }
 
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   const varios = d.ganadores.length > 1;
   return {
+    // El logo, y el "Hecho con Tinkazo" que va siempre a su lado. Sin logo, la foto es la de siempre, píxel por píxel.
+    ...(d.logo ? { logo: d.logo, hecho: cad(lang, "logoHecho") } : {}),
     rotulo: rotuloDeSorteo(lang, d),
     titulo: cad(lang, varios ? "imgGanaron" : "imgGano"),
     personas: d.ganadores,
@@ -191,13 +199,14 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
  * "Sin sello: no se puede comprobar."; con alguno, junto al QR tampoco dice
  * "comprobarlo" (el QR abre la página del evento, que dice cuál es cuál).
  */
-export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string): Foto {
+export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string, logo?: Logo | null): Foto {
   const n = sorteos.length;
   const enOrden = enOrdenDeSalida(sorteos);
   const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const hayUnoSinSello = cuantosSinSello(sorteos) > 0;
   return {
-    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(" · "),
+    ...(logo ? { logo, hecho: cad(lang, "logoHecho") } : {}),
+    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(", "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
     filas: enOrden.map((s) => ({
@@ -467,6 +476,9 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
     {
       titulo: cad(lang, "cmpSorteo"),
       preparar: async () => {
+        // El logo va dentro del enlace corto, cifrado; el largo y el comprobante no lo llevan.
+        // Sin logo también: uno que se quitó después de sellar no puede seguir viajando en el corto.
+        ponerLogoDeRuta(rutaDe(d.enlace), d.logo);
         const c = op.corto === false ? null : await acortar(d.enlace);
         const enlace = c?.corto ?? d.enlace;
         return {
@@ -503,9 +515,9 @@ export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores
 }
 
 /** Desde Mis sorteos: el comprobante trae el número de personas, el premio, la fecha y el número del sorteo. */
-export async function compartirSorteo(enlace: string, ganadores: string[], lang: Lang = getLang()): Promise<void> {
+export async function compartirSorteo(enlace: string, ganadores: string[], lang: Lang = getLang(), logo?: Logo | null): Promise<void> {
   const comprobante = await decodeProof(enlace.slice(enlace.indexOf("#")));
-  abrirSorteo(datosDeComprobante(comprobante, enlace, ganadores), lang);
+  abrirSorteo({ ...datosDeComprobante(comprobante, enlace, ganadores), ...(logo ? { logo } : {}) }, lang);
 }
 
 /* -------------------------------------------------------------------- evento */
@@ -530,7 +542,7 @@ export async function paqueteDeEvento(
   const parte = (i: number): string => rellenar(cad(lang, "evParte"), { i, n });
   const partes = await Promise.all(
     grupos.map(async (g, i) => {
-      const tt = n > 1 ? `${titulo} · ${parte(i + 1)}` : titulo;
+      const tt = n > 1 ? `${titulo}: ${parte(i + 1)}` : titulo;
       return { titulo: tt, enlace: await eventoUrl(tt, g, base), sorteos: g };
     }),
   );
@@ -556,7 +568,7 @@ export async function prepararEvento(
   titulo: string,
   sorteos: SorteoDelEvento[],
   lang: Lang = getLang(),
-  op: { corto?: boolean; base?: string } = {},
+  op: { corto?: boolean; base?: string; logo?: Logo | null } = {},
 ): Promise<Listo> {
   sorteos = enOrdenDeSalida(sorteos);
   const lineas = lineasDeEvento(lang, sorteos);
@@ -564,11 +576,14 @@ export async function prepararEvento(
   const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const archivo = archivoDe(undefined, fecha);
   if (op.corto !== false) {
-    const c = await acortar(await eventoUrl(titulo, sorteos, op.base));
+    const largo = await eventoUrl(titulo, sorteos, op.base);
+    // El logo del evento (el de todos sus sorteos, si es el mismo) va solo dentro del enlace corto.
+    ponerLogoDeRuta(rutaDe(largo), op.logo);
+    const c = await acortar(largo);
     if (c) {
       return {
         mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello }),
-        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto)],
+        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto, op.logo)],
         archivo,
         corto: true,
       };
@@ -578,7 +593,7 @@ export async function prepararEvento(
   const partes = r?.partes ?? [];
   return {
     mensaje: r?.mensaje ?? "",
-    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace)),
+    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace, op.logo)),
     ...(partes.length > 1 ? { nota: rellenar(cad(lang, "evAvisoPartes"), { n: partes.length }) } : {}),
     archivo,
     corto: false,
@@ -586,7 +601,7 @@ export async function prepararEvento(
 }
 
 /** Compartir un evento: la foto (o una por parte) y el mensaje con quién ganó qué. */
-export async function compartirEvento(titulo: string, sorteos: SorteoDelEvento[], lang: Lang = getLang()): Promise<void> {
+export async function compartirEvento(titulo: string, sorteos: SorteoDelEvento[], lang: Lang = getLang(), logo?: Logo | null): Promise<void> {
   if (!sorteos.length) return;
-  abrirCompartir({ titulo: cad(lang, "histGrupoCompartir"), preparar: () => prepararEvento(titulo, sorteos, lang), medir: { evento: true } }, lang);
+  abrirCompartir({ titulo: cad(lang, "histGrupoCompartir"), preparar: () => prepararEvento(titulo, sorteos, lang, { logo }), medir: { evento: true } }, lang);
 }

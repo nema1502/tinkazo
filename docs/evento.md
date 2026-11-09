@@ -20,7 +20,7 @@ Sorteos del 20 de octubre de 2026 (4 sorteos), todos verificables.
 Si querés verificarlos, entrá acá:
 https://tinkazo.app/evento.html#…
 
-Sorteado con Tinkazo · https://tinkazo.app
+Sorteado con Tinkazo: https://tinkazo.app
 ```
 
 Cuando el evento se reparte en varios enlaces, el botón dice cuántos (**Compartir el evento (3 partes)**), y el mensaje trae un enlace por parte.
@@ -49,6 +49,7 @@ Lo que se comparte es lo mismo que sale en la pantalla del sorteo:
 
 - **El mensaje**, en el idioma de quien comparte: quién ganó, entre cuántos, el premio, el enlace de verificación y el pie. Se copia, o se manda por WhatsApp (el enlace de WhatsApp lo abre con el texto puesto).
 - **La imagen con el QR**, un PNG de 1080 × 1350: el título (el premio, o el nombre del evento), quién ganó, el QR del enlace y «Escaneá y comprobalo vos». Se dibuja en el navegador, como el QR, sin servicios de afuera. En el celular, **Compartir la imagen con el QR** abre el menú del sistema con la imagen y el mensaje; en la computadora, **Bajar la imagen con el QR** la baja.
+- **El logo de la comunidad**, si quien organiza puso uno (`docs/ux.md`): va arriba a la derecha de la imagen, con «Hecho con Tinkazo», y dentro del enlace corto, cifrado. En un evento, la página y la imagen llevan el logo solo si todos sus sorteos se sellaron con el mismo; si difieren, ninguno. Un enlace largo no lo lleva.
 
 Un QR no lleva más de unos 2.900 caracteres de enlace. Un sorteo con muchas personas puede pasar de ese tamaño: entonces no hay imagen, y el mensaje trae el enlace igual. Lo mismo pasa en la pantalla de «Mostrar en grande», que dibuja el mismo QR.
 

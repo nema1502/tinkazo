@@ -5,12 +5,14 @@ import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
 import { guardarBorrador } from "./participants";
-import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
-import { type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
+import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
+import { errorDeCodigo } from "./ingreso-errores";
+import { esDeRed } from "../stellar/errores";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -119,7 +121,14 @@ export const canAnchor = (): boolean => anchoringAvailable && session !== null &
  * En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta
  * del sorteo y el botón de sellar. En el ensayo sí, porque no se graba nada.
  */
-const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enEnsayo();
+const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enPractica();
+
+/**
+ * La clave del texto de "Sellar la lista" cuando está en reposo: sin cuenta dice "Entrar para sellar" (tocarlo abre la
+ * entrada y no sella), y con cuenta o en el ensayo, "Sellar la lista". La usan todos los que le devuelven su texto
+ * (`freeze.ts`, `red.ts`), para que ninguno lo pise.
+ */
+export const claveDeSellar = (): "sigEntrarSellar" | "freeze" => (sinCuentaParaSellar() ? "sigEntrarSellar" : "freeze");
 
 /** Vuelve a pintar la puerta: al entrar al ensayo, que no pide cuenta. */
 export function refrescarPuerta(): void {
@@ -449,7 +458,7 @@ function render(): void {
   pintarCuenta();
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable || !session) return;
-  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
+  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true, undefined, false);
   void refreshFunds();
 }
 
@@ -495,7 +504,7 @@ function pintarCuenta(): void {
     // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
     if (grifoApagado) {
       net.classList.add("sin-grifo");
-      net.textContent = `${t("netTest")} · ${t("grifoOffTag")}`;
+      net.textContent = `${t("netTest")}, ${t("grifoOffTag")}`;
       net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
     }
     box.appendChild(net);
@@ -504,7 +513,7 @@ function pintarCuenta(): void {
   const chip = crearChip(e, { tx: t, recien: recienEntro });
   if (e.estado === "dentro" && session) {
     // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
-    chip.title = `${session.label} · ${session.address}`;
+    chip.title = `${session.label}: ${session.address}`;
     chip.addEventListener("click", () => void showAccount());
   } else if (e.estado === "fuera") {
     // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
@@ -565,13 +574,18 @@ function applyGate(): void {
   // nadie con una puerta que no tiene llave.
   const locked = sinCuentaParaSellar();
   body?.classList.toggle("locked", locked);
-  // El botón de sellar no se apaga con la clase: queda a la vista y con
-  // aria-disabled, que es lo que lee un lector de pantalla. freeze() no lo
-  // sella sin cuenta, y la línea debajo dice qué falta.
+  // Sin cuenta, el botón de sellar sigue con el color de la casa y dice "Entrar para sellar": tocarlo abre la entrada
+  // con su motivo, y freeze() no sella nada. `aria-disabled` es la marca de que abre la entrada y no sella (main.ts).
   const sellar = document.getElementById("btn-freeze");
-  if (locked) sellar?.setAttribute("aria-disabled", "true");
-  else sellar?.removeAttribute("aria-disabled");
-  if (!locked) {
+  if (sellar) {
+    if (locked) sellar.setAttribute("aria-disabled", "true");
+    else sellar.removeAttribute("aria-disabled");
+    // Apagado es que se está sellando: su texto es el de ese paso, y no se pisa.
+    if (!(sellar as HTMLButtonElement).disabled) refreshFreezeLabel();
+  }
+  // La línea que pedía entrar encima de "Pegar lista" ya no va: el botón de la cabecera y el de sellar lo piden. Queda
+  // solo para lo que pasa ahora: retomar la sesión, conectar, o pedir el toque que el navegador exige.
+  if (!locked || !(retomando || conectando || pidiendoEntrar)) {
     gate.style.display = "none";
     return;
   }
@@ -579,7 +593,7 @@ function applyGate(): void {
   // hablaba de grabar en Stellar y de a quién atribuirlo, y dejaba "Sellar la
   // lista" una pantalla más abajo (diseño del onboarding, 22 de octubre de
   // 2026). La cuenta se resuelve al principio, desde la portada; acá queda la
-  // línea con su botón secundario, que es lo que usan los auditores.
+  // línea con su botón secundario.
   // La puerta se vuelve a armar cada vez que cambia algo de la cuenta (el idioma, entrar, el ensayo): si el botón tenía el
   // foco, el botón nuevo lo recibe. Sin esto, "Entrar" desde una página de lectura dejaba el foco en el aire en cuanto
   // la herramienta terminaba de armarse (pedirEntrar).
@@ -588,11 +602,11 @@ function applyGate(): void {
   const p = document.createElement("p");
   // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
   const ocupada = retomando || conectando;
-  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : pidiendoEntrar ? "cuentaPideGoogle" : "gateLinea");
+  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : "cuentaPideGoogle");
   gate.appendChild(p);
   gate.classList.toggle("retomando", ocupada);
   if (!ocupada) {
-    const b = pidiendoEntrar ? button(t("cuentaPideEntrar"), "ghost", () => void entrar()) : button(t("gateEntrar"), "ghost", () => void openPicker());
+    const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
     b.type = "button";
     gate.appendChild(b);
     if (teniaElFoco) b.focus({ preventScroll: true });
@@ -848,6 +862,15 @@ export async function openPicker(pedido: Pedido = {}): Promise<void> {
   abriendo = true;
   try {
     await abrirPicker(pedido);
+  } catch {
+    // El navegador conserva los import fallidos durante esta carga: repetir el
+    // mismo import no lo recupera aunque vuelva la red. Se usa la vuelta de
+    // ingreso existente, con el borrador guardado y otro gesto para recargar.
+    notice(t("loginAbrirFallo"), true, () => {
+      guardarBorrador();
+      try { sessionStorage.setItem(MARCA_INGRESAR, "1"); } catch { /* sin almacenamiento, el chip sigue ofreciendo entrar */ }
+      location.reload();
+    });
   } finally {
     abriendo = false;
   }
@@ -881,7 +904,7 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
   } else {
     options.push({
       label: t("loginWallet"),
-      small: `Freighter · ${t("loginInstall")} ↗`,
+      small: `Freighter, ${t("loginInstall")} ↗`,
       hint: t("freighterInstall"),
       icon: "wallet",
       pick: null,
@@ -1074,10 +1097,10 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       const { pollarWallet } = await import("../stellar/wallet-pollar");
       await pollarWallet.sendEmailCode(mail);
       codeStep(mail);
-    } catch {
+    } catch (e) {
       go.disabled = false;
       go.textContent = label;
-      say(err, t("loginSendFailed"));
+      say(err, errorDeCodigo(e, "enviar"));
     }
   }
 
@@ -1122,13 +1145,9 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
         // ese tipo y se retoma igual al recargar.
         await afterConnect(w, pollarWallet, address, "google", back, shut);
       } catch (e) {
-        const why = e instanceof Error ? e.message : "";
         go.disabled = false;
         go.textContent = t("loginCodeGo");
-        say(
-          err,
-          why === "EMAIL_CODE_INVALID" ? t("loginBadCode") : why === "EMAIL_CODE_EXPIRED" ? t("loginExpired") : t("loginFailed"),
-        );
+        say(err, errorDeCodigo(e, "verificar"));
         input.select();
       }
     }
@@ -1145,8 +1164,8 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
         const { pollarWallet } = await import("../stellar/wallet-pollar");
         await pollarWallet.sendEmailCode(mail);
         say(err, t("loginResent"), true);
-      } catch {
-        say(err, t("loginSendFailed"));
+      } catch (e) {
+        say(err, errorDeCodigo(e, "enviar"));
       }
       again.disabled = false;
     });
@@ -1309,7 +1328,9 @@ async function disconnect(): Promise<void> {
 }
 
 async function walletErrorText(e: unknown): Promise<string> {
-  const { WALLET_ERRORS } = await lite();
+  // El clasificador tampoco puede depender de que la descarga que falló vuelva a funcionar.
+  const WALLET_ERRORS = await lite().then((w) => w.WALLET_ERRORS).catch(() => null);
+  if (!WALLET_ERRORS) return t("walletUnknown");
   const msg = e instanceof Error ? e.message : String(e);
   if (msg === WALLET_ERRORS.notInstalled) return t("freighterInstall");
   if (msg === WALLET_ERRORS.rejected) return t("walletRejected");
@@ -1319,11 +1340,12 @@ async function walletErrorText(e: unknown): Promise<string> {
   if (msg === WALLET_ERRORS.popupBlocked) return t("cuentaBloqueada");
   if (msg === WALLET_ERRORS.popupClosed) return t("cuentaCerrada");
   if (msg === WALLET_ERRORS.popupNoSession) return t("cuentaSinSesion");
-  return t("walletUnknown");
+  return t(esDeRed(e) ? "loginConexion" : "walletUnknown");
 }
 
 /**
- * Un aviso breve. El de un error flota sobre el pie de página y se va solo.
+ * El aviso de error persiste con una acción y un cierre explícito; con la
+ * ventana de ingreso abierta se dibuja dentro de su tarjeta, sin tapar la X.
  *
  * El de que algo salió bien ("Cuenta de prueba lista…") va dentro de la página,
  * arriba de la lista, donde estaba el botón para entrar, así que no tapa nada:
@@ -1333,18 +1355,39 @@ async function walletErrorText(e: unknown): Promise<string> {
  * o tecla, después de que el toque llegó a su botón (si la página se moviera
  * antes, el toque caería en otro lado), o a los diez segundos.
  */
-function notice(text: string, bad: boolean): void {
+function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true): void {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
-  el.textContent = text;
   if (bad) {
-    // Un error se anuncia enseguida a los lectores de pantalla (y se va solo a los siete segundos).
+    // Persiste hasta que la persona elija cómo seguir; no pierde su acción a los siete segundos.
     el.setAttribute("role", "alert");
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 7000);
+    const login = document.querySelector<HTMLElement>(".modal-card.login");
+    const frase = document.createElement("p");
+    frase.textContent = text;
+    const acciones = document.createElement("div");
+    acciones.className = "wallet-notice-acciones";
+    if (reintentar) {
+      acciones.append(button(t("loginRecargar"), "ghost", () => { el.remove(); reintentar(); }));
+    } else if (otraVia && !login) {
+      // Con la ventana de ingreso abierta las otras formas ya están ahí, a la vista: el aviso solo se cierra.
+      acciones.append(button(t("loginOtraVia"), "ghost", () => { el.remove(); void openPicker(); }));
+    }
+    acciones.append(button(t("loginClose"), "ghost", () => el.remove()));
+    el.append(frase, acciones);
+    if (login) {
+      // Dentro de la tarjeta y no flotando: arriba tapaba la X para cerrarla, abajo el campo del correo.
+      el.classList.add("en-tarjeta");
+      // Pegado debajo del botón de Google: arriba empujaba la tarjeta y a 320 px había que scrollear para volver al botón.
+      const google = login.querySelector<HTMLElement>(".login-google");
+      if (google) {
+        el.classList.add("bajo-boton");
+        google.after(el);
+      } else login.insertBefore(el, login.querySelector(".login-body"));
+    } else document.body.appendChild(el);
     return;
   }
+  el.textContent = text;
   el.setAttribute("role", "status");
   const lista = document.querySelector<HTMLElement>("#sec-participants .body");
   const cabecera = document.querySelector("body > header");

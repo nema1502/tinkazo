@@ -16,8 +16,8 @@ export const T_VUELO = 3;
  * show se comprime hasta 0,82 (con 2 personas; 0,86 con 9 o más): 3,7 s del plan son 3 s de verdad, lo que hace falta para leer.
  */
 export const T_NOMBRES = 3.7;
-/** Los segundos de la recta final, sin estirar (la foto del duelo suma unos décimos). */
-export const DUR_FINAL = 15;
+/** Los segundos de la recta final, sin estirar (el reloj de la recta, `carrera-ritmo.ts`, los reparte: la cámara lenta del duelo suma unos décimos). */
+export const DUR_FINAL = 15.1;
 /** La recta mide esto, en anchos de pantalla. */
 export const RECTA = 2;
 /** Los segundos que no se estiran: el sostén del cartel de quien gana y la cuenta de la sala. */

@@ -14,7 +14,7 @@
  *   pnpm audit:todo [--json] [--solo audit-ui,smoke] [--juegos trompo,oruro]
  *                   [--noche] [--fisica] [--todos-los-juegos]
  *                   [--base URL] [--out archivo.json] [--paralelo 1|2]
- *                   [--simular] [--progreso] [--construir]
+ *                   [--simular] [--progreso] [--construir] [--boleta <juego>]
  *
  * - Sin `--solo` corren los de nivel `siempre`; `--noche` suma la mezcla de
  *   sonido (inestable con carga) y los dos temas de la QA de flujo; `--fisica`
@@ -28,15 +28,20 @@
  *   cualquier auditor: {"auditor":"audit-todo","aprobadas","total","fallas",…}.
  * - El archivo va a `docs/capturas/auditorias/<fecha-hora>.json` (no se
  *   versiona) y la salida entera de cada corrida, a una carpeta al lado.
+ * - Con `--boleta <juego>` corre lo que alimenta la boleta de ese juego (o lo de `--solo`), arma
+ *   `docs/capturas/boletas/<juego>.md` con el veredicto de las nueve dimensiones (ver `scripts/boleta.mjs`)
+ *   y termina con su línea JSON si se pidió `--json`.
  * - Apaga solo lo que lanzó, por PID. Nunca todos los Chrome.
  * - Sale con 1 si algo falló o si algún auditor se cayó sin dejar resumen.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agrupar, contar, correrEnPool, duracion, estimarSegundos, formatearResumen, informeDe, planDe, resumenDeBateria } from "./lib/bateria.mjs";
 import { correrTarea, levantarPreview, matarTodos } from "./lib/bateria-proceso.mjs";
+import { AUDITORES_DE_LA_BOLETA, corridasDe, resumenDeBoleta } from "./lib/boleta.mjs";
+import { escribirBoleta } from "./lib/boleta-archivo.mjs";
 import { quiereJson } from "./lib/resumen.mjs";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,15 +61,24 @@ const carpetaLogs = salida.replace(/\.json$/, "") + "-logs";
 const paralelo = Math.max(1, Math.min(2, Number(opt("--paralelo", "2")) || 2));
 const cdp = Number(opt("--cdp", process.env.CDP_PORT || "9680"));
 const json = quiereJson(args);
+// `--boleta <juego>`: solo ese juego y los auditores que alimentan la boleta, salvo que se pida otra cosa con --solo.
+const boletaDe = flag("--boleta") ? opt("--boleta", "") : "";
+if (flag("--boleta") && !boletaDe) {
+  console.error("--boleta pide el juego: `--boleta wheel`");
+  process.exit(2);
+}
+const soloPedido = lista(opt("--solo", "")).length ? lista(opt("--solo", "")) : boletaDe ? AUDITORES_DE_LA_BOLETA : [];
+const juegosPedidos = boletaDe ? [boletaDe] : lista(opt("--juegos", "")).length ? lista(opt("--juegos", "")) : null;
 
 let plan;
 try {
   plan = planDe({
-    solo: lista(opt("--solo", "")),
-    juegos: lista(opt("--juegos", "")).length ? lista(opt("--juegos", "")) : null,
+    solo: soloPedido,
+    juegos: juegosPedidos,
     noche: flag("--noche"),
     fisica: flag("--fisica"),
     todosLosJuegos: flag("--todos-los-juegos"),
+    boleta: !!boletaDe,
     base: opt("--base", "http://localhost:4180"),
   });
 } catch (e) {
@@ -112,11 +126,12 @@ try {
   }
   // Ahora que se sabe la base, se arma el plan de verdad.
   const real = planDe({
-    solo: lista(opt("--solo", "")),
-    juegos: lista(opt("--juegos", "")).length ? lista(opt("--juegos", "")) : null,
+    solo: soloPedido,
+    juegos: juegosPedidos,
     noche: flag("--noche"),
     fisica: flag("--fisica"),
     todosLosJuegos: flag("--todos-los-juegos"),
+    boleta: !!boletaDe,
     base: base || "http://localhost:4180",
   });
 
@@ -148,15 +163,22 @@ try {
     inicio: inicio.toISOString(),
     base: base || null,
     paralelo,
-    opciones: { solo: lista(opt("--solo", "")), juegos: lista(opt("--juegos", "")), noche: flag("--noche"), fisica: flag("--fisica"), todosLosJuegos: flag("--todos-los-juegos") },
+    opciones: { solo: soloPedido, juegos: juegosPedidos ?? [], noche: flag("--noche"), fisica: flag("--fisica"), todosLosJuegos: flag("--todos-los-juegos") },
   });
   mkdirSync(dirname(salida), { recursive: true });
   writeFileSync(salida, JSON.stringify(informe, null, 1));
 
   const mostrar = salida.startsWith(raiz) ? salida.slice(raiz.length + 1).replace(/\\/g, "/") : salida;
   console.log(formatearResumen(informe, { archivo: mostrar }).join("\n"));
-  if (json) console.log(JSON.stringify(resumenDeBateria(informe)));
-  process.exitCode = informe.fallas.length ? 1 : 0;
+  if (json && !boletaDe) console.log(JSON.stringify(resumenDeBateria(informe)));
+  if (boletaDe) {
+    // La boleta con el informe que se acaba de escribir.
+    const t = Date.now();
+    const { boleta, salida: archivoBoleta } = escribirBoleta({ raiz, juego: boletaDe, corridas: corridasDe(informe) });
+    console.log(`boleta de ${boletaDe}: ${boleta.aprueba ? "aprueba" : "no aprueba"}, escrita en ${archivoBoleta}`);
+    if (json) console.log(JSON.stringify(resumenDeBoleta(boleta, (Date.now() - t) / 1000)));
+    process.exitCode = boleta.aprueba ? 0 : 1;
+  } else process.exitCode = informe.fallas.length ? 1 : 0;
 } finally {
   preview?.parar();
   apagar();

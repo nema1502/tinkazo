@@ -1,5 +1,8 @@
 import { FINALISTAS, FIJOS, TARJETA, normalDe } from "./games/llamas/carrera-duracion";
 
+/** Cuánto promete «Normal» el Guajojó según la gente: sale de `guajojo-duracion.ts`, sin Pixi ni DOM. */
+export { normalGuajojo } from "./games/pixi/guajojo-duracion";
+
 /**
  * Cuánto dura la carrera según cuánta gente corre.
  *

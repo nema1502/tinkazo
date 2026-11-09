@@ -1,15 +1,19 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="titPrecios" data-desc-clave="descPrecios">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tinkazo, precios y cómo funciona</title>
-<meta name="description" content="Hoy Tinkazo es gratis. Estos son los precios previstos para cuando empecemos a cobrar. Participar en un sorteo y verificarlo es gratis, siempre." />
+<title>Precios de Tinkazo: participar y verificar es gratis</title>
+<meta name="description" content="Hoy Tinkazo es gratis. Estos son los precios previstos para cuando empecemos a cobrar, y te avisamos antes. Participar y verificar un sorteo es gratis, siempre." />
 <link rel="canonical" href="https://tinkazo.app/precios.html" />
-<meta property="og:title" content="Tinkazo, precios y cómo funciona" />
-<meta property="og:description" content="Hoy Tinkazo es gratis. Estos son los precios previstos para cuando empecemos a cobrar. Participar en un sorteo y verificarlo es gratis, siempre." />
+<link rel="alternate" hreflang="es" href="https://tinkazo.app/precios.html" />
+<link rel="alternate" hreflang="en" href="https://tinkazo.app/precios.html?lang=en" />
+<link rel="alternate" hreflang="x-default" href="https://tinkazo.app/precios.html" />
+<meta property="og:title" content="Tinkazo pricing: taking part and checking are free" />
+<meta property="og:description" content="Taking part and checking a result are free, always. The prices shown are planned for when we start charging, and we will tell you first. Participar y verificar son gratis." />
 <meta property="og:type" content="website" />
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<meta property="og:locale" content="es_BO" />
+<meta property="og:locale:alternate" content="en_US" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/precios.html" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -17,9 +21,15 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Tinkazo pricing: taking part and checking are free" />
+<meta name="twitter:description" content="Taking part and checking a result are free, always. The prices shown are planned for when we start charging, and we will tell you first. Participar y verificar son gratis." />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://tinkazo.app/precios.html#webpage","url":"https://tinkazo.app/precios.html","name":"Precios de Tinkazo: participar y verificar es gratis","description":"Hoy Tinkazo es gratis. Estos son los precios previstos para cuando empecemos a cobrar, y te avisamos antes. Participar y verificar un sorteo es gratis, siempre.","inLanguage":"es","isPartOf":{"@id":"https://tinkazo.app/#website"},"breadcrumb":{"@id":"https://tinkazo.app/precios.html#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://tinkazo.app/precios.html#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Tinkazo","item":"https://tinkazo.app/"},{"@type":"ListItem","position":2,"name":"Precios","item":"https://tinkazo.app/precios.html"}]}]}</script>
 </head>
 <body>
 <header>
@@ -28,6 +38,7 @@
     <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
@@ -37,7 +48,6 @@
           <a href="/precios.html" aria-current="page" data-i="navPrecios">Precios</a>
         </div>
       </div>
-      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
     </nav>
     <nav class="langs" aria-label="idioma">
       <button id="l-es" class="on">es</button>
@@ -71,15 +81,15 @@
     </table>
     <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 14px" data-i="prTablaNota">En Bolivia los precios van en bolivianos y en el resto de Latinoamérica, en dólares. Los bolivianos no son una conversión: son el precio de Bolivia.</p>
     <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prSponsorNota">La marca de un sponsor nunca va dentro del sorteo.</p>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prPatrocinioNota">Tinkazo cubre el costo de la red por sellar y sortear. Puede haber un tope por cuenta y por mes; si se agota, se puede pagar con la propia cuenta o esperar a que vuelva.</p>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prLogoNota">El logo de tu comunidad en el sorteo es gratis, para todos, y siempre lleva «Hecho con Tinkazo» al lado. Lo previsto para los planes pagos es otra cosa: sacar ese «Hecho con Tinkazo», los colores propios, el acta y el informe del evento. Todavía no existen, y te avisamos antes de cobrarlos.</p>
   </section>
 
   <section style="padding: 14px 0 0">
     <h2 class="kicker" data-i="prPayTitle">Cómo vas a pagar</h2>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prPayBody">Pensamos cobrar como se paga en tu país: con QR o tarjeta, en tu moneda (en Bolivia, con el QR de tu banco, en bolivianos). O con cripto (USDC o XLM) desde tu wallet, desde cualquier lugar. Hoy no cobramos nada.</p>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prPayBody">Pensamos cobrar como se paga en tu país: con QR o tarjeta, en tu moneda (en Bolivia, con el QR de tu banco, en bolivianos). Hoy no cobramos nada.</p>
     <p style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px">
       <span class="num" style="background:var(--yellow)" data-i="prPayM1">QR o tarjeta, en tu moneda</span>
-      <span class="num" style="background:var(--teal)" data-i="prPayM2">USDC</span>
-      <span class="num" style="background:var(--purple); color:var(--on-purple)" data-i="prPayM3">XLM</span>
     </p>
   </section>
   <section style="padding: 14px 0 0">
@@ -92,9 +102,12 @@
     </ul>
   </section>
   <section style="padding: 14px 0 30px">
-    <h2 class="kicker" data-i="nextTitle">Qué pasa por dentro</h2>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">Al cerrar la lista, se sella en Stellar antes de que exista el número que decide, y cualquier cambio posterior se nota. La red de Stellar cobra una comisión por grabar cada sorteo, que cambia con el uso de la red; en el plan Gratis la pagamos nosotros. Hoy Tinkazo funciona en la red de prueba de Stellar (testnet), que se borra entera el 16 de diciembre de 2026: tu comprobante sigue sirviendo para rehacer la cuenta.</p>
-    <a class="sec-link" href="/como-funciona.html#que-queda" data-i="prDuraLink">Qué queda de tu sorteo y por cuánto tiempo →</a>
+    <details class="tecnico">
+      <summary data-i="detalleT">Para quien quiera el detalle</summary>
+      <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. En el plan Gratis, el costo de la red lo paga Tinkazo. Hoy Tinkazo funciona en modo prueba: guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.</p>
+      <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="prPayCripto">También pensamos aceptar cripto (USDC o XLM) desde una wallet, desde cualquier lugar.</p>
+      <a class="sec-link" href="/como-funciona.html#que-queda" data-i="prDuraLink">Qué queda de tu sorteo y por cuánto tiempo →</a>
+    </details>
   </section>
   <section style="padding: 0 0 40px">
     <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
@@ -107,13 +120,18 @@
     <a href="/juegos.html" data-i="navJuegos">Juegos</a>
     <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
     <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/marca.html" data-i="navMarca">Marca</a>
     <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
     <a href="/precios.html" data-i="navPrecios">Precios</a>
     <a href="/terminos.html" data-i="navTerminos">Términos</a>
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
     <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="/ruleta-de-nombres.html" data-i="navRuleta">Ruleta de nombres</a>
+    <a href="/sorteo-para-eventos.html" data-i="navEventos">Sorteo para eventos</a>
     <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+    <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
+    <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>

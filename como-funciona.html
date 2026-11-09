@@ -1,15 +1,19 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="titComo" data-desc-clave="descComo">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cómo funciona un sorteo de Tinkazo</title>
-<meta name="description" content="Cinco pasos, sin jerga: la lista se sella, un número público del futuro decide, Stellar lo graba y cualquiera lo comprueba desde su celular." />
+<title>Cómo funciona un sorteo verificable en Tinkazo, paso a paso</title>
+<meta name="description" content="Cinco pasos sin jerga: la lista se sella, un número público del futuro decide y cualquiera comprueba el resultado desde su celular. Participar es gratis." />
 <link rel="canonical" href="https://tinkazo.app/como-funciona.html" />
-<meta property="og:title" content="Cómo funciona un sorteo de Tinkazo" />
-<meta property="og:description" content="Cinco pasos, y cada uno se puede comprobar." />
+<link rel="alternate" hreflang="es" href="https://tinkazo.app/como-funciona.html" />
+<link rel="alternate" hreflang="en" href="https://tinkazo.app/como-funciona.html?lang=en" />
+<link rel="alternate" hreflang="x-default" href="https://tinkazo.app/como-funciona.html" />
+<meta property="og:title" content="How Tinkazo selects a winner, step by step" />
+<meta property="og:description" content="Five plain steps: the list is sealed, a public number from the future selects the winner, anyone checks. Free to enter. Cinco pasos sin jerga, y cualquiera comprueba." />
 <meta property="og:type" content="website" />
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<meta property="og:locale" content="es_BO" />
+<meta property="og:locale:alternate" content="en_US" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/como-funciona.html" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -17,9 +21,15 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="How Tinkazo selects a winner, step by step" />
+<meta name="twitter:description" content="Five plain steps: the list is sealed, a public number from the future selects the winner, anyone checks. Free to enter. Cinco pasos sin jerga, y cualquiera comprueba." />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://tinkazo.app/como-funciona.html#webpage","url":"https://tinkazo.app/como-funciona.html","name":"Cómo funciona un sorteo verificable en Tinkazo, paso a paso","description":"Cinco pasos sin jerga: la lista se sella, un número público del futuro decide y cualquiera comprueba el resultado desde su celular. Participar es gratis.","inLanguage":"es","isPartOf":{"@id":"https://tinkazo.app/#website"},"breadcrumb":{"@id":"https://tinkazo.app/como-funciona.html#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://tinkazo.app/como-funciona.html#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Tinkazo","item":"https://tinkazo.app/"},{"@type":"ListItem","position":2,"name":"Cómo funciona","item":"https://tinkazo.app/como-funciona.html"}]}]}</script>
 </head>
 <body>
 <header>
@@ -28,6 +38,7 @@
     <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
@@ -37,7 +48,6 @@
           <a href="/precios.html" data-i="navPrecios">Precios</a>
         </div>
       </div>
-      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
     </nav>
     <nav class="langs" aria-label="idioma">
       <button id="l-es" class="on">es</button>
@@ -65,7 +75,7 @@
     </ol>
   </section>
 
-  <section class="portada-sec">
+  <section class="portada-sec" id="que-se-guarda">
     <h2 class="sec-t" data-i="cfGuardaT">Qué queda guardado y dónde</h2>
     <p class="sec-b" data-i="cfGuardaB">Lo que se graba en Stellar sigue a tu cuenta en cualquier equipo. Los nombres no: quedan en el navegador donde sellaste y en el comprobante. Si lo compartís o lo mostrás en grande, queda además una copia en Cloudflare para el enlace corto, protegida con una clave que va solo en el enlace: Tinkazo no la puede leer.</p>
     <table class="guarda">
@@ -88,6 +98,10 @@
       <li data-i-html="cfDura2"><b>La memoria del contrato:</b> 7 días en la red de prueba (testnet) y 120 en la red principal (mainnet). Es corta y no es lo que prueba el sorteo: lo prueba el sello.</li>
       <li data-i-html="cfDura3"><b>La red de prueba:</b> hoy Tinkazo funciona ahí, y Stellar la borra entera el 16 de diciembre de 2026, con los sellos y sus horas. Tu comprobante sigue sirviendo para rehacer la cuenta, pero nadie podrá confirmar la hora del sello.</li>
     </ul>
+    <details class="tecnico">
+      <summary data-i="cfCostoT">Para quien quiera el detalle: cuánto cuesta la red</summary>
+      <p class="sec-b" data-i-html="cfCostoB">Grabar cada sorteo en la red tiene un costo. Lo cobra la red, no Tinkazo, y casi todo es renta de almacenamiento: cambia con el uso de la red. En el plan Gratis lo paga Tinkazo. Las cifras medidas, con su fecha, están en <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.</p>
+    </details>
     <p class="sec-b promesa" data-i="cfDuraPromesa">Este comprobante lleva lo necesario para volver a comprobar el sorteo con herramientas abiertas. La hora del sello la confirman los archivos públicos de Stellar mientras existan: nadie garantiza ese plazo, tampoco nosotros. Guardalo.</p>
   </section>
 
@@ -123,13 +137,18 @@
     <a href="/juegos.html" data-i="navJuegos">Juegos</a>
     <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
     <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/marca.html" data-i="navMarca">Marca</a>
     <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
     <a href="/precios.html" data-i="navPrecios">Precios</a>
     <a href="/terminos.html" data-i="navTerminos">Términos</a>
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
     <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="/ruleta-de-nombres.html" data-i="navRuleta">Ruleta de nombres</a>
+    <a href="/sorteo-para-eventos.html" data-i="navEventos">Sorteo para eventos</a>
     <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+    <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
+    <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>

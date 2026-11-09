@@ -7,24 +7,28 @@ import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
 import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
-import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
+import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
+import { apruebaAMano, canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
-import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
-import { contar, errorContable } from "../contar";
-import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
+import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
+import { logoParaSellar } from "../logo-guardado";
+import { contar, errorContable, origenActual } from "../contar";
+import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinPatrocinio, mostrarSinSaldo, patrocinioDelError, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
+import { pintarVer3D } from "./ver3d";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -78,19 +82,91 @@ export function rotarJuego(): void {
   juegoAMano = false;
 }
 
+/**
+ * Después del resultado, un toque en el selector vuelve a mostrar ese mismo resultado con el juego tocado
+ * (`draw.ts`, `verDeNuevo`). Se registra desde `draw.ts`: este archivo no lo importa.
+ */
+let alElegirConResultado: ((g: Game) => void) | null = null;
+export function alElegirDespuesDelResultado(f: (g: Game) => void): void {
+  alElegirConResultado = f;
+}
+
 /** Un toque en el selector: el juego que se eligió, y que ya no se cambia solo. */
 export function elegirJuego(g: Game): void {
+  // Ya hay resultado: el juego no cambia lo que salió, solo cómo se ve. Se vuelve a ver con el juego tocado,
+  // salvo mientras corre el show (el selector está apagado y dice por qué: `marcarShow`).
+  if (app.drawn) {
+    if (!enShow) alElegirConResultado?.(g);
+    return;
+  }
   juegoAMano = true;
   setGame(g);
 }
 
-export function setGame(g: Game): void {
-  if (app.drawn) return;
+/** Pone el juego en el selector y en el rótulo de junto al botón, sin mirar si ya hay resultado. */
+function marcarJuego(g: Game): void {
   app.game = g;
   for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
   pintarJuego();
+}
+
+export function setGame(g: Game): void {
+  if (app.drawn) return;
+  marcarJuego(g);
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
+}
+
+/**
+ * "Ver de nuevo con otro juego": el resultado ya está, y el juego elegido cambia solo cómo se vuelve a ver. No
+ * toca `juegoAMano`: el próximo sorteo sigue sugiriendo el juego que encaje.
+ */
+export function juegoParaVerDeNuevo(g: Game): void {
+  marcarJuego(g);
+  if (app.frozen) preloadGame(g, app.frozen.names.length);
+}
+
+/** El show está corriendo: el selector no se toca (es un show) y dice por qué. */
+let enShow = false;
+
+/**
+ * Se llama al arrancar el show y al terminar. Mientras corre, el selector se apaga (`inert`: ni el ratón ni el
+ * teclado) y la nota de arriba lo explica; al terminar se enciende, y si ya hay resultado dice cómo verlo de nuevo.
+ */
+export function marcarShow(en: boolean): void {
+  enShow = en;
+  document.body.toggleAttribute("data-show", en);
+  document.getElementById("gamepick")?.toggleAttribute("inert", en);
+  pintarNotaDelJuego();
+}
+
+/**
+ * La nota de arriba del selector, solo cuando el selector no es el de siempre: mientras corre el show ("no se
+ * cambia") y con el resultado puesto ("tocá un juego y lo ves de nuevo"). Antes del sorteo no dice nada: elegir es
+ * lo normal.
+ */
+export function pintarNotaDelJuego(): void {
+  const el = document.getElementById("juego-nota");
+  if (!el) return;
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
+  const texto = clave ? t(clave) : "";
+  if (el.textContent !== texto) el.textContent = texto;
+  el.hidden = !texto;
+}
+
+/**
+ * Lleva al selector y deja el foco en el primer juego que no es el de ahora, para verlo de nuevo con otro: "Probar
+ * otro juego" y "Ver de nuevo con otro juego".
+ */
+export function irAlSelectorParaOtro(): void {
+  const nota = document.getElementById("juego-nota");
+  // Con la nota puesta ("tocá un juego…"), se lleva ella a la vista y el selector queda debajo, entero; si no, como "Cambiar de juego".
+  if (nota && !nota.hidden) {
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    nota.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "start" });
+  } else cambiarJuego();
+  const otro = GAME_BUTTONS.map(([id]) => document.getElementById(id) as HTMLButtonElement | null).find((b) => b && !b.hidden && !b.classList.contains("on"));
+  otro?.focus({ preventScroll: true });
 }
 
 /**
@@ -105,6 +181,8 @@ export function pintarJuego(): void {
   const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(claveNombre(app.game));
   if (el.textContent !== nombre) el.textContent = nombre;
   pintarNotaElegida();
+  pintarNotaDelJuego();
+  pintarVer3D();
 }
 
 /**
@@ -138,8 +216,8 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
-/** Cuántos premios se sortean: el selector de "Cuántos ganan", que con la lista sellada ya no cambia. */
-const premiosElegidos = (): number => Math.max(1, parseInt($<HTMLSelectElement>("nw").value, 10) || 1);
+/** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
+const premiosElegidos = (): number => ganadoresPedidos();
 
 export function pintarRecomendacion(n: number): void {
   const botones = new Map<Game, HTMLElement>();
@@ -185,7 +263,7 @@ export function pintarRecomendacion(n: number): void {
 }
 
 /**
- * La línea de arriba del selector: "Para 8 personas · Duración: Normal · 41 s".
+ * La línea de arriba del selector: "Para 8 personas. Duración: Normal, 41 s".
  * La duración es la del show con el ritmo elegido, que hoy es la misma para
  * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
  */
@@ -194,7 +272,7 @@ function pintarCabecera(n: number): void {
   if (!el) return;
   const p = currentPace();
   const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-  el.textContent = `${frase("recHead", [n])} · ${t("paceLabel")}: ${nombre} · ${paceSeconds(p)} s`;
+  el.textContent = `${frase("recHead", [n])}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
   el.style.display = "";
 }
 
@@ -232,11 +310,15 @@ const CHAIN_MARGIN_SECONDS = 8;
 
 export function secondsToRound(): number {
   if (!app.frozen) return 0;
+  // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
+  if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
   const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;
   return Math.max(0, roundTime(app.frozen.round) + margin - Math.floor(Date.now() / 1000));
 }
 
 let countdownTimer: number | undefined;
+/** La ronda de stand ya arrancó sola: una sola vez por cuenta regresiva. */
+let arrancoSola = false;
 
 /**
  * Se apretó "Sellar la lista" con la pantalla en grande pedida (`vista-grande.ts`): cuando el sello esté, la
@@ -312,6 +394,7 @@ function abrirEspera(alSellar = false): void {
  * y otra vez cuando la ronda ya nació y el botón se habilita.
  */
 function preconectarDrand(): void {
+  if (enStand()) return;
   const href = QUICKNET.relays[0];
   document.head.querySelector(`link[rel="preconnect"][href="${href}"]`)?.remove();
   const link = document.createElement("link");
@@ -333,6 +416,7 @@ function preconectarDrand(): void {
  * los segundos que le quedan.
  */
 function startCountdown(): void {
+  arrancoSola = false;
   const btn = $<HTMLButtonElement>("btn-draw");
   const box = document.getElementById("wait-box");
   const num = document.getElementById("wait-round");
@@ -357,7 +441,8 @@ function startCountdown(): void {
   // Anclado, también la curva en la página: el contrato pide la firma
   // descomprimida.
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
-  prepararFirma();
+  // El modo stand no pide ni verifica ningún número: nada que preparar ni conexión que abrir.
+  if (!enStand()) prepararFirma();
   if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
   let preconectado = false;
   const tick = (): void => {
@@ -370,7 +455,8 @@ function startCountdown(): void {
       btn.disabled = true;
       btn.classList.remove("lista");
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      btn.textContent = T[getLang()].drawIn(reloj);
+      // El modo stand no espera ningún número: «Arranca en 3».
+      btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
       if (left) left.textContent = reloj;
@@ -397,7 +483,13 @@ function startCountdown(): void {
       // la barra ya le muestra el botón encendido.
       // Con la espera en grande abierta, en cambio, el sorteo arranca desde
       // ahí y el show ocupa la pantalla sin pasar por la página (espera.ts).
-      if (!app.drawn && espera?.esperaAbierta()) espera.nacioElNumero();
+      if (!app.drawn && enStand()) {
+        // Una ronda de stand arranca sola: quien atiende no tiene que estar sobre el botón.
+        if (!arrancoSola) {
+          arrancoSola = true;
+          btn.click();
+        }
+      } else if (!app.drawn && espera?.esperaAbierta()) espera.nacioElNumero();
       else if (!app.drawn) {
         const r = btn.getBoundingClientRect();
         if (!barraActiva() && (r.top < 0 || r.bottom > innerHeight)) btn.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -420,7 +512,7 @@ export function refreshFreezeLabel(): void {
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
   const btn = $("btn-freeze");
-  btn.dataset.i = "freeze";
+  btn.dataset.i = enStand() ? "standEmpezar" : claveDeSellar();
   btn.textContent = t(btn.dataset.i);
 }
 
@@ -440,8 +532,9 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
   // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
   // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
   // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
-  // esté. En el ensayo, lo mismo: se practica como va a ser. Sin gesto (la red volvió sola, la demo), solo la vista.
-  if (puedeSellar() && grandeAlSellar(entornoDeAhora())) {
+  // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
+  // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
+  if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
     pedirPantallaCompleta();
     grandePendiente = true;
   }
@@ -483,12 +576,14 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
     : sinSello
       ? SIN_SELLO_LEAD_SECONDS
-      : enEnsayo() && !params.has("lead")
-        ? ENSAYO_ESPERA_S
-        : LEAD_SECONDS;
+      : enStand()
+        ? STAND_ESPERA_S
+        : enEnsayo() && !params.has("lead")
+          ? ENSAYO_ESPERA_S
+          : LEAD_SECONDS;
   let round = targetRound(ts, lead);
   let prize = $<HTMLInputElement>("prize").value.trim();
-  let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
+  let numWinners = Math.min(ganadoresPedidos(), names.length);
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -502,6 +597,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     const onStep = (step: AnchorStep, detail?: string): void => {
       btn.textContent = stepLabel(step);
       showTxStatus("seal-status", step, detail);
+      // Recién protegida la cuenta: se dice que se sigue, hasta que el sello queda grabado.
+      const estado = document.getElementById("seal-status");
+      if (opciones.protegida && step !== "confirmed" && estado) estado.textContent = `${t("protSigue")} ${estado.textContent ?? ""}`.trim();
     };
     // Enseguida, antes de cualquier espera: el botón quedaba apagado y diciendo
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
@@ -521,7 +619,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       }
       // El contador del embudo (src/contar.ts): un intento de sellar, y después cómo terminó. La verdad
       // del sello es la cadena. Un toque que la red frenó antes de mandar nada no es un intento.
-      contar("seal_sent", { network: network.name });
+      // El reintento de después de proteger la cuenta es el mismo intento de la persona: no suma otro envío.
+      if (!opciones.protegida) contar("seal_sent", { network: network.name });
       // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
       // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
       //   30 s que exige el contrato y el sello falla (3 de 11 sellos con el RPC público de
@@ -579,30 +678,54 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         prize = previo.premio;
         numWinners = sello.retomado.numWinners;
         ponerPremio(prize);
-        $<HTMLSelectElement>("nw").value = String(numWinners);
+        ponerGanadores(numWinners);
       }
       // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
       showTxStatus("seal-status", "confirmed", sealTx);
-      contar("seal_confirmed", { network: network.name });
+      contar("seal_confirmed", { network: network.name, from: origenActual() });
     } catch (e) {
       // La pantalla dice algo que se entiende; el detalle técnico queda plegado
       // debajo y en este navegador (`detalle-error.ts`), y en la consola.
       console.warn("[tinkazo] el sello no se pudo grabar", e);
+      // Pollar 0.12 (mainnet): la cuenta no firma hasta tener una forma de recuperarla. Se abre "Protegé tu cuenta" y,
+      // si la protege, se vuelve solo al sello con la misma lista. Una sola vez por intento: si vuelve a fallar, se dice.
+      // Mientras la ventana está abierta la lista sigue cerrada (no se puede tocar lo que se va a sellar) y el intento
+      // todavía no se cuenta como fallado: se cuenta cómo termina el reintento, o que la persona no la protegió.
+      if (!protegiendoLaCuenta && (await pideProtegerLaCuenta(e))) {
+        hideTxStatus("seal-status");
+        protegiendoLaCuenta = true;
+        try {
+          // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
+          if ((await protegerLaCuenta(btn, "seal-status")) && bytesToHex(listHash(parseNames())) === hash) {
+            await sellar({ ...opciones, saltarChequeo: true, protegida: true });
+            return;
+          }
+        } finally {
+          protegiendoLaCuenta = false;
+        }
+      }
       btn.disabled = false;
       cerrarLista(false);
-      btn.dataset.i = "freeze";
-      btn.textContent = t("freeze");
+      btn.dataset.i = claveDeSellar();
+      btn.textContent = t(btn.dataset.i);
       marcarSellado(false);
       // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle. Se cuenta
       // antes de cualquier camino de la red: un sello que empezó y no entró es un fallo siempre.
       void import("../stellar/errores")
-        .then(({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
         .catch(() => undefined);
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
       if (esCostoAlto(e)) {
         hideTxStatus("seal-status");
         await mostrarCostoAlto(e.costoXlm, e.restaurar);
+        return;
+      }
+      // El portero del patrocinio dijo que no (se acabó el cupo, no pagó o no contestó): su pantalla, con su acción.
+      const sinPatrocinio = patrocinioDelError(e);
+      if (sinPatrocinio) {
+        hideTxStatus("seal-status");
+        await mostrarSinPatrocinio(sinPatrocinio);
         return;
       }
       if (await esSinSaldoDelPatrocinador(e)) {
@@ -621,7 +744,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
-      await escribirError(status, e, "sello");
+      await escribirError(status, e, "sello", numWinners);
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -639,6 +762,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
   if (raffleId !== undefined) precargarParaElSorteo();
 
+  // El logo de la comunidad que había al sellar: solo su huella. No es parte del sorteo (logo.ts).
+  const logo = logoParaSellar();
   app.frozen = {
     names,
     listHash: hash,
@@ -649,6 +774,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
     ...(sinSello ? { sinSello: true } : {}),
+    ...(logo ? { logo } : {}),
   };
   // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.
   marcarSellado(false);
@@ -682,6 +808,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         ...(sealTx ? { sealTx } : {}),
         // Sin sello: Mis sorteos lo dice, y no figura como comprobable.
         ...(sinSello ? { sinSello: true } : {}),
+        ...(logo ? { logo } : {}),
       });
       h.renderHistory(who);
     });
@@ -812,6 +939,9 @@ async function esCorteDelRpc(e: unknown): Promise<boolean> {
   }
 }
 
+/** Ya se abrió "Protegé tu cuenta" en este intento de sellar: si el sello vuelve a pedirla, se dice y no se repite. */
+let protegiendoLaCuenta = false;
+
 /** El sello no entró porque el patrocinador no tiene con qué pagar (mainnet, sin grifo): se explica con su acción. */
 async function esSinSaldoDelPatrocinador(e: unknown): Promise<boolean> {
   if (network.name !== "mainnet") return false;
@@ -841,13 +971,15 @@ export function resumeFrozen(e: {
   sealTx?: string;
   /** Se había seguido sin sello (la red no dejó sellar): retomarlo no lo vuelve comprobable. */
   sinSello?: boolean;
+  /** El logo con el que se selló: la huella (`logo.ts`). */
+  logo?: string;
 }): void {
   if (bytesToHex(listHash(e.names)) !== e.listHash || app.drawn) return;
   const ta = $<HTMLTextAreaElement>("ta");
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
   ponerPremio(e.prize);
-  $<HTMLSelectElement>("nw").value = String(Math.max(1, Math.min(32, e.numWinners)));
+  ponerGanadores(e.numWinners);
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
   app.frozen = {
     names: e.names,
@@ -859,6 +991,7 @@ export function resumeFrozen(e: {
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(e.sealTx ? { sealTx: e.sealTx } : {}),
     ...(e.sinSello && raffleId === undefined ? { sinSello: true } : {}),
+    ...(e.logo ? { logo: e.logo } : {}),
   };
   history.replaceState(null, "", "#sortear");
   dispatchEvent(new HashChangeEvent("hashchange"));
@@ -902,6 +1035,12 @@ export function unfreeze(lista: string): void {
 function textosDelSello(): void {
   const sin = sinSelloAhora(app.frozen);
   ponerTextoDelSello(document.querySelector<HTMLElement>("#sec-frozen .head h2 [data-i]"), "titulo", sin);
+  // Una ronda de stand no se sella: el título no dice «sellada».
+  const titulo = document.querySelector<HTMLElement>("#sec-frozen .head h2 [data-i]");
+  if (enStand() && titulo) {
+    titulo.dataset.i = "standListaT";
+    titulo.textContent = t("standListaT");
+  }
   ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
 }
 
@@ -916,7 +1055,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   olvidarBorrador();
   btn.disabled = true;
   // Sin sello (la red no dejó): no dice "sellada", que es lo que se espera de la cadena.
-  btn.dataset.i = raffleId !== undefined ? "sealed" : f.sinSello ? "redSinSelloBoton" : "frozenOk";
+  btn.dataset.i = raffleId !== undefined ? "sealed" : f.sinSello ? "redSinSelloBoton" : enStand() ? "standEnMarcha" : "frozenOk";
   btn.textContent = t(btn.dataset.i);
   $("freeze-hint").style.display = "none";
   $("free-rule").style.display = "none";
@@ -982,7 +1121,7 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   const text = T[lang].rules({
     prize: f.prize,
     count: f.names.length,
-    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, f.names.length),
+    winners: Math.min(ganadoresPedidos(), f.names.length),
     listHash: f.listHash,
     sealedAt: when(f.ts),
     round: f.round,
@@ -1010,7 +1149,7 @@ function renderSealSummary(): void {
   if (!f) return;
   const el = $("entities");
   el.textContent =
-    `Seal · list_hash=${f.listHash} · count=${f.names.length} · sealed_at=${f.ts} · target_round=${f.round} · round_time=${roundTime(f.round)}`;
+    `Seal: list_hash=${f.listHash}, count=${f.names.length}, sealed_at=${f.ts}, target_round=${f.round}, round_time=${roundTime(f.round)}`;
   if (f.raffleId === undefined) {
     const tag = document.createElement("span");
     tag.className = "kicker";
@@ -1020,11 +1159,37 @@ function renderSealSummary(): void {
     el.appendChild(tag);
     return;
   }
-  el.append(` · raffle_id=${f.raffleId} · `);
+  el.append(`, raffle_id=${f.raffleId}, `);
   const a = document.createElement("a");
   a.href = contractUrl();
   a.target = "_blank";
   a.rel = "noopener";
   a.textContent = `${network.name} ↗`;
   el.appendChild(a);
+}
+
+/**
+ * Las bases antes de sellar: lo que ya se sabe (premio, cuántos ganan, cuántas
+ * personas) y cómo se elige, sin huella, fechas ni número, que todavía no
+ * existen. Para avisar del sorteo antes de empezar el evento.
+ */
+export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
+  const lang = getLang();
+  const count = parseNames().length;
+  if (count < 2) return;
+  const text = T[lang].rulesPre({
+    prize: $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " "),
+    count,
+    winners: Math.min(ganadoresPedidos(), count),
+    verifyUrl: `${location.origin}/como-funciona.html`,
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = t("copied");
+    setTimeout(() => { btn.textContent = t("copyRules"); }, 1600);
+  } catch {
+    const pre = $("rules-pre-text");
+    pre.textContent = text;
+    pre.style.display = "block";
+  }
 }

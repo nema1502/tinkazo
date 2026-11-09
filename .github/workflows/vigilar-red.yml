@@ -103,6 +103,20 @@ jobs:
         with:
           path: .estado-red
           key: vigilar-red-${{ github.run_id }}
+      # El fondo del portero de patrocinio (workers/patrocinio/README.md, «Bitácora y alerta del fondo»).
+      # Una vez al día, con el recordatorio de las 12:07 UTC: llama a `/estado` y falla si el saldo de la
+      # cuenta patrocinadora está por debajo de la alerta (`alerta: true`) o si el portero no contesta.
+      # COMENTADO hasta que exista el despliegue en p.tinkazo.app: hoy no hay nada que llamar y la CI fallaría.
+      # Para activarlo: descomentar el paso y cargar el secreto PORTERO_ADMIN_TOKEN (la clave de administración
+      # del portero) en los secretos del repositorio. El secreto va por `env`, nunca dentro del comando.
+      # - name: Fondo del portero de patrocinio
+      #   if: ${{ github.event.schedule == '7 12 * * *' || inputs.diario }}
+      #   env:
+      #     PORTERO_URL: https://p.tinkazo.app
+      #     PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_ADMIN_TOKEN }}
+      #   run: |
+      #     curl -fsS -m 20 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero.json
+      #     node -e "const j=JSON.parse(require('fs').readFileSync('estado-portero.json','utf8')); console.log('saldo (stroops):', j.balanceStroops, '| alerta:', j.alerta, j.motivoAlerta ?? ''); process.exit(j.alerta ? 1 : 0)"
       # El latido: avisa a un servicio de alarma (healthchecks.io) que el detector corrió, y
       # lo hace también si la corrida falló por una alarma de la red: lo que el servicio
       # vigila es que el detector no calle (el cron se saltea, o GitHub desactiva el workflow

@@ -1,0 +1,132 @@
+/**
+ * La parte de la sala que no depende de Cloudflare: los topes, las formas que
+ * se aceptan y los orígenes. Va aparte de `index.ts` (que importa
+ * `cloudflare:workers`) para poder probarla en Node.
+ */
+
+export const SITIO = "https://tinkazo.app";
+/** Cuánto vive una sala: a las 10 h de creada se borra todo, sola. */
+export const VIDA_MS = 10 * 3_600_000;
+/** Nombres por sala. */
+export const MAX_NOMBRES = 400;
+/** Nombres por minuto por sala: todo un recinto puede salir por una sola IP, por eso el tope es de la sala y no de la dirección. */
+export const NOMBRES_POR_MINUTO = 120;
+/** Salas nuevas por dirección y por hora, y en total por día. */
+export const SALAS_POR_IP_POR_HORA = 5;
+export const SALAS_POR_DIA = 100;
+/** Lo que mide, como mucho, un nombre cifrado: `[1][IV de 12][texto cifrado + 16 de la etiqueta]`. */
+export const MAX_BYTES_NOMBRE = 256;
+export const MIN_BYTES_NOMBRE = 13 + 16 + 1;
+/** Lo que mide, como mucho, ese mismo nombre en base64url. */
+export const MAX_CARACTERES = Math.ceil((MAX_BYTES_NOMBRE * 4) / 3);
+/**
+ * Sockets abiertos a la vez por sala: más allá de esto, uno nuevo solo entra si
+ * desplaza a otro que lleva callado más de `PRESENTARSE_MS`. Alguien que tenga el
+ * id puede ocupar lugares sin presentarse; con 12 lugares y 3 segundos tiene que
+ * abrir unos cuatro por segundo, sin parar, para dejar afuera a la pantalla
+ * real. Una pantalla de verdad se presenta apenas abre (un mensaje).
+ */
+export const MAX_SOCKETS = 12;
+/** Cuánto puede un socket quedarse sin presentarse con el token. */
+export const PRESENTARSE_MS = 3_000;
+
+export const ES_ID = /^[0-9A-Za-z]{8}$/;
+const ES_BASE64URL = /^[A-Za-z0-9_-]+$/;
+/** 16 bytes en base64url, sin relleno. */
+export const ES_TOKEN = /^[A-Za-z0-9_-]{22}$/;
+
+/** Si es un nombre cifrado bien formado: base64url, del largo que puede tener. No lo descifra: nadie acá puede. */
+export function nombreCifradoValido(s: string): boolean {
+  if (s.length === 0 || s.length > MAX_CARACTERES || !ES_BASE64URL.test(s)) return false;
+  const bytes = Math.floor((s.length * 3) / 4);
+  return bytes >= MIN_BYTES_NOMBRE && bytes <= MAX_BYTES_NOMBRE;
+}
+
+/**
+ * Desde dónde se pueden crear salas y abrir la pantalla. Los celulares que se
+ * suman no cuentan: abren la página que sirve este mismo Worker.
+ */
+export function origenPermitido(origen: string | null): boolean {
+  if (!origen) return false;
+  if (origen === SITIO || origen === "https://www.tinkazo.app") return true;
+  if (/^https:\/\/tinkazo(-[a-z0-9-]+)?\.vercel\.app$/.test(origen)) return true;
+  return /^http:\/\/localhost:\d{2,5}$/.test(origen);
+}
+
+/** En IPv6 cuenta el bloque /64, no la dirección entera (con la entera, un solo bloque daba millones de topes). */
+export function grupoDeIp(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const v4 = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  if (v4?.[1]) return v4[1];
+  const doble = ip.includes("::");
+  const [cabeza = "", cola = ""] = ip.toLowerCase().split("::");
+  const a = cabeza ? cabeza.split(":") : [];
+  const b = doble && cola ? cola.split(":") : [];
+  const bloques = doble ? [...a, ...Array<string>(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b] : a;
+  return `${bloques
+    .slice(0, 4)
+    .map((x) => x.replace(/^0+(?=.)/, ""))
+    .join(":")}::/64`;
+}
+
+/**
+ * Cuenta eventos por minuto, en memoria. `intentar` suma uno y dice si cabe.
+ * Si el objeto se desaloja a mitad de un minuto, la cuenta vuelve a cero y ese
+ * minuto caben otros 120: el tope por minuto solo frena el ritmo, no es exacto.
+ * Lo exacto es el de 400 nombres por sala, que vive en SQLite y no se reinicia;
+ * lo peor que gana alguien que desaloje el objeto es llenar la sala más rápido.
+ */
+export class VentanaPorMinuto {
+  private minuto = -1;
+  private n = 0;
+  constructor(private readonly max: number) {}
+  intentar(ahora: number): boolean {
+    const m = Math.floor(ahora / 60_000);
+    if (m !== this.minuto) {
+      this.minuto = m;
+      this.n = 0;
+    }
+    if (this.n >= this.max) return false;
+    this.n += 1;
+    return true;
+  }
+}
+
+/** La hora UTC de un instante, contada desde 1970: la ventana de las altas por dirección. */
+export function horaUtc(ms: number): number {
+  return Math.floor(ms / 3_600_000);
+}
+
+/** Donde viven las altas de la hora: en el almacenamiento del objeto, para que dormirse no las borre. */
+export interface AltasPorHora {
+  leer(grupo: string, hora: number): number;
+  sumar(grupo: string, hora: number): void;
+  /** Olvida todas las horas anteriores a esta. */
+  olvidarAntes(hora: number): void;
+}
+
+/**
+ * Cuenta un alta de `grupo` en la hora de `ahora` si cabe en `max`. Ventana fija
+ * por hora (no deslizante): en el cambio de hora caben hasta `2 * max`, y el tope
+ * del día sigue siendo uno solo. `grupo` ya viene hecho huella: acá no se ve la dirección.
+ */
+export function intentarAlta(a: AltasPorHora, grupo: string, ahora: number, max: number): boolean {
+  const hora = horaUtc(ahora);
+  a.olvidarAntes(hora);
+  if (a.leer(grupo, hora) >= max) return false;
+  a.sumar(grupo, hora);
+  return true;
+}
+
+/** Compara dos huellas hexadecimales sin cortar en la primera diferencia. */
+export function iguales(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+/** El día UTC de un instante, `AAAA-MM-DD`: lo único del momento que se guarda de las altas. */
+export function diaUtc(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}

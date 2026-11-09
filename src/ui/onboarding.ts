@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { app, params } from "../state";
-import { enEnsayo } from "../ensayo-modo";
+import { enPractica } from "../ensayo-modo";
 
 /**
  * La primera vez: una línea, "¿Primera vez? Mirá cómo se usa o probalo con un
@@ -50,20 +50,16 @@ const nombres = (): number => document.getElementById("names")?.childElementCoun
 function pintar(): void {
   const box = document.getElementById("primera-vez");
   if (!box) return;
-  const ve = !ofertaVista() && !params.has("demo") && !enEnsayo() && !app.frozen && nombres() === 0;
+  const ve = !ofertaVista() && !params.has("demo") && !enPractica() && !app.frozen && nombres() === 0;
   box.style.display = ve ? "" : "none";
 }
 
-/** Se llama una vez, con la herramienta armada. `abrirTutorial` abre "¿Cómo se usa?". */
-export function initOnboarding(abrirTutorial: () => void): void {
+/** Se llama una vez, con la herramienta armada. */
+export function initOnboarding(): void {
   $("pv-cerrar").addEventListener("click", () => {
     marcarOfertaVista();
     // El foco no queda en el aire: va a lo que toca, "Pegar lista".
     document.getElementById("btn-pegar")?.focus({ preventScroll: true });
-  });
-  $("pv-como").addEventListener("click", () => {
-    marcarOfertaVista();
-    abrirTutorial();
   });
   // "probalo con un ejemplo" entra al ensayo (ensayo.ts, por `data-entrar-ensayo`); acá solo se cierra.
   $("pv-ensayo").addEventListener("click", marcarOfertaVista);

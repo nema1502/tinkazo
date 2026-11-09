@@ -105,4 +105,10 @@ describe("las respuestas de la ruleta", () => {
     expect(respuestasRuleta(p, T_WIND + 3.5).paso).toEqual({ tipo: "nada", desde: T_WIND });
     expect(respuestasRuleta(p, 10).paso.tipo).toBe("nada");
   });
+
+  it("cuánto falta solo se ve cuando la rueda ya casi se traba: antes gira, a fondo o arrastrándose", () => {
+    const p = ruleta(18, 4, false);
+    for (const t of [0, T_WIND + 1, 4, 10, T_HOLD - 0.1]) expect(respuestasRuleta(p, t).progresoVisible, `t=${t}`).toBe(false);
+    for (const t of [T_HOLD, T_HOLD + 1, T_LOCK, T_CROWN, T_CROWN + 2]) expect(respuestasRuleta(p, t).progresoVisible, `t=${t}`).toBe(true);
+  });
 });

@@ -1,0 +1,497 @@
+{
+ "comun/campana-hi": {
+  "n": 1,
+  "kb": [
+   12.1
+  ],
+  "dur": [
+   1.48
+  ],
+  "hz": 528.4
+ },
+ "comun/campana-lo": {
+  "n": 1,
+  "kb": [
+   12.1
+  ],
+  "dur": [
+   1.48
+  ],
+  "hz": 191.2
+ },
+ "comun/impacto": {
+  "n": 1,
+  "kb": [
+   6.6
+  ],
+  "dur": [
+   0.76
+  ]
+ },
+ "comun/kalimba-hi": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 502.3
+ },
+ "comun/kalimba-lo": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 248.1
+ },
+ "comun/madera-hi": {
+  "n": 1,
+  "kb": [
+   4.1
+  ],
+  "dur": [
+   0.45
+  ],
+  "hz": 1053.5
+ },
+ "comun/madera-lo": {
+  "n": 1,
+  "kb": [
+   4.1
+  ],
+  "dur": [
+   0.45
+  ],
+  "hz": 197.1
+ },
+ "comun/zampona-hi": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 1060.3
+ },
+ "comun/zampona-lo": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 195.9
+ },
+ "chovena/corte": {
+  "n": 1,
+  "kb": [
+   3.3
+  ],
+  "dur": [
+   0.35
+  ]
+ },
+ "chovena/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "guajojo/ganador": {
+  "n": 1,
+  "kb": [
+   20.2
+  ],
+  "dur": [
+   2.51
+  ]
+ },
+ "oruro/bombo": {
+  "n": 1,
+  "kb": [
+   4.1
+  ],
+  "dur": [
+   0.45
+  ]
+ },
+ "oruro/campana": {
+  "n": 1,
+  "kb": [
+   17.8
+  ],
+  "dur": [
+   2.2
+  ]
+ },
+ "oruro/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "oruro/paso": {
+  "n": 1,
+  "kb": [
+   3.3
+  ],
+  "dur": [
+   0.35
+  ]
+ },
+ "pinata/caramelos": {
+  "n": 2,
+  "kb": [
+   2.5,
+   7.6
+  ],
+  "dur": [
+   0.25,
+   0.9
+  ]
+ },
+ "pinata/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "pinata/palo": {
+  "n": 2,
+  "kb": [
+   4.1,
+   4.1
+  ],
+  "dur": [
+   0.45,
+   0.45
+  ]
+ },
+ "pinata/rotura": {
+  "n": 1,
+  "kb": [
+   16.6
+  ],
+  "dur": [
+   2.04
+  ]
+ },
+ "pinata/soga": {
+  "n": 1,
+  "kb": [
+   4.1
+  ],
+  "dur": [
+   0.45
+  ]
+ },
+ "pinata/traqueteo": {
+  "n": 2,
+  "kb": [
+   5.1,
+   5.1
+  ],
+  "dur": [
+   0.6,
+   0.6
+  ]
+ },
+ "race/casco": {
+  "n": 3,
+  "kb": [
+   2.9,
+   2.9,
+   2.9
+  ],
+  "dur": [
+   0.3,
+   0.3,
+   0.3
+  ]
+ },
+ "race/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "race/redoble": {
+  "n": 1,
+  "kb": [
+   6.0
+  ],
+  "dur": [
+   0.7
+  ]
+ },
+ "race/resoplido": {
+  "n": 1,
+  "kb": [
+   5.1
+  ],
+  "dur": [
+   0.6
+  ]
+ },
+ "race/tropiezo": {
+  "n": 2,
+  "kb": [
+   6.8,
+   6.8
+  ],
+  "dur": [
+   0.8,
+   0.8
+  ]
+ },
+ "sapo/boca": {
+  "n": 1,
+  "kb": [
+   8.4
+  ],
+  "dur": [
+   1.0
+  ]
+ },
+ "sapo/ficha": {
+  "n": 2,
+  "kb": [
+   2.7,
+   3.3
+  ],
+  "dur": [
+   0.29,
+   0.35
+  ]
+ },
+ "sapo/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "teleferico/apagon": {
+  "n": 1,
+  "kb": [
+   6.8
+  ],
+  "dur": [
+   0.8
+  ]
+ },
+ "teleferico/cable": {
+  "n": 1,
+  "kb": [
+   5.1
+  ],
+  "dur": [
+   0.6
+  ]
+ },
+ "teleferico/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "teleferico/llegada": {
+  "n": 1,
+  "kb": [
+   11.5
+  ],
+  "dur": [
+   1.4
+  ]
+ },
+ "teleferico/torre": {
+  "n": 1,
+  "kb": [
+   5.1
+  ],
+  "dur": [
+   0.6
+  ]
+ },
+ "toborochi/colibri": {
+  "n": 1,
+  "kb": [
+   10.4
+  ],
+  "dur": [
+   1.28
+  ]
+ },
+ "toborochi/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "toborochi/viento": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "trompo/cae": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ]
+ },
+ "trompo/choque": {
+  "n": 2,
+  "kb": [
+   5.1,
+   5.1
+  ],
+  "dur": [
+   0.6,
+   0.6
+  ]
+ },
+ "trompo/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "trompo/zumbido": {
+  "n": 1,
+  "kb": [
+   9.8
+  ],
+  "dur": [
+   1.2
+  ]
+ },
+ "wheel/ganador": {
+  "n": 1,
+  "kb": [
+   22.5
+  ],
+  "dur": [
+   2.8
+  ]
+ },
+ "wheel/tum": {
+  "n": 1,
+  "kb": [
+   3.7
+  ],
+  "dur": [
+   0.41
+  ]
+ },
+ "oruro/bronce-hi": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 522.3
+ },
+ "oruro/bronce-lo": {
+  "n": 1,
+  "kb": [
+   7.6
+  ],
+  "dur": [
+   0.9
+  ],
+  "hz": 207.6
+ },
+ "chovena/pisada": {
+  "n": 2,
+  "kb": [
+   2.5,
+   2.5
+  ],
+  "dur": [
+   0.25,
+   0.25
+  ]
+ },
+ "guajojo/grillo": {
+  "n": 2,
+  "kb": [
+   2.5,
+   2.5
+  ],
+  "dur": [
+   0.25,
+   0.25
+  ]
+ },
+ "oruro/redoblante": {
+  "n": 1,
+  "kb": [
+   2.9
+  ],
+  "dur": [
+   0.3
+  ]
+ },
+ "trompo/roce": {
+  "n": 2,
+  "kb": [
+   2.1,
+   2.1
+  ],
+  "dur": [
+   0.2,
+   0.2
+  ]
+ },
+ "wheel/clavija": {
+  "n": 3,
+  "kb": [
+   1.5,
+   1.5,
+   1.5
+  ],
+  "dur": [
+   0.12,
+   0.12,
+   0.12
+  ]
+ }
+}

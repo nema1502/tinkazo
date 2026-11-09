@@ -33,6 +33,16 @@ describe("el guion del grabador", () => {
     expect(s).toContain("rec.escena.push");
   });
 
+  it("el brillo de los farolitos, solo si se pide y solo si el juego lo anota", () => {
+    expect(grabador()).toContain('"faroles":false');
+    const s = grabador({ faroles: true });
+    expect(s).toContain('"faroles":true');
+    expect(s).toContain('typeof window.__faroles === "function"');
+    expect(s).toContain("rec.faroles.push");
+    // eslint-disable-next-line no-new-func
+    expect(() => new Function(s)).not.toThrow();
+  });
+
   it("engancha lo que ve la sala: la aplicación de PixiJS, el relator y el reloj", () => {
     const s = grabador();
     expect(s).toContain("globalThis.__PIXI_APP_INIT__");

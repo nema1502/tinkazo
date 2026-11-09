@@ -10,6 +10,10 @@ import { duracionNominal, grupoDe, normalDe, tSalidaDe } from "./carrera-duracio
 
 export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, corto, duracionNominal, grupoDe, normalDe, tSalidaDe };
 import { planRace, type Plan as PlanFinal } from "./plan";
+import { carrilesDe, planRecta } from "./carrera-recta";
+import { conCierre } from "./carrera-cierre";
+import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
+import { conObstaculos } from "./carrera-obstaculos";
 
 /**
  * El show de la carrera, puro: la salida, el grupo que se va echando, la recta
@@ -30,7 +34,6 @@ import { planRace, type Plan as PlanFinal } from "./plan";
 
 /** Cuánto se mueve el frente del grupo en cada terreno, en anchos de pantalla por segundo. */
 export const VELOCIDAD: Record<Terreno, number> = { cuesta: 0.085, barro: 0.07, piedras: 0.095, viento: 0.105 };
-const LENTO = 0.4;
 /** Desde qué fracción de la cinta la meta entra entera en el plano. */
 export const META_ENTERA = 0.8;
 /** Desde qué fracción de la final se mira a las de adelante. */
@@ -75,9 +78,13 @@ export interface EscenaCarrera {
   meta(): Caja;
   foco(): FocoPunto;
   protegida(): { caja: Caja; zona: Zona } | null;
+  /** Dónde cae en la pantalla quien va adelante (para la prueba del niño; `null` si no se ve). */
+  puntoDelFrente(t: number): { x: number; y: number } | null;
 }
 
 export interface Datos {
+  /** La carrera nueva (`?carrera=nueva`): distancia de verdad, carriles fijos y la recta intercambiable. */
+  nueva: boolean;
   n: number;
   names: string[];
   cortos: string[];
@@ -110,6 +117,11 @@ export interface Datos {
   t80: number;
   /** La primera en `t` (índice en la lista). */
   lider(t: number): number;
+  /**
+   * Quién lleva la ficha amarilla y la manta. En la de siempre es `lider`. En la carrera nueva, la última que llevó la punta al menos 1,4 s
+   * seguidos: cuando dos se pasan y se repasan (el acordeón), la manta no parpadea. La raya sigue al hocico más adelantado.
+   */
+  duena(t: number): number;
   /** Las que siguen en el grupo en `t`, de la primera a la última. */
   vivas(t: number): number[];
   campeona: number;
@@ -126,12 +138,30 @@ export interface Datos {
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
-export function planCarrera(ctx: Contexto): Plan<Datos> {
+/** La recta de la carrera nueva: los carriles con el azar de la ronda y el camino con el suyo, aparte del grupo y de la ganadora. */
+function rectaNueva(ctx: Contexto, campeona: number): PlanFinal {
+  const lanes = carrilesDe(ctx.nombres, campeona, ctx.rng, ctx.ganadores.slice(1));
+  return planRecta(lanes, lanes.indexOf(campeona), sembrar(Math.floor(ctx.azar("carrera:recta") * 4294967296)));
+}
+
+export interface OpcionesCarrera {
+  /** La carrera nueva, detrás de `?carrera=nueva`. Sin ella, la de siempre. */
+  nueva?: boolean;
+}
+
+export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos> {
+  const nueva = !!op.nueva;
   const names = ctx.nombres;
   const n = names.length;
   const campeona = ctx.ganadores[0] ?? 0;
-  // La final: la historia del director de emoción, con el azar de la ronda como siempre.
-  const final = planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) });
+  // La final. La de siempre: la historia del director de emoción, con el azar de la ronda. La nueva: la recta intercambiable,
+  // que se decide en los últimos metros (`carrera-recta.ts`) y tiene su azar aparte.
+  // La de siempre lleva además el cierre (`carrera-cierre.ts`): cómo se decide el último tramo, con su azar aparte.
+  // Y, en las dos, los obstáculos (`carrera-obstaculos.ts`): piedras, valla y ráfaga, con su azar aparte.
+  const sinObstaculos = nueva
+    ? rectaNueva(ctx, campeona)
+    : conCierre(planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) }), sembrar(Math.floor(ctx.azar("carrera:cierre") * 4294967296)));
+  const final = conObstaculos(sinObstaculos, sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296)));
   const lanes = final.lanes;
   const arco = final.story.arc;
   const cortos = names.map(corto);
@@ -164,20 +194,20 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
 
   // La recta: nominalmente DUR_FINAL; en el duelo, la llegada en cámara lenta desde la foto.
   const foto = Math.min(1, final.foto);
-  const tDeQ = (q: number): number => (q <= foto ? tAbre + q * DUR_FINAL : tAbre + foto * DUR_FINAL + ((q - foto) * DUR_FINAL) / LENTO);
-  const q = (t: number): number => {
-    const s = t - tAbre;
-    if (s <= 0) return 0;
-    const sf = foto * DUR_FINAL;
-    return Math.min(1, s <= sf ? s / DUR_FINAL : foto + ((s - sf) * LENTO) / DUR_FINAL);
-  };
+  // El reloj de la recta (`carrera-ritmo.ts`): pareja y, desde el 78 %, cada vez más lenta, así el final se ve más tiempo.
+  const tDeQ = (q: number): number => tAbre + segundosDeQ(q, foto);
+  const q = (t: number): number => qDeSegundos(t - tAbre, foto);
   const tCrown = tDeQ(1);
 
   /* --------------------------------------------------------------- el orden */
-  const entrada = lanes.map((_, k) => k).sort((a, b) => final.pos(b, 0.067) - final.pos(a, 0.067) || a - b).map((k) => lanes[k] as number);
+  // La carrera nueva entra a la recta en el orden en que sale la recta (q = 0); la de siempre, en el que tiene al 7 %.
+  const qEntrada = nueva ? 0 : 0.067;
+  const entrada = lanes.map((_, k) => k).sort((a, b) => final.pos(b, qEntrada) - final.pos(a, qEntrada) || a - b).map((k) => lanes[k] as number);
   const orden = crearOrden({
     gente, cae: (i) => tiempos.cae.get(i) ?? Infinity, finalistas: lanes, entrada, t0: tSalida, tConv, tAbre,
     rng: sembrar(Math.floor(ctx.azar("carrera:orden") * 4294967296)),
+    // En la nueva, quien toma la punta tarda dos segundos en pasar: el adelantamiento se ve, no se salta.
+    ...(nueva ? { traspaso: 1.8 } : {}),
   });
 
   /* ---------------------------------------------------------------- distancia */
@@ -242,7 +272,41 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     const h = tandas.find((x) => t < x.tFin) ?? tandas[0];
     return (h?.miembros[0] ?? lanes[0]) as number;
   };
-  const lider = (t: number): number => (t >= tAbre ? (ranking(t)[0] as number) : t < tSalida && conTandas ? delCorral(t) : (orden.lider(Math.max(t, tSalida)) >= 0 ? orden.lider(Math.max(t, tSalida)) : (lanes[0] as number)));
+  // Sin grupo (hasta ocho personas) no hay carrera antes de la recta: el que va primero en el corral es el primero de la recta.
+  const sinGrupo = nueva && tAbre - tSalida < 0.01;
+  const lider = (t: number): number => (t >= tAbre || sinGrupo ? (ranking(Math.max(t, tAbre))[0] as number) : t < tSalida && conTandas ? delCorral(t) : (orden.lider(Math.max(t, tSalida)) >= 0 ? orden.lider(Math.max(t, tSalida)) : (lanes[0] as number)));
+  // La ficha pasa a quien toma la punta cuando esa punta se sostiene (un segundo, como las que anuncia el relator): mira un poco hacia adelante
+  // en el plan, que es puro, así la manta cambia justo cuando el relator lo dice y no parpadea entre dos casi empatadas.
+  const HISTERESIS = 1;
+  const duenaMemo = new Map<number, number>();
+  const duena = (t: number): number => {
+    const real = lider(t);
+    if (!nueva || t < tSalida + 0.5 || t >= tDeQ(0.97)) return real;
+    // Sobre una grilla de una décima: así el largo de cada tramo de punta se mide siempre igual y la dueña no se pelea con el borde de un tramo.
+    const celda = Math.floor(t * 10 + 1e-9);
+    const dado = duenaMemo.get(celda);
+    if (dado !== undefined) return dado;
+    const tq = celda / 10;
+    let quien = -2, desde = 0, ultima = -1;
+    const cierra = (hasta: number): void => {
+      if (quien >= 0 && desde <= tq + 1e-9 && hasta - desde >= HISTERESIS - 1e-9) ultima = quien;
+    };
+    const tope = tq + HISTERESIS;
+    for (let c = Math.max(Math.ceil(tSalida * 10), celda - 90); c <= Math.round(tope * 10); c++) {
+      const tt = c / 10;
+      const l = lider(tt);
+      if (l !== quien) {
+        cierra(tt);
+        quien = l;
+        desde = tt;
+      }
+    }
+    cierra(tope + 0.1);
+    const v = ultima >= 0 && (tiempos.cae.get(ultima) ?? Infinity) > t ? ultima : real;
+    if (duenaMemo.size > 4000) duenaMemo.clear();
+    duenaMemo.set(celda, v);
+    return v;
+  };
   const tanda = (t: number): number => (conTandas && t >= T_VUELO - 0.3 ? tandas.findIndex((x) => t < x.tFin) : -1);
   const vivas = (t: number): number[] => (t >= tAbre ? ranking(t) : t < tSalida ? orden.en(tSalida) : orden.en(t));
   const fase = (t: number): FaseCarrera => (t < tVuelo ? "vuelo" : t < tNombres ? (conTandas ? "tandas" : "nombres") : t < tAbre ? "grupo" : t < tCrown ? "recta" : "fin");
@@ -262,6 +326,13 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     if (b.kind === "pique") sucesos.push({ desde: t, tipo: "adelante", quien: lanes[b.actor] });
     else if (b.kind === "tropiezo" || b.kind === "plantada") sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.actor] });
     else if (b.kind === "escupida" && b.target !== undefined) sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.target] });
+  }
+  // Los obstáculos (`carrera-obstaculos.ts`): a quien le cae la piedra, a quien le toca el viento y a quien le sale mal el salto, también frenan.
+  const obstaculos = final.obstaculos ?? [];
+  for (const o of obstaculos) {
+    if (o.tipo === "piedras") sucesos.push({ desde: tDeQ(o.q + 0.004), tipo: "freno", quien: lanes[o.carriles[0] as number] });
+    else if (o.tipo === "salto") for (const m of o.malas) sucesos.push({ desde: tDeQ(o.llegan[m] as number), tipo: "freno", quien: lanes[m] });
+    else sucesos.push({ desde: tDeQ(o.q + 0.02), tipo: "freno", quien: lanes[o.carriles[0] as number] });
   }
   sucesos.push({ desde: tCrown, tipo: "gano", quien: campeona });
   sucesos.sort((a, b) => a.desde - b.desde);
@@ -334,12 +405,34 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     else if (b.kind === "pique") decir(3, t, { texto: () => ctx.txt("carPique"), calor, ...(solo ? { hecho: { tipo: "adelante" as const, quien } } : {}) });
     else if (b.kind === "escupida" && b.target !== undefined) decir(3, t, { texto: () => ctx.txt("carEscupida"), calor });
   }
-  if (arco === "remontada") decir(4, tDeQ(0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
+  // Los obstáculos: el relator avisa antes de que pasen y no nombra a nadie (le tocan a cualquiera, y nombrarla no dice quién gana).
+  const semillaObst = Math.floor(ctx.azar("carrera:obstaculos:sonido") * 4294967296);
+  for (const o of obstaculos) {
+    if (o.tipo === "piedras") {
+      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carAlud"), calor: 0.5 + 0.3 * o.q });
+      sonar(tDeQ(o.q + 0.004), (k) => k.sonido.tono(0, "climax", { dur: 0.5, timbre: "sine", vol: 0.085 }));
+    } else if (o.tipo === "salto") {
+      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carValla"), calor: 0.5 + 0.3 * o.q });
+      for (const m of o.malas) {
+        decir(4, tDeQ((o.llegan[m] as number) + 0.012), { texto: () => ctx.txt("carSaltoMal"), calor: 0.55 + 0.3 * o.q });
+        sonar(tDeQ(o.llegan[m] as number), (k) => k.sonido.tono(1, "evento", { dur: 0.12, vol: 0.05 }));
+      }
+      sonar(tDeQ(o.q), (k) => k.sonido.tono(9, "evento", { dur: 0.08, vol: 0.05 }));
+    } else {
+      decir(5, tDeQ(o.q - 0.01), { texto: () => ctx.txt("carRafaga"), calor: 0.5 + 0.3 * o.q });
+      sonar(tDeQ(o.q - 0.01), (k) => k.sonido.viento(1.6, 0.8, semillaObst));
+    }
+  }
+  // En la carrera nueva el arco se nombra por cómo termina y la recta se decide al 88 %: las líneas del arco caen después.
+  if (arco === "remontada") decir(4, tDeQ(nueva ? 0.93 : 0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
   else if (arco === "duelo") {
-    decir(4, tDeQ(0.52), { texto: () => ctx.txt("carDuelo"), calor: 0.7 });
-    decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
+    decir(4, tDeQ(nueva ? 0.9 : 0.52), { texto: () => ctx.txt("carDuelo"), calor: 0.7 });
+    if (!nueva) decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
     decir(5, tDeQ(final.foto), { texto: () => ctx.txt("carFoto"), calor: 0.95, grito: true, prioridad: PRIORIDAD.importante });
-  } else if (arco === "tapada") decir(4, tDeQ(0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
+  } else if (arco === "tapada") decir(4, tDeQ(nueva ? 0.93 : 0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
+  // Antes de la largada, mientras se lee la lista: un pulso suave de la sala que espera, cada 0,8 s, sin melodía. Sin esto
+  // la carrera quedaba cuatro segundos en silencio entre el cartel de la meta y la salida.
+  for (let t = 1.2, j = 0; t < tSalida; t += 0.8, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 5 : 3, "fondo", { dur: 0.06, vol: 0.022 }));
   // Las patas: un golpe de casco cada medio segundo, parejo.
   for (let t = tSalida + 0.5, j = 0; t < tCrown - 0.4; t += 0.5, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 3 : 0, "fondo", { dur: 0.05, vol: 0.022 }));
 
@@ -393,10 +486,26 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     hinchadas.push(mejor.t);
   }
   hinchadas.sort((x, y) => x - y).forEach((t, k) => {
-    const quien = gritan[k] as number;
+    // En la carrera nueva, antes del 88 % ir adelante no dice nada de quién gana (el acordeón lo reparte): la tribuna grita por quien lleva la raya.
+    const quien = nueva ? duena(t) : (gritan[k] as number);
     decir(2, t, { texto: () => ctx.txt("carHinchada", nom(quien)), calor: Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL)) });
   });
   aceptadas = aceptar(cand);
+  // Ninguna frase se repite más de dos veces seguidas: la tercera igual se tira.
+  const ordenadas = aceptadas.slice().sort((a, b) => a.linea.t - b.linea.t);
+  let ultimo = "", seguidas = 0;
+  const sinRepetir = ordenadas.filter((c) => {
+    if (c.linea.texto === undefined) return true;
+    const x = typeof c.linea.texto === "function" ? c.linea.texto() : c.linea.texto;
+    seguidas = x === ultimo ? seguidas + 1 : 1;
+    ultimo = x;
+    if (seguidas > 2) {
+      seguidas = 2;
+      return false;
+    }
+    return true;
+  });
+  aceptadas = sinRepetir;
   const guion = aceptadas.map((c) => c.linea).sort((a, b) => a.t - b.t);
   const lineasAdelante = aceptadas.filter((a) => a.tipo === "adelante").map((a) => a.linea.t).sort((x, y) => x - y);
 
@@ -432,7 +541,7 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   const respuestas = (t: number): Respuestas => {
     const s = ultimoSuceso(t);
     return {
-      adelante: { quienes: [t >= tCrown ? campeona : lider(t)], lugar: "derecha" },
+      adelante: { quienes: [t >= tCrown ? campeona : duena(t)], lugar: "derecha" },
       hacia: "derecha",
       progreso: frac(Math.min(t, tCrown)),
       paso: { tipo: s.tipo, quien: s.quien, desde: s.desde },
@@ -440,14 +549,16 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   };
 
   const datos: Datos = {
-    n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCrown, tramos,
-    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, vivas, campeona, fase, sucesos, cambiosDePunta: cambios, lineasAdelante, tandas, tanda,
+    nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCrown, tramos,
+    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, vivas, campeona, fase, sucesos, cambiosDePunta: cambios, lineasAdelante, tandas, tanda,
   };
   return {
     duracion: tCrown,
     arco,
     sentido: "derecha",
     normal: normalDe(n),
+    // El cartel dice quién gana: el relator no lo repite y, en el celular, el contador de arriba se va para dejarle el lugar.
+    ...(nueva ? { alCoronar: { sinAnuncio: true, sinMarcador: true } } : {}),
     marcador,
     respuestas,
     momentos,

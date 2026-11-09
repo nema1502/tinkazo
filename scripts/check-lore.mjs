@@ -19,6 +19,7 @@
 
 import { readFile } from "node:fs/promises";
 import { emitirJson } from "./lib/resumen.mjs";
+import { tarjetasDeTextos } from "./lib/tarjetas.mjs";
 
 const offline = process.argv.includes("--offline");
 const fails = [];
@@ -38,11 +39,7 @@ const lore = await readFile("src/games/lore.ts", "utf8");
 const i18n = await readFile("src/i18n.ts", "utf8");
 
 /** Las entradas de `LORE`, sacadas del archivo tal como están escritas. */
-// De qué juego es cada tarjeta: la última clave `juego: [` antes de ella.
-const juegos = [...lore.matchAll(/^ {2}(\w+): \[/gm)].map((m) => ({ at: m.index ?? 0, juego: m[1] }));
-const juegoDe = (at) => juegos.filter((j) => j.at < at).at(-1)?.juego ?? "";
-const cards = [...lore.matchAll(/q:\s*"([^"]+)",\s*\n\s*a:\s*"([^"]+)",\s*\n\s*href:\s*"([^"]+)",\s*\n\s*src:\s*"([^"]+)"/g)]
-  .map((m) => ({ q: m[1], a: m[2], href: m[3], src: m[4], juego: juegoDe(m.index ?? 0) }));
+const cards = tarjetasDeTextos(lore, await readFile("src/games/pixi/kit/catalogo.ts", "utf8").catch(() => ""));
 
 /**
  * Si una fuente no contesta, ¿hay una copia en archive.org? Con copia, la cita
@@ -109,10 +106,20 @@ for (const card of cards) {
   }
 }
 
-/** Una fuente que no contesta: aviso si hay copia o si el juego no se ve; si no, falla. */
-async function caida(card, motivo) {
+/**
+ * El sitio contesta, pero no deja pasar a un robot: 401, 403 o 429. Le pasa a
+ * algunos diarios con los servidores de la integración (El Deber, 2 de
+ * noviembre de 2026: 200 desde una casa, 403 desde la integración). La página
+ * existe; lo que se mide acá es que la cita no esté rota, y una página rota es
+ * un 404, un 410 o un dominio que ya no existe.
+ */
+const NO_DEJA_PASAR = new Set([401, 403, 429]);
+
+/** Una fuente que no contesta: aviso si hay copia, si no deja pasar robots o si el juego no se ve; si no, falla. */
+async function caida(card, motivo, estado) {
   const copia = await copiaArchivada(card.href);
   if (copia) avisos.push(`${card.href} ${motivo}; hay copia en ${copia}`);
+  else if (NO_DEJA_PASAR.has(estado)) avisos.push(`${card.href} ${motivo}: el sitio contesta pero no deja pasar robots; se mira a mano`);
   else if (FUERA_DEL_SELECTOR.has(card.juego)) avisos.push(`${card.href} ${motivo}, sin copia; es de ${card.juego}, fuera del selector`);
   else fails.push(`${card.href} ${motivo}`);
 }
@@ -130,7 +137,7 @@ if (!offline) {
       });
       status = String(res.status);
       if (res.ok) ok.push(card.href);
-      else await caida(card, `respondió ${res.status}`);
+      else await caida(card, `respondió ${res.status}`, res.status);
     } catch (e) {
       await caida(card, `no respondió (${e instanceof Error ? e.message : e})`);
     }

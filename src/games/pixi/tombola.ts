@@ -1004,7 +1004,7 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       const np = legendPages.length;
       const pi = np > 1 ? Math.min(np - 1, Math.floor(((tAll - L0) / (L1 - L0)) * np)) : 0;
       legendPages.forEach((pg, i) => (pg.visible = i === pi));
-      legendTitle.text = np > 1 ? `${t("cTomWho")} · ${legendRange[pi] ?? ""} · ${pi + 1}/${np}` : t("cTomWho");
+      legendTitle.text = np > 1 ? `${t("cTomWho")} ${legendRange[pi] ?? ""} (${pi + 1}/${np})` : t("cTomWho");
     }
     if (tAll >= tCrown) crown.at(tAll - tCrown);
   }

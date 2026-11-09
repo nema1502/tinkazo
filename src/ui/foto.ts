@@ -1,6 +1,7 @@
 import { drawAvatar } from "../avatar";
 import { qrLienzo } from "./qr";
 import { marcarQr } from "../contar";
+import { logoALienzo, type Logo } from "../logo";
 
 /**
  * La foto para compartir: quién ganó, qué se lleva y el QR para comprobarlo,
@@ -19,12 +20,16 @@ import { marcarQr } from "../contar";
  * es tan largo que el QR no se leería en la foto, no se dibuja: la foto dice
  * que el enlace va en el mensaje.
  *
+ * Si quien organiza puso el logo de su comunidad (`logo.ts`), va arriba a la
+ * derecha, en su placa, con "Hecho con Tinkazo" a su izquierda en dos renglones.
+ * Sin logo, la foto es la de siempre, píxel por píxel. El QR no se toca.
+ *
  * No importa `i18n.ts`: la usa la página de verificación, y ese módulo trae el
  * diccionario entero. Los textos llegan ya traducidos.
  */
 
 export interface Foto {
-  /** Arriba, en versalitas: "Sorteo #278 · 21 de octubre de 2026". */
+  /** Arriba, en versalitas: "Sorteo #278, 21 de octubre de 2026". */
   rotulo: string;
   /** "Ganó", "Ganaron" o el nombre del evento. */
   titulo: string;
@@ -48,6 +53,10 @@ export interface Foto {
   escanear: string;
   /** Lo que dice la foto en lugar del QR, si no se leería. */
   sinQr: string;
+  /** El logo de la comunidad (`logo.ts`): arriba a la derecha. Sin él, la foto no cambia. */
+  logo?: Logo;
+  /** "Hecho con Tinkazo": va a la izquierda del logo, siempre con él. */
+  hecho?: string;
 }
 
 export const ANCHO_FOTO = 1080;
@@ -219,6 +228,33 @@ function marca(c: Ctx, x: number, base: number): void {
   c.fillText("Tinka", x + 96, base);
   c.fillStyle = C.magenta;
   c.fillText("zo", x + 96 + c.measureText("Tinka").width, base);
+}
+
+/**
+ * El logo de la comunidad: la placa arriba a la derecha (de y=34 a y=158, 124 px
+ * de alto y hasta 248 de ancho, pegada al margen derecho) y "Hecho con / Tinkazo"
+ * a su izquierda, en dos renglones de 28 px. La marca termina cerca de x=410 y el
+ * rótulo arranca en y=176: no se pisan. Es la imagen ya aplanada sobre su
+ * placa: sirve sobre el fondo oscuro de la foto sin medir nada.
+ */
+const LOGO_Y = 34;
+const LOGO_ALTO = 124;
+function logoYHecho(c: Ctx, logo: HTMLCanvasElement, hecho: string): void {
+  const w = Math.min(2 * LOGO_ALTO, Math.max(1, Math.round((logo.width / logo.height) * LOGO_ALTO)));
+  const x = W - M - w;
+  calcomania(c, x, LOGO_Y, w, LOGO_ALTO, "#ffffff", 0, () => {
+    c.imageSmoothingQuality = "high";
+    c.drawImage(logo, 0, 0, w, LOGO_ALTO);
+  }, 8);
+  // "Hecho con Tinkazo" en dos renglones: se corta en el último espacio ("Hecho con / Tinkazo", "Made with / Tinkazo").
+  const corte = hecho.lastIndexOf(" ");
+  const renglones = corte > 0 ? [hecho.slice(0, corte), hecho.slice(corte + 1)] : [hecho];
+  c.font = `800 28px ${SANS}`;
+  c.fillStyle = C.crema2;
+  c.textAlign = "right";
+  const medio = LOGO_Y + LOGO_ALTO / 2;
+  renglones.forEach((r, i) => c.fillText(r, x - 22, medio + 10 + (i - (renglones.length - 1) / 2) * 34));
+  c.textAlign = "left";
 }
 
 /* ------------------------------------------------------------- el medio */
@@ -582,6 +618,11 @@ export async function dibujarFoto(f: Foto): Promise<HTMLCanvasElement> {
   franja(c, 0);
   franja(c, H - 16);
   marca(c, M, 132);
+  // El logo de la comunidad, si hay y se puede abrir: nunca frena la foto.
+  if (f.logo) {
+    const l = await logoALienzo(f.logo).catch(() => null);
+    if (l) logoYHecho(c, l, f.hecho ?? "Hecho con Tinkazo");
+  }
 
   // El rótulo: qué es, el número y cuándo, en versalitas espaciadas.
   c.font = `700 25px ${MONO}`;

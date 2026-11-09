@@ -74,7 +74,7 @@ export function shortDate(secs: number): string {
 export interface DrawRow {
   /** El premio; sin premio, "Sorteo #3". */
   title: string;
-  /** `27 personas · 17 oct`, y `· sin sortear` si solo se selló. */
+  /** `27 personas, 17 oct`, y `, sin sortear` si solo se selló. */
   meta: string;
   /** El enlace del comprobante, si hay. */
   proof: string | null;
@@ -86,5 +86,5 @@ export function drawRow(e: Entry): DrawRow {
   const title = e.prize?.trim() || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
   const parts = [`${e.count} ${t("histPeople")}`, shortDate(e.sealedAt)];
   if (!done) parts.push(t("acctPending"));
-  return { title, meta: parts.filter(Boolean).join(" · "), proof: e.proof || null };
+  return { title, meta: parts.filter(Boolean).join(", "), proof: e.proof || null };
 }

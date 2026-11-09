@@ -14,7 +14,16 @@ import { sapoFinalCloseUp, sapoFinalFrame } from "./sapo-zoom-final";
 import { escalaChipLegible } from "./letra";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
-import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
+import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point, type Throw } from "./sapo-plan";
+import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_FIRST, HANG_SMALL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, tiemposDeTiros } from "./sapo-tiempos";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas } from "./kit/marcador";
+import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D } from "../tres/tipos";
+import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } from "../tres/sapo-3d";
 
 /**
  * El sapo.
@@ -42,40 +51,11 @@ import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, t
  * Todo sale de la hora del juego (`dt`), nunca del reloj de la pared.
  */
 
-/** Lo que tarda cada parte de la entrada. */
-const Q_SHOW = 1.0;
-const Q_WAVE = 1.25;
-const Q_FLY = 1.1;
-const HANG_FIRST = 0.9;
-const HANG_FINAL = 1.8;
-const HANG_SMALL = 0.5;
-/** Después de caer: el rebote y la salida, el baile en el borde, o hundirse en el agujero. */
-const AFTER_MISS = 0.8;
-const AFTER_NEAR = 1.3;
-const AFTER_HIT = 1.0;
-/**
- * No se acorta: "¡ADENTRO!" abre el remate de la música al caer, y el remate
- * rasguea casi dos segundos. Con 1,3 y con 1,6 el cartel llegaba encima del
- * rasgueo y el golpe del ganador sonaba más bajo que lo de antes (auditor de
- * mezcla, 7 de octubre de 2026: −4,6 y −8,1 LU).
- */
-const AFTER_FINAL = 2.0;
-/** La parte de AFTER_NEAR que la argolla baila en el borde antes de salir. */
-const WOBBLE = 0.8;
-const SINK = 0.5;
+/** Lo lento del sapo vive en sapo-tiempos.ts (lo comparte con la prueba del niño). */
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
-/**
- * La boca (un fallo que entra a la rana, una vez por show): cuánto tarda en
- * hundirse la argolla, cuándo sale escupida y cuánto vuela hasta el aro.
- */
-const BOCA_IN = 0.3;
-const BOCA_SPIT = 0.45;
-const BOCA_FLY = 0.5;
-/** Lo que dura la boca entera: tragar, escupir, y rodar afuera como cualquier fallo. */
-const BOCA_AFTER = BOCA_SPIT + BOCA_FLY + AFTER_MISS;
 
 interface Toss {
   th: Throw;
@@ -96,9 +76,9 @@ interface Toss {
   spat: boolean;
 }
 
-export async function sapoPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+export async function sapoPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaSapo>): Promise<void> {
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
@@ -169,23 +149,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const premioDe = (turn: number): number => total - turn;
 
   /* ---------------------------------------------------------------- el guion */
-  const tosses: Toss[] = [];
-  let tt = T_SEATED;
-  throws.forEach((th, i) => {
-    const final = i === throws.length - 1;
-    const grand = th.turn === last;
-    tt += i === 0 ? HANG_FIRST : final ? HANG_FINAL : HANG_SMALL;
-    const flight = throwTime(th.kind, grand);
-    const after = th.boca ? BOCA_AFTER : th.kind === "miss" ? AFTER_MISS : th.kind === "near" ? AFTER_NEAR : final ? AFTER_FINAL : AFTER_HIT;
-    const start = tt;
-    tosses.push({
-      th, i, name: prizes[th.turn] as number, slot: plan.winnerSlots[th.turn] as number, grand, final,
-      start, land: start + flight, end: start + flight + after, flight,
-      announced: false, thrown: false, landed: false, spat: false,
-    });
-    tt = start + flight + after;
-  });
-  const T_CROWN = tt;
+  const linea = tiemposDeTiros(throws, last, T_SEATED);
+  const tosses: Toss[] = throws.map((th, i) => ({
+    th, i, name: prizes[th.turn] as number, slot: plan.winnerSlots[th.turn] as number, ...(linea.tiros[i] as (typeof linea.tiros)[number]),
+    announced: false, thrown: false, landed: false, spat: false,
+  }));
+  const T_CROWN = linea.corona;
   /** Cuándo cae la última argolla: ahí va el respiro de la música. */
   const T_LAND = (tosses[tosses.length - 1] as Toss).land;
   /** Desde cuándo sube el zoom de emoción: cuando tira la última argolla, hasta la corona. */
@@ -273,7 +242,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return { x: g.cx - w / 2, y: g.cy - d / 2, w, h: d + 46 * g.k };
   };
   /** Lo que se ve del juego: debajo de la barra de arriba y encima del relator. */
-  const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: S.top(), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
+  const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: Math.max(S.top(), contadorBajo()), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
+  /**
+   * Hasta dónde llega el contador con su fila de marcas: el encuadre lo reserva, y el tablero (con los nombres de las esquinas)
+   * empieza debajo. Antes el contador se apagaba cuando la cámara se acercaba, y con la cámara lejos tapaba la ficha de arriba.
+   */
+  const contadorBajo = (): number => S.top() + 10 * g.k + medidasContador(g.k).alto + reservaDeMarcas(all, g.k, g.w).alto + 4 * g.k;
   /** Debajo de donde sale el cartel del ganador, encima del relator y sin pegarse a los costados. */
   const zonaFinal = (): Zona => ({ x0: 8 * g.k, y0: S.placaBajo(winners.length) + 4 * g.k, x1: g.w - 8 * g.k, y1: g.h - S.bottom() - 6 * g.k });
 
@@ -296,7 +270,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const counter = S.text("", { fontFamily: MONO, fontSize: CONTADOR.fuente, fontWeight: "700", fill: CREAM });
   counter.anchor.set(0.5);
   const counterG = new Container();
-  counterG.addChild(counterBox, counter);
+  const marcasG = new Graphics();
+  counterG.addChild(counterBox, counter, marcasG);
   S.hud.addChild(counterG);
   // "¡Casi!" como calcomanía amarilla, legible desde el fondo.
   const almostBox = new Graphics();
@@ -313,6 +288,50 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const badgeOf = new Map<number, Text>();
   S.hud.addChild(badgeLayer);
 
+  /* ------------------------------------------------------------------ el 3D (si hay) */
+  // Con el 3D prendido, el cajón, la rana, la mano y las argollas los dibuja la vista 3D debajo de este lienzo, que queda
+  // transparente. Este archivo sigue decidiendo todo y le pasa lo que ya puso, cuadro a cuadro. Los nombres, las medallas
+  // y el foco siguen siendo de acá y se anclan a donde la cámara 3D ve cada punto de la mesa (aPant).
+  const puente: Puente = {};
+  const v3 = enchufar3D(S, tres);
+  const fxS = new Graphics();
+  if (v3) {
+    floor.visible = boxG.visible = frogG.visible = tokG.visible = handG.visible = false;
+    S.hud.addChildAt(fxS, 0);
+  }
+  /** Dónde cae en la pantalla un punto de la mesa (en unidades de la mesa, con su altura): por la cámara 3D, o la del 2D. */
+  const aPant = (p: Point, alto = 0): Point => {
+    const s = v3 ? puente.aPantalla?.(p, alto) : null;
+    if (s) return s;
+    const q = P(p);
+    return cam.toScreen(q.x, q.y, g.w, g.h);
+  };
+
+  /** Dónde está cada ficha de la mesa en la pantalla este cuadro, por agujero: para que la insignia no caiga encima de ninguna. */
+  const fichas = new Map<number, { x0: number; y0: number; x1: number; y1: number }>();
+  const tocaFicha = (x: number, y: number, r: number): boolean => {
+    for (const f of fichas.values()) {
+      const dx = x - Math.max(f.x0, Math.min(x, f.x1)), dy = y - Math.max(f.y0, Math.min(y, f.y1));
+      if (dx * dx + dy * dy < r * r) return true;
+    }
+    return false;
+  };
+  /** El lugar más cercano a `p` donde la insignia (radio `r`) no tapa ninguna ficha: el suyo si ya está libre; si no, arriba, a un costado o abajo de la propia. */
+  const insigniaLibre = (p: { x: number; y: number }, r: number, slot: number): { x: number; y: number } => {
+    if (!tocaFicha(p.x, p.y, r)) return p;
+    const own = fichas.get(slot);
+    if (!own) return p;
+    const m = 2 * g.k;
+    const cand = [
+      { x: own.x1 - r, y: own.y0 - r - m },
+      { x: own.x1 + r + m, y: (own.y0 + own.y1) / 2 },
+      { x: own.x0 + r, y: own.y0 - r - m },
+      { x: own.x0 - r - m, y: (own.y0 + own.y1) / 2 },
+      { x: own.x1 - r, y: own.y1 + r + m },
+    ];
+    const dentro = (c: { x: number; y: number }): boolean => c.x >= r && c.x <= g.w - r && c.y >= S.top() + r && c.y <= g.h - S.bottom() - r;
+    return cand.find((c) => dentro(c) && !tocaFicha(c.x, c.y, r)) ?? cand.find((c) => dentro(c)) ?? p;
+  };
   /** Un chip por nombre de la lista original, con su cara. Los finalistas terminan siendo los nombres de los agujeros. */
   let chips: Container[] = [];
   /** Dónde estaba cada chip en la grilla de la clasificatoria (pantalla). */
@@ -514,7 +533,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const holeAt = (s: number): number => flyAt(s) + Q_FLY * 0.75;
 
   /* ------------------------------------------------------------------ movimiento */
-  interface Tok { x: number; y: number; ground: Point; scale: number; alpha: number; height: number }
+  interface Tok {
+    x: number; y: number; ground: Point; scale: number; alpha: number; height: number;
+    /** Lo que el 3D necesita para vestirla: qué hace, cuánto avanzó, hace cuánto aterrizó y en qué borde baila. */
+    st: EstadoArgolla; u: number; edad: number; borde: Point | null;
+  }
 
   const arc = (a: Point, b: Point, f: number, apex: number): Point => ({
     x: a.x + (b.x - a.x) * f,
@@ -535,15 +558,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         if (f < LABIO) {
           const u = f / LABIO;
           const q = arc(hand, P(lab), u, apex);
-          return { x: q.x, y: q.y, ground: { x: hp.x + (lab.x - hp.x) * u, y: hp.y + (lab.y - hp.y) * u }, scale: 1, alpha: 1, height: 4 * apex * u * (1 - u) };
+          return { x: q.x, y: q.y, ground: { x: hp.x + (lab.x - hp.x) * u, y: hp.y + (lab.y - hp.y) * u }, scale: 1, alpha: 1, height: 4 * apex * u * (1 - u), st: "vuelo", u: f, edad: 0, borde: null };
         }
         const u = (f - LABIO) / (1 - LABIO);
         const q = arc(P(lab), land, u, apex * 0.35);
-        return { x: q.x, y: q.y, ground: { x: lab.x + (o.th.landing.x - lab.x) * u, y: lab.y + (o.th.landing.y - lab.y) * u }, scale: 1, alpha: 1, height: 4 * apex * 0.35 * u * (1 - u) };
+        return { x: q.x, y: q.y, ground: { x: lab.x + (o.th.landing.x - lab.x) * u, y: lab.y + (o.th.landing.y - lab.y) * u }, scale: 1, alpha: 1, height: 4 * apex * 0.35 * u * (1 - u), st: "vuelo", u: f, edad: 0, borde: null };
       }
       const q = arc(hand, land, f, apex);
       const ground = { x: hp.x + (o.th.landing.x - hp.x) * f, y: hp.y + (o.th.landing.y - hp.y) * f };
-      return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f) };
+      return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f), st: "vuelo", u: f, edad: 0, borde: null };
     }
     if (o.th.boca) {
       // La boca: la argolla se hunde, la rana la escupe sobre el aro y de ahí rueda.
@@ -552,27 +575,27 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const m = P(MOUTH);
       if (age < BOCA_IN) {
         const u = age / BOCA_IN;
-        return { x: m.x, y: m.y, ground: MOUTH, scale: 1 - 0.6 * u * u, alpha: 1 - u * u, height: 0 };
+        return { x: m.x, y: m.y, ground: MOUTH, scale: 1 - 0.6 * u * u, alpha: 1 - u * u, height: 0, st: "boca-entra", u, edad: age, borde: null };
       }
-      if (age < BOCA_SPIT) return { x: m.x, y: m.y, ground: MOUTH, scale: 1, alpha: 0, height: 0 };
+      if (age < BOCA_SPIT) return { x: m.x, y: m.y, ground: MOUTH, scale: 1, alpha: 0, height: 0, st: "oculta", u: 0, edad: age, borde: null };
       if (age < BOCA_SPIT + BOCA_FLY) {
         const f = (age - BOCA_SPIT) / BOCA_FLY;
         const apex = g.sc * 0.5;
         const q = arc(m, P(b.spit), f, apex);
         const ground = { x: MOUTH.x + (b.spit.x - MOUTH.x) * f, y: MOUTH.y + (b.spit.y - MOUTH.y) * f };
-        return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f) };
+        return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f), st: "boca-sale", u: f, edad: age, borde: null };
       }
       const u = clamp((age - BOCA_SPIT - BOCA_FLY) / AFTER_MISS, 0, 1);
       const gp = { x: b.spit.x + (b.exit.x - b.spit.x) * ease.outCubic(u), y: b.spit.y + (b.exit.y - b.spit.y) * ease.outCubic(u) };
       const q = P(gp);
       const hop = g.br * 2.6 * (1 - u) * Math.abs(Math.sin(u * Math.PI * 3));
       const off = clamp((Math.hypot(gp.x, gp.y) - L.tableR) / 0.15, 0, 1);
-      return { x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop };
+      return { x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop, st: "rueda", u: 0, edad: age - BOCA_SPIT - BOCA_FLY, borde: null };
     }
     const age = t - o.land;
     if (o.th.kind === "hit") {
       const u = clamp(age / SINK, 0, 1);
-      return { x: land.x, y: land.y + g.br * 0.8 * u, ground: o.th.landing, scale: 1 - 0.85 * ease.outCubic(u), alpha: u >= 1 ? 0 : 1, height: 0 };
+      return { x: land.x, y: land.y + g.br * 0.8 * u, ground: o.th.landing, scale: 1 - 0.85 * ease.outCubic(u), alpha: u >= 1 ? 0 : 1, height: 0, st: "hunde", u, edad: age, borde: null };
     }
     let gp: Point;
     let hop: number;
@@ -591,7 +614,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
     const q = P(gp);
     const off = clamp((Math.hypot(gp.x, gp.y) - L.tableR) / 0.15, 0, 1);
-    return { x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop };
+    const baila = o.th.kind === "near" && age < WOBBLE;
+    const rim = o.th.kind === "near" && o.th.rimSlot !== undefined ? (L.holes[o.th.rimSlot] as Point) : null;
+    return {
+      x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop,
+      st: baila ? "baile" : "rueda", u: baila ? age / WOBBLE : o.th.kind === "near" ? 1 : 0, edad: baila ? age : age - (o.th.kind === "near" ? WOBBLE : 0), borde: baila ? rim : null,
+    };
   };
 
   /* ------------------------------------------------------------------ el guion hablado */
@@ -601,9 +629,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   let empujeDado = false;
 
   const crownUI = S.crown(names, winners, true);
+  /** La hora en que salió el golpe de la corona (para el 3D), o -1. */
+  let tGolpe = -1;
   function crown(): void {
     if (crowned) return;
     crowned = true;
+    tGolpe = tAll;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
@@ -939,7 +970,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // De cerca, la mesa entera si entra; si no, de borde a borde de la
     // pantalla: antes la cámara se pegaba al borde de la pantalla y mostraba
     // piso de un lado mientras dejaba agujeros afuera del otro.
-    const v = encuadrar(mesa(), zonaJuego(), { x, y, z }, g.w, g.h);
+    // Con los nombres ya sentados, el encuadre los cuenta: la ficha de una esquina de arriba no queda bajo el contador.
+    // Con la cámara quieta o a un acercamiento corto (hasta 1,3) la mesa entera con sus nombres entra debajo del contador: si no
+    // entra a ese tamaño, se achica lo que haga falta. Más de cerca (el seguimiento de la argolla, el último tiro) manda
+    // `encuadrar`, que cubre la zona de punta a punta; ahí el contador se aparta solo si una ficha le queda debajo.
+    const conNombres = tAll >= T_SEATED && !crowned;
+    if (conNombres && z <= 1.3) for (let vuelta = 0; vuelta < 3; vuelta++) z = Math.min(z, cabe(mesaConNombres(z), zonaJuego()));
+    const v = encuadrar(conNombres ? mesaConNombres(z) : mesa(), zonaJuego(), { x, y, z }, g.w, g.h);
     cam.lookAt(v.x, v.y, z, rate);
   }
 
@@ -1073,22 +1110,110 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     tokG.ellipse(x, y, r * 0.4, r * 0.32).fill({ color: 0x3a2a14, alpha }).stroke({ width: 2 * g.k, color: INK, alpha });
   }
 
+  /** El parpadeo de la rana: 1 abierto, 0,15 cerrado. */
+  const ojoAbierto = (): number => ((Math.floor(tAll * 0.7) % 5 === 0 && (tAll * 0.7) % 1 < 0.12) ? 0.15 : 1);
+  /** El impulso de la mano que tira: de 0 a 1 hacia atrás, y de 0 a -0,8 al soltar. */
+  const impulsoMano = (): number => {
+    const next = tosses.find((o) => tAll < o.start + 0.3);
+    if (!next) return 0;
+    const u = next.start - tAll;
+    if (u >= 0) return u < WINDUP ? 1 - u / WINDUP : 0;
+    return -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
+  };
+
+  /** Las argollas que se ven este cuadro, tal como las puso el 2D, para vestirlas en 3D. */
+  function argollas3(): ArgollaSapo[] {
+    const out: ArgollaSapo[] = [];
+    for (const o of tosses) {
+      if (tAll < o.start - HANG_FIRST) continue;
+      const prevDone = o.i === 0 || (tosses[o.i - 1] as Toss).landed || tAll >= (tosses[o.i - 1] as Toss).end - 0.2;
+      if (tAll < o.start) {
+        // En la mano, esperando el tiro.
+        if (prevDone && o.start - tAll < (o.final ? HANG_FINAL : o.i === 0 ? HANG_FIRST : HANG_SMALL)) {
+          out.push({ estado: "mano", suelo: handPoint(), alto: 0, escala: 1, alfa: 1, u: 0, edad: 0, ultima: false, borde: null });
+        }
+        continue;
+      }
+      if (tAll >= o.end && !(o.final && o.th.kind === "hit")) continue;
+      const tk = tokenAt(o, Math.min(tAll, o.end));
+      out.push({ estado: tk.st, suelo: tk.ground, alto: tk.height / g.sc, escala: tk.scale, alfa: tk.alpha, u: tk.u, edad: tk.edad, ultima: o.final, borde: tk.borde });
+    }
+    return out;
+  }
+
+  /** Pasa el cuadro al 3D: lo que el 2D ya puso, sin recalcular nada. */
+  function frame3D(agujeros: AgujeroSapo[]): void {
+    if (!v3) return;
+    const ultimo = tosses[tosses.length - 1] as Toss;
+    const hand = handPoint();
+    const golpes = tosses
+      .filter((o) => !o.th.boca && tAll >= o.land && tAll - o.land < 0.8)
+      .map((o) => ({ t: o.land, punto: o.th.landing, fuerza: o.th.kind === "near" ? 0.6 : o.final ? 1 : 0.85 }));
+    v3.frame({
+      ...entradaBase(S, tAll),
+      puente,
+      mesa: { cx: g.cx, cy: g.cy, sc: g.sc, tilt: g.tilt },
+      trazo: { holes: L.holes, holeR: L.holeR, frogR: L.frogR, tableR: L.tableR },
+      radio: g.br / g.sc,
+      agujeros,
+      rana: {
+        boca: croakAt(),
+        ojo: ojoAbierto(),
+        garganta: 1 + 0.06 * Math.max(0, Math.sin(tAll * 5)),
+        labio: labio && tAll >= ultimo.start + ultimo.flight * LABIO ? tAll - (ultimo.start + ultimo.flight * LABIO) : -1,
+        mira: crowned ? (L.holes[ultimo.slot] as Point) : null,
+        quieta: tAll >= T_LAND - 0.4 && tAll < T_LAND,
+      },
+      mano: { visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2) },
+      argollas: argollas3(),
+      golpes,
+      tension: empujeDado ? clamp((tAll - T_EMPUJE) / Math.max(0.5, T_CROWN - T_EMPUJE), 0, 1) : 0,
+      golpe: tGolpe,
+      adentro: tAll >= ultimo.land ? ultimo.land : -1,
+    });
+  }
+
+  /** Los rayos del agujero ganador, en la pantalla, sobre lo que la cámara 3D ve (en el 2D van en la escena). */
+  function rayos3D(): void {
+    const fin = tosses[tosses.length - 1] as Toss;
+    const age = tAll - fin.land;
+    if (age < 0 || age >= 0.7) return;
+    const h = L.holes[fin.slot] as Point;
+    const c = aPant(h);
+    const ex = aPant({ x: h.x + L.holeR, y: h.y }), ey = aPant({ x: h.x, y: h.y + L.holeR });
+    const rx = Math.abs(ex.x - c.x), ry = Math.abs(ey.y - c.y);
+    const e = ease.outCubic(age / 0.7);
+    for (let r = 0; r < 12; r++) {
+      const a = (r / 12) * Math.PI * 2;
+      const r0 = 1.3 + 0.4 * e, r1 = 1.6 + 1.6 * e;
+      fxS.moveTo(c.x + Math.cos(a) * r0 * rx, c.y + Math.sin(a) * r0 * ry)
+        .lineTo(c.x + Math.cos(a) * r1 * rx, c.y + Math.sin(a) * r1 * ry)
+        .stroke({ width: 5 * g.k, color: YELLOW, alpha: 1 - age / 0.7, cap: "round" });
+    }
+  }
+
   function draw(): void {
     const k = g.k;
-    drawBox();
+    // El foco del cierre es del 2D; con el 3D prendido no se dibuja (main).
     winnerTargetG.clear();
-    drawFrog();
-    drawHand();
+    if (!v3) {
+      drawBox();
+      drawFrog();
+      drawHand();
+    }
     fx.clear();
+    fxS.clear();
     tokG.clear();
     strikeG.clear();
     glowG.clear();
 
     const lit = new Map<number, number>();
     for (const o of tosses) if (o.th.kind === "hit" && tAll >= o.land) lit.set(o.slot, o.final ? 1 : 0.6);
+    const ag3: AgujeroSapo[] = [];
     for (let s = 0; s < holes; s++) {
       const f = clamp((tAll - holeAt(s)) / 0.35, 0, 1);
-      if (f <= 0) continue;
+      if (v3) ag3.push({ nace: f > 0 ? ease.outBack(f) : 0, aro: colorDe(whoAt(s)), lit: lit.get(s) ?? 0 });
+      if (f <= 0 || v3) continue;
       const c = P(L.holes[s] as Point);
       const rx = L.holeR * g.sc * ease.outBack(f), ry = rx * g.tilt;
       const glow = lit.get(s);
@@ -1113,8 +1238,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
     }
 
+    // El 3D dibuja la mesa antes que los nombres: ellos se anclan a donde su cámara ve cada aro.
+    if (v3) {
+      frame3D(ag3);
+      rayos3D();
+    }
+
     // Los nombres: primero en la grilla de la clasificatoria, después volando a su agujero, y ahí se quedan.
     const ls = labelScale();
+    fichas.clear();
     names.forEach((_, i) => {
       const c = chips[i] as Container;
       const slot = slotOfName.get(i);
@@ -1145,8 +1277,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         if (sit) sit.visible = false;
         return;
       }
-      const lp = P(labelAt(slot));
-      const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
+      const q = aPant(labelAt(slot));
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
       // En un celular, ya sentado el nombre es el chip compacto; antes de sentarse, y el del ganador, el de siempre con su cara.
       const llegado = !!sit && !ganador && u >= 1;
@@ -1173,9 +1304,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         // de 2026). Va centrado sobre el aro de su propio agujero: ahí no cubre a nadie más.
         const fin = tosses[tosses.length - 1] as Toss;
         const f = ease.outCubic(clamp((tAll - fin.land) / 0.35, 0, 1));
-        const h = L.holes[slot] as Point;
-        const c = P(h);
-        const d = cam.toScreen(c.x, c.y, g.w, g.h);
+        const d = aPant(L.holes[slot] as Point);
         qx = q.x + (d.x - q.x) * f;
         qy = q.y + (d.y - q.y) * f;
         an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0.5 - an.ay) * f };
@@ -1185,6 +1314,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const x = grid.x - cc.width / 2 + (tx - (grid.x - cc.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
       const xx = clamp(x, 4, Math.max(4, g.w - cc.width - 4));
       cc.position.set(xx, y);
+      // La destacada va por encima de las vecinas: una ficha de al lado le tapaba la última letra.
+      if (ganador && cc.parent === chipLayer) chipLayer.addChild(cc);
+      if (cc.visible && cc.alpha > 0) fichas.set(slot, { x0: xx, x1: xx + cc.width, y0: y - cc.height / 2, y1: y + cc.height / 2 });
       // Con la cámara cerca, el nombre que quedaría cortado contra el borde se
       // apaga en vez de arrastrarse encima de los agujeros o de la rana.
       cc.alpha = ganador || u < 1 || (Math.abs(xx - x) < 6 * k && qx > 0 && qx < g.w) ? 1 : 0;
@@ -1198,7 +1330,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const prevDone = o.i === 0 || (tosses[o.i - 1] as Toss).landed || tAll >= (tosses[o.i - 1] as Toss).end - 0.2;
       if (tAll < o.start) {
         // En la mano, esperando el tiro.
-        if (prevDone && o.start - tAll < (o.final ? HANG_FINAL : o.i === 0 ? HANG_FIRST : HANG_SMALL)) {
+        if (!v3 && prevDone && o.start - tAll < (o.final ? HANG_FINAL : o.i === 0 ? HANG_FIRST : HANG_SMALL)) {
           const hp = handAt();
           const u = o.start - tAll;
           const sw = u < WINDUP ? 1 - u / WINDUP : 0;
@@ -1209,6 +1341,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (tAll >= o.end && !(o.final && o.th.kind === "hit")) continue;
       const tk = tokenAt(o, Math.min(tAll, o.end));
       if (tAll < o.land) {
+        if (v3) continue;
         const sh = P(tk.ground);
         const sz = g.br * (1 - clamp(tk.height / (g.sc * 2), 0, 0.5));
         fx.ellipse(sh.x, sh.y + g.br * 0.5, sz, sz * g.tilt).fill({ color: INK, alpha: 0.35 });
@@ -1216,10 +1349,18 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       } else {
         const age = tAll - o.land;
         if (o.th.kind !== "hit" && !o.th.boca && age < 0.4) {
-          const lp = P(o.th.landing);
-          fx.ellipse(lp.x, lp.y, g.br * (1 + 4 * age), g.br * (1 + 4 * age) * g.tilt).stroke({ width: 2 * k, color: YELLOW, alpha: 1 - age / 0.4 });
+          if (v3) {
+            // La onda del golpe, sobre la mesa que ve la cámara 3D.
+            const c = aPant(o.th.landing);
+            const ex = aPant({ x: o.th.landing.x + g.br / g.sc, y: o.th.landing.y }), ey = aPant({ x: o.th.landing.x, y: o.th.landing.y + g.br / g.sc });
+            const k4 = 1 + 4 * age;
+            fxS.ellipse(c.x, c.y, Math.abs(ex.x - c.x) * k4, Math.abs(ey.y - c.y) * k4).stroke({ width: 2 * k, color: YELLOW, alpha: 1 - age / 0.4 });
+          } else {
+            const lp = P(o.th.landing);
+            fx.ellipse(lp.x, lp.y, g.br * (1 + 4 * age), g.br * (1 + 4 * age) * g.tilt).stroke({ width: 2 * k, color: YELLOW, alpha: 1 - age / 0.4 });
+          }
         }
-        if (tk.alpha > 0.01) {
+        if (!v3 && tk.alpha > 0.01) {
           const sh = P(tk.ground);
           fx.ellipse(sh.x, sh.y + g.br * 0.5, g.br, g.br * g.tilt).fill({ color: INK, alpha: 0.3 * tk.alpha });
           drawToken(tk.x, tk.y, tk.scale, false, tk.alpha);
@@ -1232,23 +1373,34 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     for (const o of tosses) if (tAll >= o.start - 0.7) turn = o.th.turn;
     const started = tAll >= (tosses[0] as Toss).start - 0.7;
     const quedan = all - waves.reduce((a, w, wi) => a + (tAll >= Q_SHOW + wi * Q_WAVE + 0.6 ? w.length : 0), 0);
-    counter.text = !started
-      ? (tAll < T_FLY && all > holes ? `${t("cQualIn")}  ${quedan}` : `${t("cSapHoles")}  ${holes}`)
-      : total > 1 ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
+    // «QUEDAN 14 DE 18» (primero los de la clasificatoria, después los de la mesa, que bajan con cada medalla) y,
+    // debajo, una marca por persona: un chico cuenta las encendidas sin leer. Con varios premios el texto es el de la cuenta de premios.
+    const resueltos = tosses.reduce((a, o) => a + (o.th.kind === "hit" && !o.final && tAll >= o.land + SINK ? 1 : 0), 0);
+    const siguen = !started && tAll < T_FLY && all > holes ? quedan : Math.max(1, holes - resueltos);
+    counter.text = started && total > 1
+      ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase()
+      : `${t("marcadorQuedan")}  ${siguen} ${t("marcadorDe")} ${all}`;
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(marcasG, { total: all, quedan: siguen, k, w: g.w });
     counterG.position.set(22 * k, S.top() + 10 * k);
     counterG.visible = !crowned && !finalCloseUp();
-    // Con la cámara cerca tapaba nombres de la fila de arriba.
-    counterG.alpha = clamp((1.15 - cam.zoom) / 0.1, 0, 1);
+    // El encuadre le deja su lugar (`contadorBajo`) y ya no se apaga con el zoom: solo con la cámara muy cerca y solo si una
+    // ficha le queda justo debajo.
+    const cajaContador = { x0: 22 * k, y0: S.top() + 10 * k, x1: 22 * k + Math.max(bw, reservaDeMarcas(all, k, g.w).ancho) + 5 * k, y1: contadorBajo() };
+    counterG.alpha = cam.zoom > 1.3 && [...fichas.values()].some((f) => f.x1 > cajaContador.x0 && f.x0 < cajaContador.x1 && f.y1 > cajaContador.y0 && f.y0 < cajaContador.y1) ? 0 : 1;
 
     // Los agujeros ya ocupados: una medalla con el orden (o una tilde con un solo ganador).
     for (const o of tosses) {
       if (o.th.kind !== "hit" || tAll < o.land + SINK || crowned) continue;
-      const c = P(L.holes[o.slot] as Point);
-      const p = cam.toScreen(c.x + L.holeR * g.sc * 0.95, c.y - L.holeR * g.sc * g.tilt * 1.1, g.w, g.h);
+      const hh = L.holes[o.slot] as Point;
+      const p = aPant({ x: hh.x + L.holeR * 0.95, y: hh.y - L.holeR * 1.1 }, 0.03);
       const br = Math.max(9 * k, 12 * k);
+      // La insignia no va sobre ninguna ficha: si cae encima, se corre afuera, junto a la propia.
+      const q = insigniaLibre(p, br, o.slot);
+      p.x = q.x;
+      p.y = q.y;
       strikeG.circle(p.x, p.y, br).fill(YELLOW).stroke({ width: 2 * k, color: INK });
       if (total > 1) {
         let b = badgeOf.get(o.th.turn);
@@ -1271,8 +1423,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (o.th.kind !== "near" || tAll < o.land || tAll >= o.land + AFTER_NEAR) continue;
       const age = tAll - o.land;
       // Entre la argolla y la rana: afuera quedaba encima del nombre del vecino.
-      const lp = P({ x: o.th.landing.x * 0.55, y: o.th.landing.y * 0.55 });
-      const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
+      const q = aPant({ x: o.th.landing.x * 0.55, y: o.th.landing.y * 0.55 }, 0.05);
       almostG.position.set(q.x, q.y - 6 * k * ease.outCubic(clamp(age / 0.3, 0, 1)));
       almostG.rotation = -0.08;
       almostG.alpha = clamp(age / 0.15, 0, 1) * clamp((AFTER_NEAR - age) / 0.3, 0, 1);
@@ -1282,10 +1433,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Dónde está el agujero de quien gana en la pantalla, para el foco. */
   function focoDelAgujero(): FocoAt {
     const slot = (tosses[tosses.length - 1] as Toss).slot;
-    const c = P(L.holes[slot] as Point);
-    const s = cam.toScreen(c.x, c.y, g.w, g.h);
-    const z = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    return { arco: story.arc, x: s.x, y: s.y, r: L.holeR * g.sc * z * 1.7, color: colorDeNombre(nameOfSlot(slot)), rival: null };
+    const h = L.holes[slot] as Point;
+    const s = aPant(h);
+    const borde = aPant({ x: h.x + L.holeR, y: h.y });
+    return { arco: story.arc, x: s.x, y: s.y, r: Math.max(8, Math.abs(borde.x - s.x)) * 1.7, color: colorDeNombre(nameOfSlot(slot)), rival: null };
   }
 
   // Para el auditor de emoción: el agujero de quien gana y su nombre, en la pantalla.
@@ -1301,6 +1452,44 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }, selectedTargetOnScreen);
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen, adónde mirar, cuánto falta y qué pasó. Solo lee.
+  const planNino = {
+    n: all,
+    oleadas: waves.map((w) => w.map((persona) => ({ persona, at: goneAt.get(persona) ?? 0 }))),
+    tFly: T_FLY,
+    tiros: tosses.map((o) => ({
+      land: o.land,
+      kind: o.th.kind,
+      final: o.final,
+      ...(o.th.kind === "hit" ? { persona: whoAt(o.slot) } : {}),
+      ...(o.th.kind === "near" && o.th.rimSlot !== undefined ? { borde: whoAt(o.th.rimSlot) } : {}),
+    })),
+    duracion: T_CROWN + FOCO.golpe / paceFactor(),
+  };
+  exponerNino({
+    forma: FORMA_SAPO,
+    duracion: planNino.duracion,
+    t: () => tAll,
+    verdad: () => {
+      const r = respuestasSapo(planNino, tAll);
+      // Adónde mirar es lo que decide la cámara: la grilla de los nombres mientras se tachan, la argolla cuando vuela o baila, el agujero cuando entra, y si no la mesa.
+      let p: Point;
+      const ultimo = tosses[tosses.length - 1] as Toss;
+      const vuela = tosses.find((o) => tAll >= o.start && tAll < o.end);
+      if (tAll < T_FLY) {
+        const q = r.adelante.quienes.map((i) => gridAt[i]).filter((x): x is Point => !!x);
+        const m = Math.max(1, q.length);
+        return { ...r, adelante: { ...r.adelante, lugar: lugarDe(q.reduce((a, b) => a + b.x, 0) / m, q.reduce((a, b) => a + b.y, 0) / m, S.sw(), S.sh()) } };
+      }
+      if (tAll >= ultimo.land) p = v3 ? aPant(L.holes[ultimo.slot] as Point) : S.scene.toGlobal(P(L.holes[ultimo.slot] as Point));
+      else if (vuela) {
+        const tk = tokenAt(vuela, tAll);
+        p = v3 ? aPant(tk.ground, tk.height / g.sc) : S.scene.toGlobal(tk);
+      } else p = v3 ? aPant({ x: 0, y: 0 }) : S.scene.toGlobal(P({ x: 0, y: 0 }));
+      return { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } };
+    },
+  });
 
   S.run((dt, now) => {
     tAll += dt;

@@ -1,10 +1,11 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app, currentPace, forzarRitmo, params } from "../state";
-import { ENSAYO_ESPERA_S, LISTA_ENSAYO, enEnsayo, marcarEnsayo } from "../ensayo-modo";
+import { ENSAYO_ESPERA_S, LISTA_ENSAYO, enEnsayo, enStand, marcarEnsayo } from "../ensayo-modo";
 import { guardarBorrador, renderNames, setList } from "./participants";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { actualizarPaso } from "./siguiente";
+import { elegirOtroJuegoParaVer } from "./draw";
 
 /**
  * El ensayo, en la página: probar Tinkazo con una lista de ejemplo, haciendo y
@@ -15,12 +16,13 @@ import { actualizarPaso } from "./siguiente";
  * - la lista es de la fauna de Bolivia, no se edita y no pisa la que se estaba
  *   armando (el borrador queda guardado y vuelve al salir);
  * - una banda arriba dice que es un ensayo, con "Salir del ensayo", y en el
- *   estadio, donde va el número público, "ENSAYO · no se graba";
+ *   estadio, donde va el número público, "ENSAYO: no se graba";
  * - una línea debajo de los pasos guía, sin bloquear nada;
  * - el número sale en 15 s (en un sorteo de verdad son unos 45) y el show va en
  *   el ritmo rápido, sin cambiar el que eligió la persona;
  * - al final no hay QR, ni compartir, ni siguiente premio, ni en grande: "Así se
- *   sortea", con "Sortear con mi lista".
+ *   sortea", con "Probar otro juego" (el mismo resultado, contado por otro juego, sin
+ *   sellar otra vez) y, después, "Sortear con mi lista".
  *
  * Se entra por botón (la portada, la oferta de primera vez, el pie del
  * tutorial y el enlace de debajo del cuadro vacío) y nunca con un sorteo
@@ -81,7 +83,8 @@ function guiar(clave = claveDelPaso): void {
   // Sin clave (al cambiar de idioma), la del último paso: la espera sigue siendo la espera.
   claveDelPaso = clave;
   const el = document.getElementById("ensayo-guia");
-  if (!el) return;
+  // En el modo stand la línea es de `stand.ts`.
+  if (!el || enStand()) return;
   let texto = "";
   if (enEnsayo() && !app.drawn) {
     if (!app.frozen) texto = t("ensGuia1");
@@ -134,6 +137,8 @@ export function initEnsayo(): void {
       entrarAlEnsayo();
     });
   }
+  // "Probar otro juego": el mismo resultado de ejemplo, contado por otro juego, sin sellar de nuevo ni esperar.
+  document.getElementById("ens-otro")?.addEventListener("click", elegirOtroJuegoParaVer);
   document.getElementById("ens-mio")?.addEventListener("click", () => salirDelEnsayo({ conMiLista: true }));
   for (const id of ["ens-salir", "ens-salir-banda"]) document.getElementById(id)?.addEventListener("click", () => salirDelEnsayo());
   document.getElementById("ens-como")?.addEventListener("click", () => salirDelEnsayo({ aTutorial: true }));

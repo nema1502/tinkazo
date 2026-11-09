@@ -116,6 +116,8 @@ export function bloqueCatalogo(v) {
     "{",
     `  id: "${v.id}",`,
     `  cargar: () => import("../${v.id}").then((m) => m.${v.id}Pixi),`,
+    '  // La forma decide la pregunta propia de la prueba del niño: "carrera", "de-pie", "rueda" o "acumulacion".',
+    '  forma: "carrera",',
     "  selector: false,",
     "  rango: { minimo: 2, maximo: 200 },",
     "  captura: false,",
@@ -206,6 +208,11 @@ export function encender({ raiz = RAIZ, id, dryRun = false }) {
   if (/selector:\s*true/.test(bloque)) throw new Error(`"${id}" ya está encendido`);
   const faltan = [];
   if (!existsSync(join(raiz, `public/juegos/${id}.webp`))) faltan.push(`falta la captura public/juegos/${id}.webp (node scripts/capturas-juegos.mjs ${id} --en 6.5)`);
+  for (const dir of ["selector", "portada"]) {
+    for (const sufijo of ["", "-light"]) {
+      if (!existsSync(join(raiz, `public/juegos/${dir}/${id}${sufijo}.webp`))) faltan.push(`falta la imagen public/juegos/${dir}/${id}${sufijo}.webp (node scripts/capturas-juegos.mjs ${id} --limpia --out public/juegos/${dir} --tam ${dir === "selector" ? "320x180" : "640x360"})`);
+    }
+  }
   if (/borrador:\s*true/.test(bloque)) faltan.push("la historia sigue en borrador: escribila con una fuente primaria verificada y sacale borrador: true");
   if (!/rango:\s*\{[^}]*(?:maximo|minimo)/.test(bloque)) faltan.push("falta el rango de personas");
   if (!hayBateria(raiz, id)) faltan.push("falta la batería guardada en JSON en docs/capturas/auditorias (node scripts/audit-todo.mjs --json)");
@@ -215,7 +222,7 @@ export function encender({ raiz = RAIZ, id, dryRun = false }) {
   return {
     id,
     siguientes: [
-      `Sumá la ficha de ${id} en juegos.html (con la captura) y la fila de docs/juegos.md.`,
+      `Sumá su botón (con las dos imágenes del selector) en index.html, su tarjeta de El show en la portada, la ficha de ${id} en juegos.html (con la captura) y la fila de docs/juegos.md.`,
       "Corré pnpm check:paginas y pnpm check:lore, y pedí la aprobación de quien mantiene el proyecto antes de subirlo.",
     ],
   };

@@ -1,4 +1,4 @@
-import { normalCarrera, segundosDe } from "./duraciones";
+import { normalCarrera, normalGuajojo, segundosDe } from "./duraciones";
 import type { JuegoKit } from "./games/pixi/kit/catalogo";
 
 /**
@@ -38,6 +38,13 @@ export interface Frozen {
    * esté, el resultado, lo compartido y Mis sorteos lo dicen.
    */
   sinSello?: boolean;
+  /**
+   * La huella del logo de la comunidad de este sorteo (`logo.ts`), leída al
+   * sellar: así volver a compartir un sorteo de septiembre no le pone el logo de
+   * octubre. No es parte del sorteo: no entra en el sello, en la huella de la
+   * lista ni en el comprobante. Si este navegador no tiene ese logo, no hay logo.
+   */
+  logo?: string;
 }
 
 export interface Drawn {
@@ -121,6 +128,37 @@ export function setParaCompartir(on: boolean): void {
 }
 
 if (params.get("compartir") === "1") setParaCompartir(true);
+
+/**
+ * "En 3D": en los juegos que ganaron la comparación a ciegas, el 3D es lo que la sala ve sin tocar nada, y quien organiza
+ * puede volver al 2D con el interruptor del selector. La preferencia se recuerda en este navegador (`localStorage`) y
+ * distingue tres casos: nunca lo tocó (`null`: manda la regla por defecto), lo prendió (`true`) y lo apagó (`false`).
+ * Sin almacenamiento no se recuerda y no pasa nada más. Solo es un pedido: que se use o no lo decide `usa3D`
+ * (`games/engine.ts`), según el juego y lo que aguanta el equipo.
+ */
+const VER3D_KEY = "tinkazo.ver3d";
+
+/** Lo que se eligió en esta página cuando el navegador no deja guardar: vale hasta recargar. */
+let ver3DEnMemoria: boolean | null = null;
+
+export function ver3DGuardado(): boolean | null {
+  if (ver3DEnMemoria !== null) return ver3DEnMemoria;
+  try {
+    const v = localStorage.getItem(VER3D_KEY);
+    return v === "1" ? true : v === "0" ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setVer3D(on: boolean): void {
+  ver3DEnMemoria = on;
+  try {
+    localStorage.setItem(VER3D_KEY, on ? "1" : "0");
+  } catch {
+    /* sin almacenamiento, vale hasta recargar */
+  }
+}
 
 /** `true` si el sistema pide menos movimiento. Seguro sin `matchMedia`. */
 export function motionReduced(): boolean {
@@ -327,7 +365,14 @@ export const currentPace = (): Pace => ritmo();
 export const paceSeconds = (p: Pace): number => {
   // La carrera de hasta 30 promete según cuánta gente corre; el resto, lo de siempre.
   // (El motor anterior, con `?motor=clasico`, no tiene pelotón: ahí vale lo de todos.)
-  const propio = app.game === "race" && app.frozen && params.get("motor") !== "clasico" ? normalCarrera(app.frozen.names.length) : null;
+  const propio =
+    app.frozen && params.get("motor") !== "clasico"
+      ? app.game === "race"
+        ? normalCarrera(app.frozen.names.length)
+        : app.game === "guajojo"
+          ? normalGuajojo(app.frozen.names.length)
+          : null
+      : null;
   return (propio !== null ? segundosDe(p, propio) : PACES[p]) + (conCuenta(p) ? CUENTA_SECONDS : 0);
 };
 

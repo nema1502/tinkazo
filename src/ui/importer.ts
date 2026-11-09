@@ -273,7 +273,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       const masked = rep.has(i) && ecol >= 0 ? maskEmail(r[ecol] ?? "") : "";
       const note = notes.get(i);
       const mail = masked
-        ? `<small class="imp-was">${note ? `${esc(t(note === "same" ? "impMailSame" : "impMailOther"))} · ` : ""}` +
+        ? `<small class="imp-was">${note ? `${esc(t(note === "same" ? "impMailSame" : "impMailOther"))}: ` : ""}` +
           `<span class="mono">${esc(masked)}</span></small>`
         : "";
       const face = faces && shown.length >= 2 ? `<img src="${avatar(shown, 36)}" alt="" />` : `<i class="imp-noface"></i>`;
@@ -364,7 +364,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const renderFoot = (): void => {
     const n = built.names.length;
     const marked = s.picked.filter(Boolean).length;
-    count.textContent = L.impCount(marked, tb.rows.length) + (s.hand ? ` · ${L.impHand(s.hand)}` : "");
+    count.textContent = L.impCount(marked, tb.rows.length) + (s.hand ? `, ${L.impHand(s.hand)}` : "");
     use.textContent = L.impUse(n);
     use.disabled = n < 2;
     need.textContent = n < 2 ? t("impNeed") : "";

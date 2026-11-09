@@ -1,16 +1,18 @@
 import { $ } from "../dom";
-import { onLangChange, t } from "../i18n";
+import { getLang, onLangChange, t } from "../i18n";
 import { sinGrabar } from "../ensayo-modo";
 import { app } from "../state";
-import { type Diagnostico, type FuentesDelChequeo, chequearRed, crearChequeo, llamarRpc, simularConRpc, umbralesDe } from "../stellar/chequeo-red";
+import { type DetalleDelPatrocinio, type Diagnostico, type FuentesDelChequeo, chequearRed, crearChequeo, llamarRpc, simularConRpc, umbralesDe } from "../stellar/chequeo-red";
 import { network } from "../stellar/config";
+import { esNoQueBloquea } from "../stellar/errores";
 import { grifoDisponible } from "../stellar/grifo";
+import { estadoDelPatrocinio, fechaOCercana } from "../stellar/patrocinador";
 import { anotar, anotarChequeo, registroParaCopiar, saturacionReciente } from "../stellar/registro-red";
 import { limpiarDetalle } from "./anchor";
 import { ponerDetalle } from "./detalle-error";
 import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, respuestaDelBoton } from "./red-acciones";
 import { verError } from "./siguiente";
-import { canAnchor, currentSession } from "./wallet-ui";
+import { canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 
 /**
  * La red, a la vista antes de sellar.
@@ -37,6 +39,8 @@ export interface OpcionesDeSellado {
   saltarChequeo?: boolean;
   /** La comisión la paga la cuenta de la persona, no el patrocinador. */
   pagarConMiCuenta?: boolean;
+  /** Es el reintento de después de proteger la cuenta (`proteger-cuenta.ts`): el mismo intento de la persona, no otro. */
+  protegida?: boolean;
 }
 
 let sellarFn: ((o: OpcionesDeSellado) => Promise<void>) | null = null;
@@ -91,9 +95,27 @@ async function fuentes(): Promise<FuentesDelChequeo> {
   };
 }
 
+/**
+ * Lo que el portero del patrocinio dice de esta cuenta, si la red está bien: sin cupo, apagado o sin respuesta, no se
+ * puede sellar gratis y se dice antes de apretar (no después de armar y firmar). Cuando paga Pollar, o no hay portero
+ * configurado, no se pregunta nada. Cerrado ante la duda: si no contesta, tampoco se paga.
+ */
+async function conElPatrocinio(d: Diagnostico): Promise<Diagnostico> {
+  if (d.nivel === "rojo" || d.sinInternet || d.sinChequeo || d.pagador !== "patrocinado") return d;
+  const s = currentSession();
+  if (!s) return d;
+  const estado = await estadoDelPatrocinio(s.address, { forzar: true });
+  if (estado.rige === "pollar") return d;
+  let patrocinio: DetalleDelPatrocinio | null = null;
+  if (estado.rige === "cerrado") patrocinio = { motivo: "cerrado" };
+  else if (estado.cupo.sellos.quedan <= 0) patrocinio = { motivo: "cupo-cuenta", que: "sellos", liberaEn: estado.cupo.liberaEn };
+  if (!patrocinio) return d;
+  return { ...d, nivel: "rojo", caso: "sin-patrocinio", casos: [...d.casos, { caso: "sin-patrocinio", nivel: "rojo" }], patrocinio, motivo: `el patrocinio no cubre: ${patrocinio.motivo}` };
+}
+
 async function medirDeVerdad(): Promise<Diagnostico> {
   try {
-    const d = await chequearRed(await fuentes());
+    const d = await conElPatrocinio(await chequearRed(await fuentes()));
     anotarChequeo("chequeo", d);
     return d;
   } catch (e) {
@@ -182,8 +204,8 @@ function aplicarAlBoton(): void {
   btn.classList.toggle("red-accion", accion !== "sellar");
   if (accion === "sellar") {
     alApretar = null;
-    btn.dataset.i = "freeze";
-    btn.textContent = t("freeze");
+    btn.dataset.i = claveDeSellar();
+    btn.textContent = t(btn.dataset.i);
     btn.disabled = false;
     return;
   }
@@ -194,18 +216,21 @@ function aplicarAlBoton(): void {
   alApretar = vista.tipo === "confirmar" ? () => void seguirSinSello() : () => hacer(accion);
 }
 
+/** Los huecos de las frases del patrocinio: el día en que vuelve el cupo. */
+const huecosDe = (p: Panel): Record<string, string> => ({ fecha: fechaOCercana(p.liberaEn, getLang(), t("errAnchor.cupoPronto")) });
+
 /** Lo que dice la caja de arriba del botón: la frase del panel, con su segunda frase si la hay. */
 function frase(p: Panel, d: Diagnostico, modo: "panel" | "respuesta"): string {
   if (modo === "respuesta") {
     const r = respuestaDelBoton(d, p);
-    const base = r.clave === "redRoja" ? decir("redRoja", { motivo: fraseDelCaso(p) }) : t(r.clave);
+    const base = r.clave === "redRoja" ? decir("redRoja", { motivo: fraseDelCaso(p) }) : decir(r.clave, huecosDe(p));
     return r.aparte ? `${base} ${t(r.aparte)}` : base;
   }
   return `${fraseDelCaso(p)}${p.aparte ? ` ${t(p.aparte)}` : ""}`;
 }
 function fraseDelCaso(p: Panel): string {
   // El mismo texto cuenta atrás cuando la app vuelve a probar sola.
-  return p.frase === "redSinRpc" ? decir("redSinRpc", { t: mmss(restan) }) : t(p.frase);
+  return p.frase === "redSinRpc" ? decir("redSinRpc", { t: mmss(restan) }) : decir(p.frase, huecosDe(p));
 }
 
 const ICONO = { verde: "✓", amarillo: "!", rojo: "✕" } as const;
@@ -302,6 +327,10 @@ function pintar(): void {
     }
   }
   caja.className = `red-estado ${nivel}`;
+  // Qué caso se está diciendo: la línea del cupo se calla cuando el panel ya dice lo mismo.
+  const caso = vista.tipo === "panel" || vista.tipo === "respuesta" || vista.tipo === "confirmar" ? (vista.p.caso ?? "") : "";
+  if (caso) caja.dataset.caso = caso;
+  else delete caja.dataset.caso;
   ico.textContent = ICONO[nivel];
   if (fila.childElementCount) caja.append(fila);
   // El detalle técnico plegado: para quien tenga que contar qué pasó.
@@ -329,7 +358,7 @@ function ver(v: Vista): void {
 async function contextoDe(d: Diagnostico): Promise<ContextoDelPanel> {
   let saldoXlm = d.saldoXlm;
   // Para decidir si "Sellar pagando con mi cuenta" es posible hace falta saber cuánto tiene la cuenta.
-  if (saldoXlm === null && d.nivel === "rojo" && (d.caso === "costo-alto" || d.caso === "sin-saldo")) {
+  if (saldoXlm === null && d.nivel === "rojo" && (d.caso === "costo-alto" || d.caso === "sin-saldo" || d.caso === "sin-patrocinio")) {
     const s = currentSession();
     if (s) {
       try {
@@ -571,6 +600,39 @@ export async function mostrarSinSaldo(): Promise<void> {
   const base = diagnosticoRoto(new Error("sin-saldo"));
   const d: Diagnostico = { ...base, sinChequeo: false, nivel: "rojo", caso: "sin-saldo", casos: [{ caso: "sin-saldo", nivel: "rojo" }], pagador: "patrocinado", costoXlm: chequeo.ultimo()?.costoXlm ?? null, motivo: "no alcanzó la comisión" };
   anotarChequeo("sellar", d, { final: "sin saldo" });
+  sellando = false;
+  await mostrar(d, "panel");
+  const caja = document.getElementById("red-estado");
+  if (caja) verError(caja);
+}
+
+/** Un no del portero que bloquea, como lo cuenta la pantalla; `null` si no es de los que bloquean. */
+export function patrocinioDelError(e: unknown): DetalleDelPatrocinio | null {
+  if (!esNoQueBloquea(e)) return null;
+  const x = e as { motivo: string; que?: "sellos" | "sorteos"; liberaEn?: number };
+  switch (x.motivo) {
+    case "cupo-cuenta":
+      return { motivo: "cupo-cuenta", ...(x.que ? { que: x.que } : {}), ...(x.liberaEn !== undefined ? { liberaEn: x.liberaEn } : {}) };
+    case "fondo":
+      return { motivo: "fondo" };
+    case "no-permitida":
+    case "cuenta-ajena":
+      return { motivo: "ajena" };
+    default:
+      return { motivo: "cerrado" };
+  }
+}
+
+/**
+ * El sello no entró porque el portero del patrocinio dijo que no (se acabó el cupo de la cuenta, el servicio no
+ * pagó o no contestó, o la cuenta no es de las que cubre): se explica con su única acción, como el costo alto.
+ */
+export async function mostrarSinPatrocinio(patrocinio: DetalleDelPatrocinio): Promise<void> {
+  queriaSellar();
+  chequeo.olvidar();
+  const base = diagnosticoRoto(new Error("sin-patrocinio"));
+  const d: Diagnostico = { ...base, sinChequeo: false, nivel: "rojo", caso: "sin-patrocinio", casos: [{ caso: "sin-patrocinio", nivel: "rojo" }], pagador: "patrocinado", costoXlm: chequeo.ultimo()?.costoXlm ?? null, patrocinio, motivo: `el patrocinio no cubre: ${patrocinio.motivo}` };
+  anotarChequeo("sellar", d, { final: "el patrocinio no cubre" });
   sellando = false;
   await mostrar(d, "panel");
   const caja = document.getElementById("red-estado");

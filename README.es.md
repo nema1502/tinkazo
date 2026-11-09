@@ -2,7 +2,7 @@
 
 # Tinkazo 🦙
 
-### Sorteos verificables para comunidades, sellados antes de que exista el azar y comprobados en Stellar.
+### Sorteos verificables para comunidades y promociones, sellados antes de que exista el azar y comprobados en Stellar.
 
 [![Probalo](https://img.shields.io/badge/demo-tinkazo.app-e93d9c?style=flat-square)](https://tinkazo.app)
 [![Contrato Soroban en testnet](https://img.shields.io/badge/Soroban-en%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A)
@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.app)** · [Cómo funciona](#cómo-funciona) · [Seguridad](#seguridad) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
+**[Probalo](https://tinkazo.app)**, [Cómo funciona](#cómo-funciona), [Seguridad](#seguridad), [Por qué Stellar](#por-qué-stellar), [Qué está andando](#qué-está-andando-hoy), [Los próximos 30 días](#los-próximos-30-días), [English](README.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
 
@@ -18,7 +18,7 @@
 
 ---
 
-Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
+Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después. Y quien gana casi nunca tiene cómo saber que la selección fue justa.
 
 **Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
@@ -26,12 +26,12 @@ Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
 El sorteo es por donde empieza. Para lo que existe Tinkazo es más amplio: que repartir entre la gente sea justo (un premio, un turno para exponer, una beca, un cupo en un viaje), y que cualquiera lo pueda comprobar desde su celular, sin saber que abajo hay una blockchain.
 
-## No es de apuestas
+## Participar es gratis
 
-Tinkazo decide quién se lleva algo que ya se está regalando. No sirve para apostar ni para vender chances:
+Tinkazo decide quién se lleva algo que ya se está regalando. Nadie paga por participar:
 
-- **Participar es gratis, siempre.** No hay boletos ni entrada paga. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
-- **Nadie puede apostar al resultado.** No hay cuotas ni pozo: nadie pone plata, así que nadie gana la plata de otro.
+- **Participar es gratis, siempre.** No hay entrada paga ni nada que comprar. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
+- **Nadie puede apostar al resultado, porque nadie paga para participar.** El premio lo pone quien organiza o un patrocinador, nunca los participantes, así que nadie gana con la plata de otros participantes.
 - **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
 - **Tinkazo nunca toca lo que se reparte.** Lo entrega quien organiza, como siempre, y Tinkazo no se queda con ninguna parte.
 
@@ -58,14 +58,14 @@ sequenceDiagram
 1. **Sellar.** La lista se normaliza y se resume con SHA-256. El contrato anota, entre otras cosas, la huella, la cantidad de personas, cuántos ganan y una ronda **futura** de drand, y rechaza una ronda a menos de treinta segundos.
 2. **Esperar el número.** [drand](https://drand.love) quicknet, el faro público de aleatoriedad de la League of Entropy (Cloudflare, Protocol Labs, la EPFL y otros), publica una ronda firmada cada tres segundos. Nadie, ni quien organiza ni Tinkazo, puede conocerla ni elegirla antes.
 3. **Sortear.** `draw` verifica la firma BLS12-381 de la ronda **dentro del contrato**, deriva la semilla y elige a los ganadores de forma determinista. No le pide permiso a nadie: si quien organiza desaparece en medio del evento, cualquiera lo finaliza y el ganador es el mismo.
-4. **El show.** Uno de ocho juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
+4. **El show.** Uno de diez juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
 5. **Revisar.** El comprobante es un enlace. Quien lo abre ve a la página rehacer el sorteo desde cero y recibe un veredicto: verde si el contrato atestigua la lista, amarillo si el sorteo no se ancló, rojo con el motivo si algo no cuadra. Si sorteaste varias veces en el mismo evento, el [enlace de evento](docs/evento.md) los junta en una sola página.
 
 La selección completa es una especificación normativa, el [protocolo v2](docs/protocolo.md), con vectores de prueba que comparten el contrato en Rust y el cliente en TypeScript ([docs/vectors.json](docs/vectors.json)). Cualquiera puede reimplementarlo y llegar a los mismos ganadores.
 
 ## Por qué Stellar
 
-- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación cuesta **0,003 XLM**; un sorteo entero, sellar más sortear, **0,76 XLM, unos 16 centavos de dólar**, medido en testnet el 3 de octubre de 2026, y casi todo es renta de almacenamiento ([detalle](docs/deployments.md)).
+- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación en sí cuesta **0,003 XLM** (medido en testnet el 3 de octubre de 2026). El resto de lo que cuesta un sorteo es renta de almacenamiento, que la red fija y ya cambió más de una vez ([historial con fechas](docs/deployments.md)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta (el recorrido con una sesión real de Google todavía se está probando), con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
@@ -74,41 +74,43 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 
 | Pieza | Estado | Evidencia |
 |---|---|---|
-| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
-| Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
+| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A), 19 tests, uno con una ronda real de quicknet, WASM de 11,4 KB |
+| Sitio | En producción | [tinkazo.app](https://tinkazo.app), español e inglés, tema claro y oscuro, sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Comprobación por archivos de historial | Herramienta de línea de comandos | `node scripts/verificar-archivo.mjs <red> <hash de la transacción>` lee los archivos públicos de historial de Stellar de varias organizaciones y confirma que una transacción de sello o de sorteo estuvo en un ledger y a qué hora cerró. Verde solo si dos organizaciones devuelven la misma cabecera de ledger ([protocolo §7.2](docs/protocolo.md)) |
-| Ocho juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
+| Diez juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | Tests en la CI, auditores antes de cada subida | 205 tests de TypeScript y los 19 del contrato corren en la CI; diez auditores propios (abajo) corren contra el sitio construido |
+| Controles de calidad | Tests en la CI, auditores antes de cada subida | Más de 4.700 tests de TypeScript y los 19 del contrato corren en la CI; diez auditores propios (abajo) corren contra el sitio construido |
 
 Probado con mil participantes (el 22 de septiembre, con el motor anterior): el sorteo andaba a sesenta cuadros por segundo y se anclaba igual. Los juegos de hoy están pensados para hasta doscientas personas en pantalla.
 
-**Quién estaba de verdad en la sala.** En el primer export real de Luma que probamos se habían inscrito 67 personas y hicieron check-in 35. Sortear con el export entero le daba la mitad de las chances a gente que no estaba. La ventana de importar propone a los que hicieron check-in, dice quién queda afuera y por qué (no vino, pendiente, invitado, rechazado) y deja marcar a alguien que vino y nunca le hicieron check-in. El archivo no sale del navegador, y al sorteo entran solo los nombres.
+**Quién estaba de verdad en la sala.** En el primer export real de Luma que probamos se habían inscrito 67 personas y hicieron check-in 35. Sortear con el export entero le daba a gente que no estaba la mitad de los lugares del sorteo. La ventana de importar propone a los que hicieron check-in, dice quién queda afuera y por qué (no vino, pendiente, invitado, rechazado) y deja marcar a alguien que vino y nunca le hicieron check-in. El archivo no sale del navegador, y al sorteo entran solo los nombres.
 
 <div align="center">
 <img src="docs/capturas/readme/importar.webp" alt="La ventana de importar: un export de Luma con 67 filas, los 35 que hicieron check-in marcados y el detalle de quién queda afuera" width="860">
 </div>
 
 <div align="center">
-<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, la rueda de la Chovena que se congela cuando se corta la música, el trompo, el teleférico de La Paz, la piñata, el sapo con la argolla que rebota en la rana, las cartas de ¿Quién es? dándose vuelta y la llegada de la carrera de llamas, donde gana Carlos Choque" width="720">
+<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, la rueda de la Chovena que se congela cuando se corta la música, el trompo, el teleférico de La Paz, la piñata, el sapo con la argolla que rebota en la rana, las cartas de ¿Quién es? dándose vuelta y la llegada de la carrera de llamas, donde sale elegido Carlos Choque" width="720">
 </div>
 
 ## El show
 
-La justicia es matemática; el show es lo que hace que a la sala le importe. Ocho juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
+La justicia es matemática; el show es lo que hace que a la sala le importe. Diez juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
 
 | Juego | Qué es |
 |---|---|
 | Carrera de llamas | Ocho carriles por la cordillera |
-| Sapo | El de las ferias y los patios: un agujero con cada nombre alrededor de la rana; las argollas pegan, bailan en el borde y salen, y la última entra en el de quien gana |
-| Trompo | El juego de patio: los trompos se tiran al ruedo de tiza, chocan y se sacan hasta el mano a mano |
 | Chovena | El baile chiquitano de Santa Cruz: la rueda gira de la mano y, cuando el conjunto corta la música, el que trastabilla se suelta y se sienta al borde de la plaza. El único juego donde la sala aplaude al ritmo y se congela con el corte |
-| Piñata | La estrella de siete picos de las posadas: con cada palo caen nombres, y gana el último caramelo que quedaba adentro |
-| Ruleta | La de siempre, que se ve bien hasta con dos personas |
+| Trompo | El juego de patio: los trompos se tiran al ruedo de tiza, chocan y se sacan hasta el mano a mano |
+| Sapo | El de las ferias y los patios: un agujero con cada nombre alrededor de la rana; las argollas pegan, bailan en el borde y salen, y la última entra en el del nombre elegido |
+| Piñata | La estrella de siete picos de las posadas: con cada palo caen nombres, y sale elegido el último caramelo que quedaba adentro |
+| La Entrada | Una comparsa de la Diablada baila cuadra por cuadra hacia el Socavón; en cada arco se quedan algunos |
 | Teleférico | Cabinas con los colores de las líneas de La Paz y El Alto suben por el cable, una por grupo; en cada estación baja un grupo entero |
-| Carnaval de Oruro | Una comparsa de la Diablada baila cuadra por cuadra hacia el Socavón; en cada arco se quedan algunos |
+| Guajojó | Un sendero del monte de noche: mientras canta el guajojó todos caminan; cuando calla, quietos, y al que hace crujir una rama lo escucha y se sienta. Sale elegido quien llega de pie al amanecer |
+| Toborochi | El toborochi en flor, el árbol de Santa Cruz: los nombres llegan de a ocho y el surazo se va llevando las flores de a poco, hasta que quedan las finalistas |
+| Ruleta | La de siempre, que se ve bien hasta con dos personas |
 
 **Ninguno decide nada.** Un *director de emoción* escribe la historia de cada sorteo con la misma ronda: en la carrera una llama se planta, otra tropieza y dos se escupen; la ruleta se para en otro nombre y después avanza un gajo; en el teleférico se corta la luz en el aire. El final no se adivina, y un auditor comprueba en dieciséis semillas por juego que la historia no delata al ganador.
 
@@ -128,7 +130,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 | Cambiar la lista después de sellar | Cambia la huella, y la que vale quedó anotada antes de la semilla |
 | Retener un resultado que no gustó | `draw` no pide permiso: cualquiera lo finaliza y el ganador es el mismo |
 | Sortear dos veces | El contrato guarda el primer resultado y rechaza otro |
-| Que el juego muestre otro ganador | Los juegos reciben el ganador ya decidido, y un auditor lo comprueba en los ocho |
+| Que el juego muestre otro ganador | Los juegos reciben el ganador ya decidido, y un auditor lo comprueba en los diez |
 | Tomar el contrato | No tiene administrador, no se actualiza y no guarda fondos |
 
 **Lo que queda abierto, y lo que hay contra eso**
@@ -160,17 +162,9 @@ Por eso Tinkazo no publica otro crate verificador más. Su comprobación en la c
 
 ## Qué cuesta
 
-Medido en testnet el 3 de octubre de 2026, no estimado: lo que cobró la red según Horizon. XLM a US$ 0,215.
+Lo que cuesta un sorteo lo fija la red, no nosotros, y se mueve. Casi todo es alquiler de almacenamiento, y Stellar cambia esa tarifa: el 16 de septiembre de 2026 el mismo contrato pagaba 0,18 XLM por sorteo en testnet, tres semanas después la renta de testnet lo había multiplicado por cuatro, y el 25 de octubre se disparó mucho más cuando el estado vivo de la red cruzó su objetivo, hasta que la red subió ese objetivo. Lo único que no se mueve es la verificación BLS: **0,003 XLM**, medido en testnet el 3 de octubre de 2026.
 
-| | XLM | US$ |
-|---|---|---|
-| Sellar un sorteo | 0,42 | 0,090 |
-| Sortear, con la verificación BLS | 0,34 | 0,074 |
-| **Total por sorteo** | **0,76** | **0,16** |
-| Mainnet: desplegar una vez (proyección del 16 de septiembre) | unos 16 | unos 3 |
-| Mainnet: mantener vivo el contrato (ídem) | unos 49 al año | unos 10 al año |
-
-Casi todo el costo es alquiler de almacenamiento, y esa tarifa la pone la red: el 16 de septiembre el mismo contrato pagaba 0,18 XLM por sorteo, y en tres semanas la renta de testnet la multiplicó por cuatro. La verificación BLS en sí cuesta 0,003 XLM. En mainnet se mide al desplegar. **Verificar es gratis siempre.**
+Las mediciones con fecha y las proyecciones de mainnet están en [docs/deployments.md](docs/deployments.md). La tabla por sorteo que estaba acá era una sola lectura de testnet del 3 de octubre, y después de los cambios de renta ya no describía lo que cuesta un sorteo; en mainnet se mide al desplegar. **Verificar es gratis siempre.**
 
 ## Calidad
 
@@ -207,7 +201,7 @@ Hace falta Node 22 o más y pnpm 11. Copiá `.env.example` a `.env.local`: la ll
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # 205 tests, entre ellos el protocolo v2 contra los vectores compartidos
+pnpm test         # más de 4.700 tests, entre ellos el protocolo v2 contra los vectores compartidos
 pnpm build
 ```
 
@@ -223,7 +217,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|tr
 ## El repositorio
 
 ```
-index.html · verificar.html     La portada y la herramienta, y la página que rehace un sorteo desde su comprobante
+index.html, verificar.html     La portada y la herramienta, y la página que rehace un sorteo desde su comprobante
 lista.html                      La lista para revisar antes de sellar, en el celular de cada uno
 src/protocol/                   Lista canónica, selección, drand, comprobante
 src/stellar/                    Red, billeteras y cliente del contrato
@@ -233,7 +227,7 @@ docs/                           Protocolo, arquitectura, amenazas, despliegues, 
 scripts/                        Despliegue, prueba de humo y los auditores
 ```
 
-Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architecture.md) · [amenazas](docs/amenazas.md) · [despliegues y costos](docs/deployments.md) · [juegos](docs/juegos.md) · [legal](docs/legal.md) · [marca](docs/marca.md) · [UX](docs/ux.md).
+Documentación: [protocolo](docs/protocolo.md), [arquitectura](docs/architecture.md), [amenazas](docs/amenazas.md), [despliegues y costos](docs/deployments.md), [juegos](docs/juegos.md), [legal](docs/legal.md), [marca](docs/marca.md), [UX](docs/ux.md).
 
 ## Quién lo hace
 

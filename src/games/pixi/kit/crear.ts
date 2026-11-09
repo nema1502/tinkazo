@@ -9,6 +9,8 @@ import { crearGuion, type EjecutorGuion } from "./guion";
 import { anotarMarcas } from "./marcas";
 import { crearMarcadorVista } from "./marcador-vista";
 import { tamanoLetra } from "./nombres";
+import { entradaDe } from "./catalogo";
+import { lugarDe, verdadDelNino, type Respuestas } from "./respuestas";
 import { crearSonido } from "./sonido";
 import type { Contexto, DefJuego, Kit, Lanzador, Plan } from "./tipos";
 
@@ -97,7 +99,15 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     let escena: E | undefined;
     // `?auditar=nino`: la verdad del plan en cada instante, para la prueba del niño (`audit-nino`).
     // `duracion` es la hora del golpe (el 100 %): `audit-nino` para al 25 % y al 60 % de ella.
-    if (anf.auditar() === "nino") (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => plan.respuestas(t) };
+    // Si la escena sabe dónde cae en la pantalla quien va adelante (`puntoDelFrente`), la zona de la verdad es esa y no una que declaró el plan.
+    const verdadEnPantalla = (r: Respuestas): Respuestas => {
+      const p = (escena as { puntoDelFrente?: (hora: number) => { x: number; y: number } | null } | undefined)?.puntoDelFrente?.(t);
+      const forma = entradaDe(def.id)?.forma ?? "de-pie";
+      const completa = verdadDelNino(forma, r, { n: nombres.length, ganadores: ganadores.length });
+      return p ? { ...completa, adelante: { ...completa.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } } : completa;
+    };
+    // `forma` sale del catálogo: el auditor arma la pregunta propia con ella (carrera, de pie, rueda o acumulación).
+    if (anf.auditar() === "nino") (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, forma: entradaDe(def.id)?.forma, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => verdadEnPantalla(plan.respuestas(t)) };
     const sonido = crearSonido(anf.voz);
     const k: Kit = {
       S, cam: S.cam, nombres, ganadores, ronda: baliza.randomness, idioma,
@@ -125,7 +135,9 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
 
     /* --------------------------------------------------------------- la escena */
     // El único contador, arriba a la izquierda: lo dibuja el kit, así ningún juego tiene otro.
-    const marcadorUI = crearMarcadorVista(S, () => txt("marcadorQuedan"));
+    // De pie, el número lleva el total («EN EL MONTE 5 DE 18»): es lo que dice cuánto falta. La carrera ya tiene su meta.
+    const deNombres = (entradaDe(def.id)?.forma ?? "de-pie") === "de-pie" ? { de: () => txt("marcadorDe"), cuantos: nombres.length } : undefined;
+    const marcadorUI = crearMarcadorVista(S, () => txt("marcadorQuedan"), deNombres);
     escena = def.arma(k, plan);
     S.onResize(() => {
       escena = def.arma(k, plan, escena);
@@ -138,7 +150,8 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     const corona = (): void => {
       if (coronado) return;
       coronado = true;
-      S.say(anf.anuncio(nombres, ganadores), 1);
+      // Con `sinAnuncio` y un solo premio, la línea del relator se borra y el cartel dice solo quién gana.
+      S.say(plan.alCoronar?.sinAnuncio && ganadores.length === 1 ? "" : anf.anuncio(nombres, ganadores), 1);
       sonido.fanfarria();
       director.golpe();
     };
@@ -166,6 +179,7 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       S.cam.apply(S.scene, S.sw(), S.sh(), ahora);
       def.cuadro(k, plan, escena as E, t);
       marcadorUI.pintar(coronado ? 1 : Math.max(1, Math.round(plan.marcador(t))));
+      marcadorUI.ocultar(coronado && !!plan.alCoronar?.sinMarcador && S.portrait());
       if (t >= plan.duracion) {
         crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
         def.trasCorona?.(k, plan, escena as E, t);

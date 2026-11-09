@@ -1,18 +1,20 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="titPortada" data-desc-clave="descPortada">
 <head>
 <meta charset="utf-8" />
 <!-- viewport-fit=cover: el estadio ocupa la pantalla entera, también detrás de la muesca; la zona segura (env(safe-area-inset-*)) se respeta en la cabecera y en lo que se proyecta. interactive-widget: el teclado achica la página en vez de tapar el botón (Chrome de Android). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-<title>Tinkazo, sorteos verificables para eventos y clases</title>
-<meta name="description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
+<title>Tinkazo: sorteo verificable y gratis para eventos y clases</title>
+<meta name="description" content="Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis." />
 <link rel="canonical" href="https://tinkazo.app/" />
-<meta property="og:title" content="Tinkazo, sorteos verificables para eventos y clases" />
-<meta property="og:description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
+<link rel="alternate" hreflang="es" href="https://tinkazo.app/" />
+<link rel="alternate" hreflang="en" href="https://tinkazo.app/?lang=en" />
+<link rel="alternate" hreflang="x-default" href="https://tinkazo.app/" />
+<meta property="og:title" content="Tinkazo: verifiable winner selection on Stellar" />
+<meta property="og:description" content="The list is sealed before the random number exists, and a Soroban contract verifies that number. Free to enter, always. Selección verificable de ganadores, gratis para participar." />
 <meta property="og:type" content="website" />
-<link rel="icon" href="/favicon.ico" sizes="48x48" />
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<meta property="og:locale" content="es_BO" />
+<meta property="og:locale:alternate" content="en_US" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -20,52 +22,21 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Tinkazo: verifiable winner selection on Stellar" />
+<meta name="twitter:description" content="The list is sealed before the random number exists, and a Soroban contract verifies that number. Free to enter, always. Selección verificable de ganadores, gratis para participar." />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <!-- Añadido a la pantalla de inicio, abre sin la barra del navegador: la forma de tener pantalla completa en un iPhone, que no ofrece la API. -->
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Tinkazo" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": "https://tinkazo.app/#website",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "inLanguage": ["es", "en"],
-      "image": "https://tinkazo.app/og.jpg",
-      "publisher": { "@id": "https://tinkazo.app/#organization" }
-    },
-    {
-      "@type": "Organization",
-      "@id": "https://tinkazo.app/#organization",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "logo": "https://tinkazo.app/icon-512.png",
-      "sameAs": ["https://github.com/nema1502/tinkazo"]
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://tinkazo.app/#app",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "applicationCategory": "UtilitiesApplication",
-      "operatingSystem": "Web",
-      "inLanguage": ["es", "en"],
-      "isAccessibleForFree": true,
-      "image": "https://tinkazo.app/og.jpg",
-      "description": "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
-      "publisher": { "@id": "https://tinkazo.app/#organization" }
-    }
-  ]
-}
-</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://tinkazo.app/#website","name":"Tinkazo","alternateName":["tinkazo.app"],"url":"https://tinkazo.app/","inLanguage":["es","en"],"image":"https://tinkazo.app/og.jpg","publisher":{"@id":"https://tinkazo.app/#organization"}},{"@type":"Organization","@id":"https://tinkazo.app/#organization","name":"Tinkazo","alternateName":["tinkazo.app"],"url":"https://tinkazo.app/","logo":"https://tinkazo.app/icon-512.png","description":"Sorteos verificables para eventos, clases y comunidades. Participar es gratis.","disambiguatingDescription":"Herramienta gratuita para elegir con justicia en eventos y clases. No vende participaciones ni paquetes de sorteos.","sameAs":["https://github.com/nema1502/tinkazo","https://www.instagram.com/tinkazo.app/"]},{"@type":"WebPage","@id":"https://tinkazo.app/#webpage","url":"https://tinkazo.app/","name":"Tinkazo: sorteo verificable y gratis para eventos y clases","description":"Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis.","inLanguage":"es","isPartOf":{"@id":"https://tinkazo.app/#website"},"about":{"@id":"https://tinkazo.app/#app"}},{"@type":"SoftwareApplication","@id":"https://tinkazo.app/#app","name":"Tinkazo","url":"https://tinkazo.app/","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","inLanguage":["es","en"],"isAccessibleForFree":true,"image":"https://tinkazo.app/og.jpg","description":"Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis.","disambiguatingDescription":"Herramienta gratuita para elegir con justicia en eventos y clases. No vende participaciones ni paquetes de sorteos.","publisher":{"@id":"https://tinkazo.app/#organization"}}]}</script>
 </head>
 <body>
 <header>
@@ -74,6 +45,7 @@
     <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
@@ -83,9 +55,8 @@
           <a href="/precios.html" data-i="navPrecios">Precios</a>
         </div>
       </div>
-      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
     </nav>
-    <div style="display:flex; gap:14px; align-items:center">
+    <div class="header-lado">
       <nav class="langs" aria-label="idioma">
         <button id="l-es" class="on">es</button>
         <button id="l-en">en</button>
@@ -101,9 +72,8 @@
 <main>
   <section class="hero hero-portada portada-only">
     <div class="hero-copy">
-      <span class="sticker" data-i-html="badge">Sorteá para tu <span class="rotating" data-words="meetup|clase|evento|taller|charla|congreso">meetup</span></span>
-      <h1 data-i-html="h1">Sorteos que <span class="hl"><span class="hl-t">cualquiera puede comprobar</span></span>.</h1>
-      <p class="lead" data-i="lead">Pegá la lista, sorteá en pantalla grande y que cualquiera pueda comprobarlo.</p>
+      <h1 data-i-html="h1">Sorteos <span class="hl"><span class="hl-t">justos</span></span>, en pantalla grande.</h1>
+      <p class="lead" data-i="lead">Pegá tu lista y mirá quién gana.</p>
       <!-- La cuenta se resuelve acá, antes de que la sala mire: directo a Google
            (main.ts y entrar() en wallet-ui.ts). El ensayo, al lado, no pide nada. -->
       <div class="hero-ctas">
@@ -111,7 +81,7 @@
         <button class="ghost" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
       </div>
       <p class="hero-otras"><button class="enlace" type="button" data-otras-formas data-i="ctaOtras">Otras formas de entrar</button></p>
-      <p class="kicker hero-note" data-i="note">Gratis, en dos pasos y sin instalar nada. Tu gente no necesita crear cuenta.</p>
+      <p class="hero-note"><a class="enlace" href="#confiar" data-i="ctaJusto">¿Cómo sé que es justo?</a></p>
     </div>
     <a class="hero-shot" href="/?demo=race&amp;lead=3" aria-label="Ver una demo" data-i-aria="ctaDemo">
       <picture>
@@ -124,24 +94,26 @@
 
   <h2 class="sr-only portada-only" data-i="howTitle">¿Cómo funciona?</h2>
   <div class="steps portada-only">
-    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier hoja de cálculo, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni crea una cuenta.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Al sellarla, la lista queda con un resumen corto de la lista (su huella) y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. Y la huella queda grabada en Stellar.</p></article>
-    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los ocho juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
+    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Queda cerrada: si después alguien entra o sale de la lista, se nota.</p></article>
+    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Elegí uno de los diez juegos. El juego solo muestra al ganador: lo decide un número que nadie puede elegir.</p></article>
   </div>
 
   <section class="portada-sec portada-only" id="juegos">
     <span class="kicker" data-i="pjKicker">El show</span>
-    <h2 class="sec-t" data-i="pjT">Ocho juegos. Ninguno decide nada.</h2>
-    <p class="sec-b" data-i="pjB">Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Cuando arranca la animación el ganador ya salió: todos cuentan el mismo sorteo.</p>
+    <h2 class="sec-t" data-i="pjT">Diez juegos. Ninguno decide nada.</h2>
+    <p class="sec-b" data-i="pjB">Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Todos muestran el mismo resultado: cambia el show, no quién gana.</p>
     <div class="portada-juegos">
-      <a href="/?demo=race&amp;lead=3" data-thumb="race"><span data-i="gameRace">Carrera de llamas</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=sapo&amp;lead=3" data-thumb="sapo"><span data-i="gameSapo">Sapo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=trompo&amp;lead=3" data-thumb="trompo"><span data-i="gameTrompo">Trompo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=chovena&amp;lead=3" data-thumb="chovena"><span data-i="gameCho">Chovena</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=pinata&amp;lead=3" data-thumb="pinata"><span data-i="gamePinata">Piñata</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=wheel&amp;lead=3" data-thumb="wheel"><span data-i="gameWheel">Ruleta</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=teleferico&amp;lead=3" data-thumb="teleferico"><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">La Entrada</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=race&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/race.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/race-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameRace">Carrera de llamas</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=sapo&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/sapo.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/sapo-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameSapo">Sapo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=trompo&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/trompo.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/trompo-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameTrompo">Trompo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=chovena&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/chovena.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/chovena-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameCho">Chovena</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=pinata&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/pinata.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/pinata-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gamePinata">Piñata</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=wheel&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/wheel.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/wheel-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameWheel">Ruleta</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=teleferico&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/teleferico.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/teleferico-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=oruro&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/oruro.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/oruro-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameOruro">La Entrada</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=guajojo&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/guajojo.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/guajojo-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameGuajojo">Guajojó</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=toborochi&amp;lead=3"><img class="pj-img pj-osc" src="/juegos/portada/toborochi.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><img class="pj-img pj-cla" src="/juegos/portada/toborochi-light.webp" width="640" height="360" alt="" loading="lazy" decoding="async" /><span data-i="gameToborochi">El Toborochi</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
     </div>
   </section>
 
@@ -149,9 +121,7 @@
     <span class="kicker" data-i="confKicker">Por qué creerle</span>
     <h2 class="sec-t" data-i="confT">No hace falta creerme: cada paso se puede comprobar.</h2>
     <div class="cards3">
-      <article><span class="ico" aria-hidden="true">#</span><h3 data-i="conf1t">La lista se sella</h3><p data-i="conf1b">Antes del sorteo, la lista queda con un resumen corto de la lista (su huella). Si alguien agrega o saca un nombre, la huella cambia y se nota.</p></article>
-      <article><span class="ico" aria-hidden="true">&#9673;</span><h3 data-i="conf2t">El azar es público</h3><p data-i="conf2b">El ganador sale de un número que publica un faro público a una hora fija, después del sello. Lo publica una red de organizaciones independientes: ni quien organiza ni Tinkazo lo pueden elegir.</p></article>
-      <article><span class="ico" aria-hidden="true">&#10003;</span><h3 data-i="conf3t">Queda en Stellar</h3><p data-i="conf3b">El sello y el resultado quedan grabados en Stellar, en un programa que verifica el número solo. Cualquiera rehace el sorteo desde su celular y le tiene que dar lo mismo.</p></article>
+      <article class="conf-unica"><span class="ico" aria-hidden="true">&#10003;</span><h3 data-i="conf1t">Cualquiera puede comprobarlo</h3><p data-i="conf1b">La lista se cierra antes de sortear y el ganador sale de un número que ni quien organiza ni Tinkazo pueden elegir. Desde un celular, cualquiera rehace el sorteo y tiene que dar lo mismo.</p></article>
     </div>
     <div class="sec-links">
       <a class="sec-link" href="/como-funciona.html" data-i="confMas">Cómo funciona, paso a paso &rarr;</a>
@@ -173,25 +143,15 @@
     </div>
   </section>
 
-  <section class="portada-sec portada-only" id="numeros">
-    <span class="kicker" data-i="cifKicker">En números, medidos</span>
-    <div class="cifras">
-      <div><b>8</b><span data-i="cif1">juegos a pantalla completa</span></div>
-      <div><b data-i="cif2v">0,76 XLM</b><span data-i="cif2">por sorteo grabado, medido en testnet el 3 de octubre de 2026: unos 16 centavos. Lo cobra la red, no Tinkazo</span></div>
-      <div><b>0</b><span data-i="cif3">servidores propios para sortear: nada que se caiga de este lado</span></div>
-      <div><b>MIT</b><span data-i="cif4">código abierto, para que lo revises</span></div>
-    </div>
-  </section>
-
   <section class="portada-sec portada-only" id="preguntas">
     <span class="kicker" data-i="faqKicker">Preguntas</span>
     <h2 class="sec-t" data-i="faqT">Lo que todos preguntan.</h2>
     <div class="faq">
       <details><summary data-i="faq1q">¿Alguien paga por participar?</summary><p data-i="faq1a">No. Tinkazo nunca le cobra a quien participa, y sus términos prohíben usarlo para sorteos con entrada paga: no es una apuesta ni una rifa con boletos.</p></details>
       <details><summary data-i="faq2q">¿Mi gente tiene que instalar algo?</summary><p data-i="faq2a">No. Solo quien organiza entra con una cuenta, con Google en dos pasos. Los participantes no instalan ni se crean nada.</p></details>
-      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy funciona en testnet, la red de prueba de Stellar, con XLM de prueba: no cuesta nada. Grabar un sorteo usa unos 0,76 XLM de comisión, unos 16 centavos de dólar (medido el 3 de octubre de 2026). La cobra la red, no Tinkazo, y casi toda es renta de almacenamiento, que cambia con la red. Verificar es gratis.</p></details>
-      <details><summary data-i="faq4q">¿Cómo sé que no hiciste trampa?</summary><p data-i="faq4a">No hace falta creerme: el comprobante trae la lista, la ronda y la prueba, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.</p></details>
-      <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i="faq5a">En Stellar queda, a nombre de tu cuenta, la huella de la lista, cuántos son y cuántos ganan, el premio que escribiste, la ronda, la hora del sello y la del sorteo, y los puestos de quien ganó, y los datos que enumera Seguridad. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís. Al compartir o mostrar en grande, queda además una copia para el enlace corto, que solo se abre con el enlace y que Tinkazo no puede leer.</p></details>
+      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy es gratis para todos. Si algún día cobramos a quien organiza, te avisamos antes. Participar y comprobar son gratis siempre.</p></details>
+      <details><summary data-i="faq4q">¿Cómo sé que no hiciste trampa?</summary><p data-i="faq4a">No hace falta creerme: el comprobante trae la lista y la prueba, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.</p></details>
+      <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i-html="faq5a">Los nombres nunca se publican: quedan en tu equipo y en el comprobante que compartís. De cada sorteo solo queda un registro público, a nombre de tu cuenta y sin nombres. <a href="/como-funciona.html#que-se-guarda">Qué se guarda, en Cómo funciona</a>.</p></details>
     </div>
   </section>
 
@@ -204,29 +164,31 @@
     <p class="hero-otras"><button class="enlace" type="button" data-otras-formas data-i="ctaOtras">Otras formas de entrar</button></p>
   </section>
 
-  <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se graba nada en Stellar.</p>
+  <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se registra nada.</p>
   <!-- El ensayo (src/ui/ensayo.ts): solo se ve con body[data-ensayo="1"]. -->
   <div class="ensayo-banda app-only tab-nuevo" id="ensayo-banda">
-    <p data-i="ensBanda">Ensayo con una lista de ejemplo: nada de esto se graba.</p>
-    <button class="ghost mini" id="ens-salir-banda" type="button" data-i="ensSalir">Salir del ensayo</button>
+    <p data-i="ensBanda">Ensayo: nada de esto se graba.</p>
+    <button class="ghost mini" id="ens-salir-banda" type="button" data-i="ensSalirBanda" data-i-aria="ensSalirAria" aria-label="Salir del ensayo">Salir</button>
+  </div>
+  <!-- El modo stand (src/ui/stand.ts): solo se ve con body[data-stand="1"]. -->
+  <div class="stand-banda app-only tab-nuevo" id="stand-banda">
+    <p data-i="standBanda">Ronda de ejemplo: no se puede comprobar</p>
+    <button class="ghost mini" id="stand-salir-banda" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
   </div>
   <div class="appbar app-only">
     <div class="appbar-t">
-      <h2 data-i="appTitle">Tu sorteo</h2>
+      <h2 class="tab-nuevo" data-i="appTitle">Tu sorteo</h2>
+      <h2 class="tab-hist" data-i="histTitle">Mis sorteos</h2>
       <!-- "¿Cómo se usa?", siempre a mano (src/ui/tutorial.ts): secundario, nunca flotando ni en la barra de abajo. -->
       <button class="ghost mini btn-como tab-nuevo" id="btn-como" type="button" aria-expanded="false" aria-controls="como-panel" aria-label="¿Cómo se usa?" data-i-aria="comoBtn"><span class="como-q" aria-hidden="true">?</span><span class="como-bt" data-i="comoBtn">¿Cómo se usa?</span></button>
     </div>
     <!-- Dónde estás y qué falta: lo arma `src/ui/siguiente.ts`. -->
     <ol class="pasos app-only tab-nuevo" id="pasos" role="list" aria-label="Pasos del sorteo" data-i-aria="pasosAria">
-      <li data-paso="1" class="actual" aria-current="step"><span class="p-n" aria-hidden="true">1</span><span class="p-t" data-i="paso1">Lista</span><span class="sr-only p-e"></span></li>
-      <li data-paso="2"><span class="p-n" aria-hidden="true">2</span><span class="p-t" data-i="paso2">Sellar</span><span class="sr-only p-e"></span></li>
-      <li data-paso="3"><span class="p-n" aria-hidden="true">3</span><span class="p-t" data-i="paso3">Sortear</span><span class="sr-only p-e"></span></li>
-      <li data-paso="4"><span class="p-n" aria-hidden="true">4</span><span class="p-t" data-i="paso4">Compartir</span><span class="sr-only p-e"></span></li>
+      <li data-paso="1" class="actual" aria-current="step"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso1">Lista</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="2"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso2">Sellar</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="3"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso3">Sortear</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="4"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso4">Compartir</span></span><span class="sr-only p-e"></span></li>
     </ol>
-    <div class="tabs" role="tablist">
-      <button role="tab" id="tab-nuevo" aria-selected="true" data-i="tabNuevo">Nuevo sorteo</button>
-      <button role="tab" id="tab-hist" aria-selected="false" data-i="tabHist">Mis sorteos</button>
-    </div>
   </div>
   <!-- "¿Cómo se usa?": un panel en el lugar, que empuja la página y no tapa nada (src/ui/tutorial.ts).
        Las cuatro tarjetas son los cuatro pasos del indicador, con el dibujo del botón de verdad. -->
@@ -280,8 +242,6 @@
   </section>
   <!-- La línea que guía el ensayo, debajo de los pasos. Cambia con el paso y nunca bloquea. -->
   <p class="ensayo-guia app-only tab-nuevo" id="ensayo-guia" role="status" aria-live="polite" hidden></p>
-  <!-- El recordatorio de crear la cuenta: solo en el ensayo, antes de sellar, una sola vez por sesión (src/ui/aviso-cuenta.ts). Sin ventana ni color de la casa. -->
-  <p class="aviso-cuenta app-only tab-nuevo" id="aviso-cuenta" hidden><span data-i="cuentaPideGoogle">Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.</span> <button class="enlace" type="button" id="aviso-cuenta-entrar" data-i="cuentaPideEntrar">Entrar con Google</button></p>
 
   <!-- 01 Participantes -->
   <section class="block app-only tab-nuevo" id="sec-participants">
@@ -289,20 +249,61 @@
     <div class="body">
       <!-- La cuenta, en una línea con su botón (wallet-ui.ts, applyGate). -->
       <aside class="gate" id="gate" style="display:none"></aside>
-      <!-- La primera vez, una línea sin botones de color, una sola vez por equipo (onboarding.ts).
-           Reemplaza a la bienvenida de tres pasos, que se veía una vez y no volvía. -->
+      <!-- La primera vez, una línea sin botones de color, una sola vez por equipo (onboarding.ts): una sola puerta al ensayo,
+           y mientras se ve, "o probá con un ejemplo" de más abajo se esconde (styles.css). "¿Cómo se usa?" ya está arriba. -->
       <aside class="primera-vez" id="primera-vez" style="display:none">
-        <p><b data-i="pvPrimera">¿Primera vez?</b> <button class="enlace" type="button" id="pv-como" data-i="pvVer">Mirá cómo se usa</button> <span data-i="pvO">o</span> <button class="enlace" type="button" id="pv-ensayo" data-entrar-ensayo data-i="pvEnsayo">probalo con un ejemplo</button></p>
+        <p><b data-i="pvPrimera">¿Primera vez?</b> <button class="enlace" type="button" id="pv-ensayo" data-entrar-ensayo data-i="pvEnsayo">Probalo con un ejemplo</button></p>
         <button class="pv-x" type="button" id="pv-cerrar" aria-label="No mostrar más" data-i-aria="pvCerrar" data-i-title="pvCerrar" title="No mostrar más">✕</button>
       </aside>
       <!-- Un sorteo sellado en este navegador que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
       <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
+      <!-- La sala por QR del modo stand (src/ui/stand-sala.ts): solo se ve con body[data-stand="1"]. Alimenta rondas de ejemplo, nunca un sorteo sellado. -->
+      <section class="stand-sala" id="stand-sala" aria-labelledby="sala-t">
+        <h3 id="sala-t" data-i="standSalaT">Que se sumen con el celular</h3>
+        <div id="sala-cerrada">
+          <p class="note" data-i="standSalaB">Mostrá un QR: cada persona escribe su nombre en su celular y aparece acá. Si no hay señal, escribilos vos en el cuadro de abajo.</p>
+          <button class="ghost" type="button" id="sala-crear" data-i="standSalaCrear">Que se sumen con un QR</button>
+        </div>
+        <p class="ss-error" id="sala-error" role="status" hidden></p>
+        <div id="sala-abierta" hidden>
+          <p class="ss-titqr" data-i="standSalaTitQr">Escaneá y sumate con tu nombre</p>
+          <div class="ss-qr">
+            <img id="sala-qr-img" alt="" data-i-aria="standSalaQrAlt" aria-label="QR para sumarse a la ronda" />
+            <div class="ss-lado">
+              <p class="ss-estado" id="sala-estado" role="status" aria-live="polite"></p>
+              <p class="ss-cuenta" id="sala-cuenta" aria-live="polite"></p>
+              <div class="row">
+                <button class="ghost" type="button" id="sala-grande" aria-expanded="false" data-i="standSalaGrande">Ver el QR en grande</button>
+                <button class="ghost" type="button" id="sala-cerrar" data-i="standSalaCerrar">Cerrar la sala</button>
+              </div>
+            </div>
+          </div>
+          <ul class="ss-nombres" id="sala-nombres" aria-label="Quiénes se sumaron" data-i-aria="standSalaListaAria"></ul>
+          <div class="ss-revisar" id="sala-revisar" hidden>
+            <h4 data-i="standSalaRevisarT">Para revisar</h4>
+            <p class="note" data-i="standSalaRevisarB">Estos nombres tienen algo que conviene mirar antes de mostrarlos en la pantalla.</p>
+            <ul id="sala-revisar-lista"></ul>
+          </div>
+        </div>
+      </section>
       <div class="row origenes" id="origenes" style="margin: 0 0 14px">
         <button class="chip live" type="button" id="btn-pegar" data-i="srcPaste">Pegar lista</button>
+        <!-- Luma a la vista, sin abrir nada, y su "?" que enseña a bajar el CSV (src/ui/luma-ayuda.ts). Es un origen más: no lleva el color de la casa. -->
+        <label class="chip live luma-chip" id="luma-chip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
+        <button class="chip live luma-q" type="button" id="luma-q" aria-expanded="false" aria-controls="luma-ayuda" aria-label="Cómo bajar tu lista de Luma" data-i-aria="lumaQ" data-i-title="lumaQ" title="Cómo bajar tu lista de Luma">?</button>
         <button class="mini" type="button" id="btn-recuperar" style="display:none" data-i="recuperarLista">Recuperar la lista anterior</button>
       </div>
+      <div class="luma-ayuda" id="luma-ayuda" hidden>
+        <p class="luma-t" data-i="lumaT">Tu lista de Luma, en tres pasos</p>
+        <ol>
+          <li data-i="lumaP1">En Luma, desde la compu o desde el navegador del celular, abrí tu evento, entrá a «Manage» y a la pestaña «Guests».</li>
+          <li data-i="lumaP2">Tocá «Download CSV». Si te pregunta, elegí la lista completa. Se guarda en Descargas.</li>
+          <li data-i="lumaP3">Volvé acá, tocá «Desde Luma» y elegí ese archivo. Marcás quiénes entran: los que vinieron o los aprobados.</li>
+        </ol>
+        <p class="note" data-i="lumaNota">El archivo se lee en tu navegador y no se sube a ningún lado.</p>
+      </div>
       <!-- Con la lista vacía, cómo se hace (participants.ts). -->
-      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Copiá la lista en WhatsApp o en tu hoja de cálculo y tocá «Pegar lista».</p>
+      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.</p>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
         <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
@@ -313,6 +314,8 @@
       <p class="lista-cuenta" id="lista-cuenta" style="display:none"></p>
       <!-- Con el cuadro vacío y en una red con contrato, en lugar de "Cargar ejemplo": el ensayo, que no graba nada. -->
       <button class="enlace" type="button" id="btn-ensayo" data-entrar-ensayo data-i="ensayoLink" style="display:none">o probá con un ejemplo, sin grabar nada</button>
+      <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
+      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas de ejemplo con quienes pasan</button>
       <!-- Al volver de entrar con una lista lista: lo que sigue, con el foco en "Sellar la lista". Nunca sella solo. -->
       <p class="ya-entraste" id="ya-entraste" role="status" style="display:none"></p>
       <!-- Todo lo que no es pegar ni sellar va plegado (regla de letra, 26 de octubre de 2026): el premio, cuántos ganan, CSV y Luma.
@@ -321,7 +324,6 @@
         <summary data-i="masOpciones">Premio, cuántos ganan y subir CSV</summary>
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
-          <label class="chip live" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
         </div>
       <div class="field">
         <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
@@ -330,20 +332,49 @@
         <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
       </div>
       <div class="row mas-fila">
-        <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
-        <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option><option>31</option><option>32</option></select>
+        <!-- Cuántos ganan (src/ui/ganadores.ts): un número y los atajos de lo común. El tope de la red lo pone el código al cargar
+             (el contrato de cada red admite lo suyo, ver topeDeGanadores en stellar/config.ts); el del HTML es el del protocolo,
+             MAX_WINNERS, y una prueba (ganadores.test.ts) lo compara. -->
+        <div class="nw-grupo">
+          <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
+          <input id="nw" class="mono" type="number" inputmode="numeric" min="1" max="300" step="1" value="1" autocomplete="off" aria-describedby="nw-nota" />
+          <div class="premio-chips nw-atajos" id="nw-atajos" role="group" data-i-aria="winnersAtajos" aria-label="Atajos para cuántos ganan">
+            <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button><button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="5" aria-pressed="false">5</button><button type="button" data-n="10" aria-pressed="false">10</button>
+          </div>
+        </div>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
       </div>
+      <p class="note nw-nota" id="nw-nota" role="status" hidden></p>
       </details>
+      <!-- El logo de la comunidad (src/ui/logo-ui.ts): dos toques, sin confirmar. No es parte del sorteo. Se esconde con la lista cerrada. -->
+      <div class="logo-fila" id="logo-fila">
+        <label class="chip live" id="logo-poner" for="logo-input"><span data-i="logoPoner">Poner logo</span><input id="logo-input" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" /></label>
+        <div class="logo-vista" id="logo-vista" hidden>
+          <div class="logo-muestras" id="logo-muestras"></div>
+          <p class="note" data-i="logoVista">Va a salir en el sorteo, en la foto y en el enlace para comprobar. Queda en este navegador: en otro equipo, volvé a subirlo. Usá solo el logo de tu comunidad u organización; el de un sponsor no va en el sorteo.</p>
+          <div class="row logo-acciones">
+            <button class="mini" type="button" id="logo-cambiar" data-i="logoCambiar">Cambiar</button>
+            <button class="mini" type="button" id="logo-quitar" data-i="logoQuitar">Quitar</button>
+            <button class="mini" type="button" id="logo-fondo" data-i="logoFondo" hidden>Cambiar el fondo</button>
+          </div>
+        </div>
+        <p class="note logo-error" id="logo-error" role="alert" hidden></p>
+      </div>
       <div class="row">
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
-        <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la sala</button>
+        <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la pantalla</button>
       </div>
       <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. Va pegada a los botones: explica la acción que reemplaza a "Sellar la lista". -->
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
-      <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas · 1 ganador · Termo. Al sellar, la lista queda cerrada." -->
+      <!-- Lo que le queda a la cuenta con el patrocinio de Tinkazo (src/ui/cupo-patrocinio.ts): solo cuando paga el servicio y hay cuenta. Nace escondida. -->
+      <p class="note cupo-linea" id="cupo-linea" style="display:none"></p>
+      <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas, 1 ganador, Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
-      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Entrá con tu cuenta para sellar</p>
+      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Tu gente no necesita crear cuenta.</p>
+      <div class="row rules-row rules-pre-row" id="rules-pre-row" style="display:none">
+        <button class="ghost mini" id="btn-rules-pre" type="button" data-i="copyRules" data-i-title="rulesNotePre" title="Pegalas en Luma, en WhatsApp o donde avisaste del sorteo antes de empezar. Dicen cómo se elige y cuándo se publica el número del sorteo.">Copiar las bases</button>
+      </div>
+      <pre class="entity rules-text" id="rules-pre-text" style="display:none"></pre>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
       <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
       <!-- "¿La red está bien?": un toque antes de empezar un evento; dice verde, amarillo o rojo con la razón. Solo con cuenta. -->
@@ -368,10 +399,10 @@
         <div class="wait-main">
           <p class="kicker" data-i="waitTitle">El número que va a decidir</p>
           <div class="wait-row">
-            <p class="wait-num mono"><b id="wait-round">·</b><span id="wait-left">0:00</span></p>
+            <p class="wait-num mono"><b id="wait-round">…</b><span id="wait-left">0:00</span></p>
             <p class="wait-id" id="wait-id" style="display:none"></p>
           </div>
-          <p class="wait-line" data-i="waitLine">Nadie puede elegir este número, ni quien organiza.</p>
+          <p class="wait-line" data-i="waitLine">Nadie puede elegirlo, ni quien organiza.</p>
           <!-- Solo en pantallas táctiles: el navegador no puede saber si el celular está en silencio. -->
           <p class="wait-vol" data-i="volAviso">Subí el volumen del celular: el show tiene música.</p>
         </div>
@@ -389,20 +420,28 @@
       <p class="kicker pick-label" id="pick-label" data-i="gameLabel">Juego</p>
       <p class="note" id="rec-head" style="display:none"></p>
       <p class="note rec-sel-nota" id="rec-sel-nota" aria-live="polite"></p>
+      <!-- Cuando el selector no es el de siempre: mientras corre el show no se cambia, y con el resultado puesto sirve para verlo de nuevo con otro juego (freeze.ts, pintarNotaDelJuego). -->
+      <p class="note juego-nota" id="juego-nota" aria-live="polite" hidden></p>
       <div class="gamepick" id="gamepick">
-        <button id="g-race" class="on"><span data-i="gameRace">Carrera de llamas</span></button>
-        <button id="g-sapo"><span data-i="gameSapo">Sapo</span></button>
-        <button id="g-trompo"><span data-i="gameTrompo">Trompo</span></button>
-        <button id="g-chovena"><span data-i="gameCho">Chovena</span></button>
-        <button id="g-pinata"><span data-i="gamePinata">Piñata</span></button>
-        <button id="g-wheel"><span data-i="gameWheel">Ruleta</span></button>
+        <button id="g-race" class="on"><img class="sel-img sel-osc" src="/juegos/selector/race.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/race-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameRace">Carrera de llamas</span></button>
+        <button id="g-sapo"><img class="sel-img sel-osc" src="/juegos/selector/sapo.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/sapo-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameSapo">Sapo</span></button>
+        <button id="g-trompo"><img class="sel-img sel-osc" src="/juegos/selector/trompo.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/trompo-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameTrompo">Trompo</span></button>
+        <button id="g-chovena"><img class="sel-img sel-osc" src="/juegos/selector/chovena.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/chovena-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameCho">Chovena</span></button>
+        <button id="g-pinata"><img class="sel-img sel-osc" src="/juegos/selector/pinata.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/pinata-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gamePinata">Piñata</span></button>
+        <button id="g-wheel"><img class="sel-img sel-osc" src="/juegos/selector/wheel.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/wheel-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameWheel">Ruleta</span></button>
         <!-- De pie y El Trueque salieron del selector el 26 de octubre de 2026: el botón queda apagado, y los dos siguen abriendo con ?demo=. -->
         <button id="g-quien" hidden><span data-i="gameQuien">De pie</span></button>
         <button id="g-trueque" hidden><span data-i="gameTrueque">El Trueque</span></button>
-        <button id="g-teleferico"><span data-i="gameTeleferico">Teleférico</span></button>
-        <button id="g-oruro"><span data-i="gameOruro">La Entrada</span></button>
+        <button id="g-teleferico"><img class="sel-img sel-osc" src="/juegos/selector/teleferico.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/teleferico-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameTeleferico">Teleférico</span></button>
+        <button id="g-oruro"><img class="sel-img sel-osc" src="/juegos/selector/oruro.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/oruro-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameOruro">La Entrada</span></button>
+        <button id="g-guajojo"><img class="sel-img sel-osc" src="/juegos/selector/guajojo.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/guajojo-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameGuajojo">Guajojó</span></button>
+        <button id="g-toborochi"><img class="sel-img sel-osc" src="/juegos/selector/toborochi.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/toborochi-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameToborochi">El Toborochi</span></button>
       </div>
       <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta llega hasta 200 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
+      <div class="ver3d" id="ver3d-row" hidden>
+        <button class="ghost mini" id="btn-3d" type="button" aria-pressed="false" data-i="ver3dOn" data-i-aria="ver3dEtiqueta" aria-label="Ver en 3D">En 3D</button>
+        <span class="note" data-i="ver3dNota">Este juego se ve con cámara y relieve de verdad. Si el equipo se pone lento, tocá y pasa a 2D. El sorteo y quién gana son los mismos.</span>
+      </div>
       <details class="mas" id="mas-ajustes">
         <summary data-i="masAjustes">Sonido, duración y más</summary>
       <div class="row ajustes">
@@ -424,7 +463,7 @@
       </details>
       <div class="kpis solo-verificar">
         <div><b id="k-n">0</b><span data-i="kEntries">participantes</span></div>
-        <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
+        <div><b id="k-digest" style="font-size:16px" class="mono">…</b><span data-i="kDigest">huella de la lista</span></div>
         <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
       </div>
       <details class="tecnico solo-verificar"><summary data-i="tecnicoT">Detalles técnicos</summary><p class="entity" id="entities"></p></details>
@@ -443,6 +482,8 @@
       </div>
       <div class="winner-box" id="winner-box">
         <p class="kicker" data-i="winnerLabel">Lo que salió</p>
+        <!-- El logo de la comunidad, a la derecha del renglón (src/ui/logo-sorteo.ts). Vacío sin logo. -->
+        <span class="winner-logo" id="winner-logo"></span>
         <div id="winner-cards" role="status" aria-live="polite"></div>
         <!-- Se siguió sin sello porque la red no dejaba sellar: este sorteo no se puede comprobar. Lo muestra draw.ts. -->
         <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>
@@ -456,25 +497,37 @@
             <button class="ghost" id="btn-proof" data-i="shareProof">Compartir el resultado</button>
             <button class="ghost" id="btn-again-nueva" data-i="againNueva">Usar otra lista</button>
           </div>
+          <!-- Qué sigue para la sala y para quien organiza: una línea, sin botón (draw.ts, showAgain). -->
+          <p class="note again-sigue" id="again-sigue"></p>
         </section>
         <div class="demo-fin">
           <h3 data-i="demoFinT">Así de fácil. ¿Lo hacemos con tu lista?</h3>
           <div class="hero-ctas">
-            <a class="primary cta cta-entrar" href="/#sortear" data-cta-entrar><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear, es gratis</span></a>
+            <a class="primary cta cta-entrar" href="/#sortear" data-cta-entrar data-cta-corto><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear, es gratis</span></a>
             <a class="enlace" href="/#como-se-usa-fin" data-i="navComoUsa">Cómo se usa</a>
           </div>
         </div>
         <!-- El final del ensayo (src/ui/ensayo.ts): nada se sorteó, y lo que sigue es sortear con la lista propia. -->
         <div class="ensayo-fin" id="ensayo-fin">
-          <h3 data-i="ensFinT">Era un ensayo: el ganador es de mentira y no se grabó nada.</h3>
+          <h3 data-i="ensFinT">Era un ensayo: quien salió es de mentira y no se grabó nada.</h3>
           <p data-i="ensFinB">Así se sortea. En vivo, entrá y pegá tu lista antes de proyectar: la espera es de unos 45 segundos.</p>
           <div class="row">
-            <button class="primary" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>
+            <button class="primary" id="ens-otro" type="button" data-i="ensOtroJuego">Probar otro juego</button>
+            <button class="ghost" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>
             <button class="ghost" id="ens-salir" type="button" data-i="ensSalir">Salir del ensayo</button>
             <button class="enlace" id="ens-como" type="button" data-i="comoBtn">¿Cómo se usa?</button>
           </div>
         </div>
-        <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button></div>
+        <!-- El final de una ronda de stand (src/ui/stand.ts): no se sorteó nada de verdad. -->
+        <div class="stand-fin" id="stand-fin">
+          <h3 data-i="standFinT">Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.</h3>
+          <p data-i="standFinB">Entrar es gratis. El sorteo de cierre sí se puede comprobar, desde cualquier celular.</p>
+          <div class="row">
+            <button class="primary" id="stand-otra" type="button" data-i="standOtra">Otra ronda</button>
+            <button class="ghost" id="stand-salir" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
+          </div>
+        </div>
+        <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button><button class="ghost" id="btn-otro-juego" type="button" data-i="otroJuegoBtn">Ver de nuevo con otro juego</button></div>
         <p class="note" id="motion-note" style="display:none"><span data-i="motionNote">Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.</span> <button class="ghost" id="btn-replay" data-i="motionReplay">Ver la animación igual</button></p>
         <div class="verify">
           <div>
@@ -483,8 +536,8 @@
             <details class="tecnico solo-verificar">
               <summary data-i="tecnicoT">Detalles técnicos</summary>
               <p class="entity" id="proof"></p>
-              <p class="note" data-i="verifyPasos">Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.</p>
-              <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:12px"></a>
+              <p class="note" data-i="verifyPasos">Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro; 2) randomness = sha256(prueba); 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.</p>
+              <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:14px"></a>
             </details>
             <div class="row">
               <button class="ghost solo-verificar" id="btn-reverify" data-i="reverify">Rehacelo acá mismo</button>
@@ -500,6 +553,7 @@
           </div>
         </div>
         <aside class="lore" id="lore-box" style="display:none"></aside>
+        <a class="enlace feedback-fin" id="feedback-fin" href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="resultado" data-i="feedbackFin">¿Algo para mejorar? Contanos en 30 segundos</a>
         <aside class="lore leyenda" id="leyenda-box" style="display:none"></aside>
       </div>
     </div>
@@ -507,7 +561,7 @@
 
   <!-- Historial -->
   <section class="block app-only tab-hist" id="sec-history" style="display:none">
-    <div class="head"><h2 data-i="histTitle">Tus sorteos</h2><span class="kicker" id="hist-count"></span></div>
+    <div class="head"><span class="kicker" id="hist-count"></span></div>
     <div class="body">
       <!-- Los sorteos primero: volver a mandar un comprobante es lo más común, y en el celular
            el formulario de eventos lo dejaba abajo (evaluación crítica de experiencia, hallazgo 5). -->
@@ -517,7 +571,7 @@
       <div id="hist-eventos" class="hist-eventos" style="display:none"></div>
       <details class="hist-why">
         <summary data-i="histWhyT">¿Qué se guarda y dónde?</summary>
-        <p class="note" data-i="histWhy">Este navegador se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este navegador, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.</p>
+        <p class="note" data-i="histWhy">Este navegador se acuerda de los sorteos que hiciste acá, con los nombres. Los que registraste desde otro equipo se traen del registro público: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este navegador, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.</p>
         <a class="sec-link" href="/como-funciona.html" data-i="histWhyMas">Todo, en Cómo funciona →</a>
       </details>
       <div class="hist-pie">
@@ -528,7 +582,7 @@
   </section>
   <section class="block app-only tab-hist" id="hist-vacio">
     <div class="body">
-      <p class="sin-sesion" data-i="histNoAcct">Entrá con tu cuenta para ver tus sorteos. Los que grabaste en Stellar aparecen en cualquier equipo donde entres.</p>
+      <p class="sin-sesion" data-i="histNoAcct">Entrá con tu cuenta para ver tus sorteos. Los que registraste aparecen en cualquier equipo donde entres.</p>
       <div class="row sin-sesion"><button class="primary" id="hist-entrar" data-i="histEnter">Entrar</button></div>
       <p class="con-sesion" data-i="histNone">Todavía no hay sorteos con esta cuenta. El primero aparece acá en cuanto sellás una lista.</p>
       <p class="con-sesion"><a class="enlace" href="/#como-se-usa" data-i="navComoUsa">Cómo se usa</a></p>
@@ -541,7 +595,7 @@
     <h2 class="kicker" data-i="masTitle">Para saber más</h2>
     <div class="notas" style="margin-top: 12px">
       <a class="nota" href="/juegos.html" style="text-decoration:none;color:inherit">
-        <h3 data-i="masJuegosT">Los ocho juegos</h3>
+        <h3 data-i="masJuegosT">Los diez juegos</h3>
         <p data-i="masJuegosB">Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y dos más, con la captura de cada uno.</p>
       </a>
       <a class="nota" href="/historia.html" style="text-decoration:none;color:inherit">
@@ -550,11 +604,11 @@
       </a>
       <a class="nota" href="/seguridad.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masSeguridadT">Cómo se puede romper</h3>
-        <p data-i="masSeguridadB">Qué impide el protocolo, qué ataques siguen abiertos y qué límites tiene.</p>
+        <p data-i="masSeguridadB">Qué impiden las reglas del sorteo, qué ataques siguen abiertos y qué límites tiene.</p>
       </a>
       <a class="nota" href="/precios.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masPreciosT">Qué cuesta</h3>
-        <p data-i="masPreciosB">Unos 0,76 XLM de comisión de red por sorteo grabado en Stellar, medidos en testnet. Verificar es gratis, siempre.</p>
+        <p data-i="masPreciosB">Hoy Tinkazo es gratis. Participar y verificar un sorteo es gratis, siempre.</p>
       </a>
       <a class="nota" href="/sorteo-para-meetup.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masMeetupT">Sorteo para meetup</h3>
@@ -567,6 +621,14 @@
       <a class="nota" href="/sorteo-verificable.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masVerifT">Sorteo verificable</h3>
         <p data-i="masVerifB">Cómo rehacer un resultado con tus propias herramientas, y qué no promete: la lista la arma quien sortea.</p>
+      </a>
+      <a class="nota" href="/ruleta-de-nombres.html" style="text-decoration:none;color:inherit">
+        <h3 data-i="masRuletaT">Ruleta de nombres</h3>
+        <p data-i="masRuletaB">Pegá los nombres y mirá girar la ruleta. Es gratis, y después cualquiera comprueba que nadie la empujó.</p>
+      </a>
+      <a class="nota" href="/sorteo-para-eventos.html" style="text-decoration:none;color:inherit">
+        <h3 data-i="masEventosT">Sorteo para eventos y stands</h3>
+        <p data-i="masEventosB">Pantalla grande, QR y lista de Luma. El resultado queda en un enlace para compartir.</p>
       </a>
       <a class="nota" href="/terminos.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masTermT">Términos y privacidad</h3>
@@ -583,13 +645,18 @@
     <a href="/juegos.html" data-i="navJuegos">Juegos</a>
     <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
     <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/marca.html" data-i="navMarca">Marca</a>
     <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
     <a href="/precios.html" data-i="navPrecios">Precios</a>
     <a href="/terminos.html" data-i="navTerminos">Términos</a>
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
     <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="/ruleta-de-nombres.html" data-i="navRuleta">Ruleta de nombres</a>
+    <a href="/sorteo-para-eventos.html" data-i="navEventos">Sorteo para eventos</a>
     <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+    <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
+    <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>
@@ -600,7 +667,7 @@
      pantalla anuncia los cambios de una región que ya estaba. -->
 <div class="siguiente" id="siguiente" role="region" aria-label="Lo que sigue" data-i-aria="sigRegion" inert>
   <div class="sig-in">
-    <p class="sig-paso mono" id="sig-paso"></p>
+    <p class="sig-paso" id="sig-paso"></p>
     <button class="primary" id="sig-btn" type="button"></button>
   </div>
 </div>

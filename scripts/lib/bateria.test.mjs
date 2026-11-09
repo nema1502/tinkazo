@@ -13,6 +13,7 @@ import {
   planDe,
   resumenDeBateria,
 } from "./bateria.mjs";
+import { AUDITORES_DE_LA_BOLETA } from "./boleta.mjs";
 import { FUERA_DEL_SELECTOR, SELECTOR } from "./juegos.mjs";
 
 const ids = (plan) => plan.map((t) => t.id);
@@ -57,6 +58,16 @@ describe("qué corre la batería", () => {
     expect(() => planDe({ solo: ["nada"] })).toThrow(/no conozco el auditor nada/);
     expect(buscarAuditor("rigor").id).toBe("audit-rigor");
     expect(buscarAuditor("no-existe")).toBeNull();
+  });
+
+  it("para la boleta, el auditor de palabras corre una vez por juego y sin Chrome; en la batería, una sola vez", () => {
+    const boleta = planDe({ solo: AUDITORES_DE_LA_BOLETA, juegos: ["wheel"], boleta: true });
+    const p = boleta.filter((t) => t.auditor === "audit-palabras");
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatchObject({ objetivo: "wheel", chrome: false, args: ["wheel", "--json"] });
+    const bateria = planDe().filter((t) => t.auditor === "audit-palabras");
+    expect(bateria).toHaveLength(1);
+    expect(bateria[0].args).toEqual(["--json"]);
   });
 
   it("--juegos corre cada auditor de juegos una vez por juego pedido", () => {

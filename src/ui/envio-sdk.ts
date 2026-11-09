@@ -122,7 +122,7 @@ async function mandarYConfirmar(firmada: NonNullable<TxArmada["signed"]>, onStep
  * y devuelve la firmada; el envío lo hace esta capa, como con Freighter. Es "Sellar pagando
  * con mi cuenta" cuando el sello cuesta más de lo que el patrocinador cubre.
  */
-async function firmarSinPatrocinio(tx: TxArmada, wallet: { signUnsponsored?: (xdr: string) => Promise<string> }): Promise<NonNullable<TxArmada["signed"]> & { timeBounds?: { maxTime?: string | number } }> {
+async function firmarSinPatrocinio(tx: TxArmada, wallet: { signUnsponsored?: (xdr: string) => Promise<string> }): Promise<NonNullable<TxArmada["signed"]> & { timeBounds?: { maxTime?: string | number }; toXDR(): string }> {
   if (!wallet.signUnsponsored) throw new Error("pollar-sin-pago-propio");
   const firmado = await wallet.signUnsponsored(tx.toXDR());
   const { TransactionBuilder } = await import("@stellar/stellar-sdk");
@@ -177,13 +177,15 @@ export async function armar<T>(f: () => Promise<T>): Promise<T> {
 /**
  * Lo que devolvió Pollar cuando no pudo, y no se sabe si mandó: un corte, su tope
  * de tiempo, un error que no se entiende, `TRY_AGAIN_LATER` (que la red también
- * contesta cuando la transacción ya entró). Lo demás (sin saldo, la secuencia, un
- * código de resultado de la red) es la red contestando que no la tomó.
+ * contesta cuando la transacción ya entró) y `RATE_LIMITED` (demasiados pedidos: puede
+ * llegar al preguntar por una transacción que ya se mandó). Lo demás (sin saldo, la
+ * secuencia, un código de resultado de la red, una co-firma que no se aprobó) es la
+ * respuesta de que no se tomó.
  */
 async function pollarNoSabe(e: unknown): Promise<boolean> {
   const { errorKey, esDeRed, textoDelError } = await import("../stellar/errores");
   const clave = errorKey(e);
-  return esDeRed(e) || clave === "unknown" || clave === "unconfirmed" || /TRY_AGAIN_LATER|DUPLICATE/.test(textoDelError(e));
+  return esDeRed(e) || clave === "unknown" || clave === "unconfirmed" || /TRY_AGAIN_LATER|DUPLICATE|RATE_LIMITED/.test(textoDelError(e));
 }
 
 /**
@@ -199,7 +201,7 @@ async function pollarNoSabe(e: unknown): Promise<boolean> {
  * comisión, y el RPC la encuentra igual por ese hash (medido el 21 de octubre de
  * 2026 con el sello patrocinado 93a2c960…).
  */
-export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean } = {}): Promise<{ hash: string; value: unknown } | null> {
+export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean } = {}): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet"),
     import("../stellar/wallet-pollar"),
@@ -221,6 +223,11 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
   const { server } = await import("../stellar/contract");
   let hash: string;
   let enviar: (() => Promise<RespuestaEnvio>) | undefined;
+  /** El no del portero, si lo hubo antes de que nada quedara en el aire: es lo que se le dice a la persona. */
+  let rechazoDelPortero: unknown;
+  /** El portero dijo 503 y, al volver a preguntar, ahora rige Pollar. */
+  let cambioDeDueno = false;
+  let topeEnvioMs: number | undefined;
   if (opciones.pagarConMiCuenta) {
     // Pollar solo firma (sin patrocinio) y la manda esta capa: la misma transacción las veces que haga
     // falta, con el mismo hash. Un fallo al firmar es antes de mandar nada: no hay nada en el aire.
@@ -229,17 +236,76 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
     venceEn = Number(firmada.timeBounds?.maxTime) || venceEn;
     enviar = async () => leerEnvio(await server.sendTransaction(firmada as unknown as Parameters<typeof server.sendTransaction>[0]));
   } else {
-    try {
-      hash = await wallet.signAndSubmit(tx.toXDR());
-    } catch (e) {
-      if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
-      throw e;
+    // Quién paga lo dice el portero (`patrocinador.ts`). Sin portero configurado, Pollar, como siempre. Con él
+    // y sin respuesta, esto lanza antes de pedirle a la persona que firme nada: cerrado ante la duda.
+    const patrocinador = await (await import("../stellar/patrocinador")).elegirPatrocinador(wallet.address ?? "", wallet);
+    if (patrocinador.firmaAntes) {
+      // El portero: Pollar firma sin patrocinio y la transacción firmada va al portero, que la envuelve y paga.
+      // Es la misma transacción las veces que haga falta (un reintento no cuenta dos veces: el portero
+      // contesta lo mismo para el mismo hash).
+      const firmada = await firmarSinPatrocinio(tx, wallet);
+      let propia = toHex(firmada.hash());
+      const xdrFirmado = firmada.toXDR();
+      venceEn = Number(firmada.timeBounds?.maxTime) || venceEn;
+      hash = propia;
+      topeEnvioMs = (await import("../stellar/patrocinador")).TOPE_PAGO_MS + 5_000;
+      const { esErrorDelPortero, AVISO_DE_ESPERA_MS } = await import("../stellar/patrocinador");
+      let hablo = false;
+      enviar = async () => {
+        // Si el portero tarda, la persona lo sabe: "Estamos cubriendo la comisión por vos…", en el lugar de los avisos de la red.
+        let aviso: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+          aviso = undefined;
+          onStep("covering");
+          hablo = true;
+        }, AVISO_DE_ESPERA_MS);
+        try {
+          const r = await patrocinador.mandar(xdrFirmado);
+          clearTimeout(aviso);
+          if (hablo) onStep("sending", r.hash);
+          hablo = false;
+          // El hash que devuelve es el de la transacción interna: el que se consulta. Si alguna vez difiriera, manda el suyo.
+          if (r.hash !== propia) propia = r.hash;
+          hash = propia;
+          return { status: r.status };
+        } catch (e) {
+          clearTimeout(aviso);
+          if (hablo) onStep("sending", hash);
+          hablo = false;
+          // Un no del portero (sin cupo, sin fondo, no permitida…) no es un corte: nada quedó en el aire,
+          // y repetir el pedido no lo cambia. Se corta acá y se le dice a la persona por qué.
+          if (esErrorDelPortero(e) && !e.reintentable) {
+            rechazoDelPortero = e;
+            // Un 503 puede ser que ya no rija el portero (lo devolvieron a Pollar): antes de decir "no podemos pagar"
+            // se vuelve a preguntar, sin la caché. Si ahora rige Pollar, se repite desde la firma, una sola vez.
+            if (e.estado === 503 && !opciones.yaVolvioAPreguntar) {
+              const p = await import("../stellar/patrocinador");
+              p.olvidarElEstado();
+              cambioDeDueno = (await p.estadoDelPatrocinio(wallet.address ?? "", { forzar: true })).rige === "pollar";
+            }
+            // Un 429 o un 503 se dicen antes de mandar nada a la red: son definitivos aunque un envío anterior se haya cortado.
+            return { status: "ERROR", codigo: e.message, ...(e.estado === 429 || e.estado === 503 ? { definitivo: true } : {}) };
+          }
+          throw e;
+        }
+      };
+    } else {
+      try {
+        hash = (await patrocinador.mandar(tx.toXDR())).hash;
+      } catch (e) {
+        if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
+        throw e;
+      }
     }
   }
   onStep("sending", hash);
   // Con Pollar patrocinando, ya la mandó (y a veces ya la vio entrar): solo se pregunta, mientras siga viva.
   const { enviarYConfirmar, SelloIncierto } = await import("../stellar/envio");
-  const d = await enviarYConfirmar({ ...(enviar ? { enviar } : {}), consultar: async () => leerConsulta(await server.getTransaction(hash)), venceEn, sinRedMs, alSaturada: avisarSaturacion });
+  const d = await enviarYConfirmar({ ...(enviar ? { enviar } : {}), ...(topeEnvioMs ? { topeEnvioMs } : {}), consultar: async () => leerConsulta(await server.getTransaction(hash)), venceEn, sinRedMs, alSaturada: avisarSaturacion });
+  if (d.estado === "rechazada" && rechazoDelPortero) {
+    // Cambió quien rige entre la consulta y el envío: se elige de nuevo y se firma con el patrocinio de Pollar.
+    if (cambioDeDueno) return submitElsewhere(tx, onStep, sinRedMs, intento, { ...opciones, yaVolvioAPreguntar: true });
+    throw rechazoDelPortero;
+  }
   if (d.estado === "entro") {
     let value: unknown;
     try {

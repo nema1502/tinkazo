@@ -13,6 +13,13 @@
  * anotar cada nota que arranca: cuándo, qué altura, qué timbre, qué volumen y
  * cuánto dura. Después mide lo que se puede medir sin oídos.
  *
+ * Desde que los juegos pueden sonar con archivos (`src/sonidos/banco.ts`), engancha
+ * también `AudioBufferSourceNode`: un archivo que reemplaza a una nota lleva anotado
+ * qué nota reemplaza (`__beep`), y se cuenta con esa altura, ese volumen y ese timbre,
+ * así las reglas de abajo (escala, registro, volumen, huecos, golpes repetidos) valen
+ * igual para el oscilador y para el archivo. Además se cuenta cuántos disparos sonaron
+ * con archivo, y con `--con-banco` se exige que el banco haya sonado en cada juego.
+ *
  * Uso:
  *   node scripts/audit-sound.mjs <juego> [--base http://localhost:4173]
  *   node scripts/audit-sound.mjs todos
@@ -31,7 +38,9 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` escucha los juegos del motor anterior. El nuevo usa la placa de video.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
+// Con `--con-banco`, cada juego tiene que haber sonado con archivos (no solo con osciladores).
+const conBanco = args.includes("--con-banco");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const lista = juegosDe(pedido);
 const registro = [];
@@ -54,7 +63,11 @@ const F_MIN = 128;
 const F_MAX = 2150;
 /** Por debajo de esto queda bajo el murmullo de cincuenta personas. */
 const VOL_MIN = 0.019;
-/** Más silencio que esto y la escena se siente muerta. */
+/**
+ * Más silencio que esto y la escena se siente muerta. Un hueco más corto no es defecto: el
+ * cuarto de segundo de silencio que termina en el golpe es a propósito, y lo que se pide de él
+ * (de 0,2 a 0,6 s) lo mide el grupo `ritmo` de `audit-emocion` (`scripts/lib/ritmo.mjs`).
+ */
 const HUECO_MAX = 4.0;
 
 /**
@@ -88,6 +101,18 @@ const HOOK = `(() => {
     if (v > 0.0002) window.__lastGain = v;
     return lr.apply(this, arguments);
   };
+  // Los archivos del banco: el nodo trae anotada la nota que reemplaza.
+  const BS = AudioBufferSourceNode.prototype;
+  const bstart = BS.start, bstop = BS.stop;
+  BS.start = function (w) {
+    if (this.__beep && !this.__musica) {
+      const b = this.__beep;
+      this.__rec = { t: +w || 0, w: performance.now() / 1000, f: b.f, tipo: b.tipo, g: b.g, end: 0, id: b.id, amb: !!b.amb };
+      window.__snd.push(this.__rec);
+    }
+    return bstart.apply(this, arguments);
+  };
+  BS.stop = function (w) { if (this.__rec) this.__rec.end = +w || 0; return bstop.apply(this, arguments); };
 })()`;
 
 /**
@@ -155,7 +180,8 @@ async function correr(browser, juego) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
-  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}` });
+  // Los archivos están apagados en el sitio (`banco.ts`): con `--con-banco` se prenden por la dirección.
+  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}` });
 
   const arranco = await page.waitFor(
     `document.getElementById('stadium').style.display === 'block'`,
@@ -181,9 +207,10 @@ function medir(notas) {
   const cortas = [];
   for (const n of orden) {
     const d = Math.max(0, n.end - n.t);
-    if (n.f < F_MIN || n.f > F_MAX) fuera.push(`${Math.round(n.f)} Hz`);
-    if (n.g && n.g < VOL_MIN) bajas.push(`${Math.round(n.f)} Hz a ${n.g}`);
-    if (!enEscala(n.f)) desafinadas.push(`${Math.round(n.f)} Hz`);
+    // El viento y el colibrí son ruido o zumbido sin nota: cuentan para los huecos, no para la afinación ni el registro.
+    if (!n.amb && (n.f < F_MIN || n.f > F_MAX)) fuera.push(`${Math.round(n.f)} Hz`);
+    if (!n.amb && n.g && n.g < VOL_MIN) bajas.push(`${Math.round(n.f)} Hz a ${n.g}`);
+    if (!n.amb && !enEscala(n.f)) desafinadas.push(`${Math.round(n.f)} Hz`);
     // Sólo cuenta como melodía lo que tiene cuerpo: por debajo de 40 ms el
     // oído no percibe altura, oye un clic, y un clic como clic está bien.
     if (d > 0 && d < 0.04 && n.g >= 0.04) cortas.push(`${Math.round(n.f)} Hz ${Math.round(d * 1000)} ms`);
@@ -243,7 +270,11 @@ function medir(notas) {
 
   const ultima = orden[orden.length - 1];
   const dur = orden.length ? ultima.w - t0 + Math.max(0, ultima.end - ultima.t) : 0;
-  return { total: orden.length, dur, hueco, cuando, fuera, bajas, desafinadas, cortas, repes };
+  // De dónde salió el sonido: los archivos, por nombre, contra los osciladores.
+  const archivos = orden.filter((n) => n.id);
+  const porId = {};
+  for (const n of archivos) porId[n.id] = (porId[n.id] || 0) + 1;
+  return { total: orden.length, dur, hueco, cuando, fuera, bajas, desafinadas, cortas, repes, archivos: archivos.length, porId };
 }
 
 const unicos = (a, n = 3) => [...new Set(a)].slice(0, n).join(", ");
@@ -264,6 +295,7 @@ async function run() {
       const m = medir(r.notas);
       const fallas = [];
       if (m.total === 0) fallas.push("no sonó nada");
+      if (conBanco && m.archivos === 0) fallas.push("el banco no sonó: todo salió de osciladores");
       if (m.fuera.length) fallas.push(`${m.fuera.length} fuera del parlante (${unicos(m.fuera)})`);
       if (m.bajas.length) fallas.push(`${m.bajas.length} por debajo del murmullo (${unicos(m.bajas)})`);
       if (m.desafinadas.length) fallas.push(`${m.desafinadas.length} fuera de escala (${unicos(m.desafinadas)})`);
@@ -283,7 +315,8 @@ async function run() {
       }
 
       const cortes = v.cortadas.length ? ` · ${v.cortadas.length} cortada(s)` : "";
-      const cab = `${juego.padEnd(10)} ${String(m.total).padStart(3)} notas de efectos y ${String(r.musica ?? 0).padStart(4)} de música en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
+      const usados = Object.entries(m.porId).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k.split("/").pop()}x${v}`).join(" ");
+      const cab = `${juego.padEnd(10)} ${String(m.total).padStart(3)} notas de efectos (${m.archivos} de archivo${usados ? `: ${usados}` : ""}) y ${String(r.musica ?? 0).padStart(4)} de música en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
       registro.push({ nombre: juego, ok: fallas.length === 0, detalle: fallas.join("; ") });
       if (fallas.length) {
         malas++;

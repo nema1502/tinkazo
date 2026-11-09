@@ -38,7 +38,7 @@
  * sala espere y, si no deja sellar, dice una frase y ofrece una sola acción que
  * reemplaza a "Sellar la lista". Cuatro casos, cada uno en otro Chrome y en el
  * primer tema:
- *  1. los dos RPC cortados: "Stellar no contesta", la acción es "Probar ahora",
+ *  1. los dos RPC cortados: "El registro no contesta", la acción es "Probar ahora",
  *     se ve en la pantalla (aunque se apriete la barra) y no se selló nada; y,
  *     en la primera pantalla, al volver la red la app sella sola;
  *  2. solo el primer RPC cortado (primera pantalla): se sella por el segundo, sin
@@ -488,7 +488,7 @@ const MEDIR_RED = `JSON.stringify((() => {
 
 /** Los textos de la contingencia, en los dos idiomas: lo que se espera ver. */
 const TEXTO = {
-  sinRpc: /Stellar no contesta|Stellar isn't answering/i,
+  sinRpc: /El registro no contesta|The record isn't answering|Stellar no contesta|Stellar isn't answering/i,
   costoAlto: /cuesta más de lo que Tinkazo puede pagar|costs more today than Tinkazo can cover/i,
   costoMedio: /cuesta más de lo normal|costs more than usual/i,
   sinSaldo: /no tiene saldo para sellar|has no balance to seal/i,
@@ -542,6 +542,13 @@ const metodoRpc = (request) => {
   }
 };
 
+/**
+ * Los dos RPC de testnet que usa el sitio (`RPC_LISTAS.testnet`). El sitio mira la red con el primero y, si tarda más de 4 s,
+ * contesta con un ledger viejo o falla, sigue con el segundo (medido el 4-nov-2026: el de la SDF agotó los 4 s en 35 de 40
+ * chequeos seguidos). Un caso que simula el costo tiene que cortar los dos, o el segundo contesta lo de verdad y el aviso no sale.
+ */
+const RPC_DE_TESTNET = ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"];
+
 const fixture = (nombre) => readFileSync(new URL(`../src/stellar/fixtures/${nombre}`, import.meta.url), "utf8");
 
 /** Una pantalla lista para probar la red: la cuenta de prueba conectada, el ejemplo cargado y la tarjeta arriba. */
@@ -593,7 +600,7 @@ async function cajaYAccionAlaVista(page, quien, ctx) {
 /**
  * La red de Stellar no contesta: los dos RPC cortados. Antes la app dejaba apretar "Sellar" y fallaba al rato,
  * con el motivo escrito junto a un botón que, si se apretaba la barra, quedaba fuera de la pantalla (20 de octubre
- * de 2026). Ahora lo mira antes: dice "Stellar no contesta", la acción de ahí en adelante es "Probar ahora" (que
+ * de 2026). Ahora lo mira antes: dice "El registro no contesta", la acción de ahí en adelante es "Probar ahora" (que
  * reemplaza a "Sellar la lista") y no se selló nada. En la primera pantalla, además, al volver la red la app
  * sella sola: la persona había apretado "Sellar la lista" y la red volvió.
  */
@@ -607,7 +614,7 @@ async function falloDelSello(browser, vista, tema, completo) {
     // dejar un error genérico.
     await interceptar(page, ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"], () => "fallar");
     const usaBarra = await pulsar(page, { etiqueta, tema, celular }, REAL.lista, "sellar con la red caída");
-    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /Stellar no contesta|Stellar isn't answering/i.test(c.textContent || ''); })()`, 60000);
+    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /El registro no contesta|The record isn't answering|Stellar no contesta|Stellar isn't answering/i.test(c.textContent || ''); })()`, 60000);
     check(`${quien}: lo dice antes de sellar${usaBarra ? " (se apretó la barra)" : ""}`, dijo.ok, dijo.ok ? "" : "no apareció la frase en 60 s: ¿cambió el servidor de Stellar o el RPC de respaldo?");
     if (!dijo.ok) return;
     const { msg } = await cajaYAccionAlaVista(page, quien, { celular });
@@ -777,7 +784,7 @@ async function costoAlto(browser, vista, tema, completo = false) {
   const ctx = { etiqueta, tema, celular };
   let quien = `${etiqueta} ${tema} · costo alto (pide restaurar)`;
   let page = await abrirParaLaRed(browser, vista, tema, (p) =>
-    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+    interceptar(p, RPC_DE_TESTNET, (r) => {
       const metodo = metodoRpc(r);
       if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-restaurar.json") };
       return metodo === "sendTransaction" ? "fallar" : "seguir";
@@ -817,7 +824,7 @@ async function costoAlto(browser, vista, tema, completo = false) {
   quien = `${etiqueta} ${tema} · costo alto con la cuenta de prueba`;
   let mandadas = 0;
   page = await abrirParaLaRed(browser, vista, tema, (p) =>
-    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+    interceptar(p, RPC_DE_TESTNET, (r) => {
       const metodo = metodoRpc(r);
       if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-caro.json") };
       if (metodo === "sendTransaction") {
@@ -1066,7 +1073,7 @@ async function anchosDeCelular(browser, ancho) {
     await page.waitFor("document.readyState === 'complete'", 20000);
     await sleep(900);
     // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
-    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true`);
+    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true`);
     const mirar = async (nombre) => {
       const m = JSON.parse(await page.eval(MEDIR_ANCHO));
       check(`${quien} · ${nombre}: sin scroll horizontal`, m.scrollX <= 1, `${m.scrollX}px`);

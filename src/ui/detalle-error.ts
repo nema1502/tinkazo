@@ -1,6 +1,6 @@
 import { t } from "../i18n";
 import { network } from "../stellar/config";
-import { anchorErrorText } from "./anchor";
+import { anchorErrorText, cuentaPatrocinada } from "./anchor";
 
 /**
  * El mensaje de un error, y el detalle para la próxima vez.
@@ -36,7 +36,7 @@ async function tipoDeCuenta(): Promise<string> {
 export async function lineaDelError(e: unknown, paso: "sello" | "sorteo"): Promise<string> {
   const { errorKey, codigoTecnico } = await import("../stellar/errores");
   const cuando = new Date().toISOString().slice(0, 19) + "Z";
-  return [cuando, paso, network.name, await tipoDeCuenta(), errorKey(e), codigoTecnico(e)].join(" · ");
+  return [cuando, paso, network.name, await tipoDeCuenta(), errorKey(e, { patrocinada: await cuentaPatrocinada() }), codigoTecnico(e)].join(" · ");
 }
 
 /** Guarda la línea entre los últimos errores de este navegador. Sin almacenamiento, no pasa nada. */
@@ -55,8 +55,8 @@ export function guardarError(linea: string): void {
  * detalle va al lado del mensaje y no adentro: el mensaje es lo que se lee (y lo
  * que miran los auditores), el detalle es para copiar.
  */
-export async function mostrarError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
-  const [mensaje, linea] = await Promise.all([anchorErrorText(e), lineaDelError(e, paso)]);
+export async function mostrarError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo", ganadores?: number): Promise<void> {
+  const [mensaje, linea] = await Promise.all([anchorErrorText(e, paso, ganadores), lineaDelError(e, paso)]);
   status.textContent = mensaje;
   guardarError(linea);
   ponerDetalle(status, linea);

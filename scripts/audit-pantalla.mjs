@@ -15,7 +15,10 @@
  *   chico que se ve; después se informa la mediana y el percentil 10 de esos
  *   cuadros, así un texto que aparece un instante no cuenta como el tamaño del
  *   juego. Y el contraste de cada texto contra lo que tiene detrás: tiene que
- *   pasar 4,5 a 1, o llevar un contorno oscuro.
+ *   pasar 4,5 a 1, o llevar un contorno: oscuro, de 1,5 px y que contraste 3 a 1
+ *   con la letra (`esContorno`; tinta con borde de tinta no lo es). Y que el borde del texto no se
+ *   coma la letra: un borde del mismo tono que la letra, más ancho que el 8 %
+ *   de su tamaño en pantalla, la funde en una mancha (`bordeSeCome`).
  * - **Líneas**: el grosor de los trazos, con la misma mediana y el mismo
  *   percentil. Con menos de dos píxeles de alto en 720, Zoom los pierde.
  * - **Capturas**: la pantalla con el cartel, en cada resolución, y con
@@ -47,7 +50,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
+import { bordeSeCome, comprobacionesDePantalla, esContorno, hayHallazgo } from "./lib/pantalla-comprobaciones.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
 
 /** Los nombres de la escena fija (`?pose=`), para reconocer los que se ven como nombres. */
@@ -64,8 +67,10 @@ const opt = (name, def) => {
 const flag = (name) => args.includes(name);
 // Uno o varios juegos, separados por espacio; "todos" son los ocho del selector (El Trueque, que antes se salteaba, salió del selector el 26 de octubre de 2026: se pide por nombre).
 const pedidos = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
-const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("diez") ? juegosDe("diez") : pedidos;
+const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("doce") ? juegosDe("doce") : pedidos;
 const base = opt("--base", "http://localhost:4606").replace(/\/$/, "");
+// `--motor 3d` mira la carrera en 3D (docs/motores.md); por defecto, el motor de todos.
+const motor = opt("--motor", "pixi");
 const outDir = opt("--out", join(tmpdir(), "tinkazo-pantalla"));
 const resoluciones = opt("--res", "1280x720").split(",").map((r) => r.split("x").map(Number));
 const clip = flag("--clip");
@@ -143,11 +148,6 @@ const MEDIR = `(() => {
     return null;
   };
   const textos = [], trazos = [];
-  const oscuro = (c) => {
-    if (c === null) return false;
-    const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    return 0.2126 * f((c >> 16) & 255) + 0.7152 * f((c >> 8) & 255) + 0.0722 * f(c & 255) < 0.12;
-  };
   const podio = app.stage.children[4];
   const visit = (node, enPodio, alfaPadre) => {
     if (!node.visible || !node.renderable) return;
@@ -162,8 +162,9 @@ const MEDIR = `(() => {
         s: node.text.slice(0, 40), px: (st.fontSize || 0) * escala, a,
         box: [b.x, b.y, b.width, b.height],
         fill: hex(st.fill),
-        // Un contorno cuenta solo si es oscuro: luminosidad relativa por debajo de 0,12.
-        contorno: !!st.stroke && (st.stroke.width || 0) * escala >= 1.5 && oscuro(hex(st.stroke.color ?? st.stroke)),
+        // Si el trazo es un contorno (esContorno) se decide afuera, con el color y el ancho del borde en pantalla.
+        trazoColor: st.stroke ? hex(st.stroke.color ?? st.stroke) : null,
+        trazoPx: st.stroke ? (st.stroke.width || 0) * escala : 0,
         plato: enPodio,
         nombre: esNombre(node.text),
       });
@@ -279,7 +280,7 @@ async function abrir(browser, juego, [W, H], tema = "") {
   await page.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false, screenWidth: W, screenHeight: H });
   const previo = compartir ? "try { sessionStorage.setItem('tinkazo.compartir', '1'); } catch (e) {}" : "";
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: PRELUDIO + ";" + previo });
-  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=pixi${tema ? `&theme=${tema}` : ""}` });
+  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=${motor}${tema ? `&theme=${tema}` : ""}` });
   const listo = await page.waitFor("window.__app && getComputedStyle(document.getElementById('stadium')).display === 'block'", 60_000);
   return listo.ok ? page : null;
 }
@@ -290,6 +291,7 @@ async function recorrer(page, alCartel = null) {
   const nombres = [], etiquetas = [], platos = [], lineas = [];
   const trazo = new Map();
   const contrastes = [];
+  const bordes = new Map();
   const mirasHechas = new Set();
   let cuadros = 0;
   let golpe = -1;
@@ -302,6 +304,12 @@ async function recorrer(page, alCartel = null) {
     let nMin = Infinity, eMin = Infinity, pMin = Infinity, lMin = Infinity;
     for (const t of m.textos) {
       if (t.a < 0.5 || t.s.trim().length < 2) continue;
+      const come = bordeSeCome(t);
+      if (come) {
+        // Un renglón por texto: el peor porcentaje que tuvo y en cuántos cuadros pasó.
+        const previo = bordes.get(come.s);
+        bordes.set(come.s, { ...(previo && previo.pct >= come.pct ? previo : come), veces: (previo?.veces ?? 0) + 1 });
+      }
       if (t.plato) {
         if (cartelListo && t.px < pMin) pMin = t.px;
       } else if (t.nombre) {
@@ -327,7 +335,7 @@ async function recorrer(page, alCartel = null) {
   };
   const contrasteDe = async (m) => {
     const con = JSON.parse(await page.eval(`JSON.stringify(${CONTRASTE(JSON.stringify(m.textos.filter((t) => t.a >= 0.5)))})`));
-    for (const t of con) if (t.ratio !== null && t.ratio !== undefined) contrastes.push({ s: t.s, ratio: +t.ratio.toFixed(2), contorno: t.contorno, px: +t.px.toFixed(1) });
+    for (const t of con) if (t.ratio !== null && t.ratio !== undefined) contrastes.push({ s: t.s, ratio: +t.ratio.toFixed(2), contorno: esContorno(t), px: +t.px.toFixed(1) });
   };
   for (let tramo = 0; tramo < 90 * 4 && !hecho; tramo++) {
     serie.push(...(await page.eval("window.__avanzar(16)")));
@@ -358,6 +366,7 @@ async function recorrer(page, alCartel = null) {
     texto: { nombres: resumen(nombres), etiquetas: resumen(etiquetas), plato: resumen(platos) },
     trazo: { minimo: resumen(lineas), bajos: Object.fromEntries([...trazo].map(([k, v]) => [k, v.n])) },
     contrastes,
+    bordes: [...bordes.values()],
     golpe,
     cuadros,
   };
@@ -390,6 +399,7 @@ export async function medirJuego(browser, juego, [W, H], tema = "") {
     texto: r.texto,
     contraste: { peor: peor.ratio === Infinity ? null : peor, sinContorno: sinContorno.slice(0, 8), medidos: r.contrastes.length },
     trazo: r.trazo,
+    bordes: r.bordes.sort((a, b) => b.pct - a.pct).slice(0, 8),
     errores,
   };
 }
@@ -442,7 +452,7 @@ async function main() {
     await browser.close();
   }
   await writeFile(join(outDir, "resumen.json"), JSON.stringify(resultados, null, 2));
-  const malos = resultados.filter((r) => !r.ok || r.destellos?.peorPorSegundo > 3 || (r.contraste?.sinContorno?.length ?? 0) > 0);
+  const malos = resultados.filter(hayHallazgo);
   console.log(`\n${malos.length ? "CON HALLAZGOS" : "SIN HALLAZGOS"}: ${resultados.length - malos.length}/${resultados.length} sin problemas`);
   emitirJson({ auditor: "audit-pantalla", objetivo: pedidos.length === 0 || pedidos.includes("todos") ? "todos" : juegos.join(","), checks: resultados.flatMap(comprobacionesDePantalla) });
   process.exit(malos.length ? 1 : 0);

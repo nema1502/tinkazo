@@ -41,6 +41,7 @@ import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
 import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
+import { OCULTA_S, cartelDesde, correrPestana, juzgarPestana } from "./lib/pestana.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -50,7 +51,7 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` audita los juegos en el motor anterior. El nuevo usa la placa de video.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
@@ -61,6 +62,14 @@ const outDir = opt("--out", "docs/capturas/rigor");
 const conPantalla = !args.includes("--sin-pantalla");
 const pantallaRes = opt("--pantalla-res", "1280x720").split(",").map((r) => r.split("x").map(Number));
 const pantallaTemas = opt("--pantalla-temas", "").split(",").filter(Boolean);
+// El grupo de la pestaña escondida (docs/juegos.md, "La pestaña escondida"): con el reloj de verdad, esconde la pestaña
+// 10 s al 50 % del show y en el golpe. `--sin-pestana` lo saltea; `--solo-pestana` corre solo eso; `--pestana-ritmo normal`
+// lo corre con el ritmo normal en vez del rápido (que dura menos); `--pestana-capturas <carpeta>` guarda
+// las imágenes del momento de volver.
+const conPestana = !args.includes("--sin-pestana");
+const soloPestana = args.includes("--solo-pestana");
+const pestanaRitmo = opt("--pestana-ritmo", "rapido");
+const pestanaCapturas = opt("--pestana-capturas", "");
 
 /** Lo que el selector de duración promete, en segundos. Debe coincidir con `PACES`. */
 const PACES = { rapido: 20, normal: 38, epico: 45 };
@@ -73,9 +82,14 @@ const PACES = { rapido: 20, normal: 38, epico: 45 };
  * menos, las echadas quedarían a menos de 1 s) y Épico un 18 % más. Con 8 o menos y con más de 30 vale `PACES`.
  */
 const NORMAL_CARRERA = { 9: 39, 10: 41, 11: 44, 12: 48, 13: 51, 14: 53, 15: 55, 16: 57, 17: 61, 18: 63, 19: 65, 20: 66, 21: 68, 22: 69, 23: 72, 24: 73, 25: 74, 26: 75, 27: 76, 28: 76, 29: 77, 30: 78 };
+/**
+ * El Guajojó también promete según la gente (`normalGuajojo` en `src/duraciones.ts`: de 25 a 60 s, con la tarjeta adentro):
+ * con la lista de ejemplo (18) son 44 s. Una prueba (`src/duraciones.test.ts`) compara esta tabla con la función.
+ */
+const NORMAL_GUAJOJO = { 2: 27, 3: 32, 8: 38, 18: 40, 30: 48, 200: 55 };
 /** Lo que promete cada posición del selector con `gente` personas en este juego. */
 function prometido(juego, pace, gente) {
-  const normal = juego === "race" ? NORMAL_CARRERA[gente] : undefined;
+  const normal = juego === "race" ? NORMAL_CARRERA[gente] : juego === "guajojo" ? NORMAL_GUAJOJO[gente] : undefined;
   if (!normal) return PACES[pace];
   return pace === "normal" ? normal : pace === "rapido" ? Math.max(20, Math.round(normal * 0.9)) : Math.round(normal * 1.18);
 }
@@ -136,6 +150,9 @@ const PRELUDIO = `(() => {
   // con nueve celdas amarillas seguidas, más de un cuarto del ancho.
   const huella = (cv) => {
     oc.clearRect(0, 0, 32, 18);
+    // Con \`?motor=3d\` el estadio es otro lienzo, debajo del de PixiJS: la huella los junta.
+    const t3 = document.getElementById('tres-canvas');
+    if (t3 && t3.width > 0) oc.drawImage(t3, 0, 0, 32, 18);
     oc.drawImage(cv, 0, 0, 32, 18);
     const d = oc.getImageData(0, 0, 32, 18).data;
     let s = '', banda = false;
@@ -273,7 +290,7 @@ const check = (name, ok, detail = "") => {
 const semillaN = opt("--semilla", "");
 const semilla = semillaN ? createHash("sha256").update(`semilla-${semillaN}`).digest("hex") : "";
 const urlDe = (juego, extra = "") =>
-  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}${motor ? `&motor=${motor}` : ""}`;
+  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}${motor ? `&motor=${motor}` : ""}${motor === "3d" ? "&auditar=3d" : ""}`;
 
 /**
  * Corre la escena de un juego con el reloj cambiado y devuelve lo que midió.
@@ -660,6 +677,31 @@ ${juego} · pantalla`);
   }
 }
 
+/**
+ * El grupo de la pestaña escondida. Tres corridas por juego con el reloj de verdad (la escena fija, sin red): una de
+ * control, otra escondiendo la pestaña 10 s al 50 % del show, y otra escondiéndola justo antes del golpe. El juicio
+ * está en `scripts/lib/pestana.mjs`, con sus pruebas.
+ */
+async function pestana(browser, juego) {
+  grupo = `${juego} pestaña`;
+  console.log(`\n${juego} · pestaña escondida`);
+  const url = urlDe(juego, `&theme=dark&pace=${pestanaRitmo}`);
+  const carpeta = pestanaCapturas || null;
+  if (carpeta) await mkdir(carpeta, { recursive: true });
+  const control = await correrPestana(browser, url);
+  const cd = cartelDesde(control.cartel);
+  check("la escena de control cierra y llega al cartel", control.arranco && control.cerro && cd !== null, control.dur === null ? "no cerró" : `${control.dur.toFixed(1)} s, el cartel a los ${cd === null ? "?" : cd.toFixed(1)} s`);
+  if (!control.cerro || cd === null) return;
+  const momentos = [
+    ["al 50 %", control.dur * 0.5, "50"],
+    ["en el golpe", Math.max(1, cd - 1.5), "golpe"],
+  ];
+  for (const [etiqueta, cuando, clave] of momentos) {
+    const x = await correrPestana(browser, url, { escondeEn: cuando, capturas: carpeta, nombre: `${juego}-${clave}` });
+    for (const c of juzgarPestana({ control, prueba: x, excepciones: x.excepciones, etiqueta: `pestaña escondida ${OCULTA_S} s ${etiqueta}` })) check(c.name, c.ok, c.detail);
+  }
+}
+
 const informe = {};
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9361), width: 1280, height: 720 });
 try {
@@ -685,6 +727,8 @@ try {
         `quieto ${rx.peorQuieto.toFixed(1)} s desde los ${rx.dondeQuieto.toFixed(1)} · hueco ${rx.hueco.toFixed(1)} s · ${fx.fps.toFixed(0)} cps`,
       );
     }
+  } else if (soloPestana) {
+    for (const j of juegos) await pestana(browser, j).catch((e) => check("la pestaña escondida corrió sin caerse", false, e.message));
   } else {
     for (const j of juegos) {
       informe[j] = await auditar(browser, j).catch((e) => {
@@ -692,6 +736,7 @@ try {
         return null;
       });
       if (conPantalla) await pantalla(browser, j);
+      if (conPestana) await pestana(browser, j).catch((e) => check("la pestaña escondida corrió sin caerse", false, e.message));
     }
   }
 } finally {

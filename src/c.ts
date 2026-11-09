@@ -1,7 +1,7 @@
 import "./pagina";
 import { $ } from "./dom";
 import { onLangChange, texto as t } from "./idioma";
-import { abrir, type Abierto } from "./enlace-corto";
+import { abrir, dejarLogoEntrante, type Abierto } from "./enlace-corto";
 
 /**
  * La página de un enlace corto: `tinkazo.app/c/<id>#<clave>`. En Vercel la sirve
@@ -45,7 +45,7 @@ function pintar(): void {
  * Lo que la persona eligió en la dirección (idioma y tema) sigue en la página
  * del comprobante. Y por dónde llegó, para el contador del embudo
  * (src/contar.ts): desde el QR (`o=qr`, que trae el enlace corto del QR) o
- * desde el enlace corto (`o=short`). La página la saca de la dirección al abrir.
+ * desde el enlace corto (`o=short`) o desde el cartel de un video (`o=video`). La página la saca de la dirección al abrir.
  */
 function preferencias(): string {
   const q = new URLSearchParams(location.search);
@@ -54,7 +54,8 @@ function preferencias(): string {
   const tema = q.get("theme");
   if (lang === "es" || lang === "en") sigue.set("lang", lang);
   if (tema === "light" || tema === "dark") sigue.set("theme", tema);
-  sigue.set("o", q.get("o") === "qr" ? "qr" : "short");
+  const o = q.get("o");
+  sigue.set("o", o === "qr" || o === "video" ? o : "short");
   return `?${sigue.toString()}`;
 }
 
@@ -65,6 +66,8 @@ async function intentar(): Promise<void> {
   if ("ruta" in r) {
     // La ruta ya viene revisada: verificar.html o evento.html de este sitio, con su fragmento.
     const corte = r.ruta.indexOf("#");
+    // El logo del enlace (si trae uno) viaja a la otra página, atado a la ruta a la que va.
+    dejarLogoEntrante(r.ruta, r.logo);
     location.replace(`${r.ruta.slice(0, corte)}${preferencias()}${r.ruta.slice(corte)}`);
     return;
   }

@@ -12,7 +12,7 @@ También es el primero que nació directamente en el motor nuevo, con la cámara
 
 ## La mecánica
 
-**El tiro.** Los trompos entran desde abajo, en arco, de a uno y en un orden sembrado, y caen al ruedo girando. El contador de arriba a la izquierda dice cuántos hay en el ruedo.
+**El tiro.** Los trompos entran desde abajo, en arco, de a uno y en un orden sembrado, y caen al ruedo girando. El contador de arriba a la izquierda dice cuántos hay en el ruedo («QUEDAN 12 DE 18», con una marca por persona debajo).
 
 **El baile.** Cada trompo deambula con su propio vaivén y se empuja con los vecinos. Cuando dos se rozan fuerte suena un toque. La tiza los contiene: nadie sale sin que lo saquen.
 

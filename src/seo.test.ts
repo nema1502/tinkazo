@@ -19,6 +19,7 @@ const PUBLICAS: Record<string, string> = {
   "index.html": `${BASE}/`,
   "juegos.html": `${BASE}/juegos.html`,
   "historia.html": `${BASE}/historia.html`,
+  "marca.html": `${BASE}/marca.html`,
   "como-funciona.html": `${BASE}/como-funciona.html`,
   "seguridad.html": `${BASE}/seguridad.html`,
   "precios.html": `${BASE}/precios.html`,
@@ -26,6 +27,8 @@ const PUBLICAS: Record<string, string> = {
   "sorteo-para-meetup.html": `${BASE}/sorteo-para-meetup.html`,
   "sorteo-en-clase.html": `${BASE}/sorteo-en-clase.html`,
   "sorteo-verificable.html": `${BASE}/sorteo-verificable.html`,
+  "ruleta-de-nombres.html": `${BASE}/ruleta-de-nombres.html`,
+  "sorteo-para-eventos.html": `${BASE}/sorteo-para-eventos.html`,
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
@@ -38,18 +41,50 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
     h1: "Sorteo para tu meetup, en pantalla grande",
   },
   "sorteo-en-clase.html": {
-    titulo: "Sorteo en clase: elegí quién pasa, de forma justa",
+    titulo: "Sorteo en clase: elegí quién pasa a exponer, con justicia",
     h1: "Sorteo en clase, justo y comprobable",
   },
   "sorteo-verificable.html": {
-    titulo: "Sorteo verificable: cómo comprobar el resultado",
+    titulo: "Sorteo verificable: cómo comprobar un resultado paso a paso",
     h1: "Sorteo verificable: cualquiera puede rehacer el resultado",
+  },
+  "ruleta-de-nombres.html": {
+    titulo: "Ruleta de nombres gratis y verificable para sortear",
+    h1: "Ruleta de nombres, gratis y verificable",
+  },
+  "sorteo-para-eventos.html": {
+    titulo: "Sorteo para eventos y stands: pantalla grande y QR",
+    h1: "Sorteo para eventos y stands, en pantalla grande",
   },
 };
 
 const canonical = (html: string): string | null => html.match(/<link rel="canonical" href="([^"]+)"/)?.[1] ?? null;
 const descripcion = (html: string): string => html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? "";
 const ogDescripcion = (html: string): string => html.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? "";
+const ogTituloDe = (html: string): string => html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? "";
+const twitterTitulo = (html: string): string => html.match(/<meta name="twitter:title" content="([^"]*)"/)?.[1] ?? "";
+const twitterDescripcion = (html: string): string => html.match(/<meta name="twitter:description" content="([^"]*)"/)?.[1] ?? "";
+
+/**
+ * La vista previa al compartir es una versión corta en los dos idiomas: el
+ * título en inglés (el que lee un foro o un chat de afuera) y la descripción con
+ * una frase en inglés y otra en español. El `<title>` y la meta description
+ * siguen en español, que es lo que lee el buscador en Bolivia.
+ */
+const vistaPreviaBilingue = (html: string): void => {
+  const t = ogTituloDe(html);
+  const d = ogDescripcion(html);
+  expect(t, "og:title").not.toBe("");
+  expect([...t].length, `og:title: ${t}`).toBeLessThanOrEqual(60);
+  expect(t.startsWith("Tinkazo") || /Tinkazo/.test(t), "nombra a Tinkazo").toBe(true);
+  expect(t, "el título corto va en inglés").not.toMatch(/\b(sorteo|sorteos|cómo|cualquiera|gratis)\b/i);
+  expect([...d].length, `og:description: ${d}`).toBeLessThanOrEqual(200);
+  expect(d, "lleva una frase en español").toMatch(/[áéíóúñ]|\b(sorteo|gratis|participar|cinco|diez|qué|cómo|términos|marca|de dónde)\b/i);
+  expect(d, "lleva una frase en inglés").toMatch(/\b(the|free|and|of|a)\b/);
+  expect(twitterTitulo(html), "twitter:title").toBe(t);
+  expect(twitterDescripcion(html), "twitter:description").toBe(d);
+  expect(`${t} ${d}`).not.toContain("·");
+};
 
 /** Todos los bloques `application/ld+json` de una página, ya parseados. */
 const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
@@ -57,15 +92,24 @@ const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
     (m) => JSON.parse(m[1] ?? "{}") as Record<string, unknown>,
   );
 
-describe("portada: canonical, sin hreflang y datos estructurados", () => {
+/** Los nodos de los datos estructurados de una página, con los de `@graph` a la par de los sueltos. */
+const nodosDe = (html: string): Array<Record<string, unknown>> =>
+  datosEstructurados(html).flatMap((b) => (Array.isArray(b["@graph"]) ? (b["@graph"] as Array<Record<string, unknown>>) : [b]));
+
+describe("portada: canonical, hreflang y datos estructurados", () => {
   const html = leer("index.html");
 
   it("tiene canonical a la portada", () => {
     expect(canonical(html)).toBe(`${BASE}/`);
   });
 
-  it("no declara hreflang: la portada se indexa en una sola URL, la canónica", () => {
-    expect(html).not.toMatch(/hreflang/);
+  it("declara hreflang es, en y x-default, y la canónica sigue siendo la dirección limpia", () => {
+    expect([...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)].map((m) => [m[1], m[2]])).toEqual([
+      ["es", `${BASE}/`],
+      ["en", `${BASE}/?lang=en`],
+      ["x-default", `${BASE}/`],
+    ]);
+    expect(canonical(html)).toBe(`${BASE}/`);
   });
 
   it("el bloque ld+json se parsea y trae WebSite, Organization y SoftwareApplication", () => {
@@ -76,8 +120,9 @@ describe("portada: canonical, sin hreflang y datos estructurados", () => {
     expect(grafo.find((n) => n["@type"] === "Organization")).toMatchObject({
       name: "Tinkazo",
       url: `${BASE}/`,
-      sameAs: ["https://github.com/nema1502/tinkazo"],
+      sameAs: ["https://github.com/nema1502/tinkazo", "https://www.instagram.com/tinkazo.app/"],
     });
+    expect(grafo.find((n) => n["@type"] === "WebSite")).toMatchObject({ name: "Tinkazo", alternateName: ["tinkazo.app"] });
     expect(grafo.find((n) => n["@type"] === "SoftwareApplication")).toMatchObject({
       name: "Tinkazo",
       url: `${BASE}/`,
@@ -95,9 +140,10 @@ describe("portada: canonical, sin hreflang y datos estructurados", () => {
     expect(JSON.stringify(grafo)).not.toMatch(/"(offers|price|priceCurrency)"/);
   });
 
-  it("og:description es la misma que la meta description, y las dos caben en 160 caracteres", () => {
-    expect(ogDescripcion(html)).toBe(descripcion(html));
+  it("la meta description cabe en 160 caracteres, y la vista previa al compartir es la versión corta bilingüe", () => {
     expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+    vistaPreviaBilingue(html);
+    expect(ogTituloDe(html)).toBe("Tinkazo: verifiable winner selection on Stellar");
   });
 });
 
@@ -178,14 +224,15 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(iconos.filter((href) => href.startsWith("data:"))).toEqual([]);
   });
 
-  it("cada rel=\"icon\" apunta a un archivo de public/, en el orden ico, png y svg", () => {
-    expect(iconos).toEqual(["/favicon.ico", "/icon-192.png", "/icon.svg"]);
+  it("cada rel=\"icon\" apunta a un archivo de public/, en el orden ico, png de 96 y svg: la llama sola, sin el fondo oscuro de la app", () => {
+    expect(iconos).toEqual(["/favicon.ico", "/icon-96.png", "/favicon.svg"]);
     for (const ruta of iconos) {
       expect(esArchivoPublico(ruta), ruta).toBe(true);
     }
   });
 
-  it("icon-192.png e icon-512.png son PNG de 192 y 512 px, según su IHDR", () => {
+  it("icon-96.png, icon-192.png e icon-512.png son PNG de 96, 192 y 512 px, según su IHDR", () => {
+    expect(dimensionesPng(leerPublico("icon-96.png"))).toEqual({ ancho: 96, alto: 96 });
     expect(dimensionesPng(leerPublico("icon-192.png"))).toEqual({ ancho: 192, alto: 192 });
     expect(dimensionesPng(leerPublico("icon-512.png"))).toEqual({ ancho: 512, alto: 512 });
   });
@@ -210,13 +257,12 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(dimensionesJpeg(leerPublico("og.jpg"))).toEqual({ ancho: 1200, alto: 630 });
   });
 
-  it("el título es el de la portada, tiene de 30 a 60 caracteres, empieza con Tinkazo, y og:title lo repite", () => {
+  it("el título es el de la portada, en español, tiene de 30 a 60 caracteres y empieza con Tinkazo", () => {
     const titulo = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
-    expect(titulo).toBe("Tinkazo, sorteos verificables para eventos y clases");
+    expect(titulo).toBe("Tinkazo: sorteo verificable y gratis para eventos y clases");
     expect([...titulo].length).toBeGreaterThanOrEqual(30);
     expect([...titulo].length).toBeLessThanOrEqual(60);
     expect(titulo.startsWith("Tinkazo")).toBe(true);
-    expect(html.match(/<meta property="og:title" content="([^"]*)"/)?.[1]).toBe(titulo);
   });
 
   it("la meta description tiene de 120 a 160 caracteres", () => {
@@ -242,10 +288,9 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(JSON.stringify(grafo)).not.toMatch(/aggregateRating|"review"/);
   });
 
-  // La portada no pide su título ni su descripción por clave. Si el <html> los pidiera, el idioma cambiaría también
-  // la etiqueta <title> y la meta description: el buscador renderiza con JavaScript y podría leer el inglés, mientras
-  // og:title y el JSON-LD quedan en español. Las claves titPortada y descPortada siguen en el diccionario, con su
-  // versión en inglés, por si el autor decide otra cosa.
+  // La portada pide su título y su descripción por clave, como las demás. El buscador renderiza con JavaScript y su
+  // navegador está en inglés: por eso `initialLang` le da siempre el español a un rastreador (ver `idioma.test.ts`),
+  // y el inglés se pide con `?lang=en`.
   const claveTitulo = "titPortada";
   const claveDesc = "descPortada";
   const textoEn = (clave: string): string => {
@@ -253,9 +298,10 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     return typeof valor === "string" ? valor : "";
   };
 
-  it("la etiqueta html de la portada no pide título ni descripción por clave: el buscador lee los de la etiqueta y la meta", () => {
+  it("la etiqueta html de la portada pide título y descripción por clave, titPortada y descPortada", () => {
     const etiquetaHtml = html.match(/<html\b[^>]*>/)?.[0] ?? "";
-    expect(etiquetaHtml).not.toMatch(/\sdata-(titulo|desc)-clave=/);
+    expect(etiquetaHtml).toMatch(/\sdata-titulo-clave="titPortada"/);
+    expect(etiquetaHtml).toMatch(/\sdata-desc-clave="descPortada"/);
   });
 
   it("titPortada y descPortada existen en es y en en: en español son el título y la meta de la portada", () => {
@@ -299,14 +345,14 @@ describe("cada página pública", () => {
     expect(largo).toBeLessThanOrEqual(160);
   });
 
-  it.each(Object.keys(NUEVAS))("%s: og:description igual a la meta, y de 160 caracteres o menos", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: la meta description cabe en 160 caracteres y la vista previa es la versión corta bilingüe", (archivo) => {
     const html = leer(archivo);
-    expect(ogDescripcion(html)).toBe(descripcion(html));
     expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+    vistaPreviaBilingue(html);
   });
 
   it.each(Object.keys(NUEVAS))("%s lleva un WebPage con name, description, url e inLanguage es", (archivo) => {
-    const pagina = datosEstructurados(leer(archivo)).find((b) => b["@type"] === "WebPage");
+    const pagina = nodosDe(leer(archivo)).find((b) => b["@type"] === "WebPage");
     expect(pagina).toMatchObject({
       "@type": "WebPage",
       name: NUEVAS[archivo]?.titulo,
@@ -385,7 +431,7 @@ describe("título y descripción de las páginas nuevas, en el idioma de la pág
   });
 });
 
-describe("og:title y og:description, en el idioma de la página", () => {
+describe("título y descripción en el idioma de la página, vista previa en los dos", () => {
   /** Las claves de título y descripción que pide el `<html>` de una página. */
   const clavesOg = (html: string): { tituloClave: string; descClave: string } => {
     const etiqueta = html.match(/<html\b[^>]*>/)?.[0] ?? "";
@@ -394,20 +440,21 @@ describe("og:title y og:description, en el idioma de la página", () => {
       descClave: etiqueta.match(/\sdata-desc-clave="([^"]+)"/)?.[1] ?? "",
     };
   };
-  const ogTitulo = (html: string): string => html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? "";
 
-  it.each(Object.keys(NUEVAS))("%s: sin JavaScript, las etiquetas og están en español, como el título", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: sin JavaScript, el título y la descripción están en español y la vista previa en los dos idiomas", (archivo) => {
     const html = leer(archivo);
     const { tituloClave, descClave } = clavesOg(html);
-    expect(ogTitulo(html)).toBe(T.es[tituloClave]);
-    expect(ogDescripcion(html)).toBe(T.es[descClave]);
+    expect(html.match(/<title>([^<]*)<\/title>/)?.[1]).toBe(T.es[tituloClave]);
+    expect(descripcion(html)).toBe(T.es[descClave]);
+    expect(ogTituloDe(html)).not.toBe(T.es[tituloClave]);
+    expect(ogDescripcion(html)).not.toBe(T.es[descClave]);
   });
 
-  it.each(Object.keys(NUEVAS))("%s: en inglés, las mismas claves dan el og:title y el og:description en inglés", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: en inglés, las mismas claves dan el título y la descripción en inglés", (archivo) => {
     const { tituloClave, descClave } = clavesOg(leer(archivo));
     const en = metasDePagina(T.en, { tituloClave, descClave });
-    expect(en.titulo, "og:title en en").toBeTruthy();
-    expect(en.desc, "og:description en en").toBeTruthy();
+    expect(en.titulo, "título en en").toBeTruthy();
+    expect(en.desc, "descripción en en").toBeTruthy();
     expect(en.titulo).not.toBe(T.es[tituloClave]);
     expect(en.desc).not.toBe(T.es[descClave]);
   });
@@ -431,7 +478,7 @@ const sinEntidades = (s: string): string =>
     .replace(/&amp;/g, "&");
 const espacios = (s: string): string => s.replace(/\s+/g, " ").trim();
 
-type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label"; valor: string };
+type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label" | "alt"; valor: string };
 
 /** Todas las copias estáticas de una página: cada `data-i`, `data-i-html` y atributo `data-i-ph`, `-title` o `-aria`. */
 /** Desde `desde` (justo después de la apertura de `tag`), dónde cierra ese mismo elemento: un span dentro de un span no corta el de afuera. */
@@ -464,6 +511,7 @@ const copiasDe = (html: string): Copia[] => {
     ["data-i-ph", "placeholder"],
     ["data-i-title", "title"],
     ["data-i-aria", "aria-label"],
+    ["data-i-alt", "alt"],
   ] as const;
   for (const [dataAttr, atributo] of atributos) {
     for (const m of html.matchAll(new RegExp(`<[a-z][a-z0-9]*\\b[^>]*?\\s${dataAttr}="([^"]+)"[^>]*>`, "g"))) {
@@ -475,7 +523,7 @@ const copiasDe = (html: string): Copia[] => {
 };
 
 /** Cuántos atributos `data-i*` tiene el HTML: la extracción de `copiasDe` tiene que encontrarlos todos. */
-const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria)?="/g) ?? []).length;
+const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria|-alt)?="/g) ?? []).length;
 
 /** Cuánto se aparta una copia de lo que dice T.es; null si coincide. Los textos se comparan con los espacios normalizados; los atributos, tal cual. */
 const diferencia = (c: Copia): string | null => {
@@ -610,7 +658,7 @@ describe("enlaces a las páginas nuevas", () => {
     ...Object.keys(NUEVAS),
   ];
 
-  it.each(conPie)("%s enlaza a las tres páginas nuevas desde el pie", (archivo) => {
+  it.each(conPie)("%s enlaza a las cinco páginas de aterrizaje desde el pie", (archivo) => {
     const pie = leer(archivo).match(/<nav class="pies"[\s\S]*?<\/nav>/)?.[0] ?? "";
     for (const nueva of Object.keys(NUEVAS)) {
       expect(pie).toContain(`href="/${nueva}"`);
@@ -634,7 +682,8 @@ const NO_SE_DICE = /sin confiar en|without trusting|sin confiar en tinkazo|no ha
 const DE_APUESTA = /rifa|raffle|apuesta|lotería|loteria|casino/i;
 
 /** La portada y los términos dicen en qué no sirve Tinkazo, así que ahí no se mira `DE_APUESTA`. */
-const CON_AVISO = ["index.html", "terminos.html"];
+// marca.html nombra «rifa» y «raffle» solo para pedir que no se usen (el bloque de cómo se escribe Tinkazo).
+const CON_AVISO = ["index.html", "terminos.html", "marca.html"];
 
 /** Lo que una página dice: sus claves en los dos idiomas, el título y las descripciones. */
 const textosDe = (archivo: string): string[] => {
@@ -649,10 +698,22 @@ const textosDe = (archivo: string): string[] => {
     ogDescripcion(html),
     ...[...html.matchAll(/"description":\s*"([^"]*)"/g)].map((m) => m[1]),
   ];
-  return [...claves.flatMap((k) => [T.es[k], T.en[k]]), ...declarados].filter((v): v is string => typeof v === "string");
+  // El kit trae el material literal ES/EN en HTML, no como claves: también pasa
+  // por las mismas prohibiciones editoriales, sin dejar un hueco en el control.
+  const materialKit = html.match(/<!-- kit:material:start -->([\s\S]*?)<!-- kit:material:end -->/)?.[1];
+  const estaticos = materialKit ? [espacios(sinEntidades(sinEtiquetas(materialKit)))] : [];
+  return [...claves.flatMap((k) => [T.es[k], T.en[k]]), ...declarados, ...estaticos].filter((v): v is string => typeof v === "string");
 };
 
 describe("la portada y las páginas de lectura no dicen lo que el sitio no puede sostener", () => {
+  it("incluye también el material bilingüe estático del kit en el control editorial", () => {
+    const material = textosDe("sorteo-para-meetup.html").join(" ");
+    expect(material).toContain("Hacé el sorteo de tu evento en 5 pasos");
+    expect(material).toContain("Run your event's draw in 5 steps");
+    expect(material).toContain("Este sorteo se puede comprobar");
+    expect(material).toContain("This draw can be checked");
+  });
+
   it.each(Object.keys(PUBLICAS))("%s", (archivo) => {
     const prohibidas = CON_AVISO.includes(archivo) ? NO_SE_DICE : new RegExp(`${NO_SE_DICE.source}|${DE_APUESTA.source}`, "i");
     expect(textosDe(archivo).filter((t) => prohibidas.test(t))).toEqual([]);
@@ -684,7 +745,7 @@ describe("frases fijas de la segunda ronda", () => {
     expect(todos.filter((t) => /veredicto de advertencia|warning verdict/i.test(t))).toEqual([]);
   });
 
-  it.each(["sgLimit2", "meetListaDet", "tmQ3B"])("%s dice la lista completa que sube a Stellar, en los dos idiomas", (clave) => {
+  it.each(["sgLimit2", "meetListaDet", "tmQ3Lista"])("%s dice la lista completa que sube a Stellar, en los dos idiomas", (clave) => {
     expect(T.es[clave]).toContain(LISTA_ES);
     expect(T.en[clave]).toContain(LISTA_EN);
   });

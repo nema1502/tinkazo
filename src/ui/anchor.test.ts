@@ -286,6 +286,9 @@ describe("con una cuenta de Pollar", () => {
     ["el tope de 30 s de Pollar", "Request timed out after 30000ms"],
     ["un rechazo sin motivo", "pollar-submit-failed"],
     ["la red ocupada, que también contesta así cuando ya entró", "TRY_AGAIN_LATER"],
+    // `RATE_LIMITED` se cuenta como red ocupada, pero puede llegar al preguntar por una transacción que ya se mandó.
+    ["demasiados pedidos a Pollar, que pudo contestarlo ya con la transacción mandada", "RATE_LIMITED"],
+    ["se mandó y todavía no se confirmó", "TX_SUBMIT_UNCONFIRMED"],
   ])("Pollar no pudo y no se sabe si mandó (%s): sello incierto", async (_nombre, mensaje) => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     const { error } = await sellar();
@@ -296,6 +299,8 @@ describe("con una cuenta de Pollar", () => {
     ["sin saldo", "txInsufficientBalance"],
     ["entró y falló", "txFailed"],
     ["la secuencia", "txBadSeq"],
+    // Sin aprobación no hay firma ni envío: no hay nada en el aire que averiguar.
+    ["la co-firma se rechazó", "SDK_COSIGN_REJECTED"],
   ])("Pollar contestó con el resultado de la red (%s): eso no es incierto, es la red diciendo que no", async (_nombre, mensaje) => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     h.red.name = "mainnet";
@@ -443,7 +448,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     h.wallet = pollar();
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });
@@ -463,7 +468,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       // Lo que hace freeze.ts: lo reconoce y reintenta con otra ronda, sin que haya quedado nada en la cadena.
       const { selloSinGrabar, anchorErrorText } = await import("./anchor");
       expect(selloSinGrabar(error)).toBe(true);
-      expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
+      expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
       // Ni simuló, ni firmó, ni mandó nada.
       expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
       expect(h.seal).not.toHaveBeenCalled();
@@ -628,11 +633,26 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("la falta de saldo se le dice tal cual, sin mandarla a ningún lado", async () => {
+  it("la falta de saldo se le dice sin culparla y sin mandarla a ningún lado", async () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
+  });
+
+  it("al sortear, con la lista ya sellada, el patrocinio vacío habla de sortear y no culpa a la cuenta", async () => {
+    const { anchorErrorText } = await import("./anchor");
+    const alSortear =
+      "Tu lista está sellada y nadie la puede cambiar. Ahora no pudimos cubrir lo que cobra la red para sortear. Probá de nuevo en unos minutos: el ganador va a ser el mismo. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
+    h.wallet = pollar();
+    // Las dos formas en que se queda sin con qué pagar el patrocinio de Pollar, y la del portero de Tinkazo.
+    for (const e of [new Error("txInsufficientBalance"), new Error("SDK_CREDITS_INSUFFICIENT"), { name: "ErrorPortero", motivo: "fondo", estado: 503 }]) {
+      const texto = await anchorErrorText(e, "sorteo");
+      expect(texto, String((e as Error).message ?? (e as { motivo: string }).motivo)).toBe(alSortear);
+      expect(texto).not.toContain("sellar");
+    }
+    // Al sellar sigue diciendo "sellar", que es lo que pasa en ese paso.
+    expect(await anchorErrorText(new Error("SDK_CREDITS_INSUFFICIENT"), "sello")).toContain("no se pudo sellar");
   });
 });
 
@@ -646,7 +666,7 @@ describe("una comisión corta no es falta de saldo", () => {
     expect(eventos).toEqual([]);
     const { anchorErrorText } = await import("./anchor");
     // "La red estaba ocupada": hay que probar de nuevo, no conseguir XLM.
-    expect(await anchorErrorText(error)).toBe("La red estaba ocupada y no tomó la transacción. Probá de nuevo en unos segundos.");
+    expect(await anchorErrorText(error)).toBe("El registro estaba ocupado. Probá de nuevo en unos segundos.");
   });
 
   it("y la secuencia corrida (tx_bad_seq) tampoco", async () => {
@@ -701,7 +721,7 @@ describe("el margen de la ronda al empezar a armar el sello", () => {
     const { error } = await sellar(conMargen(10));
     const { selloSinGrabar, anchorErrorText } = await import("./anchor");
     expect(selloSinGrabar(error)).toBe(true);
-    expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
   });
 });
 
@@ -726,12 +746,12 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("el error que ve la persona es el de falta de saldo, tal cual", async () => {
+  it("el error que ve la persona dice que no es su cuenta, no que le falta saldo", async () => {
     conGrifoApagado();
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
   });
 
   it("si Pollar paga la comisión, sella igual que siempre: con la cuenta en 0 y sin tocar el grifo", async () => {
@@ -836,7 +856,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
       h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
       const { error } = await sellar();
       const { anchorErrorText } = await import("./anchor");
-      expect(await anchorErrorText(error)).not.toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+      expect(await anchorErrorText(error)).not.toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
       const { errorKey } = await import("../stellar/errores");
       expect(errorKey(error, { enLinea: true })).toBe("rpcDown");
     });
@@ -1121,7 +1141,7 @@ describe("escribirError: sin conexión, igual dice algo", () => {
     expect(status.textContent).toBe("Estás sin internet. Conectate y probá de nuevo.");
     vi.stubGlobal("navigator", { onLine: true });
     await escribirError(status, new TypeError("Failed to fetch"), "sorteo");
-    expect(status.textContent).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
+    expect(status.textContent).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
   });
 });
 
@@ -1290,11 +1310,47 @@ describe("'Sellar pagando con mi cuenta': Pollar solo firma, sin patrocinio, y s
     expect(h.send).not.toHaveBeenCalled();
   });
 
+  it("si la persona paga con su cuenta y le falta saldo, el mensaje es el de siempre: cargale XLM, no 'no es por tu cuenta'", async () => {
+    h.wallet = pollarConPagoPropio();
+    h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "tx_insufficient_balance" } }));
+    const { error } = await sellarPagando();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+  });
+
+  it("y si después paga el patrocinio (otro sello, sin 'mi cuenta'), vuelve a decir que no es por su cuenta", async () => {
+    h.wallet = pollarConPagoPropio();
+    h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "tx_insufficient_balance" } }));
+    await sellarPagando();
+    h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
+    const { sealOnChain, anchorErrorText } = await import("./anchor");
+    const error = await sealOnChain(argsDeAhora(), () => undefined).catch((x: unknown) => x);
+    expect(await anchorErrorText(error)).toContain("no es por tu cuenta");
+  });
+
   it("si la red la rechaza por falta de saldo, es la red diciendo que no (no un sello incierto)", async () => {
     h.wallet = pollarConPagoPropio();
     h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "txInsufficientBalance" } }));
     const { error } = await sellarPagando();
     expect(esSelloIncierto(error)).toBe(false);
     expect((error as Error).message).toMatch(/tx-REJECTED/);
+  });
+});
+
+describe("más ganadores de los que admite el contrato de la red", () => {
+  const simulacionFallida = (): Error =>
+    new Error('Transaction simulation failed: "HostError: Error(Contract, #4)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #4)]"');
+
+  it("si se pidieron más de 32, dice que esa red todavía admite hasta 32 (y no que sobran ganadores)", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(simulacionFallida(), "sello", 50)).toBe("Esta red todavía admite hasta 32 ganadores por sorteo. Elegí 32 o menos y probá de nuevo.");
+  });
+
+  it("con 32 o menos es el mensaje de siempre", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(simulacionFallida(), "sello", 32)).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
+    expect(await anchorErrorText(simulacionFallida(), "sello")).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
   });
 });

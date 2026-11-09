@@ -32,6 +32,7 @@ const TRES_FUERA = ["tombola", "pasanaku", "stellar"];
  */
 export const AUDITORES = [
   { id: "check-glosario", script: "check-glosario.mjs", chrome: false, nivel: "siempre", juegos: null, estimado: 2 },
+  { id: "audit-palabras", script: "audit-palabras.mjs", chrome: false, nivel: "siempre", juegos: null, estimado: 2, porJuegoEnBoleta: true },
   { id: "check-lore", script: "check-lore.mjs", chrome: false, red: true, nivel: "siempre", juegos: null, estimado: 20 },
   { id: "check-renta", script: "check-renta.mjs", chrome: false, red: true, nivel: "siempre", juegos: null, estimado: 10 },
   {
@@ -52,6 +53,9 @@ export const AUDITORES = [
   { id: "audit-identidad", script: "audit-identidad.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 120, args: conBase, fuera: TRES_FUERA },
   { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "aparte", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
   { id: "audit-delatores", script: "audit-delatores.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 102, args: conBase, fuera: TRES_FUERA },
+  // La recta de la carrera nueva (`?carrera=nueva`), a nivel del plan y sin Chrome (`audit-delatores race --nueva`): el adivinador del camino entero (13,2 % o menos hasta el 88 %
+  // con ocho carriles), las señales del acordeón y de los sucesos, y el auditor de arco (variedad e independencia). De 2 a 200 personas.
+  { id: "audit-recta", script: "audit-recta.mjs", chrome: false, nivel: "siempre", juegos: null, estimado: 150 },
   { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 60, args: conBase, fuera: TRES_FUERA },
   { id: "audit-legible", script: "audit-legible.mjs", chrome: true, red: true, nivel: "siempre", juegos: "todos", estimado: 45, args: conBase, fuera: TRES_FUERA },
   { id: "audit-choques", script: "audit-choques.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 41, args: conBase },
@@ -83,11 +87,11 @@ export function buscarAuditor(token, catalogo = AUDITORES) {
 /**
  * Qué se corre: una tarea por (auditor, objetivo). Sin `solo` entran los de
  * nivel `siempre`, más `noche` con `--noche` y `fisica` con `--fisica`; con
- * `solo`, esos, pidan lo que pidan. Sin `juegos`, los que miran juegos corren
+ * `solo`, esos, pidan lo que pidan. Con `boleta`, los que marcan `porJuegoEnBoleta` corren por juego. Sin `juegos`, los que miran juegos corren
  * los ocho del selector; `todosLosJuegos` suma los que salieron de él.
  */
 export function planDe(
-  { solo = [], juegos = null, noche = false, fisica = false, todosLosJuegos = false, base = "http://localhost:4180" } = {},
+  { solo = [], juegos = null, noche = false, fisica = false, todosLosJuegos = false, base = "http://localhost:4180", boleta = false } = {},
   catalogo = AUDITORES,
 ) {
   const desconocidos = solo.filter((s) => !buscarAuditor(s, catalogo));
@@ -95,6 +99,8 @@ export function planDe(
   const elegidos = solo.length
     ? solo.map((s) => buscarAuditor(s, catalogo))
     : catalogo.filter((a) => a.nivel === "siempre" || (a.nivel === "noche" && noche) || (a.nivel === "fisica" && fisica));
+  // Para la boleta, los que lo piden (`porJuegoEnBoleta`) corren una vez por juego aunque en la batería corran una sola vez.
+  const porJuego = (a) => (boleta && a.porJuegoEnBoleta ? { ...a, juegos: "uno" } : a);
   const tareas = [];
   const tarea = (a, objetivo) => {
     const propios = a.args ? a.args({ base, objetivo, noche }) : [];
@@ -113,7 +119,8 @@ export function planDe(
       estimado: a.estimado,
     });
   };
-  for (const a of elegidos) {
+  for (const a0 of elegidos) {
+    const a = porJuego(a0);
     if (!a.juegos) {
       tarea(a, "sitio");
     } else if (a.juegos === "uno") {

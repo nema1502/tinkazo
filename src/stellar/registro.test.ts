@@ -145,6 +145,31 @@ describe("el registro, leído de la cadena", () => {
     expect(r.nombres[r.ganadores[0] as number]).toBe("Ana Vargas");
   });
 
+  it("una entrada vencida que el RPC todavía devuelve (liveUntilLedgerSeq 0, medido en testnet el 6 de noviembre de 2026) se lee igual que una viva", async () => {
+    // El alquiler venció pero la entrada no se desalojó: el RPC la devuelve marcada como vencida. Lo que
+    // guarda es lo último que se escribió, así que el registro y el veredicto son los de siempre; cuando
+    // se desaloje, el estado dirá "no está" y la verificación pasará al historial (verificacion-historial.test.ts).
+    const porClave = new Map<string, string>();
+    for (const x of Object.values(XDR_165)) porClave.set(claveDe(x), x);
+    const vencido = (async (_url: string, init?: RequestInit) => {
+      const { params } = JSON.parse(String(init?.body)) as { params: { keys: string[] } };
+      const entries = params.keys
+        .filter((key) => porClave.has(key))
+        .map((key) => ({ key, xdr: porClave.get(key), lastModifiedLedgerSeq: 1, liveUntilLedgerSeq: 0 }));
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { entries, latestLedger: 5_587_894 } }));
+    }) as typeof fetch;
+    const r = await leerRegistro(TESTNET, "165", vencido);
+    expect(r.sello?.id).toBe("165");
+    expect(r.resultado?.winners).toEqual([4]);
+    const v = await revisarComprobante(COMPROBANTE_165, {
+      verificarFirma: async (round, s) => verifyRound(round, s),
+      traerFirma: sinFaro,
+      leerRegistro: (c, id) => leerRegistro(c, id, vencido),
+    });
+    expect(v.veredicto).toBe("verde");
+    expect(v.fuente).toBe("estado");
+  });
+
   it("si la dirección oficial corriera otro código, no se lee nada de lo que guarda", async () => {
     const ajena = rpc({ ...XDR_165, instancia: instanciaCon(TESTNET.contractId, WASM_AJENO) });
     const r = await leerRegistro(TESTNET, "165", ajena);

@@ -29,7 +29,7 @@ const veces = (texto, que) => texto.split(que).length - 1;
 
 describe("nuevo-juego: el id", () => {
   it("son de tres a doce letras minúsculas", () => {
-    for (const bueno of ["prueba", "abc", "abcdefghijkl", "guajojo"]) expect(problemasDeId(bueno)).toEqual([]);
+    for (const bueno of ["prueba", "abc", "abcdefghijkl", "pajaro"]) expect(problemasDeId(bueno)).toEqual([]);
     for (const malo of ["Prueba", "ab", "abcdefghijklm", "con-guion", "con_guion", "1234", "ñandú", "", undefined, "a b"]) {
       expect(problemasDeId(malo).length, String(malo)).toBeGreaterThan(0);
     }
@@ -43,9 +43,9 @@ describe("nuevo-juego: el id", () => {
 
   it("la capital sale del id", () => {
     expect(capital("prueba")).toBe("Prueba");
-    expect(variables("guajojo", "El Guajojó")).toEqual({ id: "guajojo", cap: "Guajojo", nombre: "El Guajojó", nombreEn: "El Guajojó" });
-    expect(variables("guajojo").nombre).toBe("Guajojo");
-    expect(variables("guajojo", "El Guajojó", "The Guajojó").nombreEn).toBe("The Guajojó");
+    expect(variables("pajaro", "El Pájaro")).toEqual({ id: "pajaro", cap: "Pajaro", nombre: "El Pájaro", nombreEn: "El Pájaro" });
+    expect(variables("pajaro").nombre).toBe("Pajaro");
+    expect(variables("pajaro", "El Pájaro", "The Pájaro").nombreEn).toBe("The Pájaro");
   });
 });
 
@@ -139,11 +139,11 @@ describe("nuevo-juego: aplicar", () => {
   it("dos juegos distintos conviven entre las mismas marcas", () => {
     const raiz = raizDePrueba();
     aplicar({ raiz, id: "prueba" });
-    aplicar({ raiz, id: "guajojo", nombre: "El Guajojó" });
+    aplicar({ raiz, id: "pajaro", nombre: "El Pájaro" });
     expect(veces(leer(raiz, CATALOGO), "selector: false")).toBe(2);
-    expect(leer(raiz, I18N)).toContain('gameGuajojo: "El Guajojó"');
+    expect(leer(raiz, I18N)).toContain('gamePajaro: "El Pájaro"');
     // Un id que es prefijo de otro no se confunde con él.
-    expect(() => aplicar({ raiz, id: "guajo" })).not.toThrow();
+    expect(() => aplicar({ raiz, id: "paja" })).not.toThrow();
   });
 
   it("respeta los saltos de línea del archivo (CRLF)", () => {
@@ -182,6 +182,10 @@ describe("nuevo-juego: encender", () => {
     aplicar({ raiz, id: "prueba" });
     mkdirSync(join(raiz, "public/juegos"), { recursive: true });
     writeFileSync(join(raiz, "public/juegos/prueba.webp"), "x");
+    for (const dir of ["selector", "portada"]) {
+      mkdirSync(join(raiz, "public/juegos", dir), { recursive: true });
+      for (const sufijo of ["", "-light"]) writeFileSync(join(raiz, "public/juegos", dir, `prueba${sufijo}.webp`), "x");
+    }
     mkdirSync(join(raiz, "docs/capturas/auditorias"), { recursive: true });
     writeFileSync(join(raiz, "docs/capturas/auditorias/2026-10-26.json"), JSON.stringify({ auditor: "audit-game", objetivo: "prueba", aprobadas: 20, total: 20, fallas: [] }));
     writeFileSync(join(raiz, CATALOGO), leer(raiz, CATALOGO).replace("borrador: true", "borrador: false"));

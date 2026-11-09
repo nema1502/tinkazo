@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CARRERA_FIJOS, CARRERA_TARJETA, hayPeloton, normalCarrera, segundosDe } from "./duraciones";
+import { CARRERA_FIJOS, CARRERA_TARJETA, hayPeloton, normalCarrera, normalGuajojo, segundosDe } from "./duraciones";
 import { duracionNominal } from "./games/llamas/carrera-show";
 
 describe("normalCarrera: cuánto dura la carrera según la gente", () => {
@@ -62,15 +62,45 @@ describe("la portada no baja el show de la carrera", () => {
   // importar es `carrera-duracion.ts`, y ese solo las medidas, las tandas y los tiempos.
   const importes = (archivo: string): string[] => [...readFileSync(new URL(archivo, import.meta.url), "utf8").matchAll(/^\s*(?:import|export)\s[^"']*?from\s*["']([^"']+)["']/gm)].map((m) => m[1] as string);
 
-  it("duraciones.ts solo importa carrera-duracion", () => {
-    expect(importes("./duraciones.ts")).toEqual(["./games/llamas/carrera-duracion"]);
+  it("duraciones.ts solo importa carrera-duracion y guajojo-duracion", () => {
+    expect(importes("./duraciones.ts").sort()).toEqual(["./games/llamas/carrera-duracion", "./games/pixi/guajojo-duracion"]);
   });
-  it("carrera-duracion.ts solo importa las medidas, las tandas y los tiempos", () => {
-    expect(importes("./games/llamas/carrera-duracion.ts").sort()).toEqual(["./carrera-base", "./carrera-tandas", "./carrera-tiempos"]);
+  it("guajojo-duracion.ts no importa nada: ni Pixi, ni el kit, ni el DOM", () => {
+    expect(importes("./games/pixi/guajojo-duracion.ts")).toEqual([]);
   });
-  it("y esos tres no traen el plan ni la cámara", () => {
-    for (const f of ["carrera-base", "carrera-tandas", "carrera-tiempos"]) {
-      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-tiempos", "../nombres"], `${f} importa ${dep}`).toContain(dep);
+  it("carrera-duracion.ts solo importa las medidas, el reloj de la recta, las tandas y los tiempos", () => {
+    expect(importes("./games/llamas/carrera-duracion.ts").sort()).toEqual(["./carrera-base", "./carrera-ritmo", "./carrera-tandas", "./carrera-tiempos"]);
+  });
+  it("y esos cuatro no traen el plan ni la cámara", () => {
+    for (const f of ["carrera-base", "carrera-ritmo", "carrera-tandas", "carrera-tiempos"]) {
+      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-ritmo", "./carrera-tiempos", "../nombres"], `${f} importa ${dep}`).toContain(dep);
+    }
+  });
+});
+
+describe("normalGuajojo: cuánto dura el Guajojó según la gente", () => {
+  it("con menos de dos no hay a quién contar, y nunca pasa de 60 s con ninguna cantidad", () => {
+    for (const n of [0, 1]) expect(normalGuajojo(n)).toBeNull();
+    for (let n = 2; n <= 200; n++) {
+      expect(normalGuajojo(n) as number, `con ${n}`).toBeLessThanOrEqual(60);
+      expect(normalGuajojo(n) as number, `con ${n}`).toBeGreaterThanOrEqual(25);
+    }
+  });
+  it("crece con la gente hasta que no hay lista, y con la lista de ejemplo (18) son 40 s", () => {
+    expect(normalGuajojo(2)).toBeLessThan(normalGuajojo(8) as number);
+    expect(normalGuajojo(8)).toBeLessThan(normalGuajojo(30) as number);
+    expect(normalGuajojo(18)).toBe(40);
+  });
+  it("la tabla de audit-rigor dice lo mismo que la función", () => {
+    const fuente = readFileSync(new URL("../scripts/audit-rigor.mjs", import.meta.url), "utf8");
+    const tabla = /NORMAL_GUAJOJO = \{([^}]+)\}/.exec(fuente)?.[1] ?? "";
+    for (const [, n, v] of tabla.matchAll(/(\d+):\s*(\d+)/g)) expect(normalGuajojo(Number(n)), `con ${n}`).toBe(Number(v));
+  });
+  it("rápido es el 90 % de Normal y el estiramiento queda lejos del tope de ×2,2", () => {
+    for (const n of [2, 3, 8, 18, 30, 64, 65, 200]) {
+      const normal = normalGuajojo(n) as number;
+      expect(segundosDe("rapido", normal)).toBe(Math.max(20, Math.round(normal * 0.9)));
+      expect(normal, `con ${n}`).toBeLessThanOrEqual(60);
     }
   });
 });

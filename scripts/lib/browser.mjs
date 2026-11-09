@@ -64,6 +64,8 @@ export class CDP {
    * emoción se quedó hora y media esperando una respuesta que nunca llegó.
    */
   send(method, params = {}, ms = 300_000) {
+    // `TINKAZO_EXTRA=carrera=nueva`: parámetros que se suman a cada página que abre un auditor (para medir la carrera nueva sin tocar cada script).
+    if (method === "Page.navigate" && process.env.TINKAZO_EXTRA && typeof params.url === "string" && params.url.includes("?")) params = { ...params, url: `${params.url}&${process.env.TINKAZO_EXTRA}` };
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params }));
     return new Promise((resolve, reject) => {
@@ -270,7 +272,9 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
     } catch {
       /* todavía no levantó */
     }
-    if (i > 60) {
+    // Hasta 30 s: en la máquina de GitHub el primer Chrome a veces tarda más de 12 s en arrancar
+    // (pasó el 3-nov-2026 en las páginas de lectura); cuando arranca rápido, esto no espera nada.
+    if (i > 150) {
       await cerrar();
       throw new Error("Chrome no expuso DevTools");
     }

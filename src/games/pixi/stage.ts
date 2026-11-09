@@ -12,8 +12,10 @@ import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelIn
 import { guardiaNombre, meter } from "./encuadre";
 import { ajusteGanador, ENTRADA_RELATOR, reservaRelator } from "./ganador-altura";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
+import { enStand } from "../../ensayo-modo";
 import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
-import { ajustarEnRenglones, formaQueEntra } from "../nombres";
+import { acomodarGanador, ajustarEnRenglones, formaQueEntra } from "../nombres";
+import { separarEtiquetas, type Rect as RectNombre } from "./kit/nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
@@ -204,6 +206,12 @@ export interface PixiStage {
    * sacarlos).
    */
   tags(names: string[], who: readonly number[], at: (i: number) => { x: number; y: number } | null, avoid?: readonly { x: number; y: number; width: number; height: number }[]): void;
+  /**
+   * El contador de arriba a la izquierda (y su fila de marcas) avisa dónde está, en píxeles de la pantalla, o `null` si
+   * se esconde. Los juegos del kit lo hacen: con eso prendido, la última guardia de los nombres separa los que se pisan
+   * y no deja que uno tape el contador (`separarEtiquetas`, en `kit/nombres.ts`).
+   */
+  reservarContador(r: readonly { x: number; y: number; w: number; h: number }[] | null): void;
   /**
    * La tanda de la lista que toca en `t`: de a `max` (ocho si no se pide otra
    * cosa), entre `t0` y `t1`, tomando uno de cada tantos de `order` para que la
@@ -403,6 +411,11 @@ export function leerZonaSegura(): { top: number; right: number; bottom: number; 
 export interface MountOptions {
   /** La música del juego: la andina de siempre, salvo que pida otra. */
   music?: MusicStyle;
+  /**
+   * El fondo del lienzo sin pintar, para que se vea otro dibujo debajo (el prototipo 3D de la
+   * carrera, `?motor=3d`). Hay que pedirlo al crear el lienzo: después no se puede cambiar.
+   */
+  transparente?: boolean;
 }
 
 export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void, opts: MountOptions = {}): Promise<PixiStage | null> {
@@ -459,6 +472,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       resolution: aj.resolucion,
       autoDensity: true,
       backgroundColor: 0x10101c,
+      backgroundAlpha: opts.transparente ? 0 : 1,
       autoStart: false,
       // Para que los auditores puedan leer el lienzo entre cuadros.
       preserveDrawingBuffer: true,
@@ -491,7 +505,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { aplicacion: app, camara: cam, escena: scene, cartel: null, ganador: null, cuerpoGanador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { aplicacion: app, camara: cam, escena: scene, hud, cartel: null, ganador: null, cuerpoGanador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
@@ -652,6 +666,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
    */
   const chipsVivos = new Set<Container>();
   const sinDibujar: Container[] = [];
+  /** De quién es cada chip (el nombre entero), para darle prioridad al que nombra el relator. */
+  const dueno = new WeakMap<Container, string>();
+  /** Los juegos del kit piden la pasada de separación avisando dónde está su contador (`reservarContador`). */
+  let separarNombres = false;
+  let vedaContador: readonly RectNombre[] = [];
+  /** Lo que el juego pidió no tapar al poner sus nombres en este cuadro (`tags`: el contador, los ojos del palo): la pasada final también lo respeta. */
+  let vedasDelCuadro: RectNombre[] = [];
   /**
    * Hasta dónde llega un nombre por abajo: la franja del relator o, si una frase
    * larga lo hizo crecer más que ella, su borde de arriba de verdad. La ruta del
@@ -706,12 +727,40 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         if (m) correr(c, m.dx, m.dy);
       } else correr(c, g.dx, g.dy);
     }
+    if (separarNombres) separar(zona.y0, zona.y1, correr);
+  };
+
+  /**
+   * Una última pasada con los nombres ya puestos y metidos en la pantalla: dos que se pisan se separan (el de menos
+   * prioridad se corre arriba o abajo) y uno no tapa el contador; si no cabe, no se dibuja en ese cuadro. La prioridad
+   * la tiene el que nombra el relator y, después, el que se ve más (el alfa); a igualdad, el orden en que nacieron.
+   */
+  const separar = (y0: number, y1: number, correr: (c: Container, dx: number, dy: number) => void): void => {
+    const habla = (commentEl.textContent ?? "").toLowerCase();
+    const vivos: Container[] = [];
+    for (const c of chipsVivos) if (!c.destroyed && seDibuja(c)) vivos.push(c);
+    const cajas = vivos.map((c) => {
+      const b = c.getBounds();
+      const nombre = (dueno.get(c) ?? "").toLowerCase();
+      return { x: b.x, y: b.y, w: b.width, h: b.height, prioridad: (nombre && habla.includes(nombre) ? 100 : 0) + 10 * c.alpha };
+    });
+    const res = separarEtiquetas(cajas, { y0, y1 }, [...vedaContador, ...vedasDelCuadro]);
+    vedasDelCuadro = [];
+    vivos.forEach((c, i) => {
+      const r = res[i];
+      if (!r) return;
+      if (r.callar) {
+        c.renderable = false;
+        sinDibujar.push(c);
+      } else if (r.dy !== 0) correr(c, 0, r.dy);
+    });
   };
 
   const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null, conCara = true, completo = false): Container => {
     const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
     chipsVivos.add(c);
+    dueno.set(c, faceOf);
     const label = text(completo ? name : shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
     if (completo) {
       const a = ajustarEnRenglones(name, sw() - 12 - (conCara ? 32 : 14) * k,
@@ -885,7 +934,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       nombrePrevio?.destroy({ children: true }); nombrePrevio = null;
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
-      const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
+      // En una ronda de stand nadie gana nada: «SALIÓ», nunca «GANA».
+      const rotulo = enStand()
+        ? getLang() === "es"
+          ? all.length > 1 ? "SALIERON" : "SALIÓ"
+          : "PICKED"
+        : getLang() === "es"
+          ? all.length > 1 ? "GANAN" : "GANA"
+          : all.length > 1 ? "WINNERS" : "WINNER";
+      const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
       // Hasta tres nombres y "y N más", igual que el relator.
@@ -908,9 +965,32 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // máximo sale de ahí (y no del 86 % de la pantalla de antes), descontando su sombra y lo que da el giro.
       const REBOTE = 1.2;
       const phAprox = 12 * k + title.height + 6 * k + altos.reduce((a, h) => a + h, 0) + 20 * k;
-      const pwMax = Math.min(sw() * 0.86, (sw() - 4 - 12 * k) / REBOTE - 0.12 * phAprox);
+      const pwMaxDe = (ph: number): number => Math.min(sw() * 0.86, (sw() - 4 - 12 * k) / REBOTE - 0.12 * ph);
+      let pwMax = pwMaxDe(phAprox);
+      // Con una cara al costado el nombre tiene ~175 px en un celular de 390 y ~160 en uno de 360: una palabra de diez
+      // letras o más no entra ni a la letra de la regla y se partía a mitad de palabra («Maximilia / no Paz»). Si pasa,
+      // la cara se va arriba, con «GANA», y el nombre usa todo el ancho (unos 100 px más); si aun así no entra, se parte
+      // por sílaba, con guion. Solo en vertical y solo si gana el ancho: con un nombre normal el cartel es el de siempre.
+      const CARA_ARRIBA = 58;
+      let caraArriba = false;
+      if (big && portrait()) {
+        const tx0 = nameTexts[0] as Text;
+        const nombre0 = lines[0] as string;
+        const piso0 = Math.min(1, letraMinima(k, true) / talla(0));
+        const medir0 = (x: string): number => {
+          tx0.text = x;
+          return tx0.width;
+        };
+        const arribaPh = phAprox + (CARA_ARRIBA - 18) * k;
+        const r = acomodarGanador(nombre0, pwMax - 132 * k, pwMaxDe(arribaPh) - 56 * k, medir0, piso0, true);
+        if (r.caraArriba) {
+          caraArriba = true;
+          pwMax = pwMaxDe(arribaPh);
+        }
+        tx0.text = nombre0;
+      }
       for (const [i, tx] of nameTexts.entries()) {
-        const maxW = pwMax - (big ? 132 : 56) * k - hueco(i);
+        const maxW = pwMax - (big && !caraArriba ? 132 : 56) * k - hueco(i);
         const piso = Math.min(1, letraMinima(k, true) / talla(i));
         if (tx.width <= maxW) continue;
         const nombre = lines[i] as string;
@@ -946,10 +1026,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // nombre se salía por el costado y por abajo.
       if (big && nameTexts[0]) altos[0] = Math.max(altos[0] ?? 0, nameTexts[0].height + 6 * k);
       const innerW = Math.max(title.width, ...nameTexts.map((x, i) => x.width + hueco(i)));
-      const pw = innerW + (big ? 132 : 56) * k;
+      const lado0 = CARA_ARRIBA * k;
+      // Con la cara arriba, «GANA» va a su lado y el cartel es tan ancho como lo más ancho de las dos filas.
+      const pw = (caraArriba ? Math.max(innerW, lado0 + 14 * k + title.width) : innerW) + (big && !caraArriba ? 132 : 56) * k;
       const lineH = altos[0] ?? 60 * k;
       // «GANA» es lo principal de la sala (48 px en 1080): los nombres arrancan debajo de él, no encima.
-      const arriba = 12 * k + title.height + 6 * k;
+      const arriba = 12 * k + (caraArriba ? Math.max(title.height, lado0) : title.height) + 6 * k;
       const ph = arriba + altos.reduce((a, h) => a + h, 0) + 20 * k;
       cartelAlto = { m: winners.length, k, ph };
       const dy = arriba / 2 - 18 * k;
@@ -960,18 +1042,22 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         .fill(YELLOW)
         .stroke({ width: 5 * k, color: INK });
       plate.addChild(bgp);
-      const x0 = -pw / 2 + (big ? 112 : 28) * k;
+      const x0 = -pw / 2 + (big && !caraArriba ? 112 : 28) * k;
       if (big) {
         const propia = caraPropia?.(winners[0] as number) ?? null;
         const av = new Sprite(propia ?? caraGrande(all[0] ?? ""));
-        av.width = av.height = 76 * k;
-        av.position.set(-pw / 2 + 22 * k, -38 * k + dy);
-        const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k + dy, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
+        const lado = caraArriba ? lado0 : 76 * k;
+        const ax = caraArriba ? x0 : -pw / 2 + 22 * k;
+        const ay = caraArriba ? -ph / 2 + 12 * k : -38 * k + dy;
+        av.width = av.height = lado;
+        av.position.set(ax, ay);
+        const border = new Graphics().rect(ax - 2 * k, ay - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 4 * k, color: INK });
         plate.addChild(av);
         // El emblema ya trae su propio borde: el marco de siempre solo va con el glifo cuadrado.
         if (!propia) plate.addChild(border);
       }
-      title.position.set(x0, -ph / 2 + 12 * k);
+      if (caraArriba) title.position.set(x0 + lado0 + 14 * k, -ph / 2 + 12 * k + (lado0 - title.height) / 2);
+      else title.position.set(x0, -ph / 2 + 12 * k);
       plate.addChild(title);
       // Cada renglón en su contenedor, para que con varios premios entren de a uno.
       const renglones: Container[] = [];
@@ -1075,6 +1161,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         root.visible = true;
         plate.visible = placa && tp >= 0;
         tl.time(Math.max(0, tp));
+        // En un celular el cartel ocupa casi todo el ancho: el contador y las marcas (la capa `hud`) se van mientras entra,
+        // en el mismo rato (el cartel arranca a los 0,12 s y su rebote llega a su tamaño en unos 0,5), y no asoman
+        // por los costados ni quedan restos al lado de un cartel de dos renglones.
+        hud.alpha = placa && portrait() ? 1 - Math.max(0, Math.min(1, (tp - 0.12) / 0.4)) : 1;
         if (vista) {
           if (foco && T) {
             // Un latido grave por cada marca, si no se saltó el silencio.
@@ -1185,6 +1275,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       tagK = k;
     }
     for (const c of tagChips.values()) c.visible = false;
+    vedasDelCuadro = avoid.filter((r) => r.width > 0 && r.height > 0).map((r) => ({ x: r.x, y: r.y, w: r.width, h: r.height }));
     const placed: { x: number; y: number; w: number; h: number }[] = avoid.map((r) => ({ x: r.x, y: r.y + r.height / 2, w: r.width, h: r.height }));
     const W = sw(), H = sh();
     const pts = who.map((i) => ({ i, p: at(i) })).filter((a): a is { i: number; p: { x: number; y: number } } => !!a.p).sort((a, b) => a.p.y - b.p.y);
@@ -1240,6 +1331,19 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           x = Math.max(8 * k, Math.min(W - cw - 8 * k, x + cw * 0.35));
         }
       }
+      // Si después de todos los intentos sigue encima de otra ficha o de lo que no se tapa, en este cuadro no se muestra:
+      // una ficha tapada del todo no se lee y tapa a la de abajo (el trompo, al pasar lista, dejaba un nombre entero
+      // debajo de otro); vuelve a salir cuando hay lugar o en la tanda siguiente.
+      // Un roce no la esconde: solo si le tapa más de un tercio de su área a otra ficha o a lo que no se tapa.
+      const tapa = placed.some((r) => {
+        const w = Math.min(x + cw, r.x + r.w) - Math.max(x, r.x);
+        const h = Math.min(y + ch / 2, r.y + r.h / 2) - Math.max(y - ch / 2, r.y - r.h / 2);
+        return w > 0 && h > 0 && (w * h) / Math.min(cw * ch, r.w * r.h) > 1 / 3;
+      });
+      if (tapa) {
+        c.visible = false;
+        continue;
+      }
       placed.push({ x, y, w: cw, h: ch });
       c.position.set(x, y);
     }
@@ -1252,6 +1356,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       musicBreath();
     }
   };
+  const reservarContador = (r: readonly { x: number; y: number; w: number; h: number }[] | null): void => {
+    separarNombres = true;
+    vedaContador = r ?? [];
+  };
   const batch = (n: number, t: number, t0: number, t1: number, order?: readonly number[], max = 8): number[] => {
     if (n > 64 || n <= 0 || t < t0 || t >= t1) return [];
     const B = Math.max(1, Math.ceil(n / Math.max(1, max)));
@@ -1261,7 +1369,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   };
 
   const stage: PixiStage = {
-    app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark,
+    app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark, reservarContador,
     despejarGanador(cuerpo) {
       // Por encima de la penumbra del foco, pero fuera de la superficie del cartel.
       nombrePrevio ??= podium.addChild(chip(textoGanador, Math.max(1, escalaChipLegible(u())), textoGanador, null, true, true));

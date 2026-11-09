@@ -148,3 +148,44 @@ describe("sonido: los gestos", () => {
     expect(s.fase(2, 2, 2)).toBe(1);
   });
 });
+
+describe("sonido: el viento y el zumbido", () => {
+  it("el viento va de 350 a 1.500 Hz y de 0,04 a 0,05, más fuerte cuanto más fuerza, y la misma semilla suena igual", () => {
+    const llamadas: { dur: number; vol: number; hz0: number; hz1: number; semilla: number }[] = [];
+    const voz: Voz = { ...vozFalsa().voz, viento: (dur, vol, hz0, hz1, semilla) => llamadas.push({ dur, vol, hz0, hz1, semilla }) };
+    const s = crearSonido(voz);
+    s.viento(3, 0, 5);
+    s.viento(3, 1, 5);
+    s.viento(3, 9, 5);
+    expect(llamadas[0]!.vol).toBeCloseTo(0.04, 6);
+    expect(llamadas[1]!.vol).toBeCloseTo(0.05, 6);
+    expect(llamadas[2]!.vol).toBeCloseTo(0.05, 6);
+    expect(llamadas[0]!.hz0).toBe(350);
+    expect(llamadas[1]!.hz1).toBe(1500);
+    expect(llamadas[1]!.semilla).toBe(llamadas[2]!.semilla);
+    for (const l of llamadas) {
+      expect(l.vol).toBeGreaterThanOrEqual(0.02);
+      expect(l.vol).toBeLessThanOrEqual(0.05 + 1e-9);
+    }
+  });
+
+  it("el zumbido es la nota 12, entre 0,02 y 0,03, y crece al acercarse", () => {
+    const llamadas: { hz: number; vol0: number; vol1: number }[] = [];
+    const voz: Voz = { ...vozFalsa().voz, zumbido: (hz, _dur, vol0, vol1) => llamadas.push({ hz, vol0, vol1 }) };
+    const s = crearSonido(voz);
+    s.zumbido(1, 0);
+    s.zumbido(1, 1);
+    expect(llamadas.every((l) => l.hz === nota(12))).toBe(true);
+    expect(llamadas[1]!.vol0).toBeGreaterThan(llamadas[0]!.vol0);
+    expect(Math.max(...llamadas.map((l) => l.vol1))).toBeCloseTo(0.03, 6);
+    expect(Math.min(...llamadas.map((l) => l.vol0))).toBeGreaterThanOrEqual(0.019);
+  });
+
+  it("un anfitrión sin viento ni zumbido no rompe nada", () => {
+    const s = crearSonido(vozFalsa().voz);
+    expect(() => {
+      s.viento(2, 0.5);
+      s.zumbido(1);
+    }).not.toThrow();
+  });
+});

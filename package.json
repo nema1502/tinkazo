@@ -16,6 +16,7 @@
     "check:renta": "node scripts/check-renta.mjs",
     "check:red": "node scripts/vigilar-red.mjs",
     "check:paginas": "node scripts/check-paginas.mjs",
+    "check:imagenes": "node scripts/check-imagenes.mjs",
     "check:glosario": "node scripts/check-glosario.mjs",
     "check:verificacion": "node scripts/check-verificacion.mjs",
     "preflight:mainnet": "node scripts/preflight-mainnet.mjs",
@@ -24,14 +25,20 @@
     "audit:mezcla": "node scripts/audit-mezcla.mjs",
     "audit:ui": "node scripts/audit-ui.mjs",
     "audit:legible": "node scripts/audit-legible.mjs",
+    "audit:letra": "node scripts/audit-legible.mjs --paginas",
+    "audit:palabras": "node scripts/audit-palabras.mjs",
     "audit:todo": "node scripts/audit-todo.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "metricas:cadena": "node scripts/metricas-cadena.mjs"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
+    "@types/three": "0.180.0",
+    "jsdom": "^26.1.0",
     "jsqr": "^1.4.0",
+    "opentype.js": "^2.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
@@ -39,12 +46,13 @@
   "dependencies": {
     "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.4.0",
-    "@pollar/core": "^0.11.3",
+    "@pollar/core": "^0.12.0",
     "@stellar/freighter-api": "^6.0.1",
-    "@stellar/stellar-sdk": "^17.3.0",
+    "@stellar/stellar-sdk": "17.3.0",
     "gsap": "^3.15.0",
     "pixi-filters": "^6.1.5",
     "pixi.js": "^8.21.0",
-    "qrcode-generator": "^2.0.4"
+    "qrcode-generator": "^2.0.4",
+    "three": "0.180.0"
   }
 }

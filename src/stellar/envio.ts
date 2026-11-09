@@ -37,6 +37,11 @@ export interface RespuestaEnvio {
   status: "PENDING" | "DUPLICATE" | "TRY_AGAIN_LATER" | "ERROR" | string;
   /** El código del rechazo, si lo hubo: `tx_bad_seq`, `tx_insufficient_balance`… */
   codigo?: string;
+  /**
+   * El no es definitivo aunque un envío anterior se haya cortado: lo dijo quien no manda nada a la red antes de
+   * decirlo (el portero del patrocinio con un 429 o un 503). Sin esto, un `ERROR` después de un corte no prueba nada.
+   */
+  definitivo?: boolean;
 }
 
 /** Lo que importa de lo que contesta el RPC al preguntar por una transacción (`getTransaction`). */
@@ -77,6 +82,8 @@ export interface OpcionesEnvio {
   reenviarCadaMs?: number;
   /** Cuánto se le da a cada pedido (10 s): el SDK no les pone tope y un pedido colgado colgaba el sorteo. */
   topePedidoMs?: number;
+  /** Cuánto se le da a cada envío, si es más que a las consultas: el portero del patrocinio puede tardar hasta unos 48 s. */
+  topeEnvioMs?: number;
   /** Un tope de seguridad si el RPC deja de avanzar (4 min). */
   topeTotalMs?: number;
   ahora?: () => number;
@@ -117,6 +124,8 @@ const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTime
  * - `ERROR` en el primer envío: rechazada, con su código. Si antes la red ya la
  *   había tomado, o un envío se cortó sin respuesta, un `ERROR` al reenviar no
  *   prueba nada (la secuencia ya pudo usarse porque entró): se sigue preguntando.
+ *   Salvo que sea `definitivo` y la red no la haya tomado: un no del portero del
+ *   patrocinio (cupo agotado, sin fondo) no depende de lo que haya pasado antes.
  * - Un corte al mandar o al preguntar: se sigue, hasta `sinRedMs` sin respuesta.
  * - `NOT_FOUND` mientras la transacción sigue viva no es una falla: se espera.
  *   Con la hora de la red pasada de `venceEn`, venció.
@@ -142,13 +151,13 @@ export async function enviarYConfirmar(op: OpcionesEnvio): Promise<Desenlace> {
   for (;;) {
     if (op.enviar && ahora() >= proximoEnvio) {
       try {
-        const r = await conTope(op.enviar(), tope, "envio-lento");
+        const r = await conTope(op.enviar(), op.topeEnvioMs ?? tope, "envio-lento");
         ultimoContacto = ahora();
         if (r.status === "PENDING" || r.status === "DUPLICATE") {
           tomada = true;
           proximoEnvio = ahora() + reenviarCadaMs;
         } else if (r.status === "ERROR") {
-          if (!tomada && !quizasTomada) return { estado: "rechazada", codigo: r.codigo ?? "ERROR" };
+          if (!tomada && (!quizasTomada || r.definitivo)) return { estado: "rechazada", codigo: r.codigo ?? "ERROR" };
           // Ya la había tomado (o quizás): no se reenvía más, se pregunta.
           proximoEnvio = Number.POSITIVE_INFINITY;
         } else {

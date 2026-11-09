@@ -1,4 +1,6 @@
 import { $ } from "../dom";
+import { eventoError, type AccionError } from "./error-accion";
+import { enEnsayo, enStand } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
@@ -15,7 +17,8 @@ import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe 
  * parte; esto es lo demás:
  *
  * - El indicador de pasos de arriba: 1 Lista, 2 Sellar, 3 Sortear, 4
- *   Compartir. El actual resaltado y los hechos con ✓.
+ *   Compartir, como una barra de progreso en cuatro tramos y no como cuatro
+ *   cajitas: no es nada para apretar. El actual resaltado y los hechos con ✓.
  * - Una barra fija abajo con la acción del paso. Es la red de seguridad: sale
  *   solo cuando el botón de verdad queda fuera de la pantalla, así nunca hay
  *   dos botones iguales a la vista, y su clic es un clic en el de verdad, así
@@ -39,7 +42,7 @@ interface Toca {
 }
 
 /** Los textos que tapan toda la página: con uno abierto la barra se va. */
-const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala";
+const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
 
 let segundos: () => number = () => 0;
 let listo = false;
@@ -77,7 +80,13 @@ let reintento = 0;
 /** Cuántos nombres hay en la lista: los que dibuja `renderNames`, sin pedirle nada a `participants.ts`. */
 const nombres = (): number => document.getElementById("names")?.childElementCount ?? 0;
 
-/** La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera de la demo, que se hace sola. */
+/**
+ * La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera
+ * de la demo, que se hace sola. En el modo stand sale solo antes de empezar la
+ * ronda (con la lista escrita, "Empezar la ronda" queda más abajo en el celular):
+ * después la ronda corre sola y la barra hablaría de sellos, números y
+ * comprobantes que ahí no hay.
+ */
 function activa(): boolean {
   const d = document.body.dataset;
   return d.vista === "app" && d.tab === "nuevo" && d.demo !== "1";
@@ -94,8 +103,8 @@ export const barraActiva = (): boolean => listo && activa();
 /**
  * El botón de verdad que hace avanzar cada paso. En el 1, "Pegar lista". En el
  * 4, "Siguiente premio" si queda con quién sortear y, si no, el del comprobante
- * (`draw.ts` esconde uno y muestra el otro); en el ensayo, "Sortear con mi
- * lista", que es su final.
+ * (`draw.ts` esconde uno y muestra el otro); en el ensayo, "Probar otro juego",
+ * que es su final.
  *
  * Sin cuenta también: "Sellar la lista" abre la ventana para entrar, con su
  * motivo (`main.ts`), y eso es lo que sigue. Hasta el 22 de octubre de 2026 la
@@ -105,7 +114,7 @@ export const barraActiva = (): boolean => listo && activa();
 function botonDe(paso: Paso): HTMLButtonElement | null {
   switch (paso) {
     case 4: {
-      const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-mio") : null;
+      const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-otro") : null;
       if (fin instanceof HTMLButtonElement) return fin;
       const sin = $<HTMLButtonElement>("btn-again-sin");
       const sigue = $("again-row").style.display !== "none" && sin.style.display !== "none";
@@ -139,12 +148,15 @@ function calcular(): Toca {
   const revelado = app.drawn !== null && $("winner-box").style.display === "block";
   const n = nombres();
   const paso = pasoDe({ nombres: n, sellada: app.frozen !== null, revelado });
-  const boton = botonDe(paso);
+  // En el stand la barra es solo para empezar la ronda: ni "Pegar lista" ni nada de después.
+  const boton = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
   const restan = paso === 3 ? segundos() : 0;
   const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
-  // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo.
-  if (clave === "sigLista") detalle = detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", t("sigSinPremio"));
+  // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
+  // el premio que falta: nada se sella de verdad.
+  // En el stand no hay premio: la línea dice solo cuántas personas hay.
+  if (clave === "sigLista") detalle = enStand() ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
@@ -161,24 +173,29 @@ function avisarPaso(s: Toca): void {
   document.dispatchEvent(new CustomEvent("tinkazo:paso", { detail: { paso: s.paso, clave: s.clave } }));
 }
 
-/** El indicador de arriba: hecho con ✓, el actual resaltado y lo que falta con su número. */
+/**
+ * El indicador de arriba: cuatro tramos. El hecho va lleno y con ✓ delante del nombre, el actual lleno de otro color y
+ * con el nombre en negrita, y lo que falta apagado. Sin números: la barra de abajo dice "Paso 2 de 4".
+ */
 function pintarPasos(paso: Paso): void {
+  // Al final del ensayo no queda nada por hacer (no hay qué compartir): los cuatro tramos van hechos.
+  const final = paso === 4 && enEnsayo();
   for (const li of document.querySelectorAll<HTMLElement>("#pasos li")) {
     const n = Number(li.dataset.paso);
-    const estado = n < paso ? "hecho" : n === paso ? "actual" : "falta";
+    const estado = final || n < paso ? "hecho" : n === paso ? "actual" : "falta";
     li.classList.toggle("hecho", estado === "hecho");
     li.classList.toggle("actual", estado === "actual");
     if (estado === "actual") li.setAttribute("aria-current", "step");
     else li.removeAttribute("aria-current");
-    const num = li.querySelector(".p-n");
-    if (num) num.textContent = estado === "hecho" ? "✓" : String(n);
+    const marca = li.querySelector(".p-n");
+    if (marca) marca.textContent = estado === "hecho" ? "✓" : "";
     const e = li.querySelector(".p-e");
     if (e) e.textContent = estado === "hecho" ? t("pasoHecho") : estado === "actual" ? t("pasoActual") : "";
   }
 }
 
-/** La línea de la barra: "Paso 3 de 4 · Esperando la ronda · 0:25". */
-const linea = (s: Toca): string => lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
+/** La línea de la barra: "Paso 3 de 4: esperando el número, 0:25". */
+const linea = (s: Toca): string => enStand() ? s.detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
 
 /**
  * El cambio de paso, dicho con calma (`role="status"`, polite). Solo cuando
@@ -198,6 +215,10 @@ function anunciar(s: Toca): void {
     $("sig-aviso").textContent = "";
     return;
   }
+  if (enStand()) {
+    $("sig-aviso").textContent = s.detalle;
+    return;
+  }
   $("sig-aviso").textContent = s.clave === "sigRonda" ? `${t("sigPaso").replace("{n}", String(s.paso))}. ${t("sigAvisoRonda")}` : `${t("sigPaso").replace("{n}", String(s.paso))}. ${s.detalle}.`;
 }
 
@@ -205,10 +226,8 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
   const bar = $("siguiente");
   const btn = $<HTMLButtonElement>("sig-btn");
   if (s.boton) {
-    // Sin cuenta, "Sellar la lista" está apagado (aria-disabled) y tocarlo abre la ventana para entrar: la barra dice lo
-    // que va a pasar y no promete un sello (26 de octubre de 2026).
-    const pideCuenta = s.paso === 2 && s.boton.getAttribute("aria-disabled") === "true";
-    const texto = pideCuenta ? t("sigEntrarSellar") : (s.boton.textContent?.trim() ?? "");
+    // Sin cuenta, el botón de verdad ya dice "Entrar para sellar" (wallet-ui.ts): la barra copia lo que dice.
+    const texto = s.boton.textContent?.trim() ?? "";
     if (btn.textContent !== texto) btn.textContent = texto;
     btn.disabled = s.boton.disabled;
     btn.classList.toggle("lista", s.boton.classList.contains("lista"));
@@ -325,8 +344,8 @@ export function actualizarPaso(): void {
  * ofrece el mensaje primero (`tinkazo:error`), y si lo muestra, con la acción
  * para reintentar, la página de atrás no se mueve (espera.ts).
  */
-export function verError(mensaje: HTMLElement): void {
-  const enGrande = new CustomEvent("tinkazo:error", { detail: mensaje.textContent?.trim() ?? "", cancelable: true });
+export function verError(mensaje: HTMLElement, accion?: AccionError, segunda?: AccionError): void {
+  const enGrande = eventoError(mensaje.textContent?.trim() ?? "", accion, segunda);
   if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");
@@ -355,7 +374,7 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   moBoton = new MutationObserver(render);
   const general = new MutationObserver(render);
   // Ventanas, tarjeta y cortina se agregan al cuerpo; el estadio es fijo y cambia de estilo.
-  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo"] });
+  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo", "data-stand"] });
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });
   // La lista cambia sin que nadie toque el sello: pasar de 1 a 2 nombres es pasar de paso.
   general.observe($("names"), { childList: true });

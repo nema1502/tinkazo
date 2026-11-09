@@ -1,7 +1,8 @@
 import { texto as t } from "./idioma";
-import type { Proof } from "./protocol/proof";
+import { hashDeTx, type Proof } from "./protocol/proof";
 import { roundTime } from "./protocol/quicknet";
 import { camposDistintos, type Motivo, type Revision } from "./protocol/verificacion";
+import { txUrl } from "./stellar/config";
 import type { SelloDelHistorial } from "./stellar/historial";
 
 /**
@@ -156,6 +157,25 @@ export function detalleTecnico(r: Revision, p: Proof): string[] {
         return t("vTechRegistro");
     }
   });
+}
+
+/**
+ * Por qué el sello salió del historial y no de la memoria rápida de la red (el estado del contrato):
+ * ya no está (se archivó) o no se pudo leer ahora (`registro` nulo). Es la primera frase del verde por historial.
+ */
+export const porQueDelHistorial = (r: Pick<Revision, "registro">): string => (r.registro ? "vHistMemoriaArchivada" : "vHistMemoriaSinLeer");
+
+/**
+ * Dónde mirar cuando el historial no pudo confirmar el sello y el comprobante lo cita: la transacción en un
+ * explorador y cómo comprobarla con los archivos de historia de Stellar, sin pasar por Tinkazo. Vacío si no
+ * hay nada que citar o si el resultado no es "no confirmado" por falta de lectura. Plegado debajo del veredicto.
+ */
+export function detalleSinHistorial(r: Pick<Revision, "ancla" | "veredicto" | "falta">, p: Pick<Proof, "stx">): string[] {
+  const stx = hashDeTx(p.stx);
+  if (!stx || r.ancla.tipo !== "oficial" || r.veredicto !== "sin-red") return [];
+  if (r.falta !== "sin-historial" && r.falta !== "sin-cadena") return [];
+  const red = r.ancla.contrato.red;
+  return [llenar("vTechSinHistorial", { tx: stx, url: txUrl(stx, red), red })];
 }
 
 /**

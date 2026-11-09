@@ -77,8 +77,8 @@ export function abrirRearmado(entry: Entry): void {
   card.innerHTML =
     `<h3>${esc(t("histRebuildTitle"))}</h3>` +
     `<p class="note">${esc(t("histRebuildNote"))}</p>` +
-    `<p class="note"><b>#${esc(entry.id ?? "")}</b> · ${entry.count} ${esc(t("histPeople"))}` +
-    `${entry.prize ? ` · ${esc(entry.prize)}` : ""}</p>` +
+    `<p class="note"><b>#${esc(entry.id ?? "")}</b>, ${entry.count} ${esc(t("histPeople"))}` +
+    `${entry.prize ? `, ${esc(entry.prize)}` : ""}</p>` +
     `<textarea class="rearmar-ta" rows="7" spellcheck="false"></textarea>` +
     `<p class="rearmar-out note"></p>` +
     `<div class="row"></div>`;

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ajustar, ajustarEnRenglones, envolver, formaQueEntra, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres,
+  acomodarGanador, ajustar, ajustarEnRenglones, envolver, envolverConAviso, formaQueEntra, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres, silabas,
   type Nivel,
 } from "./nombres";
 
@@ -299,7 +299,7 @@ describe("ajustarEnRenglones: el nombre del cartel entero, en los renglones que 
         const a = ajustarEnRenglones(nombre, ancho, u, piso);
         expect(a.escala).toBeGreaterThanOrEqual(piso);
         expect(a.escala).toBeLessThanOrEqual(1);
-        const quitar = (x: string): string => x.replace(/\s+/gu, "");
+        const quitar = (x: string): string => x.replace(/-/gu, "").replace(/\s+/gu, "");
         expect(quitar(a.lineas.join(" "))).toBe(quitar(nombre));
         // Lo que se dibuja, a esa escala, entra en la caja.
         for (const l of a.lineas) expect(u(l) * a.escala).toBeLessThanOrEqual(Math.max(ancho, 8 * a.escala) + 1e-9);
@@ -320,6 +320,39 @@ describe("ajustarEnRenglones: el nombre del cartel entero, en los renglones que 
     const libre = ajustarEnRenglones("María Fernanda Guadalupe Quispe Mamani Zuleta", 14 * 8, u, 0.8);
     expect(libre.partida).toBe(false);
     expect(libre.lineas).toEqual(["María Fernanda", "Guadalupe Quispe", "Mamani Zuleta"]);
+  });
+
+  it("en un celular de 390 no parte un nombre a mitad de palabra: achica un poco y usa dos renglones", () => {
+    // El cartel a 390 de ancho: la letra de 50 px mide unos 28 px por letra y al nombre le quedan unos 170 px.
+    const medir = (s: string): number => grafemas(s).length * 28;
+    for (const nombre of ["Daniela Cruz", "Rodrigo Peña", "Andrés Villca", "Alejandro Ríos", "Gabriela Paz"]) {
+      for (const piso of [0.5, 0.6]) {
+        const a = ajustarEnRenglones(nombre, 170, medir, piso);
+        expect(a.partida).toBe(false);
+        // Cada renglón es una o más palabras enteras del nombre.
+        const palabras = nombre.split(" ");
+        for (const l of a.lineas) for (const w of l.split(" ")) expect(palabras).toContain(w);
+        expect(a.lineas.join(" ")).toBe(nombre);
+        for (const l of a.lineas) expect(medir(l) * a.escala).toBeLessThanOrEqual(170 + 1e-9);
+      }
+    }
+  });
+
+  it("parte una palabra por letras solo cuando no entra ni a la escala mínima", () => {
+    const medir = (s: string): number => grafemas(s).length * 28;
+    // «Alejandro» (252) a la escala 0,6 mide 151 y entra en 170; «Anticonstitucionalmente» (644) no entra ni a 0,6.
+    expect(ajustarEnRenglones("Alejandro Ríos", 170, medir, 0.6).lineas).toEqual(["Alejandro", "Ríos"]);
+    const largo = ajustarEnRenglones("Anticonstitucionalmente", 170, medir, 0.6);
+    expect(largo.lineas.length).toBeGreaterThan(1);
+    // Se parte entre sílabas y con guion («Anticons- / titucio- / nalmente»): sin los guiones, las mismas letras.
+    expect(largo.lineas.join("").replace(/-/gu, "")).toBe("Anticonstitucionalmente");
+    for (const l of largo.lineas) expect(medir(l) * largo.escala).toBeLessThanOrEqual(170 + 1e-9);
+  });
+
+  it("envolverConAviso dice si partió una palabra", () => {
+    const medir = (s: string): number => grafemas(s).length * 8;
+    expect(envolverConAviso("María Quispe", 11 * 8, medir)).toEqual({ lineas: ["María", "Quispe"], partioPalabra: false });
+    expect(envolverConAviso("Anticonstitucionalmente", 8 * 8, medir).partioPalabra).toBe(true);
   });
 
   it("con espacio para unas pocas letras por renglón lo escribe en cuatro renglones a lo sumo mientras el piso lo permita", () => {
@@ -367,5 +400,154 @@ describe("determinismo", () => {
   });
   it("la misma lista da lo mismo", () => {
     expect(planNombres(FIXTURES)).toEqual(planNombres([...FIXTURES]));
+  });
+});
+
+/* ================================================== el cartel con nombres largos, con la letra de verdad */
+
+/**
+ * El ancho de cada letra del cartel (`system-ui` a peso 900, medido con `measureText` en Chrome a 100 px), en centésimas de
+ * la altura de la letra. Lo que no está en la tabla mide 60. Con esto el ancho de una palabra es el real y no «28 px por
+ * letra»: la prueba de antes usaba palabras de nueve letras como máximo y por eso no vio «Maximilia / no Paz».
+ */
+const ANCHO_900: Record<string, number> = {
+  a: 56.1, b: 64.2, c: 49.5, d: 64.2, e: 56, f: 43.1, g: 64.2, h: 61.7, i: 30.8, j: 30.8, k: 59.3, l: 30.8, m: 95, n: 62.6, o: 63.4,
+  p: 64.2, q: 64.2, r: 43.6, s: 48.3, t: 41.7, u: 62.6, v: 58.8, w: 84.5, x: 62.1, y: 57.4, z: 50.9, á: 56.1, é: 56, í: 30.8, ó: 63.4,
+  ú: 62.6, ñ: 62.6, ü: 62.6, A: 75, B: 69.1, C: 63, D: 75.9, E: 55.2, F: 54.1, G: 72.7, H: 80.2, I: 34.9, J: 51.1, K: 69, L: 54.1,
+  M: 98.7, N: 81.2, O: 76.5, P: 65.6, Q: 76.5, R: 68.2, S: 57.2, T: 63.6, U: 74, V: 70.2, W: 105.3, X: 70.2, Y: 65, Z: 64.1, Á: 75,
+  É: 55.2, Í: 34.9, Ó: 76.5, Ú: 74, Ñ: 81.2, " ": 27.8, "-": 40.7, ".": 32,
+};
+const medirReal = (px: number) => (s: string): number => Array.from(s).reduce((a, c) => a + (ANCHO_900[c] ?? 60), 0) * px / 100;
+const sinGuiones = (ls: string[]): string => ls.join("").replace(/-/gu, "").replace(/\s+/gu, "");
+
+describe("silabas: la partición simple del español", () => {
+  it("parte por sílabas, con grupos que no se separan y hiatos que sí", () => {
+    expect(silabas("Maximiliano")).toEqual(["Ma", "xi", "mi", "lia", "no"]);
+    expect(silabas("Washington")).toEqual(["Wa", "shing", "ton"]);
+    expect(silabas("Hermenegildo")).toEqual(["Her", "me", "ne", "gil", "do"]);
+    expect(silabas("Montenegro")).toEqual(["Mon", "te", "ne", "gro"]);
+    expect(silabas("Bustamante")).toEqual(["Bus", "ta", "man", "te"]);
+    expect(silabas("Encarnación")).toEqual(["En", "car", "na", "ción"]);
+    expect(silabas("Gabriela")).toEqual(["Ga", "brie", "la"]);
+    expect(silabas("Sebastián")).toEqual(["Se", "bas", "tián"]);
+    expect(silabas("Guillermo")).toEqual(["Gui", "ller", "mo"]);
+    expect(silabas("Raúl")).toEqual(["Ra", "úl"]);
+  });
+  it("nunca deja una letra sola en las puntas ni pierde letras", () => {
+    for (const w of ["Amigo", "Alejandro", "Eliana", "Ofelia", "Ibáñez", "Ñusta", "Úrsula", "Anticonstitucionalmente"]) {
+      const sil = silabas(w);
+      expect(sil.join("")).toBe(w);
+      if (sil.length > 1) {
+        expect((sil[0] as string).length).toBeGreaterThanOrEqual(2);
+        expect((sil[sil.length - 1] as string).length).toBeGreaterThanOrEqual(2);
+      }
+    }
+  });
+  it("una palabra corta, sin vocales o con algo que no es una letra no se parte", () => {
+    expect(silabas("Ana")).toEqual(["Ana"]);
+    expect(silabas("Rey")).toEqual(["Rey"]);
+    expect(silabas("Brrrr")).toEqual(["Brrrr"]);
+    expect(silabas("Pepe2025")).toEqual(["Pepe2025"]);
+    expect(silabas("🌸🌸🌸🌸")).toEqual(["🌸🌸🌸🌸"]);
+  });
+});
+
+describe("el cartel del ganador con nombres largos y la letra de verdad (celular de 390 y de 360)", () => {
+  // La misma cuenta de `crown()` en `stage.ts`: letra de 54 k, piso de la regla de letra y ancho útil del cartel.
+  const celulares = [
+    { sw: 390, sh: 844 },
+    { sw: 360, sh: 780 },
+  ].map(({ sw, sh }) => {
+    const k = Math.min(sw / 420, sh / 900);
+    const talla = 54 * k;
+    const piso = Math.min(1, Math.max(22, 32 * k) / talla);
+    const ph = 12 * k + 32 * k + 6 * k + 60 * k + 20 * k;
+    const pwMax = Math.min(sw * 0.86, (sw - 4 - 12 * k) / 1.2 - 0.12 * ph);
+    return { sw, talla, piso, alLado: pwMax - 132 * k, arriba: pwMax - 56 * k, medir: medirReal(talla) };
+  });
+  const LARGOS = ["Maximiliano Paz", "Washington Gil", "Encarnación Rey", "Hermenegildo Paz", "Ana Montenegro", "Juan Bustamante"];
+  const DE_ANTES = ["Daniela Cruz", "Rodrigo Peña", "Andrés Villca", "Alejandro Ríos", "Gabriela Paz"];
+
+  it("con la cara al costado no entra una palabra de diez letras al piso: el ancho de antes era unos 175 y 160", () => {
+    for (const c of celulares) {
+      expect(c.alLado).toBeGreaterThan(150);
+      expect(c.alLado).toBeLessThan(180);
+      expect(c.medir("Maximiliano") * c.piso).toBeGreaterThan(c.alLado);
+      expect(c.medir("Hermenegildo") * c.piso).toBeGreaterThan(c.alLado);
+    }
+  });
+
+  it("ninguna palabra queda partida: la cara se va arriba y el nombre entra entero, a la letra de la regla o más", () => {
+    for (const c of celulares) {
+      for (const nombre of LARGOS) {
+        const r = acomodarGanador(nombre, c.alLado, c.arriba, c.medir, c.piso, true);
+        expect(r.caraArriba, `${nombre} a ${c.sw}`).toBe(true);
+        expect(r.ajuste.partida, `${nombre} a ${c.sw}`).toBe(false);
+        expect(r.ajuste.escala).toBeGreaterThanOrEqual(c.piso - 1e-9);
+        // Cada renglón son palabras enteras del nombre y entra en la caja a la escala con que se dibuja.
+        const ws = palabras(nombre);
+        for (const l of r.ajuste.lineas) {
+          for (const w of palabras(l)) expect(ws).toContain(w);
+          expect(c.medir(l) * r.ajuste.escala).toBeLessThanOrEqual(c.arriba + 1e-6);
+        }
+        expect(r.ajuste.lineas.join(" ")).toBe(nombre);
+      }
+    }
+  });
+
+  it("los nombres de antes se escriben enteros, sin partir ninguna palabra", () => {
+    for (const c of celulares) {
+      for (const nombre of DE_ANTES) {
+        const r = acomodarGanador(nombre, c.alLado, c.arriba, c.medir, c.piso, true);
+        expect(r.ajuste.partida).toBe(false);
+        for (const l of r.ajuste.lineas) expect(c.medir(l) * r.ajuste.escala).toBeLessThanOrEqual((r.caraArriba ? c.arriba : c.alLado) + 1e-6);
+        expect(r.ajuste.lineas.join(" ")).toBe(nombre);
+      }
+    }
+  });
+
+  it("si la cara no puede ir arriba, una palabra que no entra se parte al piso, por sílaba y con guion", () => {
+    for (const c of celulares) {
+      for (const nombre of LARGOS) {
+        const r = acomodarGanador(nombre, c.alLado, c.arriba, c.medir, c.piso, false);
+        expect(r.caraArriba).toBe(false);
+        // Una palabra de diez letras puede entrar justa al piso; las de once y doce no entran en ningún celular.
+        if (/Maximiliano|Hermenegildo/u.test(nombre)) expect(r.ajuste.partida).toBe(true);
+        if (!r.ajuste.partida) {
+          for (const l of r.ajuste.lineas) for (const w of palabras(l)) expect(palabras(nombre)).toContain(w);
+          continue;
+        }
+        expect(r.ajuste.escala).toBe(c.piso);
+        for (const l of r.ajuste.lineas) expect(c.medir(l) * r.ajuste.escala).toBeLessThanOrEqual(c.alLado + 1e-6);
+        // Todo renglón que sigue en la misma palabra termina en guion y corta entre sílabas.
+        const ws = palabras(nombre);
+        r.ajuste.lineas.forEach((l, i) => {
+          if (!l.endsWith("-")) return;
+          const cabeza = (palabras(l).pop() as string).slice(0, -1);
+          const resto = (palabras(r.ajuste.lineas[i + 1] as string)[0] as string);
+          const palabra = ws.find((w) => w.endsWith(cabeza + resto) || w === cabeza + resto || w.includes(cabeza + resto)) as string;
+          expect(palabra, `${l}${resto}`).toBeDefined();
+          const desde = palabra.indexOf(cabeza + resto.slice(0, 1));
+          let acum = 0;
+          const bordes = new Set(silabas(palabra).map((x) => (acum += x.length)));
+          expect(bordes.has(desde + cabeza.length), `${l} / ${resto}`).toBe(true);
+        });
+        expect(sinGuiones(r.ajuste.lineas)).toBe(nombre.replace(/\s+/gu, ""));
+      }
+    }
+  });
+
+  it("«Maximiliano Paz» en la caja de 160 se parte «Maximi- / liano Paz», no «Maximilia / no Paz»", () => {
+    const a = ajustarEnRenglones("Maximiliano Paz", 160, medirReal(50), 0.593);
+    expect(a.partida).toBe(true);
+    expect(a.escala).toBe(0.593);
+    expect(a.lineas[0]).toMatch(/^Maxi.*-$/u);
+    expect(a.lineas.some((l) => /^(no|o)\b/u.test(l))).toBe(false);
+    expect(sinGuiones(a.lineas)).toBe("MaximilianoPaz");
+  });
+
+  it("con un ancho tan chico que ni una sílaba con guion entra, cae a letras enteras sin perder ninguna", () => {
+    const a = ajustarEnRenglones("Maximiliano", 10, medirReal(50), 0.6);
+    expect(sinGuiones(a.lineas)).toBe("Maximiliano");
   });
 });

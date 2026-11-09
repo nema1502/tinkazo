@@ -75,10 +75,10 @@ describe("enlace de evento", () => {
   });
 
   it("cada parte dice cuál es, y todos los enlaces van a evento.html", async () => {
-    const enlaces = await eventosUrls(titulo, doce(), (i, n) => ` · parte ${i} de ${n}`, "https://tinkazo.app");
+    const enlaces = await eventosUrls(titulo, doce(), (i, n) => `: parte ${i} de ${n}`, "https://tinkazo.app");
     expect(enlaces.length).toBeGreaterThan(1);
     const primera = await decodeEvento(enlaces[0]!.slice(enlaces[0]!.indexOf("#") + 1));
-    expect(primera.titulo).toBe(`${titulo} · parte 1 de ${enlaces.length}`);
+    expect(primera.titulo).toBe(`${titulo}: parte 1 de ${enlaces.length}`);
     expect(enlaces.every((u) => u.startsWith("https://tinkazo.app/evento.html#"))).toBe(true);
   });
 

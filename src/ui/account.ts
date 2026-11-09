@@ -352,11 +352,11 @@ function paint(s: Open): void {
     : money.balance === null
       ? ""
       : `<span class="acct-badge">${esc(money.balance === "unknown" ? t("acctUnknown") : fmtBalance(money.balance))}</span>`;
-  // Por dónde entró, y el correo tapado: "Entraste con Google · n•••@gmail.com". La cuenta de prueba y Freighter ya se
+  // Por dónde entró, y el correo tapado: "Entraste con Google, n•••@gmail.com". La cuenta de prueba y Freighter ya se
   // llaman así arriba: no se repite.
   const correo = ocultarCorreo(view.mail);
   const porDonde = t(CLAVES_DE_VIA[viaDe(view.label)].larga);
-  const linea = correo ? `${porDonde} · ${correo}` : porDonde;
+  const linea = correo ? `${porDonde}, ${correo}` : porDonde;
   const via = linea === title ? "" : `<p class="acct-via" title="${esc(linea)}">${esc(linea)}</p>`;
   // `?grifo=0`: que el panel también lo diga, además de la insignia de la cabecera.
   const sinGrifo = grifoApagado
@@ -367,7 +367,7 @@ function paint(s: Open): void {
   const es = getLang() === "es";
   const muted = isMuted();
   const pace = (Object.keys(PACES) as Pace[])
-    .map((p) => `<option value="${p}"${p === currentPace() ? " selected" : ""}>${esc(paceName(p))} · ${paceSeconds(p)} s</option>`)
+    .map((p) => `<option value="${p}"${p === currentPace() ? " selected" : ""}>${esc(paceName(p))}, ${paceSeconds(p)} s</option>`)
     .join("");
 
   card.innerHTML =

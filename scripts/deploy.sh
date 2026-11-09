@@ -101,15 +101,16 @@ p = "docs/deployments.md"
 lines = io.open(p, encoding="utf-8").read().split("\n")
 out, done = [], False
 for l in lines:
-    if not done and l.startswith("| — | " + net + " |"):
+    # La fila "pendiente" de la tabla empieza con "· " (antes con "—"): se acepta cualquiera de las dos.
+    if not done and (l.startswith("| — | " + net + " |") or l.startswith("| · | " + net + " |")):
         out.append(row); done = True
     else:
         out.append(l)
 if not done:
     # insertar tras la última fila de la primera tabla
-    idx = next(i for i, l in enumerate(out) if l.startswith("## Costos"))
-    j = idx
-    while j > 0 and not out[j - 1].startswith("|"): j -= 1
+    first = next(i for i, l in enumerate(out) if l.startswith("| Fecha |"))
+    j = first
+    while j < len(out) and out[j].startswith("|"): j += 1
     out.insert(j, row)
 io.open(p, "w", encoding="utf-8", newline="\n").write("\n".join(out))
 EOF
