@@ -998,6 +998,8 @@ export const T: Record<Lang, Dict> = {
     prPayCripto: "También pensamos aceptar cripto (USDC o XLM) desde una wallet, desde cualquier lugar.",
     nextBody: "Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. Hoy el costo de la red lo paga Tinkazo y el sitio funciona en modo prueba: guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.",
     footL: "Tinkazo", footR: "Hecho con ♥ en Bolivia",
+    builtOn: "Hecho con",
+    stellarNotice: "Tinkazo es software independiente: no está afiliado a la Stellar Development Foundation ni avalado por ella. Stellar es una marca registrada de la Stellar Development Foundation.",
     // `seed` es la barra de arriba del sorteo: "NÚMERO PÚBLICO N.º 32254977".
     // Decía "· RONDA", que es la palabra de drand, y en el sorteo no va nada
     // técnico. "N.º" y no "#": "Sorteo #N" ya es el número del sorteo en Mis
@@ -3312,6 +3314,8 @@ export const T: Record<Lang, Dict> = {
     prPayCripto: "We also plan to accept crypto (USDC or XLM) from a wallet, from anywhere.",
     nextBody: "When you close the list, it is sealed before the number that decides exists, and any later change shows. Today Tinkazo pays the network cost and the site runs in test mode: keep the receipts of your draws, because they let anyone check them again even after the record resets on December 16, 2026.",
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
+    builtOn: "Built on",
+    stellarNotice: "Tinkazo is independent software: it is not affiliated with or endorsed by the Stellar Development Foundation. Stellar is a registered trademark of the Stellar Development Foundation.",
     src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the draw number ↗", proofOk: "proof verified",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",

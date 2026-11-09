@@ -1140,6 +1140,11 @@
   }
   .pies a:hover { color: var(--ink); text-decoration: underline; }
   @media (max-width: 700px) { footer .bar { justify-content: center; text-align: center; } }
+  /* El aviso de marca de la portada: una línea chica, en su propia fila debajo de los enlaces del pie, con la letra de la página y no la del pie. */
+  footer .bar .trademark-note {
+    flex: 1 1 100%; max-width: 760px; margin: 0 auto; text-align: center; text-transform: none; letter-spacing: normal;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 14px; font-weight: 500; line-height: 1.45; color: var(--muted);
+  }
 
   /* ------------------------------------------------ la ventana de importar
      Un export de Luma trae a todos los inscritos: acá se ve el archivo entero,
@@ -1332,6 +1337,21 @@
   /* Los dos enlaces de la portada ("Otras formas de entrar" y "¿Cómo sé que es justo?") quedaban a 80 px uno del otro,
      con un hueco donde antes había una nota: se juntan sin achicar el blanco de toque de ninguno. */
   .hero-portada .hero-note { margin-top: -28px; }
+  /* "Hecho con" y el logo oficial de Stellar: una firma, nunca un titular. Va al final del bloque de texto, debajo de los botones, así que
+     no mueve el botón principal en ninguna pantalla. El enlace mide 44 px de alto para tocarlo cómodo en el celular; el logo, 20 px y el ancho sale solo de su proporción: sin recortar,
+     sin estirar y sin filtros (el negro es para el tema claro y el blanco para el oscuro, dos archivos oficiales). */
+  .built-on { margin: 0; }
+  .built-on-link { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 0; color: var(--ink2); text-decoration: none; font-size: 14px; font-weight: 700; }
+  .built-on-link:hover .built-on-text { color: var(--ink); text-decoration: underline; }
+  .built-on-logo { display: block; flex: none; height: 20px; width: auto; max-width: none; }
+  /* Un logo por tema: se ve el del tema efectivo del sitio (el del sistema o el que se elige con data-theme), no solo el del sistema. */
+  .built-on-logo-dark { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .built-on-logo-dark { display: block; }
+    :root:not([data-theme="light"]) .built-on-logo-light { display: none; }
+  }
+  :root[data-theme="dark"] .built-on-logo-dark { display: block; }
+  :root[data-theme="dark"] .built-on-logo-light { display: none; }
 
   /* Las secciones de la portada. */
   .portada-sec { margin: 0 0 56px; scroll-margin-top: 28px; }

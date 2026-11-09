@@ -325,6 +325,42 @@ La sección `/marca.html#qr` ofrece códigos QR listos para poner en un afiche, 
 
 **Cómo se hace.** Los códigos solos y el ZIP los genera `scripts/marca/qr-clave.mjs` (con `qrcode-generator`, nivel Q) desde el mismo `generar-marca.mjs`; `node scripts/generar-marca.mjs --solo qr` los regenera sin tocar nada más (en particular, sin rehacer los stickers de la colección). Es reproducible: dos corridas dejan los mismos bytes. La etiqueta y las tarjetas se dibujan aparte, en HTML con la letra y la llama de la marca, y se capturan con Chrome; el repositorio guarda los PNG finales y el ZIP los lee tal cual. Las pruebas (`src/marca-qr.test.ts`) leen cada PNG con jsQR, a tamaño completo y a 400 px de ancho y sin probar la imagen invertida, y comparan el destino exacto con una lista escrita a mano.
 
+## Marcas de otros
+
+Tinkazo corre sobre la red Stellar, y la portada lo dice con una firma chica: «Hecho con» y el logo de Stellar (en inglés, «Built on»). El logo es una marca de otros, no de Tinkazo: se usa como lo pide su dueño y no se confunde con el kit de marca de este documento.
+
+### De dónde sale el logo
+
+Son los logos oficiales de Stellar, en sus dos versiones: negro, para el tema claro, y blanco, para el oscuro. Lo único que se les hizo fue achicarlos al mismo tamaño (511 × 128 px) y guardarlos como WebP, para que pesen poco (cada uno, menos de 20 KB). No se les cambió el color, ni las proporciones, ni se recortaron.
+
+| Archivo | Tema | Dónde |
+|---|---|---|
+| `stellar-logo-negro-511x128.webp` | claro | `public/terceros/stellar/` |
+| `stellar-logo-blanco-511x128.webp` | oscuro | `public/terceros/stellar/` |
+
+Viven en `public/terceros/`, aparte de `public/marca/`: esa carpeta es el kit de Tinkazo y hay pruebas que cuentan sus archivos. Si Stellar cambia su logo, se vuelve a bajar el oficial y se reemplazan los dos archivos con el mismo nombre y el mismo tamaño.
+
+### Reglas de uso
+
+- **Sin alterar.** Ni color, ni proporciones, ni recorte, ni filtros de CSS para cambiarle el color. Cada tema usa su archivo: negro sobre el papel claro y blanco sobre el oscuro. El alto se fija en 20 px y el ancho sale de la proporción del archivo.
+- **Chico.** Es una firma, no un titular: entre 18 y 22 px de alto, con aire alrededor, y nunca el elemento más grande ni más llamativo del bloque. Va debajo de los botones de la portada, para no empujar el botón principal fuera de la primera pantalla, ni en un celular de 360 × 640 ni en uno de 320 de ancho.
+- **Sin sugerir aval.** No se escribe nada que haga pensar que la Stellar Development Foundation avala, patrocina o es socia de Tinkazo («socio», «aliado oficial», «certificado por Stellar»). Se dice solo «Hecho con» y el logo, y el logo lleva el texto alternativo «Stellar».
+- **El aviso en el pie.** Mientras el logo esté en una página, el pie de esa página lleva el aviso, en los dos idiomas:
+  - es: «Tinkazo es software independiente: no está afiliado a la Stellar Development Foundation ni avalado por ella. Stellar es una marca registrada de la Stellar Development Foundation.»
+  - en: «Tinkazo is independent software: it is not affiliated with or endorsed by the Stellar Development Foundation. Stellar is a registered trademark of the Stellar Development Foundation.»
+- **El enlace.** Toda la línea lleva a https://stellar.org y abre en otra pestaña, con `rel="noopener"`.
+
+### Dónde se usa
+
+Solo en la portada (`index.html`):
+
+- La línea «Hecho con» y el logo, al final del bloque de texto de arriba (`.hero-copy`), debajo de los botones. Las clases son `built-on`, `built-on-link`, `built-on-text` y `built-on-logo`, con `built-on-logo-light` (el negro) y `built-on-logo-dark` (el blanco). Los estilos están en `src/styles.css`, junto a `.hero-note`.
+- El aviso de marca, en el pie de la página, con la clase `trademark-note`.
+- Los textos son las claves `builtOn` y `stellarNotice` de `src/i18n.ts`.
+- `src/hecho-con-stellar.test.ts` vigila la línea, el enlace, las dos imágenes, las claves, el aviso y el peso de los archivos.
+
+Si el logo pasa a otra página, hay que cumplir las mismas reglas (incluido el aviso en su pie) y sumar la página a esta lista.
+
 ## Los enlaces
 
 | Qué | Dónde |
