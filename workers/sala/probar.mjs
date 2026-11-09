@@ -138,9 +138,11 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
 // 6b. Los equipos: el registro con cuenta de equipos.html. El tope por minuto de los nombres ya se gastó: se espera a que pase.
 {
   await sleep(61_000 - (Date.now() % 60_000));
-  const A = `G${"A".repeat(55)}`;
-  const B = `G${"B".repeat(55)}`;
-  const EVENTO = `G${"C".repeat(55)}`;
+  const A = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
+  const B = "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U";
+  const EVENTO = "GDWUSKGGFDI4FRXK5EBTRECZSVQSSWJHHJOGH6JWG3AUMFFMQ435DIAG";
+  // Una dirección de la forma correcta pero con la última letra cambiada: el control no cuadra.
+  const MAL_ESCRITA = `${A.slice(0, 55)}${A[55] === "A" ? "B" : "A"}`;
   const config = { modo: "sorteo", evento: "space-apps-scz-2026", cuenta: EVENTO };
   const json = { "Content-Type": "application/json" };
   const putConfig = (tok, cuerpo) => fetch(`${base}/v1/sala/${id}/config`, { method: "PUT", headers: { ...json, ...(tok ? auth(tok) : SITIO) }, body: JSON.stringify(cuerpo) });
@@ -148,7 +150,7 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
   const equiposCifrados = async (nombre, integrantes) => cifrar(clave, JSON.stringify({ n: nombre, i: integrantes }));
 
   check("sin token no se arma el registro (403)", (await putConfig(null, config)).status === 403);
-  check("una configuración mala da 400 (un modo que no existe, una cuenta que no es)", (await putConfig(token, { ...config, modo: "sena" })).status === 400 && (await putConfig(token, { ...config, cuenta: "GMALA" })).status === 400);
+  check("una configuración mala da 400 (un modo que no existe, una cuenta que no es)", (await putConfig(token, { ...config, modo: "sena" })).status === 400 && (await putConfig(token, { ...config, cuenta: "GMALA" })).status === 400 && (await putConfig(token, { ...config, cuenta: MAL_ESCRITA })).status === 400);
   const antes = await (await fetch(`${base}/v1/sala/${id}/publico`, { headers: SITIO })).json();
   check("antes de armarlo, la sala dice que no hay registro", antes.config === null && antes.equipos === 0, JSON.stringify(antes));
   check("anotar un equipo sin registro armado da 409", (await altaEquipo(A, await equiposCifrados("Cóndores", ["Ana", "Beto"]))).status === 409);
@@ -158,6 +160,7 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
 
   check("anotar sin el origen del sitio da 403", (await altaEquipo(A, await equiposCifrados("X", ["a", "b"]), {})).status === 403);
   check("anotar con una cuenta que no es da 400", (await altaEquipo("GMALA", await equiposCifrados("X", ["a", "b"]))).status === 400);
+  check("anotar con una cuenta mal copiada (el control no cuadra) da 400", (await altaEquipo(MAL_ESCRITA, await equiposCifrados("X", ["a", "b"]))).status === 400);
   check("anotar con datos que no son un equipo cifrado da 400", (await altaEquipo(A, "hola mundo!")).status === 400);
 
   const lleg = p3.msgs.length;
@@ -179,7 +182,7 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
 
   const unoA = await (await fetch(`${base}/v1/sala/${id}/equipos/${A}`, { headers: SITIO })).json();
   check("el celular del equipo pregunta en qué punto está, sin token", unoA.n === altaJson.n && unoA.estado === "solicitud", JSON.stringify(unoA));
-  check("una cuenta que no se anotó da 404", (await fetch(`${base}/v1/sala/${id}/equipos/G${"D".repeat(55)}`, { headers: SITIO })).status === 404);
+  check("una cuenta que no se anotó da 404", (await fetch(`${base}/v1/sala/${id}/equipos/GDFJHLAXAUMHA4OWPOB4P7YO72AQR2HMIUYFOXLXE2DZGM633K7HZDQP`, { headers: SITIO })).status === 404);
 
   const putEstado = (tok, n, estado) => fetch(`${base}/v1/sala/${id}/equipos/${n}`, { method: "PUT", headers: { ...json, ...(tok ? auth(tok) : SITIO) }, body: JSON.stringify({ estado }) });
   check("sin token no se cambia el estado (403)", (await putEstado(null, altaJson.n, "aceptado")).status === 403);

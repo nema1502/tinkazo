@@ -185,6 +185,11 @@ describe("tu cuenta", () => {
     escribir(m, "eqp-g", "GMALA");
     q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
     expect(mensaje(m)).toBe(t("eqpErrCuenta"));
+    // Con la forma de una cuenta pero la última letra cambiada: se dice que está mal copiada.
+    escribir(m, "eqp-g", `${g.slice(0, 55)}${g[55] === "A" ? "B" : "A"}`);
+    q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
+    expect(mensaje(m)).toBe(t("eqpErrCuentaCopiada"));
+    expect(vista(m)).toBe("eqp-cuenta");
     escribir(m, "eqp-g", ` ${g} `);
     q<HTMLFormElement>(m, "eqp-form-cuenta").requestSubmit();
     await vi.waitFor(() => expect(vista(m)).toBe("eqp-datos"));

@@ -140,8 +140,42 @@ export function diaUtc(ms: number): string {
  * del QR, como los nombres de la sala: este servicio no puede leerlos.
  */
 
-/** Una cuenta de Stellar: la letra G y 55 caracteres en base 32. No se comprueba su suma de control: eso lo hace quien la usa. */
-export const ES_CUENTA = /^G[A-Z2-7]{55}$/;
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+
+/** El control de una dirección de Stellar (CRC16 XMODEM) sobre sus primeros 33 bytes. */
+function crc16(bytes: readonly number[]): number {
+  let crc = 0;
+  for (const b of bytes) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+/**
+ * Una cuenta de Stellar de verdad: la letra G, 55 caracteres en base 32 y el final de control que cuadra. Una dirección
+ * con una letra cambiada no pasa: dejarla entrar haría fallar el cupón de todo el evento. Sin el SDK: el Worker no lo carga.
+ */
+export function esCuentaValida(x: unknown): x is string {
+  if (typeof x !== "string" || !/^G[A-Z2-7]{55}$/.test(x)) return false;
+  const bytes: number[] = [];
+  let acc = 0;
+  let bits = 0;
+  for (const c of x) {
+    acc = (acc << 5) | BASE32.indexOf(c);
+    bits += 5;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((acc >> bits) & 0xff);
+    }
+  }
+  // 35 bytes: la versión de una cuenta (6 << 3), la llave de 32 y el control de 2 (el menos pesado primero).
+  if (bytes.length !== 35 || bytes[0] !== 6 << 3) return false;
+  return crc16(bytes.slice(0, 33)) === (bytes[34] as number) * 256 + (bytes[33] as number);
+}
+
+/** Se usa como una expresión regular (`ES_CUENTA.test(x)`), pero comprueba también el control de la dirección. */
+export const ES_CUENTA: { test: (x: unknown) => boolean } = { test: esCuentaValida };
 /** Equipos por sala. Los cupones se mandan de a 100 por transacción; con 200 caben en dos. */
 export const MAX_EQUIPOS = 200;
 /** Lo que mide, como mucho, un equipo cifrado: el nombre del equipo y hasta cinco integrantes. */
@@ -199,6 +233,6 @@ export function validarConfigEquipos(x: unknown): ConfigEquipos | null {
   const evento = o.evento;
   if (typeof evento !== "string" || evento.length < 3 || evento.length > MAX_EVENTO || !ES_EVENTO.test(evento)) return null;
   const cuenta = o.cuenta;
-  if (typeof cuenta !== "string" || !ES_CUENTA.test(cuenta)) return null;
+  if (!esCuentaValida(cuenta)) return null;
   return { modo, evento, cuenta };
 }

@@ -5,7 +5,7 @@ import { enlaceDeRegistro } from "../equipos/enlace";
 import { LAB_FIRMAR, type Aprobacion, aprobarYEnviar } from "../equipos/envio";
 import { type Evidencia, accionSugerida, contarPorEstado, estadoEfectivo, listaDesdeCupones, paraDarCupon } from "../equipos/estado";
 import { type OpcionesDeHorizon, type Pago, cuentasActivas, cuponesEnviados, leerCuenta, pagosDeLaCuenta } from "../equipos/horizon";
-import { type ConfigEquipos, type DatosDeEquipo, type Equipo, EVENTO_POR_DEFECTO, cuentaCorta, esCuenta, esEstado, eventoValido, rango } from "../equipos/modelo";
+import { type ConfigEquipos, type DatosDeEquipo, type Equipo, ES_CUENTA, EVENTO_POR_DEFECTO, cuentaCorta, esCuenta, esEstado, eventoValido, rango } from "../equipos/modelo";
 import { horaValida, instanteDelSorteo } from "../equipos/pantalla-stand";
 import { type LecturaDeSorteos, cuentasQueYaSortearon } from "../equipos/sorteos";
 import { type PedidoDeCupones, type TransaccionDeCupones, armarCupones, tandas } from "../equipos/transacciones";
@@ -310,6 +310,14 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     pintar();
   }
 
+  /** Los equipos que quedaron afuera por la cuenta, para decirlos por nombre: los tres primeros y cuántos más. */
+  function nombresDe(equipos: readonly Equipo[]): string {
+    const nombres = equipos.map((e) => e.nombre);
+    return nombres.length <= 3 ? nombres.join(", ") : `${nombres.slice(0, 3).join(", ")} ${fmt("eqYMas", { n: nombres.length - 3 })}`;
+  }
+
+  const notaDeCuentasMalas = (malas: readonly Equipo[]): string => (malas.length ? fmt("eqCuentasMalas", { quienes: nombresDe(malas) }) : "");
+
   async function activasDe(cuentas: string[]): Promise<void> {
     if (cuentas.length === 0) return;
     const m = await deps.activas(cuentas);
@@ -408,7 +416,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     const cuenta = q<HTMLInputElement>("eq-cuenta").value.trim();
     const elegido = raiz.querySelector<HTMLInputElement>('input[name="eq-modo"]:checked')?.value;
     if (!eventoValido(evento)) return aviso(tx("eqErrEvento"));
-    if (!esCuenta(cuenta)) return aviso(tx("eqErrCuenta"));
+    if (!esCuenta(cuenta)) return aviso(tx(ES_CUENTA.test(cuenta) ? "eqErrCuentaCopiada" : "eqErrCuenta"));
     const nuevo: ConfigEquipos = { modo: elegido === "cupon" ? "cupon" : "sorteo", evento, cuenta };
     q<HTMLButtonElement>("eq-abrir").disabled = true;
     aviso(tx("eqAbriendo"));
@@ -543,6 +551,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     cancelada: "eqErrCancelada",
   };
 
+  /** Si el error es de conexión (el navegador no llegó a la red); cualquier otro es un fallo nuestro y no se dice «sin conexión». */
+  function esErrorDeRed(e: unknown): boolean {
+    if (e instanceof DOMException) return e.name === "AbortError" || e.name === "TimeoutError" || e.name === "NetworkError";
+    return e instanceof TypeError && /fetch|network|load failed|conexi/i.test(e.message);
+  }
+
   async function darCupones(): Promise<void> {
     const s = sala;
     const c = config;
@@ -556,10 +570,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       // Con lo último que dice la red: quién ya tiene el cupón, quién ya sorteó, qué cuentas existen.
       await revisar(true);
       if (sala !== s) return;
-      const { listos, inactivos } = paraDarCupon(c.modo, lista(), evidencias);
+      const { listos, inactivos, malas } = paraDarCupon(c.modo, lista(), evidencias);
+      // Una cuenta mal escrita nunca entra a la tanda: haría fallar el cupón de todos. Se deja afuera y se dice cuál es.
+      const notaMalas = notaDeCuentasMalas(malas);
       if (listos.length === 0) {
         progreso = "";
-        return aviso(inactivos.length ? fmt("eqNoActivas", { n: inactivos.length }) : tx("eqSinQuienDar"));
+        return aviso(notaMalas || (inactivos.length ? fmt("eqNoActivas", { n: inactivos.length }) : tx("eqSinQuienDar")));
       }
       const tanda = tandas(listos)[0] ?? [];
       const cuenta = await deps.leerCuenta(c.cuenta);
@@ -592,10 +608,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
         if (tanda.every((e) => evidencias.get(e.cuenta)?.cupon)) break;
       }
       const quedan = listos.length - tanda.length;
-      progreso = quedan > 0 ? fmt("eqCuponesTanda", { n: tanda.length, m: quedan }) : fmt("eqCuponesListos", { n: tanda.length });
+      const resultado = quedan > 0 ? fmt("eqCuponesTanda", { n: tanda.length, m: quedan }) : fmt("eqCuponesListos", { n: tanda.length });
+      progreso = notaMalas ? `${resultado} ${notaMalas}` : resultado;
     } catch (e) {
       progreso = "";
-      mensaje = tx(e instanceof Error && e.message.startsWith("cupones:") ? "eqErrRechazada" : "eqErrRed");
+      mensaje = tx(e instanceof Error && e.message.startsWith("cupones:") ? "eqErrRechazada" : esErrorDeRed(e) ? "eqErrRed" : "eqErrInesperado");
     } finally {
       ocupado = "";
       pintar();
@@ -661,6 +678,13 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       w.textContent = `${tx("eqInactiva")}. ${tx("eqInactivaAyuda")}`;
       li.append(w);
     }
+    if (!esCuenta(e.cuenta) && ef !== "cupon") {
+      const w = document.createElement("p");
+      w.className = "eq-aviso";
+      w.dataset.cuentaMala = "1";
+      w.textContent = tx("eqCuentaMala");
+      li.append(w);
+    }
     const botones = document.createElement("div");
     botones.className = "row eq-botones";
     const boton = (clave: string, alClick: () => void): void => {
@@ -689,10 +713,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     error.textContent = texto;
     error.hidden = !texto;
     const prog = q("eq-progreso");
-    const sinActivar = abierta && config ? paraDarCupon(config.modo, lista(), evidencias).inactivos.length : 0;
+    const aparte = abierta && config ? paraDarCupon(config.modo, lista(), evidencias) : null;
+    const sinActivar = aparte?.inactivos.length ?? 0;
     const nota =
       progreso ||
       (ocupado === "revisando" && abierta ? tx(modo() === "sorteo" ? "eqLeyendoSorteos" : "eqRevisando") : "") ||
+      (aparte ? notaDeCuentasMalas(aparte.malas) : "") ||
       (sinActivar ? fmt("eqNoActivas", { n: sinActivar }) : "") ||
       (abierta && avisos.truncado ? tx("eqSorteosTruncado") : "");
     prog.textContent = nota;

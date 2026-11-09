@@ -4,7 +4,7 @@ import type { NetworkName } from "../stellar/config";
 import { guardarEquipoLocal, leerEquipoLocal, prepararPrimerSorteo, sorteoPropioLocal } from "./celular";
 import { cifrarEquipo } from "./datos";
 import type { SalaDeRegistro } from "./enlace";
-import { type ConfigEquipos, type DatosDeEquipo, type EstadoEquipo, MAX_INTEGRANTES, cuentaCorta, esCuenta, limpiarEquipo } from "./modelo";
+import { type ConfigEquipos, type DatosDeEquipo, type EstadoEquipo, ES_CUENTA, MAX_INTEGRANTES, cuentaCorta, esCuenta, limpiarEquipo } from "./modelo";
 
 /**
  * La página de registro del celular (`equipos.html`): el encargado de un equipo lo anota con su cuenta.
@@ -250,7 +250,7 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
   q("eqp-form-cuenta").addEventListener("submit", (e) => {
     e.preventDefault();
     const c = q<HTMLInputElement>("eqp-g").value.trim();
-    if (!esCuenta(c)) return mensaje("eqpErrCuenta");
+    if (!esCuenta(c)) return mensaje(ES_CUENTA.test(c) ? "eqpErrCuentaCopiada" : "eqpErrCuenta");
     void conCuenta(c);
   });
   q("eqp-form").addEventListener("submit", (e) => {

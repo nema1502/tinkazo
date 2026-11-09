@@ -24,7 +24,8 @@ const hayPollar = !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
 const hayGoogle = hayPollar && !enNavegadorDeApp(navigator.userAgent);
 
 // El SDK de Pollar baja con la página quieta: abrir la ventana de Google tiene que salir del toque, sin esperas.
-if (hayGoogle) void import("./stellar/wallet-pollar").then((m) => m.precargarSdk());
+// Con el registro de equipos apagado (VITE_EQUIPOS) la página no deja entrar a nadie: no hay para qué bajarlo.
+if (hayGoogle && equiposActivo()) void import("./stellar/wallet-pollar").then((m) => m.precargarSdk());
 
 const raiz = document.querySelector<HTMLElement>(".eqp");
 if (raiz) {

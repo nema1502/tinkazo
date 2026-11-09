@@ -832,8 +832,13 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
   const L = T[getLang()];
   const nota = $("again-note");
+  // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
-    modo === "sinGanadores" ? L.againQuitados(salieron, quedan.length) : modo === "ausente" ? L.ausenteNota(ausente, quedan.length, salieron.length > 1) : "";
+    modo === "sinGanadores"
+      ? L.againQuitados(salieron.map(etiquetaDe), quedan.length)
+      : modo === "ausente"
+        ? L.ausenteNota(etiquetaDe(ausente), quedan.length, salieron.length > 1)
+        : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
   const btn = $<HTMLButtonElement>("btn-draw");

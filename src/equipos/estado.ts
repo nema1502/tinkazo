@@ -1,4 +1,4 @@
-import { type Equipo, type EstadoEquipo, type ModoEquipos, rango } from "./modelo";
+import { type Equipo, type EstadoEquipo, type ModoEquipos, esCuenta, rango } from "./modelo";
 
 /**
  * Qué se sabe de un equipo y qué le toca, sin red ni DOM.
@@ -41,16 +41,22 @@ export function leToca(modo: ModoEquipos, e: Equipo, ev: Evidencia | undefined):
   return modo === "cupon" || estado === "sorteo";
 }
 
-/** Los equipos a los que hay que mandarles el cupón: los que les toca, y cuya cuenta ya existe en la red. */
-export function paraDarCupon(modo: ModoEquipos, equipos: readonly Equipo[], evidencias: Evidencias): { listos: Equipo[]; inactivos: Equipo[] } {
+/**
+ * Los equipos a los que hay que mandarles el cupón: los que les toca, y cuya cuenta ya existe en la red.
+ * Aparte quedan los inactivos (su cuenta todavía no existe) y los de cuenta mal escrita: una sola cuenta mala
+ * haría fallar la transacción de todos, así que nunca entra a la tanda.
+ */
+export function paraDarCupon(modo: ModoEquipos, equipos: readonly Equipo[], evidencias: Evidencias): { listos: Equipo[]; inactivos: Equipo[]; malas: Equipo[] } {
   const listos: Equipo[] = [];
   const inactivos: Equipo[] = [];
+  const malas: Equipo[] = [];
   for (const e of equipos) {
     if (!leToca(modo, e, evidencias.get(e.cuenta))) continue;
-    if (e.activa === false) inactivos.push(e);
+    if (!esCuenta(e.cuenta)) malas.push(e);
+    else if (e.activa === false) inactivos.push(e);
     else listos.push(e);
   }
-  return { listos, inactivos };
+  return { listos, inactivos, malas };
 }
 
 /** Los equipos con cupón, en el orden en que lo recibieron. */

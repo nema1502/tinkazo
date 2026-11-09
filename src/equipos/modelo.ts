@@ -1,4 +1,5 @@
 import { stripInvisibles } from "../invisibles";
+import { esDireccionG } from "../stellar/pagos";
 
 /**
  * Los equipos de un evento con cupón (Space Apps y parecidos).
@@ -85,10 +86,14 @@ export interface Equipo extends DatosDeEquipo {
   activa: boolean | null;
 }
 
-/** Una cuenta de Stellar: la letra G y 55 caracteres en base 32. */
+/** Una cuenta de Stellar: la letra G y 55 caracteres en base 32. Solo la forma: no dice si está bien copiada. */
 export const ES_CUENTA = /^G[A-Z2-7]{55}$/;
 
-export const esCuenta = (x: unknown): x is string => typeof x === "string" && ES_CUENTA.test(x);
+/**
+ * Una cuenta de Stellar de verdad: tiene la forma y su final de control cuadra, así que una letra cambiada no pasa.
+ * Es una función pura y chica (no baja el SDK), por eso se puede preguntar desde la portada.
+ */
+export const esCuenta = (x: unknown): x is string => esDireccionG(x);
 
 /** Los bytes de un texto en UTF-8. */
 export const bytesDe = (s: string): number => new TextEncoder().encode(s).length;

@@ -1,6 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { equipoCifradoValido, validarConfigEquipos } from "../../workers/sala/src/logica";
+import { ES_CUENTA as ES_CUENTA_DE_LA_SALA, equipoCifradoValido, esCuentaValida, validarConfigEquipos } from "../../workers/sala/src/logica";
 import { generarClave } from "../sala/cifra";
 import { type Dependencias, escucharSala, type Sala } from "../sala/cliente";
 import { anotarEquipoEnSala, leerEstadoDeEquipo } from "../sala/equipos";
@@ -11,13 +11,16 @@ import { aprobarYEnviar } from "./envio";
 import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, paraMostrar, ponerEtiquetas } from "./etiquetas";
 import { accionSugerida, conCupon, contarPorEstado, estadoEfectivo, etiquetasDeEquipos, leToca, listaDesdeCupones, paraDarCupon } from "./estado";
 import { comoPago, cuentasActivas, cuponesEnviados, enviarTransaccion, leerCuenta, type Pago, pagosDeLaCuenta } from "./horizon";
-import { CUPON_MONTO, EVENTO_POR_DEFECTO, type Equipo, MAX_NOTA_BYTES, TOPE_OPERACIONES, bytesDe, cuentaCorta, esCuenta, eventoValido, limpiarEquipo, memoCupon } from "./modelo";
+import { CUPON_MONTO, ES_CUENTA, EVENTO_POR_DEFECTO, type Equipo, MAX_NOTA_BYTES, TOPE_OPERACIONES, bytesDe, cuentaCorta, esCuenta, eventoValido, limpiarEquipo, memoCupon } from "./modelo";
 import { cuentasQueYaSortearon } from "./sorteos";
 import { ErrorDeCupones, armarCupones, leerCupones, tandas } from "./transacciones";
 
 const PASS = "Test SDF Network ; September 2015";
 const cuenta = (): string => Keypair.random().publicKey();
 const EVENTO = cuenta();
+/** La misma cuenta con la última letra cambiada: tiene la forma, pero el final de control ya no cuadra. */
+const malEscrita = (g: string): string => `${g.slice(0, 55)}${g[55] === "A" ? "B" : "A"}`;
+
 
 const equipo = (o: Partial<Equipo> & { n: number }): Equipo => ({
   nombre: `Equipo ${o.n}`,
@@ -48,6 +51,11 @@ describe("las notas y las cuentas", () => {
     expect(esCuenta(`${g}x`)).toBe(false);
     expect(esCuenta("Ana")).toBe(false);
     expect(cuentaCorta(g)).toBe(`${g.slice(0, 4)}…${g.slice(-4)}`);
+  });
+  it("una cuenta con la última letra cambiada no es una cuenta, aunque tenga la forma", () => {
+    const g = cuenta();
+    expect(ES_CUENTA.test(malEscrita(g))).toBe(true);
+    expect(esCuenta(malEscrita(g))).toBe(false);
   });
 });
 
@@ -108,6 +116,16 @@ describe("la configuración que acepta la sala", () => {
       expect(validarConfigEquipos(mal)).toBeNull();
     }
   });
+  it("la sala rechaza una cuenta con la última letra cambiada, igual que una de mala forma", () => {
+    const g = cuenta();
+    expect(esCuentaValida(g)).toBe(true);
+    expect(ES_CUENTA_DE_LA_SALA.test(g)).toBe(true);
+    expect(esCuentaValida(malEscrita(g))).toBe(false);
+    expect(ES_CUENTA_DE_LA_SALA.test(malEscrita(g))).toBe(false);
+    expect(esCuentaValida("GMALA")).toBe(false);
+    expect(esCuentaValida(undefined)).toBe(false);
+    expect(validarConfigEquipos({ ...ok, cuenta: malEscrita(EVENTO) })).toBeNull();
+  });
 });
 
 describe("la transacción de cupones", () => {
@@ -136,6 +154,13 @@ describe("la transacción de cupones", () => {
     await expect(armarCupones({ ...base, destinos: [] })).rejects.toBeInstanceOf(ErrorDeCupones);
     await expect(armarCupones({ ...base, destinos: [a, a] })).rejects.toMatchObject({ motivo: "repetidas" });
     await expect(armarCupones({ ...base, destinos: [a, "GMALA"] })).rejects.toMatchObject({ motivo: "cuenta" });
+  });
+  it("una cuenta con la última letra cambiada entre varias buenas no pasa: no llega al SDK", async () => {
+    const base = { origen: EVENTO, secuencia: "1", evento: EVENTO_POR_DEFECTO, passphrase: PASS };
+    const destinos = [cuenta(), malEscrita(cuenta()), cuenta()];
+    await expect(armarCupones({ ...base, destinos })).rejects.toMatchObject({ motivo: "cuenta" });
+    // Sin la mala, la misma tanda sí se arma.
+    await expect(armarCupones({ ...base, destinos: [destinos[0] as string, destinos[2] as string] })).resolves.toMatchObject({ destinos: [destinos[0], destinos[2]] });
   });
   it("parte la lista en tandas de a 100", () => {
     const xs = Array.from({ length: 230 }, (_, i) => i);
@@ -327,6 +352,13 @@ describe("a quién le toca el cupón", () => {
     const { listos, inactivos } = paraDarCupon("cupon", [e1, e2, equipo({ n: 6, guardado: "aceptado" }), e4, e5], ev);
     expect(listos.map((e) => e.n)).toEqual([2, 6]);
     expect(inactivos.map((e) => e.n)).toEqual([4]);
+  });
+  it("un equipo con la cuenta mal escrita se aparta de la tanda y queda a la vista, sin frenar a los demás", () => {
+    const mala = equipo({ n: 7, cuenta: malEscrita(cuenta()) });
+    const { listos, inactivos, malas } = paraDarCupon("cupon", [e1, mala, e2], new Map());
+    expect(listos.map((e) => e.n)).toEqual([1, 2]);
+    expect(inactivos).toEqual([]);
+    expect(malas.map((e) => e.n)).toEqual([7]);
   });
   it("con sorteo propio, solo a los aceptados que ya sortearon", () => {
     const ev = new Map([

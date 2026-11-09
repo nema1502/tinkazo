@@ -352,6 +352,66 @@ describe("con sorteo propio: el cupón solo va a quien ya sorteó", () => {
     expect(m.armadas).toEqual([[viva]]);
   });
 
+  it("una cuenta mal escrita se deja afuera, se dice cuál es y los demás reciben su cupón", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const buena1 = cuenta();
+    const buena2 = cuenta();
+    const g = cuenta();
+    // La última letra cambiada: tiene la forma de una cuenta, pero Stellar la rechazaría y tiraría abajo toda la tanda.
+    const mala = `${g.slice(0, 55)}${g[55] === "A" ? "B" : "A"}`;
+    await equipoLlega(m, 1, buena1, "Los Cóndores", "aceptado");
+    await equipoLlega(m, 2, mala, "Los Pumas", "aceptado");
+    await equipoLlega(m, 3, buena2, "Los Halcones", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(3));
+    // La mala se marca en la lista antes de dar los cupones, para poder quitarla.
+    expect(filas(p).find((f) => f.dataset.n === "2")?.textContent).toContain(t("eqCuentaMala"));
+    expect(filas(p).find((f) => f.dataset.n === "1")?.textContent).not.toContain(t("eqCuentaMala"));
+    m.deps.aprobar = async () => {
+      m.pagos.push(pago(1, buena1), pago(2, buena2));
+      return { tipo: "enviado", hash: "TXHASH" };
+    };
+    await p.darCupones();
+    expect(m.armadas).toEqual([[buena1, buena2]]);
+    expect(m.estados).toContainEqual([1, "cupon"]);
+    expect(m.estados).toContainEqual([3, "cupon"]);
+    expect(m.estados.find(([n]) => n === 2)).toBeUndefined();
+    const nota = $q(p, "#eq-progreso").textContent ?? "";
+    expect(nota).toContain(t("eqCuponesListos").replace("{n}", "2"));
+    expect(nota).toContain("Los Pumas");
+    expect($q(p, "#eq-error").hidden).toBe(true);
+  });
+
+  it("si solo queda una cuenta mala, no se arma nada y se dice cuál es, no «sin conexión»", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const g = cuenta();
+    await equipoLlega(m, 1, `${g.slice(0, 55)}${g[55] === "A" ? "B" : "A"}`, "Los Pumas", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(1));
+    await p.darCupones();
+    expect(m.armadas).toEqual([]);
+    expect($q(p, "#eq-error").textContent).toContain("Los Pumas");
+    expect($q(p, "#eq-error").textContent).not.toBe(t("eqErrRed"));
+  });
+
+  it("un error que no es de conexión no se muestra como «No hay conexión»", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    await equipoLlega(m, 1, cuenta(), "Uno", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(1));
+    m.deps.armar = async () => {
+      throw new Error("destination is invalid");
+    };
+    await p.darCupones();
+    expect($q(p, "#eq-error").textContent).toBe(t("eqErrInesperado"));
+    // Un fallo de conexión de verdad sí.
+    m.deps.armar = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+    await p.darCupones();
+    expect($q(p, "#eq-error").textContent).toBe(t("eqErrRed"));
+  });
+
   it("si la lectura de los sorteos falla, no se afirma nada: se avisa y nadie recibe el cupón", async () => {
     const m = mundo();
     m.deps.sorteos = async () => null;
