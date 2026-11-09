@@ -990,7 +990,6 @@
   .demo-fin .hero-ctas .enlace, .portada-fin .enlace, .ensayo-fin .enlace:hover,
   .demo-fin .hero-ctas .enlace:hover, .portada-fin .enlace:hover { color: var(--on-purple); }
   .demo-fin .cta-entrar { padding-inline: 20px; }
-  .portada-fin .hero-otras { margin-top: 10px; }
 
   /* La primera vez, una línea sin botones de color (onboarding.ts). */
   .primera-vez {
@@ -1287,9 +1286,15 @@
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
   }
-  /* Con "Cómo se usa" son siete en la fila (22 de octubre de 2026): entre 1101 y
-     1279 px, con la cuenta abierta, se apretaban contra el nombre. Un poco menos
-     de aire en cada una alcanza. */
+  /* "Cómo se usa" solo va en "Más" del celular (8 de noviembre de 2026): en escritorio, y solo en
+     la página que tiene el botón "¿Cómo se usa?" de la fila del título (la herramienta), lo repite.
+     En las demás páginas no hay ese botón y la entrada queda a la vista. menu.ts lo sigue
+     agregando siempre y acá se esconde, así el texto no se pierde. */
+  @media (min-width: 761px) { body:has(#btn-como) .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
+  /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
+     de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
+     1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
+     en cada una alcanza. */
   @media (min-width: 1101px) and (max-width: 1439px) { .topnav a { padding: 0 8px; } }
   /* Con la cuenta (26 de octubre de 2026): la insignia de la red y el chip de la cuenta no entraban en la fila de 1240 px
      y la cuenta caía a una segunda fila, a la izquierda, debajo del logo: donde nadie la mira. Desde 1440 px la fila es más
@@ -1298,7 +1303,7 @@
   /* En el celular "Sortear" y "Mis sorteos" quedan a la vista, y lo demás va
      detrás de "Más". Antes el menú se recorría de costado y "Mis sorteos" quedaba
      cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
-     mínimo. Entre 761 y 1100 px las seis páginas entran en la fila. */
+     mínimo. Entre 761 y 1100 px las cuatro entradas entran en la fila. */
   @media (max-width: 760px) {
     .topnav > a[href="/#mis-sorteos"] { order: 2; }
     .topnav .mas { display: block; position: relative; order: 3; }

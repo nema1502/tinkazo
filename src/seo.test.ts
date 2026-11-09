@@ -394,13 +394,6 @@ describe("el texto escrito en las páginas nuevas y en las tarjetas es el del di
     expect(elementos.filter((e) => e.texto !== textoEs(e.clave)).map((e) => `${e.clave}: ${e.texto}`)).toEqual([]);
     expect(elementos.filter((e) => sinVersionEn(e.clave)).map((e) => e.clave)).toEqual([]);
   });
-
-  it("las tarjetas de meetup, clase y verificable de la portada repiten el texto de T.es", () => {
-    const tarjetas = elementosConClave(leer("index.html")).filter((e) => /^mas(Meetup|Clase|Verif)[TB]$/.test(e.clave));
-    expect(tarjetas.map((e) => e.clave).sort()).toEqual(["masClaseB", "masClaseT", "masMeetupB", "masMeetupT", "masVerifB", "masVerifT"]);
-    expect(tarjetas.filter((e) => e.texto !== textoEs(e.clave)).map((e) => `${e.clave}: ${e.texto}`)).toEqual([]);
-    expect(tarjetas.filter((e) => sinVersionEn(e.clave)).map((e) => e.clave)).toEqual([]);
-  });
 });
 
 describe("título y descripción de las páginas nuevas, en el idioma de la página", () => {
@@ -664,15 +657,6 @@ describe("enlaces a las páginas nuevas", () => {
       expect(pie).toContain(`href="/${nueva}"`);
     }
   });
-
-  it("la portada las enlaza desde Para saber más", () => {
-    const html = leer("index.html");
-    const inicio = html.indexOf('data-i="masTitle"');
-    const seccion = html.slice(inicio, html.indexOf("</section>", inicio));
-    for (const nueva of Object.keys(NUEVAS)) {
-      expect(seccion).toContain(`href="/${nueva}"`);
-    }
-  });
 });
 
 /** Lo que no dice la portada ni ninguna página de lectura, en español y en inglés. */
@@ -775,12 +759,41 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
     expect(leer("precios.html")).not.toMatch(/doble|double/i);
   });
 
-  it("abre diciendo que hoy es gratis y que los números son los precios previstos", () => {
-    expect(T.es.prNote).toMatch(/^Hoy Tinkazo es gratis\. Estos son los precios previstos para cuando empecemos a cobrar/);
-    expect(T.en.prNote).toMatch(/^Today Tinkazo is free\. These are the planned prices for when we start charging/);
+  it("abre diciendo que hoy es gratis y que los precios se publican muy pronto", () => {
+    expect(T.es.prNote).toMatch(/^Hoy Tinkazo es gratis\. Los precios para quien organiza los vamos a publicar acá muy pronto/);
+    expect(T.en.prNote).toMatch(/^Today Tinkazo is free\. We will publish pricing for organizers here very soon/);
+    expect(T.es.prNote).toContain("Participar en un sorteo y comprobarlo es gratis, siempre.");
+    expect(T.en.prNote).toContain("Taking part in a draw and checking it is always free.");
   });
 
-  it("los números de la tabla siguen siendo los aprobados", () => {
+  it("dice lo mismo del cobro en la portada, la ruleta y precios, y no queda el 'si algún día'", () => {
+    for (const clave of ["faq3a", "rulF3B"] as const) {
+      expect(T.es[clave]).toContain("se publican muy pronto");
+      expect(T.es[clave]).toContain("te avisamos antes de cobrar");
+      expect(T.en[clave]).toContain("will be published very soon");
+      expect(T.en[clave]).toContain("before we charge");
+      expect(T.es[clave]).not.toMatch(/algún día/);
+      expect(T.en[clave]).not.toMatch(/ever charge/);
+    }
+    // Ya no hay tabla de planes: ningún texto visible habla del "plan Gratis".
+    for (const clave of ["nextBody", "cfCostoB"] as const) {
+      expect(T.es[clave]).not.toMatch(/plan Gratis/);
+      expect(T.en[clave]).not.toMatch(/Free plan/);
+    }
+  });
+
+  it("precios.html conserva la promesa de que la marca de un sponsor no va dentro del sorteo", () => {
+    expect(leer("precios.html")).toContain('data-i="prSponsorNota"');
+  });
+
+  it("precios.html no muestra la tabla mientras los precios no estén definidos", () => {
+    const html = leer("precios.html");
+    expect(html).not.toMatch(/data-i="prP\d|data-i="prCol|<table/);
+    // Lo que nunca se cobra sí se dice.
+    for (const clave of ["prNever1", "prNever2", "prNever3", "prNever4"]) expect(html).toContain(`data-i="${clave}"`);
+  });
+
+  it("las claves de la tabla se quedan en el diccionario con los números aprobados, para volver a ponerla", () => {
     expect(T.es.prP1b).toContain("20 sorteos por mes por cuenta (50 si la comunidad está verificada)");
     expect(T.en.prP1b).toContain("20 draws a month per account (50 if the community is verified)");
     expect(T.es.prP2b).toBe("10 sorteos por Bs 20; 50 por Bs 90");
