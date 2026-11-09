@@ -3,6 +3,7 @@
 // página lo hacía a mano y se había quedado sin el tema: con `?theme=light`
 // salía oscura igual (revisión visual, 21 de octubre de 2026).
 import "./pagina";
+import "./version-nueva";
 import { $, esc } from "./dom";
 import { pintarLeyenda } from "./ui/leyenda";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";

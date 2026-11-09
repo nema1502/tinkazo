@@ -1,4 +1,5 @@
 import "./pagina";
+import "./version-nueva";
 import { $, esc } from "./dom";
 import { onLangChange, texto as t } from "./idioma";
 import { GRUPOS, grupoDe } from "./games/grupos";

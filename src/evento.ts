@@ -1,4 +1,5 @@
 import "./pagina";
+import "./version-nueva";
 import { $, esc } from "./dom";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
 import { SAMPLE } from "./state";

@@ -323,9 +323,19 @@ function vigilar(boton: HTMLButtonElement | null): void {
 }
 
 /**
+ * El alto de la cinta de versión nueva cuando va pegada arriba (pantallas
+ * angostas, donde la cabecera se queda en su lugar), que la publica en
+ * `--cinta-alto` (version-nueva.ts). Sin la cinta, o dentro de la cabecera fija
+ * (que ya la cuenta en su alto), vale cero.
+ */
+function altoCinta(): number {
+  return Number.parseFloat(document.documentElement.style.getPropertyValue("--cinta-alto")) || 0;
+}
+
+/**
  * Mide la barra y arma el observador: el botón "se ve" si entra entero en la
- * pantalla, sin la cabecera fija (en pantallas anchas) que le tapa el borde de
- * arriba.
+ * pantalla, sin la cabecera fija (en pantallas anchas) ni la cinta de versión
+ * nueva pegada arriba (en las angostas), que le tapan el borde de arriba.
  *
  * El borde de abajo no descuenta el lugar de la barra, y es a propósito: un
  * botón que cabe entero en la pantalla se ve esté donde esté, y la barra se
@@ -340,7 +350,7 @@ function armar(): void {
   // resto del sitio funciona igual. La barra es una red de seguridad, no puede romper lo que protege.
   if (typeof IntersectionObserver === "undefined") return;
   const cab = document.querySelector("header");
-  const arriba = cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0;
+  const arriba = (cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0) + altoCinta();
   io?.disconnect();
   io = new IntersectionObserver(
     (entradas) => {
@@ -366,7 +376,8 @@ export function actualizarPaso(): void {
  * hablar con la red de Stellar"). Si la persona apretó el de la barra, ese
  * botón está fuera de la pantalla y el error también: quedaba a la vista un
  * botón que volvía a estar disponible sin decir por qué. Si el mensaje no se ve
- * (sin contar la cabecera fija ni la propia barra), se lo lleva a la pantalla;
+ * (sin contar la cabecera fija, la cinta de versión nueva pegada arriba ni la
+ * propia barra), se lo lleva a la pantalla;
  * con el movimiento reducido, sin animación.
  *
  * Si el sorteo arrancó desde la espera en grande, la pantalla es ella: se le
@@ -378,7 +389,7 @@ export function verError(mensaje: HTMLElement, accion?: AccionError, segunda?: A
   if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");
-  const arriba = cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0;
+  const arriba = (cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0) + altoCinta();
   const abajo = innerHeight - ($("siguiente").classList.contains("on") ? alto : 0);
   if (r.top >= arriba && r.bottom <= abajo) return;
   const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;

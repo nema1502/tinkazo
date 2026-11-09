@@ -63,7 +63,7 @@ describe("recursos públicos de marca", () => {
         expect(textos?.[lang]?.[clave]).toBe(T[lang][clave]);
       }
       // Con los stickers, los impresos y el kit de sponsors la página usa varios cientos de claves: sigue lejos del diccionario entero.
-      expect(Object.keys(textos![lang]!).length).toBeLessThan(420);
+      expect(Object.keys(textos![lang]!).length).toBeLessThan(440);
       expect(Object.keys(textos![lang]!).length).toBeLessThan(Object.keys(T[lang]).length / 3);
     }
   });

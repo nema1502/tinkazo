@@ -1,4 +1,5 @@
 import "./styles.css";
+import { cargaOpcional } from "./version-nueva";
 import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
@@ -562,8 +563,9 @@ setLang(initialLang());
 // La palabra del sticker rota después de traducir: el texto sale del diccionario.
 rotateWords();
 // El contador va aparte y después: no frena la página y queda en su propio
-// archivo, chico, en vez de darle su nombre al código común.
-void import("./analytics").then((m) => m.countVisits());
+// archivo, chico, en vez de darle su nombre al código común. Si no baja (un
+// bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.
+void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);

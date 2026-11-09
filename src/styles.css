@@ -1302,6 +1302,9 @@
   @media (max-width: 1100px) { header { position: static; } }
   /* Con la cabecera fija, lo que se encuadra con scrollIntoView queda debajo de ella. */
   @media (min-width: 1101px) { section.block { scroll-margin-top: 97px; } }
+  /* Sin cabecera fija, la cinta de versión nueva va pegada arriba y publica su alto
+     (version-nueva.ts): lo encuadrado queda debajo de ella. Sin la cinta vale cero. */
+  @media (max-width: 1100px) { section.block { scroll-margin-top: var(--cinta-alto, 0px); } }
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
   }
@@ -1616,12 +1619,14 @@
   .ensayo-banda, .ensayo-fin, .stand-banda, .stand-fin { display: none; }
   body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-    position: sticky; top: 0; z-index: 12; margin: 22px 0 0; padding: 10px 14px;
+    position: sticky; top: var(--cinta-alto, 0px); z-index: 12; margin: 22px 0 0; padding: 10px 14px;
     background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
   }
   /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
+     Sin cabecera fija, debajo de la cinta de versión nueva si está pegada arriba
+     (`--cinta-alto`, version-nueva.ts; sin la cinta vale cero).
      Y lo que la página lleva a la vista se para debajo de la banda, no detrás. */
-  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
+  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cinta-alto, 0px) + var(--banda-alto, 0px) + 8px); }
   @media (min-width: 1101px) {
     body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { top: var(--cab-alto, 0px); }
     body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
@@ -2233,8 +2238,8 @@
   .juego-nota { font-size: 16px; font-weight: 700; color: var(--ink); margin: 8px 0 10px; }
   .juego-nota[hidden] { display: none; }
   /* Al ir al selector, la nota queda arriba y a la vista, no detrás de la cabecera fija ni de la banda del ensayo. */
-  .juego-nota { scroll-margin-top: 12px; }
-  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--banda-alto, 0px) + 12px); }
+  .juego-nota { scroll-margin-top: calc(var(--cinta-alto, 0px) + 12px); }
+  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cinta-alto, 0px) + var(--banda-alto, 0px) + 12px); }
   @media (min-width: 1101px) {
     .juego-nota { scroll-margin-top: 109px; }
     body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 12px); }

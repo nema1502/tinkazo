@@ -1,4 +1,5 @@
 import "./pagina";
+import "./version-nueva";
 import "./marca.css";
 import { getLang, onLangChange, texto } from "./idioma";
 import { iniciarCreadores } from "./marca-creadores-ui";

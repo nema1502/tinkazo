@@ -1,4 +1,5 @@
 import "./pagina";
+import "./version-nueva";
 import { $ } from "./dom";
 import { onLangChange, texto as t } from "./idioma";
 import { abrir, dejarLogoEntrante, type Abierto } from "./enlace-corto";

@@ -3,6 +3,7 @@ import { network } from "./config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
+import { cargaOpcional } from "../carga-opcional";
 
 /**
  * Entrar con Google o con un correo, sin instalar nada.
@@ -630,7 +631,7 @@ export const pollarWallet = new PollarWallet();
  */
 export function precargarSdk(): void {
   if (!pollarConfigured()) return;
-  void import("@pollar/core").catch(() => undefined);
+  void cargaOpcional(import("@pollar/core"));
 }
 
 /** Una wallet que envía sus propias transacciones. */
