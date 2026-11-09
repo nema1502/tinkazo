@@ -56,6 +56,9 @@ export function nombreDelEquipo(cuenta: string): string | undefined {
 
 export const hayEtiquetas = (): boolean => etiquetas.size > 0;
 
+/** Los nombres de los equipos de ahora, como se ven en el show: los que nunca se acortan (`games/nombres-enteros.ts`). */
+export const nombresDeLosEquipos = (): string[] => [...etiquetas.values()];
+
 /** El nombre del equipo de esa línea, o la línea tal cual si no es de ningún equipo. */
 export const etiquetaDe = (linea: string): string => etiquetas.get(linea) ?? linea;
 

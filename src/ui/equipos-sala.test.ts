@@ -19,6 +19,7 @@ import { type Pago } from "../equipos/horizon";
 import { CUPON_MONTO, EVENTO_POR_DEFECTO, memoCupon } from "../equipos/modelo";
 import type { Aprobacion } from "../equipos/envio";
 import { type DepsDelPanel, crearPanelDeEquipos, initEquiposSala } from "./equipos-sala";
+import { crearPantallaDelStand } from "./pantalla-stand";
 import type { Escucha, EquipoDeSala, Sala } from "../sala/cliente";
 
 
@@ -49,6 +50,8 @@ interface Mundo {
   etiquetas: Map<string, string>[];
   sellada: { si: boolean };
   quitados: number[];
+  /** El reloj de la pantalla del stand. */
+  ahora: number;
 }
 
 function mundo(): Mundo {
@@ -66,9 +69,11 @@ function mundo(): Mundo {
     etiquetas: [],
     sellada: { si: false },
     quitados: [],
+    ahora: new Date(2026, 10, 14, 17, 30, 0).getTime(),
   };
   m.deps = {
     tx: t,
+    ahora: () => m.ahora,
     cuentaDeLaSesion: () => null,
     crearSala: async () => SALA,
     cerrarSala: async () => true,
@@ -114,6 +119,16 @@ function mundo(): Mundo {
     verCuenta: (c) => `https://explorador/cuenta/${c}`,
     verTransaccion: (x) => `https://explorador/tx/${x}`,
     portapapeles: async () => true,
+    pantalla: (datos) =>
+      crearPantallaDelStand({
+        tx: t,
+        idioma: () => "es",
+        datos,
+        qr: async () => undefined,
+        ahora: () => m.ahora,
+        cada: () => () => undefined,
+        ventana: () => ({ ancho: 1920, alto: 1080 }),
+      }),
   };
   return m;
 }
@@ -547,5 +562,112 @@ describe("la bandera", () => {
     expect(document.getElementById("equipos-panel")?.hidden).toBe(false);
     expect(entrada.getAttribute("aria-expanded")).toBe("true");
     await espera();
+  });
+});
+
+describe("la pantalla del stand", () => {
+  const pantalla = (): HTMLElement => document.getElementById("pantalla-stand") as HTMLElement;
+  const tarjetas = (): HTMLElement[] => [...pantalla().querySelectorAll<HTMLElement>(".stp-equipo")];
+
+  it("se abre desde el panel con los equipos, su estado y cuántos tienen cupón, sin lo que hay que revisar", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const a = cuenta();
+    await equipoLlega(m, 1, a, "Las Wawas", "aceptado");
+    await equipoLlega(m, 2, cuenta(), "Los Cóndores");
+    await equipoLlega(m, 3, cuenta(), "Los pendejos");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    await vi.waitFor(() => expect($q(p, "#eq-para-revisar").hidden).toBe(false));
+    m.pagos.push(pago(100, a));
+    await p.revisar(true);
+    $q<HTMLButtonElement>(p, "#eq-pantalla").click();
+    expect(pantalla().hidden).toBe(false);
+    expect(pantalla().getAttribute("role")).toBe("dialog");
+    expect(tarjetas().map((li) => [li.querySelector(".stp-nombre")?.textContent, li.dataset.estado])).toEqual([
+      ["Las Wawas", "cupon"],
+      ["Los Cóndores", "anotado"],
+    ]);
+    expect(tarjetas()[0]?.querySelector(".stp-chip")?.textContent).toBe(t("eqStCupon"));
+    expect(pantalla().querySelector("#stp-cupones-n")?.textContent).toBe(t("eqStCuponesN").replace("{c}", "1").replace("{n}", "2"));
+    expect(pantalla().querySelector("#stp-cupones-t")?.textContent).toBe(t("eqStCuponesT"));
+    // Una sola cosa para tocar.
+    expect(pantalla().querySelectorAll("button")).toHaveLength(1);
+    // Sin hora fijada, no hay cuenta regresiva.
+    expect((pantalla().querySelector("#stp-reloj") as HTMLElement).hidden).toBe(true);
+  });
+
+  it("un equipo que llega con la pantalla abierta aparece en ella", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    $q<HTMLButtonElement>(p, "#eq-pantalla").click();
+    expect((pantalla().querySelector("#stp-vacia") as HTMLElement).hidden).toBe(false);
+    await equipoLlega(m, 1, cuenta(), "Byte Club", "aceptado");
+    await vi.waitFor(() => expect(tarjetas()).toHaveLength(1));
+    expect(tarjetas()[0]?.dataset.estado).toBe("anotado");
+    expect((pantalla().querySelector("#stp-vacia") as HTMLElement).hidden).toBe(true);
+  });
+
+  it("con la hora del sorteo fijada muestra cuánto falta, y la hora queda guardada en la pestaña", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const hora = $q<HTMLInputElement>(p, "#eq-hora");
+    hora.value = "18:00";
+    hora.dispatchEvent(new Event("change"));
+    $q<HTMLButtonElement>(p, "#eq-pantalla").click();
+    const reloj = pantalla().querySelector("#stp-reloj") as HTMLElement;
+    expect(reloj.hidden).toBe(false);
+    expect(reloj.querySelector("#stp-reloj-n")?.textContent).toBe(t("eqStFaltan").replace("{t}", "30:00"));
+    expect(JSON.parse(m.deps.almacen.getItem("tinkazo.equipos.sala") ?? "{}").hora).toBe("18:00");
+    // Pasada la hora, lo dice.
+    m.ahora = new Date(2026, 10, 14, 18, 0, 5).getTime();
+    p.pintar();
+    expect(reloj.querySelector("#stp-reloj-n")?.textContent).toBe(t("eqStLlego"));
+  });
+
+  it("el instante se calcula al fijar la hora: al pasar la medianoche no salta a «faltan 23 horas»", async () => {
+    const m = mundo();
+    m.ahora = new Date(2026, 10, 14, 23, 0, 0).getTime();
+    const p = await abrirRegistro(m, "sorteo");
+    const hora = $q<HTMLInputElement>(p, "#eq-hora");
+    hora.value = "23:50";
+    hora.dispatchEvent(new Event("change"));
+    $q<HTMLButtonElement>(p, "#eq-pantalla").click();
+    const n = pantalla().querySelector("#stp-reloj-n") as HTMLElement;
+    expect(n.textContent).toBe(t("eqStFaltan").replace("{t}", "50:00"));
+    expect(JSON.parse(m.deps.almacen.getItem("tinkazo.equipos.sala") ?? "{}").instante).toBe(new Date(2026, 10, 14, 23, 50).getTime());
+    // Pasada la hora y también la medianoche, sigue diciendo que llegó.
+    m.ahora = new Date(2026, 10, 14, 23, 55, 0).getTime();
+    p.pintar();
+    expect(n.textContent).toBe(t("eqStLlego"));
+    m.ahora = new Date(2026, 10, 15, 0, 10, 0).getTime();
+    p.pintar();
+    expect(n.textContent).toBe(t("eqStLlego"));
+    // Y si se recarga la pestaña, la hora guardada sigue siendo la misma.
+    document.body.innerHTML = "";
+    const otra = crearPanelDeEquipos(m.deps);
+    document.body.append(otra.raiz);
+    $q<HTMLButtonElement>(otra, "#eq-pantalla").click();
+    expect((pantalla().querySelector("#stp-reloj-n") as HTMLElement).textContent).toBe(t("eqStLlego"));
+  });
+
+  it("«Volver al panel» y Escape la cierran y devuelven el foco al botón", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const abrir = $q<HTMLButtonElement>(p, "#eq-pantalla");
+    abrir.click();
+    (pantalla().querySelector(".stp-cerrar") as HTMLButtonElement).click();
+    expect(pantalla().hidden).toBe(true);
+    expect(document.activeElement).toBe(abrir);
+    abrir.click();
+    dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(pantalla().hidden).toBe(true);
+  });
+
+  it("al cerrar el registro, la pantalla se va", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    $q<HTMLButtonElement>(p, "#eq-pantalla").click();
+    $q<HTMLButtonElement>(p, "#eq-cerrar").click();
+    await vi.waitFor(() => expect(pantalla().hidden).toBe(true));
   });
 });

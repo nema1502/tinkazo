@@ -4,6 +4,7 @@
  */
 
 import { formasDe, palabras } from "../nombres";
+import { esNombreEntero } from "../nombres-enteros";
 
 /** Cuántas llegan a la recta: las ocho de la final. */
 export const FINALISTAS = 8;
@@ -29,10 +30,13 @@ export const TOPE_NORMAL = 90;
 
 /**
  * El nombre corto de la línea del relator: el mismo que escribe la ficha de la llama (`formasDe`, nivel 3: el de pila
- * y la inicial del último apellido, "María Quispe Mamani" es "María M."), con dos palabras como mucho.
+ * y la inicial del último apellido, "María Quispe Mamani" es "María M."), con dos palabras como mucho. El nombre de un
+ * equipo (`nombres-enteros.ts`) no se acorta.
  */
 export function corto(nombre: string): string {
   if (!nombre.trim()) return "";
+  // El de un equipo va entero: «¡Vamos, Las Wawas!», nunca «¡Vamos, Las W.!» (ensayo del 6 de noviembre de 2026).
+  if (esNombreEntero(nombre)) return palabras(nombre).join(" ");
   return palabras(formasDe(nombre)[2]).slice(0, 2).join(" ");
 }
 

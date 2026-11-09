@@ -28,6 +28,8 @@
  *   nombres y de cuántos quedan. Puro, sin DOM, para probarlo en Node.
  */
 
+import { esNombreEntero } from "./nombres-enteros";
+
 export type Nivel = 1 | 2 | 3 | 4;
 
 /** Una letra o un número: lo que cuenta como "empieza con". */
@@ -70,6 +72,8 @@ export type Formas = readonly [string, string, string, string];
 export function formasDe(nombre: string): Formas {
   const p = partesDe(nombre);
   if (!p) return ["?", "?", "?", "?"];
+  // El nombre de un equipo no tiene nombre de pila ni apellido: entero en todos los niveles menos el de la inicial.
+  if (esNombreEntero(nombre)) return [inicialDe(nombre), p.completo, p.completo, p.completo];
   const conApellido = p.ultima ? `${p.pila} ${inicialDe(p.ultima)}.` : p.pila;
   return [inicialDe(nombre), p.pila, conApellido, p.completo];
 }
@@ -192,7 +196,7 @@ export function planNombres(nombres: readonly string[]): PlanNombres {
     const k = clave(nm);
     total.set(k, (total.get(k) ?? 0) + 1);
     const p = partesDe(nm);
-    if (p && !partes.has(k)) partes.set(k, p);
+    if (p && !partes.has(k) && !esNombreEntero(nm)) partes.set(k, p);
   }
   const pasos = pasosDistinguidos(partes);
   const ordinal: number[] = [];

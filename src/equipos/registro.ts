@@ -10,8 +10,9 @@ import { type ConfigEquipos, type DatosDeEquipo, type EstadoEquipo, MAX_INTEGRAN
  * La página de registro del celular (`equipos.html`): el encargado de un equipo lo anota con su cuenta.
  *
  * Los pasos, uno por pantalla y con una sola acción principal:
- *  1. Tu cuenta: la que recibe el cupón y cobra el premio. Se entra con Google (la cuenta se crea sola) o se pega la
- *     dirección de una cuenta de Stellar que ya se tiene.
+ *  1. Tu cuenta: la que recibe el cupón y cobra el premio. Si en ese celular ya hay una sesión abierta (Google,
+ *     Freighter o la cuenta de prueba) se usa esa y este paso no aparece (`sesion.ts`); si no, se entra con Google (la
+ *     cuenta se crea sola) o se pega la dirección de una cuenta de Stellar que ya se tiene.
  *  2. El equipo: su nombre y hasta cinco integrantes. Viajan cifrados con la clave del QR (el fragmento del enlace,
  *     que ningún navegador manda a un servidor); la cuenta viaja en claro, porque es pública.
  *  3. En qué punto está: según cómo armó el registro quien organiza.
@@ -32,7 +33,7 @@ export interface DepsDelRegistro {
   red: NetworkName;
   /** Hay entrada con Google en este sitio. */
   hayGoogle: boolean;
-  /** La cuenta con que ya se había entrado, si el navegador la recuerda. */
+  /** La cuenta de la sesión abierta en este navegador, sea cual sea la vía (`cuentaDeLaSesion` en `sesion.ts`). */
   cuentaRecordada: () => Promise<string | null>;
   /** Abre Google y devuelve la cuenta. Falla con el motivo de la entrada (`popup-blocked`, `popup-closed`…). */
   entrarConGoogle: () => Promise<string>;

@@ -2569,8 +2569,11 @@
   /* Ganadores y premios (src/ui/panel-ganadores.ts): una fila por ganador, con el estado de su pago a la derecha. */
   .pagos { margin-top: 18px; }
   .gan { padding: 16px 18px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
-  /* En verificar la sección ya es el bloque: el panel va sin marco propio. */
+  /* En verificar la sección ya es el bloque: el panel va sin marco propio. Cuando el panel es el cuerpo del bloque
+     (`#pagos-cuerpo` en verificar.html), conserva el aire del cuerpo: sin él, el texto quedaba pegado al borde de la
+     tarjeta (ensayo del 6 de noviembre de 2026). */
   .block .gan { padding: 0; background: none; border: 0; box-shadow: none; }
+  .block .body.gan { padding: 22px; }
   .gan-titulo { font-size: 18px; font-weight: 800; text-wrap: balance; }
   .gan-premio { margin-top: 2px; font-size: 16px; color: var(--ink2); overflow-wrap: anywhere; }
   .gan-resumen { margin-top: 4px; font-size: 16px; font-weight: 700; }

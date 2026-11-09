@@ -6,15 +6,17 @@ import { LAB_FIRMAR, type Aprobacion, aprobarYEnviar } from "../equipos/envio";
 import { type Evidencia, accionSugerida, contarPorEstado, estadoEfectivo, listaDesdeCupones, paraDarCupon } from "../equipos/estado";
 import { type OpcionesDeHorizon, type Pago, cuentasActivas, cuponesEnviados, leerCuenta, pagosDeLaCuenta } from "../equipos/horizon";
 import { type ConfigEquipos, type DatosDeEquipo, type Equipo, EVENTO_POR_DEFECTO, cuentaCorta, esCuenta, esEstado, eventoValido, rango } from "../equipos/modelo";
+import { horaValida, instanteDelSorteo } from "../equipos/pantalla-stand";
 import { type LecturaDeSorteos, cuentasQueYaSortearon } from "../equipos/sorteos";
 import { type PedidoDeCupones, type TransaccionDeCupones, armarCupones, tandas } from "../equipos/transacciones";
 import { ponerEtiquetas } from "../equipos/etiquetas";
-import { onLangChange, t } from "../i18n";
+import { getLang, onLangChange, t } from "../i18n";
 import { type EquipoDeSala, type EstadoDeConexion, type Sala, cerrarSala, crearSala, escucharSala } from "../sala/cliente";
 import { cambiarEstadoEnSala, configurarRegistro, quitarEquipoEnSala } from "../sala/equipos";
 import { accountUrl, network, txUrl } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { app } from "../state";
+import { type DatosDePantalla, type DepsDePantalla, type PantallaDelStand, crearPantallaDelStand } from "./pantalla-stand";
 import { pintarQr, precargarQr } from "./qr";
 import { setList } from "./participants";
 
@@ -34,6 +36,9 @@ import { setList } from "./participants";
  *  3. Usar los equipos con cupón como lista: las cuentas, una por línea, en el orden en que recibieron el cupón. El
  *     nombre de cada equipo queda como etiqueta local para el show y el resultado.
  *
+ * Para el proyector, «Mostrar la pantalla del stand» abre a pantalla completa el QR en grande, los equipos con su punto,
+ * cuántos tienen cupón y, si se fijó la hora del sorteo, cuánto falta (`pantalla-stand.ts`).
+ *
  * La verdad está en la cadena: cada cierto tiempo (y al tocar «Revisar de nuevo») la pantalla lee los pagos de la
  * cuenta del evento y los sorteos del contrato, y de ahí salen los estados. Lo que dice la sala es lo que ve el
  * celular del equipo.
@@ -50,6 +55,8 @@ const PAUSA_TRAS_ENVIAR_MS = 4_000;
 type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export interface DepsDelPanel {
+  /** La hora de ahora, en milisegundos. */
+  ahora: () => number;
   tx: (clave: string) => string;
   /** La cuenta con que se entró, para proponerla como cuenta del evento. */
   cuentaDeLaSesion: () => string | null;
@@ -80,6 +87,8 @@ export interface DepsDelPanel {
   verCuenta: (cuenta: string) => string;
   verTransaccion: (hash: string) => string;
   portapapeles: (texto: string) => Promise<boolean>;
+  /** La pantalla del stand, para el proyector. Recibe de dónde leer los datos. */
+  pantalla: (datos: DepsDePantalla["datos"]) => PantallaDelStand;
 }
 
 export function depsReales(): DepsDelPanel {
@@ -106,6 +115,7 @@ export function depsReales(): DepsDelPanel {
       return true;
     },
     ponerEtiquetas,
+    ahora: () => Date.now(),
     qr: async (img, enlace) => void (await pintarQr(img, enlace, 300)),
     precargarQr: async () => void (await precargarQr()),
     cada: (f, ms) => {
@@ -126,6 +136,19 @@ export function depsReales(): DepsDelPanel {
         return false;
       }
     },
+    pantalla: (datos) =>
+      crearPantallaDelStand({
+        tx: t,
+        idioma: getLang,
+        datos,
+        qr: async (img, enlace, lado) => void (await pintarQr(img, enlace, lado)),
+        ahora: () => Date.now(),
+        cada: (f, ms) => {
+          const id = setInterval(f, ms);
+          return () => clearInterval(id);
+        },
+        ventana: () => ({ ancho: innerWidth, alto: innerHeight }),
+      }),
   };
 }
 
@@ -135,6 +158,10 @@ interface Guardada {
   sala: Sala;
   config: ConfigEquipos;
   dejados: number[];
+  /** La hora del sorteo para la cuenta regresiva de la pantalla del stand («18:30»), o vacío. Solo vive en esta pestaña. */
+  hora?: string;
+  /** El instante del sorteo que salió de esa hora cuando se fijó, para que no cambie al pasar la medianoche. */
+  instante?: number;
 }
 
 type Ocupado = "" | "revisando" | "cupones";
@@ -178,6 +205,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   let enlaceCopiado = false;
   /** Para no pisar un envío con la lectura periódica. */
   let revisandoYa: Promise<void> | null = null;
+  /** La hora del sorteo que fijó quien organiza, para la pantalla del stand. */
+  let hora = "";
+  /** El instante de esa hora, calculado una sola vez al fijarla. */
+  let instante: number | null = null;
+  let pantalla: PantallaDelStand | null = null;
 
   const fmt = (clave: string, vars: Record<string, string | number>): string =>
     Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), tx(clave));
@@ -198,7 +230,6 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     `</div>` +
     `<p class="ss-error" id="eq-error" role="status" hidden></p>` +
     `<div id="eq-sala" hidden>` +
-    `<p class="ss-titqr" data-eq="eqTitQr"></p>` +
     `<div class="ss-qr">` +
     `<img id="eq-qr" alt="" />` +
     `<div class="ss-lado">` +
@@ -206,12 +237,13 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     `<p class="ss-cuenta" id="eq-cuenta-n" aria-live="polite"></p>` +
     `<p class="eq-resumen" id="eq-resumen"></p>` +
     `<div class="row">` +
-    `<button class="ghost" type="button" id="eq-grande" aria-expanded="false" data-eq="eqGrande"></button>` +
+    `<button class="ghost" type="button" id="eq-pantalla" aria-haspopup="dialog" data-eq="eqStAbrir"></button>` +
     `<button class="ghost" type="button" id="eq-copiar" data-eq="eqCopiarEnlace"></button>` +
     `<button class="ghost" type="button" id="eq-cerrar" data-eq="eqCerrar"></button>` +
     `</div>` +
     `</div>` +
     `</div>` +
+    `<div class="field eq-hora"><label for="eq-hora" data-eq="eqStHora"></label><input id="eq-hora" type="time" step="60" /><small data-eq="eqStHoraAyuda"></small></div>` +
     `<div class="eq-acciones row">` +
     `<button class="ghost" type="button" id="eq-aceptar-todos" hidden></button>` +
     `<button class="ghost" type="button" id="eq-dar"></button>` +
@@ -237,7 +269,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
 
   function guardar(): void {
     try {
-      if (sala && config) deps.almacen.setItem(CLAVE, JSON.stringify({ sala, config, dejados: [...dejados] } satisfies Guardada));
+      if (sala && config) deps.almacen.setItem(CLAVE, JSON.stringify({ sala, config, dejados: [...dejados], hora, ...(instante === null ? {} : { instante }) } satisfies Guardada));
       else deps.almacen.removeItem(CLAVE);
     } catch {
       /* sin almacenamiento, el registro dura lo que la página */
@@ -250,7 +282,13 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       if (!x?.sala || typeof x.sala.id !== "string" || typeof x.sala.token !== "string" || typeof x.sala.clave !== "string" || !x.config) return null;
       if (x.sala.vence && x.sala.vence < Date.now()) return null;
       if ((x.config.modo !== "cupon" && x.config.modo !== "sorteo") || !esCuenta(x.config.cuenta) || typeof x.config.evento !== "string") return null;
-      return { sala: x.sala, config: x.config, dejados: Array.isArray(x.dejados) ? x.dejados.filter((n): n is number => typeof n === "number") : [] };
+      return {
+        sala: x.sala,
+        config: x.config,
+        dejados: Array.isArray(x.dejados) ? x.dejados.filter((n): n is number => typeof n === "number") : [],
+        hora: typeof x.hora === "string" && horaValida(x.hora) ? x.hora : "",
+        ...(typeof x.instante === "number" && Number.isFinite(x.instante) ? { instante: x.instante } : {}),
+      };
     } catch {
       return null;
     }
@@ -260,6 +298,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
 
   const lista = (): Equipo[] => [...equipos.values()].sort((a, b) => a.n - b.n);
   const modo = (): ConfigEquipos["modo"] => config?.modo ?? "sorteo";
+
+  /** Lo que muestra la pantalla del stand: el QR del registro, los equipos con lo que dice la red y la hora fijada. */
+  function datosDePantalla(): DatosDePantalla | null {
+    if (!sala || !config) return null;
+    return { enlace: enlaceDeRegistro(sala, deps.origen()), modo: config.modo, equipos: lista(), evidencias, instante };
+  }
 
   function aviso(texto: string): void {
     mensaje = texto;
@@ -429,6 +473,9 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     xdr = null;
     progreso = "";
     ultimaTransaccion = "";
+    hora = "";
+    instante = null;
+    pantalla?.cerrar();
     guardar();
   }
 
@@ -690,7 +737,8 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     usar.dataset.sugerida = sugerida === "lista" ? "1" : "";
     q<HTMLButtonElement>("eq-revisar").disabled = ocupado !== "";
     q<HTMLButtonElement>("eq-copiar").textContent = tx(enlaceCopiado ? "eqCopiado" : "eqCopiarEnlace");
-    q<HTMLButtonElement>("eq-grande").textContent = tx(raiz.classList.contains("grande") ? "eqGrandeCerrar" : "eqGrande");
+    const campoHora = q<HTMLInputElement>("eq-hora");
+    if (campoHora.value !== hora && document.activeElement !== campoHora) campoHora.value = hora;
 
     const cajaXdr = q("eq-xdr");
     cajaXdr.hidden = xdr === null;
@@ -706,6 +754,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     const aRevisar = todos.filter((e) => e.revisar);
     q("eq-para-revisar").hidden = aRevisar.length === 0;
     q("eq-para-revisar-lista").replaceChildren(...aRevisar.map((e) => fila(e, false)));
+    if (pantalla?.abierta()) pantalla.pintar();
     if (ultimaTransaccion && progreso) {
       // El enlace a la transacción va junto al aviso de que se mandó.
       const a = document.createElement("a");
@@ -746,10 +795,16 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       pintar();
     });
   });
-  q("eq-grande").addEventListener("click", () => {
-    const grande = raiz.classList.toggle("grande");
-    q("eq-grande").setAttribute("aria-expanded", String(grande));
-    pintar();
+  q("eq-pantalla").addEventListener("click", () => {
+    pantalla ??= deps.pantalla(datosDePantalla);
+    pantalla.abrir(q("eq-pantalla"));
+  });
+  q<HTMLInputElement>("eq-hora").addEventListener("change", () => {
+    const v = q<HTMLInputElement>("eq-hora").value;
+    hora = horaValida(v) ? v : "";
+    instante = hora ? instanteDelSorteo(hora, deps.ahora()) : null;
+    guardar();
+    if (pantalla?.abierta()) pantalla.pintar();
   });
   // Cuenta y evento a la vista: el evento de Space Apps y la cuenta con que se entró.
   q<HTMLInputElement>("eq-evento").value = EVENTO_POR_DEFECTO;
@@ -761,6 +816,9 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     sala = g.sala;
     config = g.config;
     for (const n of g.dejados) dejados.add(n);
+    hora = g.hora ?? "";
+    // Si lo guardado es de antes de que se guardara el instante, se calcula ahora, una vez.
+    instante = hora ? (g.instante ?? instanteDelSorteo(hora, deps.ahora())) : null;
     escuchar(sala);
   }
   pintar();

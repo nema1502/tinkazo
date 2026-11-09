@@ -8,6 +8,8 @@ import { onLangChange, texto } from "./idioma";
 import { enNavegadorDeApp } from "./navegador";
 import { anotarEquipoEnSala, leerEstadoDeEquipo, leerPublico } from "./sala/equipos";
 import { network } from "./stellar/config";
+import { loadSessionKind } from "./stellar/session-store";
+import { cuentaDeLaSesion } from "./equipos/sesion";
 
 /**
  * La página de registro de un equipo (`equipos.html`): el QR de la pantalla del evento la abre, y el encargado del
@@ -32,11 +34,16 @@ if (raiz) {
     activo: equiposActivo(),
     red: network.name,
     hayGoogle,
-    cuentaRecordada: async () => {
-      if (!hayPollar) return null;
-      const { pollarWallet } = await import("./stellar/wallet-pollar");
-      return pollarWallet.restore();
-    },
+    // La sesión que ya está abierta en este celular (Google, Freighter o la cuenta de prueba): si hay una, no se pide
+    // pegar la cuenta. Nada de esto abre una ventana ni pide permiso.
+    cuentaRecordada: () =>
+      cuentaDeLaSesion({
+        tipo: loadSessionKind(network.name),
+        hayPollar,
+        google: async () => (await import("./stellar/wallet-pollar")).pollarWallet.restore(),
+        freighter: async () => (await import("./stellar/wallet-lite")).freighterWallet.restore(),
+        prueba: async () => (await import("./stellar/wallet")).guestWallet.restore(),
+      }),
     entrarConGoogle: async () => {
       const { pollarWallet } = await import("./stellar/wallet-pollar");
       return pollarWallet.connect();

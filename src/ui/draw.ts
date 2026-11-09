@@ -33,7 +33,8 @@ import { contar, contarPractica, errorContable, refDe } from "../contar";
 import { acreditarEnSegundoPlano } from "../stellar/monedas-eventos";
 import { ponerTextoDelSello } from "./sin-sello-textos";
 import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
-import { etiquetaConCuenta, etiquetaDe, paraMostrar } from "../equipos/etiquetas";
+import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+import { ponerNombresEnteros } from "../games/nombres-enteros";
 import { pagosActivos } from "../stellar/pagos-bandera";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -448,6 +449,8 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
   // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
   names = paraMostrar(names);
+  // Y su nombre va entero en el show: «¡Vamos, Las Wawas!», nunca «Las W.». Sin equipos la lista queda vacía.
+  ponerNombresEnteros(hayEtiquetas() ? nombresDeLosEquipos() : []);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".

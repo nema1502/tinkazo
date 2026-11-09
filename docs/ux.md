@@ -286,6 +286,16 @@ Con la bandera `VITE_PAGOS` prendida (apagada en producción, ver [premios.md](p
 - **Con más de diez ganadores**, un buscador por nombre y diez filas a la vista; "Ver los N ganadores" muestra el resto.
 - **Sin tecnicismos:** la nota del pago es "la nota"; el pago listo para firmar afuera va plegado.
 
+## La pantalla del stand (8 de noviembre de 2026)
+
+Con la bandera `VITE_EQUIPOS` (el registro de equipos con cupón), el panel de quien organiza ofrece «Mostrar la pantalla del stand»: lo que se proyecta mientras los equipos se anotan. Vive en `src/ui/pantalla-stand.ts` y lo que decide, sin DOM, en `src/equipos/pantalla-stand.ts`. Reglas:
+
+- **Todo junto y sin scroll:** el QR para anotar al equipo en grande, los equipos en el orden en que se anotaron con su estado en palabras y en color (Anotado, Aceptado, Ya sorteó, Con cupón), cuántos tienen cupón (el contador «N de M equipos ya tienen su cupón» cuenta solo a los equipos que se ven: los que quien organiza tiene que revisar no entran ni en N ni en M) y, si quien organiza fijó la «Hora del sorteo» en el panel, cuánto falta («Faltan 24:03»; al llegar, «¡Llegó la hora del sorteo!»). Sin hora no hay reloj. La hora se guarda solo en esa pestaña.
+- **Letra de la sala:** los nombres, entre el 2,6 % y el 5 % del alto (28 a 54 px en 1080); la letra más grande con la que entran todos. Si con la mínima no entran, los equipos pasan en páginas cada 8 segundos, medidas con los nombres más largos para que ninguna página se pase y al dar la vuelta no se saltee a nadie. Las tarjetas tienen todas el alto de la más alta.
+- **Una sola cosa para tocar:** «Volver al panel» (o Escape, o salir de la pantalla completa), que devuelve el foco al botón que la abrió. Los equipos que quien organiza tiene que revisar no salen en la pantalla.
+- **Celular parado:** una columna, el QR arriba a la izquierda del título y los equipos en dos columnas de 16 px.
+- **Los nombres de equipo van enteros** también en el show: «¡Vamos, Las Wawas!», nunca «Las W.» (`src/games/nombres-enteros.ts`).
+
 ## Cuando la red falla
 
 El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM por el estado de la red (no por Tinkazo), el patrocinador de la comisión tiene un tope, y lo único que veía quien sorteaba era un error genérico, después de esperar. Desde ese día la app mira la red **antes** de que la sala espere (`src/stellar/chequeo-red.ts`, la pantalla en `src/ui/red.ts`) y, cuando algo anda mal, dice **una frase y ofrece una sola acción**. Nada de "RPC", "fee" ni "XLM" en lo que se lee.
