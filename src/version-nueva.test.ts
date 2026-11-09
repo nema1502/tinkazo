@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLang } from "./i18n";
 import { cargaOpcional, installVersionNotice, isStaleChunkError, resetVersionNotice, showVersionNotice } from "./version-nueva";
@@ -316,6 +319,17 @@ describe("no tapa nada y se puede cerrar", () => {
     await asentar();
     expect(cinta()).toBeNull();
   });
+
+  it("cerrada, un cambio de idioma ya no toca la cinta que se fue", async () => {
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    const ida = cinta() as HTMLElement;
+    cerrar()?.click();
+    setLang("en");
+    expect(ida.textContent).toContain(AVISO_ES);
+    expect(ida.textContent).not.toContain(AVISO_EN);
+  });
 });
 
 describe("en pantalla angosta, con la página bajada", () => {
@@ -415,6 +429,238 @@ describe("en pantalla angosta, con la página bajada", () => {
     window.dispatchEvent(new Event("resize"));
     expect(cinta()).toBeNull();
     expect(altoPublicado()).toBe("");
+  });
+
+  /**
+   * La app instalada en un iPhone (viewport-fit=cover y la barra de estado
+   * translúcida) dibuja la página debajo de la hora y la batería. La cabecera
+   * deja ese lugar; fuera de ella, la cinta lo deja sola. Sin muesca, env()
+   * vale cero y el relleno es el de siempre, 10 px arriba y 16 a los costados.
+   */
+  const CON_MUESCA = {
+    top: "max(10px, env(safe-area-inset-top, 0px))",
+    left: "max(16px, env(safe-area-inset-left, 0px))",
+    right: "max(16px, env(safe-area-inset-right, 0px))",
+  };
+
+  it("fuera de la cabecera deja el lugar de la muesca; dentro, el relleno de siempre", async () => {
+    document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    const estilo = (cinta() as HTMLElement).style;
+    expect([estilo.paddingTop, estilo.paddingLeft, estilo.paddingRight, estilo.paddingBottom]).toEqual([CON_MUESCA.top, CON_MUESCA.left, CON_MUESCA.right, "10px"]);
+    const cabecera = document.querySelector<HTMLElement>("body > header") as HTMLElement;
+    cabecera.style.position = "sticky";
+    window.dispatchEvent(new Event("resize"));
+    expect([estilo.paddingTop, estilo.paddingLeft, estilo.paddingRight, estilo.paddingBottom]).toEqual(["10px", "16px", "16px", "10px"]);
+    cabecera.style.position = "static";
+    window.dispatchEvent(new Event("resize"));
+    expect(estilo.paddingTop).toBe(CON_MUESCA.top);
+  });
+
+  it("en una página sin cabecera también deja el lugar de la muesca", async () => {
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    const estilo = (cinta() as HTMLElement).style;
+    expect([estilo.paddingTop, estilo.paddingLeft, estilo.paddingRight, estilo.paddingBottom]).toEqual([CON_MUESCA.top, CON_MUESCA.left, CON_MUESCA.right, "10px"]);
+  });
+
+  /**
+   * Safari de iOS no tiene anclaje de scroll: con la página bajada, poner o
+   * quitar la cinta pegada (que ocupa su alto en el flujo) mueve todo el
+   * contenido ese alto. Ahí se compensa a mano; con anclaje, el navegador ya
+   * lo hace y no se toca nada.
+   */
+  describe("con la página bajada", () => {
+    const desplazar = vi.fn();
+    beforeEach(() => {
+      desplazar.mockClear();
+      vi.stubGlobal("scrollBy", desplazar);
+      vi.stubGlobal("scrollY", 300);
+    });
+
+    const abrirYCerrar = async (): Promise<void> => {
+      hayOtra();
+      fallaVite();
+      await vi.waitFor(() => expect(cinta()).not.toBeNull());
+      document.querySelector<HTMLButtonElement>("#version-nueva button[data-cerrar]")?.click();
+      expect(cinta()).toBeNull();
+    };
+
+    it("sin anclaje de scroll, compensa el alto al aparecer y al cerrarse", async () => {
+      vi.stubGlobal("CSS", { supports: (propiedad: string) => propiedad !== "overflow-anchor" });
+      document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+      hayOtra();
+      fallaVite();
+      await vi.waitFor(() => expect(cinta()).not.toBeNull());
+      expect(desplazar.mock.calls).toEqual([[0, ALTO]]);
+      document.querySelector<HTMLButtonElement>("#version-nueva button[data-cerrar]")?.click();
+      expect(desplazar.mock.calls).toEqual([[0, ALTO], [0, -ALTO]]);
+    });
+
+    it("sin CSS.supports cuenta como sin anclaje", async () => {
+      vi.stubGlobal("CSS", undefined);
+      document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+      await abrirYCerrar();
+      expect(desplazar.mock.calls).toEqual([[0, ALTO], [0, -ALTO]]);
+    });
+
+    /**
+     * Con la página bajada la cinta pegada puede cambiar de alto (el celular
+     * girado, otro idioma, los botones que bajan a otra fila): sin anclaje, lo
+     * de abajo se correría esa diferencia. Dentro de la cabecera fija no se
+     * toca nada, como al aparecer.
+     */
+    it("sin anclaje, si la cinta pegada cambia de alto compensa la diferencia", async () => {
+      vi.stubGlobal("CSS", { supports: () => false });
+      const observado: { avisar?: () => void } = {};
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          constructor(avisar: () => void) {
+            observado.avisar = avisar;
+          }
+          observe(): void {}
+          disconnect(): void {}
+        },
+      );
+      let alto = ALTO;
+      const previa = medida.getMockImplementation();
+      medida.mockImplementation(function (this: HTMLElement) {
+        if (this.id === "version-nueva") return { top: 0, bottom: alto, left: 0, right: 390, width: 390, height: alto, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+        return previa?.call(this) as DOMRect;
+      });
+      document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+      hayOtra();
+      fallaVite();
+      await vi.waitFor(() => expect(cinta()).not.toBeNull());
+      expect(desplazar.mock.calls).toEqual([[0, ALTO]]);
+      alto = ALTO + 24;
+      observado.avisar?.();
+      expect(desplazar.mock.calls).toEqual([[0, ALTO], [0, 24]]);
+      expect(altoPublicado()).toBe(`${ALTO + 24}px`);
+      alto = ALTO;
+      observado.avisar?.();
+      expect(desplazar.mock.calls).toEqual([[0, ALTO], [0, 24], [0, -24]]);
+      // Dentro de la cabecera fija, su cambio de alto no mueve nada.
+      (document.querySelector("body > header") as HTMLElement).style.position = "sticky";
+      window.dispatchEvent(new Event("resize"));
+      alto = ALTO + 24;
+      observado.avisar?.();
+      expect(desplazar.mock.calls).toHaveLength(3);
+    });
+
+    it("con anclaje de scroll no toca nada", async () => {
+      vi.stubGlobal("CSS", { supports: () => true });
+      document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+      await abrirYCerrar();
+      expect(desplazar).not.toHaveBeenCalled();
+    });
+
+    it("con la página arriba de todo, en la cabecera fija o sin cabecera, no toca nada", async () => {
+      vi.stubGlobal("CSS", { supports: () => false });
+      vi.stubGlobal("scrollY", 0);
+      document.body.innerHTML = `<header style="position: static"></header><main></main>`;
+      await abrirYCerrar();
+      resetVersionNotice();
+      vi.stubGlobal("scrollY", 300);
+      document.body.innerHTML = `<header style="position: sticky; top: 0"></header><main></main>`;
+      await abrirYCerrar();
+      resetVersionNotice();
+      document.body.innerHTML = `<main></main>`;
+      await abrirYCerrar();
+      expect(desplazar).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe("los botones de la cinta", () => {
+  /**
+   * El texto y los dos botones van en una sola fila si entran. Si no, bajan
+   * los dos juntos: nunca "Recargar" al lado del texto y "Ahora no" solo
+   * abajo (pasaba a 768 px). Por eso van agrupados, sin partirse.
+   */
+  it("van juntos en un grupo aparte del texto, con 44 px de alto cada uno", async () => {
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    const recargar = boton() as HTMLButtonElement;
+    const ahoraNo = document.querySelector<HTMLButtonElement>("#version-nueva button[data-cerrar]") as HTMLButtonElement;
+    const grupo = recargar.parentElement as HTMLElement;
+    expect(ahoraNo.parentElement).toBe(grupo);
+    expect(grupo).not.toBe(cinta());
+    expect(grupo.parentElement).toBe(cinta());
+    expect(cinta()?.children).toHaveLength(2);
+    expect(cinta()?.firstElementChild?.textContent).toBe(AVISO_ES);
+    expect(cinta()?.lastElementChild).toBe(grupo);
+    expect([...grupo.children]).toEqual([recargar, ahoraNo]);
+    expect(grupo.style.display).toBe("flex");
+    expect([recargar.style.minHeight, ahoraNo.style.minHeight]).toEqual(["44px", "44px"]);
+  });
+});
+
+describe("lo que la página encuadra arriba, con la cinta pegada", () => {
+  /**
+   * Con la cinta pegada arriba (1100 px o menos), lo que el sitio lleva a la
+   * vista con scrollIntoView o con un enlace a un ancla tiene que quedar
+   * debajo de ella, sea el elemento que sea ("18 personas, 1 ganador" al
+   * pegar la lista, /#juegos). Un solo lugar lo resuelve para todos: el
+   * scroll-padding-top de html. Las reglas de scroll-margin-top no lo suman,
+   * porque los dos se suman y se contaría dos veces; sin la cinta, todo vale
+   * lo mismo que antes de que existiera.
+   */
+  // Con jsdom, URL es la del navegador y no abre archivos: la ruta va armada a mano.
+  const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "styles.css"), "utf8");
+
+  /** Los bloques `@media (max-width: 1100px)`, con sus llaves parejas. */
+  const angostas = [...css.matchAll(/@media\s*\(\s*max-width:\s*1100px\s*\)\s*\{/g)].map((m) => {
+    let prof = 0;
+    for (let i = m.index ?? 0; i < css.length; i++) {
+      if (css[i] === "{") prof++;
+      else if (css[i] === "}" && --prof === 0) return css.slice(m.index, i + 1);
+    }
+    return "";
+  });
+
+  it("a 1100 px o menos, html deja arriba el alto de la cinta, y sin ella lo de siempre", () => {
+    const conPadding = angostas.filter((b) => /html\s*\{[^}]*scroll-padding-top/.test(b));
+    expect(conPadding).toHaveLength(1);
+    // Sin la cinta, el valor de siempre: html no tenía scroll-padding-top en pantalla angosta (auto).
+    expect(conPadding[0]).toMatch(/html\s*\{\s*scroll-padding-top:\s*var\(--cinta-alto,\s*auto\);?\s*\}/);
+  });
+
+  it("ninguna regla de scroll-margin-top suma la cinta, y vuelven a sus valores", () => {
+    const margenes = [...css.matchAll(/scroll-margin-top:\s*([^;}]*)/g)].map((m) => m[1] ?? "");
+    expect(margenes.length).toBeGreaterThan(0);
+    expect(margenes.filter((v) => v.includes("--cinta-alto"))).toEqual([]);
+    expect(css).toMatch(/\.juego-nota \{ scroll-margin-top: 12px; \}/);
+    expect(css).toMatch(/body\[data-ensayo="1"\] \.juego-nota \{ scroll-margin-top: calc\(var\(--banda-alto, 0px\) \+ 12px\); \}/);
+    expect(css).toMatch(/body\[data-stand="1"\] section\.block \{ scroll-margin-top: calc\(var\(--banda-alto, 0px\) \+ 8px\); \}/);
+  });
+
+  it("la banda del ensayo sigue apilándose debajo de la cinta", () => {
+    expect(css).toMatch(/\.stand-banda \{[^}]*position: sticky; top: var\(--cinta-alto, 0px\)/);
+  });
+
+  /**
+   * En la app instalada en un iPhone la cinta pegada ya deja el lugar de la
+   * muesca. La cabecera, quieta justo debajo, dejaba otro igual: un hueco entre
+   * la cinta y el logo. Mientras la cinta va antes que ella, la cabecera no lo
+   * deja; dentro de la cabecera fija o sin cinta, la regla no alcanza a nadie.
+   */
+  it("con la cinta pegada, la cabecera no deja otra vez el lugar de la muesca", () => {
+    const regla = /^\s*(body > #version-nueva ~ header)\s*\{\s*padding-top:\s*0;?\s*\}/m.exec(css);
+    expect(regla).not.toBeNull();
+    const selector = regla?.[1] ?? "";
+    const alcanza = (html: string): boolean => {
+      document.body.innerHTML = html;
+      return document.querySelector("header")?.matches(selector) ?? false;
+    };
+    expect(alcanza(`<div id="version-nueva"></div><header></header><main></main>`)).toBe(true);
+    expect(alcanza(`<header><div id="version-nueva"></div></header><main></main>`)).toBe(false);
+    expect(alcanza(`<header></header><main></main>`)).toBe(false);
   });
 });
 

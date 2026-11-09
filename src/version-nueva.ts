@@ -199,18 +199,34 @@ export function showVersionNotice(): HTMLElement {
     close.textContent = texto("nuevaVersionCerrar");
   };
   paint();
-  onLangChange(paint);
+  // Cerrada, la cinta ya no está en la página y su callback de idioma no la toca.
+  onLangChange(() => {
+    if (bar.isConnected) paint();
+  });
   button.addEventListener("click", () => reloadPage());
   close.addEventListener("click", () => {
     cerrada = true;
     esperando?.disconnect();
     esperando = null;
     const habia = lugar;
+    const alto = bar.getBoundingClientRect().height;
     soltar();
     bar.remove();
     if (habia !== "pagina") avisarAlto();
+    if (habia === "pegada") compensarSinAnclaje(-alto);
   });
-  bar.append(message, button, close);
+  // Los dos botones van juntos: si no entran al lado del texto, bajan los dos
+  // (sin el grupo, a 768 px "Ahora no" bajaba solo y quedaba desparejo). La
+  // separación es la de siempre entre ellos; solo en un ancho que no los deja
+  // ni de a dos se apilan.
+  const botones = document.createElement("div");
+  botones.style.display = "flex";
+  botones.style.flexWrap = "wrap";
+  botones.style.alignItems = "center";
+  botones.style.justifyContent = "center";
+  botones.style.gap = "8px 16px";
+  botones.append(button, close);
+  bar.append(message, botones);
   colocar(bar);
   // Solo mientras la cinta está a la vista: si la ventana cruza los 1100 px, la
   // cabecera cambia de fija a quieta (o al revés) y la cinta se muda con ella.
@@ -219,19 +235,40 @@ export function showVersionNotice(): HTMLElement {
   };
   window.addEventListener("resize", alCambiarTamano);
   // Si cambia de alto (otro idioma, el celular girado), lo que se apila debajo se vuelve a medir.
+  // Pegada, con la página bajada, lo de abajo se correría la diferencia: se compensa como al aparecer.
   if (typeof ResizeObserver !== "undefined") {
     let alto = bar.getBoundingClientRect().height;
     alCambiarAlto = new ResizeObserver(() => {
       const nuevo = bar.getBoundingClientRect().height;
       if (nuevo === alto) return;
+      const diferencia = nuevo - alto;
       alto = nuevo;
-      if (lugar === "pegada") publicarAlto(bar);
+      if (lugar === "pegada") {
+        publicarAlto(bar);
+        compensarSinAnclaje(diferencia);
+      }
       if (lugar !== "pagina") avisarAlto();
     });
     alCambiarAlto.observe(bar);
   }
   if (lugar !== "pagina") avisarAlto();
+  if (lugar === "pegada") compensarSinAnclaje(bar.getBoundingClientRect().height);
   return bar;
+}
+
+/**
+ * La cinta pegada ocupa su alto en el flujo, arriba de todo: al ponerla,
+ * quitarla o cambiar de alto con la página bajada, el contenido se correría
+ * ese alto (con signo: negativo si se achica o se va). Los
+ * navegadores con anclaje de scroll (overflow-anchor) ya lo compensan solos;
+ * en los que no lo tienen (Safari de iOS) se compensa a mano. Arriba de todo
+ * no hace falta: no hay nada que mover.
+ */
+function compensarSinAnclaje(alto: number): void {
+  if (!(window.scrollY > 0) || alto === 0) return;
+  const css = (window as unknown as { CSS?: { supports?: (propiedad: string, valor: string) => boolean } }).CSS;
+  if (typeof css?.supports === "function" && css.supports("overflow-anchor", "auto")) return;
+  window.scrollBy(0, alto);
 }
 
 /**
@@ -244,8 +281,9 @@ export function showVersionNotice(): HTMLElement {
  *   la página bajada nadie la vería). Va por encima de la página y de la banda
  *   del ensayo (12), y por debajo de la barra de lo que sigue y el menú (30) y
  *   de todas las capas (40 a 80). Publica su alto en `--cinta-alto`: la banda
- *   del ensayo se apila debajo y la barra de lo que sigue no cuenta como
- *   visible un botón que quedó detrás.
+ *   del ensayo se apila debajo, lo que se lleva a la vista queda debajo (el
+ *   scroll-padding-top de html, en styles.css) y la barra de lo que sigue no
+ *   cuenta como visible un botón que quedó detrás.
  * - "pagina": arriba de la página, en el flujo (una página sin cabecera).
  */
 type Lugar = "cabecera" | "pegada" | "pagina";
@@ -265,6 +303,15 @@ function colocar(bar: HTMLElement): boolean {
   } else if (document.body.firstElementChild !== bar) {
     document.body.prepend(bar);
   }
+  // La app instalada en un iPhone (viewport-fit=cover y la barra de estado
+  // translúcida) se dibuja debajo de la hora y la batería, y con el teléfono
+  // acostado, al lado de la muesca. Dentro de la cabecera, ella ya deja ese
+  // lugar; fuera, lo deja la cinta. Sin muesca, env() vale 0 y el relleno es
+  // el de siempre.
+  const afuera = nuevo !== "cabecera";
+  bar.style.paddingTop = afuera ? "max(10px, env(safe-area-inset-top, 0px))" : "10px";
+  bar.style.paddingLeft = afuera ? "max(16px, env(safe-area-inset-left, 0px))" : "16px";
+  bar.style.paddingRight = afuera ? "max(16px, env(safe-area-inset-right, 0px))" : "16px";
   const pegada = nuevo === "pegada";
   bar.style.position = pegada ? "sticky" : "";
   bar.style.top = pegada ? "0px" : "";

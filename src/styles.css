@@ -1380,9 +1380,6 @@
   @media (max-width: 1100px) { header { position: static; } }
   /* Con la cabecera fija, lo que se encuadra con scrollIntoView queda debajo de ella. */
   @media (min-width: 1101px) { section.block { scroll-margin-top: 97px; } }
-  /* Sin cabecera fija, la cinta de versión nueva va pegada arriba y publica su alto
-     (version-nueva.ts): lo encuadrado queda debajo de ella. Sin la cinta vale cero. */
-  @media (max-width: 1100px) { section.block { scroll-margin-top: var(--cinta-alto, 0px); } }
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
   }
@@ -1703,8 +1700,9 @@
   /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
      Sin cabecera fija, debajo de la cinta de versión nueva si está pegada arriba
      (`--cinta-alto`, version-nueva.ts; sin la cinta vale cero).
-     Y lo que la página lleva a la vista se para debajo de la banda, no detrás. */
-  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cinta-alto, 0px) + var(--banda-alto, 0px) + 8px); }
+     Y lo que la página lleva a la vista se para debajo de la banda, no detrás
+     (la cinta ya la suma el scroll-padding-top de html). */
+  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
   @media (min-width: 1101px) {
     body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { top: var(--cab-alto, 0px); }
     body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
@@ -2320,8 +2318,8 @@
   .juego-nota { font-size: 16px; font-weight: 700; color: var(--ink); margin: 8px 0 10px; }
   .juego-nota[hidden] { display: none; }
   /* Al ir al selector, la nota queda arriba y a la vista, no detrás de la cabecera fija ni de la banda del ensayo. */
-  .juego-nota { scroll-margin-top: calc(var(--cinta-alto, 0px) + 12px); }
-  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cinta-alto, 0px) + var(--banda-alto, 0px) + 12px); }
+  .juego-nota { scroll-margin-top: 12px; }
+  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--banda-alto, 0px) + 12px); }
   @media (min-width: 1101px) {
     .juego-nota { scroll-margin-top: 109px; }
     body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 12px); }
@@ -2482,6 +2480,9 @@
      estadio ocupe la pantalla entera, y entonces la cabecera, la página y la barra de abajo
      tienen que dejar lugar. Sin muesca todo vale cero y el diseño es el de siempre. */
   header { padding-top: env(safe-area-inset-top, 0px); }
+  /* Con la cinta de versión nueva pegada arriba (1100 px o menos, version-nueva.ts), ese lugar ya lo deja ella: la
+     cabecera, justo debajo, no lo deja otra vez. Dentro de la cabecera fija o sin la cinta, esta regla no alcanza a nadie. */
+  body > #version-nueva ~ header { padding-top: 0; }
   .bar { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
   main { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
   .siguiente { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
@@ -2499,6 +2500,10 @@
      200 % de zoom (681 × 316), empujaba la espera y el primer ganador debajo de la barra de "lo que sigue"
      (batería de cierre del 26 de octubre de 2026). */
   @media (min-width: 1101px) { html { scroll-padding-top: 76px; } }
+  /* Sin cabecera fija, la cinta de versión nueva va pegada arriba y publica su alto (version-nueva.ts): todo lo que
+     se lleva a la vista, con scrollIntoView o por un ancla, queda debajo de ella. Las reglas de scroll-margin-top no
+     la suman, porque se contaría dos veces. Sin la cinta la variable no existe y vale auto, como siempre. */
+  @media (max-width: 1100px) { html { scroll-padding-top: var(--cinta-alto, auto); } }
   /* Una pantalla baja (una laptop chica con zoom, un celular de lado, una laptop de 1362 x 632): con la letra grande el
      primer ganador crece (el botón de "¿No está?" y la letra), así que lo de arriba se aprieta para que entero quede
      sobre la barra. Hasta el 26 de octubre de 2026 esto valía hasta 520 px de alto y en 632 la tarjeta, girada, quedaba
