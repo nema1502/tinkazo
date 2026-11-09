@@ -96,26 +96,51 @@ try {
         await sleep(120);
         if (fin === true || fin === "true") break;
       }
-      await sleep(1500);
-      const mirar = async () => JSON.parse(await page.eval(`JSON.stringify({
-        titulo: document.title,
-        desborde: document.documentElement.scrollWidth - window.innerWidth,
-        rotas: [...document.images].filter(i => !i.complete || i.naturalWidth === 0).length,
-        vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
-        enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
-        toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
-      })`));
+      // Recién abiertas, con el navegador todavía tibio, alguna imagen sigue en
+      // vuelo cuando se cuenta y figuraba como rota sin estarlo (siempre la
+      // primera página, la primera pantalla). Antes de contar se espera a que
+      // todas las pedidas terminen, cargadas o con error, hasta 10 segundos.
+      // Si alguna sigue sin terminar, puede ser la carrera del tema forzado
+      // (`?theme=` reescribe el `media` de los `source` en pagina.ts mientras
+      // el precargador ya pidió la otra versión): la imagen queda sin pedir
+      // hasta que vuelve a entrar en pantalla. Se vuelve arriba de a una
+      // pantalla, como quien relee, y se espera otra vez antes de contarla
+      // como colgada.
+      await page.waitFor("[...document.images].every((i) => i.complete)", 10000);
+      const mirar = async () => JSON.parse(await page.eval(`JSON.stringify((() => {
+        const pedidas = [...document.images];
+        const rotas = pedidas.filter((i) => i.complete && i.naturalWidth === 0)
+          .map((i) => (i.currentSrc || i.getAttribute("src") || "(sin src)").slice(0, 120));
+        const colgadas = pedidas.filter((i) => !i.complete)
+          .map((i) => ((i.getAttribute("src") || "(sin src)").slice(0, 120)));
+        return {
+          titulo: document.title,
+          desborde: document.documentElement.scrollWidth - window.innerWidth,
+          total: pedidas.length,
+          rotas: rotas.length,
+          cualesRotas: rotas.slice(0, 5).join(" | "),
+          colgadas: colgadas.length,
+          cualesColgadas: colgadas.slice(0, 5).join(" | "),
+          vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
+          enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
+          toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
+        };
+      })())`));
       let r = await mirar();
-      // Una imagen puede estar todavía en vuelo. Se mira una segunda vez antes
-      // de decir que está rota: si no, la comprobación falla sola de a ratos.
-      if (r.rotas > 0) {
-        await sleep(2000);
+      if (r.colgadas > 0) {
+        for (let i = 0; i < 90; i++) {
+          const inicio = await page.eval("window.scrollBy(0, -window.innerHeight); window.scrollY <= 0");
+          await sleep(120);
+          if (inicio === true || inicio === "true") break;
+        }
+        await page.waitFor("[...document.images].every((i) => i.complete)", 10000);
         r = await mirar();
       }
       const etiqueta = `${tema} ${como}`;
       check(!!r.titulo, `${etiqueta}: tiene título`, r.titulo);
       check(r.desborde <= 1, `${etiqueta}: sin scroll horizontal`, `${r.desborde}px`);
-      check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`);
+      check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`, r.rotas ? `${r.rotas} de ${r.total}: ${r.cualesRotas}` : `${r.total} imágenes`);
+      check(r.colgadas === 0, `${etiqueta}: las imágenes terminan de cargar`, r.colgadas ? `${r.colgadas} de ${r.total} sin terminar: ${r.cualesColgadas}` : `${r.total} imágenes`);
       check(r.vacios === 0, `${etiqueta}: sin textos sin traducir`);
       // Cada página de lectura, más el código. Se compara contra la lista de
       // arriba y no contra un número: con un número, agregar una página
@@ -147,24 +172,40 @@ try {
       await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
       const termino = await page.waitFor(listo, 30000);
       await sleep(500);
-      const r = JSON.parse(await page.eval(`JSON.stringify({
-        titulo: document.title,
-        titular: document.querySelector('h1')?.textContent || '',
-        tema: document.documentElement.dataset.theme || '',
-        desborde: document.documentElement.scrollWidth - window.innerWidth,
-        rotas: [...document.images].filter(i => !i.complete || i.naturalWidth === 0).length,
-        vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
-        enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
-        toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
-        pasos: (() => { const e = document.getElementById('v-steps'); return e ? e.scrollWidth - e.clientWidth : 0; })(),
-      })`));
+      // Como arriba: antes de contar se espera a que las imágenes pedidas
+      // terminen, hasta 10 segundos. La que sigue sin terminar se cuenta
+      // aparte, como colgada, y no como rota.
+      await page.waitFor("[...document.images].every((i) => i.complete)", 10000);
+      const r = JSON.parse(await page.eval(`JSON.stringify((() => {
+        const pedidas = [...document.images];
+        const rotas = pedidas.filter((i) => i.complete && i.naturalWidth === 0)
+          .map((i) => (i.currentSrc || i.getAttribute("src") || "(sin src)").slice(0, 120));
+        const colgadas = pedidas.filter((i) => !i.complete)
+          .map((i) => ((i.getAttribute("src") || "(sin src)").slice(0, 120)));
+        return {
+          titulo: document.title,
+          titular: document.querySelector('h1')?.textContent || '',
+          tema: document.documentElement.dataset.theme || '',
+          desborde: document.documentElement.scrollWidth - window.innerWidth,
+          total: pedidas.length,
+          rotas: rotas.length,
+          cualesRotas: rotas.slice(0, 5).join(" | "),
+          colgadas: colgadas.length,
+          cualesColgadas: colgadas.slice(0, 5).join(" | "),
+          vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
+          enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
+          toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
+          pasos: (() => { const e = document.getElementById('v-steps'); return e ? e.scrollWidth - e.clientWidth : 0; })(),
+        };
+      })())`));
       if (!titular) titular = r.titular;
       const etiqueta = `${tema} ${como}`;
       check(termino.ok, `${etiqueta}: termina de revisar`);
       check(!!r.titulo, `${etiqueta}: tiene título`, r.titulo);
       check(r.tema === tema, `${etiqueta}: ?theme= se aplica`, r.tema || "(sin data-theme)");
       check(r.desborde <= 1, `${etiqueta}: sin scroll horizontal`, `${r.desborde}px`);
-      check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`);
+      check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`, r.rotas ? `${r.rotas} de ${r.total}: ${r.cualesRotas}` : `${r.total} imágenes`);
+      check(r.colgadas === 0, `${etiqueta}: las imágenes terminan de cargar`, r.colgadas ? `${r.colgadas} de ${r.total} sin terminar: ${r.cualesColgadas}` : `${r.total} imágenes`);
       check(r.vacios === 0, `${etiqueta}: sin textos sin traducir`);
       const ajenas = r.enlaces.filter((h) => h.startsWith("/") && !PAGINAS.some((q) => h === `/${q}.html`));
       check(r.enlaces.length > 0 && ajenas.length === 0, `${etiqueta}: el pie lleva a páginas que existen`, ajenas.join(", "));
