@@ -373,3 +373,61 @@ No se convierte esa evidencia parcial en un caso completo. La matriz conserva
 4casos históricos completos de48, con9intentos y5claves; sus fuentes originales
 no se reasignan al candidato actual. El segundo arreglo queda bloqueado según
 la instrucción explícita de reportar el bloqueo si la causa sigue sin demostrar.
+
+### Diagnóstico focal posterior de Stage (L55)
+
+Se ejecutaron exactamente dos casos con la lista larga original,852×393/iPhone13
+WebKit, movimiento normal y Rápido nativo: CarreraES y RuletaEN. La primera es
+cobertura nueva;492/70 correspondía al antecedente CarreraES corto, no a ambos juegos.
+
+Carrera volvió a agotar la espera `#stadium:hidden` de40000ms en el runner v3:163:
+40012.548ms según Node y40002.579ms en la acción de Playwright,67resoluciones.
+La primera corona se observó45.707s después de Stage visible en el mismo reloj
+del navegador; no se observó el cierre, la placa final ni HTML/verificador.
+Los421cuadros crudos incluyen2tardíos; no sustituyen la prueba faltante dentro del plazo.
+Ruleta cerró la espera en38028.441ms; el DOM visible→oculto duró38.450s.
+Se revisaron330cuadros/60activos/33de sostén,81checks sin fallos, HTML y verificador
+realEN7/7. Es un caso medido completo, no aceptación de los48 ni prueba de la causa.
+
+Ambas pestañas registraron visibilidad/foco sin transición oculta. Las dos trazas
+locales inspeccionadas tienen0bytes de red y0fuentes embebidas; no se publican.
+Los eventos DOM no son marcas internas de mount/run/destrucción, y la incertidumbre
+de alineación navegador/prueba sigue desconocida. Costos de callbacks/render son
+mediciones de pared, no prueba causal de CPU/GPU ni de overhead de la traza.
+La causa permanece sin demostrar: no se cambian Stage, Sapo, relojes, ritmo,
+ganador ni40s; tampoco se aplica parche especulativo ni se reintenta la matriz.
+
+El corte actualizado es11intentos/6claves/4históricascompletas de48;44siguen sin
+completarse. #30 y el diagnóstico causal siguen bloqueados bajoS18/S19/S23,
+Stage dentro del arreglo, primer1ec intacto, sin segundo commit/PR terminado.
+Workers, navegadores y servidores cerrados. Informe y rutas de ambas trazas:
+`.evidence/arreglos-parent/stage-l55-diagnostic-report.md`.
+
+### Comparación acotada de auditor y traza en Carrera (L58)
+
+Se ejecutaron exactamente dos variantes nuevas ES/largos/852×393/iPhone13 WebKit,
+Rápido nativo y movimiento normal, ambas sin traza: auditor pesado apagado y
+encendido. La medición liviana común siguió activa; no se afirma instrumentación
+cero. Las rondas naturales fueron33614238/#353 y33614278/#354, ambas con índice3,
+frente al antecedente33612706/#351/índice4. La lista/hash original se conservó.
+
+Ambas agotaron la misma espera40s:40003.542ms y40002.226ms. El primer render de
+estado ganador activo se midió34.097s/33.991s tras el DOM visible; no equivale a
+la primera placa visible. El cierre con auditor se observó44.050s tras el DOM
+visible,43.067s desde la espera: **tardío**, no aceptación. Sin auditor no se
+observó cierre al exportar. No se completaron HTML ni verificador público.
+
+En la ventana nominal40s, callback de juego1.239s/1.351s, llamada de dibujo
+15.721s/17.031s y auditor0s/0.788s. El callback incluye kit/cámara/escena; la llamada
+de dibujo no mide finalización GPU y el tiempo restante no demuestra inactividad.
+Los totales por plazo476/475 renders son nominales;478/496 crudos incluyen2/21
+posteriores. Cambiaron ronda, caché y límites de instrumentación respecto del
+antecedente; no se calcula una causalidad exacta ni se inventa update histórico.
+
+La demora persiste sin auditor pesado ni traza; la causa sigue sin demostrarse.
+Se aplica el cierre acotadoS27: #30 bloqueado con Stage dentro, sin parche
+especulativo, cambios de50ms/reloj/ritmo/ganador/Sapo/40s, matriz, segundo commit
+o PR terminado. El corte es13intentos/6claves/4históricas completas y44sin completar.
+Smoke nativo separado pasó sin sorteos reales; ambos casos públicos fallaron.
+629inputs/14SHA de preparación se conservaron; navegador/servidor cerrados.
+Informe y limitaciones: `.evidence/arreglos-parent/stage-ablation-l58-report.md`.
