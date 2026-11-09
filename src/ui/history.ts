@@ -2,7 +2,7 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { isTurnOrder } from "../modos/turnos";
 import type { SorteoDelEvento } from "../protocol/evento";
-import { network, txUrl } from "../stellar/config";
+import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
 import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
@@ -841,6 +841,36 @@ function enlazarEventos(): void {
 // resultado y se tocaba sin querer. Si alguien necesita que se borre, lo pide a
 // hola@tinkazo.app y lo borra Tinkazo (workers/enlaces/README.md).
 
+/**
+ * La línea que dice que los sorteos del otro modo están en el otro modo, con el botón para pasar. Sin modo Oficial
+ * queda escondida, como hoy. La pasan por la misma guarda que la hoja del modo (`modo-ui.ts`, que la página ya tiene
+ * cargado): con un sorteo sellado esperando su número, o mientras se sella, no cambia y dice por qué.
+ */
+function pintarOtroModo(otroModo: HTMLElement | null): void {
+  if (!otroModo) return;
+  if (!hayModoOficial) {
+    otroModo.style.display = "none";
+    return;
+  }
+  const enOficial = network.name === "mainnet";
+  otroModo.style.display = "";
+  otroModo.textContent = `${t(enOficial ? "historyOtherModeTest" : "historyOtherModeOfficial")} `;
+  const pasar = document.createElement("button");
+  pasar.type = "button";
+  pasar.className = "mini ghost";
+  pasar.textContent = t(enOficial ? "historySwitchToTest" : "historySwitchToOfficial");
+  pasar.addEventListener("click", () => {
+    void import("./modo-ui").then((m) => {
+      if (m.pasarAModo(enOficial ? "testnet" : "mainnet") || otroModo.querySelector(".modo-bloqueo")) return;
+      const motivo = document.createElement("span");
+      motivo.className = "modo-bloqueo";
+      motivo.textContent = ` ${t("modeSwitchBlocked")}`;
+      otroModo.appendChild(motivo);
+    });
+  });
+  otroModo.appendChild(pasar);
+}
+
 function paint(organizer: string | null): void {
   shown = organizer;
   const box = $("sec-history");
@@ -855,6 +885,8 @@ function paint(organizer: string | null): void {
   // "todavía no hay sorteos" sería mentira si los hay, más atrás de lo que se lee.
   if (list.length === 0 && guardados.length === 0 && !chainTruncated(organizer)) {
     box.style.display = "none";
+    // En Oficial la cuenta empieza vacía: quien venía de Prueba tiene que ver dónde quedaron sus sorteos.
+    pintarOtroModo(document.getElementById("hist-vacio-otro-modo"));
     return;
   }
 
@@ -898,6 +930,10 @@ function paint(organizer: string | null): void {
     html += `<div class="hist-grupo">${cabeceraDeEvento(g, gi)}${enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("")}</div>`;
   });
   $("hist-list").innerHTML = html;
+  // Los sorteos del otro modo no se mezclan con estos: la línea del pie lo dice y ofrece pasar.
+  pintarOtroModo(document.getElementById("hist-otro-modo"));
+  const sinLista = document.getElementById("hist-vacio-otro-modo");
+  if (sinLista) sinLista.style.display = "none";
   box.style.display = "block";
 }
 

@@ -2,6 +2,7 @@ import "./styles.css";
 import { cargaOpcional } from "./version-nueva";
 import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
 import { network } from "./stellar/config";
+import { leerMarcaPollar } from "./stellar/pollar-config";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
@@ -58,7 +59,7 @@ function montarLaCuenta(): void {
   }
   let marcaPollar: string | null = null;
   try {
-    marcaPollar = localStorage.getItem("tinkazo.pollar.intent");
+    marcaPollar = leerMarcaPollar(localStorage, network.name);
   } catch {
     /* sin almacenamiento no hay marca */
   }

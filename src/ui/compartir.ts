@@ -11,6 +11,8 @@ import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
 import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
 import { modesFlagOn, requestedMode } from "../modos/bandera";
+import { hayModoOficial } from "../stellar/config";
+import { eventoEsDePrueba } from "../evento-modo";
 import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
 
 /**
@@ -154,7 +156,7 @@ export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; gana
  */
 export function mensajeDeEvento(
   lang: Lang,
-  d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[]; sinSello?: number },
+  d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[]; sinSello?: number; prueba?: boolean },
 ): string {
   const uno = d.sorteos === 1;
   const sin = d.sinSello ?? 0;
@@ -163,8 +165,13 @@ export function mensajeDeEvento(
       ? rellenar(cad(lang, uno ? "cmpEvUnoSin" : "cmpEvMezcla"), { t: d.titulo, n: d.sorteos, s: sin })
       : rellenar(cad(lang, uno ? "cmpEvUno" : "cmpEvVarios"), { t: d.titulo, n: d.sorteos });
   const ver = sin > 0 ? (uno ? "cmpVerEvUnoSin" : "cmpVerEvSin") : uno ? "cmpVerificarEvUno" : "cmpVerificarEv";
-  return [cabeza, ...(d.lineas ?? []), rellenar(cad(lang, ver), { enlace: d.enlaces }), "", cad(lang, "cmpPie")].join("\n");
+  // Con los dos modos a la vista, un evento de Prueba lo dice: esos sorteos se borran y quien lo recibe tiene que saberlo.
+  const prueba = d.prueba ? [cad(lang, "cmpEvPrueba")] : [];
+  return [cabeza, ...(d.lineas ?? []), ...prueba, rellenar(cad(lang, ver), { enlace: d.enlaces }), "", cad(lang, "cmpPie")].join("\n");
 }
+
+/** Si el evento lleva la marca de Prueba: solo con el modo Oficial a la vista (sin él, todo es de Prueba y no hay qué distinguir). */
+const marcaDePrueba = (sorteos: readonly { net?: string | undefined }[]): boolean => hayModoOficial && eventoEsDePrueba(sorteos);
 
 /** Cuántos de estos sorteos se hicieron sin sello. */
 const cuantosSinSello = (sorteos: readonly ConMarca[]): number => sorteos.filter((s) => esSinSello(s)).length;
@@ -239,14 +246,15 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
  * "Sin sello: no se puede comprobar."; con alguno, junto al QR tampoco dice
  * "comprobarlo" (el QR abre la página del evento, que dice cuál es cuál).
  */
-export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string, logo?: Logo | null): Foto {
+export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string, logo?: Logo | null, prueba = false): Foto {
   const n = sorteos.length;
   const enOrden = enOrdenDeSalida(sorteos);
   const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const hayUnoSinSello = cuantosSinSello(sorteos) > 0;
   return {
     ...(logo ? { logo, hecho: cad(lang, "logoHecho") } : {}),
-    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(", "),
+    // Igual que la foto de un sorteo suelto: si es de Prueba, el rótulo lo dice.
+    rotulo: [cad(lang, "fotoEvento"), prueba ? cad(lang, "fotoPrueba") : "", fechaLarga(lang, fecha)].filter(Boolean).join(", "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
     filas: enOrden.map((s) => ({
@@ -611,6 +619,7 @@ export async function paqueteDeEvento(
       enlaces,
       lineas: lineasDeEvento(lang, sorteos),
       sinSello: cuantosSinSello(sorteos),
+      prueba: marcaDePrueba(sorteos),
     }),
   };
 }
@@ -629,6 +638,7 @@ export async function prepararEvento(
   sorteos = enOrdenDeSalida(sorteos);
   const lineas = lineasDeEvento(lang, sorteos);
   const sinSello = cuantosSinSello(sorteos);
+  const prueba = marcaDePrueba(sorteos);
   const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const archivo = archivoDe(undefined, fecha);
   if (op.corto !== false) {
@@ -638,8 +648,8 @@ export async function prepararEvento(
     const c = await acortar(largo);
     if (c) {
       return {
-        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello }),
-        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto, op.logo)],
+        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello, prueba }),
+        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto, op.logo, prueba)],
         archivo,
         corto: true,
       };
@@ -649,7 +659,7 @@ export async function prepararEvento(
   const partes = r?.partes ?? [];
   return {
     mensaje: r?.mensaje ?? "",
-    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace, op.logo)),
+    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace, op.logo, marcaDePrueba(p.sorteos))),
     ...(partes.length > 1 ? { nota: rellenar(cad(lang, "evAvisoPartes"), { n: partes.length }) } : {}),
     archivo,
     corto: false,

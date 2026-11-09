@@ -8,8 +8,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * que sale de los cupones.
  */
 
-const h = vi.hoisted(() => ({ app: { frozen: null as unknown } }));
+const h = vi.hoisted(() => ({ app: { frozen: null as unknown }, red: null as "testnet" | "mainnet" | null, oficial: null as boolean | null }));
 vi.mock("../state", () => ({ app: h.app }));
+// El modo de la pestaña, que las pruebas de "una sala es del modo en que se abrió" cambian a mano.
+vi.mock("../stellar/config", async (orig) => {
+  const real = await orig<typeof import("../stellar/config")>();
+  return {
+    ...real,
+    get hayModoOficial() {
+      return h.oficial ?? real.hayModoOficial;
+    },
+    network: new Proxy(real.network, { get: (t, k) => (k === "name" && h.red ? h.red : Reflect.get(t, k)) }),
+  };
+});
 vi.mock("./participants", () => ({ setList: () => undefined }));
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
@@ -156,6 +167,8 @@ async function abrirRegistro(m: Mundo, modo: "sorteo" | "cupon"): Promise<Return
 beforeEach(() => {
   document.body.innerHTML = "";
   h.app.frozen = null;
+  h.red = null;
+  h.oficial = null;
 });
 
 describe("abrir el registro de equipos", () => {
@@ -850,6 +863,88 @@ describe("cerrar y retomar", () => {
     const otra = crearPanelDeEquipos(m.deps);
     expect($q(otra, "#eq-sala").hidden).toBe(false);
     expect($q(otra, "#eq-config").hidden).toBe(true);
+  });
+});
+
+describe("la sala es del modo en que se abrió", () => {
+  const CLAVE = "tinkazo.equipos.sala";
+
+  it("la sala guardada lleva su modo", async () => {
+    h.red = "testnet";
+    const m = mundo();
+    await abrirRegistro(m, "sorteo");
+    expect(JSON.parse(m.deps.almacen.getItem(CLAVE) ?? "{}").red).toBe("testnet");
+  });
+
+  it("al cambiar de modo y recargar, la sala del otro modo no se retoma y se borra", async () => {
+    h.red = "testnet";
+    const m = mundo();
+    await abrirRegistro(m, "sorteo");
+    expect(m.deps.almacen.getItem(CLAVE)).not.toBeNull();
+    // Pasa a Oficial: la pestaña recarga en el otro modo con la misma memoria de la pestaña.
+    h.red = "mainnet";
+    document.body.innerHTML = "";
+    const otra = crearPanelDeEquipos(m.deps);
+    expect($q(otra, "#eq-sala").hidden).toBe(true);
+    expect($q(otra, "#eq-config").hidden).toBe(false);
+    expect(m.deps.almacen.getItem(CLAVE)).toBeNull();
+  });
+
+  it("y a la inversa: la sala de Oficial no se retoma en Prueba", async () => {
+    h.red = "mainnet";
+    const m = mundo();
+    await abrirRegistro(m, "cupon");
+    h.red = "testnet";
+    document.body.innerHTML = "";
+    const otra = crearPanelDeEquipos(m.deps);
+    expect($q(otra, "#eq-sala").hidden).toBe(true);
+    expect(m.deps.almacen.getItem(CLAVE)).toBeNull();
+  });
+
+  it("el enlace que se copia lleva el modo de la sala solo cuando existe el modo Oficial", async () => {
+    const copiados: string[] = [];
+    for (const [oficial, red, esperado] of [
+      [true, "testnet", "prueba"],
+      [true, "mainnet", "oficial"],
+      [false, "testnet", null],
+    ] as const) {
+      h.red = red;
+      h.oficial = oficial;
+      const m = mundo();
+      m.deps.portapapeles = async (x: string) => {
+        copiados.push(x);
+        return true;
+      };
+      const p = await abrirRegistro(m, "sorteo");
+      $q<HTMLButtonElement>(p, "#eq-copiar").click();
+      await vi.waitFor(() => expect(copiados.length).toBeGreaterThan(0));
+      expect(new URL(copiados.pop() as string).searchParams.get("red")).toBe(esperado);
+      document.body.innerHTML = "";
+    }
+  });
+
+  it("en el mismo modo, la sala se retoma", async () => {
+    h.red = "mainnet";
+    const m = mundo();
+    await abrirRegistro(m, "sorteo");
+    document.body.innerHTML = "";
+    const otra = crearPanelDeEquipos(m.deps);
+    expect($q(otra, "#eq-sala").hidden).toBe(false);
+  });
+
+  it("una sala guardada sin modo es de Prueba: sigue retomándose en Prueba y no pasa a Oficial", async () => {
+    h.red = "testnet";
+    const m = mundo();
+    await abrirRegistro(m, "sorteo");
+    const vieja = JSON.parse(m.deps.almacen.getItem(CLAVE) ?? "{}");
+    delete vieja.red;
+    m.deps.almacen.setItem(CLAVE, JSON.stringify(vieja));
+    document.body.innerHTML = "";
+    expect($q(crearPanelDeEquipos(m.deps), "#eq-sala").hidden).toBe(false);
+    h.red = "mainnet";
+    document.body.innerHTML = "";
+    expect($q(crearPanelDeEquipos(m.deps), "#eq-sala").hidden).toBe(true);
+    expect(m.deps.almacen.getItem(CLAVE)).toBeNull();
   });
 });
 

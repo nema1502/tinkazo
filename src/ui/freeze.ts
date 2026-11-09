@@ -5,7 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
-import { contractUrl, network } from "../stellar/config";
+import { contractUrl, hayModoOficial, modeNameKey, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
 import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, pagaElPortero, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
@@ -14,7 +14,7 @@ import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomenda
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
+import { apruebaAMano, billeteraEnOtraRed, canAnchor, claveDeSellar, currentSession, frenarPorOtraRed } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { contar as contarPersonas, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
 import { modesVisible } from "../modos/bandera";
@@ -33,6 +33,7 @@ import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarR
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { pintarVer3D } from "./ver3d";
+import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -516,6 +517,19 @@ function startCountdown(): void {
  * hallazgo 9). Con data-i, el cambio de idioma lo traduce.
  */
 export function refreshFreezeLabel(): void {
+  // La línea del modo va debajo del botón de sellar, en los dos modos, solo cuando existe el modo Oficial. Dice lo
+  // mismo que hace `sellar()`: el Ensayo y la demo no graban nada, así que no la llevan; y con la billetera en la otra
+  // red, en vez de prometer el registro dice que así no se puede sellar (el botón frena con el aviso de cómo seguir).
+  const lineaModo = document.getElementById("sellar-modo");
+  if (lineaModo) {
+    const verLinea = hayModoOficial && !sinGrabar();
+    lineaModo.textContent = !verLinea
+      ? ""
+      : billeteraEnOtraRed()
+        ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name)))
+        : t(network.name === "mainnet" ? "sealModeOfficial" : "sealModeTest");
+    lineaModo.style.display = verLinea ? "" : "none";
+  }
   if (app.frozen) return;
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
@@ -527,6 +541,8 @@ export function refreshFreezeLabel(): void {
 /** Cuándo se soltó el último sorteo para armar el siguiente (`unfreeze`), y cuánto no responde "Sellar" después. */
 let soltadoEn = -Infinity;
 export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
+/** Hay un `freeze()` en curso: otro toque de "Sellar la lista" no hace nada hasta que termine (ver `freeze`). */
+let sellandoYa = false;
 
 /**
  * Sella la lista.
@@ -537,20 +553,28 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
  * antes de que existiera la semilla.
  */
 export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
-  // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
-  // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
-  // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
-  // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
-  // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
-  if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
-    pedirPantallaCompleta();
-    grandePendiente = true;
-  }
+  // Un toque mientras otro sigue en curso no hace nada. Con el modo Oficial, antes de apagar el botón se le pregunta la
+  // red a la billetera, y un doble toque en ese momento sellaba dos veces la misma lista (y el segundo, al terminar,
+  // soltaba el bloqueo del cambio de modo mientras el primero seguía sellando).
+  if (sellandoYa) return;
+  sellandoYa = true;
   try {
+    // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
+    // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
+    // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
+    // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
+    // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
+    if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
+      pedirPantallaCompleta();
+      grandePendiente = true;
+    }
     await sellar(opciones);
   } finally {
     // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista.
     grandePendiente = false;
+    // Terminó de sellar, bien o mal: el cambio de modo ya no lo espera (`modo-ui.ts`). Si quedó sellado, lo bloquea el sorteo.
+    marcarSellandoAhora(false);
+    sellandoYa = false;
   }
 }
 
@@ -586,6 +610,13 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   if (!puedeSellar()) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
+  // Con el modo Oficial a la vista, una cuenta con la billetera en la otra red no cae callada al modo libre: se frena
+  // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
+  // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
+  if (hayModoOficial && !sinGrabar() && (await frenarPorOtraRed())) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
   // un sorteo: aunque haya una cuenta abierta no se graba nada ni se espera la
   // cadena (`ensayo-modo.ts`).
@@ -616,6 +647,13 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
 
+  // La primera vez que se sella en Oficial en este navegador, una confirmación corta antes de tocar la red. Si la
+  // cierra o pasa a Prueba, la pantalla completa que pidió el toque de "Sellar la lista" se suelta: no hay espera.
+  if (anchoring && !(await confirmarPrimerSelloOficial())) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
+
   if (anchoring) {
     const session = currentSession();
     if (!session) return;
@@ -633,8 +671,10 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
     // segundo a catorce (`clienteListo` en anchor.ts). Y se va el error de antes.
     onStep("starting");
-    // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`).
+    // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`). Y el modo no se cambia hasta
+    // que termine (`modo-ui.ts`): la recarga cortaría el envío.
     marcarSellado(true);
+    marcarSellandoAhora(true);
     try {
       // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
       // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
@@ -1225,7 +1265,8 @@ function renderSealSummary(): void {
   a.href = contractUrl();
   a.target = "_blank";
   a.rel = "noopener";
-  a.textContent = `${network.name} ↗`;
+  // Con el modo Oficial a la vista dice el modo; sin él, como siempre, el nombre de la red.
+  a.textContent = hayModoOficial ? `${t(modeNameKey(network.name))} ↗` : `${network.name} ↗`;
   el.appendChild(a);
 }
 

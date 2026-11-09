@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { T } from "./i18n";
+import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
 
 /**
  * La regla del repositorio: toda cadena visible nueva va en español y en
@@ -87,6 +88,77 @@ describe("diccionario", () => {
       expect(T.en.cTelOffN(["Ana", "Bea", "Ciro"], 15)).toMatch(/Ana, Bea, Ciro and 15 more/);
       expect(T.es.cTelOffN(["Ana", "Bea", "Ciro"], 15)).toMatch(/Ana, Bea, Ciro y 15 más/);
     }
+  });
+
+  it("con modo Oficial, los modos se llaman Prueba y Oficial, sin nombres técnicos ni promesas de que algo no se borra", () => {
+    // El diccionario con el modo Oficial puesto: son los textos que se ven cuando la lista oficial tiene contrato en la red real.
+    const conModo = (l: "es" | "en"): Record<string, unknown> => ({ ...T[l], ...TEXTOS_MODO_OFICIAL[l] });
+    expect(conModo("es").netTest).toBe("Prueba");
+    expect(conModo("es").netMain).toBe("Oficial");
+    expect(conModo("en").netTest).toBe("Test");
+    expect(conModo("en").netMain).toBe("Live");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["netTest", "netMain", "netTestHint", "netMainHint", "modeOfficialBody", "modeTestBody", "sealModeOfficial", "sealModeTest", "firstOfficialBody", "acctNetTest", "acctNetMain", "wrongNetwork"] as const) {
+        const v = conModo(l)[k] as string;
+        expect(v, `${l}.${k}`).not.toMatch(/testnet|mainnet/i);
+        expect(v, `${l}.${k}`).not.toMatch(/para siempre|no se borra|never deleted|forever/i);
+      }
+    }
+  });
+
+  // El día que la lista oficial tenga contrato en la red real, esta deja de correr y corre la de abajo: el diccionario lleva los del modo Oficial.
+  it.runIf(!HAY_MODO_OFICIAL)("sin contrato en la red real, el diccionario dice lo que decía antes del modo Oficial", () => {
+    // deployments.json trae mainnet en null: nada de "En el modo Prueba", que le haría pensar a quien lee que hay otro modo.
+    expect(T.es.netTest).toBe("Modo prueba");
+    expect(T.en.netTest).toBe("Test mode");
+    expect(T.es.fotoPrueba).toBe("modo prueba");
+    expect(T.es.acctNetMain).toBe("Red principal");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["nextBody", "verifN3", "tmMore3"]) expect(T[l][k] as string, `${l}.${k}`).not.toMatch(/En el modo Prueba|In Test mode/);
+    }
+    expect(T.es.nextBody as string).toContain("Hoy el costo de la red lo paga Tinkazo y el sitio funciona en modo prueba");
+    expect(T.es.verifN3 as string).toContain("Hoy Tinkazo funciona en modo prueba");
+    expect(T.es.tmMore3 as string).toContain("Hoy funciona en modo prueba");
+    expect(T.en.verifN3 as string).toContain("runs in test mode today");
+  });
+
+  it("los textos del modo Oficial pisan claves que ya existen y están en los dos idiomas", () => {
+    expect(Object.keys(TEXTOS_MODO_OFICIAL.es).sort()).toEqual(Object.keys(TEXTOS_MODO_OFICIAL.en).sort());
+    for (const l of ["es", "en"] as const) {
+      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) {
+        expect(typeof T[l][k], `${l}.${k} ya existe`).toBe("string");
+        // Con contrato en la red real, el diccionario ya los lleva puestos: se mira abajo.
+        if (!HAY_MODO_OFICIAL) expect(TEXTOS_MODO_OFICIAL[l][k], `${l}.${k} cambia`).not.toBe(T[l][k]);
+      }
+    }
+  });
+
+  it.runIf(HAY_MODO_OFICIAL)("con contrato en la red real, el diccionario lleva los textos del modo Oficial", () => {
+    for (const l of ["es", "en"] as const) {
+      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+    }
+  });
+
+  describe("con contrato en la red real", () => {
+    afterEach(() => {
+      vi.doUnmock("./stellar/deployments.json");
+      vi.resetModules();
+    });
+
+    it("el diccionario lleva los nombres Prueba y Oficial, y las páginas de lectura hablan del modo Prueba", async () => {
+      const real = (await import("./stellar/deployments.json")).default;
+      vi.resetModules();
+      vi.doMock("./stellar/deployments.json", () => ({
+        default: { ...real, mainnet: { contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", rpcUrl: "https://rpc.example" } },
+      }));
+      const { T: conOficial } = await import("./i18n");
+      expect(conOficial.es.netTest).toBe("Prueba");
+      expect(conOficial.es.netMain).toBe("Oficial");
+      expect(conOficial.en.netTest).toBe("Test");
+      expect(conOficial.en.netMain).toBe("Live");
+      expect(conOficial.es.nextBody as string).toContain("En el modo Prueba, guardá");
+      expect(conOficial.en.tmMore3 as string).toContain("In Test mode, keep");
+    });
   });
 
   it("en inglés ningún número se une con \"a\" (\"4 a 30\"): es la palabra del español, y en inglés se lee \"4 to 30\"", () => {

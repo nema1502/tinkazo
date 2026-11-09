@@ -21,6 +21,8 @@ import { pintarFranja } from "./ui/logo-franja";
 import { contar, seCuentaPorPersona } from "./participaciones";
 import { modesFlagOn, requestedMode } from "./modos/bandera";
 import { isTurnOrder } from "./modos/turnos";
+import { eventoEsDePrueba, veredictoConModo } from "./evento-modo";
+import { hayModoOficial } from "./stellar/config";
 
 /**
  * La página de un evento: varios sorteos del mismo día, en un solo enlace.
@@ -345,9 +347,12 @@ const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
 function veredicto(estado: "ok" | "partial" | "bad" | "working", kicker: string, titulo: string, detalle: string, aviso = ""): void {
   pintarFranja(logoDelEnlace, estado);
   $("ev-veredicto").className = `verdict ${estado}`;
-  $("ev-kicker").textContent = t(kicker);
+  // Un evento de Prueba lo dice arriba y en cualquier color (con los dos modos a la vista, como la verificación de un sorteo).
+  const modo = veredictoConModo({ estado, kicker: t(kicker), detalle, prueba: hayModoOficial && eventoEsDePrueba(entran) }, t);
+  $("ev-kicker").textContent = modo.kicker;
+  $("ev-kicker").classList.toggle("marca-prueba", modo.marca);
   $("ev-veredicto-t").textContent = t(titulo);
-  $("ev-detalle").textContent = detalle;
+  $("ev-detalle").textContent = modo.detalle;
   const caja = $("ev-aviso");
   caja.textContent = aviso;
   caja.style.display = aviso ? "" : "none";

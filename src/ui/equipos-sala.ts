@@ -13,7 +13,7 @@ import { ponerEtiquetas } from "../equipos/etiquetas";
 import { getLang, onLangChange, t } from "../i18n";
 import { type EquipoDeSala, type EstadoDeConexion, type Sala, cerrarSala, crearSala, escucharSala } from "../sala/cliente";
 import { cambiarEstadoEnSala, configurarRegistro, quitarEquipoEnSala } from "../sala/equipos";
-import { accountUrl, network, txUrl } from "../stellar/config";
+import { type NetworkName, accountUrl, hayModoOficial, network, txUrl } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { app } from "../state";
 import { type DatosDePantalla, type DepsDePantalla, type PantallaDelStand, crearPantallaDelStand } from "./pantalla-stand";
@@ -161,6 +161,8 @@ export function depsReales(): DepsDelPanel {
 
 interface Guardada {
   sala: Sala;
+  /** El modo en que se abrió la sala. Lo guardado antes de que se guardara el modo es de Prueba, como era todo. */
+  red?: NetworkName;
   config: ConfigEquipos;
   dejados: number[];
   /** La hora del sorteo para la cuenta regresiva de la pantalla del stand («18:30»), o vacío. Solo vive en esta pestaña. */
@@ -285,7 +287,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
 
   function guardar(): void {
     try {
-      if (sala && config) deps.almacen.setItem(CLAVE, JSON.stringify({ sala, config, dejados: [...dejados], hora, ...(instante === null ? {} : { instante }) } satisfies Guardada));
+      if (sala && config) deps.almacen.setItem(CLAVE, JSON.stringify({ sala, red: network.name, config, dejados: [...dejados], hora, ...(instante === null ? {} : { instante }) } satisfies Guardada));
       else deps.almacen.removeItem(CLAVE);
     } catch {
       /* sin almacenamiento, el registro dura lo que la página */
@@ -297,6 +299,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       const x = JSON.parse(deps.almacen.getItem(CLAVE) ?? "null") as Partial<Guardada> | null;
       if (!x?.sala || typeof x.sala.id !== "string" || typeof x.sala.token !== "string" || typeof x.sala.clave !== "string" || !x.config) return null;
       if (x.sala.vence && x.sala.vence < Date.now()) return null;
+      // La sala es del modo en que se abrió: al pasar de Prueba a Oficial (o al revés) sus equipos, sus sorteos y sus
+      // cupones quedan en el otro modo, así que no se retoma. Se descarta limpia y se arma otra en el modo nuevo.
+      if ((x.red ?? "testnet") !== network.name) {
+        deps.almacen.removeItem(CLAVE);
+        return null;
+      }
       if ((x.config.modo !== "cupon" && x.config.modo !== "sorteo") || !esCuenta(x.config.cuenta) || typeof x.config.evento !== "string") return null;
       return {
         sala: x.sala,
@@ -318,7 +326,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   /** Lo que muestra la pantalla del stand: el QR del registro, los equipos con lo que dice la red y la hora fijada. */
   function datosDePantalla(): DatosDePantalla | null {
     if (!sala || !config) return null;
-    return { enlace: enlaceDeRegistro(sala, deps.origen()), modo: config.modo, equipos: lista(), evidencias, instante };
+    return { enlace: enlaceDeRegistro(sala, deps.origen(), network.name, hayModoOficial), modo: config.modo, equipos: lista(), evidencias, instante };
   }
 
   function aviso(texto: string): void {
@@ -823,7 +831,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       qrDe = "";
       return;
     }
-    const enlace = enlaceDeRegistro(sala, deps.origen());
+    const enlace = enlaceDeRegistro(sala, deps.origen(), network.name, hayModoOficial);
     if (qrDe !== enlace) {
       qrDe = enlace;
       void deps.qr(q<HTMLImageElement>("eq-qr"), enlace);
@@ -916,7 +924,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   });
   q("eq-copiar").addEventListener("click", () => {
     if (!sala) return;
-    void deps.portapapeles(enlaceDeRegistro(sala, deps.origen())).then((ok) => {
+    void deps.portapapeles(enlaceDeRegistro(sala, deps.origen(), network.name, hayModoOficial)).then((ok) => {
       enlaceCopiado = ok;
       pintar();
     });

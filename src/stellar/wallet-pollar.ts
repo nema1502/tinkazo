@@ -1,5 +1,6 @@
 import type { AuthOpenContext, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
+import { LEGACY_POLLAR_INTENT_KEY, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
@@ -34,8 +35,17 @@ import { cargaOpcional } from "../carga-opcional";
  * de disfrazarse.
  */
 
-/** Guarda por dónde entró la persona ("google" o "email"), para retomar la sesión. */
-const KEY = "tinkazo.pollar.intent";
+/**
+ * Guarda por dónde entró la persona ("google" o "email"), para retomar la sesión.
+ * Una marca por red: abrir el otro modo sin sesión no borra la de este. La clave
+ * vieja sin red solo se lee en Prueba, que es donde quedó escrita.
+ */
+const intentKey = (): string => pollarIntentKey(network.name);
+const readIntent = (): string | null => leerMarcaPollar(localStorage, network.name);
+const forgetIntent = (): void => {
+  localStorage.removeItem(intentKey());
+  if (network.name === "testnet") localStorage.removeItem(LEGACY_POLLAR_INTENT_KEY);
+};
 type Via = "google" | "email";
 
 /**
@@ -90,7 +100,7 @@ export interface SubmittingWallet extends WalletAdapter {
   signUnsponsored?(xdr: string): Promise<string>;
 }
 
-export const pollarConfigured = (): boolean => !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
+export const pollarConfigured = (): boolean => pollarKeyFor(network.name) !== "";
 
 /**
  * Una firma que el SDK dejó esperando confirmación (`PendingConfirmation` de `@pollar/core`, lo que usamos).
@@ -176,7 +186,7 @@ class PollarWallet implements SubmittingWallet {
   #remember(via: Via): void {
     this.#via = via;
     try {
-      localStorage.setItem(KEY, via);
+      localStorage.setItem(intentKey(), via);
     } catch {
       /* sin almacenamiento, al volver no se restaura solo */
     }
@@ -192,7 +202,7 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async #armarCliente(): Promise<PollarClient> {
-    const apiKey = import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
+    const apiKey = pollarKeyFor(network.name);
     if (!apiKey) throw new Error("pollar-not-configured");
     const { PollarClient: Ctor } = await import("@pollar/core");
     const client = new Ctor({
@@ -360,7 +370,7 @@ class PollarWallet implements SubmittingWallet {
   async restore(): Promise<string | null> {
     let via: string | null = null;
     try {
-      via = localStorage.getItem(KEY);
+      via = readIntent();
     } catch {
       /* nada que restaurar */
     }
@@ -395,7 +405,7 @@ class PollarWallet implements SubmittingWallet {
   /** ¿Sigue la marca de que esta app tenía una cuenta de Pollar? `restore` la olvida cuando la sesión ya no existe. */
   hayMarca(): boolean {
     try {
-      return localStorage.getItem(KEY) !== null;
+      return readIntent() !== null;
     } catch {
       return false;
     }
@@ -403,7 +413,7 @@ class PollarWallet implements SubmittingWallet {
 
   #olvidarMarca(): void {
     try {
-      localStorage.removeItem(KEY);
+      forgetIntent();
     } catch {
       /* ya no está */
     }
@@ -426,7 +436,7 @@ class PollarWallet implements SubmittingWallet {
 
   async disconnect(): Promise<void> {
     try {
-      localStorage.removeItem(KEY);
+      forgetIntent();
     } catch {
       /* ya no está */
     }

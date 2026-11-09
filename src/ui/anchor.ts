@@ -1,6 +1,6 @@
 import { getLang, t } from "../i18n";
 import { roundTime } from "../protocol/quicknet";
-import { network, txUrl } from "../stellar/config";
+import { modeNameKey, network, txUrl } from "../stellar/config";
 import type { IntentoDeSello, Resolucion } from "../stellar/envio";
 import type { TxArmada } from "./envio-sdk";
 import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
@@ -698,8 +698,8 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
     const net = document.createElement("span");
     net.className = "kicker";
     net.style.marginLeft = "8px";
-    // En la red de prueba dice "Modo prueba", como la cabecera: "testnet" no le dice nada a quien sortea.
-    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
+    // En la red de prueba dice lo mismo que la cabecera; en la otra, el modo Oficial.
+    net.textContent = network.name === "testnet" ? t("netTest") : t(modeNameKey(network.name));
     host.appendChild(net);
   }
 }

@@ -400,6 +400,8 @@
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
         <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la pantalla</button>
       </div>
+      <!-- En qué modo se sella (src/ui/freeze.ts): solo cuando existe el modo Oficial. Nace escondida. -->
+      <p class="note sellar-modo" id="sellar-modo" style="display:none"></p>
       <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. Va pegada a los botones: explica la acción que reemplaza a "Sellar la lista". -->
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <!-- Lo que le queda a la cuenta con el patrocinio de Tinkazo (src/ui/cupo-patrocinio.ts): solo cuando paga el servicio y hay cuenta. Nace escondida. -->
@@ -606,6 +608,8 @@
       <!-- Solo se ve si la lista de la cadena se cortó por el tope (history.ts): sin recorte no se avisa. -->
       <p class="note hist-truncado" id="hist-truncado" data-i="histTruncated" style="display:none">Mostramos los sorteos más recientes. Hay sorteos más viejos que no entran en esta lista.</p>
       <div id="hist-list" class="hist-list"></div>
+      <!-- Los sorteos del otro modo viven en el otro modo (src/ui/history.ts): solo cuando existe el modo Oficial. Nace escondido. -->
+      <p class="note hist-otro-modo" id="hist-otro-modo" style="display:none"></p>
       <div id="hist-eventos" class="hist-eventos" style="display:none"></div>
       <details class="hist-why">
         <summary data-i="histWhyT">¿Qué se guarda y dónde?</summary>
@@ -624,6 +628,8 @@
       <div class="row sin-sesion"><button class="primary" id="hist-entrar" data-i="histEnter">Entrar</button></div>
       <p class="con-sesion" data-i="histNone">Todavía no hay sorteos con esta cuenta. El primero aparece acá en cuanto sellás una lista.</p>
       <p class="con-sesion"><a class="enlace" href="/#como-se-usa" data-i="navComoUsa">Cómo se usa</a></p>
+      <!-- Lo mismo que el pie de Mis sorteos, para la cuenta vacía (src/ui/history.ts): solo con modo Oficial. Nace escondido. -->
+      <p class="note con-sesion hist-otro-modo" id="hist-vacio-otro-modo" style="display:none"></p>
     </div>
   </section>
 

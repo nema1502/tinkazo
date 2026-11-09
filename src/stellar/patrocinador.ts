@@ -1,4 +1,5 @@
 import type { RespuestaEnvio } from "./envio";
+import { network, type NetworkName } from "./config";
 import { configDelPortero } from "./patrocinio-config";
 
 /**
@@ -15,7 +16,8 @@ import { configDelPortero } from "./patrocinio-config";
  *   `envio.ts`.
  *
  * **Sin portero configurado, nada cambia:** no hay ninguna consulta y rige Pollar, como hoy. La dirección sale de
- * `VITE_PATROCINIO_URL` o, en `tinkazo.app` y en testnet, de la de por defecto (`patrocinio-config.ts`).
+ * la variable de esta red o, en `tinkazo.app` y en Prueba, de la de por defecto (`patrocinio-config.ts`). Si el
+ * portero contesta que es de otra red, no se le manda nada: cerrado ante la duda.
  * **Con la variable puesta y sin respuesta, cerrado ante la duda:** no se paga con nadie y la pantalla lo dice. Un
  * portero que contesta que está apagado, o que le falta algo de su configuración, es lo mismo.
  * **Con la dirección por defecto y sin respuesta, rige Pollar:** el portero no es condición para sellar. Si
@@ -163,9 +165,11 @@ const cuenta = (x: unknown): { usados: number; max: number; quedan: number } => 
  * en falso, con `motivo:"pollar"`, porque `prendido` solo dice si el portero paga ahora). Con `portero`, se usa
  * solo si `prendido` es verdadero; si no, cerrado, con el `motivo` (`config`, `apagado`, `fondo`).
  */
-export function leerCupo(estado: number, cuerpo: unknown): EstadoDelPatrocinio {
+export function leerCupo(estado: number, cuerpo: unknown, redEsperada: NetworkName = network.name): EstadoDelPatrocinio {
   if (estado !== 200 || !cuerpo || typeof cuerpo !== "object") return { rige: "cerrado", motivo: "sin-respuesta" };
   const o = cuerpo as Record<string, unknown>;
+  // El portero dice de qué red es. Si no es la de este modo, no se le manda nada.
+  if (typeof o.red === "string" && o.red !== redEsperada) return { rige: "cerrado", motivo: "sin-respuesta" };
   if (o.rige === "pollar") return { rige: "pollar", configurado: true };
   if (o.rige !== "portero") return { rige: "cerrado", motivo: "sin-respuesta" };
   if (o.prendido !== true) return { rige: "cerrado", motivo: o.motivo === "config" ? "config" : o.motivo === "apagado" ? "apagado" : o.motivo === "fondo" ? "fondo" : "sin-respuesta" };
@@ -178,10 +182,18 @@ export function leerCupo(estado: number, cuerpo: unknown): EstadoDelPatrocinio {
 /** La última vez que se preguntó, el servicio no contestó a tiempo: la próxima espera menos. */
 let seAgotoElTiempo = false;
 
-/** Pregunta a `/cupo`. Lanza si no contesta a tiempo. */
-async function preguntar(url: string, g: string, f: Fetch): Promise<EstadoDelPatrocinio> {
+/**
+ * Pregunta a `/cupo`. Lanza si no contesta a tiempo.
+ *
+ * Después de una espera entera sin respuesta, la próxima espera menos. Con la dirección por defecto (`porDefecto`) eso
+ * dura hasta que el servicio conteste: sin respuesta rige Pollar, así que cortar rápido no frena a nadie. Sin ella, no
+ * contestar es `cerrado` y frena el sello: la espera corta vale una sola vez, y la siguiente vuelve a ser entera, para
+ * que una demora suelta no deje el sello cerrado hasta recargar la página con un servicio que contesta en 2 o 3 s.
+ */
+async function preguntar(url: string, g: string, f: Fetch, porDefecto: boolean): Promise<EstadoDelPatrocinio> {
   const control = new AbortController();
   const tope = seAgotoElTiempo ? TOPE_CUPO_TRAS_CAIDA_MS : TOPE_CUPO_MS;
+  if (!porDefecto) seAgotoElTiempo = false;
   const reloj = setTimeout(() => control.abort(), tope);
   try {
     const r = await f(`${url}/v1/patrocinio/cupo?cuenta=${encodeURIComponent(g)}`, { method: "GET", cache: "no-store", signal: control.signal });
@@ -194,7 +206,7 @@ async function preguntar(url: string, g: string, f: Fetch): Promise<EstadoDelPat
     }
     return leerCupo(r.status, cuerpo);
   } catch (e) {
-    if (control.signal.aborted) seAgotoElTiempo = true;
+    if (control.signal.aborted && tope === TOPE_CUPO_MS) seAgotoElTiempo = true;
     throw e;
   } finally {
     clearTimeout(reloj);
@@ -249,7 +261,7 @@ export async function estadoDelPatrocinio(g: string | null | undefined, o: Opcio
   // Una consulta en curso se espera, también con `forzar`: dos preguntas seguidas no son dos esperas.
   if (enCurso && enCurso.g === quien) return enCurso.p;
   const f = o.fetch ?? fetch;
-  const p = preguntar(url, quien, f)
+  const p = preguntar(url, quien, f, config.porDefecto)
     .catch((): EstadoDelPatrocinio => ({ rige: "cerrado", motivo: "sin-respuesta" }))
     .then((estado) => {
       // Un "cerrado" por no contestar no se guarda: la próxima pregunta vuelve a intentar.

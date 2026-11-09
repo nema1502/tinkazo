@@ -1,7 +1,7 @@
 import { avatar } from "../avatar";
 import { esc } from "../dom";
 import { type Lang, chooseLang, getLang, onLangChange, t } from "../i18n";
-import { accountUrl, network } from "../stellar/config";
+import { accountUrl, hayModoOficial, network } from "../stellar/config";
 import { grifoApagado, grifoDisponible } from "../stellar/grifo";
 import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
@@ -295,6 +295,10 @@ function act(s: Open, el: HTMLElement): void {
       closeAccount();
       s.view.onFund();
       break;
+    case "mode":
+      closeAccount(false);
+      void import("./modo-ui").then((m) => m.abrirHojaDeModo());
+      break;
     case "saldo":
       closeAccount();
       void import("./saldo").then((m) => m.abrirSaldo({ address: s.view.address }));
@@ -462,7 +466,9 @@ function paint(s: Open): void {
     `<div class="acct-body">` +
     // La red, el saldo y el explorador.
     `<section class="acct-sec"><div class="acct-badges">` +
-    `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>${sinGrifo}${balance}</div>` +
+    (hayModoOficial
+      ? `<button type="button" class="acct-badge net${mainnet ? " main" : ""}" data-k="mode">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</button>`
+      : `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>`) + `${sinGrifo}${balance}</div>` +
     (fund ? `<div class="acct-badges">${fund}</div>` : "") +
     `<a class="acct-link" data-k="explorer" href="${esc(accountUrl(view.address))}" target="_blank" rel="noopener">${esc(t("fundExplorer"))}</a></section>` +
     // Cargar saldo, monedas, tiendita y plan del equipo: cada una detrás de su bandera (nada sale con todas apagadas).

@@ -6,7 +6,8 @@ import { type Dependencias, escucharSala, type Sala } from "../sala/cliente";
 import { anotarEquipoEnSala, leerEstadoDeEquipo } from "../sala/equipos";
 import { borradorDelPrimerSorteo, guardarEquipoLocal, leerEquipoLocal, prepararPrimerSorteo, sorteoPropioLocal } from "./celular";
 import { cifrarEquipo, descifrarEquipo, revisarEquipo } from "./datos";
-import { enlaceDeRegistro, leerEnlaceDeRegistro } from "./enlace";
+import { direccionDelSorteo, enlaceDeRegistro, leerEnlaceDeRegistro } from "./enlace";
+import { parseModeValue } from "../stellar/config";
 import { aprobarYEnviar } from "./envio";
 import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, paraMostrar, ponerEtiquetas } from "./etiquetas";
 import { accionSugerida, conCupon, contarPorEstado, estadoEfectivo, etiquetasDeEquipos, leToca, listaDesdeCupones, paraDarCupon } from "./estado";
@@ -518,6 +519,29 @@ describe("el celular del equipo", () => {
     expect(u.search).not.toContain(s.clave);
     expect(u.hash).toBe(`#${s.clave}`);
     expect(leerEnlaceDeRegistro(u.search, u.hash, "tinkazo.app")).toEqual(s);
+  });
+  it("un evento en Oficial lleva su modo en el enlace, y uno en Prueba no", () => {
+    const s = { id: "AbCd1234", clave: generarClave(), servicio: "https://s.tinkazo.app" };
+    const oficial = new URL(enlaceDeRegistro(s, "https://tinkazo.app", "mainnet"));
+    expect(oficial.searchParams.get("red")).toBe("oficial");
+    expect(oficial.searchParams.get("sala")).toBe(s.id);
+    expect(oficial.hash).toBe(`#${s.clave}`);
+    const prueba = new URL(enlaceDeRegistro(s, "https://tinkazo.app", "testnet"));
+    expect(prueba.searchParams.get("red")).toBeNull();
+  });
+  it("con el modo Oficial a la vista, el enlace de Prueba también lleva su modo", () => {
+    const s = { id: "AbCd1234", clave: generarClave(), servicio: "https://s.tinkazo.app" };
+    expect(new URL(enlaceDeRegistro(s, "https://tinkazo.app", "testnet", true)).searchParams.get("red")).toBe("prueba");
+    expect(new URL(enlaceDeRegistro(s, "https://tinkazo.app", "mainnet", true)).searchParams.get("red")).toBe("oficial");
+    // Sin el modo Oficial queda como siempre, y lo que lleva es leíble por la página.
+    expect(new URL(enlaceDeRegistro(s, "https://tinkazo.app", "testnet", false)).searchParams.get("red")).toBeNull();
+    expect(parseModeValue(new URL(enlaceDeRegistro(s, "https://tinkazo.app", "testnet", true)).searchParams.get("red"))).toBe("testnet");
+  });
+  it("«Ir al sorteo» sigue en el modo del registro sin depender de lo que guarde la pestaña", () => {
+    expect(direccionDelSorteo("mainnet", true)).toBe("/?red=oficial#sortear");
+    expect(direccionDelSorteo("testnet", true)).toBe("/?red=prueba#sortear");
+    // Sin el modo Oficial, la dirección de siempre.
+    expect(direccionDelSorteo("testnet", false)).toBe("/#sortear");
   });
   it("un servicio de otro lado solo se acepta en localhost", () => {
     const s = { id: "AbCd1234", clave: generarClave(), servicio: "http://127.0.0.1:8792" };

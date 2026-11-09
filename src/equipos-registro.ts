@@ -3,12 +3,13 @@ import { cargaOpcional } from "./version-nueva";
 import "./equipos/equipos.css";
 import { equiposActivo } from "./equipos/bandera";
 import { cifrarEquipo } from "./equipos/datos";
-import { leerEnlaceDeRegistro } from "./equipos/enlace";
+import { direccionDelSorteo, leerEnlaceDeRegistro } from "./equipos/enlace";
 import { montarRegistro } from "./equipos/registro";
 import { onLangChange, texto } from "./idioma";
 import { enNavegadorDeApp } from "./navegador";
 import { anotarEquipoEnSala, leerEstadoDeEquipo, leerPublico } from "./sala/equipos";
-import { network } from "./stellar/config";
+import { hayModoOficial, network } from "./stellar/config";
+import { hasPollarKey } from "./stellar/pollar-config";
 import { loadSessionKind } from "./stellar/session-store";
 import { cuentaDeLaSesion } from "./equipos/sesion";
 
@@ -21,7 +22,7 @@ import { cuentaDeLaSesion } from "./equipos/sesion";
  * está abierto. Todo lo que se puede probar sin navegador vive en `equipos/registro.ts`.
  */
 
-const hayPollar = !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
+const hayPollar = hasPollarKey(network.name);
 const hayGoogle = hayPollar && !enNavegadorDeApp(navigator.userAgent);
 
 // El SDK de Pollar baja con la página quieta: abrir la ventana de Google tiene que salir del toque, sin esperas.
@@ -57,8 +58,8 @@ if (raiz) {
     cifrar: cifrarEquipo,
     local: localStorage,
     sesion: sessionStorage,
-    // La herramienta se abre en esta pestaña, con la sesión de la cuenta y el borrador que se acaba de dejar.
-    irAlSorteo: () => location.assign("/#sortear"),
+    // La herramienta se abre en esta pestaña, con la sesión de la cuenta y el borrador que se acaba de dejar, en el modo del registro.
+    irAlSorteo: () => location.assign(direccionDelSorteo(network.name, hayModoOficial)),
     cada: (f, ms) => {
       const id = setInterval(f, ms);
       return () => clearInterval(id);

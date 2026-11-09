@@ -8,6 +8,7 @@ import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { paraMostrar } from "../equipos/etiquetas";
+import { hayModoOficial, network } from "../stellar/config";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -241,6 +242,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   back.innerHTML =
     `<div class="espera-top">` +
     `<span class="sticker">${esc(t("espSticker"))}</span>` +
+    // En Prueba, la sala entera ve en qué modo está el sorteo; en Oficial, nada.
+    (hayModoOficial && network.name === "testnet" ? `<span class="espera-prueba">${esc(t("netTest"))}</span>` : "") +
     `<div class="espera-top-acc">${juegoHtml(juegos, "barra")}<button class="ghost" type="button" data-volver>${esc(t("espVolver"))}</button></div>` +
     `</div>` +
     // En el ensayo también se ve que no se graba, como en el estadio (ensayo.ts).

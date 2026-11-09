@@ -40,7 +40,7 @@ function portero(cupoCuerpo: unknown, pago: () => Response | Promise<Response>) 
 }
 
 beforeEach(async () => {
-  vi.stubEnv("VITE_PATROCINIO_URL", URL);
+  vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", URL);
   getTransaction.mockReset();
   sendTransaction.mockReset();
   signAndSubmit.mockClear();
@@ -68,7 +68,7 @@ describe("submitElsewhere con el portero", () => {
   });
 
   it("sin la variable de entorno todo es como hoy: Pollar firma y manda, sin ninguna consulta al portero", async () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", "");
     const f = vi.fn();
     vi.stubGlobal("fetch", f);
     const { submitElsewhere } = await import("./envio-sdk");
@@ -80,7 +80,7 @@ describe("submitElsewhere con el portero", () => {
   });
 
   it("en tinkazo.app, sin la variable, se usa el portero por defecto", async () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", "");
     vi.stubGlobal("location", { hostname: "tinkazo.app" });
     const f = portero(cupo(), () => responder(200, { hash: HASH, status: "PENDING", quedan: 18, quedanSorteos: 38 }));
     const { submitElsewhere } = await import("./envio-sdk");
@@ -92,7 +92,7 @@ describe("submitElsewhere con el portero", () => {
   });
 
   it("en tinkazo.app, sin la variable y con el portero caído, Pollar firma y manda como siempre, sin error", async () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", "");
     vi.stubGlobal("location", { hostname: "tinkazo.app" });
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
     const { submitElsewhere } = await import("./envio-sdk");

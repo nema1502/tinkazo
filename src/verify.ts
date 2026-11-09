@@ -17,10 +17,11 @@ import { QUICKNET, bytesToHex, fetchRound, roundTime, roundUrl } from "./protoco
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { decodeProof, esSinSello, type Proof } from "./protocol/proof";
 import { anclaDe, premioDe, revisarComprobante, type Revision } from "./protocol/verificacion";
-import { network, shortAddress, txUrl } from "./stellar/config";
+import { hayModoOficial, network, shortAddress, txUrl } from "./stellar/config";
 import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
 import { leerRegistro } from "./stellar/registro";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
+import { detalleDeLaRed, rotuloDelModo } from "./verificacion-modo";
 import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
 import { agruparPorPersona, contar as contarPersonas, seCuentaPorPersona } from "./participaciones";
@@ -299,7 +300,7 @@ export function pintarComprobaciones(proof: Proof, r: Revision): void {
     // en ella, así que no se afirma: se dice de dónde sale el sello y con qué código se lo reconoce.
     else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")}, ${codigoDelSello(delHistorial)}`);
     else if (sello && !resultado) set("vCheckChain", "pending", () => t("vNotDrawnYet"));
-    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id}, ${proof.net}`);
+    else set("vCheckChain", r.motivos.length ? "bad" : "ok", () => detalleDeLaRed(proof, hayModoOficial, t));
 
     // La ronda tiene que haber nacido después del sello, con la hora de la cadena.
     const alSellar = sello ? { round: sello.round, en: sello.sealedAt } : delHistorial ? { round: delHistorial.round, en: delHistorial.closedAt } : null;
@@ -356,6 +357,18 @@ const hora = (s: number): string =>
   new Date(s * 1000).toLocaleTimeString(getLang() === "es" ? "es-BO" : "en-US", { hour: "2-digit", minute: "2-digit" });
 
 /**
+ * Pinta el modo del comprobante en el rótulo, con la marca naranja si es de Prueba. El modo sale del contrato de la
+ * lista oficial que reconoce el comprobante, no del `net` del enlace ni del de esta pestaña, y no la cambia
+ * (`verificacion-modo.ts`).
+ */
+function pintarModo(proof: Proof, resto: string): void {
+  const el = $("v-net");
+  const r = rotuloDelModo(anclaDe(proof), proof.net, resto, hayModoOficial, t);
+  el.textContent = r.texto;
+  el.classList.toggle("marca-prueba", r.marca);
+}
+
+/**
  * El rótulo de arriba de las comprobaciones: la red y cómo se reconoce el sorteo. Con el sello que
  * sale del historial, el número del enlace no se comprueba (la transacción no lo trae y el mismo sello
  * pasa con cualquier número): el sorteo se reconoce por el código del sello, junto con la fecha en que
@@ -363,7 +376,7 @@ const hora = (s: number): string =>
  */
 function pintarIdentidad(proof: Proof, delHistorial: SelloDelHistorial | null): void {
   if (!delHistorial) return;
-  $("v-net").textContent = `${String(proof.net ?? "")}, ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
+  pintarModo(proof, t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial)));
 }
 
 /**
@@ -750,8 +763,9 @@ export function renderList(proof: Proof): void {
     out.textContent = texto;
   };
   input.addEventListener("input", buscarAhora);
-  // Lo que dice el enlace, tal cual: si no es de Tinkazo, lo dice el veredicto.
-  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")}, #${String(proof.id ?? "")}` : t("noAnchor");
+  // Lo que dice el enlace, con el modo de su comprobante: si no es de Tinkazo, lo dice el veredicto.
+  if (anclaDe(proof).tipo !== "libre") pintarModo(proof, `#${String(proof.id ?? "")}`);
+  else $("v-net").textContent = t("noAnchor");
 }
 
 export function renderResult(

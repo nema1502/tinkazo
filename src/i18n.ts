@@ -4,6 +4,7 @@ import { TEXTOS_CREADORES } from "./marca-creadores-textos";
 import { TEXTOS_EQUIPOS } from "./equipos/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
+import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
 // las páginas de lectura y verificar lo usan con sus pocos textos.
@@ -442,8 +443,32 @@ export const T: Record<Lang, Dict> = {
     acctPrefs: "Preferencias",
     acctUnknown: "saldo sin leer",
     netTest: "Modo prueba",
+    netMain: "Oficial",
     netTestHint: "Es una prueba: todo funciona igual y se puede comprobar.",
     netMainHint: "Estás en la red de verdad.",
+    modeSheetTitle: "¿En qué modo sorteás?",
+    modeOfficial: "Oficial",
+    modeOfficialBody: "Para los sorteos que cuentan. El sello queda registrado en Stellar y cualquiera puede rehacer la cuenta con el comprobante.",
+    modeTest: "Prueba",
+    modeTestBody: "Para probar con calma. Funciona igual y se puede comprobar, pero se borra el 16 de diciembre.",
+    modeCurrent: "Estás en este modo",
+    modeSwitchToOfficial: "Pasar a Oficial",
+    modeSwitchToTest: "Pasar a Prueba",
+    modeSwitchBlocked: "Terminá este sorteo antes de cambiar de modo.",
+    sealModeOfficial: "Modo Oficial: este sorteo queda registrado en Stellar.",
+    sealModeTest: "Modo Prueba: se borra el 16 de diciembre. Para tu evento, pasá a Oficial.",
+    sealModeOtraRed: "Tu billetera está en otra red: así no se puede sellar en {modo}.",
+    otraRedComoCambiar: "En tu billetera elegí \"{etiqueta}\" y volvé a tocar Sellar la lista.",
+    walletNetLabelMain: "Main Net",
+    walletNetLabelTest: "Test Net",
+    firstOfficialTitle: "Vas a sellar en modo Oficial",
+    firstOfficialBody: "El sello queda registrado en Stellar; los nombres no se publican, solo la huella de la lista.",
+    firstOfficialSeal: "Sellar",
+    firstOfficialToTest: "Pasar a Prueba",
+    historyOtherModeTest: "Tus sorteos de Prueba están en el modo Prueba.",
+    historyOtherModeOfficial: "Tus sorteos de Oficial están en el modo Oficial.",
+    historySwitchToTest: "Pasar a Prueba",
+    historySwitchToOfficial: "Pasar a Oficial",
     fundTag: "Modo prueba",
     fundTitle: "Tu cuenta todavía no tiene saldo",
     fundBody: "Para sellar hace falta un poquito. En testnet es dinero de prueba: pedila acá y seguís.",
@@ -2405,6 +2430,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
     cmpPie: "Sorteado con Tinkazo: https://tinkazo.app",
     cmpEvUno: "{t} (1 sorteo), verificable.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
+    cmpEvPrueba: "Estos sorteos son del modo Prueba y se borran el 16 de diciembre.",
     // Sin sello (26 de octubre de 2026): si algún sorteo del evento se siguió sin sello, el mensaje no dice
     // "verificable" de ninguno ni "verificarlos", y el renglón de cada uno lleva `redSinSelloEtiqueta`.
     cmpVerSinSello: "Para ver la lista y la cuenta, entrá acá: {enlace}",
@@ -2933,8 +2959,32 @@ export const T: Record<Lang, Dict> = {
     acctPrefs: "Preferences",
     acctUnknown: "balance unread",
     netTest: "Test mode",
+    netMain: "Live",
     netTestHint: "This is a test: everything works the same and can be checked.",
     netMainHint: "You are on the real network.",
+    modeSheetTitle: "Which mode are you drawing in?",
+    modeOfficial: "Live",
+    modeOfficialBody: "For the draws that count. The seal stays recorded on Stellar and anyone can redo the math with the receipt.",
+    modeTest: "Test",
+    modeTestBody: "For trying things calmly. Everything works the same and can be checked, but it is wiped on December 16.",
+    modeCurrent: "You are in this mode",
+    modeSwitchToOfficial: "Switch to Live",
+    modeSwitchToTest: "Switch to Test",
+    modeSwitchBlocked: "Finish this draw before switching modes.",
+    sealModeOfficial: "Live mode: this draw stays recorded on Stellar.",
+    sealModeTest: "Test mode: it is wiped on December 16. For your event, switch to Live.",
+    sealModeOtraRed: "Your wallet is on another network: you can't seal in {modo} like this.",
+    otraRedComoCambiar: "In your wallet, pick \"{etiqueta}\" and tap Seal the list again.",
+    walletNetLabelMain: "Main Net",
+    walletNetLabelTest: "Test Net",
+    firstOfficialTitle: "You are about to seal in Live mode",
+    firstOfficialBody: "The seal stays recorded on Stellar; names are never published, only the fingerprint of the list.",
+    firstOfficialSeal: "Seal",
+    firstOfficialToTest: "Switch to Test",
+    historyOtherModeTest: "Your Test draws are in Test mode.",
+    historyOtherModeOfficial: "Your Live draws are in Live mode.",
+    historySwitchToTest: "Switch to Test",
+    historySwitchToOfficial: "Switch to Live",
     fundTag: "Test mode",
     fundTitle: "Your account has no balance yet",
     fundBody: "Sealing needs a little. On testnet it's test money: ask for it here and carry on.",
@@ -4852,6 +4902,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
     cmpPie: "Drawn with Tinkazo: https://tinkazo.app",
     cmpEvUno: "{t} (1 draw), verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
+    cmpEvPrueba: "These draws are from Test mode and are wiped on December 16.",
     // Without a seal (26 October 2026): if any draw of the event went on without a seal, the message says
     // neither "verifiable" of any of them nor "verify them", and each one's line carries `redSinSelloEtiqueta`.
     cmpVerSinSello: "To see the list and the math, open this link: {enlace}",
@@ -5345,6 +5396,11 @@ Object.assign(T.en, TEXTOS_EQUIPOS.en);
 // Los premios pagados y el panel de ganadores (src/ui/panel-ganadores.ts) tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_PAGOS.es);
 Object.assign(T.en, TEXTOS_PAGOS.en);
+// Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre (`i18n-modo-oficial.ts`).
+if (HAY_MODO_OFICIAL) {
+  Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
+  Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
+}
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los
 // juegos leen `T[getLang()]` y `t()` como siempre.
