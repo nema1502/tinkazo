@@ -85,6 +85,16 @@ describe("qué dice cada equipo", () => {
     expect(r.conCupon).toBe(1);
     expect(r.total).toBe(2);
   });
+
+  it("si dos equipos se llaman igual, el segundo lleva (2): solo lo que se muestra", () => {
+    const a = equipo(1, { nombre: "Equipo 7" });
+    const b = equipo(2, { nombre: "equipo 7" });
+    const c = equipo(3, { nombre: "Los Cóndores" });
+    const r = filasDePantalla("cupon", [a, b, c], new Map());
+    expect(r.filas.map((f) => f.nombre)).toEqual(["Equipo 7", "equipo 7 (2)", "Los Cóndores"]);
+    // Las cuentas, que es lo que se sella, no cambian.
+    expect(a.cuenta).not.toBe(b.cuenta);
+  });
 });
 
 describe("cómo entran en el proyector", () => {

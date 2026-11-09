@@ -17,7 +17,7 @@ const equipo = (n: number): Equipo => ({
   activa: true,
 });
 
-function armar(datos: DatosDePantalla, idioma: "es" | "en" = "es") {
+function armar(datos: DatosDePantalla, idioma: "es" | "en" = "es", ventana = { ancho: 1920, alto: 1080 }) {
   const relojes = new Map<number, () => void>();
   const p = crearPantallaDelStand({
     tx: t,
@@ -29,7 +29,7 @@ function armar(datos: DatosDePantalla, idioma: "es" | "en" = "es") {
       relojes.set(ms, f);
       return () => relojes.delete(ms);
     },
-    ventana: () => ({ ancho: 1920, alto: 1080 }),
+    ventana: () => ventana,
   });
   return { p, relojes };
 }
@@ -67,6 +67,25 @@ describe("la pantalla del stand", () => {
     p.abrir();
     expect((p.raiz.querySelector("#stp-pagina") as HTMLElement).hidden).toBe(true);
     expect(p.raiz.querySelectorAll(".stp-equipo")).toHaveLength(2);
+  });
+
+  it("con 26 equipos la letra se lee desde el fondo: 26 px en 1366x768 y 34 en 1920x1080", () => {
+    for (const [ancho, alto, piso] of [
+      [1366, 768, 26],
+      [1920, 1080, 34],
+    ] as const) {
+      const equipos = Array.from({ length: 26 }, (_, i) => equipo(i + 1));
+      const { p } = armar({ enlace: "x", modo: "cupon", equipos, evidencias: new Map(), instante: null }, "es", { ancho, alto });
+      p.abrir();
+      const ol = p.raiz.querySelector("#stp-equipos") as HTMLElement;
+      const letra = Number(/([\d.]+)px/.exec(ol.style.getPropertyValue("--stp-letra"))?.[1] ?? 0);
+      expect(letra, `${ancho}x${alto}`).toBeGreaterThanOrEqual(piso);
+      // Con menos por página hay más páginas, y se muestran los 26.
+      const pagina = p.raiz.querySelector("#stp-pagina") as HTMLElement;
+      expect(pagina.hidden, `${ancho}x${alto}`).toBe(false);
+      p.cerrar();
+      document.body.innerHTML = "";
+    }
   });
 
   it("la hora se escribe como se lee en cada idioma", () => {

@@ -216,6 +216,14 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   /** El instante de esa hora, calculado una sola vez al fijarla. */
   let instante: number | null = null;
   let pantalla: PantallaDelStand | null = null;
+  /** El orden en que cada equipo entró al panel, para saber si entró después de que empezó la última lectura terminada. */
+  let secuenciaDeEntrada = 0;
+  const entradas = new Map<number, number>();
+  let entradasCubiertasPorLaUltimaLectura = 0;
+  /** Si se está armando la lista desde los cupones: el botón lo muestra y no se puede tocar otra vez. */
+  let usandoLista = false;
+  /** Cambia cada vez que la sala vigente cambia o se deja: una lectura de cuentas de la sala anterior no escribe en la nueva. */
+  let marcaDeSala = 0;
 
   const fmt = (clave: string, vars: Record<string, string | number>): string =>
     Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), tx(clave));
@@ -258,11 +266,13 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     `</div>` +
     `<p class="note" id="eq-progreso" role="status" aria-live="polite" hidden></p>` +
     `<div class="eq-xdr" id="eq-xdr" hidden>` +
-    `<h4 data-eq="eqXdrT"></h4><p class="note" id="eq-xdr-porque"></p><p class="note" data-eq="eqXdrPasos"></p>` +
+    `<p class="note" id="eq-xdr-porque"></p>` +
+    `<details class="eq-xdr-detalle"><summary data-eq="eqXdrDetalle"></summary><h4 data-eq="eqXdrT"></h4><p class="note" data-eq="eqXdrPasos"></p>` +
     `<textarea id="eq-xdr-texto" readonly rows="4" spellcheck="false" class="mono"></textarea>` +
     `<div class="row"><button class="ghost" type="button" id="eq-xdr-copiar" data-eq="eqXdrCopiar"></button>` +
-    `<a class="ghost btn-like" id="eq-xdr-lab" href="${LAB_FIRMAR}" target="_blank" rel="noopener" data-eq="eqXdrLab"></a>` +
-    `<button class="ghost" type="button" id="eq-xdr-ya" data-eq="eqXdrYa"></button></div>` +
+    `<a class="ghost btn-like" id="eq-xdr-lab" href="${LAB_FIRMAR}" target="_blank" rel="noopener" data-eq="eqXdrLab"></a></div>` +
+    `</details>` +
+    `<div class="row"><button class="ghost" type="button" id="eq-xdr-ya" data-eq="eqXdrYa"></button></div>` +
     `</div>` +
     `<p class="note" data-eq="eqEtiquetaNota"></p>` +
     `<ul class="eq-equipos" id="eq-equipos"></ul>` +
@@ -324,9 +334,10 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
 
   const notaDeCuentasMalas = (malas: readonly Equipo[]): string => (malas.length ? fmt("eqCuentasMalas", { quienes: nombresDe(malas) }) : "");
 
-  async function activasDe(cuentas: string[]): Promise<void> {
+  async function activasDe(cuentas: string[], marca = marcaDeSala): Promise<void> {
     if (cuentas.length === 0) return;
     const m = await deps.activas(cuentas);
+    if (marca !== marcaDeSala) return;
     for (const e of equipos.values()) {
       const a = m.get(e.cuenta);
       if (a !== undefined) e.activa = a;
@@ -347,6 +358,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     }
     const antes = equipos.get(x.n);
     if (antes && antes.v > x.v) return;
+    if (!antes) entradas.set(x.n, ++secuenciaDeEntrada);
     equipos.set(x.n, {
       n: x.n,
       cuenta: x.cuenta,
@@ -362,6 +374,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   }
 
   function seQuito(n: number): void {
+    entradas.delete(n);
     if (equipos.delete(n)) {
       dejados.delete(n);
       pintar();
@@ -385,25 +398,45 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       try {
         const cuentas = lista().map((e) => e.cuenta);
         const sinSaber = lista().filter((e) => e.activa !== true).map((e) => e.cuenta);
-        const [pagos, sorteos] = await Promise.all([deps.pagos(c.cuenta), c.modo === "sorteo" && cuentas.length ? deps.sorteos(cuentas) : Promise.resolve(undefined), activasDe(sinSaber)]);
+        // Los cupones primero, sin esperar a los sorteos: esa lectura es la lenta y el botón de la lista no depende
+        // de ella. En cuanto están los pagos se pinta, así el botón aparece aunque los sorteos sigan leyéndose.
+        const pagosP = deps.pagos(c.cuenta);
+        const sorteosP = c.modo === "sorteo" && cuentas.length ? deps.sorteos(cuentas) : Promise.resolve(undefined);
+        const activasP = activasDe(sinSaber);
+        // Las dos lecturas que esperan tienen destino desde el principio: si los pagos fallan o la sala cambia, no quedan sin nadie que las atienda.
+        const sorteosSeguros = sorteosP.catch(() => null);
+        const activasSeguras = activasP.catch(() => undefined);
+        const pagos = await pagosP;
         if (sala !== s) return;
         avisos = {
           pagos: pagos === null,
           leyendo: pagos === null && !!deps.pagosPendientes?.(c.cuenta),
-          sorteos: c.modo === "sorteo" && sorteos === null,
-          truncado: !!sorteos?.truncado,
+          sorteos: false,
+          truncado: false,
         };
         if (pagos) {
           const cupones = cuponesEnviados(pagos, c.cuenta, c.evento);
-          for (const cuenta of cuentas) {
-            const cupon = cupones.get(cuenta);
-            if (cupon) evidencias.set(cuenta, { ...evidencias.get(cuenta), cupon });
+          // La evidencia es para los equipos que están en el panel cuando llega la respuesta, no solo para los de la foto inicial.
+          for (const e of lista()) {
+            const cupon = cupones.get(e.cuenta);
+            if (cupon) evidencias.set(e.cuenta, { ...evidencias.get(e.cuenta), cupon });
           }
+          // Esta lectura ya miró a los equipos que están en el panel a esta altura; los que entren desde ahora quedan para otra.
+          entradasCubiertasPorLaUltimaLectura = secuenciaDeEntrada;
         }
+        pintar();
+        const sorteos = await sorteosSeguros;
+        await activasSeguras;
+        if (sala !== s) return;
+        avisos = {
+          ...avisos,
+          sorteos: c.modo === "sorteo" && sorteos === null,
+          truncado: !!sorteos?.truncado,
+        };
         if (sorteos) {
-          for (const cuenta of cuentas) {
-            const y = sorteos.porCuenta.get(cuenta);
-            if (y) evidencias.set(cuenta, { ...evidencias.get(cuenta), yaSorteo: { id: y.id, contrato: y.contrato } });
+          for (const e of lista()) {
+            const y = sorteos.porCuenta.get(e.cuenta);
+            if (y) evidencias.set(e.cuenta, { ...evidencias.get(e.cuenta), yaSorteo: { id: y.id, contrato: y.contrato } });
           }
         }
         // Lo que la red dice y la sala todavía no: se sube, para que el celular del equipo lo vea.
@@ -460,6 +493,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   }
 
   function escuchar(s: Sala): void {
+    marcaDeSala++;
     escucha?.parar();
     pararReloj?.();
     estadoRed = "conectando";
@@ -485,6 +519,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   }
 
   function olvidar(): void {
+    marcaDeSala++;
     escucha?.parar();
     escucha = null;
     pararReloj?.();
@@ -493,6 +528,9 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     config = null;
     equipos.clear();
     evidencias.clear();
+    entradas.clear();
+    entradasCubiertasPorLaUltimaLectura = 0;
+    usandoLista = false;
     dejados.clear();
     xdr = null;
     progreso = "";
@@ -597,6 +635,9 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       const notaMalas = notaDeCuentasMalas(malas);
       if (listos.length === 0) {
         progreso = "";
+        // Todos con el cupón ya en la red: no falta nadie, está todo repartido. Se dice así, no que no hay a quién darle.
+        const todos = lista();
+        if (todos.length > 0 && todos.every((e) => evidencias.get(e.cuenta)?.cupon)) return aviso(tx("eqTodosConCupon"));
         return aviso([notaMalas, inactivos.length ? fmt("eqNoActivas", { n: inactivos.length }) : ""].filter(Boolean).join(" ") || tx("eqSinQuienDar"));
       }
       const tanda = tandas(listos)[0] ?? [];
@@ -645,17 +686,43 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   /** Deja a la vista el aviso de los pagos (que se va solo cuando la lectura termina), sin otro mensaje que lo tape. */
   const sinPagosLeidos = (): void => aviso("");
 
-  function usarComoLista(): void | Promise<void> {
-    // Con una lectura de la red en curso (al abrir la pantalla tarda unos segundos), los cupones todavía están llegando:
-    // se espera a que termine. Sin esto, un toque temprano decía «Hacen falta al menos dos equipos con cupón» con dos ya a la vista.
-    if (revisandoYa) return revisandoYa.then(() => usarComoLista());
-    // Con los pagos sin leer enteros, la lista puede quedar sin equipos que sí tienen su cupón: no se arma.
-    if (avisos.pagos) return sinPagosLeidos();
-    const { lineas, etiquetas } = listaDesdeCupones(lista(), evidencias);
-    if (lineas.length < 2) return aviso(tx("eqListaPocos"));
-    if (!deps.ponerLista(lineas.join("\n"))) return aviso(tx("eqListaSellada"));
-    deps.ponerEtiquetas(etiquetas);
-    aviso(fmt("eqListaPuesta", { n: lineas.length }));
+  /** Si hace falta mirar la red antes de armar la lista: un equipo con cupón según la sala sin evidencia leída, o que entró después de la última lectura. */
+  const haceFaltaLeer = (): boolean =>
+    lista().some((e) => (e.guardado === "cupon" && !evidencias.get(e.cuenta)?.cupon) || (entradas.get(e.n) ?? 0) > entradasCubiertasPorLaUltimaLectura);
+  const sinConfirmar = (): Equipo[] => lista().filter((e) => e.guardado === "cupon" && !evidencias.get(e.cuenta)?.cupon);
+  const textoSinConfirmar = (n: number): string => (n === 1 ? tx("eqListaSinConfirmar1") : fmt("eqListaSinConfirmar", { n }));
+
+  async function usarComoLista(): Promise<void> {
+    if (usandoLista) return;
+    usandoLista = true;
+    pintar();
+    try {
+      // Con un equipo que la última lectura no pudo mirar, primero se lee de nuevo y recién ahí se arma: si no, quedaría afuera en silencio.
+      // Al terminar se vuelve a mirar, por si entró otro mientras se esperaba, con un tope para no esperar para siempre.
+      for (let vueltas = 0; vueltas < 3 && haceFaltaLeer(); ) {
+        // Una lectura ya en curso se espera primero: si empezó después de que entraron los equipos, alcanza.
+        if (revisandoYa) {
+          await revisandoYa;
+          continue;
+        }
+        vueltas++;
+        const s = sala;
+        await revisar(true);
+        if (sala !== s) return;
+      }
+      // Con los pagos sin leer enteros, la lista puede quedar sin equipos que sí tienen su cupón: no se arma.
+      if (avisos.pagos) return sinPagosLeidos();
+      const quedan = sinConfirmar();
+      const { lineas, etiquetas } = listaDesdeCupones(lista(), evidencias);
+      if (lineas.length < 2) return aviso(quedan.length ? textoSinConfirmar(quedan.length) : tx("eqListaPocos"));
+      if (!deps.ponerLista(lineas.join("\n"))) return aviso(tx("eqListaSellada"));
+      deps.ponerEtiquetas(etiquetas);
+      // Quien figura con cupón en la sala y no se leyó en la red no entra, pero se dice: no queda afuera en silencio.
+      aviso(quedan.length ? `${fmt("eqListaPuesta", { n: lineas.length })} ${textoSinConfirmar(quedan.length)}` : fmt("eqListaPuesta", { n: lineas.length }));
+    } finally {
+      usandoLista = false;
+      pintar();
+    }
   }
 
   /* ------------------------------------------------------------------ la vista */
@@ -788,9 +855,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     dar.dataset.sugerida = sugerida === "cupones" ? "1" : "";
     dar.disabled = ocupado === "cupones" || avisos.pagos;
     const usar = q<HTMLButtonElement>("eq-lista");
-    usar.hidden = !todos.some((e) => evidencias.get(e.cuenta)?.cupon);
+    // Tras recargar, la sala ya dice quién tiene su cupón aunque la red todavía se esté leyendo: el botón se ve
+    // enseguida, donde va, en vez de aparecer de golpe al terminar. Tocarlo antes espera a la lectura en curso.
+    usar.hidden = !todos.some((e) => evidencias.get(e.cuenta)?.cupon || e.guardado === "cupon");
     usar.dataset.sugerida = sugerida === "lista" ? "1" : "";
-    usar.disabled = avisos.pagos;
+    usar.disabled = avisos.pagos || usandoLista;
+    usar.textContent = tx(usandoLista ? "eqRevisando" : "eqUsarLista");
     q<HTMLButtonElement>("eq-revisar").disabled = ocupado !== "";
     q<HTMLButtonElement>("eq-copiar").textContent = tx(enlaceCopiado ? "eqCopiado" : "eqCopiarEnlace");
     const campoHora = q<HTMLInputElement>("eq-hora");

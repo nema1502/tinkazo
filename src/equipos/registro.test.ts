@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { Keypair } from "@stellar/stellar-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { T, t } from "../i18n";
+import { guardarEquipoLocal } from "./celular";
 import { generarClave } from "../sala/cifra";
 import { descifrarEquipo } from "./datos";
 import type { SalaDeRegistro } from "./enlace";
@@ -128,6 +129,40 @@ describe("antes de pedir nada", () => {
     await vi.waitFor(() => expect(mensaje(m)).toBe(t("eqpSinRegistro")));
     expect(vista(m)).toBe("ninguna");
   });
+  it("si la sala no contesta, el error trae un botón para probar de nuevo", async () => {
+    let caida = true;
+    const m = await montar({ leerPublico: async () => (caida ? { ok: false, motivo: "red" } : { ok: true, config: CONFIG("cupon"), equipos: 0 }) });
+    await vi.waitFor(() => expect(mensaje(m)).toBe(t("eqpRed")));
+    const b = q<HTMLButtonElement>(m, "eqp-reintentar");
+    expect(b.hidden).toBe(false);
+    expect(b.textContent).toBe(t("eqpReintentar"));
+    caida = false;
+    b.click();
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-cuenta"));
+    expect(q<HTMLButtonElement>(m, "eqp-reintentar").hidden).toBe(true);
+  });
+  it("«Probar de nuevo» no lanza dos cargas a la vez, y la respuesta que vale es la de esa carga", async () => {
+    let llamadas = 0;
+    let soltar: () => void = () => undefined;
+    const m = await montar({
+      leerPublico: async () => {
+        llamadas++;
+        if (llamadas === 1) return { ok: false, motivo: "red" };
+        return new Promise((r) => {
+          soltar = () => r({ ok: true, config: CONFIG("cupon"), equipos: 0 });
+        }) as never;
+      },
+    });
+    await vi.waitFor(() => expect(mensaje(m)).toBe(t("eqpRed")));
+    const b = q<HTMLButtonElement>(m, "eqp-reintentar");
+    b.click();
+    b.click();
+    await vi.waitFor(() => expect(llamadas).toBe(2));
+    expect(b.disabled).toBe(true);
+    soltar();
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-cuenta"));
+    expect(llamadas).toBe(2);
+  });
   it("una sala cerrada, una sala sin armar y una sin red se dicen distinto", async () => {
     const m1 = await montar({ leerPublico: async () => ({ ok: false, motivo: "cerrada" }) });
     await vi.waitFor(() => expect(mensaje(m1)).toBe(t("eqpCerrada")));
@@ -231,6 +266,17 @@ describe("anotar al equipo", () => {
     expect(q(m, "eqp-estado-t").textContent).toBe("Tu equipo quedó anotado");
     expect(q(m, "eqp-estado-b").textContent).toBe("Tu cupón llega a tu cuenta cuando quien organiza los reparta.");
     expect(q<HTMLButtonElement>(m, "eqp-sorteo").hidden).toBe(true);
+  });
+
+  it("el título acompaña el punto del equipo: anotado y con cupón", async () => {
+    const { m } = await hastaElFormulario({ modo: "cupon" });
+    expect(m.raiz.querySelector("h1")?.textContent).toBe(t("eqpTitulo"));
+    await llenar(m);
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-estado"));
+    expect(m.raiz.querySelector("h1")?.textContent).toBe(t("eqpListo"));
+    m.sala.estado = "cupon";
+    m.reloj.f();
+    await vi.waitFor(() => expect(m.raiz.querySelector("h1")?.textContent).toBe(t("eqpCuponT")));
   });
 
   it("con sorteo propio queda como solicitud: 'Pedimos participar'", async () => {
@@ -390,6 +436,18 @@ describe("el camino con sorteo propio", () => {
 
   it("'Cambiar los nombres del equipo' vuelve al formulario con lo que se había escrito", async () => {
     const { m } = await anotado();
+    q<HTMLButtonElement>(m, "eqp-cambiar").click();
+    expect(vista(m)).toBe("eqp-datos");
+    expect(q<HTMLInputElement>(m, "eqp-nombre").value).toBe("Los Cóndores");
+    expect(q<HTMLInputElement>(m, "eqp-i2").value).toBe("Carla");
+  });
+
+  it("'Cambiar los nombres' trae lo guardado aunque la página se haya recargado en el medio", async () => {
+    const g = cuenta();
+    const m = await montar({ cuentaRecordada: async () => g, estado: "aceptado", modo: "cupon" });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-estado"));
+    // Al entrar directo al estado no hay nada en memoria: lo que vale es lo que este celular guardó.
+    guardarEquipoLocal({ nombre: "Los Cóndores", integrantes: ["Ana", "Beto", "Carla"], cuenta: g, sala: SALA.id }, m.deps.local);
     q<HTMLButtonElement>(m, "eqp-cambiar").click();
     expect(vista(m)).toBe("eqp-datos");
     expect(q<HTMLInputElement>(m, "eqp-nombre").value).toBe("Los Cóndores");

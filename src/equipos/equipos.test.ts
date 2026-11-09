@@ -427,6 +427,19 @@ describe("la lista que se sella sale de los cupones", () => {
     const m = etiquetasDeEquipos([equipo({ n: 1, nombre: "Cóndores" }), equipo({ n: 2, nombre: "cóndores" }), equipo({ n: 3, nombre: "Pumas" })]);
     expect([...m.values()]).toEqual(["Cóndores", "cóndores (2)", "Pumas"]);
   });
+  it("con nombres repetidos y cupones en orden inverso, el (2) es el segundo en anotarse, como en la pantalla del stand", () => {
+    const a = equipo({ n: 1, nombre: "Equipo 7" });
+    const b = equipo({ n: 2, nombre: "Equipo 7" });
+    const ev = new Map([
+      [b.cuenta, { cupon: { orden: 1n, hash: "a" } }],
+      [a.cuenta, { cupon: { orden: 2n, hash: "b" } }],
+    ]);
+    const { lineas, etiquetas } = listaDesdeCupones([a, b], ev);
+    // Las líneas siguen en el orden en que recibieron el cupón.
+    expect(lineas).toEqual([b.cuenta, a.cuenta]);
+    expect(etiquetas.get(a.cuenta)).toBe("Equipo 7");
+    expect(etiquetas.get(b.cuenta)).toBe("Equipo 7 (2)");
+  });
   it("las etiquetas solo cambian lo que es de un equipo", () => {
     const g = cuenta();
     expect(hayEtiquetas()).toBe(false);
@@ -657,5 +670,19 @@ describe("los textos de los equipos no dicen lo que Tinkazo no puede decir", () 
   it("las dos lenguas tienen las mismas claves", async () => {
     const { TEXTOS_EQUIPOS } = await import("./textos");
     expect(Object.keys(TEXTOS_EQUIPOS.es).sort()).toEqual(Object.keys(TEXTOS_EQUIPOS.en).sort());
+  });
+  it("lo que se ve sin abrir el detalle no tiene tecnicismos: ni llave, ni código, ni Stellar Lab", async () => {
+    const { TEXTOS_EQUIPOS } = await import("./textos");
+    // A la vista quedan solo la línea llana y el botón para seguir; el detalle plegado sí puede nombrarlos.
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["eqXdrPollar", "eqXdrOtra", "eqXdrSin", "eqXdrDetalle"]) {
+        expect(TEXTOS_EQUIPOS[l][k], `${l} ${k}`).not.toMatch(/llave|c[oó]digo|transacci|transaction|xdr|wallet|billetera|stellar lab|key|code/i);
+      }
+    }
+  });
+  it("el renglón del pliegue de aprobar cupones dice qué hay que hacer, en las dos lenguas", async () => {
+    const { TEXTOS_EQUIPOS } = await import("./textos");
+    expect(TEXTOS_EQUIPOS.es.eqXdrDetalle).toBe("Cómo aprobarlos");
+    expect(TEXTOS_EQUIPOS.en.eqXdrDetalle).toBe("How to approve them");
   });
 });

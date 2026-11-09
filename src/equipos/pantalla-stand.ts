@@ -79,11 +79,19 @@ export interface FilaDePantalla {
  * vez. Los que quien organiza todavía tiene que revisar no salen en el proyector, y tampoco se cuentan: el total y los
  * que tienen cupón son los de las tarjetas que se ven («3 de 5 equipos ya tienen su cupón» tiene que coincidir con lo
  * que se lee en la pantalla). El cupón se cuenta igual que sus etiquetas: lo que dice la red, o la sala si la red
- * todavía no se leyó.
+ * todavía no se leyó. Si dos equipos se llaman igual, el segundo lleva "(2)" y así, como en el show y en el
+ * resultado: solo lo que se muestra, las cuentas no cambian.
  */
 export function filasDePantalla(modo: ModoEquipos, equipos: readonly Equipo[], evidencias: Evidencias): { filas: FilaDePantalla[]; conCupon: number; total: number } {
   const orden = [...equipos].sort((a, b) => a.n - b.n);
-  const filas = orden.filter((e) => !e.revisar).map((e) => ({ n: e.n, nombre: e.nombre, estado: estadoEnPantalla(modo, e, evidencias) }));
+  const vistas = new Map<string, number>();
+  const filas: FilaDePantalla[] = [];
+  for (const e of orden) {
+    if (e.revisar) continue;
+    const veces = (vistas.get(e.nombre.toLocaleLowerCase()) ?? 0) + 1;
+    vistas.set(e.nombre.toLocaleLowerCase(), veces);
+    filas.push({ n: e.n, nombre: veces === 1 ? e.nombre : `${e.nombre} (${veces})`, estado: estadoEnPantalla(modo, e, evidencias) });
+  }
   const conCupon = filas.filter((f) => f.estado === "cupon").length;
   return { filas, conCupon, total: filas.length };
 }

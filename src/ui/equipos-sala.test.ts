@@ -331,6 +331,22 @@ describe("con sorteo propio: el cupón solo va a quien ya sorteó", () => {
     expect($q(p, "#eq-error").textContent).toBe(t("eqSinQuienDar"));
   });
 
+  it("si todos ya tienen su cupón, lo dice así y no que no hay a quién darle", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const a = cuenta();
+    const b = cuenta();
+    await equipoLlega(m, 1, a, "Primeros", "aceptado");
+    await equipoLlega(m, 2, b, "Segundos", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    // Los dos ya recibieron el suyo: la red lo muestra y la pantalla lo sube a la sala.
+    m.pagos.push(pago(10, a), pago(20, b));
+    await p.revisar(true);
+    await p.darCupones();
+    expect(m.armadas).toEqual([]);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqTodosConCupon"));
+  });
+
   it("una cuenta que todavía no existe en la red no recibe el cupón y se avisa, sin fallar", async () => {
     const m = mundo();
     const p = await abrirRegistro(m, "sorteo");
@@ -477,8 +493,15 @@ describe("aprobar los cupones", () => {
     await p.darCupones();
     const caja = $q(p, "#eq-xdr");
     expect(caja.hidden).toBe(false);
-    expect($q<HTMLTextAreaElement>(p, "#eq-xdr-texto").value).toBe("XDR-DE-PRUEBA");
+    // A la vista, solo la línea llana y el botón para seguir.
     expect($q(p, "#eq-xdr-porque").textContent).toBe(t("eqXdrPollar"));
+    // Los pasos con el código van plegados, para quien quiera el detalle.
+    const detalle = caja.querySelector("details") as HTMLElement;
+    expect(detalle.querySelector("summary")?.textContent).toBe(t("eqXdrDetalle"));
+    // El renglón dice qué hay que hacer ahí adentro, no que es un detalle opcional: sin esos pasos no hay aprobación.
+    expect(detalle.querySelector("summary")?.textContent).toBe("Cómo aprobarlos");
+    expect(detalle.textContent).toContain(t("eqXdrPasos"));
+    expect($q<HTMLTextAreaElement>(p, "#eq-xdr-texto").value).toBe("XDR-DE-PRUEBA");
     expect($q<HTMLAnchorElement>(p, "#eq-xdr-lab").href).toContain("lab.stellar.org");
     // «Ya la envié» vuelve a mirar la red.
     $q<HTMLButtonElement>(p, "#eq-xdr-ya").click();
@@ -573,6 +596,108 @@ describe("la lista que se sella sale de los cupones", () => {
     expect(m.lista).toEqual([a, b]);
   });
 
+  it("el botón de la lista sale con los pagos, sin esperar a los sorteos que tardan", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const [a, b] = [cuenta(), cuenta()] as [string, string];
+    await equipoLlega(m, 1, a, "Primeros", "aceptado");
+    await equipoLlega(m, 2, b, "Segundos", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    m.pagos.push(pago(10, a), pago(20, b));
+    // Los sorteos tardan: la lectura queda en curso.
+    let soltar: (x: Awaited<ReturnType<DepsDelPanel["sorteos"]>>) => void = () => undefined;
+    m.deps.sorteos = () => new Promise((r) => (soltar = r));
+    const lectura = p.revisar(true);
+    // Los cupones ya están a la vista: el botón no espera a los sorteos.
+    await vi.waitFor(() => expect($q<HTMLButtonElement>(p, "#eq-lista").hidden).toBe(false));
+    soltar({ porCuenta: new Map(), truncado: false });
+    await lectura;
+    // Y la lista sale igual, en el orden en que llegaron los cupones.
+    $q<HTMLButtonElement>(p, "#eq-lista").click();
+    expect(m.lista).toEqual([a, b]);
+  });
+
+  it("tras recargar, el botón se ve enseguida si la sala ya dice que hay cupones", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    // La red tarda, pero la sala ya trae el punto: se recargó con los cupones repartidos.
+    m.deps.pagos = () => new Promise<Pago[]>(() => undefined);
+    await equipoLlega(m, 1, cuenta(), "Primeros", "cupon");
+    await equipoLlega(m, 2, cuenta(), "Segundos", "cupon");
+    await vi.waitFor(() => expect($q(p, "#eq-cuenta-n").textContent).toContain("2"));
+    expect($q<HTMLButtonElement>(p, "#eq-lista").hidden).toBe(false);
+    p.detener();
+  });
+
+  it("un equipo que entra después de la foto de cuentas entra a la lista si su pago ya viene en la respuesta", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const [a, b, c] = [cuenta(), cuenta(), cuenta()] as [string, string, string];
+    await equipoLlega(m, 1, a, "Primeros", "cupon");
+    await equipoLlega(m, 2, b, "Segundos", "cupon");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    // La lectura sale con la foto de A y B; C entra al panel mientras la red contesta, y su pago ya viene en esa respuesta.
+    let soltar: (x: Pago[]) => void = () => undefined;
+    m.deps.pagos = () => new Promise<Pago[]>((r) => (soltar = r));
+    const lectura = p.revisar(true);
+    await equipoLlega(m, 3, c, "Terceros", "cupon");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(3));
+    soltar([pago(10, a), pago(20, b), pago(30, c)]);
+    await lectura;
+    $q<HTMLButtonElement>(p, "#eq-lista").click();
+    await vi.waitFor(() => expect(m.lista).toEqual([a, b, c]));
+  });
+
+  it("un equipo que entra después de la última lectura terminada hace leer de nuevo antes de armar la lista, y el botón muestra que trabaja", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const [a, b, c] = [cuenta(), cuenta(), cuenta()] as [string, string, string];
+    await equipoLlega(m, 1, a, "Primeros", "cupon");
+    await equipoLlega(m, 2, b, "Segundos", "cupon");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    m.pagos.push(pago(10, a), pago(20, b), pago(30, c));
+    await p.revisar(true);
+    // C entra después de esa lectura, con su cupón ya en la red.
+    await equipoLlega(m, 3, c, "Terceros", "cupon");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(3));
+    let soltar: (x: Pago[]) => void = () => undefined;
+    let lecturas = 0;
+    m.deps.pagos = () => {
+      lecturas++;
+      return new Promise<Pago[]>((r) => (soltar = r));
+    };
+    const boton = $q<HTMLButtonElement>(p, "#eq-lista");
+    boton.click();
+    await vi.waitFor(() => expect(lecturas).toBe(1));
+    expect(boton.disabled).toBe(true);
+    expect(boton.textContent).toBe(t("eqRevisando"));
+    // Un segundo toque mientras espera no lanza otra lectura.
+    boton.click();
+    void p.usarComoLista();
+    expect(lecturas).toBe(1);
+    soltar([pago(10, a), pago(20, b), pago(30, c)]);
+    await vi.waitFor(() => expect(m.lista).toEqual([a, b, c]));
+    expect(boton.disabled).toBe(false);
+    expect(boton.textContent).toBe(t("eqUsarLista"));
+  });
+
+  it("un equipo que figura con cupón en la sala pero no se lee en la red no entra a la lista, y eso se avisa", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const [a, b, c] = [cuenta(), cuenta(), cuenta()] as [string, string, string];
+    await equipoLlega(m, 1, a, "Primeros", "cupon");
+    await equipoLlega(m, 2, b, "Segundos", "cupon");
+    await equipoLlega(m, 3, c, "Terceros", "cupon");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(3));
+    // De C no hay pago en la red: nunca entra solo por lo que dice la sala.
+    m.pagos.push(pago(10, a), pago(20, b));
+    await p.usarComoLista();
+    expect(m.lista).toEqual([a, b]);
+    expect(m.lista).not.toContain(c);
+    expect($q(p, "#eq-error").textContent).toContain(t("eqListaPuesta").replace("{n}", "2"));
+    expect($q(p, "#eq-error").textContent).toContain(t("eqListaSinConfirmar1"));
+  });
+
   it("con la lista ya sellada no se cambia y se explica", async () => {
     const m = mundo();
     const { p } = await conCupones(m);
@@ -649,6 +774,61 @@ describe("la lista que se sella sale de los cupones", () => {
     $q<HTMLButtonElement>(p, "#eq-lista").click();
     expect(m.lista).toEqual([]);
     expect($q(p, "#eq-error").textContent).toBe(t("eqListaPocos"));
+  });
+
+  it("la lista ocupa buena parte del alto: con 26 equipos se trabaja sin una caja de dos", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync("src/equipos/equipos.css", "utf8");
+    const regla = /\.eq-equipos\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(Number(/max-height:\s*([\d.]+)vh/.exec(regla)?.[1] ?? 0)).toBeGreaterThanOrEqual(60);
+  });
+});
+
+describe("las lecturas que quedan esperando", () => {
+  it("si los pagos fallan, las de sorteos y cuentas no quedan sin nadie que las atienda", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "sorteo");
+    const g = cuenta();
+    m.activas.set(g, false);
+    await equipoLlega(m, 1, g, "Uno", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(1));
+    m.deps.pagos = async () => {
+      throw new Error("pagos caídos");
+    };
+    m.deps.sorteos = async () => {
+      throw new Error("sorteos caídos");
+    };
+    m.deps.activas = async () => {
+      throw new Error("cuentas caídas");
+    };
+    await expect(p.revisar(true)).rejects.toThrow("pagos caídos");
+    // Si alguna de las que esperaban quedara sin destino, la prueba terminaría con un rechazo sin atrapar.
+    await espera(20);
+  });
+
+  it("una lectura de cuentas de la sala anterior no escribe sobre la sala nueva", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const g = cuenta();
+    let soltarVieja: () => void = () => undefined;
+    m.deps.activas = () =>
+      new Promise<Map<string, boolean | null>>((r) => {
+        soltarVieja = () => r(new Map([[g, true]]));
+      });
+    await equipoLlega(m, 1, g, "Los Cóndores", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(1));
+    $q<HTMLButtonElement>(p, "#eq-cerrar").click();
+    await vi.waitFor(() => expect($q(p, "#eq-sala").hidden).toBe(true));
+    $q<HTMLButtonElement>(p, "#eq-abrir").click();
+    await vi.waitFor(() => expect($q(p, "#eq-sala").hidden).toBe(false));
+    m.activas.set(g, false);
+    m.deps.activas = async (cs) => new Map(cs.map((c) => [c, m.activas.get(c) ?? true] as [string, boolean]));
+    await equipoLlega(m, 1, g, "Los Cóndores", "aceptado");
+    await vi.waitFor(() => expect(filas(p)[0]?.textContent).toContain(t("eqInactiva")));
+    // La lectura vieja recién contesta, diciendo que la cuenta sí está activa: no vale para esta sala.
+    soltarVieja();
+    await espera(20);
+    expect(filas(p)[0]?.textContent).toContain(t("eqInactiva"));
   });
 });
 

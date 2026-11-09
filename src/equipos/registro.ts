@@ -67,6 +67,10 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
   let claveError = "";
   let pararReloj: (() => void) | null = null;
   let enviando = false;
+  /** Si ya hay una lectura de la sala en curso: «Probar de nuevo» no lanza otra encima de esa. */
+  let cargando = false;
+  /** Cuál es la última lectura que entró, para que una respuesta vieja no pise a una nueva. */
+  let cargaActual = 0;
   /** La llave de este celular para la sala: prueba ante la sala que los cambios del equipo vienen del mismo celular. */
   let llave: string | null = null;
 
@@ -77,7 +81,6 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     q("eqp-estado").hidden = v !== "estado";
     pintar();
   };
-
   function mensaje(clave: string, mal = true): void {
     claveError = clave;
     const m = q("eqp-msg");
@@ -96,6 +99,13 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     for (let i = 0; i < MAX_INTEGRANTES; i++) q<HTMLInputElement>(`eqp-i${i}`).placeholder = tx("eqpIntegrante").replace("{n}", String(i + 1));
     q("eqp-google").hidden = !deps.hayGoogle;
     if (vista === "estado") pintarEstado();
+    // El título acompaña el punto del equipo: anotado, aceptado o con cupón. Sin estado a la vista, el de siempre.
+    const h1 = raiz.querySelector("h1");
+    if (h1) h1.textContent = vista === "estado" ? q("eqp-estado-t").textContent : tx("eqpTitulo");
+    // Si la sala no contestó, se puede probar de nuevo sin recargar la página.
+    reintentar.textContent = tx("eqpReintentar");
+    reintentar.hidden = vista !== "error";
+    reintentar.disabled = cargando;
   }
 
   function pintarEstado(): void {
@@ -151,7 +161,7 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
       return;
     }
     estado = r.estado;
-    if (vista === "estado") pintarEstado();
+    if (vista === "estado") pintar();
     if (r.estado === "cupon") {
       pararReloj?.();
       pararReloj = null;
@@ -246,6 +256,15 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
 
   /* --------------------------------------------------------------- eventos */
 
+  // Sin conexión con la sala, el error no es un callejón: se prueba de nuevo desde acá.
+  const reintentar = document.createElement("button");
+  reintentar.type = "button";
+  reintentar.id = "eqp-reintentar";
+  reintentar.className = "ghost eqp-btn";
+  reintentar.hidden = true;
+  reintentar.addEventListener("click", () => void cargar());
+  raiz.querySelector(".eqp-tarjeta")?.append(reintentar);
+
   q("eqp-google").addEventListener("click", () => void google());
   q("eqp-otra").addEventListener("click", () => {
     q("eqp-form-cuenta").hidden = false;
@@ -271,6 +290,11 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
   });
   q("eqp-cambiar").addEventListener("click", () => {
     pararReloj?.();
+    // Lo que este celular ya guardó manda: si la página se recargó, en memoria no hay nada pero sigue guardado.
+    if (!equipo && cuenta && deps.sala) {
+      const mio = leerEquipoLocal(deps.sala.id, deps.local);
+      if (mio && mio.cuenta === cuenta) equipo = { nombre: mio.nombre, integrantes: mio.integrantes };
+    }
     rellenar();
     mensaje("", false);
     ver("datos");
@@ -283,31 +307,48 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
 
   /* ---------------------------------------------------------------- arranque */
 
-  void (async () => {
-    if (!deps.sala) {
-      mensaje("eqpIncompleto");
-      return ver("error");
+  /** Lee la sala y lleva a la cuenta o al equipo. Se llama al abrir y al tocar «Probar de nuevo». */
+  async function cargar(): Promise<void> {
+    if (cargando) return;
+    cargando = true;
+    const miCarga = ++cargaActual;
+    reintentar.disabled = true;
+    try {
+      if (!deps.sala) {
+        mensaje("eqpIncompleto");
+        return ver("error");
+      }
+      if (!deps.activo) {
+        mensaje("eqpSinRegistro");
+        return ver("error");
+      }
+      mensaje("eqpCargando", false);
+      const p = await deps.leerPublico(deps.sala.servicio, deps.sala.id);
+      // Entró una lectura más nueva mientras esta esperaba: la vieja no pisa lo que se ve.
+      if (miCarga !== cargaActual) return;
+      if (!p.ok) {
+        mensaje(p.motivo === "cerrada" ? "eqpCerrada" : "eqpRed");
+        return ver("error");
+      }
+      if (!p.config) {
+        mensaje("eqpSinRegistro");
+        return ver("error");
+      }
+      config = p.config;
+      mensaje("", false);
+      const conocida = (await deps.cuentaRecordada().catch(() => null)) ?? leerEquipoLocal(deps.sala.id, deps.local)?.cuenta ?? null;
+      if (miCarga !== cargaActual) return;
+      if (conocida && esCuenta(conocida)) return await conCuenta(conocida);
+      ver("cuenta");
+    } finally {
+      if (miCarga === cargaActual) {
+        cargando = false;
+        reintentar.disabled = false;
+      }
     }
-    if (!deps.activo) {
-      mensaje("eqpSinRegistro");
-      return ver("error");
-    }
-    mensaje("eqpCargando", false);
-    const p = await deps.leerPublico(deps.sala.servicio, deps.sala.id);
-    if (!p.ok) {
-      mensaje(p.motivo === "cerrada" ? "eqpCerrada" : "eqpRed");
-      return ver("error");
-    }
-    if (!p.config) {
-      mensaje("eqpSinRegistro");
-      return ver("error");
-    }
-    config = p.config;
-    mensaje("", false);
-    const conocida = (await deps.cuentaRecordada().catch(() => null)) ?? leerEquipoLocal(deps.sala.id, deps.local)?.cuenta ?? null;
-    if (conocida && esCuenta(conocida)) return conCuenta(conocida);
-    ver("cuenta");
-  })();
+  }
+
+  void cargar();
 
   return {
     detener: () => pararReloj?.(),

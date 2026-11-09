@@ -104,11 +104,11 @@ export function crearPantallaDelStand(deps: DepsDePantalla): PantallaDelStand {
   const fmt = (clave: string, vars: Record<string, string | number>): string =>
     Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), tx(clave));
 
-  /** La letra de los nombres: la de la sala (2,6 % del alto) como mínimo, y hasta el doble. En un celular, la de siempre. */
+  /** La letra de los nombres: la de la sala (3,4 % del alto) como mínimo, y hasta el 5 %. En un celular, la de siempre. */
   function letras(): { min: number; max: number } {
     const { ancho, alto } = deps.ventana();
     if (ancho < 700) return { min: 16, max: 26 };
-    return { min: Math.max(16, alto * 0.026), max: Math.max(22, alto * 0.05) };
+    return { min: Math.max(16, alto * 0.034), max: Math.max(22, alto * 0.05) };
   }
 
   /** Lo que mide el lugar de los equipos. En un DOM de mentira no mide nada: se usa la ventana. */

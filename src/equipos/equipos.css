@@ -35,7 +35,7 @@
 .eq-xdr { margin: 12px 0; padding: 12px; border: 2px dashed var(--ink); }
 .eq-xdr textarea { width: 100%; font-size: 14px; word-break: break-all; margin: 8px 0; }
 
-.eq-equipos { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; max-height: 46vh; overflow: auto; }
+.eq-equipos { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; max-height: 70vh; overflow: auto; }
 .eq-equipo { border: 2px solid var(--ink); background: var(--paper); padding: 10px 12px; display: grid; gap: 4px; }
 .eq-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .eq-nombre { font-size: 18px; overflow-wrap: anywhere; }
@@ -56,7 +56,7 @@
 
 /* La pantalla del stand (src/ui/pantalla-stand.ts): para el proyector, sin scroll. La letra de la sala sale de la regla de
    docs/marca.md («La letra»): en 1080 de alto, 28 px lo secundario y 48 lo principal; los nombres, lo que deje la grilla
-   (`--stp-letra`, entre el 2,6 % y el 5 % del alto). Los colores son los del tema: se ve igual de bien en claro y oscuro. */
+   (`--stp-letra`, entre el 3,4 % y el 5 % del alto: desde el fondo se leen con 26 px en 1366x768 y 34 en 1920x1080). Los colores son los del tema: se ve igual de bien en claro y oscuro. */
 html.con-pantalla-stand { overflow: hidden; }
 .stp {
   position: fixed; inset: 0; z-index: 80; overflow: hidden; background: var(--paper); color: var(--ink);

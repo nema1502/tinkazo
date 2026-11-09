@@ -72,18 +72,22 @@ export function conCupon(equipos: readonly Equipo[], evidencias: Evidencias): Eq
 
 /**
  * Los nombres con que se muestran los equipos en el show y en el resultado: el del equipo. Si dos equipos se llaman
- * igual, el segundo lleva "(2)" y así: las cuentas son distintas, pero en la pantalla no se distinguirían.
+ * igual, el segundo lleva "(2)" y así: las cuentas son distintas, pero en la pantalla no se distinguirían. La numeración
+ * es por orden de anotación, como en la pantalla del stand, así el "(2)" señala al mismo equipo en los dos lados: el
+ * orden en que se recorre para numerar no cambia el orden del mapa que sale, que sigue siendo el que traían los equipos.
  */
 export function etiquetasDeEquipos(equipos: readonly Equipo[]): Map<string, string> {
   const vistas = new Map<string, number>();
-  const out = new Map<string, string>();
-  for (const e of equipos) {
+  const porCuenta = new Map<string, string>();
+  for (const e of [...equipos].sort((a, b) => a.n - b.n)) {
     const base = e.nombre;
     const clave = base.toLocaleLowerCase();
     const veces = (vistas.get(clave) ?? 0) + 1;
     vistas.set(clave, veces);
-    out.set(e.cuenta, veces === 1 ? base : `${base} (${veces})`);
+    porCuenta.set(e.cuenta, veces === 1 ? base : `${base} (${veces})`);
   }
+  const out = new Map<string, string>();
+  for (const e of equipos) out.set(e.cuenta, porCuenta.get(e.cuenta) ?? e.nombre);
   return out;
 }
 
