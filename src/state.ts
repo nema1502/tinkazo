@@ -220,7 +220,9 @@ export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
  * que nazca antes de treinta segundos, y el contrato es inmutable. Sobre esos
  * treinta hay que dejar lo que tarde la transacción en confirmarse, porque el
  * contrato mide contra la hora de cierre del ledger, no contra la del
- * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet.
+ * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet. Si la comisión la paga el
+ * portero del patrocinio, la primera ronda nace a 65 (`MARGEN_CON_PORTERO_S` en `ui/sello-seguro.ts`):
+ * ese camino hace más llamadas a la red.
  */
 export const ANCHOR_LEAD_SECONDS = 45;
 

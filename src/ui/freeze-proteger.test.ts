@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
+import { roundTime } from "../protocol/quicknet";
 
 /**
  * El sello cuando Pollar pide proteger la cuenta (`SDK_WALLET_RECOVERY_REQUIRED`, `freeze.ts`). Se prueba el flujo
@@ -19,6 +20,9 @@ const h = vi.hoisted(() => ({
   proteger: vi.fn(),
   contar: vi.fn(),
   nombres: ["Ana", "Beto"],
+  pagaElPortero: vi.fn(),
+  paraAprobar: 0,
+  inicial: null as { round: number; ts: number } | null,
 }));
 
 const recuperacion = () => new Error("SDK_WALLET_RECOVERY_REQUIRED");
@@ -31,7 +35,8 @@ vi.mock("./anchor", () => ({
     status.textContent = (e as Error).message;
   },
   hideTxStatus: () => h.orden.push("hideTxStatus"),
-  margenParaAprobar: async () => 0,
+  margenParaAprobar: async () => h.paraAprobar,
+  pagaElPortero: (...a: unknown[]) => h.pagaElPortero(...a),
   precargarParaElSorteo: () => undefined,
   resolverSelloEnLaRed: async () => null,
   sealOnChain: (...a: unknown[]) => h.sealOnChain(...a),
@@ -42,10 +47,12 @@ vi.mock("./anchor", () => ({
   },
   stepLabel: (paso: string) => paso,
 }));
-vi.mock("./sello-seguro", () => ({
+vi.mock("./sello-seguro", async (orig) => ({
+  ...(await orig<typeof import("./sello-seguro")>()),
   leerPendiente: () => null,
   guardarPendiente: () => undefined,
   sellarSinDuplicar: async (inicial: { round: number; ts: number }, o: { sellar: (r: number) => Promise<unknown> }) => {
+    h.inicial = inicial;
     await o.sellar(inicial.round);
     return { raffleId: 1n, txHash: "H", round: inicial.round, ts: inicial.ts };
   },
@@ -98,6 +105,10 @@ beforeEach(() => {
   h.proteger.mockReset();
   h.contar.mockReset();
   h.nombres = ["Ana", "Beto"];
+  h.paraAprobar = 0;
+  h.inicial = null;
+  h.pagaElPortero.mockReset();
+  h.pagaElPortero.mockResolvedValue(false);
   armarPagina();
   // Pasada la guarda de "recién se soltó el sorteo anterior".
   vi.spyOn(performance, "now").mockReturnValue(10_000);
@@ -192,5 +203,53 @@ describe("sellar cuando la cuenta pide protección", () => {
     await freeze();
     expect(h.proteger).not.toHaveBeenCalled();
     expect(cuentas("seal_failed")).toBe(1);
+  });
+});
+
+describe("la ronda del primer intento según quién paga la comisión", () => {
+  const AHORA_S = 1_800_000_000;
+
+  /** Sella con el reloj quieto y devuelve a cuántos segundos de AHORA_S nace la ronda que se le pide a `sellarSinDuplicar`. */
+  async function margenPedido(opciones: { pagarConMiCuenta?: boolean } = {}): Promise<number> {
+    const reloj = vi.spyOn(Date, "now").mockReturnValue(AHORA_S * 1000);
+    try {
+      h.sealOnChain.mockRejectedValue(new Error("boom"));
+      const { freeze } = await import("./freeze");
+      await freeze(opciones);
+      expect(h.inicial).not.toBeNull();
+      expect(h.inicial?.ts).toBe(AHORA_S);
+      return roundTime(h.inicial?.round ?? 0) - AHORA_S;
+    } finally {
+      reloj.mockRestore();
+    }
+  }
+
+  it("si la comisión la paga el portero, la ronda nace a 65 s o más (y a menos de una ronda de drand de más)", async () => {
+    h.pagaElPortero.mockResolvedValue(true);
+    const margen = await margenPedido();
+    expect(margen).toBeGreaterThanOrEqual(65);
+    expect(margen).toBeLessThan(65 + 3);
+  });
+
+  it("si no la paga el portero, la ronda nace a 45 s, sin los 20 s de más", async () => {
+    const margen = await margenPedido();
+    expect(margen).toBeGreaterThanOrEqual(45);
+    expect(margen).toBeLessThan(45 + 3);
+  });
+
+  it("con el portero, lo que se suma para aprobar a mano va sobre los 65 s", async () => {
+    h.pagaElPortero.mockResolvedValue(true);
+    h.paraAprobar = 45;
+    const margen = await margenPedido();
+    expect(margen).toBeGreaterThanOrEqual(110);
+    expect(margen).toBeLessThan(110 + 3);
+  });
+
+  it("a pagaElPortero le llega si la persona eligió pagar con su cuenta", async () => {
+    await margenPedido({ pagarConMiCuenta: true });
+    expect(h.pagaElPortero).toHaveBeenCalledWith({ pagarConMiCuenta: true });
+    h.pagaElPortero.mockClear();
+    await margenPedido();
+    expect(h.pagaElPortero).toHaveBeenCalledWith({ pagarConMiCuenta: false });
   });
 });

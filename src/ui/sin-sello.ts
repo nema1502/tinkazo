@@ -58,7 +58,8 @@ export interface ParametrosDelReintento {
   /** Reloj en milisegundos. */
   ahora?: () => number;
   dormir?: (ms: number) => Promise<void>;
-  avisar?: (que: "verificando" | "reintentando") => void;
+  /** "otra-ronda" no llega nunca acá: sin `rondaNueva` la ronda es una sola (`sello-seguro.ts`). */
+  avisar?: (que: "verificando" | "reintentando" | "otra-ronda") => void;
 }
 
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));

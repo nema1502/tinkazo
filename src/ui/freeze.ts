@@ -8,7 +8,7 @@ import { esCostoAlto } from "../stellar/chequeo-red";
 import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
-import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, pagaElPortero, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
@@ -569,9 +569,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   const anchoring = conCuenta && !sinSello;
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
-  // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
+  // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
-  // elegir el juego, y la línea que guía dice que de verdad son unos 45.
+  // elegir el juego, y la línea que guía dice que de verdad es cerca de un minuto.
   const lead = anchoring
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
     : sinSello
@@ -628,7 +628,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // - Si no se sabe si entró (un corte, una respuesta que no llegó), primero se averigua.
       //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
       // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
-      const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      // - Si la comisión la paga el portero del patrocinio, la primera ronda nace a 65 s y no a 45:
+      //   ese camino hace más llamadas a la red (`MARGEN_CON_PORTERO_S` en sello-seguro.ts).
+      const [seguro, extra, conPortero] = await Promise.all([import("./sello-seguro"), margenParaAprobar(), pagaElPortero({ pagarConMiCuenta: !!opciones.pagarConMiCuenta })]);
       const contrato = network.contractId ?? "";
       const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
       // Sin un intento pendiente lo próximo es armar la transacción: la ronda se elige
@@ -636,11 +638,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // para que bajarlo no se coma el margen. Con un intento pendiente, primero se
       // averigua si entró, como siempre, y eso no necesita el cliente.
       if (!previo) await clienteListo();
-      const anclado = lead + extra;
-      const rondaNueva = (): { round: number; ts: number } => {
-        const ahora = Math.floor(Date.now() / 1000);
-        return { round: targetRound(ahora, anclado), ts: ahora };
-      };
+      // Si la ronda de antes no quedó grabada, `sello-seguro.ts` pide la próxima más lejos. La cuenta
+      // regresiva y la hora del sorteo salen de la ronda que quede (`app.frozen.round`), no de este número.
+      const rondaNueva = seguro.rondasDesde(seguro.margenDelPrimerIntento(lead, { conPortero, paraAprobar: extra }));
       ({ round, ts } = rondaNueva());
       const sello = await seguro.sellarSinDuplicar(
         { round, ts },
@@ -665,7 +665,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
             return selloSinGrabar(e);
           },
           guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
-          avisar: (que) => onStep(que === "verificando" ? "verifying" : "retrying"),
+          avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
         previo?.intento ?? null,
       );

@@ -150,14 +150,14 @@ Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si n
 cd workers/patrocinio
 node preparar-testnet.mjs        # una vez: crea en testnet la cuenta patrocinadora con su llave acotada; escribe .dev.vars y .prueba.json (no se versionan)
 npx wrangler@4 dev --port 8793 --var POR_IP_POR_HORA:300
-node probar.mjs http://127.0.0.1:8793          # 88 chequeos: un sello y un sorteo reales patrocinados con una cuenta de 0 XLM, una cuenta de dos firmas de dos, recursos inflados, y todo lo demás
+node probar.mjs http://127.0.0.1:8793          # 89 chequeos: un sello y un sorteo reales patrocinados con una cuenta de 0 XLM, una cuenta de dos firmas de dos, recursos inflados, y todo lo demás
 node probar.mjs http://127.0.0.1:8793 --ip     # aparte: el tope por dirección (lo agota; el de las consultas de cupo es otro)
 npx wrangler@4 dev --port 8794 --var CLAVE_PATROCINADOR:no-es-una-llave
 node probar.mjs http://127.0.0.1:8794 --llave-mala   # aparte: con la llave mal pegada /cupo dice prendido:false, motivo config; devuelto a Pollar, motivo pollar
 pnpm exec vitest run workers/patrocinio        # desde la raíz: 133 pruebas de unidad sin red (lista blanca, cupos en SQLite, servicio con una red de mentira, y el plan del equipo con un Worker de la cuenta de mentira)
 ```
 
-`probar.mjs` solo habla con testnet y con un `wrangler dev` local (rechaza otra cosa). Gasta unos centavos de XLM de prueba y deja un sello y un sorteo con la marca `prueba-portero` en el contrato oficial de testnet. Las cuentas de 0 XLM las abre una "billetera de Pollar de prueba" propia, con el mismo mecanismo de patrocinio de reservas que usa Pollar, así que el portero las reconoce como de la app sin necesitar a Pollar. Las llaves de prueba son de testnet y no se usan en otra red.
+`probar.mjs` solo habla con testnet y con un `wrangler dev` local (rechaza otra cosa). Cada sello apunta a una ronda que nace 90 s después de armarlo, y la prueba dice con cuánto margen llegó al ledger: el contrato pide 30 s o más (`RoundTooSoon`), y con el RPC público de testnet lento el camino entero (simular, el portero y el ledger) se come de 17 a 23 s (medido el 8 de noviembre de 2026). Con los 45 s de antes el ensayo del 6 de noviembre no quedaba en verde. Gasta unos centavos de XLM de prueba y deja un sello y un sorteo con la marca `prueba-portero` en el contrato oficial de testnet. Las cuentas de 0 XLM las abre una "billetera de Pollar de prueba" propia, con el mismo mecanismo de patrocinio de reservas que usa Pollar, así que el portero las reconoce como de la app sin necesitar a Pollar. Las llaves de prueba son de testnet y no se usan en otra red.
 
 Lo que cubren las pruebas de unidad y no `probar.mjs` (por no gastar sellos de verdad): el sello 20 pasa y el 21 da `429`, el reloj corriendo hasta el mes siguiente, treinta pedidos a la vez de una cuenta, cinco veces el mismo hash, el objeto que se reinicia con los conteos intactos, el peor caso de las reservas (sellos baratos y sorteos inflados, ocho sellos con el fee declarado al máximo), la reserva de un objeto muerto antes de mandar y la alarma del saldo. `probar.mjs` prueba el `429` con el cupo bajado a 1 por la ruta de ajustes.
 

@@ -37,11 +37,12 @@ const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
  * crea de fondo después de entrar y tarda unos segundos; `funding`, la carga con
  * el grifo de testnet cuando la comisión no la paga la app. `verifying` es la
  * pregunta de si un sello que se cortó llegó a entrar; `retrying`, la espera
- * antes de volver a probar cuando la red no contestó. `starting` es lo que dice
+ * antes de volver a probar cuando la red no contestó; `laterRound`, que el sello
+ * no quedó grabado y se prueba con una ronda más lejana. `starting` es lo que dice
  * el botón apenas se aprieta, antes que nada ("Preparando el sello…", ver
  * `clienteListo`).
  */
-export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "covering";
+export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "laterRound" | "covering";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -190,6 +191,29 @@ export async function margenParaAprobar(): Promise<number> {
 }
 
 /**
+ * La comisión de este sello la va a pagar el portero del patrocinio (`workers/patrocinio`): la cuenta
+ * manda sola (Pollar), la persona no eligió pagar con su cuenta y el portero dice que rige él. Es lo
+ * mismo que decide `submitElsewhere` al mandar (`elegirPatrocinador`), preguntado antes de elegir la
+ * ronda: ese camino tarda más y la ronda nace con más margen (`MARGEN_CON_PORTERO_S`). Lo que se
+ * supo de `/cupo` vale 15 s y el chequeo de antes de sellar acaba de preguntarlo, así que casi
+ * siempre no hay otra consulta. Ante la duda (sin respuesta, un error) no: queda el margen de siempre.
+ */
+export async function pagaElPortero(
+  opciones: OpcionesDeSello = {},
+  consultar: (g: string) => Promise<{ rige: string }> = async (g) => (await import("../stellar/patrocinador")).estadoDelPatrocinio(g),
+): Promise<boolean> {
+  if (opciones.pagarConMiCuenta) return false;
+  try {
+    const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+    const w = activeWallet();
+    if (!w || !submitsItself(w) || !w.address) return false;
+    return (await consultar(w.address)).rige === "portero";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Cuánto vale el sello (`timeoutInSeconds`): hasta 15 segundos después de que el
  * contrato ya no lo aceptaría (`round_time - 30`). Más tarde no tiene sentido:
  * entraría al ledger y fallaría, con la comisión cobrada. Así la red lo descarta
@@ -235,10 +259,10 @@ const SIN_RED_SORTEO_MS = 15_000;
  * el sello.
  *
  * El contrato rechaza (`RoundTooSoon`, #5) una ronda que nazca a menos de 30 s de
- * cuando la transacción entra a un ledger. `freeze.ts` elige la ronda con 45 s de
- * margen al hacer clic, y de ahí salen unos segundos para simular, firmar y
- * entrar. Si antes se esperó a que Pollar abriera la cuenta, el margen se come: la
- * simulación todavía pasa (mira el último ledger, unos segundos atrás) y la
+ * cuando la transacción entra a un ledger. `freeze.ts` elige la ronda con 45 s de margen al
+ * hacer clic (65 si la comisión la paga el portero, `MARGEN_CON_PORTERO_S`), y de ahí salen unos
+ * segundos para simular, firmar y entrar. Si antes se esperó a que Pollar abriera la cuenta, el
+ * margen se come: la simulación todavía pasa (mira el último ledger, unos segundos atrás) y la
  * transacción entra al ledger y falla. Se vio el 20 de octubre de 2026 con una
  * cuenta nueva: costó una comisión y unos veinte segundos. Con menos de esto se
  * pide otra ronda antes de mandar nada.
@@ -627,6 +651,7 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
   preparing: "txPreparing",
   verifying: "txVerifying",
   retrying: "txRetrying",
+  laterRound: "txOtraRonda",
   covering: "txCubriendo",
 };
 

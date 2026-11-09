@@ -1079,6 +1079,27 @@ describe("cuánto vale cada envío", () => {
     h.wallet = { kind: "guest", address: DIR, signTransaction: vi.fn() };
     expect(await margenParaAprobar()).toBe(0);
   });
+
+  it("la comisión la paga el portero solo si la cuenta manda sola, no eligió pagar ella y el portero dice que rige", async () => {
+    const { pagaElPortero } = await import("./anchor");
+    const portero = vi.fn(async () => ({ rige: "portero" }));
+    h.wallet = pollar();
+    expect(await pagaElPortero({}, portero)).toBe(true);
+    expect(portero).toHaveBeenCalledWith(DIR);
+    expect(await pagaElPortero({}, async () => ({ rige: "pollar" }))).toBe(false);
+    expect(await pagaElPortero({}, async () => ({ rige: "cerrado" }))).toBe(false);
+    // Ante la duda, el margen de siempre.
+    expect(await pagaElPortero({}, async () => Promise.reject(new Error("sin red")))).toBe(false);
+    // Pagar con la cuenta propia no pasa por el portero: ni se pregunta.
+    portero.mockClear();
+    expect(await pagaElPortero({ pagarConMiCuenta: true }, portero)).toBe(false);
+    // Freighter y la cuenta de prueba pagan ellas.
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    expect(await pagaElPortero({}, portero)).toBe(false);
+    h.wallet = { kind: "guest", address: DIR, signTransaction: vi.fn() };
+    expect(await pagaElPortero({}, portero)).toBe(false);
+    expect(portero).not.toHaveBeenCalled();
+  });
 });
 
 describe("selloSinGrabar: cuándo se reintenta el sello con otra ronda", () => {

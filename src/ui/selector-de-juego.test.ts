@@ -18,6 +18,7 @@ vi.mock("./anchor", () => ({
   escribirError: async () => undefined,
   hideTxStatus: () => undefined,
   margenParaAprobar: async () => 0,
+  pagaElPortero: async () => false,
   precargarParaElSorteo: () => undefined,
   resolverSelloEnLaRed: async () => null,
   sealOnChain: async () => {
@@ -27,7 +28,7 @@ vi.mock("./anchor", () => ({
   showTxStatus: () => undefined,
   stepLabel: (paso: string) => paso,
 }));
-vi.mock("./sello-seguro", () => ({ leerPendiente: () => null, guardarPendiente: () => undefined, sellarSinDuplicar: async () => ({ raffleId: 1n, txHash: "H", round: 1, ts: 1 }) }));
+vi.mock("./sello-seguro", async (orig) => ({ ...(await orig<typeof import("./sello-seguro")>()), leerPendiente: () => null, guardarPendiente: () => undefined, sellarSinDuplicar: async () => ({ raffleId: 1n, txHash: "H", round: 1, ts: 1 }) }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: async () => false, protegerLaCuenta: async () => false }));
 vi.mock("../contar", () => ({ contar: () => undefined, errorContable: (c: string) => c }));
 vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, STAND_ESPERA_S: 3, enEnsayo: () => h.ensayo, enStand: () => false, sinGrabar: () => h.ensayo }));
