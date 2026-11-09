@@ -6,11 +6,12 @@ import { tiemposFoco } from "../pixi/foco";
 import type { Plan } from "../pixi/kit";
 import { tamanoLetra } from "../pixi/kit/nombres";
 import {
-  ACERCA_FINAL_2D, ALTO_FESTEJO, DUR_ACERCA_2D, FRENTE_ANTES, FOTO_DESPUES, GIRO_MAX, GIRO_PICO, RAMPA_CARTEL, ZOOM_FOTO_MAX, ZOOM_MAX, ZOOM_PICO,
+  ACERCA_FINAL_2D, ALTO_FESTEJO, DUR_ACERCA_2D, LLEGADA_ANTES, FOTO_DESPUES, GIRO_MAX, GIRO_PICO, RAMPA_CARTEL, VIAJE_MAX, ZOOM_FOTO_MAX, ZOOM_MAX, ZOOM_PICO,
   ampliacionDe, anguloEntre, cajaEnPantalla, cajaFinal2D, crearCamara3D, ejeDe, proyectar, zoomDeCaja, zoomFinal2D, type Plano, type Puesto,
 } from "./carrera-camara";
 import { PANTALLAS, correr, puestosDe, type Corrida, type Cuadro, type Hueco } from "./carrera-camara-prueba";
-import { camara3D, type Pose3D } from "./carrera-3d-mapa";
+import { TAM3D, ZC, camara3D, escala3D, type Pose3D } from "./carrera-3d-mapa";
+import { LLAMA_ALTO } from "./carrera-forma";
 import { TARJETA } from "./carrera-base";
 import { LLAMA_HOCICO, carrilesDe } from "./carrera-forma";
 import { ctxDe } from "./carrera-prueba";
@@ -62,10 +63,10 @@ function resumen(n: number, semilla: number, pantalla: keyof typeof PANTALLAS): 
       if (f.foto) r.fotoMax = Math.max(r.fotoMax, z);
       else r.zoomMax = Math.max(r.zoomMax, z);
     }
-    if (f.t >= c.d.tAbre + 1 && f.t < c.d.tCrown - FRENTE_ANTES) {
+    if (f.t >= c.d.tAbre + 1 && f.t < c.d.tCrown - LLEGADA_ANTES) {
       r.visiblesMin = Math.min(r.visiblesMin, f.altos.filter((a) => a.visible).length);
       if (sub) f.altos.forEach((a) => a.visible && r.recta.push(a.alto));
-    } else if (f.t >= c.d.tCrown - FRENTE_ANTES && f.t < c.d.tCrown && sub) {
+    } else if (f.t >= c.d.tCrown - LLEGADA_ANTES && f.t < c.d.tCrown && sub) {
       const delante = f.puestos.map((p, j) => [p.x + LLAMA_HOCICO * p.esc, j] as const).sort((x, y) => y[0] - x[0]).slice(0, 3);
       for (const [, j] of delante) if ((f.altos[j] as { visible: boolean }).visible) r.final.push((f.altos[j] as { alto: number }).alto);
     } else if (f.t >= c.tGolpe + 1 && sub) {
@@ -126,7 +127,7 @@ describe("los topes de movimiento de la cámara", () => {
   it("el riel de la recta no gira: ya instalado, el eje queda quieto mientras el grupo corre", () => {
     for (const n of [8, 18]) {
       const c = entera(n, 3, "proyector");
-      const riel = c.cuadros.filter((f) => f.plano === "recta" && f.t > c.d.tAbre + 3 && f.t < c.d.tCrown - FRENTE_ANTES - 0.1);
+      const riel = c.cuadros.filter((f) => f.plano === "recta" && f.t > c.d.tAbre + 3 && f.t < c.d.tCrown - LLEGADA_ANTES - 0.1);
       expect(riel.length).toBeGreaterThan(300);
       let giro = 0;
       for (let i = 1; i < riel.length; i++) giro = Math.max(giro, anguloEntre(ejeDe((riel[i - 1] as Cuadro).pose), ejeDe((riel[i] as Cuadro).pose)) / ((riel[i] as Cuadro).t - (riel[i - 1] as Cuadro).t));
@@ -134,13 +135,28 @@ describe("los topes de movimiento de la cámara", () => {
     }
   });
 
-  it("los cortes son pocos y declarados: la cámara de la meta, la foto y, en el celular, el festejo (donde el viaje esconde a la ganadora detrás del pelotón)", () => {
+  it("en el proyector la cámara no corta nunca (de la base al festejo es un solo viaje); en el celular, solo al festejo (donde el viaje esconde a la ganadora detrás del pelotón)", () => {
     for (const pantalla of ["proyector", "celular"] as const) {
       const r = resumen(18, 2, pantalla);
-      expect(r.cortes.map((c) => c.plano)).toEqual(pantalla === "proyector" ? ["frente", "foto"] : ["foto", "festejo"]);
-      const primero = r.cortes[0] as { plano: Plano; t: number };
-      const tFoto = r.d.tCrown + Math.min(FOTO_DESPUES, (r.tGolpe - r.d.tCrown) * 0.5);
-      expect(primero.t).toBeCloseTo(pantalla === "proyector" ? r.d.tCrown - FRENTE_ANTES : tFoto, 1);
+      expect(r.cortes.map((c) => c.plano)).toEqual(pantalla === "proyector" ? [] : ["festejo"]);
+      if (pantalla === "celular") expect((r.cortes[0] as { plano: Plano; t: number }).t).toBeCloseTo(r.tGolpe, 1);
+    }
+  });
+
+  it("en la llegada la cámara viaja, no salta: la posición de la cámara se mueve menos que el tope del riel", () => {
+    for (const pantalla of ["proyector", "celular"] as const) {
+      for (const n of [8, 18]) {
+        const c = entera(n, 3, pantalla);
+        const hl = LLAMA_ALTO * c.carr.esc * escala3D(c.P.u) * TAM3D;
+        const llegada = c.cuadros.filter((f) => f.plano === "llegada" || (f.plano === "recta" && f.t >= c.d.tCrown - LLEGADA_ANTES - 0.5));
+        expect(llegada.length).toBeGreaterThan(150);
+        let viaje = 0;
+        for (let i = 1; i < llegada.length; i++) {
+          const a = llegada[i - 1] as Cuadro, b = llegada[i] as Cuadro;
+          viaje = Math.max(viaje, Math.hypot(b.pose.pos[0] - a.pose.pos[0], b.pose.pos[1] - a.pose.pos[1], b.pose.pos[2] - a.pose.pos[2]) / (b.t - a.t));
+        }
+        expect(viaje / hl, `${pantalla}, ${n} personas: alturas de llama por segundo`).toBeLessThanOrEqual(VIAJE_MAX);
+      }
     }
   });
 });
@@ -221,20 +237,36 @@ describe("la cámara no delata y es la misma ronda cuadro por cuadro", () => {
     }
   });
 
-  it("de la cámara de la meta a la foto (de T − 3 s a T + 0,4 s) la cámara está quieta: nada la mueve hacia nadie", () => {
-    for (const semilla of SEMILLAS.slice(0, 3)) {
-      const c = entera(18, semilla, "proyector");
-      const frente = c.cuadros.filter((f) => f.plano === "frente");
-      expect(frente.length).toBeGreaterThan(150);
-      for (const f of frente) expect(f.pose).toEqual((frente[0] as Cuadro).pose);
+  it("la llegada termina en T mirando la línea de costado, quieta hasta la foto, y la foto sigue de ahí sin corte", () => {
+    for (const pantalla of ["proyector", "celular"] as const) {
+      for (const semilla of SEMILLAS.slice(0, 3)) {
+        const c = entera(18, semilla, pantalla);
+        const s = escala3D(c.P.u);
+        const llegada = c.cuadros.filter((f) => f.plano === "llegada");
+        expect(llegada.length).toBeGreaterThan(150);
+        for (const f of llegada) expect(f.corte).toBe(false);
+        // De T a la foto la cámara no se mueve: las llamas pararon en la línea y se ve quién tiene la nariz adelante.
+        const quieta = llegada.filter((f) => f.t >= c.d.tCrown);
+        expect(quieta.length).toBeGreaterThan(10);
+        const enT = (quieta[0] as Cuadro).pose;
+        for (const f of quieta) expect(f.pose).toEqual(enT);
+        // Perpendicular a la línea y en su plano: la meta cae en el centro de la pantalla, vertical, en el carril de adelante y en el de atrás.
+        for (const y of [c.carr.y0, c.carr.y1]) expect(proyectar(enT, c.P.w, c.P.h, [c.metaX * s, 0, y * s * ZC]).x).toBeCloseTo(c.P.w / 2, 6);
+        // La foto arranca donde quedó la llegada.
+        const foto = c.cuadros.find((f) => f.plano === "foto") as Cuadro;
+        expect(foto.corte).toBe(false);
+        expect(anguloEntre(ejeDe(foto.pose), ejeDe(enT))).toBeLessThan(1e-6);
+        expect(Math.abs(ampliacionDe(foto.pose) - ampliacionDe(enT))).toBeLessThan(0.02);
+      }
     }
   });
 
-  it("el plano de frente se fija con las finalistas al cortar, no con quién gana", () => {
+  it("la llegada no mira quién va adelante: a T mira la línea, estén donde estén las finalistas", () => {
     const c = entera(8, 2, "proyector");
-    const corte = c.cuadros.find((f) => f.plano === "frente") as Cuadro;
-    const con = (g: number) => crearCamara3D(configDe(c)).cuadro({ t: corte.t, puestos: corte.puestos, base: (c.cuadros[0] as Cuadro).pose, ganadora: g, golpeEn: null }).pose;
-    expect(con(0)).toEqual(con(5));
+    const enT = c.cuadros.find((f) => f.t >= c.d.tCrown) as Cuadro;
+    const con = (puestos: Puesto[]) => crearCamara3D(configDe(c)).cuadro({ t: enT.t, puestos, base: (c.cuadros[0] as Cuadro).pose, ganadora: 0, golpeEn: null }).pose;
+    // Las mismas finalistas corridas un cuerpo hacia atrás: la cámara de T es la misma.
+    expect(con(enT.puestos.map((p) => ({ ...p, x: p.x - 40 * p.esc })))).toEqual(con(enT.puestos));
   });
 
   it("saltar al golpe (la hora salta de golpe) cae directo en el festejo, sin viaje", () => {
@@ -310,7 +342,7 @@ describe("la cámara no depende de los cuadros: en una hora de la grilla es la m
       const huecos: { donde: string; desde: number }[] = [
         { donde: "antes de abrirse la recta", desde: d.tAbre - 2 },
         { donde: "en la recta", desde: d.tAbre + 5 },
-        { donde: "al cortar a la cámara de la meta", desde: d.tCrown - FRENTE_ANTES - 0.3 },
+        { donde: "al empezar la llegada", desde: d.tCrown - LLEGADA_ANTES - 0.3 },
         { donde: "en el cabeza a cabeza", desde: d.tCrown - 1.5 },
         { donde: "en la foto", desde: d.tCrown - 0.1 },
         { donde: "sobre el golpe", desde: base.tGolpe - 0.5 },
@@ -334,7 +366,7 @@ describe("la cámara no depende de los cuadros: en una hora de la grilla es la m
         expect(c.hitos).toEqual(base.hitos);
       }
       // Las horas de los hitos son las nominales, no las de un cuadro.
-      expect(base.hitos.frente).toBeCloseTo(base.d.tCrown - FRENTE_ANTES, 12);
+      expect(base.hitos.llegada).toBeCloseTo(base.d.tCrown - LLEGADA_ANTES, 12);
       expect(base.hitos.foto).toBeCloseTo(base.d.tCrown + Math.min(FOTO_DESPUES, (base.tGolpe - base.d.tCrown) * 0.5), 12);
     });
   }
@@ -361,7 +393,7 @@ describe("la cámara no depende de los cuadros: en una hora de la grilla es la m
     const base = (c.cuadros[0] as Cuadro).pose;
     const casos: { plano: Plano; t: number; tope: number }[] = [
       { plano: "recta", t: c.d.tAbre + 6, tope: 1e-3 },
-      { plano: "frente", t: c.d.tCrown - 2, tope: TOL },
+      { plano: "llegada", t: c.d.tCrown - 2, tope: 1e-3 },
       { plano: "festejo", t: c.tGolpe + 4, tope: TOL },
     ];
     for (const k of casos) {
@@ -635,7 +667,7 @@ describe("el 2D en los últimos 3 s: se acerca al grupo de punta 1,8 veces, desp
     }
     expect(pico).toBeLessThanOrEqual(ZOOM_MAX);
     // Termina un poco antes de la meta: la dirección pide llegar al plano de cerca antes de que crucen.
-    expect(DUR_ACERCA_2D).toBeLessThan(FRENTE_ANTES);
+    expect(DUR_ACERCA_2D).toBeLessThan(LLEGADA_ANTES);
   });
 
   it("la caja que pide deja ese acercamiento y centra al promedio del grupo, no a una", () => {

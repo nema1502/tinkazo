@@ -8,24 +8,28 @@
  *
  * Tampoco depende de cuántos cuadros reales hubo ni de cuándo cayeron (como las fichas de nombre, `carrera-fichas-mov.ts`): lo que se
  * integra en el tiempo, el riel de la recta, avanza sobre una grilla fija de pasos virtuales atada a la hora del show (el paso
- * `k = floor(t * 60)`) y con el objetivo evaluado en la hora de cada paso, no en la del cuadro; y los hitos (el corte a la cámara de la
- * meta, la foto, el golpe) son horas nominales, no el cuadro que cayó primero. Así, en una hora dada, la cámara es la misma con cuadros
- * a 20, 60 o 120 por segundo, y también con un cuadro largo en el medio.
+ * `k = floor(t * 60)`) y con el objetivo evaluado en la hora de cada paso, no en la del cuadro; y los hitos (la llegada, la foto, el
+ * golpe) son horas nominales, no el cuadro que cayó primero. Así, en una hora dada, la cámara es la misma con cuadros a 20, 60 o 120
+ * por segundo, y también con un cuadro largo en el medio.
  *
  * Los tramos, con T el instante en que la ganadora cruza la meta:
  *
  * - **base**: hasta que se abre la recta manda la cámara del director del 2D, traducida a perspectiva (`camara3D`).
  * - **recta**: de costado, un poco adelante y baja, sobre un riel junto a la pista: la cámara viaja con el grupo de punta (el
  *   promedio de las cinco de adelante, nunca una sola llama) sin girar. Las finalistas miden de 150 px de alto en 1080 (`ALTO_RECTA`).
- * - **frente** (de T − 3 s a T + 0,4 s): corte a la cámara de la meta, de frente y desde atrás de la línea, quieta, con lente largo. Las del
- *   grupo vienen hacia la cámara y crecen de unos 240 a unos 400 px. El lente y la distancia salen de dónde está el grupo al cortar; la
- *   cámara no se mueve: no apunta a nadie. Centrada entre las del grupo, a lo ancho, sin mirar quién va adelante.
- * - **foto** (de T + 0,4 s al golpe): corte a la vista de costado, perpendicular a la línea, y un acercamiento de 1,2 a 1,7 veces sobre
- *   las narices que llega justo cuando cae el golpe.
+ * - **llegada** (de T − 3 s a T + 0,4 s): sin corte, el riel se vuelve la vista de la foto. En los 3 s la cámara gira de a poco hasta quedar
+ *   perpendicular a la línea, sube un poco, se acerca `ACERCA_LLEGADA` veces y su punto mirado pasa del riel (que sigue al grupo) a la línea
+ *   de la meta: a T mira la línea, de costado, y las que pelean se ven correr hasta ella con su nombre, en el orden en que van. No apunta a
+ *   nadie: el riel es el promedio del grupo y la línea es la línea. De T a T + 0,4 s queda quieta: las llamas paran en la línea y se ve quién
+ *   tiene la nariz adelante. El plano de frente de antes (un corte a la cámara de la meta, con lente largo) aplastaba la distancia: el público
+ *   veía a las ocho «en fila, quietas» y a la ganadora salir de la nada.
+ * - **foto** (de T + 0,4 s al golpe): la misma vista, y un acercamiento de `ACERCA_LLEGADA` a `FOTO_A` veces sobre las narices que llega
+ *   justo cuando cae el golpe. La línea cae vertical en el centro de la pantalla (la cámara está en su plano), así que la nariz que la pasó
+ *   primero se ve pasada en cualquier carril.
  * - **festejo** (del golpe en adelante): desde el golpe, la cámara se acerca a la ganadora hasta que mide `ALTO_FESTEJO` de la
  *   pantalla (300 px en 1080), en el tercio de abajo (el cartel va arriba), y después gira muy despacio.
  *
- * Los topes de movimiento (los verifica `carrera-camara.test.ts` cuadro a cuadro, salvo los cortes declarados y la foto):
+ * Los topes de movimiento (los verifica `carrera-camara.test.ts` cuadro a cuadro, salvo el corte declarado del celular y la foto):
  *
  * - **Giro**: el eje óptico gira `GIRO_MAX` (30 grados por segundo) como mucho. Los cambios de plano que no son cortes se hacen con una
  *   curva suave (cero en los extremos, pico de 1,5 veces el promedio) que dura lo que hace falta para que el pico quede en `GIRO_PICO`
@@ -36,7 +40,7 @@
  * - **Sin sacudón, sin desenfoque**: la cámara 3D no recibe el sacudón del golpe del 2D.
  */
 
-import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO } from "./carrera-forma";
+import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO } from "./carrera-forma";
 import { TAM3D, ZC, escala3D, type Pose3D } from "./carrera-3d-mapa";
 import { cabe, crecer, unir, type Caja, type Zona } from "../pixi/encuadre";
 import { PASOS_POR_SEGUNDO, pasoDe } from "./carrera-fichas-mov";
@@ -71,29 +75,29 @@ export const GLIDE_MIN = 1.4;
 export const ALTO_RECTA = 0.155;
 /** Lo mismo en el celular, parado: 90 px en 844 (la meta pide 70). */
 export const ALTO_RECTA_CEL = 0.108;
-/** Alto de las del grupo de punta al cortar a la cámara de la meta (T − 3 s): 270 px en 1080 (la meta pide de 200 a 450 durante los 3 s). */
-export const ALTO_FRENTE = 0.25;
-/** Lo mismo en el celular, parado: ahí entra poco a lo ancho (390 px), así que el lente prefiere el ancho al alto. */
-export const ALTO_FRENTE_CEL = 0.115;
-/** En el celular parado el plano de frente no se corta: el riel se acerca esta cantidad de veces en los 3 s. */
-export const ACERCA_FRENTE_CEL = 1.3;
-/** El ancho mínimo que ve la cámara de la meta en la línea, en alturas de llama, y el margen a cada lado del grupo. */
-export const ANCHO_FRENTE = 6.5;
-export const ANCHO_FRENTE_CEL = 4.5;
-/** Y lo más ancho que se abre: con 10,4 alturas caben los ocho carriles si el plano está en el medio de la pista. */
-export const ANCHO_FRENTE_MAX = 10.4;
-export const ANCHO_FRENTE_CEL_MAX = 6;
-export const MARGEN_FRENTE = 0.5;
+/**
+ * Cuánto se acerca la cámara en la llegada (de T − 3 s a T), en veces la ampliación de la recta: a T las finalistas miden 1,5 veces lo de la recta
+ * (250 px en 1080; la meta pide de 200 a 450 en los últimos 3 s) y la foto sigue desde ahí hasta `FOTO_A`. En el celular parado entra poco a lo
+ * ancho (390 px): menos.
+ */
+export const ACERCA_LLEGADA = 1.5;
+export const ACERCA_LLEGADA_CEL = 1.3;
+/**
+ * Lo que la llegada deja libre arriba (la cinta y el nombre sobre la cabeza) y abajo, como fracción del alto de la pantalla, para que a T las cuatro de
+ * adelante entren enteras; en la foto el pie puede quedar un poco fuera (lo que importa son las narices).
+ */
+export const MARGEN_LLEGADA_ARRIBA = 0.17;
+export const MARGEN_LLEGADA_ABAJO = 0.04;
+export const MARGEN_FOTO_ABAJO = -0.12;
 /** Alto de la ganadora en el festejo, como fracción del alto de la pantalla: 0,31 son 335 px en 1080 (la meta pide 300). */
 export const ALTO_FESTEJO = 0.31;
 /** A qué altura de la pantalla va el centro de la ganadora en el festejo (el cartel queda arriba). */
 export const Y_FESTEJO = 0.66;
 
-/** Cuánto antes de T se corta a la cámara de la meta, y cuánto después de T se vuelve al costado, en segundos. */
-export const FRENTE_ANTES = 3;
+/** Cuánto antes de T empieza la llegada (el viaje del riel a la vista de la foto), y cuánto después de T empieza el acercamiento de la foto, en segundos. */
+export const LLEGADA_ANTES = 3;
 export const FOTO_DESPUES = 0.4;
-/** Cuánto se acerca la foto (veces la ampliación de la recta). */
-export const FOTO_DE = 1.2;
+/** Hasta cuánto se acerca la foto (veces la ampliación de la recta): empieza en `ACERCA_LLEGADA`. */
 export const FOTO_A = 1.7;
 /**
  * Cuánto antes de abrirse la recta empieza a bajar la cámara. El viaje de la base al riel (más baja y más cerca) dura de 1,4 a 2,4 s por los
@@ -118,15 +122,11 @@ const TOLERA_GOLPE = 0.25;
 const TOLERA_GOLPE_ANTES = 0.1;
 /** Cuántas de adelante marcan el centro del riel de la recta. */
 export const GRUPO_RIEL = 5;
-/** Cuántas de adelante entran en el plano de frente: las que están a un cuerpo de la primera, entre tres y cuatro. */
-export const GRUPO_FRENTE_MIN = 3;
-export const GRUPO_FRENTE_MAX = 4;
 
 /** Cómo mira cada plano: el costado desde donde se mira (`yaw`, adelante es positivo), qué tan baja (`pitch`) y el campo vertical. */
 export const FOV_RECTA = 28 * RAD;
 export const YAW_RECTA = 0.34;
 export const PITCH_RECTA = 0.2;
-export const PITCH_FRENTE = 0.07;
 /**
  * La foto mira desde más arriba que la recta: con la cámara casi a ras (0,1) la llama del carril de adelante quedaba gigante y cortada tapando la línea, y los
  * carriles no se escalonaban; con 0,3 se ven de arriba y se distingue quién cruza. El lente es más largo (`FOV_FOTO`) para lo mismo: la cámara queda más lejos
@@ -153,9 +153,6 @@ export const RAMPA_CARTEL = (0.9 * 0.55) / 4;
 /** El giro lento del festejo y hasta dónde llega, en radianes por segundo y en radianes. */
 export const GIRO_FESTEJO = 0.035;
 export const GIRO_FESTEJO_TOPE = 0.22;
-/** El campo del lente largo de la cámara de la meta. */
-export const FOV_FRENTE_MIN = 12 * RAD;
-export const FOV_FRENTE_MAX = 30 * RAD;
 /** La cámara de la recta lleva el grupo a este tanto del ancho de la pantalla desde la izquierda (0,5 es el centro): deja aire adelante. */
 export const COLOCA_GRUPO = 0.44;
 
@@ -265,7 +262,7 @@ export function ampliacionDe(p: Pose3D): number {
 }
 
 /* --------------------------------------------------------------- el director */
-export type Plano = "base" | "recta" | "frente" | "foto" | "festejo";
+export type Plano = "base" | "recta" | "llegada" | "foto" | "festejo";
 
 export interface Marco {
   w: number;
@@ -309,7 +306,7 @@ export interface EntradaCamara {
 export interface SalidaCamara {
   pose: Pose3D;
   plano: Plano;
-  /** Este cuadro es un corte declarado (de un plano a otro sin viaje): los auditores no lo cuentan como giro. */
+  /** Este cuadro es un corte declarado (de un plano a otro sin viaje, o un salto del reloj): los auditores no lo cuentan como giro. */
   corte: boolean;
   /** Este cuadro es el acercamiento de la foto (el único con tope de acercamiento más alto). */
   foto: boolean;
@@ -317,8 +314,8 @@ export interface SalidaCamara {
 
 export interface Camara3D {
   cuadro(e: EntradaCamara): SalidaCamara;
-  /** La hora de juego del corte a la cámara de la meta y de la foto, para los auditores: las nominales, las mismas en cualquier corrida. */
-  hitos(): { frente: number; foto: number };
+  /** La hora de juego en que empieza la llegada y en que empieza la foto, para los auditores: las nominales, las mismas en cualquier corrida. */
+  hitos(): { llegada: number; foto: number };
 }
 
 /** Cuántos segundos hace falta para ir de `a` a `b` sin pasar el pico de giro ni de acercamiento. */
@@ -338,15 +335,14 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   // El alto de una llama de las finalistas en el mundo 3D, y el centro de los carriles a lo ancho de la pista.
   const hl = LLAMA_ALTO * carriles.esc * s * TAM3D;
   const zLanes = ((carriles.y0 + carriles.y1) / 2) * s * ZC;
-  /** Cuánto separa un carril del siguiente, en unidades 3D. */
-  const pasoCarril = ((carriles.y1 - carriles.y0) / Math.max(1, carriles.n)) * s * ZC;
   const x3 = (c: Puesto): number => (c.x + ((LLAMA_HOCICO + LLAMA_COLA) / 2) * c.esc) * s;
   const z3 = (c: Puesto): number => c.y * s * ZC;
   const nariz = (c: Puesto): number => (c.x + LLAMA_HOCICO * c.esc) * s;
   const altoRecta = retrato ? ALTO_RECTA_CEL : ALTO_RECTA;
+  const acercaLlegada = retrato ? ACERCA_LLEGADA_CEL : ACERCA_LLEGADA;
   /** Las horas nominales de los hitos: no dependen de los cuadros que haya habido. */
   const tRecta = tAbre - RECTA_ANTES;
-  const tFrente = tCrown - FRENTE_ANTES;
+  const tLlegada = tCrown - LLEGADA_ANTES;
   // La foto dura desde T + 0,4 s hasta el golpe; si el golpe llega antes (el foco del arco más rápido), la foto empieza a la mitad.
   const tFoto = Math.min(tCrown + FOTO_DESPUES, tCrown + (cfg.tGolpe - tCrown) * 0.5);
   const tGolpeNominal = Math.max(tFoto + 0.05, cfg.tGolpe);
@@ -365,25 +361,17 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   const mediaAnchoRecta = (distDe(ORB_RECTA) * Math.tan(FOV_RECTA / 2) * W) / H;
   const MIRA_Y = 0.55 * hl;
 
-  /** Cuánto mide una llama de largo en el mundo 3D: el "cuerpo" con que se mide el grupo de punta. */
-  const cuerpo = LLAMA_LARGO * carriles.esc * s * TAM3D;
-
   /** El centro del grupo de punta: el promedio de los cuerpos de las `k` de adelante (por la nariz). Nunca una sola. */
-  const centroDelGrupo = (puestos: readonly Puesto[], k: number, banda = 0): { x: number; z: number; nariz: number; zMin: number; zMax: number } => {
+  const centroDelGrupo = (puestos: readonly Puesto[], k: number): { x: number; z: number } => {
     const todas = [...puestos].sort((a, b) => nariz(b) - nariz(a) || a.persona - b.persona);
-    // Con `banda`, el grupo son las que están a esa distancia de la primera (entre `k` y `GRUPO_FRENTE_MAX`); sin ella, las `k` de adelante.
-    const dentro = banda > 0 && todas.length ? todas.filter((c) => nariz(c) >= nariz(todas[0] as Puesto) - banda).length : 0;
-    const orden = todas.slice(0, Math.max(1, Math.min(banda > 0 ? Math.max(k, Math.min(GRUPO_FRENTE_MAX, dentro)) : k, todas.length)));
+    const orden = todas.slice(0, Math.max(1, Math.min(k, todas.length)));
     const n = orden.length || 1;
-    let sx = 0, sz = 0, sn = 0, zMin = Infinity, zMax = -Infinity;
+    let sx = 0, sz = 0;
     for (const c of orden) {
       sx += x3(c);
       sz += z3(c);
-      sn += nariz(c);
-      zMin = Math.min(zMin, z3(c));
-      zMax = Math.max(zMax, z3(c));
     }
-    return { x: orden.length ? sx / n : metaX3, z: orden.length ? sz / n : zLanes, nariz: orden.length ? sn / n : metaX3, zMin: orden.length ? zMin : zLanes, zMax: orden.length ? zMax : zLanes };
+    return { x: orden.length ? sx / n : metaX3, z: orden.length ? sz / n : zLanes };
   };
 
   /* --------------------------------------------------------------- el estado */
@@ -392,8 +380,6 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   let ultimaBase: Pose3D | null = null;
   /** El cambio de plano en curso: desde dónde, desde cuándo y cuánto dura. */
   let cambio: { t0: number; dur: number; desde: Mira } | null = null;
-  /** Lo que se fija al cortar a la cámara de la meta: el lente, la distancia y dónde mira. */
-  let frente: Mira | null = null;
   /** El festejo: desde cuándo corre (la hora nominal del golpe) y cómo termina el cambio. */
   let tFestejo = -1;
   let ultimoMira: Mira | null = null;
@@ -462,47 +448,80 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   const miraRecta = (t: number, en: (t: number) => readonly Puesto[]): Mira => ({ ...ORB_RECTA, m: rielEn(t, en) });
 
   /**
-   * La cámara de la meta, fijada al cortar con el grupo de punta tal como está en la hora nominal del corte (no en el cuadro que cayó primero). Lo que la fija es dónde están sus carriles y
-   * qué tan lejos de la línea van, no quién va adelante:
-   *
-   * - A lo ancho tienen que entrar las del grupo cuando cruzan la línea: el ancho visible a la distancia de la línea es el que ocupan sus
-   *   carriles más un margen (nunca menos de `ANCHO_FRENTE` alturas de llama).
-   * - Al cortar, las del grupo miden `ALTO_FRENTE` o más. De las dos cosas salen el lente (entre 12 y 30 grados) y la distancia a la línea.
-   *   Con un grupo angosto el lente es largo y las llamas crecen mucho al llegar; con uno ancho, más abierto y crecen menos.
+   * La vista de la foto, a `veces` la ampliación de la recta: de costado, perpendicular a la línea, mirando la línea misma a media altura de llama
+   * y a la profundidad `z` (entre los carriles de las que pelean). La cámara queda en el plano de la línea, así que la línea cae vertical en el
+   * centro de la pantalla en todos los carriles: una nariz que la pasó se ve pasada esté en el carril que esté (mirando un punto antes de la línea,
+   * la perspectiva la inclinaba y una nariz del carril de atrás parecía más atrás de lo que iba).
    */
-  function fijarFrente(puestos: readonly Puesto[]): Mira {
-    const g = centroDelGrupo(puestos, GRUPO_FRENTE_MIN, cuerpo);
-    const dx = Math.max(0.6 * hl, metaX3 - g.nariz);
-    const asp = W / H;
-    // El ancho que ve en la línea: el de `ANCHO_FRENTE` alturas de llama, y nunca menos que lo que ocupan los carriles del grupo con su margen.
-    const ancho = Math.min((retrato ? ANCHO_FRENTE_CEL_MAX : ANCHO_FRENTE_MAX) * hl, Math.max((retrato ? ANCHO_FRENTE_CEL : ANCHO_FRENTE) * hl, g.zMax - g.zMin + 2 * MARGEN_FRENTE * hl));
-    const a = ancho / (2 * asp);
-    const b = (hl * Math.cos(PITCH_FRENTE)) / (2 * (retrato ? ALTO_FRENTE_CEL : ALTO_FRENTE));
-    const tgMin = Math.tan(FOV_FRENTE_MIN / 2), tgMax = Math.tan(FOV_FRENTE_MAX / 2);
-    const tg = Math.max(tgMin, Math.min(tgMax, (b - a) / dx));
-    const dist = a / tg;
-    // Centrada, a lo ancho, entre las del grupo: el medio de sus carriles, sin salirse de la pista. No mira a ninguna: mira la línea.
-    const zMinPista = (zLanes - ((carriles.n - 1) / 2) * pasoCarril) - 0.7 * hl, zMaxPista = (zLanes + ((carriles.n - 1) / 2) * pasoCarril) + 0.7 * hl;
-    const mitad = (dist * tg * asp);
-    const z = Math.max(Math.min((g.zMin + g.zMax) / 2, zMaxPista - mitad), zMinPista + mitad);
-    // La cámara está a `dist` de la línea, bajita; el eje apunta al grupo tal como estaba al cortar (a media altura de llama) y no a la línea:
-    // así las del grupo quedan en el medio de la pantalla al cortar y bajan hacia la línea al llegar, y abajo queda menos pista vacía.
-    const pos: V3 = [metaX3 + dist * Math.cos(PITCH_FRENTE), 0.5 * hl + dist * Math.sin(PITCH_FRENTE), z];
-    const mira: V3 = [Math.min(g.x, metaX3), 0.5 * hl, z];
-    const o: V3 = [pos[0] - mira[0], pos[1] - mira[1], 0];
-    const d = Math.hypot(o[0], o[1]);
-    return { m: mira, yaw: Math.PI / 2, pitch: Math.asin(o[1] / d), lDist: Math.log(d), lTg: Math.log(tg) };
+  const miraSobreLaLinea = (veces: number, z: number): Mira => ({ ...orbita(0, pitchFoto, distPara(altoRecta, pitchFoto, fovFoto) / veces, fovFoto), m: [metaX3, 0.5 * hl, z] });
+
+  /**
+   * Lo que fija la vista de la llegada y de la foto, con las finalistas tal como están en la hora nominal en que empieza la llegada (no en el cuadro
+   * que cayó primero): las cuatro de adelante (`grupoFinal2D`, las mismas que encuadra el 2D; la ganadora es una de ellas en todas las rondas y
+   * cae parejo entre las cuatro) marcan la profundidad que se mira, el medio entre sus carriles, y el acercamiento es el mayor que las deja a todas
+   * enteras en la pantalla a T (de la cabeza al pie, debajo de la cinta de arriba) hasta `ACERCA_LLEGADA`; el de la foto, el mayor que deja sus
+   * cabezas a la vista hasta `FOTO_A`. Con las cuatro en carriles vecinos se acerca todo; repartidas de punta a punta de la pista, menos. No mira
+   * quién va adelante: solo en qué carriles corren.
+   */
+  function fijarLlegada(puestos: readonly Puesto[]): { z: number; veces: number; vecesFoto: number } {
+    const grupo = new Set(grupoFinal2D(puestos.map((c) => ({ q: c.persona, nariz: nariz(c) }))));
+    const zs = puestos.filter((c) => grupo.has(c.persona)).map(z3);
+    const zMin = zs.length ? Math.min(...zs) : zLanes, zMax = zs.length ? Math.max(...zs) : zLanes;
+    const z = (zMin + zMax) / 2;
+    /** ¿A `veces` entran la cabeza (con su nombre arriba) y el pie de una llama parada en la línea en los dos carriles extremos del grupo? */
+    const caben = (veces: number, arriba: number, abajo: number): boolean => {
+      const pose = poseDe(miraSobreLaLinea(veces, z));
+      for (const zz of [zMin, zMax]) {
+        if (proyectar(pose, W, H, [metaX3, hl, zz]).y < arriba * H) return false;
+        if (proyectar(pose, W, H, [metaX3, 0, zz]).y > (1 - abajo) * H) return false;
+      }
+      return true;
+    };
+    /** El mayor acercamiento, entre 1 y `tope`, con el que caben: acercarse las separa, así que se busca por bisección. */
+    const mayor = (tope: number, arriba: number, abajo: number): number => {
+      if (caben(tope, arriba, abajo)) return tope;
+      let lo = 1, hi = tope;
+      if (!caben(lo, arriba, abajo)) return lo;
+      for (let i = 0; i < 16; i++) {
+        const m = (lo + hi) / 2;
+        if (caben(m, arriba, abajo)) lo = m;
+        else hi = m;
+      }
+      return lo;
+    };
+    const veces = mayor(acercaLlegada, MARGEN_LLEGADA_ARRIBA, MARGEN_LLEGADA_ABAJO);
+    return { z, veces, vecesFoto: Math.max(veces, mayor(FOTO_A, MARGEN_LLEGADA_ARRIBA, MARGEN_FOTO_ABAJO)) };
+  }
+  /** La vista de la llegada de esta ronda, fijada la primera vez que hace falta (siempre con las finalistas de la hora nominal). */
+  let llegada: { z: number; veces: number; vecesFoto: number } | null = null;
+  const llegadaDe = (en: (t: number) => readonly Puesto[]): { z: number; veces: number; vecesFoto: number } => (llegada ??= fijarLlegada(en(tLlegada)));
+
+  /**
+   * La llegada: del riel (tal como viene, con su órbita de la recta) a la vista de la foto, con la curva suave de los cambios de plano en los
+   * `LLEGADA_ANTES` segundos antes de T. Todo a la vez y sin corte: el costado, la altura, el lente, la distancia y el punto mirado, que pasa del
+   * riel (que sigue al grupo hasta la línea) a la línea. Desde T es la vista de la foto, quieta, hasta que empieza el acercamiento.
+   */
+  function miraLlegada(t: number, en: (t: number) => readonly Puesto[]): Mira {
+    const r = mezclar(t, miraRecta(t, en));
+    const ll = llegadaDe(en);
+    const f = miraSobreLaLinea(ll.veces, ll.z);
+    const k = suave((t - tLlegada) / LLEGADA_ANTES);
+    // Desde T, la vista de la foto tal cual (sin la cuenta de la mezcla, que deja restos de redondeo): quieta hasta que empieza el acercamiento.
+    if (k >= 1) return f;
+    return {
+      m: [lerp(r.m[0], f.m[0], k), lerp(r.m[1], f.m[1], k), lerp(r.m[2], f.m[2], k)],
+      yaw: lerp(r.yaw, f.yaw, k), pitch: lerp(r.pitch, f.pitch, k), lDist: lerp(r.lDist, f.lDist, k), lTg: lerp(r.lTg, f.lTg, k),
+    };
   }
 
-  /** La foto: de costado, perpendicular a la línea, y un acercamiento de `FOTO_DE` a `FOTO_A` veces que llega con el golpe. */
-  function miraFoto(t: number): Mira {
+  /** La foto: la misma vista de la llegada y un acercamiento sobre las narices (hasta `FOTO_A` veces la recta) que llega con el golpe. */
+  function miraFoto(t: number, en: (t: number) => readonly Puesto[]): Mira {
+    const ll = llegadaDe(en);
     const dur = Math.max(0.05, tGolpeNominal - tFoto);
     const u = suave((t - tFoto) / dur);
     // El pico de la curva suave es 1,5 veces la velocidad media: el acercamiento de la foto se acorta si la ventana es chica.
-    const sube = Math.min(Math.log(FOTO_A / FOTO_DE), (ZOOM_FOTO_MAX * dur) / PICO_SUAVE);
-    const veces = Math.exp(Math.log(FOTO_DE) + sube * u);
-    const base = distPara(altoRecta, pitchFoto, fovFoto);
-    return { ...orbita(0, pitchFoto, base / veces, fovFoto), m: [metaX3 - 1.2 * hl, 0.5 * hl, zLanes] };
+    const sube = Math.min(Math.log(ll.vecesFoto / ll.veces), (ZOOM_FOTO_MAX * dur) / PICO_SUAVE);
+    return miraSobreLaLinea(Math.exp(Math.log(ll.veces) + sube * u), ll.z);
   }
 
   /** El festejo: la ganadora a `ALTO_FESTEJO` en el tercio de abajo, vista de tres cuartos, y un giro lento. */
@@ -576,14 +595,14 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   /** El plano que toca a la hora `t`. */
   const planoEn = (t: number, golpe: number | null): Plano => {
     if (t < tRecta) return "base";
-    if (t < tFrente) return "recta";
-    if (t < tFoto) return "frente";
+    if (t < tLlegada) return "recta";
+    if (t < tFoto) return "llegada";
     if (golpe === null || t < golpe) return "foto";
     return "festejo";
   };
 
   return {
-    hitos: () => ({ frente: tFrente, foto: tFoto }),
+    hitos: () => ({ llegada: tLlegada, foto: tFoto }),
     cuadro(e) {
       const { t, puestos } = e;
       const en = e.puestosEn ?? (() => puestos);
@@ -615,19 +634,9 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
             cambio = null;
             corte = true;
           }
-        } else if (quiero === "frente") {
-          if (retrato) {
-            // En un celular parado entran uno o dos carriles a lo ancho: la cámara de la meta no cabe. Sigue el riel y se acerca despacio.
-            frente = null;
-            corte = salto;
-          } else {
-            frente = fijarFrente(en(tFrente));
-            cambio = null;
-            corte = true;
-          }
-        } else if (quiero === "foto") {
-          cambio = null;
-          corte = true;
+        } else if (quiero === "llegada" || quiero === "foto") {
+          // La llegada sigue del riel y la foto sigue de la llegada: función de la hora, sin corte (salvo que el reloj haya saltado).
+          corte = salto;
         } else {
           // El festejo: viaje suave desde la foto (tal como termina) hasta la ganadora; si se saltó, directo. El giro lento empieza igual que si
           // el viaje se hubiera hecho (`cambioDur`): una cámara nueva, o la que salta, queda donde estaría la que siguió la ronda.
@@ -639,7 +648,7 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
             cambio = null;
             corte = true;
           } else {
-            empezar(tFestejo, miraFoto(tFestejo), miraFestejo(en(tFestejo), e.ganadora, tFestejo));
+            empezar(tFestejo, miraFoto(tFestejo, en), miraFestejo(en(tFestejo), e.ganadora, tFestejo));
             if (salto) {
               cambio = null;
               corte = true;
@@ -650,14 +659,8 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
 
       /* ---- la mira del plano ---- */
       if (plano === "recta") return salida(mezclar(t, miraRecta(t, en)), "recta", corte);
-      if (plano === "frente") {
-        if (frente) return salida(frente, "frente", corte);
-        // Celular: el riel de la recta con un acercamiento de 1,0 a `ACERCA_FRENTE_CEL` veces en los 3 segundos (mucho menos que el tope).
-        const m = mezclar(t, miraRecta(t, en));
-        const k = suave((t - tFrente) / FRENTE_ANTES);
-        return salida({ ...m, lDist: m.lDist - k * Math.log(ACERCA_FRENTE_CEL) }, "frente", corte);
-      }
-      if (plano === "foto") return salida(miraFoto(t), "foto", corte, true);
+      if (plano === "llegada") return salida(miraLlegada(t, en), "llegada", corte);
+      if (plano === "foto") return salida(miraFoto(t, en), "foto", corte, true);
       return salida(bajoElCartel(mezclar(t, miraFestejo(puestos, e.ganadora, t)), puestos, e.ganadora, t, golpe, e.bajoCartel), "festejo", corte);
     },
   };

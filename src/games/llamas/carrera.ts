@@ -5,7 +5,7 @@ import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type De
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
 import { camara3D, type Borla3D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
-import { FRENTE_ANTES, cajaFinal2D, crearCamara3D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Camara3D, type Puesto } from "./carrera-camara";
+import { LLEGADA_ANTES, cajaFinal2D, crearCamara3D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Camara3D, type Puesto } from "./carrera-camara";
 import { unir } from "../pixi/encuadre";
 import { tarjetaRetrato, type DisenoTarjeta } from "./carrera-tarjeta";
 import { tiemposFoco } from "../pixi/foco";
@@ -295,12 +295,6 @@ const MARGEN_LETRERO_Y = 0.5;
   const enUso = new Map<number, Corredora>();
   /** Dónde está cada ficha respecto de su llama (`carrera-fichas-mov.ts`): la decisión de no pisarse cambia de golpe y la ficha se desliza. */
   const fichasMov = new Map<number, EstadoFicha>();
-  /**
-   * La hora del último corte de la cámara del 3D (a la cámara de la meta, a la foto): una hora nominal del plan (`carrera-camara.ts`), no el cuadro
-   * en que cayó. En un corte las llamas saltan cientos de píxeles en la pantalla: las fichas no vienen deslizando desde el plano anterior (se cruzarían
-   * y quedarían encimadas) sino que se colocan donde manda la decisión, como en un salto del reloj, y recién después se deslizan.
-   */
-  let corteAplicado = -Infinity;
   function tomar(persona: number): Corredora {
     let c = enUso.get(persona);
     if (c) return c;
@@ -1005,7 +999,7 @@ const MARGEN_LETRERO_Y = 0.5;
   let rayaX = 0;
   function pintarRaya(t: number): void {
     raya.clear();
-    if (t < d.tSalida + 0.3 || t >= d.tCrown - FRENTE_ANTES) return;
+    if (t < d.tSalida + 0.3 || t >= d.tCrown - LLEGADA_ANTES) return;
     const u = P.u;
     const vz = cam.zoom || 1;
     const y0 = (t >= d.tAbre ? carr.y0 : forma.y0) - 10 * u, y1 = (t >= d.tAbre ? carr.y1 : forma.y1) + 6 * u;
@@ -1339,7 +1333,7 @@ const MARGEN_LETRERO_Y = 0.5;
       // La etiqueta: pegada al cuerpo.
       const et = c.etiqueta;
       // En los últimos 3 s nada marca a quien va adelante (ni la ficha amarilla ni la manta ni el aro): es el cabeza a cabeza.
-      const soyLider = q === duenia && !lying && t < d.tCrown - FRENTE_ANTES;
+      const soyLider = q === duenia && !lying && t < d.tCrown - LLEGADA_ANTES;
       const estilo = lying ? "echada" : soyLider ? "lider" : "normal";
       const nv: Nivel = lying ? 3 : nivel;
       ponerEtiqueta(et, textoDe(q, nv), px, estilo);
@@ -1392,7 +1386,7 @@ const MARGEN_LETRERO_Y = 0.5;
     pintarObstaculos(t);
     if (Number.isFinite(rayaMax)) rayaX = rayaMax;
     // La borla: pasa de una a otra (se calculó antes del bucle).
-    borla.visible = !!bp && t < d.tCrown - FRENTE_ANTES && (!d.tandas.length || t >= ((d.tandas[0] as Tanda).salidas[0] as number));
+    borla.visible = !!bp && t < d.tCrown - LLEGADA_ANTES && (!d.tandas.length || t >= ((d.tandas[0] as Tanda).salidas[0] as number));
     if (bp) {
       borla.position.set(bp.x, bp.y);
       borla.scale.set(bp.esc);
@@ -1462,7 +1456,7 @@ const MARGEN_LETRERO_Y = 0.5;
     const medidas: { persona: number; px: number; alto: number; ancho: number; x: number; y: number }[] = [];
     const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva, vuela: bp.vuela } : null;
     // La cámara: hasta que se abre la recta mira lo que mira el director del 2D; de ahí al festejo la lleva `carrera-camara.ts`, que solo lee
-    // dónde pisa cada finalista (de la recta, del cabeza a cabeza, de la foto y de la ganadora desde el golpe).
+    // dónde pisa cada finalista (de la recta, de la llegada, de la foto y de la ganadora desde el golpe).
     if (k.coronado && golpeEn === null) golpeEn = t;
     const escMedia = gente.length ? gente.reduce((a, c) => a + c.esc, 0) / gente.length : 0.5;
     const base = camara3D({ x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, P.w, P.h, P.u, escMedia);
@@ -1480,13 +1474,6 @@ const MARGEN_LETRERO_Y = 0.5;
       carriles: { y0: carr.y0, y1: carr.y1, n: carr.n, esc: carr.esc },
     });
     const dirigida = director3D.cuadro({ t, puestos, puestosEn, base, ganadora: d.campeona, golpeEn, bajoCartel: S.placaBajo(k.ganadores.length) + 4 * P.u });
-    // Los cortes de la cámara son horas del plan: a la cámara de la meta (en el celular parado no hay corte: sigue el riel) y a la foto.
-    const hitos = director3D.hitos();
-    const corte = Math.max(t >= hitos.foto ? hitos.foto : -Infinity, !P.retrato && t >= hitos.frente ? hitos.frente : -Infinity);
-    if (corte > corteAplicado) {
-      corteAplicado = corte;
-      fichasMov.clear();
-    }
     const pose = dirigida.plano === "base" ? null : dirigida.pose;
     tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, pose, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
     // Los letreros SALIDA y META, mientras se ven, cuentan como cajas ya puestas (como SALIDA en el 2D): las fichas los tapaban.
@@ -1521,12 +1508,11 @@ const MARGEN_LETRERO_Y = 0.5;
       const piso = Math.max(pose ? hudG.bajo + 3 * P.u : P.top, pisoDeFichas());
       et.raiz.position.set(Math.max(mitad, Math.min(P.w - mitad, pan.x)), Math.max(piso + (et.h * e) / 2, pan.y - (et.h * e) / 2 - 3 * P.u));
       et.raiz.zIndex = f.peso + pan.y;
-      // Con la cámara del director 3D, las llamas que quedan lejos no llevan ficha: en la recta, las de menos del 6 % del alto de la pantalla
-      // y, en el cabeza a cabeza, las de menos del 12 %. Desde la cámara de la meta se ven al fondo de la pista las que se echaron antes y
-      // sus fichas quedaban como letras sueltas debajo de la cinta; ahí los nombres son los de las que vienen.
-      const enCabeza = t >= d.tCrown - FRENTE_ANTES;
-      const minAlto = (enCabeza ? 0.12 : 0.06) * P.h;
-      // Y en el cabeza a cabeza no se etiqueta a una echada: con el lente largo una que quedó atrás mide más del 12 % y su ficha flotaba atenuada sobre el horizonte.
+      // Con la cámara del director 3D, las llamas que quedan lejos no llevan ficha: las de menos del 6 % del alto de la pantalla (en la recta y en la
+      // llegada por igual: con la cámara de la meta de antes el umbral de la llegada era del 12 %, y de costado el carril del fondo quedaba justo en él y su nombre parpadeaba).
+      const enCabeza = t >= d.tCrown - LLEGADA_ANTES;
+      const minAlto = 0.06 * P.h;
+      // Y en la llegada no se etiqueta a una echada: una que quedó atrás a la vista tenía su ficha flotando atenuada sobre el horizonte.
       const sigueEnCarrera = !enCabeza || (d.tiempos.cae.get(f.persona) ?? Infinity) > t;
       et.raiz.visible = dentro && f.etiquetar && !f.sinLugar && sigueEnCarrera && (!pose || pan.alto >= minAlto);
       // Ningún letrero a la vista queda debajo de una ficha, ni de la amarilla (con su rótulo de la izquierda). Con `margen`, la caja del letrero se agranda
@@ -1678,7 +1664,7 @@ const MARGEN_LETRERO_Y = 0.5;
   let finalZ0: number | null = null;
   let finalGrupo: number[] | null = null;
   function cajaFinalDelGrupo(t: number): Caja | null {
-    const tF = d.tCrown - FRENTE_ANTES;
+    const tF = d.tCrown - LLEGADA_ANTES;
     if (t < tF) return null;
     if (finalZ0 === null || finalGrupo === null) {
       finalZ0 = zoomDeCaja(unir(cajasDelFrentePrevias(tF)), zona(), 40);
@@ -1703,7 +1689,7 @@ const MARGEN_LETRERO_Y = 0.5;
   const metaCerca = (t: number): boolean => d.frac(t) >= 0.86;
   function meta(): Caja {
     // En los últimos 3 s la cámara se acerca al grupo: la meta tiene que seguir entrando a lo ancho, pero no de arriba a abajo de todos los carriles.
-    if (finalGrupo && k.t >= d.tCrown - FRENTE_ANTES) {
+    if (finalGrupo && k.t >= d.tCrown - LLEGADA_ANTES) {
       const ys = finalGrupo.map((q) => posicion(q, k.t).y);
       const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
       return { x: metaX - 100 * P.u, y: cy - 60 * P.u, w: 140 * P.u, h: 120 * P.u };

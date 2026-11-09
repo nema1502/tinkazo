@@ -3,7 +3,7 @@ import { cabe, centrar, crecer, dentro, unir, type Caja, type Zona } from "../pi
 import { tiemposFoco } from "../pixi/foco";
 import { tamanoLetra } from "../pixi/kit/nombres";
 import type { Vista } from "../pixi/kit/tipos";
-import { FRENTE_ANTES, cajaFinal2D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Puesto } from "./carrera-camara";
+import { LLEGADA_ANTES, cajaFinal2D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Puesto } from "./carrera-camara";
 import { pantallaDe, puestosDe } from "./carrera-camara-prueba";
 import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, carrilesDe, hudDe, type Pantalla } from "./carrera-forma";
 import { ctxDe } from "./carrera-prueba";
@@ -59,7 +59,7 @@ function correrFinal(d: Datos, P: Pantalla): Final {
   const carr = carrilesDe(P, d.lanes.length, nombrePx);
   const zona: Zona = { x0: 0, y0: hudDe(P).bajo, x1: P.w, y1: P.bottom };
   const metaX = RECTA * P.w + LLAMA_HOCICO * carr.esc;
-  const tF = d.tCrown - FRENTE_ANTES;
+  const tF = d.tCrown - LLEGADA_ANTES;
   const tGolpe = d.tCrown + tiemposFoco(d.final.story.arc).golpe;
   const en = (t: number): Puesto[] => puestosDe(d, carr, P, 0, t);
   const de = (ps: readonly Puesto[], q: number): Puesto => ps[d.lanes.indexOf(q)] as Puesto;

@@ -45,7 +45,7 @@ export interface Corrida {
   Xs: number;
   tGolpe: number;
   cuadros: Cuadro[];
-  hitos: { frente: number; foto: number };
+  hitos: { llegada: number; foto: number };
   /** Dónde pisa cada finalista en una hora cualquiera: lo que la escena le da a la cámara para las horas de la grilla. */
   puestosEn: (t: number) => Puesto[];
 }

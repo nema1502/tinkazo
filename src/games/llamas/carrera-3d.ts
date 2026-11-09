@@ -535,7 +535,9 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
         caja(i % 2 ? 0xffffff : 0x16161f, xm, xm + 0.5, 0, 0.13, zA + i * ancho, zA + (i + 1) * ancho);
       }
       const alto = 190 * u * s;
-      for (const z of [zA - 0.5, zB + 0.5]) caja(0x16161f, xm - 0.18, xm + 0.18, 0, alto, z - 0.18, z + 0.18);
+      // Los postes van finos: en la llegada la cámara mira la línea de costado desde su mismo plano, y el poste de este lado, ancho, quedaba
+      // justo sobre la línea en la pantalla y tapaba la nariz que la cruzaba.
+      for (const z of [zA - 0.5, zB + 0.5]) caja(0x16161f, xm - 0.06, xm + 0.06, 0, alto, z - 0.18, z + 0.18);
       const viga = caja(0xffffff, xm - 0.15, xm + 0.15, alto - 1.1, alto, zA - 0.5, zB + 0.5);
       viga.material = B.add(new MeshLambertMaterial({ map: cuadros(Math.max(4, Math.round((zB - zA) / 0.7)), 2, B), flatShading: true }));
       rotulo(g.rotuloMeta, 0xffc629, xm, alto + 1.8, (zA + zB) / 2, Math.max(7, (zB - zA) * 0.5), 2.2);
