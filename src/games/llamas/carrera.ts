@@ -5,6 +5,9 @@ import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type De
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
 import { camara3D, type Borla3D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
+import { cambiosDeCara, caraEn, cuantoCara, ponerCaras, quienDeCara } from "./carrera-cara";
+import { armarEtiqueta, olvidarEtiqueta, ponerEtiqueta as ponerFicha, type AspectoFicha, type Etiqueta, type EstiloFicha } from "./carrera-etiqueta";
+import { formaEn, nivelesDe } from "./carrera-nombre-nivel";
 import { LLEGADA_ANTES, cajaFinal2D, crearCamara3D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Camara3D, type Puesto } from "./carrera-camara";
 import { unir } from "../pixi/encuadre";
 import { tarjetaRetrato, type DisenoTarjeta } from "./carrera-tarjeta";
@@ -59,21 +62,6 @@ const ease = (v: number): number => {
   const x = clamp01(v);
   return x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
 };
-
-interface Etiqueta {
-  raiz: Container;
-  fondo: Graphics;
-  texto: Text;
-  /** El rótulo "ADELANTE" pegado a la izquierda de la ficha de quien va primera (celular): una palabra que contesta la pregunta sin mirar la raya. */
-  rotulo: Container;
-  rotuloTexto: Text;
-  rotuloFondo: Graphics;
-  /** Cuánto sobresale el rótulo a la izquierda de la ficha, en el espacio de la ficha (0 si no se muestra). */
-  rotuloW: number;
-  w: number;
-  h: number;
-  clave: string;
-}
 
 interface Corredora {
   persona: number;
@@ -177,7 +165,8 @@ const MARGEN_LETRERO_Y = 0.5;
     }
     return v;
   };
-  const nivelDe = (vivas: number): Nivel => (vivas <= 8 ? 4 : vivas <= 14 ? 3 : 2);
+  // El nivel de los nombres de todas cambia solo cuando cambia cuántas siguen en carrera: horas que el plan ya conoce (`carrera-nombre-nivel.ts`).
+  const niveles = nivelesDe(d);
   const textoDe = (i: number, nivel: Nivel): string => (formasN[i] as readonly string[])[nivel - 1] ?? names[i] ?? "";
 
   let forma: Forma;
@@ -241,54 +230,25 @@ const MARGEN_LETRERO_Y = 0.5;
   const xDeT = (t: number): number => F0 + d.dist(t) * P.w;
 
   /* ------------------------------------------------------------- etiquetas */
+  const aspecto: AspectoFicha = {
+    tinta: INK, amarillo: YELLOW, crema: CREAM, echada: FICHA_ECHADA, fichaAlfa: luz.fichaAlfa, fichaEchadaAlfa: luz.fichaEchadaAlfa, contorno: (fs) => contorno(fs),
+  };
   function crearEtiqueta(): Etiqueta {
-    const raiz = new Container();
-    const fondo = new Graphics();
-    const texto = S.text("", { fontSize: 20, fontWeight: "800", fill: CREAM, stroke: contorno(20) });
-    texto.anchor.set(0.5);
-    const rotulo = new Container();
-    const rotuloFondo = new Graphics();
-    const rotuloTexto = S.text("", { fontSize: 12, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 2, join: "round" } });
-    rotuloTexto.anchor.set(0.5);
-    rotulo.addChild(rotuloFondo, rotuloTexto);
-    rotulo.visible = false;
-    raiz.addChild(fondo, texto, rotulo);
-    return { raiz, fondo, texto, rotulo, rotuloTexto, rotuloFondo, rotuloW: 0, w: 0, h: 0, clave: "" };
+    const nombre = (): Text => S.text("", { fontSize: 20, fontWeight: "800", fill: CREAM, stroke: contorno(20) });
+    return armarEtiqueta({
+      raiz: new Container(),
+      fondo: new Graphics(),
+      texto: nombre(),
+      sale: nombre(),
+      rotulo: new Container(),
+      rotuloTexto: S.text("", { fontSize: 12, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 2, join: "round" } }),
+      rotuloFondo: new Graphics(),
+    });
   }
-  function ponerEtiqueta(e: Etiqueta, s: string, px: number, estilo: "normal" | "lider" | "echada"): void {
-    const clave = `${s}|${px.toFixed(1)}|${estilo}`;
-    if (e.clave === clave) return;
+  /** La ficha con el nombre `s` y, a mitad de un cambio de forma, el que se va (`sale`, con `mezcla` de 0 a 1): `carrera-etiqueta.ts`. */
+  function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha): void {
     const conRotulo = d.nueva && P.retrato && estilo === "lider";
-    e.clave = clave;
-    const fs = estilo === "lider" ? px * 1.25 : px;
-    e.texto.style.fontSize = fs;
-    e.texto.style.fill = estilo === "lider" ? INK : CREAM;
-    // La ficha amarilla lleva letra de tinta sin borde oscuro, en las dos carreras: tinta sobre amarillo ya tiene contraste
-    // de sobra, y un borde de tinta sobre la tinta engorda las letras hasta que el nombre se vuelve una mancha que no se lee.
-    // El trazo amarillo, del color de la ficha, no se ve: deja la letra tal cual.
-    e.texto.style.stroke = estilo === "lider" ? { color: YELLOW, width: 1, join: "round" } : contorno(fs);
-    e.texto.text = s;
-    const w = e.texto.width + fs * 0.5;
-    // La ficha amarilla tiene más aire arriba y abajo: la letra queda rodeada de amarillo y no del borde de tinta.
-    const h = fs * (estilo === "lider" ? 1.6 : 1.28);
-    e.w = w;
-    e.h = h;
-    e.texto.position.set(0, 0);
-    e.fondo.clear();
-    if (estilo === "lider") e.fondo.roundRect(-w / 2 + 3, -h / 2 + 3, w, h, h * 0.3).fill(INK).roundRect(-w / 2, -h / 2, w, h, h * 0.3).fill(YELLOW).stroke({ width: Math.max(2, fs / 9), color: INK });
-    else e.fondo.roundRect(-w / 2, -h / 2, w, h, h * 0.3).fill({ color: estilo === "echada" ? FICHA_ECHADA : INK, alpha: estilo === "echada" ? luz.fichaEchadaAlfa : luz.fichaAlfa });
-    // En el celular las llamas son chicas y las filas se apilan: la de adelante lleva la palabra pegada a su ficha, además de la raya y la manta.
-    e.rotulo.visible = conRotulo;
-    e.rotuloW = 0;
-    if (conRotulo) {
-      const rf = fs * 0.8;
-      e.rotuloTexto.style.fontSize = rf;
-      e.rotuloTexto.text = k.txt("carRotuloPunta");
-      const rw = e.rotuloTexto.width + rf * 0.9, rh = rf * 1.35;
-      e.rotuloFondo.clear().roundRect(-rw / 2, -rh / 2, rw, rh, rh * 0.3).fill(INK);
-      e.rotulo.position.set(-w / 2 - rw / 2 + 3, 0);
-      e.rotuloW = rw - 3;
-    }
+    ponerFicha(e, s, sale, mezcla, px, estilo, aspecto, conRotulo ? k.txt("carRotuloPunta") : null);
   }
 
   /* ------------------------------------------------------------ corredoras */
@@ -721,14 +681,20 @@ const MARGEN_LETRERO_Y = 0.5;
   const cintaG = new Graphics();
   const cursor = new Container();
   const cursorAro = new Graphics();
+  // Dos caras bajo la misma máscara: cuando la marca pasa a otra, la nueva entra encima de la vieja (`carrera-cara.ts`).
+  const cursorCaras = new Container();
+  const cursorCaraSale = new Sprite();
   const cursorCara = new Sprite();
   const cursorMascara = new Graphics();
-  cursor.addChild(cursorAro, cursorCara, cursorMascara);
-  cursorCara.mask = cursorMascara;
+  cursorCaras.addChild(cursorCaraSale, cursorCara);
+  cursorCaras.mask = cursorMascara;
+  cursor.addChild(cursorAro, cursorCaras, cursorMascara);
   cinta.addChild(cintaG, cursor);
   hud.addChild(cinta);
   let hudG = hudDe(P);
-  let cursorDe = -1;
+  // De quién es la cara en cada hora y cuándo puede cambiar (cuando pasa la marca): `carrera-cara.ts`.
+  const cambiosCara = cambiosDeCara(d);
+  const quienCara = quienDeCara(d);
   let cintaXa = 0;
   let cintaXb = 1;
   function pintarCinta(): void {
@@ -767,9 +733,10 @@ const MARGEN_LETRERO_Y = 0.5;
     // El cursor: la cara de quien va adelante.
     cursorAro.clear().circle(0, 0, r).fill(YELLOW).stroke({ width: 3 * u, color: INK });
     cursorMascara.clear().circle(0, 0, r * 0.82).fill(0xffffff);
-    cursorCara.anchor.set(0.5);
-    cursorCara.width = cursorCara.height = r * 1.64;
-    cursorDe = -1;
+    for (const s of [cursorCaraSale, cursorCara]) {
+      s.anchor.set(0.5);
+      s.width = s.height = r * 1.64;
+    }
   }
 
   /* -------------------------------------------------------- el cartel de nombres */
@@ -1032,8 +999,7 @@ const MARGEN_LETRERO_Y = 0.5;
     q: number;
     c: Corredora;
     p: Posicion;
-    estilo: "normal" | "lider" | "echada";
-    nv: Nivel;
+    estilo: EstiloFicha;
     arriba: boolean;
     comp: number;
     esc: number;
@@ -1054,7 +1020,7 @@ const MARGEN_LETRERO_Y = 0.5;
     return (Math.hypot(dx, a1.y - a0.y) * PASOS_POR_SEGUNDO) / cuerpoPx();
   }
   /**
-   * La ficha va con su llama y lo que la decisión de no pisar a otra cambia (un renglón, el modo, el nombre más corto) se desliza (`carrera-fichas-mov.ts`):
+   * La ficha va con su llama y lo que la decisión de no pisar a otra cambia (un renglón, el modo) se desliza (`carrera-fichas-mov.ts`):
    * nunca salta. `quiere` es si la decisión la muestra; `llama(hora)` cuánto se mueve su ancla respecto del frente del grupo (cuerpos por segundo) en esa hora de la grilla
    * (cada paso que avanza la ficha pide la suya) y `cuerpo` los píxeles de un cuerpo en la pantalla.
    */
@@ -1125,11 +1091,12 @@ const MARGEN_LETRERO_Y = 0.5;
   /**
    * Las fichas no se pisan, en las dos carreras. Se ubican de la que más manda a la que menos: la que el relator nombra ahora,
    * la amarilla, las que se echaron y después el resto, de adelante hacia atrás. La que pisa a una ya puesta (más del 10 % de la
-   * más chica) pasa a un nombre más corto (solo la carrera nueva) y, si todavía pisa, se corre un renglón arriba o abajo, alternando,
-   * sin irse más de dos renglones de su llama. Si no cabe, se calla ese cuadro. Una ficha que no entra entera en la pantalla se
-   * corre hacia adentro, o se calla: nunca sale cortada. Es una función del cuadro, sin azar.
+   * más chica) se corre un renglón arriba o abajo, alternando, sin irse más de dos renglones de su llama. Si no cabe, se calla ese
+   * cuadro. Una ficha que no entra entera en la pantalla se corre hacia adentro, o se calla: nunca sale cortada. Es una función del
+   * cuadro, sin azar. El nombre no se acorta acá: la forma del nombre es función de la hora (`carrera-nombre-nivel.ts`) y un nombre
+   * que se acortaba por chocar en un cuadro cambiaba de golpe, sin fundido.
    */
-  function resolverFichas(fichas: Ficha[], px: number, vz: number, nombrados: ReadonlySet<number>): void {
+  function resolverFichas(fichas: Ficha[], nombrados: ReadonlySet<number>): void {
     const puestas: CajaF[] = [];
     const lim = limites();
     // El letrero SALIDA cuenta como una caja ya puesta mientras se ve: las fichas lo pisaban y quedaba «SALI» con un nombre encima.
@@ -1155,31 +1122,19 @@ const MARGEN_LETRERO_Y = 0.5;
     // La amarilla se ubica primero, pegada a su llama; la que el relator nombra busca lugar después, sin empujarla.
     const manda = (f: Ficha): number => (f.soyLider ? 5 : nombrados.has(f.q) ? 4 : f.estilo === "echada" ? 2 : 1);
     const orden = [...fichas].sort((a, b) => manda(b) - manda(a) || b.p.x - a.p.x);
-    fichas: for (const f of orden) {
+    for (const f of orden) {
       const et = f.c.etiqueta;
       // Dónde cae su ficha sin más (y lo que ya se corrió para entrar en la pantalla): el tope de renglones cuenta desde ahí.
-      let yNatural = et.raiz.y;
+      const yNatural = et.raiz.y;
       if (!encajar(f)) {
         et.raiz.visible = false;
         continue;
       }
-      let r = caja(f);
-      let nv = f.nv;
-      while (d.nueva && pisaA(r, puestas) && nv > 2 && !f.soyLider && f.estilo !== "echada") {
-        nv = (nv - 1) as Nivel;
-        ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
-        ubicarFicha(et, f.p, f.arriba, f.comp, vz, f.soyLider);
-        yNatural = et.raiz.y;
-        if (!encajar(f)) {
-          et.raiz.visible = false;
-          continue fichas;
-        }
-        r = caja(f);
-      }
+      const r = caja(f);
       if (pisaA(r, puestas)) {
         if (nombrados.has(f.q) && !f.soyLider) {
-          // La que el relator nombra busca lugar debajo de su llama (justo bajo las patas y, si no, un renglón abajo y después arriba); si no
-          // entra con su nombre, pasa a su nombre de pila. Nunca empuja a la amarilla, y si no hay lugar se queda donde está, por encima de todas.
+          // La que el relator nombra busca lugar debajo de su llama (justo bajo las patas y, si no, un renglón abajo y después arriba).
+          // Nunca empuja a la amarilla, y si no hay lugar se queda donde está, por encima de todas.
           const buscar = (): number | null => {
             const cab = caja(f);
             if (f.arriba) {
@@ -1190,17 +1145,7 @@ const MARGEN_LETRERO_Y = 0.5;
             }
             return sitioLibre(cab, puestas, lim, false, et.raiz.y - yNatural, true);
           };
-          let dy = buscar();
-          if (dy === null && nv > 2) {
-            nv = 2;
-            ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
-            ubicarFicha(et, f.p, f.arriba, f.comp, vz, f.soyLider);
-            yNatural = et.raiz.y;
-            if (encajar(f)) {
-              r = caja(f);
-              dy = pisaA(r, puestas) ? buscar() : 0;
-            }
-          }
+          const dy = buscar();
           if (dy !== null) et.raiz.y += dy;
         } else {
           // Un renglón arriba o abajo, alternando (sobre la cabeza, primero para arriba).
@@ -1265,8 +1210,6 @@ const MARGEN_LETRERO_Y = 0.5;
     const quienes = new Set<number>(d.gente.length ? d.gente : d.lanes);
     if (d.tandas.length && t < d.tSalida) for (const h of d.tandas) if (t >= h.t0 - 0.2 && t < h.tFin + 1.3) for (const m of h.miembros) quienes.add(m);
     for (const q of [...enUso.keys()]) if (!quienes.has(q)) soltar(q);
-    const nVivas = d.tiempos.echadas.length ? d.vivas(t).length : d.lanes.length;
-    const nivel = nivelDe(nVivas);
     const px = nombrePx();
     const lider = estable(t);
     const corona = t - d.tCrown;
@@ -1335,8 +1278,10 @@ const MARGEN_LETRERO_Y = 0.5;
       // En los últimos 3 s nada marca a quien va adelante (ni la ficha amarilla ni la manta ni el aro): es el cabeza a cabeza.
       const soyLider = q === duenia && !lying && t < d.tCrown - LLEGADA_ANTES;
       const estilo = lying ? "echada" : soyLider ? "lider" : "normal";
-      const nv: Nivel = lying ? 3 : nivel;
-      ponerEtiqueta(et, textoDe(q, nv), px, estilo);
+      // La forma del nombre sale de la hora: cuando cambia cuántas siguen en carrera, o cuando esta se echa, el nombre viejo se va
+      // mientras llega el nuevo (`carrera-nombre-nivel.ts`).
+      const fn = formaEn(niveles, t, lying ? (d.tiempos.cae.get(q) ?? t - (p.momento?.p ?? 0) * ECHADA_DUR) : Infinity);
+      ponerEtiqueta(et, textoDe(q, fn.a), fn.mezcla < 1 ? textoDe(q, fn.de) : "", fn.mezcla, px, estilo);
       // La ficha nunca se ve más chica que el piso del kit (16 px en el celular, el 2,6 % del alto en el proyector).
       const comp = Math.max(1, Math.min(2.2, minimoPx("nombre", P.w, P.h) / (px * vz)));
       et.raiz.scale.set(comp);
@@ -1362,12 +1307,12 @@ const MARGEN_LETRERO_Y = 0.5;
           f.sinLugar = sinLugar || sobra;
         }
       } else {
-        if (et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
+        if (et.raiz.visible) fichas.push({ q, c, p, estilo, arriba, comp, esc, soyLider });
         deLlamas.push({ q, et, p, dentro });
       }
     }
     if (!tres) {
-      resolverFichas(fichas, px, vz, nombrados);
+      resolverFichas(fichas, nombrados);
       // Lo que decidió resolverFichas se aplica deslizando (M9): la ficha sigue a su llama y no salta de un cuadro al otro.
       const lim = limites();
       pegadas.clear();
@@ -1398,19 +1343,10 @@ const MARGEN_LETRERO_Y = 0.5;
     // La cinta: el cursor lleva la cara de quien va adelante.
     const c = hudG.cinta;
     // La cara del cursor es la de quien va adelante en la lista (no la que lleva la marca): sin marca no pasa a ser la de una finalista.
-    const lid = d.duena(t) >= 0 ? d.duena(t) : (d.lanes[0] as number);
-    if (cursorDe !== lid) {
-      cursorDe = lid;
-      cursorCara.texture = k.figura(lid);
-      cursorCara.width = cursorCara.height = c.h * 0.72 * 1.64;
-    }
     // En los últimos tres segundos la cinta no señala a nadie: el aro sigue el avance y la cara se apaga. Cuando la marca pasa a otra (la de siempre),
-    // la cara no cambia de golpe: se apaga en 0,2 s, cambia y se prende en 0,2 s. En las tandas no hay marca y la cara no se ve.
-    let fundido = 1;
-    for (const m of d.marcas) fundido = Math.min(fundido, clamp01(Math.abs(t - m.t) / 0.2));
-    const sinMarca = !d.nueva && d.tandas.length > 0 && t < d.tSalida;
-    cursorCara.alpha = sinMarca ? 0 : d.cursor(t) * fundido;
-    cursorCara.visible = cursorCara.alpha > 0.01;
+    // la cara no cambia de golpe ni se apaga: la nueva entra encima de la vieja en 0,3 s, desde la hora de la marca (`carrera-cara.ts`).
+    // En las tandas no hay marca y la cara no se ve hasta la salida: ahí entra en 0,3 s y no de golpe (`cuantoCara`).
+    ponerCaras(cursorCaraSale, cursorCara, caraEn(t, quienCara, cambiosCara), cuantoCara(d, t), k.figura, c.h * 0.72 * 1.64);
     cursor.position.set(cintaXa + clamp01(d.frac(t)) * (cintaXb - cintaXa), c.y + c.h / 2);
     // El cartel de los nombres: del vuelo a la salida.
     if (d.tandas.length) {
@@ -1743,7 +1679,7 @@ const MARGEN_LETRERO_Y = 0.5;
     corralMemo.clear();
     fichasMov.clear();
     caminata = null;
-    for (const c of enUso.values()) c.etiqueta.clave = "";
+    for (const c of enUso.values()) olvidarEtiqueta(c.etiqueta);
     pintarCielo();
     pintarMarcas();
     pintarCinta();

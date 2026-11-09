@@ -76,11 +76,11 @@ export const ALTO_RECTA = 0.155;
 /** Lo mismo en el celular, parado: 90 px en 844 (la meta pide 70). */
 export const ALTO_RECTA_CEL = 0.108;
 /**
- * Cuánto se acerca la cámara en la llegada (de T − 3 s a T), en veces la ampliación de la recta: a T las finalistas miden 1,5 veces lo de la recta
- * (250 px en 1080; la meta pide de 200 a 450 en los últimos 3 s) y la foto sigue desde ahí hasta `FOTO_A`. En el celular parado entra poco a lo
- * ancho (390 px): menos.
+ * Cuánto se acerca la cámara en la llegada (de T − 3 s a T), en veces la ampliación de la recta: a T las finalistas miden hasta 1,6 veces lo de la
+ * recta (unos 265 px en 1080; la meta pide de 200 a 450 de mediana en los últimos 3 s) y la foto sigue desde ahí hasta `FOTO_A`. Con 1,5 la mediana
+ * quedaba en 198 px con 8 personas y en 195 con 18 (`medir-escala-carrera`, 8-nov-2026). En el celular parado entra poco a lo ancho (390 px): menos.
  */
-export const ACERCA_LLEGADA = 1.5;
+export const ACERCA_LLEGADA = 1.6;
 export const ACERCA_LLEGADA_CEL = 1.3;
 /**
  * Lo que la llegada deja libre arriba (la cinta y el nombre sobre la cabeza) y abajo, como fracción del alto de la pantalla, para que a T las cuatro de
@@ -89,6 +89,13 @@ export const ACERCA_LLEGADA_CEL = 1.3;
 export const MARGEN_LLEGADA_ARRIBA = 0.17;
 export const MARGEN_LLEGADA_ABAJO = 0.04;
 export const MARGEN_FOTO_ABAJO = -0.12;
+/**
+ * A qué altura mira la vista de la línea, en altos de llama desde el suelo. A media altura (0,5) lo que limitaba el acercamiento era el borde de
+ * abajo (la llama del carril más cercano, que se ve más grande y más abajo, sacaba los pies) y arriba sobraba lugar; además, las de punta que
+ * venían por los carriles cercanos se salían por abajo en el último segundo. Mirando más abajo el cuadro se reparte parejo: entra más acercamiento
+ * y se cortan menos.
+ */
+export const MIRA_LINEA_Y = 0.2;
 /** Alto de la ganadora en el festejo, como fracción del alto de la pantalla: 0,31 son 335 px en 1080 (la meta pide 300). */
 export const ALTO_FESTEJO = 0.31;
 /** A qué altura de la pantalla va el centro de la ganadora en el festejo (el cartel queda arriba). */
@@ -448,12 +455,12 @@ export function crearCamara3D(cfg: ConfigCamara): Camara3D {
   const miraRecta = (t: number, en: (t: number) => readonly Puesto[]): Mira => ({ ...ORB_RECTA, m: rielEn(t, en) });
 
   /**
-   * La vista de la foto, a `veces` la ampliación de la recta: de costado, perpendicular a la línea, mirando la línea misma a media altura de llama
-   * y a la profundidad `z` (entre los carriles de las que pelean). La cámara queda en el plano de la línea, así que la línea cae vertical en el
+   * La vista de la foto, a `veces` la ampliación de la recta: de costado, perpendicular a la línea, mirando la línea misma a `MIRA_LINEA_Y` del alto
+   * de una llama y a la profundidad `z` (entre los carriles de las que pelean). La cámara queda en el plano de la línea, así que la línea cae vertical en el
    * centro de la pantalla en todos los carriles: una nariz que la pasó se ve pasada esté en el carril que esté (mirando un punto antes de la línea,
    * la perspectiva la inclinaba y una nariz del carril de atrás parecía más atrás de lo que iba).
    */
-  const miraSobreLaLinea = (veces: number, z: number): Mira => ({ ...orbita(0, pitchFoto, distPara(altoRecta, pitchFoto, fovFoto) / veces, fovFoto), m: [metaX3, 0.5 * hl, z] });
+  const miraSobreLaLinea = (veces: number, z: number): Mira => ({ ...orbita(0, pitchFoto, distPara(altoRecta, pitchFoto, fovFoto) / veces, fovFoto), m: [metaX3, MIRA_LINEA_Y * hl, z] });
 
   /**
    * Lo que fija la vista de la llegada y de la foto, con las finalistas tal como están en la hora nominal en que empieza la llegada (no en el cuadro

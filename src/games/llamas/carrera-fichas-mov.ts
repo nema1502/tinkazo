@@ -1,9 +1,10 @@
 /**
  * El movimiento de las fichas de nombre de la carrera, puro (sin Pixi): una ficha va con su llama, con el mismo tope de paso, y nunca salta.
  *
- * `carrera-fichas.ts` decide cada cuadro dónde cae cada ficha para no pisar a otra (un renglón más arriba, más abajo, un nombre más corto, o
- * callarla) y esa decisión cambia de golpe: una ficha saltaba un renglón entero entre dos cuadros, o aparecía y desaparecía. Acá se separa lo que
- * es de la llama de lo que es de la decisión (`DIRECCION.md`, M9):
+ * `carrera-fichas.ts` decide cada cuadro dónde cae cada ficha para no pisar a otra (un renglón más arriba, más abajo, o callarla; el nombre no se
+ * acorta por chocar: su forma es de la hora, `carrera-nombre-nivel.ts`) y esa decisión cambia de golpe: una ficha saltaba un renglón entero entre
+ * dos cuadros, o aparecía y desaparecía. Acá se separa lo que
+ * es de la llama de lo que es de la decisión (regla M9 de la dirección de la carrera):
  *
  * - la **ancla** es el lugar que sigue a la llama (la misma posición con que se dibuja), sin más cuenta;
  * - la **diferencia** entre donde la decisión pone la ficha y su ancla se desliza: arranca y frena de a poco, nunca se corre más de lo que sobra del
