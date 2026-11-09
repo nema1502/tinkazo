@@ -1,7 +1,7 @@
 import { anotarEquipoEnSala, leerEstadoDeEquipo, leerPublico } from "../sala/equipos";
 import { revisarNombre } from "../sala/filtro";
 import type { NetworkName } from "../stellar/config";
-import { guardarEquipoLocal, leerEquipoLocal, prepararPrimerSorteo, sorteoPropioLocal } from "./celular";
+import { guardarEquipoLocal, leerEquipoLocal, llaveDelCelular, prepararPrimerSorteo, sorteoPropioLocal } from "./celular";
 import { cifrarEquipo } from "./datos";
 import type { SalaDeRegistro } from "./enlace";
 import { type ConfigEquipos, type DatosDeEquipo, type EstadoEquipo, ES_CUENTA, MAX_INTEGRANTES, cuentaCorta, esCuenta, limpiarEquipo } from "./modelo";
@@ -67,6 +67,8 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
   let claveError = "";
   let pararReloj: (() => void) | null = null;
   let enviando = false;
+  /** La llave de este celular para la sala: prueba ante la sala que los cambios del equipo vienen del mismo celular. */
+  let llave: string | null = null;
 
   const ver = (v: Vista): void => {
     vista = v;
@@ -208,8 +210,11 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     q<HTMLButtonElement>("eqp-enviar").disabled = true;
     mensaje("", false);
     try {
-      const r = await deps.anotar(sala.servicio, sala.id, cuenta, await deps.cifrar(sala.clave, hecho.equipo));
+      llave ??= llaveDelCelular(sala.id, deps.local);
+      const r = await deps.anotar(sala.servicio, sala.id, cuenta, await deps.cifrar(sala.clave, hecho.equipo), llave);
       if (!r.ok) {
+        if (r.motivo === "ajena") return mensaje("eqpErrAjena");
+        if (r.motivo === "cupo-conexion") return mensaje("eqpErrCupoConexion");
         return mensaje(r.motivo === "cerrada" ? "eqpCerrada" : r.motivo === "sin-registro" ? "eqpSinRegistro" : r.motivo === "llena" ? "eqpErrLlena" : r.motivo === "rapido" ? "eqpErrRapido" : r.motivo === "red" ? "eqpRed" : "eqpErrOtro");
       }
       equipo = hecho.equipo;

@@ -39,6 +39,39 @@ export function leerEquipoLocal(sala: string, almacen: Pick<Storage, "getItem"> 
   }
 }
 
+const CLAVE_LLAVES = "tinkazo.equipo.llaves";
+/** Cuántas salas recuerda: una sala vive 10 horas, así que alcanza con las últimas. */
+const MAX_LLAVES = 8;
+
+/**
+ * La llave de este celular para una sala: 16 bytes al azar, en base64url. Va con cada alta del equipo y la sala
+ * guarda solo su huella: después, solo quien la tiene puede cambiar los datos de esa cuenta. Es una por sala y no por
+ * cuenta, así que el mismo celular puede anotar otra cuenta en la misma sala y volver a la primera.
+ *
+ * Se guarda antes de mandar el alta: si la respuesta se pierde, el reintento lleva la misma. Sin almacenamiento
+ * devuelve una nueva cada vez; quien la pide la conserva mientras la página esté abierta.
+ */
+export function llaveDelCelular(sala: string, almacen: Pick<Storage, "getItem" | "setItem"> = localStorage): string {
+  let lista: [string, string][] = [];
+  try {
+    const x = JSON.parse(almacen.getItem(CLAVE_LLAVES) ?? "[]") as unknown;
+    if (Array.isArray(x)) lista = x.filter((e): e is [string, string] => Array.isArray(e) && typeof e[0] === "string" && typeof e[1] === "string");
+  } catch {
+    /* sin almacenamiento o con algo roto: se empieza de nuevo */
+  }
+  const hay = lista.find(([s]) => s === sala)?.[1];
+  if (hay) return hay;
+  let bin = "";
+  for (const b of crypto.getRandomValues(new Uint8Array(16))) bin += String.fromCharCode(b);
+  const llave = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  try {
+    almacen.setItem(CLAVE_LLAVES, JSON.stringify([...lista, [sala, llave]].slice(-MAX_LLAVES)));
+  } catch {
+    /* sin almacenamiento: vale mientras la página esté abierta */
+  }
+  return llave;
+}
+
 /** El premio con que se sugiere el primer sorteo del equipo. */
 export const PREMIO_SUGERIDO = "¿Quién presenta primero?";
 

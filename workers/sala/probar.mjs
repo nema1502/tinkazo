@@ -5,7 +5,7 @@
  *   npx wrangler@4 dev --port 8791 --var VIDA_PRUEBA_MS:4000
  *   node probar.mjs http://127.0.0.1:8791 [--cupos] [--tope]
  *
- * Crea dos salas y no deja nada guardado (las cierra o vencen solas). `--cupos`
+ * Crea tres salas y no deja nada guardado (las cierra o vencen solas). `--cupos`
  * prueba el tope de salas por dirección (deja esa dirección una hora sin crear;
  * reiniciar `wrangler dev` lo reinicia); `--tope` manda nombres durante cinco
  * minutos para llegar a 400.
@@ -23,6 +23,35 @@ const check = (nombre, ok, detalle = "") => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const b64 = (u) => Buffer.from(u).toString("base64url");
+/** La llave de un celular para el registro de equipos: 16 bytes al azar. */
+const nuevaLlave = () => b64(crypto.getRandomValues(new Uint8Array(16)));
+
+/** Una cuenta de Stellar bien formada (G…, con su suma de control), hecha de 32 bytes iguales a `byte`. */
+function cuentaDePrueba(byte) {
+  const datos = new Uint8Array(35);
+  datos[0] = 6 << 3;
+  datos.fill(byte, 1, 33);
+  let crc = 0;
+  for (const b of datos.subarray(0, 33)) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  datos[33] = crc & 0xff;
+  datos[34] = crc >> 8;
+  const ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = 0;
+  let valor = 0;
+  let out = "";
+  for (const b of datos) {
+    valor = (valor << 8) | b;
+    bits += 8;
+    while (bits >= 5) {
+      out += ABC[(valor >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return out;
+}
 
 /** Un nombre cifrado como lo hace la página: [1][IV][AES-GCM]. */
 async function cifrar(claveB64, texto) {
@@ -138,15 +167,18 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
 // 6b. Los equipos: el registro con cuenta de equipos.html. El tope por minuto de los nombres ya se gastó: se espera a que pase.
 {
   await sleep(61_000 - (Date.now() % 60_000));
-  const A = "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
-  const B = "GCATS5YOVB6ROX2WUNKGNQ2MP3GMXDMKSG2O4N5CLX3A6W4PZGZZI55U";
-  const EVENTO = "GDWUSKGGFDI4FRXK5EBTRECZSVQSSWJHHJOGH6JWG3AUMFFMQ435DIAG";
+  const A = cuentaDePrueba(1);
+  const B = cuentaDePrueba(2);
+  const EVENTO = cuentaDePrueba(3);
   // Una dirección de la forma correcta pero con la última letra cambiada: el control no cuadra.
   const MAL_ESCRITA = `${A.slice(0, 55)}${A[55] === "A" ? "B" : "A"}`;
+  // Cada cuenta, desde su celular: la llave con que se anotó es la única que la puede reescribir.
+  const llaves = { [A]: nuevaLlave(), [B]: nuevaLlave() };
   const config = { modo: "sorteo", evento: "space-apps-scz-2026", cuenta: EVENTO };
   const json = { "Content-Type": "application/json" };
   const putConfig = (tok, cuerpo) => fetch(`${base}/v1/sala/${id}/config`, { method: "PUT", headers: { ...json, ...(tok ? auth(tok) : SITIO) }, body: JSON.stringify(cuerpo) });
-  const altaEquipo = (cuenta, d, headers = SITIO) => fetch(`${base}/v1/sala/${id}/equipos`, { method: "POST", headers: { ...json, ...headers }, body: JSON.stringify({ cuenta, d }) });
+  const altaEquipo = (cuenta, d, headers = SITIO, llave = llaves[cuenta] ?? nuevaLlave(), sala = id) =>
+    fetch(`${base}/v1/sala/${sala}/equipos`, { method: "POST", headers: { ...json, ...headers }, body: JSON.stringify({ cuenta, d, llave }) });
   const equiposCifrados = async (nombre, integrantes) => cifrar(clave, JSON.stringify({ n: nombre, i: integrantes }));
 
   check("sin token no se arma el registro (403)", (await putConfig(null, config)).status === 403);
@@ -162,6 +194,8 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
   check("anotar con una cuenta que no es da 400", (await altaEquipo("GMALA", await equiposCifrados("X", ["a", "b"]))).status === 400);
   check("anotar con una cuenta mal copiada (el control no cuadra) da 400", (await altaEquipo(MAL_ESCRITA, await equiposCifrados("X", ["a", "b"]))).status === 400);
   check("anotar con datos que no son un equipo cifrado da 400", (await altaEquipo(A, "hola mundo!")).status === 400);
+  check("anotar sin la llave del celular da 400", (await fetch(`${base}/v1/sala/${id}/equipos`, { method: "POST", headers: { ...json, ...SITIO }, body: JSON.stringify({ cuenta: A, d: await equiposCifrados("X", ["a", "b"]) }) })).status === 400);
+  check("anotar con una llave que no es da 400", (await altaEquipo(A, await equiposCifrados("X", ["a", "b"]), SITIO, "corta")).status === 400);
 
   const lleg = p3.msgs.length;
   const alta = await altaEquipo(A, await equiposCifrados("Los Cóndores", ["Ana", "Beto", "Carla"]));
@@ -169,7 +203,12 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
   check("un equipo se anota (201) y con sorteo propio queda como solicitud", alta.status === 201 && altaJson.estado === "solicitud" && Number.isInteger(altaJson.n), JSON.stringify(altaJson));
   check("la pantalla recibe el equipo al instante, con la cuenta en claro y lo demás cifrado", await esperar(() => p3.msgs.slice(lleg).some((m) => m.t === "equipo" && m.cuenta === A && !JSON.stringify(m).includes("Cóndores"))));
   const re = await (await altaEquipo(A, await equiposCifrados("Los Cóndores 2", ["Ana", "Beto"]))).json();
-  check("la misma cuenta otra vez cambia los datos y conserva el número y el estado", re.n === altaJson.n && re.estado === "solicitud", JSON.stringify(re));
+  check("la misma cuenta otra vez, con su llave, cambia los datos y conserva el número y el estado", re.n === altaJson.n && re.estado === "solicitud", JSON.stringify(re));
+  const lPisar = p3.msgs.length;
+  const pisar = await altaEquipo(A, await equiposCifrados("Pisado", ["Intruso", "Otro"]), SITIO, nuevaLlave());
+  check("con otra llave no se pisa una cuenta anotada (409 ajena)", pisar.status === 409 && (await pisar.json()).error === "ajena");
+  await sleep(300);
+  check("y la pantalla no recibe nada de ese intento", !p3.msgs.slice(lPisar).some((m) => m.t === "equipo"));
   const segundo = await (await altaEquipo(B, await equiposCifrados("Pumas", ["Dani", "Eva"]))).json();
   check("otra cuenta es otro equipo, con otro número", segundo.n !== altaJson.n);
 
@@ -177,7 +216,7 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
   const todos = await (await fetch(`${base}/v1/sala/${id}/equipos?desde=0`, { headers: auth(token) })).json();
   check("con el token se leen, cifrados", todos.length === 2 && !JSON.stringify(todos).includes("Pumas") && !JSON.stringify(todos).includes("Cóndores"), `${todos.length} equipos`);
   const delA = todos.find((e) => e.cuenta === A);
-  check("y se descifran con la clave que solo tiene el QR", JSON.parse(await descifrar(clave, delA.d)).n === "Los Cóndores 2");
+  check("y se descifran con la clave que solo tiene el QR: siguen los datos de su celular, no los del intento", JSON.parse(await descifrar(clave, delA.d)).n === "Los Cóndores 2");
   const vMax = Math.max(...todos.map((e) => e.v));
 
   const unoA = await (await fetch(`${base}/v1/sala/${id}/equipos/${A}`, { headers: SITIO })).json();
@@ -201,16 +240,30 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
   check("con el token se quita (204)", (await fetch(`${base}/v1/sala/${id}/equipos/${segundo.n}`, { method: "DELETE", headers: auth(token) })).status === 204);
   check("la pantalla se entera", await esperar(() => p3.msgs.slice(l3).some((m) => m.t === "equipo-quitado" && m.n === segundo.n)));
   check("y ya no figura (404)", (await fetch(`${base}/v1/sala/${id}/equipos/${B}`, { headers: SITIO })).status === 404);
+  check("quitado, la cuenta se puede anotar desde otro celular (201)", (await altaEquipo(B, await equiposCifrados("Pumas", ["Dani", "Eva"]), SITIO, nuevaLlave())).status === 201);
 
   // Una sala nueva sin registro no deja anotar a nadie.
   const r3 = await crear();
   if (r3.status === 201) {
     const s3 = await r3.json();
-    const sinRegistro = await fetch(`${base}/v1/sala/${s3.id}/equipos`, { method: "POST", headers: { ...json, ...SITIO }, body: JSON.stringify({ cuenta: A, d: await equiposCifrados("X", ["a", "b"]) }) });
+    const sinRegistro = await altaEquipo(A, await equiposCifrados("X", ["a", "b"]), SITIO, nuevaLlave(), s3.id);
     check("una sala sin registro armado no deja anotar (409)", sinRegistro.status === 409);
     await fetch(`${base}/v1/sala/${s3.id}/config`, { method: "PUT", headers: { ...json, ...auth(s3.token) }, body: JSON.stringify({ ...config, modo: "cupon" }) });
-    const directo = await (await fetch(`${base}/v1/sala/${s3.id}/equipos`, { method: "POST", headers: { ...json, ...SITIO }, body: JSON.stringify({ cuenta: A, d: await equiposCifrados("X", ["a", "b"]) }) })).json();
+    const directo = await (await altaEquipo(A, await equiposCifrados("X", ["a", "b"]), SITIO, nuevaLlave(), s3.id)).json();
     check("con el cupón gratis el equipo queda aceptado directamente", directo.estado === "aceptado", JSON.stringify(directo));
+    // El tope por conexión: 60 equipos nuevos cada 10 minutos desde una misma dirección (ya va uno).
+    let nuevos = 1;
+    let frenado = null;
+    for (let i = 10; i < 80 && !frenado; i++) {
+      const r = await altaEquipo(cuentaDePrueba(i), await equiposCifrados(`E${i}`, ["a", "b"]), SITIO, nuevaLlave(), s3.id);
+      if (r.status === 201) nuevos++;
+      else frenado = { status: r.status, error: (await r.json()).error, espera: Number(r.headers.get("Retry-After")) };
+    }
+    check(
+      "una sola conexión anota 60 equipos y el siguiente da 429 cupo-conexion, con cuánto esperar",
+      nuevos === 60 && frenado?.status === 429 && frenado.error === "cupo-conexion" && frenado.espera > 0 && frenado.espera <= 600,
+      `entraron ${nuevos}, ${JSON.stringify(frenado)}`,
+    );
     await fetch(`${base}/v1/sala/${s3.id}`, { method: "DELETE", headers: auth(s3.token) });
     check("al cerrar la sala se van también los equipos (404)", (await fetch(`${base}/v1/sala/${s3.id}/equipos/${A}`, { headers: SITIO })).status === 404);
   } else console.log("NO PROBADO el cupón gratis: el cupo de salas no dejó crear otra", r3.status);

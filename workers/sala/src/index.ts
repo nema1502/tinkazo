@@ -15,7 +15,8 @@
  * Los equipos de un evento (el registro con cuenta de `equipos.html` en el sitio):
  *   PUT    /v1/sala/<id>/config            Authorization: Bearer <token>   JSON {modo, evento, cuenta} → 204
  *   GET    /v1/sala/<id>/publico           sin token: cómo es el registro y cuántos equipos van → 200 {config, equipos}
- *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}
+ *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d, llave}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}
+ *                                           (una cuenta ya anotada solo se reescribe con la misma llave: si no, 409 {"error":"ajena"})
  *   GET    /v1/sala/<id>/equipos?desde=V   Authorization: Bearer <token>   → 200 [{n, cuenta, d, estado, v}]
  *   GET    /v1/sala/<id>/equipos/<cuenta>  sin token: en qué punto está ese equipo → 200 {n, estado}
  *   PUT    /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   JSON {estado} → 204
@@ -26,8 +27,10 @@
  * la hora de creación. Una alarma a las 10 h de creada borra todo. No guarda
  * nombres en claro, ni direcciones IP, ni navegador, ni hora por persona (para
  * contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella
- * con sal que no se devuelve a la dirección). Los topes viven en el objeto, que
- * es donde son exactos.
+ * con sal que no se devuelve a la dirección; para el tope de altas de equipos
+ * por conexión, cada sala guarda 10 minutos una huella con una sal suya, y de la
+ * llave del celular que anotó cada equipo guarda solo su huella SHA-256). Los
+ * topes viven en el objeto, que es donde son exactos.
  *
  * El WebSocket hacia la pantalla usa la API de hibernación: un socket quieto
  * no cobra tiempo. Si se corta, la pantalla reconecta y consulta cada 3 s.
@@ -62,6 +65,8 @@ import {
 } from "./logica";
 import type { AltasPorHora, ConfigEquipos, EstadoEquipo } from "./logica";
 import { paginaCelular } from "./pagina";
+import { ES_LLAVE, anotarEquipo as anotarEnRegistro, crearTablasDeEquipos, quitarEquipo as quitarDelRegistro, siguienteVersion } from "./registro";
+import type { Ejecutar } from "./registro";
 
 export interface Env {
   SALA: DurableObjectNamespace<Sala>;
@@ -185,10 +190,14 @@ interface Presentacion {
 }
 
 /** Lo que el Worker le pide a la sala, por RPC. */
-export type Resultado<T = object> = ({ ok: true } & T) | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" };
+export type Resultado<T = object> =
+  | ({ ok: true } & T)
+  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" }
+  | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
 export class Sala extends DurableObject<Env> {
   private porMinuto = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
+  private readonly sql: Ejecutar = (consulta, ...parametros) => this.ctx.storage.sql.exec(consulta, ...parametros).toArray() as never;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -209,12 +218,10 @@ export class Sala extends DurableObject<Env> {
   /**
    * Los equipos: la cuenta va en claro (es pública y es lo que identifica al equipo); el nombre y los integrantes, cifrados.
    * `v` sube con cada cambio, para que la pantalla que consulta pida solo lo que cambió. Las salas que ya existían antes
-   * de esto la crean la primera vez que se las configura.
+   * de esto la crean la primera vez que se las configura. Las tablas y las reglas del alta viven en `registro.ts`.
    */
   private crearTablaDeEquipos(): void {
-    this.ctx.storage.sql.exec(
-      "CREATE TABLE IF NOT EXISTS equipos (n INTEGER PRIMARY KEY AUTOINCREMENT, cuenta TEXT NOT NULL UNIQUE, d TEXT NOT NULL, estado TEXT NOT NULL, v INTEGER NOT NULL)",
-    );
+    crearTablasDeEquipos(this.sql);
   }
 
   /** Sin tablas no hay sala: nunca se creó, o ya se cerró. */
@@ -305,32 +312,21 @@ export class Sala extends DurableObject<Env> {
   }
 
   private siguienteVersion(): number {
-    return this.ctx.storage.sql.exec<{ v: number }>("SELECT COALESCE(MAX(v), 0) + 1 AS v FROM equipos").one().v;
+    return siguienteVersion(this.sql);
   }
 
-  /** Un equipo de un celular. La misma cuenta dos veces cambia los datos del equipo, no lo duplica: conserva su número y su estado. */
-  async anotarEquipo(cuenta: string, d: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
+  /**
+   * Un equipo de un celular. La misma cuenta otra vez, con la misma llave, cambia los datos del equipo, no lo duplica:
+   * conserva su número y su estado. Con otra llave (o sin ella) se rechaza y lo que estaba queda igual.
+   */
+  async anotarEquipo(cuenta: string, d: string, llave: string, ip: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     const config = this.config();
     if (!config) return { ok: false, motivo: "sin-registro" };
-    if (!this.porMinuto.intentar(Date.now())) return { ok: false, motivo: "rapido" };
-    const sql = this.ctx.storage.sql;
-    const hay = sql.exec<{ n: number; estado: EstadoEquipo }>("SELECT n, estado FROM equipos WHERE cuenta = ?", cuenta).toArray()[0];
-    if (!hay && sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c >= MAX_EQUIPOS) return { ok: false, motivo: "llena" };
-    const v = this.siguienteVersion();
-    let n: number;
-    let estado: EstadoEquipo;
-    if (hay) {
-      sql.exec("UPDATE equipos SET d = ?, v = ? WHERE n = ?", d, v, hay.n);
-      n = hay.n;
-      estado = hay.estado;
-    } else {
-      // Sin requisito no hay nada que aceptar: el equipo queda listo para recibir su cupón.
-      estado = config.modo === "sorteo" ? "solicitud" : "aceptado";
-      n = sql.exec<{ n: number }>("INSERT INTO equipos (cuenta, d, estado, v) VALUES (?, ?, ?, ?) RETURNING n", cuenta, d, estado, v).one().n;
-    }
-    this.avisar({ t: "equipo", v, n, cuenta, d, estado });
-    return { ok: true, n, estado };
+    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.porMinuto.intentar(Date.now()));
+    if (!r.ok) return r;
+    this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta, d, estado: r.estado });
+    return { ok: true, n: r.n, estado: r.estado };
   }
 
   /** Los equipos que cambiaron desde la versión `desde`, para quien tiene el token. */
@@ -383,7 +379,7 @@ export class Sala extends DurableObject<Env> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     try {
-      this.ctx.storage.sql.exec("DELETE FROM equipos WHERE n = ?", n);
+      quitarDelRegistro(this.sql, n);
     } catch {
       /* sala anterior a los equipos */
     }
@@ -521,10 +517,10 @@ async function leerJson(req: Request, tope: number): Promise<unknown> {
   }
 }
 
-const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409 };
+const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, "cupo-conexion": 429 };
 
-function falla(r: { motivo: string }, h: Record<string, string>): Response {
-  const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : h;
+function falla(r: { motivo: string; esperaS?: number }, h: Record<string, string>): Response {
+  const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : r.motivo === "cupo-conexion" ? { ...h, "Retry-After": String(r.esperaS ?? 600) } : h;
   return json({ error: r.motivo }, MOTIVOS[r.motivo] ?? 400, extra);
 }
 
@@ -606,9 +602,11 @@ export default {
       if (partes[3] === "equipos") {
         if (partes.length === 4 && req.method === "POST") {
           if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
-          const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown } | null;
+          const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown; llave?: unknown } | null;
           if (!cuerpo || typeof cuerpo.cuenta !== "string" || !ES_CUENTA.test(cuerpo.cuenta) || !equipoCifradoValido(cuerpo.d)) return json({ error: "forma" }, 400, h);
-          const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d);
+          // La llave del celular: sin ella no hay forma de probar después que es el mismo celular.
+          if (typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) return json({ error: "forma" }, 400, h);
+          const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d, cuerpo.llave, req.headers.get("CF-Connecting-IP") ?? "sin-ip");
           return r.ok ? json({ n: r.n, estado: r.estado }, 201, h) : falla(r, h);
         }
         if (partes.length === 4 && req.method === "GET") {

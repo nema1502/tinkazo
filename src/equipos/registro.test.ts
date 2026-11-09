@@ -32,7 +32,7 @@ interface Mundo {
   raiz: HTMLElement;
   /** Lo que la sala dice del equipo de esta cuenta. */
   sala: { estado: EstadoEquipo | null | "red" };
-  altas: Array<{ cuenta: string; d: string }>;
+  altas: Array<{ cuenta: string; d: string; llave?: string }>;
   reloj: { f: () => void; parado: boolean };
   fuera: { destino: string };
 }
@@ -58,8 +58,8 @@ async function montar(o: Partial<DepsDelRegistro> & { modo?: ConfigEquipos["modo
     cuentaRecordada: async () => null,
     entrarConGoogle: async () => cuenta(),
     leerPublico: async () => ({ ok: true, config: o.config === undefined ? CONFIG(o.modo ?? "sorteo") : o.config, equipos: 0 }),
-    anotar: async (_s, _i, c, d) => {
-      m.altas.push({ cuenta: c, d });
+    anotar: async (_s, _i, c, d, llave) => {
+      m.altas.push({ cuenta: c, d, llave });
       m.sala.estado = (o.modo ?? "sorteo") === "sorteo" ? "solicitud" : "aceptado";
       return { ok: true, n: 1, estado: m.sala.estado };
     },
@@ -271,6 +271,34 @@ describe("anotar al equipo", () => {
       expect(vista(m)).toBe("eqp-datos");
       expect(q<HTMLButtonElement>(m, "eqp-enviar").disabled).toBe(false);
     }
+  });
+
+  it("manda la llave de este celular, y al recargar la página corrige los datos con la misma", async () => {
+    const { m, g } = await hastaElFormulario({ modo: "cupon" });
+    await llenar(m);
+    await vi.waitFor(() => expect(m.altas).toHaveLength(1));
+    const llave = m.altas[0]?.llave;
+    expect(llave).toMatch(/^[A-Za-z0-9_-]{22,}$/);
+    const otra = await montar({ cuentaRecordada: async () => g, modo: "cupon", estado: "aceptado", local: m.deps.local });
+    await vi.waitFor(() => expect(vista(otra)).toBe("eqp-estado"));
+    q<HTMLButtonElement>(otra, "eqp-cambiar").click();
+    await llenar(otra, "Los Cóndores Andinos");
+    await vi.waitFor(() => expect(otra.altas).toHaveLength(1));
+    expect(otra.altas[0]?.llave).toBe(llave);
+  });
+
+  it("si la cuenta ya está anotada desde otro celular, lo dice en llano; y el tope de la red también", async () => {
+    for (const [motivo, clave] of [
+      ["ajena", "eqpErrAjena"],
+      ["cupo-conexion", "eqpErrCupoConexion"],
+    ] as const) {
+      const { m } = await hastaElFormulario({ anotar: async () => ({ ok: false, motivo }) });
+      await llenar(m);
+      await vi.waitFor(() => expect(mensaje(m)).toBe(t(clave)));
+      expect(vista(m)).toBe("eqp-datos");
+      expect(q<HTMLButtonElement>(m, "eqp-enviar").disabled).toBe(false);
+    }
+    expect(T.es.eqpErrAjena).toBe("Esta cuenta ya está anotada desde otro celular. Pedile a quien organiza que la quite de la lista y volvé a anotarte.");
   });
 
   it("si la sala ya conoce a este equipo (por ejemplo, desde otro celular), va directo al estado", async () => {

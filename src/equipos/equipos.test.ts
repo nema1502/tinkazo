@@ -548,24 +548,25 @@ describe("el celular del equipo", () => {
 
 describe("la sala, vista desde el celular y desde la pantalla", () => {
   const SALA: Sala = { id: "AbCd1234", token: "T".repeat(22), clave: generarClave(), vence: Date.now() + 1000, servicio: "https://s.test" };
+  const LLAVE = "L".repeat(22);
 
   it("anota el equipo con su cuenta en claro y los datos cifrados", async () => {
     const g = cuenta();
     const f = vi.fn(async () => new Response(JSON.stringify({ n: 3, estado: "solicitud" }), { status: 201 }));
-    const r = await anotarEquipoEnSala("https://s.test", "AbCd1234", g, "CIFRADO", { fetch: f as never });
+    const r = await anotarEquipoEnSala("https://s.test", "AbCd1234", g, "CIFRADO", LLAVE, { fetch: f as never });
     expect(r).toEqual({ ok: true, n: 3, estado: "solicitud" });
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://s.test/v1/sala/AbCd1234/equipos");
-    expect(JSON.parse(String(init.body))).toEqual({ cuenta: g, d: "CIFRADO" });
+    expect(JSON.parse(String(init.body))).toEqual({ cuenta: g, d: "CIFRADO", llave: LLAVE });
   });
   it("traduce lo que contesta la sala", async () => {
     const con = (estado: number, cuerpo: unknown = {}) => ({ fetch: (async () => new Response(JSON.stringify(cuerpo), { status: estado })) as never });
     const g = cuenta();
-    expect(await anotarEquipoEnSala("s", "i", g, "d", con(404))).toEqual({ ok: false, motivo: "cerrada" });
-    expect(await anotarEquipoEnSala("s", "i", g, "d", con(409))).toEqual({ ok: false, motivo: "sin-registro" });
-    expect(await anotarEquipoEnSala("s", "i", g, "d", con(429, { error: "llena" }))).toEqual({ ok: false, motivo: "llena" });
-    expect(await anotarEquipoEnSala("s", "i", g, "d", con(429, { error: "rapido" }))).toEqual({ ok: false, motivo: "rapido" });
-    expect(await anotarEquipoEnSala("s", "i", g, "d", { fetch: (async () => { throw new Error("x"); }) as never })).toEqual({ ok: false, motivo: "red" });
+    expect(await anotarEquipoEnSala("s", "i", g, "d", LLAVE, con(404))).toEqual({ ok: false, motivo: "cerrada" });
+    expect(await anotarEquipoEnSala("s", "i", g, "d", LLAVE, con(409))).toEqual({ ok: false, motivo: "sin-registro" });
+    expect(await anotarEquipoEnSala("s", "i", g, "d", LLAVE, con(429, { error: "llena" }))).toEqual({ ok: false, motivo: "llena" });
+    expect(await anotarEquipoEnSala("s", "i", g, "d", LLAVE, con(429, { error: "rapido" }))).toEqual({ ok: false, motivo: "rapido" });
+    expect(await anotarEquipoEnSala("s", "i", g, "d", LLAVE, { fetch: (async () => { throw new Error("x"); }) as never })).toEqual({ ok: false, motivo: "red" });
   });
   it("lee en qué punto está el equipo", async () => {
     const f = (estado: number, cuerpo: unknown) => ({ fetch: (async () => new Response(JSON.stringify(cuerpo), { status: estado })) as never });
