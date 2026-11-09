@@ -2,8 +2,15 @@
 /**
  * Prueba de la sala contra un Worker en marcha:
  *
- *   npx wrangler@4 dev --port 8791 --var VIDA_PRUEBA_MS:4000
+ *   npx wrangler@4 dev --port 8791 --var VIDA_PRUEBA_MS:600000
  *   node probar.mjs http://127.0.0.1:8791 [--cupos] [--tope]
+ *
+ * La prueba principal tarda más de un minuto (espera a que pase el tope por minuto de los nombres), así que la
+ * sala tiene que vivir más que eso: con `VIDA_PRUEBA_MS:600000` vive diez minutos. La alarma que borra la sala sola
+ * se prueba aparte, con una vida corta y solo ella (conviene un Worker nuevo, por el cupo de salas por hora):
+ *
+ *   npx wrangler@4 dev --port 8791 --var VIDA_PRUEBA_MS:4000
+ *   node probar.mjs http://127.0.0.1:8791 --alarma
  *
  * Crea tres salas y no deja nada guardado (las cierra o vencen solas). `--cupos`
  * prueba el tope de salas por dirección (deja esa dirección una hora sin crear;
@@ -15,6 +22,7 @@ import { gzipSync } from "node:zlib";
 const base = (process.argv[2] ?? "http://127.0.0.1:8791").replace(/\/$/, "");
 const conCupos = process.argv.includes("--cupos");
 const conTope = process.argv.includes("--tope");
+const soloAlarma = process.argv.includes("--alarma");
 const SITIO = { Origin: "https://tinkazo.app" };
 let fallas = 0;
 const check = (nombre, ok, detalle = "") => {
@@ -113,6 +121,31 @@ check("crear desde tinkazo.app da 201", r1.status === 201);
 const { id, token } = await r1.json();
 check("id de 8 caracteres y token de 22", /^[0-9A-Za-z]{8}$/.test(id) && /^[A-Za-z0-9_-]{22}$/.test(token));
 const clave = b64(crypto.getRandomValues(new Uint8Array(16)));
+
+/** La alarma: con una vida corta (`--var VIDA_PRUEBA_MS:4000`) la sala vence sola. Con la vida larga no se puede probar. */
+async function probarAlarma() {
+  const r2 = await crear();
+  if (r2.status === 201) {
+    const s2 = await r2.json();
+    const vida = s2.vence - Date.now();
+    await post(s2.id, await cifrar(clave, "Carla"));
+    if (vida < 60_000) {
+      await sleep(vida + 2500);
+      const a = (await post(s2.id, await cifrar(clave, "Dani"))).status;
+      const b = (await fetch(`${base}/v1/sala/${s2.id}/nombres`, { headers: auth(s2.token) })).status;
+      check("la alarma borra la sala sola", a === 404 && b === 404, `venció a los ${Math.round(vida / 1000)} s de prueba`);
+    } else {
+      console.log("NO PROBADO la alarma: la sala vive más de un minuto. Probala aparte con --var VIDA_PRUEBA_MS:4000 y --alarma");
+      await fetch(`${base}/v1/sala/${s2.id}`, { method: "DELETE", headers: auth(s2.token) });
+    }
+  } else console.log("NO PROBADO la alarma: el cupo de salas no dejó crear otra", r2.status);
+}
+
+if (soloAlarma) {
+  await probarAlarma();
+  console.log(fallas ? `\n${fallas} FALLAS` : "\nTodo en verde");
+  process.exit(fallas ? 1 : 0);
+}
 
 // 3. Los nombres.
 check("una forma que no es un nombre cifrado da 400", (await post(id, "hola mundo!")).status === 400);
@@ -276,22 +309,8 @@ check("la pantalla recibe el cierre", await esperar(() => p3.est.cierre === 1000
 check("cerrada, sumar da 404", (await post(id, await cifrar(clave, "Tarde"))).status === 404);
 check("cerrada, no queda nada para leer (404)", (await fetch(`${base}/v1/sala/${id}/nombres`, { headers: auth(token) })).status === 404);
 
-// 8. La alarma: con VIDA_PRUEBA_MS la sala vence sola.
-const r2 = await crear();
-if (r2.status === 201) {
-  const s2 = await r2.json();
-  const vida = s2.vence - Date.now();
-  await post(s2.id, await cifrar(clave, "Carla"));
-  if (vida < 60_000) {
-    await sleep(vida + 2500);
-    const a = (await post(s2.id, await cifrar(clave, "Dani"))).status;
-    const b = (await fetch(`${base}/v1/sala/${s2.id}/nombres`, { headers: auth(s2.token) })).status;
-    check("la alarma borra la sala sola", a === 404 && b === 404, `venció a los ${Math.round(vida / 1000)} s de prueba`);
-  } else {
-    console.log("NO PROBADO la alarma de 10 h: arrancá wrangler con --var VIDA_PRUEBA_MS:4000");
-    await fetch(`${base}/v1/sala/${s2.id}`, { method: "DELETE", headers: auth(s2.token) });
-  }
-} else console.log("NO PROBADO la alarma: el cupo de salas no dejó crear otra", r2.status);
+// 8. La alarma.
+await probarAlarma();
 
 // 9. Cupo de salas por dirección.
 if (conCupos) {

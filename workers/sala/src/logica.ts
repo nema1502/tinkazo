@@ -174,8 +174,6 @@ export function esCuentaValida(x: unknown): x is string {
   return crc16(bytes.slice(0, 33)) === (bytes[34] as number) * 256 + (bytes[33] as number);
 }
 
-/** Se usa como una expresión regular (`ES_CUENTA.test(x)`), pero comprueba también el control de la dirección. */
-export const ES_CUENTA: { test: (x: unknown) => boolean } = { test: esCuentaValida };
 /** Equipos por sala. Los cupones se mandan de a 100 por transacción; con 200 caben en dos. */
 export const MAX_EQUIPOS = 200;
 /** Lo que mide, como mucho, un equipo cifrado: el nombre del equipo y hasta cinco integrantes. */

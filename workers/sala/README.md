@@ -5,7 +5,7 @@ Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee
 Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `workers/enlaces`), en la misma cuenta: un error de despliegue acá no puede tumbar los enlaces de los comprobantes. La cuenta, en cambio, comparte los 100.000 pedidos por día del plan gratis (ver [Plan y gasto](#plan-y-gasto)).
 
 - **Lo que guarda son bytes cifrados.** El navegador de la pantalla genera una clave (AES-GCM, 16 bytes) y la pone en el QR, después del `#`: `s.tinkazo.app/<id>#<clave>`. El fragmento no llega a ningún servidor. El celular cifra el nombre con esa clave antes de mandarlo, así que el servicio no puede leerlo.
-- **No guarda** nombres en claro, la clave, direcciones IP, navegador ni hora por persona. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección).
+- **No guarda** nombres en claro, la clave, direcciones IP, navegador ni hora por persona. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección). Para el tope de altas de equipos por conexión, cada sala guarda una huella del grupo de dirección con una sal suya: queda hasta que se borra la sala, y las ventanas de 10 minutos que ya pasaron se limpian con cada envío.
 - **Se borra solo:** una alarma a las 10 horas de creada hace `deleteAll()`; antes, «Cerrar la sala» hace lo mismo. Los nombres cifrados quedan en el objeto hasta entonces (no 5 minutos): una compu que se cuelga en una feria no puede perder la lista, y el servicio sigue sin poder leerlos.
 - **Quitar un nombre** con un toque lo saca también del objeto.
 - **El filtro de palabras corre en la pantalla** (`src/sala/filtro.ts`), no acá: ningún servidor lee los nombres. Lo que coincide queda en «Para revisar».
@@ -79,11 +79,15 @@ Cuentas de una feria (estimaciones, no medidas): 300 nombres son unos 300 pedido
 ## Probar
 
 ```bash
-# En local (workerd, sin tocar Cloudflare). VIDA_PRUEBA_MS acorta la vida de la sala para probar la alarma.
-npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:4000
+# En local (workerd, sin tocar Cloudflare). VIDA_PRUEBA_MS acorta la vida de la sala. La prueba principal tarda más de un minuto,
+# así que la sala tiene que vivir más que eso: diez minutos.
+npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:600000
 node probar.mjs http://127.0.0.1:8792            # unos 50 chequeos (con la llave de cada celular y el tope por conexión); crea tres salas y no deja ninguna
 node probar.mjs http://127.0.0.1:8792 --cupos    # el tope de 5 salas por hora (queda guardado: para repetirlo, otra carpeta con --persist-to o esperar una hora)
 node probar.mjs http://127.0.0.1:8792 --tope     # 400 nombres por sala: cinco minutos
+# La alarma que borra la sala sola se prueba aparte, con una vida corta (conviene un Worker nuevo, por el cupo de salas por hora):
+npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:4000
+node probar.mjs http://127.0.0.1:8792 --alarma
 ```
 
 De punta a punta, con Chrome (desde la raíz del repo): `pnpm build && pnpm preview --port 4391`, `wrangler dev --port 8792 --var VIDA_PRUEBA_MS:600000` y `CDP_PORT=9733 node scripts/probar-sala.mjs --base http://localhost:4391 --sala http://127.0.0.1:8792`. El sitio solo acepta otro servicio con `?sala=` y desde `localhost`.

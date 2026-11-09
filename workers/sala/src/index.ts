@@ -28,16 +28,16 @@
  * nombres en claro, ni direcciones IP, ni navegador, ni hora por persona (para
  * contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella
  * con sal que no se devuelve a la dirección; para el tope de altas de equipos
- * por conexión, cada sala guarda 10 minutos una huella con una sal suya, y de la
- * llave del celular que anotó cada equipo guarda solo su huella SHA-256). Los
- * topes viven en el objeto, que es donde son exactos.
+ * por conexión, cada sala guarda una huella con una sal suya, que queda hasta
+ * que se borra la sala (las ventanas de 10 minutos que ya pasaron se limpian con
+ * cada envío), y de la llave del celular que anotó cada equipo guarda solo su
+ * huella SHA-256). Los topes viven en el objeto, que es donde son exactos.
  *
  * El WebSocket hacia la pantalla usa la API de hibernación: un socket quieto
  * no cobra tiempo. Si se corta, la pantalla reconecta y consulta cada 3 s.
  */
 import { DurableObject } from "cloudflare:workers";
 import {
-  ES_CUENTA,
   ES_ID,
   ES_TOKEN,
   MAX_CUERPO_CONFIG,
@@ -54,6 +54,7 @@ import {
   VentanaPorMinuto,
   diaUtc,
   equipoCifradoValido,
+  esCuentaValida,
   esEstadoEquipo,
   grupoDeIp,
   horaUtc,
@@ -603,7 +604,7 @@ export default {
         if (partes.length === 4 && req.method === "POST") {
           if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
           const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown; llave?: unknown } | null;
-          if (!cuerpo || typeof cuerpo.cuenta !== "string" || !ES_CUENTA.test(cuerpo.cuenta) || !equipoCifradoValido(cuerpo.d)) return json({ error: "forma" }, 400, h);
+          if (!cuerpo || typeof cuerpo.cuenta !== "string" || !esCuentaValida(cuerpo.cuenta) || !equipoCifradoValido(cuerpo.d)) return json({ error: "forma" }, 400, h);
           // La llave del celular: sin ella no hay forma de probar después que es el mismo celular.
           if (typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) return json({ error: "forma" }, 400, h);
           const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d, cuerpo.llave, req.headers.get("CF-Connecting-IP") ?? "sin-ip");
@@ -615,7 +616,7 @@ export default {
           return r.ok ? json(r.equipos, 200, h) : falla(r, h);
         }
         const quien = partes[4] ?? "";
-        if (partes.length === 5 && req.method === "GET" && ES_CUENTA.test(quien)) {
+        if (partes.length === 5 && req.method === "GET" && esCuentaValida(quien)) {
           const r = await salaDe(id).equipoDe(quien);
           return r.ok ? json({ n: r.n, estado: r.estado }, 200, h) : falla(r, h);
         }

@@ -597,7 +597,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       const notaMalas = notaDeCuentasMalas(malas);
       if (listos.length === 0) {
         progreso = "";
-        return aviso(notaMalas || (inactivos.length ? fmt("eqNoActivas", { n: inactivos.length }) : tx("eqSinQuienDar")));
+        return aviso([notaMalas, inactivos.length ? fmt("eqNoActivas", { n: inactivos.length }) : ""].filter(Boolean).join(" ") || tx("eqSinQuienDar"));
       }
       const tanda = tandas(listos)[0] ?? [];
       const cuenta = await deps.leerCuenta(c.cuenta);
@@ -743,11 +743,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     const prog = q("eq-progreso");
     const aparte = abierta && config ? paraDarCupon(config.modo, lista(), evidencias) : null;
     const sinActivar = aparte?.inactivos.length ?? 0;
+    // Las dos notas de lo que queda afuera de los cupones (cuenta mal copiada, cuenta sin activar) van juntas: una no tapa a la otra.
+    const queDaAfuera = [aparte ? notaDeCuentasMalas(aparte.malas) : "", sinActivar ? fmt("eqNoActivas", { n: sinActivar }) : ""].filter(Boolean).join(" ");
     const nota =
       progreso ||
       (ocupado === "revisando" && abierta ? tx(modo() === "sorteo" ? "eqLeyendoSorteos" : "eqRevisando") : "") ||
-      (aparte ? notaDeCuentasMalas(aparte.malas) : "") ||
-      (sinActivar ? fmt("eqNoActivas", { n: sinActivar }) : "") ||
+      queDaAfuera ||
       (abierta && avisos.truncado ? tx("eqSorteosTruncado") : "");
     prog.textContent = nota;
     prog.hidden = !nota;

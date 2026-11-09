@@ -1,6 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { ES_CUENTA as ES_CUENTA_DE_LA_SALA, equipoCifradoValido, esCuentaValida, validarConfigEquipos } from "../../workers/sala/src/logica";
+import { equipoCifradoValido, esCuentaValida, validarConfigEquipos } from "../../workers/sala/src/logica";
 import { generarClave } from "../sala/cifra";
 import { type Dependencias, escucharSala, type Sala } from "../sala/cliente";
 import { anotarEquipoEnSala, leerEstadoDeEquipo } from "../sala/equipos";
@@ -119,9 +119,7 @@ describe("la configuración que acepta la sala", () => {
   it("la sala rechaza una cuenta con la última letra cambiada, igual que una de mala forma", () => {
     const g = cuenta();
     expect(esCuentaValida(g)).toBe(true);
-    expect(ES_CUENTA_DE_LA_SALA.test(g)).toBe(true);
     expect(esCuentaValida(malEscrita(g))).toBe(false);
-    expect(ES_CUENTA_DE_LA_SALA.test(malEscrita(g))).toBe(false);
     expect(esCuentaValida("GMALA")).toBe(false);
     expect(esCuentaValida(undefined)).toBe(false);
     expect(validarConfigEquipos({ ...ok, cuenta: malEscrita(EVENTO) })).toBeNull();

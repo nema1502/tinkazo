@@ -394,6 +394,26 @@ describe("con sorteo propio: el cupón solo va a quien ya sorteó", () => {
     expect($q(p, "#eq-error").textContent).not.toBe(t("eqErrRed"));
   });
 
+  it("con una cuenta mal copiada y otra sin activar, se dicen las dos notas, en la lista y al dar los cupones", async () => {
+    const m = mundo();
+    const p = await abrirRegistro(m, "cupon");
+    const g = cuenta();
+    const nueva = cuenta();
+    m.activas.set(nueva, false);
+    await equipoLlega(m, 1, `${g.slice(0, 55)}${g[55] === "A" ? "B" : "A"}`, "Los Pumas", "aceptado");
+    await equipoLlega(m, 2, nueva, "Los Halcones", "aceptado");
+    await vi.waitFor(() => expect(filas(p)).toHaveLength(2));
+    await p.revisar(true);
+    const nota = $q(p, "#eq-progreso").textContent ?? "";
+    expect(nota).toContain("Los Pumas");
+    expect(nota).toContain(t("eqNoActivas").replace("{n}", "1"));
+    await p.darCupones();
+    expect(m.armadas).toEqual([]);
+    const error = $q(p, "#eq-error").textContent ?? "";
+    expect(error).toContain("Los Pumas");
+    expect(error).toContain(t("eqNoActivas").replace("{n}", "1"));
+  });
+
   it("un error que no es de conexión no se muestra como «No hay conexión»", async () => {
     const m = mundo();
     const p = await abrirRegistro(m, "cupon");
