@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { T } from "./i18n";
 
 /**
  * Precios: lo que nunca se cobra ni se vende (punto 2 del pulido del sitio).
@@ -25,6 +26,19 @@ describe("precios y el detalle plegado", () => {
   it("el plegado técnico es el mismo componente en las tres páginas", () => {
     for (const pagina of ["../precios.html", "../como-funciona.html", "../seguridad.html"]) {
       expect(readFileSync(new URL(pagina, import.meta.url), "utf8"), pagina).toContain('class="tecnico"');
+    }
+  });
+
+  it("cada renglón se entiende solo, sin leer el título chico", () => {
+    for (const idioma of ["es", "en"] as const) {
+      for (const clave of ["prNever1", "prNever2", "prNever3", "prNever4"]) {
+        const texto = String(T[idioma][clave]);
+        // Frase completa: arranca en mayúscula y cierra con punto.
+        expect(texto[0], `${idioma} ${clave}`).toMatch(/[A-ZÁÉÍÓÚ]/u);
+        expect(texto.endsWith("."), `${idioma} ${clave}`).toBe(true);
+        // Y dice de qué lado está: nunca cobra ni vende, o es gratis.
+        expect(texto, `${idioma} ${clave}`).toMatch(/nunca|gratis|never|free/i);
+      }
     }
   });
 

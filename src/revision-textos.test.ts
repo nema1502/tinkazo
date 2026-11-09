@@ -19,7 +19,7 @@ describe("revisión de redacción de los textos visibles", () => {
   it("precios.html usa «comprobar» en el título, la descripción y los datos estructurados", () => {
     const html = leer("precios.html");
     expect(html).not.toMatch(/verificar/i);
-    expect(t("es", "prNever3")).toBe("Comprobar un sorteo.");
+    expect(t("es", "prNever3")).toBe("Comprobar un sorteo es gratis, siempre.");
     expect(t("es", "titPrecios")).toBe("Precios de Tinkazo: participar y comprobar es gratis");
     expect(html).toContain(`<title>${t("es", "titPrecios")}</title>`);
     expect(html).toContain(t("es", "descPrecios"));

@@ -104,6 +104,20 @@ describe("el aviso de marca en el pie de la portada", () => {
   });
 });
 
+describe("el tamaño de la firma y del aviso de marca", () => {
+  it("los dos textos van en 16 px o más, sin agrandar el logo ni achicar el blanco de toque", () => {
+    // La letra secundaria de la herramienta mide 16 px (la regla la mide scripts/audit-legible.mjs).
+    expect(css).toContain("--letra-sec: 16px");
+    const enlace = /\.built-on-link\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(enlace).toMatch(/font-size:\s*var\(--letra-sec\)/);
+    expect(enlace).toContain("min-height: 44px");
+    const logo = /\.built-on-logo\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(logo).toMatch(/height:\s*20px/);
+    const aviso = /footer\s+\.bar\s+\.trademark-note\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(aviso).toMatch(/font-size:\s*var\(--letra-sec\)/);
+  });
+});
+
 describe("los archivos del logo de Stellar", () => {
   it.each(Object.entries(LOGOS))("el del tema %s existe, es WebP y pesa menos de 20 KB", (_tema, ruta) => {
     const archivo = new URL(`../${ruta}`, import.meta.url);
