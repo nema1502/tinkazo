@@ -131,6 +131,16 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
 type ConMarca = Parameters<typeof esSinSello>[0];
 
 /**
+ * Si el sorteo del evento es un orden de turnos, cuántas personas hay en el
+ * orden; si no, null. En un orden de turnos salen tantas personas como hay en
+ * la lista (`isTurnOrder`). La usan el mensaje y la foto del evento, para que
+ * digan lo mismo.
+ */
+function personasDelOrden(s: { prize?: string; ganadores: readonly string[]; names?: readonly string[] }): number | null {
+  return s.names && isTurnOrder(s.names.length, s.ganadores.length, s.prize?.trim() ?? "") ? s.names.length : null;
+}
+
+/**
  * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
  * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
  * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores.
@@ -140,8 +150,8 @@ type ConMarca = Parameters<typeof esSinSello>[0];
  */
 export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[]; names?: readonly string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
-    // En un orden de turnos salen tantas personas como hay en la lista (`isTurnOrder`).
-    const quien = s.names && isTurnOrder(s.names.length, s.ganadores.length, s.prize?.trim() ?? "") ? rellenar(cad(lang, "evPersonas"), { n: s.names.length }) : lista(lang, s.ganadores);
+    const personas = personasDelOrden(s);
+    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores);
     const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${quien}`;
     return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
@@ -257,12 +267,16 @@ export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvent
     rotulo: [cad(lang, "fotoEvento"), prueba ? cad(lang, "fotoPrueba") : "", fechaLarga(lang, fecha)].filter(Boolean).join(", "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
-    filas: enOrden.map((s) => ({
-      premio: s.prize?.trim() || cad(lang, "histDraw"),
-      ganadores: lista(lang, s.ganadores),
-      cortos: listasCortas(lang, s.ganadores),
-      ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
-    })),
+    filas: enOrden.map((s) => {
+      // Un orden de turnos no lista a nadie: dice cuántas personas hay, como el mensaje del evento.
+      const personas = personasDelOrden(s);
+      return {
+        premio: s.prize?.trim() || cad(lang, "histDraw"),
+        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores),
+        cortos: personas !== null ? [] : listasCortas(lang, s.ganadores),
+        ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
+      };
+    }),
     lineas: [],
     mas: cad(lang, "fotoMas"),
     enlace,

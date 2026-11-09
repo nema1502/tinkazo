@@ -300,6 +300,19 @@ describe("lo que va en la foto", () => {
     // Con uno solo no hay nada que acortar.
     expect(fotoDeEvento("es", "Meetup", [sorteoGrande(2, 3)], corto).filas?.[0]?.cortos).toEqual([]);
   });
+
+  it("un evento: un orden de turnos no lista a nadie en la foto, dice cuántas personas hay, como el mensaje", () => {
+    const base = sorteoGrande(1, 3);
+    const turnos = { ...base, prize: "Turnos de limpieza", ganadores: [...base.names] };
+    const es = fotoDeEvento("es", "Meetup", [turnos], corto);
+    expect(es.filas?.[0]?.ganadores).toBe("3 personas");
+    expect(es.filas?.[0]?.cortos).toEqual([]);
+    expect(lineasDeEvento("es", [turnos])).toEqual([`Turnos de limpieza: ${es.filas?.[0]?.ganadores}`]);
+    expect(fotoDeEvento("en", "Meetup", [turnos], corto).filas?.[0]?.ganadores).toBe("3 people");
+    // Un sorteo común en el que ganan los tres sigue listando a los tres.
+    const comun = fotoDeEvento("es", "Meetup", [{ ...turnos, prize: "Polera" }], corto);
+    expect(comun.filas?.[0]?.ganadores).toBe(lista("es", [...base.names]));
+  });
 });
 
 /** Los textos de la página del enlace corto (c.html). */
