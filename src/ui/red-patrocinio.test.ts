@@ -39,23 +39,31 @@ describe("sin-patrocinio: una sola acción principal", () => {
     const p = panelDe(diag({ motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA }), ctx());
     expect(p).toMatchObject({ nivel: "rojo", caso: "sin-patrocinio", frase: "errAnchor.porteroCupoSellos", principal: "seguir-sin-sello", bloquea: true, liberaEn: LIBERA });
   });
-  it("el servicio no contesta o no puede pagar: volver a probar, y seguir sin sello en chiquito", () => {
+  it("el servicio no contesta o no puede pagar, sin saldo: volver a probar, y seguir sin sello en chiquito", () => {
     for (const motivo of ["cerrado", "fondo"] as const) {
       const p = panelDe(diag({ motivo }), ctx());
       expect(p).toMatchObject({ frase: "errAnchor.porteroFondo", principal: "reintentar", secundarias: ["seguir-sin-sello"], bloquea: true });
+      expect(p.reintentaSola).toBe(false);
+    }
+  });
+  it("el servicio no contesta o no puede pagar, con saldo: volver a probar es la principal y sellar con la propia queda en chiquito", () => {
+    for (const motivo of ["cerrado", "fondo"] as const) {
+      const p = panelDe(diag({ motivo }), ctx({ saldoXlm: 50 }));
+      expect(p).toMatchObject({ frase: "errAnchor.porteroFondo", principal: "reintentar", secundarias: ["sellar-con-mi-cuenta", "seguir-sin-sello"], bloquea: true, cargaPrevia: false });
     }
   });
   it("la cuenta no es de las que se cubren: seguir sin sello, y sellar con la propia si puede", () => {
     expect(panelDe(diag({ motivo: "ajena" }), ctx())).toMatchObject({ frase: "errAnchor.porteroAjena", principal: "seguir-sin-sello" });
     expect(panelDe(diag({ motivo: "ajena" }), ctx({ saldoXlm: 50 }))).toMatchObject({ frase: "errAnchor.porteroAjenaPropia", principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"] });
+    expect(panelDe(diag({ motivo: "ajena" }), ctx({ red: "testnet", grifo: true }))).toMatchObject({ frase: "errAnchor.porteroAjenaPropia", principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"], cargaPrevia: true });
   });
-  it("si la cuenta tiene con qué pagar la suya, esa es la acción en cualquiera de los casos", () => {
-    for (const motivo of ["cerrado", "fondo", "cupo-cuenta"] as const) {
-      expect(panelDe(diag({ motivo }), ctx({ saldoXlm: 50 })).principal).toBe("sellar-con-mi-cuenta");
-    }
+  it("motivo de la cuenta con saldo o grifo: sellar con la propia sigue siendo la principal, como hasta ahora", () => {
+    expect(panelDe(diag({ motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA }), ctx({ saldoXlm: 50 })).principal).toBe("sellar-con-mi-cuenta");
+    expect(panelDe(diag({ motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA }), ctx({ red: "testnet", grifo: true }))).toMatchObject({ principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"], cargaPrevia: true });
   });
-  it("en testnet, con el grifo, se carga saldo de prueba y se sella con la propia", () => {
-    expect(panelDe(diag({ motivo: "cerrado" }), ctx({ red: "testnet", grifo: true }))).toMatchObject({ principal: "sellar-con-mi-cuenta", cargaPrevia: true });
+  it("en testnet, con el grifo y el servicio caído: volver a probar es la principal y cargar saldo de prueba queda en chiquito", () => {
+    expect(panelDe(diag({ motivo: "cerrado" }), ctx({ red: "testnet", grifo: true }))).toMatchObject({ principal: "reintentar", secundarias: ["sellar-con-mi-cuenta", "seguir-sin-sello"], cargaPrevia: true });
+    expect(panelDe(diag({ motivo: "fondo" }), ctx({ red: "testnet", grifo: true, saldoXlm: 50 }))).toMatchObject({ principal: "reintentar", secundarias: ["sellar-con-mi-cuenta", "seguir-sin-sello"], cargaPrevia: false });
   });
   it("el botón de la red no repite 'Hoy no se puede sellar' delante de estas frases", () => {
     const d = diag({ motivo: "fondo" });
@@ -80,6 +88,10 @@ describe("los textos nuevos", () => {
       expect(v, `${l} ${k}`).not.toMatch(PROHIBIDAS);
       expect(v, `${l} ${k}`).not.toContain("·");
     }
+  });
+  it("la frase del servicio caído dice que se puede volver a probar en un momento", () => {
+    expect(String(T.es["errAnchor.porteroFondo"])).toContain("Probá en unos minutos");
+    expect(String(T.en["errAnchor.porteroFondo"])).toContain("Try again in a while");
   });
   it("las frases con día llevan el hueco {fecha} y nunca culpan a la persona", () => {
     for (const l of ["es", "en"] as const) {
