@@ -43,7 +43,9 @@ describe("el plan del equipo (VITE_PLAN_EQUIPO)", () => {
   it("sin cuenta de planes, con una mal escrita, o sin Worker, no se ofrece", () => {
     expect(planDelEquipo({ ...prendido, cuentaPlanes: undefined })).toBeNull();
     expect(planDelEquipo({ ...prendido, cuentaPlanes: "GABC" })).toBeNull();
-    expect(planDelEquipo({ ...prendido, cuentaPlanes: `${PLANES.slice(0, 30)}X${PLANES.slice(31)}` })).toBeNull();
+    // Una letra cambiada de verdad: la cuenta es al azar, y si ya tenía una X ahí, va una Y.
+    const otraLetra = PLANES[30] === "X" ? "Y" : "X";
+    expect(planDelEquipo({ ...prendido, cuentaPlanes: `${PLANES.slice(0, 30)}${otraLetra}${PLANES.slice(31)}` })).toBeNull();
     expect(planDelEquipo({ ...prendido, monedas: undefined })).toBeNull();
     expect(planDelEquipo({ ...prendido, host: "localhost" })).toBeNull();
   });
