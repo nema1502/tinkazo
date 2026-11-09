@@ -1,8 +1,9 @@
 import { passphraseDe } from "../stellar/oficiales";
 import type { NetworkName } from "../stellar/config";
 import { txUrl } from "../stellar/config";
-import { type ActivoDePago, esDireccionG, montoDelPremio, montoDePago, montoLegible } from "../stellar/pagos";
+import { type ActivoDePago, type LecturaDePago, esDireccionG, montoDelPremio, montoDePago, montoLegible, notaDelPremio } from "../stellar/pagos";
 import { type DatosDelPago, type Envio, type MotivoDeRechazo, type MotivoSinPago, mandarPago, prepararPago } from "../stellar/pagos-envio";
+import { type BusquedaDePago, buscarPago } from "../stellar/pagos-red";
 import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
 
 /**
@@ -15,6 +16,10 @@ import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } f
  *
  * Antes de pedir la firma se mira la red: si la cuenta de quien ganó no existe o no tiene USDC activado, se dice en
  * palabras simples y se ofrece "Avisarle" (copiar un mensaje), en vez de hacer firmar algo que va a fallar.
+ *
+ * Un premio se paga una sola vez. Antes de armar el pago se busca en la red uno ya hecho con la nota de ese premio: si
+ * está, no se arma nada; si la red no deja saberlo, tampoco (no se paga a ciegas). Y si al mandar un pago la red no
+ * confirma si entró, el botón queda en pausa hasta que la red diga con certeza que ese pago no está.
  */
 
 /* ------------------------------------------------------------- la secuencia */
@@ -32,6 +37,8 @@ export interface Billetera {
 }
 
 export interface Dependencias {
+  /** Busca en la red el pago de un premio. Sin caché: cada pregunta va a la red. */
+  buscar: (b: BusquedaDePago) => Promise<LecturaDePago>;
   preparar: (d: DatosDelPago) => ReturnType<typeof prepararPago>;
   mandar: (red: NetworkName, xdrFirmado: string) => Promise<Envio>;
   billetera: Billetera | null;
@@ -49,6 +56,10 @@ export interface PedidoDePago {
   monto: string;
   /** Solo si se firma afuera: la cuenta que va a pagar. Con billetera propia manda la billetera. */
   cuentaQuePaga?: string;
+  /** Los pagos anteriores a este instante (Unix, segundos) no son de este sorteo. */
+  desde: number;
+  /** Las cuentas cuyo pago con esta nota ya cuenta como hecho, además de la que paga. */
+  pagadoras?: readonly string[];
 }
 
 export type Resultado =
@@ -60,12 +71,26 @@ export type Resultado =
   | { tipo: "otra-red" }
   | { tipo: "no-firmado" }
   | { tipo: "rechazado"; rechazo: MotivoDeRechazo }
-  | { tipo: "sin-respuesta" }
+  /** No se supo si el pago entró. `busqueda` es lo que hay que mirar en la red antes de volver a ofrecer pagar. */
+  | { tipo: "sin-respuesta"; busqueda: BusquedaDePago }
+  /** El premio ya tenía su pago en la red: no se armó otro. */
+  | { tipo: "ya-pagado"; hash: string; origen: string }
+  /** No se pudo mirar en la red si el premio ya estaba pagado: no se armó nada. */
+  | { tipo: "sin-consulta" }
   | { tipo: "listo"; hash: string; origen: string };
 
+/** Busca en la red el pago de un premio. Nunca lanza: si la búsqueda falla, no se sabe. */
+export async function mirarSiSalio(deps: Pick<Dependencias, "buscar">, b: BusquedaDePago): Promise<LecturaDePago> {
+  try {
+    return await deps.buscar(b);
+  } catch {
+    return { tipo: "sin-consulta" };
+  }
+}
+
 /**
- * Los pasos de un pago, sin pantalla: valida el monto, mira la red, arma el pago y, si hay billetera que firme acá, lo
- * firma y lo manda. Nunca lanza. No manda nada si algo de antes falla.
+ * Los pasos de un pago, sin pantalla: valida el monto, busca en la red si el premio ya está pagado, mira las cuentas,
+ * arma el pago y, si hay billetera que firme acá, lo firma y lo manda. Nunca lanza. No manda nada si algo de antes falla.
  */
 export async function pagarUnPremio(deps: Dependencias, p: PedidoDePago): Promise<Resultado> {
   const monto = montoDePago(p.monto);
@@ -76,6 +101,19 @@ export async function pagarUnPremio(deps: Dependencias, p: PedidoDePago): Promis
   if (!esDireccionG(origen)) return { tipo: "cuenta-mala" };
 
   deps.alAvanzar?.("mirando");
+  let busqueda: BusquedaDePago;
+  try {
+    const pagadoras = [...new Set([...(p.pagadoras ?? []), origen])];
+    busqueda = { red: p.red, destino: p.destino, activo: p.activo, nota: notaDelPremio(p.raffleId, p.puesto), pagadoras, desde: p.desde };
+  } catch {
+    return { tipo: "no-se-puede", motivo: "datos-invalidos" };
+  }
+  // Un pago con la nota de este premio ya en la red (de otra pestaña, de antes de recargar, o uno que entró sin que
+  // la red lo confirmara) hace que no se arme otro. Sin poder saberlo, tampoco se arma.
+  const previo = await mirarSiSalio(deps, busqueda);
+  if (previo.tipo === "pagado") return { tipo: "ya-pagado", hash: previo.hash, origen: previo.de };
+  if (previo.tipo === "sin-consulta") return { tipo: "sin-consulta" };
+
   const prep = await deps.preparar({ red: p.red, origen, destino: p.destino, activo: p.activo, monto, raffleId: p.raffleId, puesto: p.puesto });
   if (!prep.ok) return { tipo: "no-se-puede", motivo: prep.motivo, ...(prep.saldo !== undefined ? { saldo: prep.saldo } : {}) };
   if (!firmaAdentro) return { tipo: "afuera", xdr: prep.xdr, nota: prep.nota, origen };
@@ -94,7 +132,7 @@ export async function pagarUnPremio(deps: Dependencias, p: PedidoDePago): Promis
   deps.alAvanzar?.("enviando");
   const env = await deps.mandar(p.red, firmado);
   if (env.ok) return { tipo: "listo", hash: env.hash, origen };
-  return env.rechazo === "sin-respuesta" ? { tipo: "sin-respuesta" } : { tipo: "rechazado", rechazo: env.rechazo };
+  return env.rechazo === "sin-respuesta" ? { tipo: "sin-respuesta", busqueda } : { tipo: "rechazado", rechazo: env.rechazo };
 }
 
 /** La billetera activa de la página, si firma pagos acá. Con Pollar, `firmaAdentro` es falso. */
@@ -154,7 +192,11 @@ export function mensajeDe(r: Resultado, c: { quien: string; red: NetworkName; mo
         error: true,
       };
     case "sin-respuesta":
-      return { clave: "pgSinRespuesta", vars: v, avisar: false, error: true };
+      return { clave: "pgDuda", vars: v, avisar: false, error: true };
+    case "ya-pagado":
+      return { clave: "pgYaPagado", vars: v, avisar: false, error: false };
+    case "sin-consulta":
+      return { clave: "pgSinConsultaPrevia", vars: v, avisar: false, error: true };
     case "listo":
       return { clave: "pgListo", vars: v, avisar: false, error: false };
   }
@@ -179,18 +221,37 @@ export interface ContextoDePago {
   activo: ActivoDePago;
   /** Se le suma la cuenta que paga, para que el panel reconozca su pago. */
   pagadoras: Set<string>;
+  /** Los pagos anteriores a este instante (Unix, segundos) no son de este sorteo. */
+  desde: number;
+  /** Tras un pago sin respuesta, cuánto se espera antes de mirar en la red si entró (6 s: que alcance a cerrar un ledger). */
+  esperaMs?: number;
   /** Para las pruebas: las dependencias de la red y la billetera. */
   dependencias?: () => Promise<Dependencias>;
 }
 
+/** Lo que queda de un formulario cerrado, para reabrirlo tal cual si un pago está en camino, en duda o ya hecho. */
+interface FormularioGuardado {
+  form: HTMLFormElement;
+  retener: () => boolean;
+  reabrir: () => void;
+}
+
 /**
  * El manejador de "Pagar premio" para `montarGanadores`: abre, debajo de la fila, el monto y el botón "Firmar y pagar".
- * Tocar "Pagar premio" otra vez (o "Cancelar") lo cierra.
+ * Tocar "Pagar premio" otra vez (o "Cancelar") lo cierra. Si el pago de ese premio está en camino, en duda o hecho,
+ * reabrir muestra ese mismo formulario y no uno nuevo con el botón disponible.
  */
 export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanadores["pagar"]> {
+  const guardados = new Map<number, FormularioGuardado>();
   return (fila, caja, alTerminar) => {
     if (caja.firstElementChild) {
       caja.replaceChildren();
+      return;
+    }
+    const guardado = guardados.get(fila.puesto);
+    if (guardado?.retener()) {
+      caja.replaceChildren(guardado.form);
+      guardado.reabrir();
       return;
     }
     const form = el("form", "gan-form");
@@ -220,9 +281,13 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     const acciones = el("div", "row");
     const pagar = el("button", "ghost");
     pagar.type = "submit";
+    // Tras un pago en duda: vuelve a mirar en la red si entró.
+    const volver = el("button", "ghost");
+    volver.type = "button";
+    volver.hidden = true;
     const cancelar = el("button", "ghost");
     cancelar.type = "button";
-    acciones.append(pagar, cancelar);
+    acciones.append(pagar, volver, cancelar);
 
     const msg = el("p", "gan-msg");
     msg.setAttribute("role", "status");
@@ -267,6 +332,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       cuentaT.textContent = tx("pgCuentaPagaL");
       explica.textContent = tx("pgPaga", { quien: fila.nombre, nota: fila.nota });
       pagar.textContent = cuentaL.hidden ? tx("pgFirmar") : tx("pgArmar");
+      volver.textContent = tx("pgVolverAMirar");
       cancelar.textContent = tx("pgCancelar");
       avisar.textContent = tx("pgAvisar");
       resumen.textContent = tx("pgXdrResumen");
@@ -277,15 +343,75 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     alCambiarDeIdioma(pintar, form);
     pintar();
     monto.focus();
+    // Mientras no se mandó nada, la cuenta que paga sigue a la billetera; una vez pagado, ese campo ya no se muestra.
+    let hecho = false;
     // Con la billetera de quien organiza, paga su cuenta; si se firma afuera (Pollar), se elige la cuenta que paga.
     const preparar = async (): Promise<Dependencias> => {
       const deps = ctx.dependencias ? await ctx.dependencias() : await dependenciasReales();
-      cuentaL.hidden = deps.billetera?.firmaAdentro === true;
+      cuentaL.hidden = hecho || deps.billetera?.firmaAdentro === true;
       if (!cuenta.value && deps.billetera) cuenta.value = deps.billetera.direccion;
       pintar();
       return deps;
     };
     void preparar().catch(() => undefined);
+
+    // Un pago mandado sin respuesta de la red: hasta saber que no está, no se ofrece pagar otra vez.
+    let enDuda: { deps: Dependencias; busqueda: BusquedaDePago } | null = null;
+    let mirandoDuda = false;
+    let reloj: ReturnType<typeof setTimeout> | undefined;
+    let ocupado = false;
+
+    // Un pago mandado o encontrado: queda la confirmación y el enlace, y el botón no vuelve.
+    const terminarPagado = (hash: string, origen: string): void => {
+      hecho = true;
+      ctx.pagadoras.add(origen);
+      enlace.href = txUrl(hash, ctx.red);
+      enlace.textContent = tx("pgVerPago");
+      enlace.hidden = false;
+      montoL.hidden = true;
+      cuentaL.hidden = true;
+      explica.hidden = true;
+      acciones.hidden = true;
+      pagar.hidden = true;
+      alTerminar();
+    };
+
+    /** Mira en la red si el pago en duda entró. Solo un "no está" seguro vuelve a habilitar el botón. */
+    const mirarDuda = async (): Promise<void> => {
+      const duda = enDuda;
+      if (!duda || mirandoDuda) return;
+      clearTimeout(reloj);
+      mirandoDuda = true;
+      volver.hidden = true;
+      pagar.disabled = true;
+      progreso = null;
+      decir("pgDudaMirando");
+      const l = await mirarSiSalio(duda.deps, duda.busqueda);
+      mirandoDuda = false;
+      if (enDuda !== duda) return;
+      if (l.tipo === "pagado") {
+        enDuda = null;
+        decir("pgListo");
+        terminarPagado(l.hash, l.de);
+      } else if (l.tipo === "no-hay") {
+        enDuda = null;
+        pagar.disabled = false;
+        decir("pgDudaNoEsta");
+      } else {
+        decir("pgDudaSinRed", {}, true);
+        volver.hidden = false;
+      }
+    };
+    volver.addEventListener("click", () => void mirarDuda());
+
+    guardados.set(fila.puesto, {
+      form,
+      retener: () => ocupado || enDuda !== null || hecho,
+      reabrir: () => {
+        alCambiarDeIdioma(pintar, form);
+        pintar();
+      },
+    });
 
     const cerrar = (): void => caja.replaceChildren();
     cancelar.addEventListener("click", cerrar);
@@ -310,10 +436,10 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       else xdr.select();
     });
 
-    let ocupado = false;
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (ocupado) return;
+      // Un toque doble, un Enter en el monto con el botón en pausa o un premio ya pagado no arman otro pago.
+      if (ocupado || enDuda || hecho) return;
       ocupado = true;
       pagar.disabled = true;
       avisar.hidden = true;
@@ -340,6 +466,8 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
             destino: fila.cuenta,
             activo: ctx.activo,
             monto: monto.value,
+            desde: ctx.desde,
+            pagadoras: [...ctx.pagadoras],
             ...(cuenta.value.trim() ? { cuentaQuePaga: cuenta.value.trim() } : {}),
           },
         );
@@ -354,22 +482,16 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
           xdr.value = r.xdr;
           afuera.hidden = false;
           afuera.open = true;
-        } else if (r.tipo === "listo") {
-          ctx.pagadoras.add(r.origen);
-          enlace.href = txUrl(r.hash, ctx.red);
-          enlace.textContent = tx("pgVerPago");
-          enlace.hidden = false;
-          // Ya está pagado: el monto, la explicación y "Cancelar" sobran; queda la confirmación y el enlace al pago.
-          montoL.hidden = true;
-          explica.hidden = true;
-          acciones.hidden = true;
+        } else if (r.tipo === "listo" || r.tipo === "ya-pagado") {
+          terminarPagado(r.hash, r.origen);
+        } else if (r.tipo === "sin-respuesta") {
+          enDuda = { deps, busqueda: r.busqueda };
           alTerminar();
-        } else if (r.tipo === "sin-respuesta") alTerminar();
-        // Si el pago ya salió, no se vuelve a ofrecer.
-        pagar.hidden = r.tipo === "listo";
+          reloj = setTimeout(() => void mirarDuda(), ctx.esperaMs ?? 6_000);
+        }
       } finally {
         ocupado = false;
-        pagar.disabled = false;
+        pagar.disabled = enDuda !== null || hecho;
       }
     });
   };
@@ -378,6 +500,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
 /** Las dependencias de verdad: la red de Stellar y la billetera activa. */
 async function dependenciasReales(): Promise<Dependencias> {
   return {
+    buscar: (b) => buscarPago(b),
     preparar: (d) => prepararPago(d),
     mandar: (red, xdr) => mandarPago(red, xdr),
     billetera: await billeteraActiva(),

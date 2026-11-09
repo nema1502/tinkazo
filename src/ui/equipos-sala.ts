@@ -4,7 +4,7 @@ import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
 import { enlaceDeRegistro } from "../equipos/enlace";
 import { LAB_FIRMAR, type Aprobacion, aprobarYEnviar } from "../equipos/envio";
 import { type Evidencia, accionSugerida, contarPorEstado, estadoEfectivo, listaDesdeCupones, paraDarCupon } from "../equipos/estado";
-import { type OpcionesDeHorizon, type Pago, cuentasActivas, cuponesEnviados, leerCuenta, pagosDeLaCuenta } from "../equipos/horizon";
+import { type OpcionesDeHorizon, type Pago, cuentasActivas, cuponesEnviados, leerCuenta, pagosDeLaCuenta, quedaPorLeer } from "../equipos/horizon";
 import { type ConfigEquipos, type DatosDeEquipo, type Equipo, ES_CUENTA, EVENTO_POR_DEFECTO, cuentaCorta, esCuenta, esEstado, eventoValido, rango } from "../equipos/modelo";
 import { horaValida, instanteDelSorteo } from "../equipos/pantalla-stand";
 import { type LecturaDeSorteos, cuentasQueYaSortearon } from "../equipos/sorteos";
@@ -49,6 +49,8 @@ import { setList } from "./participants";
 const CLAVE = "tinkazo.equipos.sala";
 const REVISAR_CADA_MS = 20_000;
 const PAUSA_TRAS_ENVIAR_MS = 4_000;
+/** Si la lectura de los pagos quedó a medias por su tope, la próxima va a los pocos segundos, sin pasarse del límite de Horizon. */
+const SEGUIR_LEYENDO_MS = 5_000;
 
 /* ------------------------------------------------------------ dependencias */
 
@@ -68,6 +70,8 @@ export interface DepsDelPanel {
   quitar: typeof quitarEquipoEnSala;
   descifrar: (clave: string, d: string) => Promise<DatosDeEquipo | null>;
   pagos: (cuenta: string) => Promise<Pago[] | null>;
+  /** Si el último `null` de `pagos` es porque falta leer (no porque la red falló). */
+  pagosPendientes?: (cuenta: string) => boolean;
   sorteos: (cuentas: readonly string[]) => Promise<LecturaDeSorteos | null>;
   activas: (cuentas: readonly string[]) => Promise<Map<string, boolean | null>>;
   leerCuenta: (cuenta: string) => Promise<Awaited<ReturnType<typeof leerCuenta>>>;
@@ -104,6 +108,7 @@ export function depsReales(): DepsDelPanel {
     quitar: quitarEquipoEnSala,
     descifrar: descifrarEquipo,
     pagos: (c) => pagosDeLaCuenta(c, horizon),
+    pagosPendientes: (c) => quedaPorLeer(c, horizon),
     sorteos: (cs) => cuentasQueYaSortearon(cs),
     activas: (cs) => cuentasActivas(cs, horizon),
     leerCuenta: (c) => leerCuenta(c, horizon),
@@ -198,7 +203,8 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
   let progreso = "";
   let xdr: { texto: string; porque: "pollar" | "otra-cuenta" | "sin-billetera" } | null = null;
   let ultimaTransaccion = "";
-  let avisos = { pagos: false, sorteos: false, truncado: false };
+  /** `pagos`: los cupones no se pudieron mirar enteros; `leyendo`: porque falta leer, no porque la red falló. */
+  let avisos = { pagos: false, leyendo: false, sorteos: false, truncado: false };
   let escucha: { parar: () => void } | null = null;
   let pararReloj: (() => void) | null = null;
   let qrDe = "";
@@ -381,7 +387,12 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
         const sinSaber = lista().filter((e) => e.activa !== true).map((e) => e.cuenta);
         const [pagos, sorteos] = await Promise.all([deps.pagos(c.cuenta), c.modo === "sorteo" && cuentas.length ? deps.sorteos(cuentas) : Promise.resolve(undefined), activasDe(sinSaber)]);
         if (sala !== s) return;
-        avisos = { pagos: pagos === null, sorteos: c.modo === "sorteo" && sorteos === null, truncado: !!sorteos?.truncado };
+        avisos = {
+          pagos: pagos === null,
+          leyendo: pagos === null && !!deps.pagosPendientes?.(c.cuenta),
+          sorteos: c.modo === "sorteo" && sorteos === null,
+          truncado: !!sorteos?.truncado,
+        };
         if (pagos) {
           const cupones = cuponesEnviados(pagos, c.cuenta, c.evento);
           for (const cuenta of cuentas) {
@@ -404,6 +415,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
         revisandoYa = null;
         if (ocupado === "revisando") ocupado = "";
         pintar();
+        // Lo que faltó leer se sigue leyendo sin esperar la revisión periódica.
+        if (sala === s && avisos.leyendo)
+          void deps.esperar(SEGUIR_LEYENDO_MS).then(() => {
+            if (sala === s && ocupado === "") void revisar();
+          });
       }
     })();
     return revisandoYa;
@@ -483,6 +499,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     ultimaTransaccion = "";
     hora = "";
     instante = null;
+    avisos = { pagos: false, leyendo: false, sorteos: false, truncado: false };
     pantalla?.cerrar();
     guardar();
   }
@@ -570,6 +587,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       // Con lo último que dice la red: quién ya tiene el cupón, quién ya sorteó, qué cuentas existen.
       await revisar(true);
       if (sala !== s) return;
+      // Sin todos los pagos a la vista no se sabe quién ya tiene su cupón: no se manda nada.
+      if (avisos.pagos) {
+        progreso = "";
+        return sinPagosLeidos();
+      }
       const { listos, inactivos, malas } = paraDarCupon(c.modo, lista(), evidencias);
       // Una cuenta mal escrita nunca entra a la tanda: haría fallar el cupón de todos. Se deja afuera y se dice cuál es.
       const notaMalas = notaDeCuentasMalas(malas);
@@ -619,10 +641,16 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     }
   }
 
+  const textoDePagos = (): string => (avisos.leyendo ? "eqPagosLeyendo" : "eqPagosNoLeidos");
+  /** Deja a la vista el aviso de los pagos (que se va solo cuando la lectura termina), sin otro mensaje que lo tape. */
+  const sinPagosLeidos = (): void => aviso("");
+
   function usarComoLista(): void | Promise<void> {
     // Con una lectura de la red en curso (al abrir la pantalla tarda unos segundos), los cupones todavía están llegando:
     // se espera a que termine. Sin esto, un toque temprano decía «Hacen falta al menos dos equipos con cupón» con dos ya a la vista.
     if (revisandoYa) return revisandoYa.then(() => usarComoLista());
+    // Con los pagos sin leer enteros, la lista puede quedar sin equipos que sí tienen su cupón: no se arma.
+    if (avisos.pagos) return sinPagosLeidos();
     const { lineas, etiquetas } = listaDesdeCupones(lista(), evidencias);
     if (lineas.length < 2) return aviso(tx("eqListaPocos"));
     if (!deps.ponerLista(lineas.join("\n"))) return aviso(tx("eqListaSellada"));
@@ -709,7 +737,7 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     q("eq-config").hidden = abierta;
     q("eq-sala").hidden = !abierta;
     const error = q("eq-error");
-    const texto = mensaje || (abierta && avisos.pagos ? tx("eqPagosNoLeidos") : "") || (abierta && avisos.sorteos ? tx("eqSorteosNoLeidos") : "");
+    const texto = mensaje || (abierta && avisos.pagos ? tx(textoDePagos()) : "") || (abierta && avisos.sorteos ? tx("eqSorteosNoLeidos") : "");
     error.textContent = texto;
     error.hidden = !texto;
     const prog = q("eq-progreso");
@@ -757,10 +785,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
     const dar = q<HTMLButtonElement>("eq-dar");
     dar.textContent = listos.length ? fmt("eqDarCupones", { n: listos.length }) : tx("eqDarCuponesCero");
     dar.dataset.sugerida = sugerida === "cupones" ? "1" : "";
-    dar.disabled = ocupado === "cupones";
+    dar.disabled = ocupado === "cupones" || avisos.pagos;
     const usar = q<HTMLButtonElement>("eq-lista");
     usar.hidden = !todos.some((e) => evidencias.get(e.cuenta)?.cupon);
     usar.dataset.sugerida = sugerida === "lista" ? "1" : "";
+    usar.disabled = avisos.pagos;
     q<HTMLButtonElement>("eq-revisar").disabled = ocupado !== "";
     q<HTMLButtonElement>("eq-copiar").textContent = tx(enlaceCopiado ? "eqCopiado" : "eqCopiarEnlace");
     const campoHora = q<HTMLInputElement>("eq-hora");

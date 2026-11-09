@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T, setLang } from "../i18n";
 import { passphraseDe } from "../stellar/oficiales";
 import { txUrl } from "../stellar/config";
+import type { LecturaDePago } from "../stellar/pagos";
 import type { Envio, Preparacion } from "../stellar/pagos-envio";
 import { type Billetera, type ContextoDePago, type Dependencias, type PedidoDePago, type Resultado, mensajeDe, pagarPremioEn, pagarUnPremio } from "./pagar-premio";
 
@@ -16,12 +17,14 @@ const HASH = "cd".repeat(32);
 const XDR_ARMADO = "AAAAAgAAAAArmado";
 const XDR_FIRMADO = "AAAAAgAAAAFirmado";
 
-const PEDIDO: PedidoDePago = { red: "testnet", raffleId: "777", puesto: 2, destino: GANA, activo: ACTIVO, monto: "50" };
+const DESDE = 1_800_000_000;
+const PEDIDO: PedidoDePago = { red: "testnet", raffleId: "777", puesto: 2, destino: GANA, activo: ACTIVO, monto: "50", desde: DESDE };
 
 const LISTO: Preparacion = { ok: true, xdr: XDR_ARMADO, nota: "tk:premio:777:2", monto: "50.0000000" };
 
 interface Armado {
   deps: Dependencias;
+  buscar: ReturnType<typeof vi.fn>;
   preparar: ReturnType<typeof vi.fn>;
   mandar: ReturnType<typeof vi.fn>;
   firmar: ReturnType<typeof vi.fn>;
@@ -29,7 +32,10 @@ interface Armado {
 }
 
 /** Dependencias de mentira: lo que contesta la red y la billetera, y quién fue llamado. */
-function armar(o: { prep?: Preparacion; envio?: Envio; billetera?: Partial<Billetera> | null; firma?: "firma" | "rechaza" } = {}): Armado {
+function armar(
+  o: { prep?: Preparacion; envio?: Envio; billetera?: Partial<Billetera> | null; firma?: "firma" | "rechaza"; previo?: LecturaDePago | (() => Promise<LecturaDePago>) } = {},
+): Armado {
+  const buscar = vi.fn(async (): Promise<LecturaDePago> => (typeof o.previo === "function" ? o.previo() : (o.previo ?? { tipo: "no-hay" })));
   const preparar = vi.fn(async () => o.prep ?? LISTO);
   const mandar = vi.fn(async () => o.envio ?? ({ ok: true, hash: HASH } as Envio));
   const firmar = vi.fn(async () => {
@@ -41,7 +47,7 @@ function armar(o: { prep?: Preparacion; envio?: Envio; billetera?: Partial<Bille
     o.billetera === null
       ? null
       : { direccion: ORG, firmaAdentro: true, red: async () => passphraseDe("testnet"), firmar, ...o.billetera };
-  return { deps: { preparar, mandar, billetera, alAvanzar: (p) => pasos.push(p) }, preparar, mandar, firmar, pasos };
+  return { deps: { buscar, preparar, mandar, billetera, alAvanzar: (p) => pasos.push(p) }, buscar, preparar, mandar, firmar, pasos };
 }
 
 describe("los pasos de un pago de premio", () => {
@@ -130,7 +136,7 @@ describe("los pasos de un pago de premio", () => {
     const r1 = await pagarUnPremio(armar({ envio: { ok: false, rechazo: "sin-linea", codigos: ["op_no_trust"] } }).deps, PEDIDO);
     expect(r1).toEqual({ tipo: "rechazado", rechazo: "sin-linea" });
     const r2 = await pagarUnPremio(armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } }).deps, PEDIDO);
-    expect(r2).toEqual({ tipo: "sin-respuesta" });
+    expect(r2).toMatchObject({ tipo: "sin-respuesta", busqueda: { destino: GANA, nota: "tk:premio:777:2", desde: DESDE } });
   });
 });
 
@@ -143,7 +149,9 @@ describe("lo que se le dice a la persona", () => {
     { tipo: "otra-red" },
     { tipo: "no-firmado" },
     ...(["sin-saldo", "sin-linea", "sin-cuenta", "lleno", "secuencia", "vencido", "firma", "otro"] as const).map((rechazo): Resultado => ({ tipo: "rechazado", rechazo })),
-    { tipo: "sin-respuesta" },
+    { tipo: "sin-respuesta", busqueda: { red: "testnet", destino: GANA, activo: ACTIVO, nota: "tk:premio:777:2", pagadoras: [ORG], desde: DESDE } },
+    { tipo: "ya-pagado", hash: HASH, origen: ORG },
+    { tipo: "sin-consulta" },
     { tipo: "listo", hash: HASH, origen: ORG },
   ];
 
@@ -206,7 +214,7 @@ function abrir(dep: Armado, extra: Partial<ContextoDePago> = {}): { caja: HTMLEl
   document.body.append(caja);
   const pagadoras = new Set<string>([ORG]);
   const terminados: number[] = [];
-  const pagar = pagarPremioEn({ red: "testnet", raffleId: "777", premio: "Beca de 50 USDC", activo: ACTIVO, pagadoras, dependencias: async () => dep.deps, ...extra });
+  const pagar = pagarPremioEn({ red: "testnet", raffleId: "777", premio: "Beca de 50 USDC", activo: ACTIVO, pagadoras, desde: DESDE, dependencias: async () => dep.deps, ...extra });
   pagar(FILA, caja, () => terminados.push(1));
   return { caja, terminados, pagadoras, form: caja.querySelector("form") as HTMLFormElement };
 }
@@ -255,7 +263,7 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(b.caja.childElementCount).toBe(0);
 
     const c = abrir(dep);
-    const pagar = pagarPremioEn({ red: "testnet", raffleId: "777", premio: "", activo: ACTIVO, pagadoras: new Set(), dependencias: async () => dep.deps });
+    const pagar = pagarPremioEn({ red: "testnet", raffleId: "777", premio: "", activo: ACTIVO, pagadoras: new Set(), desde: DESDE, dependencias: async () => dep.deps });
     pagar(FILA, c.caja, () => undefined);
     expect(c.caja.childElementCount).toBe(0);
   });
@@ -365,7 +373,7 @@ describe("el formulario de 'Pagar premio'", () => {
 
   it("si no se sabe si el pago salió, lo dice y vuelve a mirar la red más tarde", async () => {
     const dep = armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } });
-    const { caja, form, terminados } = abrir(dep);
+    const { caja, form, terminados } = abrir(dep, { esperaMs: 60_000 });
     enviar(form);
     await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toContain("No supimos si el pago salió"));
     expect(terminados).toHaveLength(1);
@@ -412,5 +420,215 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(caja.textContent).toContain("Amount in USDC");
     expect(campos(caja).enviar.textContent).toBe("Sign and pay");
     expect(botonCon(caja, "Let them know")).toBeDefined();
+  });
+});
+
+/* ------------------------------------------------------- un premio se paga una vez */
+
+const PAGADO: LecturaDePago = { tipo: "pagado", hash: HASH, monto: "50.0000000", cuando: DESDE + 60, de: ORG };
+
+/**
+ * Una red de mentira con memoria: lo que se manda queda pagado (aunque conteste que no supo), y buscar lo encuentra.
+ * Sirve para ver que un premio no se paga dos veces.
+ */
+function redConMemoria(o: { contesta?: "ok" | "sin-respuesta" } = {}): { armar: () => Armado; mandados: () => number } {
+  let pagos = 0;
+  const armarUna = (): Armado => {
+    const a = armar();
+    a.buscar.mockImplementation(async (): Promise<LecturaDePago> => (pagos > 0 ? PAGADO : { tipo: "no-hay" }));
+    a.mandar.mockImplementation(async (): Promise<Envio> => {
+      pagos++;
+      return o.contesta === "sin-respuesta" ? { ok: false, rechazo: "sin-respuesta", codigos: [] } : { ok: true, hash: HASH };
+    });
+    return a;
+  };
+  return { armar: armarUna, mandados: () => pagos };
+}
+
+describe("antes de armar un pago se mira si el premio ya está pagado", () => {
+  it("busca en la red el pago con la nota de ese premio, desde las cuentas que pagan y la que va a pagar", async () => {
+    const a = armar();
+    await pagarUnPremio(a.deps, { ...PEDIDO, pagadoras: [OTRA] });
+    expect(a.buscar).toHaveBeenCalledWith({ red: "testnet", destino: GANA, activo: ACTIVO, nota: "tk:premio:777:2", pagadoras: [OTRA, ORG], desde: DESDE });
+    // Primero se mira, después se arma.
+    expect(a.buscar.mock.invocationCallOrder[0]).toBeLessThan(a.preparar.mock.invocationCallOrder[0] as number);
+  });
+
+  it("si ya tiene su pago, no arma nada, no pide firmar y no manda", async () => {
+    const a = armar({ previo: PAGADO });
+    expect(await pagarUnPremio(a.deps, PEDIDO)).toEqual({ tipo: "ya-pagado", hash: HASH, origen: ORG });
+    expect(a.preparar).not.toHaveBeenCalled();
+    expect(a.firmar).not.toHaveBeenCalled();
+    expect(a.mandar).not.toHaveBeenCalled();
+  });
+
+  it("si la red no deja saberlo, no paga a ciegas", async () => {
+    const a = armar({ previo: { tipo: "sin-consulta" } });
+    expect(await pagarUnPremio(a.deps, PEDIDO)).toEqual({ tipo: "sin-consulta" });
+    expect(a.preparar).not.toHaveBeenCalled();
+    const b = armar({ previo: () => Promise.reject(new Error("se cortó")) });
+    expect(await pagarUnPremio(b.deps, PEDIDO)).toEqual({ tipo: "sin-consulta" });
+    expect(b.preparar).not.toHaveBeenCalled();
+  });
+
+  it("firmando afuera también mira antes: un premio pagado no se vuelve a armar", async () => {
+    const a = armar({ billetera: { direccion: PAGA, firmaAdentro: false }, previo: { ...PAGADO, de: PAGA } });
+    expect(await pagarUnPremio(a.deps, PEDIDO)).toEqual({ tipo: "ya-pagado", hash: HASH, origen: PAGA });
+    expect(a.preparar).not.toHaveBeenCalled();
+  });
+});
+
+describe("si la red no confirma si el pago salió, no se vuelve a ofrecer pagar a ciegas", () => {
+  it("el botón queda en pausa; si el pago estaba, pasa a pagado y no se manda otro", async () => {
+    const red = redConMemoria({ contesta: "sin-respuesta" });
+    const dep = red.armar();
+    let mirar: () => void = () => undefined;
+    // La consulta de después tarda: mientras tanto el botón no se puede usar.
+    dep.buscar.mockImplementationOnce(async (): Promise<LecturaDePago> => ({ tipo: "no-hay" }));
+    dep.buscar.mockImplementationOnce(() => new Promise<LecturaDePago>((r) => (mirar = () => r(PAGADO))));
+    const { caja, form, terminados } = abrir(dep, { esperaMs: 0 });
+    enviar(form);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Mirando en la red si el pago salió…"));
+    expect(campos(caja).enviar.disabled).toBe(true);
+    // Otro Enter u otro toque no arman nada.
+    enviar(form);
+    enviar(form);
+    mirar();
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Listo, el pago salió."));
+    expect(campos(caja).enviar.hidden).toBe(true);
+    expect((caja.querySelector("a") as HTMLAnchorElement).href).toBe(txUrl(HASH, "testnet"));
+    expect(red.mandados()).toBe(1);
+    expect(dep.preparar).toHaveBeenCalledTimes(1);
+    expect(terminados.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("si la red dice con certeza que el pago no está, vuelve el botón", async () => {
+    const dep = armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } });
+    const { caja, form } = abrir(dep, { esperaMs: 0 });
+    enviar(form);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Miramos en la red y ese pago no está. Podés volver a intentarlo."));
+    expect(campos(caja).enviar.disabled).toBe(false);
+    expect(campos(caja).enviar.hidden).toBe(false);
+  });
+
+  it("si la red no contesta, sigue en pausa, lo explica y deja volver a mirar", async () => {
+    const dep = armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } });
+    const respuestas: LecturaDePago[] = [{ tipo: "no-hay" }, { tipo: "sin-consulta" }, { tipo: "no-hay" }];
+    dep.buscar.mockImplementation(async (): Promise<LecturaDePago> => respuestas.shift() ?? { tipo: "sin-consulta" });
+    const { caja, form } = abrir(dep, { esperaMs: 0 });
+    enviar(form);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toContain("Todavía no pudimos mirar en la red si el pago salió"));
+    expect(campos(caja).mensaje.classList.contains("bad")).toBe(true);
+    expect(campos(caja).enviar.disabled).toBe(true);
+    const volver = botonCon(caja, "Volver a mirar") as HTMLButtonElement;
+    expect(volver.hidden).toBe(false);
+    // Con el botón en pausa, mandar el formulario no hace nada.
+    enviar(form);
+    await Promise.resolve();
+    expect(dep.preparar).toHaveBeenCalledTimes(1);
+    volver.click();
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Miramos en la red y ese pago no está. Podés volver a intentarlo."));
+    expect(campos(caja).enviar.disabled).toBe(false);
+    expect(volver.hidden).toBe(true);
+    expect(dep.mandar).toHaveBeenCalledTimes(1);
+  });
+
+  it("cerrar y volver a abrir el formulario no devuelve el botón: se ve el mismo, en pausa", async () => {
+    const dep = armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } });
+    const caja = document.createElement("div");
+    document.body.append(caja);
+    const pagar = pagarPremioEn({
+      red: "testnet",
+      raffleId: "777",
+      premio: "50 USDC",
+      activo: ACTIVO,
+      pagadoras: new Set([ORG]),
+      desde: DESDE,
+      esperaMs: 60_000,
+      dependencias: async () => dep.deps,
+    });
+    pagar(FILA, caja, () => undefined);
+    enviar(caja.querySelector("form") as HTMLFormElement);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toContain("No supimos si el pago salió"));
+    pagar(FILA, caja, () => undefined);
+    expect(caja.childElementCount).toBe(0);
+    pagar(FILA, caja, () => undefined);
+    expect(campos(caja).mensaje.textContent).toContain("No supimos si el pago salió");
+    expect(campos(caja).enviar.disabled).toBe(true);
+    enviar(caja.querySelector("form") as HTMLFormElement);
+    await Promise.resolve();
+    expect(dep.preparar).toHaveBeenCalledTimes(1);
+    expect(dep.mandar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un toque doble manda un solo pago", async () => {
+    const red = redConMemoria();
+    const dep = red.armar();
+    const { caja, form } = abrir(dep);
+    enviar(form);
+    enviar(form);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Listo, el pago salió."));
+    expect(red.mandados()).toBe(1);
+    expect(dep.buscar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("el premio pagado desde otra parte", () => {
+  it("con la página recargada justo después de pagar: 'Firmar y pagar' encuentra el pago y no arma otro", async () => {
+    const red = redConMemoria();
+    const antes = red.armar();
+    const a = abrir(antes);
+    enviar(a.form);
+    await vi.waitFor(() => expect(campos(a.caja).mensaje.textContent).toBe("Listo, el pago salió."));
+    // La página nueva no sabe nada del pago: el panel todavía lo puede mostrar pendiente.
+    document.body.replaceChildren();
+    const despues = red.armar();
+    const b = abrir(despues);
+    enviar(b.form);
+    await vi.waitFor(() => expect(campos(b.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    expect(campos(b.caja).mensaje.classList.contains("bad")).toBe(false);
+    expect(campos(b.caja).enviar.hidden).toBe(true);
+    expect((b.caja.querySelector("a") as HTMLAnchorElement).hidden).toBe(false);
+    expect(b.terminados).toHaveLength(1);
+    expect(despues.firmar).not.toHaveBeenCalled();
+    expect(red.mandados()).toBe(1);
+  });
+
+  it("con dos pestañas abiertas, la segunda no paga lo que pagó la primera", async () => {
+    const red = redConMemoria();
+    const una = abrir(red.armar());
+    const otra = abrir(red.armar());
+    enviar(una.form);
+    await vi.waitFor(() => expect(campos(una.caja).mensaje.textContent).toBe("Listo, el pago salió."));
+    enviar(otra.form);
+    await vi.waitFor(() => expect(campos(otra.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    expect(red.mandados()).toBe(1);
+  });
+
+  it("si no se puede mirar antes, lo dice, no arma nada y deja volver a probar", async () => {
+    const dep = armar({ previo: { tipo: "sin-consulta" } });
+    const { caja, form } = abrir(dep);
+    enviar(form);
+    await vi.waitFor(() =>
+      expect(campos(caja).mensaje.textContent).toBe("No pudimos mirar en la red si este premio ya está pagado, así que no armamos el pago. Probá otra vez en un momento."),
+    );
+    expect(dep.preparar).not.toHaveBeenCalled();
+    expect(campos(caja).enviar.disabled).toBe(false);
+    dep.buscar.mockImplementation(async (): Promise<LecturaDePago> => ({ tipo: "no-hay" }));
+    enviar(form);
+    await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toBe("Listo, el pago salió."));
+    expect(dep.buscar).toHaveBeenCalledTimes(2);
+  });
+
+  it("en inglés, los avisos nuevos también", async () => {
+    const dep = armar({ envio: { ok: false, rechazo: "sin-respuesta", codigos: [] } });
+    const respuestas: LecturaDePago[] = [{ tipo: "no-hay" }, { tipo: "sin-consulta" }];
+    dep.buscar.mockImplementation(async (): Promise<LecturaDePago> => respuestas.shift() ?? { tipo: "sin-consulta" });
+    const { caja, form } = abrir(dep, { esperaMs: 0 });
+    enviar(form);
+    await vi.waitFor(() => expect(botonCon(caja, "Volver a mirar")?.hidden).toBe(false));
+    setLang("en");
+    expect(campos(caja).mensaje.textContent).toBe("We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. Try Check again in a moment.");
+    expect(botonCon(caja, "Check again")).toBeDefined();
   });
 });

@@ -34,6 +34,7 @@ export function mostrarPagosDelResultado(): void {
   // La ronda nace en un instante fijo y público: de ahí se cuentan los 7 días.
   const sorteoEn = roundTime(drawn.beacon.round);
   const activo = activoDePagos(network.name);
+  const desde = sorteoEn - 600;
 
   montarGanadores(caja, {
     red: network.name,
@@ -42,10 +43,10 @@ export function mostrarPagosDelResultado(): void {
     activo,
     ganadores: drawn.winners.map((i, puesto) => ({ puesto, entrada: frozen.names[i] ?? "" })),
     sorteoEn,
-    desde: sorteoEn - 600,
+    desde,
     pagadoras,
     lector,
-    ...(sesion ? { pagar: pagarPremioEn({ red: network.name, raffleId, premio: frozen.prize, activo, pagadoras }) } : {}),
+    ...(sesion ? { pagar: pagarPremioEn({ red: network.name, raffleId, premio: frozen.prize, activo, pagadoras, desde }) } : {}),
   });
   caja.style.display = "block";
 }

@@ -213,20 +213,23 @@ describe("los cupones, leídos de Horizon", () => {
     expect(comoPago(registro({ id: 1, de: EVENTO, a, ok: false }) as never)).toBeNull();
     expect(comoPago(registro({ id: 1, de: EVENTO, a, tipo: "create_account" }) as never)).toBeNull();
   });
-  it("lee los pagos de la cuenta del evento, del más viejo al más nuevo, y sigue las páginas", async () => {
+  it("lee los pagos que salieron de la cuenta del evento, del más viejo al más nuevo, y sigue las páginas", async () => {
+    // Una tanda de cupones es una transacción: todos sus pagos comparten la nota.
+    const regs = Array.from({ length: 201 }, (_, i) => ({ ...registro({ id: i + 1, de: EVENTO, a }), transaction_hash: "tanda" }));
     const f = vi.fn(async (url: string | URL | Request) => {
-      const u = String(url);
-      if (u.includes("page2")) return pagina([registro({ id: 1, de: EVENTO, a: b })]);
-      return pagina(
-        Array.from({ length: 200 }, (_, i) => registro({ id: 500 - i, de: EVENTO, a })),
-        "https://h.test/page2",
-      );
+      const u = new URL(String(url));
+      if (u.pathname.startsWith("/transactions/")) return new Response(JSON.stringify({ memo_type: "text", memo: memoCupon(EVENTO_POR_DEFECTO) }), { status: 200 });
+      const desc = u.searchParams.get("order") === "desc";
+      const cursor = Number(u.searchParams.get("cursor") ?? (desc ? Infinity : 0));
+      const ficha = (r: object): number => Number((r as { paging_token: string }).paging_token);
+      const lista = (desc ? [...regs].reverse() : regs).filter((r) => (desc ? ficha(r) < cursor : ficha(r) > cursor));
+      return pagina(lista.slice(0, 200));
     });
-    const pagos = await pagosDeLaCuenta(EVENTO, { fetch: f as never, horizon: "https://h.test" });
+    const pagos = await pagosDeLaCuenta(EVENTO, { fetch: f as never, horizon: "https://h.test", memoria: new Map(), ahora: () => Date.parse("2026-11-14T12:00:00Z") });
     expect(pagos).toHaveLength(201);
     expect(pagos?.[0]?.orden).toBe(1n);
-    expect(pagos?.at(-1)?.orden).toBe(500n);
-    expect(String(f.mock.calls[0]?.[0])).toContain(`/accounts/${EVENTO}/payments?order=desc&limit=200&join=transactions`);
+    expect(pagos?.at(-1)?.orden).toBe(201n);
+    expect(String(f.mock.calls[0]?.[0])).toContain(`/accounts/${EVENTO}/payments?order=desc&limit=200&include_failed=false`);
   });
   it("sin respuesta de Horizon no se afirma nada (null), y una cuenta que no existe no tiene pagos", async () => {
     expect(await pagosDeLaCuenta(EVENTO, { fetch: (async () => new Response("", { status: 503 })) as never })).toBeNull();

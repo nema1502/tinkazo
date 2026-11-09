@@ -562,6 +562,62 @@ describe("la lista que se sella sale de los cupones", () => {
     expect($q(p, "#eq-error").textContent).toBe(t("eqListaSellada"));
   });
 
+  it("si los pagos no se pudieron leer, ni da cupones ni arma la lista con lo que ya conocía, y lo dice", async () => {
+    const m = mundo();
+    const { p, c } = await conCupones(m);
+    // Horizon deja de contestar: lo que se sabía de antes puede estar incompleto.
+    m.deps.pagos = async () => null;
+    await p.revisar(true);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqPagosNoLeidos"));
+    expect($q<HTMLButtonElement>(p, "#eq-dar").disabled).toBe(true);
+    expect($q<HTMLButtonElement>(p, "#eq-lista").disabled).toBe(true);
+    // Aunque se llame igual (un toque que llegó antes de pintar): ni la lista ni el cupón para `c`.
+    await p.usarComoLista();
+    expect(m.lista).toEqual([]);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqPagosNoLeidos"));
+    await p.darCupones();
+    expect(m.armadas).toEqual([]);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqPagosNoLeidos"));
+    // Cuando la red vuelve a contestar, todo vuelve.
+    m.deps.pagos = async () => [...m.pagos];
+    await p.revisar(true);
+    expect($q<HTMLButtonElement>(p, "#eq-lista").disabled).toBe(false);
+    await p.darCupones();
+    expect(m.armadas).toEqual([[c]]);
+  });
+
+  it("con tantos pagos que no se leen en una vuelta, sigue leyendo enseguida y mientras tanto no deja armar la lista", async () => {
+    const m = mundo();
+    const { p, a, b } = await conCupones(m);
+    let pendientes = 2;
+    m.deps.pagos = async () => (pendientes > 0 ? null : [...m.pagos]);
+    m.deps.pagosPendientes = () => pendientes > 0;
+    const esperas: number[] = [];
+    let seguir: () => void = () => undefined;
+    m.deps.esperar = (ms) => {
+      esperas.push(ms);
+      return new Promise<void>((r) => (seguir = r));
+    };
+    await p.revisar(true);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqPagosLeyendo"));
+    expect($q<HTMLButtonElement>(p, "#eq-lista").disabled).toBe(true);
+    await p.usarComoLista();
+    expect(m.lista).toEqual([]);
+    // La próxima vuelta no espera la revisión periódica (20 s).
+    expect(esperas).toHaveLength(1);
+    expect(esperas[0]).toBeLessThan(20_000);
+    pendientes = 1;
+    seguir();
+    await vi.waitFor(() => expect(esperas).toHaveLength(2));
+    pendientes = 0;
+    seguir();
+    await vi.waitFor(() => expect($q<HTMLButtonElement>(p, "#eq-lista").disabled).toBe(false));
+    expect($q(p, "#eq-error").hidden).toBe(true);
+    expect(esperas).toHaveLength(2);
+    await p.usarComoLista();
+    expect(m.lista).toEqual([b, a]);
+  });
+
   it("con menos de dos equipos con cupón no arma la lista", async () => {
     const m = mundo();
     const p = await abrirRegistro(m, "cupon");
