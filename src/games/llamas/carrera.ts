@@ -8,6 +8,7 @@ import { camara3D, type Borla3D, type Corredora3D, type Efecto3D, type Fabrica3D
 import { cambiosDeCara, caraEn, cuantoCara, ponerCaras, quienDeCara } from "./carrera-cara";
 import { armarEtiqueta, olvidarEtiqueta, ponerEtiqueta as ponerFicha, type AspectoFicha, type Etiqueta, type EstiloFicha } from "./carrera-etiqueta";
 import { formaEn, nivelesDe } from "./carrera-nombre-nivel";
+import { finalChipDecision, startChipShows } from "./carrera-final-fichas";
 import { LLEGADA_ANTES, cajaFinal2D, crearCamara3D, grupoFinal2D, zoomDeCaja, zoomFinal2D, type Camara3D, type Puesto } from "./carrera-camara";
 import { unir } from "../pixi/encuadre";
 import { tarjetaRetrato, type DisenoTarjeta } from "./carrera-tarjeta";
@@ -246,8 +247,8 @@ const MARGEN_LETRERO_Y = 0.5;
     });
   }
   /** La ficha con el nombre `s` y, a mitad de un cambio de forma, el que se va (`sale`, con `mezcla` de 0 a 1): `carrera-etiqueta.ts`. */
-  function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha): void {
-    const conRotulo = d.nueva && P.retrato && estilo === "lider";
+  function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha, conRotuloAdelante = true): void {
+    const conRotulo = d.nueva && P.retrato && estilo === "lider" && conRotuloAdelante;
     ponerFicha(e, s, sale, mezcla, px, estilo, aspecto, conRotulo ? k.txt("carRotuloPunta") : null);
   }
 
@@ -1277,34 +1278,37 @@ const MARGEN_LETRERO_Y = 0.5;
       const et = c.etiqueta;
       // En los últimos 3 s nada marca a quien va adelante (ni la ficha amarilla ni la manta ni el aro): es el cabeza a cabeza.
       const soyLider = q === duenia && !lying && t < d.tCrown - LLEGADA_ANTES;
-      const estilo = lying ? "echada" : soyLider ? "lider" : "normal";
+      // En el 3D, desde el cruce y nunca antes, la ficha de quien ganó va dorada y por encima de las demás.
+      const finalChip = tres ? finalChipDecision(q, d.campeona, t, d.tCrown, k.coronado) : null;
+      const estilo = lying ? "echada" : soyLider || finalChip?.gold ? "lider" : "normal";
       // La forma del nombre sale de la hora: cuando cambia cuántas siguen en carrera, o cuando esta se echa, el nombre viejo se va
       // mientras llega el nuevo (`carrera-nombre-nivel.ts`).
       const fn = formaEn(niveles, t, lying ? (d.tiempos.cae.get(q) ?? t - (p.momento?.p ?? 0) * ECHADA_DUR) : Infinity);
-      ponerEtiqueta(et, textoDe(q, fn.a), fn.mezcla < 1 ? textoDe(q, fn.de) : "", fn.mezcla, px, estilo);
+      ponerEtiqueta(et, textoDe(q, fn.a), fn.mezcla < 1 ? textoDe(q, fn.de) : "", fn.mezcla, px, estilo, !finalChip?.gold);
       // La ficha nunca se ve más chica que el piso del kit (16 px en el celular, el 2,6 % del alto en el proyector).
       const comp = Math.max(1, Math.min(2.2, minimoPx("nombre", P.w, P.h) / (px * vz)));
       et.raiz.scale.set(comp);
       const enCarril = t >= d.tAbre && d.lanes.includes(q);
       const arriba = enCarril ? carr.arriba : forma.arriba;
       const esc = p.esc;
-      // Desde el golpe, la ficha de quien gana manda como la amarilla: con las demás alrededor perdía el lugar un cuadro sí y otro no, y quedaba a media luz.
-      if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider || (k.coronado && q === d.campeona) ? 3e6 : reciente ? 2e6 : 1e6 });
+      // Desde el cruce, la ficha de quien gana manda como la amarilla: se ubica primero y queda por encima de las demás.
+      if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider || finalChip?.onTop ? 3e6 : reciente ? 2e6 : 1e6 });
       else ubicarFicha(et, p, arriba, comp, vz, soyLider);
-      et.raiz.zIndex = nombrados.has(q) ? 4e6 : soyLider ? 3e6 : reciente ? 2e6 : 1e6;
+      et.raiz.zIndex = nombrados.has(q) ? 4e6 : soyLider || finalChip?.onTop ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
       const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
       c.raiz.visible = dentro;
       // En el celular no hay lugar para que los nombres de todas las que se echaron queden a la vista: a los 2,5 s se va la ficha y queda la llama echada.
       const sinLugar = P.retrato && lying && (p.momento?.p ?? 0) > 5;
-      // Cuando cae el golpe, quien gana ya tiene su cartel: la ficha sobra (el nombre aparecía tres veces).
-      const sobra = d.nueva && ((k.coronado && q === d.campeona) || p.x + LLAMA_HOCICO * p.esc < cam.x - P.w / (2 * vz) + 4 * P.u);
+      // Cuando cae el golpe, quien gana ya tiene su cartel: en el 2D la ficha sobra (el nombre aparecía tres veces). En el 3D queda solo la suya.
+      const sobra = d.nueva && ((k.coronado && q === d.campeona && !tres) || p.x + LLAMA_HOCICO * p.esc < cam.x - P.w / (2 * vz) + 4 * P.u);
       et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar && !sobra;
       if (tres) {
         const f = fichas3[fichas3.length - 1];
         if (f) {
           f.etiquetar = p.etiquetar !== false;
-          f.sinLugar = sinLugar || sobra;
+          // Con el cartel en pantalla, las fichas de quienes no ganaron se apagan con el fundido de siempre y queda solo la de quien ganó.
+          f.sinLugar = sinLugar || sobra || !(finalChip?.shows ?? true);
         }
       } else {
         if (et.raiz.visible) fichas.push({ q, c, p, estilo, arriba, comp, esc, soyLider });
@@ -1419,11 +1423,24 @@ const MARGEN_LETRERO_Y = 0.5;
     // se corre hacia arriba o hacia abajo por su alto y, si ni así cabe, no se muestra en ese cuadro.
     // Y ninguna ficha tapa la cabeza de otra llama (la perspectiva apila las filas, y la ficha de la de adelante caía sobre la de atrás).
     const puestas: { x0: number; y0: number; x1: number; y1: number; de?: number; cabeza?: boolean }[] = [];
+    // En pantalla angosta, la tarjeta de nombres también cuenta como caja puesta mientras se ve: ninguna ficha queda debajo de ella.
+    if (P.retrato && cartel.visible && cartel.alpha > 0.05) {
+      const cajaCartel = cartelFondo.getBounds();
+      puestas.push({ x0: cajaCartel.x, y0: cajaCartel.y, x1: cajaCartel.x + cajaCartel.width, y1: cajaCartel.y + cajaCartel.height });
+    }
     for (const f of fichas) {
       const pc = tres.pantallaDe(f.persona);
       if (!pc || pc.x < 0 || pc.x > P.w || pc.y < P.top || pc.y > P.bottom) continue;
       puestas.push({ de: f.persona, cabeza: true, x0: pc.x - pc.alto * 0.28, x1: pc.x + pc.alto * 0.28, y0: pc.y - pc.alto * 0.1, y1: pc.y + pc.alto * 0.3 });
     }
+    // En la largada con pantalla angosta el grupo va junto y en diagonal: antes de la salida las fichas se turnan por el lugar
+    // de cada llama en la formación de salida (la de adelante primero), y desde la salida quedan solo las fichas de las que van
+    // más adelante en la pista, en el orden en que van en esta hora, hasta que se abre la recta y el grupo queda en carriles.
+    const ordenLargada = P.retrato && t < d.tAbre
+      ? t < d.tSalida
+        ? [...d.gente].sort((a, b2) => d.orden.rango(a) - d.orden.rango(b2) || a - b2)
+        : [...fichas].sort((a, b2) => b2.peso - a.peso || (tres?.pantallaDe(b2.persona)?.x ?? -Infinity) - (tres?.pantallaDe(a.persona)?.x ?? -Infinity)).map((f) => f.persona)
+      : [];
     for (const f of [...fichas].sort((a, b2) => b2.peso - a.peso)) {
       const pan = tres.pantallaDe(f.persona);
       const et = f.et;
@@ -1450,7 +1467,8 @@ const MARGEN_LETRERO_Y = 0.5;
       const minAlto = 0.06 * P.h;
       // Y en la llegada no se etiqueta a una echada: una que quedó atrás a la vista tenía su ficha flotando atenuada sobre el horizonte.
       const sigueEnCarrera = !enCabeza || (d.tiempos.cae.get(f.persona) ?? Infinity) > t;
-      et.raiz.visible = dentro && f.etiquetar && !f.sinLugar && sigueEnCarrera && (!pose || pan.alto >= minAlto);
+      const enLargada = startChipShows(f.persona, ordenLargada, P.retrato, t, d.tSalida, d.tAbre);
+      et.raiz.visible = dentro && f.etiquetar && !f.sinLugar && sigueEnCarrera && (!pose || pan.alto >= minAlto) && enLargada;
       // Ningún letrero a la vista queda debajo de una ficha, ni de la amarilla (con su rótulo de la izquierda). Con `margen`, la caja del letrero se agranda
       // `MARGEN_LETRERO_X` altos de ficha a los costados y `MARGEN_LETRERO_Y` arriba y abajo; sin él, se tocan cuando se pisan más de un píxel.
       const fw = et.w * e, fh = et.h * e, izq = et.rotuloW * e;
@@ -1488,7 +1506,15 @@ const MARGEN_LETRERO_Y = 0.5;
       if (!dentro && !fichasMov.has(f.persona)) {
         et.raiz.alpha = 1;
         et.raiz.visible = false;
-      } else deslizarFicha(f.persona, et, ancla, et.raiz.visible && dentro, t, () => 0, cuerpoPx() * vz, { x0: 4 * P.u, x1: P.w - 4 * P.u, y0: piso, y1: P.bottom });
+      } else {
+        deslizarFicha(f.persona, et, ancla, et.raiz.visible && dentro, t, () => 0, cuerpoPx() * vz, { x0: 4 * P.u, x1: P.w - 4 * P.u, y0: piso, y1: P.bottom });
+        // En la largada angosta, la ficha que no está en su turno se apaga en el acto: con el fundido de siempre se verían dos turnos a la vez y se pisarían.
+        if (P.retrato && t < d.tAbre && !enLargada) {
+          fichasMov.delete(f.persona);
+          et.raiz.visible = false;
+          et.raiz.alpha = 1;
+        }
+      }
       // Lo que el deslizamiento todavía no corrió (un corte de cámara, un letrero que cruza más rápido que el margen) se calla en ese cuadro.
       if (et.raiz.visible && sobreLetrero({ x0: et.raiz.x - fw / 2, y0: et.raiz.y - fh / 2, x1: et.raiz.x + fw / 2, y1: et.raiz.y + fh / 2 }, false)) et.raiz.visible = false;
       if (auditarMarcha) fichas3Cuadro.push([f.persona, et.raiz.x, et.raiz.y, et.raiz.visible ? et.raiz.alpha : 0, pan.x, pan.y, et.raiz.scale.x, et.w * e, et.h * e, et.rotuloW * e]);

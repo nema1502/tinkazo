@@ -285,6 +285,30 @@ export function corrimientoLider(x0: number, x1: number, w: number, h: number, a
   return 0;
 }
 
+/** La opacidad más baja de los postes de la meta justo en el cruce. */
+export const FINISH_POST_MIN_OPACITY = 0.22;
+/** Cuánto antes del cruce empiezan a apagarse los postes de la meta, en segundos. */
+export const FINISH_POST_FADE_BEFORE = 0.7;
+/** Cuánto después del cruce vuelven a verse enteros los postes de la meta, en segundos. */
+export const FINISH_POST_FADE_AFTER = 1.4;
+
+const smoothFinish = (v: number): number => {
+  const x = Math.max(0, Math.min(1, v));
+  return x * x * (3 - 2 * x);
+};
+
+/**
+ * La opacidad de los postes de la meta según los segundos desde el cruce (`crown`, negativo antes).
+ * En el cruce el poste de este lado tapaba parte del cuerpo de quien cruzaba: se apaga un poco solo en
+ * ese instante y vuelve solo. Es función de esa hora y nada más, y es la misma para cualquier ganadora.
+ */
+export function finishPostOpacity(crown: number): number {
+  if (!Number.isFinite(crown)) return 1;
+  const fadesIn = smoothFinish((crown + FINISH_POST_FADE_BEFORE) / FINISH_POST_FADE_BEFORE);
+  const fadesOut = 1 - smoothFinish(crown / FINISH_POST_FADE_AFTER);
+  return 1 - (1 - FINISH_POST_MIN_OPACITY) * fadesIn * fadesOut;
+}
+
 /** Las puntas de una llama, en unidades del dibujo y desde su origen (pies, centro): nariz, cola, cabeza arriba y los costados del cuerpo. */
 export const PUNTOS_LLAMA: ReadonlyArray<readonly [number, number, number]> = [
   [38, 36, 0], [-36, 40, 0], [14, 100, 0], [0, 30, 13], [0, 30, -13], [14, 0, 0], [-14, 0, 0],

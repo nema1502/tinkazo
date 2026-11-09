@@ -5,7 +5,7 @@ import {
 } from "three";
 import { LLAMA_ALTO } from "./carrera-forma";
 import {
-  TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, PUNTOS_LLAMA,
+  TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, finishPostOpacity, PUNTOS_LLAMA,
   type CajaPantalla3D, type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
@@ -325,6 +325,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   let fijoBasura = new Basura();
   /** Las cuatro esquinas de las letras de cada letrero (SALIDA y META), en el mundo: de ahí sale su caja en la pantalla (`letreros`). */
   let letrerosMundo: Vector3[][] = [];
+  /** Los materiales de los postes de la meta: en el cruce se apagan un poco para no tapar el cuerpo que cruza. */
+  let postesMeta: MeshLambertMaterial[] = [];
   let cielo: Mesh | null = null;
   let tribuna: { malla: InstancedMesh; base: { x: number; y: number; z: number; ph: number }[]; dummy: Object3D } | null = null;
   const llamas = new Map<number, Colocada>();
@@ -342,6 +344,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     fijoBasura = new Basura();
     const B = fijoBasura;
     letrerosMundo = [];
+    postesMeta = [];
     fijo = new Group();
     escena.add(fijo);
     tribuna = null;
@@ -536,8 +539,13 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       }
       const alto = 190 * u * s;
       // Los postes van finos: en la llegada la cámara mira la línea de costado desde su mismo plano, y el poste de este lado, ancho, quedaba
-      // justo sobre la línea en la pantalla y tapaba la nariz que la cruzaba.
-      for (const z of [zA - 0.5, zB + 0.5]) caja(0x16161f, xm - 0.06, xm + 0.06, 0, alto, z - 0.18, z + 0.18);
+      // justo sobre la línea en la pantalla y tapaba la nariz que la cruzaba. En el instante del cruce además se apagan un poco.
+      for (const z of [zA - 0.5, zB + 0.5]) {
+        const poste = caja(0x16161f, xm - 0.06, xm + 0.06, 0, alto, z - 0.18, z + 0.18);
+        const materialPoste = B.add(new MeshLambertMaterial({ color: 0x16161f, transparent: true, opacity: 1 }));
+        poste.material = materialPoste;
+        postesMeta.push(materialPoste);
+      }
       const viga = caja(0xffffff, xm - 0.15, xm + 0.15, alto - 1.1, alto, zA - 0.5, zB + 0.5);
       viga.material = B.add(new MeshLambertMaterial({ map: cuadros(Math.max(4, Math.round((zB - zA) / 0.7)), 2, B), flatShading: true }));
       rotulo(g.rotuloMeta, 0xffc629, xm, alto + 1.8, (zA + zB) / 2, Math.max(7, (zB - zA) * 0.5), 2.2);
@@ -741,6 +749,10 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     }
 
     efectos3D.frame(e.efectos, e.u);
+
+    // Los postes de la meta se apagan un poco solo en el instante del cruce, para que no tapen el cuerpo que cruza.
+    const opacidadPoste = finishPostOpacity(e.corona);
+    for (const materialPoste of postesMeta) materialPoste.opacity = opacidadPoste;
 
     // La cámara: la del director del 2D, con perspectiva.
     const esc = e.gente.length ? escSum / e.gente.length : 0.5;
