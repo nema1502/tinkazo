@@ -16,12 +16,16 @@ import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-comple
 import type { OpcionDeJuego } from "./espera";
 import { apruebaAMano, canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
+import { contar as contarPersonas, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
+import { modesVisible } from "../modos/bandera";
 import { preloadGame } from "../games/engine";
 import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { isTurnOrder } from "../modos/turnos";
+import { ajustarPremioDeTurnos, ordenNoCabe } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable, origenActual } from "../contar";
@@ -226,7 +230,11 @@ export function pintarRecomendacion(n: number): void {
     if (el) botones.set(g, el);
   }
   const gp = $("gamepick");
-  recomendar(n, premiosElegidos()).games.forEach((r, i) => {
+  // Un orden de turnos no tiene premios: las notas de capacidad dicen turnos. Se decide como en el resto de
+  // la pantalla, por la lista sellada y su nombre; antes de sellar vale el nombre del campo.
+  const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
+  const turnos = isTurnOrder(n, premiosElegidos(), premio);
+  recomendar(n, premiosElegidos(), turnos).games.forEach((r, i) => {
     const el = botones.get(r.game);
     if (!el) return;
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
@@ -546,15 +554,34 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
   }
 }
 
-/** Hay con qué sellar ahora: dos nombres o más, y no se acaba de soltar el sorteo anterior. */
+/** Hay con qué sellar ahora: dos personas distintas o más, y no se acaba de soltar el sorteo anterior. */
 function puedeSellar(): boolean {
   // Recién se soltó el sorteo anterior con "Siguiente premio": un doble toque
   // nervioso caía en "Sellar la lista" y sellaba el próximo premio sin premio,
   // para siempre (diseño del onboarding, 22 de octubre de 2026).
-  return parseNames().length >= 2 && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+  const names = parseNames();
+  // Dos personas distintas: una lista repartida puede tener muchas líneas de una sola. Sin la bandera de los
+  // modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
+  const personas = contarPersonas(names, modesVisible()).personas;
+  // En el modo «Orden de turnos», si la lista pasa de lo que admite la red no se sella: un orden incompleto no es un orden.
+  return personas >= 2 && !ordenNoCabe(names.length) && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+}
+
+/**
+ * Con los modos a la vista, a quien quedó con números que no cierran (se borró a mano una línea de su reparto) se lo
+ * vuelve a numerar justo antes de sellar: lo sellado y la cuenta del panel dicen lo mismo. Se hace al sellar y no al
+ * escribir, para que el cursor no se mueva mientras la persona escribe.
+ */
+function renumerarLaLista(): void {
+  if (!modesVisible()) return;
+  const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
+  if (!ta) return;
+  const nuevo = renumerarSufijos(ta.value);
+  if (nuevo !== ta.value) setList(nuevo, false);
 }
 
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
+  renumerarLaLista();
   const names = parseNames();
   if (!puedeSellar()) return;
 
@@ -582,7 +609,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           ? ENSAYO_ESPERA_S
           : LEAD_SECONDS;
   let round = targetRound(ts, lead);
-  let prize = $<HTMLInputElement>("prize").value.trim();
+  // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo es el cuadro, recortado.
+  let prize = ajustarPremioDeTurnos();
   let numWinners = Math.min(ganadoresPedidos(), names.length);
 
   let raffleId: bigint | undefined;
@@ -1044,6 +1072,30 @@ function textosDelSello(): void {
   ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
 }
 
+/**
+ * La cuenta de la lista sellada: cuántas participaciones y, si no son una por persona, de cuántas personas.
+ * La etiqueta de siempre la pinta el cambio de idioma por `data-i`; la de las dos cuentas se pinta acá, con el
+ * `data-i` quitado para que no la pise, y el `onLangChange` de abajo la vuelve a escribir.
+ */
+export function pintarCuentaSellada(names: readonly string[]): void {
+  // La misma regla que la verificación (`seCuentaPorPersona`): un reparto entero siempre, y con los modos a la
+  // vista también el reparto con nombres a secas. Sin los modos, cada línea es una persona, como siempre.
+  const { personas, participaciones } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
+  $("k-n").textContent = String(participaciones);
+  const etiqueta = $("k-entries");
+  if (personas === participaciones) {
+    etiqueta.dataset.i = "kEntries";
+    etiqueta.textContent = t("kEntries");
+    return;
+  }
+  delete etiqueta.dataset.i;
+  etiqueta.textContent = T[getLang()].kEntriesDe(personas);
+}
+
+onLangChange(() => {
+  if (app.frozen) pintarCuentaSellada(app.frozen.names);
+});
+
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */
 function showFrozen(names: string[], hash: string, raffleId: bigint | undefined): void {
   const f = app.frozen;
@@ -1061,7 +1113,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $("free-rule").style.display = "none";
   $("sec-frozen").style.display = "block";
   textosDelSello();
-  $("k-n").textContent = String(names.length);
+  pintarCuentaSellada(names);
   $("k-digest").textContent = hash.slice(0, 16) + "…";
   $("k-status").textContent = raffleId !== undefined ? `Stellar #${raffleId}` : "local";
   // El número del sorteo bien grande durante la espera: queda en las fotos de
@@ -1081,7 +1133,9 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // cantidad (D02). La demo juega el que pide su enlace.
   if (!juegoAMano && !params.has("demo")) {
     // Después de un premio, otro juego; la primera vez, el de siempre (D02).
-    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos());
+    // Un orden de turnos queda con la ruleta si la lista entra (`juegoPorDefecto`); con más de lo que admite, el de siempre.
+    const turnos = isTurnOrder(names.length, Math.min(premiosElegidos(), names.length), f.prize);
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos(), turnos);
     juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
@@ -1118,10 +1172,17 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   const lang = getLang();
   const when = (s: number): string =>
     new Date(s * 1000).toLocaleString(lang === "es" ? "es-BO" : "en-US", { dateStyle: "long", timeStyle: "long" });
-  const text = T[lang].rules({
+  const winners = Math.min(ganadoresPedidos(), f.names.length);
+  // Con varias participaciones por persona, las bases dicen las dos cuentas, con la misma regla que la
+  // verificación y la espera (`seCuentaPorPersona`).
+  const { personas, participaciones } = contarPersonas(f.names, seCuentaPorPersona(f.names, modesVisible()));
+  // Un orden de turnos tiene sus bases, sin ganadores ni premio.
+  const bases = isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
+  const text = bases({
     prize: f.prize,
-    count: f.names.length,
-    winners: Math.min(ganadoresPedidos(), f.names.length),
+    count: personas,
+    entries: participaciones,
+    winners,
     listHash: f.listHash,
     sealedAt: when(f.ts),
     round: f.round,
@@ -1175,12 +1236,19 @@ function renderSealSummary(): void {
  */
 export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   const lang = getLang();
-  const count = parseNames().length;
+  const names = parseNames();
+  const { personas: count, participaciones: entries } = contarPersonas(names, modesVisible());
   if (count < 2) return;
-  const text = T[lang].rulesPre({
-    prize: $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " "),
+  const prize = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
+  const winners = Math.min(ganadoresPedidos(), names.length);
+  // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
+  // (lo que se sella: cada línea, un turno), no por las personas.
+  const basesPre = isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
+  const text = basesPre({
+    prize,
     count,
-    winners: Math.min(ganadoresPedidos(), count),
+    entries,
+    winners,
     verifyUrl: `${location.origin}/como-funciona.html`,
   });
   try {

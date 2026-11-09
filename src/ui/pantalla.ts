@@ -1,6 +1,8 @@
 import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
+import { modesVisible } from "../modos/bandera";
+import { isTurnOrder, turnOrder, turnOrderDisplayNames } from "../modos/turnos";
 import { etiquetaDe } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
@@ -55,7 +57,15 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const muchos = n > 5;
   // Con más de doce, las tarjetas con cara no entran ni en dos columnas (cien tarjetas son diez pantallas): una lista
   // de renglones cortos, número y nombre, en tantas columnas como entren, con la letra más grande que deje todos a la vista.
-  const lista = n > MAX_CON_CARA;
+  // Un orden de turnos (`isTurnOrder`) va siempre en lista, con «Turno 1 ... Turno N» desde el primero, sin «Se llevan» ni
+  // caras: lo que se lee desde el fondo es el orden.
+  const turnos = isTurnOrder(frozen.names.length, n, premio);
+  const lista = n > MAX_CON_CARA || turnos;
+  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo. En un orden
+  // repartido se lee el nombre de la persona, sin el sufijo de la línea, como en el resultado.
+  // Sin los modos a la vista no se toca ningún nombre: la página del resultado y la verificación muestran las líneas
+  // tal cual, y la pantalla grande dice lo mismo.
+  const orden = turnos && modesVisible() ? turnOrderDisplayNames(frozen.names, drawn.winners) : turnOrder(frozen.names, drawn.winners);
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -64,7 +74,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const siguiente = sig ? (sig.textContent ?? "").replace(/\s+/g, " ").trim() : "";
 
   const back = document.createElement("div");
-  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}${lista ? " lista" : ""}`;
+  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}${lista ? " lista" : ""}${turnos ? " turnos" : ""}`;
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
   back.setAttribute("aria-label", t("pantallaT"));
@@ -75,10 +85,17 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
     `<div class="pantalla-body">` +
     `<div class="pantalla-ganadores">` +
-    (varios && premio ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>` : "") +
+    (turnos
+      ? `<p class="pantalla-llevan" data-i="turnsResultTitle">${esc(t("turnsResultTitle"))}</p>`
+      : varios && premio
+        ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>`
+        : "") +
     (lista
-      ? `<ol class="pantalla-lista">${drawn.winners
-          .map((i, k) => `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">#${k + 1}</span><span class="pantalla-nombre">${esc(etiquetaDe(frozen.names[i] ?? ""))}</span></li>`)
+      ? `<ol class="pantalla-lista">${orden
+          .map((nombre, k) => {
+            const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
+            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(etiquetaDe(nombre))}</span></li>`;
+          })
           .join("")}</ol>`
       : drawn.winners
           .map((i, k) => {
@@ -94,7 +111,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `</div>` +
     `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
-    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
+    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
   document.body.appendChild(back);
 
   const ajustar = (): void => encajar(back, n);

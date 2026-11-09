@@ -3,6 +3,7 @@ import { enStand } from "./ensayo-modo";
 import { TEXTOS_CREADORES } from "./marca-creadores-textos";
 import { TEXTOS_EQUIPOS } from "./equipos/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
+import { esResultadoDeTurnos } from "./modos/turnos";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
 // las páginas de lectura y verificar lo usan con sus pocos textos.
@@ -14,12 +15,16 @@ export interface RulesPreParams {
   count: number;
   winners: number;
   verifyUrl: string;
+  /** Cuántas participaciones hay en la lista, cuando no son una por persona. */
+  entries?: number;
 }
 
 export interface RulesParams {
   prize: string;
   count: number;
   winners: number;
+  /** Cuántas participaciones hay en la lista, cuando no son una por persona. */
+  entries?: number;
   listHash: string;
   /** Fecha y hora del sello, ya formateadas en el idioma y con la zona. */
   sealedAt: string;
@@ -30,6 +35,25 @@ export interface RulesParams {
   network: string;
   verifyUrl: string;
 }
+
+/**
+ * El punto 2 de las bases de un orden de turnos, antes y después de sellar. Cada línea de la lista es un turno: con
+ * varias participaciones por persona hay más turnos que personas, y el orden va del 1 al último turno, no a la
+ * última persona. Con una por persona, el texto de siempre.
+ */
+const basesDeTurnosEs = (p: RulesPreParams): string => {
+  const turnos = p.entries ?? p.count;
+  return turnos !== p.count
+    ? `2. Participan las ${p.count} personas de la lista, con ${turnos} turnos. Salen todos, en orden: ese orden son los turnos, del 1 al ${turnos}. Quien tiene más de una participación recibe un turno por cada una.`
+    : `2. Participan las ${p.count} personas de la lista. Salen todas, en orden: ese orden son los turnos, del 1 al ${p.count}.`;
+};
+
+const basesDeTurnosEn = (p: RulesPreParams): string => {
+  const turnos = p.entries ?? p.count;
+  return turnos !== p.count
+    ? `2. The ${p.count} people on the list take part, with ${turnos} turns. They all come out, in order: that order is the turns, 1 to ${turnos}. Whoever has more than one entry gets one turn for each.`
+    : `2. The ${p.count} people on the list take part. Everyone comes out, in order: that order is the turns, 1 to ${p.count}.`;
+};
 
 /**
  * Diccionario de la interfaz.
@@ -50,7 +74,7 @@ export interface Dict {
    * "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca.
    * `sinSello`: se siguió sin sello. El mensaje lo dice y no promete nada que no se pueda comprobar ("Nadie eligió…", "verificarlo").
    */
-  summary: (w: string, n: number, premio: string, enlace: string, varios: boolean, sinSello?: boolean) => string;
+  summary: (w: string, n: number, premio: string, enlace: string, varios: boolean, sinSello?: boolean, personas?: number) => string;
   /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con quién ganó qué (un renglón por sorteo) y el enlace a evento.html. */
   summaryEvento: (fecha: string, n: number, enlace: string, lineas?: string[]) => string;
   drawIn: (mmss: string) => string;
@@ -63,7 +87,9 @@ export interface Dict {
   /** Arriba del cuadro, después de "sin los ganadores": quién salió y cuántos quedan. */
   againQuitados: (nombres: string[], n: number) => string;
   /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
-  ausenteNota: (nombre: string, n: number, otros: boolean) => string;
+  /** `premios`: cuántos premios se llevaba quien no está (con varias participaciones pudo salir más de una vez). */
+  ausenteNota: (nombre: string, n: number, otros: boolean, premios?: number) => string;
+  salioVarias: (nombre: string, veces: number, premios: readonly number[]) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -282,7 +308,7 @@ export interface Dict {
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. `sinSello`: no promete que se pueda comprobar. */
-  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean, sinSello?: boolean) => string;
+  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean, sinSello?: boolean, personas?: number) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -302,8 +328,28 @@ export interface Dict {
   cWheelWhere: string[];
   /** El aguayo: sale el tercero del nudo y queda el mano a mano. */
   cPasTwo: (n: string) => string;
-  /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). */
-  sellarResumen: (n: number, ganan: number, premio: string | null) => string;
+  /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. */
+  sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number) => string;
+  /** La cuenta de junto al cuadro cuando la lista tiene varias participaciones por persona. */
+  listaCuentaPart: (n: number, k: number) => string;
+  /** La cuenta de junto al cuadro en un orden de turnos repartido: personas y turnos. */
+  listaCuentaTurnos: (n: number, k: number) => string;
+  /** La cuenta en vivo del panel de participaciones: personas y participaciones. */
+  partCuenta: (n: number, k: number) => string;
+  /** La cuenta en vivo del panel cuando habla de turnos: personas y turnos. */
+  partCuentaTurnos: (n: number, k: number) => string;
+  /** La pregunta ante una lista pegada que ya trae un número al lado de los nombres. */
+  partPregunta: (n: number) => string;
+  /** La línea tranquila del panel cuando alguien pasó del máximo y quedó en el máximo. */
+  partTopeAviso: (quienes: string, varios: boolean) => string;
+  /** La etiqueta de la cuenta sellada cuando las participaciones no son una por persona. */
+  kEntriesDe: (n: number) => string;
+  /** El modo «Orden de turnos» (src/modos/): lo de antes de sellar y las bases, sin ganadores ni premio. */
+  turnsSellarResumen: (n: number, personas?: number) => string;
+  /** El resumen de antes de sellar cuando la lista no entra en lo que la red admite: sin la promesa del sello. */
+  turnsSellarTope: (n: number, personas?: number) => string;
+  turnsRules: (p: RulesParams) => string;
+  turnsRulesPre: (p: RulesPreParams) => string;
 }
 
 /**
@@ -342,6 +388,13 @@ export function nameList(ns: string[], more = 0): string {
 export function setPickSeed(rng: (() => number) | null): void {
   pickRng = rng;
 }
+
+/**
+ * El cartel final de los juegos (`cWin`, por donde pasan todos): con un orden de turnos dice que el
+ * orden quedó listo, no quién ganó. La marca la pone `draw.ts` al mostrar el resultado
+ * (`esResultadoDeTurnos` de `modos/turnos.ts`).
+ */
+const esDeTurnos = (): boolean => esResultadoDeTurnos();
 
 export const T: Record<Lang, Dict> = {
   es: {
@@ -870,6 +923,8 @@ export const T: Record<Lang, Dict> = {
     "rec.race.corto": "Con una sola persona no hay carrera.",
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `Con ${premios} premios no entra: la carrera tiene ${carriles} carriles.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `Con ${premios} premios no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
+    "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `Con ${turnos} turnos no entra: la carrera tiene ${carriles} carriles.`,
+    "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `Con ${turnos} turnos no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
     "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
     "rec.sapo.alto": "Más de 12 pasan por una clasificatoria, y los que salen miran.",
@@ -917,6 +972,8 @@ export const T: Record<Lang, Dict> = {
     prizeSugeridos: ["Polera", "Libro", "Entrada", "Stickers", "Termo", "Kit de bienvenida", "Tarjeta de regalo", "Licencia"],
     prizeRecent: "Lo usaste antes", prizeUsed: "ya salió",
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
+    // La etiqueta de la cuenta sellada cuando las participaciones no son una por persona (freeze.ts).
+    kEntriesDe: (n) => `participaciones de ${n === 1 ? "1 persona" : `${n} personas`}`,
     // Sin "ronda" ni "faro": eran las dudas de quien sorteaba por primera vez (diseño del onboarding, 22 de octubre de 2026).
     waitTitle: "El número que va a decidir",
     waitLine: "Nadie puede elegirlo, ni quien organiza.",
@@ -944,54 +1001,70 @@ export const T: Record<Lang, Dict> = {
     copySummary: "Copiar el mensaje", copied: "¡Copiado!",
     copyRules: "Copiar las bases",
     rulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.",
-    rules: (p) => [
-      `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
-      "",
-      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
-      `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
-      `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
-      `   ${p.listHash}`,
-      `4. ${p.winners === 1 ? "Quién gana sale" : "Quiénes ganan salen"} de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista. Cualquiera puede rehacer la cuenta y le da lo mismo.`,
-      p.raffleId
-        ? `5. El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
-        : "5. Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo.",
-      "6. El juego que se ve en pantalla es presentación: no decide nada.",
-      "7. Quien organiza responde por el premio. Tinkazo es la herramienta.",
-      "",
-      `Para comprobarlo: ${p.verifyUrl}`,
-    ].join("\n"),
-    rulesPre: (p) => [
-      `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
-      "",
-      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
-      `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
-      "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
-      "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
-      "5. El juego que se ve en pantalla es presentación: no decide nada.",
-      "6. Quien organiza responde por el premio. Tinkazo es la herramienta.",
-      "",
-      `Para comprobarlo: ${p.verifyUrl}`,
-    ].join("\n"),
+    rules: (p) => {
+      // Con varias participaciones por persona, las bases dicen las dos cuentas y que las participaciones no se venden.
+      const varias = typeof p.entries === "number" && p.entries !== p.count;
+      return [
+        `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
+        "",
+        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+        varias
+          ? `2. Participan las ${p.count} personas de la lista, con ${p.entries} participaciones: quien tiene varias puede salir más de una vez. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`
+          : `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
+        ...(varias ? ["3. Las participaciones no se venden: las define quien organiza y figuran en la lista sellada."] : []),
+        `${varias ? 4 : 3}. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
+        `   ${p.listHash}`,
+        `${varias ? 5 : 4}. ${p.winners === 1 ? "Quién gana sale" : "Quiénes ganan salen"} de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista. Cualquiera puede rehacer la cuenta y le da lo mismo.`,
+        `${varias ? 6 : 5}. ${p.raffleId
+          ? `El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
+          : "Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo."}`,
+        `${varias ? 7 : 6}. El juego que se ve en pantalla es presentación: no decide nada.`,
+        `${varias ? 8 : 7}. Quien organiza responde por el premio. Tinkazo es la herramienta.`,
+        "",
+        `Para comprobarlo: ${p.verifyUrl}`,
+      ].join("\n");
+    },
+    rulesPre: (p) => {
+      const varias = typeof p.entries === "number" && p.entries !== p.count;
+      return [
+        `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
+        "",
+        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+        varias
+          ? `2. Participan las ${p.count} personas de la lista, con ${p.entries} participaciones: quien tiene varias puede salir más de una vez. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`
+          : `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
+        ...(varias ? ["3. Las participaciones no se venden: las define quien organiza y figuran en la lista sellada."] : []),
+        `${varias ? 4 : 3}. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.`,
+        `${varias ? 5 : 4}. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.`,
+        `${varias ? 6 : 5}. El juego que se ve en pantalla es presentación: no decide nada.`,
+        `${varias ? 7 : 6}. Quien organiza responde por el premio. Tinkazo es la herramienta.`,
+        "",
+        `Para comprobarlo: ${p.verifyUrl}`,
+      ].join("\n");
+    },
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
-    tellBody: (w, prize, n, u, varios, sinSello) =>
+    tellBody: (w, prize, n, u, varios, sinSello, personas) => {
+      // Con varias participaciones por persona, se dicen las dos cuentas.
+      const entre = personas && personas !== n ? `entre ${n} participaciones de ${personas} personas` : `entre ${n} personas`;
       // Sin sello no se promete lo que no se puede comprobar: ni "nadie los eligió" ni "revisalo".
-      sinSello
+      return sinSello
         ? `${varios ? `¡Ganaron, ${w}! Se llevan` : `¡Ganaste, ${w}! Te llevás`}${prize ? " " + prize : " el sorteo"}.\n\n` +
-          `${varios ? "Salieron" : "Saliste"} entre ${n} personas.\n\n` +
+          `${varios ? "Salieron" : "Saliste"} ${entre}.\n\n` +
           `Sin sello: no se puede comprobar. Si ${varios ? "quieren" : "querés"} ver la lista y la cuenta: ${u}\n\n` +
           `Sorteado con Tinkazo: https://tinkazo.app`
         : varios
         ? `¡Ganaron, ${w}! Se llevan${prize ? " " + prize : " el sorteo"}.\n\n` +
-          `Salieron entre ${n} personas y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
+          `Salieron ${entre} y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
           `y ese número lo publica una red abierta de organizaciones independientes, que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revísenlo ustedes mismos, toma diez segundos: ${u}\n\n` +
           `Sorteado con Tinkazo: https://tinkazo.app`
         : `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
-          `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
+          `Saliste ${entre} y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
           `y ese número lo publica una red abierta de organizaciones independientes, que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
-          `Sorteado con Tinkazo: https://tinkazo.app`,
+          `Sorteado con Tinkazo: https://tinkazo.app`;
+    },
     qrCaption: "Escaneá para comprobar",
     qrCaptionSinSello: "Sin sello: escaneá para ver la lista y la cuenta",
     detalleT: "Para quien quiera el detalle",
@@ -1038,7 +1111,13 @@ export const T: Record<Lang, Dict> = {
     ausenteQ: "¿Sorteamos de nuevo su premio?",
     ausenteSi: "Sí, sortear de nuevo",
     ausenteNo: "Cancelar",
-    ausenteNota: (nombre, n, otros) => `${nombre} no está: su premio se sortea de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
+    ausenteNota: (nombre, n, otros, premios = 1) =>
+      `${nombre} no está: ${premios > 1 ? `sus ${premios} premios se sortean` : "su premio se sortea"} de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
+    salioVarias: (nombre, veces, premios) => {
+      const nums = premios.map((p) => `#${p + 1}`);
+      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} y ${nums[nums.length - 1]}`;
+      return `${nombre} salió ${veces} veces: ${lista}.`;
+    },
     imgKicker: "Resultado del sorteo",
     imgGano: "Ganó",
     imgGanaron: "Ganaron",
@@ -1061,8 +1140,19 @@ export const T: Record<Lang, Dict> = {
     // Sola, junto al cuadro: va con mayúscula. La de la barra (sigLista) va en medio de la línea.
     listaCuenta: "Lista de {n} personas",
     listaCuentaUna: "Lista de 1 persona",
+    // Con varias participaciones por persona, la cuenta de junto al cuadro dice las dos cosas.
+    listaCuentaPart: (n, k) => `Lista de ${n === 1 ? "1 persona" : `${n} personas`}, ${k} participaciones`,
+    // En un orden de turnos repartido, junto al cuadro se cuentan personas y turnos, no participaciones.
+    listaCuentaTurnos: (n, k) => `Lista de ${n === 1 ? "1 persona" : `${n} personas`}, ${k} turnos`,
     sigPegar: "Pegá la lista",
-    sellarResumen: (n, k, premio) => `${n} personas, ${k === 1 ? "1 ganador" : `${k} ganadores`}${premio === null ? "" : `, ${premio || "sin premio"}`}. Al sellar, la lista queda cerrada.`,
+    sellarResumen: (n, k, premio, participaciones) => {
+      const varias = typeof participaciones === "number" && participaciones !== n;
+      return (
+        `${varias ? `${n} personas, ${participaciones} participaciones` : `${n} personas`}, ` +
+        `${k === 1 ? "1 ganador" : `${k} ganadores`}${premio === null ? "" : `, ${premio || "sin premio"}`}. ` +
+        `${varias ? "Quien tiene varias participaciones puede salir más de una vez. " : ""}Al sellar, la lista queda cerrada.`
+      );
+    },
     loginCorreoO: "o con tu correo",
     loginGoogle: "Entrar con Google",
     loginMas: "Más formas de entrar",
@@ -1414,6 +1504,8 @@ export const T: Record<Lang, Dict> = {
     salaBtn: "Mostrar la lista a la pantalla",
     salaT: "La lista, antes de sellar",
     salaN: "{n} personas",
+    // La sala de la lista, cuando tiene varias participaciones por persona (lista.ts, sala.ts).
+    salaPart: "{n} personas, {k} participaciones",
     salaHuella: "Huella",
     salaQr: "Escaneá y buscate",
     salaCerrar: "Cerrar",
@@ -2065,6 +2157,7 @@ export const T: Record<Lang, Dict> = {
     trustBlocked: "El servicio no está disponible; no enviamos tu respuesta.",
     tmTrust: "El servicio opcional de respuestas de confianza está apagado. Cuando se active, después de comprobar un resultado vas a poder responder Sí, No o No sé. Se guardarán solo totales por día, con la respuesta y el sorteo al que se refiere (su número público, que ya está en Stellar), sin nombres, lista, cuenta, dirección de la página ni la hora en que respondiste. Cloudflare recibe el pedido, y la dirección IP se usa solo para limitar cuántos llegan por hora, sin guardarla. Si tu navegador pide que no te sigan, no se manda nada, y tampoco desde la demo ni desde un ensayo. Este navegador recuerda que ya respondiste ese sorteo, sin mandar esa marca a ningún lado. Se cuenta una respuesta, no una persona distinta. Si no llega la confirmación, la respuesta podría haberse guardado igual, y reintentar la contaría dos veces. Cuando se active, esta página lo dirá, con su fecha.",
     vQuieroComprobar: "Quiero comprobarlo", vChecks: "Lo que se comprobó", vResult: "Quién ganó", vList: "La lista sellada",
+    vCuentaPart: "{n} personas, {k} participaciones", vEntriesDe: "{k} participaciones",
     vHow: "Rehacelo con tus herramientas",
     vHowIntro: "No hace falta que confíes en esta página. Estos son los pasos exactos, con los valores de este sorteo:",
     vProtocol: "El protocolo completo ↗", vBack: "← Sortear con Tinkazo",
@@ -2082,7 +2175,7 @@ export const T: Record<Lang, Dict> = {
     vNoProof: "Este enlace no trae un sorteo",
     vNoProofDetail: "Pedile a quien organizó el sorteo el enlace completo, con todo lo que viene después del numeral.",
     vCheckList: "La lista y su huella", vCheckRound: "La firma de la ronda",
-    vCheckSeed: "La semilla sale de la firma", vCheckWinner: "El ganador recomputado",
+    vCheckSeed: "La semilla sale de la firma", vCheckWinner: "El ganador recomputado", vCheckOrden: "El orden recomputado",
     vCheckChain: "El registro en Stellar",
     vNotDrawnYet: "todavía no se sorteó en la cadena",
     vChainUnreachable: "no pude leer el contrato",
@@ -2198,8 +2291,8 @@ export const T: Record<Lang, Dict> = {
     evVacio: "Este evento no tiene sorteos con comprobante.",
     evUnSorteo: "1 sorteo", evNSorteos: "{n} sorteos",
     evSinPremio: "Sorteo sin premio", evGano: "Ganó", evGanaron: "Ganaron",
-    evPersonas: "{n} personas", evSellado: "Sellado el {f}",
-    evChkLista: "La lista del enlace", evChkFirma: "La prueba de la ronda", evChkGanador: "El ganador, rehecho",
+    evPersonas: "{n} personas", evPersonasPart: "{n} personas, {k} participaciones", evSellado: "Sellado el {f}",
+    evChkLista: "La lista del enlace", evChkFirma: "La prueba de la ronda", evChkGanador: "El ganador, rehecho", evChkOrden: "El orden, rehecho",
     evOk: "Cuadra", evMalo: "No cuadra", evSinRedCorto: "Sin conexión", evListaMal: "La lista llegó deformada",
     evAnclado: "Comparado con lo que quedó sellado en Stellar.",
     evSinAnclar: "Sin anclar: no hay testigo en la cadena para su lista.",
@@ -2284,9 +2377,9 @@ export const T: Record<Lang, Dict> = {
     cLast: ["¡ÚLTIMA RECTA!", "¡LOS ÚLTIMOS METROS!", "¡YA SE VE LA META!", "¡AHÍ ESTÁ LA META!"],
     cLead: (n) => pick([`¡${n} pasa adelante!`, `¡${n} se pone primero!`, `¡Adelante va ${n}!`, `¡${n} se escapa!`, `¡${n} los pasa a todos!`]),
     // En una ronda de stand nadie gana nada: «salió», nunca «ganó».
-    cWin: (n, many) => enStand() ? (many ? `¡SALIERON ${n}!` : `¡SALIÓ ${n}!`) : pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
-    summary: (w, n, premio, enlace, varios, sinSello) =>
-      `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\n` +
+    cWin: (n, many) => esDeTurnos() ? "¡El orden quedó listo!" : enStand() ? (many ? `¡SALIERON ${n}!` : `¡SALIÓ ${n}!`) : pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
+    summary: (w, n, premio, enlace, varios, sinSello, personas) =>
+      `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, ${personas && personas !== n ? `entre ${n} participaciones de ${personas} personas` : `entre ${n} personas`}.\n` +
       // Sin sello no se promete lo que no se puede comprobar: ni "nadie eligió" ni "verificarlo".
       (sinSello
         ? `Sin sello: no se puede comprobar.\nPara ver la lista y la cuenta, entrá acá: ${enlace}`
@@ -2303,6 +2396,10 @@ export const T: Record<Lang, Dict> = {
     cmpCabPremioUno: "Sorteo de {premio}: ganó {w}, entre {n} personas.",
     cmpCabPremioVarios: "Sorteo de {premio}: ganaron {w}, entre {n} personas.",
     cmpCabUno: "Ganó {w}, entre {n} personas.", cmpCabVarios: "Ganaron {w}, entre {n} personas.",
+    // Con varias participaciones por persona, la cabeza dice las dos cuentas ({n} participaciones, {k} personas).
+    cmpCabPremioUnoPart: "Sorteo de {premio}: ganó {w}, entre {n} participaciones de {k} personas.",
+    cmpCabPremioVariosPart: "Sorteo de {premio}: ganaron {w}, entre {n} participaciones de {k} personas.",
+    cmpCabUnoPart: "Ganó {w}, entre {n} participaciones de {k} personas.", cmpCabVariosPart: "Ganaron {w}, entre {n} participaciones de {k} personas.",
     cmpNadieUno: "Nadie eligió este nombre.", cmpNadieVarios: "Nadie eligió estos nombres.",
     cmpVerificarUno: "Si querés verificarlo, entrá acá: {enlace}",
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
@@ -2315,9 +2412,10 @@ export const T: Record<Lang, Dict> = {
     cmpVerEvUnoSin: "Para ver el sorteo, entrá acá:\n{enlace}", cmpVerEvSin: "Para ver cada sorteo, entrá acá:\n{enlace}",
     // --- La página del enlace corto, c.html (21 de octubre de 2026).
     cTitulo: "Comprobante de un sorteo en Tinkazo",
-    cDesc: "Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular.",
+    // Neutro para cualquier resultado: un orden de turnos no dice quién ganó.
+    cDesc: "Abrilo para ver el resultado y comprobarlo vos mismo, desde tu celular.",
     cKicker: "Comprobante de un sorteo",
-    cAbriendo: "Abriendo el comprobante…", cAbriendoB: "En un momento ves quién ganó y lo comprobás vos.",
+    cAbriendo: "Abriendo el comprobante…", cAbriendoB: "En un momento ves el resultado y lo comprobás vos.",
     cRedT: "No pudimos abrir el comprobante", cRedB: "Revisá tu conexión y probá de nuevo.",
     cNoExisteT: "Este enlace ya no existe", cNoExisteB: "Se borró a pedido de alguien, o se copió mal. Pedile a quien te lo mandó que lo comparta de nuevo.",
     cRotoT: "Este enlace no se puede abrir", cRotoB: "Puede que se haya copiado mal o le falte un pedazo. Pedile a quien te lo mandó que lo comparta de nuevo.",
@@ -2330,7 +2428,7 @@ export const T: Record<Lang, Dict> = {
     cmpAdjuntaLaFoto: "La foto se descargó: adjuntala en el chat de WhatsApp.",
     cmpAdjuntaLasFotos: "Las fotos se descargaron: adjuntalas en el chat de WhatsApp.",
     cmpNoAparece: "¿No estaba WhatsApp? Descargá la foto y copiá el mensaje para pegarlos en el chat.",
-    cmpFotoAlt: "La foto con quién ganó y el QR para comprobarlo",
+    cmpFotoAlt: "La foto con el resultado y el QR para comprobarlo",
     cmpSinFoto: "No se pudo armar la foto: el mensaje trae el enlace igual.",
     cmpPrivLista: "Quien tenga la foto o el enlace puede ver la lista entera.",
     cmpPrivCorto: "El enlace corto guarda una copia que solo se abre con el enlace, para que el sorteo se pueda volver a comprobar. Tinkazo no la puede leer.",
@@ -2341,7 +2439,10 @@ export const T: Record<Lang, Dict> = {
     fotoEscanearSinSello: "Escaneá para ver la lista y la cuenta",
     fotoSinQrSinSello: "Para ver la lista y la cuenta, abrí el enlace que va con esta foto.",
     fotoNumero: "Sorteo #{n}", fotoPrueba: "modo prueba", fotoEvento: "Evento",
-    fotoEntreUno: "Salió entre {n} personas", fotoEntreVarios: "Salieron entre {n} personas", fotoMas: "y {n} más", fotoMasNombres: "{n} más",
+    fotoEntreUno: "Salió entre {n} personas", fotoEntreVarios: "Salieron entre {n} personas",
+    // Las dos cuentas ({n} participaciones, {k} personas) cuando no es una por persona.
+    fotoEntreUnoPart: "Salió entre {n} participaciones de {k} personas", fotoEntreVariosPart: "Salieron entre {n} participaciones de {k} personas",
+    fotoMas: "y {n} más", fotoMasNombres: "{n} más",
     evnT: "Mis eventos",
     evnLead: "Un evento junta sorteos bajo un nombre, para mandarlos juntos. Sumale sorteos desde cada uno de tus sorteos.",
     evnNombre: "Nombre del evento", evnCrear: "Crear evento", evnGuardar: "Guardar el nombre",
@@ -2500,6 +2601,10 @@ export const T: Record<Lang, Dict> = {
     sigPaso: "Paso {n} de 4",
     // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
     sigLista: "lista de {n} personas",
+    // En un orden de turnos repartido, la barra cuenta personas y turnos, como el resto de la pantalla.
+    sigListaTurnos: "lista de {p} personas, {n} turnos",
+    // Con varias participaciones, la barra cuenta personas y participaciones, como el resto de la pantalla.
+    sigListaPart: "lista de {p} personas, {n} participaciones",
     sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
     sigEspera: "Esperando el número",
@@ -2507,6 +2612,7 @@ export const T: Record<Lang, Dict> = {
     sigSorteando: "Sorteando",
     sigGano: "Ya salió el ganador",
     sigGanaron: "Ya salieron los ganadores",
+    sigTurnos: "Ya salió el orden de los turnos",
     sigAvisoRonda: "El número ya salió. Podés lanzar el sorteo.",
     juegoElegido: "Juego elegido",
     cambiarJuego: "Cambiar de juego",
@@ -2675,6 +2781,96 @@ export const T: Record<Lang, Dict> = {
     lumaNota: "El archivo se lee en tu navegador y no se sube a ningún lado.",
     againSigue: "Para la sala: «Mostrar en grande». Para quien no estuvo: «Avisarle por WhatsApp».",
     againSigueLuma: "Para la sala: «Mostrar en grande». Para tus invitados: copiá el mensaje, acá abajo, y pegalo en Luma.",
+    // --- El modo «Orden de turnos» (src/ui/turnos.ts, src/modos/): sortea a todas las personas de la lista, en orden.
+    //     Ahí no se habla de ganadores: la palabra es «turno». «Pasanaku» solo está en la línea de ejemplo de la ayuda.
+    turnsOption: "Orden de turnos",
+    turnsHelp: "Salen todos, en orden. Ese orden son los turnos.",
+    turnsExample: "Sirve para un pasanaku, para turnos de exposición o para repartir turnos de lo que sea. Tinkazo solo da el orden.",
+    turnsCount: "Cuántos turnos",
+    turnsPrizeLabel: "Nombre de los turnos (opcional)",
+    turnsPrize: "Turnos",
+    turnsMas: "Orden de turnos, nombre y subir CSV",
+    turnsLimit: "En esta red el orden llega hasta {n} turnos: con más, no se puede sellar.",
+    turnsWord: "Turno",
+    turnsResultTitle: "El orden de los turnos",
+    turnsCopy: "Copiar el orden",
+    turnsPie: "Nadie eligió este orden: la lista se cerró antes de que existiera el número que lo decidió.",
+    turnsAgainFew: "Ya están todos en el orden. Para otro orden, usá otra lista.",
+    turnsHist: "Turnos: {n} personas",
+    turnsHistPart: "Turnos: {n} personas, {k} turnos",
+    // Lo de antes de sellar y las bases de un orden de turnos: nada de ganar ni de premio.
+    turnsSellarResumen: (n, personas = n) =>
+      personas === n
+        ? `${n} personas, turnos del 1 al ${n}. Al sellar, la lista queda cerrada.`
+        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una. Al sellar, la lista queda cerrada.`,
+    // Sin la promesa del sello: esta lista no entra en lo que la red admite y no se puede sellar.
+    turnsSellarTope: (n, personas = n) =>
+      personas === n
+        ? `${n} personas, turnos del 1 al ${n}.`
+        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una.`,
+    turnsRules: (p) => [
+      `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeTurnosEs(p),
+      `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
+      `   ${p.listHash}`,
+      `4. El orden sale de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista. Cualquiera puede rehacer la cuenta y le da lo mismo.`,
+      p.raffleId
+        ? `5. El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
+        : "5. Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo.",
+      "6. El juego que se ve en pantalla es presentación: no decide nada.",
+      "7. Tinkazo solo da el orden. Quien organiza responde por lo que se haga con los turnos.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    turnsRulesPre: (p) => [
+      `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeTurnosEs(p),
+      "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
+      "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
+      "5. El juego que se ve en pantalla es presentación: no decide nada.",
+      "6. Tinkazo solo da el orden. Quien organiza responde por lo que se haga con los turnos.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    // El mensaje para el grupo y el aviso a cada persona (src/modos/mensajes.ts).
+    turnsMsgCab: "Orden de los turnos: {orden}",
+    turnsTell: "Te tocó el turno {k} de {n}. Revisalo vos: {enlace}",
+    turnsTellSin: "Te tocó el turno {k} de {n}. Sin sello: no se puede comprobar. Para ver la lista y la cuenta: {enlace}",
+    turnsTellSubject: "Tu turno 🦙",
+    turnsNotify: "Avisarle",
+    turnsRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige el orden antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
+    turnsFotoLinea: "{n} personas, turnos del 1 al {n}",
+    turnsFotoLineaPart: "{k} personas, {n} turnos, turnos del 1 al {n}",
+    // --- Varias participaciones por persona: se eligen tocando, en el panel de la lista. Solo se ve con la
+    //     bandera de los modos o con ?modo= en la dirección (src/modos/bandera.ts).
+    partAbrir: "Alguien participa más de una vez",
+    partAbrirTurnos: "Alguien tiene más de un turno",
+    partTitulo: "Cuántas veces participa cada persona",
+    partTituloTurnos: "Cuántos turnos tiene cada persona",
+    partListo: "Listo",
+    partBuscar: "Buscar un nombre",
+    partMax: "máximo",
+    partSinResultados: "No hay nadie con ese nombre.",
+    partSumar: "Sumar una participación a {nombre}",
+    partQuitar: "Quitar una participación a {nombre}",
+    partSumarTurno: "Sumar un turno a {nombre}",
+    partQuitarTurno: "Quitar un turno a {nombre}",
+    partCuenta: (n: number, k: number) =>
+      `${n === 1 ? "1 persona" : `${n} personas`}, ${k === 1 ? "1 participación" : `${k} participaciones`}`,
+    partCuentaTurnos: (n: number, k: number) =>
+      `${n === 1 ? "1 persona" : `${n} personas`}, ${k === 1 ? "1 turno" : `${k} turnos`}`,
+    partPregunta: (n: number) =>
+      n === 1
+        ? "Tu lista trae un número al lado de 1 nombre. ¿Son las veces que participa?"
+        : `Tu lista trae un número al lado de ${n} nombres. ¿Son las veces que participa cada uno?`,
+    partSi: "Sí, usarlos",
+    partNo: "No",
+    partTopeAviso: (quienes: string, varios: boolean) =>
+      varios ? `El máximo es 10 por persona: ${quienes} quedaron en 10.` : `El máximo es 10 por persona: ${quienes} quedó en 10.`,
     // --- patrocinio
     "errAnchor.porteroCupoSellos": "Ya usaste los sorteos gratis de este mes. Podés sortear de nuevo el {fecha}.",
     "errAnchor.porteroCupoSorteos": "Tu lista sigue sellada y nadie la puede cambiar. Ya usaste los sorteos gratis de este mes: podés sortearla de nuevo el {fecha}.",
@@ -3197,6 +3393,8 @@ export const T: Record<Lang, Dict> = {
     "rec.race.corto": "With just one person, there's no race.",
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `With ${premios} prizes it doesn't fit: the race has ${carriles} lanes.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `With ${premios} prizes it doesn't fit: the frog's table has ${agujeros} holes.`,
+    "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `With ${turnos} turns it doesn't fit: the race has ${carriles} lanes.`,
+    "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `With ${turnos} turns it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
     "rec.sapo.bajo": "With few people, the table has few holes and few throws.",
     "rec.sapo.alto": "Over 12 go through a qualifier, and those who drop out watch.",
@@ -3243,6 +3441,8 @@ export const T: Record<Lang, Dict> = {
     prizeSugeridos: ["T-shirt", "Book", "Ticket", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
     prizeRecent: "You used it before", prizeUsed: "already drawn",
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
+    // The sealed-count label when entries are not one per person (freeze.ts).
+    kEntriesDe: (n) => `entries from ${n === 1 ? "1 person" : `${n} people`}`,
     waitTitle: "The number that will decide",
     waitLine: "Nobody can pick it, not even the organizer.",
     waitLineSinSello: "An independent network publishes it in a few seconds. No seal: this draw can't be checked.",
@@ -3269,48 +3469,64 @@ export const T: Record<Lang, Dict> = {
     copySummary: "Copy the message", copied: "Copied!",
     copyRules: "Copy the rules",
     rulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the winner is chosen before anyone knows, and put on record which draw counts.",
-    rules: (p) => [
-      `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
-      "",
-      "1. Entry is free. Nothing to buy and no account needed.",
-      `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
-      `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
-      `   ${p.listHash}`,
-      `4. ${p.winners === 1 ? "The winner comes" : "The winners come"} from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
-      p.raffleId
-        ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
-        : "5. This list was closed in the organizer's browser: nobody else can vouch for when.",
-      "6. The game on screen is presentation: it decides nothing.",
-      "7. The organizer is responsible for the prize. Tinkazo is the tool.",
-      "",
-      `To check it: ${p.verifyUrl}`,
-    ].join("\n"),
-    rulesPre: (p) => [
-      `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
-      "",
-      "1. Entry is free. Nothing to buy and no account needed.",
-      `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
-      "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
-      "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",
-      "5. The game on screen is presentation: it decides nothing.",
-      "6. The organizer is responsible for the prize. Tinkazo is the tool.",
-      "",
-      `To check it: ${p.verifyUrl}`,
-    ].join("\n"),
+    rules: (p) => {
+      // With several entries per person, the rules give both counts and say that entries are not sold.
+      const varias = typeof p.entries === "number" && p.entries !== p.count;
+      return [
+        `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
+        "",
+        "1. Entry is free. Nothing to buy and no account needed.",
+        varias
+          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several can come out more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
+          : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
+        ...(varias ? ["3. Entries are not sold: the organizer sets them and they are written in the sealed list."] : []),
+        `${varias ? 4 : 3}. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
+        `   ${p.listHash}`,
+        `${varias ? 5 : 4}. ${p.winners === 1 ? "The winner comes" : "The winners come"} from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
+        `${varias ? 6 : 5}. ${p.raffleId
+          ? `This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
+          : "This list was closed in the organizer's browser: nobody else can vouch for when."}`,
+        `${varias ? 7 : 6}. The game on screen is presentation: it decides nothing.`,
+        `${varias ? 8 : 7}. The organizer is responsible for the prize. Tinkazo is the tool.`,
+        "",
+        `To check it: ${p.verifyUrl}`,
+      ].join("\n");
+    },
+    rulesPre: (p) => {
+      const varias = typeof p.entries === "number" && p.entries !== p.count;
+      return [
+        `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
+        "",
+        "1. Entry is free. Nothing to buy and no account needed.",
+        varias
+          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several can come out more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
+          : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
+        ...(varias ? ["3. Entries are not sold: the organizer sets them and they are written in the sealed list."] : []),
+        `${varias ? 4 : 3}. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.`,
+        `${varias ? 5 : 4}. When the list is closed, this draw's number is published. Everything is checked with it at the link below.`,
+        `${varias ? 6 : 5}. The game on screen is presentation: it decides nothing.`,
+        `${varias ? 7 : 6}. The organizer is responsible for the prize. Tinkazo is the tool.`,
+        "",
+        `To check it: ${p.verifyUrl}`,
+      ].join("\n");
+    },
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the draw 🦙",
-    tellBody: (w, prize, n, u, varios, sinSello) =>
-      sinSello
+    tellBody: (w, prize, n, u, varios, sinSello, personas) => {
+      // With several entries per person, both counts are given.
+      const of = personas && personas !== n ? `${n} entries from ${personas} people` : `${n} people`;
+      return sinSello
         ? // Without a seal it promises nothing that can't be checked: neither "nobody hand-picked you" nor "check it".
           `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
-          `You came out of ${n} people.\n\n` +
+          `You came out of ${of}.\n\n` +
           `No seal: it can't be checked. To see the list and the math: ${u}\n\n` +
           `Drawn with Tinkazo: https://tinkazo.app`
         : `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
-          `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
+          `You came out of ${of} and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
           `and that number is published by an open network of independent organizations that neither the organizer nor Tinkazo controls.\n\n` +
           `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
-          `Drawn with Tinkazo: https://tinkazo.app`,
+          `Drawn with Tinkazo: https://tinkazo.app`;
+    },
     qrCaption: "Scan to check",
     qrCaptionSinSello: "No seal: scan to see the list and the math",
     detalleT: "For those who want the detail",
@@ -3350,7 +3566,13 @@ export const T: Record<Lang, Dict> = {
     ausenteQ: "Draw this prize again?",
     ausenteSi: "Yes, draw again",
     ausenteNo: "Cancel",
-    ausenteNota: (nombre, n, otros) => `${nombre} is not here: their prize is drawn again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
+    ausenteNota: (nombre, n, otros, premios = 1) =>
+      `${nombre} is not here: ${premios > 1 ? `their ${premios} prizes are drawn` : "their prize is drawn"} again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
+    salioVarias: (nombre, veces, premios) => {
+      const nums = premios.map((p) => `#${p + 1}`);
+      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} and ${nums[nums.length - 1]}`;
+      return `${nombre} came out ${veces} times: ${lista}.`;
+    },
     imgKicker: "Draw result",
     imgGano: "Winner",
     imgGanaron: "Winners",
@@ -3371,8 +3593,19 @@ export const T: Record<Lang, Dict> = {
     // On its own, next to the box: capitalized. The bar's one (sigLista) sits mid-line.
     listaCuenta: "List of {n} people",
     listaCuentaUna: "List of 1 person",
+    // With several entries per person, the count next to the box gives both.
+    listaCuentaPart: (n, k) => `List of ${n === 1 ? "1 person" : `${n} people`}, ${k} entries`,
+    // In a split turn order, the count next to the box gives people and turns, not entries.
+    listaCuentaTurnos: (n, k) => `List of ${n === 1 ? "1 person" : `${n} people`}, ${k} turns`,
     sigPegar: "Paste the list",
-    sellarResumen: (n, k, premio) => `${n} people, ${k === 1 ? "1 winner" : `${k} winners`}${premio === null ? "" : `, ${premio || "no prize"}`}. Sealing locks the list.`,
+    sellarResumen: (n, k, premio, participaciones) => {
+      const varias = typeof participaciones === "number" && participaciones !== n;
+      return (
+        `${varias ? `${n} people, ${participaciones} entries` : `${n} people`}, ` +
+        `${k === 1 ? "1 winner" : `${k} winners`}${premio === null ? "" : `, ${premio || "no prize"}`}. ` +
+        `${varias ? "Anyone with several entries can come out more than once. " : ""}Sealing locks the list.`
+      );
+    },
     loginCorreoO: "or with your email",
     loginGoogle: "Sign in with Google",
     loginMas: "More ways to sign in",
@@ -3722,6 +3955,8 @@ export const T: Record<Lang, Dict> = {
     salaBtn: "Show the list on the screen",
     salaT: "The list, before sealing",
     salaN: "{n} people",
+    // The list room, when it has several entries per person (lista.ts, sala.ts).
+    salaPart: "{n} people, {k} entries",
     salaHuella: "Fingerprint",
     salaQr: "Scan and find yourself",
     salaCerrar: "Close",
@@ -4371,6 +4606,7 @@ export const T: Record<Lang, Dict> = {
     trustBlocked: "The service is unavailable; we did not send your response.",
     tmTrust: "The optional trust-response service is off. When it is turned on, after checking a result you will be able to answer Yes, No or Not sure. Only totals per day will be stored, with the answer and the draw it refers to (its public number, which is already on Stellar), with no names, list, account, page address or the time you answered. Cloudflare receives the request, and the IP address is only used to limit how many arrive per hour, without storing it. If your browser asks not to be tracked, nothing is sent, and nothing is sent from the demo or a rehearsal either. This browser remembers that you already answered that draw, without sending that mark anywhere. One answer is counted, not one distinct person. If the confirmation does not arrive, the answer may have been saved anyway, and retrying would count it twice. When it is turned on, this page will say so, with its date.",
     vQuieroComprobar: "I want to check it", vChecks: "What was checked", vResult: "Who won", vList: "The sealed list",
+    vCuentaPart: "{n} people, {k} entries", vEntriesDe: "{k} entries",
     vHow: "Run it again with your own tools",
     vHowIntro: "You don't have to trust this page. These are the exact steps, with this draw's values:",
     vProtocol: "The whole protocol ↗", vBack: "← Run a draw with Tinkazo",
@@ -4388,7 +4624,7 @@ export const T: Record<Lang, Dict> = {
     vNoProof: "This link carries no draw",
     vNoProofDetail: "Ask whoever ran the draw for the full link, including everything after the hash sign.",
     vCheckList: "The list and its fingerprint", vCheckRound: "The round signature",
-    vCheckSeed: "The seed comes from the signature", vCheckWinner: "The recomputed winner",
+    vCheckSeed: "The seed comes from the signature", vCheckWinner: "The recomputed winner", vCheckOrden: "The recomputed order",
     vCheckChain: "The record on Stellar",
     vNotDrawnYet: "not drawn on chain yet",
     vChainUnreachable: "couldn't read the contract",
@@ -4504,8 +4740,8 @@ export const T: Record<Lang, Dict> = {
     evVacio: "This event has no draws with a receipt.",
     evUnSorteo: "1 draw", evNSorteos: "{n} draws",
     evSinPremio: "Draw without a prize", evGano: "Won by", evGanaron: "Won by",
-    evPersonas: "{n} people", evSellado: "Sealed on {f}",
-    evChkLista: "The list in the link", evChkFirma: "The round's proof", evChkGanador: "The winner, redone",
+    evPersonas: "{n} people", evPersonasPart: "{n} people, {k} entries", evSellado: "Sealed on {f}",
+    evChkLista: "The list in the link", evChkFirma: "The round's proof", evChkGanador: "The winner, redone", evChkOrden: "The order, redone",
     evOk: "Adds up", evMalo: "Doesn't add up", evSinRedCorto: "No connection", evListaMal: "The list arrived damaged",
     evAnclado: "Checked against what was sealed on Stellar.",
     evSinAnclar: "Not anchored: there's no witness on the chain for its list.",
@@ -4588,9 +4824,9 @@ export const T: Record<Lang, Dict> = {
     cStart: ["AND THEY'RE OFF!", "HERE WE GO!", "THERE THEY GO!", "GO GO GO!"],
     cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "THE FINISH IS IN SIGHT!", "THERE'S THE FINISH!"],
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
-    cWin: (n, many) => enStand() ? `${n} PICKED!` : pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
-    summary: (w, n, premio, enlace, varios, sinSello) =>
-      `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\n` +
+    cWin: (n, many) => esDeTurnos() ? "The order is set!" : enStand() ? `${n} PICKED!` : pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
+    summary: (w, n, premio, enlace, varios, sinSello, personas) =>
+      `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, ${personas && personas !== n ? `out of ${n} entries from ${personas} people` : `out of ${n} people`}.\n` +
       // Without a seal it promises nothing that can't be checked: neither "nobody picked" nor "verify it".
       (sinSello
         ? `No seal: it can't be checked.\nTo see the list and the math, open this link: ${enlace}`
@@ -4607,6 +4843,10 @@ export const T: Record<Lang, Dict> = {
     cmpCabPremioUno: "{premio} draw: the winner is {w}, out of {n} people.",
     cmpCabPremioVarios: "{premio} draw: the winners are {w}, out of {n} people.",
     cmpCabUno: "The winner is {w}, out of {n} people.", cmpCabVarios: "The winners are {w}, out of {n} people.",
+    // With several entries per person, the heading gives both counts ({n} entries, {k} people).
+    cmpCabPremioUnoPart: "{premio} draw: the winner is {w}, out of {n} entries from {k} people.",
+    cmpCabPremioVariosPart: "{premio} draw: the winners are {w}, out of {n} entries from {k} people.",
+    cmpCabUnoPart: "The winner is {w}, out of {n} entries from {k} people.", cmpCabVariosPart: "The winners are {w}, out of {n} entries from {k} people.",
     cmpNadieUno: "Nobody picked this name.", cmpNadieVarios: "Nobody picked these names.",
     cmpVerificarUno: "If you want to verify it, open this link: {enlace}",
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
@@ -4619,9 +4859,10 @@ export const T: Record<Lang, Dict> = {
     cmpVerEvUnoSin: "To see the draw, open this link:\n{enlace}", cmpVerEvSin: "To see each draw, open this link:\n{enlace}",
     // --- The short link page, c.html (21 October 2026).
     cTitulo: "A draw's receipt on Tinkazo",
-    cDesc: "Open it to see who won and check it yourself, from your phone.",
+    // Neutral for any result: a turn order does not say who won.
+    cDesc: "Open it to see the result and check it yourself, from your phone.",
     cKicker: "A draw's receipt",
-    cAbriendo: "Opening the receipt…", cAbriendoB: "In a moment you'll see who won and check it yourself.",
+    cAbriendo: "Opening the receipt…", cAbriendoB: "In a moment you'll see the result and check it yourself.",
     cRedT: "We couldn't open the receipt", cRedB: "Check your connection and try again.",
     cNoExisteT: "This link no longer exists", cNoExisteB: "It was deleted at someone's request, or it was copied wrong. Ask whoever sent it to share it again.",
     cRotoT: "This link can't be opened", cRotoB: "It may have been copied wrong or be missing a piece. Ask whoever sent it to share it again.",
@@ -4634,7 +4875,7 @@ export const T: Record<Lang, Dict> = {
     cmpAdjuntaLaFoto: "The photo was downloaded: attach it in the WhatsApp chat.",
     cmpAdjuntaLasFotos: "The photos were downloaded: attach them in the WhatsApp chat.",
     cmpNoAparece: "WhatsApp wasn't there? Download the photo and copy the message to paste them in the chat.",
-    cmpFotoAlt: "The photo with who won and the QR code to check it",
+    cmpFotoAlt: "The photo with the result and the QR code to check it",
     cmpSinFoto: "The photo couldn't be made: the message still has the link.",
     cmpPrivLista: "Anyone with the photo or the link can see the whole list.",
     cmpPrivCorto: "The short link keeps a copy that only opens with the link, so the draw can be checked again. Tinkazo can't read it.",
@@ -4645,7 +4886,10 @@ export const T: Record<Lang, Dict> = {
     fotoEscanearSinSello: "Scan to see the list and the math",
     fotoSinQrSinSello: "To see the list and the math, open the link that comes with this photo.",
     fotoNumero: "Draw #{n}", fotoPrueba: "test mode", fotoEvento: "Event",
-    fotoEntreUno: "Drawn from {n} people", fotoEntreVarios: "Drawn from {n} people", fotoMas: "and {n} more", fotoMasNombres: "{n} more",
+    fotoEntreUno: "Drawn from {n} people", fotoEntreVarios: "Drawn from {n} people",
+    // Both counts ({n} entries, {k} people) when it is not one per person.
+    fotoEntreUnoPart: "Drawn from {n} entries from {k} people", fotoEntreVariosPart: "Drawn from {n} entries from {k} people",
+    fotoMas: "and {n} more", fotoMasNombres: "{n} more",
     evnT: "My events",
     evnLead: "An event groups draws under one name, to send them together. Add draws to it from each of your draws.",
     evnNombre: "Event name", evnCrear: "Create event", evnGuardar: "Save the name",
@@ -4803,6 +5047,10 @@ export const T: Record<Lang, Dict> = {
     sigPaso: "Step {n} of 4",
     // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
     sigLista: "list of {n} people",
+    // In a split turn order, the bar counts people and turns, like the rest of the screen.
+    sigListaTurnos: "list of {p} people, {n} turns",
+    // With several entries per person, the bar counts people and entries, like the rest of the screen.
+    sigListaPart: "list of {p} people, {n} entries",
     sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
     sigEspera: "Waiting for the number",
@@ -4810,6 +5058,7 @@ export const T: Record<Lang, Dict> = {
     sigSorteando: "Drawing",
     sigGano: "The winner is out",
     sigGanaron: "The winners are out",
+    sigTurnos: "The turn order is out",
     sigAvisoRonda: "The number is out. You can run the draw.",
     juegoElegido: "Chosen game",
     cambiarJuego: "Change game",
@@ -4978,6 +5227,96 @@ export const T: Record<Lang, Dict> = {
     lumaNota: "The file is read in your browser and isn't uploaded anywhere.",
     againSigue: "For the room: “Show it big”. For whoever wasn't there: “Tell them on WhatsApp”.",
     againSigueLuma: "For the room: “Show it big”. For your guests: copy the message, right below, and paste it in Luma.",
+    // --- The “Turn order” mode (src/ui/turnos.ts, src/modos/): draws everyone on the list, in order.
+    //     It never talks about winners: the word is “turn”. “Pasanaku” only shows in the help's example line.
+    turnsOption: "Turn order",
+    turnsHelp: "Everyone comes out, in order. That order is the turns.",
+    turnsExample: "Useful for a pasanaku, for presentation turns or to hand out turns for anything. Tinkazo only gives the order.",
+    turnsCount: "How many turns",
+    turnsPrizeLabel: "Name of the turns (optional)",
+    turnsPrize: "Turns",
+    turnsMas: "Turn order, name and upload CSV",
+    turnsLimit: "On this network the order goes up to {n} turns: with more, it can't be sealed.",
+    turnsWord: "Turn",
+    turnsResultTitle: "The turn order",
+    turnsCopy: "Copy the order",
+    turnsPie: "Nobody chose this order: the list was closed before the number that decided it existed.",
+    turnsAgainFew: "Everyone is in the order. For another order, use another list.",
+    turnsHist: "Turns: {n} people",
+    turnsHistPart: "Turns: {n} people, {k} turns",
+    // What shows before sealing and the rules of a turn order: nothing about winning or prizes.
+    turnsSellarResumen: (n, personas = n) =>
+      personas === n
+        ? `${n} people, turns 1 to ${n}. Sealing locks the list.`
+        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each. Sealing locks the list.`,
+    // Without the promise of sealing: this list is past what the network allows and cannot be sealed.
+    turnsSellarTope: (n, personas = n) =>
+      personas === n
+        ? `${n} people, turns 1 to ${n}.`
+        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each.`,
+    turnsRules: (p) => [
+      `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeTurnosEn(p),
+      `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
+      `   ${p.listHash}`,
+      `4. The order comes from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
+      p.raffleId
+        ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
+        : "5. This list was closed in the organizer's browser: nobody else can vouch for when.",
+      "6. The game on screen is presentation: it decides nothing.",
+      "7. Tinkazo only gives the order. The organizer is responsible for what is done with the turns.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    turnsRulesPre: (p) => [
+      `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeTurnosEn(p),
+      "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
+      "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",
+      "5. The game on screen is presentation: it decides nothing.",
+      "6. Tinkazo only gives the order. The organizer is responsible for what is done with the turns.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    // The message for the group and the notice to each person (src/modos/mensajes.ts).
+    turnsMsgCab: "Turn order: {orden}",
+    turnsTell: "You got turn {k} of {n}. Check it yourself: {enlace}",
+    turnsTellSin: "You got turn {k} of {n}. No seal: it can't be checked. To see the list and the math: {enlace}",
+    turnsTellSubject: "Your turn 🦙",
+    turnsNotify: "Tell them",
+    turnsRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the order is chosen before anyone knows it, and put on record which draw counts.",
+    turnsFotoLinea: "{n} people, turns 1 to {n}",
+    turnsFotoLineaPart: "{k} people, {n} turns, turns 1 to {n}",
+    // --- Several entries per person: chosen by tapping, in the list panel. Only shown with the modes flag
+    //     or with ?modo= in the address (src/modos/bandera.ts).
+    partAbrir: "Someone takes part more than once",
+    partAbrirTurnos: "Someone has more than one turn",
+    partTitulo: "How many times each person takes part",
+    partTituloTurnos: "How many turns each person has",
+    partListo: "Done",
+    partBuscar: "Search for a name",
+    partMax: "max",
+    partSinResultados: "No one has that name.",
+    partSumar: "Add one entry for {nombre}",
+    partQuitar: "Remove one entry from {nombre}",
+    partSumarTurno: "Add one turn for {nombre}",
+    partQuitarTurno: "Remove one turn from {nombre}",
+    partCuenta: (n: number, k: number) =>
+      `${n === 1 ? "1 person" : `${n} people`}, ${k === 1 ? "1 entry" : `${k} entries`}`,
+    partCuentaTurnos: (n: number, k: number) =>
+      `${n === 1 ? "1 person" : `${n} people`}, ${k === 1 ? "1 turn" : `${k} turns`}`,
+    partPregunta: (n: number) =>
+      n === 1
+        ? "Your list has a number next to 1 name. Is it how many times that person takes part?"
+        : `Your list has a number next to ${n} names. Are they how many times each person takes part?`,
+    partSi: "Yes, use them",
+    partNo: "No",
+    partTopeAviso: (quienes: string, varios: boolean) =>
+      varios ? `The most is 10 per person: ${quienes} stayed at 10.` : `The most is 10 per person: ${quienes} stayed at 10.`,
     // --- patrocinio
     "errAnchor.porteroCupoSellos": "You've used this month's free draws. You can draw again on {fecha}.",
     "errAnchor.porteroCupoSorteos": "Your list stays sealed and nobody can change it. You've used this month's free draws: you can run it again on {fecha}.",

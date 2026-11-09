@@ -156,13 +156,14 @@ export interface Recomendaciones {
   duracionNormal: { desde: number; hasta: number } | null;
 }
 
-function evaluar(game: Game, n: number, premios = 1): Recomendacion {
+function evaluar(game: Game, n: number, premios = 1, turnos = false): Recomendacion {
   const r = RANGOS[game];
   const args = [n, r?.minimo ?? 0, r?.maximo ?? 0];
   if (!r) return { game, fits: null, ideal: false, note: null, args };
   // Cada premio es un carril de la recta (la carrera) o un agujero de la final (el sapo): con más, el juego echaría o dejaría
-  // afuera a quien después anuncia como ganador.
-  if (r.premios !== undefined && premios > r.premios) return { game, fits: false, ideal: false, note: `rec.${game}.premios`, args: [n, premios, r.premios] };
+  // afuera a quien después anuncia como ganador. En un orden de turnos la nota dice turnos: ahí no hay premios.
+  if (r.premios !== undefined && premios > r.premios)
+    return { game, fits: false, ideal: false, note: `rec.${game}.${turnos ? "turnos" : "premios"}`, args: [n, premios, r.premios] };
   if (r.maximo !== undefined && n > r.maximo) return { game, fits: false, ideal: false, note: `rec.${game}.largo`, args };
   if (r.minimo === undefined) return { game, fits: null, ideal: false, note: null, args };
   if (n < r.minimo) return { game, fits: false, ideal: false, note: `rec.${game}.corto`, args };
@@ -201,8 +202,16 @@ export const cabenLosPremios = (game: Game, premios: number): boolean => premios
  * Hasta el 21 de octubre de 2026, con 20 personas quedaba elegida la carrera,
  * que llega hasta 8 y no estaba entre los recomendados, mientras los cuatro de
  * arriba del selector sí (D02, de la evaluación crítica de experiencia).
+ *
+ * `turnos`: el sorteo es un orden de turnos (`isTurnOrder`, src/modos/turnos.ts). Con la lista dentro del tope de la ruleta
+ * queda la ruleta; con más, el que elige el código de siempre.
  */
-export function juegoPorDefecto(n: number, premios = 1): Game {
+export function juegoPorDefecto(n: number, premios = 1, turnos = false): Game {
+  // Un orden de turnos (`isTurnOrder`) sortea a todas las personas: ningún juego cuenta un orden completo, y la ruleta es la
+  // que menos promete (sortea al primero y deja a todos en el cartel). El producto es la lista de turnos, no la animación.
+  // La ruleta no admite más que su tope (`RANGOS.wheel.maximo`, el `WHEEL_MAX` de state.ts): con más, queda el que ya elige el código.
+  const topeRuleta = RANGOS.wheel?.maximo;
+  if (turnos && topeRuleta !== undefined && n >= 2 && n <= topeRuleta) return "wheel";
   const r = recomendar(n, premios).games;
   // Hasta 30 sale la carrera sola; con más encaja (pasa por tandas) pero no es lo ideal: se recomienda otro primero.
   if (n <= 30 && r.find((x) => x.game === JUEGO_DE_SIEMPRE)?.fits === true) return JUEGO_DE_SIEMPRE;
@@ -230,12 +239,13 @@ export function juegoSiguiente(n: number, actual: Game, premios = 1): Game {
  * Qué juegos del selector sirven para `n` personas, con su nota y la duración
  * de la sección 8.2. `n` se toma entero y nunca negativo. `premios` (uno, si no
  * se dice) le importa a los juegos con tope de premios (`Rango.premios`): la carrera
- * con más de ocho y el sapo con más de doce no encajan, y dicen por qué.
+ * con más de ocho y el sapo con más de doce no encajan, y dicen por qué. Con
+ * `turnos`, el sorteo es un orden de turnos y esas notas dicen turnos.
  */
-export function recomendar(n: number, premios = 1): Recomendaciones {
+export function recomendar(n: number, premios = 1, turnos = false): Recomendaciones {
   const k = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
   const p = Number.isFinite(premios) ? Math.max(1, Math.floor(premios)) : 1;
-  const games = SELECTOR.map((g) => evaluar(g, k, p)).sort(ordenar);
+  const games = SELECTOR.map((g) => evaluar(g, k, p, turnos)).sort(ordenar);
   const tramo = VENTANA_NORMAL.find(({ personas: [de, a] }) => k >= de && k <= a);
   return {
     games,

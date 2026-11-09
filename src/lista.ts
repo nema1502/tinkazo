@@ -7,6 +7,8 @@ import { canonicalList, listHash } from "./protocol/canonical";
 import { bytesToHex } from "./protocol/quicknet";
 import { decodePreview } from "./protocol/proof";
 import { buscar, repetidos, vecesExacto } from "./buscar";
+import { contar, seCuentaPorPersona } from "./participaciones";
+import { modesFlagOn, requestedMode } from "./modos/bandera";
 
 /**
  * La lista para revisar antes de sellar, en el celular de cada participante.
@@ -34,7 +36,15 @@ function cabinaDe(i: number): string {
 function pintar(): void {
   const rep = repetidos(names);
   const hash = bytesToHex(listHash(names));
-  $("l-count").textContent = t("salaN").replace("{n}", String(names.length));
+  // Esta página no conoce la bandera de quien organiza: la regla de todos (`seCuentaPorPersona`) con el modo que
+  // trae la dirección (la sala agrega `?modo=varias` cuando la lista es un reparto) o la bandera de construcción.
+  // Sin ninguno, las dos cuentas solo si la lista entera es un reparto; cualquier otra, una persona por línea.
+  const reparto = seCuentaPorPersona(names, requestedMode() === "varias" || modesFlagOn());
+  const { personas, participaciones } = contar(names, reparto);
+  $("l-count").textContent =
+    personas === participaciones
+      ? t("salaN").replace("{n}", String(participaciones))
+      : t("salaPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
   $("l-huella").textContent = hash.slice(0, 12) + "…";
   $("l-lista").innerHTML = names
     .map((n, i) => `<li data-p="${i + 1}"${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}<small class="cabina" style="display:block;opacity:.75">${esc(cabinaDe(i))}</small></li>`)

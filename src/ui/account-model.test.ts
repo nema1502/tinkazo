@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LAST_DRAWS, drawRow, feeCovered, fmtBalance, initialOf, kindText, moneyLine, shortAddr, shortDate } from "./account-model";
 import type { Entry } from "./history";
 
@@ -118,5 +118,39 @@ describe("panel de la cuenta: las filas de Tus sorteos", () => {
 
   it("el panel muestra los últimos cuatro", () => {
     expect(LAST_DRAWS).toBe(4);
+  });
+});
+
+describe("panel de la cuenta: cuántas personas tiene cada sorteo", () => {
+  // Ana con 2, Beto con 1 y Carla con 2: 3 personas y 5 líneas.
+  const repartida = ["Ana Quispe (1/2)", "Ana Quispe (2/2)", "Beto Rojas", "Carla Suarez (1/2)", "Carla Suarez (2/2)"];
+  const conLista = { ...base, count: 5, names: repartida };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("con los modos a la vista, el reparto dice 3 personas, 5 participaciones, igual que Mis sorteos", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    const { cuentaDeLaEntrada } = await import("./cuenta-entrada");
+    expect(cuentaDeLaEntrada(conLista)).toBe("3 personas, 5 participaciones");
+    expect(drawRow(conLista).meta).toContain("3 personas, 5 participaciones");
+    expect(drawRow(conLista).meta).not.toContain("5 personas");
+  });
+
+  it("sin modos, la misma entrada dice 5 personas, como hoy", () => {
+    vi.stubEnv("VITE_MODOS", "0");
+    const meta = drawRow(conLista).meta;
+    expect(meta.startsWith("5 personas, ")).toBe(true);
+    expect(meta.endsWith(", sin sortear")).toBe(true);
+    expect(meta).not.toContain("participaciones");
+  });
+
+  it("una entrada sin la lista dice lo de siempre con la cantidad, con modos o sin ellos", () => {
+    vi.stubEnv("VITE_MODOS", "0");
+    expect(drawRow(base).meta).toContain("27 personas");
+    vi.stubEnv("VITE_MODOS", "1");
+    expect(drawRow(base).meta).toContain("27 personas");
+    expect(drawRow(base).meta).not.toContain("participaciones");
   });
 });

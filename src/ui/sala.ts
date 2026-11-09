@@ -9,6 +9,8 @@ import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { contar } from "../contar";
+import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
+import { modesVisible } from "../modos/bandera";
 import { etiquetaDe } from "../equipos/etiquetas";
 import { LEGIBLE } from "../games/pixi/letra";
 
@@ -64,6 +66,16 @@ export async function mostrarLista(): Promise<void> {
   // Sin sello (la red no dejó sellar) la lista está cerrada, no sellada: la sala no debe creer que se puede comprobar.
   const sin = sinSelloAhora(sellada);
   const titulo = t(sellada ? claveDelSello("tituloDeLaSala", sin) : "salaT");
+  // Con varias participaciones por persona, el título de la sala dice las dos cuentas. Antes del sello manda
+  // la bandera de la herramienta, como el panel de la lista; la lista ya sellada se cuenta con la regla de
+  // todos (`seCuentaPorPersona`), como la espera, las bases y la verificación. Sin los modos: cada línea, una
+  // persona, salvo un reparto entero.
+  const modos = modesVisible();
+  const { personas, participaciones } = contarPersonas(names, sellada ? seCuentaPorPersona(names, modos) : modos);
+  const cuenta =
+    personas === participaciones
+      ? t("salaN").replace("{n}", String(participaciones))
+      : t("salaPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
 
   const back = document.createElement("div");
   back.className = "sala";
@@ -73,7 +85,7 @@ export async function mostrarLista(): Promise<void> {
   back.innerHTML =
     `<div class="sala-top">` +
     `<div><span class="sticker">${esc(titulo)}</span>` +
-    `<h2>${esc(t("salaN").replace("{n}", String(names.length)))}</h2>` +
+    `<h2>${esc(cuenta)}</h2>` +
     `<p class="sala-huella mono">${esc(t("salaHuella"))} <b>${esc(hash.slice(0, 12))}</b>…</p></div>` +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button>` +
     `</div>` +
@@ -114,6 +126,9 @@ export async function mostrarLista(): Promise<void> {
   const enlace = new URL(await previewUrl(names, prize));
   // "sin": lo que el celular de cada uno lee tampoco dice "sellada" (lista.ts).
   if (sellada) enlace.searchParams.set("sellada", sin ? "sin" : "1");
+  // Con los modos a la vista y un reparto, el celular cuenta igual que el proyector: la página de la lista no
+  // conoce la bandera de quien organiza y lee el modo de la dirección. Sin los modos, el enlace queda como siempre.
+  if (modos && seCuentaPorPersona(names, true)) enlace.searchParams.set("modo", "varias");
   const url = enlace.toString();
   // Para pegarlo en el grupo del evento, si alguien no puede escanear.
   const copiar = back.querySelector<HTMLButtonElement>("[data-copiar]");

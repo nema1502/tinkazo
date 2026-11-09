@@ -1,5 +1,8 @@
 import { esc } from "../dom";
-import { t } from "../i18n";
+import { T, getLang, t } from "../i18n";
+import { isTurnOrder } from "../modos/turnos";
+import { salieronVariasVeces } from "../participaciones";
+import { htmlDeTurnos } from "./lista-de-turnos";
 
 /**
  * Los ganadores en la página del resultado (`#winner-cards`).
@@ -25,6 +28,8 @@ export interface DatosDeGanadores {
   reemplazo: boolean;
   /** La cara de una persona (`avatar` de `state.ts`). */
   avatar: (nombre: string, px: number) => string;
+  /** La lista se lee por persona (la bandera de los modos o `?modo=` a la vista): quien salió varias veces se avisa. */
+  porPersona?: boolean;
 }
 
 /**
@@ -94,15 +99,25 @@ function fila(d: DatosDeGanadores, k: number): string {
 
 /**
  * Las tarjetas, o la tarjeta del primero y debajo la lista de los demás. Los ids (`wn-<k>`) y los `data-k` son los de
- * siempre, con `k` desde cero en el orden de los premios: «No está» sortea de nuevo el premio `k`.
+ * siempre, con `k` desde cero en el orden de los premios: «No está» sortea de nuevo el premio `k`. Si el sorteo es un
+ * orden de turnos (`isTurnOrder`), es la lista de turnos de `lista-de-turnos.ts`: «Turno 1 ... Turno N» desde el primero,
+ * sin tarjeta grande, sin «Se lleva» y sin «No está».
  */
 export function htmlDeGanadores(d: DatosDeGanadores): string {
   const n = d.winners.length;
-  if (!enLista(n)) return d.winners.map((_, k) => tarjeta(d, k)).join(" ");
+  // Con más de ocho turnos, «Copiar el orden» va también arriba de la lista: el de abajo queda.
+  if (isTurnOrder(d.names.length, n, d.prize))
+    return htmlDeTurnos(d.names, d.winners, { avisar: true, sinSufijos: d.porPersona ?? true, copiarArriba: n > 8 });
+  // Quien tiene varias participaciones puede salir más de una vez: abajo de los ganadores, con cuáles premios.
+  const varias = salieronVariasVeces(d.names, d.winners, d.porPersona ?? true)
+    .map((v) => `<p class="again-note">${esc(T[getLang()].salioVarias(v.nombre, v.veces, v.puestos))}</p>`)
+    .join("");
+  if (!enLista(n)) return d.winners.map((_, k) => tarjeta(d, k)).join(" ") + varias;
   const premio = d.prize ? `<p class="winner-prize winner-lista-premio"><span>${esc(t("winnersCadaUno"))}</span> ${esc(d.prize)}</p>` : "";
   return (
     tarjeta(d, 0) +
     `<h3 class="winner-lista-t" id="winner-lista-t">${esc(t("winnersOtros").replace("{n}", String(n - 1)))}</h3>${premio}` +
-    `<ol class="winner-lista" aria-labelledby="winner-lista-t" start="2">${d.winners.map((_, k) => (k === 0 ? "" : fila(d, k))).join("")}</ol>`
+    `<ol class="winner-lista" aria-labelledby="winner-lista-t" start="2">${d.winners.map((_, k) => (k === 0 ? "" : fila(d, k))).join("")}</ol>` +
+    varias
   );
 }

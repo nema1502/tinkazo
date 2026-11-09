@@ -70,11 +70,30 @@ export function ponerGanadores(n: number): void {
   sincronizar();
 }
 
+/** La lista se está sellando o ya está sellada (`cerrarLista`). */
+let cerrado = false;
+/** El modo «Orden de turnos» fija la cantidad a la de la lista (`fijarGanadores`). */
+let fijo = false;
+
+function aplicarBloqueo(): void {
+  const el = campo();
+  if (el) el.disabled = cerrado || fijo;
+  for (const b of atajos()) b.disabled = cerrado || fijo;
+}
+
 /** Bloquea o libera el campo y los atajos juntos (la lista se está sellando o ya está sellada: `cerrarLista`). */
 export function bloquearGanadores(si: boolean): void {
-  const el = campo();
-  if (el) el.disabled = si;
-  for (const b of atajos()) b.disabled = si;
+  cerrado = si;
+  aplicarBloqueo();
+}
+
+/**
+ * En el modo «Orden de turnos» la cantidad es la de la lista y no se toca (`src/ui/turnos.ts`): el campo y los atajos
+ * quedan bloqueados aunque la lista esté abierta. Al apagar el modo vuelven, salvo que la lista esté cerrada.
+ */
+export function fijarGanadores(si: boolean): void {
+  fijo = si;
+  aplicarBloqueo();
 }
 
 /** «Hasta 300 ganadores por sorteo», solo cuando se pidió de más y se bajó al tope. */

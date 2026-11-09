@@ -36,6 +36,33 @@ describe("mensaje del sorteo: el mismo que el de la pantalla del sorteo", () => 
   });
 });
 
+describe("con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas", () => {
+  // Lo que sale de una lista sellada de 2 personas y 5 participaciones.
+  const d = { ganadores: ["Ana"], total: 5, personas: 2, premio: "Pizza", enlace };
+
+  it("es: la cabeza, palabra por palabra igual a T.es.summary con las dos cuentas", () => {
+    expect(mensajeDeSorteo("es", d)).toBe(T.es.summary(lista("es", ["Ana"]), 5, "Pizza", enlace, false, undefined, 2));
+  });
+
+  it("en: igual a T.en.summary con las dos cuentas", () => {
+    expect(mensajeDeSorteo("en", d)).toBe(T.en.summary(lista("en", ["Ana"]), 5, "Pizza", enlace, false, undefined, 2));
+  });
+
+  it("la foto también dice las dos cuentas, y sin premio o con varios ganadores también", () => {
+    expect(fotoDeSorteo("es", d, enlace).lineas).toContain("Salió entre 5 participaciones de 2 personas");
+    expect(fotoDeSorteo("en", d, enlace).lineas).toContain("Drawn from 5 entries from 2 people");
+    const varios = { ganadores: ["Ana", "Beto"], total: 5, personas: 2, premio: "", enlace };
+    expect(fotoDeSorteo("es", varios, enlace).lineas).toContain("Salieron entre 5 participaciones de 2 personas");
+  });
+
+  it("una participación por persona, nada nuevo: la cabeza y la foto de siempre", () => {
+    const igual = { ganadores: ["Ana"], total: 5, personas: 5, premio: "Pizza", enlace };
+    expect(mensajeDeSorteo("es", igual)).toBe(mensajeDeSorteo("es", { ganadores: ["Ana"], total: 5, premio: "Pizza", enlace }));
+    expect(fotoDeSorteo("es", igual, enlace).lineas).toContain("Salió entre 5 personas");
+    expect(fotoDeSorteo("es", igual, enlace).lineas).not.toContain("participaciones de");
+  });
+});
+
 /** Dos sorteos del evento: uno con premio y otro sin, con dos ganadores. */
 const deEvento = [
   { prize: "Polera", ganadores: ["Gabriela Flores"] },
@@ -46,6 +73,16 @@ describe("mensaje del evento: dice quién ganó qué (D15), igual que summaryEve
   it("un renglón por sorteo: el premio, o Sorteo, y quién ganó", () => {
     expect(lineasDeEvento("es", deEvento)).toEqual(["Polera: Gabriela Flores", "Sorteo: Ana y Beto"]);
     expect(lineasDeEvento("en", deEvento)).toEqual(["Polera: Gabriela Flores", "Draw: Ana and Beto"]);
+  });
+
+  it("un orden de turnos no lista a nadie: dice cuántas personas hay en el orden", () => {
+    const names = ["Ana", "Beto", "Carla"];
+    const turnos = [{ prize: "Turnos de limpieza", ganadores: names.slice(), names }];
+    expect(lineasDeEvento("es", turnos)).toEqual(["Turnos de limpieza: 3 personas"]);
+    expect(lineasDeEvento("en", turnos)).toEqual(["Turnos de limpieza: 3 people"]);
+    // Un sorteo común con las mismas tres personas sigue listando quién ganó.
+    const comun = [{ prize: "Polera", ganadores: names.slice(), names }];
+    expect(lineasDeEvento("es", comun)).toEqual([`Polera: ${lista("es", names)}`]);
   });
 
   it("es: con el nombre por defecto y uno o varios sorteos, igual a summaryEvento", () => {
@@ -297,6 +334,19 @@ describe("textos nuevos de compartir y de eventos", () => {
       expect(String(T.es[k])).not.toMatch(prohibidas);
       expect(String(T.en[k])).not.toMatch(prohibidas);
     }
+  });
+
+  it("la página del enlace corto y el texto de la foto no prometen un ganador: valen para un orden de turnos", () => {
+    for (const k of [...DE_C, "cmpFotoAlt"]) {
+      expect(String(T.es[k]), k).not.toMatch(/ganó|ganador|ganadora|gana\b/i);
+      expect(String(T.en[k]), k).not.toMatch(/who won|winner|wins\b/i);
+    }
+    expect(T.es.cDesc).toBe("Abrilo para ver el resultado y comprobarlo vos mismo, desde tu celular.");
+    expect(T.es.cAbriendoB).toBe("En un momento ves el resultado y lo comprobás vos.");
+    expect(T.es.cmpFotoAlt).toBe("La foto con el resultado y el QR para comprobarlo");
+    expect(T.en.cDesc).toBe("Open it to see the result and check it yourself, from your phone.");
+    expect(T.en.cAbriendoB).toBe("In a moment you'll see the result and check it yourself.");
+    expect(T.en.cmpFotoAlt).toBe("The photo with the result and the QR code to check it");
   });
 });
 

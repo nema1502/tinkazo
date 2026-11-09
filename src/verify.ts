@@ -6,6 +6,10 @@ import "./pagina";
 import "./version-nueva";
 import { $, esc } from "./dom";
 import { pintarLeyenda } from "./ui/leyenda";
+import { htmlDeLosGanadores } from "./ui/ganadores-de-la-verificacion";
+import { htmlDeTurnos } from "./ui/lista-de-turnos";
+import { alCopiarOrden } from "./ui/lista-de-turnos";
+import { isTurnOrder } from "./modos/turnos";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
@@ -19,6 +23,8 @@ import { leerRegistro } from "./stellar/registro";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
 import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
+import { agruparPorPersona, contar as contarPersonas, seCuentaPorPersona } from "./participaciones";
+import { modesFlagOn, requestedMode, withMode } from "./modos/bandera";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
@@ -60,6 +66,24 @@ const via = viaDe(location.search);
 quitarMarca();
 /** La referencia pública del sorteo, si está anclado: sin ella no se cuenta nada. */
 let ref: Ref | undefined;
+
+/** El modo que trae el enlace, si trae uno válido: la página cuenta el sorteo en la forma en que se hizo. */
+const modoDelEnlace = requestedMode();
+
+/**
+ * ¿La lista sellada se agrupa por persona? Como siempre cuando es un reparto entero, y con el modo de varias
+ * participaciones en el enlace (o la bandera de construcción prendida) cuando la lista cierra como reparto:
+ * cada grupo coherente, las líneas sin sufijo como personas de una sola, y alguien con más de una. Con el
+ * parámetro sobre una lista que no cierra no se agrupa: línea por línea. No cambia el veredicto ni quién ganó,
+ * solo cómo se muestra la lista sellada y su cuenta.
+ */
+function repartoParaVerificacion(nombres: readonly string[]): boolean {
+  // La misma regla que la herramienta después del sello (`seCuentaPorPersona`): así las dos cuentan igual. Cualquier
+  // modo del enlace cuenta como modos a la vista: un orden con varias participaciones lleva solo `?modo=turnos`
+  // (el enlace guarda un modo), y en la herramienta ese orden ya se contaba por persona. Sin los modos a la vista
+  // la herramienta no le pone modo a ningún enlace, tampoco al de un orden (`modoDelComprobante`).
+  return seCuentaPorPersona(nombres, modoDelEnlace === "varias" || modoDelEnlace === "turnos" || modesFlagOn());
+}
 
 /**
  * Cómo terminó la verificación, para el contador: verde, amarillo, rojo, o que
@@ -190,7 +214,7 @@ async function main(): Promise<void> {
   // enlace, y "Compartir" mandaba el nuevo con el ganador del viejo: se vuelve a
   // verificar desde cero.
   window.addEventListener("hashchange", () => location.reload());
-  enlaceVerificado = location.origin + location.pathname + location.hash;
+  enlaceVerificado = withMode(location.origin + location.pathname + location.hash, modoDelEnlace);
 
   try {
     proof = await decodeProof(location.hash);
@@ -227,7 +251,7 @@ async function main(): Promise<void> {
 }
 
 /** Cada comprobación, con lo que se vio. */
-function pintarComprobaciones(proof: Proof, r: Revision): void {
+export function pintarComprobaciones(proof: Proof, r: Revision): void {
   const tiene = (...m: Revision["motivos"]): boolean => m.some((x) => r.motivos.includes(x));
   const sello = r.registro?.sello ?? null;
   const resultado = r.registro?.resultado ?? null;
@@ -307,7 +331,10 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
     // Anclado y sin el sello leído (ni del contrato ni de su transacción), cuántos ganadores había no se sabe: lo que se
     // rehizo es un solo nombre y no está atestiguado, así que no lleva el visto bueno (queda pendiente, como la lista).
     const sinSello = r.ancla.tipo === "oficial" && !sello && !delHistorial;
-    set("vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
+    // Un orden de turnos no tiene ganador: lo que se rehizo es el orden. Solo lo decide lo sellado
+    // (`isTurnOrder`): el parámetro del enlace por sí solo no convierte un sorteo común en un orden.
+    const turnos = isTurnOrder(r.nombres.length, r.ganadores.length, proof.prize ?? "");
+    set(turnos ? "vCheckOrden" : "vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
   }
 
   // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
@@ -667,12 +694,36 @@ function offerToFinish(proof: Proof, r: Revision): void {
   });
 }
 
-function renderList(proof: Proof): void {
+export function renderList(proof: Proof): void {
   const names = Array.isArray(proof.names) ? proof.names.map(String) : [];
-  $("v-count").textContent = `${names.length} ${t("kEntries")}`;
-  $("v-names").innerHTML = names
-    .map((n, i) => `<i data-p="${i + 1}"><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
-    .join("");
+  // Con un modo en el enlace (o la bandera prendida), la lista se lee por persona
+  // cuando cierra como reparto: quien tiene una sola queda sin sufijo. Sin ese dato, esta página agrupa solo
+  // cuando la lista ENTERA es un reparto coherente (cada línea con sufijo, cada persona con todos los suyos
+  // del 1/m al m/m, y alguna con más de una participación). Cualquier otra lista se muestra tal cual, como
+  // siempre: un nombre como «Grupo (1/2)» puede ser solo un nombre.
+  const reparto = repartoParaVerificacion(names);
+  const { personas, participaciones } = contarPersonas(names, reparto);
+  $("v-count").textContent =
+    personas === participaciones
+      ? `${names.length} ${t("kEntries")}`
+      : t("vCuentaPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
+  const fila = (p: number): string =>
+    `<i data-p="${p + 1}"><img src="${avatar(names[p] ?? "", 44)}" alt="" loading="lazy" />${esc(names[p] ?? "")}</i>`;
+  // Quien tiene varias participaciones aparece una sola vez, con todas las suyas juntas (los sufijos
+  // «(1/3)» se agrupan por persona) y con cuántas tiene. Si la lista no es un reparto entero, no se
+  // inventa nada: cada línea queda tal cual, como llegó en la lista sellada.
+  $("v-names").innerHTML = (
+    reparto
+      ? agruparPorPersona(names).flatMap((g) =>
+          g.coherente && g.puestos.length > 1
+            ? [
+                `<i data-p="${g.puestos.map((p) => p + 1).join(" ")}"><img src="${avatar(g.nombre, 44)}" alt="" loading="lazy" />${esc(g.nombre)} ` +
+                  `<small>${esc(t("vEntriesDe").replace("{k}", String(g.puestos.length)))}</small></i>`,
+              ]
+            : g.puestos.map((p) => fila(p)),
+        )
+      : names.map((_, p) => fila(p))
+  ).join("");
   // Cada uno se busca: "estás en el puesto 37 de 120". El que está dos veces
   // o el que falta se descubre solo, que es la defensa contra inflar la lista.
   const input = $<HTMLInputElement>("v-buscar");
@@ -685,7 +736,7 @@ function renderList(proof: Proof): void {
       return;
     }
     const puestos = buscar(names, q);
-    for (const p of puestos) document.querySelector(`#v-names i[data-p="${p}"]`)?.classList.add("match");
+    for (const p of puestos) document.querySelector(`#v-names i[data-p~="${p}"]`)?.classList.add("match");
     if (!puestos.length) {
       out.textContent = t("buscateNada");
       return;
@@ -703,7 +754,7 @@ function renderList(proof: Proof): void {
   $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")}, #${String(proof.id ?? "")}` : t("noAnchor");
 }
 
-function renderResult(
+export function renderResult(
   proof: Proof,
   r: Revision,
   premio: string,
@@ -715,18 +766,21 @@ function renderResult(
   const randomness = r.semilla ?? "";
   $("sec-result").style.display = "block";
   $("v-round").textContent = `${t("seed")} ${r.ronda}`;
-  $("v-winners").innerHTML = winners
-    .map((i) => {
-      const name = names[i] ?? "";
-      return `<div class="winner-card">
-        <img src="${avatar(name, 128)}" alt="" />
-        <div>
-          <p class="winner-name">${esc(name)}</p>
-          ${premio ? `<p class="winner-prize">${esc(t("winsPrize"))} ${esc(premio)}</p>` : ""}
-        </div>
-      </div>`;
-    })
-    .join(" ");
+  // Un orden de turnos (ganan tantas personas como hay en la lista y el nombre empieza con «Turnos») se muestra con la misma
+  // lista que la herramienta: «Turno 1 ... Turno N», y no una tarjeta por persona con «Se lleva» (con 300 son decenas de miles
+  // de píxeles). El comprobante es el de siempre: se reconoce por la cantidad y el nombre que ya trae.
+  const turnos = isTurnOrder(names.length, winners.length, premio);
+  const encabezado = document.getElementById("v-result-t");
+  if (encabezado) {
+    encabezado.dataset.i = turnos ? "turnsResultTitle" : "vResult";
+    encabezado.textContent = t(encabezado.dataset.i);
+  }
+  $("v-winners").onclick = turnos ? (e) => void alCopiarOrden(e) : null;
+  // Un orden repartido muestra el nombre de cada persona sin el sufijo de la línea, como el resultado en la herramienta;
+  // solo cuando la lista sellada se cuenta por persona en esta página. Si no, cada línea tal cual se selló.
+  $("v-winners").innerHTML = turnos
+    ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: repartoParaVerificacion(names) })
+    : htmlDeLosGanadores(names, winners, premio, avatar);
   $("v-proof").textContent =
     `round=${r.ronda}, signature=${signature.slice(0, 20)}…, randomness=${randomness.slice(0, 20)}…, winners=[${winners.join(",")}]${extra.fromChain ? ", on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
@@ -741,6 +795,9 @@ function renderResult(
       enlace: enlaceVerificado,
       ganadores: winners.map((i) => names[i] ?? ""),
       total: names.length,
+      // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
+      // sellada agrupa por persona en esta página, nunca por el parámetro del enlace solo.
+      personas: contarPersonas(names, repartoParaVerificacion(names)).personas,
       premio,
       ...(extra.fecha ? { fecha: extra.fecha } : {}),
       ...(extra.numero ? { numero: extra.numero } : {}),

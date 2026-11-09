@@ -5,6 +5,10 @@ import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
 import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { esResultadoDeTurnos } from "../modos/turnos";
+import { modesVisible } from "../modos/bandera";
+import { contar } from "../participaciones";
+import { canonicalList } from "../protocol/canonical";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -180,12 +184,26 @@ function calcular(): Toca {
   // Con equipos con cupón, manda usar esa lista que ofrece el panel.
   const boton = paso === 1 && mandaListaDeCupones() ? null : botonReal;
   const restan = paso === 3 ? segundos() : 0;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
+  const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos() });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
+  // Con los modos a la vista, la barra cuenta personas y líneas como el cuadro y el resumen: en un orden de
+  // turnos las líneas son turnos, y con varias participaciones son participaciones, no personas.
+  const turnosActivo = document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
+  if (clave === "sigLista" && (turnosActivo || modesVisible())) {
+    // Las personas se cuentan con la misma función que el resto, desde el cuadro: leer el texto de las
+    // fichas dependía de cómo se pintan y podía contar distinto que el cuadro y el resumen.
+    const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
+    const personas = contar(canonicalList(ta?.value ?? ""), true).personas;
+    if (personas > 0 && personas < n) {
+      detalle = turnosActivo
+        ? t("sigListaTurnos").replace("{p}", String(personas)).replace("{n}", String(n))
+        : t("sigListaPart").replace("{p}", String(personas)).replace("{n}", String(n));
+    }
+  }
   // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
-  // el premio que falta: nada se sella de verdad.
+  // el premio que falta: nada se sella de verdad. En un orden de turnos no hay premio que nombrar.
   // En el stand no hay premio: la línea dice solo cuántas personas hay.
-  if (clave === "sigLista") detalle = enStand() ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
+  if (clave === "sigLista") detalle = enStand() || turnosActivo ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 

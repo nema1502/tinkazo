@@ -309,8 +309,35 @@
       </div>
       <p class="again-note" id="again-note" style="display:none" aria-live="polite"></p>
       <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
+      <!-- Si una lista pegada ya trae un número al lado de los nombres, se pregunta y no se toca nada hasta que
+           la persona responde (src/participaciones.ts). Solo con la bandera de los modos nuevos o con ?modo=
+           en la dirección (src/modos/bandera.ts). -->
+      <div class="part-pregunta" id="participaciones-aviso" style="display:none" role="status">
+        <p id="part-pregunta-texto"></p>
+        <div class="part-pregunta-btns">
+          <button class="mini" type="button" id="btn-part-si" data-i="partSi">Sí, usarlos</button>
+          <button class="mini" type="button" id="btn-part-no" data-i="partNo">No</button>
+        </div>
+      </div>
       <!-- Cuántas personas hay, en grande junto al cuadro: que pegó se ve de un vistazo (participants.ts). -->
       <p class="lista-cuenta" id="lista-cuenta" style="display:none"></p>
+      <!-- Varias participaciones, tocando: el botón abre el panel de contadores y cada toque reescribe el cuadro.
+           A la vista, cerca de la lista, y solo con los modos a la vista y con dos nombres o más. -->
+      <button class="ghost part-abrir" type="button" id="btn-varias" hidden aria-expanded="false" aria-controls="varias-panel" data-i="partAbrir">Alguien participa más de una vez</button>
+      <section class="varias-panel" id="varias-panel" hidden aria-labelledby="varias-titulo">
+        <div class="varias-cab">
+          <h3 id="varias-titulo" data-i="partTitulo">Cuántas veces participa cada persona</h3>
+          <button class="mini" type="button" id="btn-varias-listo" data-i="partListo">Listo</button>
+        </div>
+        <p class="varias-cuenta" id="varias-cuenta" role="status" aria-live="polite"></p>
+        <p class="varias-tope" id="varias-tope" role="status" hidden></p>
+        <div class="varias-buscar" id="varias-buscar-fila" hidden>
+          <label for="varias-buscar" data-i="partBuscar">Buscar un nombre</label>
+          <input id="varias-buscar" type="text" autocomplete="off" />
+        </div>
+        <div class="varias-lista" id="varias-lista"></div>
+        <p class="note varias-sin" id="varias-sin" hidden data-i="partSinResultados">No hay nadie con ese nombre.</p>
+      </section>
       <!-- Con el cuadro vacío y en una red con contrato, en lugar de "Cargar ejemplo": el ensayo, que no graba nada. -->
       <button class="enlace" type="button" id="btn-ensayo" data-entrar-ensayo data-i="ensayoLink" style="display:none">o probá con un ejemplo, sin grabar nada</button>
       <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
@@ -324,6 +351,16 @@
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
         </div>
+      <!-- «Orden de turnos» (src/ui/turnos.ts): sortea a todas las personas de la lista, en orden. Escondido salvo con la
+           bandera VITE_MODOS o con ?modo=turnos en la dirección (src/modos/bandera.ts). -->
+      <div class="field turnos-opcion" id="turnos-opcion" hidden>
+        <div class="premio-chips">
+          <button type="button" id="btn-turnos" aria-pressed="false" aria-describedby="turnos-ayuda" data-i="turnsOption">Orden de turnos</button>
+        </div>
+        <p class="note" id="turnos-ayuda" data-i="turnsHelp">Salen todos, en orden. Ese orden son los turnos.</p>
+        <p class="note" id="turnos-ejemplo" data-i="turnsExample">Sirve para un pasanaku, para turnos de exposición o para repartir turnos de lo que sea. Tinkazo solo da el orden.</p>
+        <p class="note nw-nota" id="turnos-nota" role="status" hidden></p>
+      </div>
       <div class="field">
         <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
         <!-- Los que más se sortean y los últimos que usaste: se arman en premios.ts. El cuadro de abajo sigue siendo lo que se sella. -->
@@ -461,7 +498,7 @@
       <pre class="entity rules-text" id="rules-text" style="display:none"></pre>
       </details>
       <div class="kpis solo-verificar">
-        <div><b id="k-n">0</b><span data-i="kEntries">participantes</span></div>
+        <div><b id="k-n">0</b><span id="k-entries" data-i="kEntries">participantes</span></div>
         <div><b id="k-digest" style="font-size:16px" class="mono">…</b><span data-i="kDigest">huella de la lista</span></div>
         <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
       </div>

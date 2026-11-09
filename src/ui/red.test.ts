@@ -139,6 +139,8 @@ function montar(): void {
     createElement: (tag: string) => new El(tag),
     querySelector: (sel: string) =>
       sel === "#red-estado .red-texto" ? (els["red-estado"] as El).buscar("red-texto") : sel === "#red-estado .red-cuenta" ? (els["red-estado"] as El).buscar("red-cuenta") : null,
+    // Lo único que la herramienta tiene y este documento no: los atajos de "Cuántos ganan" (siempre ninguno).
+    querySelectorAll: (): El[] => [],
     addEventListener: (tipo: string, f: (e: unknown) => void) => void (oyentesDoc[tipo] ??= []).push(f),
     visibilityState: "visible",
   });
@@ -638,6 +640,31 @@ describe("'Seguir sin sello' pide confirmar y desalienta", () => {
     const { r } = await enRojo();
     r.alApretarSellar();
     expect(r.hayAccionDeRed()).toBe(true);
+  });
+
+  it("con un orden de turnos que no entra en la red, ni 'Seguir sin sello' ni 'Seguir igual' se aprietan", async () => {
+    const { r, sellar } = await enRojo();
+    // El documento de mentira no tiene las clases del DOM: con que existan, `instanceof` dice que no son campos.
+    vi.stubGlobal("HTMLInputElement", class {});
+    // El modo «Orden de turnos» con una lista que pasa del tope de la red: no se puede sellar (turnos.ts).
+    const { ponerModoTurnos, seguirLaLista } = await import("./turnos");
+    const { topeDeGanadores } = await import("../stellar/config");
+    seguirLaLista(topeDeGanadores() + 8);
+    ponerModoTurnos(true);
+    // La red vuelve a pintar su caso (como el chequeo de fondo cuando la lista cambia): la acción queda apagada.
+    await r.chequearAntesDeSellar();
+    expect(boton().textContent).toBe("Seguir sin sello");
+    expect(boton().disabled).toBe(true);
+    // La pregunta de la confirmación tampoco: un orden incompleto no se sigue sin sello.
+    r.alApretarSellar();
+    expect(boton().textContent).toBe("Seguir igual");
+    expect(boton().disabled).toBe(true);
+    expect(sellar).not.toHaveBeenCalled();
+    // Apagado el modo, la acción de la red vuelve a poderse apretar.
+    ponerModoTurnos(false);
+    await r.chequearAntesDeSellar();
+    expect(boton().textContent).toBe("Seguir sin sello");
+    expect(boton().disabled).toBe(false);
   });
 });
 

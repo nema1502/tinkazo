@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 /**
  * El auditor de detallitos no se corre acá (pide un navegador y producción):
  * esta prueba cuida que no se despegue del sitio. D06 espera el aviso con coma
- * ("Termo, 18 personas"), que es lo que arma `history.ts` (el punto medio se
+ * ("Termo, 18 personas"), que es lo que arma `cuenta-entrada.ts` (el punto medio se
  * sacó de todo lo visible). D08 mide la regla de hoy del ejemplo
  * (`participants.ts`, `onboarding.ts`): con el cuadro vacío se ofrece (la
  * oferta de primera vez o el enlace de abajo, según la red), con nombres no,
@@ -14,10 +14,10 @@ import { describe, expect, it } from "vitest";
 describe("el auditor de detallitos acompaña al sitio", () => {
   const auditor = readFileSync(new URL("../scripts/audit-detalles.mjs", import.meta.url), "utf8");
   const participantes = readFileSync(new URL("./ui/participants.ts", import.meta.url), "utf8");
-  const historial = readFileSync(new URL("./ui/history.ts", import.meta.url), "utf8");
+  const historial = readFileSync(new URL("./ui/cuenta-entrada.ts", import.meta.url), "utf8");
 
   it("D06 espera el aviso con coma, como lo arma el sitio", () => {
-    expect(historial).toContain('${e.count} ${t("histPeople")}');
+    expect(historial).toContain('${personas} ${t("histPeople")}');
     expect(auditor).toContain("Termo, 18 personas");
     expect(auditor).not.toContain("Termo · 18 personas");
   });

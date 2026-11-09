@@ -14,6 +14,7 @@ import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
+import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
@@ -26,6 +27,7 @@ import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
 import { equiposActivo } from "./equipos/bandera";
+import { requestedMode } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
@@ -208,10 +210,14 @@ iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
 montarGanadores();
+// «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
+montarTurnos();
 // Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
 cerrarSalidaDelStand();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
+// Con ?modo=turnos la herramienta abre con «Orden de turnos» ya elegido, después del borrador: lo que pide la dirección manda.
+abrirConElModoPedido();
 initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
@@ -257,7 +263,8 @@ initLumaAyuda();
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
   const body = document.body;
-  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
+  // `?modo=turnos` abre la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || requestedMode() === "turnos";
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.

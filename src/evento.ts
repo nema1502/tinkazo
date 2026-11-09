@@ -18,6 +18,9 @@ import { fechaLarga } from "./ui/agrupar";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
+import { contar, seCuentaPorPersona } from "./participaciones";
+import { modesFlagOn, requestedMode } from "./modos/bandera";
+import { isTurnOrder } from "./modos/turnos";
 
 /**
  * La página de un evento: varios sorteos del mismo día, en un solo enlace.
@@ -267,10 +270,12 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   const codigo = delHistorial && f && f.cadena === "ok" ? `, ${t("evSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}` : "";
   const cuando = (fecha ? t("evSellado").replace("{f}", fechaLarga(fecha, getLang())) : "") + numero + codigo;
   const estado = (e: Estado | undefined): string => (e === "ok" ? t("evOk") : e === "bad" ? t("evMalo") : e === "sin-red" ? t("evSinRedCorto") : "");
+  // Un orden de turnos se muestra como orden, como en el resultado y en la verificación: nunca como «Ganaron».
+  const turnos = isTurnOrder(s.names.length, s.ganadores.length, s.prize ?? "");
   const filasHtml = [
     fila(t("evChkLista"), f?.lista, f ? (f.lista === "ok" ? `${f.r.huella.slice(0, 16)}…` : t("evListaMal")) : "", true),
     fila(t("evChkFirma"), f?.firma, estado(f?.firma)),
-    fila(t("evChkGanador"), f?.ganador, estado(f?.ganador)),
+    fila(t(turnos ? "evChkOrden" : "evChkGanador"), f?.ganador, estado(f?.ganador)),
     ...(f && f.cadena !== "libre" ? [filaCadena(f.cadena, !!delHistorial, f.r.falta === "sin-historial")] : []),
   ];
   const nota = !f
@@ -305,12 +310,20 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   const tecnico = lineas.length
     ? `<details class="tecnico"><summary>${esc(t("tecnicoT"))}</summary><p class="entity">${lineas.map(esc).join("<br>")}</p></details>`
     : "";
+  // La cuenta de la lista: las dos cuando no es una participación por persona, con la regla de todos
+  // (`seCuentaPorPersona`). El enlace del evento junta sorteos distintos y hoy no lleva el modo de cada uno:
+  // sin `?modo=varias` en la dirección ni la bandera de construcción, agrupa solo un reparto entero.
+  const { personas, participaciones } = contar(s.names, seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+  const cuenta =
+    personas === participaciones
+      ? t("evPersonas").replace("{n}", String(personas))
+      : t("evPersonasPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
   return (
     `<section class="block ev-sorteo">` +
     `<div class="head"><h2>${esc(premio)}</h2><span class="kicker">${esc(cuando)}</span></div>` +
     `<div class="body">` +
-    `<p class="ev-gana"><span class="kicker">${esc(t(s.ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(s.ganadores)}</b></p>` +
-    `<p class="note">${esc(t("evPersonas").replace("{n}", String(s.names.length)))}</p>` +
+    `<p class="ev-gana"><span class="kicker">${esc(t(turnos ? "turnsResultTitle" : s.ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(s.ganadores)}</b></p>` +
+    `<p class="note">${esc(cuenta)}</p>` +
     // Un sorteo que se hizo sin sello (el comprobante lo marca) lo dice con la frase, además de su estado de siempre.
     (esSinSello(s) ? `<p class="note sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
     avisos +

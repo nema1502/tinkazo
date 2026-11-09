@@ -132,3 +132,40 @@ describe("«No está» en un renglón de la lista", () => {
     expect(alConfirmar).not.toHaveBeenCalled();
   });
 });
+
+describe("quien salió más de una vez, con varias participaciones", () => {
+  const pintarLista = (names: string[], winners: number[]): HTMLElement => {
+    const caja = document.createElement("div");
+    caja.innerHTML = htmlDeGanadores({ names, winners, prize: "Termo", reemplazo: false, avatar });
+    return caja;
+  };
+
+  it("debajo de los ganadores dice quién y con cuáles premios salió", () => {
+    const c = pintarLista(["Ana (1/3)", "Beto", "Ana (2/3)", "Carla"], [2, 0]);
+    expect(c.querySelector(".again-note")?.textContent).toBe("Ana salió 2 veces: #1 y #2.");
+    // La línea va también cuando los ganadores van en lista (más de seis).
+    const muchos = htmlDeGanadores({
+      names: ["Ana (1/3)", "Beto", "Ana (2/3)", ...Array.from({ length: 8 }, (_, i) => `Otro ${i}`)],
+      winners: [2, 0, 4, 5, 6, 7, 8],
+      prize: "Termo",
+      reemplazo: false,
+      avatar,
+    });
+    expect(muchos).toContain("Ana salió 2 veces: #1 y #2.");
+  });
+
+  it("con más de dos premios, el último va con «y»", () => {
+    const names = ["Ana (1/3)", "Ana (2/3)", "Ana (3/3)", "Beto"];
+    expect(pintarLista(names, [0, 3, 1]).querySelector(".again-note")?.textContent).toBe("Ana salió 2 veces: #1 y #3.");
+    expect(pintarLista(names, [0, 1, 2]).querySelector(".again-note")?.textContent).toBe("Ana salió 3 veces: #1, #2 y #3.");
+  });
+
+  it("una lista común, donde nadie sale dos veces, no trae la línea", () => {
+    expect(pintar(3).querySelector(".again-note")).toBeNull();
+  });
+
+  it("el texto está en español y en inglés", () => {
+    expect(T.es.salioVarias("Ana Quispe", 2, [0, 1])).toBe("Ana Quispe salió 2 veces: #1 y #2.");
+    expect(T.en.salioVarias("Ana Quispe", 2, [0, 1])).toBe("Ana Quispe came out 2 times: #1 and #2.");
+  });
+});

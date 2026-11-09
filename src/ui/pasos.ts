@@ -31,7 +31,7 @@ export function pasoDe(e: { nombres: number; sellada: boolean; revelado: boolean
  * `apagado` es el botón de verdad: apagado con la lista lista es que se está
  * sellando, y apagado con la ronda ya nacida es que ya se está sorteando.
  */
-export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean; ganadores: number }): string {
+export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean; ganadores: number; turnos?: boolean }): string {
   switch (paso) {
     case 1:
       // Desde el 22 de octubre de 2026 la barra también ofrece "Pegar lista" (siguiente.ts): su línea dice qué falta.
@@ -41,7 +41,8 @@ export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean
     case 3:
       return e.segundos > 0 ? "sigEspera" : e.apagado ? "sigSorteando" : "sigRonda";
     case 4:
-      return e.ganadores > 1 ? "sigGanaron" : "sigGano";
+      // Un orden de turnos no tiene ganadores: la línea dice que el orden ya salió.
+      return e.turnos ? "sigTurnos" : e.ganadores > 1 ? "sigGanaron" : "sigGano";
   }
 }
 

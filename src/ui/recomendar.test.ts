@@ -374,6 +374,34 @@ describe("el juego que sigue después de un premio", () => {
   });
 });
 
+describe("en un orden de turnos, las notas de capacidad dicen turnos", () => {
+  it("la carrera y el sapo no encajan igual, pero la nota no habla de premios", () => {
+    const prohibidas = /premio|ganador|gana|prize|winner|wins/i;
+    for (const l of ["es", "en"] as const) {
+      for (const [game, tope] of [
+        ["race", 8],
+        ["sapo", 12],
+      ] as const) {
+        const r = recomendar(18, 18, true).games.find((x) => x.game === game) as Recomendacion;
+        expect(r.fits, `${l} ${game}`).toBe(false);
+        expect(r.note).toBe(`rec.${game}.turnos`);
+        const texto = (T[l][r.note as string] as (...a: number[]) => string)(...r.args);
+        expect(texto, `${l} ${game}`).not.toMatch(prohibidas);
+        expect(texto, `${l} ${game}`).toContain("18");
+        expect(texto, `${l} ${game}`).toContain(String(tope));
+      }
+    }
+    expect((T.es["rec.race.turnos"] as (...a: number[]) => string)(18, 18, 8)).toBe("Con 18 turnos no entra: la carrera tiene 8 carriles.");
+    expect((T.en["rec.sapo.turnos"] as (...a: number[]) => string)(18, 18, 12)).toBe("With 18 turns it doesn't fit: the frog's table has 12 holes.");
+  });
+
+  it("sin turnos, las notas de siempre quedan como estaban", () => {
+    expect(recomendar(18, 18).games.find((r) => r.game === "race")?.note).toBe("rec.race.premios");
+    expect(recomendar(18, 18).games.find((r) => r.game === "sapo")?.note).toBe("rec.sapo.premios");
+    expect(recomendar(18, 18, true).games.map((r) => r.fits)).toEqual(recomendar(18, 18).games.map((r) => r.fits));
+  });
+});
+
 describe("la carrera y los premios: cada premio es un carril de la recta", () => {
   const carrera = (n: number, premios?: number): Recomendacion => recomendar(n, premios).games.find((r) => r.game === "race") as Recomendacion;
 
