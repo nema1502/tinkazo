@@ -976,7 +976,10 @@
      al lado y "Otras formas de entrar" debajo, chico. La G solo cuando el botón
      va de verdad a Google (main.ts): con Pollar, sin sesión y fuera del
      navegador de una app. */
-  .cta-entrar { display: inline-flex; align-items: center; gap: 10px; }
+  .cta-entrar { display: inline-flex; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+  /* A 360 px el texto se parte en dos renglones: si queda a la izquierda parece
+     otro elemento y no el mismo botón. Centrado, con el balance que ya lleva. */
+  .cta-entrar .cta-t { text-align: center; }
   .cta-entrar .g-ico { display: none; }
   body[data-google="1"][data-sesion="no"] .cta-entrar .g-ico {
     display: inline-block; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink);
@@ -1139,7 +1142,13 @@
     display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px;
   }
   .pies a:hover { color: var(--ink); text-decoration: underline; }
-  @media (max-width: 700px) { footer .bar { justify-content: center; text-align: center; } }
+  @media (max-width: 700px) {
+    footer .bar { justify-content: center; text-align: center; }
+    /* En el celular cada enlace ocupaba una fila y el pie medía unos 540 px:
+       dos columnas que se acomodan solas, con el blanco de toque intacto. */
+    footer .pies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; width: 100%; }
+    footer .pies a { justify-content: center; }
+  }
   /* El aviso de marca de la portada: una línea chica, en su propia fila debajo de los enlaces del pie, con la letra de la página y no la del pie. */
   footer .bar .trademark-note {
     flex: 1 1 100%; max-width: 760px; margin: 0 auto; text-align: center; text-transform: none; letter-spacing: normal;
@@ -1291,11 +1300,10 @@
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
   }
-  /* "Cómo se usa" solo va en "Más" del celular (8 de noviembre de 2026): en escritorio, y solo en
-     la página que tiene el botón "¿Cómo se usa?" de la fila del título (la herramienta), lo repite.
-     En las demás páginas no hay ese botón y la entrada queda a la vista. menu.ts lo sigue
-     agregando siempre y acá se esconde, así el texto no se pierde. */
-  @media (min-width: 761px) { body:has(#btn-como) .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
+  /* "Cómo se usa" solo va en "Más" del celular (8 de noviembre de 2026): en escritorio
+     la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
+     y acá se esconde, así el texto no se pierde. */
+  @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
      1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire
@@ -1774,10 +1782,15 @@
   /* El número del sorteo durante la espera, grande para las fotos. */
   .wait-id { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: clamp(16px, 2vw, 22px); background: var(--yellow); color: #191919; border: 2px solid var(--ink); display: inline-block; padding: 6px 12px; margin: 6px 0 10px; }
 
-  /* Lo técnico, plegado: está para quien lo busca, no para la sala. */
+  /* Lo técnico, plegado: está para quien lo busca, no para la sala. El resumen
+     parece un título chico más si va suelto: lleva caja con borde, como un
+     control, y el signo cambia al abrir. En el celular ocupa todo el ancho para
+     que el blanco de toque no quede corto. */
   details.tecnico { margin: 8px 0 10px; }
-  details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
-  details.tecnico[open] summary { color: var(--ink2); }
+  details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); background: var(--card); border: 2px solid var(--line); border-radius: 12px; padding: 10px 14px; box-sizing: border-box; }
+  details.tecnico summary:hover { border-color: var(--muted); color: var(--ink2); }
+  details.tecnico[open] summary { color: var(--ink2); border-color: var(--ink2); }
+  @media (max-width: 760px) { details.tecnico summary { width: 100%; min-height: 44px; } }
   /* Que se vea que se abre: sin la marca parecía un rótulo más y nadie tocaba el plegado. */
   details.tecnico summary { list-style: none; }
   details.tecnico summary::-webkit-details-marker { display: none; }

@@ -262,7 +262,8 @@ const DETALLES = {
         const aviso = await page.waitFor(visible("#pendiente"), 20000);
         const texto = aviso.ok ? await page.eval("document.getElementById('pendiente').textContent") : "";
         const solo = await page.eval("getComputedStyle(document.getElementById('sec-frozen')).display === 'none'");
-        check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo · 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
+        // history.ts arma "Termo, 18 personas", con coma: el punto medio se sacó de todo lo visible.
+        check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo, 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
         check(`${quien} · y no se retoma solo`, solo);
         await page.eval("(document.getElementById('pendiente') || document.getElementById('sec-participants')).scrollIntoView({ block: 'center' }); true");
         await sleep(300);
@@ -284,11 +285,26 @@ const DETALLES = {
   D08: {
     // Desde el 22 de octubre de 2026, en una red con contrato "Cargar ejemplo" no se ve nunca (con una
     // cuenta abierta, sellarlo grababa un sorteo de nombres inventados): en su lugar está el ensayo,
-    // "o probá con un ejemplo, sin grabar nada", con la misma regla (diseño del onboarding).
+    // "o probá con un ejemplo, sin grabar nada", con la misma regla (diseño del onboarding). Y desde el
+    // modo stand (2 de noviembre de 2026), en práctica (ensayo o stand) no se ve ninguno de los dos.
     que: 'el ejemplo ("o probá con un ejemplo") solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {
+      // La regla de hoy (participants.ts): el enlace se ve con el cuadro vacío, en una red con contrato
+      // y cuando la pestaña NO está en práctica. Se abre la herramienta en limpio, como quien llega por
+      // primera vez: los detallitos anteriores dejan su borrador guardado (D03 deja 12 nombres, el premio
+      // y la cantidad) y sin limpiarlo el cuadro nacería lleno y el "vacío" no se mediría.
       const page = await abrir(browser, v, tema);
       try {
+        await page.eval("localStorage.clear(); true");
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(900);
+        // La herramienta tarda en arrancar (los juegos se traen después): hasta que pinta la regla, los
+        // dos enlaces están como en el markup y el que se elige es otro. Con el cuadro vacío y fuera de
+        // práctica, la regla de hoy muestra exactamente uno de los dos: se espera a verlo.
+        const listo = await page.waitFor(`(${visible("#btn-ensayo")}) || (${visible("#btn-sample")})`, 20000);
+        check(`${quien} · con el cuadro vacío, el enlace del ejemplo aparece`, listo.ok, listo.ok ? `a los ${listo.elapsed} ms` : "ninguno de los dos se ve: ¿la pestaña está en práctica o la herramienta no arrancó?");
+        if (!listo.ok) throw new Error("el enlace del ejemplo no apareció con el cuadro vacío");
         const sel = (await page.eval("!!document.getElementById('btn-ensayo') && getComputedStyle(document.getElementById('btn-sample')).display === 'none'")) ? "#btn-ensayo" : "#btn-sample";
         const vacio = await page.eval(visible(sel));
         await escribir(page, "Ana Quispe\nLuis Mamani");
