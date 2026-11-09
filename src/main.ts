@@ -46,6 +46,10 @@ const INGRESAR = MARCA_INGRESAR;
 const themeParam = params.get("theme");
 if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
 
+// `?lavado=1`: solo para auditar. El estadio se ve como en un proyector pobre, con luz en la sala (menos contraste, negros grises y más brillo).
+// Lo mide `scripts/audit-lavado.mjs`; ninguna persona lo ve si no lo pide en la dirección.
+if (params.get("lavado") === "1") document.documentElement.dataset.lavado = "1";
+
 // De qué enlace se llegó (`?o=aula`, `?o=video`…), para el contador del embudo (src/contar.ts).
 recordarOrigen();
 

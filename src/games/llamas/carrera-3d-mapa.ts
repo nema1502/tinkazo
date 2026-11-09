@@ -18,6 +18,7 @@
  */
 
 import { LLAMA_ALTO } from "./carrera-forma";
+import type { TemaCarrera } from "./carrera-luz";
 import type { Momento } from "./llama";
 
 /** Cuánto se ensancha la profundidad respecto de las filas de la pantalla. */
@@ -63,6 +64,8 @@ export interface Borla3D {
   duenia: number;
   /** La carrera nueva: en vez de la borla, una manta amarilla sobre el lomo (una tira de color). */
   manta?: boolean;
+  /** Va de una llama a otra: la marca sigue `x` y `pie`, que se deslizan, y no la llama de su dueña. */
+  vuela?: boolean;
 }
 
 /** La cámara del director del 2D en este cuadro. */
@@ -108,6 +111,11 @@ export interface Entrada3D {
   h: number;
   u: number;
   cam: Camara2D;
+  /**
+   * La cámara del director 3D (`carrera-camara.ts`): de la recta al festejo manda sobre `cam`, que sigue siendo la del director del 2D
+   * y es la de antes. Sin `pose`, el 3D mira lo que mira el 2D.
+   */
+  pose?: Pose3D | null;
   gente: Corredora3D[];
   borla: Borla3D | null;
   campeona: number;
@@ -166,12 +174,25 @@ export interface Pantalla3D {
   alto: number;
 }
 
+/** Una caja en la pantalla, en píxeles: de `x0,y0` (arriba a la izquierda) a `x1,y1`. */
+export interface CajaPantalla3D {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
 /** Lo que el enchufe espera de la vista 3D. Se arma con `Fabrica3D`. */
 export interface Vista3D {
   /** Dibuja el cuadro: acomoda la escena, mueve la cámara y renderiza. */
   frame(e: Entrada3D): void;
   /** Dónde cae en la pantalla la cabeza de `persona` en el último cuadro, o null si no se ve. */
   pantallaDe(persona: number): Pantalla3D | null;
+  /**
+   * Dónde caen en la pantalla las letras de los letreros del mundo (SALIDA y META) con la cámara del último cuadro: solo los que están delante de la
+   * cámara y asoman, aunque sea en parte, en la pantalla. Las fichas de nombre no se les ponen encima.
+   */
+  letreros(): CajaPantalla3D[];
   /** El mundo cambió (otro tamaño de pantalla): rearma lo fijo. */
   reconstruir(g: Geometria3D): void;
   destruir(): void;
@@ -185,6 +206,8 @@ export interface OpcionesFabrica3D {
   colores: (persona: number) => { pelaje: number; manta: number };
   /** Si piden anotar lo que se dibuja para los auditores (`?auditar=3d`). */
   auditar: boolean;
+  /** El tema de la página: el día en el claro, el atardecer en el oscuro (`carrera-luz.ts`). */
+  tema: TemaCarrera;
 }
 
 export type Fabrica3D = (o: OpcionesFabrica3D) => Vista3D;

@@ -3,7 +3,7 @@ import { CanvasSource, Container, Graphics, Sprite, Text, Texture } from "pixi.j
 import { emblemasDe } from "../emblemas";
 import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, params, setGameLength, yaContaron, type Beacon } from "../../state";
+import { auditaCon, paceFactor, params, setGameLength, yaContaron, type Beacon } from "../../state";
 import { hayPeloton, normalCarrera } from "../../duraciones";
 import { cabe, centrar, crecer, dentro, unir, type Vista, type Zona } from "../pixi/encuadre";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
@@ -1002,7 +1002,7 @@ export async function llamasPixi(
    * (sin el nombre), cuál gana y dónde está la zona de la corona. El auditor
    * comprueba que la ganadora quede entera y que el cartel no tape a ninguna.
    */
-  const auditoria = params.get("auditar") === "encuadre"
+  const auditoria = auditaCon("encuadre")
     ? {
       n: N,
       ganadora: story.winner,

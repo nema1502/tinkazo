@@ -1,6 +1,6 @@
 import { Container, Graphics, GraphicsContext, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, params, setGameLength, type Beacon } from "../../state";
+import { auditaCon, paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { musicHold } from "../../music";
 import { writeStory } from "../drama";
@@ -130,7 +130,7 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   /* ---------------------------------------------------------------- física */
   // `?auditar=fisica`: lo encimadas que quedan después de cada paso y si alguna
   // se sale del bombo, para `scripts/audit-fisica.mjs`.
-  const audit = params.get("auditar") === "fisica"
+  const audit = auditaCon("fisica")
     ? { juego: "tombola", n, maxOverlap: 0, maxAt: 0, escapes: 0, pasos: 0, done: false }
     : null;
   if (audit) (window as unknown as { __fisica: typeof audit }).__fisica = audit;

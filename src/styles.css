@@ -699,6 +699,8 @@
   /* ---------- Modo estadio ---------- */
   .stadium { position: fixed; inset: 0; z-index: 40; display: none; background: #10101c; }
   .stadium canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+  /* `?lavado=1`, solo para auditar (scripts/audit-lavado.mjs): el estadio como en un proyector pobre con luz en la sala. contrast(0,6) sube el negro a un 20 % de gris y baja el blanco a un 80 %; brightness(1,1) lo aclara un poco. */
+  html[data-lavado="1"] .stadium { filter: contrast(0.6) brightness(1.1); }
   .st-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; z-index: 2; }
   /* El mismo logo de la cabecera, en chico: la llama en su cuadro y el nombre plano. */
   .st-brand { display: inline-flex; align-items: center; gap: 9px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px 4px 6px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: clamp(14px, 1.3vw, 20px); }
@@ -1565,6 +1567,9 @@
   body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
   body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate, body[data-demo="1"] #again-row,
   body[data-demo="1"] .ausente { display: none !important; }
+  /* En la demo todo lo de la columna de la izquierda de la comprobación está oculto (WhatsApp, copiar, correo, lo técnico): sin esa columna vacía, el recuadro se ajusta al QR. */
+  body[data-demo="1"] .verify > div:first-child { display: none; }
+  @media (min-width: 701px) { body[data-demo="1"] .verify { grid-template-columns: auto; width: fit-content; } }
 
   /* El ensayo (src/ui/ensayo.ts): la herramienta de verdad con una lista de
      ejemplo, que nunca graba nada. Se ve que es un ensayo: una banda arriba que

@@ -1,4 +1,4 @@
-import { params } from "../../state";
+import { auditaCon } from "../../state";
 import { camaraDeEscena } from "./camara";
 import type { EntradaBase, Montaje3D, Vista3D } from "./tipos";
 
@@ -34,7 +34,7 @@ export function enchufar3D<E extends EntradaBase>(S: EstadioEnchufe, montaje: Mo
   if (!montaje) return null;
   let vista: Vista3D<E> | null = null;
   try {
-    vista = montaje(S.view, { tema: S.dark ? "oscuro" : "claro", auditar: params.get("auditar") === "3d" });
+    vista = montaje(S.view, { tema: S.dark ? "oscuro" : "claro", auditar: auditaCon("3d") });
   } catch (err) {
     console.warn("[3d] no arrancó, sigue el 2D", err);
     vista = null;

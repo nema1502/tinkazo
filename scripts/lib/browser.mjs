@@ -23,6 +23,9 @@ const CANDIDATES = [
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** La conexión que se le fija al Chrome de los auditores (ver `launch`). */
+const CONEXION = process.env.TINKAZO_CONEXION === undefined ? "4G" : process.env.TINKAZO_CONEXION;
+
 export function findChrome() {
   const chrome = CANDIDATES.find((p) => existsSync(p));
   if (!chrome) throw new Error("no encontré Chrome ni Edge; definí CHROME=<ruta>");
@@ -208,6 +211,13 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
       // Con TINKAZO_SIN_WEBGL=1 el navegador no tiene WebGL, como un equipo
       // viejo: para comprobar que el sorteo cae solo al motor anterior.
       ...(process.env.TINKAZO_SIN_WEBGL === "1" ? ["--disable-3d-apis"] : []),
+      // La conexión que dice tener el navegador (`navigator.connection.effectiveType`) la estima Chrome de lo que tardan los
+      // pedidos, y con la página ocupada (el reloj en turbo, la CPU frenada) pasa de "4g" a "3g" a partir de la segunda página del
+      // mismo Chrome. El sitio no arranca el 3D con 3g o menos (`permite3d.ts`) y cae al 2D sin avisar: un auditor que abre
+      // varias páginas medía el 2D creyendo que era el 3D (la línea de base de la carrera del 6 de noviembre de 2026). Por eso
+      // el Chrome de los auditores tiene la conexión fija en 4G. `TINKAZO_CONEXION=3G` (o 2G, Slow-2G) la cambia para probar
+      // lo que pasa con una conexión lenta; vacío la deja como la estime Chrome.
+      ...(CONEXION ? [`--force-effective-connection-type=${CONEXION}`] : []),
       // El idioma de una persona de acá: sin esto el navegador sin interfaz
       // toma el del sistema, y la página elige idioma según el navegador.
       "--lang=es-BO",

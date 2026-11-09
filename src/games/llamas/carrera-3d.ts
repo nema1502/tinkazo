@@ -6,11 +6,12 @@ import {
 import { LLAMA_ALTO } from "./carrera-forma";
 import {
   TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, PUNTOS_LLAMA,
-  type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
+  type CajaPantalla3D, type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
 import { crearEfectos3D } from "./carrera-3d-obstaculos";
 import { crearLider3D, modoLider } from "./carrera-3d-lider";
+import { luzDe } from "./carrera-luz";
 import type { Momento } from "./llama";
 import { posturaObstaculo } from "./llama-obstaculos";
 
@@ -308,17 +309,22 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   const camara = new PerspectiveCamera(36, 1, 0.5, 4000);
   const basura = new Basura();
   const piezas = crearPiezas(basura);
+  // La luz del tema (`carrera-luz.ts`): el día en el claro, el atardecer de siempre en el oscuro.
+  const luz = luzDe(o.tema);
   // El color del horizonte: donde el cielo y la niebla se juntan.
-  const HORIZONTE = new Color(0xd98a64);
+  const HORIZONTE = new Color(luz.horizonte);
   escena.fog = new Fog(HORIZONTE, 110, 650);
-  escena.add(new HemisphereLight(0xcfd4ff, 0x6a5a58, 1.35));
-  const sol = new DirectionalLight(0xffe2b8, 1.9);
-  sol.position.set(-60, 90, 70);
+  escena.add(new HemisphereLight(luz.hemi.cielo, luz.hemi.suelo, luz.hemi.fuerza));
+  const sol = new DirectionalLight(luz.luzSol.color, luz.luzSol.fuerza);
+  const solDesde = luz.luzSol.desde;
+  sol.position.set(...solDesde);
   escena.add(sol);
   escena.add(sol.target);
 
   let fijo: Group | null = null;
   let fijoBasura = new Basura();
+  /** Las cuatro esquinas de las letras de cada letrero (SALIDA y META), en el mundo: de ahí sale su caja en la pantalla (`letreros`). */
+  let letrerosMundo: Vector3[][] = [];
   let cielo: Mesh | null = null;
   let tribuna: { malla: InstancedMesh; base: { x: number; y: number; z: number; ph: number }[]; dummy: Object3D } | null = null;
   const llamas = new Map<number, Colocada>();
@@ -335,6 +341,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     }
     fijoBasura = new Basura();
     const B = fijoBasura;
+    letrerosMundo = [];
     fijo = new Group();
     escena.add(fijo);
     tribuna = null;
@@ -360,7 +367,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       const geo = B.add(new SphereGeometry(2600, 24, 14));
       const pos = geo.getAttribute("position");
       const cols: number[] = [];
-      const zen = new Color(0x1d2248), med = new Color(0x4b3b6e), alto = new Color(0x7b4a73), hor = HORIZONTE;
+      const zen = new Color(luz.cenit), med = new Color(luz.medio), alto = new Color(luz.alto), hor = HORIZONTE;
       const c = new Color();
       for (let i = 0; i < pos.count; i++) {
         const k = Math.max(0, Math.min(1, pos.getY(i) / 2600));
@@ -374,14 +381,14 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       m.renderOrder = -10;
       cielo = m;
       fijo.add(m);
-      // El sol, bajo, en el fondo.
-      const sc = new Mesh(B.add(new SphereGeometry(60, 18, 12)), B.add(new MeshBasicMaterial({ color: 0xffe9a8, fog: false })));
-      sc.position.set(X(g.metaX) * 0.75, 90, Z(g.y0) - 1500);
+      // El sol: bajo y en el fondo al atardecer; de día, alto y a la izquierda.
+      const sc = new Mesh(B.add(new SphereGeometry(60, 18, 12)), B.add(new MeshBasicMaterial({ color: luz.solDisco, fog: false })));
+      sc.position.set(X(g.metaX) * 0.75, o.tema === "claro" ? 620 : 90, Z(g.y0) - 1500);
       fijo.add(sc);
     }
 
     // El suelo: la base oscura de todo el paisaje y, encima, una franja por terreno.
-    const base = new Mesh(B.add(new PlaneGeometry(xMax - xMin + 4000, 5000)), mat(0x5a4a6e, { flat: false }));
+    const base = new Mesh(B.add(new PlaneGeometry(xMax - xMin + 4000, 5000)), mat(luz.base, { flat: false }));
     base.rotation.x = -Math.PI / 2;
     base.position.set((xMin + xMax) / 2, -0.05, zTop - 1500 + 2500);
     fijo.add(base);
@@ -429,16 +436,16 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       const ico = B.add(new IcosahedronGeometry(1, 0));
       const cono = B.add(new ConeGeometry(1, 1, 5));
       const disco = B.add(new CylinderGeometry(1, 1, 1, 10));
-      instanciar(ico, 0xcfd2dc, lista.piedras ?? [], (it, d) => {
+      instanciar(ico, luz.acento.piedras, lista.piedras ?? [], (it, d) => {
         d.position.set(it.x, 0.5 + it.r * 0.3, it.z);
         d.scale.set(0.9 + it.r * 1.1, 0.6 + it.r * 0.7, 0.8 + it.r);
         d.rotation.set(it.r * 3, it.r * 7, 0);
       });
-      instanciar(disco, 0x3e2a1c, lista.barro ?? [], (it, d) => {
+      instanciar(disco, luz.charco, lista.barro ?? [], (it, d) => {
         d.position.set(it.x, 0.06, it.z);
         d.scale.set(1.4 + it.r * 1.6, 0.1, 0.8 + it.r * 0.9);
       });
-      instanciar(cono, 0x2f9e44, lista.cuesta ?? [], (it, d) => {
+      instanciar(cono, luz.acento.cuesta, lista.cuesta ?? [], (it, d) => {
         d.position.set(it.x, 0.6, it.z);
         d.scale.set(0.45, 1.2 + it.r * 0.6, 0.45);
       });
@@ -544,7 +551,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       const base: { x: number; y: number; z: number; ph: number }[] = [];
       for (let k = 0; k < tiers; k++) {
         const z0 = baseZ - k * 3.2 - 3.2, z1 = baseZ - k * 3.2;
-        caja(k % 2 ? 0x3a3a4e : 0x2f2f44, x0, x1, 0, 1.6 + k * 1.5, z0, z1);
+        caja(luz.tribuna[k % 2] as number, x0, x1, 0, 1.6 + k * 1.5, z0, z1);
         const filas = Math.floor((x1 - x0) / 1.15);
         for (let i = 0; i < filas; i++) {
           if (hash(i * 5 + k, 77) < 0.12) continue;
@@ -569,15 +576,47 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     // Los cerros del fondo.
     {
       const geo = B.add(new ConeGeometry(1, 1, 6));
-      const m1 = mat(0x3a3566), m2 = mat(0x2d2a52);
+      const m1 = mat(luz.cerros[0]), m2 = mat(luz.cerros[1]), nieve = mat(0xf4f7fb);
       for (let i = 0; i < 26; i++) {
         const r = hash(i, 11);
         const h = 50 + r * 120;
         const m = new Mesh(geo, i % 2 ? m1 : m2);
-        m.scale.set(80 + hash(i, 12) * 120, h, 70 + hash(i, 13) * 80);
+        const ancho = 80 + hash(i, 12) * 120, fondo = 70 + hash(i, 13) * 80;
+        m.scale.set(ancho, h, fondo);
         m.position.set(lerp(xMin, xMax, (i + hash(i, 14) * 0.6) / 26), h / 2 - 2, zTop - 420 - hash(i, 15) * 380);
         fijo.add(m);
+        // De día, las cumbres altas llevan nieve: un cerro chico encima, con la misma punta y un poco más ancho para que no se pise.
+        if (luz.nieve && h > 110) {
+          const c = new Mesh(geo, nieve);
+          c.scale.set(ancho * 0.38, h * 0.3, fondo * 0.38);
+          c.position.set(m.position.x, m.position.y + h / 2 - (h * 0.3) / 2, m.position.z);
+          fijo.add(c);
+        }
       }
+    }
+
+    // De día, matas de pasto detrás de la pista, sobre el suelo de más allá: sin ellas esa franja de arriba es un color liso. Sin azar:
+    // el lugar y el tamaño de cada una salen de un hash de su número.
+    if (luz.matas !== null) {
+      const xm = X(g.metaX);
+      const lugares: { x: number; z: number; r: number }[] = [];
+      for (let i = 0; i < 1200; i++) {
+        const x = lerp(xMin, xMax, hash(i, 41));
+        // La tribuna ocupa el fondo de la meta.
+        if (x > xm - 80 && x < xm + 48) continue;
+        lugares.push({ x, z: zTop - 8 - hash(i, 43) * 110, r: hash(i, 47) });
+      }
+      const matas = new InstancedMesh(B.add(new ConeGeometry(1, 1, 5)), mat(luz.matas), lugares.length);
+      const d = new Object3D();
+      lugares.forEach((l, j) => {
+        d.position.set(l.x, 0.6 + l.r * 0.5, l.z);
+        d.scale.set(0.5 + l.r * 0.4, 1.2 + l.r * 1.1, 0.5 + l.r * 0.4);
+        d.updateMatrix();
+        matas.setMatrixAt(j, d.matrix);
+      });
+      matas.instanceMatrix.needsUpdate = true;
+      matas.frustumCulled = false;
+      fijo.add(matas);
     }
 
     /* -- ayudas de arriba -- */
@@ -615,6 +654,14 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       const m = new Mesh(B.add(new PlaneGeometry(ancho, alto)), B.add(new MeshBasicMaterial({ map: t, transparent: true, side: DoubleSide })));
       m.position.set(x, y, z);
       fijo.add(m);
+      // Lo que ocupan las letras con su borde (el lienzo es más ancho y más alto que ellas): es lo que las fichas de nombre no pueden tapar.
+      const med = cx.measureText(txt);
+      const hc = cx.canvas.height, borde = cx.lineWidth / 2;
+      const mx = (Math.min(256, med.width / 2 + borde) / 512) * ancho;
+      const arriba = Math.max(0, hc * 0.54 - (med.actualBoundingBoxAscent || hc * 0.31) - borde);
+      const abajo = Math.min(hc, hc * 0.54 + (med.actualBoundingBoxDescent || hc * 0.31) + borde);
+      const ya = y + alto * (0.5 - arriba / hc), yb = y + alto * (0.5 - abajo / hc);
+      letrerosMundo.push([new Vector3(x - mx, ya, z), new Vector3(x + mx, ya, z), new Vector3(x - mx, yb, z), new Vector3(x + mx, yb, z)]);
     }
   }
   armarMundo(o.geometria());
@@ -695,7 +742,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
 
     // La cámara: la del director del 2D, con perspectiva.
     const esc = e.gente.length ? escSum / e.gente.length : 0.5;
-    const pose = camara3D(e.cam, e.w, e.h, e.u, esc);
+    const pose = e.pose ?? camara3D(e.cam, e.w, e.h, e.u, esc);
     camara.fov = (pose.fov * 180) / Math.PI;
     camara.position.set(...pose.pos);
     camara.up.set(Math.sin(pose.giro), Math.cos(pose.giro), 0);
@@ -706,7 +753,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     // lo justo para que la llama que va adelante quede entera, con aire hasta el borde. Función de la hora, sin azar.
     let objetivo = 0;
     const duenia = e.borla ? llamas.get(e.borla.duenia) : undefined;
-    if (W < H && duenia) {
+    // Con la cámara del director 3D no hace falta: ella encuadra al grupo; el corrimiento que traía de antes se apaga despacio.
+    if (!e.pose && W < H && duenia) {
       const r = duenia.rig.raiz, k = r.scale.x;
       const xs = PUNTOS_LLAMA.map(([dx, dy, dz]) => {
         v.set(r.position.x + dx * k, r.position.y + dy * k, r.position.z + dz * k).project(camara);
@@ -730,7 +778,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     }
     cielo?.position.copy(camara.position);
     sol.target.position.set(pose.mira[0], 0, pose.mira[2]);
-    sol.position.set(pose.mira[0] - 60, 90, pose.mira[2] + 70);
+    sol.position.set(pose.mira[0] + solDesde[0], solDesde[1], pose.mira[2] + solDesde[2]);
 
     renderer.render(escena, camara);
 
@@ -771,9 +819,30 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     return { x, y, alto: Math.abs(yPie - y) };
   }
 
+  function letreros(): CajaPantalla3D[] {
+    const cajas: CajaPantalla3D[] = [];
+    if (W === 0) return cajas;
+    for (const esquinas of letrerosMundo) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, detras = false;
+      for (const p of esquinas) {
+        v.copy(p).project(camara);
+        if (v.z > 1) detras = true;
+        const x = ((v.x + 1) / 2) * W, y = ((1 - v.y) / 2) * H;
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+      if (detras || x1 <= 0 || x0 >= W || y1 <= 0 || y0 >= H) continue;
+      cajas.push({ x0, y0, x1, y1 });
+    }
+    return cajas;
+  }
+
   return {
     frame,
     pantallaDe,
+    letreros,
     reconstruir(g: Geometria3D) {
       sinAzarDeTres(() => armarMundo(g));
     },

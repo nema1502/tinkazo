@@ -1,6 +1,6 @@
 import { Container, Graphics, type Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, params, setGameLength, type Beacon } from "../../state";
+import { auditaCon, paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -175,7 +175,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
 
   // `?auditar=fisica`: a quién agarró el haz y a qué velocidad iba, y lo más
   // rápido que se movió alguien con luz roja sin que lo vieran.
-  const audit = params.get("auditar") === "fisica"
+  const audit = auditaCon("fisica")
     ? {
       juego: "luz", n, maxOverlap: 0, maxAt: 0, escapes: 0, pasos: 0, done: false,
       catches: [] as { t: number; idx: number; v: number; dist: number; cycle: number }[],

@@ -238,16 +238,18 @@ export function evaluarReparto(conteos, probs = null) {
   const n = conteos.reduce((a, b) => a + b, 0);
   const pr = probs ?? Array.from({ length: K }, () => 1 / K);
   const esperados = pr.map((q) => n * q);
-  const gl = K - 1;
+  // Un casillero con probabilidad cero es uno que no puede pasar (por ejemplo, la ganadora fuera de las cuatro de adelante): si pasa aunque sea una vez, es un fallo.
+  const imposible = pr.some((q, i) => q === 0 && conteos[i] > 0);
+  const gl = pr.filter((q) => q > 0).length - 1;
   const chi2 = esperados.reduce((s, e, i) => (e > 0 ? s + (conteos[i] - e) ** 2 / e : s), 0);
-  const alcanza = K >= 2 && n >= UMBRAL.minimo && esperados.every((e) => e >= 5);
-  const p = alcanza ? Math.min(1, chi2sf(chi2, gl)) : 1;
+  const alcanza = gl >= 1 && n >= UMBRAL.minimo && esperados.every((e) => e === 0 || e >= 5);
+  const p = imposible ? 0 : alcanza ? Math.min(1, chi2sf(chi2, gl)) : 1;
   let mas = null;
   esperados.forEach((e, i) => {
     const desvio = e > 0 ? (conteos[i] - e) / Math.sqrt(e * (1 - pr[i])) : 0;
     if (!mas || Math.abs(desvio) > Math.abs(mas.desvio)) mas = { indice: i, observado: conteos[i], esperado: e, veces: e > 0 ? conteos[i] / e : 1, desvio };
   });
-  return { n, K, gl, chi2, p, conteos, esperados, mas, veredicto: alcanza ? veredictoP(p) : "pocos" };
+  return { n, K, gl, chi2, p, conteos, esperados, mas, veredicto: imposible ? "delator" : alcanza ? veredictoP(p) : "pocos" };
 }
 
 /**
