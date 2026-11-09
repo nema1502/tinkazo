@@ -59,7 +59,7 @@ Se lee de la cadena (`getLedgerEntries`, campo `extXdr`) que el patrocinador de 
 
 ### El plan del equipo sube el cupo
 
-Quien compró el plan del equipo (5 USDC, 30 días, ver `workers/cuenta/README.md`) tiene mientras dure **50 sellos y 100 sorteos por mes** en lugar de 20 y 40: el sitio dice "50 sorteos propios por 30 días (el plan gratis da 20 por mes)". El portero no guarda quién tiene plan: se lo pregunta al Worker de la cuenta.
+Quien compró el plan del equipo (5 USDC, 30 días, ver `workers/cuenta/README.md`) tiene mientras dure **50 sellos y 100 sorteos por mes** en lugar de 20 y 40: el sitio dice "50 sorteos propios por 30 días". El portero no guarda quién tiene plan: se lo pregunta al Worker de la cuenta.
 
 - **El contrato entre los dos Workers** es un solo recurso público y de solo lectura: `GET <CUENTA_URL>/v1/cuenta/<cuenta>/plan` → `{activo:true, vence, cupo:{sellos, sorteos}}` o `{activo:false}`. `vence` en ms.
 - **Cuándo se pregunta.** Al calcular los topes de una cuenta: en cada `POST /v1/patrocinio` (antes de reservar, nunca en medio, así reservar sigue siendo una sola jugada) y en cada `GET /cupo`. Por eso `/cupo` y el "Te quedan N sorteos gratis este mes" del sitio ya muestran el cupo del plan.

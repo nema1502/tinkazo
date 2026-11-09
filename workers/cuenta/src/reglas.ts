@@ -6,7 +6,7 @@
  *
  * Las reglas de siempre (docs de negocio de Tinkazo, 6 de noviembre de 2026):
  * - Las monedas son puntos. Se ganan usando Tinkazo, no se compran directamente, no se transfieren, no se cambian
- *   por dinero y nunca compran chances en ningún sorteo. No hay en el Worker ningún camino que haga nada de eso.
+ *   por dinero y nunca dan más probabilidades en ningún sorteo. No hay en el Worker ningún camino que haga nada de eso.
  * - El dinero es USDC en la cuenta de la persona. Tinkazo no lo guarda. Lo único que se cobra es el plan del equipo,
  *   y es un pago común a la cuenta de planes que el Worker comprueba contra la red antes de activar nada.
  */

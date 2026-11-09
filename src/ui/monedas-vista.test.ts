@@ -35,14 +35,14 @@ describe("Tus monedas", () => {
     expect(h).toContain("Comprobar un resultado: +5, hasta 5 veces");
     expect(h).toContain("Invitar a un equipo que sortea: +10, próximamente");
     expect(h).toContain("Las monedas no se cambian por dinero: sirven dentro de Tinkazo.");
-    expect(h).toContain("nunca compran chances en un sorteo");
+    expect(h).toContain("nunca te dan más probabilidades en un sorteo");
   });
 
   it("lo mismo en inglés", () => {
     const h = monedasHtml(vista(), en);
     expect(h).toContain("70 coins");
     expect(h).toContain("Coins can't be exchanged for money: they're used inside Tinkazo.");
-    expect(h).toContain("never buy chances in a draw");
+    expect(h).toContain("never improve your odds in a draw");
   });
 
   it("marca lo que ya se hizo, también para quien no ve", () => {

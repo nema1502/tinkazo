@@ -6,7 +6,7 @@ Es un script aparte de los otros (enlaces, portero, sala, música): un error ac�
 
 ## Las reglas, fijas
 
-- Las monedas son **puntos**. Se ganan usando Tinkazo. **No se compran directamente, no se transfieren, no se cambian por dinero y nunca compran chances en ningún sorteo.** En el Worker no existe ningún camino que haga nada de eso (hay una prueba que lo mira).
+- Las monedas son **puntos**. Se ganan usando Tinkazo. **No se compran directamente, no se transfieren, no se cambian por dinero y nunca dan más probabilidades en ningún sorteo.** En el Worker no existe ningún camino que haga nada de eso (hay una prueba que lo mira).
 - El dinero es USDC en la cuenta de la persona. Tinkazo no lo guarda. Lo único que se cobra es el plan del equipo, y es un pago común a la cuenta de planes, que el Worker comprueba contra la red antes de activar nada.
 - Los números viven en `src/reglas.ts` y los toma de ahí también el sitio: una regla cambia en un solo lugar.
 
@@ -59,7 +59,7 @@ Qué da el plan, hoy:
 
 - queda anotado en la cuenta, con inicio, vencimiento y el enlace a la transacción;
 - regala las 50 monedas (una vez);
-- **sube el cupo del portero** mientras está vigente: **50 sellos y 100 sorteos por mes** en lugar de 20 y 40 (`PLAN.cupo` en `src/reglas.ts`, el único lugar donde viven esos números). Es lo que el sitio dice: "50 sorteos propios por 30 días (el plan gratis da 20 por mes)". El portero lo averigua con el recurso de abajo y el panel lo refleja solo, porque "Te quedan N sorteos gratis este mes" sale del `/cupo` del portero.
+- **sube el cupo del portero** mientras está vigente: **50 sellos y 100 sorteos por mes** en lugar de 20 y 40 (`PLAN.cupo` en `src/reglas.ts`, el único lugar donde viven esos números). Es lo que el sitio dice: "50 sorteos propios por 30 días". El portero lo averigua con el recurso de abajo y el panel lo refleja solo, porque "Te quedan N sorteos gratis este mes" sale del `/cupo` del portero.
 
 El nombre del equipo en el show sigue figurando como "próximamente" en el sitio, y el logo ya es gratis para todos.
 

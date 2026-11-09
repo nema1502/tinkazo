@@ -27,7 +27,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgDetSinConsulta: "No pudimos consultar la red ahora. Probá con Actualizar.",
     pgVerPago: "Ver el pago ↗",
     pgNotaLeer:
-      "El estado sale de la red de Stellar. Tinkazo no guarda ni mueve dinero: el pago sale de la cuenta de quien organiza, y que la cuenta que lo recibe sea la de quien ganó lo confirma quien ganó.",
+      "El estado sale de la red de Stellar. Tinkazo no guarda ni mueve dinero: el pago sale de la cuenta de quien organiza, y quien ganó confirma que la cuenta que lo recibe es la suya.",
     pgPagar: "Pagar premio",
     pgCancelar: "Cancelar",
     pgMontoL: "Monto en USDC",
@@ -97,7 +97,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgDetSinConsulta: "We couldn't check the network right now. Try Refresh.",
     pgVerPago: "See the payment ↗",
     pgNotaLeer:
-      "The status comes from the Stellar network. Tinkazo never holds or moves money: the payment comes from the organizer's account, and whether the receiving account belongs to the winner is for the winner to confirm.",
+      "The status comes from the Stellar network. Tinkazo never holds or moves money: the payment comes from the organizer's account, and the winner confirms that the receiving account is theirs.",
     pgPagar: "Pay prize",
     pgCancelar: "Cancel",
     pgMontoL: "Amount in USDC",

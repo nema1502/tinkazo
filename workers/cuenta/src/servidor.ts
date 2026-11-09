@@ -17,7 +17,7 @@
  * Lo que decide el Worker y no el navegador:
  * - la primera carga y el plan se comprueban contra Horizon antes de acreditar;
  * - un canje lo pide solo quien organiza (su token, guardado como huella SHA-256), nunca el navegador de quien participa;
- * - ningún camino compra monedas, las transfiere, las cambia por dinero ni compra chances en un sorteo.
+ * - ningún camino compra monedas, las transfiere, las cambia por dinero ni da más probabilidades en un sorteo.
  */
 import { type ContextoHorizon, buscarCarga, buscarPagosDePlan, cuentaExiste } from "./pagos";
 import type { PorIp } from "./por-ip";

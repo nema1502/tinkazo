@@ -86,7 +86,7 @@ describe("lo que se muestra para pagar", () => {
     expect(cuerpo).toContain("30 días de plan en tu cuenta.");
     expect(cuerpo).toContain("50 monedas de regalo, una sola vez.");
     // Lo que sube el cupo es real (lo averigua el portero): se dice sin «próximamente» y con el número del Worker de la cuenta.
-    expect(cuerpo).toContain("50 sorteos propios por 30 días (el plan gratis da 20 por mes).");
+    expect(cuerpo).toContain("50 sorteos propios por 30 días.");
     expect(cuerpo).not.toMatch(/Próximamente:[^.]*sorteos/);
     // El logo ya existe y es gratis para todos; el nombre del equipo en el show sigue siendo futuro.
     expect(cuerpo).toContain("es gratis para todos");
@@ -103,7 +103,7 @@ describe("lo que se muestra para pagar", () => {
     setLang("en");
     abrirPlan({ address: YO });
     const cuerpo = dialogo()?.textContent ?? "";
-    expect(cuerpo).toContain(`${PLAN.cupo.sellos} draws of your own for ${PLAN.dias} days (the free plan gives 20 a month).`);
+    expect(cuerpo).toContain(`${PLAN.cupo.sellos} draws of your own for ${PLAN.dias} days.`);
     expect(cuerpo).toContain("Coming soon: the team name on the show.");
     expect(cuerpo).not.toMatch(/Coming soon:[^.]*draws/);
   });
