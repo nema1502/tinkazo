@@ -198,4 +198,15 @@ describe("diccionario", () => {
     }
   });
 
+  it("la caja de fondos en el modo oficial informa falta de saldo, no un intento fallido", () => {
+    // El título no puede sonar a fallo: todavía no se intentó nada, la cuenta no tiene saldo para la comisión.
+    expect(T.es.fundTitleMain).toMatch(/saldo/i);
+    expect(T.es.fundTitleMain).not.toMatch(/no se pudo|falló|fallo/i);
+    expect(T.en.fundTitleMain).toMatch(/balance/i);
+    expect(T.en.fundTitleMain).not.toMatch(/couldn't|failed|failure/i);
+    // Coherente con el cuerpo de la caja: habla de la comisión de la red.
+    expect(T.es.fundTitleMain).toMatch(/comisión/i);
+    expect(T.en.fundTitleMain).toMatch(/fee/i);
+  });
+
 });
