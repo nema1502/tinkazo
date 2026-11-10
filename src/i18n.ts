@@ -10,6 +10,7 @@ import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
 import { altaPagoActivo } from "./stellar/alta-config";
 import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
 import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
+import { hayEtiquetas } from "./equipos/etiquetas";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
 // las páginas de lectura y verificar lo usan con sus pocos textos.
@@ -84,12 +85,12 @@ export interface Dict {
   /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con quién ganó qué (un renglón por sorteo) y el enlace a evento.html. */
   summaryEvento: (fecha: string, n: number, enlace: string, lineas?: string[]) => string;
   drawIn: (mmss: string) => string;
-  /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
-  againLeft: (n: number) => string;
+  /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. Con equipos (`equipos`), dice cuántos equipos quedan; sin el parámetro, la palabra la pone `hayEtiquetas()`. */
+  againLeft: (n: number, equipos?: boolean) => string;
   /** El botón de seguir con la misma lista: empieza por lo que lo distingue. */
   againSin: (n: number) => string;
-  /** Por qué no hay otro sorteo con esta lista, cuando quedan menos de dos. */
-  againFew: (n: number) => string;
+  /** Por qué no hay otro sorteo con esta lista, cuando quedan menos de dos. Con equipos (`equipos`), dice un solo equipo. */
+  againFew: (n: number, equipos?: boolean) => string;
   /** Arriba del cuadro, después de "sin los ganadores": quién salió y cuántos quedan. */
   againQuitados: (nombres: string[], n: number) => string;
   /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
@@ -318,7 +319,7 @@ export interface Dict {
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. `sinSello`: no promete que se pueda comprobar. */
-  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean, sinSello?: boolean, personas?: number) => string;
+  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean, sinSello?: boolean, personas?: number, equipos?: boolean) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -338,8 +339,8 @@ export interface Dict {
   cWheelWhere: string[];
   /** El aguayo: sale el tercero del nudo y queda el mano a mano. */
   cPasTwo: (n: string) => string;
-  /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. */
-  sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number) => string;
+  /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. Con equipos (`equipos`), cuenta equipos; sin el parámetro, la palabra la pone `hayEtiquetas()`. */
+  sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number, equipos?: boolean) => string;
   /** La cuenta de junto al cuadro cuando la lista tiene varias participaciones por persona. */
   listaCuentaPart: (n: number, k: number) => string;
   /** La cuenta de junto al cuadro en un orden de turnos repartido: personas y turnos. */
@@ -1083,9 +1084,9 @@ export const T: Record<Lang, Dict> = {
     },
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
-    tellBody: (w, prize, n, u, varios, sinSello, personas) => {
+    tellBody: (w, prize, n, u, varios, sinSello, personas, eq = hayEtiquetas()) => {
       // Con varias participaciones por persona, se dicen las dos cuentas.
-      const entre = personas && personas !== n ? `entre ${n} participaciones de ${personas} personas` : `entre ${n} personas`;
+      const entre = personas && personas !== n ? `entre ${n} participaciones de ${personas} personas` : `entre ${n} ${eq ? "equipos" : "personas"}`;
       // Sin sello no se promete lo que no se puede comprobar: ni "nadie los eligió" ni "revisalo".
       return sinSello
         ? `${varios ? `¡Ganaron, ${w}! Se llevan` : `¡Ganaste, ${w}! Te llevás`}${prize ? " " + prize : " el sorteo"}.\n\n` +
@@ -1130,11 +1131,14 @@ export const T: Record<Lang, Dict> = {
     pantallaQrSinSello: "Escaneá y mirá la lista y la cuenta",
     pantallaPie: "Nadie eligió este nombre: la lista se cerró antes de que existiera el número que lo decidió.",
     againTitle: "¿Pasamos al siguiente premio?",
-    againLeft: (n) => (n === 1 ? "Queda 1 persona sin premio." : `Quedan ${n} personas sin premio.`),
+    againLeft: (n, eq = hayEtiquetas()) => {
+      const p = eq ? "equipo" : "persona";
+      return n === 1 ? `Queda 1 ${p} sin premio.` : `Quedan ${n} ${p}s sin premio.`;
+    },
     // El espacio no separable: si el botón se parte (un celular angosto), queda "Siguiente premio" y debajo "(quedan 16)", nunca "16)" solo.
     againSin: (n) => `Siguiente premio (quedan\xa0${n})`,
     againNueva: "Usar otra lista",
-    againFew: (n) => (n === 1 ? "Queda una sola persona sin premio: para otro sorteo, usá otra lista." : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
+    againFew: (n, eq = hayEtiquetas()) => (n === 1 ? `Queda ${eq ? "un solo equipo" : "una sola persona"} sin premio: para otro sorteo, usá otra lista.` : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${new Intl.ListFormat("es", { type: "conjunction" }).format(nombres)} ya ganaron y no están en esta lista. Quedan ${n}.`),
     recuperarLista: "Recuperar la lista anterior",
     cortinaSe: "Se sortea",
@@ -1175,7 +1179,10 @@ export const T: Record<Lang, Dict> = {
     pvEnsayo: "Probalo con un ejemplo",
     pvCerrar: "No mostrar más",
     gateRetomando: "Retomando tu cuenta…",
-    yaEntraste: "Ya entraste. Sellá tu lista de {n} personas.",
+    // La palabra la pone el navegador: con equipos con cupón, la lista es de equipos (src/equipos/etiquetas.ts).
+    get yaEntraste() {
+      return hayEtiquetas() ? "Ya entraste. Sellá tu lista de {n} equipos." : "Ya entraste. Sellá tu lista de {n} personas.";
+    },
     pegarAyuda: "Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.",
     // Sola, junto al cuadro: va con mayúscula. La de la barra (sigLista) va en medio de la línea.
     listaCuenta: "Lista de {n} personas",
@@ -1185,10 +1192,11 @@ export const T: Record<Lang, Dict> = {
     // En un orden de turnos repartido, junto al cuadro se cuentan personas y turnos, no participaciones.
     listaCuentaTurnos: (n, k) => `Lista de ${n === 1 ? "1 persona" : `${n} personas`}, ${k} turnos`,
     sigPegar: "Pegá la lista",
-    sellarResumen: (n, k, premio, participaciones) => {
+    sellarResumen: (n, k, premio, participaciones, eq = hayEtiquetas()) => {
       const varias = typeof participaciones === "number" && participaciones !== n;
       return (
-        `${varias ? `${n} personas, ${participaciones} participaciones` : `${n} personas`}, ` +
+        // Con varias participaciones la lista sigue siendo de personas: los equipos van uno por línea, sin ellas.
+        `${varias ? `${n} personas, ${participaciones} participaciones` : `${n} ${eq ? "equipos" : "personas"}`}, ` +
         `${k === 1 ? "1 ganador" : `${k} ganadores`}${premio === null ? "" : `, ${premio || "sin premio"}`}. ` +
         `${varias ? "Quien tiene varias participaciones puede salir más de una vez. " : ""}Al sellar, la lista queda cerrada.`
       );
@@ -2371,7 +2379,12 @@ export const T: Record<Lang, Dict> = {
     // La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026).
     loginTitle: "Entrá o creá tu cuenta",
     // Desde "Sellar la lista", sin cuenta (evaluación crítica de experiencia, hallazgo 7).
-    loginParaSellar: "Para sellar tu lista de {n} personas, entrá o creá tu cuenta. La lista te espera acá.",
+    // La palabra la pone el navegador: con equipos con cupón, la lista es de equipos (src/equipos/etiquetas.ts).
+    get loginParaSellar() {
+      return hayEtiquetas()
+        ? "Para sellar tu lista de {n} equipos, entrá o creá tu cuenta. La lista te espera acá."
+        : "Para sellar tu lista de {n} personas, entrá o creá tu cuenta. La lista te espera acá.";
+    },
     loginMailLabel: "Tu correo",
     loginMailPh: "Tu correo",
     loginMailGo: "Seguir con el correo",
@@ -2653,7 +2666,10 @@ export const T: Record<Lang, Dict> = {
     sigRegion: "Lo que sigue",
     sigPaso: "Paso {n} de 4",
     // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
-    sigLista: "lista de {n} personas",
+    // Con equipos con cupón, la barra también dice equipos (src/equipos/etiquetas.ts).
+    get sigLista() {
+      return hayEtiquetas() ? "lista de {n} equipos" : "lista de {n} personas";
+    },
     // En un orden de turnos repartido, la barra cuenta personas y turnos, como el resto de la pantalla.
     // Corta a propósito: con las dos cuentas no entra en un renglón ni en el celular, y ahí vale hasta dos.
     sigListaTurnos: "{p} personas, {n} turnos",
@@ -3667,9 +3683,9 @@ export const T: Record<Lang, Dict> = {
     },
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the draw 🦙",
-    tellBody: (w, prize, n, u, varios, sinSello, personas) => {
+    tellBody: (w, prize, n, u, varios, sinSello, personas, eq = hayEtiquetas()) => {
       // With several entries per person, both counts are given.
-      const of = personas && personas !== n ? `${n} entries from ${personas} people` : `${n} people`;
+      const of = personas && personas !== n ? `${n} entries from ${personas} people` : `${n} ${eq ? "teams" : "people"}`;
       return sinSello
         ? // Without a seal it promises nothing that can't be checked: neither "nobody hand-picked you" nor "check it".
           `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
@@ -3704,10 +3720,10 @@ export const T: Record<Lang, Dict> = {
     pantallaQrSinSello: "Scan it to see the list and the math",
     pantallaPie: "Nobody picked this name: the list was locked before the number that decided it existed.",
     againTitle: "On to the next prize?",
-    againLeft: (n) => (n === 1 ? "1 person is left without a prize." : `${n} people are left without a prize.`),
+    againLeft: (n, eq = hayEtiquetas()) => (n === 1 ? `1 ${eq ? "team" : "person"} is left without a prize.` : `${n} ${eq ? "teams" : "people"} are left without a prize.`),
     againSin: (n) => `Next prize (${n}\xa0left)`,
     againNueva: "Use another list",
-    againFew: (n) => (n === 1 ? "Only one person is left without a prize: for another draw, use another list." : "Everyone on the list has already won: for another prize, use another list."),
+    againFew: (n, eq = hayEtiquetas()) => (n === 1 ? `Only one ${eq ? "team" : "person"} is left without a prize: for another draw, use another list.` : "Everyone on the list has already won: for another prize, use another list."),
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${new Intl.ListFormat("en", { type: "conjunction" }).format(nombres)} already won and are off this list. ${n} left.`),
     recuperarLista: "Bring back the previous list",
     cortinaSe: "Up for grabs",
@@ -3744,7 +3760,10 @@ export const T: Record<Lang, Dict> = {
     pvEnsayo: "Try it with a sample",
     pvCerrar: "Don't show again",
     gateRetomando: "Getting your account back…",
-    yaEntraste: "You're in. Seal your list of {n} people.",
+    // The word is this browser's call: with coupon teams, the list is a list of teams (src/equipos/etiquetas.ts).
+    get yaEntraste() {
+      return hayEtiquetas() ? "You're in. Seal your list of {n} teams." : "You're in. Seal your list of {n} people.";
+    },
     pegarAyuda: "Paste names from WhatsApp or a spreadsheet, or bring your Luma list.",
     // On its own, next to the box: capitalized. The bar's one (sigLista) sits mid-line.
     listaCuenta: "List of {n} people",
@@ -3754,10 +3773,11 @@ export const T: Record<Lang, Dict> = {
     // In a split turn order, the count next to the box gives people and turns, not entries.
     listaCuentaTurnos: (n, k) => `List of ${n === 1 ? "1 person" : `${n} people`}, ${k} turns`,
     sigPegar: "Paste the list",
-    sellarResumen: (n, k, premio, participaciones) => {
+    sellarResumen: (n, k, premio, participaciones, eq = hayEtiquetas()) => {
       const varias = typeof participaciones === "number" && participaciones !== n;
       return (
-        `${varias ? `${n} people, ${participaciones} entries` : `${n} people`}, ` +
+        // With several entries the list is still one of people: teams go one per line, without them.
+        `${varias ? `${n} people, ${participaciones} entries` : `${n} ${eq ? "teams" : "people"}`}, ` +
         `${k === 1 ? "1 winner" : `${k} winners`}${premio === null ? "" : `, ${premio || "no prize"}`}. ` +
         `${varias ? "Anyone with several entries can come out more than once. " : ""}Sealing locks the list.`
       );
@@ -4934,7 +4954,12 @@ export const T: Record<Lang, Dict> = {
     byPollar: "With Google or your email, Pollar keeps your account safe. With Varial, your extension keeps it safe, and with the test account, this browser does. Tinkazo never sees your key.",
     // The sign-in window, shaped like Pollar's (8 October 2026).
     loginTitle: "Sign in or create your account",
-    loginParaSellar: "To seal your list of {n} people, sign in or create your account. Your list will be waiting here.",
+    // The word is this browser's call: with coupon teams, the list is a list of teams (src/equipos/etiquetas.ts).
+    get loginParaSellar() {
+      return hayEtiquetas()
+        ? "To seal your list of {n} teams, sign in or create your account. Your list will be waiting here."
+        : "To seal your list of {n} people, sign in or create your account. Your list will be waiting here.";
+    },
     loginMailLabel: "Your email",
     loginMailPh: "Your email",
     loginMailGo: "Continue with email",
@@ -5213,7 +5238,10 @@ export const T: Record<Lang, Dict> = {
     sigRegion: "What's next",
     sigPaso: "Step {n} of 4",
     // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
-    sigLista: "list of {n} people",
+    // With coupon teams, the bar says teams too (src/equipos/etiquetas.ts).
+    get sigLista() {
+      return hayEtiquetas() ? "list of {n} teams" : "list of {n} people";
+    },
     // In a split turn order, the bar counts people and turns, like the rest of the screen.
     // Short on purpose: with both counts it never fits one line, not even on a phone, where two lines are fine.
     sigListaTurnos: "{p} people, {n} turns",
