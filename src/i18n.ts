@@ -2618,7 +2618,7 @@ export const T: Record<Lang, Dict> = {
     monHecha: "ya lo hiciste",
     // UX 19-oct: fondos
     txFunding: "Preparando tu cuenta de prueba…",
-    fundTitleMain: "Todavía no se pudo cubrir la comisión",
+    fundTitleMain: "Tu cuenta no tiene saldo para la comisión",
     // UX 19-oct: siguiente. Dónde estás, qué falta y qué sigue.
     pasosAria: "Pasos del sorteo",
     paso1: "Lista", paso2: "Sellar", paso3: "Sortear", paso4: "Compartir",
@@ -5089,7 +5089,7 @@ export const T: Record<Lang, Dict> = {
     monHecha: "already done",
     // UX 19-oct: fondos
     txFunding: "Setting up your test account…",
-    fundTitleMain: "The fee couldn't be covered yet",
+    fundTitleMain: "Your account has no balance for the network fee",
     // UX 19-oct: siguiente. Where you are, what is missing and what comes next.
     pasosAria: "Draw steps",
     paso1: "List", paso2: "Seal", paso3: "Draw", paso4: "Share",
