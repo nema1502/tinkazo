@@ -343,10 +343,12 @@ describe("en pantalla angosta, con la página bajada", () => {
   const ALTO = 62;
   const raiz = document.documentElement.style;
   const altoPublicado = (): string => raiz.getPropertyValue("--cinta-alto");
+  const altoEnCabecera = (): string => raiz.getPropertyValue("--cinta-cabecera-alto");
   let medida: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     raiz.removeProperty("--cinta-alto");
+    raiz.removeProperty("--cinta-cabecera-alto");
     const original = HTMLElement.prototype.getBoundingClientRect;
     medida = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       if (this.id === "version-nueva") return { top: 0, bottom: ALTO, left: 0, right: 390, width: 390, height: ALTO, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
@@ -357,6 +359,7 @@ describe("en pantalla angosta, con la página bajada", () => {
   afterEach(() => {
     medida.mockRestore();
     raiz.removeProperty("--cinta-alto");
+    raiz.removeProperty("--cinta-cabecera-alto");
   });
 
   it("queda pegada arriba al bajar, debajo de las capas y encima de la banda del ensayo", async () => {
@@ -397,6 +400,66 @@ describe("en pantalla angosta, con la página bajada", () => {
     fallaVite();
     await vi.waitFor(() => expect(cinta()).not.toBeNull());
     expect(altoPublicado()).toBe("");
+  });
+
+  it("dentro de la cabecera fija publica su alto aparte, y pegada no", async () => {
+    document.body.innerHTML = `<header style="position: sticky; top: 0"></header><main></main>`;
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    expect(altoEnCabecera()).toBe(`${ALTO}px`);
+    expect(altoPublicado()).toBe("");
+    // Se angosta la ventana: va pegada, publica la otra variable y quita esta.
+    const cabecera = document.querySelector<HTMLElement>("body > header") as HTMLElement;
+    cabecera.style.position = "static";
+    window.dispatchEvent(new Event("resize"));
+    expect(altoEnCabecera()).toBe("");
+    expect(altoPublicado()).toBe(`${ALTO}px`);
+    // Y se vuelve a ensanchar.
+    cabecera.style.position = "sticky";
+    window.dispatchEvent(new Event("resize"));
+    expect(altoEnCabecera()).toBe(`${ALTO}px`);
+    expect(altoPublicado()).toBe("");
+  });
+
+  it("la variable de la cabecera se quita al cerrar la cinta", async () => {
+    document.body.innerHTML = `<header style="position: sticky; top: 0"></header><main></main>`;
+    hayOtra();
+    fallaVite();
+    await vi.waitFor(() => expect(cinta()).not.toBeNull());
+    expect(altoEnCabecera()).toBe(`${ALTO}px`);
+    document.querySelector<HTMLButtonElement>("#version-nueva button[data-cerrar]")?.click();
+    expect(altoEnCabecera()).toBe("");
+  });
+
+  it("si la cinta cambia de alto dentro de la cabecera, la variable sigue a la cinta", async () => {
+    let alto = ALTO;
+    medida.mockImplementation(function (this: HTMLElement) {
+      const h = this.id === "version-nueva" ? alto : 0;
+      return { top: 0, bottom: h, left: 0, right: 390, width: 390, height: h, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    });
+    const observado: { avisar?: () => void } = {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(avisar: () => void) {
+          observado.avisar = avisar;
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    try {
+      document.body.innerHTML = `<header style="position: sticky; top: 0"></header><main></main>`;
+      hayOtra();
+      fallaVite();
+      await vi.waitFor(() => expect(cinta()).not.toBeNull());
+      alto = ALTO + 24;
+      observado.avisar?.();
+      expect(altoEnCabecera()).toBe(`${ALTO + 24}px`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("si la ventana cruza el ancho de la cabecera fija, se muda y no queda encima de ella", async () => {
@@ -629,6 +692,15 @@ describe("lo que la página encuadra arriba, con la cinta pegada", () => {
     expect(conPadding).toHaveLength(1);
     // Sin la cinta, el valor de siempre: html no tenía scroll-padding-top en pantalla angosta (auto).
     expect(conPadding[0]).toMatch(/html\s*\{\s*scroll-padding-top:\s*var\(--cinta-alto,\s*auto\);?\s*\}/);
+  });
+
+  it("a más de 1100 px, html suma el alto de la cinta de la cabecera, y sin ella vale 76px", () => {
+    expect(css).toMatch(/@media \(min-width: 1101px\) \{ html \{ scroll-padding-top: calc\(76px \+ var\(--cinta-cabecera-alto, 0px\)\); \} \}/);
+  });
+
+  it("el ensayo y el stand en escritorio restan la cinta de la cabecera para no contarla dos veces", () => {
+    expect(css).toContain("scroll-margin-top: calc(var(--cab-alto, 0px) - var(--cinta-cabecera-alto, 0px) + var(--banda-alto, 0px) + 8px)");
+    expect(css).toContain("scroll-margin-top: calc(var(--cab-alto, 0px) - var(--cinta-cabecera-alto, 0px) + var(--banda-alto, 0px) + 12px)");
   });
 
   it("ninguna regla de scroll-margin-top suma la cinta, y vuelven a sus valores", () => {

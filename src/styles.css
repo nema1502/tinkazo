@@ -1701,11 +1701,12 @@
      Sin cabecera fija, debajo de la cinta de versión nueva si está pegada arriba
      (`--cinta-alto`, version-nueva.ts; sin la cinta vale cero).
      Y lo que la página lleva a la vista se para debajo de la banda, no detrás
-     (la cinta ya la suma el scroll-padding-top de html). */
+     (la cinta ya la suma el scroll-padding-top de html: de --cab-alto, que la lleva adentro, se le resta
+     `--cinta-cabecera-alto` para no contarla dos veces). */
   body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
   @media (min-width: 1101px) {
     body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { top: var(--cab-alto, 0px); }
-    body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
+    body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) - var(--cinta-cabecera-alto, 0px) + var(--banda-alto, 0px) + 8px); }
   }
   .ensayo-banda p, .stand-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
   .ensayo-banda button.ghost, .stand-banda button.ghost { min-height: 44px; }
@@ -2322,7 +2323,7 @@
   body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--banda-alto, 0px) + 12px); }
   @media (min-width: 1101px) {
     .juego-nota { scroll-margin-top: 109px; }
-    body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 12px); }
+    body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) - var(--cinta-cabecera-alto, 0px) + var(--banda-alto, 0px) + 12px); }
   }
   .gamepick[inert] { opacity: 0.55; cursor: not-allowed; }
   #rec-head { font-size: 16px; }
@@ -2498,8 +2499,9 @@
   /* Con la cabecera fija (más de 1100 px) lo que la página lleva a la vista se para debajo de ella. Con la cabecera
      suelta no hay nada que esquivar: este relleno dejaba 76 px vacíos arriba de cada paso y, en una laptop chica a
      200 % de zoom (681 × 316), empujaba la espera y el primer ganador debajo de la barra de "lo que sigue"
-     (batería de cierre del 26 de octubre de 2026). */
-  @media (min-width: 1101px) { html { scroll-padding-top: 76px; } }
+     (batería de cierre del 26 de octubre de 2026). Si la cinta de versión nueva está dentro de la cabecera, esta mide
+     más y la cinta publica su alto en `--cinta-cabecera-alto` (version-nueva.ts); sin ella la suma vale 76px. */
+  @media (min-width: 1101px) { html { scroll-padding-top: calc(76px + var(--cinta-cabecera-alto, 0px)); } }
   /* Sin cabecera fija, la cinta de versión nueva va pegada arriba y publica su alto (version-nueva.ts): todo lo que
      se lleva a la vista, con scrollIntoView o por un ancla, queda debajo de ella. Las reglas de scroll-margin-top no
      la suman, porque se contaría dos veces. Sin la cinta la variable no existe y vale auto, como siempre. */

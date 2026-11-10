@@ -244,8 +244,10 @@ export function showVersionNotice(): HTMLElement {
       const diferencia = nuevo - alto;
       alto = nuevo;
       if (lugar === "pegada") {
-        publicarAlto(bar);
+        publicarAlto(bar, "--cinta-alto");
         compensarSinAnclaje(diferencia);
+      } else if (lugar === "cabecera") {
+        publicarAlto(bar, "--cinta-cabecera-alto");
       }
       if (lugar !== "pagina") avisarAlto();
     });
@@ -275,7 +277,10 @@ function compensarSinAnclaje(alto: number): void {
  * Dónde está la cinta:
  * - "cabecera": dentro de la cabecera fija (escritorio, más de 1100 px). Baja con
  *   la página sin posición ni z-index propios: no tapa nada más que la cabecera
- *   misma, que ya queda debajo de todas las capas.
+ *   misma, que ya queda debajo de todas las capas. Publica su alto en
+ *   `--cinta-cabecera-alto`: la cabecera crece lo que mide la cinta y el
+ *   scroll-padding-top de html lo suma para no dejar lo que se lleva a la vista
+ *   detrás de ella.
  * - "pegada": arriba de la página, pegada al borde de arriba mientras se baja
  *   (celular y tableta, donde la cabecera se queda en su lugar y, sin esto, con
  *   la página bajada nadie la vería). Va por encima de la página y de la banda
@@ -316,13 +321,16 @@ function colocar(bar: HTMLElement): boolean {
   bar.style.position = pegada ? "sticky" : "";
   bar.style.top = pegada ? "0px" : "";
   bar.style.zIndex = pegada ? "20" : "";
-  if (pegada) publicarAlto(bar);
+  // Cada lugar publica su alto en su variable y quita la del otro.
+  if (pegada) publicarAlto(bar, "--cinta-alto");
   else document.documentElement.style.removeProperty("--cinta-alto");
+  if (nuevo === "cabecera") publicarAlto(bar, "--cinta-cabecera-alto");
+  else document.documentElement.style.removeProperty("--cinta-cabecera-alto");
   return cambio;
 }
 
-function publicarAlto(bar: HTMLElement): void {
-  document.documentElement.style.setProperty("--cinta-alto", `${Math.ceil(bar.getBoundingClientRect().height)}px`);
+function publicarAlto(bar: HTMLElement, variable: "--cinta-alto" | "--cinta-cabecera-alto"): void {
+  document.documentElement.style.setProperty(variable, `${Math.ceil(bar.getBoundingClientRect().height)}px`);
 }
 
 /** La cinta se va: deja de escuchar la ventana y de publicar su alto. */
@@ -332,6 +340,7 @@ function soltar(): void {
   alCambiarAlto?.disconnect();
   alCambiarAlto = null;
   document.documentElement.style.removeProperty("--cinta-alto");
+  document.documentElement.style.removeProperty("--cinta-cabecera-alto");
   lugar = "pagina";
 }
 
