@@ -21,6 +21,14 @@ Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explo
 | `draw` (verificación BLS + selección) | `39c4fad01488269e…` | 827 191 stroops = **0,083 XLM** |
 | `extend` (renta de instancia y código, 7 → 120 días) | `67e9b763fc86706a…` | 151 530 187 stroops = **15,15 XLM** |
 
+## Versión 0.2.0, la de mainnet
+
+La versión 0.2.0 del paquete (`contracts/raffle/Cargo.toml`) cambia dos cosas respecto del tag `v0.1.0`: el tope de ganadores sube de 32 a 300 (`MAX_WINNERS`) y las entradas del sorteo (`Raffle`, `Draw`) se renuevan con su propio umbral: cuando les quedan menos de 30 días, `seal`, `draw` y `extend` las dejan en 120 (`TTL_ENTRADA_THRESHOLD` y `TTL_ENTRADA_EXTEND_TO`; el `v0.1.0` usaba 60 y 120, y la variante de testnet del 25 de octubre, 2 y 7). El umbral de 30 es lo que queda de los 120 después de los 90 días que el contrato de premios lee un sorteo desde su `draw`: hasta ahí nadie tiene que renovar nada. Una prueba (`las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30`) comprueba que nacen con 120, que a los 89 días `extend` no las toca y que a los 91 las vuelve a dejar en 120.
+
+La 0.2.0 renueva las entradas a 120 días en cualquier red. **En mainnet el costo medido no cambia**: la red crea toda entrada persistente nueva con su mínimo, que ya son 120 días (`min_persistent_ttl` de 2.073.600 ledgers, en `scripts/vigilar-red.base.json`), así que `seal` y `draw` ya pagaban la renta de 120 días, y el pedido de la 0.2.0 no hace nada al nacer la entrada (le quedan 120, sobre el umbral de 30). Las proyecciones de abajo (0,178 XLM por un sorteo de tres ganadores, 0,331 con 100 y 0,647 con 300) salen de esa renta y siguen valiendo. En testnet sí cambiaría: el mínimo es de 7 días, y el mismo pedido subiría cada entrada a 120 y pagaría unas 17 veces más renta, que es justo lo que la variante del 25 de octubre evitaba.
+
+El paquete está en 0.2.0 porque el workflow de StellarExpert nombra el `.wasm` y el release con la versión del paquete: con el tag `v0.2.0` salen el release `v0.2.0_tinkazo-raffle_cli28.1.0` y el archivo `tinkazo-raffle_v0.2.0.wasm`. Con un tag que no coincida con la versión del paquete, el nombre del release agrega `_pkg<versión>`.
+
 ## Costos medidos y proyección a mainnet
 
 **Medición del 3 de octubre de 2026 (vigente).** Lo que cobró la red según Horizon, en los sorteos 151, 152, 159 y 160:
@@ -49,6 +57,65 @@ Notas:
 - La verificación BLS es barata: la parte no reembolsable de `draw` (CPU, lectura, tamaño) fue de 29 672 stroops, 0,003 XLM. Es posible gracias a las funciones nativas de BLS12-381 del host, incorporadas por [CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md) en el protocolo 22. Casi todo el fee de `seal` y `draw` es renta de las dos entradas persistentes por 120 días.
 - La renta del código depende del tamaño del módulo compilado, no del WASM crudo: un contrato de 11,4 KB paga como si ocupara unos 110 KB. Mantenerlo chico importa.
 - `extend` puede llamarlo cualquiera; el mantenedor lo corre cuando el TTL baja de 60 días. Si nadie lo hace y las entradas se archivan, la siguiente transacción las restaura pagando la renta (protocolo 23+).
+
+## Costo según la cantidad de ganadores
+
+**Medido y proyectado el 6 de noviembre de 2026**, para subir `MAX_WINNERS` de 32 a 300 en la versión que vaya a mainnet. Las filas de 3, 32, 50 y 100 se midieron con el tope en 100 (rama `sorteo-100-ganadores`); el tope quedó en 300 y las filas de 300 se midieron y proyectaron después con el mismo método. Nada se envió a ninguna red: lo de testnet y de mainnet son simulaciones de solo lectura. La selección, la serialización y el hash no cambian; es solo el tope.
+
+**Qué crece con los ganadores y qué no.** El sello (`seal`) cuesta lo mismo con 3 que con 300 ganadores: la entrada `Raffle` guarda la cantidad, no la lista. El sorteo (`draw`) crece por dos cosas: la entrada `Draw` guarda la lista de ganadores (8 bytes por ganador) y su renta por 120 días, y el evento `Drawn` la repite. La cantidad de participantes casi no pesa: en la cadena solo va la huella de la lista. Lo único que depende de los participantes es cuántos hashes hace la selección: con muchos más participantes que ganadores son pocos más que `k`, y con `k = participantes` (el «modo orden», una permutación completa) son unos `k · H(k)`: unos 519 con 100 y unos 1.885 con 300 (con 100, en 3.000 pruebas con semillas al azar, de unos 290 a 1.200).
+
+**1. En local, con el presupuesto de Soroban** (`cargo test -p tinkazo-raffle costo -- --nocapture`; con `TINKAZO_WASM=<archivo.wasm>` el contrato corre en la máquina virtual, que es lo que paga la red; el `.wasm` es el de `stellar contract build --optimize`, 11.687 bytes, los mismos que el desplegado, con otra constante). El límite de la red es de 400 millones de instrucciones y 40 MiB de memoria por transacción; la prueba exige quedar bajo la cuarta parte de los dos.
+
+| Ganadores | Participantes | Instrucciones | % del límite | Memoria | Entrada `Draw` (bytes XDR) | Bytes escritos | Evento (bytes) |
+|---|---|---|---|---|---|---|---|
+| 3 | 18 o 1.000 | 27.387.766 | 6,8 % | 1,39 MB | 316 | 888 | 232 |
+| 32 | 32 | 29.142.805 | 7,3 % | 1,44 MB | 548 | 1.120 | 464 |
+| 32 | 1.000 | 27.889.872 | 7,0 % | 1,41 MB | 548 | 1.120 | 464 |
+| 50 | 50 | 30.061.432 | 7,5 % | 1,47 MB | 692 | 1.264 | 608 |
+| 50 | 1.000 | 28.233.015 | 7,1 % | 1,42 MB | 692 | 1.264 | 608 |
+| 100 | 100 | 34.609.484 | 8,7 % | 1,60 MB | 1.092 | 1.664 | 1.008 |
+| 100 | 1.000 | 29.152.733 | 7,3 % | 1,48 MB | 1.092 | 1.664 | 1.008 |
+| **300** | **300** | **58.254.896** | **14,6 %** | 2,24 MB | **2.692** | 3.264 | 2.608 |
+| 300 | 1.000 | 36.733.236 | 9,2 % | 1,93 MB | 2.692 | 3.264 | 2.608 |
+
+Las filas de 300 se midieron con el `.wasm` de esta versión (20.656 bytes, optimizado con `stellar contract optimize`), que en las filas que se pueden comparar (3, 32 y 50 ganadores) da entre 0,2 y 4,9 % más instrucciones que el de 11.687 bytes de las filas de arriba.
+`seal` en la máquina virtual: 524.529 instrucciones y 700 bytes escritos, con 3 o con 100 ganadores (537.032 y los mismos 700 bytes, con 3 o con 300, en el `.wasm` de las filas de 300). Con 100 de 100, la peor de 300 semillas (`peor_semilla_de_la_seleccion_con_el_tope_de_ganadores`) hace la selección en 10,4 millones de instrucciones, contra 4,8 de la semilla real: el sorteo entero queda en unos 40 millones (10 % del límite), todavía bajo la cuarta parte. Con 300 de 300 y el contrato como Rust nativo, la semilla real hace la selección en 13,5 millones y la peor de las 300 semillas en 33,2: el sorteo entero queda en 40,3 millones con la real y en 60,0 con la peor (15 % del límite), todavía bajo la cuarta parte. La peor semilla no se midió en la máquina virtual.
+
+**2. Simulación en testnet con el contrato vigente** (`CDNWNY26…KYV3A`, tope 32, ledger 5.587.025 a 5.587.032, protocolo 30). Para `seal` con 3 y con 32 ganadores el fee es el mismo; con 33, 50 y 100 el contrato responde `Error(Contract, #4)` (`BadWinnerCount`), que prueba que el tope viejo vive en la red. Para `draw` se simuló sobre cuatro sorteos de ese contrato que seguían sin sortear, con su ronda de drand ya publicada (la firma salió de `api.drand.sh`). Con 50, 100 y 300 ganadores no hay forma de simular en la red hasta desplegar la versión nueva, así que esos salen del ajuste de abajo.
+
+| Paso | Ganadores (participantes) | Fee simulado (stroops) | En XLM | Instrucciones | Bytes escritos | Renta y escritura del TTL |
+|---|---|---|---|---|---|---|
+| `seal` | 3 o 32 | 66.429 | 0,0066 | 695.647 | 632 | 60.943 |
+| `draw` | 1 (18) | 64.953 | 0,0065 | 28.626.865 | 876 | 51.007 |
+| `draw` | 2 (18) | 65.900 | 0,0066 | 28.646.046 | 884 | 51.926 |
+| `draw` | 12 (40) | 75.391 | 0,0075 | 28.883.296 | 944 | 61.125 |
+| `draw` | 32 (40) | 94.530 | 0,0095 | 29.826.379 | 1.104 | 79.522 |
+
+Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta exacta de la forma `5.934 + 114,98 · S` stroops de renta (con `S` los bytes de la entrada `Draw`, 392 con un ganador y 8 más por cada uno), que pasa por los cuatro puntos sin error. El resto del fee es fijo o casi: instrucciones (≈ 3 stroops cada 10.000), 2.500 por las dos entradas escritas, 1.831 + 124 por el tamaño de la transacción (624 bytes) y 2.500 por KB de eventos.
+
+**3. Testnet y mainnet comparten los parámetros de fee y de renta** (testnet ya está en el protocolo 30 y mainnet sigue en el 29; el detector no registra cambios al 6 de noviembre desde la línea base del 4): la diferencia es el TTL mínimo de una entrada persistente, 7 días contra 120. La razón de las rentas se midió simulando la subida del mismo `.wasm` (11.687 bytes) en los dos RPC: 0,959 XLM en testnet y **16,373 XLM en mainnet** (la renta, sin la parte fija, sale 17,129 veces mayor; 120 sobre 7 da 17,143, menos de 0,1 % de diferencia). Y la renta por KB es la misma en las dos, el piso de 1.000 stroops, porque el estado vivo está bajo 2/3 del objetivo (testnet 4.417 de 7.000 MB, 63 %; mainnet 1.672 de 3.000 MB, 56 %). Con eso, mainnet = lo fijo + 17,129 veces lo que depende del tamaño de la entrada. Como control, la misma cuenta da para tres ganadores 0,0954 de `seal` y 0,0824 de `draw`, que coinciden con los 0,10 y 0,08 de la proyección del 16 de septiembre. En mainnet las entradas nacen con 120 días por el mínimo de la red, y la 0.2.0 también pide 120 (`TTL_ENTRADA_*`): el pedido no agrega costo allá.
+
+| Ganadores (participantes) | `draw` testnet (7 días) | `draw` mainnet (120 días) | `seal` + `draw` mainnet | En US$ (XLM a 0,196) |
+|---|---|---|---|---|
+| 3 (18) | 0,0067 | 0,0824 | **0,178 XLM** | ≈ 0,035 |
+| 32 (32) | 0,0095 (medido) | 0,1282 | **0,224 XLM** | ≈ 0,044 |
+| 50 (50) | 0,0112 | 0,1566 | **0,252 XLM** | ≈ 0,049 |
+| 100 (100) | 0,0161 | 0,2356 | 0,331 XLM | ≈ 0,065 |
+| 100 (1.000) | 0,0159 | 0,2355 | 0,331 XLM | ≈ 0,065 |
+| 300 (300) | 0,0355 | 0,5515 | **0,647 XLM** | ≈ 0,127 |
+
+`seal` vale 0,0066 XLM en testnet (medido) y 0,0954 en mainnet (proyectado). Con 100 ganadores el sorteo cuesta cerca de 2,9 veces el de tres y el par completo 1,9 veces; de los 0,2356 XLM del `draw`, 0,2338 son renta de la entrada `Draw` por 120 días. Las filas de 300 salen de seguir esa recta (el `draw` crece 0,00158 XLM por ganador en mainnet y 0,000097 en testnet, la misma pendiente entre 3, 32, 50 y 100): con 300 ganadores el par completo cuesta 3,6 veces el de tres. Instrucciones y memoria casi no cuentan en el fee (36 millones de instrucciones son 0,0011 XLM).
+
+**Si el estado de mainnet sube, el costo se multiplica, y con muchos ganadores se nota antes.** La renta por KB sale del piso al pasar 2/3 del objetivo (2.000 MB) y llega a ×10 en el objetivo (3.000 MB). Mismos datos que arriba, con la renta de cada nivel:
+
+| Estado de mainnet | Renta por KB | 3 ganadores, `seal` + `draw` | 100 ganadores, solo `draw` | 100 ganadores, `seal` + `draw` | 300 ganadores, solo `draw` | 300 ganadores, `seal` + `draw` |
+|---|---|---|---|---|---|---|
+| hoy, 1.672 MB (hasta 2.000) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM | 0,551 XLM | 0,647 XLM |
+| 2.250 MB | ×3,25 | 0,571 | 0,760 | 1,068 | 1,786 | 2,094 |
+| 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 | 3,020 | 3,539 |
+| 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 | 5,489 | 6,433 |
+
+El `draw` de 100 ganadores pasa de 1 XLM (el tope de comisión de Pollar en mainnet) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); el de 300 ganadores, hacia los 2.090 MB, unos cuatro días; con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
 
 ## Vigilancia de la red
 
@@ -108,7 +175,7 @@ git add scripts/vigilar-red.base.json && git commit            # paso 4
 ```
 
 **Latido.** Si el detector mismo calla (el cron se saltea o GitHub desactiva el workflow) no llega ningún correo: por eso el último paso de `vigilar-red.yml` hace `curl` a la dirección del secreto `HEALTHCHECK_URL`, también cuando la corrida falla; sin el secreto no hace nada.
-En healthchecks.io el chequeo va con período de 30 minutos y gracia de 90, para que mande un correo si pasan 2 horas sin latido; el secreto se carga con `gh secret set HEALTHCHECK_URL --repo nema1502/tinkazo` (el chequeo lo crea Nicolás).
+En healthchecks.io el chequeo va con período de 30 minutos y gracia de 90, para que mande un correo si pasan 2 horas sin latido; el secreto se carga con `gh secret set HEALTHCHECK_URL --repo nema1502/tinkazo` (el chequeo lo crea quien dirige el proyecto).
 
 ## Cómo desplegar
 
@@ -124,11 +191,11 @@ En mainnet no se compila acá: se despliega el `.wasm` del release que arma GitH
 
 ```bash
 # 1. Un tag dispara .github/workflows/release.yml: pruebas, compilación, release y atestación
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 
 # 2. Bajar el .wasm del release (el nombre exacto del release sale en el resumen del workflow)
-gh release download v0.1.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
-gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
+gh release download v0.2.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
+gh attestation verify tinkazo-raffle_v0.2.0.wasm --repo nema1502/tinkazo \
   --signer-repo stellar-expert/soroban-build-workflow
 
 # 3. Desplegarlo. El script no despliega en mainnet un .wasm sin atestación de GitHub,
@@ -137,7 +204,7 @@ gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
 #    sin eso, la verificación no cree en el contrato nuevo.
 stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com \
   --network-passphrase "Public Global Stellar Network ; September 2015"
-scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.1.0.wasm
+scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.2.0.wasm
 ```
 
 Si el despliegue reemplaza a otro contrato, el anterior pasa a `anteriores` en el mismo commit, con los dos topes que lo cierran (sin ellos, `oficiales.ts` no lo acepta, o no lo acepta por historial): `ultimoId` es `next_id − 1` y `ultimoLedger` es el `sealed_ledger` de ese sorteo. Los dos salen por simulación de solo lectura, sin firmar nada:
@@ -176,7 +243,14 @@ El workflow hace esa recompilación en otra máquina en cada release y falla si 
 Ese servicio es de StellarExpert y no depende de nosotros: entre fines de julio y el 13 de octubre de 2026 no verificó contratos ([soroban-build-workflow#9](https://github.com/stellar-expert/soroban-build-workflow/issues/9)). Si una hora después del release el contrato sigue sin marcar:
 
 1. En la corrida, el paso «Respuesta de StellarExpert» del job «Comprobar el release» dice qué respondió: `{"ok":1}` es que lo recibió.
-2. Reenviar el aviso con el workflow «Reenviar el aviso de verificación»: `gh workflow run reenviar-verificacion.yml`. Manda el mismo pedido, sin compilar ni crear otro release. Conviene repetirlo después de desplegar en mainnet, con el `.wasm` ya en la red.
+2. Reenviar el aviso con el workflow «Reenviar el aviso de verificación». Manda el mismo pedido, sin compilar ni crear otro release. Conviene repetirlo después de desplegar en mainnet, con el `.wasm` ya en la red. El commit, la corrida y el hash no tienen valor por defecto, porque son los de un release en particular; para el `v0.2.0`:
+
+   ```bash
+   gh workflow run reenviar-verificacion.yml \
+     -f commit="$(git rev-list -n 1 v0.2.0)" \
+     -f corrida="$(gh run list --workflow release.yml --json databaseId,headBranch --jq '.[] | select(.headBranch=="v0.2.0") | .databaseId')" \
+     -f hash="$(sha256sum tinkazo-raffle_v0.2.0.wasm | cut -d' ' -f1)"
+   ```
 3. Si aun así no lo marca, escribir en `stellar-expert/soroban-build-workflow` con el hash, el commit y la corrida.
 
 Mientras tanto la prueba sigue en pie: la atestación (caminos 2 y 3) y la recompilación (camino 4) no dependen de stellar.expert.

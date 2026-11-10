@@ -177,13 +177,15 @@ export async function armar<T>(f: () => Promise<T>): Promise<T> {
 /**
  * Lo que devolvió Pollar cuando no pudo, y no se sabe si mandó: un corte, su tope
  * de tiempo, un error que no se entiende, `TRY_AGAIN_LATER` (que la red también
- * contesta cuando la transacción ya entró). Lo demás (sin saldo, la secuencia, un
- * código de resultado de la red) es la red contestando que no la tomó.
+ * contesta cuando la transacción ya entró) y `RATE_LIMITED` (demasiados pedidos: puede
+ * llegar al preguntar por una transacción que ya se mandó). Lo demás (sin saldo, la
+ * secuencia, un código de resultado de la red, una co-firma que no se aprobó) es la
+ * respuesta de que no se tomó.
  */
 async function pollarNoSabe(e: unknown): Promise<boolean> {
   const { errorKey, esDeRed, textoDelError } = await import("../stellar/errores");
   const clave = errorKey(e);
-  return esDeRed(e) || clave === "unknown" || clave === "unconfirmed" || /TRY_AGAIN_LATER|DUPLICATE/.test(textoDelError(e));
+  return esDeRed(e) || clave === "unknown" || clave === "unconfirmed" || /TRY_AGAIN_LATER|DUPLICATE|RATE_LIMITED/.test(textoDelError(e));
 }
 
 /**

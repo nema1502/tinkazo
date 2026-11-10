@@ -31,11 +31,11 @@ afterEach(() => {
 
 describe("urlDelPortero", () => {
   it("sin la variable no hay portero", () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", "");
     expect(urlDelPortero()).toBeNull();
   });
   it("le saca la barra del final", () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", `${URL}/`);
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", `${URL}/`);
     expect(urlDelPortero()).toBe(URL);
   });
 });
@@ -53,6 +53,15 @@ describe("leerCupo: primero rige, después prendido", () => {
   it("rige portero y prendido en falso: cerrado, con el motivo", () => {
     for (const motivo of ["config", "apagado", "fondo"] as const) expect(leerCupo(200, cupo({ prendido: false, motivo }))).toEqual({ rige: "cerrado", motivo });
     expect(leerCupo(200, cupo({ prendido: false }))).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
+  });
+  it("un portero de la otra red no rige: cerrado y no se le manda nada", async () => {
+    expect(leerCupo(200, cupo({ red: "mainnet" }))).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
+    expect(leerCupo(200, cupo({ red: "testnet" }), "mainnet")).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
+    const f = async () => responder(200, cupo({ red: "mainnet" }));
+    expect(await estadoDelPatrocinio(CUENTA, { url: URL, fetch: f as unknown as typeof fetch })).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
+    const billetera = { signAndSubmit: vi.fn(async () => HASH) };
+    await expect(elegirPatrocinador(CUENTA, billetera, { url: URL, fetch: f as unknown as typeof fetch })).rejects.toMatchObject({ motivo: "cerrado" });
+    expect(billetera.signAndSubmit).not.toHaveBeenCalled();
   });
   it("lo que no se entiende es cerrado", () => {
     expect(leerCupo(500, cupo())).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
@@ -316,6 +325,59 @@ describe("las bajas del cliente del portero", () => {
     }
   });
 
+  it("sin la dirección por defecto, después de una demora suelta la espera corta vale una vez: un portero lento pero vivo vuelve a contestar", async () => {
+    vi.useFakeTimers();
+    try {
+      // Contesta, pero a los 2,5 s: más que la espera corta y menos que la entera.
+      const lento = vi.fn(
+        (_u: string, i?: RequestInit) =>
+          new Promise<Response>((resolver, rechazar) => {
+            const t = setTimeout(() => resolver(responder(200, cupo())), 2_500);
+            i?.signal?.addEventListener("abort", () => {
+              clearTimeout(t);
+              rechazar(new DOMException("abort", "AbortError"));
+            });
+          }),
+      );
+      const colgado = vi.fn((_u: string, i?: RequestInit) => new Promise<Response>((_r, rechazar) => i?.signal?.addEventListener("abort", () => rechazar(new DOMException("abort", "AbortError")))));
+      // Sin `porDefecto`: ante la duda, cerrado (el modo Oficial).
+      const o = { url: URL, forzar: true };
+      const caida = estadoDelPatrocinio(CUENTA, { ...o, fetch: colgado as unknown as typeof fetch });
+      await vi.advanceTimersByTimeAsync(TOPE_CUPO_MS + 1);
+      expect(await caida).toEqual({ rige: "cerrado", motivo: "sin-respuesta" });
+      const vistas: string[] = [];
+      for (let i = 0; i < 2; i++) {
+        const p = estadoDelPatrocinio(CUENTA, { ...o, fetch: lento as unknown as typeof fetch });
+        await vi.advanceTimersByTimeAsync(TOPE_CUPO_MS + 1);
+        vistas.push((await p).rige);
+      }
+      // A lo sumo un intento más se corta: el siguiente espera lo que hace falta y el portero paga.
+      expect(vistas).toContain("portero");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("con la dirección por defecto, después de una caída sigue cortando corto: un portero que no contesta cae a Pollar sin hacer esperar", async () => {
+    vi.useFakeTimers();
+    try {
+      const colgado = vi.fn((_u: string, i?: RequestInit) => new Promise<Response>((_r, rechazar) => i?.signal?.addEventListener("abort", () => rechazar(new DOMException("abort", "AbortError")))));
+      const o = { url: URL, porDefecto: true, forzar: true, fetch: colgado as unknown as typeof fetch };
+      const primera = estadoDelPatrocinio(CUENTA, o);
+      await vi.advanceTimersByTimeAsync(TOPE_CUPO_MS + 1);
+      expect(await primera).toEqual({ rige: "pollar", configurado: false });
+      for (let i = 0; i < 2; i++) {
+        let listo = false;
+        const p = estadoDelPatrocinio(CUENTA, o).then((x) => ((listo = true), x));
+        await vi.advanceTimersByTimeAsync(TOPE_CUPO_TRAS_CAIDA_MS + 1);
+        expect(listo).toBe(true);
+        expect(await p).toEqual({ rige: "pollar", configurado: false });
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("con la dirección de la cuenta vacía y un portero configurado no se consulta nada", async () => {
     const f = vi.fn();
     const billetera = { signAndSubmit: vi.fn(async () => HASH) };
@@ -330,7 +392,7 @@ describe("la dirección por defecto (tinkazo.app, testnet)", () => {
   const billetera = { signAndSubmit: vi.fn(async () => HASH) };
   beforeEach(() => {
     vi.unstubAllEnvs();
-    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", "");
     vi.stubGlobal("location", { hostname: "tinkazo.app" });
   });
 
@@ -387,7 +449,7 @@ describe("la dirección por defecto (tinkazo.app, testnet)", () => {
     expect(f).not.toHaveBeenCalled();
   });
   it("con la variable puesta a mano se mantiene lo de antes: sin respuesta, cerrado", async () => {
-    vi.stubEnv("VITE_PATROCINIO_URL", URL);
+    vi.stubEnv("VITE_PATROCINIO_URL_TESTNET", URL);
     const caido = async (): Promise<Response> => {
       throw new TypeError("Failed to fetch");
     };

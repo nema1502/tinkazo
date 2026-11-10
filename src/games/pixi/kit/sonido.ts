@@ -46,6 +46,8 @@ export interface Voz {
   nota(grado: number): number;
   /** El remate de los carteles: cuerpo, acorde y arpegio. */
   fanfarria(): void;
+  /** Si el golpe y el festejo los pone otra cosa (las candidatas de la carrera): el kit no suma los suyos. */
+  propio?(): { golpe: boolean; festejo: boolean };
   /** Algo dentro de `ms` milisegundos reales. */
   despues(ms: number, fn: () => void): void;
   /**
@@ -132,9 +134,10 @@ export function crearSonido(voz: Voz): Sonido {
       grados.forEach((g, i) => voz.despues(i * pasoMs, () => tono(g, "fondo", { dur: 0.04, timbre: "square", vol: 0.025 })));
     },
     fanfarria() {
-      tono(0, "climax", { dur: 0.7, timbre: "sine", vol: 0.09 });
+      const propio = voz.propio?.() ?? { golpe: false, festejo: false };
+      if (!propio.golpe) tono(0, "climax", { dur: 0.7, timbre: "sine", vol: 0.09 });
       voz.fanfarria();
-      voz.despues(520, () => tono(17, "evento", { dur: 0.12, vol: 0.045 }));
+      if (!propio.festejo) voz.despues(520, () => tono(17, "evento", { dur: 0.12, vol: 0.045 }));
     },
     salida: () => tono(9, "evento", { dur: 0.08, vol: 0.04 }),
     despues: (ms, fn) => voz.despues(ms, fn),

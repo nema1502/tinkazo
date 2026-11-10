@@ -36,6 +36,33 @@ describe("mensaje del sorteo: el mismo que el de la pantalla del sorteo", () => 
   });
 });
 
+describe("con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas", () => {
+  // Lo que sale de una lista sellada de 2 personas y 5 participaciones.
+  const d = { ganadores: ["Ana"], total: 5, personas: 2, premio: "Pizza", enlace };
+
+  it("es: la cabeza, palabra por palabra igual a T.es.summary con las dos cuentas", () => {
+    expect(mensajeDeSorteo("es", d)).toBe(T.es.summary(lista("es", ["Ana"]), 5, "Pizza", enlace, false, undefined, 2));
+  });
+
+  it("en: igual a T.en.summary con las dos cuentas", () => {
+    expect(mensajeDeSorteo("en", d)).toBe(T.en.summary(lista("en", ["Ana"]), 5, "Pizza", enlace, false, undefined, 2));
+  });
+
+  it("la foto también dice las dos cuentas, y sin premio o con varios ganadores también", () => {
+    expect(fotoDeSorteo("es", d, enlace).lineas).toContain("Salió entre 5 participaciones de 2 personas");
+    expect(fotoDeSorteo("en", d, enlace).lineas).toContain("Drawn from 5 entries from 2 people");
+    const varios = { ganadores: ["Ana", "Beto"], total: 5, personas: 2, premio: "", enlace };
+    expect(fotoDeSorteo("es", varios, enlace).lineas).toContain("Salieron entre 5 participaciones de 2 personas");
+  });
+
+  it("una participación por persona, nada nuevo: la cabeza y la foto de siempre", () => {
+    const igual = { ganadores: ["Ana"], total: 5, personas: 5, premio: "Pizza", enlace };
+    expect(mensajeDeSorteo("es", igual)).toBe(mensajeDeSorteo("es", { ganadores: ["Ana"], total: 5, premio: "Pizza", enlace }));
+    expect(fotoDeSorteo("es", igual, enlace).lineas).toContain("Salió entre 5 personas");
+    expect(fotoDeSorteo("es", igual, enlace).lineas).not.toContain("participaciones de");
+  });
+});
+
 /** Dos sorteos del evento: uno con premio y otro sin, con dos ganadores. */
 const deEvento = [
   { prize: "Polera", ganadores: ["Gabriela Flores"] },
@@ -46,6 +73,16 @@ describe("mensaje del evento: dice quién ganó qué (D15), igual que summaryEve
   it("un renglón por sorteo: el premio, o Sorteo, y quién ganó", () => {
     expect(lineasDeEvento("es", deEvento)).toEqual(["Polera: Gabriela Flores", "Sorteo: Ana y Beto"]);
     expect(lineasDeEvento("en", deEvento)).toEqual(["Polera: Gabriela Flores", "Draw: Ana and Beto"]);
+  });
+
+  it("un orden de turnos no lista a nadie: dice cuántas personas hay en el orden", () => {
+    const names = ["Ana", "Beto", "Carla"];
+    const turnos = [{ prize: "Turnos de limpieza", ganadores: names.slice(), names }];
+    expect(lineasDeEvento("es", turnos)).toEqual(["Turnos de limpieza: 3 personas"]);
+    expect(lineasDeEvento("en", turnos)).toEqual(["Turnos de limpieza: 3 people"]);
+    // Un sorteo común con las mismas tres personas sigue listando quién ganó.
+    const comun = [{ prize: "Polera", ganadores: names.slice(), names }];
+    expect(lineasDeEvento("es", comun)).toEqual([`Polera: ${lista("es", names)}`]);
   });
 
   it("es: con el nombre por defecto y uno o varios sorteos, igual a summaryEvento", () => {
@@ -210,10 +247,13 @@ describe("evento con enlace corto: entero, en un solo enlace y una sola foto", (
   }, LENTA);
 });
 
+/** Cómo se llama el modo de prueba en la foto: «modo prueba» hoy, «Prueba» con el modo Oficial (`i18n-modo-oficial.ts`). */
+const PRUEBA = String(T.es.fotoPrueba);
+
 describe("lo que va en la foto", () => {
-  it("un sorteo anclado en la red de prueba: número, red y fecha arriba; ganó, el premio y entre cuántos", () => {
+  it("un sorteo anclado en modo prueba: número, red y fecha arriba; ganó, el premio y entre cuántos", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "Polera", fecha: 1_792_600_000, numero: "278", red: "testnet" }, corto);
-    expect(f.rotulo).toMatch(/^Sorteo #278, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(new RegExp(`^Sorteo #278, ${PRUEBA}, \\d{1,2} de [a-z]+ de 2026$`));
     expect(f.titulo).toBe("Ganó");
     expect(f.personas).toEqual(["Ana"]);
     expect(f.lineas).toEqual(["Se lleva: Polera", "Salió entre 18 personas"]);
@@ -230,13 +270,13 @@ describe("lo que va en la foto", () => {
     expect(f.mas).toBe("and {n} more");
   });
 
-  it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo red de prueba", () => {
+  it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo modo prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", fecha: 1_792_600_000, red: "testnet" }, enlace);
-    expect(f.rotulo).toMatch(/^Resultado del sorteo, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(new RegExp(`^Resultado del sorteo, ${PRUEBA}, \\d{1,2} de [a-z]+ de 2026$`));
     expect(fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", red: "mainnet" }, enlace).rotulo).toBe("Resultado del sorteo");
   });
 
-  it("en la red principal no dice red de prueba", () => {
+  it("en la red principal no dice modo prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 5, premio: "", numero: "9", red: "mainnet" }, enlace);
     expect(f.rotulo).toBe("Sorteo #9");
   });
@@ -259,6 +299,19 @@ describe("lo que va en la foto", () => {
     expect(en.filas?.[0]?.cortos).toEqual(["Elena Condori, Sofía Aguilar, and 1 more", "Elena Condori and 2 more"]);
     // Con uno solo no hay nada que acortar.
     expect(fotoDeEvento("es", "Meetup", [sorteoGrande(2, 3)], corto).filas?.[0]?.cortos).toEqual([]);
+  });
+
+  it("un evento: un orden de turnos no lista a nadie en la foto, dice cuántas personas hay, como el mensaje", () => {
+    const base = sorteoGrande(1, 3);
+    const turnos = { ...base, prize: "Turnos de limpieza", ganadores: [...base.names] };
+    const es = fotoDeEvento("es", "Meetup", [turnos], corto);
+    expect(es.filas?.[0]?.ganadores).toBe("3 personas");
+    expect(es.filas?.[0]?.cortos).toEqual([]);
+    expect(lineasDeEvento("es", [turnos])).toEqual([`Turnos de limpieza: ${es.filas?.[0]?.ganadores}`]);
+    expect(fotoDeEvento("en", "Meetup", [turnos], corto).filas?.[0]?.ganadores).toBe("3 people");
+    // Un sorteo común en el que ganan los tres sigue listando a los tres.
+    const comun = fotoDeEvento("es", "Meetup", [{ ...turnos, prize: "Polera" }], corto);
+    expect(comun.filas?.[0]?.ganadores).toBe(lista("es", [...base.names]));
   });
 });
 
@@ -297,6 +350,19 @@ describe("textos nuevos de compartir y de eventos", () => {
       expect(String(T.es[k])).not.toMatch(prohibidas);
       expect(String(T.en[k])).not.toMatch(prohibidas);
     }
+  });
+
+  it("la página del enlace corto y el texto de la foto no prometen un ganador: valen para un orden de turnos", () => {
+    for (const k of [...DE_C, "cmpFotoAlt"]) {
+      expect(String(T.es[k]), k).not.toMatch(/ganó|ganador|ganadora|gana\b/i);
+      expect(String(T.en[k]), k).not.toMatch(/who won|winner|wins\b/i);
+    }
+    expect(T.es.cDesc).toBe("Abrilo para ver el resultado y comprobarlo vos mismo, desde tu celular.");
+    expect(T.es.cAbriendoB).toBe("En un momento ves el resultado y lo comprobás vos.");
+    expect(T.es.cmpFotoAlt).toBe("La foto con el resultado y el QR para comprobarlo");
+    expect(T.en.cDesc).toBe("Open it to see the result and check it yourself, from your phone.");
+    expect(T.en.cAbriendoB).toBe("In a moment you'll see the result and check it yourself.");
+    expect(T.en.cmpFotoAlt).toBe("The photo with the result and the QR code to check it");
   });
 });
 

@@ -40,10 +40,12 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(3, { ...ok, apagado: true })).toBe("sigSorteando");
     expect(claveDelPaso(4, ok)).toBe("sigGano");
     expect(claveDelPaso(4, { ...ok, ganadores: 2 })).toBe("sigGanaron");
+    // Un orden de turnos no tiene ganadores, aunque salga toda la lista.
+    expect(claveDelPaso(4, { ...ok, ganadores: 12, turnos: true })).toBe("sigTurnos");
   });
 
   it("todos esos textos existen en los dos idiomas", () => {
-    const claves = ["sigPegar", "sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigAvisoRonda"];
+    const claves = ["sigPegar", "sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigTurnos", "sigAvisoRonda"];
     const faltan = (["es", "en"] as const).flatMap((l) => claves.filter((k) => typeof T[l][k] !== "string" || !(T[l][k] as string).trim()).map((k) => `${l}.${k}`));
     expect(faltan).toEqual([]);
   });
@@ -105,6 +107,8 @@ describe("la línea de la barra", () => {
       }
       expect(T[l].sigPaso, l).toContain("{n}");
       expect(T[l].sigLista, l).toContain("{n}");
+      expect(T[l].sigListaPart, l).toContain("{p}");
+      expect(T[l].sigListaPart, l).toContain("{n}");
     }
   });
 });

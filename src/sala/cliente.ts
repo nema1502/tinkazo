@@ -99,6 +99,23 @@ export interface Escucha {
   alEstado?: (e: EstadoDeConexion) => void;
   /** La sala se cerró o venció: no hay más que escuchar. */
   alCerrada?: () => void;
+  /**
+   * Un equipo nuevo, o uno que cambió (sus datos o su estado). Cada versión `v` se avisa una sola vez. Solo se pide
+   * a la sala si se pasa esto: el modo stand de los nombres no lo usa.
+   */
+  alEquipo?: (e: EquipoDeSala) => void;
+  /** Un equipo se quitó (desde otra pestaña). */
+  alEquipoQuitado?: (n: number) => void;
+}
+
+/** Un equipo tal como lo guarda la sala: la cuenta en claro y el resto cifrado con la clave del QR. */
+export interface EquipoDeSala {
+  n: number;
+  cuenta: string;
+  d: string;
+  estado: string;
+  /** Sube con cada cambio del equipo en la sala. */
+  v: number;
 }
 
 /**
@@ -135,6 +152,18 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     parar();
     e.alCerrada?.();
   };
+  /**
+   * Lo más nuevo que trajo una consulta: la sala manda solo lo que cambió desde esa versión. Los mensajes del
+   * socket no la mueven: uno que llega antes que la primera consulta no puede tapar a los equipos anteriores.
+   */
+  let desdeV = 0;
+  /** La última versión que se avisó de cada equipo, para no repetir lo que ya llegó por el otro camino. */
+  const versionDe = new Map<number, number>();
+  const recibirEquipo = (x: EquipoDeSala): void => {
+    if ((versionDe.get(x.n) ?? 0) >= x.v) return;
+    versionDe.set(x.n, x.v);
+    e.alEquipo?.(x);
+  };
 
   /** Pide lo que falta. Sirve para recargar la pantalla, para el sondeo y para ponerse al día al reconectar. */
   const consultar = async (): Promise<void> => {
@@ -144,6 +173,16 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
       if (r.status === 404) return cerrada();
       if (!r.ok) return;
       for (const x of (await r.json()) as { n: number; d: string }[]) recibir(x.n, x.d);
+      if (e.alEquipo) {
+        const q = await f(`${s.servicio}/v1/sala/${s.id}/equipos?desde=${desdeV}`, { headers: auth(s) });
+        if (q.status === 404) return cerrada();
+        if (q.ok) {
+          for (const x of (await q.json()) as EquipoDeSala[]) {
+            desdeV = Math.max(desdeV, x.v);
+            recibirEquipo(x);
+          }
+        }
+      }
     } catch {
       /* sin red: se vuelve a intentar */
     }
@@ -173,7 +212,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     });
     socket.addEventListener("message", (ev: MessageEvent) => {
       if (typeof ev.data !== "string" || ev.data === "pong") return;
-      let m: { t?: string; n?: number; d?: string };
+      let m: { t?: string; n?: number; d?: string; v?: number; cuenta?: string; estado?: string };
       try {
         m = JSON.parse(ev.data);
       } catch {
@@ -184,6 +223,9 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
         void consultar();
       } else if (m.t === "nombre" && typeof m.n === "number" && typeof m.d === "string") recibir(m.n, m.d);
       else if (m.t === "quitado" && typeof m.n === "number") e.alQuitado?.(m.n);
+      else if (m.t === "equipo" && typeof m.n === "number" && typeof m.d === "string" && typeof m.v === "number" && typeof m.cuenta === "string" && typeof m.estado === "string")
+        recibirEquipo({ n: m.n, cuenta: m.cuenta, d: m.d, estado: m.estado, v: m.v });
+      else if (m.t === "equipo-quitado" && typeof m.n === "number") e.alEquipoQuitado?.(m.n);
     });
     socket.addEventListener("close", (ev: CloseEvent) => {
       if (ws !== socket) return;

@@ -14,6 +14,8 @@ export interface MarcadorVista {
   rearmar(): void;
   /** Lo esconde o lo muestra (el cartel de quien gana, en el celular, cae encima). */
   ocultar(si: boolean): void;
+  /** Cuánto se ve, de 0 a 1 (`Plan.marcadorApagado`): se apaga y se prende sin saltos. */
+  alfa(a: number): void;
 }
 
 const MONO = "ui-monospace, Consolas, monospace";
@@ -118,6 +120,9 @@ export function crearMarcadorVista(S: Estadio, rotulo: () => string, total?: Tot
       if (raiz.visible === !si) return;
       raiz.visible = !si;
       avisar();
+    },
+    alfa(a) {
+      raiz.alpha = Math.max(0, Math.min(1, a));
     },
   };
 }

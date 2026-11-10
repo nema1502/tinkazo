@@ -28,6 +28,8 @@
  *   nombres y de cuántos quedan. Puro, sin DOM, para probarlo en Node.
  */
 
+import { esNombreEntero } from "./nombres-enteros";
+
 export type Nivel = 1 | 2 | 3 | 4;
 
 /** Una letra o un número: lo que cuenta como "empieza con". */
@@ -68,8 +70,28 @@ export type Formas = readonly [string, string, string, string];
  * niveles, y el texto simplemente no cambia.
  */
 export function formasDe(nombre: string): Formas {
+  const p = partesDe(nombre);
+  if (!p) return ["?", "?", "?", "?"];
+  // El nombre de un equipo no tiene nombre de pila ni apellido: entero en todos los niveles menos el de la inicial.
+  if (esNombreEntero(nombre)) return [inicialDe(nombre), p.completo, p.completo, p.completo];
+  const conApellido = p.ultima ? `${p.pila} ${inicialDe(p.ultima)}.` : p.pila;
+  return [inicialDe(nombre), p.pila, conApellido, p.completo];
+}
+
+/** Las piezas de un nombre con las que se arman sus formas. */
+interface Partes {
+  /** El nombre de pila: hasta la primera palabra que tenga una letra. */
+  pila: string;
+  /** La última palabra que tenga una letra después del nombre de pila (el último apellido), si hay. */
+  ultima: string | undefined;
+  /** Lo que viene después del último apellido (un "3" suelto, un emoji): vacío si no hay nada. */
+  resto: string;
+  completo: string;
+}
+
+function partesDe(nombre: string): Partes | null {
   const ws = palabras(nombre);
-  if (!ws.length) return ["?", "?", "?", "?"];
+  if (!ws.length) return null;
   const completo = ws.join(" ");
   // El nombre de pila: hasta la primera palabra que tenga una letra (un "🌸"
   // suelto delante se queda con ella).
@@ -81,11 +103,40 @@ export function formasDe(nombre: string): Formas {
   let iUlt = ws.length - 1;
   while (iUlt > iPila && !SOLO_LETRA.test(ws[iUlt] as string)) iUlt--;
   const ultima = iUlt > iPila ? ws[iUlt] : undefined;
-  const conApellido = ultima ? `${pila} ${inicialDe(ultima)}.` : pila;
-  return [inicialDe(nombre), pila, conApellido, completo];
+  return { pila, ultima, resto: ws.slice((ultima ? iUlt : iPila) + 1).join(" "), completo };
 }
 
 const clave = (s: string): string => s.normalize("NFC").toLocaleLowerCase("es").replace(/\s+/gu, " ").trim();
+
+/** Las letras del apellido desde la primera que es letra o número ("(Mamani)" empieza en la "M"). */
+function letrasDe(palabra: string): string[] {
+  const gs = grafemas(palabra);
+  const i = gs.findIndex((g) => LETRA.test(g));
+  return i < 0 ? gs : gs.slice(i);
+}
+
+/**
+ * El nivel 3 de un nombre en el `paso` que hace falta para no confundirlo con otro. El paso 0 es el de siempre
+ * ("Elena C."); cada paso agrega algo que distingue y nunca saca nada:
+ *
+ * 1. lo que viene después del apellido ("Elena C. 3")
+ * 2. las dos primeras letras del apellido ("Elena Co. 3"), después tres, y así
+ * 3. el apellido entero ("Elena Condori 3")
+ * 4. el nombre entero (con segundos apellidos y todo), que ya no se puede confundir con otro
+ */
+function conApellidoEn(p: Partes, paso: number): string {
+  if (!p.ultima) return paso === 0 ? p.pila : p.completo;
+  const resto = p.resto ? ` ${p.resto}` : "";
+  if (paso === 0) return `${p.pila} ${inicialDe(p.ultima)}.`;
+  if (paso === 1) return `${p.pila} ${inicialDe(p.ultima)}.${resto}`;
+  const gs = letrasDe(p.ultima);
+  if (paso < gs.length) return `${p.pila} ${((gs[0] as string).toLocaleUpperCase("es") + gs.slice(1, paso).join(""))}.${resto}`;
+  if (paso === gs.length) return `${p.pila} ${p.ultima}${resto}`;
+  return p.completo;
+}
+
+/** El último paso de `conApellidoEn`: el nombre entero. */
+const pasoFinal = (p: Partes): number => (p.ultima ? Math.max(2, letrasDe(p.ultima).length + 1) : 1);
 
 export interface PlanNombres {
   n: number;
@@ -98,21 +149,66 @@ export interface PlanNombres {
 }
 
 /**
+ * El paso del nivel 3 de cada nombre distinto de la lista que tuvo que subir; los que no aparecen quedan en el 0,
+ * el de siempre ("Elena C."). Sube cuando otra persona con otro nombre lo escribiría igual ("Elena Condori" y
+ * "Elena Condori 3", "María Pérez" y "María Paz"): los que chocan suben juntos de paso (`conApellidoEn`) hasta
+ * distinguirse. Una lista sin choques queda exactamente como estaba.
+ */
+function pasosDistinguidos(partes: ReadonlyMap<string, Partes>): Map<string, number> {
+  const pasos = new Map<string, number>([...partes.keys()].map((k) => [k, 0]));
+  const texto = (k: string): string => conApellidoEn(partes.get(k) as Partes, pasos.get(k) as number);
+  // Cada vuelta sube un paso a todos los que chocan; el último paso (el nombre entero) no choca nunca, así que termina.
+  for (;;) {
+    const grupos = new Map<string, string[]>();
+    for (const k of partes.keys()) {
+      // «Luis Paz» y «Luis Paz.» se leen igual: el punto no los distingue.
+      const t = clave(texto(k)).replace(/\./gu, "");
+      grupos.set(t, [...(grupos.get(t) ?? []), k]);
+    }
+    let subio = false;
+    for (const ks of grupos.values()) {
+      if (ks.length < 2) continue;
+      for (const k of ks) {
+        const p = pasos.get(k) as number;
+        if (p < pasoFinal(partes.get(k) as Partes)) {
+          pasos.set(k, p + 1);
+          subio = true;
+        }
+      }
+    }
+    if (!subio) break;
+  }
+  return new Map([...pasos].filter(([, p]) => p > 0));
+}
+
+/**
  * Arma las formas de toda la lista. Los nombres repetidos reciben un ordinal
  * en los niveles 3 y 4, en el orden de la lista: "Juan Pérez" y "Juan Pérez
  * (2)". El ordinal no depende de quién gana, solo de dónde está cada nombre.
+ * Dos nombres distintos que en el nivel 3 se escribirían igual ("Elena C."
+ * para "Elena Condori" y "Elena Condori 3") se distinguen ahí mismo.
  */
 export function planNombres(nombres: readonly string[]): PlanNombres {
   const vistos = new Map<string, number>();
   const total = new Map<string, number>();
-  for (const nm of nombres) total.set(clave(nm), (total.get(clave(nm)) ?? 0) + 1);
+  const partes = new Map<string, Partes>();
+  for (const nm of nombres) {
+    const k = clave(nm);
+    total.set(k, (total.get(k) ?? 0) + 1);
+    const p = partesDe(nm);
+    if (p && !partes.has(k) && !esNombreEntero(nm)) partes.set(k, p);
+  }
+  const pasos = pasosDistinguidos(partes);
   const ordinal: number[] = [];
   const formas: Formas[] = nombres.map((nm) => {
     const k = clave(nm);
     const o = (vistos.get(k) ?? 0) + 1;
     vistos.set(k, o);
     ordinal.push(o);
-    const f = formasDe(nm);
+    const base = formasDe(nm);
+    const paso = pasos.get(k) ?? 0;
+    const propias = paso > 0 ? partesDe(nm) : null;
+    const f: Formas = propias ? [base[0], base[1], conApellidoEn(propias, paso), base[3]] : base;
     if ((total.get(k) ?? 1) <= 1 || o === 1) return f;
     return [f[0], f[1], `${f[2]} (${o})`, `${f[3]} (${o})`] as const;
   });

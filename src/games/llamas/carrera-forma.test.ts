@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { unidadDe } from "../pixi/kit/nombres";
-import { ECHADA_DUR, carrilesDe, formaDe, hudDe, ordenDeFilas, plegada, type Pantalla } from "./carrera-forma";
+import { ECHADA_DUR, FONDO_CARTEL, arribaDelCartel, carrilesDe, formaDe, hudDe, ordenDeFilas, plegada, type Pantalla } from "./carrera-forma";
+import { MARCADOR, medidasMarcador } from "../pixi/kit/marcador";
 
 const pantalla = (w: number, h: number): Pantalla => ({ w, h, u: unidadDe(w, h), retrato: h > w * 1.1, top: Math.round(0.06 * h), bottom: Math.round(h - Math.max(110, 0.14 * h)) });
 const PANTALLAS: [string, Pantalla][] = [["1080p", pantalla(1920, 1080)], ["720p", pantalla(1280, 720)], ["celular 390", pantalla(390, 844)], ["celular de lado", pantalla(844, 390)]];
@@ -28,6 +29,18 @@ describe("la forma de la carrera", () => {
       expect(h.cinta.x1).toBeGreaterThan(h.cinta.x0);
       expect(h.bajo).toBeGreaterThan(h.cinta.y + h.cinta.h - 1);
       expect(h.bajo).toBeLessThan(p.bottom - 60);
+    });
+
+    it(`${nombre}: el fondo del cartel de nombres empieza debajo del marcador QUEDAN, con su sombra, y deja lugar para los nombres`, () => {
+      const k = p.u;
+      const marc = medidasMarcador(k);
+      // El marcador del kit: la caja en (MARCADOR.x, top + MARCADOR.y) y una sombra 5 u más abajo.
+      const sombraAbajo = p.top + MARCADOR.y * k + marc.alto + 5 * k;
+      const fondoArriba = arribaDelCartel(p) - FONDO_CARTEL * k;
+      expect(fondoArriba, "el fondo no pisa la sombra del marcador").toBeGreaterThanOrEqual(sombraAbajo + 2 * k);
+      expect(arribaDelCartel(p), "nunca más arriba que debajo de la cinta").toBeGreaterThanOrEqual(hudDe(p).bajo + 10 * k);
+      // Y no se come la pista: el cartel conserva un buen trozo de pantalla.
+      expect(p.bottom - arribaDelCartel(p)).toBeGreaterThan(0.4 * p.h);
     });
 
     it(`${nombre}: con 2 a 30 nadie se encima, el primero es el de más a la derecha y todo entra en la pista`, () => {

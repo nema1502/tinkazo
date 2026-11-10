@@ -1,6 +1,8 @@
 import "./styles.css";
+import { cargaOpcional } from "./version-nueva";
 import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
 import { network } from "./stellar/config";
+import { leerMarcaPollar } from "./stellar/pollar-config";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
@@ -57,7 +59,7 @@ function montarLaCuenta(): void {
   }
   let marcaPollar: string | null = null;
   try {
-    marcaPollar = localStorage.getItem("tinkazo.pollar.intent");
+    marcaPollar = leerMarcaPollar(localStorage, network.name);
   } catch {
     /* sin almacenamiento no hay marca */
   }
@@ -85,8 +87,9 @@ setLang(initialLang());
 montarLaCuenta();
 onLangChange(montarLaCuenta);
 // El contador va aparte y después: no frena la página y queda en su propio
-// archivo, chico, en vez de darle su nombre al código común.
-void import("./analytics").then((m) => m.countVisits());
+// archivo, chico, en vez de darle su nombre al código común. Si no baja (un
+// bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.
+void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 // Las tablas que se apilan en el celular llevan el rótulo de su columna en cada celda.
 const rotular = (): void => {
   document.querySelectorAll<HTMLElement>("[data-label-i]").forEach((el) => {

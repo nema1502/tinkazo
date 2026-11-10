@@ -79,14 +79,8 @@ function puesto(e: Entrada3D, s: number, c: Contexto3D): { cx: number; cz: numbe
 
 /* ====================================================================== el aro */
 
-/** Cuántos segundos tarda el aro en asentarse en su nueva dueña: es lo que dura el salto, y la ficha cambia a la vez que él. */
-export const SALTO_ARO = 0.2;
-/** El tamaño del aro a los `dt` segundos de cambiar de dueña, respecto del de siempre: arranca 28 % más grande y se asienta con la curva suave. */
-export const golpeAro = (dt: number): number => 1 + 0.28 * (1 - smooth(dt / SALTO_ARO));
-
 function aro(c: Contexto3D): Lider3D {
   const B = c.basura;
-  let dueno = -1, desde = 0;
   const raiz = new Group();
   raiz.visible = false;
   c.escena.add(raiz);
@@ -123,15 +117,13 @@ function aro(c: Contexto3D): Lider3D {
       const p = puesto(e, s, c);
       raiz.visible = !!e.borla && p.esc > 0;
       if (!raiz.visible) return;
-      // Quien lo lleva cambia: el aro salta a su lugar de una vez, un poco más grande, y se asienta en un instante, sin viajar de una llama a otra.
-      if (e.borla && e.borla.duenia !== dueno) {
-        dueno = e.borla.duenia;
-        desde = e.t;
-      }
-      const pulso = (1 + 0.035 * Math.sin(e.t * 5.2)) * golpeAro(e.t - desde);
+      const pulso = 1 + 0.035 * Math.sin(e.t * 5.2);
       // El mismo lugar que la malla de la llama: su x y su z, en el piso. Un óvalo que la abraza de punta a punta y no se mete en el carril de al lado.
-      const pos = p.d?.raiz.position;
-      raiz.position.set((pos ? pos.x : p.cx) + 1 * p.esc, 0.08 * (p.esc / 0.015), pos ? pos.z : p.cz);
+      // Cuando cambia de dueña no salta: se desliza por el piso de una llama a la otra con la borla (`vuela`, lo que dura su vuelo, 0,45 s).
+      const pos = e.borla?.vuela ? undefined : p.d?.raiz.position;
+      // El aro va unas centésimas por encima de las rayas de la pista (que miden 0,1 de alto): con 0,08 por la escala de la llama, en las más grandes quedaba a la altura de la raya
+      // y competían por la profundidad (dos corridas iguales dibujaban unos píxeles distintos donde se cruzan: `audit-rigor`, «la misma ronda dibuja los mismos cuadros»).
+      raiz.position.set((pos ? pos.x : p.cx) + 1 * p.esc, Math.max(0.14, 0.08 * (p.esc / 0.015) + 0.06), pos ? pos.z : p.cz);
       raiz.scale.set(58 * p.esc * pulso, 1, 27 * p.esc * pulso);
       giro.rotation.y = -e.t * 0.9;
     },

@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
-import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
+import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress } from "../stellar/config";
+import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -57,6 +58,8 @@ interface Session {
 let session: Session | null = null;
 /** La wallet está en otra red que la configurada: no se puede sellar. */
 let wrongNetwork = false;
+/** La red que dice la billetera abierta (su frase), para ofrecer pasar el sitio a su modo. */
+let fraseDeLaBilletera: string | null = null;
 let mod: WalletModule | null = null;
 
 const loadWallets = async (): Promise<WalletModule> => (mod ??= await import("../stellar/wallet"));
@@ -130,6 +133,51 @@ const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === nul
  */
 export const claveDeSellar = (): "sigEntrarSellar" | "freeze" => (sinCuentaParaSellar() ? "sigEntrarSellar" : "freeze");
 
+/**
+ * Con el modo Oficial a la vista, hay una cuenta abierta y su billetera está en la otra red: así no se puede sellar
+ * en este modo. Sin modo Oficial no cuenta: ahí, como siempre, se sella en modo libre con su aviso.
+ */
+export const billeteraEnOtraRed = (): boolean => hayModoOficial && anchoringAvailable && session !== null && wrongNetwork;
+
+/**
+ * Antes de sellar: si la billetera está en la otra red, frena con el aviso de cómo seguir y devuelve `true`. Primero
+ * le pregunta de nuevo su red, para que quien ya la cambió en la billetera no tenga que volver a entrar.
+ */
+export async function frenarPorOtraRed(): Promise<boolean> {
+  if (!billeteraEnOtraRed()) return false;
+  try {
+    const frase = await (await lite()).activeWallet()?.networkPassphrase();
+    if (frase !== undefined) {
+      fraseDeLaBilletera = frase;
+      wrongNetwork = frase !== null && frase !== network.networkPassphrase;
+    }
+  } catch {
+    /* si no contesta, vale lo que dijo al entrar */
+  }
+  if (!wrongNetwork) {
+    render();
+    return false;
+  }
+  avisarOtraRed();
+  return true;
+}
+
+/**
+ * El aviso de la billetera en otra red, con el modo Oficial a la vista: qué pasa, cómo cambiar la red en la billetera
+ * (con el nombre que ella le da, que es lo que hay que tocar) y, si la billetera está en la red del otro modo, el
+ * botón para pasar el sitio a ese modo.
+ */
+function avisarOtraRed(): void {
+  const etiqueta = t(network.name === "mainnet" ? "walletNetLabelMain" : "walletNetLabelTest");
+  notice(`${t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name)))} ${t("otraRedComoCambiar").replace("{etiqueta}", etiqueta)}`, true, undefined, false);
+  // Marcado, para que se vaya solo en cuanto la billetera esté en la red del modo (`render`).
+  document.querySelector(".wallet-notice")?.classList.add("otra-red");
+  const destino = networkOfPassphrase(fraseDeLaBilletera);
+  if (!destino || destino === network.name) return;
+  const pasar = button(t(destino === "mainnet" ? "modeSwitchToOfficial" : "modeSwitchToTest"), "ghost", () => void import("./modo-ui").then((m) => m.pasarAModo(destino)));
+  document.querySelector(".wallet-notice .wallet-notice-acciones")?.prepend(pasar);
+}
+
 /** Vuelve a pintar la puerta: al entrar al ensayo, que no pide cuenta. */
 export function refrescarPuerta(): void {
   applyGate();
@@ -157,7 +205,7 @@ let recienEntro = false;
 function haySesionGuardada(): boolean {
   if (loadSessionKind(network.name)) return true;
   try {
-    return !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY && localStorage.getItem("tinkazo.pollar.intent") !== null;
+    return hasPollarKey(network.name) && leerMarcaPollar(localStorage, network.name) !== null;
   } catch {
     return false;
   }
@@ -167,7 +215,7 @@ function haySesionGuardada(): boolean {
 export const enNavegadorDeApp = (): boolean => typeof navigator !== "undefined" && esDeApp(navigator.userAgent);
 
 /** Si "Entrar con Google y sortear" va directo a Google: hay Pollar y no es el navegador de una app. */
-export const entraConGoogle = (): boolean => !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY && !enNavegadorDeApp();
+export const entraConGoogle = (): boolean => hasPollarKey(network.name) && !enNavegadorDeApp();
 
 /** Quien entra va a sortear: al volver del login, incluso del redirect de Google, la página abre la herramienta. */
 function marcarQueVaASortear(): void {
@@ -347,6 +395,7 @@ async function activate(
   // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
   // igual, y con un error más claro que una suposición nuestra.
   wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
+  fraseDeLaBilletera = passphrase;
   const prof = (wallet as { profile?: () => { name: string; avatar: string; mail: string } | null }).profile?.();
   session = {
     kind: wallet.kind,
@@ -456,9 +505,16 @@ function render(): void {
     void import("./history").then((h) => h.renderHistory(session?.address ?? null));
   }
   pintarCuenta();
+  // La billetera ya está en la red del modo (o no hay cuenta): el aviso de otra red se va. Si quedaba, decía que no se
+  // podía sellar mientras el sello entraba.
+  if (!wrongNetwork || !session) document.querySelector(".wallet-notice.otra-red")?.remove();
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable || !session) return;
-  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true, undefined, false);
+  if (wrongNetwork) {
+    // Con el modo Oficial a la vista, el aviso dice cómo seguir y ofrece pasar al modo de la billetera. Sin él, el de siempre.
+    if (hayModoOficial) avisarOtraRed();
+    else notice(t("wrongNetwork").replace("{red}", network.name), true, undefined, false);
+  }
   void refreshFunds();
 }
 
@@ -490,18 +546,31 @@ function pintarCuenta(): void {
   box.innerHTML = "";
   const e = estadoDeLaCuenta();
   document.dispatchEvent(new CustomEvent("tinkazo:cuenta", { detail: { estado: e.estado } }));
-  // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
-  if (!anchoringAvailable) return;
+  // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla, salvo que haya modo Oficial para mostrar.
+  if (!anchoringAvailable && !hayModoOficial) return;
 
-  if (e.estado === "dentro" && session) {
+  if (hayModoOficial) {
+    // La marca del modo se ve siempre, con sesión o sin ella, y tocarla abre la hoja para cambiar.
+    const net = document.createElement("button");
+    net.type = "button";
+    net.className = wrongNetwork && session ? "netbadge bad con-modo" : network.name === "mainnet" ? "netbadge main" : "netbadge";
+    net.textContent = t(modeNameKey(network.name));
+    net.title = wrongNetwork && session ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name))) : t(network.name === "testnet" ? "netTestHint" : "netMainHint");
+    net.setAttribute("aria-label", net.title);
+    if (grifoApagado && network.name === "testnet") {
+      net.classList.add("sin-grifo");
+      net.textContent = `${t("netTest")}, ${t("grifoOffTag")}`;
+      net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
+    }
+    net.addEventListener("click", () => void import("./modo-ui").then((m) => m.abrirHojaDeModo()));
+    box.appendChild(net);
+  } else if (e.estado === "dentro" && session) {
     const net = document.createElement("span");
-    // Naranja en testnet y turquesa en mainnet: el color dice en qué red estás
-    // antes de que alcances a leer la palabra.
+    // Naranja en Prueba y turquesa en Oficial: el color dice en qué modo estás antes de que alcances a leer la palabra.
     net.className = wrongNetwork ? "netbadge bad" : network.name === "mainnet" ? "netbadge main" : "netbadge";
-    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
+    net.textContent = t(modeNameKey(network.name));
     net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
-    // `?grifo=0`: que se vea, para que nadie lo deje así sin querer y para que
-    // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
+    // `?grifo=0`: que se vea, para que nadie lo deje así sin querer y para que las capturas lo digan.
     if (grifoApagado) {
       net.classList.add("sin-grifo");
       net.textContent = `${t("netTest")}, ${t("grifoOffTag")}`;
@@ -725,7 +794,7 @@ function renderFundBox(box: HTMLElement, address: string): void {
 
   const tag = document.createElement("span");
   tag.className = "fund-tag";
-  tag.textContent = testnet ? t("fundTag") : network.name;
+  tag.textContent = testnet ? t("fundTag") : t(modeNameKey(network.name));
   box.appendChild(tag);
 
   const h = document.createElement("h3");
@@ -1315,6 +1384,7 @@ async function disconnect(): Promise<void> {
   w.setActiveWallet(null);
   session = null;
   wrongNetwork = false;
+  fraseDeLaBilletera = null;
   cajaDeUltimoRecurso = false;
   // Cerrar sesión a propósito es lo único que olvida el tipo de sesión guardado.
   clearSessionKind(network.name);

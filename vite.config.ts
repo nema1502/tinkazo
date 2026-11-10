@@ -239,6 +239,7 @@ export default defineConfig({
         "ruleta-de-nombres": resolve(__dirname, "ruleta-de-nombres.html"),
         "sorteo-para-eventos": resolve(__dirname, "sorteo-para-eventos.html"),
         lista: resolve(__dirname, "lista.html"),
+        equipos: resolve(__dirname, "equipos.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
@@ -252,8 +253,9 @@ export default defineConfig({
     // `pnpm test` corría también las pruebas a medias de otra copia y
     // fallaba por trabajo ajeno (18 de octubre de 2026).
     exclude: [...configDefaults.exclude, "**/worktrees/**"],
-    // Con la máquina cargada, las pruebas que verifican firmas reales o cargan el SDK de Stellar pasan de 5 segundos.
-    // Subir el margen no esconde fallas: deja de confundir la carga con un error.
-    testTimeout: 30000,
+    // Con la máquina cargada, las pruebas que verifican firmas reales o cargan el SDK de Stellar pasan de 5 segundos,
+    // y las que simulan cientos de carreras enteras pasan de 30 cuando el procesador trabaja en modo silencioso o
+    // hay otras tareas al lado. Subir el margen no esconde fallas: deja de confundir la carga con un error.
+    testTimeout: 60000,
   },
 });

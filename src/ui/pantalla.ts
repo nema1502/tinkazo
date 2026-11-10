@@ -1,6 +1,9 @@
 import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
+import { modesVisible } from "../modos/bandera";
+import { isTurnOrder, turnOrder, turnOrderDisplayNames } from "../modos/turnos";
+import { etiquetaDe } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
@@ -12,6 +15,9 @@ import { piezaParaLaSala } from "./logo-sorteo";
  * llega después, el QR cambia a él: es el que se lee desde el fondo.
  */
 const ESPERA_CORTO_MS = 2_000;
+
+/** Hasta cuántos ganadores salen cada uno con su cara; con más, una lista de renglones cortos (ver `mostrarResultado`). */
+export const MAX_CON_CARA = 12;
 
 /**
  * El resultado en grande, para el proyector: quién salió, qué se lleva, y el
@@ -49,6 +55,17 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // nombres pero no qué se llevaban (evaluación de la subida 2, hallazgo 7):
   // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
   const muchos = n > 5;
+  // Con más de doce, las tarjetas con cara no entran ni en dos columnas (cien tarjetas son diez pantallas): una lista
+  // de renglones cortos, número y nombre, en tantas columnas como entren, con la letra más grande que deje todos a la vista.
+  // Un orden de turnos (`isTurnOrder`) va siempre en lista, con «Turno 1 ... Turno N» desde el primero, sin «Se llevan» ni
+  // caras: lo que se lee desde el fondo es el orden.
+  const turnos = isTurnOrder(frozen.names.length, n, premio);
+  const lista = n > MAX_CON_CARA || turnos;
+  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo. En un orden
+  // repartido se lee el nombre de la persona, sin el sufijo de la línea, como en el resultado.
+  // Sin los modos a la vista no se toca ningún nombre: la página del resultado y la verificación muestran las líneas
+  // tal cual, y la pantalla grande dice lo mismo.
+  const orden = turnos && modesVisible() ? turnOrderDisplayNames(frozen.names, drawn.winners) : turnOrder(frozen.names, drawn.winners);
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -57,7 +74,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const siguiente = sig ? (sig.textContent ?? "").replace(/\s+/g, " ").trim() : "";
 
   const back = document.createElement("div");
-  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}`;
+  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}${lista ? " lista" : ""}${turnos ? " turnos" : ""}`;
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
   back.setAttribute("aria-label", t("pantallaT"));
@@ -68,21 +85,33 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
     `<div class="pantalla-body">` +
     `<div class="pantalla-ganadores">` +
-    (varios && premio ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>` : "") +
-    drawn.winners
-      .map((i, k) => {
-        const nombre = frozen.names[i] ?? "";
-        const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
-        return (
-          `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
-          `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="pantalla-premio">${pie}</p>` : ""}</div></div>`
-        );
-      })
-      .join("") +
+    (turnos
+      ? `<p class="pantalla-llevan" data-i="turnsResultTitle">${esc(t("turnsResultTitle"))}</p>`
+      : varios && premio
+        ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>`
+        : "") +
+    (lista
+      ? `<ol class="pantalla-lista">${orden
+          .map((nombre, k) => {
+            const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
+            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(etiquetaDe(nombre))}</span></li>`;
+          })
+          .join("")}</ol>`
+      : drawn.winners
+          .map((i, k) => {
+            // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
+            const nombre = etiquetaDe(frozen.names[i] ?? "");
+            const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
+            return (
+              `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
+              `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="pantalla-premio">${pie}</p>` : ""}</div></div>`
+            );
+          })
+          .join("")) +
     `</div>` +
     `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
-    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
+    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
   document.body.appendChild(back);
 
   const ajustar = (): void => encajar(back, n);
@@ -172,7 +201,7 @@ function encajar(back: HTMLElement, n: number): void {
     (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1);
   // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
   let chico = celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec));
-  let grande = n === 1 ? 132 : n <= 5 ? 84 : 52;
+  let grande = n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52;
   caja.style.setProperty("--letra", `${grande}px`);
   if (entra()) return;
   while (grande - chico > 1) {

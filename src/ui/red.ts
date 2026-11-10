@@ -12,6 +12,7 @@ import { limpiarDetalle } from "./anchor";
 import { ponerDetalle } from "./detalle-error";
 import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, respuestaDelBoton } from "./red-acciones";
 import { verError } from "./siguiente";
+import { ordenNoCabe } from "./turnos";
 import { canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 
 /**
@@ -206,13 +207,16 @@ function aplicarAlBoton(): void {
     alApretar = null;
     btn.dataset.i = claveDeSellar();
     btn.textContent = t(btn.dataset.i);
-    btn.disabled = false;
+    // En el modo «Orden de turnos», con una lista que la red no admite, sellar sigue apagado (`turnos.ts`).
+    btn.disabled = ordenNoCabe();
     return;
   }
   const texto = clave ?? TEXTO_DE_ACCION(accion, network.name);
   btn.dataset.i = texto;
   btn.textContent = t(texto);
-  btn.disabled = false;
+  // En el modo «Orden de turnos», con una lista que la red no admite, «Seguir sin sello» tampoco se aprieta:
+  // un orden incompleto no se sella de otra manera.
+  btn.disabled = accion === "seguir-sin-sello" && ordenNoCabe();
   alApretar = vista.tipo === "confirmar" ? () => void seguirSinSello() : () => hacer(accion);
 }
 

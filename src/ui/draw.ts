@@ -21,6 +21,13 @@ import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
+import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { turnMessage, turnNotice } from "../modos/mensajes";
+import { isTurnOrder, modoDelComprobante, setResultadoDeTurnos } from "../modos/turnos";
+import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
+import { modesVisible, withMode } from "../modos/bandera";
+import { alCopiarOrden } from "./lista-de-turnos";
+import { alTocarAusente, htmlDeGanadores } from "./resultado-ganadores";
 import { acortar, alAcortar, cortoGuardado, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { logoPorHuella } from "../logo-guardado";
 import { pintarLogoEnElResultado, quitarLogoDelResultado } from "./logo-sorteo";
@@ -28,8 +35,12 @@ import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import { contar, contarPractica, errorContable, refDe } from "../contar";
+import { acreditarEnSegundoPlano } from "../stellar/monedas-eventos";
 import { ponerTextoDelSello } from "./sin-sello-textos";
 import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
+import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+import { ponerNombresEnteros } from "../games/nombres-enteros";
+import { pagosActivos } from "../stellar/pagos-bandera";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -116,7 +127,7 @@ export async function draw(): Promise<void> {
     }
 
     const { names, listHash, raffleId } = app.frozen;
-    const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
+    const nWinners = Math.min(ganadoresPedidos(), names.length);
     let winners: number[] = [];
     let drawTx: string | undefined;
 
@@ -145,7 +156,7 @@ export async function draw(): Promise<void> {
       // acepta uno solo por sello.
       // La curva, para pasar la firma al formato del contrato. La cuenta
       // regresiva ya la bajó (ver `freeze`).
-      const [{ decompressG1 }, { sortearConReintentos, SORTEO_REINTENTABLE, avisoDelReintento }, { errorKey }] = await Promise.all([
+      const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable, avisoDelReintento }, { errorKey }] = await Promise.all([
         import("../protocol/drand"),
         import("./sorteo-seguro"),
         import("../stellar/errores"),
@@ -162,7 +173,7 @@ export async function draw(): Promise<void> {
             { pagarConMiCuenta },
           ),
         yaEsta: () => readDraw(raffleId),
-        reintentable: (e) => SORTEO_REINTENTABLE.has(errorKey(e)),
+        reintentable: sorteoReintentable,
         alReintentar: (proximo, total, e) => {
           // Dice lo que pasó: la red no contestó, estaba ocupada, la cadena todavía no ve la ronda u otra cosa.
           const aviso = avisoDelReintento(errorKey(e));
@@ -181,7 +192,7 @@ export async function draw(): Promise<void> {
         sinShow();
         protegiendoElSorteo = true;
         try {
-          if (await protegerLaCuenta()) {
+          if (await protegerLaCuenta(btn, "draw-status")) {
             // Lo elegido para este intento sigue valiendo para el que se repite.
             if (pagarConMiCuenta) elegirPagarConMiCuenta();
             await draw();
@@ -224,6 +235,9 @@ export async function draw(): Promise<void> {
       // Quedó grabado: la tarjeta sigue con la cuenta de la sala, y después el juego.
       grabado();
       contar("draw_confirmed", { network: network.name });
+      // El primer sorteo de la cuenta suma monedas (detrás de VITE_MONEDAS; el demo y el ensayo no cuentan: no graban).
+      const cuenta = sinGrabar() ? undefined : currentSession()?.address;
+      if (cuenta) acreditarEnSegundoPlano(cuenta, "primer_sorteo");
     } else {
       winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
     }
@@ -242,6 +256,9 @@ export async function draw(): Promise<void> {
     granFinal = enGrande() ? { pantalla: !!document.fullscreenElement } : null;
     seguirEnPantallaCompleta(granFinal?.pantalla === true);
     const finish = (): void => reveal(names, winners, beacon, listHash);
+    // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
+    // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
+    setResultadoDeTurnos(isTurnOrder(names.length, winners.length, app.frozen.prize));
     playGame(names, winners, beacon, finish, tarjeta);
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
@@ -311,13 +328,13 @@ async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alr
     ejecutar: () => {
       if (app.frozen !== sello) return;
       if (!ausencia) { location.assign(enlace); return; }
-      const cantidad = $<HTMLSelectElement>("nw").value;
+      const cantidad = ganadoresPedidos();
       recuperacion = null;
       // Usa el camino existente: cancela esperas/reintentos, abre los campos y
       // activa la guarda contra doble toque. No toca la sesión ni la red.
       unfreeze(sello.names.join("\n"));
       ponerPremio(sello.prize);
-      $<HTMLSelectElement>("nw").value = cantidad;
+      ponerGanadores(cantidad);
       status.style.display = "none";
       $<HTMLButtonElement>("btn-draw").dataset.i = "draw";
       $("sec-participants").scrollIntoView({ block: "start" });
@@ -438,6 +455,10 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
  * pasa a anunciar el que se juega.
  */
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
+  // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
+  names = paraMostrar(names);
+  // Y su nombre va entero en el show: «¡Vamos, Las Wawas!», nunca «Las W.». Sin equipos la lista queda vacía.
+  ponerNombresEnteros(hayEtiquetas() ? nombresDeLosEquipos() : []);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
@@ -577,31 +598,21 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // La leyenda del juego, si trae una: plegada y después del resultado, nunca durante el show.
   pintarLeyenda($("leyenda-box"), app.game, getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
   const prize = app.frozen?.prize ?? "";
+  // El cartel final de los juegos dice «¡El orden quedó listo!» cuando el resultado es un orden de
+  // turnos (`cWin` de `i18n.ts` lee esta marca).
+  setResultadoDeTurnos(isTurnOrder(names.length, winners.length, prize));
   // Con el resultado puesto, el selector dice que sirve para verlo de nuevo con otro juego.
   pintarNotaDelJuego();
   // Este premio ya salió: en el próximo sorteo queda marcado entre las opciones.
   marcarSalio(prize);
   // "No está" solo si queda con quién volver a sortear: dos personas, como
-  // en "Otro premio".
-  const reemplazo = names.length - winners.length >= 2;
-  $("winner-cards").innerHTML = winners
-    .map((i, k) => {
-      const name = names[i] ?? "";
-      const tag = prize
-        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` #${k + 1}` : ""}</p>`
-        : winners.length > 1
-          ? `<p class="winner-prize">#${k + 1}</p>`
-          : "";
-      return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
-        <img src="${avatar(name, 128)}" alt="" />
-        <div>
-          <p class="winner-name" id="wn-${k}">${esc(name)}</p>
-          ${tag}
-          ${reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k)}</div>` : ""}
-        </div>
-      </div>`;
-    })
-    .join(" ");
+  // en "Otro premio". Quien salió se va entero, con todas sus participaciones.
+  // Sin la bandera de los modos ni `?modo=`, se saca por línea, como siempre: «Grupo (1/2)» puede ser un nombre.
+  const porPersona = modesVisible();
+  const reemplazo = contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
+  // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
+  // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
+  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona });
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
@@ -630,6 +641,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
+  // Premios pagados (detrás de la bandera): el panel de ganadores con el estado de cada pago y "Pagar premio".
+  if (pagosActivos()) void import("./pagos-resultado").then((m) => m.mostrarPagosDelResultado()).catch(() => undefined);
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
@@ -717,12 +730,19 @@ export function elegirOtroJuegoParaVer(): void {
 // Después del resultado, un toque en el selector lo vuelve a mostrar con ese juego (freeze.ts, `elegirJuego`).
 alElegirDespuesDelResultado((g) => verDeNuevo(g));
 
-/** Quiénes quedan en la lista sellada si se sacan los que ya salieron. */
+/** El sorteo que se ve es un orden de turnos: ganan tantas personas como hay en la lista y el nombre empieza con «Turnos». */
+const esDeTurnos = (): boolean => !!app.frozen && !!app.drawn && isTurnOrder(app.frozen.names.length, app.drawn.winners.length, app.frozen.prize);
+
+/**
+ * Quiénes quedan en la lista sellada si se sacan, enteras, a las personas que ya salieron: con todas sus
+ * participaciones. Así "No está" y "Siguiente premio" no dejan a medias a quien ya salió, y el reemplazo nunca
+ * puede ser otra participación de quien no está: sus líneas ya no están.
+ */
 function sinGanadores(): string[] {
   const { frozen, drawn } = app;
   if (!frozen || !drawn) return [];
-  const salieron = new Set(drawn.winners);
-  return frozen.names.filter((_, i) => !salieron.has(i));
+  // Sin la bandera de los modos ni `?modo=`, se saca por línea, como siempre.
+  return sinLasPersonasQueSalieron(frozen.names, drawn.winners, modesVisible());
 }
 
 /**
@@ -738,7 +758,8 @@ function sinGanadores(): string[] {
  */
 function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
-  const quedan = sinGanadores().length;
+  // Los textos hablan de personas: quien salió se va entero, con todas sus participaciones.
+  const quedan = contarPersonas(sinGanadores(), modesVisible()).personas;
   const alcanza = quedan >= 2;
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
@@ -755,7 +776,8 @@ function showAgain(): HTMLButtonElement {
   const titulo = $("again-t");
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
-  $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
+  // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
+  $("again-left").textContent = alcanza ? L.againLeft(quedan) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(quedan);
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
   const sigue = $("again-sigue");
   sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
@@ -806,10 +828,19 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (!frozen || !drawn || replaying) return;
   const conLista = modo !== "otraLista";
   const quedan = conLista ? sinGanadores() : [];
-  if (conLista && quedan.length < 2) return;
-  const salieron = drawn.winners.map((i) => frozen.names[i] ?? "").filter(Boolean);
-  const ausente = modo === "ausente" ? (frozen.names[drawn.winners[k] ?? -1] ?? "") : "";
+  // Para seguir hace falta dos personas distintas: una lista repartida puede dejar muchas líneas de una sola.
+  const personas = contarPersonas(quedan, modesVisible()).personas;
+  if (conLista && personas < 2) return;
+  // Quiénes salieron, por persona y sin repetidos: con varias participaciones, una misma persona puede salir más
+  // de una vez. Sin la bandera de los modos ni `?modo=`, quien salió es la línea que salió: los nombres tal cual.
+  const porPersona = modesVisible();
+  const elNombre = (n: string): string => (porPersona ? nombreDePersona(n) : n);
+  const salieron = [...new Set(drawn.winners.map((i) => frozen.names[i] ?? "").filter(Boolean).map(elNombre))];
+  const ausente = modo === "ausente" ? elNombre(frozen.names[drawn.winners[k] ?? -1] ?? "") : "";
   if (modo === "ausente" && !ausente) return;
+  // Cuántos premios se llevaba quien no está: con varias participaciones pudo salir más de una vez, y se va
+  // con todas sus líneas, así que todos sus premios se sortean de nuevo. Sin los modos es siempre uno.
+  const premiosDelAusente = modo === "ausente" ? drawn.winners.filter((i) => elNombre(frozen.names[i] ?? "") === ausente).length : 0;
   const premio = frozen.prize;
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
   // equivocado frente a la sala no puede costar la lista de Luma filtrada.
@@ -822,19 +853,22 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (modo === "otraLista") olvidarSalieron();
   // "Premios" no puede quedar en más que los que quedan: con 2 personas y 3
   // premios, el próximo sorteo los premiaba a todos sin avisar.
-  const nw = $<HTMLSelectElement>("nw");
   if (modo === "ausente") {
-    // El reemplazo es uno solo y se lleva lo mismo que se iba a llevar quien
-    // no estaba. Los otros ganadores, si los hubo, se quedan con lo suyo y no
-    // entran a este sorteo.
-    nw.value = "1";
+    // Se reponen los premios de quien no estaba: uno, o todos los suyos si salió más de una vez. Los
+    // reemplazos se llevan lo mismo. Los otros ganadores se quedan con lo suyo y no entran a este sorteo.
+    ponerGanadores(Math.max(1, Math.min(premiosDelAusente, quedan.length)));
     ponerPremio(premio);
-  } else if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
+  } else if (quedan.length) ponerGanadores(Math.min(ganadoresPedidos(), Math.max(1, quedan.length - 1)));
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
   const L = T[getLang()];
   const nota = $("again-note");
+  // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
-    modo === "sinGanadores" ? L.againQuitados(salieron, quedan.length) : modo === "ausente" ? L.ausenteNota(ausente, quedan.length, salieron.length > 1) : "";
+    modo === "sinGanadores"
+      ? L.againQuitados(salieron.map(etiquetaDe), personas)
+      : modo === "ausente"
+        ? L.ausenteNota(etiquetaDe(ausente), personas, salieron.length > 1, premiosDelAusente)
+        : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
   const btn = $<HTMLButtonElement>("btn-draw");
@@ -851,6 +885,12 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
   limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
+  // El panel de ganadores y pagos del sorteo anterior (pagos-resultado.ts) no se queda para el siguiente.
+  const pagosBox = document.getElementById("pagos-box");
+  if (pagosBox) {
+    pagosBox.replaceChildren();
+    pagosBox.style.display = "none";
+  }
   quitarLogoDelResultado();
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
@@ -864,15 +904,6 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   actualizarPaso();
 }
 
-/** El botón "No está" de una tarjeta; describe a quién se refiere con el nombre de la tarjeta. */
-const botonAusente = (k: number): string =>
-  `<button class="ausente-btn" type="button" data-ausente aria-describedby="wn-${k}" data-i="ausenteBtn">${esc(t("ausenteBtn"))}</button>`;
-
-const preguntaAusente = (): string =>
-  `<p class="ausente-q" data-i="ausenteQ">${esc(t("ausenteQ"))}</p>` +
-  `<button class="ausente-btn si" type="button" data-ausente-si data-i="ausenteSi">${esc(t("ausenteSi"))}</button>` +
-  `<button class="ausente-btn" type="button" data-ausente-no data-i="ausenteNo">${esc(t("ausenteNo"))}</button>`;
-
 /**
  * "No está": quien ganó ya se fue, cosa que pasa en casi todo evento. Su
  * premio vuelve a sortearse entre los que quedan, con un sello nuevo: el
@@ -881,18 +912,9 @@ const preguntaAusente = (): string =>
  * clic de más frente a la sala no puede borrar al ganador de la pantalla.
  */
 export function alTocarGanadores(e: Event): void {
-  const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button");
-  const caja = b?.closest<HTMLElement>(".ausente");
-  if (!b || !caja) return;
-  const k = Number(caja.dataset.k);
-  if (b.dataset.ausenteSi !== undefined) {
-    newDraw("ausente", k);
-    return;
-  }
-  const preguntar = b.dataset.ausente !== undefined;
-  caja.innerHTML = preguntar ? preguntaAusente() : botonAusente(k);
-  // El foco va a "Cancelar": con él en "Sí", dos Enter seguidos borraban al ganador.
-  caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-no]" : "[data-ausente]")?.focus({ preventScroll: true });
+  // En un orden de turnos no hay «No está» sino «Copiar el orden» (resultado-ganadores.ts).
+  if (alCopiarOrden(e)) return;
+  alTocarAusente(e, (k) => newDraw("ausente", k));
 }
 
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */
@@ -1007,7 +1029,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   };
   let link: string;
   try {
-    link = await proofUrl(proof);
+    // Sin los modos a la vista el enlace queda como siempre, también el de un orden de turnos (`modoDelComprobante`).
+    link = withMode(await proofUrl(proof), modoDelComprobante(names, winners.length, f.prize, modesVisible()));
   } catch {
     // Sin comprobante, el QR al menos lleva a la ronda del faro.
     link = roundLink;
@@ -1068,11 +1091,23 @@ function mensajeDelSorteo(): string {
   if (!app.frozen || !app.drawn) return "";
   const { names, prize } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const lista = winners.map((i) => names[i] ?? "");
+  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
   // Sin sello: que lo diga también lo que se pega en el grupo, y que no prometa lo que no se puede comprobar.
   const sinSello = !!app.frozen.sinSello && app.frozen.raffleId === undefined;
-  return T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1, sinSello);
+  const enlace = cortoLink || proofLink || roundUrl(beacon.round);
+  // Un orden de turnos dice el orden, y que nadie lo eligió, y no quién ganó (src/modos/mensajes.ts).
+  if (isTurnOrder(names.length, winners.length, prize)) return turnMessage(getLang(), { orden: lista, enlace, ...(sinSello ? { sinSello: true } : {}) });
+  // Con varias participaciones por persona, el mensaje dice las dos cuentas y no solo las líneas de la lista.
+  return T[getLang()].summary(quienes, names.length, prize, enlace, lista.length > 1, sinSello, personasDeLaLista(names));
+}
+
+/**
+ * Cuántas personas hay en la lista sellada, para lo que se comparte: la misma regla que la espera, las bases y la
+ * verificación (`seCuentaPorPersona`). Sufijos que no cierran se cuentan por línea, como los cuenta la verificación.
+ */
+function personasDeLaLista(names: readonly string[]): number {
+  return contarPersonas(names, seCuentaPorPersona(names, modesVisible())).personas;
 }
 
 /** Copia el mensaje y avisa en el botón. Devuelve false si el navegador no deja copiar. */
@@ -1101,8 +1136,11 @@ export function shareProof(): void {
   const enlace = proofLink || roundUrl(d.beacon.round);
   const datos = {
     enlace,
-    ganadores: d.winners.map((i) => f.names[i] ?? ""),
+    ganadores: d.winners.map((i) => etiquetaDe(f.names[i] ?? "")),
     total: f.names.length,
+    // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas, con la misma regla
+    // que la espera, las bases y la verificación (`seCuentaPorPersona`).
+    personas: personasDeLaLista(f.names),
     premio: f.prize,
     fecha: f.ts,
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
@@ -1123,14 +1161,25 @@ export function shareProof(): void {
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const prize = app.frozen?.prize ?? "";
   // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
-  const lista = winners.map((i) => names[i] ?? "");
+  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
   const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
   // Al ganador de un sorteo sin sello tampoco se le dice que nadie lo eligió a dedo ni que lo revise: no se puede comprobar.
   const sinSello = !!app.frozen?.sinSello && app.frozen.raffleId === undefined;
-  const body = T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1, sinSello);
+  // Un orden de turnos: los botones de abajo mandan el orden entero, y cada renglón de la lista tiene su «Avisarle» con
+  // «Te tocó el turno 3 de 12». Nadie «ganó» nada: las frases de ganar no se usan (src/modos/mensajes.ts).
+  const turnos = isTurnOrder(names.length, winners.length, prize);
+  const body = turnos
+    ? turnMessage(getLang(), { orden: lista, enlace: url, ...(sinSello ? { sinSello: true } : {}) })
+    : T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1, sinSello, personasDeLaLista(names));
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
-    `mailto:?subject=${encodeURIComponent(t("tellSubject"))}&body=${encodeURIComponent(body)}`;
+    `mailto:?subject=${encodeURIComponent(t(turnos ? "turnsResultTitle" : "tellSubject"))}&body=${encodeURIComponent(body)}`;
+  if (!turnos) return;
+  for (const a of document.querySelectorAll<HTMLAnchorElement>("a[data-turno]")) {
+    const aviso = turnNotice(getLang(), { turn: Number(a.dataset.turno) + 1, of: names.length, enlace: url, ...(sinSello ? { sinSello: true } : {}) });
+    a.href = `https://wa.me/?text=${encodeURIComponent(aviso)}`;
+    a.hidden = false;
+  }
 }
 
 /** Rehace la verificación de la firma y la selección desde cero (protocolo §7). */

@@ -1,13 +1,18 @@
 import { avatar } from "../avatar";
 import { esc } from "../dom";
 import { type Lang, chooseLang, getLang, onLangChange, t } from "../i18n";
-import { accountUrl, network } from "../stellar/config";
+import { accountUrl, hayModoOficial, network } from "../stellar/config";
 import { grifoApagado, grifoDisponible } from "../stellar/grifo";
 import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
 import { LAST_DRAWS, drawRow, feeCovered, fmtBalance, initialOf, kindText, moneyLine, shortAddr } from "./account-model";
 import { CLAVES_DE_VIA, ocultarCorreo, viaDe } from "./cuenta-estado";
 import type { Entry } from "./history";
+import { contextoHorizon, revisarCarga } from "../stellar/carga";
+import { leerCuenta } from "../stellar/cuenta-api";
+import { modoDeRampa, planDelEquipo, urlDeCuenta } from "../stellar/cuenta-config";
+import { type EstadoDeCuenta, con, monedasHtml, planHtml, saldoHtml, tienditaHtml } from "./monedas-vista";
+import { pintarQr } from "./qr";
 
 /**
  * El panel de la cuenta.
@@ -58,6 +63,12 @@ interface Open {
   hist: { mod: HistoryMod; list: Entry[] } | null;
   /** Para devolver "Copiado ✓" a "Copiar" aunque se vuelva a pintar. */
   copiedTimer: number;
+  /** Las monedas, la tiendita y el plan de esta cuenta. `null` con las monedas apagadas (`VITE_MONEDAS`). */
+  cuenta: EstadoDeCuenta | null;
+  /** "Tus primeros dólares digitales llegaron", cuando se supo. */
+  aviso: string;
+  /** El código de la tiendita (el QR con la cuenta) está a la vista. */
+  tiendaQr: boolean;
 }
 
 let current: Open | null = null;
@@ -126,6 +137,9 @@ export function openAccount(view: AccountView): void {
     onKey: (e) => onKey(s, e),
     hist: null,
     copiedTimer: 0,
+    cuenta: null,
+    aviso: "",
+    tiendaQr: false,
   };
   current = s;
 
@@ -169,6 +183,55 @@ export function openAccount(view: AccountView): void {
     s.hist = { mod, list: mod.historyOf(view.address) };
     paint(s);
   });
+  void iniciarMonedas(s);
+}
+
+/** Avisó una vez que llegaron los primeros dólares (sin monedas no hay otro lugar donde recordarlo). */
+const claveDeAviso = (address: string): string => `tinkazo.carga.${address}`;
+
+/**
+ * Lo que el panel trae del Worker de la cuenta (el saldo de monedas, la tiendita y el plan) y la primera carga:
+ * si todavía no se cumplió, mira por Horizon si llegaron los primeros dólares digitales y, si llegaron, lo dice y
+ * le pide al Worker las monedas. Todo detrás de las banderas; con ellas apagadas el panel queda como siempre.
+ */
+async function iniciarMonedas(s: Open): Promise<void> {
+  const base = urlDeCuenta();
+  const address = s.view.address;
+  if (base) {
+    s.cuenta = "cargando";
+    paint(s);
+    const v = await leerCuenta(base, address);
+    if (current !== s) return;
+    s.cuenta = v ?? "error";
+    paint(s);
+  }
+  if (modoDeRampa() === "apagada") return;
+  const yaCargo = typeof s.cuenta === "object" && s.cuenta !== null && (s.cuenta.hechos.primera_carga ?? 0) > 0;
+  let avisada = false;
+  try {
+    avisada = !base && localStorage.getItem(claveDeAviso(address)) !== null;
+  } catch {
+    /* sin almacenamiento, se avisa cada vez */
+  }
+  if (yaCargo || avisada) return;
+  const r = await revisarCarga(address, { horizon: contextoHorizon(), base });
+  if (current !== s || r.estado !== "llego") return;
+  s.aviso = r.monedas > 0 ? `${t("saldoLlego")}. ${con(t("saldoLlegoMonedas"), { n: r.monedas })}` : t("saldoLlego");
+  if (!base) {
+    try {
+      localStorage.setItem(claveDeAviso(address), "1");
+    } catch {
+      /* sin almacenamiento, se avisa cada vez */
+    }
+  }
+  paint(s);
+  if (base) {
+    const v = await leerCuenta(base, address);
+    if (current === s && v) {
+      s.cuenta = v;
+      paint(s);
+    }
+  }
 }
 
 /* ---------------------------------------------------------------- teclado */
@@ -231,6 +294,28 @@ function act(s: Open, el: HTMLElement): void {
     case "fund":
       closeAccount();
       s.view.onFund();
+      break;
+    case "mode":
+      closeAccount(false);
+      void import("./modo-ui").then((m) => m.abrirHojaDeModo());
+      break;
+    case "saldo":
+      closeAccount();
+      void import("./saldo").then((m) => m.abrirSaldo({ address: s.view.address }));
+      break;
+    case "plan": {
+      const vence = typeof s.cuenta === "object" && s.cuenta !== null ? (s.cuenta.plan?.vence ?? null) : null;
+      closeAccount();
+      void import("./plan").then((m) => m.abrirPlan({ address: s.view.address, vence }));
+      break;
+    }
+    case "canjear":
+      closeAccount();
+      void import("./canje").then((m) => m.abrirCanje());
+      break;
+    case "tienda-qr":
+      s.tiendaQr = !s.tiendaQr;
+      paint(s);
       break;
     case "all":
       closeAccount();
@@ -381,9 +466,15 @@ function paint(s: Open): void {
     `<div class="acct-body">` +
     // La red, el saldo y el explorador.
     `<section class="acct-sec"><div class="acct-badges">` +
-    `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>${sinGrifo}${balance}</div>` +
+    (hayModoOficial
+      ? `<button type="button" class="acct-badge net${mainnet ? " main" : ""}" data-k="mode">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</button>`
+      : `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>`) + `${sinGrifo}${balance}</div>` +
     (fund ? `<div class="acct-badges">${fund}</div>` : "") +
     `<a class="acct-link" data-k="explorer" href="${esc(accountUrl(view.address))}" target="_blank" rel="noopener">${esc(t("fundExplorer"))}</a></section>` +
+    // Cargar saldo, monedas, tiendita y plan del equipo: cada una detrás de su bandera (nada sale con todas apagadas).
+    (modoDeRampa() === "apagada" ? "" : saldoHtml({ aviso: s.aviso }, t)) +
+    (s.cuenta === null ? "" : monedasHtml(s.cuenta, t) + tienditaHtml(s.cuenta, { idioma: getLang(), qr: s.tiendaQr }, t)) +
+    (s.cuenta === null ? "" : planHtml(s.cuenta, { idioma: getLang(), sePuedeComprar: planDelEquipo() !== null, sorteos: sorteosConPlan(s) }, t)) +
     // Las preferencias, en una fila con sus etiquetas.
     `<section class="acct-sec" aria-labelledby="acct-prefs-h"><h3 class="kicker" id="acct-prefs-h">${esc(t("acctPrefs"))}</h3>` +
     `<div class="acct-prefs">` +
@@ -403,7 +494,17 @@ function paint(s: Open): void {
 
   const newBody = card.querySelector<HTMLElement>(".acct-body");
   if (newBody) newBody.scrollTop = scroll;
+  // El código de la tiendita: la cuenta, en QR, para mostrarla en el stand.
+  const qr = card.querySelector<HTMLImageElement>("img.tienda-qr");
+  if (qr) void pintarQr(qr, view.address, 176).then((ok) => ok || qr.remove());
   if (keep) card.querySelector<HTMLElement>(keep)?.focus({ preventScroll: true });
+}
+
+/** Cuántos sorteos propios lleva la cuenta desde que empezó el plan (los que el historial conoce), o null si no se sabe. */
+function sorteosConPlan(s: Open): number | null {
+  const plan = typeof s.cuenta === "object" && s.cuenta !== null ? s.cuenta.plan : null;
+  if (!plan || !s.hist) return null;
+  return s.hist.list.filter((e) => e.sealedAt * 1000 >= plan.inicio).length;
 }
 
 function drawsHtml(list: Entry[]): string {

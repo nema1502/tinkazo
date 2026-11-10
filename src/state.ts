@@ -98,6 +98,23 @@ export function playableGame(game: Game, people: number, _names?: readonly strin
 
 export const params = new URLSearchParams(location.search);
 
+/**
+ * `?auditar=` admite varias cosas a la vez, separadas por coma (`nino,camara,encuadre`): cada auditor pide lo que necesita
+ * y puede sumar lo de otro. Solo lee la dirección; en el sorteo de verdad no hay `?auditar` y esto es siempre falso.
+ */
+export const auditaCon = (clave: string): boolean => (params.get("auditar") ?? "").split(",").includes(clave);
+
+/**
+ * Con `?auditar=`, anota en `window.__golpe` la hora de la página (en segundos) en que pasó cada parte del golpe, la primera vez que pasa:
+ * la luz, el cartel, el acercamiento. Lo lee `scripts/medir-drama-carrera.mjs` para medir que caigan juntas. Sin `?auditar` no hace nada.
+ */
+export function anotarGolpe(clave: string): void {
+  if (!params.get("auditar")) return;
+  const w = window as unknown as { __golpe?: Record<string, number> };
+  const g = (w.__golpe ??= {});
+  if (g[clave] === undefined) g[clave] = performance.now() / 1000;
+}
+
 /** `?instant=1`: salta las animaciones (capturas y pruebas). */
 export const instantMode = params.get("instant") === "1";
 
@@ -203,7 +220,9 @@ export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
  * que nazca antes de treinta segundos, y el contrato es inmutable. Sobre esos
  * treinta hay que dejar lo que tarde la transacción en confirmarse, porque el
  * contrato mide contra la hora de cierre del ledger, no contra la del
- * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet.
+ * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet. Si la comisión la paga el
+ * portero del patrocinio, la primera ronda nace a 65 (`MARGEN_CON_PORTERO_S` en `ui/sello-seguro.ts`):
+ * ese camino hace más llamadas a la red.
  */
 export const ANCHOR_LEAD_SECONDS = 45;
 

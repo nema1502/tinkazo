@@ -5,22 +5,27 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
-import { contractUrl, network } from "../stellar/config";
+import { contractUrl, hayModoOficial, modeNameKey, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
-import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, pagaElPortero, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
+import { apruebaAMano, billeteraEnOtraRed, canAnchor, claveDeSellar, currentSession, frenarPorOtraRed } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
+import { contar as contarPersonas, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
+import { modesVisible } from "../modos/bandera";
 import { preloadGame } from "../games/engine";
 import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
+import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { isTurnOrder } from "../modos/turnos";
+import { ajustarPremioDeTurnos, ordenNoCabe } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable, origenActual } from "../contar";
@@ -28,6 +33,7 @@ import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarR
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { pintarVer3D } from "./ver3d";
+import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -215,8 +221,8 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
-/** Cuántos premios se sortean: el selector de "Cuántos ganan", que con la lista sellada ya no cambia. */
-const premiosElegidos = (): number => Math.max(1, parseInt($<HTMLSelectElement>("nw").value, 10) || 1);
+/** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
+const premiosElegidos = (): number => ganadoresPedidos();
 
 export function pintarRecomendacion(n: number): void {
   const botones = new Map<Game, HTMLElement>();
@@ -225,7 +231,11 @@ export function pintarRecomendacion(n: number): void {
     if (el) botones.set(g, el);
   }
   const gp = $("gamepick");
-  recomendar(n, premiosElegidos()).games.forEach((r, i) => {
+  // Un orden de turnos no tiene premios: las notas de capacidad dicen turnos. Se decide como en el resto de
+  // la pantalla, por la lista sellada y su nombre; antes de sellar vale el nombre del campo.
+  const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
+  const turnos = isTurnOrder(n, premiosElegidos(), premio);
+  recomendar(n, premiosElegidos(), turnos).games.forEach((r, i) => {
     const el = botones.get(r.game);
     if (!el) return;
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
@@ -507,6 +517,19 @@ function startCountdown(): void {
  * hallazgo 9). Con data-i, el cambio de idioma lo traduce.
  */
 export function refreshFreezeLabel(): void {
+  // La línea del modo va debajo del botón de sellar, en los dos modos, solo cuando existe el modo Oficial. Dice lo
+  // mismo que hace `sellar()`: el Ensayo y la demo no graban nada, así que no la llevan; y con la billetera en la otra
+  // red, en vez de prometer el registro dice que así no se puede sellar (el botón frena con el aviso de cómo seguir).
+  const lineaModo = document.getElementById("sellar-modo");
+  if (lineaModo) {
+    const verLinea = hayModoOficial && !sinGrabar();
+    lineaModo.textContent = !verLinea
+      ? ""
+      : billeteraEnOtraRed()
+        ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name)))
+        : t(network.name === "mainnet" ? "sealModeOfficial" : "sealModeTest");
+    lineaModo.style.display = verLinea ? "" : "none";
+  }
   if (app.frozen) return;
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
@@ -518,6 +541,8 @@ export function refreshFreezeLabel(): void {
 /** Cuándo se soltó el último sorteo para armar el siguiente (`unfreeze`), y cuánto no responde "Sellar" después. */
 let soltadoEn = -Infinity;
 export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
+/** Hay un `freeze()` en curso: otro toque de "Sellar la lista" no hace nada hasta que termine (ver `freeze`). */
+let sellandoYa = false;
 
 /**
  * Sella la lista.
@@ -528,36 +553,70 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
  * antes de que existiera la semilla.
  */
 export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
-  // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
-  // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
-  // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
-  // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
-  // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
-  if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
-    pedirPantallaCompleta();
-    grandePendiente = true;
-  }
+  // Un toque mientras otro sigue en curso no hace nada. Con el modo Oficial, antes de apagar el botón se le pregunta la
+  // red a la billetera, y un doble toque en ese momento sellaba dos veces la misma lista (y el segundo, al terminar,
+  // soltaba el bloqueo del cambio de modo mientras el primero seguía sellando).
+  if (sellandoYa) return;
+  sellandoYa = true;
   try {
+    // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
+    // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
+    // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
+    // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
+    // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
+    if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
+      pedirPantallaCompleta();
+      grandePendiente = true;
+    }
     await sellar(opciones);
   } finally {
     // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista.
     grandePendiente = false;
+    // Terminó de sellar, bien o mal: el cambio de modo ya no lo espera (`modo-ui.ts`). Si quedó sellado, lo bloquea el sorteo.
+    marcarSellandoAhora(false);
+    sellandoYa = false;
   }
 }
 
-/** Hay con qué sellar ahora: dos nombres o más, y no se acaba de soltar el sorteo anterior. */
+/** Hay con qué sellar ahora: dos personas distintas o más, y no se acaba de soltar el sorteo anterior. */
 function puedeSellar(): boolean {
   // Recién se soltó el sorteo anterior con "Siguiente premio": un doble toque
   // nervioso caía en "Sellar la lista" y sellaba el próximo premio sin premio,
   // para siempre (diseño del onboarding, 22 de octubre de 2026).
-  return parseNames().length >= 2 && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+  const names = parseNames();
+  // Dos personas distintas: una lista repartida puede tener muchas líneas de una sola. Sin la bandera de los
+  // modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
+  const personas = contarPersonas(names, modesVisible()).personas;
+  // En el modo «Orden de turnos», si la lista pasa de lo que admite la red no se sella: un orden incompleto no es un orden.
+  return personas >= 2 && !ordenNoCabe(names.length) && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+}
+
+/**
+ * Con los modos a la vista, a quien quedó con números que no cierran (se borró a mano una línea de su reparto) se lo
+ * vuelve a numerar justo antes de sellar: lo sellado y la cuenta del panel dicen lo mismo. Se hace al sellar y no al
+ * escribir, para que el cursor no se mueva mientras la persona escribe.
+ */
+function renumerarLaLista(): void {
+  if (!modesVisible()) return;
+  const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
+  if (!ta) return;
+  const nuevo = renumerarSufijos(ta.value);
+  if (nuevo !== ta.value) setList(nuevo, false);
 }
 
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
+  renumerarLaLista();
   const names = parseNames();
   if (!puedeSellar()) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
+  // Con el modo Oficial a la vista, una cuenta con la billetera en la otra red no cae callada al modo libre: se frena
+  // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
+  // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
+  if (hayModoOficial && !sinGrabar() && (await frenarPorOtraRed())) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
   // un sorteo: aunque haya una cuenta abierta no se graba nada ni se espera la
   // cadena (`ensayo-modo.ts`).
@@ -568,9 +627,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   const anchoring = conCuenta && !sinSello;
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
-  // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
+  // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
-  // elegir el juego, y la línea que guía dice que de verdad son unos 45.
+  // elegir el juego, y la línea que guía dice que de verdad es cerca de un minuto.
   const lead = anchoring
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
     : sinSello
@@ -581,11 +640,19 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           ? ENSAYO_ESPERA_S
           : LEAD_SECONDS;
   let round = targetRound(ts, lead);
-  let prize = $<HTMLInputElement>("prize").value.trim();
-  let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
+  // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo es el cuadro, recortado.
+  let prize = ajustarPremioDeTurnos();
+  let numWinners = Math.min(ganadoresPedidos(), names.length);
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
+
+  // La primera vez que se sella en Oficial en este navegador, una confirmación corta antes de tocar la red. Si la
+  // cierra o pasa a Prueba, la pantalla completa que pidió el toque de "Sellar la lista" se suelta: no hay espera.
+  if (anchoring && !(await confirmarPrimerSelloOficial())) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
 
   if (anchoring) {
     const session = currentSession();
@@ -604,8 +671,10 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
     // segundo a catorce (`clienteListo` en anchor.ts). Y se va el error de antes.
     onStep("starting");
-    // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`).
+    // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`). Y el modo no se cambia hasta
+    // que termine (`modo-ui.ts`): la recarga cortaría el envío.
     marcarSellado(true);
+    marcarSellandoAhora(true);
     try {
       // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
       // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
@@ -627,7 +696,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // - Si no se sabe si entró (un corte, una respuesta que no llegó), primero se averigua.
       //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
       // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
-      const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      // - Si la comisión la paga el portero del patrocinio, la primera ronda nace a 65 s y no a 45:
+      //   ese camino hace más llamadas a la red (`MARGEN_CON_PORTERO_S` en sello-seguro.ts).
+      const [seguro, extra, conPortero] = await Promise.all([import("./sello-seguro"), margenParaAprobar(), pagaElPortero({ pagarConMiCuenta: !!opciones.pagarConMiCuenta })]);
       const contrato = network.contractId ?? "";
       const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
       // Sin un intento pendiente lo próximo es armar la transacción: la ronda se elige
@@ -635,11 +706,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // para que bajarlo no se coma el margen. Con un intento pendiente, primero se
       // averigua si entró, como siempre, y eso no necesita el cliente.
       if (!previo) await clienteListo();
-      const anclado = lead + extra;
-      const rondaNueva = (): { round: number; ts: number } => {
-        const ahora = Math.floor(Date.now() / 1000);
-        return { round: targetRound(ahora, anclado), ts: ahora };
-      };
+      // Si la ronda de antes no quedó grabada, `sello-seguro.ts` pide la próxima más lejos. La cuenta
+      // regresiva y la hora del sorteo salen de la ronda que quede (`app.frozen.round`), no de este número.
+      const rondaNueva = seguro.rondasDesde(seguro.margenDelPrimerIntento(lead, { conPortero, paraAprobar: extra }));
       ({ round, ts } = rondaNueva());
       const sello = await seguro.sellarSinDuplicar(
         { round, ts },
@@ -664,7 +733,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
             return selloSinGrabar(e);
           },
           guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
-          avisar: (que) => onStep(que === "verificando" ? "verifying" : "retrying"),
+          avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
         previo?.intento ?? null,
       );
@@ -677,7 +746,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         prize = previo.premio;
         numWinners = sello.retomado.numWinners;
         ponerPremio(prize);
-        $<HTMLSelectElement>("nw").value = String(numWinners);
+        ponerGanadores(numWinners);
       }
       // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
       showTxStatus("seal-status", "confirmed", sealTx);
@@ -695,7 +764,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
-          if ((await protegerLaCuenta()) && bytesToHex(listHash(parseNames())) === hash) {
+          if ((await protegerLaCuenta(btn, "seal-status")) && bytesToHex(listHash(parseNames())) === hash) {
             await sellar({ ...opciones, saltarChequeo: true, protegida: true });
             return;
           }
@@ -743,7 +812,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
-      await escribirError(status, e, "sello");
+      await escribirError(status, e, "sello", numWinners);
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -978,7 +1047,7 @@ export function resumeFrozen(e: {
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
   ponerPremio(e.prize);
-  $<HTMLSelectElement>("nw").value = String(Math.max(1, Math.min(32, e.numWinners)));
+  ponerGanadores(e.numWinners);
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
   app.frozen = {
     names: e.names,
@@ -1043,6 +1112,30 @@ function textosDelSello(): void {
   ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
 }
 
+/**
+ * La cuenta de la lista sellada: cuántas participaciones y, si no son una por persona, de cuántas personas.
+ * La etiqueta de siempre la pinta el cambio de idioma por `data-i`; la de las dos cuentas se pinta acá, con el
+ * `data-i` quitado para que no la pise, y el `onLangChange` de abajo la vuelve a escribir.
+ */
+export function pintarCuentaSellada(names: readonly string[]): void {
+  // La misma regla que la verificación (`seCuentaPorPersona`): un reparto entero siempre, y con los modos a la
+  // vista también el reparto con nombres a secas. Sin los modos, cada línea es una persona, como siempre.
+  const { personas, participaciones } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
+  $("k-n").textContent = String(participaciones);
+  const etiqueta = $("k-entries");
+  if (personas === participaciones) {
+    etiqueta.dataset.i = "kEntries";
+    etiqueta.textContent = t("kEntries");
+    return;
+  }
+  delete etiqueta.dataset.i;
+  etiqueta.textContent = T[getLang()].kEntriesDe(personas);
+}
+
+onLangChange(() => {
+  if (app.frozen) pintarCuentaSellada(app.frozen.names);
+});
+
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */
 function showFrozen(names: string[], hash: string, raffleId: bigint | undefined): void {
   const f = app.frozen;
@@ -1060,7 +1153,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $("free-rule").style.display = "none";
   $("sec-frozen").style.display = "block";
   textosDelSello();
-  $("k-n").textContent = String(names.length);
+  pintarCuentaSellada(names);
   $("k-digest").textContent = hash.slice(0, 16) + "…";
   $("k-status").textContent = raffleId !== undefined ? `Stellar #${raffleId}` : "local";
   // El número del sorteo bien grande durante la espera: queda en las fotos de
@@ -1080,7 +1173,9 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // cantidad (D02). La demo juega el que pide su enlace.
   if (!juegoAMano && !params.has("demo")) {
     // Después de un premio, otro juego; la primera vez, el de siempre (D02).
-    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos());
+    // Un orden de turnos queda con la ruleta si la lista entra (`juegoPorDefecto`); con más de lo que admite, el de siempre.
+    const turnos = isTurnOrder(names.length, Math.min(premiosElegidos(), names.length), f.prize);
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos(), turnos);
     juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
@@ -1117,10 +1212,17 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   const lang = getLang();
   const when = (s: number): string =>
     new Date(s * 1000).toLocaleString(lang === "es" ? "es-BO" : "en-US", { dateStyle: "long", timeStyle: "long" });
-  const text = T[lang].rules({
+  const winners = Math.min(ganadoresPedidos(), f.names.length);
+  // Con varias participaciones por persona, las bases dicen las dos cuentas, con la misma regla que la
+  // verificación y la espera (`seCuentaPorPersona`).
+  const { personas, participaciones } = contarPersonas(f.names, seCuentaPorPersona(f.names, modesVisible()));
+  // Un orden de turnos tiene sus bases, sin ganadores ni premio.
+  const bases = isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
+  const text = bases({
     prize: f.prize,
-    count: f.names.length,
-    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, f.names.length),
+    count: personas,
+    entries: participaciones,
+    winners,
     listHash: f.listHash,
     sealedAt: when(f.ts),
     round: f.round,
@@ -1163,7 +1265,8 @@ function renderSealSummary(): void {
   a.href = contractUrl();
   a.target = "_blank";
   a.rel = "noopener";
-  a.textContent = `${network.name} ↗`;
+  // Con el modo Oficial a la vista dice el modo; sin él, como siempre, el nombre de la red.
+  a.textContent = hayModoOficial ? `${t(modeNameKey(network.name))} ↗` : `${network.name} ↗`;
   el.appendChild(a);
 }
 
@@ -1174,12 +1277,19 @@ function renderSealSummary(): void {
  */
 export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   const lang = getLang();
-  const count = parseNames().length;
+  const names = parseNames();
+  const { personas: count, participaciones: entries } = contarPersonas(names, modesVisible());
   if (count < 2) return;
-  const text = T[lang].rulesPre({
-    prize: $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " "),
+  const prize = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
+  const winners = Math.min(ganadoresPedidos(), names.length);
+  // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
+  // (lo que se sella: cada línea, un turno), no por las personas.
+  const basesPre = isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
+  const text = basesPre({
+    prize,
     count,
-    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, count),
+    entries,
+    winners,
     verifyUrl: `${location.origin}/como-funciona.html`,
   });
   try {

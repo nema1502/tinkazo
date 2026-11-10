@@ -1,12 +1,18 @@
 import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
 import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
+import { turnMessage } from "../modos/mensajes";
+import { isTurnOrder } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
+import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
+import { modesFlagOn, requestedMode } from "../modos/bandera";
+import { hayModoOficial } from "../stellar/config";
+import { eventoEsDePrueba } from "../evento-modo";
 import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
 
 /**
@@ -65,8 +71,10 @@ export interface DatosSorteo {
   /** El enlace de verificación del sorteo: el comprobante, tal como quedó. */
   enlace: string;
   ganadores: string[];
-  /** Cuántas personas había en la lista. */
+  /** Cuántas participaciones había en la lista (una línea cada una). */
   total: number;
+  /** Cuántas personas había cuando no es una participación por persona: el mensaje y la foto dicen las dos cuentas. */
+  personas?: number;
   /** El premio, o "" si no hubo. */
   premio: string;
   /** Cuándo se selló, en segundos. */
@@ -93,11 +101,22 @@ export interface DatosSorteo {
  * ni "verificarlo". Palabra por palabra igual a `T.summary` (una prueba lo compara).
  */
 export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
+  // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts).
+  if (isTurnOrder(d.total, d.ganadores.length, d.premio)) return turnMessage(lang, { orden: d.ganadores, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
   const varios = d.ganadores.length > 1;
   const w = lista(lang, d.ganadores);
+  // Con varias participaciones por persona, la cabeza dice las dos cuentas: «entre 5 participaciones de 2 personas».
+  const part = d.personas !== undefined && d.personas !== d.total;
   const cabeza = d.premio
-    ? rellenar(cad(lang, varios ? "cmpCabPremioVarios" : "cmpCabPremioUno"), { premio: d.premio, w, n: d.total })
-    : rellenar(cad(lang, varios ? "cmpCabVarios" : "cmpCabUno"), { w, n: d.total });
+    ? rellenar(
+        cad(lang, varios ? (part ? "cmpCabPremioVariosPart" : "cmpCabPremioVarios") : part ? "cmpCabPremioUnoPart" : "cmpCabPremioUno"),
+        { premio: d.premio, w, n: d.total, ...(part ? { k: d.personas } : {}) },
+      )
+    : rellenar(cad(lang, varios ? (part ? "cmpCabVariosPart" : "cmpCabVarios") : part ? "cmpCabUnoPart" : "cmpCabUno"), {
+        w,
+        n: d.total,
+        ...(part ? { k: d.personas } : {}),
+      });
   return [
     cabeza,
     ...(d.sinSello
@@ -112,14 +131,28 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
 type ConMarca = Parameters<typeof esSinSello>[0];
 
 /**
+ * Si el sorteo del evento es un orden de turnos, cuántas personas hay en el
+ * orden; si no, null. En un orden de turnos salen tantas personas como hay en
+ * la lista (`isTurnOrder`). La usan el mensaje y la foto del evento, para que
+ * digan lo mismo.
+ */
+function personasDelOrden(s: { prize?: string; ganadores: readonly string[]; names?: readonly string[] }): number | null {
+  return s.names && isTurnOrder(s.names.length, s.ganadores.length, s.prize?.trim() ?? "") ? s.names.length : null;
+}
+
+/**
  * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
  * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
  * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores.
  * Sin sello: no se puede comprobar."
+ * Un orden de turnos no lista a nadie: dice cuántas personas hay en el orden
+ * ("Turnos de limpieza: 3 personas"), como la tarjeta de la página del evento.
  */
-export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden & ConMarca>): string[] {
+export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[]; names?: readonly string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
-    const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`;
+    const personas = personasDelOrden(s);
+    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores);
+    const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${quien}`;
     return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
 }
@@ -133,7 +166,7 @@ export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; gana
  */
 export function mensajeDeEvento(
   lang: Lang,
-  d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[]; sinSello?: number },
+  d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[]; sinSello?: number; prueba?: boolean },
 ): string {
   const uno = d.sorteos === 1;
   const sin = d.sinSello ?? 0;
@@ -142,8 +175,13 @@ export function mensajeDeEvento(
       ? rellenar(cad(lang, uno ? "cmpEvUnoSin" : "cmpEvMezcla"), { t: d.titulo, n: d.sorteos, s: sin })
       : rellenar(cad(lang, uno ? "cmpEvUno" : "cmpEvVarios"), { t: d.titulo, n: d.sorteos });
   const ver = sin > 0 ? (uno ? "cmpVerEvUnoSin" : "cmpVerEvSin") : uno ? "cmpVerificarEvUno" : "cmpVerificarEv";
-  return [cabeza, ...(d.lineas ?? []), rellenar(cad(lang, ver), { enlace: d.enlaces }), "", cad(lang, "cmpPie")].join("\n");
+  // Con los dos modos a la vista, un evento de Prueba lo dice: esos sorteos se borran y quien lo recibe tiene que saberlo.
+  const prueba = d.prueba ? [cad(lang, "cmpEvPrueba")] : [];
+  return [cabeza, ...(d.lineas ?? []), ...prueba, rellenar(cad(lang, ver), { enlace: d.enlaces }), "", cad(lang, "cmpPie")].join("\n");
 }
+
+/** Si el evento lleva la marca de Prueba: solo con el modo Oficial a la vista (sin él, todo es de Prueba y no hay qué distinguir). */
+const marcaDePrueba = (sorteos: readonly { net?: string | undefined }[]): boolean => hayModoOficial && eventoEsDePrueba(sorteos);
 
 /** Cuántos de estos sorteos se hicieron sin sello. */
 const cuantosSinSello = (sorteos: readonly ConMarca[]): number => sorteos.filter((s) => esSinSello(s)).length;
@@ -174,17 +212,36 @@ function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   const varios = d.ganadores.length > 1;
+  // Un orden de turnos: «Orden de turnos» arriba, las personas en el orden del sorteo (la foto muestra las primeras y «N más»)
+  // y debajo cuántas son, sin «Premio:» ni «Entre N personas».
+  const turnos = isTurnOrder(d.total, d.ganadores.length, d.premio);
+  // Las dos cuentas cuando no es una participación por persona.
+  const part = !turnos && d.personas !== undefined && d.personas !== d.total;
   return {
     // El logo, y el "Hecho con Tinkazo" que va siempre a su lado. Sin logo, la foto es la de siempre, píxel por píxel.
     ...(d.logo ? { logo: d.logo, hecho: cad(lang, "logoHecho") } : {}),
     rotulo: rotuloDeSorteo(lang, d),
-    titulo: cad(lang, varios ? "imgGanaron" : "imgGano"),
+    titulo: cad(lang, turnos ? "turnsOption" : varios ? "imgGanaron" : "imgGano"),
     personas: d.ganadores,
-    lineas: [
-      d.premio ? `${cad(lang, varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "",
-      rellenar(cad(lang, varios ? "fotoEntreVarios" : "fotoEntreUno"), { n: d.total }),
-      d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
-    ].filter(Boolean),
+    lineas: turnos
+      ? [
+          // El nombre que le puso quien organiza, si es más que la palabra «Turnos».
+          /^\s*(turnos|turns)\s*$/i.test(d.premio) ? "" : d.premio,
+          // Con varias participaciones por persona hay más turnos que personas: las dos cuentas, como las bases.
+          d.personas !== undefined && d.personas !== d.total
+            ? rellenar(cad(lang, "turnsFotoLineaPart"), { n: d.total, k: d.personas })
+            : rellenar(cad(lang, "turnsFotoLinea"), { n: d.total }),
+          d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
+        ].filter(Boolean)
+      : [
+          d.premio ? `${cad(lang, varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "",
+          // Con varias participaciones por persona, la foto dice las dos cuentas.
+          rellenar(
+            cad(lang, varios ? (part ? "fotoEntreVariosPart" : "fotoEntreVarios") : part ? "fotoEntreUnoPart" : "fotoEntreUno"),
+            { n: d.total, ...(part ? { k: d.personas } : {}) },
+          ),
+          d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
+        ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
     enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
@@ -199,22 +256,27 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
  * "Sin sello: no se puede comprobar."; con alguno, junto al QR tampoco dice
  * "comprobarlo" (el QR abre la página del evento, que dice cuál es cuál).
  */
-export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string, logo?: Logo | null): Foto {
+export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string, logo?: Logo | null, prueba = false): Foto {
   const n = sorteos.length;
   const enOrden = enOrdenDeSalida(sorteos);
   const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const hayUnoSinSello = cuantosSinSello(sorteos) > 0;
   return {
     ...(logo ? { logo, hecho: cad(lang, "logoHecho") } : {}),
-    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(", "),
+    // Igual que la foto de un sorteo suelto: si es de Prueba, el rótulo lo dice.
+    rotulo: [cad(lang, "fotoEvento"), prueba ? cad(lang, "fotoPrueba") : "", fechaLarga(lang, fecha)].filter(Boolean).join(", "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
-    filas: enOrden.map((s) => ({
-      premio: s.prize?.trim() || cad(lang, "histDraw"),
-      ganadores: lista(lang, s.ganadores),
-      cortos: listasCortas(lang, s.ganadores),
-      ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
-    })),
+    filas: enOrden.map((s) => {
+      // Un orden de turnos no lista a nadie: dice cuántas personas hay, como el mensaje del evento.
+      const personas = personasDelOrden(s);
+      return {
+        premio: s.prize?.trim() || cad(lang, "histDraw"),
+        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores),
+        cortos: personas !== null ? [] : listasCortas(lang, s.ganadores),
+        ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
+      };
+    }),
     lineas: [],
     mas: cad(lang, "fotoMas"),
     enlace,
@@ -504,6 +566,9 @@ export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores
     enlace,
     ganadores,
     total: comprobante.names.length,
+    // Las dos cuentas si no es una por persona, con la regla de todos (`seCuentaPorPersona`) y el modo que trae
+    // el enlace del comprobante: lo mismo que cuenta la verificación al abrirlo.
+    personas: contarPersonas(comprobante.names, seCuentaPorPersona(comprobante.names, modoVariasDelEnlace(enlace))).personas,
     premio: comprobante.prize ?? "",
     ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
     ...(comprobante.id ? { numero: comprobante.id } : {}),
@@ -512,6 +577,19 @@ export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores
     // Para el contador (`src/contar.ts`): la referencia, solo si el comprobante la trae entera.
     ref: refDe(comprobante),
   };
+}
+
+/**
+ * ¿El enlace del comprobante trae un modo (o el sitio se construyó con la bandera)? Cualquier modo, como en la
+ * verificación: un orden con varias participaciones lleva solo `?modo=turnos`, porque el enlace guarda uno.
+ */
+function modoVariasDelEnlace(enlace: string): boolean {
+  if (modesFlagOn()) return true;
+  try {
+    return requestedMode(new URL(enlace, "https://tinkazo.app").search) !== null;
+  } catch {
+    return false;
+  }
 }
 
 /** Desde Mis sorteos: el comprobante trae el número de personas, el premio, la fecha y el número del sorteo. */
@@ -555,6 +633,7 @@ export async function paqueteDeEvento(
       enlaces,
       lineas: lineasDeEvento(lang, sorteos),
       sinSello: cuantosSinSello(sorteos),
+      prueba: marcaDePrueba(sorteos),
     }),
   };
 }
@@ -573,6 +652,7 @@ export async function prepararEvento(
   sorteos = enOrdenDeSalida(sorteos);
   const lineas = lineasDeEvento(lang, sorteos);
   const sinSello = cuantosSinSello(sorteos);
+  const prueba = marcaDePrueba(sorteos);
   const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const archivo = archivoDe(undefined, fecha);
   if (op.corto !== false) {
@@ -582,8 +662,8 @@ export async function prepararEvento(
     const c = await acortar(largo);
     if (c) {
       return {
-        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello }),
-        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto, op.logo)],
+        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello, prueba }),
+        fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto, op.logo, prueba)],
         archivo,
         corto: true,
       };
@@ -593,7 +673,7 @@ export async function prepararEvento(
   const partes = r?.partes ?? [];
   return {
     mensaje: r?.mensaje ?? "",
-    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace, op.logo)),
+    fotos: partes.map((p) => fotoDeEvento(lang, p.titulo, p.sorteos, p.enlace, op.logo, marcaDePrueba(p.sorteos))),
     ...(partes.length > 1 ? { nota: rellenar(cad(lang, "evAvisoPartes"), { n: partes.length }) } : {}),
     archivo,
     corto: false,

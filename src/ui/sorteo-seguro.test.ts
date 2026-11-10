@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { errorKey } from "../stellar/errores";
-import { ESPERAS_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sortearConReintentos } from "./sorteo-seguro";
+import { ESPERAS_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sorteoReintentable, sortearConReintentos } from "./sorteo-seguro";
 
 /** Un reloj de mentira: `dormir` lo adelanta en el acto. */
 function reloj() {
@@ -115,5 +115,34 @@ describe("avisoDelReintento: la línea de la sala dice lo que pasó", () => {
         expect(texto as string).not.toMatch(/hash|bytes?|firmas?|drand|RPC|XDR|ledger/i);
       }
     }
+  });
+});
+
+describe("la co-firma pendiente de Pollar no se reintenta", () => {
+  it("el sorteo pide la firma una sola vez mientras la anterior puede seguir viva", async () => {
+    const r = reloj();
+    const signAndSubmit = vi.fn().mockRejectedValue(new Error("pollar-pending"));
+    const fin = await sortearConReintentos({ intentar: signAndSubmit, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin.ok).toBe(false);
+    expect(signAndSubmit).toHaveBeenCalledTimes(1);
+    expect(r.dormir).not.toHaveBeenCalled();
+  });
+
+  it.each(["SDK_COSIGN_REJECTED", "SDK_COSIGN_VERIFICATION_FAILED"])("%s tampoco: repetir no cambia nada y cada intento pediría otra aprobación", async (codigo) => {
+    const r = reloj();
+    const error = new Error(`co-sign request rejected · ${codigo}`);
+    expect(sorteoReintentable(error)).toBe(false);
+    const signAndSubmit = vi.fn().mockRejectedValue(error);
+    const fin = await sortearConReintentos({ intentar: signAndSubmit, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin.ok).toBe(false);
+    expect(signAndSubmit).toHaveBeenCalledTimes(1);
+    expect(r.dormir).not.toHaveBeenCalled();
+  });
+
+  it("también con el error envuelto, y lo demás sin confirmar sigue reintentándose", () => {
+    expect(sorteoReintentable(new Error("tx", { cause: new Error("pollar-pending") }))).toBe(false);
+    expect(sorteoReintentable(new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }))).toBe(true);
+    expect(sorteoReintentable(new Error("envio-lento"))).toBe(true);
+    expect(sorteoReintentable(new TypeError("Load failed"))).toBe(true);
   });
 });

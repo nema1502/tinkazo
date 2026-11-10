@@ -1,4 +1,5 @@
 import { getLang, t } from "../i18n";
+import { cuentaDeLaEntrada } from "./cuenta-entrada";
 import type { Entry } from "./history";
 
 /**
@@ -84,7 +85,7 @@ export interface DrawRow {
 export function drawRow(e: Entry): DrawRow {
   const done = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
   const title = e.prize?.trim() || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
-  const parts = [`${e.count} ${t("histPeople")}`, shortDate(e.sealedAt)];
+  const parts = [cuentaDeLaEntrada(e), shortDate(e.sealedAt)];
   if (!done) parts.push(t("acctPending"));
   return { title, meta: parts.filter(Boolean).join(", "), proof: e.proof || null };
 }

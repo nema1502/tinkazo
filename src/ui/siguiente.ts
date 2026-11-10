@@ -5,6 +5,10 @@ import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
 import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { esResultadoDeTurnos } from "../modos/turnos";
+import { modesVisible } from "../modos/bandera";
+import { contar } from "../participaciones";
+import { canonicalList } from "../protocol/canonical";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -52,6 +56,20 @@ let observado: HTMLButtonElement | null = null;
 let alVista = true;
 let io: IntersectionObserver | null = null;
 let moBoton: MutationObserver | null = null;
+/** El botón de la lista de equipos con cupón y sus contenedores: si aparece, desaparece o se esconde, la barra se recalcula. */
+let moLista: MutationObserver | null = null;
+let listaObservada: Element | null = null;
+
+function vigilarListaDeCupones(): void {
+  const b = document.getElementById("eq-lista");
+  if (b === listaObservada) return;
+  moLista?.disconnect();
+  listaObservada = b;
+  if (!b) return;
+  moLista ??= new MutationObserver(render);
+  // Hasta el cuerpo no: la propia barra cambia sus clases, y eso no tiene que volver a despertar este cálculo.
+  for (let el: HTMLElement | null = b; el && el !== document.body; el = el.parentElement) moLista.observe(el, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
+}
 
 /** Alto de la barra, medido: cambia según el ancho. Lo usan el relleno de la página y el aviso flotante. */
 let alto = 0;
@@ -138,6 +156,19 @@ export function pasoActual(): Paso {
 }
 
 /**
+ * Si el panel de equipos ya ofrece usar los que tienen cupón como lista, manda esa: la barra no propone "Pegar
+ * lista" a la vez (una sola acción principal por paso, docs/ux.md). El botón se ve cuando la sala está abierta y
+ * hay al menos un equipo con cupón.
+ */
+export function mandaListaDeCupones(): boolean {
+  const b = document.getElementById("eq-lista");
+  if (!(b instanceof HTMLButtonElement)) return false;
+  // No alcanza con que el botón no esté escondido: si un contenedor suyo lo está (el panel plegado o la sala cerrada), nadie lo ve.
+  for (let el: HTMLElement | null = b; el; el = el.parentElement) if (el.hidden) return false;
+  return typeof b.checkVisibility === "function" ? b.checkVisibility() : true;
+}
+
+/**
  * En qué paso está el sorteo y qué botón lo hace avanzar.
  *
  * El paso 4 empieza cuando el resultado ya se ve, no cuando se sabe: mientras
@@ -149,14 +180,30 @@ function calcular(): Toca {
   const n = nombres();
   const paso = pasoDe({ nombres: n, sellada: app.frozen !== null, revelado });
   // En el stand la barra es solo para empezar la ronda: ni "Pegar lista" ni nada de después.
-  const boton = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
+  const botonReal = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
+  // Con equipos con cupón, manda usar esa lista que ofrece el panel.
+  const boton = paso === 1 && mandaListaDeCupones() ? null : botonReal;
   const restan = paso === 3 ? segundos() : 0;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
+  const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos() });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
+  // Con los modos a la vista, la barra cuenta personas y líneas como el cuadro y el resumen: en un orden de
+  // turnos las líneas son turnos, y con varias participaciones son participaciones, no personas.
+  const turnosActivo = document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
+  if (clave === "sigLista" && (turnosActivo || modesVisible())) {
+    // Las personas se cuentan con la misma función que el resto, desde el cuadro: leer el texto de las
+    // fichas dependía de cómo se pintan y podía contar distinto que el cuadro y el resumen.
+    const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
+    const personas = contar(canonicalList(ta?.value ?? ""), true).personas;
+    if (personas > 0 && personas < n) {
+      detalle = turnosActivo
+        ? t("sigListaTurnos").replace("{p}", String(personas)).replace("{n}", String(n))
+        : t("sigListaPart").replace("{p}", String(personas)).replace("{n}", String(n));
+    }
+  }
   // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
-  // el premio que falta: nada se sella de verdad.
+  // el premio que falta: nada se sella de verdad. En un orden de turnos no hay premio que nombrar.
   // En el stand no hay premio: la línea dice solo cuántas personas hay.
-  if (clave === "sigLista") detalle = enStand() ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
+  if (clave === "sigLista") detalle = enStand() || turnosActivo ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
@@ -294,9 +341,19 @@ function vigilar(boton: HTMLButtonElement | null): void {
 }
 
 /**
+ * El alto de la cinta de versión nueva cuando va pegada arriba (pantallas
+ * angostas, donde la cabecera se queda en su lugar), que la publica en
+ * `--cinta-alto` (version-nueva.ts). Sin la cinta, o dentro de la cabecera fija
+ * (que ya la cuenta en su alto), vale cero.
+ */
+function altoCinta(): number {
+  return Number.parseFloat(document.documentElement.style.getPropertyValue("--cinta-alto")) || 0;
+}
+
+/**
  * Mide la barra y arma el observador: el botón "se ve" si entra entero en la
- * pantalla, sin la cabecera fija (en pantallas anchas) que le tapa el borde de
- * arriba.
+ * pantalla, sin la cabecera fija (en pantallas anchas) ni la cinta de versión
+ * nueva pegada arriba (en las angostas), que le tapan el borde de arriba.
  *
  * El borde de abajo no descuenta el lugar de la barra, y es a propósito: un
  * botón que cabe entero en la pantalla se ve esté donde esté, y la barra se
@@ -311,7 +368,7 @@ function armar(): void {
   // resto del sitio funciona igual. La barra es una red de seguridad, no puede romper lo que protege.
   if (typeof IntersectionObserver === "undefined") return;
   const cab = document.querySelector("header");
-  const arriba = cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0;
+  const arriba = (cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0) + altoCinta();
   io?.disconnect();
   io = new IntersectionObserver(
     (entradas) => {
@@ -337,7 +394,8 @@ export function actualizarPaso(): void {
  * hablar con la red de Stellar"). Si la persona apretó el de la barra, ese
  * botón está fuera de la pantalla y el error también: quedaba a la vista un
  * botón que volvía a estar disponible sin decir por qué. Si el mensaje no se ve
- * (sin contar la cabecera fija ni la propia barra), se lo lleva a la pantalla;
+ * (sin contar la cabecera fija, la cinta de versión nueva pegada arriba ni la
+ * propia barra), se lo lleva a la pantalla;
  * con el movimiento reducido, sin animación.
  *
  * Si el sorteo arrancó desde la espera en grande, la pantalla es ella: se le
@@ -349,7 +407,7 @@ export function verError(mensaje: HTMLElement, accion?: AccionError, segunda?: A
   if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");
-  const arriba = cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0;
+  const arriba = (cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0) + altoCinta();
   const abajo = innerHeight - ($("siguiente").classList.contains("on") ? alto : 0);
   if (r.top >= arriba && r.bottom <= abajo) return;
   const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -373,6 +431,14 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   addEventListener("scroll", () => (ultimoScroll = performance.now()), { passive: true });
   moBoton = new MutationObserver(render);
   const general = new MutationObserver(render);
+  // El botón de la lista de equipos vive adentro del panel: hay que descubrirlo cuando el panel aparece y vigilarlo desde ahí.
+  vigilarListaDeCupones();
+  const descubreLista = new MutationObserver(() => {
+    const antes = listaObservada;
+    vigilarListaDeCupones();
+    if (listaObservada !== antes) render();
+  });
+  descubreLista.observe(document.body, { childList: true, subtree: true });
   // Ventanas, tarjeta y cortina se agregan al cuerpo; el estadio es fijo y cambia de estilo.
   general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo", "data-stand"] });
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });

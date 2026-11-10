@@ -1,0 +1,2238 @@
+{
+  "red": "testnet",
+  "nota": "Cuántos, nunca quiénes: sin cuentas, listas ni nombres. `todas` es lo que hay en la cadena; `sinInternas` descuenta las cuentas de docs/cuentas-internas.json; `sinInternasNiEjemplo` descuenta además los sellos de la lista de ejemplo del sitio, que es la que sellan las pruebas.",
+  "corte": {
+    "ledger": 5566030,
+    "cerroEn": "2026-11-05T04:43:10Z"
+  },
+  "contratos": [
+    {
+      "contrato": "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A",
+      "vigente": true,
+      "sellos": 570,
+      "registros": 158,
+      "nextId": 571
+    },
+    {
+      "contrato": "CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH",
+      "vigente": false,
+      "sellos": 936,
+      "registros": 406,
+      "nextId": 937,
+      "ultimoIdOficial": 936
+    },
+    {
+      "contrato": "CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ",
+      "vigente": false,
+      "sellos": 1,
+      "registros": 1,
+      "nextId": 2,
+      "ultimoIdOficial": 1
+    }
+  ],
+  "eventosDespuesDelUltimoOficial": 0,
+  "comprobaciones": {
+    "ok": true,
+    "detalle": [
+      "ok  CDNWNY26: 570 sellos, ids 1..570 sin huecos ni repetidos",
+      "ok  CDNWNY26: next_id 571 = 570 sellos + 1",
+      "ok  CD2SSHBU: 936 sellos, ids 1..936 sin huecos ni repetidos",
+      "ok  CD2SSHBU: next_id 937 = 936 sellos + 1",
+      "ok  CDVAI2RK: 1 sellos, ids 1..1 sin huecos ni repetidos",
+      "ok  CDVAI2RK: next_id 2 = 1 sellos + 1",
+      "ok  2072 de 2072 eventos con su transacción de Horizon",
+      "ok  los eventos y las transacciones coinciden",
+      "ok  el RPC, en su ventana de unos 7 días, cuenta 389 sellos y 107 registros; el índice, 389 y 107"
+    ]
+  },
+  "cuentasInternas": {
+    "enLaLista": 1,
+    "cuentasQueAparecen": 1,
+    "sorteosSellados": 3,
+    "sorteosRegistrados": 2,
+    "lugaresEnListas": 39
+  },
+  "listasDeEjemplo": {
+    "enLaLista": 1,
+    "sorteosSellados": 1180,
+    "sorteosRegistrados": 325,
+    "organizadoresDistintos": 677,
+    "lugaresEnListas": 21240
+  },
+  "todas": {
+    "totales": {
+      "sorteosSellados": 1507,
+      "sorteosRegistrados": 565,
+      "organizadoresDistintos": 890,
+      "organizadoresNuevos": 890,
+      "lugaresEnListas": 30154,
+      "ganadores": 969,
+      "cierresSinSortear": 942,
+      "transacciones": 2072,
+      "comisionStroops": 24634517067,
+      "marcas": {
+        "fila": 1,
+        "premios": 1,
+        "sinMarca": 1506
+      },
+      "organizadoresQueVuelvenDias": 6,
+      "organizadoresQueVuelvenSemanas": 4,
+      "patrocinadas": 83,
+      "primerSorteo": {
+        "cuentasConSorteo": 439,
+        "cuentasSinSorteoTodavia": 451,
+        "medianaSegundos": 55,
+        "p90Segundos": 60,
+        "maximoSegundos": 2150
+      },
+      "listasRepetidas": {
+        "listasDistintas": 132,
+        "listasSelladasMasDeUnaVez": 37,
+        "sellosEnListasRepetidas": 1412,
+        "sellosSobrantes": 1375,
+        "vecesMaxima": 1182,
+        "selladasPorMasDeUnaCuenta": 34
+      }
+    },
+    "porDia": {
+      "2026-09-16": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 36,
+        "ganadores": 6,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 155372234,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-20": {
+        "sorteosSellados": 31,
+        "sorteosRegistrados": 8,
+        "organizadoresDistintos": 15,
+        "organizadoresNuevos": 15,
+        "lugaresEnListas": 532,
+        "ganadores": 10,
+        "cierresSinSortear": 23,
+        "transacciones": 39,
+        "comisionStroops": 74420468,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 31
+        }
+      },
+      "2026-09-21": {
+        "sorteosSellados": 9,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 162,
+        "ganadores": 3,
+        "cierresSinSortear": 6,
+        "transacciones": 12,
+        "comisionStroops": 23744325,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 9
+        }
+      },
+      "2026-09-22": {
+        "sorteosSellados": 14,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 3784,
+        "ganadores": 7,
+        "cierresSinSortear": 7,
+        "transacciones": 21,
+        "comisionStroops": 46187634,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 14
+        }
+      },
+      "2026-09-24": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 2,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 9638552,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-25": {
+        "sorteosSellados": 8,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 144,
+        "ganadores": 2,
+        "cierresSinSortear": 6,
+        "transacciones": 10,
+        "comisionStroops": 27619284,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 8
+        }
+      },
+      "2026-09-26": {
+        "sorteosSellados": 6,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 3,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 108,
+        "ganadores": 0,
+        "cierresSinSortear": 6,
+        "transacciones": 6,
+        "comisionStroops": 18870056,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 6
+        }
+      },
+      "2026-09-27": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 2,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 10859610,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-28": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 5,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 216,
+        "ganadores": 3,
+        "cierresSinSortear": 9,
+        "transacciones": 15,
+        "comisionStroops": 46647798,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        }
+      },
+      "2026-09-29": {
+        "sorteosSellados": 7,
+        "sorteosRegistrados": 4,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 126,
+        "ganadores": 4,
+        "cierresSinSortear": 3,
+        "transacciones": 11,
+        "comisionStroops": 35495272,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 7
+        }
+      },
+      "2026-09-30": {
+        "sorteosSellados": 14,
+        "sorteosRegistrados": 4,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 5,
+        "lugaresEnListas": 252,
+        "ganadores": 4,
+        "cierresSinSortear": 10,
+        "transacciones": 18,
+        "comisionStroops": 71288462,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 14
+        }
+      },
+      "2026-10-01": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 30,
+        "ganadores": 9,
+        "cierresSinSortear": 1,
+        "transacciones": 19,
+        "comisionStroops": 71731529,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-02": {
+        "sorteosSellados": 30,
+        "sorteosRegistrados": 15,
+        "organizadoresDistintos": 10,
+        "organizadoresNuevos": 8,
+        "lugaresEnListas": 540,
+        "ganadores": 15,
+        "cierresSinSortear": 15,
+        "transacciones": 45,
+        "comisionStroops": 175856611,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 30
+        }
+      },
+      "2026-10-03": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 1,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 36,
+        "ganadores": 1,
+        "cierresSinSortear": 1,
+        "transacciones": 3,
+        "comisionStroops": 11655122,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-04": {
+        "sorteosSellados": 30,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 22,
+        "organizadoresNuevos": 21,
+        "lugaresEnListas": 542,
+        "ganadores": 9,
+        "cierresSinSortear": 21,
+        "transacciones": 39,
+        "comisionStroops": 160310088,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 30
+        }
+      },
+      "2026-10-05": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 180,
+        "ganadores": 2,
+        "cierresSinSortear": 8,
+        "transacciones": 12,
+        "comisionStroops": 49485733,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-06": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 0,
+        "cierresSinSortear": 2,
+        "transacciones": 2,
+        "comisionStroops": 8350777,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-08": {
+        "sorteosSellados": 8,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 144,
+        "ganadores": 0,
+        "cierresSinSortear": 8,
+        "transacciones": 8,
+        "comisionStroops": 37026652,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 8
+        }
+      },
+      "2026-10-10": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 10,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 180,
+        "ganadores": 10,
+        "cierresSinSortear": 2,
+        "transacciones": 22,
+        "comisionStroops": 104719318,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        }
+      },
+      "2026-10-14": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 23,
+        "ganadores": 7,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 20612378,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-16": {
+        "sorteosSellados": 59,
+        "sorteosRegistrados": 23,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 2053,
+        "ganadores": 42,
+        "cierresSinSortear": 36,
+        "transacciones": 82,
+        "comisionStroops": 457642010,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 59
+        }
+      },
+      "2026-10-17": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 6,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 201,
+        "ganadores": 6,
+        "cierresSinSortear": 4,
+        "transacciones": 16,
+        "comisionStroops": 90459099,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-19": {
+        "sorteosSellados": 4,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 10,
+        "ganadores": 3,
+        "cierresSinSortear": 1,
+        "transacciones": 7,
+        "comisionStroops": 42926945,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 4
+        }
+      },
+      "2026-10-20": {
+        "sorteosSellados": 241,
+        "sorteosRegistrados": 100,
+        "organizadoresDistintos": 186,
+        "organizadoresNuevos": 185,
+        "lugaresEnListas": 4108,
+        "ganadores": 193,
+        "cierresSinSortear": 141,
+        "transacciones": 341,
+        "comisionStroops": 2148347066,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 241
+        }
+      },
+      "2026-10-21": {
+        "sorteosSellados": 120,
+        "sorteosRegistrados": 17,
+        "organizadoresDistintos": 51,
+        "organizadoresNuevos": 49,
+        "lugaresEnListas": 2038,
+        "ganadores": 23,
+        "cierresSinSortear": 103,
+        "transacciones": 137,
+        "comisionStroops": 944769470,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 120
+        }
+      },
+      "2026-10-22": {
+        "sorteosSellados": 241,
+        "sorteosRegistrados": 134,
+        "organizadoresDistintos": 161,
+        "organizadoresNuevos": 160,
+        "lugaresEnListas": 3956,
+        "ganadores": 226,
+        "cierresSinSortear": 107,
+        "transacciones": 375,
+        "comisionStroops": 2610751106,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 241
+        }
+      },
+      "2026-10-24": {
+        "sorteosSellados": 1,
+        "sorteosRegistrados": 1,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 18,
+        "ganadores": 1,
+        "cierresSinSortear": 0,
+        "transacciones": 2,
+        "comisionStroops": 14604891,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1
+        }
+      },
+      "2026-10-25": {
+        "sorteosSellados": 53,
+        "sorteosRegistrados": 41,
+        "organizadoresDistintos": 33,
+        "organizadoresNuevos": 31,
+        "lugaresEnListas": 1164,
+        "ganadores": 53,
+        "cierresSinSortear": 12,
+        "transacciones": 94,
+        "comisionStroops": 17125890489,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 53
+        }
+      },
+      "2026-10-26": {
+        "sorteosSellados": 155,
+        "sorteosRegistrados": 36,
+        "organizadoresDistintos": 82,
+        "organizadoresNuevos": 81,
+        "lugaresEnListas": 2760,
+        "ganadores": 63,
+        "cierresSinSortear": 119,
+        "transacciones": 191,
+        "comisionStroops": 10389010,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 155
+        }
+      },
+      "2026-10-27": {
+        "sorteosSellados": 15,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 222,
+        "ganadores": 18,
+        "cierresSinSortear": 6,
+        "transacciones": 24,
+        "comisionStroops": 1310387,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 15
+        }
+      },
+      "2026-10-28": {
+        "sorteosSellados": 6,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 6,
+        "lugaresEnListas": 92,
+        "ganadores": 6,
+        "cierresSinSortear": 3,
+        "transacciones": 9,
+        "comisionStroops": 491167,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 6
+        }
+      },
+      "2026-11-01": {
+        "sorteosSellados": 42,
+        "sorteosRegistrados": 26,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 676,
+        "ganadores": 50,
+        "cierresSinSortear": 16,
+        "transacciones": 68,
+        "comisionStroops": 3711344,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 42
+        }
+      },
+      "2026-11-02": {
+        "sorteosSellados": 162,
+        "sorteosRegistrados": 56,
+        "organizadoresDistintos": 103,
+        "organizadoresNuevos": 103,
+        "lugaresEnListas": 2351,
+        "ganadores": 74,
+        "cierresSinSortear": 106,
+        "transacciones": 218,
+        "comisionStroops": 11851265,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 162
+        }
+      },
+      "2026-11-03": {
+        "sorteosSellados": 32,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 576,
+        "ganadores": 5,
+        "cierresSinSortear": 29,
+        "transacciones": 35,
+        "comisionStroops": 1903983,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 32
+        }
+      },
+      "2026-11-04": {
+        "sorteosSellados": 111,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 49,
+        "organizadoresNuevos": 48,
+        "lugaresEnListas": 2062,
+        "ganadores": 80,
+        "cierresSinSortear": 104,
+        "transacciones": 118,
+        "comisionStroops": 6468671,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 110
+        }
+      },
+      "2026-11-05": {
+        "sorteosSellados": 42,
+        "sorteosRegistrados": 15,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 724,
+        "ganadores": 30,
+        "cierresSinSortear": 27,
+        "transacciones": 57,
+        "comisionStroops": 3108261,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 42
+        }
+      }
+    },
+    "porSemana": {
+      "2026-09-14": {
+        "sorteosSellados": 33,
+        "sorteosRegistrados": 10,
+        "organizadoresDistintos": 16,
+        "organizadoresNuevos": 16,
+        "lugaresEnListas": 568,
+        "ganadores": 16,
+        "cierresSinSortear": 23,
+        "transacciones": 43,
+        "comisionStroops": 229792702,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 33
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-21": {
+        "sorteosSellados": 41,
+        "sorteosRegistrados": 16,
+        "organizadoresDistintos": 20,
+        "organizadoresNuevos": 19,
+        "lugaresEnListas": 4270,
+        "ganadores": 16,
+        "cierresSinSortear": 25,
+        "transacciones": 57,
+        "comisionStroops": 136919461,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 41
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-28": {
+        "sorteosSellados": 105,
+        "sorteosRegistrados": 45,
+        "organizadoresDistintos": 45,
+        "organizadoresNuevos": 44,
+        "lugaresEnListas": 1742,
+        "ganadores": 45,
+        "cierresSinSortear": 60,
+        "transacciones": 150,
+        "comisionStroops": 572984882,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 105
+        },
+        "organizadoresQueVuelvenDias": 2,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-05": {
+        "sorteosSellados": 32,
+        "sorteosRegistrados": 12,
+        "organizadoresDistintos": 14,
+        "organizadoresNuevos": 11,
+        "lugaresEnListas": 540,
+        "ganadores": 12,
+        "cierresSinSortear": 20,
+        "transacciones": 44,
+        "comisionStroops": 199582480,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 32
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-12": {
+        "sorteosSellados": 71,
+        "sorteosRegistrados": 31,
+        "organizadoresDistintos": 40,
+        "organizadoresNuevos": 39,
+        "lugaresEnListas": 2277,
+        "ganadores": 55,
+        "cierresSinSortear": 40,
+        "transacciones": 102,
+        "comisionStroops": 568713487,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 71
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-19": {
+        "sorteosSellados": 660,
+        "sorteosRegistrados": 296,
+        "organizadoresDistintos": 429,
+        "organizadoresNuevos": 427,
+        "lugaresEnListas": 11294,
+        "ganadores": 499,
+        "cierresSinSortear": 364,
+        "transacciones": 956,
+        "comisionStroops": 22887289967,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 660
+        },
+        "organizadoresQueVuelvenDias": 2,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-26": {
+        "sorteosSellados": 218,
+        "sorteosRegistrados": 74,
+        "organizadoresDistintos": 136,
+        "organizadoresNuevos": 135,
+        "lugaresEnListas": 3750,
+        "ganadores": 137,
+        "cierresSinSortear": 144,
+        "transacciones": 292,
+        "comisionStroops": 15901908,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 218
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-11-02": {
+        "sorteosSellados": 347,
+        "sorteosRegistrados": 81,
+        "organizadoresDistintos": 199,
+        "organizadoresNuevos": 199,
+        "lugaresEnListas": 5713,
+        "ganadores": 189,
+        "cierresSinSortear": 266,
+        "transacciones": 428,
+        "comisionStroops": 23332180,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 346
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    },
+    "porMes": {
+      "2026-09": {
+        "sorteosSellados": 107,
+        "sorteosRegistrados": 37,
+        "organizadoresDistintos": 45,
+        "organizadoresNuevos": 45,
+        "lugaresEnListas": 5432,
+        "ganadores": 43,
+        "cierresSinSortear": 70,
+        "transacciones": 144,
+        "comisionStroops": 520143695,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 107
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 1
+      },
+      "2026-10": {
+        "sorteosSellados": 1011,
+        "sorteosRegistrados": 421,
+        "organizadoresDistintos": 612,
+        "organizadoresNuevos": 610,
+        "lugaresEnListas": 18333,
+        "ganadores": 687,
+        "cierresSinSortear": 590,
+        "transacciones": 1432,
+        "comisionStroops": 24087329848,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1011
+        },
+        "organizadoresQueVuelvenDias": 4,
+        "organizadoresQueVuelvenSemanas": 3
+      },
+      "2026-11": {
+        "sorteosSellados": 389,
+        "sorteosRegistrados": 107,
+        "organizadoresDistintos": 235,
+        "organizadoresNuevos": 235,
+        "lugaresEnListas": 6389,
+        "ganadores": 239,
+        "cierresSinSortear": 282,
+        "transacciones": 496,
+        "comisionStroops": 27043524,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 388
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    }
+  },
+  "sinInternas": {
+    "totales": {
+      "sorteosSellados": 1504,
+      "sorteosRegistrados": 563,
+      "organizadoresDistintos": 889,
+      "organizadoresNuevos": 889,
+      "lugaresEnListas": 30115,
+      "ganadores": 963,
+      "cierresSinSortear": 941,
+      "transacciones": 2067,
+      "comisionStroops": 24432381806,
+      "marcas": {
+        "fila": 1,
+        "premios": 1,
+        "sinMarca": 1503
+      },
+      "organizadoresQueVuelvenDias": 5,
+      "organizadoresQueVuelvenSemanas": 3,
+      "patrocinadas": 83,
+      "primerSorteo": {
+        "cuentasConSorteo": 438,
+        "cuentasSinSorteoTodavia": 451,
+        "medianaSegundos": 55,
+        "p90Segundos": 60,
+        "maximoSegundos": 2150
+      },
+      "listasRepetidas": {
+        "listasDistintas": 131,
+        "listasSelladasMasDeUnaVez": 37,
+        "sellosEnListasRepetidas": 1410,
+        "sellosSobrantes": 1373,
+        "vecesMaxima": 1180,
+        "selladasPorMasDeUnaCuenta": 34
+      }
+    },
+    "porDia": {
+      "2026-09-20": {
+        "sorteosSellados": 31,
+        "sorteosRegistrados": 8,
+        "organizadoresDistintos": 15,
+        "organizadoresNuevos": 15,
+        "lugaresEnListas": 532,
+        "ganadores": 10,
+        "cierresSinSortear": 23,
+        "transacciones": 39,
+        "comisionStroops": 74420468,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 31
+        }
+      },
+      "2026-09-21": {
+        "sorteosSellados": 9,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 162,
+        "ganadores": 3,
+        "cierresSinSortear": 6,
+        "transacciones": 12,
+        "comisionStroops": 23744325,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 9
+        }
+      },
+      "2026-09-22": {
+        "sorteosSellados": 14,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 3784,
+        "ganadores": 7,
+        "cierresSinSortear": 7,
+        "transacciones": 21,
+        "comisionStroops": 46187634,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 14
+        }
+      },
+      "2026-09-24": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 2,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 9638552,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-25": {
+        "sorteosSellados": 8,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 144,
+        "ganadores": 2,
+        "cierresSinSortear": 6,
+        "transacciones": 10,
+        "comisionStroops": 27619284,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 8
+        }
+      },
+      "2026-09-26": {
+        "sorteosSellados": 6,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 3,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 108,
+        "ganadores": 0,
+        "cierresSinSortear": 6,
+        "transacciones": 6,
+        "comisionStroops": 18870056,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 6
+        }
+      },
+      "2026-09-27": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 2,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 10859610,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-28": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 5,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 216,
+        "ganadores": 3,
+        "cierresSinSortear": 9,
+        "transacciones": 15,
+        "comisionStroops": 46647798,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        }
+      },
+      "2026-09-29": {
+        "sorteosSellados": 7,
+        "sorteosRegistrados": 4,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 126,
+        "ganadores": 4,
+        "cierresSinSortear": 3,
+        "transacciones": 11,
+        "comisionStroops": 35495272,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 7
+        }
+      },
+      "2026-09-30": {
+        "sorteosSellados": 14,
+        "sorteosRegistrados": 4,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 5,
+        "lugaresEnListas": 252,
+        "ganadores": 4,
+        "cierresSinSortear": 10,
+        "transacciones": 18,
+        "comisionStroops": 71288462,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 14
+        }
+      },
+      "2026-10-01": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 30,
+        "ganadores": 9,
+        "cierresSinSortear": 1,
+        "transacciones": 19,
+        "comisionStroops": 71731529,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-02": {
+        "sorteosSellados": 30,
+        "sorteosRegistrados": 15,
+        "organizadoresDistintos": 10,
+        "organizadoresNuevos": 8,
+        "lugaresEnListas": 540,
+        "ganadores": 15,
+        "cierresSinSortear": 15,
+        "transacciones": 45,
+        "comisionStroops": 175856611,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 30
+        }
+      },
+      "2026-10-03": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 1,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 36,
+        "ganadores": 1,
+        "cierresSinSortear": 1,
+        "transacciones": 3,
+        "comisionStroops": 11655122,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-04": {
+        "sorteosSellados": 30,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 22,
+        "organizadoresNuevos": 21,
+        "lugaresEnListas": 542,
+        "ganadores": 9,
+        "cierresSinSortear": 21,
+        "transacciones": 39,
+        "comisionStroops": 160310088,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 30
+        }
+      },
+      "2026-10-05": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 180,
+        "ganadores": 2,
+        "cierresSinSortear": 8,
+        "transacciones": 12,
+        "comisionStroops": 49485733,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-06": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 36,
+        "ganadores": 0,
+        "cierresSinSortear": 2,
+        "transacciones": 2,
+        "comisionStroops": 8350777,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-08": {
+        "sorteosSellados": 8,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 144,
+        "ganadores": 0,
+        "cierresSinSortear": 8,
+        "transacciones": 8,
+        "comisionStroops": 37026652,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 8
+        }
+      },
+      "2026-10-10": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 10,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 180,
+        "ganadores": 10,
+        "cierresSinSortear": 2,
+        "transacciones": 22,
+        "comisionStroops": 104719318,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        }
+      },
+      "2026-10-14": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 23,
+        "ganadores": 7,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 20612378,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-16": {
+        "sorteosSellados": 59,
+        "sorteosRegistrados": 23,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 2053,
+        "ganadores": 42,
+        "cierresSinSortear": 36,
+        "transacciones": 82,
+        "comisionStroops": 457642010,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 59
+        }
+      },
+      "2026-10-17": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 6,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 201,
+        "ganadores": 6,
+        "cierresSinSortear": 4,
+        "transacciones": 16,
+        "comisionStroops": 90459099,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-19": {
+        "sorteosSellados": 4,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 10,
+        "ganadores": 3,
+        "cierresSinSortear": 1,
+        "transacciones": 7,
+        "comisionStroops": 42926945,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 4
+        }
+      },
+      "2026-10-20": {
+        "sorteosSellados": 241,
+        "sorteosRegistrados": 100,
+        "organizadoresDistintos": 186,
+        "organizadoresNuevos": 185,
+        "lugaresEnListas": 4108,
+        "ganadores": 193,
+        "cierresSinSortear": 141,
+        "transacciones": 341,
+        "comisionStroops": 2148347066,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 241
+        }
+      },
+      "2026-10-21": {
+        "sorteosSellados": 120,
+        "sorteosRegistrados": 17,
+        "organizadoresDistintos": 51,
+        "organizadoresNuevos": 49,
+        "lugaresEnListas": 2038,
+        "ganadores": 23,
+        "cierresSinSortear": 103,
+        "transacciones": 137,
+        "comisionStroops": 944769470,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 120
+        }
+      },
+      "2026-10-22": {
+        "sorteosSellados": 241,
+        "sorteosRegistrados": 134,
+        "organizadoresDistintos": 161,
+        "organizadoresNuevos": 160,
+        "lugaresEnListas": 3956,
+        "ganadores": 226,
+        "cierresSinSortear": 107,
+        "transacciones": 375,
+        "comisionStroops": 2610751106,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 241
+        }
+      },
+      "2026-10-24": {
+        "sorteosSellados": 1,
+        "sorteosRegistrados": 1,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 0,
+        "lugaresEnListas": 18,
+        "ganadores": 1,
+        "cierresSinSortear": 0,
+        "transacciones": 2,
+        "comisionStroops": 14604891,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1
+        }
+      },
+      "2026-10-25": {
+        "sorteosSellados": 52,
+        "sorteosRegistrados": 41,
+        "organizadoresDistintos": 32,
+        "organizadoresNuevos": 31,
+        "lugaresEnListas": 1161,
+        "ganadores": 53,
+        "cierresSinSortear": 11,
+        "transacciones": 93,
+        "comisionStroops": 17079127462,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 52
+        }
+      },
+      "2026-10-26": {
+        "sorteosSellados": 155,
+        "sorteosRegistrados": 36,
+        "organizadoresDistintos": 82,
+        "organizadoresNuevos": 81,
+        "lugaresEnListas": 2760,
+        "ganadores": 63,
+        "cierresSinSortear": 119,
+        "transacciones": 191,
+        "comisionStroops": 10389010,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 155
+        }
+      },
+      "2026-10-27": {
+        "sorteosSellados": 15,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 222,
+        "ganadores": 18,
+        "cierresSinSortear": 6,
+        "transacciones": 24,
+        "comisionStroops": 1310387,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 15
+        }
+      },
+      "2026-10-28": {
+        "sorteosSellados": 6,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 6,
+        "organizadoresNuevos": 6,
+        "lugaresEnListas": 92,
+        "ganadores": 6,
+        "cierresSinSortear": 3,
+        "transacciones": 9,
+        "comisionStroops": 491167,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 6
+        }
+      },
+      "2026-11-01": {
+        "sorteosSellados": 42,
+        "sorteosRegistrados": 26,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 676,
+        "ganadores": 50,
+        "cierresSinSortear": 16,
+        "transacciones": 68,
+        "comisionStroops": 3711344,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 42
+        }
+      },
+      "2026-11-02": {
+        "sorteosSellados": 162,
+        "sorteosRegistrados": 56,
+        "organizadoresDistintos": 103,
+        "organizadoresNuevos": 103,
+        "lugaresEnListas": 2351,
+        "ganadores": 74,
+        "cierresSinSortear": 106,
+        "transacciones": 218,
+        "comisionStroops": 11851265,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 162
+        }
+      },
+      "2026-11-03": {
+        "sorteosSellados": 32,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 576,
+        "ganadores": 5,
+        "cierresSinSortear": 29,
+        "transacciones": 35,
+        "comisionStroops": 1903983,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 32
+        }
+      },
+      "2026-11-04": {
+        "sorteosSellados": 111,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 49,
+        "organizadoresNuevos": 48,
+        "lugaresEnListas": 2062,
+        "ganadores": 80,
+        "cierresSinSortear": 104,
+        "transacciones": 118,
+        "comisionStroops": 6468671,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 110
+        }
+      },
+      "2026-11-05": {
+        "sorteosSellados": 42,
+        "sorteosRegistrados": 15,
+        "organizadoresDistintos": 36,
+        "organizadoresNuevos": 36,
+        "lugaresEnListas": 724,
+        "ganadores": 30,
+        "cierresSinSortear": 27,
+        "transacciones": 57,
+        "comisionStroops": 3108261,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 42
+        }
+      }
+    },
+    "porSemana": {
+      "2026-09-14": {
+        "sorteosSellados": 31,
+        "sorteosRegistrados": 8,
+        "organizadoresDistintos": 15,
+        "organizadoresNuevos": 15,
+        "lugaresEnListas": 532,
+        "ganadores": 10,
+        "cierresSinSortear": 23,
+        "transacciones": 39,
+        "comisionStroops": 74420468,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 31
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-21": {
+        "sorteosSellados": 41,
+        "sorteosRegistrados": 16,
+        "organizadoresDistintos": 20,
+        "organizadoresNuevos": 19,
+        "lugaresEnListas": 4270,
+        "ganadores": 16,
+        "cierresSinSortear": 25,
+        "transacciones": 57,
+        "comisionStroops": 136919461,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 41
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-28": {
+        "sorteosSellados": 105,
+        "sorteosRegistrados": 45,
+        "organizadoresDistintos": 45,
+        "organizadoresNuevos": 44,
+        "lugaresEnListas": 1742,
+        "ganadores": 45,
+        "cierresSinSortear": 60,
+        "transacciones": 150,
+        "comisionStroops": 572984882,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 105
+        },
+        "organizadoresQueVuelvenDias": 2,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-05": {
+        "sorteosSellados": 32,
+        "sorteosRegistrados": 12,
+        "organizadoresDistintos": 14,
+        "organizadoresNuevos": 11,
+        "lugaresEnListas": 540,
+        "ganadores": 12,
+        "cierresSinSortear": 20,
+        "transacciones": 44,
+        "comisionStroops": 199582480,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 32
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-12": {
+        "sorteosSellados": 71,
+        "sorteosRegistrados": 31,
+        "organizadoresDistintos": 40,
+        "organizadoresNuevos": 39,
+        "lugaresEnListas": 2277,
+        "ganadores": 55,
+        "cierresSinSortear": 40,
+        "transacciones": 102,
+        "comisionStroops": 568713487,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 71
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-19": {
+        "sorteosSellados": 659,
+        "sorteosRegistrados": 296,
+        "organizadoresDistintos": 428,
+        "organizadoresNuevos": 427,
+        "lugaresEnListas": 11291,
+        "ganadores": 499,
+        "cierresSinSortear": 363,
+        "transacciones": 955,
+        "comisionStroops": 22840526940,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 659
+        },
+        "organizadoresQueVuelvenDias": 2,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-26": {
+        "sorteosSellados": 218,
+        "sorteosRegistrados": 74,
+        "organizadoresDistintos": 136,
+        "organizadoresNuevos": 135,
+        "lugaresEnListas": 3750,
+        "ganadores": 137,
+        "cierresSinSortear": 144,
+        "transacciones": 292,
+        "comisionStroops": 15901908,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 218
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-11-02": {
+        "sorteosSellados": 347,
+        "sorteosRegistrados": 81,
+        "organizadoresDistintos": 199,
+        "organizadoresNuevos": 199,
+        "lugaresEnListas": 5713,
+        "ganadores": 189,
+        "cierresSinSortear": 266,
+        "transacciones": 428,
+        "comisionStroops": 23332180,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 346
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    },
+    "porMes": {
+      "2026-09": {
+        "sorteosSellados": 105,
+        "sorteosRegistrados": 35,
+        "organizadoresDistintos": 44,
+        "organizadoresNuevos": 44,
+        "lugaresEnListas": 5396,
+        "ganadores": 37,
+        "cierresSinSortear": 70,
+        "transacciones": 140,
+        "comisionStroops": 364771461,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 105
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 1
+      },
+      "2026-10": {
+        "sorteosSellados": 1010,
+        "sorteosRegistrados": 421,
+        "organizadoresDistintos": 611,
+        "organizadoresNuevos": 610,
+        "lugaresEnListas": 18330,
+        "ganadores": 687,
+        "cierresSinSortear": 589,
+        "transacciones": 1431,
+        "comisionStroops": 24040566821,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1010
+        },
+        "organizadoresQueVuelvenDias": 4,
+        "organizadoresQueVuelvenSemanas": 3
+      },
+      "2026-11": {
+        "sorteosSellados": 389,
+        "sorteosRegistrados": 107,
+        "organizadoresDistintos": 235,
+        "organizadoresNuevos": 235,
+        "lugaresEnListas": 6389,
+        "ganadores": 239,
+        "cierresSinSortear": 282,
+        "transacciones": 496,
+        "comisionStroops": 27043524,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 388
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    }
+  },
+  "sinInternasNiEjemplo": {
+    "totales": {
+      "sorteosSellados": 324,
+      "sorteosRegistrados": 238,
+      "organizadoresDistintos": 220,
+      "organizadoresNuevos": 220,
+      "lugaresEnListas": 8875,
+      "ganadores": 385,
+      "cierresSinSortear": 86,
+      "transacciones": 562,
+      "comisionStroops": 13808803245,
+      "marcas": {
+        "fila": 1,
+        "premios": 1,
+        "sinMarca": 323
+      },
+      "organizadoresQueVuelvenDias": 1,
+      "organizadoresQueVuelvenSemanas": 1,
+      "patrocinadas": 42,
+      "primerSorteo": {
+        "cuentasConSorteo": 175,
+        "cuentasSinSorteoTodavia": 45,
+        "medianaSegundos": 55,
+        "p90Segundos": 70,
+        "maximoSegundos": 2150
+      },
+      "listasRepetidas": {
+        "listasDistintas": 130,
+        "listasSelladasMasDeUnaVez": 36,
+        "sellosEnListasRepetidas": 230,
+        "sellosSobrantes": 194,
+        "vecesMaxima": 49,
+        "selladasPorMasDeUnaCuenta": 33
+      }
+    },
+    "porDia": {
+      "2026-09-20": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 10,
+        "ganadores": 3,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 7215921,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-09-22": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 10,
+        "organizadoresNuevos": 10,
+        "lugaresEnListas": 3712,
+        "ganadores": 7,
+        "cierresSinSortear": 3,
+        "transacciones": 17,
+        "comisionStroops": 36859002,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-01": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 30,
+        "ganadores": 9,
+        "cierresSinSortear": 1,
+        "transacciones": 19,
+        "comisionStroops": 71731529,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        }
+      },
+      "2026-10-04": {
+        "sorteosSellados": 1,
+        "sorteosRegistrados": 0,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 20,
+        "ganadores": 0,
+        "cierresSinSortear": 1,
+        "transacciones": 1,
+        "comisionStroops": 4239672,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1
+        }
+      },
+      "2026-10-10": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 10,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 180,
+        "ganadores": 10,
+        "cierresSinSortear": 2,
+        "transacciones": 22,
+        "comisionStroops": 104719318,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        }
+      },
+      "2026-10-14": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 23,
+        "ganadores": 7,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 20612378,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      },
+      "2026-10-16": {
+        "sorteosSellados": 47,
+        "sorteosRegistrados": 23,
+        "organizadoresDistintos": 30,
+        "organizadoresNuevos": 30,
+        "lugaresEnListas": 1837,
+        "ganadores": 42,
+        "cierresSinSortear": 24,
+        "transacciones": 70,
+        "comisionStroops": 386720778,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 47
+        }
+      },
+      "2026-10-17": {
+        "sorteosSellados": 6,
+        "sorteosRegistrados": 6,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 129,
+        "ganadores": 6,
+        "cierresSinSortear": 0,
+        "transacciones": 12,
+        "comisionStroops": 66513767,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 6
+        }
+      },
+      "2026-10-19": {
+        "sorteosSellados": 4,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 10,
+        "ganadores": 3,
+        "cierresSinSortear": 1,
+        "transacciones": 7,
+        "comisionStroops": 42926945,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 4
+        }
+      },
+      "2026-10-20": {
+        "sorteosSellados": 15,
+        "sorteosRegistrados": 13,
+        "organizadoresDistintos": 14,
+        "organizadoresNuevos": 13,
+        "lugaresEnListas": 40,
+        "ganadores": 24,
+        "cierresSinSortear": 2,
+        "transacciones": 28,
+        "comisionStroops": 170257971,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 15
+        }
+      },
+      "2026-10-21": {
+        "sorteosSellados": 15,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 8,
+        "organizadoresNuevos": 8,
+        "lugaresEnListas": 148,
+        "ganadores": 11,
+        "cierresSinSortear": 6,
+        "transacciones": 24,
+        "comisionStroops": 159334842,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 15
+        }
+      },
+      "2026-10-22": {
+        "sorteosSellados": 75,
+        "sorteosRegistrados": 55,
+        "organizadoresDistintos": 63,
+        "organizadoresNuevos": 62,
+        "lugaresEnListas": 968,
+        "ganadores": 73,
+        "cierresSinSortear": 20,
+        "transacciones": 130,
+        "comisionStroops": 888169362,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 75
+        }
+      },
+      "2026-10-25": {
+        "sorteosSellados": 32,
+        "sorteosRegistrados": 30,
+        "organizadoresDistintos": 19,
+        "organizadoresNuevos": 19,
+        "lugaresEnListas": 801,
+        "ganadores": 32,
+        "cierresSinSortear": 2,
+        "transacciones": 62,
+        "comisionStroops": 11840653061,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 32
+        }
+      },
+      "2026-10-26": {
+        "sorteosSellados": 13,
+        "sorteosRegistrados": 12,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 11,
+        "lugaresEnListas": 204,
+        "ganadores": 16,
+        "cierresSinSortear": 1,
+        "transacciones": 25,
+        "comisionStroops": 1352155,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 13
+        }
+      },
+      "2026-10-27": {
+        "sorteosSellados": 3,
+        "sorteosRegistrados": 3,
+        "organizadoresDistintos": 3,
+        "organizadoresNuevos": 3,
+        "lugaresEnListas": 6,
+        "ganadores": 6,
+        "cierresSinSortear": 0,
+        "transacciones": 6,
+        "comisionStroops": 328073,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 3
+        }
+      },
+      "2026-10-28": {
+        "sorteosSellados": 1,
+        "sorteosRegistrados": 1,
+        "organizadoresDistintos": 1,
+        "organizadoresNuevos": 1,
+        "lugaresEnListas": 2,
+        "ganadores": 2,
+        "cierresSinSortear": 0,
+        "transacciones": 2,
+        "comisionStroops": 109358,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 1
+        }
+      },
+      "2026-11-01": {
+        "sorteosSellados": 5,
+        "sorteosRegistrados": 5,
+        "organizadoresDistintos": 5,
+        "organizadoresNuevos": 5,
+        "lugaresEnListas": 10,
+        "ganadores": 10,
+        "cierresSinSortear": 0,
+        "transacciones": 10,
+        "comisionStroops": 546750,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 5
+        }
+      },
+      "2026-11-02": {
+        "sorteosSellados": 47,
+        "sorteosRegistrados": 39,
+        "organizadoresDistintos": 30,
+        "organizadoresNuevos": 30,
+        "lugaresEnListas": 281,
+        "ganadores": 40,
+        "cierresSinSortear": 8,
+        "transacciones": 86,
+        "comisionStroops": 4663991,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 47
+        }
+      },
+      "2026-11-04": {
+        "sorteosSellados": 22,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 11,
+        "organizadoresNuevos": 11,
+        "lugaresEnListas": 460,
+        "ganadores": 80,
+        "cierresSinSortear": 15,
+        "transacciones": 29,
+        "comisionStroops": 1629652,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 21
+        }
+      },
+      "2026-11-05": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 4,
+        "ganadores": 4,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 218720,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        }
+      }
+    },
+    "porSemana": {
+      "2026-09-14": {
+        "sorteosSellados": 2,
+        "sorteosRegistrados": 2,
+        "organizadoresDistintos": 2,
+        "organizadoresNuevos": 2,
+        "lugaresEnListas": 10,
+        "ganadores": 3,
+        "cierresSinSortear": 0,
+        "transacciones": 4,
+        "comisionStroops": 7215921,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 2
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-21": {
+        "sorteosSellados": 10,
+        "sorteosRegistrados": 7,
+        "organizadoresDistintos": 10,
+        "organizadoresNuevos": 10,
+        "lugaresEnListas": 3712,
+        "ganadores": 7,
+        "cierresSinSortear": 3,
+        "transacciones": 17,
+        "comisionStroops": 36859002,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 10
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-09-28": {
+        "sorteosSellados": 11,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 5,
+        "organizadoresNuevos": 5,
+        "lugaresEnListas": 50,
+        "ganadores": 9,
+        "cierresSinSortear": 2,
+        "transacciones": 20,
+        "comisionStroops": 75971201,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 11
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-05": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 10,
+        "organizadoresDistintos": 4,
+        "organizadoresNuevos": 4,
+        "lugaresEnListas": 180,
+        "ganadores": 10,
+        "cierresSinSortear": 2,
+        "transacciones": 22,
+        "comisionStroops": 104719318,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-12": {
+        "sorteosSellados": 55,
+        "sorteosRegistrados": 31,
+        "organizadoresDistintos": 32,
+        "organizadoresNuevos": 32,
+        "lugaresEnListas": 1989,
+        "ganadores": 55,
+        "cierresSinSortear": 24,
+        "transacciones": 86,
+        "comisionStroops": 473846923,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 55
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-19": {
+        "sorteosSellados": 141,
+        "sorteosRegistrados": 110,
+        "organizadoresDistintos": 105,
+        "organizadoresNuevos": 104,
+        "lugaresEnListas": 1967,
+        "ganadores": 143,
+        "cierresSinSortear": 31,
+        "transacciones": 251,
+        "comisionStroops": 13101342181,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 141
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10-26": {
+        "sorteosSellados": 22,
+        "sorteosRegistrados": 21,
+        "organizadoresDistintos": 21,
+        "organizadoresNuevos": 20,
+        "lugaresEnListas": 222,
+        "ganadores": 34,
+        "cierresSinSortear": 1,
+        "transacciones": 43,
+        "comisionStroops": 2336336,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 22
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-11-02": {
+        "sorteosSellados": 71,
+        "sorteosRegistrados": 48,
+        "organizadoresDistintos": 43,
+        "organizadoresNuevos": 43,
+        "lugaresEnListas": 745,
+        "ganadores": 124,
+        "cierresSinSortear": 23,
+        "transacciones": 119,
+        "comisionStroops": 6512363,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 70
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    },
+    "porMes": {
+      "2026-09": {
+        "sorteosSellados": 12,
+        "sorteosRegistrados": 9,
+        "organizadoresDistintos": 12,
+        "organizadoresNuevos": 12,
+        "lugaresEnListas": 3722,
+        "ganadores": 10,
+        "cierresSinSortear": 3,
+        "transacciones": 21,
+        "comisionStroops": 44074923,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 12
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      },
+      "2026-10": {
+        "sorteosSellados": 236,
+        "sorteosRegistrados": 176,
+        "organizadoresDistintos": 160,
+        "organizadoresNuevos": 160,
+        "lugaresEnListas": 4398,
+        "ganadores": 241,
+        "cierresSinSortear": 60,
+        "transacciones": 412,
+        "comisionStroops": 13757669209,
+        "marcas": {
+          "fila": 0,
+          "premios": 0,
+          "sinMarca": 236
+        },
+        "organizadoresQueVuelvenDias": 1,
+        "organizadoresQueVuelvenSemanas": 1
+      },
+      "2026-11": {
+        "sorteosSellados": 76,
+        "sorteosRegistrados": 53,
+        "organizadoresDistintos": 48,
+        "organizadoresNuevos": 48,
+        "lugaresEnListas": 755,
+        "ganadores": 134,
+        "cierresSinSortear": 23,
+        "transacciones": 129,
+        "comisionStroops": 7059113,
+        "marcas": {
+          "fila": 1,
+          "premios": 1,
+          "sinMarca": 75
+        },
+        "organizadoresQueVuelvenDias": 0,
+        "organizadoresQueVuelvenSemanas": 0
+      }
+    }
+  }
+}

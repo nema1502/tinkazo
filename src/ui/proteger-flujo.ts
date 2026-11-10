@@ -13,11 +13,16 @@ export async function pideProtegerLaCuenta(e: unknown): Promise<boolean> {
   }
 }
 
-/** Abre "Protegé tu cuenta". Devuelve si la cuenta quedó protegida; si no se pudo abrir, que no. */
-export async function protegerLaCuenta(): Promise<boolean> {
+/**
+ * Abre "Protegé tu cuenta". Devuelve si la cuenta quedó protegida; si no se pudo abrir, que no.
+ *
+ * `volverA` es el botón que sella o sortea y `estadoId` su línea de estado: a esa altura el botón ya está apagado y el foco
+ * cayó en la página, así que al cerrar la ventana hay que decirle a dónde volver (ver `proteger-cuenta.ts`).
+ */
+export async function protegerLaCuenta(volverA?: HTMLElement | null, estadoId?: string): Promise<boolean> {
   try {
     const [{ protegerCuenta }, { pollarWallet }] = await Promise.all([import("./proteger-cuenta"), import("../stellar/wallet-pollar")]);
-    return await protegerCuenta(pollarWallet);
+    return await protegerCuenta(pollarWallet, volverA, estadoId);
   } catch (e) {
     console.warn("[tinkazo] no se pudo abrir la protección de la cuenta", e);
     return false;

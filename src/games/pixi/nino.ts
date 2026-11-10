@@ -1,4 +1,4 @@
-import { params } from "../../state";
+import { auditaCon } from "../../state";
 import type { Forma, Respuestas } from "./kit/respuestas";
 
 /**
@@ -33,6 +33,6 @@ export interface GanchoNino {
 }
 
 export function exponerNino(gancho: Omit<GanchoNino, "sinLetras">): void {
-  if (params.get("auditar") !== "nino") return;
+  if (!auditaCon("nino")) return;
   (window as unknown as { __nino: GanchoNino }).__nino = { sinLetras: false, ...gancho };
 }

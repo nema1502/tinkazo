@@ -1,4 +1,5 @@
 import "./pagina";
+import "./version-nueva";
 import "./kit-organizador.css";
 
 // The cards and QR are already public, static HTML/SVG: printing never waits for

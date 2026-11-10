@@ -1,15 +1,22 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
-import { anchoringAvailable } from "../stellar/config";
+import { anchoringAvailable, topeDeGanadores } from "../stellar/config";
 import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
+import { MAX_WINNERS } from "../protocol/select";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
-import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
+import { type Table, cleanName, decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
+import { isTurnOrder } from "../modos/turnos";
+import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
+import { TOPE_POR_PERSONA, contar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, terminaEnNumero } from "../participaciones";
+import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
+import { etiquetaDe } from "../equipos/etiquetas";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
@@ -23,8 +30,18 @@ let cerrada = false;
 /** La lista no se puede tocar: se está sellando o ya está sellada. */
 const listaCerrada = (): boolean => cerrada || !!app.frozen;
 
-/** "Lista de 20 personas", junto al cuadro. */
-const cuentaDeLista = (n: number): string => (n === 1 ? t("listaCuentaUna") : t("listaCuenta").replace("{n}", String(n)));
+/**
+ * "Lista de 20 personas", junto al cuadro. Con varias participaciones por persona, dice las dos cuentas; en un
+ * orden de turnos repartido, personas y turnos, como el resumen y la barra.
+ */
+const cuentaDeLista = (n: number, k = n): string =>
+  k === n
+    ? n === 1
+      ? t("listaCuentaUna")
+      : t("listaCuenta").replace("{n}", String(n))
+    : modoTurnosActivo()
+      ? T[getLang()].listaCuentaTurnos(n, k)
+      : T[getLang()].listaCuentaPart(n, k);
 
 /**
  * Cierra la lista a los cambios, o la vuelve a abrir.
@@ -44,9 +61,11 @@ export function cerrarLista(si: boolean): void {
   cerrada = si;
   $<HTMLTextAreaElement>("ta").disabled = si;
   $<HTMLInputElement>("prize").disabled = si;
-  $<HTMLSelectElement>("nw").disabled = si;
+  bloquearGanadores(si);
+  bloquearTurnos(si);
   for (const id of ["csv", "csv-luma", "btn-pegar"]) $<HTMLInputElement>(id).disabled = si;
   $<HTMLButtonElement>("btn-recuperar").disabled = si;
+  $<HTMLButtonElement>("btn-varias").disabled = si;
   // Los orígenes se ven apagados: ya no cargan nada (styles.css).
   $("sec-participants").classList.toggle("lista-cerrada", si);
   // Los botones de premios escriben en el cuadro: se apagan con él.
@@ -56,15 +75,20 @@ export function cerrarLista(si: boolean): void {
 
 export function renderNames(): void {
   const names = parseNames();
+  // Para sellar hacen falta dos personas distintas: una lista repartida puede tener muchas líneas de una sola.
+  // Sin la bandera de los modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
+  const personas = contar(names, modesVisible()).personas;
   $("names").innerHTML = names
-    .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
+    .map((n) => `<i><img src="${avatar(etiquetaDe(n), 44)}" alt="" loading="lazy" />${esc(etiquetaDe(n))}</i>`)
     .join("");
-  $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || listaCerrada();
+  // En el modo «Orden de turnos» la cantidad sigue a la lista, y si la lista pasa de lo que admite la red no se sella.
+  seguirLaLista(names.length);
+  $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length);
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
-  $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
+  $("freeze-hint").style.display = personas < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
   // Las bases de antes de sellar: con lista y sin sellar. Después las reemplazan las de siempre.
-  $("rules-pre-row").style.display = names.length >= 2 && !listaCerrada() ? "" : "none";
+  $("rules-pre-row").style.display = personas >= 2 && !listaCerrada() ? "" : "none";
   const vacia = names.length === 0 && !listaCerrada();
   // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
   // Y "Cargar ejemplo" es para quien llega sin lista: con nombres en el cuadro,
@@ -82,7 +106,7 @@ export function renderNames(): void {
   // que mientras falten nombres queda apagado y sin color (diseño del onboarding).
   $("btn-pegar").classList.toggle("primary", vacia && !enEnsayo());
   const sellar = $("btn-freeze");
-  const alcanza = names.length >= 2 || listaCerrada();
+  const alcanza = personas >= 2 || listaCerrada();
   sellar.classList.toggle("primary", alcanza);
   sellar.classList.toggle("ghost", !alcanza);
   const ayuda = document.getElementById("pegar-ayuda");
@@ -90,14 +114,15 @@ export function renderNames(): void {
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? cuentaDeLista(names.length) : "";
+    cuenta.textContent = names.length ? cuentaDeLista(personas, names.length) : "";
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
   const ya = document.getElementById("ya-entraste");
   if (ya && (ya.dataset.n !== String(names.length) || listaCerrada())) ya.style.display = "none";
   $("csv-edit").style.display = listaCerrada() ? "none" : "";
-  pintarResumen(names.length);
+  pintarResumen(personas);
+  pintarVarias();
 }
 
 /**
@@ -106,7 +131,7 @@ export function renderNames(): void {
  * deshace: que se lea antes (diseño del onboarding, pantalla 3). Lo vuelven a
  * escribir el premio, "Cuántos ganan" y el idioma.
  */
-function pintarResumen(n = parseNames().length): void {
+function pintarResumen(n = contar(parseNames(), modesVisible()).personas): void {
   const el = document.getElementById("sellar-resumen");
   if (!el) return;
   if (n < 2 || listaCerrada()) {
@@ -114,10 +139,23 @@ function pintarResumen(n = parseNames().length): void {
     return;
   }
   const L = T[getLang()];
-  const k = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, n);
+  // Cuántos ganan se corta con las participaciones (las líneas de la lista), no con las personas.
+  const entradas = parseNames().length;
+  const k = Math.min(ganadoresPedidos(), entradas);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
   // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
-  el.textContent = L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio);
+  // Un orden de turnos dice «12 personas, turnos del 1 al 12», no cuántos ganan. Se decide por las líneas
+  // de la lista (lo que se sella: cada línea, un turno), no por las personas: una lista repartida de 2
+  // personas y 4 líneas es un orden de 4. Y si la lista no entra en lo que la red admite, no se promete
+  // el sello: no se va a poder sellar (`ordenNoCabe`).
+  // Una lista de más de 300 líneas no entra en ninguna red: «Cuántos ganan» se recorta a 300 y `k` ya no es igual a
+  // las líneas. Con el modo prendido eso se decide por el modo (`ordenNoCabe`) y no por el recorte: sigue siendo un
+  // orden que no se puede sellar, y no un sorteo común con ganadores.
+  el.textContent = ordenNoCabe(entradas)
+    ? L.turnsSellarTope(entradas, n)
+    : isTurnOrder(entradas, k, premio)
+      ? L.turnsSellarResumen(entradas, n)
+      : L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio, entradas);
   el.style.display = "";
 }
 
@@ -135,6 +173,7 @@ let lastResult: ImportResult | null = null;
 
 export function bindParticipants(): void {
   const ta = $<HTMLTextAreaElement>("ta");
+  refreshPlaceholder();
   ta.addEventListener("input", (e) => {
     // Si edita a mano, manda lo que escribió: el resumen del archivo ya no aplica.
     hideSummary();
@@ -153,17 +192,47 @@ export function bindParticipants(): void {
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
   $("prize").addEventListener("input", guardarPronto);
   $("prize-chips").addEventListener("click", guardarPronto);
-  $("nw").addEventListener("change", guardarPronto);
+  // El campo es un número: se escribe (`input`) y se confirma al salir (`change`). Los atajos mandan `change`.
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, guardarPronto);
   // El resumen de debajo de "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
-  $("nw").addEventListener("change", () => pintarResumen());
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, () => pintarResumen());
+  // Prender o apagar «Orden de turnos» cambia la cantidad y si se puede sellar: la lista se vuelve a pintar y se guarda el borrador.
+  // El panel de contadores sigue a la vista y pasa a hablar de turnos.
+  document.getElementById("turnos-opcion")?.addEventListener("tinkazo:modo", () => {
+    renderNames();
+    guardarPronto();
+    refreshPlaceholder();
+  });
+  // El botón que abre el panel de contadores, el «Listo» que lo pliega, la pregunta por los números que ya
+  // trae una lista pegada y el buscador del panel. Todo se pinta en `pintarVarias`, al cambiar la lista.
+  const botonVarias = document.getElementById("btn-varias");
+  if (botonVarias) {
+    botonVarias.addEventListener("click", () => {
+      panelAbierto = !panelAbierto;
+      pintarVarias();
+    });
+    $("btn-varias-listo").addEventListener("click", () => {
+      panelAbierto = false;
+      pintarVarias();
+      (botonVarias as HTMLButtonElement).focus();
+    });
+    $("btn-part-si").addEventListener("click", usarNumerosDeLaLista);
+    $("btn-part-no").addEventListener("click", () => {
+      listaSinUsarNumeros = $<HTMLTextAreaElement>("ta").value;
+      pintarVarias();
+    });
+    $("varias-buscar").addEventListener("input", () => pintarFilasDelPanel());
+  }
   onLangChange(() => {
+    refreshPlaceholder();
     pintarResumen();
+    pintarVarias();
     const cuenta = document.getElementById("lista-cuenta");
-    const n = parseNames().length;
-    if (cuenta && n) cuenta.textContent = cuentaDeLista(n);
+    const { personas, participaciones } = contar(parseNames(), modesVisible());
+    if (cuenta && participaciones) cuenta.textContent = cuentaDeLista(personas, participaciones);
   });
   addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
@@ -341,6 +410,21 @@ function contarLista(): void {
  *
  * `fileName` vacío es texto pegado.
  */
+/**
+ * ¿Esta tabla es un «Nombre, cuántas» plausible? Dos columnas, nada que se haya tenido que saltear y en la segunda
+ * solo enteros de 1 en adelante. Puede ser cuántas participaciones tiene cada persona (o la edad, o la mesa: por eso
+ * entra al cuadro como «Nombre, n» y la pregunta de debajo del cuadro decide). Sin los modos a la vista, no se
+ * mira: la ventana de importar, como siempre.
+ */
+function tablaDeParticipaciones(t: Table): boolean {
+  if (t.columns.length !== 2 || t.skipped.length > 0 || t.rows.length < 2) return false;
+  return t.rows.every((r) => {
+    const cuantas = (r[1] ?? "").trim();
+    const n = Number(cuantas);
+    return (r[0] ?? "").trim().length >= 2 && /^\d+$/.test(cuantas) && n >= 1;
+  });
+}
+
 export function loadFile(raw: string, fileName = "lista.csv"): void {
   if (listaCerrada()) return;
   callarAviso();
@@ -348,6 +432,14 @@ export function loadFile(raw: string, fileName = "lista.csv"): void {
   if (parsed && parsed.columns.length > 1) {
     if (parsed.rows.length === 0) {
       avisar((L) => L.impNoNames(fileName));
+      return;
+    }
+    // La tabla de dos columnas con números enteros al final es una oferta, no un cambio: la persona decide con el
+    // botón del aviso. Sin repartir, lo que se sella es la lista de siempre (el nombre, sin el número).
+    if (variasALaVista() && tablaDeParticipaciones(parsed)) {
+      setList(parsed.rows.map((r) => `${cleanName(r[0] ?? "")}, ${(r[1] ?? "").trim()}`).join("\n"));
+      anotarOrigen(origenArchivo, true);
+      avisarCarga([]);
       return;
     }
     imported = initialState(parsed, fileName);
@@ -462,6 +554,213 @@ function insertar(ta: HTMLTextAreaElement, text: string, conFoco = true): void {
 /** Una pantalla táctil: el foco en un cuadro de texto abre el teclado. */
 const tactil = (): boolean => typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
+/* ------------------------------------------------ varias participaciones */
+
+/**
+ * ¿Los modos están a la vista? Con la bandera de construcción o con `?modo=` en la dirección. Sin las dos
+ * cosas no hay botón, ni panel, ni pregunta: la herramienta de siempre.
+ */
+const variasALaVista = (): boolean => modesVisible();
+
+/** El texto de ayuda del cuadro vacío: un nombre por línea, como siempre. Las veces se eligen tocando. */
+const refreshPlaceholder = (): void => {
+  const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
+  if (ta) ta.placeholder = t("placeholder");
+};
+
+/** ¿El panel de contadores está abierto? Lo abren el botón de debajo de la cuenta y el «Sí» de la pregunta. */
+let panelAbierto = false;
+
+/** La lista exacta a la que ya se le dijo que no a usar sus números: por esa lista no se pregunta de nuevo. */
+let listaSinUsarNumeros = "";
+
+/** Quiénes pasaron del máximo al usar los números de una lista pegada, para decirlo en una línea del panel. */
+let quedaronEnElTope: string[] = [];
+
+/** Una lista de nombres en palabras: los primeros y «y N más». */
+const listaDeNombres = (nombres: readonly string[]): string => {
+  const mas = nombres.length - 3;
+  return new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(
+    mas > 0 ? [...nombres.slice(0, 3), t("fotoMas").replace("{n}", String(mas))] : [...nombres],
+  );
+};
+
+/** Los números que una lista ya trae al lado de los nombres: una sola coma y un entero de 1 en adelante. */
+function numerosDeLaLista(texto: string): Array<{ nombre: string; n: number }> {
+  const salida: Array<{ nombre: string; n: number }> = [];
+  for (const linea of texto.split(/\r?\n/)) {
+    if (!terminaEnNumero(linea)) continue;
+    const nombre = (linea.split(",")[0] ?? "").trim();
+    const n = Number(linea.slice(linea.lastIndexOf(",") + 1).trim());
+    if (nombre.length >= 2 && Number.isInteger(n) && n >= 1) salida.push({ nombre, n });
+  }
+  return salida;
+}
+
+/**
+ * Pinta todo lo del modo: la pregunta por los números que ya trae la lista, el botón que abre el panel y,
+ * si está abierto, el panel entero. Lo llama `renderNames`, así que cualquier cambio del cuadro (tocar un
+ * contador, editar a mano, cambiar de idioma o de modo) lo deja al día.
+ */
+function pintarVarias(): void {
+  pintarPreguntaDeNumeros();
+  const boton = document.getElementById("btn-varias") as HTMLButtonElement | null;
+  const panel = document.getElementById("varias-panel");
+  if (!boton || !panel) return;
+  const puede = variasALaVista() && !listaCerrada() && parseNames().length >= 2;
+  const turnos = modoTurnosActivo();
+  boton.hidden = !puede;
+  boton.textContent = t(turnos ? "partAbrirTurnos" : "partAbrir");
+  boton.setAttribute("aria-expanded", String(puede && panelAbierto));
+  panel.hidden = !(puede && panelAbierto);
+  if (!puede || !panelAbierto) return;
+  const titulo = document.getElementById("varias-titulo");
+  if (titulo) titulo.textContent = t(turnos ? "partTituloTurnos" : "partTitulo");
+  const texto = $<HTMLTextAreaElement>("ta").value;
+  const personas = personasDelCuadro(texto);
+  const cuenta = contar(parseNames());
+  const elCuenta = document.getElementById("varias-cuenta");
+  if (elCuenta) elCuenta.textContent = turnos ? T[getLang()].partCuentaTurnos(cuenta.personas, cuenta.participaciones) : T[getLang()].partCuenta(cuenta.personas, cuenta.participaciones);
+  const elTope = document.getElementById("varias-tope");
+  if (elTope) {
+    const enElTope = quedaronEnElTope.filter((nombre) => personas.some((p) => p.nombre === nombre && p.veces >= TOPE_POR_PERSONA));
+    elTope.textContent = enElTope.length ? T[getLang()].partTopeAviso(listaDeNombres(enElTope), enElTope.length > 1) : "";
+    elTope.hidden = !enElTope.length;
+  }
+  const buscar = document.getElementById("varias-buscar-fila");
+  if (buscar) buscar.hidden = personas.length <= 10;
+  pintarFilasDelPanel(personas);
+}
+
+/**
+ * Las filas del panel: una por persona, con su contador para tocar. Con más de diez personas el buscador
+ * filtra por lo que se escribe, sin tocar el cuadro.
+ */
+function pintarFilasDelPanel(personas = personasDelCuadro($<HTMLTextAreaElement>("ta").value)): void {
+  const lista = document.getElementById("varias-lista");
+  if (!lista) return;
+  const buscado = ($<HTMLInputElement>("varias-buscar").value ?? "").trim().toLocaleLowerCase();
+  const visibles = buscado ? personas.filter((p) => p.nombre.toLocaleLowerCase().includes(buscado)) : personas;
+  const turnos = modoTurnosActivo();
+  lista.textContent = "";
+  for (const p of visibles) {
+    const fila = document.createElement("div");
+    fila.className = "varias-fila";
+    const nombre = document.createElement("span");
+    nombre.className = "varias-nombre";
+    nombre.textContent = p.nombre;
+    const control = document.createElement("span");
+    control.className = "varias-control";
+    const menos = document.createElement("button");
+    menos.type = "button";
+    menos.className = "varias-menos";
+    menos.textContent = "−";
+    menos.dataset.persona = p.nombre;
+    menos.setAttribute("aria-label", t(turnos ? "partQuitarTurno" : "partQuitar").replace("{nombre}", p.nombre));
+    menos.disabled = p.veces <= 1 || listaCerrada();
+    menos.addEventListener("click", () => cambiarVeces(p.nombre, p.veces - 1, "menos"));
+    const numero = document.createElement("span");
+    numero.className = p.veces > 1 ? "varias-num varias" : "varias-num";
+    const cifra = document.createElement("b");
+    cifra.textContent = String(p.veces);
+    numero.append(cifra);
+    if (p.veces >= TOPE_POR_PERSONA) {
+      const maximo = document.createElement("small");
+      maximo.textContent = t("partMax");
+      numero.append(maximo);
+    }
+    const mas = document.createElement("button");
+    mas.type = "button";
+    mas.className = "varias-mas";
+    mas.textContent = "+";
+    mas.dataset.persona = p.nombre;
+    mas.setAttribute("aria-label", t(turnos ? "partSumarTurno" : "partSumar").replace("{nombre}", p.nombre));
+    mas.disabled = p.veces >= TOPE_POR_PERSONA || listaCerrada();
+    mas.addEventListener("click", () => cambiarVeces(p.nombre, p.veces + 1, "mas"));
+    control.append(menos, numero, mas);
+    fila.append(nombre, control);
+    lista.append(fila);
+  }
+  const sin = document.getElementById("varias-sin");
+  if (sin) sin.hidden = visibles.length > 0;
+}
+
+/** Un toque en el contador: reescribe el cuadro en el acto y el foco vuelve al mismo botón. */
+function cambiarVeces(persona: string, veces: number, lado: "mas" | "menos"): void {
+  if (listaCerrada()) return;
+  const ta = $<HTMLTextAreaElement>("ta");
+  const nuevo = ponerParticipaciones(ta.value, persona, veces);
+  if (nuevo === ta.value) return;
+  reemplazar(ta, nuevo);
+  // El panel se repintó con el cuadro nuevo: el botón tocado es otro elemento, y el foco vuelve a él.
+  const botones = [...document.querySelectorAll<HTMLButtonElement>("#varias-lista button")];
+  const mismo = botones.find((b) => b.dataset.persona === persona && b.classList.contains(lado === "mas" ? "varias-mas" : "varias-menos"));
+  const otro = botones.find((b) => b.dataset.persona === persona);
+  (mismo && !mismo.disabled ? mismo : otro)?.focus();
+}
+
+/**
+ * La pregunta de debajo del cuadro: una lista pegada que ya trae un número al lado de los nombres puede ser
+ * las veces que participa cada uno, o la edad o la mesa. Por eso se pregunta y no se cambia nada hasta que
+ * la persona responde. Con «No» no se pregunta de nuevo por esa misma lista.
+ */
+function pintarPreguntaDeNumeros(): void {
+  const aviso = document.getElementById("participaciones-aviso");
+  if (!aviso) return;
+  const texto = $<HTMLTextAreaElement>("ta").value;
+  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros ? numerosDeLaLista(texto) : [];
+  aviso.style.display = numeros.length ? "" : "none";
+  if (!numeros.length) return;
+  const pregunta = document.getElementById("part-pregunta-texto");
+  if (pregunta) pregunta.textContent = T[getLang()].partPregunta(numeros.length);
+}
+
+/**
+ * «Sí, usarlos»: los números de la lista pasan a ser una línea por participación, con el máximo de siempre
+ * por persona, y el panel se abre para que se vea cómo quedó. Quién pasó del máximo queda dicho arriba del
+ * panel, en una sola línea.
+ */
+function usarNumerosDeLaLista(): void {
+  if (listaCerrada()) return;
+  const ta = $<HTMLTextAreaElement>("ta");
+  const numeros = numerosDeLaLista(ta.value);
+  if (!numeros.length) return;
+  const totales = new Map<string, number>();
+  for (const { nombre, n } of numeros) totales.set(nombre, (totales.get(nombre) ?? 0) + n);
+  quedaronEnElTope = [...totales.entries()].filter(([, total]) => total > TOPE_POR_PERSONA).map(([nombre]) => nombre);
+  // Cada número se corta al máximo antes de repartir: `repartir` suma los repetidos y vuelve a cortar por persona.
+  const ajustado = ta.value
+    .split(/\r?\n/)
+    .map((linea) => {
+      if (!terminaEnNumero(linea)) return linea;
+      const { nombre, n } = numerosDeLaLista(linea)[0] ?? { nombre: "", n: 0 };
+      return nombre ? `${nombre}, ${Math.min(n, TOPE_POR_PERSONA)}` : linea;
+    })
+    .join("\n");
+  const repartido = repartir(ajustado);
+  panelAbierto = true;
+  if (repartido !== null && repartido !== ta.value) reemplazar(ta, repartido);
+  else pintarVarias();
+  // Aplicados, los parecidos se siguen diciendo: «ana quispe» y «Ana Quispe» quedan como dos personas.
+  const pares = parecidos([...new Set(parseNames().map(nombreDePersona))]);
+  const [par] = pares;
+  if (par) avisar((L) => L.pegParecidos(par[0], par[1], pares.length - 1));
+}
+
+/**
+ * Reemplaza todo el texto del cuadro, deshacible con Ctrl+Z como cualquier pegar (ver `insertar`): se marca todo
+ * y se escribe encima con `execCommand`, que lo deja en el historial del cuadro.
+ */
+function reemplazar(ta: HTMLTextAreaElement, text: string): void {
+  const plano = text.replace(/\r\n?/g, "\n");
+  ta.focus();
+  ta.setSelectionRange(0, ta.value.length);
+  // Solo con el foco en el cuadro: si no lo tomó, `execCommand` escribiría en otro lado. Donde no existe, se escribe a mano.
+  if (document.activeElement === ta && typeof document.execCommand === "function" && document.execCommand("insertText", false, plano)) return;
+  ta.setRangeText(plano, 0, ta.value.length, "end");
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
 function apply(r: ImportResult): void {
   if (listaCerrada()) return;
@@ -562,7 +861,7 @@ export function guardarBorrador(): void {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
     if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
-    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: $<HTMLSelectElement>("nw").value }));
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos(), ...(modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {}) }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
   }
@@ -591,7 +890,7 @@ export function olvidarBorrador(): void {
  */
 export function reponerBorrador(): void {
   if (sinGrabar() || listaCerrada() || $<HTMLTextAreaElement>("ta").value.trim()) return;
-  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown } | null;
+  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
   let b: Guardado;
   try {
     b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
@@ -599,10 +898,16 @@ export function reponerBorrador(): void {
     return;
   }
   if (!b || typeof b.texto !== "string") return;
+  // El modo de varias participaciones vuelve con la lista, antes de pintarla: sin él, la lista repartida se
+  // contaría por líneas y «No está» sacaría una línea en vez de a la persona entera.
+  if (b.modo === "varias") recordarModo("varias");
   setList(b.texto);
   if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
   const nw = Number(b.nw);
-  if (Number.isInteger(nw) && nw >= 1 && nw <= 32) $<HTMLSelectElement>("nw").value = String(nw);
+  // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
+  // El modo «Orden de turnos» vuelve con la lista (la cantidad pasa a ser la de la lista, no la que quedó guardada).
+  if (b.modo === "turnos") ponerModoTurnos(true);
   if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 

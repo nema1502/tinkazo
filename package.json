@@ -28,7 +28,8 @@
     "audit:letra": "node scripts/audit-legible.mjs --paginas",
     "audit:palabras": "node scripts/audit-palabras.mjs",
     "audit:todo": "node scripts/audit-todo.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "metricas:cadena": "node scripts/metricas-cadena.mjs"
   },
   "engines": {
     "node": ">=22"

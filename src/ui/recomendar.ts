@@ -38,7 +38,27 @@ export interface Rango {
   maximo?: number;
   /** Puntaje de la sección 5 ("meta, sin probar"). Solo desempata. */
   meta?: number;
+  /**
+   * Cuántos premios (ganadores) puede contar el juego sin dejar a ninguno afuera de su historia. Con más no encaja y
+   * dice por qué (`rec.<juego>.premios`). Sin este dato, el juego cuenta cualquier cantidad: la ruleta cuenta al primero
+   * y el resto sale en el cartel («y 97 más»), y en los de eliminación los demás premiados se van «con premio».
+   */
+  premios?: number;
 }
+
+/**
+ * Los carriles de la recta final de la carrera: con más premios que carriles, los que no entran se echarían del
+ * grupo y después se anunciarían ganadores. Es `FINALISTAS` de `games/llamas/carrera-base.ts` (una prueba compara
+ * los dos: ese módulo no se importa acá porque este viaja con la portada).
+ */
+export const CARRILES_CARRERA = 8;
+
+/**
+ * Los agujeros de la mesa del sapo: la final tiene un agujero por premio y la clasificatoria deja doce. Es `SAPO_MAX` de
+ * `games/pixi/sapo-plan.ts` (una prueba compara los dos). Con 13 premios o más, `planQualifier` rechaza el sorteo y el
+ * sapo se cierra sin mostrar nada. Pasa con solo pedir 13 ganadores en una lista de 13 a 40.
+ */
+export const AGUJEROS_SAPO = 12;
 
 /**
  * Lo que dice la auditoría (sección 6) para cada juego del selector hoy.
@@ -60,8 +80,10 @@ export interface Rango {
  */
 const RANGOS_BASE: Partial<Record<Game, Rango>> = {
   // La carrera llega a 200 desde el 26 de octubre de 2026: con 9 a 30 salen todas y se van echando de a una; con más, pasa por tandas.
-  race: { minimo: 2, ideal: [4, 30], maximo: 200, meta: 7.0 },
-  sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
+  // Y no pasa de ocho premios: uno por carril de la recta final.
+  race: { minimo: 2, ideal: [4, 30], maximo: 200, meta: 7.0, premios: CARRILES_CARRERA },
+  // El sapo tiene doce agujeros y cada premio es uno de la final: con más de doce, el juego no arranca (`planQualifier`).
+  sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1, premios: AGUJEROS_SAPO },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
@@ -111,13 +133,6 @@ const VENTANA_NORMAL: ReadonlyArray<{ personas: readonly [number, number]; seg: 
   { personas: [101, 200], seg: [32, 34] },
 ];
 
-/**
- * Los carriles de la recta final de la carrera: con más premios que carriles, los que no entran se echarían del
- * grupo y después se anunciarían ganadores. Es `FINALISTAS` de `games/llamas/carrera-base.ts` (una prueba compara
- * los dos: ese módulo no se importa acá porque este viaja con la portada).
- */
-export const CARRILES_CARRERA = 8;
-
 export interface Recomendacion {
   game: Game;
   /** `true`: encaja (Recomendado). `false`: no encaja (se atenúa). `null`: sin rango claro (neutral). */
@@ -141,12 +156,14 @@ export interface Recomendaciones {
   duracionNormal: { desde: number; hasta: number } | null;
 }
 
-function evaluar(game: Game, n: number, premios = 1): Recomendacion {
+function evaluar(game: Game, n: number, premios = 1, turnos = false): Recomendacion {
   const r = RANGOS[game];
   const args = [n, r?.minimo ?? 0, r?.maximo ?? 0];
   if (!r) return { game, fits: null, ideal: false, note: null, args };
-  // Cada premio es un carril de la recta: con más de ocho, la carrera echaría a quien después anuncia como ganadora.
-  if (game === "race" && premios > CARRILES_CARRERA) return { game, fits: false, ideal: false, note: "rec.race.premios", args: [n, premios, CARRILES_CARRERA] };
+  // Cada premio es un carril de la recta (la carrera) o un agujero de la final (el sapo): con más, el juego echaría o dejaría
+  // afuera a quien después anuncia como ganador. En un orden de turnos la nota dice turnos: ahí no hay premios.
+  if (r.premios !== undefined && premios > r.premios)
+    return { game, fits: false, ideal: false, note: `rec.${game}.${turnos ? "turnos" : "premios"}`, args: [n, premios, r.premios] };
   if (r.maximo !== undefined && n > r.maximo) return { game, fits: false, ideal: false, note: `rec.${game}.largo`, args };
   if (r.minimo === undefined) return { game, fits: null, ideal: false, note: null, args };
   if (n < r.minimo) return { game, fits: false, ideal: false, note: `rec.${game}.corto`, args };
@@ -174,6 +191,9 @@ function ordenar(a: Recomendacion, b: Recomendacion): number {
 /** El juego que sale elegido cuando nadie eligió otro (`app.game` en state.ts). */
 export const JUEGO_DE_SIEMPRE: Game = "race";
 
+/** ¿El juego puede contar tantos premios? Los que no tienen tope (la ruleta, la piñata, los de eliminación) sí. */
+export const cabenLosPremios = (game: Game, premios: number): boolean => premios <= (RANGOS[game]?.premios ?? Number.POSITIVE_INFINITY);
+
 /**
  * El juego que queda elegido para `n` personas si quien organiza no eligió
  * otro: el de siempre si encaja, y si no, el primero que se recomienda (el del
@@ -182,13 +202,21 @@ export const JUEGO_DE_SIEMPRE: Game = "race";
  * Hasta el 21 de octubre de 2026, con 20 personas quedaba elegida la carrera,
  * que llega hasta 8 y no estaba entre los recomendados, mientras los cuatro de
  * arriba del selector sí (D02, de la evaluación crítica de experiencia).
+ *
+ * `turnos`: el sorteo es un orden de turnos (`isTurnOrder`, src/modos/turnos.ts). Con la lista dentro del tope de la ruleta
+ * queda la ruleta; con más, el que elige el código de siempre.
  */
-export function juegoPorDefecto(n: number, premios = 1): Game {
+export function juegoPorDefecto(n: number, premios = 1, turnos = false): Game {
+  // Un orden de turnos (`isTurnOrder`) sortea a todas las personas: ningún juego cuenta un orden completo, y la ruleta es la
+  // que menos promete (sortea al primero y deja a todos en el cartel). El producto es la lista de turnos, no la animación.
+  // La ruleta no admite más que su tope (`RANGOS.wheel.maximo`, el `WHEEL_MAX` de state.ts): con más, queda el que ya elige el código.
+  const topeRuleta = RANGOS.wheel?.maximo;
+  if (turnos && topeRuleta !== undefined && n >= 2 && n <= topeRuleta) return "wheel";
   const r = recomendar(n, premios).games;
   // Hasta 30 sale la carrera sola; con más encaja (pasa por tandas) pero no es lo ideal: se recomienda otro primero.
   if (n <= 30 && r.find((x) => x.game === JUEGO_DE_SIEMPRE)?.fits === true) return JUEGO_DE_SIEMPRE;
-  // Si ninguno encaja, el de siempre, salvo que no entren los premios: ahí el primero del selector que no sea la carrera.
-  return r.find((x) => x.fits === true)?.game ?? (premios > CARRILES_CARRERA ? (r.find((x) => x.game !== JUEGO_DE_SIEMPRE)?.game ?? JUEGO_DE_SIEMPRE) : JUEGO_DE_SIEMPRE);
+  // Si ninguno encaja, el de siempre, salvo que no entren los premios: ahí el primero del selector que los cuente.
+  return r.find((x) => x.fits === true)?.game ?? (cabenLosPremios(JUEGO_DE_SIEMPRE, premios) ? JUEGO_DE_SIEMPRE : (r.find((x) => cabenLosPremios(x.game, premios))?.game ?? JUEGO_DE_SIEMPRE));
 }
 
 /**
@@ -210,12 +238,14 @@ export function juegoSiguiente(n: number, actual: Game, premios = 1): Game {
 /**
  * Qué juegos del selector sirven para `n` personas, con su nota y la duración
  * de la sección 8.2. `n` se toma entero y nunca negativo. `premios` (uno, si no
- * se dice) solo le importa a la carrera: con más de ocho no encaja.
+ * se dice) le importa a los juegos con tope de premios (`Rango.premios`): la carrera
+ * con más de ocho y el sapo con más de doce no encajan, y dicen por qué. Con
+ * `turnos`, el sorteo es un orden de turnos y esas notas dicen turnos.
  */
-export function recomendar(n: number, premios = 1): Recomendaciones {
+export function recomendar(n: number, premios = 1, turnos = false): Recomendaciones {
   const k = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
   const p = Number.isFinite(premios) ? Math.max(1, Math.floor(premios)) : 1;
-  const games = SELECTOR.map((g) => evaluar(g, k, p)).sort(ordenar);
+  const games = SELECTOR.map((g) => evaluar(g, k, p, turnos)).sort(ordenar);
   const tramo = VENTANA_NORMAL.find(({ personas: [de, a] }) => k >= de && k <= a);
   return {
     games,

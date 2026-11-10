@@ -23,6 +23,7 @@
  * Uso:
  *   node scripts/audit-sound.mjs <juego> [--base http://localhost:4173]
  *   node scripts/audit-sound.mjs todos
+ *   node scripts/audit-sound.mjs race --sonido pasos:b,musica:a   # la carrera con esas candidatas (src/sonidos/carrera.ts)
  */
 
 import { launch } from "./lib/browser.mjs";
@@ -41,6 +42,8 @@ const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 const motor = opt("--motor", "");
 // Con `--con-banco`, cada juego tiene que haber sonado con archivos (no solo con osciladores).
 const conBanco = args.includes("--con-banco");
+// Con `--sonido pieza:candidata,...` la carrera suena con esas candidatas (solo con `?auditar`; ver `src/sonidos/carrera-eleccion.ts`).
+const sonidoCarrera = opt("--sonido", "");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const lista = juegosDe(pedido);
 const registro = [];
@@ -181,7 +184,7 @@ async function correr(browser, juego) {
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
   // Los archivos están apagados en el sitio (`banco.ts`): con `--con-banco` se prenden por la dirección.
-  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}` });
+  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}${sonidoCarrera ? `&auditar=sonido&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}` });
 
   const arranco = await page.waitFor(
     `document.getElementById('stadium').style.display === 'block'`,

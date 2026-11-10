@@ -1,7 +1,7 @@
 import type { Momento } from "./llama";
 
 /**
- * La postura de la llama ante un obstáculo (`carrera-obstaculos.ts`), una sola cuenta para las tres llamas (la de siempre, la de aguayo y la
+ * La postura de la llama ante un obstáculo (`carrera-obstaculos.ts`) o al entrar trotando al corral (`carrera-caminata.ts`), una sola cuenta para las tres llamas (la de siempre, la de aguayo y la
  * del 3D). Es función de `m.p` (el avance del momento, de 0 a 1) y nada más: sin azar ni reloj.
  *
  * Los ángulos son los del 3D y los del aguayo: la pata hacia adelante es positiva; `lean` positivo es cabeza para abajo; `cuelloRot`
@@ -34,6 +34,11 @@ export function posturaObstaculo(m: Momento): PosturaObstaculo | null {
     // Se queda corta: salta a medias y trastabilla al caer, con la cabeza para abajo.
     const a = Math.sin(Math.PI * p) * 0.55;
     return { patas: [0.8 * a, 0.5 * a, -0.5 * a, -0.4 * a], lean: 0.5 * Math.sin(Math.PI * Math.min(1, p * 1.25)), cuelloRot: 0.18 * Math.sin(Math.PI * p), ...(p > 0.35 ? { aviso: "!" as const } : {}), rigida: true };
+  }
+  if (m.kind === "trote") {
+    // Entra al corral trotando (las que pasan por el portón): el cuerpo hacia adelante y la cabeza baja, sin patas clavadas. Arranca y termina de a poco.
+    const a = Math.min(1, p / 0.08, (1 - p) / 0.08);
+    return { lean: 0.1 * a, cuelloRot: 0.16 * a, rigida: false };
   }
   if (m.kind === "ventarron") {
     // El viento de frente: se echa para atrás, con la cabeza gacha, sin dejar de correr.

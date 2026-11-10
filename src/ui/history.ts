@@ -1,10 +1,12 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
+import { isTurnOrder } from "../modos/turnos";
 import type { SorteoDelEvento } from "../protocol/evento";
-import { network, txUrl } from "../stellar/config";
+import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
 import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
+import { cuentaDeLaEntrada, cuentasDe } from "./cuenta-entrada";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 import { compartirEvento, compartirSorteo } from "./compartir";
 import {
@@ -259,8 +261,22 @@ export async function askChain(organizer: string): Promise<void> {
 const fmtDate = (secs: number): string =>
   secs ? new Date(secs * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US") : "";
 
-/** Quién ganó, dicho con lo que se tenga: los nombres o el puesto en la lista. */
+/** ¿El sorteo de esa entrada es un orden de turnos? Ganan tantas personas como hay en la lista y el nombre empieza con «Turnos». */
+const esDeTurnos = (e: Entry | undefined): e is Entry => !!e && isTurnOrder(e.count, e.numWinners, e.prize);
+
+export { cuentaDeLaEntrada };
+
+/** «Turnos: 12 personas», en lugar de los doce nombres unidos con comas: con 300 era una fila de 300 nombres. Repartido, también los turnos. */
+function turnosDe(e: Entry): string {
+  const { personas, participaciones } = cuentasDe(e);
+  return personas === participaciones
+    ? t("turnsHist").replace("{n}", String(personas))
+    : t("turnsHistPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
+}
+
+/** Quién ganó, dicho con lo que se tenga: los nombres o el puesto en la lista. Un orden de turnos, cuántas personas tiene. */
 export function winnerLabel(e: Entry): string {
+  if (esDeTurnos(e) && (e.winners?.length || e.winnerIdx?.length)) return turnosDe(e);
   if (e.winners?.length) return e.winners.join(", ");
   if (e.winnerIdx?.length) return t("histWinnerAt").replace("{n}", e.winnerIdx.map((i) => i + 1).join(", "));
   return t("histPending");
@@ -401,7 +417,7 @@ function pintarPendiente(list: Entry[]): void {
     caja.textContent = "";
     return;
   }
-  const que = `${e.prize || t("histDraw")}, ${e.count} ${t("histPeople")}`;
+  const que = `${e.prize || t("histDraw")}, ${cuentaDeLaEntrada(e)}`;
   caja.innerHTML =
     `<span>${esc(t("pendienteT").replace("{que}", que))}</span>` +
     `<button class="mini" type="button" data-retomar-pendiente>${esc(t("pendienteBtn"))}</button>`;
@@ -670,7 +686,7 @@ const marcaSinSello = (e: Entry | undefined): string =>
 function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   const titulo = e.prize || t("histDraw");
   const ganadores = e.winners ?? [];
-  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
+  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${esDeTurnos(e) ? `<b>${esc(turnosDe(e))}</b>` : `${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`}`;
   const nombre = t("evnSumarA").replace("{s}", titulo).replace("{e}", ev.nombre);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
@@ -699,7 +715,7 @@ function filaDeEvento(ev: EventoGuardado, s: SorteoGuardado, k: number, list: En
   const e = list.find((x) => x.proof === s.enlace);
   const titulo = e?.prize || t("histDraw");
   const fecha = e ? fmtDate(e.sealedAt) : "";
-  const quien = `${t(s.ganadores.length > 1 ? "histWonMany" : "histWon")} <b>${esc(s.ganadores.join(", "))}</b>`;
+  const quien = esDeTurnos(e) ? `<b>${esc(turnosDe(e))}</b>` : `${t(s.ganadores.length > 1 ? "histWonMany" : "histWon")} <b>${esc(s.ganadores.join(", "))}</b>`;
   const clave = esc(`${ev.id}|${k}`);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b>${fecha ? ` <span class="hc-fecha">${esc(fecha)}</span>` : ""}</div>` +
@@ -825,6 +841,36 @@ function enlazarEventos(): void {
 // resultado y se tocaba sin querer. Si alguien necesita que se borre, lo pide a
 // hola@tinkazo.app y lo borra Tinkazo (workers/enlaces/README.md).
 
+/**
+ * La línea que dice que los sorteos del otro modo están en el otro modo, con el botón para pasar. Sin modo Oficial
+ * queda escondida, como hoy. La pasan por la misma guarda que la hoja del modo (`modo-ui.ts`, que la página ya tiene
+ * cargado): con un sorteo sellado esperando su número, o mientras se sella, no cambia y dice por qué.
+ */
+function pintarOtroModo(otroModo: HTMLElement | null): void {
+  if (!otroModo) return;
+  if (!hayModoOficial) {
+    otroModo.style.display = "none";
+    return;
+  }
+  const enOficial = network.name === "mainnet";
+  otroModo.style.display = "";
+  otroModo.textContent = `${t(enOficial ? "historyOtherModeTest" : "historyOtherModeOfficial")} `;
+  const pasar = document.createElement("button");
+  pasar.type = "button";
+  pasar.className = "mini ghost";
+  pasar.textContent = t(enOficial ? "historySwitchToTest" : "historySwitchToOfficial");
+  pasar.addEventListener("click", () => {
+    void import("./modo-ui").then((m) => {
+      if (m.pasarAModo(enOficial ? "testnet" : "mainnet") || otroModo.querySelector(".modo-bloqueo")) return;
+      const motivo = document.createElement("span");
+      motivo.className = "modo-bloqueo";
+      motivo.textContent = ` ${t("modeSwitchBlocked")}`;
+      otroModo.appendChild(motivo);
+    });
+  });
+  otroModo.appendChild(pasar);
+}
+
 function paint(organizer: string | null): void {
   shown = organizer;
   const box = $("sec-history");
@@ -839,6 +885,8 @@ function paint(organizer: string | null): void {
   // "todavía no hay sorteos" sería mentira si los hay, más atrás de lo que se lee.
   if (list.length === 0 && guardados.length === 0 && !chainTruncated(organizer)) {
     box.style.display = "none";
+    // En Oficial la cuenta empieza vacía: quien venía de Prueba tiene que ver dónde quedaron sus sorteos.
+    pintarOtroModo(document.getElementById("hist-vacio-otro-modo"));
     return;
   }
 
@@ -882,6 +930,10 @@ function paint(organizer: string | null): void {
     html += `<div class="hist-grupo">${cabeceraDeEvento(g, gi)}${enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("")}</div>`;
   });
   $("hist-list").innerHTML = html;
+  // Los sorteos del otro modo no se mezclan con estos: la línea del pie lo dice y ofrece pasar.
+  pintarOtroModo(document.getElementById("hist-otro-modo"));
+  const sinLista = document.getElementById("hist-vacio-otro-modo");
+  if (sinLista) sinLista.style.display = "none";
   box.style.display = "block";
 }
 
@@ -924,7 +976,8 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
-    `<p class="hc-meta">${esc(id)}, ${e.count} ${esc(t("histPeople"))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+    // Un orden de turnos dice «Turnos: 12 personas» (que ya cuenta cuántos son), no los nombres ni «ganaron».
+    `<p class="hc-meta">${esc(id)}, ${hecho && esDeTurnos(e) ? `<b>${esc(winnerLabel(e))}</b>` : `${esc(cuentaDeLaEntrada(e))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}`}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`
   );

@@ -194,6 +194,14 @@ describe("enlace corto: solo lleva a un comprobante o a un evento de este sitio"
     expect(rutaDe("/verificar.html#zAA")).toBe("/verificar.html#zAA");
   });
 
+  it("rutaDe conserva solo el modo válido de la verificación", () => {
+    expect(rutaDe("https://tinkazo.app/verificar.html?modo=turnos&lang=en#rXy")).toBe("/verificar.html?modo=turnos#rXy");
+    expect(rutaDe("https://tinkazo.app/verificar.html?modo=varias#rXy")).toBe("/verificar.html?modo=varias#rXy");
+    expect(rutaDe("https://tinkazo.app/verificar.html?modo=otro#rXy")).toBe("/verificar.html#rXy");
+    expect(esRuta("/verificar.html?modo=turnos#rXy")).toBe(true);
+    expect(esRuta("/verificar.html?modo=otro#rXy")).toBe(false);
+  });
+
   it.each([
     "https://api.drand.sh/52db/public/32254977",
     "https://tinkazo.app/verificar.html",

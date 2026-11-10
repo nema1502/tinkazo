@@ -3,14 +3,18 @@
  * El auditor de encuadre de la carrera: ¿la ganadora se ve entera, y el cartel
  * no tapa a nadie?
  *
- * Lo pidió el feedback de Alejandro (Vaquita y Pollar, 19 de octubre de 2026):
+ * Lo pidió una devolución de prueba (19 de octubre de 2026):
  * "¿probaron esto en mobile?". Con tres o cuatro personas cada llama mide más de
  * dos carriles de alto, y al final la ganadora quedaba cortada contra el borde
  * del celular y el cartel del ganador tapaba a la llama del carril de arriba.
  *
- * Con `?auditar=encuadre` la carrera anota, en la recta final, en la foto y en
- * la corona, dónde cae el cuerpo de cada llama en la pantalla (sin el nombre),
- * dónde está el cartel y dónde la caja del relator. En cada tamaño de pantalla,
+ * Con `?auditar=encuadre,camara` la carrera (`src/games/llamas/carrera.ts`, la de hoy:
+ * PixiJS y 3D) anota, en la recta final, en la foto y en la corona, dónde cae el
+ * cuerpo de cada llama en la pantalla (sin el nombre), dónde está el cartel y dónde
+ * la caja del relator. Hasta el 6 de noviembre de 2026 el gancho (`window.__encuadre`)
+ * solo existía en el archivo viejo `pixi-race.ts`, que ya no dibuja la carrera: el
+ * auditor esperaba 120 s por corrida y no medía nada. Ahora, si el juego no deja el
+ * gancho, lo dice a los 30 s. En cada tamaño de pantalla,
  * con 2, 3, 4, 5 y 8 personas y en varias semillas (cambia el carril de la
  * ganadora y el arco), comprueba:
  *
@@ -28,7 +32,10 @@
  * sombra), así que mide de más: una llama "tapada" en un 2% puede no estarlo.
  *
  * Corre sin red, con la escena fija (`?pose=1&n=<personas>`), en la duración
- * rápida y con el reloj en turbo.
+ * rápida y con el reloj en turbo, en los dos motores (`--motores pixi,3d`; con 3D mide
+ * la cabeza y el pie de cada llama por la cámara de ese cuadro, y el ancho como el alto
+ * por 1,1). Si se pide el 3D y el juego dibuja en 2D lo dice y no mide: antes un auditor
+ * así medía el motor equivocado sin avisar.
  * Con `--capturas <carpeta>` saca una foto de cada corrida a los `--en` segundos
  * del golpe (2,2 si no se pide otra cosa), para mirarla a ojo.
  *
@@ -36,7 +43,7 @@
  *   pnpm preview &
  *   node scripts/audit-encuadre.mjs [--base http://localhost:4173] [--n 2,3,4,5,8]
  *     [--tam 1440x900,1024x768,844x390,390x844] [--temas dark,light] [--semillas 3]
- *     [--capturas <carpeta>] [--en 2.2]
+ *     [--motores pixi,3d] [--capturas <carpeta>] [--en 2.2]
  */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
@@ -54,6 +61,7 @@ const gentes = opt("--n", "2,3,4,5,8").split(",").map(Number);
 const tams = opt("--tam", "1440x900,1024x768,844x390,390x844").split(",");
 const temas = opt("--temas", "dark,light").split(",");
 const SEMILLAS = Number(opt("--semillas", "3"));
+const motores = opt("--motores", "pixi,3d").split(",");
 const capturas = opt("--capturas", "");
 const EN = Number(opt("--en", "2.2"));
 /** Desde cuándo la cámara ya llegó al plano de la corona, en segundos después del golpe. */
@@ -101,14 +109,25 @@ const tapada = (a, b) => {
   return a[2] > 0 && a[3] > 0 ? (ix * iy) / (a[2] * a[3]) : 0;
 };
 
-async function correr(browser, { w, h, n, tema, seed, foto }) {
+async function correr(browser, { w, h, n, tema, seed, foto, motor }) {
   const page = await browser.open("about:blank");
   const movil = Math.min(w, h) < 500;
   await page.send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: movil ? 2 : 1, mobile: movil });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO + (foto ? `;window.__alto = ${EN};` : "") });
   // En la duración rápida: el encuadre del final no depende de cuánto dure la
   // carrera, y así cada corrida tarda la mitad.
-  await page.send("Page.navigate", { url: `${base}/?pose=1&motor=pixi&pace=rapido&auditar=encuadre&n=${n}&theme=${tema}&semilla=${semilla(seed)}` });
+  await page.send("Page.navigate", { url: `${base}/?pose=1&motor=${motor}&pace=rapido&auditar=encuadre,camara&n=${n}&theme=${tema}&semilla=${semilla(seed)}` });
+  // El gancho aparece apenas el juego arma su escena. Si no aparece, el juego no lo deja: se dice ya y no a los 120 s.
+  const gancho = await page.waitFor("window.__encuadre", 30_000);
+  if (!gancho.ok) {
+    const excepciones = [...page.exceptions];
+    try {
+      await page.send("Page.close");
+    } catch {
+      /* ya cerrada */
+    }
+    return { log: null, sinGancho: true, errores: 0, excepciones };
+  }
   if (foto) {
     const parado = await page.waitFor("window.__parado === true", 120_000);
     if (parado.ok) {
@@ -139,19 +158,24 @@ const filas = [];
 
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9481), width: 1440, height: 900 });
 try {
-  for (const tam of tams) {
+  for (const motor of motores) for (const tam of tams) {
     const [w, h] = tam.split("x").map(Number);
     for (const n of gentes) {
       for (const tema of temas) {
         // En el tema claro alcanza una semilla: el encuadre no depende del tema.
         const semillas = tema === temas[0] ? SEMILLAS : 1;
         for (let seed = 1; seed <= semillas; seed++) {
-          const foto = capturas && seed === 1 ? join(capturas, `${tam}-n${n}-${tema}.png`) : "";
-          const r = await correr(browser, { w, h, n, tema, seed, foto });
-          const nombre = `${tam} · ${n} personas · ${tema} · semilla ${seed}`;
+          const foto = capturas && seed === 1 ? join(capturas, `${motor}-${tam}-n${n}-${tema}.png`) : "";
+          const r = await correr(browser, { w, h, n, tema, seed, foto, motor });
+          const nombre = `${motor} · ${tam} · ${n} personas · ${tema} · semilla ${seed}`;
           if (!r.log) {
             console.log(`\n${nombre}`);
-            check("la carrera corre y anota el encuadre", false, "no terminó en 120 s");
+            check("la carrera corre y anota el encuadre", false, r.sinGancho ? "el juego no dejó window.__encuadre en 30 s (¿?auditar=encuadre no llega al juego?)" : "no terminó en 120 s");
+            continue;
+          }
+          if ((motor === "3d") !== (r.log.motor === "3d")) {
+            console.log(`\n${nombre}`);
+            check("dibuja en el motor pedido", false, `pidió ${motor} y dibujó ${r.log.motor}: no se mide`);
             continue;
           }
           const { ganadora: g, muestras } = r.log;
@@ -167,6 +191,10 @@ try {
           // 1. La ganadora entera en pantalla, desde el golpe.
           let peorBorde = Infinity;
           for (const m of corona) {
+            if (!m.cajas[g]) {
+              peorBorde = -Infinity;
+              continue;
+            }
             const [x, y, cw, ch] = m.cajas[g];
             peorBorde = Math.min(peorBorde, x, y, w - (x + cw), h - (y + ch));
           }
@@ -174,6 +202,7 @@ try {
           // 2. Debajo del cartel y encima del relator.
           let pisaCartel = -Infinity, pisaRelator = -Infinity;
           for (const m of conCartel) {
+            if (!m.cajas[g]) continue;
             const [, y, , ch] = m.cajas[g];
             pisaCartel = Math.max(pisaCartel, m.cartel[1] + m.cartel[3] - y);
             if (m.relator && m.relator[3] > 0) pisaRelator = Math.max(pisaRelator, y + ch - m.relator[1]);
@@ -187,7 +216,7 @@ try {
           let tapaLlego = 0, tapaGolpe = 0;
           for (const m of conCartel) {
             m.cajas.forEach((c, k) => {
-              if (k === g) return;
+              if (k === g || !c) return;
               const t = tapada(c, m.cartel);
               tapaGolpe = Math.max(tapaGolpe, t);
               if (m.t >= LLEGO) tapaLlego = Math.max(tapaLlego, t);
@@ -199,9 +228,9 @@ try {
           const cartelAdentro = c[0] >= -1 && c[1] >= -1 && c[0] + c[2] <= w + 1 && c[1] + c[3] <= h + 1;
           check("el cartel adentro de la pantalla", cartelAdentro, `${c.map(Math.round).join(", ")}`);
           // 5. Que no quede diminuta.
-          const altos = llego.map((m) => m.cajas[g][3] / h).sort((a, b) => a - b);
+          const altos = llego.map((m) => (m.cajas[g] ? m.cajas[g][3] : 0) / h).sort((a, b) => a - b);
           const alto = altos[Math.floor(altos.length / 2)];
-          const enteras = llego[llego.length - 1].cajas.filter((cc) => cc[0] >= -1 && cc[1] >= -1 && cc[0] + cc[2] <= w + 1 && cc[1] + cc[3] <= h + 1).length;
+          const enteras = llego[llego.length - 1].cajas.filter((cc) => cc && cc[0] >= -1 && cc[1] >= -1 && cc[0] + cc[2] <= w + 1 && cc[1] + cc[3] <= h + 1).length;
           check("la ganadora no queda diminuta", alto >= 0.1, `mide el ${pct(alto)} del alto · ${enteras} de ${r.log.n} llamas enteras en pantalla · acercamiento ${llego[llego.length - 1].z}`);
           // 6. En la foto del duelo, las dos enteras cuando la cámara ya llegó
           // (la segunda mitad de la foto): la foto mira a las dos por igual.
@@ -211,13 +240,17 @@ try {
             fotoBorde = Infinity;
             for (const m of fotos.slice(Math.floor(fotos.length / 2))) {
               for (const k of [g, r.log.rival]) {
+                if (!m.cajas[k]) {
+                  fotoBorde = -Infinity;
+                  continue;
+                }
                 const [x, y, cw, ch] = m.cajas[k];
                 fotoBorde = Math.min(fotoBorde, x, y, w - (x + cw), h - (y + ch));
               }
             }
             check("en la foto, las dos del duelo enteras", fotoBorde >= -1, `lo más cerca de un borde: ${fotoBorde.toFixed(1)} px`);
           }
-          filas.push({ tam, n, tema, seed, carril: g + 1, arco: r.log.arco, borde: peorBorde, tapa: tapaLlego, golpe: tapaGolpe, alto, enteras, foto: fotoBorde });
+          filas.push({ motor, tam, n, tema, seed, carril: g + 1, arco: r.log.arco, borde: peorBorde, tapa: tapaLlego, golpe: tapaGolpe, alto, enteras, foto: fotoBorde });
         }
       }
     }
@@ -227,10 +260,10 @@ try {
 }
 
 console.log("\nResumen (ya quieta):");
-console.log("  pantalla    gente tema  sem carril arco        borde px  tapa   golpe  alto   enteras  foto px");
+console.log("  motor pantalla    gente tema  sem carril arco        borde px  tapa   golpe  alto   enteras  foto px");
 for (const f of filas) {
   console.log(
-    `  ${f.tam.padEnd(10)} ${String(f.n).padStart(5)}  ${f.tema.padEnd(5)} ${String(f.seed).padStart(3)} ${String(f.carril).padStart(6)} ${f.arco.padEnd(10)} ${f.borde.toFixed(1).padStart(8)}  ${pct(f.tapa).padStart(5)}  ${pct(f.golpe).padStart(5)}  ${pct(f.alto).padStart(5)}  ${`${f.enteras}/${Math.min(8, f.n)}`.padStart(7)}  ${f.foto === null ? "·" : f.foto.toFixed(1)}`,
+    `  ${f.motor.padEnd(5)} ${f.tam.padEnd(10)} ${String(f.n).padStart(5)}  ${f.tema.padEnd(5)} ${String(f.seed).padStart(3)} ${String(f.carril).padStart(6)} ${f.arco.padEnd(10)} ${f.borde.toFixed(1).padStart(8)}  ${pct(f.tapa).padStart(5)}  ${pct(f.golpe).padStart(5)}  ${pct(f.alto).padStart(5)}  ${`${f.enteras}/${Math.min(8, f.n)}`.padStart(7)}  ${f.foto === null ? "·" : f.foto.toFixed(1)}`,
   );
 }
 const malos = checks.filter((c) => !c.ok);

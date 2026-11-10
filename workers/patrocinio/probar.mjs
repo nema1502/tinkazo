@@ -131,6 +131,22 @@ const argsSeal = (kp, ronda, marca = 1) => [
 const rondaEn = (ts) => Math.floor((ts - QUICKNET.genesis) / QUICKNET.period) + 1;
 const tiempoDeRonda = (r) => QUICKNET.genesis + (r - 1) * QUICKNET.period;
 
+// El contrato rechaza (`RoundTooSoon`, error 5) un sello cuya ronda nazca a menos de 30 s de la hora del
+// ledger que lo incluye. Entre elegir la ronda y ese ledger está todo el camino: simular contra el RPC, firmar,
+// el portero (lee la cuenta, simula otra vez y manda) y la espera del ledger. El 8 de noviembre de 2026, con el
+// RPC público de testnet a 3 o 4 s por llamada, eran de 17 a 21 s: con 45 s de margen el sello entraba al ledger
+// y fallaba (el ensayo del 6 de noviembre no quedó en verde por eso). Acá no hay nadie mirando: sobra margen.
+const MARGEN_DEL_CONTRATO_S = 30;
+const HOLGURA_S = 60;
+/** La primera ronda que nace a 90 s o más de ahora. Se pide justo antes de armar cada sello, nunca antes. */
+function rondaConMargen() {
+  const t = Math.floor(Date.now() / 1000) + MARGEN_DEL_CONTRATO_S + HOLGURA_S;
+  const r = rondaEn(t);
+  return tiempoDeRonda(r) >= t ? r : r + 1;
+}
+/** Cuántos segundos faltaban para la ronda cuando cerró el ledger que incluyó la transacción: el contrato pide 30 o más. */
+const margenEnElLedger = (ronda, cierre) => (cierre?.createdAt ? tiempoDeRonda(ronda) - Number(cierre.createdAt) : null);
+
 async function crudo(tx) {
   const r = await (await fetch(RPC_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "sendTransaction", params: { transaction: tx.toXDR() } }) })).json();
   let codigo = "";
@@ -239,8 +255,7 @@ ver("el cupo del intruso quedó intacto", (await cupo(intruso.publicKey()))?.sel
 const propia = Keypair.random();
 await conGrifo(propia);
 {
-  const ronda = rondaEn(Math.floor(Date.now() / 1000) + 60);
-  const t = await transaccion("seal", argsSeal(propia, ronda, 2), propia);
+  const t = await transaccion("seal", argsSeal(propia, rondaConMargen(), 2), propia);
   r = await pagar(t.xdr);
   ver("cuenta con llaves propias (fondeada por el grifo, sin patrocinador): 403 cuenta-ajena", r.estado === 403 && r.json?.motivo === "cuenta-ajena", `${r.estado} ${JSON.stringify(r.json)}`);
   ver("y no gastó cupo", (await cupo(propia.publicKey()))?.sellos?.usados === 0);
@@ -256,8 +271,7 @@ const saldoQ0 = await saldoXlm(Q.publicKey());
 ver("la cuenta de prueba nace con 0 XLM, abierta por la billetera de Pollar de prueba", saldoQ0 !== null && Number(saldoQ0) === 0, `saldo ${saldoQ0}`);
 const saldoP0 = await saldoXlm(P);
 
-const ahoraS = Math.floor(Date.now() / 1000);
-const ronda = rondaEn(ahoraS + 45);
+const ronda = rondaConMargen();
 const sello = await transaccion("seal", argsSeal(Q, ronda, 3), Q);
 r = await pagar(sello.xdr);
 ver("el sello real da 200 con el hash de la transacción interna", r.estado === 200 && r.json?.hash === sello.hash && (r.json?.status === "PENDING" || r.json?.status === "DUPLICATE"), `${r.estado} ${JSON.stringify(r.json)}`);
@@ -269,7 +283,9 @@ let c = await cupo(Q.publicKey());
 ver("y cuenta uno solo", c?.sellos?.usados === 1 && c?.sellos?.quedan === 19, JSON.stringify(c?.sellos));
 
 const enRed = await servidor.pollTransaction(sello.hash, { attempts: 40, sleepStrategy: () => 1500 });
-ver("el sello entró a la red (se busca por el hash de la transacción interna)", enRed.status === "SUCCESS", enRed.status);
+const margenSello = margenEnElLedger(ronda, enRed);
+ver("el sello entró a la red (se busca por el hash de la transacción interna)", enRed.status === "SUCCESS", `${enRed.status}, la ronda nacía ${margenSello ?? "?"} s después del ledger`);
+ver(`y la ronda nacía ${MARGEN_DEL_CONTRATO_S} s o más después del ledger (lo que pide el contrato)`, margenSello !== null && margenSello >= MARGEN_DEL_CONTRATO_S, `${margenSello ?? "?"} s`);
 const idSorteo = enRed.returnValue ? scValToNative(enRed.returnValue) : null;
 ver("devolvió el número del sorteo", idSorteo !== null, String(idSorteo));
 let h = await horizon(`/transactions/${sello.hash}`);
@@ -321,8 +337,7 @@ if (firma && idSorteo !== null) {
 
 {
   const R = await nuevaCuentaCero();
-  const ronda3 = rondaEn(Math.floor(Date.now() / 1000) + 60);
-  const inflada = await transaccionInflada("seal", argsSeal(R, ronda3, 11), R, 4);
+  const inflada = await transaccionInflada("seal", argsSeal(R, rondaConMargen(), 11), R, 4);
   r = await pagar(inflada.xdr);
   ver("recursos declarados 4 veces la simulación: 400 fee-alta, sin contar ni mandar", r.estado === 400 && r.json?.motivo === "fee-alta", `${r.estado} ${JSON.stringify(r.json)}`);
   ver("y el cupo quedó intacto", (await cupo(R.publicKey()))?.sellos?.usados === 0);
@@ -351,7 +366,7 @@ let hashDeLaDosDeDos = null;
   const cz = await horizon(`/accounts/${Z.publicKey()}`);
   ver("la cuenta de dos firmas de dos quedó armada en la cadena (maestra 0, umbral 2)", cz?.thresholds?.med_threshold === 2 && cz?.signers?.length === 3 && cz?.signers?.find((x) => x.key === Z.publicKey())?.weight === 0, JSON.stringify(cz?.thresholds));
 
-  const r3 = rondaEn(Math.floor(Date.now() / 1000) + 60);
+  const r3 = rondaConMargen();
   const soloA = await transaccion("seal", argsSeal(Z, r3, 12), Z, { firmantes: [A] });
   r = await pagar(soloA.xdr);
   ver("firmada solo por uno de los dos: 400 firma peso-insuficiente, sin contar", r.estado === 400 && r.json?.razon === "firma" && r.json?.detalle === "peso-insuficiente", `${r.estado} ${JSON.stringify(r.json)}`);
@@ -359,12 +374,14 @@ let hashDeLaDosDeDos = null;
   r = await pagar(soloMaestra.xdr);
   ver("firmada solo por la maestra, que pesa 0: 400 firma", r.estado === 400 && r.json?.razon === "firma", `${r.estado} ${JSON.stringify(r.json)}`);
   ver("y no se contó nada", (await cupo(Z.publicKey()))?.sellos?.usados === 0);
-  const ambas = await transaccion("seal", argsSeal(Z, r3, 12), Z, { firmantes: [A, B] });
+  // La ronda se elige de nuevo: las dos simulaciones de arriba ya se comieron parte del margen de `r3`.
+  const r3b = rondaConMargen();
+  const ambas = await transaccion("seal", argsSeal(Z, r3b, 12), Z, { firmantes: [A, B] });
   r = await pagar(ambas.xdr);
   ver("firmada por los dos: pasa y la paga la patrocinadora", r.estado === 200 && r.json?.hash === ambas.hash, `${r.estado} ${JSON.stringify(r.json)}`);
   const cierre = await servidor.pollTransaction(ambas.hash, { attempts: 40, sleepStrategy: () => 1500 });
   const hz = await horizon(`/transactions/${ambas.hash}`);
-  ver("y entró a la red como un fee-bump de la patrocinadora", cierre.status === "SUCCESS" && hz?.fee_account === P && hz?.successful === true, `${cierre.status} ${hz?.fee_account}`);
+  ver("y entró a la red como un fee-bump de la patrocinadora", cierre.status === "SUCCESS" && hz?.fee_account === P && hz?.successful === true, `${cierre.status} ${hz?.fee_account}, la ronda nacía ${margenEnElLedger(r3b, cierre) ?? "?"} s después del ledger`);
   hashDeLaDosDeDos = ambas.hash;
 }
 
@@ -373,7 +390,7 @@ let hashDeLaDosDeDos = null;
 {
   const R = await nuevaCuentaCero();
   const antes = await cupo(R.publicKey());
-  const t = await transaccion("seal", argsSeal(R, rondaEn(Math.floor(Date.now() / 1000) + 60), 4), R, { saltoDeSecuencia: 10 });
+  const t = await transaccion("seal", argsSeal(R, rondaConMargen(), 4), R, { saltoDeSecuencia: 10 });
   r = await pagar(t.xdr);
   ver("una transacción con la secuencia mal la rechaza la red antes de entrar", r.estado === 400 && r.json?.motivo === "rechazada", `${r.estado} ${JSON.stringify(r.json)}`);
   const despues = await cupo(R.publicKey());
@@ -383,10 +400,9 @@ let hashDeLaDosDeDos = null;
 // ---------- 5. el cupo por cuenta y 6. el tope general (con ajustes en caliente) ----------
 
 {
-  const ronda5 = rondaEn(Math.floor(Date.now() / 1000) + 60);
   r = await ajustar("max_sellos_mes", 1);
   ver("ajustar el cupo con la clave de administración", r.estado === 200);
-  const otro = await transaccion("seal", argsSeal(Q, ronda5, 5), Q);
+  const otro = await transaccion("seal", argsSeal(Q, rondaConMargen(), 5), Q);
   r = await pagar(otro.xdr);
   const hoy = new Date();
   const sigMes = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth() + 1, 1);
@@ -402,7 +418,7 @@ let hashDeLaDosDeDos = null;
 
   const T = await nuevaCuentaCero();
   await ajustar("tope_general_stroops", 1);
-  const t = await transaccion("seal", argsSeal(T, rondaEn(Math.floor(Date.now() / 1000) + 60), 6), T);
+  const t = await transaccion("seal", argsSeal(T, rondaConMargen(), 6), T);
   r = await pagar(t.xdr);
   ver("con el tope general en el piso, el sello da 503 fondo", r.estado === 503 && r.json?.motivo === "fondo", `${r.estado} ${JSON.stringify(r.json)}`);
   ver("y no se contó", (await cupo(T.publicKey()))?.sellos?.usados === 0);
@@ -413,7 +429,7 @@ let hashDeLaDosDeDos = null;
 
 {
   const T = await nuevaCuentaCero();
-  const t = await transaccion("seal", argsSeal(T, rondaEn(Math.floor(Date.now() / 1000) + 60), 7), T);
+  const t = await transaccion("seal", argsSeal(T, rondaConMargen(), 7), T);
   await modo("apagar");
   r = await pagar(t.xdr);
   ver("apagado: 503 apagado", r.estado === 503 && r.json?.motivo === "apagado", JSON.stringify(r.json));

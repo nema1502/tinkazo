@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, params, setGameLength, type Beacon } from "../../state";
+import { auditaCon, paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -158,7 +158,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
 
   // `?auditar=fisica`: lo encimados que quedan después de cada paso, en el
   // plano de la tela, y si alguno se sale, para `scripts/audit-fisica.mjs`.
-  const audit = params.get("auditar") === "fisica"
+  const audit = auditaCon("fisica")
     ? { juego: "pasanaku", n, maxOverlap: 0, maxAt: 0, escapes: 0, pasos: 0, done: false }
     : null;
   if (audit) (window as unknown as { __fisica: typeof audit }).__fisica = audit;

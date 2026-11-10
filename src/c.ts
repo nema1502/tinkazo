@@ -1,7 +1,9 @@
 import "./pagina";
+import "./version-nueva";
 import { $ } from "./dom";
 import { onLangChange, texto as t } from "./idioma";
 import { abrir, dejarLogoEntrante, type Abierto } from "./enlace-corto";
+import { requestedMode } from "./modos/bandera";
 
 /**
  * La página de un enlace corto: `tinkazo.app/c/<id>#<clave>`. En Vercel la sirve
@@ -47,13 +49,14 @@ function pintar(): void {
  * (src/contar.ts): desde el QR (`o=qr`, que trae el enlace corto del QR) o
  * desde el enlace corto (`o=short`) o desde el cartel de un video (`o=video`). La página la saca de la dirección al abrir.
  */
-function preferencias(): string {
+function preferencias(modo?: string | null): string {
   const q = new URLSearchParams(location.search);
   const sigue = new URLSearchParams();
   const lang = q.get("lang");
   const tema = q.get("theme");
   if (lang === "es" || lang === "en") sigue.set("lang", lang);
   if (tema === "light" || tema === "dark") sigue.set("theme", tema);
+  if (modo) sigue.set("modo", modo);
   const o = q.get("o");
   sigue.set("o", o === "qr" || o === "video" ? o : "short");
   return `?${sigue.toString()}`;
@@ -65,10 +68,10 @@ async function intentar(): Promise<void> {
   const r: Abierto = id && clave ? await abrir(id, clave) : { error: "roto" };
   if ("ruta" in r) {
     // La ruta ya viene revisada: verificar.html o evento.html de este sitio, con su fragmento.
-    const corte = r.ruta.indexOf("#");
+    const destino = new URL(r.ruta, location.origin);
     // El logo del enlace (si trae uno) viaja a la otra página, atado a la ruta a la que va.
-    dejarLogoEntrante(r.ruta, r.logo);
-    location.replace(`${r.ruta.slice(0, corte)}${preferencias()}${r.ruta.slice(corte)}`);
+    dejarLogoEntrante(destino.pathname + destino.hash, r.logo);
+    location.replace(`${destino.pathname}${preferencias(requestedMode(destino.search))}${destino.hash}`);
     return;
   }
   estado = r.error;

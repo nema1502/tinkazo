@@ -135,6 +135,22 @@ describe("retomar la sesión al cargar", () => {
     expect(pollarWallet.label).toBe("Google");
   });
 
+  it("la marca del otro modo no se lee ni se borra desde este modo", async () => {
+    const datos = almacen({ "tinkazo.pollar.intent.mainnet": "google" });
+    const { pollarWallet } = await modulo();
+    expect(await pollarWallet.restore()).toBeNull();
+    expect(pollarWallet.hayMarca()).toBe(false);
+    expect(datos.get("tinkazo.pollar.intent.mainnet")).toBe("google");
+  });
+
+  it("con la marca nueva de esta red y la cuenta viva, devuelve la dirección", async () => {
+    almacen({ "tinkazo.pollar.intent.testnet": "email" });
+    h.billetera = { address: DIR };
+    const { pollarWallet } = await modulo();
+    expect(await pollarWallet.restore()).toBe(DIR);
+    expect(pollarWallet.label).toBe("Email");
+  });
+
   it("una marca de correo se retoma como correo", async () => {
     almacen({ "tinkazo.pollar.intent": "email" });
     h.billetera = { address: DIR };
@@ -329,5 +345,81 @@ describe("bajar el SDK con la página quieta", () => {
     vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY", "");
     const sin = await modulo();
     expect(() => sin.precargarSdk()).not.toThrow();
+  });
+});
+
+describe("en Oficial, con la llave y la marca de Oficial", () => {
+  const MARCA_VIEJA = "tinkazo.pollar.intent";
+  const MARCA_OFICIAL = "tinkazo.pollar.intent.mainnet";
+
+  /** El módulo con la red de esta pestaña en Oficial: la llave y `stellarNetwork` salen de la misma red. */
+  async function moduloEnOficial() {
+    vi.resetModules();
+    vi.doMock("./config", async (orig) => {
+      const o = await orig<typeof import("./config")>();
+      return { ...o, network: { ...o.network, name: "mainnet", networkPassphrase: "Public Global Stellar Network ; September 2015" } };
+    });
+    return import("./wallet-pollar");
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_MAINNET", "pub_mainnet_prueba");
+  });
+  afterEach(() => {
+    vi.doUnmock("./config");
+  });
+
+  it("el cliente se arma con la llave de Oficial y la red real, nunca con la de Prueba", async () => {
+    almacen({ [MARCA_OFICIAL]: "google" });
+    h.billetera = { address: DIR };
+    const { pollarWallet } = await moduloEnOficial();
+    expect(await pollarWallet.restore()).toBe(DIR);
+    expect(h.config?.apiKey).toBe("pub_mainnet_prueba");
+    expect(h.config?.stellarNetwork).toBe("mainnet");
+  });
+
+  it("la marca vieja, sin red, no se lee ni se borra desde Oficial: es de la cuenta de Prueba", async () => {
+    const datos = almacen({ [MARCA_VIEJA]: "google", "tinkazo.pollar.intent.testnet": "google" });
+    const { pollarWallet } = await moduloEnOficial();
+    expect(pollarWallet.hayMarca()).toBe(false);
+    expect(await pollarWallet.restore()).toBeNull();
+    // Ni se armó un cliente (que habría sido con alguna llave) ni se tocó lo de la otra red.
+    expect(h.cliente).toBeNull();
+    expect(datos.get(MARCA_VIEJA)).toBe("google");
+    expect(datos.get("tinkazo.pollar.intent.testnet")).toBe("google");
+  });
+
+  it("sin llave de Oficial no se ofrece entrar, aunque haya llave de Prueba", async () => {
+    vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_MAINNET", "");
+    almacen();
+    const { pollarConfigured } = await moduloEnOficial();
+    expect(pollarConfigured()).toBe(false);
+    vi.doUnmock("./config");
+    const { pollarConfigured: enPrueba } = await modulo();
+    expect(enPrueba()).toBe(true);
+  });
+
+  it("entrar deja la marca de Oficial y no escribe la vieja", async () => {
+    const datos = almacen();
+    vi.stubGlobal("window", { open: vi.fn(), setInterval, clearInterval, setTimeout, clearTimeout });
+    h.alLogin = (c) => {
+      setTimeout(() => {
+        (c as unknown as { wallet: { address: string } }).wallet = { address: DIR };
+        for (const f of (c as unknown as { oyentes: Set<(s: { step: string }) => void> }).oyentes) f({ step: "authenticated" });
+      }, 20);
+    };
+    const { pollarWallet } = await moduloEnOficial();
+    expect(await pollarWallet.connect()).toBe(DIR);
+    expect(datos.get(MARCA_OFICIAL)).toBe("google");
+    expect(datos.has(MARCA_VIEJA)).toBe(false);
+  });
+
+  it("salir de Oficial olvida solo la marca de Oficial: la de Prueba y la vieja quedan", async () => {
+    const datos = almacen({ [MARCA_OFICIAL]: "email", [MARCA_VIEJA]: "google", "tinkazo.pollar.intent.testnet": "google" });
+    const { pollarWallet } = await moduloEnOficial();
+    await pollarWallet.disconnect();
+    expect(datos.has(MARCA_OFICIAL)).toBe(false);
+    expect(datos.get(MARCA_VIEJA)).toBe("google");
+    expect(datos.get("tinkazo.pollar.intent.testnet")).toBe("google");
   });
 });

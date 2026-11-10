@@ -1,4 +1,4 @@
-import { roundTime } from "../protocol/quicknet";
+import { roundTime, targetRound } from "../protocol/quicknet";
 import { type IntentoDeSello, type Resolucion, esSelloIncierto } from "../stellar/envio";
 import { esDeRed, textoDelError } from "../stellar/errores";
 
@@ -16,7 +16,9 @@ import { esDeRed, textoDelError } from "../stellar/errores";
  * 3. Si la red no contestó antes de mandar nada (al armar o simular), se vuelve a
  *    probar dos veces, con una espera que crece: no hay nada en el aire.
  * 4. Si el sello falló sin dejar nada por la ronda (`selloSinGrabar`), se prueba
- *    con otra ronda, hasta tres intentos en total, como siempre.
+ *    con otra ronda, hasta tres intentos en total, como siempre. Cada ronda nueva
+ *    nace un poco más lejos que la anterior (`MAS_LEJOS_POR_INTENTO_S`): si la red
+ *    tardó una vez, lo más probable es que vuelva a tardar lo mismo.
  */
 
 export interface SelloHecho {
@@ -35,19 +37,22 @@ export interface PasosDelSello {
   /** Averigua si un intento entró (`resolverSelloEnLaRed`). */
   resolver: (intento: IntentoDeSello) => Promise<Resolucion>;
   /**
-   * Una ronda nueva, con el margen de siempre, contada desde ahora. Sin ella (el sello
-   * que se vuelve a intentar después de "Seguir sin sello") la ronda es una sola: lo
-   * que se arregla con otra ronda no se arregla, y sale el error. Sellar otra ronda
-   * sería otro sorteo, nunca "anclar" el que ya se sorteó.
+   * Una ronda nueva, con el margen de siempre más `masLejosS` segundos, contada desde
+   * ahora. Sin ella (el sello que se vuelve a intentar después de "Seguir sin sello")
+   * la ronda es una sola: lo que se arregla con otra ronda no se arregla, y sale el
+   * error. Sellar otra ronda sería otro sorteo, nunca "anclar" el que ya se sorteó.
    */
-  rondaNueva?: () => { round: number; ts: number };
+  rondaNueva?: (masLejosS?: number) => { round: number; ts: number };
   /** Falló sin dejar nada en la cadena, de una forma que se arregla con otra ronda (`selloSinGrabar`). */
   sinGrabar: (e: unknown) => boolean;
   /** Guarda (o borra, con `null`) el intento del que no se sabe si entró. */
   guardarPendiente: (intento: IntentoDeSello | null) => void;
   dormir?: (ms: number) => Promise<void>;
-  /** Para la línea de estado: se está averiguando, o se va a volver a probar. */
-  avisar?: (que: "verificando" | "reintentando") => void;
+  /**
+   * Para la línea de estado: se está averiguando, se va a volver a probar tras un corte,
+   * o se va a probar con una ronda más lejana porque la de antes no quedó grabada.
+   */
+  avisar?: (que: "verificando" | "reintentando" | "otra-ronda") => void;
 }
 
 /** No se pudo averiguar si un sello entró. Queda guardado: el próximo intento empieza por ahí. */
@@ -64,6 +69,59 @@ export class SelloSinConfirmar extends Error {
 const OTRAS_RONDAS = 2;
 /** Cuántas veces se reintenta un corte antes de mandar nada. */
 const OTRAS_POR_RED = 2;
+/**
+ * Cuánto más lejos nace cada ronda nueva cuando la anterior no quedó grabada: 20 s la
+ * segunda vez y 40 s la tercera, sobre el margen de siempre (45 s con cuenta).
+ *
+ * Con el mismo margen, una red lenta falla las tres veces igual. Se midió el 8 de
+ * noviembre de 2026 contra la testnet, con el portero en local: del clic al ledger
+ * pasaban de 17 a 21 s, y la ronda a 45 s llegaba al ledger con 25 a 28 s de margen,
+ * menos de los 30 que exige el contrato (`RoundTooSoon`). Con 20 s más alcanza y
+ * sobra. Más lejos es siempre seguro para el sorteo: solo se espera un poco más.
+ */
+export const MAS_LEJOS_POR_INTENTO_S = 20;
+
+/**
+ * El margen del primer intento cuando la comisión la paga el portero del patrocinio
+ * (`workers/patrocinio`): 65 s en vez de los 45 de siempre (`ANCHOR_LEAD_SECONDS`).
+ *
+ * Ese camino hace unas cinco llamadas a la red antes de que el sello llegue a un ledger:
+ * dos del sitio (armar y simular) y tres del portero (revisar, envolver y mandar). Se
+ * midió el 8 de noviembre de 2026: en mainnet cada llamada al RPC tarda de 1,6 a 2,1 s, y
+ * con 45 s la ronda llegaba al ledger con 25 a 28 s, menos de los 30 que exige el contrato
+ * (`RoundTooSoon`). El primer sello fallaba y gastaba un sello del cupo y la comisión del
+ * patrocinador. Con 20 s más entra a la primera. Sin portero (Freighter, o una cuenta que
+ * paga su comisión) el margen sigue como siempre.
+ */
+export const MARGEN_CON_PORTERO_S = 65;
+
+/**
+ * Con cuántos segundos nace la ronda del primer intento: el margen del camino (el de
+ * siempre, o `MARGEN_CON_PORTERO_S` si paga el portero, nunca menos de lo que pida la
+ * URL) más lo que se deja para aprobar a mano (`margenParaAprobar`, solo Freighter).
+ */
+export function margenDelPrimerIntento(lead: number, o: { conPortero: boolean; paraAprobar: number }): number {
+  return (o.conPortero ? Math.max(lead, MARGEN_CON_PORTERO_S) : lead) + o.paraAprobar;
+}
+
+/**
+ * La ronda de cada intento, contada desde ahora: el margen del camino más `masLejosS`
+ * (`MAS_LEJOS_POR_INTENTO_S` por cada ronda que no quedó grabada). Es la que pasa a
+ * `PasosDelSello.rondaNueva`, y la pantalla muestra la cuenta y la hora de la que salga.
+ */
+export function rondasDesde(margenS: number, ahoraS: () => number = () => Math.floor(Date.now() / 1000)): (masLejosS?: number) => { round: number; ts: number } {
+  return (masLejosS = 0) => {
+    const ahora = ahoraS();
+    return { round: targetRound(ahora, margenS + masLejosS), ts: ahora };
+  };
+}
+
+/**
+ * Cuánto queda a la vista el aviso de que se prueba con otra ronda (`txOtraRonda`) antes de
+ * seguir: sin esta espera, "Armando el sello…" lo pisaba enseguida y casi no se leía. Se
+ * espera antes de elegir la ronda nueva, así no le quita margen.
+ */
+export const AVISO_OTRA_RONDA_MS = 1500;
 
 /**
  * Un corte de red que se puede reintentar sin miedo: pasó antes de mandar nada.
@@ -114,7 +172,9 @@ export async function sellarSinDuplicar(
         p.guardarPendiente(null);
         if (otrasRondas >= OTRAS_RONDAS || !p.rondaNueva) throw e.cause instanceof Error ? e.cause : e;
         otrasRondas++;
-        ({ round, ts } = p.rondaNueva());
+        p.avisar?.("otra-ronda");
+        await dormir(AVISO_OTRA_RONDA_MS);
+        ({ round, ts } = p.rondaNueva(MAS_LEJOS_POR_INTENTO_S * otrasRondas));
         continue;
       }
       if (corteAntesDeMandar(e) && otrasPorRed < OTRAS_POR_RED) {
@@ -125,13 +185,17 @@ export async function sellarSinDuplicar(
         // Conservarla mientras "todavía alcanzara" competía por décimas de segundo con el
         // chequeo de `sellar` (anchor.ts, el mismo umbral de 40 s): medido el 21 de octubre
         // de 2026 en la testnet con la red cortada 4 s, caía en "la ronda quedó cerca" y
-        // gastaba uno de los dos cambios de ronda.
-        if (p.rondaNueva) ({ round, ts } = p.rondaNueva());
+        // gastaba uno de los dos cambios de ronda. Lo que ya se había alejado por rondas que
+        // no quedaron grabadas se conserva (sin ninguna, es el margen de siempre): un corte no
+        // borra que la red venía lenta.
+        if (p.rondaNueva) ({ round, ts } = p.rondaNueva(MAS_LEJOS_POR_INTENTO_S * otrasRondas));
         continue;
       }
       if (p.rondaNueva && p.sinGrabar(e) && otrasRondas < OTRAS_RONDAS) {
         otrasRondas++;
-        ({ round, ts } = p.rondaNueva());
+        p.avisar?.("otra-ronda");
+        await dormir(AVISO_OTRA_RONDA_MS);
+        ({ round, ts } = p.rondaNueva(MAS_LEJOS_POR_INTENTO_S * otrasRondas));
         continue;
       }
       throw e;

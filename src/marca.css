@@ -105,7 +105,7 @@
 .marca-hoja { height: auto; }
 @media (max-width: 760px) { .marca-red { height: auto; min-height: 120px; } }
 
-/* La colección de stickers con personaje: cuatro por fila, cada uno con su PNG; las tres hojas para la imprenta. */
+/* La colección de stickers con personaje: cuatro por fila, cada uno con su PNG; las cuatro hojas para la imprenta. */
 .marca h4 { margin: 26px 0 10px; font-size: 18px; font-weight: 900; color: var(--ink); }
 .marca-coleccion { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
 .marca-col { margin: 0; min-width: 0; display: grid; gap: 8px; align-content: start; }
@@ -114,9 +114,10 @@
 .marca-col .marca-vista { position: relative; padding: 0; aspect-ratio: 1 / 1; box-sizing: border-box; min-width: 0; }
 .marca-col .marca-sticker img { position: absolute; inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); max-width: none; max-height: none; margin: 0; object-fit: contain; }
 .marca-col .mini { justify-content: center; margin-top: 0; }
-.marca-hojas-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.marca-hojas-col { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1000px) {
   .marca-coleccion { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .marca-hojas-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
   .marca-coleccion { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
@@ -223,7 +224,7 @@
 .marca-ir a { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 11px; border: 2px solid var(--ink); background: var(--card); color: var(--ink); font-weight: 800; text-decoration: none; box-shadow: var(--sh-sm); }
 .marca-ir a:hover { background: var(--yellow, #ffc83d); color: #191919; }
 .marca-ir a:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
-#sponsors, #coleccion, #impresos, #creadores, #mas { scroll-margin-top: 16px; }
+#sponsors, #coleccion, #impresos, #qr, #creadores, #mas { scroll-margin-top: 16px; }
 /* Las imágenes anchas (cabeceras y banners) ocupan toda la fila: a media columna no se leía lo que dicen. */
 .marca-redes .marca-ancha { grid-column: 1 / -1; }
 .marca .marca-red-ancha { height: auto; }
@@ -259,19 +260,94 @@
 .marca-mono-oscuro { background: #191919; }
 @media (max-width: 1000px) { .marca-mono { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-/* DevFest Tarija 2026: el evento donde Tinkazo es sponsor, con el afiche oficial y el botón para reservar lugar. */
-.marca-devfest { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px 28px; align-items: center; margin: 8px 0 28px; padding: 20px 24px; border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); border-top: 8px solid var(--yellow); }
+/* Eventos: una tarjeta por evento, con su enlace oficial y un código QR grande para escanearlo desde una pantalla o un afiche.
+   El QR lleva su propio borde blanco (la zona tranquila va adentro del SVG): el borde de tinta va por fuera. */
+.marca-ev-cab h2 { margin: 0 0 4px; }
+.marca-ev-cab p { margin: 0 0 18px; }
+.marca-evento { display: grid; gap: 22px 28px; align-items: center; margin: 0 0 28px; padding: 20px 24px; border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); border-top: 8px solid var(--yellow); }
+.marca-devfest { grid-template-columns: 220px minmax(0, 1fr) 300px; }
+.marca-spaceapps { grid-template-columns: minmax(0, 1fr) 300px; border-top-color: var(--teal); }
+.marca-evento[hidden] { display: none; }
 .marca-df-afiche { display: block; line-height: 0; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); background: #fff; }
 .marca-df-afiche img { width: 100%; height: auto; display: block; }
-.marca-df-texto h2 { margin: 10px 0 8px; }
+.marca-df-texto h3 { margin: 10px 0 8px; font-size: clamp(24px, 3vw, 32px); font-weight: 900; letter-spacing: -.02em; }
 .marca-df-texto p { margin: 0 0 14px; max-width: 62ch; }
-.marca-df-org { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 8px 14px; background: #fff; color: #191919; border: var(--bw) solid var(--ink); font-weight: 700; }
-.marca-df-org img { height: 22px; width: auto; }
+.marca-df-texto .marca-nota { margin: 12px 0 0; }
+.marca-df-texto .marca-nota a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; color: var(--purple-ink); }
+.marca-df-org { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; padding: 8px 12px; background: #fff; color: #191919; border: var(--bw) solid var(--ink); font-weight: 700; }
+.marca-df-org img { height: 18px; width: auto; }
 .marca-df-rsvp { font-size: 18px; }
-@media (max-width: 760px) {
-  .marca-devfest { grid-template-columns: 1fr; padding: 16px; }
-  .marca-df-afiche { max-width: 260px; }
-  .marca-df-org img { height: 18px; }
+.marca-df-wa { font-size: 18px; }
+/* Los dos botones del DevFest quedan alineados a la izquierda, juntos o uno debajo del otro, sin corrimiento. */
+.marca-devfest .marca-df-rsvp { margin: 0 10px 10px 0; }
+.marca-devfest .marca-df-wa { margin: 0; }
+.marca-qr { margin: 0; display: grid; gap: 10px; justify-items: center; min-width: 0; }
+.marca-qr img { display: block; width: 100%; max-width: 300px; height: auto; aspect-ratio: 1; background: #fff; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+.marca-qr figcaption { display: grid; gap: 2px; justify-items: center; text-align: center; color: var(--ink); }
+.marca-qr figcaption strong { font-size: 18px; font-weight: 900; }
+.marca-qr figcaption a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; color: var(--purple-ink); }
+@media (max-width: 1000px) {
+  .marca-devfest { grid-template-columns: 200px minmax(0, 1fr); }
+  .marca-spaceapps { grid-template-columns: minmax(0, 1fr); }
+  .marca-devfest .marca-qr { grid-column: 1 / -1; }
 }
-.marca-df-wa { font-size: 18px; margin-left: 10px; }
-@media (max-width: 760px) { .marca-df-wa { margin: 10px 0 0; } }
+@media (max-width: 760px) {
+  .marca-evento { padding: 16px; }
+  .marca-devfest { grid-template-columns: 1fr; }
+  .marca-df-afiche { max-width: 260px; }
+}
+/* La frase: el nombre, la dirección y el lema, como van en un afiche o en la pared de sponsors. */
+.marca-frase { margin-top: 36px; }
+.marca-frase-caja { margin: 10px 0 14px; padding: 26px 28px; border: 3px solid var(--ink); box-shadow: var(--sh); background: var(--amarillo, #ffd23f); color: #1b1b1f; }
+/* Todo lo que va sobre el amarillo lleva la tinta oscura fija: el tema oscuro pinta el texto claro y no se leía. */
+.marca-frase-caja .marca-frase-url { margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; color: #1b1b1f; opacity: 1; }
+.marca-frase-caja .marca-frase-titulo { margin: 0; font-size: clamp(30px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; color: #1b1b1f; }
+.marca-frase-caja .marca-frase-gratis { margin: 14px 0 0; font-size: 22px; font-weight: 800; color: #1b1b1f; opacity: 1; }
+.marca-frase-copia { margin: 0 0 10px; padding: 12px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); font-size: 17px; line-height: 1.45; text-wrap: pretty; }
+@media (max-width: 760px) { .marca-frase-caja { padding: 20px 18px; } .marca-frase-gratis { font-size: 19px; } }
+
+/* QR para tu arte: la etiqueta principal, grande, con sus reglas al lado; debajo, las tarjetas para redes y los otros destinos, más chicos. */
+.marca-qr-principal { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); grid-template-areas: "et texto" "reglas texto"; gap: 20px 32px; align-items: start; margin: 18px 0 12px; }
+.marca-qr-etiquetas { grid-area: et; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.marca-qr-texto { grid-area: texto; min-width: 0; }
+.marca-qr-et, .marca-qr-tar, .marca-qr-extra { margin: 0; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.marca-qr-et figcaption, .marca-qr-tar figcaption, .marca-qr-extra figcaption { font-weight: 800; font-size: 16px; color: var(--ink); }
+.marca .marca-qr-et .mini, .marca .marca-qr-tar .mini, .marca .marca-qr-extra .mini { justify-content: center; text-align: center; margin-top: 0; }
+/* La escena de la etiqueta es siempre clara, en los dos temas: la etiqueta tiene fondo transparente y su placa es blanca. */
+.marca-qr-escena { background: #fff6e9; padding: 14px; line-height: 0; }
+.marca-qr-texto h3 { margin: 10px 0 8px; font-size: clamp(24px, 3vw, 32px); font-weight: 900; letter-spacing: -.02em; }
+.marca-qr-texto h4 { margin: 20px 0 2px; font-size: 18px; }
+.marca-qr-texto p { margin: 0 0 12px; }
+.marca p.marca-qr-regla { margin: 0 0 12px; padding: 10px 12px; border: 2px solid var(--ink); background: var(--card); box-shadow: var(--sh-sm); font-weight: 800; color: var(--ink); }
+.marca-qr-solo { display: grid; gap: 10px; margin-top: 10px; }
+.marca-qr-fila { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 10px; padding: 10px 12px; border: 2px solid var(--ink); background: var(--card); box-shadow: var(--sh-sm); }
+.marca-qr-fila > span { grid-column: 1 / -1; font-weight: 800; font-size: 15px; line-height: 1.35; color: var(--ink); }
+.marca .marca-qr-fila .mini { justify-content: center; text-align: center; margin-top: 0; }
+.marca-qr-reglas { grid-area: reglas; margin: 0; }
+.marca-qr-reglas h3:first-child { margin-top: 0; }
+.marca-qr-tarjetas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.marca-qr-tar .marca-vista { padding: 0; line-height: 0; }
+/* Los otros destinos: cada tarjeta es una subgrilla de cinco filas, así los botones quedan a la misma altura aunque una dirección ocupe dos líneas. */
+.marca-qr-mas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 16px; align-items: start; }
+.marca-qr-extra { grid-row: span 5; grid-template-rows: subgrid; }
+.marca-qr-codigo { background: #ffffff; padding: 10px; line-height: 0; }
+.marca .marca-qr-extra p { margin: 0; font-size: 15px; line-height: 1.45; }
+.marca-qr-lleva code { font-size: 14px; overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .marca-qr-principal { grid-template-columns: 1fr; grid-template-areas: "et" "texto" "reglas"; }
+  .marca-qr-mas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .marca-qr-extra:nth-child(n+3) .marca-qr-codigo { margin-top: 14px; }
+}
+@media (max-width: 760px) {
+  .marca-qr-etiquetas { gap: 10px 12px; }
+  .marca-qr-escena { padding: 8px; }
+  /* En el celular cada tarjeta es una fila: la vista a un lado y, al otro, el fondo y los dos botones. */
+  .marca-qr-tarjetas { grid-template-columns: 1fr; gap: 16px; }
+  .marca-qr-tar { grid-template-columns: minmax(0, 42%) minmax(0, 1fr); align-items: center; gap: 6px 14px; }
+  .marca-qr-tar .marca-vista { grid-row: 1 / span 2; }
+  .marca-qr-tar figcaption { align-self: end; }
+  .marca-qr-tar .marca-descargas { align-self: start; }
+  .marca-qr-mas { gap: 8px 12px; }
+  .marca-qr-codigo { padding: 6px; }
+  .marca .marca-qr-tar .mini, .marca .marca-qr-extra .mini { font-size: 15px; padding: 5px 8px; }
+}

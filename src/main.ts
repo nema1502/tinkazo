@@ -1,4 +1,5 @@
 import "./styles.css";
+import { cargaOpcional } from "./version-nueva";
 import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
@@ -12,6 +13,9 @@ import { initPlegables } from "./ui/plegable";
 import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
+import { montarGanadores, ponerGanadores } from "./ui/ganadores";
+import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
+import { MAX_WINNERS } from "./protocol/select";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
@@ -22,6 +26,9 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { equiposActivo } from "./equipos/bandera";
+import { requestedMode } from "./modos/bandera";
+import { reponerEtiquetas } from "./equipos/etiquetas";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -41,6 +48,10 @@ const INGRESAR = MARCA_INGRESAR;
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
 if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+
+// `?lavado=1`: solo para auditar. El estadio se ve como en un proyector pobre, con luz en la sala (menos contraste, negros grises y más brillo).
+// Lo mide `scripts/audit-lavado.mjs`; ninguna persona lo ve si no lo pide en la dirección.
+if (params.get("lavado") === "1") document.documentElement.dataset.lavado = "1";
 
 // De qué enlace se llegó (`?o=aula`, `?o=video`…), para el contador del embudo (src/contar.ts).
 recordarOrigen();
@@ -198,16 +209,26 @@ iniciarLogo();
 iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+montarGanadores();
+// «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
+montarTurnos();
 // Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
 cerrarSalidaDelStand();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
+// Con ?modo=turnos la herramienta abre con «Orden de turnos» ya elegido, después del borrador: lo que pide la dirección manda.
+abrirConElModoPedido();
 initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
 // El modo stand, si se recargó en él.
 initStandSala();
+// Los equipos con cupón (bandera VITE_EQUIPOS, apagada por defecto): sin la bandera no se agrega nada.
+if (equiposActivo()) {
+  reponerEtiquetas();
+  void import("./ui/equipos-sala").then((m) => m.initEquiposSala());
+}
 initStand();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
@@ -242,7 +263,8 @@ initLumaAyuda();
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
   const body = document.body;
-  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
+  // `?modo=turnos` abre la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || requestedMode() === "turnos";
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
@@ -446,7 +468,7 @@ async function autoDemo(mode: string): Promise<void> {
   // ganadores: hubo un sorteo de dos en el que el juego anunciaba uno solo.
   const nw = Number(params.get("nw"));
   const sel = document.getElementById("nw");
-  if (nw >= 1 && nw <= 32 && sel instanceof HTMLSelectElement) sel.value = String(nw);
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS && sel instanceof HTMLInputElement) ponerGanadores(nw);
   await freeze();
   setGame((GAMES.find((g) => g === mode) ?? "race") as Game);
   // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
@@ -491,7 +513,7 @@ async function poseScene(): Promise<void> {
     : base;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
   // auditar cómo anuncia cada juego a cada ganador.
-  const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
+  const premios = Math.max(1, Math.min(L.length, MAX_WINNERS, Math.floor(Number(params.get("nw")) || 1)));
   // Quiénes ganan: los de siempre, repartidos por la lista, o con
   // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
   // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena
@@ -548,8 +570,9 @@ setLang(initialLang());
 // La palabra del sticker rota después de traducir: el texto sale del diccionario.
 rotateWords();
 // El contador va aparte y después: no frena la página y queda en su propio
-// archivo, chico, en vez de darle su nombre al código común.
-void import("./analytics").then((m) => m.countVisits());
+// archivo, chico, en vez de darle su nombre al código común. Si no baja (un
+// bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.
+void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);

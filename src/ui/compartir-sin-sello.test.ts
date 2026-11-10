@@ -99,6 +99,20 @@ describe("desde Mis sorteos: los datos salen del comprobante", () => {
     expect(datosDeComprobante({ ...sellado, sinSello: true }, enlace, ["Ana"])).not.toHaveProperty("sinSello");
     expect(datosDeComprobante({ ...sellado, sinSello: true }, enlace, ["Ana"]).numero).toBe("4");
   });
+  it("un reparto con nombres a secas cuenta por persona si el enlace trae el modo, como la verificación", () => {
+    const names = ["Ana Quispe (1/3)", "Ana Quispe (2/3)", "Ana Quispe (3/3)", "Beto Rojas", "Carla Suarez"];
+    const conModo = "https://tinkazo.app/verificar.html?modo=varias#rEJEMPLO";
+    expect(datosDeComprobante({ ...base, names }, conModo, ["Ana Quispe (2/3)"]).personas).toBe(3);
+    // Sin el modo en el enlace, la lista se cuenta como siempre: cada línea, una persona.
+    expect(datosDeComprobante({ ...base, names }, enlace, ["Ana Quispe (2/3)"]).personas).toBe(5);
+  });
+  it("un orden repartido lleva el modo de turnos en el enlace y también cuenta por persona, como la verificación", () => {
+    const names = ["Ana Quispe (1/2)", "Ana Quispe (2/2)", "Beto Rojas", "Carla Suarez (1/2)", "Carla Suarez (2/2)"];
+    const deTurnos = "https://tinkazo.app/verificar.html?modo=turnos#rEJEMPLO";
+    const d = datosDeComprobante({ ...base, names, prize: "Turnos" }, deTurnos, names);
+    expect(d.personas).toBe(3);
+    expect(d.total).toBe(5);
+  });
 });
 
 describe("el mensaje al ganador de un sorteo sin sello", () => {

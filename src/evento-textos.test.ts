@@ -31,4 +31,12 @@ describe("textos de la página de evento", () => {
     });
     expect(distintas).toEqual([]);
   });
+
+  it("un orden de turnos tiene su clave de comprobación, sin hablar de ganador", () => {
+    expect(codigo).toContain("evChkOrden");
+    expect(T.es.evChkOrden).toBe("El orden, rehecho");
+    expect(T.en.evChkOrden).toBe("The order, redone");
+    expect(`${T.es.evChkOrden} ${T.en.evChkOrden}`).not.toMatch(/ganador|winner/i);
+    expect(`${T.es.turnsResultTitle} ${T.en.turnsResultTitle}`).not.toMatch(/ganador|winner/i);
+  });
 });

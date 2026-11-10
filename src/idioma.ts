@@ -150,16 +150,11 @@ export function setLang(l: Lang): void {
   fijarMeta('meta[property="og:locale"]', l === "en" ? "en_US" : "es_BO");
   fijarMeta('meta[property="og:locale:alternate"]', l === "en" ? "es_BO" : "en_US");
   // Las páginas de sorteo dicen su título y su descripción en el idioma de la
-  // página, y lo mismo en las etiquetas og: lo que se comparte sale en el
-  // idioma que se lee.
+  // página. Las etiquetas og: y twitter: no se tocan: la vista previa al
+  // compartir es una versión corta en los dos idiomas, escrita en el HTML,
+  // porque quien la lee (un chat, un foro) no corre el script.
   const { titulo, desc } = metasDePagina(dict, document.documentElement.dataset);
-  if (titulo !== undefined) {
-    document.title = titulo;
-    fijarMeta('meta[property="og:title"]', titulo);
-  }
-  if (desc !== undefined) {
-    fijarMeta('meta[name="description"]', desc);
-    fijarMeta('meta[property="og:description"]', desc);
-  }
+  if (titulo !== undefined) document.title = titulo;
+  if (desc !== undefined) fijarMeta('meta[name="description"]', desc);
   for (const fn of listeners) fn(l);
 }

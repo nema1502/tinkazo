@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { huellaLogo, validarLogo, type Logo } from "./logo";
+import { requestedMode } from "./modos/bandera";
 
 /**
  * El enlace corto de un comprobante: `tinkazo.app/c/<id>#<clave>`.
@@ -53,8 +54,8 @@ const MAX_BYTES = 256 * 1024;
 export const ES_ID = /^[0-9A-Za-z]{8}$/;
 /** 16 bytes en base64url, sin relleno. */
 const ES_CLAVE = /^[A-Za-z0-9_-]{22}$/;
-/** Lo único a lo que lleva un enlace corto: el comprobante de un sorteo o un evento. */
-const ES_RUTA = /^\/(?:verificar|evento)\.html#[A-Za-z0-9_-]{2,}$/;
+/** Lo único a lo que lleva un enlace corto: el comprobante de un sorteo o un evento. La verificación puede llevar el modo del sorteo. */
+const ES_RUTA = /^\/(?:verificar|evento)\.html(?:\?modo=(?:turnos|varias))?#[A-Za-z0-9_-]{2,}$/;
 const GUARDADOS = "tinkazo.cortos";
 const MAX_GUARDADOS = 300;
 
@@ -100,7 +101,8 @@ export function rutaDe(enlace: string): string | null {
   try {
     const u = new URL(enlace, "https://tinkazo.app");
     if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-    const ruta = u.pathname + u.hash;
+    const modo = u.pathname === "/verificar.html" ? requestedMode(u.search) : null;
+    const ruta = u.pathname + (modo ? `?modo=${modo}` : "") + u.hash;
     return esRuta(ruta) ? ruta : null;
   } catch {
     return null;
