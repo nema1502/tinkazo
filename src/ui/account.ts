@@ -9,6 +9,7 @@ import { LAST_DRAWS, drawRow, feeCovered, fmtBalance, initialOf, kindText, money
 import { CLAVES_DE_VIA, ocultarCorreo, viaDe } from "./cuenta-estado";
 import type { Entry } from "./history";
 import { contextoHorizon, revisarCarga } from "../stellar/carga";
+import { nombreDelEquipo } from "../equipos/etiquetas";
 import { leerCuenta } from "../stellar/cuenta-api";
 import { modoDeRampa, planDelEquipo, urlDeCuenta } from "../stellar/cuenta-config";
 import { type EstadoDeCuenta, con, monedasHtml, planHtml, saldoHtml, tienditaHtml } from "./monedas-vista";
@@ -426,6 +427,10 @@ function paint(s: Open): void {
 
   const name = view.name?.trim() ?? "";
   const title = name || kindText(view.label);
+  // El nombre del equipo, si este navegador lo conoce (lista de equipos con cupón): en vez de la cuenta cortada.
+  // La copia y el título siguen con la cuenta entera: el sello y el comprobante son de las cuentas.
+  const equipo = nombreDelEquipo(view.address);
+  const cuenta = equipo ?? shortAddr(view.address);
 
   const mainnet = network.name === "mainnet";
   // Con el saldo en camino no se afirma nada: ni el número, ni "saldo sin leer", ni el botón de conseguir XLM.
@@ -459,7 +464,7 @@ function paint(s: Open): void {
     `<div class="acct-head">${faceHtml(view)}` +
     `<div class="acct-id"><h2 id="acct-title" class="sr-only">${esc(t("acctTitle"))}</h2>` +
     `<p class="acct-name" title="${esc(title)}">${esc(title)}</p>${via}` +
-    `<p class="acct-addr"><span class="acct-short mono" title="${esc(view.address)}">${esc(shortAddr(view.address))}</span>` +
+    `<p class="acct-addr"><span class="acct-short${equipo ? "" : " mono"}" title="${esc(view.address)}">${esc(cuenta)}</span>` +
     `<button type="button" class="acct-copy" data-k="copy" aria-label="${esc(t("acctCopyAria"))}"><span>${esc(t("acctCopy"))}</span></button>` +
     `<span class="acct-live sr-only" role="status" aria-live="polite"></span></p></div>` +
     `<button type="button" class="acct-x" data-k="x" aria-label="${esc(t("acctClose"))}">${CLOSE}</button></div>` +
