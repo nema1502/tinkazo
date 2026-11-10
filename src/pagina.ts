@@ -26,14 +26,34 @@ textosDeLaPagina();
 // para las capturas y para mirar las dos versiones sin tocar el sistema. Se
 // lee acá y no de `state`, que es de la herramienta y arrastra a los juegos.
 const tema = new URLSearchParams(location.search).get("theme");
-if (tema === "light" || tema === "dark") {
-  document.documentElement.dataset.theme = tema;
-  // Las imágenes con versión clara la eligen por el tema del sistema: con
-  // el tema forzado, la versión del tema del sitio.
-  document.querySelectorAll<HTMLSourceElement>('picture source[media*="prefers-color-scheme"]').forEach((s) => {
-    s.media = tema === "light" ? "all" : "not all";
+
+/**
+ * Fija el tema y deja cada captura pidiendo la versión del tema.
+ *
+ * Con `?theme=light|dark` (igual que en la página principal: sirve para mirar
+ * las dos versiones sin tocar el sistema) este código corre con el HTML ya
+ * abierto, así que el navegador puede haber pedido ya la versión del tema del
+ * sistema. Solo cambiar el `media` del `<source>` no siempre vuelve a pedir:
+ * quedaban capturas sin cargar en juegos.html (sapo, trompo, chovena). Por eso
+ * al hacer el tema no se negocia: el `<picture>` queda con una sola fuente, la
+ * del tema, escrita en el `img`.
+ */
+export function fijarElTema(forzado: string | null): void {
+  if (forzado !== "light" && forzado !== "dark") return;
+  document.documentElement.dataset.theme = forzado;
+  document.querySelectorAll<HTMLPictureElement>("picture").forEach((picture) => {
+    const source = picture.querySelector<HTMLSourceElement>('source[media*="prefers-color-scheme"]');
+    const img = picture.querySelector("img");
+    if (!source || !img) return;
+    // Las capturas por hoy solo traen versión clara: la clara vive en el
+    // `<source>` y la oscura es el `img` de base.
+    const pedida = forzado === "light" ? (source.srcset.split(",")[0]?.trim().split(/\s+/)[0] ?? "") : (img.getAttribute("src") ?? "");
+    if (!pedida) return;
+    source.remove();
+    img.src = pedida;
   });
 }
+fijarElTema(tema);
 
 /**
  * La cuenta, siempre a la vista también acá (26 de octubre de 2026): "Entrar" si no hay cuenta (un enlace a la
