@@ -1,6 +1,6 @@
 # Operación: qué hacer si algo cae
 
-Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esperan la aprobación de quien mantiene el proyecto. Costos y niveles: [deployments.md](deployments.md). Revisado el 26 de octubre de 2026.
+Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esperan la aprobación de quien mantiene el proyecto. Costos y niveles: [deployments.md](deployments.md). Revisado el 10 de noviembre de 2026.
 
 ## RPC de Stellar
 
@@ -14,10 +14,20 @@ Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esper
 
 **Se nota:** falla el ingreso con Google, o el sello de una cuenta sin XLM falla por saldo o por tope.
 
-- **Tope:** Max fee de la app en el panel de Pollar: 1 XLM en mainnet (100 en testnet). Pollar ofrece unas 3 veces la tarifa: pasado ≈ 0,33 XLM de sello, el patrocinio se apaga sin avisar.
-- **Saldo:** la billetera patrocinadora (su dirección, en el panel) necesita XLM de sobra: `node scripts/verificar-patrocinio.mjs --red mainnet --billetera G…`.
+El patrocinio de comisiones tiene dos vías y solo una paga en cada momento: el portero de comisiones (sección siguiente) o la app de Pollar. **Lo que sigue vale solo mientras pague la app de cuentas de Pollar**; cuando pague el portero, usá su hoja de operación.
+
+- **Tope:** el Max fee de la app en el panel de Pollar corta el patrocinio cuando la tarifa real lo supera: el patrocinio se apaga sin avisar.
+- **Saldo:** la billetera patrocinadora de Pollar necesita XLM de sobra; el panel la muestra.
 - **Qué hacer:** recargala; subí el Max fee solo si el costo real lo justifica; mientras tanto, entrar con Freighter, que paga con su cuenta.
 - **Política si la red no deja sellar** (ya está en `main`): «volver a probar»; después «pagar con mi cuenta» (paga quien organiza); al final «Seguir sin sello», con confirmación y el comprobante marcado como no comprobable en la cadena.
+
+## Portero de comisiones
+
+Servicio propio (`workers/patrocinio`): revisa el pedido de sello del sitio, lo manda como una transacción que paga la comisión con su propia cuenta y lleva los cupos por cuenta y por mes. No se inventa cuál vía rige en cada red: según cuál esté encendido paga el portero o Pollar, y el propio servicio lo dice en su respuesta de cupo (el README del portero describe esa salida y sus motivos).
+
+**Se nota:** el sello de una cuenta nueva falla por cupo (se acabó el de esa cuenta, el del mes o el general) o por saldo del servicio (la cuenta del portero quedó sin XLM para pagar comisiones).
+
+**Qué hacer:** la [Hoja de operación del portero](../workers/patrocinio/README.md#hoja-de-operación) mantiene la única copia de los pedidos completos: encender, apagar, volver a Pollar, cargar fondos y rotar la llave.
 
 ## Worker de enlaces (`c.tinkazo.app`)
 
@@ -50,7 +60,7 @@ stellar contract extend --wasm-hash <sha256 del .wasm> --ledgers-to-extend 20736
 
 - **Amarillo, 2.000 MB:** la renta deja el piso. Mirá la pendiente y las horas hasta el rojo.
 - **Naranja, 2.500 MB:** el sello cuesta ≈ 0,5 XLM. Pedí ya que suban el objetivo (SLP y votación, de 13 a 17 días).
-- **Rojo, 2.850 MB:** quedan 13 a 19 horas. Al cruzar el objetivo la renta se multiplica y el tope de Pollar corta los sellos: avisá a quien tenga eventos y aplicá la política de Pollar.
+- **Rojo, 2.850 MB:** quedan 13 a 19 horas. Al cruzar el objetivo la renta se multiplica y el tope de comisión del pagador corta los sellos: avisá a quien tenga eventos y aplicá la política de la vía que pague (portero o Pollar).
 
 Parámetro cambiado y entendido: `node scripts/vigilar-red.mjs --actualizar-base --red <la red que cambió>` y commit de `scripts/vigilar-red.base.json`; mientras no se actualice, las corridas pasan («línea base vieja: …» en el nombre del paso) y solo la diaria sigue fallando. Si el detector mismo calla, el latido (`HEALTHCHECK_URL`) manda un correo a las 2 horas. El camino paso a paso para cuando cambie mainnet, y el latido: [deployments.md](deployments.md#vigilancia-de-la-red).
 
