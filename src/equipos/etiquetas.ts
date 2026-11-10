@@ -68,5 +68,16 @@ export function etiquetaConCuenta(linea: string): string {
   return e === undefined ? linea : `${e} (${cuentaCorta(linea)})`;
 }
 
-/** Las líneas de una lista como se muestran en el show: el nombre de cada equipo. */
-export const paraMostrar = (lineas: readonly string[]): string[] => (etiquetas.size ? lineas.map(etiquetaDe) : [...lineas]);
+/**
+ * Los nombres para mostrar de una lista completa de líneas, deshaciendo los choques: cuando dos equipos comparten
+ * nombre («Equipo 7»), los dos carteles llevan la cuenta corta — «Equipo 7 (GABC…WXYZ)», como la tarjeta del
+ * resultado — y así la sala sabe cuál es cuál; los nombres que no se repiten quedan igual. Sin etiquetas, las líneas
+ * tal cual: son cuentas, ya se distinguen solas.
+ */
+export const paraMostrar = (lineas: readonly string[]): string[] => {
+  if (!etiquetas.size) return [...lineas];
+  const nombres = lineas.map(etiquetaDe);
+  const veces = new Map<string, number>();
+  for (const n of nombres) veces.set(n, (veces.get(n) ?? 0) + 1);
+  return nombres.map((n, i) => ((veces.get(n) ?? 0) > 1 ? `${n} (${cuentaCorta(lineas[i] ?? "")})` : n));
+};

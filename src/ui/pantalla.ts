@@ -3,7 +3,7 @@ import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
 import { modesVisible } from "../modos/bandera";
 import { isTurnOrder, turnOrder, turnOrderDisplayNames } from "../modos/turnos";
-import { etiquetaDe } from "../equipos/etiquetas";
+import { etiquetaDe, paraMostrar } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
@@ -66,6 +66,11 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // Sin los modos a la vista no se toca ningún nombre: la página del resultado y la verificación muestran las líneas
   // tal cual, y la pantalla grande dice lo mismo.
   const orden = turnos && modesVisible() ? turnOrderDisplayNames(frozen.names, drawn.winners) : turnOrder(frozen.names, drawn.winners);
+  // Con equipos, las etiquetas que ve la sala deshacen los nombres repetidos: si dos equipos se llaman igual, los dos
+  // carteles llevan la cuenta corta (`paraMostrar`), como la tarjeta del resultado. En un orden de turnos los nombres
+  // ya vienen armados (`turnOrderDisplayNames`) y no se tocan.
+  const visibles = turnos ? null : paraMostrar(frozen.names);
+  const nombreEnPantalla = (i: number): string => (visibles ? (visibles[i] ?? "") : etiquetaDe(frozen.names[i] ?? ""));
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -92,15 +97,18 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
         : "") +
     (lista
       ? `<ol class="pantalla-lista">${orden
-          .map((nombre, k) => {
+          .map((_, k) => {
             const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
-            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(etiquetaDe(nombre))}</span></li>`;
+            // En un orden de turnos el nombre ya viene listo; con equipos, la etiqueta ya deshace los repetidos.
+            const nombre = turnos ? etiquetaDe(orden[k] ?? "") : nombreEnPantalla(drawn.winners[k] ?? -1);
+            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(nombre)}</span></li>`;
           })
           .join("")}</ol>`
       : drawn.winners
           .map((i, k) => {
-            // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
-            const nombre = etiquetaDe(frozen.names[i] ?? "");
+            // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta; con dos equipos
+            // que se llaman igual, cada cartel lleva su cuenta corta (`nombreEnPantalla`).
+            const nombre = nombreEnPantalla(i);
             const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
             return (
               `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
