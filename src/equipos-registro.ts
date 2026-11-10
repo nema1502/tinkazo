@@ -23,7 +23,11 @@ import { cuentaDeLaSesion } from "./equipos/sesion";
  */
 
 const hayPollar = hasPollarKey(network.name);
-const hayGoogle = hayPollar && !enNavegadorDeApp(navigator.userAgent);
+// El navegador de una app (Instagram, Facebook…) no deja entrar con Google, aunque el sitio lo ofrezca: el aviso
+// manda a abrir el enlace en el navegador del teléfono. Sin Pollar en el sitio (compilación local) no hay aviso.
+const deApp = enNavegadorDeApp(navigator.userAgent);
+const enApp = hayPollar && deApp;
+const hayGoogle = hayPollar && !deApp;
 
 // El SDK de Pollar baja con la página quieta: abrir la ventana de Google tiene que salir del toque, sin esperas.
 // Con el registro de equipos apagado (VITE_EQUIPOS) la página no deja entrar a nadie: no hay para qué bajarlo.
@@ -38,6 +42,7 @@ if (raiz) {
     activo: equiposActivo(),
     red: network.name,
     hayGoogle,
+    enApp,
     // La sesión que ya está abierta en este celular (Google, Freighter o la cuenta de prueba): si hay una, no se pide
     // pegar la cuenta. Nada de esto abre una ventana ni pide permiso.
     cuentaRecordada: () =>

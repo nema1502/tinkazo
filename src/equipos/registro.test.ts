@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { Keypair } from "@stellar/stellar-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { T, t } from "../i18n";
+import { T, setLang, t } from "../i18n";
 import { guardarEquipoLocal } from "./celular";
 import { generarClave } from "../sala/cifra";
 import { descifrarEquipo } from "./datos";
@@ -97,6 +97,7 @@ async function llenar(m: Mundo, nombre = "Los Cóndores", integrantes = ["Ana", 
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  setLang("es");
 });
 
 describe("el markup de la página", () => {
@@ -205,6 +206,24 @@ describe("tu cuenta", () => {
     q<HTMLButtonElement>(m, "eqp-google").click();
     await vi.waitFor(() => expect(mensaje(m)).toBe(t("eqpErrGoogle")));
     expect(q<HTMLButtonElement>(m, "eqp-google").disabled).toBe(false);
+  });
+  it("en el navegador de una app, el aviso dice que Google no deja entrar y que se abra en el navegador del teléfono, en los dos idiomas", async () => {
+    for (const l of ["es", "en"] as const) {
+      setLang(l);
+      const m = await montar({ enApp: true, hayGoogle: false });
+      await vi.waitFor(() => expect(vista(m)).toBe("eqp-cuenta"));
+      const aviso = q(m, "eqp-en-app");
+      expect(aviso.hidden).toBe(false);
+      expect(aviso.textContent).toBe(T[l].eqpEnApp);
+      expect(q<HTMLButtonElement>(m, "eqp-google").hidden).toBe(true);
+      // El aviso no tapa la salida de siempre: la cuenta de Stellar sigue pegándose.
+      expect(q<HTMLButtonElement>(m, "eqp-otra").hidden).toBe(false);
+    }
+  });
+  it("sin navegador de app, el aviso no aparece", async () => {
+    const m = await montar({ enApp: false });
+    await vi.waitFor(() => expect(vista(m)).toBe("eqp-cuenta"));
+    expect(q(m, "eqp-en-app").hidden).toBe(true);
   });
   it("sin Google en este sitio, solo queda pegar la cuenta", async () => {
     const m = await montar({ hayGoogle: false });

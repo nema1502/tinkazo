@@ -33,6 +33,8 @@ export interface DepsDelRegistro {
   red: NetworkName;
   /** Hay entrada con Google en este sitio. */
   hayGoogle: boolean;
+  /** Hay entrada con Google en el sitio, pero se abrió dentro del navegador de una app (Instagram, Facebook…): Google no deja entrar desde ahí y el aviso manda al navegador del teléfono. */
+  enApp: boolean;
   /** La cuenta de la sesión abierta en este navegador, sea cual sea la vía (`cuentaDeLaSesion` en `sesion.ts`). */
   cuentaRecordada: () => Promise<string | null>;
   /** Abre Google y devuelve la cuenta. Falla con el motivo de la entrada (`popup-blocked`, `popup-closed`…). */
@@ -98,6 +100,9 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
     q<HTMLInputElement>("eqp-nombre").placeholder = "";
     for (let i = 0; i < MAX_INTEGRANTES; i++) q<HTMLInputElement>(`eqp-i${i}`).placeholder = tx("eqpIntegrante").replace("{n}", String(i + 1));
     q("eqp-google").hidden = !deps.hayGoogle;
+    const avisoApp = q("eqp-en-app");
+    avisoApp.hidden = !deps.enApp;
+    if (deps.enApp) avisoApp.textContent = tx("eqpEnApp");
     if (vista === "estado") pintarEstado();
     // El título acompaña el punto del equipo: anotado, aceptado o con cupón. Sin estado a la vista, el de siempre.
     const h1 = raiz.querySelector("h1");
