@@ -333,7 +333,7 @@ async function pasoDeFondos(browser, p, tema) {
     });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: freighterFalsa() });
     await sinSesionGuardada(page);
-    await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba` });
     await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
     await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
     await sleep(600);
@@ -808,7 +808,7 @@ async function chipsFueraYRetomando(browser, sinCuenta, p, tema) {
   try {
     await r.send("Emulation.setDeviceMetricsOverride", { width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil, screenWidth: p.w, screenHeight: p.h });
     await r.send("Page.addScriptToEvaluateOnNewDocument", { source: "(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', 'freighter'); } catch {} })()" });
-    await r.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+    await r.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
     const vi = await r.waitFor("document.querySelector('#wallet-box [data-estado=\"retomando\"]')", 6000);
     check(`${pre}: mientras la sesión guardada vuelve, el chip dice "Retomando…"`, vi.ok);
     if (vi.ok) {
@@ -836,7 +836,7 @@ async function chipsFueraYRetomando(browser, sinCuenta, p, tema) {
           ? `(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', '${guardada}'); localStorage.setItem('tinkazo.pollar.intent', 'google'); } catch {} })()`
           : "(() => { try { for (const k of Object.keys(localStorage)) if (/^tinkazo\\.session\\.kind\\.|^tinkazo\\.pollar\\.intent$/.test(k)) localStorage.removeItem(k); } catch {} })()",
       });
-      await l.send("Page.navigate", { url: `${base}/juegos.html?theme=${tema}` });
+      await l.send("Page.navigate", { url: `${base}/juegos.html?theme=${tema}&red=prueba` });
       await l.waitFor("document.readyState === 'complete' && !!document.querySelector('header .pg-auth')", 20000);
       await sleep(400);
       const c = JSON.parse(await l.eval(SONDA_CHIP));
@@ -879,7 +879,7 @@ async function run() {
           screenWidth: p.w, screenHeight: p.h,
         });
         await sinSesionGuardada(page);
-        await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
+        await page.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba` });
         await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
 
         const tapa = await resaltadoTapa(page);
