@@ -598,6 +598,20 @@ async function cajaYAccionAlaVista(page, quien, ctx) {
 }
 
 /**
+ * Los casos que solo falsean la simulación dejan pasar el resto de la sonda a la testnet de verdad. Si sus dos RPC se
+ * pasan del tope a la vez, la app dice primero que el registro no contesta y vuelve a mirar sola a los 15 s. Eso es
+ * la red de pruebas, no lo que el caso mide: se deja anotado y se espera la frase del caso. Medido el 9-nov-2026: el
+ * RPC de la SDF se pasó de los 4 s en 14 de 16 rondas y el de Ankr en 2, y juzgar la primera frase dio rojo en 4 de
+ * 24 pantallas con la app bien.
+ */
+async function esperarLaFraseDelCaso(page, quien, frase, tope = 90000) {
+  const leer = "(document.getElementById('red-estado').textContent || '')";
+  if (!TEXTO.sinRpc.test(await page.eval(leer))) return;
+  info(`${quien}: la testnet de verdad no contestó a tiempo y la app lo dijo; se espera a que vuelva a mirar`);
+  await page.waitFor(`${frase}.test(${leer})`, tope);
+}
+
+/**
  * La red de Stellar no contesta: los dos RPC cortados. Antes la app dejaba apretar "Sellar" y fallaba al rato,
  * con el motivo escrito junto a un botón que, si se apretaba la barra, quedaba fuera de la pantalla (20 de octubre
  * de 2026). Ahora lo mira antes: dice "El registro no contesta", la acción de ahí en adelante es "Probar ahora" (que
@@ -795,6 +809,7 @@ async function costoAlto(browser, vista, tema, completo = false) {
     const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && c.textContent.trim().length > 0; })()`, 60000);
     check(`${quien}: lo dice antes de sellar, sin que se apriete nada`, dijo.ok);
     if (!dijo.ok) return;
+    await esperarLaFraseDelCaso(page, quien, TEXTO.costoAlto);
     let { msg } = await cajaYAccionAlaVista(page, quien, ctx);
     check(`${quien}: la frase del caso`, TEXTO.costoAlto.test(msg.texto), `"${msg.texto.slice(0, 80)}"`);
     check(`${quien}: la acción es "Seguir sin sello" y "Probar ahora" queda aparte`, TEXTO.seguirSin.test(msg.boton) && msg.botones.length === 1 && TEXTO.probar.test(msg.botones[0]), `${msg.boton} / ${msg.botones.join(", ")}`);
@@ -810,9 +825,10 @@ async function costoAlto(browser, vista, tema, completo = false) {
     check(`${etiqueta} ${tema} · seguir sin sello: nada de "verificable" ni de XLM`, !/verific|XLM/i.test(msg.texto + msg.boton + msg.botones.join(" ")), msg.texto.slice(0, 80));
     check(`${etiqueta} ${tema} · seguir sin sello: todavía no se siguió`, !msg.sellada);
     await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-8-seguir-sin-sello.png`));
-    // "Esperar a la red" vuelve a mirar y no sigue.
+    // "Esperar a la red" vuelve a mirar y no sigue. Vuelve a mirar la testnet de verdad: si justo esa vez no contesta,
+    // la app reintenta sola a los 15 s, y por eso el tope alcanza para dos vueltas.
     await page.eval("[...document.querySelectorAll('#red-estado button')].find((b) => /Esperar a la red|Wait for the network/.test(b.textContent)).click(); true");
-    const volvio = await page.waitFor(`/Seguir sin sello|Continue without a seal/.test(document.getElementById('btn-freeze').textContent) && !/Sin sello, nadie|Without a seal, nobody/.test(document.getElementById('red-estado').textContent)`, 30000);
+    const volvio = await page.waitFor(`/Seguir sin sello|Continue without a seal/.test(document.getElementById('btn-freeze').textContent) && !/Sin sello, nadie|Without a seal, nobody/.test(document.getElementById('red-estado').textContent)`, 75000);
     check(`${etiqueta} ${tema} · seguir sin sello: "Esperar a la red" vuelve a la frase del caso y no sigue`, volvio.ok);
     // Y si de verdad se sigue: nada de lo que se lee dice "sellada" ni invita a comprobar (protocolo §8).
     if (volvio.ok) await seguirSinSelloDeVerdad(page, ctx, completo, `${etiqueta} ${tema}`);
