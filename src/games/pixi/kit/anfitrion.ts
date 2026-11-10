@@ -2,6 +2,9 @@ import { CanvasSource, Texture } from "pixi.js";
 import { T, getLang, t } from "../../../i18n";
 import { musicCue, type MusicStyle } from "../../../music";
 import { beep, fanfare, hum, note, wind } from "../../../sound";
+import { festejoPropio, golpePropio } from "../../../sonidos/carrera-eleccion";
+// Registra cómo suenan las candidatas de la carrera (sin elección, no cambia nada).
+import "../../../sonidos/carrera-uso";
 import { paceFactor, params, setGameLength } from "../../../state";
 import type { Emblema } from "../../emblemas";
 import { cargarEmblemas, emblemaCanvas, emblemasListos } from "../../emblemas-dibujo";
@@ -80,6 +83,7 @@ export const anfitrionTinkazo: Anfitrion = {
     tono: (hz, dur, timbre, vol) => beep(hz, dur, timbre, vol),
     nota: (grado) => note(grado),
     fanfarria: () => fanfare(),
+    propio: () => ({ golpe: golpePropio(), festejo: festejoPropio() }),
     despues: (ms, fn) => void setTimeout(fn, ms),
     viento: (dur, vol, hz0, hz1, semilla) => wind(dur, vol, hz0, hz1, semilla),
     zumbido: (hz, dur, vol0, vol1) => hum(hz, dur, vol0, vol1),

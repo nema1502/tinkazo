@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { alfabetico } from "./carrera-base";
 import { ctxDe, nombresDe } from "./carrera-prueba";
 import { duracionNominal, planCarrera, FINALISTAS, FIJOS, TARJETA } from "./carrera-show";
 import { CARTEL_S, SALIDA_PORTON, TANDA_MAX, grupoDeTandas, pasanPorTanda, tandasPara } from "./carrera-tandas";
+
+// Armar la recta prueba hasta 160 arreglos por ronda (`carrera-marcha.ts`): unos 40 ms por plan, y estas pruebas arman seiscientos.
+vi.setConfig({ testTimeout: 120_000 });
 
 const TAMANOS = [31, 40, 50, 60, 75, 100, 150, 160, 175, 200];
 
@@ -10,8 +13,8 @@ describe("las tandas: de 31 a 200 se arman series que se juntan", () => {
   it("hay tandas de 25 o menos, parejas (±1) y todas pasan lo mismo", () => {
     for (const n of TAMANOS) {
       const T = tandasPara(n);
-      // Las justas para que ninguna pase de 25; de 151 a 175, ocho más chicas (con siete no entra en los 90 s).
-      expect(T).toBe(n > 150 && n <= 175 ? 8 : Math.ceil(n / TANDA_MAX));
+      // Las justas para que ninguna pase de 25; de 126 a 175, ocho más chicas (con seis o siete no entra en los 90 s, ahora que las que pasan caminan).
+      expect(T).toBe(n > 125 && n <= 175 ? 8 : Math.ceil(n / TANDA_MAX));
       for (let s = 1; s <= 15; s++) {
         const { tandas, gente } = planCarrera(ctxDe(n, s)).datos as unknown as { tandas: { miembros: number[]; pasan: number[]; noPasan: number[] }[]; gente: number[] };
         expect(tandas).toHaveLength(T);

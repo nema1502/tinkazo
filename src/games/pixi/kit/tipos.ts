@@ -133,6 +133,11 @@ export interface Plan<P> {
   sentido: Direccion;
   /** Cuántos siguen en el segundo `t`: el único contador, arriba a la izquierda en todos los juegos (`marcador.ts`). */
   marcador(t: number): number;
+  /**
+   * Desde qué segundo el contador se apaga (en 0,3 s) hasta el golpe, donde vuelve ya en 1. Para el juego cuyo final no saca de a una: en la
+   * carrera las ocho corren hasta la meta y el número pasaba de 8 a 1 de golpe. Sin decir, el contador se ve siempre.
+   */
+  marcadorApagado?: number;
   /** La prueba del niño: en el segundo `t`, quién va adelante, hacia dónde, cuánto falta y qué acaba de pasar. */
   respuestas(t: number): Respuestas;
   /**
@@ -143,11 +148,14 @@ export interface Plan<P> {
   /** Datos que quedan anotados para los auditores (`data-*` del lienzo). */
   marcas?: Readonly<Record<string, string>>;
   /**
-   * Lo que el cartel de quien gana ya dice, para que no se repita encima. `sinAnuncio`: con un solo premio el relator no
-   * repite el nombre del cartel (con varios sí, y dice a todos). `sinMarcador`: en el celular, donde el cartel cae sobre el
-   * contador de arriba, el contador se va al caer el golpe.
+   * Lo que el juego pide distinto al coronar. Lo que el cartel de quien gana ya dice no se repite encima: `sinAnuncio`, con
+   * un solo premio la caja del relator se vacía al coronar (antes del golpe) y queda vacía hasta el final, sin repetir el
+   * nombre del cartel (con varios premios sí, y dice a todos); `sinMarcador`, en el celular, donde el cartel cae sobre el
+   * contador de arriba, el contador se va al caer el golpe. `sinLatidos`: entre la meta y el golpe no suena nada, ni los
+   * latidos del foco. `cartelConGolpe`: el cartel entra con el golpe y no un instante después (las dos, `OpcionesCorona`
+   * del estadio).
    */
-  alCoronar?: { sinAnuncio?: boolean; sinMarcador?: boolean };
+  alCoronar?: { sinAnuncio?: boolean; sinMarcador?: boolean; sinLatidos?: boolean; cartelConGolpe?: boolean };
   /** Lo propio del juego: el kit no lo mira. */
   datos: P;
 }

@@ -43,9 +43,9 @@ describe("la carrera nueva: el plan es puro y cumple la regla del niño", () => 
     expect(sin.arco).toBe(vieja.arco);
   });
 
-  it("al caer el golpe, la nueva no repite el nombre en el relator ni deja el contador bajo el cartel; la de siempre sigue igual", () => {
-    expect(planCarrera(ctxDe(18, 7), NUEVA).alCoronar).toEqual({ sinAnuncio: true, sinMarcador: true });
-    expect(planCarrera(ctxDe(18, 7)).alCoronar).toBeUndefined();
+  it("al coronar, ninguna de las dos repite el nombre en el relator ni suena antes del golpe; la nueva además no deja el contador bajo el cartel", () => {
+    expect(planCarrera(ctxDe(18, 7), NUEVA).alCoronar).toEqual({ sinAnuncio: true, sinMarcador: true, sinLatidos: true, cartelConGolpe: true });
+    expect(planCarrera(ctxDe(18, 7)).alCoronar).toEqual({ sinAnuncio: true, sinLatidos: true, cartelConGolpe: true });
   });
 
   it("la duración es la de siempre: la recta nueva mide lo mismo (solo la foto del duelo suma unos segundos)", () => {

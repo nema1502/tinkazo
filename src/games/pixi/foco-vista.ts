@@ -49,7 +49,7 @@ function hornear(ancho: number, alto: number, pintar: (cx: CanvasRenderingContex
 }
 
 /** Las texturas del foco, todas blancas (el color se pone con `tint`) menos la del hueco. */
-function armarTexturas(): Record<"luz" | "hueco" | "rayos" | "cono" | "anillo" | "marco" | "abanico", Texture> {
+function armarTexturas(tres = false): Record<"luz" | "hueco" | "rayos" | "cono" | "anillo" | "marco" | "abanico", Texture> {
   return {
     // El resplandor: blanco al centro, transparente en el borde.
     luz: hornear(256, 256, (cx, L) => {
@@ -72,11 +72,16 @@ function armarTexturas(): Record<"luz" | "hueco" | "rayos" | "cono" | "anillo" |
       cx.fillStyle = g;
       cx.fillRect(0, 0, L, L);
     }),
-    // Dieciocho rayos que se apagan hacia afuera.
+    // Dieciocho rayos que se apagan hacia afuera. En el 3D salen de un hueco del tamaño de quien gana y
+    // arrancan más tenues: encima del modelo, con mezcla `screen`, la dejaban blanca y sin forma.
     rayos: hornear(512, 512, (cx, L) => {
       const c = L / 2;
       const g = cx.createRadialGradient(c, c, 0, c, c, c);
-      g.addColorStop(0, "rgba(255,255,255,0.95)");
+      if (tres) {
+        g.addColorStop(0, "rgba(255,255,255,0)");
+        g.addColorStop(0.25, "rgba(255,255,255,0)");
+        g.addColorStop(0.37, "rgba(255,255,255,0.55)");
+      } else g.addColorStop(0, "rgba(255,255,255,0.95)");
       g.addColorStop(0.6, "rgba(255,255,255,0.4)");
       g.addColorStop(1, "rgba(255,255,255,0)");
       cx.fillStyle = g;
@@ -179,7 +184,11 @@ export class FocoVista {
   private ondas: Sprite[] = [];
   private marcos: Sprite[] = [];
 
-  constructor() {
+  /**
+   * `tres`: el foco va sobre la carrera en 3D (`?motor=3d`). El lienzo de PixiJS queda transparente encima del
+   * modelo 3D, y lo que se suma con mezcla `screen` sobre quien gana la lava. Sin el dato, el foco es el del 2D.
+   */
+  constructor(private readonly tres = false) {
     this.root.visible = false;
   }
 
@@ -193,7 +202,7 @@ export class FocoVista {
   private armar(): void {
     if (this.armado) return;
     this.armado = true;
-    const tx = (this.tx = armarTexturas());
+    const tx = (this.tx = armarTexturas(this.tres));
     const solido = (): Sprite => {
       const s = sprite(Texture.WHITE, 0, 0);
       return s;
@@ -283,7 +292,8 @@ export class FocoVista {
     this.luz.position.set(x, y);
     this.luz.tint = ORO;
     this.luz.width = this.luz.height = r * (2 + 1.7 * e.luz) * e.pulso;
-    this.luz.alpha = 0.6 * e.luz;
+    // En el 3D, un poco más tenue: es lo que más aclara a quien gana (sin él, su luminancia media baja un cuarto).
+    this.luz.alpha = (this.tres ? 0.5 : 0.6) * e.luz;
     this.rayos.visible = e.rayos > 0.001;
     this.rayos.position.set(x, y);
     this.rayos.tint = BLANCO;

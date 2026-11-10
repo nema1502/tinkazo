@@ -2,7 +2,7 @@
 
 # Tinkazo 🦙
 
-### Verifiable draws for communities, sealed before the randomness exists and checked on Stellar.
+### Verifiable winner selection for communities and promotions, sealed before the randomness exists and checked on Stellar.
 
 [![Live demo](https://img.shields.io/badge/demo-tinkazo.app-e93d9c?style=flat-square)](https://tinkazo.app)
 [![Soroban contract on testnet](https://img.shields.io/badge/Soroban-live%20on%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A)
@@ -18,20 +18,20 @@
 
 ---
 
-Every community has things to share out: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
+Every community has things to share out: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards. And the winner rarely has a way to know the selection was fair.
 
-**Tinkazo makes the draw checkable by anyone, from their phone.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game, and anyone can re-run the whole draw in their browser from a link.
+**Tinkazo makes the draw checkable by anyone, from their phone.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen animated reveal, and anyone can re-run the whole draw in their browser from a link.
 
 Participants need nothing: no wallet, no account, no app.
 
 The draw is where it starts. What Tinkazo is for is broader: whenever people share something out (a prize, a speaking slot, a grant, a spot on a trip), it should be fair, and anyone should be able to check it from their phone, without knowing there is a blockchain underneath.
 
-## Not gambling
+## Participation is free
 
-Tinkazo decides who gets something that is already being given away. It is not a way to bet or to sell chances:
+Tinkazo selects who receives something that is already being given away. Nobody pays to take part:
 
-- **Entering is free, always.** No tickets and no entry fees. The [terms](https://tinkazo.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
-- **Nobody can bet on the outcome.** There are no odds and no pot: nobody puts money in, so nobody wins anyone else's money.
+- **Entering is free, always.** No entry fees and nothing to buy. The [terms](https://tinkazo.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
+- **Nobody can bet on the outcome, because nobody pays to take part.** The prize is provided by the organizer or a sponsor, never by the participants, so nobody's winnings come out of other participants' pockets.
 - **The contract holds no funds.** It stores a list fingerprint and a result, nothing else.
 - **Tinkazo never touches what is shared out.** The organizer hands it over, as always, and Tinkazo takes no cut of it.
 
@@ -58,14 +58,14 @@ sequenceDiagram
 1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records, among other things, the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
 2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
 3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
-4. **Show.** One of eight full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+4. **Show.** One of ten full-screen reveals tells the result. The winner is already fixed when the animation starts; the reveal only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match. If you ran several draws at the same event, the [event link](docs/evento.md) puts them on one page.
 
 The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md) ([English translation](docs/protocol.en.md)), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
 
 ## Why Stellar
 
-- **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification costs **0.003 XLM**; a whole draw, seal plus draw, costs **0.76 XLM, about US$0.16**, measured on testnet on October 3, 2026, and almost all of it is storage rent ([breakdown](docs/deployments.md)).
+- **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification itself costs **0.003 XLM** (measured on testnet on October 3, 2026). The rest of a draw's cost is storage rent, which the network sets and has changed more than once ([history, with dates](docs/deployments.md)).
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through Pollar, which holds the key for them (the full flow with a real Google session is still being tested), with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
@@ -79,40 +79,42 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | History-archive check | Command-line tool | `node scripts/verificar-archivo.mjs <network> <tx hash>` reads the public Stellar history archives of several organizations and confirms that a seal or draw transaction was in a ledger and when it closed. Green only when two organizations return the same ledger header ([protocol §7.2](docs/protocol.en.md)) |
-| Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Ten animated reveals | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
-| Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |
+| Quality gates | Tests in CI, auditors before every push | More than 4,700 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |
 
-Tested with a thousand participants (September 22, with the previous engine): the draw ran at 60 frames per second and anchored the same way. Today's games are built for up to 200 on screen.
+Tested with a thousand participants (September 22, with the previous engine): the draw ran at 60 frames per second and anchored the same way. Today's reveals are built for up to 200 names on screen.
 
-**Who was actually in the room.** In the first real Luma export we tried, 67 people had registered and 35 checked in. Drawing from the whole export would have handed half the chances to people who were not there. The import window proposes those who checked in, says who is left out and why (didn't come, pending, invited, declined), and lets the organizer tick someone who came but was never checked in. The file never leaves the browser, and only names go into the draw.
+**Who was actually in the room.** In the first real Luma export we tried, 67 people had registered and 35 checked in. Drawing from the whole export would have given people who were not there half of the places in the draw. The import window proposes those who checked in, says who is left out and why (didn't come, pending, invited, declined), and lets the organizer tick someone who came but was never checked in. The file never leaves the browser, and only names go into the draw.
 
 <div align="center">
 <img src="docs/capturas/readme/importar.webp" alt="The import window: a Luma export with 67 rows, 35 who checked in selected, and the breakdown of who is left out" width="860">
 </div>
 
 <div align="center">
-<img src="docs/capturas/readme/partidas.webp" alt="Real games recorded from the site: the Oruro Carnival, the aguayo, the Chovena ring freezing when the music stops, spinning tops, the La Paz cable car, the piñata, the frog toss bouncing off the frog's lip, the cards of Who is it? flipping and the llama race finish, where Carlos Choque wins" width="720">
+<img src="docs/capturas/readme/partidas.webp" alt="Real games recorded from the site: the Oruro Carnival, the aguayo, the Chovena ring freezing when the music stops, spinning tops, the La Paz cable car, the piñata, the frog toss bouncing off the frog's lip, the cards of Who is it? flipping and the llama race finish, where Carlos Choque is selected" width="720">
 </div>
 
 ## The show
 
-Fairness is math; the show is what makes a room care. Eight games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
+Fairness is math; the reveal is what makes a room care. Ten reveals, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
 
-| Game | What it is |
+| Reveal | What it is |
 |---|---|
 | Llama Race | Eight lanes across the Andes |
-| Sapo | The frog toss from fairs and patios: a hole for each name around the frog; rings hit, dance on a rim and roll out, and the last one drops into the winner's |
+| Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one reveal where the room claps along and freezes with the cut |
 | Spinning Tops | The schoolyard game: tops thrown into a chalk ring clash and knock each other out, down to a head-to-head |
-| Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one game where the room claps along and freezes with the cut |
-| Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
-| Wheel | The classic, readable even with two people |
+| Sapo | The frog toss from fairs and patios: a hole for each name around the frog; rings hit, dance on a rim and roll out, and the last one drops into the selected name's hole |
+| Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside is the one selected |
+| La Entrada | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable, one per group; at each station a whole group gets off |
-| Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
+| Guajojó | A forest trail at night: while the guajojó sings, everyone walks; when it goes quiet, they freeze, and whoever snaps a twig sits down. The one still standing at dawn is selected |
+| Toborochi | The toborochi in bloom, the tree of Santa Cruz: names arrive eight at a time and the south wind carries the flowers off little by little, until the finalists remain |
+| Wheel | The classic, readable even with two people |
 
 **None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
 
-A camera director frames every game like a broadcast: it follows the leader, pushes in on the scare, slows down for the photo finish and shakes on impact. The games run on PixiJS, and where a device has no WebGL the previous engine takes over, so a draw never goes blank.
+A camera director frames every reveal like a broadcast: it follows the leader, pushes in on the scare, slows down for the photo finish and shakes on impact. The reveals run on PixiJS, and where a device has no WebGL the previous engine takes over, so a draw never goes blank.
 
 Andean music with a beat plays in the background and follows the tension (the Chovena brings its own Chiquitano music, with a cane flute, a leather-snared drum and a bass drum, and its cut is the game itself), and goes silent for a breath right before every winner; short captions call each moment on screen, and after the winner a card explains a piece of the story with its primary source.
 
@@ -128,7 +130,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 | Changing the list after sealing | The fingerprint changes, and the one that counts was recorded before the seed |
 | Withholding an unwanted result | `draw` is permissionless: anyone can finalize it, and the winner is the same |
 | Drawing twice | The contract keeps the first result and rejects another |
-| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all eight |
+| A reveal showing another winner | Reveals receive the winner already decided, and an auditor checks it in all ten |
 | Taking over the contract | It has no admin, it can't be upgraded and it holds no funds |
 
 **What stays open, and what stands against it**
@@ -160,23 +162,15 @@ That is why Tinkazo does not publish yet another verifier crate. Its on-chain ch
 
 ## Costs
 
-Measured on testnet on October 3, 2026, not estimated: what the network charged, per Horizon. XLM at US$0.215.
+What a draw costs is set by the network, not by us, and it moves. Almost all of it is storage rent, and Stellar changes that rate: on September 16, 2026 the same contract paid 0.18 XLM per draw on testnet, three weeks later testnet rent had quadrupled it, and on October 25 it jumped far higher when the network's live state crossed its target, until the network raised that target. The one part that stays put is the BLS verification: **0.003 XLM**, measured on testnet on October 3, 2026.
 
-| | XLM | US$ |
-|---|---|---|
-| Seal a draw | 0.42 | 0.090 |
-| Draw, including BLS verification | 0.34 | 0.074 |
-| **Total per draw** | **0.76** | **0.16** |
-| Mainnet: deploy once (September 16 projection) | about 16 | about 3 |
-| Mainnet: keep the contract alive (same) | about 49 a year | about 10 a year |
-
-Almost all of the cost is storage rent, and the network sets that rate: on September 16 the same contract paid 0.18 XLM per draw, and in three weeks testnet rent quadrupled it. The BLS verification itself costs 0.003 XLM. Mainnet gets measured at deploy time. **Verifying is always free.**
+The dated measurements and the mainnet projections are in [docs/deployments.md](docs/deployments.md). The per-draw table that used to be here was a single testnet reading from October 3, and after the rent changes it no longer described what a draw costs; mainnet gets measured when the contract is deployed. **Verifying is always free.**
 
 ## Quality
 
 Ten auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 
-- **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
+- **Reveal auditor**, 20 checks per reveal against live drand. The one that matters: the name on screen is the one the protocol fixed.
 - **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
 - **Emotion auditor**, sixteen seeds per game: the story arcs vary and the winner's mid-race position does not give it away.
 - **Sound auditor**, which hooks every oscillator and measures the effects' pitch, register, volume and gaps, with the music counted apart.
@@ -207,7 +201,7 @@ Requires Node 22+ and pnpm 11. Copy `.env.example` to `.env.local`: the Pollar k
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # 205 tests, including protocol v2 against the shared vectors
+pnpm test         # more than 4,700 tests, including protocol v2 against the shared vectors
 pnpm build
 ```
 
@@ -243,7 +237,7 @@ The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
 
 ## Contributing
 
-Issues and pull requests are welcome. **If you find a way to skew a draw, open an issue**: it is the most useful report there is. To add a game, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
+Issues and pull requests are welcome. **If you find a way to skew a draw, open an issue**: it is the most useful report there is. To add a reveal, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
 
 ## License
 

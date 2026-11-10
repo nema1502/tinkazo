@@ -18,6 +18,7 @@ vi.mock("./anchor", () => ({
   escribirError: async () => undefined,
   hideTxStatus: () => undefined,
   margenParaAprobar: async () => 0,
+  pagaElPortero: async () => false,
   precargarParaElSorteo: () => undefined,
   resolverSelloEnLaRed: async () => null,
   sealOnChain: async () => {
@@ -27,7 +28,7 @@ vi.mock("./anchor", () => ({
   showTxStatus: () => undefined,
   stepLabel: (paso: string) => paso,
 }));
-vi.mock("./sello-seguro", () => ({ leerPendiente: () => null, guardarPendiente: () => undefined, sellarSinDuplicar: async () => ({ raffleId: 1n, txHash: "H", round: 1, ts: 1 }) }));
+vi.mock("./sello-seguro", async (orig) => ({ ...(await orig<typeof import("./sello-seguro")>()), leerPendiente: () => null, guardarPendiente: () => undefined, sellarSinDuplicar: async () => ({ raffleId: 1n, txHash: "H", round: 1, ts: 1 }) }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: async () => false, protegerLaCuenta: async () => false }));
 vi.mock("../contar", () => ({ contar: () => undefined, errorContable: (c: string) => c }));
 vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, STAND_ESPERA_S: 3, enEnsayo: () => h.ensayo, enStand: () => false, sinGrabar: () => h.ensayo }));
@@ -61,7 +62,7 @@ const JUEGOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien",
 
 function armarPagina(): void {
   document.body.innerHTML =
-    `<button id="btn-freeze"></button><input id="prize" value=""><select id="nw"><option value="1">1</option></select><div id="seal-status"></div>` +
+    `<button id="btn-freeze"></button><input id="prize" value=""><input id="nw" type="number" value="1"><div id="seal-status"></div>` +
     ["freeze-hint", "free-rule", "sec-frozen", "k-n", "k-digest", "k-status", "frozen-ts", "wheel-cap", "juego-actual", "rec-sel-nota"].map((id) => `<div id="${id}"></div>`).join("") +
     `<p id="juego-nota" hidden></p><div id="gamepick">${JUEGOS.map((g) => `<button id="g-${g}"><span>${g}</span></button>`).join("")}</div>`;
   Element.prototype.scrollIntoView = () => undefined;

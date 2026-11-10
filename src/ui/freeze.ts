@@ -8,7 +8,7 @@ import { esCostoAlto } from "../stellar/chequeo-red";
 import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
-import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, pagaElPortero, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
@@ -21,6 +21,7 @@ import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
+import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable, origenActual } from "../contar";
@@ -215,8 +216,8 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
-/** Cuántos premios se sortean: el selector de "Cuántos ganan", que con la lista sellada ya no cambia. */
-const premiosElegidos = (): number => Math.max(1, parseInt($<HTMLSelectElement>("nw").value, 10) || 1);
+/** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
+const premiosElegidos = (): number => ganadoresPedidos();
 
 export function pintarRecomendacion(n: number): void {
   const botones = new Map<Game, HTMLElement>();
@@ -568,9 +569,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   const anchoring = conCuenta && !sinSello;
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
-  // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
+  // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
-  // elegir el juego, y la línea que guía dice que de verdad son unos 45.
+  // elegir el juego, y la línea que guía dice que de verdad es cerca de un minuto.
   const lead = anchoring
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
     : sinSello
@@ -582,7 +583,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           : LEAD_SECONDS;
   let round = targetRound(ts, lead);
   let prize = $<HTMLInputElement>("prize").value.trim();
-  let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
+  let numWinners = Math.min(ganadoresPedidos(), names.length);
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -627,7 +628,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // - Si no se sabe si entró (un corte, una respuesta que no llegó), primero se averigua.
       //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
       // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
-      const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      // - Si la comisión la paga el portero del patrocinio, la primera ronda nace a 65 s y no a 45:
+      //   ese camino hace más llamadas a la red (`MARGEN_CON_PORTERO_S` en sello-seguro.ts).
+      const [seguro, extra, conPortero] = await Promise.all([import("./sello-seguro"), margenParaAprobar(), pagaElPortero({ pagarConMiCuenta: !!opciones.pagarConMiCuenta })]);
       const contrato = network.contractId ?? "";
       const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
       // Sin un intento pendiente lo próximo es armar la transacción: la ronda se elige
@@ -635,11 +638,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // para que bajarlo no se coma el margen. Con un intento pendiente, primero se
       // averigua si entró, como siempre, y eso no necesita el cliente.
       if (!previo) await clienteListo();
-      const anclado = lead + extra;
-      const rondaNueva = (): { round: number; ts: number } => {
-        const ahora = Math.floor(Date.now() / 1000);
-        return { round: targetRound(ahora, anclado), ts: ahora };
-      };
+      // Si la ronda de antes no quedó grabada, `sello-seguro.ts` pide la próxima más lejos. La cuenta
+      // regresiva y la hora del sorteo salen de la ronda que quede (`app.frozen.round`), no de este número.
+      const rondaNueva = seguro.rondasDesde(seguro.margenDelPrimerIntento(lead, { conPortero, paraAprobar: extra }));
       ({ round, ts } = rondaNueva());
       const sello = await seguro.sellarSinDuplicar(
         { round, ts },
@@ -664,7 +665,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
             return selloSinGrabar(e);
           },
           guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
-          avisar: (que) => onStep(que === "verificando" ? "verifying" : "retrying"),
+          avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
         previo?.intento ?? null,
       );
@@ -677,7 +678,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         prize = previo.premio;
         numWinners = sello.retomado.numWinners;
         ponerPremio(prize);
-        $<HTMLSelectElement>("nw").value = String(numWinners);
+        ponerGanadores(numWinners);
       }
       // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
       showTxStatus("seal-status", "confirmed", sealTx);
@@ -695,7 +696,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
-          if ((await protegerLaCuenta()) && bytesToHex(listHash(parseNames())) === hash) {
+          if ((await protegerLaCuenta(btn, "seal-status")) && bytesToHex(listHash(parseNames())) === hash) {
             await sellar({ ...opciones, saltarChequeo: true, protegida: true });
             return;
           }
@@ -743,7 +744,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
-      await escribirError(status, e, "sello");
+      await escribirError(status, e, "sello", numWinners);
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -978,7 +979,7 @@ export function resumeFrozen(e: {
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
   ponerPremio(e.prize);
-  $<HTMLSelectElement>("nw").value = String(Math.max(1, Math.min(32, e.numWinners)));
+  ponerGanadores(e.numWinners);
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
   app.frozen = {
     names: e.names,
@@ -1120,7 +1121,7 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   const text = T[lang].rules({
     prize: f.prize,
     count: f.names.length,
-    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, f.names.length),
+    winners: Math.min(ganadoresPedidos(), f.names.length),
     listHash: f.listHash,
     sealedAt: when(f.ts),
     round: f.round,
@@ -1179,7 +1180,7 @@ export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   const text = T[lang].rulesPre({
     prize: $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " "),
     count,
-    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, count),
+    winners: Math.min(ganadoresPedidos(), count),
     verifyUrl: `${location.origin}/como-funciona.html`,
   });
   try {

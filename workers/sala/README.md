@@ -1,11 +1,11 @@
 # La sala del stand
 
-Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee un QR, escriba su nombre o apodo en el celular y lo vea aparecer en la pantalla grande. **Solo alimenta rondas de ejemplo** (el modo stand del sitio): esos nombres nunca van a un sorteo sellado ni a un comprobante.
+Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee un QR, escriba su nombre o apodo en el celular y lo vea aparecer en la pantalla grande. **Solo alimenta rondas de ejemplo** (el modo stand del sitio): esos nombres nunca van a un sorteo sellado ni a un comprobante. La única excepción son los **equipos de un evento** (ver [más abajo](#los-equipos-de-un-evento-registro-con-cuenta)): ahí lo que va a la lista sellada es la cuenta pública del equipo, que se anota con su consentimiento; el nombre del equipo y los de sus integrantes siguen cifrados y no salen de la sala.
 
 Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `workers/enlaces`), en la misma cuenta: un error de despliegue acá no puede tumbar los enlaces de los comprobantes. La cuenta, en cambio, comparte los 100.000 pedidos por día del plan gratis (ver [Plan y gasto](#plan-y-gasto)).
 
 - **Lo que guarda son bytes cifrados.** El navegador de la pantalla genera una clave (AES-GCM, 16 bytes) y la pone en el QR, después del `#`: `s.tinkazo.app/<id>#<clave>`. El fragmento no llega a ningún servidor. El celular cifra el nombre con esa clave antes de mandarlo, así que el servicio no puede leerlo.
-- **No guarda** nombres en claro, la clave, direcciones IP, navegador ni hora por persona. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección).
+- **No guarda** nombres en claro, la clave, direcciones IP, navegador ni hora por persona. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección). Para el tope de altas de equipos por conexión, cada sala guarda una huella del grupo de dirección con una sal suya: queda hasta que se borra la sala, y las ventanas de 10 minutos que ya pasaron se limpian con cada envío.
 - **Se borra solo:** una alarma a las 10 horas de creada hace `deleteAll()`; antes, «Cerrar la sala» hace lo mismo. Los nombres cifrados quedan en el objeto hasta entonces (no 5 minutos): una compu que se cuelga en una feria no puede perder la lista, y el servicio sigue sin poder leerlos.
 - **Quitar un nombre** con un toque lo saca también del objeto.
 - **El filtro de palabras corre en la pantalla** (`src/sala/filtro.ts`), no acá: ningún servidor lee los nombres. Lo que coincide queda en «Para revisar».
@@ -23,6 +23,42 @@ Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `
 | `GET /<id>` | La página del celular: un HTML con su CSS y su JS adentro, en español y en inglés. Sin bajar el sitio, sin depender de Vercel y sin CORS | |
 
 Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N}`, `{"t":"nombre","n","d"}`, `{"t":"quitado","n"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+
+### Los equipos de un evento (registro con cuenta)
+
+La misma sala sirve para que los equipos de un evento (Space Apps y parecidos) se anoten con su cuenta de Stellar desde el celular de su encargado: la página `equipos.html` del sitio (no la de este Worker) abre el QR, y habla con estos pedidos desde `tinkazo.app`. Detrás de la bandera `VITE_EQUIPOS` del sitio; el Worker no sabe de banderas: sin registro armado, nadie puede anotar nada (`409`).
+
+| Pedido | Qué hace | Límite |
+| --- | --- | --- |
+| `PUT /v1/sala/<id>/config` | Quien organiza arma el registro: `{"modo","evento","cuenta"}`. `modo` es `cupon` (el equipo queda anotado y recibe el cupón gratis) o `sorteo` (pide participar, quien organiza lo acepta y tiene que haber hecho un sorteo con su cuenta). Con el token. `204` | 1.000 bytes |
+| `GET /v1/sala/<id>/publico` | Sin token: `{"config","equipos"}` (cuántos hay). Es lo que lee la página del celular antes de pedir nada | |
+| `POST /v1/sala/<id>/equipos` | `{"cuenta","d","llave"}`: la cuenta `G…` en claro (es pública), los datos del equipo cifrados con la clave del QR (de 30 a 1.100 bytes) y la llave del celular (ver abajo). Solo desde el sitio. `201 {"n","estado"}`; con la misma cuenta y la misma llave cambia los datos y conserva el número y el estado; con otra llave, `409 {"error":"ajena"}` y no cambia nada. Sin llave o con una mal formada, `400` | 200 por sala; 120 por minuto por sala (los mismos de los nombres); por conexión, 60 equipos nuevos y 300 envíos cada 10 minutos (`429 {"error":"cupo-conexion"}` con `Retry-After`) |
+| `GET /v1/sala/<id>/equipos?desde=V` | Con el token: los equipos que cambiaron desde la versión `V` (`[{"n","cuenta","d","estado","v"}]`). `v` sube con cada alta o cambio de estado | |
+| `GET /v1/sala/<id>/equipos/<cuenta>` | Sin token: `{"n","estado"}` de ese equipo, o `404`. Lo pregunta el celular del encargado cada 15 s mientras la página está a la vista | |
+| `PUT /v1/sala/<id>/equipos/<n>` | Con el token: `{"estado"}`, uno de `solicitud`, `aceptado`, `sorteo`, `cupon`. `204` | |
+| `DELETE /v1/sala/<id>/equipos/<n>` | Con el token: saca un equipo. `204` | |
+
+Mensajes nuevos del socket: `{"t":"equipo","v","n","cuenta","d","estado"}` (alta o cambio) y `{"t":"equipo-quitado","n"}`. El nombre del equipo y los de sus integrantes nunca llegan en claro: la cuenta es lo único que este servicio ve de un equipo. Una sala creada antes de este cambio no tiene la tabla de equipos; se crea al configurar el registro. Se borra con la sala (10 horas, o «Cerrar la sala»).
+
+#### La llave del celular: nadie pisa el registro de otro equipo
+
+La dirección de una cuenta es pública (se ve en la pantalla y en la red), así que no alcanza para decidir quién puede cambiar los datos de un equipo. En la primera alta, la página del celular inventa una llave (16 bytes al azar, en base64url, `llaveDelCelular` en `src/equipos/celular.ts`), la guarda en ese navegador (una por sala, las últimas ocho) **antes** de mandarla, y la manda con el alta. La sala guarda solo su huella SHA-256 junto al equipo (`workers/sala/src/registro.ts`) y nunca la devuelve.
+
+- Para volver a mandar esa cuenta (corregir los nombres, reintentar después de un corte) hay que presentar la misma llave. Sin ella, `409 {"error":"ajena"}`, el equipo queda como estaba y la pantalla no recibe nada.
+- El celular que recarga la página o vuelve más tarde tiene la llave en su navegador: ve su estado (eso no pide llave: `GET /equipos/<cuenta>` es público, como la cuenta) y puede corregir sus datos.
+- Un equipo que perdió el celular o borró el navegador ve «Esta cuenta ya está anotada desde otro celular. Pedile a quien organiza que la quite de la lista y volvé a anotarte.». Quien organiza lo quita con su token (`DELETE /equipos/<n>`, el botón «Quitar» de su pantalla): la fila se va con la huella y la cuenta queda libre para anotarse desde cualquier celular.
+
+#### El tope por conexión
+
+Las altas y los envíos de equipos se cuentan por grupo de dirección (la IPv4 entera, o el bloque /64 en IPv6) en ventanas fijas de 10 minutos: **60 equipos nuevos y 300 envíos** (altas, correcciones e intentos rechazados) por ventana. Es generoso a propósito: en un evento decenas de celulares salen por la misma red del lugar, y con esto 40 equipos detrás de una sola dirección se anotan y corrigen varias veces en diez minutos sin tocarlo, mientras que una sola conexión no llena los 200 lugares en dos minutos (a lo sumo 120, si cruza el cambio de ventana). El tope de envíos se mira antes que el de 120 por minuto de la sala, así que una sola conexión tampoco lo gasta para todos. La dirección no se guarda: cada sala tiene una sal al azar y guarda una huella del grupo con sus cuentas de la ventana en curso (las ventanas que pasaron se borran en cada envío), y todo se borra con la sala.
+
+Lo que no frena: alguien con muchas direcciones distintas (eso es la regla de Cloudflare de [Muchas direcciones](#muchas-direcciones)), ni que alguien anote primero una cuenta ajena que todavía no se anotó (eso lo resuelve comprobar que quien anota controla la cuenta, aparte de esto). Quien organiza puede quitar cualquier equipo.
+
+#### Versiones que van juntas
+
+Este protocolo (`llave` en el alta, `ajena` y `cupo-conexion`) pide subir **juntos** el Worker y el sitio de esta misma versión. El Worker publicado hasta ahora es anterior al registro de equipos (con él, el registro del sitio no abre), así que no hay celulares viejos que cuidar. Un sitio anterior a este cambio no puede anotar equipos contra el Worker nuevo (`400`, por falta de llave), y un Worker con equipos pero sin este cambio aceptaría el alta del sitio nuevo sin protegerla (ignora la llave). Se despliega el Worker y en seguida el sitio, antes de abrir un registro. La tabla `equipos` nace con la columna de la huella; una sala armada con un Worker anterior a este cambio que tuviera la tabla sin esa columna no puede anotar equipos (se cierra y se arma otra).
+
+Qué significa cada estado y cuándo lo cambia la pantalla de quien organiza (con lo que lee de la cadena: los pagos de la cuenta del evento y los sellos del contrato por organizador) está en `src/equipos/estado.ts`.
 
 **Los topes viven en los objetos, porque ahí son exactos:** 400 nombres por sala (exacto, en SQLite) y 120 por minuto (en memoria: si el objeto se desaloja a mitad de un minuto, ese minuto caben otros 120; solo frena el ritmo, el de 400 no se reinicia); 5 salas por dirección por hora (en IPv6, por bloque /64) y 100 por día en un objeto aparte (`Cupos`), los dos en su SQLite: dormirse o reiniciarse no los pone en cero. El límite es por sala y no por dirección porque todo un recinto puede salir por una sola IP.
 
@@ -43,11 +79,15 @@ Cuentas de una feria (estimaciones, no medidas): 300 nombres son unos 300 pedido
 ## Probar
 
 ```bash
-# En local (workerd, sin tocar Cloudflare). VIDA_PRUEBA_MS acorta la vida de la sala para probar la alarma.
-npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:4000
-node probar.mjs http://127.0.0.1:8792            # unos 40 chequeos; deja dos salas
+# En local (workerd, sin tocar Cloudflare). VIDA_PRUEBA_MS acorta la vida de la sala. La prueba principal tarda más de un minuto,
+# así que la sala tiene que vivir más que eso: diez minutos.
+npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:600000
+node probar.mjs http://127.0.0.1:8792            # unos 50 chequeos (con la llave de cada celular y el tope por conexión); crea tres salas y no deja ninguna
 node probar.mjs http://127.0.0.1:8792 --cupos    # el tope de 5 salas por hora (queda guardado: para repetirlo, otra carpeta con --persist-to o esperar una hora)
 node probar.mjs http://127.0.0.1:8792 --tope     # 400 nombres por sala: cinco minutos
+# La alarma que borra la sala sola se prueba aparte, con una vida corta (conviene un Worker nuevo, por el cupo de salas por hora):
+npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:4000
+node probar.mjs http://127.0.0.1:8792 --alarma
 ```
 
 De punta a punta, con Chrome (desde la raíz del repo): `pnpm build && pnpm preview --port 4391`, `wrangler dev --port 8792 --var VIDA_PRUEBA_MS:600000` y `CDP_PORT=9733 node scripts/probar-sala.mjs --base http://localhost:4391 --sala http://127.0.0.1:8792`. El sitio solo acepta otro servicio con `?sala=` y desde `localhost`.

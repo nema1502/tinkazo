@@ -3,9 +3,10 @@ import { gsap } from "gsap";
 import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
+import { LCOLORS, anotarGolpe, auditaCon, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
 import { beep, note } from "../../sound";
+import { finalPropio } from "../../sonidos/carrera-eleccion";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
@@ -182,6 +183,16 @@ export interface PixiStage {
    * (en pantalla; el texto queda como se escribió, con el nombre bien escrito).
    */
   say(msg: string, heat?: number, grito?: boolean): void;
+  /**
+   * Lo dice solo a los lectores de pantalla, en una región propia (`#commentary-sr`): para cuando la caja del relator
+   * queda vacía a propósito y el nombre de quien gana igual tiene que oírse.
+   */
+  anunciarLector(msg: string): void;
+  /**
+   * El foco de la corona va sobre un modelo 3D que ya arrancó: los rayos salen de un hueco y el resplandor baja a 0,5
+   * (`FocoVista`). Solo lo pide la carrera, y solo cuando su 3D arrancó. Hay que pedirlo antes de armar la corona.
+   */
+  focoSobreTres(): void;
   face(name: string): Texture;
   text(s: string, style: TextStyleOptions): Text;
   /**
@@ -233,7 +244,7 @@ export interface PixiStage {
    * `caraPropia` da la textura que reemplaza al glifo cuadrado de la persona (el emblema de figura de la carrera con
    * pelotón): así la misma persona no tiene una cara en el pelotón y otra en el cartel del ganador.
    */
-  crown(names: string[], winners: readonly number[], conFoco?: boolean, caraPropia?: (persona: number) => Texture | null): Crown;
+  crown(names: string[], winners: readonly number[], conFoco?: boolean, caraPropia?: (persona: number) => Texture | null, opciones?: OpcionesCorona): Crown;
   /**
    * Hasta dónde baja el cartel de la corona con `m` premios, en píxeles de
    * pantalla, con su sombra. Un juego lo usa para que la ganadora quede debajo.
@@ -256,6 +267,14 @@ export interface PixiStage {
 /** Dónde está quien gana en la pantalla y cómo se corona: lo que pide el foco. */
 export interface FocoAt extends FocoPunto {
   arco: Arc;
+}
+
+/** Lo que un juego pide distinto de lo de siempre al coronar con foco. */
+export interface OpcionesCorona {
+  /** El silencio del foco es silencio: entre la meta y el golpe no suena ningún latido. */
+  sinLatidos?: boolean;
+  /** El cartel entra con el golpe (la luz, el acercamiento y la fanfarria) y no un instante después, con la placa. */
+  cartelConGolpe?: boolean;
 }
 
 export interface Crown {
@@ -418,6 +437,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const commentEl = $("commentary");
   commentEl.textContent = "";
   commentEl.classList.remove("grito");
+  const lectorEl = $("commentary-sr");
+  lectorEl.textContent = "";
   $("st-round").textContent = `${t("seed")} ${beacon.round}`;
 
   // El lienzo de siempre queda escondido; PixiJS dibuja en uno propio, porque
@@ -498,13 +519,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, hud, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
+  if (auditaCon("camara") || auditaCon("encuadre")) (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, hud, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
   // apagarlo vuelve. `__ninoRepintar` dibuja el mismo cuadro otra vez sin avanzar
   // el juego. Sin el parámetro no se expone nada y el cuadro no cambia.
-  const ninoPedido = params.get("auditar") === "nino";
+  const ninoPedido = auditaCon("nino");
   const letrasOcultas = new Set<Container>();
   const letrasNino = (): void => {
     const sin = !!(window as unknown as { __nino?: { sinLetras?: boolean } }).__nino?.sinLetras;
@@ -545,10 +566,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   };
   const gobernador = new Gobernador(arranque.nivel, bajarA, arranque.fijo);
   // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
-  const identPedida = params.get("auditar") === "identidad";
+  const identPedida = auditaCon("identidad");
   // `?auditar=mezcla`: el instante del revelado, para que el auditor de mezcla
   // compare lo que suena antes y después del ganador.
-  const mezclaPedida = params.get("auditar") === "mezcla";
+  const mezclaPedida = auditaCon("mezcla");
   let ident: ReturnType<typeof identidadDe> | null = null;
   let relojId = 0;
   let cuadros = 0;
@@ -885,8 +906,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   /** Lo que mide de alto el cartel de la corona armada, para `placaBajo`. */
   let cartelAlto: { m: number; k: number; ph: number } | null = null;
+  /** El foco de la corona va sobre un 3D que arrancó (`focoSobreTres`). Sin el pedido, el foco es el del 2D. */
+  let focoTres = false;
 
-  const crown = (names: string[], winners: readonly number[], conFoco = false, caraPropia?: (persona: number) => Texture | null): Crown => {
+  const crown = (names: string[], winners: readonly number[], conFoco = false, caraPropia?: (persona: number) => Texture | null, opciones: OpcionesCorona = {}): Crown => {
     if (identPedida && !ident) {
       ident = identidadDe(names);
       (window as unknown as { __identidad: Identidad }).__identidad = ident.estado;
@@ -901,9 +924,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const plate = new Container();
     // El foco va debajo del papel picado y del cartel: lo que oscurece es la
     // escena, nunca el nombre.
-    const vista = conFoco ? new FocoVista() : null;
+    const vista = conFoco ? new FocoVista(focoTres) : null;
     root.addChild(...(vista ? [vista.root] : []), confetti, plate, flash);
     const tl = gsap.timeline({ paused: true });
+    /** Cuándo empieza a crecer el cartel en su línea de tiempo: antes va el destello. */
+    const entraCartel = 0.12;
     cleaners.push(() => tl.kill());
     if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
@@ -1063,8 +1088,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.position.set(sw() / 2, portrait() ? sh() * 0.24 : sh() * 0.26);
       tl.clear();
       tl.fromTo(flash, { alpha: 0.9 }, { alpha: 0, duration: 0.5, ease: "power2.out" }, 0)
-        .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, 0.12)
-        .fromTo(plate, { rotation: -0.12 }, { rotation: 0, duration: 0.9, ease: "elastic.out(1, 0.4)" }, 0.12);
+        .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, entraCartel)
+        .fromTo(plate, { rotation: -0.12 }, { rotation: 0, duration: 0.9, ease: "elastic.out(1, 0.4)" }, entraCartel);
       // Con varios premios, el primero aparece con el cartel y los demás
       // llegan después, de a uno: cada premio tiene su momento.
       // En segundos reales: la corona recibe la hora del juego, que el
@@ -1109,20 +1134,28 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         const pace = paceFactor();
         const T = vista && foco ? tiemposFoco(foco.arco) : null;
         const tr = tt * pace;
-        const tp = T ? tt - T.placa / pace : tt;
         const tg = T ? tt - T.golpe / pace : tt;
+        // Con `cartelConGolpe` el cartel no espera a la placa: su línea de tiempo se adelanta lo que tarda en arrancar el rebote, así
+        // crece desde el cuadro del golpe y a los 60 ms ya mide la mitad, junto con la luz, el acercamiento y la fanfarria.
+        const conGolpe = !!T && !!opciones.cartelConGolpe;
+        const tp = T ? (conGolpe ? tg + entraCartel : tt - T.placa / pace) : tt;
         const w = window as unknown as { __revelado?: number };
         if (mezclaPedida && w.__revelado === undefined && tg >= 0) w.__revelado = performance.now();
         lastT = tt;
         lastPlaca = placa;
         lastFoco = foco;
         root.visible = true;
-        plate.visible = placa && tp >= 0;
+        plate.visible = placa && (conGolpe ? tg >= 0 : tp >= 0);
+        // `?auditar=`: cuándo cae cada parte del golpe (la luz, el cartel), en segundos del reloj de la página: lo lee `scripts/medir-drama-carrera.mjs`.
+        if (params.get("auditar")) {
+          if (plate.visible) anotarGolpe("cartel");
+          if (foco && T && tr >= T.golpe) anotarGolpe("luz");
+        }
         tl.time(Math.max(0, tp));
         // En un celular el cartel ocupa casi todo el ancho: el contador y las marcas (la capa `hud`) se van mientras entra,
         // en el mismo rato (el cartel arranca a los 0,12 s y su rebote llega a su tamaño en unos 0,5), y no asoman
         // por los costados ni quedan restos al lado de un cartel de dos renglones.
-        hud.alpha = placa && portrait() ? 1 - Math.max(0, Math.min(1, (tp - 0.12) / 0.4)) : 1;
+        hud.alpha = placa && portrait() ? 1 - Math.max(0, Math.min(1, (tp - entraCartel) / 0.4)) : 1;
         if (vista) {
           if (foco && T) {
             // Un latido grave por cada marca, si no se saltó el silencio.
@@ -1130,6 +1163,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
               if (tr < te || latidosSonados.has(i)) return;
               latidosSonados.add(i);
               if (tr - te > 0.15) return;
+              // Con el final de la carrera que se eligió escuchando, o si el juego lo pide (`sinLatidos`), el silencio de antes del golpe es
+              // silencio: ningún latido.
+              if (finalPropio() || opciones.sinLatidos) return;
               beep(note(0), 0.22, "sine", i === 0 ? 0.06 : 0.05);
             });
             if (!vibro && tr >= T.golpe) {
@@ -1347,6 +1383,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
       );
       musicCue(heat);
+    },
+    anunciarLector(msg) {
+      lectorEl.textContent = msg;
+    },
+    focoSobreTres() {
+      focoTres = true;
     },
     face, text, chip, tags, batch, breath, mark, crown,
     onResize: (fn) => resizers.push(fn),

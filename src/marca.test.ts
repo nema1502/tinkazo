@@ -533,14 +533,19 @@ describe("colección de stickers con personaje", async () => {
   const ruta = new URL("../scripts/marca/coleccion.mjs", import.meta.url).href; // un .mjs sin tipos: se importa por su URL
   const m = await import(/* @vite-ignore */ ruta) as unknown as {
     COLECCION: St[]; HOJAS: Record<string, { ids: string[] }>; LADO_PNG: number;
-    stickerColeccion: (st: St, lang: string | null, cm: number, sangre: number) => { w: number; h: number; capMin: number; formas: Array<{ capa?: string }> };
+    stickerColeccion: (st: St, lang: string | null, cm: number, sangre: number) => { w: number; h: number; capMin: number; capSello: number; formas: Array<{ capa?: string; clase?: string }> };
+    LAPTOP: Array<[string, string]>;
   };
   const langs = (st: St): Array<string | null> => st.langs ?? ["es", "en"];
   const nombres = m.COLECCION.flatMap(st => langs(st).map(l => (l ? `${st.id}-${l}` : st.id)));
 
-  it("son 26: los diez juegos numerados del 1 al 10, la llama, frases y devs", () => {
-    expect(m.COLECCION.length).toBe(26);
-    expect(new Set(m.COLECCION.map(s => s.id)).size).toBe(26);
+  it("son 28: los diez juegos numerados del 1 al 10, el especial de Tarija, la llama, frases y devs", () => {
+    expect(m.COLECCION.length).toBe(28);
+    expect(new Set(m.COLECCION.map(s => s.id)).size).toBe(28);
+    expect(m.COLECCION.filter(s => s.grupo === "tarija").map(s => s.id)).toEqual(["tarija", "tarija-laptop"]);
+    // Lo que se sacó el 7 de noviembre de 2026 no vuelve: ni la boca abierta del sapo ni las frases de «adentro» y «afuera».
+    const frases = m.COLECCION.flatMap(st => Object.values(st.lineas).flat()).join("\n");
+    expect(frases).not.toMatch(/adentro|afuera|right in|everyone's in|left out/i);
     expect(m.COLECCION.filter(s => s.grupo === "juegos").map(s => s.num)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     for (const g of ["llama", "frases", "devs"]) expect(m.COLECCION.filter(s => s.grupo === g).length, g).toBeGreaterThanOrEqual(5);
     for (const st of m.COLECCION) for (const l of langs(st)) expect(st.lineas[String(l)]?.length, `${st.id} ${l}`).toBeGreaterThan(0);
@@ -552,6 +557,17 @@ describe("colección de stickers con personaje", async () => {
       expect(s.capMin, `${st.id} ${l}`).toBeGreaterThanOrEqual(2.8);
       expect(s.formas.filter(f => f.capa === "corte").length).toBe(1);
     }
+  });
+  it("todos llevan tinkazo.app abajo, del mismo tamaño y legible a 5 cm: la letra mide al menos 2,2 mm (26 puntos a 300 ppp)", () => {
+    const sellos: number[] = [];
+    for (const st of m.COLECCION) for (const l of langs(st)) {
+      const s = m.stickerColeccion(st, l, 5, 0);
+      expect(s.formas.some(f => f.clase === "sello"), `${st.id} ${l}`).toBe(true);
+      expect(s.capSello, `${st.id} ${l}`).toBeGreaterThanOrEqual(2.2);
+      expect(s.capSello * 300 / 25.4, `${st.id} ${l}`).toBeGreaterThanOrEqual(26);
+      sellos.push(s.capSello);
+    }
+    expect(Math.max(...sellos) - Math.min(...sellos)).toBeLessThan(0.05);
   });
   it("cada sticker tiene su PNG con fondo transparente y la página los ofrece en es y en", () => {
     const html = leer("marca.html");
@@ -571,9 +587,9 @@ describe("colección de stickers con personaje", async () => {
     expect(html).toContain('href="/marca/coleccion/tinkazo-stickers.zip"');
     expect(html).toContain('href="/marca/coleccion/frases.txt"');
   });
-  it("las hojas miden A4 y A3, traen la capa de corte y la A3 lleva los 26", () => {
+  it("las hojas miden A4 y A3, traen la capa de corte, la A3 lleva los 28 y la de la laptop, nueve de 6 cm", () => {
     const mm = (v: number): string => (v * 72 / 25.4).toFixed(3);
-    for (const l of ["es", "en"]) for (const [h, [w, alto]] of [["hoja-a4-juegos", [210, 297]], ["hoja-a4-frases", [210, 297]], ["hoja-a3", [297, 420]]] as const) {
+    for (const l of ["es", "en"]) for (const [h, [w, alto]] of [["hoja-a4-juegos", [210, 297]], ["hoja-a4-frases", [210, 297]], ["hoja-a4-laptop", [210, 297]], ["hoja-a3", [297, 420]]] as const) {
       const pdf = enCol(`${h}-${l}.pdf`).toString("latin1");
       expect(pdf, h).toContain(`/MediaBox [0 0 ${mm(w)} ${mm(alto)}]`);
       expect(pdf).toContain("/OCG");
@@ -582,14 +598,23 @@ describe("colección de stickers con personaje", async () => {
     expect(new Set(m.HOJAS["hoja-a3"]!.ids)).toEqual(new Set(m.COLECCION.map(s => s.id)));
     expect(m.HOJAS["hoja-a4-juegos"]!.ids.length).toBe(15);
     expect(m.HOJAS["hoja-a4-frases"]!.ids.length).toBe(15);
+    expect(m.HOJAS["hoja-a4-laptop"]!.ids).toEqual(m.LAPTOP.map(([id]) => id));
+    expect(m.LAPTOP.length).toBe(9);
+    for (const [id, por] of m.LAPTOP) { expect(m.COLECCION.some(s => s.id === id), id).toBe(true); expect(por.length, id).toBeGreaterThan(20); }
   });
-  it("el ZIP pesa menos de 4 MB y trae cada sticker en PDF de 5 y 7 cm, SVG de 5 cm con sangrado y corte, PNG, hojas y frases", () => {
+  it("el ZIP pesa menos de 4 MB y trae cada sticker en PDF de 5 y 7 cm, SVG de 5 cm con sangrado y corte, las hojas A4 y las frases; los PNG van en otro", () => {
     const bytes = enCol("tinkazo-stickers.zip");
     expect(bytes.length).toBeLessThan(4 * 1024 * 1024);
     const zip = leerZip(bytes);
+    const bytesPng = enCol("tinkazo-stickers-png.zip");
+    expect(bytesPng.length).toBeLessThan(4 * 1024 * 1024);
+    const png = leerZip(bytesPng);
     const r = "tinkazo-stickers/";
     expect(zip.has(`${r}LEEME.txt`)).toBe(true);
-    expect(zip.get(`${r}frases.txt`)!.equals(enCol("frases.txt"))).toBe(true);
+    // El ZIP guarda frases.txt tal como estaba en la máquina que lo generó (fin de línea CRLF en Windows), y git entrega
+    // el archivo suelto con el fin de línea de cada sistema: se comparan las líneas, no los bytes.
+    const lineas = (b: Buffer): string => b.toString("utf8").replace(/\r\n/g, "\n");
+    expect(lineas(zip.get(`${r}frases.txt`)!)).toBe(lineas(enCol("frases.txt")));
     for (const n of nombres) {
       for (const cm of [5, 7]) expect(zip.get(`${r}stickers/tinkazo-${n}-${cm}cm.pdf`)!.toString("latin1").startsWith("%PDF-1.5"), n).toBe(true);
       const svg = zip.get(`${r}stickers/tinkazo-${n}-5cm.svg`)!.toString("utf8");
@@ -597,10 +622,13 @@ describe("colección de stickers con personaje", async () => {
       expect(Math.max(w, h), n).toBeCloseTo(56, 2); // 50 mm de troquel más 3 mm de sangrado por lado
       expect(svg).toMatch(/<g id="corte" fill="none" stroke="#ff00ff" stroke-width="0\.25">\n<path d="M[^"]+Z"\/>\n<\/g>/);
       expect(svg).not.toMatch(/<text|<tspan|font-family|<image|<script/);
-      expect(zip.get(`${r}png/tinkazo-${n}.png`)!.equals(enCol(`${n}.png`)), n).toBe(true);
+      expect(zip.has(`${r}png/tinkazo-${n}.png`), n).toBe(false);
+      expect(png.get(`tinkazo-stickers-png/tinkazo-${n}.png`)!.equals(enCol(`${n}.png`)), n).toBe(true);
     }
-    for (const l of ["es", "en"]) for (const h of Object.keys(m.HOJAS)) expect(zip.get(`${r}hojas/tinkazo-stickers-${h}-${l}.pdf`)!.equals(enCol(`${h}-${l}.pdf`)), h).toBe(true);
-    expect(zip.size).toBe(2 + nombres.length * 4 + 6);
+    const enZip = Object.keys(m.HOJAS).filter(h => h !== "hoja-a3");
+    for (const l of ["es", "en"]) for (const h of enZip) expect(zip.get(`${r}hojas/tinkazo-stickers-${h}-${l}.pdf`)!.equals(enCol(`${h}-${l}.pdf`)), h).toBe(true);
+    expect(zip.size).toBe(2 + nombres.length * 3 + enZip.length * 2);
+    expect(png.size).toBe(nombres.length);
     const leeme = zip.get(`${r}LEEME.txt`)!.toString("utf8");
     for (const f of ["@tinkazo.app", "kiss-cut", "5 mm", "3 mm", "no vienen en sobres sorpresa", "no mystery packs"]) expect(leeme, f).toContain(f);
   });
@@ -613,12 +641,12 @@ describe("colección de stickers con personaje", async () => {
   });
   it("cada texto de la sección está en español y en inglés, sin punto medio ni tecnicismos", () => {
     const claves = Object.keys(T.es).filter(k => k.startsWith("maCol"));
-    expect(claves.length).toBe(42);
+    expect(claves.length).toBe(48);
     const html = leer("marca.html");
     for (const k of claves) {
       expect(html, k).toContain(`data-i="${k}"`);
       for (const lang of ["es", "en"] as const) expect(T[lang][k], `${lang}.${k}`).not.toMatch(/·|drand|hash|WebGL|Worker|bytes|blockchain/i);
-      if (!["maColGuajojo", "maColToborochi", "maColChovena", "maColEntrada", "maColPinata", "maColDevCommit"].includes(k)) expect(T.en[k], k).not.toBe(T.es[k]);
+      if (!["maColGuajojo", "maColToborochi", "maColChovena", "maColEntrada", "maColPinata", "maColDevCommit", "maColTarijaLaptop"].includes(k)) expect(T.en[k], k).not.toBe(T.es[k]);
     }
     expect(T.es.maColT).toBe("Stickers con personaje");
     expect(T.en.maColT).toBe("Character stickers");
@@ -835,9 +863,9 @@ describe("kit de marca: impresos y sponsors", () => {
     for (const n of PARED) expect(html, n).toContain(`/marca/${n}.png`);
     for (const [id] of SPONSOR_REDES) expect(html, id).toContain(`/marca/redes-${id}-`);
     for (const n of ["rollup-85x200", "rollup-100x200", "banner-mesa-120x40"]) for (const e of ["pdf", "svg"]) expect(html, n).toContain(`/marca/${n}-{l}.${e}`);
-    // El logo y el afiche del evento viven solo en el bloque del DevFest Tarija, que enlaza a la página oficial
-    // del evento: las piezas de Tinkazo para sponsors siguen sin logos de terceros.
-    const sinDevfest = html.replace(/<section class="marca-devfest"[\s\S]*?<\/section>/, "");
+    // El logo y el afiche del evento viven solo en la sección de eventos (el bloque del DevFest Tarija enlaza a la
+    // página oficial del evento): las piezas de Tinkazo para sponsors siguen sin logos de terceros.
+    const sinDevfest = html.replace(/<section class="marca-eventos"[\s\S]*?<\/section>/, "");
     expect(sinDevfest).not.toMatch(/devfest[^"]*\.(svg|png|jpg|webp)|gdg[^"]*\.(svg|png|jpg|webp)/i);
     expect(html).toContain('href="https://gdg.community.dev/events/details/google-gdg-tarija-presents-devfest-tarija-2026/"');
     const claves = Object.keys(T.es).filter(k => /^ma(Sp|Imp)/.test(k));
@@ -851,5 +879,30 @@ describe("kit de marca: impresos y sponsors", () => {
       if (k !== "maImpRoll") expect(T.en[k], k).not.toBe(T.es[k]);
     }
     expect(leer("src/marca.ts")).toContain("data-copiar");
+  });
+});
+
+describe("la frase de la marca en marca.html", () => {
+  const html = leer("marca.html");
+  it("está arriba, con la dirección, el lema, la línea de gratis y el botón de copiar", () => {
+    expect(html).toContain('id="frase"');
+    expect(html.indexOf('id="frase"')).toBeLessThan(html.indexOf('id="devfest"'));
+    expect(html).toContain("tinkazo.app</p>");
+    expect(html).toContain('data-i="maFrTitulo"');
+    expect(html).toContain('data-i="maFrGratis"');
+    expect(html).toContain('data-copiar="fr-copia"');
+    expect(html).toContain('href="#frase"');
+  });
+  it("dice lo mismo en los dos idiomas y lo copiable trae el nombre, la dirección y la frase", () => {
+    for (const l of ["es", "en"] as const) {
+      const copia = T[l].maFrCopia as string;
+      expect(copia).toContain("Tinkazo");
+      expect(copia).toContain("tinkazo.app");
+      expect(copia.toLowerCase()).toContain((T[l].maFrTitulo as string).toLowerCase().replace(/\.$/, ""));
+      expect(copia).toContain(T[l].maFrGratis as string);
+      expect(copia).not.toContain("·");
+    }
+    expect(T.es.maFrTitulo).toBe("Sorteos que cualquiera puede comprobar.");
+    expect(T.en.maFrTitulo).toBe("Draws anyone can check.");
   });
 });

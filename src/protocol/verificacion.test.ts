@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import vectors from "../../docs/vectors.json";
+import { canonicalList, listHash } from "./canonical";
 import { verifyRound } from "./drand";
 import { PROOF_VERSION, type Proof } from "./proof";
-import { roundTime } from "./quicknet";
+import { bytesToHex, hexToBytes, roundTime } from "./quicknet";
+import { MAX_WINNERS, select } from "./select";
 import {
   type Dependencias,
   MIN_LEAD_SECS,
@@ -360,5 +362,70 @@ describe("revisar un comprobante (protocolo §7)", () => {
     expect(leer).toHaveBeenCalledTimes(1);
     expect(leer.mock.calls[0]?.[0]).toMatchObject({ red: "testnet", contractId: TESTNET, wasmSha256: WASM_TESTNET });
     expect(leer.mock.calls[0]?.[1]).toBe("4");
+  });
+});
+
+describe("un sorteo con el máximo de ganadores", () => {
+  /** Cien personas y cien ganadores (el modo orden: cada quien con su turno), con la ronda y la firma reales de los vectores. */
+  const personas = (n: number): string[] => canonicalList(Array.from({ length: n }, (_, i) => `Participante ${i + 1}`).join("\n"));
+  const sorteo = (n: number, k: number) => {
+    const names = personas(n);
+    const huella = bytesToHex(listHash(names));
+    const ganadores = select(hexToBytes(SEMILLA), hexToBytes(huella), n, k);
+    return { names, huella, ganadores };
+  };
+
+  it("el tope de la verificación es el del protocolo, no el de un contrato viejo", () => {
+    expect(MAX_WINNERS).toBe(300);
+  });
+
+  it("cien ganadores de cien dan verde, y los rehace en el mismo orden que el registro", async () => {
+    const { names, huella, ganadores } = sorteo(100, 100);
+    const reg = registro({ sello: { listHash: huella, count: 100, numWinners: 100 }, resultado: { winners: ganadores } });
+    const r = await revisarComprobante(comprobante({ names }), deps(reg));
+    expect(r.motivos).toEqual([]);
+    expect(r.veredicto).toBe("verde");
+    expect(r.k).toBe(100);
+    expect(r.ganadores).toEqual(ganadores);
+    expect([...ganadores].sort((a, b) => a - b)).toEqual(names.map((_, i) => i));
+  });
+
+  it("cien ganadores de mil dan verde", async () => {
+    const { names, huella, ganadores } = sorteo(1000, 100);
+    const reg = registro({ sello: { listHash: huella, count: 1000, numWinners: 100 }, resultado: { winners: ganadores } });
+    const r = await revisarComprobante(comprobante({ names }), deps(reg));
+    expect(r.motivos).toEqual([]);
+    expect(r.veredicto).toBe("verde");
+    expect(new Set(r.ganadores).size).toBe(100);
+  });
+
+  it("trescientos ganadores de trescientos dan verde, y los rehace en el mismo orden que el registro", async () => {
+    const { names, huella, ganadores } = sorteo(300, 300);
+    const reg = registro({ sello: { listHash: huella, count: 300, numWinners: 300 }, resultado: { winners: ganadores } });
+    const r = await revisarComprobante(comprobante({ names }), deps(reg));
+    expect(r.motivos).toEqual([]);
+    expect(r.veredicto).toBe("verde");
+    expect(r.k).toBe(300);
+    expect(r.ganadores).toEqual(ganadores);
+    expect([...ganadores].sort((a, b) => a - b)).toEqual(names.map((_, i) => i));
+  });
+
+  it("trescientos uno no existe: un registro que lo dice es incoherente, aunque haya gente de sobra", async () => {
+    const { names, huella } = sorteo(1000, MAX_WINNERS);
+    const reg = registro({ sello: { listHash: huella, count: 1000, numWinners: MAX_WINNERS + 1 } });
+    const r = await revisarComprobante(comprobante({ names }), deps(reg));
+    expect(r.veredicto).toBe("mal");
+    expect(r.motivos).toContain("registro-incoherente");
+    expect(r.motivos).toContain("ganadores");
+  });
+
+  it("cien ganadores con una lista de cien cambiada en uno solo no es la sellada", async () => {
+    const { names, huella, ganadores } = sorteo(100, 100);
+    const cambiada = [...names];
+    cambiada[57] = "Otra Persona";
+    const reg = registro({ sello: { listHash: huella, count: 100, numWinners: 100 }, resultado: { winners: ganadores } });
+    const r = await revisarComprobante(comprobante({ names: cambiada }), deps(reg));
+    expect(r.veredicto).toBe("mal");
+    expect(r.motivos).toContain("lista-cambiada");
   });
 });

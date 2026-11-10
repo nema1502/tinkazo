@@ -1,4 +1,4 @@
-import { BoxGeometry, ConeGeometry, Group, IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, SphereGeometry, type Scene } from "three";
+import { BoxGeometry, Group, IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, SphereGeometry, type Scene } from "three";
 import { ZC, escala3D, type Efecto3D } from "./carrera-3d-mapa";
 
 /**
@@ -32,6 +32,12 @@ const PIEDRAS = 5;
 const POLVO = 14;
 const RAYAS = 26;
 const PASTO = 16;
+/** Las rayas de viento: finas, cortas, color crema y a media transparencia, para que se lean como aire y no como una llama o una línea del carril. */
+const RAYA_COLOR = 0xf3e6c4;
+const RAYA_OPACIDAD = 0.5;
+const RAYA_GROSOR = 0.04;
+const RAYA_LARGO_MIN = 1;
+const RAYA_LARGO_MAX = 2.6;
 
 export function crearEfectos3D(escena: Scene, basura: Desechable): Efectos3D {
   const grupo = new Group();
@@ -40,9 +46,10 @@ export function crearEfectos3D(escena: Scene, basura: Desechable): Efectos3D {
   const matPiedra = basura.add(new MeshLambertMaterial({ color: 0x8d8478, flatShading: true }));
   const geoEsfera = basura.add(new SphereGeometry(1, 8, 6));
   const geoCaja = basura.add(new BoxGeometry(1, 1, 1));
-  const geoPunta = basura.add(new ConeGeometry(0.14, 0.5, 4));
+  // Las hojas que vuela la ráfaga: un elipsoide achatado, plano como una hoja, en dos verdes (nada de conos ni de paja beige).
+  const geoHoja = basura.add(new SphereGeometry(0.5, 6, 4));
   const matPasto = basura.add(new MeshLambertMaterial({ color: 0x6fae4a, flatShading: true }));
-  const matPaja = basura.add(new MeshLambertMaterial({ color: 0xc9b27a, flatShading: true }));
+  const matPasto2 = basura.add(new MeshLambertMaterial({ color: 0x86bd55, flatShading: true }));
 
   const piedras = Array.from({ length: PIEDRAS }, () => {
     const m = new Mesh(geoPiedra, matPiedra);
@@ -55,12 +62,12 @@ export function crearEfectos3D(escena: Scene, basura: Desechable): Efectos3D {
     return m;
   });
   const rayas = Array.from({ length: RAYAS }, () => {
-    const m = new Mesh(geoCaja, basura.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false })));
+    const m = new Mesh(geoCaja, basura.add(new MeshBasicMaterial({ color: RAYA_COLOR, transparent: true, opacity: 0, depthWrite: false })));
     grupo.add(m);
     return m;
   });
   const pastos = Array.from({ length: PASTO }, (_, i) => {
-    const m = new Mesh(geoPunta, i % 3 ? matPasto : matPaja);
+    const m = new Mesh(geoHoja, i % 3 ? matPasto : matPasto2);
     grupo.add(m);
     return m;
   });
@@ -126,16 +133,19 @@ export function crearEfectos3D(escena: Scene, basura: Desechable): Efectos3D {
             const m = rayas[i];
             if (!m) break;
             const fase = (hash(f.id * 11 + i, 4) + f.s * 2.6) % 1;
-            const largo = 2 + 4 * hash(f.id + i, 8);
+            const largo = RAYA_LARGO_MIN + (RAYA_LARGO_MAX - RAYA_LARGO_MIN) * hash(f.id + i, 8);
             poner(m, xc - ancho / 2 + fase * ancho, 0.5 + 2.6 * hash(f.id * 13 + i, 6), zA + hash(f.id * 17 + i, 5) * (zB - zA) + f.lado * fase * 2.2, 1);
-            m.scale.set(largo, 0.09, 0.09);
-            (m.material as MeshBasicMaterial).opacity = 0.9 * env;
+            m.scale.set(largo, RAYA_GROSOR, RAYA_GROSOR);
+            (m.material as MeshBasicMaterial).opacity = RAYA_OPACIDAD * env;
           }
           for (let i = 0; i < PASTO; i++) {
             const m = pastos[i];
             if (!m) break;
             const fase = (hash(f.id * 19 + i, 7) + f.s * 1.8) % 1;
-            poner(m, xc - ancho / 2 + fase * ancho, 0.4 + Math.sin(fase * Math.PI) * (1.5 + 2 * hash(i, f.id)), zA + hash(f.id * 23 + i, 3) * (zB - zA) + f.lado * fase * 2, 1.7 * (0.4 + env));
+            const hoja = 1.7 * (0.4 + env);
+            poner(m, xc - ancho / 2 + fase * ancho, 0.4 + Math.sin(fase * Math.PI) * (1.5 + 2 * hash(i, f.id)), zA + hash(f.id * 23 + i, 3) * (zB - zA) + f.lado * fase * 2, 1);
+            // Larga, angosta y casi sin espesor: una hoja que da vueltas en el aire.
+            m.scale.set(hoja * 0.5, hoja * 0.05, hoja * 0.2);
             m.rotation.set(fase * 14 + i, fase * 9, fase * 11);
           }
           for (let i = 0; i < 5; i++) {

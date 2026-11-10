@@ -36,8 +36,20 @@ export const SALIDA_PORTON = 1.2;
 export const CIERRE_PORTON = 1.2;
 /** Del cierre al cartel de la tanda siguiente. */
 export const ENTRE_TANDAS = 0.4;
-/** Del cierre de la última tanda a la salida del grupo: lo que tarda el relator en decir "¡Salida!" sin pisar el cierre. */
-export const ENTRE_FINAL = 1;
+/**
+ * Del cierre de la última tanda a la salida del grupo: lo que tardan en llegar al corral las últimas en salir por el portón. Entran trotando, a
+ * un cuerpo y medio por segundo como mucho (`carrera-caminata.ts`): de su lugar en la tanda al fondo del corral son diez u once cuerpos (con las
+ * pantallas de 16:9 de 1280 a 2340 de ancho) y toma unos nueve segundos. Las que no alcanzan a entrar antes terminan de entrar en los primeros
+ * `LLEGADA_TARDE` segundos del grupo, cuando todavía no se mueve nadie más. Es también lo que tarda el relator en decir "¡Salida!" sin pisar el cierre.
+ */
+export const ENTRE_FINAL = 5;
+/** Cuánto después de la salida del grupo puede seguir entrando al corral la última en llegar, en segundos: antes de la primera echada (a los 4 s). */
+export const LLEGADA_TARDE = 3;
+/** Cuánto se queda la marca de quien va adelante (la borla y la ficha amarilla) en la que pasa por el portón: lo que tarda en cruzarlo; después no hay marca hasta que pasa la siguiente. */
+export const MARCA_PORTON = 3;
+
+/** Lo que debería durar "Normal" con tandas (la tarjeta incluida), en segundos: con 60 personas, un minuto y poco ("El arco del show", en la dirección de la carrera). */
+export const OBJETIVO_TANDAS = 68;
 
 /** Lo que dura una tanda con `pasan` plazas, del cartel a que arranque la siguiente. */
 export const durTanda = (pasan: number): number => CARTEL_S + (pasan - 1) * SALIDA_PORTON + CIERRE_PORTON + ENTRE_TANDAS;
@@ -50,11 +62,14 @@ export const durTanda = (pasan: number): number => CARTEL_S + (pasan - 1) * SALI
  * grupo son las ocho.
  */
 function plazasQueEntran(T: number): number {
-  for (let p = 7; p >= 1; p--) {
-    const g = T * p;
-    if (g > 16 || g < FINALISTAS) continue;
-    const total = T_VUELO + T * durTanda(p) + duracionGrupo(g - FINALISTAS) + RECTA_MEDIA + FIJOS + TARJETA;
-    if (total <= TOPE_NORMAL - 4) return p;
+  const total = (p: number): number => T_VUELO + T * durTanda(p) + ENTRE_FINAL + duracionGrupo(T * p - FINALISTAS) + RECTA_MEDIA + FIJOS + TARJETA;
+  // Primero las más plazas que dejan el show en el objetivo de las tandas; si ninguna lo logra (muchas tandas), las que entran en el tope.
+  for (const tope of [OBJETIVO_TANDAS, TOPE_NORMAL - 4]) {
+    for (let p = 7; p >= 1; p--) {
+      const g = T * p;
+      if (g > 16 || g < FINALISTAS) continue;
+      if (total(p) <= tope) return p;
+    }
   }
   return 0;
 }
@@ -112,7 +127,7 @@ export interface Tandas {
   tFin: number;
 }
 
-export function armarTandas(o: { n: number; nombres: readonly string[]; finalistas: readonly number[]; t0: number; rng: () => number }): Tandas {
+export function armarTandas(o: { n: number; nombres: readonly string[]; finalistas: readonly number[]; t0: number; rng: () => number; entrada?: readonly number[] }): Tandas {
   const { n } = o;
   const T = tandasPara(n);
   const p = pasanPorTanda(n);
@@ -141,6 +156,17 @@ export function armarTandas(o: { n: number; nombres: readonly string[]; finalist
     a[a.indexOf(sobra)] = cambia;
     b[b.indexOf(cambia)] = sobra;
   }
+  // Las finalistas ocupan los lugares de finalista que les tocaron al barajar, pero en el orden en que entran a la recta (`entrada`): la que entra
+  // primera es la primera finalista en salir por el portón. El conjunto de lugares (cuántas finalistas tiene cada tanda) sigue siendo el sorteo
+  // de siempre y el puesto de la ganadora al entrar sigue siendo uno de ocho parejo; lo que cambia es que quienes salen primero por el portón
+  // son las que van adelante en el corral, y las últimas, atrás, cerca del portón: ninguna tiene que cruzar el corral corriendo.
+  const rank = new Map<number, number>((o.entrada ?? []).map((p, k) => [p, k]));
+  if (o.entrada) {
+    const lugares: [number, number][] = [];
+    reparto.forEach((r, h) => r.forEach((p, i) => { if (esFinal.has(p)) lugares.push([h, i]); }));
+    const orden = [...o.entrada].filter((p) => esFinal.has(p));
+    if (orden.length === lugares.length) lugares.forEach(([h, i], k) => { (reparto[h] as number[])[i] = orden[k] as number; });
+  }
   const tandas: Tanda[] = [];
   const gente: number[] = [];
   let t = o.t0;
@@ -150,6 +176,12 @@ export function armarTandas(o: { n: number; nombres: readonly string[]; finalist
     const otras = barajar(miembros.filter((i) => !esFinal.has(i)), o.rng).slice(0, Math.max(0, p - fin.length));
     // El orden de salida es otro sorteo: no mira si es finalista.
     const pasan = barajar([...fin, ...otras], o.rng);
+    // Las finalistas salen en el orden en que entran a la recta; entre ellas, las otras salen donde les toca.
+    if (o.entrada) {
+      const lugaresFin = pasan.flatMap((p, i) => (esFinal.has(p) ? [i] : []));
+      const enOrden = lugaresFin.map((i) => pasan[i] as number).sort((x, y) => (rank.get(x) ?? 0) - (rank.get(y) ?? 0));
+      lugaresFin.forEach((i, k) => { pasan[i] = enOrden[k] as number; });
+    }
     const salidas = pasan.map((_, j) => t + CARTEL_S + j * SALIDA_PORTON);
     const tCierra = t + CARTEL_S + (pasan.length - 1) * SALIDA_PORTON + CIERRE_PORTON;
     const tFin = tCierra + ENTRE_TANDAS;

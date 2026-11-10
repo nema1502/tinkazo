@@ -38,7 +38,7 @@
  * sala espere y, si no deja sellar, dice una frase y ofrece una sola acción que
  * reemplaza a "Sellar la lista". Cuatro casos, cada uno en otro Chrome y en el
  * primer tema:
- *  1. los dos RPC cortados: "Stellar no contesta", la acción es "Probar ahora",
+ *  1. los dos RPC cortados: "El registro no contesta", la acción es "Probar ahora",
  *     se ve en la pantalla (aunque se apriete la barra) y no se selló nada; y,
  *     en la primera pantalla, al volver la red la app sella sola;
  *  2. solo el primer RPC cortado (primera pantalla): se sella por el segundo, sin
@@ -488,7 +488,7 @@ const MEDIR_RED = `JSON.stringify((() => {
 
 /** Los textos de la contingencia, en los dos idiomas: lo que se espera ver. */
 const TEXTO = {
-  sinRpc: /Stellar no contesta|Stellar isn't answering/i,
+  sinRpc: /El registro no contesta|The record isn't answering|Stellar no contesta|Stellar isn't answering/i,
   costoAlto: /cuesta más de lo que Tinkazo puede pagar|costs more today than Tinkazo can cover/i,
   costoMedio: /cuesta más de lo normal|costs more than usual/i,
   sinSaldo: /no tiene saldo para sellar|has no balance to seal/i,
@@ -600,7 +600,7 @@ async function cajaYAccionAlaVista(page, quien, ctx) {
 /**
  * La red de Stellar no contesta: los dos RPC cortados. Antes la app dejaba apretar "Sellar" y fallaba al rato,
  * con el motivo escrito junto a un botón que, si se apretaba la barra, quedaba fuera de la pantalla (20 de octubre
- * de 2026). Ahora lo mira antes: dice "Stellar no contesta", la acción de ahí en adelante es "Probar ahora" (que
+ * de 2026). Ahora lo mira antes: dice "El registro no contesta", la acción de ahí en adelante es "Probar ahora" (que
  * reemplaza a "Sellar la lista") y no se selló nada. En la primera pantalla, además, al volver la red la app
  * sella sola: la persona había apretado "Sellar la lista" y la red volvió.
  */
@@ -614,7 +614,7 @@ async function falloDelSello(browser, vista, tema, completo) {
     // dejar un error genérico.
     await interceptar(page, ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"], () => "fallar");
     const usaBarra = await pulsar(page, { etiqueta, tema, celular }, REAL.lista, "sellar con la red caída");
-    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /Stellar no contesta|Stellar isn't answering/i.test(c.textContent || ''); })()`, 60000);
+    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /El registro no contesta|The record isn't answering|Stellar no contesta|Stellar isn't answering/i.test(c.textContent || ''); })()`, 60000);
     check(`${quien}: lo dice antes de sellar${usaBarra ? " (se apretó la barra)" : ""}`, dijo.ok, dijo.ok ? "" : "no apareció la frase en 60 s: ¿cambió el servidor de Stellar o el RPC de respaldo?");
     if (!dijo.ok) return;
     const { msg } = await cajaYAccionAlaVista(page, quien, { celular });

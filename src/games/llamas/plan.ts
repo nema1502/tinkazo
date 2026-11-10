@@ -1,5 +1,6 @@
 import { writeStory, type Arc, type Story } from "../drama";
 import type { InfoCierre } from "./carrera-cierre";
+import type { InfoMarcha } from "./carrera-marcha";
 import type { Obstaculo } from "./carrera-obstaculos";
 
 /**
@@ -60,6 +61,8 @@ export interface Plan {
   cierre?: InfoCierre;
   /** Los obstáculos de la recta (`carrera-obstaculos.ts`): piedras, valla y ráfaga. Sin ellos, la recta es la de siempre. */
   obstaculos?: Obstaculo[];
+  /** La marcha con tacto (`carrera-marcha.ts`): la curva de cada carril, acotada en velocidad y aceleración. Sin ella, la recta es la de siempre. */
+  marcha?: InfoMarcha;
   /** Cuánto se corre `k` hacia un costado en `q`, en filas de carril (la ráfaga). */
   lateral?(k: number, q: number): number;
   /** Cuánto sube `k` en `q`, en filas de carril (el salto de la valla). */

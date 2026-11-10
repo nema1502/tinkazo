@@ -22,6 +22,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { type Env, leerConfig } from "./config";
 import { Cupos } from "./cupos";
+import { Planes } from "./plan";
 import { PorIp } from "./por-ip";
 import { RpcRed } from "./red";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
@@ -64,7 +65,10 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       }
     }
     const cfg = leerConfig(this.env);
-    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar);
+    // El plan del equipo sube el cupo: sin `CUENTA_URL` no se pregunta nada. Una dirección mal escrita se avisa y se ignora (no apaga al portero).
+    if ((this.env.CUENTA_URL ?? "").trim() && !cfg.cuentaUrl) console.error(JSON.stringify({ evento: "error-config", falta: ["cuenta-url"] }));
+    const planes = cfg.cuentaUrl ? new Planes(cfg.cuentaUrl, (...a: Parameters<typeof fetch>) => fetch(...a), () => Date.now(), registrar) : null;
+    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes);
     const falta = this.portero.faltaDeConfig();
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.

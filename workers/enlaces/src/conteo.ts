@@ -53,6 +53,8 @@ export const ERRORES = [
   "confirmation",
   /** Quien paga la comisión por la persona (Pollar) se quedó sin con qué: no es de su cuenta. */
   "sponsorEmpty",
+  /** Pollar 0.12: la co-firma de la cuenta no se aprobó (la rechazó quien aprueba, o la transacción no coincidía). */
+  "cosignRejected",
   "rpcDown",
   "offline",
   /** Los motivos del portero del patrocinio: ver `ERRORES_DEL_PORTERO`. */

@@ -35,6 +35,11 @@ import { contratoOficial, type ContratoOficial, type Red } from "../stellar/ofic
  * cantidad de ganadores. Con el estado a mano manda el estado, y el historial solo
  * lo cruza: si dice otra cosa, es rojo; si no se pudo leer, no cambia nada.
  *
+ * El estado vivo no es condición del verde, y la persona no tiene que hacer nada para
+ * pasar de uno a otro: se intenta el estado y, si el contrato ya no tiene el sorteo (la
+ * entrada archivada, la instancia ausente) o no se lo pudo leer (el RPC no contesta), el
+ * testigo es la transacción del sello. Con la misma transacción, el mismo veredicto.
+ *
  * Qué es cada resultado cuando el estado no tiene el sello y hay `stx`:
  * - el historial lo respalda y todo cuadra: verde (`fuente: "historial"`);
  * - la transacción se leyó y no es un sello oficial, o no cuadra con el
@@ -114,7 +119,8 @@ export type Ancla =
  *   borrada, una entrada archivada) y no hay a quién preguntar más: el comprobante
  *   no trae el hash del sello, o quien revisa no lee el historial. Sin testigo.
  * - `sin-red`: no se pudo leer la cadena, el faro o, cuando el estado ya no tiene el
- *   sello y el comprobante trae su hash, el historial de transacciones. No se afirma nada.
+ *   sello y el comprobante trae su hash, el historial de transacciones. Si el estado no
+ *   se pudo leer pero el historial sí, es verde por historial, no `sin-red`. No se afirma nada.
  * - `mal`: algo no coincide, o el registro no es de Tinkazo.
  */
 export type Veredicto = "verde" | "pendiente" | "libre" | "falta" | "sin-red" | "mal";
@@ -412,9 +418,10 @@ export async function revisarComprobante(
   let fuente: Fuente = "estado";
   let historial: LecturaDelHistorial | null = null;
   let selloH: SelloDelHistorial | null = null;
-  if (pedidoAlHistorial && registro && motivos.size === 0) {
+  if (pedidoAlHistorial && motivos.size === 0) {
     const { contrato, lectura } = pedidoAlHistorial;
-    // Con el estado a mano el historial no puede demorar el veredicto; sin él, es el único testigo.
+    // Con el estado a mano el historial no puede demorar el veredicto; sin él (archivado, ausente o que
+    // no se pudo leer), es el único testigo.
     historial = sello ? ((await conLimite(lectura, opciones.esperaDelHistorialMs ?? ESPERA_DEL_HISTORIAL_CON_ESTADO_MS)) ?? null) : await lectura;
     if (historial?.ok) {
       const h = historial.sello;
@@ -428,7 +435,7 @@ export async function revisarComprobante(
         fuente = "historial";
         selloH = h;
         revisarSello({ ...h, sealedAt: h.closedAt });
-        if (falta === "sin-contrato" || falta === "sin-sello") falta = null;
+        if (falta === "sin-contrato" || falta === "sin-sello" || falta === "sin-cadena") falta = null;
       }
     } else if (historial) {
       // Solo una transacción que se leyó y no es un sello de este comprobante es una contradicción.

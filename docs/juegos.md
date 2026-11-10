@@ -436,7 +436,7 @@ Lo demás se informa pero no decide, y un `si` antes del golpe hace fallar la co
 ## El auditor de mezcla
 
 ```bash
-node scripts/audit-mezcla.mjs <juego>      # o "todos"; --sin-musica mide solo los efectos
+node scripts/audit-mezcla.mjs <juego>      # o "todos"; --sin-musica mide solo los efectos, --motor pixi los mide en 2D
 ```
 
 El auditor de sonido mira la partitura de los efectos. Este escucha la señal: engancha la salida de WebAudio antes de que cargue la página, junta las muestras de la escena fija de punta a punta y mide con las reglas de la radiodifusión (ITU-R BS.1770, EBU R128):
@@ -539,6 +539,32 @@ Lo que no cambia: el reloj del juego manda y no hay azar (la variante de un efec
 Cómo se regeneran los sonidos: [`public/sonidos/PROMPTS.md`](../public/sonidos/PROMPTS.md) y `scripts/sonidos/` (`generar.mjs` baja las variantes del servicio, `procesar.py` elige, normaliza, codifica y escribe `archivos.ts`). `pnpm test` mira que todo lo que el banco nombra exista, que los pesos entren y que no haya música en el índice.
 
 **Los auditores** miran lo mismo con archivos: `audit-sound` engancha también `AudioBufferSourceNode`, y un archivo lleva anotada la nota que reemplaza (`__beep`), así que la afinación, el registro, el volumen, los huecos y los golpes repetidos se miden igual; cuenta cuántos disparos sonaron con archivo y, con `--con-banco`, exige que haya sonado el banco. `audit-mezcla` no cambia (mide la señal), y con `--grabar <carpeta> --etiqueta antes|despues` guarda en un WAV los 20 segundos que terminan 4 s después del cartel del ganador, para escuchar lo mismo antes y después de un cambio de sonido.
+
+### Las candidatas de sonido de la carrera (6 de noviembre de 2026)
+
+La dirección de la carrera (sección 8) pide un sonido elegido con oídos, no con auditores: seis piezas (la música, los pasos, echarse, los obstáculos, el final con su silencio, el festejo), cada una con tres candidatas sintetizadas con el motor de siempre (`src/sound.ts` y `src/music.ts`), más "el de hoy". Una candidata es un dato (`src/sonidos/carrera.ts`): una lista de voces (notas de la escala, soplos de ruido filtrado, bombo, charango, zampoña, palmas) o, en la música, un arreglo (ritmo de 100, 112 y 124 golpes por minuto, qué capas suenan, cómo rasguea el charango). Todo es de la pentatónica de la menor, que es la de do mayor de los efectos; no hay campanas ni voces de animal.
+
+**Mientras no se elija, suena lo de hoy.** `src/sonidos/carrera-elegidas.ts` dice qué suena en cada pieza (`hoy`, `a`, `b`, `c` o `base`, que es lo de hoy con el ritmo nuevo y el silencio antes del golpe) y hoy todo es `hoy`. Con `?auditar=...&sonido=pasos:b,musica:a` la carrera suena con esas candidatas, para que `audit-sound --sonido pasos:b` y `audit-mezcla race --sonido musica:a` las midan en la carrera de verdad. Sin `?auditar` la dirección no cambia nada.
+
+Lo que se puede medir sin oídos, por candidata y sobre el audio renderizado (`scripts/sonidos/carrera-juicio.mjs`): sonoridad de la música en −18 LUFS con 2 de margen, pico real de −1 dBTP o menos y ninguna muestra recortada, 3 LU o menos de pérdida en un parlante que corta en 150 Hz y 6 o menos en 300 Hz, el silencio de antes del golpe bajo −50 dBFS, el golpe de 6 a 10 LU sobre la música de la recta, el festejo de 2 a 3 s y una sola fanfarria. Que una candidata cumpla no dice que suene bien: eso lo decide quien escucha.
+
+```bash
+# Renderiza cada candidata a un WAV con el mismo motor (Chrome sin interfaz, sin el sitio construido)
+CDP_PORT=9770 node scripts/sonidos/carrera-render.mjs --salida <carpeta>
+node scripts/sonidos/carrera-medir.mjs --carpeta <carpeta> --sugerir   # mide y juzga; escribe medidas.json
+node scripts/sonidos/carrera-calibrar.mjs --carpeta <carpeta>            # ajusta src/sonidos/carrera-niveles.ts; se repite hasta que cumplan
+# Las rutas de la página de escucha se piden: TINKAZO_ESCUCHA=<carpeta> (con render/, salida/ y video-base.mp4) o --render, --salida y --video
+node scripts/sonidos/carrera-armar-escucha.mjs                           # un video por candidata para la página de escucha
+node scripts/sonidos/carrera-aplicar.mjs [--simular]                     # aplica lo que se eligió en la página
+# En la carrera de verdad (sitio construido y servido), una candidata por vez o una combinación
+CDP_PORT=9770 node scripts/sonidos/carrera-auditar.mjs --base http://localhost:4770 --salida <carpeta> [--solo pieza[:candidata]] [--sin-hoy] [--combo musica:a,final:c]
+```
+
+El límite de `audit-mezcla` de "ningún tramo de 3 s salta más de 7 LU" solo tiene sentido con la música nueva en −18 LUFS: con la de hoy (−30) cualquier golpe o festejo nuevo lo pasa. Por eso las candidatas de efecto se miden también combinadas con una música elegida (`--combo`), que es como suenan en el show.
+
+`carrera-aplicar` lee `elecciones.json` de la página de escucha (con `--elecciones <archivo>` o con `TINKAZO_ESCUCHA=<carpeta>`; sin ninguna de las dos se detiene con un mensaje) y reescribe `carrera-elegidas.ts`. Después hay que correr `pnpm typecheck`, `audit-sound` y `audit-mezcla` de la carrera y revisar el cambio antes de subir. El final propio (el bombo que crece desde tres segundos antes del cruce, el clic, el corte de la banda y el silencio hasta el golpe) lo programa `programarFinal` desde `carrera-show.ts` en `tCrown`: cuando la ronda del tiempo de la foto mueva el golpe, solo cambian `TIEMPOS_FINAL` y ese punto.
+
+**El bombo y el bajo para parlante chico.** `MEZCLA_GRAVE_PARLANTE_CHICO` (`src/music.ts`) baja el seno del bombo, del kick y del triángulo del bajo y sube su cuerpo y la sierra, para que se sigan oyendo en un proyector; a cambio la música suena cerca de 1 LU más baja. Como nada de lo que se oye hoy cambia sin que alguien lo escuche, esa mezcla solo suena con el arreglo de una candidata de la carrera y en las bandas de las candidatas de efecto; sin ellas, la música de los diez juegos usa `MEZCLA_GRAVE_DE_HOY`, los valores de producción (`src/music-mezcla.test.ts` fija los dos). La página de escucha trae un par aparte, "El bombo y el bajo" (clave `carrera:bomboBajo`): si elige "parlante chico", `carrera-aplicar` escribe `BOMBO_Y_BAJO = "chico"` en `carrera-elegidas.ts` y la mezcla pasa a valer también sin candidatas, en la música de los diez juegos; si elige "hoy", queda condicionada. `carrera-render.mjs` renderiza el par (`bomboBajo/hoy.wav` y `bomboBajo/chico.wav`, catorce segundos de la música de hoy) y `carrera-armar-escucha.mjs --solo pieza,pieza` rearma solo esas tarjetas.
 
 ## La pestaña escondida
 
@@ -691,6 +717,18 @@ Es del trompo, el primer juego con choques de verdad. Los demás auditores miran
 
 El detalle está en [juegos/trompo.md](juegos/trompo.md#cómo-auditarlo).
 
+### Las medidas de la carrera de llamas
+
+Tres medidas miden lo que pide la dirección de la carrera (sus metas están en `scripts/lib/final-carrera.mjs`, `drama-show.mjs` y `escala-carrera.mjs`). Imprimen una tabla con la meta de cada fila y un JSON (`--json archivo`), y salen con error si una meta no se cumple. Las tres usan el reloj en turbo de `audit-emocion` (`scripts/lib/reloj-turbo.mjs`), 16 semillas por tamaño (8, 18 y 60 personas; 200 donde se pide) y los dos motores (`pixi` y `3d`), y leen el estado del motor, no la imagen.
+
+- **`medir-final-carrera`**: sobre el plan, con 1.500 rondas con 8, 18, 60 y 200 personas, mide con qué frecuencia la que va primera a 3, 1,5 y 0,5 s de la meta termina ganando (a 1,5 s, 40 % o menos), cuánto tiempo lleva la punta la ganadora frente a cada otra (de 0,8 a 1,25 veces sin el último segundo), los segundos en punta antes de cruzar, el margen en la meta, si la mayor remontada del último cuarto es de la ganadora (1 de cada 3 o menos) y los cambios de punta (de 1 a 2 por terreno, de 3 a 5 en la recta); con `--navegador` compara además el orden que la escena le da al motor con el del plan, cuadro a cuadro.
+- **`medir-drama-carrera`**: sobre el plan, la duración de cada tramo y del total contra la tabla de la sección 3 de la dirección (48 s con 18 personas, 60 con 60, 68 con 200) y los huecos de más de 4 s sin un hecho; con `--navegador`, el silencio de efectos y de música antes del golpe (0,4 s o más) y que la luz, el acercamiento, el sonido y el cartel caigan a menos de 100 ms entre sí (con la resolución de un cuadro, 15,6 ms).
+- **`medir-escala-carrera`**: el alto en píxeles de las finalistas en la recta, de las tres de punta en los últimos 3 s y de la ganadora en el festejo, en 1080p (mediana de 150 px o más, ninguna bajo 100, las de punta de 200 a 450, la ganadora de 300 o más) y en el celular parado (70 px o más), y qué parte de la pantalla tapa la tarjeta de nombres en el celular (25 % o menos).
+
+Para que las tres puedan leer el estado de la carrera, `?auditar=` acepta varios valores separados por coma (`?auditar=encuadre,camara`, `?auditar=nino,camara`): `encuadre` deja `window.__encuadre` (dónde cae cada finalista en la pantalla, el cartel, el relator y la tarjeta de nombres, cuadro a cuadro desde la recta; lo lee también `audit-encuadre`, que desde el 6 de noviembre de 2026 mide los dos motores y avisa a los 30 s si el juego no deja el gancho) y, con cualquier `?auditar`, `window.__golpe` anota la hora de la luz, el cartel, el acercamiento y el corte de la música. Ninguno existe en un sorteo de verdad.
+
+**El Chrome de los auditores tiene la conexión fija en 4G** (`scripts/lib/browser.mjs`, `TINKAZO_CONEXION` la cambia). Chrome estima la conexión de lo que tardan los pedidos y, con la página ocupada, pasa de 4g a 3g desde la segunda página del mismo Chrome; el sitio no arranca el 3D con 3g o menos (`permite3d.ts`) y cae al 2D sin avisar, así que un auditor que abría varias páginas con el 3D podía estar midiendo el 2D. `medir-3d` además descarta toda corrida que dibujó otro motor que el pedido, la repite en un Chrome nuevo y, si ninguna fue del motor pedido, sale con error.
+
 ## Los subtítulos, y por qué no hay voz
 
 Cada momento del juego se cuenta en la caja del estadio, abajo: "¡Tiren los trompos!", "¡Se cortó la luz!", el nombre del ganador. Cada línea lleva su tensión de 0 a 1, y una línea nueva no pisa a la que está en pantalla salvo que importe más: el anuncio del ganador pisa a cualquier cosa, y un cambio de líder no pisa a otro cambio de líder. El auditor exigente mide que dos líneas no se pisen a menos de tres décimos.
@@ -718,6 +756,7 @@ Ningún ganador se narra como perdedor, y cada premio tiene su momento (7 de oct
 - **Un co-ganador que sale antes del final, sale con premio.** En el trompo y el aguayo, los juegos que cuentan la historia del primer premio, el relator dice "¡Óscar Limachi sale, pero con premio!" y lo nombra siempre, aunque haya mucha gente. La Chovena y el teleférico ya lo hacían, y el sapo tiene un turno por premio. La piñata (desde el 20 de octubre de 2026) y La Entrada (desde el 21) dicen el premio y no el nombre ("¡Sale con premio!", "Se quedan 3, uno con premio"), y el nombre se lee recién en el cartel (lista "Chicos" de la sección 10 de la auditoría de juegos).
 - **El cartel de la corona.** Cada ganador va con su cara, el primer premio más grande, y los demás entran de a uno, cada uno con su golpe: dos notas, más graves cuanto más abajo en la lista. Con más de tres, tres nombres y "y 2 más", igual que el relator. Con un solo premio el cartel no cambia.
 - **Para auditarlo sin red:** la escena fija acepta `?nw=N` (`?pose=trompo&nw=3`). El primer ganador es el de siempre y los demás quedan repartidos por la lista.
+- **Hasta cuántos premios cuenta cada juego** (6 de noviembre de 2026, con el tope del contrato en 300). La carrera, hasta ocho (un carril de la recta final por premio), y el sapo, hasta doce (un agujero de la final por premio: con trece, `planQualifier` rechaza el sorteo y el juego se cierra sin mostrar nada). Con más, el selector los atenúa y dice por qué (`rec.race.premios`, `rec.sapo.premios`) y el juego que queda elegido, y el que sigue después de cada premio, es otro (`Rango.premios` en `src/ui/recomendar.ts`). Los demás cuentan cualquier cantidad: la ruleta sortea al primero y el resto sale en el cartel («y 297 más»), y en los de eliminación los demás premiados se van «con premio». Los planes de La Entrada, el teleférico, Guajojó y Toborochi se probaron con 50, 100 y 200 premios sin que falle ninguno; cómo se ve cada show con tantos premiados todavía no se miró en un navegador.
 
 ## Los cierres
 
@@ -745,7 +784,7 @@ El ritmo de la animación, la legibilidad del cartel y el tartamudeo de los subt
 - ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe. Lo mide el ritmo de los hechos (de 0,2 a 0,6 s, sobre los efectos).
 - ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie. Lo mide el ritmo de los hechos: un subtítulo de «última» sin un hecho `salio` ni `gano` en los 3 s siguientes es una pasada vacía.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
-- ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido.
+- ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear el máximo de ganadores (trescientos) entre ellos pasa desapercibido.
 - ¿El ganador queda claro al final, sin ambigüedad?
 
 ## La boleta

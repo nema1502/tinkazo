@@ -1,4 +1,4 @@
-import { medidasMarcador } from "../pixi/kit/marcador";
+import { MARCADOR, medidasMarcador } from "../pixi/kit/marcador";
 
 /**
  * La forma de la carrera en la pantalla, pura: dónde va el grupo, las filas y
@@ -66,6 +66,22 @@ export function hudDe(p: Pantalla): Hud {
   }
   const y = p.top + 10 * k + marc.alto + 8 * k;
   return { cinta: { x0: 12 * k, x1: p.w - 12 * k, y, h }, bajo: y + h };
+}
+
+/** Cuánto sobresale por arriba del primer renglón el fondo del cartel de nombres, en unidades `u` (`disponerCartel`). */
+export const FONDO_CARTEL = 18;
+/** Cuánto baja la sombra del marcador por debajo de su caja, en unidades `u` (`marcador-vista.ts`). */
+const SOMBRA_MARCADOR = 5;
+
+/**
+ * Dónde empieza el primer renglón del cartel de nombres (el de las tandas, a la izquierda, y el del corral), de modo
+ * que su fondo quede **debajo** del marcador QUEDAN con su sombra y un poco de aire. Se mide del rectángulo del
+ * marcador y no de `bajo`: la sombra baja más que la caja y la cinta, y el fondo sale 18 u por encima del texto.
+ */
+export function arribaDelCartel(p: Pantalla): number {
+  const k = p.u;
+  const sombra = p.top + MARCADOR.y * k + medidasMarcador(k).alto + SOMBRA_MARCADOR * k;
+  return Math.max(hudDe(p).bajo + 10 * k, sombra + (3 + FONDO_CARTEL) * k);
 }
 
 export interface Forma {

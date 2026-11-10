@@ -7,6 +7,7 @@ import { enEnsayo } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
+import { paraMostrar } from "../equipos/etiquetas";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -96,8 +97,12 @@ function vueltas(fila: number): number {
   return Math.max(1, Math.ceil(14 / Math.max(1, fila)));
 }
 
-/** Los nombres en una, dos o tres cintas, según cuántos sean. */
-function cintas(names: string[]): string {
+/**
+ * Los nombres en una, dos o tres cintas, según cuántos sean. Con equipos con cupón la lista sellada son cuentas: en la
+ * cinta va el nombre de cada equipo, como en el show (`paraMostrar`), no la cuenta de 56 letras.
+ */
+export function cintas(lista: readonly string[]): string {
+  const names = paraMostrar(lista);
   const filas = names.length <= 12 ? 1 : names.length <= 60 ? 2 : 3;
   const por = Math.ceil(names.length / filas);
   let html = "";
@@ -423,6 +428,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const yo = {
     nacio: (): void => {
       if (fase !== "cuenta") return;
+      // Con Freighter la persona aprueba el sorteo en su ventana. Con Pollar (o la cuenta de prueba) no hay otra
+      // aprobación: el clic en "Sellar la lista" ya cubre el sorteo de esa lista y se lanza solo cuando nace la ronda.
       if (sorteo.aMano()) accion("lanzar", t("espAprobar"), t("draw"));
       else sortear();
     },
