@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Anotá a tu equipo, en Tinkazo</title>
+<meta name="robots" content="noindex" />
+<meta name="description" content="Anotá a tu equipo en el sorteo de un evento: entrás con tu cuenta, escribís el nombre del equipo y sus integrantes, y quien organiza te da el cupón." />
+<meta property="og:title" content="Anotá a tu equipo" />
+<meta property="og:description" content="Anotá a tu equipo en el sorteo del evento." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Tinkazo" />
+<meta property="og:url" content="https://tinkazo.app/equipos.html" />
+<meta property="og:image" content="https://tinkazo.app/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
+    <nav class="topnav" aria-label="páginas">
+      <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
+      <div class="mas">
+        <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
+        <div class="mas-lista" id="mas-lista">
+          <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+          <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+        </div>
+      </div>
+    </nav>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eqp">
+    <div class="eqp-tarjeta">
+      <h1 data-i="eqpTitulo">Anotá a tu equipo</h1>
+      <p class="eqp-msg" id="eqp-msg" role="status" aria-live="polite"></p>
+
+      <!-- 1. Tu cuenta: la que recibe el cupón y cobra el premio. -->
+      <section id="eqp-cuenta" hidden aria-labelledby="eqp-cuenta-t">
+        <h2 id="eqp-cuenta-t" data-i="eqpCuentaT">Tu cuenta</h2>
+        <p data-i="eqpCuentaB">Tu cuenta recibe el cupón y cobra el premio si tu equipo gana. Si todavía no tenés una, se crea sola cuando entrás con Google.</p>
+        <button class="primary" type="button" id="eqp-google" data-i="eqpGoogle">Entrar con Google</button>
+        <button class="enlace eqp-suave" type="button" id="eqp-otra" data-i="eqpOtraCuenta">Ya tengo una cuenta de Stellar</button>
+        <form id="eqp-form-cuenta" hidden novalidate>
+          <label for="eqp-g" data-i="eqpCuentaLabel">La dirección de tu cuenta</label>
+          <input id="eqp-g" type="text" class="mono" maxlength="56" autocomplete="off" autocapitalize="characters" spellcheck="false" data-i-ph="eqpCuentaPh" placeholder="G…" />
+          <button class="ghost" type="submit" data-i="eqpUsar">Usar esta cuenta</button>
+        </form>
+      </section>
+
+      <!-- 2. El equipo: su nombre y hasta cinco integrantes. -->
+      <section id="eqp-datos" hidden>
+        <p class="eqp-cuenta mono" id="eqp-tu-cuenta"></p>
+        <button class="enlace eqp-suave" type="button" id="eqp-otra-cuenta" data-i="eqpCambiarCuenta">Usar otra cuenta</button>
+        <form id="eqp-form" novalidate autocomplete="off">
+          <label for="eqp-nombre" data-i="eqpNombre">Nombre del equipo</label>
+          <input id="eqp-nombre" type="text" maxlength="40" autocomplete="off" spellcheck="false" />
+          <label for="eqp-i0" data-i="eqpIntegrantes">Integrantes (hasta 5)</label>
+          <input id="eqp-i0" type="text" maxlength="30" autocomplete="off" spellcheck="false" />
+          <input id="eqp-i1" type="text" maxlength="30" autocomplete="off" spellcheck="false" />
+          <input id="eqp-i2" type="text" maxlength="30" autocomplete="off" spellcheck="false" />
+          <input id="eqp-i3" type="text" maxlength="30" autocomplete="off" spellcheck="false" />
+          <input id="eqp-i4" type="text" maxlength="30" autocomplete="off" spellcheck="false" />
+          <button class="primary" type="submit" id="eqp-enviar">Anotar al equipo</button>
+        </form>
+        <small data-i="eqpAviso">El nombre del equipo y los de sus integrantes se ven en la pantalla del evento y se borran a las 10 horas. En la red queda solo tu cuenta.</small>
+        <small><a href="/terminos.html" data-i="eqpTerminos">Términos</a></small>
+      </section>
+
+      <!-- 3. En qué punto está el equipo. -->
+      <section id="eqp-estado" hidden aria-live="polite">
+        <h2 id="eqp-estado-t"></h2>
+        <p id="eqp-estado-b"></p>
+        <button class="primary" type="button" id="eqp-sorteo" hidden></button>
+        <small id="eqp-sorteo-b" hidden></small>
+        <a class="ghost eqp-btn" id="eqp-comprobante" href="/#mis-sorteos" hidden></a>
+        <button class="enlace eqp-suave" type="button" id="eqp-cambiar" data-i="eqpCambiar">Cambiar los nombres del equipo</button>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer><div class="bar">
+  <span data-i="footL">Tinkazo</span>
+  <nav class="pies" aria-label="secciones">
+    <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+    <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+    <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/marca.html" data-i="navMarca">Marca</a>
+    <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+    <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <a href="/terminos.html" data-i="navTerminos">Términos</a>
+    <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+    <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
+    <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
+  </nav>
+  <span data-i="footR">Hecho con ♥ en Bolivia</span>
+</div></footer>
+<script type="module" src="/src/equipos-registro.ts"></script>
+</body>
+</html>

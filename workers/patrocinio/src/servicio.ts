@@ -16,6 +16,7 @@ import { StrKey, TransactionBuilder, type Transaction } from "@stellar/stellar-s
 import { type Config, DIA_MS, topesDeCuenta } from "./config";
 import { type Cupo, type Cupos, type Limites } from "./cupos";
 import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
+import type { Planes } from "./plan";
 import { type CuentaEnRed, ErrorDeRed, type Red } from "./red";
 
 export type Modo = "portero" | "pollar" | "apagado";
@@ -64,6 +65,8 @@ export class Portero {
      * nunca una dirección IP, un nombre, una cuenta ni una llave. Los eventos que empiezan con `error-` salen como error.
      */
     private readonly registrar: (evento: string, datos?: Record<string, string | number>) => void = () => {},
+    /** Quien averigua si una cuenta tiene el plan del equipo (que le sube el cupo). Sin él, todas tienen el cupo de siempre. */
+    private readonly planes: Planes | null = null,
   ) {}
 
   // ---------- estado ----------
@@ -84,6 +87,18 @@ export class Portero {
     const verificada = this.cfg.verificadas.has(cuenta);
     const maxSellos = verificada ? base.sellos : n("max_sellos_mes", base.sellos);
     return { maxSellos, maxSorteos: verificada ? base.sorteos : maxSellos * 2, topeGeneral: n("tope_general_stroops", this.cfg.topeGeneral), reservaSorteo: this.cfg.reservaSorteo };
+  }
+
+  /**
+   * Los topes de la cuenta ahora: los de siempre y, si tiene el plan del equipo activo, el cupo del plan si es más alto
+   * (el plan sube, nunca baja). Espera a lo sumo lo que tarda la consulta del plan (1,5 s) y **nunca falla por ella**:
+   * si no hay respuesta, vale el cupo de siempre. Se llama antes de reservar, nunca en medio: reservar sigue siendo síncrono.
+   */
+  private async limitesDe(cuenta: string): Promise<Limites> {
+    const lim = this.limites(cuenta);
+    const plan = this.planes ? await this.planes.cupoDe(cuenta).catch(() => null) : null;
+    if (!plan) return lim;
+    return { ...lim, maxSellos: Math.max(lim.maxSellos, plan.sellos), maxSorteos: Math.max(lim.maxSorteos, plan.sorteos) };
   }
 
   /** Lo más que se acepta que declare una transacción de recursos, dada la simulación: 1,5 veces más un margen fijo. */
@@ -113,11 +128,11 @@ export class Portero {
    * contrato (`motivo:"config"`) y si se devolvió a Pollar (`motivo:"pollar"`, con `rige:"pollar"`). El cliente decide
    * primero por `rige` y recién después por `prendido`.
    */
-  cupoDe(cuenta: string): Respuesta {
+  async cupoDe(cuenta: string): Promise<Respuesta> {
     if (!esCuenta(cuenta)) return r(400, { motivo: "cuenta" });
     const modo = this.modo();
+    const lim = await this.limitesDe(cuenta);
     const ahora = this.reloj();
-    const lim = this.limites(cuenta);
     const c: Cupo = this.cupos.consultar(cuenta, ahora, lim);
     const configCompleta = this.faltaDeConfig().length === 0;
     const prendido = modo === "portero" && configCompleta;
@@ -163,9 +178,10 @@ export class Portero {
     if (!v.ok) return r(400, { motivo: "no-permitida", razon: v.motivo, detalle: v.detalle });
     const tx = v.tx;
 
+    // Los topes de esta cuenta (con su plan, si lo tiene), antes de mirar nada del hash: acá puede haber una espera corta.
+    const lim = await this.limitesDe(tx.cuenta);
     // Ya pagada o en camino: el mismo resultado, sin volver a contar.
     const previa = this.cupos.buscar(tx.hash);
-    const lim = this.limites(tx.cuenta);
     if (previa && (previa.estado === "ok" || previa.estado === "fallo")) {
       const c = this.cupos.consultar(tx.cuenta, ahora, lim);
       return r(200, { hash: tx.hash, status: "DUPLICATE", estado: previa.estado, quedan: c.quedan, quedanSorteos: c.quedanSorteos });

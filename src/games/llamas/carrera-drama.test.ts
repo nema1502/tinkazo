@@ -19,7 +19,10 @@ const puesto = (p: Plan, k: number, q: number): number => {
 };
 const qDe = (p: Plan, s: number): number => qDeSegundos(s, p.foto);
 const RONDAS = 1200;
-const planes = Array.from({ length: RONDAS }, (_, i) => completo(i));
+/** El cierre solo (sin obstáculos): el plan de la recta que miden las pruebas del cierre. */
+const planes = Array.from({ length: RONDAS }, (_, i) => conCierre(base(i), sembrar(i * 104729 + 11)));
+/** El cierre con los obstáculos puestos encima (la recta que arma `carrera-show.ts`, sin la marcha). */
+const conObs = Array.from({ length: RONDAS }, (_, i) => completo(i));
 
 describe("el cierre de la recta", () => {
   it("no cambia quién gana ni cómo llega: la ganadora cruza primera donde la deja el plan base, y la foto es la del plan base", () => {
@@ -173,10 +176,10 @@ describe("el cierre de la recta", () => {
 });
 
 describe("los obstáculos", () => {
-  it("cada carrera tiene uno, dos o tres, de tipos distintos, y se reparten como se dijo", () => {
-    const cuantos = [0, 0, 0, 0];
+  it("cada carrera tiene uno o dos, de tipos distintos, y se reparten como se dijo (30 y 70 %)", () => {
+    const cuantos = [0, 0, 0];
     const tipos: Record<TipoObstaculo, number> = { piedras: 0, salto: 0, viento: 0 };
-    for (const p of planes) {
+    for (const p of conObs) {
       const o = p.obstaculos ?? [];
       cuantos[o.length]!++;
       expect(new Set(o.map((x) => x.tipo)).size).toBe(o.length);
@@ -185,20 +188,18 @@ describe("los obstáculos", () => {
       for (const x of o) tipos[x.tipo]++;
     }
     expect(cuantos[0]).toBe(0);
-    expect(cuantos[1]! / RONDAS).toBeGreaterThan(0.14);
-    expect(cuantos[1]! / RONDAS).toBeLessThan(0.26);
-    expect(cuantos[2]! / RONDAS).toBeGreaterThan(0.43);
-    expect(cuantos[2]! / RONDAS).toBeLessThan(0.57);
-    expect(cuantos[3]! / RONDAS).toBeGreaterThan(0.24);
-    expect(cuantos[3]! / RONDAS).toBeLessThan(0.36);
-    for (const t of Object.values(tipos)) expect(t / RONDAS).toBeGreaterThan(0.55);
+    expect(cuantos[1]! / RONDAS).toBeGreaterThan(0.24);
+    expect(cuantos[1]! / RONDAS).toBeLessThan(0.36);
+    expect(cuantos[2]! / RONDAS).toBeGreaterThan(0.64);
+    expect(cuantos[2]! / RONDAS).toBeLessThan(0.76);
+    for (const t of Object.values(tipos)) expect(t / RONDAS).toBeGreaterThan(0.45);
   });
 
   it("no miran quién gana: le tocan a la ganadora tantas veces como a cualquiera", () => {
     const quienes = (o: NonNullable<Plan["obstaculos"]>[number], tipo: TipoObstaculo): number[] => (o.tipo !== tipo ? [] : tipo === "salto" ? o.malas : o.carriles);
     for (const tipo of ["piedras", "salto", "viento"] as const) {
       let ganadora = 0, esperadas = 0;
-      for (const p of planes) {
+      for (const p of conObs) {
         for (const o of p.obstaculos ?? []) {
           const tocadas = quienes(o, tipo);
           if (o.tipo !== tipo) continue;
@@ -211,17 +212,18 @@ describe("los obstáculos", () => {
     }
   });
 
-  it("las piedras frenan a una llama y se recupera; la valla hace perder un puesto a la que salta mal; la ráfaga desordena a un grupo", () => {
+  it("con tacto: las piedras frenan a una llama de a poco y se recupera; la valla la hace perder lugar a la que salta mal; la ráfaga corre a un grupo despacio", () => {
     let piedras = 0, mal = 0, viento = 0;
-    for (const p of planes) {
+    for (const p of conObs) {
       for (const o of p.obstaculos ?? []) {
         const k = o.carriles[0] as number;
-        if (o.tipo === "piedras") {
-          // Sin las piedras iría más adelante: en el medio del golpe, a más de dos cuerpos; recuperada, igual.
-          const b = conCierre(base(planes.indexOf(p)), sembrar(planes.indexOf(p) * 104729 + 11));
-          const antes = b.pos(k, o.q + 0.02) - p.pos(k, o.q + 0.02);
-          expect(antes).toBeGreaterThan(0.0115 * 2);
-          expect(b.pos(k, o.ventana[1] + 0.03) - p.pos(k, o.ventana[1] + 0.03)).toBeCloseTo(0, 9);
+        if (o.tipo === "piedras" && (p.obstaculos ?? []).length === 1) {
+          // Con una sola piedra en la carrera: sin ella iría más adelante: a los dos segundos y medio del golpe, a más de medio cuerpo; a los siete, recuperada.
+          const b = planes[conObs.indexOf(p)] as Plan;
+          const t0 = segundosDeQ(o.q, p.foto);
+          const q1 = qDe(p, t0 + 2.5), q2 = qDe(p, t0 + 7.2);
+          expect((b.pos(k, q1) - p.pos(k, q1)) / 0.0115).toBeGreaterThan(0.5);
+          expect(b.pos(k, q2) - p.pos(k, q2)).toBeCloseTo(0, 9);
           piedras++;
         }
         if (o.tipo === "salto") {
@@ -230,6 +232,8 @@ describe("los obstáculos", () => {
           for (const m of o.malas) {
             // La rezagada que llega a la valla después de la ventana (y quizá con otro obstáculo encima) no se mide.
             if ((o.llegan[m] as number) >= o.ventana[1]) continue;
+            // Si a la misma le toca también otro obstáculo, la postura que se ve es la del primero.
+            if ((p.obstaculos ?? []).some((x) => x !== o && ((x.tipo === "piedras" && x.carriles[0] === m) || (x.tipo === "viento" && x.carriles.includes(m))))) continue;
             let vio = false;
             for (let q = (o.llegan[m] as number) - 0.05; q < (o.llegan[m] as number) + 0.08; q += 0.001) if (p.beatOf(m, q)?.kind === "malsalto") vio = true;
             expect(vio, "la que salta mal se ve").toBe(true);
@@ -239,22 +243,24 @@ describe("los obstáculos", () => {
         if (o.tipo === "viento") {
           expect(o.carriles.length).toBeGreaterThanOrEqual(Math.min(2, p.lanes.length));
           expect(o.carriles.length).toBeLessThanOrEqual(4);
-          const medio = o.q + 0.03;
-          expect(Math.abs(p.lateral?.(o.carriles[0] as number, medio) ?? 0)).toBeGreaterThan(0.5);
+          // A los dos segundos y medio de la ráfaga el grupo ya va corrido (la mitad de una fila, de a poco); a los ocho, otra vez en su carril.
+          const medio = qDe(p, segundosDeQ(o.q, p.foto) + 2.5);
+          expect(Math.abs(p.lateral?.(o.carriles[0] as number, medio) ?? 0)).toBeGreaterThan(0.25);
+          expect(p.lateral?.(o.carriles[0] as number, qDe(p, segundosDeQ(o.q, p.foto) + 8))).toBeCloseTo(0, 9);
           // Y los que no están en el grupo no se corren.
           for (let j = 0; j < p.lanes.length; j++) if (!o.carriles.includes(j)) expect(p.lateral?.(j, medio) ?? 0).toBe(0);
           viento++;
         }
       }
     }
-    expect(piedras).toBeGreaterThan(500);
+    expect(piedras).toBeGreaterThan(100);
     expect(mal).toBeGreaterThan(500);
     expect(viento).toBeGreaterThan(500);
   });
 
   it("en la valla saltan todas: cada carril sube al cruzarla, y la que la hace mal sube menos", () => {
     let vistas = 0;
-    for (const p of planes.slice(0, 200)) {
+    for (const p of conObs.slice(0, 200)) {
       for (const o of p.obstaculos ?? []) {
         if (o.tipo !== "salto") continue;
         for (let k = 0; k < p.lanes.length; k++) {
@@ -271,10 +277,10 @@ describe("los obstáculos", () => {
     expect(vistas).toBeGreaterThan(100);
   });
 
-  it("sin obstáculos y fuera de las ventanas el plan es el del cierre", () => {
+  it("antes de abrirse la recta y en la llegada el plan es el del cierre: los obstáculos no tocan la meta ni la foto", () => {
     for (let i = 0; i < 200; i++) {
-      const sin = conCierre(base(i), sembrar(i * 104729 + 11)), con = planes[i] as Plan;
-      for (const q of [0, 0.05, 0.067, 0.25, 0.5, 0.75, 0.96, 1]) for (let k = 0; k < 8; k++) expect(con.pos(k, q)).toBeCloseTo(sin.pos(k, q), 9);
+      const sin = planes[i] as Plan, con = conObs[i] as Plan;
+      for (const q of [0, 1]) for (let k = 0; k < 8; k++) expect(con.pos(k, q), `ronda ${i} carril ${k} al ${q}`).toBeCloseTo(sin.pos(k, q), 9);
     }
   });
 });

@@ -11,6 +11,10 @@
  *   pnpm preview --port 4183 &
  *   CDP_PORT=9731 node scripts/capturas-3d.mjs --base http://localhost:4183 --out <carpeta> --en 8,14,20 --tamano 1366x768
  *   CDP_PORT=9731 node scripts/capturas-3d.mjs --base http://localhost:4183 --fps
+ *
+ * Con `--rel` los momentos son horas de juego respecto de las de la recta final: `q4:-3=t-3,q4:0.42=foto,q4:1=golpe` saca la foto a T − 3 s (la hora de la meta es la
+ * quinta, `q4`), a T + 0,42 s y a T + 1 s, y las guarda con esos nombres (`<ancho>x<alto>-<tema>-3d-n<personas>-<nn>-<nombre>.png`). `--semilla <64 hex>` fija la semilla de
+ * la escena (la misma ronda en cada corrida).
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -26,7 +30,8 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const out = opt("--out", "capturas-3d");
 const porQ = opt("--q", "");
 // `--q 0,1,2,3,4` saca la foto al 25, 50, 70, 88 y 100 % de la recta final; `--en` en segundos de show.
-const momentos = porQ ? porQ.split(",").map((x) => `q${x}`) : opt("--en", "6,12,18").split(",").map(Number);
+const rel = opt("--rel", "").split(",").filter(Boolean).map((x) => x.split("="));
+const momentos = rel.length ? rel.map(([spec]) => spec) : porQ ? porQ.split(",").map((x) => `q${x}`) : opt("--en", "6,12,18").split(",").map(Number);
 const [w, h] = opt("--tamano", "1366x768").split("x").map(Number);
 const tema = opt("--tema", "dark");
 const motor = opt("--motor", "3d");
@@ -34,6 +39,7 @@ const demo = opt("--demo", "pose");
 const prefijo = opt("--prefijo", "");
 // `--n 18`: la escena fija con esa cantidad de nombres de ejemplo (`?n=`).
 const cuantos = opt("--n", "");
+const semilla = opt("--semilla", "");
 const midiendo = args.includes("--fps");
 // `--cpu 4`: frena la CPU esa cantidad de veces (el celular de gama media). Con `--fps`, mide cuadros por segundo de la página entera
 // (los dos lienzos) además de lo que dibuja three.js; con `--motor pixi` mide el 2D de siempre, para compararlos.
@@ -56,8 +62,9 @@ const PRELUDIO = (lista) => `(() => {
     if (v0 < 0 && st && st.style.display === 'block') v0 = virt;
     if (v0 >= 0) window.__foto.t = (virt - v0) / 1000;
     const ob = objetivos[sig];
+    const [qi, desp] = typeof ob === 'string' ? ob.slice(1).split(':') : [];
     const llego = typeof ob === 'string'
-      ? !!(window.__tres && window.__tres.horas.length && window.__tres.t >= window.__tres.horas[Number(ob.slice(1))])
+      ? !!(window.__tres && window.__tres.horas.length && window.__tres.t >= window.__tres.horas[Number(qi)] + Number(desp || 0))
       : v0 >= 0 && virt - v0 >= ob * 1000;
     if (sig < objetivos.length && llego && window.__foto.lista < 0) window.__foto.lista = sig;
     if (window.__foto.lista >= 0) { RAF(bombear); return; }
@@ -72,7 +79,7 @@ const PRELUDIO = (lista) => `(() => {
   RAF(bombear);
 })()`;
 
-const url = (demo === "pose" ? `${base}/?pose=1` : `${base}/?demo=${demo}`) + `&theme=${tema}&motor=${motor}&auditar=3d${cuantos ? `&n=${cuantos}` : ""}`;
+const url = (demo === "pose" ? `${base}/?pose=1` : `${base}/?demo=${demo}`) + `&theme=${tema}&motor=${motor}&auditar=3d${cuantos ? `&n=${cuantos}` : ""}${semilla ? `&semilla=${semilla}` : ""}`;
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9731), width: w, height: h });
 try {
   const page = await browser.open("about:blank");
@@ -94,7 +101,9 @@ try {
       if (!ok.ok) throw new Error(`no llegó al segundo ${momentos[i]}`);
       await sleep(300);
       const t = await page.eval("window.__foto.t");
-      const arch = join(out, `${prefijo}${w}x${h}-${tema}-${porQ ? "q" + (["25", "50", "70", "88", "100"][Number(porQ.split(",")[i])] ?? i) : "t" + String(momentos[i]).padStart(2, "0")}.png`);
+      const arch = rel.length
+        ? join(out, `${prefijo}${w}x${h}-${tema}-${motor}${cuantos ? `-n${cuantos}` : ""}-${String(i + 1).padStart(2, "0")}-${rel[i][1] ?? momentos[i]}.png`)
+        : join(out, `${prefijo}${w}x${h}-${tema}-${porQ ? "q" + (["25", "50", "70", "88", "100"][Number(porQ.split(",")[i])] ?? i) : "t" + String(momentos[i]).padStart(2, "0")}.png`);
       await page.screenshot(arch);
       const fichas = JSON.parse(await page.eval("JSON.stringify(window.__fichas3d || [])"));
       const pxs = fichas.map((f) => f.px).sort((a, b) => a - b);

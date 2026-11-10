@@ -1,7 +1,7 @@
 import { LEGIBLE } from "./letra";
 import { Container, Graphics } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, params, setGameLength, type Beacon } from "../../state";
+import { auditaCon, paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -304,7 +304,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   const choqueEn: number[] = [];
 
   // `?auditar=choques` deja anotado cada golpe para el auditor de choques.
-  const log = params.get("auditar") === "choques"
+  const log = auditaCon("choques")
     ? {
       n, rn, winner: winnerIdx, rival: rivalIdx, arc: story.arc, clashes: clashes.length,
       planned: [...victims, ...(duo ? [rivalIdx] : [])],

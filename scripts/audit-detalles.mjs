@@ -262,7 +262,8 @@ const DETALLES = {
         const aviso = await page.waitFor(visible("#pendiente"), 20000);
         const texto = aviso.ok ? await page.eval("document.getElementById('pendiente').textContent") : "";
         const solo = await page.eval("getComputedStyle(document.getElementById('sec-frozen')).display === 'none'");
-        check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo · 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
+        // history.ts arma "Termo, 18 personas", con coma: el punto medio se sacó de todo lo visible.
+        check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo, 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
         check(`${quien} · y no se retoma solo`, solo);
         await page.eval("(document.getElementById('pendiente') || document.getElementById('sec-participants')).scrollIntoView({ block: 'center' }); true");
         await sleep(300);
@@ -282,24 +283,77 @@ const DETALLES = {
   },
 
   D08: {
-    // Desde el 22 de octubre de 2026, en una red con contrato "Cargar ejemplo" no se ve nunca (con una
-    // cuenta abierta, sellarlo grababa un sorteo de nombres inventados): en su lugar está el ensayo,
-    // "o probá con un ejemplo, sin grabar nada", con la misma regla (diseño del onboarding).
-    que: 'el ejemplo ("o probá con un ejemplo") solo con el cuadro vacío',
+    // La regla de hoy (participants.ts, onboarding.ts, styles.css): con el
+    // cuadro vacío se ofrece el ejemplo. En una red con contrato es el ensayo
+    // ("o probá con un ejemplo, sin grabar nada", #btn-ensayo); en una sin
+    // contrato, "Cargar ejemplo" (#btn-sample). La primera vez, además, la
+    // oferta vive arriba ("¿Primera vez? Probalo con un ejemplo", #pv-ensayo
+    // dentro de #primera-vez) y mientras se ve, el enlace de abajo se esconde.
+    // Con nombres en el cuadro no se ofrece nada; al vaciarlo, vuelve. La
+    // oferta de arriba se puede cerrar con la cruz y queda cerrada en el
+    // equipo: a partir de ahí el ejemplo vive abajo. Desde el modo stand
+    // (2 de noviembre de 2026), en práctica no se ve ninguno de los dos.
+    que: "el ejemplo con el cuadro vacío (oferta de primera vez y enlace de abajo)",
     async correr(browser, v, tema, quien) {
+      // Se abre la herramienta en limpio, como quien llega por primera vez:
+      // los detallitos anteriores dejan su borrador guardado (D03 deja 12
+      // nombres, el premio y la cantidad) y sin limpiarlo el cuadro nacería
+      // lleno y el "vacío" no se mediría.
       const page = await abrir(browser, v, tema);
       try {
-        const sel = (await page.eval("!!document.getElementById('btn-ensayo') && getComputedStyle(document.getElementById('btn-sample')).display === 'none'")) ? "#btn-ensayo" : "#btn-sample";
-        const vacio = await page.eval(visible(sel));
+        await page.eval("localStorage.clear(); true");
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(900);
+        // La herramienta tarda en arrancar (los juegos se traen después): hasta
+        // que pinta la regla, los enlaces están como en el markup y el que se
+        // elige es otro. Con el cuadro vacío y fuera de práctica, la regla de
+        // hoy muestra la oferta de arriba o el enlace de abajo: se espera a
+        // ver alguno de los tres.
+        const listo = await page.waitFor(`(${visible("#pv-ensayo")}) || (${visible("#btn-ensayo")}) || (${visible("#btn-sample")})`, 20000);
+        check(`${quien} · con el cuadro vacío, el ejemplo se ofrece`, listo.ok, listo.ok ? `a los ${listo.elapsed} ms` : "no se ve ni la oferta de primera vez ni el enlace de abajo: ¿la pestaña está en práctica o la herramienta no arrancó?");
+        if (!listo.ok) throw new Error("el ejemplo no se ofrece con el cuadro vacío");
+        const estado = async () => JSON.parse(await page.eval(`JSON.stringify({
+          primera: (${visible("#primera-vez")}),
+          pv: (${visible("#pv-ensayo")}),
+          ensayo: (${visible("#btn-ensayo")}),
+          sample: (${visible("#btn-sample")})
+        })`));
+        let st = await estado();
+        check(`${quien} · sin cerrar nada, se ve la oferta de primera vez`, st.primera && st.pv, JSON.stringify(st));
+        check(`${quien} · mientras se ve la oferta, el enlace de abajo se esconde`, !st.ensayo, JSON.stringify(st));
+        check(`${quien} · los dos enlaces de abajo no se ofrecen a la vez`, !(st.ensayo && st.sample), JSON.stringify(st));
+        // Sin cerrar: con nombres se esconde todo; al vaciarlo, vuelve la oferta.
         await escribir(page, "Ana Quispe\nLuis Mamani");
-        const conNombres = await page.eval(visible(sel));
+        await sleep(600);
+        const conNombres = await estado();
         await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
         await sleep(300);
         await captura(page, "D08", v, tema, "con-nombres");
+        check(`${quien} · con nombres en el cuadro, el ejemplo no se ofrece`, !conNombres.primera && !conNombres.pv && !conNombres.ensayo && !conNombres.sample, JSON.stringify(conNombres));
         await escribir(page, "");
-        const otraVez = await page.eval(visible(sel));
-        check(`${quien} · ${sel}: con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
-        if (sel === "#btn-ensayo") check(`${quien} · "Cargar ejemplo" no se ve en una red con contrato`, !(await page.eval(visible("#btn-sample"))));
+        await sleep(600);
+        const vacio = await estado();
+        check(`${quien} · al vaciarlo sin haber cerrado, vuelve la oferta de primera vez`, vacio.primera && vacio.pv && !vacio.ensayo, JSON.stringify(vacio));
+        // La oferta de arriba se puede cerrar y queda cerrada en el equipo: a
+        // partir de ahí, con el cuadro vacío, el ejemplo vive abajo. Cuál de
+        // los dos es dice la red: el ensayo con contrato, "Cargar ejemplo" sin
+        // él. Nunca los dos.
+        await page.eval("document.getElementById('pv-cerrar').click(); true");
+        await sleep(600);
+        const cerrado = await estado();
+        check(`${quien} · la oferta de primera vez se puede cerrar`, !cerrado.primera && !cerrado.pv, JSON.stringify(cerrado));
+        const abajo = cerrado.ensayo ? "ensayo" : cerrado.sample ? "sample" : "ninguno";
+        check(`${quien} · cerrada la oferta y con el cuadro vacío, el ejemplo sigue abajo`, abajo !== "ninguno", `${abajo} ${JSON.stringify(cerrado)}`);
+        check(`${quien} · abajo sigue uno solo, el de esta red`, !(cerrado.ensayo && cerrado.sample), JSON.stringify(cerrado));
+        await escribir(page, "Ana Quispe\nLuis Mamani");
+        await sleep(600);
+        const conNombres2 = await estado();
+        check(`${quien} · con nombres, abajo tampoco se ofrece`, !conNombres2.primera && !conNombres2.ensayo && !conNombres2.sample, JSON.stringify(conNombres2));
+        await escribir(page, "");
+        await sleep(600);
+        const vuelve = await estado();
+        check(`${quien} · al vaciarlo, vuelve el mismo de abajo y la oferta sigue cerrada`, !vuelve.primera && ((abajo === "ensayo" && vuelve.ensayo && !vuelve.sample) || (abajo === "sample" && vuelve.sample && !vuelve.ensayo)), JSON.stringify(vuelve));
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }

@@ -90,6 +90,8 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 - **Hay países donde los criptoactivos están prohibidos o muy restringidos.** Un premio en USDC no se ofrece a esos participantes sin revisar antes.
 - **Un premio en dinero con fines de propaganda es justo lo que regulan Brasil, Colombia y México.** Ahí, el patrocinador que fondea un premio necesita su permiso.
 
+**Nota del 6 de noviembre de 2026, a la espera de la lectura de quien dirige el proyecto.** Para el piloto de Space Apps Santa Cruz (14 y 15 de noviembre) el código ya sabe armar el pago de un premio en USDC y el pago de un cupón de 1 stroop de XLM. En los dos casos lo firma la billetera de quien organiza y Tinkazo solo arma la transacción: no la firma ni la guarda, no pasa por ningún servidor nuestro y no toca el dinero, así que lo escrito arriba sobre la custodia sigue valiendo. El plan del equipo (5 USDC) paga un servicio, nunca una chance, y entrar a un sorteo sigue siendo gratis. Las promesas de este documento no se cambiaron; todo esto está apagado en producción y lo prende quien dirige el proyecto, con la revisión legal que pide [premios.md](premios.md).
+
 ## Lo que decide el producto
 
 1. **Entrar a un sorteo es gratis, siempre.** Tinkazo nunca vende boletos, ni rifas, ni entradas a un sorteo, ni deja que se cobren por él. Es lo que nos deja del lado del "sorteo gratuito" en casi todo el mundo. Si algún día alguien quiere vender boletos, es otro producto, con licencia, y no es este.

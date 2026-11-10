@@ -1,5 +1,8 @@
-import { audio, isMuted } from "./sound";
+import { audio, destinoDeMezcla, isMuted } from "./sound";
+import { anotarGolpe } from "./state";
 import { camaDeMusica } from "./sonidos/banco";
+import { ACORDES, curvaDeTecho, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
+import { bomboYBajoChico, festejoPropio, golpePropio, perfilDeMusica } from "./sonidos/carrera-eleccion";
 
 /**
  * La música del estadio: andina con beat.
@@ -124,10 +127,54 @@ const PROGRESSIONS: Chord[][] = [
   [AM, EM, G, AM, C, G, EM, AM],
 ];
 
+/* ------------------------------------------- la mezcla del bombo y del bajo */
+
+/** Cuánto suena cada capa del bombo, del kick y del bajo. */
+export interface MezclaGrave {
+  /** El seno grave del bombo legüero y el golpe de cuerpo que lo acompaña. */
+  bomboSeno: number;
+  bomboCuerpo: number;
+  /** El seno del bombo electrónico y su cuerpo. */
+  kickSeno: number;
+  kickCuerpo: number;
+  /** El triángulo es la nota del bajo; la sierra le da los armónicos que sí salen por un parlante chico. */
+  bajoTriangulo: number;
+  bajoSierra: number;
+}
+
+/** La mezcla que suena hoy en los diez juegos. No se toca: es lo que la gente oye en producción. */
+export const MEZCLA_GRAVE_DE_HOY: Readonly<MezclaGrave> = {
+  bomboSeno: 0.56,
+  bomboCuerpo: 0.3,
+  kickSeno: 0.45,
+  kickCuerpo: 0.24,
+  bajoTriangulo: 1,
+  bajoSierra: 0.42,
+};
+
+/**
+ * La mezcla para un parlante chico: menos seno grave, que un proyector o una laptop no reproducen, y más cuerpo y
+ * armónicos, que sí se oyen. Está condicionada porque baja la música de hoy en toda la mezcla de los diez juegos
+ * (la carrera, 1,2 LU) y ningún sonido se cambia sin que alguien lo escuche: vale con el arreglo de una candidata de
+ * la carrera y, sin ella, solo si eligió "parlante chico" en la página de escucha (`BOMBO_Y_BAJO` en
+ * `src/sonidos/carrera-elegidas.ts`).
+ */
+export const MEZCLA_GRAVE_PARLANTE_CHICO: Readonly<MezclaGrave> = {
+  bomboSeno: 0.4,
+  bomboCuerpo: 0.42,
+  kickSeno: 0.33,
+  kickCuerpo: 0.32,
+  bajoTriangulo: 0.6,
+  bajoSierra: 0.6,
+};
+
+/** La mezcla del bombo y del bajo que corresponde a una sesión. */
+export const mezclaGrave = (parlanteChico: boolean): Readonly<MezclaGrave> => (parlanteChico ? MEZCLA_GRAVE_PARLANTE_CHICO : MEZCLA_GRAVE_DE_HOY);
+
 /* ------------------------------------------------------------- el estado */
 
 interface Session {
-  ctx: AudioContext;
+  ctx: BaseAudioContext;
   bus: GainNode;
   wet: GainNode;
   noise: AudioBuffer;
@@ -159,6 +206,18 @@ interface Session {
   cho: Cho | null;
   /** La cama de archivo, si el juego la tiene. */
   cama: Cama | null;
+  /** La música de la carrera que se eligió escuchando (`src/sonidos/carrera.ts`), o `null` para la de siempre. */
+  perfil: PerfilMusica | null;
+  /** `true` si el bombo y el bajo suenan con la mezcla para parlante chico (`MEZCLA_GRAVE_PARLANTE_CHICO`) y no con la de hoy. */
+  parlanteChico: boolean;
+  /** El volumen del bus: 0,3, y más si la música de la carrera lo pide para llegar a −18 LUFS. */
+  vol: number;
+  /** Los golpes por minuto de la música de la carrera: cambian solo al empezar un compás. */
+  bpm: number;
+  /** La vuelta de acordes de la música de la carrera. */
+  vuelta: Chord[];
+  /** Desde cuándo (hora del contexto) suena solo el bombo, cada vez más fuerte: los últimos tres segundos. -1 si no. */
+  soloBombo: number;
 }
 
 /** El bucle de un archivo, con el filtro y el volumen que le pone la tensión. */
@@ -207,21 +266,68 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
   if (!enabled || isMuted()) return;
   const ctx = audio();
   if (!ctx) return;
+  // La carrera puede tener su propia música (una de las candidatas que se eligieron escuchando). Las demás, la de siempre.
+  const perfil = style === "andino" ? perfilDeMusica() : null;
+  cur = armarSesion(ctx, destinoDeMezcla(ctx), seed, style, perfil, 0.6);
+  // La chovena no: sus bailarines pisan en el tiempo de la música y la cama no lo conoce.
+  const archivo = style === "andino" && !perfil ? camaDeMusica() : null;
+  if (archivo) cur.cama = armarCama(cur, archivo);
+  cur.timer = window.setInterval(tick, 40);
+  tick();
+}
+
+/**
+ * Arma la banda sobre cualquier contexto de audio (la página, o un `OfflineAudioContext` que renderiza las
+ * candidatas de la carrera a un archivo): el bus con su compresor y la sala. `entrada` es lo que tarda en subir el
+ * volumen al empezar (0 en el renderizado: la pieza arranca en seco). `parlanteChico` elige la mezcla del bombo y del
+ * bajo; sin decirlo, es la de hoy salvo con el arreglo de una candidata o si se eligió la de parlante chico.
+ */
+function armarSesion(
+  ctx: BaseAudioContext,
+  destino: AudioNode,
+  seed: number,
+  style: MusicStyle,
+  perfil: PerfilMusica | null,
+  entrada: number,
+  trim = perfil?.trim ?? 1,
+  parlanteChico?: boolean,
+): Session {
   const rng = seeded(seed ^ 0x5eed);
+  const vol = 0.3 * trim;
 
   // El bus de la música va aparte de los efectos: un compresor para que las
   // capas sumadas no saturen, y sin el paso bajo de los efectos, que le
   // quitaría el brillo a los platillos.
   const bus = ctx.createGain();
-  bus.gain.value = 0;
-  bus.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.6);
+  if (entrada > 0) {
+    bus.gain.value = 0;
+    bus.gain.linearRampToValueAtTime(vol, ctx.currentTime + entrada);
+  } else bus.gain.value = vol;
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -16;
   comp.ratio.value = 4;
   comp.attack.value = 0.006;
   comp.release.value = 0.2;
   bus.connect(comp);
-  comp.connect(ctx.destination);
+  let salida: AudioNode = comp;
+  if (perfil || trim > 1) {
+    // La música más fuerte (−18 LUFS) necesita un techo: un limitador corto después del compresor, que no deja pasar un
+    // pico sobre −1 dBTP aunque la banda sume bombo, charango y zampoña en el mismo compás.
+    const tope = ctx.createDynamicsCompressor();
+    tope.threshold.value = -4;
+    tope.knee.value = 0;
+    tope.ratio.value = 20;
+    tope.attack.value = 0.001;
+    tope.release.value = 0.08;
+    comp.connect(tope);
+    // Y un techo suave en -1,3 dBFS: lo que el limitador deja pasar por un instante no recorta ni pasa de -1 dBTP.
+    const techo = ctx.createWaveShaper();
+    techo.curve = curvaDeTecho(0.72);
+    techo.oversample = "2x";
+    tope.connect(techo);
+    salida = techo;
+  }
+  salida.connect(destino);
 
   // Un poco de sala para la zampoña y el charango: un estadio no suena seco.
   const verb = ctx.createConvolver();
@@ -231,14 +337,22 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
   wet.connect(verb);
   verb.connect(bus);
 
-  cur = {
+  // El orden en que se saca el azar es el de siempre (la sala, el ruido, la vuelta de acordes, el motivo): la misma ronda suena igual.
+  const noise = noiseBuffer(ctx, rng);
+  const prog = PROGRESSIONS[Math.floor(rng() * PROGRESSIONS.length)] ?? (PROGRESSIONS[0] as Chord[]);
+  const motif = writeMotif(rng);
+  // La melodía de la chovena sale del mismo azar, después de lo del andino: los otros
+  // juegos suenan igual que antes de que existiera la chovena.
+  const cho = style === "chovena" ? writeChovena(rng) : null;
+  const elegida = perfil ? perfil.vueltas[Math.floor(rng() * perfil.vueltas.length)] : undefined;
+  return {
     ctx,
     bus,
     wet,
-    noise: noiseBuffer(ctx, rng),
+    noise,
     rng,
-    prog: PROGRESSIONS[Math.floor(rng() * PROGRESSIONS.length)] ?? (PROGRESSIONS[0] as Chord[]),
-    motif: writeMotif(rng),
+    prog,
+    motif,
     next: ctx.currentTime + 0.12,
     step: 0,
     started: ctx.currentTime,
@@ -252,17 +366,19 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
     style,
     hold: false,
     tempo: 1,
-    // La melodía sale del mismo azar, después de lo del andino: los otros
-    // juegos suenan igual que antes de que existiera la chovena.
-    cho: style === "chovena" ? writeChovena(rng) : null,
+    cho,
     cama: null,
+    perfil,
+    parlanteChico: parlanteChico ?? (perfil !== null || bomboYBajoChico()),
+    vol,
+    bpm: perfil ? perfil.bpm[0] : 96,
+    vuelta: elegida ? elegida.map(acorde) : prog,
+    soloBombo: -1,
   };
-  // La chovena no: sus bailarines pisan en el tiempo de la música y la cama no lo conoce.
-  const archivo = style === "andino" ? camaDeMusica() : null;
-  if (archivo) cur.cama = armarCama(cur, archivo);
-  cur.timer = window.setInterval(tick, 40);
-  tick();
 }
+
+/** Un acorde de la banda de la carrera (pentatónico), con la forma de los acordes de siempre. */
+const acorde = (id: AcordeId): Chord => ({ root: ACORDES[id].raiz, strings: [...ACORDES[id].cuerdas] });
 
 /** La corta con un fundido corto. Se llama al desmontar el estadio. */
 export function stopMusic(): void {
@@ -292,10 +408,12 @@ export function musicHold(on: boolean): void {
   s.bus.gain.cancelScheduledValues(t);
   s.bus.gain.setValueAtTime(s.bus.gain.value, t);
   if (on) {
+    // `?auditar=`: la hora de la página en que se corta la música (`scripts/medir-drama-carrera.mjs`).
+    anotarGolpe("musicaCorte");
     s.bus.gain.linearRampToValueAtTime(0, t + 0.025);
     return;
   }
-  s.bus.gain.linearRampToValueAtTime(0.3, t + 0.03);
+  s.bus.gain.linearRampToValueAtTime(s.vol, t + 0.03);
   s.next = t + 0.03;
   s.step = Math.ceil(s.step / 8) * 8;
 }
@@ -332,7 +450,7 @@ export function musicCue(heat: number): void {
     if (s.hold) {
       s.hold = false;
       s.bus.gain.cancelScheduledValues(s.ctx.currentTime);
-      s.bus.gain.setValueAtTime(0.3, s.ctx.currentTime);
+      s.bus.gain.setValueAtTime(s.vol, s.ctx.currentTime);
     }
     if (s.cama) {
       // El remate lo hace el sintetizador: la cama se apaga rápido para dejarle lugar.
@@ -437,7 +555,7 @@ function soltarCama(c: Cama): void {
 // La chovena no acelera con la tensión: los bailarines pisan en el tiempo, y
 // el juego calcula ese tiempo con el mismo número. Acelera cuando el juego lo pide.
 const beatLength = (s: Session): number =>
-  s.style === "chovena" ? 60 / (CHO_BPM * s.tempo) : 60 / ((96 + 36 * s.level) * s.tempo);
+  s.style === "chovena" ? 60 / (CHO_BPM * s.tempo) : s.perfil ? 60 / (s.bpm * s.tempo) : 60 / ((96 + 36 * s.level) * s.tempo);
 
 /** Cuánto antes de la hora del audio puede quedar un paso y sonar igual: más que eso es un atraso y se salta. */
 const ATRASO_MAXIMO = 0.04;
@@ -478,7 +596,7 @@ function tick(): void {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);
-    else if (!s.cama && s.next >= s.breakUntil) playStep(s, s.next, s.step);
+    else if (!s.cama && s.next >= s.breakUntil) (s.perfil && !s.perfil.legado ? playStepCarrera : playStep)(s, s.next, s.step);
     if (s.crashAt > 0 && s.next >= s.crashAt) {
       crash(s, s.next, 0.5);
       bombo(s, s.next, 1);
@@ -493,6 +611,8 @@ function tick(): void {
 function playStep(s: Session, t: number, step: number): void {
   const L = s.level;
   const inBar = step % 8;
+  // "Ninguno" en la música de la carrera: el arreglo de hoy con el ritmo nuevo, que cambia al empezar un compás.
+  if (s.perfil && inBar === 0) s.bpm = L < s.perfil.umbrales[0] ? s.perfil.bpm[0] : L < s.perfil.umbrales[1] ? s.perfil.bpm[1] : s.perfil.bpm[2];
   const bar = Math.floor(step / 8);
   const chord = s.prog[bar % s.prog.length] as Chord;
 
@@ -536,6 +656,184 @@ function playStep(s: Session, t: number, step: number): void {
 
   // Cada cuatro compases, con toda la tensión, una subida de ruido.
   if (L > 0.8 && step % 32 === 16) riser(s, t, beatLength(s) * 8);
+}
+
+/* ------------------------------------------------- la música de la carrera */
+
+/**
+ * Lo que suena en una semicorchea de la música de la carrera (`src/sonidos/carrera.ts`): la misma banda y los mismos
+ * instrumentos de siempre, con un arreglo por candidata. El ritmo va a 100 golpes por minuto en la largada, 112 en el
+ * grupo y 124 en la recta, y cambia solo al empezar un compás. Todo es de la pentatónica de la menor: la música y
+ * los efectos nunca chocan.
+ */
+function playStepCarrera(s: Session, t: number, step: number): void {
+  const p = s.perfil as PerfilMusica;
+  const L = s.level;
+  const inBar = step % 8;
+  const bar = Math.floor(step / 8);
+  const chord = s.vuelta[bar % s.vuelta.length] as Chord;
+  const c = p.capas;
+  if (inBar === 0) s.bpm = L < p.umbrales[0] ? p.bpm[0] : L < p.umbrales[1] ? p.bpm[1] : p.bpm[2];
+
+  // Los últimos tres segundos: se cae todo menos el bombo, al pulso y cada vez más fuerte.
+  if (s.soloBombo >= 0 && t >= s.soloBombo) {
+    pasoDelFinal(s, t, step);
+    return;
+  }
+
+  // El bombo legüero: en el uno siempre; en el dos y en la síncopa del huayno según el arreglo y la tensión.
+  if (c.bombo > 0) {
+    if (inBar === 0) bombo(s, t, 0.8 * c.bombo);
+    if (inBar === 4 && ((c.bombo >= 0.95 && L > 0.2) || (c.bombo < 0.7 && L > 0.5))) bombo(s, t, (c.bombo >= 0.95 ? 0.5 : 0.4) * c.bombo);
+    if (inBar === 6 && L > 0.3 && c.bombo >= 0.75) bombo(s, t, 0.45 * c.bombo);
+  }
+
+  // El bajo, en el uno y en el "y" del dos; con tensión salta de octava.
+  if (c.bajo > 0 && L > 0.15 && (inBar === 0 || inBar === 6)) bass(s, t, chord.root + (L > 0.8 && inBar === 6 ? 12 : 0), c.bajo);
+
+  // El charango, rasgueado de tres maneras: el huayno (larga, corta, corta), el pulso de la marcha o apenas un acorde.
+  if (c.charango > 0) {
+    const v = c.charango;
+    if (p.charango === "huayno") {
+      const pos = inBar % 4;
+      if (L > 0.15) {
+        if (pos === 0) strum(s, t, chord, true, v);
+        if (pos === 2) strum(s, t, chord, true, 0.6 * v);
+        if (pos === 3) strum(s, t, chord, false, 0.5 * v);
+      } else if (inBar === 0) strum(s, t, chord, true, 0.5 * v);
+    } else if (p.charango === "pulso") {
+      if (L > 0.3) {
+        if (inBar % 4 === 0) strum(s, t, chord, true, 0.9 * v);
+        if (inBar % 4 === 2) strum(s, t, chord, false, 0.4 * v);
+      } else if (inBar === 0) strum(s, t, chord, true, 0.5 * v);
+    } else {
+      if (inBar === 0) strum(s, t, chord, true, v);
+      if (inBar === 4 && L > 0.5) strum(s, t, chord, true, 0.6 * v);
+    }
+  }
+
+  // La caja de la comparsa, en el dos y el cuatro; con mucha tensión también en las notas fantasma.
+  if (c.caja > 0 && L > 0.3) {
+    if (inBar === 2 || inBar === 6) cajaDeComparsa(s, t, c.caja);
+    if (L > 0.7 && (inBar === 3 || inBar === 7)) cajaDeComparsa(s, t, 0.35 * c.caja);
+  }
+
+  // Las palmas de la gente, en el dos.
+  if (c.palmas > 0 && L > 0.5 && inBar === 4) clap(s, t, c.palmas);
+
+  // La zampoña: el motivo de la ronda, repartido entre dos cañas que se contestan. La octava de arriba solo si cabe en el parlante.
+  if (c.zampona > 0 && L > p.zamponaDesde) {
+    const i = step % s.motif.length;
+    const d = s.motif[i] as number;
+    if (d >= 0) {
+      const len = holdOf(s.motif, i) * (beatLength(s) / 4);
+      const side = (step >> 1) % 2 === 0 ? -0.45 : 0.45;
+      siku(s, t, deg(d), len, side, 0.9 * c.zampona);
+      if (L > 0.85 && deg(d) + 12 <= 27) siku(s, t, deg(d) + 12, len, -side, 0.35 * c.zampona);
+    }
+  }
+}
+
+/** Los últimos tres segundos de la música: solo el bombo, al pulso y cada vez más fuerte. */
+function pasoDelFinal(s: Session, t: number, step: number): void {
+  if (step % 4 === 0) bombo(s, t, 0.45 + 0.65 * Math.min(1, Math.max(0, (t - s.soloBombo) / 3)));
+}
+
+/** La caja de la comparsa: un golpe seco de ruido, con un cuerpo corto que cae de tono para que se oiga en un parlante chico. */
+function cajaDeComparsa(s: Session, t: number, v: number): void {
+  noiseHit(s, t, 0.22 * v, 0.09, "bandpass", 1800);
+  noiseHit(s, t, 0.08 * v, 0.05, "highpass", 5000);
+  cuerpo(s, t, 330, 0.14 * v);
+}
+
+/**
+ * Desde ahora (y como mucho tres segundos) suena solo el bombo, al pulso y cada vez más fuerte. Lo llama el show en
+ * el último tramo de la recta; sin la música de la carrera elegida no hace nada.
+ */
+export function musicFinal(): void {
+  const s = cur;
+  if (!s || !s.perfil || s.won || s.soloBombo >= 0) return;
+  s.soloBombo = s.next;
+}
+
+/** Qué pidió la demostración de una música: la semilla, el arreglo (`null` es el de hoy), cuánto dura y la tensión en cada instante. */
+export interface PedidoMusica {
+  seed: number;
+  perfil: PerfilMusica | null;
+  segundos: number;
+  /** La tensión (de 0 a 1) que lleva la música en el instante `t`. */
+  nivel: (t: number) => number;
+  /** Desde qué segundo suena solo el bombo, si lo hay. */
+  soloBomboDesde?: number;
+  /** La mezcla del bombo y del bajo: `true` para la de parlante chico, `false` para la de hoy. Sin decirlo, la de la sesión (ver `armarSesion`). */
+  parlanteChico?: boolean;
+}
+
+/**
+ * Toca la música de la carrera en un contexto sin conexión, `segundos` de largo, con la misma banda y el mismo
+ * secuenciador que la página: es lo que arma los archivos que se escuchan para elegir. Sin temporizadores ni relator: la
+ * tensión sale de `nivel`.
+ */
+export function tocarMusicaEn(ctx: BaseAudioContext, destino: AudioNode, o: PedidoMusica): void {
+  const s = armarSesion(ctx, destino, o.seed, "andino", o.perfil, 0, o.perfil?.trim ?? 1, o.parlanteChico);
+  s.next = 0.05;
+  s.started = 0;
+  while (s.next < o.segundos) {
+    s.level = o.nivel(s.next);
+    if (o.soloBomboDesde !== undefined && s.next >= o.soloBomboDesde && s.soloBombo < 0) s.soloBombo = s.next;
+    const sixteenth = beatLength(s) / 4;
+    if (s.soloBombo >= 0) pasoDelFinal(s, s.next, s.step);
+    else if (s.perfil && !s.perfil.legado) playStepCarrera(s, s.next, s.step);
+    else playStep(s, s.next, s.step);
+    s.next += sixteenth;
+    s.step++;
+  }
+}
+
+/** La banda de la carrera para las piezas de efecto (el golpe, el festejo, el bombo del final): los mismos instrumentos, en su propio bus. */
+export type Banda = Session;
+
+/**
+ * Arma una banda sobre cualquier contexto. `trim` sube o baja todo el bus: el golpe tiene que sonar de 6 a 10 LU sobre la
+ * recta. `parlanteChico` elige la mezcla del bombo y del bajo: las bandas de las candidatas de la carrera piden `true`
+ * (se calibraron con ella) y el remate de hoy no dice nada, así que suena como suena en producción.
+ */
+export function armarBanda(ctx: BaseAudioContext, destino: AudioNode, seed: number, trim: number, parlanteChico?: boolean): Banda {
+  return armarSesion(ctx, destino, seed, "andino", null, 0, trim, parlanteChico);
+}
+
+/** Una voz de la banda de las candidatas de la carrera, en la hora `t` del contexto. */
+export function tocarEnBanda(b: Banda, g: Golpe, t: number): void {
+  switch (g.k) {
+    case "bombo":
+      bombo(b, t, g.v);
+      break;
+    case "charango":
+      strum(b, t, acorde(g.acorde), g.abajo, g.v);
+      break;
+    case "zampona":
+      siku(b, t, deg(g.grado), g.dur, g.pan, g.v);
+      break;
+    case "palmas":
+      clap(b, t, g.v);
+      break;
+    case "kick":
+      kick(b, t);
+      break;
+    case "crash":
+      crash(b, t, g.v);
+      break;
+    case "corte":
+      // La banda se calla en 25 ms: lo que sigue es silencio, no una cola.
+      b.bus.gain.setValueAtTime(b.vol, t);
+      b.bus.gain.linearRampToValueAtTime(0, t + 0.025);
+      break;
+    case "abre":
+      b.bus.gain.setValueAtTime(b.vol, t);
+      break;
+    default:
+      break;
+  }
 }
 
 /** Cuántas semicorcheas dura una nota del motivo: hasta la próxima. */
@@ -596,12 +894,13 @@ function bombo(s: Session, t: number, v: number): void {
   o.frequency.exponentialRampToValueAtTime(48, t + 0.22);
   // Menos cola grave que antes: en un proyector no se oye y en la mezcla se
   // comía todo lo demás. El cuerpo de arriba la reemplaza.
-  const g = env(ctx, t, 0.56 * v, 0.004, 0.36);
+  const m = mezclaGrave(s.parlanteChico);
+  const g = env(ctx, t, m.bomboSeno * v, 0.004, 0.36);
   o.connect(g).connect(s.bus);
   o.start(t);
   o.stop(t + 0.6);
   noiseHit(s, t, 0.18 * v, 0.05, "lowpass", 900);
-  cuerpo(s, t, 190, 0.3 * v);
+  cuerpo(s, t, 190, m.bomboCuerpo * v);
 }
 
 /**
@@ -630,11 +929,12 @@ function kick(s: Session, t: number): void {
   o.type = "sine";
   o.frequency.setValueAtTime(150, t);
   o.frequency.exponentialRampToValueAtTime(46, t + 0.1);
-  const g = env(ctx, t, 0.45, 0.002, 0.22);
+  const m = mezclaGrave(s.parlanteChico);
+  const g = env(ctx, t, m.kickSeno, 0.002, 0.22);
   o.connect(g).connect(s.bus);
   o.start(t);
   o.stop(t + 0.35);
-  cuerpo(s, t, 230, 0.24);
+  cuerpo(s, t, 230, m.kickCuerpo);
 }
 
 function hat(s: Session, t: number, v: number): void {
@@ -642,8 +942,8 @@ function hat(s: Session, t: number, v: number): void {
 }
 
 /** Palmas: tres golpes de ruido casi juntos, como una fila de manos. */
-function clap(s: Session, t: number): void {
-  for (let i = 0; i < 3; i++) noiseHit(s, t + i * 0.011, i === 2 ? 0.2 : 0.12, i === 2 ? 0.16 : 0.03, "bandpass", 1600);
+function clap(s: Session, t: number, v = 1): void {
+  for (let i = 0; i < 3; i++) noiseHit(s, t + i * 0.011, (i === 2 ? 0.2 : 0.12) * v, i === 2 ? 0.16 : 0.03, "bandpass", 1600);
 }
 
 function crash(s: Session, t: number, v: number): void {
@@ -685,16 +985,17 @@ function noiseHit(s: Session, t: number, peak: number, decay: number, type: Biqu
 }
 
 /** El bajo: redondo, sin filo, para sostener sin tapar. */
-function bass(s: Session, t: number, semis: number): void {
+function bass(s: Session, t: number, semis: number, v = 1): void {
   const { ctx } = s;
   const f = ctx.createBiquadFilter();
   f.type = "lowpass";
   f.frequency.value = 1000;
-  const g = env(ctx, t, 0.32, 0.008, 0.34);
+  const g = env(ctx, t, 0.32 * v, 0.008, 0.34);
   f.connect(g).connect(s.bus);
   // El triángulo es la nota; la sierra, bajita, le da los armónicos que sí
   // salen por un parlante chico (el bajo vive entre 49 y 82 Hz).
-  for (const [type, lvl] of [["triangle", 1], ["sawtooth", 0.42]] as const) {
+  const m = mezclaGrave(s.parlanteChico);
+  for (const [type, lvl] of [["triangle", m.bajoTriangulo], ["sawtooth", m.bajoSierra]] as const) {
     const o = tag(ctx.createOscillator());
     o.type = type;
     o.frequency.value = hz(semis);
@@ -705,6 +1006,9 @@ function bass(s: Session, t: number, semis: number): void {
     o.stop(t + 0.4);
   }
 }
+
+/** Los instrumentos graves de la banda, a la vista de la prueba que fija su mezcla (`src/music-mezcla.test.ts`). */
+export const instrumentosGraves = { bombo, kick, bass } as const;
 
 /**
  * Un rasgueo de charango: cinco cuerdas punteadas una detrás de otra, de la
@@ -795,9 +1099,14 @@ function siku(s: Session, t: number, semis: number, len: number, pan: number, v:
  * y la fanfarria son del ganador.
  */
 function finale(s: Session, t: number): void {
-  bombo(s, t, 1.2);
-  kick(s, t);
-  crash(s, t, 1);
+  // Si se eligió un golpe y un festejo para la carrera, lo que suena es eso (`src/sonidos/carrera-uso.ts`): acá no.
+  const golpeMio = golpePropio(), festejoMio = festejoPropio();
+  if (!golpeMio) {
+    bombo(s, t, 1.2);
+    kick(s, t);
+    crash(s, t, 1);
+  }
+  if (festejoMio) return;
   // Veinte rasgueos son unos 600 nodos de audio: armados todos juntos, el
   // cuadro del ganador duraba más de 100 ms. Cada uno se arma poco antes de
   // sonar. Los tiempos del contexto de audio son los mismos, y el rasgueo no
@@ -815,8 +1124,22 @@ function finale(s: Session, t: number): void {
   }
   siku(s, t, deg(10), 1.5, -0.3, 1);
   siku(s, t + 0.02, deg(5), 1.5, 0.3, 0.6);
-  s.bus.gain.setValueAtTime(0.34, t + 1.6);
+  s.bus.gain.setValueAtTime(0.34 * (s.vol / 0.3), t + 1.6);
   s.bus.gain.linearRampToValueAtTime(0, t + 3.2);
+}
+
+/**
+ * El remate de hoy (el bombo, el platillo, veinte rasgueos en trémolo y las dos cañas), armado de una vez en un
+ * contexto sin conexión: es "el de hoy" que se escucha al lado de las candidatas de la carrera. Igual a `finale`, sin
+ * temporizadores ni la caída del bus.
+ */
+export function rematDeHoyEn(b: Banda, t: number): void {
+  bombo(b, t, 1.2);
+  kick(b, t);
+  crash(b, t, 1);
+  for (let i = 0; i < 20; i++) strum(b, t + i * 0.07, AM, i % 2 === 0, 0.55 * (1 - i / 26));
+  siku(b, t, deg(10), 1.5, -0.3, 1);
+  siku(b, t + 0.02, deg(5), 1.5, 0.3, 0.6);
 }
 
 /* -------------------------------------------------------------- la chovena */

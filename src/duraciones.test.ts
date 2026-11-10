@@ -71,9 +71,13 @@ describe("la portada no baja el show de la carrera", () => {
   it("carrera-duracion.ts solo importa las medidas, el reloj de la recta, las tandas y los tiempos", () => {
     expect(importes("./games/llamas/carrera-duracion.ts").sort()).toEqual(["./carrera-base", "./carrera-ritmo", "./carrera-tandas", "./carrera-tiempos"]);
   });
+  it("nombres-enteros.ts (los nombres de equipo que el show no acorta) no importa nada", () => {
+    // Lo importa carrera-base, que la portada carga con las duraciones: tiene que seguir siendo una lista suelta, sin Pixi, sin el plan y sin la cámara.
+    expect(importes("./games/nombres-enteros.ts")).toEqual([]);
+  });
   it("y esos cuatro no traen el plan ni la cámara", () => {
     for (const f of ["carrera-base", "carrera-ritmo", "carrera-tandas", "carrera-tiempos"]) {
-      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-ritmo", "./carrera-tiempos", "../nombres"], `${f} importa ${dep}`).toContain(dep);
+      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-ritmo", "./carrera-tiempos", "../nombres", "../nombres-enteros"], `${f} importa ${dep}`).toContain(dep);
     }
   });
 });

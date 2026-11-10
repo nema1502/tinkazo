@@ -1,0 +1,27 @@
+# La cuenta de Tinkazo: monedas, tiendita y plan del equipo, en cuenta.tinkazo.app (ver README.md).
+# Un script aparte de los otros (enlaces, portero, sala, música): un error de despliegue acá no puede tumbarlos.
+# NO se despliega todavía: solo wrangler dev y probar.mjs. Desplegar, crear el KV y el DNS piden la palabra de quien mantiene el proyecto.
+# Se probaría con: npx wrangler@4 dev --port 8794   (desde esta carpeta, con .dev.vars)
+name = "tinkazo-cuenta"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+# Dominio propio: Cloudflare crea el registro DNS y el certificado al desplegar.
+routes = [{ pattern = "cuenta.tinkazo.app", custom_domain = true }]
+
+# El libro de las cuentas: una entrada por cuenta (saldo, historial, canjes y plan) y una por pago del plan ya usado.
+# El id se pide con: npx wrangler@4 kv namespace create CUENTAS   (y se pega acá antes de desplegar).
+[[kv_namespaces]]
+binding = "CUENTAS"
+id = "PEGAR-ACA-EL-ID-DEL-KV"
+
+# Valores que no son secretos. Las huellas de los tokens de quienes organizan van por
+# `wrangler secret put HUELLAS_ORGANIZADORES` y, en local, en .dev.vars (que no se versiona).
+[vars]
+# La red de la que se leen los pagos: "testnet" o "mainnet".
+RED = "testnet"
+# La cuenta que cobra el plan del equipo (una G…). Vacía: el plan está apagado y no activa nada.
+CUENTA_PLANES = ""
+# Los canjes de la tiendita en JSON: [{"codigo","es","en","costo"}]. Vacío: chocolate 20, stickers 50, logo-en-el-show 100, nombre-en-el-cartel 200.
+CANJES = ""

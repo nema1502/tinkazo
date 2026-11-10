@@ -655,7 +655,7 @@ async function resaltadoTapa(page) {
  */
 const SIN_CUENTA = `JSON.stringify((() => {
   const opacidad = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 1; return o; };
-  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#prize-chips button', 'label.chip.live']
+  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#nw-atajos button', '#prize-chips button', 'label.chip.live']
     .map(s => document.querySelector(s)).filter(e => e && opacidad(e) < 1).map(e => e.id || e.className || e.tagName);
   const sellar = document.getElementById('btn-freeze');
   const linea = document.getElementById('sellar-sin-cuenta');

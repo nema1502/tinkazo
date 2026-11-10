@@ -6,23 +6,28 @@
 # hash. Esto manda el mismo pedido, sin compilar ni tocar nada, cuando ya está todo en
 # su lugar. Su servicio solo acepta pedidos desde los runners de GitHub Actions.
 # Los pasos: docs/deployments.md, «Si StellarExpert no lo marca».
+#
+# Los tres datos del release (commit, corrida y hash) no tienen valor por defecto a
+# propósito: son los de una compilación en particular y uno viejo le avisaría a
+# StellarExpert de un contrato que no es el que se despliega. Para el release v0.2.0
+# (v0.2.0_tinkazo-raffle_cli28.1.0, archivo tinkazo-raffle_v0.2.0.wasm) salen de:
+#   commit   git rev-list -n 1 v0.2.0
+#   corrida  gh run list --workflow release.yml --json databaseId,headBranch --jq '.[] | select(.headBranch=="v0.2.0") | .databaseId'
+#   hash     sha256sum tinkazo-raffle_v0.2.0.wasm
 name: Reenviar el aviso de verificación
 
 on:
   workflow_dispatch:
     inputs:
       commit:
-        description: Commit del release
+        description: Commit del tag del release (git rev-list -n 1 <tag>)
         required: true
-        default: 2466bda763493c3fd5bb50e5cb29cc6db77fde31
       corrida:
-        description: Corrida del release que compiló el .wasm
+        description: Corrida del release que compiló el .wasm (número de la corrida de release.yml)
         required: true
-        default: '39787005483'
       hash:
-        description: sha256 del .wasm
+        description: sha256 del .wasm del release (sha256sum del archivo)
         required: true
-        default: c0c7a1dda9e1f7c17721542b17da589d6f5ed89936c095145c89410ff1aaa61b
       paquete:
         description: Paquete de Cargo
         required: true

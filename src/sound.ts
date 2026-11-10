@@ -1,6 +1,8 @@
 import { getLang } from "./i18n";
 import { paceFactor, type Game } from "./state";
 import { ambiente, decidir, elegirJuego, ganador as ganadorDeArchivo, type Disparo, type Jugada } from "./sonidos/banco";
+import { curvaDeTecho } from "./sonidos/carrera";
+import { avisarJuego, festejoPropio, golpePropio, hayCandidatas } from "./sonidos/carrera-eleccion";
 
 /* Sonido con WebAudio: osciladores, y archivos cuando el banco (`src/sonidos/banco.ts`) los tiene. */
 
@@ -41,18 +43,57 @@ function contexto(): { ctx: AudioContext; out: GainNode } | null {
   if (!Ctor) return null;
   const ctx = audioCtx ?? new Ctor();
   audioCtx = ctx;
-  if (!master) {
-    const lp = ctx.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 4500;
-    lp.Q.value = 0.7;
-    const g = ctx.createGain();
-    g.gain.value = 0.9;
-    g.connect(lp);
-    lp.connect(ctx.destination);
-    master = g;
-  }
+  if (!master) master = cadenaDeEfectos(ctx);
   return { ctx, out: master };
+}
+
+/**
+ * La cadena de los efectos de un contexto: una ganancia y el paso bajo de 4,5 kHz que van antes de la salida.
+ * Es la misma que arma `contexto` en la página; el renderizador de las candidatas de la carrera la arma
+ * también en un `OfflineAudioContext` para oír, sin la página, lo mismo que sale por el parlante.
+ */
+export function cadenaDeEfectos(ctx: BaseAudioContext): GainNode {
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 4500;
+  lp.Q.value = 0.7;
+  const g = ctx.createGain();
+  g.gain.value = 0.9;
+  g.connect(lp);
+  lp.connect(destinoDeMezcla(ctx));
+  return g;
+}
+
+/** Por dónde sale todo lo que suena en un contexto: una ganancia sin cambio que va derecho a la salida o, en la carrera con candidatas, por un techo. */
+const mezclas = new WeakMap<BaseAudioContext, { entrada: GainNode; techo: WaveShaperNode }>();
+
+/**
+ * La entrada de la mezcla de un contexto: lo que suena (los efectos, la música, la banda) se conecta acá y no a la salida.
+ * Casi siempre va derecho a la salida y no cambia nada. Cuando la carrera suena con candidatas elegidas escuchando
+ * (más fuertes que lo de hoy: −18 LUFS) pasa por un techo suave en −1,3 dBFS, que deja pasar igual todo lo que está por
+ * debajo de −2,9 dBFS: la música y los efectos suman en el mismo instante y el pico real no tiene que pasar de −1 dBTP.
+ */
+export function destinoDeMezcla(ctx: BaseAudioContext): AudioNode {
+  let m = mezclas.get(ctx);
+  if (!m) {
+    const entrada = ctx.createGain();
+    const techo = ctx.createWaveShaper();
+    techo.curve = curvaDeTecho(0.72);
+    techo.oversample = "2x";
+    techo.connect(ctx.destination);
+    entrada.connect(hayCandidatas() ? techo : ctx.destination);
+    m = { entrada, techo };
+    mezclas.set(ctx, m);
+  }
+  return m.entrada;
+}
+
+/** Prende o apaga el techo de la mezcla según el juego que va a sonar. */
+function techoDeLaMezcla(ctx: BaseAudioContext, prendido: boolean): void {
+  const m = mezclas.get(ctx);
+  if (!m) return;
+  m.entrada.disconnect();
+  m.entrada.connect(prendido ? m.techo : ctx.destination);
 }
 
 /** La cadena, lista para sonar. */
@@ -140,29 +181,42 @@ function oscilador(f: number, d: number, type: OscillatorType, g: number): void 
   try {
     const c = chain();
     if (!c) return;
-    const t0 = c.ctx.currentTime;
-    const o = c.ctx.createOscillator();
-    const ga = c.ctx.createGain();
-    o.type = type;
-    o.frequency.value = f;
-    // Arrancar la ganancia en su máximo es un salto de amplitud, y un salto de
-    // amplitud es un clic. Ese clic sonaba delante de cada una de las cincuenta
-    // notas del producto: es la mitad de por qué esto suena a aparato y no a
-    // música. Doce milésimas de ataque lo borran sin ablandar el golpe.
-    const atk = Math.min(0.012, d * 0.3);
-    ga.gain.setValueAtTime(0.0001, t0);
-    ga.gain.linearRampToValueAtTime(g, t0 + atk);
-    ga.gain.exponentialRampToValueAtTime(0.0008, t0 + d);
-    // Y el cierre a cero: cortar el oscilador con la señal todavía arriba deja
-    // el mismo clic, esta vez al final.
-    ga.gain.linearRampToValueAtTime(0, t0 + d + 0.012);
-    o.connect(ga);
-    ga.connect(c.out);
-    o.start(t0);
-    o.stop(t0 + d + 0.02);
+    notaEn(c.ctx, c.out, c.ctx.currentTime, f, d, type, g);
   } catch {
     /* sin audio */
   }
+}
+
+/**
+ * Una nota de oscilador con su envolvente, armada en la hora `t0` de cualquier contexto y conectada a `out`.
+ * Es lo que hace `beep`, sin el silenciador ni el banco de archivos: así el renderizador de las candidatas de la
+ * carrera toca exactamente la misma nota. `cae` (de 0,3 a 1) baja el tono hasta esa fracción de `f` a lo largo de
+ * la nota: el golpe sordo de una almohadilla o de un tronco hueco. Sin `cae`, la nota es la de siempre.
+ */
+export function notaEn(ctx: BaseAudioContext, out: AudioNode, t0: number, f: number, d: number, type: OscillatorType, g: number, cae = 1): void {
+  const o = ctx.createOscillator();
+  const ga = ctx.createGain();
+  o.type = type;
+  o.frequency.value = f;
+  if (cae < 1) {
+    o.frequency.setValueAtTime(f, t0);
+    o.frequency.exponentialRampToValueAtTime(Math.max(20, f * cae), t0 + d);
+  }
+  // Arrancar la ganancia en su máximo es un salto de amplitud, y un salto de
+  // amplitud es un clic. Ese clic sonaba delante de cada una de las cincuenta
+  // notas del producto: es la mitad de por qué esto suena a aparato y no a
+  // música. Doce milésimas de ataque lo borran sin ablandar el golpe.
+  const atk = Math.min(0.012, d * 0.3);
+  ga.gain.setValueAtTime(0.0001, t0);
+  ga.gain.linearRampToValueAtTime(g, t0 + atk);
+  ga.gain.exponentialRampToValueAtTime(0.0008, t0 + d);
+  // Y el cierre a cero: cortar el oscilador con la señal todavía arriba deja
+  // el mismo clic, esta vez al final.
+  ga.gain.linearRampToValueAtTime(0, t0 + d + 0.012);
+  o.connect(ga);
+  ga.connect(out);
+  o.start(t0);
+  o.stop(t0 + d + 0.02);
 }
 
 /**
@@ -206,41 +260,45 @@ export function wind(gameSeconds: number, vol: number, hz0: number, hz1: number,
       }
       if (sonarAmbiente(amb.buffer, amb.id, dur, curva, { f: hz0, d: dur, tipo: "sine", g: vol })) return;
     }
-    const t0 = c.ctx.currentTime;
-    const n = Math.max(1, Math.ceil(c.ctx.sampleRate * dur));
-    const buf = c.ctx.createBuffer(1, n, c.ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    let s = Math.floor(seed) | 0 || 1;
-    for (let i = 0; i < n; i++) {
-      s = (s + 0x6d2b79f5) | 0;
-      let q = Math.imul(s ^ (s >>> 15), 1 | s);
-      q = (q + Math.imul(q ^ (q >>> 7), 61 | q)) ^ q;
-      data[i] = (((q ^ (q >>> 14)) >>> 0) / 4294967296) * 2 - 1;
-    }
-    const src = c.ctx.createBufferSource();
-    src.buffer = buf;
-    const bp = c.ctx.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.Q.value = 0.9;
-    bp.frequency.setValueAtTime(Math.max(120, hz0), t0);
-    bp.frequency.exponentialRampToValueAtTime(Math.max(120, hz1), t0 + dur);
-    const ga = c.ctx.createGain();
-    // La envolvente es una curva (sube el primer tercio y se apaga al final), sin rampas lineales de ganancia.
-    const pasos = 48;
-    const curva = new Float32Array(pasos);
-    for (let i = 0; i < pasos; i++) {
-      const u = i / (pasos - 1);
-      curva[i] = vol * Math.min(1, u / 0.35) * Math.min(1, (1 - u) / 0.25);
-    }
-    ga.gain.setValueCurveAtTime(curva, t0, dur);
-    src.connect(bp);
-    bp.connect(ga);
-    ga.connect(c.out);
-    src.start(t0);
-    src.stop(t0 + dur + 0.02);
+    vientoEn(c.ctx, c.out, c.ctx.currentTime, dur, vol, hz0, hz1, seed);
   } catch {
     /* sin audio */
   }
+}
+
+/** El viento de `wind`, armado en la hora `t0` de cualquier contexto y conectado a `out`: el renderizador de la carrera toca el mismo. `dur` en segundos reales. */
+export function vientoEn(ctx: BaseAudioContext, out: AudioNode, t0: number, dur: number, vol: number, hz0: number, hz1: number, seed: number): void {
+  const n = Math.max(1, Math.ceil(ctx.sampleRate * dur));
+  const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  let s = Math.floor(seed) | 0 || 1;
+  for (let i = 0; i < n; i++) {
+    s = (s + 0x6d2b79f5) | 0;
+    let q = Math.imul(s ^ (s >>> 15), 1 | s);
+    q = (q + Math.imul(q ^ (q >>> 7), 61 | q)) ^ q;
+    data[i] = (((q ^ (q >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.Q.value = 0.9;
+  bp.frequency.setValueAtTime(Math.max(120, hz0), t0);
+  bp.frequency.exponentialRampToValueAtTime(Math.max(120, hz1), t0 + dur);
+  const ga = ctx.createGain();
+  // La envolvente es una curva (sube el primer tercio y se apaga al final), sin rampas lineales de ganancia.
+  const pasos = 48;
+  const curva = new Float32Array(pasos);
+  for (let i = 0; i < pasos; i++) {
+    const u = i / (pasos - 1);
+    curva[i] = vol * Math.min(1, u / 0.35) * Math.min(1, (1 - u) / 0.25);
+  }
+  ga.gain.setValueCurveAtTime(curva, t0, dur);
+  src.connect(bp);
+  bp.connect(ga);
+  ga.connect(out);
+  src.start(t0);
+  src.stop(t0 + dur + 0.02);
 }
 
 /**
@@ -314,16 +372,28 @@ export function fanfare(): void {
     const j = ganadorDeArchivo();
     if (j && sonar(j, { f: 130.81, d: 1.2, tipo: "triangle", g: 0.075 })) return;
   }
+  // En la carrera, el golpe y el festejo que se eligieron escuchando (`src/sonidos/carrera-uso.ts`) reemplazan al de acá.
+  const golpeMio = golpePropio(), festejoMio = festejoPropio();
+  if ((golpeMio || festejoMio) && fanfarriaDeLaCarrera) fanfarriaDeLaCarrera();
   // Cuatro notas de 0,22 s en triángulo es una flautita: en una sala de
   // cincuenta personas no llega al fondo. Un final se oye por tres cosas que no
   // tenía: cuerpo (una nota grave sostenida), acorde (tres notas a la vez, no
   // una detrás de otra) y remate (el arpegio arriba). La pentatónica garantiza
   // que cualquier par suene bien, así que las tres juntas no pueden desafinar.
-  oscilador(note(0), 1.2, "triangle", 0.075);
-  [10, 12, 13].forEach((d) => oscilador(note(d), 0.95, "triangle", 0.042));
-  [13, 15, 17, 18].forEach((d, i) =>
-    setTimeout(() => oscilador(note(d), 0.26, "triangle", 0.05), 90 + i * 110),
-  );
+  if (!golpeMio) {
+    oscilador(note(0), 1.2, "triangle", 0.075);
+    [10, 12, 13].forEach((d) => oscilador(note(d), 0.95, "triangle", 0.042));
+  }
+  if (!festejoMio)
+    [13, 15, 17, 18].forEach((d, i) =>
+      setTimeout(() => oscilador(note(d), 0.26, "triangle", 0.05), 90 + i * 110),
+    );
+}
+
+/** Quién toca el golpe y el festejo elegidos de la carrera: lo registra `carrera-uso.ts` al cargarse (así `sound.ts` no depende de la música). */
+let fanfarriaDeLaCarrera: (() => void) | null = null;
+export function registrarFanfarriaDeLaCarrera(fn: () => void): void {
+  fanfarriaDeLaCarrera = fn;
 }
 
 export function soundLabel(): void {
@@ -357,11 +427,18 @@ export function toggleSound(): void {
  * juego ya fue elegido por el sorteo y solo se asegura que esté (el motor de los juegos lo llama otra vez al arrancar).
  */
 export function sonidoDelJuego(game: Game, reinicia = true): void {
+  avisarJuego(game);
   try {
     elegirJuego(game, audioCtx ?? contexto()?.ctx ?? null, reinicia);
+    if (audioCtx) techoDeLaMezcla(audioCtx, hayCandidatas());
   } catch {
     /* sin audio: suenan los osciladores */
   }
+}
+
+/** El contexto y la entrada de la cadena de efectos, para tocar desde afuera lo mismo que `beep` (el sonido de la carrera). `null` si no hay audio o está silenciado. */
+export function salidaDeEfectos(): { ctx: AudioContext; out: AudioNode } | null {
+  return muted ? null : chain();
 }
 
 /** `true` si el estadio está en silencio. */

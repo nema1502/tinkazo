@@ -17,7 +17,7 @@ El navegador arma la transacción, la simula y la firma **sin patrocinio**, y la
 3. si ese hash ya estaba pagado, devuelve el mismo resultado sin contar dos veces (el navegador reintenta);
 4. mira que **la cuenta la haya abierto nuestra app**;
 5. la simula, para no pagar lo que va a fallar (`AlreadyDrawn`, `RoundNotReady`);
-6. **reserva** el cupo de la cuenta y el presupuesto general, de una vez;
+6. **reserva** el cupo de la cuenta (con el plan del equipo, si lo tiene: ver [El plan del equipo sube el cupo](#el-plan-del-equipo-sube-el-cupo)) y el presupuesto general, de una vez;
 7. la envuelve en un fee-bump que paga su cuenta patrocinadora, la firma con su llave acotada y la manda a la red.
 
 De lo más barato a lo más caro: la IP y el tamaño se miran antes de leer nada, y la red solo se consulta (pasos 4 y 5) después de la lista blanca.
@@ -45,8 +45,8 @@ Se lee de la cadena (`getLedgerEntries`, campo `extXdr`) que el patrocinador de 
 
 | Tope | Valor | Cómo se cambia |
 | --- | --- | --- |
-| Sellos por cuenta y por mes (UTC) | **20**; 50 para `CUENTAS_VERIFICADAS` | `MAX_SELLOS_MES`, `MAX_SELLOS_VERIFICADA`, o en caliente por `PUT /v1/patrocinio/ajustes` |
-| Sorteos por cuenta y por mes | el doble de sus sellos (40, 100). **Sortear no se frena por el cupo de sellos**; este tope solo corta un abuso | |
+| Sellos por cuenta y por mes (UTC) | **20**; 50 para `CUENTAS_VERIFICADAS`; **50 con el plan del equipo activo** (lo dice el Worker de la cuenta, ver abajo) | `MAX_SELLOS_MES`, `MAX_SELLOS_VERIFICADA`, o en caliente por `PUT /v1/patrocinio/ajustes`. El cupo del plan sale de `workers/cuenta/src/reglas.ts` |
+| Sorteos por cuenta y por mes | el doble de sus sellos (40, 100); **100 con el plan del equipo**. **Sortear no se frena por el cupo de sellos**; este tope solo corta un abuso | |
 | General, en ventana móvil de 24 h | **15 XLM** (`150000000` stroops) | `TOPE_GENERAL_STROOPS`, o por ajustes |
 | Por transacción | 1 XLM de recursos y de total | `TOPE_TX_STROOPS` |
 | Inclusión que declara la transacción, y oferta del fee-bump | **10.000 stroops** por operación (100 veces la base de la red). La oferta es siempre esta, nunca lo que declara el cliente; una inclusión declarada por encima no se paga, porque la red exige una oferta igual o mayor | `INCLUSION_BUMP_STROOPS` |
@@ -56,6 +56,20 @@ Se lee de la cadena (`getLedgerEntries`, campo `extXdr`) que el patrocinador de 
 | Alerta del saldo de la patrocinadora | **20 XLM** (más que el tope de un día) | `SALDO_ALERTA_STROOPS` |
 | Ventana de la transacción | 300 s | `VENTANA_MAX_S` |
 | Pedidos de pago por dirección y por hora | 240 (una wifi de evento con varios organizadores comparte dirección), en memoria, sin guardar la IP (en IPv6, el /64). Las consultas de cupo tienen su propio contador, de 600. El tope de verdad es la regla de Cloudflare de abajo | `POR_IP_POR_HORA` |
+
+### El plan del equipo sube el cupo
+
+Quien compró el plan del equipo (5 USDC, 30 días, ver `workers/cuenta/README.md`) tiene mientras dure **50 sellos y 100 sorteos por mes** en lugar de 20 y 40: el sitio dice "50 sorteos propios por 30 días". El portero no guarda quién tiene plan: se lo pregunta al Worker de la cuenta.
+
+- **El contrato entre los dos Workers** es un solo recurso público y de solo lectura: `GET <CUENTA_URL>/v1/cuenta/<cuenta>/plan` → `{activo:true, vence, cupo:{sellos, sorteos}}` o `{activo:false}`. `vence` en ms.
+- **Cuándo se pregunta.** Al calcular los topes de una cuenta: en cada `POST /v1/patrocinio` (antes de reservar, nunca en medio, así reservar sigue siendo una sola jugada) y en cada `GET /cupo`. Por eso `/cupo` y el "Te quedan N sorteos gratis este mes" del sitio ya muestran el cupo del plan.
+- **Tiempo máximo: 1,5 segundos.** Pasado eso se corta la consulta y vale el cupo de siempre.
+- **Caché en memoria del objeto** (no se guarda en el SQLite): 5 minutos por cuenta si tiene plan (y nunca más allá de su `vence`), **1 minuto si no lo tiene**. La de «sin plan» es corta a propósito: quien llegó a su tope, compra el plan y vuelve a sellar no tiene que esperar cinco minutos. Las preguntas en curso por la misma cuenta se comparten, y la caché no pasa de 5.000 cuentas.
+- **Si el Worker de la cuenta falla, el portero no se entera**: un corte, un tiempo agotado, un error (`4xx`/`5xx`, incluido su tope por dirección) o una respuesta que no tiene la forma de siempre se tratan igual, como "no se pudo saber": **cupo de siempre, el pedido sigue y se paga**. Tras una falla no se vuelve a preguntar por ninguna cuenta durante 30 segundos, así una caída cuesta una espera de 1,5 s y no una por pedido. Queda `plan-sin-respuesta` (con un motivo fijo: `tiempo`, `red`, `http-503`, `forma`, `largo`) en la bitácora, sin cuentas.
+- **El plan solo sube, nunca baja**: el cupo es el más alto entre el de siempre (o el de una cuenta verificada, o el ajustado por administración) y el del plan. Una respuesta con cupos fuera de 0 a 1.000 se descarta como rota.
+- **No cambia nada más**: ni el tope general en dinero, ni la regla de que la cuenta la abrió nuestra app, ni el interruptor. El plan no abre una puerta, sube un contador.
+- **Se enciende con `CUENTA_URL`** (`https://cuenta.tinkazo.app`). Vacía, que es como nace, no se pregunta nada y todas las cuentas tienen el cupo de siempre. Solo se acepta `https` (o `http` en localhost para probar) y solo el origen, sin ruta: una dirección mal escrita se ignora y queda `error-config` con `falta:["cuenta-url"]` en la bitácora. En local, con los dos Workers en `wrangler dev`, la dirección es `http://127.0.0.1:<puerto>` y no `http://localhost:<puerto>`: con `localhost` el Worker prueba primero la dirección IPv6, donde `wrangler dev` no escucha, y el portero se rinde a los 1,5 segundos con `plan-sin-respuesta` (motivo `tiempo`) y deja el cupo de siempre (se vio en el ensayo del 6 de noviembre de 2026).
+- **Mes calendario, no 30 días.** El cupo mensual es por mes UTC como siempre: con el plan vigente el tope de cada mes es 50. Lo que la cuenta ya usó ese mes cuenta contra ese 50.
 
 **Qué se estima y qué se guarda.** Al reservar, un `seal` cuenta `estimado = 1,5 × lo simulado + 50.000 + 2 × 10.000` (el techo de recursos que acepta, más dos ofertas de inclusión) y **guarda aparte el monto fijo de su sorteo**. Ninguno de los dos sale de lo que declara el cliente: un cliente que declare 1 XLM no retiene más fondo que uno que declare lo justo (el de 1 XLM ni siquiera entra). Cuando la red cierra el sello, su gasto pasa a lo real, pero lo guardado para el sorteo se queda en el monto fijo hasta que el sorteo cierre (el costo del sello es otro costo que el del sorteo); ahí deja de contar y el gasto pasa al real del sorteo. Así 8 sellos retienen a lo sumo 8 montos fijos, y una cuenta no puede inmovilizar el fondo de todos sin sortear.
 
@@ -113,7 +127,7 @@ Una segunda regla, si el plan deja más de una: la misma expresión con `http.re
 
 ## Lo que guarda
 
-El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el contador, los hashes pagados con su resultado (`reservado`, `enviado`, `ok`, `fallo`, `devuelto`), lo estimado y lo real que cobró la red, lo guardado para sorteos y las cuentas que ya se vieron como de la app. **No guarda nombres, listas, direcciones IP ni nada que identifique a una persona más allá de su cuenta de Stellar**, que ya es pública en la cadena. `uso` se purga a los 35 días. Todo sale como JSON por `GET /v1/patrocinio/exportar` (con la clave de administración). El código que decide está en funciones sin Cloudflare (`cupos.ts`, `servicio.ts`, `lista-blanca.ts`), con reloj falso en las pruebas; las clases del objeto solo llaman a `cupos.ts`, sin SQL afuera, para poder migrar.
+El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el contador, los hashes pagados con su resultado (`reservado`, `enviado`, `ok`, `fallo`, `devuelto`), lo estimado y lo real que cobró la red, lo guardado para sorteos y las cuentas que ya se vieron como de la app. **No guarda nombres, listas, direcciones IP ni nada que identifique a una persona más allá de su cuenta de Stellar**, que ya es pública en la cadena. Si `CUENTA_URL` está cargada, le manda esa misma dirección pública al Worker de la cuenta para saber si tiene el plan, y recuerda la respuesta en memoria (no en el SQLite) unos minutos. `uso` se purga a los 35 días. Todo sale como JSON por `GET /v1/patrocinio/exportar` (con la clave de administración). El código que decide está en funciones sin Cloudflare (`cupos.ts`, `servicio.ts`, `lista-blanca.ts`), con reloj falso en las pruebas; las clases del objeto solo llaman a `cupos.ts`, sin SQL afuera, para poder migrar.
 
 ## Administración
 
@@ -136,14 +150,14 @@ Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si n
 cd workers/patrocinio
 node preparar-testnet.mjs        # una vez: crea en testnet la cuenta patrocinadora con su llave acotada; escribe .dev.vars y .prueba.json (no se versionan)
 npx wrangler@4 dev --port 8793 --var POR_IP_POR_HORA:300
-node probar.mjs http://127.0.0.1:8793          # 88 chequeos: un sello y un sorteo reales patrocinados con una cuenta de 0 XLM, una cuenta de dos firmas de dos, recursos inflados, y todo lo demás
+node probar.mjs http://127.0.0.1:8793          # 89 chequeos: un sello y un sorteo reales patrocinados con una cuenta de 0 XLM, una cuenta de dos firmas de dos, recursos inflados, y todo lo demás
 node probar.mjs http://127.0.0.1:8793 --ip     # aparte: el tope por dirección (lo agota; el de las consultas de cupo es otro)
 npx wrangler@4 dev --port 8794 --var CLAVE_PATROCINADOR:no-es-una-llave
 node probar.mjs http://127.0.0.1:8794 --llave-mala   # aparte: con la llave mal pegada /cupo dice prendido:false, motivo config; devuelto a Pollar, motivo pollar
-pnpm exec vitest run workers/patrocinio        # desde la raíz: 99 pruebas de unidad sin red (lista blanca, cupos en SQLite, servicio con una red de mentira)
+pnpm exec vitest run workers/patrocinio        # desde la raíz: 133 pruebas de unidad sin red (lista blanca, cupos en SQLite, servicio con una red de mentira, y el plan del equipo con un Worker de la cuenta de mentira)
 ```
 
-`probar.mjs` solo habla con testnet y con un `wrangler dev` local (rechaza otra cosa). Gasta unos centavos de XLM de prueba y deja un sello y un sorteo con la marca `prueba-portero` en el contrato oficial de testnet. Las cuentas de 0 XLM las abre una "billetera de Pollar de prueba" propia, con el mismo mecanismo de patrocinio de reservas que usa Pollar, así que el portero las reconoce como de la app sin necesitar a Pollar. Las llaves de prueba son de testnet y no se usan en otra red.
+`probar.mjs` solo habla con testnet y con un `wrangler dev` local (rechaza otra cosa). Cada sello apunta a una ronda que nace 90 s después de armarlo, y la prueba dice con cuánto margen llegó al ledger: el contrato pide 30 s o más (`RoundTooSoon`), y con el RPC público de testnet lento el camino entero (simular, el portero y el ledger) se come de 17 a 23 s (medido el 8 de noviembre de 2026). Con los 45 s de antes el ensayo del 6 de noviembre no quedaba en verde. Gasta unos centavos de XLM de prueba y deja un sello y un sorteo con la marca `prueba-portero` en el contrato oficial de testnet. Las cuentas de 0 XLM las abre una "billetera de Pollar de prueba" propia, con el mismo mecanismo de patrocinio de reservas que usa Pollar, así que el portero las reconoce como de la app sin necesitar a Pollar. Las llaves de prueba son de testnet y no se usan en otra red.
 
 Lo que cubren las pruebas de unidad y no `probar.mjs` (por no gastar sellos de verdad): el sello 20 pasa y el 21 da `429`, el reloj corriendo hasta el mes siguiente, treinta pedidos a la vez de una cuenta, cinco veces el mismo hash, el objeto que se reinicia con los conteos intactos, el peor caso de las reservas (sellos baratos y sorteos inflados, ocho sellos con el fee declarado al máximo), la reserva de un objeto muerto antes de mandar y la alarma del saldo. `probar.mjs` prueba el `429` con el cupo bajado a 1 por la ruta de ajustes.
 
@@ -196,12 +210,12 @@ curl -fsS -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/jso
 - **Rotar la llave del Worker** (si se sospecha que se filtró): con la fría, agregar una llave nueva de peso 1 y quitar la vieja (peso 0): `stellar tx new set-options --source-account <fria> --signer <G_NUEVA> --signer-weight 1 --network mainnet`, y lo mismo con la vieja en peso `0`. Después `npx wrangler@4 secret put CLAVE_PATROCINADOR` con la secreta nueva, y `estado` para ver que `llave` es la nueva. Lo peor que pudo hacer la vieja es gastar comisiones hasta lo cargado.
 - **Volver a Pollar**: `curl ... /pollar`, y en el panel de Pollar (app de Tinkazo, Wallets, Sponsorship, pestaña Stellar, Contract sponsorship rules) prender la regla para `seal` y `draw` del contrato oficial, con un tramo chico de fondos. Para volver al portero: `curl ... /encender` y apagar esa regla. El nombre exacto de los botones del panel de Pollar puede cambiar y no se verificó para esta versión.
 - **Si se perdió la clave de administración**: cargar una nueva con `npx wrangler@4 secret put ADMIN_TOKEN` (32 caracteres o más, por ejemplo `openssl rand -hex 32`); rige en el pedido siguiente.
-- **Si el Worker mismo no contesta o no se puede entrar**: en el panel de Cloudflare, Workers, `tinkazo-patrocinio`, quitar la ruta `p.tinkazo.app/*` (el sitio, al no recibir respuesta de `/cupo`, deja de ofrecer el patrocinio y cada uno paga lo suyo), o `npx wrangler@4 deploy --var APAGADO:1` (apaga aunque el objeto diga otra cosa).
+- **Si el Worker mismo no contesta o no se puede entrar**: en el panel de Cloudflare, Workers, `tinkazo-patrocinio`, quitar el dominio `p.tinkazo.app` (el sitio, al no recibir respuesta de `/cupo`, deja de ofrecer el patrocinio y cada uno paga lo suyo), o `npx wrangler@4 deploy --var APAGADO:1` (apaga aunque el objeto diga otra cosa).
 - **Si cambia el contrato oficial**: se actualiza `src/stellar/deployments.json` y se vuelve a desplegar este Worker, que lee el contrato de ahí al empaquetarse.
 
 ### Bitácora y alerta del fondo
 
-- **Bitácora**: `wrangler.toml` tiene `[observability]` prendido y el portero escribe una línea de JSON por hecho clave: `reservado`, `enviado`, `resultado`, `devuelto`, `alarma`, y los `error-config`, `error-envio`, `error-interno`, `error-saldo` (estos salen como error). Con `npx wrangler@4 tail` o en el panel. **Nunca lleva direcciones IP, nombres, cuentas ni llaves**: solo nombres fijos, cifras y los primeros 8 caracteres del hash.
+- **Bitácora**: `wrangler.toml` tiene `[observability]` prendido y el portero escribe una línea de JSON por hecho clave: `reservado`, `enviado`, `resultado`, `devuelto`, `alarma`, `plan-sin-respuesta` (el Worker de la cuenta no contestó: se usó el cupo de siempre), y los `error-config`, `error-envio`, `error-interno`, `error-saldo` (estos salen como error). Con `npx wrangler@4 tail` o en el panel. **Nunca lleva direcciones IP, nombres, cuentas ni llaves**: solo nombres fijos, cifras y los primeros 8 caracteres del hash.
 - **Alerta del fondo**: `GET /v1/patrocinio/estado` devuelve el saldo leído de la red y `alerta:true` por debajo de `SALDO_ALERTA_STROOPS` (20 XLM) o si no se pudo leer. Un paso del workflow diario de la red (`.github/workflows/vigilar-red.yml`) lo llama y falla si hay alerta o si no contesta: **está comentado hasta que exista el despliegue**, con el `curl` listo. Para activarlo: descomentarlo y cargar el secreto `PORTERO_ADMIN_TOKEN` en GitHub.
 
 ## Desplegar y encender (pendiente de la palabra de quien mantiene el proyecto)
@@ -209,10 +223,11 @@ curl -fsS -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/jso
 1. **Pasar la cuenta de Cloudflare al plan de US$5 antes de desplegar** (el pedido en frío no entra en el plan gratis, ver [Cifras](#cifras-de-arranque-y-cpu)).
 2. Crear la cuenta patrocinadora de mainnet con dos llaves (la fría de peso 2, la del Worker de peso 1, umbrales 1, 2 y 2, y su propia llave en 0), como hace `preparar-testnet.mjs` en testnet, y comprobar sus pesos en la cadena. Medir lo que cuesta un `draw` en mainnet y cargar `RESERVA_SORTEO_STROOPS` con ese costo más la mitad.
 3. `npx wrangler@4 secret put CLAVE_PATROCINADOR` y `ADMIN_TOKEN`; cargar `CUENTA_PATROCINADORA` y `PATROCINADORES_APP` (la billetera de fondos **exclusiva** de la app de mainnet) como variables; poner `RED = "mainnet"` y completar `mainnet` en `src/stellar/deployments.json`.
-4. `npx wrangler@4 deploy` y el registro AAAA `p` a `100::` con el proxy de Cloudflare, como con `c` y `s`. Poner la regla de límite delante de `p.tinkazo.app` (ver arriba).
+4. `npx wrangler@4 deploy`: el despliegue crea el registro y el certificado de `p.tinkazo.app` (dominio propio de Cloudflare, `custom_domain` en `wrangler.toml`), sin registro AAAA a mano. Poner la regla de límite delante de `p.tinkazo.app` (ver arriba).
 5. Probar contra producción antes de abrirlo, con una cuenta de prueba, y mirar `/cupo` (tiene que decir `rige:"portero"` y `prendido:true`) y `/estado` (`alerta:false`).
-6. Activar el paso de la alerta en el workflow diario.
-7. **Los términos** (`terminos.html`, `tmMore1` y `tmMore4`) tienen que decir que, para cuidar el fondo, se cuenta cuántos sellos hizo cada cuenta y que no se guardan nombres. Los tiene que leer quien mantiene el proyecto antes de subir.
+6. Para que el plan del equipo suba el cupo: con el Worker de la cuenta ya desplegado (`workers/cuenta/README.md`), cargar `CUENTA_URL = "https://cuenta.tinkazo.app"` en `wrangler.toml` y volver a desplegar. Comprobar con `/cupo?cuenta=<una cuenta con plan>`: `sellos.max` tiene que decir 50. Sin esta variable el portero se comporta como siempre.
+7. Activar el paso de la alerta en el workflow diario.
+8. **Los términos** (`terminos.html`, `tmMore1` y `tmMore4`) tienen que decir que, para cuidar el fondo, se cuenta cuántos sellos hizo cada cuenta y que no se guardan nombres. Los tiene que leer quien mantiene el proyecto antes de subir.
 
 ## Límites conocidos de esta versión
 
@@ -220,6 +235,8 @@ curl -fsS -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/jso
 - El presupuesto estima cada transacción con el techo que acepta (1,5 veces lo simulado más un margen) y lo corrige con lo real que cobró la red cuando la alarma la ve cerrar. Es conservador a propósito.
 - **Una fila devuelta no vuelve a contar.** Si la red rechazó un pedido (se devolvió) y, por una carrera entre dos pedidos del mismo hash, la transacción terminó entrando, el cobro no se suma al presupuesto: solo se anota lo que cobró la red. Lo ve la alerta del saldo, que lee la cadena. Es raro y está acotado por el tope de cada cuenta.
 - El tope por dirección del Worker es por nodo y en memoria: un atacante repartido entre muchos nodos de Cloudflare lo esquiva. La defensa es la regla de Cloudflare (WAF) de arriba y, sobre todo, el tope general en dinero.
+- **El plan tarda en notarse un rato**: el portero recuerda un minuto que una cuenta no tiene plan (y cinco que lo tiene), y el KV del Worker de la cuenta puede tardar hasta un minuto en verse desde otro lugar. Quien activa el plan puede tener que reintentar a los dos minutos. Con el Worker de la cuenta caído, quien tiene plan vuelve a su cupo de 20 en cuanto se acaba lo que el portero recordaba (a lo sumo cinco minutos): es el costo de no bloquear nunca por esa falla.
+- **`/cupo` con cuentas inventadas gasta consultas del plan.** Cada cuenta nueva que se consulta (una dirección válida, que un script genera sin costo) hace una consulta al Worker de la cuenta. Un script que pida miles puede agotar el tope por dirección de ese Worker (6.000 por hora, todas desde la misma dirección) y, mientras dure, quienes tienen plan vuelven al cupo de siempre (una pausa de 30 s cada vez que el Worker de la cuenta contesta `429`). No toca el dinero ni deja pasar a nadie de más. La defensa es la regla de Cloudflare ya puesta delante de `/cupo` (60 pedidos en 10 s por dirección).
 - Una cuenta que ya llegó a su tope del mes igual dispara la lectura de la cuenta y la simulación antes de recibir el `429`: no toca el fondo, sí la cuota del RPC.
 - El cambio de mes es limpio: 20 sellos el último día a las 23:59 UTC y 20 más a las 00:00 son legítimos. Es el diseño.
 - Un tercero puede mandar el `draw` de un sello ajeno (el contrato no pide firma para sortear): lo cuenta contra su propio cupo, nunca contra el del organizador, y el resultado es el mismo. Cuando el organizador llega, su `draw` falla en la simulación con `AlreadyDrawn` y recibe `400 fallaria`: el cliente tiene que tratar eso como «ya sorteado, mirá el resultado».

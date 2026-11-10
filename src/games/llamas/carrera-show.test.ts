@@ -1,15 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { crearDirector, problemasDeMomentos, resolverToma } from "../pixi/kit/director";
+import { crearGuion, validarGuion } from "../pixi/kit/guion";
 import type { Caja, Kit, PlanoToma } from "../pixi/kit/tipos";
-import { validarGuion } from "../pixi/kit/guion";
 import { problemasDeMarcador } from "../pixi/kit/marcador";
 import { problemasDeRespuestas } from "../pixi/kit/respuestas";
 import { segundosDe } from "../../duraciones";
 import { formasDe } from "../nombres";
-import { planCarrera, corto, alfabetico, duracionNominal, FINALISTAS, FIJOS, TARJETA, T_VUELO, type Datos } from "./carrera-show";
+import { planCarrera, corto, alfabetico, duracionNominal, CINTA_SIN_SENALAR, FINALISTAS, FIJOS, TARJETA, T_VUELO, type Datos } from "./carrera-show";
 import { ctxDe } from "./carrera-prueba";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import { ESP_MIN } from "./carrera-tiempos";
+import { MARCA_PORTON } from "./carrera-tandas";
+
+// Armar la recta prueba hasta 160 arreglos por ronda (`carrera-marcha.ts`): unos 40 ms por plan, y estas pruebas arman cientos.
+vi.setConfig({ testTimeout: 120_000 });
 
 const TAMANOS = [2, 3, 5, 8, 9, 12, 18, 25, 30, 31, 50, 100, 200];
 
@@ -182,6 +186,61 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     }
   });
 
+  it("desde T-3 el relator no nombra a nadie y desde la meta no dice nada: en el plan y en lo que queda en pantalla", () => {
+    for (const nueva of [false, true]) {
+      for (const n of [8, 18, 60]) {
+        for (let s = 1; s <= 10; s++) {
+          const ctx = ctxDe(n, s);
+          const plan = planCarrera(ctx, { nueva });
+          const T = plan.datos.tCrown;
+          const desde = T - CINTA_SIN_SENALAR;
+          const cortos = ctx.nombres.map((nm) => corto(nm));
+          const nombra = (x: string): boolean => cortos.some((c) => x.includes(c));
+          const caso = `${nueva ? "nueva" : "de siempre"}, n=${n} s=${s}`;
+          for (const l of plan.guion) {
+            if (l.texto === undefined) continue;
+            const x = typeof l.texto === "function" ? l.texto() : l.texto;
+            if (l.t >= desde - 1e-9) expect(nombra(x), `${caso}: «${x}» a ${(l.t - T).toFixed(2)} s de la meta`).toBe(false);
+            expect(l.t, `${caso}: «${x}» cae después de la meta`).toBeLessThan(T);
+          }
+          // Lo que se lee: el guion con su cola, cuadro a cuadro hasta pasado el golpe. La última línea dicha antes de T-3 sigue en pantalla
+          // hasta la siguiente, así que tampoco puede nombrar a nadie.
+          const g = crearGuion(plan.guion);
+          const nada = { decir: (): void => undefined, hacer: (): void => undefined };
+          for (let t = 0; t <= T + 2; t += 1 / 60) g.avanzar(t, nada);
+          const dichas = g.dichas();
+          const enPantalla = dichas.filter((d) => d.t <= desde).at(-1);
+          if (enPantalla) expect(nombra(enPantalla.texto), `${caso}: en T-3 queda «${enPantalla.texto}»`).toBe(false);
+          for (const d of dichas.filter((x) => x.t > desde)) expect(nombra(d.texto), `${caso}: «${d.texto}» a ${(d.t - T).toFixed(2)} s`).toBe(false);
+          expect(dichas.filter((d) => d.t >= T).map((d) => d.texto), caso).toEqual([]);
+          // Y al coronar el kit vacía la caja del relator y no anuncia a nadie: el nombre lo dice el cartel.
+          expect(plan.alCoronar?.sinAnuncio, caso).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("la tribuna no grita el nombre de una mientras la marca del portón está en otra: la final empieza después de que se apaga la última", () => {
+    for (const n of [31, 60, 100, 200]) {
+      for (let s = 1; s <= 4; s++) {
+        const ctx = ctxDe(n, s);
+        const plan = planCarrera(ctx);
+        const d = plan.datos;
+        expect(d.tandas.length, `n=${n} s=${s}`).toBeGreaterThan(0);
+        const ultimaSalida = Math.max(...d.tandas.flatMap((tn) => tn.salidas));
+        expect(ultimaSalida + MARCA_PORTON, `n=${n} s=${s}: la marca del portón se apaga antes de abrir la final`).toBeLessThanOrEqual(d.tAbre);
+        const nombres = ctx.nombres.map((nm) => corto(nm));
+        for (const l of plan.guion) {
+          if (l.texto === undefined) continue;
+          const texto = typeof l.texto === "function" ? l.texto() : (l.texto as string);
+          if (!nombres.some((nm) => texto.includes(nm))) continue;
+          const enVentana = d.tandas.some((tn) => tn.salidas.some((sal) => l.t >= sal && l.t < sal + MARCA_PORTON));
+          if (enVentana) expect(texto, `n=${n} s=${s} a los ${l.t.toFixed(1)} s`).not.toMatch(/^¡Vamos, /);
+        }
+      }
+    }
+  });
+
   it("la tribuna nombra a las de la final, sin mirar quién gana: la ganadora sale tanto como cualquiera, primera y última", () => {
     const RONDAS = 600;
     let ganadoraNombrada = 0, esperada = 0, varianza = 0, primeraEsGanadora = 0, hayPrimera = 0, ultimaEsGanadora = 0;
@@ -209,8 +268,9 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     const sd = Math.sqrt(hayPrimera * (1 / 8) * (7 / 8));
     expect(Math.abs(primeraEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
     expect(Math.abs(ultimaEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
-    // Las líneas de los obstáculos ocupan algunos huecos de la recta: la tribuna grita en el 93 % de las rondas o más.
-    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.93);
+    // Las líneas de los obstáculos ocupan algunos huecos de la recta y desde «¡Cabeza a cabeza!» (T-3,3) la tribuna calla: grita en el 90 %
+    // de las rondas o más (antes de esa línea, el 93 %).
+    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.9);
   });
 
   it("\"Busquen su nombre\" se dice con todas las cantidades (también con hasta 30) y \"Ya se ve la meta\" solo cuando la meta entra", () => {

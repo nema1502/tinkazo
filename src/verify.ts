@@ -16,7 +16,7 @@ import { network, shortAddress, txUrl } from "./stellar/config";
 import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
 import { leerRegistro } from "./stellar/registro";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
-import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
+import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
@@ -26,6 +26,8 @@ import { pintarFranja } from "./ui/logo-franja";
 import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
+// Solo la bandera: el panel de ganadores y sus textos se cargan únicamente si está prendida.
+import { pagosActivos } from "./stellar/pagos-bandera";
 
 /**
  * Página de verificación.
@@ -301,7 +303,10 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   // --------------------------------------------- 5. el ganador, recomputado
   if (r.semilla !== null) {
     const bien = r.ganadores.length > 0 && !tiene("ganadores", "lista-deforme", "lista-cambiada", "cantidad");
-    set("vCheckWinner", bien ? "ok" : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
+    // Anclado y sin el sello leído (ni del contrato ni de su transacción), cuántos ganadores había no se sabe: lo que se
+    // rehizo es un solo nombre y no está atestiguado, así que no lleva el visto bueno (queda pendiente, como la lista).
+    const sinSello = r.ancla.tipo === "oficial" && !sello && !delHistorial;
+    set("vCheckWinner", bien ? (sinSello ? "pending" : "ok") : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
   }
 
   // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
@@ -404,6 +409,8 @@ function contar(proof: Proof, r: Revision): void {
     // transacción). Se dice por qué, en simple, y que eso no prueba que el sorteo no exista.
     if (r.falta === "sin-historial") {
       verdict("working", "vVerdictUnknown", t(porQueSinHistorial(r)));
+      // Dónde mirar la transacción del sello sin pasar por acá: un explorador y los archivos de historia.
+      pintarTecnico(detalleSinHistorial(r, proof));
       if (primeraVez) contarFin("error");
       return;
     }
@@ -411,7 +418,9 @@ function contar(proof: Proof, r: Revision): void {
     // organizador, pero tampoco se muestra un ganador que nadie atestiguó: con la
     // red cortada (el wifi del evento), un comprobante inventado salía con su
     // tarjeta, su premio y el botón de compartir (escépticos, 22 de octubre de 2026).
+    // Si el comprobante trae el hash del sello, tampoco el historial contestó (si no, sería verde).
     verdict("working", "vVerdictUnknown", t("vVerdictUnknownDetail"));
+    pintarTecnico(detalleSinHistorial(r, proof));
     if (primeraVez) contarFin("error");
     return;
   }
@@ -437,6 +446,7 @@ function contar(proof: Proof, r: Revision): void {
       ...(atestiguado && proof.id && proof.net && !delHistorial ? { numero: proof.id, red: proof.net } : {}),
       ...(delHistorial && proof.net ? { red: proof.net } : {}),
     });
+    pintarPagos(r, premio);
     // Los otros sellos se traen al final y sin bloquear. Si muestran la misma
     // lista sellada más de una vez, el verde baja a amarillo (`pintarSellos`).
     // Con el sello del historial no se traen: se leen del estado del contrato, que ya no
@@ -454,6 +464,7 @@ function contar(proof: Proof, r: Revision): void {
         "ok",
         "vVerdictOkChain",
         t(proof.net === "testnet" ? "vVerdictOkHistoryDetailTest" : "vVerdictOkHistoryDetail")
+          .replace("{m}", t(porQueDelHistorial(r)))
           .replace("{f}", fechaLarga(delHistorial.closedAt, getLang()))
           .replace("{c}", codigoDelSello(delHistorial)),
       );
@@ -470,6 +481,15 @@ function contar(proof: Proof, r: Revision): void {
     verdict("partial", "vVerdictPartial", t("vVerdictPartialDetail"));
     if (primeraVez) contarFin("yellow");
   }
+}
+
+/**
+ * El panel de ganadores con el estado de cada premio, leído de la red (src/ui/pagos-comprobante.ts). Detrás de la
+ * bandera: apagada, esta página no baja nada de eso.
+ */
+function pintarPagos(r: Revision, premio: string): void {
+  if (!pagosActivos()) return;
+  void import("./ui/pagos-comprobante").then((m) => m.mostrarPagosDelComprobante(r, premio)).catch(() => undefined);
 }
 
 /** Cuántos sellos se listan como mucho. Los que repiten la lista entran siempre. */

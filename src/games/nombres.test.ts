@@ -118,6 +118,73 @@ describe("planNombres", () => {
   });
 });
 
+describe("planNombres: dos personas distintas no escriben lo mismo en el nivel 3", () => {
+  const nivel3 = (p: ReturnType<typeof planNombres>): string[] => p.formas.map((f) => f[2]);
+  it("«Elena Condori» y «Elena Condori 3» ya no son las dos «Elena C.»", () => {
+    const p = planNombres(["Elena Condori", "Jorge Mamani", "Elena Condori 3"]);
+    expect(nivel3(p)).toEqual(["Elena C.", "Jorge M.", "Elena C. 3"]);
+    // Los demás niveles siguen siendo los de siempre.
+    expect(p.formas[0]).toEqual(["E", "Elena", "Elena C.", "Elena Condori"]);
+    expect(p.formas[2]).toEqual(["E", "Elena", "Elena C. 3", "Elena Condori 3"]);
+  });
+  it("«Sofía Aguilar», «Sofía Aguilar 2» y «Sofía Aguilar 3»: cada una con lo suyo", () => {
+    const p = planNombres(["Sofía Aguilar 3", "Sofía Aguilar", "Sofía Aguilar 2"]);
+    expect(nivel3(p)).toEqual(["Sofía A. 3", "Sofía A.", "Sofía A. 2"]);
+  });
+  it("«María Pérez» y «María Paz» se distinguen con las letras del apellido", () => {
+    const p = planNombres(["María Pérez", "María Paz", "Jorge Mamani"]);
+    expect(nivel3(p)).toEqual(["María Pé.", "María Pa.", "Jorge M."]);
+    expect(p.formas[0]?.[3]).toBe("María Pérez");
+    expect(p.formas[1]?.[3]).toBe("María Paz");
+  });
+  it("sube de a una letra hasta distinguirse y, si hace falta, escribe el apellido o el nombre entero", () => {
+    expect(nivel3(planNombres(["Ana Quispe", "Ana Quiroga"]))).toEqual(["Ana Quis.", "Ana Quir."]);
+    // Mismo último apellido: el nivel 3 pasa a ser el nombre entero.
+    expect(nivel3(planNombres(["María Quispe Mamani", "María Soto Mamani"]))).toEqual(["María Quispe Mamani", "María Soto Mamani"]);
+    // Uno es el principio del otro.
+    expect(nivel3(planNombres(["Luis Paz", "Luis Pazos"]))).toEqual(["Luis Paz", "Luis Pazo."]);
+  });
+  it("un nombre repetido sigue con su ordinal, también cuando además choca con otro", () => {
+    const p = planNombres(["María Pérez", "María Paz", "María Pérez"]);
+    expect(nivel3(p)).toEqual(["María Pé.", "María Pa.", "María Pé. (2)"]);
+    expect(p.formas[2]?.[3]).toBe("María Pérez (2)");
+  });
+  it("un nombre de una sola palabra y el mismo con un número se distinguen", () => {
+    expect(nivel3(planNombres(["Elena", "Elena 3"]))).toEqual(["Elena", "Elena 3"]);
+  });
+  it("con 60 personas armadas como las del auditor (los 18 de la escena fija repetidos con un número) nadie comparte el nivel 3", () => {
+    const lista = Array.from({ length: 60 }, (_, i) => `${SAMPLE[i % SAMPLE.length]}${i >= SAMPLE.length ? ` ${Math.floor(i / SAMPLE.length) + 1}` : ""}`);
+    const p = planNombres(lista);
+    expect(new Set(nivel3(p).map((x) => x.toLocaleLowerCase("es"))).size).toBe(60);
+    const e = lista.indexOf("Elena Condori 3");
+    expect(p.formas[e]?.[2]).toBe("Elena C. 3");
+    expect(p.formas[lista.indexOf("Elena Condori")]?.[2]).toBe("Elena C.");
+    expect(p.formas[lista.indexOf("Sofía Aguilar 3")]?.[2]).toBe("Sofía A. 3");
+  });
+  it("una lista de 60 sin choques sale exactamente igual que antes: la forma de cada nombre, sola", () => {
+    const pilas = ["María", "Jorge", "Lucía", "Carlos", "Ana", "Diego", "Elena", "Pablo", "Sofía", "Rodrigo", "Valeria", "Miguel"];
+    const apellidos = ["Quispe", "Mamani", "Flores", "Choque", "Vargas"];
+    const lista = Array.from({ length: 60 }, (_, i) => `${pilas[i % 12]} ${apellidos[Math.floor(i / 12)]}`);
+    const p = planNombres(lista);
+    expect(new Set(lista).size).toBe(60);
+    expect(p.formas).toEqual(lista.map((nm) => formasDe(nm)));
+    expect(p.ordinal).toEqual(lista.map(() => 1));
+    // Y la de la escena fija, que no tiene choques.
+    expect(planNombres(SAMPLE).formas).toEqual(SAMPLE.map((nm) => formasDe(nm)));
+  });
+  it("no cambia con el orden de la lista (sale de los nombres, no de quién gana)", () => {
+    const lista = ["Elena Condori", "María Pérez", "Elena Condori 3", "María Paz", "Jorge Mamani"];
+    const a = planNombres(lista);
+    const b = planNombres([...lista].reverse());
+    lista.forEach((_, i) => expect(a.formas[i]).toEqual(b.formas[lista.length - 1 - i]));
+  });
+  it("con 200 personas que comparten nombre de pila y apellido termina y nadie queda igual", () => {
+    const lista = Array.from({ length: 200 }, (_, i) => `María Pérez ${i + 1}`);
+    const p = planNombres(lista);
+    expect(new Set(nivel3(p)).size).toBe(200);
+  });
+});
+
 describe("nivelPorCantidad y nivelBase", () => {
   it("sube cuando queda menos gente y nunca baja", () => {
     const niveles = Array.from({ length: 40 }, (_, i) => nivelPorCantidad(40 - i));

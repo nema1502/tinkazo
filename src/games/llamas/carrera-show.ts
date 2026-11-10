@@ -1,11 +1,11 @@
 import { sembrar } from "../pixi/kit/azar";
 import { planoSobre } from "../pixi/kit/director";
-import { PRIORIDAD } from "../pixi/kit/guion";
+import { PRIORIDAD, PROTECCION, crearGuion } from "../pixi/kit/guion";
 import type { Caja, Contexto, FocoPunto, Kit, LineaGuion, Momentos, Plan, PlanoToma, Respuestas, TipoPaso, Toma, Vista, Zona } from "../pixi/kit/tipos";
 import { crearOrden, type Orden } from "./carrera-orden";
 import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, barajar, corto } from "./carrera-base";
 import { CIERRE_TRAMO, ESP_MIN, armarTiempos, duracionGrupo, type Terreno, type Tiempos, type Tramo } from "./carrera-tiempos";
-import { ENTRE_FINAL, armarTandas, tandasPara, type Tanda } from "./carrera-tandas";
+import { ENTRE_FINAL, LLEGADA_TARDE, MARCA_PORTON, armarTandas, tandasPara, type Tanda } from "./carrera-tandas";
 import { duracionNominal, grupoDe, normalDe, tSalidaDe } from "./carrera-duracion";
 
 export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, corto, duracionNominal, grupoDe, normalDe, tSalidaDe };
@@ -14,6 +14,9 @@ import { carrilesDe, planRecta } from "./carrera-recta";
 import { conCierre } from "./carrera-cierre";
 import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
 import { conObstaculos } from "./carrera-obstaculos";
+import { conTopeDeAceleracion } from "./carrera-tope";
+import { AVISO, CARRIL_ANTES, CARRIL_DURA, CUERPO, RASTRO, conMarcha, type Causa } from "./carrera-marcha";
+import { programarFinal, sonarEchada, sonarObstaculo, sonarPaso } from "../../sonidos/carrera-ganchos";
 
 /**
  * El show de la carrera, puro: la salida, el grupo que se va echando, la recta
@@ -82,6 +85,17 @@ export interface EscenaCarrera {
   puntoDelFrente(t: number): { x: number; y: number } | null;
 }
 
+/** Desde cuántos segundos antes de la meta la cinta de arriba deja de señalar a quien va adelante. */
+export const CINTA_SIN_SENALAR = 3;
+
+/** Lo mínimo que se queda la marca de quien va adelante (el aro, la borla, la ficha amarilla y la cara de la cinta) en una misma llama, en segundos. */
+export const MARCA_MIN = 1.5;
+/**
+ * Cuánto le tiene que sacar la nueva puntera a la que lleva la marca, en cuerpos, para que la marca pase: así el cambio ya se ve en la
+ * pantalla (adelante en el cuadro, en 2D y en 3D) y no es una diferencia que solo sabe el plan.
+ */
+export const MARCA_VENTAJA = 0.5;
+
 export interface Datos {
   /** La carrera nueva (`?carrera=nueva`): distancia de verdad, carriles fijos y la recta intercambiable. */
   nueva: boolean;
@@ -99,6 +113,8 @@ export interface Datos {
   tNombres: number;
   tSalida: number;
   tAbre: number;
+  /** Cuándo empiezan las finalistas a pasar de su fila del grupo a su carril (dura `CARRIL_DURA`). */
+  tCarriles: number;
   tCrown: number;
   tramos: Tramo[];
   /** Avance del frente en anchos de pantalla desde la salida. */
@@ -118,10 +134,14 @@ export interface Datos {
   /** La primera en `t` (índice en la lista). */
   lider(t: number): number;
   /**
-   * Quién lleva la ficha amarilla y la manta. En la de siempre es `lider`. En la carrera nueva, la última que llevó la punta al menos 1,4 s
-   * seguidos: cuando dos se pasan y se repasan (el acordeón), la manta no parpadea. La raya sigue al hocico más adelantado.
+   * Quién lleva la ficha amarilla y la manta. En la de siempre, la marca (`marcas`): pasa a la nueva puntera cuando ya se la ve adelante
+   * (`MARCA_VENTAJA`), no antes de `MARCA_MIN` segundos y nunca mientras se lee una línea que nombra a otra como puntera. En la carrera nueva,
+   * la última que llevó la punta al menos 1,4 s seguidos: cuando dos se pasan y se repasan (el acordeón), la manta no parpadea. La raya sigue
+   * al hocico más adelantado.
    */
   duena(t: number): number;
+  /** En la de siempre, cuándo pasa la marca a cada una, desde la salida hasta tres segundos antes de la meta (la primera es la de la salida). Vacío en la nueva. */
+  marcas: { t: number; quien: number }[];
   /** Las que siguen en el grupo en `t`, de la primera a la última. */
   vivas(t: number): number[];
   campeona: number;
@@ -132,6 +152,13 @@ export interface Datos {
   tandas: Tanda[];
   /** La tanda que corre en `t` (-1 si no hay, o si todavía no empezó o ya terminaron). */
   tanda(t: number): number;
+  /**
+   * Cuánto señala la cinta de arriba a quien va adelante en `t` (de 1 a 0): hasta tres segundos antes de la meta lleva la cara de la primera; desde ahí no
+   * señala a nadie (queda el aro amarillo con el avance), porque en los últimos tres segundos la primera no es la ganadora más veces de las que toca.
+   */
+  cursor(t: number): number;
+  /** Los motivos a la vista de todo lo que pasa del tope de velocidad (`carrera-marcha.ts`): los piques de la punta, las echadas y los obstáculos. */
+  causas: Causa[];
   /** Cuándo el relator dice quién va adelante (un cambio de punta o, si no entró ninguno en un tramo, quien va primero). */
   lineasAdelante: number[];
 }
@@ -161,7 +188,12 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   const sinObstaculos = nueva
     ? rectaNueva(ctx, campeona)
     : conCierre(planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) }), sembrar(Math.floor(ctx.azar("carrera:cierre") * 4294967296)));
-  const final = conObstaculos(sinObstaculos, sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296)));
+  // La marcha (`carrera-marcha.ts`): el orden en que entran a la recta es el de la final al 7 % (la carrera nueva, al 0 %), y la recta pasa a
+  // ser una curva con la velocidad y la aceleración acotadas; después los obstáculos se suman sobre esa curva.
+  const qEntrada = nueva ? 0 : 0.067;
+  const entradaLanes = sinObstaculos.lanes.map((_, k) => k).sort((a, b) => sinObstaculos.pos(b, qEntrada) - sinObstaculos.pos(a, qEntrada) || a - b);
+  // Las capas (la marcha y los obstáculos) se suman sin mirarse: el tope de aceleración se pone sobre la suma (`carrera-tope.ts`).
+  const final = conTopeDeAceleracion(conObstaculos(conMarcha(sinObstaculos, { entrada: entradaLanes, rng: sembrar(Math.floor(ctx.azar("carrera:marcha") * 4294967296)) }), sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296))));
   const lanes = final.lanes;
   const arco = final.story.arc;
   const cortos = names.map(corto);
@@ -170,7 +202,9 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   /* ------------------------------------------------------- quién corre el grupo */
   const esFinal = new Set(lanes);
   const conTandas = n > PELOTON_MAX;
-  const tand = conTandas ? armarTandas({ n, nombres: names, finalistas: lanes, t0: T_VUELO, rng: sembrar(Math.floor(ctx.azar("carrera:tandas") * 4294967296)) }) : null;
+  // Las ocho entran a la recta en el orden de `entradaLanes`; el grupo las deja en ese orden (`carrera-orden.ts`) y salen por el portón en ese orden.
+  const entrada = entradaLanes.map((k) => lanes[k] as number);
+  const tand = conTandas ? armarTandas({ n, nombres: names, finalistas: lanes, t0: T_VUELO, rng: sembrar(Math.floor(ctx.azar("carrera:tandas") * 4294967296)), entrada }) : null;
   const tandas = tand?.tandas ?? [];
   let gente: number[];
   let fila: number[];
@@ -200,14 +234,13 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   const tCrown = tDeQ(1);
 
   /* --------------------------------------------------------------- el orden */
-  // La carrera nueva entra a la recta en el orden en que sale la recta (q = 0); la de siempre, en el que tiene al 7 %.
-  const qEntrada = nueva ? 0 : 0.067;
-  const entrada = lanes.map((_, k) => k).sort((a, b) => final.pos(b, qEntrada) - final.pos(a, qEntrada) || a - b).map((k) => lanes[k] as number);
+  // (`entrada` está arriba.) Con tandas, cada una ocupa en el corral el lugar de su turno en el portón, y el paseo y los piques arrancan cuando las
+  // últimas terminaron de entrar (`LLEGADA_TARDE`): el grupo sale en bloque y las que llegan al final lo alcanzan sin que nadie más se mueva.
   const orden = crearOrden({
-    gente, cae: (i) => tiempos.cae.get(i) ?? Infinity, finalistas: lanes, entrada, t0: tSalida, tConv, tAbre,
+    gente, cae: (i) => tiempos.cae.get(i) ?? Infinity, finalistas: lanes, entrada, t0: tand ? tSalida + LLEGADA_TARDE : tSalida, tConv, tAbre,
     rng: sembrar(Math.floor(ctx.azar("carrera:orden") * 4294967296)),
-    // En la nueva, quien toma la punta tarda dos segundos en pasar: el adelantamiento se ve, no se salta.
-    ...(nueva ? { traspaso: 1.8 } : {}),
+    porSalida: !!tand, rampa: tand ? 3 : undefined,
+    empalme: (g, tt) => (final.marcha && lanes.includes(g) ? final.marcha.enExtendido(lanes.indexOf(g), tt - tAbre) : null),
   });
 
   /* ---------------------------------------------------------------- distancia */
@@ -279,9 +312,22 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   // en el plan, que es puro, así la manta cambia justo cuando el relator lo dice y no parpadea entre dos casi empatadas.
   const HISTERESIS = 1;
   const duenaMemo = new Map<number, number>();
+  // La marca de la de siempre: se arma con el guion, más abajo (`marcas`). Antes de la salida y desde tres segundos antes de la meta no hay
+  // marca a la vista, y quien va adelante es la primera.
+  const marcas: { t: number; quien: number }[] = [];
+  const marcaEn = (t: number, real: number): number => {
+    if (t < tSalida || t >= tCrown - CINTA_SIN_SENALAR || !marcas.length) return real;
+    let v = real;
+    for (const m of marcas) {
+      if (m.t > t + 1e-9) break;
+      v = m.quien;
+    }
+    return v;
+  };
   const duena = (t: number): number => {
     const real = lider(t);
-    if (!nueva || t < tSalida + 0.5 || t >= tDeQ(0.97)) return real;
+    if (!nueva) return marcaEn(t, real);
+    if (t < tSalida + 0.5 || t >= tDeQ(0.97)) return real;
     // Sobre una grilla de una décima: así el largo de cada tramo de punta se mide siempre igual y la dueña no se pelea con el borde de un tramo.
     const celda = Math.floor(t * 10 + 1e-9);
     const dado = duenaMemo.get(celda);
@@ -307,6 +353,12 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     duenaMemo.set(celda, v);
     return v;
   };
+  /** Dónde va `g` en `t`, en cuerpos (la misma cuenta que pone a cada una en la pantalla, `posicion` en `carrera.ts`): en el grupo su puntaje, en la recta su lugar. */
+  const enCuerpos = (g: number, t: number): number => {
+    if (t < tAbre) return orden.puntaje(g, Math.max(t, tSalida));
+    const k = lanes.indexOf(g), qq = q(t);
+    return k < 0 ? -Infinity : (final.pos(k, qq) - qq) / CUERPO;
+  };
   const tanda = (t: number): number => (conTandas && t >= T_VUELO - 0.3 ? tandas.findIndex((x) => t < x.tFin) : -1);
   const vivas = (t: number): number[] => (t >= tAbre ? ranking(t) : t < tSalida ? orden.en(tSalida) : orden.en(t));
   const fase = (t: number): FaseCarrera => (t < tVuelo ? "vuelo" : t < tNombres ? (conTandas ? "tandas" : "nombres") : t < tAbre ? "grupo" : t < tCrown ? "recta" : "fin");
@@ -319,7 +371,9 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     if (h.noPasan.length) sucesos.push({ desde: h.tCierra, tipo: "salio", quien: h.noPasan[0] });
   }
   // Un cambio de punta no se pisa con una echada: dos hechos a menos de un instante y ninguno se ve.
-  const cambios = orden.cambios.filter((c) => !tiempos.echadas.some((e) => c.t > e.t - 0.5 && c.t < e.t + 0.8) && c.t < tAbre - 0.6);
+  const pisaEchada = (t: number): boolean => tiempos.echadas.some((e) => t > e.t - 0.5 && t < e.t + 0.8);
+  // En la de siempre, los cambios que se dicen son los de la marca, y se arman con el guion (más abajo).
+  const cambios = nueva ? orden.cambios.filter((c) => !pisaEchada(c.t) && c.t < tAbre - 0.6) : [];
   for (const c of cambios) sucesos.push({ desde: c.t, tipo: "adelante", quien: c.quien });
   const bt = final.story.beats.map((b) => ({ b, t: tDeQ(b.at) })).sort((a, b) => a.t - b.t);
   for (const { b, t } of bt) {
@@ -377,19 +431,21 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
       calor: calorEn(e.t),
       hecho: { tipo: "salio", quien: e.quien },
       hacer: (k) => {
-        k.sonido.salida();
+        // El sonido de echarse se elige escuchando (`src/sonidos/carrera.ts`); sin elección, el de siempre.
+        if (!sonarEchada()) k.sonido.salida();
         k.cam.punch(0.025);
       },
     });
   }
-  for (const c of cambios) {
+  const anunciar = (c: { t: number; quien: number }): void => {
     decir(2, c.t, {
       texto: () => ctx.txt("carAdelante", nom(c.quien), variante(`adl:${c.quien}:${Math.round(c.t)}`)),
       calor: calorEn(c.t),
       hecho: { tipo: "adelante", quien: c.quien },
       hacer: (k) => k.sonido.tono(9, "evento", { dur: 0.1, vol: 0.04 }),
     }, "adelante");
-  }
+  };
+  for (const c of cambios) anunciar(c);
   if (tAbre > tSalida) decir(4, tAbre - 0.4, { texto: () => ctx.txt("carRecta"), calor: 0.7, prioridad: PRIORIDAD.importante, hacer: (k) => k.sonido.escalera([5, 7, 10], 60) });
   decir(3, Math.max(t80, tAbre + 3), { texto: () => ctx.txt("carCasi"), calor: 0.75 });
 
@@ -410,17 +466,25 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   for (const o of obstaculos) {
     if (o.tipo === "piedras") {
       decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carAlud"), calor: 0.5 + 0.3 * o.q });
-      sonar(tDeQ(o.q + 0.004), (k) => k.sonido.tono(0, "climax", { dur: 0.5, timbre: "sine", vol: 0.085 }));
+      sonar(tDeQ(o.q + 0.004), (k) => {
+        if (!sonarObstaculo("piedras")) k.sonido.tono(0, "climax", { dur: 0.5, timbre: "sine", vol: 0.085 });
+      });
     } else if (o.tipo === "salto") {
       decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carValla"), calor: 0.5 + 0.3 * o.q });
       for (const m of o.malas) {
         decir(4, tDeQ((o.llegan[m] as number) + 0.012), { texto: () => ctx.txt("carSaltoMal"), calor: 0.55 + 0.3 * o.q });
-        sonar(tDeQ(o.llegan[m] as number), (k) => k.sonido.tono(1, "evento", { dur: 0.12, vol: 0.05 }));
+        sonar(tDeQ(o.llegan[m] as number), (k) => {
+          if (!sonarObstaculo("valla")) k.sonido.tono(1, "evento", { dur: 0.12, vol: 0.05 });
+        });
       }
-      sonar(tDeQ(o.q), (k) => k.sonido.tono(9, "evento", { dur: 0.08, vol: 0.05 }));
+      sonar(tDeQ(o.q), (k) => {
+        if (!sonarObstaculo("valla")) k.sonido.tono(9, "evento", { dur: 0.08, vol: 0.05 });
+      });
     } else {
       decir(5, tDeQ(o.q - 0.01), { texto: () => ctx.txt("carRafaga"), calor: 0.5 + 0.3 * o.q });
-      sonar(tDeQ(o.q - 0.01), (k) => k.sonido.viento(1.6, 0.8, semillaObst));
+      sonar(tDeQ(o.q - 0.01), (k) => {
+        if (!sonarObstaculo("viento")) k.sonido.viento(1.6, 0.8, semillaObst);
+      });
     }
   }
   // En la carrera nueva el arco se nombra por cómo termina y la recta se decide al 88 %: las líneas del arco caen después.
@@ -430,11 +494,21 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     if (!nueva) decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
     decir(5, tDeQ(final.foto), { texto: () => ctx.txt("carFoto"), calor: 0.95, grito: true, prioridad: PRIORIDAD.importante });
   } else if (arco === "tapada") decir(4, tDeQ(nueva ? 0.93 : 0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
+  // Desde que la cinta deja de señalar (`CINTA_SIN_SENALAR` antes de la meta) el relator no nombra a nadie: «¡Cabeza a cabeza!» sale cuando la cinta
+  // empieza a apagarse y reemplaza al último «¡Vamos, Ana!» de la tribuna, que si no quedaba en pantalla hasta el golpe. Si una línea del arco cae a
+  // menos de 1,2 s, queda esa, que tampoco nombra a nadie.
+  decir(3, tCrown - CINTA_SIN_SENALAR - 0.3, { texto: () => ctx.txt("carCabeza"), calor: 0.85 });
   // Antes de la largada, mientras se lee la lista: un pulso suave de la sala que espera, cada 0,8 s, sin melodía. Sin esto
   // la carrera quedaba cuatro segundos en silencio entre el cartel de la meta y la salida.
   for (let t = 1.2, j = 0; t < tSalida; t += 0.8, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 5 : 3, "fondo", { dur: 0.06, vol: 0.022 }));
   // Las patas: un golpe de casco cada medio segundo, parejo.
-  for (let t = tSalida + 0.5, j = 0; t < tCrown - 0.4; t += 0.5, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 3 : 0, "fondo", { dur: 0.05, vol: 0.022 }));
+  for (let t = tSalida + 0.5, j = 0; t < tCrown - 0.4; t += 0.5, j++) {
+    sonar(t, (k) => {
+      if (!sonarPaso(j)) k.sonido.tono(j % 2 ? 3 : 0, "fondo", { dur: 0.05, vol: 0.022 });
+    });
+  }
+  // El final: el bombo que crece, el clic de la foto y el silencio, si se eligió uno escuchando. Sin elección, no hace nada.
+  programarFinal(sonar, tCrown);
 
   // Se acepta primero lo que importa; lo que queda a menos de 1,2 s de una línea aceptada se tira.
   const aceptar = (todas: readonly Cand[]): Cand[] => {
@@ -451,20 +525,134 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     return out;
   };
   let aceptadas = aceptar(cand);
+  /** Cuándo sale de verdad cada línea con texto, con la cola del guion (`crearGuion`) a 60 cuadros por segundo: lo que se lee en pantalla. `NaN` si no sale. */
+  const salenEn = (lineas: readonly LineaGuion[]): number[] => {
+    const g = crearGuion(lineas.map((l, i) => ({ t: l.t, prioridad: l.prioridad, vence: l.vence, texto: l.texto === undefined ? undefined : String(i) })));
+    const nada = { decir: (): void => undefined, hacer: (): void => undefined };
+    for (let i = 0; i / 60 <= tCrown + 1; i++) g.avanzar(i / 60, nada);
+    const out = lineas.map(() => NaN);
+    for (const x of g.dichas()) out[Number(x.texto)] = x.t;
+    return out;
+  };
+  /** Las líneas que nombran a la puntera («¡Ahora va Ana!», «¡Va adelante Ana!») y a quién nombran; y la marca que pasa con cada anuncio. */
+  const nombraA = new Map<LineaGuion, number>();
+  const anuncioDe = new Map<LineaGuion, { t: number; quien: number }>();
+  // Lo que se lee en pantalla (la de siempre): cuándo sale cada línea y si nombra a la puntera.
+  type Leida = { t: number; plan: number; importante: boolean; nombra: number };
+  const leidas: Leida[] = [];
+  const leyendo = (t: number): Leida | undefined => {
+    let r: Leida | undefined;
+    for (const l of leidas) {
+      if (l.t > t + 1e-9) break;
+      r = l;
+    }
+    return r;
+  };
+  // La marca de quien va adelante (la de siempre): pasa a la nueva puntera cuando ya se la ve adelante (le saca `MARCA_VENTAJA` cuerpos, o la que
+  // la llevaba se echó), no antes de `MARCA_MIN` segundos de la anterior, y nunca mientras en pantalla se lee una línea que nombra a otra como
+  // puntera. En el grupo, si hay lugar en el guion, el relator lo dice en el mismo instante en que pasa la marca («¡Ahora va Ana!»); si no, pasa
+  // callada. No mira quién gana ni lo que viene: solo el orden de ese momento.
+  if (!nueva) {
+    const fijas = aceptadas.filter((c) => c.linea.texto !== undefined).map((c) => c.linea).sort((a, b) => a.t - b.t);
+    const salen = salenEn(fijas);
+    fijas.forEach((l, i) => {
+      const s = salen[i] as number;
+      if (Number.isFinite(s)) leidas.push({ t: s, plan: l.t, importante: (l.prioridad ?? PRIORIDAD.normal) >= PRIORIDAD.importante, nombra: -1 });
+    });
+    leidas.sort((a, b) => a.t - b.t);
+    // Una línea de quién va adelante cabe a 0,9 s de cualquier otra (como en `aceptar`) y fuera de la protección de una importante: sale a su hora.
+    const cabe = (ts: number): boolean => leidas.every((l) => Math.abs(l.t - ts) >= 0.9 && Math.abs(l.plan - ts) >= 0.9 && !(l.importante && l.t < ts && ts - l.t < PROTECCION));
+    const PASO_M = 0.05;
+    const hasta = tCrown - CINTA_SIN_SENALAR;
+    let quien = lider(tSalida), desde = tSalida;
+    marcas.push({ t: tSalida, quien });
+    for (let i = Math.round(tSalida / PASO_M) + 1; i * PASO_M < hasta; i++) {
+      const t = i * PASO_M;
+      const z = lider(t);
+      if (z < 0 || z === quien || t - desde < MARCA_MIN - 1e-9) continue;
+      const de = quien;
+      const seVe = (tt: number): boolean => lider(tt) === z && ((tiempos.cae.get(de) ?? Infinity) <= tt || enCuerpos(z, tt) - enCuerpos(de, tt) >= MARCA_VENTAJA);
+      if (!seVe(t)) continue;
+      // En el grupo, el relator lo dice con el cambio si hay lugar en el guion: hasta 0,8 s después, mientras se siga viendo.
+      let ts = -1;
+      for (let j = 0; j <= 16; j++) {
+        const tt = t + j * PASO_M;
+        if (tt >= tAbre - 0.6) break;
+        if (!pisaEchada(tt) && cabe(tt) && seVe(tt)) {
+          ts = tt;
+          break;
+        }
+      }
+      if (ts < 0) {
+        // Sin anuncio, la marca no pasa mientras se lee que va adelante otra.
+        const l = leyendo(t);
+        if (l && l.nombra >= 0 && l.nombra !== z) continue;
+        quien = z;
+        desde = t;
+        marcas.push({ t, quien });
+        continue;
+      }
+      const c = { t: ts, quien: z };
+      cambios.push(c);
+      sucesos.push({ desde: ts, tipo: "adelante", quien: z });
+      anunciar(c);
+      const linea = (cand[cand.length - 1] as Cand).linea;
+      const m = { t: ts, quien: z };
+      nombraA.set(linea, z);
+      anuncioDe.set(linea, m);
+      leidas.push({ t: ts, plan: ts, importante: false, nombra: z });
+      leidas.sort((a, b) => a.t - b.t);
+      quien = z;
+      desde = ts;
+      marcas.push(m);
+      i = Math.round(ts / PASO_M);
+    }
+    sucesos.sort((a, b) => a.desde - b.desde);
+    aceptadas = aceptar(cand);
+  }
+  /** Si el cambio de marca `m` puede esperar hasta `hasta`: la nueva sigue adelante y se ve, y el cambio siguiente queda a `MARCA_MIN` o más. */
+  const puedeEsperar = (m: { t: number; quien: number }, hasta: number): boolean => {
+    const j = marcas.indexOf(m);
+    const antes = marcas[j - 1], despues = marcas[j + 1];
+    if (!antes || hasta >= tCrown - CINTA_SIN_SENALAR || lider(hasta) !== m.quien) return false;
+    if (despues && despues.t - hasta < MARCA_MIN) return false;
+    return (tiempos.cae.get(antes.quien) ?? Infinity) <= hasta || enCuerpos(m.quien, hasta) - enCuerpos(antes.quien, hasta) >= MARCA_VENTAJA;
+  };
   // Tres tiempos por tramo: qué pasó (la echada), qué pasa (quién va adelante) y qué sigue (el terreno). Si en un tramo
   // ningún cambio de punta alcanzó a decirse, se dice quién va adelante en el hueco más largo entre dos líneas.
   for (const tr of tramos) {
     const hay = aceptadas.some((a) => a.tipo === "adelante" && a.linea.t >= tr.t0 && a.linea.t < tr.t1);
     if (hay) continue;
     const textos = aceptadas.filter((a) => a.linea.texto !== undefined && a.linea.t > tr.t0 - 1 && a.linea.t < tr.t1 + 1).map((a) => a.linea.t).sort((x, y) => x - y);
-    let mejor = { t: -1, hueco: 0 };
+    let mejor: { t: number; hueco: number; espera?: { t: number; quien: number }; hasta?: number } = { t: -1, hueco: 0 };
     for (let i = 0; i + 1 < textos.length; i++) {
       const a = Math.max(textos[i] as number, tr.t0), b = Math.min(textos[i + 1] as number, tr.t1 - 0.3);
-      if (b - a > mejor.hueco) mejor = { t: (a + b) / 2, hueco: b - a };
+      if (b - a <= mejor.hueco) continue;
+      let tf = (a + b) / 2;
+      let espera: { t: number; quien: number } | undefined;
+      const sig = textos[i + 1] as number;
+      if (!nueva) {
+        // La línea queda en pantalla hasta la siguiente: si la marca pasa en ese rato, la línea sale con el cambio y nombra a la nueva. Si el cambio cae
+        // tan cerca de la siguiente que la línea no entra, el cambio espera a que la línea se vaya (si para entonces se sigue viendo).
+        const pasa = marcas.filter((m) => m.t > tf && m.t < sig);
+        const tm = Math.max(...pasa.map((m) => m.t));
+        if (pasa.length && tm - (textos[i] as number) >= 0.9 && sig - tm >= 0.9 && tm <= tr.t1 - 0.3) tf = tm;
+        else if (pasa.length === 1 && puedeEsperar(pasa[0] as { t: number; quien: number }, sig)) espera = pasa[0];
+        else if (pasa.length) continue;
+        const previa = leyendo(tf - 1e-6);
+        if (tf - (textos[i] as number) < 0.9 || sig - tf < 0.9 || tf > tr.t1 - 0.3 || (previa?.importante && tf - previa.t < PROTECCION)) continue;
+      }
+      mejor = { t: tf, hueco: b - a, espera, hasta: sig };
     }
     if (mejor.hueco < 1.85) continue;
-    const quien = lider(mejor.t);
+    if (mejor.espera && mejor.hasta !== undefined) mejor.espera.t = mejor.hasta;
+    const quien = nueva ? lider(mejor.t) : duena(mejor.t);
     decir(2, mejor.t, { texto: () => ctx.txt("carVa", nom(quien)), calor: calorEn(mejor.t) }, "adelante");
+    if (!nueva) {
+      nombraA.set((cand[cand.length - 1] as Cand).linea, quien);
+      leidas.push({ t: mejor.t, plan: mejor.t, importante: false, nombra: quien });
+      leidas.sort((a, b) => a.t - b.t);
+    }
     aceptadas = aceptar(cand);
   }
   // La tribuna: en la final, el relator solo nombra a las que grita la tribuna ("¡Vamos, Ana!"), hasta cuatro de las
@@ -486,9 +674,14 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     hinchadas.push(mejor.t);
   }
   hinchadas.sort((x, y) => x - y).forEach((t, k) => {
-    // En la carrera nueva, antes del 88 % ir adelante no dice nada de quién gana (el acordeón lo reparte): la tribuna grita por quien lleva la raya.
+    // En la carrera nueva, antes del 88 % ir adelante no dice nada de quién gana (el acordeón lo reparte): la tribuna grita por quien lleva la raya. En la de siempre grita por las que
+    // sortea aparte, sin mirar quién va adelante: nombrar a quien lleva la ficha amarilla la hacía perder (`nombra-primero` 9,3 % contra el 12,5 % que toca, p de 5e-8, con 8 personas y
+    // 2.901 rondas). Mientras la marca del portón está en una finalista (los `MARCA_PORTON` segundos desde que pasa) no se grita el nombre de otra: «¡Vamos, Ana!» con la ficha amarilla en
+    // Beto se oiría como «Ana va adelante». Esa ventana cae en las tandas y la final empieza `ENTRE_FINAL` segundos después de la última, así que hoy la tribuna nunca la pisa;
+    // si algún día la pisa, grita sin nombrar a nadie.
     const quien = nueva ? duena(t) : (gritan[k] as number);
-    decir(2, t, { texto: () => ctx.txt("carHinchada", nom(quien)), calor: Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL)) });
+    const marcaEnOtra = !nueva && tandas.some((tn) => tn.salidas.some((s) => t >= s && t < s + MARCA_PORTON));
+    decir(2, t, { texto: () => (marcaEnOtra ? ctx.txt("carHinchadaTodas") : ctx.txt("carHinchada", nom(quien))), calor: Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL)) });
   });
   aceptadas = aceptar(cand);
   // Ninguna frase se repite más de dos veces seguidas: la tercera igual se tira.
@@ -508,6 +701,32 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   aceptadas = sinRepetir;
   const guion = aceptadas.map((c) => c.linea).sort((a, b) => a.t - b.t);
   const lineasAdelante = aceptadas.filter((a) => a.tipo === "adelante").map((a) => a.linea.t).sort((x, y) => x - y);
+  if (!nueva) {
+    // Con el guion entero, lo que se lee de verdad (la cola puede correr una línea unos cuadros): la marca pasa cuando sale la línea que la
+    // anuncia y no cambia mientras se lee una que nombra a otra como puntera; si cae ahí, espera a que esa línea se vaya.
+    const salen = salenEn(guion);
+    const leidasFinal = guion.map((l, i) => ({ l, t: salen[i] as number })).filter((x) => x.l.texto !== undefined && Number.isFinite(x.t)).sort((a, b) => a.t - b.t);
+    for (const x of leidasFinal) {
+      const m = anuncioDe.get(x.l);
+      if (m) m.t = x.t;
+    }
+    for (let vuelta = 0; vuelta < 4; vuelta++) {
+      let movio = false;
+      leidasFinal.forEach((x, j) => {
+        const y = nombraA.get(x.l);
+        if (y === undefined) return;
+        const fin = leidasFinal[j + 1]?.t ?? tCrown;
+        for (const m of marcas) {
+          if (m.t > x.t + 1e-9 && m.t < fin - 1e-9 && m.quien !== y) {
+            m.t = fin;
+            movio = true;
+          }
+        }
+      });
+      marcas.sort((a, b) => a.t - b.t);
+      if (!movio) break;
+    }
+  }
 
   /* ---------------------------------------------------------------- momentos */
   const escenaDe = (k: Kit): EscenaCarrera => k.escena as EscenaCarrera;
@@ -548,18 +767,53 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     };
   };
 
+  /* ------------------------------------------------------------------ causas */
+  // Todo lo que se mueve más que el tope general tiene un motivo a la vista, anotado acá: se anuncia (AVISO) y deja rastro (RASTRO).
+  const causas: Causa[] = [];
+  for (const r of orden.relevos) {
+    causas.push({ tipo: "pique", quienes: [r.quien], aviso: r.desde - AVISO, desde: r.desde, hasta: r.t + RASTRO });
+    causas.push({ tipo: "relevo", quienes: [r.quien], aviso: r.cae - AVISO, desde: r.cae, hasta: r.hasta + RASTRO });
+  }
+  for (const c of final.marcha?.causas ?? []) causas.push({ tipo: c.tipo, quienes: c.carriles.map((k) => lanes[k] as number), aviso: tAbre + c.aviso, desde: tAbre + c.desde, hasta: tAbre + c.hasta });
+  // Las finalistas pasan de su fila del grupo a su carril (a la vista: se abre la pista de ocho carriles). Con tandas, no antes de que terminen de
+  // entrar al corral las últimas en pasar por el portón (`LLEGADA_TARDE`): de 76 a 100 y de 126 a 200 nadie se echa y la recta se abre en la salida,
+  // y el paso al carril se sumaría al trote de las que todavía caminan.
+  const t0Carriles = Math.max(tand ? tSalida + LLEGADA_TARDE : tSalida, tAbre - CARRIL_ANTES);
+  causas.push({ tipo: "carriles", quienes: [...lanes], aviso: t0Carriles - AVISO - 1, desde: t0Carriles - AVISO, hasta: t0Carriles + CARRIL_DURA + RASTRO });
+  // Las que pasan por el portón entran al corral trotando (`carrera-caminata.ts`): a un cuerpo y medio por segundo, desde que el relator dice que pasan
+  // hasta que llegan (a más tardar `LLEGADA_TARDE` después de la salida).
+  for (const h of tandas) for (const [j, p] of h.pasan.entries()) causas.push({ tipo: "trote", quienes: [p], aviso: h.salidas[j] as number, desde: (h.salidas[j] as number) + AVISO, hasta: tSalida + LLEGADA_TARDE + RASTRO });
+  for (const e of tiempos.echadas) causas.push({ tipo: "echada", quienes: [...gente], aviso: e.t - AVISO, desde: e.t, hasta: e.t + 3.2 });
+  for (const o of obstaculos) {
+    // Las piedras y la ráfaga se ven antes de tocar (1,5 s) y la llama reacciona medio segundo antes; el efecto dura unos seis segundos.
+    if (o.tipo === "salto") {
+      o.carriles.forEach((k, j) => {
+        const ta = tDeQ(o.llegan[j] as number);
+        causas.push({ tipo: "valla", quienes: [lanes[k] as number], aviso: ta - 1.5, desde: ta - AVISO, hasta: ta + 4.5 });
+      });
+    } else {
+      const t0 = tDeQ(o.q);
+      causas.push({ tipo: o.tipo === "piedras" ? "piedra" : "viento", quienes: o.carriles.map((k) => lanes[k] as number), aviso: t0 - 1.5, desde: t0 - AVISO, hasta: t0 + 7 });
+    }
+  }
+
   const datos: Datos = {
-    nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCrown, tramos,
-    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, vivas, campeona, fase, sucesos, cambiosDePunta: cambios, lineasAdelante, tandas, tanda,
+    nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCarriles: t0Carriles, tCrown, tramos,
+    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, marcas, vivas, campeona, fase, sucesos, cursor: (t: number): number => 1 - suave((t - (tCrown - CINTA_SIN_SENALAR - 0.3)) / 0.3), cambiosDePunta: cambios, lineasAdelante, tandas, tanda, causas,
   };
   return {
     duracion: tCrown,
     arco,
     sentido: "derecha",
     normal: normalDe(n),
-    // El cartel dice quién gana: el relator no lo repite y, en el celular, el contador de arriba se va para dejarle el lugar.
-    ...(nueva ? { alCoronar: { sinAnuncio: true, sinMarcador: true } } : {}),
+    // El cartel dice quién gana: desde la meta la caja del relator queda vacía, en las dos carreras. En la nueva, en el celular,
+    // el contador de arriba se va para dejarle el lugar al cartel. Entre la meta y el golpe no suena nada, ni los latidos del
+    // foco: la dirección pide 0,4 s de silencio antes del golpe y los latidos terminaban pegados a él. Y el cartel cae con el golpe,
+    // a menos de 100 ms de la luz, el acercamiento y la fanfarria (antes llegaba 0,33 s después).
+    alCoronar: nueva ? { sinAnuncio: true, sinMarcador: true, sinLatidos: true, cartelConGolpe: true } : { sinAnuncio: true, sinLatidos: true, cartelConGolpe: true },
     marcador,
+    // Las ocho corren hasta la meta: el contador no pasa de 8 a 1 de golpe. Se apaga desde T-3, cuando las fichas quedan iguales, y vuelve con el golpe, en 1.
+    marcadorApagado: tCrown - CINTA_SIN_SENALAR,
     respuestas,
     momentos,
     guion,

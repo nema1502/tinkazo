@@ -87,10 +87,10 @@ describe("textos del logo", () => {
     expect(precios).toContain(`data-i="prLogoNota">${T.es.prLogoNota as string}</p>`);
   });
 
-  it("el sitemap tiene la fecha nueva de los términos y de precios", () => {
+  it("el sitemap tiene la fecha de los términos y la del cambio de precios (8 de noviembre de 2026)", () => {
     const mapa = readFileSync("public/sitemap.xml", "utf8");
     expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-04/);
-    expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-0[24]/);
+    expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-08/);
   });
 
   it("verificar.html y evento.html tienen la franja y el logo no entra al comprobante", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codigoTecnico, errorKey, esDeRed, textoDelError } from "./errores";
+import { TOPE_DE_LOS_CONTRATOS_VIEJOS, codigoTecnico, errorKey, esDeRed, textoDelError } from "./errores";
 
 /**
  * El corpus: los errores de verdad de cada fuente, con lo que tiene que decir la
@@ -159,6 +159,13 @@ const CORPUS: Fila[] = [
   ["Pollar 0.12: el servicio se quedó sin créditos", "fuente", () => pollar("SDK_CREDITS_INSUFFICIENT"), "sponsorEmpty"],
   ["Pollar 0.12: la cuenta del servicio no pudo fondear la cuenta nueva", "fuente", () => pollar("FUND_XLM_FAILED"), "sponsorEmpty"],
   ["Pollar 0.12: la cuenta se está abriendo", "fuente", () => pollar("SDK_WALLET_NOT_READY"), "accountNotReady"],
+  // La co-firma de la cuenta de Turnkey (mainnet): `_outcomeOfCosign` arma `SDK_COSIGN_<ESTADO>` con el detalle en minúscula, y la
+  // verificación falla con el texto de su tabla de errores. Repetir no cambia nada, y cada intento pediría otra aprobación.
+  ["Pollar 0.12: la co-firma se rechazó", "fuente", () => pollar("co-sign request rejected · SDK_COSIGN_REJECTED"), "cosignRejected"],
+  ["Pollar 0.12: la transacción no coincidía con lo que se iba a firmar", "fuente", () => pollar("SDK_COSIGN_VERIFICATION_FAILED · The transaction didn't match what would be signed, so it was not approved."), "cosignRejected"],
+  // Lo de Pollar que no tenía clave propia: una transacción mandada que todavía no se confirmó, y demasiados pedidos seguidos.
+  ["Pollar: se mandó y todavía no se confirmó", "fuente", () => pollar("TX_SUBMIT_UNCONFIRMED · The transaction was sent but isn't confirmed yet. Check its status before sending again."), "unconfirmed"],
+  ["Pollar: demasiados pedidos seguidos", "documentado", () => pollar("RATE_LIMITED"), "busy"],
 
   // ---------------------------------------------------------------- Freighter
   // El -4 lo arma la extensión, no `@stellar/freighter-api` (que solo trae el -1): por eso es documentado.
@@ -220,6 +227,19 @@ describe("errorKey: el corpus", () => {
   });
 });
 
+describe("la co-firma que no se aprobó es una respuesta de Pollar, no un corte", () => {
+  it("aunque su detalle hable de tiempo o de red, no es un corte y no se reintenta como tal", () => {
+    for (const msg of ["SDK_COSIGN_REJECTED · approval timed out", "SDK_COSIGN_VERIFICATION_FAILED · Failed to fetch the policy"]) {
+      expect(errorKey(pollar(msg), { enLinea: true }), msg).toBe("cosignRejected");
+      expect(esDeRed(pollar(msg)), msg).toBe(false);
+    }
+  });
+
+  it("y las otras co-firmas que fallan siguen donde estaban: el proveedor que dice 'probá en un momento' no es esta clave", () => {
+    expect(errorKey(pollar("SDK_COSIGN_TURNKEY_REJECTED · The wallet provider refused the request. Please try again in a moment."), { enLinea: true })).toBe("unknown");
+  });
+});
+
 describe("sin saldo con una cuenta que no paga la comisión (Pollar patrocina)", () => {
   it("lo dice el servicio y no la persona", () => {
     for (const msg of ["txInsufficientBalance", "TX_INSUFFICIENT_BALANCE · Insufficient balance to complete this transaction.", "tx-REJECTED tx_insufficient_balance"]) {
@@ -238,8 +258,23 @@ describe("sin saldo con una cuenta que no paga la comisión (Pollar patrocina)",
   });
 });
 
+describe("más ganadores de los que admite la red (el contrato de testnet de hoy tiene tope 32)", () => {
+  it("el error 4 sigue siendo badWinnerCount aunque se pidan más de 32: el contador cuenta el error del contrato", () => {
+    expect(TOPE_DE_LOS_CONTRATOS_VIEJOS).toBe(32);
+    expect(errorKey(simulacion("Error(Contract, #4)"))).toBe("badWinnerCount");
+  });
+
+  it("el mensaje para ese caso dice cuánto admite la red, en español y en inglés (ver anchor.test.ts)", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es["errAnchor.badWinnerCountViejo"]).toMatch(/{tope}/);
+    expect(T.en["errAnchor.badWinnerCountViejo"]).toMatch(/{tope}/);
+    expect(T.es["errAnchor.badWinnerCountViejo"]).toMatch(/todavía admite/);
+    expect(T.en["errAnchor.badWinnerCountViejo"]).toMatch(/still allows/);
+  });
+});
+
 describe("cada clave tiene su mensaje: qué pasó y qué hacer, sin tecnicismos", () => {
-  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown"])];
+  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown", "badWinnerCountViejo"])];
 
   it.each(claves)("errAnchor.%s", async (clave) => {
     const { T } = await import("../i18n");

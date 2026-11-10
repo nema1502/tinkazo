@@ -7,7 +7,7 @@ LOS DIEZ JUEGOS, PARA COLECCIONAR
   2/10 Ruleta: VUELTA Y VUELTA
   3/10 Piñata: DALE, DALE, DALE
   4/10 Trompo: MANO A MANO
-  5/10 Sapo: ¡ADENTRO!
+  5/10 Sapo: Puntería fina
   6/10 Guajojó: Te estoy viendo
       El guajojó es el pájaro de la noche del oriente boliviano, el de los ojos grandes.
   7/10 Toborochi: Panza llena, corazón contento
@@ -19,11 +19,17 @@ LOS DIEZ JUEGOS, PARA COLECCIONAR
   10/10 Teleférico: Todos arriba
       El teleférico de La Paz y El Alto, con cabinas del color de cada línea.
 
+ESPECIAL TARIJA
+  Tinkazo en Tarija
+      La llama chapaca, de Tarija: sombrero de ala ancha, un racimo de uvas y los viñedos del valle.
+  DevFest Tarija 2026
+      La misma llama chapaca, con su laptop, para el DevFest Tarija del 28 de noviembre de 2026.
+
 LA LLAMA
   Llama de mi corazón
   Despertame cuando salga mi nombre
   ¡Salió mi nombre!
-  Nadie se queda afuera
+  Participar es gratis
   HECHO EN BOLIVIA
   Con K de Tinkazo
 
@@ -33,7 +39,7 @@ FRASES
       El apthapi es la comida del altiplano donde cada uno trae algo y se comparte en el suelo, sobre un aguayo.
   Hasta la cacharpaya
       La cacharpaya es la fiesta de despedida: el cierre del carnaval o de un evento.
-  TODOS ADENTRO
+  Todos en la lista
   Sin trampa, con cariño
 
 PARA DEVS
@@ -54,7 +60,7 @@ THE TEN GAMES, TO COLLECT
   2/10 Wheel: ROUND AND ROUND
   3/10 Piñata: SWING, SWING, SWING
   4/10 Spinning top: HEAD TO HEAD
-  5/10 Frog toss: RIGHT IN!
+  5/10 Frog toss: Nice aim
   6/10 Guajojó: I see you
       The guajojó is the night bird of eastern Bolivia, the one with the big eyes.
   7/10 Toborochi: Full belly, happy heart
@@ -66,11 +72,17 @@ THE TEN GAMES, TO COLLECT
   10/10 Cable car: All aboard
       The cable car of La Paz and El Alto, with cabins in the color of each line.
 
+TARIJA SPECIAL
+  Tinkazo in Tarija
+      The chapaca llama, from Tarija: a wide-brimmed hat, a bunch of grapes and the valley vineyards.
+  DevFest Tarija 2026
+      The same chapaca llama, with its laptop, for DevFest Tarija on November 28, 2026.
+
 THE LLAMA
   My llama, my heart
   Wake me up when they call my name
   They called my name!
-  No one is left out
+  Entry is free
   MADE IN BOLIVIA
   Tinkazo, with a K
 
@@ -80,7 +92,7 @@ SAYINGS
       An apthapi is the Andean shared meal where everyone brings something and it is laid out on a woven cloth.
   See you at the cacharpaya
       The cacharpaya is the farewell party that closes a carnival or an event.
-  EVERYONE'S IN
+  Everyone's on the list
   No tricks, all heart
 
 FOR DEVELOPERS
