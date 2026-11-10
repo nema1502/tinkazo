@@ -5,6 +5,7 @@ import { armar, type Variante } from "./armar";
 import { POLLAR_TESTNET, leerConfig } from "./config";
 import { Cupos } from "./cupos";
 import { verificarFirma } from "./lista-blanca";
+import { Planes } from "./plan";
 import { ErrorDeRed, type Consulta, type CuentaEnRed, type Envio, type Red, type Simulacion } from "./red";
 import { ESPERA_RECONCILIAR_MS, Portero, firmanteDe } from "./servicio";
 import { sqlDePrueba } from "./sqlite-prueba";
@@ -387,10 +388,10 @@ describe("503: el fondo y el interruptor", () => {
     const t = tx({ firmante: org });
     p.poner("apagado");
     expect(await p.procesar(t.xdr)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado", rige: "ninguno" } });
-    expect(p.cupoDe(org.publicKey()).cuerpo).toMatchObject({ prendido: false, rige: "portero" });
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ prendido: false, rige: "portero" });
     p.poner("pollar");
     expect(await p.procesar(t.xdr)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado", rige: "pollar" } });
-    expect(p.cupoDe(org.publicKey()).cuerpo).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
     expect(red.lecturas + red.simulados + red.enviados.length).toBe(0);
     p.poner("portero");
     expect((await p.procesar(t.xdr)).estado).toBe(200);
@@ -635,40 +636,40 @@ describe("lo que queda en el aire antes de mandar", () => {
 });
 
 describe("/cupo dice la verdad sobre si está prendido", () => {
-  const pregunta = () => p.cupoDe(Keypair.random().publicKey()).cuerpo;
+  const pregunta = async () => (await p.cupoDe(Keypair.random().publicKey())).cuerpo;
 
   it("completo: prendido; apagado por el interruptor: no, con motivo apagado", async () => {
-    expect(pregunta()).toMatchObject({ prendido: true, rige: "portero" });
-    expect(pregunta()).not.toHaveProperty("motivo");
+    expect(await pregunta()).toMatchObject({ prendido: true, rige: "portero" });
+    expect(await pregunta()).not.toHaveProperty("motivo");
     p.poner("apagado");
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "apagado" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "apagado" });
   });
 
   it("sin llave del Worker: no está prendido, motivo config, aunque nadie lo haya apagado", async () => {
     await montar({}, { sinLlave: true });
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "config" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config" });
     expect(p.faltaDeConfig()).toEqual(["llave"]);
   });
 
   it("sin cuenta patrocinadora o sin contrato (mainnet todavía no tiene): tampoco", async () => {
     p = new Portero(leerConfig({ RED: "testnet" }), cupos, red, await firmanteDe(llave.secret()), null, () => ahora);
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "config" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config" });
     expect(p.faltaDeConfig()).toEqual(["cuenta"]);
     await montar({ RED: "mainnet" });
     expect(p.faltaDeConfig()).toEqual(["contrato", "billeteras-de-la-app"]);
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "config", red: "mainnet" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config", red: "mainnet" });
   });
 
   it("devuelto a Pollar el portero no paga: prendido false, motivo pollar y rige Pollar (con o sin su llave)", async () => {
     p.poner("pollar");
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
     await montar({}, { sinLlave: true });
     p.poner("pollar");
-    expect(pregunta()).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "pollar", rige: "pollar" });
   });
 });
 
-describe("la alerta del fondo y la bitácora", () => {
+describe("la alerta del fondo y la aviso", () => {
   const conSaldo = (saldo: bigint | null) => red.cuentas.set(patrocinadora.publicKey(), saldo === null ? null : { patrocinador: null, balance: saldo });
 
   it("/estado dice el saldo leído de la red y alerta:true por debajo del umbral", async () => {
@@ -692,7 +693,7 @@ describe("la alerta del fondo y la bitácora", () => {
     expect((await p.estado()).cuerpo).toMatchObject({ alerta: true, motivoAlerta: "saldo-no-leido" });
   });
 
-  it("la bitácora cuenta reservar, enviar y el resultado, sin cuentas, llaves ni direcciones", async () => {
+  it("la aviso cuenta reservar, enviar y el resultado, sin cuentas, llaves ni direcciones", async () => {
     const eventos: Array<[string, Record<string, string | number> | undefined]> = [];
     p = new Portero(leerConfig({ RED: "testnet" }), cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, (e, d) => eventos.push([e, d]));
     const org = Keypair.random();
@@ -715,10 +716,177 @@ describe("el cupo que se consulta", () => {
     const org = Keypair.random();
     abre(org);
     await p.procesar(tx({ firmante: org }).xdr);
-    const c = p.cupoDe(org.publicKey());
+    const c = await p.cupoDe(org.publicKey());
     expect(c.estado).toBe(200);
     expect(c.cuerpo).toMatchObject({ prendido: true, rige: "portero", red: "testnet", sellos: { usados: 1, max: 20, quedan: 19 }, sorteos: { usados: 0, max: 40, quedan: 40 } });
     expect(typeof c.cuerpo.liberaEn).toBe("number");
-    expect(p.cupoDe("no-es-una-cuenta").estado).toBe(400);
+    expect((await p.cupoDe("no-es-una-cuenta")).estado).toBe(400);
+  });
+});
+
+describe("el plan del equipo sube el cupo", () => {
+  const DIA = 86_400_000;
+  const jsonPlan = (cuerpo: unknown, estado = 200) => new Response(JSON.stringify(cuerpo), { status: estado, headers: { "Content-Type": "application/json" } });
+  const conPlan = (vence: number, sellos = 50, sorteos = 100) => jsonPlan({ activo: true, vence, cupo: { sellos, sorteos } });
+  const sinPlan = () => jsonPlan({ activo: false });
+
+  /** El portero con un Worker de la cuenta de mentira, que contesta lo que se le diga y anota a quién le preguntaron. */
+  async function montarConPlan(responder: (cuenta: string) => Promise<Response> | Response, env: Parameters<typeof leerConfig>[0] = {}, espera = 1_500) {
+    const preguntas: string[] = [];
+    const f = (async (url: unknown) => {
+      const cuenta = /\/v1\/cuenta\/(G[A-Z0-9]+)\/plan$/.exec(String(url))?.[1] ?? "";
+      preguntas.push(cuenta);
+      return responder(cuenta);
+    }) as unknown as typeof fetch;
+    const avisos: string[] = [];
+    const planes = new Planes("https://cuenta.tinkazo.app", f, () => ahora, (e) => void avisos.push(e), espera);
+    red = new RedFalsa();
+    cupos = new Cupos(sqlDePrueba());
+    p = new Portero(leerConfig({ RED: "testnet", ...env }), cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora, () => {}, () => {}, planes);
+    return { preguntas, avisos };
+  }
+
+  const sello = (org: Keypair, i: number) => p.procesar(tx({ firmante: org, hashLista: new Uint8Array(32).fill(i) }).xdr);
+  const sorteo = (org: Keypair, i: number) => p.procesar(tx({ firmante: org, metodo: "draw", raffleId: BigInt(i) }).xdr);
+
+  it("con el plan activo la cuenta sella 50 al mes, no 20; el 51 da 429 con max 50", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => conPlan(ahora + 10 * DIA));
+    abre(org);
+    for (let i = 1; i <= 50; i++) expect((await sello(org, i)).estado, `sello ${i}`).toBe(200);
+    const r = await sello(org, 99);
+    expect(r.estado).toBe(429);
+    expect(r.cuerpo).toMatchObject({ motivo: "cupo-cuenta", que: "sellos", max: 50 });
+  });
+
+  it("con el plan activo los sorteos propios suben a 100 al mes (sin plan, 40)", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => conPlan(ahora + 10 * DIA));
+    abre(org);
+    for (let i = 1; i <= 100; i++) expect((await sorteo(org, i)).estado, `sorteo ${i}`).toBe(200);
+    expect(await sorteo(org, 101)).toMatchObject({ estado: 429, cuerpo: { motivo: "cupo-cuenta", que: "sorteos", max: 100 } });
+
+    const otra = Keypair.random();
+    await montarConPlan(() => sinPlan());
+    abre(otra);
+    for (let i = 1; i <= 40; i++) expect((await sorteo(otra, i)).estado, `sorteo ${i}`).toBe(200);
+    expect(await sorteo(otra, 41)).toMatchObject({ estado: 429, cuerpo: { que: "sorteos", max: 40 } });
+  });
+
+  it("sin plan sigue siendo 20: el sello 21 da 429 con max 20", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => sinPlan());
+    abre(org);
+    for (let i = 1; i <= 20; i++) expect((await sello(org, i)).estado, `sello ${i}`).toBe(200);
+    expect(await sello(org, 99)).toMatchObject({ estado: 429, cuerpo: { motivo: "cupo-cuenta", que: "sellos", max: 20 } });
+  });
+
+  it("el plan sube lo que ya se usó: quien llegó a 20 y compra el plan puede seguir hasta 50", async () => {
+    const org = Keypair.random();
+    let tiene = false;
+    const m = await montarConPlan(() => (tiene ? conPlan(ahora + 30 * DIA) : sinPlan()));
+    abre(org);
+    for (let i = 1; i <= 20; i++) expect((await sello(org, i)).estado).toBe(200);
+    expect((await sello(org, 21)).estado).toBe(429);
+    tiene = true;
+    // Lo recordado de «sin plan» dura un minuto: pasado eso, el portero se entera.
+    ahora += 61_000;
+    const r = await sello(org, 22);
+    expect(r.estado).toBe(200);
+    expect(r.cuerpo).toMatchObject({ quedan: 29 });
+    expect(m.preguntas.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("/cupo dice los números del plan: lo que queda sale de 50 y de 100", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => conPlan(ahora + 10 * DIA));
+    abre(org);
+    await sello(org, 1);
+    const c = await p.cupoDe(org.publicKey());
+    expect(c.estado).toBe(200);
+    expect(c.cuerpo).toMatchObject({ prendido: true, rige: "portero", sellos: { usados: 1, max: 50, quedan: 49 }, sorteos: { usados: 0, max: 100, quedan: 100 } });
+  });
+
+  it("al vencer el plan, /cupo vuelve a 20 y 40 (no se recuerda un plan más allá de su vencimiento)", async () => {
+    const org = Keypair.random();
+    const vence = ahora + 2 * 60_000;
+    await montarConPlan(() => conPlan(vence));
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 50 }, sorteos: { max: 100 } });
+    ahora = vence + 1;
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 }, sorteos: { max: 40 } });
+  });
+
+  it("la respuesta se recuerda: varios pedidos de la cuenta preguntan una sola vez", async () => {
+    const org = Keypair.random();
+    const m = await montarConPlan(() => conPlan(ahora + 10 * DIA));
+    abre(org);
+    for (let i = 1; i <= 5; i++) await sello(org, i);
+    await p.cupoDe(org.publicKey());
+    expect(m.preguntas).toEqual([org.publicKey()]);
+  });
+
+  it("la consulta caída: el cupo es el de siempre, el pedido se paga igual y no se rompe nada", async () => {
+    const org = Keypair.random();
+    const m = await montarConPlan(() => Promise.reject(new TypeError("fetch failed")));
+    abre(org);
+    for (let i = 1; i <= 20; i++) expect((await sello(org, i)).estado, `sello ${i}`).toBe(200);
+    expect(await sello(org, 21)).toMatchObject({ estado: 429, cuerpo: { max: 20 } });
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ prendido: true, sellos: { max: 20 } });
+    expect(m.preguntas).toHaveLength(1);
+    expect(m.avisos).toContain("plan-sin-respuesta");
+  });
+
+  it("la consulta que nunca contesta no frena el pedido más que el tiempo máximo", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => new Promise<Response>(() => {}), {}, 40);
+    abre(org);
+    const antes = Date.now();
+    expect((await sello(org, 1)).estado).toBe(200);
+    expect(Date.now() - antes).toBeLessThan(1_000);
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 } });
+  });
+
+  it("la consulta que contesta basura o un error cuenta como caída", async () => {
+    const org = Keypair.random();
+    for (const respuesta of [() => jsonPlan({ error: "libro" }, 503), () => jsonPlan({ activo: true }), () => new Response("no es json")]) {
+      await montarConPlan(respuesta);
+      expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 }, sorteos: { max: 40 } });
+    }
+  });
+
+  it("el plan nunca baja un cupo: uno más chico que el de siempre no cambia nada, y una cuenta verificada se queda con el suyo", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => conPlan(ahora + DIA, 10, 15));
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 }, sorteos: { max: 40 } });
+    await montarConPlan(() => conPlan(ahora + DIA, 50, 100), { CUENTAS_VERIFICADAS: org.publicKey(), MAX_SELLOS_VERIFICADA: "80" });
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 80 }, sorteos: { max: 160 } });
+  });
+
+  it("el plan de una cuenta no sube el cupo de otra", async () => {
+    const con = Keypair.random();
+    const sin = Keypair.random();
+    await montarConPlan((cuenta) => (cuenta === con.publicKey() ? conPlan(ahora + DIA) : sinPlan()));
+    expect((await p.cupoDe(con.publicKey())).cuerpo).toMatchObject({ sellos: { max: 50 } });
+    expect((await p.cupoDe(sin.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 } });
+  });
+
+  it("sin CUENTA_URL (el portero de siempre) no se pregunta nada: el cupo es el de siempre", async () => {
+    const org = Keypair.random();
+    expect(leerConfig({}).cuentaUrl).toBeNull();
+    abre(org);
+    expect((await p.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 20 }, sorteos: { max: 40 } });
+  });
+
+  it("el plan no cambia lo demás: ni el tope general ni el apagado ni la regla de que la abrió la app", async () => {
+    const org = Keypair.random();
+    await montarConPlan(() => conPlan(ahora + DIA));
+    // Una cuenta que no abrió nuestra app sigue sin pasar, tenga plan o no.
+    expect((await sello(org, 1)).estado).toBe(403);
+    abre(org);
+    p.poner("apagado");
+    expect((await sello(org, 2)).estado).toBe(503);
+    p.poner("portero");
+    cupos.fijarAjuste("tope_general_stroops", "1", ahora);
+    expect((await sello(org, 3)).estado).toBe(503);
   });
 });

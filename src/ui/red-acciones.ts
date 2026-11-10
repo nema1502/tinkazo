@@ -167,16 +167,23 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
       return { ...base, principal: "seguir-sin-sello" };
     }
     case "sin-patrocinio": {
-      // La red está bien y la comisión la cubre el portero, que hoy no puede. Una sola acción: si la cuenta tiene con qué
-      // pagar la suya (o en testnet, el grifo), sellar con ella; si no, volver a probar cuando es del servicio (se
-      // repone, vuelve) y seguir sin sello cuando es de la cuenta (el cupo vuelve el mes que viene, o no entra).
+      // La red está bien y la comisión la cubre el portero, que hoy no puede. Si el motivo es del servicio
+      // (no contesta, está caído, se quedó sin fondo o un error pasajero: `cerrado`, `fondo` o sin detalle),
+      // se repone solo, así que la acción principal es volver a probar con el portero; sellar con la cuenta
+      // propia queda como secundaria, nunca como principal. Sin reintento automático: lo toca la persona.
+      // Si el motivo es de la cuenta (el cupo vuelve el mes que viene, o esta cuenta no entra), queda como
+      // siempre: sellar con la propia si puede, y si no, seguir sin sello.
       const frase = fraseDelPatrocinio(d.patrocinio, puedePagar || testnetConGrifo);
       const conFecha = d.patrocinio?.liberaEn !== undefined ? { liberaEn: d.patrocinio.liberaEn } : {};
       const propia = { ...base, frase, ...conFecha };
+      const esDeLaCuenta = d.patrocinio?.motivo === "cupo-cuenta" || d.patrocinio?.motivo === "ajena";
+      if (!esDeLaCuenta) {
+        if (testnetConGrifo || puedePagar) return { ...propia, principal: "reintentar", secundarias: ["sellar-con-mi-cuenta", "seguir-sin-sello"], cargaPrevia: testnetConGrifo && !puedePagar };
+        return { ...propia, principal: "reintentar", secundarias: ["seguir-sin-sello"] };
+      }
       if (testnetConGrifo) return { ...propia, principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"], cargaPrevia: !puedePagar };
       if (puedePagar) return { ...propia, principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"] };
-      if (d.patrocinio?.motivo === "cupo-cuenta" || d.patrocinio?.motivo === "ajena") return { ...propia, principal: "seguir-sin-sello" };
-      return { ...propia, principal: "reintentar", secundarias: ["seguir-sin-sello"] };
+      return { ...propia, principal: "seguir-sin-sello" };
     }
     case "protocolo":
       // Solo llega a rojo si la simulación falla: sellar no va a andar. Se puede volver a mirar.

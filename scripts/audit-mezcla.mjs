@@ -26,7 +26,14 @@
  * investigación y se calibran con lo que hoy suena bien.
  *
  * Uso (con `pnpm preview` corriendo):
- *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica]
+ *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica] [--motor pixi] [--espectro]
+ *   node scripts/audit-mezcla.mjs race --sonido musica:a,final:b   # la carrera con esas candidatas de sonido (src/sonidos/carrera.ts)
+ *
+ * La grabación sale de un AudioWorklet, que corre en el hilo del audio y no pierde bloques cuando la página está
+ * ocupada, y todo se cuenta con el reloj del audio. Sigue grabando hasta 2 s después del cartel del ganador; si lo
+ * grabado quedó más corto que lo que sonó, o el cartel salió y el golpe no entró, lo dice y mide una vez más.
+ * `--motor pixi` mide los juegos en 2D (sin él, lo que ve la sala). `--espectro` muestra cuánto pierde la mezcla con
+ * pasos altos de 40 a 300 Hz y cómo se reparte la energía antes y después del cartel.
  *
  * Con `--grabar <carpeta> [--etiqueta antes|despues] [--segundos 20]` guarda también, de cada
  * juego, los segundos que terminan 4 s después del cartel del ganador (o los primeros, si no se vio), de lo que salió por el parlante en `<juego>-<etiqueta>.wav`
@@ -37,6 +44,7 @@ import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
+import { grabacionCorta, hayQueRepetir, puedeParar } from "./lib/mezcla-captura.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -46,6 +54,11 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const sinMusica = args.includes("--sin-musica");
+// Con `--sonido pieza:candidata,...` la carrera suena con esas candidatas (`src/sonidos/carrera-eleccion.ts`).
+const sonidoCarrera = opt("--sonido", "");
+// `--motor pixi` mide los juegos en 2D; sin `--motor`, lo que ve la sala (el motor que la página elige).
+const motor = opt("--motor", "");
+const espectro = args.includes("--espectro");
 const carpetaWav = opt("--grabar", "");
 const etiquetaWav = opt("--etiqueta", "despues");
 const segundosWav = Number(opt("--segundos", "20"));
@@ -72,6 +85,9 @@ const CORTO_SOBRE_INTEGRADA = 7.0;
 // Calibrado con la mezcla de hoy (5 de octubre de 2026): antes de los armónicos
 // del bajo y de los bombos se perdían de 4,1 a 4,9 LU, y con ellos de 2,6 a 3,5.
 // No hay norma para este número: hay que ajustarlo midiendo parlantes reales.
+// 4 de noviembre de 2026: con los osciladores de siempre la carrera perdía de 3,6 a 3,9 LU (el 57 % de la energía
+// de la mezcla caía bajo 150 Hz, la cuarta parte entre 60 y 100 Hz: el seno del bombo y el bajo). Con el seno del
+// bombo y del bombo electrónico más bajos, y el cuerpo y la sierra del bajo más arriba, pierde de 2,5 a 2,7.
 const PIERDE_150 = 3.5;
 const PIERDE_300 = 6.0;
 const GOLPE_MIN = 2.0;
@@ -82,47 +98,78 @@ const GOLPE_MIN = 2.0;
  * muestras. El parlante sigue recibiendo lo mismo.
  */
 const OIDO = `(() => {
+  const ESPECTRO = ${espectro};
   const AC = window.AudioContext;
-  const o = window.__mezcla = { L: [], R: [], sr: 0, t0: -1, cartel: -1, juntando: true };
+  window.__espectro = ESPECTRO;
+  const o = window.__mezcla = { L: [], R: [], sr: 0, f0: -1, cartelSeg: -1, juntando: true, listo: false, falla: '' };
+  // El oído es un AudioWorklet: corre en el hilo del audio y manda las muestras en trozos de 4096. El ScriptProcessor
+  // de antes corría en el hilo de la página y, con la máquina cargada, perdía bloques: la grabación quedaba más corta
+  // que el show (36,7 s de 39) y el cartel caía corrido.
+  const CODIGO = \`class Oido extends AudioWorkletProcessor {
+    constructor() { super(); this.n = 0; this.L = new Float32Array(4096); this.R = new Float32Array(4096); this.f = -1; }
+    process(entradas) {
+      const c = entradas[0] || [];
+      if (this.f < 0) this.f = currentFrame;
+      for (let k = 0; k < 128; k++) {
+        this.L[this.n] = c[0] ? c[0][k] : 0;
+        this.R[this.n] = c[1] ? c[1][k] : c[0] ? c[0][k] : 0;
+        if (++this.n === 4096) {
+          this.port.postMessage({ L: this.L, R: this.R, f: this.f }, [this.L.buffer, this.R.buffer]);
+          this.L = new Float32Array(4096); this.R = new Float32Array(4096); this.n = 0; this.f = -1;
+        }
+      }
+      return true;
+    }
+  }
+  registerProcessor('oido-mezcla', Oido);\`;
   window.AudioContext = function (...a) {
     const ctx = new AC(...a);
     const real = ctx.destination;
     const mezcla = ctx.createGain();
     mezcla.connect(real);
-    const sp = ctx.createScriptProcessor(4096, 2, 2);
-    const mudo = ctx.createGain();
-    mudo.gain.value = 0;
-    mezcla.connect(sp);
-    sp.connect(mudo);
-    mudo.connect(real);
     o.sr = ctx.sampleRate;
-    sp.onaudioprocess = (e) => {
-      if (!o.juntando) return;
-      if (o.t0 < 0) o.t0 = performance.now();
-      o.L.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-      o.R.push(new Float32Array(e.inputBuffer.getChannelData(1)));
-    };
+    const url = URL.createObjectURL(new Blob([CODIGO], { type: 'text/javascript' }));
+    ctx.audioWorklet.addModule(url).then(() => {
+      const nodo = new AudioWorkletNode(ctx, 'oido-mezcla', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit' });
+      const mudo = ctx.createGain();
+      mudo.gain.value = 0;
+      mezcla.connect(nodo);
+      nodo.connect(mudo);
+      mudo.connect(real);
+      nodo.port.onmessage = (e) => {
+        if (!o.juntando) return;
+        if (o.f0 < 0) o.f0 = e.data.f;
+        o.L.push(e.data.L);
+        o.R.push(e.data.R);
+      };
+      o.listo = true;
+    }).catch((err) => { o.falla = String(err); });
     Object.defineProperty(ctx, 'destination', { get: () => mezcla });
     o.ctx = ctx;
     return ctx;
   };
   window.AudioContext.prototype = AC.prototype;
-  // Cuándo se revela el ganador: con \`?auditar=mezcla\` el estadio lo anota en
-  // el primer cuadro del cartel. Si no está (el motor anterior), cuando el
-  // cartel aparece en el lienzo, que es a los 0,6 s de su entrada.
+  // Cuándo se revela el ganador, en segundos del reloj del audio: con \`?auditar=mezcla\` el estadio anota la hora de
+  // la pared en el primer cuadro del cartel (se pasa a hora del audio restándole lo que pasó desde entonces). Si no
+  // está (el motor anterior), cuando el cartel aparece en el lienzo, que es a los 0,6 s de su entrada.
   const mirar = () => {
     const cv = document.getElementById('pixi-canvas') || document.getElementById('race-canvas');
-    if (o.cartel < 0 && o.t0 >= 0) {
-      if (window.__revelado !== undefined) o.cartel = window.__revelado - o.t0;
-      else if (cv && cv.dataset.cartel) o.cartel = performance.now() - o.t0 - 600;
+    if (o.cartelSeg < 0 && o.f0 >= 0 && o.ctx) {
+      const ahora = o.ctx.currentTime;
+      if (window.__revelado !== undefined) o.cartelSeg = ahora - (performance.now() - window.__revelado) / 1000;
+      else if (cv && cv.dataset.cartel) o.cartelSeg = ahora - 0.6;
     }
     requestAnimationFrame(mirar);
   };
   requestAnimationFrame(mirar);
+  // Para el auditor: cuánto sonó desde que empezó la grabación y cuánto se grabó.
+  o.estado = () => ({ listo: o.listo, falla: o.falla, ahora: o.ctx ? o.ctx.currentTime : 0, primerCuadro: o.f0, sr: o.sr, cartelSeg: o.cartelSeg, grabadoSeg: o.L.length * 4096 / (o.sr || 1) });
   o.medir = () => {
     o.juntando = false;
     const une = (xs) => { let n = 0; for (const x of xs) n += x.length; const y = new Float32Array(n); let i = 0; for (const x of xs) { y.set(x, i); i += x.length; } return y; };
     const L = une(o.L), R = une(o.R), sr = o.sr;
+    // El cartel, en ms desde el comienzo de lo grabado (el reloj del audio y el de la grabación son el mismo).
+    const cartel = o.cartelSeg >= 0 ? (o.cartelSeg - o.f0 / sr) * 1000 : -1;
     const biquad = (x, b0, b1, b2, a1, a2) => {
       const y = new Float32Array(x.length);
       let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
@@ -207,13 +254,24 @@ const OIDO = `(() => {
     // Lo que pierde en un parlante chico.
     const sinGraves = (fc) => integrada(kw(pasoAlto(L, fc)), kw(pasoAlto(R, fc)));
     const I150 = sinGraves(150), I300 = sinGraves(300);
+    // Con --espectro: cuánto pierde la mezcla con pasos altos de varias frecuencias, para ver dónde está la energía grave.
+    // Y cuánta de la energía (ponderada) cae antes del cartel, en los primeros 3 s después y más tarde, con y sin los graves.
+    let tramos = null;
+    if (window.__espectro && cartel > 0) {
+      const ha = kw(pasoAlto(L, 150)), hb = kw(pasoAlto(R, 150));
+      const c = Math.round((cartel / 1000) * sr), d3 = Math.min(ka.length, c + Math.round(3 * sr));
+      const parte = (i0, i1) => ({ seg: (i1 - i0) / sr, todo: potencia(ka, kb, i0, i1) * (i1 - i0), alto: potencia(ha, hb, i0, i1) * (i1 - i0) });
+      const tot = parte(0, ka.length).todo;
+      tramos = [["antes", parte(0, c)], ["3 s del cartel", parte(c, d3)], ["despues", parte(d3, ka.length)]].map(([n, t]) => ({ n, seg: t.seg, pct: (100 * t.todo) / tot, pierde: 10 * Math.log10(t.todo / Math.max(t.alto, 1e-12)) }));
+    }
+    const cortes = window.__espectro ? Object.fromEntries([40, 60, 80, 100, 125, 150, 200, 300].map((fc) => [fc, I - sinGraves(fc)])) : null;
     // El golpe del ganador: el medio segundo después del cartel contra el de antes.
     let golpe = null;
-    if (o.cartel > 0) {
-      const c = Math.round((o.cartel / 1000) * sr), d = Math.round(0.5 * sr);
+    if (cartel > 0) {
+      const c = Math.round((cartel / 1000) * sr), d = Math.round(0.5 * sr);
       if (c - d > 0 && c + d < ka.length) golpe = lufs(potencia(ka, kb, c, c + d)) - lufs(potencia(ka, kb, c - d, c));
     }
-    return { seg: L.length / sr, I, corto, pico, picoReal, recortes, I150, I300, golpe, cartel: o.cartel };
+    return { seg: L.length / sr, I, corto, pico, picoReal, recortes, I150, I300, golpe, cartel, cortes, tramos };
   };
 })();`;
 
@@ -222,26 +280,46 @@ const SIN_MUSICA = `(() => { try { localStorage.setItem('tinkazo.musica', '0'); 
 const db = (v) => (v > 0 ? 20 * Math.log10(v) : -120);
 const f1 = (v) => (v === null || v === undefined ? "—" : v.toFixed(1));
 
-async function medir(browser, juego) {
+async function medirUna(browser, juego) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: OIDO });
     if (sinMusica) await page.send("Page.addScriptToEvaluateOnNewDocument", { source: SIN_MUSICA });
-    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla` });
+    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}` });
     const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", 30_000);
     if (!ok.ok) return { error: "el estadio no apareció" };
-    // Hasta que el juego cierra solo, o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
+    // Hasta que el juego cierra solo (o sale el resultado), o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
     // pelotón (`normalCarrera` en src/duraciones.ts) y con 60 s se cortaba antes del ganador.
     const t0 = Date.now();
+    let cerro = false;
     while (Date.now() - t0 < 150_000) {
       await sleep(500);
-      const abierto = await page.eval("document.getElementById('stadium').style.display === 'block'");
-      if (!abierto) break;
+      cerro = Boolean(await page.eval("document.getElementById('stadium').style.display !== 'block' || document.querySelector('.winner-name') !== null"));
+      if (cerro) break;
     }
-    await sleep(400);
+    // Después de que cierra se sigue grabando hasta dos segundos del reloj del audio después del cartel, si se vio, y
+    // un poco más para que lleguen los últimos trozos: el golpe del ganador tiene que quedar adentro.
+    let e = await page.eval("window.__mezcla ? window.__mezcla.estado() : null");
+    if (!e) return { error: "no se pudo enganchar el oído" };
+    if (e.falla) return { error: `el oído no arrancó: ${e.falla}` };
+    const t1 = Date.now();
+    while (cerro && Date.now() - t1 < 15_000) {
+      e = await page.eval("window.__mezcla.estado()");
+      if (puedeParar({ cerro, cartelSeg: e.cartelSeg, ahoraSeg: e.ahora })) break;
+      await sleep(200);
+    }
+    // Hasta ahí sonó esto; se espera a que lo grabado lo alcance (los trozos viajan por mensajes).
+    const sonadoSeg = e.ahora - e.primerCuadro / e.sr;
+    for (let i = 0; i < 20; i++) {
+      e = await page.eval("window.__mezcla.estado()");
+      if (e.grabadoSeg >= sonadoSeg - 0.1) break;
+      await sleep(100);
+    }
     const r = await page.eval("window.__mezcla && window.__mezcla.L.length ? window.__mezcla.medir() : null");
     if (!r) return { error: "no sonó nada (¿el contexto de audio quedó suspendido?)" };
+    r.sonadoSeg = sonadoSeg;
+    r.corta = grabacionCorta({ grabadoSeg: r.seg, sonadoSeg });
     if (carpetaWav) {
       // Se trae el comienzo de la mezcla en trozos chicos: el canal de DevTools no aguanta un mensaje de varios MB.
       const sr = Number(await page.eval("window.__mezcla.sr"));
@@ -272,6 +350,26 @@ async function medir(browser, juego) {
   }
 }
 
+/**
+ * Mide un juego; si la grabación quedó más corta que lo que sonó, o se vio el cartel y el golpe no entró, lo dice y
+ * repite una vez en vez de dar una cifra rara. Si la segunda también queda corta, el resultado lleva `corta`.
+ */
+async function medir(browser, juego) {
+  let r;
+  try {
+    r = await medirUna(browser, juego);
+  } catch (e) {
+    // La página dejó de contestar (la máquina cargada, una pestaña colgada): una vez más, en una pestaña nueva.
+    console.log(`${juego.padEnd(11)} la página no contestó (${String(e.message ?? e).slice(0, 80)}): repito una vez`);
+    r = await medirUna(browser, juego);
+  }
+  if (!r.error && hayQueRepetir({ corta: r.corta, cartelMs: r.cartel, golpe: r.golpe })) {
+    console.log(`${juego.padEnd(11)} la grabación no quedó completa (${r.seg.toFixed(1)} s de ${r.sonadoSeg.toFixed(1)} s${r.cartel > 0 && r.golpe === null ? ", sin golpe" : ""}): repito una vez`);
+    r = await medirUna(browser, juego);
+  }
+  return r;
+}
+
 async function run() {
   process.env.TINKAZO_GPU = "1";
   const browser = await launch({ port: Number(process.env.CDP_PORT || 9671), width: 1280, height: 720 });
@@ -282,7 +380,9 @@ async function run() {
       const r = await medir(browser, juego);
       res.push({ juego, ...r });
       if (r.error) console.log(`${juego.padEnd(11)} ✗ ${r.error}`);
-      else console.log(`${juego.padEnd(11)} ${f1(r.I)} LUFS · pico real ${f1(db(r.picoReal))} dBTP · corto máx ${f1(r.corto)} · sin graves de 150 Hz ${f1(r.I - r.I150)} LU, de 300 Hz ${f1(r.I - r.I300)} LU · golpe ${f1(r.golpe)} LU · ${r.seg.toFixed(1)} s`);
+      else if (espectro) console.log(`${juego.padEnd(11)} pierde por corte: ${Object.entries(r.cortes).map(([k, v]) => `${k} Hz ${f1(v)}`).join(" · ")}`);
+      if (r.tramos) for (const t of r.tramos) console.log(`             ${t.n}: ${t.seg.toFixed(1)} s, ${t.pct.toFixed(0)} % de la energía, pierde ${f1(t.pierde)} LU`);
+      if (!r.error) console.log(`${juego.padEnd(11)} ${f1(r.I)} LUFS · pico real ${f1(db(r.picoReal))} dBTP · corto máx ${f1(r.corto)} · sin graves de 150 Hz ${f1(r.I - r.I150)} LU, de 300 Hz ${f1(r.I - r.I300)} LU · golpe ${f1(r.golpe)} LU · ${r.seg.toFixed(1)} s`);
     }
   } finally {
     await browser.close();
@@ -308,12 +408,14 @@ async function run() {
       check(false, "se pudo medir", r.error);
       continue;
     }
+    if (r.corta) check(false, "la grabación cubre todo lo que sonó", `${f1(r.seg)} s de ${f1(r.sonadoSeg)} s, aun repitiendo`);
     check(r.recortes === 0, "nada recorta", `${r.recortes} muestras en 1 o más`);
     check(db(r.picoReal) <= PICO_REAL_MAX, `el pico real queda bajo ${PICO_REAL_MAX} dBTP`, `${f1(db(r.picoReal))} dBTP`);
     if (lista.length > 1) check(Math.abs(r.I - mediana) <= PAREJO_LU, `suena parejo con los demás (±${PAREJO_LU} LU de la mediana)`, `${f1(r.I)} contra ${f1(mediana)} LUFS`);
     check(r.corto - r.I <= CORTO_SOBRE_INTEGRADA, `ningún tramo de 3 s salta más de ${CORTO_SOBRE_INTEGRADA} LU`, `${f1(r.corto - r.I)} LU sobre la integrada`);
     check(r.I - r.I150 <= PIERDE_150, `en un parlante que corta en 150 Hz pierde ${PIERDE_150} LU o menos`, `${f1(r.I - r.I150)} LU`);
     check(r.I - r.I300 <= PIERDE_300, `en uno que corta en 300 Hz pierde ${PIERDE_300} LU o menos`, `${f1(r.I - r.I300)} LU`);
+    if (r.cartel > 0 && r.golpe === null) check(false, "se pudo medir el golpe del ganador", "el cartel salió pero no entra medio segundo de cada lado");
     if (r.golpe !== null) check(r.golpe >= GOLPE_MIN, `el ganador suena ${GOLPE_MIN} LU más fuerte que lo de antes`, `${f1(r.golpe)} LU`);
   }
   const ok = pasan === total;

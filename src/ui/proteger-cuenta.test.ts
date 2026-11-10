@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { t } from "../i18n";
-import { type Proteccion, cancelo, protegerCuenta } from "./proteger-cuenta";
+import { type Proteccion, TOPE_DE_ESPERA_MS, cancelo, protegerCuenta } from "./proteger-cuenta";
 
 /**
  * "Protegé tu cuenta" (`proteger-cuenta.ts`) contra una cuenta simulada: sin Pollar, sin Turnkey. Lo que se mira es lo
@@ -213,10 +213,318 @@ describe("cancelar el desbloqueo no es fallar", () => {
   });
 
   it("cancelo: reconoce lo que es de la persona y no lo demás", () => {
-    expect(cancelo(Object.assign(new Error("x"), { name: "AbortError" }))).toBe(true);
+    expect(cancelo(new DOMException("The operation either timed out or was not allowed.", "NotAllowedError"))).toBe(true);
+    expect(cancelo(Object.assign(new Error("x"), { name: "NotAllowedError" }))).toBe(true);
+    expect(cancelo(new Error("SDK_RECOVERY_FAILED", { cause: new DOMException("x", "NotAllowedError") }))).toBe(true);
     expect(cancelo("passkey-cancelada")).toBe(true);
+    expect(cancelo(new Error("passkey-cancelada"))).toBe(true);
     expect(cancelo(new Error("SDK_NETWORK"))).toBe(false);
     expect(cancelo(undefined)).toBe(false);
+  });
+
+  it("cancelo: un pedido de la red cortado a mitad no es la persona diciendo que no", () => {
+    // Pollar cuenta así un pedido cortado ("Aborted"), y Safari dice "cancelled" cuando el navegador corta uno.
+    expect(cancelo(new Error("Aborted"))).toBe(false);
+    expect(cancelo(Object.assign(new Error("Aborted"), { name: "AbortError" }))).toBe(false);
+    expect(cancelo(new DOMException("The operation was aborted.", "AbortError"))).toBe(false);
+    expect(cancelo(new DOMException("signal is aborted without reason", "AbortError"))).toBe(false);
+    expect(cancelo(new Error("The request was cancelled"))).toBe(false);
+    expect(cancelo(new Error("cancelled"))).toBe(false);
+    expect(cancelo(new Error("SDK_NETWORK_TIMEOUT", { cause: new Error("Aborted") }))).toBe(false);
+  });
+
+  it("cancelo: un AbortError del navegador, que no es un corte de la red, sí cuenta", () => {
+    expect(cancelo(new DOMException("", "AbortError"))).toBe(true);
+  });
+
+  it("cancelo: una causa que se apunta a sí misma no cuelga el cuadro", () => {
+    const a = new Error("a");
+    const b = new Error("b", { cause: a });
+    (a as { cause?: unknown }).cause = b;
+    expect(cancelo(a)).toBe(false);
+  });
+
+  it("un corte de la red de Pollar al proteger se dice, y no se toma por haber cancelado", async () => {
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => Promise.reject(new Error("Aborted")) });
+    void protegerCuenta(cuenta, null);
+    boton(t("protPasskey")).click();
+    await dejar();
+    expect(alerta()).toBe(t("protPasskeyFalla"));
+    expect(boton(t("protPasskey")).disabled).toBe(false);
+  });
+});
+
+describe("el navegador no deja abrir el desbloqueo", () => {
+  const noPermitido = () => new DOMException("The operation either timed out or was not allowed.", "NotAllowedError");
+  /** El texto de ayuda de siempre, debajo del botón del desbloqueo. */
+  const ayuda = (): HTMLElement | null => [...document.querySelectorAll<HTMLElement>(".modal-card.login .login-note")].find((x) => x.textContent === t("protPasskeyAyuda")) ?? null;
+  /** La nota que dice qué hacer cuando el navegador no deja abrir el desbloqueo: una región de estado, escondida hasta que hace falta. */
+  const aviso = (): HTMLElement | null => document.querySelector<HTMLElement>('.modal-card.login p[role="status"]');
+
+  it("se dice qué hacer: el código por correo, o abrir el enlace en Chrome o Safari; y no es un aviso rojo", async () => {
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => Promise.reject(noPermitido()) });
+    void protegerCuenta(cuenta, null);
+    expect(aviso()?.hidden).toBe(true);
+    boton(t("protPasskey")).click();
+    await dejar();
+    expect(aviso()?.hidden).toBe(false);
+    expect(aviso()?.textContent).toBe(t("protPasskeyBloqueada"));
+    expect(aviso()?.className).toContain("login-aviso");
+    // La ayuda de un desbloqueo que acá no se abre sobra mientras la nota está: no ocupa lugar en un celular chico.
+    expect(ayuda()?.hidden).toBe(true);
+    expect(alerta()).toBe("");
+    // El botón sigue ahí para volver a probar, y el correo está a la vista.
+    expect(boton(t("protPasskey")).disabled).toBe(false);
+    expect(hayBoton(t("protMailGo"))).toBe(true);
+  });
+
+  it("el aviso nombra las dos salidas, en español y en inglés", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es.protPasskeyBloqueada).toMatch(/correo/);
+    expect(T.es.protPasskeyBloqueada).toMatch(/Chrome/);
+    expect(T.es.protPasskeyBloqueada).toMatch(/Safari/);
+    expect(T.en.protPasskeyBloqueada).toMatch(/email/);
+    expect(T.en.protPasskeyBloqueada).toMatch(/Chrome/);
+    expect(T.en.protPasskeyBloqueada).toMatch(/Safari/);
+    // Sin tecnicismos ni puntos medios.
+    for (const l of ["es", "en"] as const) expect(String(T[l].protPasskeyBloqueada)).not.toMatch(/passkey|WebAuthn|·|\bfirma/i);
+  });
+
+  it("el aviso envuelto por el SDK también se muestra, y se va al volver a intentarlo", async () => {
+    let n = 0;
+    const cuenta = cuentaSimulada(true, {
+      protegerConPasskey: () => (n++ === 0 ? Promise.reject(new Error("SDK_RECOVERY_FAILED", { cause: noPermitido() })) : new Promise<boolean>(() => undefined)),
+    });
+    void protegerCuenta(cuenta, null);
+    boton(t("protPasskey")).click();
+    await dejar();
+    expect(aviso()?.hidden).toBe(false);
+    boton(t("protPasskey")).click();
+    expect(aviso()?.hidden).toBe(true);
+    expect(aviso()?.textContent).toBe("");
+    expect(ayuda()?.hidden).toBe(false);
+  });
+
+  it("si la persona canceló con la ceremonia propia (sin cuadro que se haya negado), no hay aviso", async () => {
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => Promise.reject(new Error("passkey-cancelada")) });
+    void protegerCuenta(cuenta, null);
+    boton(t("protPasskey")).click();
+    await dejar();
+    expect(aviso()?.hidden).toBe(true);
+    expect(alerta()).toBe("");
+  });
+});
+
+describe("si Pollar o el navegador no contestan nunca", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("el desbloqueo: pasado el tope se avisa, se vuelve a poder salir y se puede reintentar", async () => {
+    const nunca = (): Promise<boolean> => new Promise<boolean>(() => undefined);
+    let llamadas = 0;
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => (llamadas++, nunca()) });
+    const resultado = vi.fn();
+    void protegerCuenta(cuenta, null).then(resultado);
+    boton(t("protPasskey")).click();
+    expect(boton(t("protAhoraNo")).disabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(TOPE_DE_ESPERA_MS - 1);
+    expect(alerta()).toBe("");
+    expect(boton(t("protAhoraNo")).disabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(alerta()).toBe(t("protTarda"));
+    expect(boton(t("protPasskey")).disabled).toBe(false);
+    expect(boton(t("protAhoraNo")).disabled).toBe(false);
+
+    boton(t("protPasskey")).click();
+    expect(llamadas).toBe(2);
+    expect(alerta()).toBe("");
+    expect(resultado).not.toHaveBeenCalled();
+  });
+
+  it("el tope es de 60 segundos", () => {
+    expect(TOPE_DE_ESPERA_MS).toBe(60_000);
+  });
+
+  it("el código: pasado el tope se avisa, el botón vuelve y se puede salir", async () => {
+    let llamadas = 0;
+    const cuenta = cuentaSimulada(false, { confirmarCodigoDeProteccion: () => (llamadas++, new Promise<boolean>(() => undefined)) });
+    const resultado = vi.fn();
+    void protegerCuenta(cuenta, null).then(resultado);
+    escribir("#prot-mail", "ana@example.com");
+    mandarFormulario();
+    await vi.advanceTimersByTimeAsync(0);
+    escribir("#prot-code", "123456");
+    mandarFormulario();
+    expect(boton(t("protAhoraNo")).disabled).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(TOPE_DE_ESPERA_MS);
+    expect(alerta()).toBe(t("protTarda"));
+    expect(boton(t("protCodeGo")).disabled).toBe(false);
+    expect(boton(t("protAhoraNo")).disabled).toBe(false);
+
+    // Reintentar vuelve a llamar (y a esperar con tope).
+    mandarFormulario();
+    expect(llamadas).toBe(2);
+    expect(boton(t("protAhoraNo")).disabled).toBe(true);
+    await vi.advanceTimersByTimeAsync(TOPE_DE_ESPERA_MS);
+    boton(t("protAhoraNo")).click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(resultado).toHaveBeenCalledWith(false);
+  });
+
+  it("si lo que no contestaba contesta después y la cuenta quedó protegida, la ventana lo toma y sigue", async () => {
+    const tarde = pendiente<boolean>();
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => tarde.promesa });
+    const resultado = vi.fn();
+    void protegerCuenta(cuenta, null).then(resultado);
+    boton(t("protPasskey")).click();
+    await vi.advanceTimersByTimeAsync(TOPE_DE_ESPERA_MS);
+    expect(alerta()).toBe(t("protTarda"));
+    tarde.resolver(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(resultado).toHaveBeenCalledWith(true);
+    expect(ventana()).toBeNull();
+  });
+
+  it("y si contesta tarde con un error, no pisa lo que la persona está viendo", async () => {
+    const tarde = pendiente<boolean>();
+    const cuenta = cuentaSimulada(true, { protegerConPasskey: () => tarde.promesa });
+    void protegerCuenta(cuenta, null);
+    boton(t("protPasskey")).click();
+    await vi.advanceTimersByTimeAsync(TOPE_DE_ESPERA_MS);
+    tarde.rechazar(new Error("SDK_NETWORK"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(alerta()).toBe(t("protTarda"));
+  });
+
+  it("una respuesta a tiempo no deja el reloj armado", async () => {
+    const cuenta = cuentaSimulada(true);
+    void protegerCuenta(cuenta, null);
+    boton(t("protPasskey")).click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("al cerrar, el foco no se pierde", () => {
+  // Con reloj falso y limpieza propia: el sondeo del foco que queda a medias no pasa a la prueba siguiente.
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+  /** La página de un sello o un sorteo: el botón principal, apagado mientras se hace, y su línea de estado. */
+  function pagina(): { boton: HTMLButtonElement; estado: HTMLElement } {
+    document.body.innerHTML = `<button id="btn-freeze">Sellar</button><p class="txstatus" id="seal-status" style="display:none"></p>`;
+    const boton = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const estado = document.getElementById("seal-status") as HTMLElement;
+    boton.focus();
+    boton.disabled = true; // como en `freeze.ts`: el foco ya cayó en el cuerpo de la página
+    return { boton, estado };
+  }
+  /** Deja pasar el instante en que el flujo sigue y la ventana mira a dónde devolver el foco. */
+  const siguiente = async (): Promise<void> => void (await vi.advanceTimersByTimeAsync(5));
+
+  it("si la persona no protegió la cuenta, el foco vuelve al botón en cuanto el flujo lo vuelve a prender", async () => {
+    const { boton: principal, estado } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protAhoraNo")).click();
+    // Lo que hace `freeze.ts` apenas termina la ventana: prender el botón y escribir el error.
+    await expect(r).resolves.toBe(false);
+    principal.disabled = false;
+    estado.style.display = "block";
+    await siguiente();
+    expect(document.activeElement).toBe(principal);
+  });
+
+  it("si la cuenta quedó protegida y el sello sigue, el foco va a la línea de estado, que se puede enfocar", async () => {
+    const { boton: principal, estado } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protPasskey")).click();
+    await expect(r).resolves.toBe(true);
+    // El sello vuelve a empezar: el botón sigue apagado y la línea de estado se muestra.
+    estado.style.display = "block";
+    estado.textContent = "Sellando…";
+    await siguiente();
+    expect(principal.disabled).toBe(true);
+    expect(document.activeElement).toBe(estado);
+    expect(estado.getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("si el botón ya no está en la página, también va a la línea de estado", async () => {
+    const { boton: principal, estado } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protPasskey")).click();
+    await expect(r).resolves.toBe(true);
+    principal.remove();
+    estado.style.display = "block";
+    await siguiente();
+    expect(document.activeElement).toBe(estado);
+  });
+
+  it("sin botón guardado (el cuerpo de la página no sirve de destino), cae en la línea de estado", async () => {
+    const { estado } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), document.body, "seal-status");
+    boton(t("protPasskey")).click();
+    await expect(r).resolves.toBe(true);
+    estado.style.display = "block";
+    await siguiente();
+    expect(document.activeElement).toBe(estado);
+  });
+
+  it("si la línea de estado está escondida, no hay a dónde ir y no falla", async () => {
+    const { boton: principal } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protPasskey")).click();
+    await expect(r).resolves.toBe(true);
+    await siguiente();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("si el flujo tarda en prender el botón (un módulo que se carga), el foco lo espera y lo toma cuando está", async () => {
+    const { boton: principal } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protAhoraNo")).click();
+    await expect(r).resolves.toBe(false);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(document.activeElement).toBe(document.body);
+    principal.disabled = false;
+    await vi.advanceTimersByTimeAsync(150);
+    expect(document.activeElement).toBe(principal);
+  });
+
+  it("no le quita el foco a quien ya lo puso en otro lado", async () => {
+    const { boton: principal } = pagina();
+    const otro = document.createElement("input");
+    document.body.append(otro);
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protAhoraNo")).click();
+    await expect(r).resolves.toBe(false);
+    otro.focus();
+    principal.disabled = false;
+    await siguiente();
+    expect(document.activeElement).toBe(otro);
+  });
+
+  it("deja de mirar pasado un rato: no queda un reloj dando vueltas", async () => {
+    const { boton: principal } = pagina();
+    const r = protegerCuenta(cuentaSimulada(true), principal, "seal-status");
+    boton(t("protAhoraNo")).click();
+    await expect(r).resolves.toBe(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(document.activeElement).toBe(document.body);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("sin a dónde devolver el foco (ni botón ni línea de estado), no arma ningún reloj", async () => {
+    const r = protegerCuenta(cuentaSimulada(true), null);
+    // jsdom arma un reloj propio al enfocar la ventana (el de la selección): se vacía antes de contar los nuestros.
+    await vi.advanceTimersByTimeAsync(0);
+    boton(t("protAhoraNo")).click();
+    await expect(r).resolves.toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

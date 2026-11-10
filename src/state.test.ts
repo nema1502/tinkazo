@@ -91,3 +91,27 @@ describe("playableGame", () => {
 
 
 });
+
+describe("auditaCon", () => {
+  it("sin ?auditar es siempre falso: en el sorteo de verdad ningún auditor se prende", async () => {
+    const s = await load("");
+    for (const clave of ["marcha", "encuadre", "3d", "fisica", "choques", "nino", "camara"]) expect(s.auditaCon(clave)).toBe(false);
+    const vacio = await load("?auditar=");
+    expect(vacio.auditaCon("marcha")).toBe(false);
+  });
+
+  it("con un solo valor responde solo a ese", async () => {
+    const s = await load("?auditar=fisica");
+    expect(s.auditaCon("fisica")).toBe(true);
+    expect(s.auditaCon("choques")).toBe(false);
+    // Es una coincidencia exacta, no una parte del texto.
+    expect(s.auditaCon("fisic")).toBe(false);
+    expect(s.auditaCon("fisica2")).toBe(false);
+  });
+
+  it("con varios valores separados por coma responde a cada uno", async () => {
+    const s = await load("?auditar=marcha,camara,encuadre,3d,choques,fisica");
+    for (const clave of ["marcha", "camara", "encuadre", "3d", "choques", "fisica"]) expect(s.auditaCon(clave)).toBe(true);
+    expect(s.auditaCon("nino")).toBe(false);
+  });
+});

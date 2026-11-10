@@ -52,6 +52,20 @@ let observado: HTMLButtonElement | null = null;
 let alVista = true;
 let io: IntersectionObserver | null = null;
 let moBoton: MutationObserver | null = null;
+/** El botón de la lista de equipos con cupón y sus contenedores: si aparece, desaparece o se esconde, la barra se recalcula. */
+let moLista: MutationObserver | null = null;
+let listaObservada: Element | null = null;
+
+function vigilarListaDeCupones(): void {
+  const b = document.getElementById("eq-lista");
+  if (b === listaObservada) return;
+  moLista?.disconnect();
+  listaObservada = b;
+  if (!b) return;
+  moLista ??= new MutationObserver(render);
+  // Hasta el cuerpo no: la propia barra cambia sus clases, y eso no tiene que volver a despertar este cálculo.
+  for (let el: HTMLElement | null = b; el && el !== document.body; el = el.parentElement) moLista.observe(el, { attributes: true, attributeFilter: ["hidden", "style", "class"] });
+}
 
 /** Alto de la barra, medido: cambia según el ancho. Lo usan el relleno de la página y el aviso flotante. */
 let alto = 0;
@@ -138,6 +152,19 @@ export function pasoActual(): Paso {
 }
 
 /**
+ * Si el panel de equipos ya ofrece usar los que tienen cupón como lista, manda esa: la barra no propone "Pegar
+ * lista" a la vez (una sola acción principal por paso, docs/ux.md). El botón se ve cuando la sala está abierta y
+ * hay al menos un equipo con cupón.
+ */
+export function mandaListaDeCupones(): boolean {
+  const b = document.getElementById("eq-lista");
+  if (!(b instanceof HTMLButtonElement)) return false;
+  // No alcanza con que el botón no esté escondido: si un contenedor suyo lo está (el panel plegado o la sala cerrada), nadie lo ve.
+  for (let el: HTMLElement | null = b; el; el = el.parentElement) if (el.hidden) return false;
+  return typeof b.checkVisibility === "function" ? b.checkVisibility() : true;
+}
+
+/**
  * En qué paso está el sorteo y qué botón lo hace avanzar.
  *
  * El paso 4 empieza cuando el resultado ya se ve, no cuando se sabe: mientras
@@ -149,7 +176,9 @@ function calcular(): Toca {
   const n = nombres();
   const paso = pasoDe({ nombres: n, sellada: app.frozen !== null, revelado });
   // En el stand la barra es solo para empezar la ronda: ni "Pegar lista" ni nada de después.
-  const boton = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
+  const botonReal = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
+  // Con equipos con cupón, manda usar esa lista que ofrece el panel.
+  const boton = paso === 1 && mandaListaDeCupones() ? null : botonReal;
   const restan = paso === 3 ? segundos() : 0;
   const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
@@ -373,6 +402,14 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   addEventListener("scroll", () => (ultimoScroll = performance.now()), { passive: true });
   moBoton = new MutationObserver(render);
   const general = new MutationObserver(render);
+  // El botón de la lista de equipos vive adentro del panel: hay que descubrirlo cuando el panel aparece y vigilarlo desde ahí.
+  vigilarListaDeCupones();
+  const descubreLista = new MutationObserver(() => {
+    const antes = listaObservada;
+    vigilarListaDeCupones();
+    if (listaObservada !== antes) render();
+  });
+  descubreLista.observe(document.body, { childList: true, subtree: true });
   // Ventanas, tarjeta y cortina se agregan al cuerpo; el estadio es fijo y cambia de estilo.
   general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo", "data-stand"] });
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });

@@ -68,6 +68,9 @@ vi.mock("@pollar/core", () => ({
     async signAndSubmitTx(): Promise<unknown> {
       return proximo.valor;
     }
+    async signTx(): Promise<unknown> {
+      return proximo.valor;
+    }
   },
 }));
 
@@ -100,7 +103,50 @@ describe("PollarWallet.signAndSubmit", () => {
   });
 
   it("sin motivo ni hash, lanza el aviso de siempre", async () => {
-    proximo.valor = { status: "cosign_pending" };
+    proximo.valor = { status: "error" };
     await expect(pollarWallet.signAndSubmit("AAAA")).rejects.toThrow("pollar-submit-failed");
+  });
+
+  it("una co-firma pendiente puede entrar después: queda sin confirmar y no se reintenta a ciegas", async () => {
+    for (const forma of [{ status: "cosign_pending" }, { status: "cosign_pending", hash: "deadbeef" }]) {
+      proximo.valor = forma;
+      const error = await pollarWallet.signAndSubmit("AAAA").then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect((error as Error).message).toBe("pollar-pending");
+      expect(errorKey(error)).toBe("unconfirmed");
+    }
+  });
+});
+
+describe("PollarWallet.signUnsponsored (sellar pagando con la cuenta propia)", () => {
+  beforeEach(() => vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY", "pub_testnet_prueba"));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("devuelve la transacción firmada", async () => {
+    proximo.valor = { status: "signed", signedXdr: "FIRMADA" };
+    await expect(pollarWallet.signUnsponsored("AAAA")).resolves.toBe("FIRMADA");
+  });
+
+  it("una co-firma pendiente queda sin confirmar, igual que al firmar y enviar: no se reintenta a ciegas", async () => {
+    // Con la cuenta de Turnkey en mainnet, `signTx` también puede devolver `cosign_pending`. Si se lo toma por un fallo
+    // cualquiera ("pollar-submit-failed", clave `unknown`), el sorteo lo reintenta y cada intento apila otra solicitud.
+    for (const forma of [{ status: "cosign_pending" }, { status: "cosign_pending", request: { id: "r1", status: "PENDING" } }]) {
+      proximo.valor = forma;
+      const error = await pollarWallet.signUnsponsored("AAAA").then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect((error as Error).message).toBe("pollar-pending");
+      expect(errorKey(error)).toBe("unconfirmed");
+    }
+  });
+
+  it("un rechazo de verdad sigue diciendo por qué, y sin motivo deja el aviso de siempre", async () => {
+    proximo.valor = { status: "error", code: "SDK_WALLET_RECOVERY_REQUIRED" };
+    await expect(pollarWallet.signUnsponsored("AAAA")).rejects.toThrow("SDK_WALLET_RECOVERY_REQUIRED");
+    proximo.valor = { status: "error" };
+    await expect(pollarWallet.signUnsponsored("AAAA")).rejects.toThrow("pollar-submit-failed");
   });
 });

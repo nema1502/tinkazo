@@ -107,7 +107,7 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       return p ? { ...completa, adelante: { ...completa.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } } : completa;
     };
     // `forma` sale del catálogo: el auditor arma la pregunta propia con ella (carrera, de pie, rueda o acumulación).
-    if (anf.auditar() === "nino") (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, forma: entradaDe(def.id)?.forma, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => verdadEnPantalla(plan.respuestas(t)) };
+    if ((anf.auditar() ?? "").split(",").includes("nino")) (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, forma: entradaDe(def.id)?.forma, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => verdadEnPantalla(plan.respuestas(t)) };
     const sonido = crearSonido(anf.voz);
     const k: Kit = {
       S, cam: S.cam, nombres, ganadores, ronda: baliza.randomness, idioma,
@@ -127,8 +127,14 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     };
 
     const guion = crearGuion<Kit>(plan.guion);
+    // Con `sinAnuncio` y un solo premio, la caja del relator se vacía al coronar y queda vacía hasta el final: el cartel dice quién
+    // gana. Una línea que esperaba en la cola ya no sale.
+    const callaAlCoronar = !!plan.alCoronar?.sinAnuncio && ganadores.length === 1;
+    let callado = false;
     const ejecutor: EjecutorGuion<Kit> = {
-      decir: (texto, calor, grito) => S.say(texto, calor, grito),
+      decir: (texto, calor, grito) => {
+        if (!callado) S.say(texto, calor, grito);
+      },
       hacer: (fn) => fn(k),
     };
     const director = crearDirector(plan, { cam: S.cam, kit: k, pantalla, marcar: (clave, valor) => S.mark(clave, valor), ritmo: () => anf.ritmo() });
@@ -143,17 +149,22 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       escena = def.arma(k, plan, escena);
       marcadorUI.rearmar();
     });
-    const crownUI = S.crown(nombres, ganadores, conFoco);
+    const crownUI = S.crown(nombres, ganadores, conFoco, undefined, plan.alCoronar);
     const enfoque = (): Enfoque => ({ arco: plan.arco, ...plan.momentos.foco(k) });
 
     /** El golpe: el anuncio, la fanfarria y el acercamiento. Cae a la hora del foco, nunca antes. */
     const corona = (): void => {
       if (coronado) return;
       coronado = true;
-      // Con `sinAnuncio` y un solo premio, la línea del relator se borra y el cartel dice solo quién gana.
-      S.say(plan.alCoronar?.sinAnuncio && ganadores.length === 1 ? "" : anf.anuncio(nombres, ganadores), 1);
+      // Con `sinAnuncio` y un solo premio la caja ya quedó vacía al coronar y el cartel dice solo quién gana: el decir vacío, con
+      // calor 1, solo da el remate de la música.
+      S.say(callaAlCoronar ? "" : anf.anuncio(nombres, ganadores), 1);
+      // La caja visible calla, pero los lectores de pantalla oyen quién gana en el golpe, como antes.
+      if (callaAlCoronar) S.anunciarLector(anf.anuncio(nombres, ganadores));
       sonido.fanfarria();
       director.golpe();
+      // `?auditar=`: la hora de la página en que cae el acercamiento (`scripts/medir-drama-carrera.mjs`).
+      if (anf.auditar()) ((window as unknown as { __golpe?: Record<string, number> }).__golpe ??= {}).zoom ??= performance.now() / 1000;
     };
     // Saltar es ir al golpe: el silencio del foco no se espera, y lo que quedaba por decir se tira.
     saltarFn = (): void => {
@@ -169,6 +180,11 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       t += dt;
       // El respiro: la música se corta antes del golpe y vuelve con el remate.
       S.breath(t, plan.respiro ?? plan.duracion);
+      // Al coronar, en el silencio de antes del golpe, la línea del relator se va. Sin calor: el remate de la música es del golpe.
+      if (callaAlCoronar && !callado && t >= plan.duracion) {
+        callado = true;
+        S.say("", 0);
+      }
       guion.avanzar(t, ejecutor);
       if (t >= plan.duracion) {
         tHold += dt * anf.ritmo();
@@ -180,6 +196,11 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       def.cuadro(k, plan, escena as E, t);
       marcadorUI.pintar(coronado ? 1 : Math.max(1, Math.round(plan.marcador(t))));
       marcadorUI.ocultar(coronado && !!plan.alCoronar?.sinMarcador && S.portrait());
+      // Si el juego lo pide, el contador se apaga en 0,3 s desde `marcadorApagado` y se prende con el golpe, en 1, también en 0,3 s.
+      if (plan.marcadorApagado !== undefined) {
+        const rampa = (v: number): number => Math.max(0, Math.min(1, v / 0.3));
+        marcadorUI.alfa(coronado ? rampa(tHold - F.golpe) : 1 - rampa(t - plan.marcadorApagado));
+      }
       if (t >= plan.duracion) {
         crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
         def.trasCorona?.(k, plan, escena as E, t);

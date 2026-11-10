@@ -6,6 +6,7 @@
  * los necesita, una sola vez.
  */
 import deployments from "../../../src/stellar/deployments.json";
+import { leerCuentaUrl } from "./plan";
 
 export interface Env {
   /** Un solo objeto por red: el tope de la cuenta y el general se tienen que decidir juntos y de a uno. */
@@ -18,6 +19,11 @@ export interface Env {
   ADMIN_TOKEN?: string;
   /** Lista de G… con cupo ampliado (50 sellos por mes). */
   CUENTAS_VERIFICADAS?: string;
+  /**
+   * La dirección del Worker de la cuenta (`https://cuenta.tinkazo.app`), de donde se averigua si una cuenta tiene el plan del
+   * equipo, que le sube el cupo. Vacía (por defecto): no se pregunta nada y todas tienen el cupo de siempre.
+   */
+  CUENTA_URL?: string;
   /** Solo para probar en testnet: cuentas de friendbot que se aceptan sin haberlas abierto nuestra app. En mainnet se ignora. */
   CUENTAS_PRUEBA?: string;
   /** Las billeteras de fondos de Pollar: quien patrocina las reservas de una cuenta abierta por nuestra app. */
@@ -57,6 +63,8 @@ export interface Config {
   maxSorteos: number;
   maxSorteosVerificada: number;
   verificadas: Set<string>;
+  /** La dirección base del Worker de la cuenta, o null: sin ella no se consulta el plan del equipo. */
+  cuentaUrl: string | null;
   prueba: Set<string>;
   /**
    * Las billeteras de fondos que abren las cuentas de nuestra app. En testnet nace con la de Pollar; en mainnet
@@ -136,6 +144,7 @@ export function leerConfig(env: Partial<Env>): Config {
     maxSorteos: maxSellos * 2,
     maxSorteosVerificada: maxSellosVerificada * 2,
     verificadas: new Set(lista(env.CUENTAS_VERIFICADAS)),
+    cuentaUrl: leerCuentaUrl(env.CUENTA_URL),
     // Una cuenta de prueba salta el control de "la abrió nuestra app": en mainnet no existe esa puerta, aunque la variable esté puesta.
     prueba: new Set(red === "testnet" ? lista(env.CUENTAS_PRUEBA) : []),
     patrocinadoresApp: new Set(env.PATROCINADORES_APP !== undefined ? lista(env.PATROCINADORES_APP) : red === "testnet" ? [POLLAR_TESTNET] : []),

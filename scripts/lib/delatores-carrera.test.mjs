@@ -50,7 +50,7 @@ describe("lo que ve la sala en una ronda", () => {
     for (const s of ["punta-inicio", "punta-25", "punta-50", "punta-75", "tiempo-mitad", "tiempo-fin", "echa-primera", "echa-mitad", "echa-ultima", "recta-90", "nombra-primero", "nombra-ultimo", "nombra-mas", "drama"]) {
       expect(o.senales, s).toHaveProperty(s);
     }
-    expect(Object.keys(o.repartos).sort()).toEqual(["carril", "entrada", "recta-25", "recta-50", "recta-75"]);
+    expect(Object.keys(o.repartos).sort()).toEqual(["carril", "entrada", "recta-25", "recta-50", "recta-75", "recta-T15", "recta-T3"]);
     // Los obstáculos le tocan a cualquiera: sus medias dependen de cuáles tiene la ronda.
     expect(Object.keys(o.medias).filter((k) => !k.startsWith("obstaculo-")).sort()).toEqual(["echa-orden-lista", "tiempo-dif"]);
     // Sin tandas: ni tanda, ni portón, ni "la última en pasar".
@@ -73,7 +73,7 @@ describe("lo que ve la sala en una ronda", () => {
     expect(o.repartos.tanda.K).toBe(3);
     expect(d.tandas[o.repartos.tanda.k].miembros).toContain(d.campeona);
     expect(o.repartos.tanda.probs.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
-    expect(o.repartos.porton.K).toBe(5);
+    expect(o.repartos.porton.K).toBe(3);
     expect(d.tandas[o.repartos.tanda.k].pasan[o.repartos.porton.k]).toBe(d.campeona);
     expect(o.senales["punta-corral"]["la-ultima"]).toMatchObject({ azar: 1 / d.gente.length });
   });
@@ -147,12 +147,25 @@ describe("las pruebas sobre rondas de verdad", () => {
     expect(evaluarMedia(medias["echa-orden-lista"], { sd: 1 }).n).toBe(RONDAS);
   });
 
-  it("con 60 personas los casilleros de la tanda son tres y los del portón cinco", () => {
+  it("a tres segundos de la meta la ganadora cae en una de las cuatro de adelante y a 1,5 s en una de las tres, parejo: el casillero de más no recibe nunca nada", () => {
+    const { repartos } = juntar(18);
+    for (const [senal, tope] of [["recta-T3", 4], ["recta-T15", 3]]) {
+      const r = repartos[senal];
+      expect(r.conteos, senal).toHaveLength(tope + 1);
+      expect(r.conteos[tope], `${senal}: la ganadora afuera`).toBe(0);
+      expect(r.probs).toEqual([...Array.from({ length: tope }, () => 1 / tope), 0]);
+      const ev = evaluarReparto(r.conteos, r.probs);
+      expect(ev.gl, senal).toBe(tope - 1);
+      expect(ev.veredicto, `${senal}: ${r.conteos.join(" ")}`).not.toBe("delator");
+    }
+  });
+
+  it("con 60 personas los casilleros de la tanda son tres y los del portón tres", () => {
     const { repartos } = juntar(60);
     expect(repartos.tanda.conteos).toHaveLength(3);
-    expect(repartos.porton.conteos).toHaveLength(5);
+    expect(repartos.porton.conteos).toHaveLength(3);
     expect(evaluarReparto(repartos.tanda.conteos, repartos.tanda.probs).gl).toBe(2);
-    expect(evaluarReparto(repartos.porton.conteos).gl).toBe(4);
+    expect(evaluarReparto(repartos.porton.conteos).gl).toBe(2);
   });
 });
 
@@ -175,7 +188,8 @@ describe("el relator de la final no delata (lo que midió el auditor de delatore
       const ev = evaluarSenal(fam, { tamano: false });
       expect(ev.veredicto, `${senal} ${JSON.stringify(ev.mejor && { regla: ev.mejor.nombre, tasa: ev.mejor.tasa, azar: ev.mejor.azar, p: ev.p })}`).not.toBe("delator");
     }
-  });
+  // Con 200 personas y 400 rondas, cada plan de la recta prueba hasta 160 arreglos: le hace falta más que los 30 s por defecto cuando la máquina está cargada.
+  }, 120_000);
 });
 
 describe("el auditor corre solo, sin navegador", () => {

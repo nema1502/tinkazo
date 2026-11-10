@@ -37,11 +37,12 @@ const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
  * crea de fondo después de entrar y tarda unos segundos; `funding`, la carga con
  * el grifo de testnet cuando la comisión no la paga la app. `verifying` es la
  * pregunta de si un sello que se cortó llegó a entrar; `retrying`, la espera
- * antes de volver a probar cuando la red no contestó. `starting` es lo que dice
+ * antes de volver a probar cuando la red no contestó; `laterRound`, que el sello
+ * no quedó grabado y se prueba con una ronda más lejana. `starting` es lo que dice
  * el botón apenas se aprieta, antes que nada ("Preparando el sello…", ver
  * `clienteListo`).
  */
-export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "covering";
+export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "laterRound" | "covering";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -190,6 +191,29 @@ export async function margenParaAprobar(): Promise<number> {
 }
 
 /**
+ * La comisión de este sello la va a pagar el portero del patrocinio (`workers/patrocinio`): la cuenta
+ * manda sola (Pollar), la persona no eligió pagar con su cuenta y el portero dice que rige él. Es lo
+ * mismo que decide `submitElsewhere` al mandar (`elegirPatrocinador`), preguntado antes de elegir la
+ * ronda: ese camino tarda más y la ronda nace con más margen (`MARGEN_CON_PORTERO_S`). Lo que se
+ * supo de `/cupo` vale 15 s y el chequeo de antes de sellar acaba de preguntarlo, así que casi
+ * siempre no hay otra consulta. Ante la duda (sin respuesta, un error) no: queda el margen de siempre.
+ */
+export async function pagaElPortero(
+  opciones: OpcionesDeSello = {},
+  consultar: (g: string) => Promise<{ rige: string }> = async (g) => (await import("../stellar/patrocinador")).estadoDelPatrocinio(g),
+): Promise<boolean> {
+  if (opciones.pagarConMiCuenta) return false;
+  try {
+    const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+    const w = activeWallet();
+    if (!w || !submitsItself(w) || !w.address) return false;
+    return (await consultar(w.address)).rige === "portero";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Cuánto vale el sello (`timeoutInSeconds`): hasta 15 segundos después de que el
  * contrato ya no lo aceptaría (`round_time - 30`). Más tarde no tiene sentido:
  * entraría al ledger y fallaría, con la comisión cobrada. Así la red lo descarta
@@ -235,10 +259,10 @@ const SIN_RED_SORTEO_MS = 15_000;
  * el sello.
  *
  * El contrato rechaza (`RoundTooSoon`, #5) una ronda que nazca a menos de 30 s de
- * cuando la transacción entra a un ledger. `freeze.ts` elige la ronda con 45 s de
- * margen al hacer clic, y de ahí salen unos segundos para simular, firmar y
- * entrar. Si antes se esperó a que Pollar abriera la cuenta, el margen se come: la
- * simulación todavía pasa (mira el último ledger, unos segundos atrás) y la
+ * cuando la transacción entra a un ledger. `freeze.ts` elige la ronda con 45 s de margen al
+ * hacer clic (65 si la comisión la paga el portero, `MARGEN_CON_PORTERO_S`), y de ahí salen unos
+ * segundos para simular, firmar y entrar. Si antes se esperó a que Pollar abriera la cuenta, el
+ * margen se come: la simulación todavía pasa (mira el último ledger, unos segundos atrás) y la
  * transacción entra al ledger y falla. Se vio el 20 de octubre de 2026 con una
  * cuenta nueva: costó una comisión y unos veinte segundos. Con menos de esto se
  * pide otra ronda antes de mandar nada.
@@ -627,6 +651,7 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
   preparing: "txPreparing",
   verifying: "txVerifying",
   retrying: "txRetrying",
+  laterRound: "txOtraRonda",
   covering: "txCubriendo",
 };
 
@@ -673,7 +698,8 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
     const net = document.createElement("span");
     net.className = "kicker";
     net.style.marginLeft = "8px";
-    net.textContent = network.name;
+    // En la red de prueba dice "Modo prueba", como la cabecera: "testnet" no le dice nada a quien sortea.
+    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
     host.appendChild(net);
   }
 }
@@ -713,13 +739,20 @@ export function selloSinGrabar(e: unknown): boolean {
  * Mensaje de error de una invocación, ya traducido. Clasifica sin el SDK de
  * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
  * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
+ * `ganadores`, si se sabe, es cuántos se pidieron al sellar: con el error de cantidad
+ * de ganadores dice si la red todavía admite menos de lo pedido (`errores.ts`).
  */
-export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Promise<string> {
+export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
-    const { errorKey, esNoDelPortero } = await import("../stellar/errores");
+    const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
     let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
-    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo.
-    if (tipo === "porteroFondo" && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
+    // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
+    // habla de "sellar" y al sortear confundía).
+    if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // El error de cantidad con más ganadores de los que admitían los contratos viejos: no sobran ganadores, la red todavía no llega.
+    // La clave del error (para el contador y el detalle) sigue siendo la del contrato; solo cambia lo que se lee.
+    if (tipo === "badWinnerCount" && (ganadores ?? 0) > TOPE_DE_LOS_CONTRATOS_VIEJOS) tipo = "badWinnerCountViejo";
     const clave = "errAnchor." + tipo;
     let texto = t(clave);
     if (!texto || texto === clave) return t("errAnchor.unknown");
@@ -728,7 +761,7 @@ export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Pr
       const { fechaOCercana } = await import("../stellar/patrocinador");
       texto = texto.replaceAll("{fecha}", fechaOCercana((e as unknown as { liberaEn?: unknown }).liberaEn, getLang(), t("errAnchor.cupoPronto")));
     }
-    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto"));
+    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto")).replaceAll("{tope}", String(TOPE_DE_LOS_CONTRATOS_VIEJOS));
     // Con el sorteo sin hacer, no se pierde: queda en Mis sorteos para sortearlo después.
     return paso === "sorteo" && (tipo === "porteroFondoSorteo" || tipo === "porteroCupoSorteos") ? `${dicho} ${t("sorteoMasTarde")}` : dicho;
   } catch {
@@ -764,12 +797,12 @@ const sinConexion = (): string =>
  * igual queda el mensaje: medido el 21 de octubre de 2026 con DevTools sin red,
  * sin esto el sellado terminaba sin decir nada.
  */
-export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
+export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo", ganadores?: number): Promise<void> {
   try {
-    await (await import("./detalle-error")).mostrarError(status, e, paso);
+    await (await import("./detalle-error")).mostrarError(status, e, paso, ganadores);
   } catch {
     limpiarDetalle(status.id);
-    status.textContent = await anchorErrorText(e, paso);
+    status.textContent = await anchorErrorText(e, paso, ganadores);
   }
 }
 

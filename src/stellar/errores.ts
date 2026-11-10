@@ -43,6 +43,14 @@ export const CONTRACT_ERRORS: Record<number, string> = {
 };
 
 /**
+ * Cuántos ganadores admitían los contratos hasta el que sube el tope a 300 (el de testnet del 25 de octubre de 2026
+ * todavía lo tiene). Con más pedidos, el contrato devuelve el error 4 aunque la lista alcance: no es que sobren
+ * ganadores, es que esa red todavía no llega. La clave sigue siendo `badWinnerCount` (el contador de errores la cuenta
+ * como lo que es, el error 4); quien muestra el mensaje (`anchorErrorText`) lo cambia si sabe cuántos se pidieron.
+ */
+export const TOPE_DE_LOS_CONTRATOS_VIEJOS = 32;
+
+/**
  * La cuenta existe y no tiene con qué pagar la comisión. Cada quien lo cuenta a
  * su manera: la red dice `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`),
  * Pollar lo guarda como `txInsufficientBalance` y le agrega "Insufficient XLM to
@@ -82,6 +90,14 @@ const CUENTA_NO_LISTA = /account-not-ready/;
  */
 const RECUPERACION = /SDK_WALLET_RECOVERY_REQUIRED/;
 const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
+/**
+ * La cuenta de Turnkey (mainnet) co-firma cada operación, y la co-firma no se aprobó: `SDK_COSIGN_REJECTED` (la rechazó quien
+ * aprueba, y el SDK la arma con el estado de la solicitud) o `SDK_COSIGN_VERIFICATION_FAILED` (la transacción no coincidía con
+ * lo que se iba a firmar y el SDK no la aprobó). Es una respuesta, no un corte, y repetir da lo mismo: no se reintenta solo,
+ * porque cada intento pediría otra aprobación. En `errorKey` se mira antes que `CANCELO`: el detalle puede decir
+ * "rejected" o "declined".
+ */
+const COFIRMA_NO_APROBADA = /SDK_COSIGN_(?:REJECTED|VERIFICATION_FAILED)/;
 const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
 /** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
 const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
@@ -104,23 +120,26 @@ const BILLETERA = /wallet-rejected|wallet encountered an internal error|Wallet n
 
 /**
  * Se mandó y no se sabe cómo terminó: quedó en la cola (`DUPLICATE`), la
- * espera se acabó con la transacción todavía viva, o el resultado no llegó.
+ * espera se acabó con la transacción todavía viva, el resultado no llegó, o Pollar
+ * lo dice con sus palabras (`TX_SUBMIT_UNCONFIRMED`, y `pollar-pending` cuando la
+ * co-firma sigue pendiente).
  * Ver `envio.ts`: un sello nunca se vuelve a mandar sin antes saber esto.
  *
  * `envio-lento` es el tope de un envío que no contestó (`enviarYConfirmar`): el
  * pedido pudo haber llegado. No va con los cortes de red a propósito: un corte
  * de red antes de mandar nada se reintenta solo (`sello-seguro.ts`), y esto no.
  */
-const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|envio-lento|pollar-pending|for transaction to complete, but it did not/;
+const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|envio-lento|pollar-pending|TX_SUBMIT_UNCONFIRMED|for transaction to complete, but it did not/;
 
 /**
  * La red no la tomó y hay que volver a probar: ocupada (`TRY_AGAIN_LATER`, o un
- * 429 del RPC), la secuencia corrida, la ventana vencida, o una comisión por
- * encima del tope de quien la paga (Pollar, `TX_FEE_LIMIT_EXCEEDED`, cuando la
- * red sube las comisiones). Va antes que la red caída: el rechazo del SDK
+ * 429 del RPC), demasiados pedidos seguidos a Pollar (`RATE_LIMITED`), la secuencia
+ * corrida, la ventana vencida, o una comisión por encima del tope de quien la paga
+ * (Pollar, `TX_FEE_LIMIT_EXCEEDED`, cuando la red sube las comisiones). Va antes que
+ * la red caída: el rechazo del SDK
  * empieza con "Sending the transaction to the network failed!".
  */
-const OCUPADA = /TRY_AGAIN_LATER|tx_?bad_?seq|TX_BAD_SEQUENCE|tx_?too_?late|tx-EXPIRED|TX_FEE_LIMIT_EXCEEDED|status code 429|HTTP 429/i;
+const OCUPADA = /TRY_AGAIN_LATER|tx_?bad_?seq|TX_BAD_SEQUENCE|tx_?too_?late|tx-EXPIRED|TX_FEE_LIMIT_EXCEEDED|RATE_LIMITED|status code 429|HTTP 429/i;
 
 /**
  * Entró a un ledger y falló sin decir por qué (el SDK no puede leer el
@@ -259,7 +278,7 @@ export function esDeRed(e: unknown): boolean {
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
-  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto)) return false;
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
 }
 
@@ -350,6 +369,7 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?
   const texto = textoDelError(e);
   if (RECUPERACION.test(texto)) return "recoveryRequired";
   if (CONFIRMACION.test(texto)) return "confirmation";
+  if (COFIRMA_NO_APROBADA.test(texto)) return "cosignRejected";
   if (SERVICIO_SIN_FONDOS.test(texto)) return "sponsorEmpty";
   if (CUENTA_ABRIENDOSE.test(texto)) return "accountNotReady";
   const m = /Error\(Contract,\s*#(\d+)\)/.exec(texto);

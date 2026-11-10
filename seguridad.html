@@ -9,8 +9,8 @@
 <link rel="alternate" hreflang="es" href="https://tinkazo.app/seguridad.html" />
 <link rel="alternate" hreflang="en" href="https://tinkazo.app/seguridad.html?lang=en" />
 <link rel="alternate" hreflang="x-default" href="https://tinkazo.app/seguridad.html" />
-<meta property="og:title" content="Seguridad de un sorteo verificable: qué impide y qué no" />
-<meta property="og:description" content="Qué impide el protocolo de Tinkazo, qué ataques siguen abiertos y qué límites tiene la herramienta. Un sorteo verificable dice también dónde no llega." />
+<meta property="og:title" content="Tinkazo security: what the protocol rules out, and what not" />
+<meta property="og:description" content="What the protocol prevents, which attacks stay open and where the tool stops. Qué impide el protocolo, qué queda abierto y hasta dónde llega." />
 <meta property="og:type" content="website" />
 <meta property="og:locale" content="es_BO" />
 <meta property="og:locale:alternate" content="en_US" />
@@ -21,6 +21,8 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Tinkazo security: what the protocol rules out, and what not" />
+<meta name="twitter:description" content="What the protocol prevents, which attacks stay open and where the tool stops. Qué impide el protocolo, qué queda abierto y hasta dónde llega." />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
 <link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -42,8 +44,6 @@
         <div class="mas-lista" id="mas-lista">
           <a href="/juegos.html" data-i="navJuegos">Juegos</a>
           <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
-          <a href="/seguridad.html" aria-current="page" data-i="navSeguridad">Seguridad</a>
-          <a href="/precios.html" data-i="navPrecios">Precios</a>
         </div>
       </div>
     </nav>
@@ -86,7 +86,10 @@
     <div class="head"><h2 data-i="sgOpenT">El ataque que sigue abierto</h2><span class="kicker" data-i="sgOpenK">selección del compromiso</span></div>
     <div class="body">
       <p style="color: var(--ink2); font-size: 14px" data-i="sgOpenB">Un organizador puede sellar la misma lista cinco veces contra cinco rondas distintas y publicar solo el comprobante que le convino. Cada uno de esos sorteos es, por separado, perfectamente legítimo. Es la única forma conocida de torcer un sorteo de Tinkazo con la lista ya sellada, y no está cerrada.</p>
-      <p style="color: var(--ink2); font-size: 14px; margin-top: 12px" data-i-html="sgOpenD"><b>Lo que hay contra eso:</b> el número del sorteo se muestra bien grande durante la espera, para que quede en las fotos de la sala antes de que exista el número que decide. La página de verificación trae los sellos de esa misma cuenta, marca sola los que repiten la huella o la cantidad de gente, y avisa si otra cuenta selló la misma lista. Si alguien reordena los nombres y usa otra cuenta, no se ve. Cerrarlo del todo exigiría que el organizador anuncie el número del sorteo antes de la ronda, por un canal que él no controle, y eso Tinkazo no lo puede imponer.</p>
+      <details class="tecnico">
+        <summary data-i="detalleT">Para quien quiera el detalle</summary>
+        <p style="color: var(--ink2); font-size: 14px; margin-top: 12px" data-i-html="sgOpenD"><b>Lo que hay contra eso:</b> el número del sorteo se muestra bien grande durante la espera, para que quede en las fotos de la sala antes de que exista el número que decide. La página de verificación trae los sellos de esa misma cuenta, marca sola los que repiten la huella o la cantidad de gente, y avisa si otra cuenta selló la misma lista. Si alguien reordena los nombres y usa otra cuenta, no se ve. Cerrarlo del todo exigiría que el organizador anuncie el número del sorteo antes de la ronda, por un canal que él no controle, y eso Tinkazo no lo puede imponer.</p>
+      </details>
     </div>
   </section>
 
@@ -94,12 +97,17 @@
     <h2 class="kicker" data-i="sgLimitT">Los límites que hay que decir</h2>
     <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
       <li data-i="sgLimit1">Sin anclar en Stellar, la cuenta cierra igual, pero nadie más que el organizador atestigua que esa era la lista. La página lo dice con un veredicto amarillo, en vez de un verde fácil.</li>
-      <li data-i="sgLimit2">Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.</li>
       <li data-i="sgLimit3">Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y hoy el contrato está en testnet, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.</li>
       <li data-i="sgLimit5">El sello impide cambiar la lista después, no armarla mal desde el principio: quien organiza puede meter nombres de relleno o repetidos, o dejar afuera a alguien. Por eso, antes de sellar, la lista se puede mostrar a la sala con un QR para que cada uno se busque en su celular; los repetidos salen marcados, el comprobante tiene un buscador, y la importación de Luma propone solo a los que hicieron check-in.</li>
       <li data-i="sgLimit4">Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Hay cuatro relays, tres de drand.sh y uno de Cloudflare, y se rotan hasta que uno contesta.</li>
       <li data-i="sgLimitCorto">El enlace corto (tinkazo.app/c/…) guarda en Cloudflare una copia del comprobante, cifrada en el navegador con una clave que va solo en el enlace: Tinkazo no la puede leer, y quien tenga el enlace o su QR ve la lista entera. No decide nada: abre el mismo comprobante, que se rehace como siempre. No vence, para que el sorteo se pueda volver a comprobar; si alguien necesita que se borre, lo pide a hola@tinkazo.app, y borrarla no le quita la lista a quien ya la abrió. Si el servicio se cae, el enlace corto no abre mientras dure la caída: el enlace largo sigue andando, y quien organiza lo tiene en Mis sorteos, en el equipo donde sorteó.</li>
     </ul>
+    <details class="tecnico">
+      <summary data-i="detalleT">Para quien quiera el detalle</summary>
+      <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
+        <li data-i="sgLimit2">Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.</li>
+      </ul>
+    </details>
   </section>
 
   <section style="padding: 6px 0 34px">

@@ -13,6 +13,7 @@ import { afiche, cartel, ampliar } from "./afiches.mjs";
 import { portada } from "./portada.mjs";
 import { rollUp, bannerMesa, cargarFotos, cargarFotosRed, JUEGOS_FOTO, SANGRE_IMPRESO, logoPared, VARIANTES_PARED, SPONSOR_FORMATOS, SPONSOR_CON_JUEGOS, escenaSponsor } from "./impresos.mjs";
 import { textosSponsorTxt, preguntasTxt } from "./textos-sponsor.mjs";
+import { EVENTOS_QR, rutaQrEvento, svgQrEvento } from "./eventos.mjs";
 
 export const TEMAS_ARCHIVO = ["claro", "oscuro"];
 export const LANGS = ["es", "en"];
@@ -164,6 +165,8 @@ export function generarPiezas(escribir) {
   sponsor.push(["tinkazo-textos-sponsor.txt", "textos-sponsor.txt"]);
   escribir("preguntas-organizadores.txt", preguntasTxt());
   sponsor.push(["tinkazo-preguntas-para-coordinar.txt", "preguntas-organizadores.txt"]);
+  // 9. El QR de cada evento de la página de marca, con el enlace oficial adentro: suelto, no va en ningún ZIP.
+  for (const e of EVENTOS_QR) escribir(rutaQrEvento(e), svgQrEvento(e.url, e.titulo));
   for (const [ruta, nombre] of sponsor) nota(`sponsor/${ruta}`, nombre);
   return { zip, sponsor };
 }

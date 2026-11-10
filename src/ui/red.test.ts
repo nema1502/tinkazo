@@ -416,7 +416,7 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
   });
 });
 
-describe("caso 2: Stellar no contesta", () => {
+describe("caso 2: el registro no contesta", () => {
   const caidos = (): Record<string, RpcDeMentira> => ({ [SDF as string]: { anda: "cortado" }, [ANKR]: { anda: "503" } });
 
   it("lo dice con la cuenta atrás, 'Probar ahora' es la acción, y vuelve a probar solo", async () => {
@@ -424,16 +424,16 @@ describe("caso 2: Stellar no contesta", () => {
     red(caidos());
     const { r } = await cargar();
     expect(await r.chequearAntesDeSellar()).toBe(false);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15.");
     expect(boton().textContent).toBe("Probar ahora");
     expect(caja().botones()).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(5000);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:10.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:10.");
     const antes = falsa.pedidos.length;
     await vi.advanceTimersByTimeAsync(10_000);
     // Llegó a cero: volvió a mirar solo.
     await vi.waitFor(() => expect(falsa.pedidos.length).toBeGreaterThan(antes));
-    await vi.waitFor(() => expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15."));
+    await vi.waitFor(() => expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15."));
   });
 
   it("tres intentos sin respuesta: 'Seguir sin sello' pasa a ser la principal y 'Probar ahora' queda aparte", async () => {
@@ -446,7 +446,7 @@ describe("caso 2: Stellar no contesta", () => {
       await vi.waitFor(() => expect(falsa.pedidos.length).toBeGreaterThanOrEqual(8 * (i + 2)));
       await vi.waitFor(() => expect(boton().disabled).toBe(false));
     }
-    await vi.waitFor(() => expect(frase()).toBe("Stellar no contesta."));
+    await vi.waitFor(() => expect(frase()).toBe("El registro no contesta."));
     expect(boton().textContent).toBe("Seguir sin sello");
     expect(caja().botones().map((b) => b.textContent)).toEqual(["Probar ahora"]);
     // Ya no vuelve a probar sola.
@@ -470,7 +470,7 @@ describe("caso 2: Stellar no contesta", () => {
     red(caidos());
     const { r, sellar } = await cargar();
     hayLista();
-    await esperar(() => expect(frase()).toContain("Stellar no contesta"));
+    await esperar(() => expect(frase()).toContain("El registro no contesta"));
     red(bien());
     expect(r.alApretarSellar()).toBe(true);
     await esperar(() => expect(visible()).toBe(false));
@@ -487,7 +487,7 @@ describe("caso 2: Stellar no contesta", () => {
     // ...y después se cortó: el sello falla, y en vez de un error genérico se ve el caso 2.
     red(caidos());
     expect(await r.verLaRedTrasFallar()).toBe(true);
-    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15.");
+    expect(frase()).toBe("El registro no contesta. Vuelvo a probar en 0:15.");
     expect(boton().textContent).toBe("Probar ahora");
   });
 
@@ -554,7 +554,7 @@ describe("caso 5: el protocolo cambió", () => {
     const { r } = await cargar();
     expect(await r.chequearAntesDeSellar()).toBe(true);
     expect(caja().className).toContain("amarillo");
-    expect(frase()).toBe("Stellar cambió algo y Tinkazo todavía no se puso al día. Se puede sellar igual.");
+    expect(frase()).toBe("La red cambió algo y Tinkazo todavía no se puso al día. Se puede sellar igual.");
     expect(boton().textContent).toBe("Sellar la lista");
   });
 

@@ -64,7 +64,8 @@ describe("current-frame crown clearance", () => {
       expect(f.cam.apply).toHaveBeenCalledWith(f.S.scene, 852, 393, 123);
       expect(f.crownAt.mock.calls[0]?.[0]).toBeCloseTo(0.1);
       expect(f.cleanup).not.toHaveBeenCalled();
-      expect(f.S.crown).toHaveBeenCalledWith(f.names, f.winners, false);
+      // Desde que la corona acepta opciones (`plan.alCoronar`), `crear` la llama con 5 argumentos: se comprueban los 3 primeros.
+      expect(vi.mocked(f.S.crown).mock.calls[0]?.slice(0, 3)).toEqual([f.names, f.winners, false]);
       expect(f.names).toEqual(["Fabio"]);
       f.body.destroy(); f.S.scene.destroy();
     });
@@ -76,7 +77,7 @@ describe("current-frame crown clearance", () => {
     expect(f.body.y).toBe(170);
     expect(f.cam.update).toHaveBeenCalledExactlyOnceWith(0.6);
     expect(f.crownAt.mock.calls[0]?.[0]).toBeCloseTo(0.1);
-    expect(f.S.crown).toHaveBeenCalledWith(["Fabio"], [0], false);
+    expect(vi.mocked(f.S.crown).mock.calls[0]?.slice(0, 3)).toEqual([["Fabio"], [0], false]);
     expect(f.host.duracion).toHaveBeenCalledWith(0.5, 3, null);
     expect(f.cleanup).not.toHaveBeenCalled();
     f.run!(3, 124);

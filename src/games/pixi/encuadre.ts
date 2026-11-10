@@ -9,7 +9,7 @@
  * el que las cajas entran y el centro que las deja ahí. Es aritmética sobre lo
  * que el juego ya decidió: la cámara no decide nada.
  *
- * Nació con la carrera con pocas personas (feedback de Alejandro, 19 de octubre
+ * Nació con la carrera con pocas personas (devolución de una prueba, 19 de octubre
  * de 2026: "¿probaron esto en mobile?"). Con tres o cuatro llamas, cada una mide
  * más de dos carriles de alto, y al final la ganadora quedaba cortada contra el
  * borde del celular y el cartel tapaba a otra llama.

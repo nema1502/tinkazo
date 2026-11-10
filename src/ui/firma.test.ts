@@ -52,9 +52,9 @@ describe("el paso de firmar", () => {
     h.wallet = deprueba;
     const { quienFirma, stepLabel } = await import("./anchor");
     await quienFirma();
-    expect(stepLabel("signing")).toBe("Mandando a la red…");
+    expect(stepLabel("signing")).toBe("Guardando el sello…");
     const linea = await lineaAlFirmar();
-    expect(linea).toBe("Mandando a la red…");
+    expect(linea).toBe("Guardando el sello…");
     expect(linea).not.toContain("XLM");
   });
 
@@ -62,7 +62,7 @@ describe("el paso de firmar", () => {
     h.wallet = pollar;
     const { quienFirma, stepLabel } = await import("./anchor");
     await quienFirma();
-    expect(stepLabel("signing")).toBe("Mandando a la red…");
+    expect(stepLabel("signing")).toBe("Guardando el sello…");
   });
 
   it("sin saber quién firma, se supone una billetera con ventana", async () => {
@@ -78,6 +78,6 @@ describe("el paso de firmar", () => {
     // Sin "transacción" (diseño del onboarding, 22 de octubre de 2026): se arma el sello, o el sorteo.
     expect(stepLabel("simulating")).toBe("Armando el sello…");
     expect(stepLabel("simulating", "sorteo")).toBe("Armando el sorteo…");
-    expect(stepLabel("sending")).toBe("Mandando a la red…");
+    expect(stepLabel("sending")).toBe("Guardando el sello…");
   });
 });

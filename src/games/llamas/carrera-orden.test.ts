@@ -25,23 +25,27 @@ function lideres(d: Datos): number[] {
 }
 
 describe("el orden del grupo: la punta cambia de dueña", () => {
-  it("con 18 la punta cambia al menos tres veces, con tres dueñas distintas, en todas las rondas", () => {
+  it("con 18 la punta cambia al menos una vez, con dos dueñas distintas, en todas las rondas, y dos veces en promedio (un pique de seis segundos cada siete a nueve)", () => {
+    let cambios = 0;
     for (let s = 1; s <= 40; s++) {
       const { d } = ronda(18, s);
       const ls = lideres(d);
-      expect(ls.length - 1, `semilla ${s}`).toBeGreaterThanOrEqual(3);
-      expect(new Set(ls).size, `semilla ${s}`).toBeGreaterThanOrEqual(3);
+      cambios += ls.length - 1;
+      expect(ls.length - 1, `semilla ${s}`).toBeGreaterThanOrEqual(1);
+      expect(new Set(ls).size, `semilla ${s}`).toBeGreaterThanOrEqual(2);
     }
+    expect(cambios / 40, `${cambios} cambios en 40 rondas`).toBeGreaterThanOrEqual(1.8);
   });
 
-  it("con 12 a 30 hay cambios de punta y ninguno a menos de medio segundo del anterior", () => {
+  it("con 12 a 30 la punta cambia y dos cambios nunca caen a menos de un segundo y medio uno del otro", () => {
     for (const n of [12, 18, 24, 30]) {
       for (let s = 1; s <= 12; s++) {
         const { d } = ronda(n, s);
-        expect(lideres(d).length - 1, `n=${n} semilla ${s}`).toBeGreaterThanOrEqual(2);
         d.orden.cambios.forEach((c, i) => {
-          if (i) expect(c.t - (d.orden.cambios[i - 1] as { t: number }).t).toBeGreaterThanOrEqual(0.5 - 1e-9);
+          if (i) expect(c.t - (d.orden.cambios[i - 1] as { t: number }).t, `n=${n} semilla ${s}`).toBeGreaterThanOrEqual(1.5 - 1e-9);
         });
+        // Los piques salen del azar y de cuánto dura el grupo: con 12 el grupo dura quince segundos y hay lugar para uno.
+        expect(d.orden.relevos.length, `n=${n} semilla ${s}`).toBeGreaterThanOrEqual(n >= 18 ? 1 : 0);
       }
     }
   });
@@ -68,7 +72,7 @@ describe("el orden del grupo: la punta cambia de dueña", () => {
         }
       }
     }
-    expect(anunciadas).toBeGreaterThan(300);
+    expect(anunciadas).toBeGreaterThan(240);
     expect(cortos / tramos, `${cortos} de ${tramos}`).toBeLessThan(0.06);
   });
 

@@ -72,13 +72,14 @@ const promedio = (xs) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
 export async function cargarCarrera({ raiz = process.cwd() } = {}) {
   const { runnerImport } = await import("vite");
   const cargar = async (ruta) => (await runnerImport(resolve(raiz, ruta), { configFile: false, logLevel: "silent" })).module;
-  const [show, kit, textos, drama, select, canonical] = await Promise.all([
+  const [show, kit, textos, drama, select, canonical, base] = await Promise.all([
     cargar("src/games/llamas/carrera-show.ts"),
     cargar("src/games/pixi/kit/azar.ts"),
     cargar("src/games/llamas/carrera-textos.ts"),
     cargar("src/games/drama.ts"),
     cargar("src/protocol/select.ts"),
     cargar("src/protocol/canonical.ts"),
+    cargar("src/games/llamas/carrera-base.ts"),
   ]);
   return {
     planCarrera: show.planCarrera,
@@ -89,6 +90,8 @@ export async function cargarCarrera({ raiz = process.cwd() } = {}) {
     writeStory: drama.writeStory,
     select: select.select,
     listHash: canonical.listHash,
+    /** Las medidas fijas del show (`carrera-base.ts`): la tarjeta de «cómo se juega», lo que no se estira, el vuelo de la cámara. */
+    constantes: { TARJETA: base.TARJETA, FIJOS: base.FIJOS, T_VUELO: base.T_VUELO },
   };
 }
 
@@ -254,6 +257,15 @@ export function observar(lib, plan, ctx) {
     for (const q of d.nueva ? [0.25, 0.5, 0.75, 0.88] : [0.25, 0.5, 0.75]) {
       repartos[`recta-${Math.round(q * 100)}`] = { K: L, k: puestoEn(q) };
       tiempos[`recta-${Math.round(q * 100)}`] = d.tDeQ(q);
+    }
+    // A tres segundos de la meta la cámara de la meta corta de frente y encuadra el grupo de punta: la ganadora está entre las cuatro de adelante, y entre las
+    // cuatro (como a 1,5 s entre las tres) cae parejo: que se sepa cuál de ellas es, es un delator. Un casillero de más, con probabilidad cero, recoge
+    // las rondas en que la ganadora queda afuera (si pasa una sola vez, es un fallo).
+    for (const [nombre, segundos, tope] of [["recta-T3", 3, 4], ["recta-T15", 1.5, 3]]) {
+      if (L < tope) continue;
+      const qT = d.q(d.tCrown - segundos);
+      repartos[nombre] = { K: tope + 1, k: Math.min(puestoEn(qT), tope), probs: [...Array.from({ length: tope }, () => 1 / tope), 0] };
+      tiempos[nombre] = d.tCrown - segundos;
     }
     const qTop = d.nueva ? 0.88 : 0.9;
     const alTop = d.lanes.map((g, j) => ({ g, x: d.final.pos(j, qTop) })).sort((a, b) => b.x - a.x);

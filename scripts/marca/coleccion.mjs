@@ -1,16 +1,17 @@
 /**
  * La colección de stickers con personaje: los diez juegos numerados para completar la serie (sin sobres sorpresa:
- * cada uno se elige), la llama en sus días buenos, frases nuestras y una tanda para quienes programan.
+ * cada uno se elige), el especial de Tarija, la llama en sus días buenos, frases nuestras y una tanda para quienes programan.
  *
  * Todo se dibuja acá con formas planas: pixel art como el logo, unas pocas formas limpias y las letras de Montserrat
  * en trazos. La llama sigue sin cara ni poncho: lo tierno sale de la pose y de lo que la acompaña. Los demás
  * personajes (el sapo, el guajojó, la bailarina) sí tienen ojos, como en los juegos.
  *
  * Cada sticker se troquela por su silueta: la unión de lo dibujado, agrandada un borde blanco, con 3 mm de sangrado
- * y la línea de corte en una capa aparte. Sale en 5 y 7 cm (SVG y PDF), en hojas A4 y A3 y en PNG transparente.
+ * y la línea de corte en una capa aparte. Todos llevan tinkazo.app en una etiqueta chica abajo. Sale en 5 y 7 cm (SVG y
+ * PDF), en hojas A4 y A3 y en PNG transparente.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { negra, seminegra, rect, circulo, poli, afin, rotar, rects as RECTS_LLAMA, anchoLlama, contornoUnion, rasterizar, pngNivel, pdf, svgMm, zip, azar } from "./base.mjs";
+import { negra, seminegra, rect, circulo, redondeado, poli, afin, rotar, rects as RECTS_LLAMA, anchoLlama, contornoUnion, rasterizar, pngNivel, pdf, svgMm, zip, azar } from "./base.mjs";
 import { Lienzo, escribir, caja, medir, banderines, llamaGrande, tilde } from "./dibujo.mjs";
 import { campo, silueta, aCmds, cajaLazos } from "./silueta.mjs";
 
@@ -19,13 +20,21 @@ import { campo, silueta, aCmds, cajaLazos } from "./silueta.mjs";
 const C = {
   blanco: "#ffffff", noche: "#2b2357", estrella: "#fff6e9",
   rojoBo: "#d52b1e", amarilloBo: "#f9e300", verdeBo: "#007934",
-  sapo: "#c9953f", sapoOsc: "#97692a", panza: "#efcf8a", boca: "#3a2316", lengua: "#f2788f",
   pluma: "#8b7f72", plumaClara: "#b7ab9b", pico: "#4a3f36", rama: "#7a4f2a",
   rosa: "#f79cc8", tronco: "#7fb069", troncoOsc: "#5e8f4c", espina: "#f4efd6",
   madera: "#c98a4b", maderaOsc: "#8d5a2b", metal: "#b9c0c8",
   cielo: "#bfe3f2", nieve: "#ffffff", cerro: "#8a73e8", cerroOsc: "#6c4ce0",
   corazon: "#ff4d6d", fantasma: "#f3eee6", barra: "#e9e2d4",
   piel1: "#c68b59", piel2: "#8d5524", piel3: "#e0ac69", piel4: "#a0673f", pelo: "#3b2418", mejilla: "#f08aa8",
+  // El sapo de bronce de la mesa del juego y su cajón.
+  bronce: "#d39a36", bronceOsc: "#9a6520", bronceClaro: "#f3d27a", tapa: "#e2a868", agujero: "#4a2c14",
+  // El guajojó: plumas de corteza y la luna.
+  plumaOsc: "#5e5247", luna: "#fff0b3", lunaOsc: "#f2d77a",
+  // El toborochi: tronco verde botella y flores rosadas de centro crema.
+  troncoClaro: "#a9cf8c", flor: "#f58fc1", florOsc: "#d9529a", florClara: "#ffd0e6", florCentro: "#fff4c2",
+  // Tarija: el sombrero chapaco, las uvas y los viñedos del valle.
+  paja: "#f4e2b0", pajaOsc: "#d9bd78", uva: "#7d3c98", uvaClara: "#b07cc6", hoja: "#4f9a3a", cerroVerde: "#8cc66b",
+  cerroVerdeOsc: "#5f9e4a", vid: "#2f6b2a", cieloTarde: "#ffe2a8", cieloNoche: "#1f1a45", sol: "#ffb636",
 };
 /** Las letras de los sprites: '.' es vacío. */
 const BASE = { k: "tinta", w: C.blanco, p: "papel", m: "magenta", n: "naranja", a: "amarillo", t: "turquesa", v: "morado" };
@@ -150,13 +159,60 @@ function cinta(D, { lineas, cx, y, ancho, fill = "amarillo", color = "sobre", ro
   D.r(cx - w / 2, y, w + sombra, h + sombra, rot, rc);
   return { w, h, cap, y1: y + h };
 }
-/** El número de la serie en una pastilla chica: "3/10". */
+/** El número de la serie en una pastilla chica, en una esquina: "3/10". */
 function numero(D, n, x, y) {
-  const s = `${n}/10`, tam = 3.6, pad = 1.2;
+  const s = `${n}/10`, tam = 2.9, pad = 0.9;
   const w = medir(s, tam, { font: negra }) + 2 * pad, h = tam * 0.7 + 2 * pad;
-  caja(D.L, { x, y, w, h, fill: "tarjeta", borde: 0.6, sombra: 0.8, radio: h / 2 });
+  caja(D.L, { x, y, w, h, fill: "tarjeta", borde: 0.5, sombra: 0.6, radio: h / 2 });
   escribir(D.L, { s, x: x + w / 2, y: y + pad + tam * 0.7, tam, ancla: "c", color: "tinta", font: negra });
-  D.r(x, y, w + 0.8, h + 0.8);
+  D.r(x, y, w + 0.6, h + 0.6);
+}
+
+/**
+ * La dirección, en todos: una etiqueta chica de tinta con «tinkazo.app» en papel, colgada del borde de abajo del troquel
+ * (o de la esquina que pida el sticker). Mide lo mismo en todos a la medida final: la letra, 2,35 mm de alto a 5 cm.
+ * Como la escala final depende de la caja del troquel, y la caja de la etiqueta, se resuelve en unas pocas pasadas.
+ */
+const SELLO = { s: "tinkazo.app", cap: 2.35, padX: 1.3, padY: 1.05, sombra: 0.45 }; // en mm a 5 cm
+function cajaMasa(masa) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const f of masa) {
+    let pts;
+    if (f.c) { const [cx, cy, r] = f.c; pts = [[cx - r, cy - r], [cx + r, cy + r]]; }
+    else {
+      const [x, y, w, h] = f.r;
+      pts = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+      if (f.rot) {
+        const a = f.rot * Math.PI / 180, [cx, cy] = f.rc;
+        pts = pts.map(([px, py]) => [cx + (px - cx) * Math.cos(a) - (py - cy) * Math.sin(a), cy + (px - cx) * Math.sin(a) + (py - cy) * Math.cos(a)]);
+      }
+    }
+    for (const [px, py] of pts) { x0 = Math.min(x0, px); y0 = Math.min(y0, py); x1 = Math.max(x1, px); y1 = Math.max(y1, py); }
+  }
+  return { x0, y0, x1, y1 };
+}
+function sello(D, conf = {}) {
+  const c0 = cajaMasa(D.masa);
+  const medida = (s) => {
+    const tam = SELLO.cap / 0.7 / s, w = medir(SELLO.s, tam, { font: negra }) + 2 * SELLO.padX / s, h = SELLO.cap / s + 2 * SELLO.padY / s;
+    const ancla = conf.ancla ?? "c";
+    const xr = conf.x ?? (ancla === "l" ? c0.x0 : ancla === "r" ? c0.x1 : (c0.x0 + c0.x1) / 2);
+    const x = ancla === "l" ? xr : ancla === "r" ? xr - w : xr - w / 2;
+    const y = conf.y ?? c0.y1 + (conf.dy ?? -0.2);
+    return { tam, w, h, x, y, sombra: SELLO.sombra / s };
+  };
+  let s = 0.9, m;
+  for (let i = 0; i < 6; i++) {
+    m = medida(s);
+    const W = Math.max(c0.x1, m.x + m.w + m.sombra) - Math.min(c0.x0, m.x), H = Math.max(c0.y1, m.y + m.h + m.sombra) - Math.min(c0.y0, m.y);
+    s = 50 / (Math.max(W, H) + 2 * BORDE);
+  }
+  caja(D.L, { x: m.x, y: m.y, w: m.w, h: m.h, fill: "tinta", borde: 0, sombra: m.sombra, sombraCol: "magenta", radio: m.h / 2 });
+  const n0 = D.L.formas.length;
+  const r = escribir(D.L, { s: SELLO.s, x: m.x + m.w / 2, y: m.y + m.h / 2 + SELLO.cap / s / 2, tam: m.tam, ancla: "c", color: "papel", font: negra });
+  for (let i = n0; i < D.L.formas.length; i++) D.L.formas[i].clase = "sello";
+  D.r(m.x, m.y, m.w + m.sombra, m.h + m.sombra);
+  return r.cap;
 }
 /** Distancia de un punto a la caja de una forma de la masa (sin contar el giro: alcanza para acercar el confeti). */
 function distA(f, x, y) {
@@ -185,42 +241,49 @@ function chispas(D, { semilla, n, area: [ax, ay, aw, ah], evitar = [], lado = 1.
 }
 
 // ───────────────────────── Los sprites ─────────────────────────
+/**
+ * El sapo de bronce de la mesa del juego, sentado, con la boca cerrada y cara de pícaro: los párpados a media asta y
+ * los ojos de reojo hacia la ficha. g bronce, d sombra, h brillo, r mejilla.
+ */
 const SAPO = [
-  "....ssss....ssss....",
-  "...swwwws..swwwws...",
-  "...swwkks..swwkks...",
-  "...swwkks..swwkks...",
-  "..ssssssssssssssss..",
-  ".ssssssssssssssssss.",
-  ".sssbbbbbbbbbbbbsss.",
-  "ssrsbbbbbbbbbbbbsrss",
-  "sssssbbbllllbbbsssss",
-  "ssssssbbbbbbbbssssss",
-  "ssssyyyyyyyyyyyyssss",
-  ".sssyyyyyyyyyyyysss.",
-  "sss.ssssssssssss.sss",
-  "ssss..ssssssss..ssss",
+  "....gggg........gggg....",
+  "...gddddg......gddddg...",
+  "...gwwkkg......gwwkkg...",
+  "..ggwwwwggggggggwwwwgg..",
+  "..ghhhgggggggggggggggg..",
+  ".ghhgggggggggggggkggggg.",
+  ".grrggggggggggggkggrrgg.",
+  ".ggggggkkkkkkkkkkgggggg.",
+  "gggggghhhhhhhhhhhhgggggg",
+  "dgggghhhhhhhhhhhhhhggggd",
+  "ddggdhhhhhhhhhhhhhhdggdd",
+  "dddgdghhhhhhhhhhhhgdgddd",
+  "gdgdg.gdg......gdg.gdgdg",
 ];
-const ARGOLLA = [".aaaa.", "aaaaaa", "aa..aa", "aa..aa", "aaaaaa", ".aaaa."];
-const GUAJOJO = [
-  "....gggggg....",
-  "..gggggggggg..",
-  ".gaaaaggaaaag.",
-  ".gakkaggakkag.",
-  ".gakkaggakkag.",
-  ".gaaaaggaaaag.",
-  "..ggggddgggg..",
-  "..gggggggggg..",
-  ".gglgggglgggg.",
-  ".gggglggggglg.",
-  ".gglggggglggg.",
-  "..gggglggggg..",
-  "..gglgggglgg..",
-  "...gggggggg...",
-  "...gggggggg...",
-  "....gggggg....",
-  ".....gggg.....",
-];
+/** El guajojó, de frente: ojos grandes y amarillos, pico chico, pecho de corteza con chevrones. Se espeja desde la mitad. */
+const espejo = (filas) => filas.map((f) => f + [...f].reverse().join(""));
+const GUAJOJO = espejo([
+  "..dd.....",
+  "..ddd....",
+  "..dgggggg",
+  ".dggggggg",
+  "dggaaaagg",
+  "dgaaaaaag",
+  "dgaawkaag",
+  "dgaakkaag",
+  "dgaakkaag",
+  "dggaaaagp",
+  "ddggggggp",
+  "ddgggggll",
+  "ddgldllll",
+  "ddglldlll",
+  "ddgllldll",
+  ".ddglllld",
+  ".ddgllldl",
+  "..ddgllll",
+  "...ddgggg",
+  "....ff.ff",
+]);
 const TROMPO = [
   ".....oo.....",
   "....oooo....",
@@ -306,18 +369,108 @@ function ronda(n) {
     return fila + (i < n - 1 ? mano : "");
   }).join(""));
 }
-/** El tronco del toborochi: una botella que se ensancha, con sus espinas. */
-function tronco() {
-  const anchos = [3, 3, 3, 3, 4, 5, 7, 9, 11, 12, 12, 11, 12];
-  const W = 12;
-  return anchos.map((a, j) => {
-    const i0 = Math.floor((W - a) / 2);
-    return Array.from({ length: W }, (_, i) => {
-      if (i < i0 || i >= i0 + a) return ".";
-      if (i === i0 + a - 1 && j > 4 && j < 12) return "o";
-      return (i * 7 + j * 5) % 9 === 0 && j > 2 && j < 11 ? "e" : "t";
-    }).join("");
+/**
+ * El toborochi: el árbol botella de Santa Cruz. Tronco verde y panzón que se angosta arriba, ramas abiertas como un
+ * paraguas y racimos de flores rosadas con el centro crema, separados para que se vean las ramas.
+ * t tronco, o sombra, l luz, e espina, b rama, r flor, s sombra de flor, p pétalo claro, c centro.
+ */
+function toborochi() {
+  const W = 42, H = 30;
+  const g = Array.from({ length: H }, () => Array(W).fill("."));
+  const pon = (x, y, ch) => { if (x >= 0 && x < W && y >= 0 && y < H) g[y][x] = ch; };
+  // El tronco, de la fila 13 a la 29: angosto arriba, la panza abajo y un pie que se abre.
+  const anchos = [4, 4, 4, 5, 6, 8, 10, 12, 14, 15, 16, 16, 16, 15, 14, 14, 16];
+  anchos.forEach((a, k) => {
+    const j = 13 + k, i0 = Math.round(21 - a / 2);
+    for (let i = i0; i < i0 + a; i++) {
+      let ch = "t";
+      if (i >= i0 + a - 2) ch = "o";
+      else if (a >= 8 && i === i0 + 1) ch = "l";
+      else if (a >= 10 && (i * 7 + j * 3) % 13 === 0) ch = "e";
+      pon(i, j, ch);
+    }
   });
+  // Las ramas: de la punta del tronco hacia afuera y arriba.
+  const ramas = [[4, 7], [12, 2.5], [21, 1], [30, 2.5], [38, 7]];
+  for (const [ex, ey] of ramas) {
+    const sx = 21 + Math.sign(ex - 21) * 0.6, sy = 13.5, n = 40;
+    for (let k = 0; k <= n; k++) {
+      const u = k / n, x = sx + (ex - sx) * u, y = sy + (ey - sy) * Math.pow(u, 0.8);
+      pon(Math.round(x), Math.round(y), "b"); pon(Math.round(x) + (ex > 21 ? -1 : 1), Math.round(y), "b");
+    }
+  }
+  // Los racimos de flores: en la punta de cada rama y a mitad de las de los costados.
+  const racimos = [[4, 6.5, 3.6], [12, 3, 3.6], [21, 2.6, 3.9], [30, 3, 3.6], [38, 6.5, 3.6], [8.5, 10.5, 2.1], [33.5, 10.5, 2.1]];
+  for (const [cx, cy, r] of racimos) {
+    for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
+      const d = Math.hypot(x - cx, (y - cy) * 1.1);
+      if (d > r) continue;
+      // Cada flor es una cruz: centro crema y cuatro pétalos; entre flores, sombra rosada.
+      const f = ((x + 2 * y) % 5 + 5) % 5;
+      pon(x, y, f === 0 ? "c" : f === 1 || f === 4 ? "r" : y > cy + r * 0.35 ? "s" : d < r * 0.45 && f === 2 ? "p" : "r");
+    }
+  }
+  return g.map((f) => f.join(""));
+}
+
+// ───────────────────────── Tarija ─────────────────────────
+/**
+ * El valle de Tarija en un disco: el cielo (de tarde o de noche), el sol o la luna, dos lomas y las hileras de la viña.
+ * Las lomas se recortan contra el círculo a mano: cada una es su borde de arriba y el arco de abajo del disco.
+ */
+function valle(D, { cx, cy, r, noche = false }) {
+  disco(D, cx, cy, r, noche ? C.cieloNoche : C.cieloTarde, { borde: 0.9, sombra: 1.4 });
+  if (noche) {
+    D.L.add(circulo(cx - r * 0.5, cy - r * 0.42, r * 0.2), C.luna);
+    D.L.add(circulo(cx - r * 0.44, cy - r * 0.47, r * 0.17), C.cieloNoche);
+    for (const [u, v] of [[-0.15, -0.7], [0.55, -0.55], [0.75, -0.1], [-0.8, 0.05], [0.3, -0.85]]) pixeles(D, [".w.", "www", ".w."], { x: cx + u * r - 1.1, y: cy + v * r - 1.1, p: 0.75, borde: 0, col: { w: C.estrella } });
+  } else {
+    D.L.add(circulo(cx - r * 0.48, cy - r * 0.38, r * 0.24), C.sol);
+  }
+  const loma = (f, color) => {
+    const n = 72, arriba = [], abajo = [];
+    for (let i = 0; i <= n; i++) {
+      const x = cx - r + 2 * r * i / n, h = Math.sqrt(Math.max(0, r * r - (x - cx) ** 2));
+      const yb = cy + h, yt = Math.min(yb, Math.max(f(x), cy - h));
+      arriba.push([x, yt]); abajo.push([x, yb]);
+    }
+    D.L.add(poli([...arriba, ...abajo.reverse()]), color);
+  };
+  loma((x) => cy + r * 0.05 - 3.2 * Math.sin((x - cx) / r * 2.2 + 0.6), noche ? C.cerroVerdeOsc : C.cerroVerde);
+  const f2 = (x) => cy + r * 0.32 - 2.4 * Math.sin((x - cx) / r * 1.8 - 0.9);
+  loma(f2, noche ? C.vid : C.cerroVerdeOsc);
+  // Las hileras de la viña: plantitas en fila, con una uva cada tanto.
+  for (let k = 0; k < 4; k++) for (let x = cx - r; x < cx + r; x += 2.3) {
+    const xx = x + (k % 2) * 1.15, yy = f2(xx) + 2.2 + k * 2.4;
+    if (Math.hypot(xx - cx, yy - cy) > r - 1.6) continue;
+    D.L.add(redondeado(xx - 0.8, yy - 0.5, 1.6, 1.1, 0.5), noche ? C.cerroVerdeOsc : C.vid);
+    if (Math.round(xx * 3 + k) % 3 === 0) D.L.add(circulo(xx + 0.5, yy + 0.6, 0.42), C.uva);
+  }
+}
+/** El sombrero chapaco de ala ancha, sobre la cabeza de la llama (la de `llama`, con su esquina y su alto). */
+function sombreroChapaco(D, { x, y, alto }) {
+  // La cabeza de la llama va de 14 a 22 en x y arranca en `yh`: el ala se apoya arriba y deja la cara a la vista.
+  const k = alto / 26, yh = y + 2 * k;
+  const copa = [x + 14.6 * k, yh - 4.6 * k, 7.2 * k, 3.9 * k], ala = [x + 8.6 * k, yh - 1.3 * k, 18.8 * k, 1.8 * k];
+  caja(D.L, { x: copa[0], y: copa[1], w: copa[2], h: copa[3], fill: C.paja, borde: 0.8, sombra: 1, radio: 1.4 * k });
+  D.L.add(rect(copa[0] + 0.8, copa[1] + copa[3] - 1.25 * k, copa[2] - 1.6, 1 * k), C.rojoBo);
+  caja(D.L, { x: ala[0], y: ala[1], w: ala[2], h: ala[3], fill: C.paja, borde: 0.8, sombra: 1.1, radio: ala[3] / 2 });
+  D.L.add(rect(ala[0] + 1.4 * k, ala[1] + ala[3] - 0.85, ala[2] - 2.8 * k, 0.35 * k), C.pajaOsc);
+  D.r(copa[0], copa[1], copa[2] + 1, copa[3] + 1);
+  D.r(ala[0], ala[1], ala[2] + 1.1, ala[3] + 1.1);
+}
+/** Un racimo de uvas con su tallo y una hoja. (x, y) es el arranque del tallo; `u` el radio de cada uva. */
+function racimo(D, { x, y, u }) {
+  const pos = [];
+  [3, 3, 2, 1].forEach((n, fila) => { for (let i = 0; i < n; i++) pos.push([x + 2.2 * u + (i - (n - 1) / 2) * 2 * u * 0.95, y + 1.9 * u + fila * 1.7 * u]); });
+  D.L.add(rotar(rect(x - 0.35, y - 0.2, 0.7, 2.6 * u), -40, x, y), "tinta");
+  poliBorde(D, [[x, y + 0.2], [x + 3.4 * u, y - 1.6 * u], [x + 4.4 * u, y + 0.2 * u], [x + 2.4 * u, y + 1.1 * u]], C.hoja, { borde: 0.6 });
+  for (const [px, py] of pos) D.L.add(circulo(px + 0.7, py + 0.7, u + 0.65), "tinta");
+  for (const [px, py] of pos) D.L.add(circulo(px, py, u + 0.65), "tinta");
+  for (const [px, py] of pos) D.L.add(circulo(px, py, u), C.uva);
+  for (const [px, py] of pos) D.L.add(circulo(px - u * 0.35, py - u * 0.35, u * 0.32), C.uvaClara);
+  for (const [px, py] of pos) D.c(px + 0.35, py + 0.35, u + 1);
+  D.r(x - 0.5, y - 1.8 * u, 5 * u, 2.4 * u + 1);
 }
 
 // ───────────────────────── La colección ─────────────────────────
@@ -394,7 +547,7 @@ export const COLECCION = [
       disco(D, cx, cy, 7, "amarillo", { borde: 0.9, sombra: 1.2 });
       D.L.add(rect(cx - 7, cy - 1.6, 14, 1.2), "magenta");
       D.L.add(rect(cx - 6.6, cy + 1.2, 13.2, 1.2), "turquesa");
-      cinta(D, { lineas: t, cx: 25, y: 34, ancho: 40, fill: "magenta" });
+      cinta(D, { lineas: t, cx: 25, y: 34, ancho: 44, fill: "magenta" });
     },
   },
   {
@@ -410,13 +563,25 @@ export const COLECCION = [
     },
   },
   {
-    id: "sapo", grupo: "juegos", num: 5, juego: { es: "Sapo", en: "Frog toss" }, insignia: [39.5, 1],
-    lineas: { es: ["¡ADENTRO!"], en: ["RIGHT IN!"] },
+    id: "sapo", grupo: "juegos", num: 5, juego: { es: "Sapo", en: "Frog toss" },
+    lineas: { es: ["Puntería fina"], en: ["Nice aim"] },
     dibujar(D, l, t) {
-      pixeles(D, SAPO, { x: 8, y: 8, p: 1.95, col: { s: C.sapo, b: C.boca, l: C.lengua, y: C.panza, r: C.mejilla }, borde: 0.85, sombra: 1.4 });
-      pixeles(D, ARGOLLA, { x: 3.6, y: 2.6, p: 1.3, borde: 0.7, sombra: 0.9, rot: -25 });
-      [[12, 4.4], [14.6, 6.2]].forEach(([x, y], i) => { D.L.add(rotar(rect(x, y, 2.6 - i * 0.7, 1), 30, x, y), "tinta"); D.c(x + 1, y + 0.5, 1.2); });
-      cinta(D, { lineas: t, cx: 27, y: 37, ancho: 32, fill: "amarillo" });
+      // El cajón de madera de la mesa del sapo: la tapa y el frente con sus agujeros.
+      caja(D.L, { x: 6.5, y: 29.2, w: 37, h: 8.6, fill: C.madera, borde: 0.85, sombra: 1.3 });
+      D.r(6.5, 29.2, 38.3, 9.9);
+      [14.5, 25, 35.5].forEach((x) => { D.L.add(circulo(x, 33.5, 2.25), "tinta"); D.L.add(circulo(x, 33.5, 1.5), C.agujero); });
+      [19.75, 30.25].forEach((x) => D.L.add(rect(x - 0.35, 30.1, 0.7, 6.8), C.maderaOsc));
+      caja(D.L, { x: 4.5, y: 26.4, w: 41, h: 3.4, fill: C.tapa, borde: 0.85, sombra: 1.1 });
+      D.r(4.5, 26.4, 42.1, 4.5);
+      // El sapo de bronce, con la boca cerrada, de reojo hacia la ficha.
+      pixeles(D, SAPO, { x: 25 - 12 * 1.5, y: 7, p: 1.5, col: { g: C.bronce, d: C.bronceOsc, h: C.bronceClaro, r: C.mejilla }, borde: 0.8, sombra: 1.2 });
+      // La ficha dorada en el aire, con su estela.
+      arco(D, 41.5, 7.5, 5.6, -10, 50, 0.9);
+      arco(D, 41.5, 7.5, 8, 0, 35, 0.9);
+      disco(D, 41.5, 7.5, 3.5, "amarillo", { borde: 0.8, sombra: 1 });
+      D.L.add(circulo(41.5, 7.5, 2.2), "tinta"); D.L.add(circulo(41.5, 7.5, 1.6), C.bronceClaro);
+      brillo(D, 34.5, 0.6, 0.6, "amarillo");
+      cinta(D, { lineas: t, cx: 25, y: 39.5, ancho: 40, fill: "turquesa" });
     },
   },
   {
@@ -424,27 +589,24 @@ export const COLECCION = [
     lineas: { es: ["Te estoy viendo"], en: ["I see you"] },
     dibujar(D, l, t) {
       disco(D, 25, 19.5, 18.5, C.noche, { borde: 0.9, sombra: 1.4 });
-      D.L.add(circulo(11, 14, 3.2), "amarillo"); D.L.add(circulo(12.6, 12.9, 2.8), C.noche);
-      for (const [x, y] of [[13.5, 5.5], [8.5, 22], [41, 23], [38.5, 10], [30, 3.6]]) pixeles(D, [".w.", "www", ".w."], { x, y, p: 0.75, borde: 0, col: { w: C.estrella } });
-      D.L.add(rect(7, 31.6, 36, 3.2), "tinta"); D.L.add(rect(7.8, 32.4, 34.4, 1.6), C.rama);
-      D.L.add(rect(34, 28.6, 1.6, 4), "tinta"); D.L.add(rect(34.4, 29.2, 0.8, 3), C.rama);
-      pixeles(D, GUAJOJO, { x: 13.1, y: 3.4, p: 1.7, col: { g: C.pluma, l: C.plumaClara, d: C.pico }, borde: 0.8, sombra: 1.2 });
-      cinta(D, { lineas: t, cx: 25, y: 37, ancho: l === "es" ? 42 : 32, fill: "amarillo" });
+      // La luna llena detrás de la cabeza: la silueta del pájaro se recorta contra ella.
+      D.L.add(circulo(35.5, 9.5, 6.5), C.luna);
+      for (const [x, y, r] of [[38, 7.5, 1.2], [39, 12, 0.8]]) D.L.add(circulo(x, y, r), C.lunaOsc);
+      for (const [x, y] of [[9.5, 9], [7.5, 23], [41.5, 25], [13, 4.5], [11.5, 29.5]]) pixeles(D, [".w.", "www", ".w."], { x, y, p: 0.75, borde: 0, col: { w: C.estrella } });
+      // La rama, con su muñón y una hoja.
+      D.L.add(rect(6.5, 31.4, 37, 3.2), "tinta"); D.L.add(rect(7.3, 32.2, 35.4, 1.6), C.rama);
+      D.L.add(rect(36.5, 28.2, 1.8, 4), "tinta"); D.L.add(rect(36.9, 28.8, 1, 3), C.rama);
+      pixeles(D, GUAJOJO, { x: 25 - 9 * 1.38, y: 4.6, p: 1.38, col: { g: C.pluma, l: C.plumaClara, d: C.plumaOsc, p: C.pico, f: "naranja" }, borde: 0.8, sombra: 1.2 });
+      cinta(D, { lineas: t, cx: 25, y: 37, ancho: l === "es" ? 45 : 34, fill: "amarillo" });
     },
   },
   {
     id: "toborochi", grupo: "juegos", num: 7, juego: { es: "Toborochi", en: "Toborochi" },
     lineas: { es: ["Panza llena,", "corazón contento"], en: ["Full belly,", "happy heart"] },
     dibujar(D, l, t) {
-      pixeles(D, tronco(), { x: 25 - 6 * 1.5, y: 12.5, p: 1.5, col: { t: C.tronco, o: C.troncoOsc, e: C.espina }, borde: 0.85, sombra: 1.3 });
-      const copa = [[15.5, 11, 6.2], [25, 7.5, 7.2], [34.5, 11, 6.2], [20, 15.5, 5.4], [30, 15.5, 5.4], [9.5, 15.8, 4.2], [40.5, 15.8, 4.2]];
-      for (const [x, y, r] of copa) { D.L.add(circulo(x + 1.2, y + 1.2, r + 0.85), "tinta"); D.c(x + 0.6, y + 0.6, r + 1.5); }
-      for (const [x, y, r] of copa) D.L.add(circulo(x, y, r + 0.85), "tinta");
-      for (const [x, y, r] of copa) D.L.add(circulo(x, y, r), C.rosa);
-      for (const [x, y] of [[13, 9], [22, 5], [31, 8], [37, 13], [18, 15], [27, 13], [10, 16.5], [41, 16.5], [33, 17]]) {
-        pixeles(D, [".m.", "mam", ".m."], { x: x - 1, y: y - 1, p: 0.75, borde: 0 });
-      }
-      cinta(D, { lineas: t, cx: 25, y: 31.5, ancho: 44, fill: "turquesa" });
+      pixeles(D, toborochi(), { x: 25 - 21 * 1.1, y: 0.6, p: 1.1, col: { t: C.tronco, o: C.troncoOsc, l: C.troncoClaro, e: C.espina, b: C.troncoOsc, r: C.flor, s: C.florOsc, p: C.florClara, c: C.florCentro }, borde: 0.75, sombra: 1.1 });
+      for (const [x, y] of [[5.5, 19], [42, 17.5], [10, 25]]) pixeles(D, [".r.", "rcr", ".r."], { x, y, p: 0.85, borde: 0.4, col: { r: C.flor, c: C.florCentro } });
+      cinta(D, { lineas: t, cx: 25, y: 31.5, ancho: 47, fill: "turquesa" });
     },
   },
   {
@@ -468,7 +630,7 @@ export const COLECCION = [
     },
   },
   {
-    id: "teleferico", grupo: "juegos", num: 10, juego: { es: "Teleférico", en: "Cable car" }, insignia: [3, 1.5],
+    id: "teleferico", grupo: "juegos", num: 10, juego: { es: "Teleférico", en: "Cable car" }, insignia: [3.5, 4],
     lineas: { es: ["Todos arriba"], en: ["All aboard"] },
     dibujar(D, l, t) {
       // Los cerros con nieve y el sol de la tarde.
@@ -510,7 +672,7 @@ export const COLECCION = [
       letras(D, { s: "z", x: 34, y: 11, tam: 6, color: "morado", contorno: 0.5, sombra: 0.8 });
       letras(D, { s: "z", x: 38.5, y: 6.5, tam: 8, color: "turquesa", contorno: 0.55, sombra: 0.9 });
       letras(D, { s: "Z", x: 43, y: 2.5, tam: 8, color: "amarillo", contorno: 0.6, sombra: 1 });
-      cinta(D, { lineas: t, cx: 25, y: 30, ancho: 40, fill: "amarillo" });
+      cinta(D, { lineas: t, cx: 25, y: 30, ancho: 44, fill: "amarillo" });
     },
   },
   {
@@ -524,12 +686,12 @@ export const COLECCION = [
   },
   {
     id: "caravana", grupo: "llama",
-    lineas: { es: ["Nadie se", "queda afuera"], en: ["No one", "is left out"] },
+    lineas: { es: ["Participar", "es gratis"], en: ["Entry", "is free"] },
     dibujar(D, l, t) {
       banderines(D.L, { x0: 3, x1: 47, y: 2.5, n: 7, alto: 4.6, sag: 1.6, hilo: 0.55, fondoCalado: "tarjeta" });
       D.r(2.5, 1.8, 45, 6.4);
       ["magenta", "naranja", "amarillo", "turquesa", "morado"].forEach((col, i) => llama(D, { x: 1.5 + i * 9.3, y: i % 2 ? 11 : 12.5, alto: 13, color: col, contorno: 0.7, sombra: 0.9 }));
-      cinta(D, { lineas: t, cx: 25, y: 30, ancho: 40, fill: "naranja" });
+      cinta(D, { lineas: t, cx: 25, y: 30, ancho: 40, fill: "naranja", tamMax: 7.6 });
     },
   },
   {
@@ -598,12 +760,30 @@ export const COLECCION = [
     },
   },
   {
-    id: "todos-adentro", grupo: "frases",
-    lineas: { es: ["TODOS", "ADENTRO"], en: ["EVERYONE'S", "IN"] },
+    id: "todos-lista", grupo: "frases",
+    lineas: { es: ["Todos en", "la lista"], en: ["Everyone's", "on the list"] },
     dibujar(D, l, t) {
-      llama(D, { x: 16.5, y: 2, alto: 20, contorno: 0.85, sombra: 1.2 });
-      chispas(D, { semilla: 11, n: 8, area: [3, 1, 44, 21], evitar: [[14.5, 0, 22, 23]], lado: 1.6 });
-      cinta(D, { lineas: t, cx: 25, y: 24, ancho: l === "es" ? 40 : 42, fill: "naranja", tamMax: 12 });
+      // La lista en una tablilla, con un nombre por renglón y todos marcados.
+      const x = 23.5, y = 6.5, w = 22, h = 23.5, g = 6, rc = [x + w / 2, y + h / 2];
+      caja(D.L, { x, y, w, h, fill: "tarjeta", borde: 0.85, sombra: 1.3, rot: g, rc });
+      D.r(x, y, w + 1.3, h + 1.3, g, rc);
+      const giro = (cmds) => rotar(cmds, g, ...rc);
+      D.L.add(giro(rect(x + w / 2 - 4.5, y - 1.6, 9, 3.4)), "tinta");
+      D.L.add(giro(rect(x + w / 2 - 3.7, y - 0.8, 7.4, 1.8)), C.metal);
+      const cols = ["magenta", "naranja", "turquesa", "morado", "amarillo"];
+      for (let i = 0; i < 5; i++) {
+        const yy = y + 3.6 + i * 3.9;
+        D.L.add(giro(circulo(x + 3.6, yy + 1, 1.35)), "tinta");
+        D.L.add(giro(circulo(x + 3.6, yy + 1, 0.85)), cols[i]);
+        D.L.add(giro(rect(x + 6, yy + 0.35, [10, 8, 11, 7, 9][i], 1.3)), C.barra);
+        const tl = [];
+        ["........X", ".......XX", "X.....XX.", "XX...XX..", ".XX.XX...", "..XXX....", "...X....."].forEach((f, j) => [...f].forEach((ch, k) => { if (ch === "X") tl.push(...rect(x + w - 5.6 + k * 0.42, yy - 0.6 + j * 0.42, 0.44, 0.44)); }));
+        D.L.add(giro(tl), "turquesa");
+      }
+      // La llama, orgullosa, con la pata delantera sobre la tablilla.
+      llama(D, { x: 1.8, y: 2, alto: 28, contorno: 0.9, sombra: 1.4 });
+      brillo(D, 43.5, 2.5, 0.7, "amarillo"); brillo(D, 3, 6.5, 0.6, "turquesa");
+      cinta(D, { lineas: t, cx: 24, y: 31.5, ancho: 40, fill: "naranja", tamMax: 7.6 });
     },
   },
   {
@@ -627,10 +807,10 @@ export const COLECCION = [
       ["magenta", "amarillo", "turquesa"].forEach((c, i) => D.L.add(circulo(8 + i * 3.2, 5.1, 1), c));
       llama(D, { x: 19, y: 9, alto: 15, contorno: 0, sombra: 0 });
       escribir(D.L, { s: ">_", x: 7, y: 26, tam: 4.4, color: "turquesa", font: negra });
-      // La dirección en la barra de la ventana: el sticker que se fotografía dice de dónde es.
-      const u = escribir(D.L, { s: "tinkazo.app", x: 44, y: 6.4, tam: 4.2, color: "tinta", font: negra, ancla: "r" });
+      // En la barra de la ventana, la máquina de siempre: en la de quien programa, anda.
+      const u = escribir(D.L, { s: "localhost", x: 44, y: 6.4, tam: 4.7, color: "tinta", font: negra, ancla: "r" });
       D.caps.push(u.cap);
-      cinta(D, { lineas: t, cx: 25, y: 30.5, ancho: 40, fill: "amarillo" });
+      cinta(D, { lineas: t, cx: 25, y: 30.5, ancho: 44, fill: "amarillo" });
     },
   },
   {
@@ -658,10 +838,6 @@ export const COLECCION = [
       D.L.add(trazos, "tinta");
       for (const [a, b, w, h] of rr) D.r(a - 0.4, b - 0.4, w + 0.8, h + 0.8);
       letras(D, { s: "404", x: 36, y: 21, tam: 17, color: "magenta", ancla: "c", contorno: 0.8, sombra: 1.5 });
-      // La dirección, chica, arriba del número: el sticker dice de dónde es.
-      const u = escribir(D.L, { s: "tinkazo.app", x: 36.5, y: 6.2, tam: 4.8, color: "tinta", font: negra, ancla: "c" });
-      D.caps.push(u.cap);
-      D.r(u.x0 - 0.6, 6.2 - u.cap - 0.8, u.ancho + 1.2, u.cap + 1.8);
       cinta(D, { lineas: t, cx: 25, y: 27.5, ancho: 40, fill: "turquesa" });
     },
   },
@@ -711,6 +887,45 @@ export const COLECCION = [
       D.r(izq - 3, yb - 1.5, 11, 6.5);
     },
   },
+  // ── Especial Tarija ──
+  {
+    id: "tarija", grupo: "tarija", texto: { es: "Tinkazo en Tarija", en: "Tinkazo in Tarija" },
+    lineas: { es: ["Tinkazo en", "TARIJA"], en: ["Tinkazo in", "TARIJA"] },
+    dibujar(D, l, t) {
+      valle(D, { cx: 25, cy: 19, r: 17.5 });
+      const ll = { x: 8.5, y: 5.2, alto: 27 };
+      llama(D, { ...ll, contorno: 0.9, sombra: 1.4 });
+      sombreroChapaco(D, ll);
+      const k = ll.alto / 26;
+      racimo(D, { x: ll.x + 22.3 * k, y: ll.y + 5.6 * k, u: 1.45 });
+      brillo(D, 43, 2.5, 0.65, "amarillo");
+      const a = cinta(D, { lineas: [t[0]], cx: 21, y: 30.6, ancho: 35, fill: "tarjeta", color: "tinta", rot: -3, tamMax: 6 });
+      cinta(D, { lineas: [t[1]], cx: 25, y: a.y1 + 0.6, ancho: 40, fill: "magenta", rot: -3, tamMax: 11 });
+    },
+  },
+  {
+    id: "tarija-laptop", grupo: "tarija", langs: [null],
+    lineas: { null: ["DevFest", "Tarija 2026"] },
+    dibujar(D) {
+      valle(D, { cx: 25, cy: 19, r: 17.5, noche: true });
+      const ll = { x: 17.5, y: 6.5, alto: 25 };
+      llama(D, { ...ll, contorno: 0.9, sombra: 1.4 });
+      sombreroChapaco(D, ll);
+      // La laptop, de espaldas: la tapa con sus stickers (la llama, unas uvas y un «</>») y la base.
+      const lx = 3.2, ly = 16.2, lw = 21.5, lh = 14.8;
+      caja(D.L, { x: lx, y: ly, w: lw, h: lh, fill: "#3b3a4a", borde: 0.85, sombra: 1.4, radio: 1.2 });
+      D.r(lx, ly, lw + 1.4, lh + 1.4);
+      caja(D.L, { x: lx - 2.5, y: ly + lh - 0.2, w: lw + 5, h: 2.4, fill: C.metal, borde: 0.8, sombra: 1.2, radio: 0.8 });
+      D.r(lx - 2.5, ly + lh - 0.2, lw + 6.2, 3.6);
+      D.L.add(circulo(lx + 5.6, ly + 5.4, 3.6), C.blanco);
+      llamaGrande(D.L, { x: lx + 3, y: ly + 2.4, alto: 6, color: "magenta" });
+      caja(D.L, { x: lx + 10.6, y: ly + 2.2, w: 8.8, h: 4.6, fill: "turquesa", borde: 0.45, sombra: 0, radio: 1 });
+      escribir(D.L, { s: "</>", x: lx + 15, y: ly + 5.9, tam: 4, ancla: "c", color: "tinta", font: negra });
+      racimo(D, { x: lx + 11.2, y: ly + 7.6, u: 0.85 });
+      brillo(D, 44.5, 6, 0.65, "amarillo");
+      cinta(D, { lineas: ["DevFest", "Tarija 2026"], cx: 25, y: 33, ancho: 38, fill: "amarillo", tamMax: 8 });
+    },
+  },
 ];
 
 // ───────────────────────── Troquel, sangrado y salidas ─────────────────────────
@@ -722,23 +937,27 @@ export const langsDe = (st) => st.langs ?? LANGS;
 export const nombreDe = (st, lang) => (lang ? `${st.id}-${lang}` : st.id);
 
 const memo = new Map();
-function base(st, lang) {
-  const clave = nombreDe(st, lang);
+function base(st, lang, conSello) {
+  const clave = `${nombreDe(st, lang)}${conSello ? "" : "-sin-sello"}`;
   if (memo.has(clave)) return memo.get(clave);
   const D = new Dib(lang);
   st.dibujar(D, lang, st.lineas[lang]);
   if (st.num) numero(D, st.num, ...(st.insignia ?? [2.5, 1.5]));
+  const capSello = conSello ? sello(D, st.sello) : 0;
   const c = campo(D.masa, BORDE + MAX_SANGRE);
   const corte = silueta(c, BORDE);
   if (corte.length !== 1) throw new Error(`${clave}: la silueta tiene ${corte.length} partes`);
-  const b = { D, c, corte, caja: cajaLazos(corte) };
+  const b = { D, c, corte, caja: cajaLazos(corte), capSello };
   memo.set(clave, b);
   return b;
 }
 
-/** Un sticker a tamaño real: la medida mayor del troquel es `cm`. Las formas tienen (0, 0) en la esquina del troquel. */
-export function stickerColeccion(st, lang, cm, sangre) {
-  const b = base(st, lang);
+/**
+ * Un sticker a tamaño real: la medida mayor del troquel es `cm`. Las formas tienen (0, 0) en la esquina del troquel.
+ * Con `sello: false` sale sin la etiqueta de la dirección (para los impresos, que ya la dicen en grande).
+ */
+export function stickerColeccion(st, lang, cm, sangre, { sello: conSello = true } = {}) {
+  const b = base(st, lang, conSello);
   const s = cm * 10 / Math.max(b.caja.w, b.caja.h);
   const fondo = sangre ? silueta(b.c, BORDE + sangre / s) : b.corte;
   const tr = (cmds) => afin(cmds, s, 0, 0, s, -b.caja.x * s, -b.caja.y * s);
@@ -747,7 +966,7 @@ export function stickerColeccion(st, lang, cm, sangre) {
     ...b.D.L.formas.map((f) => ({ ...f, cmds: tr(f.cmds) })),
     { cmds: tr(aCmds(b.corte)), trazo: "#ff00ff", grosor: 0.25, capa: "corte" },
   ];
-  return { w: b.caja.w * s, h: b.caja.h * s, formas, capMin: Math.min(...b.D.caps) * s };
+  return { w: b.caja.w * s, h: b.caja.h * s, formas, capMin: Math.min(...b.D.caps) * s, capSello: b.capSello * s };
 }
 
 const mueve = (formas, dx, dy) => formas.map((f) => ({ ...f, cmds: afin(f.cmds, 1, 0, 0, 1, dx, dy) }));
@@ -775,15 +994,31 @@ export function hojaColeccion(lista, { cm = 5, ancho, alto, cols, aire = 5, sang
 }
 
 const porId = Object.fromEntries(COLECCION.map((s) => [s.id, s]));
-/** Qué va en cada hoja. Las de A4 se llenan con los que más se piden. */
+/** Los nueve de la hoja «laptop», con por qué cada uno. */
+export const LAPTOP = [
+  ["carrera", "La llama del logo a toda velocidad: es la marca y se reconoce de lejos."],
+  ["tarija", "El especial de Tarija, el más trabajado de la tanda: sombrero chapaco, uvas y viñedos."],
+  ["tarija-laptop", "El del evento: una llama con su laptop en una laptop, para quien estuvo ahí."],
+  ["verificalo", "La promesa de Tinkazo en dos palabras, con una lupa que se lee a un metro."],
+  ["dev-mi-llama", "El chiste de quien programa, nacido para pegarse al lado del teclado."],
+  ["llama-salio", "El momento del sorteo que todos quieren vivir, con la llama saltando."],
+  ["guajojo", "El pájaro de la noche con la luna: la silueta más fuerte de los juegos."],
+  ["ruleta", "Los cinco colores de la marca en un círculo: alegra cualquier tapa."],
+  ["con-k", "La K grande enseña a escribir el nombre: marketing que se pega solo."],
+];
+/**
+ * Qué va en cada hoja. Las de A4 se llenan con los que más se piden; la «laptop» trae los nueve que más dan ganas de
+ * pegar, en 6 cm. La A3 no va en el ZIP (con ella pasaba de los 4 MB que tolera el repo): se baja suelta.
+ */
 export const HOJAS = {
   "hoja-a4-juegos": { ancho: 210, alto: 297, cols: 3, ids: [...COLECCION.filter((s) => s.grupo === "juegos").map((s) => s.id), "llama-corazon", "llama-dormida", "llama-salio", "caravana", "bolivia"] },
-  "hoja-a4-frases": { ancho: 210, alto: 297, cols: 3, ids: ["con-k", "verificalo", "apthapi", "cacharpaya", "todos-adentro", "sin-trampa", "dev-mi-llama", "dev-404", "dev-commit", "dev-tests", "dev-hola", "llama-corazon", "caravana", "sapo", "toborochi"] },
-  "hoja-a3": { ancho: 297, alto: 420, cols: 5, ids: [...COLECCION.map((s) => s.id), "llama-corazon", "dev-404", "caravana", "con-k"] },
+  "hoja-a4-frases": { ancho: 210, alto: 297, cols: 3, ids: ["con-k", "verificalo", "apthapi", "cacharpaya", "todos-lista", "sin-trampa", "dev-mi-llama", "dev-404", "dev-commit", "dev-tests", "dev-hola", "tarija", "tarija-laptop", "caravana", "llama-corazon"] },
+  "hoja-a4-laptop": { ancho: 210, alto: 297, cols: 3, cm: 6, ids: LAPTOP.map(([id]) => id) },
+  "hoja-a3": { ancho: 297, alto: 420, cols: 5, enZip: false, ids: [...COLECCION.map((s) => s.id), "tarija", "llama-corazon", "dev-404", "con-k"] },
 };
 const listaHoja = (h, lang) => h.ids.map((id) => [porId[id], porId[id].langs ? null : lang]);
 
-export const GRUPOS = { juegos: ["Los diez juegos, para coleccionar", "The ten games, to collect"], llama: ["La llama", "The llama"], frases: ["Frases", "Sayings"], devs: ["Para devs", "For developers"] };
+export const GRUPOS = { juegos: ["Los diez juegos, para coleccionar", "The ten games, to collect"], tarija: ["Especial Tarija", "Tarija special"], llama: ["La llama", "The llama"], frases: ["Frases", "Sayings"], devs: ["Para devs", "For developers"] };
 const NOTAS = {
   apthapi: ["El apthapi es la comida del altiplano donde cada uno trae algo y se comparte en el suelo, sobre un aguayo.", "An apthapi is the Andean shared meal where everyone brings something and it is laid out on a woven cloth."],
   cacharpaya: ["La cacharpaya es la fiesta de despedida: el cierre del carnaval o de un evento.", "The cacharpaya is the farewell party that closes a carnival or an event."],
@@ -792,6 +1027,8 @@ const NOTAS = {
   chovena: ["La chovena es una danza en ronda, de la mano.", "The chovena is a circle dance, hand in hand."],
   entrada: ["La Entrada es el desfile de las fraternidades del Carnaval de Oruro. En inglés, comparsa es crew.", "La Entrada is the parade of the dance groups of the Oruro Carnival."],
   teleferico: ["El teleférico de La Paz y El Alto, con cabinas del color de cada línea.", "The cable car of La Paz and El Alto, with cabins in the color of each line."],
+  tarija: ["La llama chapaca, de Tarija: sombrero de ala ancha, un racimo de uvas y los viñedos del valle.", "The chapaca llama, from Tarija: a wide-brimmed hat, a bunch of grapes and the valley vineyards."],
+  "tarija-laptop": ["La misma llama chapaca, con su laptop, para el DevFest Tarija del 28 de noviembre de 2026.", "The same chapaca llama, with its laptop, for DevFest Tarija on November 28, 2026."],
 };
 
 /** El texto con todas las frases, en los dos idiomas, para el kit. */
@@ -829,12 +1066,12 @@ export function textoFrases() {
 const LEEME = `TINKAZO, COLECCIÓN DE STICKERS
 ==============================
 
-26 stickers dibujados por nosotros: los diez juegos de Tinkazo numerados del 1 al 10 para completar la serie (cada uno se elige, no vienen en sobres sorpresa), la llama en sus días buenos, frases nuestras y una tanda para quienes programan.
+28 stickers dibujados por nosotros: los diez juegos de Tinkazo numerados del 1 al 10 para completar la serie (cada uno se elige, no vienen en sobres sorpresa), el especial de Tarija, la llama en sus días buenos, frases nuestras y una tanda para quienes programan. Todos llevan tinkazo.app en una etiqueta chica abajo.
 
 QUÉ HAY ADENTRO
   stickers/  Cada sticker suelto a tamaño real, en PDF de 5 y de 7 cm (la medida mayor del troquel) y en SVG de 5 cm (1 unidad = 1 mm; se agranda sin perder calidad). Con 3 mm de sangrado y la capa 'corte' con la línea de troquelado, que sigue la silueta del dibujo con un borde blanco. Los de texto vienen en español (-es) y en inglés (-en).
-  hojas/     Listas para la imprenta, en PDF: hoja A4 de los juegos y la llama, hoja A4 de frases y devs, y hoja A3 con los 26, todos de 5 cm, con 5 mm de aire entre troqueles y 2 mm de sangrado.
-  png/       Cada sticker en PNG de 512 px, con fondo transparente, para redes o para un video.
+  hojas/     Listas para la imprenta, en PDF: hoja A4 de los juegos y la llama, hoja A4 de frases, devs y Tarija (de 5 cm), y la hoja «laptop», con los nueve que más dan ganas de pegar, de 6 cm. Con 5 mm de aire entre troqueles y 2 mm de sangrado. La hoja A3 con los 28 se baja suelta desde https://tinkazo.app/marca.html.
+  Los PNG de 512 px con fondo transparente, para redes o para un video, van aparte en tinkazo-stickers-png.zip (con todo junto pasaba de los 4 MB): https://tinkazo.app/marca.html
   frases.txt Todas las frases en español y en inglés, con lo que quieren decir las palabras bolivianas.
 
 PARA IMPRIMIR
@@ -849,12 +1086,12 @@ Contacto: hola@tinkazo.app
 TINKAZO, STICKER COLLECTION
 ===========================
 
-26 stickers we drew ourselves: the ten Tinkazo games numbered 1 to 10 to complete the series (you pick each one, there are no mystery packs), the llama on its good days, our own sayings and a batch for people who code.
+28 stickers we drew ourselves: the ten Tinkazo games numbered 1 to 10 to complete the series (you pick each one, there are no mystery packs), the Tarija special, the llama on its good days, our own sayings and a batch for people who code. Each one carries tinkazo.app on a small tag at the bottom.
 
 WHAT IS INSIDE
   stickers/  Each sticker on its own at true size, as 5 and 7 cm PDF (the longest side of the cut) and 5 cm SVG (1 unit = 1 mm; it scales up without losing quality). With 3 mm bleed and the 'corte' layer holding the die-cut line, which follows the drawing with a white border. The ones with text come in Spanish (-es) and English (-en).
-  hojas/     Print-ready PDF sheets: an A4 sheet with the games and the llama, an A4 sheet with sayings and developer stickers, and an A3 sheet with all 26, all at 5 cm, 5 mm apart with 2 mm bleed.
-  png/       Each sticker as a 512 px PNG with a transparent background, for social media or a video.
+  hojas/     Print-ready PDF sheets: an A4 sheet with the games and the llama, an A4 sheet with sayings, developer stickers and Tarija (at 5 cm), and the "laptop" sheet with the nine you most want to stick on one, at 6 cm. 5 mm apart with 2 mm bleed. The A3 sheet with all 28 is a separate download at https://tinkazo.app/marca.html.
+  The 512 px PNG files with a transparent background, for social media or a video, come separately in tinkazo-stickers-png.zip (all together it went over 4 MB): https://tinkazo.app/marca.html
   frases.txt Every saying in Spanish and English, with what the Bolivian words mean.
 
 PRINTING
@@ -871,15 +1108,15 @@ The lettering is drawn from Montserrat (SIL Open Font License 1.1, https://openf
 export function generarColeccion(destino) {
   mkdirSync(destino, { recursive: true });
   const escribir = (n, d) => writeFileSync(new URL(n, destino), d);
-  const zipE = [];
+  const zipE = [], zipPng = [];
   const raiz = "tinkazo-stickers";
   const SANGRE = 3;
-  const caps = [];
+  const caps = [], sellos = [];
   for (const st of COLECCION) for (const lang of langsDe(st)) {
     const nombre = nombreDe(st, lang);
     for (const cm of [5, 7]) {
       const s = stickerColeccion(st, lang, cm, SANGRE);
-      if (cm === 5) caps.push([nombre, s.capMin]);
+      if (cm === 5) { caps.push([nombre, s.capMin]); sellos.push(s.capSello); }
       const w = s.w + 2 * SANGRE, h = s.h + 2 * SANGRE, formas = mueve(s.formas, SANGRE, SANGRE);
       // El SVG va solo en 5 cm (se agranda sin perder nada); el PDF, en las dos medidas. Así el ZIP queda por debajo de 4 MB.
       if (cm === 5) zipE.push([`${raiz}/stickers/tinkazo-${nombre}-${cm}cm.svg`, Buffer.from(svgMm(w, h, formas, `Tinkazo, sticker de ${cm} cm con ${SANGRE} mm de sangrado`))]);
@@ -888,16 +1125,14 @@ export function generarColeccion(destino) {
     const v = stickerColeccion(st, lang, 5, 0);
     const p = png(v.formas, v.w, v.h, LADO_PNG);
     escribir(`${nombre}.png`, p);
-    zipE.push([`${raiz}/png/tinkazo-${nombre}.png`, p]);
+    zipPng.push([`${raiz}-png/tinkazo-${nombre}.png`, p]);
   }
   for (const [id, h] of Object.entries(HOJAS)) for (const lang of LANGS) {
-    const hoja = hojaColeccion(listaHoja(h, lang), { ancho: h.ancho, alto: h.alto, cols: h.cols });
+    const hoja = hojaColeccion(listaHoja(h, lang), { ancho: h.ancho, alto: h.alto, cols: h.cols, cm: h.cm ?? 5 });
     const nombre = `${id}-${lang}`;
-    const titulo = `Tinkazo, ${id.startsWith("hoja-a3") ? "hoja A3" : "hoja A4"} de stickers de 5 cm`;
     const p = pdf(hoja.ancho, hoja.alto, 0, hoja.formas);
     escribir(`${nombre}.pdf`, p);
-    zipE.push([`${raiz}/hojas/tinkazo-stickers-${nombre}.pdf`, p]);
-    void titulo;
+    if (h.enZip !== false) zipE.push([`${raiz}/hojas/tinkazo-stickers-${nombre}.pdf`, p]);
     const fondo = { cmds: rect(0, 0, hoja.ancho, hoja.alto), fill: "#e9e2d4" };
     escribir(`${nombre}.png`, png([fondo, ...hoja.formas], hoja.ancho, hoja.alto, 700));
   }
@@ -906,5 +1141,7 @@ export function generarColeccion(destino) {
   zipE.push([`${raiz}/frases.txt`, frases], [`${raiz}/LEEME.txt`, Buffer.from(LEEME, "utf8")]);
   const z = zip(zipE);
   escribir("tinkazo-stickers.zip", z);
-  return { stickers: COLECCION.length, archivosZip: zipE.length, capMin: caps.sort((a, b) => a[1] - b[1])[0] };
+  // Los PNG van en su propio ZIP: con ellos adentro, el de la imprenta pasaba de los 4 MB que tolera el repo.
+  escribir("tinkazo-stickers-png.zip", zip(zipPng));
+  return { stickers: COLECCION.length, archivosZip: zipE.length, archivosPng: zipPng.length, capMin: caps.sort((a, b) => a[1] - b[1])[0], capSello: Math.min(...sellos) };
 }

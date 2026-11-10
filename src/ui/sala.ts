@@ -9,6 +9,7 @@ import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { contar } from "../contar";
+import { etiquetaDe } from "../equipos/etiquetas";
 import { LEGIBLE } from "../games/pixi/letra";
 
 /**
@@ -79,7 +80,7 @@ export async function mostrarLista(): Promise<void> {
     `<div class="sala-body">` +
     `<ol class="sala-nombres">` +
     names
-      .map((n, i) => `<li${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}</li>`)
+      .map((n, i) => `<li${rep.has(i) ? ' class="rep"' : ""}>${esc(etiquetaDe(n))}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}</li>`)
       .join("") +
     `</ol>` +
     `<aside class="sala-qr"><img alt="" /><p>${esc(t("salaQr"))}</p>` +

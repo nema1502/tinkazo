@@ -239,6 +239,7 @@ export default defineConfig({
         "ruleta-de-nombres": resolve(__dirname, "ruleta-de-nombres.html"),
         "sorteo-para-eventos": resolve(__dirname, "sorteo-para-eventos.html"),
         lista: resolve(__dirname, "lista.html"),
+        equipos: resolve(__dirname, "equipos.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),

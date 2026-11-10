@@ -12,13 +12,26 @@
  *   DELETE /v1/sala/<id>                   Authorization: Bearer <token>   → 204 (cierra la sala y borra todo)
  *   GET    /<id>                           la página del celular (HTML, con su CSS y JS adentro)
  *
+ * Los equipos de un evento (el registro con cuenta de `equipos.html` en el sitio):
+ *   PUT    /v1/sala/<id>/config            Authorization: Bearer <token>   JSON {modo, evento, cuenta} → 204
+ *   GET    /v1/sala/<id>/publico           sin token: cómo es el registro y cuántos equipos van → 200 {config, equipos}
+ *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d, llave}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}
+ *                                           (una cuenta ya anotada solo se reescribe con la misma llave: si no, 409 {"error":"ajena"})
+ *   GET    /v1/sala/<id>/equipos?desde=V   Authorization: Bearer <token>   → 200 [{n, cuenta, d, estado, v}]
+ *   GET    /v1/sala/<id>/equipos/<cuenta>  sin token: en qué punto está ese equipo → 200 {n, estado}
+ *   PUT    /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   JSON {estado} → 204
+ *   DELETE /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   → 204
+ *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), la huella SHA-256 del token y
  * la hora de creación. Una alarma a las 10 h de creada borra todo. No guarda
  * nombres en claro, ni direcciones IP, ni navegador, ni hora por persona (para
  * contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella
- * con sal que no se devuelve a la dirección). Los topes viven en el objeto, que
- * es donde son exactos.
+ * con sal que no se devuelve a la dirección; para el tope de altas de equipos
+ * por conexión, cada sala guarda una huella con una sal suya, que queda hasta
+ * que se borra la sala (las ventanas de 10 minutos que ya pasaron se limpian con
+ * cada envío), y de la llave del celular que anotó cada equipo guarda solo su
+ * huella SHA-256). Los topes viven en el objeto, que es donde son exactos.
  *
  * El WebSocket hacia la pantalla usa la API de hibernación: un socket quieto
  * no cobra tiempo. Si se corta, la pantalla reconecta y consulta cada 3 s.
@@ -27,6 +40,9 @@ import { DurableObject } from "cloudflare:workers";
 import {
   ES_ID,
   ES_TOKEN,
+  MAX_CUERPO_CONFIG,
+  MAX_CUERPO_EQUIPO,
+  MAX_EQUIPOS,
   MAX_NOMBRES,
   MAX_SOCKETS,
   NOMBRES_POR_MINUTO,
@@ -37,15 +53,21 @@ import {
   VIDA_MS,
   VentanaPorMinuto,
   diaUtc,
+  equipoCifradoValido,
+  esCuentaValida,
+  esEstadoEquipo,
   grupoDeIp,
   horaUtc,
   intentarAlta,
   iguales,
   nombreCifradoValido,
   origenPermitido,
+  validarConfigEquipos,
 } from "./logica";
-import type { AltasPorHora } from "./logica";
+import type { AltasPorHora, ConfigEquipos, EstadoEquipo } from "./logica";
 import { paginaCelular } from "./pagina";
+import { ES_LLAVE, anotarEquipo as anotarEnRegistro, crearTablasDeEquipos, quitarEquipo as quitarDelRegistro, siguienteVersion } from "./registro";
+import type { Ejecutar } from "./registro";
 
 export interface Env {
   SALA: DurableObjectNamespace<Sala>;
@@ -169,10 +191,14 @@ interface Presentacion {
 }
 
 /** Lo que el Worker le pide a la sala, por RPC. */
-export type Resultado<T = object> = ({ ok: true } & T) | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" };
+export type Resultado<T = object> =
+  | ({ ok: true } & T)
+  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" }
+  | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
 export class Sala extends DurableObject<Env> {
   private porMinuto = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
+  private readonly sql: Ejecutar = (consulta, ...parametros) => this.ctx.storage.sql.exec(consulta, ...parametros).toArray() as never;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -187,6 +213,16 @@ export class Sala extends DurableObject<Env> {
   private crearTablas(): void {
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sala (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS nombres (n INTEGER PRIMARY KEY AUTOINCREMENT, d TEXT NOT NULL)");
+    this.crearTablaDeEquipos();
+  }
+
+  /**
+   * Los equipos: la cuenta va en claro (es pública y es lo que identifica al equipo); el nombre y los integrantes, cifrados.
+   * `v` sube con cada cambio, para que la pantalla que consulta pida solo lo que cambió. Las salas que ya existían antes
+   * de esto la crean la primera vez que se las configura. Las tablas y las reglas del alta viven en `registro.ts`.
+   */
+  private crearTablaDeEquipos(): void {
+    crearTablasDeEquipos(this.sql);
   }
 
   /** Sin tablas no hay sala: nunca se creó, o ya se cerró. */
@@ -241,6 +277,114 @@ export class Sala extends DurableObject<Env> {
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     this.ctx.storage.sql.exec("DELETE FROM nombres WHERE n = ?", n);
     this.avisar({ t: "quitado", n });
+    return { ok: true };
+  }
+
+  /** La configuración del registro de equipos, o null si todavía no se armó. */
+  private config(): ConfigEquipos | null {
+    const crudo = this.dato("config");
+    if (!crudo) return null;
+    try {
+      return validarConfigEquipos(JSON.parse(crudo));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Quien organiza arma (o rearma) el registro: con qué modo y con qué cuenta del evento. */
+  async configurar(token: string, config: ConfigEquipos): Promise<Resultado> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    this.crearTablaDeEquipos();
+    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('config', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", JSON.stringify(config));
+    return { ok: true };
+  }
+
+  /** Lo que ve cualquiera con el enlace: cómo es el registro y cuántos equipos van. Nada de nombres. */
+  async publico(): Promise<Resultado<{ config: ConfigEquipos | null; equipos: number }>> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    let equipos = 0;
+    try {
+      equipos = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c;
+    } catch {
+      /* sala anterior a los equipos */
+    }
+    return { ok: true, config: this.config(), equipos };
+  }
+
+  private siguienteVersion(): number {
+    return siguienteVersion(this.sql);
+  }
+
+  /**
+   * Un equipo de un celular. La misma cuenta otra vez, con la misma llave, cambia los datos del equipo, no lo duplica:
+   * conserva su número y su estado. Con otra llave (o sin ella) se rechaza y lo que estaba queda igual.
+   */
+  async anotarEquipo(cuenta: string, d: string, llave: string, ip: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    const config = this.config();
+    if (!config) return { ok: false, motivo: "sin-registro" };
+    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.porMinuto.intentar(Date.now()));
+    if (!r.ok) return r;
+    this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta, d, estado: r.estado });
+    return { ok: true, n: r.n, estado: r.estado };
+  }
+
+  /** Los equipos que cambiaron desde la versión `desde`, para quien tiene el token. */
+  async leerEquipos(token: string, desde: number): Promise<Resultado<{ equipos: { n: number; cuenta: string; d: string; estado: string; v: number }[] }>> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    let equipos: { n: number; cuenta: string; d: string; estado: string; v: number }[] = [];
+    try {
+      equipos = this.ctx.storage.sql
+        .exec<{ n: number; cuenta: string; d: string; estado: string; v: number }>("SELECT n, cuenta, d, estado, v FROM equipos WHERE v > ? ORDER BY v LIMIT ?", desde, MAX_EQUIPOS)
+        .toArray();
+    } catch {
+      /* sala anterior a los equipos */
+    }
+    return { ok: true, equipos };
+  }
+
+  /** En qué punto está el equipo de esta cuenta. Lo pregunta el celular de su encargado. */
+  async equipoDe(cuenta: string): Promise<Resultado<{ n: number; estado: string }>> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    let fila: { n: number; estado: string } | undefined;
+    try {
+      fila = this.ctx.storage.sql.exec<{ n: number; estado: string }>("SELECT n, estado FROM equipos WHERE cuenta = ?", cuenta).toArray()[0];
+    } catch {
+      /* sala anterior a los equipos */
+    }
+    return fila ? { ok: true, n: fila.n, estado: fila.estado } : { ok: false, motivo: "no-existe" };
+  }
+
+  /** Quien organiza cambia el punto en que está un equipo: lo ve el celular de su encargado. */
+  async cambiarEstado(token: string, n: number, estado: EstadoEquipo): Promise<Resultado> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const sql = this.ctx.storage.sql;
+    let fila: { cuenta: string; d: string } | undefined;
+    try {
+      fila = sql.exec<{ cuenta: string; d: string }>("SELECT cuenta, d FROM equipos WHERE n = ?", n).toArray()[0];
+    } catch {
+      /* sala anterior a los equipos */
+    }
+    if (!fila) return { ok: false, motivo: "no-existe" };
+    const v = this.siguienteVersion();
+    sql.exec("UPDATE equipos SET estado = ?, v = ? WHERE n = ?", estado, v, n);
+    this.avisar({ t: "equipo", v, n, cuenta: fila.cuenta, d: fila.d, estado });
+    return { ok: true };
+  }
+
+  /** Saca un equipo, también del objeto. */
+  async quitarEquipo(token: string, n: number): Promise<Resultado> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    try {
+      quitarDelRegistro(this.sql, n);
+    } catch {
+      /* sala anterior a los equipos */
+    }
+    this.avisar({ t: "equipo-quitado", n });
     return { ok: true };
   }
 
@@ -363,10 +507,21 @@ function bearer(req: Request): string {
   return (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
 }
 
-const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429 };
+/** El cuerpo de un pedido como JSON, o `null` si no es JSON o pasa del tope. */
+async function leerJson(req: Request, tope: number): Promise<unknown> {
+  const largo = Number(req.headers.get("Content-Length") ?? "NaN");
+  if (!Number.isFinite(largo) || largo <= 0 || largo > tope) return null;
+  try {
+    return JSON.parse(await req.text());
+  } catch {
+    return null;
+  }
+}
 
-function falla(r: { motivo: string }, h: Record<string, string>): Response {
-  const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : h;
+const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, "cupo-conexion": 429 };
+
+function falla(r: { motivo: string; esperaS?: number }, h: Record<string, string>): Response {
+  const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : r.motivo === "cupo-conexion" ? { ...h, "Retry-After": String(r.esperaS ?? 600) } : h;
   return json({ error: r.motivo }, MOTIVOS[r.motivo] ?? 400, extra);
 }
 
@@ -379,7 +534,7 @@ export default {
 
     if (partes[0] === "v1" && partes[1] === "sala") {
       const id = partes[2];
-      const metodos = "GET, POST, DELETE, OPTIONS";
+      const metodos = "GET, POST, PUT, DELETE, OPTIONS";
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origen, metodos) });
       const h = cors(origen, metodos);
 
@@ -431,6 +586,52 @@ export default {
         if (!Number.isInteger(n) || n < 1) return json({ error: "forma" }, 400, h);
         const r = await salaDe(id).quitar(bearer(req), n);
         return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+
+      // Los equipos: el registro con cuenta. Quien organiza lo configura; el celular de cada encargado anota su equipo.
+      if (partes[3] === "config" && partes.length === 4 && req.method === "PUT") {
+        const cuerpo = await leerJson(req, MAX_CUERPO_CONFIG);
+        const config = cuerpo === null ? null : validarConfigEquipos(cuerpo);
+        if (!config) return json({ error: "forma" }, 400, h);
+        const r = await salaDe(id).configurar(bearer(req), config);
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+      if (partes[3] === "publico" && partes.length === 4 && req.method === "GET") {
+        const r = await salaDe(id).publico();
+        return r.ok ? json({ config: r.config, equipos: r.equipos }, 200, h) : falla(r, h);
+      }
+      if (partes[3] === "equipos") {
+        if (partes.length === 4 && req.method === "POST") {
+          if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+          const cuerpo = (await leerJson(req, MAX_CUERPO_EQUIPO)) as { cuenta?: unknown; d?: unknown; llave?: unknown } | null;
+          if (!cuerpo || typeof cuerpo.cuenta !== "string" || !esCuentaValida(cuerpo.cuenta) || !equipoCifradoValido(cuerpo.d)) return json({ error: "forma" }, 400, h);
+          // La llave del celular: sin ella no hay forma de probar después que es el mismo celular.
+          if (typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) return json({ error: "forma" }, 400, h);
+          const r = await salaDe(id).anotarEquipo(cuerpo.cuenta, cuerpo.d, cuerpo.llave, req.headers.get("CF-Connecting-IP") ?? "sin-ip");
+          return r.ok ? json({ n: r.n, estado: r.estado }, 201, h) : falla(r, h);
+        }
+        if (partes.length === 4 && req.method === "GET") {
+          const desde = Math.max(0, Math.floor(Number(url.searchParams.get("desde") ?? "0")) || 0);
+          const r = await salaDe(id).leerEquipos(bearer(req), desde);
+          return r.ok ? json(r.equipos, 200, h) : falla(r, h);
+        }
+        const quien = partes[4] ?? "";
+        if (partes.length === 5 && req.method === "GET" && esCuentaValida(quien)) {
+          const r = await salaDe(id).equipoDe(quien);
+          return r.ok ? json({ n: r.n, estado: r.estado }, 200, h) : falla(r, h);
+        }
+        if (partes.length === 5 && (req.method === "PUT" || req.method === "DELETE")) {
+          const n = Number(quien);
+          if (!Number.isInteger(n) || n < 1) return json({ error: "forma" }, 400, h);
+          if (req.method === "DELETE") {
+            const r = await salaDe(id).quitarEquipo(bearer(req), n);
+            return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+          }
+          const cuerpo = (await leerJson(req, 200)) as { estado?: unknown } | null;
+          if (!cuerpo || !esEstadoEquipo(cuerpo.estado)) return json({ error: "forma" }, 400, h);
+          const r = await salaDe(id).cambiarEstado(bearer(req), n, cuerpo.estado);
+          return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+        }
       }
 
       // La pantalla abre su WebSocket. Los navegadores mandan el origen: solo el sitio.

@@ -6,7 +6,7 @@ import { PROOF_VERSION, type Proof } from "./protocol/proof";
 import { MOTIVOS, type Motivo, type Revision } from "./protocol/verificacion";
 import { contratoOficial } from "./stellar/oficiales";
 import type { LecturaDelHistorial, SelloDelHistorial } from "./stellar/historial";
-import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
+import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 
 /**
  * Los textos de la verificación: lo que cuentan `verificar.html` y `evento.html`
@@ -37,7 +37,7 @@ describe("las claves de texto de la verificación", () => {
 
   it("los textos del historial que ve cualquiera no dicen firma, hash, bytes ni drand", () => {
     // Lo técnico va plegado (vTech…); el resto lo lee quien escaneó el QR.
-    const planos = ["vVerdictOkHistoryDetail", "vVerdictOkHistoryDetailTest", "vTx", "vOfficialAddress", "vChainFromHistory", "vHistInvalidDetail", "vHistDistinctDetail", "vHistWhyDown", "vHistWhyOdd", "vHistWhyWindow", "vHistWhyNone", "vChainNotConfirmed", "vSelloCodigo", "evCadenaHistorial", "evCadenaSinHistorial", "evSelloCodigo", "evAncladoHistorial"];
+    const planos = ["vVerdictOkHistoryDetail", "vVerdictOkHistoryDetailTest", "vTx", "vOfficialAddress", "vChainFromHistory", "vHistInvalidDetail", "vHistDistinctDetail", "vHistWhyDown", "vHistWhyOdd", "vHistWhyWindow", "vHistWhyNone", "vHistMemoriaArchivada", "vHistMemoriaSinLeer", "vVerdictMissingDetail", "vChainNotConfirmed", "vSelloCodigo", "evCadenaHistorial", "evCadenaSinHistorial", "evSelloCodigo", "evAncladoHistorial"];
     for (const l of ["es", "en"] as const) {
       for (const k of planos) {
         expect(String(T[l][k]), `${l}.${k}`).not.toMatch(/drand|\bbytes?\b|\bhash(es)?\b|\bfirmas?\b|\bfirmad[oa]s?\b|signature|\bBLS\b/i);
@@ -221,6 +221,54 @@ describe("por qué el historial no pudo confirmar un sorteo", () => {
     // El 410 no se cuenta como "probá de nuevo en un rato" (la razón de la red) ni como "no existe".
     expect(de({ ok: false, error: "fuera-de-ventana" })).not.toBe(de({ ok: false, error: "red-caida" }));
     expect(de({ ok: false, error: "fuera-de-ventana" })).not.toBe(de({ ok: false, error: "no-encontrada" }));
+  });
+});
+
+describe("el verde por historial dice por qué no salió de la memoria rápida de la red", () => {
+  it("archivado (la instancia contestó) y sin poder leer (el RPC no contestó) son dos frases, y las dos existen en los dos idiomas", () => {
+    const registroConInstancia = { wasm: "x", siguiente: 1, sello: null, resultado: null };
+    expect(porQueDelHistorial({ registro: registroConInstancia })).toBe("vHistMemoriaArchivada");
+    expect(porQueDelHistorial({ registro: null })).toBe("vHistMemoriaSinLeer");
+    expect(T.es.vHistMemoriaArchivada).toBe("Este sorteo ya no está en la memoria rápida de la red");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["vHistMemoriaArchivada", "vHistMemoriaSinLeer"]) expect(typeof T[l][k], `${l}.${k}`).toBe("string");
+      // La frase se arma delante del resto: el detalle del verde empieza por ella.
+      for (const k of ["vVerdictOkHistoryDetail", "vVerdictOkHistoryDetailTest"]) expect(String(T[l][k]), `${l}.${k}`).toMatch(/^\{m\}/);
+    }
+  });
+});
+
+describe("dónde mirar cuando ni el estado ni el historial pudieron confirmar el sorteo", () => {
+  const sinConfirmar = (falta: Revision["falta"]) => revision({ veredicto: "sin-red", falta });
+
+  it("cita la transacción del sello, un explorador de la red del comprobante y el verificador de archivos de historia", () => {
+    const [linea, ...mas] = detalleSinHistorial(sinConfirmar("sin-historial"), proof);
+    expect(mas).toEqual([]);
+    expect(linea).toContain(proof.stx);
+    expect(linea).toContain("https://stellar.expert/explorer/testnet/tx/" + proof.stx);
+    expect(linea).toContain(`node scripts/verificar-archivo.mjs testnet ${proof.stx}`);
+    expect(linea).not.toMatch(/[{}]/);
+    // Y con el estado sin leer y el historial sin contestar también.
+    expect(detalleSinHistorial(sinConfirmar("sin-cadena"), proof)).toHaveLength(1);
+  });
+
+  it("no inventa nada: sin hash del sello, con un hash roto, con otro resultado o con otra falta no dice nada", () => {
+    expect(detalleSinHistorial(sinConfirmar("sin-historial"), {})).toEqual([]);
+    expect(detalleSinHistorial(sinConfirmar("sin-historial"), { stx: "no-es-un-hash" })).toEqual([]);
+    expect(detalleSinHistorial(revision({ veredicto: "falta", falta: "sin-sello" }), proof)).toEqual([]);
+    expect(detalleSinHistorial(sinConfirmar("sin-ronda"), proof)).toEqual([]);
+    expect(detalleSinHistorial({ ...sinConfirmar("sin-historial"), ancla: { tipo: "libre" } }, proof)).toEqual([]);
+  });
+
+  it("cuando la fuente ya no guarda algo tan antiguo, el mensaje dice dónde está la historia completa, sin prometer nada ni decir que no existe", () => {
+    for (const k of ["vHistWhyWindow", "vHistWhyNone"]) {
+      expect(String(T.es[k]), `es.${k}`).toMatch(/stellar\.expert/);
+      expect(String(T.es[k]), `es.${k}`).toMatch(/archivos de historia/);
+      expect(String(T.es[k]), `es.${k}`).toMatch(/detalles técnicos/);
+      expect(String(T.en[k]), `en.${k}`).toMatch(/stellar\.expert/);
+      expect(String(T.en[k]), `en.${k}`).toMatch(/history archives/);
+      expect(String(T.en[k]), `en.${k}`).toMatch(/technical details/);
+    }
   });
 });
 

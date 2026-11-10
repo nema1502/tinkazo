@@ -214,6 +214,16 @@ describe("un reparto: dónde cae la ganadora", () => {
     expect(evaluarReparto([361, 389, 384, 366]).gl).toBe(3);
   });
 
+  it("un casillero con probabilidad cero (la ganadora afuera de las cuatro de adelante) es un fallo si pasa una sola vez, y los demás se miden entre sí", () => {
+    const probs = [0.25, 0.25, 0.25, 0.25, 0];
+    const bien = evaluarReparto([371, 380, 372, 377, 0], probs);
+    expect(bien.gl).toBe(3);
+    expect(bien.veredicto).toBe("limpia");
+    expect(evaluarReparto([371, 380, 372, 376, 1], probs).veredicto).toBe("delator");
+    // Un reparto torcido entre las cuatro también es rojo: 1.500 rondas con la primera al 18 % y la última al 32 %.
+    expect(evaluarReparto([270, 330, 420, 480, 0], probs).veredicto).toBe("delator");
+  });
+
   it("el mismo chi cuadrado vale distinto con distintos grados: 15 es delator con 2 casilleros y limpio con 8", () => {
     // Dos casilleros: (n/2 + d, n/2 - d) da chi2 = 4 d² / n.
     const dos = evaluarReparto([750 + 61, 750 - 61]);

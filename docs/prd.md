@@ -95,7 +95,7 @@ El Organizador puede subir un archivo CSV y la primera columna se toma como nomb
 - Consecuencias: mismo resultado que FR-1 tras la normalización; archivos sin nombres válidos dejan el botón de sellar deshabilitado.
 
 #### FR-3: Umbral mínimo
-El Sello solo se habilita con `count >= 2` y `1 <= ganadores <= min(count, 32)`.
+El Sello solo se habilita con `count >= 2` y `1 <= ganadores <= min(count, 300)` (el tope es `MAX_WINNERS`).
 
 ### 4.2 Sello en Stellar
 
@@ -139,7 +139,7 @@ Los índices ganadores se derivan exactamente como indica el Protocolo v2, sin r
 - Consecuencias: el Organizador no puede retener el resultado; la app lo usa también para "reanudar" un Sorteo interrumpido.
 
 #### FR-13: Múltiples ganadores
-El Organizador puede pedir de 1 a 32 ganadores; el Registro guarda todos en orden de selección.
+El Organizador puede pedir más de un ganador, hasta el tope de FR-3; el Registro guarda todos en orden de selección.
 
 ### 4.4 Show
 

@@ -14,7 +14,7 @@ import { MAX_WINNERS, select } from "./protocol/select";
  *
  * Con `?ganador=<semilla>` ganan los que elegiría el protocolo (§5) con esa
  * semilla en lugar del número del faro: `select(semilla, listHash(lista), n,
- * premios)`, hasta 32 como en un sorteo de verdad. Doscientas semillas dan
+ * premios)`, hasta `MAX_WINNERS` como en un sorteo de verdad. Doscientas semillas dan
  * ganadores repartidos por toda la lista, sin `Math.random` ni red. La semilla
  * son 64 caracteres hex, la misma forma que `?semilla=` (con el mismo valor en
  * los dos, ganan los mismos y se cuenta lo mismo que en un sorteo de verdad

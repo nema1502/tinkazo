@@ -1,0 +1,17 @@
+{
+  "$comment": "Qué se descuenta de los números de scripts/metricas-cadena.mjs, y por qué. «cuentas»: direcciones que firman sorteos por trabajo propio y no por uso (la de despliegue, las del equipo), con la etiqueta «interna», sin nombres de personas. «listasDeEjemplo»: la lista de ejemplo del sitio (la de docs/vectors.json), que sellan las pruebas y los auditores con una cuenta nueva cada vez, por eso no se puede listar por cuenta. Los totales muestran siempre las tres vistas: todo lo que hay en la cadena, sin las cuentas internas, y sin las internas ni los sellos de la lista de ejemplo. Una cuenta se agrega acá en el mismo commit en que se la reconoce como propia, con la red en que se usó.",
+  "cuentas": [
+    {
+      "direccion": "GD6P7XJV6BAJLA6UJ2BJKPTYMTVDHR4O4DIYJ4TLZUBARXYQX2W4R526",
+      "etiqueta": "interna",
+      "red": "testnet",
+      "motivo": "cuenta de despliegue de los contratos (docs/deployments.md)"
+    }
+  ],
+  "listasDeEjemplo": [
+    {
+      "listHash": "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef",
+      "motivo": "la lista de ejemplo del sitio y de docs/vectors.json (18 nombres)"
+    }
+  ]
+}

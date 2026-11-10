@@ -243,7 +243,7 @@ export class Camera {
    * sacudón o cualquier zoom que se sume después. Si no entra, la cámara se
    * aleja lo justo; si se sale por un costado, se corre lo justo. Sin caja, nada.
    *
-   * Nació con la carrera con pocas personas (feedback de Alejandro, 19 de
+   * Nació con la carrera con pocas personas (devolución de una prueba, 19 de
    * octubre de 2026): con el golpe de la meta, la ganadora quedaba cortada
    * contra el borde del celular. El juego la protege desde que la revela, nunca
    * antes: proteger a alguien antes sería delatarlo.

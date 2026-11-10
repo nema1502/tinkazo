@@ -1,0 +1,83 @@
+# Los números de la cadena, recalculados.
+#
+# Corre scripts/metricas-cadena.mjs contra la red y deja el resumen en la corrida.
+# Sirve para lo mismo que sirve a cualquiera que clone el repo: comprobar que los
+# totales de docs/metricas/ salen de la cadena. No guarda nada en el repo ni sube
+# archivos: solo lee de los servidores públicos (RPC, Horizon e índice de eventos)
+# y no usa secretos.
+#
+# Hoy es solo manual (workflow_dispatch). Para programarlo una vez por día,
+# agregar debajo de `on:` un bloque `schedule` con un cron fuera de los minutos 0 y
+# 30 (donde GitHub se demora), por ejemplo:
+#
+#   schedule:
+#     - cron: '17 6 * * *'
+#
+# y decidir antes dónde queda la foto del día (docs/metricas/README.md,
+# «Cómo programarlo»): esta corrida no commitea.
+name: Metricas de la cadena
+
+on:
+  workflow_dispatch:
+    inputs:
+      red:
+        description: 'Red a contar'
+        type: choice
+        options: [testnet, mainnet]
+        default: testnet
+      hasta_ledger:
+        description: 'Cortar en este ledger (vacío: el último cerrado). Con el ledger de docs/metricas/totales-<red>.json tiene que dar lo mismo.'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metricas-cadena
+  cancel-in-progress: false
+
+jobs:
+  contar:
+    name: Contar desde la cadena
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Contar
+        env:
+          RED: ${{ inputs.red }}
+          LEDGER: ${{ inputs.hasta_ledger }}
+        run: |
+          args=(--red "$RED" --totales "$RUNNER_TEMP/totales.json")
+          if [ -n "$LEDGER" ]; then args+=(--hasta-ledger "$LEDGER"); fi
+          node scripts/metricas-cadena.mjs "${args[@]}" | tee "$RUNNER_TEMP/resumen.txt"
+          {
+            echo '```'
+            cat "$RUNNER_TEMP/resumen.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Comparar con lo versionado
+        env:
+          RED: ${{ inputs.red }}
+          LEDGER: ${{ inputs.hasta_ledger }}
+        run: |
+          if [ -f "docs/metricas/totales-$RED.json" ] && [ -n "$LEDGER" ]; then
+            if cmp -s "$RUNNER_TEMP/totales.json" "docs/metricas/totales-$RED.json"; then
+              echo "Lo recalculado es idéntico a docs/metricas/totales-$RED.json" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Lo recalculado difiere de docs/metricas/totales-$RED.json (¿otro ledger de corte?)" | tee -a "$GITHUB_STEP_SUMMARY"
+              diff "$RUNNER_TEMP/totales.json" "docs/metricas/totales-$RED.json" | head -40 || true
+              exit 1
+            fi
+          fi
