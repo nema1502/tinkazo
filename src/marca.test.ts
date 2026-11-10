@@ -589,7 +589,10 @@ describe("colección de stickers con personaje", async () => {
     const zip = leerZip(bytes);
     const r = "tinkazo-stickers/";
     expect(zip.has(`${r}LEEME.txt`)).toBe(true);
-    expect(zip.get(`${r}frases.txt`)!.equals(enCol("frases.txt"))).toBe(true);
+    // El ZIP guarda frases.txt tal como estaba en la máquina que lo generó (fin de línea CRLF en Windows), y git entrega
+    // el archivo suelto con el fin de línea de cada sistema: se comparan las líneas, no los bytes.
+    const lineas = (b: Buffer): string => b.toString("utf8").replace(/\r\n/g, "\n");
+    expect(lineas(zip.get(`${r}frases.txt`)!)).toBe(lineas(enCol("frases.txt")));
     for (const n of nombres) {
       for (const cm of [5, 7]) expect(zip.get(`${r}stickers/tinkazo-${n}-${cm}cm.pdf`)!.toString("latin1").startsWith("%PDF-1.5"), n).toBe(true);
       const svg = zip.get(`${r}stickers/tinkazo-${n}-5cm.svg`)!.toString("utf8");
