@@ -115,7 +115,7 @@ Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta ex
 | 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 | 3,020 | 3,539 |
 | 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 | 5,489 | 6,433 |
 
-El `draw` de 100 ganadores pasa de 1 XLM (el tope de comisión de Pollar en mainnet) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); el de 300 ganadores, hacia los 2.090 MB, unos cuatro días; con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
+El `draw` de 100 ganadores cruza el tope de comisión del pagador de ese momento (el portero de comisiones o Pollar, según cuál esté encendido, ver [operacion.md](operacion.md)) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); el de 300 ganadores, hacia los 2.090 MB, unos cuatro días; con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
 
 ## Vigilancia de la red
 
@@ -133,7 +133,7 @@ Niveles de mainnet (objetivo 3.000 MB). Testnet tiene uno solo, rojo a 6.000 MB 
 
 - **Amarillo, 2.000 MB** (2/3 del objetivo): la renta deja el piso. Mirar la pendiente.
 - **Naranja, 2.500 MB:** el sello ya cuesta ≈ 0,5 XLM. Pedir ya que suban el objetivo: en mainnet exige un SLP y una votación, de 13 a 17 días desde la propuesta.
-- **Rojo, 2.850 MB** (95 %): quedan 150 MB, de 13 a 19 horas al ritmo más alto de la semana. Al cruzar el objetivo la renta se multiplica y el tope de 1 XLM de Pollar corta los sellos.
+- **Rojo, 2.850 MB** (95 %): quedan 150 MB, de 13 a 19 horas al ritmo más alto de la semana. Al cruzar el objetivo la renta se multiplica y el tope de comisión del pagador corta los sellos.
 
 El rojo nunca pasa del 95 % del objetivo vigente: si la red baja el objetivo, el aviso baja con él. Los niveles están en `src/stellar/red-umbrales.json`, compartidos con la app (que decide con ellos antes de sellar, en `src/stellar/chequeo-red.ts`); si el objetivo sube de verdad, hay que revisarlos.
 
