@@ -551,13 +551,26 @@ const RPC_DE_TESTNET = ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"];
 
 const fixture = (nombre) => readFileSync(new URL(`../src/stellar/fixtures/${nombre}`, import.meta.url), "utf8");
 
+/**
+ * El modo queda anotado en la pestaña al cargar: el sitio lo guarda en
+ * `sessionStorage` (`tinkazo.red`, ver `pickNetwork` en `src/stellar/config.ts`)
+ * y `?red=prueba` de la dirección manda sobre todo lo demás. Si la página no
+ * quedó en modo de prueba, la cuenta de prueba no existe ahí y el recorrido
+ * fallaría más adelante por un motivo confuso: se corta acá con la frase clara.
+ */
+async function exigirModoPrueba(page) {
+  const modo = await page.eval("String(sessionStorage.getItem('tinkazo.red'))");
+  hayFalla(modo !== "prueba", `el sitio no abrió en modo de prueba (tinkazo.red=${modo})`);
+}
+
 /** Una pantalla lista para probar la red: la cuenta de prueba conectada, el ejemplo cargado y la tarjeta arriba. */
 async function abrirParaLaRed(browser, vista, tema, antesDeLaLista) {
   const [, ancho, alto, dpr, celular] = vista;
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
-  await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+  await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido&red=prueba` });
   await page.waitFor("document.readyState === 'complete'", 20000);
+  await exigirModoPrueba(page);
   await conectarCuentaDePrueba(page);
   await antesDeLaLista?.(page);
   await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
@@ -895,8 +908,9 @@ async function recorrer(browser, vista, tema, caso) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
-    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido&red=prueba` });
     await page.waitFor("document.readyState === 'complete'", 20000);
+    await exigirModoPrueba(page);
 
     await conectarCuentaDePrueba(page);
 
@@ -1085,8 +1099,9 @@ async function anchosDeCelular(browser, ancho) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 740, deviceScaleFactor: 2, mobile: true, screenWidth: ancho, screenHeight: 740 });
-    await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
+    await exigirModoPrueba(page);
     await sleep(900);
     // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
     await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true`);
