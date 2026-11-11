@@ -397,7 +397,7 @@ async function casoA(browser, vista, tema, ctx) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-    await page.send("Page.navigate", { url: `${base}/?modo=turnos&instant=1&pace=rapido&theme=${tema}&lang=es#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?modo=turnos&instant=1&pace=rapido&theme=${tema}&lang=es&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await conectarCuentaDePrueba(page);
 
@@ -489,7 +489,7 @@ async function casoB(browser, vista, tema, ctx) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await conectarCuentaDePrueba(page);
 
@@ -570,7 +570,7 @@ async function casoC(browser, vista, tema, ctx) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await conectarCuentaDePrueba(page);
 
@@ -673,7 +673,7 @@ async function casoD(browser, vista, tema, ctx) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?modo=varias&instant=1&pace=rapido&theme=${tema}&lang=es&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await conectarCuentaDePrueba(page);
 
@@ -725,7 +725,7 @@ async function casoE(browser, vista, tema, ctx) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-    await page.send("Page.navigate", { url: `${base}/?modo=turnos&pace=rapido&theme=${tema}&lang=es#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?modo=turnos&pace=rapido&theme=${tema}&lang=es&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await conectarCuentaDePrueba(page);
     await escribirLista(page, "Ana Quispe\nBeto Mamani\nCarla Flores");

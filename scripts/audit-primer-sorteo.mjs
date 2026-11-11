@@ -260,7 +260,7 @@ const resultados = [];
 async function flujoCuenta(browser, vista, tema) {
   const nombre = `cuenta-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/?red=prueba`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.hero [data-cta-entrar]')", 30000);
@@ -319,7 +319,7 @@ async function flujoCuenta(browser, vista, tema) {
 async function flujoSinCuenta(browser, vista, tema) {
   const nombre = `sincuenta-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  const { page } = await nuevaPagina(browser, vista, tema, `${BASE}/?red=prueba`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.nav-app')", 30000);
@@ -367,7 +367,8 @@ async function flujoSinCuenta(browser, vista, tema) {
 async function flujoEnsayo(browser, vista, tema, conCuenta) {
   const nombre = `${conCuenta ? "ensayo-cuenta" : "ensayo"}-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  // Solo el recorrido con la cuenta de prueba necesita la red de prueba; el ensayo sin cuenta sigue como estaba.
+  const { page, red } = await nuevaPagina(browser, vista, tema, conCuenta ? `${BASE}/?red=prueba` : `${BASE}/`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.hero [data-entrar-ensayo]')", 30000);
