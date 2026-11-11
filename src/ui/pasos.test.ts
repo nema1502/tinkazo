@@ -100,6 +100,41 @@ describe("la línea de la barra", () => {
     }
   });
 
+  it("con las dos cuentas, la línea del paso 2 entra en dos renglones de un celular de 320 px", () => {
+    // Los mismos 46 caracteres por renglón de la prueba de arriba, partiendo por los espacios como el navegador:
+    // una palabra que no entra baja entera al renglón siguiente. Cuentas de cuatro cifras, las más largas
+    // razonables para una sala, y el premio más largo que deja pasar detalleDeLista.
+    const renglones = (texto: string, ancho = 46): number => {
+      let n = 1;
+      let usado = 0;
+      for (const palabra of texto.split(" ")) {
+        const largo = Array.from(palabra).length;
+        if (usado === 0) usado = largo;
+        else if (usado + 1 + largo <= ancho) usado += 1 + largo;
+        else {
+          n++;
+          usado = largo;
+        }
+      }
+      return n;
+    };
+    // Un premio de muchas palabras y uno de una sola palabra larga, que no se puede partir.
+    const premios = ["Una notebook con su mochila y el cargador", "Supercalifragilístico", ""];
+    for (const l of ["es", "en"] as const) {
+      const s = (k: string): string => T[l][k] as string;
+      const paso = s("sigPaso").replace("{n}", "2");
+      for (const clave of ["sigListaPart", "sigListaPartUno", "sigListaTurnos", "sigListaTurnosUno"]) {
+        const cuentas = s(clave).replace("{p}", "9999").replace("{n}", "9999");
+        // Con varias participaciones se nombra el premio (o "sin premio"); un orden de turnos no lo lleva.
+        const detalles = clave.startsWith("sigListaPart") ? premios.map((p) => detalleDeLista(cuentas, p, s("sigSinPremio"))) : [cuentas];
+        for (const detalle of detalles) {
+          const linea = lineaDelPaso(paso, detalle);
+          expect(renglones(linea), `${l}: ${linea}`).toBeLessThanOrEqual(2);
+        }
+      }
+    }
+  });
+
   it("los textos del indicador y de la barra existen en los dos idiomas, con su número", () => {
     for (const l of ["es", "en"] as const) {
       for (const k of ["paso1", "paso2", "paso3", "paso4", "pasosAria", "pasoHecho", "pasoActual", "sigRegion"]) {

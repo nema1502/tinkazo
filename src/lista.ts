@@ -13,7 +13,7 @@ import { modesFlagOn, requestedMode } from "./modos/bandera";
 /**
  * La lista para revisar antes de sellar, en el celular de cada participante.
  *
- * Llega desde el QR que el proyector muestra con "Mostrar la lista a la sala".
+ * Llega desde el QR que el proyector muestra con "Mostrar la lista en grande".
  * La lista viaja en el fragmento del enlace, así que no pasa por ningún
  * servidor. Cada uno se busca: si falta o está dos veces, lo dice antes del
  * sello, que es cuando todavía se puede arreglar.
@@ -77,8 +77,8 @@ function buscarAhora(): void {
 }
 
 /**
- * Desde la lista ya sellada (`?sellada=1`, lo agrega "Mostrar la lista a la
- * sala" durante la espera): es la misma lista, pero "antes de sellar" ya no es
+ * Desde la lista ya sellada (`?sellada=1`, lo agrega "Mostrar la lista en
+ * grande" durante la espera): es la misma lista, pero "antes de sellar" ya no es
  * cierto. Cada uno se busca igual; lo que cambia es que ya no se puede arreglar.
  */
 function sellada(): void {

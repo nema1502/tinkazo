@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { texto as t } from "../idioma";
 import { isTurnOrder } from "../modos/turnos";
+import { cierraComoReparto, nombreDePersona, salieronVariasVeces } from "../participaciones";
 import { htmlDeTurnos } from "./lista-de-turnos";
 
 /**
@@ -21,12 +22,16 @@ export function htmlDeLosGanadores(
   winners: readonly number[],
   premio: string,
   avatar: (nombre: string, px: number) => string,
+  porPersona = false,
 ): string {
   // Sin título: el encabezado de la página (`#v-result-t`) ya dice «El orden de los turnos».
-  if (isTurnOrder(names.length, winners.length, premio)) return htmlDeTurnos(names, winners, { titulo: false });
-  return winners
+  if (isTurnOrder(names.length, winners.length, premio)) return htmlDeTurnos(names, winners, { titulo: false, sinSufijos: porPersona });
+  // Con reparto que cierra, la tarjeta nombra a la persona, sin la marca de la línea sellada, como el resultado.
+  const lecturaPorPersona = porPersona && cierraComoReparto(names);
+  const mostrar = (linea: string): string => (lecturaPorPersona ? nombreDePersona(linea) : linea);
+  const tarjetas = winners
     .map((i) => {
-      const name = names[i] ?? "";
+      const name = mostrar(names[i] ?? "");
       return `<div class="winner-card">
         <img src="${avatar(name, 128)}" alt="" />
         <div>
@@ -36,4 +41,11 @@ export function htmlDeLosGanadores(
       </div>`;
     })
     .join(" ");
+  // Debajo, el aviso de quien salió más de una vez, como en la herramienta, con estilo de nota para que no parezca
+  // otra tarjeta. Estas tarjetas no llevan el número de cada premio, así que el aviso no puede nombrarlos: dice
+  // cuántas veces salió.
+  const aviso = salieronVariasVeces(names, winners, lecturaPorPersona)
+    .map((v) => `<p class="again-note veces">${esc(t("salioVeces").replace(/\{(nombre|n)\}/g, (_, k: string) => (k === "nombre" ? v.nombre : String(v.veces))))}</p>`)
+    .join("");
+  return tarjetas + aviso;
 }

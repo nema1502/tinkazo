@@ -38,6 +38,16 @@ export interface Foto {
   /** Un sorteo: quienes ganaron, en orden, cada uno con su cara. */
   personas?: string[];
   /**
+   * El nombre limpio de cada persona de `personas`, en el mismo orden, cuando el que se muestra lleva su
+   * cuenta («Ana (2 veces)»): la cara sale de este, nunca del texto con la cuenta.
+   */
+  caras?: string[];
+  /**
+   * Los números de premio de cada renglón de `personas`, en el mismo orden, cuando quien salió más de una vez va en
+   * un solo renglón: «#1 #3». Sin ellos, cada renglón lleva su posición, que es la del premio.
+   */
+  numeros?: string[];
+  /**
    * Un evento: una fila por sorteo, el premio y quién ganó. `cortos`, si
    * vienen, son los mismos ganadores cada vez con un nombre menos y "N más" al
    * final, para cuando no entran todos: así un nombre no se corta nunca.
@@ -330,7 +340,7 @@ function nombreGrande(c: Ctx, nombre: string, s: number): Bloque {
 }
 
 /** Varios ganadores: una fila por persona, con su cara y su número; de siete en adelante, en dos columnas. */
-function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number): Bloque {
+function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number, caras?: readonly string[]): Bloque {
   const total = nombres.length;
   const enDos = total > 6;
   const tope = enDos ? 12 : 6;
@@ -342,7 +352,9 @@ function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number): Bloque 
   const lado = fila - Math.round(18 * s);
   const numTam = Math.round(Math.min(40, fila * 0.34));
   c.font = `800 ${numTam}px ${MONO}`;
-  const numW = c.measureText(`#${vistos}`).width;
+  // El número de cada renglón es el del premio: con quien salió más de una vez en un solo renglón, sus números («#1 #3»).
+  const numero = (k: number): string => f.numeros?.[k] ?? `#${k + 1}`;
+  const numW = Math.max(...Array.from({ length: Math.max(1, vistos) }, (_, k) => c.measureText(numero(k)).width));
   const libre = colW - lado - 22 - numW - 16;
   // La letra baja hasta que entren todos los nombres, con un piso; lo que no entre ni así se recorta.
   let nomTam = Math.round(Math.min(64, fila * 0.48));
@@ -365,15 +377,19 @@ function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number): Bloque 
           continue;
         }
         const nombre = nombres[k] ?? "";
-        const foto = cara(nombre, lado);
+        const foto = cara(caras?.[k] ?? nombre, lado);
         calcomania(c, x0, y0, lado, lado, "#fff", k % 2 ? 2 : -2, () => c.drawImage(foto, 0, 0, lado, lado), Math.max(4, Math.round(lado / 14)));
         c.font = `900 ${nomTam}px ${SANS}`;
         c.fillStyle = C.crema;
-        c.fillText(recortar(c, nombre, libre), x0 + lado + 22, medio + nomTam * 0.36);
+        // Si no entra, se recorta el nombre y no su cuenta («(2 veces)»), que es lo que dice que salió más de una vez.
+        const limpio = caras?.[k];
+        const cuenta = limpio && nombre !== limpio && nombre.startsWith(limpio) ? nombre.slice(limpio.length) : "";
+        const texto = cuenta && limpio ? `${recortar(c, limpio, libre - c.measureText(cuenta).width)}${cuenta}` : recortar(c, nombre, libre);
+        c.fillText(texto, x0 + lado + 22, medio + nomTam * 0.36);
         c.font = `800 ${numTam}px ${MONO}`;
         c.fillStyle = C.magenta;
         c.textAlign = "right";
-        c.fillText(`#${k + 1}`, x0 + colW, medio + numTam * 0.36);
+        c.fillText(numero(k), x0 + colW, medio + numTam * 0.36);
         c.textAlign = "left";
       }
     },
@@ -520,9 +536,9 @@ function medio(c: Ctx, f: Foto, s: number, apretado = false): Bloque[] {
   const personas = f.personas ?? [];
   if (!f.personas) return [titulo(c, f, s, null), separa(30), filasDeEvento(c, f, s, apretado), separa(24), cola(c, f.lineas, s)];
   if (personas.length === 1) {
-    return [titulo(c, f, s, personas[0] ?? ""), separa(34), nombreGrande(c, personas[0] ?? "", s), separa(34), cola(c, f.lineas, s)];
+    return [titulo(c, f, s, f.caras?.[0] ?? personas[0] ?? ""), separa(34), nombreGrande(c, personas[0] ?? "", s), separa(34), cola(c, f.lineas, s)];
   }
-  return [titulo(c, f, s, null), separa(26), filasDePersonas(c, f, personas, s), separa(24), cola(c, f.lineas, s)];
+  return [titulo(c, f, s, null), separa(26), filasDePersonas(c, f, personas, s, f.caras), separa(24), cola(c, f.lineas, s)];
 }
 
 /* ------------------------------------------------------------- abajo: el QR */

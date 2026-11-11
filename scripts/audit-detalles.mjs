@@ -191,7 +191,7 @@ const DETALLES = {
               ),
             )
           : {};
-        check(`${quien} · "Mostrar la lista a la sala" muestra la sellada`, sala.ok && s.n === 22 && /sellada/i.test(s.sticker) && s.sello.startsWith(s.huella), sala.ok ? `"${s.sticker}" · ${s.n} nombres · huella ${s.huella} / sello ${s.sello}` : "no se abrió");
+        check(`${quien} · "Mostrar la lista en grande" muestra la sellada`, sala.ok && s.n === 22 && /sellada/i.test(s.sticker) && s.sello.startsWith(s.huella), sala.ok ? `"${s.sticker}" · ${s.n} nombres · huella ${s.huella} / sello ${s.sello}` : "no se abrió");
         await captura(page, "D01", v, tema, "sala");
         await page.eval("document.querySelector('.sala [data-cerrar]')?.click(); true");
         await sleep(300);

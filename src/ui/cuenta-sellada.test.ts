@@ -111,6 +111,32 @@ describe("después de sellar un reparto con nombres a secas", () => {
   });
 });
 
+describe("las bases de antes de sellar, sin los modos", () => {
+  const MESA = ["Mesa 1 (1/3)", "Mesa 1 (2/3)", "Mesa 1 (3/3)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"];
+
+  it("un reparto entero dice 2 personas y 5 participaciones, como el cuadro y como después de sellar", async () => {
+    history.replaceState(null, "", "/?lang=es");
+    h.nombres = MESA;
+    const { copyRulesPre, copyRules } = await import("./freeze");
+    await copyRulesPre(boton());
+    expect(copiado).toContain("Participan las 2 personas de la lista, con 5 participaciones");
+    expect(copiado).not.toContain("Participan las 5 personas");
+    const antes = /Participan[^.:]*/.exec(copiado)?.[0];
+    const { app } = await import("../state");
+    app.frozen = { names: MESA, listHash: "ab".repeat(32), ts: 1_800_000_000, at: "", prize: "Una pizza", round: 1000, raffleId: 7n } as never;
+    await copyRules(boton());
+    expect(/Participan[^.:]*/.exec(copiado)?.[0]).toBe(antes);
+  });
+
+  it("una lista común sigue diciendo una persona por línea", async () => {
+    history.replaceState(null, "", "/?lang=es");
+    h.nombres = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Ana", "Beto"];
+    const { copyRulesPre } = await import("./freeze");
+    await copyRulesPre(boton());
+    expect(copiado).toContain("Participan las 4 personas de la lista.");
+  });
+});
+
 describe("las bases de un orden de turnos repartido", () => {
   const preparar = (): void => {
     history.replaceState(null, "", "/?modo=turnos&lang=es");

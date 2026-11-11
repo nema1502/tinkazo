@@ -365,6 +365,19 @@ export function seCuentaPorPersona(nombres: readonly string[], modosALaVista: bo
   return esReparto(nombres) || (modosALaVista && cierraComoReparto(nombres));
 }
 
+/**
+ * La cuenta que se muestra de una lista todavía sin sellar (el cuadro, el resumen, la sala, las bases de antes de
+ * sellar, la nota y el botón de «Siguiente premio»). Con los modos a la vista, por persona, como siempre. Sin ellos,
+ * por persona solo si la lista es un reparto entero, como la cuenta de después de sellar: así la lista «Mesa 1 (1/3)»
+ * a «Mesa 2 (2/2)» dice «2 personas, 5 participaciones» en todos lados y no cambia al sellar.
+ *
+ * Solo para el texto: habilitar «Sellar», seguir sorteando y a quién se saca se sigue contando con `contar(nombres,
+ * modosALaVista)`.
+ */
+export function cuentaParaMostrar(nombres: readonly string[], modosALaVista: boolean): { personas: number; participaciones: number } {
+  return contar(nombres, modosALaVista || seCuentaPorPersona(nombres, false));
+}
+
 /** Una persona que salió más de una vez entre los ganadores, con los puestos de sus premios (desde 0, en el orden en que salieron). */
 export interface SalidaRepetida {
   nombre: string;

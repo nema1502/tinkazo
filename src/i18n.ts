@@ -91,6 +91,10 @@ export interface Dict {
   /** `premios`: cuántos premios se llevaba quien no está (con varias participaciones pudo salir más de una vez). */
   ausenteNota: (nombre: string, n: number, otros: boolean, premios?: number) => string;
   salioVarias: (nombre: string, veces: number, premios: readonly number[]) => string;
+  /** El nombre con su cuenta cuando una persona sale más de una vez: "Ana (2 veces)". */
+  repetidoVeces: string;
+  /** El aviso de la verificación, cuyas tarjetas no llevan el número de cada premio: "Ana salió 2 veces.". */
+  salioVeces: string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -485,6 +489,7 @@ export const T: Record<Lang, Dict> = {
     musicYes: "Música: sí",
     musicNo: "Música: no",
     freezeHint: "Hacen falta al menos dos nombres.",
+    freezeHintPersonas: "Hacen falta al menos dos personas.",
     freeRule: 'Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.',
     frozenOk: "Lista sellada ✓",
     csvHas: (col, n) => `Con algo en «${col}» (${n})`,
@@ -941,6 +946,10 @@ export const T: Record<Lang, Dict> = {
     // largo o corto cuando no encaja. Las que llevan números son funciones.
     recBadge: "Recomendado",
     recHead: (n: number) => `Para ${n} personas`,
+    // Con varias participaciones, la cabecera dice las dos cuentas, como el resto de la pantalla (freeze.ts).
+    recHeadPart: (p: number, n: number) => `Para ${p} personas, ${n} participaciones`,
+    // En un orden de turnos repartido, las líneas son turnos, no personas de más.
+    recHeadTurnos: (p: number, n: number) => `Para ${p} personas, ${n} turnos`,
     "rec.race.ideal": "Salen todas juntas, se van echando de a una y quedan ocho en la final.",
     "rec.race.bajo": "Con tan pocas llamas dura lo mismo y tiene menos momentos.",
     "rec.race.alto": "Con tanta gente se arma en tandas: pasan unas pocas de cada una y corren juntas.",
@@ -1122,7 +1131,7 @@ export const T: Record<Lang, Dict> = {
     againSin: (n) => `Siguiente premio (quedan\xa0${n})`,
     againNueva: "Usar otra lista",
     againFew: (n) => (n === 1 ? "Queda una sola persona sin premio: para otro sorteo, usá otra lista." : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
-    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${nombres.join(", ")} ya ganaron y no están en esta lista. Quedan ${n}.`),
+    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${new Intl.ListFormat("es", { type: "conjunction" }).format(nombres)} ya ganaron y no están en esta lista. Quedan ${n}.`),
     recuperarLista: "Recuperar la lista anterior",
     cortinaSe: "Se sortea",
     cortinaSin: "Ya sale el sorteo",
@@ -1140,9 +1149,11 @@ export const T: Record<Lang, Dict> = {
       `${nombre} no está: ${premios > 1 ? `sus ${premios} premios se sortean` : "su premio se sortea"} de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
     salioVarias: (nombre, veces, premios) => {
       const nums = premios.map((p) => `#${p + 1}`);
-      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} y ${nums[nums.length - 1]}`;
+      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} y\u00a0${nums[nums.length - 1]}`;
       return `${nombre} salió ${veces} veces: ${lista}.`;
     },
+    repetidoVeces: "{nombre} ({n} veces)",
+    salioVeces: "{nombre} salió {n} veces.",
     imgKicker: "Resultado del sorteo",
     imgGano: "Ganó",
     imgGanaron: "Ganaron",
@@ -1526,7 +1537,7 @@ export const T: Record<Lang, Dict> = {
     histWhyMas: "Todo, en Cómo funciona →",
     histEnter: "Entrar",
     navCuenta: "Mi cuenta",
-    salaBtn: "Mostrar la lista a la pantalla",
+    salaBtn: "Mostrar la lista en grande",
     salaT: "La lista, antes de sellar",
     salaN: "{n} personas",
     // La sala de la lista, cuando tiene varias participaciones por persona (lista.ts, sala.ts).
@@ -2628,9 +2639,13 @@ export const T: Record<Lang, Dict> = {
     // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
     sigLista: "lista de {n} personas",
     // En un orden de turnos repartido, la barra cuenta personas y turnos, como el resto de la pantalla.
-    sigListaTurnos: "lista de {p} personas, {n} turnos",
+    // Corta a propósito: con las dos cuentas no entra en un renglón ni en el celular, y ahí vale hasta dos.
+    sigListaTurnos: "{p} personas, {n} turnos",
+    sigListaTurnosUno: "1 persona, {n} turnos",
     // Con varias participaciones, la barra cuenta personas y participaciones, como el resto de la pantalla.
-    sigListaPart: "lista de {p} personas, {n} participaciones",
+    // Corta a propósito, igual que la de turnos: con las dos cuentas vale hasta dos renglones en el celular.
+    sigListaPart: "{p} personas, {n} participaciones",
+    sigListaPartUno: "1 persona, {n} participaciones",
     sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
     sigEspera: "Esperando el número",
@@ -3067,6 +3082,7 @@ export const T: Record<Lang, Dict> = {
     musicYes: "Music: on",
     musicNo: "Music: off",
     freezeHint: "At least two names are needed.",
+    freezeHintPersonas: "At least two people are needed.",
     freeRule: 'Taking part is always free: not for draws with paid entry or for gambling. By sealing the list you accept the <a href="/terminos.html">terms</a>.',
     frozenOk: "List sealed ✓",
     csvHas: (col, n) => `Something in "${col}" (${n})`,
@@ -3502,6 +3518,10 @@ export const T: Record<Lang, Dict> = {
     // range; largo (too many) and corto (too few) when it doesn't fit.
     recBadge: "Recommended",
     recHead: (n: number) => `For ${n} people`,
+    // With several entries per person, the header says both counts, like the rest of the screen (freeze.ts).
+    recHeadPart: (p: number, n: number) => `For ${p} people, ${n} entries`,
+    // In a shared-out turn order, the lines are turns, not extra people.
+    recHeadTurnos: (p: number, n: number) => `For ${p} people, ${n} turns`,
     "rec.race.ideal": "They all start together, lie down one by one, and eight reach the final.",
     "rec.race.bajo": "With so few llamas, it lasts just as long and has fewer moments.",
     "rec.race.alto": "With this many people it runs in heats: a few from each one get through and run together.",
@@ -3670,7 +3690,7 @@ export const T: Record<Lang, Dict> = {
     againSin: (n) => `Next prize (${n}\xa0left)`,
     againNueva: "Use another list",
     againFew: (n) => (n === 1 ? "Only one person is left without a prize: for another draw, use another list." : "Everyone on the list has already won: for another prize, use another list."),
-    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${nombres.join(", ")} already won and are off this list. ${n} left.`),
+    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${new Intl.ListFormat("en", { type: "conjunction" }).format(nombres)} already won and are off this list. ${n} left.`),
     recuperarLista: "Bring back the previous list",
     cortinaSe: "Up for grabs",
     cortinaSin: "The draw is coming",
@@ -3686,9 +3706,11 @@ export const T: Record<Lang, Dict> = {
       `${nombre} is not here: ${premios > 1 ? `their ${premios} prizes are drawn` : "their prize is drawn"} again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
     salioVarias: (nombre, veces, premios) => {
       const nums = premios.map((p) => `#${p + 1}`);
-      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} and ${nums[nums.length - 1]}`;
+      const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} and\u00a0${nums[nums.length - 1]}`;
       return `${nombre} came out ${veces} times: ${lista}.`;
     },
+    repetidoVeces: "{nombre} ({n} times)",
+    salioVeces: "{nombre} came out {n} times.",
     imgKicker: "Draw result",
     imgGano: "Winner",
     imgGanaron: "Winners",
@@ -4068,7 +4090,7 @@ export const T: Record<Lang, Dict> = {
     histWhyMas: "All of it, in How it works →",
     histEnter: "Sign in",
     navCuenta: "My account",
-    salaBtn: "Show the list on the screen",
+    salaBtn: "Show the list on the big screen",
     salaT: "The list, before sealing",
     salaN: "{n} people",
     // The list room, when it has several entries per person (lista.ts, sala.ts).
@@ -5165,9 +5187,13 @@ export const T: Record<Lang, Dict> = {
     // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
     sigLista: "list of {n} people",
     // In a split turn order, the bar counts people and turns, like the rest of the screen.
-    sigListaTurnos: "list of {p} people, {n} turns",
+    // Short on purpose: with both counts it never fits one line, not even on a phone, where two lines are fine.
+    sigListaTurnos: "{p} people, {n} turns",
+    sigListaTurnosUno: "1 person, {n} turns",
     // With several entries per person, the bar counts people and entries, like the rest of the screen.
-    sigListaPart: "list of {p} people, {n} entries",
+    // Short on purpose, like the turns one: with both counts two lines on a phone are fine.
+    sigListaPart: "{p} people, {n} entries",
+    sigListaPartUno: "1 person, {n} entries",
     sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
     sigEspera: "Waiting for the number",

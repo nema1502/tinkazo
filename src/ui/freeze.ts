@@ -16,7 +16,7 @@ import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-comple
 import type { OpcionDeJuego } from "./espera";
 import { apruebaAMano, billeteraEnOtraRed, canAnchor, claveDeSellar, currentSession, frenarPorOtraRed } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
-import { contar as contarPersonas, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
+import { contar as contarPersonas, cuentaParaMostrar, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
 import { modesVisible } from "../modos/bandera";
 import { preloadGame } from "../games/engine";
 import { claveNombre } from "./gamecard";
@@ -225,7 +225,8 @@ function frase(clave: string, args: readonly number[] = []): string {
 /** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
 const premiosElegidos = (): number => ganadoresPedidos();
 
-export function pintarRecomendacion(n: number): void {
+export function pintarRecomendacion(names: readonly string[]): void {
+  const n = names.length;
   const botones = new Map<Game, HTMLElement>();
   for (const [id, g] of GAME_BUTTONS) {
     const el = document.getElementById(id);
@@ -268,7 +269,7 @@ export function pintarRecomendacion(n: number): void {
       el.appendChild(nota);
     }
   });
-  pintarCabecera(n);
+  pintarCabecera(names);
   pintarNotaElegida();
 }
 
@@ -276,13 +277,22 @@ export function pintarRecomendacion(n: number): void {
  * La línea de arriba del selector: "Para 8 personas. Duración: Normal, 41 s".
  * La duración es la del show con el ritmo elegido, que hoy es la misma para
  * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
+ *
+ * Con varias participaciones dice las dos cuentas ("Para 4 personas, 7 participaciones"), con la misma regla que el
+ * resto de la pantalla: en un orden de turnos repartido las líneas son turnos. Sin reparto, como siempre. La
+ * recomendación de juegos sigue contando líneas, como antes.
  */
-function pintarCabecera(n: number): void {
+export function pintarCabecera(names: readonly string[]): void {
   const el = document.getElementById("rec-head");
   if (!el) return;
   const p = currentPace();
   const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-  el.textContent = `${frase("recHead", [n])}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
+  const n = names.length;
+  const { personas } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
+  const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
+  const turnos = isTurnOrder(n, premiosElegidos(), premio);
+  const cabeza = personas === n ? frase("recHead", [n]) : turnos ? frase("recHeadTurnos", [personas, n]) : frase("recHeadPart", [personas, n]);
+  el.textContent = `${cabeza}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
   el.style.display = "";
 }
 
@@ -292,7 +302,7 @@ function pintarCabecera(n: number): void {
  * selector visible, y no hace nada.
  */
 export function refrescarRecomendacion(): void {
-  if (app.frozen) pintarRecomendacion(app.frozen.names.length);
+  if (app.frozen) pintarRecomendacion(app.frozen.names);
 }
 onLangChange(refrescarRecomendacion);
 
@@ -1214,7 +1224,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
   // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
-  pintarRecomendacion(names.length);
+  pintarRecomendacion(names);
   // Si nadie eligió otro, queda elegido uno que se recomienda para esta
   // cantidad (D02). La demo juega el que pide su enlace.
   if (!juegoAMano && !params.has("demo")) {
@@ -1324,8 +1334,9 @@ function renderSealSummary(): void {
 export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   const lang = getLang();
   const names = parseNames();
-  const { personas: count, participaciones: entries } = contarPersonas(names, modesVisible());
-  if (count < 2) return;
+  // Para copiar hacen falta dos personas, contadas como siempre; lo que dicen las bases, con la cuenta del cuadro.
+  if (contarPersonas(names, modesVisible()).personas < 2) return;
+  const { personas: count, participaciones: entries } = cuentaParaMostrar(names, modesVisible());
   const prize = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
   const winners = Math.min(ganadoresPedidos(), names.length);
   // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista

@@ -2,7 +2,8 @@ import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
 import { modesVisible } from "../modos/bandera";
-import { isTurnOrder, turnOrder, turnOrderDisplayNames } from "../modos/turnos";
+import { isTurnOrder, turnOrder } from "../modos/turnos";
+import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { etiquetaDe } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
@@ -61,11 +62,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // caras: lo que se lee desde el fondo es el orden.
   const turnos = isTurnOrder(frozen.names.length, n, premio);
   const lista = n > MAX_CON_CARA || turnos;
-  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo. En un orden
-  // repartido se lee el nombre de la persona, sin el sufijo de la línea, como en el resultado.
-  // Sin los modos a la vista no se toca ningún nombre: la página del resultado y la verificación muestran las líneas
-  // tal cual, y la pantalla grande dice lo mismo.
-  const orden = turnos && modesVisible() ? turnOrderDisplayNames(frozen.names, drawn.winners) : turnOrder(frozen.names, drawn.winners);
+  // Un sorteo que se cuenta por persona muestra a la persona, sin el sufijo de la línea sellada, como el
+  // resultado: la misma lectura que la cuenta (`seCuentaPorPersona`). Sin ella, cada línea tal cual se selló.
+  const mostrar = (linea: string): string => (seCuentaPorPersona(frozen.names, modesVisible()) ? nombreDePersona(linea) : linea);
+  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo, y cada renglón
+  // pasa una sola vez por `mostrar`. Sin la lectura por persona (`seCuentaPorPersona`) cada línea queda tal cual se
+  // selló, como en el resultado y la verificación.
+  const orden = turnOrder(frozen.names, drawn.winners);
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -94,13 +97,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
       ? `<ol class="pantalla-lista">${orden
           .map((nombre, k) => {
             const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
-            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(etiquetaDe(nombre))}</span></li>`;
+            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(mostrar(etiquetaDe(nombre)))}</span></li>`;
           })
           .join("")}</ol>`
       : drawn.winners
           .map((i, k) => {
             // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
-            const nombre = etiquetaDe(frozen.names[i] ?? "");
+            const nombre = mostrar(etiquetaDe(frozen.names[i] ?? ""));
             const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
             return (
               `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
@@ -195,20 +198,91 @@ function encajar(back: HTMLElement, n: number): void {
   if (!caja || !cuerpo) return;
   const celular = innerWidth <= 700;
   const nombres = [...back.querySelectorAll<HTMLElement>(".pantalla-nombre")];
-  const entra = (): boolean =>
-    nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
-    cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
-    (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1);
-  // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
-  let chico = celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec));
-  let grande = n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52;
-  caja.style.setProperty("--letra", `${grande}px`);
-  if (entra()) return;
+  // En el celular, el orden de turnos se lee en una lista que se desplaza: cada nombre en su renglón. Un nombre
+  // partido en dos no desborda a lo ancho, así que el ajuste lo daba por bueno y quedaba partido pudiendo entrar
+  // en uno con una letra un poco más chica. Se cuenta en cuántos renglones sale cada nombre; sin medidas (el ensayo)
+  // se da por bueno. En el resto la partición vale como siempre y nada cambia.
+  const rango = document.createRange();
+  const enUnRenglon = (e: HTMLElement): boolean => {
+    rango.selectNodeContents(e);
+    const renglones = rango.getClientRects().length;
+    return renglones <= 1;
+  };
+  const listaDeTurnos = celular && back.classList.contains("turnos");
+  const ponerLetra = (letra: number): void => caja.style.setProperty("--letra", `${letra}px`);
+  const cabe = (letra: number, exigidos: readonly HTMLElement[]): boolean => {
+    ponerLetra(letra);
+    return (
+      nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
+      exigidos.every(enUnRenglon) &&
+      cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
+      (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1)
+    );
+  };
+  const letra = letraDeLosNombres({
+    tope: n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52,
+    // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
+    piso: celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec)),
+    pisoUnRenglon: listaDeTurnos ? PISO_UN_RENGLON : null,
+    nombres,
+    cabe,
+    enUnRenglon: (l, e) => {
+      ponerLetra(l);
+      return enUnRenglon(e);
+    },
+  });
+  caja.style.setProperty("--letra", `${letra}px`);
+}
+
+/**
+ * La letra más chica con la que se busca, en el orden de turnos del celular, que cada nombre entre en un
+ * renglón. Por debajo de esto la lista ya no se lee desde lejos: antes que achicar a todos por un nombre
+ * largo, ese nombre se parte por sus espacios.
+ */
+export const PISO_UN_RENGLON = 22;
+
+/**
+ * La letra más grande entre `piso` y `tope` con la que `cabe` da verdadero, buscando a la mitad: `cabe`
+ * tiene que ser monótona (si entra con una letra, entra con cualquiera más chica). Si no entra ni con el
+ * piso, queda el piso.
+ */
+export function letraQueEntra(tope: number, piso: number, cabe: (letra: number) => boolean): number {
+  if (cabe(tope)) return tope;
+  let chico = piso;
+  let grande = tope;
   while (grande - chico > 1) {
     const medio = Math.floor((chico + grande) / 2);
-    caja.style.setProperty("--letra", `${medio}px`);
-    if (entra()) chico = medio;
+    if (cabe(medio)) chico = medio;
     else grande = medio;
   }
-  caja.style.setProperty("--letra", `${chico}px`);
+  return chico;
+}
+
+/**
+ * La letra de los nombres de la pantalla grande, en dos pasadas cuando hay `pisoUnRenglon` (el orden de
+ * turnos en el celular). Primero, con ese piso, exigiendo un renglón por nombre. Si con ese piso no entran
+ * todos en un renglón, se exige el renglón solo a los que entran en uno con ese piso, con el piso de siempre:
+ * la letra queda grande, los nombres que entraban siguen en un renglón y solo el largo se parte por sus
+ * espacios. El conjunto se mide una vez, así que cada pasada es monótona (con una letra más chica nadie sale
+ * de su renglón) y la búsqueda a la mitad sirve. Sin `pisoUnRenglon`, la búsqueda de siempre, sin exigirlo.
+ * `cabe(letra, exigidos)` mide con esa letra, exigiendo un renglón a `exigidos`; `enUnRenglon(letra, nombre)`
+ * dice si ese nombre sale en un renglón con esa letra.
+ */
+export function letraDeLosNombres<N>(op: {
+  tope: number;
+  piso: number;
+  pisoUnRenglon: number | null;
+  nombres: readonly N[];
+  cabe: (letra: number, exigidos: readonly N[]) => boolean;
+  enUnRenglon: (letra: number, nombre: N) => boolean;
+}): number {
+  const { tope, piso, pisoUnRenglon, nombres, cabe, enUnRenglon } = op;
+  if (pisoUnRenglon !== null && pisoUnRenglon < tope) {
+    const exigidos = nombres.filter((n) => enUnRenglon(pisoUnRenglon, n));
+    if (exigidos.length === nombres.length && cabe(pisoUnRenglon, nombres)) {
+      return letraQueEntra(tope, pisoUnRenglon, (letra) => cabe(letra, nombres));
+    }
+    if (exigidos.length) return letraQueEntra(tope, piso, (letra) => cabe(letra, exigidos));
+  }
+  return letraQueEntra(tope, piso, (letra) => cabe(letra, []));
 }

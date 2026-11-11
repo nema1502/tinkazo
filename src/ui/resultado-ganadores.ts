@@ -1,7 +1,7 @@
 import { esc } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { isTurnOrder } from "../modos/turnos";
-import { salieronVariasVeces } from "../participaciones";
+import { nombreDePersona, salieronVariasVeces } from "../participaciones";
 import { htmlDeTurnos } from "./lista-de-turnos";
 
 /**
@@ -28,7 +28,11 @@ export interface DatosDeGanadores {
   reemplazo: boolean;
   /** La cara de una persona (`avatar` de `state.ts`). */
   avatar: (nombre: string, px: number) => string;
-  /** La lista se lee por persona (la bandera de los modos o `?modo=` a la vista): quien salió varias veces se avisa. */
+  /**
+   * ¿La lista se lee por persona? Es la lectura ya calculada por quien llama con `seCuentaPorPersona`, no la
+   * bandera de los modos: con ella se muestra el nombre sin la marca de la línea sellada y se avisa quién salió
+   * varias veces. Quien decide a quién se saca con «No está» usa otra cosa y no pasa por acá.
+   */
   porPersona?: boolean;
 }
 
@@ -69,8 +73,15 @@ export function alTocarAusente(e: Event, alConfirmar: (k: number) => void): void
 /** ¿Alcanzan las tarjetas o van en lista? */
 export const enLista = (cuantos: number): boolean => cuantos > MAX_TARJETAS;
 
+/** El nombre como se muestra: si la lista se lee por persona (`porPersona`, la lectura que ya calculó quien llama), el de la persona, sin el sufijo de la línea sellada. */
+function nombreParaMostrar(d: DatosDeGanadores, k: number): string {
+  const sellado = d.names[d.winners[k] as number] ?? "";
+  // Lo sellado no cambia: es solo cómo se lee, y lo decide la misma regla que la cuenta (`seCuentaPorPersona`).
+  return (d.porPersona ?? true) ? nombreDePersona(sellado) : sellado;
+}
+
 function tarjeta(d: DatosDeGanadores, k: number): string {
-  const name = d.names[d.winners[k] as number] ?? "";
+  const name = nombreParaMostrar(d, k);
   const varios = d.winners.length > 1;
   const tag = d.prize
     ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(d.prize)}${varios ? ` #${k + 1}` : ""}</p>`
@@ -89,7 +100,7 @@ function tarjeta(d: DatosDeGanadores, k: number): string {
 
 /** Un renglón de la lista: su número, su nombre (con el id que lee `aria-describedby` del botón) y «No está». */
 function fila(d: DatosDeGanadores, k: number): string {
-  const name = d.names[d.winners[k] as number] ?? "";
+  const name = nombreParaMostrar(d, k);
   return `<li class="winner-fila" value="${k + 1}">
         <span class="winner-num" aria-hidden="true">#${k + 1}</span>
         <span class="winner-name" id="wn-${k}">${esc(name)}</span>
@@ -110,7 +121,7 @@ export function htmlDeGanadores(d: DatosDeGanadores): string {
     return htmlDeTurnos(d.names, d.winners, { avisar: true, sinSufijos: d.porPersona ?? true, copiarArriba: n > 8 });
   // Quien tiene varias participaciones puede salir más de una vez: abajo de los ganadores, con cuáles premios.
   const varias = salieronVariasVeces(d.names, d.winners, d.porPersona ?? true)
-    .map((v) => `<p class="again-note">${esc(T[getLang()].salioVarias(v.nombre, v.veces, v.puestos))}</p>`)
+    .map((v) => `<p class="again-note veces">${esc(T[getLang()].salioVarias(v.nombre, v.veces, v.puestos))}</p>`)
     .join("");
   if (!enLista(n)) return d.winners.map((_, k) => tarjeta(d, k)).join(" ") + varias;
   const premio = d.prize ? `<p class="winner-prize winner-lista-premio"><span>${esc(t("winnersCadaUno"))}</span> ${esc(d.prize)}</p>` : "";

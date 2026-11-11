@@ -137,7 +137,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 
 | Riesgo | Lo que hay |
 |---|---|
-| **Armar mal la lista** antes de sellar: un nombre dos veces, alguien que falta | "Mostrar la lista a la sala": la lista en el proyector con los repetidos marcados y un QR para que cada uno se busque en su celular. El comprobante también tiene el buscador, y la importación de Luma propone solo a los que hicieron check-in |
+| **Armar mal la lista** antes de sellar: un nombre dos veces, alguien que falta | "Mostrar la lista en grande": la lista en el proyector con los repetidos marcados y un QR para que cada uno se busque en su celular. El comprobante también tiene el buscador, y la importación de Luma propone solo a los que hicieron check-in |
 | **Sellar varias veces** y publicar el resultado que convino | El número del sorteo se muestra bien grande durante la espera, para que quede en las fotos. La verificación marca los sellos repetidos de la cuenta y la misma lista sellada desde otra |
 | **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 

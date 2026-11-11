@@ -23,7 +23,7 @@ import type { ChainHistory, ChainRaffle } from "./stellar/seals";
 import { detalleDeLaRed, rotuloDelModo } from "./verificacion-modo";
 import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
-import { agruparPorPersona, contar as contarPersonas, seCuentaPorPersona } from "./participaciones";
+import { agruparPorPersona, cierraComoReparto, contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "./participaciones";
 import { modesFlagOn, requestedMode, withMode } from "./modos/bandera";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
@@ -791,9 +791,12 @@ export function renderResult(
   $("v-winners").onclick = turnos ? (e) => void alCopiarOrden(e) : null;
   // Un orden repartido muestra el nombre de cada persona sin el sufijo de la línea, como el resultado en la herramienta;
   // solo cuando la lista sellada se cuenta por persona en esta página. Si no, cada línea tal cual se selló.
+  const reparto = repartoParaVerificacion(names);
+  // Las tarjetas nombran a la persona, sin la marca de la línea sellada, cuando la lista cierra como reparto.
+  const mostrar = (linea: string): string => (reparto && cierraComoReparto(names) ? nombreDePersona(linea) : linea);
   $("v-winners").innerHTML = turnos
-    ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: repartoParaVerificacion(names) })
-    : htmlDeLosGanadores(names, winners, premio, avatar);
+    ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: reparto })
+    : htmlDeLosGanadores(names, winners, premio, avatar, reparto);
   $("v-proof").textContent =
     `round=${r.ronda}, signature=${signature.slice(0, 20)}…, randomness=${randomness.slice(0, 20)}…, winners=[${winners.join(",")}]${extra.fromChain ? ", on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
@@ -806,11 +809,11 @@ export function renderResult(
   compartir.onclick = () =>
     abrirSorteo({
       enlace: enlaceVerificado,
-      ganadores: winners.map((i) => names[i] ?? ""),
+      ganadores: winners.map((i) => mostrar(names[i] ?? "")),
       total: names.length,
       // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
       // sellada agrupa por persona en esta página, nunca por el parámetro del enlace solo.
-      personas: contarPersonas(names, repartoParaVerificacion(names)).personas,
+      personas: contarPersonas(names, reparto).personas,
       premio,
       ...(extra.fecha ? { fecha: extra.fecha } : {}),
       ...(extra.numero ? { numero: extra.numero } : {}),

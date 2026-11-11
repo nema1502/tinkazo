@@ -18,7 +18,7 @@ import { fechaLarga } from "./ui/agrupar";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
-import { contar, seCuentaPorPersona } from "./participaciones";
+import { quienEnLaTarjeta } from "./evento-tarjeta";
 import { modesFlagOn, requestedMode } from "./modos/bandera";
 import { isTurnOrder } from "./modos/turnos";
 import { eventoEsDePrueba, veredictoConModo } from "./evento-modo";
@@ -315,7 +315,9 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   // La cuenta de la lista: las dos cuando no es una participación por persona, con la regla de todos
   // (`seCuentaPorPersona`). El enlace del evento junta sorteos distintos y hoy no lleva el modo de cada uno:
   // sin `?modo=varias` en la dirección ni la bandera de construcción, agrupa solo un reparto entero.
-  const { personas, participaciones } = contar(s.names, seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+  // Quien ganó, por persona solo cuando la cuenta también es por persona: la marca (k/m) es interna, la tarjeta nombra.
+  // Quien salió más de una vez va una sola vez, con su cuenta; en un orden de turnos no se junta a nadie.
+  const { personas, participaciones, ganadores } = quienEnLaTarjeta(getLang(), s, requestedMode() === "varias" || modesFlagOn(), turnos);
   const cuenta =
     personas === participaciones
       ? t("evPersonas").replace("{n}", String(personas))
@@ -324,7 +326,7 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     `<section class="block ev-sorteo">` +
     `<div class="head"><h2>${esc(premio)}</h2><span class="kicker">${esc(cuando)}</span></div>` +
     `<div class="body">` +
-    `<p class="ev-gana"><span class="kicker">${esc(t(turnos ? "turnsResultTitle" : s.ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(s.ganadores)}</b></p>` +
+    `<p class="ev-gana"><span class="kicker">${esc(t(turnos ? "turnsResultTitle" : ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(ganadores)}</b></p>` +
     `<p class="note">${esc(cuenta)}</p>` +
     // Un sorteo que se hizo sin sello (el comprobante lo marca) lo dice con la frase, además de su estado de siempre.
     (esSinSello(s) ? `<p class="note sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +

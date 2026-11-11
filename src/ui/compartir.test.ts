@@ -63,6 +63,63 @@ describe("con varias participaciones por persona, el mensaje y la foto dicen las
   });
 });
 
+describe("quien salió más de una vez, junto por persona", () => {
+  // Lo que llega de la herramienta y de la verificación: los nombres ya sin la marca de la línea sellada.
+  const d = { ganadores: ["Ana", "Beto", "Ana"], total: 3, personas: 2, premio: "Pizza", enlace };
+  const lineas = ["Ana (1/2)", "Beto (1/1)", "Ana (2/2)"];
+
+  it("el mensaje no dice «Ana y Ana»: la nombra una vez, con su cuenta, en los dos idiomas", () => {
+    expect(mensajeDeSorteo("es", d)).toContain("Ana (2 veces) y Beto");
+    expect(mensajeDeSorteo("es", d)).not.toContain("Ana, Beto y Ana");
+    expect(mensajeDeSorteo("en", d)).toContain("Ana (2 times) and Beto");
+  });
+
+  it("la foto lleva un renglón por persona, con su cuenta, y la cara sale del nombre limpio", () => {
+    const f = fotoDeSorteo("es", d, enlace);
+    expect(f.personas).toEqual(["Ana (2 veces)", "Beto"]);
+    expect(f.caras).toEqual(["Ana", "Beto"]);
+  });
+
+  it("cada renglón de la foto lleva los números de sus premios, los mismos de la herramienta", () => {
+    // Ana se lleva el #1 y el #2, Beto el #3 y Carla el #4: juntar a Ana no le cambia el número a nadie.
+    const f = fotoDeSorteo("es", { ganadores: ["Ana", "Ana", "Beto", "Carla"], total: 5, personas: 4, premio: "Polera", enlace }, enlace);
+    expect(f.personas).toEqual(["Ana (2 veces)", "Beto", "Carla"]);
+    expect(f.numeros).toEqual(["#1 #2", "#3", "#4"]);
+    const g = fotoDeSorteo("es", { ganadores: ["Ana", "Beto", "Ana", "Carla"], total: 5, personas: 4, premio: "Polera", enlace }, enlace);
+    expect(g.numeros).toEqual(["#1 #3", "#2", "#4"]);
+    // Sin nadie junto, la foto no lleva números aparte: cada renglón es su premio.
+    expect(fotoDeSorteo("es", { ganadores: ["Ana", "Beto"], total: 5, premio: "", enlace }, enlace).numeros).toBeUndefined();
+  });
+
+  it("si una sola persona se lleva todo, el mensaje y la foto van en singular", () => {
+    const sola = { ganadores: ["Ana", "Ana"], total: 5, personas: 3, premio: "Polera", enlace };
+    expect(mensajeDeSorteo("es", sola)).toContain("Sorteo de Polera: ganó Ana (2 veces), entre 5 participaciones de 3 personas.");
+    expect(mensajeDeSorteo("es", sola)).toContain("Nadie eligió este nombre.");
+    expect(mensajeDeSorteo("en", sola)).toContain("the winner is Ana (2 times)");
+    expect(mensajeDeSorteo("es", sola)).toBe(T.es.summary("Ana (2 veces)", 5, "Polera", enlace, false, undefined, 3));
+    expect(fotoDeSorteo("es", sola, enlace).titulo).toBe(T.es.imgGano);
+  });
+
+  it("las líneas y la foto del evento hacen lo mismo con un reparto entero", () => {
+    const sorteo = { prize: "Polera", ganadores: lineas, names: ["Ana (1/2)", "Ana (2/2)", "Beto (1/1)"] };
+    expect(lineasDeEvento("es", [sorteo])).toEqual(["Polera: Ana (2 veces) y Beto"]);
+    expect(fotoDeEvento("es", "Meetup", [{ ...sorteoGrande(1, 3), prize: "Polera", ganadores: sorteo.ganadores, names: sorteo.names }], corto).filas?.[0]?.ganadores).toBe("Ana (2 veces) y Beto");
+  });
+
+  it("la marca se quita una sola vez: un nombre que ya termina en «(1/2)» no la pierde otra vez", () => {
+    // «Grupo (1/2)» con tres participaciones se selló como «Grupo (1/2) (1/3)»; quien llama ya dejó «Grupo (1/2)».
+    const doble = { ganadores: ["Grupo (1/2)", "Beto"], total: 5, personas: 3, premio: "Pizza", enlace };
+    expect(mensajeDeSorteo("es", doble)).toContain("Grupo (1/2) y Beto");
+    expect(fotoDeSorteo("es", doble, enlace).personas).toEqual(["Grupo (1/2)", "Beto"]);
+  });
+
+  it("sin lectura por persona los nombres no se tocan: «Ana y Ana» queda como salió", () => {
+    const comun = { ganadores: ["Ana", "Beto", "Ana"], total: 12, premio: "Pizza", enlace };
+    expect(mensajeDeSorteo("es", comun)).toContain("Ana, Beto y Ana");
+    expect(fotoDeSorteo("es", comun, enlace).personas).toEqual(["Ana", "Beto", "Ana"]);
+  });
+});
+
 /** Dos sorteos del evento: uno con premio y otro sin, con dos ganadores. */
 const deEvento = [
   { prize: "Polera", ganadores: ["Gabriela Flores"] },
@@ -146,6 +203,33 @@ function sorteoGrande(i: number, personas: number): SorteoDelEvento {
 
 /** Las pruebas que arman enlaces comprimen; bajo carga de la suite entera pasan de los cinco segundos por defecto. */
 const LENTA = 30_000;
+
+describe("la marca de la línea sellada en el evento, sin modos a la vista", () => {
+  const nombres = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Ana", "Beto"];
+  const sorteo = { prize: "Polera", ganadores: ["Grupo 4 (1/2)", "Grupo 4 (2/2)"], names: nombres };
+
+  it("sin modo, las líneas del mensaje muestran los nombres tal cual se sellaron", () => {
+    expect(lineasDeEvento("es", [sorteo])).toEqual(["Polera: Grupo 4 (1/2) y Grupo 4 (2/2)"]);
+    expect(lineasDeEvento("en", [sorteo])).toEqual(["Polera: Grupo 4 (1/2) and Grupo 4 (2/2)"]);
+  });
+
+  it("sin modo, la foto del evento muestra los nombres tal cual se sellaron", () => {
+    const f = fotoDeEvento("es", "Meetup", [{ ...sorteoGrande(1, 3), prize: "Polera", ganadores: sorteo.ganadores, names: nombres }], corto);
+    expect(f.filas?.[0]?.ganadores).toBe("Grupo 4 (1/2) y Grupo 4 (2/2)");
+  });
+
+  it("con el modo de varias participaciones a la vista y un reparto, muestra a la persona", () => {
+    vi.stubGlobal("location", { search: "?modo=varias" });
+    try {
+      const reparto = { prize: "Polera", ganadores: ["Ana (1/2)", "Beto"], names: ["Ana (1/2)", "Ana (2/2)", "Beto"] };
+      expect(lineasDeEvento("es", [reparto])).toEqual(["Polera: Ana y Beto"]);
+      const f = fotoDeEvento("es", "Meetup", [{ ...sorteoGrande(1, 3), prize: "Polera", ganadores: reparto.ganadores, names: reparto.names }], corto);
+      expect(f.filas?.[0]?.ganadores).toBe("Ana y Beto");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("evento en las partes de siempre: títulos, enlaces y mensaje", () => {
   // Doce sorteos de 120 personas pasan de sobra el presupuesto de un enlace: se parten en varias partes.

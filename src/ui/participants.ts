@@ -12,7 +12,7 @@ import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
 import { isTurnOrder } from "../modos/turnos";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
-import { TOPE_POR_PERSONA, contar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, terminaEnNumero } from "../participaciones";
+import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
 import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
@@ -73,6 +73,16 @@ export function cerrarLista(si: boolean): void {
   renderNames();
 }
 
+/**
+ * Lo que dice la cuenta de la lista antes de sellar. Con los modos a la vista, por persona, como siempre (una marca
+ * que todavía no cierra se renumera al sellar). Sin ellos, por persona solo si la lista es un reparto entero
+ * (`seCuentaPorPersona` sin modos): la cabecera del selector y el resultado después de sellar leen así una lista
+ * hecha toda de marcas que cierran («Mesa 1 (1/3)» a «Mesa 2 (2/2)»), y antes decía «5 personas» y después
+ * «2 personas, 5 participaciones». Para habilitar «Sellar» se sigue contando como siempre.
+ */
+const cuentaParaMostrar = (names: readonly string[]): { personas: number; participaciones: number } =>
+  cuentaParaMostrarSinSellar(names, modesVisible());
+
 export function renderNames(): void {
   const names = parseNames();
   // Para sellar hacen falta dos personas distintas: una lista repartida puede tener muchas líneas de una sola.
@@ -85,7 +95,14 @@ export function renderNames(): void {
   seguirLaLista(names.length);
   $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length);
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
-  $("freeze-hint").style.display = personas < 2 && !app.frozen ? "block" : "none";
+  const hint = $("freeze-hint");
+  hint.style.display = personas < 2 && !app.frozen ? "block" : "none";
+  // Con los modos a la vista se cuentan personas, no renglones: tres participaciones de Ana son tres nombres y una persona.
+  const claveHint = modesVisible() ? "freezeHintPersonas" : "freezeHint";
+  if (hint.dataset.i !== claveHint) {
+    hint.dataset.i = claveHint;
+    hint.textContent = t(claveHint);
+  }
   $("free-rule").style.display = app.frozen ? "none" : "block";
   // Las bases de antes de sellar: con lista y sin sellar. Después las reemplazan las de siempre.
   $("rules-pre-row").style.display = personas >= 2 && !listaCerrada() ? "" : "none";
@@ -114,14 +131,14 @@ export function renderNames(): void {
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? cuentaDeLista(personas, names.length) : "";
+    cuenta.textContent = names.length ? cuentaDeLista(cuentaParaMostrar(names).personas, names.length) : "";
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
   const ya = document.getElementById("ya-entraste");
   if (ya && (ya.dataset.n !== String(names.length) || listaCerrada())) ya.style.display = "none";
   $("csv-edit").style.display = listaCerrada() ? "none" : "";
-  pintarResumen(personas);
+  pintarResumen();
   pintarVarias();
 }
 
@@ -131,10 +148,13 @@ export function renderNames(): void {
  * deshace: que se lea antes (diseño del onboarding, pantalla 3). Lo vuelven a
  * escribir el premio, "Cuántos ganan" y el idioma.
  */
-function pintarResumen(n = contar(parseNames(), modesVisible()).personas): void {
+function pintarResumen(): void {
   const el = document.getElementById("sellar-resumen");
   if (!el) return;
-  if (n < 2 || listaCerrada()) {
+  // Se muestra cuando se puede sellar (la cuenta de siempre) y dice las personas con la regla de la cuenta.
+  const nombres = parseNames();
+  const n = cuentaParaMostrar(nombres).personas;
+  if (contar(nombres, modesVisible()).personas < 2 || listaCerrada()) {
     el.style.display = "none";
     return;
   }
@@ -231,7 +251,7 @@ export function bindParticipants(): void {
     pintarResumen();
     pintarVarias();
     const cuenta = document.getElementById("lista-cuenta");
-    const { personas, participaciones } = contar(parseNames(), modesVisible());
+    const { personas, participaciones } = cuentaParaMostrar(parseNames());
     if (cuenta && participaciones) cuenta.textContent = cuentaDeLista(personas, participaciones);
   });
   addEventListener("pagehide", guardarBorrador);
@@ -478,7 +498,7 @@ function avisosDeNumeracion(num: ReturnType<typeof quitarNumeracion>): Array<(L:
  * la lista canónica hace en silencio: un nombre escrito dos veces igual entra
  * una sola vez, y dos que parecen la misma persona escrita distinto ("Ana
  * Quispe" y "ana quispe") entran los dos. Hasta el 21 de octubre de 2026 eso
- * solo se veía en "Mostrar la lista a la sala" (buscador de detalles, D09). No
+ * solo se veía en "Mostrar la lista en grande" (buscador de detalles, D09). No
  * frena el sello: avisa.
  */
 function avisarCarga(partes: Array<(L: Dict) => string>): void {

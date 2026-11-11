@@ -7,9 +7,10 @@ import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
+import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
-import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
+import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { modesFlagOn, requestedMode } from "../modos/bandera";
 import { hayModoOficial } from "../stellar/config";
 import { eventoEsDePrueba } from "../evento-modo";
@@ -70,6 +71,10 @@ function listasCortas(lang: Lang, nombres: string[]): string[] {
 export interface DatosSorteo {
   /** El enlace de verificación del sorteo: el comprobante, tal como quedó. */
   enlace: string;
+  /**
+   * Quienes salieron, en orden, con el nombre que se muestra: quien llama ya le quitó la marca de la línea sellada
+   * si la lista se lee por persona. Acá no se vuelve a quitar: un nombre que termina en «(1/2)» la perdería dos veces.
+   */
   ganadores: string[];
   /** Cuántas participaciones había en la lista (una línea cada una). */
   total: number;
@@ -101,12 +106,17 @@ export interface DatosSorteo {
  * ni "verificarlo". Palabra por palabra igual a `T.summary` (una prueba lo compara).
  */
 export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
-  // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts).
-  if (isTurnOrder(d.total, d.ganadores.length, d.premio)) return turnMessage(lang, { orden: d.ganadores, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
-  const varios = d.ganadores.length > 1;
-  const w = lista(lang, d.ganadores);
-  // Con varias participaciones por persona, la cabeza dice las dos cuentas: «entre 5 participaciones de 2 personas».
+  // Con varias participaciones por persona, el mensaje dice las dos cuentas y junta a quien se repite. Los nombres
+  // ya llegan sin la marca de la línea sellada (`DatosSorteo.ganadores`).
   const part = d.personas !== undefined && d.personas !== d.total;
+  const porPersona = d.ganadores;
+  // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts): ahí no se junta a nadie.
+  if (isTurnOrder(d.total, porPersona.length, d.premio)) return turnMessage(lang, { orden: porPersona, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
+  // Quien salió más de una vez va una sola vez, con su cuenta: no «Ana y Ana».
+  const ganadores = part ? withRepeatCounts(lang, porPersona) : porPersona;
+  // Singular o plural según los nombres que nombra la frase, ya juntos: «Ganó Ana (2 veces)», como la tarjeta del evento.
+  const varios = ganadores.length > 1;
+  const w = lista(lang, ganadores);
   const cabeza = d.premio
     ? rellenar(
         cad(lang, varios ? (part ? "cmpCabPremioVariosPart" : "cmpCabPremioVarios") : part ? "cmpCabPremioUnoPart" : "cmpCabPremioUno"),
@@ -151,7 +161,11 @@ function personasDelOrden(s: { prize?: string; ganadores: readonly string[]; nam
 export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[]; names?: readonly string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
     const personas = personasDelOrden(s);
-    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores);
+    // La tarjeta del evento nombra a la persona, sin la marca de la línea sellada, solo cuando la lista se cuenta por persona.
+    const porPersona = !!(s.names && seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+    const ganadores = porPersona ? s.ganadores.map(nombreDePersona) : s.ganadores;
+    // Quien salió más de una vez en este sorteo va una sola vez, con su cuenta (en un orden de turnos no se lista a nadie).
+    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, porPersona ? withRepeatCounts(lang, ganadores) : ganadores);
     const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${quien}`;
     return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
@@ -209,20 +223,35 @@ function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
     .join(", ");
 }
 
+/** Los números de premio de una persona, en orden: «#1 #3». Con más de tres, los tres primeros y «…». */
+function numerosDePremio(ganadores: readonly string[], persona: string): string {
+  const numeros = ganadores.flatMap((g, i) => (g === persona ? [`#${i + 1}`] : []));
+  return numeros.length > 3 ? `${numeros.slice(0, 3).join(" ")} …` : numeros.join(" ");
+}
+
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
-  const varios = d.ganadores.length > 1;
+  // Los nombres ya llegan sin la marca de la línea sellada cuando la lista se lee por persona (`DatosSorteo.ganadores`).
+  const parte = d.personas !== undefined && d.personas !== d.total;
+  const ganadores = d.ganadores;
   // Un orden de turnos: «Orden de turnos» arriba, las personas en el orden del sorteo (la foto muestra las primeras y «N más»)
   // y debajo cuántas son, sin «Premio:» ni «Entre N personas».
-  const turnos = isTurnOrder(d.total, d.ganadores.length, d.premio);
+  const turnos = isTurnOrder(d.total, ganadores.length, d.premio);
   // Las dos cuentas cuando no es una participación por persona.
-  const part = !turnos && d.personas !== undefined && d.personas !== d.total;
+  const part = !turnos && parte;
+  // Quien salió más de una vez va en un solo renglón: «Ganó» o «Ganaron» según las personas que quedan, como el mensaje.
+  const caras = part ? [...new Set(ganadores)] : null;
+  const varios = (caras ?? ganadores).length > 1;
   return {
     // El logo, y el "Hecho con Tinkazo" que va siempre a su lado. Sin logo, la foto es la de siempre, píxel por píxel.
     ...(d.logo ? { logo: d.logo, hecho: cad(lang, "logoHecho") } : {}),
     rotulo: rotuloDeSorteo(lang, d),
     titulo: cad(lang, turnos ? "turnsOption" : varios ? "imgGanaron" : "imgGano"),
-    personas: d.ganadores,
+    // Quien salió más de una vez va en un solo renglón, con su cuenta; su cara sale del nombre limpio (`caras`).
+    // En un orden de turnos no se junta a nadie: cada turno es su renglón.
+    // Cada renglón lleva los números de sus premios («#1 #3»), los mismos de la herramienta y la verificación.
+    personas: part ? withRepeatCounts(lang, ganadores) : ganadores,
+    ...(caras ? { caras, numeros: caras.map((p) => numerosDePremio(ganadores, p)) } : {}),
     lineas: turnos
       ? [
           // El nombre que le puso quien organiza, si es más que la palabra «Turnos».
@@ -270,10 +299,14 @@ export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvent
     filas: enOrden.map((s) => {
       // Un orden de turnos no lista a nadie: dice cuántas personas hay, como el mensaje del evento.
       const personas = personasDelOrden(s);
+      const porPersona = !!(s.names && seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+      const ganadores = porPersona ? s.ganadores.map(nombreDePersona) : s.ganadores;
+      // Quien salió más de una vez va una sola vez, con su cuenta, como en el mensaje del evento.
+      const mostrados = porPersona && personas === null ? withRepeatCounts(lang, ganadores) : ganadores;
       return {
         premio: s.prize?.trim() || cad(lang, "histDraw"),
-        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores),
-        cortos: personas !== null ? [] : listasCortas(lang, s.ganadores),
+        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, mostrados),
+        cortos: personas !== null ? [] : listasCortas(lang, mostrados),
         ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
       };
     }),
@@ -562,13 +595,14 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
  * sin sello (el mensaje y la foto lo dicen, y no prometen que se pueda comprobar).
  */
 export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores: string[]): DatosSorteo {
+  // La regla de todos (`seCuentaPorPersona`) con el modo que trae el enlace del comprobante: lo mismo que cuenta la
+  // verificación al abrirlo. Decide las dos cuentas y si se nombra a la persona, sin la marca de la línea sellada.
+  const porPersona = seCuentaPorPersona(comprobante.names, modoVariasDelEnlace(enlace));
   return {
     enlace,
-    ganadores,
+    ganadores: porPersona ? ganadores.map(nombreDePersona) : ganadores,
     total: comprobante.names.length,
-    // Las dos cuentas si no es una por persona, con la regla de todos (`seCuentaPorPersona`) y el modo que trae
-    // el enlace del comprobante: lo mismo que cuenta la verificación al abrirlo.
-    personas: contarPersonas(comprobante.names, seCuentaPorPersona(comprobante.names, modoVariasDelEnlace(enlace))).personas,
+    personas: contarPersonas(comprobante.names, porPersona).personas,
     premio: comprobante.prize ?? "",
     ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
     ...(comprobante.id ? { numero: comprobante.id } : {}),

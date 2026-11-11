@@ -81,6 +81,20 @@ describe("sin la bandera y sin el parámetro, la herramienta es la de siempre", 
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 3 personas");
     expect(sellar().disabled).toBe(false);
   });
+
+  it("una lista hecha toda de marcas que cierran cuenta igual antes y después de sellar", async () => {
+    // La cabecera del selector y el resultado leen este reparto entero por persona aun sin modos: antes de sellar
+    // la cuenta dice lo mismo, «2 personas, 5 participaciones», y no «5 personas».
+    await montar();
+    escribir("Mesa 1 (1/3)\nMesa 1 (2/3)\nMesa 1 (3/3)\nMesa 2 (1/2)\nMesa 2 (2/2)");
+    expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 2 personas, 5 participaciones");
+    const { contar, seCuentaPorPersona } = await import("../participaciones");
+    const lineas = ["Mesa 1 (1/3)", "Mesa 1 (2/3)", "Mesa 1 (3/3)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"];
+    // La misma cuenta que usa la cabecera del selector después de sellar (freeze.ts).
+    expect(contar(lineas, seCuentaPorPersona(lineas, false)).personas).toBe(2);
+    // Se sigue pudiendo sellar, como siempre.
+    expect(sellar().disabled).toBe(false);
+  });
 });
 
 describe("el panel de contadores", () => {
@@ -286,6 +300,8 @@ describe("para sellar una lista repartida hacen falta dos personas distintas", (
     expect(ta().value).toBe("Ana Quispe (1/3)\nAna Quispe (2/3)\nAna Quispe (3/3)");
     expect(sellar().disabled).toBe(true);
     expect(document.getElementById("freeze-hint")?.style.display).toBe("block");
+    // Hay tres renglones: la explicación habla de personas, no de nombres.
+    expect(document.getElementById("freeze-hint")?.textContent).toBe("Hacen falta al menos dos personas.");
     // Con otra persona, vuelve a poder sellarse.
     escribir(`${ta().value}\nBeto Rojas`);
     expect(sellar().disabled).toBe(false);

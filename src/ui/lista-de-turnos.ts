@@ -39,12 +39,18 @@ export interface OpcionesDeTurnos {
 /** El HTML de la lista de turnos. `names` es la lista sellada y `winners`, los índices del sorteo, en su orden. */
 export function htmlDeTurnos(names: readonly string[], winners: readonly number[], op: OpcionesDeTurnos = {}): string {
   const orden = op.sinSufijos ? turnOrderDisplayNames(names, winners) : turnOrder(names, winners);
+  // Con «Avisarle», el nombre y el botón van juntos al lado del número (styles.css, `.turno-resto`): en el celular
+  // «Avisarle» baja debajo del nombre cuando no entra, pero el nombre nunca baja debajo del número.
+  const nombre = (name: string, k: number): string => `<span class="winner-name" id="wn-${k}">${esc(name)}</span>`;
   const filas = orden
     .map(
       (name, k) => `<li class="winner-fila" value="${k + 1}">
         <span class="winner-num"><span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}</span>
-        <span class="winner-name" id="wn-${k}">${esc(name)}</span>
-        ${op.avisar ? `<a class="ghost mini turno-avisar" data-turno="${k}" aria-describedby="wn-${k}" target="_blank" rel="noopener" hidden data-i="turnsNotify">${esc(t("turnsNotify"))}</a>` : ""}
+        ${
+          op.avisar
+            ? `<span class="turno-resto">${nombre(name, k)}<a class="ghost mini turno-avisar" data-turno="${k}" aria-describedby="wn-${k}" target="_blank" rel="noopener" hidden data-i="turnsNotify">${esc(t("turnsNotify"))}</a></span>`
+            : nombre(name, k)
+        }
       </li>`,
     )
     .join("");

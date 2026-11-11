@@ -12,13 +12,13 @@ vi.mock("../enlace-corto", () => ({ acortar: async () => null, enlaceParaElQr: a
 vi.mock("./qr", () => ({ pintarQrDelComprobante: async () => false }));
 vi.mock("./logo-sorteo", () => ({ piezaParaLaSala: () => null }));
 
-async function abrir(n: number, premio = "Termo"): Promise<HTMLElement> {
+async function abrir(n: number, premio = "Termo", lista?: string[], ganadores?: number[]): Promise<HTMLElement> {
   vi.resetModules();
   document.body.innerHTML = "";
   const { app } = await import("../state");
-  const names = Array.from({ length: Math.max(n + 3, 20) }, (_, i) => `Persona <${i + 1}> & Co`);
+  const names = lista ?? Array.from({ length: Math.max(n + 3, 20) }, (_, i) => `Persona <${i + 1}> & Co`);
   app.frozen = { names, listHash: "00".repeat(32), ts: 1, at: "", prize: premio, round: 1 } as never;
-  app.drawn = { beacon: { round: 1, randomness: "00".repeat(32), signature: "" }, winners: Array.from({ length: n }, (_, i) => i + 1) } as never;
+  app.drawn = { beacon: { round: 1, randomness: "00".repeat(32), signature: "" }, winners: ganadores ?? Array.from({ length: n }, (_, i) => i + 1) } as never;
   const { mostrarResultado } = await import("./pantalla");
   await mostrarResultado("https://tinkazo.app/v#x");
   return document.querySelector(".pantalla") as HTMLElement;
@@ -61,5 +61,26 @@ describe("el resultado en grande según cuántos ganan", () => {
     expect(p.querySelectorAll(".pantalla-llevan")).toHaveLength(1);
     expect(p.querySelector(".pantalla-llevan b")?.textContent).toBe("Una <b>polera</b>");
     expect(p.querySelectorAll(".pantalla-lista b")).toHaveLength(0);
+  });
+
+  it("sin modos, una lista hecha toda de marcas que cierran se lee sin marca y una común tal cual", async () => {
+    sessionStorage.clear();
+    history.replaceState(null, "", "/");
+    const mesas = await abrir(2, "Termo", ["Mesa 1 (1/2)", "Mesa 1 (2/2)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"], [0, 2]);
+    expect([...mesas.querySelectorAll(".pantalla-nombre")].map((e) => e.textContent)).toEqual(["Mesa 1", "Mesa 2"]);
+    const grupos = await abrir(2, "Termo", ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Ana", "Beto"], [0, 1]);
+    expect([...grupos.querySelectorAll(".pantalla-nombre")].map((e) => e.textContent)).toEqual(["Grupo 4 (1/2)", "Grupo 4 (2/2)"]);
+  });
+
+  it("en un orden de turnos la marca se quita una sola vez", async () => {
+    sessionStorage.clear();
+    history.replaceState(null, "", "/?modo=varias");
+    // «Grupo (1/2)» con dos participaciones: la sala lee «Grupo (1/2)», no «Grupo».
+    const lista = ["Grupo (1/2) (1/2)", "Grupo (1/2) (2/2)", "Beto"];
+    const p = await abrir(3, "Turnos", lista, [2, 0, 1]);
+    expect(p.classList.contains("turnos")).toBe(true);
+    expect([...p.querySelectorAll(".pantalla-nombre")].map((e) => e.textContent)).toEqual(["Beto", "Grupo (1/2)", "Grupo (1/2)"]);
+    history.replaceState(null, "", "/");
+    sessionStorage.clear();
   });
 });

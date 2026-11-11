@@ -19,10 +19,11 @@ export const PAUSA_EVENTO = 12 * 3600;
 /**
  * ¿Trae comprobante? El enlace de verificación lleva el comprobante en el
  * fragmento. El enlace de la ronda de drand (el de respaldo) no lo trae, y ese
- * sorteo no entra en un evento.
+ * sorteo no entra en un evento. Un sorteo hecho con un modo lleva el modo en
+ * el enlace («verificar.html?modo=varias#…») y también trae comprobante.
  */
 export function tieneComprobante(e: { proof?: string }): boolean {
-  return !!e.proof && e.proof.includes("verificar.html#");
+  return !!e.proof && /verificar\.html(\?[^#]*)?#/.test(e.proof);
 }
 
 /**

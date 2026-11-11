@@ -95,7 +95,7 @@ export const EVENTOS = {
   account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: { from: ORIGENES }, ref: "no" },
   /** Prepara: la primera lista de dos o más de la pestaña: pegada, escrita a mano, de un archivo o de Luma. */
   list_ready: { p: { source: ["paste", "typed", "csv", "luma"], size: TAMANOS }, o: {}, ref: "no" },
-  /** Muestra: "Mostrar la lista a la sala". */
+  /** Muestra: "Mostrar la lista en grande". */
   list_shown: { p: {}, o: {}, ref: "no" },
   /** Sella: se pidió sellar con cuenta, se confirmó o falló. La verdad del sello es la cadena (`sealed`). */
   seal_sent: { p: { network: REDES }, o: {}, ref: "no" },

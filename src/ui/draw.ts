@@ -24,10 +24,11 @@ import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { turnMessage, turnNotice } from "../modos/mensajes";
 import { isTurnOrder, modoDelComprobante, setResultadoDeTurnos } from "../modos/turnos";
-import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
+import { contar as contarPersonas, cuentaParaMostrar, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
 import { modesVisible, withMode } from "../modos/bandera";
 import { alCopiarOrden } from "./lista-de-turnos";
 import { alTocarAusente, htmlDeGanadores } from "./resultado-ganadores";
+import { withRepeatCounts } from "./repeated-names";
 import { acortar, alAcortar, cortoGuardado, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { logoPorHuella } from "../logo-guardado";
 import { pintarLogoEnElResultado, quitarLogoDelResultado } from "./logo-sorteo";
@@ -626,7 +627,9 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const reemplazo = contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
   // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
   // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
-  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona });
+  // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
+  // que decide a quién se saca, que sigue siendo `porPersona`.
+  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()) });
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
@@ -773,12 +776,15 @@ function sinGanadores(): string[] {
 function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
   // Los textos hablan de personas: quien salió se va entero, con todas sus participaciones.
-  const quedan = contarPersonas(sinGanadores(), modesVisible()).personas;
+  const lineas = sinGanadores();
+  const quedan = contarPersonas(lineas, modesVisible()).personas;
   const alcanza = quedan >= 2;
+  // El número de los textos, con la cuenta del cuadro que va a quedar al tocar «Siguiente premio».
+  const mostrar = cuentaParaMostrar(lineas, modesVisible()).personas;
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
   sin.style.display = alcanza ? "" : "none";
-  sin.textContent = L.againSin(quedan);
+  sin.textContent = L.againSin(mostrar);
   comprobante.className = alcanza ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector. Solo
@@ -791,7 +797,7 @@ function showAgain(): HTMLButtonElement {
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = alcanza ? L.againLeft(quedan) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(quedan);
+  $("again-left").textContent = alcanza ? L.againLeft(mostrar) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar);
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
   const sigue = $("again-sigue");
   sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
@@ -845,6 +851,8 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Para seguir hace falta dos personas distintas: una lista repartida puede dejar muchas líneas de una sola.
   const personas = contarPersonas(quedan, modesVisible()).personas;
   if (conLista && personas < 2) return;
+  // El número de la nota, con la cuenta que va a decir el cuadro con esas líneas.
+  const mostrar = cuentaParaMostrar(quedan, modesVisible()).personas;
   // Quiénes salieron, por persona y sin repetidos: con varias participaciones, una misma persona puede salir más
   // de una vez. Sin la bandera de los modos ni `?modo=`, quien salió es la línea que salió: los nombres tal cual.
   const porPersona = modesVisible();
@@ -879,9 +887,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
     modo === "sinGanadores"
-      ? L.againQuitados(salieron.map(etiquetaDe), personas)
+      ? L.againQuitados(salieron.map(etiquetaDe), mostrar)
       : modo === "ausente"
-        ? L.ausenteNota(etiquetaDe(ausente), personas, salieron.length > 1, premiosDelAusente)
+        ? L.ausenteNota(etiquetaDe(ausente), mostrar, salieron.length > 1, premiosDelAusente)
         : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
@@ -1105,15 +1113,20 @@ function mensajeDelSorteo(): string {
   if (!app.frozen || !app.drawn) return "";
   const { names, prize } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
-  const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  // Quien salió, por persona cuando la lista se lee por persona: la marca (k/m) es interna, la sala lee el nombre.
+  const porPersona = seCuentaPorPersona(names, modesVisible());
+  const mostrar = (linea: string): string => (porPersona ? nombreDePersona(linea) : linea);
+  const lista = winners.map((i) => mostrar(etiquetaDe(names[i] ?? "")));
   // Sin sello: que lo diga también lo que se pega en el grupo, y que no prometa lo que no se puede comprobar.
   const sinSello = !!app.frozen.sinSello && app.frozen.raffleId === undefined;
   const enlace = cortoLink || proofLink || roundUrl(beacon.round);
   // Un orden de turnos dice el orden, y que nadie lo eligió, y no quién ganó (src/modos/mensajes.ts).
   if (isTurnOrder(names.length, winners.length, prize)) return turnMessage(getLang(), { orden: lista, enlace, ...(sinSello ? { sinSello: true } : {}) });
+  // Quien salió más de una vez va una sola vez, con su cuenta: no «Ana y Ana». Singular o plural según los nombres ya juntos.
+  const juntos = porPersona ? withRepeatCounts(getLang(), lista) : lista;
+  const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   // Con varias participaciones por persona, el mensaje dice las dos cuentas y no solo las líneas de la lista.
-  return T[getLang()].summary(quienes, names.length, prize, enlace, lista.length > 1, sinSello, personasDeLaLista(names));
+  return T[getLang()].summary(quienes, names.length, prize, enlace, juntos.length > 1, sinSello, personasDeLaLista(names));
 }
 
 /**
@@ -1148,9 +1161,10 @@ export function shareProof(): void {
   const d = app.drawn;
   if (!f || !d) return;
   const enlace = proofLink || roundUrl(d.beacon.round);
+  const mostrar = (linea: string): string => (seCuentaPorPersona(f.names, modesVisible()) ? nombreDePersona(linea) : linea);
   const datos = {
     enlace,
-    ganadores: d.winners.map((i) => etiquetaDe(f.names[i] ?? "")),
+    ganadores: d.winners.map((i) => mostrar(etiquetaDe(f.names[i] ?? ""))),
     total: f.names.length,
     // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas, con la misma regla
     // que la espera, las bases y la verificación (`seCuentaPorPersona`).
@@ -1174,17 +1188,23 @@ export function shareProof(): void {
  */
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const prize = app.frozen?.prize ?? "";
-  // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
-  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
-  const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios. Cuando la lista se lee por persona, el nombre
+  // de la persona, sin la marca de la línea.
+  const porPersona = seCuentaPorPersona(names, modesVisible());
+  const mostrar = (linea: string): string => (porPersona ? nombreDePersona(linea) : linea);
+  const lista = winners.map((i) => mostrar(etiquetaDe(names[i] ?? "")));
   // Al ganador de un sorteo sin sello tampoco se le dice que nadie lo eligió a dedo ni que lo revise: no se puede comprobar.
   const sinSello = !!app.frozen?.sinSello && app.frozen.raffleId === undefined;
   // Un orden de turnos: los botones de abajo mandan el orden entero, y cada renglón de la lista tiene su «Avisarle» con
   // «Te tocó el turno 3 de 12». Nadie «ganó» nada: las frases de ganar no se usan (src/modos/mensajes.ts).
   const turnos = isTurnOrder(names.length, winners.length, prize);
+  // En un sorteo común, quien salió más de una vez va una sola vez, con su cuenta; en un orden de turnos no se junta a nadie.
+  // Singular o plural según los nombres ya juntos: a quien se lleva todo se le habla de vos.
+  const juntos = porPersona && !turnos ? withRepeatCounts(getLang(), lista) : lista;
+  const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   const body = turnos
     ? turnMessage(getLang(), { orden: lista, enlace: url, ...(sinSello ? { sinSello: true } : {}) })
-    : T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1, sinSello, personasDeLaLista(names));
+    : T[getLang()].tellBody(who, prize, names.length, url, juntos.length > 1, sinSello, personasDeLaLista(names));
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
     `mailto:?subject=${encodeURIComponent(t(turnos ? "turnsResultTitle" : "tellSubject"))}&body=${encodeURIComponent(body)}`;

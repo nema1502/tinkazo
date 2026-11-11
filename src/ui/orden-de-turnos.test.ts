@@ -62,6 +62,20 @@ describe("el resultado de un orden de turnos", () => {
     expect(c.querySelectorAll("b, i, script")).toHaveLength(0);
   });
 
+  it("en cada fila el nombre y «Avisarle» van juntos al lado del número, para que el nombre nunca baje debajo de él", () => {
+    // En el celular «Avisarle» puede bajar debajo del nombre (styles.css, `.turno-resto`), pero el número y el nombre
+    // quedan en el mismo renglón desde el «Turno 1» hasta el último, por más ancho que sea el número en esa letra.
+    const c = pintar(nombres(12), ganadoresDe(12), "Turnos");
+    const filas = [...c.querySelectorAll<HTMLElement>(".winner-lista > li.winner-fila")];
+    expect(filas).toHaveLength(12);
+    for (const fila of filas) {
+      const hijos = [...fila.children].map((e) => e.className);
+      expect(hijos).toEqual(["winner-num", "turno-resto"]);
+      const resto = fila.querySelector(".turno-resto");
+      expect([...(resto?.children ?? [])].map((e) => e.classList.contains("winner-name") || e.classList.contains("turno-avisar"))).toEqual([true, true]);
+    }
+  });
+
   it("el nombre del orden puede ser «Turnos de limpieza» o «Turns», y aun así es turnos", () => {
     for (const prize of ["Turnos de limpieza", "turnos", "Turns", "TURNS for the lab"]) {
       const c = pintar(nombres(12), ganadoresDe(12), prize);

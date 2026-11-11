@@ -137,7 +137,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 
 | Risk | What there is |
 |---|---|
-| **Building the list wrong** before sealing: a name twice, someone missing | "Show the list to the room": the list on the projector with duplicates flagged and a QR so everyone can find themselves on their phone. The receipt has the same search box, and the Luma import proposes only those who checked in |
+| **Building the list wrong** before sealing: a name twice, someone missing | "Show the list on the big screen": the list on the projector with duplicates flagged and a QR so everyone can find themselves on their phone. The receipt has the same search box, and the Luma import proposes only those who checked in |
 | **Sealing several times** and publishing the convenient result | The draw number is shown big during the wait, so it ends up in the photos. The verification flags repeated seals from the account and the same list sealed from another |
 | **A fake site** on the projector | What counts is the contract, and a fake site can't write to it. The draw can be checked on stellar.expert and with drand's public round, [without going through Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 

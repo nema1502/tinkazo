@@ -75,7 +75,7 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 | `practice_done` | El ensayo o la demo llegaron al ganador | `kind`: `practice`, `demo` |
 | `account_connected` | La primera cuenta conectada de la pestaña (retomar una sesión no cuenta) | `kind`: `google`, `email`, `freighter`, `test`; `from`, opcional: el origen (abajo) |
 | `list_ready` | La primera lista de dos o más de la pestaña, puesta por la persona | `source`: `paste`, `typed`, `csv`, `luma`; `size`: `2-9`, `10-49`, `50-199`, `200+` |
-| `list_shown` | "Mostrar la lista a la sala" | — |
+| `list_shown` | "Mostrar la lista en grande" | — |
 | `seal_sent`, `seal_confirmed`, `seal_failed` | Se pide sellar con cuenta, se confirma o falla | `network`: `mainnet`, `testnet`; en la falla, `error`: la clave de `errorKey` (`src/stellar/errores.ts`); al confirmar, `from`, opcional: el origen (abajo) |
 | `draw_confirmed`, `draw_failed` | El sorteo anclado queda grabado o no se pudo grabar | `network`; en la falla, `error` (las mismas claves) |
 | `share` | Se copia o se comparte el mensaje, se avisa al ganador o se muestra el QR en grande | `channel`: `copy`, `native`, `whatsapp`, `email`, `qr_big`, `event`; `ref` si el sorteo está anclado (un evento va sin `ref`) |

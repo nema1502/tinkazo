@@ -16,10 +16,13 @@
  * captura por paso en `--out` y avisa con una tilde o una cruz por cada
  * comprobacion.
  *
- * Los casos son cinco: A (orden de turnos con seis nombres), B (los dos modos
+ * Los casos son cinco: A (orden de turnos con doce nombres, uno largo y uno
+ * corto; en el celular mira ademas la lista a 320, 360, 390 y 412 px, la letra
+ * de "Mostrar en grande" y el boton de la lista a 320 px en los dos idiomas), B (los dos modos
  * juntos: aceptar los numeros de la lista y despues elegir el orden), C (varias
  * participaciones con tres ganadores), D (varias participaciones puestas
- * tocando el contador del panel, sin numeros en la lista) y E (el cartel final
+ * tocando el contador del panel, sin numeros en la lista, y el aire entre el
+ * boton y el panel abierto) y E (el cartel final
  * del primer orden de turnos, con el juego corriendo de verdad). Si la cuenta de
  * prueba no puede sellar (sin red, sin saldo), lo dice en una linea clara y
  * sale con 2.
@@ -295,6 +298,213 @@ async function esperarVeredicto(ver) {
 }
 const sinScrollX = async (page) => Number(await page.eval("document.documentElement.scrollWidth - document.documentElement.clientWidth"));
 
+/** Ninguna tarjeta ni fila del resultado trae la marca de la línea sellada («(2/3)»: es interna, para sellar). */
+const sinMarcaDeLinea = (nombres) => nombres.every((t) => !/\(\d+\s*\/\s*\d+\)/.test(t));
+
+/** La frase de la barra entra en su caja: ni cortada a lo ancho ni a lo alto (con reparto vale hasta dos renglones). */
+const barraEntra = (page) =>
+  page.eval(`(() => {
+    const el = document.getElementById('sig-paso');
+    if (!el) return 'no esta';
+    const entra = el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1;
+    return entra ? 'entra' : 'ancho ' + el.scrollWidth + '/' + el.clientWidth + ' alto ' + el.scrollHeight + '/' + el.clientHeight;
+  })()`);
+
+/** El aire entre el botón de más de un turno y el enlace del stand, en píxeles (u «oculto» si el botón no se ve). */
+const aireBotonEnlace = (page) =>
+  page.eval(`(() => {
+    const b = document.getElementById('btn-varias');
+    const s = document.getElementById('btn-stand');
+    if (!b || !s) return 'falta';
+    if (getComputedStyle(b).display === 'none') return 'oculto';
+    return String(Math.round(s.getBoundingClientRect().top - b.getBoundingClientRect().bottom));
+  })()`);
+
+/**
+ * Las medidas del botón de más de un turno, su panel y el enlace del stand, en coordenadas de la página (no se
+ * mueven si la página se desplaza): el borde de abajo del botón, el de arriba del panel, el alto del panel y el
+ * borde de arriba del enlace. El panel cerrado da null.
+ */
+const medidasDelPanel = async (page) =>
+  JSON.parse(
+    await page.eval(`JSON.stringify((() => {
+      const y = (el) => el.getBoundingClientRect().top + scrollY;
+      const b = document.getElementById('btn-varias');
+      const p = document.getElementById('varias-panel');
+      const s = document.getElementById('btn-stand');
+      if (!b || !p || !s) return null;
+      const abierto = getComputedStyle(p).display !== 'none';
+      return {
+        botonAbajo: b.getBoundingClientRect().bottom + scrollY,
+        panelArriba: abierto ? y(p) : null,
+        panelAlto: abierto ? p.getBoundingClientRect().height : null,
+        enlaceArriba: y(s),
+      };
+    })())`),
+  );
+
+/**
+ * Cuántos rectángulos da un rango sobre cada palabra de los elementos que elige el selector: una palabra partida
+ * entre dos renglones da dos. Devuelve las palabras partidas, como «Valeria (2)». El texto se recorre nodo por
+ * nodo, así que vale aunque el elemento tenga hijos.
+ */
+const PALABRAS_PARTIDAS = (selector) => `(() => {
+  const partidas = [];
+  const rg = document.createRange();
+  for (const el of document.querySelectorAll(${JSON.stringify(selector)})) {
+    const paseo = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (paseo.nextNode()) {
+      const n = paseo.currentNode;
+      for (const m of n.textContent.matchAll(/\\S+/g)) {
+        rg.setStart(n, m.index);
+        rg.setEnd(n, m.index + m[0].length);
+        const rects = [...rg.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+        if (rects.length !== 1) partidas.push(m[0] + ' (' + rects.length + ')');
+      }
+    }
+  }
+  return partidas;
+})()`;
+
+/** Pone la ventana del celular en otro ancho, con el alto de siempre, y espera a que la página se acomode. */
+async function anchoDeCelular(page, vista, ancho) {
+  await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: true, screenWidth: ancho, screenHeight: vista.alto });
+  await sleep(700);
+}
+
+/**
+ * La lista del orden de turnos a un ancho: palabras partidas en los nombres, cómo queda cada «Avisarle» (oculto,
+ * cortado, más bajo que 44 px o partido en dos renglones) y si el del nombre corto va en el mismo renglón que el nombre.
+ */
+const medirListaDeTurnos = async (page, corto) =>
+  JSON.parse(
+    await page.eval(`JSON.stringify((() => {
+      const filas = [...document.querySelectorAll('#winner-cards .winner-turnos .winner-fila')];
+      const partidas = ${PALABRAS_PARTIDAS("#winner-cards .winner-turnos .winner-name")};
+      const avisarMal = [];
+      // Lo que se rompe sin hacer desplazar la página (la caja recorta lo que desborda): un nombre que se sale de su
+      // caja, un nombre que se mete debajo de «Avisarle» y una fila que pasa el borde de la caja del resultado.
+      const desbordan = [];
+      const tapados = [];
+      const fuera = [];
+      // La regla de cada fila: «Avisarle» al lado solo si el nombre entero entra, y un nombre que entra en un
+      // renglón al lado del número no se parte. Lo que la incumple son filas de formas distintas en la misma lista.
+      const partidosSinNecesidad = [];
+      const abajoSinNecesidad = [];
+      // El nombre empieza en el renglón de su número, en todas las filas: si baja debajo del número, la fila tiene otra forma.
+      const bajoElNumero = [];
+      const caja = document.getElementById('winner-box');
+      const cr = caja ? caja.getBoundingClientRect() : null;
+      const rectsDe = (el) => { const rg = document.createRange(); rg.selectNodeContents(el); return [...rg.getClientRects()].filter((x) => x.width > 0 && x.height > 0); };
+      let altoMin = Infinity;
+      let mismoRenglonCorto = null;
+      for (const f of filas) {
+        const nombre = f.querySelector('.winner-name');
+        const a = f.querySelector('.turno-avisar');
+        const quien = nombre ? nombre.textContent.trim() : '?';
+        const fr0 = f.getBoundingClientRect();
+        if (cr && (fr0.right > cr.right + 1 || fr0.left < cr.left - 1)) fuera.push(quien);
+        if (nombre && nombre.scrollWidth > nombre.clientWidth + 1) desbordan.push(quien);
+        const num0 = f.querySelector('.winner-num');
+        if (nombre && num0 && nombre.getBoundingClientRect().top >= num0.getBoundingClientRect().bottom) bajoElNumero.push(quien);
+        if (!a) { avisarMal.push(quien + ': no hay boton'); continue; }
+        if (a.hidden || getComputedStyle(a).display === 'none') { avisarMal.push(quien + ': oculto'); continue; }
+        const r = a.getBoundingClientRect();
+        const fr = f.getBoundingClientRect();
+        if (nombre) {
+          if (rectsDe(nombre).some((x) => x.left < r.right - 1 && x.right > r.left + 1 && x.top < r.bottom - 1 && x.bottom > r.top + 1)) tapados.push(quien);
+          const cs = getComputedStyle(f);
+          const gap = parseFloat(cs.columnGap) || 0;
+          const num = f.querySelector('.winner-num');
+          // Lo que le queda al nombre al lado del número: lo que deja el número, y como mucho el tope del nombre tal como
+          // lo resuelve la página (src/styles.css), medido y no supuesto: se le pide un ancho enorme y se mira hasta dónde llega.
+          const contenido = f.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+          const anchoAntes = nombre.style.width;
+          nombre.style.width = '100000px';
+          const tope = nombre.getBoundingClientRect().width;
+          nombre.style.width = anchoAntes;
+          const libre = Math.min(contenido - (num ? num.getBoundingClientRect().width + gap : 0), tope);
+          const medida = document.createElement('span');
+          medida.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap';
+          medida.style.font = getComputedStyle(nombre).font;
+          medida.style.letterSpacing = getComputedStyle(nombre).letterSpacing;
+          medida.textContent = nombre.textContent;
+          document.body.appendChild(medida);
+          const entero = medida.getBoundingClientRect().width;
+          medida.remove();
+          const renglones = new Set(rectsDe(nombre).map((x) => Math.round(x.top))).size;
+          if (renglones > 1 && entero <= libre - 1) partidosSinNecesidad.push(quien);
+          const nr0 = nombre.getBoundingClientRect();
+          const alLado = r.top < nr0.bottom && r.bottom > nr0.top;
+          if (!alLado && entero + gap + r.width <= libre - 1) abajoSinNecesidad.push(quien);
+        }
+        altoMin = Math.min(altoMin, r.height);
+        if (r.height < 43.5) avisarMal.push(quien + ': ' + Math.round(r.height) + ' px de alto');
+        if (a.scrollWidth > a.clientWidth + 1 || r.left < fr.left - 1 || r.right > fr.right + 1 || r.right > innerWidth) avisarMal.push(quien + ': cortado');
+        const rg = document.createRange();
+        rg.selectNodeContents(a);
+        const tops = new Set([...rg.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top)));
+        if (tops.size > 1) avisarMal.push(quien + ': en ' + tops.size + ' renglones');
+        if (quien === ${JSON.stringify(corto)} && nombre) {
+          const nr = nombre.getBoundingClientRect();
+          mismoRenglonCorto = r.top < nr.bottom && r.bottom > nr.top;
+        }
+      }
+      const ol = document.querySelector('#winner-cards ol.winner-turnos');
+      if (ol) { ol.scrollIntoView({ block: 'start' }); scrollBy(0, -90); }
+      return {
+        bajoElNumero,
+        filas: filas.length,
+        partidas,
+        avisarMal,
+        altoMin: Number.isFinite(altoMin) ? Math.round(altoMin) : 0,
+        mismoRenglonCorto,
+        desbordan,
+        tapados,
+        fuera,
+        partidosSinNecesidad,
+        abajoSinNecesidad,
+        scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    })())`),
+  );
+
+/**
+ * El botón «Mostrar la lista en grande» en el paso de la lista, a 320 px, en el idioma que se pide: que se vea
+ * entero, sin salirse de la ventana ni cortarse, sin palabras partidas, y con el texto de ese idioma.
+ */
+async function botonDeLaListaA320(page, vista, tema, lang, quien) {
+  await page.eval(`document.getElementById('l-${lang}').click(); true`);
+  await sleep(700);
+  await anchoDeCelular(page, vista, 320);
+  const m = JSON.parse(
+    await page.eval(`JSON.stringify((() => {
+      const b = document.getElementById('btn-sala');
+      if (!b) return { falta: true };
+      b.scrollIntoView({ block: 'center' });
+      const r = b.getBoundingClientRect();
+      const cs = getComputedStyle(b);
+      return {
+        visible: cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0,
+        texto: b.textContent.trim(),
+        dentro: r.left >= -0.5 && r.right <= innerWidth + 0.5,
+        sinCorte: b.scrollWidth <= b.clientWidth + 1 && b.scrollHeight <= b.clientHeight + 1,
+        alto: Math.round(r.height),
+        partidas: ${PALABRAS_PARTIDAS("#btn-sala")},
+        scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    })())`),
+  );
+  await sleep(300);
+  await page.screenshot(join(outDir, `a-boton-lista-320-${lang}-${tema}.png`));
+  const textoEsperado = lang === "es" ? /^Mostrar la lista en grande$/ : /^Show the list on the big screen$/;
+  check(
+    `${quien}: a 320 px en ${lang} el botón de la lista se ve entero`,
+    !m.falta && m.visible && textoEsperado.test(m.texto) && m.dentro && m.sinCorte && m.partidas.length === 0 && m.alto >= 44 && m.scrollX <= 1,
+    m.falta ? "no esta" : `"${m.texto}" ${m.alto}px de alto${m.dentro ? "" : ", se sale de la ventana"}${m.sinCorte ? "" : ", cortado"}${m.partidas.length ? `, partidas: ${m.partidas.join(", ")}` : ""}${m.scrollX > 1 ? `, scroll ${m.scrollX}px` : ""}`,
+  );
+}
+
 /**
  * Abre el comprobante de un sorteo común agregándole un modo en la dirección: la página tiene que seguir
  * mostrándolo como un sorteo común, porque el parámetro por sí solo no cambia lo que se selló.
@@ -374,6 +584,13 @@ async function enlaceDeVerificacion(page) {
 
 const esEnlaceDeVerificacion = (enlace) => /verificar\.html(?:\?[^#]*)?#|\/c\/[0-9A-Za-z]{8}#[A-Za-z0-9_-]{22}/.test(enlace);
 
+/** El enlace de verificación con el tema de la corrida: sin él, la página abre en el tema de siempre y la captura «-dark» sale clara. */
+function conTema(enlace, tema) {
+  const u = new URL(enlace, base);
+  u.searchParams.set("theme", tema);
+  return u.toString();
+}
+
 /** Los nombres del resultado, en el orden en que se ven, y el titulo de la lista. */
 const leerResultado = async (page) =>
   JSON.parse(
@@ -388,12 +605,22 @@ const leerResultado = async (page) =>
     })`),
   );
 
-const NOMBRES_A = ["Ana Quispe", "Beto Mamani", "Carla Flores", "Diego Rojas", "Elena Condori", "Fabian Torrez"];
+// Un nombre largo y uno corto entre doce: con el largo, «Avisarle» tiene que bajar a su renglón en los celulares
+// angostos sin partir ninguna palabra y la pantalla grande no puede achicar la lista entera; con el corto, «Avisarle»
+// va en el mismo renglón.
+const NOMBRE_LARGO = "María Fernanda Rodríguez López";
+const NOMBRE_CORTO = "Ana";
+const NOMBRES_A = [
+  NOMBRE_CORTO, "Beto Mamani", "Carla Flores", "Diego Rojas", "Elena Condori", "Fabian Torrez",
+  NOMBRE_LARGO, "Gabriel Choque", "Hilda Vargas", "Iván Mendoza", "Julia Paz", "Kevin Ortiz",
+];
+const N_A = NOMBRES_A.length;
+const ANCHOS_DE_CELULAR = [320, 360, 390, 412];
 
-/** Caso A: orden de turnos con seis nombres. */
+/** Caso A: orden de turnos con doce nombres, uno largo y uno corto. */
 async function casoA(browser, vista, tema, ctx) {
   const quien = `A ${vista.etiqueta} ${tema}`;
-  console.log(`\n  ${quien} - orden de turnos con seis nombres`);
+  console.log(`\n  ${quien} - orden de turnos con doce nombres, uno largo y uno corto`);
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
@@ -402,17 +629,26 @@ async function casoA(browser, vista, tema, ctx) {
     await conectarCuentaDePrueba(page);
 
     const n = await escribirLista(page, NOMBRES_A.join("\n"));
-    check(`${quien}: la lista quedo con los seis nombres`, n === 6, `${n} nombres`);
+    check(`${quien}: la lista quedo con los ${N_A} nombres`, n === N_A, `${n} nombres`);
     const modo = await page.eval("document.getElementById('btn-turnos')?.getAttribute('aria-pressed')");
     check(`${quien}: Orden de turnos quedo elegido con ?modo=turnos`, modo === "true", `aria-pressed=${modo}`);
     const nw = await page.eval("document.getElementById('nw').value");
-    check(`${quien}: la cantidad de turnos sigue a la lista`, nw === "6", `cuantos ganan: ${nw}`);
+    check(`${quien}: la cantidad de turnos sigue a la lista`, nw === String(N_A), `cuantos ganan: ${nw}`);
     const cuentas = await leerCuentas(page);
-    check(`${quien}: el resumen dice turnos del 1 al 6`, /turnos del 1 al 6/i.test(cuentas.resumen), cuentas.resumen.slice(0, 80));
+    check(`${quien}: el resumen dice turnos del 1 al ${N_A}`, new RegExp(`turnos del 1 al ${N_A}\\b`, "i").test(cuentas.resumen), cuentas.resumen.slice(0, 80));
     checkCuentasCoinciden(quien, cuentas);
     check(`${quien}: sin scroll horizontal antes de sellar`, (await sinScrollX(page)) <= 1, `${await sinScrollX(page)}px`);
     checkSinGanador(quien, await palabraProhibida(page));
     await page.screenshot(join(outDir, `a-lista-${vista.etiqueta}-${tema}.png`));
+    if (vista.movil) {
+      // El botón de la lista a 320 px, en los dos idiomas; después vuelve al español y al ancho de la vista.
+      await botonDeLaListaA320(page, vista, tema, "es", quien);
+      await botonDeLaListaA320(page, vista, tema, "en", quien);
+      await page.eval("document.getElementById('l-es').click(); true");
+      await sleep(700);
+      await anchoDeCelular(page, vista, vista.ancho);
+      await page.eval("scrollTo(0, 0); true");
+    }
 
     await sellar(page);
     await quieto(page);
@@ -422,14 +658,43 @@ async function casoA(browser, vista, tema, ctx) {
     await sortear(page);
     const res = await leerResultado(page);
     check(`${quien}: el titulo habla del orden de los turnos`, /El orden de los turnos|The turn order/.test(res.titulo), `"${res.titulo}"`);
-    const seis = res.nombres.length === 6 && NOMBRES_A.every((x) => res.nombres.includes(x));
-    check(`${quien}: estan los seis en orden`, res.filas === 6 && seis, res.nombres.join(" / "));
-    const turnosBien = res.turnos.length === 6 && res.turnos.every((t, k) => new RegExp(`\\b${k + 1}\\b`).test(t));
+    const todos = res.nombres.length === N_A && NOMBRES_A.every((x) => res.nombres.includes(x));
+    check(`${quien}: estan los ${N_A} en orden`, res.filas === N_A && todos, res.nombres.join(" / "));
+    const turnosBien = res.turnos.length === N_A && res.turnos.every((t, k) => new RegExp(`\\b${k + 1}\\b`).test(t));
     check(`${quien}: cada renglon dice su turno`, turnosBien, res.turnos.join(" / "));
     check(`${quien}: existe Copiar el orden`, res.copiar.some((t) => /Copiar el orden|Copy the order/.test(t)), res.copiar.join(" / ") || "no esta");
     checkSinGanador(quien, await palabraProhibida(page));
     check(`${quien}: sin scroll horizontal en el resultado`, (await sinScrollX(page)) <= 1, `${await sinScrollX(page)}px`);
     await page.screenshot(join(outDir, `a-resultado-${vista.etiqueta}-${tema}.png`));
+
+    if (vista.movil) {
+      // La lista de turnos en cuatro celulares: ninguna palabra partida, «Avisarle» entero y de 44 px o más, sin
+      // scroll a lo ancho, y con el nombre corto en 390 y 412 px «Avisarle» en su mismo renglón. Una captura por ancho.
+      for (const ancho of ANCHOS_DE_CELULAR) {
+        await anchoDeCelular(page, vista, ancho);
+        const m = await medirListaDeTurnos(page, NOMBRE_CORTO);
+        await sleep(300);
+        await page.screenshot(join(outDir, `a-turnos-${ancho}-${tema}.png`));
+        check(`${quien} ${ancho}px: ninguna palabra de un nombre queda partida`, m.filas === N_A && m.partidas.length === 0, m.filas === N_A ? m.partidas.join(", ") || "ninguna" : `${m.filas} renglones`);
+        check(`${quien} ${ancho}px: «Avisarle» entero y de 44 px de alto o mas`, m.filas === N_A && m.avisarMal.length === 0 && m.altoMin >= 44, m.avisarMal.slice(0, 3).join(" / ") || `el mas bajo mide ${m.altoMin}px`);
+        check(`${quien} ${ancho}px: sin scroll horizontal en la lista de turnos`, m.scrollX <= 1, `${m.scrollX}px`);
+        // La caja del resultado recorta lo que desborda, así que el scroll de la página no lo ve: se mide fila por fila.
+        const rotos = [...m.desbordan.map((x) => `${x}: se sale`), ...m.tapados.map((x) => `${x}: debajo de «Avisarle»`), ...m.fuera.map((x) => `${x}: pasa la caja`)];
+        check(`${quien} ${ancho}px: ningun nombre se sale ni se mete debajo de «Avisarle», y ninguna fila pasa la caja`, m.filas === N_A && rotos.length === 0, rotos.slice(0, 3).join(" / ") || "bien");
+        const fueraDeRegla = [...m.partidosSinNecesidad.map((x) => `${x}: partido y entraba`), ...m.abajoSinNecesidad.map((x) => `${x}: «Avisarle» abajo y entraba`)];
+        check(`${quien} ${ancho}px: cada fila sigue la misma regla («Avisarle» al lado solo si el nombre entero entra)`, m.filas === N_A && fueraDeRegla.length === 0, fueraDeRegla.slice(0, 3).join(" / ") || "todas");
+        check(`${quien} ${ancho}px: en todas las filas el nombre empieza en el renglon de su numero`, m.filas === N_A && m.bajoElNumero.length === 0, m.bajoElNumero.slice(0, 3).map((x) => `${x}: debajo del numero`).join(" / ") || "todas");
+        // El final de la lista, del «Turno 10» en adelante: las filas de dos cifras son las que más ocupan.
+        await page.eval("(() => { const fs = document.querySelectorAll('#winner-cards .winner-turnos .winner-fila'); const u = fs[fs.length - 1]; if (u) u.scrollIntoView({ block: 'center' }); return true; })()");
+        await sleep(300);
+        await page.screenshot(join(outDir, `a-turnos-${ancho}-${tema}-fin.png`));
+        if (ancho >= 390) {
+          check(`${quien} ${ancho}px: con el nombre corto, «Avisarle» va en su mismo renglon`, m.mismoRenglonCorto === true, String(m.mismoRenglonCorto));
+        }
+      }
+      await anchoDeCelular(page, vista, vista.ancho);
+      await page.eval("scrollTo(0, 0); true");
+    }
 
     const grande = await page.eval("(() => { const b = document.getElementById('btn-grande'); return !!b && getComputedStyle(b).display !== 'none' && b.getBoundingClientRect().height > 0; })()");
     if (grande) {
@@ -441,6 +706,46 @@ async function casoA(browser, vista, tema, ctx) {
         check(`${quien}: Mostrar en grande trae el codigo QR`, qr.ok);
         await sleep(500);
         await page.screenshot(join(outDir, `a-grande-${vista.etiqueta}-${tema}.png`));
+        if (vista.movil) {
+          // Con el nombre largo entre doce turnos, la letra de la lista no baja de 22 px: ese nombre se parte por sus
+          // espacios antes que achicar a todos. Ninguna palabra queda partida a la mitad.
+          const g = JSON.parse(
+            await page.eval(`JSON.stringify((() => {
+              const ns = [...document.querySelectorAll('.pantalla .pantalla-lista .pantalla-nombre')];
+              const largo = ns.find((e) => e.textContent.trim() === ${JSON.stringify(NOMBRE_LARGO)});
+              if (largo) largo.scrollIntoView({ block: 'center' });
+              const letras = ns.map((e) => parseFloat(getComputedStyle(e).fontSize));
+              // En la pantalla grande una palabra no se parte (overflow-wrap: normal): lo que puede salir mal es que se
+              // salga de su caja, o que la lista quede más ancha que la pantalla.
+              const cuerpo = document.querySelector('.pantalla .pantalla-body');
+              const lista = document.querySelector('.pantalla .pantalla-ganadores');
+              const rg = document.createRange();
+              const renglones = (e) => { rg.selectNodeContents(e); return new Set([...rg.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size; };
+              return {
+                n: ns.length,
+                largo: !!largo,
+                letraMin: letras.length ? Math.min(...letras) : 0,
+                desbordan: ns.filter((e) => e.scrollWidth > e.clientWidth + 1).map((e) => e.textContent.trim()),
+                anchoDeMas: cuerpo && lista ? Math.round(lista.getBoundingClientRect().width - cuerpo.clientWidth) : 0,
+                // Los nombres de dos palabras cortas van en un renglón: solo el largo se parte por sus espacios.
+                partidosCortos: ns.filter((e) => e !== largo && renglones(e) > 1).map((e) => e.textContent.trim()),
+              };
+            })())`),
+          );
+          await sleep(400);
+          await page.screenshot(join(outDir, `a-grande-largo-${vista.etiqueta}-${tema}.png`));
+          check(
+            `${quien}: en Mostrar en grande, con el nombre largo, la letra de la lista no baja de 22 px`,
+            g.n === N_A && g.largo && g.letraMin >= 21.5,
+            `${g.n} nombres, letra ${g.letraMin}px${g.largo ? "" : ", no esta el nombre largo"}`,
+          );
+          check(
+            `${quien}: en Mostrar en grande ningun nombre se sale de su caja ni la lista de la pantalla`,
+            g.n === N_A && g.desbordan.length === 0 && g.anchoDeMas <= 1,
+            [g.desbordan.join(", "), g.anchoDeMas > 1 ? `la lista mide ${g.anchoDeMas}px de mas` : ""].filter(Boolean).join(" / ") || "ninguno",
+          );
+          check(`${quien}: en Mostrar en grande, con el nombre largo, solo ese nombre se parte`, g.n === N_A && g.partidosCortos.length === 0, g.partidosCortos.join(", ") || "solo el largo");
+        }
         await page.eval("document.querySelector('.pantalla [data-cerrar]')?.click(); true");
         await page.waitFor("!document.querySelector('.pantalla')", 8000);
       }
@@ -459,15 +764,15 @@ async function casoA(browser, vista, tema, ctx) {
     const ver = await browser.open("about:blank");
     try {
       await ver.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-      await ver.send("Page.navigate", { url: new URL(enlace, base).toString() });
+      await ver.send("Page.navigate", { url: conTema(enlace, tema) });
       await ver.waitFor("document.readyState === 'complete'", 20000);
       const veredicto = await esperarVeredicto(ver);
       check(`${quien}: la verificacion mostro su veredicto`, !!veredicto, `"${veredicto}"`);
       const titulo = String(await ver.eval("(document.getElementById('v-result-t') || {}).textContent || ''"));
       check(`${quien}: la verificacion muestra el orden como orden`, /El orden de los turnos|The turn order/.test(titulo), `"${titulo}"`);
       const vNombres = JSON.parse(await ver.eval("JSON.stringify([...document.querySelectorAll('#v-winners .winner-name')].map((el) => el.textContent.trim()))"));
-      const mismoOrden = vNombres.length === 6 && vNombres.every((x, k) => x === nombresResultado[k]);
-      check(`${quien}: la verificacion trae los seis en el mismo orden`, mismoOrden, vNombres.join(" / "));
+      const mismoOrden = vNombres.length === N_A && vNombres.every((x, k) => x === nombresResultado[k]);
+      check(`${quien}: la verificacion trae los ${N_A} en el mismo orden`, mismoOrden, vNombres.join(" / "));
       await ver.screenshot(join(outDir, `a-verificacion-${vista.etiqueta}-${tema}.png`));
       check(`${quien}: la verificacion no trae excepciones`, ver.exceptions.length === 0, ver.exceptions.slice(0, 2).join(" | "));
     } finally {
@@ -534,7 +839,7 @@ async function casoB(browser, vista, tema, ctx) {
     const ver = await browser.open("about:blank");
     try {
       await ver.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-      await ver.send("Page.navigate", { url: new URL(enlace, base).toString() });
+      await ver.send("Page.navigate", { url: conTema(enlace, tema) });
       await ver.waitFor("document.readyState === 'complete'", 20000);
       const veredicto = await esperarVeredicto(ver);
       check(`${quien}: la verificacion mostro su veredicto`, !!veredicto, `"${veredicto}"`);
@@ -580,6 +885,10 @@ async function casoC(browser, vista, tema, ctx) {
     const dice = [cuentas.cuadro, cuentas.resumen, cuentas.barra].filter((t) => /4 personas/i.test(t) && /7 participaciones/i.test(t));
     check(`${quien}: la cuenta dice 4 personas, 7 participaciones`, dice.length >= 2, [cuentas.cuadro, cuentas.resumen].map((t) => `"${t.trim().slice(0, 60)}"`).join(" / "));
     checkCuentasCoinciden(quien, cuentas);
+    if (vista.movil) {
+      const barraC = await barraEntra(page);
+      check(`${quien}: la frase de la barra entra en su caja`, barraC === "entra", barraC);
+    }
     await page.screenshot(join(outDir, `c-repartida-${vista.etiqueta}-${tema}.png`));
 
     await ponerGanadores(page, 3);
@@ -589,10 +898,13 @@ async function casoC(browser, vista, tema, ctx) {
     await sellar(page);
     await quieto(page);
     await page.screenshot(join(outDir, `c-sellada-${vista.etiqueta}-${tema}.png`));
+    const cabezaC = String(await page.eval("(document.getElementById('rec-head') || {}).textContent || ''"));
+    check(`${quien}: la cabecera del selector cuenta 4 personas, no 7`, /4 personas/i.test(cabezaC) && !/7 personas/i.test(cabezaC), cabezaC.trim().slice(0, 80));
 
     await sortear(page);
     const res = await leerResultado(page);
     check(`${quien}: salieron tres ganadores`, res.nombres.length === 3, res.nombres.join(" / "));
+    check(`${quien}: ninguna tarjeta ni fila trae la marca de la linea sellada`, sinMarcaDeLinea(res.nombres), res.nombres.join(" / "));
     // Los renglones traen la linea sellada con su sufijo («Ana Quispe (2/3)»): se cuenta por persona, y el aviso es el
     // que escribe la app, con tilde («salió 2 veces»). Con esta lista alguien repite en casi la mitad de los sorteos;
     // si en esta corrida nadie repitio, solo se comprueba que no se invente un aviso.
@@ -615,7 +927,7 @@ async function casoC(browser, vista, tema, ctx) {
     const ver = await browser.open("about:blank");
     try {
       await ver.send("Emulation.setDeviceMetricsOverride", { width: vista.ancho, height: vista.alto, deviceScaleFactor: vista.dpr, mobile: vista.movil, screenWidth: vista.ancho, screenHeight: vista.alto });
-      await ver.send("Page.navigate", { url: new URL(enlace, base).toString() });
+      await ver.send("Page.navigate", { url: conTema(enlace, tema) });
       await ver.waitFor("document.readyState === 'complete'", 20000);
       const veredicto = await esperarVeredicto(ver);
       check(`${quien}: la verificacion mostro su veredicto`, !!veredicto, `"${veredicto}"`);
@@ -680,9 +992,52 @@ async function casoD(browser, vista, tema, ctx) {
     await escribirLista(page, "Ana Quispe\nBeto Rojas\nCarla Suarez");
     const abrio = await page.waitFor("document.getElementById('btn-varias') && getComputedStyle(document.getElementById('btn-varias')).display !== 'none'", 10000);
     check(`${quien}: se ve el boton para poner mas de una participacion`, abrio.ok);
+    const aire = await aireBotonEnlace(page);
+    check(`${quien}: entre el boton y el enlace del stand hay 12 px o mas`, aire === "oculto" || (/^\d+$/.test(aire) && Number(aire) >= 12), `${aire}px`);
+    const cerrado = await medidasDelPanel(page);
     await page.eval("document.getElementById('btn-varias').click(); true");
     const panel = await page.waitFor("document.querySelectorAll('.varias-mas').length === 3", 10000);
     check(`${quien}: el panel trae una fila por persona`, panel.ok);
+    // Con el panel abierto: 12 px entre el botón y el panel (no 24, sumando los dos márgenes), y lo de abajo no baja
+    // más de lo que mide el panel (con los márgenes sumados bajaría 12 px de más).
+    await sleep(400);
+    const abierto = await medidasDelPanel(page);
+    if (cerrado && abierto && abierto.panelArriba !== null) {
+      const aireAbierto = Math.round(abierto.panelArriba - abierto.botonAbajo);
+      check(`${quien}: con el panel abierto, entre el boton y el panel hay 12 px`, Math.abs(aireAbierto - 12) <= 1, `${aireAbierto}px`);
+      const salto = Math.round(abierto.enlaceArriba - cerrado.enlaceArriba);
+      const mide = Math.round(abierto.panelAlto);
+      check(`${quien}: al abrir el panel, lo de abajo no baja mas de lo que mide el panel`, salto <= mide + 1, `bajo ${salto}px, el panel mide ${mide}px`);
+      await page.eval("document.getElementById('btn-varias').scrollIntoView({ block: 'start' }); scrollBy(0, -90); true");
+      await sleep(300);
+      await page.screenshot(join(outDir, `d-panel-abierto-${vista.etiqueta}-${tema}.png`));
+      if (vista.movil) {
+        // A 320 px y con un nombre largo en la fila de Carla (solo en la pantalla, la lista no cambia): ninguna palabra
+        // del panel se parte, y los contadores no se salen de la fila.
+        await anchoDeCelular(page, vista, 320);
+        const p = JSON.parse(
+          await page.eval(`JSON.stringify((() => {
+            const n = document.querySelectorAll('.varias-nombre')[2];
+            const antes = n ? n.textContent : '';
+            if (n) n.textContent = ${JSON.stringify(NOMBRE_LARGO)};
+            document.getElementById('btn-varias').scrollIntoView({ block: 'start' });
+            const partidas = ${PALABRAS_PARTIDAS(".varias-nombre")};
+            const fuera = [...document.querySelectorAll('.varias-fila')].filter((f) => {
+              const c = f.querySelector('.varias-control');
+              return c && c.getBoundingClientRect().right > f.getBoundingClientRect().right + 1;
+            }).length;
+            return { partidas, fuera, antes, hay: !!n };
+          })())`),
+        );
+        await sleep(300);
+        await page.screenshot(join(outDir, `d-panel-320-${tema}.png`));
+        check(`${quien} 320px: en el panel, con un nombre largo, ninguna palabra se parte`, p.hay && p.partidas.length === 0 && p.fuera === 0, p.partidas.join(", ") || (p.fuera ? `${p.fuera} filas con los contadores afuera` : "ninguna"));
+        await page.eval(`(() => { const n = document.querySelectorAll('.varias-nombre')[2]; if (n) n.textContent = ${JSON.stringify(p.antes)}; return true; })()`);
+        await anchoDeCelular(page, vista, vista.ancho);
+      }
+    } else {
+      check(`${quien}: con el panel abierto, entre el boton y el panel hay 12 px`, false, "no se pudo medir el panel");
+    }
     for (const fila of [0, 0, 2]) {
       await page.eval(`document.querySelectorAll('.varias-mas')[${fila}].click(); true`);
       await sleep(500);
@@ -692,6 +1047,10 @@ async function casoD(browser, vista, tema, ctx) {
     const cuentas = await leerCuentas(page);
     check(`${quien}: la cuenta dice 3 personas, 6 participaciones`, /3 personas/i.test(cuentas.cuadro) && /6 participaciones/i.test(cuentas.cuadro), cuentas.cuadro.trim());
     checkCuentasCoinciden(quien, cuentas);
+    if (vista.movil) {
+      const barraD = await barraEntra(page);
+      check(`${quien}: la frase de la barra entra en su caja`, barraD === "entra", barraD);
+    }
     const cuadro = String(await page.eval("document.getElementById('ta').value"));
     const esperado = ["Ana Quispe (1/3)", "Ana Quispe (2/3)", "Ana Quispe (3/3)", "Beto Rojas", "Carla Suarez (1/2)", "Carla Suarez (2/2)"];
     check(`${quien}: el cuadro quedo reescrito con las participaciones`, JSON.stringify(cuadro.split("\n")) === JSON.stringify(esperado), cuadro.replaceAll("\n", " / "));
@@ -702,6 +1061,7 @@ async function casoD(browser, vista, tema, ctx) {
     await sortear(page);
     const res = await leerResultado(page);
     check(`${quien}: el sorteo salio con un resultado`, res.nombres.length === 1, res.nombres.join(" / "));
+    check(`${quien}: ninguna tarjeta ni fila trae la marca de la linea sellada`, sinMarcaDeLinea(res.nombres), res.nombres.join(" / "));
     check(`${quien}: sin scroll horizontal en el resultado`, (await sinScrollX(page)) <= 1, `${await sinScrollX(page)}px`);
     await page.screenshot(join(outDir, `d-resultado-${vista.etiqueta}-${tema}.png`));
     check(`${quien}: sin excepciones de la pagina`, page.exceptions.length === 0, page.exceptions.slice(0, 2).join(" | "));
