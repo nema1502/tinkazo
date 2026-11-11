@@ -1,9 +1,10 @@
 import { chooseLang, getLang, onLangChange, t } from "../i18n";
 import { altaLibre } from "../stellar/alta-config";
-import type { CanjeDeCupon, ErrorDeAlta, EstadoDeAlta, ResultadoDeAlta } from "../stellar/alta-api";
+import { type CanjeDeCupon, type ErrorDeAlta, ESPERA_MS, type EstadoDeAlta, type ResultadoDeAlta } from "../stellar/alta-api";
 import { network } from "../stellar/config";
 import { mostrar, normalizar } from "../stellar/cupon-codigo";
 import { esDeRed } from "../stellar/errores";
+import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
 import type { EstadoOficial, ResultadoDeActivar } from "../stellar/wallet-pollar";
 import { ocultarCorreo } from "./cuenta-estado";
 import {
@@ -207,7 +208,14 @@ const LENTO_MS = 8_000;
 const CADA_LECTURA_MS = 4_000;
 const SONDEO_SIN_PEDIDO_MS = 20_000;
 const ESPERA_ACTIVACION_MS = 60_000;
+/** Una lectura de Pollar (`estadoOficial`): la que se repite al esperar el pedido de crear la cuenta y la activación. */
 const TOPE_LECTURA_MS = 10_000;
+/**
+ * Una lectura del servidor de las altas (`acceso.estado()`): espera el token de la sesión (`TOPE_TOKEN_MS`) y después el
+ * pedido (`ESPERA_MS`). Su tope va un segundo detrás de los dos, así siempre deciden primero los de adentro: con la wifi
+ * lenta de un stand, un token de 7 segundos y un pedido de 4 terminan bien y no dejan «Probar de nuevo».
+ */
+export const TOPE_LECTURA_SERVIDOR_MS = TOPE_TOKEN_MS + ESPERA_MS + 1_000;
 /** Lo más que espera «Cerrar sesión» antes de cerrar el paso igual. */
 export const TOPE_CERRAR_MS = 12_000;
 /** Un toque en la principal no cuenta si cambió de acción hace menos que esto (o si el paso recién se abrió). */
@@ -960,7 +968,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     pintar();
     let r: ResultadoDeAlta<EstadoDeAlta>;
     try {
-      r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
     } catch {
       r = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
     }
@@ -978,7 +986,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   async function releerElAccesoTrasActivar(): Promise<void> {
     if (!acceso) return;
     try {
-      const r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      const r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
       if (r.ok && !cerrado && !acc.cadena) {
         aplicarAcceso(r);
         pintar();
@@ -1115,7 +1123,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (!acceso) throw new Error("sin-acceso");
     let e: ResultadoDeAlta<EstadoDeAlta>;
     try {
-      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
     } catch {
       throw new Error("sin-acceso");
     }
@@ -1180,7 +1188,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       }
       correr("revisando");
       pintar();
-      const e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      const e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
       if (cerrado) return;
       if (!e.ok) {
         if (e.clave === "clErrSesion") st.falla = "sesion";

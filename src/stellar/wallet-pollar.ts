@@ -1,7 +1,7 @@
 import type { AuthOpenContext, CosignRequest, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import { errorKey, esDeRed } from "./errores";
-import { LEGACY_POLLAR_INTENT_KEY, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
+import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
@@ -471,11 +471,8 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Cuánto se espera, al cerrar sesión, a sacar este navegador de la cuenta, y a una confirmación que esté en curso. */
 export const TOPE_SACAR_NAVEGADOR_MS = 10_000;
 export const TOPE_CONFIRMACION_EN_CURSO_MS = 20_000;
-/**
- * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`). En un stand con
- * la red lenta, verificarla puede tardar varios segundos, y alguien con un cupón válido no tiene que ver «probá de nuevo».
- */
-export const TOPE_TOKEN_MS = 8_000;
+/** Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`): `pollar-config.ts`. */
+export { TOPE_TOKEN_MS };
 
 /**
  * ¿Se puede usar el desbloqueo de este celular o compu (huella, cara o clave) para la cuenta? Hace falta que el navegador

@@ -1,9 +1,22 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLang, t } from "../i18n";
-import type { CanjeDeCupon, ErrorDeAlta, EstadoDeAlta, ResultadoDeAlta } from "../stellar/alta-api";
+import { type CanjeDeCupon, type ErrorDeAlta, ESPERA_MS, type EstadoDeAlta, type ResultadoDeAlta } from "../stellar/alta-api";
+import { TOPE_TOKEN_MS } from "../stellar/pollar-config";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
-import { type AccesoDelPaso, type CuentaDelPaso, GUARDA_DE_TOQUE_MS, PEDIDO_CADA_MS, PEDIDO_VECES, type OpcionesDelPaso, abrirCuentaLista, aceptarClicsDePrueba, formatoDelCupon } from "./cuenta-lista";
+import {
+  type AccesoDelPaso,
+  type CuentaDelPaso,
+  GUARDA_DE_TOQUE_MS,
+  PEDIDO_CADA_MS,
+  PEDIDO_VECES,
+  type OpcionesDelPaso,
+  TOPE_LECTURA_SERVIDOR_MS,
+  abrirCuentaLista,
+  aceptarClicsDePrueba,
+  formatoDelCupon,
+} from "./cuenta-lista";
+import { accesoDelServidor } from "./cuenta-lista-acceso";
 
 /**
  * La caja del acceso de «Dejá tu cuenta lista» (W8 del cobro por uso), en jsdom, con un servidor de las altas y una
@@ -79,6 +92,38 @@ function cuentaFalsa(inicial: Partial<Est> = {}, partes: Partial<CuentaDelPaso> 
 }
 
 const salidasFalsas = () => ({ cerrarSesion: vi.fn(async () => undefined), pasarAPrueba: vi.fn(), puedePasarAPrueba: vi.fn(() => true), entrarDeNuevo: vi.fn() });
+
+/**
+ * El acceso de verdad (`accesoDelServidor`) detrás de la wifi lenta de un stand: el token de la sesión tarda `tokenMs` y
+ * cada pedido al portero, `pedidoMs` (se pueden cambiar a mitad de camino). El portero es de mentira y no hay red; el
+ * cupo de la línea no se pregunta.
+ */
+function porteroLento(tokenMs: number, pedidoMs: number) {
+  const s = { acceso: "ninguno" as EstadoDeAlta["acceso"], guardado: CODIGO as string | null, rutas: [] as string[], tokenMs, pedidoMs };
+  const cuerpoDe = (ruta: string): unknown => {
+    if (ruta.endsWith("/v1/alta/cupon")) {
+      s.acceso = "cupon";
+      return { ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: null }, sigue: "activar" };
+    }
+    return { acceso: s.acceso, cuenta: "GAAA", abierta: false, pedido: null, sorteos: { quedan: s.acceso === "ninguno" ? 0 : 3, proximoVence: null }, orden: null, fondeo: "inmediato" };
+  };
+  const pedido = (url: string): Promise<Response> => {
+    s.rutas.push(url);
+    return new Promise((r) => setTimeout(() => r({ status: 200, json: async () => cuerpoDe(url) } as unknown as Response), s.pedidoMs));
+  };
+  const sesion = { token: () => new Promise<string>((r) => setTimeout(() => r("token-de-la-sesion-de-prueba-0123456789"), s.tokenMs)), sesionViva: () => true, cuenta: () => "GAAA" };
+  const real = accesoDelServidor(sesion, { url: "https://pm.prueba.invalid", fetch: pedido as unknown as typeof fetch });
+  const acceso: AccesoDelPaso = {
+    estado: () => real.estado(),
+    canjear: (c) => real.canjear(c),
+    cuenta: () => real.cuenta(),
+    cuponGuardado: () => s.guardado,
+    guardarCupon: (c) => void (s.guardado = c),
+    olvidarCupon: () => void (s.guardado = null),
+    refrescarCupo: vi.fn(),
+  };
+  return { s, acceso };
+}
 
 const raiz = (): HTMLElement | null => document.querySelector(".cuenta-lista");
 const principal = (): HTMLButtonElement => raiz()?.querySelector(".cl-principal") as HTMLButtonElement;
@@ -787,5 +832,72 @@ describe("lo que no se negocia", () => {
     await pasa();
     expect(salidas.pasarAPrueba).toHaveBeenCalled();
     expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
+  });
+});
+
+describe("con la wifi lenta de un stand", () => {
+  /** Abre el paso con el portero lento, sin esperar nada más que lo justo para pintar. */
+  function abrirLento(p: ReturnType<typeof porteroLento>, cf = cuentaFalsa()) {
+    void abrirCuentaLista(cf.cuenta, salidasFalsas(), { para: "entrada", correo: "ana@gmail.com", celular: true, inicial: cf.estado.est, acceso: p.acceso });
+    return cf;
+  }
+
+  it("al abrir, el token tarda 7 s y el pedido 4 s: se sabe el acceso, sin «Probar de nuevo»", async () => {
+    const p = porteroLento(7_000, 4_000);
+    p.s.guardado = null;
+    abrirLento(p);
+    await pasa(10_500);
+    // Pasados los 10 s, la lectura sigue: los que deciden son los topes de adentro (el del token y el del pedido).
+    expect(principal().textContent).toBe(t("clRevisando"));
+    expect(alerta()).toBe("");
+    await pasa(1_000);
+    expect(alerta()).toBe("");
+    expect(principal().textContent).toBe(t("altaTengoCupon"));
+    expect(visibles().some((b) => b.textContent === t("clProbarDeNuevo"))).toBe(false);
+  });
+
+  it("en la cadena del cupón, con la wifi que se pone lenta: a los 8 s dice que tarda, y el acceso de antes del voto llega a tiempo", async () => {
+    const p = porteroLento(0, 0);
+    const cf = abrirLento(p);
+    await pasa();
+    expect(principal().textContent).toBe(t("altaActivarConCupon"));
+    // Desde acá, cada token tarda 7 s y cada pedido, 4.
+    p.s.tokenMs = 7_000;
+    p.s.pedidoMs = 4_000;
+    principal().click();
+    // El canje: 7 s del token y 4 del pedido.
+    await pasa(11_100);
+    expect(p.s.rutas.filter((r) => r.endsWith("/v1/alta/cupon"))).toHaveLength(1);
+    // El pedido de crear la cuenta ya está: antes del voto, el acceso de esta sesión, otra vez con la misma demora.
+    await pasa(8_100);
+    expect(raiz()?.querySelector(".cl-estado")?.textContent).toBe(t("clActivarLento"));
+    expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
+    await pasa(3_000);
+    expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
+    // Y la lectura de después de activar, igual.
+    await pasa(11_100);
+    expect(alerta()).toBe("");
+    expect(raiz()?.querySelector('[data-parte="activar"]')?.getAttribute("data-estado")).toBe("lista");
+  });
+
+  it("el tope de una lectura del servidor sale de los dos de adentro, un segundo detrás", () => {
+    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(TOPE_TOKEN_MS + ESPERA_MS + 1_000);
+    expect(TOPE_LECTURA_SERVIDOR_MS).toBe(17_000);
+  });
+
+  it("una lectura del servidor que no contesta nunca se corta igual, y deja «Probar de nuevo»", async () => {
+    const srv = servidorFalso();
+    srv.s.estadoImpl = () => new Promise<never>(() => undefined);
+    await abrir({ acceso: srv });
+    await pasa(TOPE_LECTURA_SERVIDOR_MS - 1_000);
+    expect(principal().textContent).toBe(t("clRevisando"));
+    await pasa(1_100);
+    expect(alerta()).toContain(t("altaErrServicio"));
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+    salidasALaVista();
+    srv.s.estadoImpl = null;
+    principal().click();
+    await pasa();
+    expect(principal().textContent).toBe(t("altaTengoCupon"));
   });
 });
