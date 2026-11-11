@@ -471,6 +471,11 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
 /** Cuánto se espera, al cerrar sesión, a sacar este navegador de la cuenta, y a una confirmación que esté en curso. */
 export const TOPE_SACAR_NAVEGADOR_MS = 10_000;
 export const TOPE_CONFIRMACION_EN_CURSO_MS = 20_000;
+/**
+ * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion`). En un stand con
+ * la red lenta, verificarla puede tardar varios segundos, y alguien con un cupón válido no tiene que ver «probá de nuevo».
+ */
+export const TOPE_TOKEN_MS = 8_000;
 
 /**
  * ¿Se puede usar el desbloqueo de este celular o compu (huella, cara o clave) para la cuenta? Hace falta que el navegador
@@ -1210,6 +1215,58 @@ class PollarWallet implements SubmittingWallet {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * El token de la sesión de Pollar, solo con la sesión verificada por Pollar (`verified: true`): una sesión que el kit
+   * retomó de lo guardado y todavía no revalidó no sirve. Si no está verificada, espera hasta `tope` a que lo esté; si
+   * no, `null`. Es lo que pide el servidor de las altas (`alta-api.ts`) para saber quién es. No se guarda ni se anota:
+   * se pide cada vez, y nunca va en una dirección, en la consola ni en un mensaje de error. Sin token no se le pregunta
+   * nada al servidor. No toca la firma ni lo que se aprueba: solo lee la sesión.
+   */
+  tokenDeSesion(tope = TOPE_TOKEN_MS): Promise<string | null> {
+    const client = this.#client;
+    if (!client) return Promise.resolve(null);
+    const deLaSesion = (s: unknown): string | null => {
+      const a = s as { step?: unknown; verified?: unknown; session?: { token?: { accessToken?: unknown } } } | null;
+      if (!a || a.step !== "authenticated" || a.verified !== true) return null;
+      const tk = a.session?.token?.accessToken;
+      return typeof tk === "string" && tk.trim() !== "" ? tk : null;
+    };
+    let ya: string | null = null;
+    try {
+      ya = deLaSesion(client.getAuthState());
+    } catch {
+      return Promise.resolve(null);
+    }
+    if (ya) return Promise.resolve(ya);
+    if (typeof client.onAuthStateChange !== "function") return Promise.resolve(null);
+    return new Promise<string | null>((resolve) => {
+      let listo = false;
+      let soltar: (() => void) | null = null;
+      const terminar = (v: string | null): void => {
+        if (listo) return;
+        listo = true;
+        clearTimeout(reloj);
+        try {
+          soltar?.();
+        } catch {
+          /* ya suelto */
+        }
+        resolve(v);
+      };
+      const reloj = setTimeout(() => terminar(null), tope);
+      try {
+        // El kit repite el estado al suscribirse: puede contestar antes de que `soltar` exista.
+        soltar = client.onAuthStateChange((s) => {
+          const tk = deLaSesion(s);
+          if (tk) terminar(tk);
+        });
+        if (listo) soltar();
+      } catch {
+        terminar(null);
+      }
+    });
   }
 
   /* ------------------------------------------------ otro celular u otra compu (sumar este navegador a la cuenta) */

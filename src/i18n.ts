@@ -5,6 +5,13 @@ import { TEXTOS_EQUIPOS } from "./equipos/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
+import { TEXTOS_ALTA } from "./alta-textos";
+import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
+import { altaPagoActivo } from "./stellar/alta-config";
+import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
+import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
+import { ALTA_EN_EL_BUILD, TEXTOS_PRECIOS_CON_CUPON } from "./alta-textos-precios";
+import { TEXTOS_CON_CUPON } from "./alta-textos-con-cupon";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
 // las páginas de lectura y verificar lo usan con sus pocos textos.
@@ -5554,10 +5561,32 @@ Object.assign(T.en, TEXTOS_EQUIPOS.en);
 // Los premios pagados y el panel de ganadores (src/ui/panel-ganadores.ts) tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_PAGOS.es);
 Object.assign(T.en, TEXTOS_PAGOS.en);
+// El acceso al modo Oficial con cupón y lo que queda de sorteos oficiales tienen sus textos aparte (`alta-textos.ts`).
+Object.assign(T.es, TEXTOS_ALTA.es);
+Object.assign(T.en, TEXTOS_ALTA.en);
+// Mientras la compra de sorteos esté apagada no hay dónde comprar: ningún texto lo ofrece (`alta-textos-sin-pago.ts`).
+if (!altaPagoActivo()) {
+  Object.assign(T.es, TEXTOS_ALTA_SIN_PAGO.es);
+  Object.assign(T.en, TEXTOS_ALTA_SIN_PAGO.en);
+}
+Object.assign(T.es, TEXTOS_ALTA_CUENTA.es);
+Object.assign(T.en, TEXTOS_ALTA_CUENTA.en);
+Object.assign(T.es, TEXTOS_ALTA_PASO.es);
+Object.assign(T.en, TEXTOS_ALTA_PASO.en);
+// La frase de precios.html cuando el modo Oficial se abre con cupones: solo en un build con VITE_ALTA=1 (`alta-textos-precios.ts`).
+if (ALTA_EN_EL_BUILD) {
+  Object.assign(T.es, TEXTOS_PRECIOS_CON_CUPON.es);
+  Object.assign(T.en, TEXTOS_PRECIOS_CON_CUPON.en);
+}
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre (`i18n-modo-oficial.ts`).
 if (HAY_MODO_OFICIAL) {
   Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
   Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
+}
+// Con el acceso por cupón en el build, quién paga en Oficial y qué guarda el servicio al canjear (`alta-textos-con-cupon.ts`).
+if (ALTA_EN_EL_BUILD && HAY_MODO_OFICIAL) {
+  Object.assign(T.es, TEXTOS_CON_CUPON.es);
+  Object.assign(T.en, TEXTOS_CON_CUPON.en);
 }
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los

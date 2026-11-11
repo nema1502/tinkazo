@@ -208,6 +208,16 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
   ]);
   const wallet = activeWallet();
   if (!submitsItself(wallet)) return null;
+  const cobro = await import("../stellar/cobro-oficial");
+  // En la red principal con una cuenta de Google o de correo, con o sin banderas (`cobro-oficial.ts`), "pagar con mi
+  // cuenta" no existe: Pollar firmaría sin el portero y esa firma le cuesta a Tinkazo sin que nadie la cuente. Se corta
+  // acá, antes de pedir ninguna firma.
+  if (opciones.pagarConMiCuenta && cobro.redPrincipalConPollar({ billetera: wallet })) throw new (await import("../stellar/patrocinador")).ErrorPortero("cerrado", 0, { detalle: "pago-propio" });
+  // Ahí, además, ninguna firma sin el acceso confirmado por el portero: el sello, con sorteos oficiales que alcancen; el
+  // sorteo, con el acceso. Vale con o sin el cobro por uso prendido en el build: con él la pantalla ya lo miró antes
+  // (`sin-sorteos.ts`) y esto es el candado por si se llega por otro camino; sin él, es lo único entre el botón y la firma.
+  // Sin respuesta o sin lo oficial, cerrado. Lanza el no del portero.
+  if (cobro.redPrincipalConPollar({ billetera: wallet })) await (await import("../stellar/acceso-oficial")).exigirAcceso(wallet.address, intento ? "sello" : "sorteo", intento?.numWinners);
   // El SDK mira la simulación antes de firmar y lanza si el contrato dijo que no
   // ("Transaction simulation failed: Error(Contract, #5)": la ronda quedó
   // demasiado cerca). Esta wallet recibe el XDR sin pasar por ahí, y

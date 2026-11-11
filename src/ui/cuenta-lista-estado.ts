@@ -10,16 +10,54 @@ import type { EstadoDeActivacion, EstadoDeProteccionOficial } from "../stellar/w
  * - una sola acción principal, y nunca la del final si las dos partes no están listas;
  * - con otro celular u otra compu, confirmar que es la persona va primero, y por correo;
  * - en la compu la principal de proteger es el correo, y en el celular con desbloqueo, el desbloqueo;
- * - las dos salidas («Pasar a Prueba» y «Cerrar sesión») a la vista hasta el final, y nunca apagadas por algo que corre.
+ * - las dos salidas («Pasar a Prueba» y «Cerrar sesión») a la vista hasta el final, y nunca apagadas por algo que corre;
+ * - en la red principal, «Activar» solo con el acceso confirmado por el servidor (un cupón, un pago o un alta a mano), o
+ *   en el build del plan B1 (`VITE_ALTA_LIBRE=1`): cada activación le cuesta a Tinkazo. Sin el acceso, la parte 1 es la
+ *   caja del cupón, aunque la cuenta ya esté activada y protegida.
  */
+
+/**
+ * De dónde sale el permiso de activar (W3 del cobro por uso).
+ * - `libre`: como siempre. Fuera de la red principal (donde el paso ni se abre) y en el build del plan B1.
+ * - `cerrado`: la red principal sin el acceso por cupón en el build. No hay a quién preguntarle, así que no se activa.
+ * - `servidor`: la red principal con el acceso por cupón. Se activa solo con el acceso que confirma el servidor.
+ */
+export type ModoDelAcceso = "libre" | "cerrado" | "servidor";
+
+/** Lo que el paso sabe del acceso al modo Oficial y del cupón. Sin esto, `libre`: el paso de siempre. */
+export interface AccesoEnLaVista {
+  modo: ModoDelAcceso;
+  /** Con servidor: preguntándole, sin acceso, con acceso, o no contestó. */
+  estado: "revisando" | "ninguno" | "con" | "error";
+  /** Por qué tiene acceso: cambia el texto de la activación. */
+  por: "cupon" | "pago" | "admin" | null;
+  /** Se abrió para usar un cupón aunque ya tenga acceso (se quedó sin sorteos oficiales). */
+  pideCupon: boolean;
+  /** El cupón listo para usar (el del enlace, o el que se escribió), como se muestra, o `null`. */
+  cuponEnMano: string | null;
+  /** Se ve el campo para escribir el cupón. */
+  escribiendo: boolean;
+  /** Lo escrito en el campo es un cupón entero (12 letras y números). */
+  campoOk: boolean;
+  /** El último error del servidor (al preguntar el acceso o al canjear), con sus datos. */
+  error: Texto | null;
+  /** Qué arregla ese error: volver a probar, entrar de nuevo, o nada desde acá (se revisa a mano). */
+  arreglo: "probar" | "entrar" | "ninguno";
+  /** El cupón ya se canjeó en este paso: cuántos sorteos oficiales trajo. `null` si no se canjeó. */
+  canjeado: number | null;
+  /** Corre lo que sigue al canje: esperar el pedido de crear la cuenta, activarla y volver a preguntar. */
+  cadena: boolean;
+  /** Algo de lo que sigue al canje no salió: el cupón quedó en la cuenta y se puede seguir sin volver a canjearlo. */
+  fallaTrasCanje: boolean;
+}
 
 /** Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar o antes de sortear. */
 export type Para = "entrada" | "entrada-con-lista" | "sello" | "sorteo";
 
 export type Parte = "activar" | "proteger";
 
-/** Lo que está corriendo ahora. `esperando`: el voto salió y la cuenta todavía no aparece. */
-export type Corre = "revisando" | "activando" | "esperando" | "desbloqueo" | "mandando" | "confirmando" | "cerrando" | null;
+/** Lo que está corriendo ahora. `esperando`: el voto salió y la cuenta todavía no aparece. `canjeando`: el cupón. */
+export type Corre = "revisando" | "activando" | "esperando" | "desbloqueo" | "mandando" | "confirmando" | "cerrando" | "canjeando" | null;
 
 /** El último error, en palabras del paso. */
 export type Falla =
@@ -63,7 +101,19 @@ export type Accion =
   | "seguir"
   | "sellar"
   | "sortear"
-  | "volver";
+  | "volver"
+  /** «Tengo un cupón»: abre el campo. */
+  | "tengo-cupon"
+  /** «Activar con mi cupón» (o «Usar un cupón», con la cuenta ya activada): canjea y sigue. */
+  | "usar-cupon"
+  /** «Usar otro cupón»: el campo, con el que había guardado a un lado. */
+  | "otro-cupon"
+  /** «Volver» desde el campo del cupón. */
+  | "volver-cupon"
+  /** «Probar de nuevo» cuando no se supo el acceso: solo vuelve a preguntar. */
+  | "leer-acceso"
+  /** «Probar de nuevo» después del canje: sigue desde lo que no salió, sin volver a canjear. */
+  | "seguir-cupon";
 
 /** Un texto: la clave y lo que va en sus huecos (`{mail}`, `{s}`). */
 export interface Texto {
@@ -102,11 +152,13 @@ export interface CajaVista {
   nota: Texto | null;
   /** El error de esta caja, con `role="alert"`. */
   error: Texto[] | null;
-  /** El campo que va en la caja: el correo escrito a mano o el código. */
-  campo: "correo" | "codigo" | null;
+  /** El campo que va en la caja: el correo escrito a mano, el código o el cupón. */
+  campo: "correo" | "codigo" | "cupon" | null;
   secundarios: Secundario[];
   /** Corre algo en esta caja (`aria-busy`). */
   ocupada: boolean;
+  /** Lo que va al final de la caja, debajo de todo (`altaNoTengo`). */
+  cierre?: Texto[];
 }
 
 export interface Vista {
@@ -163,13 +215,62 @@ export interface EntradaVista {
   puedePasarAPrueba: boolean;
   /** Este navegador todavía no confirmó su primer sello en Oficial. */
   primerOficialPendiente: boolean;
+  /** El acceso al modo Oficial (el cobro por uso). Sin decirlo, `libre`: el paso de siempre. */
+  acceso?: AccesoEnLaVista;
+}
+
+/** El acceso de siempre: activar no pide nada. */
+export const ACCESO_LIBRE: Readonly<AccesoEnLaVista> = Object.freeze({
+  modo: "libre",
+  estado: "con",
+  por: null,
+  pideCupon: false,
+  cuponEnMano: null,
+  escribiendo: false,
+  campoOk: false,
+  error: null,
+  arreglo: "probar",
+  canjeado: null,
+  cadena: false,
+  fallaTrasCanje: false,
+});
+
+const accesoDe = (e: Pick<EntradaVista, "acceso">): AccesoEnLaVista => e.acceso ?? ACCESO_LIBRE;
+
+/**
+ * Falta el acceso: la parte 1 es la caja del cupón, o lo que pasa con él. Con servidor y sin acceso confirmado, aunque
+ * la cuenta ya esté activada y protegida; y también si el paso se abrió para usar un cupón y todavía no se usó.
+ */
+export function faltaElAcceso(e: Pick<EntradaVista, "acceso" | "corre">): boolean {
+  const a = accesoDe(e);
+  if (a.modo !== "servidor") return false;
+  if (a.fallaTrasCanje || a.cadena || e.corre === "canjeando") return true;
+  return a.estado !== "con" || (a.pideCupon && a.canjeado === null);
+}
+
+/**
+ * El paso se abrió para usar un cupón («Se te acabaron», la caja de la red) con la cuenta ya activada y protegida: no hay
+ * nada a medias, así que se puede volver a la página con «Volver» (y con Escape). Mientras se canjea, o con lo que sigue
+ * al canje en marcha, no. Al entrar tampoco: ahí no se abre para un cupón.
+ */
+export function puedeVolverDelCupon(e: Pick<EntradaVista, "acceso" | "corre" | "activacion" | "proteccion" | "para">): boolean {
+  const a = accesoDe(e);
+  return a.modo === "servidor" && a.pideCupon && !a.cadena && e.corre !== "canjeando" && e.activacion === "lista" && e.proteccion === "lista" && e.para !== "entrada";
+}
+
+/** «Activar» se puede ofrecer: como siempre, o con el acceso confirmado por el servidor. Nunca en `cerrado`. */
+export function activarPermitido(e: Pick<EntradaVista, "acceso" | "corre">): boolean {
+  const a = accesoDe(e);
+  if (a.modo === "libre") return true;
+  return a.modo === "servidor" && a.estado === "con" && !faltaElAcceso(e);
 }
 
 /** Los segundos que se espera para ofrecer otro código, y para decir que mire en Spam. */
 export const OTRO_CODIGO_S = 30;
 export const SPAM_S = 20;
 
-const listaLa = (e: EntradaVista, p: Parte): boolean => (p === "activar" ? e.activacion === "lista" : e.proteccion === "lista");
+/** La parte 1 está lista con la cuenta activada y, si lo pide el cobro por uso, con el acceso. */
+const listaLa = (e: EntradaVista, p: Parte): boolean => (p === "activar" ? e.activacion === "lista" && !faltaElAcceso(e) : e.proteccion === "lista");
 
 /** Sin forma de recuperar la cuenta desde acá: ni proteger ni confirmar este navegador. */
 const sinForma = (e: EntradaVista): boolean => e.proteccion === "sin-forma" || (e.proteccion === "aparato-nuevo" && !e.correoConfirmado && !e.tieneLlaves);
@@ -239,15 +340,23 @@ function cajaVacia(parte: Parte, numero: 1 | 2): CajaVista {
   };
 }
 
+/** Lo que dice la caja de activar: con el acceso del cobro por uso, por qué no se paga nada. */
+function textoDeActivar(e: EntradaVista): string {
+  const a = accesoDe(e);
+  if (a.modo !== "servidor") return "clActivarTexto";
+  return a.por === "cupon" ? "altaActivarCupon" : a.por === "pago" ? "altaActivarPago" : "clActivarTexto";
+}
+
 /** La caja de activar cuando es la que toca. */
 function activarActual(e: EntradaVista, caja: CajaVista): Armado {
+  const lead = textoDeActivar(e);
   if (e.falla === "sesion" || (e.falla && !FALLAS_DE_PROTEGER.has(e.falla))) {
     const f = e.falla;
     return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(TEXTO_DE_LA_FALLA[f]) }, principal: principalDeLaFalla(f) };
   }
   if (e.corre === "activando" || e.corre === "esperando") {
     return {
-      caja: { ...caja, estado: "haciendo", palabra: "", abierta: true, textos: textos(["clActivarTexto"]), ocupada: true },
+      caja: { ...caja, estado: "haciendo", palabra: "", abierta: true, textos: textos([lead]), ocupada: true },
       principal: ocupado("activar", "clActivarHaciendo"),
     };
   }
@@ -256,7 +365,88 @@ function activarActual(e: EntradaVista, caja: CajaVista): Armado {
   }
   if (e.activacion === "fallo") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrFallo"]) }, principal: boton("leer", "clProbarDeNuevo") };
   if (e.activacion === "no-se-sabe") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrRed"]) }, principal: boton("leer", "clProbarDeNuevo") };
-  return { caja: { ...caja, estado: "falta", palabra: "clEstadoFalta", abierta: true, textos: textos(["clActivarTexto"]) }, principal: boton("activar", "clActivarBoton", e.corre !== null) };
+  return { caja: { ...caja, estado: "falta", palabra: "clEstadoFalta", abierta: true, textos: textos([lead]) }, principal: boton("activar", "clActivarBoton", e.corre !== null) };
+}
+
+/**
+ * La parte 1 en la red principal sin el acceso por cupón en el build: no hay a quién preguntarle, así que no se activa.
+ * Se dice lo cierto (ahora no se pueden activar cuentas nuevas) y la principal es «Pasar a Prueba», si se puede.
+ */
+function cerradoActual(e: EntradaVista, caja: CajaVista): Armado {
+  if (e.falla === "sesion") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  return {
+    caja: { ...caja, estado: "falta", palabra: "clEstadoFalta", abierta: true, textos: textos(["clErrServicio"]) },
+    principal: e.puedePasarAPrueba ? boton("pasar-a-prueba", "modeSwitchToTest") : null,
+  };
+}
+
+/** La principal de un error del servidor que no se arregla probando de nuevo. */
+function principalDelArreglo(e: EntradaVista, arreglo: AccesoEnLaVista["arreglo"], probar: Boton): Boton | null {
+  if (arreglo === "entrar") return boton("entrar-de-nuevo", "clEntrarDeNuevo");
+  if (arreglo === "ninguno") return e.puedePasarAPrueba ? boton("pasar-a-prueba", "modeSwitchToTest") : null;
+  return probar;
+}
+
+/**
+ * La parte 1 cuando falta el acceso: la caja del cupón (W7). Una sola principal en cada fila:
+ * - con un cupón en mano, «Activar con mi cupón» (y «Usar otro cupón» de texto);
+ * - sin cupón, «Tengo un cupón», que abre el campo;
+ * - escribiendo, «Activar con mi cupón», apagada hasta que haya 12 letras y números (y «Volver» de texto);
+ * - con la cuenta ya activada, lo mismo con `altaYaActivada`, y la principal dice «Usar un cupón».
+ * Debajo, siempre `altaNoTengo`. Las filas del pago no se muestran: el pago todavía no está.
+ */
+function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
+  const a = accesoDe(e);
+  const activada = e.activacion === "lista";
+  const base: CajaVista = { ...caja, titulo: activada ? "altaTituloSorteos" : "clActivarTitulo", abierta: true };
+  const usar = activada ? "cupoOfUsarCupon" : "altaActivarConCupon";
+  const cierre = textos(["altaNoTengo"]);
+  if (e.falla === "sesion") return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  // Algo después del canje no salió: el cupón quedó en la cuenta, y «Probar de nuevo» sigue desde ahí.
+  if (a.fallaTrasCanje) return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["altaCuponGuardado"]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
+  // Lo que sigue al canje: esperar el pedido, activar y volver a preguntar.
+  if (a.cadena) {
+    const n = a.canjeado ?? 0;
+    const t: Texto[] = !activada && n > 0 ? [n === 1 ? { clave: "altaCuponOk1" } : { clave: "altaCuponOk", vars: { n: String(n) } }] : [];
+    return { caja: { ...base, estado: "haciendo", palabra: "", textos: t, ocupada: true }, principal: ocupado("usar-cupon", e.corre === "revisando" ? "clRevisando" : "clActivarHaciendo") };
+  }
+  if (a.estado === "revisando" || (e.corre === "revisando" && e.activacion !== "lista")) {
+    return { caja: { ...base, estado: "revisando", palabra: "", abierta: false, ocupada: true }, principal: ocupado("leer-acceso", "clRevisando") };
+  }
+  if (a.estado === "error") {
+    const err = a.error ? [a.error] : textos(["altaErrServicio"]);
+    return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: err }, principal: principalDelArreglo(e, a.arreglo, boton("leer-acceso", "clProbarDeNuevo")) };
+  }
+  const canjeando = e.corre === "canjeando";
+  const error = a.error ? [a.error] : null;
+  const estado: EstadoDeCaja = canjeando ? "haciendo" : error ? "no-salio" : "falta";
+  const palabra = canjeando ? "" : error ? "clEstadoNoSalio" : "clEstadoFalta";
+  // Con un error a la vista, el motivo va antes que la explicación de siempre: en un celular chico no entran los dos.
+  const lead: Texto[] = error ? [] : [{ clave: activada ? "altaYaActivada" : "altaTexto" }];
+  const conArreglo = (p: Boton): Boton | null => (canjeando ? p : principalDelArreglo(e, a.arreglo, p));
+  if (a.escribiendo) {
+    return {
+      // Con «Volver» a la página a la vista, el campo no repite otro «Volver».
+      caja: { ...base, estado, palabra, error, campo: "cupon", ocupada: canjeando, secundarios: puedeVolverDelCupon(e) ? [] : [{ ...boton("volver-cupon", "clVolver", canjeando), forma: "texto" }], cierre },
+      principal: canjeando ? ocupado("usar-cupon", "altaRevisando") : conArreglo(boton("usar-cupon", usar, !a.campoOk)),
+    };
+  }
+  if (a.cuponEnMano) {
+    return {
+      caja: {
+        ...base,
+        estado,
+        palabra,
+        textos: [...lead, { clave: "altaCuponListo", vars: { codigo: a.cuponEnMano } }],
+        error,
+        ocupada: canjeando,
+        secundarios: [{ ...boton("otro-cupon", "altaOtroCupon", canjeando), forma: "texto" }],
+        cierre,
+      },
+      principal: canjeando ? ocupado("usar-cupon", "altaRevisando") : conArreglo(boton("usar-cupon", usar)),
+    };
+  }
+  return { caja: { ...base, estado, palabra, textos: lead, error, cierre }, principal: conArreglo(boton("tengo-cupon", "altaTengoCupon")) };
 }
 
 /** La caja de proteger (o de confirmar este navegador) cuando es la que toca. */
@@ -357,7 +547,16 @@ function lineaDeEstado(e: EntradaVista): Texto | null {
   if (e.corre === "esperando") return { clave: "clActivarLento" };
   if (e.corre === "desbloqueo" && e.lento) return { clave: "clEsperandoDesbloqueo" };
   if (e.corre === "cerrando") return { clave: "clCerrando" };
+  if (e.corre === "canjeando") return { clave: "altaRevisando" };
   return e.aviso ? { clave: e.aviso } : null;
+}
+
+/** La parte 1 cuando es la que toca: la caja del cupón si falta el acceso, cerrada sin a quién preguntar, o activar. */
+function parte1Actual(e: EntradaVista, caja: CajaVista): Armado {
+  const a = accesoDe(e);
+  if (faltaElAcceso(e)) return accesoActual(e, caja);
+  if (a.modo === "cerrado" && e.activacion !== "lista") return cerradoActual(e, caja);
+  return activarActual(e, caja);
 }
 
 /** La vista del paso para lo que se sabe ahora. */
@@ -369,9 +568,10 @@ export function vistaDe(e: EntradaVista): Vista {
   const cajas = orden.map((parte, i) => {
     const vacia = cajaVacia(parte, (i + 1) as 1 | 2);
     if (parte === "proteger" && e.proteccion === "aparato-nuevo") vacia.titulo = "clAparatoTitulo";
+    if (parte === "activar" && e.activacion === "lista" && faltaElAcceso(e)) vacia.titulo = "altaTituloSorteos";
     if (listaLa(e, parte)) return { ...vacia, estado: "lista" as const, palabra: "clEstadoListo" };
     if (parte !== actual) return vacia;
-    const armado = parte === "activar" ? activarActual(e, vacia) : protegerActual(e, vacia);
+    const armado = parte === "activar" ? parte1Actual(e, vacia) : protegerActual(e, vacia);
     principal = armado.principal;
     return armado.caja;
   });
@@ -399,13 +599,15 @@ export function vistaDe(e: EntradaVista): Vista {
   const notas: string[] = [];
   if (e.proteccion === "falta" && e.unicoNavegador) notas.push(cel(e, "clSalirAviso"));
   notas.push(e.puedePasarAPrueba ? "clAPruebaNota" : "modeSwitchBlocked");
+  // Con la cuenta activada y protegida, lo único que falta es el acceso: no son «dos pasos».
+  const soloElAcceso = faltaElAcceso(e) && e.activacion === "lista" && e.proteccion === "lista";
   return {
     final: false,
     titulo: "clTitulo",
-    bajada: "clBajada",
+    bajada: soloElAcceso ? "altaBajadaUnPaso" : "clBajada",
     cajas,
     principal: principalFinal,
-    volver: null,
+    volver: puedeVolverDelCupon(e) ? boton("volver", "clVolver") : null,
     primerOficial: false,
     estado: lineaDeEstado(e),
     notas,

@@ -1,5 +1,6 @@
 import { type CasoRed, type DetalleDelPatrocinio, type Diagnostico, type Nivel, umbralesDe } from "../stellar/chequeo-red";
 import type { NetworkName } from "../stellar/config";
+import type { EstadoDelPatrocinio } from "../stellar/patrocinador";
 
 /**
  * Qué se le dice a la persona y qué única acción se le ofrece, según cómo esté la red.
@@ -17,7 +18,11 @@ import type { NetworkName } from "../stellar/config";
  *   lo que cuesta sellar), "Sellar pagando con mi cuenta".
  */
 
-export type AccionRed = "sellar" | "reintentar" | "sellar-con-mi-cuenta" | "cargar-saldo" | "seguir-sin-sello";
+/**
+ * `usar-cupon` existe solo con el cobro por uso del modo Oficial y una cuenta sin acceso: vuelve a sellar con el paso de
+ * la cuenta abierto en el campo del cupón (`sin-sorteos.ts`).
+ */
+export type AccionRed = "sellar" | "reintentar" | "sellar-con-mi-cuenta" | "cargar-saldo" | "seguir-sin-sello" | "usar-cupon";
 
 export interface ContextoDelPanel {
   red: NetworkName;
@@ -29,6 +34,17 @@ export interface ContextoDelPanel {
   saldoXlm: number | null;
   /** Lo que cuesta sellar (el medido o uno estimado), para comparar con el saldo. */
   costoXlm: number | null;
+  /**
+   * La red principal con una cuenta de Google o de correo (`redPrincipalConPollar`, `cobro-oficial.ts`), con o sin
+   * banderas: ahí "Sellar pagando con mi cuenta" no existe (cada firma de esa cuenta le cuesta a Tinkazo). Sin esto,
+   * como siempre.
+   */
+  sinPagoPropio?: boolean;
+  /**
+   * Rige el cobro por uso del modo Oficial (`cobroPorUso`, `cobro-oficial.ts`): si la cuenta no entra, la frase es la
+   * del acceso al modo Oficial. Sin esto, la de siempre.
+   */
+  cobroPorUso?: boolean;
 }
 
 export interface Panel {
@@ -65,6 +81,8 @@ export const TEXTO_DE_ACCION = (a: AccionRed, red: NetworkName): string => {
       return "redAccCargar";
     case "seguir-sin-sello":
       return "redAccSinSello";
+    case "usar-cupon":
+      return "cupoOfUsarCupon";
   }
 };
 
@@ -75,6 +93,7 @@ export const NOMBRE_DE_ACCION: Record<AccionRed, string> = {
   "sellar-con-mi-cuenta": "sellar-con-mi-cuenta",
   "cargar-saldo": "cargar-saldo",
   "seguir-sin-sello": "seguir-sin-sello",
+  "usar-cupon": "usar-cupon",
 };
 
 const FRASE_AMARILLA: Record<CasoRed, string> = {
@@ -95,16 +114,39 @@ const FRASE_ROJA: Record<CasoRed, string> = {
   "sin-patrocinio": "errAnchor.porteroFondo",
 };
 
-/** La frase de lo que no cubre el portero, según por qué (las mismas claves que `errorKey` da a un no del portero). */
-export function fraseDelPatrocinio(p: DetalleDelPatrocinio | undefined, puedePagar: boolean): string {
+/**
+ * La frase de lo que no cubre el portero, según por qué (las mismas claves que `errorKey` da a un no del portero). Con el
+ * cobro por uso (`conCobroPorUso`), una cuenta que no entra es una cuenta sin acceso al modo Oficial todavía.
+ */
+export function fraseDelPatrocinio(p: DetalleDelPatrocinio | undefined, puedePagar: boolean, conCobroPorUso = false): string {
   switch (p?.motivo) {
     case "cupo-cuenta":
       return p.que === "sorteos" ? "errAnchor.porteroCupoSorteos" : "errAnchor.porteroCupoSellos";
     case "ajena":
+      if (conCobroPorUso) return "errAnchor.porteroSinAlta";
       return puedePagar ? "errAnchor.porteroAjenaPropia" : "errAnchor.porteroAjena";
     default:
       return "errAnchor.porteroFondo";
   }
+}
+
+/**
+ * Lo que dice el portero de esta cuenta y frena el sello antes de apretar (el chequeo de la red), o `null` si no frena.
+ * Con el bloque `oficial`, los sellos que quedan son lo menor entre el mes y los sorteos oficiales.
+ *
+ * - Con el cobro por uso prendido (`conCobroPorUso`, `cobro-oficial.ts`), cero es el tope del mes solo si la cuenta tiene
+ *   acceso y le quedan sorteos. Sin acceso o sin sorteos no frena acá: lo resuelve la compuerta del sello
+ *   (`sin-sorteos.ts`), con la caja del cupón o «Se te acabaron».
+ * - Con el cobro por uso apagado esa compuerta no corre, así que cero frena siempre, como antes: si no, una cuenta de
+ *   Google sin acceso firmaría un sello que el portero rechaza, y esa firma cuesta igual. Ante la duda, frena.
+ */
+export function patrocinioQueFrena(estado: EstadoDelPatrocinio, conCobroPorUso = false): DetalleDelPatrocinio | null {
+  if (estado.rige === "pollar") return null;
+  if (estado.rige === "cerrado") return { motivo: "cerrado" };
+  if (estado.cupo.sellos.quedan > 0) return null;
+  const oficial = estado.oficial;
+  if (conCobroPorUso && oficial && !(oficial.acceso && (oficial.sorteos?.quedan ?? 0) > 0)) return null;
+  return { motivo: "cupo-cuenta", que: "sellos", liberaEn: estado.cupo.liberaEn };
 }
 
 const sinPanel = (): Panel => ({
@@ -139,8 +181,10 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
 
   const max = umbralesDe(c.red).comun.reintentosAntesDeSinSello;
   const margen = umbralesDe(c.red).comun.margenDeSaldo;
-  const puedePagar = c.saldoXlm !== null && c.costoXlm !== null && c.saldoXlm >= margen * c.costoXlm;
-  const testnetConGrifo = c.red === "testnet" && c.grifo;
+  // En la red principal con una cuenta de Google o de correo no hay "pagar con mi cuenta": ni con saldo ni con grifo.
+  const sinPagoPropio = c.sinPagoPropio === true;
+  const puedePagar = !sinPagoPropio && c.saldoXlm !== null && c.costoXlm !== null && c.saldoXlm >= margen * c.costoXlm;
+  const testnetConGrifo = !sinPagoPropio && c.red === "testnet" && c.grifo;
   const base: Panel = { ...sinPanel(), nivel: "rojo", caso: d.caso, frase: FRASE_ROJA[d.caso], bloquea: true };
 
   switch (d.caso) {
@@ -173,9 +217,12 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
       // propia queda como secundaria, nunca como principal. Sin reintento automático: lo toca la persona.
       // Si el motivo es de la cuenta (el cupo vuelve el mes que viene, o esta cuenta no entra), queda como
       // siempre: sellar con la propia si puede, y si no, seguir sin sello.
-      const frase = fraseDelPatrocinio(d.patrocinio, puedePagar || testnetConGrifo);
+      const frase = fraseDelPatrocinio(d.patrocinio, puedePagar || testnetConGrifo, c.cobroPorUso === true);
       const conFecha = d.patrocinio?.liberaEn !== undefined ? { liberaEn: d.patrocinio.liberaEn } : {};
       const propia = { ...base, frase, ...conFecha };
+      // Con el cobro por uso, una cuenta sin acceso al modo Oficial tiene otra cosa que hacer antes que seguir sin sello:
+      // usar un cupón, que abre el paso de la cuenta en su campo. Sin firma: la compuerta del sello vuelve a preguntar.
+      if (c.cobroPorUso === true && d.patrocinio?.motivo === "ajena") return { ...propia, principal: "usar-cupon", secundarias: ["seguir-sin-sello"] };
       const esDeLaCuenta = d.patrocinio?.motivo === "cupo-cuenta" || d.patrocinio?.motivo === "ajena";
       if (!esDeLaCuenta) {
         if (testnetConGrifo || puedePagar) return { ...propia, principal: "reintentar", secundarias: ["sellar-con-mi-cuenta", "seguir-sin-sello"], cargaPrevia: testnetConGrifo && !puedePagar };
@@ -197,7 +244,7 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
  * Las frases rojas que ya dicen que hoy no se puede sellar: con "Hoy no se puede sellar:" delante quedaban
  * repetidas ("Hoy no se puede sellar: Hoy sellar cuesta más…", "…: Tu cuenta no tiene saldo para sellar.").
  */
-const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo", "redSinSaldoPatrocinio", "errAnchor.porteroFondo", "errAnchor.porteroCupoSellos", "errAnchor.porteroCupoSorteos", "errAnchor.porteroAjena", "errAnchor.porteroAjenaPropia"]);
+const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo", "redSinSaldoPatrocinio", "errAnchor.porteroFondo", "errAnchor.porteroCupoSellos", "errAnchor.porteroCupoSorteos", "errAnchor.porteroAjena", "errAnchor.porteroAjenaPropia", "errAnchor.porteroSinAlta"]);
 
 /** Lo que dice el botón "¿La red está bien?": la clave, la frase del caso si es rojo y la segunda frase si la hay. */
 export function respuestaDelBoton(d: Diagnostico, p: Panel): { clave: string; motivo?: string; aparte?: string; nivel: Nivel } {

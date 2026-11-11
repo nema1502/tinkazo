@@ -324,13 +324,13 @@ export function esNoDelPortero(e: unknown): e is NoDelPortero & Error {
  * Los demás (la simulación dice que va a fallar, la comisión pedida quedó corta, la ventana venció, la red del
  * portero) se cuentan como cualquier error de la red: ver `errorKey`.
  */
-export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena"]);
+export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena", "sin-alta"]);
 /** Lo que dice `razon` cuando el problema no es de la cuenta sino de la transacción o del sitio: no es "esta cuenta no puede". */
 const RAZONES_QUE_NO_SON_DE_LA_CUENTA = new Set(["restaurar", "tamano", "xdr"]);
 export const esNoQueBloquea = (e: unknown): boolean =>
   esNoDelPortero(e) && MOTIVOS_QUE_BLOQUEAN.has(e.motivo) && !(e.razon === "fee-alta" || e.razon === "ventana" || (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)));
 
-function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): string | null {
+function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean; cobroPorUso?: boolean }): string | null {
   switch (e.motivo) {
     case "cupo-cuenta":
       return e.que === "sorteos" ? "porteroCupoSorteos" : "porteroCupoSellos";
@@ -348,7 +348,17 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): stri
       if (e.razon === "fee-alta" || e.razon === "ventana") return "busy";
       // El estado archivado del contrato, una transacción demasiado grande o un XDR que no se lee no son de la cuenta.
       if (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)) return "unknown";
+      // Con el cobro por uso del modo Oficial, el portero dice `cuenta-ajena` de una cuenta que no está en su libro: es
+      // una cuenta sin acceso todavía, lo mismo que dice la caja de la red (`red-acciones.ts`), y no la frase de Prueba.
+      if (e.motivo === "cuenta-ajena" && contexto.cobroPorUso) return "porteroSinAlta";
       return "porteroAjena";
+    case "sin-alta":
+      // El candado de antes de la firma: la cuenta todavía no tiene acceso al modo Oficial. Con el cobro por uso, un cupón
+      // lo arregla; sin él no hay caja del cupón, y es la frase de una cuenta que el portero no cubre.
+      return contexto.cobroPorUso === false ? "porteroAjena" : "porteroSinAlta";
+    case "sin-sorteos":
+      // 402 del portero de la red principal: a la cuenta no le quedan sorteos oficiales que alcancen para este sello.
+      return "porteroSinSorteos";
     case "fee-alta":
     case "rechazada":
       return "busy";
@@ -366,7 +376,7 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): stri
  * (`errAnchor.<clave>`). `contexto.enLinea` dice si hay internet; si no se
  * pasa, se le pregunta al navegador.
  */
-export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean } = {}): string {
+export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean; cobroPorUso?: boolean } = {}): string {
   if (esIncierto(e)) return "unconfirmed";
   if (esNoDelPortero(e)) {
     const clave = claveDelPortero(e, contexto);

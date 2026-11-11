@@ -1,8 +1,28 @@
 import { chooseLang, getLang, onLangChange, t } from "../i18n";
+import { altaLibre } from "../stellar/alta-config";
+import type { CanjeDeCupon, ErrorDeAlta, EstadoDeAlta, ResultadoDeAlta } from "../stellar/alta-api";
+import { network } from "../stellar/config";
+import { mostrar, normalizar } from "../stellar/cupon-codigo";
 import { esDeRed } from "../stellar/errores";
 import type { EstadoOficial, ResultadoDeActivar } from "../stellar/wallet-pollar";
 import { ocultarCorreo } from "./cuenta-estado";
-import { OTRO_CODIGO_S, SPAM_S, type Accion, type Boton, type Corre, type EntradaVista, type Falla, type Para, type Secundario, type Texto, type Vista, vistaDe } from "./cuenta-lista-estado";
+import {
+  OTRO_CODIGO_S,
+  SPAM_S,
+  type Accion,
+  type AccesoEnLaVista,
+  type Boton,
+  type Corre,
+  type EntradaVista,
+  type Falla,
+  type ModoDelAcceso,
+  type Para,
+  type Secundario,
+  type Texto,
+  type Vista,
+  activarPermitido,
+  vistaDe,
+} from "./cuenta-lista-estado";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from "./proteger-cuenta";
 
@@ -15,7 +35,8 @@ import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from
  * Lo abre `cuenta-lista-flujo.ts`: al entrar, al retomar la sesión, antes de sellar y antes de sortear.
  *
  * Obligatorio no es trampa: «Pasar a Prueba» y «Cerrar sesión» están siempre a la vista en el pie, también mientras algo
- * corre. No hay «Ahora no», ni X, ni Escape ni clic afuera que deje seguir en Oficial con la cuenta a medias.
+ * corre. No hay «Ahora no», ni X, ni Escape ni clic afuera que deje seguir en Oficial con la cuenta a medias. Si se abrió
+ * para usar un cupón con la cuenta ya activada y protegida, no hay nada a medias: «Volver» (y Escape) vuelven a la página.
  *
  * Es el único lugar que llama a la activación (`activarCuenta`, una prueba lo fija): cada voto cuesta, y sale solo del
  * toque de la persona en «Activar mi cuenta». Lo automático solo lee. Qué se ve en cada estado lo decide `vistaDe`
@@ -70,6 +91,101 @@ export interface OpcionesDelPaso {
   primerOficial?: { pendiente(): boolean; marcar(): void } | undefined;
   /** La dirección de la sesión: si cambia (`tinkazo:sesion`), el paso se cierra. */
   direccion?: string | null | undefined;
+  /**
+   * El acceso al modo Oficial con el cobro por uso (`cuenta-lista-acceso.ts`): el servidor al que se le pregunta, o cómo
+   * se porta sin él. Sin decirlo, en la red principal es `cerrado` (salvo el build del plan B1, `VITE_ALTA_LIBRE=1`) y
+   * fuera de ella `libre`: ante la duda, no se ofrece activar.
+   */
+  acceso?: AccesoDelPaso | "libre" | "cerrado" | undefined;
+  /** Abrir directo en el campo del cupón («Usar un cupón» de la ventana «Se te acabaron»). Con un cupón guardado, ese. */
+  cupon?: "escribir" | undefined;
+}
+
+/**
+ * Lo que el paso le pide al servidor de las altas y al cupón de la pestaña. Es `accesoDelServidor` de
+ * `cuenta-lista-acceso.ts`; en la muestra y en las pruebas, un reemplazo. Nada de esto lanza: los errores vuelven con su
+ * clave de texto.
+ */
+export interface AccesoDelPaso {
+  /** Qué acceso tiene la persona (`POST /v1/alta/estado`, con el token de la sesión verificada). */
+  estado(): Promise<ResultadoDeAlta<EstadoDeAlta>>;
+  /** Canjea un cupón ya normalizado (`POST /v1/alta/cupon`). */
+  canjear(codigo: string): Promise<ResultadoDeAlta<CanjeDeCupon>>;
+  /** El cupón guardado en la pestaña (el del enlace, o uno escrito), normalizado, o `null`. */
+  cuponGuardado(): string | null;
+  guardarCupon(codigo: string): void;
+  olvidarCupon(): void;
+  /** Vuelve a preguntar el cupo de la cuenta, para la línea de abajo: después de canjear y de activar. */
+  refrescarCupo(): void;
+  /** La cuenta de la sesión (su dirección pública), o `null`. El canje en camino es de esa cuenta y de ninguna otra. */
+  cuenta(): string | null;
+}
+
+/** Lo que sigue al canje, en orden. */
+type PasoDelCanje = "pedido" | "activar" | "estado";
+
+/** Los motivos del canje que dicen que ese cupón no sirve: se olvida, y se deja el campo para corregirlo. */
+const CUPON_QUE_NO_SIRVE: ReadonlySet<string> = new Set(["forma", "cupon-no-existe", "cupon-vencido", "cupon-anulado", "cupon-usado", "lote-usado"]);
+
+/** Cada cuánto, y cuántas veces, se mira si ya está el pedido de crear la cuenta después del canje. */
+export const PEDIDO_CADA_MS = 2_000;
+export const PEDIDO_VECES = 20;
+
+/**
+ * El canje en curso, fuera del paso: un doble toque, o cerrar y volver a abrir el paso mientras el servidor contesta,
+ * no canjean el mismo cupón dos veces. Al salir bien se olvida el cupón y se refresca el cupo, aunque el paso ya se haya
+ * cerrado. Es de una cuenta: si se cierra la sesión y entra otra con el mismo cupón, esa canjea con su propia sesión y
+ * nunca sigue con lo que el servidor le contestó a la anterior. Sin saber la cuenta, no se comparte.
+ */
+let canjeEnVuelo: { cuenta: string; codigo: string; promesa: Promise<ResultadoDeAlta<CanjeDeCupon>> } | null = null;
+
+function cuentaDelAcceso(a: AccesoDelPaso): string | null {
+  try {
+    return a.cuenta();
+  } catch {
+    return null;
+  }
+}
+
+function canjearUnaVez(a: AccesoDelPaso, codigo: string): Promise<ResultadoDeAlta<CanjeDeCupon>> {
+  const cuenta = cuentaDelAcceso(a);
+  if (cuenta && canjeEnVuelo && canjeEnVuelo.cuenta === cuenta && canjeEnVuelo.codigo === codigo) return canjeEnVuelo.promesa;
+  const sinServicio: ErrorDeAlta = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+  const promesa: Promise<ResultadoDeAlta<CanjeDeCupon>> = Promise.resolve()
+    .then(() => a.canjear(codigo))
+    .catch((): ResultadoDeAlta<CanjeDeCupon> => sinServicio)
+    .then((r) => {
+      if (r.ok) {
+        a.olvidarCupon();
+        a.refrescarCupo();
+      }
+      return r;
+    })
+    .finally(() => {
+      if (canjeEnVuelo?.promesa === promesa) canjeEnVuelo = null;
+    });
+  if (cuenta) canjeEnVuelo = { cuenta, codigo, promesa };
+  return promesa;
+}
+
+/** Lo escrito en el campo del cupón, como se muestra: mayúsculas, la O como 0 y la I o la L como 1, y los guiones solos. */
+export function formatoDelCupon(crudo: string): string {
+  const enlace = /cupon=([^&\s]+)/i.exec(crudo);
+  const base = enlace?.[1] ?? crudo;
+  const limpio = base
+    .toUpperCase()
+    .replace(/O/g, "0")
+    .replace(/[IL]/g, "1")
+    .replace(/[^0-9ABCDEFGHJKMNPQRSTVWXYZ]/g, "")
+    .slice(0, 12);
+  return (limpio.match(/.{1,4}/g) ?? []).join("-");
+}
+
+/** Qué arregla un error del servidor: entrar de nuevo, nada desde acá (se revisa a mano), o probar de nuevo. */
+function arregloDe(e: ErrorDeAlta): AccesoEnLaVista["arreglo"] {
+  if (e.clave === "clErrSesion") return "entrar";
+  if (e.clave === "altaErrCuentaDeOtro") return "ninguno";
+  return "probar";
 }
 
 /** La marca de `sessionStorage` de un código mandado (sin el correo). Es la de `MARCAS_DE_LA_CUENTA.codigo`. */
@@ -178,7 +294,12 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const promesa = new Promise<boolean>((r) => (resolver = r));
   let op: OpcionesDelPaso = { ...opciones };
   const subir = (o: OpcionesDelPaso): void => {
-    if (PRIORIDAD[o.para] < PRIORIDAD[op.para]) return;
+    // «Usar un cupón» con el paso ya abierto: el campo, salvo que ya haya un cupón guardado.
+    if (o.cupon === "escribir" && !acc.pideCupon && acc.canjeado === null) {
+      acc.pideCupon = true;
+      if (!cuponEnMano()) acc.escribiendo = true;
+    }
+    if (PRIORIDAD[o.para] < PRIORIDAD[op.para]) return pintar();
     op = { ...op, para: o.para, volverA: o.volverA ?? op.volverA, alSeguir: o.alSeguir ?? op.alSeguir };
     pintar();
   };
@@ -204,6 +325,41 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     codigoRecargado: false,
     sinPedidoVeces: 0,
   };
+
+  // El acceso al modo Oficial (W3): sin decir de dónde sale, en la red principal no se activa (salvo el plan B1).
+  const fuente: AccesoDelPaso | "libre" | "cerrado" = op.acceso ?? (network.name === "mainnet" && !altaLibre() ? "cerrado" : "libre");
+  const acceso: AccesoDelPaso | null = typeof fuente === "object" ? fuente : null;
+  const modo: ModoDelAcceso = acceso ? "servidor" : (fuente as "libre" | "cerrado");
+  const acc = {
+    estado: (acceso ? "revisando" : "con") as AccesoEnLaVista["estado"],
+    por: null as AccesoEnLaVista["por"],
+    fondeo: "inmediato" as EstadoDeAlta["fondeo"],
+    pideCupon: op.cupon === "escribir",
+    escribiendo: false,
+    error: null as Texto | null,
+    arreglo: "probar" as AccesoEnLaVista["arreglo"],
+    canjeado: null as number | null,
+    cadena: false,
+    /** Lo que sigue al canje y no salió: «Probar de nuevo» sigue desde ahí. */
+    fallo: null as PasoDelCanje | null,
+    /**
+     * El último cupón que el servidor dijo que no sirve (no existe, venció, ya no vale, ya se usó): con ese mismo en el
+     * campo la principal queda apagada, porque otro toque solo sumaba un intento fallido. Cambiarlo la prende.
+     */
+    codigoMalo: null as string | null,
+  };
+  let lecturasDeAcceso = 0;
+  /** El cupón guardado en la pestaña, como se muestra, o `null`. */
+  const cuponEnMano = (): string | null => {
+    try {
+      const c = acceso?.cuponGuardado() ?? null;
+      return c ? mostrar(c) : null;
+    } catch {
+      return null;
+    }
+  };
+  // Abierto para usar un cupón: el campo, salvo que ya haya uno guardado (entonces, ese).
+  if (acc.pideCupon && !cuponEnMano()) acc.escribiendo = true;
   // Lo que ya se sabe alcanza para pintar: si falta activar, la parte 1 dice «Revisando…» hasta leer el pedido.
   let cerrado = false;
   let abiertoEn = Date.now();
@@ -279,6 +435,28 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   campoCodigo.className = "cl-codigo";
   campoCodigo.placeholder = "••••••";
   const limpio = (): string => campoCodigo.value.replace(/\s+/g, "");
+  // El cupón: letras y números en mayúsculas, sin autocompletar ni corrector, y los guiones se ponen solos.
+  const campoCupon = document.createElement("input");
+  campoCupon.type = "text";
+  campoCupon.id = "cl-cupon";
+  campoCupon.inputMode = "text";
+  campoCupon.setAttribute("inputmode", "text");
+  campoCupon.setAttribute("autocapitalize", "characters");
+  campoCupon.autocomplete = "off";
+  campoCupon.spellcheck = false;
+  campoCupon.setAttribute("autocorrect", "off");
+  // Lo pegado se recorta al tope antes de llegar al campo: con 14, un enlace entero o un código con un espacio de más
+  // perdían el cupón. `formatoDelCupon` ya deja solo los 12 caracteres, con sus guiones.
+  campoCupon.maxLength = 200;
+  campoCupon.className = "cl-cupon";
+  campoCupon.placeholder = "••••-••••-••••";
+  campoCupon.setAttribute("aria-describedby", "cl-cupon-ayuda");
+
+  /** Lo escrito tiene forma de cupón y no es el que el servidor acaba de decir que no sirve. */
+  const cuponDelCampoSirve = (): boolean => {
+    const c = normalizar(campoCupon.value);
+    return c !== null && c !== acc.codigoMalo;
+  };
 
   /* ------------------------------------------------ la vista */
 
@@ -305,6 +483,20 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     sinPedidoVeces: st.sinPedidoVeces,
     puedePasarAPrueba: salidas.puedePasarAPrueba(),
     primerOficialPendiente: op.primerOficial?.pendiente() ?? false,
+    acceso: {
+      modo,
+      estado: acc.estado,
+      por: acc.por,
+      pideCupon: acc.pideCupon,
+      cuponEnMano: cuponEnMano(),
+      escribiendo: acc.escribiendo,
+      campoOk: cuponDelCampoSirve(),
+      error: acc.error,
+      arreglo: acc.arreglo,
+      canjeado: acc.canjeado,
+      cadena: acc.cadena,
+      fallaTrasCanje: acc.fallo !== null,
+    },
   });
 
   function boton(b: Secundario | Boton, clase: string): HTMLButtonElement {
@@ -320,11 +512,13 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function parrafo(x: Texto, clase = "cl-texto-caja"): HTMLParagraphElement {
     const p = document.createElement("p");
     p.className = clase;
-    if (x.clave === "protCodeLead") {
-      // El correo en negrita: a dónde fue el código.
-      const [antes, despues] = t(x.clave).split("{mail}");
+    if (x.clave === "protCodeLead" || x.clave === "altaCuponListo") {
+      // En negrita lo que importa: a dónde fue el código, o el cupón que se va a usar.
+      const hueco = x.clave === "protCodeLead" ? "mail" : "codigo";
+      const [antes, despues] = t(x.clave).split(`{${hueco}}`);
       const b = document.createElement("b");
-      b.textContent = x.vars?.mail ?? "";
+      b.textContent = x.vars?.[hueco] ?? "";
+      if (hueco === "codigo") b.className = "cl-cupon-listo";
       p.append(antes ?? "", b, despues ?? "");
     } else p.textContent = texto(x);
     return p;
@@ -384,32 +578,46 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           n.setAttribute("role", "status");
           cuerpo.append(n);
         }
-        if (c.error) {
+        const armarError = (): HTMLDivElement | null => {
+          if (!c.error) return null;
           const err = document.createElement("div");
           err.className = "cl-error";
           err.setAttribute("role", "alert");
           for (const x of c.error) err.append(parrafo(x, "cl-error-texto"));
-          cuerpo.append(err);
-        }
+          return err;
+        };
+        // El error del cupón va debajo del campo, junto a lo que hay que corregir; los demás, antes.
+        const errorAntes = c.campo === "cupon" ? null : armarError();
+        if (errorAntes) cuerpo.append(errorAntes);
         if (c.campo) {
           const form = document.createElement("form");
           form.className = "cl-form";
           form.noValidate = true;
           const etiqueta = document.createElement("label");
-          const campo = c.campo === "codigo" ? campoCodigo : campoCorreo;
+          const campo = c.campo === "codigo" ? campoCodigo : c.campo === "cupon" ? campoCupon : campoCorreo;
           etiqueta.htmlFor = campo.id;
           etiqueta.className = "cl-etiqueta";
-          etiqueta.textContent = t(c.campo === "codigo" ? "protCodeLabel" : "protMailLabel");
+          etiqueta.textContent = t(c.campo === "codigo" ? "protCodeLabel" : c.campo === "cupon" ? "altaCuponLabel" : "protMailLabel");
           if (c.campo === "correo") campoCorreo.placeholder = t("protMailLabel");
           campo.disabled = c.ocupada;
           form.append(etiqueta, campo);
+          if (c.campo === "cupon") {
+            const ayuda = document.createElement("p");
+            ayuda.id = "cl-cupon-ayuda";
+            ayuda.className = "cl-texto-caja cl-ayuda";
+            ayuda.textContent = t("altaCuponAyuda");
+            form.append(ayuda);
+            const err = armarError();
+            if (err) form.append(err);
+            campoCupon.setAttribute("aria-invalid", String(!!c.error));
+          }
           form.addEventListener("submit", (ev) => {
             ev.preventDefault();
             if (!confiable(ev)) return;
             // Lo escrito cambia qué está prendido: se mira de nuevo, no la vista de la última pintada.
             const ahora = vistaDe(entrada());
             const p = ahora.principal;
-            if (p && !p.apagado && (p.accion === "confirmar-codigo" || p.accion === "mandar-a-mano")) void hacer(p.accion);
+            if (p && !p.apagado && (p.accion === "confirmar-codigo" || p.accion === "mandar-a-mano" || p.accion === "usar-cupon")) void hacer(p.accion);
             else {
               const sec = ahora.cajas.flatMap((x) => x.secundarios).find((x) => x.accion === "mandar-a-mano" && !x.apagado);
               if (sec) void hacer("mandar-a-mano");
@@ -432,6 +640,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           cuerpo.append(b);
           if (sec.ayuda) cuerpo.append(parrafo(sec.ayuda, "cl-texto-caja cl-ayuda"));
         }
+        for (const x of c.cierre ?? []) cuerpo.append(parrafo(x, "cl-texto-caja cl-ayuda cl-cierre"));
         s.append(cuerpo);
         return s;
       }),
@@ -481,8 +690,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     // El foco vuelve a donde estaba, si sigue ahí.
     if (enfocado && (!document.activeElement || !raiz.contains(document.activeElement))) {
       const de =
-        enfocado === campoCodigo || enfocado === campoCorreo
-          ? enfocado.isConnected
+        enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon
+          ? enfocado.isConnected && !(enfocado as HTMLInputElement).disabled
             ? enfocado
             : null
           : enfocadoAccion
@@ -533,6 +742,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     // pie pegado al contenido (`ANCHA`), solo lo justo: el título no se va de la vista.
     const ancha = typeof matchMedia === "function" && matchMedia(ANCHA).matches;
     campo.scrollIntoView?.({ block: ancha ? "nearest" : "center" });
+    // Con un error debajo del campo (el del cupón), que se lea entero: los que dicen qué hacer son largos y, en un
+    // celular chico, quedaban bajo el pie. Lo justo para verlo, sin sacar el campo de la vista.
+    const error = campo.form?.querySelector(".cl-error");
+    if (error) error.scrollIntoView?.({ block: "nearest" });
   }
 
   /* ------------------------------------------------ leer cómo está la cuenta */
@@ -540,12 +753,18 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function aplicar(e: EstadoOficial): void {
     const antes = st.est;
     st.est = e;
+    // Lo que sigue al canje lleva su propia cuenta de lo que corre: una lectura de fondo solo trae el estado.
+    if (acc.cadena) return pintar();
     if (st.corre === "revisando") st.corre = null;
     if (!cuentaSesionViva()) st.falla = "sesion";
     else if (st.falla && ["red", "tarda", "fallo", "rara", "servicio", "prot-red"].includes(st.falla)) st.falla = null;
     else if (st.falla === "sin-pedido" && e.activacion !== "preparando") st.falla = null;
     if (antes.activacion !== "lista" && e.activacion === "lista") {
-      if (st.corre === "activando" || st.corre === "esperando") st.corre = null;
+      if (st.corre === "activando" || st.corre === "esperando") {
+        st.corre = null;
+        // La activación que se esperaba entró: el servidor lo tiene que saber, y el cupo, también.
+        if (acceso) void releerElAccesoTrasActivar();
+      }
       st.aviso = e.proteccion === "lista" ? null : "clActivada";
     }
     if (antes.proteccion !== "lista" && e.proteccion === "lista") {
@@ -586,6 +805,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       alAviso();
     }
     if (cerrado || n !== lecturas) return;
+    if (!e && acc.cadena) return;
     if (!e) {
       if (st.corre === "revisando") st.corre = null;
       st.falla = cuentaSesionViva() ? "red" : "sesion";
@@ -618,7 +838,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
    */
   let releer: ReturnType<typeof setTimeout> | null = null;
   function alAviso(): void {
-    if (releer || cerrado) return;
+    // Lo que sigue al canje ya mira la cuenta a su ritmo: un aviso no suma lecturas.
+    if (releer || cerrado || acc.cadena) return;
     if (enVuelo > 0) {
       releerAlTerminar = true;
       return;
@@ -638,13 +859,23 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     relojLento = c && c !== "mandando" && c !== "cerrando" ? despues(() => ((st.lento = true), pintar()), LENTO_MS) : null;
   }
 
+  /**
+   * El voto que activa la cuenta: el único lugar de la página que lo pide (una prueba lo fija). Lo llaman solo «Activar
+   * mi cuenta», «Activar con mi cupón» y «Probar de nuevo» después de un canje, siempre desde un toque de la persona.
+   */
+  function votarLaActivacion(): Promise<ResultadoDeActivar> {
+    return cuenta.activarCuenta();
+  }
+
   async function activar(): Promise<void> {
+    // Falla cerrado: sin el acceso confirmado (o sin el build del plan B1), no hay voto, aunque el botón llegara a estar.
+    if (!activarPermitido(entrada())) return;
     st.falla = null;
     st.aviso = null;
     correr("activando");
     pintar();
     try {
-      const r = await cuenta.activarCuenta();
+      const r = await votarLaActivacion();
       if (cerrado) return;
       if (r === "activada") {
         correr(null);
@@ -652,6 +883,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         st.aviso = st.est.proteccion === "lista" ? null : "clActivada";
         pintar();
         void leer(false);
+        if (acceso) void releerElAccesoTrasActivar();
         return;
       }
       if (r === "no-hay") {
@@ -689,6 +921,297 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       }
       esperarActivacion();
     }, CADA_LECTURA_MS);
+  }
+
+  /* ------------------------------------------------ el acceso y el cupón (el cobro por uso) */
+
+  /** Lo que dijo el servidor del acceso. */
+  function aplicarAcceso(r: ResultadoDeAlta<EstadoDeAlta>): void {
+    if (r.ok) {
+      acc.estado = r.datos.acceso === "ninguno" ? "ninguno" : "con";
+      acc.por = r.datos.acceso === "ninguno" ? null : r.datos.acceso;
+      acc.fondeo = r.datos.fondeo;
+      acc.error = null;
+      acc.arreglo = "probar";
+      return;
+    }
+    acc.estado = "error";
+    acc.error = { clave: r.clave, vars: r.vars };
+    acc.arreglo = arregloDe(r);
+  }
+
+  /** Qué acceso tiene la persona: al abrir y con «Probar de nuevo». Sin token no se pregunta (lo dice `acceso.estado`). */
+  async function leerAcceso(): Promise<void> {
+    if (!acceso || acc.cadena) return;
+    const n = ++lecturasDeAcceso;
+    acc.estado = "revisando";
+    acc.error = null;
+    pintar();
+    let r: ResultadoDeAlta<EstadoDeAlta>;
+    try {
+      r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+    } catch {
+      r = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+    }
+    if (cerrado || n !== lecturasDeAcceso) return;
+    aplicarAcceso(r);
+    pintar();
+    // Se abrió para escribir el cupón y nadie tocó nada todavía: el foco va al campo.
+    if (acc.escribiendo && campoCupon.isConnected && !campoCupon.disabled && document.activeElement === titulo) enfocarCampo(campoCupon);
+  }
+
+  /**
+   * Después de activar, se le vuelve a preguntar al servidor: así cuenta esa activación una sola vez en sus créditos.
+   * Y el cupo de la línea de abajo se pregunta de nuevo. De fondo: si no contesta, no cambia nada de lo que se ve.
+   */
+  async function releerElAccesoTrasActivar(): Promise<void> {
+    if (!acceso) return;
+    try {
+      const r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      if (r.ok && !cerrado && !acc.cadena) {
+        aplicarAcceso(r);
+        pintar();
+      }
+    } catch {
+      /* de fondo: lo que no contestó no cambia lo que se ve */
+    }
+    acceso.refrescarCupo();
+  }
+
+  /** Una pausa que se corta si el paso se cierra (la promesa queda sin resolver: nadie la espera). */
+  const pausa = (ms: number): Promise<void> => new Promise((r) => void despues(r, ms));
+
+  /** Después del canje, con la cuenta que se abre en el momento: el pedido de crearla, cada 2 segundos y hasta 20 veces. */
+  async function esperarPedido(): Promise<"hay" | "lista" | "no"> {
+    for (let i = 0; i < PEDIDO_VECES; i++) {
+      if (i > 0) await pausa(PEDIDO_CADA_MS);
+      let e: EstadoOficial | null = null;
+      try {
+        // Sin pedirle a Pollar que relea la billetera: el kit ya la mira solo, y acá alcanza con los pedidos pendientes.
+        e = await conTopeSimple(cuenta.estadoOficial(false), TOPE_LECTURA_MS);
+      } catch {
+        e = null;
+      }
+      if (cerrado) return "no";
+      if (e) {
+        st.est = e;
+        if (e.activacion === "lista") return "lista";
+        if (e.activacion === "falta") return "hay";
+      }
+    }
+    return "no";
+  }
+
+  /** El voto salió y la cuenta todavía no aparece: se mira cada 4 segundos, hasta un minuto, sin votar otra vez. */
+  async function esperarQueSeActive(): Promise<boolean> {
+    const hasta = Date.now() + ESPERA_ACTIVACION_MS;
+    while (Date.now() < hasta) {
+      await pausa(CADA_LECTURA_MS);
+      try {
+        const e = await conTopeSimple(cuenta.estadoOficial(true), TOPE_LECTURA_MS);
+        if (cerrado) return false;
+        st.est = e;
+        if (e.activacion === "lista") return true;
+      } catch {
+        /* se mira otra vez */
+      }
+    }
+    return false;
+  }
+
+  /**
+   * «Activar con mi cupón»: canjea en el servidor y sigue con lo que diga el canje. Un doble toque, o cerrar y volver a
+   * abrir mientras el servidor contesta, no canjean dos veces (`canjearUnaVez`). Un cupón escrito se guarda en la pestaña
+   * antes de mandarlo, así no se pierde si se cierra el paso; se olvida cuando se canjea, o si no sirve.
+   */
+  async function usarCupon(): Promise<void> {
+    if (!acceso || st.corre === "canjeando" || acc.cadena || acc.fallo) return;
+    const codigo = acc.escribiendo ? normalizar(campoCupon.value) : acceso.cuponGuardado();
+    if (!codigo) {
+      acc.escribiendo = true;
+      acc.error = { clave: "altaErrForma" };
+      acc.arreglo = "probar";
+      pintar();
+      enfocarCampo(campoCupon);
+      return;
+    }
+    if (acc.escribiendo) acceso.guardarCupon(codigo);
+    acc.error = null;
+    st.falla = null;
+    st.aviso = null;
+    correr("canjeando");
+    pintar();
+    const r = await canjearUnaVez(acceso, codigo);
+    if (cerrado) return;
+    correr(null);
+    if (!r.ok) {
+      acc.error = { clave: r.clave, vars: r.vars };
+      acc.arreglo = arregloDe(r);
+      if (CUPON_QUE_NO_SIRVE.has(r.motivo)) {
+        // Ese cupón no sirve: se olvida, y queda escrito en el campo para corregirlo (la principal, apagada hasta que cambie).
+        acceso.olvidarCupon();
+        acc.escribiendo = true;
+        acc.codigoMalo = codigo;
+        campoCupon.value = mostrar(codigo);
+      }
+      pintar();
+      if (acc.escribiendo) {
+        enfocarCampo(campoCupon);
+        campoCupon.select();
+      }
+      return;
+    }
+    // El mismo cupón otra vez, y ya gastado: el servidor no suma nada y no quedan sorteos. Seguir llevaba a «Listo» y la
+    // compuerta volvía a «Se te acabaron» sin decir por qué: se dice que ese cupón ya se usó, como un cupón que no sirve.
+    if (r.datos.repetido && r.datos.sorteosSumados === 0 && r.datos.sorteos.quedan === 0) {
+      acc.error = { clave: "altaErrUsado" };
+      acc.arreglo = "probar";
+      acceso.olvidarCupon();
+      acc.escribiendo = true;
+      acc.codigoMalo = codigo;
+      campoCupon.value = mostrar(codigo);
+      pintar();
+      enfocarCampo(campoCupon);
+      campoCupon.select();
+      return;
+    }
+    // El servidor ya lo tiene: desde acá, nada vuelve a canjear.
+    acc.codigoMalo = null;
+    acc.estado = "con";
+    acc.por = "cupon";
+    acc.pideCupon = false;
+    acc.canjeado = r.datos.sorteosSumados > 0 ? r.datos.sorteosSumados : r.datos.sorteos.quedan;
+    acc.escribiendo = false;
+    campoCupon.value = "";
+    const sigue = r.datos.sigue;
+    // Crear la billetera y abrir la cuenta desde el servidor todavía no están: el cupón quedó, y se sigue al volver.
+    const desde: PasoDelCanje | null = sigue === "lista" ? "estado" : sigue === "activar" && acc.fondeo === "inmediato" ? "pedido" : null;
+    if (!desde) {
+      acc.fallo = "estado";
+      pintar();
+      return;
+    }
+    await seguirCadena(desde);
+  }
+
+  /**
+   * Justo antes del voto que activa: el acceso de esta sesión, preguntado otra vez. «si» con el acceso confirmado para la
+   * cuenta de la sesión. «no» cuando el servidor dice que no hay acceso o que es de otra cuenta: queda dicho en la caja y
+   * la cadena termina. Sin respuesta, o sin la cuenta, lanza `sin-acceso`, y «Probar de nuevo» pregunta otra vez antes
+   * de votar.
+   */
+  async function accesoParaVotar(): Promise<"si" | "no"> {
+    if (!acceso) throw new Error("sin-acceso");
+    let e: ResultadoDeAlta<EstadoDeAlta>;
+    try {
+      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+    } catch {
+      throw new Error("sin-acceso");
+    }
+    if (cerrado) return "no";
+    const mia = cuentaDelAcceso(acceso);
+    if (e.ok && e.datos.acceso !== "ninguno" && e.datos.cuenta !== null && (mia === null || e.datos.cuenta === mia)) return "si";
+    if (!e.ok && e.clave === "clErrSesion") {
+      st.falla = "sesion";
+      throw new Error("sin-acceso");
+    }
+    if ((e.ok && e.datos.acceso === "ninguno") || (!e.ok && e.clave === "altaErrCuentaDeOtro")) {
+      aplicarAcceso(e);
+      acc.canjeado = null;
+      acc.cadena = false;
+      correr(null);
+      pintar();
+      return "no";
+    }
+    if (e.ok && e.datos.cuenta !== null && mia !== null && e.datos.cuenta !== mia) {
+      aplicarAcceso({ ok: false, clave: "altaErrCuentaDeOtro", vars: {}, motivo: "cuenta-de-otro", estado: 0 });
+      acc.cadena = false;
+      correr(null);
+      pintar();
+      return "no";
+    }
+    throw new Error("sin-acceso");
+  }
+
+  /** Lo que sigue al canje, desde `desde`. Si algo no sale, `altaCuponGuardado` y «Probar de nuevo» sigue desde ahí. */
+  async function seguirCadena(desde: PasoDelCanje): Promise<void> {
+    if (!acceso || acc.cadena) return;
+    acc.cadena = true;
+    acc.fallo = null;
+    st.falla = null;
+    st.aviso = null;
+    let paso: PasoDelCanje = desde;
+    let activo = false;
+    try {
+      if (paso === "pedido") {
+        correr("activando");
+        pintar();
+        const p = await esperarPedido();
+        if (cerrado) return;
+        if (p === "no") throw new Error("sin-pedido");
+        paso = p === "lista" ? "estado" : "activar";
+      }
+      if (paso === "activar") {
+        correr("activando");
+        pintar();
+        // Falla cerrado: el voto le cuesta créditos a Tinkazo. Antes de pedirlo, el servidor confirma con la sesión de
+        // ahora que esta misma cuenta tiene acceso. Si el acceso quedó en otra cuenta, o el servidor no lo ve, no se vota.
+        if ((await accesoParaVotar()) === "no") return;
+        if (cerrado) return;
+        let r: ResultadoDeActivar | "esperada" = await votarLaActivacion();
+        if (cerrado) return;
+        if (r === "pendiente") r = (await esperarQueSeActive()) ? "esperada" : "pendiente";
+        if (cerrado) return;
+        if (r !== "activada" && r !== "esperada") throw new Error(r === "no-hay" ? "sin-pedido" : "tarda");
+        st.est = { ...st.est, activacion: "lista" };
+        activo = true;
+        paso = "estado";
+      }
+      correr("revisando");
+      pintar();
+      const e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_MS);
+      if (cerrado) return;
+      if (!e.ok) {
+        if (e.clave === "clErrSesion") st.falla = "sesion";
+        // El acceso quedó en otra cuenta: probar de nuevo no lo arregla, se dice con su texto (escribirnos o Prueba).
+        if (e.clave === "altaErrCuentaDeOtro") {
+          aplicarAcceso(e);
+          acc.cadena = false;
+          correr(null);
+          pintar();
+          return;
+        }
+        throw new Error("estado");
+      }
+      aplicarAcceso(e);
+      acceso.refrescarCupo();
+      acc.cadena = false;
+      correr(null);
+      st.aviso = activo && st.est.proteccion !== "lista" ? "clActivada" : null;
+      pintar();
+      void leer(false);
+    } catch (x) {
+      if (cerrado) return;
+      acc.cadena = false;
+      correr(null);
+      const m = mensaje(x);
+      if (paso === "activar" && !["sin-pedido", "tarda", "sin-acceso"].includes(m)) {
+        // La activación falló con lo suyo: sin sesión, o sin arreglo desde acá, se dice como siempre.
+        const f = fallaDeActivar(x, cuentaSesionViva());
+        if (f === "sesion" || f === "tope") {
+          st.falla = f;
+          pintar();
+          return;
+        }
+      }
+      if (st.falla === "sesion" || !cuentaSesionViva()) {
+        st.falla = "sesion";
+        pintar();
+        return;
+      }
+      acc.fallo = paso;
+      pintar();
+    }
   }
 
   /** Lo que devolvió una protección o una confirmación de este navegador. */
@@ -851,6 +1374,26 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "volver":
         cerrar(false);
         return;
+      case "tengo-cupon":
+      case "otro-cupon":
+        acc.escribiendo = true;
+        acc.error = null;
+        if (a === "otro-cupon") campoCupon.value = "";
+        pintar();
+        enfocarCampo(campoCupon);
+        return;
+      case "volver-cupon":
+        acc.escribiendo = false;
+        acc.error = null;
+        pintar();
+        return;
+      case "usar-cupon":
+        return usarCupon();
+      case "leer-acceso":
+        return leerAcceso();
+      case "seguir-cupon":
+        if (acc.fallo) return seguirCadena(acc.fallo);
+        return;
     }
   }
 
@@ -889,6 +1432,28 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (st.falla === "codigo-malo") st.falla = null;
     actualizarPrincipalDelCampo();
   });
+  campoCupon.addEventListener("input", () => {
+    // Los guiones se ponen solos, y el cursor queda después de lo mismo que se había escrito.
+    const crudo = campoCupon.value;
+    const cursor = campoCupon.selectionStart ?? crudo.length;
+    const antes = formatoDelCupon(crudo.slice(0, cursor)).replace(/-/g, "").length;
+    const nuevo = formatoDelCupon(crudo);
+    if (nuevo !== crudo) {
+      campoCupon.value = nuevo;
+      const pos = antes === 0 ? 0 : antes + Math.floor((antes - 1) / 4);
+      try {
+        campoCupon.setSelectionRange(Math.min(pos, nuevo.length), Math.min(pos, nuevo.length));
+      } catch {
+        /* sin selección (un campo que no está a la vista) */
+      }
+    }
+    if (acc.error) {
+      acc.error = null;
+      acc.arreglo = "probar";
+      campoCupon.setAttribute("aria-invalid", "false");
+    }
+    actualizarPrincipalDelCampo();
+  });
   /**
    * Apagada porque corre lo suyo («Activando tu cuenta…») se ve entera y con la ruedita; apagada porque falta algo
    * («Confirmar» sin el código), con el rosa claro y el borde punteado. Así no se confunde esperar con escribir.
@@ -901,6 +1466,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function actualizarPrincipalDelCampo(): void {
     const v = vistaDe(entrada());
     const p = v.principal;
+    // Lo escrito cambió la acción (un error del cupón sin arreglo que se borra al corregir): se pinta todo.
+    if ((p?.accion ?? "") !== (principal.hidden ? "" : (principal.dataset.accion ?? ""))) return pintar();
     if (p && principal.dataset.accion === p.accion) {
       principal.disabled = p.apagado;
       marcarOcupada(p);
@@ -917,7 +1484,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const alEnfocar = (ev: FocusEvent): void => {
     const vv = (window as { visualViewport?: { height: number } }).visualViewport;
     const ese = ev.target;
-    if ((ese === campoCodigo || ese === campoCorreo) && vv && vv.height < 500) {
+    if ((ese === campoCodigo || ese === campoCorreo || ese === campoCupon) && vv && vv.height < 500) {
       raiz.classList.add("cl-tecleando");
       setTimeout(() => (ese as HTMLElement).scrollIntoView?.({ block: "center" }), 50);
     }
@@ -933,8 +1500,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (ev.key === "Escape") {
       ev.preventDefault();
       ev.stopPropagation();
-      if (vistaActual?.final) {
-        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar). Nunca sella ni sortea.
+      if (vistaActual?.final || vistaActual?.volver) {
+        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar). Nunca sella ni sortea. Antes del final, solo
+        // cuando el paso se abrió para usar un cupón con la cuenta ya lista: ahí también es «Volver».
         cerrar(op.para === "entrada");
         return;
       }
@@ -1051,5 +1619,6 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     () => undefined,
   );
   void leer(true);
+  void leerAcceso();
   return promesa;
 }

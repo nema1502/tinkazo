@@ -6,11 +6,12 @@ import { type DetalleDelPatrocinio, type Diagnostico, type FuentesDelChequeo, ch
 import { network } from "../stellar/config";
 import { esNoQueBloquea } from "../stellar/errores";
 import { grifoDisponible } from "../stellar/grifo";
-import { estadoDelPatrocinio, fechaOCercana } from "../stellar/patrocinador";
+import { type EstadoDelPatrocinio, estadoDelPatrocinio, fechaOCercana } from "../stellar/patrocinador";
+import { cobroPorUso, redPrincipalConPollar } from "../stellar/cobro-oficial";
 import { anotar, anotarChequeo, registroParaCopiar, saturacionReciente } from "../stellar/registro-red";
 import { limpiarDetalle } from "./anchor";
 import { ponerDetalle } from "./detalle-error";
-import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, respuestaDelBoton } from "./red-acciones";
+import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, patrocinioQueFrena, respuestaDelBoton } from "./red-acciones";
 import { verError } from "./siguiente";
 import { ordenNoCabe } from "./turnos";
 import { canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
@@ -42,6 +43,8 @@ export interface OpcionesDeSellado {
   pagarConMiCuenta?: boolean;
   /** Es el reintento de después de proteger la cuenta (`proteger-cuenta.ts`): el mismo intento de la persona, no otro. */
   protegida?: boolean;
+  /** «Usar un cupón» de la caja de la red: si a la cuenta le falta el acceso, el paso abre en el campo del cupón. */
+  conCupon?: boolean;
 }
 
 let sellarFn: ((o: OpcionesDeSellado) => Promise<void>) | null = null;
@@ -105,11 +108,12 @@ async function conElPatrocinio(d: Diagnostico): Promise<Diagnostico> {
   if (d.nivel === "rojo" || d.sinInternet || d.sinChequeo || d.pagador !== "patrocinado") return d;
   const s = currentSession();
   if (!s) return d;
-  const estado = await estadoDelPatrocinio(s.address, { forzar: true });
-  if (estado.rige === "pollar") return d;
-  let patrocinio: DetalleDelPatrocinio | null = null;
-  if (estado.rige === "cerrado") patrocinio = { motivo: "cerrado" };
-  else if (estado.cupo.sellos.quedan <= 0) patrocinio = { motivo: "cupo-cuenta", que: "sellos", liberaEn: estado.cupo.liberaEn };
+  // Con el cobro por uso, lo que se supo hace un momento alcanza: las compuertas del sello y del sorteo preguntan de
+  // nuevo antes de la firma, y el portero cuenta las consultas por dirección (un stand sale por una sola wifi).
+  const conCobro = cobroPorUso();
+  const estado = await estadoDelPatrocinio(s.address, { forzar: !conCobro });
+  // El cero de una cuenta sin acceso o sin sorteos lo resuelve la compuerta del sello, que corre solo con el cobro por uso.
+  const patrocinio: DetalleDelPatrocinio | null = patrocinioQueFrena(estado, conCobro);
   if (!patrocinio) return d;
   return { ...d, nivel: "rojo", caso: "sin-patrocinio", casos: [...d.casos, { caso: "sin-patrocinio", nivel: "rojo" }], patrocinio, motivo: `el patrocinio no cubre: ${patrocinio.motivo}` };
 }
@@ -374,7 +378,7 @@ async function contextoDe(d: Diagnostico): Promise<ContextoDelPanel> {
       }
     }
   }
-  return { red: network.name, intentos, grifo: grifoDisponible(), saldoXlm, costoXlm: d.costoXlm ?? (network.name === "mainnet" ? 0.2 : 1) };
+  return { red: network.name, intentos, grifo: grifoDisponible(), saldoXlm, costoXlm: d.costoXlm ?? (network.name === "mainnet" ? 0.2 : 1), sinPagoPropio: redPrincipalConPollar(), cobroPorUso: cobroPorUso() };
 }
 
 /** Pone en pantalla lo que dice un diagnóstico y arma lo que sigue. */
@@ -467,6 +471,12 @@ function hacer(a: AccionRed): void {
   switch (a) {
     case "sellar":
       void sellarFn?.({ saltarChequeo: true });
+      return;
+    case "usar-cupon":
+      // Lo mismo que «Sellar la lista», con el paso de la cuenta abierto en el cupón: la compuerta del sello vuelve a
+      // preguntarle al portero y, sin acceso, lo abre (`sin-sorteos.ts`). No se pide ninguna firma sin acceso.
+      ver({ tipo: "nada" });
+      void sellarFn?.({ saltarChequeo: true, conCupon: true });
       return;
     case "reintentar":
       // Desde "Esperar a la red" se vuelve a empezar la cuenta de intentos, y la red queda vigilada: esperar es esperar.
@@ -621,6 +631,7 @@ export function patrocinioDelError(e: unknown): DetalleDelPatrocinio | null {
       return { motivo: "fondo" };
     case "no-permitida":
     case "cuenta-ajena":
+    case "sin-alta":
       return { motivo: "ajena" };
     default:
       return { motivo: "cerrado" };
@@ -744,6 +755,25 @@ export function iniciarRed(o: { sellar: (op: OpcionesDeSellado) => Promise<void>
       if (vista.tipo !== "sin-sello") ver({ tipo: "nada" });
     }
     programar();
+  });
+  // Con el cobro por uso, el acceso al modo Oficial o los sorteos de la cuenta cambiaron (se canjeó un cupón, se selló):
+  // lo medido antes ya no vale, y una caja del portero de antes se va y se vuelve a mirar. La misma respuesta otra vez no
+  // hace nada (cada chequeo la vuelve a avisar). Sin el bloque `oficial` (Prueba, Freighter), como siempre.
+  let oficialVisto: string | undefined;
+  document.addEventListener("tinkazo:patrocinio", (e) => {
+    const detalle = (e as CustomEvent<{ cuenta?: string; estado?: EstadoDelPatrocinio } | null>).detail;
+    const estado = detalle?.estado;
+    const oficial = estado && estado.rige !== "cerrado" ? estado.oficial : undefined;
+    if (!oficial) return;
+    const firma = JSON.stringify([detalle?.cuenta ?? "", oficial.acceso, oficial.sorteos?.quedan ?? null]);
+    const antes = oficialVisto;
+    oficialVisto = firma;
+    if (antes === undefined || antes === firma) return;
+    chequeo.olvidar();
+    if ((vista.tipo === "panel" || vista.tipo === "respuesta") && vista.p.caso === "sin-patrocinio") {
+      ver({ tipo: "nada" });
+      programar();
+    }
   });
   const names = document.getElementById("names");
   if (names) new MutationObserver(programar).observe(names, { childList: true });

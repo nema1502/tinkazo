@@ -1,8 +1,9 @@
 /// <reference types="vitest/config" />
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { defineConfig, runnerImport, type Plugin } from "vite";
+import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
+import { problemasDeAlta } from "./src/stellar/alta-build";
 
 type Dict = Record<string, unknown>;
 
@@ -99,6 +100,22 @@ function textosPorPagina(): Plugin {
         const json = JSON.stringify({ es: elegir("es"), en: elegir("en") }).replace(/</g, "\\u003c");
         return [{ tag: "script", attrs: { type: "application/json", id: "textos" }, children: json, injectTo: "body" }];
       },
+    },
+  };
+}
+
+/**
+ * El build no sale con las banderas del cobro por uso a medio poner (`src/stellar/alta-build.ts`): `VITE_ALTA=1` sin
+ * la dirección del portero de la red principal dejaría el acceso sin a quién preguntar. Falla antes de armar nada y
+ * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ */
+function validarBanderasDeAlta(): Plugin {
+  return {
+    name: "tinkazo:banderas-de-alta",
+    apply: "build",
+    config(_config, { mode }) {
+      const problemas = problemasDeAlta(loadEnv(mode, __dirname, "VITE_"));
+      if (problemas.length) throw new Error(`Las banderas del cobro por uso están a medio poner:\n- ${problemas.join("\n- ")}`);
     },
   };
 }
@@ -215,7 +232,7 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
+  plugins: [validarBanderasDeAlta(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
   build: {
     target: "es2022",
     sourcemap: true,

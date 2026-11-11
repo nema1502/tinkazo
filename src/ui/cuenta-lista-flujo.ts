@@ -81,7 +81,7 @@ function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
 export const TOPE_AL_ENTRAR_MS = 8_000;
 export const TOPE_AL_SELLAR_MS = 4_000;
 
-type Extra = Pick<OpcionesDelPaso, "inicial" | "volverA" | "alSeguir" | "alAbrir">;
+type Extra = Pick<OpcionesDelPaso, "inicial" | "volverA" | "alSeguir" | "alAbrir" | "cupon">;
 
 /** Cómo terminó el intento de abrir el paso: se abrió (y la promesa dice qué eligió la persona) o no se pudo bajar. */
 type Apertura = { abrio: true; eleccion: Promise<boolean> } | { abrio: false };
@@ -91,10 +91,10 @@ type Apertura = { abrio: true; eleccion: Promise<boolean> } | { abrio: false };
  * dice con un aviso que ofrece volver a cargar la página, y no se abre: en Oficial no se sigue, pero tampoco en silencio.
  */
 async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
-  let mods: [typeof import("./cuenta-lista"), typeof import("../stellar/wallet-pollar"), typeof import("./wallet-ui"), typeof import("./modo-ui"), typeof import("./cuenta-estado")];
+  let mods: [typeof import("./cuenta-lista"), typeof import("../stellar/wallet-pollar"), typeof import("./wallet-ui"), typeof import("./modo-ui"), typeof import("./cuenta-estado"), typeof import("./cuenta-lista-acceso")];
   let alSeguir = extra.alSeguir;
   try {
-    mods = await Promise.all([import("./cuenta-lista"), import("../stellar/wallet-pollar"), import("./wallet-ui"), import("./modo-ui"), import("./cuenta-estado")]);
+    mods = await Promise.all([import("./cuenta-lista"), import("../stellar/wallet-pollar"), import("./wallet-ui"), import("./modo-ui"), import("./cuenta-estado"), import("./cuenta-lista-acceso")]);
     if (para === "entrada-con-lista" && !alSeguir) {
       // Sella en el mismo toque del botón del final: `freeze` ya tiene que estar cargado.
       const { freeze } = await import("./freeze");
@@ -105,7 +105,7 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
     avisarQueNoCargo();
     return { abrio: false };
   }
-  const [{ abrirCuentaLista }, wp, ui, modo, { claveDelAviso }] = mods;
+  const [{ abrirCuentaLista }, wp, ui, modo, { claveDelAviso }, { fuenteDelAcceso }] = mods;
   // La activación lee la transacción con el SDK de Stellar: se baja mientras la persona mira el paso.
   void import("@stellar/stellar-sdk").catch(() => undefined);
   try {
@@ -116,6 +116,12 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
       return e.estado === "dentro" ? `${t(claveDelAviso(e)).replace("{n}", e.nombre)}.` : undefined;
     };
     const porCorreo = wp.pollarWallet.label === "Email";
+    // El acceso al modo Oficial (W3): el servidor, con el token de la sesión verificada, o cerrado sin él.
+    const acceso = fuenteDelAcceso({
+      token: () => wp.pollarWallet.tokenDeSesion(),
+      sesionViva: () => wp.pollarWallet.sesionViva(),
+      cuenta: () => ui.currentSession()?.address ?? null,
+    });
     const eleccion = abrirCuentaLista(
       wp.pollarWallet,
       {
@@ -136,6 +142,8 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
         volverA: extra.volverA,
         alAbrir: extra.alAbrir,
         alSeguir,
+        acceso,
+        cupon: extra.cupon,
       },
     );
     return { abrio: true, eleccion };
@@ -242,8 +250,11 @@ export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGra
   return abrirPaso("sello", { ...o, inicial: e });
 }
 
-/** El sello o el sorteo fallaron por la cuenta (falta protegerla, confirmar este navegador o activarla): el paso. */
-export async function abrirParaElError(para: "sello" | "sorteo", volverA: HTMLElement | null): Promise<boolean> {
+/**
+ * El sello o el sorteo fallaron por la cuenta (falta protegerla, confirmar este navegador, activarla o el acceso al modo
+ * Oficial): el paso. Con `cupon: "escribir"` («Usar un cupón» de la ventana «Se te acabaron»), abre en el campo del cupón.
+ */
+export async function abrirParaElError(para: "sello" | "sorteo", volverA: HTMLElement | null, o: Pick<OpcionesDelPaso, "cupon"> = {}): Promise<boolean> {
   if (!aplica()) return false;
-  return abrirPaso(para, { volverA });
+  return abrirPaso(para, { volverA, ...(o.cupon ? { cupon: o.cupon } : {}) });
 }

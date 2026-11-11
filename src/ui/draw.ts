@@ -42,6 +42,7 @@ import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando
 import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
 import { ponerNombresEnteros } from "../games/nombres-enteros";
 import { pagosActivos } from "../stellar/pagos-bandera";
+import { cobroPorUso } from "../stellar/cobro-oficial";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -62,6 +63,9 @@ let recuperacion: { sello: NonNullable<typeof app.frozen>; accion: AccionError }
 /** Ya se abrió "Protegé tu cuenta" en este intento de sortear: si vuelve a pedirla, se dice y no se repite. */
 let protegiendoElSorteo = false;
 
+/** Un sorteo está pasando por las compuertas del modo Oficial (el paso de la cuenta, el acceso). */
+let enLasCompuertas = false;
+
 export async function draw(): Promise<void> {
   if (recuperacion?.sello === app.frozen) {
     recuperacion.accion.ejecutar();
@@ -72,16 +76,27 @@ export async function draw(): Promise<void> {
   // En modo Oficial, si la memoria dice que a la cuenta le falta activarse, el paso «Dejá tu cuenta lista» antes de
   // sortear. Solo la memoria y sin red: el sorteo se lanza solo desde la espera. Fuera del modo Oficial no se baja nada.
   if (app.frozen.raffleId !== undefined && network.name === "mainnet") {
-    let flujo: typeof import("./cuenta-lista-flujo") | null = null;
+    // Un toque mientras otro sigue en las compuertas no hace nada: el botón se apaga recién después de ellas, y con el
+    // portero lento (hasta 6 s) un segundo toque pedía otra firma del mismo sorteo.
+    if (enLasCompuertas) return;
+    enLasCompuertas = true;
     try {
-      flujo = await import("./cuenta-lista-flujo");
-    } catch {
-      // No bajó: el sorteo sigue sin la compuerta. Ya está sellado, así que la cuenta estaba lista al sellar; si igual
-      // le faltara algo, el sorteo falla antes de firmar y lo dice. Frenarlo acá lo dejaba muerto hasta recargar.
-      flujo = null;
+      let flujo: typeof import("./cuenta-lista-flujo") | null = null;
+      try {
+        flujo = await import("./cuenta-lista-flujo");
+      } catch {
+        // No bajó: el sorteo sigue sin la compuerta. Ya está sellado, así que la cuenta estaba lista al sellar; si igual
+        // le faltara algo, el sorteo falla antes de firmar y lo dice. Frenarlo acá lo dejaba muerto hasta recargar.
+        flujo = null;
+      }
+      if (flujo && flujo.faltaEnLaMemoria() && !(await flujo.cuentaListaParaGrabar("sorteo", { volverA: document.getElementById("btn-draw"), alSeguir: pedirPantallaDelSorteo }))) return;
+      if (!app.frozen || app.drawn) return;
+      // Con el cobro por uso del modo Oficial, ninguna firma del sorteo sin el acceso de la cuenta (`sin-sorteos.ts`).
+      if (cobroPorUso() && !(await accesoOficialParaSortear())) return;
+      if (!app.frozen || app.drawn) return;
+    } finally {
+      enLasCompuertas = false;
     }
-    if (flujo && flujo.faltaEnLaMemoria() && !(await flujo.cuentaListaParaGrabar("sorteo", { volverA: document.getElementById("btn-draw"), alSeguir: pedirPantallaDelSorteo }))) return;
-    if (!app.frozen || app.drawn) return;
   }
   // "Sortear pagando con mi cuenta", si se eligió: vale para este intento y no se hereda al siguiente.
   const pagarConMiCuenta = tomarLaEleccion();
@@ -300,6 +315,47 @@ export async function draw(): Promise<void> {
     await escribirError(status, e, "sorteo");
     verError(status);
   }
+}
+
+/**
+ * La compuerta del sorteo con el cobro por uso: el portero tiene que decir que la cuenta tiene acceso al modo Oficial.
+ * Sin acceso, el paso de la cuenta; si no contesta, no se firma y se dice, con el botón para volver a probar. Sortear lo
+ * que ya está sellado no gasta sorteos oficiales. Si el módulo no baja, tampoco se firma.
+ */
+async function accesoOficialParaSortear(): Promise<boolean> {
+  const btn = document.getElementById("btn-draw");
+  const status = document.getElementById("draw-status");
+  let clave: string | null = "errAnchor.porteroFondoSorteo";
+  try {
+    const { accesoParaSortear } = await import("./sin-sorteos");
+    const r = await accesoParaSortear({
+      volverA: btn,
+      alRevisar: (revisando) => {
+        // Como la compuerta del sello: mientras se revisa, el botón no se aprieta.
+        if (btn instanceof HTMLButtonElement) btn.disabled = revisando;
+        if (!status) return;
+        status.style.display = revisando ? "block" : "none";
+        status.className = "txstatus";
+        if (revisando) status.textContent = t("clRevisando");
+      },
+    });
+    if (r.sigue) return true;
+    clave = r.clave;
+  } catch {
+    /* no bajó: cerrado, con el mensaje de volver a probar */
+  }
+  if (btn instanceof HTMLButtonElement) {
+    btn.disabled = false;
+    btn.classList.add("lista");
+    btn.textContent = t("drawRetry");
+  }
+  if (status && clave) {
+    status.style.display = "block";
+    status.className = "txstatus bad";
+    status.textContent = t(clave);
+    verError(status);
+  }
+  return false;
 }
 
 /**

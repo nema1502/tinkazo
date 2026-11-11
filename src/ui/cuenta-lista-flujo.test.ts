@@ -316,3 +316,33 @@ describe("si el paso no se puede bajar", () => {
     expect(aviso()).toBeNull();
   });
 });
+
+describe("el acceso al modo Oficial que recibe el paso (W3)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("sin el acceso por cupón en el build, cerrado: el paso no activa", async () => {
+    vi.stubEnv("VITE_ALTA", "");
+    vi.stubEnv("VITE_ALTA_LIBRE", "");
+    const f = await flujo();
+    await f.abrirParaElError("sello", null);
+    expect((h.abrir.mock.calls[0]?.[2] as { acceso: unknown }).acceso).toBe("cerrado");
+  });
+
+  it("con el acceso por cupón y el portero en el build, el servidor; y «Usar un cupón» abre en el campo", async () => {
+    vi.stubEnv("VITE_ALTA", "1");
+    vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", "https://pm.prueba.invalid");
+    const f = await flujo();
+    await f.abrirParaElError("sello", null, { cupon: "escribir" });
+    const op = h.abrir.mock.calls[0]?.[2] as { acceso: unknown; cupon: unknown };
+    expect(typeof op.acceso).toBe("object");
+    expect(Object.keys(op.acceso as object).sort()).toEqual(["canjear", "cuenta", "cuponGuardado", "estado", "guardarCupon", "olvidarCupon", "refrescarCupo"]);
+    expect(op.cupon).toBe("escribir");
+  });
+
+  it("el plan B1 (VITE_ALTA_LIBRE=1): libre, como antes", async () => {
+    vi.stubEnv("VITE_ALTA_LIBRE", "1");
+    const f = await flujo();
+    await f.abrirParaElError("sorteo", null);
+    expect((h.abrir.mock.calls[0]?.[2] as { acceso: unknown }).acceso).toBe("libre");
+  });
+});

@@ -108,6 +108,55 @@ const sinSaldo = () => new Error("txInsufficientBalance");
 
 const pollar = (signAndSubmit = vi.fn(async () => "deadbeef")) => ({ kind: "external", address: DIR, submitsItself: true, signAndSubmit });
 
+/** El portero de la red principal de mentira, en su dirección de prueba. */
+const PORTERO = "https://portero.prueba";
+/**
+ * Una respuesta del portero hecha a mano, con lo único que lee el sitio (`status` y `json`): sin la de verdad, que lee el
+ * cuerpo con vueltas del reloj real y, con el reloj de mentira avanzando, se comería el margen de la ronda.
+ */
+const responder = (estado: number, cuerpo: unknown): Response => ({ status: estado, ok: estado >= 200 && estado < 300, json: async () => cuerpo }) as unknown as Response;
+
+/**
+ * En la red principal, una cuenta de Pollar sin portero no firma nada (`elegirPatrocinador` lanza «cerrado»), así que
+ * las pruebas de esa red ponen un portero de mentira, como `envio-portero.test.ts`: `/cupo` dice quién rige y el pago
+ * contesta lo que se le pide.
+ *
+ * - `"pollar"`: el portero está y le devolvió el pago a Pollar (el modo `pollar` del servidor). Pollar firma y manda, y
+ *   lo que contesta llega como siempre: es la forma de probar en la red principal lo que hace el sitio con las
+ *   respuestas de Pollar.
+ * - `"portero"`: paga el portero. Pollar solo firma (`signUnsponsored`) y la transacción firmada va al portero.
+ *
+ * Como el de verdad (con las altas), `/cupo` trae lo oficial de la cuenta: tiene acceso y le quedan sorteos. Sin eso, el
+ * candado de `submitElsewhere` no deja firmar nada en la red principal.
+ */
+function porteroDeMentira(rige: "pollar" | "portero", pago: () => Response = () => responder(200, { hash: HASH_FIRMADA, status: "PENDING", quedan: 19, quedanSorteos: 39 })) {
+  vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", PORTERO);
+  const oficial = { acceso: true, sorteos: { quedan: 19, proximoVence: null } };
+  const cupo =
+    rige === "pollar"
+      ? { red: "mainnet", rige: "pollar", prendido: false, motivo: "pollar", oficial }
+      : { red: "mainnet", rige: "portero", prendido: true, sellos: { usados: 1, max: 20, quedan: 19 }, sorteos: { usados: 1, max: 40, quedan: 39 }, liberaEn: Date.UTC(2026, 11, 1), oficial };
+  const f = vi.fn(async (u: string) => (String(u).includes("/cupo") ? responder(200, cupo) : pago()));
+  vi.stubGlobal("fetch", f);
+  return f;
+}
+
+/** Los pagos que se le pidieron al portero (todo lo que no es `/cupo`). */
+const pagosAlPortero = (f: { mock: { calls: unknown[][] } }): unknown[][] => f.mock.calls.filter((c) => !String(c[0]).includes("/cupo"));
+
+/**
+ * Una cuenta de Pollar que sabe firmar sin patrocinio, y `TransactionBuilder.fromXDR` de mentira para leer lo que firmó:
+ * lo que hace falta para que pague el portero. Devuelve cómo deshacerlo.
+ */
+function pollarParaElPortero(firmar = vi.fn(async (_xdr: string) => "FIRMADA")) {
+  vi.doMock("@stellar/stellar-sdk", async (orig) => {
+    const real = await orig<typeof import("@stellar/stellar-sdk")>();
+    const firmada = { hash: () => new Uint8Array(32).fill(2), toXDR: () => "FIRMADA", timeBounds: { maxTime: String(cierre() + 60) } };
+    return { ...real, TransactionBuilder: { ...real.TransactionBuilder, fromXDR: () => firmada } };
+  });
+  return { wallet: { ...pollar(vi.fn(async () => "no-se-usa")), signUnsponsored: firmar }, firmar, deshacer: () => vi.doUnmock("@stellar/stellar-sdk") };
+}
+
 /** Corre el sellado y devuelve lo que vio la pantalla, en orden, y cómo terminó. */
 async function sellar(args = argsDeAhora()): Promise<{ pasos: [AnchorStep, string | undefined][]; r?: SealResult; error?: unknown }> {
   const { sealOnChain } = await import("./anchor");
@@ -136,6 +185,11 @@ async function sortear(): Promise<{ pasos: [AnchorStep, string | undefined][]; r
 }
 
 let eventos: string[];
+/**
+ * Los avisos de la página, sin el de lo que queda del portero (`tinkazo:patrocinio`, que sale cada vez que se le
+ * pregunta): lo que se mira es que no salga la caja de fondos ni ningún otro.
+ */
+const avisos = (): string[] => eventos.filter((e) => e !== "tinkazo:patrocinio");
 beforeEach(() => {
   vi.resetModules();
   h.red.name = "testnet";
@@ -154,6 +208,7 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -229,6 +284,8 @@ describe("con una cuenta de Pollar", () => {
   it("en mainnet nunca hay grifo: no se pide nada, no se reintenta y no sale la caja de fondos", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada (ver más abajo).
+    porteroDeMentira("pollar");
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
     h.wallet = pollar(enviar);
     const { pasos, error } = await sellar();
@@ -238,7 +295,7 @@ describe("con una cuenta de Pollar", () => {
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(pasos.map(([p]) => p)).not.toContain("funding");
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 
   it("si la simulación falló (la ronda quedó cerca) no manda una transacción sin armar: lanza el error del contrato", async () => {
@@ -305,6 +362,8 @@ describe("con una cuenta de Pollar", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // En mainnet Pollar manda solo con el portero puesto, que le devolvió el pago.
+    porteroDeMentira("pollar");
     const { error } = await sellar();
     expect(esSelloIncierto(error)).toBe(false);
     expect((error as Error).message).toBe(mensaje);
@@ -319,6 +378,74 @@ describe("con una cuenta de Pollar", () => {
     const { r } = await sellar();
     expect(r?.raffleId).toBe(7n);
     expect(h.getTx).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * En la red principal con una cuenta de Google o de correo, sin portero configurado: cada firma de esa cuenta le cuesta
+ * a Tinkazo y nadie la contaría, así que no se pide ninguna (`elegirPatrocinador` y el candado de `submitElsewhere`).
+ */
+describe("en mainnet, una cuenta de Pollar sin portero", () => {
+  beforeEach(() => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", "");
+  });
+
+  const billetera = () => {
+    const signAndSubmit = vi.fn(async () => "deadbeef");
+    const signUnsponsored = vi.fn(async (_xdr: string) => "FIRMADA");
+    return { w: { ...pollar(signAndSubmit), signUnsponsored }, signAndSubmit, signUnsponsored };
+  };
+
+  it("el sello da «cerrado» y no se pide ninguna firma ni se manda nada", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    const { error, pasos } = await sellar();
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+    expect(f).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).not.toContain("sending");
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+    // Lo que lee la persona: que ahora no se pudo cubrir, lo mismo que cualquier cierre del portero.
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe(await anchorErrorText({ name: "ErrorPortero", motivo: "cerrado", estado: 0 }));
+  });
+
+  it("el sorteo, igual: «cerrado» sin firma", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    h.getTx.mockImplementation(async () => resultadoDelSorteo());
+    const { error } = await sortear();
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("y pagar con mi cuenta tampoco existe: «cerrado» antes de firmar", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    const { sealOnChain } = await import("./anchor");
+    const error = await sealOnChain(argsDeAhora(), () => undefined, { pagarConMiCuenta: true }).catch((x: unknown) => x);
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("con Freighter no cambia nada: firma y sella como siempre, sin portero", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    const { r, error } = await sellar();
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
   });
 });
 
@@ -593,6 +720,14 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: así llega a Pollar cada error que se prueba acá. Sin portero no
+    // se firmaría nada y estas pruebas pasarían sin mirar nada.
+    porteroDeMentira("pollar");
+  });
+  // Lo que carga el camino del portero, cargado antes de que el reloj de mentira empiece a correr: cargarlo lleva tiempo
+  // de verdad, y mientras tanto `correr` adelanta el reloj y se come el margen de la ronda.
+  beforeEach(async () => {
+    await Promise.all([import("./anchor"), import("./envio-sdk"), import("../stellar/patrocinador"), import("../stellar/cobro-oficial"), import("../stellar/envio"), import("../stellar/errores")]);
   });
   afterEach(() => vi.useRealTimers());
 
@@ -619,10 +754,14 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     ["la ronda quedó cerca", () => new Error("HostError: Error(Contract, #5)")],
     ["algo que nadie esperaba", () => new Error("boom")],
   ])("%s", async (_nombre, hacer) => {
-    h.wallet = pollar(vi.fn().mockRejectedValue(hacer()));
+    const enviar = vi.fn().mockRejectedValue(hacer());
+    h.wallet = pollar(enviar);
     const { error } = await correr(sellar());
     expect(error).toBeInstanceOf(Error);
-    expect(eventos).toEqual([]);
+    // El error es el que dijo Pollar, no el cierre por falta de portero.
+    expect((error as { name?: string }).name).not.toBe("ErrorPortero");
+    expect(enviar).toHaveBeenCalled();
+    expect(avisos()).toEqual([]);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
   });
 
@@ -630,7 +769,25 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     h.accountOnRpc.mockResolvedValue(false);
     h.wallet = pollar();
     await correr(sellar());
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
+  });
+
+  it("tampoco cuando paga el portero y se quedó sin fondo: sale su no, sin grifo ni caja", async () => {
+    const f = porteroDeMentira("portero", () => responder(503, { motivo: "fondo" }));
+    const { wallet, firmar, deshacer } = pollarParaElPortero();
+    try {
+      // El SDK de mentira y el cliente del contrato, cargados antes de que corra el reloj (ver arriba).
+      await Promise.all([import("@stellar/stellar-sdk"), import("../stellar/contract")]);
+      h.wallet = wallet;
+      const { error } = await correr(sellar());
+      expect(error).toMatchObject({ name: "ErrorPortero", motivo: "fondo" });
+      expect(firmar).toHaveBeenCalledTimes(1);
+      expect(pagosAlPortero(f).length).toBeGreaterThan(0);
+      expect(avisos()).toEqual([]);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    } finally {
+      deshacer();
+    }
   });
 
   it("la falta de saldo se le dice sin culparla y sin mandarla a ningún lado", async () => {
@@ -776,11 +933,13 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     conGrifoApagado();
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada.
+    porteroDeMentira("pollar");
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 });
 
@@ -1014,13 +1173,15 @@ describe("el sorteo (drawOnChain) se ayuda igual que el sellado", () => {
   it("en mainnet nunca hay grifo ni caja de fondos: no se pide nada y el error sale tal cual", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada.
+    porteroDeMentira("pollar");
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
     h.wallet = pollar(enviar);
     const { error } = await sortear();
-    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 
   it("con otra wallet no cambia nada: el error sale tal cual, sin grifo ni caja de fondos", async () => {
@@ -1231,11 +1392,24 @@ describe("el costo del sello de verdad (antes de firmar o de entregarlo)", () =>
   it("en mainnet el tope es otro: 0,5 XLM ya corta, 0,1 no", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
-    h.wallet = pollar();
-    h.seal.mockImplementation(async () => txSimulada("5000000"));
-    expect(nombre((await sellar()).error)).toBe("CostoAlto");
-    h.seal.mockImplementation(async () => txSimulada("1000000"));
-    expect((await sellar()).r?.txHash).toBe("deadbeef");
+    // Con el portero que paga, como en mainnet con el cobro por uso: el tope corta antes de pedir la firma.
+    const f = porteroDeMentira("portero");
+    const { wallet, firmar, deshacer } = pollarParaElPortero();
+    try {
+      h.wallet = wallet;
+      h.seal.mockImplementation(async () => txSimulada("5000000"));
+      expect(nombre((await sellar()).error)).toBe("CostoAlto");
+      expect(firmar).not.toHaveBeenCalled();
+      expect(pagosAlPortero(f)).toHaveLength(0);
+      h.seal.mockImplementation(async () => txSimulada("1000000"));
+      const { r, error } = await sellar();
+      expect(error).toBeUndefined();
+      expect(r?.txHash).toBe(HASH_FIRMADA);
+      expect(firmar).toHaveBeenCalledTimes(1);
+      expect(pagosAlPortero(f)).toHaveLength(1);
+    } finally {
+      deshacer();
+    }
   });
 
   it("con un costo normal no pasa nada raro: sella como siempre", async () => {

@@ -11,6 +11,7 @@ import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
 import { initPlegables } from "./ui/plegable";
 import { iniciarCupo } from "./ui/cupo-patrocinio";
+import { iniciarCupon } from "./ui/cupon-enlace-entorno";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
@@ -220,6 +221,8 @@ reponerBorrador();
 abrirConElModoPedido();
 initVistas();
 initWalletUI();
+// El cupón que llegó en el enlace (`#cupon=`): se guarda y se saca de la dirección con la sesión. Sin el acceso por cupón a la vista, no hace nada.
+iniciarCupon();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
 // El modo stand, si se recargó en él.

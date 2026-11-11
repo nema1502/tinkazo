@@ -745,7 +745,8 @@ export function selloSinGrabar(e: unknown): boolean {
 export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
     const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
-    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
+    // Con el cobro por uso, una cuenta que el portero no cubre oye lo mismo que en la caja de la red: que todavía no tiene acceso.
+    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada(), cobroPorUso: await rigeElCobroPorUso() });
     // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
     // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
     // habla de "sellar" y al sortear confundía).
@@ -779,6 +780,15 @@ export async function cuentaPatrocinada(): Promise<boolean> {
   try {
     const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
     return submitsItself(activeWallet());
+  } catch {
+    return false;
+  }
+}
+
+/** Rige el cobro por uso del modo Oficial (`cobro-oficial.ts`). Si no se puede saber, no: la frase de siempre. */
+async function rigeElCobroPorUso(): Promise<boolean> {
+  try {
+    return (await import("../stellar/cobro-oficial")).cobroPorUso();
   } catch {
     return false;
   }

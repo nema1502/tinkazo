@@ -15,7 +15,8 @@ import { configDelPortero } from "./patrocinio-config";
  *   manda a la red. El hash que devuelve es el de la transacción interna, el mismo que ya consulta
  *   `envio.ts`.
  *
- * **Sin portero configurado, nada cambia:** no hay ninguna consulta y rige Pollar, como hoy. La dirección sale de
+ * **Sin portero configurado, nada cambia en Prueba:** no hay ninguna consulta y rige Pollar, como hoy. En la red
+ * principal (Oficial) es al revés: sin portero no se paga con nadie (`elegirPatrocinador` lanza `cerrado`). La dirección sale de
  * la variable de esta red o, en `tinkazo.app` y en Prueba, de la de por defecto (`patrocinio-config.ts`). Si el
  * portero contesta que es de otra red, no se le manda nada: cerrado ante la duda.
  * **Con la variable puesta y sin respuesta, cerrado ante la duda:** no se paga con nadie y la pantalla lo dice. Un
@@ -86,8 +87,12 @@ export function textoDelCupo(estado: EstadoDelPatrocinio | null, idioma: string,
 
 /* ---------------------------------------------------------------- los errores */
 
-/** Por qué el portero no pagó. Los de `/v1/patrocinio` del README del Worker, más `cerrado`: el Worker no contesta. */
-export type MotivoDelPortero = "cupo-cuenta" | "cupo-ip" | "fondo" | "apagado" | "cerrado" | "no-permitida" | "cuenta-ajena" | "origen" | "fallaria" | "fee-alta" | "rechazada" | "red" | "interno" | "desconocido";
+/**
+ * Por qué el portero no pagó. Los de `/v1/patrocinio` del README del Worker, más `cerrado`: el Worker no contesta. En la
+ * red principal con el cobro por uso, `sin-sorteos` (402: a la cuenta no le quedan sorteos oficiales que alcancen) y
+ * `sin-alta`, que no viene del Worker: lo dice el sitio antes de pedir la firma de una cuenta sin acceso al modo Oficial.
+ */
+export type MotivoDelPortero = "cupo-cuenta" | "cupo-ip" | "fondo" | "apagado" | "cerrado" | "no-permitida" | "cuenta-ajena" | "origen" | "fallaria" | "fee-alta" | "rechazada" | "red" | "interno" | "sin-sorteos" | "sin-alta" | "desconocido";
 
 /**
  * El portero no pagó. Lo que importa de su respuesta, sin el XDR ni la cuenta. `errorKey` lo traduce a
@@ -107,8 +112,10 @@ export class ErrorPortero extends Error {
   readonly reintentable: boolean;
   /** Cuando el portero dice que ahora rige otro (`apagado` con `rige:"pollar"`): la próxima vez se pregunta de nuevo. */
   readonly rige?: string;
+  /** Con `sin-sorteos`: cuántos sorteos oficiales se le vencieron a la cuenta sin usar. */
+  readonly vencieron?: number;
 
-  constructor(motivo: MotivoDelPortero, estado: number, extra: { que?: "sellos" | "sorteos" | undefined; liberaEn?: number | undefined; max?: number | undefined; razon?: string | undefined; detalle?: string | undefined; rige?: string | undefined } = {}) {
+  constructor(motivo: MotivoDelPortero, estado: number, extra: { que?: "sellos" | "sorteos" | undefined; liberaEn?: number | undefined; max?: number | undefined; razon?: string | undefined; detalle?: string | undefined; rige?: string | undefined; vencieron?: number | undefined } = {}) {
     // `fallaria` lleva el error de la simulación (`Error(Contract, #5)`…), para que se lea como cualquier error del contrato.
     super(`portero-${motivo}${extra.razon ? `/${extra.razon}` : ""}${motivo === "fallaria" && extra.detalle ? ` ${extra.detalle}` : ""}`);
     this.name = "ErrorPortero";
@@ -120,6 +127,7 @@ export class ErrorPortero extends Error {
     if (extra.razon) this.razon = extra.razon;
     if (extra.detalle) this.detalle = extra.detalle;
     if (extra.rige) this.rige = extra.rige;
+    if (extra.vencieron !== undefined) this.vencieron = extra.vencieron;
     this.reintentable = motivo === "red" || motivo === "interno";
   }
 }
@@ -141,15 +149,26 @@ export interface CupoDeLaCuenta {
 }
 
 /**
+ * Lo oficial de la cuenta, que el portero de la red principal suma a `/cupo` con el cobro por uso: si la cuenta está en
+ * su libro (`acceso`) y, si está, cuántos sorteos oficiales le quedan y el próximo vencimiento (en ms) con cuántos vencen.
+ */
+export interface OficialDeLaCuenta {
+  acceso: boolean;
+  sorteos: { quedan: number; proximoVence: { fecha: number; cuantos: number } | null } | null;
+}
+
+/**
  * Quién paga ahora, para esta cuenta.
  *
  * - `pollar`: como siempre (también si no hay portero configurado: `configurado: false`).
  * - `portero`: paga el portero. `cupo` trae lo que le queda a la cuenta.
  * - `cerrado`: no se paga con nadie. El portero no contesta, está apagado o le falta configuración.
+ *
+ * `oficial` está solo si el portero lo mandó (la red principal con el cobro por uso). En Prueba no viene nunca.
  */
 export type EstadoDelPatrocinio =
-  | { rige: "pollar"; configurado: boolean }
-  | { rige: "portero"; cupo: CupoDeLaCuenta }
+  | { rige: "pollar"; configurado: boolean; oficial?: OficialDeLaCuenta }
+  | { rige: "portero"; cupo: CupoDeLaCuenta; oficial?: OficialDeLaCuenta }
   | { rige: "cerrado"; motivo: "sin-respuesta" | "apagado" | "config" | "fondo" };
 
 const numero = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
@@ -158,8 +177,29 @@ const cuenta = (x: unknown): { usados: number; max: number; quedan: number } => 
   return { usados: numero(o.usados), max: numero(o.max), quedan: numero(o.quedan) };
 };
 
+const esConteo = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0;
+
 /**
- * Lee la respuesta de `/cupo`. Cualquier cosa que no se entienda es `cerrado`: ante la duda no se paga.
+ * El bloque `oficial` de `/cupo`: `undefined` si no vino (Prueba, o el portero sin el cobro por uso) y `null` si vino y no
+ * se entiende. Con `acceso` en falso no hay sorteos que contar; con `acceso` y sin un número de sorteos que se entienda,
+ * los sorteos quedan en `null` (y quien decide no pide la firma del sello).
+ */
+function leerOficial(x: unknown): OficialDeLaCuenta | null | undefined {
+  if (x === undefined) return undefined;
+  if (!x || typeof x !== "object") return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.acceso !== "boolean") return null;
+  if (!o.acceso) return { acceso: false, sorteos: null };
+  const s = (o.sorteos && typeof o.sorteos === "object" ? o.sorteos : {}) as Record<string, unknown>;
+  if (!esConteo(s.quedan)) return { acceso: true, sorteos: null };
+  const v = (s.proximoVence && typeof s.proximoVence === "object" ? s.proximoVence : null) as Record<string, unknown> | null;
+  const proximoVence = v && esConteo(v.fecha) && v.fecha > 0 && esConteo(v.cuantos) ? { fecha: v.fecha, cuantos: v.cuantos } : null;
+  return { acceso: true, sorteos: { quedan: Math.floor(s.quedan), proximoVence } };
+}
+
+/**
+ * Lee la respuesta de `/cupo`. Cualquier cosa que no se entienda es `cerrado`: ante la duda no se paga. Eso vale también
+ * para un bloque `oficial` que vino y no se entiende.
  *
  * Primero `rige`, que dice quién paga: con `pollar` se sigue como siempre, sin mirar `prendido` (el Worker lo manda
  * en falso, con `motivo:"pollar"`, porque `prendido` solo dice si el portero paga ahora). Con `portero`, se usa
@@ -170,13 +210,16 @@ export function leerCupo(estado: number, cuerpo: unknown, redEsperada: NetworkNa
   const o = cuerpo as Record<string, unknown>;
   // El portero dice de qué red es. Si no es la de este modo, no se le manda nada.
   if (typeof o.red === "string" && o.red !== redEsperada) return { rige: "cerrado", motivo: "sin-respuesta" };
-  if (o.rige === "pollar") return { rige: "pollar", configurado: true };
+  const oficial = leerOficial(o.oficial);
+  if (oficial === null) return { rige: "cerrado", motivo: "sin-respuesta" };
+  const conOficial = oficial ? { oficial } : {};
+  if (o.rige === "pollar") return { rige: "pollar", configurado: true, ...conOficial };
   if (o.rige !== "portero") return { rige: "cerrado", motivo: "sin-respuesta" };
   if (o.prendido !== true) return { rige: "cerrado", motivo: o.motivo === "config" ? "config" : o.motivo === "apagado" ? "apagado" : o.motivo === "fondo" ? "fondo" : "sin-respuesta" };
   // Sin cuánto le queda a la cuenta no hay nada que decir ni que contar: un cupo que falta no es un cupo de cero.
   const sellos = (o.sellos && typeof o.sellos === "object" ? o.sellos : {}) as Record<string, unknown>;
   if (typeof sellos.quedan !== "number" || !Number.isFinite(sellos.quedan)) return { rige: "cerrado", motivo: "sin-respuesta" };
-  return { rige: "portero", cupo: { sellos: cuenta(o.sellos), sorteos: cuenta(o.sorteos), liberaEn: numero(o.liberaEn) } };
+  return { rige: "portero", cupo: { sellos: cuenta(o.sellos), sorteos: cuenta(o.sorteos), liberaEn: numero(o.liberaEn) }, ...conOficial };
 }
 
 /** La última vez que se preguntó, el servicio no contestó a tiempo: la próxima espera menos. */
@@ -230,6 +273,8 @@ export interface OpcionesDeEstado {
   url?: string | null;
   /** La dirección es la de por defecto (`patrocinio-config.ts`): sin respuesta, rige Pollar. Solo con `url`. */
   porDefecto?: boolean;
+  /** La red del modo vigente, si no es la del entorno (las pruebas). */
+  red?: NetworkName;
 }
 
 /** La dirección del portero y si es la de por defecto, según lo que se pasó o el entorno. */
@@ -334,6 +379,7 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown): ErrorPortero 
     razon: texto(o.razon),
     detalle: texto(o.detalle) ?? texto(o.codigo),
     rige: texto(o.rige),
+    vencieron: typeof o.vencieron === "number" && Number.isFinite(o.vencieron) ? o.vencieron : undefined,
   };
   const conocido: Record<string, MotivoDelPortero> = {
     "cupo-cuenta": "cupo-cuenta",
@@ -348,6 +394,8 @@ export function errorDeRespuesta(estado: number, cuerpo: unknown): ErrorPortero 
     rechazada: "rechazada",
     red: "red",
     interno: "interno",
+    // 402: a la cuenta no le quedan sorteos oficiales que alcancen (la red principal con el cobro por uso).
+    "sin-sorteos": "sin-sorteos",
   };
   const m = (motivo && conocido[motivo]) || (estado === 502 ? "red" : estado >= 500 ? "interno" : "desconocido");
   return new ErrorPortero(m, estado, extra);
@@ -382,9 +430,12 @@ export function crearPortero(url: string, o: OpcionesDeEstado = {}): Patrocinado
       const hash = typeof c.hash === "string" ? c.hash : "";
       const status = typeof c.status === "string" && ESTADOS_QUE_DICE_EL_PORTERO.has(c.status) ? c.status : "PENDING";
       if (!/^[0-9a-f]{64}$/i.test(hash)) throw new ErrorPortero("interno", 200, { detalle: "sin-hash" });
-      // Se gastó un sello: lo que queda cambió, y la línea de la página lo muestra sin preguntar otra vez.
+      // Se gastó un sello: lo que queda cambió, y la línea de la página lo muestra sin preguntar otra vez. Con lo oficial
+      // (los sorteos que gasta cada sello) no se adivina: se olvida y la próxima vez se pregunta.
       const previo = guardado && guardado.estado.rige === "portero" ? guardado : null;
-      if (previo && previo.estado.rige === "portero" && typeof c.quedan === "number") {
+      if (previo && previo.estado.rige === "portero" && previo.estado.oficial) {
+        olvidarElEstado();
+      } else if (previo && previo.estado.rige === "portero" && typeof c.quedan === "number") {
         const cupo = previo.estado.cupo;
         const quedanSorteos = typeof c.quedanSorteos === "number" ? c.quedanSorteos : cupo.sorteos.quedan;
         const nuevo: EstadoDelPatrocinio = {
@@ -408,6 +459,9 @@ export function crearPortero(url: string, o: OpcionesDeEstado = {}): Patrocinado
  */
 export async function elegirPatrocinador(g: string, wallet: BilleteraQueManda, o: OpcionesDeEstado = {}): Promise<Patrocinador> {
   const { url, porDefecto } = configDe(o);
+  // En la red principal, la regla de quién paga la pone el portero y nadie más: sin él, Pollar no queda como quien paga
+  // sin regla (cada firma de una cuenta de Google le cuesta créditos a Tinkazo). Cerrado antes de pedir ninguna firma.
+  if (!url && (o.red ?? network.name) === "mainnet") throw new ErrorPortero("cerrado", 0, { detalle: "sin-portero" });
   // Con portero y sin dirección de la cuenta no se pregunta nada: el cupo sería el de una cuenta que no es de la persona.
   // Con la dirección por defecto el portero no es condición: sin cuenta que contar, rige Pollar, como antes de que existiera.
   if (url && !g && porDefecto) return crearPollar(wallet, { ...o, url, porDefecto });

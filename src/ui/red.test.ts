@@ -316,11 +316,12 @@ describe("caso 1: el sello cuesta más de lo que el patrocinador paga", () => {
 });
 
 /**
- * Mainnet: no hay grifo. Antes de "Seguir sin sello" se ofrece "Sellar pagando con mi cuenta" si la
- * cuenta es una wallet con saldo suficiente (el doble de lo que cuesta sellar). "Seguir sin sello" queda
- * al final, y siempre con la confirmación.
+ * Mainnet: no hay grifo. Con una cuenta de Google o de correo (Pollar) tampoco hay "Sellar pagando con mi
+ * cuenta", tenga el saldo que tenga y con o sin `VITE_ALTA` (cada firma de esa cuenta le cuesta a Tinkazo y,
+ * sin el portero, nadie la cuenta): la salida es "Seguir sin sello", siempre con la confirmación. El umbral
+ * del saldo (el doble de lo que cuesta sellar) sigue en `red-acciones.test.ts`, donde todavía decide.
  */
-describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
+describe("mainnet: sin grifo, y con Pollar sin pagar con mi cuenta", () => {
   const MAINNET = "Public Global Stellar Network ; September 2015";
   const principal = (o: RpcDeMentira = {}): Record<string, RpcDeMentira> => ({
     [RPC_LISTAS.mainnet[0]]: { passphrase: MAINNET, ...o },
@@ -330,17 +331,19 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
     h.red.name = "mainnet";
   });
 
-  it("caso 1 con saldo suficiente: 'Sellar pagando con mi cuenta' primero (sin grifo), 'Seguir sin sello' aparte", async () => {
+  it("caso 1 con saldo de sobra y la bandera apagada: ni 'Sellar pagando con mi cuenta' ni grifo, 'Seguir sin sello' y confirmar", async () => {
     h.xlmBalance.mockResolvedValue(50);
     // 5 XLM de recurso: muy por encima de 0,33.
     red(principal({ minResourceFee: "50000000" }));
     const { r, sellar } = await cargar();
     expect(await r.chequearAntesDeSellar()).toBe(false);
     expect(frase()).toBe("Hoy sellar cuesta más de lo que Tinkazo puede pagar.");
-    expect(boton().textContent).toBe("Sellar pagando con mi cuenta");
-    expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
+    expect(boton().textContent).toBe("Seguir sin sello");
+    expect(caja().botones()).toHaveLength(0);
     r.alApretarSellar();
-    await esperar(() => expect(sellar).toHaveBeenCalledWith({ saltarChequeo: true, pagarConMiCuenta: true }));
+    // Pide confirmar y no sella pagando con la cuenta.
+    expect(boton().textContent).toBe("Seguir igual");
+    expect(sellar).not.toHaveBeenCalled();
     // Nada de grifo: en mainnet no existe.
     expect(h.fund).not.toHaveBeenCalled();
   });
@@ -366,27 +369,47 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
     await esperar(() => expect(sellar).toHaveBeenCalledWith({ sinSello: true, saltarChequeo: true }));
   });
 
-  it("caso 1 con saldo justo para el doble: alcanza; con un poco menos, no", async () => {
-    // 5 XLM de recurso: el doble son 10 XLM.
+  it("caso 1: con Pollar el saldo no abre ninguna salida de pago propio, ni con el doble ni con menos", async () => {
+    // 5 XLM de recurso: el doble son 10 XLM. Antes 10,1 alcanzaba para "Sellar pagando con mi cuenta".
     red(principal({ minResourceFee: "50000000" }));
-    h.xlmBalance.mockResolvedValue(10.1);
-    const a = await cargar();
-    await a.r.chequearAntesDeSellar();
-    expect(boton().textContent).toBe("Sellar pagando con mi cuenta");
-    h.xlmBalance.mockResolvedValue(9);
-    const b = await cargar();
-    await b.r.chequearAntesDeSellar();
-    expect(boton().textContent).toBe("Seguir sin sello");
+    for (const saldo of [10.1, 9]) {
+      h.xlmBalance.mockResolvedValue(saldo);
+      const { r } = await cargar();
+      await r.chequearAntesDeSellar();
+      expect(boton().textContent, String(saldo)).toBe("Seguir sin sello");
+      expect(caja().botones()).toHaveLength(0);
+    }
   });
 
-  it("caso 4, el patrocinador no tiene con qué pagar y la cuenta tiene saldo: 'Sellar pagando con mi cuenta'", async () => {
+  it("caso 4, el patrocinador no tiene con qué pagar y la cuenta tiene saldo: igual no es su cuenta, probar de nuevo o seguir sin sello", async () => {
     h.xlmBalance.mockResolvedValue(5);
     red(principal());
     const { r } = await cargar();
     await r.mostrarSinSaldo();
-    expect(frase()).toBe("Tu cuenta no tiene saldo para sellar.");
-    expect(boton().textContent).toBe("Sellar pagando con mi cuenta");
+    expect(frase()).toContain("no es por tu cuenta");
+    expect(boton().textContent).toBe("Probar ahora");
     expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
+  });
+
+  it("con VITE_ALTA apagada, en ningún caso de la caja aparece 'Sellar pagando con mi cuenta'", async () => {
+    h.xlmBalance.mockResolvedValue(1_000);
+    for (const [rpcs, mirar] of [
+      [principal({ minResourceFee: "50000000" }), "chequeo"],
+      [principal(), "sin-saldo"],
+      [principal({ minResourceFee: "50000000" }), "costo"],
+      [principal(), "ajena"],
+      [principal(), "fondo"],
+    ] as const) {
+      red(rpcs);
+      const { r } = await cargar();
+      if (mirar === "chequeo") await r.chequearAntesDeSellar();
+      else if (mirar === "sin-saldo") await r.mostrarSinSaldo();
+      else if (mirar === "costo") await r.mostrarCostoAlto(5, false);
+      else await r.mostrarSinPatrocinio({ motivo: mirar });
+      const textos = [boton().textContent, ...caja().botones().map((b) => b.textContent)];
+      expect(textos, mirar).not.toContain("Sellar pagando con mi cuenta");
+      expect(frase(), mirar).not.toContain("pagando con tu cuenta");
+    }
   });
 
   it("caso 4 sin saldo propio: no es su cuenta, se puede volver a probar o seguir sin sello", async () => {

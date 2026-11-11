@@ -368,6 +368,8 @@
   .red-estado.verde { border-left-color: var(--teal); }
   .red-estado.amarillo { border-left-color: var(--yellow); }
   .red-estado.rojo { border-left-color: var(--orange); }
+  /* Sin sorteos oficiales (src/ui/cupo-patrocinio.ts): la línea del cupo pesa como un aviso, con la marca naranja de la caja de la red. */
+  .note.cupo-linea--cero { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
   .red-estado .red-frase { margin: 0; display: flex; align-items: baseline; gap: 10px; }
   .red-estado .red-ico { flex: none; width: 1.4em; text-align: center; font-weight: 800; }
   .red-estado .red-sub { margin-top: 10px; gap: 8px; }
@@ -2912,6 +2914,14 @@
     background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 0;
   }
   .cl-form input.cl-codigo { text-align: center; letter-spacing: 0.4em; font-family: ui-monospace, Consolas, monospace; font-size: 22px; }
+  /* El cupón: como en la tarjeta, en tres grupos y en letra que no confunde la O con el 0. */
+  .cl-form input.cl-cupon { text-align: center; letter-spacing: 0.12em; font-family: ui-monospace, Consolas, monospace; font-size: 20px; text-transform: uppercase; }
+  .cl-form input.cl-cupon::placeholder { letter-spacing: 0.12em; }
+  /* El cupón queda seleccionado tras un error («revisá las letras»): con los colores de la casa se lee, no en el gris del sistema. */
+  .cl-form input.cl-cupon::selection { background: var(--magenta); color: var(--on-accent); }
+  .cl-form .cl-ayuda { margin: 0; font-size: 16px; line-height: 1.45; }
+  .cl-cupon-listo { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap; }
+  .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }
   .cl-raya { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font-size: 16px; font-weight: 600; color: var(--ink2); }
   .cl-raya::before, .cl-raya::after { content: ""; flex: 1; border-top: 2px solid var(--ink2); }
   .cl-secundario {

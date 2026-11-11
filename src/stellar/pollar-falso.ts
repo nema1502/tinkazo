@@ -24,6 +24,9 @@ export interface EstadoPollarFalso {
   billetera: BilleteraFalsa | null;
   redDelCliente: "mainnet" | "testnet";
   paso: string;
+  /** La sesión ya la revalidó Pollar (`verified` de `getAuthState`), y su token. */
+  verificada: boolean;
+  token: string;
   llamadas: string[];
   argumentos: Record<string, unknown[][]>;
   impl: Record<string, Impl | undefined>;
@@ -31,6 +34,7 @@ export interface EstadoPollarFalso {
     billetera: Set<(p: string) => void>;
     cofirma: Set<(s: unknown) => void>;
     transaccion: Set<(s: unknown) => void>;
+    sesion: Set<(s: unknown) => void>;
   };
   /** Lo que devuelve `getCosignState()`. */
   cofirma: { pending: unknown[]; lastResolved?: unknown };
@@ -49,10 +53,12 @@ export function estadoPollarFalso(): EstadoPollarFalso {
     billetera: null,
     redDelCliente: "mainnet",
     paso: "authenticated",
+    verificada: false,
+    token: "",
     llamadas: [],
     argumentos: {},
     impl: {},
-    oyentes: { billetera: new Set(), cofirma: new Set(), transaccion: new Set() },
+    oyentes: { billetera: new Set(), cofirma: new Set(), transaccion: new Set(), sesion: new Set() },
     cofirma: { pending: [] },
     transaccion: null,
   };
@@ -68,14 +74,28 @@ export function reiniciar(h: EstadoPollarFalso): void {
   h.billetera = null;
   h.redDelCliente = "mainnet";
   h.paso = "authenticated";
+  h.verificada = false;
+  h.token = "";
   h.llamadas = [];
   h.argumentos = {};
   h.impl = {};
   h.oyentes.billetera.clear();
   h.oyentes.cofirma.clear();
   h.oyentes.transaccion.clear();
+  h.oyentes.sesion.clear();
   h.cofirma = { pending: [] };
   h.transaccion = null;
+}
+
+/** Lo que devuelve `getAuthState()`: el paso, si Pollar ya revalidó la sesión, y su token. */
+export function estadoDeSesion(h: EstadoPollarFalso): { step: string; verified: boolean; session: { token: { accessToken: string } } } {
+  return { step: h.paso, verified: h.verificada, session: { token: { accessToken: h.token } } };
+}
+
+/** Pollar revalida la sesión (o la cierra): cambia el estado y avisa a quien escucha, como `_setAuthState` del kit. */
+export function emitirSesion(h: EstadoPollarFalso, cambios: Partial<Pick<EstadoPollarFalso, "paso" | "verificada" | "token">>): void {
+  Object.assign(h, cambios);
+  for (const cb of [...h.oyentes.sesion]) cb(estadoDeSesion(h));
 }
 
 /** Cambia el estado de la máquina de transacciones y avisa, como `_setTransactionState` del kit. */
@@ -135,16 +155,17 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     getNetwork(): string {
       return h.redDelCliente;
     }
-    getAuthState(): { step: string } {
-      return { step: h.paso };
+    getAuthState(): { step: string; verified: boolean; session: { token: { accessToken: string } } } {
+      return estadoDeSesion(h);
     }
     ready = asincrono("ready", () => undefined);
     refreshWalletState = asincrono("refreshWalletState", () => h.billetera?.provisioning ?? null);
     onConfirmationRequest(): () => void {
       return () => undefined;
     }
-    onAuthStateChange(): () => void {
-      return () => undefined;
+    onAuthStateChange(cb: (s: unknown) => void): () => void {
+      h.oyentes.sesion.add(cb);
+      return () => h.oyentes.sesion.delete(cb);
     }
     onWalletStateChange(cb: (p: string) => void): () => void {
       h.oyentes.billetera.add(cb);

@@ -35,6 +35,7 @@ import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-te
 import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
+import { cobroPorUso } from "../stellar/cobro-oficial";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -651,6 +652,65 @@ async function cuentaListaParaSellar(btn: HTMLButtonElement): Promise<boolean> {
   });
 }
 
+/**
+ * Con el cobro por uso del modo Oficial (`cobro-oficial.ts`), la compuerta del acceso (`sin-sorteos.ts`): el portero
+ * tiene que decir que la cuenta tiene acceso al modo Oficial y sorteos oficiales que alcancen para estos ganadores. Si
+ * no, el paso de la cuenta o la ventana de «Se te acabaron», y no se pide ninguna firma. Mientras pregunta, el botón dice
+ * «Revisando tu cuenta…», como la compuerta del paso. Si el módulo no baja, no se sella (y lo dice).
+ */
+async function accesoOficialParaSellar(btn: HTMLButtonElement, ganadores: number, cupon = false): Promise<boolean> {
+  let accesoParaSellar: typeof import("./sin-sorteos").accesoParaSellar;
+  try {
+    ({ accesoParaSellar } = await import("./sin-sorteos"));
+  } catch {
+    return !(await frenarSinElPaso());
+  }
+  return accesoParaSellar(ganadores, {
+    volverA: btn,
+    ...(cupon ? { cupon: true } : {}),
+    alRevisar: (revisando) => {
+      btn.disabled = revisando;
+      if (revisando) btn.textContent = t("clRevisando");
+      else {
+        btn.dataset.i = claveDeSellar();
+        btn.textContent = t(btn.dataset.i);
+      }
+    },
+  });
+}
+
+/**
+ * Hay un sello de esta lista que se cortó y todavía no se sabe si entró. Averiguarlo no pide ninguna firma, y si entró
+ * pudo gastar el último sorteo oficial: la compuerta del acceso no lo frena. Si hay que sellar de nuevo, el candado de
+ * antes de la firma (`envio-sdk.ts`) vuelve a mirar el acceso.
+ */
+async function hayUnSelloPendiente(names: string[]): Promise<boolean> {
+  const s = currentSession();
+  if (!s) return false;
+  try {
+    const seguro = await import("./sello-seguro");
+    return seguro.leerPendiente(s.address, bytesToHex(listHash(names)), network.name, network.contractId ?? "") !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** El no del portero fue que no le quedan sorteos oficiales: la ventana de «Se te acabaron». `false` si no era eso. */
+async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promise<boolean> {
+  const x = e as { name?: unknown; motivo?: unknown } | null;
+  if (!x || typeof x !== "object" || x.name !== "ErrorPortero" || x.motivo !== "sin-sorteos") return false;
+  try {
+    const m = await import("./sin-sorteos");
+    if (!m.esSinSorteos(e)) return false;
+    // Ya no se está sellando: «Pasar a Prueba» de la ventana tiene que poder cambiar de modo.
+    marcarSellandoAhora(false);
+    await m.alQuedarseSinSorteos({ volverA: btn });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   renumerarLaLista();
   const names = parseNames();
@@ -672,6 +732,12 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
+  // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
+  if (anchoring && network.name === "mainnet" && cobroPorUso() && !(await hayUnSelloPendiente(names)) && !(await accesoOficialParaSellar(btn, Math.min(ganadoresPedidos(), names.length), opciones.conCupon === true))) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
   // En modo Oficial con una cuenta de Google o de correo, la cuenta tiene que estar activada y protegida antes de sellar:
   // si falta algo, el paso «Dejá tu cuenta lista» a pantalla completa (`cuenta-lista-flujo.ts`). Va antes de la
   // confirmación del primer sello y de cerrar la lista, así sus salidas funcionan. Fuera del modo Oficial no se baja nada.
@@ -843,6 +909,11 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       if (esCostoAlto(e)) {
         hideTxStatus("seal-status");
         await mostrarCostoAlto(e.costoXlm, e.restaurar);
+        return;
+      }
+      // Con el cobro por uso, el portero (o el candado de antes de la firma) dijo que no quedan sorteos oficiales.
+      if (await siSeAcabaronLosSorteos(e, btn)) {
+        hideTxStatus("seal-status");
         return;
       }
       // El portero del patrocinio dijo que no (se acabó el cupo, no pagó o no contestó): su pantalla, con su acción.

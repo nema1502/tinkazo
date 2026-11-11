@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { redPrincipalConPollar } from "../stellar/cobro-oficial";
 import { network } from "../stellar/config";
 import { esNoQueBloquea } from "../stellar/errores";
 import { grifoDisponible } from "../stellar/grifo";
@@ -11,7 +12,7 @@ import { currentSession } from "./wallet-ui";
  * tiene con qué pagar la suya (o en testnet, el grifo se encarga), es "Sortear pagando con mi cuenta".
  *
  * El sorteo es el mismo y el ganador también: lo único que cambia es quién paga la comisión. Este archivo decide si se
- * ofrece y guarda la elección hasta el próximo intento (`draw.ts`).
+ * ofrece y guarda la elección hasta el próximo intento (`draw.ts`). Con el cobro por uso del modo Oficial no se ofrece.
  */
 
 /** La persona eligió pagar con su cuenta: vale para el próximo intento de sortear, una sola vez. */
@@ -38,6 +39,9 @@ const TOPE_SALDO_MS = 3_000;
  * puede: `conFondos` (anchor.ts) la carga antes de firmar.
  */
 export async function sePuedeSortearPagando(e: unknown): Promise<boolean> {
+  // En la red principal con una cuenta de Google o de correo no existe, con o sin banderas: cada firma de esa cuenta le
+  // cuesta a Tinkazo, y sin el portero no hay quien la cuente (`cobro-oficial.ts`).
+  if (redPrincipalConPollar()) return false;
   if (!esNoQueBloquea(e)) return false;
   const s = currentSession();
   if (!s) return false;
