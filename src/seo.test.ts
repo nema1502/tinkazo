@@ -759,11 +759,11 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
     expect(leer("precios.html")).not.toMatch(/doble|double/i);
   });
 
-  it("abre diciendo que hoy es gratis y que los precios se publican muy pronto", () => {
-    expect(T.es.prNote).toMatch(/^Hoy Tinkazo es gratis\. Los precios para quien organiza los vamos a publicar acá muy pronto/);
-    expect(T.en.prNote).toMatch(/^Today Tinkazo is free\. We will publish pricing for organizers here very soon/);
-    expect(T.es.prNote).toContain("Participar en un sorteo y comprobarlo es gratis, siempre.");
-    expect(T.en.prNote).toContain("Taking part in a draw and checking it is always free.");
+  it("abre diciendo que con el cupón de tu evento el modo Oficial es gratis, y que participar y comprobar lo es siempre", () => {
+    expect(T.es.prNote).toBe("El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.");
+    expect(T.en.prNote).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it is always free.");
+    // El HTML trae el mismo texto, que es lo que ven los buscadores y quien no tiene JavaScript.
+    expect(leer("precios.html")).toContain(`data-i="prNote">${T.es.prNote as string}</p>`);
   });
 
   it("dice lo mismo del cobro en la portada, la ruleta y precios, y no queda el 'si algún día'", () => {

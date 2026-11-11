@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { problemasDeAlta } from "./alta-build";
 import { BANDERAS_APAGADAS, altaActiva, altaLibre, altaPagoActivo, banderasDeAlta, sorteoPorServidor } from "./alta-config";
@@ -121,5 +122,48 @@ describe("problemasDeAlta, lo que frena el build", () => {
   it("no escribe el valor de ninguna variable", () => {
     const p = problemasDeAlta({ VITE_ALTA: "1", VITE_PATROCINIO_URL_MAINNET: "", VITE_ALTA_PAGO: "1" }).join(" ");
     expect(p).not.toMatch(/https?:/);
+  });
+});
+
+describe("problemasDeAlta, la publicación de producción", () => {
+  const PORTERO = "https://pm.tinkazo.app";
+
+  it("las páginas dicen que con un cupón el modo Oficial es gratis: la publicación de producción sin VITE_ALTA=1 no sale", () => {
+    for (const alta of [undefined, "", "0", "  "]) {
+      const p = problemasDeAlta({ VERCEL_ENV: "production", VITE_ALTA: alta, VITE_PATROCINIO_URL_MAINNET: PORTERO });
+      expect(p, JSON.stringify(alta)).toHaveLength(1);
+      expect(p[0]).toContain("VITE_ALTA=1");
+      expect(p[0]).toContain("cupón");
+    }
+  });
+
+  it("con VITE_ALTA=1 y el portero de la red principal, la publicación de producción sale", () => {
+    expect(problemasDeAlta({ VERCEL_ENV: "production", VITE_ALTA: "1", VITE_PATROCINIO_URL_MAINNET: PORTERO })).toEqual([]);
+  });
+
+  it("solo frena la publicación de producción: las vistas previas, el desarrollo, la CI y los builds locales salen sin banderas", () => {
+    for (const entorno of ["preview", "development", "", undefined]) {
+      expect(problemasDeAlta({ VERCEL_ENV: entorno }), String(entorno)).toEqual([]);
+    }
+    expect(problemasDeAlta({})).toEqual([]);
+  });
+
+  it("el plan B1 (VITE_ALTA_LIBRE sola) sigue pudiendo publicarse: es la salida de emergencia", () => {
+    expect(problemasDeAlta({ VERCEL_ENV: "production", VITE_ALTA_LIBRE: "1" })).toEqual([]);
+  });
+
+  it("con VITE_ALTA=1 pero sin portero dice una sola cosa: la del portero", () => {
+    const p = problemasDeAlta({ VERCEL_ENV: "production", VITE_ALTA: "1" });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("VITE_PATROCINIO_URL_MAINNET");
+  });
+
+  it("no escribe el valor de ninguna variable", () => {
+    expect(problemasDeAlta({ VERCEL_ENV: "production", VITE_PATROCINIO_URL_MAINNET: "https://secreto.example" }).join(" ")).not.toMatch(/secreto|https?:/);
+  });
+
+  it("vite.config.ts le pasa al control el entorno de la publicación (VERCEL_ENV), no solo las variables VITE_", () => {
+    const config = readFileSync(new URL("../../vite.config.ts", import.meta.url), "utf8");
+    expect(config).toMatch(/problemasDeAlta\(loadEnv\(mode, __dirname, \["VITE_", "VERCEL_ENV"\]\)\)/);
   });
 });

@@ -81,7 +81,7 @@ Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, as
 
 ## Los planes B, de mejor a peor
 
-- **B1, el portero listo y la pantalla del cupón no.** El portero con el libro y la administración, y un build del sitio con `VITE_ALTA_LIBRE=1` y `VITE_ALTA` apagada (el build no sale con las dos). Los equipos que pasan por la mesa le dictan su dirección a quien opera, que los admite con `cupones.mjs admitir`. Cualquiera que entre a Oficial y toque «Activar» cuesta 20 créditos; sellar sigue cerrado para quien no está en el libro.
+- **B1, el portero listo y la pantalla del cupón no.** El portero con el libro y la administración, y un build del sitio con `VITE_ALTA_LIBRE=1` y `VITE_ALTA` apagada (el build no sale con las dos; la publicación de producción lo deja pasar, y las páginas de lectura siguen diciendo que con un cupón el modo Oficial es gratis). Los equipos que pasan por la mesa le dictan su dirección a quien opera, que los admite con `cupones.mjs admitir`. Cualquiera que entre a Oficial y toque «Activar» cuesta 20 créditos; sellar sigue cerrado para quien no está en el libro.
 - **B2, sin portero de mainnet.** Oficial solo con billetera propia; los equipos sortean gratis en Prueba. Las tarjetas se guardan para el próximo evento: se anula el lote y se crea otro con la fecha nueva.
 - **B3, último recurso y solo con la palabra de quien mantiene el proyecto.** La regla de contrato de Pollar para `seal` y `draw` del contrato de mainnet, con solo los créditos del día cargados, porque no tiene tope por cuenta. Se borra al terminar.
 
@@ -94,3 +94,4 @@ Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, as
 - **No desplegar sin `--env mainnet` ni sin `--config wrangler.toml`.** Sin `--env` se despliega el portero de Prueba en `p.tinkazo.app`; sin `--config`, wrangler puede tomar otro `wrangler.json` que encuentre hacia arriba. Y siempre con la versión probada de wrangler (4.160.0), no la última del día.
 - **No cargar toda la plata en la cuenta que paga.** La llave del Worker solo puede gastar comisiones, pero hasta lo cargado.
 - **No dejar las tarjetas boca arriba ni sacarles foto.**
+- **No vaciar `VITE_ALTA` en Vercel antes de revertir los textos.** Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis, y la publicación de producción (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1` (`src/stellar/alta-build.ts`): con la variable vacía el build falla y queda la publicación anterior. Para quitar el acceso por cupón, primero se revierte el commit que puso esos textos y después se vacía la variable.

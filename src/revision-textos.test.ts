@@ -33,9 +33,23 @@ describe("revisión de redacción de los textos visibles", () => {
         if (!html.includes(`data-i="${clave}">${t("es", clave)}<`)) desfasadas.push(`${pagina}, data-i="${clave}"`);
       }
     }
-    expect(vistas).toEqual(expect.arrayContaining(["precios.html:nextBody", "sorteo-verificable.html:verifN3", "terminos.html:tmMore3"]));
+    expect(vistas).toEqual(
+      expect.arrayContaining([
+        "precios.html:nextBody",
+        "precios.html:prNote",
+        "index.html:faq3a",
+        "terminos.html:tmPatrocinio",
+        "terminos.html:tmMore1",
+        "sorteo-verificable.html:verifN3",
+        "terminos.html:tmMore3",
+      ]),
+    );
     const donde = HAY_MODO_OFICIAL ? "el de i18n-modo-oficial.ts" : "el de i18n.ts";
     expect(desfasadas, `El HTML tiene que llevar el texto del diccionario (${donde}) en`).toEqual([]);
+  });
+
+  it("como-funciona.html trae en el HTML el texto de quién paga la comisión, el único que lleva un enlace", () => {
+    expect(leer("como-funciona.html")).toContain(`data-i-html="cfCostoB">${t("es", "cfCostoB")}</p>`);
   });
 
   it("precios.html usa «comprobar» en el título, la descripción y los datos estructurados", () => {

@@ -106,15 +106,17 @@ function textosPorPagina(): Plugin {
 
 /**
  * El build no sale con las banderas del cobro por uso a medio poner (`src/stellar/alta-build.ts`): `VITE_ALTA=1` sin
- * la dirección del portero de la red principal dejaría el acceso sin a quién preguntar. Falla antes de armar nada y
- * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ * la dirección del portero de la red principal dejaría el acceso sin a quién preguntar. Y la publicación de producción
+ * (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1`, porque las páginas dicen que con un cupón el modo Oficial es
+ * gratis. Falla antes de armar nada y sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las
+ * pruebas no se frenan.
  */
 function validarBanderasDeAlta(): Plugin {
   return {
     name: "tinkazo:banderas-de-alta",
     apply: "build",
     config(_config, { mode }) {
-      const problemas = problemasDeAlta(loadEnv(mode, __dirname, "VITE_"));
+      const problemas = problemasDeAlta(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]));
       if (problemas.length) throw new Error(`Las banderas del cobro por uso están a medio poner:\n- ${problemas.join("\n- ")}`);
     },
   };

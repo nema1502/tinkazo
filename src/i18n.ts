@@ -10,8 +10,6 @@ import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
 import { altaPagoActivo } from "./stellar/alta-config";
 import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
 import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
-import { ALTA_EN_EL_BUILD, TEXTOS_PRECIOS_CON_CUPON } from "./alta-textos-precios";
-import { TEXTOS_CON_CUPON } from "./alta-textos-con-cupon";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
 // las páginas de lectura y verificar lo usan con sus pocos textos.
@@ -2997,8 +2995,8 @@ export const T: Record<Lang, Dict> = {
     cupoQuedan: "Te quedan {n} sorteos gratis este mes.",
     cupoQueda1: "Te queda 1 sorteo gratis este mes.",
     cupoCero: "Ya usaste los sorteos gratis de este mes. Vuelven el {fecha}.",
-    tmPatrocinio: "Tinkazo cubre la comisión que cobra la red por sellar y sortear. Puede haber un tope por cuenta y por mes; si se agota, se puede pagar con la propia cuenta o esperar a que vuelva. Si hay tope, para llevar la cuenta el servicio guarda cuántos sellos y sorteos hizo cada cuenta, sin nombres ni listas.",
-    prPatrocinioNota: "Tinkazo cubre el costo de la red por sellar y sortear. Puede haber un tope por cuenta y por mes; si se agota, se puede pagar con la propia cuenta o esperar a que vuelva.",
+    tmPatrocinio: "Tinkazo cubre la comisión que cobra la red por sellar y sortear. Puede haber un tope por cuenta y por mes. Si se agota, se puede pagar con la propia cuenta o esperar a que vuelva. Si hay tope, para llevar la cuenta el servicio guarda cuántos sellos y sorteos hizo cada cuenta, sin nombres ni listas.",
+    prPatrocinioNota: "Tinkazo cubre el costo de la red por sellar y sortear. Puede haber un tope por cuenta y por mes. Si se agota, se puede pagar con la propia cuenta o esperar a que vuelva.",
     sortearPropio: "Sortear pagando con mi cuenta",
     sorteoMasTarde: "Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.",
     txCubriendo: "Estamos cubriendo el costo de la red por vos…",
@@ -5545,8 +5543,8 @@ export const T: Record<Lang, Dict> = {
     cupoQuedan: "You have {n} free draws left this month.",
     cupoQueda1: "You have 1 free draw left this month.",
     cupoCero: "You've used this month's free draws. They're back on {fecha}.",
-    tmPatrocinio: "Tinkazo covers the charge the network makes for sealing and drawing. There may be a cap per account per month; if it runs out, you can pay with your own account or wait for it to come back. If there is a cap, to keep count the service stores how many seals and draws each account has made, with no names or lists.",
-    prPatrocinioNota: "Tinkazo covers the network cost of sealing and drawing. There may be a cap per account per month; if it runs out, you can pay with your own account or wait for it to come back.",
+    tmPatrocinio: "Tinkazo covers the charge the network makes for sealing and drawing. There may be a cap per account per month. If it runs out, you can pay with your own account or wait for it to come back. If there is a cap, to keep count the service stores how many seals and draws each account has made, with no names or lists.",
+    prPatrocinioNota: "Tinkazo covers the network cost of sealing and drawing. There may be a cap per account per month. If it runs out, you can pay with your own account or wait for it to come back.",
     sortearPropio: "Draw paying with my account",
     sorteoMasTarde: "Your draw stays in My draws: you can pick it up from there later.",
     txCubriendo: "We're covering the network cost for you…",
@@ -5574,20 +5572,11 @@ Object.assign(T.es, TEXTOS_ALTA_CUENTA.es);
 Object.assign(T.en, TEXTOS_ALTA_CUENTA.en);
 Object.assign(T.es, TEXTOS_ALTA_PASO.es);
 Object.assign(T.en, TEXTOS_ALTA_PASO.en);
-// La frase de precios.html cuando el modo Oficial se abre con cupones: solo en un build con VITE_ALTA=1 (`alta-textos-precios.ts`).
-if (ALTA_EN_EL_BUILD) {
-  Object.assign(T.es, TEXTOS_PRECIOS_CON_CUPON.es);
-  Object.assign(T.en, TEXTOS_PRECIOS_CON_CUPON.en);
-}
-// Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre (`i18n-modo-oficial.ts`).
+// Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
+// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`).
 if (HAY_MODO_OFICIAL) {
   Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
   Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
-}
-// Con el acceso por cupón en el build, quién paga en Oficial y qué guarda el servicio al canjear (`alta-textos-con-cupon.ts`).
-if (ALTA_EN_EL_BUILD && HAY_MODO_OFICIAL) {
-  Object.assign(T.es, TEXTOS_CON_CUPON.es);
-  Object.assign(T.en, TEXTOS_CON_CUPON.en);
 }
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los

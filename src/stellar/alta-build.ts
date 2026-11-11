@@ -4,6 +4,11 @@
  *
  * Devuelve lo que está mal, en español y sin valores de variables (una dirección o una llave no se escribe en la
  * bitácora de un build). Vacío: el entorno está bien.
+ *
+ * Además de las banderas, mira dónde se publica: `VERCEL_ENV` (lo pone Vercel) dice `production` solo en la
+ * publicación de producción. Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis
+ * (`i18n-modo-oficial.ts`), y sin `VITE_ALTA=1` el sitio no tiene dónde canjearlo: esa publicación no sale. La CI, las
+ * vistas previas y los builds locales no se frenan por esto.
  */
 
 /** Las banderas del cobro por uso: cada una vale 1 (prendida), 0 o vacía (apagada). */
@@ -65,6 +70,12 @@ export function problemasDeAlta(env: Record<string, string | undefined>): string
   }
   for (const k of ["VITE_ALTA_PAGO", "VITE_SORTEO_SERVIDOR"]) {
     if (uno(k) && !uno("VITE_ALTA")) problemas.push(`${k}=1 necesita VITE_ALTA=1: la compra de sorteos y el sorteo por el servidor dependen del acceso.`);
+  }
+  // El plan B1 (VITE_ALTA_LIBRE sola) es la salida de emergencia y se puede publicar sin el acceso por cupón.
+  if (env.VERCEL_ENV === "production" && !uno("VITE_ALTA") && !uno("VITE_ALTA_LIBRE")) {
+    problemas.push(
+      "La publicación de producción necesita VITE_ALTA=1: las páginas dicen que con un cupón de evento el modo Oficial es gratis, y sin esa bandera el sitio no tiene dónde canjearlo. Para volver atrás se revierte primero el cambio que puso esos textos y después se vacía la variable: vaciarla antes deja la publicación sin salir.",
+    );
   }
   return problemas;
 }

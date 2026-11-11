@@ -82,7 +82,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación en sí cuesta **0,003 XLM** (medido en testnet el 3 de octubre de 2026). El resto de lo que cuesta un sorteo es renta de almacenamiento, que la red fija y ya cambió más de una vez ([historial con fechas](docs/deployments.md)). En mainnet, un sorteo de tres ganadores se proyecta en 0,178 XLM ([qué cuesta](#qué-cuesta)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva: mainnet corre la versión 0.2.0 en su propia dirección, y cada despliegue está anotado en [docs/deployments.md](docs/deployments.md).
-- **Entrar funciona en un meetup.** En el modo Prueba, quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta, con Freighter, o con una cuenta de prueba que el navegador crea y fondea, y Tinkazo cubre la comisión de la red. En el modo Oficial, quien organiza entra con su propia billetera y paga de ahí la comisión de la red, que es de centavos. La cuenta de prueba solo funciona en el modo Prueba. Los participantes no tocan Stellar nunca.
+- **Entrar funciona en un meetup.** En el modo Prueba, quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta, con Freighter, o con una cuenta de prueba que el navegador crea y fondea, y Tinkazo cubre la comisión de la red. En el modo Oficial, quien organiza entra con Google y sortea gratis con el cupón de su evento: Tinkazo cubre la comisión de la red mientras le queden sorteos oficiales. Quien entra con su propia billetera paga de ahí la comisión de la red, que es de centavos. La cuenta de prueba solo funciona en el modo Prueba. Los participantes no tocan Stellar nunca.
 
 ## Qué está andando hoy
 
@@ -196,7 +196,7 @@ En mainnet, según [docs/deployments.md](docs/deployments.md):
 | Un sorteo de 100 ganadores | 0,331 | Proyectado |
 | Un sorteo de 300 ganadores | 0,647 | Proyectado |
 
-Las proyecciones valen mientras el estado vivo de la red siga bajo los 2.000 MB (el 11 de noviembre de 2026 estaba en 1.608 MB). Por encima, la renta se multiplica, y docs/deployments.md tiene la tabla de cada nivel. En el modo Oficial la comisión la paga la billetera de quien organiza; en el modo Prueba la cubre Tinkazo. **Participar y verificar son gratis siempre.**
+Las proyecciones valen mientras el estado vivo de la red siga bajo los 2.000 MB (el 11 de noviembre de 2026 estaba en 1.608 MB). Por encima, la renta se multiplica, y docs/deployments.md tiene la tabla de cada nivel. En el modo Oficial, con el cupón de un evento la comisión la cubre Tinkazo, y quien entra con su propia billetera la paga de ahí; en el modo Prueba la cubre Tinkazo. **Participar y verificar son gratis siempre.**
 
 ## Calidad
 
@@ -221,7 +221,7 @@ Cada punto tiene una comprobación que cualquiera puede hacer desde afuera:
 |---|---|
 | Cinco sorteos reales en mainnet, al menos tres hechos por otra persona con su propia cuenta | Cinco enlaces de comprobación en verde en mainnet, cinco direcciones de organizador y un comentario corto de cada uno |
 | Una guía sobre aleatoriedad en contratos de Soroban, para la documentación de Stellar | Un pull request listo para revisar y enlazado a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), que cubre el [alcance que se aceptó](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) |
-| Entrar con Google en el modo Oficial, con la comisión cubierta | Alguien que entró con Google, con 0 XLM, sella y sortea en el modo Oficial un sorteo que da verde |
+| Entrar con Google en el modo Oficial, con un cupón de evento y la comisión cubierta | Alguien que entró con Google y canjeó un cupón de evento, con 0 XLM, sella y sortea en el modo Oficial un sorteo que da verde |
 
 Después, solo si las comunidades lo piden: una constancia de entrega, para que quien organiza deje anotado que entregó el premio (por ejemplo, con un pago en USDC de su cuenta a la de quien ganó). Los participantes siguen sin pagar nada, y Tinkazo no custodia ni mueve la plata ([diseño](docs/premios.md)).
 
