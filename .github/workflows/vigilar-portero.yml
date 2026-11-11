@@ -1,18 +1,32 @@
 # Vigilancia del portero de mainnet.
 #
 # Una vez por hora, cuando GitHub la dispara, llama a `/v1/patrocinio/estado` de https://pm.tinkazo.app y
-# falla si los créditos de Pollar están por debajo del piso más 1.000, si la cuenta patrocinadora está baja,
+# mira si los créditos de Pollar están por debajo del piso más 1.000, si la cuenta patrocinadora está baja,
 # si hay más de 10 firmas de cuentas de Google sin explicar en 24 horas o si el patrocinio de la app en
-# Pollar no está todo apagado; también si algo de eso no se pudo leer (scripts/lib/vigilar-portero.mjs).
-# Que falle es el aviso: GitHub manda un correo por la corrida fallida.
+# Pollar no está todo apagado; también si algo de eso no se pudo leer o si el portero no contestó
+# (scripts/lib/vigilar-portero.mjs).
+#
+# Que falle es el aviso: GitHub manda un correo por la corrida fallida. Pero no un correo por hora por el mismo
+# problema: la corrida falla solo cuando hay algo que decir. Es un problema que la corrida anterior no tenía
+# (uno nuevo, o uno distinto), o el mismo que sigue pasadas 23 horas del último aviso: el recordatorio, un
+# correo por día mientras dure. En las demás corridas con ese problema sale bien, muestra igual la línea de
+# cifras y dice que ya se avisó. Un problema que se arregla se olvida: si vuelve, avisa de nuevo.
+#
+# Lo que ya se avisó vive en la caché de Actions, como en vigilar-red.yml: un archivo con las claves de los
+# problemas (sin las cifras, que se mueven) y la hora del último aviso. Una clave nueva por corrida
+# (`vigilar-portero-<número de corrida>`, que nunca existe) y `restore-keys` trae la más reciente. Se guarda
+# también cuando la corrida falla; si no, el mismo aviso se repetiría cada hora. Sin caché (la primera vez),
+# nada se avisó.
 #
 # Es el respaldo de la mirada a mano de docs/operacion.md, no la alarma: GitHub salta corridas, y el día
 # de un evento se mira `estado` cada hora a mano.
 #
-# La clave es la de operar del portero de mainnet (apaga, sube el tope, exporta las tablas). Por eso no
-# está entre los secretos del repositorio, que cualquier workflow de cualquier rama puede leer, sino en el
-# Environment `vigilancia` de GitHub, que solo ve `main`. Va por `env`, nunca dentro del comando. Sin ella
-# avisa y sale bien. La vigilancia de la red de Stellar vive aparte, en vigilar-red.yml.
+# La clave es la de operar del portero de mainnet (apaga, sube el tope, exporta las tablas). Por eso tiene que
+# estar en el Environment `vigilancia` de GitHub, que solo ve `main`, y no entre los secretos del repositorio,
+# que cualquier workflow de cualquier rama puede leer. Va por `env`, nunca dentro del comando. Con el mismo
+# nombre en los dos lugares gana el del Environment; si solo hay una copia entre los secretos del repositorio,
+# la toma de ahí, y por eso se borra (pasos en workers/patrocinio/README.md). Sin clave en ningún lado avisa
+# y sale bien. La vigilancia de la red de Stellar vive aparte, en vigilar-red.yml.
 # Las acciones van fijadas por SHA (ver el encabezado de ci.yml).
 name: Vigilar el portero de mainnet
 
@@ -24,6 +38,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: vigilar-portero
+  cancel-in-progress: false
 
 jobs:
   vigilar:
@@ -41,14 +59,29 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
+      - name: Recuperar lo que se avisó en la corrida anterior
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .estado-portero
+          key: vigilar-portero-${{ github.run_id }}
+          restore-keys: vigilar-portero-
       - name: Portero de mainnet
         env:
           PORTERO_URL: https://pm.tinkazo.app
           PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_MAINNET_ADMIN_TOKEN }}
         run: |
           if [ -z "$PORTERO_ADMIN_TOKEN" ]; then
-            echo "Sin PORTERO_MAINNET_ADMIN_TOKEN en el Environment vigilancia: el portero de mainnet no se mira."
+            echo "Sin PORTERO_MAINNET_ADMIN_TOKEN (ni en el Environment vigilancia ni entre los secretos del repositorio): el portero de mainnet no se mira."
             exit 0
           fi
-          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json
-          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json
+          rm -f estado-portero-mainnet.json
+          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json || echo "El portero no contestó bien a /estado."
+          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json --anterior .estado-portero/avisado.json --guardar .estado-portero/avisado.json
+      # Aunque la corrida haya fallado: el aviso de ahora no se repite en la hora que viene. Sin el archivo
+      # (sin clave, la corrida no miró nada) no hay nada que guardar.
+      - name: Guardar lo avisado para la próxima corrida
+        if: ${{ always() && hashFiles('.estado-portero/avisado.json') != '' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .estado-portero
+          key: vigilar-portero-${{ github.run_id }}

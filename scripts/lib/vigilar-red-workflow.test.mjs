@@ -7,7 +7,8 @@
 // También prueba el workflow aparte de la vigilancia del portero de mainnet,
 // .github/workflows/vigilar-portero.yml: que corra con el Environment `vigilancia` (que solo ve
 // `main`), con la clave de operar por `env` y nunca dentro del comando, y que vigilar-red.yml ya
-// no la nombre.
+// no la nombre. Y que recuerde lo que ya avisó en la caché de Actions, con las mismas acciones
+// (y los mismos SHA) que vigilar-red.yml: si no, falla en cada corrida mientras dure el problema.
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,6 +157,72 @@ describe("vigilar-portero.yml: el portero de mainnet", () => {
   it("sin la clave no falla: avisa y sale con 0", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
     expect(run).toMatch(/if \[ -z "\$PORTERO_ADMIN_TOKEN" \]; then[\s\S]*exit 0/);
+  });
+});
+
+describe("vigilar-portero.yml: no manda un correo por hora por el mismo problema", () => {
+  const texto = readFileSync(WORKFLOW_PORTERO, "utf8");
+  const textoRed = readFileSync(WORKFLOW, "utf8");
+  const PASO = "Portero de mainnet";
+  const RECUPERAR = "Recuperar lo que se avisó en la corrida anterior";
+  const GUARDAR = "Guardar lo avisado para la próxima corrida";
+  const vivo = texto.split(/\r?\n/).filter((r) => !/^\s*#/.test(r));
+  const nombres = vivo.flatMap((r) => r.match(/^\s*-\s*name:\s*(.+?)\s*$/)?.slice(1) ?? []).map((n) => n.replace(/^["']|["']$/g, ""));
+
+  /** La acción de un paso, con su SHA: `actions/cache/restore@0057…`. */
+  const accionDe = (archivo, nombre) => renglonesDelPaso(archivo, nombre)?.join("\n").match(/uses:\s*(\S+)/)?.[1];
+
+  it("recupera lo avisado antes del paso que mira, y lo guarda después", () => {
+    expect(nombres.indexOf(RECUPERAR)).toBeGreaterThan(-1);
+    expect(nombres.indexOf(RECUPERAR)).toBeLessThan(nombres.indexOf(PASO));
+    expect(nombres.indexOf(GUARDAR)).toBeGreaterThan(nombres.indexOf(PASO));
+  });
+
+  it("usa las mismas acciones de caché, fijadas por SHA, que vigilar-red.yml", () => {
+    const recuperar = accionDe(texto, RECUPERAR);
+    const guardar = accionDe(texto, GUARDAR);
+    expect(recuperar).toMatch(/^actions\/cache\/restore@[0-9a-f]{40}$/);
+    expect(guardar).toMatch(/^actions\/cache\/save@[0-9a-f]{40}$/);
+    expect(recuperar).toBe(accionDe(textoRed, "Recuperar lo que se avisó en la corrida anterior"));
+    expect(guardar).toBe(accionDe(textoRed, "Guardar lo avisado para la próxima corrida"));
+  });
+
+  it("guarda aunque la corrida falle (avisar es fallar), y solo si hay algo que guardar", () => {
+    const condicion = condicionDelPaso(texto, GUARDAR);
+    expect(condicion, "el paso no tiene if:").not.toBeNull();
+    expect(condicion).toMatch(/^always\(\)\s*&&\s*/);
+    expect(condicion).toContain("hashFiles('.estado-portero/avisado.json')");
+  });
+
+  it("la clave de la caché es nueva en cada corrida y trae la más reciente con restore-keys", () => {
+    const recuperar = renglonesDelPaso(texto, RECUPERAR).join("\n");
+    const guardar = renglonesDelPaso(texto, GUARDAR).join("\n");
+    expect(recuperar).toMatch(/key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}/);
+    expect(recuperar).toMatch(/restore-keys:\s*vigilar-portero-\s*$/m);
+    expect(guardar).toMatch(/key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}/);
+    expect(recuperar).toMatch(/path:\s*\.estado-portero\s*$/m);
+    expect(guardar).toMatch(/path:\s*\.estado-portero\s*$/m);
+  });
+
+  it("el guion lee y escribe el archivo de la carpeta que se guarda", () => {
+    const paso = renglonesDelPaso(texto, PASO).join("\n");
+    const run = paso.slice(paso.indexOf("run:"));
+    expect(run).toContain("--anterior .estado-portero/avisado.json");
+    expect(run).toContain("--guardar .estado-portero/avisado.json");
+    // La clave sigue entrando solo por env.
+    expect(run).not.toContain("${{");
+  });
+
+  it("un portero que no contesta no corta el paso antes del guion: se cuenta como un problema más", () => {
+    const run = renglonesDelPaso(texto, PASO).join("\n");
+    expect(run).toMatch(/curl [^\n]*-o estado-portero-mainnet\.json \|\| echo /);
+  });
+
+  it("la cabecera dice cómo avisa", () => {
+    const cabecera = texto.split(/\r?\n/).filter((r) => /^#/.test(r)).join("\n");
+    expect(cabecera).toContain("no un correo por hora");
+    expect(cabecera).toContain("23 horas");
+    expect(cabecera).toContain("caché de Actions");
   });
 });
 
