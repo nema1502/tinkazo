@@ -545,9 +545,9 @@ describe("el cableado: registrado en el 3D, apagado en el selector (D3)", () => 
     expect(tiene3D("bolillas")).toBe(true);
   });
 
-  it("Bolillas no entra a JUEGOS_CON_3D: el 3D se prueba con ?motor=3d, no con el interruptor", () => {
-    expect(JUEGOS_CON_3D).not.toContain("bolillas");
-    expect(ofrece3D("bolillas")).toBe(false);
+  it("Bolillas entra a JUEGOS_CON_3D: prende por defecto en equipos aptos y el interruptor aparece (D3 actualizada)", () => {
+    expect(JUEGOS_CON_3D).toContain("bolillas");
+    expect(ofrece3D("bolillas")).toBe(true);
   });
 
   it("el lanzador conecta con el enchufe del 2D (bolillasPixi3D) y sin él sigue el 2D; nada de azar", () => {
