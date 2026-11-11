@@ -1,6 +1,7 @@
 // Prueba la revisión del portero de mainnet (scripts/lib/vigilar-portero.mjs) con respuestas de `/estado`
-// inventadas: ninguna prueba le habla al portero. Prueba también cuándo avisar: un problema nuevo, el mismo que sigue
-// (un recordatorio cada 23 horas) y el que se arregla y vuelve.
+// inventadas: ninguna prueba le habla al portero. Prueba también cuándo avisar: un problema nuevo, uno que empeora, el
+// mismo que sigue (un recordatorio cada 23 horas), el que se arregla y vuelve, la corrida a mano y el portero que no
+// contesta. Y que lo que sale al registro (público) y a la caché nunca lleva una cifra del negocio.
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,7 @@ import {
   MARGEN_MINIMO,
   MAX_SIN_EXPLICAR,
   RECORDATORIO_HORAS,
+  TRAMOS_SIN_EXPLICAR,
   decidirAviso,
   escribirRecordado,
   leerRecordado,
@@ -17,27 +19,34 @@ import {
   sinRecordar,
 } from "./vigilar-portero.mjs";
 
-/** Un `/estado` del portero de mainnet con todo en orden. */
+/** Un `/estado` del portero de mainnet con todo en orden (los campos que manda de verdad). */
 const bien = (extra = {}) => ({
   modo: "portero",
   red: "mainnet",
   alerta: false,
   balanceStroops: "500000000",
+  saldoAlertaStroops: 200000000,
   creditos: 9000,
   piso: 2000,
   margen: 7000,
+  altasPausadas: false,
   firmasSinExplicar: 2,
   firmas: { cobradas: 30, explicadas: 28, sellos: 20, sorteos: 6, activaciones: 2, completo: true, desde: 0 },
   patrocinioPollar: { esperado: true, prendidos: [] },
   ...extra,
 });
 
+/** La cuenta patrocinadora baja, como la manda el portero: `alerta` y el motivo de `servicio.ts`. */
+const patrocinadoraBaja = (balanceStroops) => bien({ alerta: true, motivoAlerta: "saldo-bajo", balanceStroops });
+
+/** Lo que sale en el registro sin las fechas de los avisos ni las «23 horas» del recordatorio. */
+const sinFechas = (texto) => texto.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "").replace(/23 horas/g, "");
+
 describe("revisarPortero", () => {
-  it("con todo en orden no hay problemas, y el resumen dice las cifras", () => {
+  it("con todo en orden no hay problemas ni claves", () => {
     const r = revisarPortero(bien());
     expect(r.problemas).toEqual([]);
-    expect(r.resumen).toMatch(/9000/);
-    expect(r.resumen).toMatch(/2000/);
+    expect(r.claves).toEqual([]);
   });
 
   it(`los créditos por debajo del piso más ${MARGEN_MINIMO}: falla; justo en el borde, no`, () => {
@@ -49,16 +58,59 @@ describe("revisarPortero", () => {
     expect(revisarPortero(bien({ piso: undefined })).problemas).toHaveLength(1);
   });
 
-  it("la patrocinadora baja o sin leer: falla", () => {
-    expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-bajo" })).problemas[0]).toMatch(/saldo-bajo/);
+  it("los créditos bajo el piso son otro problema que los créditos bajos: ahí el portero deja de aceptar canjes", () => {
+    expect(revisarPortero(bien({ creditos: 2999, piso: 2000 })).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero(bien({ creditos: 2000, piso: 2000 })).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero(bien({ creditos: 1999, piso: 2000 })).claves).toEqual(["creditos-bajo-el-piso"]);
+    expect(revisarPortero(bien({ creditos: 0, piso: 2000 })).claves).toEqual(["creditos-bajo-el-piso"]);
+    expect(revisarPortero(bien({ creditos: 1999, piso: 2000 })).problemas).toHaveLength(1);
+  });
+
+  it("la patrocinadora baja o sin leer: falla, con los motivos que manda el portero", () => {
+    expect(revisarPortero(patrocinadoraBaja("150000000")).problemas[0]).toMatch(/saldo-bajo/);
+    expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-no-leido", balanceStroops: null })).problemas[0]).toMatch(/saldo-no-leido/);
     expect(revisarPortero(bien({ alerta: undefined })).problemas).toHaveLength(1);
+  });
+
+  it("la patrocinadora que casi no tiene saldo (menos de la mitad del nivel de alerta) es un problema más grave", () => {
+    expect(revisarPortero(patrocinadoraBaja("150000000")).claves).toEqual(["patrocinadora-baja:saldo-bajo"]);
+    // Justo la mitad todavía es el tramo de abajo; un stroop menos, el de arriba.
+    expect(revisarPortero(patrocinadoraBaja("100000000")).claves).toEqual(["patrocinadora-baja:saldo-bajo"]);
+    expect(revisarPortero(patrocinadoraBaja("99999999")).claves).toEqual(["patrocinadora-casi-sin-saldo"]);
+    expect(revisarPortero(patrocinadoraBaja("0")).claves).toEqual(["patrocinadora-casi-sin-saldo"]);
+    // Sin saldo leído no se sabe cuánto queda: sigue siendo el problema de siempre.
+    expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-no-leido", balanceStroops: null })).claves).toEqual(["patrocinadora-baja:saldo-no-leido"]);
+    // Y sin el nivel de alerta en la respuesta no se inventa uno.
+    expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-bajo", balanceStroops: "10", saldoAlertaStroops: undefined })).claves).toEqual(["patrocinadora-baja:saldo-bajo"]);
+    expect(revisarPortero(patrocinadoraBaja("99999999")).problemas).toHaveLength(1);
+  });
+
+  it("las altas pausadas (el campo altasPausadas de /estado) son un problema", () => {
+    expect(revisarPortero(bien({ altasPausadas: false })).claves).toEqual([]);
+    expect(revisarPortero(bien({ altasPausadas: undefined })).claves).toEqual([]);
+    const r = revisarPortero(bien({ altasPausadas: true }));
+    expect(r.claves).toEqual(["altas-pausadas"]);
+    expect(r.problemas).toHaveLength(1);
   });
 
   it(`más de ${MAX_SIN_EXPLICAR} firmas sin explicar: falla; sin la vigilancia, también`, () => {
     expect(MAX_SIN_EXPLICAR).toBe(10);
     expect(revisarPortero(bien({ firmasSinExplicar: 10 })).problemas).toEqual([]);
-    expect(revisarPortero(bien({ firmasSinExplicar: 11 })).problemas[0]).toMatch(/11/);
+    expect(revisarPortero(bien({ firmasSinExplicar: 11 })).problemas).toHaveLength(1);
     expect(revisarPortero(bien({ firmasSinExplicar: null })).problemas).toHaveLength(1);
+  });
+
+  it("las firmas sin explicar van por tramos gruesos: más de 10, más de 50 y más de 200", () => {
+    expect(TRAMOS_SIN_EXPLICAR).toEqual([10, 50, 200]);
+    const clave = (n) => revisarPortero(bien({ firmasSinExplicar: n })).claves;
+    expect(clave(10)).toEqual([]);
+    expect(clave(11)).toEqual(["firmas-sin-explicar:mas-de-10"]);
+    expect(clave(50)).toEqual(["firmas-sin-explicar:mas-de-10"]);
+    expect(clave(51)).toEqual(["firmas-sin-explicar:mas-de-50"]);
+    expect(clave(200)).toEqual(["firmas-sin-explicar:mas-de-50"]);
+    expect(clave(201)).toEqual(["firmas-sin-explicar:mas-de-200"]);
+    expect(clave(5000)).toEqual(["firmas-sin-explicar:mas-de-200"]);
+    expect(clave(null)).toEqual(["firmas-sin-comparar"]);
   });
 
   it("el patrocinio de la app prendido, o sin leer: falla y nombra lo prendido", () => {
@@ -72,10 +124,29 @@ describe("revisarPortero", () => {
     expect(revisarPortero(null).problemas.length).toBeGreaterThan(0);
   });
 
-  it("con la página de movimientos llena lo avisa en el resumen, sin fallar por eso", () => {
-    const r = revisarPortero(bien({ firmas: { ...bien().firmas, completo: false } }));
-    expect(r.problemas).toEqual([]);
-    expect(r.resumen).toMatch(/puede haber más/);
+  it("los problemas nombran qué pasa en palabras: ninguno lleva una cifra, un saldo ni una dirección", () => {
+    const todoMal = bien({
+      red: "testnet",
+      alerta: true,
+      motivoAlerta: "saldo-bajo",
+      balanceStroops: "17654321",
+      patrocinadora: "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
+      creditos: 1234,
+      piso: 2000,
+      altasPausadas: true,
+      firmasSinExplicar: 777,
+      patrocinioPollar: { esperado: false, prendidos: ["sponsor_trustlines"] },
+    });
+    const r = revisarPortero(todoMal);
+    expect(r.problemas).toHaveLength(r.claves.length);
+    expect(r.problemas.length).toBeGreaterThanOrEqual(6);
+    const texto = r.problemas.join("\n");
+    expect(texto).not.toMatch(/\d/);
+    expect(texto).not.toMatch(/GABCDEF/);
+    // Cada tramo de las firmas y cada nivel de los créditos lo dice con palabras.
+    for (const n of [11, 51, 201]) expect(revisarPortero(bien({ firmasSinExplicar: n })).problemas.join("")).not.toMatch(/\d/);
+    for (const c of [100, 2500]) expect(revisarPortero(bien({ creditos: c })).problemas.join("")).not.toMatch(/\d/);
+    expect(revisarPortero(patrocinadoraBaja("1")).problemas.join("")).not.toMatch(/\d/);
   });
 });
 
@@ -84,19 +155,32 @@ describe("las claves de los problemas", () => {
     expect(revisarPortero(bien()).claves).toEqual([]);
     const r = revisarPortero(bien({ creditos: 100, firmasSinExplicar: 40 }));
     expect(r.problemas).toHaveLength(2);
-    expect(r.claves).toEqual(["creditos-bajos", "firmas-sin-explicar"]);
+    expect(r.claves).toEqual(["creditos-bajo-el-piso", "firmas-sin-explicar:mas-de-10"]);
   });
 
   it("el mismo problema con otras cifras tiene la misma clave: las cifras se mueven y el problema es el mismo", () => {
     expect(revisarPortero(bien({ creditos: 2500 })).claves).toEqual(revisarPortero(bien({ creditos: 2310 })).claves);
-    expect(revisarPortero(bien({ firmasSinExplicar: 11 })).claves).toEqual(revisarPortero(bien({ firmasSinExplicar: 300 })).claves);
+    expect(revisarPortero(bien({ creditos: 1500 })).claves).toEqual(revisarPortero(bien({ creditos: 90 })).claves);
+    expect(revisarPortero(bien({ firmasSinExplicar: 11 })).claves).toEqual(revisarPortero(bien({ firmasSinExplicar: 14 })).claves);
+    expect(revisarPortero(bien({ firmasSinExplicar: 60 })).claves).toEqual(revisarPortero(bien({ firmasSinExplicar: 190 })).claves);
+    expect(revisarPortero(patrocinadoraBaja("150000000")).claves).toEqual(revisarPortero(patrocinadoraBaja("120000000")).claves);
+  });
+
+  it("empeorar es otra clave: de bajos a bajo el piso, de un tramo de firmas al siguiente, de baja a casi sin saldo", () => {
+    const bajos = revisarPortero(bien({ creditos: 2500 })).claves;
+    const bajoElPiso = revisarPortero(bien({ creditos: 1500 })).claves;
+    expect(bajoElPiso).not.toEqual(bajos);
+    expect(revisarPortero(bien({ firmasSinExplicar: 60 })).claves).not.toEqual(revisarPortero(bien({ firmasSinExplicar: 11 })).claves);
+    expect(revisarPortero(bien({ firmasSinExplicar: 300 })).claves).not.toEqual(revisarPortero(bien({ firmasSinExplicar: 60 })).claves);
+    expect(revisarPortero(patrocinadoraBaja("50000000")).claves).not.toEqual(revisarPortero(patrocinadoraBaja("150000000")).claves);
   });
 
   it("otro problema, otra clave: sin leer no es lo mismo que bajo, ni una causa de alerta que otra", () => {
     const bajos = revisarPortero(bien({ creditos: 2500 })).claves;
     const sinLeer = revisarPortero(bien({ creditos: null })).claves;
     expect(sinLeer).not.toEqual(bajos);
-    expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-bajo" })).claves).not.toEqual(revisarPortero(bien({ alerta: true, motivoAlerta: "sin-lectura" })).claves);
+    const baja = revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-bajo" })).claves;
+    expect(baja).not.toEqual(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-no-leido" })).claves);
     const uno = revisarPortero(bien({ patrocinioPollar: { esperado: false, prendidos: ["sponsor_trustlines"] } })).claves;
     const dos = revisarPortero(bien({ patrocinioPollar: { esperado: false, prendidos: ["sponsor_trustlines", "sponsor_accounts"] } })).claves;
     expect(uno).not.toEqual(dos);
@@ -112,6 +196,7 @@ describe("decidirAviso: cuándo hace falta el correo", () => {
   const t0 = new Date("2026-11-11T14:23:00Z");
   const despues = (horas) => new Date(t0.getTime() + horas * hora);
   const CREDITOS = ["creditos-bajos"];
+  const FIRMAS = ["firmas-sin-explicar:mas-de-10"];
 
   it("sin problemas no avisa, y se olvida lo avisado", () => {
     const d = decidirAviso({ claves: [], recordado: { claves: CREDITOS, avisadoEn: t0.toISOString() }, ahora: despues(1) });
@@ -151,25 +236,25 @@ describe("decidirAviso: cuándo hace falta el correo", () => {
 
   it("cambia el problema: avisa, aunque el otro se haya avisado hace una hora", () => {
     const antes = { claves: CREDITOS, avisadoEn: t0.toISOString() };
-    const d = decidirAviso({ claves: ["firmas-sin-explicar"], recordado: antes, ahora: despues(1) });
-    expect(d).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["firmas-sin-explicar"] });
-    expect(d.siguiente.claves).toEqual(["firmas-sin-explicar"]);
+    const d = decidirAviso({ claves: FIRMAS, recordado: antes, ahora: despues(1) });
+    expect(d).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: FIRMAS });
+    expect(d.siguiente.claves).toEqual(FIRMAS);
   });
 
   it("se suma un problema a otro que ya se avisó: avisa por el nuevo", () => {
     const antes = { claves: CREDITOS, avisadoEn: t0.toISOString() };
-    const d = decidirAviso({ claves: ["firmas-sin-explicar", ...CREDITOS], recordado: antes, ahora: despues(1) });
-    expect(d).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["firmas-sin-explicar"] });
-    expect(d.siguiente.claves).toEqual(["creditos-bajos", "firmas-sin-explicar"]);
+    const d = decidirAviso({ claves: [...FIRMAS, ...CREDITOS], recordado: antes, ahora: despues(1) });
+    expect(d).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: FIRMAS });
+    expect(d.siguiente.claves).toEqual([...CREDITOS, ...FIRMAS].sort());
   });
 
   it("se arregla uno de dos: no avisa, y si vuelve es nuevo", () => {
-    const antes = { claves: ["creditos-bajos", "firmas-sin-explicar"], avisadoEn: t0.toISOString() };
+    const antes = { claves: [...CREDITOS, ...FIRMAS].sort(), avisadoEn: t0.toISOString() };
     const d = decidirAviso({ claves: CREDITOS, recordado: antes, ahora: despues(1) });
     expect(d).toMatchObject({ avisar: false, motivo: "ya-avisado" });
     expect(d.siguiente).toEqual({ claves: CREDITOS, avisadoEn: t0.toISOString() });
-    const vuelve = decidirAviso({ claves: ["creditos-bajos", "firmas-sin-explicar"], recordado: d.siguiente, ahora: despues(2) });
-    expect(vuelve).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["firmas-sin-explicar"] });
+    const vuelve = decidirAviso({ claves: [...CREDITOS, ...FIRMAS], recordado: d.siguiente, ahora: despues(2) });
+    expect(vuelve).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: FIRMAS });
   });
 
   it("se arregla y vuelve: avisa, aunque haya pasado menos de un día", () => {
@@ -194,6 +279,42 @@ describe("decidirAviso: cuándo hace falta el correo", () => {
   it("una fecha del futuro (el reloj se atrasó) no deja al problema sin recordatorio", () => {
     const d = decidirAviso({ claves: CREDITOS, recordado: { claves: CREDITOS, avisadoEn: despues(5).toISOString() }, ahora: t0 });
     expect(d).toMatchObject({ avisar: true, motivo: "recordatorio" });
+  });
+
+  it("si el portero no contesta, lo ya avisado se conserva: no se olvida por no poder mirar", () => {
+    const antes = { claves: CREDITOS, avisadoEn: t0.toISOString() };
+    const sinLectura = decidirAviso({ claves: ["sin-lectura"], recordado: antes, ahora: despues(1) });
+    expect(sinLectura).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["sin-lectura"] });
+    expect(sinLectura.siguiente.claves).toEqual(["creditos-bajos", "sin-lectura"]);
+    // Sigue sin contestar: no se vuelve a avisar y se sigue conservando.
+    const otra = decidirAviso({ claves: ["sin-lectura"], recordado: sinLectura.siguiente, ahora: despues(2) });
+    expect(otra).toMatchObject({ avisar: false, motivo: "ya-avisado" });
+    expect(otra.siguiente.claves).toEqual(["creditos-bajos", "sin-lectura"]);
+    // Vuelve con lo mismo de antes: ya estaba avisado.
+    const vuelve = decidirAviso({ claves: CREDITOS, recordado: otra.siguiente, ahora: despues(3) });
+    expect(vuelve).toMatchObject({ avisar: false, motivo: "ya-avisado" });
+    expect(vuelve.siguiente.claves).toEqual(CREDITOS);
+  });
+
+  it("solo se conserva cuando la única clave es sin-lectura: con otro problema, lo arreglado se olvida", () => {
+    const antes = { claves: CREDITOS, avisadoEn: t0.toISOString() };
+    const d = decidirAviso({ claves: ["sin-lectura", "respuesta-invalida"], recordado: antes, ahora: despues(1) });
+    expect(d.siguiente.claves).toEqual(["respuesta-invalida", "sin-lectura"]);
+    // Y sin problemas se olvida todo, como siempre.
+    expect(decidirAviso({ claves: [], recordado: antes, ahora: despues(1) }).siguiente).toEqual(sinRecordar());
+  });
+
+  it("sin usar la memoria (corrida a mano o repetida) avisa siempre que hay un problema, y lo guarda igual", () => {
+    const antes = { claves: CREDITOS, avisadoEn: t0.toISOString() };
+    const d = decidirAviso({ claves: CREDITOS, recordado: antes, ahora: despues(1), usarMemoria: false });
+    expect(d).toMatchObject({ avisar: true, motivo: "sin-memoria", nuevos: CREDITOS });
+    expect(d.siguiente).toEqual({ claves: CREDITOS, avisadoEn: despues(1).toISOString() });
+    // Sin problemas no avisa: se arregló.
+    expect(decidirAviso({ claves: [], recordado: antes, ahora: despues(1), usarMemoria: false })).toMatchObject({ avisar: false, motivo: "sin-problemas" });
+    // Y aunque no decida con la memoria, no la pierde si el portero no contesta.
+    const sinLectura = decidirAviso({ claves: ["sin-lectura"], recordado: antes, ahora: despues(1), usarMemoria: false });
+    expect(sinLectura.avisar).toBe(true);
+    expect(sinLectura.siguiente.claves).toEqual(["creditos-bajos", "sin-lectura"]);
   });
 });
 
@@ -233,11 +354,47 @@ describe("principal: lee el archivo y sale con 1 si hay problemas", () => {
     const lineas = [];
     const log = (s) => lineas.push(String(s));
     expect(principal([archivo("bien.json", JSON.stringify(bien()))], { log })).toBe(0);
+    expect(lineas.join("\n")).toMatch(/Sin problemas/);
     expect(principal([archivo("mal.json", JSON.stringify(bien({ firmasSinExplicar: 40 })))], { log })).toBe(1);
-    expect(lineas.join("\n")).toMatch(/40/);
+    expect(lineas.join("\n")).toMatch(/Problema: /);
     expect(principal([archivo("roto.json", "no es json")], { log })).toBe(1);
     expect(principal([join(dir, "no-existe.json")], { log })).toBe(1);
     expect(principal([], { log })).toBe(1);
+  });
+
+  it("el registro nunca lleva una cifra: ni créditos, ni piso, ni saldo, ni firmas, ni una dirección", () => {
+    const lineas = [];
+    const log = (s) => lineas.push(String(s));
+    const estado = bien({
+      alerta: true,
+      motivoAlerta: "saldo-bajo",
+      balanceStroops: "17654321",
+      patrocinadora: "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
+      creditos: 2431,
+      piso: 2000,
+      margen: 431,
+      altasPausadas: true,
+      firmasSinExplicar: 77,
+    });
+    expect(principal([archivo("cifras.json", JSON.stringify(estado))], { log, ahora: new Date("2026-11-11T14:23:00Z") })).toBe(1);
+    const texto = lineas.join("\n");
+    for (const cifra of ["2431", "2000", "431", "17654321", "77", "GABCDEF", "500000000", "200000000", "9000"]) expect(texto, cifra).not.toContain(cifra);
+    expect(sinFechas(texto)).not.toMatch(/\d/);
+    // Y un estado que está bien tampoco las muestra.
+    lineas.length = 0;
+    expect(principal([archivo("bien-2.json", JSON.stringify(bien()))], { log })).toBe(0);
+    expect(lineas.join("\n")).not.toMatch(/\d/);
+  });
+
+  it("si no se pudo leer, el registro dice que no contestó sin copiar lo que había en el archivo", () => {
+    const lineas = [];
+    const log = (s) => lineas.push(String(s));
+    expect(principal([archivo("roto-2.json", '{"creditos": 2431, "balanceStroops": "17654321" oops')], { log })).toBe(1);
+    const texto = lineas.join("\n");
+    expect(texto).toMatch(/No se pudo leer la respuesta del portero/);
+    expect(texto).not.toContain("2431");
+    expect(texto).not.toContain("17654321");
+    expect(texto).not.toContain(dir);
   });
 });
 
@@ -254,9 +411,9 @@ describe("principal con lo avisado de la corrida anterior", () => {
   };
 
   /** Una corrida entera: el mismo `/estado`, la misma memoria en disco, y la hora. */
-  function corrida(memoria, archivo, ahora) {
+  function corrida(memoria, archivo, ahora, extra = []) {
     const lineas = [];
-    const codigo = principal([archivo, "--anterior", memoria, "--guardar", memoria], { log: (s) => lineas.push(String(s)), ahora });
+    const codigo = principal([archivo, "--anterior", memoria, "--guardar", memoria, ...extra], { log: (s) => lineas.push(String(s)), ahora });
     return { codigo, texto: lineas.join("\n") };
   }
 
@@ -265,14 +422,13 @@ describe("principal con lo avisado de la corrida anterior", () => {
     const mal = estado("creditos.json", bien({ creditos: 2500, piso: 2000 }));
     const primera = corrida(memoria, mal, t0);
     expect(primera.codigo).toBe(1);
-    expect(primera.texto).toMatch(/Problema: los créditos de Pollar \(2500\)/);
+    expect(primera.texto).toMatch(/Problema: los créditos de Pollar están bajos/);
     expect(existsSync(memoria)).toBe(true);
 
-    // Una hora después, con otro saldo: el mismo problema. Sale bien, con las cifras y diciendo que ya se avisó.
+    // Una hora después, con otro saldo: el mismo problema. Sale bien y dice que ya se avisó.
     const otra = corrida(memoria, estado("creditos-2.json", bien({ creditos: 2431, piso: 2000 })), despues(1));
     expect(otra.codigo).toBe(0);
-    expect(otra.texto).toMatch(/créditos 2431, piso 2000/);
-    expect(otra.texto).toMatch(/Problema: los créditos de Pollar \(2431\)/);
+    expect(otra.texto).toMatch(/Problema: los créditos de Pollar están bajos/);
     expect(otra.texto).toMatch(/Ya se avisó de esto el 2026-11-11T14:23:00.000Z/);
     expect(otra.texto).toMatch(/Esta corrida sale bien/);
 
@@ -281,6 +437,40 @@ describe("principal con lo avisado de la corrida anterior", () => {
     expect(manana.codigo).toBe(1);
     expect(manana.texto).toMatch(/pasadas 23 horas/);
     expect(corrida(memoria, mal, despues(25)).codigo).toBe(0);
+  });
+
+  it("los créditos bajos ya avisados y una hora después bajo el piso: avisa, porque empeoró", () => {
+    const memoria = join(dir, "avisado-empeora-creditos.json");
+    expect(corrida(memoria, estado("c-bajos.json", bien({ creditos: 2500, piso: 2000 })), t0).codigo).toBe(1);
+    const bajoElPiso = estado("c-bajo-el-piso.json", bien({ creditos: 1500, piso: 2000 }));
+    const empeora = corrida(memoria, bajoElPiso, despues(1));
+    expect(empeora.codigo).toBe(1);
+    expect(empeora.texto).toMatch(/por debajo del piso/);
+    expect(empeora.texto).toMatch(/Es un problema que no se había avisado/);
+    // Con menos créditos todavía, es el mismo problema: no avisa.
+    expect(corrida(memoria, estado("c-bajo-el-piso-2.json", bien({ creditos: 600, piso: 2000 })), despues(2)).codigo).toBe(0);
+  });
+
+  it("las firmas sin explicar: de 11 a 60 avisa, de 11 a 14 no", () => {
+    const memoria = join(dir, "avisado-firmas.json");
+    expect(corrida(memoria, estado("f-11.json", bien({ firmasSinExplicar: 11 })), t0).codigo).toBe(1);
+    expect(corrida(memoria, estado("f-14.json", bien({ firmasSinExplicar: 14 })), despues(1)).codigo).toBe(0);
+    expect(corrida(memoria, estado("f-60.json", bien({ firmasSinExplicar: 60 })), despues(2)).codigo).toBe(1);
+    expect(corrida(memoria, estado("f-70.json", bien({ firmasSinExplicar: 70 })), despues(3)).codigo).toBe(0);
+    expect(corrida(memoria, estado("f-250.json", bien({ firmasSinExplicar: 250 })), despues(4)).codigo).toBe(1);
+    expect(corrida(memoria, estado("f-251.json", bien({ firmasSinExplicar: 251 })), despues(5)).codigo).toBe(0);
+  });
+
+  it("la patrocinadora que de baja pasa a casi sin saldo, y las altas que se pausan: avisan", () => {
+    const memoria = join(dir, "avisado-patrocinadora.json");
+    expect(corrida(memoria, estado("p-baja.json", patrocinadoraBaja("150000000")), t0).codigo).toBe(1);
+    expect(corrida(memoria, estado("p-baja-2.json", patrocinadoraBaja("140000000")), despues(1)).codigo).toBe(0);
+    const casi = corrida(memoria, estado("p-casi.json", patrocinadoraBaja("40000000")), despues(2));
+    expect(casi.codigo).toBe(1);
+    expect(casi.texto).toMatch(/casi no le queda saldo/);
+    const pausadas = corrida(memoria, estado("p-pausadas.json", { ...patrocinadoraBaja("40000000"), altasPausadas: true }), despues(3));
+    expect(pausadas.codigo).toBe(1);
+    expect(pausadas.texto).toMatch(/pausadas a mano/);
   });
 
   it("se arregla y vuelve: la que se arregló deja la memoria vacía y la que vuelve avisa", () => {
@@ -311,6 +501,43 @@ describe("principal con lo avisado de la corrida anterior", () => {
     expect(siguiente.texto).toMatch(/Ya se avisó/);
   });
 
+  it("si el portero no contesta una hora, no se olvida lo que ya se avisó: al volver con lo mismo, no avisa", () => {
+    const memoria = join(dir, "avisado-sin-lectura.json");
+    const mal = estado("sl-mal.json", bien({ creditos: 2500, piso: 2000 }));
+    expect(corrida(memoria, mal, t0).codigo).toBe(1);
+    const caido = corrida(memoria, join(dir, "no-contesto.json"), despues(1));
+    expect(caido.codigo).toBe(1);
+    expect(caido.texto).toMatch(/No se pudo leer/);
+    expect(JSON.parse(readFileSync(memoria, "utf8")).claves).toEqual(["creditos-bajos", "sin-lectura"]);
+    const vuelve = corrida(memoria, mal, despues(2));
+    expect(vuelve.codigo).toBe(0);
+    expect(vuelve.texto).toMatch(/Ya se avisó/);
+    // Ya no está caído: sin-lectura se olvidó, y si vuelve a caer, avisa.
+    expect(JSON.parse(readFileSync(memoria, "utf8")).claves).toEqual(["creditos-bajos"]);
+    expect(corrida(memoria, join(dir, "no-contesto.json"), despues(3)).codigo).toBe(1);
+  });
+
+  it("una corrida a mano o repetida no usa la memoria: con un problema falla aunque ya se haya avisado, y lo guarda", () => {
+    const memoria = join(dir, "avisado-a-mano.json");
+    const mal = estado("am-mal.json", bien({ creditos: 2500, piso: 2000 }));
+    expect(corrida(memoria, mal, t0).codigo).toBe(1);
+    // La del reloj, una hora después: ya avisado, sale bien.
+    expect(corrida(memoria, mal, despues(1)).codigo).toBe(0);
+    // A mano: quien cargó créditos y comprueba tiene que ver que el problema sigue.
+    const aMano = corrida(memoria, mal, despues(2), ["--sin-memoria"]);
+    expect(aMano.codigo).toBe(1);
+    expect(aMano.texto).toMatch(/Problema: los créditos de Pollar están bajos/);
+    expect(aMano.texto).toMatch(/a mano o repetida/);
+    expect(aMano.texto).not.toMatch(/Esta corrida sale bien/);
+    // Se guardó: la corrida del reloj que sigue no repite el aviso.
+    expect(JSON.parse(readFileSync(memoria, "utf8"))).toEqual({ claves: ["creditos-bajos"], avisadoEn: despues(2).toISOString() });
+    expect(corrida(memoria, mal, despues(3)).codigo).toBe(0);
+    // Arreglado, a mano sale bien.
+    const arreglado = corrida(memoria, estado("am-ok.json", bien()), despues(4), ["--sin-memoria"]);
+    expect(arreglado.codigo).toBe(0);
+    expect(arreglado.texto).toMatch(/Sin problemas/);
+  });
+
   it("sin archivo de antes, o con uno roto, nada se había avisado", () => {
     const mal = estado("mal-2.json", bien({ creditos: 100 }));
     expect(corrida(join(dir, "no-existe-antes.json"), mal, t0).codigo).toBe(1);
@@ -324,5 +551,79 @@ describe("principal con lo avisado de la corrida anterior", () => {
     const log = () => undefined;
     expect(principal([mal], { log, ahora: t0 })).toBe(1);
     expect(principal([mal], { log, ahora: despues(1) })).toBe(1);
+  });
+
+  it("lo que se guarda en la caché lleva claves de problemas y una fecha, nunca una cifra", () => {
+    const memoria = join(dir, "avisado-sin-cifras.json");
+    const e = {
+      ...patrocinadoraBaja("17654321"),
+      patrocinadora: "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW",
+      creditos: 1234,
+      piso: 2000,
+      altasPausadas: true,
+      firmasSinExplicar: 777,
+    };
+    expect(corrida(memoria, estado("sc.json", e), t0).codigo).toBe(1);
+    const guardado = readFileSync(memoria, "utf8");
+    for (const cifra of ["17654321", "1234", "2000", "777", "GABCDEF"]) expect(guardado, cifra).not.toContain(cifra);
+    const j = JSON.parse(guardado);
+    expect(Object.keys(j).sort()).toEqual(["avisadoEn", "claves"]);
+    expect(j.claves).toEqual(["altas-pausadas", "creditos-bajo-el-piso", "firmas-sin-explicar:mas-de-200", "patrocinadora-casi-sin-saldo"]);
+  });
+});
+
+describe("principal con --resumen: lo que queda en el resumen de la corrida", () => {
+  const dir = mkdtempSync(join(tmpdir(), "tinkazo-vigilar-portero-resumen-"));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  const t0 = new Date("2026-11-11T14:23:00Z");
+  const estado = (nombre, e) => {
+    const f = join(dir, nombre);
+    writeFileSync(f, JSON.stringify(e));
+    return f;
+  };
+  const resumenDe = (argv, ahora = t0) => {
+    const salida = join(dir, `resumen-${Math.random().toString(36).slice(2)}.md`);
+    const codigo = principal([...argv, "--resumen", salida], { log: () => undefined, ahora });
+    return { codigo, resumen: existsSync(salida) ? readFileSync(salida, "utf8") : null };
+  };
+
+  it("sin problemas dice «Sin problemas»", () => {
+    const { codigo, resumen } = resumenDe([estado("r-bien.json", bien())]);
+    expect(codigo).toBe(0);
+    expect(resumen).toMatch(/Sin problemas/);
+    expect(resumen).not.toMatch(/\d{3,}/);
+  });
+
+  it("con problemas, los lista y dice si ya se había avisado de cada uno", () => {
+    const memoria = join(dir, "r-memoria.json");
+    writeFileSync(memoria, escribirRecordado({ claves: ["creditos-bajos"], avisadoEn: t0.toISOString() }));
+    const mal = estado("r-mal.json", bien({ creditos: 2500, piso: 2000, firmasSinExplicar: 60 }));
+    const { codigo, resumen } = resumenDe([mal, "--anterior", memoria], new Date(t0.getTime() + 3_600_000));
+    expect(codigo).toBe(1);
+    expect(resumen).toMatch(/créditos de Pollar están bajos.*ya se había avisado/);
+    expect(resumen).toMatch(/firmas de cuentas de Google sin explicar.*no se había avisado/);
+    expect(resumen).toMatch(/se avisa/i);
+  });
+
+  it("en una corrida a mano dice que no usa lo avisado antes, y que por eso falla", () => {
+    const memoria = join(dir, "r-memoria-2.json");
+    writeFileSync(memoria, escribirRecordado({ claves: ["creditos-bajos"], avisadoEn: t0.toISOString() }));
+    const mal = estado("r-mal-2.json", bien({ creditos: 2500, piso: 2000 }));
+    const { codigo, resumen } = resumenDe([mal, "--anterior", memoria, "--sin-memoria"], new Date(t0.getTime() + 3_600_000));
+    expect(codigo).toBe(1);
+    expect(resumen).toMatch(/ya se había avisado/);
+    expect(resumen).toMatch(/a mano o repetida/);
+    expect(resumen).toMatch(/falla/);
+  });
+
+  it("el resumen tampoco lleva cifras ni direcciones, y se suma a lo que ya había en el archivo", () => {
+    const salida = join(dir, "r-suma.md");
+    writeFileSync(salida, "Lo que escribió otro paso\n");
+    const e = bien({ alerta: true, motivoAlerta: "saldo-bajo", balanceStroops: "17654321", creditos: 2431, piso: 2000, firmasSinExplicar: 77, patrocinadora: "GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW" });
+    expect(principal([estado("r-cifras.json", e), "--resumen", salida], { log: () => undefined, ahora: t0 })).toBe(1);
+    const texto = readFileSync(salida, "utf8");
+    expect(texto).toContain("Lo que escribió otro paso");
+    for (const cifra of ["17654321", "2431", "2000", "77", "GABCDEF"]) expect(texto, cifra).not.toContain(cifra);
+    expect(sinFechas(texto)).not.toMatch(/\d/);
   });
 });

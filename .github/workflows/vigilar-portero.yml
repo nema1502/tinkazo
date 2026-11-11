@@ -1,22 +1,33 @@
 # Vigilancia del portero de mainnet.
 #
 # Una vez por hora, cuando GitHub la dispara, llama a `/v1/patrocinio/estado` de https://pm.tinkazo.app y
-# mira si los créditos de Pollar están por debajo del piso más 1.000, si la cuenta patrocinadora está baja,
-# si hay más de 10 firmas de cuentas de Google sin explicar en 24 horas o si el patrocinio de la app en
-# Pollar no está todo apagado; también si algo de eso no se pudo leer o si el portero no contestó
+# mira si los créditos de Pollar están cerca del piso o por debajo, si la cuenta patrocinadora está baja, si las
+# altas están pausadas, si hay firmas de cuentas de Google sin explicar por encima del tope o si el patrocinio de
+# la app en Pollar no está todo apagado; también si algo de eso no se pudo leer o si el portero no contestó
 # (scripts/lib/vigilar-portero.mjs).
 #
 # Que falle es el aviso: GitHub manda un correo por la corrida fallida. Pero no un correo por hora por el mismo
-# problema: la corrida falla solo cuando hay algo que decir. Es un problema que la corrida anterior no tenía
-# (uno nuevo, o uno distinto), o el mismo que sigue pasadas 23 horas del último aviso: el recordatorio, un
-# correo por día mientras dure. En las demás corridas con ese problema sale bien, muestra igual la línea de
-# cifras y dice que ya se avisó. Un problema que se arregla se olvida: si vuelve, avisa de nuevo.
+# problema: la corrida del reloj falla solo cuando hay algo que decir. Es un problema que la corrida anterior no
+# tenía (uno nuevo, uno distinto o uno que empeoró, como los créditos que pasan de bajos a por debajo del piso), o
+# el mismo que sigue pasadas 23 horas del último aviso: el recordatorio, un correo por día mientras dure. En las
+# demás corridas con ese problema sale bien y dice que ya se avisó. Un problema que se arregla se olvida: si
+# vuelve, avisa de nuevo. Si el portero no contesta una hora, no se olvida lo ya avisado.
+#
+# Una corrida a mano (workflow_dispatch) o una repetición (Re-run) dice la verdad: no usa lo ya avisado para decidir,
+# así que con un problema falla siempre. Quien cargó créditos y corre el workflow para comprobar ve verde solo si
+# el problema se arregló, no porque ya se avisó. Lo avisado se guarda igual. Solo la corrida del reloj, en su
+# primer intento, decide con lo avisado antes.
+#
+# El registro de la corrida es público (el repositorio lo es): dice qué problemas hay con palabras, o que no hay
+# ninguno, y nunca una cifra, un saldo ni una dirección. Lo mismo va al resumen de la corrida. Las cifras se miran
+# en `estado`, con las herramientas de operación.
 #
 # Lo que ya se avisó vive en la caché de Actions, como en vigilar-red.yml: un archivo con las claves de los
-# problemas (sin las cifras, que se mueven) y la hora del último aviso. Una clave nueva por corrida
-# (`vigilar-portero-<número de corrida>`, que nunca existe) y `restore-keys` trae la más reciente. Se guarda
-# también cuando la corrida falla; si no, el mismo aviso se repetiría cada hora. Sin caché (la primera vez),
-# nada se avisó.
+# problemas (sin las cifras, que se mueven) y la hora del último aviso. Una clave nueva por corrida y por intento
+# (`vigilar-portero-<número de corrida>-<intento>`, que no existe antes de guardarla: una caché no se puede
+# reescribir, y con solo el número de corrida una repetición no guardaría lo suyo) y `restore-keys` trae la más
+# reciente. Se guarda también cuando la corrida falla; si no, el mismo aviso se repetiría cada hora. Sin caché (la
+# primera vez), nada se avisó.
 #
 # Es el respaldo de la mirada a mano de docs/operacion.md, no la alarma: GitHub salta corridas, y el día
 # de un evento se mira `estado` cada hora a mano.
@@ -63,12 +74,15 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .estado-portero
-          key: vigilar-portero-${{ github.run_id }}
+          key: vigilar-portero-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: vigilar-portero-
       - name: Portero de mainnet
         env:
           PORTERO_URL: https://pm.tinkazo.app
           PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_MAINNET_ADMIN_TOKEN }}
+          # Solo la corrida del reloj, en su primer intento, decide con lo que ya se avisó. Una corrida a mano o una
+          # repetición no: con un problema, fallan siempre.
+          USAR_MEMORIA: ${{ github.event_name == 'schedule' && github.run_attempt == 1 }}
         run: |
           if [ -z "$PORTERO_ADMIN_TOKEN" ]; then
             echo "Sin PORTERO_MAINNET_ADMIN_TOKEN (ni en el Environment vigilancia ni entre los secretos del repositorio): el portero de mainnet no se mira."
@@ -76,12 +90,18 @@ jobs:
           fi
           rm -f estado-portero-mainnet.json
           curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json || echo "El portero no contestó bien a /estado."
-          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json --anterior .estado-portero/avisado.json --guardar .estado-portero/avisado.json
-      # Aunque la corrida haya fallado: el aviso de ahora no se repite en la hora que viene. Sin el archivo
-      # (sin clave, la corrida no miró nada) no hay nada que guardar.
+          opciones=(--anterior .estado-portero/avisado.json --guardar .estado-portero/avisado.json --resumen "$GITHUB_STEP_SUMMARY")
+          if [ "$USAR_MEMORIA" != "true" ]; then
+            opciones+=(--sin-memoria)
+            echo "Corrida a mano o repetida: no cuenta lo que ya se avisó. Si hay un problema, esta corrida falla."
+          fi
+          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json "${opciones[@]}"
+      # Aunque la corrida haya fallado: el aviso de ahora no se repite en la hora que viene. Sin la clave la
+      # corrida no mira nada y no escribe el archivo; si la caché se había recuperado, el archivo existe y se
+      # guarda igual con la clave nueva, con lo mismo que ya tenía: es inofensivo.
       - name: Guardar lo avisado para la próxima corrida
         if: ${{ always() && hashFiles('.estado-portero/avisado.json') != '' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .estado-portero
-          key: vigilar-portero-${{ github.run_id }}
+          key: vigilar-portero-${{ github.run_id }}-${{ github.run_attempt }}

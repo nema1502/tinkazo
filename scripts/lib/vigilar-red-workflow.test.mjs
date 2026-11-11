@@ -197,9 +197,10 @@ describe("vigilar-portero.yml: no manda un correo por hora por el mismo problema
   it("la clave de la caché es nueva en cada corrida y trae la más reciente con restore-keys", () => {
     const recuperar = renglonesDelPaso(texto, RECUPERAR).join("\n");
     const guardar = renglonesDelPaso(texto, GUARDAR).join("\n");
-    expect(recuperar).toMatch(/key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}/);
+    const clave = /key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}\s*$/m;
+    expect(recuperar).toMatch(clave);
     expect(recuperar).toMatch(/restore-keys:\s*vigilar-portero-\s*$/m);
-    expect(guardar).toMatch(/key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}/);
+    expect(guardar).toMatch(clave);
     expect(recuperar).toMatch(/path:\s*\.estado-portero\s*$/m);
     expect(guardar).toMatch(/path:\s*\.estado-portero\s*$/m);
   });
@@ -213,6 +214,39 @@ describe("vigilar-portero.yml: no manda un correo por hora por el mismo problema
     expect(run).not.toContain("${{");
   });
 
+  it("solo la corrida del reloj, en su primer intento, decide con lo avisado: a mano o repetida va con --sin-memoria", () => {
+    const paso = renglonesDelPaso(texto, PASO).join("\n");
+    // La condición entra por env, no pegada al comando.
+    expect(paso).toMatch(/USAR_MEMORIA:\s*\$\{\{\s*github\.event_name == 'schedule' && github\.run_attempt == 1\s*\}\}/);
+    const run = paso.slice(paso.indexOf("run:"));
+    expect(run).toMatch(/if \[ "\$USAR_MEMORIA" != "true" \]; then[\s\S]*--sin-memoria[\s\S]*fi/);
+    // Lo avisado se guarda igual en las dos: --guardar va siempre, no solo en la rama del reloj.
+    const antes = run.slice(0, run.indexOf('if [ "$USAR_MEMORIA"'));
+    expect(antes).toContain("--guardar .estado-portero/avisado.json");
+    expect(antes).not.toContain("--sin-memoria");
+  });
+
+  it("escribe el resultado en el resumen de la corrida", () => {
+    const run = renglonesDelPaso(texto, PASO).join("\n");
+    expect(run).toContain('--resumen "$GITHUB_STEP_SUMMARY"');
+  });
+
+  it("la caché se guarda con una clave por corrida y por intento: una repetición no puede reescribir la de la primera", () => {
+    const guardar = renglonesDelPaso(texto, GUARDAR).join("\n");
+    expect(guardar).toMatch(/key:\s*vigilar-portero-\$\{\{\s*github\.run_id\s*\}\}-\$\{\{\s*github\.run_attempt\s*\}\}/);
+    const cabecera = texto.split(/\r?\n/).filter((r) => /^#/.test(r)).join("\n");
+    expect(cabecera).toContain("<número de corrida>-<intento>");
+  });
+
+  it("no se pisa con otra corrida: concurrency con su grupo y sin cancelar la que está corriendo", () => {
+    expect(vivo.join("\n")).toMatch(/^concurrency:\n {2}group:\s*vigilar-portero\n {2}cancel-in-progress:\s*false\s*(\n|$)/m);
+  });
+
+  it("el comentario de guardar no dice que sin el archivo no hay nada que guardar: con la caché recuperada el archivo existe", () => {
+    expect(texto).not.toContain("no hay nada que guardar");
+    expect(texto).toMatch(/si la caché se había recuperado, el archivo existe y se\s+# guarda/);
+  });
+
   it("un portero que no contesta no corta el paso antes del guion: se cuenta como un problema más", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
     expect(run).toMatch(/curl [^\n]*-o estado-portero-mainnet\.json \|\| echo /);
@@ -223,6 +257,13 @@ describe("vigilar-portero.yml: no manda un correo por hora por el mismo problema
     expect(cabecera).toContain("no un correo por hora");
     expect(cabecera).toContain("23 horas");
     expect(cabecera).toContain("caché de Actions");
+  });
+
+  it("la cabecera dice que el registro no lleva cifras y que una corrida a mano no usa lo avisado", () => {
+    const cabecera = texto.split(/\r?\n/).filter((r) => /^#/.test(r)).join("\n");
+    expect(cabecera).toContain("nunca una cifra");
+    expect(cabecera).toContain("Una corrida a mano");
+    expect(cabecera).not.toContain("muestra igual la línea de cifras");
   });
 });
 
