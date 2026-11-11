@@ -12,6 +12,12 @@
       "etiqueta": "interna",
       "red": "mainnet",
       "motivo": "cuenta de despliegue del contrato de la red principal (docs/deployments.md)"
+    },
+    {
+      "direccion": "GCDSHM7H5G7KXNQTE2KIBJYWSI2YDETQ4KS5ZDTUN6JYU7N5ZTQVT23D",
+      "etiqueta": "interna",
+      "red": "mainnet",
+      "motivo": "cuenta de prueba del equipo: la prueba interna de los cupones del modo Oficial, que hizo el sorteo número 1 del contrato de la red principal"
     }
   ],
   "listasDeEjemplo": [
