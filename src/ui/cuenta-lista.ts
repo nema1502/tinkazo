@@ -871,11 +871,23 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
   /* ------------------------------------------------ las acciones */
 
-  function correr(c: Corre): void {
-    st.corre = c;
+  /** El reloj de «está tardando»: a los 8 segundos de empezar lo que corre, `lento`. Lo reinicia `correr`. */
+  function armarLento(): void {
     st.lento = false;
     if (relojLento) clearTimeout(relojLento);
-    relojLento = c && c !== "mandando" && c !== "cerrando" ? despues(() => ((st.lento = true), pintar()), LENTO_MS) : null;
+    relojLento = despues(() => ((st.lento = true), pintar()), LENTO_MS);
+  }
+
+  function pararLento(): void {
+    st.lento = false;
+    if (relojLento) clearTimeout(relojLento);
+    relojLento = null;
+  }
+
+  function correr(c: Corre): void {
+    st.corre = c;
+    if (c && c !== "mandando" && c !== "cerrando") armarLento();
+    else pararLento();
   }
 
   /**
@@ -965,6 +977,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     const n = ++lecturasDeAcceso;
     acc.estado = "revisando";
     acc.error = null;
+    // Esta lectura puede durar hasta 17 segundos: con nada más corriendo, el reloj de «está tardando» es suyo.
+    if (st.corre === null) armarLento();
     pintar();
     let r: ResultadoDeAlta<EstadoDeAlta>;
     try {
@@ -974,6 +988,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     }
     if (cerrado || n !== lecturasDeAcceso) return;
     aplicarAcceso(r);
+    if (st.corre === null) pararLento();
     pintar();
     // Se abrió para escribir el cupón y nadie tocó nada todavía: el foco va al campo.
     if (acc.escribiendo && campoCupon.isConnected && !campoCupon.disabled && document.activeElement === titulo) enfocarCampo(campoCupon);
@@ -1637,6 +1652,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     },
     () => undefined,
   );
+  // El paso se abre revisando la cuenta (`st.corre`), y esa espera también cuenta para decir que tarda.
+  armarLento();
   void leer(true);
   void leerAcceso();
   return promesa;

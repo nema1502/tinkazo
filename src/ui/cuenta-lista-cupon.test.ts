@@ -856,6 +856,65 @@ describe("con la wifi lenta de un stand", () => {
     expect(visibles().some((b) => b.textContent === t("clProbarDeNuevo"))).toBe(false);
   });
 
+  /** La línea de estado del pie: lo que lee el lector de pantalla y, si no es lo mismo que la principal, también se ve. */
+  const lineaDeEstado = (): string => raiz()?.querySelector(".cl-estado")?.textContent ?? "";
+
+  it("mientras se lee el acceso: nada a los 7 segundos, a los 8 dice que puede tardar, y al contestar el aviso se va", async () => {
+    const p = porteroLento(7_000, 4_000);
+    p.s.guardado = null;
+    abrirLento(p);
+    await pasa(7_500);
+    expect(principal().textContent).toBe(t("clRevisando"));
+    expect(lineaDeEstado()).toBe("");
+    await pasa(1_000);
+    expect(principal().textContent).toBe(t("clRevisando"));
+    expect(lineaDeEstado()).toBe(t("clActivarLento"));
+    // El aviso se ve (no es la misma frase que el botón ocupado): no queda solo para el lector de pantalla.
+    expect(raiz()?.querySelector(".cl-estado")?.classList.contains("sr-only")).toBe(false);
+    // El portero contesta a los 11 segundos.
+    await pasa(3_000);
+    expect(principal().textContent).toBe(t("altaTengoCupon"));
+    expect(lineaDeEstado()).toBe("");
+  });
+
+  it("con «Probar de nuevo» la lectura vuelve a empezar y vuelve a avisar a los 8 segundos", async () => {
+    const srv = servidorFalso();
+    srv.s.estadoImpl = () => new Promise<never>(() => undefined);
+    await abrir({ acceso: srv });
+    await pasa(TOPE_LECTURA_SERVIDOR_MS);
+    await pasa();
+    expect(principal().textContent).toBe(t("clProbarDeNuevo"));
+    expect(lineaDeEstado()).toBe("");
+    principal().click();
+    await pasa();
+    expect(principal().textContent).toBe(t("clRevisando"));
+    expect(lineaDeEstado()).toBe("");
+    await pasa(7_000);
+    expect(lineaDeEstado()).toBe("");
+    await pasa(600);
+    expect(lineaDeEstado()).toBe(t("clActivarLento"));
+  });
+
+  it("mientras se revisa la cuenta de Pollar, que tarda: también avisa a los 8 segundos, y no queda cuando se corta", async () => {
+    const cf = cuentaFalsa({}, { estadoOficial: vi.fn(() => new Promise<never>(() => undefined)) });
+    await abrir({ cuenta: cf });
+    expect(principal().textContent).toBe(t("clRevisando"));
+    await pasa(7_000);
+    expect(lineaDeEstado()).toBe("");
+    await pasa(1_000);
+    expect(lineaDeEstado()).toBe(t("clActivarLento"));
+    // A los 10 segundos la lectura de Pollar se corta: ya no se está revisando, no hay nada que avisar.
+    await pasa(2_000);
+    expect(lineaDeEstado()).toBe("");
+  });
+
+  it("el aviso está en los dos idiomas", () => {
+    setLang("en");
+    expect(t("clActivarLento")).toBe("It can take a few more seconds.");
+    setLang("es");
+    expect(t("clActivarLento")).toBe("Puede tardar unos segundos más.");
+  });
+
   it("en la cadena del cupón, con la wifi que se pone lenta: a los 8 s dice que tarda, y el acceso de antes del voto llega a tiempo", async () => {
     const p = porteroLento(0, 0);
     const cf = abrirLento(p);

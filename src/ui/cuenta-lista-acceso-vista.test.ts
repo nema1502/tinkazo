@@ -233,6 +233,14 @@ describe("W7: la caja del acceso es la parte 1", () => {
     expect(vista.cajas[0]?.estado).toBe("revisando");
   });
 
+  it("mientras se pregunta el acceso: sin aviso al principio, y a los 8 segundos dice que puede tardar", () => {
+    expect(v({}, { estado: "revisando" }).estado).toBeNull();
+    expect(v({ lento: true }, { estado: "revisando" }).estado?.clave).toBe("clActivarLento");
+    // Con el acceso ya sabido (o con el error a la vista), `lento` solo no dice nada.
+    expect(v({ lento: true }, { estado: "ninguno" }).estado).toBeNull();
+    expect(v({ lento: true }, { estado: "error", error: { clave: "altaErrServicio" } }).estado).toBeNull();
+  });
+
   it("después del canje: «Activando tu cuenta…» con lo que trae el cupón, y la principal girando", () => {
     const vista = v({ corre: "activando" }, { estado: "con", canjeado: 3, cadena: true });
     expect(vista.cajas[0]?.textos).toEqual([{ clave: "altaCuponOk", vars: { n: "3" } }]);

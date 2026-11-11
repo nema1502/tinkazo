@@ -102,6 +102,15 @@ describe("vistaDe: activar", () => {
     expect(v({ corre: "activando", lento: true }).estado?.clave).toBe("clActivarLento");
   });
 
+  it("mientras se revisa la cuenta: sin aviso al principio, y a los 8 segundos dice que puede tardar", () => {
+    expect(v({ corre: "revisando" }).estado).toBeNull();
+    expect(v({ corre: "revisando", lento: true }).estado?.clave).toBe("clActivarLento");
+    expect(v({ activacion: "lista", corre: "revisando", lento: true }).estado?.clave).toBe("clActivarLento");
+    // Lo lento no dice nada si no corre nada que revise.
+    expect(v({ lento: true }).estado).toBeNull();
+    expect(v({ corre: "mandando", lento: true }).estado).toBeNull();
+  });
+
   it("mientras algo corre en una caja, la caja no repite la palabra: lo dice la principal apagada", () => {
     const ocupadas = [
       v({ corre: "activando" }),

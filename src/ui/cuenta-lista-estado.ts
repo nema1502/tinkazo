@@ -541,13 +541,18 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
   };
 }
 
-/** La línea de estado del pie. */
+/**
+ * La línea de estado del pie. Mientras se revisa la cuenta o el acceso (una lectura del servidor puede durar hasta unos
+ * 17 segundos), a los 8 segundos avisa que tarda, con el mismo texto que la activación: «Puede tardar unos segundos más.»
+ * no habla de activar, y sin ese aviso la persona ve solo el botón ocupado.
+ */
 function lineaDeEstado(e: EntradaVista): Texto | null {
   if (e.corre === "activando") return { clave: e.lento ? "clActivarLento" : "clActivarHaciendo" };
   if (e.corre === "esperando") return { clave: "clActivarLento" };
   if (e.corre === "desbloqueo" && e.lento) return { clave: "clEsperandoDesbloqueo" };
   if (e.corre === "cerrando") return { clave: "clCerrando" };
   if (e.corre === "canjeando") return { clave: "altaRevisando" };
+  if (e.lento && (e.corre === "revisando" || accesoDe(e).estado === "revisando")) return { clave: "clActivarLento" };
   return e.aviso ? { clave: e.aviso } : null;
 }
 
