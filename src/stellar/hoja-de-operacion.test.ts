@@ -81,6 +81,12 @@ describe("la regla de límite de Cloudflare delante del portero de mainnet", () 
     // Ninguna regla de Cloudflare sugerida para el cupo.
     expect(readme).not.toMatch(/uri\.path eq "\/v1\/patrocinio\/cupo"/);
   });
+
+  it("el comentario de `cupoPorHora` dice lo mismo que los documentos: la regla de Cloudflare no cubre el cupo", () => {
+    const comentario = porIp.replace(/\s*\r?\n\s*\*\s?/g, " ");
+    expect(comentario).not.toContain("regla de límite de Cloudflare sigue delante");
+    expect(comentario).toContain("no lo cubre la regla de límite de Cloudflare: lo limita solo este contador, que vive en memoria y es de cada nodo");
+  });
 });
 
 describe("el acceso que quedó en otra cuenta", () => {
