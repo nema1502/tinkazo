@@ -213,6 +213,25 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Mueve el reloj de mentira, pero solo cuando las cargas pendientes ya terminaron.
+ *
+ * `anchor` carga sus piezas con `import()` y cada prueba las vuelve a cargar en frío (`vi.resetModules()`): tarda tiempo de
+ * verdad, y mucho más en una máquina lenta o recién encendida. Si el reloj de mentira corre mientras tanto, se come el margen
+ * de la ronda (`MARGEN_DE_RONDA_S`) o los 20 s del grifo antes de que el código llegue a mirarlos, y la prueba pasa o no según
+ * la velocidad de la máquina. `vi.dynamicImportSettled()` espera a que no quede ninguna carga pendiente, también las que se
+ * encadenan; recién ahí se mueve el reloj.
+ */
+async function avanzar(ms: number): Promise<void> {
+  await vi.dynamicImportSettled();
+  await vi.advanceTimersByTimeAsync(ms);
+}
+
+/** Mueve el reloj de mentira, de a `pasoMs`, hasta que `listo()` o hasta que pasaron `hastaMs` de reloj de mentira: no cuenta vueltas. */
+async function correrElReloj(listo: () => boolean, hastaMs: number, pasoMs = 250): Promise<void> {
+  for (let t = 0; t < hastaMs && !listo(); t += pasoMs) await avanzar(pasoMs);
+}
+
 describe("con una cuenta de Pollar", () => {
   it("no muestra la comisión al firmar: quizá la paga la app", async () => {
     h.wallet = pollar();
@@ -465,8 +484,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       () => (listo = true),
       () => (listo = true),
     );
-    // Las piezas de afuera se cargan con import(): el reloj de mentira avanza de a poco.
-    for (let t = 0; t < hastaMs && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    await correrElReloj(() => listo, hastaMs);
     expect(listo).toBe(true);
     return { ...(await corrida), transcurrido: Date.now() - t0 };
   }
@@ -662,15 +680,15 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValue(false);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(3500);
+      await avanzar(3500);
       const preguntas = h.accountOnRpc.mock.calls.length;
       expect(preguntas).toBeGreaterThanOrEqual(2);
       expect(doc.oyentes("tinkazo:sesion")).toBe(1);
       doc.avisarSesion(null);
-      await vi.advanceTimersByTimeAsync(1000);
+      await avanzar(1000);
       const { error } = await corrida;
       expect((error as Error).message).toBe("account-wait-cancelled");
-      await vi.advanceTimersByTimeAsync(10_000);
+      await avanzar(10_000);
       expect(h.accountOnRpc.mock.calls.length).toBeLessThanOrEqual(preguntas + 1);
       expect(h.seal).not.toHaveBeenCalled();
       expect(doc.oyentes("tinkazo:sesion")).toBe(0);
@@ -681,9 +699,9 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValue(false);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(2500);
+      await avanzar(2500);
       doc.avisarSesion("GOTRACUENTA");
-      await vi.advanceTimersByTimeAsync(1000);
+      await avanzar(1000);
       expect(((await corrida).error as Error).message).toBe("account-wait-cancelled");
     });
 
@@ -692,7 +710,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(1500);
+      await avanzar(1500);
       doc.avisarSesion(DIR);
       const { r } = await correr(corrida);
       expect(r?.txHash).toBe("deadbeef");
@@ -737,7 +755,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
       () => (listo = true),
       () => (listo = true),
     );
-    for (let t = 0; t < 200_000 && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    await correrElReloj(() => listo, 200_000);
     return corrida;
   }
 
@@ -1072,7 +1090,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
         () => (listo = true),
         () => (listo = true),
       );
-      for (let t = 0; t < 120_000 && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+      await correrElReloj(() => listo, 120_000);
       return corrida;
     }
 
@@ -1298,8 +1316,7 @@ describe("un grifo que no contesta", () => {
       listo = true;
       return r;
     });
-    // Las piezas de afuera se cargan con import() y el reloj de mentira avanza de a poco.
-    for (let i = 0; i < 60 && !listo; i++) await vi.advanceTimersByTimeAsync(1000);
+    await correrElReloj(() => listo, 60_000, 1000);
     const { error } = await corrida;
     expect(listo).toBe(true);
     expect((error as Error).message).toContain("txInsufficientBalance");
