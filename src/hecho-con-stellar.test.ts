@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 
 /**
- * La firma "Hecho con" y el logo oficial de Stellar en la portada, y el aviso de marca en su pie
- * (docs/marca.md, "Marcas de otros"). Se lee el HTML y el CSS tal como están escritos.
+ * La firma "Hecho con" y el logo oficial de Stellar en la portada, y el aviso de marca de Stellar,
+ * que va al final de la página de términos y no en la portada (docs/marca.md, "Marcas de otros").
+ * Se lee el HTML y el CSS tal como están escritos.
  */
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const terminos = readFileSync(new URL("../terminos.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 const LOGOS = {
@@ -82,30 +84,57 @@ describe("la firma «Hecho con» Stellar en la portada", () => {
   });
 
   it("nada de lo nuevo lleva el punto medio", () => {
-    const pie = html.slice(html.indexOf("<footer"));
-    const nuevo = [linea, pie.match(/<p class="trademark-note"[\s\S]*?<\/p>/)?.[0] ?? "", ...(["es", "en"] as const).flatMap((l) => [T[l].builtOn, T[l].stellarNotice])];
+    const aviso = terminos.match(/<p class="note" data-i="tmStellarMarca"[\s\S]*?<\/p>/)?.[0] ?? "";
+    expect(aviso).not.toBe("");
+    const nuevo = [linea, aviso, ...(["es", "en"] as const).flatMap((l) => [T[l].builtOn, T[l].tmStellarMarca])];
     for (const texto of nuevo) expect(String(texto)).not.toContain("·");
   });
 });
 
-describe("el aviso de marca en el pie de la portada", () => {
-  it("dice, en español y en inglés, que Tinkazo es independiente y que Stellar es marca de la Fundación", () => {
-    expect(T.es.stellarNotice).toBe(
-      "Tinkazo es software independiente: no está afiliado a la Stellar Development Foundation ni avalado por ella. Stellar es una marca registrada de la Stellar Development Foundation.",
-    );
-    expect(T.en.stellarNotice).toBe(
-      "Tinkazo is independent software: it is not affiliated with or endorsed by the Stellar Development Foundation. Stellar is a registered trademark of the Stellar Development Foundation.",
-    );
+describe("el aviso de marca de Stellar va en la página de términos y no en la portada", () => {
+  const AVISO_ES =
+    "Stellar es una marca de la Stellar Development Foundation. Todos los derechos reservados. Tinkazo es un proyecto independiente: no está afiliado a la Stellar Development Foundation, ni patrocinado ni avalado por ella.";
+  const AVISO_EN =
+    '"Stellar" is a trademark of the Stellar Development Foundation. All rights reserved. Tinkazo is an independent project, not affiliated with, sponsored or endorsed by the Stellar Development Foundation.';
+
+  it("la portada no lleva el aviso: ni el párrafo, ni la clase, ni la clave, ni el texto", () => {
+    expect(html).not.toContain("trademark-note");
+    expect(html).not.toContain("stellarNotice");
+    expect(html).not.toContain("tmStellarMarca");
+    expect(html).not.toContain("Stellar Development Foundation");
+    expect(html).not.toContain("marca registrada");
+    expect(css).not.toContain("trademark-note");
+    // La firma, en cambio, sigue donde estaba: «Hecho con» y el logo.
+    expect(html.match(/class="built-on"/g)).toHaveLength(1);
+    // La clave vieja ya no existe en ningún idioma.
+    for (const idioma of ["es", "en"] as const) expect(T[idioma].stellarNotice, idioma).toBeUndefined();
   });
 
-  it("está dentro del pie y repite el español", () => {
-    const pie = html.slice(html.indexOf("<footer"), html.indexOf("</footer>"));
-    expect(pie).toContain(`<p class="trademark-note" data-i="stellarNotice">${T.es.stellarNotice}</p>`);
+  it("el diccionario dice, en español y en inglés, que Stellar es marca de la Fundación y que Tinkazo es independiente", () => {
+    expect(T.es.tmStellarMarca).toBe(AVISO_ES);
+    expect(T.en.tmStellarMarca).toBe(AVISO_EN);
+  });
+
+  it("terminos.html lleva el aviso como nota chica al final del contenido, con el texto en español", () => {
+    const principal = terminos.slice(terminos.indexOf("<main"), terminos.indexOf("</main>"));
+    const nota = `<p class="note" data-i="tmStellarMarca">${AVISO_ES}</p>`;
+    expect(principal).toContain(nota);
+    expect(terminos.match(/data-i="tmStellarMarca"/g)).toHaveLength(1);
+    // Va después del enlace al documento legal, ya en el cierre de la sección «Y además».
+    expect(principal.indexOf(nota)).toBeGreaterThan(principal.indexOf('data-i="tmLinkLegal"'));
+    // No está en el pie, que en las páginas de lectura es solo navegación.
+    expect(terminos.slice(terminos.indexOf("<footer"))).not.toContain("tmStellarMarca");
+  });
+
+  it("no insinúa aval: ni «socio», ni «aliado oficial», ni «certificado por Stellar»", () => {
+    for (const idioma of ["es", "en"] as const) {
+      expect(String(T[idioma].tmStellarMarca), idioma).not.toMatch(/socio|partner|aliad|certificad|certified|oficial/i);
+    }
   });
 });
 
 describe("el tamaño de la firma y del aviso de marca", () => {
-  it("los dos textos van en 16 px o más, sin agrandar el logo ni achicar el blanco de toque", () => {
+  it("la firma va en 16 px o más, sin agrandar el logo ni achicar el blanco de toque, y el aviso usa la nota de la página", () => {
     // La letra secundaria de la herramienta mide 16 px (la regla la mide scripts/audit-legible.mjs).
     expect(css).toContain("--letra-sec: 16px");
     const enlace = /\.built-on-link\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
@@ -113,8 +142,9 @@ describe("el tamaño de la firma y del aviso de marca", () => {
     expect(enlace).toContain("min-height: 44px");
     const logo = /\.built-on-logo\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
     expect(logo).toMatch(/height:\s*20px/);
-    const aviso = /footer\s+\.bar\s+\.trademark-note\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    expect(aviso).toMatch(/font-size:\s*var\(--letra-sec\)/);
+    // El aviso es un `.note`, que mide 16 px y va en gris: chico, pero legible.
+    const nota = /\n\s*\.note\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(nota).toMatch(/font-size:\s*16px/);
   });
 });
 

@@ -1268,13 +1268,6 @@
        la izquierda se leía como un renglón suelto. */
     footer .pies a:last-child:nth-child(odd) { grid-column: 1 / -1; }
   }
-  /* El aviso de marca de la portada: una línea chica, en su propia fila debajo de los enlaces del pie, con la letra de la página y no la del pie. */
-  footer .bar .trademark-note {
-    flex: 1 1 100%; max-width: 760px; margin: 0 auto; text-align: center; text-transform: none; letter-spacing: normal;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: var(--letra-sec); font-weight: 500; line-height: 1.45; color: var(--muted);
-    /* En angosto la última palabra quedaba sola en su renglón: se reparte parejo. */
-    text-wrap: balance;
-  }
 
   /* ------------------------------------------------ la ventana de importar
      Un export de Luma trae a todos los inscritos: acá se ve el archivo entero,

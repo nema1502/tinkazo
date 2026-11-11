@@ -1113,7 +1113,6 @@ export const T: Record<Lang, Dict> = {
     nextBody: "Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. Hoy el costo de la red lo paga Tinkazo y el sitio funciona en modo prueba: guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.",
     footL: "Tinkazo", footR: "Hecho con ♥ en Bolivia",
     builtOn: "Hecho con",
-    stellarNotice: "Tinkazo es software independiente: no está afiliado a la Stellar Development Foundation ni avalado por ella. Stellar es una marca registrada de la Stellar Development Foundation.",
     // `seed` es la barra de arriba del sorteo: "NÚMERO PÚBLICO N.º 32254977".
     // Decía "· RONDA", que es la palabra de drand, y en el sorteo no va nada
     // técnico. "N.º" y no "#": "Sorteo #N" ya es el número del sorteo en Mis
@@ -2071,6 +2070,8 @@ export const T: Record<Lang, Dict> = {
     tmMore4: "Vigentes desde el 4 de noviembre de 2026, cuando sumamos el servicio que cubre la comisión y cuenta los sellos de cada cuenta, y empezamos a contar, sin saber quién es, los pasos del sorteo. Antes se habían sumado el logo de la comunidad, el formulario para opinar y las rondas de ejemplo de los stands. Si cambian, cambia esta página, con su fecha.",
     tmMore5: '¿Dudas, o algo que corregir? Escribinos a <a href="mailto:hola@tinkazo.app">hola@tinkazo.app</a>.',
     tmLinkLegal: "Lo que averiguamos de las leyes, país por país ↗",
+    // El aviso de marca de Stellar: va al final de terminos.html y no en el pie de la portada (docs/marca.md, "Marcas de otros").
+    tmStellarMarca: "Stellar es una marca de la Stellar Development Foundation. Todos los derechos reservados. Tinkazo es un proyecto independiente: no está afiliado a la Stellar Development Foundation, ni patrocinado ni avalado por ella.",
     sgKicker: "Seguridad",
     sgTitle: "Cómo se puede romper",
     sgLead: "Un sorteo que dice ser verificable tiene que decir también dónde no llega. Esto es lo que el protocolo impide, lo que todavía no, y lo que la herramienta no puede prometer.",
@@ -3677,7 +3678,6 @@ export const T: Record<Lang, Dict> = {
     nextBody: "When you close the list, it is sealed before the number that decides exists, and any later change shows. Today Tinkazo pays the network cost and the site runs in test mode: keep the receipts of your draws, because they let anyone check them again even after the record resets on December 16, 2026.",
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
     builtOn: "Built on",
-    stellarNotice: "Tinkazo is independent software: it is not affiliated with or endorsed by the Stellar Development Foundation. Stellar is a registered trademark of the Stellar Development Foundation.",
     src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the draw number ↗", proofOk: "proof verified",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
@@ -4622,6 +4622,7 @@ export const T: Record<Lang, Dict> = {
     tmMore4: "In effect since November 4, 2026, when we added the service that covers the network charge and counts each account's seals, and started counting the steps of a draw without knowing who takes them. Before that came the community logo, the feedback form and the sample rounds for booths. If they change, this page changes, with its date.",
     tmMore5: 'Questions, or something to fix? Write to <a href="mailto:hola@tinkazo.app">hola@tinkazo.app</a>.',
     tmLinkLegal: "What we found about the law, country by country ↗",
+    tmStellarMarca: '"Stellar" is a trademark of the Stellar Development Foundation. All rights reserved. Tinkazo is an independent project, not affiliated with, sponsored or endorsed by the Stellar Development Foundation.',
     sgKicker: "Security",
     sgTitle: "Where it can fail",
     sgLead: "A draw that claims to be verifiable also has to say where it stops. This is what the protocol prevents, what it does not yet, and what the tool cannot promise.",

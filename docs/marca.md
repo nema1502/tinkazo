@@ -345,21 +345,21 @@ Viven en `public/terceros/`, aparte de `public/marca/`: esa carpeta es el kit de
 - **Sin alterar.** Ni color, ni proporciones, ni recorte, ni filtros de CSS para cambiarle el color. Cada tema usa su archivo: negro sobre el papel claro y blanco sobre el oscuro. El alto se fija en 20 px y el ancho sale de la proporción del archivo.
 - **Chico.** Es una firma, no un titular: entre 18 y 22 px de alto, con aire alrededor, y nunca el elemento más grande ni más llamativo del bloque. Va debajo de los botones de la portada, para no empujar el botón principal fuera de la primera pantalla, ni en un celular de 360 × 640 ni en uno de 320 de ancho.
 - **Sin sugerir aval.** No se escribe nada que haga pensar que la Stellar Development Foundation avala, patrocina o es socia de Tinkazo («socio», «aliado oficial», «certificado por Stellar»). Se dice solo «Hecho con» y el logo, y el logo lleva el texto alternativo «Stellar».
-- **El aviso en el pie.** Mientras el logo esté en una página, el pie de esa página lleva el aviso, en los dos idiomas:
-  - es: «Tinkazo es software independiente: no está afiliado a la Stellar Development Foundation ni avalado por ella. Stellar es una marca registrada de la Stellar Development Foundation.»
-  - en: «Tinkazo is independent software: it is not affiliated with or endorsed by the Stellar Development Foundation. Stellar is a registered trademark of the Stellar Development Foundation.»
+- **El aviso va en la página de términos.** La política de marca de la Stellar Development Foundation (vigente desde el 21 de enero de 2025, https://www.stellar.org/trademark-brand-policy/) pide un aviso cuando un software muestra su marca, y permite ponerlo en una página de créditos si no queda bien junto al logo. En Tinkazo ese lugar es `terminos.html`, al final del contenido, como una nota chica. La portada no lleva el aviso: solo la línea «Hecho con» y el logo. El aviso dice, en los dos idiomas:
+  - es: «Stellar es una marca de la Stellar Development Foundation. Todos los derechos reservados. Tinkazo es un proyecto independiente: no está afiliado a la Stellar Development Foundation, ni patrocinado ni avalado por ella.»
+  - en: «"Stellar" is a trademark of the Stellar Development Foundation. All rights reserved. Tinkazo is an independent project, not affiliated with, sponsored or endorsed by the Stellar Development Foundation.»
 - **El enlace.** Toda la línea lleva a https://stellar.org y abre en otra pestaña, con `rel="noopener"`.
 
 ### Dónde se usa
 
-Solo en la portada (`index.html`):
+El logo, solo en la portada (`index.html`); el aviso de marca, solo en la página de términos (`terminos.html`):
 
 - La línea «Hecho con» y el logo, al final del bloque de texto de arriba (`.hero-copy`), debajo de los botones. Las clases son `built-on`, `built-on-link`, `built-on-text` y `built-on-logo`, con `built-on-logo-light` (el negro) y `built-on-logo-dark` (el blanco). Los estilos están en `src/styles.css`, junto a `.hero-note`.
-- El aviso de marca, en el pie de la página, con la clase `trademark-note`.
-- Los textos son las claves `builtOn` y `stellarNotice` de `src/i18n.ts`.
-- `src/hecho-con-stellar.test.ts` vigila la línea, el enlace, las dos imágenes, las claves, el aviso y el peso de los archivos.
+- El aviso de marca, al final de `terminos.html`, en un párrafo con la clase `note` (la nota chica de las páginas de lectura). La portada ya no lleva el aviso en su pie.
+- Los textos son las claves `builtOn` (la línea) y `tmStellarMarca` (el aviso) de `src/i18n.ts`.
+- `src/hecho-con-stellar.test.ts` vigila la línea, el enlace, las dos imágenes, las claves, que la portada no lleve el aviso, que `terminos.html` lo lleve con el texto exacto en los dos idiomas y el peso de los archivos.
 
-Si el logo pasa a otra página, hay que cumplir las mismas reglas (incluido el aviso en su pie) y sumar la página a esta lista.
+Si el logo pasa a otra página, hay que cumplir las mismas reglas; el aviso sigue en la página de términos y no se repite en el pie.
 
 ## Los enlaces
 
