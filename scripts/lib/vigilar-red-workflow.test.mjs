@@ -3,6 +3,11 @@
 // o la línea base vieja) y, sin `always()`, GitHub saltea los pasos que siguen: la alerta del
 // fondo no correría justo el día del recordatorio. Vale con el paso comentado, como está hasta
 // que exista el portero, y el día que se descomente.
+//
+// También prueba el workflow aparte de la vigilancia del portero de mainnet,
+// .github/workflows/vigilar-portero.yml: que corra con el Environment `vigilancia` (que solo ve
+// `main`), con la clave de operar por `env` y nunca dentro del comando, y que vigilar-red.yml ya
+// no la nombre.
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +15,7 @@ import { describe, expect, it } from "vitest";
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const WORKFLOW = resolve(aqui, "..", "..", ".github", "workflows", "vigilar-red.yml");
+const WORKFLOW_PORTERO = resolve(aqui, "..", "..", ".github", "workflows", "vigilar-portero.yml");
 const NOMBRE = "Fondo del portero de patrocinio";
 
 /** Un renglón sin el `#` de comentario de adelante (si lo tiene), con su sangría. */
@@ -104,25 +110,38 @@ describe("condicionDelPaso", () => {
   });
 });
 
-describe("vigilar-red.yml: el portero de mainnet", () => {
-  const texto = readFileSync(WORKFLOW, "utf8");
+describe("vigilar-portero.yml: el portero de mainnet", () => {
+  const texto = readFileSync(WORKFLOW_PORTERO, "utf8");
   const PASO = "Portero de mainnet";
   const crudo = texto.split(/\r?\n/);
+  /** El archivo sin sus renglones de comentario: lo que GitHub lee de verdad. */
+  const vivo = crudo.filter((r) => !/^\s*#/.test(r)).join("\n");
 
-  it("el paso está una sola vez, y prendido (no comentado)", () => {
+  it("corre con el Environment vigilancia, que solo ve main", () => {
+    expect(vivo).toMatch(/^ {4}environment:\s*vigilancia\s*$/m);
+    expect(vivo.match(/^\s*environment:/gm)).toHaveLength(1);
+  });
+
+  it("solo puede leer el repositorio: permissions con contents: read y nada más", () => {
+    expect(vivo).toMatch(/^permissions:\n {2}contents:\s*read\s*(\n|$)/m);
+    expect(vivo).not.toMatch(/:\s*write\b/);
+  });
+
+  it("corre cada hora (minuto 23) y a mano con workflow_dispatch", () => {
+    const crones = vivo.match(/^\s*-\s*cron:.*$/gm) ?? [];
+    expect(crones).toHaveLength(1);
+    expect(crones[0]).toMatch(/cron:\s*'23 \* \* \* \*'\s*$/);
+    expect(vivo).toMatch(/^ {2}workflow_dispatch:/m);
+  });
+
+  it("el paso está una sola vez, prendido (no comentado) y sin condición: corre en cada disparo", () => {
     const veces = crudo.filter((r) => r.includes(`name: ${PASO}`));
     expect(veces).toHaveLength(1);
     expect(veces[0]).toMatch(/^\s*-\s*name:/);
+    expect(condicionDelPaso(texto, PASO)).toBeNull();
   });
 
-  it("corre una vez al día aunque falle el recordatorio: always() && (las 12:07 o a mano con diario)", () => {
-    const condicion = condicionDelPaso(texto, PASO);
-    expect(condicion).toMatch(/^always\(\)\s*&&\s*\(.*\)$/);
-    expect(condicion).toContain("github.event.schedule == '7 12 * * *'");
-    expect(condicion).toContain("inputs.diario");
-  });
-
-  it("la clave va por env desde los secretos, nunca adentro del comando, y mira pm.tinkazo.app con la revisión del repositorio", () => {
+  it("la clave va por env desde los secretos, nunca adentro del comando, y mira pm.tinkazo.app", () => {
     const paso = renglonesDelPaso(texto, PASO).join("\n");
     expect(paso).toMatch(/PORTERO_ADMIN_TOKEN:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_ADMIN_TOKEN\s*\}\}/);
     expect(paso).toContain("https://pm.tinkazo.app");
@@ -130,10 +149,25 @@ describe("vigilar-red.yml: el portero de mainnet", () => {
     expect(run).not.toContain("${{");
     expect(run).toContain("/v1/patrocinio/estado");
     expect(run).toContain("node scripts/lib/vigilar-portero.mjs");
+    // Es el único secreto del archivo: no se le pasa al checkout ni a ningún otro paso.
+    expect(vivo.match(/secrets\./g)).toHaveLength(1);
   });
 
-  it("sin el secreto no falla: hasta que exista el despliegue, avisa y sale con 0", () => {
+  it("sin la clave no falla: avisa y sale con 0", () => {
     const run = renglonesDelPaso(texto, PASO).join("\n");
     expect(run).toMatch(/if \[ -z "\$PORTERO_ADMIN_TOKEN" \]; then[\s\S]*exit 0/);
+  });
+});
+
+describe("vigilar-red.yml: ya no mira al portero de mainnet", () => {
+  const texto = readFileSync(WORKFLOW, "utf8");
+
+  it("no nombra la clave del portero de mainnet, ni en un paso ni en un comentario", () => {
+    expect(texto).not.toContain("PORTERO_MAINNET_ADMIN_TOKEN");
+  });
+
+  it("no tiene el paso del portero de mainnet ni su revisión", () => {
+    expect(texto.split(/\r?\n/).filter((r) => r.includes("name: Portero de mainnet"))).toHaveLength(0);
+    expect(texto).not.toContain("vigilar-portero.mjs");
   });
 });

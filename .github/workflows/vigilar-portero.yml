@@ -1,0 +1,54 @@
+# Vigilancia del portero de mainnet.
+#
+# Una vez por hora, cuando GitHub la dispara, llama a `/v1/patrocinio/estado` de https://pm.tinkazo.app y
+# falla si los créditos de Pollar están por debajo del piso más 1.000, si la cuenta patrocinadora está baja,
+# si hay más de 10 firmas de cuentas de Google sin explicar en 24 horas o si el patrocinio de la app en
+# Pollar no está todo apagado; también si algo de eso no se pudo leer (scripts/lib/vigilar-portero.mjs).
+# Que falle es el aviso: GitHub manda un correo por la corrida fallida.
+#
+# Es el respaldo de la mirada a mano de docs/operacion.md, no la alarma: GitHub salta corridas, y el día
+# de un evento se mira `estado` cada hora a mano.
+#
+# La clave es la de operar del portero de mainnet (apaga, sube el tope, exporta las tablas). Por eso no
+# está entre los secretos del repositorio, que cualquier workflow de cualquier rama puede leer, sino en el
+# Environment `vigilancia` de GitHub, que solo ve `main`. Va por `env`, nunca dentro del comando. Sin ella
+# avisa y sale bien. La vigilancia de la red de Stellar vive aparte, en vigilar-red.yml.
+# Las acciones van fijadas por SHA (ver el encabezado de ci.yml).
+name: Vigilar el portero de mainnet
+
+on:
+  schedule:
+    # Cada hora, pero fuera del minuto 0, donde GitHub se congestiona y suele demorar o saltear corridas.
+    - cron: '23 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vigilar:
+    name: Mirar el portero de mainnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: vigilancia
+    steps:
+      # Solo scripts/: el guion que revisa la respuesta. El resto del repo no hace falta.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: |
+            scripts
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Portero de mainnet
+        env:
+          PORTERO_URL: https://pm.tinkazo.app
+          PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_MAINNET_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$PORTERO_ADMIN_TOKEN" ]; then
+            echo "Sin PORTERO_MAINNET_ADMIN_TOKEN en el Environment vigilancia: el portero de mainnet no se mira."
+            exit 0
+          fi
+          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json
+          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json
