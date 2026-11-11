@@ -68,6 +68,20 @@ export async function draw(): Promise<void> {
   }
   recuperacion = null;
   if (!app.frozen || app.drawn || secondsToRound() > 0) return;
+  // En modo Oficial, si la memoria dice que a la cuenta le falta activarse, el paso «Dejá tu cuenta lista» antes de
+  // sortear. Solo la memoria y sin red: el sorteo se lanza solo desde la espera. Fuera del modo Oficial no se baja nada.
+  if (app.frozen.raffleId !== undefined && network.name === "mainnet") {
+    let flujo: typeof import("./cuenta-lista-flujo") | null = null;
+    try {
+      flujo = await import("./cuenta-lista-flujo");
+    } catch {
+      // No bajó: el sorteo sigue sin la compuerta. Ya está sellado, así que la cuenta estaba lista al sellar; si igual
+      // le faltara algo, el sorteo falla antes de firmar y lo dice. Frenarlo acá lo dejaba muerto hasta recargar.
+      flujo = null;
+    }
+    if (flujo && flujo.faltaEnLaMemoria() && !(await flujo.cuentaListaParaGrabar("sorteo", { volverA: document.getElementById("btn-draw"), alSeguir: pedirPantallaDelSorteo }))) return;
+    if (!app.frozen || app.drawn) return;
+  }
   // "Sortear pagando con mi cuenta", si se eligió: vale para este intento y no se hereda al siguiente.
   const pagarConMiCuenta = tomarLaEleccion();
   // Tiene que correr dentro del clic: los navegadores no dejan hablar a una

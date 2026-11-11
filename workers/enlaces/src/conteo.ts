@@ -49,6 +49,8 @@ export const ERRORES = [
   "wallet",
   /** Pollar 0.12: la cuenta no firma hasta tener una forma de recuperarla. */
   "recoveryRequired",
+  /** Pollar 0.12 (modo Oficial): este navegador todavía no es uno de los de la cuenta; se confirma en el paso de la cuenta. */
+  "deviceNotEnrolled",
   /** Pollar 0.12: la firma pidió confirmación y nadie la atendió, o no era la que la persona pidió. */
   "confirmation",
   /** Quien paga la comisión por la persona (Pollar) se quedó sin con qué: no es de su cuenta. */

@@ -14,6 +14,7 @@ import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 import { errorDeCodigo } from "./ingreso-errores";
 import { esDeRed } from "../stellar/errores";
+import { CLASE_NO_CARGO, avisarQueNoCargo } from "./aviso-no-cargo";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -416,7 +417,57 @@ async function activate(
   render();
   refreshFreezeLabel();
   precargarSello();
-  if (!restoring) anunciarEntrada();
+  // En modo Oficial, con una cuenta nueva, el paso «Dejá tu cuenta lista» se abre enseguida y dice él quién entró.
+  if (!restoring) {
+    entradaCallada = pasoAlEntrar(wallet);
+    if (!entradaCallada) anunciarEntrada();
+  }
+}
+
+/**
+ * La entrada no se anunció porque el paso «Dejá tu cuenta lista» la iba a anunciar. Si el paso no se abre (no bajó, o
+ * la revisión dijo que no hacía falta), se anuncia igual: si no, la persona no veía ni el paso ni que había entrado.
+ */
+let entradaCallada = false;
+
+/**
+ * El paso «Dejá tu cuenta lista» se va a abrir apenas entra: modo Oficial, una cuenta de Google o de correo y, sin
+ * preguntar a la red, la cuenta todavía sin activar (`cuenta-lista-flujo.ts`). Así la página no anuncia la entrada abajo
+ * mientras el paso la anuncia arriba.
+ */
+function pasoAlEntrar(wallet: import("../stellar/wallet-lite").WalletAdapter): boolean {
+  if (network.name !== "mainnet" || sinGrabar()) return false;
+  try {
+    return (wallet as { estadoOficialLocal?: () => { activacion: string } }).estadoOficialLocal?.().activacion === "falta";
+  } catch {
+    return false;
+  }
+}
+
+/** En modo Oficial, después de entrar o de retomar la sesión: si a la cuenta le falta algo, el paso a pantalla completa. */
+function revisarLaCuentaOficial(origen: "entrada" | "retomar"): void {
+  if (network.name !== "mainnet") {
+    entradaCallada = false;
+    return;
+  }
+  const anunciarSiCallada = (): void => {
+    if (!entradaCallada) return;
+    entradaCallada = false;
+    anunciarEntrada();
+  };
+  void import("./cuenta-lista-flujo")
+    .then((m) => m.revisarCuentaOficial(origen))
+    .then(
+      (abrio) => {
+        if (abrio) entradaCallada = false;
+        else anunciarSiCallada();
+      },
+      () => {
+        // El flujo mismo no bajó: la entrada se anuncia y se dice que hay que volver a cargar.
+        anunciarSiCallada();
+        avisarQueNoCargo();
+      },
+    );
 }
 
 /**
@@ -433,6 +484,8 @@ function anunciarEntrada(): void {
   if (vivo) vivo.textContent = texto;
   const ya = document.getElementById("ya-entraste");
   if (e.via === "prueba" || (ya && ya.style.display !== "none")) return;
+  // El aviso de volver a cargar el paso de la cuenta pesa más que el de la entrada: no se tapa.
+  if (document.querySelector(`.${CLASE_NO_CARGO}`)) return;
   notice(texto, false);
 }
 
@@ -462,6 +515,7 @@ async function restorePollar(): Promise<void> {
     render();
     refreshFreezeLabel();
     precargarSello();
+    revisarLaCuentaOficial("retomar");
     // Al retomar la sesión, el perfil (nombre y foto) vive solo en memoria y llega después de la dirección, a veces
     // varios segundos después. Se mira cada tanto hasta que llega; mientras, la cabecera dice por dónde entró y
     // nunca muestra la dirección ni el correo como si fueran el nombre.
@@ -1375,12 +1429,18 @@ async function afterConnect(
     }
   }
   done();
+  revisarLaCuentaOficial("entrada");
 }
+
+/** Cerrar sesión, también desde el paso «Dejá tu cuenta lista». */
+export const cerrarSesion = (): Promise<void> => disconnect();
 
 async function disconnect(): Promise<void> {
   const w = await lite();
   const wallet = w.activeWallet();
   if (wallet) await wallet.disconnect();
+  // La cuenta de la red principal no pudo sacar este navegador al cerrar sesión (otro celular u otra compu): se dice.
+  const dejo = (wallet as { ultimoCierreDejoNavegador?: boolean } | null)?.ultimoCierreDejoNavegador === true;
   w.setActiveWallet(null);
   session = null;
   wrongNetwork = false;
@@ -1395,6 +1455,10 @@ async function disconnect(): Promise<void> {
   $("wallet-box").querySelector<HTMLElement>(".cuenta-chip")?.focus({ preventScroll: true });
   const vivo = document.getElementById("cuenta-aviso");
   if (vivo) vivo.textContent = t("cuentaSalio");
+  if (dejo) {
+    const celular = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+    notice(t(celular ? "clNoSeSacoCel" : "clNoSeSacoCompu"), true, undefined, false);
+  }
 }
 
 async function walletErrorText(e: unknown): Promise<string> {

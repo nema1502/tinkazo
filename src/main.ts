@@ -444,7 +444,7 @@ function avisarQueYaEntro(): void {
   // línea de la cuenta, el foco volvía a un botón que ya no está.
   const hasta = Date.now() + 60_000;
   const enfocar = (): void => {
-    if (document.querySelector(".modal-back")) {
+    if (document.querySelector(".modal-back, .cuenta-lista")) {
       if (Date.now() < hasta) setTimeout(enfocar, 200);
       return;
     }

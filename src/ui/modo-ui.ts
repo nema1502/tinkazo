@@ -53,7 +53,7 @@ export function yaConfirmoPrimerOficial(): boolean {
   }
 }
 
-function marcarPrimerOficial(): void {
+export function marcarPrimerOficial(): void {
   try {
     localStorage.setItem(FIRST_OFFICIAL_KEY, "1");
   } catch {

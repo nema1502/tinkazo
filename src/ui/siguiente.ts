@@ -46,7 +46,7 @@ interface Toca {
 }
 
 /** Los textos que tapan toda la página: con uno abierto la barra se va. */
-const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
+const SUPERPUESTOS = ".modal-back, .cuenta-lista, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
 
 let segundos: () => number = () => 0;
 let listo = false;

@@ -2792,3 +2792,241 @@
     .gan-form .row > button, .gan-pagar { flex: 1 1 100%; }
     .gan-pagar { justify-self: stretch; }
   }
+
+  /* «Dejá tu cuenta lista» (src/ui/cuenta-lista.ts, 11 de noviembre de 2026): el paso a pantalla completa y obligatorio
+     del modo Oficial. Tapa todo, también la cabecera y los avisos. Tres franjas: la barra, el cuerpo que se recorre y el
+     pie con la acción principal y las dos salidas, siempre a la vista. Cajas con borde de tinta y sombra dura, sin
+     radios ni sombras difusas, como el resto del sitio.
+     En el celular el pie va fijo abajo, de borde a borde. Desde 760 px de ancho (y con más de 480 de alto) el cuerpo y
+     el pie forman un solo bloque al medio de la pantalla, con el mismo ancho: la acción queda pegada a los pasos. Desde
+     1000 px, dos columnas: a la izquierda el título (y abajo, las notas de las salidas), a la derecha los pasos y,
+     debajo de ellos, la principal y las salidas, en el mismo orden que en el celular. Las notas pasan al pie desde
+     760 px (`ubicarPiezas`, `src/ui/cuenta-lista.ts`). */
+  html.con-cuenta-lista, html.con-cuenta-lista body { overflow: hidden; }
+  .cuenta-lista {
+    position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh; background: var(--paper); color: var(--ink);
+    /* La página va de borde a borde (viewport-fit=cover): la muesca y las esquinas del celular no tapan la barra ni el pie. */
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+    /* El ancho de la columna (o de las dos) y su margen: el cuerpo, el pie y la barra se alinean con esto. */
+    --cl-ancho: 560px; --cl-margen: 16px;
+  }
+  .cuenta-lista [hidden] { display: none !important; }
+  .cl-barra {
+    flex: none; display: flex; align-items: center; gap: 12px; height: 56px;
+    padding: 0 max(var(--cl-margen), calc((100% - var(--cl-ancho)) / 2));
+    border-bottom: var(--bw) solid var(--ink); background: var(--paper);
+  }
+  .cl-marca { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 20px; letter-spacing: 0.04em; }
+  .cl-marca svg { width: 28px; height: 32px; fill: var(--ink); }
+  .cl-modo { margin-left: auto; box-shadow: none; }
+  .cl-idiomas { display: inline-flex; gap: 6px; }
+  .cl-idioma {
+    min-width: 44px; min-height: 44px; padding: 0 8px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 800; letter-spacing: 0.08em; cursor: pointer;
+  }
+  .cl-idioma[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); }
+  /* El hueco de la barra de recorrido, a los dos lados: con o sin ella, la columna queda alineada con el pie. */
+  .cl-cuerpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; }
+  /* Lo que no entra se esfuma contra el pie: se nota que sigue más abajo y ningún renglón parece cortado. Al final del
+     recorrido queda sobre el margen de abajo del contenido, donde no tapa nada. */
+  .cl-cuerpo::after {
+    content: ""; display: block; position: sticky; bottom: 0; height: 24px; margin-top: -24px; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--paper));
+  }
+  .cl-contenido {
+    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: 0 auto; padding: 16px var(--cl-margen) 28px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .cl-cabeza { display: flex; flex-direction: column; gap: 12px; }
+  .cl-quien { margin: 0; font-size: 16px; color: var(--ink2); font-weight: 600; }
+  .cl-titulo { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 900; text-wrap: balance; }
+  .cuenta-lista .cl-titulo:focus, .cuenta-lista .cl-titulo:focus-visible { outline: none; box-shadow: none; }
+  .cl-bajada { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink2); }
+  .cl-pasos { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+  .cl-paso { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+  .cl-paso.cl-actual { box-shadow: var(--sh); }
+  .cl-paso[data-estado="espera"] { border: 2px dashed var(--ink2); box-shadow: none; background: transparent; }
+  /* La fila de arriba de cada caja: el círculo, el título y la palabra del estado. Si el título no entra, se parte él;
+     la palabra no baja sola a un renglón vacío. */
+  .cl-paso-cab { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 12px 14px; }
+  .cl-circulo {
+    grid-column: 1; grid-row: 1;
+    flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    border: var(--bw) solid var(--ink); border-radius: 50%; background: var(--card); color: var(--ink); font-weight: 900; font-size: 18px;
+  }
+  .cl-circulo svg { width: 22px; height: 22px; }
+  .cl-paso[data-estado="espera"] .cl-circulo { color: var(--ink2); border-color: var(--ink2); border-width: 2px; background: transparent; }
+  .cl-paso[data-estado="lista"] .cl-circulo { background: var(--teal); color: var(--on-accent); }
+  .cl-paso[data-estado="no-salio"] .cl-circulo { background: var(--orange); color: var(--on-accent); }
+  .cl-paso[data-estado="haciendo"] .cl-circulo, .cl-paso[data-estado="revisando"] .cl-circulo { position: relative; }
+  .cl-paso-titulo { grid-column: 2; grid-row: 1; min-width: 0; margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; }
+  .cl-palabra { grid-column: 3; grid-row: 1; justify-self: end; text-align: right; font-size: 16px; font-weight: 700; color: var(--ink2); }
+  .cl-paso[data-estado="lista"] .cl-palabra { color: var(--teal-ink); }
+  .cl-paso[data-estado="no-salio"] .cl-palabra { color: var(--magenta-ink); }
+  .cl-paso-cuerpo { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .cl-texto-caja, .cl-nota-caja { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+  .cl-nota-caja { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
+  .cl-error { border: 2px solid var(--ink); border-left: 8px solid var(--orange); background: var(--paper); padding: 8px 12px; display: grid; gap: 4px; }
+  .cl-error-texto { margin: 0; font-size: 16px; line-height: 1.45; font-weight: 700; color: var(--ink); }
+  .cl-form { display: grid; gap: 6px; }
+  .cl-etiqueta { font-size: 16px; font-weight: 700; }
+  .cl-form input {
+    min-height: 48px; width: 100%; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--ink);
+    background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 0;
+  }
+  .cl-form input.cl-codigo { text-align: center; letter-spacing: 0.4em; font-family: ui-monospace, Consolas, monospace; font-size: 22px; }
+  .cl-raya { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font-size: 16px; font-weight: 600; color: var(--ink2); }
+  .cl-raya::before, .cl-raya::after { content: ""; flex: 1; border-top: 2px solid var(--ink2); }
+  .cl-secundario {
+    min-height: 44px; padding: 8px 16px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font: inherit; font-size: 16px; font-weight: 800; text-align: center; cursor: pointer; overflow-wrap: anywhere;
+  }
+  .cl-texto {
+    min-height: 44px; padding: 0 6px; border: 0; background: none; color: var(--ink); align-self: flex-start;
+    font: inherit; font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+  }
+  .cl-secundario:disabled, .cl-texto:disabled { color: var(--ink2); border-color: var(--ink2); cursor: default; text-decoration: none; }
+  .cl-notas { display: grid; gap: 8px; }
+  .cl-nota { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink2); }
+  .cl-pie {
+    flex: none; padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    border-top: var(--bw) solid var(--ink); background: var(--card);
+    /* Los mismos huecos a los costados que el cuerpo cuando se recorre: así sus bordes coinciden siempre. */
+    overflow: hidden; scrollbar-gutter: stable both-edges;
+  }
+  /* Adentro del pie, la misma columna que la del contenido: la principal y las salidas tienen su ancho exacto. */
+  .cl-pie-dentro {
+    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: 0 auto; padding: 0 var(--cl-margen);
+    display: flex; flex-direction: column-reverse; gap: 8px;
+  }
+  .cl-accion { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .cl-salidas { display: flex; justify-content: space-between; gap: 12px; width: 100%; }
+  .cl-salidas .cl-texto { align-self: auto; }
+  .cl-contenido > .cl-salidas { max-width: none; margin: 4px 0 0; border-top: 2px solid var(--ink2); padding-top: 8px; }
+  .cl-primer { margin: 0; font-size: 16px; line-height: 1.45; color: var(--ink2); }
+  .cl-estado { margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink2); font-weight: 600; }
+  /* Vacía sigue en el árbol (sin alto y sin sumar hueco): los lectores de pantalla oyen lo que se escriba después. */
+  .cl-estado:empty { height: 0; overflow: hidden; margin-bottom: -8px; }
+  .cl-principal {
+    width: 100%; min-height: 56px; padding: 8px 18px; background: var(--magenta); color: var(--on-accent);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); font: inherit; font-size: 22px; font-weight: 900;
+    line-height: 1.2; cursor: pointer; overflow-wrap: anywhere;
+  }
+  /* Apagada sigue siendo la que viene: la misma forma y el mismo tamaño, un rosa claro y el borde punteado (como el paso
+     que espera). Se prende entera cuando se puede tocar. */
+  .cl-principal:disabled {
+    background: color-mix(in srgb, var(--magenta) 24%, var(--card)); color: var(--ink);
+    border-style: dashed; box-shadow: none; cursor: default;
+  }
+  /* Apagada porque corre lo suyo («Activando tu cuenta…»): entera, con la ruedita del botón de entrar. No se confunde con
+     la que espera que se escriba algo, que es la del borde punteado. */
+  .cl-principal[aria-busy="true"] {
+    background: var(--magenta); color: var(--on-accent); border-style: solid; box-shadow: var(--sh-sm); cursor: progress;
+  }
+  .cl-principal[aria-busy="true"]::before {
+    content: ""; display: inline-block; vertical-align: -0.1em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
+    border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%;
+    animation: cc-gira 0.8s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { .cl-principal[aria-busy="true"]::before { animation: none; } }
+  /* Lo que dice qué es el desbloqueo, debajo de su botón. */
+  .cl-ayuda { color: var(--ink2); }
+  .cl-volver { align-self: center; }
+  @media (pointer: coarse) {
+    .cl-idioma, .cl-secundario, .cl-texto { min-height: 48px; }
+    .cl-idioma { min-width: 48px; }
+  }
+  @media (min-width: 400px) { .cl-titulo { font-size: 28px; } }
+  @media (max-width: 759px) {
+    /* La palabra larga («Después del paso 1») va debajo del título, no en un renglón propio que agranda la caja. */
+    .cl-paso[data-estado="espera"] .cl-circulo { grid-row: 1 / 3; }
+    .cl-paso[data-estado="espera"] .cl-paso-titulo { align-self: end; }
+    .cl-paso[data-estado="espera"] .cl-palabra { grid-column: 2; grid-row: 2; justify-self: start; align-self: start; text-align: left; }
+  }
+  @media (max-width: 359px) {
+    /* El celular chico: un poco menos de aire para que los dos pasos entren a la vista sin recorrer. */
+    .cl-nombre { display: none; }
+    .cl-contenido, .cl-cabeza { gap: 10px; }
+    .cl-contenido { padding-top: 12px; }
+    .cl-paso-cab { column-gap: 10px; padding: 10px 12px; }
+    .cl-paso-cuerpo { padding: 0 12px 12px; }
+    .cl-circulo { width: 32px; height: 32px; font-size: 16px; }
+    .cl-circulo svg { width: 20px; height: 20px; }
+    .cl-paso-titulo { font-size: 18px; }
+    /* Con la ruedita, «Activando tu cuenta…» sigue en un renglón. */
+    .cl-principal[aria-busy="true"] { padding-inline: 10px; font-size: 18px; }
+  }
+  @media (min-width: 760px) and (min-height: 481px) {
+    /* El cuerpo y el pie, un solo bloque al medio: la principal queda debajo de los pasos y no en el borde de la pantalla.
+       Si no entra, el cuerpo se recorre y el pie sigue a la vista. */
+    .cuenta-lista { --cl-ancho: 600px; --cl-margen: 24px; }
+    .cl-cuerpo { flex: 0 1 auto; margin-top: auto; }
+    .cl-contenido { padding-top: 24px; }
+    .cl-pie { margin-bottom: auto; padding: 8px 0 24px; border-top: 0; background: none; }
+    .cl-titulo { font-size: 32px; }
+    /* En la caja, «Otro código en…» y «Usar otro correo» van en una fila: el paso del código entra sin recorrer en la tablet
+       y en la compu. */
+    .cl-paso-cuerpo { flex-flow: row wrap; column-gap: 12px; row-gap: 8px; }
+    .cl-paso-cuerpo > * { flex: 1 1 100%; }
+    .cl-paso-cuerpo > .cl-secundario[data-accion="otro-codigo"] { flex: 1 1 auto; }
+    .cl-paso-cuerpo > .cl-texto[data-accion="otro-correo"] { flex: 0 0 auto; align-self: center; }
+  }
+  @media (min-width: 1000px) and (min-height: 481px) {
+    /* Dos columnas. Los pasos van abajo de la suya, pegados a la principal; el título arriba de la otra. */
+    .cuenta-lista { --cl-ancho: 1024px; --cl-margen: 32px; --cl-der: 560px; --cl-medio: 64px; }
+    .cl-contenido, .cl-pie-dentro {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--cl-der)); column-gap: var(--cl-medio); align-items: start;
+    }
+    .cl-cabeza { grid-column: 1; grid-row: 1; }
+    .cl-pasos { grid-column: 2; grid-row: 1; align-self: end; margin-top: 0; }
+    /* La tercera fila se lleva lo que las notas tengan de más: las salidas quedan pegadas a la principal. */
+    .cl-pie-dentro { row-gap: 8px; grid-template-rows: auto auto 1fr; }
+    .cl-pie-dentro > .cl-notas { grid-column: 1; grid-row: 1 / span 3; padding-top: 6px; }
+    .cl-pie-dentro > .cl-accion { grid-column: 2; grid-row: 1; }
+    .cl-pie-dentro > .cl-salidas { grid-column: 2; grid-row: 2; }
+    .cl-titulo { font-size: 40px; line-height: 1.1; }
+    .cl-bajada { font-size: 18px; }
+  }
+  @media (min-width: 760px) and (min-height: 481px) and (max-height: 640px) {
+    /* Una pantalla baja (tablet acostada, laptop chica): menos aire arriba y abajo, para que el paso entre sin recorrer. */
+    .cl-contenido { padding-top: 12px; padding-bottom: 20px; }
+    .cl-pasos { gap: 10px; }
+    .cl-pie { padding-top: 8px; padding-bottom: 12px; }
+  }
+  @media (min-width: 1600px) and (min-height: 900px) {
+    /* Pantalla grande: más ancho y letra acorde, sin agrandar los huecos. */
+    .cuenta-lista { --cl-ancho: 1200px; --cl-der: 640px; --cl-medio: 96px; }
+    .cl-quien { font-size: 18px; }
+    .cl-titulo { font-size: 56px; }
+    .cl-bajada { font-size: 22px; }
+    .cl-paso-titulo { font-size: 24px; }
+    .cl-circulo { width: 44px; height: 44px; font-size: 20px; }
+    .cl-circulo svg { width: 26px; height: 26px; }
+    .cl-paso-cab { padding: 16px 18px; column-gap: 14px; }
+    .cl-paso-cuerpo { padding: 0 18px 18px; gap: 12px; }
+    .cl-texto-caja, .cl-nota-caja, .cl-nota, .cl-error-texto, .cl-etiqueta, .cl-palabra, .cl-raya, .cl-secundario, .cl-texto,
+    .cl-estado, .cl-primer { font-size: 18px; }
+    .cl-secundario, .cl-texto { min-height: 48px; }
+    .cl-form input { min-height: 56px; font-size: 18px; }
+    .cl-form input.cl-codigo { font-size: 26px; }
+    .cl-principal { min-height: 64px; font-size: 26px; }
+  }
+  @media (max-height: 560px) { .cl-barra { height: 48px; } }
+  @media (max-height: 480px) {
+    .cl-contenido { padding-top: 10px; gap: 8px; }
+    .cl-titulo { font-size: 22px; }
+    .cl-principal { min-height: 48px; font-size: 20px; }
+  }
+  /* El teclado abierto en un celular chico: se esconde lo que sobra mientras se escribe. */
+  .cuenta-lista.cl-tecleando .cl-quien, .cuenta-lista.cl-tecleando .cl-bajada,
+  .cuenta-lista.cl-tecleando .cl-paso:not(.cl-actual), .cuenta-lista.cl-tecleando .cl-notas { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .cuenta-lista { animation: cl-entra 150ms ease-out; }
+    .cl-paso[data-estado="haciendo"] .cl-circulo::after, .cl-paso[data-estado="revisando"] .cl-circulo::after {
+      content: ""; position: absolute; inset: -7px; border: 3px solid transparent; border-top-color: var(--magenta-ink);
+      border-radius: 50%; animation: cl-gira 0.9s linear infinite;
+    }
+  }
+  @keyframes cl-entra { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes cl-gira { to { transform: rotate(360deg); } }

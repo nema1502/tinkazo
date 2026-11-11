@@ -154,6 +154,8 @@ const CORPUS: Fila[] = [
   ["Pollar: billetera externa sin conectar", "fuente", () => pollar("Wallet not connected. Reconnect your wallet to sign."), "wallet"],
   // Pollar 0.12 (24 de octubre de 2026). Los códigos y sus textos salen de `@pollar/core` 0.12.0 (dist/index.mjs, tabla de errores).
   ["Pollar 0.12: la cuenta pide una forma de recuperarla antes de firmar", "fuente", () => pollar("SDK_WALLET_RECOVERY_REQUIRED · Set up a way to recover this wallet first: a passkey, a second device or your email."), "recoveryRequired"],
+  // Un navegador nuevo no vota hasta que la cuenta lo reconozca (dist/index.mjs, `devices` y `revokeDevice`, y su tabla de errores).
+  ["Pollar 0.12: este navegador todavía no puede aprobar por la cuenta", "fuente", () => pollar("SDK_COSIGN_DEVICE_NOT_ENROLLED · This device can't approve requests for this wallet."), "deviceNotEnrolled"],
   ["Pollar 0.12: nadie atiende la confirmación de la firma", "fuente", () => pollar("SDK_CONFIRMATION_UNAVAILABLE · confirmation is 'prompt' but nothing shows the prompt: mount PollarProvider or subscribe with onConfirmationRequest"), "confirmation"],
   ["Pollar 0.12: la firma se rechazó (la rechazamos nosotros si no era la pedida)", "fuente", () => pollar("SDK_CONFIRMATION_DECLINED · the user declined the transaction"), "confirmation"],
   ["Pollar 0.12: el servicio se quedó sin créditos", "fuente", () => pollar("SDK_CREDITS_INSUFFICIENT"), "sponsorEmpty"],

@@ -1,9 +1,11 @@
-import type { AuthOpenContext, PollarClient, WalletInfo } from "@pollar/core";
+import type { AuthOpenContext, CosignRequest, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
+import { errorKey, esDeRed } from "./errores";
 import { LEGACY_POLLAR_INTENT_KEY, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
+import { enNavegadorDeApp } from "../navegador";
 import { cargaOpcional } from "../carga-opcional";
 
 /**
@@ -152,6 +154,403 @@ export function atenderFirmas(
   }
 }
 
+/* ------------------------------------------------ activar la cuenta en la red principal */
+
+/**
+ * Un pedido de co-firma de Pollar (`CosignRequest` de `@pollar/core` 0.12.0, los campos que se miran). Lo abre Pollar y
+ * espera el voto de la persona. En la red principal, al entrar, queda uno: el de crear su cuenta, pagado por la app.
+ */
+export interface PedidoDeCofirma {
+  id: string;
+  kind?: string | undefined;
+  network?: string | undefined;
+  status?: string | undefined;
+  intent?: string | undefined;
+  operation?: string | undefined;
+  account?: string | undefined;
+  signWith?: string | undefined;
+  /** No está en los tipos del kit, aunque llegó en vivo: la regla no depende de que siga llegando. */
+  appPaysFee?: boolean | undefined;
+  refreshable?: boolean | undefined;
+  unsignedPayload?: string | undefined;
+  payloadHash?: string | undefined;
+  activityId?: string | null | undefined;
+  subOrgId?: string | undefined;
+  createdAt?: string | undefined;
+  expiresAt?: string | undefined;
+  submit?: { status?: string | undefined; hash?: string | undefined } | undefined;
+}
+
+/** Una operación de la transacción de un pedido, con lo que la regla compara. */
+export interface OperacionLeida {
+  type: string;
+  source?: string | undefined;
+  destination?: string | undefined;
+  sponsoredId?: string | undefined;
+  startingBalance?: string | undefined;
+}
+
+/** Lo que hace falta leer de la transacción de un pedido para saber qué se firma. */
+export interface TransaccionLeida {
+  /** La cuenta que paga la comisión. */
+  fuente: string;
+  /** El hash de la transacción, en hexadecimal, calculado con la red de la página. */
+  hash: string;
+  operaciones: readonly OperacionLeida[];
+}
+
+/**
+ * ¿Este pedido es la creación de ESTA cuenta, pagada por otro, y nada más? Devuelve el motivo si no lo es, `null` si sí.
+ *
+ * Es lo único que la activación aprueba (sección 5 del diseño de «Dejá tu cuenta lista»): el pedido es crear la cuenta de
+ * quien entró, en Stellar, pendiente, sin voto, de esta organización; la transacción la paga otra cuenta G; y sus
+ * operaciones son exactamente abrir el patrocinio de esta cuenta, crearla con saldo 0 y cerrar el patrocinio desde ella,
+ * en ese orden, con el hash que el pedido dice. Lo único que la persona firma como dueña es ese cierre, que no mueve
+ * nada. El motivo va a la consola: nunca lleva direcciones, la transacción ni el pedido, solo palabras fijas y, si es por
+ * las operaciones, la lista de sus tipos.
+ */
+export function motivoContraLaActivacion(p: PedidoDeCofirma, cuenta: string, tx: TransaccionLeida | null, subOrg: string | null): string | null {
+  if (!cuenta.startsWith("G")) return "cuenta";
+  if (p.status !== "PENDING") return "estado";
+  if (p.kind !== "TX" || p.network !== "STELLAR") return "tipo";
+  if (p.intent !== "account_create" || p.operation !== "create_account") return "intención";
+  if (p.account === undefined) return "pedido sin cuenta";
+  if (p.account !== cuenta || p.signWith !== cuenta) return "otra cuenta";
+  if (p.appPaysFee === false) return "no paga la app";
+  if (p.activityId) return "ya votado";
+  if (!p.unsignedPayload || !p.payloadHash) return "sin transacción";
+  if (!subOrg || p.subOrgId !== subOrg) return "otra organización";
+  if (!tx) return "no se lee";
+  if (!tx.fuente.startsWith("G") || tx.fuente === cuenta) return "quién paga";
+  const tipos = `operaciones: ${tx.operaciones.map((o) => o.type).join(",")}`;
+  if (tx.operaciones.length !== 3) return tipos;
+  const [abre, crea, cierra] = tx.operaciones as readonly [OperacionLeida, OperacionLeida, OperacionLeida];
+  const forma =
+    abre.type === "beginSponsoringFutureReserves" &&
+    abre.sponsoredId === cuenta &&
+    esDeOtro(abre.source, cuenta) &&
+    crea.type === "createAccount" &&
+    crea.destination === cuenta &&
+    crea.startingBalance !== undefined &&
+    Number(crea.startingBalance) === 0 &&
+    esDeOtro(crea.source, cuenta) &&
+    cierra.type === "endSponsoringFutureReserves" &&
+    cierra.source === cuenta;
+  if (!forma) return tipos;
+  if (tx.hash !== p.payloadHash.toLowerCase()) return "hash";
+  return null;
+}
+
+/** Una operación sin cuenta propia la paga quien paga la transacción; si trae una, tiene que ser otra G. */
+function esDeOtro(source: string | undefined, cuenta: string): boolean {
+  return source === undefined || (source.startsWith("G") && source !== cuenta);
+}
+
+/** La propuesta que el kit arma en `verify` y `relay` estampa con la llave de este navegador. */
+export interface PropuestaDeVoto {
+  path: string;
+  body: unknown;
+}
+
+/** Lo que se va a estampar es exactamente nuestro hash, para esta cuenta y esta organización, y nada más. */
+export function propuestaEsLaNuestra(prop: PropuestaDeVoto, cuenta: string, hashNuestro: string, subOrg: string): boolean {
+  const b = (prop.body ?? {}) as { type?: unknown; organizationId?: unknown; parameters?: Record<string, unknown> };
+  const p = b.parameters && typeof b.parameters === "object" ? b.parameters : null;
+  const claves = p ? Object.keys(p).sort().join(",") : "";
+  return (
+    prop.path === "/public/v1/submit/sign_raw_payload" &&
+    b.type === "ACTIVITY_TYPE_SIGN_RAW_PAYLOAD_V2" &&
+    !!subOrg &&
+    b.organizationId === subOrg &&
+    claves === "encoding,hashFunction,payload,signWith" &&
+    p?.signWith === cuenta &&
+    p.payload === hashNuestro &&
+    p.encoding === "PAYLOAD_ENCODING_HEXADECIMAL" &&
+    p.hashFunction === "HASH_FUNCTION_NOT_APPLICABLE"
+  );
+}
+
+/**
+ * Lee la transacción de un pedido con el SDK de Stellar y la red de la página. `null` si no trae, si no se puede leer o
+ * si viene envuelta (otra cuenta paga por encima): esa forma no es la de una activación.
+ */
+export async function leerTransaccion(xdr: string | undefined, passphrase: string): Promise<TransaccionLeida | null> {
+  if (!xdr) return null;
+  try {
+    const { Transaction, TransactionBuilder } = await import("@stellar/stellar-sdk");
+    const tx = TransactionBuilder.fromXDR(xdr, passphrase);
+    if (!(tx instanceof Transaction)) return null;
+    return {
+      fuente: tx.source,
+      hash: aHex(tx.hash()),
+      operaciones: tx.operations.map((o) => {
+        const x = o as { type: string; source?: string; destination?: string; sponsoredId?: string; startingBalance?: string };
+        return { type: x.type, source: x.source, destination: x.destination, sponsoredId: x.sponsoredId, startingBalance: x.startingBalance };
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Los bytes de un hash, en hexadecimal en minúscula (sin `Buffer`, que en el navegador no está). */
+const aHex = (bytes: Uint8Array): string => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+
+/** Cómo terminó la activación: no había nada que activar, quedó activada, o el voto salió y todavía no se cerró. */
+export type ResultadoDeActivar = "no-hay" | "activada" | "pendiente";
+
+/** Los errores de la activación. Nunca el error del kit, que trae el pedido en su cuerpo. */
+export const ACTIVACION_SIN_CUENTA = "pollar-sin-cuenta";
+export const ACTIVACION_RARA = "pollar-activacion-rara";
+export const ACTIVACION_FALLO = "pollar-activacion-fallo";
+export const ACTIVACION_TOPE = "pollar-activacion-tope";
+/** Cuántos votos fallados se admiten por pestaña antes de pedir que cierre sesión y entre de nuevo: cada voto cuesta. */
+export const TOPE_DE_VOTOS_FALLADOS = 2;
+
+/**
+ * Lo que la cuenta de la red principal deja en `sessionStorage`, sin datos de la cuenta: los votos fallados de esta
+ * pestaña (un número), que este navegador se sumó a la cuenta en esta pestaña, y que se mandó un código. Se borran al
+ * cerrar sesión.
+ */
+export const MARCAS_DE_LA_CUENTA = { votos: "tinkazo.cl.votos", inscrito: "tinkazo.cl.inscrito", codigo: "tinkazo.cl.codigo" } as const;
+
+/** El canal con que una pestaña avisa a las otras que la cuenta cambió. El mensaje es `{ tipo: "cambio" }`, sin la dirección. */
+export const CANAL_DE_LA_CUENTA = "tinkazo-cuenta-oficial";
+
+function leerMarca(clave: string): string | null {
+  try {
+    return sessionStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+}
+function ponerMarca(clave: string, valor: string): void {
+  try {
+    sessionStorage.setItem(clave, valor);
+  } catch {
+    /* sin almacenamiento, la marca vive lo que viva la llamada */
+  }
+}
+function borrarMarca(clave: string): void {
+  try {
+    sessionStorage.removeItem(clave);
+  } catch {
+    /* ya no está */
+  }
+}
+const votosFallados = (): number => {
+  const n = Number(leerMarca(MARCAS_DE_LA_CUENTA.votos));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+};
+const sumarVotoFallado = (): void => ponerMarca(MARCAS_DE_LA_CUENTA.votos, String(votosFallados() + 1));
+
+/** Avisa a las otras pestañas (y a quien escuche en esta) que la cuenta cambió, para que vuelvan a leer. */
+export function avisarCambioDeLaCuenta(): void {
+  try {
+    if (typeof BroadcastChannel === "undefined") return;
+    const canal = new BroadcastChannel(CANAL_DE_LA_CUENTA);
+    canal.postMessage({ tipo: "cambio" });
+    canal.close();
+  } catch {
+    /* sin canal, las otras pestañas leen al volver a la vista */
+  }
+}
+
+/**
+ * Lo que importa del estado de la co-firma que avisa el kit, en una cadena: cada pedido pendiente con su estado y su
+ * actividad, y el último resuelto. Dos avisos con la misma firma dicen lo mismo.
+ */
+export function firmaDeLaCofirma(s: unknown): string {
+  const de = (r: unknown): string => {
+    const x = (r ?? {}) as { id?: unknown; status?: unknown; activityId?: unknown };
+    return `${String(x.id ?? "")}:${String(x.status ?? "")}:${String(x.activityId ?? "")}`;
+  };
+  const e = (s ?? {}) as { pending?: unknown; lastResolved?: unknown };
+  const pendientes = Array.isArray(e.pending) ? e.pending.map(de).sort() : [];
+  return `${pendientes.join(",")}|${e.lastResolved ? de(e.lastResolved) : ""}`;
+}
+
+/** La cuenta ya existe en la red: gana siempre sobre cualquier pedido pendiente. */
+const cuentaCreada = (w: { existsOnStellar?: boolean | undefined; provisioning?: string | undefined } | null | undefined): boolean =>
+  w?.existsOnStellar === true || w?.provisioning === "READY";
+
+/** El pedido de crear esta cuenta, todavía pendiente. */
+const esPedidoDeCrear = (p: PedidoDeCofirma, cuenta: string): boolean => p.intent === "account_create" && p.status === "PENDING" && p.account === cuenta;
+
+/** El más nuevo por `createdAt`; con fechas iguales o ilegibles, el último de la lista. */
+function elMasNuevo(lista: readonly PedidoDeCofirma[]): PedidoDeCofirma | null {
+  let mejor: PedidoDeCofirma | null = null;
+  let cuando = -Infinity;
+  for (const p of lista) {
+    const t = Date.parse(p.createdAt ?? "");
+    const v = Number.isFinite(t) ? t : -Infinity;
+    if (mejor === null || v >= cuando) {
+      mejor = p;
+      cuando = v;
+    }
+  }
+  return mejor;
+}
+
+const codigoDelKit = (e: unknown): string | undefined => {
+  const c = (e as { code?: unknown } | null)?.code;
+  return typeof c === "string" ? c : undefined;
+};
+
+/** El error del kit, convertido en uno nuestro que solo trae el código: de créditos, de red o la falla de siempre. */
+function errorDeActivar(e: unknown): Error {
+  if (errorKey(e) === "sponsorEmpty") return new Error("SDK_CREDITS_INSUFFICIENT");
+  const sinInternet = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (sinInternet || esDeRed(e)) return new Error("SDK_NETWORK_TIMEOUT");
+  return new Error(ACTIVACION_FALLO);
+}
+async function delKit<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    throw errorDeActivar(e);
+  }
+}
+
+const noAprobada = (motivo: string): Error => {
+  console.warn(`[tinkazo] activación no aprobada: ${motivo}`);
+  return new Error(ACTIVACION_RARA);
+};
+
+/** Corre `f` con el candado entre pestañas de Web Locks; sin Web Locks, sin candado. */
+function conCandado<T>(nombre: string, f: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
+  if (!locks || typeof locks.request !== "function") return f();
+  return locks.request(nombre, f) as Promise<T>;
+}
+
+/**
+ * Cómo está la activación de la cuenta de la red principal: lista (existe en la red), falta (hay un pedido de crearla
+ * esperando el voto), se está preparando (todavía no hay pedido), no salió (Pollar dice que falló), o no se sabe (no se
+ * pudo preguntar y lo local no dice que esté lista).
+ */
+export type EstadoDeActivacion = "lista" | "falta" | "preparando" | "fallo" | "no-se-sabe";
+
+/**
+ * Cómo está la protección: lista; falta (la cuenta nueva, con este navegador adentro y sin forma de recuperarla);
+ * `aparato-nuevo` (protegida, pero este navegador no es de la cuenta: hay que confirmar que es la persona); `sin-forma`
+ * (sin protección y este navegador no es de la cuenta: desde acá no hay cómo); o no se sabe.
+ */
+export type EstadoDeProteccionOficial = "lista" | "falta" | "aparato-nuevo" | "sin-forma" | "no-se-sabe";
+
+/** Lo que el paso «Dejá tu cuenta lista» necesita saber de la cuenta. */
+export interface EstadoOficial {
+  activacion: EstadoDeActivacion;
+  proteccion: EstadoDeProteccionOficial;
+  /** La cuenta tiene un correo confirmado para recuperarla: a ese va el código de un navegador nuevo. */
+  correoConfirmado: boolean;
+  /** La cuenta tiene llaves guardadas (el desbloqueo de un celular o de una compu). */
+  tieneLlaves: boolean;
+  /** Este navegador es el único de la cuenta: si sale sin protegerla, tiene que terminar acá. */
+  unicoNavegador: boolean;
+  /** El correo confirmado de la cuenta, si tiene: el paso lo muestra tapado en «Mandar un código a…». */
+  correoDeLaCuenta: string | null;
+}
+
+/** Fuera de la red principal, o con todo en memoria: no hay nada que hacer. */
+const TODO_LISTO: EstadoOficial = { activacion: "lista", proteccion: "lista", correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
+const NADA_SE_SABE: EstadoOficial = { activacion: "no-se-sabe", proteccion: "no-se-sabe", correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
+
+/** La llave de este navegador entre las de la cuenta. Las dos son hexadecimal: se comparan sin mayúsculas. */
+const mismaLlave = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+/** Lo que haga `p`, o un error a los `ms`. El temporizador se suelta al terminar. */
+function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | undefined;
+  const tope = new Promise<never>((_, rechazar) => {
+    t = setTimeout(() => rechazar(new Error("tope")), ms);
+  });
+  return Promise.race([p, tope]).finally(() => clearTimeout(t));
+}
+
+/** Cuánto se espera, al cerrar sesión, a sacar este navegador de la cuenta, y a una confirmación que esté en curso. */
+export const TOPE_SACAR_NAVEGADOR_MS = 10_000;
+export const TOPE_CONFIRMACION_EN_CURSO_MS = 20_000;
+
+/**
+ * ¿Se puede usar el desbloqueo de este celular o compu (huella, cara o clave) para la cuenta? Hace falta que el navegador
+ * sepa crear llaves de acceso, que no sea el navegador de una aplicación (Instagram, TikTok…: ahí no se abre) y que diga
+ * que tiene un desbloqueo propio. Si no contesta en `tope` milisegundos, no.
+ */
+export async function puedeUsarDesbloqueo(tope = 800): Promise<boolean> {
+  try {
+    if (!hayPasskeys()) return false;
+    if (typeof navigator !== "undefined" && enNavegadorDeApp(navigator.userAgent ?? "")) return false;
+    const pkc = window.PublicKeyCredential as unknown as { isUserVerifyingPlatformAuthenticatorAvailable?: () => Promise<boolean> } | undefined;
+    if (typeof pkc?.isUserVerifyingPlatformAuthenticatorAvailable !== "function") return false;
+    return await conTope(pkc.isUserVerifyingPlatformAuthenticatorAvailable().then(Boolean), tope);
+  } catch {
+    return false;
+  }
+}
+
+/* ------------------------------------------------ el testigo del sello en la red principal */
+
+/**
+ * Compara la transacción que se votó en la co-firma con la que armó Tinkazo: la cuenta de origen y las operaciones, en
+ * XDR, una por una, y si la votada vino envuelta. Devuelve la línea para la consola, sin direcciones, o `null` si no se
+ * pudo leer alguna de las dos.
+ */
+export async function compararCofirma(armada: string, votada: string, passphrase: string): Promise<string | null> {
+  try {
+    const { FeeBumpTransaction, TransactionBuilder } = await import("@stellar/stellar-sdk");
+    const a0 = TransactionBuilder.fromXDR(armada, passphrase);
+    const v0 = TransactionBuilder.fromXDR(votada, passphrase);
+    const envuelta = v0 instanceof FeeBumpTransaction && !(a0 instanceof FeeBumpTransaction);
+    const a = a0 instanceof FeeBumpTransaction ? a0.innerTransaction : a0;
+    const v = v0 instanceof FeeBumpTransaction ? v0.innerTransaction : v0;
+    const opsA = a.tx.operations.map((o) => o.toXDR("base64"));
+    const opsV = v.tx.operations.map((o) => o.toXDR("base64"));
+    const misma = a.source === v.source && opsA.length === opsV.length && opsA.every((x, i) => x === opsV[i]);
+    const cola = envuelta ? ", envuelta" : "";
+    return misma ? `[tinkazo] co-firma del sello: misma operación${cola}` : `[tinkazo] co-firma del sello: distinta (${v.operations.map((o) => o.type).join(",")})${cola}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Mientras dura una firma del sello o del sorteo, escucha si el kit quedó esperando una co-firma; al terminar, si el
+ * pedido que se resolvió es ese, compara lo votado con lo que se mandó (`compararCofirma`) y lo anota. Lo que el kit
+ * repite al suscribirse no cuenta: es de una firma anterior. Todo dentro de `try`: nunca lanza ni cambia el resultado.
+ */
+function armarTestigo(client: PollarClient): ((xdr: string) => void) | null {
+  try {
+    if (typeof client.onTransactionStateChange !== "function") return null;
+    let armado = false;
+    let pedido: string | null = null;
+    const soltar = client.onTransactionStateChange((s) => {
+      if (armado && s.step === "awaiting_cosign") pedido = s.request.id;
+    });
+    armado = true;
+    return (xdr) => {
+      try {
+        soltar();
+        if (!pedido) return;
+        const r = client.getCosignState().lastResolved;
+        if (!r || r.id !== pedido || !r.unsignedPayload) return;
+        void compararCofirma(xdr, r.unsignedPayload, network.networkPassphrase).then(
+          (linea) => {
+            if (!linea) return;
+            if (linea.includes(": misma")) console.info(linea);
+            else console.warn(linea);
+          },
+          () => undefined,
+        );
+      } catch {
+        /* el testigo nunca frena nada */
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Cómo está la protección de la cuenta (la recuperación de Turnkey): lo que la pantalla necesita saber. */
 export interface EstadoDeProteccion {
   /** La cuenta pide una forma de recuperarla para poder firmar. */
@@ -177,6 +576,17 @@ class PollarWallet implements SubmittingWallet {
   /** Las confirmaciones ya resueltas (`atenderFirmas`). */
   readonly #atendidas = new Set<string>();
   #dejarDeAtender: (() => void) | null = null;
+  /**
+   * Lo que ya se sabe que está listo de la cuenta de la red principal, para esa dirección y mientras dure la página: una
+   * cuenta activada no se desactiva y una protegida no se desprotege. Se borra al cerrar sesión o si cambia la dirección.
+   */
+  #memoria: { dir: string; activacion: boolean; proteccion: boolean } | null = null;
+  /** La activación en curso en esta pestaña: dos toques comparten una sola. */
+  #activando: Promise<ResultadoDeActivar> | null = null;
+  /** Una confirmación de este navegador en curso: cerrar sesión la espera antes de sacarlo de la cuenta. */
+  #confirmacion: Promise<unknown> | null = null;
+  /** El último cierre de sesión no pudo sacar este navegador de la cuenta: la página lo avisa. */
+  ultimoCierreDejoNavegador = false;
 
   /** Lo que muestra el panel de la cuenta: por dónde entró, no un nombre fijo. */
   get label(): string {
@@ -235,6 +645,9 @@ class PollarWallet implements SubmittingWallet {
    */
   async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>): Promise<T> {
     const client = await this.#ensureClient();
+    // En la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado (riesgo aceptado,
+    // docs/architecture.md). Solo mira, después de firmar.
+    const testigo = network.name === "mainnet" ? armarTestigo(client) : null;
     this.#esperadas.set(xdr, (this.#esperadas.get(xdr) ?? 0) + 1);
     try {
       return await firmar(client);
@@ -242,6 +655,7 @@ class PollarWallet implements SubmittingWallet {
       const quedan = (this.#esperadas.get(xdr) ?? 1) - 1;
       if (quedan > 0) this.#esperadas.set(xdr, quedan);
       else this.#esperadas.delete(xdr);
+      testigo?.(xdr);
     }
   }
 
@@ -435,12 +849,18 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async disconnect(): Promise<void> {
+    this.ultimoCierreDejoNavegador = false;
+    // Si este navegador se sumó a la cuenta en esta pestaña (otro celular u otra compu), sale de la cuenta antes de cerrar.
+    await this.#sacarEsteNavegador();
     try {
       forgetIntent();
     } catch {
       /* ya no está */
     }
     this.address = null;
+    this.#memoria = null;
+    this.#activando = null;
+    for (const clave of Object.values(MARCAS_DE_LA_CUENTA)) borrarMarca(clave);
     this.#dejarDeAtender?.();
     this.#dejarDeAtender = null;
     this.#esperadas.clear();
@@ -497,6 +917,365 @@ class PollarWallet implements SubmittingWallet {
   async cotizarRampa(body: unknown): Promise<unknown> {
     const client = await this.#ensureClient();
     return client.quoteRamp(body as Parameters<PollarClient["quoteRamp"]>[0]);
+  }
+
+  /* ------------------------------------------------ activar la cuenta (el pedido que Pollar deja al entrar) */
+
+  /** La memoria de lo que está listo, para esta dirección. Si la dirección cambió, empieza de cero y sin votos fallados. */
+  #memoriaDe(dir: string): { dir: string; activacion: boolean; proteccion: boolean } {
+    if (this.#memoria?.dir !== dir) {
+      if (this.#memoria) borrarMarca(MARCAS_DE_LA_CUENTA.votos);
+      this.#memoria = { dir, activacion: false, proteccion: false };
+    }
+    return this.#memoria;
+  }
+
+  /** La cuenta que se puede activar (C1 y C3): la de la sesión, la misma que dice el kit, una G, en la red principal. */
+  #cuentaParaActivar(client: PollarClient): string | null {
+    const dir = this.address;
+    if (!dir || !dir.startsWith("G") || client.getWallet()?.address !== dir) return null;
+    if (network.name !== "mainnet" || typeof client.getNetwork !== "function" || client.getNetwork() !== "mainnet") return null;
+    return dir;
+  }
+
+  /**
+   * Termina de crear la cuenta en la red principal: vota que sí, con la llave de este navegador, el pedido de crearla que
+   * Pollar dejó al entrar. Solo se llama desde el toque de la persona en el paso «Dejá tu cuenta lista» (una prueba lo
+   * fija), porque cada voto cuesta. No recibe un pedido: lo busca ella. Lo que estampa es lo que leyó y revisó: el pedido
+   * se pide de nuevo una sola vez, se lee su transacción con el SDK de Stellar y la red de la página, tiene que pasar
+   * `motivoContraLaActivacion` y el lector del propio kit, y la propuesta de `verify` tiene que ser nuestro hash para esta
+   * cuenta y esta organización (`propuestaEsLaNuestra`). Recién ahí `relay`. Nunca usa `approve` (vuelve a pedir la
+   * transacción por dentro), ni `reject` o `cancel` (rechazar es definitivo). No vota sobre una cuenta que ya existe.
+   *
+   * Falla solo con `pollar-sin-cuenta`, `pollar-activacion-rara`, `pollar-activacion-fallo` y `pollar-activacion-tope`, o
+   * con un error que solo trae el código de red o de créditos. Fuera de la red principal no arma nada.
+   */
+  activarCuenta(): Promise<ResultadoDeActivar> {
+    if (network.name !== "mainnet") return Promise.reject(new Error(ACTIVACION_SIN_CUENTA));
+    this.#activando ??= conCandado("tinkazo-activar", () => this.#activar()).finally(() => {
+      this.#activando = null;
+    });
+    return this.#activando;
+  }
+
+  async #activar(): Promise<ResultadoDeActivar> {
+    // 1. La cuenta y la red.
+    const client = await this.#ensureClient();
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) throw new Error(ACTIVACION_SIN_CUENTA);
+    const memoria = this.#memoriaDe(cuenta);
+    // 2. Una cuenta que ya existe no se vota.
+    await client.refreshWalletState().catch(() => null);
+    if (cuentaCreada(client.getWallet())) {
+      memoria.activacion = true;
+      return "activada";
+    }
+    // 3. El tope de votos fallados de esta pestaña.
+    if (votosFallados() >= TOPE_DE_VOTOS_FALLADOS) throw new Error(ACTIVACION_TOPE);
+    // 4. El pedido de crear esta cuenta, el más nuevo, y la organización de esta sesión.
+    const [pendientes, recuperacion] = await delKit(Promise.all([client.cosign.pending(), client.cosign.recovery.status()]));
+    const lista = pendientes as unknown as PedidoDeCofirma[];
+    const candidato = elMasNuevo(lista.filter((p) => esPedidoDeCrear(p, cuenta)));
+    if (!candidato) {
+      if (lista.some((p) => p.intent === "account_create" && p.status === "PENDING" && p.account === undefined)) {
+        console.warn("[tinkazo] activación no aprobada: pedido sin cuenta");
+      }
+      return "no-hay";
+    }
+    // 5. La transacción envejece mientras la persona decide: se pide de nuevo, una sola vez, y se revisa esa versión.
+    const pedido = (candidato.refreshable ? await delKit(client.cosign.refresh(candidato.id)) : candidato) as PedidoDeCofirma;
+    if (pedido.id !== candidato.id) throw noAprobada("otro pedido");
+    // 6. Ya no está pendiente: se lee cómo quedó, sin votar.
+    if (pedido.status !== "PENDING") return this.#comoQuedo(client, pedido, memoria, false);
+    // 7. Ya tiene un voto: no se vota otra vez, se espera.
+    if (pedido.activityId) {
+      let leido = (await delKit(client.cosign.get(pedido.id, { sync: true }))) as PedidoDeCofirma;
+      if (leido.status === "PENDING") leido = (await delKit(client.cosign.settle(leido as unknown as CosignRequest))) as PedidoDeCofirma;
+      return this.#comoQuedo(client, leido, memoria, false);
+    }
+    // 8. La regla, con nuestra lectura, y el lector del kit como segunda llave.
+    const tx = await leerTransaccion(pedido.unsignedPayload, network.networkPassphrase);
+    const motivo = motivoContraLaActivacion(pedido, cuenta, tx, recuperacion.subOrgId ?? null);
+    if (motivo !== null || !tx) throw noAprobada(motivo ?? "no se lee");
+    const { recognizedSetupRequest } = await import("@pollar/core");
+    const reconocido = recognizedSetupRequest(pedido as unknown as CosignRequest);
+    if (!reconocido.ok || reconocido.kind !== "account_create") throw noAprobada("el lector del kit no la reconoce");
+    // 9. Lo que se va a estampar: el hash del kit tiene que ser el nuestro, y la propuesta, exactamente esa.
+    const verificacion = await delKit(client.cosign.verify(pedido as unknown as CosignRequest));
+    if (!verificacion.ok || verificacion.localHash !== tx.hash) throw noAprobada("la verificación del kit");
+    if (!propuestaEsLaNuestra(verificacion.proposal, cuenta, tx.hash, pedido.subOrgId ?? "")) throw noAprobada("la propuesta");
+    // 10. La cuenta otra vez, y el voto.
+    if (this.#client !== client || this.#cuentaParaActivar(client) !== cuenta) throw new Error(ACTIVACION_SIN_CUENTA);
+    let votado: PedidoDeCofirma;
+    try {
+      const res = await client.cosign.relay(verificacion.proposal.path, verificacion.proposal.body, { requestId: pedido.id });
+      votado = (res.request ?? (await client.cosign.get(pedido.id, { sync: true }))) as PedidoDeCofirma;
+    } catch (e) {
+      if (codigoDelKit(e) !== "SDK_COSIGN_REQUEST_NOT_PENDING") {
+        // No se sabe si el voto salió: cuenta como uno fallado.
+        sumarVotoFallado();
+        throw errorDeActivar(e);
+      }
+      try {
+        votado = (await client.cosign.get(pedido.id, { sync: true })) as PedidoDeCofirma;
+      } catch (e2) {
+        sumarVotoFallado();
+        throw errorDeActivar(e2);
+      }
+    }
+    // 11. Cómo terminó. Si el voto salió y todavía no se cerró, se espera un poco; si sigue, queda pendiente.
+    if (votado.status === "PENDING") {
+      try {
+        votado = (await client.cosign.settle(votado as unknown as CosignRequest)) as PedidoDeCofirma;
+      } catch {
+        return "pendiente";
+      }
+    }
+    return this.#comoQuedo(client, votado, memoria, true);
+  }
+
+  /** Lo que dice un pedido que terminó (o no). `votamos`: si el voto fue de este llamado, una falla cuenta en el tope. */
+  async #comoQuedo(client: PollarClient, r: PedidoDeCofirma, memoria: { activacion: boolean }, votamos: boolean): Promise<ResultadoDeActivar> {
+    if (r.status === "PENDING") return "pendiente";
+    if (r.status === "APPROVED" && r.submit?.status !== "FAILED") {
+      if (r.submit?.status !== "SUCCESS") {
+        await client.refreshWalletState().catch(() => null);
+        if (!cuentaCreada(client.getWallet())) return "pendiente";
+      }
+      memoria.activacion = true;
+      avisarCambioDeLaCuenta();
+      return "activada";
+    }
+    if (votamos) sumarVotoFallado();
+    throw new Error(ACTIVACION_FALLO);
+  }
+
+  /* ------------------------------------------------ cómo está la cuenta de la red principal */
+
+  /**
+   * Sin red: lo que ya se sabe de la cuenta por lo que guarda el kit y la memoria. La activación está lista si el kit
+   * dice que la cuenta existe; falta si dice que se está creando; si no hay ninguna, falló, no hay cliente o no dice
+   * nada, no se sabe (lo aclara la lectura con red). La protección, solo por la memoria. Fuera de la red principal, todo listo.
+   */
+  estadoOficialLocal(): { activacion: "lista" | "falta" | "no-se-sabe"; proteccion: "lista" | "no-se-sabe" } {
+    if (network.name !== "mainnet") return { activacion: "lista", proteccion: "lista" };
+    const dir = this.address;
+    const w = this.#client?.getWallet();
+    if (!dir || !w || w.address !== dir) return { activacion: "no-se-sabe", proteccion: "no-se-sabe" };
+    const memoria = this.#memoriaDe(dir);
+    if (!memoria.activacion && cuentaCreada(w)) memoria.activacion = true;
+    const p = w.provisioning;
+    // Solo «creándose» dice que falta activar: sin billetera (NONE) o con la creación fallada (FAILED) no hay pedido que
+    // aprobar, y el paso que se abriera por eso no tendría qué ofrecer. Eso lo dice la lectura con red.
+    const activacion = memoria.activacion ? "lista" : p === "CREATING" ? "falta" : "no-se-sabe";
+    return { activacion, proteccion: memoria.proteccion ? "lista" : "no-se-sabe" };
+  }
+
+  /**
+   * Cómo está la cuenta de la red principal, preguntándole a Pollar lo que la memoria no sabe: dónde está la cuenta
+   * (`refreshWalletState`, solo con `fresco`), los pedidos pendientes, la protección y la llave de este navegador, en
+   * paralelo y cada una con su `catch`. Lo que da «lista» queda en memoria y no se vuelve a preguntar. Solo lee: nunca
+   * vota. Fuera de la red principal no arma el cliente y dice que todo está listo.
+   */
+  async estadoOficial(fresco = true): Promise<EstadoOficial> {
+    if (network.name !== "mainnet") return { ...TODO_LISTO };
+    let client: PollarClient;
+    try {
+      client = await this.#ensureClient();
+    } catch {
+      return { ...NADA_SE_SABE };
+    }
+    const dir = this.address;
+    if (!dir || client.getWallet()?.address !== dir) return { ...NADA_SE_SABE };
+    const memoria = this.#memoriaDe(dir);
+    const [activacion, proteccion] = await Promise.all([
+      memoria.activacion ? Promise.resolve<EstadoDeActivacion>("lista") : this.#leerActivacion(client, dir, fresco),
+      memoria.proteccion ? Promise.resolve(null) : this.#leerProteccion(client),
+    ]);
+    if (this.#memoria !== memoria) return { ...NADA_SE_SABE };
+    if (activacion === "lista") memoria.activacion = true;
+    const prot = proteccion ?? { proteccion: "lista" as const, correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
+    if (prot.proteccion === "lista") memoria.proteccion = true;
+    return { activacion, ...prot };
+  }
+
+  async #leerActivacion(client: PollarClient, dir: string, fresco: boolean): Promise<EstadoDeActivacion> {
+    const [, pendientes] = await Promise.all([
+      fresco ? client.refreshWalletState().catch(() => null) : Promise.resolve(null),
+      client.cosign.pending().then(
+        (l) => l as unknown as PedidoDeCofirma[],
+        () => null,
+      ),
+    ]);
+    const w = client.getWallet();
+    if (cuentaCreada(w)) return "lista";
+    if (w?.provisioning === "FAILED") return "fallo";
+    if (pendientes === null) return "no-se-sabe";
+    return pendientes.some((p) => esPedidoDeCrear(p, dir)) ? "falta" : "preparando";
+  }
+
+  async #leerProteccion(client: PollarClient): Promise<Omit<EstadoOficial, "activacion">> {
+    const [s, llave] = await Promise.all([client.cosign.recovery.status().catch(() => null), client.cosign.publicKeyHex().catch(() => null)]);
+    const nada = { proteccion: "no-se-sabe" as const, correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null };
+    if (!s) return nada;
+    const devices = Array.isArray(s.devices) ? s.devices : [];
+    const correoConfirmado = !!s.email?.verified && !!s.email.address;
+    const extra = {
+      correoConfirmado,
+      tieneLlaves: Array.isArray(s.passkeys) && s.passkeys.length > 0,
+      correoDeLaCuenta: correoConfirmado ? (s.email?.address ?? null) : null,
+    };
+    if (!s.required) return { proteccion: "lista", ...extra, unicoNavegador: false };
+    if (!llave) return { ...nada, ...extra };
+    const esteEsta = devices.some((d) => mismaLlave(d.publicKey, llave));
+    const unicoNavegador = esteEsta && devices.length === 1;
+    const proteccion: EstadoDeProteccionOficial = s.configured ? (esteEsta ? "lista" : "aparato-nuevo") : esteEsta ? "falta" : "sin-forma";
+    return { proteccion, ...extra, unicoNavegador };
+  }
+
+  /**
+   * Avisa a `cb` cada vez que algo de la cuenta puede haber cambiado: el estado de la billetera o de la co-firma en el kit,
+   * otra pestaña (por `BroadcastChannel`), volver a la pestaña o volver la conexión. Solo llama a `cb`, que vuelve a
+   * leer: ningún aviso vota ni pide nada. Devuelve con qué soltar todo. Fuera de la red principal no hace nada.
+   */
+  alCambiarLaCuenta(cb: () => void): () => void {
+    if (network.name !== "mainnet") return () => undefined;
+    let suelto = false;
+    const sueltas: Array<() => void> = [];
+    const avisar = (): void => {
+      if (suelto) return;
+      try {
+        cb();
+      } catch {
+        /* lo que haga quien escucha no corta los avisos */
+      }
+    };
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const canal = new BroadcastChannel(CANAL_DE_LA_CUENTA);
+        canal.onmessage = (ev: MessageEvent) => {
+          if ((ev.data as { tipo?: unknown } | null)?.tipo === "cambio") avisar();
+        };
+        sueltas.push(() => canal.close());
+      }
+    } catch {
+      /* sin canal, se lee al volver a la pestaña */
+    }
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      const alVolver = (): void => {
+        if (document.visibilityState === "visible") avisar();
+      };
+      document.addEventListener("visibilitychange", alVolver);
+      sueltas.push(() => document.removeEventListener("visibilitychange", alVolver));
+    }
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("online", avisar);
+      sueltas.push(() => window.removeEventListener("online", avisar));
+    }
+    void this.#ensureClient().then(
+      (client) => {
+        if (suelto) return;
+        sueltas.push(client.onWalletStateChange(() => avisar()));
+        // El kit vuelve a avisar la co-firma cada vez que se leen los pendientes, aunque nada haya cambiado. Como avisar
+        // hace leer, eso sería un bucle de lecturas a Pollar mientras el pedido de activar espera: se avisa solo si
+        // cambió el conjunto de pedidos (o el último resuelto).
+        let ultima: string | null = null;
+        sueltas.push(
+          client.onCosignStateChange((s) => {
+            const f = firmaDeLaCofirma(s);
+            if (f === ultima) return;
+            ultima = f;
+            avisar();
+          }),
+        );
+      },
+      () => undefined,
+    );
+    return () => {
+      suelto = true;
+      for (const soltar of sueltas.splice(0)) {
+        try {
+          soltar();
+        } catch {
+          /* ya suelto */
+        }
+      }
+    };
+  }
+
+  /** ¿Sigue abierta la sesión de Pollar? Si el kit la cerró por su cuenta (venció), el paso pide entrar de nuevo. */
+  sesionViva(): boolean {
+    try {
+      return this.#client?.getAuthState().step === "authenticated";
+    } catch {
+      return false;
+    }
+  }
+
+  /* ------------------------------------------------ otro celular u otra compu (sumar este navegador a la cuenta) */
+
+  /** Con una llave guardada de la cuenta (el desbloqueo). Devuelve si este navegador quedó en la cuenta. */
+  confirmarAparatoConDesbloqueo(): Promise<boolean> {
+    return this.#confirmandoEsteNavegador((client) => client.cosign.recovery.recoverWithPasskey());
+  }
+
+  /** Con el correo de la cuenta, paso 1: Pollar manda un código al correo que la cuenta ya tiene confirmado. */
+  async mandarCodigoParaEsteAparato(): Promise<void> {
+    const client = await this.#ensureClient();
+    await client.cosign.recovery.startEmailRecovery();
+  }
+
+  /** Con el correo de la cuenta, paso 2: el código que llegó. Devuelve si este navegador quedó en la cuenta. */
+  confirmarCodigoParaEsteAparato(code: string): Promise<boolean> {
+    return this.#confirmandoEsteNavegador((client) => client.cosign.recovery.recoverWithEmailCode(code));
+  }
+
+  /**
+   * Corre una confirmación de este navegador y mira si su llave quedó entre las de la cuenta. Si quedó, deja la marca de
+   * que se sumó en esta pestaña (sin datos de la cuenta), para sacarlo al cerrar sesión, y avisa a las otras pestañas.
+   */
+  async #confirmandoEsteNavegador(confirmar: (client: PollarClient) => Promise<{ devices?: ReadonlyArray<{ publicKey: string }> }>): Promise<boolean> {
+    const client = await this.#ensureClient();
+    const corrida = (async () => {
+      const s = await confirmar(client);
+      const llave = await client.cosign.publicKeyHex();
+      const quedo = (s.devices ?? []).some((d) => mismaLlave(d.publicKey, llave));
+      if (quedo) {
+        ponerMarca(MARCAS_DE_LA_CUENTA.inscrito, "1");
+        avisarCambioDeLaCuenta();
+      }
+      return quedo;
+    })();
+    const enCurso = corrida.catch(() => undefined);
+    this.#confirmacion = enCurso;
+    try {
+      return await corrida;
+    } finally {
+      if (this.#confirmacion === enCurso) this.#confirmacion = null;
+    }
+  }
+
+  /**
+   * Antes de cerrar sesión: si este navegador se sumó a la cuenta en esta pestaña, sale. Espera primero una confirmación
+   * en curso (con tope), busca entre los navegadores de la cuenta el que tiene la llave de este y lo saca a la fuerza
+   * (es el propio), con tope. Si no se puede, la sesión se cierra igual y queda el aviso para la página.
+   */
+  async #sacarEsteNavegador(): Promise<void> {
+    if (this.#confirmacion) await conTope(this.#confirmacion, TOPE_CONFIRMACION_EN_CURSO_MS).catch(() => undefined);
+    if (leerMarca(MARCAS_DE_LA_CUENTA.inscrito) === null) return;
+    try {
+      const client = this.#client ?? (await this.#ensureClient());
+      await conTope(
+        (async () => {
+          const [{ devices }, llave] = await Promise.all([client.cosign.devices(), client.cosign.publicKeyHex()]);
+          const este = devices.find((d) => mismaLlave(d.publicKey, llave));
+          if (este) await client.cosign.revokeDevice(este.id, { force: true });
+        })(),
+        TOPE_SACAR_NAVEGADOR_MS,
+      );
+    } catch {
+      this.ultimoCierreDejoNavegador = true;
+    }
   }
 
   /* ------------------------------------------------ proteger la cuenta (la recuperación) */

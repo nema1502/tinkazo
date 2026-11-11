@@ -34,6 +34,7 @@ import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
+import { frenarSinElPaso } from "./aviso-no-cargo";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -604,6 +605,42 @@ function renumerarLaLista(): void {
   if (nuevo !== ta.value) setList(nuevo, false);
 }
 
+/**
+ * La compuerta del sello en modo Oficial. Mientras se revisa la cuenta (hasta 4 segundos), el botón queda apagado y dice
+ * «Revisando tu cuenta…». Si el paso se abre, suelta la pantalla completa que pidió el toque; su botón del final la
+ * vuelve a pedir dentro de su propio toque, con la misma condición que «Sellar la lista».
+ */
+async function cuentaListaParaSellar(btn: HTMLButtonElement): Promise<boolean> {
+  let cuentaListaParaGrabar: typeof import("./cuenta-lista-flujo").cuentaListaParaGrabar;
+  try {
+    ({ cuentaListaParaGrabar } = await import("./cuenta-lista-flujo"));
+  } catch {
+    // No bajó: con una cuenta de Google o de correo no se sella en Oficial, pero el botón no queda callado.
+    return !(await frenarSinElPaso());
+  }
+  return cuentaListaParaGrabar("sello", {
+    volverA: btn,
+    alRevisar: (revisando) => {
+      btn.disabled = revisando;
+      if (revisando) btn.textContent = t("clRevisando");
+      else {
+        btn.dataset.i = claveDeSellar();
+        btn.textContent = t(btn.dataset.i);
+      }
+    },
+    alAbrir: () => {
+      if (grandePendiente) soltarPantallaCompleta();
+      grandePendiente = false;
+    },
+    alSeguir: () => {
+      if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
+        pedirPantallaCompleta();
+        grandePendiente = true;
+      }
+    },
+  });
+}
+
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   renumerarLaLista();
   const names = parseNames();
@@ -625,6 +662,13 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // En modo Oficial con una cuenta de Google o de correo, la cuenta tiene que estar activada y protegida antes de sellar:
+  // si falta algo, el paso «Dejá tu cuenta lista» a pantalla completa (`cuenta-lista-flujo.ts`). Va antes de la
+  // confirmación del primer sello y de cerrar la lista, así sus salidas funcionan. Fuera del modo Oficial no se baja nada.
+  if (anchoring && network.name === "mainnet" && !(await cuentaListaParaSellar(btn))) {
+    if (grandePendiente) soltarPantallaCompleta();
+    return;
+  }
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
@@ -761,6 +805,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // todavía no se cuenta como fallado: se cuenta cómo termina el reintento, o que la persona no la protegió.
       if (!protegiendoLaCuenta && (await pideProtegerLaCuenta(e))) {
         hideTxStatus("seal-status");
+        // El sello no salió: el cambio de modo ya no lo espera, así «Pasar a Prueba» del paso funciona.
+        marcarSellandoAhora(false);
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.

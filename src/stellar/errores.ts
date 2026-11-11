@@ -89,6 +89,12 @@ const CUENTA_NO_LISTA = /account-not-ready/;
  * Van antes que `CANCELO`: el rechazo del SDK trae "the user declined the transaction" en el detalle.
  */
 const RECUPERACION = /SDK_WALLET_RECOVERY_REQUIRED/;
+/**
+ * Este navegador no es uno de los de la cuenta: la cuenta de Turnkey se abrió en otro celular o en otra compu, y acá no
+ * puede votar nada hasta confirmar que es la misma persona (un código al correo de la cuenta o una llave guardada). Se
+ * arregla en "Confirmar que sos vos", no con otro intento.
+ */
+const APARATO = /SDK_COSIGN_DEVICE_NOT_ENROLLED/;
 const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
 /**
  * La cuenta de Turnkey (mainnet) co-firma cada operación, y la co-firma no se aprobó: `SDK_COSIGN_REJECTED` (la rechazó quien
@@ -368,6 +374,7 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?
   }
   const texto = textoDelError(e);
   if (RECUPERACION.test(texto)) return "recoveryRequired";
+  if (APARATO.test(texto)) return "deviceNotEnrolled";
   if (CONFIRMACION.test(texto)) return "confirmation";
   if (COFIRMA_NO_APROBADA.test(texto)) return "cosignRejected";
   if (SERVICIO_SIN_FONDOS.test(texto)) return "sponsorEmpty";
