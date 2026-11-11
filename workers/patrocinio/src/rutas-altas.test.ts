@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { IP, LOTE, SECRETO_CUPON, T0, codigo, montarAltas, tokenDe } from "./altas-prueba";
 import { mostrar } from "./altas";
 import { DIA_MS, leerConfig } from "./config";
+import { MEMORIA_SESION_MS } from "./pollar";
 import { PorIp } from "./por-ip";
 import { ALTAS_POR_IP_HORA, FALLIDOS_POR_IP_HORA, FALLIDOS_POR_USUARIO_HORA, TOKENS_NUEVOS_POR_IP_HORA, atenderAlta } from "./rutas-altas";
 
@@ -78,6 +79,65 @@ describe("el camino entero, con la cuenta abierta al entrar (fondeo inmediato)",
     m.cupos.admitir(g, "admin", T0);
     m.cupos.otorgar({ usuario: `cuenta:${g}`, cuenta: g, origen: "admin", ref: "admin:x", sorteos: 20, dias: 30 }, T0);
     expect(await m.estado(nico.token)).toMatchObject({ estado: 200, cuerpo: { acceso: "admin", cuenta: g, sorteos: { quedan: 20 } } });
+  });
+});
+
+describe("la cuenta atada y la de la sesión", () => {
+  it("si el alta ya tiene una cuenta atada y Pollar dice otra en esta sesión, /estado da 409 cuenta-de-otro sin escribir nada", async () => {
+    const m = montarAltas();
+    const ana = m.persona("usr_ana");
+    await m.lote([C1]);
+    expect(await m.cupon(ana.token, C1)).toMatchObject({ estado: 200, cuerpo: { ok: true } });
+    const antes = m.cupos.altaDe("usr_ana");
+    expect(antes?.cuenta).toBe(ana.cuenta);
+
+    // La sesión vuelve a verificarse (pasó la memoria) y ahora Pollar dice otra billetera.
+    const otra = Keypair.random().publicKey();
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(ana.token, { usuario: "usr_ana", wallet: { publicKey: otra, chain: "STELLAR" } });
+    const tablas = JSON.stringify(m.cupos.exportar(true));
+    expect(await m.estado(ana.token)).toEqual({ estado: 409, cuerpo: { motivo: "cuenta-de-otro" } });
+    expect(m.cupos.estaEnElLibro(otra)).toBe(false);
+    expect(m.cupos.altaDe("usr_ana")).toEqual(antes);
+    expect(JSON.stringify(m.cupos.exportar(true))).toBe(tablas);
+    expect(m.anotado.some(([e, d]) => e === "error-alta" && d?.motivo === "cuenta-de-otro")).toBe(true);
+
+    // Con la misma que la atada, como siempre.
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(ana.token, { usuario: "usr_ana", wallet: { publicKey: ana.cuenta as string, chain: "STELLAR" } });
+    expect(await m.estado(ana.token)).toMatchObject({ estado: 200, cuerpo: { acceso: "cupon", cuenta: ana.cuenta } });
+    // Y si el verify no trae la billetera, vale la atada, como siempre.
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(ana.token, { usuario: "usr_ana" });
+    expect(await m.estado(ana.token)).toMatchObject({ estado: 200, cuerpo: { acceso: "cupon", cuenta: ana.cuenta } });
+  });
+
+  it("si el alta ya tiene una cuenta atada y Pollar dice otra en esta sesión, /cupon da 409 cuenta-de-otro sin escribir nada", async () => {
+    const m = montarAltas();
+    const ana = m.persona("usr_ana");
+    await m.lote([C1]);
+    await m.lote([C2], { lote: "otro" });
+    expect(await m.cupon(ana.token, C1)).toMatchObject({ estado: 200, cuerpo: { ok: true } });
+    const antes = m.cupos.altaDe("usr_ana");
+    expect(antes?.cuenta).toBe(ana.cuenta);
+
+    // La billetera de esta sesión es otra, que todavía no se abrió en la red: antes contestaba sigue «activar» por la
+    // atada, y el sitio votaba la activación de una cuenta que no está en el libro.
+    const otra = Keypair.random().publicKey();
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(ana.token, { usuario: "usr_ana", wallet: { publicKey: otra, chain: "STELLAR" } });
+    const tablas = JSON.stringify(m.cupos.exportar(true));
+    expect(await m.cupon(ana.token, C2)).toEqual({ estado: 409, cuerpo: { motivo: "cuenta-de-otro" } });
+    expect(await m.cupon(ana.token, C1)).toEqual({ estado: 409, cuerpo: { motivo: "cuenta-de-otro" } });
+    expect(m.cupos.estaEnElLibro(otra)).toBe(false);
+    expect(m.cupos.altaDe("usr_ana")).toEqual(antes);
+    expect(JSON.stringify(m.cupos.exportar(true))).toBe(tablas);
+    expect(m.anotado.some(([e, d]) => e === "error-alta" && d?.motivo === "cuenta-de-otro")).toBe(true);
+
+    // Con la misma que la atada, el canje sigue como siempre.
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(ana.token, { usuario: "usr_ana", wallet: { publicKey: ana.cuenta as string, chain: "STELLAR" } });
+    expect(await m.cupon(ana.token, C2)).toMatchObject({ estado: 200, cuerpo: { ok: true, repetido: false } });
   });
 });
 

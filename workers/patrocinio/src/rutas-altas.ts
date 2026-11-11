@@ -222,6 +222,19 @@ export class PuertaAltas {
     return (this.d.pollar as Pollar).billeteraDe(s.usuario);
   }
 
+  /**
+   * El alta ya tiene su cuenta atada y Pollar dice, en esta sesión, que la billetera de la persona es otra: el acceso no
+   * le sirve a esta cuenta (el sitio sella, activa y pregunta el cupo con la de la sesión). `409 cuenta-de-otro`, sin
+   * escribir nada; se revisa a mano. Sin la billetera en el verify, vale la atada, como siempre. La usan `/estado` y
+   * `/cupon`: un canje que contestara por la atada le diría al sitio que active una cuenta que no está en el libro.
+   */
+  private cuentaDeOtro(s: Extract<Sesion, { ok: true }>): Respuesta | null {
+    const atada = this.d.cupos.altaDe(s.usuario)?.cuenta ?? null;
+    if (!atada || !s.cuenta || s.cuenta === atada) return null;
+    this.registrar("error-alta", { motivo: "cuenta-de-otro" });
+    return r(409, { motivo: "cuenta-de-otro" });
+  }
+
   /** Si la cuenta ya existe en la red. Si la red no contesta, se toma como que no: lo peor es pedir una activación de más. */
   private async abierta(cuenta: string | null, alta: FilaAlta | null): Promise<boolean> {
     if (!cuenta) return false;
@@ -369,7 +382,8 @@ export class PuertaAltas {
 
   /**
    * `POST /v1/alta/estado`: qué acceso tiene la persona y cuántos sorteos oficiales le quedan. Si tiene alta y la cuenta
-   * todavía no estaba atada, la ata y la mete en el libro.
+   * todavía no estaba atada, la ata y la mete en el libro. Si ya estaba atada y Pollar dice otra en esta sesión,
+   * `409 cuenta-de-otro`, sin escribir nada.
    */
   async estado(p: PedidoAlta): Promise<Respuesta> {
     const no = this.apagado();
@@ -377,6 +391,8 @@ export class PuertaAltas {
     const ses = await this.sesion(p.token, p.ip);
     if (!ses.ok) return ses.r;
     const { usuario } = ses.s;
+    const otra = this.cuentaDeOtro(ses.s);
+    if (otra) return otra;
     await this.leerPagosDe(usuario);
     const suya = this.d.cupos.altaDe(usuario);
     const c = await this.cuentaDe(ses.s, suya);
@@ -413,7 +429,8 @@ export class PuertaAltas {
   /**
    * `POST /v1/alta/cupon`: canjea un cupón para la persona de la sesión. El mismo cupón otra vez es lo mismo (sin gastar
    * otro uso). Un código que no vale le suma un fallido a la persona y a la dirección; pasado el tope de cualquiera de
-   * los dos, el canje da `429 intentos` (la dirección frena solo el canje, nunca `/estado`).
+   * los dos, el canje da `429 intentos` (la dirección frena solo el canje, nunca `/estado`). Con el alta atada a otra
+   * cuenta que la de esta sesión, `409 cuenta-de-otro` sin canjear ni escribir nada.
    */
   async cupon(p: PedidoAlta): Promise<Respuesta> {
     const no = this.apagado();
@@ -421,6 +438,8 @@ export class PuertaAltas {
     const ses = await this.sesion(p.token, p.ip);
     if (!ses.ok) return ses.r;
     const { usuario } = ses.s;
+    const otra = this.cuentaDeOtro(ses.s);
+    if (otra) return otra;
     const trabado = this.porUsuario.trabado(usuario) ?? this.codigosPorIp.trabado(grupoDeIp(p.ip));
     if (trabado !== null) return r(429, { motivo: "intentos", reintentarEn: trabado });
     const codigo = normalizar(p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { cupon?: unknown }).cupon : undefined);

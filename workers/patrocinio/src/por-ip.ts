@@ -30,3 +30,13 @@ export class PorIp {
     return f.n <= tope;
   }
 }
+
+/**
+ * Consultas de `GET /v1/patrocinio/cupo` por dirección y por hora. En mainnet, 3.000, como las altas
+ * (`ALTAS_POR_IP_HORA`): todo un stand sale por la misma wifi, y el sitio pregunta el cupo antes de cada sello y cada
+ * sorteo; con 600, un stand con mucha gente se quedaba una hora sin sellar ni sortear. La ruta es de solo lectura y la
+ * regla de límite de Cloudflare sigue delante. En testnet, 600, como siempre.
+ */
+export function cupoPorHora(red: string): number {
+  return red === "mainnet" ? 3000 : 600;
+}

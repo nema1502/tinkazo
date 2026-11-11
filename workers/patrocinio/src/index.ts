@@ -42,7 +42,7 @@ import { Cupos, type Sql } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
 import { Planes } from "./plan";
 import { pollarDe } from "./pollar";
-import { PorIp } from "./por-ip";
+import { PorIp, cupoPorHora } from "./por-ip";
 import { RpcRed } from "./red";
 import { type AccionAlta, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
@@ -235,8 +235,6 @@ export class Patrocinio extends DurableObject<EnvPortero> {
 /** Dos contadores aparte: consultar el cupo no le gasta pedidos al POST. Ver `por-ip.ts`. */
 const cupoPorIp = new PorIp();
 const pagoPorIp = new PorIp();
-/** Consultas de cupo por dirección y por hora. */
-const CUPO_POR_HORA = 600;
 /** Los pedidos a `/v1/alta/*`, con su propio contador. */
 const altaPorIp = new PorIp();
 /** Los pedidos a `/v1/sorteo`, con el suyo. */
@@ -286,7 +284,7 @@ export default {
     // La consulta del cupo: abierta, solo lectura.
     if (url.pathname === "/v1/patrocinio/cupo" && request.method === "GET") {
       const ip = request.headers.get("CF-Connecting-IP") ?? "0.0.0.0";
-      if (!cupoPorIp.toca(ip, CUPO_POR_HORA)) return json({ motivo: "cupo-ip" }, 429, cors(origen, true));
+      if (!cupoPorIp.toca(ip, cupoPorHora(env.RED ?? ""))) return json({ motivo: "cupo-ip" }, 429, cors(origen, true));
       const r = await objeto.cupo(url.searchParams.get("cuenta") ?? "");
       return json(r.cuerpo, r.estado, cors(origen, true));
     }
