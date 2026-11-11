@@ -5,14 +5,15 @@
 ### Sorteos verificables para comunidades y promociones, sellados antes de que exista el azar y comprobados en Stellar.
 
 [![Probalo](https://img.shields.io/badge/demo-tinkazo.app-e93d9c?style=flat-square)](https://tinkazo.app)
-[![Contrato Soroban en testnet](https://img.shields.io/badge/Soroban-en%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A)
+[![Contrato Soroban en mainnet](https://img.shields.io/badge/Soroban-en%20mainnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K)
+[![Contrato Soroban en testnet](https://img.shields.io/badge/Soroban-testnet-9d8cff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A)
 [![CI](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml/badge.svg)](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml)
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.app)**, [Cómo funciona](#cómo-funciona), [Seguridad](#seguridad), [Por qué Stellar](#por-qué-stellar), [Qué está andando](#qué-está-andando-hoy), [Los próximos 30 días](#los-próximos-30-días), [English](README.md)
+**[Probalo](https://tinkazo.app)**, [Cómo funciona](#cómo-funciona), [Comprobar un sorteo](#comprobar-un-sorteo), [Seguridad](#seguridad), [Qué está andando](#qué-está-andando-hoy), [Qué cuesta](#qué-cuesta), [Correr en local](#correr-en-local), [English](README.md)
 
-<img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
+<img src="docs/capturas/readme/hero-es.webp" alt="La portada de Tinkazo en modo Oficial: sorteos justos en pantalla grande, con el botón para entrar y sortear gratis y una carrera de llamas llegando a la meta" width="860">
 
 </div>
 
@@ -21,6 +22,8 @@
 Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después. Y quien gana casi nunca tiene cómo saber que la selección fue justa.
 
 **Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
+
+**El contrato está en la red principal de Stellar desde el 11 de noviembre de 2026**, en [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). El sitio abre en el modo Prueba, sobre la red de prueba de Stellar, y el modo Oficial se elige en la cabecera.
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
@@ -31,11 +34,11 @@ El sorteo es por donde empieza. Para lo que existe Tinkazo es más amplio: que r
 Tinkazo decide quién se lleva algo que ya se está regalando. Nadie paga por participar:
 
 - **Participar es gratis, siempre.** No hay entrada paga ni nada que comprar. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
-- **Nadie puede apostar al resultado, porque nadie paga para participar.** El premio lo pone quien organiza o un patrocinador, nunca los participantes, así que nadie gana con la plata de otros participantes.
+- **Nadie pone plata.** El premio lo pone quien organiza o un patrocinador, nunca los participantes, así que nadie gana con la plata de otros participantes.
 - **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
 - **Tinkazo nunca toca lo que se reparte.** Lo entrega quien organiza, como siempre, y Tinkazo no se queda con ninguna parte.
 
-Un sorteo gratuito, sin compra obligatoria, queda fuera de las reglas de juegos de azar en casi todo el mundo; la investigación país por país está en [docs/legal.md](docs/legal.md). Algunos identificadores del contrato todavía dicen *raffle* (`tinkazo-raffle`, `raffle_id`), de antes de que el nombre se asentara. Son parte de la interfaz del contrato desplegado, así que quedan como están.
+Entrar a un sorteo es gratis, siempre, sin nada que comprar. El marco legal, país por país, está en [docs/legal.md](docs/legal.md). Algunos identificadores del contrato todavía dicen *raffle* (`tinkazo-raffle`, `raffle_id`), de antes de que el nombre se asentara. Son parte de la interfaz del contrato desplegado, así que quedan como están.
 
 ## Cómo funciona
 
@@ -63,45 +66,64 @@ sequenceDiagram
 
 La selección completa es una especificación normativa, el [protocolo v2](docs/protocolo.md), con vectores de prueba que comparten el contrato en Rust y el cliente en TypeScript ([docs/vectors.json](docs/vectors.json)). Cualquiera puede reimplementarlo y llegar a los mismos ganadores.
 
+## Comprobar un sorteo
+
+- **Con el comprobante.** Cada sorteo termina con un enlace a la página de verificación. Al abrirlo, el navegador rehace el sorteo desde cero y da el veredicto. Comprobar es gratis y no pide cuenta.
+- **Sin Tinkazo.** El sello y el resultado son públicos en stellar.expert, la ronda está en la API pública de drand y la selección, en el [protocolo](docs/protocolo.md). El sitio explica cómo juntarlos [sin pasar por Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros).
+- **Por los archivos de historial.** `node scripts/verificar-archivo.mjs <red> <hash de la transacción>` lee los archivos públicos de historial de Stellar de varias organizaciones y confirma que una transacción de sello o de sorteo estuvo en un ledger y a qué hora cerró. Verde solo si dos organizaciones devuelven la misma cabecera de ledger ([protocolo §7.2](docs/protocolo.md)).
+
+<div align="center">
+<img src="docs/capturas/readme/resultado-celular-es.webp" alt="El resultado de un sorteo en un celular: la tarjeta de quien ganó y el botón para mostrarlo en grande" width="250">
+<img src="docs/capturas/readme/verificar-es.webp" alt="La página de verificación: un sorteo del modo Prueba rehecho en el navegador, con el veredicto en verde y quien ganó" width="560">
+</div>
+
 ## Por qué Stellar
 
-- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación en sí cuesta **0,003 XLM** (medido en testnet el 3 de octubre de 2026). El resto de lo que cuesta un sorteo es renta de almacenamiento, que la red fija y ya cambió más de una vez ([historial con fechas](docs/deployments.md)).
+- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación en sí cuesta **0,003 XLM** (medido en testnet el 3 de octubre de 2026). El resto de lo que cuesta un sorteo es renta de almacenamiento, que la red fija y ya cambió más de una vez ([historial con fechas](docs/deployments.md)). En mainnet, un sorteo de tres ganadores se proyecta en 0,178 XLM ([qué cuesta](#qué-cuesta)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
-- **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
-- **Entrar funciona en un meetup.** Quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta (el recorrido con una sesión real de Google todavía se está probando), con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
+- **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva: mainnet corre la versión 0.2.0 en su propia dirección, y cada despliegue está anotado en [docs/deployments.md](docs/deployments.md).
+- **Entrar funciona en un meetup.** En el modo Prueba, quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta, con Freighter, o con una cuenta de prueba que el navegador crea y fondea, y Tinkazo cubre la comisión de la red. En el modo Oficial, quien organiza entra con su propia billetera y paga de ahí la comisión de la red, que es de centavos. La cuenta de prueba solo funciona en el modo Prueba. Los participantes no tocan Stellar nunca.
 
 ## Qué está andando hoy
 
+**Dos modos.** El sitio abre en el modo **Prueba**, sobre la red de prueba de Stellar: funciona igual y cada sorteo se puede comprobar, pero Stellar borra esa red el 16 de diciembre de 2026. El modo **Oficial**, que se elige en la cabecera, sella en la red principal de Stellar, para los sorteos que cuentan. Un enlace con `?red=oficial` abre directo en el modo Oficial.
+
+<div align="center">
+<img src="docs/capturas/readme/modo-hoja-es.webp" alt="La hoja de los modos: Oficial, para los sorteos que cuentan, y Prueba, para probar con calma, que se borra el 16 de diciembre" width="392">
+</div>
+
 | Pieza | Estado | Evidencia |
 |---|---|---|
-| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A), 19 tests, uno con una ronda real de quicknet, WASM de 11,4 KB |
-| Sitio | En producción | [tinkazo.app](https://tinkazo.app), español e inglés, tema claro y oscuro, sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
+| Contrato Soroban `tinkazo-raffle` en mainnet | Desplegado el 11 de noviembre de 2026, versión 0.2.0, hasta 300 ganadores por sorteo | [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K), el WASM de 11.737 bytes del release `v0.2.0` que compila GitHub Actions ([cómo comprobar la compilación](docs/deployments.md#verificar-la-compilación)) |
+| Contrato Soroban en testnet | Desplegado el 25 de octubre de 2026, hasta 32 ganadores por sorteo. Stellar borra testnet entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A), WASM de 11.687 bytes |
+| Sitio | En producción | [tinkazo.app](https://tinkazo.app), modos Prueba y Oficial, español e inglés, tema claro y oscuro, sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
-| Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
-| Comprobación por archivos de historial | Herramienta de línea de comandos | `node scripts/verificar-archivo.mjs <red> <hash de la transacción>` lee los archivos públicos de historial de Stellar de varias organizaciones y confirma que una transacción de sello o de sorteo estuvo en un ledger y a qué hora cerró. Verde solo si dos organizaciones devuelven la misma cabecera de ledger ([protocolo §7.2](docs/protocolo.md)) |
+| Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante ([Comprobar un sorteo](#comprobar-un-sorteo)) |
+| Guía para organizar | En producción | [tinkazo.app/sorteo-para-meetup.html](https://tinkazo.app/sorteo-para-meetup.html), en español y en inglés, con tarjetas para imprimir y dejar en las mesas ([docs/kit-organizador.md](docs/kit-organizador.md)) |
 | Diez juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | Tests en la CI, auditores antes de cada subida | Más de 4.700 tests de TypeScript y los 19 del contrato corren en la CI; diez auditores propios (abajo) corren contra el sitio construido |
+| Controles de calidad | Tests en la CI, auditores antes de cada subida | Más de 7.400 tests de TypeScript y 26 del contrato, entre ellos uno con una ronda real de quicknet, corren en la CI; 24 auditores en [`scripts/`](scripts) (abajo) corren contra el sitio construido |
 
 Probado con mil participantes (el 22 de septiembre, con el motor anterior): el sorteo andaba a sesenta cuadros por segundo y se anclaba igual. Los juegos de hoy están pensados para hasta doscientas personas en pantalla.
 
 **Quién estaba de verdad en la sala.** En el primer export real de Luma que probamos se habían inscrito 67 personas y hicieron check-in 35. Sortear con el export entero le daba a gente que no estaba la mitad de los lugares del sorteo. La ventana de importar propone a los que hicieron check-in, dice quién queda afuera y por qué (no vino, pendiente, invitado, rechazado) y deja marcar a alguien que vino y nunca le hicieron check-in. El archivo no sale del navegador, y al sorteo entran solo los nombres.
 
 <div align="center">
-<img src="docs/capturas/readme/importar.webp" alt="La ventana de importar: un export de Luma con 67 filas, los 35 que hicieron check-in marcados y el detalle de quién queda afuera" width="860">
-</div>
-
-<div align="center">
-<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, la rueda de la Chovena que se congela cuando se corta la música, el trompo, el teleférico de La Paz, la piñata, el sapo con la argolla que rebota en la rana, las cartas de ¿Quién es? dándose vuelta y la llegada de la carrera de llamas, donde sale elegido Carlos Choque" width="720">
+<img src="docs/capturas/readme/importar-es.webp" alt="La ventana de importar: un export de Luma con 18 filas, los 11 que vinieron marcados y el detalle de quién queda afuera" width="860">
+<br><sub>La ventana con un export de ejemplo de 18 filas.</sub>
 </div>
 
 ## El show
 
 La justicia es matemática; el show es lo que hace que a la sala le importe. Diez juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
 
+<div align="center">
+<img src="docs/capturas/readme/partidas-es.webp" alt="Los diez juegos del selector: carrera de llamas, Chovena, trompo, piñata, La Entrada, ruleta, teleférico, sapo, Guajojó y El Toborochi" width="860">
+</div>
+
 | Juego | Qué es |
 |---|---|
-| Carrera de llamas | Ocho carriles por la cordillera |
+| Carrera de llamas | Ocho carriles hasta la meta |
 | Chovena | El baile chiquitano de Santa Cruz: la rueda gira de la mano y, cuando el conjunto corta la música, el que trastabilla se suelta y se sienta al borde de la plaza. El único juego donde la sala aplaude al ritmo y se congela con el corte |
 | Trompo | El juego de patio: los trompos se tiran al ruedo de tiza, chocan y se sacan hasta el mano a mano |
 | Sapo | El de las ferias y los patios: un agujero con cada nombre alrededor de la rana; las argollas pegan, bailan en el borde y salen, y la última entra en el del nombre elegido |
@@ -141,7 +163,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 | **Sellar varias veces** y publicar el resultado que convino | El número del sorteo se muestra bien grande durante la espera, para que quede en las fotos. La verificación marca los sellos repetidos de la cuenta y la misma lista sellada desde otra |
 | **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 
-En mainnet va a estar este mismo contrato, sin cambios y con la compilación verificada ([despliegues](docs/deployments.md)). No limita los sorteos abiertos de una cuenta ni deja cancelar uno, y la ronda la elige quien sella (el contrato solo exige que falten al menos treinta segundos). Como no se puede actualizar, cualquiera de esas cosas pediría un contrato nuevo, en otra dirección. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
+En mainnet corre la versión 0.2.0 de este contrato, que cambia dos cosas respecto del de testnet: hasta 300 ganadores por sorteo en vez de 32, y las entradas de cada sorteo se renuevan a 120 días ([despliegues](docs/deployments.md)). No limita los sorteos abiertos de una cuenta ni deja cancelar uno, y la ronda la elige quien sella (el contrato solo exige que falten al menos treinta segundos). Como no se puede actualizar, cualquiera de esas cosas pediría un contrato nuevo, en otra dirección. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
 **Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)). Compartir o mostrar el resultado en grande arma un enlace corto, que guarda en Cloudflare una copia cifrada en el navegador, con la clave solo en el fragmento del enlace: Tinkazo no la puede leer. No vence, para que el sorteo se pueda volver a comprobar; si alguien necesita que se borre, lo pide a hola@tinkazo.app ([workers/enlaces](workers/enlaces/README.md)).
 
@@ -164,33 +186,42 @@ Por eso Tinkazo no publica otro crate verificador más. Su comprobación en la c
 
 Lo que cuesta un sorteo lo fija la red, no nosotros, y se mueve. Casi todo es alquiler de almacenamiento, y Stellar cambia esa tarifa: el 16 de septiembre de 2026 el mismo contrato pagaba 0,18 XLM por sorteo en testnet, tres semanas después la renta de testnet lo había multiplicado por cuatro, y el 25 de octubre se disparó mucho más cuando el estado vivo de la red cruzó su objetivo, hasta que la red subió ese objetivo. Lo único que no se mueve es la verificación BLS: **0,003 XLM**, medido en testnet el 3 de octubre de 2026.
 
-Las mediciones con fecha y las proyecciones de mainnet están en [docs/deployments.md](docs/deployments.md). La tabla por sorteo que estaba acá era una sola lectura de testnet del 3 de octubre, y después de los cambios de renta ya no describía lo que cuesta un sorteo; en mainnet se mide al desplegar. **Verificar es gratis siempre.**
+En mainnet, según [docs/deployments.md](docs/deployments.md):
+
+| Qué | XLM | De dónde sale |
+|---|---|---|
+| Subir el código del contrato | 14,2453 | Cobrado por la red, 11 de noviembre de 2026 |
+| Crear la instancia del contrato | 0,0178 | Cobrado por la red, 11 de noviembre de 2026 |
+| Un sorteo de 3 ganadores (`seal` + `draw`) | 0,178 | Proyectado con simulaciones, todavía sin medir en mainnet |
+| Un sorteo de 100 ganadores | 0,331 | Proyectado |
+| Un sorteo de 300 ganadores | 0,647 | Proyectado |
+
+Las proyecciones valen mientras el estado vivo de la red siga bajo los 2.000 MB (el 11 de noviembre de 2026 estaba en 1.608 MB). Por encima, la renta se multiplica, y docs/deployments.md tiene la tabla de cada nivel. En el modo Oficial la comisión la paga la billetera de quien organiza; en el modo Prueba la cubre Tinkazo. **Participar y verificar son gratis siempre.**
 
 ## Calidad
 
-Diez auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
+24 auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz. Estos son los principales:
 
 - **El de juegos**, veinte comprobaciones por juego contra drand de verdad. La que importa: el nombre en pantalla es el que fijó el protocolo.
 - **El exigente**, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro: la misma ronda dibuja lo mismo, ni un `Math.random`, nunca cuatro segundos sin novedad, el cartel del ganador se lee desde el fondo de la sala, con dos personas y con doscientas, en un celular.
 - **El de emoción**, dieciséis semillas por juego: los arcos de la historia varían y el puesto de la ganadora a mitad de carrera no la delata.
 - **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen y silencios de los efectos, con la música contada aparte.
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
-- **El de física**, para el bombo y el aguayo: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
+- **El de física**, para el bombo y el aguayo, dos juegos que salieron del selector pero siguen abriendo con `?demo=`: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
 - **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
 - **El de identificación**, con 8, 18 y 50 personas: cuántos llegan a leer su nombre antes del ganador.
 - **El de mezcla**, que graba lo que sale por el parlante y mide la sonoridad con la norma BS.1770, los picos, cuánto se pierde en un parlante de proyector y el golpe del ganador.
 - **El de flujo**, la QA de UX: recorre el sorteo de verdad con una cuenta de prueba en cinco tamaños de pantalla y a 200 % de zoom, y comprueba que en cada paso hay una acción principal a la vista sin hacer scroll, que la barra de "lo que sigue" no tapa el botón al que reemplaza ni el pie de la página, y que nadie se pierde ([`docs/ux.md`](docs/ux.md)).
 
-## Los próximos 30 días
+## Lo que viene
 
-Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer desde afuera:
+Cada punto tiene una comprobación que cualquiera puede hacer desde afuera:
 
-| Entregable | Está hecho cuando |
+| Qué | Está hecho cuando |
 |---|---|
-| Mainnet, con la comisión pagada y el contrato verificado (`pnpm preflight:mainnet` ya comprueba lo demás) | El contrato figura verificado en stellar.expert, y alguien que entró con Google, con 0 XLM, sella y sortea un sorteo que da verde |
-| Cinco sorteos reales, al menos tres hechos por otra persona con su propia cuenta | Cinco enlaces de comprobación en verde en mainnet, cinco direcciones de organizador y un comentario corto de cada uno |
-| Un kit para organizadores, en español y en inglés | Una guía de una página, las bases generadas y un texto de resultado para Luma con la prueba de cada participante, enlazados desde el sitio |
-| Una guía sobre aleatoriedad en contratos de Soroban, para la documentación de Stellar | Un pull request listo para revisar y enlazado a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), que cubre el [alcance que se aceptó](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) con los costos medidos en testnet |
+| Cinco sorteos reales en mainnet, al menos tres hechos por otra persona con su propia cuenta | Cinco enlaces de comprobación en verde en mainnet, cinco direcciones de organizador y un comentario corto de cada uno |
+| Una guía sobre aleatoriedad en contratos de Soroban, para la documentación de Stellar | Un pull request listo para revisar y enlazado a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), que cubre el [alcance que se aceptó](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) |
+| Entrar con Google en el modo Oficial, con la comisión cubierta | Alguien que entró con Google, con 0 XLM, sella y sortea en el modo Oficial un sorteo que da verde |
 
 Después, solo si las comunidades lo piden: una constancia de entrega, para que quien organiza deje anotado que entregó el premio (por ejemplo, con un pago en USDC de su cuenta a la de quien ganó). Los participantes siguen sin pagar nada, y Tinkazo no custodia ni mueve la plata ([diseño](docs/premios.md)).
 
@@ -201,7 +232,7 @@ Hace falta Node 22 o más y pnpm 11. Copiá `.env.example` a `.env.local`: la ll
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # más de 4.700 tests, entre ellos el protocolo v2 contra los vectores compartidos
+pnpm test         # más de 7.400 tests, entre ellos el protocolo v2 contra los vectores compartidos
 pnpm build
 ```
 
@@ -212,7 +243,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro` (los que salieron del selector, entre ellos `quien` y `trueque`, siguen abriendo con su identificador, que está en [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo testnet: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?red=prueba|oficial` (el modo Prueba u Oficial; el sitio abre en Prueba), `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro|guajojo|toborochi` (los que salieron del selector, entre ellos `quien` y `trueque`, siguen abriendo con su identificador, que está en [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo en el modo Prueba: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
 
 ## El repositorio
 
