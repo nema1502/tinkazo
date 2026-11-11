@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLang, t } from "../i18n";
+import { T, setLang, t } from "../i18n";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
 import { type CuentaDelPaso, GUARDA_DE_TOQUE_MS, MARCA_CODIGO, TOPE_CERRAR_MS, type OpcionesDelPaso, type SalidasDelPaso, abrirCuentaLista, aceptarClicsDePrueba, cuentaListaAbierta } from "./cuenta-lista";
 
@@ -302,6 +302,82 @@ describe("proteger con el correo", () => {
     expect(sessionStorage.getItem(MARCA_CODIGO)).toBeNull();
     principal().click();
     await expect(promesa).resolves.toBe(true);
+  });
+
+  it("el código del correo es de letras y números: el campo abre el teclado de texto, en mayúsculas y sin corrector", async () => {
+    await abrir({ activacion: "lista" });
+    principal().click();
+    await pasa();
+    const c = raiz()?.querySelector<HTMLInputElement>("#cl-codigo") as HTMLInputElement;
+    expect(c.getAttribute("inputmode")).toBe("text");
+    expect(c.getAttribute("autocapitalize")).toBe("characters");
+    expect(c.getAttribute("autocorrect")).toBe("off");
+    expect(c.getAttribute("spellcheck")).toBe("false");
+    expect(c.autocomplete).toBe("one-time-code");
+    // Nada que sugiera seis números, y lugar de sobra para lo pegado con espacios.
+    expect(c.placeholder).not.toMatch(/\d|^•{6}$/);
+    expect(c.maxLength).toBeGreaterThanOrEqual(16);
+  });
+
+  it("al confirmar, los espacios de más se sacan y las letras quedan como las escribió la persona", async () => {
+    const confirmar = vi.fn(async (_c: string) => true);
+    await abrir({ activacion: "lista" }, {}, { confirmarCodigoDeProteccion: confirmar });
+    principal().click();
+    await pasa();
+    escribir("#cl-codigo", "  aB3d 9fGh7 ");
+    principal().click();
+    await pasa();
+    expect(confirmar.mock.calls.map((c) => c[0])).toEqual(["aB3d9fGh7"]);
+  });
+
+  // El servicio de códigos contestó 500 con {"code":2,"message":"turnkey: the OTP code has either expired or is invalid
+  // (status=401)"} y el SDK de Pollar (`authProxy`) lo lanza como un `PollarApiError`: su `message` es solo el código
+  // `SDK_COSIGN_TURNKEY_REJECTED` y lo que dijo el servicio queda en `body.message`.
+  describe.each([
+    ["proteger la cuenta", { activacion: "lista" as const }, "confirmarCodigoDeProteccion" as const],
+    ["sumar este navegador", { proteccion: "aparato-nuevo" as const, correoConfirmado: true, correoDeLaCuenta: "cuenta@mail.com", unicoNavegador: false }, "confirmarCodigoParaEsteAparato" as const],
+  ])("el servicio de códigos rechaza el código (%s)", (_nombre, inicial, metodo) => {
+    const rechazo = async (mensaje: string) => {
+      const { PollarApiError } = await import("@pollar/core");
+      return new PollarApiError("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 500, message: mensaje });
+    };
+
+    it("si dice que el código venció o no sirve, sale el aviso del código y no el genérico", async () => {
+      const error = await rechazo("turnkey: the OTP code has either expired or is invalid (status=401)");
+      const confirmar = vi.fn(async (_c: string): Promise<boolean> => {
+        throw error;
+      });
+      await abrir(inicial, {}, { [metodo]: confirmar });
+      principal().click();
+      await pasa();
+      escribir("#cl-codigo", "AB12CD34E");
+      principal().click();
+      await pasa();
+      expect(confirmar).toHaveBeenCalledTimes(1);
+      expect(alerta()).toContain(t("protBadCode"));
+      expect(alerta()).not.toContain(t("protFalla"));
+      // Sigue el campo del código para volver a probar.
+      expect(raiz()?.querySelector("#cl-codigo")).not.toBeNull();
+    });
+
+    it("si el servicio rechaza por otra cosa, sigue el aviso genérico: no se culpa al código sin evidencia", async () => {
+      const error = await rechazo("turnkey: internal error (status=500)");
+      await abrir(inicial, {}, { [metodo]: vi.fn(async (_c: string): Promise<boolean> => { throw error; }) });
+      principal().click();
+      await pasa();
+      escribir("#cl-codigo", "AB12CD34E");
+      principal().click();
+      await pasa();
+      expect(alerta()).toContain(t("protFalla"));
+      expect(alerta()).not.toContain(t("protBadCode"));
+    });
+  });
+
+  it("los textos del código dicen cómo es y que puede estar vencido, en las dos lenguas", () => {
+    expect(T.es.protBadCode).toBe("Ese código no es o ya venció. Pedí otro y usalo enseguida.");
+    expect(T.en.protBadCode).toBe("That code is wrong or has expired. Ask for another one and use it right away.");
+    expect(T.es.clCorreoLlega).toBe("El correo puede venir en inglés. El código tiene letras y números, y vence en pocos minutos.");
+    expect(T.en.clCorreoLlega).toBe("The email may come in English. The code has letters and numbers, and expires in a few minutes.");
   });
 
   it("con otro correo escrito a mano, se muestra entero", async () => {

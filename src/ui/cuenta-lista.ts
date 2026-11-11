@@ -445,14 +445,20 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   campoCorreo.inputMode = "email";
   campoCorreo.autocomplete = "email";
   campoCorreo.spellcheck = false;
+  // El código que llega por correo en este paso es de 9 letras mayúsculas y números mezclados, no de seis cifras: teclado de
+  // texto, mayúsculas solas y sin corrector. Si se pega con espacios de más, el tope deja lugar (`limpio` los saca).
   const campoCodigo = document.createElement("input");
   campoCodigo.type = "text";
   campoCodigo.id = "cl-codigo";
-  campoCodigo.inputMode = "numeric";
+  campoCodigo.inputMode = "text";
+  campoCodigo.setAttribute("inputmode", "text");
+  campoCodigo.setAttribute("autocapitalize", "characters");
+  campoCodigo.setAttribute("autocorrect", "off");
+  campoCodigo.setAttribute("spellcheck", "false");
   campoCodigo.autocomplete = "one-time-code";
-  campoCodigo.maxLength = 10;
+  campoCodigo.maxLength = 24;
   campoCodigo.className = "cl-codigo";
-  campoCodigo.placeholder = "••••••";
+  campoCodigo.placeholder = "•••••••••";
   const limpio = (): string => campoCodigo.value.replace(/\s+/g, "");
   // El cupón: letras y números en mayúsculas, sin autocompletar ni corrector, y los guiones se ponen solos.
   const campoCupon = document.createElement("input");

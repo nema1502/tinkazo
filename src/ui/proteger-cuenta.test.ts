@@ -81,6 +81,23 @@ describe("el correo y el código", () => {
     expect(codigoMalo(new Error("OTP EXPIRED"))).toBe(true);
     expect(codigoMalo(new Error("Failed to fetch"))).toBe(false);
   });
+
+  // El servicio de códigos contestó 500 con {"code":2,"message":"turnkey: the OTP code has either expired or is
+  // invalid (status=401)"}. El SDK (`authProxy`) lo lanza como `PollarApiError("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus,
+  // message })`: su `message` es solo el código y lo que dijo el servicio queda en `body.message`.
+  it("un código que el servicio de códigos rechazó: lo dice en el detalle del error, no en su mensaje", async () => {
+    const { PollarApiError } = await import("@pollar/core");
+    const rechazo = (message?: string) => new PollarApiError("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus: 500, ...(message ? { message } : {}) });
+    expect(rechazo().message).toBe("SDK_COSIGN_TURNKEY_REJECTED");
+    expect(codigoMalo(rechazo("turnkey: the OTP code has either expired or is invalid (status=401)"))).toBe(true);
+    expect(codigoMalo(rechazo("turnkey: invalid OTP code"))).toBe(true);
+    // Un rechazo del servicio que no habla del código no culpa al código.
+    expect(codigoMalo(rechazo("turnkey: internal error (status=500)"))).toBe(false);
+    expect(codigoMalo(rechazo("Turnkey's Auth Proxy answered 500"))).toBe(false);
+    expect(codigoMalo(rechazo())).toBe(false);
+    // Otro error del SDK con el mismo detalle no cuenta: solo el rechazo del servicio de códigos.
+    expect(codigoMalo(Object.assign(new Error("SDK_COSIGN_UPSTREAM_ERROR"), { code: "SDK_COSIGN_UPSTREAM_ERROR", body: { message: "the OTP code is invalid" } }))).toBe(false);
+  });
 });
 
 describe("la espera con tope", () => {

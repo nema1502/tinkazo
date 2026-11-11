@@ -52,8 +52,30 @@ export function cancelo(e: unknown): boolean {
   });
 }
 
-/** El motivo por el que Pollar no aceptó un código, si lo dice con su código de error. */
-export const codigoMalo = (e: unknown): boolean => /OTP|CODE|INVALID|EXPIRED/i.test(e instanceof Error ? e.message : String(e));
+/** El código con que el SDK de Pollar lanza el rechazo del servicio de códigos del correo. */
+const RECHAZO_DEL_SERVICIO = "SDK_COSIGN_TURNKEY_REJECTED";
+
+/**
+ * El servicio de códigos rechazó el código y lo dijo en palabras. El SDK lanza ese rechazo como
+ * `PollarApiError("SDK_COSIGN_TURNKEY_REJECTED", { turnkeyStatus, message })`: su `message` es solo ese código y lo que contestó el
+ * servicio ("the OTP code has either expired or is invalid") queda en `body.message`, así que no se ve mirando el mensaje. Solo
+ * cuenta si habla del código (OTP): otro rechazo del servicio, una falla suya, no culpa a quien lo escribió.
+ */
+function rechazoDelCodigo(e: unknown): boolean {
+  return algunoDe(e, (x) => {
+    if (typeof x === "string") return false;
+    const { code, body } = x as Visto & { code?: unknown; body?: unknown };
+    if (code !== RECHAZO_DEL_SERVICIO || typeof body !== "object" || body === null) return false;
+    const dijo = (body as { message?: unknown }).message;
+    return typeof dijo === "string" && /\bOTP\b/i.test(dijo);
+  });
+}
+
+/**
+ * El motivo por el que Pollar no aceptó un código, si lo dice con su código de error (`SDK_INVALID_OTP`, `OTP EXPIRED`) o,
+ * con el rechazo del servicio de códigos, en el detalle del error (`rechazoDelCodigo`).
+ */
+export const codigoMalo = (e: unknown): boolean => /OTP|CODE|INVALID|EXPIRED/i.test(e instanceof Error ? e.message : String(e)) || rechazoDelCodigo(e);
 
 /** Cuánto se espera a Pollar o al navegador: pasado esto el paso avisa y deja reintentar. */
 export const TOPE_DE_ESPERA_MS = 60_000;
