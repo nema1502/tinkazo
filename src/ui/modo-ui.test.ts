@@ -56,7 +56,7 @@ describe("la guarda del cambio de modo, en un solo lugar", () => {
     expect(pasarAModo("mainnet")).toBe(false);
     expect(h.cambios).toEqual([]);
     abrirHojaDeModo();
-    const boton = document.querySelector<HTMLButtonElement>(".modo-card button.solid");
+    const boton = document.querySelector<HTMLButtonElement>(".modo-card .modo-cambiar");
     expect(boton?.disabled).toBe(true);
     expect(document.querySelector(".modo-bloqueo")?.textContent).toBe(T.es.modeSwitchBlocked);
     // Y si el botón se tocara igual (el foco, un lector de pantalla), la guarda no deja pasar.

@@ -200,6 +200,12 @@
   .modo-opcion p { margin: 0; }
   .modo-actual { font-weight: 800; margin-top: 8px !important; }
   .modo-bloqueo { font-weight: 700; }
+  /* El botón para pasar de modo es la acción principal de la hoja: lleva el estilo de
+     `button.primary` (fondo magenta, borde y sombra duros) y el alto de un blanco de toque
+     cómodo, 48 px en todos los anchos, igual que el botón principal de las ventanas
+     (`.dlg-main`). Antes llevaba `solid` a secas, que solo existe junto a `mini`, y se veía
+     como un botón del navegador. */
+  .modo-card .modo-cambiar { min-height: 48px; padding: 0 24px; font-size: 17px; }
   /* Una ventana siempre entra o se recorre (19 de octubre de 2026). Centrar con
      `align-items: center` cortaba por arriba y por abajo toda tarjeta más alta
      que la pantalla, y lo cortado no se alcanzaba ni con scroll: el panel de la

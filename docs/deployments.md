@@ -9,7 +9,7 @@ Registro de cada despliegue. La dirección vigente por red también vive en `src
 | 2026-10-25 | testnet | `CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A` | `c2403e081fc2d91e…` (11 687 bytes) | `cf07189` | `GD6P7XJV…R526` | **Vigente.** Entradas de 7 días (`TTL_ENTRADA_*`, solo testnet). Medición y transacciones abajo. |
 | 2026-09-16 | testnet | `CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH` | `c9f3227ffb92ef04…` (11 688 bytes) | `fd558ce` | `GD6P7XJV…R526` | Reemplazado el 25 de octubre (sus entradas duraban 120 días). Sigue en `anteriores` con `ultimoId` 936 y `ultimoLedger` 5381472 (la transacción `b5075505…`, cerrada el 25 de octubre de 2026 a las 12:22:27 UTC; `next_id` del contrato: 937). Sorteo real `id=1`, ronda 32255926, ganadores `[11, 16, 0]` sobre la lista de `docs/vectors.json` |
 | 2026-09-16 | testnet | `CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ` | `6008a5e42ca06079…` | `8c98866` | `GD6P7XJV…R526` | Reemplazado el mismo día: `seal`/`draw` extendían el TTL del código y el primer `seal` cobró 15,27 XLM. Sigue en `anteriores` de `deployments.json` con `ultimoId` 1 y `ultimoLedger` 4709441 (tiene un sorteo, el `id=1`, la transacción `2d6b998c…`; `next_id` del contrato: 2) |
-| · | mainnet | pendiente (historia 5.1) | · | · | · | · |
+| 2026-11-11 | mainnet | `CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K` | `555c5a3810e284f4ae5c8b973ea9f1ed4dbda96bce4507865875acd1b6aa03c3` | 641e083 | `GA354A…VTQQ` | 11737 bytes |
 
 Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explorables en [stellar.expert](https://stellar.expert/explorer/testnet)):
 
@@ -30,6 +30,16 @@ La 0.2.0 renueva las entradas a 120 días en cualquier red. **En mainnet el cost
 El paquete está en 0.2.0 porque el workflow de StellarExpert nombra el `.wasm` y el release con la versión del paquete: con el tag `v0.2.0` salen el release `v0.2.0_tinkazo-raffle_cli28.1.0` y el archivo `tinkazo-raffle_v0.2.0.wasm`. Con un tag que no coincida con la versión del paquete, el nombre del release agrega `_pkg<versión>`.
 
 ## Costos medidos y proyección a mainnet
+
+**El despliegue en mainnet del 11 de noviembre de 2026** (`CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K`, la fila de mainnet de arriba), con el `.wasm` de 11.737 bytes del release `v0.2.0_tinkazo-raffle_cli28.1.0`, compilado en el commit `641e083`:
+
+| Paso | Simulado | Cobrado |
+|---|---|---|
+| Subir el código | **16,3822 XLM** (simulación de solo lectura contra `https://mainnet.sorobanrpc.com`, el 10 de noviembre a las 23:51 de Bolivia, 03:51 UTC del 11) | **14,2453 XLM** (transacción `56ba56b0f79a685be9eb1fa612f34365a249135e73382ea4e7d1acf08a917205`, el 11 de noviembre a las 04:51 de Bolivia, 08:51 UTC) |
+| Crear la instancia | 0,0209 XLM (la simulación de la CLI al enviar) | 0,0178 XLM (transacción `6dac74fe9905744be64f351f862f02928a8c577e6371ab0204e4c5b34cff452d`) |
+| **Total** | | **14,2631 XLM** |
+
+El estado de la red a esa hora: 1.608,0 de 3.000 MB (53,6 % del objetivo), bajando 2,70 MB por hora, en el protocolo 29. Está bajo los 2.000 MB, así que la renta por KB sigue en el piso y las proyecciones de abajo valen sin multiplicar. La cuenta de despliegue solo paga: el contrato no tiene administrador ni se actualiza.
 
 **Medición del 3 de octubre de 2026 (vigente).** Lo que cobró la red según Horizon, en los sorteos 151, 152, 159 y 160:
 
@@ -110,12 +120,12 @@ Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta ex
 
 | Estado de mainnet | Renta por KB | 3 ganadores, `seal` + `draw` | 100 ganadores, solo `draw` | 100 ganadores, `seal` + `draw` | 300 ganadores, solo `draw` | 300 ganadores, `seal` + `draw` |
 |---|---|---|---|---|---|---|
-| hoy, 1.672 MB (hasta 2.000) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM | 0,551 XLM | 0,647 XLM |
+| hasta 2.000 MB (1.608 el 11 de noviembre de 2026) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM | 0,551 XLM | 0,647 XLM |
 | 2.250 MB | ×3,25 | 0,571 | 0,760 | 1,068 | 1,786 | 2,094 |
 | 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 | 3,020 | 3,539 |
 | 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 | 5,489 | 6,433 |
 
-El `draw` de 100 ganadores cruza el tope de comisión del pagador de ese momento (el portero de comisiones o Pollar, según cuál esté encendido, ver [operacion.md](operacion.md)) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); el de 300 ganadores, hacia los 2.090 MB, unos cuatro días; con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
+El `draw` de muchos ganadores es el primero que cruza el tope de comisión por transacción del pagador de ese momento (el portero de comisiones o Pollar, según cuál esté encendido, ver [operacion.md](operacion.md)). En mainnet, la comisión de las cuentas que entran con Google la paga Pollar, con un tope de 2 XLM por transacción desde el 11 de noviembre de 2026 (antes era de 100): el `draw` de 100 ganadores lo cruza hacia los 2.840 MB y el de 300, hacia los 2.290 MB. Con el tope de 1 XLM del portero (`TOPE_TX_STROOPS`, que hoy atiende solo la red de prueba), serían hacia los 2.360 y los 2.090 MB. Con tres ganadores ningún tope se toca antes del objetivo. El 11 de noviembre de 2026 el estado bajaba 2,70 MB por hora, así que a ese ritmo ningún cruce tiene fecha; la pendiente la sigue el detector (`pnpm check:red`, niveles de arriba).
 
 ## Vigilancia de la red
 
@@ -280,9 +290,9 @@ Mientras tanto la prueba sigue en pie: la atestación (caminos 2 y 3) y la recom
 
 ## Redes
 
-| Red | RPC | Passphrase | Protocolo (2026-10-22) | TTL mínimo persistente |
+| Red | RPC | Passphrase | Protocolo (2026-11-11) | TTL mínimo persistente |
 |---|---|---|---|---|
-| testnet | `https://soroban-testnet.stellar.org` | `Test SDF Network ; September 2015` | 29 | 7 días |
-| mainnet | `https://mainnet.sorobanrpc.com` (o un [proveedor](https://developers.stellar.org/docs/data/apis/rpc/providers)) | `Public Global Stellar Network ; September 2015` | 29 | 120 días |
+| testnet | `https://soroban-testnet.stellar.org` | `Test SDF Network ; September 2015` | 30 | 7 días |
+| mainnet | `https://mainnet.sorobanrpc.com` (o un [proveedor](https://developers.stellar.org/docs/data/apis/rpc/providers)) | `Public Global Stellar Network ; September 2015` | 29 (el 30 se vota el 23 de noviembre) | 120 días |
 
 Testnet se reinicia trimestralmente: los sorteos de prueba desaparecen y hay que redesplegar.

@@ -60,7 +60,9 @@ describe("Mis sorteos vacío y el otro modo", () => {
     const boton = lineaVacia().querySelector("button");
     expect(boton?.textContent).toBe(T.es.historySwitchToTest);
     boton?.click();
-    await vi.waitFor(() => expect(h.cambios).toEqual(["testnet"]));
+    // El botón carga `modo-ui` recién al tocarlo: con la suite entera corriendo, esa carga pasa del segundo que
+    // espera `waitFor` por defecto. Se le da tiempo de sobra; lo que se comprueba es el cambio de modo, no la demora.
+    await vi.waitFor(() => expect(h.cambios).toEqual(["testnet"]), { timeout: 15_000 });
     // La sección con la lista sigue escondida: el estado vacío es el que queda a la vista.
     expect((document.getElementById("sec-history") as HTMLElement).style.display).toBe("none");
   });

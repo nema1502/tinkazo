@@ -89,7 +89,7 @@ describe("textos del logo", () => {
 
   it("el sitemap tiene la fecha de los términos y la del cambio de precios (8 de noviembre de 2026)", () => {
     const mapa = readFileSync("public/sitemap.xml", "utf8");
-    expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-04/);
+    expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-11/);
     expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-08/);
   });
 

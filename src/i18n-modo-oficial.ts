@@ -7,13 +7,18 @@ import deployments from "./stellar/deployments.json";
  * solo si hay modo Oficial; las claves de este archivo son las que ya existían, con el texto de hoy en `i18n.ts`.
  * Los textos que solo existen para el modo Oficial (la hoja, los avisos, la confirmación) están en `i18n.ts`.
  *
- * Cuando se agregue el contrato real, en el mismo commit, el texto del HTML de cinco páginas pasa a ser el de este
+ * Cuando se agregue el contrato real, en el mismo commit, el texto del HTML de seis páginas pasa a ser el de este
  * archivo (es lo que se ve antes de que cargue el JavaScript y lo que leen los buscadores):
+ * - `index.html`, la respuesta `data-i="faq3a"`;
  * - `precios.html`, el párrafo `data-i="nextBody"`;
- * - `terminos.html`, el punto `data-i="tmMore3"`;
+ * - `terminos.html`, los puntos `data-i="tmMore3"`, `data-i="tmMore4"` y `data-i="tmPatrocinio"` y el párrafo
+ *   `data-i="tmQ4B"`;
  * - `sorteo-verificable.html`, el punto `data-i="verifN3"`;
- * - `como-funciona.html`, el punto `data-i-html="cfDura3"`;
+ * - `como-funciona.html`, el punto `data-i-html="cfDura3"`, el párrafo `data-i-html="cfCostoB"` y la celda
+ *   `data-i="cfG4b"`;
  * - `seguridad.html`, el punto `data-i="sgLimit3"`.
+ * Quién paga la comisión de la red cambia con el modo (`nextBody`, `faq3a`, `cfCostoB` y `tmPatrocinio`): en Prueba
+ * la cubre Tinkazo; en Oficial, quien entra con su propia billetera la paga de su cuenta.
  * `revision-textos.test.ts` falla hasta que estén, y dice cuál falta, pero solo mira `data-i`: el de `cfDura3`, que es
  * `data-i-html`, lo avisa `seo.test.ts`. Las claves de la ventana de entrar (`loginTestnet` y las `guest…`) no están
  * en ningún HTML. Las pruebas que dependen de estos textos (`revision-textos.test.ts`, `i18n.test.ts`,
@@ -35,7 +40,10 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     fundTag: "Prueba",
     fundBody: "Para sellar hace falta un poquito. En Prueba es dinero de prueba: pedila acá y seguís.",
     fundFoot: "No vale nada: solo sirve en Prueba, para probar.",
-    nextBody: "Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. El costo de sellar lo paga Tinkazo. En el modo Prueba, guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.",
+    nextBody: "Al cerrar la lista, se sella antes de que exista el número que decide, y cualquier cambio posterior se nota. El costo de sellar lo paga Tinkazo en el modo Prueba; en el modo Oficial, quien entra con su propia billetera paga la comisión de la red, que es de centavos. En el modo Prueba, guardá el comprobante de tus sorteos, porque sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.",
+    faq3a: "Hoy Tinkazo no cobra nada. Los precios para quien organiza se publican muy pronto, y te avisamos antes de cobrar. Participar y comprobar son gratis siempre. En el modo Oficial, quien entra con su propia billetera paga la comisión de la red.",
+    cfCostoB: 'Grabar cada sorteo en la red tiene un costo. Lo cobra la red, no Tinkazo, y casi todo es renta de almacenamiento: cambia con el uso de la red. En el modo Prueba lo paga Tinkazo. En el modo Oficial, quien entra con su propia billetera lo paga de su cuenta. Las cifras medidas, con su fecha, están en <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.',
+    tmPatrocinio: "En el modo Prueba, Tinkazo cubre la comisión que cobra la red por sellar y sortear. Puede haber un tope por cuenta y por mes; si se agota, se puede pagar con la propia cuenta o esperar a que vuelva. Si hay tope, para llevar la cuenta el servicio guarda cuántos sellos y sorteos hizo cada cuenta, sin nombres ni listas. En el modo Oficial, quien entra con su propia billetera paga esa comisión de su cuenta.",
     verifN3: "En el modo Prueba, guardá el comprobante de tus sorteos: sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026.",
     tmMore3: "Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. En el modo Prueba, guardá el comprobante de tus sorteos, que sirve para volver a comprobarlos aunque el registro se reinicie el 16 de diciembre de 2026. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y el número del sorteo: para eso están las reglas, escritas paso a paso.",
     vFinishNoWallet: "Para finalizarlo hace falta Freighter o la cuenta de prueba del modo Prueba.",
@@ -52,6 +60,9 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     guestHint: "El navegador te arma una cuenta del modo Prueba y le pone fondos de prueba. No instalás nada.",
     guestReady: "Cuenta de prueba lista y con fondos de prueba.",
     guestTestnetOnly: "La cuenta de prueba solo funciona en el modo Prueba.",
+    cfG4b: "Con Google, Pollar (en el modo Oficial, con Turnkey); con Freighter, tu extensión; con la cuenta de prueba, tu navegador",
+    tmMore4: "Vigentes desde el 11 de noviembre de 2026, cuando sumamos el modo Oficial y, en ese modo, la llave de las cuentas que entran con Google pasó a protegerla Turnkey. Antes se habían sumado el servicio que cubre la comisión y cuenta los sellos de cada cuenta, el conteo sin saber quién es de los pasos del sorteo, el logo de la comunidad, el formulario para opinar y las rondas de ejemplo de los stands. Si cambian, cambia esta página, con su fecha.",
+    tmQ4B: "Si conectás una cuenta, su dirección pública queda registrada como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y se ocupa de la llave de tu cuenta: en el modo Prueba la guarda Pollar, y en el Oficial la protege Turnkey, el servicio de llaves que usa Pollar. Tinkazo nunca la ve. En este navegador quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; la lista que estás armando, solo en esa pestaña y hasta que la sellás; los enlaces cortos que armaste o abriste acá; tu logo, si subiste uno; y la llave de la cuenta de prueba si la usás.",
   },
   en: {
     netTest: "Test",
@@ -60,7 +71,10 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     fundTag: "Test",
     fundBody: "Sealing needs a little. In Test it is test money: ask for it here and carry on.",
     fundFoot: "It's worth nothing: it only works in Test, for trying things out.",
-    nextBody: "When you close the list, it is sealed before the number that decides exists, and any later change shows. Tinkazo pays the cost of sealing. In Test mode, keep the receipts of your draws, because they let anyone check them again even after the record resets on December 16, 2026.",
+    nextBody: "When you close the list, it is sealed before the number that decides exists, and any later change shows. Tinkazo pays the cost of sealing in Test mode; in Live mode, if you sign in with your own wallet, you pay the network's charge, which is a few cents. In Test mode, keep the receipts of your draws, because they let anyone check them again even after the record resets on December 16, 2026.",
+    faq3a: "Tinkazo charges nothing for now. Pricing for organizers will be published very soon, and we'll tell you before we charge. Taking part and checking are always free. In Live mode, if you sign in with your own wallet, you pay the network's charge.",
+    cfCostoB: 'Recording each draw on the network has a cost. The network charges it, not Tinkazo, and almost all of it is storage rent: it changes with how much the network is used. In Test mode Tinkazo pays it. In Live mode, if you sign in with your own wallet, you pay it from your account. The measured figures, with their dates, are in <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.',
+    tmPatrocinio: "In Test mode, Tinkazo covers the charge the network makes for sealing and drawing. There may be a cap per account per month; if it runs out, you can pay with your own account or wait for it to come back. If there is a cap, to keep count the service stores how many seals and draws each account has made, with no names or lists. In Live mode, if you sign in with your own wallet, you pay that charge from your account.",
     verifN3: "In Test mode, keep the receipt of your draws: it lets anyone check them again even after the record resets on December 16, 2026.",
     tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. In Test mode, keep the receipt of your draws, because it lets anyone check them again even after the record resets on December 16, 2026. If something breaks in the middle of a draw, anyone can run it again with the list and the draw number: that is what the written, step-by-step rules are for.",
     vFinishNoWallet: "Finishing it needs Freighter, or the test account from Test mode.",
@@ -77,5 +91,8 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     guestHint: "The browser makes you a Test mode account and funds it with test money. Nothing to install.",
     guestReady: "Test account ready, with test money.",
     guestTestnetOnly: "The test account only works in Test mode.",
+    cfG4b: "With Google, Pollar (in Live mode, through Turnkey); with Freighter, your extension; with the test account, your browser",
+    tmMore4: "In effect since November 11, 2026, when we added Live mode and, in that mode, the key of accounts that sign in with Google became protected by Turnkey. Before that came the service that covers the network charge and counts each account's seals, counting the steps of a draw without knowing who takes them, the community logo, the feedback form and the sample rounds for booths. If they change, this page changes, with its date.",
+    tmQ4B: "If you connect an account, its public address is recorded as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and takes care of your account's key: in Test mode Pollar holds it, and in Live mode it is protected by Turnkey, the key service Pollar uses. Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; the list you're putting together, only in that tab and until you seal it; the short links you made or opened here; your logo, if you uploaded one; and the key of the test account if you use it.",
   },
 };

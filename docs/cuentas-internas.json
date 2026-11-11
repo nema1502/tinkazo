@@ -6,6 +6,12 @@
       "etiqueta": "interna",
       "red": "testnet",
       "motivo": "cuenta de despliegue de los contratos (docs/deployments.md)"
+    },
+    {
+      "direccion": "GA354AHPY5GAQXWQAW5A42L5YYGZFBJ5AE2DVWN53Q3IRGOWU5QNVTQQ",
+      "etiqueta": "interna",
+      "red": "mainnet",
+      "motivo": "cuenta de despliegue del contrato de la red principal (docs/deployments.md)"
     }
   ],
   "listasDeEjemplo": [

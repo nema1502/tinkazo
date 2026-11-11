@@ -136,7 +136,7 @@ export function abrirHojaDeModo(): void {
 
   const boton = document.createElement("button");
   boton.type = "button";
-  boton.className = "solid";
+  boton.className = "primary modo-cambiar";
   boton.textContent = t(otro === "mainnet" ? "modeSwitchToOfficial" : "modeSwitchToTest");
   boton.disabled = bloqueado;
   boton.addEventListener("click", () => pasarAModo(otro));

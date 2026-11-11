@@ -297,7 +297,10 @@ describe.skipIf(!BASH)(`scripts/deploy.sh con un stellar falso${BASH ? "" : ` (s
 
   it("--id sobre un contrato que ya tiene su fila no escribe otra", () => {
     const fila = `| 2026-11-20 | mainnet | \`${CONTRATO}\` | \`${huella.slice(0, 16)}…\` | 641e083 | \`GAAQ…\` | 30 bytes |`;
-    writeFileSync(docsCopia, readFileSync(docsCopia, "utf8").replace(/^\| · \| mainnet \|.*$/m, fila));
+    // La fila de mainnet de la tabla de despliegues, sea la pendiente («| · | mainnet | pendiente…») o la de un
+    // despliegue ya registrado: desde el 11 de noviembre de 2026 el registro de verdad trae la del contrato real.
+    writeFileSync(docsCopia, readFileSync(docsCopia, "utf8").replace(/^\| [^|\n]+ \| mainnet \|.*$/m, fila));
+    expect(readFileSync(docsCopia, "utf8")).toContain(fila);
     const antes = sha(readFileSync(docsCopia));
     const r = correr(["mainnet", "tinkazo-mainnet", "--wasm", barra(wasm), "--sha256", huella, "--id", CONTRATO]);
     expect(r.codigo).toBe(0);
