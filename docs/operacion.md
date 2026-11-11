@@ -25,7 +25,7 @@ curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/estado
 7. **Dos lotes de cupones**, el del evento y uno de reserva, con los códigos y las tarjetas fuera del repositorio:
    `node scripts/cupones.mjs crear --lote <evento> --cantidad 30 --sorteos 3 --dias 60 --vence AAAA-MM-DD --salida <carpeta privada>`
    y lo mismo con `--lote <evento>-reserva --cantidad 10`. Imprimir al 100 %, a doble faz; las tarjetas van en sobre o boca abajo (una foto del QR lo canjea) y la reserva aparte.
-8. **La regla de límite de Cloudflare** delante de `pm.tinkazo.app`: 60 pedidos en 10 segundos por dirección para `POST /v1/alta/estado` y `/v1/alta/cupon`, 20 en 10 segundos para `POST /v1/patrocinio`, con bloqueo de 10 segundos. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto.
+8. **La regla de límite de Cloudflare** delante de `pm.tinkazo.app`: 60 pedidos en 10 segundos por dirección para `POST /v1/alta/estado` y `/v1/alta/cupon`, 20 en 10 segundos para `POST /v1/patrocinio`, con bloqueo de 10 segundos. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto. `GET /v1/patrocinio/cupo` no pasa por esta regla: lo limita el propio portero, a 3.000 consultas por dirección y por hora.
 9. **A la mañana, antes de abrir el stand**: `estado` y la cuenta de abajo con todas las tarjetas por repartir.
 
 ## Durante el evento, cada hora
@@ -49,6 +49,8 @@ curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/pausar      # 
 curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/reanudar    # {"pausadas":false}
 node scripts/cupones.mjs estado --lote <evento>
 ```
+
+**Si a alguien le sale que su acceso está en otra cuenta** («No pudimos unir esta cuenta con tu acceso al modo Oficial»). Solo pasa si Pollar le cambia la billetera a una persona después de que canjeó: su acceso quedó atado a la cuenta de antes. En el registro del Worker (`wrangler tail` o el panel de Cloudflare) se ve como `{"evento":"error-alta","motivo":"cuenta-de-otro"}`, sin la cuenta ni la persona; si no aparece, lo notó el propio sitio y se sigue igual. Se admite a mano la cuenta que muestra su sitio (el panel de la cuenta la deja copiar), con los sorteos del cupón, los días del lote del evento y una referencia del stand que no se repita: `node scripts/cupones.mjs admitir --cuenta G... --sorteos 3 --dias 60 --ref <evento>-stand-1`. Después se comprueba que puede sellar, aunque el paso «Dejá tu cuenta lista» siga mostrando el aviso: el sello mira el cupo de esa cuenta, no el paso. Alcanza si la cuenta ya está activada y protegida; si el paso todavía pide activarla o protegerla, no se arregla desde el stand y esa persona sigue en Prueba.
 
 Durante el evento no se toca Pollar ni ninguna bandera del sitio o del portero.
 

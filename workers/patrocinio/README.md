@@ -123,7 +123,9 @@ El contador por dirección del Worker vive en memoria y es de cada nodo de Cloud
 | Umbral | 20 pedidos en 10 segundos (el período que deja el plan gratis; con un plan de pago, 240 por hora) |
 | Acción | Bloquear, 10 segundos (el plan gratis solo deja ese tiempo) |
 
-Una segunda regla, si el plan deja más de una: la misma expresión con `http.request.method eq "GET" and http.request.uri.path eq "/v1/patrocinio/cupo"`, 60 pedidos en 10 segundos. Un pedido bloqueado ahí no llega al Worker y no cuenta como pedido de la cuenta (ver [Plan y gasto](#plan-y-gasto)).
+Delante de `pm.tinkazo.app` va la regla de la [hoja de operación](../../docs/operacion.md): 60 pedidos en 10 segundos por dirección para `POST /v1/alta/estado` y `POST /v1/alta/cupon`, 20 en 10 segundos para `POST /v1/patrocinio`, con bloqueo de 10 segundos.
+
+`GET /v1/patrocinio/cupo` no pasa por estas reglas: lo limita el propio Worker, por dirección y por hora (`cupoPorHora`, `src/por-ip.ts`: 3.000 en mainnet y 600 en testnet), porque todo un stand sale por la misma wifi y el sitio pregunta el cupo antes de cada sello y cada sorteo.
 
 ## Lo que guarda
 
