@@ -3,6 +3,8 @@
 # En testnet está desplegado desde el 4 de noviembre de 2026, con la palabra de quien mantiene el proyecto, como
 # dominio propio (p.tinkazo.app): el despliegue crea el registro y el certificado, en el plan gratis, igual que la sala.
 # Mainnet pide su palabra otra vez (README, "Desplegar y encender"). En local: npx wrangler@4 dev --port 8793 (con .dev.vars).
+# Lo de arriba es el portero de testnet y se despliega como siempre, sin `--env`. El de mainnet es OTRO Worker, con su
+# nombre, su dominio y su objeto: la sección [env.mainnet] del final, que se despliega con `--env mainnet`.
 name = "tinkazo-patrocinio"
 account_id = "d97c3f7acada21d5ec280704fb34ff17"
 main = "src/index.ts"
@@ -35,3 +37,59 @@ PATROCINADORES_APP = "GAYWGZ4P5NHJU2UL7TGWSP6ZF5BYEBZ4WP7TZDBDZ3FXUN5DHGAMDGKU,G
 # Vacío: no se pregunta y todas tienen el cupo de siempre. Se carga al desplegar, cuando el Worker de la cuenta ya está arriba.
 # Por ejemplo: CUENTA_URL = "https://cuenta.tinkazo.app"
 CUENTA_URL = ""
+
+# ---------- El portero de mainnet: otro Worker, en pm.tinkazo.app ----------
+# `npx wrangler@4 deploy --env mainnet`, con la palabra de quien mantiene el proyecto. Las variables y el objeto NO se
+# heredan de lo de arriba: se escriben todos acá. El objeto es el mismo código con otro espacio de nombres, así que el
+# SQLite de mainnet no comparte nada con el de testnet. Los secretos van con `npx wrangler@4 secret put <NOMBRE> --env
+# mainnet`: CLAVE_PATROCINADOR, ADMIN_TOKEN (operar), CUPONES_TOKEN (cupones y altas), POLLAR_SECRETO, CUPON_SECRETO y,
+# con el sorteo del servidor, CLAVE_SORTEADORA. Ninguno va en este archivo.
+[env.mainnet]
+name = "tinkazo-patrocinio-mainnet"
+workers_dev = false
+routes = [{ pattern = "pm.tinkazo.app", custom_domain = true }]
+
+[[env.mainnet.durable_objects.bindings]]
+name = "PATROCINIO"
+class_name = "Patrocinio"
+
+# Explícita, aunque se heredaría: el objeto de mainnet nace con su SQLite propio.
+[[env.mainnet.migrations]]
+tag = "v1"
+new_sqlite_classes = ["Patrocinio"]
+
+[env.mainnet.vars]
+RED = "mainnet"
+# La patrocinadora de mainnet (O2), creada el 11 de noviembre de 2026: dos llaves, la fría de quien mantiene el
+# proyecto con peso 2 y la del Worker con peso 1 (README, «La llave acotada»). Vacía, el portero no paga nada.
+CUENTA_PATROCINADORA = "GAFEWZYBN2UNAEL7CSGEH24NCWUQLFTYM4YFWHNV5GISN7DJW36QLRYK"
+# Vacía a propósito: con ALTAS = "1" la puerta mira solo el libro de cuentas, no quién abrió la cuenta. Con ALTAS = "0"
+# y esta lista vacía, el portero de mainnet no le paga a nadie (es el corte de la hoja de operación).
+PATROCINADORES_APP = ""
+CUENTA_URL = ""
+# El libro, las rutas /v1/alta y la puerta del libro. Mientras el libro esté vacío, no pasa nadie.
+ALTAS = "1"
+# Las órdenes de pago nuevas y el sorteo del servidor, apagados hasta su prueba.
+ALTAS_PAGO = "0"
+SORTEO_SERVIDOR = "0"
+# El id de la app de mainnet en Pollar (público). Vacío, las rutas de altas no atienden.
+POLLAR_APP_ID = "cmw6osdl600080imq38rz1vvu"
+# "inmediato" hoy; "diferido" desde la fase 2a. Tiene que coincidir con lo que dice Pollar.
+POLLAR_FONDEO = "inmediato"
+# Las cuentas de cobros y la sorteadora (O2), cuando existan.
+CUENTA_COBROS = ""
+CUENTA_SORTEADORA = ""
+# producto:usdc:sorteos:dias. Mal escrito, no se vende nada.
+PRECIOS = "alta:2:3:365,p10:5:10:365,p50:20:50:365"
+# El piso de créditos de Pollar: 40 por sorteo mientras la persona firma el sorteo (20 con el sorteo del servidor) y
+# 30 por alta con la billetera creada al entrar (45 cuando se crea a pedido).
+CREDITOS_POR_SORTEO = "40"
+CREDITOS_POR_ALTA = "30"
+# Sellos oficiales por cuenta y por mes; en mainnet los sorteos del mes son tantos como los sellos.
+MAX_SELLOS_MES = "100"
+# Pagos por dirección y por hora (en testnet, 240): en un evento todo el stand sale por la misma wifi.
+POR_IP_POR_HORA = "600"
+# 15 XLM en 24 horas; el viernes se sube a 45 por la ruta de ajustes.
+TOPE_GENERAL_STROOPS = "150000000"
+# Lo guardado para el draw de cada sello: el de mainnet (unos 824.000 stroops) más la mitad.
+RESERVA_SORTEO_STROOPS = "1236000"

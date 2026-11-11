@@ -2,9 +2,13 @@
  * Lo que se configura del portero: los valores por defecto y cómo se leen de las
  * variables del Worker. Sin red ni objetos: lo usan el Worker, el objeto y las pruebas.
  *
- * Los secretos (`CLAVE_PATROCINADOR`, `ADMIN_TOKEN`) no se leen acá: los usa quien
- * los necesita, una sola vez.
+ * Los secretos (`CLAVE_PATROCINADOR`, `ADMIN_TOKEN`, `POLLAR_SECRETO`, `CUPONES_TOKEN`,
+ * `CUPON_SECRETO`, `CLAVE_SORTEADORA`) no se leen acá: los usa quien los necesita, una sola vez.
+ *
+ * Lo de las altas (el libro de cuentas, los cupones, el pago y el sorteo del servidor) nace
+ * apagado y vale solo en mainnet: en testnet sus variables se ignoran.
  */
+import { StrKey } from "@stellar/stellar-sdk/base";
 import deployments from "../../../src/stellar/deployments.json";
 import { leerCuentaUrl } from "./plan";
 
@@ -47,6 +51,36 @@ export interface Env {
   POR_IP_POR_HORA?: string;
   /** Con `1` el portero nace apagado, aunque el objeto diga otra cosa. */
   APAGADO?: string;
+
+  // ---------- las altas: solo en mainnet, y solo con un `1` ----------
+  /** Con `1`, el libro de cuentas, las rutas `/v1/alta` y la puerta que mira solo el libro. En testnet se ignora. */
+  ALTAS?: string;
+  /** Con `1` (y con `ALTAS`), las órdenes de pago nuevas. */
+  ALTAS_PAGO?: string;
+  /** Con `1` (y con `ALTAS`), el sorteo que manda el servidor (`/v1/sorteo`). */
+  SORTEO_SERVIDOR?: string;
+  /** El id de la app de mainnet en Pollar (es público). */
+  POLLAR_APP_ID?: string;
+  /** `inmediato` o `diferido`: cómo abre Pollar las cuentas. Tiene que coincidir con lo que dice Pollar. */
+  POLLAR_FONDEO?: string;
+  /** La cuenta (G…) que recibe los pagos. El Worker no tiene su llave. */
+  CUENTA_COBROS?: string;
+  /** La cuenta (G…) desde la que el servidor manda el `draw`. */
+  CUENTA_SORTEADORA?: string;
+  /** Los productos: `producto:usdc:sorteos:dias`, separados por coma (ver `leerPrecios`). */
+  PRECIOS?: string;
+  /** Lo que se guarda en créditos de Pollar por cada sorteo prometido, para el piso. */
+  CREDITOS_POR_SORTEO?: string;
+  /** Lo que se guarda en créditos de Pollar por cada alta autorizada sin activar, para el piso. */
+  CREDITOS_POR_ALTA?: string;
+  /** Secreto: la llave secreta de la app de mainnet en Pollar. */
+  POLLAR_SECRETO?: string;
+  /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
+  CUPONES_TOKEN?: string;
+  /** Secreto: con qué se calcula la huella de un cupón (32 bytes al azar). Rotarlo anula los cupones vivos. */
+  CUPON_SECRETO?: string;
+  /** Secreto: la llave de la cuenta sorteadora. */
+  CLAVE_SORTEADORA?: string;
 }
 
 export type NombreRed = "testnet" | "mainnet";
@@ -59,7 +93,7 @@ export interface Config {
   rpcUrls: string[];
   maxSellos: number;
   maxSellosVerificada: number;
-  /** Los sorteos de un mes por cuenta: el doble de sus sellos. Sortear no se frena por el cupo de sellos. */
+  /** Los sorteos de un mes por cuenta: en testnet, el doble de sus sellos; en mainnet, tantos como sus sellos (`sorteosDelMes`). */
   maxSorteos: number;
   maxSorteosVerificada: number;
   verificadas: Set<string>;
@@ -84,6 +118,81 @@ export interface Config {
   ventanaMaxS: number;
   porIpPorHora: number;
   apagadoPorVariable: boolean;
+
+  // ---------- las altas (siempre apagadas fuera de mainnet) ----------
+  /** El libro de cuentas, las rutas `/v1/alta` y la puerta del libro: solo en mainnet con `ALTAS=1`. */
+  altas: boolean;
+  /** Órdenes de pago nuevas: con `altas`, `ALTAS_PAGO=1`, precios bien escritos y la cuenta de cobros. */
+  altasPago: boolean;
+  /** El sorteo del servidor: con `altas`, `SORTEO_SERVIDOR=1` y la cuenta sorteadora. */
+  sorteoServidor: boolean;
+  pollarAppId: string | null;
+  /** null si `POLLAR_FONDEO` está mal escrito: no se adivina. */
+  pollarFondeo: Fondeo | null;
+  cuentaCobros: string | null;
+  cuentaSorteadora: string | null;
+  /** null si `PRECIOS` está mal escrito: entonces no se vende nada. */
+  precios: Producto[] | null;
+  creditosPorSorteo: number;
+  creditosPorAlta: number;
+  /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
+  faltaAltas: string[];
+}
+
+export type Fondeo = "inmediato" | "diferido";
+export type IdProducto = "alta" | "p10" | "p50";
+
+export interface Producto {
+  id: IdProducto;
+  /** El monto como se escribió (`"2"`, `"1.5"`), para mostrarlo. */
+  usdc: string;
+  /** El monto en diezmillonésimas de USDC (7 decimales, como la red). */
+  monto: number;
+  sorteos: number;
+  dias: number;
+}
+
+/** Los precios del diseño: el primer paquete trae el alta; después, 10 o 50 sorteos. */
+export const PRECIOS_POR_DEFECTO = "alta:2:3:365,p10:5:10:365,p50:20:50:365";
+const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50"];
+/** Lo más que se acepta en un producto: un número más grande es un error de tipeo, no un precio. */
+const MAX_SORTEOS_PRODUCTO = 1000;
+const MAX_DIAS_PRODUCTO = 3650;
+
+/**
+ * Lee `PRECIOS`: `producto:usdc:sorteos:dias` separados por coma, por ejemplo `alta:2:3:365,p10:5:10:365`.
+ * El producto es `alta`, `p10` o `p50`, sin repetir, y `alta` tiene que estar. El monto es positivo, con punto y
+ * hasta 7 decimales. Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza
+ * todo** (devuelve null): un precio a medias no se vende.
+ */
+export function leerPrecios(s: string): Producto[] | null {
+  const productos: Producto[] = [];
+  for (const parte of s.split(",")) {
+    const campos = parte.trim().split(":");
+    if (campos.length !== 4) return null;
+    const [id, usdc, sorteos, dias] = campos as [string, string, string, string];
+    if (!(PRODUCTOS as readonly string[]).includes(id) || productos.some((p) => p.id === id)) return null;
+    const m = /^(\d{1,6})(?:\.(\d{1,7}))?$/.exec(usdc);
+    if (!m?.[1]) return null;
+    const monto = Number(m[1]) * 10_000_000 + Number((m[2] ?? "").padEnd(7, "0"));
+    if (!/^\d{1,4}$/.test(sorteos) || !/^\d{1,4}$/.test(dias)) return null;
+    const ns = Number(sorteos);
+    const nd = Number(dias);
+    if (monto <= 0 || ns < 1 || ns > MAX_SORTEOS_PRODUCTO || nd < 1 || nd > MAX_DIAS_PRODUCTO) return null;
+    productos.push({ id: id as IdProducto, usdc, monto, sorteos: ns, dias: nd });
+  }
+  return productos.some((p) => p.id === "alta") ? productos : null;
+}
+
+/** Una cuenta G… con su suma de control, o null. */
+function cuentaG(s: string | undefined): string | null {
+  const g = (s ?? "").trim();
+  return g && StrKey.isValidEd25519PublicKey(g) ? g : null;
+}
+
+/** Los sorteos de un mes: en mainnet, tantos como los sellos; en testnet, el doble (sortear no se frena por el cupo de sellos). */
+export function sorteosDelMes(red: NombreRed, sellos: number): number {
+  return red === "mainnet" ? sellos : sellos * 2;
 }
 
 /** El patrocinador que Pollar usa en testnet (medido el 20 de octubre de 2026: `num_sponsored = 2`). */
@@ -134,6 +243,25 @@ export function leerConfig(env: Partial<Env>): Config {
   const maxSellos = entero(env.MAX_SELLOS_MES, 20);
   const maxSellosVerificada = entero(env.MAX_SELLOS_VERIFICADA, 50);
   const rpcUrls = lista(env.RPC_URLS);
+  const enMainnet = red === "mainnet";
+  // Solo un "1" prende, y solo en mainnet. En testnet todo esto se ignora.
+  const prende = (v: string | undefined) => enMainnet && v === "1";
+  const altas = prende(env.ALTAS);
+  const pideCobros = altas && prende(env.ALTAS_PAGO);
+  const pideSorteo = altas && prende(env.SORTEO_SERVIDOR);
+  const appId = (env.POLLAR_APP_ID ?? "").trim();
+  const pollarAppId = enMainnet && /^[A-Za-z0-9_-]{1,128}$/.test(appId) ? appId : null;
+  const fondeo = (env.POLLAR_FONDEO ?? "").trim();
+  const pollarFondeo: Fondeo | null = !enMainnet || fondeo === "" || fondeo === "inmediato" ? "inmediato" : fondeo === "diferido" ? "diferido" : null;
+  const precios = leerPrecios((env.PRECIOS ?? "").trim() || PRECIOS_POR_DEFECTO);
+  const cuentaCobros = enMainnet ? cuentaG(env.CUENTA_COBROS) : null;
+  const cuentaSorteadora = enMainnet ? cuentaG(env.CUENTA_SORTEADORA) : null;
+  const faltaAltas: string[] = [];
+  if (altas && !pollarAppId) faltaAltas.push("pollar-app");
+  if (altas && !pollarFondeo) faltaAltas.push("pollar-fondeo");
+  if (pideCobros && !precios) faltaAltas.push("precios");
+  if (pideCobros && !cuentaCobros) faltaAltas.push("cuenta-cobros");
+  if (pideSorteo && !cuentaSorteadora) faltaAltas.push("cuenta-sorteadora");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
@@ -141,8 +269,8 @@ export function leerConfig(env: Partial<Env>): Config {
     rpcUrls: rpcUrls.length ? rpcUrls : RPC_POR_DEFECTO[red],
     maxSellos,
     maxSellosVerificada,
-    maxSorteos: maxSellos * 2,
-    maxSorteosVerificada: maxSellosVerificada * 2,
+    maxSorteos: sorteosDelMes(red, maxSellos),
+    maxSorteosVerificada: sorteosDelMes(red, maxSellosVerificada),
     verificadas: new Set(lista(env.CUENTAS_VERIFICADAS)),
     cuentaUrl: leerCuentaUrl(env.CUENTA_URL),
     // Una cuenta de prueba salta el control de "la abrió nuestra app": en mainnet no existe esa puerta, aunque la variable esté puesta.
@@ -157,6 +285,17 @@ export function leerConfig(env: Partial<Env>): Config {
     ventanaMaxS: entero(env.VENTANA_MAX_S, 300),
     porIpPorHora: entero(env.POR_IP_POR_HORA, 240),
     apagadoPorVariable: env.APAGADO === "1",
+    altas,
+    altasPago: pideCobros && precios !== null && cuentaCobros !== null,
+    sorteoServidor: pideSorteo && cuentaSorteadora !== null,
+    pollarAppId,
+    pollarFondeo,
+    cuentaCobros,
+    cuentaSorteadora,
+    precios,
+    creditosPorSorteo: entero(env.CREDITOS_POR_SORTEO, 40),
+    creditosPorAlta: entero(env.CREDITOS_POR_ALTA, 30),
+    faltaAltas,
   };
 }
 

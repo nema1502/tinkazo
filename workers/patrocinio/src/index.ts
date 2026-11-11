@@ -12,31 +12,44 @@
  *        403 {motivo:"cuenta-ajena"|"origen"}   502 {motivo:"red"}
  *   GET  /v1/patrocinio/cupo?cuenta=G…   lo que queda, si está prendido y quién rige (portero o pollar)
  *
+ * Solo en mainnet con ALTAS=1, con la sesión de Pollar (Authorization: Bearer <token>), ver `rutas-altas.ts`:
+ *   POST /v1/alta/estado   POST /v1/alta/cupon
+ *
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
  *   GET  /v1/patrocinio/estado                         GET /v1/patrocinio/exportar
+ *
+ * Solo en mainnet con ALTAS=1, con dos claves, ver `admin.ts`: cupones y altas a mano con CUPONES_TOKEN,
+ * y pausar o reanudar las altas con ADMIN_TOKEN:
+ *   POST|GET /v1/admin/cupones   POST /v1/admin/cupones/anular   POST /v1/admin/altas   POST /v1/admin/altas/pausar | reanudar
  *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
  */
 import { DurableObject } from "cloudflare:workers";
+import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
+import { Altas } from "./altas";
+import { registrador } from "./registrador";
 import { type Env, leerConfig } from "./config";
-import { Cupos } from "./cupos";
+import { Cupos, type Sql } from "./cupos";
+import { cors, json, origenPermitido } from "./http";
 import { Planes } from "./plan";
+import { pollarDe } from "./pollar";
 import { PorIp } from "./por-ip";
 import { RpcRed } from "./red";
+import { type AccionAlta, type PedidoAlta, PuertaAltas, atenderAlta, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
 
-/** El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres ni llaves. */
-function registrar(evento: string, datos: Record<string, string | number> = {}): void {
-  (evento.startsWith("error-") ? console.error : console.log)(JSON.stringify({ evento, ...datos }));
-}
+/**
+ * El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres,
+ * llaves, el id de Pollar, tokens, correos, códigos ni cuentas: `registrador.ts` lo tapa por si algo se escapa.
+ */
+const registrar = registrador();
 
 /** Lo más que se acepta de cuerpo: una transacción firmada de `seal` pesa unos 2 KB. */
 const MAX_CUERPO = 8 * 1024;
 const ADMIN_MINIMO = 32;
 const ALARMA_MS = 20_000;
-const SITIO = "https://tinkazo.app";
 
 interface EnvPortero extends Env {
   /** La cuenta patrocinadora (G…): la que paga y reparte el peso de sus llaves. Pública. */
@@ -45,12 +58,21 @@ interface EnvPortero extends Env {
 
 export class Patrocinio extends DurableObject<EnvPortero> {
   private cupos: Cupos;
+  private sql: Sql;
   private portero: Portero | null = null;
   private firmante: Firmante | null = null;
+  /** Las rutas de altas: solo en mainnet. Sin la llave de Pollar o el secreto de los cupones, contestan `503 apagado`. */
+  private puerta: PuertaAltas | null = null;
+  /** La administración de las altas: solo en mainnet. */
+  private administracion: Administracion | null = null;
+  private exportaAltas = false;
 
   constructor(ctx: DurableObjectState, env: EnvPortero) {
     super(ctx, env);
-    this.cupos = new Cupos(ctx.storage.sql);
+    const sql = ctx.storage.sql;
+    // Lo que vale plata se escribe todo o nada: `transactionSync` del objeto.
+    this.sql = { exec: (consulta, ...enlaces) => sql.exec(consulta, ...enlaces), transaccion: (fn) => ctx.storage.transactionSync(fn) };
+    this.cupos = new Cupos(this.sql);
   }
 
   private async obtener(): Promise<Portero> {
@@ -68,9 +90,24 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     // El plan del equipo sube el cupo: sin `CUENTA_URL` no se pregunta nada. Una dirección mal escrita se avisa y se ignora (no apaga al portero).
     if ((this.env.CUENTA_URL ?? "").trim() && !cfg.cuentaUrl) console.error(JSON.stringify({ evento: "error-config", falta: ["cuenta-url"] }));
     const planes = cfg.cuentaUrl ? new Planes(cfg.cuentaUrl, (...a: Parameters<typeof fetch>) => fetch(...a), () => Date.now(), registrar) : null;
-    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes);
+    const red = new RpcRed(cfg.rpcUrls);
+    this.portero = new Portero(cfg, this.cupos, red, this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes);
+    if (cfg.red === "mainnet") {
+      // El último saldo de créditos vive en los ajustes: si el objeto arranca de nuevo con Pollar caído, sigue valiendo sus 10 minutos.
+      const pollar = pollarDe({ secreto: this.env.POLLAR_SECRETO, appId: cfg.pollarAppId, fetch: (u, i) => fetch(u, i), registrar, memoriaCreditos: memoriaEnAjustes(this.cupos) });
+      const altas = new Altas(this.sql, this.cupos);
+      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar });
+      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar });
+      this.exportaAltas = true;
+      if (cfg.altas && (this.env.CUPONES_TOKEN ?? "").length >= 32 && this.env.CUPONES_TOKEN === this.env.ADMIN_TOKEN) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
+      // Los secretos que faltan para las altas (nombres fijos, sin valores): las rutas dan 503 apagado hasta cargarlos.
+      const faltaSecretos = [...(cfg.altas && !pollar ? ["pollar-llave"] : []), ...(cfg.altas && (this.env.CUPON_SECRETO ?? "").length < 32 ? ["cupon-secreto"] : [])];
+      if (faltaSecretos.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: faltaSecretos }));
+    }
     const falta = this.portero.faltaDeConfig();
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
+    // Lo que se prendió de las altas y no se puede usar (nombres fijos, sin valores): no apaga al portero, solo eso.
+    if (cfg.faltaAltas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: cfg.faltaAltas }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
     if (this.cupos.enElAire() > 0) await this.programar();
     return this.portero;
@@ -93,6 +130,31 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     return (await this.obtener()).cupoDe(cuenta);
   }
 
+  /** Las rutas `/v1/alta/*` (solo mainnet). */
+  async alta(accion: AccionAlta, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atender(accion, pedido);
+    } catch (e) {
+      // Solo el nombre del error: el mensaje podría llevar algo del pedido.
+      registrar("error-interno", { donde: "alta", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas `/v1/admin/*` (solo mainnet): cupones, altas a mano y la pausa. La clave ya la miró el Worker. */
+  async adminAltas(accion: AccionAdmin, datos: unknown): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.administracion) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.administracion.atender(accion, datos);
+    } catch (e) {
+      registrar("error-interno", { donde: "admin", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
   async administrar(accion: string, datos?: { clave?: string; valor?: number }): Promise<Respuesta> {
     const p = await this.obtener();
     switch (accion) {
@@ -107,10 +169,15 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         return { estado: 200, cuerpo: { modo: p.modo() } };
       case "ajustes":
         return p.ajustar(String(datos?.clave), Number(datos?.valor)) ? { estado: 200, cuerpo: { ok: true } } : { estado: 400, cuerpo: { motivo: "ajuste" } };
-      case "estado":
-        return p.estado();
+      case "estado": {
+        // En mainnet con las altas, también el saldo de créditos de Pollar y el piso.
+        // Y las altas de 24 horas y los cupones de hoy.
+        const e = await p.estado();
+        return this.puerta ? { ...e, cuerpo: { ...e.cuerpo, ...(await this.puerta.resumen()), ...(this.administracion?.resumen() ?? {}) } } : e;
+      }
       case "exportar":
-        return { estado: 200, cuerpo: { exportado: Date.now(), tablas: this.cupos.exportar() } };
+        // En mainnet, también las tablas de las altas.
+        return { estado: 200, cuerpo: { exportado: Date.now(), tablas: this.cupos.exportar(this.exportaAltas) } };
       default:
         return { estado: 404, cuerpo: { motivo: "accion" } };
     }
@@ -124,27 +191,8 @@ const cupoPorIp = new PorIp();
 const pagoPorIp = new PorIp();
 /** Consultas de cupo por dirección y por hora. */
 const CUPO_POR_HORA = 600;
-
-function origenPermitido(origen: string | null): boolean {
-  if (!origen) return false;
-  if (origen === SITIO || origen === "https://www.tinkazo.app") return true;
-  if (/^https:\/\/tinkazo(-[a-z0-9-]+)?\.vercel\.app$/.test(origen)) return true;
-  return /^http:\/\/localhost:\d{2,5}$/.test(origen);
-}
-
-function json(cuerpo: unknown, estado: number, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(cuerpo), { status: estado, headers: { "Content-Type": "application/json; charset=utf-8", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", ...extra } });
-}
-
-function cors(origen: string | null, abierto: boolean): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": abierto ? "*" : origenPermitido(origen) && origen ? origen : "null",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400",
-    Vary: "Origin",
-  };
-}
+/** Los pedidos a `/v1/alta/*`, con su propio contador. */
+const altaPorIp = new PorIp();
 
 /** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
 async function esAdmin(dado: string, env: Env): Promise<boolean> {
@@ -160,6 +208,18 @@ export default {
     const url = new URL(request.url);
     const origen = request.headers.get("Origin");
     const objeto = env.PATROCINIO.get(env.PATROCINIO.idFromName(env.RED === "mainnet" ? "mainnet" : "testnet")) as unknown as DurableObjectStub<Patrocinio>;
+
+    // Las rutas de altas existen solo en mainnet; en testnet siguen sin existir, como siempre.
+    if (url.pathname.startsWith("/v1/alta/") && env.RED === "mainnet") {
+      const r = await atenderAlta(request, leerConfig(env), (accion, pedido) => objeto.alta(accion, pedido), altaPorIp);
+      if (r) return r;
+    }
+
+    // La administración de las altas, también solo en mainnet: en testnet `/v1/admin/` sigue sin existir.
+    if (url.pathname.startsWith("/v1/admin/") && env.RED === "mainnet") {
+      const r = await atenderAdmin(request, env, leerConfig(env), (accion, datos) => objeto.adminAltas(accion, datos));
+      if (r) return r;
+    }
 
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origen, url.pathname.endsWith("/cupo")) });
 

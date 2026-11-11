@@ -30,6 +30,8 @@ export interface Variante {
   sinDatos?: boolean;
   raffleId?: bigint;
   hashLista?: Uint8Array;
+  /** Los ganadores del `seal` (`num_winners`); por defecto 1. */
+  ganadores?: number;
   /** Un memo de texto (la lista blanca no admite ninguno). */
   memo?: string;
   /** Argumentos a mano, en lugar de los del método. */
@@ -44,7 +46,7 @@ function argumentos(v: Variante): xdr.ScVal[] {
       new Address(v.organizador ?? v.firmante.publicKey()).toScVal(),
       nativeToScVal(v.hashLista ?? new Uint8Array(32).fill(7), { type: "bytes" }),
       nativeToScVal(5, { type: "u32" }),
-      nativeToScVal(1, { type: "u32" }),
+      nativeToScVal(v.ganadores ?? 1, { type: "u32" }),
       nativeToScVal(99n, { type: "u64" }),
       nativeToScVal("prueba", { type: "string" }),
     ];

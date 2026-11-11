@@ -938,3 +938,323 @@ describe("el plan del equipo sube el cupo", () => {
     expect((await sello(org, 3)).estado).toBe(503);
   });
 });
+
+describe("mainnet: los sorteos del mes son tantos como los sellos", () => {
+  /** Un portero de mainnet con el contrato y la frase de testnet, para poder firmar con llaves de prueba. */
+  const deMainnet = async (env: Parameters<typeof leerConfig>[0]) => {
+    const cfg = { ...leerConfig({ RED: "mainnet", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+    return new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+  };
+
+  it("con MAX_SELLOS_MES=100, /cupo dice 100 sorteos y no 200; con el ajuste, los sorteos lo siguen", async () => {
+    const org = Keypair.random();
+    const m = await deMainnet({ MAX_SELLOS_MES: "100" });
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ red: "mainnet", sellos: { max: 100 }, sorteos: { max: 100 } });
+    m.ajustar("max_sellos_mes", 30);
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 30 }, sorteos: { max: 30 } });
+  });
+
+  it("el sorteo 3 de una cuenta con 2 sellos por mes da 429", async () => {
+    const mia = Keypair.random();
+    const org = Keypair.random();
+    abre(org, mia.publicKey());
+    const m = await deMainnet({ MAX_SELLOS_MES: "2", PATROCINADORES_APP: mia.publicKey() });
+    const sorteo = (i: number) => m.procesar(tx({ firmante: org, metodo: "draw", raffleId: BigInt(i) }).xdr);
+    expect((await sorteo(1)).estado).toBe(200);
+    expect((await sorteo(2)).estado).toBe(200);
+    expect(await sorteo(3)).toMatchObject({ estado: 429, cuerpo: { motivo: "cupo-cuenta", que: "sorteos", max: 2 } });
+  });
+});
+
+describe("mainnet con ALTAS=1: la puerta mira solo el libro", () => {
+  /** Un portero de mainnet con el contrato y la frase de testnet, para poder firmar con llaves de prueba. */
+  const deMainnet = async (env: Parameters<typeof leerConfig>[0]) => {
+    const cfg = { ...leerConfig({ RED: "mainnet", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+    return new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+  };
+  const fondoDePollar = Keypair.random();
+  /** Desde que cada sello gasta sorteos oficiales, una admitida que sella tiene que tener alguno. */
+  const dar = (k: Keypair, sorteos = 3) => cupos.otorgar({ usuario: `cuenta:${k.publicKey()}`, cuenta: k.publicKey(), origen: "admin", ref: `admin:${k.publicKey()}`, sorteos, dias: 60 }, ahora);
+
+  it("una cuenta con la reserva del fondo de Pollar y sin alta da 403, sin simular ni recordarla", async () => {
+    const org = Keypair.random();
+    abre(org, fondoDePollar.publicKey());
+    const m = await deMainnet({ ALTAS: "1", PATROCINADORES_APP: fondoDePollar.publicKey() });
+    expect(await m.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 403, cuerpo: { motivo: "cuenta-ajena" } });
+    expect(await m.procesar(tx({ firmante: org, metodo: "draw", raffleId: 7n }).xdr)).toMatchObject({ estado: 403, cuerpo: { motivo: "cuenta-ajena" } });
+    expect(red.simulados).toBe(0);
+    expect(red.enviados).toHaveLength(0);
+    expect(cupos.cuentaConocida(org.publicKey())).toBe(false);
+    expect(cupos.consultar(org.publicKey(), ahora, { maxSellos: 100, maxSorteos: 100 })).toMatchObject({ sellos: 0, sorteos: 0 });
+  });
+
+  it("una cuenta vista antes y sin alta da 403", async () => {
+    const org = Keypair.random();
+    abre(org, fondoDePollar.publicKey());
+    cupos.recordarCuenta(org.publicKey(), ahora);
+    const m = await deMainnet({ ALTAS: "1", PATROCINADORES_APP: fondoDePollar.publicKey() });
+    expect(await m.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 403, cuerpo: { motivo: "cuenta-ajena" } });
+    expect(red.enviados).toHaveLength(0);
+  });
+
+  it("una admitida pasa, abra quien abra su cuenta, y sin la lista de billeteras de la app", async () => {
+    const org = Keypair.random();
+    const propia = Keypair.random();
+    abre(org, fondoDePollar.publicKey());
+    abre(propia, null);
+    cupos.admitir(org.publicKey(), "cupon", ahora);
+    cupos.admitir(propia.publicKey(), "admin", ahora);
+    dar(org);
+    dar(propia);
+    const m = await deMainnet({ ALTAS: "1" });
+    expect(m.faltaDeConfig()).toEqual([]);
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ prendido: true, rige: "portero", red: "mainnet" });
+    expect(await m.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+    expect((await m.procesar(tx({ firmante: propia }).xdr)).estado).toBe(200);
+    expect((await m.procesar(tx({ firmante: org, metodo: "draw", raffleId: 3n }).xdr)).estado).toBe(200);
+    expect(red.enviados).toHaveLength(3);
+  });
+
+  it("lo de siempre sigue valiendo para la admitida: apagado, el tope del mes y el general", async () => {
+    const org = Keypair.random();
+    abre(org, null);
+    cupos.admitir(org.publicKey(), "pago", ahora);
+    dar(org);
+    const m = await deMainnet({ ALTAS: "1", MAX_SELLOS_MES: "1" });
+    m.poner("apagado");
+    expect((await m.procesar(tx({ firmante: org }).xdr)).estado).toBe(503);
+    m.poner("portero");
+    expect((await m.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect(await m.procesar(tx({ firmante: org, hashLista: new Uint8Array(32).fill(9) }).xdr)).toMatchObject({ estado: 429, cuerpo: { motivo: "cupo-cuenta", que: "sellos" } });
+  });
+
+  it("con ALTAS apagado mainnet hace lo de hoy: la billetera de la app abre la puerta y el libro no hace falta", async () => {
+    const org = Keypair.random();
+    abre(org, fondoDePollar.publicKey());
+    const m = await deMainnet({ ALTAS: "0", PATROCINADORES_APP: fondoDePollar.publicKey() });
+    expect((await m.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect(cupos.cuentaConocida(org.publicKey())).toBe(true);
+    expect(cupos.estaEnElLibro(org.publicKey())).toBe(false);
+    // Y sin la lista, como hoy, falta la configuración.
+    expect((await deMainnet({ ALTAS: "0" })).faltaDeConfig()).toEqual(["billeteras-de-la-app"]);
+  });
+
+  it("ALTAS=0 con la lista vacía es el corte: ni las cuentas que ya estaban en el libro pasan", async () => {
+    const org = Keypair.random();
+    abre(org, null);
+    cupos.admitir(org.publicKey(), "cupon", ahora);
+    dar(org);
+    const prendido = await deMainnet({ ALTAS: "1" });
+    expect((await prendido.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    const corte = await deMainnet({ ALTAS: "0" });
+    expect(await corte.procesar(tx({ firmante: org, hashLista: new Uint8Array(32).fill(4) }).xdr)).toMatchObject({ estado: 403, cuerpo: { motivo: "cuenta-ajena" } });
+    expect(red.enviados).toHaveLength(1);
+    expect(cupos.estaEnElLibro(org.publicKey())).toBe(true);
+  });
+
+  it("en testnet ALTAS se ignora: una cuenta de la app sin alta pasa como hoy", async () => {
+    const org = Keypair.random();
+    abre(org);
+    await montar({ ALTAS: "1" });
+    abre(org);
+    expect((await p.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect(cupos.estaEnElLibro(org.publicKey())).toBe(false);
+  });
+});
+
+describe("mainnet con ALTAS=1: cada sello gasta sorteos oficiales", () => {
+  const deMainnet = async (env: Parameters<typeof leerConfig>[0] = {}) => {
+    const cfg = { ...leerConfig({ RED: "mainnet", ALTAS: "1", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+    return new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+  };
+  /** Una cuenta del libro con `sorteos` sorteos oficiales para 60 días. */
+  const admitida = (sorteos: number) => {
+    const k = Keypair.random();
+    abre(k, null);
+    cupos.admitir(k.publicKey(), "cupon", ahora);
+    if (sorteos > 0) cupos.otorgar({ usuario: `u-${k.publicKey()}`, cuenta: k.publicKey(), origen: "cupon", ref: `cupon:h:${k.publicKey()}`, sorteos, dias: 60 }, ahora);
+    return k;
+  };
+  const lista = (i: number) => new Uint8Array(32).fill(i);
+  const quedan = (k: Keypair) => cupos.quedan({ cuenta: k.publicKey() }, ahora).quedan;
+
+  it("del libro y sin sorteos da 402 sin-sorteos: no se manda nada ni se cuenta el mes", async () => {
+    const org = admitida(0);
+    const m = await deMainnet();
+    expect(await m.procesar(tx({ firmante: org }).xdr)).toEqual({ estado: 402, cuerpo: { motivo: "sin-sorteos", vencieron: 0 } });
+    expect(red.enviados).toHaveLength(0);
+    expect(cupos.consultar(org.publicKey(), ahora, { maxSellos: 100, maxSorteos: 100 }).sellos).toBe(0);
+  });
+
+  it("con uno, sella una vez y la segunda da 402; el mismo sello reenviado no gasta otro", async () => {
+    const org = admitida(1);
+    const m = await deMainnet();
+    const t = tx({ firmante: org, hashLista: lista(1) });
+    expect((await m.procesar(t.xdr)).estado).toBe(200);
+    expect((await m.procesar(t.xdr)).estado).toBe(200);
+    expect(quedan(org)).toBe(0);
+    expect(await m.procesar(tx({ firmante: org, hashLista: lista(2) }).xdr)).toMatchObject({ estado: 402, cuerpo: { motivo: "sin-sorteos" } });
+    expect(red.enviados).toHaveLength(2);
+  });
+
+  it("los vencidos no alcanzan, y la respuesta dice cuántos vencieron", async () => {
+    const org = admitida(0);
+    // Se le dieron hace 61 días, para 60: vencieron.
+    cupos.otorgar({ usuario: "u", cuenta: org.publicKey(), origen: "cupon", ref: "cupon:viejo", sorteos: 3, dias: 60 }, ahora - 61 * 86_400_000);
+    const m = await deMainnet();
+    expect(await m.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 402, cuerpo: { motivo: "sin-sorteos", vencieron: 3 } });
+  });
+
+  it("con 60 ganadores gasta dos: con uno solo da 402 y con dos pasa", async () => {
+    const org = admitida(1);
+    const m = await deMainnet();
+    expect((await m.procesar(tx({ firmante: org, ganadores: 60 }).xdr)).estado).toBe(402);
+    cupos.otorgar({ usuario: "u", cuenta: org.publicKey(), origen: "admin", ref: "admin:otro", sorteos: 1, dias: 60 }, ahora);
+    expect((await m.procesar(tx({ firmante: org, ganadores: 60, hashLista: lista(3) }).xdr)).estado).toBe(200);
+    expect(quedan(org)).toBe(0);
+  });
+
+  it("si la red lo rechaza sin que entre, el sorteo vuelve", async () => {
+    const org = admitida(1);
+    const m = await deMainnet();
+    red.envio = { status: "ERROR", codigo: "txBadSeq" };
+    expect((await m.procesar(tx({ firmante: org }).xdr)).estado).toBe(400);
+    expect(quedan(org)).toBe(1);
+  });
+
+  it("un draw no gasta sorteos oficiales: pasa aunque no le quede ninguno", async () => {
+    const org = admitida(0);
+    const m = await deMainnet();
+    expect((await m.procesar(tx({ firmante: org, metodo: "draw", raffleId: 5n }).xdr)).estado).toBe(200);
+    expect(red.enviados).toHaveLength(1);
+  });
+
+  it("treinta sellos a la vez con cinco sorteos: pasan cinco y los demás dan 402", async () => {
+    const org = admitida(5);
+    const m = await deMainnet();
+    const res = await Promise.all(Array.from({ length: 30 }, (_, i) => m.procesar(tx({ firmante: org, hashLista: lista(i + 10) }).xdr)));
+    expect(res.filter((x) => x.estado === 200)).toHaveLength(5);
+    expect(res.filter((x) => x.estado === 402)).toHaveLength(25);
+    expect(red.enviados).toHaveLength(5);
+    expect(quedan(org)).toBe(0);
+  });
+
+  it("en testnet nada de esto: un sello pasa sin derechos, como hoy", async () => {
+    const org = Keypair.random();
+    abre(org);
+    await montar({ ALTAS: "1" });
+    abre(org);
+    expect((await p.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect(cupos.quedan({ cuenta: org.publicKey() }, ahora).quedan).toBe(0);
+  });
+});
+
+describe("mainnet con ALTAS=1: /cupo suma oficial", () => {
+  /** Con el tope del mes de mainnet (`MAX_SELLOS_MES = 100`). */
+  const deMainnet = async (env: Parameters<typeof leerConfig>[0] = {}) => {
+    const cfg = { ...leerConfig({ RED: "mainnet", ALTAS: "1", MAX_SELLOS_MES: "100", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+    return new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+  };
+  const DIA = 86_400_000;
+
+  it("del libro: acceso, los sorteos que quedan con el próximo vencimiento, y sellos.quedan es el menor", async () => {
+    const org = Keypair.random();
+    abre(org, null);
+    cupos.admitir(org.publicKey(), "cupon", ahora);
+    cupos.otorgar({ usuario: "u", cuenta: org.publicKey(), origen: "cupon", ref: "cupon:a", sorteos: 3, dias: 60 }, ahora);
+    cupos.otorgar({ usuario: "u", cuenta: org.publicKey(), origen: "admin", ref: "admin:b", sorteos: 10, dias: 365 }, ahora);
+    const m = await deMainnet();
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({
+      prendido: true,
+      sellos: { usados: 0, max: 100, quedan: 13 },
+      oficial: { acceso: true, sorteos: { quedan: 13, proximoVence: { fecha: ahora + 60 * DIA, cuantos: 3 } } },
+    });
+    // Con el tope del mes más bajo que los sorteos, manda el mes.
+    m.ajustar("max_sellos_mes", 5);
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 5, quedan: 5 }, oficial: { sorteos: { quedan: 13 } } });
+    // Un sello gasta uno.
+    expect((await m.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { usados: 1, quedan: 4 }, oficial: { sorteos: { quedan: 12 } } });
+  });
+
+  it("del libro sin sorteos, o con los suyos vencidos: acceso y quedan 0", async () => {
+    const org = Keypair.random();
+    cupos.admitir(org.publicKey(), "cupon", ahora);
+    cupos.otorgar({ usuario: "u", cuenta: org.publicKey(), origen: "cupon", ref: "cupon:viejo", sorteos: 3, dias: 60 }, ahora - 61 * DIA);
+    const m = await deMainnet();
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { quedan: 0 }, oficial: { acceso: true, sorteos: { quedan: 0, proximoVence: null } } });
+  });
+
+  it("fuera del libro: sin acceso, sin sorteos y sellos.quedan 0, aunque tenga cupo del mes", async () => {
+    const org = Keypair.random();
+    cupos.recordarCuenta(org.publicKey(), ahora);
+    const m = await deMainnet();
+    expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ sellos: { max: 100, quedan: 0 }, oficial: { acceso: false, sorteos: null } });
+  });
+
+  it("con ALTAS=0 en mainnet, y en testnet aunque diga ALTAS=1, /cupo sigue como hoy: sin oficial", async () => {
+    const org = Keypair.random();
+    cupos.admitir(org.publicKey(), "cupon", ahora);
+    const sinAltas = await deMainnet({ ALTAS: "0" });
+    const a = (await sinAltas.cupoDe(org.publicKey())).cuerpo;
+    expect(a).not.toHaveProperty("oficial");
+    expect(a).toMatchObject({ sellos: { quedan: 100 } });
+    await montar({ ALTAS: "1" });
+    const b = (await p.cupoDe(org.publicKey())).cuerpo;
+    expect(b).not.toHaveProperty("oficial");
+    expect(b).toMatchObject({ sellos: { max: 20, quedan: 20 }, sorteos: { max: 40 } });
+  });
+});
+
+describe("mainnet con ALTAS=1: cada sello que paga el portero queda en sellos_portero", () => {
+  const deMainnet = async (env: Parameters<typeof leerConfig>[0] = {}) => {
+    const cfg = { ...leerConfig({ RED: "mainnet", ALTAS: "1", ...env }), contractId: CONTRATO, passphrase: Networks.TESTNET };
+    return new Portero(cfg, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+  };
+  const admitida = (sorteos = 3) => {
+    const k = Keypair.random();
+    abre(k, null);
+    cupos.admitir(k.publicKey(), "cupon", ahora);
+    cupos.otorgar({ usuario: `u-${k.publicKey()}`, cuenta: k.publicKey(), origen: "cupon", ref: `cupon:h:${k.publicKey()}`, sorteos, dias: 60 }, ahora);
+    return k;
+  };
+  const filas = () => cupos.exportar(true).sellos_portero ?? [];
+  const lista = new Uint8Array(32).fill(0xab);
+
+  it("anota el organizador, la huella de la lista y la ronda; reenviado, una fila; el draw no anota", async () => {
+    const org = admitida();
+    const m = await deMainnet();
+    const t = tx({ firmante: org, hashLista: lista });
+    expect((await m.procesar(t.xdr)).estado).toBe(200);
+    expect((await m.procesar(t.xdr)).estado).toBe(200);
+    expect((await m.procesar(tx({ firmante: org, metodo: "draw", raffleId: 4n }).xdr)).estado).toBe(200);
+    expect(filas()).toEqual([{ hash: t.hash, organizador: org.publicKey(), huella_lista: "ab".repeat(32), ronda: 99, ms: ahora }]);
+  });
+
+  it("lo que no se paga no se anota: sin sorteos, y si la red lo rechaza sin que entre se borra", async () => {
+    const sin = admitida(1);
+    const m = await deMainnet();
+    expect((await m.procesar(tx({ firmante: sin, hashLista: lista }).xdr)).estado).toBe(200);
+    expect(await m.procesar(tx({ firmante: sin, hashLista: new Uint8Array(32).fill(1) }).xdr)).toMatchObject({ estado: 402 });
+    expect(filas()).toHaveLength(1);
+    const org = admitida();
+    red.envio = { status: "ERROR", codigo: "txBadSeq" };
+    expect((await m.procesar(tx({ firmante: org, hashLista: lista }).xdr)).estado).toBe(400);
+    expect(filas().map((f) => f.organizador)).toEqual([sin.publicKey()]);
+  });
+
+  it("en testnet y en mainnet sin altas no se anota nada", async () => {
+    const org = Keypair.random();
+    abre(org);
+    await montar({ ALTAS: "1" });
+    abre(org);
+    expect((await p.procesar(tx({ firmante: org }).xdr)).estado).toBe(200);
+    expect(filas()).toHaveLength(0);
+    const fondo = Keypair.random();
+    const otra = Keypair.random();
+    abre(otra, fondo.publicKey());
+    const sinAltas = await deMainnet({ ALTAS: "0", PATROCINADORES_APP: fondo.publicKey() });
+    expect((await sinAltas.procesar(tx({ firmante: otra }).xdr)).estado).toBe(200);
+    expect(filas()).toHaveLength(0);
+  });
+});

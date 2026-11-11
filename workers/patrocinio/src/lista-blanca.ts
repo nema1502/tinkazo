@@ -70,6 +70,13 @@ export interface TxAceptada {
   feeDeclarado: number;
   /** El `maxTime` de la ventana, en segundos. */
   venceS: number;
+  /** En `seal`, cuántos ganadores pide (`num_winners`); en `draw`, null. */
+  ganadores: number | null;
+  /**
+   * En `seal`, la huella de la lista (argumento 1, en hexadecimal) y la ronda de drand (argumento 4): lo que el portero
+   * anota de cada sello que paga, para saber después si un `draw` es de un sello suyo. En `draw`, o si no se puede leer, null.
+   */
+  sello: { huellaLista: string; ronda: number } | null;
 }
 
 export type MotivoRechazo = "xdr" | "no-permitida" | "ventana" | "fee-alta" | "restaurar" | "firma";
@@ -179,6 +186,8 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
   const args = llamada.args;
   const forma = metodo === "seal" ? ["scvAddress", "scvBytes", "scvU32", "scvU32", "scvU64", "scvString"] : ["scvU64", "scvBytes"];
   if (args.length !== forma.length || args.some((a, i) => a.type !== forma[i])) return rechazo("no-permitida", "argumentos");
+  let ganadores: number | null = null;
+  let sello: TxAceptada["sello"] = null;
   if (metodo === "seal") {
     const organizador = args[0];
     if (!organizador || organizador.type !== "scvAddress") return rechazo("no-permitida", "argumentos");
@@ -186,7 +195,13 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
     if (dir.type !== "scAddressTypeAccount") return rechazo("no-permitida", "organizador");
     const crudo = bytesDe(dir.value.ed25519);
     if (!crudo || !iguales(crudo, origenCrudo)) return rechazo("no-permitida", "organizador");
-    if ((bytesDe(args[1]?.value) ?? new Uint8Array()).length !== 32) return rechazo("no-permitida", "argumentos");
+    const lista = bytesDe(args[1]?.value) ?? new Uint8Array();
+    if (lista.length !== 32) return rechazo("no-permitida", "argumentos");
+    // Solo se lee: no cambia qué se acepta. Lo que no se pueda leer queda en null y el sello cuenta como el más caro.
+    const g = Number(args[3]?.value);
+    ganadores = Number.isInteger(g) && g >= 0 ? g : null;
+    const ronda = enteroSeguro(args[4]?.value);
+    sello = ronda === null ? null : { huellaLista: hex(lista), ronda };
   } else if ((bytesDe(args[1]?.value) ?? new Uint8Array()).length !== 96) {
     return rechazo("no-permitida", "argumentos");
   }
@@ -225,7 +240,17 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
   if (alcanzado.peso <= 0) return rechazo("firma", "sin-firma-valida");
   if (alcanzado.peso < Math.max(1, autoridad.umbral)) return rechazo("firma", "peso-insuficiente");
 
-  return { ok: true, tx: { hash: hex(hash), cuenta, metodo, resourceFee, feeDeclarado, venceS: maxS } };
+  return { ok: true, tx: { hash: hex(hash), cuenta, metodo, resourceFee, feeDeclarado, venceS: maxS, ganadores, sello } };
+}
+
+/** Un `u64` del XDR como número, si entra sin perder precisión; si no, null. */
+function enteroSeguro(v: unknown): number | null {
+  try {
+    const b = typeof v === "bigint" ? v : BigInt(String(v));
+    return b >= 0n && b <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(b) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Si un texto es una cuenta G… válida. */

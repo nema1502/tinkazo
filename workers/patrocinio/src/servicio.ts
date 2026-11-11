@@ -7,13 +7,13 @@
  *   1. ¿está prendido? (y cuál rige)
  *   2. lista blanca y firma (`lista-blanca.ts`), sin tocar nada
  *   3. ¿ya se pagó este hash? Mismo resultado, una sola cuenta (el navegador reintenta)
- *   4. ¿la cuenta la abrió nuestra app?
+ *   4. ¿la cuenta la abrió nuestra app? (en mainnet con altas: ¿está en el libro?)
  *   5. simular, para no pagar lo que va a fallar
- *   6. reservar cupo y presupuesto, de una vez (síncrono)
+ *   6. reservar cupo y presupuesto (y en mainnet con altas, los sorteos oficiales del sello), de una vez (síncrono)
  *   7. envolver en un fee-bump, firmar con la llave acotada y mandar
  */
 import { StrKey, TransactionBuilder, type Transaction } from "@stellar/stellar-sdk/base";
-import { type Config, DIA_MS, topesDeCuenta } from "./config";
+import { type Config, DIA_MS, sorteosDelMes, topesDeCuenta } from "./config";
 import { type Cupo, type Cupos, type Limites } from "./cupos";
 import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
 import type { Planes } from "./plan";
@@ -86,7 +86,14 @@ export class Portero {
     };
     const verificada = this.cfg.verificadas.has(cuenta);
     const maxSellos = verificada ? base.sellos : n("max_sellos_mes", base.sellos);
-    return { maxSellos, maxSorteos: verificada ? base.sorteos : maxSellos * 2, topeGeneral: n("tope_general_stroops", this.cfg.topeGeneral), reservaSorteo: this.cfg.reservaSorteo };
+    return {
+      maxSellos,
+      maxSorteos: verificada ? base.sorteos : sorteosDelMes(this.cfg.red, maxSellos),
+      topeGeneral: n("tope_general_stroops", this.cfg.topeGeneral),
+      reservaSorteo: this.cfg.reservaSorteo,
+      // En mainnet con las altas, cada sello gasta sorteos oficiales de la cuenta. En testnet, nunca.
+      porSorteos: this.cfg.red === "mainnet" && this.cfg.altas,
+    };
   }
 
   /**
@@ -98,7 +105,9 @@ export class Portero {
     const lim = this.limites(cuenta);
     const plan = this.planes ? await this.planes.cupoDe(cuenta).catch(() => null) : null;
     if (!plan) return lim;
-    return { ...lim, maxSellos: Math.max(lim.maxSellos, plan.sellos), maxSorteos: Math.max(lim.maxSorteos, plan.sorteos) };
+    const maxSellos = Math.max(lim.maxSellos, plan.sellos);
+    // En mainnet los sorteos del mes no pasan de los sellos, tampoco con el plan.
+    return { ...lim, maxSellos, maxSorteos: this.cfg.red === "mainnet" ? maxSellos : Math.max(lim.maxSorteos, plan.sorteos) };
   }
 
   /** Lo más que se acepta que declare una transacción de recursos, dada la simulación: 1,5 veces más un margen fijo. */
@@ -117,8 +126,9 @@ export class Portero {
     if (!this.cfg.contractId) falta.push("contrato");
     if (!this.firmante) falta.push("llave");
     if (!this.cuentaPatrocinadora) falta.push("cuenta");
-    // En mainnet la lista de billeteras de la app es obligatoria: vacía, nadie pasa el control.
-    if (this.cfg.red === "mainnet" && this.cfg.patrocinadoresApp.size === 0) falta.push("billeteras-de-la-app");
+    // En mainnet la lista de billeteras de la app es obligatoria: vacía, nadie pasa el control. Con las altas la puerta
+    // mira solo el libro de cuentas, así que la lista no hace falta.
+    if (this.cfg.red === "mainnet" && !this.cfg.altas && this.cfg.patrocinadoresApp.size === 0) falta.push("billeteras-de-la-app");
     return falta;
   }
 
@@ -127,6 +137,9 @@ export class Portero {
    * `prendido` significa "el portero paga": es false si se apagó (`motivo:"apagado"`), si falta la llave, la cuenta o el
    * contrato (`motivo:"config"`) y si se devolvió a Pollar (`motivo:"pollar"`, con `rige:"pollar"`). El cliente decide
    * primero por `rige` y recién después por `prendido`.
+   *
+   * En mainnet con las altas suma `oficial:{acceso, sorteos:{quedan, proximoVence}|null}`, y `sellos.quedan` pasa a ser lo
+   * menor entre el mes y los sorteos oficiales: el sitio no pide una firma que el portero va a rechazar.
    */
   async cupoDe(cuenta: string): Promise<Respuesta> {
     if (!esCuenta(cuenta)) return r(400, { motivo: "cuenta" });
@@ -136,16 +149,30 @@ export class Portero {
     const c: Cupo = this.cupos.consultar(cuenta, ahora, lim);
     const configCompleta = this.faltaDeConfig().length === 0;
     const prendido = modo === "portero" && configCompleta;
+    const oficial = this.oficialDe(cuenta, ahora);
     return r(200, {
       prendido,
       ...(prendido ? {} : { motivo: modo === "apagado" ? "apagado" : modo === "pollar" ? "pollar" : "config" }),
       rige: modo === "pollar" ? "pollar" : "portero",
       red: this.cfg.red,
       mes: c.mes,
-      sellos: { usados: c.sellos, max: c.maxSellos, quedan: c.quedan },
+      // En mainnet con las altas, los sellos que quedan son lo menor entre el mes y los sorteos oficiales (sin acceso, 0).
+      sellos: { usados: c.sellos, max: c.maxSellos, quedan: oficial ? Math.min(c.quedan, oficial.sorteos?.quedan ?? 0) : c.quedan },
       sorteos: { usados: c.sorteos, max: c.maxSorteos, quedan: c.quedanSorteos },
       liberaEn: c.liberaEn,
+      ...(oficial ? { oficial } : {}),
     });
+  }
+
+  /**
+   * Lo oficial de una cuenta, solo en mainnet con las altas (si no, null y `/cupo` sigue como siempre): si está en el
+   * libro (`acceso`) y, si está, cuántos sorteos oficiales le quedan y el próximo vencimiento con cuántos vencen.
+   */
+  private oficialDe(cuenta: string, ahora: number): { acceso: boolean; sorteos: { quedan: number; proximoVence: { fecha: number; cuantos: number } | null } | null } | null {
+    if (this.cfg.red !== "mainnet" || !this.cfg.altas) return null;
+    if (!this.cupos.estaEnElLibro(cuenta)) return { acceso: false, sorteos: null };
+    const q = this.cupos.quedan({ cuenta }, ahora);
+    return { acceso: true, sorteos: { quedan: q.quedan, proximoVence: q.proximoVence } };
   }
 
   // ---------- el pedido ----------
@@ -206,8 +233,9 @@ export class Portero {
       // Desde acá hasta reservar no hay ningún await: comprobar y reservar es una sola jugada.
       // El estimado sale de la simulación y de nuestra configuración, nunca de lo que declara el cliente.
       const estimado = this.techoDeRecursos(recursosSimulados) + 2 * this.cfg.inclusionBump;
-      const res = this.cupos.reservar({ hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS }, ahora, lim);
+      const res = this.cupos.reservar({ hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS, ganadores: tx.ganadores, sello: tx.sello }, ahora, lim);
       if (!res.ok) {
+        if (res.motivo === "sin-sorteos") return r(402, { motivo: "sin-sorteos", vencieron: res.vencieron });
         if (res.motivo === "cupo-cuenta") return r(429, { motivo: "cupo-cuenta", que: res.que, liberaEn: res.liberaEn, max: res.max });
         return r(503, { motivo: "fondo" });
       }
@@ -287,8 +315,16 @@ export class Portero {
     return r(400, { motivo: "rechazada", codigo: envio.codigo ?? "desconocido" });
   }
 
-  /** ¿La abrió nuestra app? Una cuenta de prueba, una ya vista, o una cuya reserva paga la billetera de fondos de Pollar. */
+  /**
+   * ¿La abrió nuestra app? Una cuenta de prueba, una ya vista, o una cuya reserva paga la billetera de fondos de Pollar.
+   * En mainnet con las altas prendidas, en cambio, **solo el libro**: una cuenta que el servidor admitió por un cupón, un
+   * pago o a mano. Ni una cuenta ya vista ni la reserva del fondo de Pollar alcanzan, y no se recuerda nada.
+   */
   private async laAbrioNuestraApp(cuenta: string, ahora: number, leer: (g: string) => Promise<CuentaEnRed | null>): Promise<boolean> {
+    if (this.cfg.red === "mainnet" && this.cfg.altas) return this.cupos.estaEnElLibro(cuenta);
+    // Mainnet sin altas y sin la lista de billeteras de la app no deja pasar a nadie, tampoco a las que ya estaban
+    // anotadas: apagar las altas es un corte.
+    if (this.cfg.red === "mainnet" && this.cfg.patrocinadoresApp.size === 0) return false;
     if (this.cfg.prueba.has(cuenta) || this.cupos.cuentaConocida(cuenta)) return true;
     const c = await leer(cuenta);
     if (!c?.patrocinador || !this.cfg.patrocinadoresApp.has(c.patrocinador)) return false;

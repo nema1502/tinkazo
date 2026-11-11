@@ -160,3 +160,14 @@ describe("la inclusión declarada", () => {
     expect((await evaluar(armar(base({ fee: 10_000 })).xdr, { ...REGLAS, inclusionMax: 10_000 })).ok).toBe(true);
   });
 });
+
+describe("lo que el sello dice para la tabla de sellos del portero", () => {
+  it("un seal devuelve la huella de la lista en hexadecimal y la ronda; un draw, nada", async () => {
+    const lista = new Uint8Array(32).map((_, i) => i);
+    const r = await evaluar(armar(base({ hashLista: lista })).xdr, REGLAS);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.tx.sello).toEqual({ huellaLista: Buffer.from(lista).toString("hex"), ronda: 99 });
+    const d = await evaluar(armar(base({ metodo: "draw" })).xdr, REGLAS);
+    expect(d.ok && d.tx.sello).toBe(null);
+  });
+});
