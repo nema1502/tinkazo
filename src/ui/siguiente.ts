@@ -62,6 +62,12 @@ let moBoton: MutationObserver | null = null;
 let moLista: MutationObserver | null = null;
 let listaObservada: Element | null = null;
 
+/**
+ * La página ya no existe: el ambiente de una prueba se desarmó (sin `document`) y los observadores de la barra, que siguen
+ * vivos, avisaron igual. Sin nada que mirar no hay nada que hacer. En el navegador `document` siempre está: nunca corta.
+ */
+const sinPagina = (): boolean => typeof document === "undefined";
+
 function vigilarListaDeCupones(): void {
   const b = document.getElementById("eq-lista");
   if (b === listaObservada) return;
@@ -306,7 +312,7 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
 }
 
 function render(): void {
-  if (!listo) return;
+  if (!listo || sinPagina()) return;
   // Con la lista sellada, la pantalla no se apaga: la espera del número, el juego y el
   // resultado se miran en el celular o se proyectan desde él. Se suelta al pasar a otra lista.
   if (app.frozen) mantenerDespierta("sorteo");
@@ -446,6 +452,7 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // El botón de la lista de equipos vive adentro del panel: hay que descubrirlo cuando el panel aparece y vigilarlo desde ahí.
   vigilarListaDeCupones();
   const descubreLista = new MutationObserver(() => {
+    if (sinPagina()) return;
     const antes = listaObservada;
     vigilarListaDeCupones();
     if (listaObservada !== antes) render();
