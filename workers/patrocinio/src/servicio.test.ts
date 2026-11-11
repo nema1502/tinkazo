@@ -1006,7 +1006,8 @@ describe("mainnet con ALTAS=1: la puerta mira solo el libro", () => {
     cupos.admitir(propia.publicKey(), "admin", ahora);
     dar(org);
     dar(propia);
-    const m = await deMainnet({ ALTAS: "1" });
+    // El draw es de un sorteo cualquiera: la regla de los sellos del portero se prueba en sorteadora.test.ts.
+    const m = await deMainnet({ ALTAS: "1", SOLO_SELLOS_PORTERO: "0" });
     expect(m.faltaDeConfig()).toEqual([]);
     expect((await m.cupoDe(org.publicKey())).cuerpo).toMatchObject({ prendido: true, rige: "portero", red: "mainnet" });
     expect(await m.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
@@ -1124,7 +1125,8 @@ describe("mainnet con ALTAS=1: cada sello gasta sorteos oficiales", () => {
 
   it("un draw no gasta sorteos oficiales: pasa aunque no le quede ninguno", async () => {
     const org = admitida(0);
-    const m = await deMainnet();
+    // El draw es de un sorteo cualquiera: la regla de los sellos del portero se prueba en sorteadora.test.ts.
+    const m = await deMainnet({ SOLO_SELLOS_PORTERO: "0" });
     expect((await m.procesar(tx({ firmante: org, metodo: "draw", raffleId: 5n }).xdr)).estado).toBe(200);
     expect(red.enviados).toHaveLength(1);
   });
@@ -1223,7 +1225,8 @@ describe("mainnet con ALTAS=1: cada sello que paga el portero queda en sellos_po
 
   it("anota el organizador, la huella de la lista y la ronda; reenviado, una fila; el draw no anota", async () => {
     const org = admitida();
-    const m = await deMainnet();
+    // El draw es de un sorteo cualquiera: la regla de los sellos del portero se prueba en sorteadora.test.ts.
+    const m = await deMainnet({ SOLO_SELLOS_PORTERO: "0" });
     const t = tx({ firmante: org, hashLista: lista });
     expect((await m.procesar(t.xdr)).estado).toBe(200);
     expect((await m.procesar(t.xdr)).estado).toBe(200);

@@ -7,7 +7,14 @@
  */
 import { StrKey, xdr } from "@stellar/stellar-sdk/base";
 
-export type Simulacion = { ok: true; minResourceFee: number } | { ok: false; motivo: "fallaria" | "restaurar"; detalle: string };
+/**
+ * Lo que dijo la simulación. Cuando pasa, también los recursos que calculó la red (`datos`, el `SorobanTransactionData`
+ * en base64, para armar una transacción propia) y el valor que devuelve el contrato (`retorno`, un `ScVal` en base64):
+ * los usa el sorteo del servidor. Cuando falla por un error del contrato, su número (`codigoContrato`: 2 es `AlreadyDrawn`).
+ */
+export type Simulacion =
+  | { ok: true; minResourceFee: number; datos?: string; retorno?: string }
+  | { ok: false; motivo: "fallaria" | "restaurar"; detalle: string; codigoContrato?: number };
 
 export interface CuentaEnRed {
   /** Quién patrocina la reserva de la cuenta (la billetera de fondos de Pollar, si la abrió nuestra app), o null. */
@@ -17,6 +24,8 @@ export interface CuentaEnRed {
   firmantes?: Array<{ clave: Uint8Array; peso: number }>;
   /** El umbral medio de la cuenta: el que pide una invocación de contrato. */
   umbralMedio?: number;
+  /** La secuencia de la cuenta (la de su última transacción), como texto: es un entero de 64 bits. */
+  secuencia?: string;
 }
 
 export interface Envio {
@@ -94,10 +103,15 @@ export class RpcRed implements Red {
   }
 
   async simular(xdrTx: string): Promise<Simulacion> {
-    const r = await this.llamar<{ error?: string; minResourceFee?: string; restorePreamble?: unknown }>("simulateTransaction", { transaction: xdrTx });
-    if (r.error) return { ok: false, motivo: "fallaria", detalle: r.error.slice(0, 200) };
+    const r = await this.llamar<{ error?: string; minResourceFee?: string; restorePreamble?: unknown; transactionData?: string; results?: Array<{ xdr?: string }> }>("simulateTransaction", { transaction: xdrTx });
+    if (r.error) {
+      const codigo = /Error\(Contract, #(\d{1,4})\)/.exec(r.error)?.[1];
+      return { ok: false, motivo: "fallaria", detalle: r.error.slice(0, 200), ...(codigo ? { codigoContrato: Number(codigo) } : {}) };
+    }
     if (r.restorePreamble) return { ok: false, motivo: "restaurar", detalle: "hay entradas archivadas" };
-    return { ok: true, minResourceFee: Number(r.minResourceFee ?? 0) };
+    const datos = typeof r.transactionData === "string" && r.transactionData ? r.transactionData : undefined;
+    const retorno = typeof r.results?.[0]?.xdr === "string" && r.results[0].xdr ? r.results[0].xdr : undefined;
+    return { ok: true, minResourceFee: Number(r.minResourceFee ?? 0), ...(datos ? { datos } : {}), ...(retorno ? { retorno } : {}) };
   }
 
   async leerCuenta(cuenta: string): Promise<CuentaEnRed | null> {
@@ -125,7 +139,7 @@ export class RpcRed implements Red {
       const clave = bytesDe(f.key.ed25519);
       if (clave) firmantes.push({ clave, peso: Number(f.weight) });
     }
-    return { patrocinador, balance: datos.value.balance, firmantes, umbralMedio: umbrales?.[2] ?? 0 };
+    return { patrocinador, balance: datos.value.balance, firmantes, umbralMedio: umbrales?.[2] ?? 0, secuencia: String(datos.value.seqNum) };
   }
 
   async enviar(xdrTx: string): Promise<Envio> {

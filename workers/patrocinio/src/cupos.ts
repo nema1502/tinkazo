@@ -271,9 +271,21 @@ export class Cupos {
    *   sin escribir nada. Un `draw` nunca gasta sorteos oficiales.
    * - Con `lim.porSorteos` y `p.sello`, el `seal` queda además en `sellos_portero` con el organizador (la cuenta: la lista
    *   blanca exige que sean la misma), la huella de la lista y la ronda, en la misma transacción.
+   * - Un `draw` con `p.selloHash` (el hash del sello del portero que sortea) usa lo guardado para ESE sello y no el primero
+   *   de la cuenta, y queda anotado en la fila de `reserva` del sello (`usada`) aunque lo guardado ya haya vencido: así se
+   *   sabe qué `draw` se pagó para cada sello (`sorteoDelSello`). Sin `selloHash`, como siempre.
    */
   reservar(
-    p: { hash: string; cuenta: string; metodo: Metodo; estimado: number; vence: number; ganadores?: number | null; sello?: { huellaLista: string; ronda: number } | null },
+    p: {
+      hash: string;
+      cuenta: string;
+      metodo: Metodo;
+      estimado: number;
+      vence: number;
+      ganadores?: number | null;
+      sello?: { huellaLista: string; ronda: number } | null;
+      selloHash?: string | null;
+    },
     ahora: number,
     lim: Limites,
   ): Reservado {
@@ -295,7 +307,9 @@ export class Cupos {
     const gasto = this.gastoDeLaVentana(ahora) + this.reservadoParaSorteos(ahora);
     let guardada: string | null = null;
     if (p.metodo === "draw") {
-      const r = this.filas("SELECT hash FROM reserva WHERE cuenta = ? AND usada IS NULL AND creado > ? ORDER BY creado LIMIT 1", p.cuenta, ahora - RESERVA_SORTEO_MS)[0];
+      const r = p.selloHash
+        ? this.filas("SELECT hash FROM reserva WHERE hash = ? AND usada IS NULL AND creado > ?", p.selloHash, ahora - RESERVA_SORTEO_MS)[0]
+        : this.filas("SELECT hash FROM reserva WHERE cuenta = ? AND usada IS NULL AND creado > ? ORDER BY creado LIMIT 1", p.cuenta, ahora - RESERVA_SORTEO_MS)[0];
       guardada = r ? String(r.hash) : null;
     }
     const falta = p.metodo === "seal" ? p.estimado + lim.reservaSorteo : guardada ? Math.max(0, p.estimado - 2 * lim.reservaSorteo) : p.estimado;
@@ -317,6 +331,7 @@ export class Cupos {
       this.sql.exec(`UPDATE cuentas SET ${p.metodo === "seal" ? "sellos = sellos + 1" : "sorteos = sorteos + 1"} WHERE cuenta = ? AND mes = ?`, p.cuenta, cupo.mes);
       if (p.metodo === "seal") this.sql.exec("INSERT OR REPLACE INTO reserva (hash, cuenta, creado, stroops, usada) VALUES (?, ?, ?, ?, NULL)", p.hash, p.cuenta, ahora, lim.reservaSorteo);
       else if (guardada) this.sql.exec("UPDATE reserva SET usada = ? WHERE hash = ?", p.hash, guardada);
+      if (p.metodo === "draw" && p.selloHash) this.sql.exec("UPDATE reserva SET usada = ? WHERE hash = ?", p.hash, p.selloHash);
       if (p.metodo === "seal" && lim.porSorteos && p.sello) {
         this.sql.exec("INSERT OR REPLACE INTO sellos_portero (hash, organizador, huella_lista, ronda, ms) VALUES (?, ?, ?, ?, ?)", p.hash, p.cuenta, p.sello.huellaLista, p.sello.ronda, ahora);
       }
@@ -388,6 +403,27 @@ export class Cupos {
   /** Cuántas hay en el aire, para saber si queda trabajo para la alarma. */
   enElAire(): number {
     return this.numero("SELECT COUNT(*) AS n FROM uso WHERE estado IN ('reservado','enviado')");
+  }
+
+  // ---------- los sellos que pagó el portero ----------
+
+  /**
+   * El hash del sello del portero que creó el sorteo de este organizador, con esta huella de la lista y esta ronda (lo
+   * que devuelve `get_raffle`). null si el portero no pagó ese sello.
+   */
+  selloDelPortero(organizador: string, huellaLista: string, ronda: number): string | null {
+    const f = this.filas("SELECT hash FROM sellos_portero WHERE organizador = ? AND huella_lista = ? AND ronda = ? ORDER BY ms DESC LIMIT 1", organizador, huellaLista.toLowerCase(), ronda)[0];
+    return f ? String(f.hash) : null;
+  }
+
+  /**
+   * El `draw` que se pagó para un sello del portero y en qué quedó, si se sabe: sirve para no mandar dos veces el mismo
+   * sorteo. Lo devuelto no cuenta (la red no lo tomó). null si no hay ninguno.
+   */
+  sorteoDelSello(selloHash: string): { hash: string; estado: Estado } | null {
+    const f = this.filas("SELECT u.hash AS hash, u.estado AS estado FROM reserva r JOIN uso u ON u.hash = r.usada WHERE r.hash = ? AND u.metodo = 'draw'", selloHash)[0];
+    if (!f || f.estado === "devuelto") return null;
+    return { hash: String(f.hash), estado: String(f.estado) as Estado };
   }
 
   // ---------- cuentas abiertas por nuestra app, y el libro ----------
@@ -534,6 +570,31 @@ export class Cupos {
   /** La cuenta del alta ya existe en la red: deja de contar como activación pendiente. */
   marcarAbierta(usuario: string, ahora: number): void {
     this.sql.exec("UPDATE altas SET estado = 'abierta', actualizada = ? WHERE usuario = ? AND estado <> 'abierta'", ahora, usuario);
+  }
+
+  /**
+   * Fase 2: Pollar dejó un pedido para abrir la cuenta del alta (`wallets/fund`, su `requestId`). Sigue contando como
+   * activación pendiente hasta que la cuenta exista. Una ya abierta no cambia.
+   */
+  marcarPedida(usuario: string, pedido: string, ahora: number): void {
+    if (!texto(pedido, 200)) throw new Error("pedido-forma");
+    this.sql.exec("UPDATE altas SET pedido = ?, estado = 'pedida', actualizada = ? WHERE usuario = ? AND estado <> 'abierta'", pedido, ahora, usuario);
+  }
+
+  /**
+   * Las firmas de cuentas de Google que explican nuestros números desde `desde` (ms), para la vigilancia de firmas: los
+   * sellos (y, si `sorteos`, los sorteos) que llegaron al portero desde cuentas del libro, en cualquier estado (la
+   * persona firmó aunque la red los haya rechazado), y las activaciones (altas que pasaron a abiertas después de nacer;
+   * una que nació con la cuenta ya abierta no tuvo activación). Con el sorteo del servidor, el `draw` lo firma la
+   * sorteadora y no cuenta como firma de Pollar. Sin cuentas: solo cifras.
+   */
+  firmasExplicadas(desde: number, o: { sorteos: boolean }): { sellos: number; sorteos: number; activaciones: number } {
+    const delLibro = (m: Metodo) => this.numero("SELECT COUNT(*) AS n FROM uso u JOIN cuenta_app c ON c.cuenta = u.cuenta AND c.permanente = 1 WHERE u.metodo = ? AND u.creado > ?", m, desde);
+    return {
+      sellos: delLibro("seal"),
+      sorteos: o.sorteos ? delLibro("draw") : 0,
+      activaciones: this.numero("SELECT COUNT(*) AS n FROM altas WHERE estado = 'abierta' AND actualizada > ? AND actualizada > creada", desde),
+    };
   }
 
   // ---------- ajustes ----------

@@ -59,6 +59,12 @@ export interface Env {
   ALTAS_PAGO?: string;
   /** Con `1` (y con `ALTAS`), el sorteo que manda el servidor (`/v1/sorteo`). */
   SORTEO_SERVIDOR?: string;
+  /**
+   * Con `ALTAS`, el portero paga un `draw` solo de un sello que pagó él. Viene prendido; solo un `0` lo apaga, y es para
+   * el plan B: si la lectura de `get_raffle` falla en la red principal, el `draw` de una cuenta del libro vuelve a pagarse
+   * sea de quien sea el sorteo, dentro del tope general.
+   */
+  SOLO_SELLOS_PORTERO?: string;
   /** El id de la app de mainnet en Pollar (es público). */
   POLLAR_APP_ID?: string;
   /** `inmediato` o `diferido`: cómo abre Pollar las cuentas. Tiene que coincidir con lo que dice Pollar. */
@@ -126,6 +132,12 @@ export interface Config {
   altasPago: boolean;
   /** El sorteo del servidor: con `altas`, `SORTEO_SERVIDOR=1` y la cuenta sorteadora. */
   sorteoServidor: boolean;
+  /**
+   * El portero paga un `draw` (lo mande la persona o la sorteadora) solo si su sello lo pagó él: con `altas`, con o sin
+   * el sorteo del servidor (así nadie de afuera sella con Freighter y le pasa el sorteo de 300 ganadores). Solo
+   * `SOLO_SELLOS_PORTERO=0` lo apaga, para el plan B.
+   */
+  soloSellosDelPortero: boolean;
   pollarAppId: string | null;
   /** null si `POLLAR_FONDEO` está mal escrito: no se adivina. */
   pollarFondeo: Fondeo | null;
@@ -288,6 +300,7 @@ export function leerConfig(env: Partial<Env>): Config {
     altas,
     altasPago: pideCobros && precios !== null && cuentaCobros !== null,
     sorteoServidor: pideSorteo && cuentaSorteadora !== null,
+    soloSellosDelPortero: altas && (env.SOLO_SELLOS_PORTERO ?? "").trim() !== "0",
     pollarAppId,
     pollarFondeo,
     cuentaCobros,

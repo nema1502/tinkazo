@@ -103,3 +103,37 @@ describe("condicionDelPaso", () => {
     expect(condicionDelPaso(paso("    # ", cond), NOMBRE)).not.toMatch(/^always\(\)\s*&&/);
   });
 });
+
+describe("vigilar-red.yml: el portero de mainnet", () => {
+  const texto = readFileSync(WORKFLOW, "utf8");
+  const PASO = "Portero de mainnet";
+  const crudo = texto.split(/\r?\n/);
+
+  it("el paso está una sola vez, y prendido (no comentado)", () => {
+    const veces = crudo.filter((r) => r.includes(`name: ${PASO}`));
+    expect(veces).toHaveLength(1);
+    expect(veces[0]).toMatch(/^\s*-\s*name:/);
+  });
+
+  it("corre una vez al día aunque falle el recordatorio: always() && (las 12:07 o a mano con diario)", () => {
+    const condicion = condicionDelPaso(texto, PASO);
+    expect(condicion).toMatch(/^always\(\)\s*&&\s*\(.*\)$/);
+    expect(condicion).toContain("github.event.schedule == '7 12 * * *'");
+    expect(condicion).toContain("inputs.diario");
+  });
+
+  it("la clave va por env desde los secretos, nunca adentro del comando, y mira pm.tinkazo.app con la revisión del repositorio", () => {
+    const paso = renglonesDelPaso(texto, PASO).join("\n");
+    expect(paso).toMatch(/PORTERO_ADMIN_TOKEN:\s*\$\{\{\s*secrets\.PORTERO_MAINNET_ADMIN_TOKEN\s*\}\}/);
+    expect(paso).toContain("https://pm.tinkazo.app");
+    const run = paso.slice(paso.indexOf("run:"));
+    expect(run).not.toContain("${{");
+    expect(run).toContain("/v1/patrocinio/estado");
+    expect(run).toContain("node scripts/lib/vigilar-portero.mjs");
+  });
+
+  it("sin el secreto no falla: hasta que exista el despliegue, avisa y sale con 0", () => {
+    const run = renglonesDelPaso(texto, PASO).join("\n");
+    expect(run).toMatch(/if \[ -z "\$PORTERO_ADMIN_TOKEN" \]; then[\s\S]*exit 0/);
+  });
+});

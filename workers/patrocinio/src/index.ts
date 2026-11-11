@@ -13,7 +13,11 @@
  *   GET  /v1/patrocinio/cupo?cuenta=G…   lo que queda, si está prendido y quién rige (portero o pollar)
  *
  * Solo en mainnet con ALTAS=1, con la sesión de Pollar (Authorization: Bearer <token>), ver `rutas-altas.ts`:
- *   POST /v1/alta/estado   POST /v1/alta/cupon
+ *   POST /v1/alta/estado   POST /v1/alta/cupon   POST /v1/alta/abrir   POST /v1/alta/orden   POST /v1/alta/pago
+ * y abierta: GET /v1/alta/precios. Los pagos en USDC se leen de Horizon (`cobros.ts`).
+ *
+ * Solo en mainnet con ALTAS=1 y SORTEO_SERVIDOR=1, abierta desde el sitio, ver `sorteadora.ts`:
+ *   POST /v1/sorteo {"sorteo","firma"}   el `draw` de un sello del portero, mandado desde la cuenta sorteadora
  *
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
@@ -22,6 +26,8 @@
  * Solo en mainnet con ALTAS=1, con dos claves, ver `admin.ts`: cupones y altas a mano con CUPONES_TOKEN,
  * y pausar o reanudar las altas con ADMIN_TOKEN:
  *   POST|GET /v1/admin/cupones   POST /v1/admin/cupones/anular   POST /v1/admin/altas   POST /v1/admin/altas/pausar | reanudar
+ *   POST /v1/admin/derechos   POST /v1/admin/ordenes/pagada   GET /v1/admin/sueltos   POST /v1/admin/sueltos/asignar
+ *   POST /v1/admin/ventas/pausar | reanudar
  *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
@@ -30,6 +36,7 @@ import { DurableObject } from "cloudflare:workers";
 import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
 import { Altas } from "./altas";
 import { registrador } from "./registrador";
+import { Cobros, LectorDeCobros } from "./cobros";
 import { type Env, leerConfig } from "./config";
 import { Cupos, type Sql } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
@@ -37,8 +44,9 @@ import { Planes } from "./plan";
 import { pollarDe } from "./pollar";
 import { PorIp } from "./por-ip";
 import { RpcRed } from "./red";
-import { type AccionAlta, type PedidoAlta, PuertaAltas, atenderAlta, memoriaEnAjustes } from "./rutas-altas";
+import { type AccionAlta, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
+import { Sorteadora, atenderSorteo } from "./sorteadora";
 
 /**
  * El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres,
@@ -91,13 +99,29 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     if ((this.env.CUENTA_URL ?? "").trim() && !cfg.cuentaUrl) console.error(JSON.stringify({ evento: "error-config", falta: ["cuenta-url"] }));
     const planes = cfg.cuentaUrl ? new Planes(cfg.cuentaUrl, (...a: Parameters<typeof fetch>) => fetch(...a), () => Date.now(), registrar) : null;
     const red = new RpcRed(cfg.rpcUrls);
-    this.portero = new Portero(cfg, this.cupos, red, this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes);
+    // La sorteadora, solo con el sorteo del servidor prendido y su llave cargada. Sin ella, `/v1/sorteo` da 503 apagado.
+    let sorteadora: Sorteadora | null = null;
+    if (cfg.sorteoServidor && cfg.cuentaSorteadora && cfg.contractId) {
+      try {
+        if (this.env.CLAVE_SORTEADORA) {
+          const firmante = await firmanteDe(this.env.CLAVE_SORTEADORA);
+          sorteadora = new Sorteadora({ passphrase: cfg.passphrase, contractId: cfg.contractId, cuenta: cfg.cuentaSorteadora, red, firmante });
+        }
+      } catch {
+        sorteadora = null;
+      }
+      if (!sorteadora) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["clave-sorteadora"] }));
+    }
+    this.portero = new Portero(cfg, this.cupos, red, this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes, sorteadora);
     if (cfg.red === "mainnet") {
       // El último saldo de créditos vive en los ajustes: si el objeto arranca de nuevo con Pollar caído, sigue valiendo sus 10 minutos.
       const pollar = pollarDe({ secreto: this.env.POLLAR_SECRETO, appId: cfg.pollarAppId, fetch: (u, i) => fetch(u, i), registrar, memoriaCreditos: memoriaEnAjustes(this.cupos) });
       const altas = new Altas(this.sql, this.cupos);
-      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar });
-      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar });
+      // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual.
+      const cobros = new Cobros(this.sql, this.cupos);
+      const lector = cfg.cuentaCobros ? new LectorDeCobros({ cobros, cuenta: cfg.cuentaCobros, fetch: (u, i) => fetch(u, i), registrar }) : null;
+      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector });
+      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector });
       this.exportaAltas = true;
       if (cfg.altas && (this.env.CUPONES_TOKEN ?? "").length >= 32 && this.env.CUPONES_TOKEN === this.env.ADMIN_TOKEN) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
       // Los secretos que faltan para las altas (nombres fijos, sin valores): las rutas dan 503 apagado hasta cargarlos.
@@ -130,6 +154,16 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     return (await this.obtener()).cupoDe(cuenta);
   }
 
+  /** `POST /v1/sorteo` (solo mainnet): el `draw` mandado desde la cuenta sorteadora. */
+  async sortear(sorteo: string, firma: string): Promise<Respuesta> {
+    try {
+      return await (await this.obtener()).sortear(sorteo, firma);
+    } catch (e) {
+      registrar("error-interno", { donde: "sorteo", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
   /** Las rutas `/v1/alta/*` (solo mainnet). */
   async alta(accion: AccionAlta, pedido: PedidoAlta): Promise<Respuesta> {
     await this.obtener();
@@ -143,7 +177,19 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
-  /** Las rutas `/v1/admin/*` (solo mainnet): cupones, altas a mano y la pausa. La clave ya la miró el Worker. */
+  /** Las rutas del pago, `/v1/alta/orden` y `/v1/alta/pago` (solo mainnet). */
+  async pagoAlta(accion: AccionPago, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atenderPago(accion, pedido);
+    } catch (e) {
+      registrar("error-interno", { donde: "pago", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas `/v1/admin/*` (solo mainnet): cupones, altas a mano, pagos y las pausas. La clave ya la miró el Worker. */
   async adminAltas(accion: AccionAdmin, datos: unknown): Promise<Respuesta> {
     await this.obtener();
     if (!this.administracion) return { estado: 503, cuerpo: { motivo: "apagado" } };
@@ -171,9 +217,9 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         return p.ajustar(String(datos?.clave), Number(datos?.valor)) ? { estado: 200, cuerpo: { ok: true } } : { estado: 400, cuerpo: { motivo: "ajuste" } };
       case "estado": {
         // En mainnet con las altas, también el saldo de créditos de Pollar y el piso.
-        // Y las altas de 24 horas y los cupones de hoy.
+        // Y las altas de 24 horas y los cupones de hoy, y la vigilancia de firmas: firmasSinExplicar y patrocinioPollar.
         const e = await p.estado();
-        return this.puerta ? { ...e, cuerpo: { ...e.cuerpo, ...(await this.puerta.resumen()), ...(this.administracion?.resumen() ?? {}) } } : e;
+        return this.puerta ? { ...e, cuerpo: { ...e.cuerpo, ...(await this.puerta.resumen()), ...(this.administracion?.resumen() ?? {}), ...(await this.puerta.vigilancia()) } } : e;
       }
       case "exportar":
         // En mainnet, también las tablas de las altas.
@@ -193,6 +239,8 @@ const pagoPorIp = new PorIp();
 const CUPO_POR_HORA = 600;
 /** Los pedidos a `/v1/alta/*`, con su propio contador. */
 const altaPorIp = new PorIp();
+/** Los pedidos a `/v1/sorteo`, con el suyo. */
+const sorteoPorIp = new PorIp();
 
 /** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
 async function esAdmin(dado: string, env: Env): Promise<boolean> {
@@ -211,13 +259,25 @@ export default {
 
     // Las rutas de altas existen solo en mainnet; en testnet siguen sin existir, como siempre.
     if (url.pathname.startsWith("/v1/alta/") && env.RED === "mainnet") {
-      const r = await atenderAlta(request, leerConfig(env), (accion, pedido) => objeto.alta(accion, pedido), altaPorIp);
+      const r = await atenderAlta(
+        request,
+        leerConfig(env),
+        (accion, pedido) => objeto.alta(accion, pedido),
+        altaPorIp,
+        (accion, pedido) => objeto.pagoAlta(accion, pedido),
+      );
       if (r) return r;
     }
 
     // La administración de las altas, también solo en mainnet: en testnet `/v1/admin/` sigue sin existir.
     if (url.pathname.startsWith("/v1/admin/") && env.RED === "mainnet") {
       const r = await atenderAdmin(request, env, leerConfig(env), (accion, datos) => objeto.adminAltas(accion, datos));
+      if (r) return r;
+    }
+
+    // El sorteo del servidor, también solo en mainnet: en testnet `/v1/sorteo` sigue sin existir.
+    if (url.pathname === "/v1/sorteo" && env.RED === "mainnet") {
+      const r = await atenderSorteo(request, leerConfig(env), sorteoPorIp, (sorteo, firma) => objeto.sortear(sorteo, firma));
       if (r) return r;
     }
 

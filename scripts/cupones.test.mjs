@@ -16,6 +16,7 @@ import {
   generarCodigos,
   mostrar,
   normalizar,
+  normalizarOrden,
   raicesProtegidas,
   tarjetasHtml,
   venceDe,
@@ -317,5 +318,138 @@ describe("estado, anular y admitir", () => {
     const r = await correr(["otra"]);
     expect(r.codigo).toBe(1);
     expect(r.salida).toMatch(/crear/);
+  });
+});
+
+describe("después del sábado: dar, pagada, sueltos, asignar y devuelto", () => {
+  const OPERACION = "238542939482828801";
+
+  it("dar suma sorteos a una cuenta del libro con su ref", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, repetido: false, sorteos: { quedan: 13, proximoVence: null } } }));
+    const r = await correr(["dar", "--cuenta", CUENTA, "--sorteos", "10", "--dias", "365", "--ref", "venta-qr-0001"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos).toHaveLength(1);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/derechos`, metodo: "POST", cuerpo: { cuenta: CUENTA, sorteos: 10, dias: 365, ref: "venta-qr-0001" } });
+    expect(p.pedidos[0].cabeceras.get("Authorization")).toBe(`Bearer ${TOKEN}`);
+    expect(r.salida).toMatch(/10 sorteos/);
+    expect(r.salida).toMatch(/13/);
+    expect(r.salida).not.toContain(TOKEN);
+    const otra = portero(() => ({ status: 200, cuerpo: { ok: true, repetido: true, sorteos: { quedan: 13, proximoVence: null } } }));
+    expect((await correr(["dar", "--cuenta", CUENTA, "--sorteos", "10", "--dias", "365", "--ref", "venta-qr-0001"], { fetch: otra.fetch })).salida).toMatch(/no se sumó nada/);
+  });
+
+  it("dar con lo mal escrito no le habla al portero", async () => {
+    const p = portero();
+    const base = ["dar", "--cuenta", CUENTA, "--sorteos", "10", "--dias", "365", "--ref", "venta-qr-0001"];
+    for (const malo of [["--cuenta", "GNOESUNACUENTA"], ["--sorteos", "0"], ["--sorteos", "501"], ["--dias", "3651"], ["--ref", "con espacios"]]) {
+      const args = [...base];
+      args.splice(args.indexOf(malo[0]), 2, ...malo);
+      expect((await correr(args, { fetch: p.fetch })).codigo, malo.join(" ")).toBe(1);
+    }
+    expect((await correr(base.slice(0, -2), { fetch: p.fetch })).codigo).toBe(1);
+    expect(p.pedidos).toHaveLength(0);
+  });
+
+  it("pagada marca una orden pagada por fuera, con el método y la ref; la orden se lee como la nota", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, repetido: false } }));
+    const r = await correr(["pagada", "--orden", "tk:o:abcd-2345", "--metodo", "qr-bs", "--ref", "comprobante-0001"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/ordenes/pagada`, metodo: "POST", cuerpo: { orden: "ABCD2345", metodo: "qr-bs", ref: "comprobante-0001" } });
+    expect(r.salida).toMatch(/ABCD2345/);
+    expect((await correr(["pagada", "--orden", "ABCD2345", "--metodo", "a-mano", "--ref", "x1"], { fetch: p.fetch })).codigo).toBe(0);
+    expect(p.pedidos[1].cuerpo).toEqual({ orden: "ABCD2345", metodo: "a-mano", ref: "x1" });
+    for (const malo of [["pagada", "--orden", "ABCD", "--metodo", "qr-bs", "--ref", "x"], ["pagada", "--orden", "ABCD2345", "--metodo", "usdc", "--ref", "x"], ["pagada", "--orden", "ABCD2345", "--ref", "x"], ["pagada", "--orden", "ABCD2345", "--metodo", "qr-bs"]]) {
+      expect((await correr(malo, { fetch: p.fetch })).codigo, malo.join(" ")).toBe(1);
+    }
+    expect(p.pedidos).toHaveLength(2);
+  });
+
+  it("la orden se lee como el portero: con el prefijo tk:o: o tk:0:", () => {
+    expect(normalizarOrden("tk:o:abcd-2345")).toBe("ABCD2345");
+    expect(normalizarOrden("TK:0:abcd2345")).toBe("ABCD2345");
+    expect(normalizarOrden("tk:00:abcd2345")).toBeNull();
+  });
+
+  it("pagada de una orden que no existe sale con el motivo", async () => {
+    const p = portero(() => ({ status: 404, cuerpo: { motivo: "orden" } }));
+    const r = await correr(["pagada", "--orden", "ABCD2345", "--metodo", "qr-bs", "--ref", "x"], { fetch: p.fetch });
+    expect(r.codigo).toBe(1);
+    expect(r.salida).toMatch(/404 orden/);
+  });
+
+  it("sueltos lista los pagos sin resolver; --json los da tal cual", async () => {
+    const suelto = { operacion: OPERACION, tx: "ab".repeat(32), de: CUENTA, activo: "USDC", monto: 20_000_000, cantidad: "2", nota: null, motivo: "sin-nota", estado: "suelto", orden: null, ref: null, ms: Date.UTC(2026, 10, 15, 14, 30) };
+    const p = portero(() => ({ status: 200, cuerpo: { sueltos: [suelto] } }));
+    const r = await correr(["sueltos"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/sueltos`, metodo: "GET" });
+    expect(r.salida).toContain(OPERACION);
+    expect(r.salida).toMatch(/2 USDC/);
+    expect(r.salida).toMatch(/sin-nota/);
+    expect(r.salida).toContain(CUENTA);
+    const j = await correr(["sueltos", "--json"], { fetch: p.fetch });
+    expect(JSON.parse(j.salida)).toEqual({ sueltos: [suelto] });
+    const vacio = await correr(["sueltos"], { fetch: portero(() => ({ status: 200, cuerpo: { sueltos: [] } })).fetch });
+    expect(vacio.codigo).toBe(0);
+    expect(vacio.salida).toMatch(/No hay pagos sueltos/);
+  });
+
+  it("sueltos lista también las órdenes pagadas a medias, y avisa si Horizon no contestó", async () => {
+    const parcial = { id: "ABCD2345", producto: "alta", recibido: "1.5", total: "2", minimo: "1.9", creada: Date.UTC(2026, 10, 11, 14), vence: Date.UTC(2026, 10, 14, 14), vencida: true };
+    const p = portero(() => ({ status: 200, cuerpo: { sueltos: [], parciales: [parcial], horizon: false } }));
+    const r = await correr(["sueltos"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(r.salida).toMatch(/No hay pagos sueltos/);
+    expect(r.salida).toMatch(/1 órdenes pagadas a medias/);
+    expect(r.salida).toMatch(/orden ABCD2345 \(alta\): llegaron 1\.5 de 2 USDC/);
+    expect(r.salida).toMatch(/venció/);
+    expect(r.salida).toMatch(/Horizon no contestó/);
+  });
+
+  it("sueltos imprime la nota de un pago ajeno sin caracteres de control", async () => {
+    const suelto = { operacion: OPERACION, tx: "ab".repeat(32), de: CUENTA, activo: "USDC", monto: 20_000_000, cantidad: "2", nota: "hola\u001b[2J\rchau", motivo: "nota-desconocida", estado: "suelto", orden: null, ref: null, ms: Date.UTC(2026, 10, 15, 14, 30) };
+    const r = await correr(["sueltos"], { fetch: portero(() => ({ status: 200, cuerpo: { sueltos: [suelto] } })).fetch });
+    expect(r.salida).toContain('nota "hola?[2J?chau"');
+    expect(r.salida).not.toContain("\u001b");
+    expect(r.salida).not.toContain("\r");
+  });
+
+  it("asignar ata un pago suelto a una orden", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, pagada: true, sobrante: "0.5" } }));
+    const r = await correr(["asignar", "--operacion", OPERACION, "--orden", "abcd2345"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/sueltos/asignar`, metodo: "POST", cuerpo: { operacion: OPERACION, orden: "ABCD2345" } });
+    expect(r.salida).toMatch(/pagada/);
+    expect(r.salida).toMatch(/0\.5/);
+    for (const malo of [["asignar", "--operacion", "12a", "--orden", "ABCD2345"], ["asignar", "--operacion", OPERACION], ["asignar", "--operacion", OPERACION, "--orden", "x"]]) {
+      expect((await correr(malo, { fetch: p.fetch })).codigo, malo.join(" ")).toBe(1);
+    }
+    expect(p.pedidos).toHaveLength(1);
+  });
+
+  it("devuelto marca devuelto un pago suelto con su ref", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, repetido: false } }));
+    const r = await correr(["devuelto", "--operacion", OPERACION, "--ref", "devolucion-0001"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/sueltos/asignar`, metodo: "POST", cuerpo: { operacion: OPERACION, devuelto: true, ref: "devolucion-0001" } });
+    expect(r.salida).toMatch(/marcada como devuelta/);
+    for (const malo of [["devuelto", "--operacion", OPERACION], ["devuelto", "--ref", "x"], ["devuelto", "--operacion", OPERACION, "--ref", "con espacios"]]) {
+      expect((await correr(malo, { fetch: p.fetch })).codigo, malo.join(" ")).toBe(1);
+    }
+    expect(p.pedidos).toHaveLength(1);
+    const ya = portero(() => ({ status: 409, cuerpo: { motivo: "ya-resuelto", estado: "asignado" } }));
+    const e = await correr(["devuelto", "--operacion", OPERACION, "--ref", "x"], { fetch: ya.fetch });
+    expect(e.codigo).toBe(1);
+    expect(e.salida).toMatch(/409 ya-resuelto/);
+  });
+
+  it("sin la clave no le habla al portero, y la ayuda nombra las órdenes nuevas", async () => {
+    const p = portero();
+    for (const args of [["dar", "--cuenta", CUENTA, "--sorteos", "1", "--dias", "1", "--ref", "x"], ["sueltos"], ["devuelto", "--operacion", OPERACION, "--ref", "x"]]) {
+      expect((await correr(args, { fetch: p.fetch, env: {} })).codigo).toBe(1);
+    }
+    expect(p.pedidos).toHaveLength(0);
+    const r = await correr(["otra"]);
+    for (const orden of ["dar", "pagada", "sueltos", "asignar", "devuelto"]) expect(r.salida).toContain(`cupones.mjs ${orden}`);
   });
 });

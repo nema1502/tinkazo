@@ -6,8 +6,13 @@
  *     GET  /v1/admin/cupones?lote=    200 {lote, creados, canjeados, cuentas, sorteosUsados, vence, anulado, anulados}
  *     POST /v1/admin/cupones/anular   {lote} | {codigo}                                         200 {anulados}
  *     POST /v1/admin/altas            {cuenta, sorteos, dias, ref}                              200 {ok, repetido, altaNueva, sorteos}
+ *     POST /v1/admin/derechos         {cuenta, sorteos, dias, ref}                              200 {ok, repetido, sorteos}   409 fuera-del-libro
+ *     POST /v1/admin/ordenes/pagada   {orden, metodo:"a-mano"|"qr-bs", ref}                     200 {ok, repetido}   404 orden
+ *     GET  /v1/admin/sueltos          200 {sueltos:[…], parciales?:[…], horizon?:false}
+ *     POST /v1/admin/sueltos/asignar  {operacion, orden} | {operacion, devuelto:true, ref}      200 {ok, pagada, sobrante} | {ok, repetido}
  *   Con `ADMIN_TOKEN` (operar, como las rutas de siempre):
  *     POST /v1/admin/altas/pausar | reanudar                                                    200 {pausadas}
+ *     POST /v1/admin/ventas/pausar | reanudar                                                   200 {ventaPausada}
  *
  * La clave de operar no crea cupones ni da sorteos, y la de cupones no apaga ni pausa nada. Sin la clave de una ruta
  * cargada, esa ruta no existe (404, como las de administración de siempre). Solo en mainnet con `ALTAS=1`: en testnet
@@ -20,6 +25,7 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Altas, FORMA_LOTE, MAX_CODIGOS_POR_PEDIDO, SECRETO_MINIMO, huella, normalizar } from "./altas";
+import { AJUSTE_VENTA_PAUSADA, type Cobros, type LectorDeCobros, normalizarOrden, usdcTexto } from "./cobros";
 import { type Config } from "./config";
 import { type Cupos, entre } from "./cupos";
 import { json } from "./http";
@@ -38,7 +44,22 @@ const MAX_CUERPO = 64 * 1024;
 /** El `ref` de un alta a mano: lo que la explica (`pruebas-internas`, `venta-qr-0001`). */
 const FORMA_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
-export type AccionAdmin = "cupones-crear" | "cupones-estado" | "cupones-anular" | "altas-admitir" | "altas-pausar" | "altas-reanudar";
+export type AccionAdmin =
+  | "cupones-crear"
+  | "cupones-estado"
+  | "cupones-anular"
+  | "altas-admitir"
+  | "altas-pausar"
+  | "altas-reanudar"
+  | "derechos-dar"
+  | "ordenes-pagada"
+  | "sueltos-lista"
+  | "sueltos-asignar"
+  | "ventas-pausar"
+  | "ventas-reanudar";
+
+/** El id de una operación de Horizon: un entero más grande que uno seguro de JavaScript, siempre en texto. */
+const OPERACION = /^\d{1,30}$/;
 
 type Registrar = (evento: string, datos?: Record<string, string | number>) => void;
 const r = (estado: number, cuerpo: Record<string, unknown>): Respuesta => ({ estado, cuerpo });
@@ -54,6 +75,10 @@ export interface DependenciasAdmin {
   red: Pick<Red, "leerCuenta">;
   reloj?: () => number;
   registrar?: Registrar;
+  /** Las órdenes y los pagos sueltos. Sin esto, lo de los pagos da `503 apagado`. */
+  cobros?: Cobros | null;
+  /** Quien lee los pagos en Horizon: la lista de sueltos lee antes lo nuevo. Sin él, lista lo que ya se sabía. */
+  lector?: LectorDeCobros | null;
 }
 
 export class Administracion {
@@ -93,6 +118,15 @@ export class Administracion {
         this.registrar(pausadas ? "alta-pausa" : "alta-reanudar", pausadas ? { motivo: "a-mano" } : {});
         return r(200, { pausadas });
       }
+      case "derechos-dar":
+        return this.dar(o);
+      case "sueltos-lista":
+        return this.sueltosLista();
+      case "ordenes-pagada":
+      case "sueltos-asignar":
+      case "ventas-pausar":
+      case "ventas-reanudar":
+        return this.pagos(accion, o);
       default:
         return r(404, { motivo: "accion" });
     }
@@ -163,9 +197,89 @@ export class Administracion {
     return r(200, { ok: true, repetido: res.repetido, altaNueva: res.altaNueva, sorteos: { quedan: q.quedan, proximoVence: q.proximoVence } });
   }
 
-  /** Para `/v1/patrocinio/estado`: altas de las últimas 24 horas y cupones canjeados y creados hoy (UTC). Sin cuentas. */
-  resumen(): Record<string, number> {
-    return this.prendida() ? this.d.altas.resumen(this.reloj()) : {};
+  /**
+   * Sorteos a mano para una cuenta que ya está en el libro (`cupones.mjs dar`), con `ref` `admin:<ref>` y el techo de
+   * sorteos dados a mano del día.
+   */
+  private dar(o: Record<string, unknown>): Respuesta {
+    const { cuenta, sorteos, dias, ref } = o;
+    if (typeof cuenta !== "string" || !StrKey.isValidEd25519PublicKey(cuenta)) return r(400, { motivo: "cuerpo" });
+    if (!entre(sorteos, 1, TECHO_SORTEOS_DIA) || !entre(dias, 1, 3650) || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
+    const ahora = this.reloj();
+    const res = this.d.altas.darAMano({ cuenta, sorteos, dias, ref, techoSorteos: TECHO_SORTEOS_DIA }, ahora);
+    if (!res.ok) return res.motivo === "techo-sorteos" ? r(400, { motivo: "techo", que: "sorteos" }) : r(409, { motivo: res.motivo });
+    if (!res.repetido) this.registrar("admin-derechos", { sorteos, dias });
+    const q = this.d.cupos.quedan({ cuenta }, ahora);
+    return r(200, { ok: true, repetido: res.repetido, sorteos: { quedan: q.quedan, proximoVence: q.proximoVence } });
+  }
+
+  /**
+   * `GET /v1/admin/sueltos`: primero lee los pagos nuevos (nadie tiene que haber tocado «Ya pagué»), y después los pagos
+   * sueltos sin resolver y, si hay, las órdenes pagadas a medias (`parciales`, vencidas o no, sin la persona), que no
+   * están en los sueltos porque lo que llegó ya está atado a su orden. Si Horizon no contestó, `horizon: false` y lo que
+   * ya se sabía.
+   */
+  private async sueltosLista(): Promise<Respuesta> {
+    const cobros = this.d.cobros;
+    if (!cobros) return r(503, { motivo: "apagado", detalle: "config" });
+    const lectura = this.d.lector ? await this.d.lector.leer() : { ok: true };
+    const parciales = cobros.parciales(this.reloj());
+    return r(200, { sueltos: cobros.sueltos(), ...(parciales.length ? { parciales } : {}), ...(lectura.ok ? {} : { horizon: false }) });
+  }
+
+  /** Las órdenes pagadas por fuera, los pagos sueltos y la venta pausada. */
+  private pagos(accion: AccionAdmin, o: Record<string, unknown>): Respuesta {
+    const cobros = this.d.cobros;
+    if (!cobros) return r(503, { motivo: "apagado", detalle: "config" });
+    const ahora = this.reloj();
+    switch (accion) {
+      case "ordenes-pagada": {
+        const orden = normalizarOrden(o.orden);
+        const { metodo, ref } = o;
+        if (!orden || (metodo !== "a-mano" && metodo !== "qr-bs") || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
+        const res = cobros.marcarPagadaAMano({ orden, metodo, ref, techoAltas: TECHO_ALTAS_DIA, techoSorteos: TECHO_SORTEOS_DIA }, ahora);
+        if (!res.ok) return res.motivo === "orden" ? r(404, { motivo: "orden" }) : r(400, { motivo: "techo", que: res.motivo === "techo-altas" ? "altas" : "sorteos" });
+        if (!res.repetido) this.registrar("admin-pagada", { metodo, producto: cobros.orden(orden)?.producto ?? "?" });
+        return r(200, { ok: true, repetido: res.repetido });
+      }
+      case "sueltos-asignar": {
+        const { operacion, orden, devuelto, ref } = o;
+        if (typeof operacion !== "string" || !OPERACION.test(operacion)) return r(400, { motivo: "cuerpo" });
+        if (devuelto === true) {
+          if (orden !== undefined || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
+          const res = cobros.devolver({ operacion, ref });
+          if (!res.ok) return res.motivo === "suelto" ? r(404, { motivo: "suelto" }) : r(409, { motivo: "ya-resuelto", estado: res.estado });
+          if (!res.repetido) this.registrar("admin-suelto", { accion: "devuelto" });
+          return r(200, { ok: true, repetido: res.repetido });
+        }
+        const id = normalizarOrden(orden);
+        if (devuelto !== undefined || !id) return r(400, { motivo: "cuerpo" });
+        const res = cobros.asignar({ operacion, orden: id }, ahora);
+        if (!res.ok) return res.motivo === "ya-resuelto" ? r(409, { motivo: "ya-resuelto", estado: res.estado }) : res.motivo === "no-asignable" ? r(409, { motivo: "no-asignable" }) : r(404, { motivo: res.motivo });
+        this.registrar("admin-suelto", { accion: "asignado", pagada: res.pagada ? 1 : 0 });
+        return r(200, { ok: true, pagada: res.pagada, sobrante: usdcTexto(res.sobrante) });
+      }
+      case "ventas-pausar":
+      case "ventas-reanudar": {
+        const ventaPausada = accion === "ventas-pausar";
+        this.d.cupos.fijarAjuste(AJUSTE_VENTA_PAUSADA, ventaPausada ? "1" : "0", ahora);
+        this.registrar("venta-pausa", { pausada: ventaPausada ? 1 : 0 });
+        return r(200, { ventaPausada });
+      }
+      default:
+        return r(404, { motivo: "accion" });
+    }
+  }
+
+  /**
+   * Para `/v1/patrocinio/estado`: altas de las últimas 24 horas y cupones canjeados y creados hoy (UTC). Con los pagos,
+   * también cuántos pagos sueltos quedan sin resolver y si la venta está pausada. Sin cuentas.
+   */
+  resumen(): Record<string, number | boolean> {
+    if (!this.prendida()) return {};
+    const base = this.d.altas.resumen(this.reloj());
+    const cobros = this.d.cobros;
+    return cobros ? { ...base, pagosSueltos: cobros.sueltosSinResolver(), ventaPausada: this.d.cupos.ajuste(AJUSTE_VENTA_PAUSADA) === "1" } : base;
   }
 }
 
@@ -185,6 +299,12 @@ const RUTAS: Record<string, { clave: "cupones" | "operar"; metodos: Partial<Reco
   "/v1/admin/altas": { clave: "cupones", metodos: { POST: "altas-admitir" } },
   "/v1/admin/altas/pausar": { clave: "operar", metodos: { POST: "altas-pausar" } },
   "/v1/admin/altas/reanudar": { clave: "operar", metodos: { POST: "altas-reanudar" } },
+  "/v1/admin/derechos": { clave: "cupones", metodos: { POST: "derechos-dar" } },
+  "/v1/admin/ordenes/pagada": { clave: "cupones", metodos: { POST: "ordenes-pagada" } },
+  "/v1/admin/sueltos": { clave: "cupones", metodos: { GET: "sueltos-lista" } },
+  "/v1/admin/sueltos/asignar": { clave: "cupones", metodos: { POST: "sueltos-asignar" } },
+  "/v1/admin/ventas/pausar": { clave: "operar", metodos: { POST: "ventas-pausar" } },
+  "/v1/admin/ventas/reanudar": { clave: "operar", metodos: { POST: "ventas-reanudar" } },
 };
 
 /**

@@ -66,6 +66,9 @@ export type Creados = { ok: true; creados: number; repetidos: number } | { ok: f
 /** Cómo terminó un alta a mano. */
 export type AltaAMano = { ok: true; repetido: boolean; altaNueva: boolean } | { ok: false; motivo: "ref-usado" | "techo-altas" | "techo-sorteos" };
 
+/** Cómo terminó dar sorteos a mano a una cuenta del libro. */
+export type DadoAMano = { ok: true; repetido: boolean } | { ok: false; motivo: "fuera-del-libro" | "ref-usado" | "techo-sorteos" };
+
 /** El día UTC de un instante, `AAAA-MM-DD`: la clave de los techos diarios. */
 const diaUtc = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -239,6 +242,32 @@ export class Altas {
       if (altaNueva) this.cupos.fijarAjuste(`altas_dia:${dia}`, String(altasHoy + 1), ahora);
       this.cupos.fijarAjuste(`derechos_dia:${dia}`, String(sorteosHoy + p.sorteos), ahora);
       return { ok: true, repetido: false, altaNueva };
+    });
+  }
+
+  /**
+   * Sorteos dados a mano a una cuenta que ya está en el libro (una venta por QR a quien ya tiene acceso), con `ref`
+   * `admin:<ref>`. Todo en una transacción y sin esperar a nadie.
+   *
+   * - Fuera del libro, `fuera-del-libro`: unos sorteos sin acceso no sirven (para eso está el alta a mano).
+   * - El mismo `ref` para la misma cuenta: `repetido`, sin sumar. Para otra cuenta: `ref-usado`.
+   * - Cuenta para el techo de sorteos dados a mano del día, el mismo del alta a mano.
+   */
+  darAMano(p: { cuenta: string; sorteos: number; dias: number; ref: string; techoSorteos: number }, ahora: number): DadoAMano {
+    if (!StrKey.isValidEd25519PublicKey(p.cuenta)) throw new Error("dar-cuenta");
+    if (!entre(p.sorteos, 1, 1000) || !entre(p.dias, 1, 3650) || !texto(p.ref, 64)) throw new Error("dar-forma");
+    const ref = `admin:${p.ref}`;
+    return this.cupos.transaccion((): DadoAMano => {
+      const previo = this.filas("SELECT cuenta FROM derechos WHERE ref = ?", ref)[0];
+      if (previo) return previo.cuenta === p.cuenta ? { ok: true, repetido: true } : { ok: false, motivo: "ref-usado" };
+      if (!this.cupos.estaEnElLibro(p.cuenta)) return { ok: false, motivo: "fuera-del-libro" };
+      const dia = diaUtc(ahora);
+      const sorteosHoy = Number(this.cupos.ajuste(`derechos_dia:${dia}`) ?? 0);
+      if (sorteosHoy + p.sorteos > p.techoSorteos) return { ok: false, motivo: "techo-sorteos" };
+      const usuario = this.cupos.altaDeCuenta(p.cuenta)?.usuario ?? `cuenta:${p.cuenta}`;
+      this.cupos.otorgar({ usuario, cuenta: p.cuenta, origen: "admin", ref, sorteos: p.sorteos, dias: p.dias }, ahora);
+      this.cupos.fijarAjuste(`derechos_dia:${dia}`, String(sorteosHoy + p.sorteos), ahora);
+      return { ok: true, repetido: false };
     });
   }
 

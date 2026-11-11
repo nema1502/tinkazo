@@ -245,6 +245,12 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(precios && leerPrecios(JSON.parse(precios) as string)).toEqual(leerPrecios(PRECIOS_POR_DEFECTO));
   });
 
+  it("mainnet paga el draw solo de los sellos del portero desde el primer despliegue; testnet no tiene la variable", () => {
+    expect(valor("env.mainnet.vars", "SOLO_SELLOS_PORTERO")).toBe('"1"');
+    expect(leerConfig({ RED: "mainnet", ALTAS: "1", SOLO_SELLOS_PORTERO: "1" }).soloSellosDelPortero).toBe(true);
+    expect(valor("vars", "SOLO_SELLOS_PORTERO")).toBeUndefined();
+  });
+
   it("mainnet fija sus pagos por dirección para un stand que sale por la misma wifi", () => {
     expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"600"');
     expect(valor("vars", "POR_IP_POR_HORA")).toBeUndefined();

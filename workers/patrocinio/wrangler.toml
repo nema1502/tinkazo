@@ -72,6 +72,9 @@ ALTAS = "1"
 # Las órdenes de pago nuevas y el sorteo del servidor, apagados hasta su prueba.
 ALTAS_PAGO = "0"
 SORTEO_SERVIDOR = "0"
+# Con ALTAS, el portero paga un draw solo de un sello que pagó él (lo mande la persona o la sorteadora). Solo "0" lo
+# apaga: es el plan B si la lectura de get_raffle fallara en la red principal.
+SOLO_SELLOS_PORTERO = "1"
 # El id de la app de mainnet en Pollar (público). Vacío, las rutas de altas no atienden.
 POLLAR_APP_ID = "cmw6osdl600080imq38rz1vvu"
 # "inmediato" hoy; "diferido" desde la fase 2a. Tiene que coincidir con lo que dice Pollar.

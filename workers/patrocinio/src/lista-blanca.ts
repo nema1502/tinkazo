@@ -77,6 +77,8 @@ export interface TxAceptada {
    * anota de cada sello que paga, para saber después si un `draw` es de un sello suyo. En `draw`, o si no se puede leer, null.
    */
   sello: { huellaLista: string; ronda: number } | null;
+  /** En `draw`, el número del sorteo (argumento 0, un `u64`, en decimal): para buscar su sello. En `seal`, null. */
+  sorteo: string | null;
 }
 
 export type MotivoRechazo = "xdr" | "no-permitida" | "ventana" | "fee-alta" | "restaurar" | "firma";
@@ -188,6 +190,7 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
   if (args.length !== forma.length || args.some((a, i) => a.type !== forma[i])) return rechazo("no-permitida", "argumentos");
   let ganadores: number | null = null;
   let sello: TxAceptada["sello"] = null;
+  let sorteo: string | null = null;
   if (metodo === "seal") {
     const organizador = args[0];
     if (!organizador || organizador.type !== "scvAddress") return rechazo("no-permitida", "argumentos");
@@ -204,6 +207,8 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
     sello = ronda === null ? null : { huellaLista: hex(lista), ronda };
   } else if ((bytesDe(args[1]?.value) ?? new Uint8Array()).length !== 96) {
     return rechazo("no-permitida", "argumentos");
+  } else {
+    sorteo = u64EnTexto(args[0]?.value);
   }
   // Autorizaciones: solo las de la cuenta de origen (que ya firma la transacción). Una dirección ajena, nunca.
   for (const a of invocacion.auth) {
@@ -240,7 +245,17 @@ export async function evaluar(xdrBase64: string, r: ReglasLista): Promise<Veredi
   if (alcanzado.peso <= 0) return rechazo("firma", "sin-firma-valida");
   if (alcanzado.peso < Math.max(1, autoridad.umbral)) return rechazo("firma", "peso-insuficiente");
 
-  return { ok: true, tx: { hash: hex(hash), cuenta, metodo, resourceFee, feeDeclarado, venceS: maxS, ganadores, sello } };
+  return { ok: true, tx: { hash: hex(hash), cuenta, metodo, resourceFee, feeDeclarado, venceS: maxS, ganadores, sello, sorteo } };
+}
+
+/** Un `u64` del XDR en decimal, o null si no se puede leer. */
+function u64EnTexto(v: unknown): string | null {
+  try {
+    const b = typeof v === "bigint" ? v : BigInt(String(v));
+    return b >= 0n && b < 1n << 64n ? b.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Un `u64` del XDR como número, si entra sin perder precisión; si no, null. */

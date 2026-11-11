@@ -1,6 +1,7 @@
 /**
  * La herramienta de cupones de Tinkazo: crea lotes en el portero de mainnet y arma las tarjetas para imprimir, mira
- * cómo va un lote, anula un lote o un código, y admite a mano una cuenta que ya existe.
+ * cómo va un lote, anula un lote o un código, y admite a mano una cuenta que ya existe. Con los pagos, suma sorteos a
+ * mano, marca una orden pagada por fuera y resuelve los pagos sueltos.
  *
  *   node scripts/cupones.mjs crear --lote space-apps-14nov --cantidad 30 --sorteos 3 --dias 60 \
  *     --vence 2026-12-14 --salida C:/cupones-privados [--usos 1]
@@ -8,6 +9,11 @@
  *   node scripts/cupones.mjs anular --lote space-apps-14nov-reserva
  *   node scripts/cupones.mjs anular --codigo K7M2-9QXA-4HTR
  *   node scripts/cupones.mjs admitir --cuenta G... --sorteos 20 --dias 60 --ref pruebas-internas
+ *   node scripts/cupones.mjs dar --cuenta G... --sorteos 10 --dias 365 --ref venta-qr-0001
+ *   node scripts/cupones.mjs pagada --orden ABCD2345 --metodo qr-bs --ref comprobante-0001
+ *   node scripts/cupones.mjs sueltos [--json]
+ *   node scripts/cupones.mjs asignar --operacion 123456789 --orden ABCD2345
+ *   node scripts/cupones.mjs devuelto --operacion 123456789 --ref devolucion-0001
  *
  * Sin secretos en el repositorio: la clave de cupones sale de `TINKAZO_CUPONES_TOKEN` y va solo en la cabecera
  * `Authorization`; nunca se muestra. El portero es `https://pm.tinkazo.app`; `--base http://127.0.0.1:8793` para probar
@@ -67,6 +73,21 @@ export function generarCodigos(cantidad, aleatorio = (arr) => globalThis.crypto.
   }
   return [...vistos];
 }
+
+/**
+ * El id de una orden como lo escribe quien opera: con o sin el prefijo de la nota (`tk:o:`), con guiones o espacios, en
+ * minúsculas, la O como 0 y la I o la L como 1. Lo mismo que `normalizarOrden` del portero (`workers/patrocinio/src/cobros.ts`).
+ */
+export function normalizarOrden(entrada) {
+  if (typeof entrada !== "string" || entrada.length > MAX_ENTRADA) return null;
+  const limpio = entrada.replace(SEPARADORES, "").replace(/^tk:[o0]:/i, "");
+  if (!/^[0-9A-Za-z]+$/.test(limpio)) return null;
+  const id = limpio.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1");
+  return new RegExp(`^[${ALFABETO}]{8}$`).test(id) ? id : null;
+}
+
+/** Un texto ajeno (la nota de un pago) como se puede imprimir: cada carácter de control pasa a ser un signo visible. */
+export const visible = (texto) => String(texto).replace(/[\u0000-\u001f\u007f-\u009f]/g, "?");
 
 /** El enlace del cupón: abre Oficial y lleva el código en el fragmento, que el navegador no le manda a nadie. */
 export const enlaceDe = (codigo) => `https://tinkazo.app/?red=oficial#cupon=${codigo}`;
@@ -252,6 +273,9 @@ const ESPERA_MS = 20_000;
 const FORMA_LOTE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const FORMA_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const FORMA_CUENTA = /^G[A-Z2-7]{55}$/;
+/** El id de una operación de Horizon, como lo muestra `sueltos`. */
+const FORMA_OPERACION = /^\d{1,30}$/;
+const METODOS_PAGADA = ["a-mano", "qr-bs"];
 
 class ErrorDeUso extends Error {}
 
@@ -302,6 +326,11 @@ const AYUDA = `Uso:
   node scripts/cupones.mjs anular --lote <lote>
   node scripts/cupones.mjs anular --codigo <código>
   node scripts/cupones.mjs admitir --cuenta G... --sorteos <1 a 500> --dias <1 a 3650> --ref <ref>
+  node scripts/cupones.mjs dar --cuenta G... --sorteos <1 a 500> --dias <1 a 3650> --ref <ref>
+  node scripts/cupones.mjs pagada --orden <orden> --metodo qr-bs|a-mano --ref <ref>
+  node scripts/cupones.mjs sueltos [--json]
+  node scripts/cupones.mjs asignar --operacion <operación> --orden <orden>
+  node scripts/cupones.mjs devuelto --operacion <operación> --ref <ref>
 La clave va en TINKAZO_CUPONES_TOKEN. --base cambia el portero (por defecto ${BASE_POR_DEFECTO}).`;
 
 /**
@@ -312,7 +341,7 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
   let escritos = [];
   try {
     const { orden, opciones } = leerArgumentos(argv);
-    if (!["crear", "estado", "anular", "admitir"].includes(orden)) throw new ErrorDeUso(orden ? `no conozco la orden "${orden}"` : "falta la orden");
+    if (!["crear", "estado", "anular", "admitir", "dar", "pagada", "sueltos", "asignar", "devuelto"].includes(orden)) throw new ErrorDeUso(orden ? `no conozco la orden "${orden}"` : "falta la orden");
     const base = baseDe(opciones.base);
     const clave = String(env.TINKAZO_CUPONES_TOKEN ?? "");
 
@@ -416,13 +445,84 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
       return 0;
     }
 
-    // admitir
-    if (typeof opciones.cuenta !== "string" || !FORMA_CUENTA.test(opciones.cuenta)) throw new ErrorDeUso("--cuenta va como una cuenta de Stellar (G...)");
-    const sorteos = entero(opciones, "sorteos", 1, 500);
-    const dias = entero(opciones, "dias", 1, 3650);
-    if (typeof opciones.ref !== "string" || !FORMA_REF.test(opciones.ref)) throw new ErrorDeUso("--ref va con letras, números, puntos, guiones o guiones bajos, hasta 64");
-    const r = await pedir("POST", "/v1/admin/altas", { cuenta: opciones.cuenta, sorteos, dias, ref: opciones.ref });
-    log(r.repetido ? `Esa ref ya se había dado a esta cuenta: no se sumó nada. Le quedan ${r.sorteos?.quedan} sorteos.` : `Cuenta admitida${r.altaNueva ? "" : " (ya estaba en el libro)"}: ${sorteos} sorteos para ${dias} días. Le quedan ${r.sorteos?.quedan} sorteos.`);
+    /** La ref de lo que se hace a mano: lo que lo explica (un comprobante, una venta). */
+    const ref = () => {
+      if (typeof opciones.ref !== "string" || !FORMA_REF.test(opciones.ref)) throw new ErrorDeUso("--ref va con letras, números, puntos, guiones o guiones bajos, hasta 64");
+      return opciones.ref;
+    };
+    const operacion = () => {
+      if (typeof opciones.operacion !== "string" || !FORMA_OPERACION.test(opciones.operacion)) throw new ErrorDeUso("--operacion va como el número de la operación que muestra sueltos");
+      return opciones.operacion;
+    };
+    const ordenDe = () => {
+      const id = normalizarOrden(opciones.orden);
+      if (!id) throw new ErrorDeUso("--orden va como el id de la orden, 8 caracteres (ABCD2345 o tk:o:ABCD2345)");
+      return id;
+    };
+
+    if (orden === "admitir" || orden === "dar") {
+      if (typeof opciones.cuenta !== "string" || !FORMA_CUENTA.test(opciones.cuenta)) throw new ErrorDeUso("--cuenta va como una cuenta de Stellar (G...)");
+      const sorteos = entero(opciones, "sorteos", 1, 500);
+      const dias = entero(opciones, "dias", 1, 3650);
+      const cuerpo = { cuenta: opciones.cuenta, sorteos, dias, ref: ref() };
+      if (orden === "dar") {
+        // Solo a una cuenta que ya está en el libro: si no, el portero contesta 409 fuera-del-libro (usá admitir).
+        const r = await pedir("POST", "/v1/admin/derechos", cuerpo);
+        log(r.repetido ? `Esa ref ya se había usado: no se sumó nada. Le quedan ${r.sorteos?.quedan} sorteos.` : `Sumados ${sorteos} sorteos para ${dias} días. Le quedan ${r.sorteos?.quedan} sorteos.`);
+        return 0;
+      }
+      const r = await pedir("POST", "/v1/admin/altas", cuerpo);
+      log(r.repetido ? `Esa ref ya se había dado a esta cuenta: no se sumó nada. Le quedan ${r.sorteos?.quedan} sorteos.` : `Cuenta admitida${r.altaNueva ? "" : " (ya estaba en el libro)"}: ${sorteos} sorteos para ${dias} días. Le quedan ${r.sorteos?.quedan} sorteos.`);
+      return 0;
+    }
+
+    if (orden === "pagada") {
+      const id = ordenDe();
+      if (!METODOS_PAGADA.includes(opciones.metodo)) throw new ErrorDeUso("--metodo va como qr-bs (cobro en bolivianos por QR) o a-mano");
+      const r = await pedir("POST", "/v1/admin/ordenes/pagada", { orden: id, metodo: opciones.metodo, ref: ref() });
+      log(r.repetido ? `La orden ${id} ya estaba pagada: no se sumó nada.` : `Orden ${id} pagada (${opciones.metodo}): la persona ya tiene sus sorteos.`);
+      return 0;
+    }
+
+    if (orden === "sueltos") {
+      const r = await pedir("GET", "/v1/admin/sueltos");
+      const sueltos = Array.isArray(r.sueltos) ? r.sueltos : [];
+      const parciales = Array.isArray(r.parciales) ? r.parciales : [];
+      if (opciones.json) {
+        log(JSON.stringify(r, null, 2));
+        return 0;
+      }
+      if (r.horizon === false) log("Horizon no contestó: esto es lo que ya se sabía, sin los pagos más nuevos.");
+      const cuandoDe = (ms) => {
+        const f = enBolivia(Number(ms));
+        return `${f.d} de ${MESES_ES[f.mes]}, ${String(f.h).padStart(2, "0")}:${String(f.min).padStart(2, "0")}`;
+      };
+      if (!sueltos.length) log("No hay pagos sueltos sin resolver.");
+      else {
+        log(`${sueltos.length} pagos sueltos sin resolver (para devolver, a mano desde la cuenta de cobros):`);
+        for (const p of sueltos) {
+          log(`  operación ${p.operacion}: ${p.cantidad} ${p.activo}, ${p.motivo}${p.nota ? `, nota "${visible(p.nota)}"` : ""}${p.orden ? `, orden ${p.orden}` : ""}, ${cuandoDe(p.ms)}`);
+          log(`    de ${visible(p.de)}, transacción ${visible(p.tx)}`);
+        }
+      }
+      if (parciales.length) {
+        log(`${parciales.length} órdenes pagadas a medias (se completan con la misma nota, se marcan con pagada o se devuelve lo recibido):`);
+        for (const o of parciales) log(`  orden ${o.id} (${o.producto}): llegaron ${o.recibido} de ${o.total} USDC, falta llegar a ${o.minimo}; ${o.vencida ? "venció" : "vence"} el ${cuandoDe(o.vence)}`);
+      }
+      return 0;
+    }
+
+    if (orden === "asignar") {
+      const cuerpo = { operacion: operacion(), orden: ordenDe() };
+      const r = await pedir("POST", "/v1/admin/sueltos/asignar", cuerpo);
+      log(`Operación ${cuerpo.operacion} asignada a la orden ${cuerpo.orden}: ${r.pagada ? "la orden quedó pagada" : "la orden todavía no llega al mínimo"}.${r.sobrante && r.sobrante !== "0" ? ` Sobran ${r.sobrante}: quedan en sueltos para devolver.` : ""}`);
+      return 0;
+    }
+
+    // devuelto
+    const cuerpo = { operacion: operacion(), devuelto: true, ref: ref() };
+    const r = await pedir("POST", "/v1/admin/sueltos/asignar", cuerpo);
+    log(r.repetido ? `La operación ${cuerpo.operacion} ya estaba marcada como devuelta.` : `Operación ${cuerpo.operacion} marcada como devuelta. La devolución la manda a mano quien tiene la llave de la cuenta de cobros.`);
     return 0;
   } catch (e) {
     // Lo escrito de un lote que el portero no creó se borra: esos códigos no valen.

@@ -18,6 +18,7 @@ import { type Cupo, type Cupos, type Limites } from "./cupos";
 import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
 import type { Planes } from "./plan";
 import { type CuentaEnRed, ErrorDeRed, type Red } from "./red";
+import { CODIGO_RONDA_NO_LISTA, CODIGO_YA_SORTEADO, REINTENTAR_RONDA_MS, type Sorteadora, VENTANA_SORTEO_S, leerFirma, leerNumeroDeSorteo, leerSorteo } from "./sorteadora";
 
 export type Modo = "portero" | "pollar" | "apagado";
 
@@ -67,6 +68,8 @@ export class Portero {
     private readonly registrar: (evento: string, datos?: Record<string, string | number>) => void = () => {},
     /** Quien averigua si una cuenta tiene el plan del equipo (que le sube el cupo). Sin él, todas tienen el cupo de siempre. */
     private readonly planes: Planes | null = null,
+    /** La cuenta sorteadora, para el sorteo del servidor (`/v1/sorteo`). Sin ella, esa ruta da `503 apagado`. */
+    private readonly sorteadora: Sorteadora | null = null,
   ) {}
 
   // ---------- estado ----------
@@ -218,8 +221,18 @@ export class Portero {
 
     if (!previa || previa.estado === "devuelto") {
       let recursosSimulados = 0;
+      let selloHash: string | null = null;
       try {
         if (!(await this.laAbrioNuestraApp(tx.cuenta, ahora, leer))) return r(403, { motivo: "cuenta-ajena" });
+        // En mainnet con las altas, un `draw` se paga solo si su sello lo pagó el portero (con o sin el sorteo del servidor):
+        // así nadie sella con Freighter y nos pasa el sorteo. Se mira antes de simular, con una lectura de `get_raffle` que
+        // no cuesta nada; si la red no deja leer, 502 red y no se paga.
+        if (this.cfg.soloSellosDelPortero && tx.metodo === "draw") {
+          const id = tx.sorteo === null ? null : leerNumeroDeSorteo(tx.sorteo);
+          const s = id === null ? null : await leerSorteo(this.red, { passphrase: this.cfg.passphrase, contractId: this.cfg.contractId, origen: tx.cuenta }, id);
+          selloHash = s ? this.cupos.selloDelPortero(s.organizador, s.huellaLista, s.ronda) : null;
+          if (!selloHash) return r(403, { motivo: "no-es-nuestro" });
+        }
         const sim = await this.red.simular(xdrBase64);
         if (!sim.ok) return sim.motivo === "restaurar" ? r(400, { motivo: "no-permitida", razon: "restaurar", detalle: sim.detalle }) : r(400, { motivo: "fallaria", detalle: sim.detalle });
         if (sim.minResourceFee > topeTx) return r(400, { motivo: "no-permitida", razon: "fee-alta", detalle: "simulacion" });
@@ -233,7 +246,7 @@ export class Portero {
       // Desde acá hasta reservar no hay ningún await: comprobar y reservar es una sola jugada.
       // El estimado sale de la simulación y de nuestra configuración, nunca de lo que declara el cliente.
       const estimado = this.techoDeRecursos(recursosSimulados) + 2 * this.cfg.inclusionBump;
-      const res = this.cupos.reservar({ hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS, ganadores: tx.ganadores, sello: tx.sello }, ahora, lim);
+      const res = this.cupos.reservar({ hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS, ganadores: tx.ganadores, sello: tx.sello, selloHash }, ahora, lim);
       if (!res.ok) {
         if (res.motivo === "sin-sorteos") return r(402, { motivo: "sin-sorteos", vencieron: res.vencieron });
         if (res.motivo === "cupo-cuenta") return r(429, { motivo: "cupo-cuenta", que: res.que, liberaEn: res.liberaEn, max: res.max });
@@ -313,6 +326,151 @@ export class Portero {
     if (envio.status === "TRY_AGAIN_LATER") return r(502, { motivo: "red", detalle: "TRY_AGAIN_LATER" });
     if (envio.codigo && /InsufficientBalance|InsufficientFee/.test(envio.codigo)) return r(503, { motivo: "fondo", codigo: envio.codigo });
     return r(400, { motivo: "rechazada", codigo: envio.codigo ?? "desconocido" });
+  }
+
+  // ---------- el sorteo por el servidor ----------
+
+  /**
+   * `POST /v1/sorteo`: manda el `draw` de un sorteo desde la cuenta sorteadora, con la firma de la ronda que ya calculó
+   * el navegador (96 bytes en hexadecimal). La persona no firma nada. Solo en mainnet con `SORTEO_SERVIDOR=1`.
+   *
+   *   1. lee el sorteo con `get_raffle` (solo lectura) y exige que el organizador esté en el libro y que su sello lo haya
+   *      pagado el portero (una fila de `sellos_portero` con el mismo organizador, huella y ronda): si no, 403;
+   *   2. ya sorteado, `{ya:true}`; ya pedido y en camino, el mismo hash;
+   *   3. simula el `draw`: ahí el contrato comprueba la firma, así que una que no pasa da 400 sin reservar ni pagar nada;
+   *   4. en la cola de la sorteadora, de a uno: la secuencia, la firma, la reserva contra el organizador (su tope de
+   *      sorteos del mes y lo guardado para su sello), el fee-bump de siempre y el envío. Con la secuencia vieja, relee la
+   *      cuenta y reintenta una vez;
+   *   5. tomado el envío, la respuesta sale con el hash, pero la cola no manda el siguiente hasta que este entre (la red
+   *      guarda una sola transacción pendiente por cuenta) o hasta que pase el plazo, y entonces relee la secuencia.
+   *
+   * La red ocupada (TRY_AGAIN_LATER, o txInsufficientFee: una secuencia que ya tiene otra pendiente, o la comisión por
+   * debajo de lo que pide la red en ese momento) es `502 {motivo:"red", detalle:"ocupada"}`, que el sitio reintenta con
+   * espera. Solo la falta de saldo es `503 fondo`.
+   */
+  async sortear(sorteo: string, firmaHex: string): Promise<Respuesta> {
+    const modo = this.modo();
+    const s = this.sorteadora;
+    if (!this.cfg.sorteoServidor || !s || modo !== "portero" || !this.cfg.contractId || !this.firmante || !this.cuentaPatrocinadora) {
+      return r(503, { motivo: "apagado", ...(modo === "pollar" ? { rige: "pollar" } : {}) });
+    }
+    const id = leerNumeroDeSorteo(sorteo);
+    const firma = leerFirma(firmaHex);
+    if (id === null || !firma) return r(400, { motivo: "cuerpo" });
+
+    let selloHash: string;
+    let organizador: string;
+    let sim;
+    try {
+      const enRed = await s.leer(id);
+      if (!enRed || !this.cupos.estaEnElLibro(enRed.organizador)) return r(403, { motivo: "no-es-nuestro" });
+      organizador = enRed.organizador;
+      const sello = this.cupos.selloDelPortero(enRed.organizador, enRed.huellaLista, enRed.ronda);
+      if (!sello) return r(403, { motivo: "no-es-nuestro" });
+      selloHash = sello;
+      if (enRed.sorteado) return r(200, { ya: true });
+      const previo = this.yaPedido(selloHash);
+      if (previo) return previo;
+      sim = await s.simular(id, firma);
+    } catch (e) {
+      if (e instanceof ErrorDeRed) return r(502, { motivo: "red", detalle: e.message });
+      throw e;
+    }
+    if (!sim.ok) {
+      if (sim.codigoContrato === CODIGO_YA_SORTEADO) return r(200, { ya: true });
+      // La hora del ledger todavía no llegó a la de la ronda: no es una firma mala, se reintenta en unos segundos.
+      if (sim.codigoContrato === CODIGO_RONDA_NO_LISTA) return r(409, { motivo: "ronda-no-lista", reintentarEn: this.reloj() + REINTENTAR_RONDA_MS });
+      return r(400, { motivo: "fallaria", detalle: sim.motivo === "restaurar" ? "restaurar" : sim.detalle });
+    }
+    if (!sim.datos) return r(502, { motivo: "red", detalle: "simulacion" });
+    if (sim.minResourceFee > this.topeTx()) return r(400, { motivo: "fee-alta", detalle: "simulacion" });
+    const datos = sim.datos;
+    const estimado = this.techoDeRecursos(sim.minResourceFee) + 2 * this.cfg.inclusionBump;
+    // Los topes del organizador se piden antes de entrar a la cola: ahí puede haber una espera corta (el plan del equipo).
+    const lim = await this.limitesDe(organizador);
+
+    return s.enCola(async (retener) => {
+      for (let intento = 0; intento < 2; intento++) {
+        const ahora = this.reloj();
+        let actual: bigint | null;
+        try {
+          actual = await s.secuencia();
+        } catch (e) {
+          if (e instanceof ErrorDeRed) return r(502, { motivo: "red", detalle: e.message });
+          throw e;
+        }
+        if (actual === null) return r(503, { motivo: "fondo", detalle: "sorteadora" });
+        const venceS = Math.floor(ahora / 1000) + Math.min(VENTANA_SORTEO_S, this.cfg.ventanaMaxS);
+        const firmada = await s.firmar(s.armar(id, firma, actual, datos, venceS));
+        // Otro pedido del mismo sorteo pudo pasar por la cola mientras simulábamos: desde acá hasta reservar, sin await.
+        const previo = this.yaPedido(selloHash);
+        if (previo) return previo;
+        const res = this.cupos.reservar({ hash: firmada.hash, cuenta: organizador, metodo: "draw", estimado, vence: venceS, selloHash }, ahora, lim);
+        if (!res.ok) {
+          if (res.motivo === "cupo-cuenta") return r(429, { motivo: "cupo-cuenta", que: res.que, liberaEn: res.liberaEn, max: res.max });
+          return r(503, { motivo: "fondo" });
+        }
+        this.cupos.purgar(ahora);
+        this.alQuedarEnElAire();
+        this.registrar("sorteo-servidor", { hash: corto(firmada.hash), estimado, intento: intento + 1 });
+
+        let envuelta: string;
+        try {
+          envuelta = await this.envolver(firmada.xdr);
+        } catch (e) {
+          this.cupos.devolver(firmada.hash);
+          this.registrar("error-interno", { donde: "envolver-sorteo", hash: corto(firmada.hash), error: String(e).slice(0, 120) });
+          return r(500, { motivo: "interno" });
+        }
+        let envio;
+        try {
+          envio = await this.red.enviar(envuelta);
+        } catch (e) {
+          // No se sabe si llegó: queda reservada para la alarma, y la secuencia se vuelve a leer.
+          s.olvidar();
+          this.alQuedarEnElAire();
+          this.registrar("error-envio", { hash: corto(firmada.hash), error: e instanceof ErrorDeRed ? e.message.slice(0, 80) : "desconocido" });
+          if (e instanceof ErrorDeRed) return r(502, { motivo: "red", detalle: e.message });
+          throw e;
+        }
+        if (envio.status === "PENDING" || envio.status === "DUPLICATE") {
+          s.usada(actual);
+          this.cupos.marcarEnviado(firmada.hash);
+          this.registrar("enviado", { hash: corto(firmada.hash), red: envio.status });
+          // La respuesta sale ya; el siguiente de la cola espera a que este entre. Lo cierra la alarma, como siempre.
+          const hash = firmada.hash;
+          retener(
+            s.esperarQueEntre(hash).then((estado) => {
+              if (estado === "NOT_FOUND") this.registrar("sorteo-sin-confirmar", { hash: corto(hash) });
+            }),
+          );
+          return r(200, { hash, status: envio.status });
+        }
+        // La red no la tomó: no se pagó nada, el sorteo del mes y lo guardado vuelven.
+        this.cupos.devolver(firmada.hash);
+        s.olvidar();
+        this.registrar("rechazada-por-la-red", { hash: corto(firmada.hash), codigo: envio.codigo ?? envio.status });
+        if (envio.codigo && /txBadSeq/.test(envio.codigo)) {
+          if (intento === 0) continue;
+          return r(502, { motivo: "red", detalle: "secuencia" });
+        }
+        // La red ocupada no es falta de plata: el sitio la reintenta. Solo un saldo que no alcanza es fondo.
+        if (envio.status === "TRY_AGAIN_LATER" || (envio.codigo && /InsufficientFee/.test(envio.codigo))) return r(502, { motivo: "red", detalle: "ocupada" });
+        if (envio.codigo && /InsufficientBalance/.test(envio.codigo)) return r(503, { motivo: "fondo", codigo: envio.codigo });
+        return r(400, { motivo: "rechazada", codigo: envio.codigo ?? "desconocido" });
+      }
+      return r(502, { motivo: "red", detalle: "secuencia" });
+    });
+  }
+
+  /**
+   * Si el `draw` de este sello ya va en camino: el mismo hash, sin mandar otro. Uno que ya cerró (bien o mal) no decide
+   * nada: si entró, `get_raffle` o la simulación lo dicen (`{ya:true}`); así un sorteo de otro sello que se quedó con lo
+   * guardado para este, antes de prender la regla, no lo frena.
+   */
+  private yaPedido(selloHash: string): Respuesta | null {
+    const d = this.cupos.sorteoDelSello(selloHash);
+    return d && (d.estado === "reservado" || d.estado === "enviado") ? r(200, { hash: d.hash, status: "DUPLICATE" }) : null;
   }
 
   /**

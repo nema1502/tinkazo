@@ -1,7 +1,9 @@
 /**
  * Lo que el portero de mainnet le pregunta a Pollar con la llave secreta de la app (`POLLAR_SECRETO`): quién es la
- * persona que manda una sesión (`tokens/verify`), cuál es su billetera de Stellar (`users`) y cuántos créditos le
- * quedan a la app (`billing/credits`, para el piso). Nada más: abrir cuentas (`wallets/fund`) entra en la fase 2.
+ * persona que manda una sesión (`tokens/verify`), cuál es su billetera de Stellar (`users`), cuántos créditos le
+ * quedan a la app y qué se cobró en el día (`billing/credits`, para el piso y la vigilancia de firmas), el patrocinio
+ * de la app (`treasury/sponsorship`, solo lectura) y, en la fase 2, abrir la cuenta de quien tiene acceso
+ * (`wallets/fund`). Nada más.
  *
  * - El servidor de Pollar va fijo en el código (`servidores.ts`): ninguna variable puede mandar la llave a otro lado.
  * - Cada llamada espera 8 segundos como máximo. Una falla nunca se toma como un sí.
@@ -13,6 +15,7 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Fetch, ServidorAjeno, haciaPollar } from "./servidores";
+import { MAX_MOVIMIENTOS } from "./vigilancia";
 
 /** Lo más que se espera a Pollar en cada llamada. */
 export const ESPERA_POLLAR_MS = 8_000;
@@ -35,6 +38,17 @@ const USUARIO = /^[A-Za-z0-9_\-.:|@]{1,200}$/;
 export type Sesion = { ok: true; usuario: string; vence: number; cuenta: string | null } | { ok: false; motivo: "sesion" | "otra-app" | "pollar" };
 export type Billetera = { ok: true; cuenta: string | null } | { ok: false };
 export type Creditos = { ok: true; disponibles: number; leido: number; deMemoria: boolean } | { ok: false };
+/** Cómo terminó pedirle a Pollar que abra una cuenta: un pedido que la persona aprueba, o ya abierta. */
+export type Apertura = { ok: true; estado: "pedido"; pedido: string } | { ok: true; estado: "abierta" } | { ok: false; motivo: "sin-creditos" | "sin-billetera" | "pollar" };
+/** Los últimos movimientos de los créditos, tal como vienen (los cuenta `vigilancia.ts`). */
+export type Movimientos = { ok: true; movimientos: unknown[] } | { ok: false };
+/** Las banderas del patrocinio de la app (`sponsor_…`). */
+export type Patrocinio = { ok: true; banderas: Record<string, boolean> } | { ok: false };
+
+/** El id de un pedido de Pollar: se guarda en el alta, así que solo lo que tiene forma de id. */
+const PEDIDO = /^[A-Za-z0-9_.:-]{1,200}$/;
+/** Una bandera del patrocinio. */
+const BANDERA = /^sponsor_[a-z0-9_]{1,60}$/;
 
 /** Dónde vive el último saldo leído: en memoria, o en los ajustes del objeto para que sobreviva a un reinicio. */
 export interface MemoriaCreditos {
@@ -364,6 +378,73 @@ export class Pollar {
     }
     if (ultimo && despues - ultimo.ms < ULTIMO_CREDITOS_MS) return { ok: true, disponibles: ultimo.valor, leido: ultimo.ms, deMemoria: true };
     return { ok: false };
+  }
+
+  /**
+   * Fase 2: le pide a Pollar que abra la cuenta de Stellar de esta billetera (`POST /v3/wallets/fund`). Con una billetera
+   * de Turnkey no se abre sola: queda un pedido (202, con su `requestId`) que la persona aprueba en su sesión; pedirlo de
+   * nuevo con el pedido abierto devuelve el mismo. 200 o `409 WALLET_ALREADY_FUNDED`: ya está abierta. 402: faltan
+   * créditos. `404 WALLET_NOT_FOUND`: Pollar no conoce esa billetera (todavía no se creó). Lo demás es Pollar, y queda
+   * anotado con su código (nunca la cuenta).
+   */
+  async abrir(cuenta: string): Promise<Apertura> {
+    if (g(cuenta) === null) return { ok: false, motivo: "pollar" };
+    const l = await this.llamar("/v3/wallets/fund", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publicKey: cuenta }) });
+    if (!l.ok) {
+      this.falla("fund", l.codigo);
+      return { ok: false, motivo: "pollar" };
+    }
+    const code = codigoDe(l.cuerpo?.code);
+    const c = l.cuerpo?.content;
+    const contenido = c && typeof c === "object" && !Array.isArray(c) ? (c as Record<string, unknown>) : null;
+    const exito = l.cuerpo?.success === true && contenido !== null && (contenido.publicKey === undefined || contenido.publicKey === cuenta);
+    if (l.estado === 202 && code === "SERVER_WALLET_ACCOUNT_REQUESTED" && exito && typeof contenido?.requestId === "string" && PEDIDO.test(contenido.requestId)) {
+      return { ok: true, estado: "pedido", pedido: contenido.requestId };
+    }
+    if ((l.estado === 200 && code === "SERVER_WALLET_FUNDED" && exito) || (l.estado === 409 && code === "WALLET_ALREADY_FUNDED")) return { ok: true, estado: "abierta" };
+    if (l.estado === 402) {
+      this.falla("fund", `402-${code}`);
+      return { ok: false, motivo: "sin-creditos" };
+    }
+    if (l.estado === 404 && code === "WALLET_NOT_FOUND") return { ok: false, motivo: "sin-billetera" };
+    this.falla("fund", l.estado === 200 || l.estado === 202 ? `${l.estado}-forma` : `${l.estado}-${code}`);
+    return { ok: false, motivo: "pollar" };
+  }
+
+  /**
+   * Los movimientos de los créditos desde `desde` (ms), los más nuevos primero y hasta `MAX_MOVIMIENTOS`: para la
+   * vigilancia de firmas. Sin memoria: se pide cuando se mira `/estado`.
+   */
+  async movimientos(desde: number): Promise<Movimientos> {
+    const desdeIso = new Date(Math.max(0, desde)).toISOString();
+    const l = await this.llamar(`/v3/billing/credits?since=${encodeURIComponent(desdeIso)}&limit=${MAX_MOVIMIENTOS}`, { method: "GET" });
+    const c = this.contenido("credits", l, "SERVER_BILLING_CREDITS");
+    if (!c) return { ok: false };
+    if (!Array.isArray(c.movements)) {
+      this.falla("credits", "forma-movimientos");
+      return { ok: false };
+    }
+    return { ok: true, movimientos: c.movements };
+  }
+
+  /**
+   * Las banderas del patrocinio de la app (`GET /v3/treasury/sponsorship`), solo lectura: las `sponsor_…` que vienen en
+   * el contenido (o adentro de `sponsorship`) con un sí o un no. Sin ninguna, no hay lectura: no se da por apagado lo que
+   * no se vio. El código de la respuesta está por confirmar, así que basta con `success`.
+   */
+  async patrocinio(): Promise<Patrocinio> {
+    const l = await this.llamar("/v3/treasury/sponsorship", { method: "GET" });
+    const c = l.ok && l.estado === 200 && l.cuerpo?.success === true ? l.cuerpo.content : undefined;
+    const base = c && typeof c === "object" && !Array.isArray(c) ? (c as Record<string, unknown>) : null;
+    const anidado = base?.sponsorship;
+    const fuente = anidado && typeof anidado === "object" && !Array.isArray(anidado) ? (anidado as Record<string, unknown>) : base;
+    const banderas: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(fuente ?? {})) if (BANDERA.test(k) && typeof v === "boolean") banderas[k] = v;
+    if (!Object.keys(banderas).length) {
+      this.falla("sponsorship", !l.ok ? l.codigo : l.estado !== 200 ? l.estado : "forma");
+      return { ok: false };
+    }
+    return { ok: true, banderas };
   }
 
   private async leerCreditos(): Promise<number | null> {

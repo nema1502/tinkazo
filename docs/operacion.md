@@ -1,95 +1,89 @@
-# Operación: qué hacer si algo cae
+# Operación del portero de mainnet en un evento
 
-Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esperan la aprobación de quien mantiene el proyecto. Costos y niveles: [deployments.md](deployments.md). Revisado el 10 de noviembre de 2026.
+El portero de mainnet (`https://pm.tinkazo.app`) paga las comisiones de sellar y sortear solo a las cuentas de su libro: las que canjearon un cupón del evento y las que se admitieron a mano. Esta hoja es para quien opera el día del evento: qué preparar, qué mirar cada hora, con qué número se frena y cómo cortar.
 
-## RPC de Stellar
+Hay dos claves, distintas entre sí, y ninguna va en el repositorio, en un chat, en un comando ni en una captura:
 
-**Se nota:** «Sellar» se queda esperando o falla por la red; el detector dice «no se pudo mirar». El RPC de mainnet es de un tercero (`mainnet.sorobanrpc.com`).
-
-1. Probá el reemplazo: `curl -s -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' <url>`. Segundo RPC (los del detector): `https://rpc.lightsail.network` o `https://rpc.ankr.com/stellar_soroban`.
-2. Cambiá `RPC_URLS.mainnet` en `src/stellar/config.ts`, `RPC` en `scripts/check-renta.mjs`, `rpcUrls` en `scripts/lib/vigilar-red.mjs` y `MAINNET_RPC` en `scripts/preflight-mainnet.mjs`. Corré `pnpm typecheck` y `pnpm test`, y subí.
-3. `RPC_LISTAS` (salto automático al segundo RPC) y `red-umbrales.json` (los números de la red, no URLs) ya están en `main`.
-
-## Pollar (Google y comisión patrocinada)
-
-**Se nota:** falla el ingreso con Google, o el sello de una cuenta sin XLM falla por saldo o por tope.
-
-El patrocinio de comisiones tiene dos vías y solo una paga en cada momento: el portero de comisiones (sección siguiente) o la app de Pollar. **Lo que sigue vale solo mientras pague la app de cuentas de Pollar**; cuando pague el portero, usá su hoja de operación.
-
-- **Tope:** el Max fee de la app en el panel de Pollar corta el patrocinio cuando la tarifa real lo supera: el patrocinio se apaga sin avisar.
-- **Saldo:** la billetera patrocinadora de Pollar necesita XLM de sobra; el panel la muestra.
-- **Qué hacer:** recargala; subí el Max fee solo si el costo real lo justifica; mientras tanto, entrar con Freighter, que paga con su cuenta.
-- **Política si la red no deja sellar** (ya está en `main`): «volver a probar»; después «pagar con mi cuenta» (paga quien organiza); al final «Seguir sin sello», con confirmación y el comprobante marcado como no comprobable en la cadena.
-
-## Portero de comisiones
-
-Servicio propio (`workers/patrocinio`): revisa el pedido de sello del sitio, lo manda como una transacción que paga la comisión con su propia cuenta y lleva los cupos por cuenta y por mes.
-
-**Quién paga ahora:** el portero o Pollar, según cuál esté encendido. Pedile el cupo al servicio con una cuenta de Stellar válida (una mal escrita da `400`): `curl -s "https://p.tinkazo.app/v1/patrocinio/cupo?cuenta=<cuenta>"`. Mirá el campo `rige`, que dice `portero` o `pollar` y se decide primero. Si dice `portero`, mirá también `prendido`: con `false` el portero no está pagando y `motivo` dice por qué (`apagado` o `config`). Hoy esa dirección atiende solo la red de prueba (el campo `red` lo dice).
-
-**Cuándo usa el sitio al portero:** en Prueba, cuando el build trae `VITE_PATROCINIO_URL_TESTNET` (o la vieja `VITE_PATROCINIO_URL`); sin ninguna de las dos, solo en `tinkazo.app` y `www.tinkazo.app`, con `https://p.tinkazo.app`. En Oficial, solo cuando el build trae `VITE_PATROCINIO_URL_MAINNET`: la vieja no vale ahí y no hay dirección por defecto. Sin portero para la red, paga Pollar.
-
-**Se nota:** el sello de una cuenta nueva falla y la respuesta del servicio dice por qué:
-
-- **Cupo de la cuenta en el mes:** `429` con `motivo:"cupo-cuenta"`. El campo `que` dice si se acabaron los `sellos` o los `sorteos`, y `liberaEn` cuándo vuelve (el mes siguiente).
-- **Cupo de la dirección en la hora:** `429` con `motivo:"cupo-ip"`. Se reintenta más tarde.
-- **Cupo general (el tope de gasto de un día):** `503` con `motivo:"fondo"`, sin `codigo`.
-- **Saldo del servicio** (la cuenta del portero quedó sin XLM para pagar comisiones): `503` con `motivo:"fondo"` y un `codigo` con el rechazo de la red.
-
-Si hay que cortar ya: **apagar el servicio** (el pedido «Apagar») o **devolver el pago a Pollar** (el pedido «Devolver el patrocinio a Pollar» y el apartado «Volver a Pollar»); los tres están en la sección «Hoja de operación» del README del portero.
-
-**Qué hacer:** la [Hoja de operación del portero](../workers/patrocinio/README.md#hoja-de-operación) mantiene la única copia de los pedidos completos: encender, apagar, volver a Pollar, cargar fondos y rotar la llave.
-
-## Worker de enlaces (`c.tinkazo.app`)
-
-**Se nota:** un enlace corto no abre (`curl -i https://c.tinkazo.app/v1/<id>`). El sorteo no depende de él: el enlace largo (`tinkazo.app/c/…#clave`) sigue andando y está en Mis sorteos.
-
-**Qué hacer:** si fue un pico, esperar: los cupos diarios (2.000 altas; 100.000 pedidos de la cuenta gratis) se liberan a la medianoche UTC. Si se rompió, en `workers/enlaces`: `npx wrangler@4 deploy` y `ADMIN_TOKEN=… node probar.mjs https://c.tinkazo.app`. Redesplegar también cuando cambia el contrato de mainnet en `deployments.json`. Detalle: [`workers/enlaces/README.md`](../workers/enlaces/README.md).
-
-## drand (la semilla)
-
-**Se nota:** el sorteo queda en «esperando la ronda» y el botón ofrece reintentar. El sitio rota entre cuatro relays (`api.drand.sh`, `api2`, `api3`, `drand.cloudflare.com`) con hasta doce intentos.
-
-**Qué hacer:** `curl -s https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/latest`. Si callan los cuatro, no hay nada que arreglar: la lista ya está sellada, la ronda objetivo es fija y su firma no vence, así que el sorteo se completa después, cuando algún relay conteste. Que quien organiza espere y reintente.
-
-## Renta del contrato
-
-**Se nota:** `pnpm check:renta` sale con error si a la instancia o al código les quedan menos de 30 días. Vencida, el próximo sello restaura pagando la renta.
-
-**Qué hacer**, cada ≈ 60 días (extiende cualquiera; paga quien firma):
+- **La clave de operar** (`ADMIN_TOKEN`): mirar el estado, pausar y reanudar las altas, apagar y encender, cambiar el tope, exportar. En los ejemplos es `$T`.
+- **La clave de cupones** (`CUPONES_TOKEN`): crear y anular cupones y admitir cuentas. `scripts/cupones.mjs` la toma de `TINKAZO_CUPONES_TOKEN`.
 
 ```bash
-stellar contract extend --id <contrato> --ledgers-to-extend 2073600 --durability persistent --source <cuenta> --network mainnet
-stellar contract extend --wasm-hash <sha256 del .wasm> --ledgers-to-extend 2073600 --source <cuenta> --network mainnet
+export P=https://pm.tinkazo.app
+curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/estado
 ```
 
-2.073.600 ledgers son ≈ 120 días. Volvé a correr `pnpm check:renta`. **Costo de hoy:** ≈ US$0,7 por mes de renta y ≈ US$0,03 por sorteo; si el estado de la red se llena, se multiplica.
+## Antes del evento
 
-## Detector de la red
+1. **El portero comprobado, un día antes como mínimo.** `estado` dice `modo: "portero"` y `alerta: false`; `POST /v1/alta/estado` sin sesión da `401` con `motivo: "sesion"`; `/v1/patrocinio/cupo?cuenta=G...` dice `prendido: true`.
+2. **Los créditos de Pollar.** El piso reserva el peor caso y cada tarjeta canjeada se come 165 de margen. Cuánto cargar: **300 + 165 × tarjetas + 15 × curiosos + 20 × reintentos + 40 × sorteos admitidos a mano**. Con 40 tarjetas, cien curiosos y unos 15 reintentos: **8.700**, más 40 por cada sorteo admitido a mano (con 5, 8.900). Con 30 tarjetas: unos 7.100 más lo admitido a mano. Con 7.000 entran unas 29 tarjetas. La carga la hace quien mantiene el proyecto, en el panel de Pollar, a más tardar el mediodía del día anterior.
+3. **La alerta de créditos bajos de Pollar** en piso + 165 × tarjetas por repartir, no en un número fijo.
+4. **La cuenta que paga con 25 XLM o más.** Por debajo de 20 el portero da `alerta: true`. Se carga desde la cuenta fría, en tramos chicos: la cuenta que paga guarda solo lo del día.
+5. **El tope general a 45 XLM** por 24 horas:
+   `curl -fsS -X PUT -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d '{"clave":"tope_general_stroops","valor":450000000}' $P/v1/patrocinio/ajustes`
+6. **La cuenta de quien organiza, admitida con 3 a 5 sorteos.** Cada sorteo admitido suma 40 al piso; el resto se suma después del evento.
+   `node scripts/cupones.mjs admitir --cuenta G... --sorteos 5 --dias 60 --ref organiza-pruebas`
+7. **Dos lotes de cupones**, el del evento y uno de reserva, con los códigos y las tarjetas fuera del repositorio:
+   `node scripts/cupones.mjs crear --lote <evento> --cantidad 30 --sorteos 3 --dias 60 --vence AAAA-MM-DD --salida <carpeta privada>`
+   y lo mismo con `--lote <evento>-reserva --cantidad 10`. Imprimir al 100 %, a doble faz; las tarjetas van en sobre o boca abajo (una foto del QR lo canjea) y la reserva aparte.
+8. **La regla de límite de Cloudflare** delante de `pm.tinkazo.app`: 60 pedidos en 10 segundos por dirección para `POST /v1/alta/estado` y `/v1/alta/cupon`, 20 en 10 segundos para `POST /v1/patrocinio`, con bloqueo de 10 segundos. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto.
+9. **A la mañana, antes de abrir el stand**: `estado` y la cuenta de abajo con todas las tarjetas por repartir.
 
-`vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora; **que la corrida falle es el aviso** (correo de GitHub). Avisa una sola vez por cada cambio de parámetros o de nivel; el rojo falla en cada corrida, y la de las 12:07 UTC (`--diario`) falla también con naranja estable o con la línea base vieja. A mano: `pnpm check:red`. Niveles de mainnet (objetivo 3.000 MB):
+## Durante el evento, cada hora
 
-- **Amarillo, 2.000 MB:** la renta deja el piso. Mirá la pendiente y las horas hasta el rojo.
-- **Naranja, 2.500 MB:** el sello cuesta ≈ 0,5 XLM. Pedí ya que suban el objetivo (SLP y votación, de 13 a 17 días).
-- **Rojo, 2.850 MB:** quedan 13 a 19 horas. Al cruzar el objetivo la renta se multiplica y el tope de comisión del pagador corta los sellos: avisá a quien tenga eventos y aplicá la política de la vía que pague (portero o Pollar).
+Mirar `estado` y anotar la hora, `creditos`, `piso`, `margen`, `altasPausadas`, `alerta`, el saldo de la cuenta que paga (`balanceStroops`), `gasto24h` contra `topeGeneralStroops`, `altas24h` y `cuponesHoy`.
 
-Parámetro cambiado y entendido: `node scripts/vigilar-red.mjs --actualizar-base --red <la red que cambió>` y commit de `scripts/vigilar-red.base.json`; mientras no se actualice, las corridas pasan («línea base vieja: …» en el nombre del paso) y solo la diaria sigue fallando. Si el detector mismo calla, el latido (`HEALTHCHECK_URL`) manda un correo a las 2 horas. El camino paso a paso para cuando cambie mainnet, y el latido: [deployments.md](deployments.md#vigilancia-de-la-red).
+**La cuenta: `margen` tiene que ser al menos 165 × tarjetas sin canjear + 15 × curiosos esperados + 20 × reintentos esperados.**
 
-## Vercel (el sitio)
+| Qué se ve | Qué quiere decir | Qué se hace |
+|---|---|---|
+| `margen` por debajo de la cuenta | No alcanza para todas las tarjetas que faltan | Cargar créditos, o dejar de repartir tarjetas |
+| `altasPausadas: true` o `margen` cerca de 0 | Los canjes nuevos se pausan (el cupón no se gasta, pero esa persona no sortea hoy) | Cargar créditos; si fue a mano, `reanudar` |
+| `alerta: true` | La cuenta que paga tiene menos de 20 XLM, o no se pudo leer | Cargar XLM desde la cuenta fría, un tramo de 20 a 40 |
+| `gasto24h` pasa el 80 % de `topeGeneralStroops` | El portero va a dejar de pagar al llegar al tope | Subir el tope (hasta 100 XLM) o frenar |
+| `creditos: null` | Pollar no contesta. Diez minutos se usa el último saldo; después, los canjes nuevos se pausan solos | Esperar y avisar. Quien ya canjeó sigue sellando |
+| `cuponesHoy` sube sin tarjetas repartidas | Alguien está usando códigos que no se dieron (una foto de la pila) | `pausar` y anular el lote |
+| `error-config` o `error-interno` en el registro del Worker | Algo de configuración o del objeto | `pausar` y revisar, sin desplegar |
 
-**Se nota:** tinkazo.app da error tras una subida. **Qué hacer:** volver a la última versión buena, en el panel (Deployments, «Instant Rollback») o con `vercel rollback <url de esa versión>`. En Hobby solo a la anterior; en Pro, a cualquiera. Después, las subidas nuevas no salen solas hasta promover una (`vercel promote`). Subí el arreglo con la aprobación de quien mantiene el proyecto.
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/pausar      # {"pausadas":true}
+curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/reanudar    # {"pausadas":false}
+node scripts/cupones.mjs estado --lote <evento>
+```
 
-## Dominio tinkazo.app
+Durante el evento no se toca Pollar ni ninguna bandera del sitio o del portero.
 
-Registrado en Cloudflare el 16 de octubre de 2026. **Renovarlo por varios años, con renovación automática:** lo hace quien mantiene el proyecto. Si se pierde, mueren los enlaces compartidos (`tinkazo.app/c/…`, `c.tinkazo.app/…` y sus QR), hola@tinkazo.app y los orígenes que aceptan Pollar y el Worker.
+## Después del evento
 
-## Quién entra a qué
+1. **Anular la reserva que no se usó**: `node scripts/cupones.mjs anular --lote <evento>-reserva`. Lo ya canjeado sigue valiendo.
+2. **El estado de cada lote**, para el informe: `node scripts/cupones.mjs estado --lote <evento> --json`.
+3. **Exportar todo**, fuera del repositorio:
+   `curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/exportar -o exporte-AAAA-MM-DD.json`
+4. **Bajar el tope general** a 15 XLM y sumar a mano los sorteos que falten a la cuenta de quien organiza.
+5. Anotar créditos y XLM gastados contra lo cargado.
 
-Hoy, solo quien mantiene el proyecto; quien se sume se anota acá, con el nombre del lugar y nunca la llave.
+## Cómo cortar, de menos a más
 
-- **Código y CI:** la cuenta de GitHub del proyecto; el único secreto de los workflows es el opcional `HEALTHCHECK_URL`.
-- **Sitio:** cuenta de Vercel y la CLI `vercel` de su máquina.
-- **Worker, dominio, DNS:** cuenta de Cloudflare y `wrangler login`; el secreto `ADMIN_TOKEN`, en su gestor de contraseñas.
-- **Pollar:** su panel; las llaves de la app, en `.env.local` (git la ignora).
-- **Contrato:** identidad `tinkazo-deployer` de la CLI de Stellar, en `~/.config/stellar/identity/`, fuera del repo.
-- **Latido:** la cuenta de healthchecks.io que cree quien mantiene el proyecto.
+1. **Pausar las altas**: nadie canjea un cupón nuevo; quien ya canjeó sigue sellando y sorteando.
+   `curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/pausar`
+2. **Apagar el portero**: no paga nada; el sitio deja de ofrecer el patrocinio. Se vuelve con `/v1/patrocinio/encender`.
+   `curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/patrocinio/apagar`
+3. **El corte**: `ALTAS = "0"` en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml` (y nada más cambiado) y desplegar desde `workers/patrocinio` con `npx wrangler@4.160.0 deploy --config wrangler.toml --env mainnet`. El portero de mainnet no le paga a nadie. No hace falta un commit nuevo ni esperar la CI. Pide desplegar y reinicia el objeto: durante el evento, solo si 1 y 2 no alcanzan. Para volver: el `wrangler.toml` como estaba y desplegar de nuevo, igual.
+4. **Si el Worker no contesta**: en el panel de Cloudflare, Workers, `tinkazo-patrocinio-mainnet`, quitar el dominio `pm.tinkazo.app`.
+
+Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, así que se sortea cuando el portero vuelve.
+
+## Los planes B, de mejor a peor
+
+- **B1, el portero listo y la pantalla del cupón no.** El portero con el libro y la administración, y un build del sitio con `VITE_ALTA_LIBRE=1`. Los equipos que pasan por la mesa le dictan su dirección a quien opera, que los admite con `cupones.mjs admitir`. Cualquiera que entre a Oficial y toque «Activar» cuesta 20 créditos; sellar sigue cerrado para quien no está en el libro.
+- **B2, sin portero de mainnet.** Oficial solo con billetera propia; los equipos sortean gratis en Prueba. Las tarjetas se guardan para el próximo evento: se anula el lote y se crea otro con la fecha nueva.
+- **B3, último recurso y solo con la palabra de quien mantiene el proyecto.** La regla de contrato de Pollar para `seal` y `draw` del contrato de mainnet, con solo los créditos del día cargados, porque no tiene tope por cuenta. Se borra al terminar.
+
+## Qué no hacer
+
+- **No desplegar durante el evento.** Un despliegue reinicia el objeto: la memoria de sesiones y los contadores de intentos vuelven a cero y todos pasan a ser «nuevos».
+- **No rotar `CUPON_SECRETO` con cupones vivos.** Cambiarlo anula todos los cupones que no se canjearon.
+- **No dejar iguales la clave de operar y la de cupones.** Si son iguales, lo de cupones no se atiende (`503 claves-iguales`).
+- **No pegar una clave en un comando, un chat o una captura.** Van en variables de entorno.
+- **No desplegar sin `--env mainnet` ni sin `--config wrangler.toml`.** Sin `--env` se despliega el portero de Prueba en `p.tinkazo.app`; sin `--config`, wrangler puede tomar otro `wrangler.json` que encuentre hacia arriba. Y siempre con la versión probada de wrangler (4.160.0), no la última del día.
+- **No cargar toda la plata en la cuenta que paga.** La llave del Worker solo puede gastar comisiones, pero hasta lo cargado.
+- **No dejar las tarjetas boca arriba ni sacarles foto.**

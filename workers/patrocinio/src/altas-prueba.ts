@@ -46,6 +46,14 @@ export interface PollarDeMentira {
   usersCaido: boolean;
   /** Solo `billing/credits` falla. */
   creditosCaido: boolean;
+  /** Los últimos movimientos de los créditos, como los devuelve `billing/credits`. */
+  movimientos: unknown[];
+  /** Lo que contesta `treasury/sponsorship` (su contenido), o null para que falle. */
+  patrocinio: Record<string, unknown> | null;
+  /** Lo que contesta `wallets/fund` para una cuenta: el estado y el código. Por defecto, el pedido abierto (202). */
+  fondeo: (cuenta: string) => { status: number; code: string };
+  /** Los cuerpos que recibió `wallets/fund`. */
+  fondeos: unknown[];
   llamadas: string[];
 }
 
@@ -55,7 +63,19 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
   const cupos = new Cupos(sql);
   const altas = new Altas(sql, cupos);
   const cfg = leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: APP, ...env });
-  const pm: PollarDeMentira = { sesiones: new Map(), billeteras: new Map(), creditos: 100_000, caido: false, usersCaido: false, creditosCaido: false, llamadas: [] };
+  const pm: PollarDeMentira = {
+    sesiones: new Map(),
+    billeteras: new Map(),
+    creditos: 100_000,
+    caido: false,
+    usersCaido: false,
+    creditosCaido: false,
+    movimientos: [],
+    patrocinio: { sponsor_trustlines: false, sponsor_swap_venues: false, sponsor_all_contracts: false, sponsor_signer_rotation: false },
+    fondeo: () => ({ status: 202, code: "SERVER_WALLET_ACCOUNT_REQUESTED" }),
+    fondeos: [],
+    llamadas: [],
+  };
   const resp = (status: number, cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
   const fetch = async (url: string, init?: RequestInit) => {
     const u = new URL(url);
@@ -73,7 +93,15 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
       return resp(200, { code: "SERVER_SDK_USERS_LIST", success: true, content: { items, total: items.length, page: 1, limit: 200, totalPages: 1, stats: {} } });
     }
     if (u.pathname === "/v3/billing/credits" && pm.creditosCaido) return resp(503, { code: "DOWN", success: false });
-    if (u.pathname === "/v3/billing/credits") return resp(200, { code: "SERVER_BILLING_CREDITS", success: true, content: { billingModel: "PREPAID", available: pm.creditos, movements: [] } });
+    if (u.pathname === "/v3/billing/credits") return resp(200, { code: "SERVER_BILLING_CREDITS", success: true, content: { billingModel: "PREPAID", available: pm.creditos, movements: pm.movimientos } });
+    if (u.pathname === "/v3/treasury/sponsorship") return pm.patrocinio ? resp(200, { code: "SERVER_TREASURY_SPONSORSHIP", success: true, content: pm.patrocinio }) : resp(503, { code: "DOWN", success: false });
+    if (u.pathname === "/v3/wallets/fund" && init?.method === "POST") {
+      const cuerpo = JSON.parse(String(init.body)) as { publicKey: string };
+      pm.fondeos.push(cuerpo);
+      const f = pm.fondeo(cuerpo.publicKey);
+      const ok = f.status === 200 || f.status === 202;
+      return resp(f.status, { code: f.code, success: ok, ...(ok ? { content: f.status === 202 ? { publicKey: cuerpo.publicKey, requestId: `req_${cuerpo.publicKey.slice(1, 9)}` } : { publicKey: cuerpo.publicKey, startingBalance: "0" } } : {}) });
+    }
     return resp(404, { code: "NOT_FOUND", success: false });
   };
   /** Lo que anotan las rutas y Pollar, como en el Worker: una sola bitácora. */
@@ -112,6 +140,7 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
     altas.crearCupones({ lote: LOTE, huellas: await Promise.all(codigos.map((c) => huella(c, SECRETO_CUPON))), sorteos: 3, dias: 60, vence: T0 + 30 * DIA_MS, usos: 1, ...extra }, ahora);
   const cupon = (token: string | null, c: unknown, ip = IP) => puerta.cupon({ token, ip, cuerpo: { cupon: c } });
   const estado = (token: string | null, ip = IP) => puerta.estado({ token, ip, cuerpo: {} });
+  const abrir = (token: string | null, ip = IP) => puerta.abrir({ token, ip, cuerpo: {} });
 
-  return { sql, cupos, altas, cfg, pm, pollar, abiertas, red, anotado, puerta, persona, lote, cupon, estado, mover: (ms: number) => (ahora += ms), hora: () => ahora };
+  return { sql, cupos, altas, cfg, pm, pollar, abiertas, red, anotado, puerta, persona, lote, cupon, estado, abrir, mover: (ms: number) => (ahora += ms), hora: () => ahora };
 }

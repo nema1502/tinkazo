@@ -119,6 +119,26 @@ jobs:
       #   run: |
       #     curl -fsS -m 20 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero.json
       #     node -e "const j=JSON.parse(require('fs').readFileSync('estado-portero.json','utf8')); console.log('saldo (stroops):', j.balanceStroops, '| alerta:', j.alerta, j.motivoAlerta ?? ''); process.exit(j.alerta ? 1 : 0)"
+      # El portero de mainnet (workers/patrocinio/README.md, «Altas y cupones»). Una vez al día, con el
+      # recordatorio de las 12:07 UTC: llama a `/estado` y falla si los créditos de Pollar están por debajo
+      # del piso más 1.000, si la cuenta patrocinadora está baja, si hay más de 10 firmas de cuentas de Google
+      # sin explicar en 24 horas o si el patrocinio de la app en Pollar no está todo apagado; también si algo
+      # de eso no se pudo leer (scripts/lib/vigilar-portero.mjs). Lleva `always()` por lo mismo que el paso de
+      # arriba. Sin el secreto PORTERO_MAINNET_ADMIN_TOKEN (la clave de operar del portero de mainnet) avisa y
+      # sale bien: así la CI no falla mientras no exista el despliegue en pm.tinkazo.app. Al desplegarlo, cargar
+      # el secreto en los del repositorio. El secreto va por `env`, nunca dentro del comando.
+      - name: Portero de mainnet
+        if: ${{ always() && (github.event.schedule == '7 12 * * *' || inputs.diario) }}
+        env:
+          PORTERO_URL: https://pm.tinkazo.app
+          PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_MAINNET_ADMIN_TOKEN }}
+        run: |
+          if [ -z "$PORTERO_ADMIN_TOKEN" ]; then
+            echo "Sin PORTERO_MAINNET_ADMIN_TOKEN: el portero de mainnet todavía no se mira."
+            exit 0
+          fi
+          curl -fsS -m 30 --retry 2 -H "Authorization: Bearer $PORTERO_ADMIN_TOKEN" "$PORTERO_URL/v1/patrocinio/estado" -o estado-portero-mainnet.json
+          node scripts/lib/vigilar-portero.mjs estado-portero-mainnet.json
       # El latido: avisa a un servicio de alarma (healthchecks.io) que el detector corrió, y
       # lo hace también si la corrida falló por una alarma de la red: lo que el servicio
       # vigila es que el detector no calle (el cron se saltea, o GitHub desactiva el workflow
