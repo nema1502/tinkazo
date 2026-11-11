@@ -1,7 +1,8 @@
 import "./styles.css";
 import { cargaOpcional } from "./version-nueva";
 import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
-import { network } from "./stellar/config";
+import { contractUrl, network } from "./stellar/config";
+import { enlazarContrato } from "./enlace-contrato";
 import { leerMarcaPollar } from "./stellar/pollar-config";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
@@ -84,6 +85,10 @@ function montarLaCuenta(): void {
 initMenuMas();
 iniciarFeedback();
 setLang(initialLang());
+// El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
+// HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
+// borre.
+enlazarContrato(document, network.contractId ? contractUrl() : null);
 montarLaCuenta();
 onLangChange(montarLaCuenta);
 // El contador va aparte y después: no frena la página y queda en su propio

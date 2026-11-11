@@ -60,7 +60,15 @@ vi.mock("./sello-seguro", async (orig) => ({
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: (...a: unknown[]) => h.proteger(...a) }));
 vi.mock("../contar", () => ({ contar: (...a: unknown[]) => h.contar(...a), errorContable: (c: string) => c }));
 vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, STAND_ESPERA_S: 15, enEnsayo: () => false, enStand: () => false, sinGrabar: () => false }));
-vi.mock("./wallet-ui", () => ({ apruebaAMano: () => false, canAnchor: () => true, claveDeSellar: () => "freeze", currentSession: () => ({ address: "GAAA" }) }));
+vi.mock("./wallet-ui", () => ({
+  apruebaAMano: () => false,
+  billeteraEnOtraRed: () => false,
+  canAnchor: () => true,
+  claveDeSellar: () => "freeze",
+  currentSession: () => ({ address: "GAAA" }),
+  // Con contrato en mainnet, sellar pregunta antes si la billetera está en la otra red: aquí nunca lo está.
+  frenarPorOtraRed: async () => false,
+}));
 vi.mock("./participants", () => ({
   cerrarLista: (...a: unknown[]) => void h.orden.push(`cerrarLista:${String(a[0])}`),
   olvidarBorrador: () => undefined,

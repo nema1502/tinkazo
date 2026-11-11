@@ -555,8 +555,8 @@ function pintarCuenta(): void {
     net.type = "button";
     net.className = wrongNetwork && session ? "netbadge bad con-modo" : network.name === "mainnet" ? "netbadge main" : "netbadge";
     net.textContent = t(modeNameKey(network.name));
+    // El nombre que oye el lector de pantalla es la palabra que se ve (Prueba u Oficial); la pista va de descripción.
     net.title = wrongNetwork && session ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name))) : t(network.name === "testnet" ? "netTestHint" : "netMainHint");
-    net.setAttribute("aria-label", net.title);
     if (grifoApagado && network.name === "testnet") {
       net.classList.add("sin-grifo");
       net.textContent = `${t("netTest")}, ${t("grifoOffTag")}`;

@@ -236,11 +236,14 @@ describe("la lista pública de cuentas internas y el archivo de totales", () => 
     expect([...cuentasInternas(lista, "testnet")]).toEqual(["GA"]);
     expect([...listasDeEjemplo(lista)]).toEqual(["ab"]);
   });
-  it("docs/cuentas-internas.json solo trae direcciones etiquetadas, sin nombres de personas", async () => {
+  it("docs/cuentas-internas.json solo trae direcciones etiquetadas, con sus cuatro campos", async () => {
     const { readFileSync } = await import("node:fs");
     const lista = JSON.parse(readFileSync(new URL("../../docs/cuentas-internas.json", import.meta.url), "utf8"));
     for (const c of lista.cuentas) {
-      expect(Object.keys(c).sort()).toEqual(["direccion", "etiqueta", "motivo", "red"]);
+      expect(
+        Object.keys(c).sort(),
+        `la cuenta ${c.direccion} tiene que traer exactamente "direccion", "red", "etiqueta" y "motivo" (el motivo dice para qué es la cuenta, sin nombres de personas)`,
+      ).toEqual(["direccion", "etiqueta", "motivo", "red"]);
       expect(c.etiqueta).toBe("interna");
       expect(c.direccion).toMatch(/^G[A-Z2-7]{55}$/);
     }

@@ -44,3 +44,6 @@ workers/musica/camas/
 !public/marca/coleccion/tinkazo-stickers.zip
 !public/marca/tinkazo-kit-sponsor.zip
 !public/marca/tinkazo-kit-impresos.zip
+
+# La marca de un despliegue del contrato que no llegó a registrarse (scripts/deploy.sh)
+.despliegue/

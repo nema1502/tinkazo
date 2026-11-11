@@ -198,14 +198,37 @@ gh release download v0.2.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pa
 gh attestation verify tinkazo-raffle_v0.2.0.wasm --repo nema1502/tinkazo \
   --signer-repo stellar-expert/soroban-build-workflow
 
-# 3. Desplegarlo. El script no despliega en mainnet un .wasm sin atestación de GitHub,
+# Antes del paso 3, el prevuelo, que no gasta nada: corre las pruebas (unos 5 minutos, con un
+# tope de 15 por corrida que, si se vence, dice que fue por tiempo), compara la huella del
+# .wasm bajado, mira que la cuenta de despliegue exista y que lo que puede gastar (el saldo
+# menos su reserva mínima) alcance la cifra de la simulación del día con un 10 % de margen, y
+# termina con la orden de deploy.sh. Lleva las cuatro opciones: sin alguna, esa línea sale
+# «ojo» en vez de verde. Si las pruebas ya se corrieron aparte ese día, --sin-pruebas las saltea.
+pnpm preflight:mainnet -- --wasm tinkazo-raffle_v0.2.0.wasm --sha256 <sha256 del .wasm del release> \
+  --account <G de la cuenta de despliegue> --necesario <XLM de la simulación del día>
+
+# 3. Desplegarlo. En mainnet el script pide la identidad (no acepta tinkazo-deployer, que es
+#    la de la red de prueba) y la huella del .wasm del release: si el archivo no la tiene,
+#    corta antes de llamar a stellar. Tampoco despliega un .wasm sin atestación de GitHub,
 #    y al final compara el hash de la red con el del archivo. Después, en el mismo commit,
 #    la dirección y el sha256 del .wasm van a deployments.md y a src/stellar/deployments.json:
 #    sin eso, la verificación no cree en el contrato nuevo.
 stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com \
   --network-passphrase "Public Global Stellar Network ; September 2015"
-scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.2.0.wasm
+# Primero con --ensayo: valida, compara la huella, consulta la atestación, la dirección de la
+# identidad y el alias, e imprime la orden y la fila, sin desplegar ni escribir nada. No mira el
+# saldo: la G que imprime tiene que ser la misma que se pasó al prevuelo con --account.
+scripts/deploy.sh mainnet tinkazo-mainnet --wasm tinkazo-raffle_v0.2.0.wasm \
+  --sha256 <sha256 del .wasm del release> --ensayo
+scripts/deploy.sh mainnet tinkazo-mainnet --wasm tinkazo-raffle_v0.2.0.wasm \
+  --sha256 <sha256 del .wasm del release>
 ```
+
+**Si el despliegue se corta.** El error de la CLI queda a la vista. Si el script no llegó a imprimir `contrato: C…`, antes de volver a correrlo hay que mirar si el contrato se creó igual, de dos maneras: con `stellar contract alias show tinkazo-mainnet --network mainnet` y con las últimas operaciones de la cuenta de despliegue en Horizon o en stellar.expert (el script imprime los dos enlaces). Las dos hacen falta: la CLI guarda el alias recién cuando la transacción se confirmó, así que un corte mientras esperaba deja el contrato creado y sin alias. En mainnet el script se niega a desplegar si el alias ya apunta a un contrato, pero sin alias no tiene cómo saberlo. Si aparece un contrato recién creado, se retoma con `--id`. Si ya lo imprimió, el contrato existe: se retoma con `scripts/deploy.sh mainnet <identidad> --wasm … --sha256 … --id <C…>` (el script imprime esa orden completa), que lee el contrato, compara el `.wasm` de la red y escribe la fila sin desplegar otro. Nunca se vuelve a correr sin `--id`. Para que nadie lo haga con apuro, el script deja una marca en `.despliegue/<red>.en-curso` (ignorada por git) antes de desplegar y la borra recién al registrar la fila: mientras esté, se niega a desplegar sin `--id` (con Ctrl+C también imprime la pista). Si se comprobó que no se creó ningún contrato, se borra a mano. Una transacción que todavía no se confirmó no aparece en las operaciones: hay que buscar su hash y esperar unos minutos antes de dar por hecho que no entró.
+
+La fila lleva la huella entera, y en mainnet el script imprime al final la entrada de `src/stellar/deployments.json` lista para pegar en lugar de `"mainnet": null`, con la misma huella: no se copia a mano. La guardia de la CI exige que la huella de la entrada sea, carácter por carácter, la de la fila de mainnet. El script también muestra qué versión de la CLI corre y descarta `STELLAR_RPC_URL`, `STELLAR_NETWORK_PASSPHRASE` y `STELLAR_NETWORK` de la consola, para que la red salga solo de `--network`.
+
+Antes de agregar la entrada de mainnet a `src/stellar/deployments.json`, `node scripts/ensayo-entrada-oficial.mjs` la ensaya: pone una entrada inventada con la misma forma (la dirección de 32 bytes en cero), corre tipos, pruebas y build (en una carpeta temporal, sin pisar `dist/`) y deja la lista como estaba, también si falla o se corta. Los únicos rojos que acepta son los que se arreglan copiando al HTML los textos de `src/i18n-modo-oficial.ts`, y los lista con la página y la clave. Si una corrida se corta de golpe, la siguiente devuelve la lista al arrancar; `--restaurar` lo hace sin correr nada más. Una prueba da rojo si la dirección inventada llega a commitearse.
 
 Si el despliegue reemplaza a otro contrato, el anterior pasa a `anteriores` en el mismo commit, con los dos topes que lo cierran (sin ellos, `oficiales.ts` no lo acepta, o no lo acepta por historial): `ultimoId` es `next_id − 1` y `ultimoLedger` es el `sealed_ledger` de ese sorteo. Los dos salen por simulación de solo lectura, sin firmar nada:
 

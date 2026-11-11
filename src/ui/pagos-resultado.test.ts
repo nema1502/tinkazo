@@ -84,11 +84,13 @@ describe("el panel de ganadores en el resultado", () => {
     await vi.waitFor(() => expect(caja().textContent).toContain("Vencido"));
   });
 
-  it("también se prende con la bandera del registro de equipos", async () => {
+  it("con la bandera de los equipos sola no hay panel de premios: ni filas ni un solo pedido a la red", async () => {
     vi.stubEnv("VITE_EQUIPOS", "1");
     sortear([cuenta()], [0]);
     mostrarPagosDelResultado();
-    expect(caja().querySelectorAll(".gan-fila")).toHaveLength(1);
+    expect(caja().querySelectorAll(".gan-fila")).toHaveLength(0);
+    expect(caja().style.display).toBe("none");
+    expect(pedidos).toEqual([]);
   });
 
   it("una lista de nombres no tiene panel: no hay a quién pagarle desde acá", async () => {

@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Address, xdr } from "@stellar/stellar-sdk";
 import { emitirJson } from "./lib/resumen.mjs";
+import { hashDelCodigo, sugerenciasDeExtension } from "./lib/renta.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RPC = {
@@ -70,6 +71,7 @@ function fecha(ledgersRestantes) {
   return cuando.toISOString().slice(0, 10);
 }
 
+/** Devuelve si hay que extender y el hash del código (hex) leído de la red, o null. */
 async function revisar(red, contrato) {
   const url = RPC[red];
   const { sequence } = await rpc(url, "getLatestLedger", {});
@@ -78,14 +80,16 @@ async function revisar(red, contrato) {
   const entrada = inst.entries?.[0];
   if (!entrada) {
     console.log(`  ${red}: la instancia no está en la cadena (¿archivada, o red equivocada?)`);
-    return false;
+    return { alarma: false, wasmHashHex: null };
   }
   const datos = xdr.LedgerEntryData.fromXdr(entrada.xdr, "base64");
   const valor = datos.contractData.val;
   const ejecutable = valor.instance.executable;
   const filas = [["instancia", Number(entrada.liveUntilLedgerSeq)]];
+  let wasmHashHex = null;
 
   if (ejecutable.type === "contractExecutableWasm") {
+    wasmHashHex = hashDelCodigo(ejecutable);
     const codigo = await rpc(url, "getLedgerEntries", {
       keys: [claveCodigo(ejecutable.wasmHash)],
     });
@@ -104,7 +108,7 @@ async function revisar(red, contrato) {
       `(hasta el ledger ${hasta}, ~${fecha(restan)})`,
     );
   }
-  return alarma;
+  return { alarma, wasmHashHex };
 }
 
 async function main() {
@@ -120,23 +124,28 @@ async function main() {
   console.log(`Renta del contrato · avisa por debajo de ${UMBRAL} días\n`);
   let alarma = false;
   const comprobaciones = [];
+  const aExtender = [];
   for (const [red, d] of redes) {
     console.log(`${red}: ${d.contractId}`);
     try {
-      const mal = await revisar(red, d.contractId);
+      const { alarma: mal, wasmHashHex } = await revisar(red, d.contractId);
       comprobaciones.push({ name: `renta de ${red}`, ok: !mal, detail: mal ? `menos de ${UMBRAL} días` : "" });
+      if (mal) aExtender.push({ red, contrato: d.contractId, wasmHashHex });
       alarma = mal || alarma;
     } catch (e) {
       console.log(`  ${red}: no se pudo preguntar (${e.message})`);
       comprobaciones.push({ name: `renta de ${red}`, ok: false, detail: `no se pudo preguntar: ${e.message}` });
+      aExtender.push({ red, contrato: d.contractId, wasmHashHex: null });
       alarma = true;
     }
   }
   if (alarma) {
-    console.log(
-      "\nPara extender:  stellar contract extend --id <contrato> --ledgers-to-extend 2073600" +
-      " --durability persistent --source <cuenta> --network <red>",
-    );
+    // Las dos entradas: la instancia y el código. Si solo se extiende la instancia, el
+    // código se archiva igual y el contrato deja de leerse.
+    for (const { red, contrato, wasmHashHex } of aExtender) {
+      console.log(`\nPara extender en ${red}, la instancia y el código:`);
+      for (const orden of sugerenciasDeExtension({ red, contrato, wasmHashHex })) console.log(`  ${orden}`);
+    }
     process.exitCode = 1;
   } else {
     console.log("\nTodo con renta de sobra.");

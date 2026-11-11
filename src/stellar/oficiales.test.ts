@@ -1,5 +1,4 @@
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import deployments from "./deployments.json";
 import { network } from "./config";
 import { contratosOficiales, passphraseDe } from "./oficiales";
@@ -44,9 +43,47 @@ describe("el contrato con el que sella el sitio es el vigente de la lista oficia
     expect(network.contractId).toBe(vigente?.contractId ?? null);
   });
 
-  it("el día que deployments.json tenga mainnet, config.ts tiene que leerlo de ahí", () => {
-    const dep = deployments as unknown as { mainnet?: { contractId?: string } | null };
-    if (!dep.mainnet?.contractId) return;
-    expect(readFileSync("src/stellar/config.ts", "utf8")).toMatch(/deployments\.mainnet/);
+  describe("en Oficial (`?red=oficial`)", () => {
+    afterEach(() => {
+      vi.doUnmock("./deployments.json");
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    });
+
+    /** `./config` y `./oficiales` cargados de nuevo con la dirección en `?red=oficial` (y la lista que se haya simulado). */
+    const enOficial = async () => {
+      vi.stubGlobal("location", { search: "?red=oficial" });
+      return { config: await import("./config"), oficiales: await import("./oficiales") };
+    };
+
+    it("con la lista real: sella con el vigente de mainnet, o cae a Prueba si todavía no hay", async () => {
+      vi.resetModules();
+      const { config, oficiales } = await enOficial();
+      const vigente = oficiales.contratosOficiales("mainnet").find((c) => c.vigente);
+      expect(config.network.name).toBe(vigente ? "mainnet" : "testnet");
+      expect(config.network.contractId).toBe(vigente?.contractId ?? deployments.testnet.contractId);
+    });
+
+    it("con una lista que trae contrato en mainnet (simulada: corre siempre): sella con el contrato de esa entrada", async () => {
+      vi.resetModules();
+      vi.doMock("./deployments.json", () => ({ default: { ...deployments, mainnet: ENTRADA_SIMULADA } }));
+      const { config, oficiales } = await enOficial();
+      const vigente = oficiales.contratosOficiales("mainnet").find((c) => c.vigente);
+      expect(vigente?.contractId).toBe(ENTRADA_SIMULADA.contractId);
+      expect(config.network.name).toBe("mainnet");
+      expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+      expect(config.network.networkPassphrase).toBe(oficiales.passphraseDe("mainnet"));
+    });
   });
 });
+
+/** Una entrada de mainnet inventada, con la forma de la real. La dirección son 32 bytes en cero: nunca un contrato real. */
+const ENTRADA_SIMULADA = {
+  contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+  deployedAt: "2026-01-01",
+  wasmSha256: "0".repeat(64),
+  maxWinners: 300,
+  rpcUrl: "https://mainnet.sorobanrpc.com",
+  networkPassphrase: "Public Global Stellar Network ; September 2015",
+  anteriores: [],
+};

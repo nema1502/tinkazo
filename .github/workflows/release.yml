@@ -183,5 +183,5 @@ jobs:
             echo "| Archivo de fuentes (sha256) | \`$FUENTES\` |"
             echo "| StellarExpert | $ESTADO |"
             echo
-            echo "Se despliega este .wasm, tal cual: \`scripts/deploy.sh <testnet|mainnet> --wasm $(basename "${WASM:-sin-wasm}")\`."
+            echo "Se despliega este .wasm, tal cual. En mainnet, primero con \`--ensayo\`: \`scripts/deploy.sh mainnet <identidad> --wasm $(basename "${WASM:-sin-wasm}") --sha256 $HASH --ensayo\`, y después la misma orden sin \`--ensayo\`. En testnet: \`scripts/deploy.sh testnet --wasm $(basename "${WASM:-sin-wasm}")\`."
           } >> "$GITHUB_STEP_SUMMARY"

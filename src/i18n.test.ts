@@ -98,12 +98,24 @@ describe("diccionario", () => {
     expect(conModo("en").netTest).toBe("Test");
     expect(conModo("en").netMain).toBe("Live");
     for (const l of ["es", "en"] as const) {
-      for (const k of ["netTest", "netMain", "netTestHint", "netMainHint", "modeOfficialBody", "modeTestBody", "sealModeOfficial", "sealModeTest", "firstOfficialBody", "acctNetTest", "acctNetMain", "wrongNetwork"] as const) {
+      for (const k of ["netTest", "netMain", "netTestHint", "netMainHint", "modeOfficialBody", "modeTestBody", "sealModeOfficial", "sealModeTest", "firstOfficialBody", "acctNetTest", "acctNetMain", "wrongNetwork", "loginTestnet", "guestHint", "guestReady", "guestTestnetOnly", "cfDura3"] as const) {
         const v = conModo(l)[k] as string;
         expect(v, `${l}.${k}`).not.toMatch(/testnet|mainnet/i);
         expect(v, `${l}.${k}`).not.toMatch(/para siempre|no se borra|never deleted|forever/i);
       }
     }
+  });
+
+  it("con modo Oficial, Cómo funciona y Seguridad hablan de los dos modos y conservan la fecha en que se borra la red de prueba", () => {
+    const conModo = (l: "es" | "en"): Record<string, unknown> => ({ ...T[l], ...TEXTOS_MODO_OFICIAL[l] });
+    expect(conModo("es").cfDura3 as string).toContain("16 de diciembre de 2026");
+    expect(conModo("en").cfDura3 as string).toContain("December 16, 2026");
+    expect(conModo("es").cfDura3 as string).toContain("modo Oficial");
+    expect(conModo("en").cfDura3 as string).toContain("Live mode");
+    expect(conModo("es").sgLimit3 as string).toContain("modo Prueba");
+    expect(conModo("en").sgLimit3 as string).toContain("Test mode");
+    expect(conModo("es").sgLimit3 as string).not.toContain("hoy el contrato está en testnet");
+    expect(conModo("en").sgLimit3 as string).not.toContain("today the contract is on testnet");
   });
 
   // El día que la lista oficial tenga contrato en la red real, esta deja de correr y corre la de abajo: el diccionario lleva los del modo Oficial.
@@ -158,6 +170,8 @@ describe("diccionario", () => {
       expect(conOficial.en.netMain).toBe("Live");
       expect(conOficial.es.nextBody as string).toContain("En el modo Prueba, guardá");
       expect(conOficial.en.tmMore3 as string).toContain("In Test mode, keep");
+      expect(conOficial.es.loginTestnet).toBe("Prueba");
+      expect(conOficial.es.cfDura3 as string).toContain("modo Oficial");
     });
   });
 

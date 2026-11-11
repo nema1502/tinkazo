@@ -1,5 +1,5 @@
 import { Keypair, Networks, TransactionBuilder, type FeeBumpTransaction } from "@stellar/stellar-sdk/base";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import deployments from "../../../src/stellar/deployments.json";
 import { armar, type Variante } from "./armar";
 import { POLLAR_TESTNET, leerConfig } from "./config";
@@ -63,6 +63,18 @@ async function montar(env: Parameters<typeof leerConfig>[0] = {}, opciones: { si
   const firmante = opciones.sinLlave ? null : await firmanteDe(llave.secret());
   p = new Portero(cfg, cupos, red, firmante, patrocinadora.publicKey(), () => ahora);
 }
+
+/**
+ * Un portero de mainnet con el contrato que diga la prueba, no el de la lista: así lo que se prueba no depende de si
+ * `deployments.json` ya tiene contrato en mainnet (lo que lee de la lista se prueba aparte).
+ */
+async function montarMainnet(contractId: string | null) {
+  await montar({ RED: "mainnet" });
+  p = new Portero({ ...leerConfig({ RED: "mainnet" }), contractId }, cupos, red, await firmanteDe(llave.secret()), patrocinadora.publicKey(), () => ahora);
+}
+
+/** Inventado, con la forma de un contrato real: 32 bytes en cero, nunca un contrato real. */
+const CONTRATO_SIMULADO = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
 
 /** Una transacción firmada, con la ventana contada desde el reloj de la prueba. */
 function tx(v: Partial<Variante> & { firmante: Keypair }) {
@@ -409,9 +421,39 @@ describe("503: el fondo y el interruptor", () => {
     expect(await p.procesar(tx({ firmante: org }).xdr)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
   });
 
-  it("mainnet todavía no tiene contrato: no patrocina nada", async () => {
-    await montar({ RED: "mainnet" });
+  it("una red sin contrato en la lista no patrocina nada", async () => {
+    await montarMainnet(null);
     expect(await p.procesar(tx({ firmante: Keypair.random() }).xdr)).toMatchObject({ estado: 503, cuerpo: { motivo: "apagado" } });
+  });
+
+  it("el portero de mainnet toma el contrato de la lista, o ninguno si todavía no hay", () => {
+    const mainnetEnLista = (deployments as unknown as { mainnet: { contractId?: string } | null }).mainnet;
+    expect(leerConfig({ RED: "mainnet" }).contractId).toBe(mainnetEnLista?.contractId ?? null);
+  });
+
+  describe("con una lista que trae contrato en mainnet (simulada: corre siempre)", () => {
+    afterEach(() => {
+      vi.doUnmock("../../../src/stellar/deployments.json");
+      vi.resetModules();
+    });
+
+    // La frase simulada es inventada, distinta de la que vale sin entrada: así se ve que el portero la toma de la lista.
+    it("el portero de mainnet toma el contrato y la frase de esa entrada", async () => {
+      const FRASE_SIMULADA = "Frase simulada de la entrada ; noviembre de 2026";
+      expect(FRASE_SIMULADA).not.toBe(Networks.PUBLIC);
+      vi.resetModules();
+      vi.doMock("../../../src/stellar/deployments.json", () => ({
+        default: {
+          ...deployments,
+          mainnet: { ...deployments.testnet, contractId: CONTRATO_SIMULADO, networkPassphrase: FRASE_SIMULADA, anteriores: [] },
+        },
+      }));
+      const { leerConfig: leerConLista } = await import("./config");
+      const cfg = leerConLista({ RED: "mainnet" });
+      expect(cfg.contractId).toBe(CONTRATO_SIMULADO);
+      expect(cfg.passphrase).toBe(FRASE_SIMULADA);
+      expect(leerConLista({ RED: "testnet" }).contractId).toBe(CONTRATO);
+    });
   });
 
   it("un ajuste por la clave de administración rige en el pedido siguiente", async () => {
@@ -651,12 +693,18 @@ describe("/cupo dice la verdad sobre si está prendido", () => {
     expect(p.faltaDeConfig()).toEqual(["llave"]);
   });
 
-  it("sin cuenta patrocinadora o sin contrato (mainnet todavía no tiene): tampoco", async () => {
+  it("sin cuenta patrocinadora o sin contrato en la lista: tampoco", async () => {
     p = new Portero(leerConfig({ RED: "testnet" }), cupos, red, await firmanteDe(llave.secret()), null, () => ahora);
     expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config" });
     expect(p.faltaDeConfig()).toEqual(["cuenta"]);
-    await montar({ RED: "mainnet" });
+    await montarMainnet(null);
     expect(p.faltaDeConfig()).toEqual(["contrato", "billeteras-de-la-app"]);
+    expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config", red: "mainnet" });
+  });
+
+  it("con contrato en mainnet y sin la lista de billeteras de la app: tampoco, y solo falta esa lista", async () => {
+    await montarMainnet(CONTRATO_SIMULADO);
+    expect(p.faltaDeConfig()).toEqual(["billeteras-de-la-app"]);
     expect(await pregunta()).toMatchObject({ prendido: false, motivo: "config", red: "mainnet" });
   });
 

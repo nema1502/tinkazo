@@ -5,3 +5,5 @@ public/marca/llama.svg text
 public/marca/llama-oscuro.svg text
 # Los QR clave también: los SVG y el ZIP se comparan byte a byte con lo que genera scripts/marca/qr-clave.mjs.
 public/marca/qr/* -text
+# Los guiones de bash van con LF en cualquier copia: con CRLF, Git Bash corta en la primera línea (core.autocrlf).
+*.sh text eol=lf

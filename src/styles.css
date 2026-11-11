@@ -806,7 +806,7 @@
   }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
   .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
-  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary {
+  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary, button.netbadge {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   /* Visible para el teclado y para el lector, invisible en pantalla. Con
@@ -2332,7 +2332,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .enlace, .gate button, .langs button, #nw { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, #nw, button.netbadge { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector
@@ -2609,10 +2609,13 @@
     .cc-via-l { display: inline; }
     .cc-via-c { display: none; }
   }
-  /* Con la cuenta abierta, el color de la red va en el borde del chip, y la insignia se esconde donde no entra: en un
-     celular, y en la fila de una línea entre 1101 y 1439 px. */
+  /* Con la cuenta abierta, el color de la red va en el borde del chip, y la insignia de siempre (un span) se esconde donde
+     no entra: en un celular, y en la fila de una línea entre 1101 y 1439 px. Con el modo Oficial la marca es un botón y se
+     ve en todos los anchos, porque confundir Prueba con Oficial es lo peor que puede pasar. La excepción es la de la
+     billetera en la otra red, en 460 px o menos: ahí la marca queda para el lector de pantalla y en pantalla la dice el
+     borde doble del chip (más abajo). */
   @media (max-width: 760px), (min-width: 1101px) and (max-width: 1439px) {
-    .auth .netbadge:not(.bad) { display: none; }
+    .auth span.netbadge:not(.bad) { display: none; }
     .auth .netbadge:not(.main):not(.bad) + .hello { border-left: 7px solid var(--orange); }
     .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
   }
@@ -2648,13 +2651,41 @@
     header .cuenta-chip { min-width: 44px; }
     header .topnav { margin: 0; padding-inline: 0; }
     header .topnav a, header .topnav .mas-btn { padding-inline: 7px; }
+    /* La marca del modo, cuando es botón, se queda a la vista y se angosta sin bajar del piso de 14 px de letra
+       (docs/ux.md): menos aire entre letras y a los lados. El alto lo da la regla de 48 px de las pantallas táctiles,
+       y con el botón la cuenta se arrima más para que la fila del logo no se parta. */
+    header .auth button.netbadge { font-size: 14px; padding: 0 4px; letter-spacing: 0.02em; }
+    header .auth:has(> button.netbadge) { gap: 4px; }
     /* La advertencia completa sigue en la página y en el panel. En el chip, el borde
        doble distingue la red incorrecta; la insignia conserva su texto accesible. */
     header .auth .netbadge.bad {
-      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px;
       overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
     }
     header .auth .netbadge.bad + .hello { border-left: 7px double var(--orange); }
+  }
+  /* Con la marca del modo como botón (cuando existe el modo Oficial) la fila del logo no entraba entre 320 y 374 px ni
+     entre 461 y 560 px: idioma, marca y cuenta caían juntos a una fila nueva y la cabecera crecía 54 px (medido el 10 de
+     noviembre de 2026 sobre el build del ensayo, con ?red=oficial, en es y en). Con el botón a la vista, el borde de la
+     cuenta no repite el color del modo, que ya dice el botón; hasta 700 px el idioma muestra solo el botón del otro,
+     el que se puede elegir, y la cuenta queda en su cara o en su silueta, como en el celular; y debajo de 350 px el
+     logo es la llama sola (la palabra sigue para el lector de pantalla en el aria-label del enlace). */
+  @media (max-width: 760px), (min-width: 1101px) and (max-width: 1439px) {
+    header .auth:has(> button.netbadge:not(.bad)) .netbadge + .hello { border-left: 2px solid var(--ink); }
+  }
+  @media (max-width: 700px) {
+    header .bar:has(button.netbadge) .langs button.on { display: none; }
+  }
+  @media (min-width: 461px) and (max-width: 700px) {
+    header .auth:has(> button.netbadge) .cuenta-chip.fuera, header .auth:has(> button.netbadge) .cuenta-chip.ocupado { padding: 4px 10px; }
+    header .auth:has(> button.netbadge) .cuenta-chip.dentro { padding: 3px 12px 3px 6px; }
+    header .auth:has(> button.netbadge) .cuenta-chip.dentro .cc-txt { display: none; }
+    header .auth:has(> button.netbadge) .cuenta-chip.fuera .cc-t, header .auth:has(> button.netbadge) .cuenta-chip.ocupado .cc-t {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  }
+  @media (max-width: 349px) {
+    header .bar:has(button.netbadge) .wm-text { display: none; }
   }
   /* La cuenta que acaba de abrirse aparece con un pulso corto, y sin movimiento queda el aro quieto un instante. */
   .cuenta-chip.recien { animation: cc-recien 1.4s ease-out 1; }
