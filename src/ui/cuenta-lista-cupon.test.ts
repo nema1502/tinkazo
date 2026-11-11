@@ -20,8 +20,11 @@ const A_LA_VISTA = "K7M2-9QXA-4HTR";
 const ok = <T>(datos: T): ResultadoDeAlta<T> => ({ ok: true, datos });
 const mal = (clave: string, motivo: string, estado = 409, vars: Record<string, string> = {}): ErrorDeAlta => ({ ok: false, clave, vars, motivo, estado });
 
-/** El servidor de las altas, de mentira: recuerda el acceso, el cupón de la pestaña y lo que le pidieron. */
-function servidorFalso(o: { acceso?: EstadoDeAlta["acceso"]; guardado?: string | null; cuenta?: string } = {}) {
+/**
+ * El servidor de las altas, de mentira: recuerda el acceso, el cupón de la pestaña y lo que le pidieron. Con `pestana`,
+ * el cupón vive ahí: dos sesiones en el mismo navegador comparten la pestaña.
+ */
+function servidorFalso(o: { acceso?: EstadoDeAlta["acceso"]; guardado?: string | null; cuenta?: string; pestana?: { guardado: string | null } } = {}) {
   const s = {
     /** La cuenta de la sesión: la que dice el servidor y la que tiene el paso. */
     cuenta: o.cuenta ?? "GAAA",
@@ -35,6 +38,7 @@ function servidorFalso(o: { acceso?: EstadoDeAlta["acceso"]; guardado?: string |
     sigue: "activar" as CanjeDeCupon["sigue"],
   };
   const estadoDe = (): EstadoDeAlta => ({ acceso: s.acceso, cuenta: s.cuenta, abierta: false, pedido: null, sorteos: { quedan: s.acceso === "ninguno" ? 0 : 3, proximoVence: null }, orden: null, fondeo: "inmediato" });
+  const pestana = o.pestana ?? s;
   const acceso = {
     estado: vi.fn(async () => (s.estadoImpl ? s.estadoImpl() : ok(estadoDe()))),
     canjear: vi.fn(async (c: string) => {
@@ -43,9 +47,9 @@ function servidorFalso(o: { acceso?: EstadoDeAlta["acceso"]; guardado?: string |
       s.acceso = "cupon";
       return ok<CanjeDeCupon>({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: null }, sigue: s.sigue });
     }),
-    cuponGuardado: vi.fn(() => s.guardado),
-    guardarCupon: vi.fn((c: string) => void (s.guardado = c)),
-    olvidarCupon: vi.fn(() => void (s.guardado = null)),
+    cuponGuardado: vi.fn(() => pestana.guardado),
+    guardarCupon: vi.fn((c: string) => void (pestana.guardado = c)),
+    olvidarCupon: vi.fn(() => void (pestana.guardado = null)),
     refrescarCupo: vi.fn(),
     cuenta: vi.fn(() => s.cuenta),
   } satisfies AccesoDelPaso;
@@ -587,6 +591,65 @@ describe("lo que no se negocia", () => {
     await pasa(PEDIDO_CADA_MS * 3);
     expect(cfB.cuenta.activarCuenta).not.toHaveBeenCalled();
     expect(alerta()).toContain(t("altaErrUsado"));
+  });
+
+  it("una sola pestaña para dos personas: el canje de la primera que sale bien tarde no borra el cupón que guardó la segunda, ni le refresca el cupo", async () => {
+    const OTRO = "B7M29QXA4HTS";
+    const srvA = servidorFalso({ guardado: CODIGO, cuenta: "GAAA" });
+    let soltarA!: (r: ResultadoDeAlta<CanjeDeCupon>) => void;
+    srvA.s.canjeImpl = () => new Promise((r) => (soltarA = r));
+    await abrir({ acceso: srvA });
+    principal().click();
+    await pasa(10);
+    expect(srvA.s.canjes).toEqual([CODIGO]);
+    // A cierra la sesión con el canje en camino: el cupón de la pestaña se olvida (`cupon-enlace.ts`) y la sesión pasa a B.
+    await cerrarElPaso();
+    srvA.s.guardado = null;
+    srvA.acceso.cuenta.mockReturnValue("GBBB");
+    // B entra en la misma pestaña y escribe su cupón: se guarda antes de mandarlo.
+    const srvB = servidorFalso({ cuenta: "GBBB", pestana: srvA.s });
+    let soltarB!: (r: ResultadoDeAlta<CanjeDeCupon>) => void;
+    srvB.s.canjeImpl = () => new Promise((r) => (soltarB = r));
+    await abrir({ acceso: srvB });
+    principal().click();
+    await pasa();
+    escribir("B7M2-9QXA-4HTS");
+    await pasa();
+    principal().click();
+    await pasa(10);
+    expect(srvB.s.canjes).toEqual([OTRO]);
+    expect(srvA.s.guardado).toBe(OTRO);
+    // Llega tarde la respuesta buena del canje de A: el cupón de B sigue, y el cupo de B no se toca por el canje de A.
+    srvA.s.acceso = "cupon";
+    soltarA(ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: null }, sigue: "activar" }));
+    await pasa(10);
+    expect(srvA.s.guardado).toBe(OTRO);
+    expect(srvA.acceso.refrescarCupo).not.toHaveBeenCalled();
+    // El canje de B no sale por la red: su cupón sigue guardado, y al volver a abrir el paso está listo para probar de nuevo.
+    soltarB(mal("altaErrServicio", "sin-red", 0));
+    await pasa();
+    expect(alerta()).toContain(t("altaErrServicio"));
+    expect(srvA.s.guardado).toBe(OTRO);
+    await cerrarElPaso();
+    await abrir({ acceso: srvB });
+    expect(raiz()?.querySelector(".cl-cupon-listo")?.textContent).toBe("B7M2-9QXA-4HTS");
+  });
+
+  it("se cierra el paso, no la sesión, y el canje sale bien después: el cupón se olvida igual y el cupo se refresca", async () => {
+    const srv = servidorFalso({ guardado: CODIGO });
+    let soltar!: (r: ResultadoDeAlta<CanjeDeCupon>) => void;
+    srv.s.canjeImpl = () => new Promise((r) => (soltar = r));
+    await abrir({ acceso: srv });
+    principal().click();
+    await pasa(10);
+    await cerrarElPaso();
+    expect(srv.s.guardado).toBe(CODIGO);
+    srv.s.acceso = "cupon";
+    soltar(ok({ ok: true, repetido: false, sorteosSumados: 3, sorteos: { quedan: 3, proximoVence: null }, sigue: "activar" }));
+    await pasa(10);
+    expect(srv.acceso.olvidarCupon).toHaveBeenCalledTimes(1);
+    expect(srv.s.guardado).toBeNull();
+    expect(srv.acceso.refrescarCupo).toHaveBeenCalledTimes(1);
   });
 
   it("cerrar y volver a abrir después del canje y antes de activar: el acceso ya está, y se activa sin canjear", async () => {

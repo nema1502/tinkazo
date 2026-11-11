@@ -133,15 +133,25 @@ export const PEDIDO_VECES = 20;
 
 /**
  * El canje en curso, fuera del paso: un doble toque, o cerrar y volver a abrir el paso mientras el servidor contesta,
- * no canjean el mismo cupón dos veces. Al salir bien se olvida el cupón y se refresca el cupo, aunque el paso ya se haya
- * cerrado. Es de una cuenta: si se cierra la sesión y entra otra con el mismo cupón, esa canjea con su propia sesión y
- * nunca sigue con lo que el servidor le contestó a la anterior. Sin saber la cuenta, no se comparte.
+ * no canjean el mismo cupón dos veces. Al salir bien, aunque el paso ya se haya cerrado, se olvida el cupón si el que
+ * está guardado en la pestaña es el que se canjeó, y se refresca el cupo si la sesión sigue siendo la de la cuenta que
+ * canjeó: en un stand, con una sola pestaña, la respuesta puede llegar cuando ya entró otra persona y guardó su cupón.
+ * Es de una cuenta: si se cierra la sesión y entra otra con el mismo cupón, esa canjea con su propia sesión y nunca sigue
+ * con lo que el servidor le contestó a la anterior. Sin saber la cuenta, no se comparte.
  */
 let canjeEnVuelo: { cuenta: string; codigo: string; promesa: Promise<ResultadoDeAlta<CanjeDeCupon>> } | null = null;
 
 function cuentaDelAcceso(a: AccesoDelPaso): string | null {
   try {
     return a.cuenta();
+  } catch {
+    return null;
+  }
+}
+
+function cuponDelAcceso(a: AccesoDelPaso): string | null {
+  try {
+    return a.cuponGuardado();
   } catch {
     return null;
   }
@@ -156,8 +166,9 @@ function canjearUnaVez(a: AccesoDelPaso, codigo: string): Promise<ResultadoDeAlt
     .catch((): ResultadoDeAlta<CanjeDeCupon> => sinServicio)
     .then((r) => {
       if (r.ok) {
-        a.olvidarCupon();
-        a.refrescarCupo();
+        // Un cupón ya canjeado no queda guardado; el de otra persona que entró después en la misma pestaña, sí.
+        if (cuponDelAcceso(a) === codigo) a.olvidarCupon();
+        if (cuentaDelAcceso(a) === cuenta) a.refrescarCupo();
       }
       return r;
     })
