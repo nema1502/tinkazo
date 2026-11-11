@@ -23,9 +23,20 @@ El patrocinio de comisiones tiene dos vías y solo una paga en cada momento: el 
 
 ## Portero de comisiones
 
-Servicio propio (`workers/patrocinio`): revisa el pedido de sello del sitio, lo manda como una transacción que paga la comisión con su propia cuenta y lleva los cupos por cuenta y por mes. No se inventa cuál vía rige en cada red: según cuál esté encendido paga el portero o Pollar, y el propio servicio lo dice en su respuesta de cupo (el README del portero describe esa salida y sus motivos).
+Servicio propio (`workers/patrocinio`): revisa el pedido de sello del sitio, lo manda como una transacción que paga la comisión con su propia cuenta y lleva los cupos por cuenta y por mes.
 
-**Se nota:** el sello de una cuenta nueva falla por cupo (se acabó el de esa cuenta, el del mes o el general) o por saldo del servicio (la cuenta del portero quedó sin XLM para pagar comisiones).
+**Quién paga ahora:** el portero o Pollar, según cuál esté encendido. Pedile el cupo al servicio con una cuenta de Stellar válida (una mal escrita da `400`): `curl -s "https://p.tinkazo.app/v1/patrocinio/cupo?cuenta=<cuenta>"`. Mirá el campo `rige`, que dice `portero` o `pollar` y se decide primero. Si dice `portero`, mirá también `prendido`: con `false` el portero no está pagando y `motivo` dice por qué (`apagado` o `config`). Hoy esa dirección atiende solo la red de prueba (el campo `red` lo dice).
+
+**Cuándo usa el sitio al portero:** en Prueba, cuando el build trae `VITE_PATROCINIO_URL_TESTNET` (o la vieja `VITE_PATROCINIO_URL`); sin ninguna de las dos, solo en `tinkazo.app` y `www.tinkazo.app`, con `https://p.tinkazo.app`. En Oficial, solo cuando el build trae `VITE_PATROCINIO_URL_MAINNET`: la vieja no vale ahí y no hay dirección por defecto. Sin portero para la red, paga Pollar.
+
+**Se nota:** el sello de una cuenta nueva falla y la respuesta del servicio dice por qué:
+
+- **Cupo de la cuenta en el mes:** `429` con `motivo:"cupo-cuenta"`. El campo `que` dice si se acabaron los `sellos` o los `sorteos`, y `liberaEn` cuándo vuelve (el mes siguiente).
+- **Cupo de la dirección en la hora:** `429` con `motivo:"cupo-ip"`. Se reintenta más tarde.
+- **Cupo general (el tope de gasto de un día):** `503` con `motivo:"fondo"`, sin `codigo`.
+- **Saldo del servicio** (la cuenta del portero quedó sin XLM para pagar comisiones): `503` con `motivo:"fondo"` y un `codigo` con el rechazo de la red.
+
+Si hay que cortar ya: **apagar el servicio** (el pedido «Apagar») o **devolver el pago a Pollar** (el pedido «Devolver el patrocinio a Pollar» y el apartado «Volver a Pollar»); los tres están en la sección «Hoja de operación» del README del portero.
 
 **Qué hacer:** la [Hoja de operación del portero](../workers/patrocinio/README.md#hoja-de-operación) mantiene la única copia de los pedidos completos: encender, apagar, volver a Pollar, cargar fondos y rotar la llave.
 
