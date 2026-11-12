@@ -82,7 +82,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification itself costs **0.003 XLM** (measured on testnet on October 3, 2026). The rest of a draw's cost is storage rent, which the network sets and has changed more than once ([history, with dates](docs/deployments.md)). On mainnet, a three-winner draw is projected at 0.178 XLM ([costs](#costs)).
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address: mainnet runs version 0.2.0 at its own address, and every deployment is recorded in [docs/deployments.md](docs/deployments.md).
-- **Onboarding that works at a meetup.** In Test mode, organizers sign in with Google through Pollar, which holds the key for them, with Freighter, or with a test account the browser creates and funds, and Tinkazo covers the network fee. In Live mode, an organizer who signs in with Google draws for free with a coupon from their event: Tinkazo covers the network fee while the coupon's draws last. One who signs in with their own wallet pays the fee from it, a few cents. The test account works only in Test mode. Participants never touch Stellar at all.
+- **Onboarding that works at a meetup.** In Test mode, organizers sign in with Google through Pollar, which holds the key for them, with Varial (formerly Freighter), or with a test account the browser creates and funds, and Tinkazo covers the network fee. In Live mode, an organizer who signs in with Google draws for free with a coupon from their event: Tinkazo covers the network fee while the coupon's draws last. One who signs in with their own wallet pays the fee from it, a few cents. The test account works only in Test mode. Participants never touch Stellar at all.
 
 ## What is live today
 
@@ -227,7 +227,7 @@ After that, only if communities ask for it: a delivery receipt, so the organizer
 
 ## Run it locally
 
-Requires Node 22+ and pnpm 11. Copy `.env.example` to `.env.local`: the Pollar key is optional, and without it Google sign-in is hidden (Freighter and the test account still work).
+Requires Node 22+ and pnpm 11. Copy `.env.example` to `.env.local`: the Pollar key is optional, and without it Google sign-in is hidden (Varial and the test account still work).
 
 ```bash
 pnpm install

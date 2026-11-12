@@ -82,7 +82,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación en sí cuesta **0,003 XLM** (medido en testnet el 3 de octubre de 2026). El resto de lo que cuesta un sorteo es renta de almacenamiento, que la red fija y ya cambió más de una vez ([historial con fechas](docs/deployments.md)). En mainnet, un sorteo de tres ganadores se proyecta en 0,178 XLM ([qué cuesta](#qué-cuesta)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva: mainnet corre la versión 0.2.0 en su propia dirección, y cada despliegue está anotado en [docs/deployments.md](docs/deployments.md).
-- **Entrar funciona en un meetup.** En el modo Prueba, quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta, con Freighter, o con una cuenta de prueba que el navegador crea y fondea, y Tinkazo cubre la comisión de la red. En el modo Oficial, quien organiza entra con Google y sortea gratis con el cupón de su evento: Tinkazo cubre la comisión de la red mientras le queden sorteos oficiales. Quien entra con su propia billetera paga de ahí la comisión de la red, que es de centavos. La cuenta de prueba solo funciona en el modo Prueba. Los participantes no tocan Stellar nunca.
+- **Entrar funciona en un meetup.** En el modo Prueba, quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta, con Varial (antes Freighter), o con una cuenta de prueba que el navegador crea y fondea, y Tinkazo cubre la comisión de la red. En el modo Oficial, quien organiza entra con Google y sortea gratis con el cupón de su evento: Tinkazo cubre la comisión de la red mientras le queden sorteos oficiales. Quien entra con su propia billetera paga de ahí la comisión de la red, que es de centavos. La cuenta de prueba solo funciona en el modo Prueba. Los participantes no tocan Stellar nunca.
 
 ## Qué está andando hoy
 
@@ -227,7 +227,7 @@ Después, solo si las comunidades lo piden: una constancia de entrega, para que 
 
 ## Correr en local
 
-Hace falta Node 22 o más y pnpm 11. Copiá `.env.example` a `.env.local`: la llave de Pollar es opcional, y sin ella no aparece la entrada con Google (Freighter y la cuenta de prueba andan igual).
+Hace falta Node 22 o más y pnpm 11. Copiá `.env.example` a `.env.local`: la llave de Pollar es opcional, y sin ella no aparece la entrada con Google (Varial y la cuenta de prueba andan igual).
 
 ```bash
 pnpm install

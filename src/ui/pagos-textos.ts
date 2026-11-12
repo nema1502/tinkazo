@@ -62,7 +62,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgAviso:
       "Hola, ganaste en el sorteo. Para recibir tus {monto} USDC, abrí tu billetera de Stellar, activá USDC (el de Circle) y avisame. Tu cuenta: {cuenta}",
     pgAfuera:
-      "Esta cuenta entró con Google y desde acá no firma pagos. Copiá el pago listo y firmalo en una billetera como Freighter, con la cuenta que va a pagar. Después apretá Actualizar.",
+      "Esta cuenta entró con Google y desde acá no firma pagos. Copiá el pago listo y firmalo en una billetera como Varial, con la cuenta que va a pagar. Después apretá Actualizar.",
     pgXdrResumen: "El pago listo para firmar",
     pgCopiar: "Copiar",
     pgCopiado: "Copiado",
@@ -132,7 +132,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgAviso:
       "Hi, you won in the draw. To receive your {monto} USDC, open your Stellar wallet, turn on USDC (the Circle one) and let me know. Your account: {cuenta}",
     pgAfuera:
-      "This account signed in with Google and can't sign payments from here. Copy the ready payment and sign it in a wallet like Freighter, with the account that will pay. Then press Refresh.",
+      "This account signed in with Google and can't sign payments from here. Copy the ready payment and sign it in a wallet like Varial, with the account that will pay. Then press Refresh.",
     pgXdrResumen: "The payment, ready to sign",
     pgCopiar: "Copy",
     pgCopiado: "Copied",

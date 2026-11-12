@@ -341,10 +341,10 @@ async function pasoDeFondos(browser, p, tema) {
     await page.waitFor(`document.querySelector('.login-opt')`, 15000);
     await sleep(500);
     const i = await page.eval(
-      `String([...document.querySelectorAll('.login-opt')].findIndex(e => /Freighter/.test(e.textContent) && !/instalar|install/.test(e.textContent)))`,
+      `String([...document.querySelectorAll('.login-opt')].findIndex(e => /Varial/.test(e.textContent) && !/instalar|install/.test(e.textContent)))`,
     );
     if (i === "-1") {
-      check(`${pre}: el paso de fondos se abre`, false, "la Freighter de mentira no aparece instalada");
+      check(`${pre}: el paso de fondos se abre`, false, "la billetera Varial de mentira no aparece instalada");
       return;
     }
     await page.eval(`[...document.querySelectorAll('.login-opt')][${i}].click()`);
@@ -531,14 +531,14 @@ async function variantesDelPanel(page, p, tema) {
     await page.screenshot(join(outDir, `ui-cuenta-google-${p.etiqueta}-${tema}.png`));
   } else check(`${pre}: se abre el panel de una cuenta de Google`, false);
 
-  if (await abrirCon({ address: CUENTA_FALSA, label: "Freighter", balance: 5 })) {
+  if (await abrirCon({ address: CUENTA_FALSA, label: "Varial", balance: 5 })) {
     const f = JSON.parse(
       await page.eval(`JSON.stringify({ saldo: !!document.querySelector('.acct-badge:not(.net)'), grifo: !!document.querySelector('[data-k=fund]') })`),
     );
-    check(`${pre}: con Freighter y 5 XLM el panel muestra el saldo y el grifo`, f.saldo && f.grifo, JSON.stringify(f));
-    chequearVentana(`${pre}: el panel de una cuenta de Freighter con poco saldo`, JSON.parse(await page.eval(ALCANCE(".acct-card"))), p.movil);
+    check(`${pre}: con Varial y 5 XLM el panel muestra el saldo y el grifo`, f.saldo && f.grifo, JSON.stringify(f));
+    chequearVentana(`${pre}: el panel de una cuenta de Varial con poco saldo`, JSON.parse(await page.eval(ALCANCE(".acct-card"))), p.movil);
     await page.screenshot(join(outDir, `ui-cuenta-freighter-${p.etiqueta}-${tema}.png`));
-  } else check(`${pre}: se abre el panel de una cuenta de Freighter`, false);
+  } else check(`${pre}: se abre el panel de una cuenta de Varial`, false);
   await cerrar();
 }
 

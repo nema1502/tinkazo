@@ -26,7 +26,7 @@ import { CLASE_NO_CARGO, avisarQueNoCargo } from "./aviso-no-cargo";
  * porque lo único que hace falta es poder firmar el sello. Los participantes
  * nunca pasan por acá.
  *
- * Hay dos caminos: Freighter, la wallet del navegador, o una cuenta de prueba
+ * Hay dos caminos: Varial (antes Freighter), la wallet del navegador, o una cuenta de prueba
  * que el propio navegador crea y fondea en testnet para quien quiera probar el
  * anclaje sin instalar nada.
  *
@@ -1077,7 +1077,7 @@ interface Option {
   /** Lo que se lee al pasar el mouse: el detalle que la ventana ya no escribe. */
   hint: string;
   icon: keyof typeof ICONS;
-  /** Al lado del nombre, en chiquito: "Freighter", "testnet". */
+  /** Al lado del nombre, en chiquito: "Varial", "testnet". */
   small?: string;
   pick: "freighter" | "guest" | "google" | null;
   href?: string;
@@ -1165,15 +1165,15 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
   // hace una vez, con la página quieta: casi siempre ya está contestada.
   const conFreighter = await Promise.race([hayFreighter(), new Promise<boolean>((r) => setTimeout(() => r(false), 400))]);
   if (conFreighter) {
-    options.push({ label: t("loginWallet"), small: "Freighter", hint: t("freighterHint"), icon: "wallet", pick: "freighter" });
+    options.push({ label: t("loginWallet"), small: "Varial", hint: t("freighterHint"), icon: "wallet", pick: "freighter" });
   } else {
     options.push({
       label: t("loginWallet"),
-      small: `Freighter, ${t("loginInstall")} ↗`,
+      small: `Varial, ${t("loginInstall")} ↗`,
       hint: t("freighterInstall"),
       icon: "wallet",
       pick: null,
-      href: "https://www.freighter.app/",
+      href: "https://varialwallet.com/",
     });
   }
   if (w.guestAvailable()) {

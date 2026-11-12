@@ -5,8 +5,8 @@
  * `window.postMessage`: manda `FREIGHTER_EXTERNAL_MSG_REQUEST` con un tipo y
  * espera un `FREIGHTER_EXTERNAL_MSG_RESPONSE` con el mismo identificador (que
  * la extensión escribe `messagedId`, con la errata). Con esto en la página
- * (`Page.addScriptToEvaluateOnNewDocument`), "Wallet · Freighter" aparece como
- * instalada, conecta con una dirección fija y el saldo de Horizon para esa
+ * (`Page.addScriptToEvaluateOnNewDocument`), la billetera Varial (antes Freighter,
+ * y la librería conserva ese nombre) aparece como instalada, conecta con una dirección fija y el saldo de Horizon para esa
  * cuenta es "no existe todavía". Así se llega al paso de fondos de la ventana
  * de ingreso por el camino de verdad, sin extensión, sin permisos y sin red.
  *

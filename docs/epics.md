@@ -220,7 +220,7 @@ para verificar en mi celular sin pedirle nada al organizador.
 
 ### Historia 3.1: Conectar wallet y detectar red: hecho
 
-Resultado (2026-09-19): el botón "Conectar wallet" de la cabecera abre un selector con Freighter (con enlace de instalación si no está) y la cuenta de prueba. Al conectar se muestra la red, la dirección abreviada enlazada al explorador y el botón de salir; si la wallet está en otra red aparece el aviso y el anclaje queda bloqueado. El SDK de Stellar se carga con `import()` recién al abrir el selector, así que quien solo sortea en modo libre no descarga esos 500 KB.
+Resultado (2026-09-19): el botón "Conectar wallet" de la cabecera abre un selector con Varial, que entonces se llamaba Freighter (con enlace de instalación si no está) y la cuenta de prueba. Al conectar se muestra la red, la dirección abreviada enlazada al explorador y el botón de salir; si la wallet está en otra red aparece el aviso y el anclaje queda bloqueado. El SDK de Stellar se carga con `import()` recién al abrir el selector, así que quien solo sortea en modo libre no descarga esos 500 KB.
 
 Como organizadora,
 quiero conectar mi wallet y ver mi dirección y la red,
@@ -279,7 +279,7 @@ para sellar y sortear anclado sin wallet ni XLM propios.
 
 **Dado** la red configurada en testnet y ninguna wallet conectada
 **Cuando** pulso "Probar sin wallet"
-**Entonces** el navegador genera un par de llaves, lo fondea con friendbot, lo guarda solo en este dispositivo y lo expone por el mismo adaptador de wallet que Freighter
+**Entonces** el navegador genera un par de llaves, lo fondea con friendbot, lo guarda solo en este dispositivo y lo expone por el mismo adaptador de wallet que Varial
 **Y** la interfaz deja claro que es una cuenta de prueba de testnet, ofrece exportar o borrar la llave y no aparece cuando la red configurada es mainnet
 **Y** `seal` y `draw` funcionan igual que con una wallet externa.
 
@@ -289,7 +289,7 @@ Justificación: mientras el proyecto viva en testnet, esta es la forma más ráp
 
 Resultado (2026-09-20): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. El costo sale de la simulación y se muestra en el paso de firma, antes de que el organizador apruebe nada.
 
-Cambio (2026-10-19): con una cuenta de Pollar (Google o correo) el costo no se muestra y no hay pantalla de fondos, porque la comisión puede pagarla la app y quien entra solo quiere sortear; si hace falta ayuda, sellar la pide solo (ver D-16 en `docs/architecture.md`). Con Freighter y con la cuenta de prueba sigue como estaba.
+Cambio (2026-10-19): con una cuenta de Pollar (Google o correo) el costo no se muestra y no hay pantalla de fondos, porque la comisión puede pagarla la app y quien entra solo quiere sortear; si hace falta ayuda, sellar la pide solo (ver D-16 en `docs/architecture.md`). Con Varial y con la cuenta de prueba sigue como estaba.
 
 Como organizadora,
 quiero mensajes claros y un estado visible en cada paso,
@@ -947,7 +947,7 @@ Resultado (2026-10-02): el trabajo de Guido Salazar ([@GuidoSV7](https://github.
 - **La piñata:** cada caramelo que sale lleva su nombre en grande, y la lista de los que quedan ya no pisa la piñata.
 - **Oruro:** cada diablo tiene su etiqueta desde el primer cuadro, unida a él por una línea, y una pasada de lista nombra a todos al menos una vez. El cambio venía con un error de una línea que hacía caer el juego en el primer cuadro y dejaba el sorteo colgado; lo encontró el auditor exigente y se arregló.
 - **La ruleta:** sacude la cámara una sola vez, cuando corona al ganador de verdad. Antes sacudía también en la parada falsa y la trampa parecía tan elegida como el ganador.
-- **La sesión se recuerda** al recargar: la cuenta de prueba, Freighter o Google. Solo se guarda el tipo de sesión, nunca una llave, y al cargar nunca se abre un popup.
+- **La sesión se recuerda** al recargar: la cuenta de prueba, Varial o Google. Solo se guarda el tipo de sesión, nunca una llave, y al cargar nunca se abre un popup.
 - **Animaciones reducidas:** quien las tiene así en su sistema ve el resultado directo, con un aviso y un botón para ver la animación igual.
 - **Volver a la pestaña** con el contexto de la placa de video perdido rearma el cartel del ganador.
 - **Las miniaturas del selector** se redibujan bien después de que el celular restaura la pestaña.

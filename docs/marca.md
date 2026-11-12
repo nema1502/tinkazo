@@ -115,7 +115,7 @@ Cómo se cumple:
 | Salir de la cuenta | Se llama "Cerrar sesión", nunca "Salir" ni "Cancelar" sueltos, y va como botón de texto en el pie: que no se confunda con cerrar la ventana. |
 | Accesibilidad | `role="dialog"`, `aria-modal` y `aria-labelledby` al título. El foco entra al abrir, no se escapa (Tab da la vuelta) y vuelve al botón que la abrió. Lo que se mueve al entrar respeta `prefers-reduced-motion`. |
 
-En el panel de la cuenta la red va como insignia (naranja en la red de pruebas, turquesa en la principal) y el saldo en otra, chica. Quien entra con Google o con un correo no ve el saldo mientras sea menor que 1, ni el botón del grifo: la comisión de esas cuentas la va a cubrir Tinkazo con Pollar, y quien entra así no tiene por qué saber qué es un XLM. Con Freighter y con la cuenta de prueba el saldo se ve como siempre.
+En el panel de la cuenta la red va como insignia (naranja en la red de pruebas, turquesa en la principal) y el saldo en otra, chica. Quien entra con Google o con un correo no ve el saldo mientras sea menor que 1, ni el botón del grifo: la comisión de esas cuentas la va a cubrir Tinkazo con Pollar, y quien entra así no tiene por qué saber qué es un XLM. Con Varial (antes Freighter) y con la cuenta de prueba el saldo se ve como siempre.
 
 Se mira en cinco pantallas, en los dos temas, y a 200 % de zoom:
 

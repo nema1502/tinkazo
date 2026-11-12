@@ -24,7 +24,7 @@ export interface SignedTx {
 
 export interface WalletAdapter {
   readonly kind: WalletKind;
-  /** Nombre para la interfaz: "Freighter", "Cuenta de prueba"… */
+  /** Nombre para la interfaz: "Varial", "Cuenta de prueba"… */
   readonly label: string;
   /** Dirección activa, o null si no hay sesión. */
   readonly address: string | null;
@@ -56,11 +56,16 @@ export const WALLET_ERRORS = {
   popupNoSession: "popup-nosession",
 } as const;
 
-/* ----------------------------------------------------------------- Freighter */
+/* ----------------------------------------------------------------- Varial (antes Freighter) */
 
+/**
+ * La billetera del navegador se llama Varial desde el 29 de octubre de 2026 (antes Freighter). Lo que ve la persona dice
+ * Varial. El paquete `@stellar/freighter-api`, estos identificadores y la clave `freighter` de las sesiones guardadas y de
+ * las métricas conservan el nombre viejo: la propia billetera los mantiene así y cambiarlos rompería sesiones abiertas.
+ */
 class FreighterWallet implements WalletAdapter {
   readonly kind = "external" as const;
-  readonly label = "Freighter";
+  readonly label = "Varial";
   address: string | null = null;
 
   /** ¿Está instalada la extensión? */

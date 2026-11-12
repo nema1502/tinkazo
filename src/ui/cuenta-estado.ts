@@ -19,7 +19,7 @@ export type Via = "google" | "email" | "freighter" | "prueba";
 
 /** Lo que la cabecera necesita saber de la sesión, sin el resto. */
 export interface SesionVista {
-  /** La etiqueta de la cuenta: "Google", "Email", "Freighter" o "Cuenta de prueba". */
+  /** La etiqueta de la cuenta: "Google", "Email", "Varial" o "Cuenta de prueba". */
   label: string;
   address: string;
   /** El nombre, solo si la cuenta lo trae (Google): el correo no cuenta como nombre. */
@@ -63,11 +63,14 @@ export function viaDeLaSesionGuardada(kind: string | null, marcaPollar: string |
   return null;
 }
 
-/** La vía, por la etiqueta de la cuenta (`wallet.label`). */
+/**
+ * La vía, por la etiqueta de la cuenta (`wallet.label`). La billetera del navegador se llama Varial desde octubre de 2026:
+ * la etiqueta vieja sigue valiendo, y la vía conserva el nombre `freighter` (es la clave de la sesión guardada y de la cuenta).
+ */
 export function viaDe(label: string): Via {
   if (label === "Google") return "google";
   if (label === "Email") return "email";
-  if (label === "Freighter") return "freighter";
+  if (label === "Varial" || label === "Freighter") return "freighter";
   return "prueba";
 }
 
