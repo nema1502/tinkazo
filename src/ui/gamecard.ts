@@ -53,7 +53,16 @@ const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "or
  */
 export const claveNombre = (g: Game): string => NOMBRE[g] ?? clavesDe(g).nombre;
 export const claveRegla = (g: Game): string => REGLA[g] ?? clavesDe(g).regla;
-const claveVarios = (g: Game): string | undefined => VARIOS[g] ?? (entradaDe(g) ? clavesDe(g).varios : undefined);
+/**
+ * La regla con varios premios del juego, solo si tiene su texto en el idioma de ahora. El catálogo del kit la
+ * supone por convención (`gc<Juego>Many`) pero no la exige: con una que no existe, la sala leía la clave cruda
+ * ("gcRaceMany") en letra grande, la carrera con dos premios o más entre ellas. Sin ella, la tarjeta cae a la regla
+ * de siempre con la nota general de varios premios (`gcPrizesNote`).
+ */
+const claveVarios = (g: Game): string | undefined => {
+  const clave = VARIOS[g] ?? (entradaDe(g) ? clavesDe(g).varios : undefined);
+  return clave !== undefined && typeof T[getLang()][clave] === "string" ? clave : undefined;
+};
 const tieneCaptura = (g: Game): boolean => CAPTURA.has(g) || entradaDe(g)?.captura === true;
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
