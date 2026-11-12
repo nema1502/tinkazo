@@ -1,0 +1,38 @@
+{
+  "descripcion": "Cadenas de código que el control de escritura no debe tratar como texto para personas. Cada exclusión lleva `archivo` (un archivo, o una carpeta si termina en /), `contiene` (un trozo del texto; si falta, vale para todo el archivo) y `porque`, que es obligatorio. Se prefiere siempre reescribir la frase antes que excluirla.",
+  "exclusiones": [
+    {
+      "archivo": "src/stellar/",
+      "contiene": "Network ; September 2015",
+      "porque": "Es la frase que identifica a cada red de Stellar y entra en la firma de la transacción: tiene que ser exacta, con su espacio y su punto y coma. No se muestra en pantalla."
+    },
+    {
+      "archivo": "src/games/tres/oruro-3d-recortes.ts",
+      "contiene": "gl_Position",
+      "porque": "Es el programa de la placa de video (sombreador de vértices), código y no texto. El punto y coma es parte de la sintaxis."
+    },
+    {
+      "archivo": "src/sonidos/carrera.ts",
+      "porque": "Son las notas con las que se describe y se elige cada sonido de la carrera: las leen las pruebas y la herramienta de elección, nunca la pantalla. El resto del archivo son parámetros de audio."
+    },
+    {
+      "archivo": "src/games/pixi/kit/guion.ts",
+      "contiene": "palabras: el máximo son",
+      "porque": "Mensaje de problemasDeLinea, que solo leen las pruebas de cada juego cuando una frase del relator rompe la regla del niño. El relator dice lo que traen los juegos: esta cadena nunca llega a la pantalla."
+    },
+    {
+      "archivo": "src/games/pixi/kit/guion.ts",
+      "contiene": "trae números: van en el marcador",
+      "porque": "Mensaje de problemasDeLinea, que solo leen las pruebas de cada juego. Nunca llega a la pantalla."
+    },
+    {
+      "archivo": "src/games/pixi/kit/guion.ts",
+      "contiene": "personas: una por línea",
+      "porque": "Mensaje de problemasDeLinea, que solo leen las pruebas de cada juego. Nunca llega a la pantalla."
+    },
+    {
+      "archivo": "src/games/pixi/kit/respuestas.ts",
+      "porque": "Todo el archivo es la prueba del niño: lo que cada juego declara a sus pruebas y al auditor (window.__nino, solo con ?auditar=nino) y los mensajes de problemasDeRespuestas, que solo leen esas pruebas. Puro, sin DOM: ninguna cadena llega a la pantalla. Las palabras entre comillas son los nombres de los campos (adelante, hacia, paso), y las pruebas los buscan tal cual."
+    }
+  ]
+}

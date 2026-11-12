@@ -95,6 +95,32 @@ describe("recursos públicos de marca", () => {
     expect(T.es.maSi1).toContain("T mayúscula");
     expect(T.es.maNo2).toContain("sorteo");
   });
+  it("lo que no también enseña las dos reglas de docs/marca.md: sin comillas angulares y sin punto y coma", () => {
+    const html = leer("marca.html");
+    const guia = leer("docs/marca.md");
+    const plano = (s: string): string => s.replace(/<[^>]+>/g, "");
+    // maNo6 lleva negrita y cursiva: el ejemplo enseña cómo se nombra un botón. La copia del HTML es la del diccionario.
+    for (const [clave, atributo] of [["maNo6", "data-i-html"], ["maNo7", "data-i"]] as const) {
+      expect(html).toContain(`<li ${atributo}="${clave}">${T.es[clave]}</li>`);
+      for (const lang of ["es", "en"] as const) {
+        expect(plano(String(T[lang][clave])), `${lang} ${clave}`).not.toMatch(/[\u00ab\u00bb;]/);
+        expect(String(T[lang][clave]), `${lang} ${clave}`).not.toMatch(/["\u201c\u201d]/);
+      }
+    }
+    expect(T.es.maNo6).toMatch(/^Comillas angulares, las de apertura y las de cierre, en español y en inglés\. /);
+    expect(T.es.maNo6).toContain("<strong>Sellar la lista</strong>");
+    expect(T.en.maNo6).toContain("<strong>Seal the list</strong>");
+    // La regla del punto y coma se dice con las mismas palabras que la guía de marca.
+    expect(guia).toContain(`- ${T.es.maNo7}`);
+    expect(T.en.maNo7).toMatch(/^Semicolons/);
+  });
+  it("en inglés, la capa de corte se nombra como se llama en el archivo", () => {
+    // En los SVG y en los PDF la capa se llama corte: una capa llamada cut no existe y la imprenta no la encuentra.
+    for (const clave of ["maStB", "maHojB", "maColNota", "maColHojB"]) {
+      expect(T.en[clave], clave).toContain("named corte");
+      expect(T.en[clave], clave).not.toMatch(/cut layer/);
+    }
+  });
   it("la silueta SVG es exactamente la del icono sin su fondo", () => {
     const icono = leer("public/icon.svg");
     const llama = leer("public/marca/llama.svg");
@@ -231,8 +257,13 @@ describe("kit de marca para patrocinios y eventos", () => {
     for (const lang of ["es", "en"] as const) expect(leeme).toContain(`${T[lang].maDescL}\r\n${T[lang].maDescP}`);
     expect(leeme).toContain("https://tinkazo.app");
     expect(leeme).toContain("hola@tinkazo.app");
-    expect(leeme).toContain("Stickers: archivos a tamaño real con 3 mm de sangrado; la capa 'corte' es la línea de corte; imprimir en vinilo mate; los colores son RGB, la imprenta los convierte");
-    expect(leeme).toContain("Stickers: true-size files with 3 mm bleed; the 'corte' layer is the cut line; print on matte vinyl; colors are RGB, the printer converts them");
+    expect(leeme).toContain("Stickers: archivos a tamaño real con 3 mm de sangrado. La capa llamada corte es la línea de corte. Imprimilos en vinilo mate. Los colores son RGB y la imprenta los convierte.");
+    expect(leeme).toContain("Stickers: true-size files with 3 mm bleed. The layer named corte is the cut line. Print them on matte vinyl. Colors are RGB and the printer converts them.");
+    // Sin comillas angulares, sin punto y coma y sin comillas rectas: los textos de cada pieza, entre comillas curvas.
+    expect(leeme).not.toMatch(/[«»;"]/);
+    expect(leeme).not.toContain("'corte'");
+    expect(leeme).toContain("“Sorteo verificable con Tinkazo”");
+    expect(leeme).toContain("Se escribe Tinkazo, todo junto y con la T mayúscula.");
     expect(leeme).toContain("#fff6e9");
     expect(leeme).toContain("24 px");
     expect(leeme).toContain("8 mm");

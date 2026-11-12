@@ -40,19 +40,37 @@ describe("los textos con cupón de las páginas de lectura", () => {
       "Tinkazo pays the cost of sealing in Test mode, and in Live mode too if you use a coupon from your event. In Live mode, if you sign in with your own wallet, you pay the network's charge, which is a few cents.",
     );
     expect(texto("es", "faq3a")).toMatch(
-      /En el modo Oficial, con el cupón de tu evento Tinkazo cubre la comisión de la red\. Quien entra con su propia billetera la paga de su cuenta\.$/,
+      /En el modo Oficial, con el cupón de tu evento, Tinkazo cubre la comisión de la red\. En ese modo, quien entra con su propia billetera la paga de su cuenta\.$/,
     );
     expect(texto("en", "faq3a")).toMatch(
-      /In Live mode, with a coupon from your event Tinkazo covers the network's charge\. If you sign in with your own wallet, you pay it from your account\.$/,
+      /In Live mode, with a coupon from your event, Tinkazo covers the network's charge\. In that mode, if you sign in with your own wallet, you pay it from your account\.$/,
     );
     expect(texto("es", "cfCostoB")).toContain("En el modo Oficial lo paga Tinkazo si usás el cupón de tu evento, y quien entra con su propia billetera lo paga de su cuenta.");
     expect(texto("en", "cfCostoB")).toContain("In Live mode Tinkazo pays it if you use a coupon from your event, and if you sign in with your own wallet, you pay it from your account.");
     expect(texto("es", "tmPatrocinio")).toMatch(
-      /En el modo Oficial, con el cupón de tu evento Tinkazo cubre esa comisión mientras te queden sorteos oficiales\. Quien entra con su propia billetera la paga de su cuenta\.$/,
+      /En el modo Oficial, con el cupón de tu evento, Tinkazo cubre esa comisión mientras te queden sorteos oficiales\. En ese modo, quien entra con su propia billetera la paga de su cuenta\.$/,
     );
     expect(texto("en", "tmPatrocinio")).toMatch(
-      /In Live mode, with a coupon from your event Tinkazo covers that charge while you have Live draws left\. If you sign in with your own wallet, you pay it from your account\.$/,
+      /In Live mode, with a coupon from your event, Tinkazo covers that charge while you have Live draws left\. In that mode, if you sign in with your own wallet, you pay it from your account\.$/,
     );
+  });
+
+  it("lo de la billetera propia queda dicho dentro del modo Oficial, y el cupón no se pega al nombre de Tinkazo", () => {
+    // Una oración suelta sobre la billetera propia, sin el modo, valdría también para el modo Prueba, donde la comisión
+    // la cubre Tinkazo. Y sin la coma, el cupón de tu evento Tinkazo se lee como el nombre del evento.
+    const idiomas = [
+      ["es", /propia billetera/, /modo Oficial|ese modo/],
+      ["en", /own wallet/, /Live mode|that mode/],
+    ] as const;
+    for (const k of DE_QUIEN_PAGA) {
+      for (const [l, billetera, modo] of idiomas) {
+        const oraciones = texto(l, k).split(/(?<=\.)\s+/).filter((o) => billetera.test(o));
+        expect(oraciones.length, `${l} ${k}`).toBeGreaterThan(0);
+        for (const o of oraciones) expect(o, `${l} ${k}`).toMatch(modo);
+      }
+      expect(texto("es", k), k).not.toMatch(/cupón de tu evento Tinkazo/);
+      expect(texto("en", k), k).not.toMatch(/coupon from your event Tinkazo/);
+    }
   });
 
   it("lo de Prueba sigue igual: ahí no hay cupón y Tinkazo cubre la comisión", () => {
@@ -68,6 +86,10 @@ describe("los textos con cupón de las páginas de lectura", () => {
     expect(texto("es", "tmMore1")).toMatch(/^No hay publicidad ni rastreadores que te sigan de un sitio a otro/);
     expect(texto("es", "tmMore1")).toContain("Al compartir o mostrar en grande, se guarda en Cloudflare una copia cifrada del comprobante, que incluye la lista.");
     expect(texto("es", "tmMore1")).toContain("No guarda la lista, nombres ni direcciones IP.");
+    // Un fondo, sin decir de quién, se puede leer como un fondo de terceros que paga las comisiones.
+    expect(texto("es", "tmMore1")).toContain("Para cuidar el saldo con que Tinkazo la paga, ese servicio anota los sellos de cada cuenta");
+    expect(texto("en", "tmMore1")).toContain("To protect the balance Tinkazo pays it from, that service records each account's seals");
+    for (const l of IDIOMAS) expect(texto(l, "tmMore1"), l).not.toMatch(/\bfondo\b|\bfund\b/);
     expect(texto("es", "tmMore1")).toMatch(
       /Si canjeás un cupón de evento, ese servicio confirma tu sesión con Pollar y guarda el identificador que Pollar le da a tu cuenta, tu dirección pública, el evento y una huella del cupón, la hora del canje y cuántos sorteos oficiales te quedan\. No guarda tu correo, tu nombre, la llave de tu sesión ni el código del cupón\. Los topes por dirección IP se cuentan en memoria, y la dirección nunca se escribe en disco ni en registros\.$/,
     );

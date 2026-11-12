@@ -705,8 +705,8 @@ describe("la portada y las páginas de lectura no dicen lo que el sitio no puede
 });
 
 /** La lista que sube a Stellar, completa: la misma frase en la interfaz, en las páginas y en la documentación. */
-const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.";
-const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.";
+const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo. Al sortear se suman la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.";
+const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number. Running the draw adds the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.";
 
 describe("la lista que sube a Stellar está completa en la documentación, en los dos idiomas", () => {
   it.each([
@@ -796,11 +796,12 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
   it("las claves de la tabla se quedan en el diccionario con los números aprobados, para volver a ponerla", () => {
     expect(T.es.prP1b).toContain("20 sorteos por mes por cuenta (50 si la comunidad está verificada)");
     expect(T.en.prP1b).toContain("20 draws a month per account (50 if the community is verified)");
-    expect(T.es.prP2b).toBe("10 sorteos por Bs 20; 50 por Bs 90");
-    expect(T.es.prP2l).toBe("10 sorteos por US$ 2; 50 por US$ 9");
-    expect(T.en.prP2b).toBe("10 draws for Bs 20; 50 for Bs 90");
-    expect(T.en.prP2l).toBe("10 draws for US$ 2; 50 for US$ 9");
-    expect(T.es.prP3b).toBe("Bs 100 hasta 100 personas; Bs 200 hasta 500; Bs 400 hasta 5.000; Bs 1.500 con más");
+    // Los dos paquetes, cada uno con su cantidad de sorteos: Bs 20 o 50, pegado, se lee como un precio entre dos.
+    expect(T.es.prP2b).toBe("10 sorteos por Bs 20, o 50 sorteos por Bs 90");
+    expect(T.es.prP2l).toBe("10 sorteos por US$ 2, o 50 sorteos por US$ 9");
+    expect(T.en.prP2b).toBe("10 draws for Bs 20, or 50 draws for Bs 90");
+    expect(T.en.prP2l).toBe("10 draws for US$ 2, or 50 draws for US$ 9");
+    expect(T.es.prP3b).toBe("Bs 100 hasta 100 personas, Bs 200 hasta 500, Bs 400 hasta 5.000 y Bs 1.500 con más");
     expect(T.es.prP5b).toBe("Bs 1.200 al año");
   });
 

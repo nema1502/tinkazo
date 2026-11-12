@@ -377,7 +377,8 @@ describe("proteger con el correo", () => {
     expect(T.es.protBadCode).toBe("Ese código no es o ya venció. Pedí otro y usalo enseguida.");
     expect(T.en.protBadCode).toBe("That code is wrong or has expired. Ask for another one and use it right away.");
     expect(T.es.clCorreoLlega).toBe("El correo puede venir en inglés. El código tiene letras y números, y vence en pocos minutos.");
-    expect(T.en.clCorreoLlega).toBe("The email may come in English. The code has letters and numbers, and expires in a few minutes.");
+    // En inglés no hace falta avisar que el correo puede venir en inglés.
+    expect(T.en.clCorreoLlega).toBe("The code has letters and numbers, and expires in a few minutes.");
   });
 
   it("con otro correo escrito a mano, se muestra entero", async () => {

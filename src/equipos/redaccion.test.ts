@@ -20,6 +20,17 @@ describe("redacción de los textos de equipos y de pagos", () => {
     for (const [k, v] of errores) expect(v, k).toMatch(/^We could not /);
   });
 
+  it("en texto plano, el botón que hay que tocar va con su nombre de verdad y presentado como botón", () => {
+    // Sin comillas, Revisar de nuevo seguido de otra vez, o Ya la envié, se leen como parte de la frase.
+    const { es, en } = TEXTOS_EQUIPOS;
+    for (const k of ["eqErrInesperado", "eqErrSinDestino", "eqErrRechazada", "eqSorteosNoLeidos", "eqPagosNoLeidos"]) {
+      expect(es[k], k).toContain(`Tocá el botón ${es.eqRevisar}`);
+      expect(en[k], k).toContain(`Tap the ${en.eqRevisar} button`);
+    }
+    expect(es.eqXdrPasos).toMatch(new RegExp(`tocá el botón ${es.eqXdrYa}\\.$`));
+    expect(en.eqXdrPasos).toMatch(new RegExp(`tap the ${en.eqXdrYa} button\\.$`));
+  });
+
   it("la nota del panel de pagos no anida «que» ni repite «quien ganó» al final", () => {
     expect(TEXTOS_PAGOS.es.pgNotaLeer).toContain("y quien ganó confirma que la cuenta que lo recibe es la suya.");
     expect(TEXTOS_PAGOS.en.pgNotaLeer).toContain("and the winner confirms that the receiving account is theirs.");

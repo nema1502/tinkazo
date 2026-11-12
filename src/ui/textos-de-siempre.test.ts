@@ -16,8 +16,8 @@ describe("el botón de la lista en grande", () => {
 
   it("la guía del meetup lo nombra con el texto exacto del botón en cada idioma", () => {
     const guia = readFileSync(new URL("../../sorteo-para-meetup.html", import.meta.url), "utf8");
-    expect(guia).toContain(`«${T.es.salaBtn}»`);
-    expect(guia).toContain(`"${T.en.salaBtn}"`);
+    expect(guia).toContain(`<strong>${T.es.salaBtn}</strong>`);
+    expect(guia).toContain(`<strong>${T.en.salaBtn}</strong>`);
     // Ningún nombre viejo del botón queda en la guía.
     for (const viejo of ["Mostrar la lista a la pantalla", "Mostrar la lista a la sala", "Show the list on the screen", "Show the list big", "Show the list to the room"]) {
       expect(guia).not.toContain(viejo);

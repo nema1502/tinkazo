@@ -180,6 +180,9 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 - Prometer lo que no está hecho. Si algo está en testnet, se dice testnet.
 - Explicar la criptografía antes de explicar para qué sirve.
 - Signos de exclamación en los botones y mensajes del producto. En los subtítulos de los juegos, en los stickers y en los videos sí, porque ahí se escribe como un relator.
+- Comillas angulares, las de apertura y las de cierre, en español y en inglés. Un botón, una pestaña o un modo se nombra por su nombre, con su mayúscula y sin comillas: "Tocá Sellar la lista." Donde la página admite marcado, el nombre va en negrita.
+- Punto y coma, en ninguna de las dos lenguas. Dos ideas van en dos oraciones o se unen con una coma y un conector (y, pero, porque, así que).
+- Ninguna de las dos se arregla con un reemplazo automático: se reescribe la frase. `pnpm check:escritura` lista cada aparición en el diccionario, las páginas y los textos descargables, con su archivo y su línea (`--informe` las agrupa por archivo).
 
 ## Los subtítulos son otro registro
 

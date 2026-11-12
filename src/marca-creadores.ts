@@ -77,32 +77,32 @@ export const PASOS_CAPCUT: readonly Bi[] = [
     en: "Download the game clip (vertical, no music) and the closing logo. If you edit on your phone, save them to the gallery first.",
   },
   {
-    es: "En CapCut tocá «Proyecto nuevo» y elegí el clip. La proporción es 9:16 (vertical) y ya viene así.",
-    en: "In CapCut tap “New project” and pick the clip. The ratio is 9:16 (vertical) and it already comes that way.",
+    es: "En CapCut tocá Proyecto nuevo y elegí el clip. La proporción es 9:16 (vertical) y ya viene así.",
+    en: "In CapCut tap New project and pick the clip. The ratio is 9:16 (vertical) and it already comes that way.",
   },
   {
-    es: "Si hace falta, cortá el clip: tocá la línea de tiempo, ubicá el cursor y usá «Dividir». Los clips duran unos 13 segundos, el último quieto en el cartel del ganador, y quedan bien enteros.",
-    en: "If you need to, trim the clip: tap the timeline, place the cursor and use “Split”. The clips run about 13 seconds, the last one still on the winner's banner, and work fine whole.",
+    es: "Si hace falta, cortá el clip: tocá la línea de tiempo, ubicá el cursor y usá Dividir. Los clips duran unos 13 segundos, el último quieto en el cartel del ganador, y quedan bien enteros.",
+    en: "If you need to, trim the clip: tap the timeline, place the cursor and use Split. The clips run about 13 seconds, the last one still on the winner's banner, and work fine whole.",
   },
   {
-    es: "Texto: tocá «Texto» y «Agregar texto», y pegá cada línea del guion en su segundo. Letra gruesa (la nuestra es Montserrat Black, libre y gratis; si tu editor no la tiene, cualquier letra bien gruesa), letras claras sobre fondo oscuro, y dentro de la zona segura (entre el 15 % y el 65 % de la altura). Cuando sale el cartel del ganador, sacá el texto: que se lea el nombre.",
-    en: "Text: tap “Text” and “Add text”, and paste each line of the script at its second. Heavy font (ours is Montserrat Black, free to use; if your editor does not have it, any very heavy font), light letters on a dark background, and inside the safe zone (between 15% and 65% of the height). When the winner's banner shows up, take the text off: let the name be read.",
+    es: "Texto: tocá Texto y después Agregar texto, y pegá cada línea del guion en su segundo. Usá letra gruesa, clara sobre fondo oscuro y dentro de la zona segura (entre el 15 % y el 65 % de la altura). La nuestra es Montserrat Black, libre y gratis. Si tu editor no la tiene, sirve cualquier letra bien gruesa. Cuando sale el cartel del ganador, sacá el texto: que se lea el nombre.",
+    en: "Text: tap Text and then Add text, and paste each line of the script at its second. Use a heavy font, light on a dark background and inside the safe zone (between 15% and 65% of the height). Ours is Montserrat Black, free to use. If your editor does not have it, any very heavy font will do. When the winner's banner shows up, take the text off: let the name be read.",
   },
   {
-    es: "Voz: tocá «Audio» y «Grabar» y leé «Lo que podés decir» con tus palabras. Si no querés hablar, dejá solo el texto.",
-    en: "Voice: tap “Audio” and “Record” and read “What you can say” in your own words. If you would rather not talk, leave just the text.",
+    es: "Voz: tocá Audio y después Grabar, y leé con tus palabras la parte Lo que podés decir. Si no querés hablar, dejá solo el texto.",
+    en: "Voice: tap Audio and then Record, and read the What you can say section in your own words. If you would rather not talk, leave just the text.",
   },
   {
-    es: "Música: el clip viene sin música a propósito. Elegí una pista de la biblioteca de la app o una tuya. Ojo: algunas pistas de CapCut solo se pueden usar en TikTok y en CapCut; si vas a subir a otras redes, elegí música libre.",
-    en: "Music: the clip comes without music on purpose. Pick a track from the app's library or one of your own. Careful: some CapCut tracks can only be used on TikTok and CapCut; if you will post elsewhere, pick music you are free to use.",
+    es: "Música: el clip viene sin música a propósito. Elegí una pista de la biblioteca de la app o una tuya. Ojo: algunas pistas de CapCut solo se pueden usar en TikTok y en CapCut. Si vas a subir a otras redes, elegí música libre.",
+    en: "Music: the clip comes without music on purpose. Pick a track from the app's library or one of your own. Careful: some CapCut tracks can only be used on TikTok and CapCut. If you will post elsewhere, pick music you are free to use.",
   },
   {
-    es: "Subtítulos: «Texto» y «Subtítulos automáticos» si hablaste, o en CapCut para computadora importá el archivo .srt del guion (si tu versión no lo trae, pegá el texto a mano).",
-    en: "Subtitles: “Text” and “Auto captions” if you spoke, or in CapCut for computer import the script's .srt file (if your version does not have it, paste the text by hand).",
+    es: "Subtítulos: si hablaste, tocá Texto y después Subtítulos automáticos, o en CapCut para computadora importá el archivo .srt del guion (si tu versión no lo trae, pegá el texto a mano).",
+    en: "Subtitles: if you spoke, tap Text and then Auto captions, or in CapCut for computer import the script's .srt file (if your version does not have it, paste the text by hand).",
   },
   {
-    es: "Cierre: tocá «Superposición» y «Agregar superposición» y poné el logo de cierre al final. Si elegiste el de fondo verde, tocá el logo, «Cortar» y «Clave de croma»: con el cuentagotas elegí el verde y subí la intensidad hasta que desaparezca. El de fondo de color no necesita nada: ponelo como un clip más.",
-    en: "Closer: tap “Overlay” and “Add overlay” and put the closing logo at the end. If you picked the green one, tap the logo, “Cut out” and “Chroma key”: with the eyedropper pick the green and raise the intensity until it disappears. The color-background one needs nothing: just add it as another clip.",
+    es: "Cierre: tocá Superposición y después Agregar superposición, y poné el logo de cierre al final. Si elegiste el de fondo verde, tocá el logo, después Cortar y Clave de croma. Con el cuentagotas elegí el verde y subí la intensidad hasta que desaparezca. El de fondo de color no necesita nada: ponelo como un clip más.",
+    en: "Closer: tap Overlay and then Add overlay, and put the closing logo at the end. If you picked the green one, tap the logo, then Cut out and Chroma key. With the eyedropper pick the green and raise the intensity until it disappears. The color-background one needs nothing: just add it as another clip.",
   },
   {
     es: "Exportá en 1080p y 30 cuadros por segundo. Subí a TikTok como borrador, mirá que nada tape el texto con sus botones y recién ahí publicá. Poné tinkazo.app y @tinkazo.app en la descripción.",
@@ -126,17 +126,17 @@ export const PASO_GRABAR: Bi = {
 export const PASOS_SIN_CLIPS: readonly Bi[] = [
   PASO_GRABAR,
   {
-    es: "En CapCut tocá «Proyecto nuevo» y elegí tu grabación. Si no quedó en 9:16 (vertical), tocá «Formato» y elegí 9:16.",
-    en: "In CapCut tap “New project” and pick your recording. If it is not 9:16 (vertical), tap “Format” and choose 9:16.",
+    es: "En CapCut tocá Proyecto nuevo y elegí tu grabación. Si no quedó en 9:16 (vertical), tocá Formato y elegí 9:16.",
+    en: "In CapCut tap New project and pick your recording. If it is not 9:16 (vertical), tap Format and choose 9:16.",
   },
   {
-    es: "Cortá la grabación: tocá la línea de tiempo, ubicá el cursor y usá «Dividir». Dejá unos 12 segundos, del último tramo al cartel del ganador, y sacá lo que no es del juego.",
-    en: "Trim the recording: tap the timeline, place the cursor and use “Split”. Keep about 12 seconds, from the last stretch to the winner's banner, and cut anything that is not the game.",
+    es: "Cortá la grabación: tocá la línea de tiempo, ubicá el cursor y usá Dividir. Dejá unos 12 segundos, del último tramo al cartel del ganador, y sacá lo que no es del juego.",
+    en: "Trim the recording: tap the timeline, place the cursor and use Split. Keep about 12 seconds, from the last stretch to the winner's banner, and cut anything that is not the game.",
   },
   ...PASOS_CAPCUT.slice(3, 7),
   {
-    es: "Cierre: dejá quieto un segundo el cartel del ganador (tocá el último cuadro y «Congelar») y sumá un texto con tinkazo.app y @tinkazo.app. El logo animado de cierre llega con los clips.",
-    en: "Closing: hold the winner's banner still for one second (tap the last frame and “Freeze”) and add a text with tinkazo.app and @tinkazo.app. The animated closing logo comes with the clips.",
+    es: "Cierre: dejá quieto un segundo el cartel del ganador (tocá el último cuadro y después Congelar) y sumá un texto con tinkazo.app y @tinkazo.app. El logo animado de cierre llega con los clips.",
+    en: "Closing: hold the winner's banner still for one second (tap the last frame and then Freeze) and add a text with tinkazo.app and @tinkazo.app. The animated closing logo comes with the clips.",
   },
   ...PASOS_CAPCUT.slice(8),
 ];
@@ -224,7 +224,7 @@ export const GUIONES: readonly Guion[] = [
       { desde: 5.4, hasta: 8.8, es: "¿En qué nombre se queda?", en: "Which name does it land on?" },
     ],
     cierre: { es: "Nadie eligió al ganador. Comprobalo en tinkazo.app y seguinos en @tinkazo.app.", en: "Nobody picked the winner. Check it at tinkazo.app and follow @tinkazo.app." },
-    toque: { es: "Poné un «tic» suave cada vez que la flecha cambia de gajo, y un segundo de silencio justo antes del cartel.", en: "Add a soft “tick” each time the pointer changes slice, and one second of silence right before the banner." },
+    toque: { es: "Poné un tic suave cada vez que la flecha cambia de gajo, y un segundo de silencio justo antes del cartel.", en: "Add a soft tick each time the pointer changes slice, and one second of silence right before the banner." },
     hashtags: "#tinkazo #sorteo #bolivia #ruleta",
   },
   {
@@ -269,7 +269,7 @@ export const GUIONES: readonly Guion[] = [
       { desde: 8.2, hasta: 9.7, es: "El último trompo en pie", en: "The last top standing" },
     ],
     cierre: { es: "Cada trompo es una persona de la lista. Mirá cómo se hace en tinkazo.app y seguinos en @tinkazo.app.", en: "Every top is a person on the list. See how it works at tinkazo.app and follow @tinkazo.app." },
-    toque: { es: "Poné un golpe seco en cada choque (efecto de sonido «impacto») y un zumbido que baja de tono cuando se apaga el trompo.", en: "Add a dry thud on every crash (an “impact” sound effect) and a hum that drops in pitch when the top stops." },
+    toque: { es: "Poné un golpe seco en cada choque (un efecto de sonido de impacto) y un zumbido que baja de tono cuando se apaga el trompo.", en: "Add a dry thud on every crash (an impact sound effect) and a hum that drops in pitch when the top stops." },
     hashtags: "#tinkazo #sorteo #bolivia #trompo",
   },
   {
@@ -291,7 +291,7 @@ export const GUIONES: readonly Guion[] = [
       { desde: 5.2, hasta: 8.7, es: "¡ADENTRO!", en: "RIGHT IN!" },
     ],
     cierre: { es: "El sapo de siempre, para sortear en grupo. tinkazo.app y @tinkazo.app.", en: "The classic frog toss, for drawing in a group. tinkazo.app and @tinkazo.app." },
-    toque: { es: "Dejá un segundo de silencio antes de «¡ADENTRO!» y subí la voz justo ahí: es el golpe del video.", en: "Leave one second of silence before “RIGHT IN!” and raise your voice right there: it is the punch of the video." },
+    toque: { es: "Dejá un segundo de silencio antes del cartel ¡ADENTRO! y subí la voz justo ahí: es el golpe del video.", en: "Leave one second of silence before the RIGHT IN! banner and raise your voice right there: it is the punch of the video." },
     hashtags: "#tinkazo #sorteo #bolivia #sapo #ferias",
   },
   {
@@ -314,7 +314,7 @@ export const GUIONES: readonly Guion[] = [
       { desde: 7.1, hasta: 8.6, es: "Amanece…", en: "Dawn…" },
     ],
     cierre: { es: "Un juego del oriente para sortear. tinkazo.app y @tinkazo.app.", en: "A game from the lowlands for drawing. tinkazo.app and @tinkazo.app." },
-    toque: { es: "Bajá la música a casi cero cuando el pájaro calla y subila de golpe en el «crac». Sin música se siente igual de bien.", en: "Drop the music to almost nothing when the bird goes quiet and bring it back on the “crack”. It feels just as good without music." },
+    toque: { es: "Bajá la música a casi cero cuando el pájaro calla y subila de golpe en el crac. Sin música se siente igual de bien.", en: "Drop the music to almost nothing when the bird goes quiet and bring it back on the crack. It feels just as good without music." },
     hashtags: "#tinkazo #sorteo #bolivia #guajojo #santacruz",
   },
   {
@@ -350,7 +350,7 @@ export const GUIONES: readonly Guion[] = [
     momentos: [
       { t: "0 a 3", es: "La rueda gira y se corta la música: quedan pocos bailando.", en: "The circle turns and the music cuts: only a few are left dancing." },
       { t: "3 a 6", es: "Última vuelta, de la mano, hasta que se corta otra vez.", en: "A last turn, holding hands, until the music cuts again." },
-      { t: "6 a 12", es: "«¡Quietos!»: alguien se suelta y el cartel nombra a quien quedó.", en: "“Freeze!”: someone lets go and the banner names whoever stayed." },
+      { t: "6 a 12", es: "¡Quietos! Alguien se suelta y el cartel nombra a quien quedó.", en: "Freeze! Someone lets go and the banner names whoever stayed." },
     ],
     pantalla: [
       { desde: 0, hasta: 2.2, es: "Se corta la música… ¡y todos quietos!", en: "The music cuts… and everybody freezes!" },
@@ -429,7 +429,7 @@ export function guionComoTexto(g: Guion, lang: Idioma, publicado: boolean = KIT_
   const clip = CLIPS.find((c) => c.juego === g.juego);
   const lineas: string[] = [];
   lineas.push(`${r.guion}: ${g.titulo[lang]}`);
-  if (clip) lineas.push(publicado ? `Clip: ${clip.archivo}` : `Clip: ${clip.archivo} (${lang === "es" ? "se publica pronto; mientras, grabá el ejemplo" : "coming soon; meanwhile, record the example"}: ${urlEjemplo(g.juego)})`);
+  if (clip) lineas.push(publicado ? `Clip: ${clip.archivo}` : `Clip: ${clip.archivo} (${lang === "es" ? "se publica pronto, y mientras tanto podés grabar el ejemplo" : "coming soon, and meanwhile you can record the example"}: ${urlEjemplo(g.juego)})`);
   lineas.push("", r.gancho, g.gancho[lang]);
   lineas.push("", r.voz, g.voz[lang]);
   lineas.push("", r.momentos, ...g.momentos.map((m) => `${m.t.replace(" a ", ` ${a} `)} ${r.seg}: ${m[lang]}`));

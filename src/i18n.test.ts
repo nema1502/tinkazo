@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { T } from "./i18n";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
@@ -221,6 +222,76 @@ describe("diccionario", () => {
     // Coherente con el cuerpo de la caja: habla de la comisión de la red.
     expect(T.es.fundTitleMain).toMatch(/comisión/i);
     expect(T.en.fundTitleMain).toMatch(/fee/i);
+  });
+
+  it("en los textos fijos, las comillas dobles quedan solo en el aviso de marca de Stellar, que es el texto legal aprobado", () => {
+    // Un botón, una opción de otra aplicación o una palabra citada se nombran sin comillas (docs/marca.md). Fuera de
+    // las etiquetas de HTML, que llevan las suyas en los atributos. Los textos que llevan adentro algo que pegó la
+    // persona son funciones y no entran acá: el único con comillas es pegSueltas, que tiene su prueba abajo.
+    const conComillas: string[] = [];
+    for (const l of ["es", "en"] as const) {
+      for (const [k, v] of Object.entries(T[l])) {
+        const textos = Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+        if (textos.some((x) => /["“”„]/.test(x.replace(/<[^>]+>/g, "")))) conComillas.push(`${l}.${k}`);
+      }
+    }
+    expect(conComillas).toEqual(["en.tmStellarMarca"]);
+  });
+
+  it("en texto plano, un botón cuyo nombre es una frase se presenta como botón", () => {
+    // Sin comillas, tocá Ya cargué se lee como si lo dijera quien escribe.
+    expect(T.es.saldoP4).toContain(`tocá el botón ${T.es.saldoYaCargue}.`);
+    expect(T.en.saldoP4).toContain(`tap the ${T.en.saldoYaCargue} button.`);
+    // Con Mostrar en grande seguido de una coma, el botón parecía el primero de una lista de cuatro.
+    expect(T.es.sorEvU1B).toMatch(new RegExp(`^Tocá ${T.es.pantallaBtn} y el premio`));
+    expect(T.en.sorEvU1B).toMatch(new RegExp(`^Tap ${T.en.pantallaBtn} and the prize`));
+  });
+
+  it("los avisos de una lista numerada se leen bien aunque lo pegado traiga números o dos puntos", () => {
+    for (const l of ["es", "en"] as const) {
+      const L = T[l];
+      // La línea con su número adentro de la frase cortaba la oración en el punto del 1.
+      const varias = L.pegNumeracion(6, "1. Ana Quispe", "Ana Quispe");
+      expect(varias, l).toContain("Ana Quispe");
+      expect(varias, l).not.toContain("1. Ana");
+      expect(L.pegNumeracion(1, "1. Ana Quispe", "Ana Quispe"), l).not.toMatch(/Por ejemplo|For example/);
+      // Lo que no tenía número suele ser el título del grupo, con sus dos puntos. Es lo único del diccionario que va
+      // entre comillas dobles: así se ve dónde empieza y dónde termina lo que pegó la persona.
+      expect(L.pegSueltas(1, "Lista del viernes:"), l).toContain("“Lista del viernes:”");
+      expect(L.pegSueltas(3, "Lista del viernes:"), l).toContain("“Lista del viernes:”");
+      expect(L.pegSueltas(3, "Lista del viernes:"), l).toMatch(/^3 /);
+    }
+  });
+
+  it("términos y verificación: cada referencia apunta a lo que corresponde, igual en las dos lenguas", () => {
+    // Sin la clave que va después del #, ni Tinkazo puede abrir la copia: es el resto del enlace, no lo de antes.
+    expect(T.es.tmCortoB).toContain("Alcanza con lo que va antes del #, y sin el resto ni nosotros podemos abrirla.");
+    expect(T.en.tmCortoB).toContain("The part before the # is enough, and without the rest not even we can open it.");
+    // {id} es el número de este sorteo, no el de un contrato.
+    expect(T.es.vTechContratoRetirado).toContain("y este sorteo es el {id}.");
+    expect(T.en.vTechContratoRetirado).toContain("and this draw is {id}.");
+  });
+
+  it("términos en inglés: lo que guarda este navegador y lo que lleva el comprobante, como dice el español", () => {
+    // Todo lo de esa lista vive en el almacenamiento del navegador, no en el equipo entero.
+    expect(T.es.tmQ4B).toContain("En este navegador quedan tus preferencias");
+    expect(T.en.tmQ4B).toContain("This browser keeps your preferences");
+    // El comprobante es el receipt en el resto del inglés. La prueba es la que publica la ronda, otra cosa.
+    expect(T.es.tmQ3C).toMatch(/^El comprobante lleva los nombres/);
+    expect(T.en.tmQ3C).toMatch(/^The receipt carries the names/);
+  });
+
+  it("términos: la comisión la paga Tinkazo de su saldo, sin un fondo que se pueda leer como de otro", () => {
+    expect(T.es.tmMore1).toContain("Para cuidar el saldo con que Tinkazo la paga, ese servicio anota");
+    expect(T.en.tmMore1).toContain("To protect the balance Tinkazo pays it from, that service records");
+    // También el diccionario de siempre, que el del modo Oficial tapa: si vuelve a quedar a la vista, dice lo mismo.
+    const fuente = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
+    for (const nuevo of ["para cuidar el saldo con que Tinkazo la paga, cuenta", "to protect the balance Tinkazo pays it from, it counts"]) {
+      expect(fuente.includes(nuevo), nuevo).toBe(true);
+    }
+    for (const viejo of ["el fondo que la paga", "the fund that pays it", "This device keeps", "The proof carries"]) {
+      expect(fuente.includes(viejo), viejo).toBe(false);
+    }
   });
 
 });

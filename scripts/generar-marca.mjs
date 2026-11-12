@@ -162,14 +162,14 @@ Esta misma página, con todo para descargar: https://tinkazo.app/marca.html
 QUÉ HAY ADENTRO
   logos/     Logo completo, horizontal y apilado, para fondo claro y para fondo oscuro (SVG y PNG de 2048 px de ancho, fondo transparente).
   llama/     La llama sola, para fondo claro y oscuro (SVG y PNG).
-  sello/     "Sorteo verificable con Tinkazo", en español y en inglés (SVG).
+  sello/     El sello “Sorteo verificable con Tinkazo”, en español y en inglés (SVG).
   logos/     También el logo con la dirección tinkazo.app (horizontal y apilado, claro y oscuro, SVG y PNG de 2048 px).
-  stickers/  Sticker redondo (claro y oscuro) y cuadrado, y los nuevos: la llama recortada al contorno con borde blanco de 2 mm, la pastilla tinkazo.app (clara y oscura), "Sorteo verificable", "Participar es gratis", "Escaneá y comprobá" con QR y "Hoy sorteamos con Tinkazo" con una franja para escribir el premio. De 5 y de 7 cm (SVG y PDF); los de texto en español (es) y en inglés (en).
-  stickers/hojas/  Hojas A4 con varios stickers y 5 mm entre sí, con la capa 'corte' lista para cortar en vinilo (5 y 7 cm, en es y en).
-  redes/     Imágenes para redes y marketing en PNG, en claro y oscuro, en es y en: portada abierta 1200x630, cuadrada 1080x1080, historia 1080x1920, cabecera 1500x500, cabecera de LinkedIn 1584x396 y las de patrocinio ("Tinkazo patrocina este evento") en 1080x1080 y 1920x1080, con un recuadro para el logo del evento.
-  afiches/   Afiche del evento "Hoy sorteamos con Tinkazo" en A4 y A3, con el QR a https://tinkazo.app y una franja para escribir el premio, y el cartel de mesa A5 con el QR a https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG y PDF, claro y oscuro, es y en).
+  stickers/  Sticker redondo (claro y oscuro) y cuadrado, y los nuevos: la llama recortada al contorno con borde blanco de 2 mm, la pastilla tinkazo.app (clara y oscura), “Sorteo verificable”, “Participar es gratis”, “Escaneá y comprobá” con QR y “Hoy sorteamos con Tinkazo” con una franja para escribir el premio. De 5 y de 7 cm (SVG y PDF). Los que llevan texto vienen en español (es) y en inglés (en).
+  stickers/hojas/  Hojas A4 con varios stickers y 5 mm entre sí, con la capa llamada corte, lista para cortar en vinilo (5 y 7 cm, en es y en).
+  redes/     Imágenes para redes y marketing en PNG, en claro y oscuro, en es y en: portada abierta 1200x630, cuadrada 1080x1080, historia 1080x1920, cabecera 1500x500, cabecera de LinkedIn 1584x396 y las de patrocinio (“Tinkazo patrocina este evento”) en 1080x1080 y 1920x1080, con un recuadro para el logo del evento.
+  afiches/   Afiche del evento “Hoy sorteamos con Tinkazo” en A4 y A3, con el QR a https://tinkazo.app y una franja para escribir el premio, y el cartel de mesa A5 con el QR a https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG y PDF, claro y oscuro, es y en).
   tinkazo-kit-portada.png  Una imagen de 1600x900 que resume todo lo que trae el kit, para mandarla junto al enlace (la versión en inglés termina en -en).
-  Aparte, en https://tinkazo.app/marca.html: los impresos del stand, también en tinkazo-kit-impresos.zip con las fotos que enlazan los SVG (roll-up de 85x200 y de 100x200 cm, y banner para el frente de la mesa de 120x40 cm, con fotos de seis juegos, personajes de los stickers, el QR grande e Instagram @tinkazo.app; PDF para la imprenta y SVG para editar, con 5 mm de sangrado y los 15 cm de abajo libres para la base), el kit para quien nos pone de sponsor (tinkazo-kit-sponsor.zip: logos para la pared en SVG, PNG, PNG de 2400 px y PDF, seis imágenes para anunciarlo, los textos y cinco preguntas para coordinar) y la colección de stickers con personaje (tinkazo-stickers.zip). Pedile a la imprenta su plantilla: algunas piden 3 o 10 mm de sangrado.
+  Aparte, en https://tinkazo.app/marca.html, están los impresos del stand: roll-up de 85x200 y de 100x200 cm y banner de 120x40 cm para el frente de la mesa, con fotos de seis juegos, personajes de los stickers, el QR grande e Instagram @tinkazo.app. Vienen en PDF para la imprenta y en SVG para editar, con 5 mm de sangrado y los 15 cm de abajo libres para la base, y también en tinkazo-kit-impresos.zip, con las fotos que enlazan los SVG. En la misma página están el kit para quien nos pone de sponsor (tinkazo-kit-sponsor.zip: logos para la pared en SVG, PNG, PNG de 2400 px y PDF, seis imágenes para anunciarlo, los textos y cinco preguntas para coordinar) y la colección de stickers con personaje (tinkazo-stickers.zip). Pedile a la imprenta su plantilla: algunas piden 3 o 10 mm de sangrado.
 Instagram: @tinkazo.app (https://www.instagram.com/tinkazo.app/)
 Las letras de los logos, el sello, los stickers, los afiches y las imágenes están convertidas en trazos: se ven igual en cualquier equipo e impresora.
 
@@ -183,11 +183,11 @@ REGLAS DE USO
   3. No lo estires ni lo deformes.
   4. No le cambies los colores.
   5. No lo pongas sobre fondos que no contrasten: usá la versión clara sobre fondo claro y la oscura sobre fondo oscuro.
-  6. Se escribe "Tinkazo", todo junto y con la T mayúscula.
-  7. Logo con la dirección tinkazo.app: mínimo 24 px de alto el horizontal y 48 px el apilado; impreso, 10 mm y 20 mm.
+  6. Se escribe Tinkazo, todo junto y con la T mayúscula.
+  7. Logo con la dirección tinkazo.app: mínimo 24 px de alto el horizontal y 48 px el apilado. Impreso, 10 mm y 20 mm.
 
 STICKERS
-  Stickers: archivos a tamaño real con 3 mm de sangrado; la capa 'corte' es la línea de corte; imprimir en vinilo mate; los colores son RGB, la imprenta los convierte.
+  Stickers: archivos a tamaño real con 3 mm de sangrado. La capa llamada corte es la línea de corte. Imprimilos en vinilo mate. Los colores son RGB y la imprenta los convierte.
 
 -------------------------------------------------------------------------------
 
@@ -204,14 +204,14 @@ This same page, with everything to download: https://tinkazo.app/marca.html
 WHAT IS INSIDE
   logos/     Full logo, horizontal and stacked, for light and dark backgrounds (SVG and PNG, 2048 px wide, transparent background).
   llama/     The llama alone, for light and dark backgrounds (SVG and PNG).
-  sello/     "Verifiable draw with Tinkazo", in Spanish and English (SVG).
+  sello/     The “Verifiable draw with Tinkazo” seal, in Spanish and English (SVG).
   logos/     Also the logo with the tinkazo.app address (horizontal and stacked, light and dark, SVG and PNG at 2048 px).
-  stickers/  Round sticker (light and dark) and square sticker, plus the new ones: the die-cut llama with a 2 mm white border, the tinkazo.app pill (light and dark), "Verifiable draw", "Entry is free", "Scan and check" with a QR code and "Today we draw with Tinkazo" with a strip to write the prize by hand. 5 and 7 cm (SVG and PDF); the ones with text come in Spanish (es) and English (en).
-  stickers/hojas/  A4 sheets with several stickers 5 mm apart, with the 'corte' layer ready to cut on vinyl (5 and 7 cm, in es and en).
-  redes/     Images for social media and marketing as PNG, light and dark, in es and en: open graph cover 1200x630, square 1080x1080, story 1080x1920, wide header 1500x500, LinkedIn header 1584x396 and the sponsorship ones ("Tinkazo sponsors this event") at 1080x1080 and 1920x1080, with a box for the event logo.
-  afiches/   Event poster "Today we draw with Tinkazo" in A4 and A3, with the QR code to https://tinkazo.app and a strip to write the prize, and the A5 table sign with the QR code to https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG and PDF, light and dark, es and en).
+  stickers/  Round sticker (light and dark) and square sticker, plus the new ones: the die-cut llama with a 2 mm white border, the tinkazo.app pill (light and dark), “Verifiable draw”, “Entry is free”, “Scan and check” with a QR code and “Today we draw with Tinkazo” with a strip to write the prize by hand. 5 and 7 cm (SVG and PDF). The ones with text come in Spanish (es) and English (en).
+  stickers/hojas/  A4 sheets with several stickers 5 mm apart, with the layer named corte, ready to cut on vinyl (5 and 7 cm, in es and en).
+  redes/     Images for social media and marketing as PNG, light and dark, in es and en: open graph cover 1200x630, square 1080x1080, story 1080x1920, wide header 1500x500, LinkedIn header 1584x396 and the sponsorship ones (“Tinkazo sponsors this event”) at 1080x1080 and 1920x1080, with a box for the event logo.
+  afiches/   Event poster “Today we draw with Tinkazo” in A4 and A3, with the QR code to https://tinkazo.app and a strip to write the prize, and the A5 table sign with the QR code to https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG and PDF, light and dark, es and en).
   tinkazo-kit-portada.png  A 1600x900 image that sums up everything in the kit, to send along with the link (the English version ends in -en).
-  Separately, at https://tinkazo.app/marca.html: the booth prints, also in tinkazo-kit-impresos.zip with the pictures the SVGs link (85x200 cm and 100x200 cm roll-ups and the 120x40 cm banner for the front of the table, with pictures of six games, sticker characters, the large QR code and Instagram @tinkazo.app; PDF for the printer and SVG to edit, with 5 mm bleed and the bottom 15 cm empty for the base), the kit for organizers who list us as a sponsor (tinkazo-kit-sponsor.zip: wall logos as SVG, PNG, 2400 px PNG and PDF, six announcement images, the texts and five questions to coordinate) and the character sticker collection (tinkazo-stickers.zip). Ask your printer for their template: some want 3 or 10 mm bleed.
+  Separately, at https://tinkazo.app/marca.html, you will find the booth prints: the 85x200 cm and 100x200 cm roll-ups and the 120x40 cm banner for the front of the table, with pictures of six games, sticker characters, the large QR code and Instagram @tinkazo.app. They come as PDF for the printer and SVG to edit, with 5 mm bleed and the bottom 15 cm empty for the base, and also in tinkazo-kit-impresos.zip, with the pictures the SVGs link. The same page has the kit for organizers who list us as a sponsor (tinkazo-kit-sponsor.zip: wall logos as SVG, PNG, 2400 px PNG and PDF, six announcement images, the texts and five questions to coordinate) and the character sticker collection (tinkazo-stickers.zip). Ask your printer for their template: some want 3 or 10 mm bleed.
 Instagram: @tinkazo.app (https://www.instagram.com/tinkazo.app/)
 The lettering of the logos, the seal, the stickers, the posters and the images is converted to outlines: it looks the same on any computer or printer.
 
@@ -225,11 +225,11 @@ USAGE RULES
   3. Do not stretch or distort it.
   4. Do not change its colors.
   5. Do not place it on backgrounds that do not contrast: use the light version on light backgrounds and the dark one on dark backgrounds.
-  6. It is written "Tinkazo", one word, with a capital T.
-  7. Logo with the tinkazo.app address: minimum 24 px tall for the horizontal one and 48 px for the stacked one; in print, 10 mm and 20 mm.
+  6. It is written Tinkazo, one word, with a capital T.
+  7. Logo with the tinkazo.app address: minimum 24 px tall for the horizontal one and 48 px for the stacked one. In print, 10 mm and 20 mm.
 
 STICKERS
-  Stickers: true-size files with 3 mm bleed; the 'corte' layer is the cut line; print on matte vinyl; colors are RGB, the printer converts them.
+  Stickers: true-size files with 3 mm bleed. The layer named corte is the cut line. Print them on matte vinyl. Colors are RGB and the printer converts them.
 
 The lettering is drawn from Montserrat (SIL Open Font License 1.1, https://openfontlicense.org).
 `.replace(/\n/g, "\r\n");

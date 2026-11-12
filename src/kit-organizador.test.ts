@@ -83,6 +83,12 @@ describe("organizer kit public navigation and paper contract", () => {
     expect(html).toContain('data-i-aria="kitNav"');
     expect(html).toContain('data-i-aria="kitQrAlt"');
   });
+  it("calls the meetup's own draw the real draw, so it is not mistaken for Live mode", () => {
+    // Oficial (Live) is a mode of the site; the warning is about the sample and the rehearsal, in either mode.
+    expect(html).toContain("<strong>Nunca uses el ejemplo ni el ensayo como el sorteo de verdad.</strong>");
+    expect(html).toContain("<strong>Never use the sample or the rehearsal as the real draw.</strong>");
+    expect(html).not.toMatch(/sorteo oficial|official draw/i);
+  });
   it("keeps the existing SEO heading, names and explanation text", () => {
     expect(html).toContain('data-i="meetH1">Sorteo para tu meetup, en pantalla grande');
     expect(html).toContain('data-i="meetNamesB">Los nombres no se publican: quedan en tu equipo');
