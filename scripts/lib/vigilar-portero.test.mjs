@@ -23,6 +23,8 @@ import {
 const bien = (extra = {}) => ({
   modo: "portero",
   red: "mainnet",
+  patrocinadora: "GPATROCINADORAINVENTADAPARALASPRUEBASDELPORTERODEMAINNET",
+  llave: "GLLAVEINVENTADAPARALASPRUEBASDELPORTERODEMAINNETQUEFIRMA",
   alerta: false,
   balanceStroops: "500000000",
   saldoAlertaStroops: 200000000,
@@ -33,6 +35,9 @@ const bien = (extra = {}) => ({
   firmasSinExplicar: 2,
   firmas: { cobradas: 30, explicadas: 28, sellos: 20, sorteos: 6, activaciones: 2, completo: true, desde: 0 },
   patrocinioPollar: { esperado: true, prendidos: [] },
+  // Los manda el portero vivo (con las altas prendidas en mainnet) aunque la venta esté cerrada. La revisión no los mira.
+  pagosSueltos: 0,
+  ventaPausada: false,
   ...extra,
 });
 
@@ -118,6 +123,42 @@ describe("revisarPortero", () => {
     expect(revisarPortero(bien({ patrocinioPollar: null })).problemas).toHaveLength(1);
   });
 
+  it("el portero que no paga es un problema: apagado o devuelto a Pollar, cada uno con su clave", () => {
+    expect(revisarPortero(bien({ modo: "portero" })).claves).toEqual([]);
+    const apagado = revisarPortero(bien({ modo: "apagado" }));
+    expect(apagado.claves).toEqual(["modo:apagado"]);
+    expect(apagado.problemas[0]).toMatch(/apagado/);
+    const pollar = revisarPortero(bien({ modo: "pollar" }));
+    expect(pollar.claves).toEqual(["modo:pollar"]);
+    expect(pollar.problemas[0]).toMatch(/Pollar/);
+  });
+
+  it("un modo que falta o que no es ninguno de los tres es no saber si el portero paga, y no entra a la clave", () => {
+    expect(revisarPortero(bien({ modo: undefined })).claves).toEqual(["modo:sin-leer"]);
+    const { modo: _modo, ...sinModo } = bien();
+    expect(revisarPortero(sinModo).claves).toEqual(["modo:sin-leer"]);
+    for (const raro of ["apagado\notra cosa", "x".repeat(5000), "Portero", "APAGADO", "", 1, null, {}, ["portero"]]) {
+      const r = revisarPortero(bien({ modo: raro }));
+      expect(r.claves, String(raro).slice(0, 20)).toEqual(["modo:sin-leer"]);
+      expect(r.problemas.join("\n")).not.toMatch(/otra cosa|xxxx/);
+    }
+  });
+
+  it("sin la llave del portero (llave en null) es un problema; un estado que no trae el campo, no", () => {
+    const r = revisarPortero(bien({ llave: null }));
+    expect(r.claves).toEqual(["portero-sin-llave"]);
+    expect(r.problemas[0]).toMatch(/llave/);
+    expect(revisarPortero(bien({ llave: "GOTRALLAVE" })).claves).toEqual([]);
+    const { llave: _llave, ...sinLlave } = bien();
+    expect(revisarPortero(sinLlave).claves).toEqual([]);
+    // Ni un texto vacío ni otra cosa que no sea null se toma como que falta: no se inventa.
+    expect(revisarPortero(bien({ llave: undefined })).claves).toEqual([]);
+  });
+
+  it("apagado y sin llave a la vez: las dos claves", () => {
+    expect(revisarPortero(bien({ modo: "apagado", llave: null })).claves).toEqual(["modo:apagado", "portero-sin-llave"]);
+  });
+
   it("si no es el portero de mainnet (o no trae nada de las altas), falla: no se mira el portero equivocado", () => {
     expect(revisarPortero(bien({ red: "testnet" })).problemas.length).toBeGreaterThan(0);
     expect(revisarPortero({ red: "mainnet", alerta: false }).problemas.length).toBeGreaterThanOrEqual(3);
@@ -137,9 +178,11 @@ describe("revisarPortero", () => {
       firmasSinExplicar: 777,
       patrocinioPollar: { esperado: false, prendidos: ["sponsor_trustlines"] },
     });
-    const r = revisarPortero(todoMal);
+    const r = revisarPortero({ ...todoMal, modo: "apagado", llave: null });
+    expect(r.claves).toContain("modo:apagado");
+    expect(r.claves).toContain("portero-sin-llave");
     expect(r.problemas).toHaveLength(r.claves.length);
-    expect(r.problemas.length).toBeGreaterThanOrEqual(6);
+    expect(r.problemas.length).toBeGreaterThanOrEqual(8);
     const texto = r.problemas.join("\n");
     expect(texto).not.toMatch(/\d/);
     expect(texto).not.toMatch(/GABCDEF/);
@@ -188,6 +231,54 @@ describe("las claves de los problemas", () => {
 
   it("una respuesta que no es un objeto tiene su clave", () => {
     expect(revisarPortero(null).claves).toEqual(["respuesta-invalida"]);
+  });
+
+  it("el texto que llega del portero entra limpio y corto: sin saltos de línea, sin caracteres de control y acotado", () => {
+    const r = revisarPortero(bien({ red: "test\nnet\r\u0007\t\tcon cosas".padEnd(500, "x") }));
+    expect(r.claves).toEqual(["no-es-mainnet"]);
+    expect(r.problemas[0]).not.toMatch(/[\u0000-\u001f\u007f]/);
+    expect(r.problemas[0]).toContain("red: test net con cosasxxx");
+    expect(r.problemas[0].length).toBeLessThanOrEqual("no es el portero de mainnet (red: )".length + 70);
+    const prendidos = Array.from({ length: 50 }, (_, i) => `sponsor_bandera_${String.fromCharCode(97 + (i % 26))}${i >= 26 ? "z" : ""}`);
+    const muchas = revisarPortero(bien({ patrocinioPollar: { esperado: false, prendidos: [...prendidos, `sponsor_x\n${"y".repeat(300)}`] } }));
+    expect(muchas.claves).toHaveLength(1);
+    const lista = muchas.claves[0].slice("patrocinio-prendido:".length).split(",");
+    expect(lista).toHaveLength(10);
+    for (const p of lista) {
+      expect(p.length).toBeLessThanOrEqual(70);
+      expect(p).not.toMatch(/[\u0000-\u001f\u007f]/);
+    }
+    expect(muchas.problemas[0]).not.toMatch(/[\u0000-\u001f\u007f]/);
+  });
+
+  it("las banderas de verdad dan la misma clave que antes: limpiar no cambia nada de lo que ya se avisó", () => {
+    const clave = (prendidos) => revisarPortero(bien({ patrocinioPollar: { esperado: false, prendidos } })).claves;
+    expect(clave(["sponsor_b", "sponsor_a"])).toEqual(["patrocinio-prendido:sponsor_a,sponsor_b"]);
+    expect(clave(["sponsor_trustlines"])).toEqual(["patrocinio-prendido:sponsor_trustlines"]);
+    const larga = `sponsor_${"a".repeat(60)}`;
+    expect(larga.length).toBe(68);
+    expect(clave([larga])).toEqual([`patrocinio-prendido:${larga}`]);
+    expect(clave([])).toEqual(["patrocinio-prendido:"]);
+    expect(revisarPortero(bien({ red: "testnet" })).problemas).toEqual(["no es el portero de mainnet (red: testnet)"]);
+  });
+
+  it("el motivo de la alerta de la patrocinadora entra a la clave y al texto solo si es uno de los dos que manda el portero", () => {
+    const baja = (motivoAlerta) => revisarPortero(bien({ alerta: true, motivoAlerta }));
+    // Los dos de verdad dan las claves de siempre y se nombran en el texto.
+    expect(baja("saldo-bajo").claves).toEqual(["patrocinadora-baja:saldo-bajo"]);
+    expect(baja("saldo-no-leido").claves).toEqual(["patrocinadora-baja:saldo-no-leido"]);
+    expect(baja("saldo-bajo").problemas[0]).toBe("la cuenta patrocinadora está baja o no se pudo leer (saldo-bajo)");
+    expect(baja("saldo-no-leido").problemas[0]).toBe("la cuenta patrocinadora está baja o no se pudo leer (saldo-no-leido)");
+    // Cualquier otra cosa es sin-motivo, y lo que mande el portero no entra ni a la clave ni al texto.
+    const largo = "x".repeat(5000);
+    for (const raro of [undefined, null, "", "saldo-bajo\notra cosa", largo, "SALDO-BAJO", " saldo-bajo", "constructor", "__proto__", 1, true, {}, ["saldo-bajo"]]) {
+      const r = baja(raro);
+      expect(r.claves, String(raro).slice(0, 20)).toEqual(["patrocinadora-baja:sin-motivo"]);
+      expect(r.problemas, String(raro).slice(0, 20)).toEqual(["la cuenta patrocinadora está baja o no se pudo leer (sin motivo conocido)"]);
+    }
+    // Sin el campo alerta en la respuesta tampoco hay motivo, y casi sin saldo sigue siendo su propia clave.
+    expect(revisarPortero(bien({ alerta: undefined })).claves).toEqual(["patrocinadora-baja:sin-motivo"]);
+    expect(revisarPortero(bien({ alerta: true, motivoAlerta: largo, balanceStroops: "1" })).claves).toEqual(["patrocinadora-casi-sin-saldo"]);
   });
 });
 
@@ -279,6 +370,15 @@ describe("decidirAviso: cuándo hace falta el correo", () => {
   it("una fecha del futuro (el reloj se atrasó) no deja al problema sin recordatorio", () => {
     const d = decidirAviso({ claves: CREDITOS, recordado: { claves: CREDITOS, avisadoEn: despues(5).toISOString() }, ahora: t0 });
     expect(d).toMatchObject({ avisar: true, motivo: "recordatorio" });
+  });
+
+  it("el portero que se apaga avisa, el que después pasa a Pollar avisa de nuevo, y el que vuelve a pagar no avisa", () => {
+    const apagado = decidirAviso({ claves: ["modo:apagado"], recordado: sinRecordar(), ahora: t0 });
+    expect(apagado).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["modo:apagado"] });
+    const pollar = decidirAviso({ claves: ["modo:pollar"], recordado: apagado.siguiente, ahora: despues(1) });
+    expect(pollar).toMatchObject({ avisar: true, motivo: "nuevo", nuevos: ["modo:pollar"] });
+    const vuelve = decidirAviso({ claves: [], recordado: pollar.siguiente, ahora: despues(2) });
+    expect(vuelve).toMatchObject({ avisar: false, motivo: "sin-problemas", siguiente: sinRecordar() });
   });
 
   it("si el portero no contesta, lo ya avisado se conserva: no se olvida por no poder mirar", () => {
@@ -625,5 +725,60 @@ describe("principal con --resumen: lo que queda en el resumen de la corrida", ()
     expect(texto).toContain("Lo que escribió otro paso");
     for (const cifra of ["17654321", "2431", "2000", "77", "GABCDEF"]) expect(texto, cifra).not.toContain(cifra);
     expect(sinFechas(texto)).not.toMatch(/\d/);
+  });
+});
+
+describe("el estado entero, como lo arma el portero de mainnet que está vivo", () => {
+  /**
+   * Todos los campos de `GET /v1/patrocinio/estado` con las altas prendidas y la venta cerrada: los de `servicio.ts`
+   * (estado), `rutas-altas.ts` (resumen y vigilancia) y `admin.ts` (resumen, con `pagosSueltos` y `ventaPausada`).
+   */
+  const vivo = () => ({
+    modo: "portero",
+    red: "mainnet",
+    patrocinadora: "GPATROCINADORAINVENTADAPARALASPRUEBASDELPORTERODEMAINNET",
+    llave: "GLLAVEINVENTADAPARALASPRUEBASDELPORTERODEMAINNETQUEFIRMA",
+    balanceStroops: "500000000",
+    saldoAlertaStroops: 200000000,
+    alerta: false,
+    topeGeneralStroops: 450000000,
+    gasto24h: 1200000,
+    sellos24h: 12,
+    sorteos24h: 4,
+    reservadoParaSorteos: 0,
+    enElAire: 0,
+    ventanaMs: 86400000,
+    creditos: 9000,
+    creditosLeidos: 1794450000000,
+    piso: 2000,
+    margen: 7000,
+    altasPausadas: false,
+    altas24h: 3,
+    cuponesHoy: 3,
+    cuponesCreadosHoy: 0,
+    pagosSueltos: 0,
+    ventaPausada: false,
+    firmasSinExplicar: 0,
+    firmas: { cobradas: 19, explicadas: 19, sellos: 12, sorteos: 4, activaciones: 3, completo: true, desde: 1794363600000 },
+    patrocinioPollar: { esperado: true, prendidos: [] },
+  });
+
+  it("con todo en orden no hay ningún problema", () => {
+    expect(revisarPortero(vivo())).toEqual({ problemas: [], claves: [] });
+  });
+
+  it("sin los pagos sueltos ni la venta pausada (un portero que no los manda) tampoco: es un dato que falta, no un problema", () => {
+    const { pagosSueltos: _p, ventaPausada: _v, ...sinLosDos } = vivo();
+    expect(revisarPortero(sinLosDos)).toEqual({ problemas: [], claves: [] });
+  });
+
+  it("los pagos sueltos y la venta pausada no se miran todavía: la venta está cerrada", () => {
+    expect(revisarPortero({ ...vivo(), pagosSueltos: 3, ventaPausada: true }).claves).toEqual([]);
+  });
+
+  it("la base de las pruebas tiene la misma forma en lo que se revisa", () => {
+    for (const campo of ["modo", "red", "llave", "alerta", "creditos", "piso", "altasPausadas", "firmasSinExplicar", "patrocinioPollar", "pagosSueltos", "ventaPausada"]) {
+      expect(Object.keys(bien()), campo).toContain(campo);
+    }
   });
 });

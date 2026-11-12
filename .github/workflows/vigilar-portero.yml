@@ -1,7 +1,13 @@
-# Vigilancia del portero de mainnet.
+# Vigilancia del portero de mainnet. ESTE FLUJO ES EL RESPALDO.
+#
+# La vigilancia principal es el Worker del vigilante (workers/vigilante): corre cada diez minutos en Cloudflare, avisa
+# por correo con las cifras y manda un resumen cada mañana. Este flujo queda de respaldo porque GitHub dispara solo
+# cerca del 10 % de las corridas programadas y no hay forma de pagarlo para que cumpla. Los dos usan la misma revisión
+# (scripts/lib/revision-portero.mjs), así que deciden lo mismo.
 #
 # Una vez por hora, cuando GitHub la dispara, llama a `/v1/patrocinio/estado` de https://pm.tinkazo.app y
-# mira si los créditos de Pollar están cerca del piso o por debajo, si la cuenta patrocinadora está baja, si las
+# mira si el portero está apagado o devuelto a Pollar (no paga ningún sello ni sorteo), si le falta su llave,
+# si los créditos de Pollar están cerca del piso o por debajo, si la cuenta patrocinadora está baja, si las
 # altas están pausadas, si hay firmas de cuentas de Google sin explicar por encima del tope o si el patrocinio de
 # la app en Pollar no está todo apagado; también si algo de eso no se pudo leer o si el portero no contestó
 # (scripts/lib/vigilar-portero.mjs).

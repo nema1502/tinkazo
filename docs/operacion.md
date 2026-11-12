@@ -26,7 +26,7 @@ curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/estado
    `node scripts/cupones.mjs crear --lote <evento> --cantidad 30 --sorteos 3 --dias 60 --vence AAAA-MM-DD --salida <carpeta privada>`
    y lo mismo con `--lote <evento>-reserva --cantidad 10`. Imprimir al 100 %, a doble faz; las tarjetas van en sobre o boca abajo (una foto del QR lo canjea) y la reserva aparte.
 8. **La regla de límite de Cloudflare**, una sola porque el plan gratis de la zona deja una: 60 pedidos en 10 segundos por dirección, con bloqueo de 10 segundos, para `POST /v1/patrocinio` en `p.tinkazo.app` y en `pm.tinkazo.app`, y para `POST /v1/alta/estado` y `POST /v1/alta/cupon` en `pm.tinkazo.app`. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto. `GET /v1/patrocinio/cupo` no pasa por esta regla: lo limita el propio portero, a 3.000 consultas por dirección y por hora (en la memoria de cada nodo).
-9. **La vigilancia por hora, con su clave en el Environment.** El workflow `vigilar-portero.yml` mira `estado` cada hora y manda un correo cuando aparece un problema nuevo o uno que empeora (y una vez por día mientras siga el mismo). Su registro es público y no lleva cifras: dice qué problemas hay, y las cifras se miran en `estado`. Una corrida a mano o repetida falla siempre que haya un problema, aunque ya se haya avisado: sirve para comprobar que se arregló. Es el respaldo de la mirada a mano de abajo, no la alarma. Necesita el Environment `vigilancia` de GitHub, con las ramas elegidas y solo `main`, y la clave de operar cargada ahí como `PORTERO_MAINNET_ADMIN_TOKEN`, sin copia entre los secretos del repositorio. Los pasos están en [workers/patrocinio/README.md](../workers/patrocinio/README.md), en «La vigilancia del portero de mainnet».
+9. **La vigilancia: el vigilante cada diez minutos y, de respaldo, la de GitHub por hora.** La alarma es el Worker `tinkazo-vigilante` (la sección El vigilante, más abajo), que avisa por correo y manda un resumen cada mañana. El de GitHub queda de respaldo porque dispara solo cerca del 10 % de las corridas programadas. El workflow `vigilar-portero.yml` mira `estado` cada hora y manda un correo cuando aparece un problema nuevo o uno que empeora (y una vez por día mientras siga el mismo). Su registro es público y no lleva cifras: dice qué problemas hay, y las cifras se miran en `estado`. Una corrida a mano o repetida falla siempre que haya un problema, aunque ya se haya avisado: sirve para comprobar que se arregló. Es el respaldo de la mirada a mano de abajo, no la alarma. Necesita el Environment `vigilancia` de GitHub, con las ramas elegidas y solo `main`, y la clave de operar cargada ahí como `PORTERO_MAINNET_ADMIN_TOKEN`, sin copia entre los secretos del repositorio. Los pasos están en [workers/patrocinio/README.md](../workers/patrocinio/README.md), en «La vigilancia del portero de mainnet».
 10. **A la mañana, antes de abrir el stand**: `estado` y la cuenta de abajo con todas las tarjetas por repartir.
 
 ## Durante el evento, cada hora
@@ -101,3 +101,72 @@ Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, as
 - **No cargar toda la plata en la cuenta que paga.** La llave del Worker solo puede gastar comisiones, pero hasta lo cargado.
 - **No dejar las tarjetas boca arriba ni sacarles foto.**
 - **No vaciar `VITE_ALTA` en Vercel antes de revertir los textos.** Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis, y la publicación de producción (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1` (`src/stellar/alta-build.ts`): con la variable vacía el build falla y queda la publicación anterior. Para quitar el acceso por cupón, primero se revierte el commit que puso esos textos y después se vacía la variable.
+
+## El vigilante
+
+El vigilante (`workers/vigilante`, en `vigilante.tinkazo.app`) es un Worker propio y aparte del portero: un error ahí no lo tumba. Cada diez minutos le pide `estado` al portero de mainnet y, si hay algo, avisa por correo, con las cifras (los créditos, el piso, el margen, el saldo de la cuenta que paga) y qué hacer. Usa la misma revisión que el flujo de GitHub (`scripts/lib/revision-portero.mjs`), que queda de respaldo. Todo el detalle de cómo funciona está en [workers/vigilante/README.md](../workers/vigilante/README.md).
+
+### Cómo se despliega
+
+Hace falta la palabra de quien mantiene el proyecto. Desplegar el vigilante no toca ni reinicia el portero, así que se puede hacer el día de un evento. Los comandos salen desde `workers/vigilante`, con la versión probada de wrangler.
+
+1. **Una dirección que reciba los avisos, verificada en la cuenta de Cloudflare.** En el panel: Email, Email Routing, Destination addresses. Se agrega la dirección y se toca el enlace del correo de verificación que llega. Cloudflare solo deja mandar a direcciones ya verificadas de la cuenta. El ruteo de correo de `tinkazo.app` ya está prendido (hoy hay direcciones que reenvían): solo comprobar que sigue prendido (Email Routing, Overview), porque de ese dominio sale el remitente. **No se toca ningún registro del dominio**, ni los de correo ni ningún otro: el vigilante no necesita ninguno nuevo.
+2. **El espacio de KV, ya hecho.** Está creado y su id (que no es un secreto) ya está en `wrangler.toml`: no hay que crear nada ni pegar ningún marcador. Solo si se arma el vigilante de nuevo en otra cuenta se repite el comando, y se pega el id nuevo en `wrangler.toml`:
+   `npx wrangler@4.160.0 kv namespace create MEMORIA`
+3. **Desplegar**: `npx wrangler@4.160.0 deploy --config wrangler.toml`. Crea el dominio `vigilante.tinkazo.app` y el reloj de diez minutos. Hasta que estén los secretos (el paso siguiente) el vigilante corre sin hacer nada y deja `error-config` en su registro: es lo esperado. No se pierde ningún aviso, porque sin a quién avisar no se da nada por avisado.
+4. **Los secretos, uno por uno.** Cada comando pide el valor en la terminal: no se escribe en el comando.
+
+   | Secreto | De dónde sale |
+   |---|---|
+   | `PORTERO_ADMIN_TOKEN` | La clave de operar del portero de mainnet: el mismo valor que su `ADMIN_TOKEN` (el que el flujo de GitHub guarda como `PORTERO_MAINNET_ADMIN_TOKEN`). `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
+   | `AVISAR_A` | La dirección verificada del paso 1. Si son varias, separadas por comas. `npx wrangler@4.160.0 secret put AVISAR_A` |
+   | `TELEGRAM_BOT_TOKEN` | Opcional. El bot que se crea hablando con BotFather en Telegram. `npx wrangler@4.160.0 secret put TELEGRAM_BOT_TOKEN` |
+   | `TELEGRAM_CHAT_ID` | Opcional. El número del chat al que escribe el bot (se le manda un mensaje al bot y se mira en `getUpdates`). `npx wrangler@4.160.0 secret put TELEGRAM_CHAT_ID` |
+
+   Telegram queda apagado si falta cualquiera de los dos. La dirección de aviso no se escribe en el repositorio. Cada `secret put` publica una versión nueva del Worker en el momento.
+
+### Cómo se prueba que anda
+
+1. **Mirar la ruta pública**: `curl -fsS https://vigilante.tinkazo.app/` devuelve `{"servicio":"tinkazo-vigilante","ultimaVuelta":"...","salioBien":true}`. La hora tiene que tener menos de 15 minutos (la ruta guarda lo que lee por 60 segundos, así que una vuelta nueva puede tardar hasta un minuto en verse). `salioBien: false` quiere decir que la última vuelta no pudo mirar al portero, que falta una configuración o que quedó un aviso sin mandar: mirar el registro con `npx wrangler@4.160.0 tail --config wrangler.toml` (los eventos `error-config`, `error-envio` y `portero-sin-respuesta`, sin secretos). La ruta no muestra ninguna cifra ni problema.
+2. **Forzar un aviso**. La ruta no recibe la clave de operar: recibe la clave de prueba, un derivado que no deja ver la clave (el HMAC-SHA-256 del texto fijo `tinkazo-vigilante/prueba/v1` con la clave de operar como llave, en hexadecimal). Se calcula en la terminal sin imprimirla y se manda:
+   `TP=$(T="$T" node -e 'process.stdout.write(require("node:crypto").createHmac("sha256", process.env.T.trim()).update("tinkazo-vigilante/prueba/v1").digest("hex"))')`
+   `curl -fsS -X POST -H "Authorization: Bearer $TP" https://vigilante.tinkazo.app/prueba`
+   Con la clave de operar cruda contesta `403`. Llega un correo "Prueba del vigilante: el aviso llega", con las cifras de ahora, y la respuesta dice `{"correo":"enviado",...}`. Si dice `error`, trae el `codigo` de Cloudflare: `E_RECIPIENT_NOT_ALLOWED` (la dirección no está verificada en la cuenta), `E_SENDER_NOT_VERIFIED` o `E_SENDER_DOMAIN_NOT_AVAILABLE` (el dominio del remitente), `E_DAILY_LIMIT_EXCEEDED` (se pasó el tope diario), `CORREO_TIEMPO` (el correo tardó más de 15 segundos). No cambia lo que el vigilante tiene recordado. Entre una prueba y la siguiente tienen que pasar 60 segundos: si no, contesta `429` con cuánto esperar.
+   Ese tope es por instancia del Worker y vuelve a cero con cada despliegue: es un resguardo contra un descuido, y lo que cuida la ruta es la clave.
+3. **Los registros de invocación, en los dos Workers**: mirar en el panel (Workers, Observability) si los registros de invocación guardan en claro la cabecera `Authorization` o si dicen `REDACTED`. En `tinkazo-patrocinio-mainnet`, en un pedido de `GET /v1/patrocinio/estado`: lleva la clave de operar cada diez minutos (el vigilante), cada hora (el flujo de GitHub) y en cada herramienta de operar. En `tinkazo-vigilante`, en el `POST /prueba` del primer despliegue, que todavía llevó la clave de operar cruda (los registros duran 7 días). Si dice `REDACTED`, anotarlo acá y no hay nada más que hacer. Si sale en claro, después del evento y no antes: apagar esos registros con `invocation_logs = false` en `[observability.logs]` de los dos (en el portero, dentro de `[env.mainnet]`), y rotar la clave de operar en los cuatro lugares (el portero, el Environment `vigilancia` de GitHub, el secreto del vigilante y el archivo de secretos de quien opera). Cambiar el código no borra lo que ya quedó registrado. El vigilante sigue escribiendo su propio registro, sin secretos.
+4. **El resumen de la primera vuelta**: apenas desplegado, la primera vuelta manda un resumen. Es una segunda prueba.
+5. **Cada mañana a las 8 (hora de Bolivia, las 12:00 UTC) llega un resumen**: todo bien o no, con las cifras. Es la señal de vida. **Si un día no llega, el vigilante se cayó**: mirar la ruta pública y el registro.
+6. **El día de un evento**, pedir el resumen más seguido: `RESUMEN_CADA_HORAS = "3"` en `[vars]` de `workers/vigilante/wrangler.toml` y desplegar solo el vigilante. Después del evento vuelve a `"24"`.
+7. **Para frenar los avisos** sin borrar nada: `crons = []` en `[triggers]` y desplegar. Para volver, `crons = ["*/10 * * * *"]`.
+
+### Qué hacer con cada aviso
+
+El asunto es lo que se ve en la pantalla bloqueada del celular. Cada correo trae además el "Qué hacer" de su problema y las cifras de ahora. Un problema se avisa una vez, de nuevo si empeora, y como recordatorio ("Sigue: ...") si pasan 23 horas sin arreglarse. Cuando se arregla llega un correo corto que empieza con "Arreglado".
+
+| Asunto | Qué quiere decir | Qué se hace |
+|---|---|---|
+| **El portero está apagado: nadie puede sellar** | Alguien lo apagó (`/v1/patrocinio/apagar` o `APAGADO = "1"`) y no paga ningún sello ni sorteo | Si fue a propósito, nada. Si no, encenderlo con `/v1/patrocinio/encender` (más arriba, "Cómo cortar") |
+| **El portero no paga: lo pasaron a Pollar** | Alguien le devolvió las comisiones a Pollar (`/v1/patrocinio/pollar`): el portero no paga nada | Si no fue a propósito, `encender`. Si es el plan B3, que la regla del contrato esté prendida en Pollar: sin ella nadie sella |
+| **No se puede leer si el portero paga** | `estado` no trae `modo`, o trae algo que no es `portero`, `apagado` ni `pollar` | Mirar `estado`: `modo` tiene que decir `portero` |
+| **El portero no tiene la llave: nadie puede sellar** | `estado` dice `llave: null`: falta el secreto `CLAVE_PATROCINADOR` del portero o no se pudo leer, y no paga nada | Cargarlo de nuevo, con la palabra de quien mantiene el proyecto: desde `workers/patrocinio`, `npx wrangler@4.160.0 secret put CLAVE_PATROCINADOR --env mainnet --config wrangler.toml` |
+| **Créditos de Pollar bajo el piso: cargá ya** | Los canjes de cupones nuevos ya se frenaron | Cargar créditos en el panel de Pollar, según la cuenta de "Antes del evento" |
+| **Créditos de Pollar bajos: cargá hoy** | Sobran menos de 1.000 créditos encima del piso | Cargar créditos antes de que bajen del piso |
+| **No se pueden leer los créditos de Pollar** | Pollar no contesta. Diez minutos se usa el último saldo y después los canjes nuevos se pausan solos | Esperar unos minutos, mirar `estado` y, si sigue, avisar a Pollar |
+| **A la cuenta que paga casi no le queda saldo** | Queda menos de la mitad del nivel de alerta: sin saldo no se puede sellar ni sortear | Cargar XLM ya desde la cuenta fría, un tramo de 20 a 40 |
+| **La cuenta que paga tiene poco saldo** | Está por debajo del nivel de alerta | Cargar XLM desde la cuenta fría, un tramo de 20 a 40 |
+| **No se puede leer el saldo de la cuenta que paga** | No se pudo leer la cuenta | Mirar `estado`. Si el saldo está bien, esperar a la próxima vuelta |
+| **Las altas están pausadas** | Alguien las pausó a mano y nadie puede canjear un cupón nuevo | Si fue a propósito, nada. Si no, `reanudar` (más arriba) |
+| **Cobros de Pollar sin explicar** | Pollar cobró firmas de cuentas de Google que el portero no puede explicar: alguien firma por fuera del sitio | Pausar las altas y mirar `estado` (más arriba, "Cómo cortar") |
+| **No se pueden comparar los cobros de Pollar** | Pollar no contestó la lista de cobros | Mirar `estado` y esperar |
+| **Patrocinio de la app prendido en Pollar** | Algo del patrocinio de la app en Pollar está prendido y gasta créditos sin que el portero lo cuente | Apagarlo en el panel de Pollar |
+| **No se puede leer el patrocinio de Pollar** | Pollar no contestó | Mirar `estado` y el panel de Pollar |
+| **El portero no contesta** | Dos vueltas seguidas (unos 20 minutos) sin respuesta de `pm.tinkazo.app` | Panel de Cloudflare, Workers, `tinkazo-patrocinio-mainnet`, y su registro. Si Cloudflare tiene una falla, esperar. Lo sellado no se pierde |
+| **El portero contesta algo que no se entiende** | La respuesta de `estado` no tiene la forma de siempre | Mirar `estado` y el registro del Worker del portero |
+| **El vigilante mira el portero equivocado** | El que contesta no dice ser el de mainnet | Revisar `PORTERO_URL` en `workers/vigilante/wrangler.toml` |
+| **Al vigilante le falta la clave del portero** | No tiene la clave de operar, o el portero ya no la acepta (rotada) | Cargarla de nuevo: `npx wrangler@4.160.0 secret put PORTERO_ADMIN_TOKEN` |
+
+Si las cifras de un correo dicen al menos junto a los cobros sin explicar, la lista de cobros de Pollar vino llena y la cifra puede quedarse corta: ese día, mirar `estado` a mano cada hora. Si dicen que los créditos se leyeron hace unos minutos, Pollar no está contestando y el portero usa el último saldo que leyó (hasta diez minutos, después los canjes nuevos se pausan solos).
+
+Si el vigilante no puede leer su KV, no manda nada ni escribe, para no repetir avisos ni perder los pendientes: deja `error-kv` en su registro y la hora de la ruta pública deja de avanzar. Mirar el panel de Cloudflare.
+
+Si el correo no llega pero el vigilante anda, el aviso queda pendiente y se reintenta en cada vuelta durante 24 horas. El registro dice por qué (`error-envio`, con el código de Cloudflare).
