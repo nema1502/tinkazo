@@ -1,8 +1,10 @@
 import { esc } from "../dom";
 import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
-import { app, avatar } from "../state";
+import { app, avatar, type Game } from "../state";
 import { beep, note } from "../sound";
+import { RANGOS } from "./recomendar";
+import { elegirAlAzar } from "./azar";
 import { enEnsayo } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
@@ -206,6 +208,8 @@ function panelDeJuegosHtml(juegos: OpcionDeJuego[]): string {
     `<div class="espera-juegos" role="group" aria-label="${esc(t("espJuegosT"))}" hidden>` +
     `<p class="espera-juegos-t">${esc(t("espJuegosT"))}</p>` +
     `<div class="espera-juegos-lista"></div>` +
+    // El sorteo de verdad ya está sellado: este azar solo elige con qué juego contarlo.
+    `<button class="ghost" type="button" data-azar><span aria-hidden="true">🎲</span> ${esc(t("espAzar"))}</button>` +
     `<button class="ghost" type="button" data-juegos-listo>${esc(t("espJuegosListo"))}</button>` +
     `</div>`
   );
@@ -292,6 +296,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
    */
   const cerrar = (alShow = false): void => {
     window.clearInterval(timer);
+    pararAzar();
     removeEventListener("resize", ajusta);
     removeEventListener("keydown", tecla);
     document.removeEventListener("fullscreenchange", pantalla);
@@ -328,15 +333,76 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   };
   const cerrarJuegos = (devolverFoco = true): void => {
     if (!panel || panel.hidden) return;
+    pararAzar();
     panel.hidden = true;
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
   };
+
+  /* ------------------------------------------------------------- el azar */
+  /** El temporizador de la ruleta, y si está corriendo: un toque más no la arranca de nuevo, y cerrarla la para. */
+  let tAzar = 0;
+  let azarCorriendo = false;
+  const pararAzar = (): void => {
+    if (tAzar) window.clearTimeout(tAzar);
+    tAzar = 0;
+    azarCorriendo = false;
+  };
+  /** La semilla del toque: nada de `Math.random` (el navegador trae criptografía de verdad, y es un número entero). */
+  const semillaAzar = (): number => {
+    const a = new Uint32Array(1);
+    crypto.getRandomValues(a);
+    return a[0] ?? 0;
+  };
+  /** El toque en «Al azar»: elige con `azar.ts` y recorre las tarjetas; al quedar, elige como si la hubieran tocado. */
+  const alAzar = (): void => {
+    if (azarCorriendo || !panel) return;
+    const catalogo = sorteo.juegos().map((j) => ({ game: j.game, rango: RANGOS[j.game as Game] ?? {} }));
+    const azar = elegirAlAzar(catalogo, app.frozen?.names.length ?? 0, semillaAzar());
+    if (!azar.elegido) return;
+    const elegido = azar.elegido;
+    const lista = panel.querySelector<HTMLElement>(".espera-juegos-lista");
+    const tarjetas = lista ? [...lista.querySelectorAll<HTMLElement>("[data-game]")] : [];
+    const quedo = (): void => {
+      pararAzar();
+      sorteo.elegirJuego(elegido.game);
+      pintarNombre();
+      cerrarJuegos();
+    };
+    // Movimiento reducido: sin ruleta, el elegido queda marcado y se elige ya.
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !tarjetas.length) {
+      quedo();
+      return;
+    }
+    azarCorriendo = true;
+    let marcada: HTMLElement | null = null;
+    const paso = (i: number): void => {
+      const pasoDe = azar.recorrido[i];
+      if (!pasoDe) {
+        quedo();
+        return;
+      }
+      if (marcada) marcada.setAttribute("aria-pressed", "false");
+      marcada = tarjetas[pasoDe.indice] ?? null;
+      // El resaltado es el mismo estilo de la tarjeta elegida (el CSS de `aria-pressed`): el panel se cierra al
+      // quedar, así que la marca termina en el juego elegido, como cuando lo tocan.
+      marcada?.setAttribute("aria-pressed", "true");
+      marcada?.scrollIntoView?.({ block: "nearest" });
+      tAzar = window.setTimeout(i + 1 < azar.recorrido.length ? () => paso(i + 1) : quedo, pasoDe.pausa);
+    };
+    paso(0);
+  };
   for (const b of botonesJuego) b.addEventListener("click", () => (juegosAbiertos() ? cerrarJuegos() : abrirJuegos()));
   panel?.addEventListener("click", (e) => {
-    const b = (e.target as HTMLElement | null)?.closest<HTMLElement>("[data-game], [data-juegos-listo]");
+    const b = (e.target as HTMLElement | null)?.closest<HTMLElement>("[data-game], [data-juegos-listo], [data-azar]");
     if (!b) return;
+    if (b.dataset.azar !== undefined) {
+      alAzar();
+      return;
+    }
     if (b.dataset.game) {
+      // Mientras la ruleta corre, un toque en una tarjeta no corta el recorrido.
+      if (azarCorriendo) return;
       sorteo.elegirJuego(b.dataset.game);
       pintarNombre();
     }
