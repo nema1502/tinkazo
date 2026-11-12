@@ -88,7 +88,7 @@ describe("el markup de la opción", () => {
     expect(T.es.turnsOption).toBe("Orden de turnos");
     expect(T.en.turnsOption).toBe("Turn order");
     expect(T.es.turnsHelp).toBe("Salen todos, en orden. Ese orden son los turnos.");
-    expect(T.en.turnsHelp).toBe("Everyone comes out, in order. That order is the turns.");
+    expect(T.en.turnsHelp).toBe("Everyone is drawn, in order. That order sets the turns.");
     expect(T.es.turnsPrize).toBe("Turnos");
     expect(T.en.turnsPrize).toBe("Turns");
     const claves = Object.keys(T.es).filter((k) => k.startsWith("turns"));

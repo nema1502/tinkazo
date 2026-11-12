@@ -537,7 +537,7 @@ const DETALLES = {
   },
 
   D17: {
-    que: '"Entrar y sortear" al final de la demo abre la ventana de ingreso',
+    que: '"Entrar y sortear gratis" al final de la demo abre la ventana de ingreso',
     async correr(browser, v, tema, quien) {
       const page = await abrir(browser, v, tema, "?demo=race&instant=1&lead=3", "");
       try {

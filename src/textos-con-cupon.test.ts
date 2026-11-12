@@ -78,8 +78,8 @@ describe("los textos con cupón de las páginas de lectura", () => {
     expect(texto("en", "tmPatrocinio")).toContain("In Test mode, Tinkazo covers the charge the network makes for sealing and drawing.");
     expect(texto("es", "cfCostoB")).toContain("En el modo Prueba lo paga Tinkazo.");
     expect(texto("en", "cfCostoB")).toContain("In Test mode Tinkazo pays it.");
-    expect(texto("es", "faq3a")).toMatch(/^Hoy Tinkazo no cobra nada\. Los precios para quien organiza se publican muy pronto, y te avisamos antes de cobrar\. Participar y comprobar son gratis siempre\./);
-    expect(texto("en", "faq3a")).toMatch(/^Tinkazo charges nothing for now\. Pricing for organizers will be published very soon, and we'll tell you before we charge\. Taking part and checking are always free\./);
+    expect(texto("es", "faq3a")).toMatch(/^Hoy Tinkazo no cobra nada\. Muy pronto publicamos los precios para quien organiza, y te avisamos antes de cobrar\. Participar y comprobar son gratis siempre\./);
+    expect(texto("en", "faq3a")).toMatch(/^Tinkazo charges nothing for now\. We'll publish pricing for organizers very soon, and we'll tell you before we charge\. Taking part and checking are always free\./);
   });
 
   it("los términos dicen qué guarda el servicio al canjear un cupón y qué no, después de lo que ya decían", () => {

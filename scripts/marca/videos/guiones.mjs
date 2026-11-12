@@ -82,7 +82,7 @@ Nombres de los archivos: tinkazo-<juego>-9x16.mp4 (clips, que terminan con un se
 tinkazo-<juego>-9x16-bucle.mp4 (el mismo clip con el final fundido en el principio, para repetirlo sin salto),
 tinkazo-placa-<juego>-<idioma>.png (la placa del gancho), tinkazo-logo-entrada-<fondo>.mp4 y
 tinkazo-logo-cierre-<idioma>-<fondo>.mp4 (logo), tinkazo-guion-<juego>-<idioma>.txt, tinkazo-subtitulos-<juego>-<idioma>.srt.
-Los de fondo verde se recortan con la clave de croma; los .webm traen transparencia.
+Los de fondo verde se recortan con la clave de croma. Los .webm traen transparencia.
 La letra de la marca es Montserrat Black y Bold (tinkazo-letra-montserrat.zip, licencia OFL: libre y gratis).
 
 Dos pedidos: no prometas premios en dinero con el kit (entrar a un sorteo en Tinkazo es gratis, siempre) y no
@@ -108,7 +108,7 @@ File names: tinkazo-<game>-9x16.mp4 (clips, ending with one still second on the 
 tinkazo-<game>-9x16-bucle.mp4 (the same clip with the end faded into the start, to repeat it seamlessly),
 tinkazo-placa-<game>-<language>.png (the hook card), tinkazo-logo-entrada-<background>.mp4 and
 tinkazo-logo-cierre-<language>-<background>.mp4 (logo), tinkazo-guion-<game>-<language>.txt, tinkazo-subtitulos-<game>-<language>.srt.
-The green-background ones are cut out with the chroma key; the .webm files carry transparency.
+The green-background ones are cut out with the chroma key. The .webm files carry transparency.
 The brand typeface is Montserrat Black and Bold (tinkazo-letra-montserrat.zip, OFL license: free to use).
 
 Two requests: do not promise cash prizes with the kit (joining a draw on Tinkazo is always free) and do not

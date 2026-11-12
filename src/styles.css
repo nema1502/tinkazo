@@ -155,7 +155,7 @@
   textarea { min-height: 120px; resize: vertical; }
   textarea:focus, input:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 0; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
-  /* El botón principal, también cuando es un enlace: "Entrar y sortear, es
+  /* El botón principal, también cuando es un enlace: "Entrar y sortear
      gratis" se veía como un link azul del navegador (lo encontró la revisión visual,
      30 de septiembre de 2026). */
   button.primary, a.primary {

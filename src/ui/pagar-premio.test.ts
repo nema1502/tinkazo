@@ -519,7 +519,7 @@ describe("si la red no confirma si el pago salió, no se vuelve a ofrecer pagar 
     enviar(form);
     await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toContain("Todavía no pudimos mirar en la red si el pago salió"));
     // Es texto plano: sin decir que es un botón, Volver a mirar se lee como parte de la frase.
-    expect(campos(caja).mensaje.textContent).toContain("Tocá el botón Volver a mirar en un momento.");
+    expect(campos(caja).mensaje.textContent).toContain("En un momento, tocá el botón Volver a mirar.");
     expect(campos(caja).mensaje.classList.contains("bad")).toBe(true);
     expect(campos(caja).enviar.disabled).toBe(true);
     const volver = botonCon(caja, "Volver a mirar") as HTMLButtonElement;
@@ -630,7 +630,7 @@ describe("el premio pagado desde otra parte", () => {
     enviar(form);
     await vi.waitFor(() => expect(botonCon(caja, "Volver a mirar")?.hidden).toBe(false));
     setLang("en");
-    expect(campos(caja).mensaje.textContent).toBe("We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. Tap the Check again button in a moment.");
+    expect(campos(caja).mensaje.textContent).toBe("We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. In a moment, tap the Check again button.");
     expect(botonCon(caja, "Check again")).toBeDefined();
   });
 });

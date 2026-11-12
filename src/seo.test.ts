@@ -747,7 +747,7 @@ describe("frases fijas de la segunda ronda", () => {
 
 describe("frases fijas de la tercera ronda", () => {
   it("uso2b en inglés dice lo mismo que en español", () => {
-    expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked it to their liking.");
+    expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked a favorite.");
   });
 });
 
@@ -767,10 +767,14 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
   });
 
   it("dice lo mismo del cobro en la portada, la ruleta y precios, y no queda el 'si algún día'", () => {
+    const muyPronto = {
+      faq3a: ["Muy pronto publicamos los precios para quien organiza", "We'll publish pricing for organizers very soon"],
+      rulF3B: ["se publican muy pronto", "will be published very soon"],
+    } as const;
     for (const clave of ["faq3a", "rulF3B"] as const) {
-      expect(T.es[clave]).toContain("se publican muy pronto");
+      expect(T.es[clave]).toContain(muyPronto[clave][0]);
       expect(T.es[clave]).toContain("te avisamos antes de cobrar");
-      expect(T.en[clave]).toContain("will be published very soon");
+      expect(T.en[clave]).toContain(muyPronto[clave][1]);
       expect(T.en[clave]).toContain("before we charge");
       expect(T.es[clave]).not.toMatch(/algún día/);
       expect(T.en[clave]).not.toMatch(/ever charge/);

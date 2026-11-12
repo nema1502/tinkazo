@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * El botón principal de la portada, en celulares angostos (punto 3 del pulido
- * del sitio). A 360 px "Entrar y sortear, es gratis" se parte en dos renglones:
+ * del sitio). A 360 px "Entrar y sortear gratis" se parte en dos renglones:
  * el texto tiene que quedar centrado, no alineado a la izquierda.
  */
 describe("el botón principal de la portada", () => {

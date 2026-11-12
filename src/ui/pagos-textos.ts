@@ -70,7 +70,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgDudaMirando: "Mirando en la red si el pago salió…",
     pgDudaNoEsta: "Miramos en la red y ese pago no está. Podés volver a intentarlo.",
     pgDudaSinRed:
-      "Todavía no pudimos mirar en la red si el pago salió. Para que no se pague dos veces, el botón sigue en pausa. Tocá el botón Volver a mirar en un momento.",
+      "Todavía no pudimos mirar en la red si el pago salió. Para que no se pague dos veces, el botón sigue en pausa. En un momento, tocá el botón Volver a mirar.",
     pgVolverAMirar: "Volver a mirar",
     pgYaPagado: "Este premio ya está pagado, así que no hace falta pagarlo de nuevo.",
     pgSinConsultaPrevia: "No pudimos mirar en la red si este premio ya está pagado, así que no armamos el pago. Probá otra vez en un momento.",
@@ -140,7 +140,7 @@ export const TEXTOS_PAGOS: { es: Record<string, string>; en: Record<string, stri
     pgDudaMirando: "Checking the network for the payment…",
     pgDudaNoEsta: "We checked the network and that payment isn't there. You can try again.",
     pgDudaSinRed:
-      "We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. Tap the Check again button in a moment.",
+      "We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. In a moment, tap the Check again button.",
     pgVolverAMirar: "Check again",
     pgYaPagado: "This prize is already paid, so there's no need to pay it again.",
     pgSinConsultaPrevia: "We couldn't check the network to see whether this prize is already paid, so we didn't prepare the payment. Try again in a moment.",
