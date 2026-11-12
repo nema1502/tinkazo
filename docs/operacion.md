@@ -57,7 +57,7 @@ node scripts/cupones.mjs estado --lote <evento>
 2. **Si se abre «Dejá tu cuenta lista» pidiendo activar o proteger la cuenta, no se admite a mano.** No lo destraba: el paso sigue viendo el acceso atado a la cuenta de antes y no se puede completar, y la cuenta admitida aparta créditos sin servir (cada sorteo admitido suma 40 al piso). Esa persona sigue en el modo Prueba, que es gratis.
 3. **Solo si el sello sale porque a esa cuenta no le quedan sorteos o todavía no tiene acceso** («Se te acabaron…» o «Tu cuenta todavía no tiene acceso al modo Oficial…»), se admite a mano la cuenta que muestra su sitio (el panel de la cuenta la deja copiar), con los sorteos del cupón, los días del lote del evento y una referencia del stand que no se repita: `node scripts/cupones.mjs admitir --cuenta G... --sorteos 3 --dias 60 --ref <evento>-stand-1`. Después se prueba sellar de nuevo: el sello mira el cupo de esa cuenta, no el aviso del paso «Dejá tu cuenta lista», así que alcanza aunque el aviso siga a la vista (se vuelve a la página y se toca «Sellar la lista»).
 
-Durante el evento no se toca Pollar ni ninguna bandera del sitio o del portero.
+Durante el evento no se toca Pollar ni ninguna bandera del sitio o del portero, salvo el plan B del ingreso (más abajo).
 
 ## Después del evento
 
@@ -84,6 +84,12 @@ Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, as
 - **B1, el portero listo y la pantalla del cupón no.** El portero con el libro y la administración, y un build del sitio con `VITE_ALTA_LIBRE=1` y `VITE_ALTA` apagada (el build no sale con las dos; la publicación de producción lo deja pasar, y las páginas de lectura siguen diciendo que con un cupón el modo Oficial es gratis). Los equipos que pasan por la mesa le dictan su dirección a quien opera, que los admite con `cupones.mjs admitir`. Cualquiera que entre a Oficial y toque «Activar» cuesta 20 créditos; sellar sigue cerrado para quien no está en el libro.
 - **B2, sin portero de mainnet.** Oficial solo con billetera propia; los equipos sortean gratis en Prueba. Las tarjetas se guardan para el próximo evento: se anula el lote y se crea otro con la fecha nueva.
 - **B3, último recurso y solo con la palabra de quien mantiene el proyecto.** La regla de contrato de Pollar para `seal` y `draw` del contrato de mainnet, con solo los créditos del día cargados, porque no tiene tope por cuenta. Se borra al terminar.
+
+## Si el proveedor de cuentas corta el ingreso: el plan B del ingreso
+
+- **Qué es.** `VITE_INGRESO_PLAN_B` es una bandera del build, apagada por defecto. Con `1` y solo en el modo Prueba, cuando entrar con Google o con un correo falla por algo que no es de la persona (Pollar contesta con error, tarda de más o no deja crear la cuenta), el aviso suma el botón Sortear sin cuenta. Lleva al modo libre: la lista se cierra en el navegador, no queda sello en Stellar, el sorteo no aparece en Mis sorteos y el comprobante dice que falta un testigo. En Oficial nunca aparece, y siempre lo elige la persona.
+- **Cuándo se prende.** Solo si durante un evento el ingreso falla para varias personas a la vez (por ejemplo, al llegar al tope de cuentas del plan de Pollar) y reintentar no lo arregla. En Vercel, la variable `VITE_INGRESO_PLAN_B=1` en Production y una publicación nueva: se lee al construir, así que el cambio llega con la publicación y no al instante.
+- **Cómo se apaga.** Vaciar la variable (o poner `0`) y publicar de nuevo. Con la bandera apagada la elección ya hecha deja de valer y el botón de sellar vuelve a pedir la cuenta.
 
 ## Qué no hacer
 

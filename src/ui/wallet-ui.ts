@@ -13,6 +13,9 @@ import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 import { errorDeCodigo } from "./ingreso-errores";
+import { type PasoDelIngreso, type TituloDelAviso, ofrecerSalida, tituloDelAviso } from "./ingreso-plan-b";
+import { AVISO_SIN_CUENTA, elegirSinCuenta, salirDeSinCuenta, sinCuentaElegido } from "./sin-cuenta";
+import { anunciarFranja, pintarFranja } from "./sin-cuenta-franja";
 import { esDeRed } from "../stellar/errores";
 import { CLASE_NO_CARGO, avisarQueNoCargo } from "./aviso-no-cargo";
 
@@ -123,9 +126,12 @@ export const canAnchor = (): boolean => anchoringAvailable && session !== null &
 
 /**
  * En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta
- * del sorteo y el botón de sellar. En el ensayo sí, porque no se graba nada.
+ * del sorteo y el botón de sellar. En el ensayo sí, porque no se graba nada. Y
+ * también quien eligió seguir sin cuenta cuando el ingreso falló por culpa del
+ * proveedor (plan B del ingreso, `ingreso-plan-b.ts`): solo con la bandera
+ * prendida y en Prueba, nunca en Oficial.
  */
-const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enPractica();
+const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enPractica() && !sinCuentaElegido();
 
 /**
  * La clave del texto de "Sellar la lista" cuando está en reposo: sin cuenta dice "Entrar para sellar" (tocarlo abre la
@@ -262,7 +268,8 @@ export async function entrar(): Promise<void> {
     const address = await pollarWallet.connect();
     await afterConnect(w, pollarWallet, address, "google", document.createElement("div"), () => undefined);
   } catch (e) {
-    notice(await walletErrorText(e), true);
+    // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
+    void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
   } finally {
     conectando = false;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
@@ -302,6 +309,12 @@ export function initWalletUI(): void {
   retomaTerminada = retomando ? new Promise<void>((resolver) => (terminarDeRetomar = resolver)) : Promise.resolve();
   render();
   onLangChange(render);
+  // El plan B del ingreso: al elegir seguir sin cuenta (o al dejarlo), la puerta, el botón de sellar y la línea se ponen al día.
+  document.addEventListener(AVISO_SIN_CUENTA, () => {
+    applyGate();
+    refreshFreezeLabel();
+    pintarFranja(() => void openPicker());
+  });
   const fin = (): void => {
     if (!retomando) return;
     retomando = false;
@@ -546,7 +559,13 @@ function esperarPerfil(wallet: { profile: () => { name: string; avatar: string; 
 let historialPedido = false;
 
 function render(): void {
+  // Con una cuenta adentro, la elección de seguir sin cuenta (plan B del ingreso) ya no vale.
+  if (session) {
+    salirDeSinCuenta();
+    quitarSalidasViejas();
+  }
   applyGate();
+  pintarFranja(() => void openPicker());
   // La página decide con esto si muestra la portada o la herramienta.
   document.dispatchEvent(new CustomEvent<string | null>("tinkazo:sesion", { detail: session?.address ?? null }));
   // Mis sorteos, recién con una cuenta. Sin ella no hay nada que mostrar: la
@@ -930,6 +949,129 @@ function button(label: string, extra: string, onClick: () => void): HTMLButtonEl
   return b;
 }
 
+/* -------------------------------------------------- plan B del ingreso */
+
+/**
+ * Lo que suma un aviso de ingreso que falló por culpa del proveedor cuando el plan B del ingreso está prendido: una
+ * acción para seguir sin cuenta (`ingreso-plan-b.ts`). Nunca se elige sola.
+ */
+interface Salida {
+  elegir: () => void;
+  /** El título del aviso: neutro si venció el plazo, y solo si el proveedor contestó con un error, el que lo señala. */
+  titulo: TituloDelAviso;
+}
+
+/** ¿Este fallo del ingreso con Pollar ofrece seguir sin cuenta? `cerrarVentana` cierra la ventana de ingreso si estaba abierta. */
+async function salidaDe(e: unknown, paso: PasoDelIngreso, cerrarVentana?: () => void): Promise<Salida | undefined> {
+  // Quien ya siguió sin cuenta no necesita que se lo ofrezcan de nuevo si un intento de entrar vuelve a fallar.
+  if (sinCuentaElegido()) return undefined;
+  try {
+    if (!(await ofrecerSalida(e, paso))) return undefined;
+  } catch {
+    return undefined;
+  }
+  return { elegir: () => seguirSinCuenta(cerrarVentana), titulo: tituloDelAviso(e) };
+}
+
+/**
+ * La persona eligió seguir sin cuenta: el aviso y la ventana se van, y la herramienta queda lista para sellar. Con una
+ * cuenta abierta no hace nada: un aviso viejo puede seguir en pantalla después de entrar por otro lado.
+ */
+function seguirSinCuenta(cerrarVentana?: () => void): void {
+  if (!elegirSinCuenta(session !== null)) return;
+  anunciarFranja();
+  document.querySelector(".wallet-notice")?.remove();
+  cerrarVentana?.();
+  // Desde la portada ("Entrar con Google y sortear") la herramienta todavía no está a la vista.
+  if (document.body.dataset.vista !== "app") {
+    history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
+    dispatchEvent(new HashChangeEvent("hashchange"));
+  }
+  document.getElementById("btn-freeze")?.focus({ preventScroll: true });
+}
+
+function botonDeSalida(salida: Salida): HTMLButtonElement {
+  const b = button(t("sinCuentaBoton"), "ghost login-salida-b", () => salida.elegir());
+  b.type = "button";
+  b.dataset.salida = "sin-cuenta";
+  return b;
+}
+
+function spanDe(clase: string, texto: string): HTMLSpanElement {
+  const s = document.createElement("span");
+  s.className = clase;
+  s.textContent = texto;
+  return s;
+}
+
+/** Saca la salida que acompañaba al error de un formulario de ingreso. */
+function quitarSalida(err: HTMLElement): void {
+  const caja = err.nextElementSibling;
+  if (caja?.classList.contains("login-salida")) caja.remove();
+}
+
+/**
+ * La salida llega después del error: el chequeo de internet puede tardar hasta seis segundos y el error no espera. Cada
+ * error de un formulario lleva un número de versión, y la salida solo se suma si sigue siendo el mismo error.
+ */
+const versionDelError = new WeakMap<HTMLElement, number>();
+const versionDe = (err: HTMLElement): number => versionDelError.get(err) ?? 0;
+const nuevaVersion = (err: HTMLElement): void => void versionDelError.set(err, versionDe(err) + 1);
+
+/** La persona volvió a escribir o a mandar: la salida del error de antes ya no va, y si todavía viene en camino, tampoco. */
+function soltarSalida(err: HTMLElement): void {
+  nuevaVersion(err);
+  quitarSalida(err);
+}
+
+/** Pone en un aviso el título, la línea y el botón de seguir sin cuenta, donde estaba la frase de siempre. */
+function sumarSalidaAlAviso(aviso: HTMLElement, e: unknown, paso: PasoDelIngreso, cerrarVentana?: () => void): Promise<void> {
+  return salidaDe(e, paso, cerrarVentana).then((salida) => {
+    // Mientras tanto la persona pudo cerrar el aviso, entrar o recibir otro error: no se suma nada a lo que ya no está.
+    if (!salida || !aviso.isConnected || session || sinCuentaElegido()) return;
+    const frase = aviso.querySelector("p");
+    const acciones = aviso.querySelector(".wallet-notice-acciones");
+    if (!frase || !acciones) return;
+    const titulo = document.createElement("p");
+    titulo.className = "ingreso-salida-t";
+    titulo.textContent = t(salida.titulo);
+    const linea = document.createElement("p");
+    linea.className = "ingreso-salida-l";
+    linea.textContent = t("ingresoCaidoLinea");
+    frase.replaceWith(titulo, linea);
+    acciones.insertBefore(botonDeSalida(salida), acciones.lastElementChild);
+  });
+}
+
+/** Lo mismo para el error de un formulario de ingreso: se suma la salida solo si sigue siendo el mismo error. */
+async function sumarSalidaAlError(err: HTMLElement, e: unknown, paso: PasoDelIngreso, cerrarVentana: () => void): Promise<void> {
+  const version = versionDe(err);
+  const salida = await salidaDe(e, paso, cerrarVentana);
+  if (!salida || versionDe(err) !== version || err.hidden || !err.isConnected || session || sinCuentaElegido()) return;
+  quitarSalida(err);
+  err.replaceChildren(spanDe("ingreso-salida-t", t(salida.titulo)), spanDe("ingreso-salida-l", t("ingresoCaidoLinea")));
+  const caja = document.createElement("div");
+  caja.className = "login-salida";
+  caja.append(botonDeSalida(salida));
+  err.after(caja);
+}
+
+/** Con una cuenta abierta, los avisos viejos que ofrecían seguir sin cuenta se van: ya no tienen sentido. */
+function quitarSalidasViejas(): void {
+  for (const boton of document.querySelectorAll('[data-salida="sin-cuenta"]')) {
+    const aviso = boton.closest(".wallet-notice");
+    if (aviso) {
+      aviso.remove();
+      continue;
+    }
+    const caja = boton.closest(".login-salida");
+    if (!caja) continue;
+    const err = caja.previousElementSibling;
+    caja.remove();
+    if (err instanceof HTMLElement) err.hidden = true;
+  }
+}
+
 interface Option {
   label: string;
   /** Lo que se lee al pasar el mouse: el detalle que la ventana ya no escribe. */
@@ -1101,9 +1243,16 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
   }
 
   function say(err: HTMLElement, text: string, ok = false): void {
+    soltarSalida(err);
     err.textContent = text;
     err.classList.toggle("ok", ok);
     err.hidden = false;
+  }
+
+  /** Esconde el error y la salida que lo acompañaba: la persona volvió a escribir. */
+  function callar(err: HTMLElement): void {
+    err.hidden = true;
+    soltarSalida(err);
   }
 
   /**
@@ -1199,7 +1348,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     go.disabled = !mailOk(mail);
     input.addEventListener("input", () => {
       go.disabled = !mailOk(input.value);
-      err.hidden = true;
+      callar(err);
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1216,6 +1365,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     const label = go.textContent ?? "";
     go.disabled = true;
     go.textContent = t("loginSending");
+    soltarSalida(err);
     try {
       const { pollarWallet } = await import("../stellar/wallet-pollar");
       await pollarWallet.sendEmailCode(mail);
@@ -1223,7 +1373,9 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     } catch (e) {
       go.disabled = false;
       go.textContent = label;
+      // El error de siempre, al instante. La salida se suma cuando contesta el chequeo de internet.
       say(err, errorDeCodigo(e, "enviar"));
+      void sumarSalidaAlError(err, e, "enviar", shut);
     }
   }
 
@@ -1249,7 +1401,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     const code = (): string => input.value.replace(/\s+/g, "");
     input.addEventListener("input", () => {
       go.disabled = code().length < 4;
-      err.hidden = true;
+      callar(err);
     });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -1260,6 +1412,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       if (code().length < 4) return;
       go.disabled = true;
       go.textContent = t("loginChecking");
+      soltarSalida(err);
       try {
         const w = await lite();
         const { pollarWallet } = await import("../stellar/wallet-pollar");
@@ -1271,6 +1424,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
         go.disabled = false;
         go.textContent = t("loginCodeGo");
         say(err, errorDeCodigo(e, "verificar"));
+        void sumarSalidaAlError(err, e, "verificar", shut);
         input.select();
       }
     }
@@ -1283,12 +1437,14 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     again.textContent = t("loginResend");
     again.addEventListener("click", async () => {
       again.disabled = true;
+      soltarSalida(err);
       try {
         const { pollarWallet } = await import("../stellar/wallet-pollar");
         await pollarWallet.sendEmailCode(mail);
         say(err, t("loginResent"), true);
       } catch (e) {
         say(err, errorDeCodigo(e, "enviar"));
+        void sumarSalidaAlError(err, e, "enviar", shut);
       }
       again.disabled = false;
     });
@@ -1375,7 +1531,9 @@ async function connect(
     await afterConnect(w, wallet, address, pick, back, done);
   } catch (e) {
     row.innerHTML = original;
-    notice(await walletErrorText(e), true);
+    const aviso = notice(await walletErrorText(e), true);
+    // Solo el ingreso con Pollar (Google) depende del proveedor que puede quedarse sin cupo: Freighter y la cuenta de prueba, no.
+    if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
   } finally {
     conectando = false;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
@@ -1489,7 +1647,7 @@ async function walletErrorText(e: unknown): Promise<string> {
  * o tecla, después de que el toque llegó a su botón (si la página se moviera
  * antes, el toque caería en otro lado), o a los diez segundos.
  */
-function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true): void {
+function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true): HTMLElement {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
@@ -1519,7 +1677,7 @@ function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = t
         google.after(el);
       } else login.insertBefore(el, login.querySelector(".login-body"));
     } else document.body.appendChild(el);
-    return;
+    return el;
   }
   el.textContent = text;
   el.setAttribute("role", "status");
@@ -1541,4 +1699,5 @@ function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = t
     document.addEventListener("click", irse);
     document.addEventListener("keydown", irse);
   }, 0);
+  return el;
 }

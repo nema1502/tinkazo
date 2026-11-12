@@ -1,6 +1,7 @@
 import type { AuthOpenContext, CosignRequest, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import { errorKey, esDeRed } from "./errores";
+import { ingresoPlanB } from "./ingreso-bandera";
 import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
@@ -711,7 +712,9 @@ class PollarWallet implements SubmittingWallet {
     this.#remember("google");
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
     marcarEntrada();
-    const ready = waitForWallet(client, 120_000);
+    // Con el plan B del ingreso prendido (`src/ui/ingreso-plan-b.ts`), un error del proveedor al armar la entrada se dice
+    // enseguida: sin esto, la persona miraba "Conectando…" hasta el final del plazo, dos minutos. Apagado, como siempre.
+    const ready = waitForWallet(client, 120_000, ingresoPlanB());
     ready.catch(() => undefined);
     let cierre = 0;
     let vigia = 0;

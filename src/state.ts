@@ -39,6 +39,11 @@ export interface Frozen {
    */
   sinSello?: boolean;
   /**
+   * Nació sin cuenta: se eligió seguir sin cuenta cuando el ingreso falló (plan B del ingreso, `ui/ingreso-plan-b.ts`). No
+   * queda a nombre de nadie: aunque después se entre con una cuenta, no se anota en Mis sorteos.
+   */
+  sinCuenta?: boolean;
+  /**
    * La huella del logo de la comunidad de este sorteo (`logo.ts`), leída al
    * sellar: así volver a compartir un sorteo de septiembre no le pone el logo de
    * octubre. No es parte del sorteo: no entra en el sello, en la huella de la

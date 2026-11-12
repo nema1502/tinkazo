@@ -350,6 +350,25 @@
     position: static; transform: none; width: auto; max-width: none; margin: 0 0 14px; z-index: auto;
     box-shadow: none; padding: 10px 16px; overflow-wrap: anywhere;
   }
+  /* El plan B del ingreso (wallet-ui.ts): el título y la línea del aviso, y la salida debajo del error del correo. */
+  .ingreso-salida-t { font-size: 18px; font-weight: 800; }
+  .ingreso-salida-l { font-weight: 600; }
+  .login-err .ingreso-salida-t, .login-err .ingreso-salida-l { display: block; }
+  .login-err .ingreso-salida-l { margin-top: 4px; }
+  .login-salida { display: flex; justify-content: center; }
+  .login-salida-b { min-height: 48px; }
+  /* La línea permanente de quien siguió sin cuenta (sin-cuenta-franja.ts): discreta, debajo de la cabecera, con el botón para entrar. */
+  .sin-cuenta-franja {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 12px;
+    padding: 2px 16px; background: var(--field); color: var(--ink); border-bottom: 2px solid var(--ink); text-align: center;
+  }
+  .sin-cuenta-franja-t { margin: 0; padding: 4px 0; font-size: 16px; font-weight: 600; line-height: 1.35; max-width: 70ch; }
+  .sin-cuenta-franja-b {
+    min-height: 44px; padding: 0 6px; background: none; border: 0; cursor: pointer; color: var(--ink);
+    font: inherit; font-size: 16px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .sin-cuenta-franja-b:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  @media (pointer: coarse), (max-width: 760px) { .sin-cuenta-franja-b { min-height: 48px; } }
   .txstatus {
     margin-top: 12px; font-size: 16px; font-weight: 700; color: var(--ink2);
     border-left: 4px solid var(--purple); padding-left: 10px;

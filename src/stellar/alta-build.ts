@@ -11,8 +11,11 @@
  * vistas previas y los builds locales no se frenan por esto.
  */
 
-/** Las banderas del cobro por uso: cada una vale 1 (prendida), 0 o vacía (apagada). */
-const BANDERAS = ["VITE_ALTA", "VITE_ALTA_LIBRE", "VITE_ALTA_PAGO", "VITE_SORTEO_SERVIDOR"] as const;
+/**
+ * Las banderas del cobro por uso, y la del plan B del ingreso (`src/ui/ingreso-plan-b.ts`, que no tiene que ver con el
+ * cobro pero se escribe igual y se equivoca igual): cada una vale 1 (prendida), 0 o vacía (apagada).
+ */
+const BANDERAS = ["VITE_ALTA", "VITE_ALTA_LIBRE", "VITE_ALTA_PAGO", "VITE_SORTEO_SERVIDOR", "VITE_INGRESO_PLAN_B"] as const;
 
 /**
  * Dónde atiende el portero de la red principal. Con `VITE_ALTA=1` el sitio le manda ahí el token de la sesión de Pollar

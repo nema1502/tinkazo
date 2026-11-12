@@ -27,6 +27,7 @@ import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
 import { ajustarPremioDeTurnos, ordenNoCabe } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
+import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable, origenActual } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinPatrocinio, mostrarSinSaldo, patrocinioDelError, verLaRedTrasFallar, verSinSello } from "./red";
@@ -534,7 +535,8 @@ export function refreshFreezeLabel(): void {
   // red, en vez de prometer el registro dice que así no se puede sellar (el botón frena con el aviso de cómo seguir).
   const lineaModo = document.getElementById("sellar-modo");
   if (lineaModo) {
-    const verLinea = hayModoOficial && !sinGrabar();
+    // Quien siguió sin cuenta (plan B del ingreso) tampoco la ve: no hay nada que se registre, y su propia línea lo dice.
+    const verLinea = hayModoOficial && !sinGrabar() && !sinCuentaElegido();
     lineaModo.textContent = !verLinea
       ? ""
       : billeteraEnOtraRed()
@@ -969,6 +971,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
     ...(sinSello ? { sinSello: true } : {}),
+    ...(sinCuentaElegido() ? { sinCuenta: true } : {}),
     ...(logo ? { logo } : {}),
   };
   // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.

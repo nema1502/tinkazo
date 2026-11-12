@@ -1127,7 +1127,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // La demo y el ensayo no son sorteos: no se anotan en Mis sorteos aunque haya
   // cuenta, igual que en el sello (freeze.ts).
   const f2 = app.frozen;
-  const who = sinGrabar() ? undefined : currentSession()?.address;
+  // Lo que nació sin cuenta no se anota, aunque la persona haya entrado con una mientras esperaba la ronda.
+  const who = sinGrabar() || f2?.sinCuenta ? undefined : currentSession()?.address;
   if (f2 && who) {
     void import("./history").then((h) => {
       h.remember({

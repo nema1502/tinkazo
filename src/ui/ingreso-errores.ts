@@ -14,16 +14,24 @@ const CODIGO_EQUIVOCADO: ReadonlySet<string> = new Set(["EMAIL_CODE_INVALID", "I
 const CODIGO_VENCIDO: ReadonlySet<string> = new Set(["EMAIL_CODE_EXPIRED", "SDK_EMAIL_CODE_EXPIRED"]);
 
 /** Los nombres con que un error dice qué le pasó: su mensaje y, si lo tiene, su `code`. */
-function nombresDe(e: unknown): string[] {
+export function nombresDe(e: unknown): string[] {
   if (!(e instanceof Error)) return [];
   const code = (e as { code?: unknown }).code;
   return typeof code === "string" ? [e.message, code] : [e.message];
 }
 
+/** Si el error dice, con un nombre confirmado del proveedor, que el código estaba mal o venció. Con otro nombre, `null`. */
+export function codigoDeLaPersona(e: unknown): "equivocado" | "vencido" | null {
+  const nombres = nombresDe(e);
+  if (nombres.some((n) => CODIGO_EQUIVOCADO.has(n))) return "equivocado";
+  if (nombres.some((n) => CODIGO_VENCIDO.has(n))) return "vencido";
+  return null;
+}
+
 /** Solo los códigos confirmados atribuyen el fallo al código o a la conexión. */
 export function errorDeCodigo(e: unknown, paso: "enviar" | "verificar"): string {
-  const nombres = nombresDe(e);
-  if (paso === "verificar" && nombres.some((n) => CODIGO_EQUIVOCADO.has(n))) return t("loginBadCode");
-  if (paso === "verificar" && nombres.some((n) => CODIGO_VENCIDO.has(n))) return t("loginExpired");
+  const delCodigo = paso === "verificar" ? codigoDeLaPersona(e) : null;
+  if (delCodigo === "equivocado") return t("loginBadCode");
+  if (delCodigo === "vencido") return t("loginExpired");
   return t(esDeRed(e) ? "loginConexion" : paso === "enviar" ? "loginSendFailed" : "loginFailed");
 }
