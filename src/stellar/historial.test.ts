@@ -101,7 +101,7 @@ describe("el sello de una transacción, del historial", () => {
   });
 
   it("armado con el SDK: una transacción simple y una envuelta por un fee-bump dan lo mismo", async () => {
-    // Both fixture builds must encode identical time bounds, even across a wall-second.
+    // Los dos armados del ejemplo tienen que llevar los mismos tiempos límite, aunque el reloj cambie de segundo entre uno y otro.
     const relojOriginal = Date.now;
     const [simple, envuelta] = (() => {
       const reloj = vi.spyOn(Date, "now").mockReturnValue(Date.now());
