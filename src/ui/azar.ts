@@ -57,6 +57,31 @@ function encaja(j: JuegoAzar, personas: number): boolean {
   return personas >= (j.rango.minimo ?? 2) && personas <= (j.rango.maximo ?? 200);
 }
 
+/**
+ * Los juegos del catálogo que pueden salir con `personas`, en el orden del catálogo. Con más de doscientas personas (o con
+ * una sola) no queda ninguno: la espera usa esto para no ofrecer Sorprendeme cuando no hay a dónde ir.
+ */
+export function posiblesDe(catalogo: readonly JuegoAzar[], personas: number): JuegoAzar[] {
+  return catalogo.filter((j) => encaja(j, personas));
+}
+
+/**
+ * Las tarjetas en el orden en que da la vuelta una luz: por el ángulo de cada una alrededor del centro de la lista. En
+ * una grilla de dos filas, la de arriba va de izquierda a derecha y la de abajo de derecha a izquierda, así la luz no
+ * salta de una punta a la otra. Es pura: `centroDe` dice dónde está cada tarjeta (el navegador mide, la prueba inventa)
+ * y, si no se sabe (todas en el mismo punto), queda el orden de siempre.
+ */
+export function enRueda<T>(tarjetas: readonly T[], centroDe: (t: T) => { x: number; y: number }, centro: { x: number; y: number }): T[] {
+  const angulo = (t: T): number => {
+    const c = centroDe(t);
+    return Math.atan2(c.y - centro.y, c.x - centro.x);
+  };
+  return tarjetas
+    .map((t, i) => ({ t, i, a: angulo(t) }))
+    .sort((p, q) => p.a - q.a || p.i - q.i)
+    .map(({ t }) => t);
+}
+
 /* ------------------------------------------------------------ la ruleta */
 
 /** Los ms entre resaltados cuando la ruleta corre parejo. */
@@ -65,6 +90,12 @@ const RAPIDO = 110;
 const ULTIMA = 480;
 /** El recorrido completo dura ~2,5 s. */
 const TOTAL = 2500;
+/**
+ * Cuánto se queda la tarjeta donde cayó antes de que el panel se cierre. La sala lo lee desde el fondo: con la pausa de
+ * un paso de la ruleta (medio segundo) el resultado pasaba sin verse, y lo único que quedaba era el nombre chico de
+ * arriba.
+ */
+export const QUEDA_MS = 1400;
 /** Los pasos del recorrido: pocas tarjetas dan más vueltas, muchas menos. */
 const PASOS_MIN = 10;
 
@@ -102,15 +133,20 @@ export function pausasDe(pasos: number): number[] {
  * sale uno parejo: la semilla pasa dos veces por el generador (una para el
  * elegido, otra para la tarjeta donde arranca la ruleta) y de allí salen las
  * vueltas hasta caer en el elegido, con las pausas de `pausasDe`.
+ *
+ * `excluir` es el juego que ya estaba elegido: con dos o más posibles no sale
+ * (para quien organiza, caer en el mismo es como si no hubiera pasado nada), pero
+ * sigue en el camino de la ruleta, que recorre todas las tarjetas posibles.
  */
-export function elegirAlAzar(catalogo: readonly JuegoAzar[], personas: number, semilla: number): Azar {
+export function elegirAlAzar(catalogo: readonly JuegoAzar[], personas: number, semilla: number, excluir?: string): Azar {
   const enJuego = catalogo.map((j, indice) => ({ j, indice })).filter(({ j }) => encaja(j, personas));
   if (!enJuego.length) return { elegido: null, recorrido: [] };
   const rng = sembrado(semilla);
-  const posicion = Math.floor(rng() * enJuego.length);
-  const elegido = enJuego[posicion];
+  const candidatos = excluir !== undefined && enJuego.length >= 2 ? enJuego.filter(({ j }) => j.game !== excluir) : enJuego;
+  const elegido = candidatos[Math.floor(rng() * candidatos.length)];
   const arranque = Math.floor(rng() * enJuego.length);
   if (!elegido) return { elegido: null, recorrido: [] };
+  const posicion = enJuego.indexOf(elegido);
   const delta = (posicion - arranque + enJuego.length) % enJuego.length;
   // Vueltas completas antes de caer en el elegido: con pocas tarjetas, más vueltas (el mismo tramo de tiempo); con
   // ocho o más, una vuelta alcanza.

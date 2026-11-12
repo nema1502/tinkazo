@@ -373,6 +373,8 @@ function juegosParaElegir(): OpcionDeJuego[] {
       rango: rangoVisible(r.game) ?? "",
       recomendado: r.fits === true,
       elegido: r.game === app.game,
+      // Con esta cantidad de gente no encaja (el trompo con 18, La Entrada con 18): la tarjeta se ve apagada.
+      encaja: r.fits !== false,
     }));
 }
 

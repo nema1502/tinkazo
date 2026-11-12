@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { elegirAlAzar, pausasDe, type JuegoAzar } from "./azar";
+import { QUEDA_MS, elegirAlAzar, enRueda, pausasDe, posiblesDe, type JuegoAzar } from "./azar";
 
 /**
  * El botón Sorprendeme del panel Elegí el juego (`azar.ts`): elige con semilla entre
@@ -141,6 +141,120 @@ describe("el recorrido de la animación", () => {
     const { elegido, recorrido } = elegirAlAzar(cortos, 3, 1);
     expect(elegido).toBeNull();
     expect(recorrido).toEqual([]);
+  });
+});
+
+describe("los juegos posibles (`posiblesDe`)", () => {
+  it("son los que encajan con la gente, en el orden del catálogo", () => {
+    // Con 7 la Chovena (desde 8) y el Teleférico (desde 16) no encajan.
+    expect(posiblesDe(CATALOGO, 7).map((j) => j.game)).toEqual(["race", "sapo", "trompo", "wheel", "pinata"]);
+    expect(posiblesDe(CATALOGO, 30).map((j) => j.game)).toEqual(["race", "sapo", "chovena", "teleferico", "wheel", "pinata"]);
+  });
+
+  it("con más de doscientas personas no queda ninguno: ningún juego pasa de 200", () => {
+    for (const n of [201, 250, 1000]) expect(posiblesDe(CATALOGO, n), String(n)).toEqual([]);
+    expect(elegirAlAzar(CATALOGO, 250, 3)).toEqual({ elegido: null, recorrido: [] });
+  });
+
+  it("con una sola persona tampoco: el mínimo de todos es 2", () => {
+    expect(posiblesDe(CATALOGO, 1)).toEqual([]);
+  });
+});
+
+describe("no repetir el juego que ya estaba elegido", () => {
+  it("con dos o más posibles, nunca cae en el excluido y los demás siguen saliendo parejo", () => {
+    const cuentas = new Map<string, number>();
+    for (let semilla = 0; semilla < 600; semilla++) {
+      const { elegido } = elegirAlAzar(CATALOGO, 3, semilla, "race");
+      expect(elegido?.game).not.toBe("race");
+      cuentas.set(elegido?.game ?? "", (cuentas.get(elegido?.game ?? "") ?? 0) + 1);
+    }
+    // Quedan cuatro (sapo, trompo, wheel, pinata): esperado 150 por juego.
+    expect([...cuentas.keys()].sort()).toEqual(["pinata", "sapo", "trompo", "wheel"]);
+    for (const [game, cuantas] of cuentas) expect(cuantas, game).toBeGreaterThanOrEqual(80);
+  });
+
+  it("el excluido sigue en el camino de la ruleta: recorre todas las tarjetas posibles, no solo las otras", () => {
+    const vistas = new Set<string>();
+    for (let semilla = 0; semilla < 40; semilla++) {
+      for (const p of elegirAlAzar(CATALOGO, 3, semilla, "race").recorrido) vistas.add(CATALOGO[p.indice]?.game ?? "");
+    }
+    expect(vistas).toContain("race");
+  });
+
+  it("el último resaltado sigue siendo el elegido, y con dos posibles el camino no queda quieto", () => {
+    const dos: JuegoAzar[] = [CATALOGO[0], CATALOGO[1]].filter((j): j is JuegoAzar => !!j);
+    for (let semilla = 0; semilla < 60; semilla++) {
+      const azar = elegirAlAzar(dos, 3, semilla, "race");
+      expect(azar.elegido?.game).toBe("sapo");
+      expect(azar.recorrido[azar.recorrido.length - 1]?.indice).toBe(1);
+      // Con dos tarjetas la luz salta de una a otra: nunca dos pasos seguidos en la misma.
+      for (let i = 1; i < azar.recorrido.length; i++) expect(azar.recorrido[i]?.indice).not.toBe(azar.recorrido[i - 1]?.indice);
+    }
+  });
+
+  it("si queda un solo posible, el excluido no se aplica: no hay a dónde ir", () => {
+    const solo: JuegoAzar[] = [CATALOGO[0] ?? { game: "race", rango: { minimo: 2, maximo: 200 } }];
+    expect(elegirAlAzar(solo, 3, 9, "race").elegido?.game).toBe("race");
+  });
+
+  it("un excluido que no encaja o que no existe no cambia nada", () => {
+    for (let semilla = 0; semilla < 50; semilla++) {
+      expect(elegirAlAzar(CATALOGO, 3, semilla, "chovena")).toEqual(elegirAlAzar(CATALOGO, 3, semilla));
+      expect(elegirAlAzar(CATALOGO, 3, semilla, "fantasma")).toEqual(elegirAlAzar(CATALOGO, 3, semilla));
+    }
+  });
+});
+
+describe("la luz da la vuelta (`enRueda`)", () => {
+  /** Una grilla de dos filas por cinco columnas: el centro de cada tarjeta, con la fila de arriba primero. */
+  const grilla = (columnas: number, filas: number): { id: string; x: number; y: number }[] =>
+    Array.from({ length: columnas * filas }, (_, i) => ({ id: `${Math.floor(i / columnas)}${i % columnas}`, x: (i % columnas) * 200 + 100, y: Math.floor(i / columnas) * 160 + 80 }));
+  const centroDe = (cuadros: { x: number; y: number }[]): { x: number; y: number } => ({
+    x: cuadros.reduce((a, c) => a + c.x, 0) / cuadros.length,
+    y: cuadros.reduce((a, c) => a + c.y, 0) / cuadros.length,
+  });
+
+  it("en dos filas de cinco, la de arriba va de izquierda a derecha y la de abajo de derecha a izquierda", () => {
+    const g = grilla(5, 2);
+    // Se las da en un orden cualquiera: el orden sale del lugar de cada una.
+    const revueltas = [...g].sort((a, b) => ((a.x * 7 + a.y * 3) % 11) - ((b.x * 7 + b.y * 3) % 11));
+    const orden = enRueda(revueltas, (c) => c, centroDe(g)).map((c) => c.id);
+    expect(orden).toEqual(["00", "01", "02", "03", "04", "14", "13", "12", "11", "10"]);
+  });
+
+  it("ningún paso salta de una punta de la grilla a la otra: cada tarjeta queda pegada a la siguiente", () => {
+    for (const [columnas, filas] of [[5, 2], [4, 3], [2, 5], [3, 4]] as const) {
+      const g = grilla(columnas, filas);
+      const orden = enRueda(g, (c) => c, centroDe(g));
+      expect(orden).toHaveLength(columnas * filas);
+      // Con la vuelta cerrada (la última con la primera): el salto más largo es de dos tarjetas, nunca de la grilla entera.
+      const mayorSalto = Math.max(
+        ...orden.map((c, i) => {
+          const sig = orden[(i + 1) % orden.length] ?? c;
+          return Math.hypot((c.x - sig.x) / 200, (c.y - sig.y) / 160);
+        }),
+      );
+      expect(mayorSalto, `${columnas}x${filas}`).toBeLessThanOrEqual(2.3);
+    }
+  });
+
+  it("no pierde ni repite ninguna tarjeta", () => {
+    const g = grilla(5, 2);
+    expect(enRueda(g, (c) => c, centroDe(g)).map((c) => c.id).sort()).toEqual(g.map((c) => c.id).sort());
+  });
+
+  it("si no se sabe dónde está cada una (todas en el mismo punto), queda el orden de siempre", () => {
+    const g = grilla(5, 2).map((c) => ({ ...c, x: 0, y: 0 }));
+    expect(enRueda(g, (c) => c, { x: 0, y: 0 }).map((c) => c.id)).toEqual(g.map((c) => c.id));
+  });
+});
+
+describe("cuánto se queda la tarjeta donde cayó", () => {
+  it("más que un paso de la ruleta, para que la sala vea dónde quedó, y menos de dos segundos", () => {
+    const ultimaPausa = pausasDe(12).at(-1) ?? 0;
+    expect(QUEDA_MS).toBeGreaterThan(ultimaPausa * 2);
+    expect(QUEDA_MS).toBeLessThanOrEqual(2000);
   });
 });
 

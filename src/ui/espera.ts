@@ -3,8 +3,9 @@ import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
 import { app, avatar, type Game } from "../state";
 import { beep, note } from "../sound";
-import { RANGOS, cabenLosPremios } from "./recomendar";
-import { elegirAlAzar } from "./azar";
+import { RANGOS, SELECTOR, cabenLosPremios, rangoParaLeer } from "./recomendar";
+import { entradaDe } from "../games/pixi/kit/catalogo";
+import { QUEDA_MS, elegirAlAzar, enRueda, posiblesDe, type JuegoAzar } from "./azar";
 import { enEnsayo } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
@@ -74,6 +75,8 @@ export interface OpcionDeJuego {
   rango: string;
   recomendado: boolean;
   elegido: boolean;
+  /** `false`: con esta cantidad de gente el juego no encaja, y su tarjeta se ve apagada. Sin dato, se ve como las demás. */
+  encaja?: boolean;
 }
 
 /** Lo que la espera necesita de la página para desembocar en el show. */
@@ -204,15 +207,22 @@ function juegoHtml(juegos: OpcionDeJuego[], lugar: "barra" | "flujo"): string {
 }
 
 /** La lista para elegir otro juego, sobre toda la espera. Se llena al abrirla. */
-function panelDeJuegosHtml(juegos: OpcionDeJuego[]): string {
+function panelDeJuegosHtml(juegos: OpcionDeJuego[], personas: number): string {
   if (juegos.length < 2) return "";
   return (
     `<div class="espera-juegos" role="group" aria-label="${esc(t("espJuegosT"))}" hidden>` +
     `<p class="espera-juegos-t">${esc(t("espJuegosT"))}</p>` +
+    // Qué quiere decir la estrella de las tarjetas: sin esta línea, quien no conoce Tinkazo no sabe por qué hay juegos con estrella.
+    (juegos.some((j) => j.recomendado)
+      ? `<p class="espera-juegos-sub"><i aria-hidden="true">★</i> ${esc(t("espRecomendadas").replace("{n}", String(personas)))}</p>`
+      : "") +
     `<div class="espera-juegos-lista"></div>` +
     // El sorteo de verdad ya está sellado: este botón solo elige con qué juego contarlo. Sin dado ni dibujo: nada con cara de casino.
+    // Los dos botones quedan siempre a la vista, abajo, aunque la lista de juegos se recorra por dentro.
+    `<div class="espera-juegos-acc">` +
     `<button class="ghost" type="button" data-azar>${esc(t("espAzar"))}</button>` +
     `<button class="ghost" type="button" data-juegos-listo>${esc(t("espJuegosListo"))}</button>` +
+    `</div>` +
     `</div>`
   );
 }
@@ -220,14 +230,22 @@ function panelDeJuegosHtml(juegos: OpcionDeJuego[]): string {
 /** La pareja de capturas de un juego, la misma del selector (`botones-kit.ts`): una por tema, oscura y clara. */
 const capturasDe = (game: string): string[] => [`/juegos/selector/${game}.webp`, `/juegos/selector/${game}-light.webp`];
 
-/** ¿Hay captura del juego? La fuente de verdad es el selector de la página: su botón trae las dos imágenes cuando la hay. */
-function tieneCaptura(game: string): boolean {
-  return !!document.querySelector(`#g-${game} img.sel-img`);
+/**
+ * ¿Hay captura del juego? Se sabe por el catálogo y no por el markup del selector, que cambia de forma (botones, tarjetas)
+ * y dejaría el panel sin imágenes sin avisar. Los juegos del selector la tienen todos: los de siempre traen las suyas con
+ * la página y los del kit no se encienden sin ella (`captura` en `kit/catalogo.ts`). Los que salieron del selector, no.
+ */
+export function tieneCaptura(game: string): boolean {
+  if (!SELECTOR.includes(game as Game)) return false;
+  return entradaDe(game)?.captura ?? true;
 }
+
+/** El tramo de personas con su unidad: "2–200" se lee "2 a 200 personas". Sin la unidad parece un marcador. */
+export const rangoConUnidad = (rango: string): string => rangoParaLeer(rango, t("espRangoPersonas"), t("recRangoUnion"));
 
 /** Las opciones de la lista de juegos: la captura del juego en su tema cuando hay (elige la lista el juego, y su
  * tarjeta se ve como la del selector de la página), y el juego sin captura queda como el botón de texto de siempre.
- * El elegido va marcado y la estrella avisa qué encaja con esta cantidad de gente. */
+ * El elegido va marcado, la estrella avisa qué encaja con esta cantidad de gente y el que no encaja se ve apagado. */
 export function opcionesHtml(juegos: OpcionDeJuego[]): string {
   return juegos
     .map((j) => {
@@ -240,11 +258,11 @@ export function opcionesHtml(juegos: OpcionDeJuego[]): string {
             .join("")
         : "";
       return (
-        `<button type="button" class="espera-juego-op${imgs ? " con-captura" : ""}" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
+        `<button type="button" class="espera-juego-op${imgs ? " con-captura" : ""}${j.encaja === false ? " no-encaja" : ""}" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
         imgs +
         `<span class="espera-juego-nombre">${j.recomendado ? `<i aria-hidden="true">★</i> ` : ""}${esc(j.nombre)}</span>` +
         (j.recomendado ? `<span class="sr-only">, ${esc(t("recBadge"))}</span>` : "") +
-        (j.rango ? `<small>${esc(j.rango)}</small>` : "") +
+        (j.rango ? `<small>${esc(rangoConUnidad(j.rango))}</small>` : "") +
         `</button>`
       );
     })
@@ -288,7 +306,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitId").replace("{n}", String(f.raffleId)))}</p>` : "") +
     // El juego, para la sala y para quien organiza: el selector queda detrás de esta capa.
     juegoHtml(juegos, "flujo") +
-    panelDeJuegosHtml(juegos);
+    panelDeJuegosHtml(juegos, f.names.length);
   document.body.appendChild(back);
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
@@ -320,6 +338,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     window.clearInterval(timer);
     pararAzar();
     removeEventListener("resize", ajusta);
+    removeEventListener("resize", medirBarra);
     removeEventListener("keydown", tecla);
     document.removeEventListener("fullscreenchange", pantalla);
     document.removeEventListener("tinkazo:error", alError);
@@ -345,13 +364,41 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!actual) return;
     for (const el of back.querySelectorAll<HTMLElement>(".espera-juego-n b")) el.textContent = actual.nombre;
   };
+  /**
+   * El alto de la barra de Sorprendeme y Listo, que va pegada abajo. Lo que se lleva a la vista (la tarjeta donde cae la
+   * ruleta, el foco con Tab) no puede quedar debajo de ella: `scroll-padding-bottom` del panel lo toma de acá.
+   */
+  const medirBarra = (): void => {
+    const barra = panel?.querySelector<HTMLElement>(".espera-juegos-acc");
+    if (panel && barra && !panel.hidden) panel.style.setProperty("--barra", `${barra.offsetHeight + 8}px`);
+  };
+  // Con otro tamaño de pantalla (un proyector que se conecta, un zoom) la barra puede pasar a dos renglones.
+  addEventListener("resize", medirBarra);
+  /** Los juegos que cuentan tantos premios como se sortean, la misma regla del selector (`cabenLosPremios`), con su tramo de gente. */
+  const catalogoDeAzar = (): JuegoAzar[] => {
+    const premios = sorteo.premios();
+    return sorteo
+      .juegos()
+      .filter((j) => cabenLosPremios(j.game as Game, premios))
+      .map((j) => ({ game: j.game, rango: RANGOS[j.game as Game] ?? {} }));
+  };
+  const personasAhora = (): number => app.frozen?.names.length ?? 0;
   const abrirJuegos = (): void => {
     const lista = panel?.querySelector<HTMLElement>(".espera-juegos-lista");
     if (!panel || !lista) return;
     lista.innerHTML = opcionesHtml(sorteo.juegos());
     panel.hidden = false;
+    // Sorprendeme solo se ofrece si hay a dónde ir. Con más de doscientas personas no cabe ningún juego, y con uno solo la
+    // luz se quedaría quieta en la misma tarjeta: en los dos casos el botón no haría nada.
+    const sorprender = panel.querySelector<HTMLElement>("[data-azar]");
+    if (sorprender) sorprender.hidden = posiblesDe(catalogoDeAzar(), personasAhora()).length < 2;
+    medirBarra();
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "true");
-    (lista.querySelector<HTMLElement>('[aria-pressed="true"]') ?? lista.querySelector<HTMLElement>("button"))?.focus({ preventScroll: true });
+    const elegida = lista.querySelector<HTMLElement>('[aria-pressed="true"]');
+    (elegida ?? lista.querySelector<HTMLElement>("button"))?.focus({ preventScroll: true });
+    // Al volver a abrirlo, el juego elegido tiene que verse. Si la lista se recorre por dentro (un celular, un zoom) y el elegido
+    // queda abajo, se lo lleva a la vista lo justo: `scroll-padding-bottom` evita que quede debajo de la barra.
+    if (elegida && panel.scrollHeight > panel.clientHeight + 1) elegida.scrollIntoView?.({ block: "nearest" });
   };
   const cerrarJuegos = (devolverFoco = true): void => {
     if (!panel || panel.hidden) return;
@@ -365,10 +412,17 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   /** El temporizador de la ruleta, y si está corriendo: un toque más no la arranca de nuevo, y cerrarla la para. */
   let tAzar = 0;
   let azarCorriendo = false;
+  /** Deja el panel como estaba antes de girar: sin la marca de giro ni la de llegada, y con el botón disponible. */
   const pararAzar = (): void => {
     if (tAzar) window.clearTimeout(tAzar);
     tAzar = 0;
     azarCorriendo = false;
+    panel?.classList.remove("girando");
+    for (const tarjeta of panel?.querySelectorAll<HTMLElement>(".espera-juego-op") ?? []) {
+      delete tarjeta.dataset.enJuego;
+      tarjeta.classList.remove("azar-quedo");
+    }
+    panel?.querySelector("[data-azar]")?.removeAttribute("aria-disabled");
   };
   /** La semilla del toque: nada de `Math.random` (el navegador trae criptografía de verdad, y es un número entero). */
   const semillaAzar = (): number => {
@@ -379,50 +433,85 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   /** El toque en Sorprendeme: elige con `azar.ts` y recorre las tarjetas. Al quedar, elige como si la hubieran tocado. */
   const alAzar = (): void => {
     if (azarCorriendo || !panel) return;
-    // Solo los juegos que cuentan tantos premios como se sortean: la misma regla del selector (`cabenLosPremios`).
-    const premios = sorteo.premios();
-    const catalogo = sorteo
-      .juegos()
-      .filter((j) => cabenLosPremios(j.game as Game, premios))
-      .map((j) => ({ game: j.game, rango: RANGOS[j.game as Game] ?? {} }));
-    const azar = elegirAlAzar(catalogo, app.frozen?.names.length ?? 0, semillaAzar());
-    if (!azar.elegido) return;
-    const elegido = azar.elegido;
+    // Las tarjetas se ordenan por su lugar en la grilla: la luz da la vuelta (arriba de izquierda a derecha, abajo de
+    // derecha a izquierda) y no salta de una punta a la otra. Solo cambia el camino: el elegido sale parejo igual.
     const lista = panel.querySelector<HTMLElement>(".espera-juegos-lista");
     const tarjetas = lista ? [...lista.querySelectorAll<HTMLElement>("[data-game]")] : [];
-    /** La tarjeta del panel de un juego del catálogo: el catálogo tiene solo los que caben, y el panel, todos. */
-    const tarjetaDe = (indice: number): HTMLElement | null => {
-      const game = catalogo[indice]?.game;
-      return tarjetas.find((tarjeta) => tarjeta.dataset.game === game) ?? null;
-    };
-    const quedo = (): void => {
-      pararAzar();
+    const tarjetaDe = (game: string | undefined): HTMLElement | null => tarjetas.find((tarjeta) => tarjeta.dataset.game === game) ?? null;
+    const caja = lista?.getBoundingClientRect();
+    const centro = caja ? { x: caja.left + caja.width / 2, y: caja.top + caja.height / 2 } : { x: 0, y: 0 };
+    const catalogo = enRueda(catalogoDeAzar(), (j) => {
+      const r = tarjetaDe(j.game)?.getBoundingClientRect();
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : centro;
+    }, centro);
+    const posibles = posiblesDe(catalogo, personasAhora());
+    if (posibles.length < 2) return;
+    // El juego que ya estaba elegido no sale: caer en el mismo es como si no hubiera pasado nada.
+    const azar = elegirAlAzar(catalogo, personasAhora(), semillaAzar(), sorteo.juegos().find((j) => j.elegido)?.game);
+    if (!azar.elegido) return;
+    const elegido = azar.elegido;
+    const tarjetaElegida = tarjetaDe(elegido.game);
+    const sinMovimiento = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Una lista que se recorre por dentro no muestra todas las tarjetas. Con lugar para dos filas y media o más (un celular
+    // parado) la ruleta corre y la lista sigue a la luz, y la barra de abajo no la tapa (`scroll-padding-bottom`). Con menos
+    // (un celular acostado, un zoom de 200 %) la luz pasaría por tarjetas que no se ven y la lista temblaría a cada paso: ahí
+    // no hay ruleta, solo la marca de dónde quedó. La media fila de más es el título y la leyenda, que ocupan el alto de
+    // arriba hasta que la lista se recorre.
+    const seRecorre = panel.scrollHeight > panel.clientHeight + 1;
+    const lugarParaTarjetas = panel.clientHeight - (panel.querySelector<HTMLElement>(".espera-juegos-acc")?.offsetHeight ?? 0);
+    const pocoLugar = seRecorre && lugarParaTarjetas < 2.5 * (tarjetas[0]?.offsetHeight ?? 0);
+    const sinRuleta = sinMovimiento || !tarjetas.length || pocoLugar;
+    azarCorriendo = true;
+    panel.querySelector("[data-azar]")?.setAttribute("aria-disabled", "true");
+
+    /**
+     * Cae en el elegido. Se elige ya, para que si el número nace ahora el show cuente el juego que la sala está viendo, y
+     * la tarjeta se queda marcada un rato (`QUEDA_MS`) antes de cerrar el panel: la sala lo lee desde el fondo.
+     */
+    const llegar = (): void => {
       sorteo.elegirJuego(elegido.game);
       pintarNombre();
-      cerrarJuegos();
+      if (!tarjetaElegida) {
+        cerrarJuegos();
+        return;
+      }
+      for (const tarjeta of tarjetas) tarjeta.setAttribute("aria-pressed", String(tarjeta === tarjetaElegida));
+      tarjetaElegida.classList.add("azar-quedo");
+      // Si la lista se recorre, la lleva al medio de lo que se ve: con `scroll-padding-bottom` no queda debajo de la barra.
+      if (seRecorre) tarjetaElegida.scrollIntoView?.({ block: "center", behavior: sinMovimiento ? "auto" : "smooth" });
+      tAzar = window.setTimeout(() => cerrarJuegos(), QUEDA_MS);
     };
-    // Movimiento reducido: sin ruleta, el elegido queda marcado y se elige ya.
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches || !tarjetas.length) {
-      quedo();
+    if (sinRuleta) {
+      llegar();
       return;
     }
-    // La tarjeta que estaba elegida de partida se apaga: mientras gira, brilla una sola, la que recorre la ruleta.
-    for (const tarjeta of tarjetas) tarjeta.setAttribute("aria-pressed", "false");
-    azarCorriendo = true;
+
+    // Mientras gira, brilla una sola tarjeta: la que estaba elegida de partida se apaga. Las que no pueden salir se ven
+    // apagadas, y el botón avisa que ya está en marcha.
+    for (const tarjeta of tarjetas) {
+      tarjeta.setAttribute("aria-pressed", "false");
+      if (posibles.some((j) => j.game === tarjeta.dataset.game)) tarjeta.dataset.enJuego = "1";
+    }
+    panel.classList.add("girando");
     let marcada: HTMLElement | null = null;
     const paso = (i: number): void => {
       const pasoDe = azar.recorrido[i];
       if (!pasoDe) {
-        quedo();
+        llegar();
         return;
       }
       if (marcada) marcada.setAttribute("aria-pressed", "false");
-      marcada = tarjetaDe(pasoDe.indice);
-      // El resaltado es el mismo estilo de la tarjeta elegida (el CSS de `aria-pressed`): el panel se cierra al
-      // quedar, así que la marca termina en el juego elegido, como cuando lo tocan.
+      marcada = tarjetaDe(catalogo[pasoDe.indice]?.game);
+      // El resaltado es el mismo estilo de la tarjeta elegida (el CSS de `aria-pressed`). Si la lista se recorre, la lleva a
+      // la vista lo justo, sin quedar debajo de la barra.
       marcada?.setAttribute("aria-pressed", "true");
-      marcada?.scrollIntoView?.({ block: "nearest" });
-      tAzar = window.setTimeout(i + 1 < azar.recorrido.length ? () => paso(i + 1) : quedo, pasoDe.pausa);
+      if (seRecorre) marcada?.scrollIntoView?.({ block: "nearest" });
+      // En el último paso la luz cae y se queda: de ahí en adelante manda la marca de llegada.
+      if (i + 1 >= azar.recorrido.length) {
+        llegar();
+        return;
+      }
+      tAzar = window.setTimeout(() => paso(i + 1), pasoDe.pausa);
     };
     paso(0);
   };

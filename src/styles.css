@@ -2474,13 +2474,19 @@
   .espera-juego-n { font-size: var(--letra-sala-sec); font-weight: 700; color: var(--ink2); }
   .espera-juego-n b { color: var(--ink); font-weight: 900; }
   .espera-juego .ghost { min-height: 48px; font-size: 16px; }
-  /* La lista de juegos, sobre toda la espera: una tarjeta que se recorre por dentro si no entra. */
+  /* La lista de juegos, sobre toda la espera: una tarjeta que se recorre por dentro si no entra. El fondo es de papel
+     lleno: con un velo, la espera de atrás (los nombres, el reloj gigante, la cabecera) se transparentaba, y la barra de
+     abajo, que es de papel, la cortaba en pedazos. `--barra` (espera.ts) es el alto de esa barra: lo que se lleva a la
+     vista (la tarjeta donde cae Sorprendeme, el foco con Tab) no queda debajo de ella. */
   .espera-juegos {
     position: fixed; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px;
-    padding: 16px; background: color-mix(in srgb, var(--paper) 94%, transparent); overflow-y: auto; overscroll-behavior: contain;
+    padding: 16px 16px 0; background: var(--paper); overflow-y: auto; overscroll-behavior: contain; scroll-padding-bottom: var(--barra, 96px);
   }
-  .espera-juegos::before, .espera-juegos::after { content: ""; flex: 1 0 0; }
-  .espera-juegos-t { font-size: var(--letra-sala-prin); font-weight: 900; }
+  /* Centrado arriba y abajo con márgenes automáticos: sobra lugar y queda al medio, falta y se recorre desde el borde. */
+  .espera-juegos-t { margin-top: auto; font-size: var(--letra-sala-prin); font-weight: 900; }
+  /* Qué quiere decir la estrella de las tarjetas: una línea bajo el título, a 16 px como todo lo que mira la sala. */
+  .espera-juegos-sub { margin-top: -4px; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); }
+  .espera-juegos-sub i { font-style: normal; color: var(--magenta-ink); }
   /* Grilla compacta: dos columnas en un teléfono (la lista de botones de texto se comía la pantalla entera) y más
      en pantallas anchas. */
   .espera-juegos-lista { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: min(100%, 760px); }
@@ -2492,18 +2498,32 @@
   }
   .espera-juego-op i { font-style: normal; color: var(--magenta-ink); }
   .espera-juego-op small { font-family: ui-monospace, Consolas, monospace; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); }
-  .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); }
+  /* La marca de la tarjeta encendida es de toda la tarjeta: el contorno la rodea entera. En una tarjeta con captura el
+     violeta del fondo es solo la franja del nombre, y quedaba escondida si la barra de abajo la tapaba. */
+  .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); outline: 4px solid var(--purple); outline-offset: 2px; }
   .espera-juego-op[aria-pressed="true"] small, .espera-juego-op[aria-pressed="true"] i { color: inherit; }
-  /* La captura del juego manda: la escena a todo lo ancho del botón, el nombre y el rango chicos debajo, como en el
-     selector de la página (`botones-kit.ts`): la misma pareja de archivos y la misma selección por tema. */
+  /* El juego que no encaja con esta cantidad de gente se ve apagado, para que su rango no se lea como un marcador. En el
+     tema claro el papel blanco deja la captura a media luz y hace falta apagarla más (0,3), y en el oscuro 0,45 ya se ve
+     apagada. Las dos reglas del tema oscuro, la de la elección explícita y la del sistema, van con la misma guarda que
+     la elección de la captura de arriba. */
+  .espera-juego-op.no-encaja .sel-img { opacity: 0.3; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .espera-juego-op.no-encaja .sel-img { opacity: 0.45; }
+  }
+  :root[data-theme="dark"] .espera-juego-op.no-encaja .sel-img { opacity: 0.45; }
+  .espera-juego-op.no-encaja:not([aria-pressed="true"]) small { color: var(--muted); }
+  /* La captura del juego manda: la escena a todo lo ancho del botón y debajo el nombre y el rango, a 16 px como todo lo
+     que mira la sala. Es el selector de la página (`botones-kit.ts`): la misma pareja de archivos y la misma selección
+     por tema. */
   .espera-juego-op.con-captura { padding: 0 0 8px; gap: 3px; }
   .espera-juego-op.con-captura .sel-img {
     display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover;
     border: 0; border-bottom: 2px solid var(--ink); background: var(--field);
   }
-  .espera-juego-op.con-captura .espera-juego-nombre { font-size: 14px; line-height: 1.25; padding: 0 6px; }
-  .espera-juego-op.con-captura small { font-size: 12px; }
-  .espera-juego-op .sel-osc { display: none; }
+  .espera-juego-op.con-captura .espera-juego-nombre { font-size: var(--letra-sec); line-height: 1.25; padding: 0 6px; }
+  .espera-juego-op.con-captura small { font-size: var(--letra-sec); }
+  /* Con la misma fuerza que la regla de la imagen, y después de ella: sin esto, en el tema claro se ven las dos capturas. */
+  .espera-juego-op.con-captura .sel-osc { display: none; }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .espera-juego-op .sel-osc { display: block; }
     :root:not([data-theme="light"]) .espera-juego-op .sel-cla { display: none; }
@@ -2511,6 +2531,50 @@
   :root[data-theme="dark"] .espera-juego-op .sel-osc { display: block; }
   :root[data-theme="dark"] .espera-juego-op .sel-cla { display: none; }
   .espera-juegos .ghost { min-height: 48px; font-size: 16px; }
+  /* Sorprendeme y Listo quedan siempre a la vista, pegados abajo: diez tarjetas en dos columnas no entran en un celular ni
+     en una laptop a 200 % de zoom, y la lista se recorre por dentro. */
+  /* La sombra de papel a los costados tapa las sombras de las tarjetas que pasan por debajo, que se asomarían 4 px. Es una
+     sombra y no más ancho: no suma desborde, y a 390 px la barra no puede pasar del ancho de la pantalla. */
+  .espera-juegos-acc {
+    position: sticky; bottom: 0; align-self: center; width: min(100%, 760px); display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 12px;
+    margin-bottom: auto; padding: 10px 0 max(14px, env(safe-area-inset-bottom, 0px)); background: var(--paper); border-top: 2px solid var(--ink);
+    box-shadow: -6px 0 0 var(--paper), 6px 0 0 var(--paper);
+    /* Por encima de la tarjeta donde cayó Sorprendeme (`.azar-quedo` va con z-index 1): su contorno y su sombra pasan por debajo. */
+    z-index: 2;
+  }
+  /* Mientras Sorprendeme gira, lo que no puede salir se ve apagado y el botón avisa que ya está en marcha. */
+  .espera-juegos.girando .espera-juego-op:not([data-en-juego]) { opacity: 0.4; }
+  .espera-juegos [data-azar][aria-disabled="true"] { opacity: 0.6; cursor: default; }
+  /* Donde cayó: borde grueso de tinta, sombra grande y un poco más grande, para que se distinga del paso de la luz y se
+     lea desde el fondo de la sala. Con movimiento reducido, la misma marca sin la escala. */
+  .espera-juego-op.azar-quedo {
+    position: relative; z-index: 1; outline: 4px solid var(--ink); outline-offset: 0; box-shadow: 6px 6px 0 var(--ink);
+    transform: scale(1.04); transition: transform 0.15s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .espera-juego-op.azar-quedo { transform: none; transition: none; } }
+  /* En una pantalla apaisada, cinco columnas: diez juegos son dos filas parejas y entran sin recorrerse. Con cuatro eran
+     4, 4 y 2, y a 1362 x 632 pasaban de la altura por 17 px: una barra de desplazamiento sobre la imagen proyectada. */
+  @media (min-width: 900px) and (orientation: landscape) {
+    .espera-juegos-lista { grid-template-columns: repeat(5, 1fr); width: min(100%, 1000px); }
+    .espera-juegos-acc { width: min(100%, 1000px); }
+  }
+  /* Un escalón intermedio para los proyectores comunes (1280 x 720) y las laptops de 1366 x 768: con la letra de 16 px
+     sobraba un tercio del alto. El panel crece hasta 1180 px y el nombre y el rango pasan a 20 px. Pide 700 px de alto: a
+     1362 x 632 no hay lugar y queda como está. Va antes de la regla del proyector, que gana por orden con sus 24 px. */
+  @media (min-width: 1180px) and (min-height: 700px) and (orientation: landscape) {
+    .espera-juegos-lista, .espera-juegos-acc { width: min(100%, 1180px); }
+    .espera-juego-op.con-captura .espera-juego-nombre, .espera-juego-op.con-captura small { font-size: 20px; }
+    .espera-juegos-sub { font-size: 18px; }
+    .espera-juegos .ghost { font-size: 18px; min-height: 52px; }
+  }
+  /* En el proyector el panel es de la sala: tarjetas de unos 270 px y el nombre y el rango a 24 px. Los webp del selector
+     son de 320 x 180, así que más grandes no se agrandan de más. */
+  @media (min-width: 1600px) and (min-height: 900px) {
+    .espera-juegos-lista, .espera-juegos-acc { width: min(100%, 1400px); }
+    .espera-juego-op.con-captura .espera-juego-nombre, .espera-juego-op.con-captura small { font-size: 24px; }
+    .espera-juegos-sub { font-size: 22px; }
+    .espera-juegos .ghost { font-size: 22px; min-height: 56px; }
+  }
 
   /* Una pantalla baja (una laptop chica a 200 % de zoom, un celular acostado): la espera se aprieta para que entre, y si
      aun así no entra se recorre por dentro, con la calcomanía y "Volver" siempre arriba. */
@@ -2519,8 +2583,6 @@
     .espera-top { top: 0; left: 0; right: 0; padding: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: var(--paper); }
     .espera-top .sticker { padding: 4px 12px; font-size: 14px; letter-spacing: 0.02em; max-width: 48vw; }
     .espera-top .ghost { min-height: 44px; white-space: nowrap; }
-    /* En la barra, solo "Cambiar de juego": el nombre del juego no entra y el botón abre la lista con el actual marcado. */
-    .espera-juego.en-barra .espera-juego-n { display: none; }
     .espera-premio { font-size: clamp(18px, 6vh, 30px); }
     .espera-ensayo { font-size: clamp(14px, 3.4vh, 20px); padding: 2px 10px; }
     .espera-reloj { font-size: clamp(52px, 20vmin, 340px); }
@@ -2532,6 +2594,11 @@
     .espera-id { font-size: clamp(14px, 3.2vh, 20px); }
     .espera-juego-n { font-size: clamp(16px, 3.6vh, 22px); }
     .espera-juego .ghost { min-height: 44px; }
+  }
+  /* En la barra, solo "Cambiar de juego": en una pantalla baja y angosta (un celular acostado) el nombre del juego no entra y
+     el botón abre la lista con el actual marcado. Si hay ancho (una tablet o una laptop de 1024 x 560) el nombre se queda. */
+  @media (max-height: 560px) and (max-width: 999px) {
+    .espera-juego.en-barra .espera-juego-n { display: none; }
   }
 
   /* La lista y el resultado en grande. */

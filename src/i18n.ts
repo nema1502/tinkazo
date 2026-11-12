@@ -2728,6 +2728,8 @@ export const T: Record<Lang, Dict> = {
     espJuegosT: "Elegí el juego",
     espJuegosListo: "Listo",
     espAzar: "Sorprendeme",
+    espRangoPersonas: "{r} personas",
+    espRecomendadas: "Los que mejor andan con {n} personas",
     recRangoUnion: " a ",
     // La cuenta, siempre a la vista (26-oct): Entrar, Conectando… y dentro, y qué pasa si la ventana de Google no se abre.
     cuentaEntrar: "Entrar",
@@ -5285,6 +5287,8 @@ export const T: Record<Lang, Dict> = {
     espJuegosT: "Pick the game",
     espJuegosListo: "Done",
     espAzar: "Surprise me",
+    espRangoPersonas: "{r} people",
+    espRecomendadas: "Best with {n} people",
     recRangoUnion: " to ",
     // Your account, always in sight (Oct 26): Sign in, Connecting… and signed in, and what happens if Google's window does not open.
     cuentaEntrar: "Sign in",
