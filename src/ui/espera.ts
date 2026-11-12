@@ -3,7 +3,7 @@ import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
 import { app, avatar, type Game } from "../state";
 import { beep, note } from "../sound";
-import { RANGOS } from "./recomendar";
+import { RANGOS, cabenLosPremios } from "./recomendar";
 import { elegirAlAzar } from "./azar";
 import { enEnsayo } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
@@ -88,6 +88,8 @@ export interface Sorteo {
   juegos: () => OpcionDeJuego[];
   /** Quien organiza eligió otro juego sin salir de la espera. */
   elegirJuego: (game: string) => void;
+  /** Cuántos premios se sortean: Sorprendeme no cae en un juego que no los cuenta todos (la carrera, el sapo). */
+  premios: () => number;
   /**
    * La abrió el propio sello y no un toque: el foco queda en la capa y no en "Volver a la
    * página", para que un Enter de más (justo después de sellar) no la cierre.
@@ -208,8 +210,8 @@ function panelDeJuegosHtml(juegos: OpcionDeJuego[]): string {
     `<div class="espera-juegos" role="group" aria-label="${esc(t("espJuegosT"))}" hidden>` +
     `<p class="espera-juegos-t">${esc(t("espJuegosT"))}</p>` +
     `<div class="espera-juegos-lista"></div>` +
-    // El sorteo de verdad ya está sellado: este azar solo elige con qué juego contarlo.
-    `<button class="ghost" type="button" data-azar><span aria-hidden="true">🎲</span> ${esc(t("espAzar"))}</button>` +
+    // El sorteo de verdad ya está sellado: este botón solo elige con qué juego contarlo. Sin dado ni dibujo: nada con cara de casino.
+    `<button class="ghost" type="button" data-azar>${esc(t("espAzar"))}</button>` +
     `<button class="ghost" type="button" data-juegos-listo>${esc(t("espJuegosListo"))}</button>` +
     `</div>`
   );
@@ -354,15 +356,25 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     crypto.getRandomValues(a);
     return a[0] ?? 0;
   };
-  /** El toque en «Al azar»: elige con `azar.ts` y recorre las tarjetas; al quedar, elige como si la hubieran tocado. */
+  /** El toque en Sorprendeme: elige con `azar.ts` y recorre las tarjetas. Al quedar, elige como si la hubieran tocado. */
   const alAzar = (): void => {
     if (azarCorriendo || !panel) return;
-    const catalogo = sorteo.juegos().map((j) => ({ game: j.game, rango: RANGOS[j.game as Game] ?? {} }));
+    // Solo los juegos que cuentan tantos premios como se sortean: la misma regla del selector (`cabenLosPremios`).
+    const premios = sorteo.premios();
+    const catalogo = sorteo
+      .juegos()
+      .filter((j) => cabenLosPremios(j.game as Game, premios))
+      .map((j) => ({ game: j.game, rango: RANGOS[j.game as Game] ?? {} }));
     const azar = elegirAlAzar(catalogo, app.frozen?.names.length ?? 0, semillaAzar());
     if (!azar.elegido) return;
     const elegido = azar.elegido;
     const lista = panel.querySelector<HTMLElement>(".espera-juegos-lista");
     const tarjetas = lista ? [...lista.querySelectorAll<HTMLElement>("[data-game]")] : [];
+    /** La tarjeta del panel de un juego del catálogo: el catálogo tiene solo los que caben, y el panel, todos. */
+    const tarjetaDe = (indice: number): HTMLElement | null => {
+      const game = catalogo[indice]?.game;
+      return tarjetas.find((tarjeta) => tarjeta.dataset.game === game) ?? null;
+    };
     const quedo = (): void => {
       pararAzar();
       sorteo.elegirJuego(elegido.game);
@@ -374,6 +386,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       quedo();
       return;
     }
+    // La tarjeta que estaba elegida de partida se apaga: mientras gira, brilla una sola, la que recorre la ruleta.
+    for (const tarjeta of tarjetas) tarjeta.setAttribute("aria-pressed", "false");
     azarCorriendo = true;
     let marcada: HTMLElement | null = null;
     const paso = (i: number): void => {
@@ -383,7 +397,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
         return;
       }
       if (marcada) marcada.setAttribute("aria-pressed", "false");
-      marcada = tarjetas[pasoDe.indice] ?? null;
+      marcada = tarjetaDe(pasoDe.indice);
       // El resaltado es el mismo estilo de la tarjeta elegida (el CSS de `aria-pressed`): el panel se cierra al
       // quedar, así que la marca termina en el juego elegido, como cuando lo tocan.
       marcada?.setAttribute("aria-pressed", "true");

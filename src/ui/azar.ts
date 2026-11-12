@@ -1,5 +1,5 @@
 /**
- * El «Al azar» del panel Elegí el juego (`espera.ts`): elige con qué juego
+ * El botón Sorprendeme del panel Elegí el juego (`espera.ts`): elige con qué juego
  * contar el sorteo cuando quien organizó no quiere elegir. Es un módulo puro:
  * dado el catálogo de juegos del panel, la cantidad de personas de la ronda y
  * una semilla, devuelve el juego elegido y el recorrido de resaltados de la

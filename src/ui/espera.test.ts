@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { t } from "../i18n";
 import { RANGOS } from "./recomendar";
 import { elegirAlAzar, type JuegoAzar } from "./azar";
 
 /**
- * El botón «Al azar» del panel Elegí el juego (`espera.ts`): al tocarlo,
- * elige un juego que encaje con la cantidad de personas, recorre las tarjetas
- * con la animación de `azar.ts` y después hace lo mismo que tocar la tarjeta
- * del juego elegido: se lo pasa a `elegirJuego` y cierra el panel. Con
- * movimiento reducido, no hay ruleta: queda el elegido directo.
+ * El botón Sorprendeme del panel Elegí el juego (`espera.ts`): al tocarlo,
+ * elige un juego que encaje con la cantidad de personas y con los premios,
+ * recorre las tarjetas con la animación de `azar.ts` y después hace lo mismo
+ * que tocar la tarjeta del juego elegido: se lo pasa a `elegirJuego` y cierra
+ * el panel. Con movimiento reducido, no hay ruleta: queda el elegido directo.
  */
 
 const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race" }));
@@ -44,13 +43,13 @@ function armarPagina(): void {
     .join("");
 }
 
-/** El catálogo numérico que la espera le arma a `azar.ts`, el mismo que arma el botón. */
+/** El catálogo numérico que la espera le arma a `azar.ts`, el mismo que arma el botón (con un solo premio no se quita ninguno). */
 function catalogo(): JuegoAzar[] {
   return juegos().map((j) => ({ game: j.game, rango: RANGOS[j.game as keyof typeof RANGOS] ?? {} }));
 }
 
-/** Prende la ronda (`app.frozen`) y abre la espera con un `Sorteo` de prueba. */
-async function abrirEspera(): Promise<{ elegirJuego: ReturnType<typeof vi.fn>; panel: HTMLElement }> {
+/** Prende la ronda (`app.frozen`) y abre la espera con un `Sorteo` de prueba. `premios`: cuántos se sortean. */
+async function abrirEspera(premios = 1): Promise<{ elegirJuego: ReturnType<typeof vi.fn>; panel: HTMLElement }> {
   const { mostrarEspera } = await import("./espera");
   const { app } = await import("../state");
   app.drawn = null;
@@ -60,7 +59,7 @@ async function abrirEspera(): Promise<{ elegirJuego: ReturnType<typeof vi.fn>; p
     // Como `elegirJuego` de freeze.ts: queda elegido, y `juegos()` lo refleja.
     h.elegido = g;
   });
-  mostrarEspera(() => 30, { sortear: () => undefined, aMano: () => false, graba: false, juegos: juegos as never, elegirJuego });
+  mostrarEspera(() => 30, { sortear: () => undefined, aMano: () => false, graba: false, juegos: juegos as never, elegirJuego, premios: () => premios });
   // La espera trae su botón de "Cambiar de juego": el toque abre el panel.
   (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
   const panel = document.querySelector(".espera-juegos") as HTMLElement;
@@ -74,7 +73,7 @@ beforeEach(() => {
   h.reduce = false;
   h.semilla = 0;
   h.elegido = "race";
-  // jsdom no tiene matchMedia: la espera la consulta (ajustar) y el azar, para el movimiento reducido.
+  // jsdom no tiene matchMedia: la espera la consulta (ajustar) y el botón, para el movimiento reducido.
   vi.stubGlobal("matchMedia", (q: string) => ({
     matches: q.includes("prefers-reduced-motion") && h.reduce,
     media: q,
@@ -94,25 +93,63 @@ afterEach(() => {
 const resaltadas = (panel: HTMLElement): string[] =>
   [...panel.querySelectorAll("[data-game][aria-pressed='true']")].map((b) => (b as HTMLElement).dataset.game ?? "");
 
-/** Recorre los timers hasta que el sorteo al azar termina (el recorrido dura menos de 3,5 s). */
+const botonAzar = (): HTMLButtonElement => document.querySelector(".espera-juegos [data-azar]") as HTMLButtonElement;
+
+/** Recorre los timers hasta que la ruleta termina (el recorrido dura menos de 3,5 s). */
 function correrLaAnimacion(): void {
   for (let i = 0; i < 50 && vi.getTimerCount() > 0; i++) vi.advanceTimersByTime(100);
 }
 
-describe("el botón Al azar", () => {
-  it("está en el panel Elegí el juego, con el dado y en el idioma", async () => {
+/**
+ * Toca el botón con la semilla dada y deja correr la ruleta de a 50 ms. Devuelve el juego que quedó y todas las tarjetas
+ * que se vieron encendidas por el camino. Si el panel está cerrado, lo abre primero.
+ */
+function sortearUna(elegirJuego: ReturnType<typeof vi.fn>, panel: HTMLElement, semilla: number): { quedo: string; vistas: Set<string> } {
+  h.semilla = semilla;
+  if (panel.hidden) (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+  const vistas = new Set<string>();
+  botonAzar().click();
+  for (let i = 0; i < 100 && !panel.hidden; i++) {
+    for (const g of resaltadas(panel)) vistas.add(g);
+    vi.advanceTimersByTime(50);
+  }
+  const ultima = elegirJuego.mock.calls[elegirJuego.mock.calls.length - 1];
+  return { quedo: String(ultima?.[0] ?? ""), vistas };
+}
+
+/** Semillas de toda clase: chicas, grandes y el máximo de 32 bits. Con la semilla 0 la ruleta arranca justo en la carrera. */
+const SEMILLAS = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 144, 12345, 2147483647, 4294967295];
+
+describe("el botón Sorprendeme", () => {
+  it("está en el panel Elegí el juego, en español, sin dado ni ícono y sin la palabra azar", async () => {
+    const { setLang } = await import("../i18n");
+    setLang("es");
     await abrirEspera();
-    const boton = document.querySelector<HTMLButtonElement>(".espera-juegos [data-azar]");
+    const boton = botonAzar();
     expect(boton).not.toBeNull();
-    expect(boton?.textContent).toContain("🎲");
-    expect(boton?.textContent).toContain(t("espAzar"));
-    expect(boton?.className).toContain("ghost");
+    expect(boton.textContent?.trim()).toBe("Sorprendeme");
+    // Ni el dado ni ningún dibujo adentro: solo el nombre.
+    expect(boton.children).toHaveLength(0);
+    expect(boton.textContent).not.toMatch(/🎲|azar|dado/i);
+    expect(boton.className).toContain("ghost");
+    // Y en todo el panel que ve la sala, la palabra azar no aparece.
+    expect(document.querySelector(".espera-juegos")?.textContent).not.toMatch(/azar/i);
+  });
+
+  it("en inglés dice Surprise me, sin dado ni ícono", async () => {
+    const { setLang } = await import("../i18n");
+    setLang("en");
+    await abrirEspera();
+    const boton = botonAzar();
+    expect(boton.textContent?.trim()).toBe("Surprise me");
+    expect(boton.children).toHaveLength(0);
+    expect(boton.textContent).not.toMatch(/🎲|dice|random/i);
   });
 
   it("al tocarlo lanza la animación y después elige, como si se tocara la tarjeta", async () => {
     const { elegirJuego, panel } = await abrirEspera();
     expect(panel.hidden).toBe(false);
-    (document.querySelector(".espera-juegos [data-azar]") as HTMLButtonElement).click();
+    botonAzar().click();
 
     // Mientras corre, no eligió todavía, pero ya hay una tarjeta resaltada.
     expect(elegirJuego).not.toHaveBeenCalled();
@@ -135,9 +172,111 @@ describe("el botón Al azar", () => {
   it("con movimiento reducido no hay ruleta: elige directo", async () => {
     h.reduce = true;
     const { elegirJuego, panel } = await abrirEspera();
-    (document.querySelector(".espera-juegos [data-azar]") as HTMLButtonElement).click();
+    botonAzar().click();
     const esperado = elegirAlAzar(catalogo(), NOMBRES.length, h.semilla).elegido?.game;
     expect(elegirJuego).toHaveBeenCalledWith(esperado);
     expect(panel.hidden).toBe(true);
+  });
+});
+
+describe("mientras gira", () => {
+  it("las semillas de la prueba arrancan la ruleta en tarjetas distintas de la elegida de partida", () => {
+    // Si todas arrancaran en la carrera, la prueba de abajo no vería nunca dos tarjetas encendidas.
+    const arranques = new Set(SEMILLAS.map((s) => catalogo()[elegirAlAzar(catalogo(), NOMBRES.length, s).recorrido[0]?.indice ?? 0]?.game));
+    expect(arranques.size).toBeGreaterThanOrEqual(3);
+    expect([...arranques].filter((g) => g !== "race").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(SEMILLAS)("con la semilla %i queda una sola tarjeta encendida en cada paso y termina en el elegido", async (semilla) => {
+    h.semilla = semilla;
+    const { elegirJuego, panel } = await abrirEspera();
+    // De partida está elegida la carrera: es la tarjeta violeta.
+    expect(resaltadas(panel)).toEqual(["race"]);
+    const esperado = elegirAlAzar(catalogo(), NOMBRES.length, semilla);
+    botonAzar().click();
+    esperado.recorrido.forEach((paso, i) => {
+      // La que estaba elegida de partida se apagó: solo brilla la que recorre la ruleta.
+      expect(resaltadas(panel), `paso ${i}`).toEqual([catalogo()[paso.indice]?.game]);
+      vi.advanceTimersByTime(paso.pausa);
+    });
+    expect(elegirJuego).toHaveBeenCalledTimes(1);
+    expect(elegirJuego).toHaveBeenCalledWith(esperado.elegido?.game);
+    expect(panel.hidden).toBe(true);
+  });
+
+  it("cerrar el panel a mitad de la ruleta la detiene y no elige nada", async () => {
+    h.semilla = 5;
+    const { elegirJuego, panel } = await abrirEspera();
+    botonAzar().click();
+    vi.advanceTimersByTime(600);
+    (document.querySelector(".espera-juegos [data-juegos-listo]") as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(true);
+    correrLaAnimacion();
+    expect(elegirJuego).not.toHaveBeenCalled();
+  });
+
+  it("un toque en una tarjeta mientras gira no corta la ruleta ni elige ese juego", async () => {
+    h.semilla = 5;
+    const { elegirJuego, panel } = await abrirEspera();
+    botonAzar().click();
+    vi.advanceTimersByTime(300);
+    (panel.querySelector("[data-game='trompo']") as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(false);
+    expect(elegirJuego).not.toHaveBeenCalled();
+    correrLaAnimacion();
+    expect(elegirJuego).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("los premios que se sortean", () => {
+  it("con 9 premios la carrera, que cuenta hasta 8, no sale ni se enciende nunca, y el sapo, que cuenta 12, sí", async () => {
+    const { elegirJuego, panel } = await abrirEspera(9);
+    const salieron = new Set<string>();
+    const vistasTodas = new Set<string>();
+    for (let semilla = 0; semilla < 60; semilla++) {
+      const { quedo, vistas } = sortearUna(elegirJuego, panel, semilla);
+      salieron.add(quedo);
+      for (const g of vistas) vistasTodas.add(g);
+    }
+    expect(salieron).not.toContain("race");
+    expect(vistasTodas).not.toContain("race");
+    expect(salieron).toContain("sapo");
+    // Y no queda nada fuera por demás: los que no tienen tope siguen saliendo.
+    expect(salieron).toContain("wheel");
+    expect(salieron).toContain("pinata");
+  });
+
+  it("con 13 premios no salen ni la carrera ni el sapo, y nunca la Chovena ni el Teleférico (7 personas)", async () => {
+    const { elegirJuego, panel } = await abrirEspera(13);
+    const salieron = new Set<string>();
+    for (let semilla = 0; semilla < 60; semilla++) salieron.add(sortearUna(elegirJuego, panel, semilla).quedo);
+    expect([...salieron].sort()).toEqual(["pinata", "trompo", "wheel"]);
+  });
+
+  it("con un solo premio salen todos los que encajan con la gente, la carrera y el sapo también", async () => {
+    const { elegirJuego, panel } = await abrirEspera(1);
+    const salieron = new Set<string>();
+    for (let semilla = 0; semilla < 80; semilla++) salieron.add(sortearUna(elegirJuego, panel, semilla).quedo);
+    expect([...salieron].sort()).toEqual(["pinata", "race", "sapo", "trompo", "wheel"]);
+  });
+
+  it("si no entra ningún juego, el toque no hace nada y el panel sigue abierto", async () => {
+    // Un panel con la carrera, la Chovena y el Teleférico, 7 personas y 9 premios: la carrera no cuenta tantos premios y las otras dos piden más gente. No hay a dónde ir.
+    const { mostrarEspera } = await import("./espera");
+    const { app } = await import("../state");
+    app.drawn = null;
+    app.frozen = { names: NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1 };
+    const elegirJuego = vi.fn();
+    const sinSalida = [
+      { game: "race", nombre: "Carrera de llamas", rango: "2–200", recomendado: true, elegido: true },
+      ...juegos().filter((j) => j.game === "chovena" || j.game === "teleferico"),
+    ];
+    mostrarEspera(() => 30, { sortear: () => undefined, aMano: () => false, graba: false, juegos: (() => sinSalida) as never, elegirJuego, premios: () => 9 });
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    const panel = document.querySelector(".espera-juegos") as HTMLElement;
+    botonAzar().click();
+    correrLaAnimacion();
+    expect(elegirJuego).not.toHaveBeenCalled();
+    expect(panel.hidden).toBe(false);
   });
 });

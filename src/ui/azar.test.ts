@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { elegirAlAzar, pausasDe, type JuegoAzar } from "./azar";
 
 /**
- * El «Al azar» del panel Elegí el juego (`azar.ts`): elige con semilla entre
+ * El botón Sorprendeme del panel Elegí el juego (`azar.ts`): elige con semilla entre
  * los juegos que encajan con la cantidad de personas, y arma el recorrido de
  * resaltados de la animación (tipo ruleta, desacelerando) que termina en el
  * elegido.

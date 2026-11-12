@@ -399,6 +399,7 @@ function abrirEspera(alSellar = false): void {
       graba: app.frozen?.raffleId !== undefined,
       juegos: juegosParaElegir,
       elegirJuego: (g) => elegirJuego(g as Game),
+      premios: premiosElegidos,
       alSellar,
     });
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
