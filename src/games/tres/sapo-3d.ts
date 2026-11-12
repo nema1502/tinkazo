@@ -505,7 +505,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const losa = 0.14, cuerpoAlto = 0.55;
   const texPiso = texturaPiso(tema);
   if (texPiso) B.add(texPiso);
-  const piso = new Mesh(B.add(new PlaneGeometry(60, 60)), B.add(new MeshLambertMaterial({ map: texPiso ?? undefined, color: texPiso ? 0xffffff : PISO[tema][0] })));
+  const piso = new Mesh(B.add(new PlaneGeometry(60, 60)), B.add(new MeshLambertMaterial({ map: texPiso, color: texPiso ? 0xffffff : PISO[tema][0] })));
   piso.rotation.x = -Math.PI / 2;
   piso.position.y = -losa - cuerpoAlto;
   mundo.add(piso);
@@ -517,7 +517,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
     B.add(texPared);
     texPared.repeat.set(40 / 3.6, alturaPared / 3.6);
   }
-  const pared = new Mesh(B.add(new PlaneGeometry(40, alturaPared)), B.add(new MeshLambertMaterial({ map: texPared ?? undefined, color: texPared ? 0xffffff : PARED[tema][0] })));
+  const pared = new Mesh(B.add(new PlaneGeometry(40, alturaPared)), B.add(new MeshLambertMaterial({ map: texPared, color: texPared ? 0xffffff : PARED[tema][0] })));
   pared.position.set(0, -losa - cuerpoAlto + alturaPared / 2, zPared);
   mundo.add(pared);
 
