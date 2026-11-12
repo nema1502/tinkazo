@@ -14,6 +14,31 @@ async function pasar(ms: number): Promise<void> {
   for (let t = 0; t < ms; t += 1000) await vi.advanceTimersByTimeAsync(1000);
 }
 
+// La ruta de prueba comprueba su clave con cuentas que corren fuera del hilo y terminan en una vuelta de verdad del
+// lazo, no en el reloj falso. Si el reloj falso avanza antes de que terminen, la espera del correo todavía no está
+// armada y nadie la vence nunca. Por eso esa prueba cede de verdad entre un paso y otro: el temporizador se guarda
+// acá, antes de que ninguna prueba ponga el reloj falso.
+const esperarDeVerdad = (() => {
+  const real = setTimeout;
+  return (ms: number) => new Promise<void>((listo) => { real(listo, ms); });
+})();
+
+/** Avanza el reloj falso de a un segundo hasta que `p` termine, cediendo de verdad entre pasos. Dice cuánto reloj pasó. */
+async function hastaQueTermine<T>(p: Promise<T>, topeMs: number): Promise<{ valor: T; pasoMs: number }> {
+  const fin: { listo: boolean; valor?: T; error?: unknown } = { listo: false };
+  p.then((valor) => { fin.valor = valor; fin.listo = true; }, (error: unknown) => { fin.error = error; fin.listo = true; });
+  await esperarDeVerdad(20);
+  let pasoMs = 0;
+  while (!fin.listo && pasoMs < topeMs) {
+    await vi.advanceTimersByTimeAsync(1000);
+    pasoMs += 1000;
+    await esperarDeVerdad(2);
+  }
+  if (!fin.listo) throw new Error(`el pedido no terminó en ${topeMs} ms de reloj falso`);
+  if (fin.error !== undefined) throw fin.error;
+  return { valor: fin.valor as T, pasoMs };
+}
+
 describe("el envío de correo tiene un tope", () => {
   it("son 15 segundos", () => {
     expect(CORREO_TIEMPO_MS).toBe(15_000);
@@ -85,8 +110,10 @@ describe("el envío de correo tiene un tope", () => {
     const m = mundoFalso();
     m.correo.send = colgado;
     const pedido = servir(new Request("https://vigilante.tinkazo.app/prueba", { method: "POST", headers: { Authorization: `Bearer ${CLAVE_DE_PRUEBA}` } }), m.env, m.dep);
-    await pasar(CORREO_TIEMPO_MS + 2000);
-    const r = await pedido;
+    const { valor: r, pasoMs } = await hastaQueTermine(pedido, CORREO_TIEMPO_MS + 8000);
+    // Corta al vencer el tope del correo: ni antes ni mucho después.
+    expect(pasoMs).toBeGreaterThanOrEqual(CORREO_TIEMPO_MS);
+    expect(pasoMs).toBeLessThanOrEqual(CORREO_TIEMPO_MS + 4000);
     expect(r.status).toBe(502);
     expect(await r.json()).toMatchObject({ correo: "error", codigo: "CORREO_TIEMPO" });
   });
