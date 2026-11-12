@@ -4,7 +4,7 @@ import { enEnsayo, enStand } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
-import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { type Paso, acortarPremio, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
 import { esResultadoDeTurnos } from "../modos/turnos";
 import { modesVisible } from "../modos/bandera";
 import { contar, seCuentaPorPersona } from "../participaciones";
@@ -45,6 +45,11 @@ interface Toca {
   doble: boolean;
   /** "0:25" mientras corre la cuenta regresiva de la ronda; si no, vacío. */
   reloj: string;
+  /**
+   * Solo en el paso 2 y con premio: el premio entero y cómo queda el detalle con otra versión suya (cortada, o vacía
+   * para dejar solo la lista). La barra mide cuál entra en su renglón (`lineaQueEntra`). `detalle` lleva el entero.
+   */
+  premio: { texto: string; detalleCon: (premio: string) => string } | null;
 }
 
 /** Los textos que tapan toda la página: con uno abierto la barra se va. */
@@ -219,8 +224,15 @@ function calcular(): Toca {
   // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
   // el premio que falta: nada se sella de verdad. En un orden de turnos no hay premio que nombrar.
   // En el stand no hay premio: la línea dice solo cuántas personas hay.
-  if (clave === "sigLista") detalle = enStand() || turnosActivo ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
-  return { paso, boton, clave, detalle, doble, reloj: restan > 0 ? relojDe(restan) : "" };
+  // El premio va entero: cuánto de él se ve lo decide el ancho de la barra al pintarla (lineaQueEntra), no un tope fijo.
+  let premio: Toca["premio"] = null;
+  if (clave === "sigLista" && !enStand() && !turnosActivo) {
+    const lista = detalle;
+    const texto = premioLimpio((document.getElementById("prize") as HTMLInputElement | null)?.value ?? "");
+    detalle = detalleDeLista(lista, texto, enEnsayo() ? null : t("sigSinPremio"), Infinity);
+    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, p) };
+  }
+  return { paso, boton, clave, detalle, doble, reloj: restan > 0 ? relojDe(restan) : "", premio };
 }
 
 /**
@@ -258,7 +270,39 @@ function pintarPasos(paso: Paso): void {
 }
 
 /** La línea de la barra: "Paso 3 de 4: esperando el número, 0:25". */
-const linea = (s: Toca): string => enStand() ? s.detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
+const linea = (s: Toca, detalle = s.detalle): string => enStand() ? detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), detalle, s.reloj);
+
+/** Sin medidas (una prueba sin pantalla, o la barra sin ancho) el premio se corta en las letras que entran en un celular de 320 px. */
+const PREMIO_SIN_MEDIDAS = 18;
+
+/** El renglón se pasa de lo que tiene: el texto no entra de ancho o, con las dos cuentas (hasta dos renglones), de alto. */
+const desborda = (p: HTMLElement): boolean => p.scrollWidth > p.clientWidth + 1 || (p.classList.contains("doble") && p.scrollHeight > p.clientHeight + 1);
+
+/** La última línea medida y lo que se decidió para ella: mientras nada cambie no se vuelve a medir ni a escribir. */
+let ajustada = { clave: "", linea: "" };
+
+/**
+ * La línea del paso 2 con el premio que entra: entero si la pantalla tiene lugar, y si no cortado en el último espacio
+ * que entra, o ninguno si ni la primera palabra entra. Se mide de verdad (el texto en su propio renglón, con el
+ * ancho que tiene ahora), probando unas pocas versiones en el mismo instante, antes de que el navegador dibuje nada:
+ * no hay parpadeo. Lo decidido queda guardado según lo que lo determina (ancho de la barra, del botón, renglones y
+ * texto), y se vuelve a medir solo si algo de eso cambia: otra ventana, otro idioma, otro premio u otra lista.
+ */
+function lineaQueEntra(s: Toca & { premio: NonNullable<Toca["premio"]> }, p: HTMLElement, btn: HTMLElement): string {
+  const { texto, detalleCon } = s.premio;
+  const con = (premio: string): string => linea(s, detalleCon(premio));
+  const ancho = $("siguiente").clientWidth;
+  if (ancho === 0) return con(acortarPremio(texto, PREMIO_SIN_MEDIDAS));
+  const clave = [ancho, btn.offsetWidth, p.classList.contains("doble"), con(texto)].join("|");
+  if (clave === ajustada.clave) return ajustada.linea;
+  const entra = (premio: string): boolean => {
+    p.textContent = con(premio);
+    return !desborda(p);
+  };
+  const l = con(premioQueEntra(texto, entra));
+  ajustada = { clave, linea: l };
+  return l;
+}
 
 /**
  * El cambio de paso, dicho con calma (`role="status"`, polite). Solo cuando
@@ -294,11 +338,12 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
     if (btn.textContent !== texto) btn.textContent = texto;
     btn.disabled = s.boton.disabled;
     btn.classList.toggle("lista", s.boton.classList.contains("lista"));
-    const l = linea(s);
     const p = $("sig-paso");
-    if (p.textContent !== l) p.textContent = l;
     // Con las dos cuentas, hasta dos renglones en el celular (styles.css): sin reparto, un solo renglón como siempre.
+    // Primero la clase y después el texto: lo que entra se mide con los renglones que va a tener.
     p.classList.toggle("doble", s.doble);
+    const l = s.premio ? lineaQueEntra({ ...s, premio: s.premio }, p, btn) : linea(s);
+    if (p.textContent !== l) p.textContent = l;
   }
   const entra = mostrar && !bar.classList.contains("on");
   // Si la barra se va con el foco adentro (se llegó con el teclado y la rueda llevó el botón de verdad a la
@@ -481,7 +526,18 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // La barra cambia de alto mientras está puesta: el botón pasa de "Sellar la lista" a "Se habilita en 0:25" y la
   // línea del paso se acomoda. Medirla solo al entrar dejaba el aire de abajo de la página en el alto de antes, y el
   // pie quedaba hasta 8 px debajo de la barra (audit-flujo, "sellada y esperando", 26 de octubre de 2026).
-  if (typeof ResizeObserver !== "undefined") new ResizeObserver(medirBarra).observe($("siguiente"));
+  // Si cambia el ancho (una ventana más angosta, la barra de scroll que aparece), el premio que entra puede ser otro.
+  let anchoVisto = 0;
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => {
+      if (sinPagina()) return;
+      medirBarra();
+      const ancho = $("siguiente").clientWidth;
+      if (ancho === anchoVisto) return;
+      anchoVisto = ancho;
+      render();
+    }).observe($("siguiente"));
+  }
   listo = true;
   armar();
   render();
