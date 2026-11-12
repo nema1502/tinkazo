@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
-import { claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { acortarPremio, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, premioQueEntra, relojDe } from "./pasos";
 
 describe("en qué paso está el sorteo", () => {
   it("sin dos nombres todavía es la lista", () => {
@@ -80,14 +80,161 @@ describe("la línea de la barra", () => {
     expect(detalleDeLista("18 personas", "Laptop", null)).toBe("18 personas, Laptop");
   });
 
-  it("un premio largo se corta con puntos suspensivos, sin partir un emoji", () => {
+  it("un premio largo se corta entre palabras con puntos suspensivos", () => {
     const largo = "Una notebook con su mochila y el cargador";
     const d = detalleDeLista("12 personas", largo, "sin premio");
     expect(d).toBe("12 personas, Una notebook con…");
     expect(Array.from(d.split(", ")[1] ?? "").length).toBeLessThanOrEqual(18);
-    expect(detalleDeLista("2 personas", "🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁", "-")).toBe(`2 personas, ${"🎁".repeat(17)}…`);
   });
 
+  it("el caso del issue 26: nunca queda una palabra por la mitad", () => {
+    // Antes salía "¿Quién presenta p…".
+    expect(detalleDeLista("lista de 5 personas", "¿Quién presenta primero?", "sin premio")).toBe("lista de 5 personas, ¿Quién presenta…");
+    // Con lugar de sobra, el premio va entero: el tope solo lo pone quien llama.
+    expect(detalleDeLista("lista de 5 personas", "¿Quién presenta primero?", "sin premio", 60)).toBe("lista de 5 personas, ¿Quién presenta primero?");
+  });
+
+  it("si ni la primera palabra entra, queda solo la lista y no se dice que no hay premio", () => {
+    expect(detalleDeLista("12 personas", "Supercalifragilísticoespialidoso", "sin premio")).toBe("12 personas");
+    expect(detalleDeLista("2 personas", "🎁".repeat(20), "-")).toBe("2 personas");
+    expect(detalleDeLista("12 personas", "Supercalifragilísticoespialidoso", null)).toBe("12 personas");
+  });
+});
+
+describe("acortarPremio: se corta en el último espacio que entra", () => {
+  it("lo que entra queda como está, con los espacios de más fuera", () => {
+    expect(acortarPremio("Termo", 18)).toBe("Termo");
+    expect(acortarPremio("  Kit   de  bienvenida ", 18)).toBe("Kit de bienvenida");
+    // Justo en el tope entra: no se corta de más.
+    expect(acortarPremio("Dieciocho letras ok", 19)).toBe("Dieciocho letras ok");
+    expect(acortarPremio("Dieciocho letras ok", 18)).toBe("Dieciocho letras…");
+  });
+
+  it("varias palabras: corta en el último espacio y cuenta los puntos suspensivos", () => {
+    expect(acortarPremio("¿Quién presenta primero?", 18)).toBe("¿Quién presenta…");
+    expect(acortarPremio("Una notebook con su mochila y el cargador", 18)).toBe("Una notebook con…");
+    expect(acortarPremio("Una notebook con su mochila y el cargador", 25)).toBe("Una notebook con su…");
+    // Dos palabras que ocupan justo el tope con los puntos: entra.
+    expect(acortarPremio("Entradas dobles para el show", 17)).toBe("Entradas dobles…");
+  });
+
+  it("una sola palabra larga no se parte: no queda nada", () => {
+    expect(acortarPremio("Supercalifragilísticoespialidoso", 18)).toBe("");
+    expect(acortarPremio("Supercalifragilísticoespialidoso", 31)).toBe("");
+    expect(acortarPremio("Supercalifragilísticoespialidoso", 32)).toBe("Supercalifragilísticoespialidoso");
+    // La primera palabra no entra aunque las siguientes sean cortas.
+    expect(acortarPremio("Electrodomésticos para la casa", 10)).toBe("");
+  });
+
+  it("cuenta letras, no unidades: las tildes y los emojis valen una", () => {
+    // 18 letras con tilde justas: entra sin cortar.
+    expect(acortarPremio("Camión de juguetes ñ", 20)).toBe("Camión de juguetes ñ");
+    // Diez emojis y nueve espacios son 19 letras: con 18 se cortan en el espacio y quedan nueve emojis.
+    expect(acortarPremio(Array(10).fill("🎁").join(" "), 18)).toBe(`${Array(9).fill("🎁").join(" ")}…`);
+    // Un emoji compuesto (bandera) no se parte nunca: se corta solo entre palabras.
+    expect(acortarPremio("🇧🇴 Viaje a Uyuni con hospedaje", 12)).toBe("🇧🇴 Viaje a…");
+    // Una letra con tilde escrita en dos piezas (a y acento) tampoco se parte.
+    const cadena = "Cámara de fotos instantanea";
+    const corte = acortarPremio(cadena, 14);
+    expect(corte).toBe("Cámara de…");
+  });
+
+  it("con signos de pregunta o exclamación al principio, cuenta y corta igual", () => {
+    expect(acortarPremio("¡Gran premio sorpresa para todos!", 20)).toBe("¡Gran premio…");
+    expect(acortarPremio("¿Quién presenta primero?", 6)).toBe("");
+    expect(acortarPremio("¿Quién presenta primero?", 7)).toBe("¿Quién…");
+  });
+
+  it("no deja una coma ni un punto colgando delante de los puntos suspensivos", () => {
+    expect(acortarPremio("Una notebook, con mochila y cargador", 17)).toBe("Una notebook…");
+    expect(acortarPremio("Premio: una bici nueva", 9)).toBe("Premio…");
+    expect(acortarPremio("Sorteo - gran final del año", 8)).toBe("Sorteo…");
+  });
+
+  it("vacío o solo espacios: vacío", () => {
+    expect(acortarPremio("", 18)).toBe("");
+    expect(acortarPremio("   \n ", 18)).toBe("");
+  });
+
+  it("nunca devuelve más del tope ni una palabra por la mitad, para cualquier tope", () => {
+    const frases = [
+      "¿Quién presenta primero?",
+      "Una notebook con su mochila y el cargador",
+      "Supercalifragilísticoespialidoso",
+      "🎁 Kit de bienvenida 🎁 para la comunidad entera",
+      "Cámara de fotos instantanea con rollo",
+      "A B C D E F G H I J K L M N",
+      "¡Gran premio sorpresa para todos!!",
+    ];
+    for (const frase of frases) {
+      const limpia = frase.trim().replace(/\s+/g, " ");
+      for (let max = 1; max <= 60; max++) {
+        const r = acortarPremio(frase, max);
+        const donde = `${frase} (${max}): ${r}`;
+        expect(Array.from(r).length, donde).toBeLessThanOrEqual(max);
+        if (r === "" || r === limpia) continue;
+        expect(r.endsWith("…"), donde).toBe(true);
+        const trozo = r.slice(0, -1);
+        // Lo que queda son palabras enteras del principio: el resto empieza en un espacio.
+        expect(limpia.startsWith(trozo), donde).toBe(true);
+        expect(limpia.charAt(trozo.length), donde).toMatch(/\s|[,.:\-–—]/);
+      }
+    }
+  });
+});
+
+describe("premioQueEntra: qué texto probar según lo que midió la pantalla", () => {
+  const premio = "Una notebook con su mochila y el cargador";
+
+  it("si el premio entero entra, es lo único que se prueba", () => {
+    const probados: string[] = [];
+    const r = premioQueEntra(premio, (t) => (probados.push(t), true));
+    expect(r).toBe(premio);
+    expect(probados).toEqual([premio]);
+  });
+
+  it("si no entra, devuelve la versión más larga cortada entre palabras que sí entra", () => {
+    const esperado: Array<[number, string]> = [
+      [3, ""],
+      [4, "Una…"],
+      [10, "Una…"],
+      [16, "Una notebook…"],
+      [17, "Una notebook con…"],
+      [19, "Una notebook con…"],
+      [20, "Una notebook con su…"],
+      [25, "Una notebook con su…"],
+      [30, "Una notebook con su mochila y…"],
+      [40, "Una notebook con su mochila y el…"],
+    ];
+    for (const [ancho, texto] of esperado) {
+      expect(premioQueEntra(premio, (t) => Array.from(t).length <= ancho), `ancho ${ancho}`).toBe(texto);
+    }
+  });
+
+  it("si ni la primera palabra entra, devuelve vacío", () => {
+    expect(premioQueEntra(premio, () => false)).toBe("");
+    expect(premioQueEntra("Supercalifragilísticoespialidoso", (t) => t.length <= 10)).toBe("");
+  });
+
+  it("prueba pocas veces aunque el premio tenga muchas palabras, y nunca más del tope de vueltas", () => {
+    const largo = Array.from({ length: 30 }, (_, i) => `p${i}`).join(" ");
+    let vueltas = 0;
+    premioQueEntra(largo, (t) => (vueltas++, t.length <= 40));
+    // El entero, y después una búsqueda por mitades: unas siete pruebas, no treinta.
+    expect(vueltas).toBeLessThanOrEqual(8);
+    vueltas = 0;
+    premioQueEntra(Array.from({ length: 5000 }, (_, i) => `p${i}`).join(" "), (t) => (vueltas++, t.length <= 40));
+    expect(vueltas).toBeLessThanOrEqual(14);
+  });
+
+  it("vacío no prueba nada", () => {
+    let vueltas = 0;
+    expect(premioQueEntra("  ", () => (vueltas++, true))).toBe("");
+    expect(vueltas).toBe(0);
+  });
+});
+
+describe("la línea de la barra con el premio", () => {
   it("la línea del paso 2 entra en un celular de 320 px con un premio corto", () => {
     // 292 px de ancho útil, a unos 6,3 px por letra normal de 13 px (la barra baja a 13 px en 340 px o menos).
     for (const l of ["es", "en"] as const) {
