@@ -247,14 +247,14 @@ export function clavesTecnicas(fuenteLore) {
 
 /** El idioma de un texto suelto: por marcas del español; sin ellas, inglés. */
 export function adivinarIdioma(t) {
-  return /[¡¿áéíóúñÁÉÍÓÚÑ]|(?:el|la|los|las|de|del|que|y|en|un|una|con|para|por|se|tu|vos|sin)/i.test(t) ? "es" : "en";
+  return /[¡¿áéíóúñÁÉÍÓÚÑ]|\b(?:el|la|los|las|de|del|que|y|en|un|una|con|para|por|se|tu|vos|sin)\b/i.test(t) ? "es" : "en";
 }
 
 /** El idioma de un literal de código por el bloque `es: {` o `en: {` más cercano antes de él; si no hay, se adivina. */
 function idiomaDeBloque(fuente, desde, texto) {
   const ventana = fuente.slice(Math.max(0, desde - 4000), desde);
   let ultimo = "";
-  for (const m of ventana.matchAll(/(es|en)\s*:\s*\{/g)) ultimo = m[1];
+  for (const m of ventana.matchAll(/\b(es|en)\s*:\s*\{/g)) ultimo = m[1];
   return ultimo || adivinarIdioma(texto);
 }
 

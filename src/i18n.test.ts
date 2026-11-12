@@ -69,7 +69,7 @@ describe("diccionario", () => {
         const uno = T[l].cTroWin("Lucía Flores"), dos = T[l].cTroWin("Ana y Beto", true);
         expect(uno).toContain("Lucía Flores");
         expect(dos).toContain("Ana y Beto");
-        expect(uno + dos).not.toMatch(/ganan?|wins?|winners?/i);
+        expect(uno + dos).not.toMatch(/\bganan?\b|\bwins?\b|\bwinners?\b/i);
       }
     }
   });

@@ -66,8 +66,8 @@ describe("revisión de redacción de los textos visibles", () => {
     expect(t("es", "monReglas")).toContain("nunca te dan más probabilidades en un sorteo");
     expect(t("en", "monReglas")).toContain("never improve your odds in a draw");
     for (const idioma of ["es", "en"] as const) {
-      expect(t(idioma, "monReglas"), idioma).not.toMatch(/chances?/i);
-      expect(t(idioma, "monNoCambia"), idioma).not.toMatch(/chances?/i);
+      expect(t(idioma, "monReglas"), idioma).not.toMatch(/\bchances?\b/i);
+      expect(t(idioma, "monNoCambia"), idioma).not.toMatch(/\bchances?\b/i);
     }
     for (const ruta of ["workers/cuenta/src/reglas.ts", "workers/cuenta/src/servidor.ts", "workers/cuenta/README.md"]) {
       expect(leer(ruta), ruta).not.toMatch(/compra(n)? chances/);

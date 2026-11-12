@@ -112,7 +112,7 @@ describe("avisoDelReintento: la línea de la sala dice lo que pasó", () => {
         expect(typeof texto, `${l}: ${k}`).toBe("string");
         expect(texto as string).toContain("{i}");
         expect(texto as string).toContain("{n}");
-        expect(texto as string).not.toMatch(/hash|bytes?|firmas?|drand|RPC|XDR|ledger/i);
+        expect(texto as string).not.toMatch(/\bhash|\bbytes?\b|\bfirmas?\b|drand|\bRPC\b|XDR|ledger/i);
       }
     }
   });
