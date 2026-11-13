@@ -940,7 +940,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
             if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
             return selloSinGrabar(e);
           },
-          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
+          // El lugar de esta cuenta y esta lista: guardar o borrar acá no toca el intento de otra lista ni de otra cuenta.
+          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize, { organizer: session.address, listHash: hash }),
           intentoDe: (r) => intentoDeSello({ organizer: session.address, hash, count: names.length, numWinners, prize }, r),
           avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
@@ -1133,7 +1134,8 @@ async function averiguarElSelloPendiente(names: string[], btn: HTMLButtonElement
     return "no-se-sabe";
   }
   const contrato = network.contractId ?? "";
-  const previo = seguro.leerPendiente(s.address, bytesToHex(listHash(names)), network.name, contrato);
+  const huella = bytesToHex(listHash(names));
+  const previo = seguro.leerPendiente(s.address, huella, network.name, contrato);
   if (!previo) return "no-hay";
   // Averiguar puede llevar unos segundos: el botón lo dice, la lista sigue como está y el modo no se cambia.
   const onStep = (step: AnchorStep, detail?: string): void => {
@@ -1147,7 +1149,7 @@ async function averiguarElSelloPendiente(names: string[], btn: HTMLButtonElement
   try {
     const r = await seguro.averiguarPendiente(previo.intento, {
       resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
-      guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, previo.premio),
+      guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, previo.premio, { organizer: s.address, listHash: huella }),
     });
     return r.estado;
   } catch {
@@ -1198,7 +1200,7 @@ function seguirIntentandoElSello(c: SorteoSinSello): void {
     resolver: (intento) => resolverSelloEnLaRed(intento),
     sinGrabar: selloSinGrabar,
     // Un solo `import()`: lo que se guarda y lo que se borra pasa en el orden en que se pidió.
-    guardarPendiente: (intento) => void seguroListo.then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize)),
+    guardarPendiente: (intento) => void seguroListo.then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize, { organizer: c.organizer, listHash: c.hash })),
     intentoDe: (r) => intentoDeSello({ organizer: c.organizer, hash: c.hash, count: c.names.length, numWinners: c.numWinners, prize: c.prize }, r),
     alIntento: (n) => {
       if (!sigueSiendo(c)) return;

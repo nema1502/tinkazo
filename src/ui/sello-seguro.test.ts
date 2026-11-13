@@ -677,6 +677,23 @@ describe("el margen de cada intento según quién paga la comisión", () => {
 
 describe("el intento pendiente se guarda para después de recargar", () => {
   const datos = new Map<string, string>();
+  const HUELLA_B = "ef".repeat(32);
+  /** De quién es cada intento: la cuenta y la lista. Con la red y el contrato, es su lugar. */
+  const de = { organizer: ORG, listHash: HUELLA };
+  const deB = { organizer: ORG, listHash: HUELLA_B };
+  const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: 33_300_000, count: 8, numWinners: 2, meta: "Una bici", desde: 1_792_600_000, hash: "ab12" };
+  // La hora de estas pruebas es fija: el pendiente vence a las 6 h de su ronda y, con la
+  // hora real, esta ronda ya venció y las pruebas fallaban solo por el paso del tiempo.
+  // Lo vencido también se limpia al guardar, así que el reloj queda en esa hora.
+  const AHORA = roundTime(i.round) + 60;
+  /** Los lugares que usan estas pruebas: se vacían al terminar cada una, también en la memoria de la pestaña. */
+  const lugares: [string, string, { organizer: string; listHash: string }][] = [
+    ["testnet", "CCONTRATO", de],
+    ["testnet", "CCONTRATO", deB],
+    ["mainnet", "CCONTRATO", de],
+    ["testnet", "CPRUEBA", deB],
+    ["testnet", "CCONTRATO", { organizer: "GOTRA", listHash: HUELLA }],
+  ];
   beforeEach(() => {
     datos.clear();
     vi.stubGlobal("localStorage", {
@@ -684,42 +701,92 @@ describe("el intento pendiente se guarda para después de recargar", () => {
       setItem: (k: string, v: string) => void datos.set(k, v),
       removeItem: (k: string) => void datos.delete(k),
     });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AHORA * 1000);
   });
   afterEach(() => {
-    guardarPendiente(null, "", "", "");
+    for (const [red, contrato, quien] of lugares) guardarPendiente(null, red, contrato, "", quien);
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: 33_300_000, count: 8, numWinners: 2, meta: "Una bici", desde: 1_792_600_000, hash: "ab12" };
-  // La hora de estas pruebas es fija: el pendiente vence a las 6 h de su ronda y, con la
-  // hora real, esta ronda ya venció y las pruebas fallaban solo por el paso del tiempo.
-  const AHORA = roundTime(i.round) + 60;
-
   it("lo guarda con la red, el contrato y el premio, y lo devuelve solo para la misma cuenta, lista, red y contrato", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici");
-    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toEqual({ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" });
+    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici", de);
+    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toEqual([{ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" }]);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
     expect(leerPendiente("GOTRA", HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
-    expect(leerPendiente(ORG, "ef".repeat(32), "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
     expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO", AHORA)).toBeNull();
     expect(leerPendiente(ORG, HUELLA, "testnet", "COTRO", AHORA)).toBeNull();
   });
 
   it("vence seis horas después de su ronda: si había entrado, se retoma desde Mis sorteos", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "");
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
     const ronda = roundTime(i.round);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 5 * 3600)).not.toBeNull();
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 6 * 3600 + 1)).toBeNull();
   });
 
   it("con null lo borra", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "");
-    guardarPendiente(null, "testnet", "CCONTRATO", "");
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    guardarPendiente(null, "testnet", "CCONTRATO", "", de);
     expect(datos.has(CLAVE_PENDIENTE)).toBe(false);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
   });
 
-  it("sin almacenamiento, dura en memoria mientras dure la pestaña", () => {
+  it("cada cuenta, lista, red y contrato tiene su lugar: guardar o borrar uno no toca a los demás", () => {
+    const b: IntentoDeSello = { ...i, listHash: HUELLA_B, round: i.round + 10, meta: "Una pizza" };
+    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici", de);
+    guardarPendiente(b, "testnet", "CCONTRATO", "Una pizza", deB);
+    // Borrar el de otra cuenta, o el de esta lista en la otra red, no borra nada de lo que hay.
+    guardarPendiente(null, "testnet", "CCONTRATO", "", { organizer: "GOTRA", listHash: HUELLA });
+    guardarPendiente(null, "mainnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: b, premio: "Una pizza" });
+    // Y borrar el de la lista B deja el de la lista A.
+    guardarPendiente(null, "testnet", "CCONTRATO", "", deB);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+  });
+
+  it("un sello bueno de otra lista deja intacto el intento sin confirmar de esta", async () => {
+    // La lista A quedó en Oficial con un sello que no se sabe si entró. Se pasa a Prueba y se sella bien la lista B:
+    // guardar antes de mandar y borrar al terminar son de B. Al volver a la lista A, el suyo sigue ahí.
+    guardarPendiente(i, "mainnet", "CCONTRATO", "Una bici", de);
+    const r = await sellarSinDuplicar(
+      { round: i.round + 20, ts: AHORA },
+      {
+        sellar: async () => ({ raffleId: 9n, txHash: "tx9" }),
+        resolver: async () => ({ estado: "no-entro" as const }),
+        sinGrabar: () => false,
+        guardarPendiente: (x) => guardarPendiente(x, "testnet", "CPRUEBA", "Una pizza", deB),
+        intentoDe: (round) => ({ ...i, listHash: HUELLA_B, round, meta: "Una pizza" }),
+      },
+    );
+    expect(r.raffleId).toBe(9n);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CPRUEBA", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+  });
+
+  it("lee el intento que guardó la versión de antes, uno solo, y guardar el de otra lista lo conserva", () => {
+    datos.set(CLAVE_PENDIENTE, JSON.stringify({ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" }));
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    guardarPendiente({ ...i, listHash: HUELLA_B }, "testnet", "CCONTRATO", "", deB);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    guardarPendiente(null, "testnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
+  });
+
+  it("lo vencido se limpia al guardar otro", () => {
+    // Ocho horas antes que la de `i`: 9.600 rondas de 3 s.
+    const viejo: IntentoDeSello = { ...i, listHash: HUELLA_B, round: i.round - 9600 };
+    guardarPendiente(viejo, "testnet", "CCONTRATO", "", deB);
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    const quedan = JSON.parse(datos.get(CLAVE_PENDIENTE) as string) as { intento: IntentoDeSello }[];
+    expect(quedan.map((g) => g.intento.listHash)).toEqual([HUELLA]);
+  });
+
+  it("sin almacenamiento, dura en memoria mientras dure la pestaña, cada uno en su lugar", () => {
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("bloqueado");
@@ -731,15 +798,22 @@ describe("el intento pendiente se guarda para después de recargar", () => {
         throw new Error("bloqueado");
       },
     });
-    guardarPendiente(i, "testnet", "CCONTRATO", "x");
+    guardarPendiente(i, "testnet", "CCONTRATO", "x", de);
+    guardarPendiente({ ...i, listHash: HUELLA_B }, "testnet", "CCONTRATO", "y", deB);
+    guardarPendiente(null, "testnet", "CCONTRATO", "", deB);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)?.intento).toEqual(i);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
   });
 
-  it("algo que no se entiende en el almacenamiento no es un pendiente", () => {
-    guardarPendiente(null, "", "", "");
+  it("algo que no se entiende en el almacenamiento no es un pendiente, y guardar encima funciona", () => {
     datos.set(CLAVE_PENDIENTE, "{roto");
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
     datos.set(CLAVE_PENDIENTE, JSON.stringify({ intento: { organizer: ORG } }));
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
+    datos.set(CLAVE_PENDIENTE, JSON.stringify([null, 3, "x", { intento: { organizer: ORG } }]));
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)?.intento).toEqual(i);
+    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toHaveLength(1);
   });
 });
