@@ -1,5 +1,5 @@
 /**
- * Medir el prototipo de video del sorteo (issue nema1502/tinkazo#31).
+ * Medir el video del sorteo (issue 31).
  *
  *   CHROME=/ruta/a/chrome node scripts/medir-video.mjs [--base http://localhost:5179] [--port 5179]
  *
@@ -9,7 +9,7 @@
  * para medir), llama a `medirTodo()` por CDP y reporta:
  *
  * - cuánto tarda volver a dibujar y codificar el show de una ronda,
- * - cuánto pesa un video vertical de 20–30 s (720x1280),
+ * - cuánto pesa un video vertical de 20 a 30 s (720x1280),
  * - qué formato produjo este Chrome (MP4 vs WebM),
  * - si el sonido de la ronda entró de verdad (pico de onda decodificada).
  *

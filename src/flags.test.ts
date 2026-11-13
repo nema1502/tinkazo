@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { videoDescarga } from "./flags";
 
 /**
- * La bandera del prototipo de video del sorteo (`src/video/`). Apagada por
+ * La bandera de la medición del video del sorteo (`src/video/`). Apagada por
  * defecto: sin la bandera de construcción ni el parámetro de medición, nada
  * del prototipo se activa.
  */

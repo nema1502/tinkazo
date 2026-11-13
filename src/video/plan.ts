@@ -1,16 +1,16 @@
 /**
  * El plan del video del sorteo, sin dibujo y sin navegador.
  *
- * Es la parte pura del prototipo del issue nema1502/tinkazo#31 («Descargar el
- * video del sorteo tal como pasó»): de una ronda (la lista, el ganador, la
+ * Es la parte pura de la medición del issue 31 ("Descargar el
+ * video del sorteo tal como pasó"): de una ronda (la lista, el ganador, la
  * semilla y el enlace del comprobante) a la secuencia de cuadros que hay que
  * dibujar. La misma ronda da siempre el mismo plan: el show es reproducible,
  * como el juego que narra (`docs/juegos.md`).
  *
  * Es un reencuentro propio del show, no el show real: dibuja una reencarnación
- * 2D vertical (720x1280) de la idea de todos los juegos — participantes que
+ * 2D vertical (720x1280) de la idea de todos los juegos, participantes que
  * avanzan con la tensión subiendo, el ganador que llega primero y el cierre con
- * «Verificalo vos» y el QR del comprobante. Lo que se mide con este plan es el
+ * "Verificalo vos" y el QR del comprobante. Lo que se mide con este plan es el
  * costo de volver a dibujar y codificar, no la fidelidad visual del motor.
  *
  * Las escenas: entrada (el cartel del sorteo), show (la carrera), ganador (el
@@ -43,7 +43,7 @@ export const FPS_VIDEO = 30;
 /** Cuántos corren en el show, como mucho; con listas chiquitas, corren menos. */
 export const CARRILES_VIDEO = 6;
 
-/** Las escenas del video, con sus segundos: 27 en total. «cartel» es el cartel del que ganó. */
+/** Las escenas del video, con sus segundos: 27 en total. "cartel" es el cartel del que ganó. */
 export const SEGUNDOS_ESCENA = { entrada: 3, show: 14, cartel: 4, cierre: 6 } as const;
 
 export type IdEscena = keyof typeof SEGUNDOS_ESCENA;

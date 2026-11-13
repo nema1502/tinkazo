@@ -13,7 +13,7 @@
 const currentSearch = (): string => (typeof location === "undefined" ? "" : location.search);
 
 /**
- * La bandera del prototipo de video del sorteo (`src/video/`): volver a dibujar
+ * La bandera de la medición del video del sorteo (`src/video/`): volver a dibujar
  * el show de un juego cuadro a cuadro y codificarlo con MediaRecorder. Apagada
  * por defecto. Se prende con `VITE_VIDEO_DESCARGA=1 pnpm build` o, solo para
  * medir, con `?video=medir` en la dirección.

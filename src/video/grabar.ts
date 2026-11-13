@@ -1,13 +1,13 @@
 /**
  * La grabación del video del sorteo, con MediaRecorder.
  *
- * La parte de navegador del prototipo del issue nema1502/tinkazo#31: toma el
+ * La parte de navegador de la medición del issue 31: toma el
  * plan (`plan.ts`), dibuja cada cuadro en un lienzo vertical 720x1280 con
  * `dibujar.ts` y lo codifica con `canvas.captureStream(0)` +
  * `MediaRecorder`, empujando un cuadro por golpe de reloj real. MediaRecorder
  * le pone a cada cuadro la hora en que llega: para que el video dure lo que el
  * plan dice, la grabación corre en tiempo real; el dibujo de cada cuadro se
- * mide aparte, que es lo que responde «cuánto cuesta volver a dibujar».
+ * mide aparte, que es lo que responde "cuánto cuesta volver a dibujar".
  *
  * La bandera (`videoDescarga` en `src/flags.ts`) gobierna todo: apagada, no
  * graba nada. El prototipo no toca la interfaz: se llama por consola o por el
@@ -25,16 +25,16 @@ import type { PlanVideo } from "./plan";
 
 /**
  * Los formatos que se le piden a MediaRecorder, del que mejor entra en
- * WhatsApp para abajo: MP4 (H.264/AAC) si el navegador lo sabe escribir —
- * Chrome 126+ y Safari lo hacen — y WebM (VP9/VP8 + Opus) si no. Lo que
+ * WhatsApp para abajo: MP4 (H.264/AAC) si el navegador lo sabe escribir,
+ * Chrome 126+ y Safari lo hacen, y WebM (VP9 o VP8, con el audio que traiga el navegador) si no. Lo que
  * produce WhatsApp aceptando es otra historia: el script de medición reporta
  * cuál salió en el Chrome de esta VPS.
  */
 export const MIMES_PREFERIDOS: readonly string[] = [
   "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
   "video/mp4",
-  "video/webm;codecs=vp9,opus",
-  "video/webm;codecs=vp8,opus",
+  "video/webm;codecs=vp9",
+  "video/webm;codecs=vp8",
   "video/webm",
 ];
 

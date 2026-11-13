@@ -18,7 +18,7 @@
 
 import { escenaDe, type PlanVideo } from "./plan";
 
-/** «Verificalo vos» / «Don't trust, verify»: el cierre del video, en los dos idiomas. */
+/** "Verificalo vos" / "Don't trust, verify": el cierre del video, en los dos idiomas. */
 export const VERIFICACION_ES = "Verificalo vos";
 export const VERIFICACION_EN = "Don't trust, verify";
 
@@ -53,9 +53,9 @@ function fondo(ctx: CanvasRenderingContext2D, p: PlanVideo): void {
   ctx.fillRect(0, 0, p.ancho, 8);
 }
 
-/** «Hecho con Tinkazo», abajo de todo, como en la foto que se comparte. */
+/** "Hecho con Tinkazo", abajo de todo, como en la foto que se comparte. */
 function pie(ctx: CanvasRenderingContext2D, p: PlanVideo): void {
-  texto(ctx, "Hecho con Tinkazo · Made with Tinkazo", p.ancho / 2, p.alto - 44, "500 26px system-ui, sans-serif", TINTA, 0.65);
+  texto(ctx, "Hecho con Tinkazo / Made with Tinkazo", p.ancho / 2, p.alto - 44, "500 26px system-ui, sans-serif", TINTA, 0.65);
 }
 
 /** La escena de entrada: qué sorteo es, entre quiénes, y la semilla que lo hace comprobable. */
@@ -66,9 +66,9 @@ function dibujarEntrada(ctx: CanvasRenderingContext2D, p: PlanVideo, local: numb
   ctx.globalAlpha = entra;
   texto(ctx, r.titulo || "Sorteo de Tinkazo", p.ancho / 2, 320, "700 64px system-ui, sans-serif", TINTA);
   if (r.premio) texto(ctx, `Premio: ${r.premio}`, p.ancho / 2, 420, "500 40px system-ui, sans-serif", MARCA);
-  texto(ctx, `${r.nombres.length} participantes · ${r.nombres.length} participants`, p.ancho / 2, 520, "500 36px system-ui, sans-serif", TINTA, 0.85);
-  texto(ctx, `Semilla drand: ${r.seed}`, p.ancho / 2, p.alto / 2 + 60, "400 28px ui-monospace, monospace", TINTA, 0.6);
-  texto(ctx, "El show que viene pasó tal cual · The draw you are about to see is exactly what happened", p.ancho / 2, p.alto / 2 + 140, "400 28px system-ui, sans-serif", TINTA, 0.6);
+  texto(ctx, `${r.nombres.length} participantes / ${r.nombres.length} participants`, p.ancho / 2, 520, "500 36px system-ui, sans-serif", TINTA, 0.85);
+  texto(ctx, `Número del sorteo: ${r.seed} / Draw number`, p.ancho / 2, p.alto / 2 + 60, "400 28px ui-monospace, monospace", TINTA, 0.6);
+  texto(ctx, "El show que viene pasó tal cual / The draw you are about to see is exactly what happened", p.ancho / 2, p.alto / 2 + 140, "400 28px system-ui, sans-serif", TINTA, 0.6);
   ctx.restore();
   void entra;
 }
@@ -137,14 +137,14 @@ function dibujarCartel(ctx: CanvasRenderingContext2D, p: PlanVideo, local: numbe
   const entra = Math.min(1, local / 12);
   ctx.save();
   ctx.globalAlpha = entra;
-  texto(ctx, "¡Ganó! · Won!", p.ancho / 2, 420, "700 44px system-ui, sans-serif", MARCA);
+  texto(ctx, "¡Ganó! / Won!", p.ancho / 2, 420, "700 44px system-ui, sans-serif", MARCA);
   texto(ctx, r.ganador, p.ancho / 2, 560, "800 96px system-ui, sans-serif", TINTA);
   if (r.premio) texto(ctx, r.premio, p.ancho / 2, 690, "500 44px system-ui, sans-serif", TINTA, 0.85);
-  texto(ctx, "Comprobá el sorteo · Verify the draw", p.ancho / 2, 800, "400 32px system-ui, sans-serif", TINTA, 0.6);
+  texto(ctx, "Comprobá el sorteo / Verify the draw", p.ancho / 2, 800, "400 32px system-ui, sans-serif", TINTA, 0.6);
   ctx.restore();
 }
 
-/** La escena del cierre: «Verificalo vos», el QR y el enlace del comprobante. */
+/** La escena del cierre: "Verificalo vos", el QR y el enlace del comprobante. */
 function dibujarCierre(ctx: CanvasRenderingContext2D, p: PlanVideo, extras: ExtrasCuadro): void {
   const r = p.ronda;
   texto(ctx, VERIFICACION_ES, p.ancho / 2, 300, "800 72px system-ui, sans-serif", TINTA);
@@ -159,7 +159,7 @@ function dibujarCierre(ctx: CanvasRenderingContext2D, p: PlanVideo, extras: Extr
     ctx.fillStyle = SOMBRA;
     ctx.fillRect(xQr, 460, ladoQr, ladoQr);
   }
-  texto(ctx, "Escaneá el QR del comprobante · Scan the receipt QR", p.ancho / 2, 1010, "500 30px system-ui, sans-serif", TINTA, 0.85);
+  texto(ctx, "Escaneá el QR del comprobante / Scan the receipt QR", p.ancho / 2, 1010, "500 30px system-ui, sans-serif", TINTA, 0.85);
   // El enlace, corto para que quepa: lo completo está en el QR.
   ctx.font = "400 24px ui-monospace, monospace";
   ctx.fillStyle = TINTA;

@@ -69,7 +69,7 @@ describe("el dibujo de un cuadro del video", () => {
     expect(textos(log).join(" | ")).toContain("Beto");
   });
 
-  it("cierra con «Verificalo vos», su par en inglés y el enlace para comprobar", () => {
+  it("cierra con Verificalo vos, su par en inglés y el enlace para comprobar", () => {
     const { ctx, log } = ctxFalso();
     const p = plan();
     const cierre = p.escenas.find((e) => e.id === "cierre")!;

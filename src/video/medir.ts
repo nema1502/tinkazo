@@ -3,8 +3,8 @@
  *
  * Es lo que llama el script de medición (`scripts/medir-video.mjs`) por CDP:
  * arma la ronda de prueba (una lista y una semilla fijas, siempre la misma),
- * planifica el show y lo graba dos veces — sin sonido y con la música de la
- * ronda — y devuelve los números del issue: cuánto tarda volver a dibujar y
+ * planifica el show y lo graba dos veces, sin sonido y con la música de la
+ * ronda, y devuelve los números del issue: cuánto tarda volver a dibujar y
  * codificar, cuánto pesa el archivo, qué formato produjo este navegador y si
  * el sonido entró de verdad (un pico de onda decodificada mayor que 0).
  *
