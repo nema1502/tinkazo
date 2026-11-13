@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Color, PerspectiveCamera, TorusGeometry, Vector3 } from "three";
+import { PerspectiveCamera, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { writeStory } from "../drama";
 import { planQualifier } from "../pixi/qualifier";
@@ -9,9 +9,9 @@ import { assignSlots } from "../pixi/slots";
 import { aplicarPose, crearMapa, poseCamara, type Pose3D } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  AGUAYO, BANDERA, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, agarraDe, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
-  camaraDelSapo, camaraDelTiro, cercaniaDelTiro, colorTabla, deltaCamara, elevacionDe, encajarAntes, fondoCajon, franjaAguayo, franjaBandera, lugarDelMundo,
-  luzDelGolpe, mezclarPose, munecaDe, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla, poseMoneda, proyectorDe, suspensoDe, teeterSapo,
+  ACENTOS, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, agarraDe, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
+  camaraDelSapo, camaraDelTiro, cercaniaDelTiro, colorTabla, deltaCamara, elevacionDe, encajarAntes, fondoCajon, franjaAguayo, lugarDelMundo,
+  luzDelGolpe, mezclarPose, munecaDe, perfilDelTiro, perfilSapo, pesoMoneda, poseArgolla, poseMoneda, proyectorDe, suspensoDe, teeterSapo,
   tomaDeArgolla, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla, type PoseArgolla,
 } from "./sapo-3d";
 
@@ -254,66 +254,41 @@ describe("la cámara 3D sigue al director y no sabe quién gana", () => {
   });
 });
 
-describe("las argollas llevan los colores de la bandera de Bolivia", () => {
-  it("la bandera es rojo, amarillo y verde, de arriba abajo", () => {
-    expect(BANDERA).toEqual([0xd52b1e, 0xf9e300, 0x007934]);
+describe("las argollas siguen amarillas, sin los colores de la bandera", () => {
+  const codigo = fuente("sapo-3d.ts");
+  it("la argolla lleva el material amarillo de siempre, sin cara ni franjas pintadas", () => {
+    expect(codigo).toContain("const matArgolla = mat.plano(AMARILLO);");
+    expect(codigo).not.toContain("pintarArgolla");
+    expect(codigo).not.toContain("texturaBandera");
+    expect(codigo).not.toContain("franjaBandera");
   });
 
-  it("cada franja ocupa un tercio de la argolla, de atrás (rojo) hacia adelante (verde)", () => {
-    const [rojo, amarillo, verde] = BANDERA;
-    expect(franjaBandera(-1, 1)).toBe(rojo);
-    expect(franjaBandera(-0.34, 1)).toBe(rojo);
-    expect(franjaBandera(-0.33, 1)).toBe(amarillo);
-    expect(franjaBandera(0, 1)).toBe(amarillo);
-    expect(franjaBandera(0.33, 1)).toBe(amarillo);
-    expect(franjaBandera(0.34, 1)).toBe(verde);
-    expect(franjaBandera(1, 1)).toBe(verde);
-    // La medida es relativa al radio: lo mismo a cualquier tamaño.
-    expect(franjaBandera(-0.5, 0.7)).toBe(rojo);
-    expect(franjaBandera(0.5, 0.7)).toBe(verde);
-  });
-
-  it("el aro pintado tiene las tres franjas netas: cada cara de un solo color y las tres presentes", () => {
-    const geo = pintarArgolla(new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2));
-    const pos = geo.getAttribute("position");
-    const col = geo.getAttribute("color");
-    expect(geo.index).toBeNull();
-    expect(col.count).toBe(pos.count);
-    const lineales = BANDERA.map((h) => new Color(h));
-    const cuantas = [0, 0, 0];
-    for (let t = 0; t < pos.count; t += 3) {
-      const cual = lineales.findIndex((c) => Math.abs(c.r - col.getX(t)) < 1e-6 && Math.abs(c.g - col.getY(t)) < 1e-6 && Math.abs(c.b - col.getZ(t)) < 1e-6);
-      expect(cual).toBeGreaterThanOrEqual(0);
-      for (let k = 1; k < 3; k++) {
-        expect(col.getX(t + k)).toBe(col.getX(t));
-        expect(col.getY(t + k)).toBe(col.getY(t));
-        expect(col.getZ(t + k)).toBe(col.getZ(t));
-      }
-      // La franja sale del lugar de la cara alrededor del aro: atrás rojo, adelante verde.
-      const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
-      const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
-      const zn = cz / Math.hypot(cx, cz);
-      if (zn < -0.4) expect(cual).toBe(0);
-      if (Math.abs(zn) < 0.3) expect(cual).toBe(1);
-      if (zn > 0.4) expect(cual).toBe(2);
-      cuantas[cual] = (cuantas[cual] as number) + 1;
-    }
-    for (const c of cuantas) expect(c).toBeGreaterThan(0);
-    // Rojo y verde, simétricos.
-    expect(cuantas[0]).toBe(cuantas[2]);
-  });
-
-  it("pintar la argolla no cambia su forma: la pose y la física siguen con el mismo toro", () => {
-    const base = new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2);
-    base.computeBoundingBox();
-    const pintada = pintarArgolla(base.clone());
-    pintada.computeBoundingBox();
-    expect(pintada.boundingBox!.min.toArray()).toEqual(base.boundingBox!.min.toArray());
-    expect(pintada.boundingBox!.max.toArray()).toEqual(base.boundingBox!.max.toArray());
+  it("la mesa tampoco los lleva: ni banderines, ni guarda, ni aguayo con la bandera", () => {
+    expect(codigo).not.toMatch(/BANDERA|0xd52b1e|0xf9e300|0x007934|[Ww]iphala/);
   });
 });
 
-describe("la mesa rústica más grande, de madera y con los colores de Bolivia (S7)", () => {
+describe("los adornos de la mesa van con los cinco acentos de la casa", () => {
+  it("los acentos son los de la paleta, en los dos temas", () => {
+    expect(ACENTOS.claro).toEqual([0xe93d9c, 0xff7a1a, 0x00a896, 0xffc629, 0x6c4ce0]);
+    expect(ACENTOS.oscuro).toEqual([0xff5cb3, 0xff8b3d, 0x17c3b2, 0xffd24d, 0x9b7bff]);
+  });
+
+  it("el aguayo cicla por los cinco acentos del tema, sin azar", () => {
+    for (const tema of ["claro", "oscuro"] as const) {
+      for (let i = -5; i < 15; i++) expect(franjaAguayo(tema, i)).toBe(ACENTOS[tema][((i % 5) + 5) % 5]);
+    }
+  });
+
+  it("los banderines, la guarda de la tapa y la tela del aguayo salen de los acentos del tema", () => {
+    const codigo = fuente("sapo-3d.ts");
+    expect(codigo).toContain("ACENTOS[tema][i % 5]");
+    expect(codigo).toContain("hex(franjaAguayo(tema, k))");
+    expect(codigo).toContain("texturaAguayo(tema)");
+  });
+});
+
+describe("la mesa rústica más grande, de madera", () => {
   it("es más grande: tapa más ancha que antes, tablón más grueso, patas más altas y marco rústico", () => {
     // Antes: tapa tableR*2.1 / tableR*2.05, losa 0,14, cuerpo 0,55.
     expect(anchoCajon(1.55)).toBeGreaterThan(1.55 * 2.1);
@@ -357,17 +332,9 @@ describe("la mesa rústica más grande, de madera y con los colores de Bolivia (
     expect(fuente("sapo-3d.ts")).not.toMatch(/Math\.random/);
   });
 
-  it("el aguayo: la bandera primero (rojo, amarillo, verde) y más colores de la casa, en rayas que ciclan", () => {
-    expect(AGUAYO.slice(0, 3)).toEqual([BANDERA[0], BANDERA[1], BANDERA[2]]);
-    expect(AGUAYO.length).toBeGreaterThanOrEqual(5);
-    expect(new Set(AGUAYO).size).toBe(AGUAYO.length);
-    const n = AGUAYO.length;
-    for (let i = 0; i < n * 2; i++) expect(franjaAguayo(i)).toBe(AGUAYO[i % n]);
-  });
-
-  it("los adornos están en el cajón: banderines con la bandera, faja de aguayo y marco de tablas", () => {
+  it("los adornos están en el cajón: banderines, faja de aguayo y marco de tablas", () => {
     const tres = fuente("sapo-3d.ts");
-    expect(tres).toContain("BANDERA[i % 3]");
+    expect(tres).toContain("banderines.poner(");
     expect(tres).toContain("texturaAguayo(");
     expect(tres).toContain("CAJON_MESA.losa");
     expect(tres).toContain("CAJON_MESA.cuerpoAlto");
@@ -509,7 +476,7 @@ describe("el primer plano del final en 3D: lo que se ve de cerca y despejado", (
     }
   });
 });
-/* ===================================================================== la cámara de los tiros (S4) y la de la moneda (S5) */
+/* ===================================================================== la cámara de los tiros y la de la moneda */
 
 /** Las pantallas de ejemplo con su tamaño, para proyectar con una cámara de three.js de verdad. */
 const PANTALLAS_WH = [
@@ -531,7 +498,7 @@ function proyectar(pose: Pose3D, w: number, h: number, pts: readonly (readonly [
 const adentro = (q: { x: number; y: number; z: number }, w: number, h: number, margen = 0): boolean =>
   q.z < 1 && q.x >= margen && q.x <= w - margen && q.y >= margen && q.y <= h - margen;
 
-describe("la cámara de cada tiro: baja, gira hacia la mano y sigue a la argolla, y vuelve al golpe (S4)", () => {
+describe("la cámara de cada tiro: baja, gira hacia la mano y sigue a la argolla, y vuelve al golpe", () => {
   const golpe = (t: number, punto: Point = { x: 0.5, y: 0.5 }) => ({ t, punto, fuerza: 0.85 });
 
   it("quieta sin tiro en el aire; sube con el vuelo y baja en menos de 0,8 s después del golpe, sin saltos", () => {
@@ -637,7 +604,7 @@ describe("la cámara de cada tiro: baja, gira hacia la mano y sigue a la argolla
   });
 });
 
-describe("la última argolla, desde la argolla: del lanzamiento con zoom hasta verla entrar (S5)", () => {
+describe("la última argolla, desde la argolla: del lanzamiento con zoom hasta verla entrar", () => {
   it("la toma de cada argolla es la del plan: la del último tiro (el acierto del último ganador) es la de la moneda", () => {
     for (const personas of [5, 18, 30]) {
       for (const semilla of [1, 2, 3, 4, 5, 6]) {
@@ -772,9 +739,9 @@ describe("la última argolla, desde la argolla: del lanzamiento con zoom hasta v
   }
 });
 
-/* ===================================================================== la mano articulada y el suspenso del borde (S9, S10) */
+/* ===================================================================== la mano articulada y el suspenso del borde */
 
-describe("la mano articulada: los dedos y la muñeca siguen la señal del 2D (S9)", () => {
+describe("la mano articulada: los dedos y la muñeca siguen la señal del 2D", () => {
   it("sin señal, el agarre se reconstruye del impulso: recogiendo cierra, en el látigo abre, y descansa a medio encoger (0,4)", () => {
     expect(agarraDe(undefined, undefined, 0)).toBeCloseTo(0.6, 9); // reposo: la flexión 0,4 del puente
     expect(agarraDe(undefined, undefined, 1)).toBeCloseTo(1, 9); // al final del impulso agarra la moneda
@@ -853,7 +820,7 @@ describe("la mano articulada: los dedos y la muñeca siguen la señal del 2D (S9
   });
 });
 
-describe("el suspenso del borde: teeter en el aro y caer donde el plan puso (S10)", () => {
+describe("el suspenso del borde: teeter en el aro y caer donde el plan puso", () => {
   const borde = { x: 0.5, y: -0.2 };
   const enBaile = (resto: Partial<ArgollaSapo> = {}): ArgollaSapo => arg("baile", { borde, ...resto });
   const enVueloDelBaile = { suelo: { x: 0.62, y: -0.2 }, edad: 0.4, u: 0.5 };

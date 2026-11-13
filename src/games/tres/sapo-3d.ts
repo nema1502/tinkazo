@@ -1,5 +1,5 @@
 import {
-  BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight,
+  BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight,
   InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PlaneGeometry, Quaternion, RepeatWrapping, SphereGeometry,
   SRGBColorSpace, TorusGeometry, Vector3,
 } from "three";
@@ -64,7 +64,7 @@ export interface ArgollaSapo {
   /** El centro del agujero en cuyo borde baila, o null. */
   borde: PuntoMesa | null;
   /**
-   * El suspenso del borde (S10): la 2D lo marca (`suspensoDe`) cuando esta argolla hace el momento de rodar en el
+   * El suspenso del borde: la 2D lo marca (`suspensoDe`) cuando esta argolla hace el momento de rodar en el
    * borde del agujero. Opcional: sin la marca el 3D no inventa nada, y la ganadora jamás lo lleva.
    */
   suspenso?: boolean;
@@ -102,7 +102,7 @@ export interface EntradaSapo extends EntradaBase {
     /** Quieta del todo: el silencio de antes de que caiga la última argolla. */
     quieta: boolean;
   };
-  /** Lo que la mano lleva lanzando: visible, dónde está y el impulso de siempre, más la señal de la mano (S9,
+  /** Lo que la mano lleva lanzando: visible, dónde está y el impulso de siempre, más la señal de la mano (
    * `SenalMano` en `tipos.ts`): la flexión de los dedos y la fase del lanzamiento que calcula el 2D. */
   mano: { visible: boolean; punto: PuntoMesa; /** de -0,8 a 1: el impulso hacia atrás y el suelte */ swing: number; manga: number } & SenalMano;
   argollas: readonly ArgollaSapo[];
@@ -133,36 +133,15 @@ export const TORO_T = 0.3;
 /** La inclinación con que queda montada sobre el aro. */
 const MONTADA = 0.22;
 
-/** Los colores de la bandera de Bolivia, de arriba abajo: rojo, amarillo y verde. Las argollas que tira la mano los llevan. */
-export const BANDERA = [0xd52b1e, 0xf9e300, 0x007934] as const;
-
 /**
- * La franja de la bandera que le toca a un punto de la argolla por su lugar de atrás hacia adelante (`z` de `-r` a `r`):
- * tres franjas de igual alto, como la bandera acostada sobre la moneda. Atrás el rojo, al medio el amarillo, adelante el verde.
+ * Los cinco acentos de la casa, por tema (docs/marca.md): los banderines, la guarda de la tapa y la faja del aguayo. Lo
+ * boliviano del sapo es el juego, no la decoración: la mesa no lleva los colores de la bandera.
  */
-export const franjaBandera = (z: number, r: number): number =>
-  z < -r / 3 ? BANDERA[0] : z > r / 3 ? BANDERA[2] : BANDERA[1];
+export const ACENTOS: Record<"claro" | "oscuro", readonly [number, number, number, number, number]> = {
+  claro: [0xe93d9c, 0xff7a1a, 0x00a896, 0xffc629, 0x6c4ce0],
+  oscuro: [0xff5cb3, 0xff8b3d, 0x17c3b2, 0xffd24d, 0x9b7bff],
+};
 
-/**
- * Pinta el aro de la argolla (un toro acostado en el plano `xz`) con las tres franjas: cada cara toma el color de la franja
- * donde cae su centro alrededor del aro, así los bordes quedan netos con el sombreado plano. No mueve ningún vértice: la
- * forma, y con ella la pose y la física, es la misma. Devuelve la geometría sin índice (cada cara con sus tres vértices).
- */
-export function pintarArgolla(geo: BufferGeometry): BufferGeometry {
-  const suelta = geo.index ? geo.toNonIndexed() : geo;
-  if (suelta !== geo) geo.dispose();
-  const pos = suelta.getAttribute("position");
-  const colores = new Float32Array(pos.count * 3);
-  const c = new Color();
-  for (let t = 0; t + 2 < pos.count; t += 3) {
-    const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
-    const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
-    c.setHex(franjaBandera(cz / Math.max(1e-9, Math.hypot(cx, cz)), 1));
-    for (let k = 0; k < 3; k++) c.toArray(colores, (t + k) * 3);
-  }
-  suelta.setAttribute("color", new Float32BufferAttribute(colores, 3));
-  return suelta;
-}
 /** La cámara, en radianes. */
 const FOV = (32 * Math.PI) / 180;
 
@@ -290,7 +269,7 @@ export function poseArgolla(a: ArgollaSapo, br: number, fr: number, mano: readon
 }
 
 /**
- * Cuánto agarra la mano (S9), de 0 abierta a 1 cerrada. Con la flexión del 2D (`flex`: 0 curvada agarrando la
+ * Cuánto agarra la mano, de 0 abierta a 1 cerrada. Con la flexión del 2D (`flex`: 0 curvada agarrando la
  * moneda, 1 abierta de golpe tras soltar, 0,4 en reposo) ella manda; sin la señal se reconstruye la misma curva de
  * la fase (`fase`: recogida de 0 a 1 y látigo de 0 a −1) y, sin fase, del impulso: recogiendo cierra y en el látigo
  * abre. Fuera de rango se amarra, y una señal rota (no finita) no se usa.
@@ -310,7 +289,7 @@ export function agarraDe(flex: number | undefined, fase: number | undefined, swi
 }
 
 /**
- * La muñeca (S9), en radianes alrededor del eje del dorso: positiva se echa atrás recogiendo el impulso (la fase de
+ * La muñeca, en radianes alrededor del eje del dorso: positiva se echa atrás recogiendo el impulso (la fase de
  * 0 a 1 del 2D), negativa es el látigo adelante de la suelta (la fase de 0 a −1, que sube y vuelve con el propio
  * latigazo). Opcional la fase: sin ella, el impulso solo basta. Nunca pasa de 60 grados: no marear.
  */
@@ -326,7 +305,7 @@ export function munecaDe(fase: number | undefined, swing: number): number {
 }
 
 /**
- * El suspenso del borde (S10): qué tiros hacen el momento de rodar en el borde, elegido de forma determinista con el
+ * El suspenso del borde: qué tiros hacen el momento de rodar en el borde, elegido de forma determinista con el
  * índice del tiro y el hash de la casa, sin consumir aleatoriedad nueva. La 2D lo usa para marcar
  * `ArgollaSapo.suspenso`; el 3D solo viste la marca, nunca la inventa, y la ganadora jamás la lleva.
  */
@@ -334,7 +313,7 @@ export const SAL_SUSPENSO = 121;
 export const suspensoDe = (i: number): boolean => hash(i, SAL_SUSPENSO) >= 0.45;
 
 /**
- * La pose del suspenso (S10): la argolla marcada da vueltas sobre el borde del agujero (`a.borde`) como si se fuera
+ * La pose del suspenso: la argolla marcada da vueltas sobre el borde del agujero (`a.borde`) como si se fuera
  * a caer, y termina exactamente donde el plan la puso (la onda muere en `u` 0 y 1). Sin la marca, sin borde, en la
  * ganadora o fuera del baile, devuelve la pose del plan tal cual. Nunca baja de la tapa: si al ladearse su punto más
  * bajo quedara debajo, se levanta lo justo.
@@ -666,7 +645,7 @@ const INK: Record<"claro" | "oscuro", number> = { claro: 0x191919, oscuro: 0x161
 const MADERA: Record<"claro" | "oscuro", number> = { claro: 0xd29a5c, oscuro: 0x9a6a3c };
 const CAJON: Record<"claro" | "oscuro", number> = { claro: 0x8f3520, oscuro: 0x5a2014 };
 
-/* ---------------------------------------------------------------- la mesa rústica (S7) */
+/* ---------------------------------------------------------------- la mesa rústica */
 
 /**
  * Las medidas del cajón rústico, en unidades de la mesa. La mesa manda más en la escena: la tapa sobresale más del radio
@@ -700,12 +679,13 @@ export const colorTabla = (tema: "claro" | "oscuro", i: number): number => {
 };
 
 /**
- * El aguayo: la bandera primero (rojo, amarillo, verde) y después los colores de la chalina de la casa. Con estas rayas
- * va la faja del canto de la mesa, la banda del frente del cajón y la guarda de la tapa, estilo wiphala.
+ * El color de la raya `i` del aguayo: cicla por los cinco acentos del tema. Con estas rayas va la faja del canto de la
+ * mesa, la banda del frente del cajón y la guarda de la tapa.
  */
-export const AGUAYO = [BANDERA[0], BANDERA[1], BANDERA[2], 0xe07a2e, 0xf2ead8, 0x2b6cd5] as const;
-/** El color de la raya `i` del aguayo: cicla por la paleta. */
-export const franjaAguayo = (i: number): number => AGUAYO[((i % AGUAYO.length) + AGUAYO.length) % AGUAYO.length] as number;
+export const franjaAguayo = (tema: "claro" | "oscuro", i: number): number => {
+  const col = ACENTOS[tema];
+  return col[((i % col.length) + col.length) % col.length] as number;
+};
 const PISO: Record<"claro" | "oscuro", [number, number]> = { claro: [0xe8d6b8, 0xdcc6a0], oscuro: [0x3b2a3a, 0x4a3849] };
 /** La pared de ladrillos de atrás, la del 2D, en el tono del tema (ladrillo, junta). */
 const PARED: Record<"claro" | "oscuro", [number, number]> = { claro: [0xecdcb9, 0xd7c196], oscuro: [0x2c2147, 0x1b1432] };
@@ -757,12 +737,11 @@ function texturaTapa(tema: "claro" | "oscuro", ancho: number, fondo: number): Ca
     for (let x = 6; x <= W - 6; x += 32) cx.lineTo(x, y + (hash(i, x) - 0.5) * 5);
     cx.stroke();
   }
-  // La guarda: rayas del aguayo, mirando hacia adentro, en el borde de adelante y el de atrás.
+  // La guarda: triángulos de los cinco acentos, mirando hacia adentro, en el borde de adelante y el de atrás.
   const banda = 30, paso = banda * 1.7;
-  const col = AGUAYO;
   const aspecto = ancho / fondo;
   for (let x = 6, k = 0; x < W - 8; x += paso, k++) {
-    cx.fillStyle = hex(col[k % col.length] as number);
+    cx.fillStyle = hex(franjaAguayo(tema, k));
     cx.beginPath();
     cx.moveTo(x, 6);
     cx.lineTo(x + paso / 2, 6 + banda * aspecto);
@@ -784,30 +763,14 @@ function texturaTapa(tema: "claro" | "oscuro", ancho: number, fondo: number): Ca
 }
 
 /**
- * La cara de la moneda: la bandera de Bolivia en tres franjas de igual alto (rojo arriba, verde abajo). Va en el disco que
- * llena el aro de la argolla; arriba de la textura es `-z` del disco acostado, igual que en `franjaBandera`.
- */
-function texturaBandera(): CanvasTexture | null {
-  const cx = lienzo(64, 64);
-  if (!cx) return null;
-  BANDERA.forEach((color, i) => {
-    const y0 = Math.round((i * 64) / 3), y1 = Math.round(((i + 1) * 64) / 3);
-    cx.fillStyle = hex(color);
-    cx.fillRect(0, y0, 64, y1 - y0);
-  });
-  const t = new CanvasTexture(cx.canvas);
-  t.colorSpace = SRGBColorSpace;
-  return t;
-}
-
-/**
- * La tela del aguayo: rayas verticales de los colores de la wiphala, para la faja del canto de la mesa y la banda del
+ * La tela del aguayo: rayas verticales de los cinco acentos del tema, para la faja del canto de la mesa y la banda del
  * frente del cajón. La misma tela para las dos, un solo dibujo más en el presupuesto.
  */
-function texturaAguayo(): CanvasTexture | null {
-  const cx = lienzo(AGUAYO.length * 8, 16);
+function texturaAguayo(tema: "claro" | "oscuro"): CanvasTexture | null {
+  const col = ACENTOS[tema];
+  const cx = lienzo(col.length * 8, 16);
   if (!cx) return null;
-  (AGUAYO as readonly number[]).forEach((color, i) => {
+  col.forEach((color, i) => {
     cx.fillStyle = hex(color);
     cx.fillRect(i * 8, 0, 8, 16);
   });
@@ -992,7 +955,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const ladoBanderin = 0.26;
   for (let i = 0; i < NB; i++) {
     const u = (i + 0.5) / NB;
-    banderines.poner(i, xG0 + (xG1 - xG0) * u, yCuerda(u) - 0.01, zPared + 0.04, ladoBanderin, ladoBanderin * 1.15, 1, 0, BANDERA[i % 3]);
+    banderines.poner(i, xG0 + (xG1 - xG0) * u, yCuerda(u) - 0.01, zPared + 0.04, ladoBanderin, ladoBanderin * 1.15, 1, 0, ACENTOS[tema][i % 5]);
   }
   for (let i = 0; i < NC; i++) {
     const ua = i / NC, ub = (i + 1) / NC;
@@ -1071,11 +1034,11 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   marco.usar(4);
   marco.fin();
   tapa.add(marco.malla);
-  // La faja del aguayo colgada del canto de adelante: rayas de la wiphala sobre la madera (y un recodo de la misma tela
-  // pintado en el borde de arriba del frente del cajón). Una sola tela, dos piezas.
-  const texAguayo = texturaAguayo();
+  // La faja del aguayo colgada del canto de adelante: rayas de los cinco acentos sobre la madera (y un recodo de la
+  // misma tela pintado en el borde de arriba del frente del cajón). Una sola tela, dos piezas.
+  const texAguayo = texturaAguayo(tema);
   if (texAguayo) B.add(texAguayo);
-  const matFaja = B.add(new MeshLambertMaterial(texAguayo ? { map: texAguayo } : { color: franjaAguayo(1) }));
+  const matFaja = B.add(new MeshLambertMaterial(texAguayo ? { map: texAguayo } : { color: franjaAguayo(tema, 1) }));
   const fajaAlto = cuerpoAlto * 0.34;
   tapa.add(pieza(g.caja, matFaja, 0, 0.012 - (fajaAlto + 0.012) / 2, fondo / 2 + 0.006, ancho * 0.46, fajaAlto + 0.012, 0.03));
   mundo.add(pieza(g.caja, matFaja, 0, -losa - 0.045, (fondo * 0.97) / 2 + 0.012, ancho * 0.97, 0.07, 0.02));
@@ -1192,7 +1155,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   mano.add(palma);
   contorno(palma, 1.1);
   // Índice, medio, anular y meñique: el del medio es el más largo; las puntas bajan hacia la mesa. Cada dedo vive en
-  // un grupo con su pivote en el nudillo (S9): así se curva con la flexión que manda el 2D, y en reposo (rotación 0)
+  // un grupo con su pivote en el nudillo: así se curva con la flexión que manda el 2D, y en reposo (rotación 0)
   // la pose es la de siempre.
   const dedos: { g: Group; peso: number }[] = [];
   const PESO_DEDO = [1.05, 1, 0.95, 0.85]; // el meñique cierra menos
@@ -1216,7 +1179,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   pulgar.rotation.set(-0.35, -0.65, 0);
   pulgarG.add(pulgar);
   contorno(pulgar, 1.15);
-  // El brazo entra desde abajo a la derecha de la pantalla (hacia la cámara y a la derecha). La muñeca (S9) va entre
+  // El brazo entra desde abajo a la derecha de la pantalla (hacia la cámara y a la derecha). La muñeca va entre
   // la palma y el antebrazo: se echa atrás recogiendo el impulso y arrea el látigo adelante en la suelta.
   const munecaG = new Group();
   mano.add(munecaG);
@@ -1251,22 +1214,13 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   contorno(boton, 1.3);
 
   /* ---------------------------------------------------------------- las argollas */
-  // La moneda de la bandera: el canto con las tres franjas (colores por cara) y el disco de adentro con la bandera
-  // pintada. Dieciocho tramos en el canto: los límites caen en ±20°, donde las franjas de la cara cortan el canto.
-  const toroArgolla = B.add(pintarArgolla(new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2)));
-  const matArgolla = B.add(new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
-  const texCara = texturaBandera();
-  if (texCara) B.add(texCara);
-  // El disco no pasa del eje del canto: la argolla ocupa lo mismo que antes y `poseArgolla` vale igual.
-  const discoArgolla = B.add(new CircleGeometry(TORO_R, 18).rotateX(-Math.PI / 2));
-  const matCara = B.add(new MeshLambertMaterial(texCara ? { map: texCara, side: DoubleSide } : { color: BANDERA[1], side: DoubleSide }));
-  const matAnillo = mat.plano(AMARILLO);
+  const toroArgolla = B.add(new TorusGeometry(TORO_R, TORO_T, 5, 12).rotateX(Math.PI / 2));
+  const matArgolla = mat.plano(AMARILLO);
+  const matAnillo = matArgolla;
   const toroAnillo = B.add(new TorusGeometry(1, 0.05, 4, 22).rotateX(Math.PI / 2));
   const ellas = Array.from({ length: 4 }, () => {
     const grupo = new Group();
     const toro = new Mesh(toroArgolla, matArgolla);
-    // La cara gira con el canto (`toro.rotation.y`).
-    toro.add(new Mesh(discoArgolla, matCara));
     const casco = new Mesh(toroArgolla, tintaBack);
     casco.scale.setScalar(1.13);
     const anillo = new Mesh(toroAnillo, matAnillo);
@@ -1378,7 +1332,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         mano.scale.setScalar(Math.max(1, Math.min(1.9, 190 / m.sc)));
         matManga.color.setHex(mn.manga);
         matPliegue.color.setHex(mn.manga).multiplyScalar(0.72);
-        // S9: los dedos se curvan con la flexión que manda el 2D (o con el impulso, si no hay señal) y la muñeca
+        // Los dedos se curvan con la flexión que manda el 2D (o con el impulso, si no hay señal) y la muñeca
         // arrea el látigo en la suelta. Con las señales en reposo las rotaciones quedan en 0: la pose de siempre.
         const agarra = agarraDe(mn.flex, mn.fase, mn.swing);
         for (const d of dedos) d.g.rotation.x = -1.05 * agarra * d.peso;

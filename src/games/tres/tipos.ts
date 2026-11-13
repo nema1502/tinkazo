@@ -81,8 +81,8 @@ export type Montaje3D<E extends EntradaBase = EntradaBase> = (lienzoPixi: HTMLCa
 export type Lanzador = (names: string[], winners: readonly number[], beacon: Beacon, done: () => void) => Promise<void>;
 
 /**
- * La señal de la mano que tira (S9): qué hacen los dedos y en qué parte del lanzamiento va. La calcula el 2D — que ya
- * tiene el guion de tiros y su reloj — y la consume el 3D, así las dos escenas lanzan con la misma hora. Son campos
+ * La señal de la mano que tira: qué hacen los dedos y en qué parte del lanzamiento va. La calcula el 2D, que ya
+ * tiene el guion de tiros y su reloj, y la consume el 3D, así las dos escenas lanzan con la misma hora. Son campos
  * opcionales: una vista que todavía no los lee sigue funcionando con los valores por defecto.
  */
 export interface SenalMano {

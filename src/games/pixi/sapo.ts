@@ -55,15 +55,11 @@ import { HOLGURA_3D } from "./ganador-altura";
 /** Lo lento del sapo vive en sapo-tiempos.ts (lo comparte con la prueba del niño). */
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
-/** Lo que dura el látigo de soltar: la mano vuelve de su impulso y los dedos se relajan (S9). */
+/** Lo que dura el látigo de soltar: la mano vuelve de su impulso y los dedos se relajan. */
 const LATIGO = 0.3;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
 
-/** Los colores de la bandera de Bolivia, los mismos que la escena 3D usa para las argollas (`sapo-3d.ts`). */
-export const BANDERA = [0xd52b1e, 0xf9e300, 0x007934] as const;
-/** El aguayo de la mesa: los cuadros del borde llevan los colores de la bandera. */
-export const AGUAYO = BANDERA;
 /** La rana verde de la casa: cuerpo, manchas y brillo, los mismos de la escena 3D. */
 export const RANA = 0x5cb746;
 export const RANA_OSC = 0x3d7a24;
@@ -78,13 +74,13 @@ export const MADERA = {
   frente: 0x7a4a22, frenteNoche: 0x5e3a1c,
   cajon: 0x8f5a2b, cajonNoche: 0x4d2e12,
 } as const;
-/** El cajón, en unidades de la mesa: más grande y rústico en la pantalla ancha (S7). En el celular ya ocupa casi todo el ancho: ahí no crece. */
+/** El cajón, en unidades de la mesa: más grande y rústico en la pantalla ancha. En el celular ya ocupa casi todo el ancho: ahí no crece. */
 export const MESA_ANCHO = 2.24;
 export const MESA_FONDO = 2.16;
 export const MESA_ANCHO_CHICO = 2.1;
 export const MESA_FONDO_CHICO = 2.05;
 
-/** Gira un vector, en coordenadas de pantalla (el ángulo crece hacia abajo): para curvar las falanges de los dedos (S9). */
+/** Gira un vector, en coordenadas de pantalla (el ángulo crece hacia abajo): para curvar las falanges de los dedos. */
 const rotar = (v: Point, a: number): Point => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
 
 interface Toss {
@@ -237,7 +233,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       ancho = Math.max(ancho, (w * 0.26) / L.tableR);
     }
     // La mitad del fondo de la tapa, en unidades de la mesa: en la pantalla
-    // ancha el cajón creció (S7), y el presupuesto de alto lo sigue.
+    // ancha el cajón creció, y el presupuesto de alto lo sigue.
     const mediaTapa = S.portrait() ? 1.03 : 1.08;
     // Lo que ocupa de alto: desde el borde de arriba del cajón hasta lo más bajo
     // entre su borde de abajo y la mano, más el frente con los cajoncitos y las patas.
@@ -587,8 +583,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     y: a.y + (b.y - a.y) * f - 4 * apex * f * (1 - f),
   });
 
-  /** El suspenso del aro (S10): qué casi-tiros ruedan una vuelta del borde antes de salir, y hacia qué lado. La decisión
-   * la fija el tiro — su índice, el agujero del borde y el turno — con un hash, sin tirar dado nuevo. La ganadora nunca
+  /** El suspenso del aro: qué casi-tiros ruedan una vuelta del borde antes de salir, y hacia qué lado. La decisión
+   * la fija el tiro (su índice, el agujero del borde y el turno) con un hash, sin tirar dado nuevo. La ganadora nunca
    * entra a este juego: su caída queda limpia. */
   const ruedaEnElAro = (o: Toss): number => {
     if (o.final) return 0;
@@ -653,7 +649,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     let hop: number;
     if (o.th.kind === "near" && age < WOBBLE) {
       const u = age / WOBBLE;
-      // El suspenso del borde (S10): algunas casi-entran ruedan una vuelta al aro del agujero, como si se fueran a caer.
+      // El suspenso del borde: algunas casi-entran ruedan una vuelta al aro del agujero, como si se fueran a caer.
       // El radio va del punto donde pegó hacia el labio del agujero y vuelve, así el baile empieza y termina donde
       // siempre: la salida de después no cambia ni un punto, y el reloj (WOBBLE) es el mismo.
       const centro = o.th.rimSlot !== undefined ? (L.holes[o.th.rimSlot] as Point) : null;
@@ -1080,7 +1076,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return clamp(c, 0, 1);
   };
 
-  /** El cajón del sapo visto desde arriba y adelante: madera rústica con vetas y nudos, patas que asoman y aguayo de Bolivia. */
+  /**
+   * El cajón del sapo visto desde arriba y adelante: madera rústica con vetas y nudos, patas que asoman y la guarda del
+   * aguayo con los cinco acentos del tema (`S.color`), los mismos de la escena 3D. La mesa no lleva la bandera.
+   */
   function drawBox(): void {
     const k = g.k;
     const { x0, y0, w, d, front, pata } = medidasMesa();
@@ -1104,10 +1103,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       boxG.rect(cx - (w / cajones) * 0.36, y0 + d + front * 0.26, (w / cajones) * 0.72, front * 0.5).fill(madera(MADERA.cajon, MADERA.cajonNoche)).stroke({ width: 2 * k, color: INK });
       boxG.circle(cx, y0 + d + front * 0.51, 3 * k).fill(YELLOW);
     }
-    // La cinta del aguayo en el borde de adelante de la tapa: cuadros wiphala.
+    // La cinta del aguayo en el borde de adelante de la tapa: cuadros de los cinco acentos.
     const celda = 9 * k, columnas = Math.ceil(w / celda);
     for (let i = 0; i < columnas; i++) {
-      boxG.rect(x0 + i * celda, y0 + d - celda, Math.min(celda, w - i * celda), celda).fill(AGUAYO[i % AGUAYO.length]);
+      boxG.rect(x0 + i * celda, y0 + d - celda, Math.min(celda, w - i * celda), celda).fill(S.color(i));
     }
     // La tapa: madera clara, de tablones, con la veta fina y sus nudos.
     boxG.rect(x0, y0, w, d).fill(madera(MADERA.tapa, MADERA.tapaNoche)).stroke({ width: 3 * k, color: INK });
@@ -1124,10 +1123,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       boxG.circle(x0 + w * nx, y0 + d * ny, nr * k).fill({ color: veta, alpha: 0.5 });
       boxG.circle(x0 + w * nx, y0 + d * ny, nr * k * 0.5).fill({ color: madera(MADERA.frenteNoche, MADERA.cajonNoche), alpha: 0.4 });
     }
-    // La guarda del aguayo en el borde de atrás: dos hileras de cuadros wiphala.
+    // La guarda del aguayo en el borde de atrás: dos hileras de cuadros de los cinco acentos.
     for (let fila = 0; fila < 2; fila++) {
       for (let i = 0; i < columnas; i++) {
-        boxG.rect(x0 + i * celda, y0 + fila * celda, Math.min(celda, w - i * celda), celda).fill(AGUAYO[(i + fila) % AGUAYO.length]);
+        boxG.rect(x0 + i * celda, y0 + fila * celda, Math.min(celda, w - i * celda), celda).fill(S.color(i + fila));
       }
     }
   }
@@ -1170,7 +1169,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Dónde está la mano, en la escena. */
   const handAt = (): Point => P(handPoint());
 
-  /** La mano que tira: se echa atrás al tomar impulso, látiga al soltar, y los dedos la siguen (S9). */
+  /** La mano que tira: se echa atrás al tomar impulso, látiga al soltar, y los dedos la siguen. */
   function drawHand(): void {
     handG.clear();
     if (crowned) return;
@@ -1178,7 +1177,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const h = handAt();
     // El impulso de siempre: baja al tomar impulso, sube de golpe al soltar.
     const swing = impulsoMano();
-    // S9: además, la mano se echa atrás por el eje del antebrazo durante el impulso, y látiga por el mismo eje al soltar.
+    // Además, la mano se echa atrás por el eje del antebrazo durante el impulso, y látiga por el mismo eje al soltar.
     const gesto = gestoMano();
     const hx = h.x + gesto.x, hy = h.y + swing * 22 * k + gesto.y;
     // El brazo entra desde fuera de la pantalla, abajo a la derecha.
@@ -1192,7 +1191,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // La sombra del antebrazo, por debajo, para que no se vea tan plano.
     handG.moveTo(mx, my + 6 * k).lineTo(hx + 3 * k, hy + 6 * k).stroke({ width: 5 * k, color: PIEL_OSC, cap: "round" });
     handG.circle(hx, hy, 15 * k).fill(PIEL).stroke({ width: 2.5 * k, color: INK });
-    // Los dedos, articulados (S9): dos falanges cada uno, curvadas por la flexión. Cerrados (flex 0) agarran la moneda,
+    // Los dedos, articulados: dos falanges cada uno, curvadas por la flexión. Cerrados (flex 0) agarran la moneda,
     // que va un poco arriba a la izquierda de la palma; abiertos (flex 1) se estiran y la sueltan.
     const falange = (de: Point, hacia: Point, largo: number): Point => ({ x: de.x + hacia.x * largo * k, y: de.y + hacia.y * largo * k });
     const digito = (b: Point, m: Point, punta: Point, w: number, color: number): void => {
@@ -1220,7 +1219,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     digito(baseT, mT, puntaT, 5.5, PIEL);
   }
 
-  /** La argolla de la bandera: tres franjas concéntricas, rojo por fuera y verde por dentro, con agujero para que no se lea como moneda. */
+  /** La argolla amarilla: un disco con agujero, para que no se lea como moneda. */
   function drawToken(x: number, y: number, s: number, glow: boolean, alpha = 1): void {
     const r = g.br * s;
     // La argolla del último tiro lleva un aro nítido. Antes era un halo
@@ -1230,13 +1229,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       tokG.ellipse(x, y, r * 1.6, r * 1.28).stroke({ width: 3 * g.k, color: YELLOW, alpha });
     }
     tokG.ellipse(x + 2 * g.k, y + 3 * g.k, r, r * 0.8).fill({ color: INK, alpha: 0.45 * alpha });
-    // El cuerpo: las tres franjas de la bandera de Bolivia, como en la 3D.
-    tokG.ellipse(x, y, r * 0.78, r * 0.62).stroke({ width: r * 0.44, color: BANDERA[0], alpha });
-    tokG.ellipse(x, y, r * 0.44, r * 0.35).stroke({ width: r * 0.26, color: BANDERA[1], alpha });
-    tokG.ellipse(x, y, r * 0.2, r * 0.16).stroke({ width: r * 0.24, color: BANDERA[2], alpha });
-    tokG.ellipse(x, y, r, r * 0.8).stroke({ width: 3 * g.k, color: INK, alpha });
-    // El agujero, chico, en el centro del verde.
-    tokG.ellipse(x, y, r * 0.1, r * 0.08).fill({ color: 0x3a2a14, alpha }).stroke({ width: 1.5 * g.k, color: INK, alpha });
+    tokG.ellipse(x, y, r, r * 0.8).fill({ color: YELLOW, alpha }).stroke({ width: 3 * g.k, color: INK, alpha });
+    tokG.ellipse(x, y, r * 0.4, r * 0.32).fill({ color: 0x3a2a14, alpha }).stroke({ width: 2 * g.k, color: INK, alpha });
   }
 
   /** El parpadeo de la rana: 1 abierto, 0,15 cerrado. */
@@ -1249,7 +1243,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (u >= 0) return u < WINDUP ? 1 - u / WINDUP : 0;
     return -0.8 * Math.sin(Math.PI * clamp(-u / LATIGO, 0, 1));
   };
-  /** Cuánto están abiertos los dedos (S9): 0,4 en reposo; curvados hasta 0 agarrando la moneda al final del impulso,
+  /** Cuánto están abiertos los dedos: 0,4 en reposo; curvados hasta 0 agarrando la moneda al final del impulso,
    * abiertos de golpe hasta 1 al soltar, y después se relajan. */
   const FLEX_RELAJADA = 0.4;
   const flexMano = (): number => {
@@ -1261,7 +1255,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (f < 0.35) return f / 0.35;
     return FLEX_RELAJADA + (1 - FLEX_RELAJADA) * (1 - (f - 0.35) / 0.65);
   };
-  /** La fase del lanzamiento (S9), para el puente con la 3D: de 0 a 1 va tomando impulso; de 0 a -1 látiga tras soltar. */
+  /** La fase del lanzamiento, para el puente con la 3D: de 0 a 1 va tomando impulso; de 0 a -1 látiga tras soltar. */
   const faseLanzamiento = (): number => {
     const next = tosses.find((o) => tAll < o.start + LATIGO);
     if (!next) return 0;
@@ -1269,8 +1263,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (u >= 0) return clamp(1 - u / WINDUP, 0, 1);
     return -clamp(-u / LATIGO, 0, 1);
   };
-  /** El gesto del brazo (S9): la mano se echa atrás por el eje del antebrazo al tomar impulso y látiga por el mismo eje
-   * al soltar. El retoque de arriba (+22·swing) es el de siempre; esto es lo que faltaba para que el lanzamiento se lea. */
+  /** El gesto del brazo: la mano se echa atrás por el eje del antebrazo al tomar impulso y látiga por el mismo eje
+   * al soltar. El retoque de arriba (+22 por swing) es el de siempre; esto es lo que faltaba para que el lanzamiento se lea. */
   const gestoMano = (): Point => {
     const s = impulsoMano();
     if (s === 0) return { x: 0, y: 0 };
@@ -1315,7 +1309,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (!v3) return;
     const ultimo = tosses[tosses.length - 1] as Toss;
     const hand = handPoint();
-    // La señal de la mano (S9): flex y fase viajan con el puente, así la 3D lanza con la misma hora que el 2D.
+    // La señal de la mano: flex y fase viajan con el puente, así la 3D lanza con la misma hora que el 2D.
     // Se sale del literal para que el tipo opcional (`SenalMano`) no pelee con la forma actual de `EntradaSapo`.
     const mn: { visible: boolean; punto: Point; swing: number; manga: number } & SenalMano = {
       visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2), flex: flexMano(), fase: faseLanzamiento(),
@@ -1509,7 +1503,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
           const hp = handAt();
           const u = o.start - tAll;
           const sw = u < WINDUP ? 1 - u / WINDUP : 0;
-          // La moneda viaja con la mano: el gesto de echarse atrás también la lleva (S9).
+          // La moneda viaja con la mano: el gesto de echarse atrás también la lleva.
           const gesto = gestoMano();
           drawToken(hp.x - 4 * k + gesto.x, hp.y - 8 * k + sw * 22 * k + gesto.y, 1, false);
         }

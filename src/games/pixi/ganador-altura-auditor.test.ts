@@ -12,7 +12,7 @@ type Check = { nombre: string; ok: boolean; rol?: string };
 const GANADORA = "María Fernanda Guadalupe Quispe Mamani Zu";
 const ANA = "Ana María de los Ángeles Condori Flores";
 
-describe("identidad explícita del nombre final (S2)", () => {
+describe("identidad explícita del nombre final", () => {
   it("no asocia a 'Ana María …' con la ganadora 'María Fernanda …', ni como texto suelto ni como chip ajeno", () => {
     expect(nombreFinalDe(ANA, null, [GANADORA])).toBeNull();
     expect(nombreFinalDe(ANA, { rol: "chip", original: ANA }, [GANADORA])).toBeNull();
@@ -26,7 +26,7 @@ describe("identidad explícita del nombre final (S2)", () => {
   });
 });
 
-describe("solo las superficies del nombre final cuentan (S6)", () => {
+describe("solo las superficies del nombre final cuentan", () => {
   it("las inscripciones de los gajos no son nombre final, aunque igualen el nombre corto", () => {
     expect(nombreFinalDe("María Z.", null, [GANADORA])).toBeNull();
     expect(nombreFinalDe("María", null, ["María"])).toBeNull();
