@@ -207,6 +207,23 @@ describe("un sello que se mandó y no se sabe si entró", () => {
   });
 });
 
+describe("el intento se guarda antes de mandar el sello", () => {
+  it("freeze le da a sellarSinDuplicar el intento de cada ronda: la cuenta, la huella, la cantidad y el premio", async () => {
+    // El navegador de un iPhone no pregunta antes de salir: lo que queda guardado antes de mandar es lo que evita un segundo sello.
+    let intentoDe: ((r: number) => unknown) | undefined;
+    h.sellarSinDuplicar = async (_inicial, o) => {
+      intentoDe = (o as { intentoDe?: (r: number) => unknown }).intentoDe;
+      throw new Error("boom");
+    };
+    const { freeze } = await import("./freeze");
+    await freeze();
+    expect(intentoDe).toBeTypeOf("function");
+    const { bytesToHex } = await import("../protocol/quicknet");
+    const { listHash } = await import("../protocol/canonical");
+    expect(intentoDe?.(123)).toMatchObject({ organizer: "GAAA", listHash: bytesToHex(listHash(["Ana", "Beto"])), round: 123, count: 2, numWinners: 1, meta: "Una pizza" });
+  });
+});
+
 describe("la pantalla completa que pidió Sellar la lista, si no se selló", () => {
   it("si la red no deja sellar, se suelta", async () => {
     h.grande = true;

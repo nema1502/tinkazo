@@ -47,6 +47,14 @@ export interface PasosDelSello {
   sinGrabar: (e: unknown) => boolean;
   /** Guarda (o borra, con `null`) el intento del que no se sabe si entró. */
   guardarPendiente: (intento: IntentoDeSello | null) => void;
+  /**
+   * El intento que se va a mandar con esa ronda, todavía sin el hash de la transacción. Si está, se guarda ANTES de
+   * mandar y se borra cuando se sabe cómo terminó. Si la página se recarga o la pestaña muere con el sello ya en la red
+   * (el navegador de un iPhone no pregunta antes de salir), lo que quedó guardado hace que el toque siguiente averigüe
+   * primero en vez de mandar otro sello de la misma lista. `resolverSello` lo encuentra sin el hash: por cuenta, huella
+   * y ronda. Sin esto el intento se guarda recién cuando el envío falla sin saberse.
+   */
+  intentoDe?: (round: number) => IntentoDeSello;
   dormir?: (ms: number) => Promise<void>;
   /**
    * Para la línea de estado: se está averiguando, se va a volver a probar tras un corte,
@@ -171,9 +179,11 @@ export async function sellarSinDuplicar(
   let otrasRondas = 0;
   let otrasPorRed = 0;
   for (;;) {
+    // Antes de mandar: si la pestaña muere con el sello en la red, queda dicho qué se mandó.
+    if (p.intentoDe) p.guardarPendiente(p.intentoDe(round));
+    let res: { raffleId: bigint; txHash: string };
     try {
-      const res = await p.sellar(round);
-      return { raffleId: res.raffleId, txHash: res.txHash, round, ts };
+      res = await p.sellar(round);
     } catch (e) {
       if (esSelloIncierto(e)) {
         p.guardarPendiente(e.intento);
@@ -193,6 +203,9 @@ export async function sellarSinDuplicar(
         ({ round, ts } = p.rondaNueva(MAS_LEJOS_POR_INTENTO_S * otrasRondas));
         continue;
       }
+      // Cualquier otro error es de un sello que no entró: no quedó nada en el aire, y el intento que se guardó antes de
+      // mandar ya no tiene qué averiguar.
+      if (p.intentoDe) p.guardarPendiente(null);
       if (corteAntesDeMandar(e) && otrasPorRed < OTRAS_POR_RED) {
         otrasPorRed++;
         p.avisar?.("reintentando");
@@ -216,6 +229,9 @@ export async function sellarSinDuplicar(
       }
       throw e;
     }
+    // Entró y se sabe: el intento guardado antes de mandar ya no hace falta.
+    if (p.intentoDe) p.guardarPendiente(null);
+    return { raffleId: res.raffleId, txHash: res.txHash, round, ts };
   }
 }
 

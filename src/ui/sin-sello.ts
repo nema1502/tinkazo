@@ -48,6 +48,8 @@ export interface ParametrosDelReintento {
   /** Falló sin dejar nada en la cadena, de una forma que se arregla con otra ronda: acá no hay otra. */
   sinGrabar: (e: unknown) => boolean;
   guardarPendiente: (intento: IntentoDeSello | null) => void;
+  /** El intento de esa ronda, para guardarlo antes de mandarlo (`PasosDelSello.intentoDe` en `sello-seguro.ts`). */
+  intentoDe?: (round: number) => IntentoDeSello;
   /** Cada intento que empieza (1, 2, 3…): la pantalla lo cuenta. */
   alIntento?: (n: number) => void;
   /** Cada intento que no entró, con su error: va al registro. */
@@ -99,6 +101,7 @@ export function reintentarSello(p: ParametrosDelReintento): Reintento {
             resolver: p.resolver,
             sinGrabar: p.sinGrabar,
             guardarPendiente: p.guardarPendiente,
+            ...(p.intentoDe ? { intentoDe: p.intentoDe } : {}),
             dormir,
             ...(p.avisar ? { avisar: p.avisar } : {}),
             // Sin `rondaNueva`: la ronda es esta.

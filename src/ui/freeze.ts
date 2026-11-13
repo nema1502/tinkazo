@@ -5,6 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
+import type { IntentoDeSello } from "../stellar/envio";
 import { contractUrl, hayModoOficial, modeNameKey, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
@@ -723,6 +724,16 @@ async function hayUnSelloPendiente(names: string[]): Promise<boolean> {
   }
 }
 
+/**
+ * El intento de sellar esta lista con esa ronda, tal como lo va a mandar `sealOnChain` (el premio recortado a 160 y su
+ * texto de siempre si está vacío). `sello-seguro.ts` lo guarda antes de mandarlo: si la pestaña muere con el sello en la
+ * red, el toque siguiente averigua primero y no manda otro. Todavía no tiene el hash de la transacción: no hace falta,
+ * el contrato lo encuentra por cuenta, huella y ronda.
+ */
+function intentoDeSello(c: { organizer: string; hash: string; count: number; numWinners: number; prize: string }, round: number): IntentoDeSello {
+  return { organizer: c.organizer, listHash: c.hash, round, count: c.count, numWinners: c.numWinners, meta: (c.prize || t("defaultMeta")).slice(0, 160), desde: Math.floor(Date.now() / 1000) };
+}
+
 /** El sello se mandó y no se pudo averiguar si entró (`SelloSinConfirmar` de `sello-seguro.ts`). */
 const esSelloSinConfirmar = (e: unknown): boolean => typeof e === "object" && e !== null && (e as { name?: unknown }).name === "SelloSinConfirmar";
 
@@ -899,6 +910,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
             return selloSinGrabar(e);
           },
           guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
+          intentoDe: (r) => intentoDeSello({ organizer: session.address, hash, count: names.length, numWinners, prize }, r),
           avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
         previo?.intento ?? null,
@@ -1143,6 +1155,7 @@ const sigueSiendo = (c: SorteoSinSello): boolean => app.frozen?.round === c.roun
 function seguirIntentandoElSello(c: SorteoSinSello): void {
   reintentoActual?.cancelar();
   const contrato = network.contractId ?? "";
+  const seguroListo = import("./sello-seguro");
   const reintento = reintentarSello({
     round: c.round,
     ts: c.ts,
@@ -1153,7 +1166,9 @@ function seguirIntentandoElSello(c: SorteoSinSello): void {
       ),
     resolver: (intento) => resolverSelloEnLaRed(intento),
     sinGrabar: selloSinGrabar,
-    guardarPendiente: (intento) => void import("./sello-seguro").then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize)),
+    // Un solo `import()`: lo que se guarda y lo que se borra pasa en el orden en que se pidió.
+    guardarPendiente: (intento) => void seguroListo.then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize)),
+    intentoDe: (r) => intentoDeSello({ organizer: c.organizer, hash: c.hash, count: c.names.length, numWinners: c.numWinners, prize: c.prize }, r),
     alIntento: (n) => {
       if (!sigueSiendo(c)) return;
       verSinSello("intentando");

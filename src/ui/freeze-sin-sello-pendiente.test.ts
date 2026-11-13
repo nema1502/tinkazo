@@ -204,4 +204,13 @@ describe("Seguir sin sello con un sello de esta lista que no se sabe si entró",
     expect(app.frozen?.sinSello).toBe(true);
     expect(h.reintentarSello).toHaveBeenCalledTimes(1);
   });
+
+  it("cada intento de sellar de después también deja guardado el suyo antes de mandarlo", async () => {
+    const { freeze } = await import("./freeze");
+    await freeze({ sinSello: true, saltarChequeo: true });
+
+    const params = h.reintentarSello.mock.calls[0]?.[0] as { round: number; intentoDe?: (r: number) => unknown };
+    expect(params.intentoDe).toBeTypeOf("function");
+    expect(params.intentoDe?.(params.round)).toMatchObject({ organizer: "GAAA", round: params.round, count: 2, numWinners: 1, meta: "Una pizza" });
+  });
 });

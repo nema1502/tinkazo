@@ -297,6 +297,115 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
   });
 });
 
+describe("sellarSinDuplicar: el intento queda guardado antes de mandarlo", () => {
+  /**
+   * Hasta acá el intento se guardaba solo cuando el envío fallaba sin saberse. Si la página se recargaba o la
+   * pestaña moría con el sello ya en la red (en el iPhone el navegador no pregunta antes de salir), no quedaba
+   * nada guardado, la lista volvía abierta y el toque siguiente mandaba otro sello con otra ronda: dos sellos de
+   * la misma lista. `intentoDe` da el intento que se va a mandar con cada ronda, todavía sin el hash.
+   */
+  const intentoDe = (round: number): IntentoDeSello => ({ organizer: ORG, listHash: HUELLA, round, count: 8, numWinners: 1, meta: "premio", desde: 1_792_600_000 });
+
+  it("antes de cada envío el intento ya está guardado, con la ronda que se manda", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const alMandar: (IntentoDeSello | null)[] = [];
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      sellar: async (round) => {
+        alMandar.push(e.pendientes.at(-1) ?? null);
+        return e.pasos.sellar(round);
+      },
+    });
+    const ronda = e.pasos.sellar.mock.calls[0]?.[0] as number;
+    expect(alMandar).toEqual([intentoDe(ronda)]);
+  });
+
+  it("si el sello entra, el intento se borra al terminar", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const r = await sellarSinDuplicar(e.inicial(), { ...e.pasos, intentoDe });
+    expect(r.raffleId).toBe(500n);
+    expect(e.pendientes.at(0)).not.toBeNull();
+    expect(e.pendientes.at(-1)).toBeNull();
+  });
+
+  it("si el envío falla sin dejar nada, cada ronda se guarda antes de mandarla y al final no queda nada", async () => {
+    const e = escenario([
+      { entra: "nunca", respuesta: "vuelve" },
+      { entra: "nunca", respuesta: "vuelve" },
+      { entra: "nunca", respuesta: "vuelve" },
+    ]);
+    const alMandar: (IntentoDeSello | null)[] = [];
+    await expect(
+      sellarSinDuplicar(e.inicial(), {
+        ...e.pasos,
+        intentoDe,
+        sellar: async (round) => {
+          alMandar.push(e.pendientes.at(-1) ?? null);
+          return e.pasos.sellar(round);
+        },
+      }),
+    ).rejects.toThrow("tx-FAILED");
+    const rondas = e.pasos.sellar.mock.calls.map(([round]) => round);
+    expect(alMandar).toEqual(rondas.map(intentoDe));
+    expect(e.pendientes.at(-1)).toBeNull();
+  });
+
+  it("un corte antes de mandar nada tampoco deja un intento guardado de más", async () => {
+    const e = escenario([
+      { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Failed to fetch") },
+      { entra: "ya", respuesta: "vuelve" },
+    ]);
+    const r = await sellarSinDuplicar(e.inicial(), { ...e.pasos, intentoDe });
+    expect(r.raffleId).toBe(500n);
+    expect(e.pendientes.at(-1)).toBeNull();
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+
+  it("si no se sabe si entró, queda guardado el de la red, con el hash de su transacción", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "se-pierde" }]);
+    const corrida = sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+    });
+    await expect(corrida).rejects.toBeInstanceOf(SelloSinConfirmar);
+    expect(e.pendientes.at(-1)?.hash).toBe("tx0");
+  });
+
+  it("si la página se recarga con el sello ya en la red, el próximo toque lo encuentra y no manda otro", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    // Lo que quedó en el almacenamiento del navegador.
+    let guardado: IntentoDeSello | null = null;
+    let alAire!: () => void;
+    const llegoAlAire = new Promise<void>((r) => (alAire = r));
+    // La pestaña muere con el sello hecho: este envío nunca vuelve.
+    void sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      guardarPendiente: (i) => void (guardado = i),
+      sellar: async (round) => {
+        await e.pasos.sellar(round);
+        alAire();
+        return new Promise<never>(() => undefined);
+      },
+    });
+    await llegoAlAire;
+    expect(guardado).not.toBeNull();
+
+    // La página nueva, con la misma lista: empieza por lo que quedó guardado.
+    const r = await sellarSinDuplicar(e.inicial(), e.pasos, guardado);
+    expect(r.retomado).toEqual(guardado);
+    expect(r.raffleId).toBe(500n);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+});
+
 describe("averiguarPendiente: saber si un sello entró sin mandar ninguno", () => {
   it("si entró, lo dice y no lo borra: quien sigue lo retoma", async () => {
     const e = escenario([{ entra: "ya", respuesta: "se-pierde" }]);
