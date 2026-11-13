@@ -38,14 +38,20 @@
  *
  * Con `--grabar <carpeta> [--etiqueta antes|despues] [--segundos 20]` guarda también, de cada
  * juego, los segundos que terminan 4 s después del cartel del ganador (o los primeros, si no se vio), de lo que salió por el parlante en `<juego>-<etiqueta>.wav`
- * (16 bits, estéreo), para escuchar lo mismo antes y después de un cambio de sonido.
+ * (16 bits, estéreo), para escuchar lo mismo antes y después de un cambio de sonido. Con `--segundos todo` guarda la
+ * grabación entera, de punta a punta, y con `--cola <s>` sigue grabando esos segundos después del cartel (2 si no se
+ * dice), para que entre el festejo entero.
+ *
+ * Con `--demo` mide el sorteo de ejemplo (`?demo=<juego>&lead=3&pace=normal`) en vez de la escena fija: pasa por la
+ * cuenta regresiva y la tarjeta de cómo se juega, como en una sala, y por eso la música de archivo ya bajó cuando
+ * arranca. Espera la ronda de verdad, así que necesita red.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
-import { grabacionCorta, hayQueRepetir, puedeParar } from "./lib/mezcla-captura.mjs";
+import { DESPUES_DEL_CARTEL, grabacionCorta, hayQueRepetir, puedeParar } from "./lib/mezcla-captura.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -65,7 +71,10 @@ const motor = opt("--motor", "");
 const espectro = args.includes("--espectro");
 const carpetaWav = opt("--grabar", "");
 const etiquetaWav = opt("--etiqueta", "despues");
-const segundosWav = Number(opt("--segundos", "20"));
+const wavEntero = opt("--segundos", "20") === "todo";
+const segundosWav = wavEntero ? 0 : Number(opt("--segundos", "20"));
+const colaSeg = Math.max(0, Number(opt("--cola", String(DESPUES_DEL_CARTEL))) || 0);
+const demo = args.includes("--demo");
 /** Un WAV de 16 bits y dos canales con el comienzo de la mezcla. */
 function escribirWav(ruta, L, R, sr, seg) {
   const n = Math.min(L.length, Math.round(seg * sr));
@@ -290,8 +299,10 @@ async function medirUna(browser, juego) {
     await page.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: OIDO });
     if (sinMusica) await page.send("Page.addScriptToEvaluateOnNewDocument", { source: SIN_MUSICA });
-    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
-    const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", 30_000);
+    const escena = demo ? `demo=${juego}&lead=3&pace=normal` : `pose=${juego === "race" ? "1" : juego}`;
+    await page.send("Page.navigate", { url: `${base}/?${escena}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
+    // El sorteo de ejemplo espera su ronda antes de abrir el estadio: por eso más tiempo.
+    const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", demo ? 90_000 : 30_000);
     if (!ok.ok) return { error: "el estadio no apareció" };
     // Hasta que el juego cierra solo (o sale el resultado), o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
     // pelotón (`normalCarrera` en src/duraciones.ts) y con 60 s se cortaba antes del ganador.
@@ -308,9 +319,9 @@ async function medirUna(browser, juego) {
     if (!e) return { error: "no se pudo enganchar el oído" };
     if (e.falla) return { error: `el oído no arrancó: ${e.falla}` };
     const t1 = Date.now();
-    while (cerro && Date.now() - t1 < 15_000) {
+    while (cerro && Date.now() - t1 < Math.max(15, colaSeg + 10) * 1000) {
       e = await page.eval("window.__mezcla.estado()");
-      if (puedeParar({ cerro, cartelSeg: e.cartelSeg, ahoraSeg: e.ahora })) break;
+      if (puedeParar({ cerro, cartelSeg: e.cartelSeg, ahoraSeg: e.ahora, extra: colaSeg })) break;
       await sleep(200);
     }
     // Hasta ahí sonó esto; se espera a que lo grabado lo alcance (los trozos viajan por mensajes).
@@ -334,10 +345,10 @@ async function medirUna(browser, juego) {
     if (carpetaWav) {
       // Se trae el comienzo de la mezcla en trozos chicos: el canal de DevTools no aguanta un mensaje de varios MB.
       const sr = Number(await page.eval("window.__mezcla.sr"));
-      const total = Math.round(segundosWav * sr);
+      const total = wavEntero ? Math.round(r.seg * sr) : Math.round(segundosWav * sr);
       const L = new Float32Array(total), R = new Float32Array(total);
       // Los segundos que terminan cuatro después del cartel del ganador (con el cartel adentro), o los primeros si no se vio.
-      const desde = r.cartel > 0 ? Math.max(0, Math.round((r.cartel / 1000 + 4) * sr) - total) : 0;
+      const desde = wavEntero ? 0 : r.cartel > 0 ? Math.max(0, Math.round((r.cartel / 1000 + 4) * sr) - total) : 0;
       let puesto = 0, bloque = Math.floor(desde / 4096);
       let saltar = desde - bloque * 4096;
       while (puesto < total) {
@@ -349,7 +360,15 @@ async function medirUna(browser, juego) {
         puesto += n; bloque++;
       }
       mkdirSync(carpetaWav, { recursive: true });
-      escribirWav(join(carpetaWav, `${juego}-${etiquetaWav}.wav`), L, R, sr, segundosWav);
+      escribirWav(join(carpetaWav, `${juego}-${etiquetaWav}.wav`), L, R, sr, wavEntero ? r.seg : segundosWav);
+      r.wav = { archivo: `${juego}-${etiquetaWav}.wav`, desdeSeg: desde / sr, cartelSeg: r.cartel > 0 ? r.cartel / 1000 - desde / sr : null };
+      // Lo que anotó el reproductor de pistas (qué sección sonó, cuándo retuvo o soltó), en segundos del archivo: para
+      // ubicar en la grabación lo que se oye.
+      if (r.pista?.registro) {
+        const cero = e.primerCuadro / e.sr + desde / sr;
+        const registro = r.pista.registro.map((x) => ({ seg: Math.round((x.t - cero) * 1000) / 1000, que: x.que }));
+        writeFileSync(join(carpetaWav, `${juego}-${etiquetaWav}.pista.json`), JSON.stringify({ modo: r.pista.modo, cartelSeg: r.wav.cartelSeg, registro }, null, 1));
+      }
     }
     return r;
   } finally {
@@ -398,6 +417,7 @@ async function run() {
         const avisos = r.pista.registro.filter((x) => /^(pista|falla|cae|corre)|llegó tarde/.test(x.que)).map((x) => x.que);
         console.log(`             música de archivo: ${r.pista.modo}${r.pista.suena ? ", sonando al cerrar" : ""}${avisos.length ? `, ${avisos.join(" | ")}` : ", sin avisos"}`);
       }
+      if (!r.error && r.wav) console.log(`             grabado en ${r.wav.archivo}${r.wav.cartelSeg !== null ? `, el cartel del ganador a los ${r.wav.cartelSeg.toFixed(2)} s del archivo` : ", sin cartel"}`);
     }
   } finally {
     await browser.close();
