@@ -30,6 +30,7 @@ import { initStandSala } from "./ui/stand-sala";
 import { equiposActivo } from "./equipos/bandera";
 import { requestedMode } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
+import { fijarElTema } from "./tema-forzado";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -46,9 +47,9 @@ import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
 
-// `?theme=light|dark` fuerza el tema (capturas).
+// `?theme=light|dark` fuerza el tema (capturas), también en la captura de la portada (`tema-forzado.ts`).
 const themeParam = params.get("theme");
-if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+fijarElTema(themeParam);
 
 // `?lavado=1`: solo para auditar. El estadio se ve como en un proyector pobre, con luz en la sala (menos contraste, negros grises y más brillo).
 // Lo mide `scripts/audit-lavado.mjs`; ninguna persona lo ve si no lo pide en la dirección.
