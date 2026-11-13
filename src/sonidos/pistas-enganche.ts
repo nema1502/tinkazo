@@ -12,7 +12,10 @@ import { corrimientoDeDecodificacion, leerCabeceraMp3 } from "./pistas-mp3";
  * 1. la dirección: `?musica=pistas` o `?musica=sintetizada`, que además queda recordada en la pestaña (entrar con la
  *    cuenta es irse a otra dirección y volver sin el parámetro);
  * 2. lo recordado en la pestaña;
- * 3. la bandera de construcción `VITE_MUSICA` (`VITE_MUSICA=pistas pnpm build`). Sin ella, `sintetizada`.
+ * 3. la bandera de construcción `VITE_MUSICA`: sin ella, `pistas`. Solo `VITE_MUSICA=sintetizada` las apaga para todos.
+ *
+ * Las pistas van prendidas por defecto, pero solo suenan los juegos de `pistas-lista.ts` (los que ya se escucharon dentro
+ * del juego): los demás no piden ningún archivo y suenan con la de siempre.
  *
  * Con `sintetizada` ninguna función de este módulo hace nada: ni un pedido de red, ni un nodo de audio.
  *
@@ -36,9 +39,12 @@ export type ModoMusica = "pistas" | "sintetizada";
 const CLAVE_MODO = "tinkazo.musica-modo";
 const MODOS: readonly ModoMusica[] = ["pistas", "sintetizada"];
 
-/** Lo que dice la bandera de construcción: solo `pistas` prende las pistas. */
+/**
+ * Lo que dice la bandera de construcción: las pistas, salvo `sintetizada`, que las apaga para todos. Cualquier otro valor
+ * (o ninguno) deja lo normal, que es la música nueva.
+ */
 export function modoDeConstruccion(valor: unknown = leerBandera()): ModoMusica {
-  return valor === "pistas" ? "pistas" : "sintetizada";
+  return typeof valor === "string" && valor.trim().toLowerCase() === "sintetizada" ? "sintetizada" : "pistas";
 }
 
 function leerBandera(): unknown {

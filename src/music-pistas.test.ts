@@ -6,9 +6,10 @@ import { bufferFalso, ContextoFalso, type FuenteFalsa } from "./sonidos/audio-fa
  * La música de los juegos con las pistas por secciones, por los mismos pedidos de siempre (`startMusic`, `musicCue`,
  * `musicHold`, `musicBreath`, `stopMusic` y `fanfare`), con un contexto de audio de mentira en la página.
  *
- * Con la música sintetizada (lo que hay hoy) nada cambia: ni un pedido de red ni una fuente de pista. Con las pistas y
- * la del juego lista, la pista toma la música y la de osciladores no arma nada; si la pista se rompe en medio del show,
- * vuelve la de osciladores.
+ * Las pistas van prendidas por defecto, pero fuera del sitio y sin carpeta de pistas no baja nada y suena la de
+ * osciladores. Con la música sintetizada (`?musica=sintetizada` o `VITE_MUSICA=sintetizada`) nada cambia: ni un pedido de
+ * red ni una fuente de pista. Con las pistas y la del juego lista, la pista toma la música y la de osciladores no arma
+ * nada; si la pista se rompe en medio del show, vuelve la de osciladores.
  */
 
 // Las pruebas ponen sus propias pistas: la lista de verdad no cuenta.
@@ -72,27 +73,42 @@ afterEach(() => {
   reiniciarPistas();
 });
 
-describe("con la música sintetizada (la de hoy)", () => {
-  it("todos los pedidos suenan con osciladores, sin un pedido de red ni una fuente de pista", () => {
+/** Un sorteo entero por los pedidos de siempre: tiene que sonar con osciladores, sin un pedido de red ni una fuente de pista. */
+function sorteoConOsciladores(): void {
+  sonidoDelJuego("race");
+  startMusic(semilla);
+  const antes = osciladores();
+  avanzar(2);
+  expect(osciladores()).toBeGreaterThan(antes);
+  musicCue(0.9);
+  musicHold(true);
+  musicHold(false);
+  musicBreath();
+  const antesDelRemate = osciladores();
+  musicCue(1);
+  fanfare();
+  vi.advanceTimersByTime(2000);
+  expect(osciladores()).toBeGreaterThan(antesDelRemate);
+  stopMusic();
+  expect(red).not.toHaveBeenCalled();
+  expect(ctx().dePista()).toHaveLength(0);
+}
+
+describe("por defecto, en la máquina de quien prueba y sin carpeta de pistas", () => {
+  it("las pistas van prendidas, pero no baja nada y suena la de osciladores", () => {
+    sessionStorage.clear();
+    // La configuración que arma la pestaña sola: esta página es localhost, sin parámetros ni bandera.
     reiniciarPistas();
+    expect(estadoDePistas().modo).toBe("pistas");
+    sorteoConOsciladores();
+  });
+});
+
+describe("con la música sintetizada (?musica=sintetizada o VITE_MUSICA=sintetizada)", () => {
+  it("todos los pedidos suenan con osciladores, sin un pedido de red ni una fuente de pista", () => {
+    reiniciarPistas({ modo: "sintetizada", host: "tinkazo.app" });
     expect(estadoDePistas().modo).toBe("sintetizada");
-    sonidoDelJuego("race");
-    startMusic(semilla);
-    const antes = osciladores();
-    avanzar(2);
-    expect(osciladores()).toBeGreaterThan(antes);
-    musicCue(0.9);
-    musicHold(true);
-    musicHold(false);
-    musicBreath();
-    const antesDelRemate = osciladores();
-    musicCue(1);
-    fanfare();
-    vi.advanceTimersByTime(2000);
-    expect(osciladores()).toBeGreaterThan(antesDelRemate);
-    stopMusic();
-    expect(red).not.toHaveBeenCalled();
-    expect(ctx().dePista()).toHaveLength(0);
+    sorteoConOsciladores();
   });
 });
 

@@ -127,11 +127,13 @@ async function lista(ctx: ContextoFalso): Promise<void> {
 }
 
 describe("el interruptor", () => {
-  it("la bandera de construcción solo prende las pistas con `pistas`", () => {
+  it("sin bandera de construcción las pistas van prendidas, y solo `sintetizada` las apaga para todos", () => {
+    expect(modoDeConstruccion(undefined)).toBe("pistas");
+    expect(modoDeConstruccion("")).toBe("pistas");
     expect(modoDeConstruccion("pistas")).toBe("pistas");
-    expect(modoDeConstruccion(undefined)).toBe("sintetizada");
-    expect(modoDeConstruccion("1")).toBe("sintetizada");
+    expect(modoDeConstruccion("1")).toBe("pistas");
     expect(modoDeConstruccion("sintetizada")).toBe("sintetizada");
+    expect(modoDeConstruccion(" Sintetizada ")).toBe("sintetizada");
   });
 
   it("la dirección pide una u otra", () => {
@@ -142,14 +144,16 @@ describe("el interruptor", () => {
   });
 
   it("la dirección manda sobre la bandera, y queda recordada en la pestaña", () => {
-    expect(modoDeMusica("pistas", "?musica=sintetizada")).toBe("sintetizada");
+    expect(modoDeMusica(undefined, "?musica=sintetizada")).toBe("sintetizada");
     // Sin el parámetro (volvió de entrar con la cuenta), sigue lo que se pidió.
-    expect(modoDeMusica("pistas", "")).toBe("sintetizada");
-    expect(modoDeMusica(undefined, "?musica=pistas")).toBe("pistas");
-    expect(modoDeMusica(undefined, "")).toBe("pistas");
-    sessionStorage.clear();
     expect(modoDeMusica(undefined, "")).toBe("sintetizada");
-    expect(modoDeMusica("pistas", "")).toBe("pistas");
+    expect(modoDeMusica("pistas", "")).toBe("sintetizada");
+    expect(modoDeMusica("sintetizada", "?musica=pistas")).toBe("pistas");
+    expect(modoDeMusica("sintetizada", "")).toBe("pistas");
+    sessionStorage.clear();
+    // Sin nada pedido en la pestaña, la de la bandera: prendida si no dice `sintetizada`.
+    expect(modoDeMusica(undefined, "")).toBe("pistas");
+    expect(modoDeMusica("sintetizada", "")).toBe("sintetizada");
   });
 });
 

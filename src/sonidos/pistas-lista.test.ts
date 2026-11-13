@@ -11,7 +11,7 @@ import { PISTAS } from "./pistas-lista";
  *
  * Sumar un juego a la lista es una decisión de oído: se cambia `APROBADAS` acá y `pistas-lista.ts` en el mismo commit.
  */
-const APROBADAS = ["race"];
+const APROBADAS = ["pinata", "race"];
 
 const CARPETA = new URL("./pistas/", import.meta.url);
 const ARMADAS = readdirSync(CARPETA)
@@ -27,7 +27,8 @@ describe("la lista de pistas del sitio", () => {
 
   it("la carrera está, y ningún juego sin pista aprobada: ni la chovena ni los que esperan", () => {
     expect(PISTAS.race).toBeDefined();
-    for (const j of ["chovena", "wheel", "trompo", "sapo", "oruro", "pinata", "toborochi", "teleferico", "guajojo"]) expect(PISTAS[j]).toBeUndefined();
+    const esperan = [...ARMADAS, "chovena"].filter((j) => !APROBADAS.includes(j));
+    for (const j of esperan) expect(PISTAS[j]).toBeUndefined();
   });
 
   it("cada pista de la lista es el contenido de su JSON, sin retoques", () => {
