@@ -308,11 +308,19 @@ export function textoDelError(e: ErrorDeAlta, decir: (clave: string) => string):
   return texto;
 }
 
+/**
+ * La clave de un motivo en una tabla, solo si es suya: lo que tiene cualquier objeto (`constructor`, `toString`) no es un
+ * motivo. Con `hasOwnProperty` y no con `Object.hasOwn`, que no existe en los iOS anteriores al 15.4: este es el camino
+ * del cupón.
+ */
+const claveDe = (tabla: Readonly<Record<string, string>>, motivo: string): string | undefined =>
+  Object.prototype.hasOwnProperty.call(tabla, motivo) ? tabla[motivo] : undefined;
+
 function errorDeRespuesta(estado: number, cuerpo: unknown, o: OpcionesDeAlta, propias: Readonly<Record<string, string>> = {}): ErrorDeAlta {
   const c = (cuerpo && typeof cuerpo === "object" ? cuerpo : {}) as Record<string, unknown>;
   let motivo = typeof c.motivo === "string" ? c.motivo.slice(0, 60) : "";
   if (!motivo && estado === 401) motivo = "sesion";
-  const clave = (Object.hasOwn(propias, motivo) ? propias[motivo] : undefined) ?? (Object.hasOwn(CLAVE_DEL_MOTIVO, motivo) ? CLAVE_DEL_MOTIVO[motivo] : undefined);
+  const clave = claveDe(propias, motivo) ?? claveDe(CLAVE_DEL_MOTIVO, motivo);
   if (!clave) return error(motivo || "respuesta", estado);
   const vars: Record<string, string> = {};
   if (clave === "altaErrVencido") {
