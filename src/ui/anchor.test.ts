@@ -593,7 +593,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     h.wallet = pollar();
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("No pudimos llegar al registro público. Probá de nuevo en unos segundos.");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });
@@ -613,7 +613,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       // Lo que hace freeze.ts: lo reconoce y reintenta con otra ronda, sin que haya quedado nada en la cadena.
       const { selloSinGrabar, anchorErrorText } = await import("./anchor");
       expect(selloSinGrabar(error)).toBe(true);
-      expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
+      expect(await anchorErrorText(error)).toBe("El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.");
       // Ni simuló, ni firmó, ni mandó nada.
       expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
       expect(h.seal).not.toHaveBeenCalled();
@@ -818,7 +818,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
   it("al sortear, con la lista ya sellada, el patrocinio vacío habla de sortear y no culpa a la cuenta", async () => {
     const { anchorErrorText } = await import("./anchor");
     const alSortear =
-      "Tu lista está sellada y nadie la puede cambiar. Ahora no pudimos cubrir lo que cobra la red para sortear. Probá de nuevo en unos minutos: el ganador va a ser el mismo. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
+      "Tu lista sigue sellada y el ganador va a ser el mismo. No pudimos cubrir el costo de sortear. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
     h.wallet = pollar();
     // Las dos formas en que se queda sin con qué pagar el patrocinio de Pollar, y la del portero de Tinkazo.
     for (const e of [new Error("txInsufficientBalance"), new Error("SDK_CREDITS_INSUFFICIENT"), { name: "ErrorPortero", motivo: "fondo", estado: 503 }]) {
@@ -896,7 +896,7 @@ describe("el margen de la ronda al empezar a armar el sello", () => {
     const { error } = await sellar(conMargen(10));
     const { selloSinGrabar, anchorErrorText } = await import("./anchor");
     expect(selloSinGrabar(error)).toBe(true);
-    expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.");
   });
 });
 
@@ -1340,7 +1340,7 @@ describe("escribirError: sin conexión, igual dice algo", () => {
     expect(status.textContent).toBe("Estás sin internet. Conectate y probá de nuevo.");
     vi.stubGlobal("navigator", { onLine: true });
     await escribirError(status, new TypeError("Failed to fetch"), "sorteo");
-    expect(status.textContent).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
+    expect(status.textContent).toBe("No pudimos llegar al registro público. Probá de nuevo en unos segundos.");
   });
 });
 

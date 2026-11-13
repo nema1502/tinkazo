@@ -396,7 +396,7 @@ const DETALLES = {
         await sleep(900);
         await sellar(page);
         const cuenta = await page.eval("document.getElementById('wait-left').textContent");
-        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya nació/.test(cuenta), `"${cuenta}"`);
+        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya salió el número/.test(cuenta), `"${cuenta}"`);
         await sortearYSaltar(page);
         await page.eval("document.getElementById('btn-grande').focus({ preventScroll: true }); true");
         await sleep(1400);

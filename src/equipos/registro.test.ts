@@ -384,12 +384,12 @@ describe("el camino con sorteo propio", () => {
     return { m, g };
   }
 
-  it("cuando lo aceptan: 'Hacé tu primer sorteo con Tinkazo' y 'Para entrar al sorteo del stand, tu equipo hace primero un sorteo con Tinkazo. Es gratis.'", async () => {
+  it("cuando lo aceptan: 'Hacé tu primer sorteo con Tinkazo' y 'Para entrar al sorteo del evento, tu equipo hace primero un sorteo con Tinkazo. Es gratis.'", async () => {
     const { m } = await anotado();
     m.sala.estado = "aceptado";
     m.reloj.f();
     await vi.waitFor(() => expect(q(m, "eqp-estado-t").textContent).toBe("Hacé tu primer sorteo con Tinkazo"));
-    expect(q(m, "eqp-estado-b").textContent).toBe("Para entrar al sorteo del stand, tu equipo hace primero un sorteo con Tinkazo. Es gratis.");
+    expect(q(m, "eqp-estado-b").textContent).toBe("Para entrar al sorteo del evento, tu equipo hace primero un sorteo con Tinkazo. Es gratis.");
     expect(q<HTMLButtonElement>(m, "eqp-sorteo").hidden).toBe(false);
     expect(q<HTMLButtonElement>(m, "eqp-sorteo").textContent).toBe(t("eqpHacerSorteo"));
   });

@@ -66,7 +66,7 @@ describe("la lista de la verificación con sufijos", () => {
     expect(filas().map((f) => f.dataset.p)).toEqual(["1", "2", "3", "4"]);
   });
 
-  it("un comprobante de turnos dice «El orden recomputado», no «El ganador recomputado»", async () => {
+  it("un comprobante de turnos dice «El orden recomputado», no «El ganador, calculado de nuevo»", async () => {
     const { pintarComprobaciones } = await montar();
     const names = ["Ana", "Beto", "Carla"];
     pintarComprobaciones({ names, prize: "Turnos de limpieza" } as never, {
@@ -82,7 +82,7 @@ describe("la lista de la verificación con sufijos", () => {
     } as never);
     const texto = document.getElementById("checks")?.textContent ?? "";
     expect(texto).toContain("El orden recomputado");
-    expect(texto).not.toContain("El ganador recomputado");
+    expect(texto).not.toContain("El ganador, calculado de nuevo");
   });
 
   it("con el modo de varias participaciones en el enlace, una lista que cierra agrupa por persona", async () => {
@@ -136,7 +136,7 @@ describe("la lista de la verificación con sufijos", () => {
       huella: "00".repeat(32),
     } as never);
     const texto = document.getElementById("checks")?.textContent ?? "";
-    expect(texto).toContain("El ganador recomputado");
+    expect(texto).toContain("El ganador, calculado de nuevo");
     expect(texto).not.toContain("El orden recomputado");
   });
 
@@ -156,7 +156,7 @@ describe("la lista de la verificación con sufijos", () => {
       huella: "00".repeat(32),
     } as never);
     const texto = document.getElementById("checks")?.textContent ?? "";
-    expect(texto).toContain("El ganador recomputado");
+    expect(texto).toContain("El ganador, calculado de nuevo");
     expect(texto).not.toContain("El orden recomputado");
   });
 
@@ -178,7 +178,7 @@ describe("la lista de la verificación con sufijos", () => {
     } as never);
     const texto = document.getElementById("checks")?.textContent ?? "";
     expect(texto).toContain("El orden recomputado");
-    expect(texto).not.toContain("El ganador recomputado");
+    expect(texto).not.toContain("El ganador, calculado de nuevo");
   });
 
   it("un orden de turnos con varias participaciones cuenta por persona y muestra los turnos sin sufijo", async () => {
@@ -226,7 +226,7 @@ describe("la lista de la verificación con sufijos", () => {
     expect(turnos).toEqual(["Otro", "Grupo 4 (1/2)", "Grupo 4 (2/2)"]);
   });
 
-  it("un sorteo común sigue diciendo «El ganador recomputado»", async () => {
+  it("un sorteo común sigue diciendo «El ganador, calculado de nuevo»", async () => {
     const { pintarComprobaciones } = await montar();
     const names = ["Ana", "Beto", "Carla"];
     pintarComprobaciones({ names, prize: "Una pizza" } as never, {
@@ -240,6 +240,6 @@ describe("la lista de la verificación con sufijos", () => {
       veredicto: "libre",
       huella: "00".repeat(32),
     } as never);
-    expect(document.getElementById("checks")?.textContent).toContain("El ganador recomputado");
+    expect(document.getElementById("checks")?.textContent).toContain("El ganador, calculado de nuevo");
   });
 });

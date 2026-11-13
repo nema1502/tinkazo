@@ -98,4 +98,11 @@ describe("revisión de redacción de los textos visibles", () => {
     expect(t("en", "saldoMinimo")).toContain("the fixed part of the fee (1 dollar)");
     expect(`${t("es", "saldoMinimo")} ${t("en", "saldoMinimo")}`).not.toMatch(/dólar fijo|fixed dollar/);
   });
+
+  it("la cuenta 3, 2, 1 de la tarjeta del juego no vuelve a decir Contemos juntos, que quien organiza rechazó", () => {
+    // La primera versión de la espera cerraba con esa frase y salió el 17 de octubre de 2026 (`ui/espera.ts`).
+    expect(t("es", "gcCuenta")).toBe("¡Cuenten conmigo!");
+    expect(t("en", "gcCuenta")).toBe("Count with me!");
+    expect(`${t("es", "gcCuenta")} ${t("en", "gcCuenta")}`).not.toMatch(/contemos juntos|count down together/i);
+  });
 });

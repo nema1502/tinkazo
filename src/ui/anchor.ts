@@ -663,6 +663,8 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
  */
 export function stepLabel(step: AnchorStep, que: "sello" | "sorteo" = "sello"): string {
   if (step === "simulating" && que === "sorteo") return t("txSimulatingSorteo");
+  // Guardar es guardar el sello al sellar, y grabar el sorteo al sortear.
+  if (que === "sorteo" && (step === "sending" || (step === "signing" && firmaSinVentana))) return t("txSendingSorteo");
   return t(step === "signing" ? (firmaSinVentana ? "txSending" : "txSigning") : CLAVE_DEL_PASO[step]);
 }
 

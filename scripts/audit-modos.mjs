@@ -531,7 +531,7 @@ async function abrirComunConModo(browser, vista, enlace, modo, quien) {
     );
     check(
       `${quien}: con ?modo=${modo} un sorteo común se muestra como sorteo común`,
-      /Quién ganó|Who won/.test(datos.titulo) && /El ganador recomputado|The recomputed winner/.test(datos.comprobaciones) && datos.tarjetas > 0 && datos.filasTurnos === 0,
+      /Quién ganó|Who won/.test(datos.titulo) && /El ganador, calculado de nuevo|The winner, worked out again/.test(datos.comprobaciones) && datos.tarjetas > 0 && datos.filasTurnos === 0,
       `"${datos.titulo}" / ${datos.tarjetas} tarjetas / ${datos.filasTurnos} turnos`,
     );
     return datos;

@@ -80,4 +80,35 @@ describe("el paso de firmar", () => {
     expect(stepLabel("simulating", "sorteo")).toBe("Armando el sorteo…");
     expect(stepLabel("sending")).toBe("Guardando el sello…");
   });
+
+  it("al sortear, guardar dice que se graba el sorteo y no el sello", async () => {
+    h.wallet = deprueba;
+    const { quienFirma, stepLabel } = await import("./anchor");
+    await quienFirma();
+    expect(stepLabel("signing", "sorteo")).toBe("Grabando el sorteo…");
+    expect(stepLabel("sending", "sorteo")).toBe("Grabando el sorteo…");
+    // Al sellar, la palabra sigue siendo sello.
+    expect(stepLabel("signing", "sello")).toBe("Guardando el sello…");
+    expect(stepLabel("sending", "sello")).toBe("Guardando el sello…");
+  });
+
+  it("al sortear con una billetera con ventana, firmar sigue pidiendo aprobar", async () => {
+    h.wallet = freighter;
+    const { quienFirma, stepLabel } = await import("./anchor");
+    await quienFirma();
+    expect(stepLabel("signing", "sorteo")).toBe("Aprobá la operación en tu billetera…");
+    expect(stepLabel("sending", "sorteo")).toBe("Grabando el sorteo…");
+  });
+
+  it("la línea de estado del sorteo dice que se graba el sorteo, y la del sello que se guarda el sello", async () => {
+    h.wallet = pollar;
+    const { quienFirma, showTxStatus } = await import("./anchor");
+    await quienFirma();
+    const host = { style: { display: "" }, className: "", textContent: "" };
+    vi.stubGlobal("document", { getElementById: (id: string) => (id.endsWith("-detalle") ? null : host) });
+    showTxStatus("draw-status", "signing");
+    expect(host.textContent).toBe("Grabando el sorteo…");
+    showTxStatus("seal-status", "signing");
+    expect(host.textContent).toBe("Guardando el sello…");
+  });
 });
