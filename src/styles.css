@@ -3194,8 +3194,13 @@
   /* --- El texto de sesión del botón grande de la portada no se ve hasta que el
      JS lo decidió (`destrabarCtas`): visibilidad, no display, para que la caja
      no salte; y la caja de la cuenta de la cabecera guarda su lugar (ver
-     `.auth:empty`, arriba). Contra el FOUC de la recarga. --- */
-  [data-cta-entrar]:not([data-cta-listo]) .cta-t { visibility: hidden; }
+     `.auth:empty`, arriba). Contra el FOUC de la recarga.
+     APAGADO: solo vale con `data-cta-espera` en la etiqueta html de index.html,
+     que hoy no está. Medido en un celular con datos lentos, el botón principal
+     quedaba vacío más de un segundo (para siempre si el JS no corre) y el salto
+     seguía igual: viene del cambio de tamaño, no del texto. Antes de prenderlo,
+     que el HTML traiga el texto que va a quedar. --- */
+  html[data-cta-espera] [data-cta-entrar]:not([data-cta-listo]) .cta-t { visibility: hidden; }
 
   /* --- El pase de tarjetas del selector "Elegí el juego" (espera.ts): tras ~6 s
      sin toques, las tarjetas se recorren una a una en bucle; la que va adelante

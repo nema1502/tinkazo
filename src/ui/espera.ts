@@ -12,6 +12,7 @@ import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
+import { atencionPrendida } from "../estilos-atencion";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -585,16 +586,20 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const armarPase = (): void => {
     if (tPase) window.clearTimeout(tPase);
     tPase = 0;
+    // Apagado (estilos-atencion.ts, ATENCION_PRENDIDA): ni el panel quieto ni un toque lo arman.
+    if (!atencionPrendida("pase")) return;
     if (azarCorriendo || !panel || panel.hidden) return;
     tPase = window.setTimeout(entrarEnPase, PASE_TRAS);
   };
-  // Un toque o movimiento dentro del panel corta el pase y rearma la espera.
+  // Un toque o movimiento dentro del panel corta el pase y rearma la espera. Con el pase apagado, el panel ni escucha.
   const alToqueEnPanel = (): void => {
     pararPase();
     armarPase();
   };
-  for (const tipo of ["pointermove", "pointerdown", "keydown", "wheel", "click", "focusin"] as const)
-    panel?.addEventListener(tipo, alToqueEnPanel, { passive: true });
+  if (atencionPrendida("pase")) {
+    for (const tipo of ["pointermove", "pointerdown", "keydown", "wheel", "click", "focusin"] as const)
+      panel?.addEventListener(tipo, alToqueEnPanel, { passive: true });
+  }
 
   const tecla = (e: KeyboardEvent): void => {
     if (e.key !== "Escape") return;

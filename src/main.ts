@@ -578,7 +578,8 @@ setLang(initialLang());
 rotateWords();
 // Las animaciones de atención (estilos-atencion.ts): el temblor de los botones
 // del hero tras ~8 s sin interactuar, el destello periódico del pie y el hover
-// vivo en las capturas de la portada. Ninguna decide nada del sorteo.
+// vivo en las capturas de la portada. Ninguna decide nada del sorteo. Hoy entran
+// apagadas: cada una tiene su interruptor en ATENCION_PRENDIDA.
 iniciarTemblorHero();
 iniciarDestelloPie();
 iniciarHoverVivo(".portada-juegos a");

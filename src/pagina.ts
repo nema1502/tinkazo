@@ -89,7 +89,7 @@ setLang(initialLang());
 enlazarContrato(document, network.contractId ? contractUrl() : null);
 // Las animaciones de atención (estilos-atencion.ts): el destello periódico del
 // pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
-// nada del sorteo.
+// nada del sorteo. Hoy entran apagadas: su interruptor está en ATENCION_PRENDIDA.
 iniciarDestelloPie();
 iniciarHoverVivo(".juego");
 montarLaCuenta();

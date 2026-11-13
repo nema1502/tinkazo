@@ -158,7 +158,37 @@ function temporizadoresAsentados(): number {
 /** Semillas de toda clase: chicas, grandes y el máximo de 32 bits. Con la semilla 0 la ruleta arranca justo en la carrera. */
 const SEMILLAS = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 144, 12345, 2147483647, 4294967295];
 
+/**
+ * El pase entra apagado: en Mostrar en grande la tarjeta elegida se apagaba a la mitad cada vuelta, frente a la sala, y
+ * se podía leer como si el juego cambiara solo. Apagado, ni con el panel quieto ni después de un toque arranca.
+ */
+describe("el pase de tarjetas entra apagado", () => {
+  it("el interruptor viene apagado", async () => {
+    const { ATENCION_PRENDIDA, atencionPrendida } = await import("../estilos-atencion");
+    expect(ATENCION_PRENDIDA.pase).toBe(false);
+    expect(atencionPrendida("pase")).toBe(false);
+  });
+
+  it("con el panel quieto no arranca, y un toque dentro del panel tampoco lo arma", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    panel.dispatchEvent(new Event("pointermove"));
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // La tarjeta elegida sigue con su marca: nada la apaga.
+    expect(resaltadas(panel)).toEqual(["race"]);
+  });
+});
+
 describe("el pase de tarjetas del selector", () => {
+  // El mecanismo, con el interruptor prendido a mano: el sitio lo trae apagado.
+  beforeEach(async () => {
+    const { forzarAtencion } = await import("../estilos-atencion");
+    forzarAtencion("pase", true);
+  });
+
   /** La tarjeta marcada como viva del pase. */
   const viva = (panel: HTMLElement): number =>
     [...panel.querySelectorAll<HTMLElement>("[data-game]")].findIndex((t) => t.classList.contains("pase-viva"));
