@@ -2388,7 +2388,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .enlace, .gate button, .langs button, #nw, button.netbadge { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, #nw, button.netbadge, button.acct-badge { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector
