@@ -3,13 +3,17 @@ import { enStand } from "./ensayo-modo";
 import { TEXTOS_CREADORES } from "./marca-creadores-textos";
 import { TEXTOS_EQUIPOS } from "./equipos/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
+import { TEXTOS_COSTOS } from "./ui/costos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
 import { TEXTOS_ALTA } from "./alta-textos";
-import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
+import { TEXTOS_ALTA_PAGO } from "./alta-textos-pago";
+import { TEXTOS_COBRO, cobroEnElBuild, textosConCobro } from "./alta-textos-con-cobro";
+import { TEXTOS_ALTA_SIN_PAGO, TEXTOS_ALTA_SIN_VENTA } from "./alta-textos-sin-pago";
 import { altaPagoActivo } from "./stellar/alta-config";
 import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
 import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
+import { TEXTOS_COMPRA } from "./compra-textos";
 import { cuadroEsDeEquipos } from "./equipos/etiquetas";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
@@ -958,6 +962,16 @@ export const T: Record<Lang, Dict> = {
     // son claves "rec.<juego>.<lado>": ideal, bajo y alto dentro del rango, y
     // largo o corto cuando no encaja. Las que llevan números son funciones.
     recBadge: "Recomendado",
+    // La llama que acompaña los recorridos largos (`ui/llama-guia.ts`): el paso arriba del camino, el nombre de la barra
+    // de progreso para el lector de pantalla y el nombre de cada tramo.
+    llamaPaso: (p: number, total: number) => `Paso ${p} de ${total}`,
+    llamaPasoAria: (p: number, total: number, tramo: string) => `Paso ${p} de ${total}: ${tramo}`,
+    llamaAvance: "Tu avance",
+    tramoCuenta: "Tu cuenta",
+    tramoIdentidad: "Tu identidad",
+    tramoMonto: "Cuánto",
+    tramoPago: "Tu pago",
+    tramoCamino: "En camino",
     recHead: (n: number) => `Para ${n} personas`,
     // Con varias participaciones, la cabecera dice las dos cuentas, como el resto de la pantalla (freeze.ts).
     recHeadPart: (p: number, n: number) => `Para ${p} personas, ${n} participaciones`,
@@ -2573,37 +2587,83 @@ export const T: Record<Lang, Dict> = {
     acctPending: "sin sortear",
     acctProofOf: "Comprobante de {sorteo}",
     acctSignOut: "Cerrar sesión",
-    // Cargá tu saldo, monedas, tiendita y plan del equipo (detrás de las banderas VITE_RAMPA, VITE_MONEDAS y VITE_PLAN_EQUIPO)
-    saldoBtn: "Cargá tu saldo",
-    saldoTitle: "Cargá tu saldo",
-    saldoLead: "Pasá bolivianos a dólares digitales en tu cuenta. El dinero es tuyo: queda en tu cuenta y lo retirás cuando quieras.",
-    saldoPasos: "Cuatro pasos",
-    saldoP1: "Descargá la app de Meru y creá tu cuenta.",
-    saldoP2: "Cargá bolivianos pagando con el QR de tu banco. Eso en Meru no tiene costo.",
-    saldoP3: "En Meru, elegí mandar dólares digitales (USDC) por la red Stellar y pegá tu dirección de abajo como destino.",
-    saldoP4: "Volvé acá y tocá el botón Ya cargué. Los primeros dólares pueden tardar unos minutos en llegar.",
-    saldoMeru: "Abrir Meru",
-    saldoCosto: "Cuánto cuesta: Meru cobra 1 % más 1 dólar al mandar. Tinkazo no cobra ni guarda nada.",
-    saldoMinimo: "Como la parte fija de la comisión (1 dólar) pesa más en los montos chicos, conviene cargar de a 25 dólares o más.",
+    // Tus dólares digitales, monedas, tiendita y plan del equipo (detrás de las banderas VITE_RAMPA, VITE_MONEDAS y VITE_PLAN_EQUIPO)
+    saldoBtn: "Tus dólares digitales",
+    saldoTitle: "Tus dólares digitales",
+    saldoLead: "Dólares digitales (USDC) en tu cuenta. Son tuyos: Tinkazo no los guarda ni los toca.",
+    saldoTenes: "Tenés {n} dólares digitales.",
+    saldoTenesPrueba: "Tenés {n} dólares digitales de prueba.",
+    cargaTenesNada: "Todavía no tenés dólares digitales en tu cuenta.",
+    saldoPractica: "Práctica: estos dólares digitales son de prueba y no valen dinero. Mandalos desde otra cuenta de prueba.",
+    cargaYaTengo: "Ya tengo dólares digitales",
+    cargaComoSaco: "¿Cómo saco mi dinero?",
+    cargaComoSacoTexto: "Tus dólares digitales están en tu cuenta y son tuyos. Pasarlos a tu banco todavía no se puede desde acá. Mientras tanto, podés mandarlos a otra cuenta tuya o a una app que los cambie a bolivianos.",
+    cargaCuentaPrimero: "Para cargar, primero dejá tu cuenta lista.",
+    cargaCuentaPrimeroBtn: "Dejar mi cuenta lista",
+    saldoSoloOficialTitulo: "Se hace en modo Oficial",
+    saldoSoloOficial: "En modo Prueba no se mueve dinero real.",
+    saldoMirandoCuenta: "Mirando si tu cuenta ya puede recibir dólares digitales…",
+    saldoMasDetalles: "Más detalles",
+    saldoRecibirTitulo: "Traé tus dólares digitales",
+    saldoRecibirOjo: "Solo USDC por la red Stellar. Otra moneda u otra red se puede perder.",
+    saldoRecibirComo: "En la otra app o exchange, elegí mandar USDC por la red Stellar y pegá tu dirección como destino. Si te pide una nota o memo, dejala vacía.",
     saldoDir: "Tu dirección",
-    saldoDirAyuda: "Pegala en Meru como destino. Es pública: sirve para recibir, nadie puede sacar nada con ella.",
-    saldoCopiarAria: "Copiar tu dirección para pegarla en Meru",
+    saldoDirAyuda: "Es pública: sirve para recibir, nadie puede sacar nada con ella.",
     saldoQrAlt: "Código QR con tu dirección",
-    saldoYaCargue: "Ya cargué",
+    saldoNota: "Nota o memo",
+    saldoNotaVacia: "Dejala vacía",
+    saldoYaMande: "Ya lo mandé",
     saldoMirando: "Mirando tu cuenta…",
+    saldoLlegaron: "Llegaron {n} dólares digitales.",
+    saldoNoVemosNuevo: "Todavía no vemos uno nuevo.",
+    saldoUltimoLlego: "El último llegó el {cuando}: {n} dólares digitales.",
+    saldoNoLlegoTodavia: "Todavía no vemos ninguno.",
+    saldoEsperaNoMandes: "Si lo mandaste hace poco, esperá unos minutos: no lo mandes de nuevo.",
     saldoLlego: "Tus primeros dólares digitales llegaron",
     saldoLlegoMonedas: "Sumaste {n} monedas de regalo.",
-    saldoNoLlego: "Todavía no los vemos. Pueden tardar un poco: probá de nuevo en unos minutos.",
     saldoError: "No pudimos mirar tu cuenta ahora. Probá de nuevo en unos minutos.",
-    saldoPollarTitle: "Cargar desde acá",
-    saldoPollarBs: "Bolivianos a cargar",
-    saldoPollarVer: "Ver cuánto recibís",
-    saldoPollarRecibis: "Recibirías unos {n} dólares digitales.",
-    saldoPollarTarda: "Tarda unos {m} minutos.",
-    saldoPollarSinRuta: "Ahora no hay un camino para ese monto. Probá con otro o cargá con Meru.",
-    saldoPollarError: "No pudimos pedir el precio ahora. Cargá con Meru mientras tanto.",
-    saldoPollarNoListo: "Cargar sin salir de Tinkazo todavía no está listo. Mientras tanto, cargá con la guía de Meru.",
-    saldoPollarCargar: "Cargar desde acá",
+    saldoVolverAMirar: "Volver a mirar",
+    saldoNoSeSabe: "No pudimos mirar tu cuenta ahora. Probá de nuevo en unos minutos.",
+    saldoNoSeSabeMas: "Hasta saber que puede recibir, no te mostramos tu dirección.",
+    saldoActivarTitulo: "Primero, activá los dólares digitales",
+    saldoActivarApp: "Activarlos lleva un momento y a vos no te cuesta nada.",
+    saldoActivarPropio: "La red aparta medio XLM de tu billetera mientras sigan activados.",
+    saldoActivarPropioMas: "También cobra una comisión mínima. Tu billetera te va a pedir que lo apruebes.",
+    saldoActivarBtn: "Activar dólares digitales",
+    saldoActivando: "Activando…",
+    saldoActivarAhoraNo: "Ahora no se puede activar. Tu cuenta está bien: probá más tarde.",
+    saldoActivarAprobar: "Aprobalo en tu billetera.",
+    saldoActivadoOk: "Listo: tu cuenta ya puede recibir dólares digitales.",
+    saldoActivarNoSalio: "No se pudo activar. Probá de nuevo en unos minutos.",
+    saldoActivarNoAprobado: "No lo aprobaste en tu billetera. Cuando quieras, probá de nuevo.",
+    saldoMonto: "{n} dólares digitales",
+    saldoMandarBtn: "Mandar mis dólares digitales",
+    saldoMandarA: "A dónde",
+    saldoMandarPegar: "Pegar dirección",
+    saldoMandarNota: "Pegar nota",
+    saldoMandarSinNota: "Sin nota",
+    saldoMandarNotaAyuda: "Si la app que recibe te dio una nota o memo, pegala acá.",
+    saldoMandarNotaMala: "Esa nota no sirve para mandar. Revisala en la otra app.",
+    saldoMandarCuanto: "Cuánto",
+    saldoMandarTodo: "Todo",
+    saldoMandarMitad: "La mitad",
+    saldoMandarMenos: "Un dólar menos",
+    saldoMandarMas: "Un dólar más",
+    saldoMandarResumen: "Vas a mandar {n} dólares digitales a {corta}.",
+    saldoMandarOk: "Mandar",
+    saldoMandarMirando: "Mirando esa cuenta…",
+    saldoMandarNoRecibe: "Esa cuenta no puede recibir dólares digitales. Revisá la dirección: no mandamos nada.",
+    saldoMandarListo: "Listo: mandaste {n} dólares digitales.",
+    saldoMandarEnCurso: "Se está mandando. No lo mandes de nuevo.",
+    saldoMandarNoSalio: "No se pudo mandar. Tus dólares digitales siguen en tu cuenta.",
+    saldoActivandoEspera: "Se está activando. Puede tardar un poco.",
+    saldoNoMandesTitulo: "No mandes dinero a esta cuenta",
+    saldoNoPuedeApp: "Por ahora no puede recibir dólares digitales. Volvé a mirar más adelante.",
+    saldoNoRecibeMas: "Por ahora no puede recibir más dólares digitales.",
+    saldoFaltaXlm: "Tu billetera necesita {n} XLM libres y tiene {m}. Sumale XLM.",
+    saldoBilleteraNuevaTitulo: "Tu billetera todavía no está activa",
+    saldoBilleteraNueva: "Primero tiene que recibir 2 XLM. Después volvé a mirar.",
+    saldoOtraRed: "Tu billetera está en otra red. Pasala a {red} y volvé a mirar.",
     monTitle: "Tus monedas",
     monSaldo: "{n} monedas",
     monCargando: "Mirando tus monedas…",
@@ -3605,6 +3665,14 @@ export const T: Record<Lang, Dict> = {
     // "rec.<game>.<side>" keys: ideal, bajo (low) and alto (high) within the
     // range; largo (too many) and corto (too few) when it doesn't fit.
     recBadge: "Recommended",
+    llamaPaso: (p: number, total: number) => `Step ${p} of ${total}`,
+    llamaPasoAria: (p: number, total: number, tramo: string) => `Step ${p} of ${total}: ${tramo}`,
+    llamaAvance: "Your progress",
+    tramoCuenta: "Your account",
+    tramoIdentidad: "Your identity",
+    tramoMonto: "How much",
+    tramoPago: "Your payment",
+    tramoCamino: "On its way",
     recHead: (n: number) => `For ${n} people`,
     // With several entries per person, the header says both counts, like the rest of the screen (freeze.ts).
     recHeadPart: (p: number, n: number) => `For ${p} people, ${n} entries`,
@@ -5190,37 +5258,83 @@ export const T: Record<Lang, Dict> = {
     acctPending: "not drawn yet",
     acctProofOf: "Receipt for {sorteo}",
     acctSignOut: "Sign out",
-    // Add to your balance, coins, little shop and team plan (behind the VITE_RAMPA, VITE_MONEDAS and VITE_PLAN_EQUIPO flags)
-    saldoBtn: "Add to your balance",
-    saldoTitle: "Add to your balance",
-    saldoLead: "Turn bolivianos into digital dollars in your account. The money is yours: it stays in your account and you can take it out whenever you want.",
-    saldoPasos: "Four steps",
-    saldoP1: "Download the Meru app and create your account.",
-    saldoP2: "Add bolivianos by paying with your bank's QR. That costs nothing in Meru.",
-    saldoP3: "In Meru, choose to send digital dollars (USDC) over the Stellar network and paste your address from below as the destination.",
-    saldoP4: "Come back here and tap the I've added it button. The first dollars can take a few minutes to arrive.",
-    saldoMeru: "Open Meru",
-    saldoCosto: "What it costs: Meru charges 1 % plus 1 dollar when it sends. Tinkazo charges nothing and keeps nothing.",
-    saldoMinimo: "Because the fixed part of the fee (1 dollar) weighs more on small amounts, it's better to add 25 dollars or more at once.",
+    // Your digital dollars, coins, little shop and team plan (behind the VITE_RAMPA, VITE_MONEDAS and VITE_PLAN_EQUIPO flags)
+    saldoBtn: "Your digital dollars",
+    saldoTitle: "Your digital dollars",
+    saldoLead: "Digital dollars (USDC) in your account. They're yours: Tinkazo doesn't hold or touch them.",
+    saldoTenes: "You have {n} digital dollars.",
+    saldoTenesPrueba: "You have {n} test digital dollars.",
+    cargaTenesNada: "You don't have any digital dollars in your account yet.",
+    saldoPractica: "Practice: these digital dollars are test ones and have no value. Send them from another test account.",
+    cargaYaTengo: "I already have digital dollars",
+    cargaComoSaco: "How do I take my money out?",
+    cargaComoSacoTexto: "Your digital dollars are in your account and they're yours. Moving them to your bank isn't possible from here yet. In the meantime, you can send them to another account of yours or to an app that changes them into bolivianos.",
+    cargaCuentaPrimero: "To add money, first get your account ready.",
+    cargaCuentaPrimeroBtn: "Get my account ready",
+    saldoSoloOficialTitulo: "It happens in Live mode",
+    saldoSoloOficial: "In Test mode no real money moves.",
+    saldoMirandoCuenta: "Checking whether your account can receive digital dollars…",
+    saldoMasDetalles: "More details",
+    saldoRecibirTitulo: "Bring your digital dollars",
+    saldoRecibirOjo: "Only USDC on the Stellar network. Another coin or network can be lost.",
+    saldoRecibirComo: "In the other app or exchange, choose to send USDC on the Stellar network and paste your address as the destination. If it asks for a note or memo, leave it empty.",
     saldoDir: "Your address",
-    saldoDirAyuda: "Paste it into Meru as the destination. It's public: it only receives, nobody can take anything out with it.",
-    saldoCopiarAria: "Copy your address to paste it into Meru",
+    saldoDirAyuda: "It's public: it only receives, nobody can take anything out with it.",
     saldoQrAlt: "QR code with your address",
-    saldoYaCargue: "I've added it",
+    saldoNota: "Note or memo",
+    saldoNotaVacia: "Leave it empty",
+    saldoYaMande: "I've sent it",
     saldoMirando: "Checking your account…",
+    saldoLlegaron: "{n} digital dollars arrived.",
+    saldoNoVemosNuevo: "We don't see a new one yet.",
+    saldoUltimoLlego: "The last one arrived on {cuando}: {n} digital dollars.",
+    saldoNoLlegoTodavia: "We don't see any yet.",
+    saldoEsperaNoMandes: "If you sent it recently, wait a few minutes: don't send it again.",
     saldoLlego: "Your first digital dollars arrived",
     saldoLlegoMonedas: "You earned {n} coins as a gift.",
-    saldoNoLlego: "We don't see them yet. They can take a few minutes: try again soon.",
     saldoError: "We couldn't check your account right now. Try again in a few minutes.",
-    saldoPollarTitle: "Add from here",
-    saldoPollarBs: "Bolivianos to add",
-    saldoPollarVer: "See how much you'd get",
-    saldoPollarRecibis: "You'd get about {n} digital dollars.",
-    saldoPollarTarda: "It takes about {m} minutes.",
-    saldoPollarSinRuta: "There's no way to do that amount right now. Try another one or add with Meru.",
-    saldoPollarError: "We couldn't get the price right now. Add with Meru in the meantime.",
-    saldoPollarNoListo: "Adding without leaving Tinkazo isn't ready yet. In the meantime, add with the Meru guide.",
-    saldoPollarCargar: "Add from here",
+    saldoVolverAMirar: "Check again",
+    saldoNoSeSabe: "We couldn't check your account right now. Try again in a few minutes.",
+    saldoNoSeSabeMas: "Until we know it can receive, we won't show your address.",
+    saldoActivarTitulo: "First, turn on digital dollars",
+    saldoActivarApp: "Turning them on takes a moment and costs you nothing.",
+    saldoActivarPropio: "The network sets aside half an XLM from your wallet while they stay on.",
+    saldoActivarPropioMas: "It also charges a tiny fee. Your wallet will ask you to approve it.",
+    saldoActivarBtn: "Turn on digital dollars",
+    saldoActivando: "Turning them on…",
+    saldoActivarAhoraNo: "It can't be turned on right now. Your account is fine: try later.",
+    saldoActivarAprobar: "Approve it in your wallet.",
+    saldoActivadoOk: "Done: your account can now receive digital dollars.",
+    saldoActivarNoSalio: "It couldn't be turned on. Try again in a few minutes.",
+    saldoActivarNoAprobado: "You didn't approve it in your wallet. Try again whenever you want.",
+    saldoMonto: "{n} digital dollars",
+    saldoMandarBtn: "Send my digital dollars",
+    saldoMandarA: "To",
+    saldoMandarPegar: "Paste address",
+    saldoMandarNota: "Paste note",
+    saldoMandarSinNota: "No note",
+    saldoMandarNotaAyuda: "If the receiving app gave you a note or memo, paste it here.",
+    saldoMandarNotaMala: "That note can't be used to send. Check it in the other app.",
+    saldoMandarCuanto: "How much",
+    saldoMandarTodo: "All",
+    saldoMandarMitad: "Half",
+    saldoMandarMenos: "One dollar less",
+    saldoMandarMas: "One dollar more",
+    saldoMandarResumen: "You're going to send {n} digital dollars to {corta}.",
+    saldoMandarOk: "Send",
+    saldoMandarMirando: "Checking that account…",
+    saldoMandarNoRecibe: "That account can't receive digital dollars. Check the address: we didn't send anything.",
+    saldoMandarListo: "Done: you sent {n} digital dollars.",
+    saldoMandarEnCurso: "It's being sent. Don't send it again.",
+    saldoMandarNoSalio: "It couldn't be sent. Your digital dollars are still in your account.",
+    saldoActivandoEspera: "They're being turned on. It can take a little while.",
+    saldoNoMandesTitulo: "Don't send money to this account",
+    saldoNoPuedeApp: "For now it can't receive digital dollars. Check again later.",
+    saldoNoRecibeMas: "For now it can't receive more digital dollars.",
+    saldoFaltaXlm: "Your wallet needs {n} free XLM and has {m}. Add some XLM.",
+    saldoBilleteraNuevaTitulo: "Your wallet isn't active yet",
+    saldoBilleteraNueva: "It first needs to receive 2 XLM. Then check again.",
+    saldoOtraRed: "Your wallet is on another network. Switch it to {red} and check again.",
     monTitle: "Your coins",
     monSaldo: "{n} coins",
     monCargando: "Checking your coins…",
@@ -5708,9 +5822,22 @@ Object.assign(T.en, TEXTOS_EQUIPOS.en);
 // Los premios pagados y el panel de ganadores (src/ui/panel-ganadores.ts) tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_PAGOS.es);
 Object.assign(T.en, TEXTOS_PAGOS.en);
+// Lo que se ve cuando el modo Oficial frena algo para no costar de más (`src/ui/costos-textos.ts`).
+Object.assign(T.es, TEXTOS_COSTOS.es);
+Object.assign(T.en, TEXTOS_COSTOS.en);
 // El acceso al modo Oficial con cupón y lo que queda de sorteos oficiales tienen sus textos aparte (`alta-textos.ts`).
 Object.assign(T.es, TEXTOS_ALTA.es);
 Object.assign(T.en, TEXTOS_ALTA.en);
+// Los textos del pago de un paquete (`alta-textos-pago.ts`): claves propias, que solo se muestran con la compra prendida.
+Object.assign(T.es, TEXTOS_ALTA_PAGO.es);
+Object.assign(T.en, TEXTOS_ALTA_PAGO.en);
+// Las de la caja del acceso sin nada a la venta, con nombre propio (`altaTextoSinVenta`, `altaYaActivadaSinVenta`).
+Object.assign(T.es, TEXTOS_ALTA_SIN_VENTA.es);
+Object.assign(T.en, TEXTOS_ALTA_SIN_VENTA.en);
+// Las claves nuevas de las páginas públicas con la compra (la lista de precios y lo que se compra en los términos), que
+// se ven solo con la compra prendida (`alta-textos-con-cobro.ts`).
+Object.assign(T.es, TEXTOS_COBRO.es);
+Object.assign(T.en, TEXTOS_COBRO.en);
 // Mientras la compra de sorteos esté apagada no hay dónde comprar: ningún texto lo ofrece (`alta-textos-sin-pago.ts`).
 if (!altaPagoActivo()) {
   Object.assign(T.es, TEXTOS_ALTA_SIN_PAGO.es);
@@ -5720,11 +5847,24 @@ Object.assign(T.es, TEXTOS_ALTA_CUENTA.es);
 Object.assign(T.en, TEXTOS_ALTA_CUENTA.en);
 Object.assign(T.es, TEXTOS_ALTA_PASO.es);
 Object.assign(T.en, TEXTOS_ALTA_PASO.en);
+// La compra con el QR del banco (`compra-textos.ts`): claves propias, que ninguna pantalla muestra mientras la compra
+// con QR esté apagada.
+Object.assign(T.es, TEXTOS_COMPRA.es);
+Object.assign(T.en, TEXTOS_COMPRA.en);
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
 // que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`).
 if (HAY_MODO_OFICIAL) {
   Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
   Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
+}
+
+// Con la compra de sorteos a la vista (en piloto, solo en una pestaña con su marca), las páginas públicas dicen que se
+// compran y ya no que es gratis para todos (`alta-textos-con-cobro.ts`). Va al final: manda sobre los textos con cupón
+// y los del modo Oficial.
+if (cobroEnElBuild()) {
+  const conCobro = textosConCobro();
+  Object.assign(T.es, conCobro.es);
+  Object.assign(T.en, conCobro.en);
 }
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los

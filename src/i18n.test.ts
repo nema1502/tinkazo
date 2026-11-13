@@ -239,9 +239,6 @@ describe("diccionario", () => {
   });
 
   it("en texto plano, un botón cuyo nombre es una frase se presenta como botón", () => {
-    // Sin comillas, tocá Ya cargué se lee como si lo dijera quien escribe.
-    expect(T.es.saldoP4).toContain(`tocá el botón ${T.es.saldoYaCargue}.`);
-    expect(T.en.saldoP4).toContain(`tap the ${T.en.saldoYaCargue} button.`);
     // Con Mostrar en grande seguido de una coma, el botón parecía el primero de una lista de cuatro.
     expect(T.es.sorEvU1B).toMatch(new RegExp(`^Tocá ${T.es.pantallaBtn} y el premio`));
     expect(T.en.sorEvU1B).toMatch(new RegExp(`^Tap ${T.en.pantallaBtn} and the prize`));

@@ -5,13 +5,15 @@
  * ayuda del campo (`altaCuponAyuda`). `i18n.ts` los suma al diccionario del sitio; mientras la compra de sorteos esté
  * apagada, los que nombran un pago van con su variante sin pago (`alta-textos-sin-pago.ts`).
  *
- * Los textos del pago (las claves `pago…`) no están acá: entran con el pago, que todavía no está prendido.
+ * Los textos del pago (las claves `pago…`) están en `alta-textos-pago.ts`. Los que ofrecen un producto
+ * (`altaPrimerPaquete`, `cupoOfSumarPaquete`) no llevan ningún precio escrito: `{sorteos}` y `{precio}` se arman con los
+ * números de `GET /v1/alta/precios` (`alta-oferta.ts`, `varsDelProducto`).
  *
  * Reglas de escritura (las comprueba `alta-textos.test.ts`): sin signos de exclamación, sin punto medio, sin rayas
  * largas ni flechas; nunca «rifa», «lotería», «raffle», «ticket», «boleto» ni «apuesta» (se dice «sorteo» y «draw»); y
  * nada de USDC, Stellar, exchange ni memo fuera de las claves `pago…`. Para Oficial, en inglés, «Live».
  *
- * Los datos que lleva cada texto van entre llaves: `{codigo}`, `{n}`, `{fecha}`, `{min}` y `{max}`.
+ * Los datos que lleva cada texto van entre llaves: `{codigo}`, `{n}`, `{fecha}`, `{min}`, `{max}`, `{sorteos}` y `{precio}`.
  */
 export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, string> } = {
   es: {
@@ -24,7 +26,7 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     // El acceso, en la primera parte de «Dejá tu cuenta lista».
     altaTexto: "Para sortear en modo Oficial necesitás un cupón o tu primer paquete de sorteos.",
     altaTengoCupon: "Tengo un cupón",
-    altaPrimerPaquete: "3 sorteos oficiales por 2 dólares",
+    altaPrimerPaquete: "{sorteos} por {precio}",
     altaPrimerPaqueteNota: "Tu cuenta queda activada sin costo extra.",
     altaNoTengo: "¿No tenés cupón? Pedile uno a quien organiza tu evento, o escribinos a hola@tinkazo.app. En Prueba podés sortear gratis.",
     altaCuponListo: "Tenés un cupón listo para usar: {codigo}.",
@@ -37,7 +39,8 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     altaCuponOk1: "Tu cupón trae 1 sorteo oficial y cubre la activación de tu cuenta.",
     altaActivarCupon: "Tu cupón cubre la activación. Un toque y listo.",
     altaActivarPago: "Ya pagaste tu primer paquete. Un toque y listo.",
-    altaYaActivada: "Tu cuenta ya está activada. Para sortear en modo Oficial, usá un cupón o sumá sorteos.",
+    // Con la compra en el build va solo junto al botón del primer paquete: corto, una sola línea.
+    altaYaActivada: "Tu cuenta ya está activada. Para sortear, usá un cupón o sumá sorteos.",
     altaCuponGuardado: "Tu cupón ya quedó en tu cuenta: no lo perdiste. Probá de nuevo.",
     clBajadaConPago: "Primero, tus sorteos oficiales. Después, dos pasos que llevan un minuto.",
     altaErrForma: "Faltan o sobran letras. El cupón tiene 12 letras y números: revisalo en la tarjeta.",
@@ -59,14 +62,18 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     cupoOfDoble: "Con más de 50 ganadores, este sorteo usa 2.",
     cupoOfSumar: "Sumar sorteos",
     cupoOfCeroTitulo: "Se te acabaron los sorteos oficiales",
-    cupoOfCeroTexto: "Tu lista no se selló. Para sellar en modo Oficial, usá un cupón o sumá sorteos. En Prueba seguís gratis.",
+    // Solo en «Se te acabaron», junto al botón de sumar (sin un paquete a la venta va `cupoOfCeroTextoSinVenta`). Corto:
+    // Pasar a Prueba ya está al lado.
+    cupoOfCeroTexto: "Tu lista no se selló. Usá un cupón o sumá sorteos para sellarla.",
     cupoOfVencidoTexto: "Tus sorteos oficiales vencieron el {fecha}. Usá un cupón o sumá sorteos. En Prueba seguís gratis.",
-    cupoOfSumar10: "Organizá 10 sorteos oficiales por 5 dólares",
-    cupoOfSumar50: "Organizá 50 sorteos oficiales por 20 dólares",
+    cupoOfSumarPaquete: "Organizá {sorteos} por {precio}",
+    cupoOfCeroSumar: "Se te acabaron los sorteos oficiales. Usá un cupón o sumá sorteos.",
     cupoOfUsarCupon: "Usar un cupón",
     cupoOfTopeMes: "Llegaste al tope de {max} sorteos oficiales de este mes. Se libera el {fecha}. Si necesitás más, escribinos a hola@tinkazo.app.",
-    "errAnchor.porteroSinAlta": "Tu cuenta todavía no tiene acceso al modo Oficial. Usá un cupón o tu primer paquete de sorteos.",
-    "errAnchor.porteroSinSorteos": "Se te acabaron los sorteos oficiales. Usá un cupón o sumá sorteos.",
+    // Los dos que dicen un no del portero van donde no hay un botón de comprar (la caja de la red, el error del sorteo,
+    // «Siguiente premio»): no ofrecen comprar ni con la compra en el build. El que sí, junto a su botón, es `cupoOfCeroSumar`.
+    "errAnchor.porteroSinAlta": "Tu cuenta todavía no tiene acceso al modo Oficial. Activala con el cupón de tu evento.",
+    "errAnchor.porteroSinSorteos": "Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.",
   },
   en: {
     altaFranja: "You have a Tinkazo coupon. Sign in with Google or email to use it.",
@@ -74,9 +81,9 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     altaCopiarEnlace: "Copy the link",
     altaConBilleteraPropia: "With your own wallet you don't need a coupon. Keep it or pass it on.",
 
-    altaTexto: "To draw in Live mode you need a coupon or your first pack of draws.",
+    altaTexto: "To draw in Live mode, you need a coupon or your first pack.",
     altaTengoCupon: "I have a coupon",
-    altaPrimerPaquete: "3 Live draws for US$2",
+    altaPrimerPaquete: "{sorteos} for {precio}",
     altaPrimerPaqueteNota: "Your account gets activated at no extra cost.",
     altaNoTengo: "No coupon? Ask your event's organizer for one, or write to us at hola@tinkazo.app. In Test mode you can draw for free.",
     altaCuponListo: "You have a coupon ready to use: {codigo}.",
@@ -89,7 +96,7 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     altaCuponOk1: "Your coupon comes with 1 Live draw and covers activating your account.",
     altaActivarCupon: "Your coupon covers activation. One tap and you're done.",
     altaActivarPago: "You've paid for your first pack. One tap and you're done.",
-    altaYaActivada: "Your account is already active. To draw in Live mode, use a coupon or add draws.",
+    altaYaActivada: "Your account is already active. To draw, use a coupon or add draws.",
     altaCuponGuardado: "Your coupon is already on your account, so you haven't lost it. Try again.",
     clBajadaConPago: "First, your Live draws. Then two steps that take a minute.",
     altaErrForma: "Some characters are missing or extra. The coupon has 12 letters and numbers: check it on the card.",
@@ -110,13 +117,13 @@ export const TEXTOS_ALTA: { es: Record<string, string>; en: Record<string, strin
     cupoOfDoble: "With more than 50 winners, this draw uses 2.",
     cupoOfSumar: "Add draws",
     cupoOfCeroTitulo: "You're out of Live draws",
-    cupoOfCeroTexto: "Your list wasn't sealed. To seal in Live mode, use a coupon or add draws. Test mode is still free.",
+    cupoOfCeroTexto: "Your list wasn't sealed. Use a coupon or add draws to seal it.",
     cupoOfVencidoTexto: "Your Live draws expired on {fecha}. Use a coupon or add draws. Test mode is still free.",
-    cupoOfSumar10: "Run 10 Live draws for US$5",
-    cupoOfSumar50: "Run 50 Live draws for US$20",
+    cupoOfSumarPaquete: "Run {sorteos} for {precio}",
+    cupoOfCeroSumar: "You're out of Live draws. Use a coupon or add draws.",
     cupoOfUsarCupon: "Use a coupon",
     cupoOfTopeMes: "You've reached this month's cap of {max} Live draws. It resets on {fecha}. If you need more, write to us at hola@tinkazo.app.",
-    "errAnchor.porteroSinAlta": "Your account doesn't have access to Live mode yet. Use a coupon or your first pack of draws.",
-    "errAnchor.porteroSinSorteos": "You're out of Live draws. Use a coupon or add draws.",
+    "errAnchor.porteroSinAlta": "Your account doesn't have access to Live mode yet. Activate it with your event's coupon.",
+    "errAnchor.porteroSinSorteos": "You're out of Live draws. Use another coupon or keep going for free in Test mode.",
   },
 };
