@@ -846,7 +846,7 @@
   }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
   .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
-  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary, button.netbadge {
+  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary, button.netbadge, button.acct-badge {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   /* Visible para el teclado y para el lector, invisible en pantalla. Con
