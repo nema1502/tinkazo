@@ -1,6 +1,9 @@
+import { NOMBRES_DE_LA_VENTA, banderasDeVenta, ventaAbiertaATodos } from "./venta-piloto";
+
 /**
- * Lo que el build comprueba de las banderas del cobro por uso (`alta-config.ts`) antes de armar el sitio. Sin imports
- * a propósito: lo lee `vite.config.ts`, que no puede traer la configuración del navegador.
+ * Lo que el build comprueba de las banderas del cobro por uso (`alta-config.ts`) antes de armar el sitio. Importa solo
+ * la puerta del piloto (`venta-piloto.ts`), que no importa nada: lo lee `vite.config.ts`, que no puede traer la
+ * configuración del navegador.
  *
  * Devuelve lo que está mal, en español y sin valores de variables (una dirección o una llave no se escribe en la
  * bitácora de un build). Vacío: el entorno está bien.
@@ -12,10 +15,11 @@
  */
 
 /**
- * Las banderas del cobro por uso, y la del plan B del ingreso (`src/ui/ingreso-plan-b.ts`, que no tiene que ver con el
- * cobro pero se escribe igual y se equivoca igual): cada una vale 1 (prendida), 0 o vacía (apagada).
+ * Las banderas del cobro por uso (con las tres de la venta, que se leen en `venta-piloto.ts`, y la que saca su piloto,
+ * `VITE_VENTA_ABIERTA`), y la del plan B del ingreso (`src/ui/ingreso-plan-b.ts`, que no tiene que ver con el cobro pero
+ * se escribe igual y se equivoca igual): cada una vale 1 (prendida), 0 o vacía (apagada).
  */
-const BANDERAS = ["VITE_ALTA", "VITE_ALTA_LIBRE", "VITE_ALTA_PAGO", "VITE_SORTEO_SERVIDOR", "VITE_INGRESO_PLAN_B"] as const;
+const BANDERAS = ["VITE_ALTA", "VITE_ALTA_LIBRE", "VITE_SORTEO_SERVIDOR", ...NOMBRES_DE_LA_VENTA, "VITE_VENTA_ABIERTA", "VITE_INGRESO_PLAN_B"] as const;
 
 /**
  * Dónde atiende el portero de la red principal. Con `VITE_ALTA=1` el sitio le manda ahí el token de la sesión de Pollar
@@ -71,14 +75,27 @@ export function problemasDeAlta(env: Record<string, string | undefined>): string
   if (uno("VITE_ALTA") && uno("VITE_ALTA_LIBRE")) {
     problemas.push("VITE_ALTA_LIBRE=1 no va junto con VITE_ALTA=1: juntas dejan activar una cuenta sin el acceso confirmado. El plan B1 es VITE_ALTA_LIBRE sola.");
   }
-  for (const k of ["VITE_ALTA_PAGO", "VITE_SORTEO_SERVIDOR"]) {
-    if (uno(k) && !uno("VITE_ALTA")) problemas.push(`${k}=1 necesita VITE_ALTA=1: la compra de sorteos y el sorteo por el servidor dependen del acceso.`);
-  }
+  // Las de la venta, tal como vienen en el build (el piloto es del navegador, no del build).
+  const venta = banderasDeVenta(env);
+  const sinAcceso = (k: string): string => `${k}=1 necesita VITE_ALTA=1: la compra de sorteos y el sorteo por el servidor dependen del acceso.`;
+  if (venta.pago && !uno("VITE_ALTA")) problemas.push(sinAcceso(NOMBRES_DE_LA_VENTA[0]));
+  if (uno("VITE_SORTEO_SERVIDOR") && !uno("VITE_ALTA")) problemas.push(sinAcceso("VITE_SORTEO_SERVIDOR"));
   // El plan B1 (VITE_ALTA_LIBRE sola) es la salida de emergencia y se puede publicar sin el acceso por cupón.
   if (env.VERCEL_ENV === "production" && !uno("VITE_ALTA") && !uno("VITE_ALTA_LIBRE")) {
     problemas.push(
       "La publicación de producción necesita VITE_ALTA=1: las páginas dicen que con un cupón de evento el modo Oficial es gratis, y sin esa bandera el sitio no tiene dónde canjearlo. Para volver atrás se revierte primero el cambio que puso esos textos y después se vacía la variable: vaciarla antes deja la publicación sin salir.",
     );
+  }
+  // Pagar con el saldo es un medio de la compra: sin la compra prendida no hay orden que pagar.
+  if (venta.saldo && !venta.pago) problemas.push("VITE_PAGO_CON_SALDO=1 necesita VITE_ALTA_PAGO=1: pagar con el saldo de la cuenta es un medio de la compra de sorteos.");
+  // La compra con QR carga dólares en la cuenta y paga el paquete con ese saldo: sin el pago con el saldo, lo cargado no
+  // tendría cómo pagar la compra.
+  if (venta.qr && !venta.saldo) {
+    problemas.push("VITE_COMPRA_QR=1 necesita VITE_PAGO_CON_SALDO=1: la compra con QR termina pagando el paquete con el saldo de la cuenta, y sin eso lo cargado no tendría cómo pagar la compra.");
+  }
+  // Sacar el piloto abre la venta para todos: sin la compra prendida no hay venta que abrir.
+  if (ventaAbiertaATodos(env) && !venta.pago) {
+    problemas.push("VITE_VENTA_ABIERTA=1 necesita VITE_ALTA_PAGO=1: saca el piloto de la venta de sorteos, y sin la compra prendida no hay venta que abrir.");
   }
   return problemas;
 }

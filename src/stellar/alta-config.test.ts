@@ -12,12 +12,12 @@ describe("banderasDeAlta", () => {
   });
 
   it("fuera de la red principal, apagadas siempre, tengan lo que tengan las variables", () => {
-    expect(banderasDeAlta(TODO, "testnet")).toEqual({ alta: false, libre: false, pago: false, sorteoServidor: false });
+    expect(banderasDeAlta(TODO, "testnet")).toEqual({ alta: false, libre: false, pago: false, sorteoServidor: false, qr: false });
     expect(banderasDeAlta(TODO, "otra-cosa")).toEqual(BANDERAS_APAGADAS);
   });
 
   it("en la red principal con todo puesto, todo prendido menos el plan B1, que con el acceso por cupón no vale", () => {
-    expect(banderasDeAlta(TODO, "mainnet")).toEqual({ alta: true, libre: false, pago: true, sorteoServidor: true });
+    expect(banderasDeAlta(TODO, "mainnet")).toEqual({ alta: true, libre: false, pago: true, sorteoServidor: true, qr: false });
   });
 
   it("el plan B1 vale solo: junto con VITE_ALTA activaría sin acceso, y vale la menos abierta", () => {
@@ -37,19 +37,19 @@ describe("banderasDeAlta", () => {
 
   it("el acceso sin la dirección del portero de la red principal no vale, y arrastra al pago y al sorteo por el servidor", () => {
     for (const url of [undefined, "", "   ", "/"]) {
-      expect(banderasDeAlta({ ...TODO, VITE_PATROCINIO_URL_MAINNET: url }, "mainnet"), String(url)).toEqual({ alta: false, libre: false, pago: false, sorteoServidor: false });
+      expect(banderasDeAlta({ ...TODO, VITE_PATROCINIO_URL_MAINNET: url }, "mainnet"), String(url)).toEqual({ alta: false, libre: false, pago: false, sorteoServidor: false, qr: false });
     }
   });
 
   it("el pago y el sorteo por el servidor sin el acceso no cuentan", () => {
-    expect(banderasDeAlta({ ...TODO, VITE_ALTA: undefined }, "mainnet")).toEqual({ alta: false, libre: true, pago: false, sorteoServidor: false });
+    expect(banderasDeAlta({ ...TODO, VITE_ALTA: undefined }, "mainnet")).toEqual({ alta: false, libre: true, pago: false, sorteoServidor: false, qr: false });
   });
 
   it("cada bandera es independiente cuando hay acceso", () => {
     const solo = { VITE_ALTA: "1", VITE_PATROCINIO_URL_MAINNET: "https://pm.example" };
-    expect(banderasDeAlta(solo, "mainnet")).toEqual({ alta: true, libre: false, pago: false, sorteoServidor: false });
-    expect(banderasDeAlta({ ...solo, VITE_ALTA_PAGO: "1" }, "mainnet")).toEqual({ alta: true, libre: false, pago: true, sorteoServidor: false });
-    expect(banderasDeAlta({ ...solo, VITE_SORTEO_SERVIDOR: "1" }, "mainnet")).toEqual({ alta: true, libre: false, pago: false, sorteoServidor: true });
+    expect(banderasDeAlta(solo, "mainnet")).toEqual({ alta: true, libre: false, pago: false, sorteoServidor: false, qr: false });
+    expect(banderasDeAlta({ ...solo, VITE_ALTA_PAGO: "1" }, "mainnet")).toEqual({ alta: true, libre: false, pago: true, sorteoServidor: false, qr: false });
+    expect(banderasDeAlta({ ...solo, VITE_SORTEO_SERVIDOR: "1" }, "mainnet")).toEqual({ alta: true, libre: false, pago: false, sorteoServidor: true, qr: false });
   });
 
   it("en este build (Prueba y sin variables) todo está apagado", () => {

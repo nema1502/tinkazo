@@ -38,7 +38,7 @@ describe("el modo del acceso (W3)", () => {
   });
 
   it("con el acceso por cupón apagado y sin el plan B1, en la red principal no hay de dónde activar", () => {
-    expect(modoDelAcceso("mainnet", { alta: false, libre: false, pago: false, sorteoServidor: false })).toBe("cerrado");
+    expect(modoDelAcceso("mainnet", { alta: false, libre: false, pago: false, sorteoServidor: false, qr: false })).toBe("cerrado");
   });
 
   it("lo que recibe el paso: el servidor, o cómo se porta sin él", () => {
