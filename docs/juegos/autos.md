@@ -46,7 +46,7 @@ Cada auto lleva la cara de su persona en la ventanilla y su nombre encima, en la
 
 ## Qué no es
 
-No es una apuesta ni una carrera de casino: no hay cuotas, ni fichas, ni tablero. No hay sangre ni choques entre personas: los autos caen o quedan tapados, y la figura sigue entera con su nombre. Lo cultural: la ruta es de cordillera, como la de la carrera de llamas, sin bandera de ningún país.
+No es una carrera de casino: no hay cuotas, ni fichas, ni tablero. No hay sangre ni choques entre personas: los autos caen o quedan tapados, y la figura sigue entera con su nombre. Lo cultural: la ruta es de cordillera, como la de la carrera de llamas, sin bandera de ningún país.
 
 ## Etapa 2 (fuera de esta página): el control desde el teléfono
 
@@ -58,5 +58,5 @@ Un código de sala en la pantalla grande, sin cuenta ni ingreso. Cada teléfono 
 - [ ] `audit-game` 20/20
 - [ ] `audit-nino` (tres capturas sin subtítulo contra `respuestas(t)`)
 - [ ] `audit-rigor`, `audit-identidad`, `audit-emocion`, `audit-sound`, `audit-mezcla`, `audit-pantalla`, `audit-delatores`
-- [ ] Capturas en escritorio y celular, dos temas, con el evaluador
+- [ ] Capturas en escritorio y celular, en los dos temas, revisadas por una persona
 - [ ] `node scripts/nuevo-juego.mjs --encender autos`

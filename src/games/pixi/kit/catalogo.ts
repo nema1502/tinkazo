@@ -147,7 +147,7 @@ export const CATALOGO = [
     selector: false,
     rango: { minimo: 2, maximo: 200 },
     captura: false,
-    historia: { q: "loreAutosQ", a: "loreAutosA", href: "https://github.com/nema1502/tinkazo/blob/main/docs/juegos.md", src: "tinkazo · docs/juegos.md", hue: "teal", borrador: true },
+    historia: { q: "loreAutosQ", a: "loreAutosA", href: "https://github.com/nema1502/tinkazo/blob/main/docs/juegos.md", src: "tinkazo, docs/juegos.md", hue: "teal", borrador: true },
   },
   // --- /autos
   // <<< kit:catalogo

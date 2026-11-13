@@ -2932,7 +2932,7 @@ export const T: Record<Lang, Dict> = {
     gameAutos: "Carrera de autos", jgAutosN: "Carrera de autos",
     jgAutosB: "Una carrera de autos por la cordillera, de costado, con la cara de cada uno en la ventanilla. Ola tras ola se abren hoyos y caen rocas gigantes, y los autos se van quedando en el camino hasta que uno solo cruza la meta. El ganador ya salió del sorteo y el juego solo lo cuenta.",
     gcAutos: "Los autos caen en hoyos o quedan bajo rocas. Gana el único que cruza la meta.",
-    gcAutosMany: "Con varios premios, el auto que cruza la meta se lleva el primero; los demás premios salen en el cartel del final.",
+    gcAutosMany: "Con varios premios, el auto que cruza la meta se lleva el primero. Los demás premios salen en el cartel del final.",
     loreAutosQ: "¿De dónde sale Carrera de autos?",
     loreAutosA: "Borrador: todavía no tiene su historia ni su fuente, y no sale en ningún sorteo hasta que se escriba.",
     // --- /autos
@@ -5524,7 +5524,7 @@ export const T: Record<Lang, Dict> = {
     gameAutos: "Car race", jgAutosN: "Car race",
     jgAutosB: "A side-view car race through the mountains, with each face in a car window. Wave after wave, holes open and giant rocks fall, and the cars drop out one by one until only one crosses the finish line. The winner already came out of the draw and the game only tells it.",
     gcAutos: "Cars fall into holes or end up under rocks. The only one to cross the finish line wins.",
-    gcAutosMany: "With several prizes, the car that crosses the finish line takes the first; the other prizes show on the final banner.",
+    gcAutosMany: "With several prizes, the car that crosses the finish line takes the first one. The other prizes show on the final banner.",
     loreAutosQ: "Where does Car race come from?",
     loreAutosA: "Draft: it has no story or source yet, and it does not show in any draw until one is written.",
     // --- /autos

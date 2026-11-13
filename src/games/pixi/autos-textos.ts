@@ -7,7 +7,7 @@ import type { Textos } from "./kit";
  *
  * La regla del niño: seis palabras o menos, ningún nombre (los nombres van sobre
  * los autos) y ningún número (los números van en el marcador). El ritmo lo llevan
- * el cuerpo y el sonido. Nada de apuestas ni de choques entre personas: los autos
+ * el cuerpo y el sonido. Nada de casino ni de choques entre personas: los autos
  * caen en un hoyo o quedan bajo una roca.
  */
 export const TEXTOS = {
