@@ -34,7 +34,7 @@ export interface PiezasEtiqueta {
   texto: Text;
   /** El nombre que se va, a mitad de un cambio de forma; fuera de un cambio no se ve. */
   sale: Text;
-  /** El rótulo "ADELANTE" pegado a la izquierda de la ficha de quien va primera (celular): una palabra que contesta la pregunta sin mirar la raya. */
+  /** El rótulo "ADELANTE" pegado a la izquierda de la ficha de quien va primera (celular), o la marca "!" de a quien le pasa un obstáculo: el nombre y la marca van en una sola pieza. */
   rotulo: Container;
   rotuloTexto: Text;
   rotuloFondo: Graphics;
@@ -92,12 +92,13 @@ function darEstilo(tx: Text, fs: number, estilo: EstiloFicha, a: AspectoFicha): 
 /**
  * Pone en la ficha el nombre `s` con la letra `px` y el estilo `estilo`. A mitad de un cambio de forma, `sale` es el nombre que se
  * va y `mezcla` (de 0 a 1) cuánto llegó el nuevo; fuera de un cambio, `sale` vacío o `mezcla` 1. `rotulo` es el texto del rótulo de
- * la izquierda, o `null` si no lleva. Lo que se dibuja depende solo de estos datos.
+ * la izquierda, o `null` si no lleva. Con `aviso`, el rótulo es la marca de un obstáculo ("!"): letra crema y no amarilla, para que no se
+ * confunda con la de quien va adelante. Lo que se dibuja depende solo de estos datos.
  */
-export function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha, a: AspectoFicha, rotulo: string | null): void {
+export function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha, a: AspectoFicha, rotulo: string | null, aviso = false): void {
   const funde = sale !== "" && sale !== s && mezcla < 1;
   const fs = letraDe(px, estilo);
-  const clave = `${s}|${funde ? sale : ""}|${px.toFixed(1)}|${estilo}|${rotulo ?? ""}`;
+  const clave = `${s}|${funde ? sale : ""}|${px.toFixed(1)}|${estilo}|${rotulo ?? ""}|${aviso ? 1 : 0}`;
   if (e.clave !== clave) {
     e.clave = clave;
     const ce = `${fs}|${estilo}`;
@@ -124,6 +125,7 @@ export function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: numb
     if (rotulo !== null) {
       const rf = fs * 0.8;
       e.rotuloTexto.style.fontSize = rf;
+      e.rotuloTexto.style.fill = aviso ? a.crema : a.amarillo;
       e.rotuloTexto.text = rotulo;
       const rw = e.rotuloTexto.width + rf * 0.9, rh = rf * 1.35;
       e.rotuloFondo.clear().roundRect(-rw / 2, -rh / 2, rw, rh, rh * 0.3).fill(a.tinta);

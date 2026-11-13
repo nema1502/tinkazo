@@ -7,6 +7,55 @@ const pantalla = (w: number, h: number): Pantalla => ({ w, h, u: unidadDe(w, h),
 const PANTALLAS: [string, Pantalla][] = [["1080p", pantalla(1920, 1080)], ["720p", pantalla(1280, 720)], ["celular 390", pantalla(390, 844)], ["celular de lado", pantalla(844, 390)]];
 const px = (p: Pantalla): number => Math.max(p.h * 0.026, 16, 19 * Math.min(2, p.u));
 
+describe("la forma con un mínimo de filas", () => {
+  const OCHO: [string, Pantalla][] = [
+    ...PANTALLAS,
+    ["1366x768", pantalla(1366, 768)],
+    ["1024x768", pantalla(1024, 768)],
+    ["800x1280", pantalla(800, 1280)],
+    ["360x640", pantalla(360, 640)],
+  ];
+  // Lo que da hoy sin opciones, fijado antes de admitir el mínimo: filas, columnas y tamaño para 2, 8, 9, 12, 18, 24 y 30 personas.
+  const DE_HOY: Record<string, string[]> = {
+    "1080p": ["2/1/1.9957", "4/2/1.6047", "4/3/1.6047", "5/3/1.1954", "6/3/0.9226", "6/4/0.9226", "7/5/0.7277"],
+    "720p": ["2/1/1.3304", "4/2/1.0453", "4/3/1.0453", "5/3/0.7774", "6/3/0.5988", "6/4/0.5988", "7/5/0.4712"],
+    "celular 390": ["2/1/1.1009", "8/1/0.7056", "9/1/0.6272", "12/1/0.4704", "18/1/0.3136", "24/1/0.2352", "30/1/0.2220"],
+    "celular de lado": ["2/1/0.7207", "4/2/0.3283", "4/3/0.3283", "4/3/0.3283", "4/5/0.3283", "4/6/0.3283", "4/8/0.3283"],
+    "1366x768": ["2/1/1.4191", "4/2/1.1346", "4/3/1.1346", "5/3/0.8449", "6/3/0.6517", "6/4/0.6517", "7/5/0.5138"],
+    "1024x768": ["2/1/1.4191", "4/2/1.1346", "4/3/1.1346", "5/3/0.8449", "6/3/0.6517", "6/4/0.6517", "7/5/0.5138"],
+    "800x1280": ["2/1/1.6696", "8/1/1.0690", "9/1/0.9502", "12/1/0.7126", "18/1/0.4751", "12/2/0.7126", "15/2/0.5701"],
+    "360x640": ["2/1/0.8348", "8/1/0.5089", "9/1/0.4524", "12/1/0.3393", "9/2/0.4524", "12/2/0.3393", "15/2/0.2714"],
+  };
+  const CANTIDADES = [2, 8, 9, 12, 18, 24, 30];
+
+  it("sin opciones da lo mismo que hoy en ocho pantallas", () => {
+    for (const [nombre, p] of OCHO) {
+      CANTIDADES.forEach((m, i) => {
+        const f = formaDe(p, m, px(p), 120 * p.u);
+        expect(`${f.filas}/${f.columnas}/${f.esc.toFixed(4)}`, `${nombre} con ${m}`).toBe(DE_HOY[nombre]?.[i]);
+        expect(f.filasMax).toBeGreaterThanOrEqual(2);
+      });
+    }
+  });
+
+  it("con un mínimo de filas da esas filas, y nunca más que las que entran en la pantalla", () => {
+    for (const [nombre, p] of OCHO) {
+      for (const m of CANTIDADES) {
+        const base = formaDe(p, m, px(p), 120 * p.u);
+        const pedido = base.filas + 2;
+        const conMin = formaDe(p, m, px(p), 120 * p.u, { filasMin: pedido });
+        // Con el nombre arriba las filas se eligen directamente: da las pedidas, sin pasar de las que entran en la pantalla.
+        // En retrato las filas salen de las columnas (una por llama o dos), así que el mínimo solo puede pedir que no bajen de las de hoy.
+        if (!p.retrato) expect(conMin.filas, `${nombre} con ${m}`).toBe(Math.min(pedido, base.filasMax));
+        else expect(conMin.filas, `${nombre} con ${m}`).toBeGreaterThanOrEqual(base.filas);
+        const conMuchas = formaDe(p, m, px(p), 120 * p.u, { filasMin: 99 });
+        if (!p.retrato) expect(conMuchas.filas, `${nombre} con ${m} y 99 pedidas`).toBe(base.filasMax);
+        expect(conMuchas.filasMax).toBe(base.filasMax);
+      }
+    }
+  });
+});
+
 describe("echarse se ve en el cuerpo a los 0,3 s", () => {
   it("a los 0,3 s de la línea del relator la llama ya va más de la mitad echada, y a los 0,5 s del todo", () => {
     expect(plegada(0)).toBe(0);

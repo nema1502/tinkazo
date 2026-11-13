@@ -6,6 +6,14 @@
 import { formasDe, palabras } from "../nombres";
 import { esNombreEntero } from "../nombres-enteros";
 
+/**
+ * La marcha pareja de la carrera de siempre (13 de noviembre de 2026): hasta tres segundos antes de la meta la ganadora es una llama más. En la
+ * recta todas las finalistas se mueven con la misma regla que la ganadora (cada una busca los puestos de su propio arco, de la misma tabla), el
+ * grupo de punta de los tres segundos finales es la ganadora y tres sorteadas sin mirar el pasado, y los momentos le tocan a cualquiera y se ven.
+ * Quién gana, el margen y la foto no cambian. En false, la carrera de antes, número por número (`carrera-huella.test.ts`).
+ */
+export const SENUELOS = true;
+
 /** Cuántas llegan a la recta: las ocho de la final. */
 export const FINALISTAS = 8;
 /** Hasta cuántas corren en el mismo grupo sin tandas: con más, las tandas arman el grupo. */

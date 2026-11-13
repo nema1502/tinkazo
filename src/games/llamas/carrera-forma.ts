@@ -88,6 +88,8 @@ export interface Forma {
   /** El nombre va arriba de la cabeza (proyector) o a la izquierda de la llama (celular). */
   arriba: boolean;
   filas: number;
+  /** Cuántas filas entran en la pantalla como mucho, con el nombre y el aire de cada fila. */
+  filasMax: number;
   columnas: number;
   /** Alto de cada fila y de la llama (sin el nombre), y cuánto hay que escalar el dibujo. */
   altoFila: number;
@@ -122,7 +124,7 @@ export function ordenDeFilas(filas: number): number[] {
   return out;
 }
 
-export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: number): Forma {
+export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: number, op?: { filasMin?: number }): Forma {
   const k = p.u;
   const hud = hudDe(p);
   const y0 = hud.bajo + 8 * k;
@@ -148,23 +150,38 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
   };
   let filas: number;
   let columnas: number;
+  let filasMax: number;
   if (arriba) {
     const rMax = Math.max(2, Math.floor(banda / (altoNombre + 44 * k)));
+    filasMax = rMax;
     filas = Math.min(rMax, m, Math.max(3, Math.round(Math.sqrt(m * 1.7))));
+    // Un mínimo de filas pedido: sube las filas hasta ahí, sin pasar nunca de las que entran en la pantalla.
+    if (op?.filasMin !== undefined) filas = Math.min(rMax, Math.max(filas, op.filasMin));
     columnas = Math.ceil(m / filas);
-    while (columnas > 1 && !armar(columnas, filas).cabe) {
+    while (columnas > 1 && !armar(columnas, filas).cabe && (op?.filasMin === undefined || filas < rMax)) {
       filas++;
       columnas = Math.ceil(m / filas);
     }
   } else {
     const rMax = Math.max(2, Math.floor(banda / (altoNombre * 1.05)));
+    filasMax = rMax;
     const colMin = nombreW + 36 * k + 8 * k;
     const cMax = Math.max(1, Math.floor((p.w * 0.94) / colMin));
-    columnas = Math.min(cMax, Math.max(1, Math.ceil(m / rMax)));
-    filas = Math.ceil(m / columnas);
-    while (columnas > 1 && !armar(columnas, filas).cabe) {
-      columnas--;
+    if (op?.filasMin !== undefined) {
+      // Con un mínimo de filas, las columnas salen de esas filas (sin pasar de las que entran) y se achican solo si el grupo no cabe.
+      columnas = Math.min(cMax, Math.max(1, Math.ceil(m / Math.min(rMax, Math.max(1, op.filasMin)))));
       filas = Math.ceil(m / columnas);
+      while (columnas > 1 && !armar(columnas, filas).cabe) {
+        columnas--;
+        filas = Math.ceil(m / columnas);
+      }
+    } else {
+      columnas = Math.min(cMax, Math.max(1, Math.ceil(m / rMax)));
+      filas = Math.ceil(m / columnas);
+      while (columnas > 1 && !armar(columnas, filas).cabe) {
+        columnas--;
+        filas = Math.ceil(m / columnas);
+      }
     }
   }
   const f = armar(columnas, filas);
@@ -172,7 +189,7 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
   const profundidad = f.base + (filas - 1) * f.escalon;
   const ancla = Math.max(0.5 * p.w, Math.min(0.8 * p.w, profundidad + f.sobra + 0.03 * p.w));
   return {
-    arriba, filas, columnas, altoFila: f.altoFila, alto: f.alto, esc: f.esc, largo: f.largo, ancho: f.ancho, escalon: f.escalon, y0, y1, altoNombre, profundidad, ancla,
+    arriba, filas, filasMax, columnas, altoFila: f.altoFila, alto: f.alto, esc: f.esc, largo: f.largo, ancho: f.ancho, escalon: f.escalon, y0, y1, altoNombre, profundidad, ancla,
     slot(puesto) {
       const col = Math.floor(puesto / filas);
       const r = puesto % filas;

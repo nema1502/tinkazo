@@ -2,7 +2,7 @@ import { ENSANCHE as ENSANCHE_PLAN } from "./carrera-obstaculos";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { permite3D, type Entorno3D } from "../permite3d";
-import { ACERCA, AIRE_LIDER, HOLGURA_LIDER, TAM3D, camara3D, colocar, corrimientoLider, escala3D, ZC, type Corredora3D } from "./carrera-3d-mapa";
+import { ACERCA, AIRE_LIDER, HOLGURA_LIDER, PORTON_BAJA_ANTES, PORTON_BAJA_DURA, PORTON_POSTE_ALTO, TAM3D, altoPostePorton, camara3D, colocar, corrimientoLider, escala3D, escalaMarca, MARCA_ALTO, ZC, type Corredora3D } from "./carrera-3d-mapa";
 import { ctxDe } from "./carrera-prueba";
 import { RECTA, planCarrera } from "./carrera-show";
 
@@ -19,10 +19,10 @@ const xDelDosD = (pq: number, q: number, Xs: number, w: number): number => Xs + 
 const QS = [0.25, 0.5, 0.7, 0.88, 1];
 
 describe("el 3D dibuja las posiciones del plan 2D", () => {
-  it("la cuenta del 2D que usa el 3D es la que está escrita en carrera.ts", () => {
-    const fuente = readFileSync(new URL("./carrera.ts", import.meta.url), "utf8");
+  it("la cuenta del 2D que usa el 3D es la que está escrita en carrera-trayectorias.ts", () => {
+    const fuente = readFileSync(new URL("./carrera-trayectorias.ts", import.meta.url), "utf8");
     expect(fuente).toContain("const pq = d.final.pos(carril, qq);");
-    expect(fuente).toContain("const xl = Xs + (qq + (pq - qq) * ENSANCHE) * RECTA * P.w;");
+    expect(fuente).toContain("const xl = geo.Xs + (qq + (pq - qq) * ENSANCHE) * RECTA * geo.ancho;");
     expect(ENSANCHE_PLAN).toBe(1.7);
   });
 
@@ -150,6 +150,40 @@ describe("el 3D no tiene azar ni reloj propio", () => {
       // El archivo del 3D solo se pide con import dinámico.
       expect(fuente).not.toMatch(/^import\s+[^;]*["'][^"']*carrera-3d["']/m);
     }
+  });
+});
+
+describe("los postes de adentro del portón bajan antes de que se abra la recta", () => {
+  it("parados hasta 2,2 segundos antes, en el piso desde 1,6 s antes, bajando en el medio, como función de la hora", () => {
+    const tAbre = 40;
+    expect(altoPostePorton(tAbre - 5, tAbre)).toBe(PORTON_POSTE_ALTO);
+    expect(altoPostePorton(tAbre - PORTON_BAJA_ANTES, tAbre)).toBe(PORTON_POSTE_ALTO);
+    expect(altoPostePorton(tAbre - PORTON_BAJA_ANTES + PORTON_BAJA_DURA, tAbre)).toBe(0);
+    expect(altoPostePorton(tAbre, tAbre)).toBe(0);
+    expect(altoPostePorton(tAbre + 10, tAbre)).toBe(0);
+    // En el medio viene bajando, sin saltos: cada muestra da menos que la anterior.
+    let anterior = Infinity;
+    for (let t = tAbre - PORTON_BAJA_ANTES; t <= tAbre - PORTON_BAJA_ANTES + PORTON_BAJA_DURA; t += 0.05) {
+      const alto = altoPostePorton(t, tAbre);
+      expect(alto).toBeLessThan(anterior);
+      expect(alto).toBeGreaterThanOrEqual(0);
+      anterior = alto;
+    }
+    // La misma hora da el mismo alto, llamada en cualquier orden.
+    const ida = [30, 39.2, 39.5, 39.8, 41].map((t) => altoPostePorton(t, tAbre));
+    const vuelta = [41, 39.8, 39.5, 39.2, 30].map((t) => altoPostePorton(t, tAbre)).reverse();
+    expect(vuelta).toEqual(ida);
+    expect(altoPostePorton(10, Infinity)).toBe(PORTON_POSTE_ALTO);
+  });
+});
+
+describe("la marca de un obstáculo en el 3D", () => {
+  it("nunca mide en la pantalla menos que un nombre", () => {
+    // Con la llama a 92 píxeles, la marca mide (MARCA_ALTO / 92) de su alto: hay que agrandarla hasta el mínimo.
+    expect(escalaMarca(92, 20) * ((MARCA_ALTO / 92) * 92)).toBeCloseTo(Math.max(MARCA_ALTO, 20), 9);
+    expect(escalaMarca(200, 20)).toBe(1);
+    expect(escalaMarca(0, 20)).toBe(1);
+    for (const alto of [40, 60, 92, 150]) expect(escalaMarca(alto, 20) * ((MARCA_ALTO / 92) * alto)).toBeGreaterThanOrEqual(20 - 1e-9);
   });
 });
 

@@ -1,5 +1,6 @@
 import { writeStory, type Arc, type Story } from "../drama";
 import type { InfoCierre } from "./carrera-cierre";
+import { TROPIEZO_ANTES, TROPIEZO_DESPUES, arcoDeEntrada, franjaDeEntrada, franjaDel50, franjaDel75, puestoDeEntrada, puestoDeFranja, type Franja } from "./carrera-franjas";
 import type { InfoMarcha } from "./carrera-marcha";
 import type { Obstaculo } from "./carrera-obstaculos";
 
@@ -69,8 +70,8 @@ export interface Plan {
   salto?(k: number, q: number): number;
   /** Dónde va el actor `k` a la altura `q`, en fracción de pista. */
   pos(k: number, q: number): number;
-  /** En qué momento de la historia está un actor, para la postura. */
-  beatOf(k: number, q: number): { kind: string; p: number } | null;
+  /** En qué momento de la historia está un actor, para la postura. En la escupida, `giro` dice hacia qué carril mira quien escupe (1 hacia el de abajo, -1 hacia el de arriba). */
+  beatOf(k: number, q: number): { kind: string; p: number; giro?: number } | null;
 }
 
 /** La ventaja se mide en anchos de pantalla en `race.ts`; la pista mide 2,4. */
@@ -80,12 +81,32 @@ const GK = 1 / 2.4;
  * `sceneryDraws` consume el azar que `race.ts` usa para el paisaje entre los
  * carriles y la historia, y `beforePlace` sortea la primera línea del relator
  * antes de ubicar a la ganadora, como siempre.
+ *
+ * `entradaPareja` (la marcha pareja de la carrera, `SENUELOS`): el puesto de la
+ * ganadora al entrar a la recta sale parejo entre los carriles, una vez de cada
+ * L, con cualquier cantidad. Con L impar el puesto del medio está en las dos
+ * franjas de entrada y salía el doble (con tres, la del medio al entrar ganaba
+ * la mitad de las veces): ahora pesa la mitad en cada una (`puestoDeEntrada`).
+ * Con dos carriles los arcos salen un tercio cada uno y dos de los tres entran
+ * adelante (la que entraba primera ganaba dos de cada tres): ahí se sortea
+ * primero el puesto de entrada, parejo, y después el arco con la ley que la
+ * marcha le da a cualquiera que entra en ese puesto (`arcoDeEntrada`), así que
+ * la remontada sale la mitad de las veces. Con L par y más de dos carriles no
+ * cambia nada, número por número.
+ *
+ * `carrilParejo` (también de la marcha pareja): con menos de ocho carriles la
+ * tapada no junta a las dos rivales en carriles vecinos, y la ganadora corre en
+ * el carril que le tocó al barajar (cada carril, una vez de cada L). Para
+ * juntarlas cambiaba de carril a la que estaba al lado de una de ellas, y a
+ * veces era la ganadora: con tres, en la tapada nunca corría en el del medio, y
+ * la del carril del medio ganaba el 23 % de las veces y no el 33 %. No gasta
+ * azar. Con ocho carriles no cambia nada.
  */
 export function planRace(
   names: string[],
   winnerIdx: number,
   rng: () => number,
-  opts: { sceneryDraws?: number; beforePlace?: () => void; co?: readonly number[] } = {},
+  opts: { sceneryDraws?: number; beforePlace?: () => void; co?: readonly number[]; entradaPareja?: boolean; carrilParejo?: boolean } = {},
 ): Plan {
   // Ocho carriles como mucho; los acompañantes y el carril del ganador salen
   // del azar sembrado, así que la lista no delata a nadie.
@@ -109,6 +130,19 @@ export function planRace(
 
   for (let i = 0; i < (opts.sceneryDraws ?? 0); i++) rng();
   const story = writeStory(rng, lanes.length, Math.max(0, lanes.indexOf(winnerIdx)));
+  // Con dos carriles y la entrada pareja: primero el puesto de entrada de la ganadora, parejo, y después su arco con la ley de cualquiera que
+  // entra ahí (la primera, susto o duelo; la segunda, remontada). La historia de dos no tiene momentos chicos: solo cambia el tropiezo del susto,
+  // que tiene la ganadora si su arco es susto (su hora se sortea más abajo, con la de siempre).
+  let entradaDeDos: number | undefined;
+  if (opts.entradaPareja && lanes.length === 2) {
+    entradaDeDos = 1 + Math.floor(rng() * 2);
+    const arco = arcoDeEntrada(2, entradaDeDos, rng);
+    if (arco !== story.arc) {
+      story.beats = story.beats.filter((bt) => !(bt.kind === "tropiezo" && bt.actor === story.winner));
+      if (arco === "susto") story.beats.push({ kind: "tropiezo", actor: story.winner, at: TROPIEZO_ANTES.desde });
+      story.arc = arco;
+    }
+  }
 
   function swapLanes(a: number, b: number): void {
     if (a === b) return;
@@ -122,7 +156,10 @@ export function planRace(
       if (bt.target !== undefined) bt.target = sw(bt.target);
     }
   }
-  if (story.arc === "tapada" && Math.abs(story.rival - story.rival2) > 1) {
+  // En la tapada, las dos rivales en carriles vecinos. El cambio de carril a veces movía a la ganadora: con tres carriles, en la tapada
+  // nunca corría en el del medio. Con `carrilParejo` y menos de ocho carriles no se juntan, y la ganadora queda donde le tocó al barajar.
+  const juntarRivales = !opts.carrilParejo || lanes.length >= 8;
+  if (juntarRivales && story.arc === "tapada" && Math.abs(story.rival - story.rival2) > 1) {
     swapLanes(story.rival + (story.rival + 1 < lanes.length ? 1 : -1), story.rival2);
   }
   // La rival del duelo, pegada a la ganadora: arriba o abajo, sorteado. Siempre
@@ -278,40 +315,36 @@ export function planRace(
   }
 
   // Las franjas de puestos, como fracciones del pelotón: con ocho, la primera
-  // cuarta parte son los puestos 1 y 2; la última, 7 y 8.
+  // cuarta parte son los puestos 1 y 2; la última, 7 y 8. Salen de la tabla de
+  // `carrera-franjas.ts`, la misma con que la marcha pareja sortea los puestos
+  // que busca cada una de las demás (`metaDeUnCarril`).
   const L_ = lanes.length;
-  const franja = (a: number, b: number): number => {
-    const lo = Math.min(L_, Math.floor(a * L_) + 1);
-    const hi = Math.max(lo, Math.min(L_, Math.ceil(b * L_)));
-    return lo + Math.floor(rng() * (hi - lo + 1));
-  };
+  const franja = (f: Franja): number => puestoDeFranja(L_, f, rng);
   const tropiezo = story.beats.find((bt) => bt.actor === story.winner && bt.kind === "tropiezo");
   const arc = story.arc;
-  const adelante = arc === "duelo" || arc === "susto";
   // En el susto, la ganadora tropieza antes de la mitad o después, mitad y
   // mitad (el director la sortea entre el 38% y el 66%, y eso deja el 43% antes
   // de la mitad): así a la mitad va atrás o adelante la mitad de las veces.
   if (arc === "susto" && tropiezo) {
-    tropiezo.at = rng() < 0.5 ? 0.38 + rng() * 0.12 : 0.5 + rng() * 0.16;
+    const hora = rng() < 0.5 ? TROPIEZO_ANTES : TROPIEZO_DESPUES;
+    tropiezo.at = hora.desde + rng() * hora.ancho;
     story.beats.sort((a, b) => a.at - b.at);
   }
-  const r25 = adelante ? franja(0, 0.5) : franja(0.5, 1);
+  const r25 = franja(franjaDeEntrada(arc));
   // A la mitad, cuatro franjas que juntas dan un octavo por puesto (con ocho):
   // el duelo del 1.º al 4.º, la tapada del 3.º al 6.º, la remontada del 5.º al
   // 8.º y el susto 1.ª o 2.ª (si todavía no tropezó) o 7.ª u 8.ª (si ya). Antes
   // era un poco más adelante que atrás (el 1.º salía 1,3 veces lo que toca) y
   // eso se veía: quien iba primera a la mitad ganaba más que una de cada ocho.
-  const r50 = arc === "duelo" ? franja(0, 0.5)
-    : arc === "tapada" ? franja(0.25, 0.75)
-      : arc === "remontada" ? franja(0.5, 1)
-        : tropiezo && tropiezo.at < 0.5 ? franja(0.75, 1) : franja(0, 0.25);
-  const r75 = arc === "duelo" ? franja(0, 0.25) : arc === "susto" ? franja(0.25, 0.5) : franja(0.5, 1);
+  const r50 = franja(franjaDel50(arc, !!tropiezo && tropiezo.at < 0.5));
+  const r75 = franja(franjaDel75(arc));
   // En la recta final, primera (aguanta adelante) o segunda (pasa en los
   // últimos metros), mitad y mitad en cada arco.
   const r90 = L_ >= 2 && rng() < 0.5 ? 2 : 1;
   // Apenas largan, el relator anuncia a la que va adelante: también ahí la
-  // ganadora va adelante en el susto y el duelo y atrás en las otras.
-  const r07 = adelante ? franja(0, 0.5) : franja(0.5, 1);
+  // ganadora va adelante en el susto y el duelo y atrás en las otras. Con la
+  // entrada pareja, cada puesto una vez de cada L (con dos, el ya sorteado).
+  const r07 = entradaDeDos ?? (opts.entradaPareja ? puestoDeEntrada(L_, arc, rng) : franja(franjaDeEntrada(arc)));
   const jorobas: { q: number; r: number; joroba: number[] }[] = [
     { q: 0.25, r: r25, joroba: [0, 0.5, 1, 0.5, 0, 0, 0, 0, 0, 0] },
     { q: 0.067, r: r07, joroba: [0, 1, 0, 0, 0, 0, 0, 0, 0, 0] },

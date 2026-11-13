@@ -1,7 +1,9 @@
 import { Color, Group, Mesh, MeshBasicMaterial, MeshLambertMaterial, Scene, SphereGeometry } from "three";
 import { describe, expect, it, vi } from "vitest";
+import { LLAMA_ALTO } from "./carrera-forma";
 import type { Efecto3D } from "./carrera-3d-mapa";
-import { crearEfectos3D } from "./carrera-3d-obstaculos";
+import { TAM3D, escala3D } from "./carrera-3d-mapa";
+import { crearEfectos3D, puntoDeLaGota } from "./carrera-3d-obstaculos";
 
 /**
  * La ráfaga del 3D: rayas de viento y hojas. Las rayas no pueden parecer llamas transparentes (finas, cortas, color crema
@@ -84,5 +86,44 @@ describe("la ráfaga del 3D", () => {
     expect(foto(b.piezas)).toEqual(foto(a.piezas));
     expect(espia).not.toHaveBeenCalled();
     espia.mockRestore();
+  });
+});
+
+describe("la escupida del 3D", () => {
+  const escupida = (s: number): Efecto3D => ({ tipo: "escupida", s, x: 0, y: 0, y1: 0, ancho: 0, lado: 1, id: 2, boca: { x: 300, y: 400, esc: 1 }, cara: { x: 900, y: 520, esc: 1 } });
+  // Las gotas van después de piedras, polvo, rayas y pasto: cada una es un borde y un centro, en ese orden.
+  const centroGota = (piezas: Mesh[], j: number): Mesh => piezas[5 + 14 + RAYAS + PASTO + j * 2 + 1] as Mesh;
+
+  it("la gota sale de la boca, llega a la cara y en el medio va por encima de las dos cabezas, sin piezas nuevas", () => {
+    const { efectos, piezas } = armar();
+    const armadas = piezas.length;
+    const boca = { x: 300, y: 400, esc: 1 }, cara = { x: 900, y: 520, esc: 1 };
+    const cuerpo = LLAMA_ALTO * escala3D(U) * TAM3D;
+    efectos.frame([escupida(0)], U);
+    const sale = centroGota(piezas, 0);
+    expect(sale.visible).toBe(true);
+    expect(sale.position.toArray()).toEqual(puntoDeLaGota(boca, cara, 0, U));
+    // Crema, y grande: un 12 % del alto de la llama o más.
+    const color = new Color((sale.material as MeshBasicMaterial).color);
+    expect(color.r).toBeGreaterThan(0.85);
+    expect(color.b).toBeLessThan(color.r);
+    expect(sale.scale.x).toBeGreaterThanOrEqual(0.12 * cuerpo);
+    efectos.frame([escupida(1)], U);
+    const llega = centroGota(piezas, 0);
+    const destino = puntoDeLaGota(boca, cara, 1, U);
+    expect(Math.hypot(llega.position.x - destino[0], llega.position.y - destino[1], llega.position.z - destino[2])).toBeLessThan(0.1 * cuerpo);
+    efectos.frame([escupida(0.5)], U);
+    expect(centroGota(piezas, 0).position.y).toBeGreaterThan(cuerpo);
+    // El salpicón abre ocho gotitas alrededor de la cara, con la misma tanda de siempre.
+    efectos.frame([escupida(1.5)], U);
+    for (let j = 4; j < 12; j++) expect(centroGota(piezas, j).visible).toBe(true);
+    expect(piezas.length).toBe(armadas);
+  });
+
+  it("sale de la boca y llega a la cara a la altura de cada llama, que mientras pasa de su fila del grupo a su carril es más grande", () => {
+    const alto = LLAMA_ALTO * escala3D(U) * TAM3D;
+    const boca = { x: 300, y: 400, esc: 1.6 }, cara = { x: 900, y: 520, esc: 0.7 };
+    expect(puntoDeLaGota(boca, cara, 0, U)[1]).toBeCloseTo(0.82 * alto * 1.6, 9);
+    expect(puntoDeLaGota(boca, cara, 1, U)[1]).toBeCloseTo(0.82 * alto * 0.7, 9);
   });
 });

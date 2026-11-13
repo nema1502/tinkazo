@@ -12,11 +12,13 @@ export interface PosturaObstaculo {
   patas?: number[];
   lean: number;
   cuelloRot: number;
+  /** Cuánto gira el cuello hacia el carril de al lado, en radianes (quien escupe mira a su vecina). El 2D lo ignora: ahí se ve el escupitajo. */
+  cuelloGiro?: number;
   aviso?: "!" | "?!";
   rigida: boolean;
 }
 
-export const ES_OBSTACULO = (kind: string | undefined): boolean => kind === "piedra" || kind === "salto" || kind === "malsalto" || kind === "ventarron";
+export const ES_OBSTACULO = (kind: string | undefined): boolean => kind === "piedra" || kind === "salto" || kind === "malsalto" || kind === "ventarron" || kind === "escupe" || kind === "escupido";
 
 export function posturaObstaculo(m: Momento): PosturaObstaculo | null {
   if (!m) return null;
@@ -44,6 +46,18 @@ export function posturaObstaculo(m: Momento): PosturaObstaculo | null {
     // El viento de frente: se echa para atrás, con la cabeza gacha, sin dejar de correr.
     const a = Math.sin(Math.PI * Math.min(1, p * 1.1));
     return { lean: -0.3 * a, cuelloRot: 0.25 * a, rigida: false };
+  }
+  if (m.kind === "escupe") {
+    // Carga un segundo mirando a la vecina con la cabeza para atrás y suelta: el giro crece de a poco y se va con el vuelo.
+    const giro = (m.giro ?? 1) * 0.6;
+    const carga = Math.min(1, p / 0.74);
+    const suelta = Math.max(0, (p - 0.74) / 0.26);
+    return { lean: -0.08 * carga * (1 - suelta), cuelloRot: -0.38 * carga * (1 - suelta) + 0.16 * Math.sin(Math.PI * suelta), cuelloGiro: giro * carga * (1 - suelta), rigida: false };
+  }
+  if (m.kind === "escupido") {
+    // Le llega a la cara: cabeza para atrás y sacudida que se apaga en poco más de medio segundo, con el "?!" al costado.
+    const tiembla = Math.sin(p * 40) * Math.max(0, 1 - p * 1.7);
+    return { lean: -0.14 * Math.sin(Math.PI * Math.min(1, p * 1.4)) + 0.1 * tiembla, cuelloRot: -0.32 * Math.sin(Math.PI * Math.min(1, p * 1.2)) + 0.18 * tiembla, ...(p < 0.75 ? { aviso: "?!" as const } : {}), rigida: p < 0.4 };
   }
   return null;
 }

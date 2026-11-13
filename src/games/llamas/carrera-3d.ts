@@ -1,17 +1,18 @@
 import {
   BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide,
-  Float32BufferAttribute, Fog, Group, HemisphereLight, IcosahedronGeometry, InstancedMesh, Material, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  Object3D, PerspectiveCamera, PlaneGeometry, Scene, SphereGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Texture, Vector3, WebGLRenderer,
+  Euler, Float32BufferAttribute, Fog, Group, HemisphereLight, IcosahedronGeometry, InstancedMesh, Material, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  Object3D, PerspectiveCamera, PlaneGeometry, Quaternion, Scene, SphereGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Texture, Vector3, WebGLRenderer,
 } from "three";
 import { LLAMA_ALTO } from "./carrera-forma";
 import {
-  TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, finishPostOpacity, PUNTOS_LLAMA,
-  type CajaPantalla3D, type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
+  TAM3D, ZC, altoPostePorton, camara3D, colocar, corrimientoLider, escala3D, escalaMarca, finishPostOpacity, MARCA_ALTO, PUNTOS_LLAMA,
+  type CajaPantalla3D, type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type SolidoDibujado, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
 import { crearEfectos3D } from "./carrera-3d-obstaculos";
 import { crearLider3D, modoLider } from "./carrera-3d-lider";
 import { luzDe } from "./carrera-luz";
+import { PIEDRITA_COLOR } from "./carrera-piedritas";
 import type { Momento } from "./llama";
 import { posturaObstaculo } from "./llama-obstaculos";
 
@@ -135,9 +136,15 @@ function crearPiezas(b: Basura): Piezas {
     tinta: b.add(new MeshLambertMaterial({ color: 0x16161f })),
     hocico: b.add(new MeshLambertMaterial({ color: 0x3a2a22 })),
     sombraMat: b.add(new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false })),
-    avisos: { "!": aviso("!", 0xffc629), "?!": aviso("?!", 0xffc629), zZ: aviso("zZ", 0xf3ead8) },
+    // Las marcas de los obstáculos van en crema con borde de tinta: el amarillo es de quien va adelante.
+    avisos: { "!": aviso("!", MARCA_COLOR), "?!": aviso("?!", MARCA_COLOR), zZ: aviso("zZ", 0xf3ead8) },
   };
 }
+
+/** El color de las marcas de los obstáculos ("!", "?!"): crema, con borde de tinta. */
+const MARCA_COLOR = 0xf3ead8;
+/** Dónde va la marca, en unidades del dibujo de la llama: delante de la cara, a la altura de los ojos, y no encima de la cabeza, donde se apoya la ficha. */
+const MARCA_LUGAR = { x: 60, y: 92 };
 
 const oscurecer = (c: number, f: number): number => {
   const r = Math.min(255, ((c >> 16) & 255) * f), g = Math.min(255, ((c >> 8) & 255) * f), b = Math.min(255, (c & 255) * f);
@@ -218,8 +225,8 @@ function crearLlama3D(P: Piezas, b: Basura, color: { pelaje: number; manta: numb
   // El aviso de los sustos y del descanso ("!", "?!", "zZ"), siempre mirando a la cámara.
   const avisoMat = b.add(new SpriteMaterial({ map: null, transparent: true, depthTest: false, fog: false }));
   const aviso = new Sprite(avisoMat);
-  aviso.position.set(22, 112, 0);
-  aviso.scale.set(38, 38, 1);
+  aviso.position.set(MARCA_LUGAR.x, MARCA_LUGAR.y, 0);
+  aviso.scale.set(MARCA_ALTO, MARCA_ALTO, 1);
   aviso.renderOrder = 10;
   aviso.visible = false;
   raiz.add(aviso);
@@ -234,6 +241,7 @@ function poner(r: LlamaRig, P: Piezas, ph: number, speed: number, m: Momento): v
   let plegada = 0;
   let legA = [Math.sin(ph) * sw, Math.sin(ph + 0.9) * sw, Math.sin(ph + Math.PI) * sw, Math.sin(ph + Math.PI + 0.9) * sw];
   let cuelloRot = Math.sin(ph * 2) * 0.05;
+  let cuelloGiro = 0;
   let aviso: "!" | "?!" | "zZ" | null = null;
   if (m?.kind === "plantada") {
     legA = [0.25, -0.35, 0.25, -0.35];
@@ -241,17 +249,18 @@ function poner(r: LlamaRig, P: Piezas, ph: number, speed: number, m: Momento): v
     cuelloRot = -0.25;
     aviso = "!";
   } else if (m?.kind === "tropiezo") lean = 0.35 * Math.sin(Math.PI * Math.min(1, m.p * 1.4));
-  else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
-  else if (m?.kind === "escupido") {
-    lean = -0.12 * Math.sin(Math.PI * m.p * 3);
-    aviso = "?!";
-  } else if (posturaObstaculo(m)) {
+  else if (posturaObstaculo(m)) {
     const o = posturaObstaculo(m);
     // El 3D usa los ángulos del 2D de siempre (patas hacia atrás positivas): se invierten.
     if (o?.patas) legA = o.patas.map((a) => -a);
     lean = o?.lean ?? lean;
     cuelloRot = o?.cuelloRot ?? cuelloRot;
+    cuelloGiro = o?.cuelloGiro ?? 0;
     if (o?.aviso) aviso = o.aviso;
+  } else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
+  else if (m?.kind === "escupido") {
+    lean = -0.12 * Math.sin(Math.PI * m.p * 3);
+    aviso = "?!";
   } else if (m?.kind === "echada") {
     plegada = Math.min(1, m.p);
     cuelloRot = -0.1;
@@ -269,6 +278,8 @@ function poner(r: LlamaRig, P: Piezas, ph: number, speed: number, m: Momento): v
   r.cuerpo.rotation.z = -lean;
   r.cuerpo.position.y = plegada ? -15 * plegada : speed > 0.1 ? Math.abs(Math.sin(ph)) * 4 : 0;
   r.cuello.rotation.z = -cuelloRot;
+  // Quien escupe mira a la vecina: el cuello gira de costado y vuelve a mirar al frente en cada cuadro sin giro.
+  r.cuello.rotation.y = cuelloGiro;
   r.orejas[0]?.rotation.set(0, 0, Math.sin(ph * 2 + 1) * 0.25);
   r.orejas[1]?.rotation.set(0, 0, Math.sin(ph * 2 + 2) * 0.25);
   r.cola.rotation.z = Math.sin(ph * 2) * 0.4;
@@ -279,7 +290,7 @@ function poner(r: LlamaRig, P: Piezas, ph: number, speed: number, m: Momento): v
   if (tex) {
     r.avisoMat.map = tex;
     r.avisoMat.needsUpdate = true;
-    r.aviso.scale.set(aviso === "!" ? 30 : 44, 38, 1);
+    r.aviso.scale.set(aviso === "!" ? 30 : 44, MARCA_ALTO, 1);
   }
 }
 
@@ -323,10 +334,16 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
 
   let fijo: Group | null = null;
   let fijoBasura = new Basura();
+  /** La unidad de la pantalla con que se armó el mundo: para pasar lo dibujado al mundo 2D. */
+  let uMundo = 1;
   /** Las cuatro esquinas de las letras de cada letrero (SALIDA y META), en el mundo: de ahí sale su caja en la pantalla (`letreros`). */
   let letrerosMundo: Vector3[][] = [];
   /** Los materiales de los postes de la meta: en el cruce se apagan un poco para no tapar el cuerpo que cruza. */
   let postesMeta: MeshLambertMaterial[] = [];
+  /** Los postes del portón de la recta que quedan en el camino de alguna finalista, con su bola: bajan al piso antes de que se abra la recta. */
+  let postesPorton: { poste: Mesh; bola: Mesh }[] = [];
+  /** Cuándo se abre la recta en este mundo: de ahí sale el alto de los postes del portón. */
+  let tAbrePorton = Infinity;
   let cielo: Mesh | null = null;
   let tribuna: { malla: InstancedMesh; base: { x: number; y: number; z: number; ph: number }[]; dummy: Object3D } | null = null;
   const llamas = new Map<number, Colocada>();
@@ -334,6 +351,10 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   escena.add(grupoLlamas);
   // Los obstáculos de la recta que se mueven: piedras, polvo, rayas de viento y pasto (`carrera-3d-obstaculos.ts`).
   const efectos3D = crearEfectos3D(escena, basura);
+  // La piedrita del tropiezo, que sale despedida: una pieza aparte que se pone en cada cuadro, apoyada en el piso como las fijas.
+  const piedritaTropiezo = new Mesh(basura.add(new IcosahedronGeometry(1, 0)), basura.add(new MeshLambertMaterial({ color: PIEDRITA_COLOR, flatShading: true })));
+  piedritaTropiezo.visible = false;
+  escena.add(piedritaTropiezo);
 
   /* -------------------------------------------------------- lo fijo del mundo */
   function armarMundo(g: Geometria3D): void {
@@ -345,6 +366,9 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     const B = fijoBasura;
     letrerosMundo = [];
     postesMeta = [];
+    postesPorton = [];
+    tAbrePorton = g.tAbre;
+    uMundo = g.u;
     fijo = new Group();
     escena.add(fijo);
     tribuna = null;
@@ -407,9 +431,9 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       caja(0x14141f, a, b, 0, 0.12, zTop, zTop + 0.5);
     }
 
-    // Lo que decora cada terreno: lodo, piedras, matas y rayas de viento, repartidos con un hash del lugar.
+    // Lo que decora cada terreno: el lodo y las rayas de viento salen de un hash del lugar; las piedras y las matas vienen en la lista (`g.rocas`).
     {
-      const lista: Record<string, { x: number; z: number; r: number; e: number }[]> = { barro: [], piedras: [], viento: [], cuesta: [], corral: [], recta: [] };
+      const lista: Record<string, { x: number; z: number; r: number; e: number }[]> = { barro: [], viento: [] };
       const T = 150 * u;
       g.zonas.forEach((z, zi) => {
         const a = Math.max(g.F0 - g.corral - 400 * u, z.desde), b = Math.min(g.metaX + 400 * u, z.hasta);
@@ -439,18 +463,49 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       const ico = B.add(new IcosahedronGeometry(1, 0));
       const cono = B.add(new ConeGeometry(1, 1, 5));
       const disco = B.add(new CylinderGeometry(1, 1, 1, 10));
-      instanciar(ico, luz.acento.piedras, lista.piedras ?? [], (it, d) => {
-        d.position.set(it.x, 0.5 + it.r * 0.3, it.z);
-        d.scale.set(0.9 + it.r * 1.1, 0.6 + it.r * 0.7, 0.8 + it.r);
-        d.rotation.set(it.r * 3, it.r * 7, 0);
-      });
+      // Una instancia por roca y por mata de la lista: el tamaño y el giro salen de la elipse y del alto de cada una. La roca (un icosaedro de
+      // radio 1) va con el centro en el piso: asoma justo su alto y apoya en el piso su elipse entera, la misma que mide el auditor de sólidos.
+      // Antes iba medio alto más arriba y se veía una vez y media más alta que lo que la lista decía (las del borde de atrás, más altas que una
+      // llama). El cono de la mata mide 1 de alto y va con la base en el piso.
+      const instanciarLista = (geo: BufferGeometry, color: number, tipo: "roca" | "mata"): void => {
+        const items = g.rocas.filter((r) => r.tipo === tipo);
+        if (!items.length) return;
+        const im = new InstancedMesh(geo, mat(color, { flat: true }), items.length);
+        im.userData.tipo = tipo;
+        const dd = new Object3D();
+        items.forEach((it, j) => {
+          dd.rotation.set(0, it.giro, 0);
+          dd.position.set(it.x * s, tipo === "roca" ? 0 : (it.alto * s) / 2, it.y * s * ZC);
+          dd.scale.set(it.a * s, it.alto * s, it.b * s * ZC);
+          dd.updateMatrix();
+          im.setMatrixAt(j, dd.matrix);
+        });
+        im.instanceMatrix.needsUpdate = true;
+        fijo?.add(im);
+      };
+      instanciarLista(ico, luz.acento.piedras, "roca");
+      instanciarLista(cono, luz.acento.cuesta, "mata");
+      // Las piedritas que se saltan: apoyadas en el piso, con su huella entera abajo y su alto justo (la mitad de abajo queda enterrada).
+      {
+        const items = g.rocas.filter((r) => r.tipo === "piedrita");
+        if (items.length) {
+          const im = new InstancedMesh(ico, mat(PIEDRITA_COLOR, { flat: true }), items.length);
+          im.userData.tipo = "piedrita";
+          const dd = new Object3D();
+          items.forEach((it, j) => {
+            dd.rotation.set(0, it.giro, 0);
+            dd.position.set(it.x * s, 0, it.y * s * ZC);
+            dd.scale.set(it.a * s, it.alto * s, it.b * s * ZC);
+            dd.updateMatrix();
+            im.setMatrixAt(j, dd.matrix);
+          });
+          im.instanceMatrix.needsUpdate = true;
+          fijo?.add(im);
+        }
+      }
       instanciar(disco, luz.charco, lista.barro ?? [], (it, d) => {
         d.position.set(it.x, 0.06, it.z);
         d.scale.set(1.4 + it.r * 1.6, 0.1, 0.8 + it.r * 0.9);
-      });
-      instanciar(cono, luz.acento.cuesta, lista.cuesta ?? [], (it, d) => {
-        d.position.set(it.x, 0.6, it.z);
-        d.scale.set(0.45, 1.2 + it.r * 0.6, 0.45);
       });
       instanciar(geoCaja, 0xffffff, lista.viento ?? [], (it, d) => {
         d.position.set(it.x, 0.1 + it.r * 0.2, it.z);
@@ -518,10 +573,12 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
         const alto = (g.carY1 - g.carY0) / Math.max(1, g.carN);
         for (let j = 0; j <= g.carN; j++) {
           const z = Z(g.carY0 + j * alto);
-          caja(0x16161f, x - 0.1, x + 0.1, 0, 1.3, z - 0.1, z + 0.1);
+          const poste = caja(0x16161f, x - 0.1, x + 0.1, 0, 1.3, z - 0.1, z + 0.1);
           const bola = new Mesh(B.add(new SphereGeometry(0.28, 8, 6)), mat(0xffc629));
           bola.position.set(x, 1.5, z);
           fijo.add(bola);
+          // Bajan los que quedan en el camino de alguna finalista: todos menos el del borde de arriba, que ninguna cruza.
+          if (j > 0) postesPorton.push({ poste, bola });
         }
       }
       rotulo(g.rotuloSalida, 0xf3ead8, X(26 * u) + 2.6, 2.2, (zA + zB) / 2 - 1, 5.2, 1.3);
@@ -749,10 +806,25 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     }
 
     efectos3D.frame(e.efectos, e.u);
+    piedritaTropiezo.visible = !!e.piedrita;
+    if (e.piedrita) {
+      piedritaTropiezo.position.set(e.piedrita.x * s, 0, e.piedrita.y * s * ZC);
+      piedritaTropiezo.scale.set(e.piedrita.a * s, e.piedrita.alto * s, e.piedrita.b * s * ZC);
+      piedritaTropiezo.rotation.set(0, e.piedrita.giro, 0);
+    }
 
     // Los postes de la meta se apagan un poco solo en el instante del cruce, para que no tapen el cuerpo que cruza.
     const opacidadPoste = finishPostOpacity(e.corona);
     for (const materialPoste of postesMeta) materialPoste.opacity = opacidadPoste;
+
+    // Los postes de adentro del portón ya están en el piso cuando se abre la recta: es función de la hora y nada más.
+    const altoPorton = altoPostePorton(e.t, tAbrePorton);
+    for (const p of postesPorton) {
+      p.poste.scale.y = Math.max(0.01, altoPorton);
+      p.poste.position.y = altoPorton / 2;
+      p.bola.position.y = altoPorton + 0.2;
+      p.bola.visible = altoPorton > 0.05;
+    }
 
     // La cámara: la del director del 2D, con perspectiva.
     const esc = e.gente.length ? escSum / e.gente.length : 0.5;
@@ -789,6 +861,19 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       camara.position.add(v);
       camara.lookAt(pose.mira[0] + v.x, pose.mira[1] + v.y, pose.mira[2] + v.z);
       camara.updateMatrixWorld();
+    }
+    // Las marcas de los obstáculos ("!", "?!") nunca miden en la pantalla menos que un nombre (`escalaMarca`).
+    if (e.marcaMin) {
+      for (const l of llamas.values()) {
+        const m = l.rig.avisoMat.map;
+        if (!l.rig.aviso.visible || !m || (m !== piezas.avisos["!"] && m !== piezas.avisos["?!"])) continue;
+        v.copy(l.cabeza).project(camara);
+        const yCabeza = v.y;
+        v.copy(l.pie).project(camara);
+        const f = escalaMarca((Math.abs(v.y - yCabeza) / 2) * H, e.marcaMin);
+        l.rig.aviso.scale.x *= f;
+        l.rig.aviso.scale.y *= f;
+      }
     }
     cielo?.position.copy(camara.position);
     sol.target.position.set(pose.mira[0], 0, pose.mira[2]);
@@ -853,10 +938,37 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     return cajas;
   }
 
+  /** Lo que dibujó de verdad, leído de three.js y pasado al mundo 2D (`Vista3D.solidos`). */
+  function solidos(): { fijos: SolidoDibujado[]; moviles: SolidoDibujado[] } {
+    const s = escala3D(uMundo);
+    const fijos: SolidoDibujado[] = [];
+    const m = new Matrix4(), p = new Vector3(), q = new Quaternion(), e = new Vector3(), giro = new Euler();
+    fijo?.traverse((o) => {
+      const tipo = (o as InstancedMesh).userData?.tipo as SolidoDibujado["tipo"] | undefined;
+      if (!tipo || !(o as InstancedMesh).isInstancedMesh) return;
+      const im = o as InstancedMesh;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        m.decompose(p, q, e);
+        giro.setFromQuaternion(q, "YXZ");
+        // El icosaedro va de -1 a 1 y el cono de -1/2 a 1/2: lo que asoma sobre el piso.
+        const medio = tipo === "mata" ? e.y / 2 : e.y;
+        fijos.push({ tipo, x: p.x / s, y: p.z / (s * ZC), a: e.x / s, b: e.z / (s * ZC), giro: giro.y, z0: Math.max(0, (p.y - medio) / s), z1: (p.y + medio) / s });
+      }
+    });
+    const moviles: SolidoDibujado[] = efectos3D.piedrasVistas().map((v) => ({ tipo: "piedra", x: v.x / s, y: v.z / (s * ZC), a: v.r / s, b: v.r / (s * ZC), giro: 0, z0: (v.y - v.r) / s, z1: (v.y + v.r) / s }));
+    if (piedritaTropiezo.visible) {
+      const t = piedritaTropiezo;
+      moviles.push({ tipo: "piedrita", x: t.position.x / s, y: t.position.z / (s * ZC), a: t.scale.x / s, b: t.scale.z / (s * ZC), giro: t.rotation.y, z0: 0, z1: (t.position.y + t.scale.y) / s, movil: true });
+    }
+    return { fijos, moviles };
+  }
+
   return {
     frame,
     pantallaDe,
     letreros,
+    solidos,
     reconstruir(g: Geometria3D) {
       sinAzarDeTres(() => armarMundo(g));
     },

@@ -9,7 +9,8 @@ import type { Textos } from "../pixi/kit";
  *
  * En la final los momentos (se plantó, tropezó, viene de atrás, mano a mano) no
  * llevan nombre: nombrarlos decía quién gana. Los nombres de la final son los de
- * la tribuna (`carHinchada`), sorteados sin mirar quién gana.
+ * la tribuna (`carHinchada`), sorteados sin mirar quién gana, y los de a quien le
+ * pasa un obstáculo, que le toca a cualquiera.
  *
  * "Salida", no "largada", y nada que huela a hipódromo de apuestas.
  */
@@ -41,10 +42,12 @@ export const TEXTOS_CARRERA: Textos = {
     carCuela: "¡Alguien se cuela!",
     carHinchada: (n: string) => `¡Vamos, ${n}!`,
     carHinchadaTodas: "¡Vamos, vamos!",
-    carAlud: "¡Caen piedras del cerro!",
+    carCuidadoPiedras: (n: string) => `¡Cuidado, ${n}: piedras!`,
     carValla: "¡A saltar la valla!",
-    carSaltoMal: "¡Alguien salta mal!",
-    carRafaga: "¡Ráfaga del altiplano!",
+    carTumbaValla: (n: string) => `¡${n} tumba la valla!`,
+    carTumbanValla: "¡Tumban la valla!",
+    carRemolino: "¡Viene un remolino!",
+    carEscupen: (n: string) => `¡Le escupen a ${n}!`,
     carFoto: "¡Foto finish!",
     carCabeza: "¡Cabeza a cabeza!",
     carTanda: "¡Siguiente tanda!",
@@ -77,10 +80,12 @@ export const TEXTOS_CARRERA: Textos = {
     carCuela: "Someone sneaks in!",
     carHinchada: (n: string) => `Go, ${n}!`,
     carHinchadaTodas: "Come on, come on!",
-    carAlud: "Rocks fall off the hill!",
+    carCuidadoPiedras: (n: string) => `Watch out, ${n}, rocks!`,
     carValla: "Jump the fence!",
-    carSaltoMal: "Someone botches the jump!",
-    carRafaga: "A gust off the highlands!",
+    carTumbaValla: (n: string) => `${n} knocks the fence over!`,
+    carTumbanValla: "They knock the fence over!",
+    carRemolino: "Here comes a dust devil!",
+    carEscupen: (n: string) => `${n} gets spat on!`,
     carFoto: "Photo finish!",
     carCabeza: "Head to head!",
     carTanda: "Next heat!",

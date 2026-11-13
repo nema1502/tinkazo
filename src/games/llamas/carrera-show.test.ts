@@ -5,7 +5,7 @@ import { problemasDeMarcador } from "../pixi/kit/marcador";
 import { problemasDeRespuestas } from "../pixi/kit/respuestas";
 import { segundosDe } from "../../duraciones";
 import { formasDe } from "../nombres";
-import { planCarrera, corto, alfabetico, duracionNominal, CINTA_SIN_SENALAR, FINALISTAS, FIJOS, TARJETA, T_VUELO, type Datos } from "./carrera-show";
+import { planCarrera, corto, alfabetico, duracionNominal, AVISO_PIEDRAS, AVISO_REMOLINO, AVISO_VALLA, CINTA_SIN_SENALAR, FINALISTAS, FIJOS, TARJETA, T_VUELO, type Datos } from "./carrera-show";
 import { ctxDe } from "./carrera-prueba";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import { ESP_MIN } from "./carrera-tiempos";
@@ -114,7 +114,7 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     }
   });
 
-  it("en la final solo se nombra a la tribuna: los momentos de la historia no llevan nombre", () => {
+  it("en la final solo se nombra a la tribuna y a quien le pasa un obstáculo: los momentos de la historia no llevan nombre", () => {
     for (const n of [8, 12, 18, 30, 31, 60, 200]) {
       for (let s = 1; s <= 8; s++) {
         const ctx = ctxDe(n, s);
@@ -122,12 +122,19 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
         const d = plan.datos;
         const gritan = TEXTOS_CARRERA.es.carHinchada as (n: string) => string;
         const hinchadas = ctx.nombres.map((nm) => gritan(corto(nm)));
+        const deObstaculo = new Set<string>();
+        for (const o of d.final.obstaculos ?? []) {
+          if (o.tipo === "piedras") deObstaculo.add((TEXTOS_CARRERA.es.carCuidadoPiedras as (n: string) => string)(corto(ctx.nombres[d.lanes[o.carriles[0] as number] as number] as string)));
+          if (o.tipo === "escupida") deObstaculo.add((TEXTOS_CARRERA.es.carEscupen as (n: string) => string)(corto(ctx.nombres[d.lanes[o.carriles[0] as number] as number] as string)));
+          if (o.tipo === "salto") for (const m of o.malas) deObstaculo.add((TEXTOS_CARRERA.es.carTumbaValla as (n: string) => string)(corto(ctx.nombres[d.lanes[m] as number] as string)));
+        }
         const enLaFinal = plan.guion.filter((l) => l.texto !== undefined && l.t >= d.tAbre - 1e-9).map((l) => (typeof l.texto === "function" ? l.texto() : (l.texto as string)));
         const nombran = enLaFinal.filter((t) => ctx.nombres.some((nm) => t.includes(corto(nm))));
-        for (const t of nombran) expect(hinchadas, `n=${n} s=${s}: "${t}"`).toContain(t);
-        // Hasta cuatro, de a una, y todas distintas.
-        expect(nombran.length, `n=${n} s=${s}`).toBeLessThanOrEqual(4);
-        expect(new Set(nombran).size).toBe(nombran.length);
+        for (const t of nombran) expect(hinchadas.includes(t) || deObstaculo.has(t), `n=${n} s=${s}: "${t}"`).toBe(true);
+        // La tribuna: hasta cuatro, de a una, y todas distintas.
+        const deLaTribuna = nombran.filter((t) => hinchadas.includes(t));
+        expect(deLaTribuna.length, `n=${n} s=${s}`).toBeLessThanOrEqual(4);
+        expect(new Set(deLaTribuna).size).toBe(deLaTribuna.length);
       }
     }
   });
@@ -279,6 +286,197 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
           expect(lineas.some((t) => dentro(t) && t >= tr.t0 && t <= tr.t0 + 1.6), `el terreno en el tramo ${k}, n=${n}, s=${s}`).toBe(true);
         });
       }
+    }
+  });
+});
+
+describe("los momentos de la historia, callados en la carrera de siempre", () => {
+  // Con la carrera de antes (`senuelos: false`): nunca le tocan a la ganadora o le tocan el doble, y si se vieran, delatarían. Siguen en la marcha,
+  // sin postura, sin línea y sin suceso. Con la marcha pareja los momentos que actúan son otros (ciegos, a cualquiera) y se ven: la prueba de abajo.
+  const HISTORIA = ["tropiezo", "plantada", "pique", "escupida", "escupido"];
+  const LINEAS = ["carPlantada", "carTropiezo", "carPique", "carEscupida"].map((c) => TEXTOS_CARRERA.es[c] as string);
+  const textosDe = (guion: ReturnType<typeof planCarrera>["guion"]): string[] => guion.filter((l) => l.texto !== undefined).map((l) => (typeof l.texto === "function" ? l.texto() : (l.texto as string)));
+  /** A quién le pasa un obstáculo (las únicas que frenan a la vista en la recta). */
+  const victimasDe = (d: Datos): Set<number> => {
+    const v = new Set<number>();
+    for (const o of d.final.obstaculos ?? []) for (const k of o.tipo === "salto" ? o.malas : o.carriles) v.add(d.lanes[k] as number);
+    return v;
+  };
+
+  it("con la carrera de antes, en la recta de siempre nadie tiene la postura de un momento, el relator no dice «¡Alguien…!», los frenos son solo de los obstáculos y los cambios de punta, de la ficha amarilla", () => {
+    let momentos = 0;
+    for (const n of [8, 18, 60]) {
+      for (let s = 1; s <= 6; s++) {
+        const plan = planCarrera(ctxDe(n, s), { senuelos: false });
+        const d = plan.datos;
+        momentos += d.final.story.beats.length;
+        for (let q = 0; q <= 1; q += 0.002) for (let k = 0; k < d.lanes.length; k++) {
+          const kind = d.final.beatOf(k, q)?.kind ?? "";
+          // El "escupido" de un obstáculo sí se ve (es ciego y le toca a cualquiera): el de la historia, no.
+          if (kind === "escupido") expect((d.final.obstaculos ?? []).some((o) => o.tipo === "escupida" && o.carriles[0] === k), `n=${n} s=${s} carril ${k} al ${q.toFixed(3)}`).toBe(true);
+          else expect(HISTORIA, `n=${n} s=${s} carril ${k} al ${q.toFixed(3)}`).not.toContain(kind);
+        }
+        for (const t of textosDe(plan.guion)) expect(LINEAS, `n=${n} s=${s}`).not.toContain(t);
+        const victimas = victimasDe(d);
+        for (const su of d.sucesos) {
+          if (su.desde < d.tAbre - 1e-9) continue;
+          if (su.tipo === "freno") expect(victimas.has(su.quien as number), `n=${n} s=${s}: freno de ${su.quien} a ${su.desde.toFixed(2)}`).toBe(true);
+          // El pique de un momento no es un cambio de punta: los que se anotan son las pasadas de la ficha amarilla, a su hora y a quien la recibe.
+          if (su.tipo === "adelante") expect(d.marcas.some((m) => Math.abs(m.t - su.desde) < 1e-9 && m.quien === su.quien), `n=${n} s=${s}: adelante de ${su.quien} a ${su.desde.toFixed(2)}`).toBe(true);
+        }
+      }
+    }
+    // La historia sigue escrita (y actúa en la marcha): solo no se ve.
+    expect(momentos).toBeGreaterThan(18);
+  });
+
+  it("con la marcha pareja, las posturas, las líneas «¡Alguien…!» y los frenos son de los momentos que actúan (a cualquiera, a su hora) o de los obstáculos, y los de la historia siguen ocultos", () => {
+    const DURA: Record<string, number> = { plantada: 0.075, pique: 0.09, escupida: 0.05, tropiezo: 0.035 };
+    const CLAVE: Record<string, string> = { plantada: "carPlantada", tropiezo: "carTropiezo", pique: "carPique", escupida: "carEscupida" };
+    let vistos = 0, dichos = 0, deLaGanadora = 0;
+    for (const n of [8, 18, 60]) {
+      for (let s = 1; s <= 6; s++) {
+        const plan = planCarrera(ctxDe(n, s), { senuelos: true });
+        const d = plan.datos;
+        const ms = d.final.marcha?.momentos ?? [];
+        expect(ms.length, `n=${n} s=${s}: momentos que actúan`).toBeGreaterThan(0);
+        deLaGanadora += ms.filter((b) => b.actor === d.final.story.winner || b.target === d.final.story.winner).length;
+        // Cada postura que se ve es de un momento que actúa, en su carril y a su hora (o la escupida de un obstáculo).
+        for (let q = 0; q <= 1; q += 0.002) for (let k = 0; k < d.lanes.length; k++) {
+          const kind = d.final.beatOf(k, q)?.kind ?? "";
+          if (!HISTORIA.includes(kind)) continue;
+          vistos++;
+          const suyo = ms.some((b) => q >= b.at && q < b.at + (DURA[b.kind] as number) && (kind === "escupido" ? b.kind === "escupida" && b.target === k : b.kind === kind && b.actor === k));
+          const deObstaculo = kind === "escupido" && (d.final.obstaculos ?? []).some((o) => o.tipo === "escupida" && o.carriles[0] === k);
+          expect(suyo || deObstaculo, `n=${n} s=${s} carril ${k}: ${kind} al ${q.toFixed(3)}`).toBe(true);
+        }
+        // Cada «¡Alguien…!» cae a la hora de un momento de su tipo.
+        for (const l of plan.guion.filter((x) => x.texto !== undefined)) {
+          const t = typeof l.texto === "function" ? l.texto() : (l.texto as string);
+          const kind = Object.keys(CLAVE).find((k) => TEXTOS_CARRERA.es[CLAVE[k] as string] === t);
+          if (!kind) continue;
+          dichos++;
+          expect(ms.some((b) => b.kind === kind && Math.abs(d.tDeQ(b.at) - l.t) < 1e-6), `n=${n} s=${s}: «${t}» a ${l.t.toFixed(2)}`).toBe(true);
+        }
+        // Los frenos de la recta son de los obstáculos o de esos momentos.
+        const victimas = victimasDe(d);
+        for (const b of ms) {
+          if (b.kind === "tropiezo" || b.kind === "plantada") victimas.add(d.lanes[b.actor] as number);
+          if (b.kind === "escupida" && b.target !== undefined) victimas.add(d.lanes[b.target] as number);
+        }
+        for (const su of d.sucesos) if (su.desde >= d.tAbre - 1e-9 && su.tipo === "freno") expect(victimas.has(su.quien as number), `n=${n} s=${s}: freno de ${su.quien} a ${su.desde.toFixed(2)}`).toBe(true);
+      }
+    }
+    expect(vistos).toBeGreaterThan(0);
+    expect(dichos).toBeGreaterThan(0);
+    // Le tocan también a la ganadora.
+    expect(deLaGanadora).toBeGreaterThan(0);
+  });
+
+  it("la carrera nueva conserva sus momentos: sus posturas y sus líneas", () => {
+    let posturas = 0, lineas = 0;
+    for (let s = 1; s <= 6; s++) {
+      const plan = planCarrera(ctxDe(18, s), { nueva: true });
+      const d = plan.datos;
+      for (const b of d.final.story.beats) if (HISTORIA.includes(d.final.beatOf(b.actor, b.at + 1e-6)?.kind ?? "")) posturas++;
+      lineas += textosDe(plan.guion).filter((t) => LINEAS.includes(t)).length;
+    }
+    expect(posturas).toBeGreaterThan(0);
+    expect(lineas).toBeGreaterThan(0);
+  });
+});
+
+describe("el relator nombra a quien le pasa un obstáculo", () => {
+  const lineasDe = (plan: ReturnType<typeof planCarrera>): { t: number; s: string; hecho?: { tipo: string; quien?: number } }[] =>
+    plan.guion.filter((l) => l.texto !== undefined).map((l) => ({ t: l.t, s: typeof l.texto === "function" ? l.texto() : (l.texto as string), hecho: l.hecho as { tipo: string; quien?: number } | undefined }));
+
+  it("cada línea de obstáculo nombra a la víctima del plan y cae a su hora", () => {
+    let piedras = 0, vallas = 0, remolinos = 0, escupidas = 0;
+    for (const n of [8, 18, 60]) {
+      for (let s = 1; s <= 12; s++) {
+        const ctx = ctxDe(n, s);
+        const plan = planCarrera(ctx);
+        const d = plan.datos;
+        const lineas = lineasDe(plan);
+        const nombreDe = (persona: number): string => corto(ctx.nombres[persona] as string);
+        for (const o of d.final.obstaculos ?? []) {
+          if (o.tipo === "piedras") {
+            const quien = d.lanes[o.carriles[0] as number] as number;
+            const esperada = (TEXTOS_CARRERA.es.carCuidadoPiedras as (x: string) => string)(nombreDe(quien));
+            // Cada línea con su nombre cae a la hora de unas piedras de alguien con ese nombre (cuando ya no quedan libres, a la misma le pueden tocar dos; con
+            // más de 32 personas, dos se llaman igual en corto).
+            const horas = (d.final.obstaculos ?? []).filter((x) => x.tipo === "piedras" && nombreDe(d.lanes[x.carriles[0] as number] as number) === nombreDe(quien)).map((x) => ({ t: d.tDeQ(x.q) - AVISO_PIEDRAS, quien: d.lanes[x.carriles[0] as number] as number }));
+            for (const l of lineas.filter((x) => x.s === esperada)) {
+              piedras++;
+              const h = horas.find((x) => Math.abs(x.t - l.t) < 1e-6);
+              expect(h, `n=${n} s=${s}: piedras a ${l.t.toFixed(2)}`).toBeDefined();
+              // El hecho se anota solo si ningún otro suceso lo pisa en los 0,35 s siguientes; si va, es el de la víctima.
+              if (l.hecho) expect(l.hecho).toEqual({ tipo: "freno", quien: h?.quien });
+            }
+          } else if (o.tipo === "salto") {
+            const aviso = lineas.find((x) => x.s === TEXTOS_CARRERA.es.carValla);
+            if (aviso) expect(aviso.t, `n=${n} s=${s}: aviso de la valla`).toBeCloseTo(d.tDeQ(o.q) - AVISO_VALLA, 6);
+            const golpes = o.malas.map((m) => ({ quien: d.lanes[m] as number, t: d.tDeQ(o.llegan[m] as number) })).sort((a, b) => a.t - b.t);
+            const juntas = golpes.length > 1 && (golpes[1] as { t: number }).t - (golpes[0] as { t: number }).t < ESP_MIN;
+            if (juntas) {
+              if (lineas.some((x) => x.s === TEXTOS_CARRERA.es.carTumbanValla)) vallas++;
+            } else for (const g of golpes) {
+              const esperada = (TEXTOS_CARRERA.es.carTumbaValla as (x: string) => string)(nombreDe(g.quien));
+              const l = lineas.find((x) => x.s === esperada);
+              if (l) {
+                vallas++;
+                expect(l.t, `n=${n} s=${s}: tumba la valla`).toBeCloseTo(g.t, 6);
+                if (l.hecho) expect(l.hecho).toEqual({ tipo: "freno", quien: g.quien });
+              }
+            }
+          } else if (o.tipo === "escupida") {
+            const quien = d.lanes[o.carriles[0] as number] as number;
+            const esperada = (TEXTOS_CARRERA.es.carEscupen as (x: string) => string)(nombreDe(quien));
+            // Con la gota en el aire: una décima después de que sale. Cada línea con su nombre cae a la hora de una escupida que recibe.
+            const horas = (d.final.obstaculos ?? []).filter((x) => x.tipo === "escupida" && nombreDe(d.lanes[x.carriles[0] as number] as number) === nombreDe(quien)).map((x) => ({ t: d.tDeQ(x.q) + 0.1, quien: d.lanes[x.carriles[0] as number] as number }));
+            for (const l of lineas.filter((x) => x.s === esperada)) {
+              escupidas++;
+              const h = horas.find((x) => Math.abs(x.t - l.t) < 1e-6);
+              expect(h, `n=${n} s=${s}: escupida a ${l.t.toFixed(2)}`).toBeDefined();
+              if (l.hecho) expect(l.hecho).toEqual({ tipo: "freno", quien: h?.quien });
+            }
+          } else {
+            const l = lineas.find((x) => x.s === TEXTOS_CARRERA.es.carRemolino);
+            if (l) {
+              remolinos++;
+              expect(l.t, `n=${n} s=${s}: remolino`).toBeCloseTo(d.tDeQ(o.q) - AVISO_REMOLINO, 6);
+              expect(l.hecho).toBeUndefined();
+            }
+            // El viento no anota a nadie en los sucesos.
+            for (const su of d.sucesos) if (su.tipo === "freno" && Math.abs(su.desde - d.tDeQ(o.q)) < 0.05) expect(o.carriles.map((k) => d.lanes[k] as number)).not.toContain(su.quien);
+          }
+        }
+        // Ninguna línea vieja de obstáculo sin nombre.
+        for (const l of lineas) expect(["¡Caen piedras del cerro!", "¡Alguien salta mal!", "¡Ráfaga del altiplano!"]).not.toContain(l.s);
+      }
+    }
+    expect(piedras).toBeGreaterThan(0);
+    expect(vallas).toBeGreaterThan(0);
+    expect(remolinos).toBeGreaterThan(0);
+    expect(escupidas).toBeGreaterThan(0);
+  });
+
+  it("con 18 personas las líneas de obstáculo no se amontonan ni se multiplican", () => {
+    for (let s = 1; s <= 20; s++) {
+      const plan = planCarrera(ctxDe(18, s));
+      // La dirección pide de 12 a 16 líneas en todo el show y con 18 personas hay de 25 a 29 (mediana 27, 150 rondas): bajar a eso es recortar la
+      // largada y el grupo, que no es de este cambio. Lo que sí se cuida acá es que nombrar a las víctimas no agregue líneas: cada obstáculo dice dos
+      // como mucho (la valla, el aviso y el golpe; los demás, una). Con las ventanas C la recta trae de tres a cinco obstáculos y, medido con 150
+      // rondas, de 2 a 5 líneas de obstáculo (antes de las ventanas C, de 1 a 3); las líneas de la recta siguen siendo de 5 a 9.
+      const lineas = lineasDe(plan);
+      expect(lineas.length, `semilla ${s}: ${lineas.map((l) => l.s).join(" / ")}`).toBeGreaterThanOrEqual(12);
+      const deObstaculo = lineas.filter((l) => l.s === TEXTOS_CARRERA.es.carRemolino || l.s === TEXTOS_CARRERA.es.carValla || l.s === TEXTOS_CARRERA.es.carTumbanValla || l.s.startsWith("¡Cuidado,") || l.s.startsWith("¡Le escupen a") || l.s.includes("tumba la valla!"));
+      expect(deObstaculo.length, `semilla ${s}`).toBeGreaterThanOrEqual(1);
+      expect(deObstaculo.length, `semilla ${s}: ${deObstaculo.map((l) => l.s).join(" / ")}`).toBeLessThanOrEqual(2 * (plan.datos.final.obstaculos ?? []).length);
+      expect(deObstaculo.length, `semilla ${s}: ${deObstaculo.map((l) => l.s).join(" / ")}`).toBeLessThanOrEqual(5);
+      const deUnaLlama = deObstaculo.filter((l) => l.s.startsWith("¡Cuidado,") || l.s.startsWith("¡Le escupen a")).length;
+      expect(deUnaLlama, `semilla ${s}`).toBeLessThanOrEqual((plan.datos.final.obstaculos ?? []).filter((o) => o.tipo === "piedras" || o.tipo === "escupida").length);
+      for (const l of deObstaculo) for (const otra of lineas) if (otra !== l) expect(Math.abs(otra.t - l.t), `semilla ${s}: «${l.s}» contra «${otra.s}»`).toBeGreaterThanOrEqual(ESP_MIN - 0.21);
     }
   });
 });
