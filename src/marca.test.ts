@@ -663,6 +663,15 @@ describe("colección de stickers con personaje", async () => {
     const leeme = zip.get(`${r}LEEME.txt`)!.toString("utf8");
     for (const f of ["@tinkazo.app", "kiss-cut", "5 mm", "3 mm", "no vienen en sobres sorpresa", "no mystery packs"]) expect(leeme, f).toContain(f);
   });
+  it("el LEEME del ZIP sigue las reglas de escritura en los dos idiomas: sin comillas angulares, punto y coma, rayas largas, flechas ni punto medio", () => {
+    const leeme = leerZip(enCol("tinkazo-stickers.zip")).get("tinkazo-stickers/LEEME.txt")!.toString("utf8");
+    expect(leeme).toContain("TINKAZO, COLECCIÓN DE STICKERS");
+    expect(leeme).toContain("TINKAZO, STICKER COLLECTION");
+    expect(leeme).not.toMatch(/[«»;—–→←↔·]/);
+    // La hoja se nombra por su nombre, sin comillas.
+    expect(leeme).toContain("y la hoja laptop, con los nueve");
+    expect(leeme).toContain("and the laptop sheet with the nine");
+  });
   it("las frases están en es y en, con Instagram, sin punto medio y sin nada de apuestas", () => {
     const txt = enCol("frases.txt").toString("utf8");
     for (const st of m.COLECCION) for (const l of langs(st)) expect(txt.toLowerCase(), st.id).toContain(st.lineas[String(l)]!.join(" ").toLowerCase());
