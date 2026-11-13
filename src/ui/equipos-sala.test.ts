@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Keypair } from "@stellar/stellar-sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * El panel de equipos de quien organiza, con un DOM de mentira y la red simulada: abrir el registro, aceptar, mirar
@@ -9,22 +11,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const h = vi.hoisted(() => ({ app: { frozen: null as unknown }, red: null as "testnet" | "mainnet" | null, oficial: null as boolean | null }));
-vi.mock("../state", () => ({ app: h.app }));
+vi.mock("../state", async (orig) => ({ ...(await orig<typeof import("../state")>()), app: h.app }));
 // El modo de la pestaña, que las pruebas de "una sala es del modo en que se abrió" cambian a mano.
 vi.mock("../stellar/config", async (orig) => {
   const real = await orig<typeof import("../stellar/config")>();
   return {
     ...real,
+    topeDeGanadores: () => 300,
     get hayModoOficial() {
       return h.oficial ?? real.hayModoOficial;
     },
     network: new Proxy(real.network, { get: (t, k) => (k === "name" && h.red ? h.red : Reflect.get(t, k)) }),
   };
 });
-vi.mock("./participants", () => ({ setList: () => undefined }));
+vi.mock("./participants", () => ({ setList: () => undefined, listaBloqueada: () => false }));
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
-import { t } from "../i18n";
+import { setLang, t } from "../i18n";
+import { ponerEtiquetas } from "../equipos/etiquetas";
 import { cifrarEquipo, descifrarEquipo } from "../equipos/datos";
 import { type Pago } from "../equipos/horizon";
 import { CUPON_MONTO, EVENTO_POR_DEFECTO, memoCupon } from "../equipos/modelo";
@@ -114,6 +118,7 @@ function mundo(): Mundo {
       return { xdr: "XDR-DE-PRUEBA", destinos: [...p.destinos], memo: memoCupon(p.evento) };
     },
     aprobar: async () => m.aprobacion.r,
+    listaCerrada: () => m.sellada.si,
     ponerLista: (texto) => {
       if (m.sellada.si) return false;
       m.lista = texto.split("\n");
@@ -163,6 +168,8 @@ async function abrirRegistro(m: Mundo, modo: "sorteo" | "cupon"): Promise<Return
   await vi.waitFor(() => expect($q(p, "#eq-sala").hidden).toBe(false));
   return p;
 }
+
+afterEach(() => ponerEtiquetas(new Map()));
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -709,6 +716,43 @@ describe("la lista que se sella sale de los cupones", () => {
     expect(m.lista).not.toContain(c);
     expect($q(p, "#eq-error").textContent).toContain(t("eqListaPuesta").replace("{n}", "2"));
     expect($q(p, "#eq-error").textContent).toContain(t("eqListaSinConfirmar1"));
+  });
+
+  it("las etiquetas se ponen antes que la lista: el resumen de Sellar, en la pantalla, dice equipos desde la primera vez", async () => {
+    // La herramienta de verdad: el index.html real y participants.ts real, y el panel entrega la lista y las etiquetas
+    // con la misma conexión que depsReales. Lo que se lee es #sellar-resumen después de usarComoLista.
+    const real = await vi.importActual<typeof import("./participants")>("./participants");
+    const ganadores = await import("./ganadores");
+    document.body.innerHTML = new DOMParser().parseFromString(readFileSync(join(process.cwd(), "index.html"), "utf8"), "text/html").body.innerHTML;
+    setLang("es");
+    real.bindParticipants();
+    ganadores.montarGanadores();
+    const m = mundo();
+    const { p, a, b } = await conCupones(m);
+    m.deps.ponerEtiquetas = (e) => ponerEtiquetas(e);
+    m.deps.listaCerrada = () => real.listaBloqueada();
+    m.deps.ponerLista = (texto) => {
+      if (real.listaBloqueada()) return false;
+      real.setList(texto);
+      return true;
+    };
+    await p.usarComoLista();
+    expect((document.getElementById("ta") as HTMLTextAreaElement).value).toBe([b, a].join("\n"));
+    const resumen = document.getElementById("sellar-resumen") as HTMLElement;
+    expect(resumen.style.display).toBe("");
+    expect(resumen.textContent).toContain("2 equipos, 1 ganador");
+    expect(resumen.textContent).not.toContain("personas");
+    expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 2 equipos");
+  });
+
+  it("con la lista sellada tampoco se tocan las etiquetas: los nombres de la lista sellada no cambian", async () => {
+    const m = mundo();
+    const { p } = await conCupones(m);
+    m.sellada.si = true;
+    await p.usarComoLista();
+    expect(m.etiquetas).toEqual([]);
+    expect(m.lista).toEqual([]);
+    expect($q(p, "#eq-error").textContent).toBe(t("eqListaSellada"));
   });
 
   it("con la lista ya sellada no se cambia y se explica", async () => {

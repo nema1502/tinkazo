@@ -97,6 +97,11 @@ export interface DatosSorteo {
    * cifrado, en el enlace corto. No cambia el mensaje ni el comprobante.
    */
   logo?: Logo;
+  /**
+   * La lista sellada es de equipos: el mensaje y la foto cuentan equipos y no personas. Quien llama lo sabe por la
+   * lista sellada (`shareProof`). Sin este dato, o con varias participaciones por persona, se cuentan personas.
+   */
+  equipos?: boolean;
 }
 
 /**
@@ -109,6 +114,8 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
   // Con varias participaciones por persona, el mensaje dice las dos cuentas y junta a quien se repite. Los nombres
   // ya llegan sin la marca de la línea sellada (`DatosSorteo.ganadores`).
   const part = d.personas !== undefined && d.personas !== d.total;
+  // Con una lista de equipos la cuenta es de equipos (las claves con sufijo Equipos, citadas enteras para que el build las incluya).
+  const eq = !!d.equipos && !part;
   const porPersona = d.ganadores;
   // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts): ahí no se junta a nadie.
   if (isTurnOrder(d.total, porPersona.length, d.premio)) return turnMessage(lang, { orden: porPersona, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
@@ -119,10 +126,15 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
   const w = lista(lang, ganadores);
   const cabeza = d.premio
     ? rellenar(
-        cad(lang, varios ? (part ? "cmpCabPremioVariosPart" : "cmpCabPremioVarios") : part ? "cmpCabPremioUnoPart" : "cmpCabPremioUno"),
+        cad(
+          lang,
+          varios
+            ? part ? "cmpCabPremioVariosPart" : eq ? "cmpCabPremioVariosEquipos" : "cmpCabPremioVarios"
+            : part ? "cmpCabPremioUnoPart" : eq ? "cmpCabPremioUnoEquipos" : "cmpCabPremioUno",
+        ),
         { premio: d.premio, w, n: d.total, ...(part ? { k: d.personas } : {}) },
       )
-    : rellenar(cad(lang, varios ? (part ? "cmpCabVariosPart" : "cmpCabVarios") : part ? "cmpCabUnoPart" : "cmpCabUno"), {
+    : rellenar(cad(lang, varios ? (part ? "cmpCabVariosPart" : eq ? "cmpCabVariosEquipos" : "cmpCabVarios") : part ? "cmpCabUnoPart" : eq ? "cmpCabUnoEquipos" : "cmpCabUno"), {
         w,
         n: d.total,
         ...(part ? { k: d.personas } : {}),
@@ -266,7 +278,12 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.premio ? `${cad(lang, varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "",
           // Con varias participaciones por persona, la foto dice las dos cuentas.
           rellenar(
-            cad(lang, varios ? (part ? "fotoEntreVariosPart" : "fotoEntreVarios") : part ? "fotoEntreUnoPart" : "fotoEntreUno"),
+            cad(
+              lang,
+              varios
+                ? part ? "fotoEntreVariosPart" : d.equipos ? "fotoEntreVariosEquipos" : "fotoEntreVarios"
+                : part ? "fotoEntreUnoPart" : d.equipos ? "fotoEntreUnoEquipos" : "fotoEntreUno",
+            ),
             { n: d.total, ...(part ? { k: d.personas } : {}) },
           ),
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
