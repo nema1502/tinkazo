@@ -465,12 +465,16 @@ export function senalesDeLaRecta({ d, guion = [], txt, cuerpo }) {
  *
  * - `subfila-sola` sale de la regla de los carriles del corral (dos finalistas de una misma fila van siempre a lados opuestos, así que la
  *   que va sola de su lado es casi siempre finalista): se mira hasta que esa regla cambie, y cambiarla pide cuidar que dos finalistas de la
- *   misma fila no se crucen al pasar a sus carriles.
- * - `hueco-al-corte` (13 de noviembre de 2026): con 4 y 5 personas, en el corte de la cámara, la de hueco raro con su vecina es la
- *   ganadora más de lo que le toca. Con 1.500 rondas, 47 de 105 con 4 (44,8 %, p 1,7e-5) y 55 de 117 con 5 (47 %, p 4,3e-7), contra 25 %.
- *   Con 2, 3, 6, 7, 8 y 18 no delata. La causa está medida, capa por capa y con 4 personas: con la marcha sola la de hueco raro es la
- *   ganadora 0,261 de las veces, con los obstáculos 0,260 y con el tope de aceleración encima, 0,291. El tope reparte hacia atrás, a los
- *   cuadros de antes del corte, el exceso de lo que la ganadora hace después (subir a su puesto y cruzar primera), y eso corre su lugar en
+ *   misma fila no se crucen al pasar a sus carriles. Con 1.500 rondas, la ganadora va sola de su lado 1,30 veces lo que le toca con 18
+ *   personas (649 rondas contra 500 esperadas, p menor que 1e-12) y 1,89 veces con 30 (31 contra 16,4, p 2,4e-4).
+ * - `hueco-al-corte` (13 de noviembre de 2026): en el corte de la cámara, en las rondas en que se ve un hueco raro (de 7 a 15 de cada 100
+ *   con 4 a 200 personas), la del hueco raro con su vecina es la ganadora más de lo que le toca. Con 1.500 rondas, contra 25 %: 47 de 105
+ *   con 4 (44,8 %, p 1,7e-5), 55 de 117 con 5 (47 %, p 4,3e-7), 62 de 172 con 6 (36 %, p 0,0017), 71 de 194 con 7 (36,6 %, p 4,5e-4),
+ *   75 de 210 con 8 (35,7 %, p 7,1e-4), 89 de 226 con 18 (39,4 %, p 2,7e-6), 67 de 180 con 30 (37,2 %, p 3,8e-4), 62 de 173 con 60
+ *   (35,8 %, p 0,0020), 57 de 171 con 100 (33,3 %, p 0,018, limpia) y 58 de 164 con 200 (35,4 %, p 0,0040). Con 3 sale al revés: 7 de
+ *   55, contra 33,3 % (p 9,0e-4). Con 2 la fila no sale. La causa está medida, capa por capa y con 4 personas: con la marcha sola la de
+ *   hueco raro es la ganadora 0,261 de las veces, con los obstáculos 0,260 y con el tope de aceleración encima, 0,291. El tope reparte
+ *   hacia atrás, a los cuadros de antes del corte, el exceso de lo que la ganadora hace después (subir a su puesto y cruzar primera), y eso corre su lugar en
  *   el corte unas diezmilésimas de cuerpo (3,3e-4 de media, contra 1,5e-4 de las otras). El arreglo es un tope de aceleración que no
  *   cruce el corte: lo de antes del corte corregido solo con lo de antes, y lo de después desde el lugar y la velocidad que cada una trae.
  *   Se probaron cuatro versiones y ninguna cerró sin romper otra prueba de la marcha, así que la fila se mira hasta que entre ese tope.
