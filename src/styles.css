@@ -1037,11 +1037,10 @@
   .part-pregunta p { margin: 0; }
   .part-pregunta-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
   .part-pregunta-btns .mini { min-height: 44px; padding: 6px 16px; }
-  /* El botón que abre el panel de contadores: secundario, a la vista, con su blanco de toque. Con aire abajo
-     para no quedar pegado al enlace del stand que viene después (12 px o más entre los dos, con el margen
-     de arriba del enlace); oculto no ocupa nada, así que ahí no se mueve nada. En su propia línea también en
-     escritorio: en línea compartía el renglón con el enlace y el aire de abajo no los separaba. */
-  button.part-abrir { display: flex; width: fit-content; min-height: 48px; margin-top: 10px; margin-bottom: 12px; padding: 8px 18px; font-size: 16px; font-weight: 800; }
+  /* El enlace que abre el panel de contadores: chico, como el del stand que viene después, con el blanco de toque de
+     todo enlace (`.enlace`). Oculto no ocupa nada, así que ahí no se mueve nada. En su propia línea también en
+     escritorio: en línea compartía el renglón con el del stand. */
+  button.part-abrir { display: flex; width: fit-content; margin-top: 4px; margin-bottom: 4px; }
   /* El panel de contadores: una fila por persona, con menos, el número y más para tocar. */
   .varias-panel {
     margin-top: 12px; padding: 14px 16px; background: var(--card);
@@ -2368,6 +2367,11 @@
   /* La nota de cada botón queda para el lector de pantalla; la del juego elegido se lee debajo. */
   .gamepick .rec-nota {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  /* Un juego que un orden de turnos no ofrece se ve apagado y dice su motivo a la vista, no solo para el lector de pantalla. */
+  .gamepick .rec-nota.rec-nota-vista, .gamepick button.atenuado:not(.on) .rec-nota.rec-nota-vista {
+    position: static; width: auto; height: auto; margin: 0; padding: 0; overflow: visible; clip: auto; white-space: normal;
+    font-size: 14px; line-height: 1.3; font-weight: 700; color: var(--ink2); text-align: center;
   }
   .rec-sel-nota { font-size: 16px; font-weight: 700; color: var(--ink2); margin: 8px 0 0; }
   .rec-sel-nota:empty { display: none; }

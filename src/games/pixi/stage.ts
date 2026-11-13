@@ -13,6 +13,8 @@ import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelIn
 import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
+import { esResultadoDeTurnos } from "../../modos/turnos";
+import { rotuloDelPanel } from "./rotulo";
 import { CHIP_SCALE, LEGIBLE, letraMinima, seLee } from "./letra";
 import { acomodarGanador, ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { separarEtiquetas, type Rect as RectNombre } from "./kit/nombres";
@@ -939,14 +941,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.removeChildren().forEach((c) => c.destroy({ children: true }));
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
-      // En una ronda de stand nadie gana nada: «SALIÓ», nunca «GANA».
-      const rotulo = enStand()
-        ? getLang() === "es"
-          ? all.length > 1 ? "SALIERON" : "SALIÓ"
-          : "PICKED"
-        : getLang() === "es"
-          ? all.length > 1 ? "GANAN" : "GANA"
-          : all.length > 1 ? "WINNERS" : "WINNER";
+      // En una ronda de stand nadie gana nada («SALIÓ», nunca «GANA») y en un orden de turnos tampoco: es «EL ORDEN».
+      const rotulo = rotuloDelPanel(getLang(), all.length, { stand: enStand(), turnos: esResultadoDeTurnos() });
       const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });

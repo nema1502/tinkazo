@@ -121,6 +121,39 @@ describe("panel de la cuenta: las filas de Tus sorteos", () => {
   });
 });
 
+describe("panel de la cuenta: un orden de turnos sin sello no ofrece comprobante", () => {
+  const RONDA = "https://api.drand.sh/dbd506d6ef76e5f386f41c651dcb808c5bcbd75471cc4eafa3f4df7ad4e4c493/public/100";
+  const VERIFICAR = "https://tinkazo.app/verificar.html#rX";
+  const orden: Entry = { ...base, count: 3, numWinners: 3, prize: "Turnos", winners: ["Beto", "Ana", "Carla"], sinSello: true };
+
+  it("con el enlace de la ronda, que es como se anota ahora", () => {
+    expect(drawRow({ ...orden, proof: RONDA }).proof).toBeNull();
+  });
+
+  it("con el enlace de verificación de una entrada anotada antes", () => {
+    expect(drawRow({ ...orden, proof: VERIFICAR }).proof).toBeNull();
+    expect(drawRow({ ...orden, proof: "https://tinkazo.app/verificar.html?modo=turnos#rX" }).proof).toBeNull();
+  });
+
+  it("sigue mostrando de qué sorteo se trata", () => {
+    const r = drawRow({ ...orden, proof: RONDA });
+    expect(r.title).toBe("Turnos");
+    expect(r.meta).toMatch(/^3 personas, .*oct/i);
+  });
+
+  it("un orden con sello (tiene número) conserva su enlace", () => {
+    expect(drawRow({ ...orden, sinSello: undefined, id: "7", proof: VERIFICAR }).proof).toBe(VERIFICAR);
+    // También si se marcó sin sello pero el sello entró a tiempo y la entrada ya tiene su número.
+    expect(drawRow({ ...orden, id: "7", proof: VERIFICAR }).proof).toBe(VERIFICAR);
+  });
+
+  it("un sorteo común sin sello conserva su enlace", () => {
+    const comun: Entry = { ...base, count: 12, numWinners: 3, prize: "Turnos de limpieza", sinSello: true, proof: VERIFICAR };
+    expect(drawRow(comun).proof).toBe(VERIFICAR);
+    expect(drawRow({ ...base, numWinners: 1, prize: "Termo", sinSello: true, proof: VERIFICAR }).proof).toBe(VERIFICAR);
+  });
+});
+
 describe("panel de la cuenta: cuántas personas tiene cada sorteo", () => {
   // Ana con 2, Beto con 1 y Carla con 2: 3 personas y 5 líneas.
   const repartida = ["Ana Quispe (1/2)", "Ana Quispe (2/2)", "Beto Rojas", "Carla Suarez (1/2)", "Carla Suarez (2/2)"];

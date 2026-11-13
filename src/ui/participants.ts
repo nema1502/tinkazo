@@ -172,7 +172,7 @@ function pintarResumen(): void {
   // las líneas. Con el modo prendido eso se decide por el modo (`ordenNoCabe`) y no por el recorte: sigue siendo un
   // orden que no se puede sellar, y no un sorteo común con ganadores.
   el.textContent = ordenNoCabe(entradas)
-    ? L.turnsSellarTope(entradas, n)
+    ? L.turnsSellarTope(entradas, n, topeDeGanadores())
     : isTurnOrder(entradas, k, premio)
       ? L.turnsSellarResumen(entradas, n)
       : L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio, entradas);
@@ -618,6 +618,19 @@ function numerosDeLaLista(texto: string): Array<{ nombre: string; n: number }> {
 }
 
 /**
+ * ¿Esos números pueden ser las veces que participa cada uno? Solo si todos los números pegados están entre 1 y el máximo
+ * por persona (10). Una lista con edades, mesas o números de socio trae alguno más grande, y ahí no se pregunta nada: la
+ * pregunta es para quien de verdad pegó las veces que participa cada uno.
+ */
+function sonVecesQueParticipa(texto: string): boolean {
+  const pegados = texto
+    .split(/\r?\n/)
+    .filter(terminaEnNumero)
+    .map((linea) => Number(linea.slice(linea.lastIndexOf(",") + 1).trim()));
+  return pegados.length > 0 && pegados.every((n) => Number.isInteger(n) && n >= 1 && n <= TOPE_POR_PERSONA);
+}
+
+/**
  * Pinta todo lo del modo: la pregunta por los números que ya trae la lista, el botón que abre el panel y,
  * si está abierto, el panel entero. Lo llama `renderNames`, así que cualquier cambio del cuadro (tocar un
  * contador, editar a mano, cambiar de idioma o de modo) lo deja al día.
@@ -728,7 +741,7 @@ function pintarPreguntaDeNumeros(): void {
   const aviso = document.getElementById("participaciones-aviso");
   if (!aviso) return;
   const texto = $<HTMLTextAreaElement>("ta").value;
-  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros ? numerosDeLaLista(texto) : [];
+  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
   aviso.style.display = numeros.length ? "" : "none";
   if (!numeros.length) return;
   const pregunta = document.getElementById("part-pregunta-texto");

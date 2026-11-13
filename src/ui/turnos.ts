@@ -51,8 +51,20 @@ const esElDeSiempre = (premio: string): boolean => ["Turnos", "Turns"].includes(
 const ROTULOS: ReadonlyArray<readonly [selector: string, apagado: string, prendido: string]> = [
   ['label[for="nw"]', "winners", "turnsCount"],
   ["#prize-etiqueta", "prizeLabel", "turnsPrizeLabel"],
-  ["#mas-opciones > summary", "masOpciones", "turnsMas"],
 ];
+
+/**
+ * El rótulo del pliegue de las opciones. Con el modo elegido, el del modo. Con los modos a la vista, el pliegue cerrado
+ * nombra el orden de turnos, que está ahí adentro: quien lo busca no tendría cómo saberlo. Sin los modos, el de siempre.
+ */
+const claveDelPliegue = (): string => (encendido ? "turnsMas" : modesVisible() ? "masOpcionesModos" : "masOpciones");
+
+function rotularElPliegue(): void {
+  const el = document.querySelector<HTMLElement>("#mas-opciones > summary");
+  if (!el) return;
+  el.dataset.i = claveDelPliegue();
+  el.textContent = t(el.dataset.i);
+}
 
 /** Pone en pantalla lo que depende del modo: el botón, los rótulos, lo que sobra y el aviso del tope. */
 function pintar(): void {
@@ -64,6 +76,7 @@ function pintar(): void {
     el.dataset.i = encendido ? prendido : apagado;
     el.textContent = t(el.dataset.i);
   }
+  rotularElPliegue();
   // El texto flotante de «Copiar las bases» no dice quién gana: se cambia la clave y el cambio de idioma la sigue.
   const bases = $id("btn-rules");
   if (bases) {
@@ -153,6 +166,7 @@ export function montarTurnos(): void {
   if (!opcion || !boton || montado) return;
   montado = true;
   opcion.hidden = !modesVisible();
+  rotularElPliegue();
   boton.addEventListener("click", () => {
     if (!boton.disabled) ponerModoTurnos(!encendido);
   });

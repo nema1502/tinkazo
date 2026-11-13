@@ -549,6 +549,8 @@ function medio(c: Ctx, f: Foto, s: number, apretado = false): Bloque[] {
  * lienzo mide justo lo que dice).
  */
 async function elQr(enlace: string): Promise<{ lienzo: HTMLCanvasElement; lado: number; modulo: number } | null> {
+  // Sin enlace (un orden de turnos sin sello no tiene comprobante) no hay qué escanear.
+  if (!enlace) return null;
   // Con la marca del QR (`o=qr`, src/contar.ts), y sin ella si así no entra con módulos que se lean.
   for (const texto of new Set([marcarQr(enlace), enlace])) {
     const qr = await qrLienzo(texto, QR_LADO - 2 * 8, 1);

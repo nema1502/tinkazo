@@ -89,6 +89,8 @@ describe("la página de verificación trae las claves de turnos y de participaci
     const usa = ["turnsWord", "turnsResultTitle", "turnsCopy", "copied", "vCheckOrden"];
     // El mensaje para el grupo, con y sin sello (modos/mensajes.ts, por compartir.ts).
     usa.push("turnsMsgCab", "turnsPie", "cmpVerificarUno", "cmpPie", "redSinSelloEtiqueta", "cmpVerSinSello");
+    // Y el de un orden sin sello, que no ofrece enlace (modos/mensajes.ts).
+    usa.push("turnsSinComprobante");
     // La foto del orden (compartir.ts).
     usa.push("turnsOption", "turnsFotoLinea", "turnsFotoLineaPart", "cmpFotoAlt");
     // La lista con participaciones: la cuenta de arriba y cuántas tiene cada persona (verify.ts).

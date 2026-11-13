@@ -8,8 +8,9 @@ import { turnOrderText } from "./turnos";
  * sorteo otra vez con `compartir.ts`). Las frases son las del diccionario, en los dos idiomas: nada de ganar ni de premio.
  *
  * El mensaje del grupo dice el orden, y que nadie lo eligió porque la lista se cerró antes de que existiera el número que lo
- * decidió. Sin sello no promete lo que no se puede comprobar: igual que el mensaje de un sorteo común, ofrece el enlace para
- * ver la lista y la cuenta, sin «nadie eligió» ni «verificarlo».
+ * decidió. Sin sello no promete lo que no se puede comprobar, y a diferencia del mensaje de un sorteo común tampoco ofrece
+ * un enlace: la verificación de un sorteo sin sello no lleva la cantidad de turnos y mostraría uno solo. Dice que un orden
+ * sin sello no tiene comprobante.
  */
 
 /** El texto de una clave en el idioma pedido. Si falta, la clave misma. */
@@ -27,9 +28,7 @@ function rellenar(plantilla: string, datos: Record<string, string | number>): st
 export function turnMessage(lang: Lang, d: { orden: readonly string[]; enlace: string; sinSello?: boolean }): string {
   return [
     rellenar(cad(lang, "turnsMsgCab"), { orden: turnOrderText(d.orden) }),
-    ...(d.sinSello
-      ? [cad(lang, "redSinSelloEtiqueta"), rellenar(cad(lang, "cmpVerSinSello"), { enlace: d.enlace })]
-      : [cad(lang, "turnsPie"), rellenar(cad(lang, "cmpVerificarUno"), { enlace: d.enlace })]),
+    ...(d.sinSello ? [cad(lang, "turnsSinComprobante")] : [cad(lang, "turnsPie"), rellenar(cad(lang, "cmpVerificarUno"), { enlace: d.enlace })]),
     "",
     cad(lang, "cmpPie"),
   ].join("\n");

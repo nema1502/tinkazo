@@ -356,8 +356,11 @@ export interface Dict {
   kEntriesDe: (n: number) => string;
   /** El modo «Orden de turnos» (src/modos/): lo de antes de sellar y las bases, sin ganadores ni premio. */
   turnsSellarResumen: (n: number, personas?: number) => string;
-  /** El resumen de antes de sellar cuando la lista no entra en lo que la red admite: sin la promesa del sello. */
-  turnsSellarTope: (n: number, personas?: number) => string;
+  /**
+   * El resumen de antes de sellar cuando la lista no entra en lo que la red admite: sin la promesa del sello, y con el
+   * motivo (el tope de la red) si quien llama lo sabe, para que se lea junto al botón apagado.
+   */
+  turnsSellarTope: (n: number, personas?: number, tope?: number) => string;
   turnsRules: (p: RulesParams) => string;
   turnsRulesPre: (p: RulesPreParams) => string;
 }
@@ -963,6 +966,8 @@ export const T: Record<Lang, Dict> = {
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `Con ${premios} premios no entra: la carrera tiene ${carriles} carriles.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `Con ${premios} premios no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `Con ${turnos} turnos no entra: la carrera tiene ${carriles} carriles.`,
+    // En un orden de turnos solo se ofrecen los juegos que lo cuentan bien: los demás se ven apagados y dicen esto.
+    "rec.sinTurnos": "Este juego es para premios.",
     "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `Con ${turnos} turnos no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
     "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
@@ -1024,6 +1029,8 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     masOpciones: "Premio, cuántos ganan y subir CSV",
+    // Con los modos a la vista, el pliegue cerrado nombra el orden de turnos, que se elige ahí adentro.
+    masOpcionesModos: "Premio, orden de turnos, cuántos ganan y subir CSV",
     masAjustes: "Sonido, duración y más",
     recRangoAria: "Para {r} personas",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
@@ -2664,6 +2671,8 @@ export const T: Record<Lang, Dict> = {
     sigListaPartUno: "1 persona, {n} participaciones",
     sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
+    // Un orden de turnos más largo de lo que admite la red: el botón está apagado y la barra dice por qué.
+    sigTope: "no se puede sellar, el orden llega hasta {tope} turnos",
     sigEspera: "Esperando el número",
     sigRonda: "El número ya salió",
     sigSorteando: "Sorteando",
@@ -2930,10 +2939,11 @@ export const T: Record<Lang, Dict> = {
         ? `${n} personas, turnos del 1 al ${n}. Al sellar, la lista queda cerrada.`
         : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una. Al sellar, la lista queda cerrada.`,
     // Sin la promesa del sello: esta lista no entra en lo que la red admite y no se puede sellar.
-    turnsSellarTope: (n, personas = n) =>
-      personas === n
+    turnsSellarTope: (n, personas = n, tope) =>
+      (personas === n
         ? `${n} personas, turnos del 1 al ${n}.`
-        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una.`,
+        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una.`) +
+      (tope === undefined ? "" : ` En esta red el orden llega hasta ${tope} turnos: con más, no se puede sellar.`),
     turnsRules: (p) => [
       `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
       "",
@@ -2965,7 +2975,9 @@ export const T: Record<Lang, Dict> = {
     // El mensaje para el grupo y el aviso a cada persona (src/modos/mensajes.ts).
     turnsMsgCab: "Orden de los turnos: {orden}",
     turnsTell: "Te tocó el turno {k} de {n}. Revisalo vos: {enlace}",
-    turnsTellSin: "Te tocó el turno {k} de {n}. Sin sello: no se puede comprobar. Para ver la lista y la cuenta: {enlace}",
+    turnsTellSin: "Te tocó el turno {k} de {n}. Este orden no se selló antes del sorteo, así que no se puede comprobar.",
+    // Un orden de turnos sin sello no tiene comprobante: la verificación mostraría un solo turno. No se ofrece enlace.
+    turnsSinComprobante: "Este orden no se selló antes del sorteo, así que no se puede comprobar.",
     turnsTellSubject: "Tu turno 🦙",
     turnsNotify: "Avisarle",
     turnsRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige el orden antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
@@ -3549,6 +3561,8 @@ export const T: Record<Lang, Dict> = {
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `With ${premios} prizes it doesn't fit: the race has ${carriles} lanes.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `With ${premios} prizes it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `With ${turnos} turns it doesn't fit: the race has ${carriles} lanes.`,
+    // In a turn order only the games that tell it well are offered: the rest look off and say this.
+    "rec.sinTurnos": "This game is for prizes.",
     "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `With ${turnos} turns it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
     "rec.sapo.bajo": "With few people, the table has few holes and few throws.",
@@ -3608,6 +3622,8 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     masOpciones: "Prize, how many win and upload CSV",
+    // With the modes in view, the closed fold names the turn order, which is chosen inside.
+    masOpcionesModos: "Prize, turn order, how many win and upload CSV",
     masAjustes: "Sound, length and more",
     recRangoAria: "For {r} people",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
@@ -4073,7 +4089,7 @@ export const T: Record<Lang, Dict> = {
     uso2t: "Classrooms and workshops",
     uso2b: "Who presents first, who takes the book home. Without anyone saying the organizer picked a favorite.",
     uso3t: "Teams at work",
-    uso3b: "Draw the year-end gift or the order of the shifts, with a result anyone can check.",
+    uso3b: "Draw the year-end gift or the order of the turns, with a result anyone can check.",
     uso4t: "Fairs and events",
     uso4b: "Prizes for the people who came, with no paperwork and no suspicion. Entering is always free.",
     faqKicker: "Questions",
@@ -5224,6 +5240,8 @@ export const T: Record<Lang, Dict> = {
     sigListaPartUno: "1 person, {n} entries",
     sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
+    // A turn order longer than the network allows: the button is off and the bar says why.
+    sigTope: "can't seal, the order goes up to {tope} turns",
     sigEspera: "Waiting for the number",
     sigRonda: "The number is out",
     sigSorteando: "Drawing",
@@ -5490,10 +5508,11 @@ export const T: Record<Lang, Dict> = {
         ? `${n} people, turns 1 to ${n}. Sealing locks the list.`
         : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each. Sealing locks the list.`,
     // Without the promise of sealing: this list is past what the network allows and cannot be sealed.
-    turnsSellarTope: (n, personas = n) =>
-      personas === n
+    turnsSellarTope: (n, personas = n, tope) =>
+      (personas === n
         ? `${n} people, turns 1 to ${n}.`
-        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each.`,
+        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each.`) +
+      (tope === undefined ? "" : ` On this network the order goes up to ${tope} turns: with more, it can't be sealed.`),
     turnsRules: (p) => [
       `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
       "",
@@ -5525,7 +5544,9 @@ export const T: Record<Lang, Dict> = {
     // The message for the group and the notice to each person (src/modos/mensajes.ts).
     turnsMsgCab: "Turn order: {orden}",
     turnsTell: "You got turn {k} of {n}. Check it yourself: {enlace}",
-    turnsTellSin: "You got turn {k} of {n}. No seal: it can't be checked. To see the list and the math: {enlace}",
+    turnsTellSin: "You got turn {k} of {n}. This order was not sealed before the draw, so it can't be checked.",
+    // A turn order with no seal has no proof: the check would show a single turn. No link is offered.
+    turnsSinComprobante: "This order was not sealed before the draw, so it can't be checked.",
     turnsTellSubject: "Your turn 🦙",
     turnsNotify: "Tell them",
     turnsRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the order is chosen before anyone knows it, and put on record which draw counts.",

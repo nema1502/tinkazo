@@ -2,7 +2,7 @@ import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
 import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { turnMessage } from "../modos/mensajes";
-import { isTurnOrder } from "../modos/turnos";
+import { isTurnOrder, ordenSinComprobante } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
@@ -237,6 +237,8 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   // Un orden de turnos: «Orden de turnos» arriba, las personas en el orden del sorteo (la foto muestra las primeras y «N más»)
   // y debajo cuántas son, sin «Premio:» ni «Entre N personas».
   const turnos = isTurnOrder(d.total, ganadores.length, d.premio);
+  // Un orden de turnos sin sello no tiene comprobante: la foto no lleva QR y dice por qué.
+  const sinComprobante = ordenSinComprobante(d.total, ganadores.length, d.premio, !!d.sinSello);
   // Las dos cuentas cuando no es una participación por persona.
   const part = !turnos && parte;
   // Quien salió más de una vez va en un solo renglón: «Ganó» o «Ganaron» según las personas que quedan, como el mensaje.
@@ -272,10 +274,10 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
         ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
-    enlace,
+    enlace: sinComprobante ? "" : enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
     escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
-    sinQr: cad(lang, d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
+    sinQr: cad(lang, sinComprobante ? "turnsSinComprobante" : d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
   };
 }
 
@@ -574,7 +576,8 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         // El logo va dentro del enlace corto, cifrado; el largo y el comprobante no lo llevan.
         // Sin logo también: uno que se quitó después de sellar no puede seguir viajando en el corto.
         ponerLogoDeRuta(rutaDe(d.enlace), d.logo);
-        const c = op.corto === false ? null : await acortar(d.enlace);
+        // Un orden de turnos sin sello no tiene enlace que acortar.
+        const c = op.corto === false || ordenSinComprobante(d.total, d.ganadores.length, d.premio, !!d.sinSello) ? null : await acortar(d.enlace);
         const enlace = c?.corto ?? d.enlace;
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),

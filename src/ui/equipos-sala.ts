@@ -1001,14 +1001,25 @@ export function initEquiposSala(deps: DepsDelPanel = depsReales()): PanelDeEquip
   entrada.addEventListener("click", () => {
     panel.raiz.hidden = !panel.raiz.hidden;
     entrada.setAttribute("aria-expanded", String(!panel.raiz.hidden));
-    if (!panel.raiz.hidden) panel.pintar();
+    if (!panel.raiz.hidden) {
+      panel.pintar();
+      // El panel está arriba del cuadro y el enlace dentro del pliegue de abajo: se lo lleva a la vista.
+      const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.raiz.scrollIntoView?.({ behavior: reducido ? "auto" : "smooth", block: "nearest" });
+    }
   });
   origenes.before(panel.raiz);
-  pie.after(entrada);
+  // El enlace va dentro del pliegue de las opciones: quien sortea sin equipos no lo ve en el camino común. Sin ese pliegue
+  // (otra pantalla), queda junto al del stand.
+  const pliegue = document.getElementById("mas-opciones");
+  if (pliegue) pliegue.append(entrada);
+  else pie.after(entrada);
   // Si el registro sigue abierto (se recargó la pantalla), el panel se ve.
   if (panel.raiz.querySelector("#eq-sala:not([hidden])")) {
     panel.raiz.hidden = false;
     entrada.setAttribute("aria-expanded", "true");
+    // El enlace vive dentro del pliegue de las opciones: con el panel a la vista, el pliegue no puede quedar cerrado.
+    if (pliegue instanceof HTMLDetailsElement) pliegue.open = true;
   }
   onLangChange(() => {
     texto();

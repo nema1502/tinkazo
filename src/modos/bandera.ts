@@ -31,6 +31,12 @@ export function requestedMode(search: string = currentSearch()): ModeName | null
   return MODES.find((mode) => mode === value) ?? null;
 }
 
+/**
+ * ¿La dirección pide un modo, y por eso la herramienta abre directo y no la portada? Es el enlace que se publica en un
+ * grupo: `?modo=turnos` o `?modo=varias`. Cualquiera de los dos.
+ */
+export const abreLaHerramienta = (search: string = currentSearch()): boolean => requestedMode(search) !== null;
+
 /** Donde queda el modo elegido en esta pestaña: vive en `sessionStorage`, como el borrador. */
 const CLAVE_MODO = "tinkazo.modo";
 

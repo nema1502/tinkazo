@@ -976,6 +976,85 @@ describe("la bandera", () => {
   });
 });
 
+describe("«Tengo equipos» no está en el camino del sorteo común", () => {
+  /** La lista con su pliegue de opciones, como `index.html`: el panel va arriba del cuadro y el enlace dentro del pliegue. */
+  const armarConPliegue = (): void => {
+    document.body.innerHTML =
+      '<div id="origenes"></div><button id="btn-stand"></button>' +
+      '<details class="mas" id="mas-opciones"><summary>Opciones</summary><div class="field" id="otra-opcion"></div></details>';
+  };
+
+  it("el enlace va dentro del pliegue de opciones, y no junto al del stand", () => {
+    armarConPliegue();
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    initEquiposSala(mundo().deps);
+    vi.unstubAllEnvs();
+    const entrada = document.getElementById("btn-equipos") as HTMLButtonElement;
+    expect(entrada.closest("#mas-opciones")).not.toBeNull();
+    expect(document.getElementById("btn-stand")?.nextElementSibling).not.toBe(entrada);
+    // El pliegue cerrado esconde el enlace: nadie lo ve en el camino común.
+    expect((document.getElementById("mas-opciones") as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it("al tocarlo se abre el panel y se lo lleva a la vista, porque está arriba del cuadro", async () => {
+    armarConPliegue();
+    const llevado = vi.fn();
+    Element.prototype.scrollIntoView = llevado;
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    const panel = initEquiposSala(mundo().deps);
+    vi.unstubAllEnvs();
+    (document.getElementById("btn-equipos") as HTMLButtonElement).click();
+    expect(panel?.raiz.hidden).toBe(false);
+    expect(llevado).toHaveBeenCalled();
+    await espera();
+  });
+
+  it("si se recarga con el registro abierto, el pliegue se abre: el enlace no queda escondido con el panel a la vista", async () => {
+    const m = mundo();
+    await abrirRegistro(m, "sorteo");
+    armarConPliegue();
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    const panel = initEquiposSala(m.deps);
+    vi.unstubAllEnvs();
+    expect(panel?.raiz.hidden).toBe(false);
+    const entrada = document.getElementById("btn-equipos") as HTMLButtonElement;
+    expect(entrada.getAttribute("aria-expanded")).toBe("true");
+    expect((document.getElementById("mas-opciones") as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it("sin registro abierto, el pliegue sigue cerrado", () => {
+    armarConPliegue();
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    initEquiposSala(mundo().deps);
+    vi.unstubAllEnvs();
+    expect((document.getElementById("mas-opciones") as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it("el desplazamiento al abrir el panel respeta el movimiento reducido", async () => {
+    for (const [reducido, comportamiento] of [[true, "auto"], [false, "smooth"]] as const) {
+      armarConPliegue();
+      const llevado = vi.fn();
+      Element.prototype.scrollIntoView = llevado;
+      vi.stubGlobal("matchMedia", (q: string) => ({ matches: reducido && q.includes("reduce"), media: q }));
+      vi.stubEnv("VITE_EQUIPOS", "1");
+      initEquiposSala(mundo().deps);
+      vi.unstubAllEnvs();
+      (document.getElementById("btn-equipos") as HTMLButtonElement).click();
+      expect(llevado, String(reducido)).toHaveBeenCalledWith({ behavior: comportamiento, block: "nearest" });
+      vi.unstubAllGlobals();
+      await espera();
+    }
+  });
+
+  it("sin el pliegue en la página (otra pantalla), queda junto al enlace del stand como antes", () => {
+    document.body.innerHTML = '<div id="origenes"></div><button id="btn-stand"></button>';
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    initEquiposSala(mundo().deps);
+    vi.unstubAllEnvs();
+    expect(document.getElementById("btn-stand")?.nextElementSibling?.id).toBe("btn-equipos");
+  });
+});
+
 describe("la pantalla del stand", () => {
   const pantalla = (): HTMLElement => document.getElementById("pantalla-stand") as HTMLElement;
   const tarjetas = (): HTMLElement[] => [...pantalla().querySelectorAll<HTMLElement>(".stp-equipo")];

@@ -1,5 +1,6 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { modoRecordado, modoVigente, modesFlagOn, modesVisible, recordarModo, requestedMode, withMode } from "./bandera";
+import { abreLaHerramienta, modoRecordado, modoVigente, modesFlagOn, modesVisible, recordarModo, requestedMode, withMode } from "./bandera";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -78,5 +79,20 @@ describe("la bandera de los modos nuevos", () => {
     expect(withMode("https://tinkazo.app/verificar.html?lang=es#abc", "varias")).toBe("https://tinkazo.app/verificar.html?lang=es&modo=varias#abc");
     expect(withMode("https://tinkazo.app/verificar.html#abc", null)).toBe("https://tinkazo.app/verificar.html#abc");
     expect(withMode("https://tinkazo.app/evento.html#abc", "turnos")).toBe("https://tinkazo.app/evento.html#abc");
+  });
+});
+
+describe("el enlace de un modo abre la herramienta", () => {
+  it("con ?modo=turnos y con ?modo=varias, la dirección pide la herramienta; sin modo o con uno que no existe, no", () => {
+    expect(abreLaHerramienta("?modo=turnos")).toBe(true);
+    expect(abreLaHerramienta("?modo=varias")).toBe(true);
+    expect(abreLaHerramienta("?lead=5&modo=Varias")).toBe(true);
+    for (const busqueda of ["", "?modo=", "?modo=otro", "?lang=en", "?demo=wheel"]) expect(abreLaHerramienta(busqueda), busqueda).toBe(false);
+  });
+
+  it("la portada lo usa: main.ts abre la herramienta directo con cualquier modo, no solo con el de turnos", () => {
+    const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+    expect(main).toMatch(/const deApp = .*\|\| abreLaHerramienta\(\);/);
+    expect(main).not.toContain('requestedMode() === "turnos"');
   });
 });

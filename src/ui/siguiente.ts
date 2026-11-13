@@ -9,6 +9,8 @@ import { esResultadoDeTurnos } from "../modos/turnos";
 import { modesVisible } from "../modos/bandera";
 import { contar, seCuentaPorPersona } from "../participaciones";
 import { canonicalList } from "../protocol/canonical";
+import { topeDeGanadores } from "../stellar/config";
+import { ordenNoCabe } from "./turnos";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -201,10 +203,14 @@ function calcular(): Toca {
   // sellando, y la barra sigue diciendo qué hay en la lista. Se cuenta con la misma regla que apaga el botón.
   const ta2 = paso === 2 ? (document.getElementById("ta") as HTMLTextAreaElement | null) : null;
   const faltaOtraPersona = !!ta2 && contar(canonicalList(ta2.value), modesVisible()).personas < 2;
-  const apagado = (boton?.disabled ?? false) && !faltaOtraPersona;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos() });
-  let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
-  let doble = false;
+  // Un orden de turnos más largo de lo que admite la red también deja el botón apagado, y tampoco es sellar: no se puede,
+  // y la barra lo dice con el tope. Se cuenta con la misma regla que apaga el botón (`ordenNoCabe`, participants.ts).
+  const noCabe = paso === 2 && ordenNoCabe(n);
+  const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe;
+  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos(), noCabe });
+  let detalle = clave ? t(clave).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
+  // La frase del tope es larga: en el celular vale hasta dos renglones, como la de las dos cuentas.
+  let doble = clave === "sigTope";
   // Con los modos a la vista, o sin ellos con una lista que es un reparto entero (`seCuentaPorPersona` sin modos, como
   // la cuenta del cuadro y la cabecera después de sellar), la barra cuenta personas y líneas: en un orden de turnos
   // las líneas son turnos, y con varias participaciones son participaciones, no personas.

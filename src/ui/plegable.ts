@@ -1,7 +1,7 @@
 import { t } from "../i18n";
 
 /**
- * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo
+ * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», o con los modos a la vista «Premio, orden de turnos, cuántos ganan y subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo
  * ahí adentro, para que lo que eligió no quede escondido (un premio escrito, más de un ganador). Lo que se
  * eligió se lee igual arriba del botón de sellar.
  *

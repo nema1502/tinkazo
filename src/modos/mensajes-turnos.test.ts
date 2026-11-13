@@ -48,13 +48,23 @@ describe("el mensaje para el grupo", () => {
     );
   });
 
-  it("sin sello no promete lo que no se puede comprobar: ni «nadie eligió» ni «verificarlo»", () => {
-    const es = turnMessage("es", { orden, enlace: ENLACE, sinSello: true });
-    expect(es).toContain("Sin sello: no se puede comprobar.");
-    expect(es).toContain(`Para ver la lista y la cuenta, entrá acá: ${ENLACE}`);
-    expect(es).not.toMatch(/Nadie eligió|verificarlo/);
-    const en = turnMessage("en", { orden, enlace: ENLACE, sinSello: true });
-    expect(en).not.toMatch(/Nobody chose|verify it/);
+  it("sin sello no promete lo que no se puede comprobar ni ofrece el enlace: dice que un orden sin sello no tiene comprobante", () => {
+    // La verificación de un sorteo sin sello no lleva la cantidad de turnos y mostraría uno solo: el enlace no se ofrece.
+    expect(turnMessage("es", { orden, enlace: ENLACE, sinSello: true })).toBe(
+      ["Orden de los turnos: 1. Ana, 2. Beto, 3. Carla", "Este orden no se selló antes del sorteo, así que no se puede comprobar.", "", "Sorteado con Tinkazo: https://tinkazo.app"].join("\n"),
+    );
+    expect(turnMessage("en", { orden, enlace: ENLACE, sinSello: true })).toBe(
+      ["Turn order: 1. Ana, 2. Beto, 3. Carla", "This order was not sealed before the draw, so it can't be checked.", "", "Drawn with Tinkazo: https://tinkazo.app"].join("\n"),
+    );
+    for (const lang of ["es", "en"] as const) {
+      const m = turnMessage(lang, { orden, enlace: ENLACE, sinSello: true });
+      expect(m, lang).not.toContain(ENLACE);
+      expect(m, lang).not.toMatch(/Nadie eligió|verificarlo|Nobody chose|verify it|verificar\.html/);
+    }
+  });
+
+  it("con sello el mensaje sigue ofreciendo el enlace", () => {
+    for (const lang of ["es", "en"] as const) expect(turnMessage(lang, { orden, enlace: ENLACE }), lang).toContain(ENLACE);
   });
 
   it("sin las palabras de ganar, en los dos idiomas", () => {
@@ -71,10 +81,14 @@ describe("el aviso a cada persona", () => {
     expect(turnNotice("en", { turn: 3, of: 12, enlace: ENLACE })).toBe(`You got turn 3 of 12. Check it yourself: ${ENLACE}\n\nDrawn with Tinkazo: https://tinkazo.app`);
   });
 
-  it("sin sello lo dice y no manda a revisarlo; ningún aviso usa palabras de ganar", () => {
+  it("sin sello lo dice, no manda a revisarlo ni lleva enlace; ningún aviso usa palabras de ganar", () => {
     const es = turnNotice("es", { turn: 1, of: 2, enlace: ENLACE, sinSello: true });
-    expect(es).toContain("Te tocó el turno 1 de 2. Sin sello: no se puede comprobar.");
+    expect(es).toContain("Te tocó el turno 1 de 2. Este orden no se selló antes del sorteo, así que no se puede comprobar.");
     expect(es).not.toContain("Revisalo");
+    expect(es).not.toContain(ENLACE);
+    const en = turnNotice("en", { turn: 1, of: 2, enlace: ENLACE, sinSello: true });
+    expect(en).toContain("You got turn 1 of 2. This order was not sealed before the draw, so it can't be checked.");
+    expect(en).not.toContain(ENLACE);
     for (const lang of ["es", "en"] as const) {
       for (const sinSello of [false, true]) expect(turnNotice(lang, { turn: 7, of: 300, enlace: ENLACE, sinSello }), `${lang} ${sinSello}`).not.toMatch(PROHIBIDAS);
     }
@@ -134,6 +148,28 @@ describe("lo que se comparte", () => {
     expect(fotoDeSorteo("en", d, ENLACE).lineas).toEqual(["3 people, 5 turns, turns 1 to 5"]);
     // Una persona por turno: la línea de siempre.
     expect(fotoDeSorteo("es", { ...d, personas: 5 }, ENLACE).lineas).toEqual(["5 personas, turnos del 1 al 5"]);
+  });
+
+  it("un orden sin sello se comparte sin enlace: el mensaje dice que no tiene comprobante y la foto no lleva QR", () => {
+    const { d } = datos(12);
+    for (const lang of ["es", "en"] as const) {
+      const sin = mensajeDeSorteo(lang, { ...d, sinSello: true });
+      expect(sin, lang).not.toContain(ENLACE);
+      expect(sin, lang).toContain(String(T[lang].turnsSinComprobante));
+      expect(sin, lang).not.toMatch(PROHIBIDAS);
+      const foto = fotoDeSorteo(lang, { ...d, sinSello: true }, ENLACE);
+      expect(foto.enlace, lang).toBe("");
+      expect(foto.sinQr, lang).toBe(String(T[lang].turnsSinComprobante));
+      // Con sello, todo como siempre: el enlace va en el mensaje y en la foto.
+      expect(fotoDeSorteo(lang, d, ENLACE).enlace, lang).toBe(ENLACE);
+      expect(mensajeDeSorteo(lang, d), lang).toContain(ENLACE);
+    }
+  });
+
+  it("un sorteo común sin sello sigue ofreciendo su enlace: solo el orden de turnos no tiene comprobante", () => {
+    const comun = { enlace: ENLACE, ganadores: ["Ana"], total: 12, premio: "Termo", sinSello: true };
+    expect(fotoDeSorteo("es", comun, ENLACE).enlace).toBe(ENLACE);
+    expect(mensajeDeSorteo("es", comun)).toContain(ENLACE);
   });
 
   it("3 poleras entre 3 personas se sigue compartiendo como siempre: quién ganó, el premio y «Entre 3 personas»", () => {

@@ -225,8 +225,12 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
-/** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
-const premiosElegidos = (): number => ganadoresPedidos();
+/**
+ * Cuántos premios se sortean entre `n` personas: el campo de "Cuántos ganan", que con la lista sellada ya no cambia, sin
+ * pasar de la lista. Es la misma cuenta del sello (`Math.min(ganadoresPedidos(), names.length)`): con tres personas y cinco
+ * pedidos salen tres, y el selector tiene que decidir con esos tres.
+ */
+const premiosElegidos = (n: number): number => Math.min(ganadoresPedidos(), Math.max(1, n));
 
 export function pintarRecomendacion(names: readonly string[]): void {
   const n = names.length;
@@ -239,13 +243,23 @@ export function pintarRecomendacion(names: readonly string[]): void {
   // Un orden de turnos no tiene premios: las notas de capacidad dicen turnos. Se decide como en el resto de
   // la pantalla, por la lista sellada y su nombre; antes de sellar vale el nombre del campo.
   const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
-  const turnos = isTurnOrder(n, premiosElegidos(), premio);
-  recomendar(n, premiosElegidos(), turnos).games.forEach((r, i) => {
+  const turnos = isTurnOrder(n, premiosElegidos(n), premio);
+  recomendar(n, premiosElegidos(n), turnos).games.forEach((r, i) => {
     const el = botones.get(r.game);
     if (!el) return;
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
     if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
     el.classList.toggle("atenuado", r.fits === false);
+    // Un orden de turnos solo ofrece los juegos que lo cuentan bien: el resto se apaga y no se puede elegir. Lo que este modo
+    // apagó se vuelve a encender con una lista que no es un orden, y nada más: la ruleta apagada por su tope no es cosa de acá.
+    const boton = el as HTMLButtonElement;
+    if (r.apagado) {
+      boton.disabled = true;
+      boton.dataset.sinTurnos = "1";
+    } else if (boton.dataset.sinTurnos) {
+      boton.disabled = false;
+      delete boton.dataset.sinTurnos;
+    }
     el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota, :scope > .rec-rango").forEach((x) => x.remove());
     if (r.fits === true) {
       const etiqueta = document.createElement("em");
@@ -267,13 +281,29 @@ export function pintarRecomendacion(names: readonly string[]): void {
     }
     if (r.note) {
       const nota = document.createElement("small");
-      nota.className = "rec-nota sr-only";
+      // Lo que se ofrece dice su nota solo para el lector de pantalla; lo apagado dice su motivo a la vista.
+      nota.className = r.apagado ? "rec-nota rec-nota-vista" : "rec-nota sr-only";
       nota.textContent = frase(r.note, r.args);
       el.appendChild(nota);
     }
   });
   pintarCabecera(names);
   pintarNotaElegida();
+}
+
+/**
+ * Un orden de turnos solo se cuenta en los juegos que lo cuentan bien (`apagado` en `recomendar.ts`). Si quedó elegido uno
+ * que no (el de otro sorteo), pasa solo a uno que sirva. La demo juega el que pide su enlace, y con una lista que ningún
+ * juego cuenta (más de doscientos turnos) no se apaga nada, así que no cambia nada.
+ */
+export function dejarUnJuegoQueSirva(names: readonly string[], prize: string): void {
+  if (params.has("demo")) return;
+  const n = names.length;
+  // La misma decisión que `pintarRecomendacion`: si ahí no se apagó nada, acá tampoco se cambia nada.
+  if (!isTurnOrder(n, premiosElegidos(n), prize)) return;
+  if (!recomendar(n, premiosElegidos(n), true).games.find((r) => r.game === app.game)?.apagado) return;
+  const g = juegoPorDefecto(n, premiosElegidos(n), true);
+  if (g !== app.game) setGame(g);
 }
 
 /**
@@ -293,7 +323,7 @@ export function pintarCabecera(names: readonly string[]): void {
   const n = names.length;
   const { personas } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
   const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
-  const turnos = isTurnOrder(n, premiosElegidos(), premio);
+  const turnos = isTurnOrder(n, premiosElegidos(n), premio);
   const cabeza = personas === n ? frase("recHead", [n]) : turnos ? frase("recHeadTurnos", [personas, n]) : frase("recHeadPart", [personas, n]);
   el.textContent = `${cabeza}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
   el.style.display = "";
@@ -408,7 +438,8 @@ function abrirEspera(alSellar = false): void {
       graba: app.frozen?.raffleId !== undefined,
       juegos: juegosParaElegir,
       elegirJuego: (g) => elegirJuego(g as Game),
-      premios: premiosElegidos,
+      // Los premios que de verdad se sortean (sin pasar de la lista), como el sello: Sorprendeme decide con esa cuenta.
+      premios: () => premiosElegidos(app.frozen?.names.length ?? 0),
       alSellar,
     });
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
@@ -1415,11 +1446,13 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   if (!juegoAMano && !params.has("demo")) {
     // Después de un premio, otro juego; la primera vez, el de siempre (D02).
     // Un orden de turnos queda con la ruleta si la lista entra (`juegoPorDefecto`); con más de lo que admite, el de siempre.
-    const turnos = isTurnOrder(names.length, Math.min(premiosElegidos(), names.length), f.prize);
-    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos(), turnos);
+    const turnos = isTurnOrder(names.length, premiosElegidos(names.length), f.prize);
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos(names.length)) : juegoPorDefecto(names.length, premiosElegidos(names.length), turnos);
     juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
+  // Y un orden de turnos no se queda en un juego que habla de premios, aunque se haya elegido a mano en otro sorteo.
+  dejarUnJuegoQueSirva(names, f.prize);
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
@@ -1430,7 +1463,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
     // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame(recomendar(names.length, premiosElegidos()).games.find((r) => r.fits === true)?.game ?? "tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length, premiosElegidos(names.length)).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

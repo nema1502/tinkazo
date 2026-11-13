@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
-import { isTurnOrder } from "../modos/turnos";
+import { isTurnOrder, ordenGuardadoSinSello } from "../modos/turnos";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
@@ -329,9 +329,15 @@ const avisar = (texto: string): void => {
   avisoPendiente = texto;
 };
 
+/**
+ * Trae un enlace de verificación que se puede ofrecer: el de la ronda no cuenta, ni el de un orden de turnos sin sello, que
+ * no tiene comprobante (`ordenGuardadoSinSello`, la misma regla del panel de la cuenta y del archivo CSV).
+ */
+const conComprobante = (e: Entry): boolean => tieneComprobante(e) && !ordenGuardadoSinSello(e);
+
 /** Se puede sumar a un evento o compartir: tiene el enlace del comprobante y sus ganadores. */
 const compartible = (e: Entry): e is Entry & { proof: string; winners: string[] } =>
-  !!(e.proof && tieneComprobante(e) && e.winners?.length);
+  !!(e.proof && conComprobante(e) && e.winners?.length);
 
 /**
  * La principal es lo que sigue con el sorteo más nuevo que tiene algo para
@@ -588,7 +594,7 @@ function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void
   // El grupo del sorteo más nuevo que se puede sumar: "Ponerle nombre" lo vuelve un evento entero.
   const ultimo = candidatos[0]?.e;
   grupoNombrable = ultimo ? (grupos.find((g) => g.includes(ultimo)) ?? null) : null;
-  if (!guardados.length && !list.some(tieneComprobante)) {
+  if (!guardados.length && !list.some(conComprobante)) {
     caja.style.display = "none";
     caja.innerHTML = "";
     return;
@@ -909,7 +915,7 @@ function paint(organizer: string | null): void {
   const sueltos = list.filter((e) => !(e.proof && eventoDelEnlace.has(e.proof)));
   // Los sueltos que tienen comprobante se agrupan por fecha en eventos: una
   // cabecera con "Compartir el evento" y, debajo, sus sorteos en el orden de la lista.
-  const grupos = agrupar(sueltos);
+  const grupos = agrupar(sueltos.filter(conComprobante));
   eventoDe = new Map<Entry, number>();
   grupos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
   eventosPintados = grupos;
@@ -952,11 +958,11 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const acciones: string[] = [];
   if (!hecho && e.names?.length) acciones.push(`<button ${comoPrincipal(`retomar:${i}`)} data-retomar="${i}">${esc(t("histResume"))}</button>`);
   // El comprobante se puede compartir otra vez, con el QR y el mensaje: sale del enlace y de los ganadores.
-  const compartible = !!(e.proof && tieneComprobante(e) && e.winners?.length);
+  const compartible = !!(e.proof && conComprobante(e) && e.winners?.length);
   if (compartible) acciones.push(`<button ${comoPrincipal(`compartir:${i}`)} type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
   // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
   // está en la cadena. Con la lista a mano se rearma.
-  if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
+  if (e.proof && !ordenGuardadoSinSello(e)) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
   else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
   if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
   if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
@@ -1027,7 +1033,8 @@ export function toCsv(organizer: string): string {
       q(e.prize),
       q(e.sealTx ?? ""),
       q(e.drawTx ?? ""),
-      q(e.proof ?? ""),
+      // Un orden de turnos sin sello no tiene comprobante: la ronda ya está en su columna.
+      q(ordenGuardadoSinSello(e) ? "" : e.proof ?? ""),
       q(e.fromChain ? "cadena" : "equipo"),
       // El id solo no dice de qué contrato es: arrancan en 1 en cada uno.
       q(e.contract ?? ""),

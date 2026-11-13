@@ -28,7 +28,7 @@ import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
 import { equiposActivo } from "./equipos/bandera";
-import { requestedMode } from "./modos/bandera";
+import { abreLaHerramienta } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
@@ -266,8 +266,8 @@ initLumaAyuda();
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
   const body = document.body;
-  // `?modo=turnos` abre la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
-  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || requestedMode() === "turnos";
+  // `?modo=turnos` y `?modo=varias` abren la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || abreLaHerramienta();
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.

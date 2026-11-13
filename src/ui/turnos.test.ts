@@ -338,7 +338,8 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
 
   it("con la lista que no entra, el resumen de antes de sellar no promete el sello", async () => {
     await prender(40, 32);
-    expect($("sellar-resumen").textContent).toBe("40 personas, turnos del 1 al 40.");
+    // Sin la promesa del sello, y con el motivo a la vista junto al botón (el mismo de la nota del pliegue).
+    expect($("sellar-resumen").textContent).toBe("40 personas, turnos del 1 al 40. En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
     expect($("sellar-resumen").textContent).not.toContain("Al sellar");
     // Con una lista que sí entra, la promesa del sello vuelve.
     poner(20);
@@ -364,7 +365,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     for (const lineas of [301, 320]) {
       await prender(lineas, 300);
       const resumen = $("sellar-resumen").textContent ?? "";
-      expect(resumen, `${lineas}`).toBe(`${lineas} personas, turnos del 1 al ${lineas}.`);
+      expect(resumen, `${lineas}`).toBe(`${lineas} personas, turnos del 1 al ${lineas}. En esta red el orden llega hasta 300 turnos: con más, no se puede sellar.`);
       expect(resumen, `${lineas}`).not.toMatch(/ganador|Al sellar/);
       expect(sellar().disabled, `${lineas}`).toBe(true);
     }
@@ -372,7 +373,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
 
   it("justo por encima del tope de una red chica, lo mismo", async () => {
     await prender(33, 32);
-    expect($("sellar-resumen").textContent).toBe("33 personas, turnos del 1 al 33.");
+    expect($("sellar-resumen").textContent).toBe("33 personas, turnos del 1 al 33. En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
     expect(sellar().disabled).toBe(true);
   });
 

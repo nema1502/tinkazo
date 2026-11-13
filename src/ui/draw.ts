@@ -23,7 +23,7 @@ import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { turnMessage, turnNotice } from "../modos/mensajes";
-import { isTurnOrder, modoDelComprobante, setResultadoDeTurnos } from "../modos/turnos";
+import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos } from "../modos/turnos";
 import { contar as contarPersonas, cuentaParaMostrar, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
 import { modesVisible, withMode } from "../modos/bandera";
 import { alCopiarOrden } from "./lista-de-turnos";
@@ -1082,6 +1082,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Se siguió sin sello y el sello no llegó a entrar: el comprobante lo lleva marcado, para que el
   // mensaje, la foto, el enlace del evento y la página de verificación lo digan (protocolo §8).
   const sinSello = !!f.sinSello && f.raffleId === undefined;
+  // Un orden de turnos sin sello no tiene comprobante: no se ofrece ningún enlace de verificación (`ordenSinComprobante`).
+  const sinComprobante = ordenSinComprobante(names.length, winners.length, f.prize, sinSello);
   const proof: Proof = {
     v: PROOF_VERSION,
     names,
@@ -1118,16 +1120,21 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     // Sin comprobante, el QR al menos lleva a la ronda del faro.
     link = roundLink;
   }
-  proofLink = link;
+  proofLink = sinComprobante ? "" : link;
   // El logo de la comunidad va solo en el enlace corto: se registra una vez, y quienes acortan no cambian.
   ponerLogoDeRuta(rutaDe(link), logoPorHuella(f.logo));
   // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
   const nota = document.getElementById("sin-sello-nota");
-  if (nota) nota.style.display = sinSello ? "block" : "none";
+  if (nota) {
+    nota.style.display = sinSello ? "block" : "none";
+    // Un orden de turnos sin sello lo dice con su propia línea: no tiene comprobante.
+    nota.dataset.i = sinComprobante ? "turnsSinComprobante" : "redSinSelloEtiqueta";
+    nota.textContent = t(nota.dataset.i);
+  }
   // Y el QR no invita a comprobar lo que no se puede comprobar: dice que no hay sello y qué se ve al escanearlo.
   ponerTextoDelSello(document.querySelector<HTMLElement>("#qr-box .kicker"), "qrDelResultado", sinSello);
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
-  cortoLink = cortoGuardado(link)?.corto ?? "";
+  cortoLink = sinComprobante ? "" : (cortoGuardado(link)?.corto ?? "");
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
   // La demo y el ensayo no son sorteos: no se anotan en Mis sorteos aunque haya
   // cuenta, igual que en el sello (freeze.ts).
@@ -1146,7 +1153,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         prize: f2.prize,
         winners: winners.map((i) => names[i] ?? ""),
         ...(f2.logo ? { logo: f2.logo } : {}),
-        proof: link,
+        // Un orden de turnos sin sello se anota con la ronda: Mis sorteos no le ofrece enlace de verificación.
+        proof: sinComprobante ? roundLink : link,
         ...(f2.raffleId !== undefined ? { id: String(f2.raffleId) } : {}),
         // El número solo no dice de qué contrato es (cada uno arranca en 1).
         ...(f2.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
@@ -1160,9 +1168,11 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Los avisos primero: el QR carga su librería aparte y tarda, y hacer
   // esperar a los botones de "avisarle por WhatsApp" por un cuadradito los
   // dejaba sin armar justo cuando el ganador aparece en pantalla.
-  setNotifyLinks(names, winners, cortoLink || link);
-  void paintQr(cortoLink || link);
-  return link;
+  setNotifyLinks(names, winners, sinComprobante ? "" : cortoLink || link);
+  // Sin comprobante no hay qué escanear: el QR se esconde, y la pantalla grande tampoco lo muestra (`proofLink` vacío).
+  if (sinComprobante) $("qr-box").style.display = "none";
+  else void paintQr(cortoLink || link);
+  return sinComprobante ? "" : link;
 }
 
 /**
@@ -1222,7 +1232,9 @@ export function shareProof(): void {
   const f = app.frozen;
   const d = app.drawn;
   if (!f || !d) return;
-  const enlace = proofLink || roundUrl(d.beacon.round);
+  // Un orden de turnos sin sello no tiene comprobante: se comparte sin enlace (`buildProof`).
+  const sinEnlace = ordenSinComprobante(f.names.length, d.winners.length, f.prize, !!f.sinSello && f.raffleId === undefined);
+  const enlace = sinEnlace ? "" : proofLink || roundUrl(d.beacon.round);
   const mostrar = (linea: string): string => (seCuentaPorPersona(f.names, modesVisible()) ? nombreDePersona(linea) : linea);
   const datos = {
     enlace,
