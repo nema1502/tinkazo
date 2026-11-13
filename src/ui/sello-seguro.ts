@@ -9,7 +9,8 @@ import { esDeRed, textoDelError } from "../stellar/errores";
  *
  * 1. Si quedó un intento que no se sabe si entró (de recién, o de antes de
  *    recargar la página), primero se averigua. Si entró, ese es el sello: no se
- *    manda otro. Si no se puede averiguar, no se manda nada.
+ *    manda otro. Si no se puede averiguar, no se manda nada. Si no entró, la
+ *    ronda se elige de nuevo después de averiguar, con el margen entero.
  * 2. Si el envío se corta y no se sabe si entró (`SelloIncierto`), se averigua
  *    antes de hacer cualquier otra cosa. Entró: listo. No entró ni puede entrar:
  *    se prueba con otra ronda. No se sabe: se guarda y se le dice a la persona.
@@ -164,6 +165,7 @@ export async function sellarSinDuplicar(
   pendiente?: IntentoDeSello | null,
 ): Promise<SelloHecho> {
   const dormir = p.dormir ?? dormirDeVerdad;
+  let { round, ts } = inicial;
   if (pendiente) {
     p.avisar?.("verificando");
     const r = await p.resolver(pendiente);
@@ -173,9 +175,12 @@ export async function sellarSinDuplicar(
     }
     if (r.estado === "no-se-sabe") throw new SelloSinConfirmar(pendiente, r.error);
     p.guardarPendiente(null);
+    // Saber que no entró puede llevar hasta un minuto: se espera a que el contrato ya no acepte ese intento. La ronda
+    // elegida antes de averiguar llegaría cerca y gastaría un cambio de ronda, así que se elige de nuevo desde ahora, con
+    // el margen entero. Sin `rondaNueva` (los reintentos de "Seguir sin sello") la ronda es una sola y sigue siendo esa.
+    if (p.rondaNueva) ({ round, ts } = p.rondaNueva());
   }
 
-  let { round, ts } = inicial;
   let otrasRondas = 0;
   let otrasPorRed = 0;
   for (;;) {

@@ -226,6 +226,35 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
     expect(e.pasos.sellar).not.toHaveBeenCalled();
   });
 
+  it("un pendiente que tarda en averiguarse y no entró: la ronda se elige de nuevo después de averiguar, con el margen entero", async () => {
+    // La pestaña murió con el intento guardado y antes de mandarlo: en la red no hay nada. Al volver, averiguarlo espera
+    // a que el contrato ya no lo acepte (unos 20 s con este margen). Con la ronda elegida antes de esa espera, el sello
+    // nuevo quedaba cerca, fallaba y gastaba uno de los dos cambios de ronda.
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const antes = e.inicial();
+    const pendiente: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: antes.round, count: 8, numWinners: 1, meta: "premio", desde: antes.ts };
+    e.avanzar(5000);
+    const inicial = e.inicial();
+    const avisos: string[] = [];
+    const r = await sellarSinDuplicar(inicial, { ...e.pasos, avisar: (q) => void avisos.push(q) }, pendiente);
+    expect(avisos).toEqual(["verificando"]);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+    expect(r.round).toBeGreaterThan(inicial.round);
+    expect(r.retomado).toBeUndefined();
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+
+  it("sin rondaNueva (los reintentos de Seguir sin sello), la ronda sigue siendo la misma después de averiguar", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    e.avanzar(90_000);
+    const inicial = e.inicial();
+    const pendiente: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: inicial.round - 40, count: 8, numWinners: 1, meta: "premio", desde: inicial.ts - 120 };
+    const { sellar, resolver, sinGrabar, guardarPendiente: guardar, dormir } = e.pasos;
+    const r = await sellarSinDuplicar(inicial, { sellar, resolver, sinGrabar, guardarPendiente: guardar, dormir }, pendiente);
+    expect(e.pasos.sellar.mock.calls.map(([round]) => round)).toEqual([inicial.round]);
+    expect(r.round).toBe(inicial.round);
+  });
+
   it("un corte antes de mandar nada (al simular) se reintenta solo, con espera creciente", async () => {
     const e = escenario([
       { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Failed to fetch") },
