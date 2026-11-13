@@ -9,6 +9,7 @@ import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
+import { fijarElTema } from "./tema-forzado";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -26,14 +27,10 @@ textosDeLaPagina();
 // para las capturas y para mirar las dos versiones sin tocar el sistema. Se
 // lee acá y no de `state`, que es de la herramienta y arrastra a los juegos.
 const tema = new URLSearchParams(location.search).get("theme");
-if (tema === "light" || tema === "dark") {
-  document.documentElement.dataset.theme = tema;
-  // Las imágenes con versión clara la eligen por el tema del sistema: con
-  // el tema forzado, la versión del tema del sitio.
-  document.querySelectorAll<HTMLSourceElement>('picture source[media*="prefers-color-scheme"]').forEach((s) => {
-    s.media = tema === "light" ? "all" : "not all";
-  });
-}
+
+// Fijar el tema y las capturas vive en `tema-forzado.ts`, que también usa la portada.
+export { fijarElTema };
+fijarElTema(tema);
 
 /**
  * La cuenta, siempre a la vista también acá (26 de octubre de 2026): "Entrar" si no hay cuenta (un enlace a la

@@ -7,7 +7,8 @@ import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type FocoAt, type PixiStage } from "./stage";
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
-import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
+import { cabe, encuadrar, unir, type Caja, type Zona } from "./encuadre";
+import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame, sapoPrimerPlano3D } from "./sapo-zoom-final";
 import { avatarColor } from "../../avatar";
 import { formasDe } from "../nombres";
 import { escalaChipLegible } from "./letra";
@@ -21,8 +22,9 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
-import type { Montaje3D } from "../tres/tipos";
+import type { Camara2D, Montaje3D, SenalMano } from "../tres/tipos";
 import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } from "../tres/sapo-3d";
+import { HOLGURA_3D } from "./ganador-altura";
 
 /**
  * El sapo.
@@ -53,8 +55,33 @@ import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } fro
 /** Lo lento del sapo vive en sapo-tiempos.ts (lo comparte con la prueba del niño). */
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
+/** Lo que dura el látigo de soltar: la mano vuelve de su impulso y los dedos se relajan. */
+const LATIGO = 0.3;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
+
+/** La rana verde de la casa: cuerpo, manchas y brillo, los mismos de la escena 3D. */
+export const RANA = 0x5cb746;
+export const RANA_OSC = 0x3d7a24;
+export const RANA_CLARO = 0x9ade6b;
+/** La piel de la mano que tira, con su sombra: la misma de la escena 3D. */
+export const PIEL = 0xdba27f;
+export const PIEL_OSC = 0xc08a68;
+/** La madera rústica del cajón: tapa clara, frente y cajones en marrones ricos, y su veta. Cada uno con su versión de noche. */
+export const MADERA = {
+  tapa: 0xc08a4d, tapaNoche: 0x8a5a2c,
+  veta: 0x6b4423, vetaNoche: 0x3f2a14,
+  frente: 0x7a4a22, frenteNoche: 0x5e3a1c,
+  cajon: 0x8f5a2b, cajonNoche: 0x4d2e12,
+} as const;
+/** El cajón, en unidades de la mesa: más grande y rústico en la pantalla ancha. En el celular ya ocupa casi todo el ancho: ahí no crece. */
+export const MESA_ANCHO = 2.24;
+export const MESA_FONDO = 2.16;
+export const MESA_ANCHO_CHICO = 2.1;
+export const MESA_FONDO_CHICO = 2.05;
+
+/** Gira un vector, en coordenadas de pantalla (el ángulo crece hacia abajo): para curvar las falanges de los dedos. */
+const rotar = (v: Point, a: number): Point => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
 
 interface Toss {
   th: Throw;
@@ -205,9 +232,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
       ancho = Math.max(ancho, (w * 0.26) / L.tableR);
     }
+    // La mitad del fondo de la tapa, en unidades de la mesa: en la pantalla
+    // ancha el cajón creció, y el presupuesto de alto lo sigue.
+    const mediaTapa = S.portrait() ? 1.03 : 1.08;
     // Lo que ocupa de alto: desde el borde de arriba del cajón hasta lo más bajo
-    // entre su borde de abajo y la mano, más el frente con los cajoncitos.
-    const arriba = L.tableR * 1.03, abajo = Math.max(hp.y, L.tableR * 1.03), frente = 46 * k;
+    // entre su borde de abajo y la mano, más el frente con los cajoncitos y las patas.
+    const arriba = L.tableR * mediaTapa, abajo = Math.max(hp.y, L.tableR * mediaTapa), frente = 56 * k;
     const sc = Math.max(8, Math.min(ancho, (botY - topY - frente) / ((arriba + abajo) * tilt)));
     const sobra = botY - topY - ((arriba + abajo) * tilt * sc + frente);
     const cy = topY + Math.max(0, sobra) / 2 + arriba * tilt * sc;
@@ -234,11 +264,21 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const ux = h.x / d, uy = h.y / d;
     return { ax: ux > 0.35 ? 0 : ux < -0.35 ? 1 : 0.5, ay: uy < -0.6 ? 1 : uy > 0.6 ? 0 : 0.5 };
   };
-  /** El cajón entero en la escena, con su frente: lo que dibuja `drawBox`, sin la sombra. */
-  const mesa = (): Caja => {
+  /**
+   * La medida del cajón en pantalla: la tapa con su frente y sus patas. La usan
+   * el encuadre y el dibujo, para que la mesa que mide la cámara sea siempre la
+   * mesa que se dibuja.
+   */
+  const medidasMesa = (): { x0: number; y0: number; w: number; d: number; front: number; pata: number } => {
     const R = L.tableR * g.sc;
-    const w = R * 2.1, d = R * 2.05 * g.tilt;
-    return { x: g.cx - w / 2, y: g.cy - d / 2, w, h: d + 46 * g.k };
+    const ancho = S.portrait() ? MESA_ANCHO_CHICO : MESA_ANCHO, fondo = S.portrait() ? MESA_FONDO_CHICO : MESA_FONDO;
+    const w = R * ancho, d = R * fondo * g.tilt;
+    return { x0: g.cx - w / 2, y0: g.cy - d / 2, w, d, front: 46 * g.k, pata: 10 * g.k };
+  };
+  /** El cajón entero en la escena, con su frente: lo que dibuja `drawBox`, sin la sombra ni las patas. */
+  const mesa = (): Caja => {
+    const m = medidasMesa();
+    return { x: m.x0, y: m.y0, w: m.w, h: m.d + m.front };
   };
   /** Lo que se ve del juego: debajo de la barra de arriba y encima del relator. */
   const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: Math.max(S.top(), contadorBajo()), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
@@ -254,11 +294,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const floor = new Graphics();
   S.bg.addChild(floor);
   const boxG = new Graphics();
+  // Solo el aro físico elegido, sin mesa, resplandor ni estallido: lo que mide el primer plano final.
+  const winnerTargetG = new Graphics();
   const frogG = new Graphics();
   const fx = new Graphics();
   const tokG = new Graphics();
   const handG = new Graphics();
-  S.scene.addChild(boxG, frogG, fx, tokG, handG);
+  S.scene.addChild(boxG, winnerTargetG, frogG, fx, tokG, handG);
   const strikeG = new Graphics();
   const chipLayer = new Container();
   S.hud.addChild(chipLayer, strikeG);
@@ -541,6 +583,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     y: a.y + (b.y - a.y) * f - 4 * apex * f * (1 - f),
   });
 
+  /** El suspenso del aro: qué casi-tiros ruedan una vuelta del borde antes de salir, y hacia qué lado. La decisión
+   * la fija el tiro (su índice, el agujero del borde y el turno) con un hash, sin tirar dado nuevo. La ganadora nunca
+   * entra a este juego: su caída queda limpia. */
+  const ruedaEnElAro = (o: Toss): number => {
+    if (o.final) return 0;
+    const r = (o.i * 2654435761 + (o.th.rimSlot ?? 0) * 40503 + o.th.turn * 7919) % 1000;
+    return r < 420 ? (r % 2 === 0 ? 1 : -1) : 0;
+  };
+
   /** Dónde está la argolla en el momento `t`, en pantalla, con su punto sobre la tapa. */
   const tokenAt = (o: Toss, t: number): Tok => {
     const hp = handPoint();
@@ -598,9 +649,23 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     let hop: number;
     if (o.th.kind === "near" && age < WOBBLE) {
       const u = age / WOBBLE;
-      const w = 0.03 * (1 - u);
-      gp = { x: o.th.landing.x + w * Math.sin(age * 26), y: o.th.landing.y + w * Math.cos(age * 19) };
-      hop = g.br * 0.9 * (1 - u) * Math.abs(Math.sin(age * 15));
+      // El suspenso del borde: algunas casi-entran ruedan una vuelta al aro del agujero, como si se fueran a caer.
+      // El radio va del punto donde pegó hacia el labio del agujero y vuelve, así el baile empieza y termina donde
+      // siempre: la salida de después no cambia ni un punto, y el reloj (WOBBLE) es el mismo.
+      const centro = o.th.rimSlot !== undefined ? (L.holes[o.th.rimSlot] as Point) : null;
+      const giro = centro ? ruedaEnElAro(o) : 0;
+      if (centro && giro !== 0) {
+        const a0 = Math.atan2(o.th.landing.y - centro.y, o.th.landing.x - centro.x);
+        const d0 = Math.hypot(o.th.landing.x - centro.x, o.th.landing.y - centro.y);
+        const ang = a0 + giro * Math.PI * 2 * u;
+        const r = d0 + (L.holeR * 1.12 - d0) * Math.sin(u * Math.PI) + 0.012 * Math.sin(u * Math.PI * 8);
+        gp = { x: centro.x + Math.cos(ang) * r, y: centro.y + Math.sin(ang) * r };
+        hop = g.br * 0.35 * (1 - u) * Math.abs(Math.sin(u * Math.PI * 3));
+      } else {
+        const w = 0.03 * (1 - u);
+        gp = { x: o.th.landing.x + w * Math.sin(age * 26), y: o.th.landing.y + w * Math.cos(age * 19) };
+        hop = g.br * 0.9 * (1 - u) * Math.abs(Math.sin(age * 15));
+      }
     } else {
       const base = o.th.kind === "near" ? WOBBLE : 0;
       const span = (o.th.kind === "near" ? AFTER_NEAR : AFTER_MISS) - base;
@@ -856,6 +921,28 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Con la corona: debajo de donde sale el cartel y encima del relator. */
   const zonaGanador = (): Zona => ({ x0: 4 * g.k, y0: S.placaBajo(winners.length) + 6 * g.k, x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
 
+  /**
+   * El celular apaisado, desde que cae la última argolla, en el 2D y en el 3D. En el 3D la cámara suelta su tope
+   * (`primerPlano`) y el despeje se mide sobre el aro que dibuja la cámara 3D, antes de dibujarlo (`encajar3D`).
+   */
+  const finalCloseUp = (): boolean => sapoFinalCloseUp(g.w, g.h, S.portrait(), tAll >= T_LAND);
+  /** El contorno pintado del aro elegido: la elipse exterior de 1,2 y la mitad del trazo amarillo de 6k. */
+  const selectedTarget = (): Caja => {
+    const slot = (tosses[tosses.length - 1] as Toss).slot;
+    const p = P(L.holes[slot] as Point);
+    const rx = L.holeR * g.sc * 1.2 + 3 * g.k;
+    const ry = L.holeR * g.sc * g.tilt * 1.2 + 3 * g.k;
+    return { x: p.x - rx, y: p.y - ry, w: 2 * rx, h: 2 * ry };
+  };
+  /** `getBounds` trae la transformación real de la escena, con el sacudón y el encuadre local. */
+  const selectedTargetOnScreen = (): Caja | null => {
+    if (!finalCloseUp()) return null;
+    // En el 3D, el aro tal como lo dibujó la cámara 3D en este cuadro: el contorno 2D no se pinta.
+    if (v3) return puente.destacada?.() ?? null;
+    const b = winnerTargetG.getBounds();
+    return b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
+  };
+
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
     // En un celular la mesa ocupa el ancho con los nombres de los costados
@@ -872,8 +959,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const tope = S.portrait() ? topeConNombres() : Infinity;
     const cuidar = S.portrait() && !crowned && tAll >= T_SEATED;
     const zEfectivo = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null, crowned ? zonaGanador() : zonaJuego());
+    const primerPlano = finalCloseUp();
+    cam.proteger(primerPlano ? selectedTarget() : cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null,
+      primerPlano ? zonaFinal() : crowned ? zonaGanador() : zonaJuego());
     if (tAll >= ultimo.land) {
+      // En el celular apaisado, el aro elegido de cerca (`sapo-zoom-final.ts`); en las demás pantallas, la mesa entera.
       // Desde que cae la última argolla, la mesa entera debajo de donde sale el
       // cartel y encima del relator: el agujero ganador se ve, los demás también,
       // y el cartel no tapa ninguno. Hasta el 21 de octubre de 2026 la cámara se
@@ -882,8 +972,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // el celular no se acerca más que la mesa de todo el juego: ahí la mesa
       // se mide para que los nombres de los costados entren justo.
       const zona = zonaFinal();
-      let caja = mesa();
-      let z = Math.min(S.portrait() ? Math.min(1, tope) : 1.5, cabe(caja, zona));
+      let chip: Parameters<typeof sapoFinalFrame>[0]["chip"];
       // En la pantalla ancha el chip grande del ganador sale de su agujero hacia
       // afuera de la mesa (hacia arriba en la fila de arriba): entra en el
       // encuadre también, así el cartel no lo pisa ni el relator lo tapa. Con
@@ -895,14 +984,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         const lp = P(labelAt(ultimo.slot));
         const sc = 1.45 * 1.3;
         const w = (anchoNombre[quien] ?? 0) * g.k * sc + 14 * g.k, h = (ch.height / Math.max(1e-6, ch.scale.y)) * sc + 14 * g.k;
-        const base = mesa();
-        for (let vuelta = 0; vuelta < 2; vuelta++) {
-          caja = unir([base, { x: lp.x - (w * an.ax) / z, y: lp.y + (h * (0.5 - an.ay)) / z - h / 2 / z, w: w / z, h: h / z }]);
-          z = Math.min(1.5, cabe(caja, zona));
-        }
+        chip = { x: lp.x, y: lp.y, w, h, ax: an.ax, ay: an.ay };
       }
-      const v = centrar(caja, zona, g.w, g.h, z);
-      cam.lookAt(v.x, v.y, z, 3);
+      const v = sapoFinalFrame({ table: mesa(), zone: zona, width: g.w, height: g.h,
+        portrait: S.portrait(), portraitLimit: tope, chip, target: selectedTarget(), closeUp: primerPlano });
+      cam.lookAt(v.x, v.y, v.z, 3);
       return;
     }
     const cur = current();
@@ -990,57 +1076,91 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return clamp(c, 0, 1);
   };
 
-  /** El cajón del sapo visto desde arriba y adelante: tapa de madera pintada, guarda de colores y frente. */
+  /**
+   * El cajón del sapo visto desde arriba y adelante: madera rústica con vetas y nudos, patas que asoman y la guarda del
+   * aguayo con los cinco acentos del tema (`S.color`), los mismos de la escena 3D. La mesa no lleva la bandera.
+   */
   function drawBox(): void {
     const k = g.k;
-    const R = L.tableR * g.sc;
-    const w = R * 2.1, d = R * 2.05 * g.tilt, front = 46 * k;
-    const x0 = g.cx - w / 2, y0 = g.cy - d / 2;
+    const { x0, y0, w, d, front, pata } = medidasMesa();
+    const madera = (c: number, noche: number): number => (S.dark ? noche : c);
+    const veta = madera(MADERA.veta, MADERA.vetaNoche);
     boxG.clear();
-    boxG.roundRect(x0 + 8 * k, y0 + 10 * k, w, d + front, 10 * k).fill({ color: INK, alpha: 0.35 });
-    // El frente del cajón, más oscuro, con los cajoncitos numerados del sapo de verdad.
-    boxG.rect(x0, y0 + d, w, front).fill(S.dark ? 0x7a2e1c : 0xb4462a).stroke({ width: 3 * k, color: INK });
+    boxG.roundRect(x0 + 8 * k, y0 + 10 * k, w, d + front + pata, 10 * k).fill({ color: INK, alpha: 0.35 });
+    // Las patas rústicas: asoman debajo del frente, en las esquinas de adelante.
+    for (const px of [x0 + 16 * k, x0 + w - 28 * k]) {
+      boxG.rect(px, y0 + d + front - 2 * k, 12 * k, pata + 2 * k).fill(madera(MADERA.frenteNoche, MADERA.cajonNoche)).stroke({ width: 2 * k, color: INK });
+    }
+    // El frente: tablones verticales de madera rica, con la costura entre tablón y tablón.
+    boxG.rect(x0, y0 + d, w, front).fill(madera(MADERA.frente, MADERA.frenteNoche)).stroke({ width: 3 * k, color: INK });
+    for (let i = 1; i < 4; i++) {
+      const xx = x0 + (i * w) / 4;
+      boxG.moveTo(xx, y0 + d + 2 * k).lineTo(xx, y0 + d + front - 2 * k).stroke({ width: 1.5 * k, color: veta, alpha: 0.7 });
+    }
     const cajones = 5;
     for (let i = 0; i < cajones; i++) {
       const cx = x0 + ((i + 0.5) * w) / cajones;
-      boxG.rect(cx - (w / cajones) * 0.36, y0 + d + front * 0.22, (w / cajones) * 0.72, front * 0.56).fill(S.dark ? 0x5a2014 : 0x8f3520).stroke({ width: 2 * k, color: INK });
-      boxG.circle(cx, y0 + d + front * 0.5, 3 * k).fill(YELLOW);
+      boxG.rect(cx - (w / cajones) * 0.36, y0 + d + front * 0.26, (w / cajones) * 0.72, front * 0.5).fill(madera(MADERA.cajon, MADERA.cajonNoche)).stroke({ width: 2 * k, color: INK });
+      boxG.circle(cx, y0 + d + front * 0.51, 3 * k).fill(YELLOW);
     }
-    // La tapa: madera clara con vetas, y una guarda del aguayo en el borde.
-    boxG.rect(x0, y0, w, d).fill(S.dark ? 0x9a6a3c : 0xd29a5c).stroke({ width: 3 * k, color: INK });
-    for (let i = 1; i < 7; i++) {
-      const yy = y0 + (i * d) / 7;
-      boxG.moveTo(x0 + 6 * k, yy).lineTo(x0 + w - 6 * k, yy).stroke({ width: 1.4 * k, color: INK, alpha: 0.12 });
+    // La cinta del aguayo en el borde de adelante de la tapa: cuadros de los cinco acentos.
+    const celda = 9 * k, columnas = Math.ceil(w / celda);
+    for (let i = 0; i < columnas; i++) {
+      boxG.rect(x0 + i * celda, y0 + d - celda, Math.min(celda, w - i * celda), celda).fill(S.color(i));
     }
-    const band = 9 * k, paso = band * 1.6;
-    for (let x = x0; x < x0 + w - 1; x += paso) {
-      const c = S.color(Math.floor((x - x0) / paso));
-      boxG.poly([x, y0, x + paso / 2, y0 + band, x + paso, y0]).fill(c);
-      boxG.poly([x, y0 + d, x + paso / 2, y0 + d - band, x + paso, y0 + d]).fill(c);
+    // La tapa: madera clara, de tablones, con la veta fina y sus nudos.
+    boxG.rect(x0, y0, w, d).fill(madera(MADERA.tapa, MADERA.tapaNoche)).stroke({ width: 3 * k, color: INK });
+    for (const f of [1 / 3, 2 / 3]) {
+      const yy = y0 + d * f;
+      boxG.moveTo(x0, yy).lineTo(x0 + w, yy).stroke({ width: 2 * k, color: veta, alpha: 0.55 });
+    }
+    for (let i = 1; i < 9; i++) {
+      const yy = y0 + (i * d) / 9;
+      boxG.moveTo(x0 + 6 * k, yy).lineTo(x0 + w - 6 * k, yy).stroke({ width: 1.2 * k, color: veta, alpha: 0.18 });
+    }
+    // Los nudos, siempre en el mismo lugar: la mesa es la misma todo el show.
+    for (const [nx, ny, nr] of [[0.22, 0.3, 3.5], [0.78, 0.62, 3], [0.55, 0.82, 2.5]] as const) {
+      boxG.circle(x0 + w * nx, y0 + d * ny, nr * k).fill({ color: veta, alpha: 0.5 });
+      boxG.circle(x0 + w * nx, y0 + d * ny, nr * k * 0.5).fill({ color: madera(MADERA.frenteNoche, MADERA.cajonNoche), alpha: 0.4 });
+    }
+    // La guarda del aguayo en el borde de atrás: dos hileras de cuadros de los cinco acentos.
+    for (let fila = 0; fila < 2; fila++) {
+      for (let i = 0; i < columnas; i++) {
+        boxG.rect(x0 + i * celda, y0 + fila * celda, Math.min(celda, w - i * celda), celda).fill(S.color(i + fila));
+      }
     }
   }
 
-  /** La rana de bronce, sentada, con la boca que se abre. */
+  /** La rana verde de la casa, sentada, con la boca que se abre. */
   function drawFrog(): void {
     const k = g.k;
     const c0 = P({ x: 0, y: 0 });
     const fr = L.frogR * g.sc;
     const open = croakAt();
-    const bronce = 0xb98a3e, oscuro = 0x7d5a22;
     const blink = (Math.floor(tAll * 0.7) % 5 === 0 && (tAll * 0.7) % 1 < 0.12) ? 0.15 : 1;
     const garganta = 1 + 0.06 * Math.max(0, Math.sin(tAll * 5));
     frogG.clear();
     frogG.ellipse(c0.x, c0.y + fr * 0.55, fr * 1.15, fr * 0.45).fill({ color: INK, alpha: 0.35 });
-    // Las patas de atrás, el cuerpo y la cabeza.
-    for (const sx of [-1, 1]) frogG.ellipse(c0.x + sx * fr * 0.78, c0.y + fr * 0.35, fr * 0.42, fr * 0.3).fill(oscuro).stroke({ width: 2 * k, color: INK });
-    frogG.ellipse(c0.x, c0.y + fr * 0.1, fr * 0.95, fr * 0.72).fill(bronce).stroke({ width: 2.5 * k, color: INK });
-    frogG.ellipse(c0.x, c0.y + fr * 0.32, fr * 0.6 * garganta, fr * 0.32 * garganta).fill(0xd8b06a);
-    for (const sx of [-0.5, 0.5]) {
-      frogG.circle(c0.x + sx * fr, c0.y - fr * 0.5, fr * 0.28).fill(bronce).stroke({ width: 2 * k, color: INK });
-      frogG.ellipse(c0.x + sx * fr, c0.y - fr * 0.5, fr * 0.13, fr * 0.13 * blink).fill(INK);
+    // Las patas de atrás, verde oscuro como las manchas del lomo.
+    for (const sx of [-1, 1]) frogG.ellipse(c0.x + sx * fr * 0.78, c0.y + fr * 0.35, fr * 0.42, fr * 0.3).fill(RANA_OSC).stroke({ width: 2 * k, color: INK });
+    // El cuerpo verde, con las manchas.
+    frogG.ellipse(c0.x, c0.y + fr * 0.1, fr * 0.95, fr * 0.72).fill(RANA).stroke({ width: 2.5 * k, color: INK });
+    for (const [sx, sy, sr] of [[-0.42, -0.28, 0.11], [0.3, -0.42, 0.09], [0.55, 0.02, 0.08], [-0.7, 0.05, 0.07]] as const) {
+      frogG.circle(c0.x + sx * fr, c0.y + sy * fr, sr * fr).fill(RANA_OSC);
     }
-    // El brillo del metal.
-    frogG.ellipse(c0.x - fr * 0.35, c0.y - fr * 0.05, fr * 0.22, fr * 0.1).fill({ color: 0xfff1c4, alpha: 0.55 });
+    // La panza clara y la garganta que se le infla al croar.
+    frogG.ellipse(c0.x, c0.y + fr * 0.32, fr * 0.6 * garganta, fr * 0.32 * garganta).fill(RANA_CLARO);
+    // El brillo del lomo, y los cachetes que se le encienden cuando croa.
+    frogG.ellipse(c0.x - fr * 0.35, c0.y - fr * 0.05, fr * 0.22, fr * 0.1).fill({ color: RANA_CLARO, alpha: 0.6 });
+    for (const sx of [-0.62, 0.62]) frogG.circle(c0.x + sx * fr, c0.y + fr * 0.3, fr * 0.09).fill({ color: 0xe0707a, alpha: 0.45 });
+    // Los ojos: cuenca verde, ojo crema con párpado y destello, como en la 3D.
+    for (const sx of [-0.5, 0.5]) {
+      const ox = c0.x + sx * fr, oy = c0.y - fr * 0.5;
+      frogG.circle(ox, oy, fr * 0.28).fill(RANA).stroke({ width: 2 * k, color: INK });
+      frogG.ellipse(ox, oy, fr * 0.2, fr * 0.2 * blink).fill(0xfff6d8);
+      frogG.ellipse(ox, oy, fr * 0.13, fr * 0.13 * blink).fill(INK);
+      frogG.circle(ox + fr * 0.05, oy - fr * 0.05, fr * 0.045).fill({ color: 0xffffff, alpha: blink });
+    }
     const mx = fr * 0.55 * (0.7 + 0.3 * open), my = fr * (0.06 + 0.3 * open);
     frogG.ellipse(c0.x, c0.y + fr * 0.02, mx, my).fill(INK);
     if (open > 0.55) frogG.ellipse(c0.x, c0.y + fr * 0.02 + my * 0.3, mx * 0.5, my * 0.45).fill(0xe0707a);
@@ -1049,33 +1169,54 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Dónde está la mano, en la escena. */
   const handAt = (): Point => P(handPoint());
 
-  /** La mano que tira: toma impulso hacia atrás y suelta. */
+  /** La mano que tira: se echa atrás al tomar impulso, látiga al soltar, y los dedos la siguen. */
   function drawHand(): void {
     handG.clear();
     if (crowned) return;
     const k = g.k;
     const h = handAt();
-    // Antes del tiro la mano baja (toma impulso); al soltar sube de golpe y vuelve.
-    const next = tosses.find((o) => tAll < o.start + 0.3);
-    let swing = 0;
-    if (next) {
-      const u = next.start - tAll;
-      if (u >= 0) swing = u < WINDUP ? 1 - u / WINDUP : 0;
-      else swing = -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
-    }
-    const hx = h.x, hy = h.y + swing * 22 * k;
+    // El impulso de siempre: baja al tomar impulso, sube de golpe al soltar.
+    const swing = impulsoMano();
+    // Además, la mano se echa atrás por el eje del antebrazo durante el impulso, y látiga por el mismo eje al soltar.
+    const gesto = gestoMano();
+    const hx = h.x + gesto.x, hy = h.y + swing * 22 * k + gesto.y;
     // El brazo entra desde fuera de la pantalla, abajo a la derecha.
     const ax = hx + 70 * 8 * k, ay = hy + 96 * 8 * k;
     const mx = hx + 32 * k, my = hy + 44 * k;
-    // La manga, de un color de la casa, y la mano con los dedos que sostienen la argolla.
+    // La manga, de un color de la casa, y el antebrazo desnudo que sostiene la argolla.
     handG.moveTo(ax, ay).lineTo(mx, my).stroke({ width: 34 * k, color: INK, cap: "round" });
     handG.moveTo(ax, ay).lineTo(mx, my).stroke({ width: 28 * k, color: S.color(2), cap: "round" });
     handG.moveTo(mx, my).lineTo(hx, hy).stroke({ width: 22 * k, color: INK, cap: "round" });
-    handG.moveTo(mx, my).lineTo(hx, hy).stroke({ width: 16 * k, color: 0xc68a5c, cap: "round" });
-    handG.circle(hx, hy, 15 * k).fill(0xc68a5c).stroke({ width: 2.5 * k, color: INK });
+    handG.moveTo(mx, my).lineTo(hx, hy).stroke({ width: 16 * k, color: PIEL, cap: "round" });
+    // La sombra del antebrazo, por debajo, para que no se vea tan plano.
+    handG.moveTo(mx, my + 6 * k).lineTo(hx + 3 * k, hy + 6 * k).stroke({ width: 5 * k, color: PIEL_OSC, cap: "round" });
+    handG.circle(hx, hy, 15 * k).fill(PIEL).stroke({ width: 2.5 * k, color: INK });
+    // Los dedos, articulados: dos falanges cada uno, curvadas por la flexión. Cerrados (flex 0) agarran la moneda,
+    // que va un poco arriba a la izquierda de la palma; abiertos (flex 1) se estiran y la sueltan.
+    const falange = (de: Point, hacia: Point, largo: number): Point => ({ x: de.x + hacia.x * largo * k, y: de.y + hacia.y * largo * k });
+    const digito = (b: Point, m: Point, punta: Point, w: number, color: number): void => {
+      handG.moveTo(b.x, b.y).lineTo(m.x, m.y).lineTo(punta.x, punta.y).stroke({ width: w * k, color, cap: "round", join: "round" });
+    };
+    const flex = flexMano();
+    const curva = (1 - flex) * 1.9;
     for (const [dx, dy] of [[-13, -6], [-9, -13], [-1, -16]]) {
-      handG.circle(hx + (dx as number) * k, hy + (dy as number) * k, 5 * k).fill(0xc68a5c).stroke({ width: 2 * k, color: INK });
+      const dd = Math.hypot(dx as number, dy as number);
+      const dir = { x: (dx as number) / dd, y: (dy as number) / dd };
+      const b = falange({ x: hx, y: hy }, dir, 8);
+      const d1 = rotar(dir, -curva * 0.45);
+      const d2 = rotar(dir, -curva);
+      const m = falange(b, d1, 8);
+      const punta = falange(m, d2, 7.5);
+      digito(b, m, punta, 7, INK);
+      digito(b, m, punta, 4.5, PIEL);
     }
+    // El pulgar, del lado de la argolla: curva del lado de adentro, al revés que los dedos.
+    const baseT = { x: hx + 9 * k, y: hy + 7 * k };
+    const dirT = rotar({ x: -0.65, y: -0.76 }, curva * 0.9);
+    const mT = falange(baseT, dirT, 7);
+    const puntaT = falange(mT, rotar(dirT, curva * 0.9), 6);
+    digito(baseT, mT, puntaT, 8, INK);
+    digito(baseT, mT, puntaT, 5.5, PIEL);
   }
 
   /** La argolla amarilla: un disco con agujero, para que no se lea como moneda. */
@@ -1096,11 +1237,40 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const ojoAbierto = (): number => ((Math.floor(tAll * 0.7) % 5 === 0 && (tAll * 0.7) % 1 < 0.12) ? 0.15 : 1);
   /** El impulso de la mano que tira: de 0 a 1 hacia atrás, y de 0 a -0,8 al soltar. */
   const impulsoMano = (): number => {
-    const next = tosses.find((o) => tAll < o.start + 0.3);
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
     if (!next) return 0;
     const u = next.start - tAll;
     if (u >= 0) return u < WINDUP ? 1 - u / WINDUP : 0;
-    return -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
+    return -0.8 * Math.sin(Math.PI * clamp(-u / LATIGO, 0, 1));
+  };
+  /** Cuánto están abiertos los dedos: 0,4 en reposo; curvados hasta 0 agarrando la moneda al final del impulso,
+   * abiertos de golpe hasta 1 al soltar, y después se relajan. */
+  const FLEX_RELAJADA = 0.4;
+  const flexMano = (): number => {
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
+    if (!next) return FLEX_RELAJADA;
+    const u = next.start - tAll;
+    if (u >= 0) return u >= WINDUP ? FLEX_RELAJADA : FLEX_RELAJADA * (u / WINDUP);
+    const f = clamp(-u / LATIGO, 0, 1);
+    if (f < 0.35) return f / 0.35;
+    return FLEX_RELAJADA + (1 - FLEX_RELAJADA) * (1 - (f - 0.35) / 0.65);
+  };
+  /** La fase del lanzamiento, para el puente con la 3D: de 0 a 1 va tomando impulso; de 0 a -1 látiga tras soltar. */
+  const faseLanzamiento = (): number => {
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
+    if (!next) return 0;
+    const u = next.start - tAll;
+    if (u >= 0) return clamp(1 - u / WINDUP, 0, 1);
+    return -clamp(-u / LATIGO, 0, 1);
+  };
+  /** El gesto del brazo: la mano se echa atrás por el eje del antebrazo al tomar impulso y látiga por el mismo eje
+   * al soltar. El retoque de arriba (+22 por swing) es el de siempre; esto es lo que faltaba para que el lanzamiento se lea. */
+  const gestoMano = (): Point => {
+    const s = impulsoMano();
+    if (s === 0) return { x: 0, y: 0 };
+    const d = Math.hypot(32, 44);
+    const q = s * 18 * g.k;
+    return { x: (q * 32) / d, y: (q * 44) / d };
   };
 
   /** Las argollas que se ven este cuadro, tal como las puso el 2D, para vestirlas en 3D. */
@@ -1123,11 +1293,27 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return out;
   }
 
+  /**
+   * El despeje del primer plano en el 3D: el estadio encaja la caja del aro (proyectada con la cámara 3D que va a dibujar)
+   * entre el cartel y el relator moviendo la escena; la cámara del 3D sale de la escena, así que se devuelve la nueva.
+   */
+  const encajar3D = (caja: Caja): Camara2D | null => {
+    const x = S.scene.position.x, y = S.scene.position.y, z = S.scene.scale.x;
+    S.despejarGanador(caja, HOLGURA_3D);
+    if (S.scene.position.x === x && S.scene.position.y === y && S.scene.scale.x === z) return null;
+    return entradaBase(S, tAll).cam;
+  };
+
   /** Pasa el cuadro al 3D: lo que el 2D ya puso, sin recalcular nada. */
   function frame3D(agujeros: AgujeroSapo[]): void {
     if (!v3) return;
     const ultimo = tosses[tosses.length - 1] as Toss;
     const hand = handPoint();
+    // La señal de la mano: flex y fase viajan con el puente, así la 3D lanza con la misma hora que el 2D.
+    // Se sale del literal para que el tipo opcional (`SenalMano`) no pelee con la forma actual de `EntradaSapo`.
+    const mn: { visible: boolean; punto: Point; swing: number; manga: number } & SenalMano = {
+      visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2), flex: flexMano(), fase: faseLanzamiento(),
+    };
     const golpes = tosses
       .filter((o) => !o.th.boca && tAll >= o.land && tAll - o.land < 0.8)
       .map((o) => ({ t: o.land, punto: o.th.landing, fuerza: o.th.kind === "near" ? 0.6 : o.final ? 1 : 0.85 }));
@@ -1146,12 +1332,14 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         mira: crowned ? (L.holes[ultimo.slot] as Point) : null,
         quieta: tAll >= T_LAND - 0.4 && tAll < T_LAND,
       },
-      mano: { visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2) },
+      mano: mn,
       argollas: argollas3(),
       golpes,
       tension: empujeDado ? clamp((tAll - T_EMPUJE) / Math.max(0.5, T_CROWN - T_EMPUJE), 0, 1) : 0,
       golpe: tGolpe,
       adentro: tAll >= ultimo.land ? ultimo.land : -1,
+      primerPlano: sapoPrimerPlano3D(finalCloseUp(), tAll - T_LAND),
+      encajar: finalCloseUp() ? encajar3D : undefined,
     });
   }
 
@@ -1181,6 +1369,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       drawFrog();
       drawHand();
     }
+    winnerTargetG.clear();
     fx.clear();
     fxS.clear();
     tokG.clear();
@@ -1198,8 +1387,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const rx = L.holeR * g.sc * ease.outBack(f), ry = rx * g.tilt;
       const glow = lit.get(s);
       const aro = glow !== undefined ? YELLOW : colorDe(whoAt(s));
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.2), Math.max(0.01, ry * 1.2)).fill(aro).stroke({ width: (glow !== undefined ? 6 : 2) * k, color: glow !== undefined ? YELLOW : INK });
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
+      const targetG = glow === 1 && finalCloseUp() ? winnerTargetG : boxG;
+      targetG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.2), Math.max(0.01, ry * 1.2)).fill(aro).stroke({ width: (glow !== undefined ? 6 : 2) * k, color: glow !== undefined ? YELLOW : INK });
+      targetG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
       if (glow === 1) {
         // El estallido del agujero ganador, como el del trompo.
         const fin = tosses[tosses.length - 1] as Toss;
@@ -1249,7 +1439,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
       const ganador = lit.get(slot) === 1;
       const sit = S.portrait() ? sentados[i] : undefined;
-      if (crowned && !ganador) {
+      // En el primer plano el nombre completo lo pone el estadio (`despejarGanador`) hasta que se lee el cartel: el chip
+      // abreviado de la mesa no lo reemplaza.
+      if (finalCloseUp() || (crowned && !ganador)) {
         c.visible = false;
         if (sit) sit.visible = false;
         return;
@@ -1311,7 +1503,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
           const hp = handAt();
           const u = o.start - tAll;
           const sw = u < WINDUP ? 1 - u / WINDUP : 0;
-          drawToken(hp.x - 4 * k, hp.y - 8 * k + sw * 22 * k, 1, false);
+          // La moneda viaja con la mano: el gesto de echarse atrás también la lleva.
+          const gesto = gestoMano();
+          drawToken(hp.x - 4 * k + gesto.x, hp.y - 8 * k + sw * 22 * k + gesto.y, 1, false);
         }
         continue;
       }
@@ -1362,7 +1556,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     pintarMarcas(marcasG, { total: all, quedan: siguen, k, w: g.w });
     counterG.position.set(22 * k, S.top() + 10 * k);
-    counterG.visible = !crowned;
+    counterG.visible = !crowned && !finalCloseUp();
     // El encuadre le deja su lugar (`contadorBajo`) y ya no se apaga con el zoom: solo con la cámara muy cerca y solo si una
     // ficha le queda justo debajo.
     const cajaContador = { x0: 22 * k, y0: S.top() + 10 * k, x1: 22 * k + Math.max(bw, reservaDeMarcas(all, k, g.w).ancho) + 5 * k, y1: contadorBajo() };
@@ -1428,7 +1622,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       y1 = Math.max(y1, c.y + c.height / 2);
     }
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  });
+  }, selectedTargetOnScreen, () => sapoEstadoGanador(tAll, T_CROWN));
 
   // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen, adónde mirar, cuánto falta y qué pasó. Solo lee.
   const planNino = {
@@ -1489,8 +1683,18 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     aim();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
+    // En el 3D el despeje del primer plano va dentro del cuadro 3D, antes de dibujar: el cartel ya tiene que tener la pose
+    // de este cuadro (el foco se vuelve a apuntar abajo, con lo que dibujó la cámara 3D).
+    const cerca3D = !!v3 && finalCloseUp();
+    if (cerca3D && tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
     draw();
-    if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
+    if (!cerca3D && tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
+    const cuerpo = selectedTargetOnScreen();
+    if (cuerpo) {
+      // El cartel y el relator ya tienen la pose de este cuadro: el estadio reserva el nombre completo y solo achica si no cabe.
+      if (!v3) S.despejarGanador(cuerpo);
+      if (tAll >= T_CROWN) crownUI.enfocar?.(focoDelAgujero());
+    }
     if (tHold >= WINNER_HOLD + FOCO.placa) {
       dead = true;
       S.cleanup();

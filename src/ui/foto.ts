@@ -24,6 +24,18 @@ import { logoALienzo, type Logo } from "../logo";
  * derecha, en su placa, con "Hecho con Tinkazo" a su izquierda en dos renglones.
  * Sin logo, la foto es la de siempre, píxel por píxel. El QR no se toca.
  *
+ * Con `fondo` (el juego que se jugó), la foto va sobre la ilustración plana de
+ * ese juego (`foto-fondos.ts`), con paneles de tinta oscuros detrás de la marca
+ * y el rótulo, del medio y de "Escaneá para comprobarlo", para que el texto se
+ * lea igual. Los paneles abrazan su texto y dejan libre la ventana del arte
+ * (`ARTE_ARRIBA` a `ARTE_ABAJO`, todo el ancho), donde cada ilustración pone lo
+ * suyo: arriba, la marca y el rótulo (en dos renglones si es largo); el medio,
+ * más compacto, en su franja (`FRANJA_ARRIBA` a `FRANJA_ABAJO`), y solo si no
+ * entra ni con la letra más chica (muchos ganadores, un evento) sube desde
+ * abajo. El QR va en su tarjeta blanca, en el mismo lugar y del mismo tamaño.
+ * Si el juego no tiene ilustración, es la foto de siempre. Sin `fondo`, la de
+ * siempre, llamada por llamada (`foto-logo.test.ts`).
+ *
  * No importa `i18n.ts`: la usa la página de verificación, y ese módulo trae el
  * diccionario entero. Los textos llegan ya traducidos.
  */
@@ -67,6 +79,8 @@ export interface Foto {
   logo?: Logo;
   /** "Hecho con Tinkazo": va a la izquierda del logo, siempre con él. */
   hecho?: string;
+  /** El juego que se jugó: la foto va sobre su ilustración, si tiene. Sin él, la foto no cambia. */
+  fondo?: string;
 }
 
 export const ANCHO_FOTO = 1080;
@@ -93,6 +107,19 @@ const ARRIBA = 236;
 /** El alto de la tarjeta que reemplaza al QR cuando el enlace no entraría legible. */
 const SIN_QR_ALTO = 300;
 const SIN_QR_Y = H - 16 - 66 - SIN_QR_ALTO;
+/**
+ * La foto del juego: la ventana del arte, de lado a lado, sin paneles encima
+ * (las ilustraciones ponen ahí lo principal, `foto-fondos.ts`), y la franja del
+ * medio, entre la ventana y la tarjeta del QR. El panel del medio deja 20 px
+ * de aire arriba y abajo de su texto.
+ */
+const ARTE_ARRIBA = ARRIBA;
+const ARTE_ABAJO = 540;
+const FRANJA_ARRIBA = ARTE_ABAJO + 16;
+const FRANJA_ABAJO = QR_Y - 16;
+const AIRE_MEDIO = 20;
+/** El rótulo de la foto del juego va en dos renglones si en uno haría el panel de arriba más ancho que esto. */
+const ROTULO_UN_RENGLON = 560;
 const SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const MONO = 'ui-monospace, "Cascadia Mono", Consolas, monospace';
 const C = {
@@ -213,6 +240,21 @@ function calcomania(c: Ctx, x: number, y: number, w: number, h: number, color: s
   c.restore();
 }
 
+/**
+ * Un panel de tinta para el texto sobre la ilustración del juego: color plano
+ * oscuro, borde grueso de tinta y sombra dura, derecho. Sin degradados ni
+ * transparencias: el texto de encima se lee como sobre la foto de siempre.
+ */
+function panel(c: Ctx, x: number, y: number, w: number, h: number): void {
+  c.fillStyle = C.tinta;
+  c.fillRect(x + 12, y + 12, w, h);
+  c.fillStyle = C.fondo;
+  c.fillRect(x, y, w, h);
+  c.lineWidth = 6;
+  c.strokeStyle = C.tinta;
+  c.strokeRect(x + 3, y + 3, w - 6, h - 6);
+}
+
 /** El avatar en su propio lienzo, derecho, y se pega entero dentro de la calcomanía. */
 function cara(nombre: string, lado: number): HTMLCanvasElement {
   const lienzo = document.createElement("canvas");
@@ -276,10 +318,18 @@ function logoYHecho(c: Ctx, logo: HTMLCanvasElement, hecho: string): void {
  */
 interface Bloque {
   alto: number;
+  /** El tamaño de la letra, para los que la comparan ("Ganó" y el nombre). */
+  tam?: number;
   dibujar: (y: number) => void;
+  /**
+   * Hasta dónde llega a la derecha de `M`, para que el panel de la foto del
+   * juego lo abrace. Se mide recién al pedirlo (cambia la letra del lienzo):
+   * la foto de siempre no lo pide. Sin él, todo el ancho.
+   */
+  ancho?: () => number;
 }
 
-function titulo(c: Ctx, f: Foto, s: number, conCara: string | null): Bloque {
+function titulo(c: Ctx, f: Foto, s: number, conCara: string | null, compacto = false): Bloque {
   const evento = !f.personas;
   if (evento) {
     // El nombre del evento: hasta dos renglones, lo más grande que entre.
@@ -289,6 +339,13 @@ function titulo(c: Ctx, f: Foto, s: number, conCara: string | null): Bloque {
     const alto = t.lineas.length * paso + (f.sub ? Math.round(subTam * 1.6) : 0);
     return {
       alto,
+      ancho: () => {
+        c.font = `900 ${t.tam}px ${SANS}`;
+        const w = Math.max(0, ...t.lineas.map((l) => c.measureText(l).width));
+        if (!f.sub) return w;
+        c.font = `700 ${subTam}px ${SANS}`;
+        return Math.max(w, c.measureText(recortar(c, f.sub, ANCHO)).width);
+      },
       dibujar: (y) => {
         c.font = `900 ${t.tam}px ${SANS}`;
         c.fillStyle = C.crema;
@@ -301,39 +358,72 @@ function titulo(c: Ctx, f: Foto, s: number, conCara: string | null): Bloque {
       },
     };
   }
-  const tam = Math.round(104 * s);
-  const lado = conCara ? Math.round(124 * s) : 0;
+  // En la foto del juego, "Ganó" más chico y la cara de su alto: el nombre es lo grande.
+  const tam = Math.round((compacto ? 72 : 104) * s);
+  const lado = conCara ? (compacto ? Math.round(tam * 0.92) : Math.round(124 * s)) : 0;
+  const hueco = Math.round((compacto ? 28 : 40) * s);
+  const sombra = Math.round(10 * s);
   const alto = Math.max(Math.round(tam * 0.9), lado);
   return {
     alto,
+    tam,
+    ancho: () => {
+      c.font = `900 ${tam}px ${SANS}`;
+      const w = c.measureText(f.titulo).width;
+      // La cara va girada tres grados, con su sombra: unos píxeles más.
+      return conCara ? w + hueco + lado + sombra + Math.ceil(lado * 0.06) : w;
+    },
     dibujar: (y) => {
       c.font = `900 ${tam}px ${SANS}`;
       c.fillStyle = C.crema;
       const base = y + alto / 2 + tam * 0.34;
       c.fillText(f.titulo, M, base);
       if (conCara) {
-        const x = M + c.measureText(f.titulo).width + Math.round(40 * s);
+        const x = M + c.measureText(f.titulo).width + hueco;
         const foto = cara(conCara, lado);
-        calcomania(c, x, y, lado, lado, "#fff", 3, () => c.drawImage(foto, 0, 0, lado, lado), Math.round(10 * s));
+        calcomania(c, x, y, lado, lado, "#fff", 3, () => c.drawImage(foto, 0, 0, lado, lado), sombra);
       }
     },
   };
 }
 
-/** Un solo ganador: el nombre grande, sobre la franja amarilla, renglón por renglón. */
-function nombreGrande(c: Ctx, nombre: string, s: number): Bloque {
-  const n = encajar(c, nombre, ANCHO - 28, 2, Math.round(120 * s), Math.round(60 * s), 900);
+/**
+ * Un solo ganador: el nombre grande, sobre la franja amarilla, renglón por
+ * renglón. Con `cabe` (la foto del juego), el tamaño más grande con el que
+ * entra en dos renglones y en ese alto, sin bajar de `cabe.min`; si no entra
+ * así, como siempre (y el medio prueba con una escala más chica).
+ */
+function nombreGrande(c: Ctx, nombre: string, s: number, cabe?: { alto: number; min: number }): Bloque {
+  const altoDe = (n: { tam: number; lineas: string[] }): number => n.lineas.length * (Math.round(n.tam * 1.12) + 12) - 12;
+  let n: { tam: number; lineas: string[] } | null = null;
+  if (cabe) {
+    for (let tam = Math.round(120 * s); tam >= cabe.min; tam -= 2) {
+      c.font = `900 ${tam}px ${SANS}`;
+      const prueba = { tam, lineas: partir(c, nombre, ANCHO - 28) };
+      if (prueba.lineas.length <= 2 && altoDe(prueba) <= cabe.alto) {
+        n = prueba;
+        break;
+      }
+    }
+  }
+  n ??= encajar(c, nombre, ANCHO - 28, 2, Math.round(120 * s), Math.round(60 * s), 900);
   const paso = Math.round(n.tam * 1.12) + 12;
+  const { tam, lineas } = n;
   return {
-    alto: n.lineas.length * paso - 12,
+    alto: altoDe(n),
+    tam,
+    ancho: () => {
+      c.font = `900 ${tam}px ${SANS}`;
+      return Math.max(0, ...lineas.map((l) => c.measureText(l).width)) + 14;
+    },
     dibujar: (y) => {
-      c.font = `900 ${n.tam}px ${SANS}`;
-      for (const [i, l] of n.lineas.entries()) {
+      c.font = `900 ${tam}px ${SANS}`;
+      for (const [i, l] of lineas.entries()) {
         const arriba = y + i * paso;
         c.fillStyle = C.amarillo;
-        c.fillRect(M - 14, arriba, c.measureText(l).width + 28, Math.round(n.tam * 1.12));
+        c.fillRect(M - 14, arriba, c.measureText(l).width + 28, Math.round(tam * 1.12));
         c.fillStyle = C.fondo;
-        c.fillText(l, M, arriba + n.tam * 0.9);
+        c.fillText(l, M, arriba + tam * 0.9);
       }
     },
   };
@@ -518,6 +608,14 @@ function cola(c: Ctx, lineas: string[], s: number): Bloque {
   const paso = (p: { tam: number }): number => Math.round(p.tam * 1.3);
   return {
     alto: piezas.reduce((n, p) => n + p.l.length * paso(p), 0),
+    ancho: () =>
+      Math.max(
+        0,
+        ...piezas.flatMap((p) => {
+          c.font = `${p.peso} ${p.tam}px ${SANS}`;
+          return p.l.map((l) => c.measureText(l).width);
+        }),
+      ),
     dibujar: (y) => {
       for (const p of piezas) {
         c.font = `${p.peso} ${p.tam}px ${SANS}`;
@@ -531,14 +629,28 @@ function cola(c: Ctx, lineas: string[], s: number): Bloque {
   };
 }
 
-function medio(c: Ctx, f: Foto, s: number, apretado = false): Bloque[] {
-  const separa = (n: number): Bloque => ({ alto: Math.round(n * s), dibujar: () => undefined });
+/**
+ * El medio con la escala `s`. Con `limite` (la foto del juego: el alto que
+ * tiene), más compacto: "Ganó" más chico, la mitad de aire entre bloques, y el
+ * nombre de un ganador del tamaño que entre en lo que queda, nunca más chico
+ * que "Ganó".
+ */
+function medio(c: Ctx, f: Foto, s: number, apretado = false, limite?: number): Bloque[] {
+  const compacto = limite !== undefined;
+  const separa = (n: number): Bloque => ({ alto: Math.round(n * s * (compacto ? 0.5 : 1)), ancho: () => 0, dibujar: () => undefined });
   const personas = f.personas ?? [];
   if (!f.personas) return [titulo(c, f, s, null), separa(30), filasDeEvento(c, f, s, apretado), separa(24), cola(c, f.lineas, s)];
   if (personas.length === 1) {
+    if (compacto) {
+      const t = titulo(c, f, s, f.caras?.[0] ?? personas[0] ?? "", true);
+      const resto = [separa(34), separa(34), cola(c, f.lineas, s)];
+      const queda = limite - t.alto - resto.reduce((n, b) => n + b.alto, 0);
+      const nombre = nombreGrande(c, personas[0] ?? "", s, { alto: queda, min: Math.max(Math.round(60 * s), t.tam ?? 0) });
+      return [t, resto[0] as Bloque, nombre, resto[1] as Bloque, resto[2] as Bloque];
+    }
     return [titulo(c, f, s, f.caras?.[0] ?? personas[0] ?? ""), separa(34), nombreGrande(c, personas[0] ?? "", s), separa(34), cola(c, f.lineas, s)];
   }
-  return [titulo(c, f, s, null), separa(26), filasDePersonas(c, f, personas, s, f.caras), separa(24), cola(c, f.lineas, s)];
+  return [titulo(c, f, s, null, compacto), separa(26), filasDePersonas(c, f, personas, s, f.caras), separa(24), cola(c, f.lineas, s)];
 }
 
 /* ------------------------------------------------------------- abajo: el QR */
@@ -559,7 +671,7 @@ async function elQr(enlace: string): Promise<{ lienzo: HTMLCanvasElement; lado: 
   return null;
 }
 
-function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: number }): void {
+function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: number }, conPanel: boolean): void {
   // La tarjeta blanca, derecha (un QR girado se lee peor), con borde y sombra dura.
   c.fillStyle = C.tinta;
   c.fillRect(QR_X + 14, QR_Y + 14, QR_LADO, QR_LADO);
@@ -582,6 +694,8 @@ function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: numb
   const dirAlto = 72;
   const bloque = altoTexto + 40 + dirAlto;
   let y0 = QR_Y + Math.round((QR_LADO - bloque) / 2);
+  // Sobre la ilustración, el texto y la dirección van sobre su panel, a la izquierda de la tarjeta del QR sin tocarla.
+  if (conPanel) panel(c, M - 28, y0 - 28, QR_X - 16 - (M - 28), bloque + 64);
   c.font = `900 ${t.tam}px ${SANS}`;
   c.fillStyle = C.crema;
   t.lineas.forEach((l, i) => c.fillText(l, M, y0 + t.tam * 0.86 + i * paso));
@@ -623,18 +737,101 @@ function abajoSinQr(c: Ctx, f: Foto): void {
 
 /* ------------------------------------------------------------- la foto */
 
+/** El rótulo de arriba en versalitas, recortado con "…" si no entra en el ancho. */
+function rotuloQueEntra(c: Ctx, f: Foto): string {
+  return entraEnElAncho(c, f.rotulo.toUpperCase());
+}
+
+function entraEnElAncho(c: Ctx, texto: string): string {
+  let rotulo = texto;
+  while (rotulo.length > 1 && anchoEspaciado(c, rotulo, 2.5) > ANCHO) rotulo = `${Array.from(rotulo).slice(0, -2).join("")}…`;
+  return rotulo;
+}
+
+/**
+ * El rótulo de la foto del juego: en un renglón si es corto; si no, en dos,
+ * cortado donde quedan más parejos, después de una coma si se puede ("SORTEO
+ * #589, RED DE PRUEBA," / "5 DE NOVIEMBRE DE 2026"). Así el panel de arriba
+ * abraza su texto y deja ver la ilustración a la derecha.
+ */
+function rotuloEnRenglones(c: Ctx, f: Foto): string[] {
+  const rotulo = f.rotulo.toUpperCase();
+  if (anchoEspaciado(c, rotulo, 2.5) <= ROTULO_UN_RENGLON) return [rotulo];
+  const espacios = Array.from(rotulo.matchAll(/ /g), (m) => m.index ?? 0).filter((i) => i > 0);
+  const trasComa = espacios.filter((i) => rotulo[i - 1] === ",");
+  const cortes = trasComa.length ? trasComa : espacios;
+  if (!cortes.length) return [rotuloQueEntra(c, f)];
+  const ancho = (i: number): number => Math.max(anchoEspaciado(c, rotulo.slice(0, i), 2.5), anchoEspaciado(c, rotulo.slice(i + 1), 2.5));
+  const corte = cortes.reduce((a, b) => (ancho(b) < ancho(a) ? b : a));
+  return [rotulo.slice(0, corte), rotulo.slice(corte + 1)].map((l) => entraEnElAncho(c, l));
+}
+
+/**
+ * El medio de la foto del juego, con su panel: abraza el texto y termina en
+ * `FRANJA_ABAJO`, justo arriba de la tarjeta del QR. Primero se busca la
+ * escala con la que entra en la franja, debajo de la ventana del arte; si no
+ * entra ni con la más chica, sube lo que haga falta, como mucho hasta debajo
+ * del panel de arriba (con un renglón por cosa, si hace falta), antes que
+ * achicar la letra de más o pisar el QR. Devuelve dónde empieza el texto.
+ */
+function medioDelJuego(c: Ctx, f: Foto): { bloques: Bloque[]; alto: number; y: number } {
+  const abajo = FRANJA_ABAJO - AIRE_MEDIO;
+  const intentos: Array<[number, boolean]> = [
+    [abajo - FRANJA_ARRIBA - AIRE_MEDIO, false],
+    [abajo - ARRIBA - AIRE_MEDIO, false],
+    [abajo - ARRIBA - AIRE_MEDIO, true],
+  ];
+  let bloques: Bloque[] = [];
+  let alto = 0;
+  buscar: for (const [limite, apretado] of intentos) {
+    // De 1 a 0,55 en pasos enteros: con `s -= 0.05` el error de redondeo deja afuera el 0,55.
+    for (let k = 0; k <= 9; k++) {
+      const s = 1 - k * 0.05;
+      bloques = medio(c, f, s, apretado, limite);
+      alto = bloques.reduce((n, b) => n + b.alto, 0);
+      if (alto <= limite) break buscar;
+    }
+  }
+  const y = abajo - alto;
+  const ancho = Math.min(ANCHO, Math.ceil(Math.max(0, ...bloques.map((b) => (b.ancho ? b.ancho() : ANCHO)))));
+  panel(c, M - 28, y - AIRE_MEDIO, ancho + 56, alto + 2 * AIRE_MEDIO);
+  return { bloques, alto, y };
+}
+
 /** Dibuja la foto. Exportada para las capturas y las pruebas; para compartir, `fotoPng`. */
 export async function dibujarFoto(f: Foto): Promise<HTMLCanvasElement> {
+  return (await pintar(f)).lienzo;
+}
+
+/** La foto, y si quedó sobre la ilustración del juego (`fondo`). */
+async function pintar(f: Foto): Promise<{ lienzo: HTMLCanvasElement; conFondo: boolean }> {
   const lienzo = document.createElement("canvas");
   lienzo.width = W;
   lienzo.height = H;
   const c = lienzo.getContext("2d");
   if (!c) throw new Error("sin lienzo 2d");
   c.textBaseline = "alphabetic";
-  c.fillStyle = C.fondo;
-  c.fillRect(0, 0, W, H);
+  // La ilustración del juego, si tiene, ocupa todo; si no, el fondo oscuro de siempre. Los dibujos se bajan recién
+  // cuando hacen falta: la página de verificación usa esta foto y nunca la del juego.
+  const conFondo = f.fondo ? (await import("./foto-fondos")).pintarFondoJuego(c, f.fondo, W, H) : false;
+  if (!conFondo) {
+    c.fillStyle = C.fondo;
+    c.fillRect(0, 0, W, H);
+  }
   franja(c, 0);
   franja(c, H - 16);
+  // El rótulo de la foto del juego sin logo puede ir en dos renglones (y el panel de arriba, 10 px más alto).
+  let rotulo: string[] | null = null;
+  if (conFondo) {
+    // El panel de arriba: la marca y el rótulo; con logo, todo el ancho, para el "Hecho con Tinkazo".
+    c.font = `900 60px ${SANS}`;
+    const anchoMarca = 96 + c.measureText("Tinkazo").width;
+    c.font = `700 25px ${MONO}`;
+    rotulo = f.logo ? [rotuloQueEntra(c, f)] : rotuloEnRenglones(c, f);
+    const anchoRotulo = Math.max(...rotulo.map((l) => anchoEspaciado(c, l, 2.5)));
+    const ancho = f.logo ? ANCHO : Math.min(ANCHO, Math.ceil(Math.max(anchoMarca, anchoRotulo)));
+    panel(c, M - 28, 40, ancho + 56, rotulo.length > 1 ? 180 : 170);
+  }
   marca(c, M, 132);
   // El logo de la comunidad, si hay y se puede abrir: nunca frena la foto.
   if (f.logo) {
@@ -645,9 +842,8 @@ export async function dibujarFoto(f: Foto): Promise<HTMLCanvasElement> {
   // El rótulo: qué es, el número y cuándo, en versalitas espaciadas.
   c.font = `700 25px ${MONO}`;
   c.fillStyle = C.apagado;
-  let rotulo = f.rotulo.toUpperCase();
-  while (rotulo.length > 1 && anchoEspaciado(c, rotulo, 2.5) > ANCHO) rotulo = `${Array.from(rotulo).slice(0, -2).join("")}…`;
-  espaciado(c, rotulo, M, 196, 2.5);
+  if (rotulo && rotulo.length > 1) rotulo.forEach((l, i) => espaciado(c, l, M, 176 + i * 28, 2.5));
+  else espaciado(c, rotuloQueEntra(c, f), M, 196, 2.5);
 
   // Abajo va el QR, o la tarjeta que lo reemplaza: se sabe antes, para centrar el medio en lo que queda.
   const qr = await elQr(f.enlace).catch(() => null);
@@ -658,28 +854,49 @@ export async function dibujarFoto(f: Foto): Promise<HTMLCanvasElement> {
   // ganadores), otra vuelta con un renglón por cosa: nunca encima del QR.
   let bloques: Bloque[] = [];
   let alto = 0;
-  buscar: for (const apretado of [false, true]) {
-    for (let s = 1; s >= 0.55; s -= 0.05) {
-      bloques = medio(c, f, s, apretado);
-      alto = bloques.reduce((n, b) => n + b.alto, 0);
-      if (alto <= abajo - ARRIBA) break buscar;
+  let y: number;
+  if (conFondo) ({ bloques, alto, y } = medioDelJuego(c, f));
+  else {
+    buscar: for (const apretado of [false, true]) {
+      for (let s = 1; s >= 0.55; s -= 0.05) {
+        bloques = medio(c, f, s, apretado);
+        alto = bloques.reduce((n, b) => n + b.alto, 0);
+        if (alto <= abajo - ARRIBA) break buscar;
+      }
     }
+    y = ARRIBA + Math.max(0, Math.round((abajo - ARRIBA - alto) / 2));
   }
-  let y = ARRIBA + Math.max(0, Math.round((abajo - ARRIBA - alto) / 2));
   for (const b of bloques) {
     b.dibujar(y);
     y += b.alto;
   }
 
-  if (qr) abajoConQr(c, f, qr);
+  // Sin QR, la tarjeta que lo reemplaza ya es opaca: sobre la ilustración se lee igual.
+  if (qr) abajoConQr(c, f, qr, conFondo);
   else abajoSinQr(c, f);
-  return lienzo;
+  return { lienzo, conFondo };
 }
 
 /** La foto como PNG. Null si el navegador no puede dibujarla. */
 export async function fotoPng(f: Foto): Promise<Blob | null> {
   try {
     const lienzo = await dibujarFoto(f);
+    return await new Promise<Blob | null>((r) => lienzo.toBlob(r, "image/png"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * La foto con el fondo del juego (`fondo`) como PNG, o null si ese juego no
+ * tiene ilustración (o no hay `fondo`, o el navegador no puede dibujarla):
+ * entonces no hay segunda foto que ofrecer, y va solo la de siempre.
+ */
+export async function fotoDelJuegoPng(f: Foto): Promise<Blob | null> {
+  if (!f.fondo) return null;
+  try {
+    const { lienzo, conFondo } = await pintar(f);
+    if (!conFondo) return null;
     return await new Promise<Blob | null>((r) => lienzo.toBlob(r, "image/png"));
   } catch {
     return null;

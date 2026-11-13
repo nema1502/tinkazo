@@ -57,6 +57,13 @@ export interface Drawn {
   winners: number[];
   /** Hash de la transacción del sorteo, si se registró en el contrato. */
   drawTx?: string;
+  /**
+   * El juego que de verdad contó este resultado la última vez (`playGame` en
+   * src/ui/draw.ts): el elegido, o el que lo reemplazó por la cantidad de gente
+   * o por el motor de respaldo. Va a la foto para compartir (su fondo). No es
+   * parte del sorteo: no entra en el comprobante ni en el historial.
+   */
+  juego?: Game;
 }
 
 /** Estado de la pantalla principal. Un solo sorteo por carga de página. */

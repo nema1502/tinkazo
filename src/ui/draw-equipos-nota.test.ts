@@ -6,7 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * lista van las cuentas, y la nota tiene que decir el nombre del equipo, nunca las 56 letras de su cuenta.
  */
 
-const h = vi.hoisted(() => ({ drawOnChain: vi.fn(), verError: vi.fn(), contar: vi.fn() }));
+const h = vi.hoisted(() => ({ drawOnChain: vi.fn(), verError: vi.fn(), contar: vi.fn(), abrirSorteo: vi.fn() }));
+
+vi.mock("./compartir", () => ({ abrirSorteo: (...a: unknown[]) => h.abrirSorteo(...a) }));
 
 vi.mock("./anchor", () => ({
   cuentaPatrocinada: async () => true,
@@ -62,7 +64,7 @@ async function prepararEstado(): Promise<void> {
   const { app } = await import("../state");
   const { ponerEtiquetas } = await import("../equipos/etiquetas");
   ponerEtiquetas(new Map([[CUENTAS[0] as string, "Los Cóndores"], [CUENTAS[1] as string, "Pumas"], [CUENTAS[2] as string, "Halcones"]]));
-  app.drawn = { winners: [0], randomness: "ab".repeat(32) } as never;
+  app.drawn = { winners: [0], randomness: "ab".repeat(32), beacon: { round: 1 } } as never;
   app.frozen = { names: [...CUENTAS], listHash: "00".repeat(32), ts: 1, at: "", prize: "Una pizza", round: 1, raffleId: 1n } as never;
 }
 
@@ -77,7 +79,7 @@ beforeEach(() => {
 });
 
 describe("la nota después de un ganador, con equipos", () => {
-  it("«Siguiente premio» nombra al equipo que ya ganó, no su cuenta", async () => {
+  it("Siguiente premio nombra al equipo que ya ganó, no su cuenta", async () => {
     await prepararEstado();
     const { newDraw } = await import("./draw");
     newDraw("sinGanadores");
@@ -86,12 +88,43 @@ describe("la nota después de un ganador, con equipos", () => {
     expect(nota).not.toContain(CUENTAS[0] as string);
   });
 
-  it("«No está» nombra al equipo ausente, no su cuenta", async () => {
+  it("No está nombra al equipo ausente, no su cuenta", async () => {
     await prepararEstado();
     const { newDraw } = await import("./draw");
     newDraw("ausente", 0);
     const nota = document.getElementById("again-note")?.textContent ?? "";
     expect(nota).toContain("Los Cóndores");
     expect(nota).not.toContain(CUENTAS[0] as string);
+  });
+
+  it("No está cuenta equipos por la lista sellada, aunque el cuadro esté vacío", async () => {
+    await prepararEstado();
+    const { newDraw } = await import("./draw");
+    newDraw("ausente", 0);
+    const nota = document.getElementById("again-note")?.textContent ?? "";
+    expect(nota).toContain("equipos que quedan");
+    expect(nota).not.toContain("personas");
+  });
+});
+
+describe("Compartir el resultado, con equipos", () => {
+  beforeEach(() => h.abrirSorteo.mockClear());
+
+  it("avisa que la lista sellada es de equipos, para que el mensaje y la foto lo digan", async () => {
+    await prepararEstado();
+    const { shareProof } = await import("./draw");
+    shareProof();
+    await vi.waitFor(() => expect(h.abrirSorteo).toHaveBeenCalledTimes(1));
+    expect(h.abrirSorteo.mock.calls[0]?.[0]).toMatchObject({ equipos: true, total: 3 });
+  });
+
+  it("con una lista de personas no lo avisa, aunque haya etiquetas viejas en memoria", async () => {
+    await prepararEstado();
+    const { app } = await import("../state");
+    app.frozen = { ...(app.frozen as object), names: ["Ana", "Beto", "Carla"] } as never;
+    const { shareProof } = await import("./draw");
+    shareProof();
+    await vi.waitFor(() => expect(h.abrirSorteo).toHaveBeenCalledTimes(1));
+    expect(h.abrirSorteo.mock.calls[0]?.[0]).not.toHaveProperty("equipos");
   });
 });

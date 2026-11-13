@@ -138,6 +138,33 @@ export const CATALOGO = [
     },
   },
   // --- /toborochi
+  // --- autos
+  {
+    id: "autos",
+    cargar: () => import("../autos").then((m) => m.autosPixi),
+    // La forma decide la pregunta propia de la prueba del niño: "carrera", "de-pie", "rueda" o "acumulacion".
+    forma: "carrera",
+    selector: false,
+    rango: { minimo: 2, maximo: 200 },
+    captura: false,
+    historia: { q: "loreAutosQ", a: "loreAutosA", href: "https://github.com/nema1502/tinkazo/blob/main/docs/juegos.md", src: "tinkazo, docs/juegos.md", hue: "teal", borrador: true },
+  },
+  // --- /autos
+  // --- bolillas
+  // Bolillas, la troya de Santa Cruz: la pegadora saca canicas del círculo de tiza de a una, y la última que
+  // queda adentro es quien ganó el sorteo. Nace apagado: abre con ?demo=bolillas y ?pose=bolillas, y entra al
+  // selector al pasar la batería y con el sí de quien mantiene el proyecto.
+  {
+    id: "bolillas",
+    cargar: () => import("../bolillas").then((m) => m.bolillasPixi),
+    // La forma decide la pregunta propia de la prueba del niño: "carrera", "de-pie", "rueda" o "acumulacion".
+    forma: "de-pie",
+    selector: false,
+    rango: { minimo: 2, ideal: [5, 12], maximo: 200 },
+    captura: false,
+    historia: { q: "loreBolillasQ", a: "loreBolillasA", href: "https://es.wikipedia.org/wiki/Canica", src: "es.wikipedia.org, Canica", hue: "teal", borrador: true },
+  },
+  // --- /bolillas
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];
 

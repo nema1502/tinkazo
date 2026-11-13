@@ -571,20 +571,7 @@ function startCountdown(): void {
  * hallazgo 9). Con data-i, el cambio de idioma lo traduce.
  */
 export function refreshFreezeLabel(): void {
-  // La línea del modo va debajo del botón de sellar, en los dos modos, solo cuando existe el modo Oficial. Dice lo
-  // mismo que hace `sellar()`: el Ensayo y la demo no graban nada, así que no la llevan; y con la billetera en la otra
-  // red, en vez de prometer el registro dice que así no se puede sellar (el botón frena con el aviso de cómo seguir).
-  const lineaModo = document.getElementById("sellar-modo");
-  if (lineaModo) {
-    // Quien siguió sin cuenta (plan B del ingreso) tampoco la ve: no hay nada que se registre, y su propia línea lo dice.
-    const verLinea = hayModoOficial && !sinGrabar() && !sinCuentaElegido();
-    lineaModo.textContent = !verLinea
-      ? ""
-      : billeteraEnOtraRed()
-        ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name)))
-        : t(network.name === "mainnet" ? "sealModeOfficial" : "sealModeTest");
-    lineaModo.style.display = verLinea ? "" : "none";
-  }
+  pintarLineaDelModo();
   if (app.frozen) return;
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
@@ -592,6 +579,31 @@ export function refreshFreezeLabel(): void {
   btn.dataset.i = enStand() ? "standEmpezar" : claveDeSellar();
   btn.textContent = t(btn.dataset.i);
 }
+
+/**
+ * La línea del modo va debajo del botón de sellar, en los dos modos, solo cuando existe el modo Oficial. Dice lo
+ * mismo que hace `sellar()`: el Ensayo y la demo no graban nada, así que no la llevan; y con la billetera en la otra
+ * red, en vez de prometer el registro dice que así no se puede sellar (el botón frena con el aviso de cómo seguir).
+ *
+ * No lleva `data-i`: la escribe esta función. Por eso también la vuelve a escribir el cambio de idioma, y con él el
+ * primero de la página: `main.ts` arma la herramienta en español y recién al final aplica `?lang=en` o el idioma del
+ * navegador. Sin esto, quien abría la página en inglés leía esta línea en español.
+ */
+export function pintarLineaDelModo(): void {
+  const lineaModo = document.getElementById("sellar-modo");
+  if (!lineaModo) return;
+  const verLinea = hayModoOficial && !sinGrabar();
+  // Quien siguió sin cuenta (plan B del ingreso) tampoco la ve: no hay nada que se registre, y su propia línea lo dice.
+  const seMuestra = verLinea && !sinCuentaElegido();
+  lineaModo.textContent = !seMuestra
+    ? ""
+    : billeteraEnOtraRed()
+      ? t("sealModeOtraRed").replace("{modo}", t(modeNameKey(network.name)))
+      : t(network.name === "mainnet" ? "sealModeOfficial" : "sealModeTest");
+  lineaModo.style.display = seMuestra ? "" : "none";
+}
+
+onLangChange(pintarLineaDelModo);
 
 /** Cuándo se soltó el último sorteo para armar el siguiente (`unfreeze`), y cuánto no responde "Sellar" después. */
 let soltadoEn = -Infinity;

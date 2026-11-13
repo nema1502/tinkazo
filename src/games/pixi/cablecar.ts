@@ -418,6 +418,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   }
   build();
   const crown = S.crown(names, winners, true);
+  /** Si `despejarGanador` ya movió la escena en esta corona: desde ahí, el rótulo CUMBRE se cuida del cartel. */
+  let corrigeCumbre = false;
   S.onResize(build);
 
   /* ================================================================ estado */
@@ -1456,6 +1458,29 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
     }
 
+    if (tAll >= T_CROWN) {
+      crown.at(tAll - T_CROWN, true, focoDeLaCabina());
+      // Con el 3D la cabina la dibuja él (más grande desde el golpe) y la del 2D está apagada: su caja no es la que se ve.
+      // Desde el golpe y no antes: en el silencio del foco la cabina lleva a los dos que llegaron arriba, y despejar
+      // pone la ficha con el nombre completo de quien gana. Con el golpe la nombra también el relator.
+      if (!v3 && tHold >= FOCO.golpe) {
+        const cuerpo = (cabs[winnerCab] as Cab).body.getBounds();
+        const dy = S.despejarGanador({ x: cuerpo.x, y: cuerpo.y, w: cuerpo.width, h: cuerpo.height });
+        crown.enfocar?.(focoDeLaCabina());
+        corrigeCumbre = corrigeCumbre || dy !== 0;
+        // Solo si hubo corrección: no llevar CUMBRE detrás del cartel. El rótulo
+        // ya se acomoda aparte del edificio contra la cabecera; conserva esa guardia.
+        if (corrigeCumbre) {
+          const tag = (stations[NS + 1] as (typeof stations)[number]).tag;
+          const b = tag.getBounds(), lo = S.placaBajo(winners.length) + 12 * S.u();
+          if (b.y < lo) {
+            const p = tag.getGlobalPosition();
+            tag.position.copyFrom((tag.parent as Container).toLocal({ x: p.x, y: p.y + lo - b.y }));
+          }
+        }
+      }
+    }
+
     // Pasar lista: en el embarque y el primer tramo, los nombres de a tandas
     // encima de su cabina, para que cada uno sepa en cuál va. Los de una misma
     // cabina se apilan.
@@ -1588,7 +1613,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     pintarMarcas(hudMarcas, { total: names.length, quedan: m, k: S.u(), w: S.sw(), y: 0 });
     if (v3) hudGrupo.alpha = 1 - ease.outCubic(clamp((tAll - T_CROWN) / 0.3, 0, 1));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
-    if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
     // El 3D dibuja el mundo y las cabinas con lo que el 2D acaba de decidir. Quién gana lo sabe recién en el golpe.
     v3?.frame({
       ...entradaBase(S, tAll),
@@ -1642,7 +1666,14 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   S.ganadorEn(() => {
     const f = focoDeLaCabina();
     return { x: f.x - f.r, y: f.y - f.r, w: 2 * f.r, h: 2 * f.r };
-  });
+  }, () => {
+    // El dibujo real, incluidos contorno y sombra, con balanceo y cámara aplicados.
+    // Excluye el círculo del foco, el colgante y las etiquetas del nombre. Con el 3D, la cabina 2D está apagada: no hay medida.
+    const cabina = cabs[winnerCab];
+    if (!cabina?.root.visible || cabina.root.alpha <= 0 || !cabina.body.visible) return null;
+    const b = cabina.body.getBounds();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  }, () => ({ activa: tAll >= T_CROWN, tiempo: tAll, fase: tHold < FOCO.placa ? "foco" : "corona" }));
 
   S.run((dt, now) => {
     tAll += dt;

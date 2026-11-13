@@ -39,7 +39,14 @@ import { contar, contarPractica, errorContable, refDe } from "../contar";
 import { acreditarEnSegundoPlano } from "../stellar/monedas-eventos";
 import { ponerTextoDelSello } from "./sin-sello-textos";
 import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
-import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+import { esListaDeEquipos, etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+
+/**
+ * Si la lista que se selló es de equipos. Lo dicen la lista sellada y no el cuadro, que después del sorteo ya pudo
+ * cambiar: así las frases de abajo del resultado, el mensaje y la foto cuentan siempre lo mismo. `undefined` si todavía
+ * no hay lista sellada, y entonces las frases miran el cuadro.
+ */
+const selladaEsDeEquipos = (): boolean | undefined => (app.frozen ? esListaDeEquipos(app.frozen.names) : undefined);
 import { ponerNombresEnteros } from "../games/nombres-enteros";
 import { pagosActivos } from "../stellar/pagos-bandera";
 import { cobroPorUso } from "../stellar/cobro-oficial";
@@ -534,6 +541,8 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   ponerNombresEnteros(hayEtiquetas() ? nombresDeLosEquipos() : []);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
+  // El juego que cuenta este resultado: la foto para compartir lleva su fondo (y el último, si se ve de nuevo con otro).
+  if (app.drawn) app.drawn.juego = game;
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
@@ -567,6 +576,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   const respaldo = (): void => {
     setShowGate(null);
     const real = classicPlayable(app.game, names.length);
+    if (app.drawn) app.drawn.juego = real;
     if (card && real !== game) card.update(real);
     const carga = classicModule(real);
     carga.catch(() => undefined);
@@ -857,7 +867,7 @@ function showAgain(): HTMLButtonElement {
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = alcanza ? L.againLeft(mostrar) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar);
+  $("again-left").textContent = alcanza ? L.againLeft(mostrar, selladaEsDeEquipos()) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar, selladaEsDeEquipos());
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
   const sigue = $("again-sigue");
   sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
@@ -948,9 +958,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
     modo === "sinGanadores"
-      ? L.againQuitados(salieron.map(etiquetaDe), mostrar)
+      ? L.againQuitados(salieron.map(etiquetaDe), mostrar, selladaEsDeEquipos())
       : modo === "ausente"
-        ? L.ausenteNota(etiquetaDe(ausente), mostrar, salieron.length > 1, premiosDelAusente)
+        ? L.ausenteNota(etiquetaDe(ausente), mostrar, salieron.length > 1, premiosDelAusente, selladaEsDeEquipos())
         : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
@@ -1198,7 +1208,7 @@ function mensajeDelSorteo(): string {
   const juntos = porPersona ? withRepeatCounts(getLang(), lista) : lista;
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   // Con varias participaciones por persona, el mensaje dice las dos cuentas y no solo las líneas de la lista.
-  return T[getLang()].summary(quienes, names.length, prize, enlace, juntos.length > 1, sinSello, personasDeLaLista(names));
+  return T[getLang()].summary(quienes, names.length, prize, enlace, juntos.length > 1, sinSello, personasDeLaLista(names), esListaDeEquipos(names));
 }
 
 /**
@@ -1243,6 +1253,8 @@ export function shareProof(): void {
     // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas, con la misma regla
     // que la espera, las bases y la verificación (`seCuentaPorPersona`).
     personas: personasDeLaLista(f.names),
+    // Con una lista de equipos, el mensaje y la foto cuentan equipos y no personas (lo dice la lista sellada).
+    ...(esListaDeEquipos(f.names) ? { equipos: true } : {}),
     premio: f.prize,
     fecha: f.ts,
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
@@ -1250,6 +1262,8 @@ export function shareProof(): void {
     ...(f.sinSello && f.raffleId === undefined ? { sinSello: true } : {}),
     // El logo con el que se selló, no el de ahora (src/logo.ts).
     ...(logoPorHuella(f.logo) ? { logo: logoPorHuella(f.logo) as NonNullable<ReturnType<typeof logoPorHuella>> } : {}),
+    // El juego que contó el resultado (el último, si se vio de nuevo con otro): la segunda foto lleva su fondo.
+    ...(d.juego ? { juego: d.juego } : {}),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }
@@ -1278,7 +1292,7 @@ function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   const body = turnos
     ? turnMessage(getLang(), { orden: lista, enlace: url, ...(sinSello ? { sinSello: true } : {}) })
-    : T[getLang()].tellBody(who, prize, names.length, url, juntos.length > 1, sinSello, personasDeLaLista(names));
+    : T[getLang()].tellBody(who, prize, names.length, url, juntos.length > 1, sinSello, personasDeLaLista(names), esListaDeEquipos(names));
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
     `mailto:?subject=${encodeURIComponent(t(turnos ? "turnsResultTitle" : "tellSubject"))}&body=${encodeURIComponent(body)}`;

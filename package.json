@@ -16,6 +16,7 @@
     "check:renta": "node scripts/check-renta.mjs",
     "check:red": "node scripts/vigilar-red.mjs",
     "check:paginas": "node scripts/check-paginas.mjs",
+    "check:tema-capturas": "node scripts/check-tema-capturas.mjs",
     "check:imagenes": "node scripts/check-imagenes.mjs",
     "check:glosario": "node scripts/check-glosario.mjs",
     "check:escritura": "node scripts/check-escritura.mjs",

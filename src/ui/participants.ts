@@ -16,7 +16,7 @@ import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSell
 import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
-import { etiquetaDe } from "../equipos/etiquetas";
+import { cuadroEsDeEquipos, etiquetaDe } from "../equipos/etiquetas";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
@@ -29,6 +29,9 @@ let cerrada = false;
 
 /** La lista no se puede tocar: se está sellando o ya está sellada. */
 const listaCerrada = (): boolean => cerrada || !!app.frozen;
+
+/** Lo mismo, para quien la cambia desde afuera: el panel de equipos mira esto antes de tocar los nombres que se muestran. */
+export const listaBloqueada = (): boolean => listaCerrada();
 
 /**
  * "Lista de 20 personas", junto al cuadro. Con varias participaciones por persona, dice las dos cuentas; en un
@@ -140,6 +143,35 @@ export function renderNames(): void {
   $("csv-edit").style.display = listaCerrada() ? "none" : "";
   pintarResumen();
   pintarVarias();
+  pintarListaDeEquipos();
+}
+
+/**
+ * Lo que cambia en la pantalla cuando la lista del cuadro es de equipos con cupón (cada línea, la cuenta de un equipo):
+ * - cada cuenta, de 56 letras, ocupa un solo renglón del cuadro. Partidas en dos, en el celular se veían diez renglones
+ *   de letras sueltas para cinco equipos, y el cuadro no decía que eran los equipos;
+ * - una nota junto a la cuenta dice qué es cada renglón y dónde están los nombres;
+ * - debajo del resumen, en vez de que la gente no necesita cuenta, dice que cada equipo ya se anotó con la de su encargado.
+ * Con otra lista, todo queda como siempre. Se decide por lo que hay en el cuadro, no por la memoria.
+ */
+function pintarListaDeEquipos(): void {
+  const equipos = cuadroEsDeEquipos();
+  const cuadro = document.getElementById("ta");
+  if (cuadro) {
+    if (equipos) cuadro.setAttribute("wrap", "off");
+    else cuadro.removeAttribute("wrap");
+  }
+  const nota = document.getElementById("lista-cuenta-nota");
+  if (nota) {
+    nota.textContent = equipos ? t("listaCuentaNotaEquipos") : "";
+    nota.style.display = equipos ? "" : "none";
+  }
+  const sinCuenta = document.getElementById("sellar-sin-cuenta");
+  if (sinCuenta) {
+    const clave = equipos ? "sellarSinCuentaEquipos" : "sellarSinCuenta";
+    sinCuenta.dataset.i = clave;
+    sinCuenta.textContent = t(clave);
+  }
 }
 
 /**
@@ -250,6 +282,7 @@ export function bindParticipants(): void {
     refreshPlaceholder();
     pintarResumen();
     pintarVarias();
+    pintarListaDeEquipos();
     const cuenta = document.getElementById("lista-cuenta");
     const { personas, participaciones } = cuentaParaMostrar(parseNames());
     if (cuenta && participaciones) cuenta.textContent = cuentaDeLista(personas, participaciones);

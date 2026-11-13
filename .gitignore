@@ -1,3 +1,6 @@
+# Capturas y medidas que deja el auditor del cierre del ganador
+.evidence/
+
 # Secretos: nunca se suben
 .env
 .env.*

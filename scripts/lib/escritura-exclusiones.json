@@ -33,6 +33,11 @@
     {
       "archivo": "src/games/pixi/kit/respuestas.ts",
       "porque": "Todo el archivo es la prueba del niño: lo que cada juego declara a sus pruebas y al auditor (window.__nino, solo con ?auditar=nino) y los mensajes de problemasDeRespuestas, que solo leen esas pruebas. Puro, sin DOM: ninguna cadena llega a la pantalla. Las palabras entre comillas son los nombres de los campos (adelante, hacia, paso), y las pruebas los buscan tal cual."
+    },
+    {
+      "archivo": "src/video/grabar.ts",
+      "contiene": "codecs=",
+      "porque": "Son los nombres de tipo de archivo que el navegador responde si sabe grabar (video/mp4 con sus codecs). El punto y coma es parte del nombre del tipo, lo lee el navegador y no se muestra en pantalla."
     }
   ]
 }
