@@ -11,6 +11,11 @@ export const VIDA_MS = 10 * 3_600_000;
 export const MAX_NOMBRES = 400;
 /** Nombres por minuto por sala: todo un recinto puede salir por una sola IP, por eso el tope es de la sala y no de la dirección. */
 export const NOMBRES_POR_MINUTO = 120;
+/**
+ * Altas de equipos por minuto por sala, con su propia ventana. Hasta el 13 de noviembre de 2026 gastaban el mismo
+ * contador que los nombres: con el id de la sala del QR, 120 nombres por minuto dejaban a todos los equipos afuera.
+ */
+export const EQUIPOS_POR_MINUTO = 120;
 /** Salas nuevas por dirección y por hora, y en total por día. */
 export const SALAS_POR_IP_POR_HORA = 5;
 export const SALAS_POR_DIA = 100;

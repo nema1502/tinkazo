@@ -349,6 +349,12 @@ let arrancoSola = false;
  */
 let grandePendiente = false;
 
+/** Suelta la pantalla completa que pidió el toque de "Sellar la lista", si sigue pedida. Una sola vez: después ya no queda pedida. */
+function soltarLoPedido(): void {
+  if (grandePendiente) soltarPantallaCompleta();
+  grandePendiente = false;
+}
+
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
 let espera: typeof import("./espera") | null = null;
 
@@ -562,6 +568,24 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
 let sellandoYa = false;
 
 /**
+ * El sello va camino a la red: recargar o cerrar la pestaña ahora lo deja sin saber si entró, y la lista vuelve
+ * abierta para sellarla otra vez con otra ronda (dos sellos de la misma lista). Mientras tanto, el navegador pregunta
+ * antes de salir.
+ */
+function avisarAntesDeSalir(ev: BeforeUnloadEvent): void {
+  ev.preventDefault();
+  // Los navegadores que no miran `preventDefault` en este evento miran esto.
+  ev.returnValue = "";
+}
+
+/** Mientras el sello va a la red, el cambio de modo lo espera (`modo-ui.ts`) y salir de la página pide confirmación. */
+function marcarMandandoElSello(v: boolean): void {
+  marcarSellandoAhora(v);
+  if (v) window.addEventListener("beforeunload", avisarAntesDeSalir);
+  else window.removeEventListener("beforeunload", avisarAntesDeSalir);
+}
+
+/**
  * Sella la lista.
  *
  * Con wallet conectada el sello va al contrato en Stellar, que deja constancia
@@ -587,10 +611,12 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
     }
     await sellar(opciones);
   } finally {
-    // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista.
-    grandePendiente = false;
+    // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista. Y la pantalla
+    // completa que pidió el toque se suelta: el proyector no se queda en grande mostrando la página con el error.
+    // Si se selló, la espera en grande ya la tomó (`startCountdown`) y esto no suelta nada.
+    soltarLoPedido();
     // Terminó de sellar, bien o mal: el cambio de modo ya no lo espera (`modo-ui.ts`). Si quedó sellado, lo bloquea el sorteo.
-    marcarSellandoAhora(false);
+    marcarMandandoElSello(false);
     sellandoYa = false;
   }
 }
@@ -644,10 +670,7 @@ async function cuentaListaParaSellar(btn: HTMLButtonElement): Promise<boolean> {
         btn.textContent = t(btn.dataset.i);
       }
     },
-    alAbrir: () => {
-      if (grandePendiente) soltarPantallaCompleta();
-      grandePendiente = false;
-    },
+    alAbrir: () => soltarLoPedido(),
     alSeguir: () => {
       if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
         pedirPantallaCompleta();
@@ -700,6 +723,9 @@ async function hayUnSelloPendiente(names: string[]): Promise<boolean> {
   }
 }
 
+/** El sello se mandó y no se pudo averiguar si entró (`SelloSinConfirmar` de `sello-seguro.ts`). */
+const esSelloSinConfirmar = (e: unknown): boolean => typeof e === "object" && e !== null && (e as { name?: unknown }).name === "SelloSinConfirmar";
+
 /** El no del portero fue que no le quedan sorteos oficiales: la ventana de «Se te acabaron». `false` si no era eso. */
 async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promise<boolean> {
   const x = e as { name?: unknown; motivo?: unknown } | null;
@@ -708,7 +734,7 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
     const m = await import("./sin-sorteos");
     if (!m.esSinSorteos(e)) return false;
     // Ya no se está sellando: «Pasar a Prueba» de la ventana tiene que poder cambiar de modo.
-    marcarSellandoAhora(false);
+    marcarMandandoElSello(false);
     await m.alQuedarseSinSorteos({ volverA: btn });
     return true;
   } catch {
@@ -726,7 +752,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
   // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
   if (hayModoOficial && !sinGrabar() && (await frenarPorOtraRed())) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
@@ -740,14 +766,14 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
   // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
   if (anchoring && network.name === "mainnet" && cobroPorUso() && !(await hayUnSelloPendiente(names)) && !(await accesoOficialParaSellar(btn, Math.min(ganadoresPedidos(), names.length), opciones.conCupon === true))) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   // En modo Oficial con una cuenta de Google o de correo, la cuenta tiene que estar activada y protegida antes de sellar:
   // si falta algo, el paso «Dejá tu cuenta lista» a pantalla completa (`cuenta-lista-flujo.ts`). Va antes de la
   // confirmación del primer sello y de cerrar la lista, así sus salidas funcionan. Fuera del modo Oficial no se baja nada.
   if (anchoring && network.name === "mainnet" && !(await cuentaListaParaSellar(btn))) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   const hash = bytesToHex(listHash(names));
@@ -775,7 +801,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // La primera vez que se sella en Oficial en este navegador, una confirmación corta antes de tocar la red. Si la
   // cierra o pasa a Prueba, la pantalla completa que pidió el toque de "Sellar la lista" se suelta: no hay espera.
   if (anchoring && !(await confirmarPrimerSelloOficial())) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
 
@@ -799,13 +825,16 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`). Y el modo no se cambia hasta
     // que termine (`modo-ui.ts`): la recarga cortaría el envío.
     marcarSellado(true);
-    marcarSellandoAhora(true);
+    marcarMandandoElSello(true);
     try {
       // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
       // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
       if (!opciones.saltarChequeo && !(await chequearAntesDeSellar())) {
         btn.disabled = false;
-        cerrarLista(false);
+        // Sin nada mandado, la lista se reabre. Pero si hay un sello de esta lista que se mandó y no se sabe si entró,
+        // sigue cerrada: reabrirla dejaría sumar a alguien, la huella cambiaría, el intento guardado no aparecería y
+        // saldría un segundo sello si el primero había entrado (otro sorteo oficial gastado).
+        cerrarLista(await hayUnSelloPendiente(names));
         hideTxStatus("seal-status");
         marcarSellado(false);
         return;
@@ -887,7 +916,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       if (!protegiendoLaCuenta && (await pideProtegerLaCuenta(e))) {
         hideTxStatus("seal-status");
         // El sello no salió: el cambio de modo ya no lo espera, así «Pasar a Prueba» del paso funciona.
-        marcarSellandoAhora(false);
+        marcarMandandoElSello(false);
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
@@ -900,7 +929,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         }
       }
       btn.disabled = false;
-      cerrarLista(false);
+      // Se mandó y no se sabe si entró: la lista sigue cerrada. Si se cambiara, la huella sería otra, el intento
+      // guardado no aparecería y saldría un segundo sello. Con la misma lista, el próximo toque averigua primero.
+      cerrarLista(esSelloSinConfirmar(e));
       btn.dataset.i = claveDeSellar();
       btn.textContent = t(btn.dataset.i);
       marcarSellado(false);

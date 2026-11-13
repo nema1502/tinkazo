@@ -45,6 +45,7 @@ import {
   MAX_EQUIPOS,
   MAX_NOMBRES,
   MAX_SOCKETS,
+  EQUIPOS_POR_MINUTO,
   NOMBRES_POR_MINUTO,
   PRESENTARSE_MS,
   SALAS_POR_DIA,
@@ -198,6 +199,8 @@ export type Resultado<T = object> =
 
 export class Sala extends DurableObject<Env> {
   private porMinuto = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
+  /** Las altas de equipos, aparte de los nombres: unos no pueden dejar afuera a los otros (`EQUIPOS_POR_MINUTO`). */
+  private equiposPorMinuto = new VentanaPorMinuto(EQUIPOS_POR_MINUTO);
   private readonly sql: Ejecutar = (consulta, ...parametros) => this.ctx.storage.sql.exec(consulta, ...parametros).toArray() as never;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -324,7 +327,7 @@ export class Sala extends DurableObject<Env> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     const config = this.config();
     if (!config) return { ok: false, motivo: "sin-registro" };
-    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.porMinuto.intentar(Date.now()));
+    const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.equiposPorMinuto.intentar(Date.now()));
     if (!r.ok) return r;
     this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta, d, estado: r.estado });
     return { ok: true, n: r.n, estado: r.estado };

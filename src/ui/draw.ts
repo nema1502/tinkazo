@@ -43,6 +43,7 @@ import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraM
 import { ponerNombresEnteros } from "../games/nombres-enteros";
 import { pagosActivos } from "../stellar/pagos-bandera";
 import { cobroPorUso } from "../stellar/cobro-oficial";
+import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -51,7 +52,8 @@ async function resolveBeacon(
 ): Promise<Beacon> {
   // El modo stand nunca toca la red para elegir, con o sin internet: no hay dos caminos ni detección de red que falle en vivo.
   if (enStand()) return faroDeStand(round);
-  const { signature } = await fetchRound(round, { onAttempt });
+  // Con plazo por pedido: un relay colgado cuenta como uno que falló, y se pasa al siguiente (`pedido-con-plazo.ts`).
+  const { signature } = await fetchRound(round, { onAttempt, fetchFn: conPlazo(fetch, PLAZO_DEL_RELAY_MS) });
   // En un worker, que la cuenta regresiva levantó: la cortina no se traba.
   if (!(await verifyRoundAsync(round, signature))) throw new Error("bad-signature");
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
@@ -730,10 +732,12 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   seguirEnPantallaCompleta(false);
   // En el ensayo el resultado se queda en la página, con su final: en grande
   // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
+  // Fuera del ensayo, en grande aunque se haya perdido la pantalla completa durante el show (Windows la suelta al
+  // cambiar de proyector): es una capa de la página, y con varios ganadores el cartel del juego no los muestra a todos.
   if (final && enPractica()) {
     soltarPantallaCompleta();
     enfocarDespues(principal);
-  } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
+  } else if (final) resultadoEnGrande(enlace, principal);
   else enfocarDespues(principal);
 }
 
@@ -921,8 +925,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   const premiosDelAusente = modo === "ausente" ? drawn.winners.filter((i) => elNombre(frozen.names[i] ?? "") === ausente).length : 0;
   const premio = frozen.prize;
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
-  // equivocado frente a la sala no puede costar la lista de Luma filtrada.
-  anterior = frozen.names;
+  // equivocado frente a la sala no puede costar la lista de Luma filtrada. Sin
+  // quienes ya ganaron: recuperarla no puede devolverle la chance a nadie.
+  anterior = conLista ? quedan : sinGanadores();
   app.drawn = null;
   // Con "Siguiente premio", el próximo sello sugiere otro juego: seguir sorteando es seguir jugando.
   if (modo === "sinGanadores") rotarJuego();
@@ -998,7 +1003,7 @@ export function alTocarGanadores(e: Event): void {
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */
 let anterior: string[] = [];
 
-/** Vuelve a poner en el cuadro la lista del sorteo anterior, entera. */
+/** Vuelve a poner en el cuadro la lista del sorteo anterior, sin quienes ya ganaron (`newDraw`). */
 export function recuperarLista(): void {
   if (!anterior.length || app.frozen) return;
   setList(anterior.join("\n"));

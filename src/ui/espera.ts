@@ -36,8 +36,9 @@ import { hayModoOficial, network } from "../stellar/config";
  *
  * - Escape o "Volver a la página" salen, como siempre, y sueltan la pantalla
  *   completa. Con la pantalla completa, Escape la suelta el navegador sin
- *   avisarle a la página: salir de ella también cierra la espera. En los dos
- *   casos la persona dijo que no, y no se le vuelve a forzar en esta sesión.
+ *   avisarle a la página: la espera se queda arriba como capa (también la
+ *   suelta Windows al cambiar de proyector), y un segundo Escape la cierra. Al
+ *   salir, la persona dijo que no, y no se le vuelve a forzar en esta sesión.
  * - "Cambiar de juego": el selector está detrás de esta capa, así que el juego
  *   se elige sin salir (secundario: la acción principal sigue siendo una sola).
  * - Si la cuenta pide aprobar cada operación en una ventana (Freighter), el
@@ -340,7 +341,6 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     removeEventListener("resize", ajusta);
     removeEventListener("resize", medirBarra);
     removeEventListener("keydown", tecla);
-    document.removeEventListener("fullscreenchange", pantalla);
     document.removeEventListener("tinkazo:error", alError);
     document.removeEventListener("tinkazo:sello", alSello);
     back.remove();
@@ -539,14 +539,12 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     else salir();
   };
   // Con la pantalla completa, Escape la suelta el navegador y la página no se
-  // entera de la tecla: salir de ella es salir de la espera. Mientras se
-  // sortea no, porque el show ya viene: un segundo Escape cierra. Nada de esto
-  // lo hace la propia página mientras la espera está abierta: es la persona.
-  const pantalla = (): void => {
-    if (!document.fullscreenElement && fase !== "sorteando") salir();
-  };
+  // entera de la tecla. Hasta el 13 de noviembre de 2026 salir de ella cerraba la
+  // espera y la marcaba como rechazada, y el sorteo ya no arrancaba solo. Pero la
+  // pantalla completa también la suelta Windows al cambiar de proyector, sin que
+  // nadie lo pida: ahora la espera se queda arriba como capa. La cierran un
+  // segundo Escape y "Volver a la página".
   addEventListener("keydown", tecla);
-  document.addEventListener("fullscreenchange", pantalla);
   volver?.addEventListener("click", salir);
 
   /** Pasa a otra fase: la cuenta y su línea dejan su lugar a lo que sigue, con el mismo alto (los nombres no saltan). */

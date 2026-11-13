@@ -21,6 +21,7 @@ import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
+import { cuadroOCierre } from "./cuadro-seguro";
 
 /**
  * El andamiaje de los juegos en PixiJS: lo mismo que `overlay.ts` hace para
@@ -1399,8 +1400,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
       let codigo = 0;
       const pace = paceFactor();
-      const loop = (now: number): void => {
-        if (dead) return;
+      const cuadro = (now: number): void => {
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         if (prev) gobernador.cuadro(now - prev, codigo);
         const c0 = performance.now();
@@ -1423,7 +1423,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           relojId = (now - start) / 1000;
           if (cuadros++ % 5 === 0) ident.mirar([scene, hud, tagLayer], relojId, sw(), sh());
         }
-        rafId = requestAnimationFrame(loop);
+      };
+      // Un cuadro que lanza no deja el estadio tapando la pantalla: se cierra y sale el resultado (`cuadro-seguro.ts`).
+      const loop = (now: number): void => {
+        if (dead) return;
+        if (cuadroOCierre(cuadro, now, () => stage.cleanup()) && !dead) rafId = requestAnimationFrame(loop);
       };
       const arrancar = (): void => {
         show();
