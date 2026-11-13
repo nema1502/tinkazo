@@ -9,7 +9,9 @@
  * - **M1** ninguna llama se corre más de 0,03 cuerpos por cuadro;
  * - **M2** velocidad de 1 cuerpo por segundo como mucho; de 1,5 en un pique o un obstáculo con causa a la vista, y por 2,5 s como mucho;
  * - **M3** aceleración de 1,2 cuerpos por segundo cada segundo, sin permiso;
- * - **M4** un adelantamiento se ve venir (un segundo o más a menos de dos cuerpos) y el cruce dura 1,2 s o más (la gran mayoría);
+ * - **M4** un adelantamiento se ve venir (un segundo o más a menos de dos cuerpos) y nunca dura menos de 0,5 s. Dos varas (`VARAS_CRUCE` de
+ *   `carrera-marcha-datos.ts`): sin un obstáculo encima, más de 0,88 de los cruces duran 1,2 s o más; con una piedra, una valla, una escupida
+ *   o un remolino encima de una de las dos, nueve de cada diez duran 0,8 s o más. Las dos varas se juzgan con todas las cantidades juntas;
  * - **M5** cambios de punta: de 3 a 5 en la recta;
  * - **las causas**: todo exceso de velocidad sobre el tope general tiene una causa registrada en el guion (`Datos.causas`), anunciada;
  * - **la justicia de la punta**: la que va primera a 1,5 s de la meta gana el 40 % de las veces o menos, y la ganadora lleva la punta
@@ -90,10 +92,13 @@ const T = M.TOPES;
 const datos = { plan: {}, navegador: {} };
 
 const soloNavegador = args.includes("--solo-navegador");
+/** Los adelantamientos de todas las cantidades juntas, para las dos varas (`VARAS_CRUCE`). */
+const todas = { pasesSin: 0, cortosSin: 0, pasesCon: 0, cortosCon: 0 };
 if (!soloNavegador) console.log(`\nEl plan: ${rondas} rondas con ${tamanos.join(", ")} personas, a 60 cuadros por segundo`);
 for (const n of soloNavegador ? [] : tamanos) {
   const peor = { paso: [0, 0], vel: [0, 0], acel: [0, 0], pique: [0, 0] };
-  let sinCausa = 0, velSinCausa = 0, acelExceso = 0, excesosVel = 0, excesosVelConCausa = 0, pases = 0, lentos = 0, rapidos = 0, sinAviso = 0;
+  let sinCausa = 0, velSinCausa = 0, acelExceso = 0, excesosVel = 0, excesosVelConCausa = 0, pases = 0, cortos = 0, rapidos = 0, sinAviso = 0;
+  let pasesSin = 0, pasesCon = 0, cortosCon = 0;
   const rondasMalasVel = new Set(), rondasMalasAcel = new Set();
   const cruces = [], cambiosRecta = [], cambios8 = [];
   // Las tandas (de 31 a 200 personas): la caminata de las que pasan por el portón, en las pantallas anchas.
@@ -128,10 +133,18 @@ for (const n of soloNavegador ? [] : tamanos) {
       else (velSinCausa++, rondasMalasVel.add(i));
     }
     for (const e of m.excesos) if (e.tipo === "velocidad") (excesosVel++, e.conCausa && excesosVelConCausa++);
+    const obstaculos = M.causasDeObstaculos(d);
     for (const p of m.pases) {
       pases++;
       cruces.push(p.cruce);
-      if (p.cruce < 1.2) lentos++;
+      // Dos varas (`VARAS_CRUCE`): sin un obstáculo encima, el cruce corto es el de menos de 1,2 s; con uno, el de menos de 0,8 s.
+      if (M.conObstaculoEncima(obstaculos, p)) {
+        pasesCon++;
+        if (p.cruce < M.VARAS_CRUCE.conObstaculo.cruce) cortosCon++;
+      } else {
+        pasesSin++;
+        if (p.cruce < M.VARAS_CRUCE.sinObstaculo.cruce) cortos++;
+      }
       if (p.cruce < 0.5) rapidos++;
       if (p.aviso < 1) sinAviso++;
     }
@@ -171,7 +184,13 @@ for (const n of soloNavegador ? [] : tamanos) {
   check(`M2 un pique no dura más de ${T.piqueDura} s por encima de 1`, peor.pique[0] <= T.piqueDura, `${f(peor.pique[0], 1)} s · ronda ${peor.pique[1]}`);
   check("M3 aceleración de 1,2 cuerpos por segundo cada segundo, sin permiso", acelExceso === 0, `la mayor ${f(peor.acel[0])} · ronda ${peor.acel[1]} · ${acelExceso} cuadros pasados en ${rondasMalasAcel.size} de ${hechas} rondas`);
   check("causas: todo exceso de velocidad sobre el tope general tiene una causa registrada, anunciada", excesosVel === excesosVelConCausa && causasSinAviso === 0, `${excesosVel} excesos, ${excesosVelConCausa} con causa · ${causas} causas, ${causasSinAviso} sin aviso de 0,3 s`);
-  check("M4 los adelantamientos se ven venir y no son un salto", sinAviso === 0 && rapidos === 0 && (pases === 0 || lentos / pases <= 0.15), `${pases} pases · ${sinAviso} sin aviso de 1 s · ${rapidos} de menos de 0,5 s · ${f((100 * lentos) / Math.max(1, pases), 0)} % de menos de 1,2 s (mediana del cruce ${f(pct(cruces, 0.5))} s)`);
+  // Las dos varas se juzgan con todas las cantidades juntas, como en la prueba de la marcha (al final): con una sola cantidad y 300 rondas
+  // quedan unos cien cruces sin obstáculo, y el azar mueve la parte más que el margen. Acá se muestran como dato.
+  todas.pasesSin += pasesSin;
+  todas.cortosSin += cortos;
+  todas.pasesCon += pasesCon;
+  todas.cortosCon += cortosCon;
+  check("M4 los adelantamientos se ven venir y no son un salto", sinAviso === 0 && rapidos === 0, `${pases} pases, ${sinAviso} sin aviso de 1 s, ${rapidos} de menos de 0,5 s. Sin obstáculo encima ${pasesSin}, ${cortos} de menos de 1,2 s (${f((100 * cortos) / Math.max(1, pasesSin), 1)} %). Con obstáculo ${pasesCon}, ${cortosCon} de menos de 0,8 s (${f((100 * cortosCon) / Math.max(1, pasesCon), 1)} %). Mediana del cruce ${f(pct(cruces, 0.5))} s`);
   if (camina.tarde > -Infinity) {
     check("tandas M1 la caminata por el portón: el mayor desplazamiento por cuadro", camina.paso <= T.cuadro, `${f(camina.paso, 4)} cuerpos (tope ${T.cuadro})`);
     check("tandas M2 el trote al corral: 1,5 cuerpos por segundo como mucho, con su causa a la vista", camina.vel <= M.TOPES_TROTE.velocidad * T.tolerancia, `la mayor ${f(camina.vel)} cuerpos/s`);
@@ -185,7 +204,14 @@ for (const n of soloNavegador ? [] : tamanos) {
     const veces = cuota / cuadros / (1 / L);
     check("la punta de la ganadora en los últimos 8 s: 1,45 veces lo que le toca o menos (meta revisada; la dirección pedía 1,25: con la ganadora entre las cuatro de adelante a T-3, parejo, el piso es 1,35, y manda el reparto)", veces <= 1.45, `${f(veces)} veces`);
   }
-  datos.plan[n] = { rondas: hechas, peor, sinCausa, pases, lentos, causas };
+  datos.plan[n] = { rondas: hechas, peor, sinCausa, pases, cortos, causas };
+}
+if (!soloNavegador && todas.pasesSin + todas.pasesCon > 0) {
+  const V = M.VARAS_CRUCE;
+  const sinOk = todas.pasesSin === 0 || 1 - todas.cortosSin / todas.pasesSin > V.sinObstaculo.parte;
+  const conOk = todas.pasesCon === 0 || 1 - todas.cortosCon / todas.pasesCon >= V.conObstaculo.parte;
+  console.log(`\nLos adelantamientos, con ${tamanos.join(", ")} personas juntas`);
+  check("M4 dos varas: sin obstáculo encima, más de 0,88 en 1,2 s o más; con un obstáculo encima, nueve de cada diez en 0,8 s o más", sinOk && conOk, `sin obstáculo ${f(1 - todas.cortosSin / Math.max(1, todas.pasesSin), 3)} (${todas.pasesSin - todas.cortosSin} de ${todas.pasesSin}), con obstáculo ${f(1 - todas.cortosCon / Math.max(1, todas.pasesCon), 3)} (${todas.pasesCon - todas.cortosCon} de ${todas.pasesCon})`);
 }
 
 /* ================================================================== 2. lo dibujado */
