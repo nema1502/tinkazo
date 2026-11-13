@@ -268,21 +268,43 @@ describe("el pago", () => {
     expect(m.sueltos()).toEqual([expect.objectContaining({ activo: "USDC", monto: 5_000_000, motivo: "sobrante", orden: ID })]);
   });
 
-  it("un pago entero a una orden ya pagada da otro paquete igual; uno chico, sobrante", async () => {
+  it("un pago a una orden ya pagada no da otro paquete: va entero a los sueltos como repetido, con su orden", async () => {
     const m = montarPagos();
     const ana = await conOrden(m);
     m.h.sumar({ monto: "2.0000000", nota: NOTA });
     await m.pago(ana.token, ana.id);
-    const [otra] = m.h.sumar({ monto: "2.0000000", nota: NOTA });
-    m.h.sumar({ monto: "0.5000000", nota: NOTA });
-    await m.pago(ana.token, ana.id);
-    expect(m.derechosDe("usr_ana").map((d) => d.ref)).toEqual([`orden:${ID}`, `orden:${ID}:${otra}`]);
-    expect(m.cupos.quedan({ cuenta: ana.cuenta as string }, m.hora()).quedan).toBe(6);
-    expect(m.sueltos()).toEqual([expect.objectContaining({ monto: 5_000_000, motivo: "sobrante", orden: ID })]);
-    expect(m.anotado.filter(([e]) => e === "alta-pago").map(([, d]) => d)).toEqual([
-      { producto: "alta", repetida: 0 },
-      { producto: "alta", repetida: 1 },
+    // Uno entero, uno chico y uno de más: ninguno da nada.
+    const [entero, chico, grande] = m.h.sumar({ monto: "2.0000000", nota: NOTA }, { monto: "0.5000000", nota: NOTA }, { monto: "5.0000000", memoId: memoIdDe(ID) });
+    expect(await m.pago(ana.token, ana.id)).toEqual({ estado: 200, cuerpo: { pagada: true, sorteos: { quedan: 3, proximoVence: { fecha: m.hora() + 365 * DIA_MS, cuantos: 3 } }, sigue: "activar" } });
+    expect(m.derechosDe("usr_ana").map((d) => d.ref)).toEqual([`orden:${ID}`]);
+    expect(m.cupos.quedan({ cuenta: ana.cuenta as string }, m.hora()).quedan).toBe(3);
+    expect(m.filasDePagos()).toHaveLength(1);
+    expect(m.sueltos()).toEqual([
+      { operacion: entero, activo: "USDC", monto: 20_000_000, nota: NOTA, motivo: "repetido", estado: "suelto", orden: ID },
+      { operacion: chico, activo: "USDC", monto: 5_000_000, nota: NOTA, motivo: "repetido", estado: "suelto", orden: ID },
+      { operacion: grande, activo: "USDC", monto: 50_000_000, nota: memoIdDe(ID), motivo: "repetido", estado: "suelto", orden: ID },
     ]);
+    expect(m.anotado.filter(([e]) => e === "alta-pago").map(([, d]) => d)).toEqual([{ producto: "alta" }]);
+    expect(m.anotado.filter(([e]) => e === "pago-suelto").map(([, d]) => d?.motivo)).toEqual(["repetido", "repetido", "repetido"]);
+    // Leer otra vez no cambia nada.
+    m.sql.exec("DELETE FROM ajustes WHERE clave = ?", AJUSTE_CURSOR);
+    await m.pago(ana.token, ana.id);
+    expect(m.sueltos()).toHaveLength(3);
+    expect(m.derechosDe("usr_ana")).toHaveLength(1);
+  });
+
+  it("un pago repetido no da nada, con la venta pausada o abierta", async () => {
+    const m = montarPagos();
+    const ana = await conOrden(m, "usr_ana");
+    m.h.sumar({ monto: "2.0000000", nota: NOTA });
+    await m.pago(ana.token, ana.id);
+    m.cupos.fijarAjuste(AJUSTE_VENTA_PAUSADA, "1", m.hora());
+    m.h.sumar({ monto: "2.0000000", nota: NOTA });
+    m.cupos.fijarAjuste(AJUSTE_VENTA_PAUSADA, "0", m.hora());
+    m.h.sumar({ monto: "2.0000000", nota: NOTA });
+    await m.pago(ana.token, ana.id);
+    expect(m.derechosDe("usr_ana")).toHaveLength(1);
+    expect(m.sueltos().map((s) => s.motivo)).toEqual(["repetido", "repetido"]);
   });
 
   it("una orden vencida que se paga se respeta: la plata llegó", async () => {

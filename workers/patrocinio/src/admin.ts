@@ -8,11 +8,18 @@
  *     POST /v1/admin/altas            {cuenta, sorteos, dias, ref}                              200 {ok, repetido, altaNueva, sorteos}
  *     POST /v1/admin/derechos         {cuenta, sorteos, dias, ref}                              200 {ok, repetido, sorteos}   409 fuera-del-libro
  *     POST /v1/admin/ordenes/pagada   {orden, metodo:"a-mano"|"qr-bs", ref}                     200 {ok, repetido}   404 orden
+ *     POST /v1/admin/ordenes/cerrar   {orden, ref}                                              200 {ok, repetido, recibido, devolver}
+ *          409 orden-pagada | sin-pagos   404 orden   502 red   (se cierra ANTES de devolver a mano lo recibido)
  *     GET  /v1/admin/sueltos          200 {sueltos:[…], parciales?:[…], horizon?:false}
  *     POST /v1/admin/sueltos/asignar  {operacion, orden} | {operacion, devuelto:true, ref}      200 {ok, pagada, sobrante} | {ok, repetido}
+ *     POST /v1/admin/compras/piloto   {cuenta, accion:"sumar"|"sacar"}                          200 {ok, cuenta, enLista, cambio, total, todos?}   400 techo
+ *     GET  /v1/admin/compras/piloto   200 {cuentas:[{cuenta, desde}], variable:[…], total, todos?}   (todos: true con COMPRAS_QR_PILOTO = "todos")
  *   Con `ADMIN_TOKEN` (operar, como las rutas de siempre):
  *     POST /v1/admin/altas/pausar | reanudar                                                    200 {pausadas}
  *     POST /v1/admin/ventas/pausar | reanudar                                                   200 {ventaPausada}
+ *     POST /v1/admin/compras/cerrar   {compra, ref} | {usuario, ref}       200 {ok, repetido, compra, producto, motivo, cargada, reemplazadas}
+ *     POST /v1/admin/compras/soltar   {ref}                                200 {ok, soltadas, reserva}
+ *          404 compra   409 orden-con-pago | compra-pagada   502 red   (anula una compra con QR que no se pagó)
  *
  * La clave de operar no crea cupones ni da sorteos, y la de cupones no apaga ni pausa nada. Sin la clave de una ruta
  * cargada, esa ruta no existe (404, como las de administración de siempre). Solo en mainnet con `ALTAS=1`: en testnet
@@ -26,6 +33,7 @@
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Altas, FORMA_LOTE, MAX_CODIGOS_POR_PEDIDO, SECRETO_MINIMO, huella, normalizar } from "./altas";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type LectorDeCobros, normalizarOrden, usdcTexto } from "./cobros";
+import { type ComprasQr, TECHO_PILOTO } from "./compras";
 import { type Config } from "./config";
 import { type Cupos, entre } from "./cupos";
 import { json } from "./http";
@@ -43,6 +51,8 @@ export const CLAVE_MINIMA = 32;
 const MAX_CUERPO = 64 * 1024;
 /** El `ref` de un alta a mano: lo que la explica (`pruebas-internas`, `venta-qr-0001`). */
 const FORMA_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/** El id que Pollar le da a una persona, como lo muestra la exportación (`compras_qr.usuario`). */
+const FORMA_USUARIO = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
 
 export type AccionAdmin =
   | "cupones-crear"
@@ -53,10 +63,15 @@ export type AccionAdmin =
   | "altas-reanudar"
   | "derechos-dar"
   | "ordenes-pagada"
+  | "ordenes-cerrar"
   | "sueltos-lista"
   | "sueltos-asignar"
   | "ventas-pausar"
-  | "ventas-reanudar";
+  | "ventas-reanudar"
+  | "piloto-cambiar"
+  | "piloto-lista"
+  | "compras-cerrar"
+  | "compras-soltar";
 
 /** El id de una operación de Horizon: un entero más grande que uno seguro de JavaScript, siempre en texto. */
 const OPERACION = /^\d{1,30}$/;
@@ -79,6 +94,8 @@ export interface DependenciasAdmin {
   cobros?: Cobros | null;
   /** Quien lee los pagos en Horizon: la lista de sueltos lee antes lo nuevo. Sin él, lista lo que ya se sabía. */
   lector?: LectorDeCobros | null;
+  /** La compra con QR, para la lista del piloto. Sin esto, lo del piloto da `503 apagado`. */
+  compras?: ComprasQr | null;
 }
 
 export class Administracion {
@@ -122,14 +139,102 @@ export class Administracion {
         return this.dar(o);
       case "sueltos-lista":
         return this.sueltosLista();
+      case "ordenes-cerrar":
+        return this.cerrarOrden(o);
       case "ordenes-pagada":
       case "sueltos-asignar":
       case "ventas-pausar":
       case "ventas-reanudar":
         return this.pagos(accion, o);
+      case "piloto-cambiar":
+      case "piloto-lista":
+        return this.piloto(accion, o);
+      case "compras-cerrar":
+        return this.cerrarCompra(o);
+      case "compras-soltar":
+        return this.soltarCompras(o);
       default:
         return r(404, { motivo: "accion" });
     }
+  }
+
+  /**
+   * La lista del piloto de la compra con QR: `sumar` o `sacar` una cuenta G…, y la lista. Las de `COMPRAS_QR_PILOTO`
+   * vienen aparte (`variable`) y se cambian cambiando la variable. Con `COMPRAS_QR_PILOTO = "todos"` las dos respuestas
+   * suman `todos: true`: la compra está abierta a cualquier cuenta y la lista no frena a nadie. Sacar a alguien no toca lo
+   * que ya está en camino: su permiso de terminar sigue. Sumar más allá de `TECHO_PILOTO` da `400 techo`. La bitácora no
+   * lleva la cuenta.
+   */
+  private piloto(accion: AccionAdmin, o: Record<string, unknown>): Respuesta {
+    const compras = this.d.compras;
+    if (!compras) return r(503, { motivo: "apagado", detalle: "config" });
+    const total = () => new Set([...compras.piloto().map((x) => x.cuenta), ...this.d.cfg.comprasQrPiloto]).size;
+    const todos = this.d.cfg.comprasQrTodos ? { todos: true } : {};
+    if (accion === "piloto-lista") return r(200, { cuentas: compras.piloto(), variable: [...this.d.cfg.comprasQrPiloto].sort(), total: total(), ...todos });
+    const { cuenta } = o;
+    if (typeof cuenta !== "string" || !StrKey.isValidEd25519PublicKey(cuenta) || (o.accion !== "sumar" && o.accion !== "sacar")) return r(400, { motivo: "cuerpo" });
+    const ahora = this.reloj();
+    if (o.accion === "sumar") {
+      const res = this.d.cupos.transaccion(() => compras.sumarPiloto(cuenta, ahora));
+      if (!res.ok) return res.motivo === "techo" ? r(400, { motivo: "techo", que: "piloto", max: TECHO_PILOTO }) : r(400, { motivo: "cuerpo" });
+      if (res.cambio) this.registrar("admin-piloto", { accion: "sumar", total: total() });
+      return r(200, { ok: true, cuenta, enLista: true, cambio: res.cambio, total: total(), ...todos });
+    }
+    const res = this.d.cupos.transaccion(() => compras.sacarPiloto(cuenta));
+    if (res.cambio) this.registrar("admin-piloto", { accion: "sacar", total: total() });
+    return r(200, { ok: true, cuenta, enLista: compras.enPiloto(cuenta), cambio: res.cambio, total: total(), ...todos });
+  }
+
+  /**
+   * `POST /v1/admin/compras/cerrar` `{compra, ref}` o `{usuario, ref}`: anula una compra con QR que no se pagó
+   * (`ComprasQr.anular`), por su número o la que esa persona tiene en curso. Es lo que suelta el recargo de una compra
+   * que se cargó y nunca tuvo QR, y la reserva de una que quedó a medias. Si la compra tiene órdenes sin pagar, primero
+   * se leen los pagos nuevos: con Horizon caído, `502 red` y no se anula a ciegas una orden que pudo quedar pagada. Otra
+   * vez es lo mismo (`repetido`). `404 compra`, `409 orden-con-pago` (una orden suya recibió algo: se resuelve antes con
+   * los sueltos o cerrando esa orden) y `409 compra-pagada`. La bitácora no lleva la persona.
+   */
+  private async cerrarCompra(o: Record<string, unknown>): Promise<Respuesta> {
+    const compras = this.d.compras;
+    if (!compras) return r(503, { motivo: "apagado", detalle: "config" });
+    const { compra, usuario, ref } = o;
+    const porNumero = compra !== undefined;
+    if (porNumero === (usuario !== undefined) || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
+    if (porNumero ? !entre(compra, 1, Number.MAX_SAFE_INTEGER) : typeof usuario !== "string" || !FORMA_USUARIO.test(usuario)) return r(400, { motivo: "cuerpo" });
+    const antes = porNumero ? compras.porId(compra as number) : compras.activa(usuario as string, this.reloj());
+    if (!antes) return r(404, { motivo: "compra" });
+    const sinPagar = () => {
+      const c = compras.porId(antes.id);
+      return c !== null && c.cerrada === null && compras.ordenesSinPagarDe(c.id).length > 0;
+    };
+    const leido = sinPagar();
+    if (leido && !(this.d.lector && (await this.d.lector.leer()).ok)) return r(502, { motivo: "red" });
+
+    // Desde acá, sin await: mirar y anular es una sola jugada.
+    const ahora = this.reloj();
+    const res = this.d.cupos.transaccion(() => {
+      // Una orden atada que nació mientras se esperaba no se leyó: que se pida otra vez.
+      if (!leido && sinPagar()) return { ok: false as const, motivo: "red" as const };
+      return compras.anular(antes.id, ahora, ref);
+    });
+    if (!res.ok) return res.motivo === "compra" ? r(404, { motivo: "compra" }) : res.motivo === "red" ? r(502, { motivo: "red" }) : r(409, { motivo: res.motivo });
+    const c = res.compra;
+    if (!res.repetido) this.registrar("admin-compra", { accion: "anulada", producto: c.producto, cargada: c.cargada !== null ? 1 : 0, reemplazadas: res.reemplazadas });
+    return r(200, { ok: true, repetido: res.repetido, compra: c.id, producto: c.producto, motivo: c.motivo, cargada: c.cargada !== null, reemplazadas: res.reemplazadas });
+  }
+
+  /**
+   * `POST /v1/admin/compras/soltar` `{ref}`: suelta de una vez todas las compras con QR sin cargar (`ComprasQr.soltarSinCargar`),
+   * así su reserva vuelve enseguida para los canjes. Las cargadas no se tocan. Anda con la venta cerrada. Otra vez no
+   * cambia nada (`soltadas: 0`). La bitácora lleva solo las cifras.
+   */
+  private soltarCompras(o: Record<string, unknown>): Respuesta {
+    const compras = this.d.compras;
+    if (!compras) return r(503, { motivo: "apagado", detalle: "config" });
+    if (typeof o.ref !== "string" || !FORMA_REF.test(o.ref)) return r(400, { motivo: "cuerpo" });
+    const ahora = this.reloj();
+    const res = this.d.cupos.transaccion(() => compras.soltarSinCargar(ahora));
+    if (res.soltadas > 0) this.registrar("admin-compra", { accion: "soltadas", soltadas: res.soltadas, reserva: res.reserva });
+    return r(200, { ok: true, soltadas: res.soltadas, reserva: res.reserva });
   }
 
   /** Los códigos llegan en claro: se normalizan, se convierten en huella y recién ahí se escriben, todos o ninguno. */
@@ -227,6 +332,24 @@ export class Administracion {
     return r(200, { sueltos: cobros.sueltos(), ...(parciales.length ? { parciales } : {}), ...(lectura.ok ? {} : { horizon: false }) });
   }
 
+  /**
+   * `POST /v1/admin/ordenes/cerrar`: cierra una orden pagada a medias para devolver lo recibido, y dice qué devolver y a
+   * quién. Primero lee los pagos nuevos: si la orden ya se completó no se cierra (`409 orden-pagada`), y con Horizon caído
+   * tampoco (`502 red`): no se cierra a ciegas una orden que pudo quedar pagada. Lo que llegue después va a los sueltos.
+   */
+  private async cerrarOrden(o: Record<string, unknown>): Promise<Respuesta> {
+    const cobros = this.d.cobros;
+    if (!cobros) return r(503, { motivo: "apagado", detalle: "config" });
+    const orden = normalizarOrden(o.orden);
+    const { ref } = o;
+    if (!orden || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
+    if (this.d.lector && !(await this.d.lector.leer()).ok) return r(502, { motivo: "red" });
+    const res = cobros.cerrar({ orden, ref });
+    if (!res.ok) return res.motivo === "orden" ? r(404, { motivo: "orden" }) : r(409, { motivo: res.motivo });
+    if (!res.repetido) this.registrar("admin-cerrada", { producto: cobros.orden(orden)?.producto ?? "?" });
+    return r(200, { ok: true, repetido: res.repetido, recibido: usdcTexto(res.recibido), devolver: res.devolver.map((p) => ({ operacion: p.operacion, de: p.de, cantidad: usdcTexto(p.monto), tx: p.tx })) });
+  }
+
   /** Las órdenes pagadas por fuera, los pagos sueltos y la venta pausada. */
   private pagos(accion: AccionAdmin, o: Record<string, unknown>): Respuesta {
     const cobros = this.d.cobros;
@@ -238,7 +361,7 @@ export class Administracion {
         const { metodo, ref } = o;
         if (!orden || (metodo !== "a-mano" && metodo !== "qr-bs") || typeof ref !== "string" || !FORMA_REF.test(ref)) return r(400, { motivo: "cuerpo" });
         const res = cobros.marcarPagadaAMano({ orden, metodo, ref, techoAltas: TECHO_ALTAS_DIA, techoSorteos: TECHO_SORTEOS_DIA }, ahora);
-        if (!res.ok) return res.motivo === "orden" ? r(404, { motivo: "orden" }) : r(400, { motivo: "techo", que: res.motivo === "techo-altas" ? "altas" : "sorteos" });
+        if (!res.ok) return res.motivo === "orden" ? r(404, { motivo: "orden" }) : res.motivo === "orden-cerrada" ? r(409, { motivo: "orden-cerrada" }) : r(400, { motivo: "techo", que: res.motivo === "techo-altas" ? "altas" : "sorteos" });
         if (!res.repetido) this.registrar("admin-pagada", { metodo, producto: cobros.orden(orden)?.producto ?? "?" });
         return r(200, { ok: true, repetido: res.repetido });
       }
@@ -255,7 +378,7 @@ export class Administracion {
         const id = normalizarOrden(orden);
         if (devuelto !== undefined || !id) return r(400, { motivo: "cuerpo" });
         const res = cobros.asignar({ operacion, orden: id }, ahora);
-        if (!res.ok) return res.motivo === "ya-resuelto" ? r(409, { motivo: "ya-resuelto", estado: res.estado }) : res.motivo === "no-asignable" ? r(409, { motivo: "no-asignable" }) : r(404, { motivo: res.motivo });
+        if (!res.ok) return res.motivo === "ya-resuelto" ? r(409, { motivo: "ya-resuelto", estado: res.estado }) : res.motivo === "suelto" || res.motivo === "orden" ? r(404, { motivo: res.motivo }) : r(409, { motivo: res.motivo });
         this.registrar("admin-suelto", { accion: "asignado", pagada: res.pagada ? 1 : 0 });
         return r(200, { ok: true, pagada: res.pagada, sobrante: usdcTexto(res.sobrante) });
       }
@@ -301,10 +424,14 @@ const RUTAS: Record<string, { clave: "cupones" | "operar"; metodos: Partial<Reco
   "/v1/admin/altas/reanudar": { clave: "operar", metodos: { POST: "altas-reanudar" } },
   "/v1/admin/derechos": { clave: "cupones", metodos: { POST: "derechos-dar" } },
   "/v1/admin/ordenes/pagada": { clave: "cupones", metodos: { POST: "ordenes-pagada" } },
+  "/v1/admin/ordenes/cerrar": { clave: "cupones", metodos: { POST: "ordenes-cerrar" } },
   "/v1/admin/sueltos": { clave: "cupones", metodos: { GET: "sueltos-lista" } },
   "/v1/admin/sueltos/asignar": { clave: "cupones", metodos: { POST: "sueltos-asignar" } },
   "/v1/admin/ventas/pausar": { clave: "operar", metodos: { POST: "ventas-pausar" } },
   "/v1/admin/ventas/reanudar": { clave: "operar", metodos: { POST: "ventas-reanudar" } },
+  "/v1/admin/compras/piloto": { clave: "cupones", metodos: { POST: "piloto-cambiar", GET: "piloto-lista" } },
+  "/v1/admin/compras/cerrar": { clave: "operar", metodos: { POST: "compras-cerrar" } },
+  "/v1/admin/compras/soltar": { clave: "operar", metodos: { POST: "compras-soltar" } },
 };
 
 /**

@@ -30,6 +30,7 @@ const CLAVES_DE_EJEMPLO = [
   "patrocinadora-baja:saldo-no-leido",
   "creditos-sin-leer",
   "creditos-bajo-el-piso",
+  "creditos-bajo-las-reservas",
   "creditos-bajos",
   "altas-pausadas",
   "firmas-sin-comparar",
@@ -38,6 +39,7 @@ const CLAVES_DE_EJEMPLO = [
   "firmas-sin-explicar:mas-de-200",
   "patrocinio-sin-leer",
   "patrocinio-prendido:sponsor_trustlines",
+  "variables-mal-escritas:recargo-qr",
   "respuesta-invalida",
   "sin-lectura",
   "vigilante-sin-clave",
@@ -129,6 +131,49 @@ describe("las cifras", () => {
     expect(m.texto).toContain("1.200");
     expect(m.texto).toContain("25,3 XLM");
     expect(m.texto).toContain("20,0 XLM");
+  });
+
+  it("los créditos que no cubren las compras con QR en curso: lo que reservan y cuánto falta, y que se frenan canjes y compras", () => {
+    const estado = estadoBien({ creditos: 2400, piso: 2000, margen: 400, reservasCompras: 530 });
+    const m = mensajeDeAlerta({ claves: ["creditos-bajo-las-reservas"], problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx(estado));
+    expect(m.asunto).toBe("Créditos de Pollar bajo las compras en curso: cargá ya");
+    const frase = m.texto.split("\n").find((l) => l.startsWith("Los créditos de Pollar no cubren"));
+    expect(frase).toBe(
+      "Los créditos de Pollar no cubren las compras con QR en curso. Quedan 2.400, el piso es 2.000 y esas compras reservan 530, así que faltan 130. Ya no entran canjes de cupones ni compras nuevas.",
+    );
+    expect(m.texto).toMatch(/Qué hacer: Cargá créditos en el panel de Pollar ahora/);
+    expect(m.texto).toContain("compra anular");
+    // Sin las cifras no se inventa cuánto falta.
+    const sinReservas = mensajeDeAlerta({ claves: ["creditos-bajo-las-reservas"], problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx(estadoBien({ reservasCompras: "x" })));
+    expect(sinReservas.texto).toMatch(/esas compras reservan sin leer, así que faltan sin leer/);
+    // Pesa casi como bajo el piso: va antes que las altas pausadas y que los créditos bajos.
+    const asunto = (claves: string[]) => mensajeDeAlerta({ claves, problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx(estado)).asunto;
+    expect(asunto(["altas-pausadas", "creditos-bajo-las-reservas"])).toBe("Créditos de Pollar bajo las compras en curso: cargá ya y 1 más");
+    expect(asunto(["creditos-bajo-las-reservas", "creditos-bajo-el-piso"])).toBe("Créditos de Pollar bajo el piso: cargá ya y 1 más");
+    // El arreglo es el de los créditos.
+    expect(mensajeDeArreglo({ arreglados: ["creditos-bajo-las-reservas"], siguen: [] }, ctx()).asunto).toBe("Arreglado: créditos de Pollar");
+  });
+
+  it("créditos bajos con compras con QR en curso: lo que sobra se cuenta encima de lo reservado, como lo mide la revisión", () => {
+    const frase = (estado: unknown) =>
+      mensajeDeAlerta({ claves: ["creditos-bajos"], problemas: [], recordatorio: false, arreglados: [], siguen: [] }, ctx(estado)).texto.split("\n").find((l) => l.startsWith("Los créditos de Pollar están cerca"));
+    const conReservas = estadoBien({ creditos: 9000, piso: 2000, margen: 7000, reservasCompras: 6100 });
+    expect(revisarPortero(conReservas).claves).toEqual(["creditos-bajos"]);
+    expect(frase(conReservas)).toBe(
+      "Los créditos de Pollar están cerca del piso. Quedan 9.000, el piso es 2.000 y las compras con QR en curso reservan 6.100, así que sobran 900. El aviso salta con menos de 1.000 de margen.",
+    );
+    // Sin reservas (o en 0), como siempre.
+    for (const estado of [estadoBien({ creditos: 2400, margen: 400 }), estadoBien({ creditos: 2400, margen: 400, reservasCompras: 0 })]) {
+      expect(frase(estado)).toBe("Los créditos de Pollar están cerca del piso. Quedan 2.400 y el piso es 2.000, así que sobran 400. El aviso salta con menos de 1.000 de margen.");
+    }
+  });
+
+  it("las cifras suman lo reservado por las compras con QR en curso solo cuando el portero lo manda", () => {
+    const linea = (estado: unknown) => mensajeDeResumen({ leyo: true, claves: [], problemas: [], horas: 24 }, ctx(estado)).texto.split("\n").find((l) => l.startsWith("- Reservado"));
+    expect(linea(estadoBien({ reservasCompras: 810 }))).toBe("- Reservado por las compras con QR en curso: 810");
+    expect(linea(estadoBien({ reservasCompras: 0 }))).toBe("- Reservado por las compras con QR en curso: 0");
+    expect(linea(estadoBien())).toBeUndefined();
+    expect(linea(estadoBien({ reservasCompras: "810" }))).toBeUndefined();
   });
 
   it("lo que el portero no manda se dice «sin leer» y no se inventa", () => {

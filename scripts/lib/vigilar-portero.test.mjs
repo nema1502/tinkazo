@@ -71,6 +71,21 @@ describe("revisarPortero", () => {
     expect(revisarPortero(bien({ creditos: 1999, piso: 2000 })).problemas).toHaveLength(1);
   });
 
+  it("con compras con QR en curso, los créditos que no cubren el piso más sus reservas son un problema propio, antes que un 402", () => {
+    // Piso 2.000 y 530 reservados por una compra en camino.
+    expect(revisarPortero(bien({ creditos: 2529, piso: 2000, reservasCompras: 530 })).claves).toEqual(["creditos-bajo-las-reservas"]);
+    expect(revisarPortero(bien({ creditos: 2529, piso: 2000, reservasCompras: 530 })).problemas[0]).toMatch(/compras con QR en curso/);
+    // Cubiertas, pero sin el margen encima de las reservas: créditos bajos.
+    expect(revisarPortero(bien({ creditos: 2530, piso: 2000, reservasCompras: 530 })).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero(bien({ creditos: 3529, piso: 2000, reservasCompras: 530 })).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero(bien({ creditos: 3530, piso: 2000, reservasCompras: 530 })).claves).toEqual([]);
+    // Bajo el piso sigue siendo lo más grave.
+    expect(revisarPortero(bien({ creditos: 1999, piso: 2000, reservasCompras: 530 })).claves).toEqual(["creditos-bajo-el-piso"]);
+    // Sin reservas, o sin el campo (la compra con QR apagada), como siempre.
+    expect(revisarPortero(bien({ creditos: 2529, piso: 2000, reservasCompras: 0 })).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero(bien({ creditos: 3000, piso: 2000 })).claves).toEqual([]);
+  });
+
   it("la patrocinadora baja o sin leer: falla, con los motivos que manda el portero", () => {
     expect(revisarPortero(patrocinadoraBaja("150000000")).problemas[0]).toMatch(/saldo-bajo/);
     expect(revisarPortero(bien({ alerta: true, motivoAlerta: "saldo-no-leido", balanceStroops: null })).problemas[0]).toMatch(/saldo-no-leido/);
@@ -731,7 +746,9 @@ describe("principal con --resumen: lo que queda en el resumen de la corrida", ()
 describe("el estado entero, como lo arma el portero de mainnet que está vivo", () => {
   /**
    * Todos los campos de `GET /v1/patrocinio/estado` con las altas prendidas y la venta cerrada: los de `servicio.ts`
-   * (estado), `rutas-altas.ts` (resumen y vigilancia) y `admin.ts` (resumen, con `pagosSueltos` y `ventaPausada`).
+   * (estado), `rutas-altas.ts` (resumen y vigilancia, con `compras` y `pagosConSaldo` dentro de `firmas`) y `admin.ts`
+   * (resumen, con `pagosSueltos` y `ventaPausada`). `reservasCompras` llega solo con la compra con QR prendida o con
+   * alguna en curso.
    */
   const vivo = () => ({
     modo: "portero",
@@ -759,12 +776,22 @@ describe("el estado entero, como lo arma el portero de mainnet que está vivo", 
     pagosSueltos: 0,
     ventaPausada: false,
     firmasSinExplicar: 0,
-    firmas: { cobradas: 19, explicadas: 19, sellos: 12, sorteos: 4, activaciones: 3, completo: true, desde: 1794363600000 },
+    firmas: { cobradas: 19, explicadas: 19, sellos: 12, sorteos: 4, activaciones: 3, compras: 0, pagosConSaldo: 0, completo: true, desde: 1794363600000 },
     patrocinioPollar: { esperado: true, prendidos: [] },
   });
 
   it("con todo en orden no hay ningún problema", () => {
     expect(revisarPortero(vivo())).toEqual({ problemas: [], claves: [] });
+  });
+
+  it("con la compra con QR prendida suma reservasCompras: en 0, o cubiertas con margen, no es ningún problema", () => {
+    expect(revisarPortero({ ...vivo(), reservasCompras: 0 })).toEqual({ problemas: [], claves: [] });
+    expect(revisarPortero({ ...vivo(), reservasCompras: 810 })).toEqual({ problemas: [], claves: [] });
+    // Cubiertas, pero sin los 1.000 de margen encima: créditos bajos. Sin cubrir: su propia clave.
+    expect(revisarPortero({ ...vivo(), reservasCompras: 6100 }).claves).toEqual(["creditos-bajos"]);
+    expect(revisarPortero({ ...vivo(), reservasCompras: 7001 }).claves).toEqual(["creditos-bajo-las-reservas"]);
+    // Lo que no es un número no inventa reservas.
+    for (const raro of [null, "530", -5, Number.NaN]) expect(revisarPortero({ ...vivo(), reservasCompras: raro }).claves, String(raro)).toEqual([]);
   });
 
   it("sin los pagos sueltos ni la venta pausada (un portero que no los manda) tampoco: es un dato que falta, no un problema", () => {

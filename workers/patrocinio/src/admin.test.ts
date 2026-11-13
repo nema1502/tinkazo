@@ -213,7 +213,27 @@ describe("estado y exportar", () => {
     await m.crear([codigo(1)]);
     expect(Object.keys(m.cupos.exportar()).sort()).toEqual(["ajustes", "cuenta_app", "cuentas", "reserva", "uso"]);
     const todo = m.cupos.exportar(true);
-    expect(Object.keys(todo).sort()).toEqual(["ajustes", "altas", "canjes", "consumos", "cuenta_app", "cuentas", "cupones", "derechos", "ordenes", "pagos", "pagos_sueltos", "reserva", "sellos_portero", "uso"]);
+    expect(Object.keys(todo).sort()).toEqual([
+      "ajustes",
+      "altas",
+      "canjes",
+      "compras_anulaciones",
+      "compras_avisos",
+      "compras_piloto",
+      "compras_qr",
+      "compras_qr_ordenes",
+      "consumos",
+      "cuenta_app",
+      "cuentas",
+      "cupones",
+      "derechos",
+      "ordenes",
+      "pagos",
+      "pagos_sueltos",
+      "reserva",
+      "sellos_portero",
+      "uso",
+    ]);
     expect(todo.cupones).toHaveLength(1);
     expect(JSON.stringify(todo)).not.toContain(codigo(1));
   });

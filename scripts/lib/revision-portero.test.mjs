@@ -41,6 +41,37 @@ describe("revision-portero.mjs: la parte pura", () => {
     expect(puro.SIN_LECTURA).toBe("sin-lectura");
     expect(puro.decidirAviso({ claves: [puro.SIN_LECTURA], ahora: new Date(0) }).siguiente.claves).toEqual(["sin-lectura"]);
   });
+
+  it("la clave de los créditos que no cubren las compras con QR en curso vive acá, así la ven el guion y el Worker", () => {
+    const estado = { red: "mainnet", modo: "portero", alerta: false, creditos: 2529, piso: 2000, reservasCompras: 530, firmasSinExplicar: 0, patrocinioPollar: { esperado: true, prendidos: [] } };
+    expect(puro.revisarPortero(estado).claves).toEqual(["creditos-bajo-las-reservas"]);
+    expect(guion.revisarPortero).toBe(puro.revisarPortero);
+    // El texto del registro público no lleva cifras.
+    expect(puro.revisarPortero(estado).problemas[0]).not.toMatch(/\d/);
+  });
+});
+
+describe("las variables mal escritas del portero (faltaAltas)", () => {
+  const bien = { red: "mainnet", modo: "portero", alerta: false, creditos: 99_000, piso: 2000, firmasSinExplicar: 0, patrocinioPollar: { esperado: true, prendidos: [] } };
+
+  it("con nombres avisa, con los nombres limpios y ordenados en la clave y en el texto, sin cifras", () => {
+    const r = puro.revisarPortero({ ...bien, faltaAltas: ["recargo-qr", "compras-qr-piloto"] });
+    expect(r.claves).toEqual(["variables-mal-escritas:compras-qr-piloto,recargo-qr"]);
+    expect(r.problemas[0]).toContain("compras-qr-piloto, recargo-qr");
+    expect(r.problemas[0]).not.toMatch(/\d/);
+    expect(puro.grupoDeClave(r.claves[0])).toBe("variables-mal-escritas");
+    expect(puro.revisarPortero({ ...bien, faltaAltas: ["cupon\r\nsecreto"] }).claves).toEqual(["variables-mal-escritas:cupon secreto"]);
+  });
+
+  it("sin el campo, con la lista vacía o con algo que no es una lista, no avisa nada", () => {
+    for (const faltaAltas of [undefined, [], "recargo-qr", null, 3]) expect(puro.revisarPortero({ ...bien, faltaAltas }).claves, JSON.stringify(faltaAltas)).toEqual([]);
+  });
+
+  it("una variable más es otra clave, así avisa de nuevo", () => {
+    const una = puro.revisarPortero({ ...bien, faltaAltas: ["recargo-qr"] }).claves;
+    const dos = puro.revisarPortero({ ...bien, faltaAltas: ["recargo-qr", "precios"] }).claves;
+    expect(puro.decidirAviso({ claves: dos, recordado: { claves: una, avisadoEn: new Date(0).toISOString() }, ahora: new Date(60_000) }).avisar).toBe(true);
+  });
 });
 
 describe("prendidosLimpios: las banderas del patrocinio, como entran a la clave y al correo", () => {
@@ -82,6 +113,10 @@ describe("arreglados: qué problemas ya avisados dejaron de estar", () => {
     expect(puro.arreglados(["creditos-bajos"], ["creditos-bajo-el-piso"])).toEqual([]);
     expect(puro.arreglados(["creditos-bajo-el-piso"], ["creditos-bajos"])).toEqual([]);
     expect(puro.arreglados(["creditos-bajos"], ["creditos-sin-leer"])).toEqual([]);
+    // Los créditos que no cubren las compras con QR en curso son el mismo problema de créditos, en otro tramo.
+    expect(puro.arreglados(["creditos-bajo-las-reservas"], ["creditos-bajo-el-piso"])).toEqual([]);
+    expect(puro.arreglados(["creditos-bajos"], ["creditos-bajo-las-reservas"])).toEqual([]);
+    expect(puro.arreglados(["creditos-bajo-las-reservas"], [])).toEqual(["creditos-bajo-las-reservas"]);
     expect(puro.arreglados(["patrocinadora-baja:saldo-bajo"], ["patrocinadora-casi-sin-saldo"])).toEqual([]);
     expect(puro.arreglados(["firmas-sin-explicar:mas-de-10"], ["firmas-sin-explicar:mas-de-50"])).toEqual([]);
     expect(puro.arreglados(["patrocinio-prendido:sponsor_trustlines"], ["patrocinio-prendido:sponsor_all_contracts,sponsor_trustlines"])).toEqual([]);
@@ -117,6 +152,7 @@ describe("arreglados: qué problemas ya avisados dejaron de estar", () => {
 describe("grupoDeClave: las claves de un mismo problema que empeora o mejora", () => {
   it("junta los tramos de cada problema", () => {
     expect(puro.grupoDeClave("creditos-bajos")).toBe(puro.grupoDeClave("creditos-bajo-el-piso"));
+    expect(puro.grupoDeClave("creditos-bajo-las-reservas")).toBe(puro.grupoDeClave("creditos-bajo-el-piso"));
     expect(puro.grupoDeClave("patrocinadora-baja:saldo-bajo")).toBe(puro.grupoDeClave("patrocinadora-casi-sin-saldo"));
     expect(puro.grupoDeClave("firmas-sin-explicar:mas-de-10")).toBe(puro.grupoDeClave("firmas-sin-explicar:mas-de-200"));
     expect(puro.grupoDeClave("creditos-bajos")).not.toBe(puro.grupoDeClave("altas-pausadas"));

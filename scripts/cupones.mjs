@@ -14,10 +14,17 @@
  *   node scripts/cupones.mjs sueltos [--json]
  *   node scripts/cupones.mjs asignar --operacion 123456789 --orden ABCD2345
  *   node scripts/cupones.mjs devuelto --operacion 123456789 --ref devolucion-0001
+ *   node scripts/cupones.mjs piloto sumar --cuenta G...
+ *   node scripts/cupones.mjs piloto sacar --cuenta G...
+ *   node scripts/cupones.mjs piloto listar [--json]
+ *   node scripts/cupones.mjs compra anular --compra 12 --ref soporte-0001
+ *   node scripts/cupones.mjs compra anular --usuario <id de la persona en Pollar> --ref soporte-0001
+ *   node scripts/cupones.mjs compra soltar --ref pausa-0001
  *
  * Sin secretos en el repositorio: la clave de cupones sale de `TINKAZO_CUPONES_TOKEN` y va solo en la cabecera
- * `Authorization`; nunca se muestra. El portero es `https://pm.tinkazo.app`; `--base http://127.0.0.1:8793` para probar
- * con `wrangler dev`.
+ * `Authorization`; nunca se muestra. `compra anular` y `compra soltar` van con la clave de operar, que sale de `TINKAZO_OPERAR_TOKEN` o, si
+ * no está, de `ADMIN_TOKEN` (el nombre que tiene en el Worker), y nunca con la de cupones. El portero es
+ * `https://pm.tinkazo.app`; `--base http://127.0.0.1:8793` para probar con `wrangler dev`.
  *
  * `crear` genera los códigos con `crypto.getRandomValues`, escribe en `--salida` el CSV (código y enlace) y
  * `<lote>-tarjetas.html` (ocho por hoja A4, frente y dorso, con su QR) y recién entonces los manda al portero. Si el
@@ -275,6 +282,14 @@ const FORMA_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const FORMA_CUENTA = /^G[A-Z2-7]{55}$/;
 /** El id de una operación de Horizon, como lo muestra `sueltos`. */
 const FORMA_OPERACION = /^\d{1,30}$/;
+/** El número de una compra con QR (`compras_qr.id` en la exportación) y el id de la persona en Pollar (`usuario`). */
+const FORMA_COMPRA = /^[1-9]\d{0,14}$/;
+const FORMA_USUARIO = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/;
+/** Qué hacer con algunos rechazos del portero. */
+const PISTAS = new Map([
+  ["orden-con-pago", ": una orden de esa compra recibió un pago. Resolverlo antes con sueltos, asignar o cerrar"],
+  ["compra-pagada", ": esa compra ya se pagó y no hay recargo que soltar"],
+]);
 const METODOS_PAGADA = ["a-mano", "qr-bs"];
 
 class ErrorDeUso extends Error {}
@@ -294,8 +309,10 @@ function baseDe(texto) {
 }
 
 export function leerArgumentos(argv) {
-  const [orden, ...resto] = argv;
+  const [orden, ...todo] = argv;
   const opciones = {};
+  // `piloto` y `compra` llevan lo que se hace como segunda palabra: sumar, sacar o listar, y anular o soltar.
+  const resto = (orden === "piloto" || orden === "compra") && todo[0] !== undefined && !todo[0].startsWith("--") ? ((opciones.accion = todo[0]), todo.slice(1)) : todo;
   for (let i = 0; i < resto.length; i++) {
     const a = resto[i];
     if (!a.startsWith("--")) throw new ErrorDeUso(`no entiendo "${a}"`);
@@ -331,7 +348,14 @@ const AYUDA = `Uso:
   node scripts/cupones.mjs sueltos [--json]
   node scripts/cupones.mjs asignar --operacion <operación> --orden <orden>
   node scripts/cupones.mjs devuelto --operacion <operación> --ref <ref>
-La clave va en TINKAZO_CUPONES_TOKEN. --base cambia el portero (por defecto ${BASE_POR_DEFECTO}).`;
+  node scripts/cupones.mjs cerrar --orden <orden> --ref <ref>
+  node scripts/cupones.mjs piloto sumar|sacar --cuenta G...
+  node scripts/cupones.mjs piloto listar [--json]
+  node scripts/cupones.mjs compra anular --compra <número> --ref <ref>
+  node scripts/cupones.mjs compra anular --usuario <id de la persona en Pollar> --ref <ref>
+  node scripts/cupones.mjs compra soltar --ref <ref>
+La clave va en TINKAZO_CUPONES_TOKEN. compra anular y compra soltar van con la clave de operar, en TINKAZO_OPERAR_TOKEN (o ADMIN_TOKEN).
+--base cambia el portero (por defecto ${BASE_POR_DEFECTO}).`;
 
 /**
  * Corre una orden. Devuelve el código de salida (0 bien, 1 mal). Todo lo de afuera entra como argumento, para probarlo
@@ -341,18 +365,20 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
   let escritos = [];
   try {
     const { orden, opciones } = leerArgumentos(argv);
-    if (!["crear", "estado", "anular", "admitir", "dar", "pagada", "sueltos", "asignar", "devuelto"].includes(orden)) throw new ErrorDeUso(orden ? `no conozco la orden "${orden}"` : "falta la orden");
+    if (!["crear", "estado", "anular", "admitir", "dar", "pagada", "sueltos", "asignar", "devuelto", "cerrar", "piloto", "compra"].includes(orden)) throw new ErrorDeUso(orden ? `no conozco la orden "${orden}"` : "falta la orden");
     const base = baseDe(opciones.base);
     const clave = String(env.TINKAZO_CUPONES_TOKEN ?? "");
+    const deCupones = { valor: clave, que: "de cupones", variable: "TINKAZO_CUPONES_TOKEN" };
+    const deOperar = { valor: String(env.TINKAZO_OPERAR_TOKEN || env.ADMIN_TOKEN || ""), que: "de operar", variable: "TINKAZO_OPERAR_TOKEN (o ADMIN_TOKEN)" };
 
     /** Un pedido al portero con la clave en la cabecera. Lanza con el estado y el motivo, nunca con la clave. */
-    const pedir = async (metodo, ruta, cuerpo) => {
-      if (clave.length < CLAVE_MINIMA) throw new ErrorDeUso("falta la clave de cupones: cargala en TINKAZO_CUPONES_TOKEN (no la pegues en el comando)");
+    const pedir = async (metodo, ruta, cuerpo, llave = deCupones) => {
+      if (llave.valor.length < CLAVE_MINIMA) throw new ErrorDeUso(`falta la clave ${llave.que}: cargala en ${llave.variable} (no la pegues en el comando)`);
       let res;
       try {
         res = await fetch(`${base}${ruta}`, {
           method: metodo,
-          headers: { Authorization: `Bearer ${clave}`, ...(cuerpo ? { "Content-Type": "application/json" } : {}) },
+          headers: { Authorization: `Bearer ${llave.valor}`, ...(cuerpo ? { "Content-Type": "application/json" } : {}) },
           ...(cuerpo ? { body: JSON.stringify(cuerpo) } : {}),
           signal: AbortSignal.timeout(ESPERA_MS),
         });
@@ -368,7 +394,12 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
       if (!res.ok) {
         const motivo = j && typeof j.motivo === "string" ? j.motivo : "sin motivo";
         const extra = j && typeof j.detalle === "string" ? ` (${j.detalle})` : j && typeof j.que === "string" ? ` (${j.que})` : "";
-        const pista = res.status === 401 ? ": la clave de TINKAZO_CUPONES_TOKEN no es la del portero" : res.status === 404 && motivo === "no-existe" ? ": el portero no tiene cargada la clave de cupones, o no es el de mainnet" : "";
+        const pista =
+          res.status === 401
+            ? `: la clave de ${llave.variable} no es la ${llave.que} del portero`
+            : res.status === 404 && motivo === "no-existe"
+              ? `: el portero no tiene cargada la clave ${llave.que}, o no es el de mainnet`
+              : (PISTAS.get(motivo) ?? "");
         throw new Error(`el portero respondió ${res.status} ${motivo}${extra}${pista}`);
       }
       return j ?? {};
@@ -506,7 +537,7 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
         }
       }
       if (parciales.length) {
-        log(`${parciales.length} órdenes pagadas a medias (se completan con la misma nota, se marcan con pagada o se devuelve lo recibido):`);
+        log(`${parciales.length} órdenes pagadas a medias (se completan con la misma nota, se marcan con pagada, o se cierran con cerrar y después se devuelve lo recibido):`);
         for (const o of parciales) log(`  orden ${o.id} (${o.producto}): llegaron ${o.recibido} de ${o.total} USDC, falta llegar a ${o.minimo}; ${o.vencida ? "venció" : "vence"} el ${cuandoDe(o.vence)}`);
       }
       return 0;
@@ -516,6 +547,70 @@ export async function ejecutar(argv, { fetch = globalThis.fetch, env = process.e
       const cuerpo = { operacion: operacion(), orden: ordenDe() };
       const r = await pedir("POST", "/v1/admin/sueltos/asignar", cuerpo);
       log(`Operación ${cuerpo.operacion} asignada a la orden ${cuerpo.orden}: ${r.pagada ? "la orden quedó pagada" : "la orden todavía no llega al mínimo"}.${r.sobrante && r.sobrante !== "0" ? ` Sobran ${r.sobrante}: quedan en sueltos para devolver.` : ""}`);
+      return 0;
+    }
+
+    if (orden === "piloto") {
+      // La lista de quienes pueden comprar con QR. Sacar a alguien no frena lo que ya tiene en camino.
+      if (opciones.accion === "listar") {
+        const r = await pedir("GET", "/v1/admin/compras/piloto");
+        if (opciones.json) {
+          log(JSON.stringify(r, null, 2));
+          return 0;
+        }
+        const cuentas = Array.isArray(r.cuentas) ? r.cuentas : [];
+        const variable = Array.isArray(r.variable) ? r.variable : [];
+        if (r.todos === true) log("La compra con QR está abierta a todas las cuentas (COMPRAS_QR_PILOTO = todos): la lista no frena a nadie. El freno es COMPRAS_QR_DIA, las personas nuevas por día.");
+        log(`En la lista del piloto: ${r.total ?? cuentas.length + variable.length} cuentas.`);
+        for (const c of cuentas) {
+          const f = enBolivia(Number(c.desde));
+          log(`  ${visible(c.cuenta)}, sumada el ${f.d} de ${MESES_ES[f.mes]}`);
+        }
+        for (const c of variable) log(`  ${visible(c)}, por la variable COMPRAS_QR_PILOTO (se saca cambiando la variable)`);
+        return 0;
+      }
+      if (opciones.accion !== "sumar" && opciones.accion !== "sacar") throw new ErrorDeUso("piloto va con sumar, sacar o listar");
+      if (typeof opciones.cuenta !== "string" || !FORMA_CUENTA.test(opciones.cuenta)) throw new ErrorDeUso("--cuenta va como una cuenta de Stellar (G...)");
+      const r = await pedir("POST", "/v1/admin/compras/piloto", { cuenta: opciones.cuenta, accion: opciones.accion });
+      if (opciones.accion === "sumar") log(r.cambio ? `Cuenta sumada al piloto. Son ${r.total}.` : `La cuenta ya estaba en el piloto. Son ${r.total}.`);
+      else log(r.cambio ? `Cuenta sacada del piloto${r.enLista ? ", pero sigue por la variable COMPRAS_QR_PILOTO" : ""}. Lo que ya tenía en camino sigue. Son ${r.total}.` : `La cuenta no estaba en la lista de administración${r.enLista ? " (está por la variable COMPRAS_QR_PILOTO)" : ""}. Son ${r.total}.`);
+      if (r.todos === true) log("Atención: COMPRAS_QR_PILOTO = todos abre la compra con QR a todas las cuentas, así que la lista no frena a nadie. Para frenar a una persona, cambiar la variable.");
+      return 0;
+    }
+
+    if (orden === "compra") {
+      if (opciones.accion === "soltar") {
+        // Suelta de una vez todas las compras con QR sin cargar: su reserva vuelve enseguida para los canjes. Las cargadas
+        // no se tocan (tienen su dinero en camino). Va con la clave de operar, nunca con la de cupones.
+        if (opciones.compra !== undefined || opciones.usuario !== undefined) throw new ErrorDeUso("compra soltar va sin --compra ni --usuario: suelta todas las compras sin cargar");
+        const r = await pedir("POST", "/v1/admin/compras/soltar", { ref: ref() }, deOperar);
+        log(r.soltadas > 0 ? `Se soltaron ${r.soltadas} compras sin cargar: volvieron ${r.reserva} créditos. Las cargadas no se tocaron.` : "No había compras sin cargar: no se cambió nada.");
+        return 0;
+      }
+      // Anula una compra con QR que no se pagó: suelta su recargo y su reserva. Va con la clave de operar, nunca con la de cupones.
+      if (opciones.accion !== "anular") throw new ErrorDeUso("compra va con anular o con soltar");
+      const porNumero = opciones.compra !== undefined;
+      if (porNumero === (opciones.usuario !== undefined)) throw new ErrorDeUso("compra anular va con --compra o con --usuario, uno solo");
+      if (porNumero && !FORMA_COMPRA.test(opciones.compra)) throw new ErrorDeUso("--compra va como el número de la compra (compras_qr, id, en la exportación)");
+      if (!porNumero && !FORMA_USUARIO.test(opciones.usuario)) throw new ErrorDeUso("--usuario va como el id de la persona en Pollar (compras_qr, usuario, en la exportación)");
+      const cuerpo = { ...(porNumero ? { compra: Number(opciones.compra) } : { usuario: opciones.usuario }), ref: ref() };
+      const r = await pedir("POST", "/v1/admin/compras/cerrar", cuerpo, deOperar);
+      if (r.repetido) log(`La compra ${r.compra} ya estaba cerrada (${r.motivo ?? "sin motivo"}): no se cambió nada.`);
+      else
+        log(
+          `Compra ${r.compra} (${r.producto}) anulada: ${r.cargada ? "su recargo ya no va en las órdenes de esa persona y " : ""}su reserva de créditos se soltó.${r.reemplazadas ? ` Se cerraron ${r.reemplazadas} órdenes sin pagar que lo llevaban: lo que llegue con su nota queda en sueltos.` : ""}`,
+        );
+      return 0;
+    }
+
+    if (orden === "cerrar") {
+      // Primero se cierra la orden y después se devuelve: un pago que llegue en el medio no la completa con plata ya devuelta.
+      const id = ordenDe();
+      const r = await pedir("POST", "/v1/admin/ordenes/cerrar", { orden: id, ref: ref() });
+      const devolver = Array.isArray(r.devolver) ? r.devolver : [];
+      log(r.repetido ? `La orden ${id} ya estaba cerrada. Lo que había que devolver:` : `Orden ${id} cerrada. Ahora devolver ${r.recibido} USDC a mano desde la cuenta de cobros:`);
+      for (const p of devolver) log(`  ${p.cantidad} USDC a ${visible(p.de)} (operación ${p.operacion}), transacción ${visible(p.tx)}`);
+      log("La orden ya no se completa: lo que llegue después con esa nota queda en sueltos, para devolverlo también.");
       return 0;
     }
 

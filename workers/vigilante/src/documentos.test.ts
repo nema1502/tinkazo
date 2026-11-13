@@ -145,6 +145,7 @@ describe("la hoja de operación", () => {
       "modo:sin-leer",
       "portero-sin-llave",
       "creditos-bajo-el-piso",
+      "creditos-bajo-las-reservas",
       "creditos-bajos",
       "creditos-sin-leer",
       "patrocinadora-casi-sin-saldo",
@@ -155,6 +156,7 @@ describe("la hoja de operación", () => {
       "firmas-sin-comparar",
       "patrocinio-prendido:x",
       "patrocinio-sin-leer",
+      "variables-mal-escritas:x",
       "no-es-mainnet",
       "respuesta-invalida",
       "sin-lectura",
@@ -280,6 +282,29 @@ describe("lo que la revisión lee del portero, tal como lo manda", () => {
     expect(cuerpo).toContain("modo: this.modo(),");
     expect(cuerpo).toContain("llave: this.firmante?.clavePublica ?? null,");
     expect(cuerpo).toContain("red: this.cfg.red,");
+  });
+
+  it("con la compra con QR, estado suma reservasCompras (un número, del resumen de las altas) y firmas suma compras y pagosConSaldo", () => {
+    const rutas = leer("workers/patrocinio/src/rutas-altas.ts");
+    const resumen = rutas.slice(rutas.indexOf("async resumen(): Promise<Record<string, unknown>>"), rutas.indexOf("async cargaAbierta(): Promise<boolean>"));
+    expect(resumen, "resumen() del portero cambió de forma").toContain("const reservas = this.reservasCompras(ahora);");
+    // Solo con la compra con QR prendida o con alguna en curso: sin el campo, la revisión cuenta cero.
+    expect(resumen).toContain("...(this.d.cfg.comprasQr || reservas > 0 ? { reservasCompras: reservas } : {}),");
+    expect(rutas).toMatch(/reservasCompras\(ahora: number\): number \{/);
+    const desdeVigilancia = rutas.indexOf("async vigilancia(): Promise<Record<string, unknown>>");
+    expect(desdeVigilancia, "vigilancia() del portero cambió de forma").toBeGreaterThan(-1);
+    const vigilancia = rutas.slice(desdeVigilancia, rutas.indexOf("\n  async ", desdeVigilancia + 1));
+    expect(vigilancia, "vigilancia() del portero cambió de forma").toContain("const q = this.d.compras?.firmas(desde) ?? { compras: 0, pagosConSaldo: 0 };");
+    expect(vigilancia).toContain("firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },");
+    expect(leer("workers/patrocinio/src/compras.ts")).toContain("firmas(desde: number): { compras: number; pagosConSaldo: number } {");
+    // Las dos partes llegan a /v1/patrocinio/estado junto con lo de servicio.ts.
+    const index = leer("workers/patrocinio/src/index.ts");
+    expect(index).toContain("...(await this.puerta.resumen())");
+    expect(index).toContain("...(await this.puerta.vigilancia())");
+    // La revisión las lee con esos nombres, y la base de las pruebas del vigilante trae las firmas como las manda.
+    const modulo = leer("scripts/lib/revision-portero.mjs");
+    expect(modulo).toContain("e.reservasCompras");
+    expect(Object.keys(estadoBien().firmas as object).sort()).toEqual(["activaciones", "cobradas", "completo", "compras", "desde", "explicadas", "pagosConSaldo", "sellos", "sorteos"]);
   });
 
   it("el README del portero cuenta, entre lo que mira la vigilancia, el portero apagado, el devuelto a Pollar y el que no tiene su llave", () => {

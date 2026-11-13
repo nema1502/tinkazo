@@ -117,10 +117,34 @@ const CATALOGO: Record<string, Entrada> = {
     },
     hacer: () => "Cargá créditos en el panel de Pollar ahora. Cuánto cargar está en la hoja de operación (docs/operacion.md), en Antes del evento.",
   },
+  "creditos-bajo-las-reservas": {
+    asunto: () => "Créditos de Pollar bajo las compras en curso: cargá ya",
+    // Casi tan grave como bajo el piso: los canjes ya se frenaron y a quien tiene su dinero en camino le puede faltar un paso.
+    gravedad: () => 89,
+    frase: (_c, e) => {
+      const creditos = numero(e.creditos);
+      const piso = numero(e.piso);
+      const reservas = numero(e.reservasCompras);
+      const falta = creditos === null || piso === null || reservas === null ? SIN_LEER : miles(piso + reservas - creditos);
+      return `Los créditos de Pollar no cubren las compras con QR en curso. Quedan ${miles(e.creditos)}, el piso es ${miles(e.piso)} y esas compras reservan ${miles(e.reservasCompras)}, así que faltan ${falta}. Ya no entran canjes de cupones ni compras nuevas.`;
+    },
+    hacer: () =>
+      "Cargá créditos en el panel de Pollar ahora. Una compra que quedó a medias se anula con cupones.mjs compra anular y suelta su reserva (docs/operacion.md, La compra con QR).",
+  },
   "creditos-bajos": {
     asunto: () => "Créditos de Pollar bajos: cargá hoy",
     gravedad: () => 50,
-    frase: (_c, e) => `Los créditos de Pollar están cerca del piso. Quedan ${miles(e.creditos)} y el piso es ${miles(e.piso)}, así que sobran ${miles(margenDe(e))}. El aviso salta con menos de 1.000 de margen.`,
+    frase: (_c, e) => {
+      // Con compras con QR en curso, el margen se cuenta encima de lo que reservan, como en la revisión.
+      const reservas = numero(e.reservasCompras);
+      if (reservas !== null && reservas > 0) {
+        const creditos = numero(e.creditos);
+        const piso = numero(e.piso);
+        const sobran = creditos === null || piso === null ? SIN_LEER : miles(creditos - piso - reservas);
+        return `Los créditos de Pollar están cerca del piso. Quedan ${miles(e.creditos)}, el piso es ${miles(e.piso)} y las compras con QR en curso reservan ${miles(reservas)}, así que sobran ${sobran}. El aviso salta con menos de 1.000 de margen.`;
+      }
+      return `Los créditos de Pollar están cerca del piso. Quedan ${miles(e.creditos)} y el piso es ${miles(e.piso)}, así que sobran ${miles(margenDe(e))}. El aviso salta con menos de 1.000 de margen.`;
+    },
     hacer: () => "Cargá créditos en el panel de Pollar hoy, antes de que bajen del piso. Cuánto cargar está en la hoja de operación (docs/operacion.md).",
   },
   "creditos-sin-leer": {
@@ -180,6 +204,15 @@ const CATALOGO: Record<string, Entrada> = {
     gravedad: () => 30,
     frase: () => "No se pudo leer el patrocinio de la app en Pollar.",
     hacer: () => "Mirá el estado a mano y revisá el patrocinio en el panel de Pollar.",
+  },
+  "variables-mal-escritas": {
+    asunto: () => "Una variable del portero está mal escrita",
+    gravedad: () => 55,
+    frase: (clave) => {
+      const nombres = sufijo(clave);
+      return `Hay variables del portero mal escritas o secretos que faltan, y lo que depende de ellos quedó cerrado${nombres ? `. Son: ${nombres.split(",").join(", ")}` : ""}.`;
+    },
+    hacer: () => "Corregí la variable en wrangler.toml o cargá el secreto, y desplegá de nuevo. Qué cierra cada una está en la hoja de operación (docs/operacion.md).",
   },
   "no-es-mainnet": {
     asunto: () => "El vigilante mira el portero equivocado",
@@ -288,6 +321,8 @@ function cifras(c: Contexto): string[] {
     `- Créditos de Pollar: ${miles(e.creditos)}${creditosDeAntes(e, c.ahora)}`,
     `- Piso: ${miles(e.piso)}`,
     `- Margen sobre el piso: ${miles(margenDe(e))}`,
+    // Lo reservado por las compras con QR en curso, solo cuando el portero lo manda (con la compra con QR prendida o en curso).
+    ...(numero(e.reservasCompras) !== null ? [`- Reservado por las compras con QR en curso: ${miles(e.reservasCompras)}`] : []),
     `- Saldo de la cuenta que paga: ${xlm(e.balanceStroops)}${nivel}`,
     `- Altas de cuentas nuevas: ${altas}`,
     `- Cobros de Pollar sin explicar en el último día: ${listaLlena(e) ? `al menos ${miles(e.firmasSinExplicar)} (la lista de Pollar vino llena)` : miles(e.firmasSinExplicar)}`,

@@ -443,13 +443,197 @@ describe("después del sábado: dar, pagada, sueltos, asignar y devuelto", () =>
     expect(e.salida).toMatch(/409 ya-resuelto/);
   });
 
+  it("cerrar cierra una orden pagada a medias antes de devolver, y dice cuánto y a quién devolver", async () => {
+    const devolver = [
+      { operacion: OPERACION, de: CUENTA, cantidad: "1", tx: "ab".repeat(32) },
+      { operacion: "250000000000004098", de: `G${"B".repeat(55)}`, cantidad: "0.5", tx: "cd".repeat(32) },
+    ];
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, repetido: false, recibido: "1.5", devolver } }));
+    const r = await correr(["cerrar", "--orden", "tk:o:abcd-2345", "--ref", "devolucion-0003"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/ordenes/cerrar`, metodo: "POST", cuerpo: { orden: "ABCD2345", ref: "devolucion-0003" } });
+    expect(r.salida).toMatch(/Orden ABCD2345 cerrada/);
+    expect(r.salida).toMatch(/devolver 1\.5 USDC/);
+    expect(r.salida).toContain(`1 USDC a ${CUENTA} (operación ${OPERACION})`);
+    expect(r.salida).toContain(`0.5 USDC a G${"B".repeat(55)}`);
+    expect(r.salida).toMatch(/lo que llegue después con esa nota queda en sueltos/);
+    // Ya cerrada, lo dice; pagada o sin pagos, el motivo del portero y sale con 1.
+    const ya = await correr(["cerrar", "--orden", "ABCD2345", "--ref", "x"], { fetch: portero(() => ({ status: 200, cuerpo: { ok: true, repetido: true, recibido: "1.5", devolver } })).fetch });
+    expect(ya.salida).toMatch(/ya estaba cerrada/);
+    for (const motivo of ["orden-pagada", "sin-pagos"]) {
+      const e = await correr(["cerrar", "--orden", "ABCD2345", "--ref", "x"], { fetch: portero(() => ({ status: 409, cuerpo: { motivo } })).fetch });
+      expect(e.codigo).toBe(1);
+      expect(e.salida).toContain(`409 ${motivo}`);
+    }
+    for (const malo of [["cerrar", "--orden", "ABCD2345"], ["cerrar", "--ref", "x"], ["cerrar", "--orden", "x", "--ref", "x"], ["cerrar", "--orden", "ABCD2345", "--ref", "con espacios"]]) {
+      expect((await correr(malo, { fetch: p.fetch })).codigo, malo.join(" ")).toBe(1);
+    }
+    expect(p.pedidos).toHaveLength(1);
+  });
+
   it("sin la clave no le habla al portero, y la ayuda nombra las órdenes nuevas", async () => {
     const p = portero();
-    for (const args of [["dar", "--cuenta", CUENTA, "--sorteos", "1", "--dias", "1", "--ref", "x"], ["sueltos"], ["devuelto", "--operacion", OPERACION, "--ref", "x"]]) {
+    for (const args of [["dar", "--cuenta", CUENTA, "--sorteos", "1", "--dias", "1", "--ref", "x"], ["sueltos"], ["devuelto", "--operacion", OPERACION, "--ref", "x"], ["cerrar", "--orden", "ABCD2345", "--ref", "x"]]) {
       expect((await correr(args, { fetch: p.fetch, env: {} })).codigo).toBe(1);
     }
     expect(p.pedidos).toHaveLength(0);
     const r = await correr(["otra"]);
-    for (const orden of ["dar", "pagada", "sueltos", "asignar", "devuelto"]) expect(r.salida).toContain(`cupones.mjs ${orden}`);
+    for (const orden of ["dar", "pagada", "sueltos", "asignar", "devuelto", "cerrar", "piloto"]) expect(r.salida).toContain(`cupones.mjs ${orden}`);
+  });
+});
+
+describe("piloto: la lista de quienes compran con QR", () => {
+  it("sumar y sacar mandan la cuenta y lo que se hace; el resultado se dice sin la clave", async () => {
+    const p = portero((q) => ({ status: 200, cuerpo: { ok: true, cuenta: CUENTA, enLista: q.cuerpo?.accion === "sumar", cambio: true, total: q.cuerpo?.accion === "sumar" ? 3 : 2 } }));
+    const sumar = await correr(["piloto", "sumar", "--cuenta", CUENTA], { fetch: p.fetch });
+    expect(sumar.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/compras/piloto`, metodo: "POST", cuerpo: { cuenta: CUENTA, accion: "sumar" } });
+    expect(p.pedidos[0]?.cabeceras.get("Authorization")).toBe(`Bearer ${TOKEN}`);
+    expect(sumar.salida).toMatch(/Cuenta sumada al piloto\. Son 3\./);
+    const sacar = await correr(["piloto", "sacar", "--cuenta", CUENTA], { fetch: p.fetch });
+    expect(sacar.codigo).toBe(0);
+    expect(p.pedidos[1]).toMatchObject({ cuerpo: { cuenta: CUENTA, accion: "sacar" } });
+    expect(sacar.salida).toMatch(/Cuenta sacada del piloto\. Lo que ya tenía en camino sigue\. Son 2\./);
+    for (const s of [sumar.salida, sacar.salida]) expect(s).not.toContain(TOKEN);
+  });
+
+  it("listar muestra las de administración y las de la variable; --json, tal cual", async () => {
+    const otra = `G${"B".repeat(55)}`;
+    const cuerpo = { cuentas: [{ cuenta: CUENTA, desde: Date.UTC(2026, 10, 12, 15) }], variable: [otra], total: 2 };
+    const p = portero(() => ({ status: 200, cuerpo }));
+    const r = await correr(["piloto", "listar"], { fetch: p.fetch });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/compras/piloto`, metodo: "GET" });
+    expect(r.salida).toMatch(/En la lista del piloto: 2 cuentas\./);
+    expect(r.salida).toContain(`${CUENTA}, sumada el 12 de noviembre`);
+    expect(r.salida).toContain(`${otra}, por la variable COMPRAS_QR_PILOTO`);
+    const j = await correr(["piloto", "listar", "--json"], { fetch: p.fetch });
+    expect(JSON.parse(j.salida)).toEqual(cuerpo);
+  });
+
+  it("abierta a todos (COMPRAS_QR_PILOTO = todos): listar lo dice primero, con el freno, y sacar avisa que la lista no frena", async () => {
+    const lista = await correr(["piloto", "listar"], { fetch: portero(() => ({ status: 200, cuerpo: { cuentas: [], variable: [], total: 0, todos: true } })).fetch });
+    expect(lista.codigo).toBe(0);
+    expect(lista.salida.split("\n")[0]).toBe("La compra con QR está abierta a todas las cuentas (COMPRAS_QR_PILOTO = todos): la lista no frena a nadie. El freno es COMPRAS_QR_DIA, las personas nuevas por día.");
+    expect(lista.salida).toMatch(/En la lista del piloto: 0 cuentas\./);
+    const sacar = await correr(["piloto", "sacar", "--cuenta", CUENTA], { fetch: portero(() => ({ status: 200, cuerpo: { ok: true, cuenta: CUENTA, enLista: true, cambio: true, total: 0, todos: true } })).fetch });
+    expect(sacar.codigo).toBe(0);
+    expect(sacar.salida).toMatch(/la lista no frena a nadie\. Para frenar a una persona, cambiar la variable\./);
+    // Sin todos, nada de eso.
+    const cerrada = await correr(["piloto", "listar"], { fetch: portero(() => ({ status: 200, cuerpo: { cuentas: [], variable: [], total: 0 } })).fetch });
+    expect(cerrada.salida).not.toMatch(/abierta a todas/);
+  });
+
+  it("sin lo que se hace, con otra cosa o sin una cuenta bien escrita, no le habla al portero", async () => {
+    const p = portero();
+    for (const malo of [["piloto"], ["piloto", "borrar", "--cuenta", CUENTA], ["piloto", "sumar"], ["piloto", "sumar", "--cuenta", "GX"], ["piloto", "--cuenta", CUENTA]]) {
+      const r = await correr(malo, { fetch: p.fetch });
+      expect(r.codigo, malo.join(" ")).toBe(1);
+      expect(r.salida).toMatch(/piloto va con sumar, sacar o listar|--cuenta va como una cuenta/);
+    }
+    expect(p.pedidos).toHaveLength(0);
+    // El techo del portero sale con su motivo.
+    const techo = await correr(["piloto", "sumar", "--cuenta", CUENTA], { fetch: portero(() => ({ status: 400, cuerpo: { motivo: "techo", que: "piloto" } })).fetch });
+    expect(techo.codigo).toBe(1);
+    expect(techo.salida).toMatch(/400 techo \(piloto\)/);
+  });
+});
+
+describe("compra anular: soltar el recargo y la reserva de una compra con QR que no se pagó", () => {
+  const OPERAR = "o".repeat(48);
+  const anulada = { ok: true, repetido: false, compra: 12, producto: "alta", motivo: "anulada", cargada: true, reemplazadas: 1 };
+
+  it("por número o por la persona, con la clave de operar en la cabecera y nunca la de cupones", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: anulada }));
+    const env = { TINKAZO_CUPONES_TOKEN: TOKEN, TINKAZO_OPERAR_TOKEN: OPERAR };
+    const r = await correr(["compra", "anular", "--compra", "12", "--ref", "soporte-0001"], { fetch: p.fetch, env });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/compras/cerrar`, metodo: "POST", cuerpo: { compra: 12, ref: "soporte-0001" } });
+    expect(p.pedidos[0]?.cabeceras.get("Authorization")).toBe(`Bearer ${OPERAR}`);
+    expect(r.salida).toMatch(/Compra 12 \(alta\) anulada: su recargo ya no va en las órdenes de esa persona y su reserva de créditos se soltó\./);
+    expect(r.salida).toMatch(/Se cerraron 1 órdenes sin pagar/);
+    const u = await correr(["compra", "anular", "--usuario", "usr_ana", "--ref", "soporte-0002"], { fetch: p.fetch, env: { ADMIN_TOKEN: OPERAR } });
+    expect(u.codigo).toBe(0);
+    expect(p.pedidos[1]).toMatchObject({ cuerpo: { usuario: "usr_ana", ref: "soporte-0002" } });
+    expect(p.pedidos[1]?.cabeceras.get("Authorization")).toBe(`Bearer ${OPERAR}`);
+    for (const s of [r.salida, u.salida]) {
+      expect(s).not.toContain(OPERAR);
+      expect(s).not.toContain(TOKEN);
+    }
+  });
+
+  it("ya cerrada lo dice; un rechazo del portero sale con su motivo, qué hacer y código 1", async () => {
+    const ya = await correr(["compra", "anular", "--compra", "12", "--ref", "x"], { fetch: portero(() => ({ status: 200, cuerpo: { ...anulada, repetido: true, reemplazadas: 0 } })).fetch, env: { ADMIN_TOKEN: OPERAR } });
+    expect(ya.codigo).toBe(0);
+    expect(ya.salida).toMatch(/La compra 12 ya estaba cerrada \(anulada\): no se cambió nada\./);
+    const conPago = await correr(["compra", "anular", "--compra", "12", "--ref", "x"], { fetch: portero(() => ({ status: 409, cuerpo: { motivo: "orden-con-pago" } })).fetch, env: { ADMIN_TOKEN: OPERAR } });
+    expect(conPago.codigo).toBe(1);
+    expect(conPago.salida).toMatch(/409 orden-con-pago: una orden de esa compra recibió un pago/);
+    for (const [status, motivo] of [[409, "compra-pagada"], [404, "compra"], [502, "red"]]) {
+      const e = await correr(["compra", "anular", "--compra", "12", "--ref", "x"], { fetch: portero(() => ({ status, cuerpo: { motivo } })).fetch, env: { ADMIN_TOKEN: OPERAR } });
+      expect(e.codigo).toBe(1);
+      expect(e.salida).toContain(`${status} ${motivo}`);
+    }
+    const clave = await correr(["compra", "anular", "--compra", "12", "--ref", "x"], { fetch: portero(() => ({ status: 401, cuerpo: { motivo: "clave" } })).fetch, env: { ADMIN_TOKEN: OPERAR } });
+    expect(clave.salida).toMatch(/no es la de operar del portero/);
+  });
+
+  it("sin la clave de operar, con la de cupones sola o con lo mal escrito, no le habla al portero", async () => {
+    const p = portero();
+    const env = { ADMIN_TOKEN: OPERAR };
+    const malos = [
+      [["compra", "anular", "--compra", "12", "--ref", "x"], { TINKAZO_CUPONES_TOKEN: TOKEN }],
+      [["compra", "anular", "--compra", "12", "--ref", "x"], {}],
+      [["compra", "anular", "--compra", "12", "--ref", "x"], { ADMIN_TOKEN: "corta" }],
+      [["compra"], env],
+      [["compra", "borrar", "--compra", "12", "--ref", "x"], env],
+      [["compra", "anular", "--ref", "x"], env],
+      [["compra", "anular", "--compra", "12", "--usuario", "usr_ana", "--ref", "x"], env],
+      [["compra", "anular", "--compra", "0", "--ref", "x"], env],
+      [["compra", "anular", "--compra", "doce", "--ref", "x"], env],
+      [["compra", "anular", "--usuario", "-ana", "--ref", "x"], env],
+      [["compra", "anular", "--compra", "12"], env],
+      [["compra", "anular", "--compra", "12", "--ref", "con espacios"], env],
+    ];
+    for (const [args, e] of malos) expect((await correr(args, { fetch: p.fetch, env: e })).codigo, args.join(" ")).toBe(1);
+    expect(p.pedidos).toHaveLength(0);
+    const sinClave = await correr(["compra", "anular", "--compra", "12", "--ref", "x"], { fetch: p.fetch, env: { TINKAZO_CUPONES_TOKEN: TOKEN } });
+    expect(sinClave.salida).toMatch(/falta la clave de operar: cargala en TINKAZO_OPERAR_TOKEN/);
+    expect(sinClave.salida).toContain("cupones.mjs compra anular");
+  });
+});
+
+describe("compra soltar: soltar de una vez las compras con QR sin cargar", () => {
+  const OPERAR = "o".repeat(48);
+
+  it("con la clave de operar y su referencia; dice cuántas y cuántos créditos volvieron", async () => {
+    const p = portero(() => ({ status: 200, cuerpo: { ok: true, soltadas: 2, reserva: 1060 } }));
+    const r = await correr(["compra", "soltar", "--ref", "pausa-0001"], { fetch: p.fetch, env: { TINKAZO_CUPONES_TOKEN: TOKEN, TINKAZO_OPERAR_TOKEN: OPERAR } });
+    expect(r.codigo).toBe(0);
+    expect(p.pedidos).toHaveLength(1);
+    expect(p.pedidos[0]).toMatchObject({ url: `${BASE_POR_DEFECTO}/v1/admin/compras/soltar`, metodo: "POST", cuerpo: { ref: "pausa-0001" } });
+    expect(p.pedidos[0]?.cabeceras.get("Authorization")).toBe(`Bearer ${OPERAR}`);
+    expect(r.salida).toMatch(/Se soltaron 2 compras sin cargar: volvieron 1060 créditos\. Las cargadas no se tocaron\./);
+    expect(r.salida).not.toContain(OPERAR);
+    const ninguna = await correr(["compra", "soltar", "--ref", "pausa-0002"], { fetch: portero(() => ({ status: 200, cuerpo: { ok: true, soltadas: 0, reserva: 0 } })).fetch, env: { ADMIN_TOKEN: OPERAR } });
+    expect(ninguna.codigo).toBe(0);
+    expect(ninguna.salida).toMatch(/No había compras sin cargar: no se cambió nada\./);
+  });
+
+  it("sin la clave de operar, sin referencia o con una compra o una persona al lado, no le habla al portero", async () => {
+    const p = portero();
+    const env = { ADMIN_TOKEN: OPERAR };
+    const malos = [
+      [["compra", "soltar", "--ref", "x"], { TINKAZO_CUPONES_TOKEN: TOKEN }],
+      [["compra", "soltar"], env],
+      [["compra", "soltar", "--ref", "con espacios"], env],
+      [["compra", "soltar", "--compra", "12", "--ref", "x"], env],
+      [["compra", "soltar", "--usuario", "usr_ana", "--ref", "x"], env],
+    ];
+    for (const [args, e] of malos) expect((await correr(args, { fetch: p.fetch, env: e })).codigo, args.join(" ")).toBe(1);
+    expect(p.pedidos).toHaveLength(0);
+    const rechazo = await correr(["compra", "soltar", "--ref", "x"], { fetch: portero(() => ({ status: 503, cuerpo: { motivo: "apagado" } })).fetch, env });
+    expect(rechazo.codigo).toBe(1);
+    expect(rechazo.salida).toContain("503 apagado");
   });
 });

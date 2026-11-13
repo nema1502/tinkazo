@@ -15,13 +15,17 @@
  * - que el portero tenga su llave (`llave` en null es que no la tiene, y entonces tampoco paga). Un estado que no trae
  *   el campo no se toma como que falta;
  * - los créditos de Pollar cerca del piso (menos de 1.000 de margen) o por debajo del piso, que es cuando el portero
- *   deja de aceptar canjes de cupones; o sin leer;
+ *   deja de aceptar canjes de cupones; o sin leer. Con compras con QR en curso, lo que reservan (`reservasCompras`) va
+ *   encima del piso, y no cubrirlo es un problema propio: avisa antes de que un 402 frene a quien tiene su dinero en
+ *   camino;
  * - la cuenta patrocinadora baja o sin leer (`alerta`), y un tramo más grave cuando queda menos de la mitad del nivel
  *   de alerta;
  * - las altas pausadas a mano (`altasPausadas`);
  * - firmas sin explicar en las últimas 24 horas por encima del tope, por tramos gruesos (más de 10, de 50 y de 200), o
  *   sin la vigilancia;
  * - el patrocinio de la app en Pollar que no está todo apagado (o sin leer);
+ * - las variables mal escritas y los secretos que faltan (`faltaAltas`, por su nombre fijo): lo que dependía de ellos
+ *   quedó cerrado sin que nadie lo note;
  * - y que no sea el portero de mainnet: no se da por bueno el portero equivocado.
  *
  * Cada problema tiene una clave estable (sin las cifras, que se mueven). Se avisa cuando aparece un problema que no se
@@ -124,9 +128,13 @@ export function revisarPortero(e) {
       hay(`patrocinadora-baja:${motivo}`, `la cuenta patrocinadora está baja o no se pudo leer (${motivo === "sin-motivo" ? "sin motivo conocido" : motivo})`);
     }
   }
+  // Lo reservado por las compras con QR en curso va encima del piso: sin el campo (la compra con QR apagada), nada.
+  const reservas = esNumero(e.reservasCompras) && e.reservasCompras > 0 ? e.reservasCompras : 0;
   if (!esNumero(e.creditos) || !esNumero(e.piso)) hay("creditos-sin-leer", "no se pudo leer el saldo de créditos de Pollar o el piso");
   else if (e.creditos < e.piso) hay("creditos-bajo-el-piso", "los créditos de Pollar están por debajo del piso: el portero ya no acepta canjes de cupones nuevos, cargar créditos");
-  else if (e.creditos < e.piso + MARGEN_MINIMO) hay("creditos-bajos", "los créditos de Pollar están bajos, cerca del piso: cargar créditos");
+  else if (e.creditos < e.piso + reservas)
+    hay("creditos-bajo-las-reservas", "los créditos de Pollar no cubren las compras con QR en curso: el portero ya no acepta canjes ni compras nuevas y a quien tiene su dinero en camino le puede faltar un paso, cargar créditos ya");
+  else if (e.creditos < e.piso + reservas + MARGEN_MINIMO) hay("creditos-bajos", "los créditos de Pollar están bajos, cerca del piso: cargar créditos");
   if (e.altasPausadas === true) hay("altas-pausadas", "las altas de cuentas nuevas están pausadas a mano");
   if (!esNumero(e.firmasSinExplicar)) hay("firmas-sin-comparar", "no se pudo comparar las firmas que cobró Pollar con las nuestras");
   else {
@@ -138,6 +146,11 @@ export function revisarPortero(e) {
   else if (pat.esperado !== true) {
     const prendidos = prendidosLimpios(pat.prendidos);
     hay(`patrocinio-prendido:${prendidos.join(",")}`, `el patrocinio de la app en Pollar no está todo apagado: ${prendidos.length ? prendidos.join(", ") : "sin detalle"}`);
+  }
+  // Una variable mal escrita o un secreto que falta: lo que depende de eso quedó cerrado. Sin el campo, nada.
+  if (Array.isArray(e.faltaAltas) && e.faltaAltas.length > 0) {
+    const nombres = prendidosLimpios(e.faltaAltas);
+    hay(`variables-mal-escritas:${nombres.join(",")}`, `hay variables del portero mal escritas o secretos que faltan, y lo que depende de ellos quedó cerrado: ${nombres.join(", ")}`);
   }
   return { problemas, claves };
 }

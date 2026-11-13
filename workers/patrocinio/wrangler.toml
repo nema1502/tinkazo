@@ -69,7 +69,9 @@ PATROCINADORES_APP = ""
 CUENTA_URL = ""
 # El libro, las rutas /v1/alta y la puerta del libro. Mientras el libro esté vacío, no pasa nadie.
 ALTAS = "1"
-# Las órdenes de pago nuevas y el sorteo del servidor, apagados hasta su prueba.
+# Las órdenes de pago nuevas y el sorteo del servidor, apagados hasta su prueba. El pago se prende con ALTAS_PAGO = "1",
+# con CUENTA_COBROS cargada y comprobada en la red (existe, tiene la línea del USDC de Circle y es propia). El sorteo del
+# servidor sigue en "0" mientras el sitio no lo use: la persona firma su sorteo y los precios cubren esa firma.
 ALTAS_PAGO = "0"
 SORTEO_SERVIDOR = "0"
 # Con ALTAS, el portero paga un draw solo de un sello que pagó él (lo mande la persona o la sorteadora). Solo "0" lo
@@ -79,15 +81,40 @@ SOLO_SELLOS_PORTERO = "1"
 POLLAR_APP_ID = "cmw6osdl600080imq38rz1vvu"
 # "inmediato" hoy; "diferido" desde la fase 2a. Tiene que coincidir con lo que dice Pollar.
 POLLAR_FONDEO = "inmediato"
-# Las cuentas de cobros y la sorteadora (O2), cuando existan.
-CUENTA_COBROS = ""
+# Las cuentas de cobros y la sorteadora (O2), cuando existan. CUENTA_COBROS es una cuenta nueva, solo para cobrar: si
+# repite CUENTA_PATROCINADORA o CUENTA_SORTEADORA no se toma y el pago queda apagado.
+CUENTA_COBROS = "GDMIGGM2J7GL24JL3UB5DLSTMMWFP5XTE3SDTTDZSPUFH7VMKFINKAO6"
 CUENTA_SORTEADORA = ""
-# producto:usdc:sorteos:dias. Mal escrito, no se vende nada.
-PRECIOS = "alta:2:3:365,p10:5:10:365,p50:20:50:365"
+# producto:usdc:sorteos:dias. Mal escrito, no se vende nada. Los de la venta con la persona firmando su sorteo: 3 sorteos
+# por 4 USDC a 90 días y 10 por 10 USDC a un año, sin el de 50.
+PRECIOS = "alta:4:3:90,p10:10:10:365"
 # El piso de créditos de Pollar: 40 por sorteo mientras la persona firma el sorteo (20 con el sorteo del servidor) y
 # 30 por alta con la billetera creada al entrar (45 cuando se crea a pedido).
 CREDITOS_POR_SORTEO = "40"
 CREDITOS_POR_ALTA = "30"
+# La carga con QR: con "1", GET /v1/carga/cupo dice abierta mientras las altas no estén pausadas y los créditos de Pollar
+# pasen el piso más RESERVA_CARGA_CREDITOS. Cerrada hasta que se pruebe. La reserva va en 8400 la semana del evento (lo
+# que piden las tarjetas sin canjear, encima del piso): ninguna compra empieza si se come eso. El lunes vuelve a 400.
+CARGAS = "0"
+RESERVA_CARGA_CREDITOS = "8400"
+# La compra de un paquete pagando con QR (POST /v1/compra/empezar, /cargar y /anular). Cerrada con el código de la venta
+# recién desplegado: se abre en el despliegue del piloto, con "1" acá y en ALTAS_PAGO y CARGAS, COMPRAS_QR_DIA con las
+# compras por día entre todos y la lista del piloto con las dos cuentas. "todos" cierra la compra entera salvo que se
+# pida además con COMPRAS_QR_TODOS = "1", que no va antes del evento. Pide además fondeo inmediato y créditos de sobra
+# para la reserva de cada compra por encima del piso, de lo reservado y de RESERVA_CARGA_CREDITOS.
+COMPRAS_QR = "0"
+COMPRAS_QR_DIA = "0"
+COMPRAS_QR_PILOTO = ""
+# Lo mínimo en bolivianos de una carga, para que el sitio no cotice menos. "0": no se sabe todavía.
+CARGA_MINIMO_BS = "0"
+# Lo que suma pagar con QR, primera:siguientes en USDC: la primera vez paga la verificación y la primera carga. Mal
+# escrito, la compra con QR no se abre. El precio decidido: 4 la primera vez (el primer paquete por QR sale 8) y 0,50
+# las siguientes.
+RECARGO_QR = "4:0.50"
+# Las banderas del patrocinio de Pollar que la vigilancia acepta prendidas: las dos que pide la compra con QR (las líneas y
+# los envíos de cuentas co-firmadas). Van antes de prenderlas en Pollar, así la vigilancia no avisa. Solo cambian lo que
+# espera la vigilancia: el portero no paga nada distinto. Vacía: se espera todo apagado.
+PATROCINIO_PERMITIDO = "sponsor_transfer_cosigned,sponsor_trustlines"
 # Sellos oficiales por cuenta y por mes; en mainnet los sorteos del mes son tantos como los sellos.
 MAX_SELLOS_MES = "100"
 # Pagos por dirección y por hora (en testnet, 240): en un evento todo el stand sale por la misma wifi.

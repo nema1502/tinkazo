@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { type AccionAdmin, TECHO_SORTEOS_DIA, atenderAdmin } from "./admin";
 import { IP } from "./altas-prueba";
 import { AJUSTE_VENTA_PAUSADA } from "./cobros";
-import { IDS, montarPagos } from "./cobros-prueba";
+import { IDS, PRECIOS_DE_PRUEBA, montarPagos } from "./cobros-prueba";
 import { DIA_MS, leerConfig } from "./config";
 import { PorIp } from "./por-ip";
 import { atenderAlta } from "./rutas-altas";
@@ -132,13 +132,12 @@ describe("los pagos sueltos", () => {
     expect(await m.admin.atender("sueltos-asignar", { operacion: otroActivo, orden: ID })).toEqual({ estado: 409, cuerpo: { motivo: "no-asignable" } });
     expect(await m.admin.atender("sueltos-asignar", { operacion: otroActivo, devuelto: true, ref: "devolucion-0001" })).toEqual({ estado: 200, cuerpo: { ok: true, repetido: false } });
     expect(await m.admin.atender("sueltos-asignar", { operacion: otroActivo, devuelto: true, ref: "devolucion-0001" })).toEqual({ estado: 200, cuerpo: { ok: true, repetido: true } });
-    // Uno chico asignado a una orden ya pagada no alcanza para otro paquete: queda como sobrante de esa orden.
-    expect(await m.admin.atender("sueltos-asignar", { operacion: chico, orden: ID })).toEqual({ estado: 200, cuerpo: { ok: true, pagada: true, sobrante: "0.1" } });
-    expect((await m.admin.atender("sueltos-lista", {})).cuerpo).toEqual({ sueltos: [expect.objectContaining({ operacion: chico, motivo: "sobrante", orden: ID, estado: "suelto" })] });
-    expect(await m.admin.atender("sueltos-asignar", { operacion: chico, orden: ID })).toEqual({ estado: 409, cuerpo: { motivo: "no-asignable" } });
+    // A una orden ya pagada no se asigna nada: no daría nada, y el suelto queda como estaba.
+    expect(await m.admin.atender("sueltos-asignar", { operacion: chico, orden: ID })).toEqual({ estado: 409, cuerpo: { motivo: "orden-pagada" } });
+    expect((await m.admin.atender("sueltos-lista", {})).cuerpo).toEqual({ sueltos: [expect.objectContaining({ operacion: chico, motivo: "nota-desconocida", orden: null, estado: "suelto" })] });
     // Lo que no existe, y lo mal escrito.
     expect(await m.admin.atender("sueltos-asignar", { operacion: "1", orden: ID })).toEqual({ estado: 404, cuerpo: { motivo: "suelto" } });
-    expect(await m.admin.atender("sueltos-asignar", { operacion: chico, orden: "ZZZZ8888" })).toEqual({ estado: 409, cuerpo: { motivo: "no-asignable" } });
+    expect(await m.admin.atender("sueltos-asignar", { operacion: chico, orden: "ZZZZ8888" })).toEqual({ estado: 404, cuerpo: { motivo: "orden" } });
     for (const malo of [{}, { operacion: 123, orden: ID }, { operacion: chico }, { operacion: chico, devuelto: true }, { operacion: chico, orden: ID, devuelto: true, ref: "x" }]) {
       expect(await m.admin.atender("sueltos-asignar", malo), JSON.stringify(malo)).toEqual({ estado: 400, cuerpo: { motivo: "cuerpo" } });
     }
@@ -161,6 +160,35 @@ describe("los pagos sueltos", () => {
     expect(await m.admin.atender("sueltos-asignar", { operacion: op, orden: ID })).toEqual({ estado: 200, cuerpo: { ok: true, pagada: true, sobrante: "1" } });
     expect(m.sueltos()).toEqual([expect.objectContaining({ operacion: op, monto: 10_000_000, motivo: "sobrante", orden: ID, estado: "suelto" })]);
     expect(m.filasDePagos()).toEqual([{ operacion: op, orden: ID, monto: 20_000_000 }]);
+  });
+
+  it("un pago repetido se devuelve o se asigna a otra orden abierta de la persona, nunca a la ya pagada", async () => {
+    const m = montarPagos();
+    const ana = await conOrden(m);
+    m.h.sumar({ monto: "2.0000000", nota: NOTA });
+    await m.pago(ana.token, ana.id);
+    const [repetido, otroRepetido] = m.h.sumar({ monto: "5.0000000", nota: NOTA }, { monto: "2.0000000", nota: NOTA });
+    await m.pago(ana.token, ana.id);
+    expect(m.sueltos()).toEqual([expect.objectContaining({ operacion: repetido, motivo: "repetido", orden: ID }), expect.objectContaining({ operacion: otroRepetido, motivo: "repetido", orden: ID })]);
+    expect(await m.admin.atender("sueltos-asignar", { operacion: repetido, orden: ID })).toEqual({ estado: 409, cuerpo: { motivo: "orden-pagada" } });
+    // Quería 10 sorteos más: pide su orden en el sitio y administración le asigna lo que mandó.
+    const p10 = await m.orden(ana.token, "p10");
+    const otra = (p10.cuerpo as { orden: { id: string } }).orden.id;
+    expect(await m.admin.atender("sueltos-asignar", { operacion: repetido, orden: otra })).toEqual({ estado: 200, cuerpo: { ok: true, pagada: true, sobrante: "0" } });
+    expect(m.derechosDe("usr_ana").map((d) => d.ref)).toEqual([`orden:${ID}`, `orden:${otra}`]);
+    // El otro se devuelve.
+    expect(await m.admin.atender("sueltos-asignar", { operacion: otroRepetido, devuelto: true, ref: "devolucion-0002" })).toEqual({ estado: 200, cuerpo: { ok: true, repetido: false } });
+    expect(m.sueltos().map((s) => s.estado)).toEqual(["asignado", "devuelto"]);
+  });
+
+  it("una orden pagada a mano no se vuelve a cobrar con un pago con su nota: va a los sueltos como repetido", async () => {
+    const m = montarPagos();
+    const ana = await conOrden(m);
+    expect((await m.admin.atender("ordenes-pagada", { orden: ID, metodo: "qr-bs", ref: "comprobante-0002" })).estado).toBe(200);
+    const [op] = m.h.sumar({ monto: "2.0000000", nota: NOTA });
+    expect(await m.pago(ana.token, ana.id)).toMatchObject({ estado: 200, cuerpo: { pagada: true, sorteos: { quedan: 3 } } });
+    expect(m.sueltos()).toEqual([expect.objectContaining({ operacion: op, motivo: "repetido", orden: ID, estado: "suelto" })]);
+    expect(m.derechosDe("usr_ana")).toHaveLength(1);
   });
 });
 
@@ -232,15 +260,17 @@ describe("las rutas de los pagos en la puerta del Worker", () => {
     expect(r.status).toBe(200);
     expect(r.headers.get("Cache-Control")).toBe("public, max-age=300");
     expect(r.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    // Sin PRECIOS, los de la venta: 3 sorteos por 4 a 90 días y 10 por 10 a un año.
     expect(await r.json()).toEqual({
       red: "mainnet",
       pago: true,
-      alta: { usdc: "2", sorteos: 3, dias: 365 },
-      paquetes: [
-        { id: "p10", usdc: "5", sorteos: 10, dias: 365 },
-        { id: "p50", usdc: "20", sorteos: 50, dias: 365 },
-      ],
+      alta: { usdc: "4", sorteos: 3, dias: 90 },
+      paquetes: [{ id: "p10", usdc: "10", sorteos: 10, dias: 365 }],
+      // Sin la compra con QR prendida no se anuncia su recargo.
+      recargoQr: null,
     });
+    const conLos3 = (await atenderAlta(pedido("/v1/alta/precios", { method: "GET" }), leerConfig({ RED: "mainnet", ALTAS: "1", PRECIOS: PRECIOS_DE_PRUEBA }), nada, new PorIp(), nada)) as Response;
+    expect(await conLos3.json()).toMatchObject({ alta: { usdc: "2", sorteos: 3, dias: 365 }, paquetes: [{ id: "p10", usdc: "5" }, { id: "p50", usdc: "20" }] });
     const sinPago = (await atenderAlta(pedido("/v1/alta/precios", { method: "GET" }), leerConfig({ RED: "mainnet", ALTAS: "1" }), nada, new PorIp(), nada)) as Response;
     expect(await sinPago.json()).toMatchObject({ pago: false });
     expect((await atenderAlta(pedido("/v1/alta/precios", { method: "POST" }), cfg, nada, new PorIp(), nada))?.status).toBe(405);

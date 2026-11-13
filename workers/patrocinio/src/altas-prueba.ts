@@ -57,9 +57,10 @@ export interface PollarDeMentira {
   llamadas: string[];
 }
 
-export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: boolean; cuponSecreto?: string | null; memoriaCreditos?: MemoriaCreditos } = {}) {
+export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: boolean; cuponSecreto?: string | null; memoriaCreditos?: MemoriaCreditos; sql?: ReturnType<typeof sqlDePrueba> } = {}) {
   let ahora = T0;
-  const sql = sqlDePrueba();
+  // Un SQLite propio de la prueba (por ejemplo, con datos de antes o uno que falla), o uno nuevo y vacío.
+  const sql = opciones.sql ?? sqlDePrueba();
   const cupos = new Cupos(sql);
   const altas = new Altas(sql, cupos);
   const cfg = leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: APP, ...env });

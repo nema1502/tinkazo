@@ -15,6 +15,8 @@
  * Solo en mainnet con ALTAS=1, con la sesión de Pollar (Authorization: Bearer <token>), ver `rutas-altas.ts`:
  *   POST /v1/alta/estado   POST /v1/alta/cupon   POST /v1/alta/abrir   POST /v1/alta/orden   POST /v1/alta/pago
  * y abierta: GET /v1/alta/precios. Los pagos en USDC se leen de Horizon (`cobros.ts`).
+ * La compra con QR, también con la sesión: POST /v1/compra/empezar | cargar | anular (`compras.ts`).
+ * Abierta como el cupo, sin sesión: GET /v1/carga/cupo {abierta}, si el sitio ofrece la carga con QR (`CARGAS=1`).
  *
  * Solo en mainnet con ALTAS=1 y SORTEO_SERVIDOR=1, abierta desde el sitio, ver `sorteadora.ts`:
  *   POST /v1/sorteo {"sorteo","firma"}   el `draw` de un sello del portero, mandado desde la cuenta sorteadora
@@ -27,7 +29,7 @@
  * y pausar o reanudar las altas con ADMIN_TOKEN:
  *   POST|GET /v1/admin/cupones   POST /v1/admin/cupones/anular   POST /v1/admin/altas   POST /v1/admin/altas/pausar | reanudar
  *   POST /v1/admin/derechos   POST /v1/admin/ordenes/pagada   GET /v1/admin/sueltos   POST /v1/admin/sueltos/asignar
- *   POST /v1/admin/ventas/pausar | reanudar
+ *   POST /v1/admin/ventas/pausar | reanudar   POST /v1/admin/compras/cerrar (con ADMIN_TOKEN)
  *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
@@ -37,6 +39,7 @@ import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
 import { Altas } from "./altas";
 import { registrador } from "./registrador";
 import { Cobros, LectorDeCobros } from "./cobros";
+import { ComprasQr } from "./compras";
 import { type Env, leerConfig } from "./config";
 import { Cupos, type Sql } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
@@ -44,7 +47,7 @@ import { Planes } from "./plan";
 import { pollarDe } from "./pollar";
 import { PorIp, cupoPorHora } from "./por-ip";
 import { RpcRed } from "./red";
-import { type AccionAlta, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, memoriaEnAjustes } from "./rutas-altas";
+import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
 import { Sorteadora, atenderSorteo } from "./sorteadora";
 
@@ -120,8 +123,13 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual.
       const cobros = new Cobros(this.sql, this.cupos);
       const lector = cfg.cuentaCobros ? new LectorDeCobros({ cobros, cuenta: cfg.cuentaCobros, fetch: (u, i) => fetch(u, i), registrar }) : null;
-      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector });
-      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector });
+      // La compra con QR: las compras en curso y sus reservas se leen siempre (también con COMPRAS_QR en "0"), para
+      // terminar lo que ya empezó y para el piso.
+      const compras = new ComprasQr(this.sql, cfg);
+      // Sin la hora del último aviso (no se pudo sumar al arrancar), la vigilancia de firmas cuenta sin ella.
+      if (this.cupos.faltaColumna("compras_qr", "avisada")) compras.sinHoraDeAviso();
+      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
+      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
       this.exportaAltas = true;
       if (cfg.altas && (this.env.CUPONES_TOKEN ?? "").length >= 32 && this.env.CUPONES_TOKEN === this.env.ADMIN_TOKEN) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
       // Los secretos que faltan para las altas (nombres fijos, sin valores): las rutas dan 503 apagado hasta cargarlos.
@@ -132,6 +140,9 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
     // Lo que se prendió de las altas y no se puede usar (nombres fijos, sin valores): no apaga al portero, solo eso.
     if (cfg.faltaAltas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: cfg.faltaAltas }));
+    // Una columna nueva que no se pudo sumar al arrancar: el objeto sigue (sellos, sorteos y cupones) y la venta queda cerrada.
+    const columnas = this.cupos.columnasQueFaltan();
+    if (columnas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["columnas-nuevas"], columnas, error: this.cupos.errorDeColumnas() }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
     if (this.cupos.enElAire() > 0) await this.programar();
     return this.portero;
@@ -174,6 +185,29 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       // Solo el nombre del error: el mensaje podría llevar algo del pedido.
       registrar("error-interno", { donde: "alta", error: e instanceof Error ? e.name : "desconocido" });
       return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas de la compra con QR, `/v1/compra/empezar` y `/v1/compra/cargar` (solo mainnet). */
+  async compra(accion: AccionCompra, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atenderCompra(accion, pedido);
+    } catch (e) {
+      registrar("error-interno", { donde: "compra", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** `GET /v1/carga/cupo` (solo mainnet): si la carga con QR está abierta. Ante cualquier error, cerrada. */
+  async carga(): Promise<boolean> {
+    try {
+      await this.obtener();
+      return this.puerta ? await this.puerta.cargaAbierta() : false;
+    } catch (e) {
+      registrar("error-interno", { donde: "carga", error: e instanceof Error ? e.name : "desconocido" });
+      return false;
     }
   }
 
@@ -239,6 +273,8 @@ const pagoPorIp = new PorIp();
 const altaPorIp = new PorIp();
 /** Los pedidos a `/v1/sorteo`, con el suyo. */
 const sorteoPorIp = new PorIp();
+/** Las consultas de `/v1/carga/cupo`, con el suyo: consultar la carga no le gasta consultas al cupo. */
+const cargaPorIp = new PorIp();
 
 /** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
 async function esAdmin(dado: string, env: Env): Promise<boolean> {
@@ -255,14 +291,15 @@ export default {
     const origen = request.headers.get("Origin");
     const objeto = env.PATROCINIO.get(env.PATROCINIO.idFromName(env.RED === "mainnet" ? "mainnet" : "testnet")) as unknown as DurableObjectStub<Patrocinio>;
 
-    // Las rutas de altas existen solo en mainnet; en testnet siguen sin existir, como siempre.
-    if (url.pathname.startsWith("/v1/alta/") && env.RED === "mainnet") {
+    // Las rutas de altas y de la compra con QR existen solo en mainnet; en testnet siguen sin existir, como siempre.
+    if ((url.pathname.startsWith("/v1/alta/") || url.pathname.startsWith("/v1/compra/")) && env.RED === "mainnet") {
       const r = await atenderAlta(
         request,
         leerConfig(env),
         (accion, pedido) => objeto.alta(accion, pedido),
         altaPorIp,
         (accion, pedido) => objeto.pagoAlta(accion, pedido),
+        (accion, pedido) => objeto.compra(accion, pedido),
       );
       if (r) return r;
     }
@@ -276,6 +313,12 @@ export default {
     // El sorteo del servidor, también solo en mainnet: en testnet `/v1/sorteo` sigue sin existir.
     if (url.pathname === "/v1/sorteo" && env.RED === "mainnet") {
       const r = await atenderSorteo(request, leerConfig(env), sorteoPorIp, (sorteo, firma) => objeto.sortear(sorteo, firma));
+      if (r) return r;
+    }
+
+    // El tope de la carga con QR, también solo en mainnet: abierta y de solo lectura, como el cupo.
+    if (url.pathname === "/v1/carga/cupo" && env.RED === "mainnet") {
+      const r = await atenderCarga(request, leerConfig(env), cargaPorIp, () => objeto.carga());
       if (r) return r;
     }
 

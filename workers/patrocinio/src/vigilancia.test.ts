@@ -5,6 +5,8 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
 import { SECRETO_POLLAR, T0, codigo, montarAltas } from "./altas-prueba";
+import { montarPagos } from "./cobros-prueba";
+import { FIRMAS_POR_COMPRA } from "./compras";
 import { DIA_MS } from "./config";
 import { Pollar } from "./pollar";
 import { POLLAR_SERVIDOR } from "./servidores";
@@ -53,10 +55,18 @@ describe("contarFirmas: las firmas cobradas en los movimientos", () => {
   });
 });
 
-describe("patrocinioEsperado: todo apagado", () => {
+describe("patrocinioEsperado: todo apagado, salvo lo permitido", () => {
   it("todo apagado es lo esperado; lo que esté prendido se nombra", () => {
     expect(patrocinioEsperado({ sponsor_trustlines: false, sponsor_all_contracts: false })).toEqual({ esperado: true, prendidos: [] });
     expect(patrocinioEsperado({ sponsor_trustlines: true, sponsor_all_contracts: false, sponsor_transfer_native: true })).toEqual({ esperado: false, prendidos: ["sponsor_transfer_native", "sponsor_trustlines"] });
+  });
+
+  it("lo que dice PATROCINIO_PERMITIDO puede estar prendido; lo demás prendido se nombra igual", () => {
+    const permitido = ["sponsor_transfer_cosigned", "sponsor_trustlines"];
+    expect(patrocinioEsperado({ sponsor_trustlines: true, sponsor_transfer_cosigned: true, sponsor_all_contracts: false }, permitido)).toEqual({ esperado: true, prendidos: [] });
+    expect(patrocinioEsperado({ sponsor_trustlines: true, sponsor_all_contracts: true }, permitido)).toEqual({ esperado: false, prendidos: ["sponsor_all_contracts"] });
+    // Permitido no es obligatorio: apagado también está bien.
+    expect(patrocinioEsperado({ sponsor_trustlines: false }, permitido)).toEqual({ esperado: true, prendidos: [] });
   });
 });
 
@@ -136,7 +146,7 @@ describe("PuertaAltas.vigilancia, para /v1/patrocinio/estado", () => {
     m.pm.movimientos = [firma(T0 - HORA), firma(T0 - HORA), firma(T0 - 2 * HORA), { event: "wallet.created:STELLAR:COSIGNED", amount: -15, createdAt: iso(T0 - HORA) }];
     expect(await m.puerta.vigilancia()).toEqual({
       firmasSinExplicar: 2,
-      firmas: { cobradas: 3, explicadas: 1, sellos: 1, sorteos: 0, activaciones: 0, completo: true, desde: T0 - DIA_MS },
+      firmas: { cobradas: 3, explicadas: 1, sellos: 1, sorteos: 0, activaciones: 0, compras: 0, pagosConSaldo: 0, completo: true, desde: T0 - DIA_MS },
       patrocinioPollar: { esperado: true, prendidos: [] },
     });
     // Nunca negativo: más explicadas que cobradas es cero.
@@ -169,5 +179,62 @@ describe("PuertaAltas.vigilancia, para /v1/patrocinio/estado", () => {
     const m = montarAltas({ ALTAS: "0" });
     expect(await m.puerta.vigilancia()).toEqual({});
     expect(m.pm.llamadas).toHaveLength(0);
+  });
+});
+
+describe("la vigilancia con la compra con QR", () => {
+  /** La compra con QR abierta y el patrocinio que necesita, permitido. */
+  const montar = () => montarPagos({ COMPRAS_QR: "1", CARGAS: "1", COMPRAS_QR_DIA: "5", PATROCINIO_PERMITIDO: "sponsor_trustlines,sponsor_transfer_cosigned" });
+  const conCompra = async (m: ReturnType<typeof montar>, usuario: string) => {
+    const p = m.persona(usuario);
+    m.cupos.transaccion(() => m.compras.sumarPiloto(p.cuenta as string, m.hora()));
+    await m.empezar(p.token, "alta");
+    await m.cargar(p.token, "alta");
+    const id = (((await m.orden(p.token, "alta")).cuerpo as { orden: { id: string } }).orden).id;
+    // Paga con el saldo de su propia cuenta, como la máquina del saldo.
+    m.h.sumar({ monto: "6.2500000", nota: `tk:o:${id}`, de: p.cuenta as string, ms: m.hora() });
+    expect(await m.pago(p.token, id)).toMatchObject({ cuerpo: { pagada: true } });
+    return p;
+  };
+
+  it("un día de compras no da alarma: cada compra con movimiento explica hasta 9 firmas y cada pago con el saldo, una", async () => {
+    const m = montar();
+    await conCompra(m, "usr_ana");
+    await conCompra(m, "usr_beto");
+    // Caro entró con un cupón y paga el de diez con su saldo, sin QR: es una firma más.
+    await m.lote([codigo(1)]);
+    const caro = m.persona("usr_caro");
+    // En la lista del piloto: con una lista puesta, la orden de alguien de afuera no nace (orden-piloto.test.ts).
+    m.cupos.transaccion(() => m.compras.sumarPiloto(caro.cuenta as string, m.hora()));
+    await m.cupon(caro.token, codigo(1));
+    const id = (((await m.orden(caro.token, "p10")).cuerpo as { orden: { id: string } }).orden).id;
+    m.h.sumar({ monto: "5.0000000", nota: `tk:o:${id}`, de: caro.cuenta as string, ms: m.hora() });
+    expect(await m.pago(caro.token, id)).toMatchObject({ cuerpo: { pagada: true } });
+    m.pm.movimientos = Array.from({ length: 2 * FIRMAS_POR_COMPRA + 1 }, (_, i) => firma(T0 - i * 1000));
+    m.pm.patrocinio = { sponsor_trustlines: true, sponsor_transfer_cosigned: true, sponsor_all_contracts: false };
+    expect(await m.puerta.vigilancia()).toMatchObject({ firmasSinExplicar: 0, firmas: { compras: 2, pagosConSaldo: 1, explicadas: 2 * FIRMAS_POR_COMPRA + 1 }, patrocinioPollar: { esperado: true, prendidos: [] } });
+    expect(m.anotado.filter(([e]) => e === "error-firmas" || e === "error-patrocinio")).toEqual([]);
+  });
+
+  it("un día con firmas de más da alarma: más de 10 por encima de lo que explican las compras, y lo no permitido prendido también", async () => {
+    const m = montar();
+    await conCompra(m, "usr_ana");
+    m.pm.movimientos = Array.from({ length: FIRMAS_POR_COMPRA + FIRMAS_SIN_EXPLICAR_MAX + 1 }, (_, i) => firma(T0 - i * 1000));
+    m.pm.patrocinio = { sponsor_trustlines: true, sponsor_all_contracts: true };
+    expect(await m.puerta.vigilancia()).toMatchObject({ firmasSinExplicar: FIRMAS_SIN_EXPLICAR_MAX + 1, patrocinioPollar: { esperado: false, prendidos: ["sponsor_all_contracts"] } });
+    expect(m.anotado).toContainEqual(["error-firmas", { sinExplicar: FIRMAS_SIN_EXPLICAR_MAX + 1, completo: 1 }]);
+    expect(m.anotado).toContainEqual(["error-patrocinio", { prendidos: 1 }]);
+  });
+
+  it("una compra cargada sin pagar sigue explicando sus aprobaciones los días siguientes, hasta una semana", async () => {
+    const m = montar();
+    const ana = m.persona("usr_ana");
+    m.cupos.transaccion(() => m.compras.sumarPiloto(ana.cuenta as string, m.hora()));
+    await m.empezar(ana.token, "alta");
+    await m.cargar(ana.token, "alta");
+    m.mover(3 * DIA_MS);
+    expect(m.compras.firmas(m.hora() - DIA_MS)).toEqual({ compras: 1, pagosConSaldo: 0 });
+    m.mover(5 * DIA_MS);
+    expect(m.compras.firmas(m.hora() - DIA_MS)).toEqual({ compras: 0, pagosConSaldo: 0 });
   });
 });

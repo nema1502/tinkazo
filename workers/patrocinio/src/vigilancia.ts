@@ -60,10 +60,14 @@ export function contarFirmas(movimientos: unknown, desde: number): { firmas: num
   return { firmas, completo: movimientos.length < MAX_MOVIMIENTOS };
 }
 
-/** El patrocinio de la app tiene que estar todo apagado: lo que esté prendido se nombra, en orden. */
-export function patrocinioEsperado(banderas: Record<string, boolean>): { esperado: boolean; prendidos: string[] } {
+/**
+ * El patrocinio de la app tiene que estar todo apagado, salvo lo `permitido` (`PATROCINIO_PERMITIDO`: la compra con QR
+ * necesita prendidos el de las líneas y el de los envíos de cuentas co-firmadas). Lo que esté prendido sin estar
+ * permitido se nombra, en orden.
+ */
+export function patrocinioEsperado(banderas: Record<string, boolean>, permitido: readonly string[] = []): { esperado: boolean; prendidos: string[] } {
   const prendidos = Object.keys(banderas)
-    .filter((k) => banderas[k] === true)
+    .filter((k) => banderas[k] === true && !permitido.includes(k))
     .sort();
   return { esperado: prendidos.length === 0, prendidos };
 }

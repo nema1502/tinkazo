@@ -60,12 +60,36 @@ const TABLAS_ALTAS = [
   "CREATE TABLE IF NOT EXISTS pagos (operacion TEXT PRIMARY KEY, paging_token TEXT NOT NULL, tx TEXT NOT NULL, orden TEXT NOT NULL, de TEXT NOT NULL, monto INTEGER NOT NULL, ms INTEGER NOT NULL)",
   "CREATE INDEX IF NOT EXISTS pagos_orden ON pagos (orden)",
   "CREATE TABLE IF NOT EXISTS pagos_sueltos (operacion TEXT PRIMARY KEY, tx TEXT NOT NULL, de TEXT NOT NULL, activo TEXT NOT NULL, monto INTEGER NOT NULL, nota TEXT, motivo TEXT NOT NULL, estado TEXT NOT NULL DEFAULT 'suelto', orden TEXT, ref TEXT, ms INTEGER NOT NULL)",
+  // La compra con QR (`compras.ts`): una fila por compra, la orden que lleva su recargo y la lista del piloto.
+  // Nace con `avisada`: en un portero que todavía no tenía la tabla no hace falta sumarla después (`COLUMNAS_NUEVAS`).
+  "CREATE TABLE IF NOT EXISTS compras_qr (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario TEXT NOT NULL, producto TEXT NOT NULL, creada INTEGER NOT NULL, desde INTEGER NOT NULL, reserva INTEGER NOT NULL, recargo INTEGER NOT NULL, primera INTEGER NOT NULL, nueva INTEGER NOT NULL, cargada INTEGER, cerrada INTEGER, motivo TEXT, avisada INTEGER)",
+  "CREATE INDEX IF NOT EXISTS compras_qr_usuario ON compras_qr (usuario, id)",
+  "CREATE TABLE IF NOT EXISTS compras_qr_ordenes (orden TEXT PRIMARY KEY, compra INTEGER NOT NULL, recargo INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS compras_qr_ordenes_compra ON compras_qr_ordenes (compra)",
+  "CREATE TABLE IF NOT EXISTS compras_piloto (cuenta TEXT PRIMARY KEY, creada INTEGER NOT NULL)",
+  // Cada vez que una persona anuló su compra cargada (`compras.ts`, `soltarReserva`): el tope es por persona y por semana.
+  "CREATE TABLE IF NOT EXISTS compras_anulaciones (id INTEGER PRIMARY KEY AUTOINCREMENT, compra INTEGER NOT NULL, usuario TEXT NOT NULL, ms INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS compras_anulaciones_usuario ON compras_anulaciones (usuario, ms)",
+  // Cada aviso de carga que dio el sí (`compras.ts`, `marcarCargada`): el tope es por compra y por semana.
+  "CREATE TABLE IF NOT EXISTS compras_avisos (id INTEGER PRIMARY KEY AUTOINCREMENT, compra INTEGER NOT NULL, ms INTEGER NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS compras_avisos_compra ON compras_avisos (compra, ms)",
 ];
 
-/** Las columnas que el libro le suma a `cuenta_app`. Se agregan una sola vez: si ya están, no se tocan. */
-const COLUMNAS_LIBRO: ReadonlyArray<[string, string]> = [
-  ["motivo", "ALTER TABLE cuenta_app ADD COLUMN motivo TEXT"],
-  ["permanente", "ALTER TABLE cuenta_app ADD COLUMN permanente INTEGER NOT NULL DEFAULT 0"],
+/**
+ * Las columnas que se suman a tablas que ya existían en un portero desplegado. Se agregan una sola vez (si ya están, no
+ * se tocan) y aceptan null o traen su valor por defecto: la versión anterior del código sigue andando sobre los mismos
+ * datos, porque escribe nombrando sus columnas y lee con `SELECT *`.
+ */
+const COLUMNAS_NUEVAS: ReadonlyArray<readonly [tabla: string, columna: string, alter: string]> = [
+  // Las del libro, en `cuenta_app`.
+  ["cuenta_app", "motivo", "ALTER TABLE cuenta_app ADD COLUMN motivo TEXT"],
+  ["cuenta_app", "permanente", "ALTER TABLE cuenta_app ADD COLUMN permanente INTEGER NOT NULL DEFAULT 0"],
+  // Cuándo se reemplazó una orden (`cobros.ts`): un pago con su nota que entró a la red hasta 2 minutos después se honra.
+  // Null en las de antes y en las que reemplace la versión anterior: esas no se honran.
+  ["ordenes", "reemplazada", "ALTER TABLE ordenes ADD COLUMN reemplazada INTEGER"],
+  // El último aviso de carga que dio el sí (`compras.ts`): a menos de 3 minutos de ese, otro aviso da `409 cargando`.
+  // Null en las compras que cargó la versión anterior: esas cuentan desde `cargada`, el primer aviso.
+  ["compras_qr", "avisada", "ALTER TABLE compras_qr ADD COLUMN avisada INTEGER"],
 ];
 
 export type Estado = "reservado" | "enviado" | "ok" | "fallo" | "devuelto";
@@ -169,6 +193,10 @@ export const PURGA_USO_MS = 35 * DIA_MS;
 const ESTADOS_QUE_GASTAN = "('reservado','enviado','ok','fallo')";
 
 export class Cupos {
+  /** Las columnas de `COLUMNAS_NUEVAS` que no se pudieron sumar al arrancar (`tabla.columna`), y el primer error. */
+  private readonly faltan: string[] = [];
+  private errorAlSumar: string | null = null;
+
   constructor(private readonly sql: Sql) {
     for (const q of [
       "CREATE TABLE IF NOT EXISTS uso (hash TEXT PRIMARY KEY, cuenta TEXT NOT NULL, metodo TEXT NOT NULL, mes TEXT NOT NULL, creado INTEGER NOT NULL, estado TEXT NOT NULL, estimado INTEGER NOT NULL, real INTEGER, vence INTEGER NOT NULL)",
@@ -184,26 +212,54 @@ export class Cupos {
     ]) {
       this.sql.exec(q);
     }
-    this.sumarColumnasDelLibro();
+    this.sumarColumnas();
   }
 
-  /** Los `ALTER` del libro, solo si `cuenta_app` no tiene la columna: correr esto dos veces no rompe nada. */
-  private sumarColumnasDelLibro(): void {
-    let hay: Set<string> | null;
-    try {
-      hay = new Set(this.filas("PRAGMA table_info(cuenta_app)").map((f) => String(f.name)));
-    } catch {
-      hay = null;
-    }
-    for (const [columna, alter] of COLUMNAS_LIBRO) {
+  /**
+   * Los `ALTER` de `COLUMNAS_NUEVAS`, solo si la tabla no tiene la columna: correr esto dos veces no rompe nada. Si uno
+   * falla por algo que no es una columna que ya estaba (la base llena, un error raro), NO se lanza: el objeto entero
+   * (sellos, sorteos y cupones del evento) no se puede caer por una columna de la venta. La columna queda anotada en
+   * `columnasQueFaltan`, la venta queda cerrada (`rutas-altas.ts`) y el estado lo dice para que la vigilancia avise.
+   */
+  private sumarColumnas(): void {
+    const leidas = new Map<string, Set<string> | null>();
+    const columnasDe = (tabla: string): Set<string> | null => {
+      if (!leidas.has(tabla)) {
+        try {
+          leidas.set(tabla, new Set(this.filas(`PRAGMA table_info(${tabla})`).map((f) => String(f.name))));
+        } catch {
+          leidas.set(tabla, null);
+        }
+      }
+      return leidas.get(tabla) ?? null;
+    };
+    for (const [tabla, columna, alter] of COLUMNAS_NUEVAS) {
+      const hay = columnasDe(tabla);
       if (hay?.has(columna)) continue;
       try {
         this.sql.exec(alter);
       } catch (e) {
-        // Sin poder leer las columnas, una que ya estaba da este error y se sigue; cualquier otro, no.
-        if (hay !== null || !/duplicate column/i.test(String(e))) throw e;
+        // Sin poder leer las columnas, una que ya estaba da este error y se sigue; cualquier otro queda anotado.
+        if (hay === null && /duplicate column/i.test(String(e))) continue;
+        this.faltan.push(`${tabla}.${columna}`);
+        this.errorAlSumar ??= String(e instanceof Error ? e.message : e).slice(0, 120);
       }
     }
+  }
+
+  /** Las columnas nuevas que no se pudieron sumar al arrancar, como `tabla.columna`. Vacío si está todo. */
+  columnasQueFaltan(): string[] {
+    return [...this.faltan];
+  }
+
+  /** Si esta columna nueva no se pudo sumar al arrancar: quien la usa consulta sin ella. */
+  faltaColumna(tabla: string, columna: string): boolean {
+    return this.faltan.includes(`${tabla}.${columna}`);
+  }
+
+  /** El primer error al sumar una columna, recortado (sin datos de nadie: es el de un `ALTER` fijo), o null. */
+  errorDeColumnas(): string | null {
+    return this.errorAlSumar;
   }
 
   /** Todo o nada (ver `Sql.transaccion`). Lo que vale plata se escribe adentro. */
@@ -641,6 +697,11 @@ export class Cupos {
             ordenes: this.filas("SELECT * FROM ordenes ORDER BY creada"),
             pagos: this.filas("SELECT * FROM pagos ORDER BY ms"),
             pagos_sueltos: this.filas("SELECT * FROM pagos_sueltos ORDER BY ms"),
+            compras_qr: this.filas("SELECT * FROM compras_qr ORDER BY id"),
+            compras_qr_ordenes: this.filas("SELECT * FROM compras_qr_ordenes ORDER BY compra, orden"),
+            compras_piloto: this.filas("SELECT * FROM compras_piloto ORDER BY creada, cuenta"),
+            compras_anulaciones: this.filas("SELECT * FROM compras_anulaciones ORDER BY id"),
+            compras_avisos: this.filas("SELECT * FROM compras_avisos ORDER BY id"),
           }
         : {}),
     };

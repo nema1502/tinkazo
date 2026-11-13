@@ -5,7 +5,9 @@
  * - que el portero pague los sellos y los sorteos: apagado o devuelto a Pollar no paga nada (o sin leer);
  * - que el portero tenga su llave (`llave` en null): sin ella tampoco paga;
  * - los créditos de Pollar cerca del piso (menos de 1.000 de margen) o por debajo del piso, que es cuando el portero
- *   deja de aceptar canjes de cupones; o sin leer;
+ *   deja de aceptar canjes de cupones; o sin leer. Con compras con QR en curso, lo que reservan (`reservasCompras`) va
+ *   encima del piso, y no cubrirlo es un problema propio: avisa antes de que un 402 frene a quien tiene su dinero en
+ *   camino;
  * - la cuenta patrocinadora baja o sin leer (`alerta`), y un tramo más grave cuando queda menos de la mitad del nivel
  *   de alerta;
  * - las altas pausadas a mano (`altasPausadas`);

@@ -83,6 +83,22 @@ describe("las altas nacen apagadas", () => {
     expect(cfg.cuentaCobros).toBeNull();
   });
 
+  it("la cuenta de cobros es propia: si repite la que paga las comisiones o la sorteadora, el pago no se prende y nadie lee sus pagos", () => {
+    const patrocinadora = Keypair.random().publicKey();
+    const base = { RED: "mainnet", ...TODO_PRENDIDO, CUENTA_PATROCINADORA: patrocinadora };
+    expect(leerConfig(base)).toMatchObject({ altasPago: true, cuentaCobros: TODO_PRENDIDO.CUENTA_COBROS, faltaAltas: [] });
+    for (const repetida of [patrocinadora, TODO_PRENDIDO.CUENTA_SORTEADORA]) {
+      const cfg = leerConfig({ ...base, CUENTA_COBROS: ` ${repetida} ` });
+      expect(cfg.altasPago).toBe(false);
+      expect(cfg.cuentaCobros).toBeNull();
+      expect(cfg.faltaAltas).toEqual(["cuenta-cobros-repetida"]);
+    }
+    // Con el pago apagado igual se dice: con la cuenta cargada el servidor ya lee sus pagos.
+    expect(leerConfig({ ...base, ALTAS_PAGO: "0", CUENTA_COBROS: patrocinadora })).toMatchObject({ cuentaCobros: null, faltaAltas: ["cuenta-cobros-repetida"] });
+    // En testnet no se mira nada.
+    expect(leerConfig({ ...base, RED: "testnet", CUENTA_COBROS: patrocinadora }).faltaAltas).toEqual([]);
+  });
+
   it("un id de app de Pollar con caracteres raros no se toma", () => {
     expect(leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: "app id/../x" }).pollarAppId).toBeNull();
     expect(leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: "  app_1  " }).pollarAppId).toBe("app_1");
@@ -90,8 +106,8 @@ describe("las altas nacen apagadas", () => {
 });
 
 describe("PRECIOS", () => {
-  it("la cadena del diseño da los tres productos, con el monto en diezmillonésimas", () => {
-    expect(leerPrecios(PRECIOS_POR_DEFECTO)).toEqual([
+  it("una cadena con los tres productos los da todos, con el monto en diezmillonésimas", () => {
+    expect(leerPrecios("alta:2:3:365,p10:5:10:365,p50:20:50:365")).toEqual([
       { id: "alta", usdc: "2", monto: 20_000_000, sorteos: 3, dias: 365 },
       { id: "p10", usdc: "5", monto: 50_000_000, sorteos: 10, dias: 365 },
       { id: "p50", usdc: "20", monto: 200_000_000, sorteos: 50, dias: 365 },
@@ -235,7 +251,8 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(valor("env.mainnet.durable_objects.bindings", "class_name")).toBe('"Patrocinio"');
     expect(valor("env.mainnet.vars", "RED")).toBe('"mainnet"');
     expect(valor("env.mainnet.vars", "ALTAS")).toBe('"1"');
-    expect(valor("env.mainnet.vars", "ALTAS_PAGO")).toBe('"0"');
+    // El pago se prende cambiando ALTAS_PAGO a "1" (ver abajo); el sorteo del servidor, todavía no: el sitio no lo usa.
+    expect(['"0"', '"1"']).toContain(valor("env.mainnet.vars", "ALTAS_PAGO"));
     expect(valor("env.mainnet.vars", "SORTEO_SERVIDOR")).toBe('"0"');
     expect(valor("env.mainnet.vars", "MAX_SELLOS_MES")).toBe('"100"');
     expect(valor("env.mainnet.vars", "RESERVA_SORTEO_STROOPS")).toBe('"1236000"');
@@ -243,6 +260,54 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(valor("env.mainnet.vars", "PATROCINADORES_APP")).toBe('""');
     const precios = valor("env.mainnet.vars", "PRECIOS");
     expect(precios && leerPrecios(JSON.parse(precios) as string)).toEqual(leerPrecios(PRECIOS_POR_DEFECTO));
+  });
+
+  /** Las variables de `[env.mainnet.vars]`, como las lee el Worker. */
+  const varsDeMainnet = (): Record<string, string> =>
+    Object.fromEntries(
+      (secciones.get("env.mainnet.vars") ?? []).flatMap((l) => {
+        const m = /^([A-Z_]+)\s*=\s*"([^"]*)"$/.exec(l);
+        return m ? [[m[1] as string, m[2] as string]] : [];
+      }),
+    );
+
+  it("prender el pago es cambiar variables: ALTAS_PAGO en 1 con la cuenta de cobros cargada prende el pago sin que falte nada", () => {
+    const vars = varsDeMainnet();
+    const cobros = Keypair.random().publicKey();
+    const cfg = leerConfig({ ...vars, ALTAS_PAGO: "1", CUENTA_COBROS: cobros });
+    expect(cfg).toMatchObject({ red: "mainnet", altas: true, altasPago: true, sorteoServidor: false, cuentaCobros: cobros, faltaAltas: [] });
+    expect(cfg.precios).toEqual(leerPrecios(PRECIOS_POR_DEFECTO));
+    // Lo que diga el archivo hoy: con el pago prendido, su cuenta de cobros es válida y propia.
+    const hoy = leerConfig(vars);
+    expect(hoy.faltaAltas).toEqual([]);
+    if (vars.ALTAS_PAGO === "1") expect(hoy.altasPago).toBe(true);
+    else expect(vars.CUENTA_COBROS === "" || hoy.cuentaCobros === vars.CUENTA_COBROS).toBe(true);
+  });
+
+  it("los precios de la venta: 3 sorteos por 4 dólares por 90 días y 10 por 10 dólares por un año, sin el de 50", () => {
+    expect(leerPrecios(PRECIOS_POR_DEFECTO)).toEqual([
+      { id: "alta", usdc: "4", monto: 40_000_000, sorteos: 3, dias: 90 },
+      { id: "p10", usdc: "10", monto: 100_000_000, sorteos: 10, dias: 365 },
+    ]);
+  });
+
+  it("ningún precio de mainnet pierde en el peor caso con la persona firmando el sorteo, y el piso guarda sus dos firmas", () => {
+    const vars = varsDeMainnet();
+    const precios = leerPrecios(vars.PRECIOS ?? "");
+    expect(precios).not.toBeNull();
+    // Las cuentas del costo de un paquete, en micro-dólares: el crédito de Pollar a US$0,01, 35 por la cuenta, 10 por mes
+    // con un sorteo por mes (hasta 12), 20 por firma, y US$0,156 de red por sorteo en el peor caso. Sin el sorteo del
+    // servidor la persona firma el sello y el sorteo, con reintentos: 2,5 firmas por sorteo. Entra el 95 % del precio.
+    const firmasMil = vars.SORTEO_SERVIDOR === "1" ? 1250 : 2500;
+    const deja = (p: NonNullable<typeof precios>[number]) => {
+      const costo = 350_000 + Math.min(p.sorteos, 12) * 100_000 + p.sorteos * ((firmasMil * 200_000) / 1000 + 156_000);
+      return Math.floor((p.monto * 95) / 1000) - costo;
+    };
+    for (const p of precios ?? []) expect(deja(p), p.id).toBeGreaterThanOrEqual(0);
+    expect(Object.fromEntries((precios ?? []).map((p) => [p.id, deja(p)]))).toEqual({ alta: 1_182_000, p10: 1_590_000 });
+    // Mientras la persona firme el sorteo, el piso guarda 40 créditos por sorteo prometido: el sello y el sorteo.
+    expect(vars.SORTEO_SERVIDOR).toBe("0");
+    expect(Number(vars.CREDITOS_POR_SORTEO)).toBeGreaterThanOrEqual(40);
   });
 
   it("mainnet paga el draw solo de los sellos del portero desde el primer despliegue; testnet no tiene la variable", () => {

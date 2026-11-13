@@ -37,7 +37,8 @@ export const estadoBien = (extra: Record<string, unknown> = {}): Record<string, 
   margen: 7000,
   altasPausadas: false,
   firmasSinExplicar: 2,
-  firmas: { cobradas: 30, explicadas: 28, sellos: 20, sorteos: 6, activaciones: 2, completo: true, desde: 0 },
+  // Con la venta en el portero, firmas suma lo que explican las compras con QR y los pagos con el saldo.
+  firmas: { cobradas: 30, explicadas: 28, sellos: 20, sorteos: 6, activaciones: 2, compras: 0, pagosConSaldo: 0, completo: true, desde: 0 },
   patrocinioPollar: { esperado: true, prendidos: [] },
   // Los manda el portero vivo (con las altas prendidas en mainnet) aunque la venta esté cerrada. La revisión no los mira.
   pagosSueltos: 0,

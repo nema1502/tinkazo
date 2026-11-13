@@ -66,6 +66,13 @@ describe("una vuelta con todo en orden", () => {
 const CASOS: Array<{ nombre: string; estado: () => unknown; asunto: RegExp; cifras: string[]; clave: string }> = [
   { nombre: "créditos bajos", estado: () => creditosBajos(), asunto: /créditos de Pollar bajos/i, cifras: ["2.400", "2.000", "400"], clave: "creditos-bajos" },
   { nombre: "créditos bajo el piso", estado: () => bajoElPiso(), asunto: /bajo el piso/i, cifras: ["1.800", "2.000", "-200"], clave: "creditos-bajo-el-piso" },
+  {
+    nombre: "créditos que no cubren las compras con QR en curso",
+    estado: () => estadoBien({ creditos: 2400, piso: 2000, margen: 400, reservasCompras: 530 }),
+    asunto: /^Créditos de Pollar bajo las compras en curso: cargá ya$/,
+    cifras: ["2.400", "2.000", "530", "faltan 130"],
+    clave: "creditos-bajo-las-reservas",
+  },
   { nombre: "créditos sin leer", estado: () => estadoBien({ creditos: null, margen: null }), asunto: /créditos de Pollar/i, cifras: [], clave: "creditos-sin-leer" },
   {
     nombre: "la cuenta que paga, con poco saldo",
