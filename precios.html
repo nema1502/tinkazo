@@ -61,6 +61,16 @@
       <p class="lead" data-i="prNote">El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.</p>
     </div>
   </section>
+  <!-- La compra de sorteos oficiales: entra solo con VITE_ALTA_PAGO (src/paginas-cobro.ts) y la lista la llena el servidor. -->
+  <template data-con-cobro>
+  <section id="paquetes" style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="prPaqT">Sorteos oficiales</h2>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 8px" data-i="prPaqAyuda">Se compran desde tu cuenta, en el modo Oficial.</p>
+    <ul class="notas" data-paquetes style="max-width: 900px; list-style: none; padding-left: 0; margin-top: 12px"></ul>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 16px; margin-top: 12px" data-paquetes-nota hidden></p>
+    <a class="sec-link" href="/terminos.html#compras" data-i="prPaqTerminos">Qué comprás y cómo pedir una devolución</a>
+  </section>
+  </template>
 
   <section style="padding: 14px 0 0">
     <h2 class="kicker" data-i="prNeverTitle">Lo que nunca vamos a cobrar ni vender</h2>

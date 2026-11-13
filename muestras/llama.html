@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Muestra de la llama que acompaña</title>
+  </head>
+  <body>
+    <!--
+      Solo en la computadora de quien desarrolla: con pnpm dev, en /muestras/llama.html. El build del sitio no la
+      incluye (vite.config.ts no la nombra), así que nunca se publica. Recorre todos los estados de la llama que
+      acompaña (src/ui/llama-guia.ts). Parámetros: vista=estados|poses|ventana, pantalla=CQ-ID (con vista=ventana),
+      lang=es|en, theme=light|dark.
+    -->
+    <main id="muestra" class="muestra"></main>
+    <script type="module" src="/src/muestra-llama.ts"></script>
+  </body>
+</html>

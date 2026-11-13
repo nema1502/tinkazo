@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Terminaste esta parte | Tinkazo</title>
+<meta name="robots" content="noindex" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<style>
+  /* La vuelta de la verificación de identidad. Suelta a propósito: Vercel la sirve tal cual, sin pasar por Vite, y no
+     carga nada del sitio ni del proveedor (así nunca hay dos copias del sitio con la misma sesión). Los colores son los
+     de src/styles.css (docs/marca.md). */
+  :root { --paper: #fff6e9; --card: #ffffff; --ink: #191919; --ink2: #4b4437; --magenta: #e93d9c; --teal: #00a896; --yellow: #ffc629; color-scheme: light; }
+  :root[data-theme="dark"] { --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --magenta: #ff5cb3; --teal: #17c3b2; --yellow: #ffd24d; color-scheme: dark; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --magenta: #ff5cb3; --teal: #17c3b2; --yellow: #ffd24d; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { overflow-x: hidden; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 32px 16px;
+    background: var(--paper); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main {
+    width: 100%; max-width: 440px; text-align: center; padding: 32px 24px 28px;
+    background: var(--card); border: 3px solid var(--ink); box-shadow: 6px 6px 0 var(--ink);
+  }
+  .llama { width: 96px; height: auto; overflow: visible; filter: drop-shadow(4px 4px 0 var(--ink)); }
+  .llama g { fill: var(--magenta); }
+  .listo { display: inline-grid; place-items: center; width: 44px; height: 44px; margin: 18px auto 0; background: var(--teal); border: 3px solid var(--ink); }
+  .listo svg { width: 24px; height: 24px; }
+  h1 { font-size: clamp(28px, 7vw, 38px); font-weight: 900; letter-spacing: -0.02em; line-height: 1.1; margin-top: 14px; }
+  p { font-size: 18px; color: var(--ink2); line-height: 1.5; margin-top: 12px; }
+  p strong { color: var(--ink); }
+  .volver {
+    display: flex; align-items: center; justify-content: center; min-height: 52px; margin-top: 22px; padding: 0 20px;
+    background: var(--magenta); color: #191919; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
+    font-size: 18px; font-weight: 900; text-decoration: none;
+  }
+  .volver:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  .volver:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
+  .pies { display: flex; justify-content: center; }
+  .pies a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; color: var(--ink); font-size: 16px; font-weight: 700; text-underline-offset: 3px; }
+  .pies a:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
+</style>
+</head>
+<body>
+<main>
+  <svg class="llama" viewBox="-2 -4 26 30" aria-hidden="true"><g><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>
+  <div class="listo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#191919" stroke-width="3.4" stroke-linecap="square"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+  <h1 id="titulo">Terminaste esta parte</h1>
+  <p id="texto">Volvé a la página de Tinkazo y tocá <strong>Ya terminé</strong>.</p>
+  <a class="volver" id="volver" href="/">Volver a Tinkazo</a>
+</main>
+<nav class="pies" aria-label="Tinkazo"><a id="terminos" href="/terminos.html">Términos y privacidad</a></nav>
+<script>
+  // Sin nada del sitio ni del proveedor: elige el idioma (el de la dirección, o el del navegador) y el tema pedido.
+  (function () {
+    var q = new URLSearchParams(location.search);
+    var pedido = q.get("lang");
+    var nav = (navigator.languages && navigator.languages[0]) || navigator.language || "es";
+    var en = pedido ? pedido === "en" : !/^es\b/i.test(nav);
+    var tema = q.get("theme");
+    if (tema === "dark" || tema === "light") document.documentElement.dataset.theme = tema;
+    if (en) {
+      document.documentElement.lang = "en";
+      document.title = "You finished this part | Tinkazo";
+      document.getElementById("titulo").textContent = "You finished this part";
+      document.getElementById("texto").innerHTML = "Go back to the Tinkazo page and tap <strong>I'm done</strong>.";
+      document.getElementById("volver").textContent = "Back to Tinkazo";
+      document.getElementById("terminos").textContent = "Terms and privacy";
+    }
+    // Volver a Tinkazo: esta página se abrió para la verificación, así que se intenta cerrarla y la de Tinkazo queda a
+    // la vista. Si el navegador no la deja cerrar, va a la portada, donde la compra sigue donde quedó.
+    document.getElementById("volver").addEventListener("click", function (e) {
+      e.preventDefault();
+      try { window.close(); } catch (_) { /* sin permiso para cerrarla */ }
+      setTimeout(function () { if (!window.closed) location.assign("/"); }, 400);
+    });
+    document.body.dataset.listo = "1";
+  })();
+</script>
+</body>
+</html>

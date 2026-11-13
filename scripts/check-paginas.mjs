@@ -63,6 +63,8 @@ const HERRAMIENTAS = [
   },
   { p: "evento", hash: "", listo: "!/working/.test(document.getElementById('ev-veredicto').className)" },
   { p: "c", hash: "", listo: "!!document.body.dataset.estado && document.body.dataset.estado !== 'abriendo'" },
+  // La vuelta de la verificación de identidad de la compra con QR: suelta, sin nada del sitio, en public/.
+  { p: "verificado", hash: "", listo: "document.body.dataset.listo === '1'" },
 ];
 
 let fallos = 0;

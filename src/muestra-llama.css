@@ -1,0 +1,23 @@
+/* La página de muestra de la llama que acompaña (muestras/llama.html). Solo para desarrollo. */
+.muestra { padding: 16px; max-width: 1240px; margin: 0 auto; width: 100%; }
+.muestra-cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin-bottom: 16px; }
+.muestra-cab h1 { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; }
+.muestra-cab nav { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.muestra-cab a { color: var(--ink); font-weight: 700; min-height: 44px; display: inline-flex; align-items: center; text-underline-offset: 3px; }
+.muestra-cab a[aria-current] { text-decoration-thickness: 3px; text-decoration-color: var(--magenta); }
+.muestra-grilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 24px; align-items: start; }
+.muestra-ventana { margin: 0; max-height: none; }
+.muestra-h { font-size: 22px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.2; }
+.muestra-dato { display: flex; justify-content: space-between; gap: 12px; font-size: 16px; padding-top: 8px; border-top: 2px dashed var(--ink); }
+.muestra-dato span { color: var(--ink2); }
+.muestra-texto {
+  min-height: 44px; background: none; border: 0; color: var(--ink); font: inherit; font-size: 16px; font-weight: 700;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.muestra-poses { display: flex; flex-wrap: wrap; gap: 20px; }
+.muestra-pose { margin: 0; padding: 12px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-align: center; }
+.muestra-pose figcaption { font-size: 16px; font-weight: 800; margin-top: 6px; }
+.muestra-chica, .muestra-grande { display: inline-block; vertical-align: bottom; }
+.muestra-chica { width: 64px; height: 64px; margin-right: 12px; }
+.muestra-grande { width: 192px; height: 192px; }
+.muestra-pose .llg-svg { display: block; width: 100%; height: 100%; overflow: visible; }

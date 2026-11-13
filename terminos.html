@@ -68,6 +68,20 @@
       <h3 data-i="tmQ1T">Gratis, y no es para apuestas</h3>
       <p data-i="tmQ1B">Tinkazo no cobra por participar y no es para sorteos que cobren: un sorteo con entrada paga es una rifa o una lotería, y en casi todo el mundo pide licencia. Tampoco es para apuestas: nadie apuesta al resultado, nadie paga para participar y Tinkazo no guarda dinero de nadie. Usarlo para cobrar la entrada o para recibir apuestas va contra estos términos.</p>
     </article>
+    <!-- Lo que se compra: entra solo con VITE_ALTA_PAGO (src/paginas-cobro.ts). -->
+    <template data-con-cobro>
+    <article class="nota" id="compras">
+      <h3 data-i="tmCompraT">Si comprás sorteos oficiales</h3>
+      <p data-i="tmCompraB">Lo que comprás son sorteos oficiales, para sellar en el modo Oficial. Antes de pagar, cada paquete dice cuántos trae y por cuántos días valen, contados desde que llega tu pago. El primero también activa tu cuenta. No son saldo: no se retiran, no se transfieren y no se cambian por dinero. Participar en un sorteo sigue siendo gratis, siempre.</p>
+      <p data-i-html="tmCompraEscribir">Para pedir una devolución o preguntar por un pago, escribinos a <a href="mailto:hola@tinkazo.app">hola@tinkazo.app</a> con la nota o el número de tu compra.</p>
+      <details class="tecnico">
+        <summary data-i="tmCompraMas">Pagos, devoluciones y datos</summary>
+        <p data-i="tmCompraPago">Pagás en dólares digitales (USDC), con los datos que te da la pantalla de pago, o con el QR de tu banco, en bolivianos. Pagando con QR se suma lo que cuesta ese pago, y la pantalla lo dice antes de pagar: la primera vez es más, porque incluye verificar tu identidad. La compra queda hecha cuando llega al menos el 95 % del precio del paquete, porque algunas apps descuentan su comisión, y si pagaste con QR, también lo que se suma por el QR. Podemos cambiar los precios o pausar la venta, y lo que ya compraste se respeta, con sus días.</p>
+        <p data-i="tmCompraDevolver">Si mandaste de más, sin la nota o dos veces, o si dejaste un pago a medias que no vas a completar, te lo devolvemos a la cuenta desde la que pagaste. Si pagaste desde un exchange, te pedimos los datos para que llegue. Lo que ya compraste no se devuelve, salvo que algo falle de nuestro lado.</p>
+        <p data-i="tmCompraDatos">Al comprar, nuestro servicio guarda tu compra (el paquete, el monto, la nota y cuándo vence) junto al identificador que Pollar le da a tu cuenta. De cada pago que llega guarda el monto, la cuenta desde la que se mandó y cuándo, para reconocerlo y poder devolverlo. Esos pagos quedan en Stellar, que es público. Si pagás con QR, para verificar tu identidad y cambiar tus bolivianos, tu carnet, una foto de tu cara y tus datos van a Pollar, la empresa que mueve tu dinero, a Didit, que mira tu carnet y tu cara, y a Stereum, la casa de cambio. Tinkazo no los guarda ni los usa. De esa compra, nuestro servicio guarda el paquete, lo que se suma por el QR y en qué paso está.</p>
+      </details>
+    </article>
+    </template>
     <article class="nota">
       <h3 data-i="tmQ2T">Quien organiza responde</h3>
       <p data-i="tmQ2B">El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.</p>
