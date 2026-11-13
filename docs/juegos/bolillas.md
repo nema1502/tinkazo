@@ -8,7 +8,7 @@ La troya de Santa Cruz: un círculo de tiza en la tierra con las canicas de los 
 
 ## El momento que hace gritar a la sala
 
-La última tirada roza a la canica que gana: rueda hasta la tiza, titila en la orilla —parece que va a cruzar— y se queda adentro. Queda sola en el círculo: ese nombre ganó.
+La última tirada roza a la canica que gana: rueda hasta la tiza, titila en la orilla, parece que va a cruzar, y se queda adentro. Queda sola en el círculo: ese nombre ganó.
 
 ## Para cuántas personas
 
@@ -47,7 +47,7 @@ Se aprueba antes del código. La regla (26 de octubre de 2026): **cualquier cuad
 
 ## Qué no es
 
-No es una apuesta: la pegadora no apuesta canicas, cobra ni reparte nada, y nadie "gana botín". No hay casino, ni fichas, ni tablero. Lo cultural, según lo pasado por quien pide el juego: en Santa Cruz al juego de canicas se le dice **bolillas**, y la variante que juega es **la troya** (círculo de tiza en la tierra, las canicas apostadas adentro, tirar para sacarlas: es.wikipedia.org/wiki/Canica). Falta la fuente local de la troya para salir del borrador.
+No hay dinero en juego: la pegadora no cobra ni reparte nada, y nadie gana un botín. No hay casino, ni fichas, ni tablero. Lo cultural, según lo pasado por quien pide el juego: en Santa Cruz al juego de canicas se le dice **bolillas**, y la variante que juega es **la troya** (círculo de tiza en la tierra, las canicas puestas adentro, tirar para sacarlas: es.wikipedia.org/wiki/Canica). Falta la fuente local de la troya para salir del borrador.
 
 ## Batería
 

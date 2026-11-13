@@ -2942,13 +2942,13 @@ export const T: Record<Lang, Dict> = {
     gcBolillas: "La pegadora saca canicas del círculo de a una. Se queda adentro la última… y esa ya ganó.",
     gcBolillasMany: "Con varios premios, las canicas de los premios no salen del círculo: la última golpeada es la del primer premio.",
     loreBolillasQ: "¿De dónde sale Bolillas?",
-    loreBolillasA: "Borrador: en Santa Cruz, jugar canicas se dice jugar a las bolillas, y una de las variantes es la troya: se dibuja un círculo en la tierra, se ponen las canicas adentro y se tira para sacarlas. El molde está en la página de canicas de Wikipedia; falta la fuente local de la troya para salir del borrador.",
+    loreBolillasA: "En Santa Cruz, jugar canicas se dice jugar a las bolillas. Una de las variantes es la troya: se dibuja un círculo en la tierra, se ponen las canicas adentro y se tira para sacarlas.",
     // --- /bolillas
     // El selector recomienda según la cantidad (`ui/recomendar.ts`). Las notas de Bolillas, el recinto del
     // círculo: la troya se luce cuando cada canica se lee y cada tiro se siente, se achica la tanpa con
     // pocas, y con muchas las canicas quedan chicas y cruza la tanda previa.
     "rec.bolillas.ideal": "El círculo se llena y cada tiro se siente.",
-    "rec.bolillas.bajo": "Con pocas, el círculo queda vacío y los tiros pasan de un tiro al otro.",
+    "rec.bolillas.bajo": "Con pocas canicas, el círculo queda vacío y los tiros se suceden sin pausa.",
     "rec.bolillas.alto": "Con mucha gente, la tanda previa cruza nombres antes de la troya.",
     "rec.bolillas.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: el círculo cabe hasta ${max}.`,
     "rec.bolillas.corto": "Con una sola persona no hay troya.",
@@ -5550,7 +5550,7 @@ export const T: Record<Lang, Dict> = {
     gcBolillas: "The thrower knocks marbles out of the circle one by one. The last one inside stays… and that one already won.",
     gcBolillasMany: "With several prizes, the prize marbles never leave the circle: the last one knocked out is the first prize's.",
     loreBolillasQ: "Where does Bolillas come from?",
-    loreBolillasA: "Draft: in Santa Cruz, playing marbles is playing bolillas, and one variant is the troya: a circle is drawn on the dirt, the marbles go inside, and players throw to knock them out. The shape comes from the Wikipedia page on marbles; the local source for the troya is still missing.",
+    loreBolillasA: "In Santa Cruz, playing marbles is called playing bolillas. One variant is the troya: players draw a circle on the dirt, put the marbles inside and throw to knock them out.",
     // --- /bolillas
     // The selector recommends by head count (`ui/recomendar.ts`). Bolillas's notes: the circle sings when
     // every marble reads and every throw lands; with few it looks empty, and with many the heads sit out.

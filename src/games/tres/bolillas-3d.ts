@@ -15,7 +15,7 @@ import {
 } from "../pixi/bolillas-plan";
 import { cercaDe, dibujoDe, anuncioDeDiana, persecucionDe, AGUAYO, CANICA_ESCALA, type Persecucion } from "../pixi/bolillas-arte";
 /**
- * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
+ * Bolillas en 3D: la troya de verdad, la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
  * lo que el plan ya puso, cuadro a cuadro, y suena cuando las canicas chocan (el clic de la casa, mudo incluido).
  * No guarda nada que cambie lo que pasa: cada cuadro es función de la hora `t` y del plan que le pasa el 2D.
@@ -26,9 +26,9 @@ import { cercaDe, dibujoDe, anuncioDeDiana, persecucionDe, AGUAYO, CANICA_ESCALA
  *
  * El cableado es el de la casa (`src/games/tres/README.md`): este archivo se registra solo (el registro de
  * `registro.ts` descubre todo `*-3d.ts` que exporte `lanzador3D`), Bolillas **no** entra a `JUEGOS_CON_3D` (D3: nace
- * apagada; el 3D se prueba con `?motor=3d`). Falta el enchufe del otro lado: la escena 2D (`pixi/bolillas.ts`, tarea
- * paralela) tiene que seguir el patrón de `guajojo`/`toborochi` — `anfitrion3D` con lienzo transparente,
- * `definicion(tres?)` y `export const bolillasPixi3D = (tres) => crearJuego(definicion(tres), anfitrion3D)` — y pasar
+ * apagada; el 3D se prueba con `?motor=3d`). Falta el enchufe del otro lado: la escena 2D (`pixi/bolillas.ts`, en
+ * otro cambio) tiene que seguir el patrón de `guajojo`/`toborochi`, `anfitrion3D` con lienzo transparente,
+ * `definicion(tres?)` y `export const bolillasPixi3D = (tres) => crearJuego(definicion(tres), anfitrion3D)`, y pasar
  * la `EntradaBolillas` de cada cuadro con `enchufar3D` + `entradaBase`. Mientras ese enchufe no exista, `lanzador3D`
  * devuelve el juego en 2D y nada se rompe.
  */
@@ -169,7 +169,7 @@ export interface Rodado {
 }
 
 /**
- * El rodado de una canica que va de `de` a `a`: el eje perpendicular al viaje —en el plano del piso— y los radianes
+ * El rodado de una canica que va de `de` a `a`: el eje perpendicular al viaje, en el plano del piso, y los radianes
  * que rueda, la distancia recorrida sobre su radio, sin patinar. `f` es el avance del tramo (0 a 1, recortado);
  * sin viaje no hay giro. Puro y determinista: la escena solo lo aplica al quaternion.
  */
@@ -207,7 +207,7 @@ export function rodadoDelTurno(d: Pick<Datos, "tiros">, slot: number, t: number,
 }
 
 /**
- * Cuánto titila una canica apoyada en la tiza, en radianes: el vaivén de la lección del sapo — un envolvente de seno
+ * Cuánto titila una canica apoyada en la tiza, en radianes: el vaivén de la lección del sapo, un envolvente de seno
  * que nace y muere en cero, así no hay salto ni de entrada ni de salida, y dentro titila de verdad. Sin azar.
  */
 export function titileo(t: number, t0: number, t1: number, alto = TEETER_ALTO, frec = TEETER_FRECUENCIA): number {
@@ -242,7 +242,7 @@ const CERCA_FOV = (40 * Math.PI) / 180;
 
 /**
  * El giro de la canica que gana sobre la tiza, en radianes: el segundo eje del titileo. Con el vaivén del costado
- * (`teeterDelCasi`), girar sobre la vertical hace que la canica se lea girando — y se queda quieta igual: nace y
+ * (`teeterDelCasi`), girar sobre la vertical hace que la canica se lea girando, y se queda quieta igual: nace y
  * muere en cero exacto con la misma envolvente del sapo. Sin azar: función de `t` y de las horas del plan.
  */
 export function giroDelCasi(d: Pick<Datos, "casi" | "duracion">, t: number): number {
@@ -332,7 +332,7 @@ export const LINEAS_N = 12;
 export const SACUDIDA_MAX = 0.035;
 /**
  * El tamaño del estallido 3D (S26), medido en canicas dibujadas (`R_DIBUJO`): la estrella no pasa de dos canicas de
- * ancho y ninguna línea se va más allá del alcance — el golpe se lee alrededor de la canica golpeada, no encima del
+ * ancho y ninguna línea se va más allá del alcance, el golpe se lee alrededor de la canica golpeada, no encima del
  * círculo ni del cartel. Los topes valen aunque la receta se retoque.
  */
 export const ESTALLIDO_RADIO_TOPE = 2;
@@ -349,8 +349,8 @@ export const DESTELLO_ALFA = 0.5;
 
 /**
  * El destello del vidrio sobre la canica golpeada (S13) en su avance `u` (0 al golpe, 1 ya apagado): dónde flota, cuánto
- * mide y cuánto se ve. S26 lo achicó y lo aclaró — antes era un globo blanco de casi tres canicas de radio encima del
- * círculo—, así que ahora el golpe se lee alrededor de la canica y no encima de la escena. Puro y determinista.
+ * mide y cuánto se ve. S26 lo achicó y lo aclaró, antes era un globo blanco de casi tres canicas de radio encima del
+ * círculo, así que ahora el golpe se lee alrededor de la canica y no encima de la escena. Puro y determinista.
  */
 export function destelloDe(u: number, radio = R_DIBUJO): { alto: number; r: number; alfa: number } {
   const k = Math.min(1, Math.max(0, u));
@@ -584,7 +584,7 @@ class Polvo {
 /* ============================================================== las chispas del vidrio */
 
 /**
- * Las chispas del choque: rayitos de brillo que saltan del impacto, más rápidos y más cortos que el polvo — el
+ * Las chispas del choque: rayitos de brillo que saltan del impacto, más rápidos y más cortos que el polvo, el
  * destello del vidrio que se roza. Cada chispa es función de `t - t0` y de un hash de su número (la misma tirada
  * suelta las mismas chispas), y sale por el rumbo de la canica golpeada que trae el plan. Vive dentro del grupo del
  * mundo (unidades del círculo), igual que el polvo.
@@ -966,8 +966,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         /* -------- las canicas: el plan dice dónde está cada una y qué le pasa */
         for (let slot = 0; slot < d.posiciones.length; slot++) {
           const c = canicaDe(slot, d);
-          // El dibujo de la canica (S25), la misma cuenta pura que la 2D: entera mientras juega —adentro de la tiza,
-          // con aire para su cuerpo doblado (S20)—, apagándose apenas cruza, y nada después: ni la malla, ni su sombra.
+          // El dibujo de la canica (S25), la misma cuenta pura que la 2D: entera mientras juega, adentro de la tiza,
+          // con aire para su cuerpo doblado (S20), apagándose apenas cruza, y nada después: ni la malla, ni su sombra.
           const dib = dibujoDe(d, slot, e.t);
           if (!dib) {
             c.grupo.visible = false;
@@ -1189,6 +1189,6 @@ export const lanzador3D = async (): Promise<Lanzador> => {
     const lanza = con3D.bolillasPixi3D(montaje);
     return (nombres, ganadores, baliza, listo) => lanza(nombres, ganadores, baliza, listo);
   }
-  // Todavía sin el enchufe (la tarea paralela dueña de pixi/bolillas*): el juego corre en 2D, como siempre.
+  // Todavía sin el enchufe (a cargo del cambio paralelo de pixi/bolillas*): el juego corre en 2D, como siempre.
   return m.bolillasPixi;
 };

@@ -194,7 +194,7 @@ export const CONTORNO_VIDRIO = 0.3;
  *
  * Existe por un bug de dibujo que la sala vio en el teléfono y no en el navegador sin placa: el `Graphics` de PixiJS
  * arranca cada subcamino en el último punto de la forma anterior (`_initNextPathLocation`), así que un `arc()` sin
- * `moveTo` se dibuja **unido** a lo que hubiera antes —un trazo de vidrio que cruza la canica— y, cuando la forma
+ * `moveTo` se dibuja **unido** a lo que hubiera antes, un trazo de vidrio que cruza la canica, y, cuando la forma
  * anterior era un `circle()`, el punto que hereda queda en `undefined` y el trazo sale con un vértice no finito
  * (geometría basura, que cada placa pinta como quiere). Con el arranque explícito, ningún arco hereda nada.
  */
@@ -230,8 +230,8 @@ export function dibujarCanica(pincel: Pincel, r: number, arte: ArteCanica, tinta
   pincel.circle(0, 0, r * ARO_VIDRIO.r);
   pincel.stroke({ width: Math.max(1, r * ARO_VIDRIO.ancho), color: arte.oscuro, alpha: ARO_VIDRIO.alfa });
   // La llama adentro: dos manchas del color del fuego, rellenas. Sin trazos curvos (`arc`): en algunas placas de
-  // video el arco del vidrio se dibujaba como una línea larga que salía del origen del gráfico —los rayos de color
-  // que reportó la sala—, y una mancha rellena no puede hacer eso.
+  // video el arco del vidrio se dibujaba como una línea larga que salía del origen del gráfico, los rayos de color
+  // que reportó la sala, y una mancha rellena no puede hacer eso.
   for (const vuelta of VUELTAS) {
     const radio = r * vuelta.r;
     const medio = (vuelta.de + vuelta.hasta) / 2;
@@ -253,7 +253,7 @@ export const SIEMBRA_AIRE = 0.28;
 
 /**
  * Cuánto se agranda el dibujo de una canica sobre su radio del plan (S17, S20): va al doble de lo que
- * medía hasta ahora — es lo que pidió la sala después de verla en el celular —, y el tope lo pone la
+ * medía hasta ahora, es lo que pidió la sala después de verla en el celular, y el tope lo pone la
  * siembra: dos canicas vecinas, con sus radios dibujados, jamás se tocan (`2 * CANICA_R * CANICA_ESCALA
  * <= SIEMBRA_AIRE`, y la prueba mide que el plan deja más aire que ese piso; con `SIEMBRA_AIRE = 0.28`
  * el tope de la siembra da 2.8, así el doble no obliga a achicar la siembra visual ni a robarle aire:
@@ -268,7 +268,7 @@ export const RADIO_DIBUJO = CANICA_R * CANICA_ESCALA;
 /**
  * El radio con que la escena dibuja de verdad el vidrio de una canica, en unidades del círculo: el `rr` de
  * `bolillas.ts` (`0.5 * CANICA_R * CANICA_ESCALA`, o sea la mitad de `RADIO_DIBUJO`, que mide el diámetro).
- * Sirve para las cosas que tienen que apartarse del vidrio —los guiones del anuncio (S28)— sin adivinar el tamaño.
+ * Sirve para las cosas que tienen que apartarse del vidrio, los guiones del anuncio (S28), sin adivinar el tamaño.
  */
 export const RADIO_VIDRIO = RADIO_DIBUJO / 2;
 
@@ -276,7 +276,7 @@ export const RADIO_VIDRIO = RADIO_DIBUJO / 2;
 
 /**
  * Cuánto tarda en desvanecerse la canica que cruza la tiza (S25): un parpadeo, muy por debajo del segundo. La sala
- * leyó «todas las bolillas se salen del círculo» porque las eliminadas se quedaban dibujadas al 35% sobre el aro para
+ * leyó "todas las bolillas se salen del círculo" porque las eliminadas se quedaban dibujadas al 35% sobre el aro para
  * siempre; ahora la que cruza se apaga en este rato y no vuelve a dibujarse (ni su sombra, ni su ficha).
  */
 export const SALIDA_VELO = 0.4;
@@ -308,11 +308,11 @@ function adentroDeLaTiza(p: Pun): Pun {
 }
 
 /**
- * El dibujo de una canica en el segundo `t` (S25), el mismo que ven la 2D y la 3D: `null` cuando ya no se dibuja —la
- * canica cruzó la tiza y se desvaneció—, o el punto y el velo con que la escena la pinta. La que sigue jugando se
+ * El dibujo de una canica en el segundo `t` (S25), el mismo que ven la 2D y la 3D: `null` cuando ya no se dibuja, la
+ * canica cruzó la tiza y se desvaneció, o el punto y el velo con que la escena la pinta. La que sigue jugando se
  * dibuja entera y **nunca cruzando la tiza**: el plan la siembra con el radio del plan, pero el dibujo va al doble
  * (S20), así que el centro se aprieta al `LIMITE_EN_JUEGO` y su cuerpo queda adentro con aire (la ganadora que titila
- * sobre la tiza incluida). La que sale se ve entera hasta cruzar —la sala la ve irse (S21)— y se apaga en
+ * sobre la tiza incluida). La que sale se ve entera hasta cruzar, la sala la ve irse (S21), y se apaga en
  * `SALIDA_VELO` segundos: después, ni cuerpo ni sombra ni ficha. Determinista: la misma hora, el mismo dibujo.
  */
 export function dibujoDe(
@@ -342,13 +342,13 @@ export const CHIP_GENTE = 3;
  * La escala de la ficha del nombre junto a una canica, para `S.chip(nombre, escala)`.
  *
  * La ficha es la etiqueta de una canica de vidrio, no la figura de una presentación: el kit la pidió
- * al tamaño de la cara y tapaba el círculo entero. Acá manda la regla de la sala —la letra más chica
+ * al tamaño de la cara y tapaba el círculo entero. Acá manda la regla de la sala, la letra más chica
  * que se lee (`escalaChipLegible`), que ya crece con la pantalla: móvil primero, la ficha más chica
- * que se puede leer—. Por encima solo crece con poca gente, hasta un cuarto más (no tapan cuando son
+ * que se puede leer. Por encima solo crece con poca gente, hasta un cuarto más (no tapan cuando son
  * pocas), y nunca desproporcionada con el juego: el alto de la ficha (22 * u * escala * 1.6 px) no
  * pasa de `CHIP_ALTO_FRACCION` del diámetro del círculo `e`. Si ese techo quedara debajo del piso,
  * manda la letra: se lee primero, tapa después. La cantidad entra por `viven` (los que juegan, `n`):
- * a más gente, menos ficha — y en el celular, donde el piso de la letra ya manda, la cantidad se ve
+ * a más gente, menos ficha, y en el celular, donde el piso de la letra ya manda, la cantidad se ve
  * en el despeje de la casa (la pasada de `separarEtiquetas` del estadio), no en el tamaño.
  *
  * Pura: mismo argumento, misma escala, en la 2D, en la 3D y en la prueba.
@@ -447,7 +447,7 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
 
 /* --------------------------------------------- el estallido de pelea (S22) */
 
-/** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff (S26 lo acorta). */
+/** Cuánto vive el estallido: más que las chispas de vidrio, el golpe de pelea se siente, y menos que el scuff (S26 lo acorta). */
 export const ESTALLO_VIDA = 0.32;
 /** Lo que se estira el estallido del último golpe: la cámara lenta del cierre (S31). */
 export const ESTALLO_LENTO = 3.4;
@@ -456,14 +456,14 @@ export const ESTALLO_PUNTAS = 10;
 /** Cuántas líneas de velocidad radian del impacto. */
 export const ESTALLO_LINEAS = 9;
 /**
- * El tamaño del estallido (S26), medido en canicas dibujadas (`RADIO_DIBUJO`): la estrella llega a 1,35–1,65 radios
- * dibujados, o sea mide a lo ancho 1,35–1,65 canicas — cómoda debajo de las dos canicas que pidió la sala —, el hueco
+ * El tamaño del estallido (S26), medido en canicas dibujadas (`RADIO_DIBUJO`): la estrella llega a 1,35 a 1,65 radios
+ * dibujados, o sea mide a lo ancho 1,35 a 1,65 canicas, cómoda debajo de las dos canicas que pidió la sala, el hueco
  * queda a poco menos de la mitad, y las líneas de velocidad son cortas y no se van del golpe.
  */
 export const ESTALLO_NUCLEO = 0.45;
 export const ESTALLO_PUNTA_MIN = 1.35;
 export const ESTALLO_PUNTA_VARIA = 0.3;
-/** El tope del radio de la estrella: dos radios dibujados —su ancho, cuatro radios, es el de dos canicas— (S26). */
+/** El tope del radio de la estrella: dos radios dibujados, su ancho, cuatro radios, es el de dos canicas, (S26). */
 export const ESTALLO_PUNTA_TOPE = 2;
 /** Lo que más corre una línea de velocidad desde el centro del golpe, en radios dibujados (S26). */
 export const ESTALLO_ALCANCE = 2.4;
@@ -483,7 +483,7 @@ export interface LineaVelocidad {
 
 /**
  * El estallido de pelea de un golpe (S22): la estrella del destello, las líneas de velocidad que radian del impacto
- * y el micro-sacudón de la escena. Todo alrededor del impacto —el punto queda en (0,0)— y en unidades del círculo.
+ * y el micro-sacudón de la escena. Todo alrededor del impacto, el punto queda en (0,0), y en unidades del círculo.
  */
 export interface Estallido {
   /** Los vértices de la estrella, alternando punta y hueco, alrededor del impacto. */
@@ -504,7 +504,7 @@ export interface Estallido {
  * dramáticos que las chispas de vidrio de S13 (que siguen, ahí mismo, aparte). Determinista y sembrado por el lugar del
  * tiro en la lista: la misma tirada estalla igual en cualquier equipo, y el golpe de la mano no lleva estallido (es el
  * blando). `dir` es el rumbo de la canica golpeada: el abanico de las líneas mira hacia adelante, por donde sale.
- * S26 lo afinó: el golpe mide canicas, no escenario — estrella de no más de dos canicas de ancho (tope
+ * S26 lo afinó: el golpe mide canicas, no escenario, estrella de no más de dos canicas de ancho (tope
  * `ESTALLO_PUNTA_TOPE`), destello suave y corto, y líneas de velocidad que no se van del impacto (`ESTALLO_ALCANCE`).
  */
 export function estalloDe(i: number, punto: Pun, dir: Pun): Estallido {
@@ -563,7 +563,7 @@ export interface EfectosDeGolpe {
  * Los efectos del golpe en el segundo `t`: valen en la ventana de la cola
  * (`COLA_GOLPE`) y solo para el tiro que acaba de pegar. Toda la geometría sale
  * del plan; `null` fuera de la ventana. (Es la vista del segundo golpe de la
- * cadena —mi canica sobre la del enemigo—; la cadena entera está en `golpesDe`.)
+ * cadena, mi canica sobre la del enemigo; la cadena entera está en `golpesDe`.)
  */
 export function efectosDe(d: Pick<Datos, "tiros">, t: number): EfectosDeGolpe | null {
   const tiro = d.tiros.find((x) => t >= x.t && t < x.t + COLA_GOLPE);
@@ -621,12 +621,12 @@ export interface Golpe {
 /**
  * Los golpes de la cadena (S23) que están vivos en el segundo `t`: el de la mano en `choque` (a la hora `tMano`) y el de
  * mi canica en `empuje.donde` (a la hora `t`), cada uno con su tiempo, su rumbo y sus efectos. El de la mano es el
- * blando —polvo, chispas de vidrio, un destello corto—; el de mi canica lleva encima el estallido de pelea (S22). Todo
+ * blando, polvo, chispas de vidrio, un destello corto; el de mi canica lleva encima el estallido de pelea (S22). Todo
  * sale del plan: la escena dibuja lo que esta cuenta dice, en el orden que dice.
  */
 /**
  * El estallido del último golpe dura más y sus líneas también: la cámara lenta del cierre (S31). La geometría no
- * cambia —lo que se estira es el tiempo—, así que el golpe se ve igual de chico, pero la sala llega a verlo.
+ * cambia, lo que se estira es el tiempo, así que el golpe se ve igual de chico, pero la sala llega a verlo.
  */
 export function estallidoLento(e: Estallido, ultimo: boolean): Estallido {
   if (!ultimo) return e;
@@ -669,8 +669,8 @@ export function golpesDe(d: Pick<Datos, "tiros">, t: number): Golpe[] {
 }
 
 /**
- * La palpitación de una canica en el segundo `t` (0 a 1): late la que acaba de recibir un golpe —mi canica cuando la
- * toca la mano, la del enemigo cuando la empuja la mía—, y muere en cero con la cola del golpe. Pura: la escena la
+ * La palpitación de una canica en el segundo `t` (0 a 1): late la que acaba de recibir un golpe, mi canica cuando la
+ * toca la mano, la del enemigo cuando la empuja la mía, y muere en cero con la cola del golpe. Pura: la escena la
  * usa para el squash del vidrio y no inventa pulsos propios.
  */
 export function palpitoDe(d: Pick<Datos, "tiros">, slot: number, t: number): number {
@@ -765,7 +765,7 @@ export function cadenaDeTiro(tiro: Tiro): Cadena {
 }
 
 /**
- * La tirada cuya **canica de mano** está en escena en el segundo `t` —de la largada a que se frena, S23—, o `null`
+ * La tirada cuya **canica de mano** está en escena en el segundo `t`, de la largada a que se frena, S23, o `null`
  * fuera de eso. Hay una sola a la vez (los turnos están a `ENTRE_TIROS` de distancia y la ventana mide menos), así la
  * escena nunca dibuja dos canicas de mano. El resto de la cadena (`empuja`, `cruza`) viaja en el resultado: la canica
  * del enemigo la mueve `trayectoriaDe`, no esta cuenta.
@@ -828,7 +828,7 @@ export const TITILA_AMPLE = 0.3;
 
 /**
  * El vaivén de la canica que casi cruza: empuja fuerte apenas llega a la tiza,
- * cada empujón es más chico, y al final muere en cero exacto — la canica se
+ * cada empujón es más chico, y al final muere en cero exacto, la canica se
  * queda, y la escena no tiembla ni un pelo después. `u` es cuánto va del
  * titileo al golpe (de 0 a 1, con el reloj del plan).
  */
@@ -876,7 +876,7 @@ export const GUION_AIRE_TOPE = 0.2;
 
 /**
  * Los guiones de la línea del anuncio (S28), parejos: todos del mismo largo, con el mismo aire entre uno y otro y
- * apartados de las dos puntas por `recorte` —el aire sobre las canicas—. A diferencia de `punteadoDe` (que reparte el
+ * apartados de las dos puntas por `recorte`, el aire sobre las canicas. A diferencia de `punteadoDe` (que reparte el
  * trazo entero, así que el guión se estira con el largo de la línea), acá el guión es siempre el mismo: la línea se lee
  * igual en cualquier tiro y en cualquier pantalla. El recorte nunca se come más de `GUION_AIRE_TOPE` de la línea por
  * punta, así una línea entre dos canicas vecinas siempre deja al menos un guión; una línea más corta que un guión deja
@@ -986,9 +986,9 @@ export const CERCA_VUELVE = 1.1;
 
 /**
  * Cuánto manda el acercamiento a la canica que gana en el segundo `t` (0: la
- * cámara del director; 1: la toma de cerca). Entra con el rodado del casi —
+ * cámara del director; 1: la toma de cerca). Entra con el rodado del casi,
  * la canica va hacia la tiza y la cámara la va a buscar y se queda con ella
- * mientras titila y gira—, y suelta apenas a tiempo para que la coronación
+ * mientras titila y gira, y suelta apenas a tiempo para que la coronación
  * caiga sobre el encuadre de siempre. Es la cuenta que comparten la cámara
  * del 3D y el velo de los chips del 2D: una sola, para las dos escenas.
  * Continua en los cuatro bordes, determinista, cosmética.
@@ -1040,7 +1040,7 @@ export interface Persecucion {
 }
 
 /**
- * La persecución de la ganadora (S24): el último turno —cuando adentro solo quedan ella y la rival— se mira desde
+ * La persecución de la ganadora (S24): el último turno, cuando adentro solo quedan ella y la rival, se mira desde
  * su lado. La ventana va de un suspiro antes de que la mano toque su canica (`tMano`) hasta un rato después del
  * golpe; el peso entra y sale suave, así la cámara no salta y el cierre del `casi` (S14) toma el relevo limpio.
  * Pura y determinista: la canica sale de `trayectoriaDe` y los números de las rayitas de la semilla fija.
@@ -1073,7 +1073,7 @@ export function persecucionDe(
 /* --------------------------------------------------- el nombre de la ficha (S33) */
 
 /**
- * El nombre corto de una ficha: el primer nombre y las iniciales del resto («Guido SV»), para que la etiqueta no tape
+ * El nombre corto de una ficha: el primer nombre y las iniciales del resto ("Ana SV"), para que la etiqueta no tape
  * media escena cuando hay mucha gente. Un solo nombre queda entero; un nombre vacío, vacío.
  */
 export function nombreCorto(nombre: string): string {

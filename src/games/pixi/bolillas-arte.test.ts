@@ -1023,7 +1023,7 @@ describe("el anuncio de la diana (S19, S28)", () => {
       visto++;
       expect(anuncio.tiro).toBe(tiro);
       expect(anuncio.linea.length).toBeGreaterThan(0);
-      // Los tramos existen y están sobre la recta choque → diana (nada de líneas por cualquier lado).
+      // Los tramos existen y están sobre la recta choque a diana (nada de líneas por cualquier lado).
       const dx = tiro.empuje.donde.x - tiro.choque.x;
       const dy = tiro.empuje.donde.y - tiro.choque.y;
       const largo = Math.hypot(dx, dy) || 1;
@@ -1121,7 +1121,7 @@ describe("el estallido del cierre en cámara lenta (S31)", () => {
 
 describe("el nombre corto de la ficha (S33)", () => {
   it("queda el primer nombre y las iniciales del resto", () => {
-    expect(nombreCorto("Guido Saavedra Vega")).toBe("Guido SV");
+    expect(nombreCorto("Ana Saavedra Vega")).toBe("Ana SV");
     expect(nombreCorto("María Quispe")).toBe("María Q");
     expect(nombreCorto("Ana")).toBe("Ana");
     expect(nombreCorto("  Elena   Condori  ")).toBe("Elena C");

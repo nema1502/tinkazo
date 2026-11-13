@@ -11,7 +11,7 @@ import type { Textos } from "./kit";
  *
  * El juego se llama Bolillas, que es como se dice en Santa Cruz; en los textos
  * se nombra la troya (el círculo de tiza en la tierra), que es la variante que
- * juega: canicas adentro y la pegadora que las saca de a una. Nada de apuestas
+ * juega: canicas adentro y la pegadora que las saca de a una. Nada de casino
  * ni de palabras de casino, y nada técnico durante el show.
  */
 export const TEXTOS = {

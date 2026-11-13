@@ -58,8 +58,8 @@ import { eventosDe } from "./bolillas-sonido";
  * se para la pegadora según el plan. Las canicas son de vidrio: cada asiento
  * lleva su color con la llama remolinando adentro, el brillo arriba y su sombra
  * blanda en la tierra, con el chip de la casa (la cara y el nombre) al lado para
- * la revelación. La pegadora tira con el agarre ñati —el interior del índice y
- * el exterior del pulgar—: la mano entra, agarra con la pinza cerrada y suelta
+ * la revelación. La pegadora tira con el agarre ñati, el interior del índice y
+ * el exterior del pulgar: la mano entra, agarra con la pinza cerrada y suelta
  * con el flick exactamente en la largada del plan.
  *
  * Cada turno es la cadena de la troya (S23) y la escena la anima tal cual la
@@ -67,12 +67,12 @@ import { eventosDe } from "./bolillas-sonido";
  * pega en **mi** canica (el primer golpe, blando: polvo, vidrio y un destello
  * corto); mi canica rueda y empuja a la del enemigo (el segundo golpe, fuerte:
  * encima de las mismas chispas de vidrio de S13, el estallido de pelea de S22
- * —estrella, líneas de velocidad y micro-sacudón—), y la del enemigo sale
+ * estrella, líneas de velocidad y micro-sacudón), y la del enemigo sale
  * adelante hasta cruzar la tiza (S21). Los dos golpes se oyen, el blando más
  * bajo que el clic de cristal del fuerte, y el golpe seco de la caída, todo por
  * la voz del kit.
- * Al cierre, la canica que gana rueda hasta la orilla y titila en la tiza —
- * empujones cada vez más chicos que mueren en cero exacto— y se queda: ese es
+ * Al cierre, la canica que gana rueda hasta la orilla y titila en la tiza,
+ * empujones cada vez más chicos que mueren en cero exacto, y se queda: ese es
  * el grito de la sala. Nada decide por su cuenta: la misma ronda dibuja lo
  * mismo cuadro por cuadro, y saltar el show a cualquier segundo da lo mismo
  * que llegar mirando.
@@ -140,7 +140,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
   id: "bolillas",
   textos: TEXTOS,
   plan: planBolillas,
-  // Sin el foco de la casa: la sala leyó el resplandor del cierre como «esa bola blanca que sale al final está feo».
+  // Sin el foco de la casa: la sala leyó el resplandor del cierre como "esa bola blanca que sale al final está feo".
   // El foco está dimensionado sobre un cuerpo de persona (el radio de `momentos.foco`, ~40 unidades) y acá quien gana es
   // un vidrio de 18 px: sus rayos y sus ondas se comen el escenario para señalar algo que ya se ve. Sin foco, el cartel
   // sale como salía antes de que existiera, con su propio destello (`DefJuego.foco`).
@@ -201,7 +201,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     const anuncio = new Graphics();
     mundo.addChild(sombra, anuncio, fx, mano);
     k.cam.cut(m.cx, m.cy, 1);
-    // El 3D (si está prendido y arrancó): el fondo y la tierra del 2D se apagan — las canicas las dibuja
+    // El 3D (si está prendido y arrancó): el fondo y la tierra del 2D se apagan, las canicas las dibuja
     // three.js y los nombres siguen siendo chips de PixiJS proyectados sobre el mismo círculo.
     const v3 = previa ? previa.v3 : enchufar3D(S, tres);
     v3?.reconstruir?.();
@@ -221,7 +221,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // Los dos golpes de la cadena (S23) vivos en este cuadro: la mano sobre mi canica y la mía sobre la del enemigo.
     const golpes = golpesDe(d, t);
     // El zoom de la toma en este cuadro: el cierre se pega a la canica, y el estallido no puede crecer con la cámara
-    // —en el teléfono se veía como una mancha blanca gigante (S26/S32)—. Se dibuja achicado por el mismo factor.
+    // en el teléfono se veía como una mancha blanca gigante (S26/S32). Se dibuja achicado por el mismo factor.
     const pantalla = k.pantalla();
     const zoomCam = Math.max(1, k.cam.toScreen(1, 0, pantalla.w, pantalla.h).x - k.cam.toScreen(0, 0, pantalla.w, pantalla.h).x);
     const achica = Math.min(1, 1 / zoomCam);
@@ -280,8 +280,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // Las canicas de los que juegan: adentro en su lugar, la golpeada volando hasta la tiza, la ganadora titilando.
     // Con el 3D enchufado las dibuja three.js; acá quedan los chips con cara y nombre, sobre la misma proyección.
     d.canicas.forEach((persona, slot) => {
-      // El dibujo de la canica (S25): entera mientras juega —adentro de la tiza, con aire para su cuerpo doblado
-      // (S20)—, apagándose apenas cruza, y nada después: ni cuerpo, ni sombra, ni ficha. La cuenta es la misma que
+      // El dibujo de la canica (S25): entera mientras juega, adentro de la tiza, con aire para su cuerpo doblado
+      // (S20), apagándose apenas cruza, y nada después: ni cuerpo, ni sombra, ni ficha. La cuenta es la misma que
       // usa el 3D (`dibujoDe`).
       const tray = trayectoriaDe(d, slot, t);
       const dib = dibujoDe(d, slot, t);
@@ -303,7 +303,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         if (dib && w) {
           // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
           g.rotation = dib.estado === "titila" ? titilazo(uTitila) : 0;
-          // La palpitación del golpe: la canica que acaba de recibir uno —la mía con la mano, la del enemigo con la mía.
+          // La palpitación del golpe: la canica que acaba de recibir uno, la mía con la mano, la del enemigo con la mía.
           g.scale.set(1 + 0.22 * palpitoDe(d, slot, t));
           g.position.set(w.x, w.y);
           // El velo de la salida: la que cruza la tiza se apaga en un parpadeo y no se vuelve a ver (S25).
@@ -323,7 +323,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         e.chips.set(persona, chip);
         e.mundo.addChild(chip);
       }
-      // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
+      // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira, el nombre
       // aparece una sola vez (S12), no el cartel y la ficha superpuestos. Y las fichas solo muestran a
       // los finalistas (S15): durante la troya, el círculo queda sin nombres. La eliminada no deja rastro: si ya
       // salió del dibujo (S25), `seVe` la apaga y su ficha tampoco se ve.
@@ -336,8 +336,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
     }
-    // El velo del acercamiento (S14): con la cámara del 3D de cerca de la ganadora, los chips —que el 2D proyecta
-    // con la cámara del director— quedan mirando otra toma: se desvanecen mientras dura y vuelven al volver.
+    // El velo del acercamiento (S14): con la cámara del 3D de cerca de la ganadora, los chips, que el 2D proyecta
+    // con la cámara del director, quedan mirando otra toma: se desvanecen mientras dura y vuelven al volver.
     if (en3d) {
       const velo = 1 - cercaDe(d, t);
       // El ganador no se desvanece: en el plano del cierre la sala tiene que ver a quién está mirando (S14).
@@ -386,8 +386,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         e.fx
           .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R * achica, CANICA_R * e.m.e * 1.05 * achica, CANICA_R * e.m.e * 0.5 * achica)
           .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF_VIDA) });
-        // El destello del impacto (S22, afinado en S26): un círculo chico y suave pegado a la canica golpeada —el de la
-        // mano, más blando todavía (`brillo`)—, no la nube blanca que tapaba la escena.
+        // El destello del impacto (S22, afinado en S26): un círculo chico y suave pegado a la canica golpeada, el de la
+        // mano, más blando todavía (`brillo`), no la nube blanca que tapaba la escena.
         if (golpe.flash > 0) {
           const fl = flashDe(golpe);
           e.fx.circle(w.x, w.y, fl.r * e.m.e).fill({ color: 0xfff6dd, alpha: fl.alfa });
@@ -406,7 +406,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
               .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
           }
         }
-        // Las chispas del vidrio (S13), punteadas (S19): rayitos que saltan más vivos y mueren antes que el polvo —
+        // Las chispas del vidrio (S13), punteadas (S19): rayitos que saltan más vivos y mueren antes que el polvo,
         // cada uno viaja con su rumbo del plan, en tramos de tiza (nada de líneas de una pieza).
         if (edad < CHISPA_VIDA) {
           for (const chispa of chispasDe(golpe.semilla, golpe.punto, golpe.dir)) {
@@ -458,7 +458,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       }
 
       // La persecución de la ganadora (S24): en una escena plana no hay punto de vista, así que la escena le pone
-      // la velocidad —rayitas que se estiran para atrás mientras su canica rueda hacia la rival—. La cámara la
+      // la velocidad, rayitas que se estiran para atrás mientras su canica rueda hacia la rival. La cámara la
       // acerca el plan (la toma de `momentos`); acá solo se dibuja lo que el arte puro ya decidió.
       const persigue = persecucionDe(d, t);
       if (persigue && persigue.peso > 0) {

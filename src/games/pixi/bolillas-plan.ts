@@ -20,9 +20,9 @@ import type { Caja, Contexto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoP
  * caben todos (`qualifier.ts`), el orden sembrado en que la pegadora saca
  * canicas de a una, la rival de la historia al final, y el **casi** del cierre:
  * la última tirada rozó la canica que gana, que titila en la tiza… y se queda
- * adentro. Cada tiro trae su geometría completa —punto de largada, impacto,
+ * adentro. Cada tiro trae su geometría completa, punto de largada, impacto,
  * salida de la canica golpeada con su rumbo y su fuerza, y la deflectación del
- * tiro— para que la escena 2D (`bolillas.ts`) y la 3D (`tres/`) animen el mismo
+ * tiro, para que la escena 2D (`bolillas.ts`) y la 3D (`tres/`) animen el mismo
  * plan, y ninguna vuelva a tirar por su cuenta.
  *
  * Sin DOM, sin reloj y sin `Math.random`: la misma ronda cuenta lo mismo en
@@ -267,7 +267,7 @@ function largadaDe(impacto: Pun, quieta: readonly Pun[], rng: () => number): Pun
 }
 
 /**
- * El empuje de mi canica: el rumbo hasta la del enemigo —se abre apenas para no rozar a quien sigue adentro— y
+ * El empuje de mi canica: el rumbo hasta la del enemigo, se abre apenas para no rozar a quien sigue adentro, y
  * dónde se frena, a dos radios largos de ella. Devuelve también el aire que deja para elegir quién tira.
  */
 function empujeDe(choque: Pun, donde: Pun, quieta: readonly Pun[]): { dir: Pun; hasta: Pun; aire: number } {
@@ -321,8 +321,8 @@ function elegirTirador(
 }
 
 /**
- * La salida de la canica golpeada (S21): sigue **adelante** sobre la línea del empuje —nunca vuelve hacia la
- * mano— y cruza la tiza de ese lado. Se abre apenas para no rozar a quien sigue adentro; si nada queda limpio,
+ * La salida de la canica golpeada (S21): sigue **adelante** sobre la línea del empuje, nunca vuelve hacia la
+ * mano, y cruza la tiza de ese lado. Se abre apenas para no rozar a quien sigue adentro; si nada queda limpio,
  * va derechito por delante.
  */
 function salidaAdelante(donde: Pun, dirEmpuje: Pun, quieta: readonly Pun[]): { dir: Pun; tiza: Pun } {
@@ -618,7 +618,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
     // movimiento de cámara de la troya es la persecución del cierre (S24), y después la tensión.
     tomas: [
       { desde: T_INTRO, toma: planoSobre((k) => [cajaDelCirculo(k.pantalla())], { margen: 30, zoomMax: 1.35 }) },
-      // La persecución de la ganadora (S24): en el último turno —cuando adentro solo quedan ella y la rival— la
+      // La persecución de la ganadora (S24): en el último turno, cuando adentro solo quedan ella y la rival, la
       // toma se pega a su canica y la acompaña hasta el golpe, con un punto adelantado para ver a quién le pega.
       // La tensión del cierre toma el relevo cuando arranca el casi.
       {
@@ -636,7 +636,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
         ),
       },
     ],
-    // La tensión sigue a la canica que gana (S32): la toma se queda con ella —rodando al aro y titilando— hasta el
+    // La tensión sigue a la canica que gana (S32): la toma se queda con ella, rodando al aro y titilando, hasta el
     // final del show, así la animación termina con la bolilla en grande y no volviendo al plano entero.
     tension: {
       desde: casi.t - 2.2,
@@ -699,7 +699,7 @@ export function adentro(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): n
 }
 
 /**
- * Los finalistas del segundo `t` (S15): los que siguen adentro cuando ya quedan tres o menos — los
+ * Los finalistas del segundo `t` (S15): los que siguen adentro cuando ya quedan tres o menos, los
  * nombres solo se muestran para ellos, con la ganadora incluida. Antes de ese momento, nadie: la
  * troya se juega sin fichas sobre el círculo.
  */
@@ -710,8 +710,8 @@ export function finalistasDe(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: numbe
 
 /**
  * Quiénes llevan ficha de nombre en el segundo `t` (S18): durante la beat de la intro (`T_INTRO`, el
- * mismo tiempo que dura la presentación del kit), todas las canicas del círculo — así la sala ve quiénes
- * juegan apenas arranca—; a partir de ahí, solo los finalistas de S15 (`finalistasDe`), siempre cortado
+ * mismo tiempo que dura la presentación del kit), todas las canicas del círculo, así la sala ve quiénes
+ * juegan apenas arranca; a partir de ahí, solo los finalistas de S15 (`finalistasDe`), siempre cortado
  * a los que tienen canica en el círculo (los de la tanda previa no llevan ficha sobre la troya).
  * Pura: misma hora, mismos nombres, en la 2D y en la 3D (que consume el mismo chip del 2D).
  */

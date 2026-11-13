@@ -83,7 +83,7 @@ const PLAN_CADENA = {
   duracion: 23.4,
 };
 
-describe("la cadena del turno en 3D (S23): mano → mi canica → la del enemigo (S21)", () => {
+describe("la cadena del turno en 3D (S23): de la mano a mi canica y a la del enemigo (S21)", () => {
   it("las ventanas del turno salen del plan y van en orden: suelte, toque, empuje, salida", () => {
     const v = ventanaCadena(TIRO);
     expect(v.suelte).toBeCloseTo(TIRO.tMano - TIRADOR, 9);

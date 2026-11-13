@@ -35,7 +35,7 @@ export interface EventoSonoro {
 /** El clic de cristal del impacto: agudo, corto, y se oye de verdad en un teléfono (clímax: la casa le da 0,08 a 0,12). */
 const CLINK = { grado: 18, cat: "climax" as const, timbre: "square" as const, vol: 0.12, dur: 0.06 };
 /**
- * El toque de la mano sobre mi canica (S23): el primer golpe de la cadena, más blando —de evento, no de clímax—, para
+ * El toque de la mano sobre mi canica (S23): el primer golpe de la cadena, más blando, de evento, no de clímax, para
  * que el turno se oiga como lo que es: primero la mano, después el choque de verdad.
  */
 const TOQUE = { grado: 15, cat: "evento" as const, timbre: "triangle" as const, vol: 0.06, dur: 0.05 };
