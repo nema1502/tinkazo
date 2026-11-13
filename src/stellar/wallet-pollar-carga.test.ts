@@ -184,6 +184,44 @@ const pedidoDeCuenta = (cambios: Partial<Pedido> = {}): Pedido => ({
 const errorDelKit = (code: string, body: Record<string, unknown> = {}) => Object.assign(new Error(code), { name: "PollarApiError", code, body: { success: false, code, ...body } });
 const sinRed = () => Object.assign(new TypeError("Failed to fetch"), { name: "PollarNetworkError", code: "SDK_NETWORK_TIMEOUT" });
 
+/* ------------------------------------------------------------------ el candado entre pestañas */
+
+/**
+ * El sitio cuida la carga con el candado entre pestañas del navegador (`navigator.locks`) y, si el navegador no lo tiene,
+ * sigue sin candado. Node 24 lo trae, pero Node 22, el de la integración continua, no: ahí no habría qué espiar y las dos
+ * pestañas de mentira correrían a la vez. Si el entorno no lo trae, cada prueba tiene uno de prueba, que se saca al
+ * terminar. Si lo trae, se usa el de verdad.
+ */
+const elEntornoTraeCandado = typeof (globalThis.navigator as { locks?: LockManager } | undefined)?.locks?.request === "function";
+
+/**
+ * Un candado de prueba mínimo y fiel al del navegador en la forma que usa el sitio, `request(nombre, f)`: exclusivo, con
+ * una fila por nombre, corre `f` cuando le toca, suelta cuando `f` termina (bien o mal) y devuelve lo que `f` devuelve.
+ * Con opciones (modo compartido, `ifAvailable`, `signal` o `steal`) falla a la vista en vez de hacer otra cosa.
+ */
+function candadoDePrueba(): LockManager {
+  const filas = new Map<string, Promise<void>>();
+  const request = (nombre: string, ...resto: unknown[]): Promise<unknown> => {
+    const f = resto[0];
+    if (resto.length !== 1 || typeof f !== "function") return Promise.reject(new TypeError("el candado de prueba solo conoce request(nombre, f)"));
+    const corrida = (filas.get(nombre) ?? Promise.resolve()).then(() => (f as (candado: { name: string; mode: string }) => unknown)({ name: nombre, mode: "exclusive" }));
+    const suelta = corrida.then(() => undefined, () => undefined);
+    filas.set(nombre, suelta);
+    void suelta.then(() => {
+      if (filas.get(nombre) === suelta) filas.delete(nombre);
+    });
+    return corrida;
+  };
+  return { request } as unknown as LockManager;
+}
+
+beforeEach(() => {
+  if (!elEntornoTraeCandado) Object.defineProperty(navigator, "locks", { value: candadoDePrueba(), configurable: true, writable: true });
+});
+afterEach(() => {
+  if (!elEntornoTraeCandado) Reflect.deleteProperty(navigator, "locks");
+});
+
 /* ------------------------------------------------------------------ el servidor de mentira */
 
 let orden: Orden;
