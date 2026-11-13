@@ -42,6 +42,7 @@ import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 import { BOTON_APAGADO_JS } from "./lib/juegos.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 
@@ -288,9 +289,9 @@ async function sembrarHistorial(page) {
  */
 async function connect(page, p, tema) {
   const etiqueta = p.etiqueta;
-  await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval(`(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click()`);
+  await page.eval(TOCAR_ENTRAR_JS);
   const abrio = await page.waitFor(`document.querySelector('.login-opt')`, 15000);
   check(`${etiqueta} ${tema}: se abre la ventana de ingreso`, abrio.ok);
   if (!abrio.ok) return false;
@@ -335,9 +336,9 @@ async function pasoDeFondos(browser, p, tema) {
     await sinSesionGuardada(page);
     await page.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba` });
     await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-    await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
+    await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
     await sleep(600);
-    await page.eval(`(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click()`);
+    await page.eval(TOCAR_ENTRAR_JS);
     await page.waitFor(`document.querySelector('.login-opt')`, 15000);
     await sleep(500);
     const i = await page.eval(
@@ -898,7 +899,7 @@ async function run() {
           await sinSesionGuardada(sinCuenta);
           await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-          await sinCuenta.waitFor(`!!document.querySelector('#wallet-box button') && !!document.getElementById('btn-sample')`, 20000);
+          await sinCuenta.waitFor(`${HAY_BOTON_ENTRAR_JS} && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
           await sleep(900);
           const f = JSON.parse(await sinCuenta.eval(SIN_CUENTA));
@@ -924,7 +925,7 @@ async function run() {
           }
           // Nada pide entrar encima de "Pegar lista" (1 de noviembre de 2026): la cuenta se pide con el chip "Entrar" de la
           // cabecera, que es secundario, y con "Entrar para sellar".
-          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector('#wallet-box button'); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })"));
+          const g = JSON.parse(await sinCuenta.eval(`JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector(${JSON.stringify(SELECTOR_CHIP_ENTRAR)}); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })`));
           check(`${etiqueta} ${tema}: sin cuenta, la puerta no se ve y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
           // La cuenta, siempre a la vista: "Entrar", "Retomando…" y las páginas de lectura.
           await chipsFueraYRetomando(browser, sinCuenta, p, tema);

@@ -80,6 +80,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -434,9 +435,9 @@ async function conectarCuentaDePrueba(page) {
     await sleep(900);
     return;
   }
-  await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
+  await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
   await sleep(300);

@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -129,8 +130,8 @@ async function pegar(page, texto) {
  * nada a la red: alcanza para Mis sorteos, no para sellar.
  */
 async function cuentaDePrueba(page) {
-  await page.waitFor("document.querySelector('#wallet-box button')", 20000);
-  await page.eval("document.querySelector('#wallet-box button').click(); true");
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
+  await page.eval(TOCAR_ENTRAR_JS);
   await page.waitFor("document.querySelector('.login-opt')", 15000);
   await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
   const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
