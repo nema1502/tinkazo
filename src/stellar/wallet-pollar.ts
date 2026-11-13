@@ -1,6 +1,9 @@
-import type { AuthOpenContext, CosignRequest, PollarClient, WalletInfo } from "@pollar/core";
+import type { AuthOpenContext, CosignRequest, CosignVerification, PollarClient, ProviderRegistration, RegistryCheck, RequirementForm, RequirementFormAnswers, WalletInfo } from "@pollar/core";
 import { network } from "./config";
+import { compraQrActiva } from "./alta-config";
+import { modoDeRampa } from "./cuenta-config";
 import { errorKey, esDeRed } from "./errores";
+import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
 import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
@@ -8,6 +11,19 @@ import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
 import { enNavegadorDeApp } from "../navegador";
 import { cargaOpcional } from "../carga-opcional";
+import {
+  DOLAR_DIGITAL,
+  type PagoPedido,
+  type ResultadoDelPagoConSaldo,
+  VIDA_DEL_PAGO_S,
+  VIDA_MAXIMA_S,
+  leerElPago,
+  montoExacto,
+  motivoContraElPago,
+  motivoDelRechazo,
+  pedidoValido,
+} from "./pago-con-saldo";
+import { usdcDeLaRed } from "./usdc-cuenta";
 
 /**
  * Entrar con Google o con un correo, sin instalar nada.
@@ -25,10 +41,15 @@ import { cargaOpcional } from "../carga-opcional";
  *
  * Desde Pollar 0.12 (24 de octubre de 2026) cada firma pide confirmación y, sin la interfaz de Pollar, el SDK devuelve
  * `SDK_CONFIRMATION_UNAVAILABLE` en todas. Acá se atiende en código (`atenderFirmas`): lo único que se confirma es la
- * firma de `signAndSubmit` y de `signUnsponsored`, que solo salen del sello y del sorteo de la persona. El clic en
+ * firma de `signAndSubmit` y de `signUnsponsored` con la transacción que la página acaba de armar (el sello y el sorteo
+ * de la persona, o lo que manda desde Tus dólares digitales), la del pago exacto de una orden (`pagarOrden`), que entra
+ * recién después de pasar `motivoContraElPago`, y, por una rama angosta, la línea del USDC de Circle que la persona pide
+ * activar con su botón (`activarUsdc`). Los pasos de la carga con bolivianos no son confirmaciones: son votos de co-firma
+ * que se estampan con `relay` después de la regla (`cargaAprobar`, `cargaPreparar`). El clic en
  * "Sellar la lista" es el consentimiento y cubre también el sorteo de esa lista: con Pollar el sorteo se lanza solo
  * cuando nace la ronda (`espera.ts`, sin otro clic, como pasa con la cuenta de prueba), mientras que con Freighter la
- * persona lo aprueba en su ventana. Cualquier otra firma que llegue se rechaza y se anota. El cliente se
+ * persona lo aprueba en su ventana. El pago lo aprueba la persona en la confirmación propia del sitio. Cualquier otra
+ * firma que llegue se rechaza y se anota. El cliente se
  * arma con `confirmation: "prompt"`: el SDK deja ganar a la política más estricta entre el código y el panel de
  * Pollar, así que fijarla en `"prompt"` hace que la lista blanca corra siempre, también con el panel en "Never ask".
  *
@@ -101,6 +122,8 @@ export interface SubmittingWallet extends WalletAdapter {
    * persona y la transacción la manda quien la pidió. Devuelve el XDR firmado.
    */
   signUnsponsored?(xdr: string): Promise<string>;
+  /** Paga la orden de un paquete con el saldo de la cuenta (`pagarOrden` de `PollarWallet`). Nunca lanza. */
+  pagarOrden?(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo>;
 }
 
 export const pollarConfigured = (): boolean => pollarKeyFor(network.name) !== "";
@@ -112,34 +135,69 @@ export const pollarConfigured = (): boolean => pollarKeyFor(network.name) !== ""
 export interface FirmaPendiente {
   id: string;
   kind: string;
+  network?: string | undefined;
   operation?: string | undefined;
   unsignedXdr?: string | undefined;
+  details?: Record<string, unknown> | undefined;
   confirm: () => void;
   reject: () => void;
+}
+
+/**
+ * La línea del USDC de Circle que la persona acaba de pedir activar con su botón (`activarUsdc`): el código, el emisor de
+ * la red, y `tomar`, que dice que sí una sola vez por toque.
+ */
+export interface LineaPedida {
+  code: string;
+  issuer: string;
+  tomar(): boolean;
+}
+
+const soloEstasClaves = (o: unknown, claves: readonly string[]): o is Record<string, unknown> =>
+  !!o && typeof o === "object" && !Array.isArray(o) && Object.keys(o).length === claves.length && claves.every((k) => Object.hasOwn(o, k));
+
+/**
+ * ¿Es exactamente la línea pedida? La arma el SDK (`setTrustline`): sin transacción a la vista, en Stellar, con
+ * `details` = `{ asset: { type, code, issuer } }` y nada más. Un límite no entra (con `"0"` cerraría la línea).
+ */
+function esLaLineaPedida(p: FirmaPendiente, linea: LineaPedida): boolean {
+  if (p.kind !== "build_sign_submit" || p.network !== "STELLAR" || p.operation !== "change_trust" || p.unsignedXdr !== undefined) return false;
+  if (!soloEstasClaves(p.details, ["asset"])) return false;
+  const a = p.details.asset;
+  if (!soloEstasClaves(a, ["type", "code", "issuer"])) return false;
+  return a.type === "credit_alphanum4" && a.code === "USDC" && a.code === linea.code && a.issuer === linea.issuer;
 }
 
 /**
  * Decide, una por una, las firmas que esperan confirmación.
  *
  * Se confirma la que cumple las tres: hay una firma pedida por nosotros en curso (`esperadas`: el XDR que se mandó a
- * firmar desde el botón de sellar o de sortear), es de las que firman una transacción (`sign` o `sign_and_send`, no
- * una construida por el SDK como un pago o una línea de confianza), y trae esa transacción y no otra (sin ella, no). Todo lo demás se
- * rechaza: una firma que la persona no pidió no se firma.
+ * firmar desde el botón de sellar o de sortear, o el pago de una orden ya revisado por `motivoContraElPago`), es de las
+ * que firman una transacción (`sign` o `sign_and_send`, no una construida por el SDK como un pago o una línea de
+ * confianza), y trae esa transacción y no otra (sin ella, no). Todo lo demás se rechaza: una firma que la persona no
+ * pidió no se firma.
  *
  * `atendidas` guarda lo ya resuelto: el SDK repite la lista entera cada vez que cambia, y al resolver una vuelve a avisar.
  * `alRechazar` recibe solo el tipo y la operación, nunca el XDR ni datos de la cuenta.
+ *
+ * `linea` es la rama angosta: mientras la persona activa los dólares digitales con su botón, se confirma también la
+ * línea del USDC de Circle de la red, solo esa y una sola vez (`tomar` va última, así una confirmación que no es la
+ * pedida no la gasta). Sin `linea`, todo es como antes.
  */
 export function atenderFirmas(
   pendientes: readonly FirmaPendiente[],
   esperadas: ReadonlySet<string>,
   atendidas: Set<string>,
   alRechazar: (motivo: string, que: { kind: string; operation: string }) => void,
+  linea: LineaPedida | null = null,
 ): void {
   for (const p of pendientes) {
     if (atendidas.has(p.id)) continue;
     atendidas.add(p.id);
     const que = { kind: p.kind, operation: p.operation ?? "" };
-    if (esperadas.size === 0) {
+    if (linea !== null && esLaLineaPedida(p, linea) && linea.tomar()) {
+      p.confirm();
+    } else if (esperadas.size === 0) {
       alRechazar("nadie la pidió", que);
       p.reject();
     } else if (p.kind !== "sign" && p.kind !== "sign_and_send") {
@@ -418,6 +476,44 @@ const noAprobada = (motivo: string): Error => {
   return new Error(ACTIVACION_RARA);
 };
 
+/** El pago con el saldo que no se firma (o no se manda) porque no es el de la orden. El motivo es una palabra fija. */
+const noAprobado = (motivo: string): ResultadoDelPagoConSaldo => {
+  console.warn(`[tinkazo] pago con saldo no aprobado: ${motivo}`);
+  return { estado: "no-salio", motivo: "regla" };
+};
+
+/**
+ * La marca de un pago con el saldo que quizás salió, por orden (su nota) y hasta cuándo puede entrar (segundos Unix). Vive
+ * en `localStorage` para que otra pestaña tampoco arme otro pago de la misma orden mientras tanto. No guarda la cuenta, el
+ * monto ni la transacción. Sin almacenamiento, vale lo que vive la pestaña (`#pagando`).
+ */
+const MARCA_DEL_PAGO = "tinkazo.pago-saldo.";
+/** Lo que se espera, después de que el pago ya no puede entrar, a que el servidor lo vea si entró. */
+export const MARGEN_DEL_PAGO_S = 60;
+
+export function leerMarcaDelPago(nota: string): number | null {
+  try {
+    const n = Number(localStorage.getItem(MARCA_DEL_PAGO + nota));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+function ponerMarcaDelPago(nota: string, hasta: number): void {
+  try {
+    localStorage.setItem(MARCA_DEL_PAGO + nota, String(Math.floor(hasta)));
+  } catch {
+    /* sin almacenamiento, la marca vive lo que vive el pago en curso */
+  }
+}
+function borrarMarcaDelPago(nota: string): void {
+  try {
+    localStorage.removeItem(MARCA_DEL_PAGO + nota);
+  } catch {
+    /* ya no está */
+  }
+}
+
 /** Corre `f` con el candado entre pestañas de Web Locks; sin Web Locks, sin candado. */
 function conCandado<T>(nombre: string, f: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
@@ -562,6 +658,128 @@ export interface EstadoDeProteccion {
   lista: boolean;
 }
 
+/* ------------------------------------------------ la carga con bolivianos: lo que no es de la clase */
+
+/** El candado entre pestañas de la carga: preparar la cuenta, crear la orden, aprobar un paso y reintentar van de a uno. */
+export const CANDADO_DE_LA_CARGA = "tinkazo-carga";
+/** Ya pagué le pregunta a Pollar por el pago de una orden como mucho una vez cada diez segundos. */
+export const YA_PAGUE_CADA_MS = 10_000;
+/** Dos aprobaciones falladas en la misma orden y la misma pestaña: no se intenta más y se muestra la ayuda. */
+export const TOPE_DE_APROBACIONES_FALLADAS = 2;
+/** Las aprobaciones falladas de esta pestaña, por orden, en `sessionStorage`: sobreviven a recargar y se borran al cerrar sesión. */
+export const MARCA_DE_APROBACIONES = "tinkazo.carga.fallas";
+/** Cada cuánto mira la espera de la verificación de identidad, y hasta cuándo, si nadie la corta antes. */
+export const VERIFICACION_CADA_MS = 3_000;
+export const VERIFICACION_TOPE_MS = 5 * 60_000;
+/** Cuántas cargas cerradas se le piden al kit para buscar la última que no terminó bien. */
+const CERRADAS_POR_PAGINA = 20;
+/** La carga es de Bolivia: el país de la verificación de identidad. */
+const PAIS_DE_LA_CARGA = "BO";
+/** Una cuenta que dejó de ser la de la sesión a mitad de camino. */
+const SIN_CUENTA_DE_LA_CARGA = "carga-sin-cuenta";
+
+/**
+ * La carga con bolivianos se prende con `VITE_RAMPA=pollar` o con la compra con QR (`compraQrActiva`, que pide la compra
+ * y el pago con el saldo), y vive solo en la red principal. Apagada, ningún método de la carga arma el cliente ni llama
+ * a nada. El permiso del servidor para comprar con QR no se mira acá: lo pide la ventana antes de cada paso.
+ */
+export const cargaPrendida = (): boolean => (modoDeRampa() === "pollar" || compraQrActiva()) && network.name === "mainnet";
+
+/**
+ * Lo que corta cualquier llamada de la carga: la bandera apagada, sin la cuenta de la sesión, sin créditos de Tinkazo (un
+ * `402`, que nunca es una falla de la persona), sin red, la cuenta que pide protegerse u otra cosa. Nunca el error del kit.
+ */
+export type FallaDeCarga =
+  | { estado: "apagada" }
+  | { estado: "sin-cuenta" }
+  | { estado: "sin-creditos" }
+  | { estado: "sin-red" }
+  | { estado: "proteger-cuenta" }
+  | { estado: "no-se-pudo" };
+
+/** El error de una llamada de la carga en una palabra, como `motivoDelError` de `rampa-pollar.ts`. */
+export function fallaDeCarga(e: unknown): FallaDeCarga {
+  if (e instanceof Error && e.message === SIN_CUENTA_DE_LA_CARGA) return { estado: "sin-cuenta" };
+  const codigo = codigoDelKit(e);
+  if (codigo === "SDK_CREDITS_INSUFFICIENT" || codigo === "SDK_BILLING_OVERDUE") return { estado: "sin-creditos" };
+  if (codigo === "SDK_WALLET_RECOVERY_REQUIRED") return { estado: "proteger-cuenta" };
+  const sinInternet = typeof navigator !== "undefined" && navigator.onLine === false;
+  if (sinInternet || (e !== null && e !== undefined && esDeRed(e))) return { estado: "sin-red" };
+  return { estado: "no-se-pudo" };
+}
+
+/** Cómo quedó la verificación de identidad. Nunca dice más de lo que se sabe: una decisión sin cerrar está procesándose. */
+export type EstadoDeVerificacion = "aprobada" | "procesando" | "en-revision" | "rechazada" | "vencida" | "en-curso";
+
+/** Lo que dice `getKycStatus`, como lo lee la ventana del kit: aprobada o rechazada solo cuando el estado lo dice. */
+export function estadoDeVerificacion(r: unknown): EstadoDeVerificacion {
+  const x = esObjetoPlano(r) ? r : {};
+  if (x.status === "approved") return "aprobada";
+  if (x.status === "rejected") return "rechazada";
+  if (x.status === "expired" || x.decisionStatus === "expired") return "vencida";
+  if (x.decisionStatus === "manual_review") return "en-revision";
+  if (x.decisionStatus === "approved" || x.decisionStatus === "rejected") return "procesando";
+  return "en-curso";
+}
+
+const esObjetoPlano = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+const soloTextos = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
+const cuerpoDelError = (e: unknown): Record<string, unknown> => {
+  const b = (e as { body?: unknown } | null)?.body;
+  return esObjetoPlano(b) ? b : {};
+};
+
+/** Una página que se puede abrir: solo https y sin usuario ni clave adentro. */
+function enlaceHttps(x: unknown): string | null {
+  if (typeof x !== "string") return null;
+  try {
+    const u = new URL(x);
+    return u.protocol === "https:" && !u.username && !u.password ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Una clave para no empezar dos veces la misma verificación (y no pagarla dos veces). */
+function claveNueva(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  const b = new Uint8Array(16);
+  c?.getRandomValues?.(b);
+  return `kyc-${Date.now().toString(36)}-${aHex(b)}`;
+}
+
+/** Espera `ms`; `false` si la cortan antes. */
+function pausa(ms: number, signal?: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve(false);
+      return;
+    }
+    const fin = (v: boolean): void => {
+      clearTimeout(reloj);
+      signal?.removeEventListener("abort", alCortar);
+      resolve(v);
+    };
+    const alCortar = (): void => fin(false);
+    const reloj = setTimeout(() => fin(true), ms);
+    signal?.addEventListener("abort", alCortar, { once: true });
+  });
+}
+
+/** Las aprobaciones falladas que guarda esta pestaña, por orden. Lo que no se lee, no cuenta. */
+function fallasGuardadas(): Record<string, number> {
+  try {
+    const v: unknown = JSON.parse(leerMarca(MARCA_DE_APROBACIONES) ?? "{}");
+    if (!esObjetoPlano(v)) return {};
+    const r: Record<string, number> = Object.create(null) as Record<string, number>;
+    for (const [orden, n] of Object.entries(v)) if (typeof n === "number" && Number.isFinite(n) && n > 0) r[orden] = Math.floor(n);
+    return r;
+  } catch {
+    return {};
+  }
+}
+
 class PollarWallet implements SubmittingWallet {
   readonly kind = "external" as const;
   readonly submitsItself = true as const;
@@ -588,6 +806,21 @@ class PollarWallet implements SubmittingWallet {
   #activando: Promise<ResultadoDeActivar> | null = null;
   /** Una confirmación de este navegador en curso: cerrar sesión la espera antes de sacarlo de la cuenta. */
   #confirmacion: Promise<unknown> | null = null;
+  /** La línea del USDC que la persona está activando con su botón: lo único que suma la rama angosta de la puerta. */
+  #lineaPedida: LineaPedida | null = null;
+  /** La activación de los dólares digitales en curso en esta pestaña. */
+  #activandoUsdc: Promise<ResultadoDeActivarUsdc> | null = null;
+  /** Las claves de cada verificación de identidad empezada en esta pestaña: tocar otra vez retoma la misma. */
+  readonly #clavesDeVerificacion = new Map<string, string>();
+  /** Cuándo preguntó Ya pagué por última vez, por orden. */
+  readonly #chequeosDePago = new Map<string, number>();
+  /** Las aprobaciones falladas por orden, también en memoria por si el almacenamiento falla. */
+  readonly #fallasDeAprobar = new Map<string, number>();
+  /** Lo de la carga en curso en esta pestaña: dos toques comparten una sola llamada. */
+  readonly #aprobando = new Map<string, Promise<ResultadoDeAprobar>>();
+  readonly #reintentando = new Map<string, Promise<ResultadoDeReintentar>>();
+  #creandoOrden: Promise<ResultadoDeCrearOrden> | null = null;
+  #preparando: Promise<ResultadoDePreparar> | null = null;
   /** El último cierre de sesión no pudo sacar este navegador de la cuenta: la página lo avisa. */
   ultimoCierreDejoNavegador = false;
 
@@ -621,7 +854,7 @@ class PollarWallet implements SubmittingWallet {
     const client = new Ctor({
       apiKey,
       // El SDK deja ganar a la política más estricta entre esta y la del panel: fijada en "prompt", la firma siempre
-      // pasa por `atenderFirmas`, que solo confirma el sello y el sorteo de la lista que la persona selló con su botón.
+      // pasa por `atenderFirmas`, que solo confirma lo que la persona acaba de pedir con su botón.
       confirmation: "prompt",
       stellarNetwork: network.name === "mainnet" ? "mainnet" : "testnet",
       // La misma ventana que abre el SDK, pero que avisa si el navegador la bloqueó (`abrirVentana`).
@@ -633,8 +866,12 @@ class PollarWallet implements SubmittingWallet {
     // llega acá, sea cual sea el modo del panel de Pollar (`atenderFirmas`).
     if (typeof client.onConfirmationRequest === "function") {
       this.#dejarDeAtender = client.onConfirmationRequest((pendientes) =>
-        atenderFirmas(pendientes, new Set(this.#esperadas.keys()), this.#atendidas, (motivo, que) =>
-          console.warn(`[tinkazo] firma de Pollar rechazada (${motivo}): ${que.kind} ${que.operation}`.trim()),
+        atenderFirmas(
+          pendientes,
+          new Set(this.#esperadas.keys()),
+          this.#atendidas,
+          (motivo, que) => console.warn(`[tinkazo] firma de Pollar rechazada (${motivo}): ${que.kind} ${que.operation}`.trim()),
+          this.#lineaPedida,
         ),
       );
     }
@@ -646,11 +883,12 @@ class PollarWallet implements SubmittingWallet {
    * Corre una firma que la persona acaba de pedir con su botón: mientras dura, esa transacción (y solo esa) se confirma
    * sola cuando el SDK lo pide. La persona ya dio su consentimiento al apretar "Sellar" o "Sortear".
    */
-  async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>): Promise<T> {
+  async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>, o: { testigo?: boolean } = {}): Promise<T> {
     const client = await this.#ensureClient();
     // En la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado (riesgo aceptado,
-    // docs/architecture.md). Solo mira, después de firmar.
-    const testigo = network.name === "mainnet" ? armarTestigo(client) : null;
+    // docs/architecture.md). Solo mira, después de firmar. El pago con el saldo no lo usa: lo firmado se revisa entero
+    // antes de mandarlo (`pagarOrden`).
+    const testigo = network.name === "mainnet" && o.testigo !== false ? armarTestigo(client) : null;
     this.#esperadas.set(xdr, (this.#esperadas.get(xdr) ?? 0) + 1);
     try {
       return await firmar(client);
@@ -866,6 +1104,10 @@ class PollarWallet implements SubmittingWallet {
     this.#memoria = null;
     this.#activando = null;
     for (const clave of Object.values(MARCAS_DE_LA_CUENTA)) borrarMarca(clave);
+    borrarMarca(MARCA_DE_APROBACIONES);
+    this.#fallasDeAprobar.clear();
+    this.#clavesDeVerificacion.clear();
+    this.#chequeosDePago.clear();
     this.#dejarDeAtender?.();
     this.#dejarDeAtender = null;
     this.#esperadas.clear();
@@ -922,6 +1164,844 @@ class PollarWallet implements SubmittingWallet {
   async cotizarRampa(body: unknown): Promise<unknown> {
     const client = await this.#ensureClient();
     return client.quoteRamp(body as Parameters<PollarClient["quoteRamp"]>[0]);
+  }
+
+  /* ------------------------------------------------ pagar un paquete con el saldo de la cuenta */
+
+  /** El pago con el saldo en curso en esta pestaña: dos toques de la misma orden comparten uno solo. */
+  #pagando: { nota: string; promesa: Promise<ResultadoDelPagoConSaldo> } | null = null;
+
+  /**
+   * Paga la orden de un paquete con los dólares digitales de esta cuenta. Solo se llama desde la confirmación propia del
+   * sitio (Vas a pagar, `pago-saldo.ts`), con los datos de la orden del servidor tal cual. Nunca lanza.
+   *
+   * 1. La cuenta: la de la sesión, la misma que dice el kit, una G, en la red principal.
+   * 2. Si esta orden ya tiene un pago con el saldo que quizás salió (en esta pestaña o en otra), no se arma otro: se
+   *    devuelve `incierto` hasta que ese pago ya no pueda entrar (`marcaDelPago`).
+   * 3. El proveedor arma el pago (`buildTx`), con la nota de texto de la orden y vida corta.
+   * 4. Lo armado tiene que ser exactamente el pago de la orden (`motivoContraElPago`). Si no, no se firma.
+   * 5. Recién ahí ese XDR, y solo ese, entra en las esperadas de la puerta (`#firmando`) y se firma, con el patrocinio.
+   * 6. Lo firmado se revisa otra vez y tiene que venir envuelto, con la comisión a cargo de otra cuenta. Si no, no se manda.
+   * 7. Se manda una vez (`submitTx`). Lo que no diga que la red lo rechazó es `incierto`: no se manda de nuevo.
+   *
+   * Pagar no da el acceso: eso lo dice el servidor cuando ve el pago (`/v1/alta/pago`).
+   */
+  pagarOrden(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo> {
+    if (this.#pagando) return this.#pagando.nota === p.nota ? this.#pagando.promesa : Promise.resolve({ estado: "no-salio", motivo: "red" });
+    const promesa = conCandado("tinkazo-pagar-con-saldo", () => this.#pagar(p)).finally(() => {
+      if (this.#pagando?.promesa === promesa) this.#pagando = null;
+    });
+    this.#pagando = { nota: p.nota, promesa };
+    return promesa;
+  }
+
+  async #pagar(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo> {
+    const red = (): ResultadoDelPagoConSaldo => ({ estado: "no-salio", motivo: "red" });
+    if (network.name !== "mainnet") return { estado: "no-salio", motivo: "sin-cuenta" };
+    let client: PollarClient;
+    try {
+      client = await this.#ensureClient();
+    } catch {
+      return red();
+    }
+    // 1. La cuenta.
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return { estado: "no-salio", motivo: "sin-cuenta" };
+    const pedido: PagoPedido = { cuenta, destino: p.destino, monto: p.monto, nota: p.nota };
+    const monto = montoExacto(p.monto);
+    if (!monto || !pedidoValido(pedido)) return noAprobado("pedido");
+    // 2. Un pago de esta orden que quizás salió.
+    const ahora = (): number => Math.floor(Date.now() / 1000);
+    const enVuelo = leerMarcaDelPago(p.nota);
+    if (enVuelo !== null && enVuelo > ahora()) return { estado: "incierto", vence: enVuelo };
+    // 3. El proveedor arma el pago.
+    let armadoXdr: string | undefined;
+    try {
+      const armado = await client.buildTx(
+        "payment",
+        { destination: p.destino, amount: monto, asset: { type: "credit_alphanum4", code: DOLAR_DIGITAL.code, issuer: DOLAR_DIGITAL.issuer } },
+        { memo: { type: "text", value: p.nota }, timeoutSec: VIDA_DEL_PAGO_S },
+      );
+      armadoXdr = armado.status === "built" ? armado.buildData.unsignedXdr : undefined;
+    } catch {
+      armadoXdr = undefined;
+    }
+    if (!armadoXdr) return red();
+    const xdr = armadoXdr;
+    // 4. La regla, con lo que armó.
+    const motivo = motivoContraElPago(await leerElPago(xdr, network.networkPassphrase), pedido, { ahora: ahora(), firmada: false });
+    if (motivo !== null) return noAprobado(motivo);
+    // 5. La firma. Desde acá hasta saber cómo terminó, la orden queda marcada: otra pestaña no arma otro pago.
+    ponerMarcaDelPago(p.nota, ahora() + VIDA_MAXIMA_S + MARGEN_DEL_PAGO_S);
+    let firma: { status?: string; signedXdr?: string; submissionToken?: string; code?: string; details?: string; message?: string };
+    try {
+      firma = (await this.#firmando(xdr, (c) => c.signTx(xdr), { testigo: false })) as typeof firma;
+    } catch {
+      borrarMarcaDelPago(p.nota);
+      return red();
+    }
+    if (firma.status !== "signed" || !firma.signedXdr) {
+      // Sin firma no se mandó nada (una co-firma que quedó pendiente es de firmar solamente: nadie la manda).
+      borrarMarcaDelPago(p.nota);
+      const codigos = [firma.code, firma.details, firma.message].filter((x): x is string => typeof x === "string").join(" ");
+      if (/SDK_CONFIRMATION_DECLINED|SDK_COSIGN_REJECTED|SDK_COSIGN_TURNKEY_REJECTED/.test(codigos)) return { estado: "no-salio", motivo: "cancelado" };
+      return red();
+    }
+    // 6. Lo firmado, otra vez con la regla, y envuelto con la comisión a cargo de otra cuenta.
+    const firmada = await leerElPago(firma.signedXdr, network.networkPassphrase);
+    const motivoFirmada = motivoContraElPago(firmada, pedido, { ahora: ahora(), firmada: true });
+    if (motivoFirmada !== null || !firmada?.vence) {
+      borrarMarcaDelPago(p.nota);
+      if (motivoFirmada === "sin-patrocinio") {
+        console.warn("[tinkazo] pago con saldo no enviado: la comisión no la cubre la app");
+        return { estado: "no-salio", motivo: "sin-patrocinio" };
+      }
+      return noAprobado(motivoFirmada ?? "sin vencimiento");
+    }
+    const vence = firmada.vence + MARGEN_DEL_PAGO_S;
+    ponerMarcaDelPago(p.nota, vence);
+    // 7. Se manda una vez.
+    let envio: { status?: string; hash?: string; resultCode?: string; details?: string; code?: string; message?: string };
+    try {
+      envio = (await client.submitTx(firma.signedXdr, firma.submissionToken ? { submissionToken: firma.submissionToken } : undefined)) as typeof envio;
+    } catch {
+      return { estado: "incierto", vence };
+    }
+    if (envio.status === "success" && envio.hash) return { estado: "salio", hash: envio.hash };
+    if (envio.status === "error") {
+      const rechazo = motivoDelRechazo([envio.resultCode, envio.details, envio.code, envio.message].filter((x): x is string => typeof x === "string"), { secuenciaIncierta: compraQrActiva() });
+      if (rechazo) {
+        // La red dijo que no: esa transacción ya no entra, y se puede volver a intentar.
+        borrarMarcaDelPago(p.nota);
+        return { estado: "no-salio", motivo: rechazo };
+      }
+    }
+    return { estado: "incierto", vence };
+  }
+
+  /* ------------------------------------------------ activar los dólares digitales (la línea del USDC de Circle) */
+
+  /**
+   * Activa los dólares digitales de la cuenta de Google o de correo: le pide a Pollar la línea del USDC de Circle de la
+   * red, sin límite y sin saltear el patrocinio. Sale solo del toque de la persona en Activar dólares digitales: mientras
+   * dura, la puerta confirma esa línea y nada más. Con la bandera apagada no arma el cliente ni llama a nada. Dos toques
+   * seguidos piden una sola.
+   */
+  activarUsdc(): Promise<ResultadoDeActivarUsdc> {
+    if (modoDeRampa() === "apagada") return Promise.resolve("apagada");
+    return this.#activarUsdcYa();
+  }
+
+  /**
+   * Pedir la línea, sin mirar `VITE_RAMPA`: lo usa también Preparar mi cuenta de la carga, que tiene su propia bandera
+   * (`cargaPrendida`, que vale también con la compra con QR sola). Dos toques piden una sola.
+   */
+  #activarUsdcYa(): Promise<ResultadoDeActivarUsdc> {
+    if (this.#activandoUsdc || this.#lineaPedida) return Promise.resolve("en-curso");
+    this.#activandoUsdc = this.#pedirLineaUsdc().finally(() => {
+      this.#activandoUsdc = null;
+    });
+    return this.#activandoUsdc;
+  }
+
+  async #pedirLineaUsdc(): Promise<ResultadoDeActivarUsdc> {
+    let client: PollarClient;
+    try {
+      client = await this.#ensureClient();
+    } catch {
+      return "no-salio";
+    }
+    const usdc = usdcDeLaRed(network.name);
+    let quedan = 1;
+    this.#lineaPedida = { code: usdc.code, issuer: usdc.issuer, tomar: () => quedan-- > 0 };
+    try {
+      const r = (await client.setTrustline({ code: usdc.code, issuer: usdc.issuer })) as { status?: string; code?: string; details?: string };
+      return resultadoDeLaLinea(r);
+    } catch {
+      return "no-salio";
+    } finally {
+      this.#lineaPedida = null;
+    }
+  }
+
+  /**
+   * Si la app pone la reserva de la línea del USDC de Circle (el catálogo de Pollar, `GET /wallet/assets`): solo lee.
+   * `null` si no se pudo leer, o con la bandera apagada.
+   */
+  async catalogoUsdc(): Promise<"patrocinada" | "no-patrocinada" | null> {
+    if (modoDeRampa() === "apagada") return null;
+    try {
+      const client = await this.#ensureClient();
+      await client.refreshAssets();
+      const s = client.getEnabledAssetsState();
+      if (s.step !== "loaded") return null;
+      const usdc = usdcDeLaRed(network.name);
+      const a = s.data.assets.find((x) => x.code === usdc.code && x.issuer === usdc.issuer && (x.chain === undefined || x.chain === "STELLAR"));
+      return a?.sponsored === true ? "patrocinada" : "no-patrocinada";
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Si ya espera un pedido de activar la línea (una co-firma `change_trust` pendiente): así Se está activando se ve en
+   * cualquier pestaña y después de recargar, y el botón no vuelve mientras el pedido siga vivo. Leer no aprueba nada.
+   * `null` si no se pudo leer, o con la bandera apagada.
+   */
+  async pendienteDeActivacion(): Promise<boolean | null> {
+    if (modoDeRampa() === "apagada") return null;
+    return this.#pendienteDeLinea();
+  }
+
+  /** Lo mismo, sin mirar `VITE_RAMPA`, para Preparar mi cuenta de la carga. */
+  async #pendienteDeLinea(): Promise<boolean | null> {
+    try {
+      const client = await this.#ensureClient();
+      let lista = (client.getCosignState().pending ?? []) as PedidoDeCofirma[];
+      if (lista.length === 0) lista = (await client.cosign.pending()) as PedidoDeCofirma[];
+      return lista.some((p) => p.status === "PENDING" && p.operation === "change_trust");
+    } catch {
+      return null;
+    }
+  }
+
+  /* ------------------------------------------------ la carga con bolivianos */
+
+  /**
+   * Lo común a cada llamada de la carga: con la bandera apagada no arma el cliente; sin la cuenta de la sesión (la misma
+   * que dice el kit, una G, en la red principal) no llama a nada; y cualquier error vuelve como una palabra, nunca con el
+   * texto del kit. Las funciones puras de la carga (`rampa-pollar.ts`, `rampa-regla.ts`) se bajan recién acá.
+   */
+  async #enLaCarga<T>(f: (client: PollarClient, cuenta: string) => Promise<T>): Promise<T | FallaDeCarga> {
+    if (!cargaPrendida()) return { estado: "apagada" };
+    let client: PollarClient;
+    try {
+      client = await this.#ensureClient();
+    } catch (e) {
+      return fallaDeCarga(e);
+    }
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return { estado: "sin-cuenta" };
+    try {
+      return await f(client, cuenta);
+    } catch (e) {
+      return fallaDeCarga(e);
+    }
+  }
+
+  /** Justo antes de votar: el cliente y la cuenta siguen siendo los de la sesión con que se empezó. */
+  #sigueLaCuenta(client: PollarClient, cuenta: string): void {
+    if (this.#client !== client || this.#cuentaParaActivar(client) !== cuenta) throw new Error(SIN_CUENTA_DE_LA_CARGA);
+  }
+
+  /** La ruta de Bolivia por QR hasta el USDC de Circle en Stellar, o que no está. Solo lee. */
+  cargaRuta(): Promise<ResultadoDeRuta> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeRuta> => {
+      const { rutaDeBolivia } = await import("./rampa-pollar");
+      const ruta = rutaDeBolivia(await client.getRampRoutes("ONRAMP"));
+      return ruta ? { estado: "ruta", ruta } : { estado: "sin-ruta" };
+    });
+  }
+
+  /**
+   * El precio de pagar `bolivianos` Bs enteros por esa ruta, o lo que falta para tenerlo (la verificación, proteger la
+   * cuenta, la línea, la cuenta de paso). Cotizar no mueve dinero.
+   */
+  cargaCotizar(ruta: RutaDeBolivia, bolivianos: number): Promise<ResultadoDeCotizar> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeCotizar> => {
+      const { cuerpoDeCotizacion, leerCotizacion, leerErrorDeCotizacion } = await import("./rampa-pollar");
+      const cuerpo = cuerpoDeCotizacion(ruta, bolivianos);
+      if (!cuerpo) return { estado: "no-se-puede" };
+      try {
+        return leerCotizacion(await client.quoteRamp(cuerpo));
+      } catch (e) {
+        return leerErrorDeCotizacion(e);
+      }
+    });
+  }
+
+  /**
+   * Empieza (o retoma) la verificación de identidad del paso y devuelve la página del proveedor para abrir en otra pestaña.
+   * La pestaña la abre la pantalla dentro del toque (en blanco, y le pone esta dirección cuando llega), como la ventana de
+   * Google. Tocar otra vez retoma la misma verificación; `deNuevo` empieza otra (Empezar de nuevo). Solo una página https.
+   */
+  cargaAbrirVerificacion(paso: PasoDeVerificacion, opciones: { deNuevo?: boolean } = {}): Promise<ResultadoDeAbrirVerificacion> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeAbrirVerificacion> => {
+      if (paso.tipo !== "KYC") return { estado: "desconocido" };
+      const llave = `${paso.opcion}\n${paso.corredor}`;
+      if (opciones.deNuevo) this.#clavesDeVerificacion.delete(llave);
+      const clave = this.#clavesDeVerificacion.get(llave) ?? claveNueva();
+      this.#clavesDeVerificacion.set(llave, clave);
+      // Como la ventana del kit: el nivel del proveedor si está en la lista del país, y el país solo en ese caso.
+      const lista = await client.getKycProviders(PAIS_DE_LA_CARGA, paso.corredor).catch(() => null);
+      const listado = (Array.isArray(lista?.providers) ? lista.providers : []).find((p) => p.id === paso.opcion);
+      try {
+        const r = await client.resolveKyc(paso.opcion, listado?.levels?.[0], listado ? PAIS_DE_LA_CARGA : undefined, paso.corredor, clave);
+        if (r.alreadyApproved) return { estado: "lista" };
+        const url = enlaceHttps(r.kycUrl);
+        return url ? { estado: "abrir", url } : { estado: "desconocido" };
+      } catch (e) {
+        const codigo = codigoDelKit(e);
+        if (codigo === "SDK_KYC_ALREADY_APPROVED") return { estado: "lista" };
+        if (codigo === "SDK_KYC_UNDER_REVIEW") return { estado: "en-revision" };
+        if (codigo !== "SDK_KYC_SESSION_EXPIRED") throw e;
+        this.#clavesDeVerificacion.delete(llave);
+        return { estado: "vencida" };
+      }
+    });
+  }
+
+  /** Ya terminé: cómo quedó la verificación del paso, ahora. Solo lee. */
+  cargaMirarVerificacion(paso: PasoDeVerificacion): Promise<ResultadoDeMirarVerificacion> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeMirarVerificacion> => {
+      if (paso.tipo !== "KYC") return { estado: "desconocido" };
+      return { estado: "leida", verificacion: estadoDeVerificacion(await client.getKycStatus(undefined, paso.corredor)) };
+    });
+  }
+
+  /**
+   * Mientras la persona se verifica en la otra pestaña: mira cada `cadaMs` hasta que hay una respuesta, hasta `topeMs`, o
+   * hasta que la pantalla la corta (`signal`, al cerrar la ventana). Es la espera de `pollKycDecision` del kit, que no se
+   * puede cortar. Solo lee.
+   */
+  cargaEsperarVerificacion(paso: PasoDeVerificacion, opciones: { signal?: AbortSignal; cadaMs?: number; topeMs?: number } = {}): Promise<ResultadoDeMirarVerificacion> {
+    const { signal, cadaMs = VERIFICACION_CADA_MS, topeMs = VERIFICACION_TOPE_MS } = opciones;
+    return this.#enLaCarga(async (client): Promise<ResultadoDeMirarVerificacion> => {
+      if (paso.tipo !== "KYC") return { estado: "desconocido" };
+      const hasta = Date.now() + topeMs;
+      for (;;) {
+        if (signal?.aborted) return { estado: "cortada" };
+        const verificacion = estadoDeVerificacion(await client.getKycStatus(undefined, paso.corredor));
+        if (signal?.aborted) return { estado: "cortada" };
+        if (verificacion !== "en-curso" || Date.now() + cadaMs > hasta) return { estado: "leida", verificacion };
+        if (!(await pausa(cadaMs, signal))) return { estado: "cortada" };
+      }
+    });
+  }
+
+  /** Unos datos tuyos: el formulario del paso, con lo que la persona ya contestó. Solo lee. */
+  cargaLeerFormulario(paso: PasoDeVerificacion): Promise<ResultadoDeFormulario> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeFormulario> => {
+      if (paso.tipo !== "FORM") return { estado: "desconocido" };
+      return { estado: "formulario", formulario: await client.getRequirementForm(paso.opcion) };
+    });
+  }
+
+  /** Guardar y seguir: las respuestas del formulario del paso. Lo que el servidor no acepta vuelve por campo. */
+  cargaGuardarFormulario(paso: PasoDeVerificacion, respuestas: RequirementFormAnswers): Promise<ResultadoDeGuardarFormulario> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeGuardarFormulario> => {
+      if (paso.tipo !== "FORM") return { estado: "desconocido" };
+      try {
+        await client.submitRequirementForm(paso.opcion, respuestas);
+        return { estado: "guardado" };
+      } catch (e) {
+        if (codigoDelKit(e) !== "KYC_FORM_INVALID_ANSWERS") throw e;
+        const lista = cuerpoDelError(e).errors;
+        const errores = (Array.isArray(lista) ? lista : []).flatMap((x) => (esObjetoPlano(x) && typeof x.key === "string" && typeof x.code === "string" ? [{ key: x.key, code: x.code }] : []));
+        return { estado: "respuestas", errores };
+      }
+    });
+  }
+
+  /** Confirmá tus datos: lo que se compara con el SEGIP, o cómo quedó la comprobación. Solo lee. */
+  cargaLeerSegip(paso: PasoDeVerificacion): Promise<ResultadoDeSegip> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeSegip> => {
+      if (paso.tipo !== "REGISTRY_CHECK") return { estado: "desconocido" };
+      let segip: RegistryCheck;
+      try {
+        segip = await client.getRegistryCheck(paso.opcion);
+      } catch (e) {
+        if (codigoDelKit(e) === "KYC_REGISTRY_IDENTITY_REQUIRED") return { estado: "falta-identidad" };
+        throw e;
+      }
+      if (segip.status === "approved") return { estado: "aprobada" };
+      if (segip.status === "pending") return { estado: "en-revision" };
+      return { estado: "datos", segip };
+    });
+  }
+
+  /** Confirmar mis datos: los apellidos y el complemento, sin espacios de más y sin los campos vacíos. */
+  cargaConfirmarSegip(paso: PasoDeVerificacion, edicion: { surname1: string; surname2?: string; complementNumber?: string }): Promise<ResultadoDeSegip> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeSegip> => {
+      const surname1 = edicion.surname1.trim();
+      const surname2 = (edicion.surname2 ?? "").trim();
+      const complementNumber = (edicion.complementNumber ?? "").trim();
+      if (paso.tipo !== "REGISTRY_CHECK" || !surname1) return { estado: "desconocido" };
+      try {
+        const r = await client.submitRegistryCheck(paso.opcion, { surname1, ...(surname2 ? { surname2 } : {}), ...(complementNumber ? { complementNumber } : {}) });
+        if (r.status === "approved") return { estado: "aprobada" };
+        if (r.status === "rejected") return { estado: "rechazada", campos: soloTextos(r.rejectedFields) };
+        return { estado: "en-revision" };
+      } catch (e) {
+        const codigo = codigoDelKit(e);
+        if (codigo === "SDK_KYC_ALREADY_APPROVED") return { estado: "aprobada" };
+        if (codigo === "KYC_REGISTRY_NAME_MISMATCH") return { estado: "no-coincide" };
+        if (codigo === "SDK_KYC_UNDER_REVIEW") return { estado: "en-revision" };
+        throw e;
+      }
+    });
+  }
+
+  /** Tu alta con Stereum: si ya está registrada, o lo que recibe Stereum. Solo lee. */
+  cargaLeerAlta(paso: PasoDeVerificacion): Promise<ResultadoDeAlta> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeAlta> => {
+      if (paso.tipo !== "PROVIDER_REGISTRATION") return { estado: "desconocido" };
+      const alta = await client.getProviderRegistration(paso.corredor);
+      return alta.status === "registered" ? { estado: "registrada" } : { estado: "alta", alta };
+    });
+  }
+
+  /** Darme de alta: con Stereum, por la ruta del paso. Si faltan datos, cuáles y en qué formularios. */
+  cargaDarDeAlta(paso: PasoDeVerificacion): Promise<ResultadoDeAlta> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeAlta> => {
+      if (paso.tipo !== "PROVIDER_REGISTRATION") return { estado: "desconocido" };
+      try {
+        const r = await client.submitProviderRegistration(paso.corredor);
+        return r.status === "registered" ? { estado: "registrada" } : { estado: "pendiente" };
+      } catch (e) {
+        if (codigoDelKit(e) !== "KYC_REGISTRATION_MISSING_DATA") throw e;
+        const cuerpo = cuerpoDelError(e);
+        const formularios = (Array.isArray(cuerpo.forms) ? cuerpo.forms : []).flatMap((f) => (esObjetoPlano(f) && typeof f.formId === "string" ? [f.formId] : []));
+        return { estado: "faltan-datos", faltan: soloTextos(cuerpo.missing), invalidos: soloTextos(cuerpo.invalid), formularios };
+      }
+    });
+  }
+
+  /**
+   * Preparar mi cuenta: un toque que hace, en orden y sin reintentos solos, lo que la cotización dijo que falta para recibir.
+   * Abre la línea del USDC de Circle si falta (`activarUsdc`, por la rama angosta de la puerta, y nunca otra mientras la
+   * primera espera) y crea la cuenta de paso en Polygon si la ruta la pide (`runRampWalletStep`), aprobando su pedido con
+   * la regla de la cuenta de paso. Ninguna de las dos mueve dinero. Si la cuenta pide protegerse, no hace nada. Dos toques
+   * preparan una sola vez, y entre pestañas va con el candado de la carga.
+   */
+  cargaPreparar(falta: readonly LoQueFalta[]): Promise<ResultadoDePreparar> {
+    if (!cargaPrendida()) return Promise.resolve({ estado: "apagada" });
+    this.#preparando ??= this.#enLaCarga((client, cuenta) => conCandado(CANDADO_DE_LA_CARGA, () => this.#preparar(client, cuenta, falta))).finally(() => {
+      this.#preparando = null;
+    });
+    return this.#preparando;
+  }
+
+  async #preparar(client: PollarClient, cuenta: string, falta: readonly LoQueFalta[]): Promise<ResultadoDePreparar> {
+    if (falta.some((f) => f.que === "proteger-cuenta")) return { estado: "proteger-cuenta" };
+    if (falta.some((f) => f.que === "linea")) {
+      // Con la bandera de la carga (también la de la compra con QR sola), no con la de VITE_RAMPA: si no, quedaría apagada.
+      if ((await this.#pendienteDeLinea()) === true) return { estado: "linea", resultado: "en-curso" };
+      const r = await this.#activarUsdcYa();
+      if (r !== "hecho") return { estado: "linea", resultado: r };
+    }
+    if (!falta.some((f) => f.que === "cuenta-de-paso")) return { estado: "listo" };
+    // Un pedido de la cuenta que ya espera se vota: no se crea otra cuenta.
+    const antes = await this.#votarCuentaDePaso(client, cuenta);
+    if (antes !== "nada") return comoQuedoLaCuentaDePaso(antes);
+    const { rampWalletStep } = await import("@pollar/core");
+    const paso = rampWalletStep({ failure: { resolutionAction: "set_up_wallet", detail: "POLYGON" } } as unknown as Parameters<typeof rampWalletStep>[0]);
+    if (!paso) return { estado: "no-se-pudo" };
+    let quedaElPedido = false;
+    try {
+      const { recoveryRequired } = await client.runRampWalletStep(paso);
+      if (recoveryRequired) return { estado: "proteger-cuenta" };
+    } catch (e) {
+      // La cuenta nueva deja un pedido que espera el voto de este navegador.
+      if (codigoDelKit(e) !== "SDK_RAMPS_WALLET_NOT_READY") throw e;
+      quedaElPedido = true;
+    }
+    const despues = await this.#votarCuentaDePaso(client, cuenta);
+    if (despues === "nada") return quedaElPedido ? { estado: "cuenta-de-paso-espera" } : { estado: "listo" };
+    return comoQuedoLaCuentaDePaso(despues);
+  }
+
+  /**
+   * Vota el pedido de la cuenta de paso, si hay uno: el más nuevo, pendiente, de crear cuentas en la billetera de la
+   * persona. Se pide de nuevo una sola vez si se puede, se revisa esa versión con `motivoContraLaCuentaDePaso` sobre la
+   * propuesta de `verify`, y recién ahí `relay`. Un pedido ya votado no se vota otra vez.
+   */
+  async #votarCuentaDePaso(client: PollarClient, cuenta: string): Promise<VotoDeLaCuentaDePaso> {
+    const [lista, recuperacion] = await Promise.all([client.cosign.pending(), client.cosign.recovery.status()]);
+    const candidato = elMasNuevo((lista as unknown as PedidoDeCofirma[]).filter((p) => p.kind === "ACCOUNT" && p.status === "PENDING"));
+    if (!candidato) return "nada";
+    const pedido = (candidato.refreshable ? await client.cosign.refresh(candidato.id) : candidato) as PedidoDeCofirma;
+    if (pedido.id !== candidato.id) return cuentaDePasoRara("otro pedido");
+    if (pedido.status !== "PENDING") return pedido.status === "APPROVED" ? "aprobada" : "no-salio";
+    if (pedido.activityId) return "pendiente";
+    const verificacion = await client.cosign.verify(pedido as unknown as CosignRequest);
+    const { motivoContraLaCuentaDePaso } = await import("./rampa-regla");
+    const motivo = motivoContraLaCuentaDePaso(pedido, verificacion, recuperacion.subOrgId ?? "");
+    if (motivo !== null || !verificacion.ok) return cuentaDePasoRara(motivo ?? "otra propuesta");
+    this.#sigueLaCuenta(client, cuenta);
+    let votado: PedidoDeCofirma;
+    try {
+      votado = await this.#votar(client, pedido.id, verificacion);
+    } catch (e) {
+      if (fallaDeCarga(e).estado === "sin-creditos") throw e;
+      return "no-salio";
+    }
+    return votado.status === "APPROVED" ? "aprobada" : votado.status === "PENDING" ? "pendiente" : "no-salio";
+  }
+
+  /** Estampa la propuesta revisada y lee cómo quedó el pedido. Un pedido que ya no espera se lee: no se vota otra vez. */
+  async #votar(client: PollarClient, id: string, verificacion: Extract<CosignVerification, { ok: true }>): Promise<PedidoDeCofirma> {
+    let votado: PedidoDeCofirma;
+    try {
+      const res = await client.cosign.relay(verificacion.proposal.path, verificacion.proposal.body, { requestId: id });
+      votado = (res.request ?? (await client.cosign.get(id, { sync: true }))) as PedidoDeCofirma;
+    } catch (e) {
+      if (codigoDelKit(e) !== "SDK_COSIGN_REQUEST_NOT_PENDING") throw e;
+      votado = (await client.cosign.get(id, { sync: true })) as PedidoDeCofirma;
+    }
+    if (votado.status === "PENDING") {
+      try {
+        votado = (await client.cosign.settle(votado as unknown as CosignRequest)) as PedidoDeCofirma;
+      } catch {
+        /* el voto salió: queda pendiente y se lee después */
+      }
+    }
+    return votado;
+  }
+
+  /**
+   * Crea la orden de carga con la cotización que la persona aceptó, desde su toque en Ver el QR. Dentro del candado de la
+   * carga relee las abiertas: si ya hay una (otra pestaña, otro aparato, un toque anterior), no crea otra y va a esa; si
+   * no se puede saber, no crea nada. Así las pestañas de este navegador nunca tienen dos QR vivos. Entre dos equipos lo
+   * cuida el servidor: el aviso de la compra con QR contesta `409 cargando` durante 3 minutos después de otro que dio el
+   * sí (`cargaCrearOrdenDeCompra`). Los datos que pide la cotización van solo por su clave.
+   * Sin respuesta al crear, mira otra vez antes de decir nada.
+   *
+   * `avisar` corre dentro del mismo candado, después de releer las abiertas y justo antes de crear: la compra con QR avisa
+   * ahí la carga al servidor (`/v1/compra/cargar`), que ata el recargo a la persona. Sin su sí (`false`, o un error) no se
+   * crea la orden y no se mueve plata. Con una carga abierta no se avisa.
+   */
+  cargaCrearOrden(precio: PrecioDeCarga, datos: Readonly<Record<string, string>> = {}, opciones: { avisar?: () => Promise<boolean> } = {}): Promise<ResultadoDeCrearOrden> {
+    if (!cargaPrendida()) return Promise.resolve({ estado: "apagada" });
+    this.#creandoOrden ??= this.#enLaCarga((client) => conCandado(CANDADO_DE_LA_CARGA, () => this.#crearOrden(client, precio, datos, opciones.avisar))).finally(() => {
+      this.#creandoOrden = null;
+    });
+    return this.#creandoOrden;
+  }
+
+  async #crearOrden(client: PollarClient, precio: PrecioDeCarga, datos: Readonly<Record<string, string>>, avisar: (() => Promise<boolean>) | undefined): Promise<ResultadoDeCrearOrden> {
+    const { cargaAbierta } = await import("./rampa-pollar");
+    const abiertas = cargaAbierta(await client.listRampOrders({ open: "true" }));
+    if (abiertas.estado === "abierta") return { estado: "ya-hay", id: abiertas.id };
+    if (abiertas.estado === "no-se-sabe") return { estado: "no-se-sabe" };
+    if (precio.vence !== null && !(Date.parse(precio.vence) > Date.now())) return { estado: "precio-vencido" };
+    const payee: Record<string, string> = {};
+    for (const campo of precio.campos) {
+      const valor = (Object.hasOwn(datos, campo.key) ? datos[campo.key] : undefined)?.trim() ?? "";
+      if (valor) payee[campo.key] = valor;
+      else if (!campo.optional) return { estado: "faltan-datos" };
+    }
+    if (avisar && (await avisar()) !== true) return { estado: "sin-aviso" };
+    let orden: unknown;
+    try {
+      orden = await client.createRampOrder({ quoteId: precio.quoteId, ...(Object.keys(payee).length ? { payee } : {}) });
+    } catch (e) {
+      const codigo = codigoDelKit(e);
+      if (codigo === "SDK_RAMPS_WALLET_NOT_READY") return { estado: "cuenta-de-paso" };
+      if (codigo === "SDK_RAMPS_QUOTE_EXPIRED") return { estado: "precio-vencido" };
+      if (codigo === "VALIDATION_ERROR") return { estado: "faltan-datos" };
+      const falla = fallaDeCarga(e);
+      if (falla.estado !== "sin-red") return falla;
+      const otra = await client.listRampOrders({ open: "true" }).then(cargaAbierta, () => null);
+      return otra?.estado === "abierta" ? { estado: "ya-hay", id: otra.id } : falla;
+    }
+    const id = esObjetoPlano(orden) && typeof orden.id === "string" && orden.id !== "" ? orden.id : null;
+    if (!id) return { estado: "no-se-sabe" };
+    return { estado: "creada", id, orden, falloAlCrear: (orden as { state?: unknown }).state === "failed" };
+  }
+
+  /**
+   * Crear la orden de carga de la compra con QR: como `cargaCrearOrden`, con el aviso al servidor siempre, también con una
+   * carga abierta, y la anulación después de una falla definitiva. Dentro del candado de la carga:
+   *
+   * 1. Relee las abiertas. Si no se puede saber, no hace nada.
+   * 2. Con una abierta, avisa una vez y la adopta (`ya-hay`) solo con el sí del aviso. Con un QR vivo nunca se anula.
+   * 3. Sin ninguna: el precio vigente y los datos que pide, antes de avisar (sin aviso no hay nada que anular).
+   * 4. Avisa. Sin el sí no se crea nada. Si el aviso no tuvo respuesta (`sin-red`, o lanzó), el servidor pudo marcar la
+   *    compra igual: relee y, solo si no hay ninguna abierta, anula.
+   * 5. Crea. Después del sí, una falla definitiva (cuenta de paso, precio vencido, datos, sin créditos, la orden que nace
+   *    fallada) anula. Sin respuesta, relee: si nació va a ella, con ninguna anula, y si no se sabe no anula. Una orden sin
+   *    id no se anula: puede haber un QR vivo.
+   *
+   * Anular suelta la reserva y no el recargo: la compra sigue en curso. La anulación no cambia lo que se devuelve.
+   */
+  cargaCrearOrdenDeCompra(precio: PrecioDeCarga, datos: Readonly<Record<string, string>>, aviso: AvisoDeLaCompra): Promise<ResultadoDeCrearOrden> {
+    if (!cargaPrendida()) return Promise.resolve({ estado: "apagada" });
+    this.#creandoOrden ??= this.#enLaCarga((client) => conCandado(CANDADO_DE_LA_CARGA, () => this.#crearOrdenDeCompra(client, precio, datos, aviso))).finally(() => {
+      this.#creandoOrden = null;
+    });
+    return this.#creandoOrden;
+  }
+
+  async #crearOrdenDeCompra(client: PollarClient, precio: PrecioDeCarga, datos: Readonly<Record<string, string>>, aviso: AvisoDeLaCompra): Promise<ResultadoDeCrearOrden> {
+    const { cargaAbierta } = await import("./rampa-pollar");
+    const releer = (): Promise<ReturnType<typeof cargaAbierta> | null> => client.listRampOrders({ open: "true" }).then(cargaAbierta, () => null);
+    const avisar = async (): Promise<boolean | "sin-red"> => {
+      try {
+        return await aviso.avisar();
+      } catch {
+        return "sin-red";
+      }
+    };
+    const anular = async (): Promise<void> => {
+      try {
+        await aviso.anular();
+      } catch {
+        /* la anulación no cambia lo que se devuelve: la compra la puede soltar quien opera */
+      }
+    };
+    const abiertas = cargaAbierta(await client.listRampOrders({ open: "true" }));
+    if (abiertas.estado === "no-se-sabe") return { estado: "no-se-sabe" };
+    if (abiertas.estado === "abierta") return (await avisar()) === true ? { estado: "ya-hay", id: abiertas.id } : { estado: "sin-aviso" };
+    if (precio.vence !== null && !(Date.parse(precio.vence) > Date.now())) return { estado: "precio-vencido" };
+    const payee: Record<string, string> = {};
+    for (const campo of precio.campos) {
+      const valor = (Object.hasOwn(datos, campo.key) ? datos[campo.key] : undefined)?.trim() ?? "";
+      if (valor) payee[campo.key] = valor;
+      else if (!campo.optional) return { estado: "faltan-datos" };
+    }
+    const dijo = await avisar();
+    if (dijo !== true) {
+      if (dijo === "sin-red" && (await releer())?.estado === "ninguna") await anular();
+      return { estado: "sin-aviso" };
+    }
+    let orden: unknown;
+    try {
+      orden = await client.createRampOrder({ quoteId: precio.quoteId, ...(Object.keys(payee).length ? { payee } : {}) });
+    } catch (e) {
+      const codigo = codigoDelKit(e);
+      const definitiva: ResultadoDeCrearOrden | null =
+        codigo === "SDK_RAMPS_WALLET_NOT_READY" ? { estado: "cuenta-de-paso" } : codigo === "SDK_RAMPS_QUOTE_EXPIRED" ? { estado: "precio-vencido" } : codigo === "VALIDATION_ERROR" ? { estado: "faltan-datos" } : null;
+      const falla = definitiva ?? fallaDeCarga(e);
+      if (definitiva || falla.estado === "sin-creditos") {
+        await anular();
+        return falla;
+      }
+      if (falla.estado !== "sin-red") return falla;
+      const otra = await releer();
+      if (otra?.estado === "abierta") return { estado: "ya-hay", id: otra.id };
+      if (otra?.estado === "ninguna") await anular();
+      return falla;
+    }
+    const id = esObjetoPlano(orden) && typeof orden.id === "string" && orden.id !== "" ? orden.id : null;
+    if (!id) return { estado: "no-se-sabe" };
+    const falloAlCrear = (orden as { state?: unknown }).state === "failed";
+    if (falloAlCrear) await anular();
+    return { estado: "creada", id, orden, falloAlCrear };
+  }
+
+  /** La orden como está ahora, o que ya no existe para esta persona. Solo lee. */
+  cargaLeerOrden(id: string): Promise<ResultadoDeOrden> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeOrden> => {
+      try {
+        return { estado: "orden", orden: await client.getRampOrder(id) };
+      } catch (e) {
+        if (codigoDelKit(e) === "SDK_RAMPS_TX_NOT_FOUND") return { estado: "no-existe" };
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Sigue la orden al ritmo que sugiere el servidor (`pollRampOrder`) hasta que se asienta, hasta que `hasta` dice que sí,
+   * o hasta que la pantalla la corta (`signal`, al cerrar la ventana). Cada lectura nueva va a `alCambiar`. Solo lee: nunca
+   * aprueba nada, aunque la orden espere una aprobación.
+   */
+  cargaSeguir(id: string, opciones: { signal?: AbortSignal; alCambiar?: (orden: unknown) => void; hasta?: (orden: unknown) => boolean } = {}): Promise<ResultadoDeSeguir> {
+    const { signal, alCambiar, hasta } = opciones;
+    return this.#enLaCarga(async (client): Promise<ResultadoDeSeguir> => {
+      try {
+        const orden = await client.pollRampOrder(id, {
+          ...(signal ? { signal } : {}),
+          onUpdate: (o) => {
+            try {
+              alCambiar?.(o);
+            } catch {
+              /* lo que haga la pantalla no corta el seguimiento */
+            }
+          },
+          onError: () => undefined,
+          ...(hasta
+            ? {
+                until: (o: unknown) => {
+                  try {
+                    return hasta(o);
+                  } catch {
+                    return false;
+                  }
+                },
+              }
+            : {}),
+        });
+        return { estado: "orden", orden };
+      } catch (e) {
+        if (signal?.aborted) return { estado: "cortada" };
+        if (codigoDelKit(e) === "SDK_RAMPS_TX_NOT_FOUND") return { estado: "no-existe" };
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Ya pagué: le pide a Pollar que mire ahora el pago de la orden (`checkRampOrder`), como mucho una vez cada diez segundos
+   * por orden. Antes, `pronto`: la pantalla sigue con la orden que ya tiene. La marca de que dijo que pagó la pone la
+   * pantalla (`anotarMarca`). Solo pregunta: no paga ni aprueba nada.
+   */
+  cargaYaPague(id: string): Promise<ResultadoDeYaPague> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeYaPague> => {
+      const ahora = Date.now();
+      const antes = this.#chequeosDePago.get(id);
+      if (antes !== undefined && ahora >= antes && ahora - antes < YA_PAGUE_CADA_MS) return { estado: "pronto" };
+      this.#chequeosDePago.set(id, ahora);
+      try {
+        return { estado: "orden", orden: await client.checkRampOrder(id) };
+      } catch (e) {
+        if (codigoDelKit(e) === "SDK_RAMPS_TX_NOT_FOUND") return { estado: "no-existe" };
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * La carga abierta de la persona, si tiene: lo primero que mira la ventana, antes que las rutas, los créditos o el
+   * acceso, para que nada la esconda. Lo que no se lee no dice que no hay ninguna. Solo lee.
+   */
+  cargaAbiertas(): Promise<ResultadoDeAbiertas> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeAbiertas> => {
+      const { cargaAbierta } = await import("./rampa-pollar");
+      const pagina = await client.listRampOrders({ open: "true" });
+      const abierta = cargaAbierta(pagina);
+      if (abierta.estado !== "abierta") return abierta;
+      const orden = (pagina.orders as unknown[]).find((o) => esObjetoPlano(o) && o.id === abierta.id) ?? null;
+      return { estado: "abierta", id: abierta.id, orden };
+    });
+  }
+
+  /**
+   * Sin una carga abierta, la última cerrada que no terminó bien desde `desde` (en milisegundos): fallida o devuelta, para
+   * mostrar su final con el número antes de un precio nuevo (`cargaCerradaSinTerminar`). Si la última cerrada terminó
+   * bien, o no se lee, ninguna. Solo lee.
+   */
+  cargaCerradas(desde: number): Promise<ResultadoDeCerradas> {
+    return this.#enLaCarga(async (client): Promise<ResultadoDeCerradas> => {
+      const { cargaCerradaSinTerminar } = await import("./rampa-pollar");
+      const pagina = await client.listRampOrders({ open: "false", since: new Date(desde).toISOString(), limit: CERRADAS_POR_PAGINA });
+      const c = cargaCerradaSinTerminar(pagina, desde);
+      return c ? { estado: "cerrada", id: c.id, orden: c.orden } : { estado: "ninguna" };
+    });
+  }
+
+  /**
+   * Lo que se aprueba en el paso que espera, para mostrarlo antes del toque: qué es y cuántos dólares mueve, o el motivo por
+   * el que la regla no lo reconoce. Solo lee: no pide el pedido de nuevo ni vota.
+   */
+  cargaRevisarPaso(ordenId: string, pedidoId: string): Promise<ResultadoDeRevisarPaso> {
+    return this.#enLaCarga(async (client, cuenta): Promise<ResultadoDeRevisarPaso> => {
+      const [{ leerOrden }, { revisarPaso }] = await Promise.all([import("./rampa-pollar"), import("./rampa-regla")]);
+      const crudo = await client.getRampOrder(ordenId);
+      const accion = leerOrden(crudo)?.accion;
+      if (accion?.kind !== "COSIGN_APPROVAL" || accion.cosignRequestId !== pedidoId) return { estado: "cambio", orden: crudo };
+      const [pedido, recuperacion] = await Promise.all([client.cosign.get(pedidoId), client.cosign.recovery.status()]);
+      const r = revisarPaso(pedido, crudo, cuenta, recuperacion.subOrgId ?? "");
+      return r.motivo === null ? { estado: "revisado", que: r.que, dolares: r.dolares } : { estado: "raro", motivo: r.motivo };
+    });
+  }
+
+  /**
+   * Aprobar: vota que sí un paso de la carga que mueve dinero, desde el toque de la persona y solo ese (`pedidoId`, el que
+   * la pantalla mostró: un toque viejo nunca aprueba el paso siguiente). Dentro del candado de la carga lee la orden y el
+   * pedido, lo pide de nuevo una vez si se puede y desde ahí usa solo esa versión; tiene que pasar la regla
+   * (`revisarPaso`), y la propuesta de `verify`, `motivoContraLaPropuesta`; recién ahí `relay`. Un pedido ya votado o
+   * resuelto no se vota otra vez, y dos toques votan una vez. Dos aprobaciones falladas en la misma orden y la misma
+   * pestaña cortan; un `402` no cuenta. Nada de esto pasa por `atenderFirmas`: un voto de co-firma no es una confirmación.
+   */
+  cargaAprobar(ordenId: string, pedidoId: string): Promise<ResultadoDeAprobar> {
+    if (!cargaPrendida()) return Promise.resolve({ estado: "apagada" });
+    const enCurso = this.#aprobando.get(ordenId);
+    if (enCurso) return enCurso;
+    const corrida: Promise<ResultadoDeAprobar> = this.#enLaCarga((client, cuenta) => conCandado(CANDADO_DE_LA_CARGA, () => this.#aprobar(client, cuenta, ordenId, pedidoId))).finally(() => {
+      if (this.#aprobando.get(ordenId) === corrida) this.#aprobando.delete(ordenId);
+    });
+    this.#aprobando.set(ordenId, corrida);
+    return corrida;
+  }
+
+  async #aprobar(client: PollarClient, cuenta: string, ordenId: string, pedidoId: string): Promise<ResultadoDeAprobar> {
+    if (this.#fallasDe(ordenId) >= TOPE_DE_APROBACIONES_FALLADAS) return { estado: "tope" };
+    const [{ leerOrden }, { revisarPaso, motivoContraLaPropuesta }] = await Promise.all([import("./rampa-pollar"), import("./rampa-regla")]);
+    // 1. La orden espera la aprobación de este pedido, y no de otro.
+    const crudo = await client.getRampOrder(ordenId);
+    const accion = leerOrden(crudo)?.accion;
+    if (accion?.kind !== "COSIGN_APPROVAL" || accion.cosignRequestId !== pedidoId) return { estado: "cambio", orden: crudo };
+    // 2. El pedido y la organización de esta sesión. Ya votado o resuelto (otra pestaña, otro toque): no se vota otra vez.
+    const [leido, recuperacion] = await Promise.all([client.cosign.get(pedidoId), client.cosign.recovery.status()]);
+    const subOrg = recuperacion.subOrgId ?? "";
+    let pedido = leido as unknown as PedidoDeCofirma;
+    if (pedido.status !== "PENDING" || pedido.activityId) return { estado: "cambio", orden: crudo };
+    // 3. La transacción envejece mientras la persona decide: se pide de nuevo una sola vez y desde ahí se usa esa versión.
+    if (pedido.refreshable) pedido = (await client.cosign.refresh(pedidoId)) as unknown as PedidoDeCofirma;
+    if (pedido.id !== pedidoId) return pasoRaro("otro pedido");
+    if (pedido.status !== "PENDING" || pedido.activityId) return { estado: "cambio", orden: crudo };
+    // 4. La regla, sobre esa versión.
+    const revisado = revisarPaso(pedido, crudo, cuenta, subOrg);
+    if (revisado.motivo !== null) return pasoRaro(revisado.motivo);
+    // 5. Lo que se estampa es firmar exactamente esa transacción, con la cuenta de paso del pedido y en esta organización.
+    const verificacion = await client.cosign.verify(pedido as unknown as CosignRequest);
+    const contraLaPropuesta = motivoContraLaPropuesta(verificacion, pedido, subOrg);
+    if (contraLaPropuesta !== null || !verificacion.ok) return pasoRaro(contraLaPropuesta ?? "otra propuesta");
+    // 6. La cuenta otra vez, y el voto.
+    this.#sigueLaCuenta(client, cuenta);
+    let votado: PedidoDeCofirma;
+    try {
+      votado = await this.#votar(client, pedidoId, verificacion);
+    } catch (e) {
+      const falla = fallaDeCarga(e);
+      // Sin créditos es de Tinkazo y no cuenta. Cualquier otra cosa pudo haber salido: cuenta como fallada.
+      if (falla.estado === "sin-creditos") return falla;
+      this.#sumarFallaDeAprobar(ordenId);
+      return falla.estado === "sin-red" ? falla : { estado: "no-salio" };
+    }
+    if (votado.status === "APPROVED") return { estado: "aprobado", que: revisado.que, dolares: revisado.dolares };
+    if (votado.status === "PENDING") return { estado: "enviado" };
+    this.#sumarFallaDeAprobar(ordenId);
+    return { estado: "no-salio" };
+  }
+
+  #fallasDe(ordenId: string): number {
+    return Math.max(this.#fallasDeAprobar.get(ordenId) ?? 0, fallasGuardadas()[ordenId] ?? 0);
+  }
+
+  #sumarFallaDeAprobar(ordenId: string): void {
+    const n = this.#fallasDe(ordenId) + 1;
+    this.#fallasDeAprobar.set(ordenId, n);
+    const todas = fallasGuardadas();
+    todas[ordenId] = n;
+    ponerMarca(MARCA_DE_APROBACIONES, JSON.stringify(todas));
+  }
+
+  /**
+   * Probar de nuevo una carga frenada que destraba la persona (o que esperaba que protegiera su cuenta): Pollar la corre otra
+   * vez desde donde paró (`retryRampOrder`). Lee la orden antes: si ya no está frenada así, no reintenta. Dos toques
+   * reintentan una vez. Reintentar no aprueba nada: el paso que siga espera su toque.
+   */
+  cargaReintentar(ordenId: string): Promise<ResultadoDeReintentar> {
+    if (!cargaPrendida()) return Promise.resolve({ estado: "apagada" });
+    const enCurso = this.#reintentando.get(ordenId);
+    if (enCurso) return enCurso;
+    const corrida: Promise<ResultadoDeReintentar> = this.#enLaCarga((client) => conCandado(CANDADO_DE_LA_CARGA, () => this.#reintentar(client, ordenId))).finally(() => {
+      if (this.#reintentando.get(ordenId) === corrida) this.#reintentando.delete(ordenId);
+    });
+    this.#reintentando.set(ordenId, corrida);
+    return corrida;
+  }
+
+  async #reintentar(client: PollarClient, ordenId: string): Promise<ResultadoDeReintentar> {
+    const { pasoDeOrden, SIN_MARCAS } = await import("./rampa-pollar");
+    const crudo = await client.getRampOrder(ordenId);
+    const pantalla = pasoDeOrden(crudo, SIN_MARCAS, Date.now());
+    const laDestrabaLaPersona = (pantalla.pantalla === "frenada" && pantalla.quien === "vos") || pantalla.pantalla === "proteger-cuenta";
+    if (!laDestrabaLaPersona) return { estado: "cambio", orden: crudo };
+    return { estado: "orden", orden: await client.retryRampOrder(ordenId) };
   }
 
   /* ------------------------------------------------ activar la cuenta (el pedido que Pollar deja al entrar) */
@@ -1372,6 +2452,122 @@ class PollarWallet implements SubmittingWallet {
     const s = await client.cosign.recovery.confirmEmail(code);
     return s.configured;
   }
+}
+
+/** Cómo terminó Activar dólares digitales con Google o correo (`activarUsdc`). */
+export type ResultadoDeActivarUsdc = "apagada" | "en-curso" | "hecho" | "no-patrocina" | "ahora-no" | "cuenta-creandose" | "proteger" | "no-salio";
+
+/* ------------------------------------------------ lo que devuelve cada método de la carga */
+
+export type ResultadoDeRuta = { estado: "ruta"; ruta: RutaDeBolivia } | { estado: "sin-ruta" } | FallaDeCarga;
+export type ResultadoDeCotizar = LecturaDeCotizacion | FallaDeCarga;
+export type ResultadoDeAbrirVerificacion = { estado: "abrir"; url: string } | { estado: "lista" } | { estado: "en-revision" } | { estado: "vencida" } | { estado: "desconocido" } | FallaDeCarga;
+export type ResultadoDeMirarVerificacion = { estado: "leida"; verificacion: EstadoDeVerificacion } | { estado: "cortada" } | { estado: "desconocido" } | FallaDeCarga;
+export type ResultadoDeFormulario = { estado: "formulario"; formulario: RequirementForm } | { estado: "desconocido" } | FallaDeCarga;
+export type ResultadoDeGuardarFormulario = { estado: "guardado" } | { estado: "respuestas"; errores: { key: string; code: string }[] } | { estado: "desconocido" } | FallaDeCarga;
+export type ResultadoDeSegip =
+  | { estado: "datos"; segip: RegistryCheck }
+  | { estado: "aprobada" }
+  | { estado: "en-revision" }
+  | { estado: "rechazada"; campos: string[] }
+  | { estado: "no-coincide" }
+  | { estado: "falta-identidad" }
+  | { estado: "desconocido" }
+  | FallaDeCarga;
+export type ResultadoDeAlta =
+  | { estado: "alta"; alta: ProviderRegistration }
+  | { estado: "registrada" }
+  | { estado: "pendiente" }
+  | { estado: "faltan-datos"; faltan: string[]; invalidos: string[]; formularios: string[] }
+  | { estado: "desconocido" }
+  | FallaDeCarga;
+/** Preparar mi cuenta: listo para cotizar de nuevo, o dónde se paró. */
+export type ResultadoDePreparar =
+  | { estado: "listo" }
+  | { estado: "linea"; resultado: ResultadoDeActivarUsdc }
+  | { estado: "cuenta-de-paso-espera" }
+  | { estado: "cuenta-de-paso-rara" }
+  | { estado: "cuenta-de-paso-no-salio" }
+  | FallaDeCarga;
+/**
+ * Crear la orden: creada (con si nació fallada, antes de que hubiera QR), la que ya estaba abierta, o por qué no. `sin-aviso`:
+ * el aviso al servidor no dijo que sí y no se creó nada.
+ */
+export type ResultadoDeCrearOrden =
+  | { estado: "creada"; id: string; orden: unknown; falloAlCrear: boolean }
+  | { estado: "ya-hay"; id: string }
+  | { estado: "sin-aviso" }
+  | { estado: "no-se-sabe" }
+  | { estado: "precio-vencido" }
+  | { estado: "faltan-datos" }
+  | { estado: "cuenta-de-paso" }
+  | FallaDeCarga;
+/**
+ * Lo que la compra con QR le da a `cargaCrearOrdenDeCompra`, los dos obligatorios: el aviso de carga al servidor
+ * (`/v1/compra/cargar`: `true` solo con su 200, `"sin-red"` si no hubo respuesta) y la anulación de la compra
+ * (`/v1/compra/anular`) después de una falla definitiva.
+ */
+export interface AvisoDeLaCompra {
+  avisar(): Promise<boolean | "sin-red">;
+  anular(): Promise<unknown>;
+}
+export type ResultadoDeOrden = { estado: "orden"; orden: unknown } | { estado: "no-existe" } | FallaDeCarga;
+export type ResultadoDeSeguir = ResultadoDeOrden | { estado: "cortada" };
+export type ResultadoDeYaPague = ResultadoDeOrden | { estado: "pronto" };
+export type ResultadoDeAbiertas = { estado: "abierta"; id: string; orden: unknown } | { estado: "ninguna" } | { estado: "no-se-sabe" } | FallaDeCarga;
+export type ResultadoDeCerradas = { estado: "cerrada"; id: string; orden: unknown } | { estado: "ninguna" } | FallaDeCarga;
+/** El motivo de `raro` son palabras fijas de la regla: nunca una cuenta de la persona. */
+export type ResultadoDeRevisarPaso = { estado: "revisado"; que: QueSeAprueba; dolares: number } | { estado: "raro"; motivo: string } | { estado: "cambio"; orden: unknown } | FallaDeCarga;
+/**
+ * Aprobar: aprobado; enviado (el voto salió y Pollar todavía no lo cerró); raro (la regla no reconoce el paso y no se votó);
+ * cambio (la orden ya no espera ese pedido, o ya está votado: no se votó); no-salio; tope (dos falladas, no se llamó a nada).
+ */
+export type ResultadoDeAprobar =
+  | { estado: "aprobado"; que: QueSeAprueba; dolares: number }
+  | { estado: "enviado" }
+  | { estado: "raro"; motivo: string }
+  | { estado: "cambio"; orden: unknown }
+  | { estado: "no-salio" }
+  | { estado: "tope" }
+  | FallaDeCarga;
+export type ResultadoDeReintentar = ResultadoDeOrden | { estado: "cambio"; orden: unknown };
+
+type VotoDeLaCuentaDePaso = "nada" | "aprobada" | "pendiente" | "rara" | "no-salio";
+
+function comoQuedoLaCuentaDePaso(v: Exclude<VotoDeLaCuentaDePaso, "nada">): ResultadoDePreparar {
+  if (v === "aprobada") return { estado: "listo" };
+  if (v === "pendiente") return { estado: "cuenta-de-paso-espera" };
+  return v === "rara" ? { estado: "cuenta-de-paso-rara" } : { estado: "cuenta-de-paso-no-salio" };
+}
+
+/** La regla no reconoce el pedido de la cuenta de paso: se anota con palabras fijas y no se vota. */
+function cuentaDePasoRara(motivo: string): "rara" {
+  console.warn(`[tinkazo] cuenta de paso no aprobada: ${motivo}`);
+  return "rara";
+}
+
+/** La regla no reconoce el paso: se anota con palabras fijas, no se vota y el dinero queda retenido a salvo. */
+function pasoRaro(motivo: string): ResultadoDeAprobar {
+  console.warn(`[tinkazo] paso de la carga no aprobado: ${motivo}`);
+  return { estado: "raro", motivo };
+}
+
+/** Lo que contestó `setTrustline`, en lo que la pantalla necesita. El detalle del error no se muestra nunca. */
+export function resultadoDeLaLinea(r: { status?: string; code?: string; details?: string }): ResultadoDeActivarUsdc {
+  if (r.status === "success" || r.status === "pending") return "hecho";
+  if (r.status === "cosign_pending") return "en-curso";
+  const codigo = `${r.code ?? ""} ${r.details ?? ""}`;
+  if (codigo.includes("TX_LOW_RESERVE")) {
+    console.warn("[tinkazo] la línea del USDC no la paga la app (TX_LOW_RESERVE)");
+    return "no-patrocina";
+  }
+  if (codigo.includes("SDK_CREDITS_INSUFFICIENT")) return "ahora-no";
+  if (codigo.includes("SDK_WALLET_NOT_READY")) return "cuenta-creandose";
+  if (codigo.includes("SDK_WALLET_RECOVERY_REQUIRED")) return "proteger";
+  if (codigo.includes("SDK_CONFIRMATION_DECLINED") || codigo.includes("SDK_CONFIRMATION_UNAVAILABLE")) {
+    console.warn("[tinkazo] la puerta no reconoció la línea del USDC pedida");
+  }
+  return "no-salio";
 }
 
 /**

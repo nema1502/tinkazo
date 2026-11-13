@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CLAVES_DE_MOTIVO } from "./stellar/alta-api";
 import { TEXTOS_ALTA } from "./alta-textos";
 import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
+import { textoDelProducto } from "./stellar/alta-oferta";
 import { T } from "./i18n";
 
 const CLAVES = Object.keys(TEXTOS_ALTA.es);
@@ -10,14 +11,19 @@ const IDIOMAS = ["es", "en"] as const;
 /** Lo que se reemplaza dentro de un texto: `{n}`, `{fecha}`… */
 const variables = (s: string): string[] => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1] as string).sort();
 
-/** Las claves que el diseño (sección 8) pone en esta tanda: todas las del acceso y el cupo, ninguna del pago. */
+/**
+ * Las claves que el diseño (sección 8) pone en esta tanda: todas las del acceso y el cupo, ninguna del pago. Las dos
+ * de «Organizá 10…» y «…50…» son una sola, `cupoOfSumarPaquete`: el producto y su precio los dice el servidor.
+ * `cupoOfCeroSumar` es el texto del diseño para cero sorteos con la compra prendida, con nombre propio: va solo en la
+ * línea del cupo, junto al botón de sumar, y `errAnchor.porteroSinSorteos` dice siempre el que no ofrece comprar.
+ */
 const DEL_DISENO = [
   "altaFranja", "altaAbrirAfuera", "altaCopiarEnlace", "altaConBilleteraPropia",
   "altaTexto", "altaTengoCupon", "altaPrimerPaquete", "altaPrimerPaqueteNota", "altaNoTengo", "altaCuponListo", "altaActivarConCupon", "altaOtroCupon",
   "altaCuponLabel", "altaCuponAyuda", "altaRevisando", "altaCuponOk", "altaCuponOk1", "altaActivarCupon", "altaActivarPago", "altaYaActivada", "altaCuponGuardado",
   "clBajadaConPago", "altaErrForma", "altaErrNoExiste", "altaErrVencido", "altaErrAnulado", "altaErrUsado", "altaErrLote", "altaErrIntentos", "altaErrServicio",
   "cupoOfQuedan", "cupoOfQueda1", "cupoOfVencen", "cupoOfVencenTodos", "cupoOfPocos", "cupoOfUnoPorPremio", "cupoOfDoble", "cupoOfSumar", "cupoOfCeroTitulo",
-  "cupoOfCeroTexto", "cupoOfVencidoTexto", "cupoOfSumar10", "cupoOfSumar50", "cupoOfUsarCupon", "cupoOfTopeMes", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos",
+  "cupoOfCeroTexto", "cupoOfVencidoTexto", "cupoOfSumarPaquete", "cupoOfCeroSumar", "cupoOfUsarCupon", "cupoOfTopeMes", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos",
 ];
 
 describe("los textos del acceso con cupón", () => {
@@ -36,7 +42,7 @@ describe("los textos del acceso con cupón", () => {
   });
 
   it("los datos que lleva cada texto son los que el código reemplaza", () => {
-    const permitidos = new Set(["codigo", "n", "fecha", "min", "max"]);
+    const permitidos = new Set(["codigo", "n", "fecha", "min", "max", "sorteos", "precio"]);
     for (const k of CLAVES) for (const l of IDIOMAS) for (const v of variables(TEXTOS_ALTA[l][k] as string)) expect(permitidos.has(v), `${l} ${k} {${v}}`).toBe(true);
   });
 
@@ -73,8 +79,12 @@ describe("los textos del acceso con cupón", () => {
 
   it("los textos más leídos son los del diseño, palabra por palabra", () => {
     expect(TEXTOS_ALTA.es.altaFranja).toBe("Tenés un cupón de Tinkazo. Entrá con Google o con tu correo para usarlo.");
-    expect(TEXTOS_ALTA.es.altaPrimerPaquete).toBe("3 sorteos oficiales por 2 dólares");
-    expect(TEXTOS_ALTA.en.altaPrimerPaquete).toBe("3 Live draws for US$2");
+    // Los que ofrecen un producto dicen lo del diseño con los números que manda el servidor, y ninguno escrito a mano.
+    expect(textoDelProducto({ id: "alta", usdc: "2", sorteos: 3, dias: 365 }, "es")).toBe("3 sorteos oficiales por 2 dólares");
+    expect(textoDelProducto({ id: "alta", usdc: "2", sorteos: 3, dias: 365 }, "en")).toBe("3 Live draws for US$2");
+    expect(textoDelProducto({ id: "p10", usdc: "5", sorteos: 10, dias: 365 }, "es")).toBe("Organizá 10 sorteos oficiales por 5 dólares");
+    expect(textoDelProducto({ id: "p50", usdc: "20", sorteos: 50, dias: 365 }, "en")).toBe("Run 50 Live draws for US$20");
+    for (const k of ["altaPrimerPaquete", "cupoOfSumarPaquete"]) for (const l of IDIOMAS) expect(TEXTOS_ALTA[l][k], `${l} ${k}`).not.toMatch(/\d/);
     expect(TEXTOS_ALTA.es.cupoOfUnoPorPremio).toBe("Cada premio que sorteás de a uno usa un sorteo. Si son iguales, poné cuántos ganan y es uno solo.");
     expect(TEXTOS_ALTA.es.cupoOfCeroTitulo).toBe("Se te acabaron los sorteos oficiales");
     expect(TEXTOS_ALTA.en.cupoOfCeroTitulo).toBe("You're out of Live draws");

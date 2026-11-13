@@ -1,14 +1,89 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { CUENTA_POR_DEFECTO, modoDeRampa, monedasActivas, planDelEquipo, urlDeCuenta } from "./cuenta-config";
+import {
+  CUENTA_POR_DEFECTO,
+  cuentasDelPiloto,
+  demoDeRampa,
+  minimoDePrueba,
+  modoDeRampa,
+  monedasActivas,
+  planDelEquipo,
+  practicaDeRampa,
+  registroDeRampa,
+  urlDeCuenta,
+} from "./cuenta-config";
 
 const PLANES = Keypair.random().publicKey();
 
 describe("la carga de saldo (VITE_RAMPA)", () => {
-  it("meru y pollar se prenden; todo lo demás la apaga", () => {
-    expect(modoDeRampa({ rampa: "meru" })).toBe("meru");
+  it("pollar prende la ventana entera; recibir solo traer y mandar; meru es otro nombre de recibir", () => {
     expect(modoDeRampa({ rampa: " Pollar " })).toBe("pollar");
-    for (const r of [undefined, "", "apagada", "stereum", "1", "true"]) expect(modoDeRampa({ rampa: r }), String(r)).toBe("apagada");
+    expect(modoDeRampa({ rampa: "recibir" })).toBe("recibir");
+    expect(modoDeRampa({ rampa: "RECIBIR" })).toBe("recibir");
+    expect(modoDeRampa({ rampa: "meru" })).toBe("recibir");
+  });
+  it("vacía o con cualquier otra cosa, apagada", () => {
+    for (const r of [undefined, "", " ", "apagada", "stereum", "1", "true", "si", "pollar,recibir"]) expect(modoDeRampa({ rampa: r }), String(r)).toBe("apagada");
+  });
+  it("leída del entorno, sin nada puesto, apagada", () => {
+    expect(modoDeRampa()).toBe("apagada");
+    expect(cuentasDelPiloto()).toEqual([]);
+    expect(minimoDePrueba()).toBeNull();
+    expect(demoDeRampa()).toBe(false);
+    expect(registroDeRampa()).toBe(false);
+    expect(practicaDeRampa()).toBe(false);
+  });
+});
+
+describe("las cuentas del piloto (VITE_RAMPA_CUENTAS)", () => {
+  const ANA = Keypair.random().publicKey();
+  const NORA = Keypair.random().publicKey();
+  it("vacía, no hay lista: ninguna cuenta", () => {
+    for (const c of [undefined, "", " ", ",", " , ,"]) expect(cuentasDelPiloto({ rampaCuentas: c }), String(c)).toEqual([]);
+  });
+  it("se lee con comas y con espacios, sin repetir", () => {
+    expect(cuentasDelPiloto({ rampaCuentas: ANA })).toEqual([ANA]);
+    expect(cuentasDelPiloto({ rampaCuentas: `${ANA},${NORA}` })).toEqual([ANA, NORA]);
+    expect(cuentasDelPiloto({ rampaCuentas: ` ${ANA} ,  ${NORA} ` })).toEqual([ANA, NORA]);
+    expect(cuentasDelPiloto({ rampaCuentas: `${ANA} ${NORA}` })).toEqual([ANA, NORA]);
+    expect(cuentasDelPiloto({ rampaCuentas: `${ANA},\n${NORA},${ANA}` })).toEqual([ANA, NORA]);
+  });
+  it("lo que no es una dirección se descarta", () => {
+    const otraLetra = ANA[30] === "X" ? "Y" : "X";
+    const rota = `${ANA.slice(0, 30)}${otraLetra}${ANA.slice(31)}`;
+    expect(cuentasDelPiloto({ rampaCuentas: `GABC,${rota},${NORA},hola` })).toEqual([NORA]);
+  });
+});
+
+describe("las banderas que valen solo en localhost", () => {
+  const LOCALES = ["localhost", "127.0.0.1", "LOCALHOST"];
+  const AJENOS = ["tinkazo.app", "www.tinkazo.app", "tinkazo-git-rama-x.vercel.app", "localhost.evil.com", ""];
+  it("VITE_RAMPA_MINIMO: un número de bolivianos, y solo en localhost", () => {
+    for (const host of LOCALES) expect(minimoDePrueba({ rampaMinimo: "50", host }), host).toBe(50);
+    expect(minimoDePrueba({ rampaMinimo: " 120 ", host: "localhost" })).toBe(120);
+    for (const host of AJENOS) expect(minimoDePrueba({ rampaMinimo: "50", host }), host).toBeNull();
+  });
+  it("VITE_RAMPA_MINIMO: lo que no es un monto entero y positivo no hace nada", () => {
+    for (const m of [undefined, "", "0", "-5", "abc", "12.5", "1e3", "Infinity"]) expect(minimoDePrueba({ rampaMinimo: m, host: "localhost" }), String(m)).toBeNull();
+  });
+  it("VITE_RAMPA_DEMO: con 1 y solo en localhost", () => {
+    for (const host of LOCALES) expect(demoDeRampa({ rampaDemo: "1", host }), host).toBe(true);
+    for (const host of AJENOS) expect(demoDeRampa({ rampaDemo: "1", host }), host).toBe(false);
+    for (const d of [undefined, "", "0", "no"]) expect(demoDeRampa({ rampaDemo: d, host: "localhost" }), String(d)).toBe(false);
+  });
+  it("VITE_RAMPA_PRACTICA: con 1 y solo en localhost", () => {
+    for (const host of LOCALES) expect(practicaDeRampa({ rampaPractica: "1", host }), host).toBe(true);
+    for (const host of AJENOS) expect(practicaDeRampa({ rampaPractica: "1", host }), host).toBe(false);
+    expect(practicaDeRampa({ rampaPractica: "0", host: "localhost" })).toBe(false);
+  });
+});
+
+describe("el registro de la carga (VITE_RAMPA_REGISTRO)", () => {
+  it("nace apagado y se prende con 1", () => {
+    expect(registroDeRampa({})).toBe(false);
+    expect(registroDeRampa({ rampaRegistro: "0" })).toBe(false);
+    expect(registroDeRampa({ rampaRegistro: "1" })).toBe(true);
+    expect(registroDeRampa({ rampaRegistro: "1", host: "tinkazo.app" })).toBe(true);
   });
 });
 

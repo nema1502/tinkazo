@@ -1,8 +1,9 @@
 /**
  * Un cliente de Pollar de mentira para las pruebas de la cuenta en modo Oficial (`wallet-pollar-activar.test.ts`,
- * `wallet-pollar-estado.test.ts`, `wallet-pollar-aparato.test.ts`, `wallet-pollar-testigo.test.ts`). Imita lo que esas
- * pruebas necesitan de `PollarClient` de `@pollar/core` 0.12.0: la billetera, la red del cliente, la sesión, las
- * suscripciones y `cosign` con su `recovery`. Cada método anota su nombre en `llamadas` (y sus argumentos en
+ * `wallet-pollar-estado.test.ts`, `wallet-pollar-aparato.test.ts`, `wallet-pollar-testigo.test.ts`) y de la carga con
+ * bolivianos (`wallet-pollar-carga.test.ts`). Imita lo que esas pruebas necesitan de `PollarClient` de `@pollar/core`
+ * 0.12.0: la billetera, la red del cliente, la sesión, las suscripciones, `cosign` con su `recovery` y los métodos de la
+ * carga, que fallan si la prueba no dice qué contestan. Cada método anota su nombre en `llamadas` (y sus argumentos en
  * `argumentos`), y hace lo que diga `impl[nombre]` o, si no hay, lo de abajo. `approve`, `reject` y `cancel` fallan
  * siempre: la activación nunca los usa. Solo lo usan las pruebas; nada de la página lo importa. No importa
  * `@pollar/core` ni la billetera: se carga dentro de `vi.hoisted`, antes de los `vi.mock`.
@@ -191,6 +192,28 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     logout = asincrono("logout", () => undefined);
     signAndSubmitTx = asincrono("signAndSubmitTx", () => ({ status: "success", hash: "deadbeef" }));
     signTx = asincrono("signTx", () => ({ status: "signed", signedXdr: "FIRMADA" }));
+    // La carga con bolivianos (`wallet-pollar-carga.test.ts`): cada prueba dice qué contesta cada una.
+    setTrustline = asincrono("setTrustline", nuncaSeLlama("setTrustline"));
+    getRampRoutes = asincrono("getRampRoutes", nuncaSeLlama("getRampRoutes"));
+    quoteRamp = asincrono("quoteRamp", nuncaSeLlama("quoteRamp"));
+    getKycStatus = asincrono("getKycStatus", nuncaSeLlama("getKycStatus"));
+    getKycProviders = asincrono("getKycProviders", nuncaSeLlama("getKycProviders"));
+    resolveKyc = asincrono("resolveKyc", nuncaSeLlama("resolveKyc"));
+    pollKycDecision = asincrono("pollKycDecision", nuncaSeLlama("pollKycDecision"));
+    getRequirementForm = asincrono("getRequirementForm", nuncaSeLlama("getRequirementForm"));
+    submitRequirementForm = asincrono("submitRequirementForm", nuncaSeLlama("submitRequirementForm"));
+    getRegistryCheck = asincrono("getRegistryCheck", nuncaSeLlama("getRegistryCheck"));
+    submitRegistryCheck = asincrono("submitRegistryCheck", nuncaSeLlama("submitRegistryCheck"));
+    getProviderRegistration = asincrono("getProviderRegistration", nuncaSeLlama("getProviderRegistration"));
+    submitProviderRegistration = asincrono("submitProviderRegistration", nuncaSeLlama("submitProviderRegistration"));
+    runRampWalletStep = asincrono("runRampWalletStep", nuncaSeLlama("runRampWalletStep"));
+    listRampOrders = asincrono("listRampOrders", nuncaSeLlama("listRampOrders"));
+    createRampOrder = asincrono("createRampOrder", nuncaSeLlama("createRampOrder"));
+    getRampOrder = asincrono("getRampOrder", nuncaSeLlama("getRampOrder"));
+    pollRampOrder = asincrono("pollRampOrder", nuncaSeLlama("pollRampOrder"));
+    checkRampOrder = asincrono("checkRampOrder", nuncaSeLlama("checkRampOrder"));
+    retryRampOrder = asincrono("retryRampOrder", nuncaSeLlama("retryRampOrder"));
+    signRampLeg = asincrono("signRampLeg", nuncaSeLlama("signRampLeg"));
     cosign = {
       pending: leePedidos("pending", () => []),
       get: leePedidos("get", () => {

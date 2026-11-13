@@ -6,8 +6,8 @@ import { enviarTransaccion, type MotivoDeEnvio, type ResultadoDeEnvio } from "./
  *
  * La cuenta del evento aprueba con lo que tenga a mano:
  *  - Freighter o la cuenta de prueba de testnet, si son la cuenta del evento: aprueban y la transacción sale sola;
- *  - Pollar (entrar con Google), a propósito NO: su firma solo se confirma para el sello y el sorteo que la persona
- *    acaba de pedir (`atenderFirmas`, en `wallet-pollar.ts`), y esto no se amplía. En ese caso, y cuando la billetera
+ *  - Pollar (entrar con Google), a propósito NO: su firma solo se confirma para lo que la persona acaba de pedir con
+ *    su botón (`atenderFirmas`, en `wallet-pollar.ts`), y esto no se amplía. En ese caso, y cuando la billetera
  *    no es la cuenta del evento, se devuelve el código de la transacción para aprobarla en Stellar Lab.
  */
 

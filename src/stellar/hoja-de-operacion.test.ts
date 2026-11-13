@@ -129,8 +129,9 @@ describe("el acceso que quedó en otra cuenta", () => {
   });
 
   it("lo que dice el orden es lo que hace el sitio: el acceso en otra cuenta no tiene arreglo en el paso, y sellar no lo abre si la cuenta está lista", () => {
-    // El servidor lo dice como cuenta-de-otro y el paso no ofrece más que pasar a Prueba.
-    expect(paso).toContain('if (e.clave === "altaErrCuentaDeOtro") return "ninguno";');
+    // El servidor lo dice como cuenta-de-otro y el paso no ofrece más que pasar a Prueba. La compra suma otra clave con el
+    // mismo arreglo (la orden que no se encuentra), en la misma condición.
+    expect(paso).toMatch(/if \(e\.clave === "altaErrCuentaDeOtro"(?: \|\| e\.clave === "[A-Za-z]+")*\) return "ninguno";/);
     expect(estadoDelPaso).toMatch(/if \(arreglo === "ninguno"\) return e\.puedePasarAPrueba \? boton\("pasar-a-prueba"/);
     // Mientras falte el acceso, la parte de activar no se da por lista: el paso no se completa.
     expect(estadoDelPaso).toContain('p === "activar" ? e.activacion === "lista" && !faltaElAcceso(e)');
