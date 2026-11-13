@@ -8,7 +8,7 @@ import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type FocoAt, type PixiStage } from "./stage";
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
-import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
+import { JUNTA_VUELO, LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
 import { GRUPOS, grupoDe } from "../grupos";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
@@ -23,15 +23,16 @@ import type { FaseCamara } from "../tres/teleferico-mapa";
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
  *
- * Un convoy sube por el cable con una cabina por grupo (`grupos.ts`, sección
- * 7.7 del plan de juegos): en cada estación se baja un grupo entero, y en la
- * última cabina se baja de a uno hasta que quedan dos, que suben juntos. Cada
- * arco tiene su giro: la puerta, la mordaza, el apagón o la ráfaga. El plan
- * está en `cablecar-plan.ts`. Lo visual: la cámara arranca en el andén de la
- * base, sigue al convoy, se acerca a cada andén cuando se baja gente, se queda
- * quieta sobre el tramo por donde resbala la mordaza, se hamaca con el viento,
- * se mete en el convoy apenas titila la luz del apagón, y sigue a la cabina
- * con los dos hasta la cumbre.
+ * Un convoy sube por el cable con una cabina por grupo (`grupos.ts`): en cada
+ * estación se baja un grupo entero sin premio. En la penúltima parada, de las
+ * cabinas con premio se bajan todos los que no ganan menos uno por cabina, y en
+ * la última estación se baja ese uno: a la cumbre llegan solo quienes ganan, en
+ * una sola cabina. Cada arco tiene su giro: la puerta, la mordaza, el apagón o
+ * la ráfaga. El plan está en `cablecar-plan.ts`. Lo visual: la cámara arranca en
+ * el andén de la base, sigue al convoy, se acerca a cada andén cuando se baja
+ * gente, se queda quieta sobre el tramo por donde resbala la mordaza, se hamaca
+ * con el viento, se mete en el convoy apenas titila la luz del apagón, y sigue a
+ * la cabina de quien gana hasta la cumbre.
  *
  * Los nombres viven en la pantalla, no en el mundo (18 de octubre de 2026): en
  * un celular, los que iban pegados a las cabinas crecían con el acercamiento de
@@ -70,6 +71,15 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    * con los demás.
    */
   const nombradoSeQueda = P.surv.includes(P.nombrado);
+  /**
+   * La parada anterior a la última: desde que se bajan los de esa parada, las
+   * cabinas con premio llevan solo a los que llegan a la última estación, y cada
+   * una muestra el nombre de cada uno.
+   */
+  const previa = stops.filter((s) => !s.last).at(-1);
+  const tFinal = previa ? previa.tOff : -Infinity;
+  /** Las cabinas con premio: la anfitriona, que sube a la cumbre, y las que se juntan con ella. */
+  const finalista = (cab: number): boolean => cab === winnerCab || P.juntaCabs.has(cab);
   /** Lo que tarda una cara en volar de su cabina a su renglón del andén. */
   const FLY = 0.5;
   /**
@@ -139,6 +149,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   let flyBox!: Container;
   let flyFrame!: Graphics;
   let flyFaces: Sprite[] = [];
+  /** Las caras de la junta, una por premio que se pasa a la cabina anfitriona. */
+  let juntaFaces: Sprite[] = [];
   /**
    * El andén de la parada en curso, ya armado: los chips de los que se bajan,
    * dónde va cada uno, y el "+N" cuando no entran todos.
@@ -375,6 +387,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     flyBox = new Container();
     flyFrame = new Graphics();
     flyFaces = [];
+    juntaFaces = [];
     S.hud.addChild(vignette, wind, nameLayer, flyBack, flyBox, flyFrame);
     // Lo que estaba armado para el tamaño anterior se rearma en el próximo
     // cuadro (ya se destruyó con el resto de la interfaz).
@@ -480,10 +493,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       });
       once(`off${s.station}`, tAll >= s.tOff, () => {
         const who = rank.slice(left[s.round + 1] as number, left[s.round] as number);
-        // Los co-ganadores que se bajan acá van primero en el andén, y con
-        // premio se los nombra aunque se bajen muchos. Hasta el 7 de octubre
-        // de 2026 el tercer premio se bajaba con "se baja uno, quedan 2".
-        const prem = who.filter((i) => winners.indexOf(i) > 0);
         platform.set(s.station, { off: who.length, t: s.tOff });
         // Cada uno vuela con su cara a su renglón del andén. El andén se queda
         // hasta que bajan los de la estación siguiente, y se va antes de que
@@ -493,23 +502,18 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         let tEnd = next ? (next.last ? next.t0 - 0.1 : next.tOff - 0.02) : T_RUN - 0.1;
         if (apagon && P.corte > s.tOff) tEnd = Math.min(tEnd, P.corte + 0.08);
         boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: offOf(s.round) });
-        if (s.last && prem.length) {
-          // De a uno, y con premio: los co-ganadores que bajan en la última se
-          // nombran con su premio, y no como "¡Hasta acá llegó X!".
-          sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.9);
-        } else if (s.last) {
-          // Se nombra a todos los que se bajan, que son los que descuenta el
-          // contador en este mismo instante: "¡Se baja X!" nombraba a uno solo
-          // mientras el contador bajaba de cuatro a dos. Si no se baja nadie
-          // (dos personas en total), no hay nada que decir.
-          if (who.length === 1) sayNow(T[lang].cTelOff(names[who[0] as number] ?? ""), 0.9);
-          else if (who.length > 1) sayNow(T[lang].cTelOffN(who.slice(0, 3).map((i) => names[i] ?? ""), Math.max(0, who.length - 3)), 0.9);
-        } else if (prem.length) {
-          sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
-        } else {
-          // Se baja un grupo entero: el relator dice el nombre del grupo.
+        const calor = s.last ? 0.9 : 0.5 + 0.3 * (s.round / Math.max(1, P.R));
+        if (P.enteras[s.round]) {
+          // Se baja un grupo entero sin premio: el relator dice el nombre del grupo.
           const grupo = GRUPOS[grupoDe(who[0] ?? 0, n)] ?? GRUPOS[0] as (typeof GRUPOS)[number];
-          sayNow(T[lang].cTelGrupo(s.station, grupo, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
+          sayNow(T[lang].cTelGrupo(s.station, grupo, who.length, left[s.round + 1] as number), calor);
+        } else {
+          // La bajada grande y la que decide: se nombra a todos los que se bajan,
+          // que son los que descuenta el contador en este mismo instante. En la
+          // última, el que se nombra es el que no llega a la cumbre. Si no se baja
+          // nadie (ganan todos), no hay nada que decir.
+          if (who.length === 1) sayNow(T[lang].cTelOff(names[who[0] as number] ?? ""), calor);
+          else if (who.length > 1) sayNow(T[lang].cTelOffN(who.slice(0, 3).map((i) => names[i] ?? ""), Math.max(0, who.length - 3)), calor);
         }
         // El golpe suena cuando la cara toca el andén.
         if (!silent) {
@@ -613,8 +617,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       });
       once("rafaga", tAll >= rt && tAll < rt + 1.4 && tAll - lastSaid > 0.5, () => sayNow(t("cTelWind"), 0.7));
     }
-    // Los dos que quedan suben juntos: la duda dura hasta la cumbre.
-    once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelWho"), 0.9));
+    // Rumbo a la última estación quedan los de la bajada que decide: la pregunta es quién llega arriba. Su hora sale
+    // del plan (`tPregunta`), que le guarda lugar en el viaje aunque haya diez cabinas.
+    if (lastStop && Number.isFinite(P.tPregunta)) {
+      once("who", tAll >= P.tPregunta && tAll < lastStop.t0 - 0.2 && tAll - lastSaid > 0.5, () => sayNow(t("cTelWho"), 0.8));
+    }
+    // A la cumbre sube una sola cabina, con quienes ganan.
+    once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelClimb"), 0.9));
     if (tAll >= T_DOCK && !didDock) {
       didDock = true;
       sayNow(t("cTelDock"), 0.95);
@@ -1006,6 +1015,48 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
   }
 
+  /**
+   * La junta: después de la bajada que decide, los premios de las otras cabinas
+   * vuelan con su cara a la cabina anfitriona (sorteada entre las cabinas con premio), y suben todos
+   * juntos. Sale del plan (`volando`), en la hora del juego. Con el 3D vuelan como
+   * personas (`saltarines3`).
+   */
+  function drawJunta(): void {
+    // Con muchísimos premios vuelan las primeras veinticuatro caras: las demás ya cuentan en la cabina.
+    const enAire = P.volando(tAll).slice(0, 24);
+    for (let i = enAire.length; i < juntaFaces.length; i++) (juntaFaces[i] as Sprite).visible = false;
+    if (!enAire.length) return;
+    const W = S.sw(), H = S.sh(), u = S.u(), k = G.k, z = zoomNow();
+    const q = clamp((tAll - P.tJunta) / JUNTA_VUELO, 0, 1);
+    const e = ease.inOutCubic(q);
+    const to = cabPoint(winnerCab, tAll);
+    enAire.forEach((idx, i) => {
+      const from = cabPoint(cabinOf.get(idx) ?? winnerCab, P.tJunta);
+      const x = from.x + (to.x - from.x) * e;
+      const y = from.y + 24 * k + G.ch * 0.5 + (to.y - from.y) * e - Math.sin(q * Math.PI) * 70 * k;
+      if (v3) {
+        saltarines3.push({ id: idx, x, y: y - 60 * k, a: 1, aterrizo: false });
+        return;
+      }
+      let f = juntaFaces[i];
+      if (!f) {
+        f = new Sprite(Texture.EMPTY);
+        flyBox.addChild(f);
+        juntaFaces[i] = f;
+      }
+      const a = cam.toScreen(x, y, W, H);
+      const sz = 30 * k * z * (1 + 0.6 * Math.sin(q * Math.PI));
+      const tex = S.face(names[idx] ?? "");
+      if (f.texture !== tex) f.texture = tex;
+      f.visible = true;
+      f.alpha = 1;
+      f.width = f.height = sz;
+      f.position.set(a.x - sz / 2, a.y - sz / 2);
+      flyBack.rect(a.x - sz / 2 + 3 * u, a.y - sz / 2 + 3 * u, sz, sz).fill({ color: INK });
+      flyFrame.rect(a.x - sz / 2, a.y - sz / 2, sz, sz).stroke({ width: 2.5 * u, color: INK });
+    });
+  }
+
   /** Los rótulos de las estaciones en pantalla (el número y el "−N"): los nombres no los tapan. */
   function stationBoxes(W: number, H: number): Box[] {
     const out: Box[] = [];
@@ -1032,16 +1083,18 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    */
   /**
    * Qué dicen los rótulos de cada cabina: el nombre del grupo, mientras la
-   * cabina lleva a varios; el nombre de la que queda sola; y, al final, el
-   * nombre de cada uno de los dos que llegan juntos (cada uno con su rótulo,
-   * porque en uno solo se cortaban).
+   * cabina lleva a varios; el nombre de la que queda sola; y, desde la bajada
+   * anterior a la última, el nombre de cada uno de los dos que siguen en una
+   * cabina con premio (cada uno con su rótulo, porque en uno solo se cortaban).
+   * Si una cabina con premio lleva más de dos, no lleva rótulo: ya no es un
+   * grupo, y los nombres salen en el cartel.
    */
+  const porPersona = (cab: number, who: number[]): boolean => finalista(cab) && tAll >= tFinal && who.length <= 2;
   function etiquetas(cab: number, who: number[]): string[] {
     if (who.length === 0) return [];
     if (who.length === 1) return [names[who[0] as number] ?? ""];
-    if (cab === winnerCab && who.length === 2 && tAll > T_RUN) {
-      return [names[who[0] as number] ?? "", names[who[1] as number] ?? ""];
-    }
+    if (porPersona(cab, who)) return [names[who[0] as number] ?? "", names[who[1] as number] ?? ""];
+    if (finalista(cab) && tAll >= tFinal) return [];
     const grupo = GRUPOS[P.groupOfCab[cab] ?? 0]?.nombre ?? "";
     // En 3D la cabina no lleva el «×N» en la esquina: la cuenta va con el nombre del grupo.
     return [v3 && grupo ? `${grupo} (${who.length})` : grupo];
@@ -1084,7 +1137,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // El nombre de una persona y el rótulo de un grupo van a la misma escala. En vertical el rótulo del grupo iba
         // a 0,8 para que entraran los diez de la columna (14 px, bajo la regla): ahora, si no entra, se oculta, y la
         // cabina ya lleva su color y su cuenta (regla de letra, 26 de octubre de 2026).
-        const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
+        const porNombre = who.length === 1 || porPersona(cab, who);
         const scEtiqueta = sc;
         let e = soloTags.get(key);
         if (!e || e.txt !== txt || e.sc !== scEtiqueta) {
@@ -1182,7 +1235,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const x = b ? (b.x0 + b.x1) / 2 : W / 2, y = b ? (b.y0 + b.y1) / 2 : H * 0.55;
     // Con el 3D el foco es más ajustado: la cabina ya se agranda sola con el golpe y el cuadrado del foco no se sale por abajo, contra el relator.
     const r = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) * (v3 ? 0.5 : 0.62) : H * 0.12;
-    return { arco: P.story.arc, x, y, r, color: colorDeNombre(names[winners[winners.length - 1] ?? 0] ?? ""), rival: null };
+    // Con varios premios la onda va en el dorado de siempre y no en el color de una cara: arriba llegan todos los que
+    // ganan, y el color del primer premio decía quién era antes de que lo nombrara el relator.
+    if (P.surv.length > 1) return { arco: P.story.arc, x, y, r, rival: null };
+    return { arco: P.story.arc, x, y, r, color: colorDeNombre(names[winners[0] ?? 0] ?? ""), rival: null };
   }
 
   /** Para qué es el encuadre de ahora: el 3D levanta la cámara distinto en cada fase (solo lo lee el 3D). */
@@ -1235,8 +1291,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const a = pt(h, slot * G.gap), b = pt(h, (slot + SLIP) * G.gap);
         cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, 1.8, 3);
       } else {
+        // La cabina de quien gana y, con premios en varias cabinas, la otra más lejana: entran las dos.
         const a = cabPoint(winnerCab, tAll), b = cabPoint(P.loserCab, tAll);
-        cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, zoomBajo(1.6, 1.3), 3);
+        const z = Math.min(zoomBajo(1.6, 1.3), (S.sw() * 0.7) / Math.max(1, Math.abs(a.x - b.x) + G.cw), (S.sh() * 0.5) / Math.max(1, Math.abs(a.y - b.y) + G.ch));
+        cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, Math.max(0.6, z), 3);
       }
     } else if (apagon && tAll >= P.corte - 0.25 && tAll <= P.vuelve + 0.45) {
       // Se va al convoy apenas titila la luz y se sigue metiendo en lo oscuro.
@@ -1502,6 +1560,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     prepareBoards(2);
     const brd = boardAt(tAll);
     drawBoard(brd);
+    drawJunta();
     // Cuando se bajan más de los que entran en el andén (doscientas personas),
     // los que no tienen renglón saltan como antes, de color, al piso de la estación.
     if (brd && boardView) {

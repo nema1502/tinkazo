@@ -100,6 +100,9 @@ export const MARCADORES = {
   cTelDoor: /^(¡Se abre la puerta de .+!|¿Se baja .+\?|¡.+ está en la puerta!)$/u,
   cTelSlip: /^¡(SE SUELTA LA DE .+|.+ se va cable abajo|Resbala la cabina de .+)!$/u,
   cTelDock: /^¡(LLEGÓ ARRIBA|TOCÓ LA CUMBRE|SE ABRE LA PUERTA)!$/u,
+  // Quien se baja (cTelOff) o quienes se bajan (cTelOffN) en una parada del teleférico. La última es la que decide.
+  cTelOff: /^¡(Se baja .+|.+ se queda en el andén|Hasta acá llegó .+)!$/u,
+  cTelOffN: /^¡(Se bajan .+|Hasta acá llegaron .+)!$/u,
   // El aguayo.
   cPasClose: /^¡(Casi sale .+|.+ en el borde|Se agarra .+)!$/u,
   cPasOut: /^¡(Se cae el bulto de .+|.+ se queda afuera|Sale .+)!$/u,
@@ -838,6 +841,23 @@ export function afueraPinata(P) {
 }
 
 /**
+ * Quién se baja del teleférico y cuándo: el que nombra el relator en una bajada
+ * ("¡Se baja X!", "¡Se bajan X, Y y 2 más!"). Su nombre sigue a la vista en el
+ * andén, tachado, hasta la parada siguiente: sin esto, la línea que despide a
+ * los de la bajada grande parecía una pista "al revés" (13 de noviembre de
+ * 2026). El que se baja sin nombre ("y 15 más") sigue contando en juego hasta
+ * que su nombre deja de verse: el azar sube y la prueba se vuelve más prudente.
+ */
+export function afueraTeleferico(P) {
+  const fuera = new Map();
+  for (const s of P.subs) {
+    if (s.t > P.revelado || !(MARCADORES.cTelOff.test(s.s) || MARCADORES.cTelOffN.test(s.s))) continue;
+    for (const i of s.quienes) if (!fuera.has(i)) fuera.set(i, s.t);
+  }
+  return fuera;
+}
+
+/**
  * La Entrada (Oruro): cada fraternidad se presenta con sus nombres, y después
  * arranca el recorrido. Si a partir de ahí llevan nombre solo los de una
  * fraternidad, los demás dejan de verse sin haberse quedado en ninguna cuadra,
@@ -1018,9 +1038,12 @@ export const JUEGOS = {
     faroles: true,
     especificas: [senalesFarol],
   },
+  // El teleférico: desde el 13 de noviembre de 2026 a la cumbre llega solo quien gana, y lo decide la última
+  // bajada (la del que acompañaba a quien gana hasta la última estación). Hasta ahí, nada tiene que adivinarlo.
   teleferico: {
     candidatos: "visibles",
-    corte: { clave: "cTelDock" },
+    corte: { claves: ["cTelOff", "cTelOffN"], ultima: true },
+    afuera: afueraTeleferico,
     especificas: [linea("puerta", ["cTelDoor"]), linea("mordaza", ["cTelSlip"])],
   },
   pasanaku: {
