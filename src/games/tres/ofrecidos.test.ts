@@ -13,7 +13,7 @@ describe("ofrece3D: cuándo el selector muestra Ver en 3D", () => {
   });
 
   it("el trompo está aprobado: en la lista y con módulo, lo ofrece", () => {
-    expect(JUEGOS_CON_3D).toEqual(["race", "trompo", "pinata", "toborochi", "sapo", "guajojo"]);
+    expect(JUEGOS_CON_3D).toEqual(["race", "trompo", "pinata", "toborochi", "sapo", "guajojo", "bolillas"]);
     expect(tiene3D("trompo")).toBe(true);
     expect(ofrece3D("trompo")).toBe(true);
   });

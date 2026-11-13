@@ -18,6 +18,7 @@ import { AVISO_SIN_CUENTA, elegirSinCuenta, salirDeSinCuenta, sinCuentaElegido }
 import { anunciarFranja, pintarFranja } from "./sin-cuenta-franja";
 import { esDeRed } from "../stellar/errores";
 import { CLASE_NO_CARGO, avisarQueNoCargo } from "./aviso-no-cargo";
+import { animarEntradaIngreso, animarSalidaIngreso } from "../estilos-atencion";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -1488,7 +1489,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
 
   function shut(): void {
     document.removeEventListener("keydown", onKey, true);
-    back.remove();
+    animarSalidaIngreso(back);
     // El chip de la cabecera se vuelve a dibujar al conectar (`pintarCuenta`): el que estaba ya no está, y el foco va al nuevo.
     const vuelve = returnTo instanceof HTMLElement && returnTo.isConnected ? returnTo : document.querySelector<HTMLElement>("#wallet-box .cuenta-chip");
     if (vuelve && vuelve.matches("button, a")) vuelve.focus();
@@ -1497,6 +1498,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
   home();
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(back);
+  animarEntradaIngreso(back);
   // El foco, en Google. Nunca en el correo en una pantalla táctil: abría el
   // teclado y el teclado tapaba a Google, que es lo que casi todos quieren.
   const tactil = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;

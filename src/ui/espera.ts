@@ -337,6 +337,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const cerrar = (alShow = false): void => {
     window.clearInterval(timer);
     pararAzar();
+    pararPase();
     removeEventListener("resize", ajusta);
     removeEventListener("resize", medirBarra);
     removeEventListener("keydown", tecla);
@@ -388,6 +389,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!panel || !lista) return;
     lista.innerHTML = opcionesHtml(sorteo.juegos());
     panel.hidden = false;
+    // El pase de inactividad vuelve a armarse cada vez que el panel abre.
+    armarPase();
     // Sorprendeme solo se ofrece si hay a dónde ir. Con más de doscientas personas no cabe ningún juego, y con uno solo la
     // luz se quedaría quieta en la misma tarjeta: en los dos casos el botón no haría nada.
     const sorprender = panel.querySelector<HTMLElement>("[data-azar]");
@@ -403,6 +406,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const cerrarJuegos = (devolverFoco = true): void => {
     if (!panel || panel.hidden) return;
     pararAzar();
+    pararPase();
     panel.hidden = true;
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
@@ -433,6 +437,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   /** El toque en Sorprendeme: elige con `azar.ts` y recorre las tarjetas. Al quedar, elige como si la hubieran tocado. */
   const alAzar = (): void => {
     if (azarCorriendo || !panel) return;
+    // La ruleta manda: si el pase estaba corriendo, se corta y no se rearma hasta que ella termina.
+    pararPase();
     // Las tarjetas se ordenan por su lugar en la grilla: la luz da la vuelta (arriba de izquierda a derecha, abajo de
     // derecha a izquierda) y no salta de una punta a la otra. Solo cambia el camino: el elegido sale parejo igual.
     const lista = panel.querySelector<HTMLElement>(".espera-juegos-lista");
@@ -531,6 +537,64 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     }
     cerrarJuegos();
   });
+
+  /* ------------------------------------------------------------- el pase */
+  /**
+   * El pase de tarjetas cuando nadie toca el panel (~6 s de inactividad): la
+   * tarjeta marcada se va "hacia atrás" y la siguiente aparece adelante, en
+   * bucle suave de ~1,5 s por paso. El primer toque o movimiento lo corta y el
+   * panel vuelve al estado normal. Es decoración de atención: no toca
+   * `aria-pressed` (esa es la elección de verdad) ni decide nada del sorteo, y
+   * con la ruleta de Sorprendeme corriendo no arranca — la de ella manda.
+   */
+  const PASE_TRAS = 6000;
+  const PASE_PASO = 1500;
+  let tPase = 0;
+  let tPasePaso = 0;
+  let paseIndice = 0;
+  const tarjetasPase = (): HTMLElement[] => (panel ? [...panel.querySelectorAll<HTMLElement>("[data-game]")] : []);
+  /** Corta el pase: sin temporizadores colgados ni marcas puestas. */
+  const pararPase = (): void => {
+    if (tPase) window.clearTimeout(tPase);
+    if (tPasePaso) window.clearTimeout(tPasePaso);
+    tPase = 0;
+    tPasePaso = 0;
+    panel?.classList.remove("pase");
+    for (const t of tarjetasPase()) t.classList.remove("pase-viva", "pase-atras");
+  };
+  /** La tarjeta `i` adelante y la anterior yéndose hacia atrás: el bucle da la vuelta sola. */
+  const marcarPase = (i: number): void => {
+    const tarjetas = tarjetasPase();
+    for (const t of tarjetas) t.classList.remove("pase-viva", "pase-atras");
+    const viva = tarjetas[i % Math.max(1, tarjetas.length)];
+    viva?.classList.add("pase-viva");
+    tarjetas[(i + tarjetas.length - 1) % Math.max(1, tarjetas.length)]?.classList.add("pase-atras");
+  };
+  const pasoPase = (i: number): void => {
+    paseIndice = i;
+    marcarPase(i);
+    tPasePaso = window.setTimeout(() => pasoPase(i + 1), PASE_PASO);
+  };
+  const entrarEnPase = (): void => {
+    if (!panel || panel.hidden || azarCorriendo || tarjetasPase().length < 2) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    panel.classList.add("pase");
+    pasoPase(paseIndice % Math.max(1, tarjetasPase().length));
+  };
+  /** Rearma la espera del pase: solo con el panel abierto y sin ruleta corriendo. */
+  const armarPase = (): void => {
+    if (tPase) window.clearTimeout(tPase);
+    tPase = 0;
+    if (azarCorriendo || !panel || panel.hidden) return;
+    tPase = window.setTimeout(entrarEnPase, PASE_TRAS);
+  };
+  // Un toque o movimiento dentro del panel corta el pase y rearma la espera.
+  const alToqueEnPanel = (): void => {
+    pararPase();
+    armarPase();
+  };
+  for (const tipo of ["pointermove", "pointerdown", "keydown", "wheel", "click", "focusin"] as const)
+    panel?.addEventListener(tipo, alToqueEnPanel, { passive: true });
 
   const tecla = (e: KeyboardEvent): void => {
     if (e.key !== "Escape") return;

@@ -155,6 +155,80 @@ function temporizadoresAsentados(): number {
   return vi.getTimerCount();
 }
 
+describe("el pase de tarjetas del panel Elegí el juego", () => {
+  /** La tarjeta marcada como viva del pase. */
+  const viva = (panel: HTMLElement): number =>
+    [...panel.querySelectorAll<HTMLElement>("[data-game]")].findIndex((t) => t.classList.contains("pase-viva"));
+
+  it("tras ~6 s sin tocar el panel, las tarjetas entran en pase y se recorren en bucle", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(5900);
+    expect(panel.classList.contains("pase")).toBe(false);
+    vi.advanceTimersByTime(100);
+    expect(panel.classList.contains("pase")).toBe(true);
+    // Una sola tarjeta adelante, y la anterior yéndose hacia atrás.
+    const primera = viva(panel);
+    expect(primera).toBeGreaterThanOrEqual(0);
+    expect(panel.querySelectorAll(".pase-viva")).toHaveLength(1);
+    expect(panel.querySelectorAll(".pase-atras")).toHaveLength(1);
+    // ~1,5 s por paso, en bucle: la siguiente adelante y la que estaba, hacia atrás.
+    vi.advanceTimersByTime(1500);
+    const tarjetas = [...panel.querySelectorAll<HTMLElement>("[data-game]")];
+    expect(viva(panel)).toBe((primera + 1) % tarjetas.length);
+    expect(tarjetas[primera]?.classList.contains("pase-atras")).toBe(true);
+  });
+
+  it("una interacción corta el pase y el panel vuelve al estado normal", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+    panel.dispatchEvent(new Event("pointermove"));
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // La elección real no la toca el pase: una sola tarjeta con aria-pressed, la elegida.
+    const marcadas = panel.querySelectorAll<HTMLElement>("[data-game][aria-pressed='true']");
+    expect(marcadas).toHaveLength(1);
+    expect(marcadas[0]?.dataset.game).toBe("race");
+    // Y sin más interacción, el pase vuelve a armarse a los ~6 s.
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+  });
+
+  it("con la ruleta de Sorprendeme corriendo, el pase no arranca: la de ella manda", async () => {
+    const { panel } = await abrirEspera();
+    (panel.querySelector("[data-azar]") as HTMLButtonElement).click();
+    // La inactividad de ~6 s alcanza de sobra mientras la ruleta recorre (~2,5 s).
+    vi.advanceTimersByTime(3000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    correrLaAnimacion();
+    // La ruleta terminó y eligió: el panel se cerró, nunca hubo pase.
+    expect(panel.hidden).toBe(true);
+    expect(panel.classList.contains("pase")).toBe(false);
+  });
+
+  it("al cerrar el panel y al cerrar la espera, el pase queda parado sin marcas puestas", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+    // Cerrar el panel apaga el pase: sin marcas ni bucles colgados.
+    (document.querySelector("[data-juegos-listo]") as HTMLButtonElement).click();
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // Y al volver a abrirlo, el pase se rearma: a los ~6 s vuelve a entrar.
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(false);
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+  });
+
+  it("con movimiento reducido no hay pase", async () => {
+    h.reduce = true;
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+  });
+});
+
 /** Semillas de toda clase: chicas, grandes y el máximo de 32 bits. Con la semilla 0 la ruleta arranca justo en la carrera. */
 const SEMILLAS = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 144, 12345, 2147483647, 4294967295];
 
@@ -519,9 +593,11 @@ describe("si nace el número con la ruleta andando", () => {
     const { nacioElNumero } = await import("./espera");
     const { elegirJuego, sortear, panel } = await abrirEspera();
     const base = temporizadoresAsentados();
+    // El pase armado por la apertura del panel es un temporizador suyo (estilos-atencion);
+    // el toque en Sorprendeme lo para (la ruleta manda) y arma el suyo: el total no cambia.
     botonAzar().click();
     vi.advanceTimersByTime(700);
-    expect(vi.getTimerCount()).toBe(base + 1);
+    expect(vi.getTimerCount()).toBe(base);
     expect(panel.classList.contains("girando")).toBe(true);
 
     nacioElNumero();
@@ -530,7 +606,8 @@ describe("si nace el número con la ruleta andando", () => {
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
     expect(panel.classList.contains("girando")).toBe(false);
-    expect(vi.getTimerCount()).toBe(base);
+    // Sin temporizadores de la ruleta ni del pase: ni a que se venzan vuelve a elegir.
+    expect(vi.getTimerCount()).toBe(base - 1);
     vi.advanceTimersByTime(10_000);
     expect(elegirJuego).not.toHaveBeenCalled();
     // El juego sigue siendo el de partida, y el nombre de la espera también.
@@ -544,6 +621,7 @@ describe("si nace el número con la ruleta andando", () => {
     const { elegirJuego, sortear, panel } = await abrirEspera();
     const base = temporizadoresAsentados();
     const esperado = elegirAlAzar(catalogo(), NOMBRES.length, 5, "race");
+    // El toque en Sorprendeme para el pase del panel (la ruleta manda) y arma el suyo: el total no cambia.
     botonAzar().click();
     vi.advanceTimersByTime(esperado.recorrido.slice(0, -1).reduce((a, p) => a + p.pausa, 0) + 300);
     expect(panel.querySelector(".azar-quedo")).not.toBeNull();
@@ -552,7 +630,8 @@ describe("si nace el número con la ruleta andando", () => {
 
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
-    expect(vi.getTimerCount()).toBe(base);
+    // Sin temporizadores de la ruleta ni del pase.
+    expect(vi.getTimerCount()).toBe(base - 1);
     expect(elegirJuego).toHaveBeenCalledTimes(1);
     expect(h.elegido).toBe(esperado.elegido?.game);
     vi.advanceTimersByTime(10_000);

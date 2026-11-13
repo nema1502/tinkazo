@@ -9,6 +9,7 @@ import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
+import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
 import { fijarElTema } from "./tema-forzado";
 
 /**
@@ -82,6 +83,11 @@ function montarLaCuenta(): void {
 initMenuMas();
 iniciarFeedback();
 setLang(initialLang());
+// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
+// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
+// nada del sorteo.
+iniciarDestelloPie();
+iniciarHoverVivo(".juego");
 // El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
 // HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
 // borre.
