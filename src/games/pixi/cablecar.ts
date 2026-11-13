@@ -1461,7 +1461,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     if (tAll >= T_CROWN) {
       crown.at(tAll - T_CROWN, true, focoDeLaCabina());
       // Con el 3D la cabina la dibuja él (más grande desde el golpe) y la del 2D está apagada: su caja no es la que se ve.
-      if (!v3) {
+      // Desde el golpe y no antes: en el silencio del foco la cabina lleva a los dos que llegaron arriba, y despejar
+      // pone la ficha con el nombre completo de quien gana. Con el golpe la nombra también el relator.
+      if (!v3 && tHold >= FOCO.golpe) {
         const cuerpo = (cabs[winnerCab] as Cab).body.getBounds();
         const dy = S.despejarGanador({ x: cuerpo.x, y: cuerpo.y, w: cuerpo.width, h: cuerpo.height });
         crown.enfocar?.(focoDeLaCabina());

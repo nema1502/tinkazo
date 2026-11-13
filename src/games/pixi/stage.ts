@@ -14,7 +14,7 @@ import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
 import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
-import { ajusteGanador, ENTRADA_RELATOR, reservaRelator } from "./ganador-altura";
+import { ajusteGanador, ENTRADA_RELATOR, nombreDeLaFicha, sobrepasoRelator } from "./ganador-altura";
 import { acomodarGanador, ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { separarEtiquetas, type Rect as RectNombre } from "./kit/nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
@@ -957,7 +957,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     cleaners.push(() => tl.kill());
     if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
-    textoGanador = all.join("\n");
+    textoGanador = nombreDeLaFicha(all);
     /** Cuándo entra cada premio después del primero, en segundos de la corona. */
     let entradas: number[] = [];
     const sonados = new Set<number>();
@@ -1420,13 +1420,19 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       nombrePrevio.visible = !nombreListo();
       const fondo = fondoGanador(), r = view.getBoundingClientRect();
       const techo = fondo ? Math.max(top(), fondo.y + fondo.h + 4 + holgura) : top();
-      const relator = commentEl.getBoundingClientRect();
+      // El relator ya entrado, a escala 1, y no el de este cuadro: su entrada es una animación del DOM con el reloj de
+      // verdad, y con el piso medido en pleno rebote la misma ronda dibujaba cuadros distintos. La escala va alrededor
+      // del centro, así que el centro no se mueve, y `offsetHeight` es el alto sin transformar. Arriba se reserva solo lo
+      // que el rebote asoma de más, igual en todos los cuadros.
+      const visto = commentEl.getBoundingClientRect(), alto = commentEl.offsetHeight;
+      const relator = { x: visto.x, width: visto.width, height: alto,
+        top: Math.round((visto.top + visto.height / 2 - alto / 2) * 64) / 64 };
       const animando = !!animacionRelator && (animacionRelator.pending || animacionRelator.playState === "running");
-      const reservaPop = reservaRelator(relator.height, animando);
+      const reservaPop = sobrepasoRelator(alto);
       const pisoReal = commentEl.textContent ? (relator.top - r.top - 4 - holgura - reservaPop) * sh() / r.height : sh() - bottom();
       const A = (window as unknown as { __tinkazo?: { encuadreGanador: unknown } }).__tinkazo;
       if (A) A.encuadreGanador = { timestamp: performance.now(), frase: commentEl.textContent,
-        relator: { x: relator.x, y: relator.y, w: relator.width, h: relator.height }, reservaPop, pisoReal,
+        relator: { x: relator.x, y: relator.top, w: relator.width, h: relator.height }, reservaPop, pisoReal,
         animacion: { activa: animando, tiempo: animacionRelator?.currentTime ?? null, estado: animacionRelator?.playState ?? null } };
       const reserva = nombrePrevio.visible ? nombrePrevio.height + 4 : 0;
       const zona = { x0: 2 + seguro.left, y0: techo + reserva, x1: sw() - 2 - seguro.right, y1: pisoReal };

@@ -20,11 +20,10 @@ describe("3D clearance slack", () => {
     expect(stage).toMatch(/relator\.top - r\.top - 4 - holgura - reservaPop/);
   });
 
-  it("is asked by the three 3D callers only", () => {
+  // The llama race is not part of this change yet, so only the Sapo and Piñata callers exist.
+  it("is asked by the 3D callers only", () => {
     expect(src("./sapo.ts")).toMatch(/S\.despejarGanador\(caja, HOLGURA_3D\);/);
     expect(src("./sapo.ts")).toMatch(/if \(!v3\) S\.despejarGanador\(cuerpo\);/);
-    expect(src("../llamas/carrera.ts")).toMatch(/despejar: \(c\) => S\.despejarGanador\(c, HOLGURA_3D\),/);
-    expect(src("../llamas/carrera.ts")).toMatch(/if \(el\) S\.despejarGanador\(cajaVisible\(el\)\);/);
     expect(src("./pinata.ts")).toMatch(/S\.despejarGanador\(v3\.cajaParaDespejar\(e\) \?\? caja2D\(\), HOLGURA_3D\);/);
     expect(src("./pinata.ts")).toMatch(/if \(!despejaEl3D\(\)\) S\.despejarGanador\(caja2D\(\)\);/);
     expect(src("./wheel.ts")).toMatch(/S\.despejarGanador\(selectedBody\(false\)\);/);

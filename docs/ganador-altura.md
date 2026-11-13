@@ -2,7 +2,7 @@
 
 En la coronación de la Piñata y del Teleférico, el cuerpo de quien gana (el
 caramelo, la cabina) y su nombre completo no quedan tapados por el cartel
-«GANA» ni por la caja del relator. Se mide en el cuadro que se dibuja, no en
+GANA ni por la caja del relator. Se mide en el cuadro que se dibuja, no en
 una estimación fija.
 
 ## Qué hace el motor
@@ -15,7 +15,7 @@ una estimación fija.
   su fondo, no el de un cuadro anterior.
 - **El relator como se ve.** El piso sale de `getBoundingClientRect()` del
   relator, que incluye el acercamiento con que entra cada frase. Mientras dura
-  ese acercamiento (`ENTRADA_RELATOR`: 280 ms, escala 0,92 → 1 con la curva
+  ese acercamiento (`ENTRADA_RELATOR`: 280 ms, escala de 0,92 a 1 con la curva
   `.34,1.56,.64,1`), `reservaRelator()` guarda lo que el relator puede crecer
   hasta el pico de la curva. Cuando termina, la reserva vuelve a cero. `piso()`
   queda igual para los demás nombres y juegos.
@@ -31,7 +31,10 @@ una estimación fija.
   entero, partido en renglones si hace falta y nunca bajo la letra mínima, va
   justo encima del cuerpo, en una franja que se le reserva. Se va cuando el
   nombre del cartel ya se lee a la letra mínima. En la Piñata reemplaza al chip
-  abreviado («Carlos Albe…ernández») de antes.
+  abreviado de antes (Carlos Albe…ernández). Con varios premios el chip lleva
+  solo el nombre del primero, que es el cuerpo que se despeja (`nombreDeLaFicha`).
+  Los demás nombres llegan con su cartel, cada uno a su hora, y nunca se
+  adelantan en el chip.
 - **CUMBRE.** En el Teleférico, si el ajuste movió la escena, el letrero CUMBRE
   baja lo justo para no quedar detrás del cartel.
 
@@ -62,9 +65,9 @@ Pixi lo dibuja. Con `--comprobar`, cada cuadro tiene que cumplir:
   juego le pone a quien gana. Cada comprobación `nombre N completo` dice de cuál
   se trata (`rol`: `cartel`, `puente` o `chip`);
 - quién es quien gana sale de la identidad que marca el estadio (el nombre
-  entero de la persona dueña de cada chip), no del texto dibujado: «Ana María…»
-  no cuenta como «María Fernanda…»;
-- las inscripciones abreviadas de los gajos de la Ruleta («María Z.») y otros
+  entero de la persona dueña de cada chip), no del texto dibujado: Ana María…
+  no cuenta como María Fernanda…;
+- las inscripciones abreviadas de los gajos de la Ruleta (María Z.) y otros
   textos sin marca, como las listas, son decorado: no se les exige nombre
   completo ni distancia al relator. El nombre completo lo exige el cartel;
 - la secuencia de cuadros sin huecos y con el cartel sostenido;

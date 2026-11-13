@@ -49,14 +49,17 @@ La definición puede agregar `trasCorona(k, plan, escena, t)` para una separaci�
 geométrica propia del juego. Se llama sólo desde el inicio de la corona, después
 de actualizar el cartel al cuadro actual y antes del cierre. No vuelve a dibujar
 la escena ni cambia relojes, duración o selección. Si falta, el orden anterior
-se conserva. Carrera lo usa para separar su cuerpo y nombre del cartel entrante;
-no instala una corrección global ni modifica el director o el estadio.
+se conserva. Hoy ningún juego lo usa: la carrera de llamas queda para una etapa
+posterior. No instala una corrección global ni modifica el director o el estadio.
 
-En el celular apaisado, el cierre se acerca a quien gana: Carrera encuadra solo
-a la campeona (`carrera-zoom-final.ts`), Sapo el aro elegido
-(`sapo-zoom-final.ts`) y Ruleta el gajo elegido con la flecha
+En el celular apaisado, el cierre se acerca a quien gana: el sapo encuadra el
+aro elegido (`sapo-zoom-final.ts`) y la ruleta el gajo elegido con la flecha
 (`wheel-zoom-final.ts`). El nombre completo lo cuida el estadio
-(`despejarGanador`). Es del 2D: con `?motor=3d` queda la toma de antes.
+(`despejarGanador`) y con varios premios es solo el del primero. El sapo se
+acerca también en 3D, que es como se ve por defecto en los equipos que lo
+aguantan: ahí la cámara suelta su tope y el despeje se mide sobre el aro que
+dibuja el 3D. La ruleta se acerca solo en 2D: con `?motor=3d` queda la toma de
+antes.
 
 La lista y la ronda llegan con cada sorteo, y los momentos dependen de las dos: por eso salen del **plan**, no de la definición. El plan recibe la ronda (`ctx.ronda`), el azar sembrado (`ctx.rng`), los textos (`ctx.txt`) y la historia del director de emoción (`ctx.historia`, que gasta `rng` cuando se la pide). **El kit nunca llama a `rng`**: si el plan lo gasta en otro orden, la misma ronda cuenta otra historia.
 

@@ -36,7 +36,7 @@ describe("solo las superficies del nombre final cuentan (S6)", () => {
     expect(nombreFinalDe(GANADORA, { rol: "decorado", original: GANADORA }, [GANADORA])).toBeNull();
   });
 
-  // Muestra de la ruleta: cartel legible, cuatro gajos «María Z.» pegados al relator y «Ana María» en la lista.
+  // Muestra de la ruleta: cartel legible, cuatro gajos María Z. pegados al relator y Ana María en la lista.
   const caja = (x: number, y: number, w = 160, h = 30) => ({ x, y, w, h });
   const muestra = () => ({
     cuerpo: caja(100, 220, 180, 100), cartel: caja(100, 60, 180, 140), placaVisible: true,
@@ -51,7 +51,7 @@ describe("solo las superficies del nombre final cuentan (S6)", () => {
     { texto: ANA, rotulo: null, caja: caja(120, 395) },
   ];
 
-  it("la ruleta con gajos y otra «María» junto al relator no genera comprobaciones de nombre falsas", () => {
+  it("la ruleta con gajos y otra María junto al relator no genera comprobaciones de nombre falsas", () => {
     const m = muestra();
     for (const d of dibujados) {
       const f = nombreFinalDe(d.texto, d.rotulo, [GANADORA]);
@@ -166,7 +166,7 @@ describe("telemetría de las esperas de 40 s", () => {
 describe("marca de rol en stage.ts: solo con ?auditar=camara", () => {
   const source = readFileSync(new URL("./stage.ts", import.meta.url), "utf8");
   it("crea el registro de rótulos solo para el auditor de cámara y lo publica en __tinkazo", () => {
-    expect(source).toMatch(/const rotulos = params\.get\("auditar"\) === "camara" \? new WeakMap<Text, \{ rol: "puente" \| "chip"; original: string \}>\(\) : null;/);
+    expect(source).toMatch(/const rotulos = auditaCon\("camara"\) \? new WeakMap<Text, \{ rol: "puente" \| "chip"; original: string \}>\(\) : null;/);
     expect(source).toMatch(/rotulos\?\.set\(label, \{ rol: completo \? "puente" : "chip", original: faceOf \}\);/);
     expect(source).toMatch(/rotuloDe: \(n: unknown\) => rotulos\?\.get\(n as Text\) \?\? null/);
   });
