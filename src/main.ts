@@ -43,6 +43,7 @@ import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
+import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
@@ -394,6 +395,8 @@ function initVistas(): void {
         boton.style.minHeight = "";
       }
     }
+    // El estado está pintado: el texto del botón grande puede verse (contra el FOUC de la recarga, estilos-atencion.ts).
+    destrabarCtas();
   };
   document.addEventListener("tinkazo:cuenta", pintarCta);
   document.addEventListener("tinkazo:sesion", (e) => {
@@ -573,6 +576,12 @@ unlockAudioOnGesture();
 setLang(initialLang());
 // La palabra del sticker rota después de traducir: el texto sale del diccionario.
 rotateWords();
+// Las animaciones de atención (estilos-atencion.ts): el temblor de los botones
+// del hero tras ~8 s sin interactuar, el destello periódico del pie y el hover
+// vivo en las capturas de la portada. Ninguna decide nada del sorteo.
+iniciarTemblorHero();
+iniciarDestelloPie();
+iniciarHoverVivo(".portada-juegos a");
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común. Si no baja (un
 // bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.

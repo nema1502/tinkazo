@@ -10,6 +10,7 @@ import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
 import { fijarElTema } from "./tema-forzado";
+import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -86,6 +87,11 @@ setLang(initialLang());
 // HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
 // borre.
 enlazarContrato(document, network.contractId ? contractUrl() : null);
+// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
+// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
+// nada del sorteo.
+iniciarDestelloPie();
+iniciarHoverVivo(".juego");
 montarLaCuenta();
 onLangChange(montarLaCuenta);
 // El contador va aparte y después: no frena la página y queda en su propio

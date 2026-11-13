@@ -95,8 +95,10 @@
   }
   .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
   .auth { display: flex; gap: 8px; align-items: center; }
-  /* Sin cuenta, la caja de la cuenta va vacía: no debe dejar el hueco de su gap. */
-  .auth:empty { display: none; }
+  /* Sin cuenta, la caja de la cuenta va vacía, pero guarda su lugar (contra el
+     salto al montar el chip, FOUC de la recarga): escondida, no quitada. */
+  .auth:empty { visibility: hidden; min-height: 44px; min-width: 92px; justify-content: flex-end; }
+  @media (max-width: 700px) { .auth:empty { min-width: 64px; } }
   button.mini, a.mini {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 5px 12px; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
@@ -3184,3 +3186,82 @@
   }
   @keyframes cl-entra { from { opacity: 0; } to { opacity: 1; } }
   @keyframes cl-gira { to { transform: rotate(360deg); } }
+  /* ====================================================  Animaciones de atención.
+     Decoración que avisa por dónde empezar y qué se puede tocar. Ninguna decide
+     nada del sorteo, y todas se apagan con prefers-reduced-motion. La lógica de
+     los temporizadores y las clases vive en `estilos-atencion.ts`; acá, el CSS. */
+
+  /* --- El texto de sesión del botón grande de la portada no se ve hasta que el
+     JS lo decidió (`destrabarCtas`): visibilidad, no display, para que la caja
+     no salte; y la caja de la cuenta de la cabecera guarda su lugar (ver
+     `.auth:empty`, arriba). Contra el FOUC de la recarga. --- */
+  [data-cta-entrar]:not([data-cta-listo]) .cta-t { visibility: hidden; }
+
+  /* --- El pase de tarjetas del selector "Elegí el juego" (espera.ts): tras ~6 s
+     sin toques, las tarjetas se recorren una a una en bucle; la que va adelante
+     se marca `pase-viva` y la que se va hacia atrás, `pase-atras`. El primer
+     toque lo corta. No toca aria-pressed: esa es la elección de verdad. --- */
+  .espera-juego-op { position: relative; }
+  .espera-juegos.pase .espera-juego-op { transition: opacity 0.55s ease, transform 0.55s ease; }
+  .espera-juegos.pase .espera-juego-op.pase-viva { opacity: 1; transform: scale(1.03); z-index: 2; }
+  .espera-juegos.pase .espera-juego-op.pase-atras { opacity: 0.5; transform: scale(0.96); z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { .espera-juegos.pase .espera-juego-op { transition: none; } }
+
+  /* --- El temblor de los dos botones del hero (estilos-atencion.ts): tras ~8 s
+     sin interactuar, una sacudida sutil de ~0,5 s con dos vaivenes. --- */
+  @keyframes temblor-atencion {
+    0%, 100% { transform: none; }
+    18% { transform: translateX(-2px) rotate(-0.3deg); }
+    38% { transform: translateX(2px) rotate(0.3deg); }
+    58% { transform: translateX(-2px) rotate(-0.3deg); }
+    78% { transform: translateX(2px) rotate(0.3deg); }
+  }
+  .hero-ctas .temblor { animation: temblor-atencion 0.55s ease-in-out; }
+  @media (prefers-reduced-motion: reduce) { .hero-ctas .temblor { animation: none; } }
+
+  /* --- El destello del pie (estilos-atencion.ts): cada ~4 s un brillo cruza el
+     badge en ~0,8 s y se apaga: sin glow permanente. El recorte del marco lo da
+     la propia caja del badge (un ítem flex de `.bar`). --- */
+  footer .bar [data-i="footR"] { position: relative; overflow: clip; }
+  @keyframes destello-atencion { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+  [data-i="footR"].destello::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 40%, color-mix(in srgb, currentColor 28%, transparent) 50%, transparent 60%);
+    animation: destello-atencion 0.8s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { [data-i="footR"].destello::after { animation: none; content: none; } }
+
+  /* --- El hover vivo de las capturas (estilos-atencion.ts): la captura de la
+     tarjeta bajo el mouse se mueve suave dentro de su marco (Ken Burns) mientras
+     el hover dura, y al salir vuelve. En pantalla táctil no hay hover: todo el
+     bloque vive dentro de (hover: hover). `.juego` ya recorta con overflow
+     hidden; la tarjeta de la portada recorta con hover-vivo. --- */
+  @keyframes ken-burns-atencion {
+    from { transform: scale(1) translate(0, 0); }
+    to { transform: scale(1.06) translate(-1.2%, -1%); }
+  }
+  @media (hover: hover) {
+    .portada-juegos a.hover-vivo { overflow: clip; }
+    .portada-juegos a .pj-img, .juego img { transition: transform 1s ease; }
+    .portada-juegos a.hover-vivo .pj-img, .juego.hover-vivo img { animation: ken-burns-atencion 7s ease-in-out infinite alternate; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .portada-juegos a.hover-vivo .pj-img, .juego.hover-vivo img { animation: none; }
+  }
+
+  /* --- La entrada de la ventana de ingreso (estilos-atencion.ts, wallet-ui.ts):
+     el fondo hace fade y el panel sube con una escala leve; al cerrar, sale más
+     corto antes de quitar el nodo. La ventana no es un <dialog> nativo; si pasa
+     a serlo, estas mismas animaciones valen con ::backdrop. --- */
+  @keyframes ingreso-entra-fondo { from { opacity: 0; } }
+  @keyframes ingreso-entra-panel { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+  @keyframes ingreso-sale-fondo { to { opacity: 0; } }
+  @keyframes ingreso-sale-panel { to { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  .modal-back.ingreso-entra { animation: ingreso-entra-fondo 0.18s ease-out; }
+  .modal-back.ingreso-entra .modal-card.login { animation: ingreso-entra-panel 0.22s ease-out; }
+  .modal-back.ingreso-sale { animation: ingreso-sale-fondo 0.15s ease-in forwards; }
+  .modal-back.ingreso-sale .modal-card.login { animation: ingreso-sale-panel 0.15s ease-in forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .modal-back.ingreso-entra, .modal-back.ingreso-entra .modal-card.login,
+    .modal-back.ingreso-sale, .modal-back.ingreso-sale .modal-card.login { animation: none; }
+  }
