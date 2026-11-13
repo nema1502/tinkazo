@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { roundTime, targetRound } from "../protocol/quicknet";
 import { type IntentoDeSello, SelloIncierto, resolverSello } from "../stellar/envio";
-import { AVISO_OTRA_RONDA_MS, CLAVE_PENDIENTE, MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S, SelloSinConfirmar, guardarPendiente, leerPendiente, margenDelPrimerIntento, rondasDesde, sellarSinDuplicar } from "./sello-seguro";
+import { AVISO_OTRA_RONDA_MS, CLAVE_PENDIENTE, MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S, SelloSinConfirmar, averiguarPendiente, guardarPendiente, leerPendiente, margenDelPrimerIntento, rondasDesde, sellarSinDuplicar } from "./sello-seguro";
 
 /**
  * "Ningún reintento puede crear un segundo sello", contra una red de mentira: el
@@ -294,6 +294,60 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
     e.avanzar(200_000);
     expect(e.sellosDeLaLista()).toBe(1);
     expect(r.raffleId).toBe(500n);
+  });
+});
+
+describe("averiguarPendiente: saber si un sello entró sin mandar ninguno", () => {
+  it("si entró, lo dice y no lo borra: quien sigue lo retoma", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "se-pierde" }]);
+    let pendiente: IntentoDeSello | null = null;
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+      guardarPendiente: (i) => void (pendiente = i ?? pendiente),
+    }).catch(() => undefined);
+    e.cortar(false);
+    const avisos: string[] = [];
+    const r = await averiguarPendiente(pendiente as unknown as IntentoDeSello, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente, avisar: (q) => void avisos.push(q) });
+    expect(r.estado).toBe("entro");
+    expect(avisos).toEqual(["verificando"]);
+    // No se borró nada: el que sigue lo retoma y lo borra al saber cómo terminó.
+    expect(e.pendientes).toEqual([]);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si no entró ni puede entrar, lo borra y no manda nada", async () => {
+    const e = escenario([{ entra: "nunca", respuesta: "se-pierde" }]);
+    let pendiente: IntentoDeSello | null = null;
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+      guardarPendiente: (i) => void (pendiente = i ?? pendiente),
+    }).catch(() => undefined);
+    e.cortar(false);
+    e.avanzar(90_000);
+    const r = await averiguarPendiente(pendiente as unknown as IntentoDeSello, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente });
+    expect(r.estado).toBe("no-entro");
+    expect(e.pendientes.at(-1)).toBeNull();
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si no se puede averiguar, lo dice y deja el intento guardado", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    e.cortar(true);
+    const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: e.inicial().round, count: 8, numWinners: 1, meta: "premio", desde: 0 };
+    const r = await averiguarPendiente(i, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente });
+    expect(r.estado).toBe("no-se-sabe");
+    expect(e.pendientes).toEqual([]);
+    expect(e.pasos.sellar).not.toHaveBeenCalled();
   });
 });
 

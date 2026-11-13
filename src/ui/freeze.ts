@@ -763,6 +763,18 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // Seguir sin sello con un sello de esta misma lista que se mandó y no se sabe si entró: el contrato no impide sellar dos
+  // veces la misma lista, así que primero se averigua. Si entró, ese es el sello y se sigue anclado, con su ronda. Si no se
+  // puede saber, se sigue sin sello pero no se manda ningún sello más de esa lista, ni ahora ni cada 15 segundos.
+  let sinReintento = false;
+  if (sinSello) {
+    const antes = await averiguarElSelloPendiente(names, btn);
+    if (antes === "entro") {
+      await sellar({ ...opciones, sinSello: false, saltarChequeo: true });
+      return;
+    }
+    sinReintento = antes === "no-se-sabe";
+  }
   // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
   // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
   if (anchoring && network.name === "mainnet" && cobroPorUso() && !(await hayUnSelloPendiente(names)) && !(await accesoOficialParaSellar(btn, Math.min(ganadoresPedidos(), names.length), opciones.conCupon === true))) {
@@ -1050,7 +1062,57 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   const quien = currentSession()?.address;
   if (sinSello && quien) {
     anotar({ red: network.name, paso: "sin-sello", accion: "seguir-sin-sello", final: `la ronda nace en ${Math.max(0, roundTime(round) - Math.floor(Date.now() / 1000))} s` });
-    seguirIntentandoElSello({ names, hash, round, ts, prize, numWinners, organizer: quien });
+    if (sinReintento) {
+      // Hay un sello de esta lista sin confirmar: este sorteo queda sin sello y no se manda otro (`averiguarElSelloPendiente`).
+      anotar({ red: network.name, paso: "sin-sello", accion: "seguir-sin-sello", final: "sin reintento: hay un sello de esta lista sin confirmar" });
+      verSinSello("vencio");
+    } else seguirIntentandoElSello({ names, hash, round, ts, prize, numWinners, organizer: quien });
+  }
+}
+
+/**
+ * "Seguir sin sello": antes de seguir, si de esta lista quedó un sello que se mandó y no se sabe si entró (el intento
+ * guardado de `sello-seguro.ts`), se averigua. Devuelve qué pasó con él:
+ *
+ * - `no-hay`: no quedó ninguno, y se sigue como siempre.
+ * - `entro`: ese es el sello de la lista. Queda guardado, y quien llama sella de nuevo sin "Seguir sin sello": retoma ese.
+ * - `no-entro`: no entró ni va a entrar. Se borró, y se sigue como siempre.
+ * - `no-se-sabe`: no se pudo averiguar. Se sigue sin sello y sin volver a mandar ninguno.
+ */
+async function averiguarElSelloPendiente(names: string[], btn: HTMLButtonElement): Promise<"no-hay" | "entro" | "no-entro" | "no-se-sabe"> {
+  const s = currentSession();
+  if (!s) return "no-hay";
+  let seguro: typeof import("./sello-seguro");
+  try {
+    seguro = await import("./sello-seguro");
+  } catch {
+    // Sin el módulo no se puede mirar si quedó uno: ante la duda, no se manda ninguno.
+    return "no-se-sabe";
+  }
+  const contrato = network.contractId ?? "";
+  const previo = seguro.leerPendiente(s.address, bytesToHex(listHash(names)), network.name, contrato);
+  if (!previo) return "no-hay";
+  // Averiguar puede llevar unos segundos: el botón lo dice, la lista sigue como está y el modo no se cambia.
+  const onStep = (step: AnchorStep, detail?: string): void => {
+    btn.textContent = stepLabel(step);
+    showTxStatus("seal-status", step, detail);
+  };
+  btn.disabled = true;
+  onStep("verifying");
+  marcarSellado(true);
+  marcarMandandoElSello(true);
+  try {
+    const r = await seguro.averiguarPendiente(previo.intento, {
+      resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
+      guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, previo.premio),
+    });
+    return r.estado;
+  } catch {
+    return "no-se-sabe";
+  } finally {
+    hideTxStatus("seal-status");
+    marcarMandandoElSello(false);
+    marcarSellado(false);
   }
 }
 

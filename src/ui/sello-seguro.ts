@@ -134,6 +134,22 @@ function corteAntesDeMandar(e: unknown): boolean {
 
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Averigua si un intento pendiente entró, sin mandar ningún sello. Es para quien no va a sellar de nuevo pero tiene que
+ * saber si la lista ya quedó sellada: "Seguir sin sello" (`freeze.ts`) no puede mandar otro sello de una lista que ya
+ * tiene uno, porque el contrato no lo impide y quedarían dos.
+ *
+ * - Entró: lo dice y NO lo borra. Quien sigue lo retoma con `sellarSinDuplicar(..., pendiente)`, que lo borra al terminar.
+ * - No entró ni puede entrar: lo borra.
+ * - No se pudo averiguar: queda guardado, y el próximo intento empieza por ahí.
+ */
+export async function averiguarPendiente(pendiente: IntentoDeSello, p: Pick<PasosDelSello, "resolver" | "guardarPendiente" | "avisar">): Promise<Resolucion> {
+  p.avisar?.("verificando");
+  const r = await p.resolver(pendiente);
+  if (r.estado === "no-entro") p.guardarPendiente(null);
+  return r;
+}
+
 export async function sellarSinDuplicar(
   inicial: { round: number; ts: number },
   p: PasosDelSello,
