@@ -26,7 +26,7 @@ import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
-import { ajustarPremioDeTurnos, ordenNoCabe } from "./turnos";
+import { ajustarPremioDeTurnos, ordenNoCabe, ponerModoTurnos } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
@@ -1332,6 +1332,10 @@ export function resumeFrozen(e: {
   const ta = $<HTMLTextAreaElement>("ta");
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
+  // El modo de la pantalla pasa a ser el del sorteo sellado. Una recarga vuelve a Sortear premios aunque se haya sellado
+  // un orden, y el selector de modo sigue a mano hasta retomar: un orden se retoma como orden, y un sorteo común no queda
+  // con la cantidad de la lista porque antes se tocó Orden de turnos.
+  ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
   ponerPremio(e.prize);
   ponerGanadores(e.numWinners);
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;

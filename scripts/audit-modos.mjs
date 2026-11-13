@@ -178,10 +178,8 @@ async function repartir(page) {
   return "btn-part-si";
 }
 
-/** Abre el pliegue de opciones (#mas-opciones) y elige "Orden de turnos" (#btn-turnos). */
+/** Elige "Orden de turnos" (#btn-turnos) en el selector de modo, que está a la vista arriba de la lista. */
 async function elegirTurnos(page) {
-  await page.eval("(() => { const mas = document.getElementById('mas-opciones'); if (mas && !mas.open) mas.open = true; return true; })()");
-  await sleep(400);
   await page.eval("document.getElementById('btn-turnos').click(); true");
   const prendido = await page.waitFor("document.getElementById('btn-turnos').getAttribute('aria-pressed') === 'true'", 10000);
   if (!prendido.ok) throw new Error("no quedo prendido Orden de turnos");

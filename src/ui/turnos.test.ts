@@ -94,7 +94,9 @@ describe("el markup de la opción", () => {
     const claves = Object.keys(T.es).filter((k) => k.startsWith("turns"));
     const conPasanaku = claves.filter((k) => /pasanaku/i.test(String(T.es[k])) || /pasanaku/i.test(String(T.en[k])));
     expect(conPasanaku).toEqual(["turnsExample"]);
-    expect(T.es.turnsExample).toMatch(/^Sirve para un pasanaku, para turnos de exposición/);
+    // Desde el 13 de noviembre de 2026 el ejemplo va debajo del nombre, en el botón del selector: corto, y con otro uso al lado.
+    expect(T.es.turnsExample).toBe("Para un pasanaku o exposiciones");
+    expect(T.en.turnsExample).toBe("For a pasanaku or presentations");
   });
 
   it("ningún texto del modo usa las palabras de ganar, en ninguno de los dos idiomas", () => {
@@ -168,8 +170,8 @@ describe("a la vista", () => {
     expect(campo().value).toBe("12");
     expect(campo().disabled).toBe(true);
     expect(premio().value).toBe("Turnos");
-    // La opción está en el pliegue: queda abierto para que se vea lo elegido.
-    expect(($("mas-opciones") as HTMLDetailsElement).open).toBe(true);
+    // La opción está a la vista, arriba de la lista: el pliegue no se abre para mostrarla.
+    expect(($("mas-opciones") as HTMLDetailsElement).open).toBe(false);
   });
 
   it("con ?modo=varias la opción se ve pero no se prende: esa es de otra tarea", async () => {
@@ -206,7 +208,7 @@ describe("prendido: la cantidad sigue a la lista", () => {
     await prender(12);
     expect(rotulo('label[for="nw"]')).toBe("Cuántos turnos");
     expect(rotulo("#prize-etiqueta")).toBe("Nombre de los turnos (opcional)");
-    expect(rotulo("#mas-opciones > summary")).toBe("Orden de turnos, nombre y subir CSV");
+    expect(rotulo("#mas-opciones > summary")).toBe("Nombre de los turnos y subir CSV");
     expect(document.querySelector('label[for="nw"]')?.getAttribute("data-i")).toBe("turnsCount");
   });
 
@@ -270,6 +272,18 @@ describe("prendido: la cantidad sigue a la lista", () => {
     participants.cerrarLista(false);
     expect(boton().disabled).toBe(false);
     expect(campo().disabled).toBe(true);
+  });
+
+  it("con la lista cerrada la cantidad ya no sigue a la lista: lo sellado no se reescribe", async () => {
+    const { participants, ganadores } = await prender(12);
+    participants.cerrarLista(true);
+    // Lo que deja un sello retomado: la cantidad sellada, con la lista ya cerrada y la lista que se vuelve a pintar.
+    ganadores.ponerGanadores(1);
+    participants.renderNames();
+    expect(campo().value).toBe("1");
+    // Al abrir la lista otra vez, vuelve a seguirla.
+    participants.cerrarLista(false);
+    expect(campo().value).toBe("12");
   });
 });
 
@@ -436,6 +450,42 @@ describe("el borrador guarda el modo", () => {
     expect(campo().disabled).toBe(true);
     expect(premio().value).toBe("Turnos de limpieza");
     expect(boton().getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("volver a Sortear premios después de reponer un orden deja un ganador, no a todos", async () => {
+    history.replaceState(null, "", "/?modo=turnos");
+    const { participants, turnos } = await montar(8);
+    turnos.ponerModoTurnos(true);
+    participants.guardarBorrador();
+    const guardado = sessionStorage.getItem(BORRADOR) as string;
+    expect(JSON.parse(guardado)).toMatchObject({ nw: 8, modo: "turnos" });
+
+    // Recargar: la página nace con el cuadro vacío y repone el orden.
+    history.replaceState(null, "", "/");
+    const otra = await montar(0);
+    sessionStorage.setItem(BORRADOR, guardado);
+    otra.participants.reponerBorrador();
+    expect(otra.turnos.modoTurnosActivo()).toBe(true);
+    expect(campo().value).toBe("8");
+    expect(premio().value).toBe("Turnos");
+
+    // Y después se elige Sortear premios: vuelve a un ganador, como al elegir el orden sin recargar.
+    otra.turnos.ponerModoTurnos(false);
+    expect(campo().value).toBe("1");
+    expect(premio().value).toBe("");
+    expect($("sellar-resumen").textContent).toContain("8 personas, 1 ganador");
+  });
+
+  it("un borrador de turnos con un nombre propio lo conserva al volver a Sortear premios", async () => {
+    const q = await montar(0);
+    sessionStorage.setItem(BORRADOR, JSON.stringify({ texto: nombres(6), premio: "Turnos de limpieza", nw: 6, modo: "turnos" }));
+    q.participants.reponerBorrador();
+    expect(q.turnos.modoTurnosActivo()).toBe(true);
+    expect(campo().value).toBe("6");
+    expect(premio().value).toBe("Turnos de limpieza");
+    q.turnos.ponerModoTurnos(false);
+    expect(campo().value).toBe("1");
+    expect(premio().value).toBe("Turnos de limpieza");
   });
 
   it("un borrador sin modo no prende nada", async () => {

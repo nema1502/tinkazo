@@ -967,13 +967,16 @@ export function reponerBorrador(): void {
   // El modo de varias participaciones vuelve con la lista, antes de pintarla: sin él, la lista repartida se
   // contaría por líneas y «No está» sacaría una línea en vez de a la persona entera.
   if (b.modo === "varias") recordarModo("varias");
+  // El orden de turnos también vuelve antes que la lista, y sin la cantidad guardada: en un orden la cantidad es la de la
+  // lista. Prendido después de poner la cantidad, el modo la tomaba como la de antes del orden, y volver a Sortear premios
+  // dejaba a todos como ganadores.
+  const enTurnos = b.modo === "turnos";
+  if (enTurnos) ponerModoTurnos(true);
   setList(b.texto);
   if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
   const nw = Number(b.nw);
   // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
-  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
-  // El modo «Orden de turnos» vuelve con la lista (la cantidad pasa a ser la de la lista, no la que quedó guardada).
-  if (b.modo === "turnos") ponerModoTurnos(true);
+  if (!enTurnos && Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
   if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 

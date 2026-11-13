@@ -1,9 +1,13 @@
 import { t } from "../i18n";
 
 /**
- * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», o con los modos a la vista «Premio, orden de turnos, cuántos ganan y subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo
- * ahí adentro, para que lo que eligió no quede escondido (un premio escrito, más de un ganador). Lo que se
- * eligió se lee igual arriba del botón de sellar.
+ * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», o con el orden de turnos elegido «Nombre de los turnos y
+ * subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo ahí adentro, para que lo que eligió no quede
+ * escondido (un premio escrito, más de un ganador). Lo que se eligió se lee igual arriba del botón de sellar.
+ *
+ * Con el orden de turnos elegido en el selector de arriba (`src/ui/turnos.ts`), la cantidad es la de la lista y el nombre
+ * «Turnos» lo pone la herramienta: eso no es algo elegido ahí adentro y no abre el pliegue. Un nombre escrito por la
+ * persona, sí.
  *
  * Y lo plegado del resultado (`#mas-resultado`, ver `plegarElResultado`).
  */
@@ -13,8 +17,13 @@ export function initPlegables(): void {
   if (!mas) return;
   const prize = document.getElementById("prize") as HTMLInputElement | null;
   const nw = document.getElementById("nw") as HTMLInputElement | null;
+  const enOrden = (): boolean => document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
   const revisar = (): void => {
-    if ((prize?.value.trim() ?? "") !== "" || (nw !== null && nw.value !== "1")) mas.open = true;
+    const turnos = enOrden();
+    const premio = prize?.value.trim() ?? "";
+    const premioElegido = premio !== "" && !(turnos && ["Turnos", "Turns"].includes(premio));
+    const cantidadElegida = !turnos && nw !== null && nw.value !== "1";
+    if (premioElegido || cantidadElegida) mas.open = true;
   };
   prize?.addEventListener("input", revisar);
   nw?.addEventListener("change", revisar);

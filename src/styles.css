@@ -1060,6 +1060,78 @@
   .varias-buscar[hidden] { display: none; }
   .varias-buscar label { display: block; font-size: 16px; font-weight: 800; margin-bottom: 6px; }
   .varias-buscar input { min-height: 48px; font-size: 16px; }
+
+  /* El modo, a la vista (src/ui/turnos.ts, 13 de noviembre de 2026): dos botones grandes arriba de la lista, Sortear premios
+     y Orden de turnos. Es una elección previa: no lleva el magenta de la acción principal ni el amarillo de la cabecera, y
+     queda chico frente a Pegar lista y a Sellar la lista. El elegido lleva el morado del juego elegido en el selector de
+     juegos, y la marca se desliza de uno al otro en 200 ms. Con la lista cerrada los botones se apagan, el borde pasa a
+     punteado como el de los orígenes, y nada se mueve. */
+  .modo-elegir { margin: 0 0 18px; max-width: 640px; }
+  .modo-elegir[hidden] { display: none; }
+  /* El rótulo es un .kicker, como los de los campos: la letra de máquina en mayúsculas que acompaña a un control. */
+  .modo-rotulo { margin: 0 0 6px; }
+  .modo-botones {
+    position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 6px; padding: 5px;
+    background: var(--paper); border: 2px solid var(--ink);
+  }
+  .modo-botones::before {
+    content: ""; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 16px) / 2); box-sizing: border-box;
+    background: var(--purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 6px)); }
+  .modo-op {
+    position: relative; z-index: 1; min-height: 56px; display: grid; grid-template-columns: auto 1fr;
+    grid-template-areas: "ico tit" "ico sub"; align-items: center; column-gap: 10px; row-gap: 2px;
+    padding: 8px 12px; text-align: left; font: inherit; color: var(--ink2);
+    background: transparent; border: 2px solid transparent; cursor: pointer;
+    /* La letra cambia de color mientras la marca llega, no de golpe antes. El que se deja pierde su fondo enseguida. */
+    transition: color 200ms ease, background-color 0s, border-color 0s;
+  }
+  .modo-op:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--card); border-color: var(--ink); }
+  /* El elegido lleva también su propio fondo, que aparece cuando la marca termina de llegar: el mismo morado en el mismo
+     lugar, así que no se nota, y lo que mide el contraste lee el fondo de verdad y no el de la caja. */
+  .modo-op[aria-pressed="true"] {
+    color: var(--on-purple); background-color: var(--purple); border-color: var(--ink); cursor: default;
+    transition: color 200ms ease, background-color 0s linear 200ms, border-color 0s linear 200ms;
+  }
+  .modo-op:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .modo-op:disabled { cursor: default; }
+  .modo-op:disabled[aria-pressed="false"] { color: var(--muted); }
+  .modo-ico { grid-area: ico; width: 28px; height: 28px; transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .modo-op[aria-pressed="true"] .modo-ico { transform: rotate(-8deg) scale(1.12); }
+  .modo-tit { grid-area: tit; font-size: 18px; font-weight: 800; line-height: 1.2; }
+  .modo-sub { grid-area: sub; font-size: 16px; font-weight: 600; line-height: 1.25; }
+  .modo-elegir .modo-ayuda { margin-top: 8px; color: var(--ink2); text-wrap: balance; }
+  .lista-cerrada .modo-botones { border-style: dashed; }
+  /* El título del paso y la ayuda entran con un movimiento corto cada vez que cambia el modo. */
+  .modo-cambia { animation: modo-entra 200ms ease-out; }
+  span.modo-cambia { display: inline-block; }
+  @keyframes modo-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  /* En el celular el selector va compacto: los dos botones lado a lado, cada uno con su dibujo y su nombre (que puede ir
+     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice la ayuda de abajo, que cambia
+     con él. Uno debajo del otro y con todo medía 231 px (271 a 360 px de ancho), y con las barras del navegador
+     (390 x 664) sacaba Pegar lista de la pantalla. Así mide 109. */
+  @media (max-width: 460px) {
+    .modo-elegir { margin-bottom: 12px; }
+    .modo-rotulo, .modo-sub { display: none; }
+    .modo-botones { gap: 4px; padding: 4px; }
+    .modo-botones::before { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 12px) / 2); }
+    .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 4px)); }
+    .modo-op { min-height: 48px; grid-template-areas: "ico tit"; column-gap: 6px; padding: 4px 8px; }
+    .modo-ico { width: 20px; height: 20px; }
+    .modo-tit { font-size: 16px; line-height: 1.1; }
+    .modo-elegir .modo-ayuda { margin-top: 6px; line-height: 1.35; }
+  }
+  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. */
+  @media (max-width: 359px) {
+    .modo-ico { display: none; }
+    .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .modo-botones::before, .modo-ico, .modo-op, .modo-op[aria-pressed="true"] { transition: none; }
+    .modo-cambia { animation: none; }
+  }
   /* La barra del scroll propio va en su lugar y no encima del «+». */
   .varias-lista { margin-top: 10px; max-height: 320px; overflow-y: auto; padding-right: 6px; scrollbar-gutter: stable; }
   .varias-fila {

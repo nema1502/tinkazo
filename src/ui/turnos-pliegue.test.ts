@@ -5,9 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 
 /**
- * El rótulo del pliegue de las opciones (`#mas-opciones`, `turnos.ts`) nombra el orden de turnos cuando los modos están a la
- * vista: la opción se elige ahí adentro, y con el rótulo de siempre («Premio, cuántos ganan y subir CSV») quien la busca no
- * sabe que está. Con el modo elegido dice el del modo, y sin los modos a la vista, el de siempre.
+ * El rótulo del pliegue de las opciones (`#mas-opciones`, `turnos.ts`). Hasta el 13 de noviembre de 2026 el orden de turnos se
+ * elegía ahí adentro y el rótulo lo nombraba. Desde ese día se elige a la vista, en el selector de arriba de la lista
+ * (`turnos-selector.test.ts`), así que el pliegue del sorteo común vuelve a decir lo que guarda: premio, cuántos ganan y
+ * subir CSV. Con el orden elegido dice lo que guarda en ese modo: el nombre de los turnos y subir CSV.
  */
 
 const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
@@ -40,26 +41,26 @@ afterEach(() => {
   history.replaceState(null, "", "/");
 });
 
-describe("el rótulo del pliegue nombra el orden de turnos cuando los modos están a la vista", () => {
-  it("con los modos a la vista dice orden de turnos antes de elegirlo, en los dos idiomas", async () => {
+describe("el rótulo del pliegue dice lo que guarda, con el modo elegido a la vista", () => {
+  it("con los modos a la vista, el del sorteo común, en los dos idiomas: el orden se elige arriba", async () => {
     history.replaceState(null, "", "/?modo=varias");
     await montar(5);
-    expect(pliegue()).toBe("Premio, orden de turnos, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
     const { setLang } = await import("../i18n");
     setLang("en");
-    expect(pliegue()).toBe("Prize, turn order, how many win and upload CSV");
+    expect(pliegue()).toBe(String(T.en.masOpciones));
     setLang("es");
-    expect(pliegue()).toBe("Premio, orden de turnos, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
   });
 
-  it("elegido el orden, el rótulo del modo; al apagarlo, vuelve el que nombra los dos", async () => {
+  it("elegido el orden, el rótulo del modo; al apagarlo, vuelve el del sorteo común", async () => {
     history.replaceState(null, "", "/?modo=turnos");
     const turnos = await montar(5);
     // Elegir el orden es lo que hace `abrirConElModoPedido` al cargar la herramienta.
     turnos.ponerModoTurnos(true);
-    expect(pliegue()).toBe("Orden de turnos, nombre y subir CSV");
+    expect(pliegue()).toBe("Nombre de los turnos y subir CSV");
     turnos.ponerModoTurnos(false);
-    expect(pliegue()).toBe("Premio, orden de turnos, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
   });
 
   it("sin los modos a la vista, el rótulo de siempre", async () => {
@@ -67,13 +68,15 @@ describe("el rótulo del pliegue nombra el orden de turnos cuando los modos est�
     expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
   });
 
-  it("el rótulo nuevo existe en los dos idiomas y no usa palabras de apuesta", () => {
+  it("el rótulo del orden existe en los dos idiomas y no usa palabras de apuesta", () => {
     for (const l of ["es", "en"] as const) {
-      const v = String(T[l].masOpcionesModos);
-      expect(v, l).toMatch(l === "es" ? /turnos/ : /turn order/);
+      const v = String(T[l].turnsMas);
+      expect(v, l).toMatch(l === "es" ? /turnos/ : /turns/);
       expect(v, l).not.toMatch(/rifa|loter|raffle|ticket|boleto|apuesta|;/i);
       expect(v, l).not.toContain(String.fromCharCode(0xab));
       expect(v, l).not.toContain(String.fromCharCode(0xbb));
     }
+    // La clave que nombraba el orden dentro del pliegue ya no existe.
+    expect(T.es.masOpcionesModos).toBeUndefined();
   });
 });

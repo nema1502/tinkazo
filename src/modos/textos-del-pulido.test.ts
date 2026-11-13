@@ -7,7 +7,9 @@ import { T } from "../i18n";
  * portada en inglés dice turns, no shifts: en todo lo demás del modo se dice turns.
  */
 
-const CLAVES = ["sigTope", "turnsSinComprobante", "turnsTellSin", "masOpcionesModos", "rec.sinTurnos"] as const;
+// El rótulo del pliegue que nombraba el orden de turnos (masOpcionesModos) se fue el 13 de noviembre de 2026: el orden se
+// elige a la vista, en el selector de arriba de la lista (src/ui/turnos-selector.test.ts).
+const CLAVES = ["sigTope", "turnsSinComprobante", "turnsTellSin", "rec.sinTurnos"] as const;
 /** Las comillas angulares, el punto medio, la raya larga y la flecha no se escriben en ningún texto que se vea: se arman con su código. */
 const PROHIBIDOS = new RegExp(`[;${String.fromCharCode(0xab, 0xbb, 0xb7, 0x2014, 0x2192)}]|rifa|loter[ií]a|raffle|ticket|boleto|apuesta|\\bbet\\b`, "i");
 const JERGA = /\b(XLM|drand|hash|firma|token|transacci[oó]n|blockchain|Soroban|Stellar)\b/i;

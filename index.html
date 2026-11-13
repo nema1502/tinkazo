@@ -244,7 +244,7 @@
 
   <!-- 01 Participantes -->
   <section class="block app-only tab-nuevo" id="sec-participants">
-    <div class="head"><h2><span data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
+    <div class="head"><h2><span id="p1-titulo" data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
     <div class="body">
       <!-- La cuenta, en una línea con su botón (wallet-ui.ts, applyGate). -->
       <aside class="gate" id="gate" style="display:none"></aside>
@@ -256,6 +256,27 @@
       </aside>
       <!-- Un sorteo sellado en este navegador que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
       <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
+      <!-- El modo, a la vista (src/ui/turnos.ts): Sortear premios o Orden de turnos, con dos botones grandes. Es una elección
+           previa, chica frente a Pegar lista y a Sellar la lista, y con la lista cerrada se queda quieta. Escondido salvo con
+           la bandera VITE_MODOS o con ?modo= en la dirección (src/modos/bandera.ts). Varias participaciones por persona no es
+           un modo: vale en los dos y se marca debajo de la lista. -->
+      <div class="modo-elegir turnos-opcion" id="turnos-opcion" hidden>
+        <p class="kicker modo-rotulo" id="modo-rotulo" data-i="modoRotulo">¿Qué vas a hacer?</p>
+        <div class="modo-botones" id="modo-botones" role="group" aria-labelledby="modo-rotulo" data-modo="sorteo">
+          <button type="button" class="modo-op" id="btn-modo-sorteo" aria-pressed="true" aria-describedby="turnos-ayuda">
+            <svg class="modo-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7C10.5 4 6.5 3.5 6.5 6S12 7 12 7zm0 0c1.5-3 5.5-3.5 5.5-1S12 7 12 7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" /></svg>
+            <span class="modo-tit" data-i="modoSorteo">Sortear premios</span>
+            <span class="modo-sub" data-i="modoSorteoSub">Gana una persona o varias</span>
+          </button>
+          <button type="button" class="modo-op" id="btn-turnos" aria-pressed="false" aria-describedby="turnos-ayuda">
+            <svg class="modo-ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 6h11M10 12h11M10 18h11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><circle cx="4.5" cy="6" r="2.2" fill="currentColor" /><circle cx="4.5" cy="12" r="2.2" fill="currentColor" /><circle cx="4.5" cy="18" r="2.2" fill="currentColor" /></svg>
+            <span class="modo-tit" data-i="turnsOption">Orden de turnos</span>
+            <span class="modo-sub" data-i="turnsExample">Para un pasanaku o exposiciones</span>
+          </button>
+        </div>
+        <p class="note modo-ayuda" id="turnos-ayuda" data-i="modoSorteoAyuda">De la lista salen quienes ganan. Vos elegís cuántos.</p>
+        <p class="note nw-nota" id="turnos-nota" role="status" hidden></p>
+      </div>
       <!-- La sala por QR del modo stand (src/ui/stand-sala.ts): solo se ve con body[data-stand="1"]. Alimenta rondas de ejemplo, nunca un sorteo sellado. -->
       <section class="stand-sala" id="stand-sala" aria-labelledby="sala-t">
         <h3 id="sala-t" data-i="standSalaT">Que se sumen con el celular</h3>
@@ -353,16 +374,6 @@
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
         </div>
-      <!-- «Orden de turnos» (src/ui/turnos.ts): sortea a todas las personas de la lista, en orden. Escondido salvo con la
-           bandera VITE_MODOS o con ?modo=turnos en la dirección (src/modos/bandera.ts). -->
-      <div class="field turnos-opcion" id="turnos-opcion" hidden>
-        <div class="premio-chips">
-          <button type="button" id="btn-turnos" aria-pressed="false" aria-describedby="turnos-ayuda" data-i="turnsOption">Orden de turnos</button>
-        </div>
-        <p class="note" id="turnos-ayuda" data-i="turnsHelp">Salen todos, en orden. Ese orden son los turnos.</p>
-        <p class="note" id="turnos-ejemplo" data-i="turnsExample">Sirve para un pasanaku, para turnos de exposición o para repartir turnos de lo que sea. Tinkazo solo da el orden.</p>
-        <p class="note nw-nota" id="turnos-nota" role="status" hidden></p>
-      </div>
       <div class="field">
         <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
         <!-- Los que más se sortean y los últimos que usaste: se arman en premios.ts. El cuadro de abajo sigue siendo lo que se sella. -->

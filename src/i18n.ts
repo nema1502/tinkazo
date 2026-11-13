@@ -1048,8 +1048,6 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     masOpciones: "Premio, cuántos ganan y subir CSV",
-    // Con los modos a la vista, el pliegue cerrado nombra el orden de turnos, que se elige ahí adentro.
-    masOpcionesModos: "Premio, orden de turnos, cuántos ganan y subir CSV",
     masAjustes: "Sonido, duración y más",
     recRangoAria: "Para {r} personas",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
@@ -3032,14 +3030,22 @@ export const T: Record<Lang, Dict> = {
     againSigue: "Para la sala, tocá Mostrar en grande. Para quien no estuvo, tocá Avisarle por WhatsApp.",
     againSigueLuma: "Para la sala, tocá Mostrar en grande. Para tus invitados, copiá el mensaje de acá abajo y pegalo en Luma.",
     // --- El modo «Orden de turnos» (src/ui/turnos.ts, src/modos/): sortea a todas las personas de la lista, en orden.
-    //     Ahí no se habla de ganadores: la palabra es «turno». «Pasanaku» solo está en la línea de ejemplo de la ayuda.
+    //     Ahí no se habla de ganadores: la palabra es «turno». «Pasanaku» solo está en el ejemplo (`turnsExample`), que desde
+    //     el 13 de noviembre de 2026 va debajo del nombre, en el botón del selector de modo, con otro uso al lado.
     turnsOption: "Orden de turnos",
     turnsHelp: "Salen todos, en orden. Ese orden son los turnos.",
-    turnsExample: "Sirve para un pasanaku, para turnos de exposición o para repartir turnos de lo que sea. Tinkazo solo da el orden.",
+    turnsExample: "Para un pasanaku o exposiciones",
+    // El título del paso de la lista con el orden elegido: dice lo que va a pasar.
+    turnsTitulo: "Quiénes tienen turno",
     turnsCount: "Cuántos turnos",
     turnsPrizeLabel: "Nombre de los turnos (opcional)",
     turnsPrize: "Turnos",
-    turnsMas: "Orden de turnos, nombre y subir CSV",
+    turnsMas: "Nombre de los turnos y subir CSV",
+    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo.
+    modoRotulo: "¿Qué vas a hacer?",
+    modoSorteo: "Sortear premios",
+    modoSorteoSub: "Gana una persona o varias",
+    modoSorteoAyuda: "De la lista salen quienes ganan. Vos elegís cuántos.",
     turnsLimit: "En esta red el orden llega hasta {n} turnos: con más, no se puede sellar.",
     turnsWord: "Turno",
     turnsResultTitle: "El orden de los turnos",
@@ -3747,8 +3753,6 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     masOpciones: "Prize, how many win and upload CSV",
-    // With the modes in view, the closed fold names the turn order, which is chosen inside.
-    masOpcionesModos: "Prize, turn order, how many win and upload CSV",
     masAjustes: "Sound, length and more",
     recRangoAria: "For {r} people",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
@@ -5702,14 +5706,20 @@ export const T: Record<Lang, Dict> = {
     againSigue: "For the room, tap Show it big. For whoever wasn't there, tap Tell them on WhatsApp.",
     againSigueLuma: "For the room, tap Show it big. For your guests, copy the message below and paste it in Luma.",
     // --- The “Turn order” mode (src/ui/turnos.ts, src/modos/): draws everyone on the list, in order.
-    //     It never talks about winners: the word is “turn”. “Pasanaku” only shows in the help's example line.
+    //     It never talks about winners: the word is “turn”. “Pasanaku” only shows in the example (`turnsExample`), which since
+    //     13 November 2026 sits under the name, in the mode picker button, next to another use.
     turnsOption: "Turn order",
     turnsHelp: "Everyone is drawn, in order. That order sets the turns.",
-    turnsExample: "Useful for a pasanaku, for presentation turns or to hand out turns for anything. Tinkazo only gives the order.",
+    turnsExample: "For a pasanaku or presentations",
+    turnsTitulo: "Who gets a turn",
     turnsCount: "How many turns",
     turnsPrizeLabel: "Name of the turns (optional)",
     turnsPrize: "Turns",
-    turnsMas: "Turn order, name and upload CSV",
+    turnsMas: "Name of the turns and upload CSV",
+    modoRotulo: "What do you want to do?",
+    modoSorteo: "Draw prizes",
+    modoSorteoSub: "One or more people win",
+    modoSorteoAyuda: "The winners come out of the list. You choose how many.",
     turnsLimit: "On this network the order goes up to {n} turns: with more, it can't be sealed.",
     turnsWord: "Turn",
     turnsResultTitle: "The turn order",
