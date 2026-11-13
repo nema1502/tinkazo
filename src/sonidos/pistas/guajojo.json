@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "guajojo",
+  "version": "f1",
+  "pulso": {
+    "bpm": 96,
+    "tiempos": 2,
+    "compas": 1.249297
+  },
+  "ganancia": 0.35,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": false,
+  "secciones": {
+    "entrada": {
+      "archivo": "guajojo-f1-entrada.mp3",
+      "inicio": 0.1,
+      "compases": 6
+    },
+    "cuerpo": {
+      "archivo": "guajojo-f1-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 24,
+      "bucleDesde": 8
+    },
+    "subida": {
+      "archivo": "guajojo-f1-subida.mp3",
+      "inicio": 0.5,
+      "compases": 6,
+      "bucleDesde": 3,
+      "tension": 0.75,
+      "cuantizar": 1,
+      "fundido": 0.06
+    },
+    "golpe": {
+      "archivo": "guajojo-f1-golpe.mp3",
+      "inicio": 0.05,
+      "compases": 1,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "guajojo-f1-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 2.5
+    }
+  }
+}

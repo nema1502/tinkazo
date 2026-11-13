@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "sapo",
+  "version": "s3",
+  "pulso": {
+    "bpm": 100,
+    "tiempos": 2,
+    "compas": 1.2
+  },
+  "ganancia": 0.35,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": true,
+  "secciones": {
+    "entrada": {
+      "archivo": "sapo-s3-entrada.mp3",
+      "inicio": 0.1,
+      "compases": 6
+    },
+    "cuerpo": {
+      "archivo": "sapo-s3-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 24,
+      "bucleDesde": 8
+    },
+    "subida": {
+      "archivo": "sapo-s3-subida.mp3",
+      "inicio": 0.5,
+      "compases": 10,
+      "bucleDesde": 6,
+      "tension": 0.75,
+      "cuantizar": 2,
+      "fundido": 0.08
+    },
+    "golpe": {
+      "archivo": "sapo-s3-golpe.mp3",
+      "inicio": 0.05,
+      "compases": 1,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "sapo-s3-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 2.5
+    }
+  }
+}

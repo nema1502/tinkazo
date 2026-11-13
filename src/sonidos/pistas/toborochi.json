@@ -1,0 +1,46 @@
+{
+  "formato": 1,
+  "juego": "toborochi",
+  "version": "t1",
+  "pulso": {
+    "bpm": 95,
+    "tiempos": 2,
+    "compas": 1.262636054
+  },
+  "ganancia": 0.4,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": false,
+  "secciones": {
+    "entrada": {
+      "archivo": "toborochi-t1-entrada.mp3",
+      "inicio": 0,
+      "compases": 6
+    },
+    "cuerpo": {
+      "archivo": "toborochi-t1-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 16,
+      "bucleDesde": 0
+    },
+    "subida": {
+      "archivo": "toborochi-t1-subida.mp3",
+      "inicio": 0.5,
+      "compases": 12,
+      "bucleDesde": 4,
+      "tension": 0.6,
+      "cuantizar": 1
+    },
+    "golpe": {
+      "archivo": "toborochi-t1-golpe.mp3",
+      "inicio": 0.02,
+      "compases": 2,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "toborochi-t1-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 1.5
+    }
+  }
+}

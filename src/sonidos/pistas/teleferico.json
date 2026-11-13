@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "teleferico",
+  "version": "z5",
+  "pulso": {
+    "bpm": 88,
+    "tiempos": 4,
+    "compas": 2.724376417
+  },
+  "ganancia": 0.4,
+  "fundido": 0.03,
+  "retomarEn": "tiempo",
+  "sorpresas": true,
+  "secciones": {
+    "entrada": {
+      "archivo": "teleferico-z5-entrada.mp3",
+      "inicio": 0.062449,
+      "compases": 2
+    },
+    "cuerpo": {
+      "archivo": "teleferico-z5-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 8,
+      "bucleDesde": 0
+    },
+    "subida": {
+      "archivo": "teleferico-z5-subida.mp3",
+      "inicio": 0.5,
+      "compases": 4,
+      "bucleDesde": 2,
+      "tension": 0.75,
+      "cuantizar": 1,
+      "fundido": 0.08
+    },
+    "golpe": {
+      "archivo": "teleferico-z5-golpe.mp3",
+      "inicio": 0.05,
+      "compases": 1,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "teleferico-z5-festejo.mp3",
+      "inicio": 0.15,
+      "salida": 2
+    }
+  }
+}

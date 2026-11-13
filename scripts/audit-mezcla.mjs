@@ -28,6 +28,7 @@
  * Uso (con `pnpm preview` corriendo):
  *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica] [--motor pixi] [--espectro]
  *   node scripts/audit-mezcla.mjs race --sonido musica:a,final:b   # la carrera con esas candidatas de sonido (src/sonidos/carrera.ts)
+ *   node scripts/audit-mezcla.mjs race --consulta "musica=pistas&pistasdesde=http://127.0.0.1:8796/"   # la carrera con su música de archivo
  *
  * La grabación sale de un AudioWorklet, que corre en el hilo del audio y no pierde bloques cuando la página está
  * ocupada, y todo se cuenta con el reloj del audio. Sigue grabando hasta 2 s después del cartel del ganador; si lo
@@ -56,6 +57,9 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const sinMusica = args.includes("--sin-musica");
 // Con `--sonido pieza:candidata,...` la carrera suena con esas candidatas (`src/sonidos/carrera-eleccion.ts`).
 const sonidoCarrera = opt("--sonido", "");
+// Con `--consulta "musica=pistas&pistasdesde=http://127.0.0.1:8796/"` se suman esos parámetros a la dirección de cada juego
+// (por ejemplo, para medir la música de archivo con los archivos servidos desde la máquina de quien mide).
+const consulta = opt("--consulta", "").replace(/^[?&]+/, "");
 // `--motor pixi` mide los juegos en 2D; sin `--motor`, lo que ve la sala (el motor que la página elige).
 const motor = opt("--motor", "");
 const espectro = args.includes("--espectro");
@@ -286,7 +290,7 @@ async function medirUna(browser, juego) {
     await page.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: OIDO });
     if (sinMusica) await page.send("Page.addScriptToEvaluateOnNewDocument", { source: SIN_MUSICA });
-    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}` });
+    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
     const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", 30_000);
     if (!ok.ok) return { error: "el estadio no apareció" };
     // Hasta que el juego cierra solo (o sale el resultado), o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
@@ -319,6 +323,13 @@ async function medirUna(browser, juego) {
     const r = await page.eval("window.__mezcla && window.__mezcla.L.length ? window.__mezcla.medir() : null");
     if (!r) return { error: "no sonó nada (¿el contexto de audio quedó suspendido?)" };
     r.sonadoSeg = sonadoSeg;
+    // Con la música de archivo prendida: lo que dice el reproductor, para saber si la pista sonó o si cayó a la de osciladores.
+    try {
+      const p = await page.eval("window.__tinkazoPista ? JSON.stringify(window.__tinkazoPista()) : null");
+      if (p) r.pista = JSON.parse(p);
+    } catch {
+      /* sin reproductor de archivo */
+    }
     r.corta = grabacionCorta({ grabadoSeg: r.seg, sonadoSeg });
     if (carpetaWav) {
       // Se trae el comienzo de la mezcla en trozos chicos: el canal de DevTools no aguanta un mensaje de varios MB.
@@ -383,6 +394,10 @@ async function run() {
       else if (espectro) console.log(`${juego.padEnd(11)} pierde por corte: ${Object.entries(r.cortes).map(([k, v]) => `${k} Hz ${f1(v)}`).join(" · ")}`);
       if (r.tramos) for (const t of r.tramos) console.log(`             ${t.n}: ${t.seg.toFixed(1)} s, ${t.pct.toFixed(0)} % de la energía, pierde ${f1(t.pierde)} LU`);
       if (!r.error) console.log(`${juego.padEnd(11)} ${f1(r.I)} LUFS · pico real ${f1(db(r.picoReal))} dBTP · corto máx ${f1(r.corto)} · sin graves de 150 Hz ${f1(r.I - r.I150)} LU, de 300 Hz ${f1(r.I - r.I300)} LU · golpe ${f1(r.golpe)} LU · ${r.seg.toFixed(1)} s`);
+      if (!r.error && r.pista) {
+        const avisos = r.pista.registro.filter((x) => /^(pista|falla|cae|corre)|llegó tarde/.test(x.que)).map((x) => x.que);
+        console.log(`             música de archivo: ${r.pista.modo}${r.pista.suena ? ", sonando al cerrar" : ""}${avisos.length ? `, ${avisos.join(" | ")}` : ", sin avisos"}`);
+      }
     }
   } finally {
     await browser.close();

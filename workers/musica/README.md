@@ -115,6 +115,12 @@ La lógica está en `src/logica.ts` y no importa nada de Cloudflare: recibe una 
 
 `src/sonidos/musica-remota.ts` devuelve `https://m.tinkazo.app/<juego>.mp3` solo cuando el sitio corre en `tinkazo.app` o `www.tinkazo.app` y el navegador no pide ahorrar datos. En cualquier otro lado (localhost, las vistas de Vercel, una copia del sitio) devuelve `null` y el sonido sigue con los osciladores.
 
+### Las pistas por secciones
+
+El mismo servicio entrega las pistas de música por secciones (`src/sonidos/pistas.ts` y `src/sonidos/pistas-enganche.ts`): cada juego con pista tiene cinco archivos, `<juego>-<version>-<seccion>.mp3` (entrada, cuerpo, subida, golpe y festejo), que se piden con la misma puerta por `Origin`. El JSON de cada pista (el pulso, los bordes y las ganancias, sin audio) sí va en el repositorio, en `src/sonidos/pistas/<juego>.json`, y se suma en `src/sonidos/pistas-lista.ts`. Esa lista trae solo las pistas que ya se escucharon dentro del juego (hoy, la carrera): el interruptor es uno solo para todos los juegos, así que una pista en la lista suena apenas se prende. Las demás están armadas en la misma carpeta y no se importan hasta que alguien las escuche. Los nombres no pueden pasar de 32 caracteres y, como los archivos se sirven inmutables, una pista que cambia lleva otra versión.
+
+Las pistas se prenden con la bandera de construcción `VITE_MUSICA=pistas` o con `?musica=pistas` en la dirección, y se apagan con `?musica=sintetizada`; sin nada de eso suena la música de osciladores. Si un archivo no llega o no decodifica, también. `subir.mjs` todavía sube solo los diez nombres fijos de las camas: para subir pistas hay que ampliarlo.
+
 ## El kit para creadores (`/kit/`)
 
 El mismo Worker entrega, **sin puerta por `Origin`**, el kit para quien quiera hacer videos de Tinkazo (TikTok, Reels, Shorts): los clips verticales de cada juego (cada uno con su versión `-bucle`), el logo animado de entrada y de salida, las placas, los guiones y los subtítulos. Es público a propósito: hecho para bajarlo.

@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "pinata",
+  "version": "v1",
+  "pulso": {
+    "bpm": 120,
+    "tiempos": 2,
+    "compas": 0.99980017
+  },
+  "ganancia": 0.4,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": true,
+  "secciones": {
+    "entrada": {
+      "archivo": "pinata-v1-entrada.mp3",
+      "inicio": 0,
+      "compases": 8
+    },
+    "cuerpo": {
+      "archivo": "pinata-v1-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 16,
+      "bucleDesde": 0
+    },
+    "subida": {
+      "archivo": "pinata-v1-subida.mp3",
+      "inicio": 0.25,
+      "compases": 8,
+      "bucleDesde": 4,
+      "tension": 0.75,
+      "cuantizar": 1,
+      "fundido": 0.2
+    },
+    "golpe": {
+      "archivo": "pinata-v1-golpe.mp3",
+      "inicio": 0.03,
+      "compases": 2,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "pinata-v1-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 1.5
+    }
+  }
+}

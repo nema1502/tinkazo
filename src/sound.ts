@@ -3,6 +3,7 @@ import { paceFactor, type Game } from "./state";
 import { ambiente, decidir, elegirJuego, ganador as ganadorDeArchivo, type Disparo, type Jugada } from "./sonidos/banco";
 import { curvaDeTecho } from "./sonidos/carrera";
 import { avisarJuego, festejoPropio, golpePropio, hayCandidatas } from "./sonidos/carrera-eleccion";
+import { pistaCallar, pistaDelJuego, pistaRemata, pistasConContexto } from "./sonidos/pistas-enganche";
 
 /* Sonido con WebAudio: osciladores, y archivos cuando el banco (`src/sonidos/banco.ts`) los tiene. */
 
@@ -42,6 +43,7 @@ function contexto(): { ctx: AudioContext; out: GainNode } | null {
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   const ctx = audioCtx ?? new Ctor();
+  if (!audioCtx) pistasConContexto(ctx);
   audioCtx = ctx;
   if (!master) master = cadenaDeEfectos(ctx);
   return { ctx, out: master };
@@ -367,6 +369,8 @@ export function note(degree: number, octaveShift = 0): number {
 }
 
 export function fanfare(): void {
+  // Con la pista de música de archivo, el golpe y el festejo son los de la pista: un solo final (`src/sonidos/pistas-enganche.ts`).
+  if (pistaRemata()) return;
   // Con archivo, el remate del ganador es uno solo (la tribuna, el golpe): el acorde de osciladores no suena encima.
   if (!muted) {
     const j = ganadorDeArchivo();
@@ -417,6 +421,8 @@ export function toggleSound(): void {
   } catch {
     /* que no se guarde no rompe nada */
   }
+  // La cola del festejo de una pista cuyo show ya terminó sigue sonando unos segundos: al apagar el sonido se calla.
+  if (muted) pistaCallar();
   // La voz del narrador es parte del sonido: un solo botón las apaga a las dos.
   soundLabel();
 }
@@ -430,6 +436,7 @@ export function sonidoDelJuego(game: Game, reinicia = true): void {
   avisarJuego(game);
   try {
     elegirJuego(game, audioCtx ?? contexto()?.ctx ?? null, reinicia);
+    pistaDelJuego(game, audioCtx);
     if (audioCtx) techoDeLaMezcla(audioCtx, hayCandidatas());
   } catch {
     /* sin audio: suenan los osciladores */
