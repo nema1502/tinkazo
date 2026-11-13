@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { crearChip } from "../../src/ui/cuenta-chip";
 import { BOTON_ENTRAR_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./entrar.mjs";
 
@@ -37,9 +37,26 @@ function armarPuerta() {
   return b;
 }
 
+/**
+ * jsdom no hace diseño: `getClientRects()` siempre vuelve vacío. Esto lo hace como un navegador para lo único que importa
+ * acá: un elemento escondido con `display:none`, él o cualquiera de sus padres, no tiene rectángulos, y uno que se ve tiene uno.
+ */
+function simularDiseno() {
+  return vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function () {
+    for (let n = this; n instanceof Element; n = n.parentElement) {
+      if (getComputedStyle(n).display === "none") return [];
+    }
+    return [{ x: 0, y: 0, width: 100, height: 48 }];
+  });
+}
+
 describe("el botón de entrar de los auditores", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
+    simularDiseno();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("con el botón del modo primero en la caja, encuentra el chip Entrar y no el del modo", () => {
@@ -76,6 +93,38 @@ describe("el botón de entrar de los auditores", () => {
     chip.addEventListener("click", () => tocados.push("chip"));
     expect(evaluar(TOCAR_ENTRAR_JS)).toBe(true);
     expect(tocados).toEqual(["cuadro"]);
+  });
+
+  it("con la puerta escondida (display:none) toma el chip de la cabecera y no el botón de la puerta", () => {
+    const { chip } = armarCaja({ estado: "fuera" });
+    const delCuadro = armarPuerta();
+    document.getElementById("gate").style.display = "none";
+    expect(evaluar(BOTON_ENTRAR_JS)).toBe(chip);
+    expect(evaluar(BOTON_ENTRAR_JS)).not.toBe(delCuadro);
+    const tocados = [];
+    delCuadro.addEventListener("click", () => tocados.push("cuadro"));
+    chip.addEventListener("click", () => tocados.push("chip"));
+    expect(evaluar(TOCAR_ENTRAR_JS)).toBe(true);
+    expect(tocados).toEqual(["chip"]);
+  });
+
+  it("con la puerta escondida y la cuenta ya adentro, no hay botón de entrar", () => {
+    armarCaja(dentro);
+    armarPuerta();
+    document.getElementById("gate").style.display = "none";
+    expect(evaluar(BOTON_ENTRAR_JS)).toBeNull();
+    expect(evaluar(HAY_BOTON_ENTRAR_JS)).toBe(false);
+    expect(evaluar(TOCAR_ENTRAR_JS)).toBe(false);
+  });
+
+  it("la puerta que se ve vuelve a tener el primer lugar cuando deja de estar escondida", () => {
+    const { chip } = armarCaja({ estado: "fuera" });
+    const delCuadro = armarPuerta();
+    const puerta = document.getElementById("gate");
+    puerta.style.display = "none";
+    expect(evaluar(BOTON_ENTRAR_JS)).toBe(chip);
+    puerta.style.display = "";
+    expect(evaluar(BOTON_ENTRAR_JS)).toBe(delCuadro);
   });
 
   it("mientras la cuenta conecta, retoma o ya está adentro, no hay botón de entrar y la espera sigue", () => {
