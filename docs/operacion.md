@@ -181,6 +181,95 @@ Las rutas nuevas:
 - **No dejar las tarjetas boca arriba ni sacarles foto.**
 - **No vaciar `VITE_ALTA` en Vercel antes de revertir los textos.** Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis, y la publicación de producción (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1` (`src/stellar/alta-build.ts`): con la variable vacía el build falla y queda la publicación anterior. Para quitar el acceso por cupón, primero se revierte el commit que puso esos textos y después se vacía la variable.
 
+## La venta de paquetes, día a día
+
+Con el pago prendido (`ALTAS_PAGO = "1"` y `CUENTA_COBROS` cargada), quien entra con Google o con su correo en el modo Oficial puede comprar un paquete de sorteos oficiales. El portero no mueve plata: crea la orden, lee en Horizon lo que llega a `CUENTA_COBROS` y da los sorteos cuando el pago alcanza. Devolver lo hace a mano quien tiene la llave de `CUENTA_COBROS`. Las órdenes, los pagos sueltos y las devoluciones se atienden con la clave de cupones (`scripts/cupones.mjs`). Pausar la venta, con la clave de operar.
+
+### Una orden
+
+Nace cuando la persona toca el paquete en el sitio (`POST /v1/alta/orden`). Hay una abierta por persona y por producto: pedirla otra vez devuelve la misma.
+
+| Campo | Qué es |
+|---|---|
+| `id` | 8 letras y números del alfabeto de los cupones, al azar (`ABCD2345`) |
+| `nota` | `tk:o:` y el id. Es lo que la persona pone como nota de texto del pago. Se lee como un cupón: sin espacios ni guiones, en mayúsculas, la O por 0 y la I o la L por 1 |
+| `memoId` | El mismo id como número, para un exchange que solo acepta notas numéricas. El sitio no la muestra: se da por correo a quien la pida |
+| `producto`, `usdc`, `sorteos`, `dias` | Lo que se vende y su precio, fijos desde que nace la orden (los de `PRECIOS` ese día) |
+| `destino` | `CUENTA_COBROS` |
+| `vence` | 72 horas después de nacer. Si ya llegó una parte, se renueva con la misma nota hasta 30 días. Un pago que llega tarde igual vale |
+
+La orden queda pagada cuando llega al menos el 95 % del monto (lo que `sueltos` llama `minimo`), en uno o en varios pagos con su nota, y en esa misma lectura da los sorteos: vencen a los `dias` de la orden, contados desde ese momento. No importa desde qué cuenta se paga.
+
+En el exporte (`GET /v1/patrocinio/exportar`), la tabla `ordenes` suma `usuario` (el identificador de Pollar), `creada`, `pagada` (cuándo), `metodo` (`usdc` si se reconoció sola, `devuelta` si se cerró para devolver, `reemplazada` si la cerró el aviso de una compra con QR o una anulación) y `ref`. Cada pago atado a una orden está en `pagos`, con la cuenta que lo mandó (`de`) y su transacción (`tx`). Los montos de esas tablas van en diezmillonésimas: 4 USDC es `40000000`.
+
+### Qué mirar cada día
+
+1. `node scripts/cupones.mjs sueltos`. Lee antes los pagos nuevos y lista los pagos sueltos sin resolver y las órdenes pagadas a medias. Si dice que Horizon no contestó, lo que muestra es lo que ya se sabía.
+2. `estado` (arriba): `pagosSueltos` (los que faltan resolver), `ventaPausada`, `creditos`, `piso` y `margen`. Un paquete pagado sube el piso 40 créditos por cada sorteo (`CREDITOS_POR_SORTEO`), y 30 más mientras la cuenta no se active (`CREDITOS_POR_ALTA`). Si `margen` no alcanza para un paquete, la orden nueva da `503 altas-pausadas` y el sitio dice que ese paquete no se vende ahora. Las órdenes que ya existen se siguen pagando.
+3. La cuenta de cobros en un explorador (por ejemplo stellar.expert): su saldo de USDC tiene que ser lo cobrado menos lo devuelto.
+
+### Los pagos sueltos
+
+Un pago que llegó a `CUENTA_COBROS` y no se pudo atar a una orden, o la parte que sobró de uno. Nunca se pierde y nunca sirve dos veces. `sueltos` muestra de cada uno la operación, la cantidad y la moneda, el motivo, la nota, la orden si la tiene, la fecha, la cuenta que lo mandó y la transacción.
+
+| Motivo | Qué pasó | Qué se hace |
+|---|---|---|
+| `sin-nota` | Llegó USDC sin nota | Si la persona escribe y se comprueba que es suyo (se le pide la cuenta desde la que pagó o el enlace de la transacción, y tiene que coincidir con lo que muestra `sueltos`), se asigna a su orden abierta. Si no, se devuelve |
+| `nota-desconocida` | La nota no es de ninguna orden: mal escrita, o de otra cosa | Lo mismo que `sin-nota` |
+| `repetido` | Llegó a una orden que ya estaba pagada, por ejemplo porque la app guardó la nota de la vez anterior | No da otro paquete. Si la persona lo pide, se asigna a otra orden abierta suya (la de un paquete para sumar, que ella pide en el sitio). Si no, se devuelve |
+| `cerrada` | Llegó a una orden que se cerró para devolver | Se devuelve, o se asigna a la orden nueva de esa persona |
+| `sobrante` | Lo que pasó del monto de una orden | Solo se devuelve |
+| `otro-activo` | Llegó XLM, un USDC que no es el de Circle u otra moneda | Solo se devuelve, en la misma moneda |
+
+Asignar: `node scripts/cupones.mjs asignar --operacion <operación> --orden <id>`. Ata el pago a una orden abierta. Si con eso llega al 95 %, la orden queda pagada y da sus sorteos, y lo que sobre vuelve a los sueltos como `sobrante`. A una orden pagada o cerrada no se asigna nada: contesta `409 orden-pagada` u `orden-cerrada` y el suelto queda como estaba.
+
+### Cómo se devuelve
+
+Siempre en este orden, para que nada se devuelva dos veces ni una orden se complete con plata ya devuelta:
+
+1. **Qué se devuelve.** Un pago suelto: la operación, la cantidad, la moneda y la cuenta `de`, de `sueltos`. Un pago a medias que la persona no va a completar: primero se cierra la orden con `node scripts/cupones.mjs cerrar --orden <id> --ref devolucion-0001`, que lee antes los pagos nuevos y dice cuánto devolver y a qué cuenta, pago por pago. Si contesta `409 orden-pagada`, se completó en el medio y no hay nada que devolver. Con `502 red`, Horizon no contestó y no se cerró: se prueba más tarde. Lo que llegue después con esa nota queda en sueltos como `cerrada`.
+2. **A dónde.** A la cuenta `de`, salvo que sea la de un exchange (una cuenta que recibe de mucha gente y pide una nota de depósito). En ese caso se le pide por correo a la persona su dirección y su nota de depósito antes de mandar: sin esa nota el exchange no sabe de quién es y la devolución se pierde.
+3. **Mandar.** Desde `CUENTA_COBROS`, la misma cantidad y la misma moneda, con la app donde está su llave y, si hace falta, la nota del exchange. La comisión sale de los XLM de esa cuenta: que no baje de 2 XLM.
+4. **Marcar.** Un suelto: `node scripts/cupones.mjs devuelto --operacion <operación> --ref devolucion-0001`. Una orden cerrada no se marca: cerrarla ya la deja devuelta.
+5. **Avisar.** Se le contesta a la persona con el enlace de la transacción.
+
+La referencia (`--ref`) es lo que después explica el movimiento en el exporte: letras, números, puntos, guiones o guiones bajos, hasta 64, empezando por una letra o un número, y una distinta por devolución. Lo comprado y concedido no se devuelve, salvo que algo falle de nuestro lado (así lo dicen los términos).
+
+### Pausar la venta
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/ventas/pausar      # {"ventaPausada":true}
+curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/ventas/reanudar    # {"ventaPausada":false}
+```
+
+Frena las órdenes nuevas (`503 venta-pausada`), sin desplegar. Las órdenes abiertas se siguen pagando y los pagos se siguen reconociendo. Se pausa si algo no cierra en los números, si `margen` se acerca a cero y, la primera semana, al llegar a 30 paquetes vendidos, para mirar los números reales (firmas por sorteo y créditos gastados contra lo cobrado) antes de reanudar.
+
+### La prueba con plata de verdad
+
+El código del pago no se puede probar en la red de prueba: Horizon, el USDC de Circle y las rutas del pago son solo de la red principal. Antes de abrir la venta al público, alguien del proyecto compra el primer paquete con plata de verdad, con los dos despliegues ya hechos: el primero con `CUENTA_COBROS` cargada y `ALTAS_PAGO = "0"`, que tiene que dejar `sueltos` vacío y `pagosSueltos: 0` (si no, la cuenta tenía historia), y el segundo con `ALTAS_PAGO = "1"`.
+
+Hace falta una vista previa del sitio con `VITE_ALTA=1`, `VITE_ALTA_PAGO=1` y `VITE_PATROCINIO_URL_MAINNET=https://pm.tinkazo.app`, un correo que nunca entró al modo Oficial (una cuenta no se activa dos veces) y unos 8 USDC en una app que deje escribir una nota de texto. En los pasos, M es el precio del primer paquete en `PRECIOS` y el mínimo es su 95 %: con 4 USDC, 3,80.
+
+1. **Lo de antes.** Anotar de `estado` `creditos`, `piso`, `margen`, `pagosSueltos` (0) y `ventaPausada` (`false`), y el saldo de USDC de `CUENTA_COBROS` en un explorador.
+2. **Los precios.** `curl -fsS $P/v1/alta/precios` dice `"pago": true`, con `alta` (monto, sorteos y días de `PRECIOS`) y los paquetes. `precios.html` de la vista previa muestra la misma lista.
+3. **La orden.** Entrar con el correo nuevo en el modo Oficial. En Dejá tu cuenta lista, el botón del primer paquete dice el precio de `/precios`. Al tocarlo, el panel muestra la cuenta, el monto y la nota. Anotar el id (la nota sin `tk:o:`). La cuenta tiene que ser `CUENTA_COBROS`, el monto M, y la nota tiene que vencer a las 72 horas (en Más detalles).
+4. **La misma orden.** Cerrar la pestaña y volver a entrar: sale la misma orden, con la misma nota.
+5. **Un pago a medias.** Mandar 1 USDC con la nota escrita en minúsculas. Ya pagué dice que llegó 1 de M, y `sueltos` muestra la orden entre las pagadas a medias, con su mínimo.
+6. **El resto.** Mandar lo que falta hasta el mínimo (con 4 USDC, 2,80) con la misma nota. La pantalla pasa sola a Recibimos tu pago, y Activar mi cuenta sigue como con un cupón. `/v1/patrocinio/cupo?cuenta=G…` dice `oficial.acceso: true` con los sorteos del paquete, y en `estado` el `piso` subió.
+7. **Sin nota.** Mandar 0,10 USDC sin nota. `sueltos` lo muestra con motivo `sin-nota`. Devolverlo y marcarlo con `devuelto`. `pagosSueltos` vuelve a 0.
+8. **Repetido.** Mandar 1 USDC con la nota de la orden ya pagada. `sueltos` lo muestra como `repetido`, con la orden, y el cupo no cambia. Devolverlo y marcarlo.
+9. **Cerrar.** En el sitio, Sumar sorteos y el paquete para sumar: sale otra orden, con otra nota. Mandar 1 USDC con esa nota y cerrarla con `cerrar`, que dice que hay que devolver 1 USDC a la cuenta que pagó. Devolverlo. `POST /v1/alta/pago` de esa orden contesta `410 orden-cerrada`.
+10. **Un sorteo.** Sellar una lista de 3 nombres y sortear con esa cuenta: el cupo baja uno.
+11. **El registro.** Desde `workers/patrocinio`, `npx wrangler@4.160.0 tail --config wrangler.toml --env mainnet` durante la prueba: `alta-orden` (dos), `alta-pago` con `producto: "alta"`, `pago-suelto` con `sin-nota` y con `repetido`, `admin-suelto` (dos) y `admin-cerrada`. Ningún `error-config` ni `error-horizon`.
+12. **La plata.** En el explorador, a `CUENTA_COBROS` entraron 5,90 USDC (con 4 de precio) y salieron 2,10. Quedan 3,80, lo cobrado por el paquete.
+13. **El exporte.** `GET /v1/patrocinio/exportar`, guardado fuera del repositorio: la orden pagada con `metodo` `usdc`, la cerrada con `devuelta` y los dos sueltos con `estado` `devuelto`.
+
+Se da por buena si cada paso dio lo dicho y el saldo de la cuenta de cobros coincide con lo cobrado. Si algo falla, se pausa la venta y se mira. Para apagarlo del todo, `ALTAS_PAGO = "0"` y desplegar: las órdenes que ya existen se siguen leyendo y pagando.
+
+**Pagar con el saldo**, solo con `VITE_PAGO_CON_SALDO=1` en la vista previa. Con una cuenta de Google ya activada que tenga dólares digitales, Sumar sorteos dice cuánto hay en la cuenta y ofrece Pagar con mi saldo, y la confirmación dice el precio de la orden y a quién se paga. Después de pagar, en la consola del navegador no tiene que aparecer `[tinkazo] pago con saldo no aprobado` ni `no enviado`. En el explorador, la transacción va envuelta y la paga la cuenta del proveedor de la billetera, con una sola operación de pago desde la cuenta de la persona a `CUENTA_COBROS`, por el monto y con la nota de la orden. La pantalla pasa sola a Recibimos tu pago. Anotar cuántos créditos bajaron por ese pago. Si algo de esto falla, se vacía `VITE_PAGO_CON_SALDO` y se sube el sitio: el pago desde otra app sigue igual.
+
+**La venta en piloto, en el sitio.** Las tres banderas de la venta (`VITE_ALTA_PAGO`, `VITE_PAGO_CON_SALDO` y `VITE_COMPRA_QR`) son del build y valen para todos los que abren ese build. Por eso, aunque estén prendidas, la venta está en piloto: se ve solo en un navegador que abrió el sitio con `?piloto=compra` en la dirección (queda guardado en ese navegador por seis horas y después vence solo, `?piloto=no` lo saca antes, y en los dos casos el parámetro sale de la dirección para que no pase a quien la copie). Un aparato que se usó para probar la compra no se usa para atender a otros mientras tenga la marca: antes, `?piloto=no`. Sin esa marca el sitio es el de las banderas apagadas: ni un botón, ni un texto, ni un pedido nuevo al portero, y `precios.html` y `terminos.html` quedan como hoy. Con la marca, Sumar sorteos aparece junto a la línea del cupo con cualquier cantidad de sorteos oficiales, no solo con 2 o menos. Quién compra de verdad lo sigue decidiendo el portero con su lista del piloto (`COMPRAS_QR_PILOTO` o `cupones.mjs piloto`): la marca del navegador no da permiso de nada. `VITE_VENTA_ABIERTA=1` saca el piloto y deja la venta a la vista para todos. No va antes de abrir la venta en el portero, y con ella la publicación de producción vuelve a pedir que las páginas digan la compra (`src/alta-textos-con-cobro.ts`). Todo esto vive en `src/stellar/venta-piloto.ts`, la única puerta por la que se leen las tres banderas.
+
 ## El vigilante
 
 El vigilante (`workers/vigilante`, en `vigilante.tinkazo.app`) es un Worker propio y aparte del portero: un error ahí no lo tumba. Cada diez minutos le pide `estado` al portero de mainnet y, si hay algo, avisa por correo, con las cifras (los créditos, el piso, el margen, el saldo de la cuenta que paga) y qué hacer. Usa la misma revisión que el flujo de GitHub (`scripts/lib/revision-portero.mjs`), que queda de respaldo. Todo el detalle de cómo funciona está en [workers/vigilante/README.md](../workers/vigilante/README.md).

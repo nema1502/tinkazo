@@ -368,6 +368,32 @@ Sin el acceso por cupón en el build (`VITE_ALTA` apagado) y sin el plan B1 (`VI
 
 **Cómo se mira.** Con la muestra local (no se versiona) se ve cada estado sin una cuenta de verdad, en las pantallas de arriba y en los dos temas. Las pruebas de `src/ui/cuenta-lista*.test.ts`, `freeze-cuenta-lista.test.ts` y `draw-cuenta-lista.test.ts` fijan lo demás sin red.
 
+## La llama que acompaña (12 de noviembre de 2026)
+
+Los recorridos largos (la ventana Tu compra con la verificación adentro, Cargar con bolivianos y, si se quiere, Dejá tu cuenta lista) llevan a la llama de la marca por un camino: arriba **Paso 2 de 4**, debajo el camino con una parada por tramo y una bandera al final, con lo alcanzado en magenta, y debajo un globo con la línea de la pantalla. Es `src/ui/llama-guia.ts`, que la ventana baja con ella, así la portada no crece.
+
+**No suma texto.** El globo es la línea que la pantalla ya tenía, hasta 14 palabras: se mueve al globo, no se agrega otra. El rótulo de etapa se va, porque lo dice el camino. La llama no habla con voz propia ni hace chistes, y festeja solo al terminar. No tapa nada: va arriba del cuerpo de la ventana (debajo del título, si el cuerpo empieza con uno) y la principal sigue en el pie fijo.
+
+**Una llamada por pantalla.** `acompanar(cuerpo, { ...enPantalla("compra", "CQ-ID"), linea: t("compraIdLinea") })`. La primera monta la llama; las siguientes la llevan al lugar nuevo (camina al trote en seis pasitos) y cambian la pose y el globo sin rehacerla, también si la ventana rehízo su cuerpo. Con `null` se va. Una falla (`quedarse`) la deja donde estaba. `enPantalla` sabe el tramo, el avance y la pose de cada pantalla de la compra y de la carga, y el número de tramo según el recorrido: la pantalla del QR es el tramo 3 de 4 en la primera compra y el 1 de 2 en las siguientes (la tabla, en `src/ui/llama-guia-estado.ts`).
+
+**Las cinco poses.** Saluda (la pata levantada, al empezar), anima (al trote, cuando hay que tocar algo), espera (echada, con tres puntos que laten, mientras trabaja algo de afuera), festeja (en el aire, con papel picado de los cinco colores, una sola vez) y se preocupa (se frena y mira para atrás, con la cola caída, cuando algo no salió). Con la cabeza agachada hacia adelante se leía como que pastaba. Son los rectángulos del logo con giros, en SVG en línea con sombra dura, borde y relleno, y los colores del tema (`src/ui/llama-poses.ts`).
+
+**Medidas.** La llama en una caja de 76 px en el celular (68 px por debajo de 360 px de ancho, así las cuatro paradas quedan a 44 px o más) y de 84 px desde 760 px de ancho. A 64 px se veía chica en la ventana. La primera parada deja lugar a media llama, así la cola no se sale del cuerpo de la ventana. Con 560 px de alto o menos, la caja baja a 40 px y el globo pasa a ser texto sin caja. Con 360 px o menos se ve solo el camino y la línea. Con menos movimiento no camina, no salta y no tira papel picado.
+
+**Para el lector de pantalla.** La llama y el camino son decorativos. El avance es una barra de progreso (Paso 2 de 4: Tu identidad) y el globo es un párrafo que se lee en su orden. No anuncia nada sola: la ventana sigue anunciando como siempre.
+
+**Cómo se mira.** Con `pnpm dev`, en `/muestras/llama.html`: todos los estados (`?vista=estados`), las poses (`?vista=poses`) y la ventana de verdad, que recorre la compra con Seguir (`?vista=ventana`), con `lang` y `theme`. El build del sitio no la incluye.
+
+## La ventana Tu compra (12 de noviembre de 2026)
+
+Comprar un paquete de sorteos pagando el QR del banco en bolivianos es un recorrido largo (la verificación de identidad la primera vez, el pago, unas aprobaciones y el toque final), y se hace en una sola ventana, Tu compra (`src/ui/compra-qr.ts`). Qué pantalla toca en cada momento lo decide una máquina sin DOM (`src/ui/compra-qr-estado.ts`). La ventana la pinta y corre cada toque por un motor. Está detrás de `VITE_COMPRA_QR` y hoy nadie la abre desde el sitio. Con la bandera prendida, la venta está en piloto: la ve solo un navegador que abrió el sitio con `?piloto=compra` en las últimas seis horas, y en él Sumar sorteos aparece con cualquier cantidad de sorteos (`src/stellar/venta-piloto.ts`). `VITE_VENTA_ABIERTA=1` la abre para todos.
+
+**Cada pantalla.** Arriba el título (el del precio es el monto, grande: Pagás Bs 102). Debajo, la llama que acompaña con el paso del recorrido (Paso 2 de 4) y, en su globo, la línea de la pantalla, que no se repite en otro lado. Después lo que hay que ver: el QR, las etapas del dinero en camino, los datos como rótulo y valor (el monto del QR grande, y Tu dinero en su propia caja en toda pantalla desde que hubo un QR). Lo demás va plegado en Más detalles. En el pie, siempre a la vista, una sola acción principal y como mucho un enlace de texto debajo (No estoy en Bolivia, Pagar desde otra app, Todavía no pagué). Al terminar, la llama festeja una vez.
+
+**Lo que cuida la ventana.** Nada se abre solo ni sigue solo: cada acción sale de un toque, y lo único que corre sin un toque es volver a leer, en las pantallas que esperan algo de afuera. Un toque cuenta si lo hizo la persona y si la principal no cambió hace menos de medio segundo, así un doble toque no aprueba dos pasos. El QR es siempre una imagen sobre una caja blanca, también en el tema oscuro. Guardar el QR baja la imagen, y en el celular Ya pagué aparece recién después. Todavía no pagué vuelve al mismo QR con el aviso de no pagarlo dos veces. La verificación se abre en otra pestaña dentro del toque y, si el navegador no la deja, la principal pasa a ser el enlace. Al terminar, la otra pestaña vuelve a `public/verificado.html`, una página suelta que no carga nada del sitio y dice Listo.
+
+**La demo.** Con `VITE_RAMPA_DEMO=1`, en `localhost` y con `?compra-demo` en la dirección, el sitio muestra una lista de compras de mentira (`src/ui/compra-demo.ts`): la primera compra de punta a punta, Ya pagué por error, sin QR hoy, la verificación en revisión, el QR vencido con la compra abierta, frenada de nuestro lado, sin ver el pago, pagar con el saldo y pagar desde otra app. Usa la ventana de verdad con órdenes inventadas, sin red, y no guarda nada en el navegador. `?aparato=celular` muestra lo del celular en una compu.
+
 ## La lista de comprobación
 
 Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperando, ronda lista, resultado, siguiente premio) y en cada pantalla:
