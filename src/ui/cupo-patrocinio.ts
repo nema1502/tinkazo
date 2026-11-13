@@ -128,8 +128,9 @@ export function iniciarCupo(): void {
     }
     estabaSellada = sellada;
     // Sumar sorteos se ofrece solo con su botón, y el botón solo si el servidor vende un paquete ahora: con pocos o ninguno
-    // (con la marca del piloto de la venta, con cualquier cantidad).
-    const sumar = oficial && !sellada && !caja && hayPaquete && ofrecerSumar(ultimo);
+    // (con la marca del piloto de la venta, con cualquier cantidad). La compra se pregunta de nuevo al pintar: si la marca
+    // del piloto vence o se saca con la página abierta, lo leído de la oferta no alcanza y la línea es la de siempre.
+    const sumar = oficial && !sellada && !caja && hayPaquete && altaPagoActivo() && ofrecerSumar(ultimo);
     const texto = !pollar || sellada || caja ? null : oficial ? lineaDelCupoOficial(ultimo, getLang(), t, { pago: sumar }) : textoDelCupo(ultimo, getLang(), t);
     if (texto === null) {
       linea.style.display = "none";
