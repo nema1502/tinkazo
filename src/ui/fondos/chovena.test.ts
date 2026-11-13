@@ -7,7 +7,7 @@ import { fondoChovena } from "./chovena";
  * mentira anota cada llamada y cada propiedad que se cambia (como en
  * `foto-fondos.test.ts`), y con eso se comprueba el dibujo de la marca, que no
  * se salga de la foto, que sea siempre el mismo y que la rueda quepa en la
- * ventana sin paneles (y = 250–540).
+ * ventana sin paneles (y = 250 a 540).
  */
 
 interface Llamada {
@@ -182,12 +182,12 @@ describe("fondoChovena", () => {
     expect(log.filter((l) => l.que === "stroke").length).toBeGreaterThan(20);
   });
 
-  it("la rueda de bailarines, entera, en la ventana sin paneles (y = 250–540)", () => {
+  it("la rueda de bailarines, entera, en la ventana sin paneles (y = 250 a 540)", () => {
     // El lienzo blanco de los tipoyes y las camisas solo lo llevan los bailarines.
     const ropa = formas(pintar()).filter((f) => f.como === "fill" && f.color === "#fbf8f1");
     expect(ropa.length).toBeGreaterThanOrEqual(8);
     for (const f of ropa) {
-      expect(f.y0 >= 250 && f.y1 <= 540, `ropa y ${f.y0.toFixed(0)}–${f.y1.toFixed(0)}`).toBe(true);
+      expect(f.y0 >= 250 && f.y1 <= 540, `ropa y ${f.y0.toFixed(0)} a ${f.y1.toFixed(0)}`).toBe(true);
     }
     // La rueda ocupa buena parte del ancho.
     expect(Math.max(...ropa.map((f) => f.x1)) - Math.min(...ropa.map((f) => f.x0))).toBeGreaterThan(500);

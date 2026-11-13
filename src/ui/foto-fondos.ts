@@ -198,7 +198,7 @@ function bandera(p: Pincel, mastil: number, arriba: number): void {
 /**
  * Carrera de llamas: la pista en el altiplano de noche, cuatro llamas al galope
  * y la meta a la derecha. La carrera entera (llamas, luna, bandera) va en la
- * franja libre de la foto del juego, y = 236–540, entre el panel de arriba y el
+ * franja libre de la foto del juego, y = 236 a 540, entre el panel de arriba y el
  * del nombre; abajo, detrás de los paneles y del QR, sigue la pista.
  */
 function fondoCarrera(p: Pincel): void {
@@ -239,7 +239,7 @@ function patio(p: Pincel): void {
 /**
  * Un punto de la tapa del cajón: `a` de izquierda a derecha y `b` de atrás hacia
  * adelante, de 0 a 1. El fondo de la tapa, con la rana, queda en la franja libre
- * de la foto del juego (y = 236–540); el resto del cajón baja detrás de los paneles.
+ * de la foto del juego (y = 236 a 540); el resto del cajón baja detrás de los paneles.
  */
 const TAPA = { atras: 342, adelante: 780, izq: 250, der: 830, abre: 130 } as const;
 function enTapa(a: number, b: number): Punto {

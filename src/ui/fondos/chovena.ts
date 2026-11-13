@@ -8,7 +8,7 @@
  * pífano, la caja y el bombo.
  *
  * La rueda entera va en la ventana sin paneles de la foto del juego
- * (y = 250–540); lo demás llena los bordes que se asoman entre los paneles.
+ * (y = 250 a 540); lo demás llena los bordes que se asoman entre los paneles.
  * Figuras planas como las del juego, sin caras de verdad: dos puntos de ojos.
  */
 
@@ -302,7 +302,7 @@ function conjunto(p: Pincel): void {
 /**
  * Chovena: la rueda tomada de la mano en la plaza de tierra colorada, de noche,
  * entre las casas de adobe y el toborochi, con faroles arriba y el conjunto
- * adelante. La rueda entera va en la ventana sin paneles (y = 250–540).
+ * adelante. La rueda entera va en la ventana sin paneles (y = 250 a 540).
  */
 export function fondoChovena(p: Pincel): void {
   estrellas(p, 0xc40e, 34, 20, 220);

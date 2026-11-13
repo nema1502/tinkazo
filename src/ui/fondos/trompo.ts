@@ -6,7 +6,7 @@
  * choque revienta en una estrella amarilla con chispas.
  *
  * Los dos trompos y el choque van en la ventana libre de la foto del juego
- * (y = 250–540); abajo, detrás de los paneles y del QR, sigue el ruedo, con la
+ * (y = 250 a 540); abajo, detrás de los paneles y del QR, sigue el ruedo, con la
  * piola tirada y un trompo caído que asoman a la derecha del nombre.
  */
 
@@ -202,7 +202,7 @@ function piola(p: Pincel): void {
 /**
  * Trompo: el patio de noche con el ruedo de tiza; en el medio baila el trompo
  * grande, con los arcos del giro, y el otro lo choca desde la izquierda. Los
- * dos y el choque caben en y = 250–540.
+ * dos y el choque caben en y = 250 a 540.
  */
 export function fondoTrompo(p: Pincel): void {
   estrellas(p, 0x7a0b0, 36, 24, 180);

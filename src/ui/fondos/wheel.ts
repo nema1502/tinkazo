@@ -5,7 +5,7 @@
  * arriba), parada en su caballete sobre un tablado, entre dos carpas a rayas,
  * de noche, con banderines.
  *
- * La rueda entera y su flecha van en la ventana libre de la foto, y = 250–540.
+ * La rueda entera y su flecha van en la ventana libre de la foto, y = 250 a 540.
  * El caballete y el cajón de la base bajan detrás del panel del nombre y
  * asoman a su derecha junto con la carpa de ese lado; abajo sigue el tablado.
  */
@@ -141,7 +141,7 @@ function flecha(p: Pincel): void {
 /**
  * Ruleta: la rueda de la fortuna de feria en su caballete, entre dos carpas a
  * rayas, con banderines arriba y confeti. La rueda y su flecha van enteras en
- * la ventana libre de la foto (y = 250–540).
+ * la ventana libre de la foto (y = 250 a 540).
  */
 export function fondoRuleta(p: Pincel): void {
   estrellas(p, 0x3e7a1, 40, 30, 300);

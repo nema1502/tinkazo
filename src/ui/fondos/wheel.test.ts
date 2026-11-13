@@ -5,7 +5,7 @@ import { fondoRuleta } from "./wheel";
  * El fondo de la ruleta, en un lienzo de mentira que anota cada llamada y cada
  * propiedad que se cambia (como `foto-fondos.test.ts`): plano como la marca,
  * dentro de la foto, siempre el mismo, y la rueda entera con su flecha en la
- * ventana libre de la foto del juego (y = 250–540, entre el panel de arriba y
+ * ventana libre de la foto del juego (y = 250 a 540, entre el panel de arriba y
  * el del nombre).
  */
 
@@ -177,14 +177,14 @@ describe("fondoRuleta", () => {
     }
   });
 
-  it("la rueda entera, con el aro, la flecha y los foquitos, cabe en la ventana y = 250–540", () => {
+  it("la rueda entera, con el aro, la flecha y los foquitos, cabe en la ventana y = 250 a 540", () => {
     const fs = formas(pintar());
     // El aro: el círculo más grande que se rellena.
     const circulos = fs.filter((f) => f.como === "fill" && f.color !== "#0b0814" && f.elipse && f.elipse[2] === f.elipse[3]);
     const aro = circulos.reduce((a, b) => (b.elipse![2]! > a.elipse![2]! ? b : a));
     const [cx, cy, r] = aro.elipse as [number, number, number];
     expect(r).toBeGreaterThanOrEqual(110);
-    expect(aro.y0 >= 250 && aro.y1 <= 540, `aro y ${aro.y0.toFixed(0)}–${aro.y1.toFixed(0)}`).toBe(true);
+    expect(aro.y0 >= 250 && aro.y1 <= 540, `aro y ${aro.y0.toFixed(0)} a ${aro.y1.toFixed(0)}`).toBe(true);
     // Los gajos: polígonos de los cinco colores dentro del aro, todos en la ventana.
     const gajos = fs.filter((f) => f.como === "fill" && FRANJA.includes(f.color) && !f.elipse && f.x0 >= cx - r && f.x1 <= cx + r && f.y0 >= cy - r && f.y1 <= cy + r && Math.min(f.x1 - f.x0, f.y1 - f.y0) > r * 0.2);
     expect(gajos.length).toBeGreaterThanOrEqual(10);

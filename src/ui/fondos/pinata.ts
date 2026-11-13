@@ -5,7 +5,7 @@
  * salen volando por la rajadura y se apilan en el piso.
  *
  * La piñata entera (la olla, los picos y sus flecos), el golpe y los caramelos
- * en el aire van en la ventana libre de la foto, y = 250–540. Detrás del panel
+ * en el aire van en la ventana libre de la foto, y = 250 a 540. Detrás del panel
  * del nombre quedan el chico con los ojos vendados y el palo; a la derecha de
  * ese panel asoman los caramelos que caen y el montón del piso.
  */

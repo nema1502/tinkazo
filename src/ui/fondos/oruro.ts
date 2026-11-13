@@ -9,7 +9,7 @@
  * calle de adoquines con serpentinas y confeti.
  *
  * La máscara entera va en la ventana sin paneles de la foto del juego
- * (y = 250–540); lo demás llena los bordes que se asoman entre los paneles.
+ * (y = 250 a 540); lo demás llena los bordes que se asoman entre los paneles.
  */
 
 import {

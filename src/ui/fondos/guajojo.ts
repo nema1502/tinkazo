@@ -5,7 +5,7 @@
  * de un tronco quebrado. Hojas grandes de selva a los costados, una palmera,
  * luciérnagas, el sendero con sus farolitos y flores de la franja.
  *
- * El guajojó y la luna van en la ventana libre de la foto (y = 250–540); el
+ * El guajojó y la luna van en la ventana libre de la foto (y = 250 a 540); el
  * tronco, el sendero y los farolitos bajan detrás de los paneles y asoman a la
  * derecha del nombre y abajo.
  */
@@ -244,7 +244,7 @@ function pasto(p: Pincel, semilla: number, n: number, x0: number, y0: number, x1
 
 /**
  * Guajojó: la luna llena detrás del guajojó, parado en la punta de un tronco
- * quebrado, todo en la ventana libre de la foto (y = 250–540). La selva lo
+ * quebrado, todo en la ventana libre de la foto (y = 250 a 540). La selva lo
  * enmarca y abajo siguen el tronco, las matas floridas y los farolitos.
  */
 export function fondoGuajojo(p: Pincel): void {

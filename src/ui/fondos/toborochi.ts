@@ -7,7 +7,7 @@
  * queda alfombrado de rosa.
  *
  * El árbol entero y el colibrí van en la ventana libre de la foto
- * (y = 250–540); el campo con flores caídas y flores del monte sigue detrás de
+ * (y = 250 a 540); el campo con flores caídas y flores del monte sigue detrás de
  * los paneles y asoma a la derecha del nombre y abajo.
  */
 
@@ -156,7 +156,7 @@ function colibri(p: Pincel, x: number, y: number): void {
 
 /**
  * Toborochi: el árbol florido en medio de una noche tibia, con el colibrí, todo
- * en la ventana libre de la foto (y = 250–540); abajo, el campo alfombrado de
+ * en la ventana libre de la foto (y = 250 a 540); abajo, el campo alfombrado de
  * flores caídas, que asoma al lado del nombre y entre los paneles.
  */
 export function fondoToborochi(p: Pincel): void {

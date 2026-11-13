@@ -5,7 +5,7 @@ import { fondoPinata } from "./pinata";
  * El fondo de la piñata, en un lienzo de mentira que anota cada llamada y cada
  * propiedad que se cambia (como `foto-fondos.test.ts`): plano como la marca,
  * dentro de la foto, siempre el mismo, y la piñata entera en la ventana libre
- * de la foto del juego (y = 250–540, entre el panel de arriba y el del nombre).
+ * de la foto del juego (y = 250 a 540, entre el panel de arriba y el del nombre).
  */
 
 interface Llamada {
@@ -176,7 +176,7 @@ describe("fondoPinata", () => {
     }
   });
 
-  it("la piñata de estrella entera (la olla, los siete picos y sus flecos) cabe en la ventana y = 250–540", () => {
+  it("la piñata de estrella entera (la olla, los siete picos y sus flecos) cabe en la ventana y = 250 a 540", () => {
     const fs = formas(pintar());
     // La olla: el único círculo naranja grande.
     const ollas = fs.filter((f) => f.como === "fill" && f.color === "#ff8b3d" && f.elipse && f.elipse[2]! >= 50 && f.elipse[2] === f.elipse[3]);
@@ -187,7 +187,7 @@ describe("fondoPinata", () => {
     expect(pinata.length).toBeGreaterThan(14);
     const y0 = Math.min(...pinata.map((f) => f.y0)), y1 = Math.max(...pinata.map((f) => f.y1));
     expect(y1 - y0, "la estrella mide de pico a pico").toBeGreaterThan(3.4 * r);
-    expect(y0 >= 250 && y1 <= 540, `piñata y ${y0.toFixed(0)}–${y1.toFixed(0)}`).toBe(true);
+    expect(y0 >= 250 && y1 <= 540, `piñata y ${y0.toFixed(0)} a ${y1.toFixed(0)}`).toBe(true);
     // Los siete picos: triángulos de colores alrededor de la olla.
     const picos = fs.filter((f) => f.como === "fill" && FRANJA.includes(f.color) && !f.elipse && Math.hypot((f.x0 + f.x1) / 2 - cx, (f.y0 + f.y1) / 2 - cy) > r && Math.hypot((f.x0 + f.x1) / 2 - cx, (f.y0 + f.y1) / 2 - cy) < 1.5 * r);
     expect(picos.length).toBeGreaterThanOrEqual(7);

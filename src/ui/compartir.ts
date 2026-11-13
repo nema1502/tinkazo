@@ -7,6 +7,7 @@ import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoActiva } from "./foto-juego-bandera";
 import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
@@ -28,10 +29,11 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
  *
  * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
- * tiene ilustración (`foto-fondos.ts`), van dos fotos lado a lado: la del
- * juego, elegida, y la de siempre. Tocar una la elige, y se comparte, se
- * descarga o se copia solo esa. Mis sorteos, la página de verificación y los
- * eventos no saben el juego: la foto de siempre, sola.
+ * tiene ilustración (`foto-fondos.ts`) y la bandera `VITE_FOTO_JUEGO` está
+ * prendida (`foto-juego-bandera.ts`, apagada por defecto), van dos fotos lado a
+ * lado: la del juego, elegida, y la de siempre. Tocar una la elige, y se
+ * comparte, se descarga o se copia solo esa. Mis sorteos, la página de
+ * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
  * historial) y la página de verificación (con lo que ella misma rehizo). Por
@@ -549,12 +551,6 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       opciones.push(op);
       fotos.appendChild(op);
     });
-    if (elegir) {
-      const guia = document.createElement("p");
-      guia.className = "note cmp-elige";
-      guia.textContent = cad(lang, "cmpElegirFoto");
-      fotos.appendChild(guia);
-    }
     if (!archivos.length) fotos.innerHTML = `<p class="note">${esc(cad(lang, "cmpSinFoto"))}</p>`;
     if (listo.nota) {
       nota.textContent = listo.nota;
@@ -651,8 +647,8 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
           fotos: [foto],
-          // La misma foto sobre el fondo del juego que se jugó: se ofrece si ese juego tiene ilustración.
-          ...(d.juego ? { juego: { ...foto, fondo: d.juego } } : {}),
+          // La misma foto sobre el fondo del juego que se jugó: se ofrece con la bandera prendida y si ese juego tiene ilustración.
+          ...(d.juego && fotoDelJuegoActiva() ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };

@@ -7,7 +7,7 @@ import { fondoOruro } from "./oruro";
  * mentira anota cada llamada y cada propiedad que se cambia (como en
  * `foto-fondos.test.ts`), y con eso se comprueba el dibujo de la marca, que no
  * se salga de la foto, que sea siempre el mismo y que la máscara de la
- * diablada quepa en la ventana sin paneles (y = 250–540).
+ * diablada quepa en la ventana sin paneles (y = 250 a 540).
  */
 
 interface Llamada {
@@ -182,7 +182,7 @@ describe("fondoOruro", () => {
     expect(log.filter((l) => l.que === "stroke").length).toBeGreaterThan(20);
   });
 
-  it("la máscara de la diablada, entera, en la ventana sin paneles (y = 250–540)", () => {
+  it("la máscara de la diablada, entera, en la ventana sin paneles (y = 250 a 540)", () => {
     const fs = formas(pintar());
     // El rojo de la cara y el oro de los cuernos solo los lleva la máscara.
     const cara = fs.filter((f) => f.como === "fill" && f.color === "#c62a1f");
@@ -190,7 +190,7 @@ describe("fondoOruro", () => {
     expect(cara.length).toBeGreaterThanOrEqual(1);
     expect(cuernos.length).toBeGreaterThanOrEqual(2);
     for (const f of [...cara, ...cuernos]) {
-      expect(f.y0 >= 250 && f.y1 <= 540, `máscara y ${f.y0.toFixed(0)}–${f.y1.toFixed(0)}`).toBe(true);
+      expect(f.y0 >= 250 && f.y1 <= 540, `máscara y ${f.y0.toFixed(0)} a ${f.y1.toFixed(0)}`).toBe(true);
     }
     // Grande: la cara mide por lo menos 200 de ancho y los cuernos la abren más.
     expect(Math.max(...cara.map((f) => f.x1 - f.x0))).toBeGreaterThan(200);

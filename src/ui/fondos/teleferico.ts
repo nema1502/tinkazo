@@ -5,7 +5,7 @@
  * cable con sus cabinas de colores; la del medio, la ganadora, va prendida.
  *
  * Las cabinas y los cables van en la ventana libre de la foto del juego
- * (y = 250–540); abajo, detrás de los paneles y del QR, siguen las casitas y la
+ * (y = 250 a 540); abajo, detrás de los paneles y del QR, siguen las casitas y la
  * torre, que asoman a la derecha del nombre y en la tira de abajo.
  */
 
@@ -177,7 +177,7 @@ function cabina(p: Pincel, l: Linea, x: number, u: number, color: string, ganado
 /**
  * Teleférico: el Illimani y la hoyada de La Paz de noche, dos líneas de cable
  * que se cruzan en el cielo y tres cabinas en la de adelante; la del medio, la
- * ganadora, prendida. Todo eso cabe en y = 250–540.
+ * ganadora, prendida. Todo eso cabe en y = 250 a 540.
  */
 export function fondoTeleferico(p: Pincel): void {
   estrellas(p, 0x7e1ef, 44, 24, 300);

@@ -247,8 +247,8 @@ describe("el motivo de cada juego cabe en la ventana sin paneles", () => {
     const ls = llamas(formas(pintar("race").log));
     expect(ls.length).toBe(4);
     for (const l of ls) {
-      expect(enVentana(l), `llama y ${l.y0.toFixed(0)}–${l.y1.toFixed(0)}`).toBe(true);
-      expect(l.x0 >= 0 && l.x1 <= 1080, `llama x ${l.x0.toFixed(0)}–${l.x1.toFixed(0)}`).toBe(true);
+      expect(enVentana(l), `llama y ${l.y0.toFixed(0)} a ${l.y1.toFixed(0)}`).toBe(true);
+      expect(l.x0 >= 0 && l.x1 <= 1080, `llama x ${l.x0.toFixed(0)} a ${l.x1.toFixed(0)}`).toBe(true);
     }
   });
 
@@ -259,14 +259,14 @@ describe("el motivo de cada juego cabe en la ventana sin paneles", () => {
     // Las rayas: barras crema horizontales de 5 unidades de alto.
     const rayas = fs.filter((f) => f.como === "fill" && f.color === CREMA && f.pts.length === 4 && Math.abs(f.y1 - f.y0 - 5 * u) < 0.01);
     expect(rayas.length).toBe(12);
-    for (const r of rayas) for (const l of ls) expect(cruza(r, l), `raya x ${r.x0.toFixed(0)}–${r.x1.toFixed(0)} y ${r.y0.toFixed(0)} sobre llama x ${l.x0.toFixed(0)}–${l.x1.toFixed(0)}`).toBe(false);
+    for (const r of rayas) for (const l of ls) expect(cruza(r, l), `raya x ${r.x0.toFixed(0)} a ${r.x1.toFixed(0)} y ${r.y0.toFixed(0)} sobre llama x ${l.x0.toFixed(0)} a ${l.x1.toFixed(0)}`).toBe(false);
   });
 
   it("sapo: la rana de bronce entera y al menos dos argollas (una en la boca) en la ventana", () => {
     const fs = formas(pintar("sapo").log);
     const bronce = fs.filter((f) => f.como === "fill" && f.color === "#b98a3e");
     expect(bronce.length).toBeGreaterThanOrEqual(3);
-    for (const b of bronce) expect(enVentana(b), `bronce y ${b.y0.toFixed(0)}–${b.y1.toFixed(0)}`).toBe(true);
+    for (const b of bronce) expect(enVentana(b), `bronce y ${b.y0.toFixed(0)} a ${b.y1.toFixed(0)}`).toBe(true);
     const argollas = fs.filter((f) => f.como === "stroke" && f.color === "#ffc629" && f.elipse && enVentana(f));
     expect(argollas.length).toBeGreaterThanOrEqual(2);
   });

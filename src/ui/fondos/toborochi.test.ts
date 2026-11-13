@@ -7,7 +7,7 @@ import type { Pincel } from "./lapiz";
  * mentira anota cada llamada y cada propiedad que se cambia (como en
  * `foto-fondos.test.ts`), y con eso se comprueba el dibujo de la marca, que no
  * se salga de la foto, que sea siempre el mismo y que el toborochi entero
- * (tronco de botella, ramas y copa florida) quede en la ventana sin paneles (y = 250–540).
+ * (tronco de botella, ramas y copa florida) quede en la ventana sin paneles (y = 250 a 540).
  */
 
 interface Llamada {
@@ -188,7 +188,7 @@ describe("fondoToborochi", () => {
     const fs = formas(pintar());
     const tronco = fs.filter((f) => f.como === "fill" && f.color === CORTEZA);
     expect(tronco.length).toBeGreaterThanOrEqual(2);
-    for (const t of tronco) expect(enVentana(t), `tronco y ${t.y0.toFixed(0)}–${t.y1.toFixed(0)}`).toBe(true);
+    for (const t of tronco) expect(enVentana(t), `tronco y ${t.y0.toFixed(0)} a ${t.y1.toFixed(0)}`).toBe(true);
     // El tronco de botella: la panza tiene más de 120 px de ancho.
     const panza = Math.max(...tronco.map((t) => t.x1 - t.x0));
     expect(panza).toBeGreaterThan(120);

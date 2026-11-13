@@ -7,20 +7,21 @@ import type { Game } from "../state";
 import "../i18n";
 
 /**
- * La foto con el fondo del juego que se jugó (odd/tasks/foto-juego.md, T1):
+ * La foto con el fondo del juego que se jugó:
  *
  * - la foto (`foto.ts`): con `fondo`, primero la ilustración y encima la foto
  *   de siempre con paneles de tinta detrás de los textos; el QR, igual. Un
- *   juego sin ilustración deja la foto de siempre (S6);
- * - el diálogo (`compartir.ts`): con el juego y su ilustración, dos fotos lado
- *   a lado, la del juego elegida; se comparte y se descarga solo la elegida
- *   (S2, S3). Sin juego, la de siempre; los eventos, como siempre (S5);
+ *   juego sin ilustración deja la foto de siempre;
+ * - el diálogo (`compartir.ts`), con la bandera prendida: con el juego y su
+ *   ilustración, dos fotos lado a lado, la del juego elegida; se comparte y se
+ *   descarga solo la elegida. Apagada o sin juego, la de siempre; los eventos,
+ *   como siempre;
  * - el sorteo (`draw.ts`): el juego que de verdad se jugó (con el cambio por
  *   cantidad o el motor de respaldo) va a compartir, y el último si se vio de
- *   nuevo con otro (S5).
+ *   nuevo con otro.
  *
- * La ilustración es de `foto-fondos.ts` (otra tarea): acá se reemplaza por una
- * que solo tiene la carrera y anota que se pintó.
+ * La ilustración es de `foto-fondos.ts`, con sus propias pruebas: acá se
+ * reemplaza por una que solo tiene la carrera y anota que se pintó.
  */
 
 const h = vi.hoisted(() => ({
@@ -154,7 +155,7 @@ describe("la foto con el fondo del juego", () => {
   });
 });
 
-/* ------------------------------------------------------------- la ilustración se ve (T2b) */
+/* ------------------------------------------------------------- la ilustración se ve */
 
 /**
  * Un lienzo que mide el texto según su letra, más o menos como el del
@@ -204,7 +205,7 @@ function paneles(con: string[]): Rect[] {
 const ARTE = { arriba: 236, abajo: 540 };
 const seCruzaConElArte = (r: Rect): boolean => r.y < ARTE.abajo && r.y + r.h + 12 > ARTE.arriba;
 
-describe("la foto del juego deja ver la ilustración (T2b)", () => {
+describe("la foto del juego deja ver la ilustración", () => {
   let registro: Registro;
   beforeEach(() => {
     registro = [];
@@ -215,7 +216,7 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  // Como la foto de la evidencia v1: sorteo de prueba con fecha, sin premio.
+  // Un sorteo de prueba con fecha y sin premio.
   const juego = (personas: string[], extra: Record<string, unknown> = {}): Record<string, unknown> => ({
     ...fotoBase,
     rotulo: "Sorteo #589, red de prueba, 5 de noviembre de 2026",
@@ -232,7 +233,7 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
   }
 
   it("el panel de arriba abraza la marca y el rótulo (en dos renglones si es largo), entre y=40 y y=220", async () => {
-    const [arriba] = paneles(await dibujo(juego(["Guido"])));
+    const [arriba] = paneles(await dibujo(juego(["Beto"])));
     expect(arriba).toBeDefined();
     const r = arriba as Rect;
     expect(r.x).toBe(56);
@@ -240,18 +241,18 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
     expect(r.y + r.h).toBeLessThanOrEqual(220);
     // "SORTEO #589, RED DE PRUEBA," en 25 px espaciado: unos 470 px, no los 930 del ancho.
     expect(r.w).toBeLessThan(600);
-    const con = await dibujo(juego(["Guido"]));
+    const con = await dibujo(juego(["Beto"]));
     const rotulo = con.filter((x) => /^fillText\(.,[\d.]+,(176|204)\)$/.test(x));
     expect(rotulo.some((x) => x.endsWith(",176)"))).toBe(true);
     expect(rotulo.some((x) => x.endsWith(",204)"))).toBe(true);
   });
 
   it.each([
-    ["un nombre corto", ["Guido"], {}],
+    ["un nombre corto", ["Beto"], {}],
     ["un nombre largo", ["María Fernanda Guadalupe Quispe"], {}],
-    ["un nombre corto con premio", ["Guido"], { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }],
+    ["un nombre corto con premio", ["Beto"], { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }],
     ["un nombre largo con premio", ["María Fernanda Guadalupe Quispe"], { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }],
-  ])("%s: ningún panel pisa la ventana del arte (y 236–540); el medio va en su franja (556–800) y abraza el texto", async (_n, personas, extra) => {
+  ])("%s: ningún panel pisa la ventana del arte (y 236 a 540); el medio va en su franja (556 a 800) y abraza el texto", async (_n, personas, extra) => {
     const con = await dibujo(juego(personas, extra));
     const ps = paneles(con);
     expect(ps).toHaveLength(3);
@@ -268,7 +269,7 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
   });
 
   it("el nombre se lee: nunca más chico que 'Ganó' ni que 33 px", async () => {
-    for (const personas of [["Guido"], ["María Fernanda Guadalupe Quispe"]]) {
+    for (const personas of [["Beto"], ["María Fernanda Guadalupe Quispe"]]) {
       const con = await dibujo(juego(personas, { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }));
       const fuentes = con.filter((x) => x.startsWith("set font=900 ")).map((x) => Number(/(\d+)px/.exec(x)?.[1]));
       const iGano = con.findIndex((x) => x.startsWith("fillText(Ganó,"));
@@ -287,8 +288,30 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
     expect(m.y).toBeGreaterThanOrEqual(arriba.y + arriba.h + 16);
   });
 
-  it("la fila de abajo no cambia: 'Escaneá' a la izquierda y la tarjeta del QR en 544–996 × 816–1268", async () => {
-    const con = await dibujo(juego(["Guido"]));
+  // Con muchos nombres el panel del medio sube y puede tapar el dibujo, por diseño: la lista entera se lee antes que la
+  // ilustración. Lo que no puede pasar es que pise el panel de arriba, pase del renglón de 800 o toque el QR.
+  it.each([
+    ["doce ganadores, en dos columnas", Array.from({ length: 12 }, (_, i) => `Persona ${i + 1}`), { titulo: "Ganaron" }],
+    ["cuarenta nombres, como un orden de turnos", Array.from({ length: 40 }, (_, i) => `Persona ${i + 1}`), { titulo: "Ganaron" }],
+    ["un nombre de 60 letras seguidas", ["A".repeat(60)], {}],
+  ])("%s: el panel del medio sube desde 800 sin pisar el de arriba ni el QR", async (_n, personas, extra) => {
+    const con = await dibujo(juego(personas, extra));
+    const ps = paneles(con);
+    expect(ps).toHaveLength(3);
+    const [arriba, m, abajo] = ps as [Rect, Rect, Rect];
+    expect(m.y + m.h).toBeLessThanOrEqual(800);
+    expect(m.y).toBeGreaterThanOrEqual(arriba.y + arriba.h + 16);
+    expect(abajo.y).toBeGreaterThan(816);
+    expect(con).toContain("fillRect(544,816,452,452)");
+  });
+
+  it("un nombre de 60 letras seguidas no pisa la ventana del arte", async () => {
+    const ps = paneles(await dibujo(juego(["A".repeat(60)])));
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+  });
+
+  it("la fila de abajo no cambia: 'Escaneá' a la izquierda y la tarjeta del QR en 544 a 996 × 816 a 1268", async () => {
+    const con = await dibujo(juego(["Beto"]));
     expect(con).toContain("fillRect(544,816,452,452)");
     expect(con).toContain("fillRect(558,830,452,452)");
     const abajo = paneles(con)[2] as Rect;
@@ -301,7 +324,7 @@ describe("la foto del juego deja ver la ilustración (T2b)", () => {
     const { LOGO_DE_PRUEBA } = await import("../logo-guardado");
     vi.stubGlobal("createImageBitmap", async () => ({ width: 128, height: 64, close: () => undefined }));
     vi.stubGlobal("window", { devicePixelRatio: 1 });
-    const con = await dibujo(juego(["Guido"], { logo: LOGO_DE_PRUEBA, hecho: "Hecho con Tinkazo" }));
+    const con = await dibujo(juego(["Beto"], { logo: LOGO_DE_PRUEBA, hecho: "Hecho con Tinkazo" }));
     const arriba = paneles(con)[0] as Rect;
     expect(arriba).toEqual({ x: 56, y: 40, w: 968, h: 170 });
     expect(con.some((x) => /^fillText\(S,84,196\)$/.test(x))).toBe(true);
@@ -316,6 +339,8 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
   const datos = { enlace, ganadores: ["Ana"], total: 12, premio: "Pizza", numero: "278", red: "testnet" };
 
   beforeEach(() => {
+    // La foto del juego vive detrás de su bandera (foto-juego-bandera.ts): acá, prendida.
+    vi.stubEnv("VITE_FOTO_JUEGO", "1");
     bajadas.length = 0;
     h.contar.mockReset();
     document.body.innerHTML = "";
@@ -342,6 +367,7 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     document.querySelector("dialog")?.close();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   async function abrir(d: Record<string, unknown>): Promise<HTMLDialogElement> {
@@ -368,6 +394,22 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect(dlg.querySelector<HTMLButtonElement>("[data-bajar]")?.textContent).toBe("Descargar la foto");
     // La foto del juego se pidió con el fondo del juego; la clásica, sin.
     expect(h.fondo.mock.calls.some((c) => c[1] === "race")).toBe(true);
+    // Sin una línea que pida elegir: la elegida ya se ve (borde y marca) y la acción principal sigue siendo compartir.
+    expect(fotos.querySelector(".cmp-elige")).toBeNull();
+    expect(fotos.textContent ?? "").not.toMatch(/Tocá una foto|Tap a photo/);
+  });
+
+  it("con la bandera apagada: aunque se sepa el juego, la foto de siempre, sola, como hasta hoy", async () => {
+    vi.stubEnv("VITE_FOTO_JUEGO", "");
+    h.fondo.mockClear();
+    const dlg = await abrir({ juego: "race" });
+    expect(opciones(dlg)).toEqual([]);
+    expect(dlg.querySelectorAll(".cmp-fotos img.cmp-png")).toHaveLength(1);
+    expect(dlg.querySelector(".cmp-fotos")?.classList.contains("varias")).toBe(false);
+    // Ni siquiera se dibuja: el fondo del juego no se pide.
+    expect(h.fondo).not.toHaveBeenCalled();
+    (dlg.querySelector("[data-bajar]") as HTMLButtonElement).click();
+    expect(bajadas).toEqual(["tinkazo-sorteo-278.png"]);
   });
 
   it("descargar baja solo la elegida: primero la del juego, y la clásica si se toca", async () => {
@@ -417,7 +459,7 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect(bajadas).toEqual([]);
   });
 
-  it("sin juego: la foto de siempre, sola, sin nada que elegir (S5)", async () => {
+  it("sin juego: la foto de siempre, sola, sin nada que elegir", async () => {
     h.fondo.mockClear();
     const dlg = await abrir({});
     expect(opciones(dlg)).toEqual([]);
@@ -460,7 +502,7 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect("juego" in r).toBe(false);
   });
 
-  it("Mis sorteos y la página de verificación no pasan el juego (S5)", async () => {
+  it("Mis sorteos y la página de verificación no pasan el juego", async () => {
     const { datosDeComprobante } = await import("./compartir");
     const d = datosDeComprobante({ v: 2, names: ["a", "b"], round: 1, signature: "ab".repeat(48) } as never, enlace, ["a"]);
     expect("juego" in d).toBe(false);

@@ -186,7 +186,7 @@ describe("fondoTeleferico", () => {
     // El cuerpo de cada cabina: un octógono (las esquinas cortadas) de un color de la franja.
     const cabinas = fs.filter((f) => f.como === "fill" && f.n === 8 && FRANJA.includes(f.color));
     expect(cabinas.length).toBe(5);
-    for (const c of cabinas) expect(enVentana(c), `cabina ${c.color} y ${c.y0.toFixed(0)}–${c.y1.toFixed(0)}`).toBe(true);
+    for (const c of cabinas) expect(enVentana(c), `cabina ${c.color} y ${c.y0.toFixed(0)} a ${c.y1.toFixed(0)}`).toBe(true);
     expect(new Set(cabinas.map((c) => c.color)).size).toBe(5);
     // La ganadora: el contorno amarillo y la ventana prendida, una sola vez.
     const contorno = fs.filter((f) => f.como === "fill" && f.n === 8 && f.color === "#ffc629" && f.x1 - f.x0 > 100);
@@ -198,6 +198,6 @@ describe("fondoTeleferico", () => {
     // Los cables de acero cruzan la foto de borde a borde dentro de la ventana.
     const cables = fs.filter((f) => f.como === "stroke" && f.color === "#9aa1ad" && f.x0 === 0 && f.x1 === 1080);
     expect(cables.length).toBe(4);
-    for (const c of cables) expect(enVentana(c), `cable y ${c.y0.toFixed(0)}–${c.y1.toFixed(0)}`).toBe(true);
+    for (const c of cables) expect(enVentana(c), `cable y ${c.y0.toFixed(0)} a ${c.y1.toFixed(0)}`).toBe(true);
   });
 });

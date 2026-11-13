@@ -7,7 +7,7 @@ import type { Pincel } from "./lapiz";
  * mentira anota cada llamada y cada propiedad que se cambia (como en
  * `foto-fondos.test.ts`), y con eso se comprueba el dibujo de la marca, que no
  * se salga de la foto, que sea siempre el mismo y que el guajojó entero quede
- * en la ventana sin paneles (y = 250–540).
+ * en la ventana sin paneles (y = 250 a 540).
  */
 
 interface Llamada {
@@ -189,12 +189,12 @@ describe("fondoGuajojo", () => {
     const ojos = fs.filter((f) => f.como === "fill" && f.color === OJO && f.elipse);
     expect(ojos.length).toBe(2);
     for (const o of ojos) {
-      expect(enVentana(o), `ojo y ${o.y0.toFixed(0)}–${o.y1.toFixed(0)}`).toBe(true);
+      expect(enVentana(o), `ojo y ${o.y0.toFixed(0)} a ${o.y1.toFixed(0)}`).toBe(true);
       expect(o.x1 - o.x0, "ojos grandes").toBeGreaterThan(40);
     }
     const pluma = fs.filter((f) => f.como === "fill" && f.color === PLUMA);
     expect(pluma.length).toBeGreaterThanOrEqual(2);
-    for (const b of pluma) expect(enVentana(b), `plumaje y ${b.y0.toFixed(0)}–${b.y1.toFixed(0)}`).toBe(true);
+    for (const b of pluma) expect(enVentana(b), `plumaje y ${b.y0.toFixed(0)} a ${b.y1.toFixed(0)}`).toBe(true);
     // Parado derecho como un palo: el cuerpo es largo y angosto.
     const cuerpo = pluma.reduce((a, b) => (b.y1 - b.y0 > a.y1 - a.y0 ? b : a));
     expect(cuerpo.y1 - cuerpo.y0).toBeGreaterThan(220);

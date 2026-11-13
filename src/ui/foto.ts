@@ -2,7 +2,6 @@ import { drawAvatar } from "../avatar";
 import { qrLienzo } from "./qr";
 import { marcarQr } from "../contar";
 import { logoALienzo, type Logo } from "../logo";
-import { pintarFondoJuego } from "./foto-fondos";
 
 /**
  * La foto para compartir: quién ganó, qué se lleva y el QR para comprobarlo,
@@ -114,8 +113,8 @@ const SIN_QR_Y = H - 16 - 66 - SIN_QR_ALTO;
  * medio, entre la ventana y la tarjeta del QR. El panel del medio deja 20 px
  * de aire arriba y abajo de su texto.
  */
-export const ARTE_ARRIBA = ARRIBA;
-export const ARTE_ABAJO = 540;
+const ARTE_ARRIBA = ARRIBA;
+const ARTE_ABAJO = 540;
 const FRANJA_ARRIBA = ARTE_ABAJO + 16;
 const FRANJA_ABAJO = QR_Y - 16;
 const AIRE_MEDIO = 20;
@@ -810,8 +809,9 @@ async function pintar(f: Foto): Promise<{ lienzo: HTMLCanvasElement; conFondo: b
   const c = lienzo.getContext("2d");
   if (!c) throw new Error("sin lienzo 2d");
   c.textBaseline = "alphabetic";
-  // La ilustración del juego, si tiene, ocupa todo; si no, el fondo oscuro de siempre.
-  const conFondo = f.fondo ? pintarFondoJuego(c, f.fondo, W, H) : false;
+  // La ilustración del juego, si tiene, ocupa todo; si no, el fondo oscuro de siempre. Los dibujos se bajan recién
+  // cuando hacen falta: la página de verificación usa esta foto y nunca la del juego.
+  const conFondo = f.fondo ? (await import("./foto-fondos")).pintarFondoJuego(c, f.fondo, W, H) : false;
   if (!conFondo) {
     c.fillStyle = C.fondo;
     c.fillRect(0, 0, W, H);
