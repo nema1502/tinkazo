@@ -99,6 +99,65 @@ function correrLaAnimacion(): void {
   for (let i = 0; i < 50 && vi.getTimerCount() > 0; i++) vi.advanceTimersByTime(100);
 }
 
+describe("el pase de tarjetas del selector", () => {
+  /** La tarjeta marcada como viva del pase. */
+  const viva = (panel: HTMLElement): number =>
+    [...panel.querySelectorAll<HTMLElement>("[data-game]")].findIndex((t) => t.classList.contains("pase-viva"));
+
+  it("tras ~6 s sin tocar el panel, las tarjetas entran en pase y se recorren en bucle", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(5900);
+    expect(panel.classList.contains("pase")).toBe(false);
+    vi.advanceTimersByTime(100);
+    expect(panel.classList.contains("pase")).toBe(true);
+    // Una sola tarjeta adelante, y la anterior yéndose hacia atrás.
+    const primera = viva(panel);
+    expect(primera).toBeGreaterThanOrEqual(0);
+    expect(panel.querySelectorAll(".pase-viva")).toHaveLength(1);
+    expect(panel.querySelectorAll(".pase-atras")).toHaveLength(1);
+    // ~1,5 s por paso, en bucle: la siguiente adelante y la que estaba, hacia atrás.
+    vi.advanceTimersByTime(1500);
+    const tarjetas = [...panel.querySelectorAll<HTMLElement>("[data-game]")];
+    expect(viva(panel)).toBe((primera + 1) % tarjetas.length);
+    expect(tarjetas[primera]?.classList.contains("pase-atras")).toBe(true);
+  });
+
+  it("una interacción corta el pase y el panel vuelve al estado normal", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+    panel.dispatchEvent(new Event("pointermove"));
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // La elección real no la toca el pase: una sola tarjeta con aria-pressed, la elegida.
+    const marcadas = panel.querySelectorAll<HTMLElement>("[data-game][aria-pressed='true']");
+    expect(marcadas).toHaveLength(1);
+    expect(marcadas[0]?.dataset.game).toBe("race");
+    // Y sin más interacción, el pase vuelve a armarse a los ~6 s.
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+  });
+
+  it("con la ruleta de Al azar corriendo, el pase no arranca: la de ella manda", async () => {
+    const { panel } = await abrirEspera();
+    (panel.querySelector("[data-azar]") as HTMLButtonElement).click();
+    // La inactividad de ~6 s alcanza de sobra mientras la ruleta recorre (~2,5 s).
+    vi.advanceTimersByTime(3000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    correrLaAnimacion();
+    // La ruleta terminó y eligió: el panel se cerró, nunca hubo pase.
+    expect(panel.hidden).toBe(true);
+    expect(panel.classList.contains("pase")).toBe(false);
+  });
+
+  it("con movimiento reducido no hay pase", async () => {
+    h.reduce = true;
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+  });
+});
+
 describe("el botón Al azar", () => {
   it("está en el panel Elegí el juego, con el dado y en el idioma", async () => {
     await abrirEspera();

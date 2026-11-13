@@ -6,6 +6,7 @@ import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
+import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -82,6 +83,11 @@ function montarLaCuenta(): void {
 initMenuMas();
 iniciarFeedback();
 setLang(initialLang());
+// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
+// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
+// nada del sorteo.
+iniciarDestelloPie();
+iniciarHoverVivo(".juego");
 montarLaCuenta();
 onLangChange(montarLaCuenta);
 // El contador va aparte y después: no frena la página y queda en su propio
