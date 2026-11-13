@@ -1,6 +1,16 @@
 import { chooseLang, getLang, onLangChange, t } from "../i18n";
 import { altaLibre } from "../stellar/alta-config";
-import { type CanjeDeCupon, type ErrorDeAlta, ESPERA_MS, type EstadoDeAlta, type ResultadoDeAlta } from "../stellar/alta-api";
+import {
+  type CanjeDeCupon,
+  type ErrorDeAlta,
+  ESPERA_MS,
+  type EstadoDeAlta,
+  type OrdenAbierta,
+  type OrdenDePago,
+  type PagoDeOrden,
+  type ResultadoDeAlta,
+} from "../stellar/alta-api";
+import type { Oferta, ProductoALaVenta } from "../stellar/alta-oferta";
 import { network } from "../stellar/config";
 import { mostrar, normalizar } from "../stellar/cupon-codigo";
 import { esDeRed } from "../stellar/errores";
@@ -16,7 +26,9 @@ import {
   type Corre,
   type EntradaVista,
   type Falla,
+  type FaseDelPago,
   type ModoDelAcceso,
+  type PagoEnLaVista,
   type Para,
   type Secundario,
   type Texto,
@@ -24,6 +36,13 @@ import {
   activarPermitido,
   vistaDe,
 } from "./cuenta-lista-estado";
+import type { MotivoDelPago } from "../stellar/pago-con-saldo";
+import { type SaldoDeDolares, alcanza, faltaPara } from "../stellar/saldo-dolares";
+import { armarPanelDePago } from "./pago-panel";
+import { type FaseDelSaldo, type PagoConSaldo, type SaldoCorto, mediosConSaldo, trasPagar } from "./pago-saldo";
+import { type Sondeo, vigilarPago } from "./pago-sondeo";
+import { MEDIOS_DE_PAGO, type MedioDePago, NO_SE_VENDE, type PanelDePago, faltaDe, textoDelErrorDeLaOrden, textoDelErrorDelPago } from "./pago-vista";
+import { recordarMedio } from "./medio-de-pago";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from "./proteger-cuenta";
 
@@ -100,6 +119,12 @@ export interface OpcionesDelPaso {
   acceso?: AccesoDelPaso | "libre" | "cerrado" | undefined;
   /** Abrir directo en el campo del cupón («Usar un cupón» de la ventana «Se te acabaron»). Con un cupón guardado, ese. */
   cupon?: "escribir" | undefined;
+  /**
+   * Llevar al QR del banco: con esto, el panel de pagar desde otra app ofrece Estoy en Bolivia, que recuerda la elección
+   * y lo llama. Lo pasa quien abre el paso solo con la compra con QR en el build y disponible para esta cuenta
+   * (`medio-de-pago.ts`, `medioDeEstaCuenta` con cambio) y con el camino del QR conectado.
+   */
+  alQr?: (() => void) | undefined;
 }
 
 /**
@@ -120,6 +145,21 @@ export interface AccesoDelPaso {
   refrescarCupo(): void;
   /** La cuenta de la sesión (su dirección pública), o `null`. El canje en camino es de esa cuenta y de ninguna otra. */
   cuenta(): string | null;
+  // La compra del primer paquete: estas tres existen solo con la compra prendida en el build (`VITE_ALTA_PAGO`). Sin
+  // ellas, el paso no pide órdenes ni pregunta por pagos, y una orden abierta que traiga el estado se deja de lado.
+  /** Lo que se vende ahora (`GET /v1/alta/precios`). */
+  oferta?(): Promise<Oferta>;
+  /** La orden de un producto (`POST /v1/alta/orden`): la abierta, o una nueva. */
+  orden?(producto: string): Promise<ResultadoDeAlta<OrdenDePago>>;
+  /** Si una orden ya está pagada (`POST /v1/alta/pago`). */
+  pago?(id: string): Promise<ResultadoDeAlta<PagoDeOrden>>;
+  /** Pagar con el saldo de la cuenta (`pago-saldo.ts`): solo con `VITE_PAGO_CON_SALDO` y la billetera del proveedor. */
+  saldo?: PagoConSaldo;
+  /**
+   * Antes de pagar con el saldo, preguntar cómo está la orden (`pago`): solo con la compra con QR en el build
+   * (`compraQrActiva`). Sin ella, como siempre.
+   */
+  preguntarAntesDePagar?: boolean;
 }
 
 /** Lo que sigue al canje, en orden. */
@@ -196,7 +236,7 @@ export function formatoDelCupon(crudo: string): string {
 /** Qué arregla un error del servidor: entrar de nuevo, nada desde acá (se revisa a mano), o probar de nuevo. */
 function arregloDe(e: ErrorDeAlta): AccesoEnLaVista["arreglo"] {
   if (e.clave === "clErrSesion") return "entrar";
-  if (e.clave === "altaErrCuentaDeOtro") return "ninguno";
+  if (e.clave === "altaErrCuentaDeOtro" || e.clave === "pagoErrOrden") return "ninguno";
   return "probar";
 }
 
@@ -208,12 +248,16 @@ const LENTO_MS = 8_000;
 const CADA_LECTURA_MS = 4_000;
 const SONDEO_SIN_PEDIDO_MS = 20_000;
 const ESPERA_ACTIVACION_MS = 60_000;
-/** Una lectura de Pollar (`estadoOficial`): la que se repite al esperar el pedido de crear la cuenta y la activación. */
+/**
+ * Una lectura de Pollar (`estadoOficial`): la que se repite al esperar el pedido de crear la cuenta y la activación.
+ * También la de lo que se vende, que no lleva sesión, y la del saldo.
+ */
 const TOPE_LECTURA_MS = 10_000;
 /**
- * Una lectura del servidor de las altas (`acceso.estado()`): espera el token de la sesión (`TOPE_TOKEN_MS`) y después el
- * pedido (`ESPERA_MS`). Su tope va un segundo detrás de los dos, así siempre deciden primero los de adentro: con la wifi
- * lenta de un stand, un token de 7 segundos y un pedido de 4 terminan bien y no dejan «Probar de nuevo».
+ * Una lectura del servidor de las altas con la sesión (`acceso.estado()`, y en la compra la orden y su pago): espera el
+ * token de la sesión (`TOPE_TOKEN_MS`) y después el pedido (`ESPERA_MS`). Su tope va un segundo detrás de los dos, así
+ * siempre deciden primero los de adentro: con la wifi lenta de un stand, un token de 7 segundos y un pedido de 4 terminan
+ * bien y no dejan «Probar de nuevo».
  */
 export const TOPE_LECTURA_SERVIDOR_MS = TOPE_TOKEN_MS + ESPERA_MS + 1_000;
 /** Lo más que espera «Cerrar sesión» antes de cerrar el paso igual. */
@@ -366,8 +410,49 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
      * campo la principal queda apagada, porque otro toque solo sumaba un intento fallido. Cambiarlo la prende.
      */
     codigoMalo: null as string | null,
+    /**
+     * La orden abierta que trajo el estado al volver, y lo que dijo de ella el pago (`retomarLaOrden`): con la compra en
+     * el build, la orden ya no se tira. La pantalla del pago la retoma desde acá.
+     */
+    orden: null as OrdenAbierta | null,
+    cobro: null as PagoDeOrden | null,
   };
   let lecturasDeAcceso = 0;
+  /**
+   * La compra del primer paquete, solo con la compra en el build (el acceso trae `oferta`, `orden` y `pago`). Lo que se
+   * vende sale del servidor (`oferta`), y la cuenta, el monto y la nota, de la orden que devolvió: acá no se arma ninguno.
+   */
+  const compraEnElBuild = !!(acceso?.oferta && acceso.orden && acceso.pago);
+  const compra = {
+    alta: null as ProductoALaVenta | null,
+    fase: "ofrecer" as FaseDelPago,
+    orden: null as OrdenDePago | null,
+    falta: null as { recibido: string; total: string } | null,
+    buscando: false,
+    noVisto: false,
+    tarda: false,
+    noLlego: false,
+    error: null as Texto | null,
+    arreglo: "probar" as AccesoEnLaVista["arreglo"],
+    // Pagar con el saldo de la cuenta, solo si el acceso lo trae (`acceso.saldo`).
+    medios: MEDIOS_DE_PAGO as readonly MedioDePago[],
+    medio: "app",
+    saldo: null as string | null,
+    corto: null as SaldoCorto | null,
+    saldoFase: "confirmar" as FaseDelSaldo,
+    incierto: false,
+    motivo: null as MotivoDelPago | null,
+  };
+  /** «Ya pagué» mirando solo cada 10 segundos (`pago-sondeo.ts`), o `null`. */
+  let sondeoDelPago: Sondeo | null = null;
+  /** Lo que se pidió de la orden: la respuesta de un pedido viejo no pisa la de uno nuevo. */
+  let pedidosDeOrden = 0;
+  /** El panel con los datos de la orden, armado una vez por orden y por idioma: así no se pierde «Copiado» al repintar. */
+  let panelArmado: { clave: string; el: HTMLElement } | null = null;
+  /** El repintado del momento en que vence la nota que se está mostrando. */
+  let relojDelVencimiento: ReturnType<typeof setTimeout> | null = null;
+  /** Más detalles de la caja, abierto por la persona: sigue abierto al repintar. */
+  let detallesAbiertos = false;
   /** El cupón guardado en la pestaña, como se muestra, o `null`. */
   const cuponEnMano = (): string | null => {
     try {
@@ -521,8 +606,46 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       canjeado: acc.canjeado,
       cadena: acc.cadena,
       fallaTrasCanje: acc.fallo !== null,
+      ...(compraEnElBuild ? { pago: pagoEnLaVista() } : {}),
     },
   });
+
+  function pagoEnLaVista(): PagoEnLaVista {
+    return {
+      idioma: getLang(),
+      alta: compra.alta,
+      medios: compra.medios,
+      fase: compra.fase,
+      orden: compra.orden,
+      falta: compra.falta,
+      buscando: compra.buscando,
+      noVisto: compra.noVisto,
+      tarda: compra.tarda,
+      noLlego: compra.noLlego,
+      vencida: compra.orden !== null && Date.now() >= compra.orden.vence,
+      error: compra.error,
+      arreglo: compra.arreglo,
+      medio: compra.medio,
+      cambio: !!opciones.alQr,
+      conSaldo: acceso?.saldo ? { saldo: compra.saldo, corto: compra.corto, fase: compra.saldoFase, incierto: compra.incierto, motivo: compra.motivo } : null,
+    };
+  }
+
+  /** El panel de esta orden, en este idioma: el mismo elemento mientras no cambien. */
+  function panelDePago(p: PanelDePago): HTMLElement {
+    const clave = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}|${p.correo}|${p.cambio ? "qr" : ""}|${getLang()}`;
+    if (panelArmado?.clave !== clave) {
+      panelArmado = {
+        clave,
+        el: armarPanelDePago(p, {
+          alCambiar: (ev) => {
+            if (confiable(ev)) void hacer("estoy-en-bolivia");
+          },
+        }),
+      };
+    }
+    return panelArmado.el;
+  }
 
   function boton(b: Secundario | Boton, clase: string): HTMLButtonElement {
     const el = document.createElement("button");
@@ -547,6 +670,25 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       p.append(antes ?? "", b, despues ?? "");
     } else p.textContent = texto(x);
     return p;
+  }
+
+  /**
+   * Lo plegado de una caja, en Más detalles. Se arma de nuevo con cada pintada, así que se recuerda si la persona lo
+   * abrió: un repintado (el idioma, un aviso) no se lo cierra en la cara.
+   */
+  function pliegue(xs: Texto[]): HTMLDetailsElement {
+    const d = document.createElement("details");
+    d.className = "mas cl-detalles";
+    d.open = detallesAbiertos;
+    const s = document.createElement("summary");
+    s.dataset.accion = "mas-detalles";
+    s.textContent = t("pagoMasDetalles");
+    d.append(s);
+    for (const x of xs) d.append(parrafo(x, "cl-texto-caja cl-ayuda"));
+    d.addEventListener("toggle", () => {
+      detallesAbiertos = d.open;
+    });
+    return d;
   }
 
   function pintar(): void {
@@ -614,6 +756,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         // El error del cupón va debajo del campo, junto a lo que hay que corregir; los demás, antes.
         const errorAntes = c.campo === "cupon" ? null : armarError();
         if (errorAntes) cuerpo.append(errorAntes);
+        // Los datos para pagar, debajo de la única línea de la caja (cómo pagar, lo que pasó con el pago o el error).
+        if (c.pago) cuerpo.append(panelDePago(c.pago));
         if (c.campo) {
           const form = document.createElement("form");
           form.className = "cl-form";
@@ -666,6 +810,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           if (sec.ayuda) cuerpo.append(parrafo(sec.ayuda, "cl-texto-caja cl-ayuda"));
         }
         for (const x of c.cierre ?? []) cuerpo.append(parrafo(x, "cl-texto-caja cl-ayuda cl-cierre"));
+        if (c.detalles?.length) cuerpo.append(pliegue(c.detalles));
         s.append(cuerpo);
         return s;
       }),
@@ -714,8 +859,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (document.activeElement === titulo && !principal.disabled && !principal.hidden) principal.focus({ preventScroll: true });
     // El foco vuelve a donde estaba, si sigue ahí.
     if (enfocado && (!document.activeElement || !raiz.contains(document.activeElement))) {
-      const de =
-        enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon
+      // Un elemento que se volvió a poner (los «Copiar» del panel del pago) recupera el foco tal cual.
+      const reusado = !!panelArmado && panelArmado.el.contains(enfocado) && enfocado.isConnected;
+      const de = reusado
+        ? enfocado
+        : enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon
           ? enfocado.isConnected && !(enfocado as HTMLInputElement).disabled
             ? enfocado
             : null
@@ -986,18 +1134,365 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     // Esta lectura puede durar hasta 17 segundos: con nada más corriendo, el reloj de «está tardando» es suyo.
     if (st.corre === null) armarLento();
     pintar();
+    // Lo que se vende, a la par del acceso: la caja no ofrece un paquete que el servidor no vende ahora.
+    const ofertaLeida = leerLaOferta();
     let r: ResultadoDeAlta<EstadoDeAlta>;
     try {
       r = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
     } catch {
       r = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
     }
+    await ofertaLeida;
     if (cerrado || n !== lecturasDeAcceso) return;
+    // Sin la compra en el build, o sin orden abierta, ni una espera de más: el paso de siempre.
+    if (r.ok && acceso.pago && r.datos.orden && r.datos.acceso === "ninguno") {
+      r = await retomarLaOrden(r);
+      if (cerrado || n !== lecturasDeAcceso) return;
+    } else {
+      acc.orden = null;
+      acc.cobro = null;
+    }
     aplicarAcceso(r);
     if (st.corre === null) pararLento();
     pintar();
     // Se abrió para escribir el cupón y nadie tocó nada todavía: el foco va al campo.
     if (acc.escribiendo && campoCupon.isConnected && !campoCupon.disabled && document.activeElement === titulo) enfocarCampo(campoCupon);
+  }
+
+  /**
+   * Al volver con una orden abierta (y con la compra en el build): antes de pintar, una sola pregunta por su pago, en vez
+   * de tirarla. Si ya está pagada, el acceso lo vuelve a decir el servidor (`/v1/alta/estado`, que ya la cuenta como
+   * pago): el sitio no lo da por su cuenta, y antes del voto se pregunta otra vez como siempre (`accesoParaVotar`). Si no
+   * está pagada, la orden y lo que llegó quedan guardados (`acc.orden`, `acc.cobro`). Si el pago no contesta, el acceso
+   * que ya se leyó vale igual: la orden no traba nada.
+   */
+  async function retomarLaOrden(r: Extract<ResultadoDeAlta<EstadoDeAlta>, { ok: true }>): Promise<ResultadoDeAlta<EstadoDeAlta>> {
+    const o = r.datos.orden;
+    if (!acceso?.pago || !o || r.datos.acceso !== "ninguno") return r;
+    acc.orden = o;
+    acc.cobro = null;
+    let p: ResultadoDeAlta<PagoDeOrden> | null;
+    try {
+      p = await conTopeSimple(acceso.pago(o.id), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      p = null;
+    }
+    if (cerrado) return r;
+    if (p?.ok) acc.cobro = p.datos;
+    // Sin pagar, o sin saberlo: la orden entera, para volver a mostrar a dónde pagar y lo que ya llegó.
+    if (!p?.ok || !p.datos.pagada) {
+      await retomarLosDatos(o, p?.ok && !p.datos.pagada ? p.datos : null);
+      return r;
+    }
+    let otra: ResultadoDeAlta<EstadoDeAlta>;
+    try {
+      otra = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      return r;
+    }
+    if (cerrado || !otra.ok || otra.datos.acceso === "ninguno") return r;
+    acc.orden = null;
+    st.aviso = "pagoListo";
+    return otra;
+  }
+
+  /* ------------------------------------------------ la compra del primer paquete */
+
+  /** Lo que se vende ahora. Si no contesta, nada: ante la duda no se ofrece comprar. */
+  async function leerLaOferta(): Promise<void> {
+    if (!compraEnElBuild || !acceso?.oferta) return;
+    try {
+      compra.alta = (await conTopeSimple(acceso.oferta(), TOPE_LECTURA_MS)).alta;
+    } catch {
+      compra.alta = null;
+    }
+  }
+
+  /**
+   * Al volver con la orden del primer paquete sin pagar: se pide la orden entera (el servidor devuelve la misma mientras
+   * siga abierta), para mostrar otra vez a dónde pagar, y lo que ya llegó. Nadie mira solo hasta que la persona toque «Ya
+   * pagué». Si no se puede pedir, la caja sigue como estaba: no se inventa ningún dato.
+   */
+  async function retomarLosDatos(o: OrdenAbierta, cobro: Extract<PagoDeOrden, { pagada: false }> | null): Promise<void> {
+    if (!compraEnElBuild || !acceso?.orden || o.producto !== "alta") return;
+    const n = ++pedidosDeOrden;
+    let r: ResultadoDeAlta<OrdenDePago> | null;
+    try {
+      r = await conTopeSimple(acceso.orden(o.producto), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      r = null;
+    }
+    if (cerrado || n !== pedidosDeOrden || !r?.ok) return;
+    const misma = r.datos.id === o.id;
+    ponerLaOrden(r.datos, misma ? (cobro ? faltaDe(cobro.recibido, cobro.total) : faltaDe(o.recibido, o.usdc)) : null);
+  }
+
+  /** La orden en mano, para pagarla: de ahí salen la cuenta, el monto y la nota. */
+  function ponerLaOrden(o: OrdenDePago, falta: { recibido: string; total: string } | null): void {
+    pararLaMirada();
+    compra.orden = o;
+    compra.fase = "pagando";
+    compra.falta = falta;
+    compra.noVisto = false;
+    compra.tarda = false;
+    compra.noLlego = false;
+    compra.error = null;
+    compra.arreglo = "probar";
+    compra.saldoFase = "confirmar";
+    compra.incierto = false;
+    compra.motivo = null;
+    // Cuando vence, la nota deja de mostrarse para pagar aunque nadie toque nada.
+    if (relojDelVencimiento) clearTimeout(relojDelVencimiento);
+    relojDelVencimiento = null;
+    const resta = o.vence - Date.now();
+    if (resta > 0 && resta < 7 * 24 * 3_600_000) {
+      relojDelVencimiento = despues(() => {
+        relojDelVencimiento = null;
+        pintar();
+      }, resta + 50);
+    }
+  }
+
+  function pararLaMirada(): void {
+    sondeoDelPago?.parar();
+    sondeoDelPago = null;
+    compra.buscando = false;
+  }
+
+  /** De vuelta a la caja del acceso: sin orden a la vista y sin mirar nada. */
+  function volverDeLaCompra(): void {
+    pararLaMirada();
+    if (relojDelVencimiento) clearTimeout(relojDelVencimiento);
+    relojDelVencimiento = null;
+    compra.fase = "ofrecer";
+    compra.orden = null;
+    compra.falta = null;
+    compra.noVisto = false;
+    compra.tarda = false;
+    compra.noLlego = false;
+    compra.error = null;
+    compra.arreglo = "probar";
+    // El saldo se vuelve a leer la próxima vez: puede haber cambiado. Un pago que quizás salió lo frena la billetera.
+    compra.medios = MEDIOS_DE_PAGO;
+    compra.medio = "app";
+    compra.saldo = null;
+    compra.corto = null;
+    compra.saldoFase = "confirmar";
+    compra.incierto = false;
+    compra.motivo = null;
+  }
+
+  /**
+   * «3 sorteos oficiales por 3 dólares» con el saldo en el paso: primero se mira en la red si alcanza para el precio que
+   * dio el servidor. Si alcanza, se pregunta cómo pagar (el saldo de principal); si no, o si no se pudo mirar, directo a
+   * los datos para pagar, como siempre (y si hay algo que no alcanza, el panel lo dice).
+   */
+  async function elegirComoPagar(): Promise<void> {
+    const alta = compra.alta;
+    const saldo = acceso?.saldo;
+    if (!alta || !saldo || compra.fase === "pidiendo") return;
+    const n = ++pedidosDeOrden;
+    compra.fase = "pidiendo";
+    compra.error = null;
+    pintar();
+    let s: SaldoDeDolares | null;
+    try {
+      s = await conTopeSimple(saldo.leer(), TOPE_LECTURA_MS);
+    } catch {
+      s = null;
+    }
+    if (cerrado || n !== pedidosDeOrden) return;
+    const m = mediosConSaldo(s, alta.usdc);
+    compra.medios = m.medios;
+    compra.saldo = m.saldo;
+    compra.corto = m.corto;
+    compra.fase = "ofrecer";
+    if (m.medios.length > 1) {
+      compra.fase = "elegir";
+      return pintar();
+    }
+    compra.medio = "app";
+    return pedirLaOrden();
+  }
+
+  /** Pagar con el saldo, desde la confirmación propia. Después, el acceso lo dice el servidor (`mirarElPago`). */
+  async function pagarConSaldo(): Promise<void> {
+    const o = compra.orden;
+    const saldo = acceso?.saldo;
+    if (!saldo || !o || compra.medio !== "saldo" || compra.saldoFase !== "confirmar" || compra.incierto) return;
+    compra.saldoFase = "pagando";
+    compra.motivo = null;
+    compra.error = null;
+    pintar();
+    // Con la compra con QR en el build, antes de pagar, cómo está la orden en el servidor: se paga solo sin pagar y sin
+    // nada recibido. Pagada, se mira. Con algo recibido (pagaron una parte desde otra app), lo que falta va por la otra
+    // app. Sin respuesta, no se manda nada. Sin la compra con QR, como siempre.
+    if (acceso?.pago && acceso.preguntarAntesDePagar) {
+      let antes: ResultadoDeAlta<PagoDeOrden> | null;
+      try {
+        antes = await conTopeSimple(acceso.pago(o.id), TOPE_LECTURA_SERVIDOR_MS);
+      } catch {
+        antes = null;
+      }
+      if (cerrado || compra.orden !== o) return;
+      if (!antes || !antes.ok) {
+        compra.saldoFase = "confirmar";
+        compra.motivo = "red";
+        return pintar();
+      }
+      if (antes.datos.pagada) {
+        compra.saldoFase = "mirando";
+        return mirarElPago();
+      }
+      if (/[1-9]/.test(antes.datos.recibido)) {
+        compra.saldoFase = "confirmar";
+        compra.medio = "app";
+        return mirarElPago();
+      }
+    }
+    let r: Awaited<ReturnType<PagoConSaldo["pagar"]>>;
+    try {
+      r = await saldo.pagar(o);
+    } catch {
+      // No debería lanzar. Si lanza, no se sabe si salió: no se ofrece de nuevo y se mira.
+      r = { estado: "incierto", vence: Math.floor(Date.now() / 1000) };
+    }
+    if (cerrado || compra.orden !== o) return;
+    const t2 = trasPagar(r);
+    compra.saldoFase = t2.fase;
+    compra.incierto = t2.incierto;
+    compra.motivo = t2.motivo;
+    if (t2.mirar) return mirarElPago();
+    // La red dijo que no alcanza: el saldo cambió desde que se leyó. Se lee de nuevo para decir cuánto hay.
+    if (t2.motivo === "sin-saldo") {
+      try {
+        const s = await conTopeSimple(saldo.leer(), TOPE_LECTURA_MS);
+        if (s.tipo === "saldo") compra.saldo = s.saldo;
+      } catch {
+        /* queda lo leído antes */
+      }
+      if (cerrado || compra.orden !== o) return;
+    }
+    pintar();
+  }
+
+  /**
+   * Pide la orden del primer paquete. Bien: los datos para pagar. Si el paquete dejó de venderse, se dice por qué y no se
+   * ofrece más; con el acceso ya dado, se vuelve a preguntar el acceso; lo demás, con su texto y «Probar de nuevo».
+   */
+  async function pedirLaOrden(producto = compra.alta?.id): Promise<void> {
+    if (!acceso?.orden || !producto || compra.fase === "pidiendo") return;
+    const n = ++pedidosDeOrden;
+    pararLaMirada();
+    compra.fase = "pidiendo";
+    compra.error = null;
+    pintar();
+    let r: ResultadoDeAlta<OrdenDePago>;
+    try {
+      r = await conTopeSimple(acceso.orden(producto), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      r = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+    }
+    if (cerrado || n !== pedidosDeOrden) return;
+    if (r.ok) {
+      ponerLaOrden(r.datos, null);
+      pintar();
+      return;
+    }
+    volverDeLaCompra();
+    if (r.motivo === "ya-tiene-acceso") return leerAcceso();
+    // Si el paquete dejó de venderse (`NO_SE_VENDE`), se dice con una frase corta y no se ofrece más.
+    compra.error = textoDelErrorDeLaOrden(r);
+    compra.arreglo = arregloDe(r);
+    if (NO_SE_VENDE.has(r.motivo)) compra.alta = null;
+    pintar();
+  }
+
+  /**
+   * «Ya pagué»: se pregunta enseguida y después solo, cada 10 segundos durante 5 minutos (`pago-sondeo.ts`). Apenas
+   * llega, el acceso lo vuelve a decir el servidor. Llegó de menos: cuánto, y se sigue mirando. La nota venció sin nada
+   * pagado: se deja de mirar y se ofrece pedir otra. Sin poder mirar: el motivo y «Probar de nuevo».
+   */
+  function mirarElPago(): void {
+    const o = compra.orden;
+    if (!acceso?.pago || !o || compra.buscando) return;
+    pararLaMirada();
+    compra.buscando = true;
+    compra.tarda = false;
+    compra.noLlego = false;
+    compra.error = null;
+    compra.arreglo = "probar";
+    pintar();
+    const preguntar = acceso.pago.bind(acceso);
+    const yo: Sondeo = vigilarPago({
+      preguntar: () => conTopeSimple(preguntar(o.id), TOPE_LECTURA_SERVIDOR_MS),
+      alResultado: (r) => {
+        if (cerrado || sondeoDelPago !== yo || compra.orden !== o) return "parar";
+        if (!r.ok) {
+          compra.buscando = false;
+          compra.error = textoDelErrorDelPago(r);
+          compra.arreglo = arregloDe(r);
+          pintar();
+          return "parar";
+        }
+        if (r.datos.pagada) {
+          compra.buscando = false;
+          void alLlegarElPago();
+          return "parar";
+        }
+        compra.falta = faltaDe(r.datos.recibido, r.datos.total);
+        compra.noVisto = compra.falta === null;
+        if (compra.falta === null && Date.now() >= o.vence) {
+          compra.buscando = false;
+          pintar();
+          return "parar";
+        }
+        pintar();
+        return "seguir";
+      },
+      alTardar: () => {
+        if (cerrado || sondeoDelPago !== yo) return;
+        compra.buscando = false;
+        compra.tarda = true;
+        pintar();
+      },
+    });
+    sondeoDelPago = yo;
+  }
+
+  /**
+   * Llegó el pago: el acceso lo dice el servidor (`/v1/alta/estado`), nunca el sitio. Con el acceso, «Recibimos tu pago.»
+   * y «Activar mi cuenta», que espera el toque de la persona. Si el estado todavía no lo ve, «Probar de nuevo» vuelve a
+   * mirar el pago.
+   */
+  async function alLlegarElPago(): Promise<void> {
+    if (!acceso) return;
+    let e: ResultadoDeAlta<EstadoDeAlta>;
+    try {
+      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      e = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+    }
+    if (cerrado) return;
+    if (e.ok && e.datos.acceso !== "ninguno") {
+      volverDeLaCompra();
+      acc.orden = null;
+      acc.cobro = null;
+      aplicarAcceso(e);
+      st.aviso = "pagoListo";
+      acceso.refrescarCupo();
+      pintar();
+      return;
+    }
+    if (!e.ok && e.clave === "altaErrCuentaDeOtro") {
+      volverDeLaCompra();
+      aplicarAcceso(e);
+      pintar();
+      return;
+    }
+    compra.error = e.ok ? { clave: "pagoErrRed" } : textoDelErrorDelPago(e);
+    compra.arreglo = e.ok ? "probar" : arregloDe(e);
+    pintar();
   }
 
   /**
@@ -1434,6 +1929,49 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "seguir-cupon":
         if (acc.fallo) return seguirCadena(acc.fallo);
         return;
+      case "comprar":
+        if (!compra.alta) return;
+        // Con el saldo en el paso, primero se mira si alcanza (`elegirComoPagar`).
+        if (acceso?.saldo) return elegirComoPagar();
+        // Con un solo medio de pago no se pregunta cómo pagar: directo a los datos.
+        if (MEDIOS_DE_PAGO.length > 1) {
+          compra.fase = "elegir";
+          compra.error = null;
+          return pintar();
+        }
+        return pedirLaOrden();
+      case "pago-medio":
+        compra.medio = "app";
+        return pedirLaOrden();
+      case "pago-saldo":
+        if (!acceso?.saldo || !compra.saldo) return;
+        compra.medio = "saldo";
+        return pedirLaOrden();
+      case "saldo-pagar":
+        return pagarConSaldo();
+      case "saldo-otro-medio":
+        // La misma orden, con los datos para pagar desde otra app. Si el saldo no alcanzaba, el panel lo dice.
+        if (compra.saldoFase === "pagando" || compra.incierto) return;
+        compra.medio = "app";
+        compra.motivo = null;
+        compra.error = null;
+        if (compra.saldo && compra.orden && !alcanza(compra.saldo, compra.orden.usdc)) compra.corto = { tiene: compra.saldo, falta: faltaPara(compra.saldo, compra.orden.usdc) };
+        return pintar();
+      case "otra-nota":
+        return pedirLaOrden(compra.orden?.producto ?? compra.alta?.id);
+      case "ya-pague":
+        return mirarElPago();
+      case "no-llego":
+        compra.noLlego = true;
+        return pintar();
+      case "volver-pago":
+        volverDeLaCompra();
+        return pintar();
+      case "estoy-en-bolivia":
+        // La persona eligió el QR: queda recordado en este navegador, y quien abrió el paso lleva al camino del QR.
+        recordarMedio("qr");
+        opciones.alQr?.();
+        return;
     }
   }
 
@@ -1591,6 +2129,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function cerrar(valor: boolean, sinFoco = false): void {
     if (cerrado) return;
     cerrado = true;
+    sondeoDelPago?.parar();
+    sondeoDelPago = null;
     for (const r of relojes) clearTimeout(r);
     relojes.clear();
     if (tic) clearInterval(tic);

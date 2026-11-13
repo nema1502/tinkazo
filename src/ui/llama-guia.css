@@ -1,0 +1,133 @@
+/* La llama que acompaña (src/ui/llama-guia.ts). Se baja con la ventana que la usa: la portada no la carga.
+   Arriba, Paso 2 de 4. Debajo, el camino con una parada por tramo y la bandera al final, con la llama parada en su
+   lugar y lo alcanzado en magenta. Debajo, el globo con la línea de la pantalla, con la cola hacia la llama.
+   Todo con las variables del tema: el tema oscuro sale solo. */
+.llg {
+  /* La caja de la llama: la llama de pie mide unos dos tercios. A 64 px se veía chica en la ventana del celular. */
+  --llg-alto: 76px;
+  /* El centro de la primera parada, y de la bandera al lugar donde la llama termina el camino. Los dos dejan lugar
+     a la media llama que queda de cada lado, así en la primera parada la cola no se sale de la ventana. */
+  --pl: calc(var(--llg-alto) * 0.36);
+  --pr: calc(24px + var(--llg-alto) * 0.4);
+  --x: 0;
+  /* Dónde está la llama, desde la izquierda del camino. Las paradas no lo usan: cada una tiene su propio --x. */
+  --llg-lugar: calc(var(--pl) + (100% - var(--pl) - var(--pr)) * var(--x));
+  /* Lo que se apila adentro (la llama sobre el papel picado) no se mezcla con el resto de la ventana. */
+  position: relative; isolation: isolate; margin: 2px 0 10px;
+}
+.llg-paso {
+  font-size: 14px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.3; color: var(--ink2);
+}
+/* La caja de la llama asoma un poco por arriba del camino: lo de arriba de la caja es aire para el salto y el papel picado. */
+.llg-camino { position: relative; height: calc(var(--llg-alto) * 0.86 + 4px); }
+.llg-via { position: absolute; left: 0; right: 20px; bottom: 6px; height: 4px; background: var(--ink); }
+.llg-hecho {
+  position: absolute; left: 0; bottom: 6px; height: 4px; background: var(--magenta);
+  width: var(--llg-lugar); transition: width 600ms steps(6, end);
+}
+.llg[data-fin] .llg-hecho { width: calc(100% - 20px); }
+.llg-parada {
+  position: absolute; bottom: 1px; width: 14px; height: 14px; margin-left: -7px;
+  left: calc(var(--pl) + (100% - var(--pl) - var(--pr)) * var(--x));
+  background: var(--card); border: 3px solid var(--ink);
+}
+.llg-parada.hecha { background: var(--magenta); }
+.llg-bandera { position: absolute; right: 0; bottom: 6px; width: 22px; height: 34px; overflow: visible; }
+.llg-llama {
+  position: absolute; width: var(--llg-alto); height: var(--llg-alto); margin-left: calc(var(--llg-alto) / -2);
+  left: var(--llg-lugar);
+  /* Las patas (y = 24 en una caja de 37 que termina en 26) apoyan arriba de la línea. */
+  bottom: calc(10px - var(--llg-alto) * 2 / 37);
+  transition: left 600ms steps(6, end);
+}
+.llg-svg { position: relative; z-index: 1; display: block; width: 100%; height: 100%; overflow: visible; transform-origin: 50% 100%; }
+.llg-globo {
+  position: relative; margin: 12px 0 0; padding: 10px 12px;
+  background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink);
+  font-size: 16px; line-height: 1.35; font-weight: 600; overflow-wrap: anywhere;
+}
+.llg-globo::before {
+  content: ""; position: absolute; top: -9px; width: 14px; height: 14px;
+  left: clamp(10px, calc(var(--llg-lugar) - 9px), calc(100% - 28px));
+  background: var(--card); border-left: 2px solid var(--ink); border-top: 2px solid var(--ink); transform: rotate(45deg);
+  transition: left 600ms steps(6, end);
+}
+
+/* Sin camino (la primera pantalla de la carga): la llama a la izquierda y el globo al lado, con la cola hacia ella. */
+.llg.sin-camino { display: flex; align-items: center; gap: 14px; }
+.llg.sin-camino .llg-camino { display: contents; }
+.llg.sin-camino :is(.llg-via, .llg-hecho, .llg-paradas, .llg-bandera) { display: none; }
+.llg.sin-camino .llg-llama { position: relative; left: auto; bottom: auto; margin: 0; flex: none; transition: none; }
+.llg.sin-camino .llg-globo { flex: 1; min-width: 0; margin: 0; }
+.llg.sin-camino .llg-globo::before { top: calc(50% - 8px); left: -9px; transform: rotate(-45deg); transition: none; }
+
+/* Lo que hace cada pose. Al trote: un saltito cada 2,5 s. Echada: mueve una oreja cada 4 s y los tres puntos laten. */
+.llg[data-pose="anima"] .llg-svg { animation: llg-salto 2.5s ease-in-out infinite; }
+@keyframes llg-salto {
+  0%, 76%, 100% { transform: translateY(0); }
+  84% { transform: translateY(-9%); }
+  92% { transform: translateY(0); }
+  96% { transform: translateY(-3%); }
+}
+.ll-a-oreja { transform-box: fill-box; transform-origin: 50% 100%; animation: llg-oreja 4s ease-in-out infinite; }
+@keyframes llg-oreja {
+  0%, 86%, 100% { transform: rotate(0); }
+  90% { transform: rotate(-28deg); }
+  94% { transform: rotate(0); }
+  97% { transform: rotate(-14deg); }
+}
+.ll-a-punto1, .ll-a-punto2, .ll-a-punto3 { animation: llg-punto 1.5s ease-in-out infinite; }
+.ll-a-punto2 { animation-delay: 0.25s; }
+.ll-a-punto3 { animation-delay: 0.5s; }
+@keyframes llg-punto {
+  0%, 60%, 100% { opacity: 0.25; }
+  30% { opacity: 1; }
+}
+/* Al aparecer: saluda moviendo la pata dos veces, y el festejo da dos saltos. Después queda quieta. */
+.ll-a-pata { transform-box: fill-box; transform-origin: 50% 0; }
+.llg-entra[data-pose="saluda"] .ll-a-pata { animation: llg-saluda 0.45s ease-in-out 2; }
+@keyframes llg-saluda { 50% { transform: rotate(-24deg); } }
+.llg-entra[data-pose="festeja"] .llg-svg { animation: llg-festeja 0.5s ease-out 2; }
+@keyframes llg-festeja {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-16%); }
+}
+/* Mientras camina de un lugar a otro: al trote, a los saltitos. */
+.llg.llg-camina .llg-svg { animation: llg-trote 200ms steps(2, end) 3; }
+@keyframes llg-trote { 50% { transform: translateY(-5%); } }
+
+/* El papel picado del festejo, una sola vez: sale de arriba de la llama y vuela detrás de ella, sin taparla. */
+.llg-papel { position: absolute; z-index: 0; left: 50%; top: 22%; width: 0; height: 0; pointer-events: none; }
+.llg-papel i {
+  position: absolute; width: 7px; height: 7px; margin: -3.5px; border: 1.5px solid var(--ink); opacity: 0;
+  animation: llg-papel 1.3s cubic-bezier(0.2, 0.6, 0.35, 1) var(--demora) forwards;
+}
+@keyframes llg-papel {
+  0% { opacity: 1; transform: translate(calc(var(--dx) * 0.3), calc(var(--dy) * 0.3)) rotate(0) scale(0.5); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), calc(var(--dy) + 30px)) rotate(var(--giro)); }
+}
+
+/* En un celular de 320 px, un poco más chica: así las cuatro paradas quedan a 44 px o más una de otra. */
+@media (max-width: 359px) { .llg { --llg-alto: 68px; } }
+/* Desde 760 px de ancho la llama crece un poco más. */
+@media (min-width: 760px) { .llg { --llg-alto: 84px; } }
+/* Con poco alto (celular acostado, zoom a 200 %): la llama más chica y el globo pasa a ser texto, sin caja. */
+@media (max-height: 560px) {
+  .llg { --llg-alto: 40px; }
+  .llg-globo { background: none; border: 0; box-shadow: none; padding: 0; margin-top: 6px; }
+  .llg-globo::before { display: none; }
+}
+/* Con muy poco alto: solo el camino y la línea, sin llama. */
+@media (max-height: 360px) {
+  .llg-llama { display: none; }
+  .llg-camino { height: 24px; }
+  .llg.sin-camino { display: block; }
+}
+
+/* Quien pidió menos movimiento: la pose de la pantalla, quieta. Sin caminar, sin saltos y sin papel picado. */
+@media (prefers-reduced-motion: reduce) {
+  .llg, .llg * { animation: none !important; transition: none !important; }
+  .llg-papel { display: none; }
+}
+.llg[data-quieta], .llg[data-quieta] * { animation: none !important; transition: none !important; }

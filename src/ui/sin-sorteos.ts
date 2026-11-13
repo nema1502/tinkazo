@@ -1,5 +1,6 @@
-import { t } from "../i18n";
+import { getLang, t } from "../i18n";
 import { type Acceso, consultarAcceso } from "../stellar/acceso-oficial";
+import { type Oferta, leerOferta, textoDelProducto } from "../stellar/alta-oferta";
 import { esNoDelPortero } from "../stellar/errores";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
@@ -15,7 +16,9 @@ import { currentSession } from "./wallet-ui";
  * - Sin acceso: se abre «Dejá tu cuenta lista» (`abrirParaElError` de `cuenta-lista-flujo.ts`), donde se usa el cupón o
  *   se compra el primer paquete. Al volver, se pregunta de nuevo al portero: lo que diga el paso no alcanza.
  * - Sin sorteos que alcancen para el sello: la ventana «Se te acabaron los sorteos oficiales». Puede estar proyectada
- *   frente a la sala, así que la acción principal nunca es un cobro: es «Usar un cupón», y al lado «Pasar a Prueba».
+ *   frente a la sala, así que la acción principal nunca es un cobro: es «Usar un cupón», y al lado «Pasar a Prueba». Con
+ *   un paquete a la venta, comprarlo va como secundaria (la ventana de los paquetes, `pago-paquete.ts`); al llegar el
+ *   pago se vuelve a mirar y, con sorteos que alcancen, se sella.
  * - Llegó al tope de sellos del mes, o el portero no contesta: la caja de la red, con su frase y su acción.
  */
 
@@ -56,13 +59,17 @@ async function abrirElPaso(para: "sello" | "sorteo", volverA: HTMLElement | null
   return cupon ? flujo.abrirParaElError(para, volverA ?? null, { cupon: "escribir" }) : flujo.abrirParaElError(para, volverA ?? null);
 }
 
-export type EleccionSinSorteos = "cupon" | "prueba" | "cerrar";
+export type EleccionSinSorteos = "cupon" | "prueba" | "cerrar" | "comprar";
 
 /**
  * La ventana «Se te acabaron los sorteos oficiales». Devuelve lo que eligió la persona: «Usar un cupón» (la principal),
- * «Pasar a Prueba» (ya pedido el cambio de modo, si se podía) o cerrarla.
+ * sumar sorteos (secundaria, solo si el servidor vende un paquete ahora), «Pasar a Prueba» (ya pedido el cambio de modo,
+ * si se podía) o cerrarla.
+ *
+ * Puede estar proyectada frente a la sala: comprar nunca es la principal. Y el texto ofrece sumar sorteos solo junto al
+ * botón que lo hace: mientras no se sabe qué se vende, o si no se vende nada, el texto es el que no ofrece comprar.
  */
-export function abrirSeAcabaron(): Promise<EleccionSinSorteos> {
+export function abrirSeAcabaron(o: { oferta?: () => Promise<Oferta> } = {}): Promise<EleccionSinSorteos> {
   return new Promise((resolve) => {
     let listo = false;
     const terminar = (e: EleccionSinSorteos): void => {
@@ -73,7 +80,7 @@ export function abrirSeAcabaron(): Promise<EleccionSinSorteos> {
     const dlg = abrirDialogo({ titulo: t("cupoOfCeroTitulo"), onCerrar: () => terminar("cerrar") });
     dlg.card.classList.add("sin-sorteos");
     const texto = document.createElement("p");
-    texto.textContent = t("cupoOfCeroTexto");
+    texto.textContent = t("cupoOfCeroTextoSinVenta");
     dlg.cuerpo.appendChild(texto);
     const cupon = botonPrincipal(t("cupoOfUsarCupon"));
     cupon.dataset.accion = "cupon";
@@ -93,7 +100,37 @@ export function abrirSeAcabaron(): Promise<EleccionSinSorteos> {
       pasarAModo("testnet");
     });
     dlg.pie.append(cupon, prueba);
+    // Lo que se vende, sin hacer esperar a la ventana (casi siempre ya está leído: la línea del cupo lo pidió antes).
+    void (o.oferta ?? leerOferta)().then(
+      (oferta) => {
+        if (listo || oferta.paquetes.length === 0) return;
+        const [unico] = oferta.paquetes.length === 1 ? oferta.paquetes : [];
+        const comprar = document.createElement("button");
+        comprar.type = "button";
+        comprar.className = "mini cupo-sumar";
+        comprar.dataset.accion = "comprar";
+        comprar.textContent = unico ? textoDelProducto(unico, getLang()) : t("cupoOfSumar");
+        comprar.addEventListener("click", () => {
+          terminar("comprar");
+          dlg.cerrar();
+        });
+        texto.textContent = t("cupoOfCeroTexto");
+        dlg.pie.insertBefore(comprar, prueba);
+      },
+      () => undefined,
+    );
   });
+}
+
+/** «Sumar sorteos» desde «Se te acabaron»: la ventana de los paquetes. `true` si llegó el pago. */
+async function sumarSorteos(): Promise<boolean> {
+  try {
+    const flujo = await import("./cuenta-lista-flujo");
+    return await flujo.abrirSumarSorteos();
+  } catch {
+    avisarQueNoCargo();
+    return false;
+  }
 }
 
 /** El no del portero, o del candado de antes de la firma, es que no quedan sorteos oficiales que alcancen. */
@@ -101,7 +138,9 @@ export const esSinSorteos = (e: unknown): boolean => esNoDelPortero(e) && e.moti
 
 /** Después de un sello que no salió por falta de sorteos: la ventana y, si elige «Usar un cupón», el paso. */
 export async function alQuedarseSinSorteos(o: OpcionesDeLaCompuerta = {}): Promise<void> {
-  if ((await abrirSeAcabaron()) === "cupon") await abrirElPaso("sello", o.volverA, true);
+  const eleccion = await abrirSeAcabaron();
+  if (eleccion === "cupon") await abrirElPaso("sello", o.volverA, true);
+  else if (eleccion === "comprar") await sumarSorteos();
 }
 
 /**
@@ -122,6 +161,8 @@ export async function accesoParaSellar(ganadores: number, o: OpcionesDeLaCompuer
       case "sin-sorteos": {
         const eleccion = await abrirSeAcabaron();
         if (eleccion === "cupon" && (await abrirElPaso("sello", o.volverA, true))) continue;
+        // Llegó el pago de un paquete: se vuelve a mirar, y con sorteos que alcancen se sella.
+        if (eleccion === "comprar" && (await sumarSorteos())) continue;
         return false;
       }
       case "tope-mes":

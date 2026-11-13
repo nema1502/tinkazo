@@ -1,4 +1,11 @@
+import { type OrdenDePago, fechaDeAlta } from "../stellar/alta-api";
+import { type ProductoALaVenta, varsDelProducto } from "../stellar/alta-oferta";
+import type { MotivoDelPago } from "../stellar/pago-con-saldo";
 import type { EstadoDeActivacion, EstadoDeProteccionOficial } from "../stellar/wallet-pollar";
+import { type FaseDelSaldo, type SaldoCorto, lineaDelSaldo, textoDelCorto, vistaDelSaldo } from "./pago-saldo";
+import { MEDIOS_DE_PAGO, type MedioDePago, type PanelDePago, lineaDelPago, panelDe, vencidaSinPagar } from "./pago-vista";
+
+export type { PanelDePago } from "./pago-vista";
 
 /**
  * Qué muestra el paso «Dejá tu cuenta lista» en cada momento, sin DOM ni textos: solo claves del diccionario.
@@ -13,7 +20,11 @@ import type { EstadoDeActivacion, EstadoDeProteccionOficial } from "../stellar/w
  * - las dos salidas («Pasar a Prueba» y «Cerrar sesión») a la vista hasta el final, y nunca apagadas por algo que corre;
  * - en la red principal, «Activar» solo con el acceso confirmado por el servidor (un cupón, un pago o un alta a mano), o
  *   en el build del plan B1 (`VITE_ALTA_LIBRE=1`): cada activación le cuesta a Tinkazo. Sin el acceso, la parte 1 es la
- *   caja del cupón, aunque la cuenta ya esté activada y protegida.
+ *   caja del cupón, aunque la cuenta ya esté activada y protegida;
+ * - con la compra en el build (`acceso.pago`), las filas del pago: comprar el primer paquete solo si el servidor lo vende
+ *   ahora, y la cuenta, el monto y la nota que se muestran son los de la orden, tal cual. Pagar nunca da «Activar»: eso
+ *   lo da el acceso que confirma el servidor. Solo medios automáticos (`pago-vista.ts`): con uno solo no se pregunta cómo
+ *   pagar. Sin `acceso.pago`, el paso de siempre.
  */
 
 /**
@@ -49,6 +60,70 @@ export interface AccesoEnLaVista {
   cadena: boolean;
   /** Algo de lo que sigue al canje no salió: el cupón quedó en la cuenta y se puede seguir sin volver a canjearlo. */
   fallaTrasCanje: boolean;
+  /** La compra del primer paquete, solo con la compra prendida en el build. Sin esto, ninguna fila del pago. */
+  pago?: PagoEnLaVista;
+}
+
+/**
+ * Dónde está la compra del primer paquete:
+ * - `ofrecer`: la caja del acceso, con el paquete de principal si el servidor lo vende (y, si pedir la orden no salió,
+ *   el motivo);
+ * - `elegir`: cómo pagar, solo con más de un medio (hoy hay uno y no se pregunta);
+ * - `pidiendo`: se le pide la orden al servidor;
+ * - `pagando`: la orden en mano, para pagarla.
+ */
+export type FaseDelPago = "ofrecer" | "elegir" | "pidiendo" | "pagando";
+
+/** Lo que el paso sabe de la compra del primer paquete. */
+export interface PagoEnLaVista {
+  /** El idioma en que se dicen los precios, los montos y las fechas. */
+  idioma: "es" | "en";
+  /** El primer paquete, si el servidor lo vende ahora (`alta-oferta.ts`). `null`: no se ofrece comprar. */
+  alta: ProductoALaVenta | null;
+  /** Los medios de pago que se ofrecen (`MEDIOS_DE_PAGO`). */
+  medios: readonly MedioDePago[];
+  fase: FaseDelPago;
+  /** La orden, entera y comprobada (`alta-api.ts`, `orden`): de acá, y de ningún otro lado, salen la cuenta, el monto y la nota. */
+  orden: OrdenDePago | null;
+  /** Lo que llegó y lo que hace falta, si llegó algo y no alcanza (lo dice el servidor). */
+  falta: { recibido: string; total: string } | null;
+  /** Se está mirando si llegó, después de «Ya pagué». */
+  buscando: boolean;
+  /** Ya se miró y no llegó nada. */
+  noVisto: boolean;
+  /** Pasaron los 5 minutos mirando. */
+  tarda: boolean;
+  /** Tocó «No llegó». */
+  noLlego: boolean;
+  /** La orden venció. */
+  vencida: boolean;
+  /** El último error de la orden o del pago, con sus datos. */
+  error: Texto | null;
+  /** Qué arregla ese error: volver a probar, entrar de nuevo, o nada desde acá. */
+  arreglo: "probar" | "entrar" | "ninguno";
+  /** El medio con que se paga: `app` (los datos para pagar, el de siempre) o `saldo`. Sin decirlo, `app`. */
+  medio?: string;
+  /** Pagar con el saldo de la cuenta (`pago-saldo.ts`): solo si el paso lo recibió. Sin esto, como siempre. */
+  conSaldo?: SaldoDeLaCompra | null;
+  /** Se ofrece Estoy en Bolivia en el panel: la compra con QR en el build y disponible para esta cuenta. */
+  cambio?: boolean;
+}
+
+/** Lo que el paso sabe del saldo de la cuenta para pagar el primer paquete. */
+export interface SaldoDeLaCompra {
+  /** El saldo leído, con siete decimales, o `null` si no hay (o no se pudo leer). */
+  saldo: string | null;
+  /** Hay saldo y no alcanza: lo que hay y lo que falta, para el renglón del panel. */
+  corto: SaldoCorto | null;
+  fase: FaseDelSaldo;
+  /** No se sabe si salió el pago con el saldo: no se ofrece pagar de nuevo. */
+  incierto: boolean;
+  motivo: MotivoDelPago | null;
+}
+
+/** La compra al empezar: nada pedido, y el primer paquete si se vende. */
+export function pagoInicial(idioma: "es" | "en", alta: ProductoALaVenta | null, medios: readonly MedioDePago[] = MEDIOS_DE_PAGO): PagoEnLaVista {
+  return { idioma, alta, medios, fase: "ofrecer", orden: null, falta: null, buscando: false, noVisto: false, tarda: false, noLlego: false, vencida: false, error: null, arreglo: "probar" };
 }
 
 /** Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar o antes de sortear. */
@@ -113,7 +188,27 @@ export type Accion =
   /** «Probar de nuevo» cuando no se supo el acceso: solo vuelve a preguntar. */
   | "leer-acceso"
   /** «Probar de nuevo» después del canje: sigue desde lo que no salió, sin volver a canjear. */
-  | "seguir-cupon";
+  | "seguir-cupon"
+  /** «3 sorteos oficiales por 3 dólares»: con un solo medio de pago pide la orden; con más, pregunta cómo pagar. */
+  | "comprar"
+  /** Un medio de pago (el del botón, `medio`): pide la orden con ese medio. */
+  | "pago-medio"
+  /** Estoy en Bolivia, en el panel de pagar desde otra app: recuerda el medio y lleva al QR del banco. */
+  | "estoy-en-bolivia"
+  /** «Pagar con mi saldo»: pide la orden para pagarla con el saldo de la cuenta. */
+  | "pago-saldo"
+  /** La confirmación propia del pago con el saldo: paga esa orden, una vez. */
+  | "saldo-pagar"
+  /** Desde el pago con el saldo, los datos para pagar desde otra app (la misma orden). */
+  | "saldo-otro-medio"
+  /** «Ya pagué»: pregunta por el pago, y sigue mirando (y «Probar de nuevo» si no se pudo mirar). */
+  | "ya-pague"
+  /** «No llegó», a los 5 minutos: dice lo de la red equivocada. */
+  | "no-llego"
+  /** «Pedir una nota nueva»: la orden venció; se pide de nuevo. */
+  | "otra-nota"
+  /** «Volver» desde el pago: a la caja del acceso. */
+  | "volver-pago";
 
 /** Un texto: la clave y lo que va en sus huecos (`{mail}`, `{s}`). */
 export interface Texto {
@@ -124,6 +219,8 @@ export interface Texto {
 export interface Boton extends Texto {
   accion: Accion;
   apagado: boolean;
+  /** El medio de pago del botón, en «pago-medio». */
+  medio?: string;
   /** Apagado porque esto mismo está corriendo («Activando tu cuenta…»), no porque falta algo (el código sin escribir). */
   ocupado?: boolean;
 }
@@ -159,6 +256,13 @@ export interface CajaVista {
   ocupada: boolean;
   /** Lo que va al final de la caja, debajo de todo (`altaNoTengo`). */
   cierre?: Texto[];
+  /**
+   * Lo que va plegado en Más detalles, al final de la caja: en las filas de la compra, lo que no hace falta para el
+   * paso siguiente (poco texto a la vista: una sola línea por estado).
+   */
+  detalles?: Texto[];
+  /** Los datos para pagar, de la orden: solo en la fila de pagar. Lo plegado del pago va dentro del panel. */
+  pago?: PanelDePago | null;
 }
 
 export interface Vista {
@@ -393,7 +497,9 @@ function principalDelArreglo(e: EntradaVista, arreglo: AccesoEnLaVista["arreglo"
  * - sin cupón, «Tengo un cupón», que abre el campo;
  * - escribiendo, «Activar con mi cupón», apagada hasta que haya 12 letras y números (y «Volver» de texto);
  * - con la cuenta ya activada, lo mismo con `altaYaActivada`, y la principal dice «Usar un cupón».
- * Debajo, siempre `altaNoTengo`. Las filas del pago no se muestran: el pago todavía no está.
+ * Debajo, siempre `altaNoTengo`. Con la compra en el build (`acceso.pago`): sin cupón y con el primer paquete a la venta,
+ * la principal es comprarlo y «Tengo un cupón» pasa a secundaria; sin nada a la venta, la de siempre con el texto sin
+ * compra; y con la compra empezada, sus filas (`filaDelPago`).
  */
 function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   const a = accesoDe(e);
@@ -417,12 +523,19 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
     const err = a.error ? [a.error] : textos(["altaErrServicio"]);
     return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: err }, principal: principalDelArreglo(e, a.arreglo, boton("leer-acceso", "clProbarDeNuevo")) };
   }
+  // La compra del primer paquete: solo sin acceso (quien ya tiene acceso no compra el primero) y con la compra en el build.
+  const pago = a.pago && a.estado === "ninguno" && !a.pideCupon ? a.pago : null;
+  // Con la compra empezada, su fila; «Tengo un cupón» desde ahí abre el campo, y su «Volver» vuelve a la compra. Pagando
+  // sin la orden en mano no hay qué mostrar: la caja de la compra, sin inventar nada.
+  if (pago && pago.fase !== "ofrecer" && !(pago.fase === "pagando" && !pago.orden) && !a.escribiendo) return filaDelPago(e, base, pago);
   const canjeando = e.corre === "canjeando";
   const error = a.error ? [a.error] : null;
   const estado: EstadoDeCaja = canjeando ? "haciendo" : error ? "no-salio" : "falta";
   const palabra = canjeando ? "" : error ? "clEstadoNoSalio" : "clEstadoFalta";
+  // Con la compra en el build, el texto que nombra un paquete va solo con el botón de comprarlo; si no, el de sin compra.
+  const sinVenta = a.pago ? "SinVenta" : "";
   // Con un error a la vista, el motivo va antes que la explicación de siempre: en un celular chico no entran los dos.
-  const lead: Texto[] = error ? [] : [{ clave: activada ? "altaYaActivada" : "altaTexto" }];
+  const lead: Texto[] = error ? [] : [{ clave: `${activada ? "altaYaActivada" : "altaTexto"}${sinVenta}` }];
   const conArreglo = (p: Boton): Boton | null => (canjeando ? p : principalDelArreglo(e, a.arreglo, p));
   if (a.escribiendo) {
     return {
@@ -446,7 +559,104 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
       principal: canjeando ? ocupado("usar-cupon", "altaRevisando") : conArreglo(boton("usar-cupon", usar)),
     };
   }
-  return { caja: { ...base, estado, palabra, textos: lead, error, cierre }, principal: conArreglo(boton("tengo-cupon", "altaTengoCupon")) };
+  // Sin cupón y con el primer paquete a la venta: comprarlo es la principal, con el precio del servidor, y el cupón al lado.
+  // Poco texto: a la vista, una sola línea (o el error); que la cuenta queda activada y qué hacer sin cupón, plegados.
+  if (pago?.alta) {
+    const errores = error ?? (pago.error ? [pago.error] : null);
+    const textosCompra: Texto[] = errores ? [] : [{ clave: activada ? "altaYaActivada" : "altaTexto" }];
+    const detalles: Texto[] = [...(activada ? [] : [{ clave: "altaPrimerPaqueteNota" }]), ...cierre];
+    const comprar = boton("comprar", "altaPrimerPaquete", false, varsDelProducto(pago.alta, pago.idioma));
+    return {
+      caja: { ...base, estado: errores ? "no-salio" : "falta", palabra: errores ? "clEstadoNoSalio" : "clEstadoFalta", textos: textosCompra, error: errores, secundarios: [{ ...boton("tengo-cupon", "altaTengoCupon"), forma: "boton" }], cierre: [], detalles },
+      principal: principalDelArreglo(e, error ? a.arreglo : pago.arreglo, comprar),
+    };
+  }
+  // Sin cupón y sin nada a la venta: «Tengo un cupón». Si la compra se frenó al pedirla, se dice por qué, y ese motivo es
+  // la única línea a la vista: qué hacer sin cupón queda plegado en Más detalles.
+  const errores = error ?? (pago?.error ? [pago.error] : null);
+  const frenada = !!errores && !error;
+  const sinCompra = frenada ? { estado: "no-salio" as const, palabra: "clEstadoNoSalio", textos: [] as Texto[], cierre: [] as Texto[], detalles: cierre } : { estado, palabra, textos: lead, cierre };
+  return { caja: { ...base, ...sinCompra, error: errores }, principal: conArreglo(boton("tengo-cupon", "altaTengoCupon")) };
+}
+
+/**
+ * Las filas de la compra ya empezada (cómo pagar, pidiendo la orden y pagando), con el título del paquete. Una sola
+ * principal en cada una; las salidas, como siempre, en el pie. Lo que se muestra para pagar sale entero de la orden.
+ * Poco texto: una sola línea a la vista (cómo pagar, lo que pasó con el pago o el error), los datos con su rótulo, y lo
+ * demás plegado en Más detalles, dentro del panel.
+ */
+function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado {
+  const base: CajaVista = { ...caja, titulo: "pagoTitulo" };
+  const error = p.error ? [p.error] : null;
+  const estado: EstadoDeCaja = error ? "no-salio" : "falta";
+  const palabra = error ? "clEstadoNoSalio" : "clEstadoFalta";
+  const volver: Secundario = { ...boton("volver-pago", "clVolver"), forma: "texto" };
+  const conArreglo = (b: Boton): Boton | null => principalDelArreglo(e, p.arreglo, b);
+  const medio = (m: MedioDePago): Boton => (m.id === "saldo" ? boton("pago-saldo", m.clave) : { ...boton("pago-medio", m.clave), medio: m.id });
+  if (p.fase === "pidiendo") return { caja: { ...base, estado: "haciendo", palabra: "", ocupada: true }, principal: ocupado("pago-medio", "pagoPreparando") };
+  const o = p.orden;
+  const saldo = p.conSaldo?.saldo ?? null;
+  if (p.fase === "elegir" || !o) {
+    const [primero, ...otros] = p.medios;
+    // Con el saldo entre los medios, la línea dice cuánto hay: con eso se entiende qué se está eligiendo.
+    const linea: Texto = saldo && p.medios.some((m) => m.id === "saldo") ? lineaDelSaldo(saldo, p.idioma) : { clave: "pagoComoPagar" };
+    return {
+      caja: { ...base, estado: "falta", palabra: "clEstadoFalta", textos: [linea], secundarios: [...otros.map((m): Secundario => ({ ...medio(m), forma: "boton" })), volver] },
+      principal: primero ? medio(primero) : null,
+    };
+  }
+  // Con el saldo: la confirmación propia, el pago y después lo que diga el servidor (`pago-saldo.ts`).
+  if (p.medio === "saldo" && saldo && p.conSaldo) {
+    const c = p.conSaldo;
+    const mirando = c.fase === "mirando" || c.incierto;
+    const s = vistaDelSaldo({ idioma: p.idioma, saldo, fase: c.fase, incierto: c.incierto, motivo: c.motivo, buscando: p.buscando, tarda: p.tarda, errorDelSondeo: mirando ? p.error : null }, o);
+    const a = (b: { accion: string; clave: string; vars?: Record<string, string>; apagado: boolean; ocupado?: boolean }): Boton => ({ ...b, accion: b.accion as Accion });
+    const corriendo = c.fase === "pagando" || p.buscando;
+    const err = s.error ? [s.error] : null;
+    return {
+      caja: {
+        ...base,
+        estado: err ? "no-salio" : corriendo ? "haciendo" : "falta",
+        palabra: err ? "clEstadoNoSalio" : corriendo ? "" : "clEstadoFalta",
+        textos: s.textos,
+        error: err,
+        ocupada: corriendo,
+        // Mientras se paga no se cambia nada. Después, Volver (y el otro medio, si todavía se puede).
+        secundarios: c.fase === "pagando" ? [] : [...s.secundarios.map((b): Secundario => ({ ...a(b), forma: "texto" })), volver],
+        cierre: [],
+        pago: null,
+      },
+      principal: a(s.principal),
+    };
+  }
+  const fecha = fechaDeAlta(o.vence, p.idioma);
+  const buscando = ocupado("ya-pague", "pagoBuscando");
+  // Vencida sin nada pagado: no se muestra para pagar (una nota vencida no se usa), pero «Ya pagué» queda por si pagó.
+  if (vencidaSinPagar(p)) {
+    return {
+      caja: {
+        ...base,
+        estado,
+        palabra,
+        textos: error ? [] : [{ clave: "pagoVencida", vars: { fecha } }],
+        error,
+        ocupada: p.buscando,
+        secundarios: p.buscando ? [volver] : [{ ...boton("ya-pague", "pagoYaPague"), forma: "texto" }, volver],
+      },
+      principal: p.buscando ? buscando : conArreglo(boton("otra-nota", "pagoOtraNota")),
+    };
+  }
+  const corto = p.conSaldo?.corto ?? null;
+  const panel: PanelDePago = panelDe(o, e.correoSesion, p.idioma, corto ? textoDelCorto(corto, p.idioma) : null, !!p.cambio);
+  // Mientras se paga, el cupón y las salidas van de texto: lo que pesa a la vista son los datos y Ya pagué.
+  const secundarios: Secundario[] = [{ ...boton("tengo-cupon", "altaTengoCupon"), forma: "texto" }];
+  if (p.tarda && !p.noLlego && !p.buscando) secundarios.push({ ...boton("no-llego", "pagoNoLlegoBoton"), forma: "texto" });
+  secundarios.push(volver);
+  const linea = lineaDelPago(p, !!error);
+  return {
+    caja: { ...base, estado, palabra, textos: linea.textos, nota: linea.nota, error, ocupada: p.buscando, secundarios, cierre: [], pago: panel },
+    principal: p.buscando ? buscando : conArreglo(boton("ya-pague", error ? "clProbarDeNuevo" : "pagoYaPague")),
+  };
 }
 
 /** La caja de proteger (o de confirmar este navegador) cuando es la que toca. */
@@ -553,6 +763,8 @@ function lineaDeEstado(e: EntradaVista): Texto | null {
   if (e.corre === "cerrando") return { clave: "clCerrando" };
   if (e.corre === "canjeando") return { clave: "altaRevisando" };
   if (e.lento && (e.corre === "revisando" || accesoDe(e).estado === "revisando")) return { clave: "clActivarLento" };
+  const pago = accesoDe(e).pago;
+  if (pago?.buscando && pago.fase === "pagando" && faltaElAcceso(e)) return { clave: "pagoBuscando" };
   return e.aviso ? { clave: e.aviso } : null;
 }
 
@@ -606,10 +818,13 @@ export function vistaDe(e: EntradaVista): Vista {
   notas.push(e.puedePasarAPrueba ? "clAPruebaNota" : "modeSwitchBlocked");
   // Con la cuenta activada y protegida, lo único que falta es el acceso: no son «dos pasos».
   const soloElAcceso = faltaElAcceso(e) && e.activacion === "lista" && e.proteccion === "lista";
+  // Con la compra empezada y la cuenta a medias: primero los sorteos, después los dos pasos.
+  const a = accesoDe(e);
+  const comprando = faltaElAcceso(e) && a.estado === "ninguno" && !a.pideCupon && a.pago !== undefined && a.pago.fase !== "ofrecer";
   return {
     final: false,
     titulo: "clTitulo",
-    bajada: soloElAcceso ? "altaBajadaUnPaso" : "clBajada",
+    bajada: soloElAcceso ? "altaBajadaUnPaso" : comprando ? "clBajadaConPago" : "clBajada",
     cajas,
     principal: principalFinal,
     volver: puedeVolverDelCupon(e) ? boton("volver", "clVolver") : null,

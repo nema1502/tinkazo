@@ -101,3 +101,52 @@ describe("el acceso del servidor", () => {
     expect(h.estado).toHaveBeenCalledWith("GBBB", { forzar: true });
   });
 });
+
+describe("la orden, el pago y lo que se vende, solo con la compra en el build", () => {
+  const respuesta = (cuerpo: unknown, estado = 200) => ({ status: estado, json: async () => cuerpo }) as unknown as Response;
+  const sesion = { token: async () => TOKEN, sesionViva: () => true, cuenta: () => "GAAA" };
+  const CON_PAGO = { alta: true, libre: false, pago: true, sorteoServidor: false, qr: false };
+  const SIN_PAGO = { alta: true, libre: false, pago: false, sorteoServidor: false, qr: false };
+
+  it("preguntar por la orden antes de pagar con el saldo, solo con la compra con QR en el build", () => {
+    expect(accesoDelServidor(sesion, { url: URL_PORTERO }, CON_PAGO).preguntarAntesDePagar).toBeUndefined();
+    expect(accesoDelServidor(sesion, { url: URL_PORTERO }).preguntarAntesDePagar).toBeUndefined();
+    expect(accesoDelServidor(sesion, { url: URL_PORTERO }, { ...CON_PAGO, qr: true }).preguntarAntesDePagar).toBe(true);
+  });
+
+  it("con la compra apagada, el paso no tiene cómo pedir una orden ni preguntar por un pago", () => {
+    const a = accesoDelServidor(sesion, { url: URL_PORTERO }, SIN_PAGO);
+    expect(a.pago).toBeUndefined();
+    expect(a.orden).toBeUndefined();
+    expect(a.oferta).toBeUndefined();
+    // Y el de este build (Prueba), tampoco.
+    const delBuild = accesoDelServidor(sesion, { url: URL_PORTERO });
+    expect(delBuild.pago).toBeUndefined();
+  });
+
+  it("con la compra prendida: el pago y la orden con el token de la sesión, solo en la cabecera", async () => {
+    const f = vi.fn(async (_url: string, _init?: RequestInit) => respuesta({ pagada: false, recibido: "0", total: "3", minimo: "2.85" }));
+    const a = accesoDelServidor(sesion, { url: URL_PORTERO, fetch: f as unknown as typeof fetch }, CON_PAGO);
+    expect(await a.pago?.("ABCD2345")).toMatchObject({ ok: true, datos: { pagada: false, total: "3" } });
+    const [url, init] = f.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_PORTERO}/v1/alta/pago`);
+    expect(String(url)).not.toContain(TOKEN);
+    expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(JSON.parse(String(init?.body))).toEqual({ orden: "ABCD2345" });
+    // Sin token, ni se pregunta.
+    const g = vi.fn(async () => respuesta({}));
+    const sinToken = accesoDelServidor({ ...sesion, token: async () => null }, { url: URL_PORTERO, fetch: g as unknown as typeof fetch }, CON_PAGO);
+    expect(await sinToken.pago?.("ABCD2345")).toMatchObject({ ok: false, motivo: "sin-token" });
+    expect(await sinToken.orden?.("alta")).toMatchObject({ ok: false, motivo: "sin-token" });
+    expect(g).not.toHaveBeenCalled();
+  });
+
+  it("lo que se vende sale del servidor, sin sesión", async () => {
+    const f = vi.fn(async (_url: string, _init?: RequestInit) => respuesta({ red: "mainnet", pago: true, alta: { usdc: "3", sorteos: 3, dias: 90 }, paquetes: [] }));
+    const a = accesoDelServidor(sesion, { url: URL_PORTERO, fetch: f as unknown as typeof fetch }, CON_PAGO);
+    expect(await a.oferta?.()).toEqual({ alta: { id: "alta", usdc: "3", sorteos: 3, dias: 90 }, paquetes: [] });
+    const [url, init] = f.mock.calls[0] ?? [];
+    expect(url).toBe(`${URL_PORTERO}/v1/alta/precios`);
+    expect(init?.headers).not.toHaveProperty("Authorization");
+  });
+});

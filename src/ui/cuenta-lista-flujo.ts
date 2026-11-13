@@ -1,5 +1,6 @@
 import { t } from "../i18n";
 import { app } from "../state";
+import { compraQrActiva } from "../stellar/alta-config";
 import { network } from "../stellar/config";
 import { enPractica, sinGrabar } from "../ensayo-modo";
 import { activeWallet } from "../stellar/wallet-lite";
@@ -38,6 +39,19 @@ function billetera(): BilleteraOficial | null {
   const w = activeWallet() as unknown as Partial<BilleteraOficial> | null;
   if (!w || w.submitsItself !== true || typeof w.estadoOficialLocal !== "function" || typeof w.estadoOficial !== "function") return null;
   return w as BilleteraOficial;
+}
+
+/**
+ * La sesión que ve el acceso al modo Oficial: el token, si sigue abierta y la cuenta. Pagar con el saldo (`pagar`) va
+ * solo si la billetera activa es la del proveedor, la de Google o de correo: con cualquier otra, no se ofrece.
+ */
+function sesionDelAcceso(wp: typeof import("../stellar/wallet-pollar"), ui: typeof import("./wallet-ui")): import("./cuenta-lista-acceso").SesionDelAcceso {
+  return {
+    token: () => wp.pollarWallet.tokenDeSesion(),
+    sesionViva: () => wp.pollarWallet.sesionViva(),
+    cuenta: () => ui.currentSession()?.address ?? null,
+    ...(activeWallet() === wp.pollarWallet ? { pagar: (p: Parameters<typeof wp.pollarWallet.pagarOrden>[0]) => wp.pollarWallet.pagarOrden(p) } : {}),
+  };
 }
 
 /** El paso aplica: modo Oficial, cuenta de Google o de correo con la sesión abierta, y no es la demo, el ensayo ni el stand. */
@@ -117,11 +131,7 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
     };
     const porCorreo = wp.pollarWallet.label === "Email";
     // El acceso al modo Oficial (W3): el servidor, con el token de la sesión verificada, o cerrado sin él.
-    const acceso = fuenteDelAcceso({
-      token: () => wp.pollarWallet.tokenDeSesion(),
-      sesionViva: () => wp.pollarWallet.sesionViva(),
-      cuenta: () => ui.currentSession()?.address ?? null,
-    });
+    const acceso = fuenteDelAcceso(sesionDelAcceso(wp, ui));
     const eleccion = abrirCuentaLista(
       wp.pollarWallet,
       {
@@ -251,10 +261,113 @@ export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGra
 }
 
 /**
+ * «Tus dólares digitales» con una cuenta de Google o de correo a la que le falta algo para recibir (crearse o
+ * protegerse): el paso, abierto por el toque de la persona. Se abre como al entrar, con Seguir al final. `true` si siguió
+ * con la cuenta lista.
+ */
+export async function abrirDesdeTusDolares(): Promise<boolean> {
+  if (!aplica()) return false;
+  return abrirPaso("entrada");
+}
+
+/**
  * El sello o el sorteo fallaron por la cuenta (falta protegerla, confirmar este navegador, activarla o el acceso al modo
  * Oficial): el paso. Con `cupon: "escribir"` («Usar un cupón» de la ventana «Se te acabaron»), abre en el campo del cupón.
  */
 export async function abrirParaElError(para: "sello" | "sorteo", volverA: HTMLElement | null, o: Pick<OpcionesDelPaso, "cupon"> = {}): Promise<boolean> {
   if (!aplica()) return false;
   return abrirPaso(para, { volverA, ...(o.cupon ? { cupon: o.cupon } : {}) });
+}
+
+/**
+ * «Sumar sorteos» con la cuenta ya lista (la ventana de los paquetes, `pago-paquete.ts`), con el servidor de las altas y
+ * la sesión de ahora. Lo abren «Se te acabaron los sorteos oficiales» y la línea del cupo. Sin la compra en el build, o
+ * fuera de Oficial con una cuenta de Google o de correo, no abre nada. `true` si llegó el pago. Nunca lanza.
+ */
+export async function abrirSumarSorteos(o: { producto?: string | null } = {}): Promise<boolean> {
+  if (!aplica()) return false;
+  let mods: [typeof import("./pago-paquete"), typeof import("../stellar/wallet-pollar"), typeof import("./wallet-ui"), typeof import("./cuenta-lista-acceso"), typeof import("./cuenta-estado")];
+  try {
+    mods = await Promise.all([import("./pago-paquete"), import("../stellar/wallet-pollar"), import("./wallet-ui"), import("./cuenta-lista-acceso"), import("./cuenta-estado")]);
+  } catch (e) {
+    console.warn("[tinkazo] no se pudo bajar la ventana de sumar sorteos", e);
+    avisarQueNoCargo();
+    return false;
+  }
+  const [paquete, wp, ui, { fuenteDelAcceso }, { ocultarCorreo }] = mods;
+  try {
+    const sesion = sesionDelAcceso(wp, ui);
+    const acceso = fuenteDelAcceso(sesion);
+    if (typeof acceso !== "object") return false;
+    const { oferta, orden, pago, saldo } = acceso;
+    if (!oferta || !orden || !pago) return false;
+    // La compra con QR, solo con su bandera en el build: apagada, no se baja nada ni se pregunta nada.
+    const qr = compraQrActiva() ? await compraConQr(wp, ui, sesion, { oferta, refrescarCupo: () => acceso.refrescarCupo() }) : null;
+    // Con una compra con QR ya cargada el dinero puede estar en camino: Tu compra la retoma donde quedó.
+    const enCurso = qr?.compraQr.abierta?.cargada ? qr.compraQr.abierta.producto : null;
+    if (qr && enCurso) {
+      qr.alQr(enCurso);
+      return false;
+    }
+    return await paquete.abrirSumarSorteos(
+      { oferta: () => oferta(), orden: (p) => orden(p), pago: (id) => pago(id), refrescarCupo: () => acceso.refrescarCupo(), ...(saldo ? { saldo } : {}), ...(acceso.preguntarAntesDePagar ? { preguntarAntesDePagar: true } : {}) },
+      { correo: ocultarCorreo(ui.currentSession()?.mail ?? ""), producto: o.producto ?? null, ...(qr ? { alQr: qr.alQr, medio: qr.medio } : {}) },
+    );
+  } catch (e) {
+    console.warn("[tinkazo] no se pudo abrir la ventana de sumar sorteos", e);
+    return false;
+  }
+}
+
+/**
+ * Tu compra con el QR del banco desde Sumar sorteos (`compra-entrada.ts`): si el servidor se la ofrece a esta cuenta, el
+ * medio deducido y quién abre la ventana con el paquete elegido. `null` si no se ofrece o no se pudo bajar. Solo se llama
+ * con la compra con QR en el build.
+ */
+async function compraConQr(
+  wp: typeof import("../stellar/wallet-pollar"),
+  ui: typeof import("./wallet-ui"),
+  sesion: import("./cuenta-lista-acceso").SesionDelAcceso,
+  acceso: { oferta: () => Promise<import("../stellar/alta-oferta").Oferta>; refrescarCupo: () => void },
+): Promise<{ alQr: (producto: string) => void; medio: "qr" | "app"; compraQr: import("../stellar/alta-api").CompraQrDelEstado } | null> {
+  try {
+    const [{ entradaDeLaCompra, abrirTuCompra }, { porteroDeLaCompra }] = await Promise.all([import("./compra-entrada"), import("./cuenta-lista-acceso")]);
+    const portero = porteroDeLaCompra(sesion);
+    const entrada = await entradaDeLaCompra({ estado: () => portero.estado() });
+    if (!entrada) return null;
+    const alQr = (producto: string): void => {
+      void (async () => {
+        const oferta = await acceso.oferta();
+        const elegido = [...(oferta.alta ? [oferta.alta] : []), ...oferta.paquetes].find((x) => x.id === producto);
+        if (!elegido) return;
+        abrirTuCompra({
+          producto: elegido,
+          oferta,
+          compraQr: entrada.compraQr,
+          billetera: wp.pollarWallet,
+          portero,
+          cuenta: () => ui.currentSession()?.address ?? null,
+          marcaDelPago: (nota) => wp.leerMarcaDelPago(nota),
+          afuera: (accion) => void afueraDeLaCompra(accion, wp, ui),
+          alCerrar: (s) => {
+            if (s.pago?.fase === "listo") acceso.refrescarCupo();
+          },
+        });
+      })().catch((e: unknown) => {
+        console.warn("[tinkazo] no se pudo abrir Tu compra", e);
+        avisarQueNoCargo();
+      });
+    };
+    return { alQr, medio: entrada.medio, compraQr: entrada.compraQr };
+  } catch (e) {
+    console.warn("[tinkazo] no se pudo bajar la compra con QR", e);
+    return null;
+  }
+}
+
+/** Lo que sigue fuera de Tu compra: entrar de nuevo, proteger la cuenta o usar un cupón. Lo demás solo cierra. */
+async function afueraDeLaCompra(accion: import("./compra-qr").AccionDeAfuera, wp: typeof import("../stellar/wallet-pollar"), ui: typeof import("./wallet-ui")): Promise<void> {
+  if (accion === "entrar") return void (wp.pollarWallet.label === "Email" ? ui.openPicker() : ui.entrar());
+  if (accion === "proteger") return void (await abrirDesdeTusDolares());
+  if (accion === "usar-cupon") return void (await abrirParaElError("sello", null, { cupon: "escribir" }));
 }

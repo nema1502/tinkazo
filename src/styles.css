@@ -2071,17 +2071,40 @@
     box-shadow: var(--sh-sm); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer;
   }
   .dlg-main:disabled { background: var(--card); color: var(--muted); box-shadow: none; cursor: default; }
+  /* Tus dólares digitales: el saldo arriba, y cada paso con su título, una línea, los datos y lo demás plegado. */
+  .saldo-total { margin: 0 0 12px; font-size: 22px; font-weight: 800; line-height: 1.25; }
+  .saldo-practica { margin: 0 0 12px; padding: 8px 12px; border: 2px solid var(--ink); background: var(--card); font-size: 15px; line-height: 1.4; }
+  .saldo-paso { display: flex; flex-direction: column; gap: 10px; }
+  .saldo-titulo { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.25; }
   .saldo-lead { font-size: 16px; line-height: 1.5; color: var(--ink2); }
-  .saldo-pasos { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 1.5; }
-  .saldo-nota { margin: 0; }
+  .saldo-paso .saldo-lead { margin: 0; }
+  .saldo-datos { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .saldo-dato dt { font-size: 14px; font-weight: 800; letter-spacing: 0.02em; color: var(--ink2); }
+  .saldo-dato dd { margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; }
   .saldo-dir {
     display: block; font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 700; line-height: 1.4;
     background: var(--paper); border: 2px solid var(--ink); padding: 10px 12px; overflow-wrap: anywhere; user-select: all;
   }
+  .saldo-dato .saldo-dir { flex: 1 1 100%; }
+  .saldo-dato .mini { min-height: 44px; }
+  .saldo-dato .mini:disabled { opacity: 0.5; box-shadow: none; cursor: default; }
   .saldo-qr { align-self: center; background: #fff; border: 2px solid var(--ink); width: 176px; height: 176px; image-rendering: pixelated; }
+  .saldo-paso .saldo-qr { border-width: 3px; padding: 8px; box-sizing: content-box; }
   .saldo-bs {
     min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 16px;
     background: var(--field, var(--paper)); color: var(--ink); border: 2px solid var(--ink);
+  }
+  .saldo-dato .saldo-pista { margin-top: 6px; font-size: 15px; line-height: 1.4; color: var(--ink2); }
+  .saldo-montos { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+  .saldo-montos .mini { min-height: 44px; min-width: 56px; }
+  .saldo-montos .mini[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .saldo-ultimo { margin: 0; font-size: 15px; line-height: 1.4; color: var(--ink2); }
+  .saldo-mas summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .saldo-mas p { margin: 4px 0 8px; font-size: 15px; line-height: 1.5; color: var(--ink2); }
+  .saldo-otras { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .saldo-link {
+    min-height: 44px; padding: 0; background: none; border: 0; color: var(--ink); font: inherit; font-size: 16px; font-weight: 700;
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   }
   .saldo-aviso { font-size: 16px; line-height: 1.4; color: var(--teal-ink); }
   .mon-saldo { font-size: 24px; line-height: 1.2; }
@@ -3031,6 +3054,43 @@
   .cl-form input.cl-cupon::selection { background: var(--magenta); color: var(--on-accent); }
   .cl-form .cl-ayuda { margin: 0; font-size: 16px; line-height: 1.45; }
   .cl-cupon-listo { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap; }
+  /* Los datos para pagar un paquete (`src/ui/pago-panel.ts`): cada dato con su rótulo arriba y, al lado, «Copiar». En la
+     letra que no confunde la O con el 0, y elegible entero de un toque. El QR siempre oscuro sobre blanco. */
+  .pago-panel { display: grid; gap: 10px; }
+  .pago-dato { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 4px; }
+  .pago-et { grid-column: 1 / -1; margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 0.04em; color: var(--ink2); }
+  .pago-valor {
+    min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 16px; font-weight: 700; line-height: 1.4;
+    background: var(--paper); border: 2px solid var(--ink); padding: 8px 10px; overflow-wrap: anywhere; user-select: all;
+  }
+  .pago-copiar { align-self: stretch; padding-inline: 12px; }
+  /* El saldo que no alcanza: un dato para leer, sin caja ni nada que copiar. */
+  .pago-valor-saldo { grid-column: 1 / -1; margin: 0; font-family: inherit; background: none; border: 0; padding: 0; user-select: text; }
+  .pago-qr-caja { display: flex; align-items: center; gap: 12px; }
+  .pago-qr { flex: none; background: #fff; border: 2px solid var(--ink); image-rendering: pixelated; }
+  .pago-qr-ayuda { line-height: 1.35; }
+  .pago-app { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+  /* La moneda: un dato para leer, sin caja ni nada que copiar. Estoy en Bolivia, como enlace de texto antes de los datos. */
+  .pago-valor[data-dato="moneda"] { grid-column: 1 / -1; font-family: inherit; background: none; border: 0; padding: 0; user-select: text; }
+  .pago-panel > .pago-cambio { justify-self: start; }
+  .pago-mas > .pago-qr-caja, .pago-mas > .pago-app { margin-top: 10px; }
+  /* Más detalles: lo que no hace falta para pagar, plegado (dentro del panel y al final de la caja de la compra). */
+  /* Va como un enlace de texto, no como un botón: no compite con la acción principal ni con Copiar. */
+  details.mas.pago-mas, details.mas.cl-detalles { margin: 0; }
+  details.mas.pago-mas > summary, details.mas.cl-detalles > summary {
+    min-height: 48px; padding: 0; background: none; border: 0; box-shadow: none; color: var(--ink2);
+    font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .pago-mas > p, .cl-detalles > p { margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: var(--ink2); overflow-wrap: anywhere; }
+  @media (max-width: 359px) { .pago-qr-caja { flex-direction: column; align-items: flex-start; } }
+  /* La ventana «Sumar sorteos» (`src/ui/pago-paquete.ts`): los mismos datos, en la ventana de las pantallas de la cuenta. */
+  .pago-cuerpo { display: flex; flex-direction: column; gap: 10px; }
+  .pago-texto { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+  .pago-nota { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
+  .pago-cierre { color: var(--ink2); border-top: 2px solid var(--ink2); padding-top: 10px; }
+  .pago-cuerpo .cl-secundario, .pago-cuerpo .cl-texto, .pago-cuerpo .pago-app { min-height: 48px; }
+  /* El botón de sumar sorteos, junto a la línea del cupo y en «Se te acabaron»: secundario, nunca como la principal. */
+  .cupo-sumar { margin: 4px 0 0; min-height: 44px; }
   .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }
   .cl-raya { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font-size: 16px; font-weight: 600; color: var(--ink2); }
   .cl-raya::before, .cl-raya::after { content: ""; flex: 1; border-top: 2px solid var(--ink2); }

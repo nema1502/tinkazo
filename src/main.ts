@@ -252,6 +252,9 @@ initSiguiente({ segundos: secondsToRound });
 initTutorial();
 initOnboarding();
 initLumaAyuda();
+// La demo de la compra con QR (`?compra-demo`): solo en la máquina de quien prueba y con VITE_RAMPA_DEMO=1, con datos
+// inventados y sin red (`ui/compra-demo.ts`). Se baja aparte, y nada se abre hasta tocar una compra de la lista.
+if (params.has("compra-demo")) void import("./ui/compra-demo").then((m) => m.montarDemoDeCompra());
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
