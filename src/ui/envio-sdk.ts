@@ -200,8 +200,11 @@ async function pollarNoSabe(e: unknown): Promise<boolean> {
  * con el hash de la transacción que se entregó: Pollar la envuelve para pagar la
  * comisión, y el RPC la encuentra igual por ese hash (medido el 21 de octubre de
  * 2026 con el sello patrocinado 93a2c960…).
+ *
+ * `antesDeMandar` corre con la transacción recién firmada por Pollar y antes de entregársela al portero. Si lanza, no se
+ * le entrega nada y sale ese error: es lo que usa el sello para no mandar una ronda que ya no alcanza (`anchor.ts`).
  */
-export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean } = {}): Promise<{ hash: string; value: unknown } | null> {
+export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean; antesDeMandar?: () => void } = {}): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet"),
     import("../stellar/wallet-pollar"),
@@ -254,6 +257,9 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
       // Es la misma transacción las veces que haga falta (un reintento no cuenta dos veces: el portero
       // contesta lo mismo para el mismo hash).
       const firmada = await firmarSinPatrocinio(tx, wallet);
+      // La firma puede haber tardado (el 13 de noviembre de 2026, medio minuto): quien llama mira si todavía vale mandarla.
+      // Lo firmado no sale de acá: si no se le entrega al portero, no llega a la red.
+      opciones.antesDeMandar?.();
       let propia = toHex(firmada.hash());
       const xdrFirmado = firmada.toXDR();
       venceEn = Number(firmada.timeBounds?.maxTime) || venceEn;

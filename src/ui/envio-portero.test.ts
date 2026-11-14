@@ -219,6 +219,29 @@ describe("submitElsewhere con el portero", () => {
     expect(pasos).not.toContain("covering");
   });
 
+  it("recién firmada, si antesDeMandar dice que ya no alcanza, no se le entrega nada al portero y sale ese error", async () => {
+    const f = portero(cupo(), () => responder(200, { hash: HASH, status: "PENDING", quedan: 18, quedanSorteos: 38 }));
+    const tarde = new Error("la ronda quedó cerca antes de mandar el sello (faltan 31 s): Error(Contract, #5)");
+    const antesDeMandar = vi.fn(() => {
+      throw tarde;
+    });
+    const { submitElsewhere } = await import("./envio-sdk");
+    await expect(submitElsewhere(tx as never, () => undefined, 5000, intento, { antesDeMandar })).rejects.toBe(tarde);
+    expect(signUnsponsored).toHaveBeenCalledTimes(1);
+    expect(antesDeMandar).toHaveBeenCalledTimes(1);
+    expect(f.mock.calls.filter((c) => !String(c[0]).includes("/cupo"))).toEqual([]);
+    expect(getTransaction).not.toHaveBeenCalled();
+  });
+
+  it("si antesDeMandar deja seguir, el portero manda como siempre", async () => {
+    const f = portero(cupo(), () => responder(200, { hash: HASH, status: "PENDING", quedan: 18, quedanSorteos: 38 }));
+    const antesDeMandar = vi.fn();
+    const { submitElsewhere } = await import("./envio-sdk");
+    expect((await submitElsewhere(tx as never, () => undefined, 5000, intento, { antesDeMandar }))?.hash).toBe(HASH);
+    expect(antesDeMandar).toHaveBeenCalledTimes(1);
+    expect(f.mock.calls.filter((c) => !String(c[0]).includes("/cupo")).length).toBe(1);
+  });
+
   it("pagar con mi cuenta no pasa por el portero", async () => {
     const f = vi.fn();
     vi.stubGlobal("fetch", f);

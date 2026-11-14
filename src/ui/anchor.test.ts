@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { roundTime, targetRound } from "../protocol/quicknet";
 import { type SelloIncierto, esSelloIncierto } from "../stellar/envio";
 import { selloSinGrabar, type AnchorStep, type DrawResult, type SealResult } from "./anchor";
+import { MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S } from "./sello-seguro";
 
 // La primera prueba paga la carga en frío del SDK de Stellar (cada una vuelve a cargar
 // `anchor` con `vi.resetModules()`). Con la máquina ocupada, 5 s no alcanzaban (20 de
@@ -60,6 +61,8 @@ vi.mock("../stellar/wallet-lite", async (orig) => {
 const DIR = "GBZQHWXF4I4ERXBLLHLQOENNXIJMHDGIYMFDYZVNX5KZM4OXTY4BDSQY";
 /** Los argumentos del sello, con la ronda que elegiría `freeze.ts` ahora mismo: 45 s de margen. */
 const argsDeAhora = () => ({ organizer: DIR, listHash: new Uint8Array(32), count: 5, numWinners: 1, round: targetRound(Date.now() / 1000, 45), meta: "premio" });
+/** Los mismos cuando paga el portero: `freeze.ts` le da a la ronda `MARGEN_CON_PORTERO_S` (65 s) y no 45. */
+const argsConPortero = () => ({ ...argsDeAhora(), round: targetRound(Date.now() / 1000, MARGEN_CON_PORTERO_S) });
 
 /** El hash (en hex) de la transacción que se arma (`built`) y de la que se firma acá (`signed`), en las de mentira. */
 const HASH_ARMADA = "01".repeat(32);
@@ -797,7 +800,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
       // El SDK de mentira y el cliente del contrato, cargados antes de que corra el reloj (ver arriba).
       await Promise.all([import("@stellar/stellar-sdk"), import("../stellar/contract")]);
       h.wallet = wallet;
-      const { error } = await correr(sellar());
+      const { error } = await correr(sellar(argsConPortero()));
       expect(error).toMatchObject({ name: "ErrorPortero", motivo: "fondo" });
       expect(firmar).toHaveBeenCalledTimes(1);
       expect(pagosAlPortero(f).length).toBeGreaterThan(0);
@@ -897,6 +900,89 @@ describe("el margen de la ronda al empezar a armar el sello", () => {
     const { selloSinGrabar, anchorErrorText } = await import("./anchor");
     expect(selloSinGrabar(error)).toBe(true);
     expect(await anchorErrorText(error)).toBe("El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.");
+  });
+});
+
+/**
+ * La prueba de punta a punta del 13 de noviembre de 2026 en la red principal, con la cuenta de Google y el portero: la
+ * ronda nació a 65 s (`MARGEN_CON_PORTERO_S`), armar el sello llevó unos 2,5 s y la firma de Pollar llegó 32 s después de
+ * pedirla. El portero la mandó, entró a un ledger 6,5 s después, a 25 s de la ronda, y el contrato la rechazó
+ * (`RoundTooSoon`). Para el portero un sello que entró a un ledger y falló gasta el sorteo oficial, y la cuenta tenía uno.
+ *
+ * La red de mentira hace lo mismo: cada paso adelanta el reloj lo que tardó esa noche, y el ledger rechaza el sello si su
+ * ronda nace a menos de 30 s, como el contrato. Lo que se mira es si la transacción le llega al portero.
+ */
+describe("la firma de Pollar que tarda, con el portero de la red principal", () => {
+  beforeEach(() => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    vi.useFakeTimers({ toFake: ["Date"] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /**
+   * Sella con la ronda que elige `freeze.ts` cuando paga el portero (`margenS` desde ahora). Armar tarda 2,5 s, la firma de
+   * Pollar lo que diga `firma`, y del portero al ledger pasan 6,5 s. Devuelve cómo terminó y cuántas veces se le pidió al
+   * portero que pague, que es lo que gasta el sorteo.
+   */
+  async function sellarConElPortero(firma: { ms: number } | { faltanAlFirmar: number }, margenS = MARGEN_CON_PORTERO_S) {
+    const round = targetRound(Date.now() / 1000, margenS);
+    const f = porteroDeMentira("portero", () => {
+      vi.setSystemTime(Date.now() + 6_500);
+      return responder(200, { hash: HASH_FIRMADA, status: "PENDING", quedan: 0, quedanSorteos: 0 });
+    });
+    const firmar = vi.fn(async (_xdr: string) => {
+      vi.setSystemTime("ms" in firma ? Date.now() + firma.ms : (roundTime(round) - firma.faltanAlFirmar) * 1000);
+      return "FIRMADA";
+    });
+    const { wallet, deshacer } = pollarParaElPortero(firmar);
+    try {
+      await Promise.all([import("@stellar/stellar-sdk"), import("../stellar/contract")]);
+      h.wallet = wallet;
+      h.seal.mockImplementation(async () => {
+        vi.setSystemTime(Date.now() + 2_500);
+        return txSimulada();
+      });
+      // El ledger: con la ronda a menos de 30 s, el contrato dice que no (`RoundTooSoon`) y la transacción queda FAILED.
+      h.getTx.mockImplementation(async () => (roundTime(round) - cierre() < 30 ? { status: "FAILED", latestLedgerCloseTime: cierre() } : entro(nativeToScVal(7n, { type: "u64" }))));
+      const res = await sellar({ ...argsDeAhora(), round });
+      return { ...res, pagos: pagosAlPortero(f).length, firmas: firmar.mock.calls.length };
+    } finally {
+      deshacer();
+    }
+  }
+
+  it("como esa noche, la firma 32 s: no se le entrega al portero, no se gasta el sorteo y se pide otra ronda", async () => {
+    const { error, pagos, firmas } = await sellarConElPortero({ ms: 32_000 });
+    expect(firmas).toBe(1);
+    expect(pagos).toBe(0);
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    expect(selloSinGrabar(error)).toBe(true);
+  });
+
+  it("la ronda siguiente (20 s más lejos) con la firma igual de lenta entra: un solo pago al portero", async () => {
+    const { r, error, pagos } = await sellarConElPortero({ ms: 32_000 }, MARGEN_CON_PORTERO_S + MAS_LEJOS_POR_INTENTO_S);
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
+    expect(pagos).toBe(1);
+  });
+
+  it("con la firma de siempre (la de esa mañana, un segundo) entra a la primera", async () => {
+    const { r, error, pagos } = await sellarConElPortero({ ms: 1_000 });
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
+    expect(pagos).toBe(1);
+  });
+
+  it.each([60, 46, 45])("a la ronda le faltan %s s al llegar la firma: se le entrega al portero", async (faltan) => {
+    const { pagos } = await sellarConElPortero({ faltanAlFirmar: faltan });
+    expect(pagos).toBe(1);
+  });
+
+  it.each([44.9, 40, 31.5, 10])("a la ronda le faltan %s s al llegar la firma: no se le entrega, entraría y fallaría", async (faltan) => {
+    const { error, pagos } = await sellarConElPortero({ faltanAlFirmar: faltan });
+    expect(pagos).toBe(0);
+    expect(selloSinGrabar(error)).toBe(true);
   });
 });
 
@@ -1415,11 +1501,11 @@ describe("el costo del sello de verdad (antes de firmar o de entregarlo)", () =>
     try {
       h.wallet = wallet;
       h.seal.mockImplementation(async () => txSimulada("5000000"));
-      expect(nombre((await sellar()).error)).toBe("CostoAlto");
+      expect(nombre((await sellar(argsConPortero())).error)).toBe("CostoAlto");
       expect(firmar).not.toHaveBeenCalled();
       expect(pagosAlPortero(f)).toHaveLength(0);
       h.seal.mockImplementation(async () => txSimulada("1000000"));
-      const { r, error } = await sellar();
+      const { r, error } = await sellar(argsConPortero());
       expect(error).toBeUndefined();
       expect(r?.txHash).toBe(HASH_FIRMADA);
       expect(firmar).toHaveBeenCalledTimes(1);

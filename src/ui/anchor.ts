@@ -244,6 +244,19 @@ async function vidaDelSorteo(): Promise<number> {
 const MARGEN_AL_MANDAR_S = 35;
 
 /**
+ * Lo mismo cuando paga el portero (`MARGEN_CON_PORTERO_S`): recién firmada por Pollar y antes de entregársela al portero,
+ * cuántos segundos tienen que faltar para que nazca la ronda. Son los 30 que pide el contrato, lo que tarda el portero en
+ * revisarla, simularla y mandarla, y lo que tarda en entrar a un ledger. Con menos no se le entrega: no queda nada en la
+ * cadena, no se gasta ningún sorteo oficial y `freeze.ts` prueba con otra ronda.
+ *
+ * Se vio el 13 de noviembre de 2026 en la red principal: la firma de Pollar llegó medio minuto después de pedirla, el
+ * portero la mandó con 31 s por delante, entró a un ledger con 25 y el contrato la rechazó (`RoundTooSoon`). El portero
+ * cuenta como gastado el sorteo oficial de un sello que entró a un ledger aunque haya fallado, y la cuenta tenía uno solo.
+ * Del portero al ledger pasaron 6,5 s esa noche y 2,4 esa mañana: con 45 sobra.
+ */
+export const MARGEN_AL_ENTREGAR_AL_PORTERO_S = 45;
+
+/**
  * Cuánto se espera, ya mandada la transacción, sin poder hablar con la red antes
  * de decir que no se sabe. Con el sello, después viene la pregunta de si entró
  * (otro tanto como mucho): medido el 21 de octubre de 2026 en la testnet, con la
@@ -358,7 +371,15 @@ async function sellarEnUnRpc(args: SealArgs, onStep: OnStep, opciones: OpcionesD
     desde: Math.floor(Date.now() / 1000),
   };
 
-  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento, { pagarConMiCuenta: !!opciones.pagarConMiCuenta });
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento, {
+    pagarConMiCuenta: !!opciones.pagarConMiCuenta,
+    // Recién firmada por Pollar, que puede tardar: si la ronda ya no alcanza para pasar por el portero, no se le entrega.
+    // Entraría a un ledger y fallaría, y el sorteo oficial quedaría gastado.
+    antesDeMandar: () => {
+      const quedan = roundTime(args.round) - Date.now() / 1000;
+      if (quedan < MARGEN_AL_ENTREGAR_AL_PORTERO_S) throw new RondaMuyCerca(quedan);
+    },
+  });
   if (delegated) {
     return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
   }
