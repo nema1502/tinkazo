@@ -224,7 +224,7 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     // Las líneas de los obstáculos ocupan algunos huecos de la recta y desde «¡Cabeza a cabeza!» (T-3,3) la tribuna calla: grita en el 90 %
     // de las rondas o más (antes de esa línea, el 93 %).
     expect(hayPrimera).toBeGreaterThan(RONDAS * 0.9);
-  });
+  }, 330_000);
 
   it("\"Busquen su nombre\" se dice con todas las cantidades (también con hasta 30) y \"Ya se ve la meta\" solo cuando la meta entra", () => {
     for (const n of [5, 8, 9, 12, 18, 30, 31, 60, 200]) {

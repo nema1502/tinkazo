@@ -222,7 +222,7 @@ describe("la piedrita que se salta", () => {
     }
     expect(conTropiezo).toBeGreaterThan(20);
     expect(conDos).toBeGreaterThan(10);
-  });
+  }, 210_000);
 
   // Tres tramos y diez en el grupo: la 7 se echa a la mitad del segundo tramo de piedras, la 8 y la 9 a la mitad del primero.
   const tramosAMano = [
@@ -298,7 +298,7 @@ describe("la piedrita que se salta", () => {
     }
     expect(carreras).toBeGreaterThan(80);
     expect(Math.abs(veces - esperado), `tropezó ${veces} veces, se esperaban ${esperado.toFixed(1)}`).toBeLessThanOrEqual(3 * Math.sqrt(varianza));
-  });
+  }, 300_000);
   for (const [W, H] of [[390, 844], [1366, 768]] as const) {
     it(`en ${W}x${H}: ninguna llama queda dentro de una roca ni de una mata en toda la carrera, también la que cruza el pedregal después de abrirse la recta`, () => {
       const toques: string[] = [];

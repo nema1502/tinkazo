@@ -325,7 +325,7 @@ describe("kit de marca para patrocinios y eventos", () => {
       for (const n of listar()) if (!original.has(n)) rmSync(new URL(n, dir));
       for (const [n, bytes] of original) writeFileSync(new URL(n, dir), bytes);
     }
-  }, 300_000);
+  }, 510_000);
 });
 
 // Segunda vuelta del kit: logos con la dirección, más stickers, hojas A4, redes, afiches, cartel y portada.

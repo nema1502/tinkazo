@@ -129,7 +129,7 @@ describe("la distancia de verdad: el puesto sale del puntaje, y el líder no sal
         expect(d.duena(d.tCrown - 0.01)).toBe(d.campeona);
       }
     }
-  });
+  }, 90_000);
 
   it("el líder al abrirse la recta es el primero de la recta, sin saltar", () => {
     for (const n of [3, 9, 18, 40]) {

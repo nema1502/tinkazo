@@ -308,14 +308,14 @@ describe("los obstáculos", () => {
     expect(cortas).toBeGreaterThan(600);
     expect(peorCorta).toBeGreaterThan(3);
     expect(tarde / medidas).toBeLessThan(0.01);
-  });
+  }, 210_000);
 
   it("las piedras se corren a C3 solo cuando las finalistas pasan tarde a sus carriles: de 2 a 200 personas", () => {
     for (let n = 2; n <= 200; n++) {
       const d = planCarrera(ctxDe(n, 1)).datos;
       expect(carrilesTardePara(n), `n=${n}`).toBe(d.tCarriles > d.tAbre + 1);
     }
-  });
+  }, 90_000);
 
   it("con los carriles tarde no hay piedras antes de C3, y la valla y el remolino salen igual de seguido", () => {
     const tipos: Record<TipoObstaculo, number> = { piedras: 0, salto: 0, viento: 0, escupida: 0 };

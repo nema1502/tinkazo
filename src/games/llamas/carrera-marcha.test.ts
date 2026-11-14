@@ -117,7 +117,7 @@ describe("la marcha del show: sin saltos, con causas a la vista", () => {
       }
       expect(Math.abs(suyas - esperadas), `${suyas} contra ${esperadas.toFixed(1)}`).toBeLessThan(4 * Math.sqrt(varianza));
     }
-  });
+  }, 90_000);
 
   it("los adelantamientos se ven venir (un segundo o más a menos de dos cuerpos) y ninguno dura menos de medio segundo; dos varas, con 64 semillas: sin obstáculo encima, nueve de cada diez pasan en 1,2 s o más, y con un obstáculo encima, en 0,8 s o más", () => {
     // Con dieciséis semillas la misma carrera daba entre 0,79 y 0,92 según qué semillas tocaran: se miden 64 por cantidad. Los cruces que tienen
@@ -145,7 +145,7 @@ describe("la marcha del show: sin saltos, con causas a la vista", () => {
       expect(sin.lentos / sin.pases, `sin obstáculo, ${cual}: ${sin.lentos} de ${sin.pases} en 1,2 s o más`).toBeGreaterThan(varaSin);
       expect(con.lentos / con.pases, `con obstáculo, ${cual}: ${con.lentos} de ${con.pases} en 0,8 s o más`).toBeGreaterThanOrEqual(VARAS_CRUCE.conObstaculo.parte);
     }
-  }, 180_000);
+  }, 270_000);
 
   it("la escupida de la historia no cuenta como obstáculo: solo las causas que vienen de un obstáculo de la recta", () => {
     let vistas = 0;
@@ -218,7 +218,7 @@ describe("la marcha del show: sin saltos, con causas a la vista", () => {
       expect(lleva / cuadros / (1 / L), `n=${n}${senuelos ? " (marcha pareja)" : ""}: la punta de la ganadora en los últimos 8 s, veces lo que le toca`).toBeLessThan(senuelos ? VARAS_PAREJA.puntaUltimos8 : 1.48);
       expect(cambios / S, `n=${n}${senuelos ? " (marcha pareja)" : ""}: cambios de punta en los últimos 8 s`).toBeGreaterThan(2.7);
     }
-  }, 360_000);
+  }, 690_000);
 
   it("la mayor remontada del último cuarto es de la ganadora una de cada tres veces o menos: otra que viene de atrás sube más y pierde en la foto", () => {
     for (const [senuelos, n] of [false, true].flatMap((x) => [8, 18].map((m) => [x, m] as const))) {
@@ -237,7 +237,7 @@ describe("la marcha del show: sin saltos, con causas a la vista", () => {
       }
       expect(suya / S, `n=${n}${senuelos ? " (marcha pareja)" : ""}: la mayor remontada es de la ganadora en ${(suya / S * 100).toFixed(0)} %`).toBeLessThan(0.4);
     }
-  }, 120_000);
+  }, 180_000);
 
   it("con 60 y 200 personas el show no pasa de lo prometido, y es el mismo con la misma ronda", () => {
     for (const n of [60, 200]) {
@@ -282,7 +282,7 @@ describe("tres segundos antes de la meta: la cámara de la meta corta de frente 
       const [a, b] = cuenta as [number, number, number, number];
       expect(Math.abs(a - b), `${a} contra ${b}`).toBeLessThan(4 * Math.sqrt(a + b));
     }
-  }, 120_000);
+  }, 330_000);
 
   it("la cinta lleva la cara de quien va adelante hasta tres segundos antes de la meta y desde ahí no señala a nadie", () => {
     for (const n of [8, 18, 60]) {

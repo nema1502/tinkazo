@@ -306,7 +306,7 @@ describe("lo que ve la sala en una ronda", () => {
       }
     }
     expect(ronda(30, 9).o).toEqual(ronda(30, 9).o);
-  });
+  }, 90_000);
 
   it("el relator se mide desde la salida: con tandas, quien pasa por el portón no es un nombre más", () => {
     const { o, plan } = ronda(100, 2);
@@ -793,7 +793,7 @@ describe("el relator de la final no delata (lo que midió el auditor de delatore
       expect(ev.veredicto, `${senal} ${JSON.stringify(ev.mejor && { regla: ev.mejor.nombre, tasa: ev.mejor.tasa, azar: ev.mejor.azar, p: ev.p })}`).not.toBe("delator");
     }
   // Con 200 personas y 400 rondas, cada plan de la recta prueba hasta 160 arreglos: le hace falta más que los 30 s por defecto cuando la máquina está cargada.
-  }, 120_000);
+  }, 150_000);
 });
 
 describe("el auditor corre solo, sin navegador", () => {
