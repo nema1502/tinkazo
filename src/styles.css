@@ -1678,6 +1678,8 @@
   .cmp-lado { display: grid; gap: 12px; align-content: start; min-width: 0; }
   .cmp-nota { font-weight: 700; margin: 0; }
   .cmp-wa { min-height: 52px; font-size: 17px; justify-content: center; text-align: center; }
+  .cmp-mas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cmp-mas button { min-height: 44px; display: inline-flex; align-items: center; flex: 1 1 45%; justify-content: center; }
   .cmp-aviso { font-weight: 800; margin: 0; }
   .cmp-aviso:empty { display: none; }
   .cmp-txt { width: 100%; min-height: 120px; padding: 10px; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--card); border: var(--bw) solid var(--ink); resize: vertical; }

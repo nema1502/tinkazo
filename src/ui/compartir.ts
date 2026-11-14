@@ -463,6 +463,10 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     `<div class="cmp-lado">` +
     `<p class="note cmp-nota" style="display:none"></p>` +
     `<button class="primary cmp-wa" type="button" data-whatsapp disabled>${esc(cad(lang, "cmpPreparando"))}</button>` +
+    `<div class="cmp-mas">` +
+    `<button class="ghost cmp-fb" type="button" data-facebook disabled hidden>${esc(cad(lang, "cmpFb"))}</button>` +
+    `<button class="ghost cmp-ig" type="button" data-instagram disabled hidden>${esc(cad(lang, "cmpIg"))}</button>` +
+    `</div>` +
     `<p class="cmp-aviso" role="status" aria-live="polite"></p>` +
     `<div class="cmp-acc">` +
     `<button class="ghost" type="button" data-bajar disabled>${esc(cad(lang, "cmpBajarFoto"))}</button>` +
@@ -476,6 +480,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const q = <T extends HTMLElement>(sel: string): T => dlg.querySelector(sel) as T;
   const fotos = q<HTMLElement>(".cmp-fotos");
   const wa = q<HTMLButtonElement>("[data-whatsapp]");
+  const fb = q<HTMLButtonElement>("[data-facebook]");
+  const ig = q<HTMLButtonElement>("[data-instagram]");
   const bajar = q<HTMLButtonElement>("[data-bajar]");
   const copiar = q<HTMLButtonElement>("[data-copiar]");
   const txt = q<HTMLTextAreaElement>("#cmp-txt");
@@ -568,6 +574,13 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       .join(" ");
     wa.textContent = cad(lang, "cmpWa");
     wa.disabled = false;
+    // Facebook siempre puede (abre el publicador con el enlace); Instagram solo
+    // en móvil, donde su app toma la foto: en computadora no hay camino y no se muestra.
+    fb.disabled = false;
+    fb.hidden = false;
+    const celular = matchMedia("(pointer: coarse)").matches;
+    ig.disabled = !celular || !archivos.length;
+    ig.hidden = !celular;
     bajar.disabled = !archivos.length;
     bajar.textContent = cad(lang, elegidos().length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
     copiar.disabled = false;
@@ -579,6 +592,20 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   // Un segundo toque mientras la hoja del sistema está abierta haría fallar al
   // primero y abriría WhatsApp Web encima: se espera a que termine.
   let compartiendo = false;
+  // Facebook: el publicador de la web con el enlace del sorteo (la foto va aparte, copiada o bajada).
+  fb.addEventListener("click", () => {
+    const u = encodeURIComponent(mensaje);
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${u}`, "_blank", "noopener,width=640,height=560");
+    contarCompartido(p, "copy");
+  });
+  // Instagram: en móvil, la foto de la elegida al portapapeles (o bajada) y la app abierta: ahí se pega.
+  ig.addEventListener("click", async () => {
+    const primera = elegidos()[0];
+    if (primera) descargar(primera);
+    window.open("https://www.instagram.com/", "_blank", "noopener");
+    avisar(cad(lang, "cmpAdjuntaLaFoto"));
+    contarCompartido(p, "copy");
+  });
   wa.addEventListener("click", () => {
     if (compartiendo) return;
     compartiendo = true;

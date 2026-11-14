@@ -2503,6 +2503,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEvUno: "Si querés verificarlo, entrá acá:\n{enlace}",
     // --- El enlace corto y la foto con el QR (21 de octubre de 2026).
     cmpWa: "Compartir por WhatsApp", cmpPreparando: "Preparando la foto…",
+    cmpFb: "Compartir en Facebook", cmpIg: "Compartir en Instagram",
     cmpBajarFoto: "Descargar la foto", cmpBajarFotos: "Descargar las fotos",
     cmpPegaLaFoto: "Copiamos la foto: pegala en el chat de WhatsApp.",
     cmpAdjuntaLaFoto: "La foto se descargó: adjuntala en el chat de WhatsApp.",
@@ -5115,6 +5116,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEvUno: "If you want to verify it, open this link:\n{enlace}",
     // --- The short link and the photo with the QR code (21 October 2026).
     cmpWa: "Share on WhatsApp", cmpPreparando: "Getting the photo ready…",
+    cmpFb: "Share on Facebook", cmpIg: "Share on Instagram",
     cmpBajarFoto: "Download the photo", cmpBajarFotos: "Download the photos",
     cmpPegaLaFoto: "We copied the photo: paste it into the WhatsApp chat.",
     cmpAdjuntaLaFoto: "The photo was downloaded: attach it in the WhatsApp chat.",
