@@ -56,6 +56,8 @@ export const ES_ID = /^[0-9A-Za-z]{8}$/;
 const ES_CLAVE = /^[A-Za-z0-9_-]{22}$/;
 /** Lo único a lo que lleva un enlace corto: el comprobante de un sorteo o un evento. La verificación puede llevar el modo del sorteo. */
 const ES_RUTA = /^\/(?:verificar|evento)\.html(?:\?modo=(?:turnos|varias))?#[A-Za-z0-9_-]{2,}$/;
+/** La vista de espectador vive en la página de la herramienta, con todo el enlace en el fragmento (`ui/espectador.ts`). */
+const ES_RUTA_ESPECTADOR = /^\/#espectador=[A-Za-z0-9_-]+$/;
 const GUARDADOS = "tinkazo.cortos";
 const MAX_GUARDADOS = 300;
 
@@ -91,9 +93,9 @@ const deB64url = (s: string): Uint8Array<ArrayBuffer> => {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 };
 
-/** Una ruta a la que puede llevar un enlace corto. */
+/** Una ruta a la que puede llevar un enlace corto: un comprobante, un evento o la vista de espectador. */
 export function esRuta(u: unknown): u is string {
-  return typeof u === "string" && ES_RUTA.test(u);
+  return typeof u === "string" && (ES_RUTA.test(u) || ES_RUTA_ESPECTADOR.test(u));
 }
 
 /** La ruta y el fragmento de un enlace largo de Tinkazo, o null si no es un comprobante ni un evento. */
