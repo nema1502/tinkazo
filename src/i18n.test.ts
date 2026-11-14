@@ -295,3 +295,17 @@ describe("diccionario", () => {
   });
 
 });
+
+describe("el modo espectador", () => {
+  it("sus textos nuevos existen en los dos idiomas", () => {
+    for (const k of ["espQrT", "espQrBoton", "espQrSub", "espVistaEspectador", "espLectura"]) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect(T.es[k] as string).toBeTruthy();
+      expect(T.en[k] as string).toBeTruthy();
+    }
+    // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos.
+    expect(T.es.espQrBoton).toBe("QR para ver en vivo");
+    expect(T.en.espQrBoton).toBe("QR to watch live");
+  });
+});

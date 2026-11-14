@@ -275,6 +275,33 @@ describe("enlace corto: solo lleva a un comprobante o a un evento de este sitio"
   });
 });
 
+describe("enlace corto: la ruta del espectador", () => {
+  it("rutaDe acepta la espera del espectador en la página de la herramienta", () => {
+    const enlace = "https://tinkazo.app/#espectador=eyJ2IjoxfQ";
+    expect(rutaDe(enlace)).toBe("/#espectador=eyJ2IjoxfQ");
+    expect(esRuta("/#espectador=eyJ2IjoxfQ")).toBe(true);
+  });
+
+  it("rutaDe rechaza lo que no es el modo espectador, aunque venga en el fragmento", () => {
+    expect(rutaDe("https://tinkazo.app/#sortear")).toBeNull();
+    expect(rutaDe("https://tinkazo.app/#espectador=")).toBeNull();
+    expect(rutaDe("https://tinkazo.app/#espectador=a b")).toBeNull();
+    expect(rutaDe("https://tinkazo.app/index.html#espectador=abc")).toBeNull();
+    expect(esRuta("/otra.html#espectador=abc")).toBe(false);
+    expect(esRuta("/#espectador")).toBe(false);
+  });
+
+  it("ida y vuelta: el corto guarda el enlace del espectador cifrado y lo abre en la misma ruta", async () => {
+    const s = servicioFalso();
+    const c = await acortar("https://tinkazo.app/#espectador=eyJ2IjoxfQ", { fetch: s.f, origen: ORIGEN });
+    expect(c).not.toBeNull();
+    const { id, clave } = partes(c?.corto ?? "");
+    olvidarMemoria();
+    const r = await abrir(id, clave, { fetch: s.f, origen: ORIGEN });
+    expect(r).toMatchObject({ ruta: "/#espectador=eyJ2IjoxfQ" });
+  });
+});
+
 describe("enlace corto: si el servicio falla, se comparte el largo", () => {
   it("si fetch falla, acortar da null sin tirar", async () => {
     const caido = (async () => {

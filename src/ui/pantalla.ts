@@ -5,7 +5,8 @@ import { modesVisible } from "../modos/bandera";
 import { isTurnOrder, turnOrder } from "../modos/turnos";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { etiquetaDe } from "../equipos/etiquetas";
-import { app, avatar } from "../state";
+import { app, avatar, currentPace } from "../state";
+import { sinGrabar } from "../ensayo-modo";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
@@ -83,6 +84,9 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.setAttribute("aria-label", t("pantallaT"));
   back.innerHTML =
     `<div class="sala-top"><span class="sticker">${esc(t("pantallaT"))}</span>` +
+    // El QR del espectador (ui/espectador.ts): quien llegó tarde escanea y ve el mismo show.
+    // Solo en un sorteo real, como el QR de la espera: la demo y el ensayo no comparten nada.
+    (!sinGrabar() ? `<button class="ghost" type="button" data-espectador>${esc(t("espQrBoton"))}</button>` : "") +
     // Lo que sigue, a un toque desde la sala: con gente sin premio, "Siguiente premio" es el botón grande.
     (siguiente ? `<button class="primary pantalla-sig" type="button" data-siguiente>${esc(siguiente)}</button>` : "") +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
@@ -153,6 +157,24 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.querySelector<HTMLButtonElement>("[data-siguiente]")?.addEventListener("click", () => {
     cerrar();
     sig?.click();
+  });
+  // El mismo panel de QR que la espera: con la ronda ya nacida, el espectador arranca el show enseguida.
+  back.querySelector<HTMLButtonElement>("[data-espectador]")?.addEventListener("click", () => {
+    const f = app.frozen;
+    const d = app.drawn;
+    if (!f || !d) return;
+    void import("./espectador").then((m) =>
+      m.abrirPanelQrEspectador(
+        m.enlaceEspectador({
+          r: d.beacon.round,
+          g: d.juego ?? app.game,
+          p: currentPace(),
+          w: d.winners.length,
+          ...(f.prize ? { z: f.prize } : {}),
+          n: f.names,
+        }),
+      ),
+    );
   });
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
   // Se pide con el clic todavía fresco: pasado ese momento, el navegador la niega.

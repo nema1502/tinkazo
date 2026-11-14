@@ -1,17 +1,18 @@
 import { esc } from "../dom";
 import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
-import { app, avatar, type Game } from "../state";
+import { app, avatar, currentPace, type Game } from "../state";
 import { beep, note } from "../sound";
 import { RANGOS, SELECTOR, cabenLosPremios, rangoParaLeer } from "./recomendar";
 import { entradaDe } from "../games/pixi/kit/catalogo";
 import { QUEDA_MS, elegirAlAzar, enRueda, posiblesDe, type JuegoAzar } from "./azar";
-import { enEnsayo } from "../ensayo-modo";
+import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
+import { armarQrDeEspectador, type DatosEspectador } from "./espectador";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -282,6 +283,9 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   back.setAttribute("aria-modal", "true");
   back.setAttribute("aria-label", t("espSticker"));
   back.tabIndex = -1;
+  // El QR del espectador, solo en un sorteo real: la demo, el ensayo y el stand no comparten número ni lista
+  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar.
+  const conEspectador = !sinGrabar();
   const juegos = sorteo.juegos();
   back.innerHTML =
     `<div class="espera-top">` +
@@ -294,6 +298,9 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     (enEnsayo() ? `<p class="espera-ensayo">${esc(t("ensEstadio"))}</p>` : "") +
     (f.prize ? `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>` : "") +
     `<div class="espera-reloj mono">0:00</div>` +
+    // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show.
+    // El dibujo llega aparte (enlace-corto.ts es asíncrono); hasta entonces queda escondido.
+    (conEspectador ? `<figure class="espera-qr" hidden><img alt="" /><figcaption>${esc(t("espQrT"))}</figcaption></figure>` : "") +
     // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error.
     `<div class="espera-sigue" hidden></div>` +
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
@@ -308,6 +315,21 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     juegoHtml(juegos, "flujo") +
     panelDeJuegosHtml(juegos, f.names.length);
   document.body.appendChild(back);
+  // El QR del espectador, solo en un sorteo real: la demo, el ensayo y el stand no comparten número ni lista
+  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar.
+  /** Los datos del enlace del espectador: si el juego cambia desde la espera, el QR se rearma con el nuevo. */
+  let datosEspectador: DatosEspectador | null = null;
+  if (conEspectador) {
+    datosEspectador = {
+      r: f.round,
+      g: app.game,
+      p: currentPace(),
+      w: Math.min(Math.max(1, sorteo.premios()), f.names.length),
+      ...(f.prize ? { z: f.prize } : {}),
+      n: f.names,
+    };
+    void armarQrDeEspectador(back, datosEspectador);
+  }
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
   ajusta();
@@ -364,6 +386,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     const actual = sorteo.juegos().find((j) => j.elegido);
     if (!actual) return;
     for (const el of back.querySelectorAll<HTMLElement>(".espera-juego-n b")) el.textContent = actual.nombre;
+    // El enlace del espectador lleva el juego: si cambió desde la espera, el QR se rearma con el nuevo.
+    if (datosEspectador) {
+      datosEspectador.g = app.game;
+      void armarQrDeEspectador(back, datosEspectador);
+    }
   };
   /**
    * El alto de la barra de Sorprendeme y Listo, que va pegada abajo. Lo que se lleva a la vista (la tarjeta donde cae la

@@ -988,6 +988,24 @@
   button.espera-accion-2 { font-size: clamp(14px, 1.8vw, 22px); min-height: 44px; max-width: 100%; }
   @keyframes espera-cinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   html:has(.espera) { overflow: hidden; }
+  /* El QR del espectador en la espera, junto a la cuenta: chico, con la misma tinta de siempre. */
+  .espera-qr { display: grid; justify-items: center; gap: 8px; margin: 0; }
+  .espera-qr img { display: block; background: #fff; padding: 8px; border: 2px solid var(--ink); box-shadow: var(--sh-sm); image-rendering: pixelated; }
+  .espera-qr figcaption { font-size: clamp(14px, 1.5vw, 20px); font-weight: 700; color: var(--ink2); }
+  .espera-qr[hidden] { display: none; }
+  /* La vista de espectador: la misma espera, con el rótulo que dice que nadie la maneja desde acá. */
+  .espectador .sticker { background: var(--teal); }
+  .espera-lectura { font-size: clamp(14px, 1.6vw, 22px); font-weight: 800; color: var(--ink2); max-width: 40ch; text-wrap: balance; }
+  /* El panel del QR del espectador desde la pantalla del resultado. */
+  .espectador-qr { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgb(25 25 25 / 0.6); }
+  .espectador-qr-caja {
+    display: grid; justify-items: center; gap: 10px; max-width: min(92vw, 460px); padding: 24px 26px; text-align: center;
+    background: var(--paper); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  }
+  .espectador-qr-t { font-size: 22px; font-weight: 800; text-wrap: balance; }
+  .espectador-qr-sub { font-size: 16px; color: var(--ink2); text-wrap: balance; }
+  .espectador-qr-caja img { display: block; background: #fff; padding: 10px; border: 2px solid var(--ink); image-rendering: pixelated; max-width: 100%; box-sizing: content-box; }
+  .espectador-qr-caja button { min-height: 44px; margin-top: 6px; }
   @media (prefers-reduced-motion: reduce) {
     .espera-cinta { animation: none; }
     .cortina-puntos i { animation: none; }

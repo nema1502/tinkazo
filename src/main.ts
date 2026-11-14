@@ -589,3 +589,12 @@ void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);
+// El modo espectador (`ui/espectador.ts`): el enlace del QR de la espera llega a esta misma
+// página con los datos en el fragmento, y abre la vista de solo-lectura. Se baja aparte:
+// quien entra a sortear no lo descarga.
+if (location.hash.startsWith("#espectador=")) {
+  void import("./ui/espectador").then((m) => {
+    const datos = m.datosDelEnlace(location.hash);
+    if (datos) m.abrirEspectador(datos, initialLang());
+  });
+}

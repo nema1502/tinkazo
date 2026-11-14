@@ -13,11 +13,12 @@ import { QUEDA_MS, elegirAlAzar, enRueda, type JuegoAzar } from "./azar";
  * ruleta: queda el elegido directo, con la misma marca y la misma espera.
  */
 
-const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race" }));
+const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ soltarPantallaCompleta: () => undefined }));
+vi.mock("./espectador", () => ({ armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a) }));
 
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito", "Gaby"];
 
@@ -795,5 +796,34 @@ describe("lo que dice el panel de cada juego", () => {
     await abrirEspera();
     expect(document.querySelector(".espera-juegos")?.textContent).not.toMatch(/azar/i);
     expect(document.querySelector(".espera-juegos")?.textContent).not.toMatch(/[«»;]/);
+  });
+});
+
+describe("el QR del espectador durante la espera", () => {
+  beforeEach(() => h.armarQr.mockClear());
+
+  /** Los datos con los que la espera pidió armar el QR del espectador. */
+  const pedidos = (): Array<{ capa: HTMLElement; datos: Record<string, unknown> }> =>
+    (h.armarQr.mock.calls as unknown as Array<[HTMLElement, Record<string, unknown>]>).map(([capa, datos]) => ({ capa, datos }));
+
+  it("arma el QR del espectador con la ronda, el juego, el pace, los ganadores y los nombres del sello", async () => {
+    await abrirEspera(2, { nombres: ["Ana", "Beto", "Cami"] });
+    const p = pedidos();
+    expect(p).toHaveLength(1);
+    expect(p[0]?.capa.classList.contains("espera")).toBe(true);
+    expect(p[0]?.datos).toEqual({ r: 1, g: "race", p: "normal", w: 2, z: "Un premio", n: ["Ana", "Beto", "Cami"] });
+    // El lugar del QR está en la espera, junto a la cuenta, aunque el dibujo llegue después.
+    expect(document.querySelector(".espera .espera-qr img")).toBeTruthy();
+  });
+
+  it("en la demo no hay QR: no es un sorteo real", async () => {
+    history.replaceState(null, "", "/?demo=1");
+    try {
+      await abrirEspera();
+      expect(pedidos()).toHaveLength(0);
+      expect(document.querySelector(".espera .espera-qr")).toBeNull();
+    } finally {
+      history.replaceState(null, "", "/");
+    }
   });
 });
