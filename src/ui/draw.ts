@@ -11,7 +11,7 @@ import { marcarEnMarcha, soltarLaMarcha, sorteoEnMarcha } from "./sorteo-en-marc
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
-import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
+import { PROOF_VERSION, type Proof, proofUrl, amigoUrl } from "../protocol/proof";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
 import { cuentaPatrocinada, escribirError, existenciaDelSorteo, limpiarDetalle, showTxStatus } from "./anchor";
 import type { AccionError } from "./error-accion";
@@ -26,8 +26,9 @@ import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
-import { turnMessage, turnNotice } from "../modos/mensajes";
-import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos } from "../modos/turnos";
+import { turnMessage, turnNotice, amigoMessage } from "../modos/mensajes";
+import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos, turnOrderDisplayNames } from "../modos/turnos";
+import { amigoSinComprobante, isSecretSanta, reparto } from "../modos/amigo";
 import { contar as contarPersonas, cuentaParaMostrar, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
 import { modesVisible, withMode } from "../modos/bandera";
 import { alCopiarOrden } from "./lista-de-turnos";
@@ -151,20 +152,25 @@ async function sortear(): Promise<void> {
   btn.disabled = true;
   btn.classList.remove("lista");
   btn.textContent = t("fetching");
-  // La pantalla completa, en el mismo clic: con cuenta, grabar el sorteo tarda
-  // unos segundos y para cuando salía la tarjeta el navegador ya no la
-  // concedía. El estadio quedaba dentro de la página. Si no se está en grande
-  // todavía, es el momento (26 de octubre de 2026: lo mismo que al sellar).
-  pedirPantallaDelSorteo();
-  // Desde la espera en grande, el resultado también sale en grande: se baja ya,
-  // para abrirlo en el mismo instante en que se va el estadio.
-  if (enGrande()) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
   const sello = app.frozen;
   const { names, listHash, raffleId } = sello;
   // Los ganadores que se sellaron: el campo se puede tocar después de sellar, el sello no.
   const nWinners = sello.numWinners ?? Math.min(ganadoresPedidos(), names.length);
+  // Un Amigo secreto: salen todos y el orden es el reparto. El juego mostraría el orden, y el orden es a quién le
+  // regala cada uno: se sale directo al resultado, sin juego con nombres (issue #99, S4).
+  const amigo = isSecretSanta(names.length, nWinners, sello.prize);
+  // Desde la espera en grande, el resultado también sale en grande: se baja ya,
+  // para abrirlo en el mismo instante en que se va el estadio. En un Amigo secreto no: la pantalla grande
+  // mostraría el orden entero, y el orden es el reparto (issue #99, S4 y S5).
+  if (enGrande() && !amigo) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
   // Una sola lectura del sello y del contador: la cortina y la tarjeta no pueden discrepar sobre qué se sortea.
   const orden = isTurnOrder(names.length, nWinners, sello.prize);
+  // La pantalla completa, en el mismo clic: con cuenta, grabar el sorteo tarda
+  // unos segundos y para cuando salía la tarjeta el navegador ya no la
+  // concedía. El estadio quedaba dentro de la página. Si no se está en grande
+  // todavía, es el momento (26 de octubre de 2026: lo mismo que al sellar).
+  // En un Amigo secreto no se pide: no hay show que ver en grande (issue #99, S4).
+  if (!amigo) pedirPantallaDelSorteo();
   // La tarjeta de cómo se juega sale ya, antes del número: no dice quién gana. Lanzado desde la espera en grande, sale
   // en los últimos segundos de la espera y termina de leerse cuando nace el número. La cuenta de la sala espera a que
   // haya resultado, y el juego arranca sin esperar a que el sorteo quede grabado: se graba aparte (`grabarAparte`).
@@ -175,8 +181,9 @@ async function sortear(): Promise<void> {
   const card = abrirTarjeta(juego, names.length, nWinners, orden, resultadoListo);
   const tarjeta: Previa | null = card ? { card, game: juego } : null;
   // Sin tarjeta, la cortina mientras llega el número. Desde la espera en grande, ella misma hace de cortina hasta que
-  // el show la tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
-  const cortina = card || skipMotion() || enGrande() ? null : abrirCortina(sello.prize, orden);
+  // el show la tapa (espera.ts), y si algo falla se queda, con la pantalla completa. En un Amigo secreto, ninguna de
+  // las dos: no hay juego que anunciar, y la sala no tiene que leer nada que hable del orden.
+  const cortina = amigo || card || skipMotion() || enGrande() ? null : abrirCortina(sello.prize, orden);
   const sinShow = (): void => {
     tarjeta?.card.hide();
     cortina?.cerrar();
@@ -258,7 +265,8 @@ async function sortear(): Promise<void> {
     $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
     // Arrancó desde la espera en grande (ella todavía hace de cortina): el show
     // termina en el resultado en grande, sin soltar la pantalla completa.
-    granFinal = enGrande() ? { pantalla: !!document.fullscreenElement } : null;
+    // En un Amigo secreto, nunca en grande: la pantalla grande mostraría el reparto.
+    granFinal = !amigo && enGrande() ? { pantalla: !!document.fullscreenElement } : null;
     seguirEnPantallaCompleta(granFinal?.pantalla === true);
     const finish = (): void => {
       reveal(names, winners, beacon, listHash);
@@ -267,7 +275,10 @@ async function sortear(): Promise<void> {
     // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
     // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
     setResultadoDeTurnos(isTurnOrder(names.length, winners.length, sello.prize));
-    playGame(names, winners, beacon, finish, orden, tarjeta);
+    // En un Amigo secreto no hay juego: mostraría el orden, y el orden es el reparto. Se sale directo al
+    // resultado, que es la lista de personas con el enlace de cada una, nunca el reparto (issue #99, S4 y S5).
+    if (amigo) finish();
+    else playGame(names, winners, beacon, finish, orden, tarjeta);
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
     // El show arrancó y el resultado está fijado: este sello ya no está en marcha. Hasta el 16 de noviembre de 2026 la
@@ -558,7 +569,8 @@ function anotarEnMisSorteos(g: PorGrabar, cambios: { porGrabar: boolean; drawTx?
         round: sello.round,
         sealedAt: sello.ts,
         prize: sello.prize,
-        winners: g.winners.map((i) => sello.names[i] ?? ""),
+        // En un Amigo secreto, el orden no se anota: `winners` es el orden, y el orden es el reparto (issue #99, S5).
+        ...(isSecretSanta(sello.names.length, g.winners.length, sello.prize) ? {} : { winners: g.winners.map((i) => sello.names[i] ?? "") }),
         ...(sello.logo ? { logo: sello.logo } : {}),
         ...(sello.raffleId !== undefined ? { id: String(sello.raffleId) } : {}),
         ...(sello.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
@@ -786,15 +798,24 @@ function juegoDe(people: number, prizes: number, names?: string[], winners?: num
     : classicPlayable(app.game, people);
 }
 
+/** El sello de esta pantalla es un Amigo secreto: salen todos y el nombre empieza con Amigo secreto o Secret Santa. A diferencia de `esDeAmigo`, también vale antes de que el resultado esté fijado (`sortear`). */
+const selloDeAmigo = (): boolean => {
+  const f = app.frozen;
+  if (!f) return false;
+  const n = f.numWinners ?? Math.min(ganadoresPedidos(), f.names.length);
+  return isSecretSanta(f.names.length, n, f.prize);
+};
+
 /**
  * La tarjeta de "cómo se juega", grande para la sala. Sus segundos salen del
  * mismo total que eligió quien sortea. Sin show (instantáneo o movimiento
  * reducido), ninguna. "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un
  * tono por número, más alto en el 1. Los dos en la pentatónica, mi y do: el
  * 990 Hz de antes era un si, fuera de la escala de los juegos.
+ * En un Amigo secreto, ninguna: no hay juego que jugar, y el juego mostraría el orden (issue #99, S4).
  */
 function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<void>, textoDeEspera?: string): GameCard | null {
-  if (skipMotion()) return null;
+  if (skipMotion() || selloDeAmigo()) return null;
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera, orden, textoDeEspera);
 }
@@ -945,14 +966,95 @@ function renderLore(beacon: Beacon): void {
   box.style.display = "block";
 }
 
+/** El resultado en pantalla es un Amigo secreto: salen todos y el nombre empieza con Amigo secreto o Secret Santa. */
+const esDeAmigo = (): boolean =>
+  !!app.frozen && !!app.drawn && isSecretSanta(app.frozen.names.length, app.drawn.winners.length, app.frozen.prize);
+
+/**
+ * El resultado de un Amigo secreto (issue #99, S5): la lista de personas, cada una con su botón Copiar enlace. El
+ * enlace abre la página personal (`confirmar.html`), que dice solo a quién le regala, el nombre del sorteo y el
+ * número del sello. La pantalla nunca muestra quién le regala a quién: ni el orden, ni el reparto.
+ *
+ * Los enlaces se arman en segundo plano (comprimir el fragmento es asíncrono); el botón espera el suyo al tocarlo.
+ * Los nombres de la lista son los que se ven, sin el sufijo de una línea sellada (`turnOrderDisplayNames`); lo que
+ * viaja en el enlace es el nombre sellado, tal cual está en el sello.
+ */
+let enlacesAmigo: Map<number, Promise<string>> | null = null;
+let amigoEnlazado = false;
+
+function pintarAmigo(names: string[], winners: number[]): void {
+  const f = app.frozen;
+  const round = app.drawn?.beacon.round ?? 0;
+  const orden = turnOrderDisplayNames(names, winners);
+  enlacesAmigo = new Map(
+    reparto(names, winners).map((a, k) => [k, amigoUrl({ round, from: a.from, to: a.to, ...(f?.prize ? { prize: f.prize } : {}) })]),
+  );
+  $("winner-cards").innerHTML =
+    `<h3 class="winner-lista-t" id="winner-lista-t" data-i="amigoResultadoT">${esc(t("amigoResultadoT"))}</h3>` +
+    `<p class="note" data-i="amigoResultadoNota">${esc(t("amigoResultadoNota"))}</p>` +
+    `<ol class="winner-lista amigo-lista" aria-labelledby="winner-lista-t">${orden
+      .map(
+        (nombre, k) =>
+          `<li class="winner-fila amigo-fila" value="${k + 1}"><span class="winner-name">${esc(nombre)}</span>` +
+          `<button class="ghost mini" type="button" data-amigo-enlace="${k}" data-i="amigoCopiar">${esc(t("amigoCopiar"))}</button></li>`,
+      )
+      .join("")}</ol>`;
+  // El comprobante completo, ofrecido aparte (S7): lleva el reparto entero, y se comparte después del intercambio.
+  const caja = $("winner-box");
+  let aviso = document.getElementById("amigo-aviso");
+  if (!aviso) {
+    aviso = document.createElement("aside");
+    aviso.id = "amigo-aviso";
+    aviso.className = "note amigo-aviso";
+    aviso.innerHTML = `<span data-i="amigoAvisoComprobante"></span> <button class="ghost mini" type="button" data-amigo-comprobante data-i="amigoVerComprobante"></button>`;
+    $("winner-cards").after(aviso);
+    aviso.querySelector("button")?.addEventListener("click", () => {
+      if (proofLink && !enDuda()) location.assign(proofLink);
+    });
+  }
+  aviso.querySelector<HTMLElement>("span")!.textContent = t("amigoAvisoComprobante");
+  aviso.querySelector("button")!.textContent = t("amigoVerComprobante");
+  aviso.style.display = "block";
+  if (!amigoEnlazado) {
+    amigoEnlazado = true;
+    $("winner-cards").addEventListener("click", (e) => void alTocarEnlaceAmigo(e));
+  }
+}
+
+/** Un toque en «Copiar enlace»: deja el enlace personal de esa persona en el portapapeles. */
+async function alTocarEnlaceAmigo(e: Event): Promise<void> {
+  const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-amigo-enlace]");
+  if (!b) return;
+  const enlace = await enlacesAmigo?.get(Number(b.dataset.amigoEnlace))?.catch(() => "");
+  if (!enlace) return;
+  try {
+    await navigator.clipboard.writeText(enlace);
+    b.textContent = t("copied");
+    setTimeout(() => (b.textContent = t("amigoCopiar")), 1600);
+  } catch {
+    // Sin permiso para el portapapeles, el enlace queda a la vista en un cuadro, ya elegido, para copiarlo a mano.
+    const caja = document.createElement("textarea");
+    caja.className = "turnos-texto";
+    caja.readOnly = true;
+    caja.value = enlace;
+    caja.setAttribute("aria-label", t("amigoResultadoT"));
+    b.after(caja);
+    caja.select();
+  }
+}
+
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
+  // Un Amigo secreto: el orden es el reparto, así que ninguna pantalla lo muestra. Lo que se ve es la lista de
+  // personas, cada una con su enlace personal, que dice solo a quién le regala (issue #99, S5).
+  const amigo = isSecretSanta(names.length, winners.length, app.frozen?.prize ?? "");
   $("winner-box").style.display = "block";
   // El logo de la comunidad, en el renglón de "Lo que salió" (src/ui/logo-sorteo.ts). Sin logo, queda como siempre.
   pintarLogoEnElResultado();
   // La demo llegó al ganador: es lo único que se cuenta de ella (src/contar.ts). El ensayo avisa con `tinkazo:ensayo-fin`.
   if (params.has("demo")) contarPractica("demo");
-  // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto.
-  $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
+  // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto. En un Amigo secreto no hay
+  // repetición que ofrecer: la nota con "Ver la animación igual" no sale.
+  $("motion-note").style.display = !amigo && skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
   // La leyenda del juego, si trae una: plegada y después del resultado, nunca durante el show.
   pintarLeyenda($("leyenda-box"), app.game, getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
@@ -973,10 +1075,22 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
   // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
   // que decide a quién se saca, que sigue siendo `porPersona`.
-  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()) });
+  // En un Amigo secreto, la lista de personas con su enlace de cada una: ni el reparto ni el orden, tampoco acá.
+  if (amigo) pintarAmigo(names, winners);
+  else {
+    $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()) });
+    const avisoAmigo = document.getElementById("amigo-aviso");
+    if (avisoAmigo) avisoAmigo.style.display = "none";
+  }
+  // En un Amigo secreto no hay pantalla grande ni repetición con otro juego: las dos mostrarían el orden, y el orden es el reparto.
+  for (const id of ["btn-grande", "btn-otro-juego"]) {
+    const b = document.getElementById(id);
+    if (b) b.style.display = amigo ? "none" : "";
+  }
   const proof = $("proof");
+  // En un Amigo secreto la línea técnica no nombra a los ganadores: `winners=[…]` es el orden, y el orden es el reparto.
   proof.textContent =
-    `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
+    `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}${amigo ? "" : `, winners=[${winners.join(",")}]`}`;
   // El enlace del sorteo grabado. Si todavía se está grabando, lo agrega la grabación al terminar (`alGuardar`).
   const drawTx = app.drawn?.drawTx;
   if (drawTx) enlaceDelSorteo(proof, drawTx, ", ");
@@ -996,7 +1110,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
   // Premios pagados (detrás de la bandera): el panel de ganadores con el estado de cada pago y "Pagar premio".
-  if (pagosActivos()) void import("./pagos-resultado").then((m) => m.mostrarPagosDelResultado()).catch(() => undefined);
+  if (pagosActivos() && !amigo) void import("./pagos-resultado").then((m) => m.mostrarPagosDelResultado()).catch(() => undefined);
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
@@ -1013,6 +1127,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
   // Fuera del ensayo, en grande aunque se haya perdido la pantalla completa durante el show (Windows la suelta al
   // cambiar de proyector): es una capa de la página, y con varios ganadores el cartel del juego no los muestra a todos.
+  // En un Amigo secreto, nunca en grande: el resultado en grande muestra el orden, y el orden es el reparto (S5).
   if (final && enPractica()) {
     soltarPantallaCompleta();
     enfocarDespues(principal);
@@ -1022,6 +1137,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
 
 /** Abre el resultado en grande en el mismo instante, si `pantalla.ts` ya bajó (siempre, salvo un wifi muy lento). */
 function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement): void {
+  // En un Amigo secreto, nunca: el resultado en grande muestra el orden, y el orden es el reparto (issue #99, S5).
+  if (esDeAmigo()) return;
   // Con el enlace corto, como "Mostrar en grande": es lo mismo, mostrarlo en grande, y el
   // QR del corto se lee desde el fondo de la sala (21 de octubre de 2026). Hasta
   // ese día iba con el largo. Nunca en la demo; si el corto no llega, va el largo (pantalla.ts).
@@ -1055,8 +1172,9 @@ export function replayAnimation(): void {
  * repetición de "Ver la animación igual"). Un show a la vez (`replaying`); al terminar, el foco vuelve a quien lo pidió.
  */
 export function verDeNuevo(juego?: Game): void {
+  // En un Amigo secreto no hay repetición: el juego muestra el orden, y el orden es el reparto (issue #99, S4).
   const { frozen, drawn } = app;
-  if (!frozen || !drawn || replaying) return;
+  if (!frozen || !drawn || replaying || esDeAmigo()) return;
   replaying = true;
   const activo = document.activeElement;
   const volverA = activo instanceof HTMLElement && activo !== document.body ? activo : null;
@@ -1103,6 +1221,8 @@ export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspecta
   const premios = drawn.winners.length;
   // El cartel final dice «¡El orden quedó listo!» cuando es un orden de turnos, como en la sala, y la tarjeta también.
   const orden = isTurnOrder(personas, premios, frozen.prize);
+  // En un Amigo secreto no hay juego ni tarjeta: mostrarían el orden, y el orden es el reparto (issue #99, S4 y S5).
+  const amigo = isSecretSanta(personas, premios, frozen.prize);
   setResultadoDeTurnos(orden);
   let tarjeta: Previa | null = null;
   let seFue = false;
@@ -1127,6 +1247,11 @@ export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspecta
     jugar: (alTerminar) => {
       if (jugado) return;
       jugado = true;
+      // En un Amigo secreto, sin juego: el juego muestra el orden, y el orden es el reparto (issue #99, S4).
+      if (amigo) {
+        alTerminar();
+        return;
+      }
       playGame(frozen.names, drawn.winners, drawn.beacon, alTerminar, orden, seFue ? null : tarjeta);
     },
     cancelar: () => tarjeta?.card.hide(),
@@ -1135,7 +1260,7 @@ export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspecta
 
 /** Un toque en "Probar otro juego" o en "Ver de nuevo con otro juego": al selector, con el foco en otro juego. */
 export function elegirOtroJuegoParaVer(): void {
-  if (!app.drawn || replaying) return;
+  if (!app.drawn || replaying || esDeAmigo()) return;
   irAlSelectorParaOtro();
 }
 
@@ -1178,9 +1303,12 @@ function showAgain(): HTMLButtonElement {
   const mostrar = cuentaParaMostrar(lineas, modesVisible()).personas;
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
+  // En un Amigo secreto no hay «siguiente premio» (todos salen) ni diálogo de compartir: la foto y el mensaje
+  // llevarían el reparto entero. El comprobante se ofrece aparte, con su aviso (`pintarAmigo`).
+  const amigo = esDeAmigo();
   sin.style.display = alcanza ? "" : "none";
   sin.textContent = L.againSin(mostrar);
-  comprobante.className = alcanza ? "ghost" : "primary";
+  comprobante.className = alcanza || amigo ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector. Solo
   // si no lo está: sacarla y volverla a poner le quita el foco, y esto también
@@ -1192,11 +1320,23 @@ function showAgain(): HTMLButtonElement {
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = alcanza ? L.againLeft(mostrar, selladaEsDeEquipos()) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar, selladaEsDeEquipos());
+  $("again-left").textContent = amigo
+    ? t("amigoAgainLeft")
+    : alcanza
+      ? L.againLeft(mostrar, selladaEsDeEquipos())
+      : esDeTurnos()
+        ? t("turnsAgainFew")
+        : L.againFew(mostrar, selladaEsDeEquipos());
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
+  // En un Amigo secreto no se muestra en grande ni se comparte la foto: el resultado ya está a la vista, sin reparto.
   const sigue = $("again-sigue");
-  sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
-  sigue.textContent = t(sigue.dataset.i);
+  if (amigo) {
+    sigue.hidden = true;
+  } else {
+    sigue.hidden = false;
+    sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
+    sigue.textContent = t(sigue.dataset.i);
+  }
   $("again-row").style.display = "block";
   actualizarPaso();
   return principal;
@@ -1298,6 +1438,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "leyenda-box", "qr-box", "sec-draw"]) {
     $(id).style.display = "none";
   }
+  // El aviso del comprobante del Amigo secreto y sus enlaces: se arman de nuevo con el próximo resultado.
+  document.getElementById("amigo-aviso")?.remove();
+  enlacesAmigo = null;
   // El pliegue del resultado («Otra lista, copiar el mensaje y más») vuelve a salir cerrado con el próximo ganador.
   const masResultado = document.getElementById("mas-resultado");
   if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
@@ -1390,8 +1533,9 @@ alAcortar((ruta, c) => {
 
 /** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
 export function mostrarGrande(): void {
-  // Una ronda de ejemplo no tiene comprobante que mostrar, y uno en duda no se muestra hasta revisarlo.
-  if (enStand() || enDuda()) return;
+  // Una ronda de ejemplo no tiene comprobante que mostrar, y uno en duda no se muestra hasta revisarlo. En un Amigo
+  // secreto tampoco hay pantalla grande: mostraría el orden, y el orden es el reparto (issue #99, S5).
+  if (enStand() || enDuda() || esDeAmigo()) return;
   contarCompartido("qr_big");
   void import("./pantalla").then((m) => m.mostrarResultado(proofLink, { corto: puedeAcortar() }));
 }
@@ -1438,8 +1582,10 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Se siguió sin sello y el sello no llegó a entrar: el comprobante lo lleva marcado, para que el
   // mensaje, la foto, el enlace del evento y la página de verificación lo digan (protocolo §8).
   const sinSello = !!f.sinSello && f.raffleId === undefined;
-  // Un orden de turnos sin sello no tiene comprobante: no se ofrece ningún enlace de verificación (`ordenSinComprobante`).
-  const sinComprobante = ordenSinComprobante(names.length, winners.length, f.prize, sinSello);
+  // Un orden de turnos o un Amigo secreto sin sello no tienen comprobante: la verificación de un sorteo sin sello no
+  // lleva la cantidad de ganadores y mostraría un solo ganador, o la lista entera como si fuera un sorteo común.
+  const sinComprobante =
+    ordenSinComprobante(names.length, winners.length, f.prize, sinSello) || amigoSinComprobante(names.length, winners.length, f.prize, sinSello);
   const proof: Proof = {
     v: PROOF_VERSION,
     names,
@@ -1483,10 +1629,13 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   const nota = document.getElementById("sin-sello-nota");
   if (nota) {
     nota.style.display = sinSello ? "block" : "none";
-    // Un orden de turnos sin sello lo dice con su propia línea: no tiene comprobante.
-    nota.dataset.i = sinComprobante ? "turnsSinComprobante" : "redSinSelloEtiqueta";
+    // Un orden de turnos o un Amigo secreto sin sello lo dicen con su propia línea: no tienen comprobante.
+    nota.dataset.i = sinComprobante ? (isSecretSanta(names.length, winners.length, f.prize) ? "amigoSinComprobante" : "turnsSinComprobante") : "redSinSelloEtiqueta";
     nota.textContent = t(nota.dataset.i);
   }
+  // El botón de abrir el comprobante del Amigo secreto: sin comprobante, el aviso queda, sin botón.
+  const botonComprobante = document.querySelector<HTMLButtonElement>("#amigo-aviso [data-amigo-comprobante]");
+  if (botonComprobante) botonComprobante.hidden = sinComprobante;
   // Y el QR no invita a comprobar lo que no se puede comprobar: dice que no hay sello y qué se ve al escanearlo.
   ponerTextoDelSello(document.querySelector<HTMLElement>("#qr-box .kicker"), "qrDelResultado", sinSello);
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
@@ -1507,7 +1656,9 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         round: d.beacon.round,
         sealedAt: f2.ts,
         prize: f2.prize,
-        winners: winners.map((i) => names[i] ?? ""),
+        // En un Amigo secreto, el orden no se anota en Mis sorteos: `winners` es el orden, y el orden es el reparto
+        // (issue #99, S5). El sorteo queda anotado igual, con su comprobante.
+        ...(isSecretSanta(names.length, winners.length, f2.prize) ? {} : { winners: winners.map((i) => names[i] ?? "") }),
         ...(f2.logo ? { logo: f2.logo } : {}),
         // Un orden de turnos sin sello se anota con la ronda: Mis sorteos no le ofrece enlace de verificación.
         proof: sinComprobante ? roundLink : link,
@@ -1559,6 +1710,8 @@ function mensajeDelSorteo(): string {
   const enlace = cortoLink || proofLink || roundUrl(beacon.round);
   // Un orden de turnos dice el orden, y que nadie lo eligió, y no quién ganó (src/modos/mensajes.ts).
   if (isTurnOrder(names.length, winners.length, prize)) return turnMessage(getLang(), { orden: lista, enlace, ...(sinSello ? { sinSello: true } : {}) });
+  // Un Amigo secreto no dice el orden ni lleva el enlace del comprobante: el orden es el reparto (issue #99, S5).
+  if (isSecretSanta(names.length, winners.length, prize)) return amigoMessage(getLang(), { prize: prize || undefined });
   // Quien salió más de una vez va una sola vez, con su cuenta: no «Ana y Ana». Singular o plural según los nombres ya juntos.
   const juntos = porPersona ? withRepeatCounts(getLang(), lista) : lista;
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
@@ -1593,7 +1746,8 @@ async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copi
  */
 export function shareProof(): void {
   // Una ronda de ejemplo no tiene comprobante que compartir: su número no es público. Uno en duda, hasta revisarlo, tampoco.
-  if (enStand() || enDuda()) return;
+  // En un Amigo secreto tampoco: la foto y el mensaje llevan el reparto entero (issue #99, S5).
+  if (enStand() || enDuda() || esDeAmigo()) return;
   const f = app.frozen;
   const d = app.drawn;
   if (!f || !d) return;
@@ -1641,6 +1795,15 @@ function setNotifyLinks(names: string[], winners: number[], url: string): void {
   // Un orden de turnos: los botones de abajo mandan el orden entero, y cada renglón de la lista tiene su «Avisarle» con
   // «Te tocó el turno 3 de 12». Nadie «ganó» nada: las frases de ganar no se usan (src/modos/mensajes.ts).
   const turnos = isTurnOrder(names.length, winners.length, prize);
+  // Un Amigo secreto: el aviso no nombra a nadie (el orden es el reparto) ni lleva el enlace del comprobante, que lo
+  // muestra entero. Cada persona recibe su enlace de quien organiza (issue #99, S5).
+  if (isSecretSanta(names.length, winners.length, prize)) {
+    const aviso = amigoMessage(getLang(), { prize: prize || undefined });
+    $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(aviso)}`;
+    $<HTMLAnchorElement>("btn-email").href =
+      `mailto:?subject=${encodeURIComponent(prize || t("amigoPrize"))}&body=${encodeURIComponent(aviso)}`;
+    return;
+  }
   // En un sorteo común, quien salió más de una vez va una sola vez, con su cuenta; en un orden de turnos no se junta a nadie.
   // Singular o plural según los nombres ya juntos: a quien se lleva todo se le habla de vos.
   const juntos = porPersona && !turnos ? withRepeatCounts(getLang(), lista) : lista;

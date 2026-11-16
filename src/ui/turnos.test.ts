@@ -22,7 +22,9 @@ const premio = (): HTMLInputElement => $("prize") as HTMLInputElement;
 const sellar = (): HTMLButtonElement => $("btn-freeze") as HTMLButtonElement;
 const opcion = (): HTMLElement => $("turnos-opcion");
 const boton = (): HTMLButtonElement => $("btn-turnos") as HTMLButtonElement;
+const amigoBtn = (): HTMLButtonElement | null => document.getElementById("btn-amigo") as HTMLButtonElement | null;
 const nota = (): HTMLElement => $("turnos-nota");
+const privacidad = (): HTMLElement | null => document.getElementById("amigo-privacidad") as HTMLElement | null;
 const rotulo = (selector: string): string => document.querySelector(selector)?.textContent ?? "";
 const BORRADOR = "tinkazo.borrador";
 /** El punto medio (U+00B7) no se escribe en ningún texto que se vea: se arma con su código para no dejarlo en el archivo. */
@@ -514,3 +516,135 @@ describe("el borrador guarda el modo", () => {
     }
   });
 });
+
+describe("el botón de Amigo secreto en el selector (S2)", () => {
+  const prenderAmigo = async (n: number, tope = 300): Promise<Modulos> => {
+    vi.stubEnv("VITE_MODOS", "1");
+    const m = await montar(n, tope);
+    amigoBtn()?.click();
+    return m;
+  };
+
+  it("montarTurnos arma un tercer botón en el selector, con su texto y subtítulo en los dos idiomas", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(5);
+    const b = amigoBtn();
+    expect(b).toBeTruthy();
+    expect(b?.closest("#modo-botones")).not.toBeNull();
+    expect(b?.querySelector(".modo-tit")?.textContent).toBe("Amigo secreto");
+    expect(b?.getAttribute("aria-pressed")).toBe("false");
+    const { setLang } = await import("../i18n");
+    setLang("en");
+    expect(b?.querySelector(".modo-tit")?.textContent).toBe("Secret Santa");
+    setLang("es");
+  });
+
+  it("sin la bandera el botón no está y la herramienta es la de siempre", async () => {
+    await montar(5);
+    expect(amigoBtn()).toBeNull();
+  });
+
+  it("al tocarlo la cantidad sigue a la lista, el campo se bloquea y el nombre queda en Amigo secreto", async () => {
+    const { turnos } = await prenderAmigo(12);
+    expect(turnos.modoAmigoActivo()).toBe(true);
+    expect(amigoBtn()?.getAttribute("aria-pressed")).toBe("true");
+    expect(boton()?.getAttribute("aria-pressed")).toBe("false");
+    expect(campo().value).toBe("12");
+    expect(campo().disabled).toBe(true);
+    expect(premio().value).toBe("Amigo secreto");
+    poner(15);
+    expect(campo().value).toBe("15");
+  });
+
+  it("los rótulos hablan del amigo secreto y no de turnos", async () => {
+    await prenderAmigo(12);
+    expect(rotulo('label[for="nw"]')).toBe("Cuántos participan");
+    expect(rotulo("#prize-etiqueta")).toBe("Nombre del amigo secreto (opcional)");
+    expect(rotulo("#mas-opciones > summary")).toBe("Nombre del amigo secreto y subir CSV");
+  });
+
+  it("el nombre escrito se ajusta con la frase por delante, y antes de sellar también", async () => {
+    const { turnos } = await prenderAmigo(5);
+    escribirPremio("Navidad");
+    expect(premio().value).toBe("Amigo secreto: Navidad");
+    premio().value = "Cambió de idea";
+    expect(turnos.ajustarPremioDeTurnos()).toBe("Amigo secreto: Cambió de idea");
+    expect(premio().value).toBe("Amigo secreto: Cambió de idea");
+  });
+
+  it("con la lista que no entra en el contrato no se puede sellar, como en un orden", async () => {
+    await prenderAmigo(40, 32);
+    expect(sellar().disabled).toBe(true);
+    expect(nota().hidden).toBe(false);
+    poner(20);
+    expect(sellar().disabled).toBe(false);
+  });
+
+  it("apagarlo vuelve al sorteo común con lo que había antes", async () => {
+    const { turnos } = await montar(12);
+    ganadoresAntes(3);
+    escribirPremio("Termo");
+    turnos.ponerModoAmigo(true);
+    expect(premio().value).toBe("Amigo secreto");
+    turnos.ponerModoAmigo(false);
+    expect(turnos.modoAmigoActivo()).toBe(false);
+    expect(turnos.modoTurnosActivo()).toBe(false);
+    expect(campo().value).toBe("3");
+    expect(campo().disabled).toBe(false);
+    expect(premio().value).toBe("Termo");
+  });
+
+  it("un borrador con el nombre Amigo secreto vuelve al modo amigo, no al de turnos", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    const { participants, turnos } = await montar(8);
+    turnos.ponerModoAmigo(true);
+    participants.guardarBorrador();
+    const guardado = sessionStorage.getItem(BORRADOR) as string;
+    history.replaceState(null, "", "/");
+    const otra = await montar(0);
+    sessionStorage.setItem(BORRADOR, guardado);
+    otra.participants.reponerBorrador();
+    expect(otra.turnos.modoAmigoActivo()).toBe(true);
+    expect(premio().value).toBe("Amigo secreto");
+    expect(campo().value).toBe("8");
+  });
+});
+
+describe("la línea de privacidad antes de sellar (S3)", () => {
+  const prenderAmigo = async (n: number): Promise<Modulos> => {
+    vi.stubEnv("VITE_MODOS", "1");
+    const m = await montar(n);
+    amigoBtn()?.click();
+    return m;
+  };
+
+  it("con el modo amigo dice que quien tiene la lista podría calcular el reparto", async () => {
+    await prenderAmigo(10);
+    const linea = privacidad();
+    expect(linea).toBeTruthy();
+    expect(linea?.hidden).toBe(false);
+    expect(linea?.textContent).toMatch(/calcular/i);
+  });
+
+  it("con 2 o 3 personas dice que no hay secreto", async () => {
+    for (const n of [2, 3]) {
+      await prenderAmigo(n);
+      expect(privacidad()?.textContent, `${n} personas`).toMatch(/no hay secreto/i);
+    }
+    await prenderAmigo(4);
+    expect(privacidad()?.textContent).not.toMatch(/no hay secreto/i);
+  });
+
+  it("sin el modo amigo no se ve", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(10);
+    expect(privacidad()?.hidden).toBe(true);
+  });
+});
+
+/** Pone la cantidad del campo a mano, como la ventana de ingreso al volver. */
+function ganadoresAntes(n: number): void {
+  const campoNw = $("nw") as HTMLInputElement;
+  campoNw.value = String(n);
+  campoNw.dispatchEvent(new Event("change", { bubbles: true }));
+}

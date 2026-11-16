@@ -283,6 +283,7 @@ export default defineConfig({
         lista: resolve(__dirname, "lista.html"),
         equipos: resolve(__dirname, "equipos.html"),
         evento: resolve(__dirname, "evento.html"),
+        confirmar: resolve(__dirname, "confirmar.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
       },
