@@ -2,11 +2,12 @@ import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app, forzarRitmo, params } from "../state";
 import { enEnsayo, enStand, marcarStand, pedirSalidaDelStand } from "../ensayo-modo";
-import { guardarBorrador, renderNames, setList } from "./participants";
+import { CLAVE_LISTA_STAND, borradorConNombres, guardarBorrador, parseNames, renderNames, setList } from "./participants";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { refreshFreezeLabel, rotarJuego } from "./freeze";
 import { newDraw } from "./draw";
 import { actualizarPaso } from "./siguiente";
+import { abrirDialogo, botonPrincipal } from "./dialogo";
 
 /**
  * El modo stand, en la página: rondas de ejemplo con los nombres de quienes
@@ -22,8 +23,8 @@ import { actualizarPaso } from "./siguiente";
  * - los nombres se escriben en la compu o llegan de la sala por QR (`stand-sala.ts`).
  *
  * Se entra por un botón y se marca en la pestaña, no en la dirección (igual que
- * el ensayo). Salir recarga la página: es la forma segura de soltar el juego y
- * de reponer la lista de antes.
+ * el ensayo). Salir recarga la página para soltar el juego. La lista del stand
+ * solo pasa al sorteo si quien atiende lo elige; si no, vuelve la de antes.
  */
 
 /** Monta el modo stand en la herramienta. */
@@ -86,14 +87,65 @@ export function entrarAlStand(): void {
   $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
 }
 
+/** La elección de quien atiende: las rondas no se guardan, pero puede llevar los nombres al sorteo de cierre. */
+function confirmarLlevarLista(): Promise<boolean | null> {
+  return new Promise((resolve) => {
+    let listo = false;
+    const terminar = (llevar: boolean | null): void => {
+      if (listo) return;
+      listo = true;
+      resolve(llevar);
+    };
+    const dlg = abrirDialogo({ titulo: t("standLlevarT"), onCerrar: () => terminar(null) });
+    const cuerpo = document.createElement("p");
+    cuerpo.textContent = t("standLlevarB");
+    dlg.cuerpo.appendChild(cuerpo);
+    if (borradorConNombres()) {
+      const reemplazo = document.createElement("p");
+      reemplazo.textContent = t("standLlevarReemplaza");
+      dlg.cuerpo.appendChild(reemplazo);
+    }
+    const llevarBtn = botonPrincipal(t("standLlevarSi"));
+    llevarBtn.addEventListener("click", () => {
+      terminar(true);
+      dlg.cerrar();
+    });
+    const sinListaBtn = document.createElement("button");
+    sinListaBtn.type = "button";
+    sinListaBtn.className = "mini ghost";
+    sinListaBtn.textContent = t("standLlevarNo");
+    sinListaBtn.addEventListener("click", () => {
+      terminar(false);
+      dlg.cerrar();
+    });
+    dlg.pie.append(llevarBtn, sinListaBtn);
+  });
+}
+
 /** Sale del modo stand: «Hacer un sorteo de verdad». Sin cuenta, la página nueva abre la entrada. */
 export async function salirDelStand(): Promise<void> {
+  let llevarLista = false;
+  if (parseNames().length >= 2) {
+    const decision = await confirmarLlevarLista();
+    if (decision === null) return;
+    llevarLista = decision;
+  }
   // Si la sala no se pudo cerrar, la primera vez no se sale: se avisa (`stand-sala.ts`) y quien atiende decide.
   // La segunda vez se sale igual, y la sala se borra sola a las 10 horas.
   const cerrada = await antesDeSalir().catch(() => false);
   if (!cerrada && !salidaAvisada) {
     salidaAvisada = true;
     return;
+  }
+  // Se guarda solo la lista, nunca la ronda ni su resultado. La página nueva la consume una sola vez.
+  if (llevarLista && enStand()) {
+    try {
+      sessionStorage.setItem(CLAVE_LISTA_STAND, $<HTMLTextAreaElement>("ta").value);
+    } catch {
+      // Sin el paso por el almacenamiento no se recarga: la lista sigue en el cuadro para copiarla a mano.
+      mostrarAviso(t("standLlevarError"));
+      return;
+    }
   }
   // El modo sigue puesto hasta que la página nueva lo apague: así el borrador
   // de la lista que se guarda al irse (`pagehide`) no se pisa con el del stand.
@@ -126,6 +178,17 @@ let antesDeSalir: () => Promise<boolean> = async () => true;
 let salidaAvisada = false;
 export function alSalirDelStand(f: () => Promise<boolean>): void {
   antesDeSalir = f;
+}
+
+/** La línea de avisos la pinta `stand-sala.ts`. La alternativa basta para usar la salida sin esa parte de la página. */
+let mostrarAviso: (texto: string) => void = (texto) => {
+  const el = document.getElementById("sala-error");
+  if (!el) return;
+  el.textContent = texto;
+  el.hidden = !texto;
+};
+export function alAvisarEnStand(f: (texto: string) => void): void {
+  mostrarAviso = f;
 }
 
 /** «Otra ronda»: la misma lista, con quienes llegaron durante la ronda, y otro juego, sin recargar la página. */

@@ -7,7 +7,7 @@ import { type EstadoDeConexion, type Sala, cerrarSala, crearSala, enlaceDeSala, 
 import { revisarNombre } from "../sala/filtro";
 import { pintarQr, precargarQr } from "./qr";
 import { setList } from "./participants";
-import { alSalirDelStand, nombresParaLaSiguiente } from "./stand";
+import { alAvisarEnStand, alSalirDelStand, nombresParaLaSiguiente } from "./stand";
 
 /**
  * La sala por QR, en la pantalla del stand: la gente escanea, escribe su nombre
@@ -371,6 +371,10 @@ export function initStandSala(): void {
     $("sala-grande").setAttribute("aria-expanded", String(grande));
   });
   nombresParaLaSiguiente(paraLaSiguiente);
+  alAvisarEnStand((texto) => {
+    mensaje = texto;
+    pintar();
+  });
   alSalirDelStand(async () => {
     // «Hacer un sorteo de verdad»: la sala se cierra y se borra lo que tenía, sin esperar más de un instante.
     if (!sala) return true;
