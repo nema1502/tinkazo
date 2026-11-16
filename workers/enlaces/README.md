@@ -90,6 +90,7 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 | `video_made` | Se arma el video del resultado | `format`: `mp4`, `webm`; `result`: `ok`, `fail`, `unsupported` |
 | `video_shared` | Se manda o se descarga el video | `channel`: `native`, `download` |
 | `proof_cta` | Quien miró un comprobante o un video toca "Hacer mi sorteo" | `from`: `proof`, `video` |
+| `google_window` | Entrar con Google con la ventana ya cerrada: sale el aviso de que se cerró antes de entrar, o se entra igual con la ventana cerrada hace más de 6 segundos | `what`: `closed`, `late` |
 
 **El origen** (`from` en `account_connected` y en `seal_confirmed`) es de qué enlace llegó quien sortea: la marca `?o=` de la dirección a la que entró, una palabra de la lista cerrada `ORIGENES`: `home` (la portada, y lo que se asume sin marca), `aula`, `meetup`, `ruleta`, `eventos`, `proof` (el comprobante de otro sorteo) y `video`. La pestaña la recuerda mientras vive, y `conOrigen` la pone dentro de un enlace para que siga al cambiar de navegador en los enlaces que la usen; no lleva nada de nadie. `?o=qr` y `?o=short` son otra cosa: dicen por dónde se abrió un comprobante (`via`).
 

@@ -25,6 +25,13 @@ const h = vi.hoisted(() => ({
   perfil: null as null | { first_name?: string; last_name?: string; mail: string; avatar: string },
   /** Un SDK sin el cliente de la API a la vista: otra versión. */
   sinApi: false,
+  /** Lo que contó el contador anónimo de la ventana de Google. */
+  contados: [] as string[],
+}));
+
+vi.mock("../contar", async (orig) => ({
+  ...(await orig<typeof import("../contar")>()),
+  contarVentanaDeGoogle: (what: string) => void h.contados.push(what),
 }));
 
 vi.mock("@pollar/core", () => ({
@@ -101,6 +108,7 @@ beforeEach(() => {
   h.alLogin = null;
   h.perfil = null;
   h.sinApi = false;
+  h.contados = [];
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY", "pub_testnet_prueba");
 });
 afterEach(() => {
@@ -356,6 +364,8 @@ describe("entrar con Google", () => {
     expect(await r).toBe(ENTRADA_CERRADA);
     // Y el SDK deja de esperar: no queda un intento colgado que cree la cuenta por detrás.
     expect(cancelLogin()).toHaveBeenCalledTimes(1);
+    // El contador anónimo suma un aviso de ventana cerrada, sin nada de la persona.
+    expect(h.contados).toEqual(["closed"]);
   });
 
   it("con la ventana cerrada y el pedido de ingreso en camino, a los 6 segundos no se corta: la cuenta llega a los 20 y se entra", async () => {
@@ -383,6 +393,8 @@ describe("entrar con Google", () => {
     expect(cancelLogin()).not.toHaveBeenCalled();
     // Ya no se mira nada del SDK.
     expect((h.cliente as unknown as { _api: { miradores: unknown[] } })._api.miradores).toHaveLength(0);
+    // Entró con la ventana cerrada hacía más de 6 segundos: el contador lo suma (antes, esto era un corte).
+    expect(h.contados).toEqual(["late"]);
   });
 
   it("con la ventana cerrada, si a los 3 segundos sale el pedido de ingreso, el corte se desarma", async () => {
@@ -556,6 +568,8 @@ describe("entrar con Google", () => {
     await vi.advanceTimersByTimeAsync(10_000);
     expect(await r).toBe(DIR);
     expect(cancelLogin()).not.toHaveBeenCalled();
+    // Entró a los 2 segundos del cierre: no cuenta como tardía.
+    expect(h.contados).toEqual([]);
   });
 });
 

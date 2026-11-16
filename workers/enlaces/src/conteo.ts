@@ -128,6 +128,12 @@ export const EVENTOS = {
   video_shared: { p: { channel: ["native", "download"] }, o: {}, ref: "no" },
   /** Quien miró un comprobante o un video tocó "Hacer mi sorteo": desde cuál de los dos. */
   proof_cta: { p: { from: ["proof", "video"] }, o: {}, ref: "no" },
+  /**
+   * Entrar con Google, con la ventana de Google ya cerrada: salió el aviso de que se cerró antes de entrar (`closed`), o
+   * se entró igual cuando llevaba más de 6 segundos cerrada (`late`), algo que antes se cortaba. Mide si la entrada se
+   * sigue cortando antes de tiempo. Nada de la persona.
+   */
+  google_window: { p: { what: ["closed", "late"] }, o: {}, ref: "no" },
 } as const satisfies Readonly<Record<string, Regla>>;
 
 type Spec = typeof EVENTOS;

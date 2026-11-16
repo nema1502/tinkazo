@@ -128,6 +128,8 @@ describe("lo que manda el sitio", () => {
       cuerpo("video_made", { format: "mp4", result: "unsupported" }),
       cuerpo("video_shared", { channel: "download" }),
       cuerpo("proof_cta", { from: "video" }),
+      cuerpo("google_window", { what: "closed" }),
+      cuerpo("google_window", { what: "late" }),
       cuerpo("proof_open", { via: "video" }, REF),
     ];
     for (const c of cuerpos) expect(validarConteo(JSON.parse(c)), c).toMatchObject({ ok: true });

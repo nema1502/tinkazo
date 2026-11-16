@@ -7,7 +7,7 @@ import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga
 import { ingresoPlanB } from "./ingreso-bandera";
 import { LEGACY_POLLAR_INTENT_KEY, TOPE_TOKEN_MS, leerMarcaPollar, pollarIntentKey, pollarKeyFor } from "./pollar-config";
 import type { SignedTx, WalletAdapter } from "./wallet";
-import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
+import { contarEntrada, contarVentanaDeGoogle, marcarEntrada, tomarEntrada } from "../contar";
 import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
 import { enNavegadorDeApp } from "../navegador";
 import { cargaOpcional } from "../carga-opcional";
@@ -1044,7 +1044,27 @@ class PollarWallet implements SubmittingWallet {
     });
     cortada.catch(() => undefined);
     this.#falla = rechazar;
-    const cerrada = (): boolean => this.#ventana?.closed === true;
+    /** Desde cuándo se ve cerrada la ventana, para el contador (`contarVentanaDeGoogle`). */
+    let cerradaDesde = 0;
+    const cerrada = (): boolean => {
+      const si = this.#ventana?.closed === true;
+      if (si && !cerradaDesde) cerradaDesde = Date.now();
+      return si;
+    };
+    // El contador anónimo nunca corta la entrada.
+    const contarVentana = (what: "closed" | "late"): void => {
+      try {
+        contarVentanaDeGoogle(what);
+      } catch {
+        /* sin contar */
+      }
+    };
+    /** Entró con la ventana cerrada hace más de 6 segundos: antes eso era un corte, y se cuenta. */
+    const entro = (address: string): string => {
+      if (cerradaDesde && Date.now() - cerradaDesde > GRACIA_CIERRE_MS) contarVentana("late");
+      this.address = address;
+      return address;
+    };
     /** Salió el pedido de ingreso: la persona terminó en Google y el servidor está creando o abriendo su cuenta. */
     let enCamino = false;
     let gracia = 0;
@@ -1085,8 +1105,7 @@ class PollarWallet implements SubmittingWallet {
     try {
       client.login({ provider: "google" });
       const wallet = await Promise.race([ready, cortada]);
-      this.address = wallet.address;
-      return wallet.address;
+      return entro(wallet.address);
     } catch (e) {
       if (e instanceof Error && CORTES.includes(e.message)) {
         // El SDK sigue esperando algo que ya no va a llegar: se le dice que pare, y no queda un intento colgado.
@@ -1094,10 +1113,9 @@ class PollarWallet implements SubmittingWallet {
         // Si la cuenta llegó justo en este instante, ya está guardada en el SDK: se entra igual. Solo en los cortes con la
         // entrada en curso: con la ventana bloqueada o sin dirección de Google no hay cuenta que pueda llegar.
         const ya = TARDIAS.includes(e.message) ? client.getWallet() : null;
-        if (ya?.address) {
-          this.address = ya.address;
-          return ya.address;
-        }
+        if (ya?.address) return entro(ya.address);
+        // La pantalla va a decir que se cerró la ventana antes de entrar: se cuenta cada vez.
+        if (e.message === ENTRADA_CERRADA) contarVentana("closed");
       }
       throw e;
     } finally {
