@@ -209,7 +209,19 @@ function alTerminar(cancelar: () => void): void {
   cancelarEntrada = cancelar;
   pintarCuenta();
   applyGate();
+  // La puerta y el chip se rearman enteros, y un nodo nuevo no siempre se anuncia: lo dice la región viva de la cabecera.
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo) vivo.textContent = t("loginTerminando");
 }
+
+/** La entrada terminó sin cuenta (cancelada o con un error): la región viva no queda diciendo Terminando de entrar. */
+function callarTerminando(): void {
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo && vivo.textContent === t("loginTerminando")) vivo.textContent = "";
+}
+
+/** El foco no está en ningún lado: se perdió al rearmarse lo que lo tenía, o se volvió de la ventana de Google. */
+const sinFoco = (): boolean => !document.activeElement || document.activeElement === document.body;
 /**
  * Termina de retomar la sesión guardada, con cuenta o sin ella. Quien toca "Entrar con Google" mientras la sesión
  * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
@@ -297,6 +309,7 @@ export async function entrar(): Promise<void> {
     if (!session) pintarCuenta();
     // La puerta decía "Terminando de entrar…" con Cancelar: vuelve a como estaba.
     if (terminaba) applyGate();
+    if (terminaba && !session) callarTerminando();
   }
 }
 
@@ -780,7 +793,8 @@ function applyGate(): void {
     const b = button(t("cancel"), "ghost", () => cancelar());
     b.type = "button";
     gate.appendChild(b);
-    if (teniaElFoco) b.focus({ preventScroll: true });
+    // También sin foco en ningún lado: al pasar a Conectando la puerta se rearmó sin botón y el foco se perdió.
+    if (teniaElFoco || sinFoco()) b.focus({ preventScroll: true });
   }
   if (!ocupada) {
     const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
@@ -1556,6 +1570,8 @@ async function connect(
   // En esta ventana la puerta queda detrás: "Terminando de entrar…" va en el mismo botón, y Cancelar justo debajo.
   let enlaces: HTMLElement | null = null;
   const terminando = (cancelar: () => void): void => {
+    // Con el foco en Google (desde el teclado) o en ningún lado, pasa a Cancelar: es lo único que se puede hacer ahora.
+    const llevarFoco = row.contains(document.activeElement) || sinFoco();
     row.innerHTML = `<span>${esc(t("loginTerminando"))}</span>`;
     enlaces = document.createElement("div");
     enlaces.className = "login-links";
@@ -1566,6 +1582,7 @@ async function connect(
     b.addEventListener("click", () => cancelar(), { once: true });
     enlaces.appendChild(b);
     row.after(enlaces);
+    if (llevarFoco) b.focus({ preventScroll: true });
     alTerminar(cancelar);
   };
   try {
@@ -1588,6 +1605,8 @@ async function connect(
       if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
     }
   } finally {
+    // Si el foco estaba en Cancelar, vuelve al botón de Google: Cancelar se va.
+    const volverAGoogle = (enlaces as HTMLElement | null)?.contains(document.activeElement) === true;
     (enlaces as HTMLElement | null)?.remove();
     // Primero deja de conectar y después se pinta la puerta, como en `entrar`: al revés quedaba en Conectando, sin botón.
     conectando = false;
@@ -1596,6 +1615,8 @@ async function connect(
     if (terminaba) applyGate();
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();
+    if (terminaba && !session) callarTerminando();
+    if (volverAGoogle && row.isConnected) row.focus({ preventScroll: true });
   }
 }
 

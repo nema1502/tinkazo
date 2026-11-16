@@ -224,3 +224,33 @@ describe("en la ventana de opciones", () => {
     expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("fuera");
   });
 });
+
+describe("Terminando de entrar se anuncia y el foco no se pierde", () => {
+  it("se anuncia en la región viva de la cabecera, y sin foco en ningún lado Cancelar de la puerta lo recibe", async () => {
+    const { ui, t } = await cargar();
+    const fin = ui.entrar();
+    await terminaEnGoogle();
+    const vivo = document.getElementById("cuenta-aviso") as HTMLElement;
+    await vi.waitFor(() => expect(vivo.textContent, volcado()).toBe(t("loginTerminando")), esperar);
+    const cancelar = document.querySelector<HTMLButtonElement>("#gate button");
+    expect(document.activeElement, volcado()).toBe(cancelar);
+    cancelar?.click();
+    await fin;
+    // Cancelado, la región viva no queda diciendo algo que ya no pasa.
+    expect(vivo.textContent).toBe("");
+  });
+
+  it("en la ventana de opciones el foco pasa de Google a Cancelar, y al cancelar vuelve a Google", async () => {
+    const { ui, t } = await cargar();
+    const google = await entrarDesdeLaVentana(ui);
+    expect(document.activeElement).toBe(google);
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(document.querySelector(".login-links .login-link"), volcado()).not.toBeNull(), esperar);
+    const cancelar = document.querySelector<HTMLButtonElement>(".login-links .login-link") as HTMLButtonElement;
+    expect(document.activeElement, volcado()).toBe(cancelar);
+    expect(document.getElementById("cuenta-aviso")?.textContent).toBe(t("loginTerminando"));
+    cancelar.click();
+    await vi.waitFor(() => expect(google.textContent, volcado()).toContain(t("loginGoogle")), esperar);
+    expect(document.activeElement, volcado()).toBe(google);
+  });
+});
