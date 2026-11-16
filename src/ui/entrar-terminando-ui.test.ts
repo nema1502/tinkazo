@@ -1,0 +1,182 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+/**
+ * Entrar con una cuenta nueva de Google, en `wallet-ui.ts` y `wallet-pollar.ts` de verdad (15 de noviembre de 2026).
+ *
+ * Con la ventana de Google ya cerrada y el pedido de ingreso en camino, crear la cuenta puede tardar. La puerta no queda
+ * muda: dice que se está terminando de entrar y ofrece Cancelar. Cancelar le pide al SDK que pare y la puerta vuelve a
+ * como estaba, sin un aviso de error. Lo único simulado es el proveedor (`@pollar/core`).
+ */
+
+const TEST = "Test SDF Network ; September 2015";
+const DIR = "GDVZABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRS5ZLE";
+
+const h = vi.hoisted(() => ({
+  paso: "idle",
+  oyentes: new Set<(estado: unknown) => void>(),
+  billetera: null as null | { address: string },
+  config: null as null | { openAuthUrl?: (ctx: { getUrl: () => Promise<string | null> }) => unknown },
+  miradores: [] as Array<{ onRequest: (x: unknown) => unknown }>,
+  cancelados: 0,
+  activa: null as unknown,
+}));
+
+vi.mock("../stellar/config", async (orig) => {
+  const o = await orig<typeof import("../stellar/config")>();
+  return {
+    ...o,
+    hayModoOficial: true,
+    anchoringAvailable: true,
+    get network() {
+      return { ...o.network, name: "testnet", contractId: "CREAL", networkPassphrase: TEST };
+    },
+  };
+});
+vi.mock("../stellar/wallet-lite", async (orig) => ({
+  ...(await orig<typeof import("../stellar/wallet-lite")>()),
+  freighterInstalled: async () => false,
+  guestStored: () => false,
+  guestAvailable: () => false,
+  setActiveWallet: (w: unknown) => void (h.activa = w),
+  activeWallet: () => h.activa,
+  xlmBalance: async () => 10,
+}));
+// El proveedor: como el de verdad, con la ventana ya en Google pasa a autenticar, y deja mirar sus pedidos.
+vi.mock("@pollar/core", () => {
+  class ClienteFalso {
+    apiKeyHash = "huella";
+    _api = {
+      use: (m: { onRequest: (x: unknown) => unknown }) => void h.miradores.push(m),
+      eject: (m: unknown) => void (h.miradores = h.miradores.filter((x) => x !== m)),
+    };
+    constructor(config: typeof h.config) {
+      h.config = config;
+    }
+    getWallet(): { address: string } | null {
+      return h.billetera;
+    }
+    getAuthState(): { step: string } {
+      return { step: h.paso };
+    }
+    ready = async (): Promise<void> => undefined;
+    onConfirmationRequest(): () => void {
+      return () => undefined;
+    }
+    onAuthStateChange(aviso: (estado: unknown) => void): () => void {
+      h.oyentes.add(aviso);
+      aviso({ step: h.paso });
+      return () => void h.oyentes.delete(aviso);
+    }
+    login(): void {
+      void Promise.resolve(h.config?.openAuthUrl?.({ getUrl: async () => "https://pollar.invalid/entrar" })).then(() => {
+        h.paso = "authenticating";
+      });
+    }
+    cancelLogin(): void {
+      h.cancelados++;
+      h.paso = "idle";
+    }
+    logout = async (): Promise<void> => undefined;
+    getUserProfile(): null {
+      return null;
+    }
+  }
+  return { PollarClient: ClienteFalso, isValidSession: () => false };
+});
+vi.mock("../stellar/seals", () => ({ sealsOfAccount: async () => null }));
+vi.mock("./freeze", () => ({ refreshFreezeLabel: () => undefined }));
+vi.mock("./anchor", () => ({ precalentarSello: () => undefined }));
+vi.mock("./participants", () => ({ guardarBorrador: () => undefined }));
+vi.mock("../ensayo-modo", () => ({ enPractica: () => false, sinGrabar: () => false }));
+vi.mock("./modo-ui", () => ({ pasarAModo: () => undefined, abrirHojaDeModo: () => undefined }));
+
+const volcado = (): string => document.body.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, "<svg/>").slice(0, 1800);
+const esperar = { timeout: 5000 };
+const aviso = (): HTMLElement | null => document.querySelector(".wallet-notice.bad");
+
+/** La ventana de Google: se abre, y la prueba decide cuándo se cierra. */
+const ventana = { closed: false, close: (): void => undefined, location: { href: "" }, opener: null as unknown };
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.unstubAllEnvs();
+  vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_TESTNET", "pub_de_ejemplo");
+  h.paso = "idle";
+  h.oyentes.clear();
+  h.billetera = null;
+  h.config = null;
+  h.miradores = [];
+  h.cancelados = 0;
+  h.activa = null;
+  ventana.closed = false;
+  localStorage.clear();
+  sessionStorage.clear();
+  vi.stubGlobal("fetch", async () => new Response(null, { status: 200 }));
+  vi.stubGlobal("open", () => ventana);
+  Object.defineProperty(document, "readyState", { value: "loading", configurable: true });
+  Element.prototype.scrollIntoView = () => undefined;
+  document.body.innerHTML =
+    '<header></header><div><div id="gate"></div></div><div id="wallet-box"></div><div id="fund-box"></div><button id="btn-freeze"></button><div id="cuenta-aviso"></div><section id="sec-history"></section>';
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+async function cargar() {
+  const ui = await import("./wallet-ui");
+  const { t } = await import("../i18n");
+  ui.initWalletUI();
+  return { ui, t };
+}
+
+/** La persona terminó en Google: sale el pedido de ingreso y la página del proveedor cierra la ventana. */
+async function terminaEnGoogle(): Promise<void> {
+  await vi.waitFor(() => expect(h.miradores.length, volcado()).toBe(1), esperar);
+  for (const m of h.miradores) m.onRequest({ request: { method: "POST" }, schemaPath: "/auth/login" });
+  ventana.closed = true;
+}
+
+describe("la puerta mientras se termina de entrar", () => {
+  it("dice Terminando de entrar y ofrece Cancelar. Cancelar para al SDK y la puerta vuelve a como estaba, sin error", async () => {
+    const { ui, t } = await cargar();
+    const fin = ui.entrar();
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(document.querySelector("#gate p")?.textContent, volcado()).toBe(t("loginTerminando")), esperar);
+    expect(document.querySelector("#wallet-box .cuenta-chip")?.textContent, volcado()).toContain(t("loginTerminando"));
+    const cancelar = document.querySelector<HTMLButtonElement>("#gate button");
+    expect(cancelar?.textContent, volcado()).toBe(t("cancel"));
+    expect(h.cancelados).toBe(0);
+    cancelar?.click();
+    await fin;
+    expect(h.cancelados).toBe(1);
+    expect(aviso(), volcado()).toBeNull();
+    expect(document.getElementById("gate")?.style.display, volcado()).toBe("none");
+    expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("fuera");
+    expect(ui.currentSession()).toBeNull();
+  });
+
+  it("si la cuenta llega mientras tanto, entra sin pedir nada más", async () => {
+    const { ui, t } = await cargar();
+    const fin = ui.entrar();
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(document.querySelector("#gate p")?.textContent, volcado()).toBe(t("loginTerminando")), esperar);
+    h.billetera = { address: DIR };
+    h.paso = "authenticated";
+    for (const f of [...h.oyentes]) f({ step: "authenticated" });
+    await fin;
+    await vi.waitFor(() => expect(ui.currentSession()?.address, volcado()).toBe(DIR), esperar);
+    expect(h.cancelados).toBe(0);
+    // Con la cuenta adentro la puerta no se ve, y con ella Cancelar.
+    expect(document.getElementById("gate")?.style.display, volcado()).toBe("none");
+    expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("dentro");
+  });
+
+  it("los textos nuevos están en los dos idiomas", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es.loginTerminando).toBe("Terminando de entrar…");
+    expect(T.en.loginTerminando).toBe("Finishing signing you in…");
+  });
+});

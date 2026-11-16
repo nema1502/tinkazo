@@ -111,8 +111,23 @@ export const ESPERA_INGRESO_MS = 50_000;
 /** El plazo largo se cumplió sin cuenta: el mismo nombre del plazo vencido de `waitForWallet`, que la pantalla ya sabe decir. */
 export const ENTRADA_DEMORADA = "pollar-timeout";
 
+/** La persona tocó Cancelar mientras se terminaba de entrar: no es un error, la puerta vuelve a como estaba. */
+export const ENTRADA_CANCELADA = "login-cancelled";
+
 /** Los cortes de la entrada con Google que dejan al SDK esperando algo que ya no va a llegar: se le dice que pare. */
-const CORTES: readonly string[] = [ENTRADA_BLOQUEADA, ENTRADA_CERRADA, ENTRADA_SIN_SESION, ENTRADA_DEMORADA];
+const CORTES: readonly string[] = [ENTRADA_BLOQUEADA, ENTRADA_CERRADA, ENTRADA_SIN_SESION, ENTRADA_DEMORADA, ENTRADA_CANCELADA];
+/** Los cortes con la entrada en curso, en los que la cuenta pudo llegar justo al cortar. */
+const TARDIAS: readonly string[] = [ENTRADA_CERRADA, ENTRADA_DEMORADA, ENTRADA_CANCELADA];
+
+/** Lo que la entrada con Google le cuenta a la pantalla mientras pasa. */
+export interface AvisosDeEntrada {
+  /**
+   * La ventana de Google se cerró y el ingreso ya está en camino: puede tardar (una cuenta nueva se crea en ese
+   * momento). La pantalla dice que se está terminando de entrar y ofrece `cancelar`, que corta la entrada con
+   * `ENTRADA_CANCELADA`. Se llama una vez por entrada.
+   */
+  terminando?: (cancelar: () => void) => void;
+}
 
 /** Lo que el SDK le pasa a quien mira sus pedidos (el cliente de su API, `openapi-fetch`). */
 interface PedidoMirado {
@@ -1012,8 +1027,9 @@ class PollarWallet implements SubmittingWallet {
    * - con el pedido en camino (antes del cierre, o durante esos 6 segundos), se espera lo que espera el SDK, hasta
    *   `ESPERA_INGRESO_MS`, o hasta que el SDK diga que falló.
    * Cada corte le dice al SDK que pare (`cancelLogin`), y si la cuenta llegó justo en ese instante, se entra igual.
+   * Mientras se espera al SDK, `avisos.terminando` le da a la pantalla cómo cancelar.
    */
-  async connect(): Promise<string> {
+  async connect(avisos: AvisosDeEntrada = {}): Promise<string> {
     const client = await this.#ensureClient();
     this.#remember("google");
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
@@ -1045,6 +1061,12 @@ class PollarWallet implements SubmittingWallet {
         if (s.step === "error") rechazar(new Error(s.errorCode));
       });
       soltarPaso = () => void soltar();
+      // La pantalla no queda muda: dice que se está terminando de entrar, con Cancelar.
+      try {
+        avisos.terminando?.(() => rechazar(new Error(ENTRADA_CANCELADA)));
+      } catch {
+        /* lo que pinte la pantalla no corta la entrada */
+      }
     };
     const dejarDeMirar = mirarPedidoDeIngreso(client, () => {
       enCamino = true;
@@ -1069,8 +1091,9 @@ class PollarWallet implements SubmittingWallet {
       if (e instanceof Error && CORTES.includes(e.message)) {
         // El SDK sigue esperando algo que ya no va a llegar: se le dice que pare, y no queda un intento colgado.
         client.cancelLogin();
-        // Si la cuenta llegó justo en este instante, ya está guardada en el SDK: se entra igual.
-        const ya = client.getWallet();
+        // Si la cuenta llegó justo en este instante, ya está guardada en el SDK: se entra igual. Solo en los cortes con la
+        // entrada en curso: con la ventana bloqueada o sin dirección de Google no hay cuenta que pueda llegar.
+        const ya = TARDIAS.includes(e.message) ? client.getWallet() : null;
         if (ya?.address) {
           this.address = ya.address;
           return ya.address;

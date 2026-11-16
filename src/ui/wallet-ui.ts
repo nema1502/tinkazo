@@ -195,6 +195,22 @@ let retomando = false;
 /** Google (o el correo) está abriendo su ventana: la cabecera dice "Conectando…" (`pintarCuenta`). */
 let conectando = false;
 /**
+ * La ventana de Google ya se cerró y la cuenta se está creando o abriendo (`AvisosDeEntrada` en wallet-pollar.ts): la
+ * cabecera y la puerta dicen "Terminando de entrar…" y la puerta ofrece Cancelar, que es esto. Con una cuenta nueva
+ * puede tardar hasta 50 segundos, y antes la pantalla quedaba muda (15 de noviembre de 2026).
+ */
+let cancelarEntrada: (() => void) | null = null;
+const esCancelada = (e: unknown): boolean => e instanceof Error && e.message === "login-cancelled";
+/** La billetera de Google, con lo que avisa mientras entra (`connect` de wallet-pollar.ts), sin traer el módulo. */
+type PollarConAvisos = { connect(avisos: { terminando?: (cancelar: () => void) => void }): Promise<string> };
+
+/** La ventana de Google ya se cerró y falta terminar de entrar: se pinta la cabecera y la puerta con Cancelar. */
+function alTerminar(cancelar: () => void): void {
+  cancelarEntrada = cancelar;
+  pintarCuenta();
+  applyGate();
+}
+/**
  * Termina de retomar la sesión guardada, con cuenta o sin ella. Quien toca "Entrar con Google" mientras la sesión
  * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
  */
@@ -265,15 +281,22 @@ export async function entrar(): Promise<void> {
   pintarCuenta();
   try {
     const [w, { pollarWallet }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
-    const address = await pollarWallet.connect();
+    const address = await pollarWallet.connect({ terminando: alTerminar });
     await afterConnect(w, pollarWallet, address, "google", document.createElement("div"), () => undefined);
   } catch (e) {
-    // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
-    void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
+    // Cancelar mientras se terminaba de entrar no es un error: la puerta vuelve a como estaba, sin aviso.
+    if (!esCancelada(e)) {
+      // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
+      void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
+    }
   } finally {
     conectando = false;
+    const terminaba = cancelarEntrada !== null;
+    cancelarEntrada = null;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();
+    // La puerta decía "Terminando de entrar…" con Cancelar: vuelve a como estaba.
+    if (terminaba) applyGate();
   }
 }
 
@@ -604,7 +627,8 @@ const vistaDeLaSesion = (): Parameters<typeof estadoCuenta>[0]["sesion"] =>
     : null;
 
 /** En qué está la cuenta ahora: afuera, conectando, retomando o adentro (`cuenta-estado.ts`). */
-export const estadoDeLaCuenta = (): EstadoCuenta => estadoCuenta({ sesion: vistaDeLaSesion(), retomando: anchoringAvailable && retomando, conectando });
+export const estadoDeLaCuenta = (): EstadoCuenta =>
+  estadoCuenta({ sesion: vistaDeLaSesion(), retomando: anchoringAvailable && retomando, conectando, terminando: cancelarEntrada !== null });
 
 /**
  * La cuenta, siempre a la vista (26 de octubre de 2026). Alguien usó tinkazo.app y no se notaba si había iniciado
@@ -744,9 +768,17 @@ function applyGate(): void {
   const p = document.createElement("p");
   // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
   const ocupada = retomando || conectando;
-  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : "cuentaPideGoogle");
+  p.textContent = t(retomando ? "gateRetomando" : conectando ? (cancelarEntrada ? "loginTerminando" : "connecting") : "cuentaPideGoogle");
   gate.appendChild(p);
   gate.classList.toggle("retomando", ocupada);
+  // Terminando de entrar, lo único que se puede hacer es cancelar: le pide al SDK que pare y la puerta vuelve a como estaba.
+  const cancelar = conectando ? cancelarEntrada : null;
+  if (cancelar) {
+    const b = button(t("cancel"), "ghost", () => cancelar());
+    b.type = "button";
+    gate.appendChild(b);
+    if (teniaElFoco) b.focus({ preventScroll: true });
+  }
   if (!ocupada) {
     const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
     b.type = "button";
@@ -1518,6 +1550,21 @@ async function connect(
   row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
   conectando = true;
   pintarCuenta();
+  // En esta ventana la puerta queda detrás: "Terminando de entrar…" va en el mismo botón, y Cancelar justo debajo.
+  let enlaces: HTMLElement | null = null;
+  const terminando = (cancelar: () => void): void => {
+    row.innerHTML = `<span>${esc(t("loginTerminando"))}</span>`;
+    enlaces = document.createElement("div");
+    enlaces.className = "login-links";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "login-link";
+    b.textContent = t("cancel");
+    b.addEventListener("click", () => cancelar(), { once: true });
+    enlaces.appendChild(b);
+    row.after(enlaces);
+    alTerminar(cancelar);
+  };
   try {
     const w = await lite();
     // Solo la cuenta de prueba necesita el SDK, para armar su par de llaves.
@@ -1527,14 +1574,21 @@ async function connect(
         : pick === "google"
           ? (await import("../stellar/wallet-pollar")).pollarWallet
           : w.freighterWallet;
-    const address = await wallet.connect();
+    const address = pick === "google" ? await (wallet as PollarConAvisos).connect({ terminando }) : await wallet.connect();
     await afterConnect(w, wallet, address, pick, back, done);
   } catch (e) {
     row.innerHTML = original;
-    const aviso = notice(await walletErrorText(e), true);
-    // Solo el ingreso con Pollar (Google) depende del proveedor que puede quedarse sin cupo: Freighter y la cuenta de prueba, no.
-    if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
+    // Cancelar mientras se terminaba de entrar no es un error: el botón vuelve a como estaba, sin aviso.
+    if (!esCancelada(e)) {
+      const aviso = notice(await walletErrorText(e), true);
+      // Solo el ingreso con Pollar (Google) depende del proveedor que puede quedarse sin cupo: Freighter y la cuenta de prueba, no.
+      if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
+    }
   } finally {
+    (enlaces as HTMLElement | null)?.remove();
+    const terminaba = cancelarEntrada !== null;
+    cancelarEntrada = null;
+    if (terminaba) applyGate();
     conectando = false;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();

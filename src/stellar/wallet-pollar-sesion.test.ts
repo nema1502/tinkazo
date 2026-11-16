@@ -435,6 +435,49 @@ describe("entrar con Google", () => {
     expect(cancelLogin()).toHaveBeenCalledTimes(1);
   });
 
+  it("mientras se espera, avisa que se está terminando de entrar, y Cancelar corta y para al SDK", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+    };
+    const { pollarWallet, ENTRADA_CANCELADA } = await modulo();
+    const avisos: Array<() => void> = [];
+    const r = pollarWallet.connect({ terminando: (cancelar) => avisos.push(cancelar) }).then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(1_500);
+    // Un solo aviso, aunque el vigía vuelva a mirar cada medio segundo.
+    expect(avisos).toHaveLength(1);
+    expect(cancelLogin()).not.toHaveBeenCalled();
+    avisos[0]?.();
+    expect(await r).toBe(ENTRADA_CANCELADA);
+    expect(cancelLogin()).toHaveBeenCalledTimes(1);
+  });
+
+  it("con la ventana cerrada sin el pedido de ingreso no avisa nada: se corta a los 6 segundos", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => (ventana.closed = true), 300);
+    };
+    const { pollarWallet, ENTRADA_CERRADA } = await modulo();
+    const terminando = vi.fn();
+    const r = pollarWallet.connect({ terminando }).then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(await r).toBe(ENTRADA_CERRADA);
+    expect(terminando).not.toHaveBeenCalled();
+  });
+
   it("si mientras se espera el SDK termina con un error, se corta enseguida con ese error", async () => {
     vi.useFakeTimers();
     almacen();

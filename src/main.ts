@@ -392,9 +392,12 @@ function initVistas(): void {
    * "Conectando…" o "Retomando tu cuenta…", sin la G y sin invitar a tocar otra vez. Lo mismo dice la cabecera.
    */
   const pintarCta = (): void => {
-    const estado = estadoDeLaCuenta().estado;
+    const cuenta = estadoDeLaCuenta();
+    const estado = cuenta.estado;
     const ocupado = estado === "conectando" || estado === "retomando";
-    const clave = estado === "conectando" ? "connecting" : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
+    // Con la ventana de Google ya cerrada y la cuenta creándose, dice "Terminando de entrar…", como la cabecera.
+    const conectandoDice = cuenta.estado === "conectando" && cuenta.terminando ? "loginTerminando" : "connecting";
+    const clave = estado === "conectando" ? conectandoDice : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
     for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
       const boton = el.closest<HTMLElement>("[data-cta-entrar]");
       // El botón no se achica mientras dice "Conectando…": lo que tiene al lado ("Probar con un ejemplo") no salta de
