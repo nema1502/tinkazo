@@ -2648,6 +2648,10 @@ export const T: Record<Lang, Dict> = {
     // Las dos cuentas ({n} participaciones, {k} personas) cuando no es una por persona.
     fotoEntreUnoPart: "Salió entre {n} participaciones de {k} personas", fotoEntreVariosPart: "Salieron entre {n} participaciones de {k} personas",
     fotoMas: "y {n} más", fotoMasNombres: "{n} más",
+    // La foto del juego con muchos ganadores: dónde está la lista completa. Con sello, en el QR. Sin él, el QR rehace un solo
+    // ganador, así que dice que está en el mensaje, que nombra a todos.
+    fotoListaEnQr: "La lista completa está en el QR.", fotoOrdenEnQr: "El orden completo está en el QR.",
+    fotoListaEnMensaje: "La lista completa está en el mensaje.", fotoOrdenEnMensaje: "El orden completo está en el mensaje.",
     evnT: "Mis eventos",
     evnLead: "Un evento junta sorteos bajo un nombre, para mandarlos juntos. Sumale sorteos desde cada uno de tus sorteos.",
     evnNombre: "Nombre del evento", evnCrear: "Crear evento", evnGuardar: "Guardar el nombre",
@@ -5421,6 +5425,10 @@ export const T: Record<Lang, Dict> = {
     // Both counts ({n} entries, {k} people) when it is not one per person.
     fotoEntreUnoPart: "Drawn from {n} entries from {k} people", fotoEntreVariosPart: "Drawn from {n} entries from {k} people",
     fotoMas: "and {n} more", fotoMasNombres: "{n} more",
+    // The game photo with many winners: where the full list is. With a seal, in the QR code. Without one the QR code redoes a
+    // single winner, so it says the list is in the message, which names everyone.
+    fotoListaEnQr: "The full list is in the QR code.", fotoOrdenEnQr: "The full order is in the QR code.",
+    fotoListaEnMensaje: "The full list is in the message.", fotoOrdenEnMensaje: "The full order is in the message.",
     evnT: "My events",
     evnLead: "An event groups draws under one name so you can send them together. Add a draw to an event from the draw itself.",
     evnNombre: "Event name", evnCrear: "Create event", evnGuardar: "Save the name",
