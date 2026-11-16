@@ -1982,6 +1982,11 @@
   /* El resultado en grande (pantalla.ts): el nombre es lo más grande, y el QR lo segundo, para leerlo desde el fondo. */
   .grande-row { margin-top: 14px; }
   .pantalla-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(20px, 4vw, 56px); align-items: center; }
+  /* El guardado del sorteo en la pantalla grande (pantalla.ts): una línea discreta abajo, con el botón si no se pudo. */
+  .pantalla-grab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0; font-size: clamp(14px, 1.3vw, 18px); font-weight: 700; color: var(--ink2); border-left: 4px solid var(--purple); padding-left: 10px; }
+  .pantalla-grab[hidden] { display: none; }
+  .pantalla-grab[data-grabacion="guardado"] { border-left-color: var(--teal); }
+  .pantalla-grab[data-grabacion="error"], .pantalla-grab[data-grabacion="recuperar"], .pantalla-grab[data-grabacion="no-coincide"] { border-left-color: var(--orange); color: var(--ink); }
   /* La letra la ajusta pantalla.ts (--letra) para que entren todos sin partir
      palabras; la cara, el relleno y el premio van en em y crecen con ella. */
   .pantalla-ganadores { font-size: var(--letra, 64px); display: flex; flex-direction: column; gap: max(10px, 0.24em); align-items: flex-start; min-width: 0; }
