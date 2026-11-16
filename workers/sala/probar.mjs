@@ -14,8 +14,8 @@
  *
  * Crea tres salas y no deja nada guardado (las cierra o vencen solas). `--cupos`
  * prueba el tope de salas por dirección (deja esa dirección una hora sin crear;
- * reiniciar `wrangler dev` lo reinicia); `--tope` manda nombres durante cinco
- * minutos para llegar a 400.
+ * reiniciar `wrangler dev` lo reinicia); `--tope` manda nombres durante unos
+ * dos minutos para llegar a 400.
  */
 import { gzipSync } from "node:zlib";
 
@@ -72,12 +72,32 @@ async function cifrar(claveB64, texto) {
   out.set(ct, 13);
   return b64(out);
 }
+/** La huella del nombre, gemela de la que calcula la página con la clave del QR. */
+async function huella(claveB64, texto) {
+  const raw = Buffer.from(claveB64, "base64url");
+  const sep = new TextEncoder().encode("Tinkazo/sala/huella-de-nombre/v1");
+  const material = new Uint8Array(sep.length + raw.length);
+  material.set(sep);
+  material.set(raw, sep.length);
+  const derivada = new Uint8Array(await crypto.subtle.digest("SHA-256", material));
+  const k = await crypto.subtle.importKey("raw", derivada, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const limpio = texto.replace(/[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u2028-\u202f\u205f-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb]/g, "");
+  const normal = limpio.replace(/\s+/g, " ").trim().normalize("NFC").trim().toLowerCase();
+  return b64(new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(normal))));
+}
 async function descifrar(claveB64, d) {
   const u = Buffer.from(d, "base64url");
   const k = await crypto.subtle.importKey("raw", Buffer.from(claveB64, "base64url"), "AES-GCM", false, ["decrypt"]);
   return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u.subarray(1, 13) }, k, u.subarray(13)));
 }
-const post = (id, d) => fetch(`${base}/v1/sala/${id}`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: d });
+/** Toda alta válida usa el cuerpo nuevo. Sin `llave`, simula un celular distinto. */
+async function post(id, nombre, llave = nuevaLlave()) {
+  const d = await cifrar(clave, nombre);
+  const h = await huella(clave, nombre);
+  return fetch(`${base}/v1/sala/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ d, h, llave }) });
+}
+/** Solo para comprobar los cuerpos mal formados y el límite de tamaño. */
+const postPlano = (id, d) => fetch(`${base}/v1/sala/${id}`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: d });
 const auth = (token) => ({ Authorization: `Bearer ${token}`, ...SITIO });
 const crear = () => fetch(`${base}/v1/sala`, { method: "POST", headers: SITIO });
 
@@ -128,10 +148,10 @@ async function probarAlarma() {
   if (r2.status === 201) {
     const s2 = await r2.json();
     const vida = s2.vence - Date.now();
-    await post(s2.id, await cifrar(clave, "Carla"));
+    await post(s2.id, "Carla");
     if (vida < 60_000) {
       await sleep(vida + 2500);
-      const a = (await post(s2.id, await cifrar(clave, "Dani"))).status;
+      const a = (await post(s2.id, "Dani")).status;
       const b = (await fetch(`${base}/v1/sala/${s2.id}/nombres`, { headers: auth(s2.token) })).status;
       check("la alarma borra la sala sola", a === 404 && b === 404, `venció a los ${Math.round(vida / 1000)} s de prueba`);
     } else {
@@ -148,16 +168,25 @@ if (soloAlarma) {
 }
 
 // 3. Los nombres.
-check("una forma que no es un nombre cifrado da 400", (await post(id, "hola mundo!")).status === 400);
-check("un nombre demasiado largo da 413 o 400", [400, 413].includes((await post(id, "A".repeat(500))).status));
-check("una sala que no existe da 404", (await post("Zz9Zz9Zz", await cifrar(clave, "Ana"))).status === 404);
-const ana = await post(id, await cifrar(clave, "Ana"));
+check("una forma que no es un alta da 400", (await postPlano(id, "hola mundo!")).status === 400);
+check("un cuerpo demasiado largo da 413", (await postPlano(id, "A".repeat(701))).status === 413);
+check("una sala que no existe da 404", (await post("Zz9Zz9Zz", "Ana")).status === 404);
+const llaveAna = nuevaLlave();
+const ana = await post(id, "Ana", llaveAna);
 check("un nombre cifrado entra (201)", ana.status === 201);
+const nAna = (await ana.json()).n;
+const anaRepetida = await post(id, " ana ", nuevaLlave());
+check("el mismo nombre desde otro celular da 409 repetido", anaRepetida.status === 409 && (await anaRepetida.json()).error === "repetido");
+const anaCorregida = await post(id, "Ana Pérez", llaveAna);
+const correccion = await anaCorregida.json();
+check("la misma llave corrige (200), deja una sola fila y trae el número anterior", anaCorregida.status === 200 && correccion.n !== nAna && correccion.r?.[0] === nAna);
+const listaTrasCorregir = await (await fetch(`${base}/v1/sala/${id}/nombres?desde=0`, { headers: auth(token) })).json();
+check("la corrección quedó una sola vez y la consulta también trae r", listaTrasCorregir.length === 1 && listaTrasCorregir[0].r?.[0] === nAna);
 check("sin token no se leen los nombres", (await fetch(`${base}/v1/sala/${id}/nombres`, { headers: SITIO })).status === 403);
 check("con otro token tampoco", (await fetch(`${base}/v1/sala/${id}/nombres`, { headers: auth(b64(crypto.getRandomValues(new Uint8Array(16)))) })).status === 403);
 const lista = await (await fetch(`${base}/v1/sala/${id}/nombres?desde=0`, { headers: auth(token) })).json();
 check("con el token se leen, cifrados", lista.length === 1 && !JSON.stringify(lista).includes("Ana"), JSON.stringify(lista).slice(0, 60));
-check("y se descifran con la clave que solo tiene el QR", (await descifrar(clave, lista[0].d)) === "Ana");
+check("y se descifran con la clave que solo tiene el QR", (await descifrar(clave, lista[0].d)) === "Ana Pérez");
 
 // 4. La pantalla por WebSocket.
 const p1 = pantalla(id);
@@ -168,7 +197,7 @@ const p2 = pantalla(id);
 await p2.abierto;
 p2.ws.send(JSON.stringify({ t: "hola", token }));
 check("con el token queda listo y dice cuántos hay", await esperar(() => p2.msgs.some((m) => m.t === "listo" && m.hay === 1)));
-const beto = await post(id, await cifrar(clave, "Beto"));
+const beto = await post(id, "Beto");
 const nBeto = (await beto.json()).n;
 check("un nombre nuevo le llega al instante a la pantalla", await esperar(() => p2.msgs.some((m) => m.t === "nombre" && m.n === nBeto)));
 const llegado = p2.msgs.find((m) => m.t === "nombre");
@@ -187,15 +216,16 @@ check("y la pantalla se entera", await esperar(() => p3.msgs.some((m) => m.t ===
 const despues = await (await fetch(`${base}/v1/sala/${id}/nombres?desde=0`, { headers: auth(token) })).json();
 check("y ya no está en el objeto", despues.length === 1 && despues[0].n !== nBeto);
 
-// 6. Tope por minuto: 120 nombres por sala (ya van 2).
+// 6. Tope por minuto: 240 nombres por sala (ya van 2).
 let ok = 2;
 let rapido = 0;
-for (let i = 0; i < 125; i++) {
-  const r = await post(id, await cifrar(clave, `Persona ${i}`));
+for (let i = 0; i < 245; i++) {
+  const r = await post(id, `Persona ${i}`);
   if (r.status === 201) ok++;
   else if (r.status === 429 && (await r.json()).error === "rapido") rapido++;
 }
-check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 && rapido >= 7, `entraron ${ok}, frenados ${rapido}`);
+// La primera alta, el repetido y la corrección también gastaron tres lugares de esta ventana.
+check("el tope es de 240 nombres por minuto por sala", ok >= 236 && ok <= 240 && rapido >= 7, `entraron ${ok}, frenados ${rapido}`);
 
 // 6b. Los equipos: el registro con cuenta de equipos.html. El tope por minuto de los nombres ya se gastó: se espera a que pase.
 {
@@ -306,7 +336,7 @@ check("el tope es de 120 nombres por minuto por sala", ok >= 118 && ok <= 120 &&
 check("sin token no se cierra", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: SITIO })).status === 403);
 check("con el token se cierra (204)", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: auth(token) })).status === 204);
 check("la pantalla recibe el cierre", await esperar(() => p3.est.cierre === 1000), String(p3.est.cierre));
-check("cerrada, sumar da 404", (await post(id, await cifrar(clave, "Tarde"))).status === 404);
+check("cerrada, sumar da 404", (await post(id, "Tarde")).status === 404);
 check("cerrada, no queda nada para leer (404)", (await fetch(`${base}/v1/sala/${id}/nombres`, { headers: auth(token) })).status === 404);
 
 // 8. La alarma.
@@ -330,7 +360,7 @@ if (conCupos) {
   check("más de 5 salas por hora desde una dirección da 429 cupo-ip", motivo === "cupo-ip" && creadas <= 5, `creó ${creadas} más, motivo ${motivo}`);
 }
 
-// 10. Tope de 400 por sala (cinco minutos).
+// 10. Tope de 400 por sala (dos minutos).
 if (conTope) {
   const rr = await crear();
   if (rr.status !== 201) console.log("NO PROBADO el tope de 400: no se pudo crear la sala", rr.status);
@@ -339,8 +369,8 @@ if (conTope) {
     let entraron = 0;
     let llena = false;
     for (let min = 0; min < 5 && !llena; min++) {
-      for (let i = 0; i < 125 && !llena; i++) {
-        const r = await post(s.id, await cifrar(clave, `P${min}-${i}`));
+      for (let i = 0; i < 245 && !llena; i++) {
+        const r = await post(s.id, `P${min}-${i}`);
         if (r.status === 201) entraron++;
         else if ((await r.json()).error === "llena") llena = true;
       }

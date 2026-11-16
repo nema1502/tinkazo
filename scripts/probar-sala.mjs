@@ -12,8 +12,9 @@
  * nombre). Comprueba que el nombre aparece en la lista, que una grosería queda
  * «Para revisar», que quitar sale también del objeto, que si la pantalla se
  * recarga sigue con los mismos nombres, que con la pantalla sin red no se
- * pierde nada, que cerrar la sala borra todo, y que el celular se ve bien en
- * 390 px. Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto>.
+ * pierde nada y que cerrar la sala borra todo. También comprueba la corrección
+ * sin duplicar, el rechazo de un repetido y el celular en 360 px. Un Chrome a
+ * la vez y con su propio puerto: CDP_PORT=<puerto>.
  */
 import http from "node:http";
 import net from "node:net";
@@ -89,24 +90,37 @@ try {
 
   // El celular.
   const cel = await browser.open("about:blank");
-  await cel.send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true });
+  // Los estados de las altas permiten comprobar 201, 200 y 409 sin cambiar la página.
+  await cel.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `window.__altas=[];var f=window.fetch;window.fetch=function(){var a=arguments;return f.apply(this,a).then(function(r){if(a[1]&&a[1].method==="POST"&&String(a[0]).indexOf("/v1/sala/")===0)window.__altas.push(r.status);return r})}`,
+  });
+  await cel.send("Emulation.setDeviceMetricsOverride", { width: 360, height: 844, deviceScaleFactor: 2, mobile: true });
   await cel.send("Page.navigate", { url: enlace });
   await cel.waitFor(`document.getElementById('n') && !document.getElementById('n').disabled`, 10000);
   check("el celular abre la página del Worker y el campo está listo", await cel.eval(`!document.getElementById('n').disabled`));
-  check("sin scroll horizontal en 390 px", await cel.eval(`document.documentElement.scrollWidth <= innerWidth`));
-  check("el campo y el botón miden al menos 44 px de alto", await cel.eval(`['n','b'].every(i => document.getElementById(i).getBoundingClientRect().height >= 44)`));
+  check("sin scroll horizontal en 360 px", await cel.eval(`document.documentElement.scrollWidth <= innerWidth`));
+  check("el campo y el botón miden al menos 48 px de alto", await cel.eval(`['n','b'].every(i => document.getElementById(i).getBoundingClientRect().height >= 48)`));
   if (salida) {
     mkdirSync(salida, { recursive: true });
     await cel.screenshot(join(salida, "sala-celular.png"));
   }
-  const sumar = async (nombre) => {
-    await cel.eval(`(() => { document.getElementById('hecho').hidden && 0; const o = document.getElementById('o'); if (!document.getElementById('hecho').hidden) o.click(); })()`);
+  const sumar = async (nombre, otroCelular = true) => {
+    if (otroCelular) {
+      // Otro celular: mismo Chrome, pero sin el recuerdo local de esta sala.
+      await cel.eval(`localStorage.removeItem(${JSON.stringify(`tk-sala:${id}`)})`);
+      await cel.send("Page.reload");
+      await cel.waitFor(`document.getElementById('n') && !document.getElementById('n').disabled && !document.getElementById('form').hidden`, 10000);
+    } else {
+      await cel.eval(`(() => { if (!document.getElementById('hecho').hidden) document.getElementById('o').click(); })()`);
+    }
     await cel.eval(`(() => { const n = document.getElementById('n'); n.value = ${JSON.stringify(nombre)}; document.getElementById('f').requestSubmit(); })()`);
     return (await cel.waitFor(`!document.getElementById('hecho').hidden || document.getElementById('msg').textContent.length > 0`, 8000)).ok;
   };
 
-  await sumar("Mariela");
-  check("el celular dice «¡Listo!» y ofrece «Hacé el tuyo, gratis»", await cel.eval(`!document.getElementById('hecho').hidden && /Hacé el tuyo, gratis/.test(document.getElementById('h').textContent)`));
+  await sumar("Mariela", false);
+  check("el celular dice que está listo, con qué nombre quedó y ofrece hacer uno gratis", await cel.eval(`!document.getElementById('hecho').hidden && /Mariela/.test(document.getElementById('hy').textContent) && /Hacé el tuyo, gratis/.test(document.getElementById('h').textContent)`));
+  check("la primera alta contestó 201", await cel.eval(`window.__altas.join(',') === '201'`));
+  check("el botón para corregir también mide al menos 48 px", await cel.eval(`document.getElementById('o').getBoundingClientRect().height >= 48`));
   const aparece = await pantalla.waitFor(`document.getElementById('ta').value.split('\\n').includes('Mariela')`, 5000);
   check("el nombre aparece en la lista de la pantalla al instante", aparece.ok, `${aparece.elapsed} ms`);
   check("la pantalla cuenta una persona", await pantalla.eval(`/1 persona se sumó/.test(document.getElementById('sala-cuenta').textContent)`));
@@ -114,6 +128,19 @@ try {
   // Lo que vio el servidor: nada en claro.
   const crudo = await (await fetch(`${sala}/v1/sala/${id}/nombres?desde=0`, { headers: { Authorization: `Bearer ${token}`, Origin: "https://tinkazo.app" } })).text();
   check("el servidor solo guarda bytes cifrados: «Mariela» no está en lo que devuelve", !crudo.includes("Mariela") && !crudo.includes(clave));
+  const antesDeCorregir = JSON.parse(crudo);
+
+  await cel.send("Page.reload");
+  check("al recargar, el celular recuerda que ya se anotó y con qué nombre", (await cel.waitFor(`!document.getElementById('hecho').hidden && /Mariela/.test(document.getElementById('hy').textContent)`, 8000)).ok);
+  await sumar("Mariela Quispe", false);
+  check("corregir desde el mismo celular contestó 200", await cel.eval(`window.__altas.join(',') === '200'`));
+  check("la pantalla saca el nombre viejo y muestra la corrección", (await pantalla.waitFor(`document.getElementById('ta').value.split('\\n').includes('Mariela Quispe') && !document.getElementById('ta').value.split('\\n').includes('Mariela')`, 5000)).ok);
+  const trasCorregir = JSON.parse(await (await fetch(`${sala}/v1/sala/${id}/nombres?desde=0`, { headers: { Authorization: `Bearer ${token}`, Origin: "https://tinkazo.app" } })).text());
+  check("la misma llave deja una sola fila y la consulta trae el número reemplazado", trasCorregir.length === 1 && trasCorregir[0].r?.[0] === antesDeCorregir[0].n, JSON.stringify(trasCorregir));
+
+  await sumar(" mariela  quispe ");
+  check("el mismo nombre desde otro celular contestó 409 y explica cómo corregirlo", await cel.eval(`window.__altas.join(',') === '409' && /apellido o un apodo/.test(document.getElementById('msg').textContent)`));
+  check("el repetido no se sumó a la pantalla", await pantalla.eval(`document.getElementById('ta').value.split('\\n').filter(x => x === 'Mariela Quispe').length === 1`));
 
   await sumar("Pedro Vergara");
   await sumar("Hijo de P u t a");

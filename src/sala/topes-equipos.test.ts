@@ -5,8 +5,8 @@ import { EQUIPOS_POR_MINUTO, NOMBRES_POR_MINUTO, VentanaPorMinuto } from "../../
 
 /**
  * El tope por minuto de la sala (`workers/sala/src/index.ts`). Los nombres que mandan los celulares y las altas de
- * equipos gastaban el mismo contador: con el id de la sala del QR, 120 nombres por minuto dejaban a todos los equipos en
- * Hay mucha gente anotándose. Ahora cada uno tiene su ventana.
+ * equipos gastaban el mismo contador y se frenaban entre sí. Ahora cada uno tiene su ventana: 240 nombres deja entrar
+ * a 200 personas que escanean a la vez, mientras los equipos conservan su tope independiente de 120.
  */
 
 const fuente = readFileSync(join(process.cwd(), "workers", "sala", "src", "index.ts"), "utf8");
@@ -14,7 +14,7 @@ const fuente = readFileSync(join(process.cwd(), "workers", "sala", "src", "index
 const metodo = (nombre: string): string => new RegExp(`\\n  async ${nombre}\\([\\s\\S]*?\\r?\\n  \\}\\r?\\n`).exec(fuente)?.[0] ?? "";
 
 describe("los topes por minuto de la sala", () => {
-  it("120 nombres en un minuto no frenan un alta de equipo", () => {
+  it("240 nombres en un minuto no frenan un alta de equipo", () => {
     const nombres = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
     const equipos = new VentanaPorMinuto(EQUIPOS_POR_MINUTO);
     const ahora = 1_000_000;
@@ -23,8 +23,11 @@ describe("los topes por minuto de la sala", () => {
     expect(equipos.intentar(ahora)).toBe(true);
   });
 
-  it("los equipos tienen su propio tope, del mismo tamaño que el de los nombres", () => {
-    expect(EQUIPOS_POR_MINUTO).toBe(NOMBRES_POR_MINUTO);
+  it("entran 200 personas en un minuto y los equipos conservan su tope aparte", () => {
+    expect(NOMBRES_POR_MINUTO).toBe(240);
+    expect(EQUIPOS_POR_MINUTO).toBe(120);
+    const nombres = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
+    for (let i = 0; i < 200; i++) expect(nombres.intentar(1_000)).toBe(true);
   });
 
   it("la sala usa una ventana para los nombres y otra para los equipos", () => {
