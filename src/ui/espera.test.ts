@@ -18,7 +18,11 @@ const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQ
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ soltarPantallaCompleta: () => undefined }));
-vi.mock("./espectador", () => ({ armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a) }));
+// El QR del espectador: el lugar y los datos son los de verdad; el dibujo (que pide el enlace corto) se anota.
+vi.mock("./espectador-enlace", async (orig) => ({
+  ...(await orig<typeof import("./espectador-enlace")>()),
+  armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a),
+}));
 
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito", "Gaby"];
 
@@ -835,5 +839,44 @@ describe("el QR del espectador durante la espera", () => {
     } finally {
       history.replaceState(null, "", "/");
     }
+  });
+
+  for (const modo of ["marcarEnsayo", "marcarStand"] as const) {
+    it(`con ${modo === "marcarEnsayo" ? "el ensayo" : "el modo stand"} tampoco: no se graba nada ni se comparte la lista`, async () => {
+      const m = await import("../ensayo-modo");
+      m[modo](true);
+      try {
+        await abrirEspera();
+        expect(pedidos()).toHaveLength(0);
+        expect(document.querySelector(".espera .espera-qr")).toBeNull();
+      } finally {
+        m[modo](false);
+      }
+    });
+  }
+
+  it("mientras llega el enlace corto, el lugar del QR dice que se está preparando y no dibuja nada", async () => {
+    await abrirEspera();
+    const figura = document.querySelector<HTMLElement>(".espera .espera-qr");
+    expect(figura?.dataset.estado).toBe("preparando");
+    expect(figura?.querySelector("img")?.hidden).toBe(true);
+    expect(figura?.querySelector(".espera-qr-estado")?.textContent).toBeTruthy();
+  });
+
+  it("con el sello todavía en camino no hay QR, y aparece cuando el sello entra, con el número del sorteo", async () => {
+    const { app } = await import("../state");
+    const { mostrarEspera } = await import("./espera");
+    app.drawn = null;
+    app.frozen = { names: ["Ana", "Beto", "Cami"], listHash: "ab", ts: 1, at: "", prize: "", round: 1, sinSello: true };
+    mostrarEspera(() => 30, { sortear: vi.fn(), aMano: () => false, graba: false, juegos: (() => juegos()) as never, elegirJuego: vi.fn(), premios: () => 1 });
+    expect(pedidos()).toHaveLength(0);
+    expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
+    // Entró el sello: el sorteo pasa a tener número, y el QR se arma con él.
+    const f = app.frozen as { raffleId?: bigint; sinSello?: boolean };
+    f.raffleId = 42n;
+    delete f.sinSello;
+    document.dispatchEvent(new CustomEvent("tinkazo:sello"));
+    expect(pedidos()).toHaveLength(1);
+    expect(pedidos()[0]?.datos).toMatchObject({ i: "42" });
   });
 });
