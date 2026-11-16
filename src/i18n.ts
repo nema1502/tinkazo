@@ -114,6 +114,8 @@ export interface Dict {
   gcPeople: (n: number) => string;
   gcPrizes: (k: number) => string;
   gcPrizesNote: (k: number) => string;
+  /** La nota de la tarjeta en una ronda del stand, con varias personas y un juego que cuenta solo a la primera. Nadie gana ni hay premios. */
+  gcStandNota: (k: number) => string;
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
@@ -346,8 +348,11 @@ export interface Dict {
   cPasTwo: (n: string) => string;
   /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. Con equipos (`equipos`), cuenta equipos; sin el parámetro, la palabra la pone la lista del cuadro. */
   sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number, equipos?: boolean) => string;
-  /** Debajo de Empezar la ronda en el stand: solo cuántas personas participan. */
-  standResumen: (n: number) => string;
+  /**
+   * Debajo de Empezar la ronda en el stand: cuántas personas participan y cuántas salen (`k`, sin pasar de la lista).
+   * Con `todas`, salen todas. Sin `k`, solo la cuenta de personas.
+   */
+  standResumen: (n: number, k?: number, todas?: boolean) => string;
   /** La cuenta de junto al cuadro cuando la lista tiene varias participaciones por persona. */
   listaCuentaPart: (n: number, k: number) => string;
   /** La cuenta de junto al cuadro en un orden de turnos repartido: personas y turnos. */
@@ -628,7 +633,8 @@ export const T: Record<Lang, Dict> = {
       const todos = more > 0 ? [...ns, `${more} más`] : ns;
       return pick([`¡Se bajan ${joinList(todos, "y")}!`, `¡Hasta acá llegaron ${joinList(todos, "y")}!`]);
     },
-    cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
+    // En una ronda del stand nadie se lleva un premio: quien se baja y también sale queda entre los que salen.
+    cTelPrize: (n) => enStand() ? pick([`¡Se baja ${n}, y queda entre los que salen!`, `¡${n} se baja, pero también sale!`]) : pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
     cTelDock: ["¡LLEGÓ ARRIBA!", "¡TOCÓ LA CUMBRE!", "¡SE ABRE LA PUERTA!"],
     cTelLeft: "QUEDAN",
@@ -665,7 +671,7 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["¡Quedan los mejores!", "¡Esto se pone bravo!", "¡Aguantan pocos!"],
     cTroEdge: (n) => pick([`¡${n} casi se sale!`, `¡${n} en el borde!`, `¡${n} rozó la tiza!`]),
     cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} ${yE(b)} ${b}!`]),
-    cTroWin: (n, many) => pick(many ? [`¡Se lo llevan ${n}!`, `¡Los premios, para ${n}!`] : [`¡${n} sigue bailando!`, `¡El ruedo es de ${n}!`, `¡Nadie tumba a ${n}!`]),
+    cTroWin: (n, many) => pick(many ? (enStand() ? [`¡Salen ${n}!`, `¡La ronda saca a ${n}!`] : [`¡Se lo llevan ${n}!`, `¡Los premios, para ${n}!`]) : [`¡${n} sigue bailando!`, `¡El ruedo es de ${n}!`, `¡Nadie tumba a ${n}!`]),
     cTroClash: ["¡Chocan!", "¡Qué golpe!", "¡Se dieron!"],
     cTroWobble: (n) => pick([`¡Cabecea el de ${n}!`, `¡${n} se tambalea!`, `¡Se va el de ${n}!`]),
     cTroRecover: ["¡Y sigue bailando!", "¡No se cae!", "¡Se endereza!"],
@@ -753,9 +759,10 @@ export const T: Record<Lang, Dict> = {
     cQuiSi: "¡SÍ!",
     cQuiNoStamp: "¡NO!",
     cQuiAlmost: (i) => ["¡Uy, casi se sienta!", "¡Uy, casi!", "¡Se salvó de milagro!"][i % 3] as string,
-    cSapNext: (k) => `¡Va el premio ${k}!`,
-    cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
-    cSapTally: (k, of) => `Premio ${k} de ${of}`,
+    // En el stand, cada argolla saca a una persona: se cuenta por persona y no por premio.
+    cSapNext: (k) => enStand() ? `¡Va la persona ${k}!` : `¡Va el premio ${k}!`,
+    cSapDone: (k) => enStand() ? pick([`¡Ya salió la persona ${k}!`, `¡Ahí quedó la persona ${k}!`]) : pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
+    cSapTally: (k, of) => enStand() ? `Persona ${k} de ${of}` : `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
     // --- La Entrada (Carnaval de Oruro): el desfile por fraternidades hasta el Socavón.
     cOruLast: ["¡Ya se ve el Socavón!", "¡La recta final de la entrada!", "¡Al Socavón!"],
@@ -781,7 +788,7 @@ export const T: Record<Lang, Dict> = {
     cChoOut: (n) => pick([`¡${n} trastabilló!`, `¡${n} se soltó!`, `¡Afuera, ${n}!`]),
     cChoOutN: (ns) => `¡${joinList(ns, "y")} se soltaron!`,
     cChoMany: (k) => `¡${k} se soltaron!`,
-    cChoPrize: (n) => `¡${n} sale con premio!`,
+    cChoPrize: (n) => enStand() ? `¡${n} se suelta, pero también sale!` : `¡${n} sale con premio!`,
     cChoGo: ["¡Sigue la chovena!", "¡Otra vuelta!", "¡Música!"],
     cChoFake: ["¡Era un amague!", "¡Falsa alarma!", "¡Sigue, sigue!"],
     cChoBack: (n) => pick([`¡${n} se había soltado, y vuelve!`, `¡${n} vuelve a la rueda!`]),
@@ -845,18 +852,22 @@ export const T: Record<Lang, Dict> = {
     cTroWobbleAny: ["¡Se tambalea!", "¡Cabecea!", "¡Ojo, se inclina!"],
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
-    cPinPrize: (k) => (k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
+    cPinPrize: (k) => (enStand() ? (k > 1 ? pick(["¡Caen, pero también salen!", "¡Caen, y quedan entre los que salen!"]) : pick(["¡Cae, pero también sale!", "¡Cae, y queda entre los que salen!"])) : k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
     gameOruro: "La Entrada",
     // La Entrada: la sala aplaude con la banda, cada fraternidad se presenta y se queda entera.
     cOruClap: ["¡Aplaudan al ritmo de la banda!", "¡Palmas con la banda!", "¡Todos a aplaudir con la banda!"],
     cOruClapHud: "¡APLAUDAN!",
     cOruFrat: (art, name, dance) => pick([`¡Entran ${art} ${name}, bailando ${dance}!`, `¡Pasan ${art} ${name}, bailando ${dance}!`, `¡Llegan ${art} ${name}, bailando ${dance}!`]),
     cOruGo: (n, f) => (n === 1 ? "¡Un bailarín: arranca el recorrido!" : n === 2 ? "¡Dos bailarines: arranca el recorrido!" : f > 1 ? `¡${n} bailarines en ${f} fraternidades: arranca el recorrido!` : `¡${n} bailarines: arranca el recorrido!`),
-    cOruFratStay: (k, art, name, prizes) => `¡Cuadra ${k}! Se quedan ${art} ${name}${prizes === 1 ? ", con un premio" : prizes > 1 ? `, con ${prizes} premios` : ""}`,
+    cOruFratStay: (k, art, name, prizes) => enStand()
+      ? `¡Cuadra ${k}! Se quedan ${art} ${name}${prizes === 1 ? ", uno entre los que salen" : prizes > 1 ? `, ${prizes} entre los que salen` : ""}`
+      : `¡Cuadra ${k}! Se quedan ${art} ${name}${prizes === 1 ? ", con un premio" : prizes > 1 ? `, con ${prizes} premios` : ""}`,
     cOruOnly: (art, name) => pick([`¡Solo quedan ${art} ${name}!`, `¡${art.charAt(0).toUpperCase()}${art.slice(1)} ${name}, la última fraternidad!`]),
     cOruMemStay: (k, ns) => (ns.length === 1 ? `¡Cuadra ${k}! Se queda ${ns[0]}` : `¡Cuadra ${k}! Se quedan ${joinList(ns, "y")}`),
     cOruMemMany: (k, c, art, name) => `¡Cuadra ${k}! Se quedan ${c} de ${art} ${name}`,
-    cOruMemPrize: (k, c, prizes) => (c === 1 ? `¡Cuadra ${k}! Se queda uno, con premio` : prizes === 1 ? `¡Cuadra ${k}! Se quedan ${c}, uno con premio` : `¡Cuadra ${k}! Se quedan ${c}, ${prizes} con premio`),
+    cOruMemPrize: (k, c, prizes) => enStand()
+      ? (c === 1 ? `¡Cuadra ${k}! Se queda uno, entre los que salen` : prizes === 1 ? `¡Cuadra ${k}! Se quedan ${c}, uno entre los que salen` : `¡Cuadra ${k}! Se quedan ${c}, ${prizes} entre los que salen`)
+      : (c === 1 ? `¡Cuadra ${k}! Se queda uno, con premio` : prizes === 1 ? `¡Cuadra ${k}! Se quedan ${c}, uno con premio` : `¡Cuadra ${k}! Se quedan ${c}, ${prizes} con premio`),
     cOruFake: (art, name) => `¿Se quedan ${art} ${name}?`,
     cOruFakeOne: (n) => `¿Se queda ${n}?`,
     cOruFakeNo: (plural) => (plural ? pick(["¡No! ¡Siguen bailando!", "¡Nada! ¡Siguen!"]) : pick(["¡No! ¡Sigue bailando!", "¡Nada! ¡Sigue!"])),
@@ -884,7 +895,9 @@ export const T: Record<Lang, Dict> = {
     cPasCinch2: ["¡Segundo apretón!", "¡Quedan menos!", "¡Se cierra más!"],
     cPasCinch3: ["¡Último apretón!", "¡Ya quedan poquitos!", "¡No entra nadie más!"],
     cPasOut: (n) => pick([`¡Se cae el bulto de ${n}!`, `¡${n} se queda afuera!`, `¡Sale ${n}!`]),
-    cPrizeOut: (ns) => (ns.length === 1 ? pick([`¡${ns[0]} se va con premio!`, `¡${ns[0]} sale, pero con premio!`]) : `¡${joinList(ns, "y")} se van con premio!`),
+    cPrizeOut: (ns) => (enStand()
+      ? (ns.length === 1 ? pick([`¡${ns[0]} se va, pero también sale!`, `¡${ns[0]} cae, y queda entre los que salen!`]) : `¡${joinList(ns, "y")} se van, pero también salen!`)
+      : ns.length === 1 ? pick([`¡${ns[0]} se va con premio!`, `¡${ns[0]} sale, pero con premio!`]) : `¡${joinList(ns, "y")} se van con premio!`),
     cPasKnot: ["¡SE ATA EL NUDO!", "¡A AMARRAR EL AGUAYO!", "¡ACÁ QUEDA!"],
     cPasPot: "EN EL AGUAYO",
     cPasCinchLbl: "APRETÓN",
@@ -1305,7 +1318,12 @@ export const T: Record<Lang, Dict> = {
     standLink: "Tengo un stand: rondas de ejemplo con quienes pasan",
     standBanda: "Ronda de ejemplo: no se puede comprobar",
     standSalir: "Hacer un sorteo de verdad",
-    standResumen: (n) => `${n} ${n === 1 ? "persona" : "personas"} en la ronda`,
+    standResumen: (n, k, todas) => {
+      const cuenta = `${n} ${n === 1 ? "persona" : "personas"} en la ronda`;
+      // Con una sola persona no hay nada que elegir: la ronda todavía no se puede empezar.
+      if (k === undefined || n <= 1) return cuenta;
+      return `${cuenta}, ${todas ? "salen todas" : k === 1 ? "sale 1" : `salen ${k}`}`;
+    },
     standLlevarT: "¿Llevás la lista del stand?",
     standLlevarB: "Las rondas de ejemplo no se guardan. Si llevás la lista, solo pasan los nombres que están en el cuadro.",
     standLlevarReemplaza: "La lista del stand reemplaza a la que tenías armada.",
@@ -1313,6 +1331,12 @@ export const T: Record<Lang, Dict> = {
     standLlevarSi: "Llevar esta lista",
     standLlevarNo: "Empezar sin ella",
     standEmpezar: "Empezar la ronda",
+    // El final de una ronda del stand: nadie gana, salen personas.
+    standOtros: "Los otros {n} que salieron, en orden",
+    standSalio: "Ya se ve quién salió",
+    standSalieron: "Ya se ve quiénes salieron",
+    standSalen: "Cuántos salen",
+    standSalenAtajos: "Atajos para cuántos salen",
     standArranca: "Arranca en {s}",
     standGuia1: "Escribí los nombres de quienes están ahí, uno por línea, y tocá Empezar la ronda. No se graba nada.",
     standFinT: "Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.",
@@ -2094,6 +2118,25 @@ export const T: Record<Lang, Dict> = {
     gcPeople: (n) => (n === 1 ? "1 participante" : `${n} participantes`),
     gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
     gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
+    // La tarjeta de cómo se juega en una ronda del stand: dice quién sale. Ahí nadie gana, no hay premios ni número público.
+    gcStandNota: (k) => `Salen ${k} personas: el juego cuenta a la primera y el cartel del final las muestra a todas.`,
+    gcStandGeneral: "El juego va mostrando quiénes salen.",
+    gcStandRace: "Sale la primera llama que cruza la meta.",
+    gcStandChovena: "Bailan en rueda. Sale el último que sigue bailando.",
+    gcStandChovenaMany: "Bailan en rueda. Salen los últimos que siguen bailando.",
+    gcStandTrompo: "Los trompos chocan y se sacan. Sale el último que baila.",
+    gcStandPinata: "Cada palo suelta caramelos. Sale el último adentro.",
+    gcStandOruro: "Carnaval de Oruro: sale quien llega al Socavón.",
+    gcStandWheel: "Sale el gajo que queda bajo la flecha.",
+    gcStandTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Sale la que cae en el vaso.",
+    gcStandTeleferico: "Cada estación baja un grupo. Sale quien llega a la cumbre.",
+    gcStandTelefericoMany: "Cada estación baja un grupo. Salen los que llegan a la cumbre.",
+    gcStandSapo: "Sale el agujero donde cae la última argolla.",
+    gcStandSapoMany: "Cada argolla que entra en un agujero saca a una persona.",
+    gcStandGuajojo: "Si canta, caminen. Si calla, quietos. Sale quien sigue de pie al amanecer.",
+    gcStandGuajojoMany: "Sale primero quien llega de pie al amanecer, y quien se sienta último también sale.",
+    gcStandToborochi: "El viento se lleva las flores de a poco. Sale la flor donde se posa el colibrí.",
+    gcStandToborochiMany: "Algunas flores caen elegidas y el colibrí se posa en la de la primera persona.",
     gcSapoMany: "Cada argolla que entra en un agujero es un premio.",
     gcQuienMany: "Una ronda por premio. Gana el último de pie.",
     gcTelefericoMany: "Cada estación baja un grupo. Los que llegan a la cumbre ganan premio.",
@@ -3411,7 +3454,8 @@ export const T: Record<Lang, Dict> = {
       const all = more > 0 ? [...ns, `${more} more`] : ns;
       return pick([`${joinList(all, "and")} get off!`, `End of the line for ${joinList(all, "and")}!`]);
     },
-    cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
+    // In a booth round nobody takes a prize: whoever gets off and is also picked stays among those picked.
+    cTelPrize: (n) => enStand() ? pick([`${n} gets off, and is picked too!`, `${n} steps off, but is picked too!`]) : pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
     cTelDock: ["IT MADE THE TOP!", "TOP OF THE LINE!", "DOORS OPENING!"],
     cTelLeft: "LEFT",
@@ -3447,7 +3491,7 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["Only the best are left!", "It's getting rough!", "Few still standing!"],
     cTroEdge: (n) => pick([`${n} almost went out!`, `${n} on the edge!`, `${n} grazed the chalk!`]),
     cTroDuel: (a, b) => pick([`Head to head, ${a} and ${b}!`, `${a} against ${b}!`, `It's ${a} and ${b}!`]),
-    cTroWin: (n, many) => pick(many ? [`${n} take the prizes!`, `The prizes go to ${n}!`] : [`${n} keeps spinning!`, `${n} rules the ring!`, `Nobody topples ${n}!`]),
+    cTroWin: (n, many) => pick(many ? (enStand() ? [`${n} are picked!`, `The round picks ${n}!`] : [`${n} take the prizes!`, `The prizes go to ${n}!`]) : [`${n} keeps spinning!`, `${n} rules the ring!`, `Nobody topples ${n}!`]),
     cTroClash: ["They clash!", "What a hit!", "Bang!"],
     cTroWobble: (n) => pick([`${n}'s top is wobbling!`, `${n} is staggering!`, `${n}'s top is going!`]),
     cTroRecover: ["And it keeps spinning!", "It won't fall!", "It straightens up!"],
@@ -3534,9 +3578,10 @@ export const T: Record<Lang, Dict> = {
     cQuiSi: "YES!",
     cQuiNoStamp: "NO!",
     cQuiAlmost: (i) => ["Almost sat down!", "Whoa, so close!", "Saved by a hair!"][i % 3] as string,
-    cSapNext: (k) => `Prize ${k}, here it goes!`,
-    cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
-    cSapTally: (k, of) => `Prize ${k} of ${of}`,
+    // In a booth round every ring picks one person: people are counted, not prizes.
+    cSapNext: (k) => enStand() ? `Here comes person ${k}!` : `Prize ${k}, here it goes!`,
+    cSapDone: (k) => enStand() ? pick([`Person ${k} is picked!`, `There it lands: person ${k}!`]) : pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
+    cSapTally: (k, of) => enStand() ? `Person ${k} of ${of}` : `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
     cOruLast: ["The Socavón is in sight!", "The final stretch of the entrada!", "On to the Socavón!"],
     cOruDuel: (a, b) => pick([`A face-off between ${a} and ${b}!`, `${a} and ${b}, face to face!`]),
@@ -3559,7 +3604,7 @@ export const T: Record<Lang, Dict> = {
     cChoOut: (n) => pick([`${n} stumbled!`, `${n} let go!`, `${n} is out!`]),
     cChoOutN: (ns) => `${joinList(ns, "and")} let go!`,
     cChoMany: (k) => `${k} let go!`,
-    cChoPrize: (n) => `${n} goes out with a prize!`,
+    cChoPrize: (n) => enStand() ? `${n} lets go, but is picked too!` : `${n} goes out with a prize!`,
     cChoGo: ["The chovena goes on!", "Another round!", "Music!"],
     cChoFake: ["Just a tease!", "False alarm!", "Keep going!"],
     cChoBack: (n) => pick([`${n} slipped out but is back in!`, `${n} is back in the ring!`]),
@@ -3620,18 +3665,22 @@ export const T: Record<Lang, Dict> = {
     cTroWobbleAny: ["It's wobbling!", "It's staggering!", "Careful, it's leaning!"],
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
-    cPinPrize: (k) => (k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),
+    cPinPrize: (k) => (enStand() ? pick(["Down, but picked too!", "Out, and picked too!"]) : k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),
     gameOruro: "La Entrada",
     // La Entrada: the room claps with the band, every group passes by and stays behind whole.
     cOruClap: ["Clap along with the band!", "Clap to the band's beat!", "Everyone, clap with the band!"],
     cOruClapHud: "CLAP!",
     cOruFrat: (_art, name, dance) => pick([`Here come the ${name}, dancing ${dance}!`, `The ${name} pass by, dancing ${dance}!`, `In come the ${name}, dancing ${dance}!`]),
     cOruGo: (n, f) => (n === 1 ? "One dancer: the parade sets off!" : n === 2 ? "Two dancers: the parade sets off!" : f > 1 ? `${n} dancers in ${f} groups: the parade sets off!` : `${n} dancers: the parade sets off!`),
-    cOruFratStay: (k, _art, name, prizes) => `Block ${k}! The ${name} stay behind${prizes === 1 ? ", with a prize" : prizes > 1 ? `, with ${prizes} prizes` : ""}`,
+    cOruFratStay: (k, _art, name, prizes) => enStand()
+      ? `Block ${k}! The ${name} stay behind${prizes === 1 ? ", one of them picked" : prizes > 1 ? `, ${prizes} of them picked` : ""}`
+      : `Block ${k}! The ${name} stay behind${prizes === 1 ? ", with a prize" : prizes > 1 ? `, with ${prizes} prizes` : ""}`,
     cOruOnly: (_art, name) => pick([`Only the ${name} are left!`, `The ${name}, the last group!`]),
     cOruMemStay: (k, ns) => (ns.length === 1 ? `Block ${k}! ${ns[0]} stays` : `Block ${k}! ${joinList(ns, "and")} stay`),
     cOruMemMany: (k, c, _art, name) => `Block ${k}! ${c} of the ${name} stay`,
-    cOruMemPrize: (k, c, prizes) => (c === 1 ? `Block ${k}! One stays, with a prize` : prizes === 1 ? `Block ${k}! ${c} stay, one with a prize` : `Block ${k}! ${c} stay, ${prizes} with prizes`),
+    cOruMemPrize: (k, c, prizes) => enStand()
+      ? (c === 1 ? `Block ${k}! One stays, and is picked` : prizes === 1 ? `Block ${k}! ${c} stay, one of them picked` : `Block ${k}! ${c} stay, ${prizes} of them picked`)
+      : (c === 1 ? `Block ${k}! One stays, with a prize` : prizes === 1 ? `Block ${k}! ${c} stay, one with a prize` : `Block ${k}! ${c} stay, ${prizes} with prizes`),
     cOruFake: (_art, name) => `Are the ${name} staying?`,
     cOruFakeOne: (n) => `Is ${n} staying?`,
     cOruFakeNo: (plural) => (plural ? pick(["No! They keep dancing!", "Nope! On they go!"]) : pick(["No! Still dancing!", "Nope! Still in!"])),
@@ -3656,7 +3705,9 @@ export const T: Record<Lang, Dict> = {
     cPasCinch2: ["Second pull!", "Fewer left!", "It's closing in!"],
     cPasCinch3: ["Last pull!", "Only a few left!", "Nobody else gets in!"],
     cPasOut: (n) => pick([`${n}'s bundle falls off!`, `${n} is left out!`, `Out goes ${n}!`]),
-    cPrizeOut: (ns) => (ns.length === 1 ? pick([`${ns[0]} goes out with a prize!`, `${ns[0]} is out, but with a prize!`]) : `${joinList(ns, "and")} go out with prizes!`),
+    cPrizeOut: (ns) => (enStand()
+      ? (ns.length === 1 ? pick([`${ns[0]} is out, but picked too!`, `${ns[0]} goes out, and is picked too!`]) : `${joinList(ns, "and")} go out, but are picked too!`)
+      : ns.length === 1 ? pick([`${ns[0]} goes out with a prize!`, `${ns[0]} is out, but with a prize!`]) : `${joinList(ns, "and")} go out with prizes!`),
     cPasKnot: ["THE KNOT IS TIED!", "TIE UP THE AGUAYO!", "IT STOPS HERE!"],
     cPasPot: "ON THE AGUAYO",
     cPasCinchLbl: "PULL",
@@ -4053,7 +4104,12 @@ export const T: Record<Lang, Dict> = {
     standLink: "I run a booth: sample rounds with whoever stops by",
     standBanda: "Sample round: it can't be checked",
     standSalir: "Run a real draw",
-    standResumen: (n) => `${n} ${n === 1 ? "person" : "people"} in the round`,
+    standResumen: (n, k, todas) => {
+      const cuenta = `${n} ${n === 1 ? "person" : "people"} in the round`;
+      // With a single person there is nothing to pick: the round cannot start yet.
+      if (k === undefined || n <= 1) return cuenta;
+      return `${cuenta}, ${todas ? (n === 2 ? "both are picked" : "all are picked") : k === 1 ? "1 is picked" : `${k} are picked`}`;
+    },
     standLlevarT: "Take the stand list?",
     standLlevarB: "Sample rounds are not saved. If you take the list, only the names in the box are carried over.",
     standLlevarReemplaza: "The stand list replaces the list you were working on.",
@@ -4061,6 +4117,12 @@ export const T: Record<Lang, Dict> = {
     standLlevarSi: "Take this list",
     standLlevarNo: "Start without it",
     standEmpezar: "Start the round",
+    // The end of a booth round: nobody wins, people are picked.
+    standOtros: "The other {n} picked, in order",
+    standSalio: "Now showing who was picked",
+    standSalieron: "Now showing everyone who was picked",
+    standSalen: "How many are picked",
+    standSalenAtajos: "Shortcuts for how many are picked",
     standArranca: "Starting in {s}",
     standGuia1: "Type the names of the people there, one per line, and tap Start the round. Nothing is recorded.",
     standFinT: "That was a sample round: it can't be checked and nothing is handed out.",
@@ -4838,6 +4900,25 @@ export const T: Record<Lang, Dict> = {
     gcPeople: (n) => (n === 1 ? "1 participant" : `${n} participants`),
     gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
     gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
+    // The how-to-play card in a booth round: it says who is picked. Nobody wins there, there are no prizes and no public number.
+    gcStandNota: (k) => `${k} people are picked: the game tells the first one and the final card shows them all.`,
+    gcStandGeneral: "The game shows who is picked.",
+    gcStandRace: "The first llama across the finish line is picked.",
+    gcStandChovena: "They dance in a ring. The last one still dancing is picked.",
+    gcStandChovenaMany: "They dance in a ring. The last ones still dancing are picked.",
+    gcStandTrompo: "Tops knock each other out. The last one spinning is picked.",
+    gcStandPinata: "Every swing drops candy. The last one inside is picked.",
+    gcStandOruro: "Oruro Carnival: whoever reaches the Socavón is picked.",
+    gcStandWheel: "The slice under the pointer is picked.",
+    gcStandTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup is picked.",
+    gcStandTeleferico: "Each station drops a group. Whoever reaches the top is picked.",
+    gcStandTelefericoMany: "Each station drops a group. Everyone who reaches the top is picked.",
+    gcStandSapo: "The hole where the last ring drops is picked.",
+    gcStandSapoMany: "Every ring that drops into a hole picks one person.",
+    gcStandGuajojo: "It sings: walk. It stops: freeze. Whoever is still standing at dawn is picked.",
+    gcStandGuajojoMany: "Whoever reaches dawn standing is picked first, and whoever sits down last is picked too.",
+    gcStandToborochi: "The wind blows the flowers away, a few at a time. The flower where the hummingbird lands is picked.",
+    gcStandToborochiMany: "Some flowers are picked as they fall, and the hummingbird lands on the first person's flower.",
     gcSapoMany: "Every ring that drops into a hole is a prize.",
     gcQuienMany: "One round per prize. The last one standing wins.",
     gcTelefericoMany: "Each station drops a group. Everyone who reaches the top wins a prize.",

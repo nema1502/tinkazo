@@ -3,10 +3,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * El modo stand y Cuántos ganan. Cuántos ganan vive junto a Sellar la lista, fuera del pliegue de opciones. El stand no
- * sortea con premio ni habla de ganar (sus rondas dicen quién salió), así que no muestra ese control: si no se esconde,
- * queda entre la lista y Empezar la ronda con un rótulo que el stand no usa. Y con un orden de turnos elegido antes de
- * entrar, quedaba a la vista, bloqueado y sin explicación, porque el stand esconde la opción de los turnos.
+ * El modo stand y la cantidad de personas que salen. El stand sí muestra el contador, con sus propias palabras (Cuántos
+ * salen, `ganadores.ts`): ninguna regla del stand lo esconde. Lo que el stand no tiene es el orden de turnos y las
+ * participaciones por persona: una ronda de ejemplo no se reparte ni se ordena.
  */
 
 const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -23,17 +22,46 @@ function cuerpos(selector: string): string[] {
   return salida;
 }
 
-describe("el modo stand no muestra Cuántos ganan", () => {
+/** Todos los selectores de las reglas que dicen body[data-stand="1"], uno por uno. */
+function selectoresDelStand(): string[] {
+  const salida: string[] = [];
+  const re = /([^{}]+)\{[^{}]*\}/g;
+  for (let m = re.exec(css); m; m = re.exec(css)) {
+    for (const s of (m[1] ?? "").split(",")) {
+      const limpio = s.replace(/\s+/g, " ").trim();
+      if (limpio.startsWith('body[data-stand="1"]')) salida.push(limpio);
+    }
+  }
+  return salida;
+}
+
+describe("el modo stand muestra Cuántos salen", () => {
   it("el control existe en la página con ese identificador", () => {
     expect(pagina).toContain('id="ganadores-control"');
   });
 
-  it("el stand lo esconde con la misma regla que esconde el premio y los turnos", () => {
-    const reglas = cuerpos('body[data-stand="1"] #ganadores-control');
+  it("ninguna regla del stand esconde el control, el contador, los atajos ni el rótulo", () => {
+    const partes = ["#ganadores-control", ".sellar-ganadores", ".nw-grupo", ".nw-contador", "#nw-atajos", "#nw-menos", "#nw-mas", "#nw-valor", "#nw-etiqueta", "#nw"];
+    for (const s of selectoresDelStand()) {
+      for (const parte of partes) {
+        expect(s.endsWith(parte) || s.includes(`${parte} `) || s.includes(`${parte}:`), `${s} esconde ${parte}`).toBe(false);
+      }
+    }
+  });
+
+  it("el stand sigue sin el orden de turnos, que no tiene", () => {
+    const reglas = cuerpos('body[data-stand="1"] #turnos-opcion');
     expect(reglas).toHaveLength(1);
     expect(reglas[0]).toMatch(/display:\s*none\s*!important/);
-    // Va en la regla de lo que el stand no tiene, la misma de la opción de turnos.
-    expect(cuerpos('body[data-stand="1"] #turnos-opcion')[0]).toBe(reglas[0]);
+  });
+
+  it("el stand tampoco muestra las participaciones por persona: en una ronda de ejemplo cada línea es una persona", () => {
+    for (const id of ["#btn-varias", "#varias-panel", "#participaciones-aviso"]) {
+      const reglas = cuerpos(`body[data-stand="1"] ${id}`);
+      expect(reglas, id).toHaveLength(1);
+      expect(reglas[0], id).toMatch(/display:\s*none\s*!important/);
+      expect(pagina, id).toContain(`id="${id.slice(1)}"`);
+    }
   });
 
   it("fuera del stand nada lo esconde: sigue a la vista junto a Sellar la lista", () => {

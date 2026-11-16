@@ -55,9 +55,9 @@ afterEach(() => {
 });
 
 describe("el resumen de la ronda de ejemplo", () => {
-  it("cuenta personas sin hablar de ganadores, premios ni sello, en los dos idiomas", async () => {
+  it("cuenta personas y cuántas salen sin hablar de ganadores, premios ni sello, en los dos idiomas", async () => {
     const { p, modo, i18n } = await montar("Ana\nBeto");
-    expect(resumen().textContent).toBe("2 personas en la ronda");
+    expect(resumen().textContent).toBe("2 personas en la ronda, sale 1");
     expect(resumen().textContent).not.toMatch(/ganador|premio|sellar/i);
     poner(p, "Ana");
     expect(resumen().textContent).toBe("1 persona en la ronda");
@@ -65,7 +65,7 @@ describe("el resumen de la ronda de ejemplo", () => {
 
     i18n.setLang("en");
     p.renderNames();
-    expect(resumen().textContent).toBe("2 people in the round");
+    expect(resumen().textContent).toBe("2 people in the round, 1 is picked");
     expect(resumen().textContent).not.toMatch(/winner|prize|seal/i);
 
     poner(p, "Ana");
@@ -79,6 +79,67 @@ describe("el resumen de la ronda de ejemplo", () => {
     expect(resumen().textContent).toBe(i18n.T.es.sellarResumen(2, 1, ""));
     expect(resumen().textContent).toContain("1 ganador");
     expect(resumen().textContent).toContain("Al sellar");
+  });
+});
+
+describe("el resumen dice cuántas salen", () => {
+  const OCHO = "Ana\nBeto\nNora\nLeo\nIris\nMax\nPía\nTeo";
+
+  it("con 8 personas y 3 que salen: salen 3, y en inglés 3 are picked", async () => {
+    const { p, i18n } = await montar(OCHO);
+    const g = await import("./ganadores");
+    g.ponerGanadores(3);
+    p.renderNames();
+    expect(resumen().textContent).toBe("8 personas en la ronda, salen 3");
+    i18n.setLang("en");
+    p.renderNames();
+    expect(resumen().textContent).toBe("8 people in the round, 3 are picked");
+  });
+
+  it("cuando salen todas lo dice con todas las letras, y con dos personas, las dos", async () => {
+    const { p, i18n } = await montar(OCHO);
+    const g = await import("./ganadores");
+    g.ponerGanadores(8);
+    p.renderNames();
+    expect(resumen().textContent).toBe("8 personas en la ronda, salen todas");
+    i18n.setLang("en");
+    p.renderNames();
+    expect(resumen().textContent).toBe("8 people in the round, all are picked");
+    // Pedir más de las que hay no promete más de las que hay.
+    g.ponerGanadores(20);
+    poner(p, "Ana\nBeto");
+    expect(resumen().textContent).toBe("2 people in the round, both are picked");
+    i18n.setLang("es");
+    p.renderNames();
+    expect(resumen().textContent).toBe("2 personas en la ronda, salen todas");
+  });
+
+  it("sigue a la lista cuando esta cambia, y con una sola que sale dice sale 1", async () => {
+    const { p } = await montar(OCHO);
+    const g = await import("./ganadores");
+    g.ponerGanadores(3);
+    p.renderNames();
+    poner(p, "Ana\nBeto\nNora\nLeo\nIris");
+    expect(resumen().textContent).toBe("5 personas en la ronda, salen 3");
+    g.ponerGanadores(1);
+    p.renderNames();
+    expect(resumen().textContent).toBe("5 personas en la ronda, sale 1");
+  });
+
+  it("no habla de ganar, de premios ni de sellar en ninguna cantidad ni idioma, y sin punto final", async () => {
+    const { p, i18n } = await montar(OCHO);
+    const g = await import("./ganadores");
+    for (const l of ["es", "en"] as const) {
+      i18n.setLang(l);
+      for (const n of [1, 2, 3, 5, 8]) {
+        g.ponerGanadores(n);
+        p.renderNames();
+        const texto = resumen().textContent ?? "";
+        expect(texto, `${l} ${n}`).not.toMatch(/gan|premio|sell|\bwin|prize|seal/i);
+        expect(texto, `${l} ${n}`).not.toMatch(/[;·—«»]/);
+        expect(texto, `${l} ${n}`).not.toMatch(/\.$/);
+      }
+    }
   });
 });
 

@@ -14,6 +14,16 @@
  *  4. El rótulo «Ronda de ejemplo: no se puede comprobar» está en la banda, en el
  *     estadio y a la vista cuando sale el cartel (captura), y no hay QR de
  *     comprobación, compartir ni «ganó».
+ *  5. Con `--salen N` (por defecto 1): el contador «Cuántos salen» marca N, el
+ *     resumen lo dice, en cada ronda salen N personas distintas de la lista, y
+ *     «Otra ronda» conserva la cantidad.
+ *
+ *  6. Lo que dice el relator dentro del estadio (la caja del relator y la línea para lectores de pantalla)
+ *     tampoco habla de ganar, de premios ni de sellar: con varias personas por ronda el sapo, la chovena, el
+ *     trompo, la piñata, La Entrada, Guajojó y El Toborochi dicen quién sale.
+ *
+ * Con `--juegos` se elige cuántos juegos de la lista de siempre (un número) o cuáles (ids de botón separados por
+ * comas, por ejemplo g-sapo,g-chovena,g-oruro).
  *
  * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto>.
  */
@@ -29,8 +39,12 @@ const opt = (n, d) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const rondas = Number(opt("--rondas", "5"));
 const salida = opt("--captura", "");
+const salen = Math.max(1, Math.min(10, Number(opt("--salen", "1")) || 1));
 const JUEGOS = ["g-race", "g-sapo", "g-trompo", "g-chovena", "g-pinata", "g-wheel", "g-quien", "g-teleferico"];
 const NOMBRES = Array.from({ length: 14 }, (_, i) => ["Ana", "Beto", "Carla", "Dani", "Eli", "Fede", "Gaby", "Hugo", "Iris", "Jose", "Kari", "Lucho", "Mara", "Nico"][i]).join("\n");
+
+/** Lo que el stand no dice: ganar, premio ni sello. Palabras enteras, para no tomar «llegan». */
+const PROHIBIDO_EN_EL_ESTADIO = /\bgan\p{L}*|premio|sell|\bwin(s|ner|ners|ning)?\b|prize|seal/iu;
 
 const checks = [];
 const check = (name, ok, detail = "") => {
@@ -65,12 +79,37 @@ try {
   // Los juegos de la prueba. Primero una vuelta con la red, para que cada juego quede cargado en la pestaña (como en el
   // stand: «los juegos visitados antes»); después se corta la red de verdad y se juegan las rondas.
   const externos = () => pedidos.filter((u) => !/^(http:\/\/localhost|http:\/\/127\.0\.0\.1|data:|blob:|about:|chrome)/.test(u));
-  const elegidos = JUEGOS.slice(0, Number(opt("--juegos", "3")));
+  const juegosPedidos = opt("--juegos", "3");
+  const elegidos = /^\d+$/.test(juegosPedidos) ? JUEGOS.slice(0, Number(juegosPedidos)) : juegosPedidos.split(",").map((x) => x.trim()).filter(Boolean);
   let n = 0;
   const ronda = async (juego, etiqueta, sinRed) => {
     n++;
     await page.eval(`(() => { const ta = document.getElementById('ta'); ta.value = ${JSON.stringify(NOMBRES)}; ta.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await page.eval(`document.getElementById(${JSON.stringify(juego)}).click()`);
+    // Cuántos salen: se elige en la primera ronda y las que siguen lo conservan (Otra ronda no lo toca).
+    if (salen > 1 && n === 1) {
+      await page.eval(`(() => { const b = document.querySelector('#nw-atajos button[data-n="${salen}"]'); if (b && !b.hidden) { b.click(); return; } for (let i = 1; i < ${salen}; i++) document.getElementById('nw-mas').click(); })()`);
+    }
+    if (salen > 1) {
+      const c = JSON.parse(await page.eval(`JSON.stringify({ rotulo: document.getElementById('nw-etiqueta').textContent, valor: document.getElementById('nw-valor').textContent, resumen: document.getElementById('sellar-resumen').textContent, visible: document.getElementById('ganadores-control').offsetParent !== null })`));
+      check(`${etiqueta} ${n}: Cuántos salen marca ${salen} y el resumen lo dice`, c.visible && c.rotulo === "Cuántos salen" && c.valor === String(salen) && c.resumen === `14 personas en la ronda, salen ${salen}`, JSON.stringify(c));
+    }
+    // Anota cada línea que el relator escribe en la ronda (la caja y la región de los lectores de pantalla).
+    await page.eval(`(() => {
+      window.__dichas = [];
+      if (!window.__observados) {
+        window.__observados = true;
+        for (const id of ['commentary', 'commentary-sr']) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          new MutationObserver(() => {
+            const t = (el.textContent || '').trim();
+            if (t && window.__dichas[window.__dichas.length - 1] !== t) window.__dichas.push(t);
+          }).observe(el, { childList: true, characterData: true, subtree: true });
+        }
+      }
+      return true;
+    })()`);
     await page.eval(`document.getElementById('btn-freeze').click()`);
     const t0 = Date.now();
     const cuenta = await page.waitFor(`/Arranca en/.test(document.getElementById('btn-draw').textContent)`, 4000);
@@ -120,6 +159,14 @@ try {
     check(`${etiqueta} ${n}: el rótulo del estadio es el de ejemplo`, /no se puede comprobar/.test(r.rotulo), r.rotulo);
     check(`${etiqueta} ${n}: el final avisa que fue de ejemplo, sin compartir ni QR de comprobación`, r.finVisible && !r.compartir && !r.qr);
     check(`${etiqueta} ${n}: nunca dice «ganó»`, !r.ganó);
+    const dichas = JSON.parse(await page.eval(`JSON.stringify(window.__dichas || [])`));
+    const malas = dichas.filter((t) => PROHIBIDO_EN_EL_ESTADIO.test(t));
+    check(`${etiqueta} ${n} (${juego}): el relator dijo ${dichas.length} líneas y ninguna habla de ganar, de premios ni de sellar`, dichas.length >= 3 && malas.length === 0, malas.length ? malas.join(" | ") : "");
+    if (salen > 1) {
+      const nombres = JSON.parse(await page.eval(`JSON.stringify([...document.querySelectorAll('#winner-cards .winner-name')].map((e) => e.textContent.trim()))`));
+      const lista = NOMBRES.split("\n");
+      check(`${etiqueta} ${n}: salen ${salen} personas distintas, todas de la lista`, nombres.length === salen && new Set(nombres).size === salen && nombres.every((x) => lista.includes(x)), nombres.join(" | "));
+    }
     await page.eval(`document.getElementById('stand-otra').click()`);
     await sleep(1000);
     return true;
