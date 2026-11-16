@@ -27,6 +27,12 @@ export interface Frozen {
   prize: string;
   /** Ronda objetivo de quicknet (protocolo §3). */
   round: number;
+  /**
+   * Cuántos ganan, tal como se selló. El resultado se calcula en el navegador con esto y no con el campo, que después
+   * de sellar se puede tocar (`sorteo-local.ts`). Lo traen el sello y el retomado desde Mis sorteos; un estado viejo sin
+   * este dato cae al campo, como antes.
+   */
+  numWinners?: number;
   /** Id del sorteo en el contrato, si quedó anclado en Stellar. */
   raffleId?: bigint;
   /** Hash de la transacción del sello. */
@@ -57,6 +63,16 @@ export interface Drawn {
   winners: number[];
   /** Hash de la transacción del sorteo, si se registró en el contrato. */
   drawTx?: string;
+  /**
+   * Con sello: el sorteo ya quedó grabado en el contrato. El show no lo espera (se graba aparte, `draw.ts`), así que
+   * hasta que se grabe falta, y Mis sorteos lo sabe. Si ya estaba grabado de antes, queda grabado sin `drawTx`.
+   */
+  guardado?: boolean;
+  /**
+   * Con sello: lo que grabó el contrato no coincide con el resultado de la pantalla (no debería pasar nunca). Mientras
+   * tanto ese resultado no se comparte ni se muestra su QR (`alNoCoincidir` en `draw.ts`).
+   */
+  noCoincide?: boolean;
   /**
    * El juego que de verdad contó este resultado la última vez (`playGame` en
    * src/ui/draw.ts): el elegido, o el que lo reemplazó por la cantidad de gente

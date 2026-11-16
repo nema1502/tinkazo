@@ -15,7 +15,7 @@ import { modesVisible } from "../modos/bandera";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
 import { NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
-import { horaDeBuscarElNumero, horaDelFinal, reglaDelShow } from "./espectador-regla";
+import { horaDeBuscarElNumero, horaDeMirarLaCadena, horaDelFinal, reglaDelShow } from "./espectador-regla";
 import { contratoDelEnlace, type DatosEspectador } from "./espectador-enlace";
 import type { ShowDelEspectador } from "./draw";
 
@@ -33,9 +33,9 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
  * Cuando nace el número, el celular lo trae él mismo de los servicios públicos de la ronda (el mismo camino que
  * `resolveBeacon` en `draw.ts`), lo verifica y calcula los ganadores con el protocolo (`select`). El ganador no existe
  * hasta que nace la ronda: la vista no lo puede revelar antes, porque no lo tiene. Con un sorteo sellado, además,
- * espera a que quede grabado en Stellar y comprueba que es este (`espectador-cadena.ts`): la sala arranca el juego en
- * ese momento, y el celular no se le adelanta. Si no lo ve grabado en el tope de la regla, juega igual. Después corre
- * el mismo show (`showDelEspectador` en `draw.ts`).
+ * espera a que quede grabado en Stellar y comprueba que es este (`espectador-cadena.ts`): la sala lo graba recién con
+ * su resultado a la vista, así que el celular va detrás de ella y no se le adelanta. Si no lo ve grabado en el tope de
+ * la regla, juega igual. Después corre el mismo show (`showDelEspectador` en `draw.ts`).
  *
  * Es solo para mirar: no hay sellar ni sortear, no toca la cadena más que para leer y no graba nada. No cuenta nada del
  * sorteo: la página suma una visita anónima, como cualquiera que entra al sitio (`analytics.ts`, sin la dirección
@@ -269,6 +269,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         const visto = await esperarElGrabado(espera, { randomness: beacon.randomness, winners }, {
           ...(op.leer ? { leer: op.leer } : {}),
           ...(op.azar ? { azar: op.azar } : {}),
+          // La cadena, recién cuando acepta el sorteo grabado (en el reloj del teléfono, con su desfase).
+          noAntesDe: (horaDeMirarLaCadena(datos.r) - desfase) * 1000,
           alTardar: () => {
             if (este === intento && fase === "grabando") linea(t("espTarda"));
           },

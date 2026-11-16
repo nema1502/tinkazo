@@ -1,38 +1,56 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { roundTime } from "../protocol/quicknet";
-import { AVISO_TARDE_MS, LARGA_IGUAL_TRAS_MS, MARGEN_DEL_FINAL_MS, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS, horaDeBuscarElNumero, horaDelFinal, reglaDelShow } from "./espectador-regla";
+import { MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S, arranqueDelShow } from "../arranque-del-show";
+import { AVISO_TARDE_MS, LARGA_IGUAL_TRAS_MS, MARGEN_DEL_FINAL_MS, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS, horaDeBuscarElNumero, horaDeMirarLaCadena, horaDelFinal, reglaDelShow } from "./espectador-regla";
 
 /**
- * La regla de cuándo arranca el show del espectador (`espectador-regla.ts`) tiene que ser la de la sala. Esta prueba
- * lee el código de la sala: si la sala cambia cuándo arranca, falla acá, y la regla se cambia en ese mismo cambio.
+ * La regla de cuándo arranca el show del espectador (`espectador-regla.ts`) tiene que dejar al celular detrás de la
+ * sala, nunca adelante. Esta prueba lee el código de la sala: si la sala cambia cuándo arranca o cuándo graba, falla
+ * acá, y la regla se cambia en ese mismo cambio.
  */
 
 const freeze = readFileSync(new URL("./freeze.ts", import.meta.url), "utf8");
 const draw = readFileSync(new URL("./draw.ts", import.meta.url), "utf8");
+const grabar = readFileSync(new URL("./grabar-sorteo.ts", import.meta.url), "utf8");
 
 describe("cuándo arranca el show del espectador", () => {
-  it("con el sorteo sellado espera el margen de la sala, el mismo número que freeze.ts", () => {
-    expect(freeze).toContain(`const CHAIN_MARGIN_SECONDS = ${MARGEN_DE_LA_CADENA_S};`);
-    // La sala solo suma el margen con el sorteo sellado.
-    expect(freeze).toContain("const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;");
-    expect(reglaDelShow(true).margenS).toBe(MARGEN_DE_LA_CADENA_S);
-    expect(horaDeBuscarElNumero(1000, true)).toBe(roundTime(1000) + MARGEN_DE_LA_CADENA_S);
+  it("la sala ya no espera margen: busca el número apenas nace la ronda, y la cuenta del celular termina con la suya", () => {
+    expect(freeze).not.toContain("CHAIN_MARGIN_SECONDS");
+    expect(freeze).toContain("return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));");
+    expect(reglaDelShow(true).margenS).toBe(0);
+    expect(horaDeBuscarElNumero(1000, true)).toBe(roundTime(1000));
   });
 
-  it("con el sorteo sellado, el juego espera lo grabado, porque la sala también lo espera", () => {
-    // En la sala, la tarjeta del juego sale con la espera de lo grabado y el juego arranca después de `grabado()`.
-    expect(draw).toContain("const card = abrirTarjeta(juego, names.length, nWinners, orden, espera);");
-    expect(draw).toMatch(/grabado\(\);[\s\S]*?playGame\(names, winners, beacon, finish, orden, tarjeta\);/);
+  it("con el sorteo sellado, el celular mira la cadena desde que acepta el sorteo grabado", () => {
+    // El mismo número que espera la grabación de la sala antes de mandar el sorteo.
+    expect(MARGEN_DE_LA_CADENA_S).toBe(MARGEN_PARA_GRABAR_S);
+    expect(arranqueDelShow(1000).grabable).toBe(roundTime(1000) + MARGEN_DE_LA_CADENA_S);
+    expect(grabar).toContain("const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? Date.now)());");
+    expect(reglaDelShow(true).miraLaCadenaDesdeS).toBe(MARGEN_DE_LA_CADENA_S);
+    expect(horaDeMirarLaCadena(1000)).toBe(roundTime(1000) + MARGEN_DE_LA_CADENA_S);
+  });
+
+  it("con el sorteo sellado, el celular espera lo grabado, que la sala manda recién con su resultado a la vista", () => {
+    // En la sala, la tarjeta espera el resultado y no lo grabado. La grabación arranca después del resultado: ya, o con
+    // la billetera propia al terminar el show. Lo grabado nunca existe antes de que la sala tenga su resultado.
+    expect(draw).toContain("const card = abrirTarjeta(juego, names.length, nWinners, orden, resultadoListo);");
+    expect(draw).toMatch(/hayResultado\(\);[\s\S]*?if \(graba && !despuesDelShow\) grabando = grabarAparte\(graba\);[\s\S]*?playGame\(names, winners, beacon, finish, orden, tarjeta\);/);
+    expect(draw).toMatch(/const finish = \(\): void => \{\s*reveal\(names, winners, beacon, listHash\);\s*if \(graba && despuesDelShow\) void grabarAparte\(graba\);/);
+    // Ningún otro lugar de la sala graba el sorteo. Las seis: la declaración, el reintento del botón con el sorteo ya
+    // jugado, las dos de arriba, la del show que falla con el resultado fijado y la de después de proteger la cuenta.
+    expect(draw.match(/grabarAparte\(/g)?.length).toBe(6);
+    expect(draw).not.toContain("drawOnChain(");
+    // Y el celular sí lo espera: así queda detrás de la sala.
     expect(reglaDelShow(true).esperaLoGrabado).toBe(true);
   });
 
   it("sin sello no hay margen ni nada que esperar: la sala juega apenas trae el número", () => {
-    expect(reglaDelShow(false)).toMatchObject({ margenS: 0, esperaLoGrabado: false });
+    expect(reglaDelShow(false)).toMatchObject({ margenS: 0, miraLaCadenaDesdeS: 0, esperaLoGrabado: false });
     expect(horaDeBuscarElNumero(1000, false)).toBe(roundTime(1000));
   });
 
-  it("visto lo grabado, el celular espera un momento más: medido en Prueba, se enteraba 0,8 s antes que la sala", () => {
+  it("visto lo grabado, el celular espera un momento más, de margen", () => {
     expect(reglaDelShow(true).retrasoTrasLoGrabadoMs).toBe(RETRASO_TRAS_LO_GRABADO_MS);
     expect(RETRASO_TRAS_LO_GRABADO_MS).toBeGreaterThanOrEqual(2_000);
     // Un par de segundos detrás del proyector, no más.
@@ -51,9 +69,11 @@ describe("cuándo arranca el show del espectador", () => {
     for (const p of ["rapido", "normal", "epico"] as const) {
       const cuenta = conCuenta(p) ? CUENTA_SECONDS : 0;
       const delRitmo = PACES[p] + cuenta;
-      // La sala, desde lo grabado: la cuenta y el juego, que es el total menos la tarjeta (la leyó mientras se grababa).
+      // La sala, desde su resultado: la cuenta y el juego, que es el total menos la tarjeta (la leyó mientras llegaba
+      // el número).
       const sala = cuenta + PACES[p] - CARD_SECONDS;
-      // El celular lanza después de lo grabado: su final, contado desde ahí, nunca cae antes.
+      // El celular lanza después de lo grabado, que llega después del resultado de la sala: aun lanzando en el mismo
+      // instante, su final nunca cae antes.
       expect(horaDelFinal(0, delRitmo)).toBeGreaterThanOrEqual(sala * 1000);
       expect(horaDelFinal(5_000, delRitmo)).toBe(5_000 + delRitmo * 1000);
     }

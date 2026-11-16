@@ -712,11 +712,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     ajusta();
   };
 
-  /** Lo que se ve mientras llega el número y, con cuenta, se graba: lo mismo que la cortina del sorteo. */
+  /** Lo que se ve mientras llega el número: lo mismo que la cortina del sorteo. La grabación va aparte y no se espera. */
   const sortear = (): void => {
     pasar(
       "sorteando",
-      `<p class="cortina-t" role="status">${esc(t(sorteo.graba ? "cortinaGraba" : "cortinaNumero"))}</p>` +
+      `<p class="cortina-t" role="status">${esc(t("cortinaNumero"))}</p>` +
         `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`,
     );
     // En la demo el sorteo lo lanza la propia demo: apretarlo acá sortearía dos veces.

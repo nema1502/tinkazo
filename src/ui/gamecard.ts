@@ -2,6 +2,7 @@ import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
 import { esSoloMirar } from "../solo-mirar";
+import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
 
 /**
  * La tarjeta de "cómo se juega", antes de que arranque el juego.
@@ -18,8 +19,8 @@ import { esSoloMirar } from "../solo-mirar";
  * con movimiento reducido no hay show. No suena por su cuenta: la música del
  * juego arranca con ella.
  */
-/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. */
-export const CARD_SECONDS = 3.5;
+/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. Vive en `arranque-del-show.ts`. */
+export const CARD_SECONDS = LECTURA_DE_LA_TARJETA_S;
 
 /** El nombre de cada juego, el mismo del selector. */
 export const NOMBRE: Partial<Record<Game, string>> = {
@@ -135,6 +136,8 @@ export function showGameCard(
   premio = "",
   espera?: Promise<unknown>,
   orden = false,
+  /** La línea de arriba mientras tanto: desde que el juego no espera la grabación, la del número que llega. */
+  textoDeEspera = "cortinaNumero",
 ): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
@@ -154,7 +157,7 @@ export function showGameCard(
   el.innerHTML =
     `<div class="gc-fondo" aria-hidden="true"></div>` +
     (espera
-      ? `<p class="gc-graba" role="status"><span>${esc(t("cortinaGraba"))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
+      ? `<p class="gc-graba" role="status"><span>${esc(t(textoDeEspera))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
       : "") +
     `<div class="gc-caja">${caja(game, people, prizes, premio, orden)}</div>` +
     // En la vista de espectador no hay Saltar: saltada mientras se graba, largaba sin la cuenta y antes que la sala.

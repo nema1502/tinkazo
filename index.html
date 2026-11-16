@@ -547,6 +547,8 @@
         <div id="winner-cards" role="status" aria-live="polite"></div>
         <!-- Se siguió sin sello porque la red no dejaba sellar: este sorteo no se puede comprobar. Lo muestra draw.ts. -->
         <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>
+        <!-- Con sello, si el sorteo ya quedó guardado: el juego no espera la grabación, que va aparte (src/ui/draw.ts). -->
+        <p class="txstatus" id="grab-estado" role="status" aria-live="polite" style="display:none"></p>
         <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
              sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
         <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">

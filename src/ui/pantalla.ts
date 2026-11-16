@@ -114,7 +114,8 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `</div>` +
     `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
-    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
+    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>` +
+    `<p class="pantalla-grab" hidden></p>`;
   document.body.appendChild(back);
 
   const ajustar = (): void => encajar(back, n);
@@ -127,10 +128,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   addEventListener("resize", ajustar);
 
   let cerrada = false;
+  const grabacion = seguirLaGrabacion(back, ajustar);
   const cerrar = (): void => {
     if (cerrada) return;
     cerrada = true;
     back.remove();
+    grabacion.soltar();
+    document.removeEventListener("tinkazo:comprobante", alComprobante);
     removeEventListener("keydown", tecla);
     removeEventListener("resize", ajustar);
     document.removeEventListener("fullscreenchange", pantalla);
@@ -172,17 +176,97 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
       : varios
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
+  /** Cada QR que se pinta lleva su vuelta: si llega otro comprobante mientras tanto, el viejo ya no se pinta encima. */
+  let vuelta = 0;
+  const sigue = (mia: number): boolean => mia === vuelta && !cerrada && back.isConnected && !grabacion.enDuda();
+  const pintarQr = async (link: string, primero: boolean): Promise<void> => {
+    const mia = ++vuelta;
+    const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
+    // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
+    if (!sigue(mia)) return;
+    const listo = ahora && img ? await pintarQrDelComprobante(img, ahora, lado) : false;
+    if (!listo && primero) back.querySelector(".pantalla-qr")?.remove();
+    ajustar();
+    if (!listo || !img) return;
+    // El corto que llegó tarde reemplaza al largo.
+    const corto = await despues;
+    if (corto && sigue(mia) && (await pintarQrDelComprobante(img, corto, lado))) ajustar();
+  };
+  // Cuando el sorteo termina de guardarse, el comprobante suma el enlace del sorteo grabado (`draw.ts`): el QR pasa a
+  // ese. Hasta el 16 de noviembre de 2026 la pantalla grande se quedaba con el de antes de guardar.
+  alComprobante = (e: Event): void => {
+    const nuevo = (e as CustomEvent<string>).detail;
+    if (nuevo && img?.isConnected && !cerrada) void pintarQr(nuevo, false);
+  };
+  document.addEventListener("tinkazo:comprobante", alComprobante);
   const link = await Promise.resolve(enlace).catch(() => "");
-  const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
-  // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
-  if (cerrada || !back.isConnected) return;
-  const listo = ahora && img ? await pintarQrDelComprobante(img, ahora, lado) : false;
-  if (!listo) back.querySelector(".pantalla-qr")?.remove();
-  ajustar();
-  if (!listo || !img) return;
-  // El corto que llegó tarde reemplaza al largo.
-  const corto = await despues;
-  if (corto && !cerrada && back.isConnected && (await pintarQrDelComprobante(img, corto, lado))) ajustar();
+  if (vuelta === 0) await pintarQr(link, true);
+}
+
+/** El QR de la pantalla grande que está abierta escucha los comprobantes nuevos (`mostrarResultado`). */
+let alComprobante: (e: Event) => void = () => undefined;
+
+/**
+ * El sorteo se graba aparte del show (`draw.ts`), y la línea que dice cómo va (`#grab-estado`) queda tapada por la
+ * pantalla grande. Esta la repite abajo, discreta: guardando, guardado, o que no se pudo con el botón para volver a
+ * probar (el mismo de la página). Si lo que sigue no es guardar (el sorteo ya estaba grabado, o hay que volver a
+ * preparar la lista), lo dice sin botón: eso se hace desde la página. Si lo guardado no coincide con lo que se ve, lo
+ * dice como alerta y el QR se va: ese resultado no se comparte hasta revisarlo. Sin sorteo grabado (sin sello, la demo)
+ * no se ve nada.
+ */
+function seguirLaGrabacion(back: HTMLElement, ajustar: () => void): { soltar: () => void; enDuda: () => boolean } {
+  const grab = document.getElementById("grab-estado");
+  const linea = back.querySelector<HTMLElement>(".pantalla-grab");
+  const enDuda = (): boolean => grab?.dataset.grabacion === "no-coincide";
+  if (!grab || !linea) return { soltar: () => undefined, enDuda };
+  const pintar = (): void => {
+    const estado = grab.dataset.grabacion;
+    const visible = !!estado && grab.style.display !== "none";
+    linea.hidden = !visible;
+    if (!visible || !estado) {
+      linea.replaceChildren();
+      return;
+    }
+    linea.dataset.grabacion = estado;
+    const grave = estado === "error" || estado === "no-coincide" || estado === "recuperar";
+    linea.setAttribute("role", grave ? "alert" : "status");
+    // El texto de la línea, sin el enlace al registro ni los botones de la página: eso se usa desde la página.
+    const texto = [...grab.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent ?? "")
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    const parrafo = document.createElement("span");
+    parrafo.textContent = texto;
+    linea.replaceChildren(parrafo);
+    if (estado === "error") {
+      const otraVez = document.createElement("button");
+      otraVez.type = "button";
+      otraVez.className = "ghost mini";
+      otraVez.textContent = t("grabReintentar");
+      // El botón de la página vuelve a probar la grabación, sin otro show. Solo si eso es lo que hace: Guardar el sorteo
+      // solo guarda, nunca se lleva el proyector a otra página ni suelta el sello.
+      otraVez.addEventListener("click", () => {
+        const btn = document.getElementById("btn-draw");
+        if (btn?.dataset.i === "grabReintentar") btn.click();
+      });
+      linea.append(otraVez);
+    }
+    // Lo que sigue no es guardar (ver el sorteo que ya estaba grabado, o volver a preparar la lista): se dice y se hace
+    // desde la página, que tiene el botón para eso.
+    if (estado === "recuperar") {
+      const sigue = document.createElement("span");
+      sigue.textContent = ` ${t("grabSigueEnLaPagina")}`;
+      linea.append(sigue);
+    }
+    if (estado === "no-coincide") back.querySelector(".pantalla-qr")?.remove();
+    ajustar();
+  };
+  pintar();
+  const mira = new MutationObserver(pintar);
+  mira.observe(grab, { attributes: true, attributeFilter: ["data-grabacion", "style"], childList: true, characterData: true, subtree: true });
+  return { soltar: () => mira.disconnect(), enDuda };
 }
 
 /**

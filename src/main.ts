@@ -153,6 +153,8 @@ for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => ele
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 initPlegables();
 $("btn-draw").addEventListener("click", () => void draw());
+// La espera en grande lanza el sorteo unos segundos antes de que nazca el número, para leer la tarjeta mientras tanto (freeze.ts).
+document.addEventListener("tinkazo:adelantar", () => void draw({ adelantado: true }));
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 // Precargada con la página quieta: si se publica una versión nueva con la

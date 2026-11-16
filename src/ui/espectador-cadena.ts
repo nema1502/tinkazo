@@ -117,6 +117,11 @@ export interface Opciones {
   dormir?: (ms: number) => Promise<void>;
   /** El azar del desfase y de las pausas, entre 0 y 1: en las pruebas, fijo. */
   azar?: () => number;
+  /**
+   * La primera lectura, no antes de esta hora (en el reloj de `ahora`): la cadena no acepta el sorteo grabado antes de
+   * su margen (`espectador-regla.ts`), y leer antes es carga de más para el RPC con toda la sala mirando.
+   */
+  noAntesDe?: number;
 }
 
 const leerDeVerdad: Leer = async (contrato, id) => {
@@ -168,6 +173,9 @@ export async function esperarElGrabado(s: SorteoDelEnlace, calculado: LoCalculad
   const dormir = op.dormir ?? dormirDeVerdad;
   const azar = op.azar ?? Math.random;
   const regla = reglaDelShow(true);
+  // Antes de que la cadena pueda tener el sorteo grabado no hay nada que leer. Los topes cuentan desde la primera lectura.
+  const antes = (op.noAntesDe ?? 0) - ahora();
+  if (antes > 0) await dormir(antes);
   const desde = ahora();
   /** La última vez que la cadena contestó: el tope de una cadena muda cuenta desde ahí. */
   let contesto = desde;

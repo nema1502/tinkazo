@@ -2,7 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 
-/** La cortina y la tarjeta leen el mismo modo, calculado una sola vez antes de que exista el resultado. */
+/**
+ * La cortina y la tarjeta leen el mismo modo, calculado una sola vez antes de que exista el resultado. Desde el 16 de
+ * noviembre de 2026 la tarjeta sale antes del número y hace de cortina: la cortina sale solo si no hay tarjeta.
+ */
 
 const h = vi.hoisted(() => ({ fetchRound: vi.fn() }));
 
@@ -71,14 +74,20 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // La tarjeta de mentira de `sinTarjeta` es solo de ese caso.
+  vi.doUnmock("./gamecard");
   vi.clearAllTimers();
   vi.useRealTimers();
   document.body.innerHTML = "";
   document.body.style.overflow = "";
 });
 
-/** Frena el número hasta que la cortina esté visible; después deja que el sorteo llegue a la tarjeta. */
-async function presentacion(orden: boolean): Promise<{ cortina: string; tarjeta: HTMLElement | null }> {
+/**
+ * Frena el número hasta que la cortina esté visible; después deja que el sorteo llegue a la tarjeta. `sinTarjeta`: la
+ * tarjeta no sale (como si no hubiera dónde mostrarla), y entonces sí la cortina.
+ */
+async function presentacion(orden: boolean, sinTarjeta = false): Promise<{ cortina: string; antes: HTMLElement | null; tarjeta: HTMLElement | null }> {
+  if (sinTarjeta) vi.doMock("./gamecard", async (orig) => ({ ...(await orig<typeof import("./gamecard")>()), showGameCard: () => null }));
   const { app } = await import("../state");
   app.game = "race";
   app.drawn = null;
@@ -97,27 +106,45 @@ async function presentacion(orden: boolean): Promise<{ cortina: string; tarjeta:
   const sorteando = draw();
   await vi.advanceTimersByTimeAsync(350);
   const cortina = document.querySelector<HTMLElement>(".cortina")?.textContent ?? "";
+  // La tarjeta que la sala lee mientras llega el número.
+  const antes = document.querySelector<HTMLElement>(".game-card");
   publicar({ signature: "01".repeat(48) });
   await sorteando;
-  return { cortina, tarjeta: document.querySelector<HTMLElement>(".game-card") };
+  return { cortina, antes, tarjeta: document.querySelector<HTMLElement>(".game-card") };
 }
 
 describe("la cortina y la tarjeta con el mismo sorteo", () => {
-  it("en un orden, las dos anuncian el orden y la regla habla del turno 1", async () => {
-    const { cortina, tarjeta } = await presentacion(true);
-    expect(cortina).toContain(T.es.cortinaSeOrden);
+  it("en un orden, la tarjeta sale antes del número, anuncia el orden y la regla habla del turno 1", async () => {
+    const { cortina, antes, tarjeta } = await presentacion(true);
+    // Con la tarjeta arriba no hay cortina: la tarjeta hace de cortina, y es la misma que sigue con el juego.
+    expect(cortina).toBe("");
+    expect(antes).not.toBeNull();
+    expect(tarjeta).toBe(antes);
     expect(tarjeta?.querySelector(".gc-premio")?.textContent).toBe(T.es.cortinaSeOrden);
     expect(tarjeta?.querySelector(".gc-regla")?.textContent).toBe(T.es.gcRaceOrden);
     expect(tarjeta?.textContent).not.toContain("Termo");
   });
 
-  it("en un sorteo de premios, las dos nombran el premio y conservan la regla común", async () => {
-    const { cortina, tarjeta } = await presentacion(false);
-    expect(cortina).toContain(T.es.cortinaSe);
-    expect(cortina).toContain("Termo");
+  it("en un orden sin tarjeta, la cortina anuncia el orden", async () => {
+    const { cortina } = await presentacion(true, true);
+    expect(cortina).toContain(T.es.cortinaSeOrden);
+    expect(cortina).not.toContain("Turnos");
+  });
+
+  it("en un sorteo de premios, la tarjeta sale antes del número, nombra el premio y conserva la regla común", async () => {
+    const { cortina, antes, tarjeta } = await presentacion(false);
+    expect(cortina).toBe("");
+    expect(tarjeta).toBe(antes);
     expect(tarjeta?.querySelector(".gc-premio")?.textContent).toBe(`${T.es.cortinaSe} Termo`);
     expect(tarjeta?.querySelector(".gc-regla")?.textContent).toBe(T.es.gcRace);
     expect(tarjeta?.textContent).not.toContain(T.es.cortinaSeOrden);
+  });
+
+  it("en un sorteo de premios sin tarjeta, la cortina nombra el premio", async () => {
+    const { cortina } = await presentacion(false, true);
+    expect(cortina).toContain(T.es.cortinaSe);
+    expect(cortina).toContain("Termo");
+    expect(cortina).not.toContain(T.es.cortinaSeOrden);
   });
 
   it("la línea del orden no habla de ganar ni de premios en ninguno de los dos idiomas", () => {

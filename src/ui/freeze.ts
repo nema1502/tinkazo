@@ -3,6 +3,8 @@ import { T, getLang, onLangChange, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
 import { fijoPara } from "./espectador-fijo";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
+import { arranqueDelShow, msHasta } from "../arranque-del-show";
+import { sorteoEnMarcha } from "./sorteo-en-marcha";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
@@ -366,27 +368,24 @@ export function cambiarJuego(): void {
 }
 
 /**
- * Segundos que faltan para poder sortear.
+ * Segundos que faltan para poder sortear: los que faltan para que nazca el número, con sello y sin sello.
  *
- * Para un sorteo anclado se esperan unos segundos de más. El contrato compara
- * la hora de la ronda contra la **hora de cierre del ledger**, que va detrás
- * del reloj del navegador porque un ledger cierra cada cinco segundos. Sin ese
- * margen hay una ventana en la que acá ya es hora, para la cadena todavía no,
- * y la transacción se cae delante de toda la sala.
+ * Hasta el 15 de noviembre de 2026, con sello se esperaban 8 segundos de más, porque el contrato compara la hora de la
+ * ronda con la hora de cierre del ledger, que va detrás del reloj. Ese margen ahora es parte de la grabación, que va
+ * aparte (`arranque-del-show.ts`, `grabar-sorteo.ts`): el juego arranca con el resultado calculado en el navegador.
  */
-const CHAIN_MARGIN_SECONDS = 8;
-
 export function secondsToRound(): number {
   if (!app.frozen) return 0;
   // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
   if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
-  const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;
-  return Math.max(0, roundTime(app.frozen.round) + margin - Math.floor(Date.now() / 1000));
+  return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));
 }
 
 let countdownTimer: number | undefined;
 /** La ronda de stand ya arrancó sola: una sola vez por cuenta regresiva. */
 let arrancoSola = false;
+/** La espera en grande ya lanzó el sorteo antes de que naciera el número: una sola vez por cuenta regresiva. */
+let seAdelanto = false;
 
 /**
  * Se apretó "Sellar la lista" con la pantalla en grande pedida (`vista-grande.ts`): cuando el sello esté, la
@@ -447,7 +446,7 @@ function abrirEspera(alSellar = false): void {
   void import("./espera").then((m) => {
     espera = m;
     const abrio = m.mostrarEspera(secondsToRound, {
-      sortear: () => $<HTMLButtonElement>("btn-draw").click(),
+      sortear: lanzarDesdeLaEspera,
       // Sin la cadena no hay nada que aprobar; con Freighter, cada operación se aprueba en su ventana.
       aMano: () => app.frozen?.raffleId !== undefined && apruebaAMano(),
       graba: app.frozen?.raffleId !== undefined,
@@ -460,6 +459,18 @@ function abrirEspera(alSellar = false): void {
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
     if (!abrio && (pedida || alSellar)) soltarPantallaCompleta();
   });
+}
+
+/**
+ * Lo que hace la espera en grande para lanzar el sorteo o volver a probarlo: el lanzamiento adelantado
+ * (`tinkazo:adelantar`, que escucha `main.ts`), que vale antes y después de que nazca el número. Antes de que nazca, el
+ * botón de la página todavía está apagado: hasta el 16 de noviembre de 2026 la espera lo apretaba igual, y un
+ * Reintentar después de una compuerta del modo Oficial que cortó (la cuenta sin activar, el acceso) no hacía nada. El
+ * modo stand no espera ningún número: aprieta el botón, como siempre.
+ */
+function lanzarDesdeLaEspera(): void {
+  if (enStand()) $<HTMLButtonElement>("btn-draw").click();
+  else document.dispatchEvent(new CustomEvent("tinkazo:adelantar"));
 }
 
 /**
@@ -495,6 +506,7 @@ function preconectarDrand(): void {
  */
 function startCountdown(): void {
   arrancoSola = false;
+  seAdelanto = false;
   const btn = $<HTMLButtonElement>("btn-draw");
   const box = document.getElementById("wait-box");
   const num = document.getElementById("wait-round");
@@ -530,22 +542,39 @@ function startCountdown(): void {
         preconectado = true;
         preconectarDrand();
       }
-      btn.disabled = true;
-      btn.classList.remove("lista");
+      // Con la espera en grande, el sorteo se lanza solo: la tarjeta de cómo se juega sale en los últimos segundos y
+      // termina de leerse cuando nace el número (`arranque-del-show.ts`). Con la billetera propia sigue el toque.
+      if (!seAdelanto && !app.drawn && !enStand() && espera?.esperaAbierta() && !(app.frozen?.raffleId !== undefined && apruebaAMano())) {
+        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round).tarjeta) === 0) {
+          seAdelanto = true;
+          // La espera pasa a decir que el número llega y lanza el sorteo (`lanzarDesdeLaEspera`): el mismo camino que su
+          // Reintentar si una compuerta del modo Oficial corta.
+          espera.nacioElNumero();
+        }
+      }
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      // El modo stand no espera ningún número: «Arranca en 3».
-      btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
+      // Mientras el sorteo lanzado por adelantado pasa por sus compuertas, el botón es de él (`sorteo-en-marcha.ts`).
+      if (!sorteoEnMarcha(app.frozen)) {
+        btn.disabled = true;
+        btn.classList.remove("lista");
+        // El modo stand no espera ningún número: «Arranca en 3».
+        btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
+      }
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
       if (left) left.textContent = reloj;
       // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
       if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
     } else {
-      btn.disabled = !!app.drawn;
-      btn.textContent = t("draw");
+      // Si el sorteo está en marcha (la espera en grande lo lanzó antes de que naciera el número), el botón es de él y
+      // no se enciende. Si una compuerta del modo Oficial lo cortó, ya no está en marcha y se enciende para volver a
+      // probar: hasta el 16 de noviembre de 2026 quedaba apagado para siempre.
+      const enMarcha = sorteoEnMarcha(app.frozen);
+      btn.disabled = !!app.drawn || enMarcha;
+      if (!enMarcha) btn.textContent = t("draw");
       // Se enciende con un pulso suave (que se apaga con `prefers-reduced-motion`)
       // hasta que alguien lo apriete: es lo único que hay que hacer ahora.
-      btn.classList.toggle("lista", !app.drawn);
+      btn.classList.toggle("lista", !app.drawn && !enMarcha);
       // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
@@ -1106,6 +1135,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     at: new Date().toLocaleString(getLang() === "es" ? "es-BO" : "en-US"),
     prize,
     round,
+    // Los ganadores que se sellaron: el resultado se calcula con esto, no con el campo.
+    numWinners,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
     ...(sinSello ? { sinSello: true } : {}),
@@ -1382,6 +1413,7 @@ export function resumeFrozen(e: {
     at: new Date(e.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US"),
     prize: e.prize,
     round: e.round,
+    numWinners: e.numWinners,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(e.sealTx ? { sealTx: e.sealTx } : {}),
     ...(e.sinSello && raffleId === undefined ? { sinSello: true } : {}),
