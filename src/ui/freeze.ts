@@ -39,6 +39,7 @@ import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
 import { cobroPorUso } from "../stellar/cobro-oficial";
+import { avisoTrasFallarEnLaCadena, entroYFalloEnLaCadena } from "./sello-tarde-aviso";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -906,6 +907,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     // que termine (`modo-ui.ts`): la recarga cortaría el envío.
     marcarSellado(true);
     marcarMandandoElSello(true);
+    // Los intentos pagados por el portero que entraron a la cadena y fallaron ahí: si el sello no se termina, la pantalla
+    // dice qué pasó con el sorteo oficial que usaron (`sello-tarde-aviso.ts`).
+    let fallosEnLaCadena = 0;
     try {
       // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
       // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
@@ -964,6 +968,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           rondaNueva,
           sinGrabar: (e) => {
             if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
+            if (conPortero && entroYFalloEnLaCadena(e)) fallosEnLaCadena++;
             return selloSinGrabar(e);
           },
           // El lugar de esta cuenta y esta lista: guardar o borrar acá no toca el intento de otra lista ni de otra cuenta.
@@ -1029,6 +1034,21 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         await mostrarCostoAlto(e.costoXlm, e.restaurar);
         return;
       }
+      // Antes, algún intento entró a la cadena y falló ahí, pagado por el portero (`sello-tarde-aviso.ts`). Si el último
+      // encontró la cuenta sin sorteos, no fue la persona quien los usó: en lugar de Se te acabaron, qué pasó y qué hacer.
+      // La devolución se promete solo si el portero la anunció en `/cupo`: el sitio puede estar delante de uno que no la hace.
+      const devuelve = fallosEnLaCadena > 0 && (await import("../stellar/patrocinador").then((m) => m.porteroDevuelveLosSellosTardios()).catch(() => false));
+      const tarde = avisoTrasFallarEnLaCadena(e, { fallosEnLaCadena, cobroPorUso: cobroPorUso(), devuelve });
+      if (tarde === "sin-sorteos") {
+        const status = $("seal-status");
+        status.style.display = "block";
+        status.className = "txstatus bad";
+        // El detalle plegado de siempre, y arriba lo que se lee.
+        await escribirError(status, e, "sello", numWinners);
+        status.textContent = t("selloTardeSinSorteos");
+        verError(status);
+        return;
+      }
       // Con el cobro por uso, el portero (o el candado de antes de la firma) dijo que no quedan sorteos oficiales.
       if (await siSeAcabaronLosSorteos(e, btn)) {
         hideTxStatus("seal-status");
@@ -1058,6 +1078,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
       await escribirError(status, e, "sello", numWinners);
+      // Si antes algún intento entró a la cadena y falló, qué pasa con el sorteo oficial que usó.
+      if (tarde === "aviso" || tarde === "aviso-sin-devolucion") status.textContent = `${status.textContent ?? ""} ${t(tarde === "aviso" ? "selloTardeAviso" : "selloTardeAvisoSinDevolucion")}`.trim();
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;

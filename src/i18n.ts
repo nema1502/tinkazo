@@ -2235,6 +2235,14 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.",
     "errAnchor.badWinnerCountViejo": "Esta red todavía admite hasta {tope} ganadores por sorteo. Elegí {tope} o menos y probá de nuevo.",
     "errAnchor.roundTooSoon": "El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.",
+    // Después de un sello pagado por el portero que entró a la cadena y falló ahí (`ui/sello-tarde-aviso.ts`). Los dos
+    // primeros, solo si el portero anunció en /cupo que devuelve ese sorteo (con el tope del día lleno no lo anuncia). Hay
+    // casos en que igual no lo devuelve (un tope que se llenó después de preguntar, una falla que no se pudo comprobar):
+    // por eso, si no lo ve de vuelta, que escriba. El tercero, sin el anuncio.
+    selloTardeSinSorteos:
+      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial, que vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+    selloTardeAviso: "No fue un error tuyo. Si algún intento usó un sorteo oficial, vuelve solo en unos minutos. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+    selloTardeAvisoSinDevolucion: "No fue un error tuyo. Si algún intento usó un sorteo oficial y te hace falta, escribinos a hola@tinkazo.app.",
     "errAnchor.roundTooFar": "La hora de tu celular o tu compu está mal y el sorteo quedó a más de 30 días. Corregila y probá de nuevo.",
     "errAnchor.roundNotReady": "Ese número del sorteo todavía no se publica. Esperá unos segundos y probá de nuevo.",
     "errAnchor.invalidSignature": "No se pudo confirmar el número del sorteo. Probá de nuevo en unos segundos.",
@@ -4955,6 +4963,10 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.badWinnerCount": "That number of winners doesn't work. Pick fewer winners than people.",
     "errAnchor.badWinnerCountViejo": "This network still allows up to {tope} winners per draw. Pick {tope} or fewer and try again.",
     "errAnchor.roundTooSoon": "Sealing took longer than expected. Tap Seal the list again.",
+    selloTardeSinSorteos:
+      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw, which comes back on its own in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
+    selloTardeAviso: "It wasn't your fault. If an attempt used a Live draw, it comes back on its own in a few minutes. If you don't see it back, write to us at hola@tinkazo.app.",
+    selloTardeAvisoSinDevolucion: "It wasn't your fault. If an attempt used a Live draw and you need it back, write to us at hola@tinkazo.app.",
     "errAnchor.roundTooFar": "Your device's clock is off and the draw ended up more than 30 days away. Fix it and try again.",
     "errAnchor.roundNotReady": "That draw number isn't published yet. Wait a few seconds and try again.",
     "errAnchor.invalidSignature": "The draw number couldn't be confirmed. Try again in a few seconds.",

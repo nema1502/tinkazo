@@ -226,6 +226,18 @@ export function leerCupo(estado: number, cuerpo: unknown, redEsperada: NetworkNa
 let seAgotoElTiempo = false;
 
 /**
+ * Si la última respuesta de `/cupo` dijo que el portero devuelve solo el sorteo de un sello que entró tarde
+ * (`devuelve: true`). Solo el portero nuevo lo manda: el sitio puede subir antes o después que el portero, y sin el
+ * campo la pantalla no promete esa devolución. Lo cambia cada respuesta 200 que se pudo leer. Una que no llegó, no.
+ */
+let devuelveLosSellosTardios = false;
+
+/** Si el portero anunció en `/cupo` que devuelve el sorteo de un sello que entró tarde (ver arriba). */
+export function porteroDevuelveLosSellosTardios(): boolean {
+  return devuelveLosSellosTardios;
+}
+
+/**
  * Pregunta a `/cupo`. Lanza si no contesta a tiempo.
  *
  * Después de una espera entera sin respuesta, la próxima espera menos. Con la dirección por defecto (`porDefecto`) eso
@@ -247,6 +259,7 @@ async function preguntar(url: string, g: string, f: Fetch, porDefecto: boolean):
     } catch {
       /* sin cuerpo que se entienda: cerrado */
     }
+    if (r.status === 200 && cuerpo && typeof cuerpo === "object") devuelveLosSellosTardios = (cuerpo as { devuelve?: unknown }).devuelve === true;
     return leerCupo(r.status, cuerpo);
   } catch (e) {
     if (control.signal.aborted && tope === TOPE_CUPO_MS) seAgotoElTiempo = true;
