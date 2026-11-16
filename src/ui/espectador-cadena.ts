@@ -1,6 +1,8 @@
 import type { Registro, Resultado, Sello } from "../protocol/verificacion";
 import type { ContratoOficial } from "../stellar/oficiales";
 import { RPC_LISTAS } from "../stellar/config";
+// Sin el SDK de Stellar arriba: `leerRegistro` lo pide recién al leer.
+import { esLimiteDelRpc, leerRegistro } from "../stellar/registro";
 import { reglaDelShow } from "./espectador-regla";
 
 /**
@@ -13,8 +15,9 @@ import { reglaDelShow } from "./espectador-regla";
  * `stellar/registro.ts`, en la red que dice el enlace y no en la del navegador) hasta que el sorteo aparece grabado.
  *
  * Y de paso comprueba dos cosas, para que un enlace equivocado o armado a mano no muestre otro sorteo: que lo sellado
- * es lo que trae el enlace (la huella de la lista, cuántas personas, cuántos premios y el número de la ronda) y que lo
- * grabado es lo que calculó el celular con el protocolo (la semilla y los ganadores). Si algo no coincide, no hay show.
+ * es lo que trae el enlace (la huella de la lista, cuántas personas, cuántos premios, el número de la ronda y el
+ * premio) y que lo grabado es lo que calculó el celular con el protocolo (la semilla y los ganadores). Si algo no
+ * coincide, no hay show.
  */
 
 /** Lo que el celular sabe del sorteo: lo que trae el enlace y lo que calculó cuando nació el número. */
@@ -27,6 +30,8 @@ export interface SorteoDelEnlace {
   count: number;
   numWinners: number;
   round: number;
+  /** El premio que muestra el enlace, si trae uno: el sello lo guarda (`meta`, recortado a 160). */
+  premio?: string;
 }
 
 export interface LoCalculado {
@@ -53,6 +58,8 @@ export function revisarSello(sello: Sello, s: SorteoDelEnlace): void {
   if (sello.count !== s.count) throw new NoCoincide("personas");
   if (sello.numWinners !== s.numWinners) throw new NoCoincide("premios");
   if (sello.round !== s.round) throw new NoCoincide("ronda");
+  // Sin premio, el sello guarda un texto de siempre y el celular no muestra ninguno: no hay nada que comparar.
+  if (s.premio && sello.meta !== s.premio.slice(0, 160)) throw new NoCoincide("premio");
 }
 
 /** Lo grabado es lo calculado. Lanza `NoCoincide` con lo primero que no da. */
@@ -84,29 +91,39 @@ export function rpcsDe(contrato: ContratoOficial): string[] {
 }
 
 /**
- * Cada cuánto se vuelve a mirar, según cuánto se lleva esperando. Al principio seguido: la sala arranca el juego en
- * cuanto queda grabado, y cada segundo que el celular tarda en enterarse es un segundo de atraso. Pasado el primer
- * minuto, más espaciado: decenas de celulares preguntando a un RPC público no tienen que parecer un ataque.
+ * Cada cuánto se vuelve a mirar, según cuánto se lleva esperando. Todos los celulares de la sala empiezan a la vez
+ * (ronda más el margen), salen por el mismo wifi y le preguntan a los mismos RPC públicos con los que la compu de la
+ * sala lanza el sorteo: si el RPC le corta a esa dirección por demasiados pedidos, también frena a la sala. Por eso
+ * cada celular espera entre 3 y 5 s, al azar para que no pregunten juntos, y pasado el primer minuto entre 6 y 10 s.
+ * Enterarse unos segundos más tarde no cuesta nada: el celular va detrás de la sala igual.
  */
-export function pausaTras(ms: number): number {
-  if (ms < 60_000) return 1_500;
-  return 4_000;
+export function pausaTras(ms: number, azar: () => number = Math.random): number {
+  const [desde, hasta] = ms < 60_000 ? [3_000, 5_000] : [6_000, 10_000];
+  return desde + azar() * (hasta - desde);
 }
+
+/** El primer vistazo de cada celular sale con un desfase al azar de hasta esto: no todos en el mismo segundo. */
+export const DESFASE_MAX_MS = 3_000;
+
+/** Si el RPC contesta que son demasiados pedidos, la pausa se duplica, hasta esta cantidad de veces la de siempre. */
+export const FRENO_MAX = 8;
 
 export interface Opciones {
   leer?: Leer;
-  /** Se llama una vez, si pasa `avisoTardeMs` de la regla sin que aparezca grabado. */
+  /** Se llama una vez, si pasa `avisoTardeMs` de la regla con la cadena mostrándolo sellado y sin resultado. */
   alTardar?: () => void;
   signal?: AbortSignal;
   ahora?: () => number;
   dormir?: (ms: number) => Promise<void>;
+  /** El azar del desfase y de las pausas, entre 0 y 1: en las pruebas, fijo. */
+  azar?: () => number;
 }
 
 const leerDeVerdad: Leer = async (contrato, id) => {
-  const { leerRegistro } = await import("../stellar/registro");
-  // Sin la espera larga entre reintentos de la verificación: la próxima vuelta ya es el reintento.
-  return leerRegistro(contrato, id, fetch, 300);
+  // Un solo intento: la próxima vuelta ya es el reintento, y los reintentos seguidos de cien celulares son una ráfaga.
+  return leerRegistro(contrato, id, fetch, 0, 1);
 };
+
 
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -133,32 +150,54 @@ export async function mirarUnaVez(s: SorteoDelEnlace, leer: Leer = leerDeVerdad)
 
 /**
  * Espera a que el sorteo quede grabado y comprueba que es el que calculó el celular. Termina con `grabado` cuando lo
- * ve, y con `sin-confirmar` si pasó lo que dice la regla (`largaIgualTrasMs`, en `espectador-regla.ts`) sin verlo: el
- * celular juega igual y no se queda colgado. Lanza `NoCoincide` si lo que hay no es este sorteo. Un RPC que no
- * contesta no corta nada: se pregunta de nuevo en la vuelta siguiente, al otro.
+ * ve. Lanza `NoCoincide` si lo que hay no es este sorteo. Un RPC que no contesta no corta nada: se pregunta de nuevo en
+ * la vuelta siguiente, al otro. El tope de la regla (`largaIgualTrasMs`, en `espectador-regla.ts`) vale según lo que
+ * contesta la cadena:
+ *
+ * - Sellado y sin resultado: la sala todavía no lo lanzó (quien organiza tiene que tocar Lanzar el sorteo, o volvió a
+ *   la página). Se sigue esperando, sin tope, y pasado `avisoTardeMs` se avisa: jugar ahora sería coronar antes que la
+ *   sala.
+ * - No contesta: pasado el tope sin ninguna respuesta, termina con `sin-confirmar` y el celular juega igual con lo que
+ *   calculó (los mismos ganadores que va a grabar el contrato). No se queda colgado.
+ * - Contesta, pero el sello de este número nunca aparece: pasado el tope, el enlace no es de un sorteo sellado
+ *   (`NoCoincide`). Un servicio que va un ledger atrás lo muestra en segundos.
  */
 export async function esperarElGrabado(s: SorteoDelEnlace, calculado: LoCalculado, op: Opciones = {}): Promise<"grabado" | "sin-confirmar"> {
   const leer = op.leer ?? leerDeVerdad;
   const ahora = op.ahora ?? (() => Date.now());
   const dormir = op.dormir ?? dormirDeVerdad;
+  const azar = op.azar ?? Math.random;
   const regla = reglaDelShow(true);
   const desde = ahora();
+  /** La última vez que la cadena contestó: el tope de una cadena muda cuenta desde ahí. */
+  let contesto = desde;
+  let selloVisto = false;
   let avisado = false;
+  let freno = 1;
+  // Los celulares de la sala llegan acá en el mismo segundo: cada uno sale con su desfase.
+  await dormir(azar() * DESFASE_MAX_MS);
   for (let vuelta = 0; ; vuelta++) {
     if (op.signal?.aborted) return "sin-confirmar";
     let reg: Registro | null = null;
     try {
       reg = await leerConRpc(leer, s, vuelta);
-    } catch {
+      freno = 1;
+    } catch (e) {
       reg = null;
+      if (esLimiteDelRpc(e)) freno = Math.min(freno * 2, FRENO_MAX);
     }
-    if (reg && leerLoQueHay(reg, s, calculado) === "grabado") return "grabado";
-    const lleva = ahora() - desde;
-    if (lleva >= regla.largaIgualTrasMs) return "sin-confirmar";
-    if (!avisado && lleva >= regla.avisoTardeMs) {
+    const hay = reg ? leerLoQueHay(reg, s, calculado) : null;
+    if (hay === "grabado") return "grabado";
+    const t = ahora();
+    const lleva = t - desde;
+    if (hay) contesto = t;
+    if (hay === "sellado") selloVisto = true;
+    if (hay === "nada" && !selloVisto && lleva >= regla.largaIgualTrasMs) throw new NoCoincide("sello");
+    if (!hay && t - contesto >= regla.largaIgualTrasMs) return "sin-confirmar";
+    if (!avisado && selloVisto && lleva >= regla.avisoTardeMs) {
       avisado = true;
       op.alTardar?.();
     }
-    await dormir(Math.min(pausaTras(lleva), Math.max(0, regla.largaIgualTrasMs - lleva)));
+    await dormir(pausaTras(lleva, azar) * freno);
   }
 }

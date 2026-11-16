@@ -1,6 +1,7 @@
 import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
+import { esSoloMirar } from "../solo-mirar";
 
 /**
  * La tarjeta de "cómo se juega", antes de que arranque el juego.
@@ -145,7 +146,8 @@ export function showGameCard(
       ? `<p class="gc-graba" role="status"><span>${esc(t("cortinaGraba"))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
       : "") +
     `<div class="gc-caja">${caja(game, people, prizes, premio)}</div>` +
-    `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>` +
+    // En la vista de espectador no hay Saltar: saltada mientras se graba, largaba sin la cuenta y antes que la sala.
+    (esSoloMirar() ? "" : `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>`) +
     `<div class="gc-barra" aria-hidden="true"><i></i></div>`;
   document.body.appendChild(el);
   // El foco a la tarjeta: con el foco en un botón de atrás, Enter o espacio
@@ -200,6 +202,7 @@ export function showGameCard(
   let grabado = !espera;
   let tope = 0;
   const saltar = (): void => {
+    if (esSoloMirar()) return;
     if (grabado) terminar();
     else saltada = true;
   };

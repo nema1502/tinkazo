@@ -1,6 +1,7 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
+import { fijoPara } from "./espectador-fijo";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
@@ -108,6 +109,12 @@ export function elegirJuego(g: Game): void {
     if (!enShow) alElegirConResultado?.(g);
     return;
   }
+  // Ya se mira en celulares desde el QR, con este juego (`espectador-fijo.ts`): no cambia hasta el resultado, y la
+  // nota de arriba del selector lo dice.
+  if (fijoPara(app.frozen, false)) {
+    pintarNotaDelJuego();
+    return;
+  }
   juegoAMano = true;
   setGame(g);
 }
@@ -121,6 +128,9 @@ function marcarJuego(g: Game): void {
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
+  // Con el sorteo mirándose en celulares, ningún camino cambia su juego (`espectador-fijo.ts`).
+  const fijo = fijoPara(app.frozen, false);
+  if (fijo && g !== fijo.juego) return;
   marcarJuego(g);
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
@@ -157,7 +167,11 @@ export function marcarShow(en: boolean): void {
 export function pintarNotaDelJuego(): void {
   const el = document.getElementById("juego-nota");
   if (!el) return;
-  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
+  const fijo = fijoPara(app.frozen, false);
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : fijo ? "juegoFijoEspectador" : "";
+  // La nota de la duración (`main.ts`) sale cuando se la quiere cambiar con el juego fijo, y se va cuando ya no lo está.
+  const notaDelRitmo = document.getElementById("pace-nota");
+  if (notaDelRitmo && !fijo) notaDelRitmo.hidden = true;
   const texto = clave ? t(clave) : "";
   if (el.textContent !== texto) el.textContent = texto;
   el.hidden = !texto;

@@ -11,10 +11,14 @@ import type { NetworkName } from "../stellar/config";
  *
  * Va todo en el fragmento de la página de la herramienta (`/#espectador=…`), que el navegador no le manda a ningún
  * servidor. Lleva lo que hace falta para contar el mismo sorteo que la sala: la ronda que decide, el juego, el ritmo,
- * cuántos premios, el premio y la lista sellada (los mismos nombres que la sala ve pasar en la espera). Con un sorteo
- * sellado en Stellar lleva también la red, el contrato y el número del sorteo: el celular espera a que quede grabado
- * (`espectador-cadena.ts`), como la sala, y comprueba que es este. Con equipos, el nombre de cada uno, que vive solo en
- * el navegador de quien organiza (`equipos/etiquetas.ts`).
+ * cuántos premios, el premio y la lista sellada (los mismos nombres que la sala ve pasar en la espera), y la red, el
+ * contrato y el número del sorteo en Stellar: el celular espera a que quede grabado (`espectador-cadena.ts`), como la
+ * sala, y comprueba que es este. Con equipos, el nombre de cada uno, que vive solo en el navegador de quien organiza
+ * (`equipos/etiquetas.ts`).
+ *
+ * Solo hay enlace con el sorteo sellado en Stellar. Sin el número no hay cómo saber cuándo la sala lanza el sorteo (el
+ * celular coronaría antes) ni con qué comparar lo que trae el enlace: cualquiera podría armar uno con otra lista o
+ * con una ronda ya pasada, cambiar el orden hasta que gane quien quiera y mostrarlo con la marca de Tinkazo.
  *
  * El QR lleva solo el enlace corto (`enlace-corto.ts`): el servicio guarda el enlace cifrado y la clave viaja solo en
  * el QR, como el comprobante. Quien escanea ve los nombres, los mismos que pasan por la pantalla de la sala. El enlace
@@ -35,10 +39,10 @@ export interface DatosEspectador {
   z?: string;
   /** La lista sellada: la misma que hash-ea el sello (protocolo §1). */
   n: string[];
-  /** Con el sorteo sellado en Stellar: la red, el contrato oficial y el número del sorteo. Van los tres o ninguno. */
-  net?: NetworkName;
-  k?: string;
-  i?: string;
+  /** El sorteo sellado en Stellar: la red, el contrato oficial y el número del sorteo. */
+  net: NetworkName;
+  k: string;
+  i: string;
   /** Los nombres de los equipos con cupón, de las cuentas de la lista: `[cuenta, nombre]`. */
   e?: [string, string][];
 }
@@ -84,7 +88,8 @@ function nombresValidos(n: unknown): n is string[] {
 
 /**
  * Los datos que trae el fragmento `#espectador=…`, o null si no es un enlace de espectador o está roto: nunca abre una
- * vista a medio armar. Un sorteo sellado tiene que nombrar un contrato oficial de Tinkazo (`stellar/oficiales.ts`).
+ * vista a medio armar. Tiene que nombrar un sorteo de un contrato oficial de Tinkazo (`stellar/oficiales.ts`): sin eso
+ * no hay con qué comparar la lista, y no se abre.
  */
 export function datosDelEnlace(hash: string = location.hash): DatosEspectador | null {
   const m = /^#espectador=([A-Za-z0-9_-]+)$/.exec(hash);
@@ -100,14 +105,9 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
     if (!nombresValidos(n)) return null;
     if (!Number.isInteger(w) || (w as number) < 1 || (w as number) > n.length) return null;
     if (z !== undefined && (typeof z !== "string" || z.length > 200)) return null;
-    const datos: DatosEspectador = { r: r as number, g: g as Game, p: p as Pace, w: w as number, n };
+    if (typeof i !== "string" || !ES_ID.test(i) || !contratoOficial(net, k)) return null;
+    const datos: DatosEspectador = { r: r as number, g: g as Game, p: p as Pace, w: w as number, n, net: net as NetworkName, k: k as string, i };
     if (z) datos.z = z;
-    if (net !== undefined || k !== undefined || i !== undefined) {
-      if (typeof i !== "string" || !ES_ID.test(i) || !contratoOficial(net, k)) return null;
-      datos.net = net as NetworkName;
-      datos.k = k as string;
-      datos.i = i;
-    }
     if (e !== undefined) {
       if (!Array.isArray(e)) return null;
       const deLaLista = new Set(n);
@@ -126,9 +126,9 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
   }
 }
 
-/** El contrato oficial del sorteo sellado del enlace, o null si no está sellado en Stellar. */
+/** El contrato oficial del sorteo del enlace, o null si no es uno de Tinkazo. */
 export function contratoDelEnlace(d: DatosEspectador): ContratoOficial | null {
-  return d.i ? contratoOficial(d.net, d.k) : null;
+  return contratoOficial(d.net, d.k);
 }
 
 /** Lo que la espera sabe del sorteo para armar el enlace. */
@@ -144,8 +144,12 @@ export interface DeLaEspera {
   equipo?: (cuenta: string) => string | undefined;
 }
 
-/** Los datos del enlace del espectador para la lista sellada `f`. */
-export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador {
+/**
+ * Los datos del enlace del espectador para la lista sellada `f`, o null si no está sellada en Stellar con un contrato
+ * oficial de esta red: sin eso no hay QR (el celular rechaza cualquier otro, `datosDelEnlace`).
+ */
+export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador | null {
+  if (f.raffleId === undefined || !d.contrato || !contratoOficial(d.red, d.contrato)) return null;
   const datos: DatosEspectador = {
     r: f.round,
     g: d.juego,
@@ -153,14 +157,11 @@ export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador {
     w: Math.min(Math.max(1, d.premios), f.names.length),
     ...(f.prize ? { z: f.prize } : {}),
     n: f.names,
+    // El celular espera a que quede grabado, como la sala, y en la red de este sorteo.
+    net: d.red,
+    k: d.contrato,
+    i: String(f.raffleId),
   };
-  // Sellado en Stellar: el celular espera a que quede grabado, como la sala, y en la red de este sorteo.
-  // Solo con un contrato oficial de esa red: el celular rechaza cualquier otro (`datosDelEnlace`).
-  if (f.raffleId !== undefined && d.contrato && contratoOficial(d.red, d.contrato)) {
-    datos.net = d.red;
-    datos.k = d.contrato;
-    datos.i = String(f.raffleId);
-  }
   const equipos = d.equipo ? f.names.flatMap((c): [string, string][] => {
     const nombre = d.equipo?.(c);
     return nombre ? [[c, nombre]] : [];

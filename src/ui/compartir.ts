@@ -493,6 +493,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const urls: string[] = [];
   let archivos: File[] = [];
   let mensaje = "";
+  /** El enlace que se publica en Facebook: el del comprobante (el corto si salió). Sin comprobante, no hay. */
+  let enlaceParaPublicar = "";
   /** Dos fotos para elegir (la del juego y la de siempre): se comparte solo la elegida. */
   let elegir = false;
   let elegida = 0;
@@ -520,6 +522,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     if (!dlg.isConnected) return;
     mensaje = listo.mensaje;
     txt.value = mensaje;
+    enlaceParaPublicar = listo.fotos.find((f) => f.enlace)?.enlace ?? "";
     const ext = listo.fotos.length > 1;
     archivos = pngs.flatMap((png, i) =>
       png ? [new File([png], `${listo.archivo}${ext ? `-${i + 1}` : ""}.png`, { type: "image/png" })] : [],
@@ -578,8 +581,9 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     wa.disabled = false;
     // Facebook siempre puede (abre el publicador con el enlace); Instagram solo
     // en móvil, donde su app toma la foto: en computadora no hay camino y no se muestra.
-    fb.disabled = false;
-    fb.hidden = false;
+    // El publicador de Facebook recibe un enlace, no un mensaje: sin enlace (un sorteo sin sello) no se ofrece.
+    fb.disabled = !enlaceParaPublicar;
+    fb.hidden = !enlaceParaPublicar;
     const celular = matchMedia("(pointer: coarse)").matches;
     ig.disabled = !celular || !archivos.length;
     ig.hidden = !celular;
@@ -596,16 +600,16 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   let compartiendo = false;
   // Facebook: el publicador de la web con el enlace del sorteo (la foto va aparte, copiada o bajada).
   fb.addEventListener("click", () => {
-    const u = encodeURIComponent(mensaje);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${u}`, "_blank", "noopener,width=640,height=560");
+    if (!enlaceParaPublicar) return;
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(enlaceParaPublicar)}`, "_blank", "noopener,width=640,height=560");
     contarCompartido(p, "copy");
   });
-  // Instagram: en móvil, la foto de la elegida al portapapeles (o bajada) y la app abierta: ahí se pega.
-  ig.addEventListener("click", async () => {
+  // Instagram: en móvil, la foto elegida se baja y se abre Instagram, donde se sube.
+  ig.addEventListener("click", () => {
     const primera = elegidos()[0];
     if (primera) descargar(primera);
     window.open("https://www.instagram.com/", "_blank", "noopener");
-    avisar(cad(lang, "cmpAdjuntaLaFoto"));
+    avisar(cad(lang, "cmpIgAviso"));
     contarCompartido(p, "copy");
   });
   wa.addEventListener("click", () => {

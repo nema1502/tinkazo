@@ -69,15 +69,23 @@ async function cerrar(page) {
   }
 }
 
-/* ------------------------------------------------------------ sin red ni sello */
+/* ------------------------------------------------------------ sin leer la cadena */
+
+/** El contrato oficial de Prueba (`src/stellar/deployments.json`): el enlace del espectador siempre nombra uno. */
+const CONTRATO_PRUEBA = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A";
+/** Los RPC de Prueba (`RPC_LISTAS` en `src/stellar/config.ts`): sin ellos la vista se queda en la cuenta, sin decidir nada. */
+const RPC_DE_PRUEBA = ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"];
 
 async function sinSello(browser) {
-  console.log("\nLa vista de espectador, con un enlace armado acá (sin sello)");
+  console.log("\nLa vista de espectador, con un enlace armado acá (sin leer la cadena)");
   const nombres = ["Ana Quispe", "Beto Mamani", "Cami Rojas", "Dani Flores", "Eva Choque", "Fito Vargas", "Gaby Torrez", "Hugo Condori", "Iris Mendoza", "Juan Pérez", "Kati Gutiérrez", "Lucho Arce"];
-  const frag = fragmento({ r: rondaDentroDe(150), g: "race", p: "normal", w: 1, z: "Una polera", n: nombres });
+  const frag = fragmento({ r: rondaDentroDe(150), g: "race", p: "normal", w: 1, z: "Una polera", n: nombres, net: "testnet", k: CONTRATO_PRUEBA, i: "999999" });
   for (const tema of ["dark", "light"]) {
     for (const ancho of [320, 360, 375, 390, 414]) {
       const page = await pestana(browser, { ancho, alto: 780, dpr: 2, celular: true, tema });
+      // Sin la cadena la vista no puede comparar el enlace con nada y se queda contando: una cadena muda no corta nada.
+      await page.send("Network.enable");
+      await page.send("Network.setBlockedURLs", { urls: RPC_DE_PRUEBA });
       await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=es${frag}` });
       const abrio = await page.waitFor("document.querySelector('.espectador .espera-reloj')", 20000);
       const quien = `${ancho} px ${tema}`;
@@ -97,6 +105,14 @@ async function sinSello(browser) {
       if (ancho === 390 || ancho === 320) await page.screenshot(join(outDir, `espectador-espera-${ancho}-${tema}.png`));
       await cerrar(page);
     }
+  }
+  // Un enlace sin el número del sorteo (el que antes salía sin sello): no abre la vista, dice que llegó roto.
+  {
+    const page = await pestana(browser, { ancho: 390, alto: 844, dpr: 2, celular: true, tema: "dark" });
+    const libre = fragmento({ r: rondaDentroDe(150), g: "race", p: "normal", w: 1, n: nombres });
+    await page.send("Page.navigate", { url: `${base}/?theme=dark&lang=es${libre}` });
+    check("un enlace sin el número del sorteo no abre la vista: dice que llegó roto", (await page.waitFor("document.querySelector('.espectador-roto')", 20000)).ok);
+    await cerrar(page);
   }
   // El enlace roto: lo dice, con una sola acción.
   for (const tema of ["dark", "light"]) {
@@ -166,6 +182,8 @@ async function deVerdad(browser) {
   const corto = await sala.eval("(document.querySelector('.espera-qr') || {}).dataset?.enlace || ''");
   check("el QR sale con el enlace corto", qr.ok && estado === "listo" && /\/c\/[0-9A-Za-z]{8}#[A-Za-z0-9_-]{22}$/.test(corto), `${estado} ${corto.replace(/#.*/, "#…")}`);
   check("el QR nunca lleva el enlace largo con los nombres", !/espectador=/.test(corto));
+  // Desde que el QR se ve, el juego de este sorteo queda (src/ui/espectador-fijo.ts): no hay Cambiar de juego.
+  check("con el QR a la vista el juego queda: no hay Cambiar de juego", await sala.eval("![...document.querySelectorAll('.espera [data-juego]')].some((b) => !b.hidden)"));
   await sala.screenshot(join(outDir, "sala-espera-qr-1362-dark.png"));
   await sala.eval("document.documentElement.dataset.theme = 'light'; true");
   await sleep(400);
@@ -201,9 +219,12 @@ async function deVerdad(browser) {
   const JUEGO = "document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'";
   const t0 = Date.now();
   let capturaShow = false;
+  let sinSaltar = null;
   while (Date.now() - t0 < 6 * 60_000 && !(t.salaFin && t.celFin)) {
     const [s, c] = await Promise.all([
-      sala.eval(`JSON.stringify({ juego: !!(${JUEGO}), fin: !!document.querySelector('.sala.pantalla') })`).then(JSON.parse),
+      // La sala corona cuando el juego termina y pasa al resultado (`reveal` llena los ganadores de la página en ese
+      // instante). La pantalla grande del resultado llega unos segundos después: no sirve para medir.
+      sala.eval(`JSON.stringify({ juego: !!(${JUEGO}), fin: !!document.querySelector('#winner-cards .winner-card') })`).then(JSON.parse),
       cel.eval(`JSON.stringify({ juego: !!(${JUEGO}), fin: !!document.querySelector('.espectador-ganadores'), texto: (document.querySelector('.espectador .espera-sigue') || {}).textContent || '' })`).then(JSON.parse),
     ]);
     const ahora = Date.now();
@@ -211,6 +232,10 @@ async function deVerdad(browser) {
     if (c.juego && !t.celJuego) t.celJuego = ahora;
     if (s.fin && !t.salaFin) t.salaFin = ahora;
     if (c.fin && !t.celFin) t.celFin = ahora;
+    // En el celular el show no se salta (src/solo-mirar.ts): ni el Saltar del estadio ni el de la tarjeta.
+    if (sinSaltar === null && (c.juego || (await cel.eval("!!document.querySelector('.game-card')")))) {
+      sinSaltar = await cel.eval("document.getElementById('st-skip').hidden && !document.querySelector('.gc-saltar')");
+    }
     if (c.juego && !capturaShow && ahora - t.celJuego > 4000) {
       capturaShow = true;
       await cel.screenshot(join(outDir, "espectador-show-390-dark.png"));
@@ -220,8 +245,20 @@ async function deVerdad(browser) {
   const s = (x) => (x ? `${((x - t0) / 1000).toFixed(1)} s` : "nunca");
   info(`juego: sala ${s(t.salaJuego)}, celular ${s(t.celJuego)} · corona: sala ${s(t.salaFin)}, celular ${s(t.celFin)}`);
   check("la sala y el celular llegan al resultado", !!(t.salaFin && t.celFin));
+  check("en el celular no hay Saltar, ni en el estadio ni en la tarjeta", sinSaltar === true, String(sinSaltar));
+  // Para leer los ganadores de la sala, su pantalla grande del resultado.
+  await sala.waitFor("document.querySelector('.sala.pantalla')", 30000);
   check("el juego del celular no arranca antes que el de la sala", !!(t.salaJuego && t.celJuego) && t.celJuego >= t.salaJuego - 300);
-  check("el celular no corona antes que la sala", !!(t.salaFin && t.celFin) && t.celFin >= t.salaFin - 300, t.salaFin && t.celFin ? `${((t.celFin - t.salaFin) / 1000).toFixed(1)} s detrás` : "");
+  // La coronación se compara solo si el juego duró lo mismo en las dos pestañas. Este Chrome dibuja sin placa de video,
+  // y con la máquina ocupada una pestaña puede atrasarse (medido el 15-nov: 54 s en el celular y 109 s en la sala, el
+  // mismo juego al mismo ritmo). Lo que decide la regla es cuándo arranca: eso se mide siempre, arriba.
+  const durSala = t.salaFin - t.salaJuego;
+  const durCel = t.celFin - t.celJuego;
+  if (t.salaFin && t.celFin && Math.abs(durSala - durCel) <= 0.15 * Math.max(durSala, durCel)) {
+    check("el celular no corona antes que la sala", t.celFin >= t.salaFin - 300, `${((t.celFin - t.salaFin) / 1000).toFixed(1)} s detrás`);
+  } else {
+    info(`la coronación no se compara: el juego duró ${(durSala / 1000).toFixed(1)} s en la sala y ${(durCel / 1000).toFixed(1)} s en el celular`);
+  }
   const enSala = JSON.parse(await sala.eval("JSON.stringify([...document.querySelectorAll('.sala.pantalla .pantalla-nombre')].map((e) => e.textContent.trim()))"));
   const enCel = JSON.parse(await cel.eval("JSON.stringify([...document.querySelectorAll('.espectador-ganadores li')].map((e) => e.textContent.trim()))"));
   check("los ganadores del celular son los de la sala", enSala.length > 0 && JSON.stringify(enSala) === JSON.stringify(enCel), `sala ${enSala.join(", ")} · celular ${enCel.join(", ")}`);

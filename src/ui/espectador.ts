@@ -1,20 +1,21 @@
 import { esc } from "../dom";
 import { getLang, setLang, t, T, type Lang } from "../i18n";
-import { app, avatar, forzarRitmo, type Beacon } from "../state";
+import { app, avatar, forzarRitmo, paceSeconds, type Beacon } from "../state";
+import { setSoloMirar } from "../solo-mirar";
 import { beep, note } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime } from "../protocol/quicknet";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { listHash } from "../protocol/canonical";
 import { cintas } from "./espera";
-import { paraMostrar, ponerEtiquetas } from "../equipos/etiquetas";
+import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { hayModoOficial } from "../stellar/config";
 import { modesVisible } from "../modos/bandera";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
 import { NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
-import { horaDeBuscarElNumero, reglaDelShow } from "./espectador-regla";
+import { horaDeBuscarElNumero, horaDelFinal, reglaDelShow } from "./espectador-regla";
 import { contratoDelEnlace, type DatosEspectador } from "./espectador-enlace";
 import type { ShowDelEspectador } from "./draw";
 
@@ -44,10 +45,11 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
 /** Lo que se espera a saber si el reloj del teléfono está corrido antes de dejar que la cuenta llegue a cero. */
 const ESPERA_DEL_RELOJ_MS = 4_000;
 
-/** Para las pruebas: el desfase del reloj y la lectura de la cadena sin red, y a dónde se va al salir. */
+/** Para las pruebas: el desfase del reloj, la lectura de la cadena sin red, el azar de sus pausas y a dónde se va al salir. */
 export interface OpcionesDeLaVista {
   desfase?: () => Promise<number>;
   leer?: Leer;
+  azar?: () => number;
   irA?: (url: string) => void;
 }
 
@@ -60,37 +62,53 @@ async function traerBeacon(round: number, onAttempt: (attempt: number, total: nu
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
 }
 
-/** Los ganadores como los lee la sala: el nombre del equipo, y la persona sin el número de su participación. */
+/**
+ * Los ganadores como los lee la sala en su resultado: la persona sin el número de su participación, y el equipo con el
+ * comienzo de su cuenta al lado (`etiquetaConCuenta`). El nombre del equipo viaja en el enlace y no está sellado: la
+ * cuenta sí, y es la que gana.
+ */
 function nombresDeGanadores(datos: DatosEspectador, winners: readonly number[]): string[] {
-  const vistos = paraMostrar(datos.n);
   // Con los modos a la vista en este sitio (la bandera de la versión), la misma lectura que la pantalla de la sala.
   const porPersona = seCuentaPorPersona(datos.n, modesVisible());
   return winners.map((i) => {
-    const n = vistos[i] ?? "";
+    const n = etiquetaConCuenta(datos.n[i] ?? "");
     return porPersona ? nombreDePersona(n) : n;
   });
 }
 
 /**
  * Abre la vista de espectador. Si la ronda ya nació (alguien que llega tarde, o que recarga), el show sale enseguida.
- * Devuelve si la abrió.
+ * Devuelve si la abrió: un enlace que no nombra un sorteo de un contrato oficial dice que llegó roto.
  */
 export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), op: OpcionesDeLaVista = {}): boolean {
   if (document.querySelector(".espectador")) return false;
+  const contrato = contratoDelEnlace(datos);
+  if (!contrato) {
+    avisarEnlaceRoto(lang);
+    return false;
+  }
   setLang(lang);
   // El show sale con el mismo ritmo y el mismo juego que el de la sala, sin cambiar el ritmo guardado de este navegador.
   forzarRitmo(datos.p);
   app.game = datos.g;
+  // El show se mira entero: sin el Saltar del estadio ni el de la tarjeta. Saltarlo mostraba quién gana unos 40 s antes
+  // que la sala (`solo-mirar.ts`).
+  setSoloMirar(true);
+  document.getElementById("st-skip")?.setAttribute("hidden", "");
   // Los equipos con cupón se ven por su nombre, como en la sala: la lista sellada son cuentas.
   if (datos.e) ponerEtiquetas(new Map(datos.e));
-  const contrato = contratoDelEnlace(datos);
-  const sorteo: SorteoDelEnlace | null =
-    contrato && datos.i
-      ? { contrato, id: datos.i, listHash: bytesToHex(listHash(datos.n)), count: datos.n.length, numWinners: datos.w, round: datos.r }
-      : null;
+  const sorteo: SorteoDelEnlace = {
+    contrato,
+    id: datos.i,
+    listHash: bytesToHex(listHash(datos.n)),
+    count: datos.n.length,
+    numWinners: datos.w,
+    round: datos.r,
+    ...(datos.z ? { premio: datos.z } : {}),
+  };
   // Cuándo termina la cuenta y si el juego espera lo grabado: la regla de la sala (`espectador-regla.ts`).
-  const regla = reglaDelShow(!!sorteo);
-  const objetivo = horaDeBuscarElNumero(datos.r, !!sorteo);
+  const regla = reglaDelShow(true);
+  const objetivo = horaDeBuscarElNumero(datos.r, true);
 
   const capa = document.createElement("div");
   capa.className = "espera espectador";
@@ -111,7 +129,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     `<div class="espera-sigue" hidden></div>` +
     `<div class="espera-nombres">${cintas(datos.n)}</div>` +
     `<p class="espera-nadie">${esc(t("espNadie"))}</p>` +
-    (datos.i ? `<p class="espera-id mono">${esc(t("waitIdPagina").replace("{n}", datos.i))}</p>` : "");
+    `<p class="espera-id mono">${esc(t("waitIdPagina").replace("{n}", datos.i))}</p>`;
   document.body.appendChild(capa);
   capa.focus({ preventScroll: true });
 
@@ -152,7 +170,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     (op.irA ?? ((url: string) => location.assign(url)))(location.pathname);
   };
   const tecla = (e: KeyboardEvent): void => {
-    // Mientras corre el show, Escape es del juego (saltar), no de la vista.
+    // Mientras corre el show, Escape no cierra la vista (ni salta el juego: el show se mira entero).
     if (e.key === "Escape" && fase !== "show" && fase !== "numero" && fase !== "grabando") salir();
   };
   addEventListener("keydown", tecla);
@@ -161,6 +179,9 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   const terminar = (): void => {
     fase = "fin";
     correr();
+    // La sala ya coronó: verlo de nuevo se puede saltar, como siempre.
+    setSoloMirar(false);
+    document.getElementById("st-skip")?.removeAttribute("hidden");
     const d = app.drawn;
     if (!d) return;
     if (sticker) sticker.textContent = t("drawnDone");
@@ -185,10 +206,30 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     otraVez?.focus({ preventScroll: true });
   };
 
+  /**
+   * El show del celular terminó: Lo que salió, pero no antes de la hora de la regla (`horaDelFinal`). Con menos
+   * movimiento el juego termina en el acto, y una sala lenta tarda más que el celular: mientras tanto, se mira la sala.
+   * Siempre hay un margen, así que la línea se ve unos segundos también al final de un show normal.
+   */
+  const terminarA = (hora: number): void => {
+    const falta = hora - Date.now();
+    if (falta <= 0) {
+      terminar();
+      return;
+    }
+    correr();
+    linea(t("espMiraLaSala"));
+    window.setTimeout(terminar, falta);
+  };
+
   /** No se pudo mostrar: el motivo y, si sirve, volver a probar. */
   const fallar = (clave: string, reintentable: boolean): void => {
     fase = "fallo";
     window.clearInterval(timer);
+    // Un enlace que no es el sorteo grabado no deja a la vista lo que trae (otro premio, otros nombres).
+    if (clave === "espNoCoincide") {
+      for (const el of capa.querySelectorAll<HTMLElement>(".espera-premio, .espera-nombres, .espera-lectura")) el.hidden = true;
+    }
     pasar(
       `<p class="espera-motivo" role="alert">${esc(t(clave))}</p>` +
         (reintentable ? `<button class="primary espera-accion" type="button">${esc(t("espProbar"))}</button>` : ""),
@@ -217,7 +258,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       app.drawn = { beacon, winners };
       const { showDelEspectador } = await import("./draw");
       let llego: () => void = () => undefined;
-      const espera = sorteo && regla.esperaLoGrabado ? sorteo : null;
+      const espera = regla.esperaLoGrabado ? sorteo : null;
       const grabado = espera ? new Promise<void>((r) => (llego = r)) : null;
       show = showDelEspectador(grabado);
       if (!show) throw new Error("sin-show");
@@ -225,17 +266,22 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         fase = "grabando";
         linea(t("cortinaGraba"));
         // Termina cuando lo ve grabado o, pasado el tope de la regla, sin verlo: en los dos casos se juega.
-        await esperarElGrabado(espera, { randomness: beacon.randomness, winners }, {
+        const visto = await esperarElGrabado(espera, { randomness: beacon.randomness, winners }, {
           ...(op.leer ? { leer: op.leer } : {}),
+          ...(op.azar ? { azar: op.azar } : {}),
           alTardar: () => {
             if (este === intento && fase === "grabando") linea(t("espTarda"));
           },
         });
+        // Visto grabado, todavía un momento: la sala se entera por la confirmación de su envío, un poco después.
+        if (visto === "grabado") await new Promise((r) => window.setTimeout(r, regla.retrasoTrasLoGrabadoMs));
         llego();
       }
       if (este !== intento) return;
       fase = "show";
-      show.jugar(terminar);
+      const lanzado = Date.now();
+      const segundos = paceSeconds(datos.p);
+      show.jugar(() => terminarA(horaDelFinal(lanzado, segundos, Date.now())));
     } catch (e) {
       show?.cancelar();
       if (este !== intento) return;
@@ -265,11 +311,9 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
 
   // Un enlace que no es de este sorteo se dice enseguida, sin hacer esperar la cuenta. De paso baja lo que hace falta
   // para leer la cadena, y cuando nazca el número ya está.
-  if (sorteo) {
-    void mirarUnaVez(sorteo, op.leer).catch((e: unknown) => {
-      if (e instanceof NoCoincide && fase === "cuenta") fallar("espNoCoincide", false);
-    });
-  }
+  void mirarUnaVez(sorteo, op.leer).catch((e: unknown) => {
+    if (e instanceof NoCoincide && fase === "cuenta") fallar("espNoCoincide", false);
+  });
 
   const tick = (): void => {
     if (fase !== "cuenta") return;
