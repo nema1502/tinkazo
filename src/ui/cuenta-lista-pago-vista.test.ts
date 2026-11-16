@@ -284,7 +284,7 @@ describe("las filas, una por una", () => {
     const vista = v({}, {}, { fase: "pagando", orden: ORDEN });
     const caja = vista.cajas[0];
     // Lo que no hace falta para pagar va plegado en Más detalles, dentro del panel.
-    const detalles = [{ clave: "pagoParaCuenta", vars: { correo: "n•••@gmail.com" } }, { clave: "pagoVence", vars: { fecha: "14 de noviembre" } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }];
+    const detalles = [{ clave: "pagoParaCuenta", vars: { correo: "n•••@gmail.com" } }, { clave: "pagoVence", vars: { fecha: "14 de noviembre" } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }, { clave: "compraDesdeXlm" }];
     const corta = `${ORDEN.destino.slice(0, 4)}…${ORDEN.destino.slice(-4)}`;
     expect(caja?.pago).toEqual({ correo: "n•••@gmail.com", destino: ORDEN.destino, cuentaCorta: corta, usdc: "2.5", monto: "2,50", nota: ORDEN.nota, enlace: ORDEN.enlace, vence: ORDEN.vence, detalles });
     expect(caja?.titulo).toBe("pagoTitulo");
@@ -330,6 +330,19 @@ describe("las filas, una por una", () => {
     for (const p of [{}, { buscando: true }, { noVisto: true }] as Partial<PagoEnLaVista>[]) {
       expect(claves(v({}, {}, { fase: "pagando", orden: ORDEN, ...p }))).not.toContain("pagoRedEquivocada");
       expect(acciones(v({}, {}, { fase: "pagando", orden: ORDEN, ...p }))).not.toContain("no-llego");
+    }
+  });
+
+  it("después de «No llegó», los tres casos: otra moneda, sin la nota o con otra, y otra red; antes, ninguno", () => {
+    const tres = ["pagoOtraMoneda", "pagoOtraNotaEnviada", "pagoRedEquivocada"];
+    const noLlego = v({}, {}, { fase: "pagando", orden: ORDEN, tarda: true, noLlego: true });
+    // Los tres casos se ven: la red equivocada a la vista (la nota), los otros dos plegados en Más detalles del panel.
+    for (const k of tres) expect(claves(noLlego), k).toContain(k);
+    expect(noLlego.cajas[0]?.pago?.detalles.map((x) => x.clave).slice(-2)).toEqual(["pagoOtraMoneda", "pagoOtraNotaEnviada"]);
+    // Antes de «No llegó», ninguno de los tres: ni a la vista ni plegado.
+    for (const p of [{}, { buscando: true }, { noVisto: true }, { tarda: true, noVisto: true }, { falta: { recibido: "1", total: "2.5" } }, { vencida: true }] as Partial<PagoEnLaVista>[]) {
+      const vistas = claves(v({}, {}, { fase: "pagando", orden: ORDEN, ...p })).filter((k) => tres.includes(k));
+      expect(vistas, JSON.stringify(p)).toEqual([]);
     }
   });
 

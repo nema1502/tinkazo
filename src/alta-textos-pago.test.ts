@@ -47,10 +47,10 @@ describe("los textos del pago", () => {
   it("los botones no nombran monedas, redes, notas técnicas ni exchanges: eso se dice una vez, en el renglón de cómo pagar", () => {
     const BOTONES = ["pagoMedioApp", "pagoPreparando", "pagoYaPague", "pagoBuscando", "pagoNoLlegoBoton", "pagoOtraNota", "pagoCopiar", "pagoCopiado", "pagoAbrirApp"];
     for (const k of BOTONES) for (const l of IDIOMAS) expect(TEXTOS_ALTA_PAGO[l][k], `${l} ${k}`).not.toMatch(/\b(USDC|Stellar|memo|exchange|token|hash)\b/i);
-    // Dónde sí: cómo pagar y qué apps sirven, la nota, lo que llegó y la red equivocada.
+    // Dónde sí: cómo pagar y qué apps sirven, la nota, lo que llegó, la red equivocada y el caso sin la nota o con otra.
     const tecnico = /\b(USDC|Stellar|exchange|memo)\b/i;
     const conTecnico = CLAVES.filter((k) => IDIOMAS.some((l) => tecnico.test((TEXTOS_ALTA_PAGO[l][k] as string).replace(/\{\w+\}/g, "")))).sort();
-    expect(conTecnico).toEqual(["pagoComo", "pagoFalta", "pagoNota", "pagoNotaImporta", "pagoRedEquivocada", "pagoSirve", "pagoVence", "pagoVencida"].sort());
+    expect(conTecnico).toEqual(["pagoComo", "pagoFalta", "pagoNota", "pagoNotaImporta", "pagoOtraNotaEnviada", "pagoRedEquivocada", "pagoSirve", "pagoVence", "pagoVencida"].sort());
   });
 
   it("solo medios automáticos: ningún texto manda a escribir para pagar ni promete un QR del banco", () => {
@@ -78,6 +78,18 @@ describe("los textos del pago", () => {
       pagoErrRed: ["No pudimos buscar tu pago ahora. Probá de nuevo en un momento.", "We couldn't look for your payment right now. Try again in a moment."],
     };
     for (const [k, [es, en]] of Object.entries(DISENO)) {
+      expect(TEXTOS_ALTA_PAGO.es[k], k).toBe(es);
+      expect(TEXTOS_ALTA_PAGO.en[k], k).toBe(en);
+    }
+  });
+
+  it("los casos de después de «No llegó» existen en los dos idiomas, palabra por palabra", () => {
+    // La misma dirección de contacto que `pagoRedEquivocada`: el pago no se pierde y se pide que lo asignen o lo devuelvan.
+    const CASOS: Record<string, [string, string]> = {
+      pagoOtraMoneda: ["¿Mandaste otra moneda? No se pierde: escribinos a hola@tinkazo.app y la asignamos o te la devolvemos.", "Sent another currency? It's not lost: email us at hola@tinkazo.app and we'll assign it or send it back."],
+      pagoOtraNotaEnviada: ["¿Mandaste sin la nota, o con otra? No se pierde: escribinos a hola@tinkazo.app y lo buscamos para asignarlo o devolverlo.", "Sent it without the memo, or with a different one? It's not lost: email us at hola@tinkazo.app and we'll trace it to assign it or send it back."],
+    };
+    for (const [k, [es, en]] of Object.entries(CASOS)) {
       expect(TEXTOS_ALTA_PAGO.es[k], k).toBe(es);
       expect(TEXTOS_ALTA_PAGO.en[k], k).toBe(en);
     }
