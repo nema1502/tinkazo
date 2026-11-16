@@ -286,7 +286,7 @@ describe("las filas, una por una", () => {
     // Lo que no hace falta para pagar va plegado en Más detalles, dentro del panel.
     const detalles = [{ clave: "pagoParaCuenta", vars: { correo: "n•••@gmail.com" } }, { clave: "pagoVence", vars: { fecha: "14 de noviembre" } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }, { clave: "compraDesdeXlm" }];
     const corta = `${ORDEN.destino.slice(0, 4)}…${ORDEN.destino.slice(-4)}`;
-    expect(caja?.pago).toEqual({ correo: "n•••@gmail.com", destino: ORDEN.destino, cuentaCorta: corta, usdc: "2.5", monto: "2,50", nota: ORDEN.nota, enlace: ORDEN.enlace, vence: ORDEN.vence, detalles });
+    expect(caja?.pago).toEqual({ correo: "n•••@gmail.com", destino: ORDEN.destino, cuentaCorta: corta, usdc: "2.5", monto: "2,50", nota: ORDEN.nota, memoId: ORDEN.memoId, enlace: ORDEN.enlace, vence: ORDEN.vence, detalles });
     expect(caja?.titulo).toBe("pagoTitulo");
     expect(caja?.textos).toEqual([{ clave: "compraAppLinea" }]);
     expect(vista.principal).toMatchObject({ accion: "ya-pague", clave: "pagoYaPague", apagado: false });

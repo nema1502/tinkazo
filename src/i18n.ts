@@ -6097,6 +6097,13 @@ Object.assign(T.en, TEXTOS_ALTA_PASO.en);
 // con QR esté apagada.
 Object.assign(T.es, TEXTOS_COMPRA.es);
 Object.assign(T.en, TEXTOS_COMPRA.en);
+// La nota numérica de la orden en el panel de pago (issue #96): su fila plegada en Más detalles con su Copiar y su
+// línea de cuándo usarla (`ui/pago-panel.ts`). Viven acá, y no en `alta-textos-pago.ts`, cuyas pruebas fijan qué
+// claves nombran «memo» y qué textos hay exactamente.
+T.es.pagoMemoNumRotulo = "Nota numérica";
+T.es.pagoMemoNumUso = "Solo si tu app pide una nota de solo números: usá esta en lugar de la de arriba.";
+T.en.pagoMemoNumRotulo = "Numeric memo";
+T.en.pagoMemoNumUso = "Only if your app asks for a numbers-only memo: use this one instead of the one above.";
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
 // que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
 // existe en los dos modos, pero su frase sobre dejar la cuenta lista solo vale cuando la persona está en Oficial.
