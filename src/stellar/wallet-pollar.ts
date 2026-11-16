@@ -1062,7 +1062,7 @@ class PollarWallet implements SubmittingWallet {
       return si;
     };
     // El contador anónimo nunca corta la entrada.
-    const contarVentana = (what: "closed" | "late"): void => {
+    const contarVentana = (what: Parameters<typeof contarVentanaDeGoogle>[0]): void => {
       try {
         contarVentanaDeGoogle(what);
       } catch {
@@ -1111,6 +1111,8 @@ class PollarWallet implements SubmittingWallet {
       enCamino = true;
       if (cerrada()) esperarAlIngreso();
     });
+    // Sin poder mirar (otra versión del SDK) vuelve la regla de los 6 segundos: se cuenta, para saberlo sin esperar quejas.
+    if (!dejarDeMirar) contarVentana("no_api");
     const vigia = window.setInterval(() => {
       if (!cerrada() || larga) return;
       if (enCamino) {
@@ -1137,6 +1139,8 @@ class PollarWallet implements SubmittingWallet {
         if (ya?.address) return entro(ya.address);
         // La pantalla va a decir que se cerró la ventana antes de entrar: se cuenta cada vez.
         if (e.message === ENTRADA_CERRADA) contarVentana("closed");
+        // El plazo largo se cumplió sin cuenta, con el ingreso en camino: se cuenta, para saber si 50 segundos alcanzan.
+        if (e.message === ENTRADA_DEMORADA && larga) contarVentana("timeout");
       }
       throw e;
     } finally {

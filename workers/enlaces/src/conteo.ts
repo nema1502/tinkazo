@@ -131,9 +131,11 @@ export const EVENTOS = {
   /**
    * Entrar con Google, con la ventana de Google ya cerrada: salió el aviso de que se cerró antes de entrar (`closed`), o
    * se entró igual cuando llevaba más de 6 segundos cerrada (`late`), algo que antes se cortaba. Mide si la entrada se
-   * sigue cortando antes de tiempo. Nada de la persona.
+   * sigue cortando antes de tiempo. También el plazo largo vencido sin cuenta (`timeout`, 50 segundos con el ingreso en
+   * camino) y una entrada en la que el SDK no deja mirar sus pedidos (`no_api`: vuelve la regla de los 6 segundos y el
+   * arreglo deja de actuar). Nada de la persona.
    */
-  google_window: { p: { what: ["closed", "late"] }, o: {}, ref: "no" },
+  google_window: { p: { what: ["closed", "late", "timeout", "no_api"] }, o: {}, ref: "no" },
 } as const satisfies Readonly<Record<string, Regla>>;
 
 type Spec = typeof EVENTOS;

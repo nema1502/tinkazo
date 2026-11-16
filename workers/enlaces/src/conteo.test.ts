@@ -215,7 +215,7 @@ describe("los eventos del aula y el origen", () => {
       ...["mp4", "webm"].flatMap((format) => ["ok", "fail", "unsupported"].map((result) => ({ e: "video_made", p: { format, result } }))),
       ...["native", "download"].map((channel) => ({ e: "video_shared", p: { channel } })),
       ...["proof", "video"].map((from) => ({ e: "proof_cta", p: { from } })),
-      ...["closed", "late"].map((what) => ({ e: "google_window", p: { what } })),
+      ...["closed", "late", "timeout", "no_api"].map((what) => ({ e: "google_window", p: { what } })),
       { e: "proof_open", p: { via: "video" } },
       { e: "proof_open", p: { via: "video" }, ref: REF },
     ];

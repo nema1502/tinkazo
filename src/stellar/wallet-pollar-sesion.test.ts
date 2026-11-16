@@ -444,6 +444,8 @@ describe("entrar con Google", () => {
     expect(await r).toBe(ENTRADA_DEMORADA);
     // El mismo nombre que el plazo vencido de siempre: la pantalla muestra el error con su salida.
     expect(ENTRADA_DEMORADA).toBe("pollar-timeout");
+    // El contador suma el plazo largo vencido: dice si 50 segundos no alcanzan.
+    expect(h.contados).toEqual(["timeout"]);
     expect(cancelLogin()).toHaveBeenCalledTimes(1);
   });
 
@@ -625,6 +627,8 @@ describe("entrar con Google", () => {
     );
     await vi.advanceTimersByTimeAsync(GRACIA_CIERRE_MS + 1_000);
     expect(await r).toBe(ENTRADA_CERRADA);
+    // El contador lo dice: si una versión nueva del SDK deja de mostrar sus pedidos, el arreglo deja de actuar.
+    expect(h.contados).toEqual(["no_api", "closed"]);
   });
 
   it("si la ventana se cierra sola porque la entrada terminó, entra y no se corta nada", async () => {

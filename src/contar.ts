@@ -188,7 +188,8 @@ export function contarEntrada(kind: PropsDe<"account_connected">["kind"]): boole
 /**
  * La ventana de Google ya cerrada al entrar: salió el aviso de que se cerró antes de entrar (`closed`), o se entró igual
  * con la ventana cerrada hace más de 6 segundos (`late`). Cada vez, sin nada de la persona: dice si la entrada se sigue
- * cortando antes de tiempo (`connect` en wallet-pollar.ts).
+ * cortando antes de tiempo (`connect` en wallet-pollar.ts). También el plazo largo vencido sin cuenta (`timeout`) y la
+ * entrada en la que el SDK no deja mirar sus pedidos (`no_api`).
  */
 export function contarVentanaDeGoogle(what: PropsDe<"google_window">["what"]): boolean {
   return contar("google_window", { what });
