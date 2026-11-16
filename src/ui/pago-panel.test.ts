@@ -201,4 +201,24 @@ describe("el panel de una orden se reusa mientras nada cambie", () => {
     expect(valor(b.el, "moneda")).toBe("USDC on Stellar");
     setLang("es");
   });
+
+  it("el renglón del saldo entra en lo que reconoce el panel: con otro saldo, arma de nuevo y muestra el nuevo", () => {
+    const conSaldo: PanelDePago = { ...PANEL, saldo: { clave: "pagoSaldoCorto", vars: { tiene: "1,50", falta: "1,50" } } };
+    const a = panelDeLaOrden(null, conSaldo, "es");
+    expect(a.el.querySelector('[data-pago="saldo"]')?.textContent).toContain("Tenés 1,50 dólares digitales, faltan 1,50");
+    // La misma orden, con el saldo recargado desde otra app: la clave cambia y el panel se arma con lo nuevo.
+    const conMasSaldo: PanelDePago = { ...conSaldo, saldo: { clave: "pagoSaldoCorto", vars: { tiene: "2,50", falta: "0,50" } } };
+    const b = panelDeLaOrden(a, conMasSaldo, "es");
+    expect(b.el).not.toBe(a.el);
+    expect(b.el.querySelector('[data-pago="saldo"]')?.textContent).toContain("Tenés 2,50 dólares digitales, faltan 0,50");
+  });
+
+  it("con el mismo saldo y la misma orden devuelve el mismo panel: nunca queda otro", () => {
+    const conSaldo: PanelDePago = { ...PANEL, saldo: { clave: "pagoSaldoCorto", vars: { tiene: "1,50", falta: "1,50" } } };
+    const a = panelDeLaOrden(null, conSaldo, "es");
+    const b = panelDeLaOrden(a, { ...conSaldo }, "es");
+    expect(b).toBe(a);
+    expect(b.el).toBe(a.el);
+    expect(pintarQr).toHaveBeenCalledTimes(1);
+  });
 });

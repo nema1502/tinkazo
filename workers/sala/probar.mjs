@@ -167,7 +167,9 @@ if (soloAlarma) {
   process.exit(fallas ? 1 : 0);
 }
 
-// 3. Los nombres.
+// 3. Los nombres. Se espera al comienzo de un minuto para que las altas de esta parte
+// y las 245 del tope por minuto caigan en la misma ventana, también contra producción.
+await sleep(61_000 - (Date.now() % 60_000));
 check("una forma que no es un alta da 400", (await postPlano(id, "hola mundo!")).status === 400);
 check("un cuerpo demasiado largo da 413", (await postPlano(id, "A".repeat(701))).status === 413);
 check("una sala que no existe da 404", (await post("Zz9Zz9Zz", "Ana")).status === 404);
@@ -219,10 +221,16 @@ check("y ya no está en el objeto", despues.length === 1 && despues[0].n !== nBe
 // 6. Tope por minuto: 240 nombres por sala (ya van 2).
 let ok = 2;
 let rapido = 0;
-for (let i = 0; i < 245; i++) {
-  const r = await post(id, `Persona ${i}`);
-  if (r.status === 201) ok++;
-  else if (r.status === 429 && (await r.json()).error === "rapido") rapido++;
+// De a 25 en paralelo: contra producción cada pedido tarda y, de a uno, la tanda cruzaría el
+// cambio de minuto sin que el tope frene a nadie.
+for (let i = 0; i < 245; i += 25) {
+  const tanda = [];
+  for (let j = i; j < Math.min(245, i + 25); j++) tanda.push(post(id, `Persona ${j}`));
+  const salidas = await Promise.all(tanda);
+  for (const r of salidas) {
+    if (r.status === 201) ok++;
+    else if (r.status === 429 && (await r.json()).error === "rapido") rapido++;
+  }
 }
 // La primera alta, el repetido y la corrección también gastaron tres lugares de esta ventana.
 check("el tope es de 240 nombres por minuto por sala", ok >= 236 && ok <= 240 && rapido >= 7, `entraron ${ok}, frenados ${rapido}`);

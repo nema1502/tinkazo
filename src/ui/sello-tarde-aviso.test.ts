@@ -75,10 +75,10 @@ describe("qué se dice con un portero de antes (no anunció la devolución)", ()
 describe("los textos", () => {
   it("con el portero que devuelve: qué pasó, que no fue un error de la persona, que el sorteo vuelve y a dónde escribir si no lo ve", () => {
     expect(T.es.selloTardeSinSorteos).toBe(
-      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial, que vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial. Si falló por llegar tarde, vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
     );
     expect(T.en.selloTardeSinSorteos).toBe(
-      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw, which comes back on its own in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
+      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw. If it failed because it arrived late, it comes back in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
     );
     expect(T.es.selloTardeAviso).toBe("No fue un error tuyo. Si algún intento usó un sorteo oficial, vuelve solo en unos minutos. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.");
     expect(T.en.selloTardeAviso).toBe("It wasn't your fault. If an attempt used a Live draw, it comes back on its own in a few minutes. If you don't see it back, write to us at hola@tinkazo.app.");
