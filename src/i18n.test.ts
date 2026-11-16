@@ -294,6 +294,18 @@ describe("diccionario", () => {
     }
   });
 
+  it("amigo secreto: el nombre, la regla y la historia están en los dos idiomas", () => {
+    for (const clave of ["gameAmigo", "jgAmigoN", "jgAmigoB", "gcAmigo", "gcAmigoMany", "loreAmigoQ", "loreAmigoA"]) {
+      expect(typeof T.es[clave], `es.${clave}`).toBe("string");
+      expect(typeof T.en[clave], `en.${clave}`).toBe("string");
+      expect(String(T.es[clave]).length).toBeGreaterThan(0);
+      expect(String(T.en[clave]).length).toBeGreaterThan(0);
+    }
+    // La regla que lee la sala dice el juego, no la mesa del generador.
+    expect(T.es.gcAmigo).not.toMatch(/mesa de a ocho|mesa final/i);
+    expect(T.en.gcAmigo).not.toMatch(/table eight at a time|final table/i);
+  });
+
 });
 
 describe("el modo espectador", () => {

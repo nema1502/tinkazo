@@ -35,6 +35,7 @@ export const ARCHIVOS_DE_JUEGO = {
   ledger: /^src\/games\/(?:pixi\/)?ledger/,
   autos: /^src\/games\/pixi\/autos/,
   bolillas: /^src\/games\/pixi\/bolillas/,
+  amigo: /^src\/games\/(?:pixi\/amigo-secreto|amigo-secreto)/,
 };
 
 /** El juego al que pertenece una clave de `src/i18n.ts` (por su nombre). */
@@ -58,6 +59,7 @@ export const CLAVES_DE_JUEGO = {
   ledger: /^(?:gameLedger|jgLedger)/,
   autos: /^(?:gameAutos|jgAutos|gcAutos|loreAutos)/,
   bolillas: /^(?:gameBolillas|jgBolillas|gcBolillas|loreBolillas)/,
+  amigo: /^(?:gameAmigo|jgAmigo|gcAmigo|loreAmigo)/,
 };
 
 /** Los juegos donde nadie «sale»: se queda de pie quien aguanta. */
