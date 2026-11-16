@@ -669,6 +669,7 @@ describe("'Seguir sin sello' pide confirmar y desalienta", () => {
     const { r, sellar } = await enRojo();
     // El documento de mentira no tiene las clases del DOM: con que existan, `instanceof` dice que no son campos.
     vi.stubGlobal("HTMLInputElement", class {});
+    vi.stubGlobal("HTMLButtonElement", class {});
     // El modo «Orden de turnos» con una lista que pasa del tope de la red: no se puede sellar (turnos.ts).
     const { ponerModoTurnos, seguirLaLista } = await import("./turnos");
     const { topeDeGanadores } = await import("../stellar/config");
