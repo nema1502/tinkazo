@@ -3,15 +3,14 @@ import { MAX_WINNERS } from "../protocol/select";
 import { topeDeGanadores } from "../stellar/config";
 
 /**
- * «Cuántos ganan»: un campo numérico (`#nw`) con atajos para lo común.
+ * Cuántos ganan: un contador con menos y más, y atajos para lo común, a la vista junto a Sellar la lista.
  *
- * Hasta el 6 de noviembre de 2026 era un desplegable con las opciones de 1 a 32 escritas a mano. Con un tope de 300 ya
- * no sirve: son trescientos renglones para bajar con el dedo. Ahora es un número que se escribe (o se sube y se baja) y, al
- * lado, los cinco valores que casi todo el mundo usa: 1, 2, 3, 5 y 10. Tocar uno es la acción; el campo está para
- * cuando hace falta otro número.
+ * La persona nunca escribe un número. Los botones cambian de a uno y los atajos ofrecen 1, 2, 3, 5 y 10. El campo
+ * escondido `#nw` sigue siendo la única fuente de verdad, como `#prize`: el sello, el resumen, las bases y el borrador
+ * lo leen con `ganadoresPedidos()`. `#nw-valor` muestra esa cantidad y los botones solo la cambian mediante el campo.
  *
- * El campo sigue siendo la única fuente de verdad, como `#prize`: el sello, el resumen, las bases y el borrador lo leen
- * de ahí con `ganadoresPedidos()`, y los atajos solo lo escriben y reflejan lo que dice.
+ * Hasta el 16 de noviembre de 2026 era un campo numérico dentro del pliegue. Salió de ahí porque varios premios de un
+ * mismo evento se pueden sortear juntos, y el contador evita teclear en un celular.
  *
  * Dos topes, y no son lo mismo. El que se **ofrece** es el de la red (`topeDeGanadores`): el contrato de testnet de hoy
  * admite 32, y el sitio no ofrece lo que la red devolvería como error. El que se **acepta al leer** es el del protocolo
@@ -28,8 +27,8 @@ export const ATAJOS: readonly number[] = [1, 2, 3, 5, 10];
 export const atajosHasta = (tope: number): number[] => ATAJOS.filter((a) => a <= tope);
 
 /**
- * Un entero entre 1 y `tope`, saque lo que saque el campo: vacío, letras, un decimal (`3.7` es 3), un negativo o
- * `1e2` (que el navegador acepta en un campo numérico y vale 100). Nunca devuelve algo que no sea un número válido.
+ * Un entero entre 1 y `tope`, también para valores viejos o escritos por otro código: vacío, letras, un decimal (`3.7`
+ * es 3), un negativo o `1e2` (100). Nunca devuelve algo que no sea un número válido.
  */
 export function acotar(valor: unknown, tope: number = MAX_WINNERS): number {
   const crudo = typeof valor === "number" ? valor : Number(String(valor ?? "").trim());
@@ -42,6 +41,15 @@ const campo = (): HTMLInputElement | null => {
   return el instanceof HTMLInputElement ? el : null;
 };
 const atajos = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>("#nw-atajos button[data-n]")];
+const boton = (id: string): HTMLButtonElement | null => {
+  const el = document.getElementById(id);
+  return el instanceof HTMLButtonElement ? el : null;
+};
+
+/** La lista se está sellando o ya está sellada (`cerrarLista`). */
+let cerrado = false;
+/** El modo Orden de turnos fija la cantidad a la de la lista (`fijarGanadores`). */
+let fijo = false;
 
 /**
  * Cuántos ganadores se piden, ya acotado: lo que leen el sello, el sorteo, el resumen y las bases. Sin el campo (la
@@ -51,18 +59,26 @@ export function ganadoresPedidos(): number {
   return acotar(campo()?.value);
 }
 
-/** Qué atajo está elegido y cuáles se ven: los que pasan del tope de la red se esconden. */
+/** El número visible, el atajo elegido y los botones que se pueden tocar con el tope de la red. */
 function sincronizar(): void {
   const tope = topeDeGanadores();
   const actual = ganadoresPedidos();
+  const visible = document.getElementById("nw-valor");
+  if (visible) visible.textContent = String(actual);
+  const bloqueado = cerrado || fijo;
   for (const b of atajos()) {
     const n = Number(b.dataset.n);
     b.hidden = n > tope;
+    b.disabled = bloqueado;
     b.setAttribute("aria-pressed", String(n === actual));
   }
+  const menos = boton("nw-menos");
+  const mas = boton("nw-mas");
+  if (menos) menos.disabled = bloqueado || actual <= 1;
+  if (mas) mas.disabled = bloqueado || actual >= tope;
 }
 
-/** Escribe la cantidad en el campo (acotada) y refleja el cambio en los atajos. No avisa: lo llaman quienes ya saben qué cambió. */
+/** Escribe la cantidad en el campo escondido y refleja el cambio en el contador y los atajos. No avisa con un evento. */
 export function ponerGanadores(n: number): void {
   const el = campo();
   if (!el) return;
@@ -70,25 +86,20 @@ export function ponerGanadores(n: number): void {
   sincronizar();
 }
 
-/** La lista se está sellando o ya está sellada (`cerrarLista`). */
-let cerrado = false;
-/** El modo «Orden de turnos» fija la cantidad a la de la lista (`fijarGanadores`). */
-let fijo = false;
-
 function aplicarBloqueo(): void {
   const el = campo();
   if (el) el.disabled = cerrado || fijo;
-  for (const b of atajos()) b.disabled = cerrado || fijo;
+  sincronizar();
 }
 
-/** Bloquea o libera el campo y los atajos juntos (la lista se está sellando o ya está sellada: `cerrarLista`). */
+/** Bloquea o libera el contador y los atajos juntos (la lista se está sellando o ya está sellada: `cerrarLista`). */
 export function bloquearGanadores(si: boolean): void {
   cerrado = si;
   aplicarBloqueo();
 }
 
 /**
- * En el modo «Orden de turnos» la cantidad es la de la lista y no se toca (`src/ui/turnos.ts`): el campo y los atajos
+ * En el modo Orden de turnos la cantidad es la de la lista y no se toca (`src/ui/turnos.ts`): el contador y los atajos
  * quedan bloqueados aunque la lista esté abierta. Al apagar el modo vuelven, salvo que la lista esté cerrada.
  */
 export function fijarGanadores(si: boolean): void {
@@ -96,7 +107,7 @@ export function fijarGanadores(si: boolean): void {
   aplicarBloqueo();
 }
 
-/** «Hasta 300 ganadores por sorteo», solo cuando se pidió de más y se bajó al tope. */
+/** El aviso del tope, solo cuando un valor anterior lo superaba y bajó. */
 function avisarTope(si: boolean): void {
   const nota = document.getElementById("nw-nota");
   if (!nota) return;
@@ -107,8 +118,8 @@ function avisarTope(si: boolean): void {
 let montado = false;
 
 /**
- * Arma el campo y los atajos: pone sus límites (los de la red, que el HTML no puede saber), baja al tope lo que se
- * escribe de más y avisa por qué, y vuelve a decir el aviso al cambiar de idioma. Se llama una vez al cargar.
+ * Arma el contador y los atajos: pone los límites de la red, cambia la cantidad solo con botones y refleja en pantalla
+ * los valores que ponen el borrador, un sello retomado o el modo de turnos. Se llama una vez al cargar.
  */
 export function montarGanadores(): void {
   const el = campo();
@@ -126,26 +137,28 @@ export function montarGanadores(): void {
     avisarTope(avisado);
     sincronizar();
   };
-  // Mientras se escribe solo se baja lo que pasa del tope: un campo vacío o un cero a medias no se tocan (se está tecleando).
+  // Los valores que llegan por código se acotan igual: el campo escondido no se escribe a mano.
   el.addEventListener("input", recortar);
-  // Al salir del campo, o con las flechas, queda un número válido: nada de vacío, de cero ni de decimales.
   el.addEventListener("change", () => {
     const hubo = avisado;
     el.value = String(acotar(el.value, tope));
     avisarTope(hubo);
     sincronizar();
   });
-  el.addEventListener("blur", () => {
-    el.value = String(acotar(el.value, tope));
-    sincronizar();
-  });
+  const elegir = (n: number): void => {
+    if (el.disabled) return;
+    ponerGanadores(n);
+    avisado = false;
+    avisarTope(false);
+    // Lo escuchan el borrador y el resumen de Sellar la lista.
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  boton("nw-menos")?.addEventListener("click", () => elegir(Math.max(1, ganadoresPedidos() - 1)));
+  boton("nw-mas")?.addEventListener("click", () => elegir(Math.min(tope, ganadoresPedidos() + 1)));
   document.getElementById("nw-atajos")?.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-n]");
-    if (!b || el.disabled) return;
-    ponerGanadores(Number(b.dataset.n));
-    avisarTope(false);
-    // Lo escuchan el borrador, el resumen de «Sellar la lista» y el pliegue de las opciones.
-    el.dispatchEvent(new Event("change", { bubbles: true }));
+    if (!b) return;
+    elegir(Number(b.dataset.n));
   });
   onLangChange(() => avisarTope(avisado));
   sincronizar();

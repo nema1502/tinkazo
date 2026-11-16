@@ -266,7 +266,7 @@ const esDeTurnos = (e: Entry | undefined): e is Entry => !!e && isTurnOrder(e.co
 
 export { cuentaDeLaEntrada };
 
-/** «Turnos: 12 personas», en lugar de los doce nombres unidos con comas: con 300 era una fila de 300 nombres. Repartido, también los turnos. */
+/** La cantidad de personas, en lugar de los nombres unidos con comas: el título de la tarjeta ya dice Turnos. Repartido, también los turnos. */
 function turnosDe(e: Entry): string {
   const { personas, participaciones } = cuentasDe(e);
   return personas === participaciones
@@ -982,7 +982,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
-    // Un orden de turnos dice «Turnos: 12 personas» (que ya cuenta cuántos son), no los nombres ni «ganaron».
+    // El título ya dice Turnos: el detalle cuenta a las personas, no muestra los nombres ni dice que ganaron.
     `<p class="hc-meta">${esc(id)}, ${hecho && esDeTurnos(e) ? `<b>${esc(winnerLabel(e))}</b>` : `${esc(cuentaDeLaEntrada(e))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}`}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`

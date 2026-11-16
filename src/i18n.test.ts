@@ -230,12 +230,12 @@ describe("diccionario", () => {
     expect(T.en.freeRule).toContain("/terminos.html");
   });
 
-  it("el rótulo del pliegue de la lista nombra lo que guarda: el premio, cuántos ganan y el CSV", () => {
+  it("el rótulo del pliegue nombra el premio y el CSV, no la cantidad que quedó afuera", () => {
     expect(T.es.masOpciones).toMatch(/premio/i);
-    expect(T.es.masOpciones).toMatch(/ganan/i);
+    expect(T.es.masOpciones).not.toMatch(/ganan/i);
     expect(T.es.masOpciones).toMatch(/CSV/);
     expect(T.en.masOpciones).toMatch(/prize/i);
-    expect(T.en.masOpciones).toMatch(/win/i);
+    expect(T.en.masOpciones).not.toMatch(/win/i);
     expect(T.en.masOpciones).toMatch(/CSV/);
   });
 

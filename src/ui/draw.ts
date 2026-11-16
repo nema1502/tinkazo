@@ -82,6 +82,8 @@ export async function draw(): Promise<void> {
   }
   recuperacion = null;
   if (!app.frozen || app.drawn || secondsToRound() > 0) return;
+  // Una sola lectura del sello y del contador: la cortina y la tarjeta no pueden discrepar sobre qué se sortea.
+  const orden = isTurnOrder(app.frozen.names.length, Math.min(ganadoresPedidos(), Math.max(1, app.frozen.names.length)), app.frozen.prize);
   // En modo Oficial, si la memoria dice que a la cuenta le falta activarse, el paso «Dejá tu cuenta lista» antes de
   // sortear. Solo la memoria y sin red: el sorteo se lanza solo desde la espera. Fuera del modo Oficial no se baja nada.
   if (app.frozen.raffleId !== undefined && network.name === "mainnet") {
@@ -125,7 +127,11 @@ export async function draw(): Promise<void> {
   if (enGrande()) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
   // Desde la espera en grande, ella misma hace de cortina hasta que el show la
   // tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
-  const cortina = skipMotion() || enGrande() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
+  const cortina = skipMotion() || enGrande() ? null : abrirCortina(
+    app.frozen.prize,
+    app.frozen.raffleId !== undefined,
+    orden,
+  );
   const sinShow = (): void => {
     cortina?.cerrar();
     if (!enGrande()) soltarPantallaCompleta();
@@ -178,7 +184,7 @@ export async function draw(): Promise<void> {
       let grabado: () => void = () => undefined;
       const espera = new Promise<void>((r) => (grabado = r));
       const juego = juegoDe(names.length, nWinners);
-      const card = abrirTarjeta(juego, names.length, nWinners, espera);
+      const card = abrirTarjeta(juego, names.length, nWinners, orden, espera);
       if (card) {
         tarjeta = { card, game: juego };
         cortina?.cerrar();
@@ -298,7 +304,7 @@ export async function draw(): Promise<void> {
     // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
     // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
     setResultadoDeTurnos(isTurnOrder(names.length, winners.length, app.frozen.prize));
-    playGame(names, winners, beacon, finish, tarjeta);
+    playGame(names, winners, beacon, finish, orden, tarjeta);
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
   } catch (e) {
@@ -477,14 +483,18 @@ function ponerHecho(el: HTMLElement | null): void {
  * espera dura más que un instante, para no parpadear cuando el juego sale
  * enseguida.
  */
-function abrirCortina(premio: string, graba: boolean): { cerrar: () => void } {
+function abrirCortina(premio: string, graba: boolean, orden: boolean): { cerrar: () => void } {
   let el: HTMLElement | null = null;
   const reloj = setTimeout(() => {
     el = document.createElement("div");
     el.className = "cortina";
     el.setAttribute("role", "status");
     el.innerHTML =
-      (premio ? `<p class="kicker">${esc(t("cortinaSe"))}</p><h2>${esc(premio)}</h2>` : `<h2>${esc(t("cortinaSin"))}</h2>`) +
+      (premio
+        ? orden
+          ? `<h2>${esc(t("cortinaSeOrden"))}</h2>`
+          : `<p class="kicker">${esc(t("cortinaSe"))}</p><h2>${esc(premio)}</h2>`
+        : `<h2>${esc(t("cortinaSin"))}</h2>`) +
       `<p class="cortina-t">${esc(t(graba ? "cortinaGraba" : "cortinaNumero"))}</p>` +
       `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`;
     document.body.appendChild(el);
@@ -517,10 +527,10 @@ function juegoDe(people: number, prizes: number, names?: string[], winners?: num
  * tono por número, más alto en el 1. Los dos en la pentatónica, mi y do: el
  * 990 Hz de antes era un si, fuera de la escala de los juegos.
  */
-function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promise<void>): GameCard | null {
+function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<void>): GameCard | null {
   if (skipMotion()) return null;
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
-  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera);
+  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera, orden);
 }
 
 /**
@@ -534,7 +544,7 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
  * sorteo (`draw`). Si con los ganadores de verdad el juego cambia, la tarjeta
  * pasa a anunciar el que se juega.
  */
-function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
+function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, orden: boolean, previa: Previa | null = null): void {
   // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
   names = paraMostrar(names);
   // Y su nombre va entero en el show: «¡Vamos, Las Wawas!», nunca «Las W.». Sin equipos la lista queda vacía.
@@ -547,7 +557,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   if (previa && previa.game !== game) previa.card.update(game);
-  const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length);
+  const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length, orden);
   setCardSeconds(card ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);
@@ -805,7 +815,7 @@ export function verDeNuevo(juego?: Game): void {
     if (btn) btn.disabled = false;
     forceMotion(false);
     if (volverA && volverA.isConnected && volverA.offsetParent !== null) volverA.focus({ preventScroll: true });
-  });
+  }, isTurnOrder(frozen.names.length, drawn.winners.length, frozen.prize));
 }
 
 /** Lo que la vista de espectador hace con su show: lanzarlo cuando la sala también lo lanza, o sacar la tarjeta. */
@@ -1041,8 +1051,8 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
   // (sin los que ya ganaron, o con "No está"), sellar; con otra lista, cargarla. Hasta el 26 de octubre de 2026,
-  // con un mouse caía en el premio, para nombrar el próximo, pero el premio quedó dentro del pliegue "Premio,
-  // cuántos ganan y subir CSV", que está cerrado: `focus()` sobre algo escondido no hace nada, y el foco se
+  // con un mouse caía en el premio, para nombrar el próximo, pero el premio quedó dentro del pliegue "Premio y
+  // subir CSV", que está cerrado: `focus()` sobre algo escondido no hace nada, y el foco se
   // perdía junto con el botón "Siguiente premio" que acababa de desaparecer. El premio se escribe igual, un Tab
   // más arriba, y el resumen de arriba del botón dice qué se va a sellar ("sin premio" o el que quedó).
   if (modo === "otraLista") $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
