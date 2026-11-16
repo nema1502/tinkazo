@@ -879,6 +879,8 @@ class PollarWallet implements SubmittingWallet {
   #falla: ((e: Error) => void) | null = null;
   /** La ventana de Google, para saber si la persona la cerró sin entrar. */
   #ventana: Window | null = null;
+  /** La entrada con Google en curso: un segundo toque se suma a ella (`connect`). */
+  #entrando: Promise<string> | null = null;
   /** Las transacciones que la persona acaba de pedir firmar (el XDR, y cuántas veces): lo único que se confirma. */
   readonly #esperadas = new Map<string, number>();
   /** Las confirmaciones ya resueltas (`atenderFirmas`). */
@@ -1027,6 +1029,20 @@ class PollarWallet implements SubmittingWallet {
   }
 
   /**
+   * Entra con Google (`#entrarConGoogle`). Un segundo toque mientras se entra se suma a la entrada en curso, sin otra
+   * ventana ni otro pedido al SDK: empezar otra le cortaba al SDK la primera, que podía estar creando la cuenta, la
+   * primera dejaba de mirar la ventana de la segunda y su corte paraba a la segunda (16 de noviembre de 2026).
+   */
+  connect(avisos: AvisosDeEntrada = {}): Promise<string> {
+    if (this.#entrando) return this.#entrando;
+    const entrada = this.#entrarConGoogle(avisos).finally(() => {
+      if (this.#entrando === entrada) this.#entrando = null;
+    });
+    this.#entrando = entrada;
+    return entrada;
+  }
+
+  /**
    * Arranca el login con Google. Se abre una ventana (SDK 0.11.3) y esta promesa resuelve cuando la cuenta está
    * lista. Falla con `popup-blocked` si el navegador no dejó abrir la ventana y con `popup-closed` si la persona la
    * cerró sin entrar: en los dos casos la entrada se corta y se puede volver a intentar. (La versión anterior del SDK
@@ -1039,7 +1055,7 @@ class PollarWallet implements SubmittingWallet {
    * Cada corte le dice al SDK que pare (`cancelLogin`), y si la cuenta llegó justo en ese instante, se entra igual.
    * Si la espera al SDK pasa de 2,5 segundos desde el cierre, `avisos.terminando` le da a la pantalla cómo cancelar.
    */
-  async connect(avisos: AvisosDeEntrada = {}): Promise<string> {
+  async #entrarConGoogle(avisos: AvisosDeEntrada): Promise<string> {
     const client = await this.#ensureClient();
     this.#remember("google");
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
@@ -1224,7 +1240,8 @@ class PollarWallet implements SubmittingWallet {
     const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
     if (!this.address) {
-      if (!(await this.#marcaViva(client, listo))) this.#olvidarMarca();
+      // Con una entrada con Google en curso, la marca es de esa entrada: no se olvida aunque la sesión de antes ya no exista.
+      if (!(await this.#marcaViva(client, listo)) && !this.#entrando) this.#olvidarMarca();
       return null;
     }
     // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada.
