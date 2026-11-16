@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { pintarQr } = vi.hoisted(() => ({ pintarQr: vi.fn(async (_img: HTMLImageElement, _texto: string, _ancho?: number) => true) }));
 vi.mock("./qr", () => ({ pintarQr }));
 
+import { memoIdDe } from "../stellar/alta-api";
 import { setLang, t } from "../i18n";
 import { armarPanelDePago, panelDeLaOrden } from "./pago-panel";
 import type { PanelDePago } from "./pago-vista";
@@ -21,6 +22,7 @@ const PANEL: PanelDePago = {
   usdc: "2.5",
   monto: "2,50",
   nota: "tk:o:ABCD2345",
+  memoId: memoIdDe("ABCD2345") as string,
   enlace: "web+stellar:pay?destination=GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H&amount=2.5",
   vence: Date.UTC(2026, 10, 14),
   detalles: [{ clave: "pagoParaCuenta", vars: { correo: "a•••@gmail.com" } }, { clave: "pagoSirve" }, { clave: "pagoDeMas" }],
@@ -43,7 +45,7 @@ const copiar = (el: HTMLElement, dato: string): HTMLButtonElement => el.querySel
 describe("el panel del pago", () => {
   it("la moneda como dato, el monto con su moneda, la nota y la cuenta corta, en ese orden y de la orden tal cual", () => {
     const el = armarPanelDePago(PANEL);
-    expect([...el.querySelectorAll(".pago-dato .pago-et")].map((x) => x.textContent)).toEqual(["Moneda", t("pagoMonto"), t("compraNotaRotulo"), t("pagoCuenta")]);
+    expect([...el.querySelectorAll(":scope > .pago-dato .pago-et")].map((x) => x.textContent)).toEqual(["Moneda", t("pagoMonto"), t("compraNotaRotulo"), t("pagoCuenta")]);
     // La moneda, a la vista y sin Copiar: es la única pantalla que la nombra, porque con otra el dinero se pierde.
     expect(valor(el, "moneda")).toBe("USDC en Stellar");
     expect(copiar(el, "moneda")).toBeNull();
@@ -125,6 +127,45 @@ describe("el panel del pago", () => {
     expect(el.querySelector("a[data-pago='app']")).not.toBeNull();
   });
 
+  it("la nota numérica de la orden va plegada en Más detalles, con su Copiar y cuándo usarla", async () => {
+    const el = armarPanelDePago(PANEL);
+    const mas = el.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]') as HTMLDetailsElement;
+    // Plegada: cerrada de entrada, y no entre los datos a la vista.
+    expect(mas.open).toBe(false);
+    expect(el.querySelector(":scope > .pago-dato [data-dato='memoId']")).toBeNull();
+    // La fila existe dentro de Más detalles, con su rótulo y el memoId de la orden tal cual.
+    const fila = el.querySelector('[data-dato="memoId"]')?.closest(".pago-dato") as HTMLElement;
+    expect(fila).toBeTruthy();
+    expect(mas.contains(fila)).toBe(true);
+    expect(fila.querySelector(".pago-et")?.textContent).toBe(t("pagoMemoNumRotulo"));
+    expect(valor(el, "memoId")).toBe(PANEL.memoId);
+    // La línea corta de cuándo usarla, justo después de la fila.
+    const uso = fila.nextElementSibling as HTMLElement;
+    expect(uso.tagName).toBe("P");
+    expect(uso.textContent).toBe(t("pagoMemoNumUso"));
+    // Su Copiar copia exactamente el memoId de la orden, y lo dice en el botón un momento.
+    document.body.append(el);
+    copiar(el, "memoId").click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(copiado.at(-1)).toBe(PANEL.memoId);
+    expect(copiar(el, "memoId").textContent).toBe(t("pagoCopiado"));
+    // En inglés, su rótulo y su línea en inglés.
+    setLang("en");
+    const en = armarPanelDePago(PANEL);
+    const enFila = en.querySelector('[data-dato="memoId"]')?.closest(".pago-dato") as HTMLElement;
+    expect(enFila.querySelector(".pago-et")?.textContent).toBe(t("pagoMemoNumRotulo"));
+    expect(enFila.nextElementSibling?.textContent).toBe(t("pagoMemoNumUso"));
+    setLang("es");
+  });
+
+  it("el memoId entra en la clave del panel: si cambia, se arma de nuevo", () => {
+    const a = panelDeLaOrden(null, PANEL, "es");
+    expect(a.orden).toContain(PANEL.memoId);
+    const b = panelDeLaOrden(a, { ...PANEL, memoId: "999999" }, "es");
+    expect(b.el).not.toBe(a.el);
+    expect(valor(b.el, "memoId")).toBe("999999");
+  });
+
   it("cada «Copiar» dice qué copia a quien no ve la pantalla, y ningún botón nombra una moneda ni una red", () => {
     const el = armarPanelDePago(PANEL);
     document.body.append(el);
@@ -141,7 +182,7 @@ describe("el panel del pago", () => {
     const mas = el.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]');
     expect(mas?.open).toBe(false);
     expect(mas?.querySelector("summary")?.textContent).toBe(t("pagoMasDetalles"));
-    expect([...(mas?.querySelectorAll("p.pago-detalle") ?? [])].map((p) => p.textContent)).toEqual(["Este pago es para la cuenta a•••@gmail.com.", t("pagoSirve"), t("pagoDeMas")]);
+    expect([...(mas?.querySelectorAll("p.pago-detalle") ?? [])].map((p) => p.textContent)).toEqual(["Este pago es para la cuenta a•••@gmail.com.", t("pagoSirve"), t("pagoDeMas"), t("pagoMemoNumUso")]);
     // Sin nada más para plegar, el pliegue igual lleva el QR del enlace y Abrir en mi app de pagos.
     expect(armarPanelDePago({ ...PANEL, detalles: [] }).querySelector("details a[data-pago='app']")).not.toBeNull();
   });
