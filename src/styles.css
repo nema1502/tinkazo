@@ -1918,12 +1918,14 @@
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
   body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel, body[data-ensayo="1"] #btn-stand { display: none !important; }
   /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto.
-     Tampoco Cuántos ganan: las rondas del stand dicen quién salió, y el valor elegido antes de entrar sigue mandando. */
+     Tampoco orden de turnos ni participaciones por persona: una ronda de ejemplo no se reparte ni se ordena. La cantidad sí
+     está: es el contador de siempre, que ahí se llama Cuántos salen (src/ui/ganadores.ts). */
   body[data-stand="1"] #gate, body[data-stand="1"] #seed-label, body[data-stand="1"] #btn-ensayo, body[data-stand="1"] #btn-stand, body[data-stand="1"] #btn-sample,
   body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
   body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
   body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
-  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion, body[data-stand="1"] #ganadores-control,
+  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion,
+  body[data-stand="1"] #btn-varias, body[data-stand="1"] #varias-panel, body[data-stand="1"] #participaciones-aviso,
   body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
   /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
   .stand-sala { display: none; }

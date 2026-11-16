@@ -2,7 +2,10 @@ import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app, forzarRitmo, params } from "../state";
 import { enEnsayo, enStand, marcarStand, pedirSalidaDelStand } from "../ensayo-modo";
-import { CLAVE_LISTA_STAND, borradorConNombres, guardarBorrador, parseNames, renderNames, setList } from "./participants";
+import { CLAVE_LISTA_STAND, borradorConNombres, guardarAntesDelStand, listaBloqueada, parseNames, renderNames, reponerBorrador, setList } from "./participants";
+import { ponerContadorDelStand } from "./ganadores";
+import { abrirConElModoPedido, ponerModoTurnos } from "./turnos";
+import { ponerPremio } from "./premios";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { refreshFreezeLabel, rotarJuego } from "./freeze";
 import { newDraw } from "./draw";
@@ -39,6 +42,17 @@ function montar(): void {
   // Sin cuenta también se sortea: no se graba nada.
   refrescarPuerta();
   refreshFreezeLabel();
+  // El stand no tiene orden de turnos ni premio: sus rondas dicen quién salió. Lo que se había elegido para el sorteo de
+  // verdad quedó guardado al entrar y vuelve al salir. La cantidad es la suya, Cuántos salen: desde 1 y sin pasar de la lista.
+  ponerModoTurnos(false);
+  ponerPremio("");
+  ponerContadorDelStand();
+  // El pliegue de las opciones solo guarda el CSV: sin el premio, su rótulo no puede nombrarlo.
+  const pliegue = document.querySelector<HTMLElement>("#mas-opciones > summary");
+  if (pliegue) {
+    pliegue.dataset.i = "srcCsv";
+    pliegue.textContent = t("srcCsv");
+  }
   renderNames();
   rotular();
   guiar();
@@ -71,11 +85,11 @@ function guiar(): void {
   el.hidden = !texto;
 }
 
-/** Entra al modo stand. Nunca con un sorteo sellado esperando, ni en la demo, ni en el ensayo. */
+/** Entra al modo stand. Nunca con un sorteo sellado esperando ni en camino, ni en la demo, ni en el ensayo. */
 export function entrarAlStand(): void {
-  if (app.frozen || enStand() || enEnsayo() || params.has("demo")) return;
-  // Lo que se estaba armando queda guardado tal cual: vuelve al salir.
-  guardarBorrador();
+  if (app.frozen || listaBloqueada() || enStand() || enEnsayo() || params.has("demo")) return;
+  // Lo que se estaba armando queda guardado tal cual, también con el cuadro vacío: vuelve al salir.
+  guardarAntesDelStand();
   marcarStand(true);
   history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
   dispatchEvent(new HashChangeEvent("hashchange"));
@@ -215,9 +229,9 @@ export function initStand(): void {
   document.getElementById("stand-otra")?.addEventListener("click", () => otraRonda());
   document.addEventListener("tinkazo:paso", () => {
     guiar();
-    // El enlace de entrada solo se ve antes de sellar y fuera del modo.
+    // El enlace de entrada solo se ve antes de sellar y fuera del modo. Con la lista cerrada (un sello en camino) no entra.
     const entrada = document.getElementById("btn-stand");
-    if (entrada) entrada.hidden = !!app.frozen || enStand();
+    if (entrada) entrada.hidden = !!app.frozen || enStand() || listaBloqueada();
   });
   onLangChange(() => {
     if (!enStand()) return;
@@ -226,6 +240,14 @@ export function initStand(): void {
   });
   // Al cargar: si se recargó en la herramienta durante el modo stand, sigue; si no, se termina.
   if (!enStand()) return;
-  if (location.hash === "#sortear" && !params.has("demo") && !app.frozen) montar();
-  else marcarStand(false);
+  if (location.hash === "#sortear" && !params.has("demo") && !app.frozen) {
+    montar();
+    return;
+  }
+  // El stand se termina: lo que se estaba armando vuelve, en el mismo orden que al arrancar la página (`main.ts`).
+  // Con la demo o un sello esperando no repone nada: `reponerBorrador` no pisa una lista ni un sello.
+  marcarStand(false);
+  ponerModoTurnos(false);
+  reponerBorrador();
+  abrirConElModoPedido();
 }

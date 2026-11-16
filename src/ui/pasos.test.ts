@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
-import { acortarPremio, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, premioQueEntra, relojDe } from "./pasos";
+import { acortarPremio, claveDelPaso, claveEnElStand, detalleDeLista, lineaDelPaso, pasoDe, premioQueEntra, relojDe } from "./pasos";
 
 describe("en qué paso está el sorteo", () => {
   it("sin dos nombres todavía es la lista", () => {
@@ -338,6 +338,29 @@ describe("lo que sigue después del ganador", () => {
       expect(typeof T[l].againTitleFin).toBe("string");
       expect(T[l].againLeft(16)).toMatch(/16/);
       expect(T[l].againLeft(1)).toMatch(/1/);
+    }
+  });
+});
+
+describe("en el stand nadie gana: el aviso del resultado dice quién salió", () => {
+  it("cambia solo el aviso del resultado, según cuántas personas salieron", () => {
+    expect(claveEnElStand("sigGano", 1)).toBe("standSalio");
+    expect(claveEnElStand("sigGanaron", 3)).toBe("standSalieron");
+    // Manda cuántas salieron, no cuál de las dos claves llegó.
+    expect(claveEnElStand("sigGano", 2)).toBe("standSalieron");
+    expect(claveEnElStand("sigGanaron", 1)).toBe("standSalio");
+    for (const clave of ["sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigTurnos", "sigTope", "sigPegar", ""]) {
+      expect(claveEnElStand(clave, 3), clave).toBe(clave);
+    }
+  });
+
+  it("los dos avisos existen en los dos idiomas y no dicen ganar", () => {
+    expect(T.es.standSalio).toBe("Ya se ve quién salió");
+    expect(T.es.standSalieron).toBe("Ya se ve quiénes salieron");
+    expect(T.en.standSalio).toBe("Now showing who was picked");
+    expect(T.en.standSalieron).toBe("Now showing everyone who was picked");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["standSalio", "standSalieron"]) expect(T[l][k] as string, `${l}.${k}`).not.toMatch(/\bgan\p{L}*|\bwin\w*/iu);
     }
   });
 });
