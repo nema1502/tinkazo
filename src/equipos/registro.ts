@@ -340,9 +340,11 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
         return ver("error");
       }
       config = p.config;
-      mensaje("", false);
+      // Retomar la cuenta de Google puede tardar hasta 8 segundos con la red lenta: mientras, se dice qué pasa.
+      mensaje("eqpRetomando", false);
       const conocida = (await deps.cuentaRecordada().catch(() => null)) ?? leerEquipoLocal(deps.sala.id, deps.local)?.cuenta ?? null;
       if (miCarga !== cargaActual) return;
+      mensaje("", false);
       if (conocida && esCuenta(conocida)) return await conCuenta(conocida);
       ver("cuenta");
     } finally {

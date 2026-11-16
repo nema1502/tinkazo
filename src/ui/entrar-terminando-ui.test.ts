@@ -174,6 +174,23 @@ describe("la puerta mientras se termina de entrar", () => {
     expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("dentro");
   });
 
+  it("retomar la sesión de Google con cuenta deja guardado el tipo de sesión, para las páginas de lectura", async () => {
+    localStorage.setItem("tinkazo.pollar.intent.testnet", "google");
+    h.billetera = { address: DIR };
+    const { ui } = await cargar();
+    await vi.waitFor(() => expect(ui.currentSession()?.address, volcado()).toBe(DIR), esperar);
+    expect(localStorage.getItem("tinkazo.session.kind.testnet")).toBe("google");
+  });
+
+  it("retomar sin cuenta no lo guarda", async () => {
+    localStorage.setItem("tinkazo.pollar.intent.testnet", "google");
+    const { ui } = await cargar();
+    // La marca de Pollar se olvida cuando el SDK termina sin cuenta: ahí ya terminó de retomar.
+    await vi.waitFor(() => expect(localStorage.getItem("tinkazo.pollar.intent.testnet")).toBeNull(), esperar);
+    expect(ui.currentSession()).toBeNull();
+    expect(localStorage.getItem("tinkazo.session.kind.testnet")).toBeNull();
+  });
+
   it("los textos nuevos están en los dos idiomas", async () => {
     const { T } = await import("../i18n");
     expect(T.es.loginTerminando).toBe("Terminando de entrar…");

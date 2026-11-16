@@ -540,6 +540,9 @@ async function restorePollar(): Promise<void> {
     const { setActiveWallet } = await lite();
     if (session) return;
     setActiveWallet(pollarWallet);
+    // Con la cuenta de vuelta, la marca de sesión de Google queda guardada, como al entrar: la cabecera de las páginas de
+    // lectura la mira para no ofrecer Entrar. Sin cuenta no se guarda nada (el borrado de arriba sigue valiendo).
+    saveSessionKind("google", network.name);
     const prof = pollarWallet.profile();
     session = {
       kind: "external",
