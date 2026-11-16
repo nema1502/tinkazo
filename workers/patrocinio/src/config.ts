@@ -106,6 +106,15 @@ export interface Env {
   COMPRAS_QR_PILOTO?: string;
   /** Solo `1` deja que `todos` en `COMPRAS_QR_PILOTO` abra la compra con QR a cualquier cuenta. Es la confirmación explícita. */
   COMPRAS_QR_TODOS?: string;
+  /**
+   * La lista del piloto de la orden en dólares digitales, aparte de la de la compra con QR: cuentas G… separadas por
+   * coma, con las mismas reglas de escritura que `COMPRAS_QR_PILOTO`. La palabra `todos` la abre a cualquier cuenta,
+   * pero solo con `ORDEN_USDC_TODOS = "1"`; sin eso, o mal escrita, cierra. Vacía: la orden mira el piloto de la
+   * compra con QR, como hasta ahora.
+   */
+  ORDEN_USDC_PILOTO?: string;
+  /** Solo `1` deja que `todos` en `ORDEN_USDC_PILOTO` abra la orden a cualquier cuenta. Es la confirmación explícita. */
+  ORDEN_USDC_TODOS?: string;
   /** Lo mínimo en bolivianos de una carga con QR, para que el sitio no cotice menos. `0` por defecto: no se sabe. */
   CARGA_MINIMO_BS?: string;
   /** Las banderas del patrocinio de Pollar que la vigilancia acepta prendidas, separadas por coma. Vacía: todo apagado. */
@@ -205,12 +214,27 @@ export interface Config {
    */
   comprasQrTodos: boolean;
   /**
-   * Qué dice `COMPRAS_QR_PILOTO` para la orden en dólares digitales: `lista` (cuentas bien escritas: la orden nueva pide
-   * estar en la lista), `mal` (algo mal escrito, o `todos` sin confirmar: la orden nueva no nace para nadie) o `ninguna`
-   * (vacía, `todos` confirmado o fuera de mainnet). Con `ninguna` y la variable vacía, la orden mira igual las cuentas
-   * sumadas por administración: si hay alguna, esa es la lista puesta (`rutas-altas.ts`, `fueraDelPiloto`).
+   * Qué dice `COMPRAS_QR_PILOTO` para la orden en dólares digitales mientras la orden no tenga su propia lista puesta
+   * (`ORDEN_USDC_PILOTO`): `lista` (cuentas bien escritas: la orden nueva pide estar en la lista), `mal` (algo mal
+   * escrito, o `todos` sin confirmar: la orden nueva no nace para nadie) o `ninguna` (vacía, `todos` confirmado o
+   * fuera de mainnet). Con `ninguna` y la variable vacía, la orden mira igual las cuentas sumadas por administración:
+   * si hay alguna, esa es la lista puesta (`rutas-altas.ts`, `fueraDelPiloto`).
    */
   pilotoEnVariable: "ninguna" | "lista" | "mal";
+  /** Las cuentas del piloto de la orden en dólares digitales que vienen de `ORDEN_USDC_PILOTO` (vacía fuera de mainnet o si está mal escrita). */
+  ordenUsdcPiloto: Set<string>;
+  /**
+   * Si `ORDEN_USDC_PILOTO` trae `todos`: la orden en dólares digitales, abierta a cualquier cuenta. Falso fuera de
+   * mainnet, sin la variable o con ella mal escrita.
+   */
+  ordenUsdcTodos: boolean;
+  /**
+   * Qué dice `ORDEN_USDC_PILOTO` para la orden en dólares digitales: `lista` (cuentas bien escritas: la orden nueva
+   * pide estar en la lista, sin mirar al piloto de la compra con QR), `mal` (algo mal escrito, o `todos` sin
+   * confirmar: la orden nueva no nace para nadie) o `ninguna` (vacía, `todos` confirmado o fuera de mainnet: la orden
+   * mira el piloto de la compra con QR, como hasta ahora — `rutas-altas.ts`, `fueraDelPiloto`).
+   */
+  ordenUsdcEnVariable: "ninguna" | "lista" | "mal";
   /** Lo mínimo en bolivianos de una carga, para el sitio. */
   cargaMinimoBs: number;
   /** Las banderas del patrocinio de Pollar que se aceptan prendidas, en orden. */
@@ -311,7 +335,6 @@ export function leerRecargo(s: string): Recargo | null {
   return { primera, siguientes, primeraUsdc: p, siguientesUsdc: q };
 }
 
-/** La palabra de `COMPRAS_QR_PILOTO` que abre la compra con QR a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
 
 /**
@@ -322,7 +345,8 @@ function listaDelPiloto(s: string | undefined, todosConfirmado: boolean): { todo
   const partes = lista(s);
   const cuentas = partes.filter((c) => c !== PILOTO_TODOS);
   const todos = cuentas.length < partes.length;
-  // `todos` sin la confirmación explícita (`COMPRAS_QR_TODOS = "1"`) es como una palabra mal escrita: cierra.
+  // `todos` sin la confirmación explícita (`COMPRAS_QR_TODOS = "1"`, u `ORDEN_USDC_TODOS = "1"` en su piloto) es como una
+  // palabra mal escrita: cierra.
   if (todos && !todosConfirmado) return null;
   return cuentas.every((c) => StrKey.isValidEd25519PublicKey(c)) ? { todos, cuentas } : null;
 }
@@ -432,6 +456,9 @@ export function leerConfig(env: Partial<Env>): Config {
   if (comprasQr && !recargoQr) faltaAltas.push("recargo-qr");
   const piloto = enMainnet ? listaDelPiloto(env.COMPRAS_QR_PILOTO, env.COMPRAS_QR_TODOS === "1") : { todos: false, cuentas: [] };
   if (comprasQr && piloto === null) faltaAltas.push("compras-qr-piloto");
+  // La orden en dólares digitales tiene su propia lista, con las mismas reglas de escritura. Sin ponerla, la orden
+  // mira igual el piloto de la compra con QR: desplegar con la variable nueva sin poner no cambia nada.
+  const pilotoOrden = enMainnet ? listaDelPiloto(env.ORDEN_USDC_PILOTO, env.ORDEN_USDC_TODOS === "1") : { todos: false, cuentas: [] };
   const permitido = lista(env.PATROCINIO_PERMITIDO);
   const permitidoBien = permitido.every((b) => BANDERA_PATROCINIO.test(b));
   if (altas && !permitidoBien) faltaAltas.push("patrocinio-permitido");
@@ -442,6 +469,8 @@ export function leerConfig(env: Partial<Env>): Config {
   if (altas && reservaCarga.mal) faltaAltas.push("reserva-carga-creditos");
   if (altas && comprasDia.mal) faltaAltas.push("compras-qr-dia");
   const ventaBienEscrita = !reservaCarga.mal && !comprasDia.mal;
+  const altasPago = pideCobros && precios !== null && cuentaCobros !== null && ventaBienEscrita;
+  if (altasPago && pilotoOrden === null) faltaAltas.push("orden-usdc-piloto");
   const cargas = altas && prende(env.CARGAS) && ventaBienEscrita;
   // El patrocinio permitido es el de la venta: con la carga y la compra con QR apagadas, se espera todo apagado.
   const conVenta = comprasQr || cargas;
@@ -469,7 +498,7 @@ export function leerConfig(env: Partial<Env>): Config {
     porIpPorHora: entero(env.POR_IP_POR_HORA, 240),
     apagadoPorVariable: env.APAGADO === "1",
     altas,
-    altasPago: pideCobros && precios !== null && cuentaCobros !== null && ventaBienEscrita,
+    altasPago,
     sorteoServidor: pideSorteo && cuentaSorteadora !== null,
     soloSellosDelPortero: altas && (env.SOLO_SELLOS_PORTERO ?? "").trim() !== "0",
     pollarAppId,
@@ -486,6 +515,9 @@ export function leerConfig(env: Partial<Env>): Config {
     comprasQrPiloto: new Set(piloto?.cuentas ?? []),
     comprasQrTodos: piloto?.todos ?? false,
     pilotoEnVariable: !enMainnet || lista(env.COMPRAS_QR_PILOTO).length === 0 || piloto?.todos ? "ninguna" : piloto === null ? "mal" : "lista",
+    ordenUsdcPiloto: new Set(pilotoOrden?.cuentas ?? []),
+    ordenUsdcTodos: pilotoOrden?.todos ?? false,
+    ordenUsdcEnVariable: !enMainnet || lista(env.ORDEN_USDC_PILOTO).length === 0 || pilotoOrden?.todos ? "ninguna" : pilotoOrden === null ? "mal" : "lista",
     cargaMinimoBs: entero(env.CARGA_MINIMO_BS, 0),
     patrocinioPermitido: enMainnet && permitidoBien && conVenta ? [...new Set(permitido)].sort() : [],
     recargoQr,

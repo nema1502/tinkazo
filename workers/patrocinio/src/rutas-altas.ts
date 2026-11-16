@@ -340,13 +340,19 @@ export class PuertaAltas {
   }
 
   /**
-   * Si una orden nueva queda fuera del piloto. Mientras haya una lista puesta, la cuenta tiene que estar en ella: la
-   * lista está puesta con cuentas en `COMPRAS_QR_PILOTO` y también, con la variable vacía, con al menos una cuenta sumada
-   * por administración. Con la variable mal escrita, o `todos` sin confirmar, no entra nadie. Con `todos` confirmado, o
-   * sin ninguna lista (la variable vacía y nadie sumado a mano), la orden no mira el piloto. Síncrono.
+   * Si una orden nueva queda fuera del piloto. La orden en dólares digitales mira su propia variable
+   * (`ORDEN_USDC_PILOTO`): con `todos` confirmado, cualquiera; con una lista puesta, solo esas cuentas, sin mirar al
+   * piloto de la compra con QR; mal escrita, nadie. Sin la variable nueva (o fuera de mainnet) vale lo de siempre:
+   * mientras haya una lista del piloto puesta en `COMPRAS_QR_PILOTO`, la cuenta tiene que estar en ella — la lista
+   * está puesta con cuentas en la variable y también, con la variable vacía, con al menos una cuenta sumada por
+   * administración. Con esa variable mal escrita, o `todos` sin confirmar, no entra nadie. Con `todos` confirmado, o
+   * sin ninguna lista, la orden no mira el piloto. Síncrono.
    */
   private fueraDelPiloto(cuenta: string | null): boolean {
     const { cfg, compras } = this.d;
+    if (cfg.ordenUsdcTodos) return false;
+    if (cfg.ordenUsdcEnVariable === "lista") return !cfg.ordenUsdcPiloto.has(cuenta ?? "");
+    if (cfg.ordenUsdcEnVariable === "mal") return true;
     if (cfg.pilotoEnVariable === "ninguna") return !cfg.comprasQrTodos && !!compras && compras.hayPilotoAMano() && !compras.enPiloto(cuenta);
     if (cfg.pilotoEnVariable === "mal" || !compras) return true;
     return !compras.enPiloto(cuenta);
@@ -917,8 +923,9 @@ export class PuertaAltas {
    * `POST /v1/alta/orden` `{producto}`: la orden abierta de la persona para ese producto o una nueva, con a qué cuenta
    * pagar, cuánto, la nota y el enlace de pago. Quien ya tiene acceso no compra el primer paquete (le toca uno de 10 o de
    * 50). Una orden nueva no nace con el pago apagado, con la venta pausada ni bajo el piso de créditos más la reserva del
-   * evento (`RESERVA_CARGA_CREDITOS`: la respetan todos los caminos de la venta). Con una lista del piloto puesta (en
-   * `COMPRAS_QR_PILOTO` o, con la variable vacía, sumada por administración), una orden nueva pide además la cuenta en
+   * evento (`RESERVA_CARGA_CREDITOS`: la respetan todos los caminos de la venta). Con una lista del piloto puesta para
+   * la orden —en `ORDEN_USDC_PILOTO`, o con esa variable vacía en el piloto de la compra con QR: sus cuentas de
+   * `COMPRAS_QR_PILOTO` y las sumadas por administración—, una orden nueva pide además la cuenta en
    * la lista: si no, `503 fuera-del-piloto` (una que ya existe se sigue devolviendo).
    *
    * Con una compra con QR cargada y sin pagar, la orden lleva su recargo, del producto que sea, y `precio` y `recargo`
