@@ -482,6 +482,11 @@ export async function traerTransaccion(horizon, idEvento, { fetch: f = fetch } =
   return rec;
 }
 
+/** La transacción de un evento que llegó por el RPC, por su hash (el id sintético del RPC no trae `toid`). */
+export async function traerTransaccionPorHash(horizon, hash, { fetch: f = fetch } = {}) {
+  return pedirJson(`${horizon}/transactions/${hash}`, { fetch: f });
+}
+
 /** El `next_id` del contrato, leído de su instancia en el RPC (el mismo número que devuelve `next_id()`). */
 export async function leerNextId(rpc, contrato, { fetch: f = fetch } = {}) {
   const clave = xdr.LedgerKey.contractData(
@@ -524,7 +529,9 @@ export async function traerEventosRpc(rpc, contrato, { fetch: f = fetch } = {}) 
       if (e.inSuccessfulContractCall === false) continue;
       const tema = scValToNative(xdr.ScVal.fromXDR(e.topic[0], "base64"));
       if (tema !== "sealed" && tema !== "drawn") continue;
-      eventos.push({ tipo: tema, id: Number(scValToNative(xdr.ScVal.fromXDR(e.topic[1], "base64"))), ledger: e.ledger, txHash: e.txHash });
+      // El crudo del RPC viaja con el evento (topic, value, hora de cierre): `registroDesdeRpc` lo
+      // convierte en el registro que se une al resto de las fuentes.
+      eventos.push({ ...e, tipo: tema, id: Number(scValToNative(xdr.ScVal.fromXDR(e.topic[1], "base64"))), ledger: Number(e.ledger), txHash: e.txHash });
     }
     // El RPC mira un tramo de ledgers por pedido y puede contestar vacío con un cursor: se sigue hasta alcanzar el último ledger.
     if (!r?.cursor) break;
@@ -533,6 +540,63 @@ export async function traerEventosRpc(rpc, contrato, { fetch: f = fetch } = {}) 
     cursor = r.cursor;
   }
   return { desdeLedger: salud.oldestLedger + 1, eventos };
+}
+
+/**
+ * Un evento crudo de la respuesta `getEvents` del RPC → el mismo registro crudo que entiende
+ * `decodificarEvento`. El id es sintético (el RPC no da el `toid` de Horizon): lo forman el ledger,
+ * el hash de la transacción y el tipo del evento, y es estable entre corridas para que el caché de
+ * transacciones y la unión de fuentes funcionen igual que con el índice.
+ */
+export function registroDesdeRpc(e, contrato = e.contractId) {
+  const toid = BigInt(e.ledger) << 32n;
+  const tema = String(scValToNative(xdr.ScVal.fromXDR(e.topic[0], "base64")));
+  const marca = tema === "sealed" ? "s" : tema === "drawn" ? "d" : "x";
+  return {
+    id: `${toid}-${e.txHash}${marca}`,
+    ts: Math.floor(Date.parse(e.ledgerClosedAt) / 1000),
+    contract: contrato,
+    rpc: true, // queda en los crudos: al recargar, la unión sabe que esta copia vino por el RPC
+    txHash: e.txHash,
+    topicsXdr: e.topic,
+    bodyXdr: e.value,
+  };
+}
+
+/**
+ * Une los eventos que llegaron por fuentes distintas: el índice de StellarExpert, los crudos
+ * guardados de corridas anteriores y el RPC (esos traen `fuenteRpc: true`). El mismo evento —
+ * mismo contrato, tipo e id de sorteo— se cuenta una vez, y manda la primera copia que aparezca
+ * (el script pasa primero el índice, después los crudos, después el RPC). Dos copias que no
+ * vienen del RPC y con `eventoId` distinto no son una duplicación de fuente sino una anomalía
+ * real: se dejan las dos para que `unir` la marque.
+ */
+export function unirFuentes(eventos) {
+  const salida = [];
+  const vistas = new Map();
+  const clave = (e) => `${e.contrato}|${e.tipo}|${e.id}`;
+  for (const e of eventos) {
+    const k = clave(e);
+    const previa = vistas.get(k);
+    if (!previa) {
+      vistas.set(k, e);
+      salida.push(e);
+      continue;
+    }
+    // La misma copia vista dos veces cae.
+    if (previa.eventoId === e.eventoId) continue;
+    if (previa.fuenteRpc !== e.fuenteRpc) {
+      // Cruce de fuentes: el mismo evento por el RPC y por el índice o los crudos. Manda la copia
+      // que no es del RPC: con su id real se puede buscar su transacción en Horizon.
+      if (previa.fuenteRpc) {
+        vistas.set(k, e);
+        salida[salida.indexOf(previa)] = e;
+      }
+      continue;
+    }
+    salida.push(e); // anomalía: queda para el recuento de problemas de `unir`
+  }
+  return salida;
 }
 
 /* ------------------------------------------------------------- comprobar */

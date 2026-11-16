@@ -1,6 +1,6 @@
 import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { actividadDe, calcular, comprobar, decodificarEvento, dia, marcaDe, mes, partesDelId, semana, unir } from "./metricas-cadena.mjs";
+import { actividadDe, calcular, comprobar, decodificarEvento, dia, marcaDe, mes, partesDelId, semana, unir, unirFuentes } from "./metricas-cadena.mjs";
 
 /**
  * Eventos inventados: no se toca la red. Las direcciones son de mentira.
@@ -256,6 +256,143 @@ describe("la lista pública de cuentas internas y el archivo de totales", () => 
       expect(texto, f).not.toMatch(/\bG[A-Z2-7]{55}\b/);
       expect(texto, f).not.toMatch(/[0-9a-f]{64}/);
     }
+  });
+});
+
+describe("la segunda fuente por RPC: traerEventosRpc", () => {
+  const json = (o) => Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve(o) });
+  const cursorEn = (l) => `${(BigInt(l) << 32n).toString()}-0`;
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const eventoRpc = (tipo, id, extra = {}) => ({
+    type: "contract",
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    contractId: C1,
+    txHash: "ab".repeat(32),
+    topic: tipo === "sealed" ? [tema(tipo), u64(id), new Address(A).toScVal().toXdr("base64")] : [tema(tipo), u64(id)],
+    value: nativeToScVal(1, { type: "u32" }).toXdr("base64"),
+    inSuccessfulContractCall: true,
+    ...extra,
+  });
+  it("sigue el cursor hasta el último ledger aunque las respuestas no traigan eventos", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const pedidos = [];
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      pedidos.push(p);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      const n = pedidos.filter((q) => q.method === "getEvents").length;
+      // Dos respuestas sin eventos pero con cursor: la primera lejos del final, la segunda en él.
+      return n === 1 ? json({ result: { events: [], cursor: cursorEn(150), latestLedger: 300 } }) : json({ result: { events: [], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.desdeLedger).toBe(101);
+    expect(r.eventos).toEqual([]);
+    const g = pedidos.filter((q) => q.method === "getEvents");
+    expect(g).toHaveLength(2); // la primera respuesta vacía no corta el recorrido
+    expect(g[0].params.startLedger).toBe(101);
+    expect(g[1].params.pagination.cursor).toBe(cursorEn(150));
+  });
+  it("trae los eventos que aparecen en el camino y se corta cuando el cursor alcanza el último ledger", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const pedidos = [];
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      pedidos.push(p);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      const n = pedidos.filter((q) => q.method === "getEvents").length;
+      return n === 1
+        ? json({ result: { events: [eventoRpc("sealed", 1)], cursor: cursorEn(250), latestLedger: 300 } })
+        : json({ result: { events: [eventoRpc("drawn", 1)], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.eventos.map((x) => `${x.tipo}#${x.id}`)).toEqual(["sealed#1", "drawn#1"]);
+    expect(r.eventos[0].ledger).toBe(5564036);
+    expect(r.eventos[0].topic).toBeDefined(); // el crudo del RPC viaja con el evento, para unirlo a los registros
+    expect(pedidos.filter((q) => q.method === "getEvents")).toHaveLength(2);
+  });
+  it("descarta los eventos de llamadas fallidas y los que no son sealed ni drawn", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      return json({ result: { events: [eventoRpc("sealed", 1), eventoRpc("otro", 2), { ...eventoRpc("sealed", 3), inSuccessfulContractCall: false }], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.eventos.map((x) => x.id)).toEqual([1]);
+  });
+});
+
+describe("registroDesdeRpc", () => {
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const mapa = (campos) => xdr.ScVal.scvMap(Object.entries(campos).map(([k, v]) => new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol(k), val: v }))).toXdr("base64");
+  const selloRpc = (extra = {}) => ({
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    txHash: "ab".repeat(32),
+    topic: [tema("sealed"), u64(570), new Address(A).toScVal().toXdr("base64")],
+    value: mapa({ count: nativeToScVal(18, { type: "u32" }), list_hash: nativeToScVal(Buffer.alloc(32, 7), { type: "bytes" }), num_winners: nativeToScVal(3, { type: "u32" }), round: nativeToScVal(99n, { type: "u64" }) }),
+    ...extra,
+  });
+  it("un evento del RPC se vuelve el registro crudo que decodificarEvento entiende", async () => {
+    const { decodificarEvento, registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const reg = registroDesdeRpc(selloRpc(), C1);
+    expect(decodificarEvento(reg)).toMatchObject({ tipo: "sealed", id: 570, organizador: A, count: 18, round: 99, ledger: 5564036, contrato: C1, ts: t("2026-11-05T10:00:00Z") });
+    expect(reg.txHash).toBe("ab".repeat(32));
+    expect(reg.rpc).toBe(true); // la marca queda en los crudos: al recargar, la unión sabe que vino por el RPC
+  });
+  it("un registro del RPC, lo mismo dos veces, da el mismo id; otro ledger o transacción, otro id", async () => {
+    const { registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const reg = registroDesdeRpc(selloRpc(), C1);
+    expect(registroDesdeRpc(selloRpc(), C1).id).toBe(reg.id);
+    expect(registroDesdeRpc({ ...selloRpc(), ledger: "5564037" }, C1).id).not.toBe(reg.id);
+    expect(registroDesdeRpc({ ...selloRpc(), txHash: "cd".repeat(32) }, C1).id).not.toBe(reg.id);
+  });
+  it("un registro drawn del RPC también se decodifica", async () => {
+    const { decodificarEvento, registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const value = mapa({ round: nativeToScVal(99n, { type: "u64" }), randomness: nativeToScVal(Buffer.alloc(32, 2), { type: "bytes" }), winners: xdr.ScVal.scvVec([nativeToScVal(3n, { type: "u64" })]) });
+    const reg = registroDesdeRpc({ ...selloRpc(), topic: [tema("drawn"), u64(570)], value }, C1);
+    expect(decodificarEvento(reg)).toMatchObject({ tipo: "drawn", id: 570, round: 99, ganadores: [3] });
+  });
+});
+
+describe("unirFuentes", () => {
+  const porIndice = sello(1, A, "2026-11-04T10:00:00Z");
+  it("el mismo evento visto por el índice, los crudos y el RPC se cuenta una vez, y manda la copia del índice", () => {
+    const porRpc = { ...sello(1, A, "2026-11-04T10:00:00Z"), eventoId: `rpc-${porIndice.eventoId}`, fuenteRpc: true };
+    const u = unirFuentes([porIndice, { ...porIndice }, porRpc]);
+    expect(u).toHaveLength(1);
+    expect(u[0].eventoId).toBe(porIndice.eventoId); // con el id real se puede buscar su transacción
+  });
+  it("un evento que solo trae el RPC se suma a los que ya había", () => {
+    const nuevo = { ...sello(2, A, "2026-11-05T10:00:00Z"), eventoId: "rpc-nuevo", fuenteRpc: true };
+    expect(unirFuentes([porIndice, nuevo])).toHaveLength(2);
+    expect(unirFuentes([porIndice, nuevo]).some((e) => e.eventoId === "rpc-nuevo")).toBe(true);
+  });
+  it("una copia del RPC que solo repite lo que guardaron los crudos no suma", () => {
+    const deCorridaPasada = { ...porIndice, eventoId: "rpc-viejo", fuenteRpc: true };
+    expect(unirFuentes([deCorridaPasada, porIndice])).toHaveLength(1);
+    expect(unirFuentes([deCorridaPasada, porIndice])[0].eventoId).toBe(porIndice.eventoId);
+  });
+  it("dos copias que no vienen del RPC y con ids distintos son una anomalía: se dejan las dos", () => {
+    expect(unirFuentes([porIndice, { ...porIndice, eventoId: "otra" }])).toHaveLength(2);
+  });
+});
+
+describe("la transacción de un evento que llegó por el RPC", () => {
+  const json = (o) => Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve(o) });
+  it("se pide por su hash y da null si Horizon no la tiene", async () => {
+    const { traerTransaccionPorHash } = await import("./metricas-cadena.mjs");
+    const vistas = [];
+    const f = (u) => {
+      vistas.push(u);
+      return u === "hz/transactions/ab" ? json({ hash: "ab", successful: true }) : Promise.resolve({ status: 404, ok: false });
+    };
+    expect(await traerTransaccionPorHash("hz", "ab", { fetch: f })).toMatchObject({ hash: "ab" });
+    expect(await traerTransaccionPorHash("hz", "cd", { fetch: f })).toBeNull();
+    expect(vistas).toEqual(["hz/transactions/ab", "hz/transactions/cd"]);
   });
 });
 
