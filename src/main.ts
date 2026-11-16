@@ -24,7 +24,8 @@ import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, 
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { MARCA_INGRESAR, cancelarLaEntrada, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { pintarCancelarEnPortada } from "./ui/cancelar-en-portada";
 import { initOnboarding } from "./ui/onboarding";
 import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
@@ -420,6 +421,8 @@ function initVistas(): void {
         boton.style.minHeight = "";
       }
     }
+    // Terminando de entrar, debajo del botón grande va Cancelar: la puerta con el suyo está en la herramienta y acá no se ve.
+    pintarCancelarEnPortada(document, { terminando: cuenta.estado === "conectando" && cuenta.terminando === true, cancelar: cancelarLaEntrada, tx: t });
     // El estado está pintado: el texto del botón grande puede verse (contra el FOUC de la recarga, estilos-atencion.ts).
     destrabarCtas();
   };

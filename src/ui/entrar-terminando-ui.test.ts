@@ -254,3 +254,20 @@ describe("Terminando de entrar se anuncia y el foco no se pierde", () => {
     expect(document.activeElement, volcado()).toBe(google);
   });
 });
+
+describe("Cancelar desde la portada", () => {
+  it("la portada puede cancelar la entrada que se está terminando, igual que la puerta", async () => {
+    const { ui } = await cargar();
+    const fin = ui.entrar();
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(ui.estadoDeLaCuenta(), volcado()).toEqual({ estado: "conectando", terminando: true }), esperar);
+    ui.cancelarLaEntrada();
+    await fin;
+    expect(h.cancelados).toBe(1);
+    expect(aviso(), volcado()).toBeNull();
+    expect(ui.estadoDeLaCuenta()).toEqual({ estado: "fuera" });
+    // Sin una entrada en curso no hace nada.
+    expect(() => ui.cancelarLaEntrada()).not.toThrow();
+    expect(h.cancelados).toBe(1);
+  });
+});

@@ -214,6 +214,11 @@ function alTerminar(cancelar: () => void): void {
   if (vivo) vivo.textContent = t("loginTerminando");
 }
 
+/** Cancela la entrada que se está terminando: el Cancelar de la portada (`cancelar-en-portada.ts`) es el de la puerta. */
+export function cancelarLaEntrada(): void {
+  cancelarEntrada?.();
+}
+
 /** La entrada terminó sin cuenta (cancelada o con un error): la región viva no queda diciendo Terminando de entrar. */
 function callarTerminando(): void {
   const vivo = document.getElementById("cuenta-aviso");
