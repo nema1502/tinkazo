@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { T } from "./i18n";
+import { nameList } from "./i18n";
+import { setResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
 
 /**
@@ -364,5 +366,32 @@ describe("el modo espectador", () => {
   it("el QR del espectador va solo en la espera: la pantalla del resultado lleva uno solo, el del comprobante", () => {
     expect(T.es.espQrBoton).toBeUndefined();
     expect(T.en.espQrBoton).toBeUndefined();
+  });
+});
+
+/**
+ * El relato del cartel del final (`cWin`, por donde pasan todos los juegos) y
+ * la lista del cartel (`stage-cartel.ts`) tienen que contar lo mismo (S5 del
+ * issue 118). En un sorteo de premios los dos cortan en tres: el relato dice
+ * los tres primeros y «y N más», con el mismo N que el renglón del cartel. En
+ * un orden de turnos el relato no nombra a nadie, así que no puede contradecir
+ * un cartel que ahora lista hasta ocho.
+ */
+describe("el relato no contradice al cartel del final", () => {
+  it("en un orden de turnos el relato no nombra a nadie, en ningún idioma", () => {
+    // El import es estático: con `vi.resetModules()` en el archivo, un import dinámico traería otra copia del módulo.
+    setResultadoDeTurnos(true);
+    try {
+      expect(T.es.cWin("Ana, Beto, César y 5 más", true)).toBe("¡El orden quedó listo!");
+      expect(T.en.cWin("Ana, Beto, César and 5 more", true)).toBe("The order is set!");
+    } finally {
+      setResultadoDeTurnos(false);
+    }
+  });
+
+  it("en un sorteo de premios el relato dice los tres primeros y el mismo «N más» que lista el cartel", () => {
+    expect(nameList(["Ana", "Beto", "César"], 2)).toBe("Ana, Beto, César y 2 más");
+    expect(T.es.cWin("Ana, Beto, César y 2 más", true)).toMatch(/Ana, Beto, César y 2 más/);
+    expect(T.en.cWin("Ana, Beto, César and 2 more", true)).toMatch(/Ana, Beto, César and 2 more/);
   });
 });
