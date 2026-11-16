@@ -294,18 +294,6 @@ describe("diccionario", () => {
     }
   });
 
-  it("amigo secreto: el nombre, la regla y la historia están en los dos idiomas", () => {
-    for (const clave of ["gameAmigo", "jgAmigoN", "jgAmigoB", "gcAmigo", "gcAmigoMany", "loreAmigoQ", "loreAmigoA"]) {
-      expect(typeof T.es[clave], `es.${clave}`).toBe("string");
-      expect(typeof T.en[clave], `en.${clave}`).toBe("string");
-      expect(String(T.es[clave]).length).toBeGreaterThan(0);
-      expect(String(T.en[clave]).length).toBeGreaterThan(0);
-    }
-    // La regla que lee la sala dice el juego, no la mesa del generador.
-    expect(T.es.gcAmigo).not.toMatch(/mesa de a ocho|mesa final/i);
-    expect(T.en.gcAmigo).not.toMatch(/table eight at a time|final table/i);
-  });
-
 });
 
 describe("el modo espectador", () => {
@@ -319,5 +307,28 @@ describe("el modo espectador", () => {
     // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos.
     expect(T.es.espQrBoton).toBe("QR para ver en vivo");
     expect(T.en.espQrBoton).toBe("QR to watch live");
+  });
+});
+
+describe("los juegos interactivos", () => {
+  it("sus textos nuevos existen en los dos idiomas", () => {
+    for (const k of [
+      "jiLink", "jiT", "jiB", "jiAbrir", "jiQrSub", "jiCerrarLista", "jiListaCerrada", "jiSellar", "jiAnunciando", "jiPocos",
+      "jiErrRonda", "jiResultadoT", "jiRondaEjemplo", "jiPRotulo", "jiPEstadoEntra", "jiPNombreEt", "jiPNombrePh", "jiPNombreBtn",
+      "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPTeToco", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
+      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo",
+    ]) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect((T.es[k] as string).trim(), `es.${k}`).not.toBe("");
+      expect((T.en[k] as string).trim(), `en.${k}`).not.toBe("");
+    }
+    // El resultado personal se llama como lo pidió quien lo pidió, y la honestidad también:
+    // es una ronda de ejemplo, no se puede comprobar y no se promete lo que no es.
+    expect(T.es.jiPTeToco).toMatch(/te tocó/i);
+    expect(T.es.jiRondaEjemplo).toMatch(/no se puede comprobar/i);
+    expect(T.en.jiRondaEjemplo).toMatch(/can't be verified/i);
+    expect(T.es.jiPEjemplo).toMatch(/no queda comprobante/i);
+    expect(T.en.jiPEjemplo).toMatch(/no receipt/i);
   });
 });

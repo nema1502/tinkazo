@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   pintarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(true)),
   acortar: vi.fn((..._a: unknown[]): any => Promise.resolve(null)),
   enlaceParaElQr: vi.fn((..._a: unknown[]): any => Promise.resolve({ ahora: "", despues: Promise.resolve(null) })),
+  anotarseEnSala: vi.fn((..._a: unknown[]): any => Promise.resolve({ ok: true, n: 1 })),
+  seguirVivo: vi.fn((..._a: unknown[]): any => ({ parar: () => undefined })),
 }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
@@ -33,18 +35,20 @@ vi.mock("./draw", () => ({ verDeNuevo: (...a: unknown[]) => h.verDeNuevo(...a) }
 vi.mock("./qr", () => ({ pintarQr: (...a: unknown[]) => h.pintarQr(...a) }));
 vi.mock("../enlace-corto", () => ({ acortar: (...a: unknown[]) => h.acortar(...a), enlaceParaElQr: (...a: unknown[]) => h.enlaceParaElQr(...a) }));
 
+/** La sala, para la vista del participante: anotarse y seguir /vivo, con falsos controlables. */
+vi.mock("../sala/cliente", () => ({ servicioDeSala: () => "http://sala.test" }));
+vi.mock("../sala/participante", async (orig) => ({
+  ...(await orig<typeof import("../sala/participante")>()),
+  anotarseEnSala: (...a: unknown[]) => h.anotarseEnSala(...a),
+  seguirVivo: (...a: unknown[]) => h.seguirVivo(...a),
+}));
+
 import { bytesToHex, hexToBytes, randomnessOf, roundTime } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
 import { app } from "../state";
 import { T } from "../i18n";
-import {
-  abrirEspectador,
-  abrirPanelQrEspectador,
-  datosDelEnlace,
-  enlaceEspectador,
-  type DatosEspectador,
-} from "./espectador";
+import { abrirEspectador, abrirPanelQrEspectador, abrirParticipante, datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espectador";
 
 /** Nombres de la lista sellada de prueba. */
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito"];
@@ -228,5 +232,156 @@ describe("el panel del QR del espectador", () => {
     abrirPanelQrEspectador("https://tinkazo.app/#espectador=abc");
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".espectador-qr")).toBeFalsy();
+  });
+});
+
+/* ------------------------------------------------- la vista del participante */
+
+describe("la vista del participante", () => {
+  beforeEach(() => {
+    h.anotarseEnSala.mockReset();
+    h.seguirVivo.mockReset();
+    // Un número distinto por alta, como en la sala de verdad: el 1 ya puede ser de otro nombre.
+    let numero = 100;
+    h.anotarseEnSala.mockImplementation(async () => ({ ok: true, n: ++numero } as const));
+    h.seguirVivo.mockReturnValue({ parar: () => undefined });
+    document.body.innerHTML = "";
+  });
+
+  const PARTICIPANTE = { id: "AbCd1234", clave: "c".repeat(22) };
+  /** La escucha que la vista dejó registrada en seguirVivo (los callbacks que el falso puede disparar). */
+  type EscuchaDeVista = Parameters<typeof import("../sala/participante").seguirVivo>[3];
+  const vista = (): HTMLElement => document.querySelector(".participante") as HTMLElement;
+  const escucha = (): EscuchaDeVista => h.seguirVivo.mock.calls[0]?.[3] as EscuchaDeVista;
+  /** El formulario de nombre, mientras está. */
+  const input = (): HTMLInputElement => vista().querySelector<HTMLInputElement>(".ji-p-nombre") as HTMLInputElement;
+  const botonSumarme = (): HTMLButtonElement => vista().querySelector<HTMLButtonElement>(".ji-p-sumarse") as HTMLButtonElement;
+
+  it("abre con el rótulo de participante y sigue la sala por /vivo, sin token", () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    expect(vista()).toBeTruthy();
+    expect(vista().textContent).toContain(T.es.jiPRotulo);
+    expect(h.seguirVivo).toHaveBeenCalledWith("AbCd1234", PARTICIPANTE.clave, "http://sala.test", expect.anything());
+    expect(vista().textContent).toContain(T.es.jiPEstadoEntra);
+  });
+
+  it("se anota con el nombre que puso y lo ve en la lista en vivo", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alNombre!(1, "Ana");
+    input().value = "  Beto  ";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.anotarseEnSala).toHaveBeenCalledWith("AbCd1234", PARTICIPANTE.clave, "Beto", "http://sala.test");
+    expect(vista().textContent).toContain(T.es.jiPListo);
+    expect([...vista().querySelectorAll("ol li")].map((li) => li.textContent)).toEqual(["Ana", "Beto"]);
+  });
+
+  it("un nombre que la pantalla quitó sale de la lista", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alNombre!(1, "Ana");
+    input().value = "Beto";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    escucha().alQuitado?.(1);
+    expect([...vista().querySelectorAll("ol li")].map((li) => li.textContent)).toEqual(["Beto"]);
+  });
+
+  it("un nombre con enlace no se manda, y el aviso lo dice", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    input().value = "mira malo.xyz";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.anotarseEnSala).not.toHaveBeenCalled();
+    expect(vista().textContent).toContain(T.es.jiPNombreMalo);
+  });
+
+  it("si la sala lo rechaza, dice por qué", async () => {
+    for (const [motivo, clave] of [["cerrada", "jiPTarde"], ["llena", "jiPErrLlena"], ["rapido", "jiPErrOtro"], ["otro", "jiPErrOtro"]] as const) {
+      h.anotarseEnSala.mockResolvedValue({ ok: false, motivo });
+      abrirParticipante(PARTICIPANTE, "es");
+      input().value = "Ana";
+      botonSumarme().click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vista().textContent, motivo).toContain(T.es[clave] as string);
+      document.body.innerHTML = "";
+      h.seguirVivo.mockReturnValue({ parar: () => undefined });
+    }
+  });
+
+  it("el cierre de lista se anuncia, y quien no alcanzó a sumarse se queda afuera", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alCierre?.();
+    expect(vista().textContent).toContain(T.es.jiPCerrada);
+    input().value = "Ana";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.anotarseEnSala).not.toHaveBeenCalled();
+    expect(vista().textContent).toContain(T.es.jiPTarde);
+  });
+
+  it("cuando comparten la ronda ve su resultado personal, con los mismos ganadores que la pantalla", async () => {
+    const nombres = ["Ana", "Beto"];
+    const hash = bytesToHex(listHash(nombres));
+    const randomness = "ab".repeat(32);
+    const sale = nombres[select(hexToBytes(randomness), hexToBytes(hash), nombres.length, 1)[0] as number] as string;
+    const ronda = { r: 1, randomness, listHash: hash, k: 1 };
+    abrirParticipante(PARTICIPANTE, "es");
+    const e = escucha();
+    e.alNombre(1, "Ana");
+    input().value = "Beto";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    e.alRonda?.(ronda);
+    const esperado = sale === "Beto" ? T.es.jiPTeToco : T.es.jiPNoGano;
+    const otro = sale === "Beto" ? T.es.jiPNoGano : T.es.jiPTeToco;
+    expect(vista().textContent).toContain(esperado);
+    expect(vista().textContent).not.toContain(otro);
+    expect(vista().textContent).toContain(sale);
+    expect(vista().textContent).toContain(T.es.jiPGanadores);
+  });
+
+  it("si la lista del celular no es la que se selló, no afirma nada", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alNombre!(1, "Ana");
+    input().value = "Beto";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    escucha().alRonda?.({ r: 1, randomness: "ab".repeat(32), listHash: "b".repeat(64), k: 1 });
+    expect(vista().textContent).toContain(T.es.jiPNoSePudo);
+    expect(vista().textContent).not.toContain(T.es.jiPTeToco);
+  });
+
+  it("sin haberse sumado, la ronda muestra igual quiénes salieron, y dice que quedó afuera", async () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alNombre!(1, "Ana");
+    escucha().alNombre!(2, "Beto");
+    escucha().alCierre?.();
+    escucha().alRonda?.({ r: 1, randomness: "ab".repeat(32), listHash: bytesToHex(listHash(["Ana", "Beto"])), k: 1 });
+    expect(vista().textContent).toContain(T.es.jiPTarde);
+    expect(vista().textContent).toContain(T.es.jiPGanadores);
+  });
+
+  it("si la sala se cierra (o vence), avisa y deja de mirar", () => {
+    const parar = vi.fn();
+    h.seguirVivo.mockReturnValue({ parar });
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alVencida?.();
+    expect(vista().textContent).toContain(T.es.jiPFin);
+    expect(parar).toHaveBeenCalled();
+  });
+
+  it("Escape cierra la vista y deja de mirar", () => {
+    const parar = vi.fn();
+    h.seguirVivo.mockReturnValue({ parar });
+    abrirParticipante(PARTICIPANTE, "es");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(vista()).toBeFalsy();
+    expect(parar).toHaveBeenCalled();
+  });
+
+  it("no se abre dos veces", () => {
+    abrirParticipante(PARTICIPANTE, "es");
+    abrirParticipante(PARTICIPANTE, "es");
+    expect(document.querySelectorAll(".participante")).toHaveLength(1);
   });
 });

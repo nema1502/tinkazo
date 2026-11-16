@@ -27,6 +27,7 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { initOrganizadorInteractivo } from "./sala/organizador";
 import { equiposActivo } from "./equipos/bandera";
 import { requestedMode } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
@@ -229,6 +230,8 @@ iniciarCupon();
 initEnsayo();
 // El modo stand, si se recargó en él.
 initStandSala();
+// Los juegos interactivos (botón de la portada: src/sala/organizador.ts).
+initOrganizadorInteractivo();
 // Los equipos con cupón (bandera VITE_EQUIPOS, apagada por defecto): sin la bandera no se agrega nada.
 if (equiposActivo()) {
   reponerEtiquetas();
@@ -596,5 +599,14 @@ if (location.hash.startsWith("#espectador=")) {
   void import("./ui/espectador").then((m) => {
     const datos = m.datosDelEnlace(location.hash);
     if (datos) m.abrirEspectador(datos, initialLang());
+  });
+}
+// La vista del participante (juegos interactivos): el QR de la sala llega a esta misma página con el
+// id y la clave en el fragmento, y abre la vista de solo-lectura con su resultado personal. Se baja
+// aparte: quien entra a sortear no lo descarga.
+if (location.hash.startsWith("#participante=")) {
+  void Promise.all([import("./ui/espectador"), import("./sala/participante")]).then(([m, p]) => {
+    const datos = p.datosDeParticipante(location.hash);
+    if (datos) m.abrirParticipante(datos, initialLang());
   });
 }

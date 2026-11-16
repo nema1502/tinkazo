@@ -56,6 +56,8 @@ export interface Vivo {
   estado: EstadoDeLaLista;
   /** La ronda compartida que decide, o `null` si la pantalla todavía no la mandó. */
   ronda: RondaViva | null;
+  /** Los números que hay ahora en la sala: si uno de los que ya viste falta, lo quitaron. */
+  ns: number[];
   /** Los nombres cifrados que cambiaron desde la última consulta. */
   nombres: { n: number; d: string }[];
 }
@@ -66,8 +68,8 @@ export async function leerVivo(id: string, desde: number, servicio: string, dep:
     const r = await (dep.fetch ?? fetch)(`${servicio}/v1/sala/${id}/vivo?desde=${desde}`);
     if (!r.ok) return null;
     const v = (await r.json()) as Partial<Vivo>;
-    if (typeof v.hay !== "number" || (v.estado !== "abierta" && v.estado !== "cerrada") || !Array.isArray(v.nombres)) return null;
-    return { hay: v.hay, estado: v.estado, ronda: v.ronda ? validarRondaDeSala(v.ronda) : null, nombres: v.nombres };
+    if (typeof v.hay !== "number" || (v.estado !== "abierta" && v.estado !== "cerrada") || !Array.isArray(v.nombres) || !Array.isArray(v.ns)) return null;
+    return { hay: v.hay, estado: v.estado, ronda: v.ronda ? validarRondaDeSala(v.ronda) : null, ns: v.ns, nombres: v.nombres };
   } catch {
     return null;
   }
@@ -76,6 +78,8 @@ export async function leerVivo(id: string, desde: number, servicio: string, dep:
 export interface EscuchaDeParticipante {
   /** Llegó un nombre que esta clave sí descifra (nuevo, o al volver a pedir los que ya había). Cada `n` se avisa una sola vez. */
   alNombre: (n: number, nombre: string) => void;
+  /** Un nombre que ya había se quitó de la sala: la lista del celular tiene que quedarse igual a la que se sella. */
+  alQuitado?: (n: number) => void;
   /** La ronda que decide cambió (por primera vez, o la pantalla volvió a compartirla). */
   alRonda?: (r: RondaViva) => void;
   /** La lista quedó cerrada: ya no entra nadie. */
@@ -128,6 +132,14 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
       cerrada = true;
       e.alCierre?.();
     }
+    // Un nombre que ya se avisó y ya no está: lo quitaron (el filtro de la pantalla, o a mano).
+    const ahora = new Set(v.ns);
+    for (const n of vistos) {
+      if (!ahora.has(n)) {
+        vistos.delete(n);
+        e.alQuitado?.(n);
+      }
+    }
     if (!parado) sondeo = poner(mirar, SONDEO_PARTICIPANTE_MS);
   };
 
@@ -138,6 +150,52 @@ export function seguirVivo(id: string, clave: string, servicio: string, e: Escuc
       sacar(sondeo);
     },
   };
+}
+
+/* --------------------------------------------------- el enlace del QR */
+
+/** Lo que viaja en el enlace del participante: la sala y la clave del QR, en el fragmento. */
+export interface DatosParticipante {
+  id: string;
+  clave: string;
+}
+
+const VERSION_ENLACE = 1;
+
+function aB64url(texto: string): string {
+  const bytes = new TextEncoder().encode(texto);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function deB64url(s: string): string {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+  return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+}
+
+/**
+ * El enlace que lleva el QR de la sala para los celulares: esta misma página del sitio, con el id
+ * y la clave en el fragmento (que ningún navegador manda a un servidor). La clave es la misma del
+ * QR del stand: con ella el celular descifra los nombres de la lista.
+ */
+export function enlaceDeParticipante(d: DatosParticipante, origen = location.origin): string {
+  return `${origen}/#participante=${aB64url(JSON.stringify({ v: VERSION_ENLACE, ...d }))}`;
+}
+
+/** Los datos que trae el fragmento `#participante=…`, o `null` si no es ese enlace o está roto. */
+export function datosDeParticipante(hash: string = location.hash): DatosParticipante | null {
+  const m = /^#participante=([A-Za-z0-9_-]+)$/.exec(hash);
+  if (!m?.[1]) return null;
+  try {
+    const j = JSON.parse(deB64url(m[1])) as Partial<DatosParticipante> & { v?: unknown };
+    if (j.v !== VERSION_ENLACE) return null;
+    if (typeof j.id !== "string" || !/^[0-9A-Za-z]{8}$/.test(j.id)) return null;
+    if (typeof j.clave !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(j.clave)) return null;
+    return { id: j.id, clave: j.clave };
+  } catch {
+    return null;
+  }
 }
 
 /* -------------------------------------------------- el resultado personal */
@@ -157,26 +215,35 @@ function bytesDeHex(hex: string): Uint8Array | null {
 export type ResultadoPersonal = "te-toco" | "no-gano" | "lista-distinta";
 
 /**
- * «Me tocó» o «no ganó», calculado con el mismo select del protocolo: la lista del celular (los
- * nombres que descifró de la sala, en el orden en que entraron) debe ser exactamente la que se
- * selló — la huella compartida lo comprueba. Si no cuadra, o la ronda está mal formada, no afirma
- * nada: la vista muestra que no se pudo decidir, nunca un resultado inventado.
+ * Quienes salieron, con el mismo select del protocolo, o `null` si la lista del celular (los nombres
+ * que descifró de la sala, en el orden en que entraron) no es exactamente la que se selló — la huella
+ * compartida lo comprueba. Si no cuadra, o la ronda está mal formada, no hay ganadores que mostrar:
+ * la vista nunca inventa un resultado.
  */
-export function resultadoPersonal(nombres: string[], ronda: RondaViva, miNombre: string): ResultadoPersonal {
+export function ganadoresDe(nombres: string[], ronda: RondaViva): string[] | null {
   const lista = canonicalList(nombres.join("\n"));
-  if (lista.length < 2) return "lista-distinta";
+  if (lista.length < 2) return null;
   const hash = listHash(lista);
   const hashHex = Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("");
-  if (hashHex !== ronda.listHash) return "lista-distinta";
+  if (hashHex !== ronda.listHash) return null;
   const randomness = bytesDeHex(ronda.randomness);
-  if (!randomness || ronda.k < 1 || ronda.k > lista.length) return "lista-distinta";
+  if (!randomness || ronda.k < 1 || ronda.k > lista.length) return null;
   let idx: number[];
   try {
     idx = select(randomness, hash, lista.length, ronda.k);
   } catch {
-    return "lista-distinta";
+    return null;
   }
+  return idx.map((i) => lista[i] as string);
+}
+
+/**
+ * «Me tocó» o «no ganó», con los mismos ganadores que ve cualquiera: si la lista no cuadra con la
+ * que se selló, no afirma nada.
+ */
+export function resultadoPersonal(nombres: string[], ronda: RondaViva, miNombre: string): ResultadoPersonal {
+  const ganadores = ganadoresDe(nombres, ronda);
+  if (!ganadores) return "lista-distinta";
   const mios = claveDe(miNombre);
-  const ganadores = idx.map((i) => claveDe(lista[i] as string));
-  return ganadores.includes(mios) ? "te-toco" : "no-gano";
+  return ganadores.some((g) => claveDe(g) === mios) ? "te-toco" : "no-gano";
 }

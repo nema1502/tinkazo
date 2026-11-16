@@ -4,7 +4,7 @@ import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
 import { cifrarNombre, generarClave } from "./cifra";
 import { cerrarListaEnSala, compartirRonda, escucharSala, type Sala } from "./cliente";
-import { anotarseEnSala, resultadoPersonal, seguirVivo, type RondaViva } from "./participante";
+import { anotarseEnSala, datosDeParticipante, enlaceDeParticipante, ganadoresDe, resultadoPersonal, seguirVivo, type RondaViva } from "./participante";
 
 /**
  * El flujo interactivo de la sala (juegos interactivos, Kahoot-like): la pantalla comparte la ronda que
@@ -118,6 +118,23 @@ describe("la pantalla comparte la ronda y cierra la lista", () => {
 
 /* --------------------------------------------------------- el participante */
 
+describe("el enlace del participante", () => {
+  it("ida y vuelta: el enlace lleva el id de la sala y la clave en el fragmento, que ningún servidor ve", () => {
+    const enlace = enlaceDeParticipante({ id: "AbCd1234", clave: "c".repeat(22) }, "https://tinkazo.app");
+    expect(enlace).toMatch(/^https:\/\/tinkazo\.app\/#participante=[A-Za-z0-9_-]+$/);
+    expect(datosDeParticipante(new URL(enlace).hash)).toEqual({ id: "AbCd1234", clave: "c".repeat(22) });
+  });
+  it("rechaza lo que no es un enlace de participante, o lo está roto", () => {
+    expect(datosDeParticipante("#sortear")).toBeNull();
+    expect(datosDeParticipante("#espectador=abc")).toBeNull();
+    expect(datosDeParticipante("#participante=abc")).toBeNull();
+    expect(datosDeParticipante("")).toBeNull();
+    // Un payload válido en base64 pero con un id o una clave mal formados.
+    const roto = Buffer.from(JSON.stringify({ v: 1, id: "corto", clave: "c".repeat(22) })).toString("base64url");
+    expect(datosDeParticipante(`#participante=${roto}`)).toBeNull();
+  });
+});
+
 describe("el participante se anota", () => {
   it("manda su nombre cifrado con la clave del QR", async () => {
     const f = vi.fn().mockResolvedValue(respuesta({ n: 1 }, 201));
@@ -148,7 +165,7 @@ describe("el participante sigue la sala", () => {
 
   /** Espera a que algo pase: descifrar nombres usa crypto de verdad, y hay que darle vueltas al bucle. */
   async function hasta(condicion: () => boolean): Promise<void> {
-    for (let i = 0; i < 60 && !condicion(); i++) await vi.advanceTimersByTimeAsync(50);
+    for (let i = 0; i < 200 && !condicion(); i++) await vi.advanceTimersByTimeAsync(50);
   }
 
   it("pide /vivo sin token, descifra los nombres y avanza el cursor", async () => {
@@ -158,7 +175,7 @@ describe("el participante sigue la sala", () => {
     let desdePedido = "";
     const f = vi.fn().mockImplementation(async (url: string) => {
       desdePedido = String(url).split("desde=")[1] ?? "";
-      return respuesta({ hay: 2, estado: "abierta", ronda: null, nombres: [{ n: 1, d: d1 }, { n: 2, d: d2 }] });
+      return respuesta({ hay: 2, estado: "abierta", ronda: null, ns: [1, 2], nombres: [{ n: 1, d: d1 }, { n: 2, d: d2 }] });
     });
     const alNombre = vi.fn();
     const s = seguirVivo(sala.id, clave, sala.servicio, { alNombre }, { fetch: f });
@@ -174,7 +191,7 @@ describe("el participante sigue la sala", () => {
   it("la ronda compartida y el cierre de lista llegan por el mismo sondeo", async () => {
     const clave = generarClave();
     const ronda = { r: 5, randomness: "a".repeat(64), listHash: "b".repeat(64), k: 1 };
-    const f = vi.fn().mockResolvedValue(respuesta({ hay: 0, estado: "cerrada", ronda, nombres: [] }));
+    const f = vi.fn().mockResolvedValue(respuesta({ hay: 0, estado: "cerrada", ronda, ns: [], nombres: [] }));
     const alRonda = vi.fn();
     const alCierre = vi.fn();
     const s = seguirVivo(sala.id, clave, sala.servicio, { alNombre: vi.fn(), alRonda, alCierre }, { fetch: f });
@@ -195,9 +212,33 @@ describe("el participante sigue la sala", () => {
     s.parar();
   });
 
+  it("un nombre que la pantalla quitó deja de verse: la lista del celular sigue siendo la que se sella", async () => {
+    const clave = generarClave();
+    const d1 = await cifrarNombre(clave, "Ana");
+    const d2 = await cifrarNombre(clave, "Beto");
+    let pedido = 0;
+    const f = vi.fn().mockImplementation(async () => {
+      pedido++;
+      return pedido === 1
+        ? respuesta({ hay: 2, estado: "abierta", ronda: null, ns: [1, 2], nombres: [{ n: 1, d: d1 }, { n: 2, d: d2 }] })
+        : respuesta({ hay: 1, estado: "abierta", ronda: null, ns: [2], nombres: [] });
+    });
+    const alNombre = vi.fn();
+    const alQuitado = vi.fn();
+    const s = seguirVivo(sala.id, clave, sala.servicio, { alNombre, alQuitado }, { fetch: f });
+    await hasta(() => alNombre.mock.calls.length === 2);
+    await hasta(() => f.mock.calls.length >= 2);
+    expect(alQuitado).toHaveBeenCalledWith(1);
+    // Y no vuelve a avisar al que quedó (el sondeo lo trae entero, por el ns).
+    const antes = alNombre.mock.calls.length;
+    await hasta(() => f.mock.calls.length >= 3);
+    expect(alNombre.mock.calls.length).toBe(antes);
+    s.parar();
+  });
+
   it("los nombres de otra clave no se muestran", async () => {
     const d1 = await cifrarNombre(generarClave(), "Otra");
-    const f = vi.fn().mockResolvedValue(respuesta({ hay: 1, estado: "abierta", ronda: null, nombres: [{ n: 1, d: d1 }] }));
+    const f = vi.fn().mockResolvedValue(respuesta({ hay: 1, estado: "abierta", ronda: null, ns: [1], nombres: [{ n: 1, d: d1 }] }));
     const alNombre = vi.fn();
     const s = seguirVivo(sala.id, generarClave(), sala.servicio, { alNombre }, { fetch: f });
     await vi.advanceTimersByTimeAsync(10);
@@ -250,5 +291,13 @@ describe("el resultado personal", () => {
     expect(resultadoPersonal(nombres, mala, "Ana")).toBe("lista-distinta");
     const truncada = { r: 1, randomness: "", listHash: hash, k: 1 };
     expect(resultadoPersonal(nombres, truncada, "Ana")).toBe("lista-distinta");
+  });
+
+  it("los ganadores salen con el mismo select, para mostrarlos en el celular", () => {
+    const { ronda, ganadores } = rondaDe(2);
+    expect(ganadoresDe(nombres, ronda)).toEqual(ganadores);
+    // Sin lista sellable, no hay ganadores que mostrar.
+    expect(ganadoresDe(["Ana"], ronda)).toBeNull();
+    expect(ganadoresDe(nombres, { ...ronda, listHash: "b".repeat(64) })).toBeNull();
   });
 });

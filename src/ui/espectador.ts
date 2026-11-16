@@ -9,6 +9,9 @@ import { listHash } from "../protocol/canonical";
 import { cintas } from "./espera";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQr } from "./qr";
+import { servicioDeSala } from "../sala/cliente";
+import { revisarNombre } from "../sala/filtro";
+import { anotarseEnSala, seguirVivo, ganadoresDe, resultadoPersonal, type DatosParticipante, type RondaViva } from "../sala/participante";
 
 /**
  * El modo espectador: el mismo sorteo, retransmitido sin servidor nuevo.
@@ -290,4 +293,207 @@ export function abrirPanelQrEspectador(enlace: string): void {
     const corto = await despues.catch(() => null);
     if (corto && capa.isConnected && img.isConnected) void pintarQr(img, corto);
   })();
+}
+
+/* ---------------------------------------------------- la vista del participante */
+
+/**
+ * La vista del participante de los juegos interactivos: quien escanea el QR de la sala (el mismo
+ * enlace de siempre, ahora con los datos en el fragmento de esta página) pone su nombre, ve la
+ * lista en vivo y, cuando quien organiza sella y comparte la ronda, ve su resultado personal.
+ *
+ * Es la contraparte en el celular del panel del organizador (`sala/organizador.ts`): no tiene el
+ * token de la sala, solo lee `/vivo` y manda su nombre cifrado. El resultado se calcula con la
+ * misma matemática que en la pantalla (`ganadoresDe`): si la lista del celular no es exactamente
+ * la que se selló, la vista no afirma nada. Es una ronda de ejemplo: sin comprobante y sin premio
+ * que entregar, lo dice abajo, como el modo stand.
+ */
+export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()): boolean {
+  if (document.querySelector(".participante")) return false;
+  setLang(lang);
+  const servicio = servicioDeSala();
+  const capa = document.createElement("div");
+  capa.className = "espera espectador participante";
+  capa.setAttribute("role", "dialog");
+  capa.setAttribute("aria-modal", "true");
+  capa.setAttribute("aria-label", t("jiPRotulo"));
+  capa.tabIndex = -1;
+  capa.innerHTML =
+    `<div class="espera-top"><span class="sticker">${esc(t("jiPRotulo"))}</span></div>` +
+    `<p class="ji-p-estado" role="status"></p>` +
+    `<div class="ji-p-cuerpo"></div>` +
+    `<p class="ji-p-ejemplo">${esc(t("jiPEjemplo"))}</p>`;
+  document.body.appendChild(capa);
+  capa.focus({ preventScroll: true });
+
+  const estadoEl = capa.querySelector<HTMLElement>(".ji-p-estado");
+  const cuerpo = capa.querySelector<HTMLElement>(".ji-p-cuerpo");
+
+  const nombres = new Map<number, string>();
+  let miNombre: string | null = null;
+  let miNumero: number | null = null;
+  let cerrada = false;
+  let ronda: RondaViva | null = null;
+  let vencida = false;
+
+  /** La lista de nombres, siempre con `textContent`: nunca como HTML. */
+  function pintarLista(nodo: HTMLElement): void {
+    const ol = document.createElement("ol");
+    ol.className = "ji-p-lista";
+    ol.setAttribute("aria-label", t("jiPListaAria"));
+    for (const nombre of nombres.values()) {
+      const li = document.createElement("li");
+      li.textContent = nombre;
+      ol.append(li);
+    }
+    nodo.replaceChildren(ol);
+  }
+
+  function pintarResultado(nodo: HTMLElement): void {
+    nodo.replaceChildren();
+    const lista = [...nombres.values()];
+    const ganadores = ronda ? ganadoresDe(lista, ronda) : null;
+    if (!ganadores) {
+      const p = document.createElement("p");
+      p.className = "ji-p-aviso";
+      p.textContent = t("jiPNoSePudo");
+      nodo.append(p);
+      return;
+    }
+    const estado = resultadoPersonal(lista, ronda as RondaViva, miNombre ?? "");
+    const grande = document.createElement("p");
+    grande.className = "ji-p-resultado";
+    grande.textContent = t(estado === "te-toco" ? "jiPTeToco" : "jiPNoGano");
+    nodo.append(grande);
+    const titulo = document.createElement("p");
+    titulo.className = "ji-p-ganadores-t";
+    titulo.textContent = t("jiPGanadores");
+    nodo.append(titulo);
+    const ol = document.createElement("ul");
+    for (const g of ganadores) {
+      const li = document.createElement("li");
+      li.textContent = g;
+      ol.append(li);
+    }
+    nodo.append(ol);
+  }
+
+  function pintar(): void {
+    if (!estadoEl || !cuerpo) return;
+    if (vencida) {
+      estadoEl.textContent = t("jiPFin");
+      cuerpo.replaceChildren();
+      return;
+    }
+    if (ronda) {
+      pintarResultado(cuerpo);
+      estadoEl.textContent = miNombre === null ? t("jiPTarde") : "";
+      return;
+    }
+    if (miNombre !== null) {
+      estadoEl.textContent = cerrada ? t("jiPCerrada") : t("jiPListo");
+      pintarLista(cuerpo);
+      return;
+    }
+    estadoEl.textContent = cerrada ? t("jiPCerrada") : nombres.size === 0 ? t("jiPEstadoEntra") : "";
+    // El formulario para sumarse, con el nombre filtrado acá mismo: lo que la pantalla va a
+    // descartar no sale del celular.
+    cuerpo.replaceChildren();
+    const form = document.createElement("form");
+    form.className = "ji-p-form";
+    const label = document.createElement("label");
+    label.textContent = t("jiPNombreEt");
+    const input = document.createElement("input");
+    input.className = "ji-p-nombre";
+    input.maxLength = 40;
+    input.autocomplete = "off";
+    input.placeholder = t("jiPNombrePh");
+    label.append(input);
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "primary ji-p-sumarse";
+    boton.textContent = t("jiPNombreBtn");
+    const aviso = document.createElement("p");
+    aviso.className = "ji-p-aviso";
+    aviso.setAttribute("role", "alert");
+    const mandar = (): void => {
+      // Cerrada la lista no hay nada que pedir: la respuesta sería «cerrada» de todos modos.
+      if (cerrada) {
+        aviso.textContent = t("jiPTarde");
+        return;
+      }
+      const revisado = revisarNombre(input.value);
+      if (revisado.estado === "descartar") {
+        aviso.textContent = t("jiPNombreMalo");
+        input.focus();
+        return;
+      }
+      aviso.textContent = t("jiPEstadoEntra");
+      boton.disabled = true;
+      void anotarseEnSala(d.id, d.clave, revisado.estado === "ok" ? revisado.nombre : input.value.trim(), servicio).then((r) => {
+        boton.disabled = false;
+        if (r.ok) {
+          miNombre = revisado.estado === "ok" ? revisado.nombre : input.value.trim();
+          miNumero = r.n;
+          nombres.set(r.n, miNombre);
+          aviso.textContent = "";
+          pintar();
+          return;
+        }
+        aviso.textContent = t(r.motivo === "cerrada" ? "jiPTarde" : r.motivo === "llena" ? "jiPErrLlena" : r.motivo === "red" ? "jiPErrRed" : "jiPErrOtro");
+        input.focus();
+      });
+    };
+    boton.addEventListener("click", mandar);
+    input.addEventListener("keydown", (ev: KeyboardEvent) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        mandar();
+      }
+    });
+    form.append(label, boton, aviso);
+    cuerpo.append(form);
+  }
+
+  const cerrar = (): void => {
+    vivo.parar();
+    removeEventListener("keydown", tecla);
+    capa.remove();
+  };
+  const tecla = (ev: KeyboardEvent): void => {
+    if (ev.key === "Escape") cerrar();
+  };
+  addEventListener("keydown", tecla);
+
+  const vivo = seguirVivo(d.id, d.clave, servicio, {
+    alNombre: (n, nombre) => {
+      nombres.set(n, nombre);
+      pintar();
+    },
+    alQuitado: (n) => {
+      nombres.delete(n);
+      if (n === miNumero) {
+        // A su propio nombre lo quitaron (lo revisó la pantalla y no pasó): vuelve al formulario.
+        miNombre = null;
+        miNumero = null;
+      }
+      pintar();
+    },
+    alCierre: () => {
+      cerrada = true;
+      pintar();
+    },
+    alRonda: (r) => {
+      ronda = r;
+      pintar();
+    },
+    alVencida: () => {
+      vencida = true;
+      // No va a venir nada más de esta sala.
+      vivo.parar();
+      pintar();
+    },
+  });
+  pintar();
+  return true;
 }
