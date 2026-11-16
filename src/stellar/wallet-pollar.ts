@@ -94,8 +94,70 @@ export const ENTRADA_CERRADA = "popup-closed";
 /** Pollar no pudo abrir la entrada (sin red, o la llave no vale en este sitio): no hay a dónde mandar la ventana. */
 export const ENTRADA_SIN_SESION = "popup-nosession";
 
-/** Cuánto se espera, con la ventana de Google cerrada, a que llegue la cuenta: el SDK tarda un instante en enterarse. */
+/**
+ * Cuánto se espera, con la ventana de Google cerrada y sin que haya salido el pedido de ingreso, a que la persona haya
+ * terminado: el SDK tarda un instante en enterarse de que el servidor tiene la sesión lista. Si no sale en este rato, la
+ * persona cerró la ventana sin entrar.
+ */
 export const GRACIA_CIERRE_MS = 6_000;
+
+/**
+ * Cuánto se espera, con la ventana cerrada y el pedido de ingreso ya en camino (`POST /auth/login`): el SDK le da 45
+ * segundos (`loginTimeoutMs`) y con una cuenta nueva ese pedido además la crea. Cinco más de margen. Antes se cortaba a
+ * los 6 segundos y una cuenta nueva tenía que entrar dos veces (15 de noviembre de 2026).
+ */
+export const ESPERA_INGRESO_MS = 50_000;
+
+/** El plazo largo se cumplió sin cuenta: el mismo nombre del plazo vencido de `waitForWallet`, que la pantalla ya sabe decir. */
+export const ENTRADA_DEMORADA = "pollar-timeout";
+
+/** Los cortes de la entrada con Google que dejan al SDK esperando algo que ya no va a llegar: se le dice que pare. */
+const CORTES: readonly string[] = [ENTRADA_BLOQUEADA, ENTRADA_CERRADA, ENTRADA_SIN_SESION, ENTRADA_DEMORADA];
+
+/** Lo que el SDK le pasa a quien mira sus pedidos (el cliente de su API, `openapi-fetch`). */
+interface PedidoMirado {
+  request?: { method?: string };
+  schemaPath?: string;
+}
+interface Mirador {
+  onRequest(p: PedidoMirado): undefined;
+}
+
+/**
+ * Avisa cuando el SDK manda el pedido de ingreso (`POST /auth/login`). Es la única señal de que la persona terminó en
+ * Google: el paso del SDK (`getAuthState().step`) es `authenticating` desde que la ventana va a Google hasta que llega la
+ * cuenta, con la persona todavía eligiendo su cuenta o ya con el ingreso en camino, y el SDK no mira la ventana. El
+ * pedido sale recién cuando el servidor dice que la sesión está lista (`authenticate` en `@pollar/core`).
+ *
+ * Mira sin tocar: no cambia el pedido ni lo frena, y si algo falla al mirar, la entrada sigue igual. Si el SDK no deja
+ * mirar (otra versión, sin `_api.use`), devuelve `null` y la entrada queda con la regla de siempre: 6 segundos.
+ */
+export function mirarPedidoDeIngreso(client: unknown, aviso: () => void): (() => void) | null {
+  const api = (client as { _api?: { use?: (m: Mirador) => unknown; eject?: (m: Mirador) => unknown } } | null)?._api;
+  if (!api || typeof api.use !== "function" || typeof api.eject !== "function") return null;
+  const mirador: Mirador = {
+    onRequest({ request, schemaPath }) {
+      try {
+        if (schemaPath === "/auth/login" && String(request?.method ?? "").toUpperCase() === "POST") aviso();
+      } catch {
+        /* mirar nunca corta la entrada */
+      }
+      return undefined;
+    },
+  };
+  try {
+    api.use(mirador);
+  } catch {
+    return null;
+  }
+  return () => {
+    try {
+      api.eject?.(mirador);
+    } catch {
+      /* ya no estaba */
+    }
+  };
+}
 
 /**
  * ¿La marca de Pollar sigue valiendo? Con el SDK ya leyó su sesión (`ready()`) y sin cuenta, la marca vale solo si
@@ -944,6 +1006,12 @@ class PollarWallet implements SubmittingWallet {
    * lista. Falla con `popup-blocked` si el navegador no dejó abrir la ventana y con `popup-closed` si la persona la
    * cerró sin entrar: en los dos casos la entrada se corta y se puede volver a intentar. (La versión anterior del SDK
    * se iba a Google y volvía a la página; `restore` sigue sirviendo si la página se recarga.)
+   *
+   * Con la ventana cerrada, el vigía mira si salió el pedido de ingreso (`mirarPedidoDeIngreso`), en cualquier orden:
+   * - sin pedido, la persona cerró sin terminar en Google: a los 6 segundos se corta (`GRACIA_CIERRE_MS`);
+   * - con el pedido en camino (antes del cierre, o durante esos 6 segundos), se espera lo que espera el SDK, hasta
+   *   `ESPERA_INGRESO_MS`, o hasta que el SDK diga que falló.
+   * Cada corte le dice al SDK que pare (`cancelLogin`), y si la cuenta llegó justo en ese instante, se entra igual.
    */
   async connect(): Promise<string> {
     const client = await this.#ensureClient();
@@ -954,30 +1022,67 @@ class PollarWallet implements SubmittingWallet {
     // enseguida: sin esto, la persona miraba "Conectando…" hasta el final del plazo, dos minutos. Apagado, como siempre.
     const ready = waitForWallet(client, 120_000, ingresoPlanB());
     ready.catch(() => undefined);
-    let cierre = 0;
-    let vigia = 0;
-    const cortada = new Promise<never>((_, rechazar) => {
-      this.#falla = rechazar;
-      // Si la persona cierra la ventana antes de entrar, no se espera dos minutos: se le da un respiro (el SDK se
-      // entera de que terminó un instante después de que la ventana se cierra sola) y se corta.
-      vigia = window.setInterval(() => {
-        if (!this.#ventana?.closed || cierre) return;
-        cierre = window.setTimeout(() => rechazar(new Error(ENTRADA_CERRADA)), GRACIA_CIERRE_MS);
-      }, 500);
+    let rechazar: (e: Error) => void = () => undefined;
+    const cortada = new Promise<never>((_, r) => {
+      rechazar = r;
     });
     cortada.catch(() => undefined);
+    this.#falla = rechazar;
+    const cerrada = (): boolean => this.#ventana?.closed === true;
+    /** Salió el pedido de ingreso: la persona terminó en Google y el servidor está creando o abriendo su cuenta. */
+    let enCamino = false;
+    let gracia = 0;
+    let larga = 0;
+    let soltarPaso = (): void => undefined;
+    // Ventana cerrada con el pedido en camino: se desarma el corte de los 6 segundos y se espera al SDK.
+    const esperarAlIngreso = (): void => {
+      window.clearTimeout(gracia);
+      gracia = 0;
+      if (larga) return;
+      larga = window.setTimeout(() => rechazar(new Error(ENTRADA_DEMORADA)), ESPERA_INGRESO_MS);
+      // Si el SDK se da por vencido antes (su plazo, o el servidor dijo que no), no hay nada más que esperar.
+      const soltar = client.onAuthStateChange((s) => {
+        if (s.step === "error") rechazar(new Error(s.errorCode));
+      });
+      soltarPaso = () => void soltar();
+    };
+    const dejarDeMirar = mirarPedidoDeIngreso(client, () => {
+      enCamino = true;
+      if (cerrada()) esperarAlIngreso();
+    });
+    const vigia = window.setInterval(() => {
+      if (!cerrada() || larga) return;
+      if (enCamino) {
+        esperarAlIngreso();
+        return;
+      }
+      // Sin el pedido, un respiro: el SDK se entera de que la sesión está lista un instante después de que la ventana
+      // se cierra sola. Si el pedido sale en este rato, `esperarAlIngreso` desarma el corte.
+      if (!gracia) gracia = window.setTimeout(() => (enCamino ? esperarAlIngreso() : rechazar(new Error(ENTRADA_CERRADA))), GRACIA_CIERRE_MS);
+    }, 500);
     try {
       client.login({ provider: "google" });
       const wallet = await Promise.race([ready, cortada]);
       this.address = wallet.address;
       return wallet.address;
     } catch (e) {
-      // El SDK sigue esperando una ventana que ya no está: se le dice que deje de hacerlo.
-      if (e instanceof Error && (e.message === ENTRADA_BLOQUEADA || e.message === ENTRADA_CERRADA || e.message === ENTRADA_SIN_SESION)) client.cancelLogin();
+      if (e instanceof Error && CORTES.includes(e.message)) {
+        // El SDK sigue esperando algo que ya no va a llegar: se le dice que pare, y no queda un intento colgado.
+        client.cancelLogin();
+        // Si la cuenta llegó justo en este instante, ya está guardada en el SDK: se entra igual.
+        const ya = client.getWallet();
+        if (ya?.address) {
+          this.address = ya.address;
+          return ya.address;
+        }
+      }
       throw e;
     } finally {
       window.clearInterval(vigia);
-      window.clearTimeout(cierre);
+      window.clearTimeout(gracia);
+      window.clearTimeout(larga);
+      soltarPaso();
+      dejarDeMirar?.();
       this.#falla = null;
       this.#ventana = null;
     }

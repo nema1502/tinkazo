@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   /** Lo que hace `login()` en la prueba. */
   alLogin: null as null | ((c: Record<string, unknown>) => void),
   perfil: null as null | { first_name?: string; last_name?: string; mail: string; avatar: string },
+  /** Un SDK sin el cliente de la API a la vista: otra versión. */
+  sinApi: false,
 }));
 
 vi.mock("@pollar/core", () => ({
@@ -31,15 +33,31 @@ vi.mock("@pollar/core", () => ({
     wallet: { address: string } | null = h.billetera;
     oyentes = new Set<(s: { step: string }) => void>();
     cancelLogin = vi.fn();
+    /** El paso del SDK: `authenticating` desde que la ventana va a Google hasta que hay cuenta, como el de verdad. */
+    paso = "idle";
+    /** Los que miran los pedidos del SDK, como los de su cliente de la API (`use` y `eject`). */
+    _api = {
+      miradores: [] as Array<{ onRequest: (x: { request: { method: string }; schemaPath: string }) => unknown }>,
+      use(m: { onRequest: (x: { request: { method: string }; schemaPath: string }) => unknown }): void {
+        this.miradores.push(m);
+      },
+      eject(m: unknown): void {
+        this.miradores = this.miradores.filter((x) => x !== m);
+      },
+    };
     constructor(config: Record<string, unknown>) {
       h.config = config;
       h.cliente = this as unknown as Record<string, unknown>;
+      if (h.sinApi) delete (this as { _api?: unknown })._api;
     }
     ready(): Promise<void> {
       return h.ready === "ya" ? Promise.resolve() : new Promise<void>(() => undefined);
     }
     getWallet(): { address: string } | null {
       return this.wallet;
+    }
+    getAuthState(): { step: string } {
+      return { step: this.paso };
     }
     onAuthStateChange(fn: (s: { step: string }) => void): () => void {
       this.oyentes.add(fn);
@@ -82,6 +100,7 @@ beforeEach(() => {
   h.billetera = null;
   h.alLogin = null;
   h.perfil = null;
+  h.sinApi = false;
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY", "pub_testnet_prueba");
 });
 afterEach(() => {
@@ -241,9 +260,29 @@ describe("el perfil: el correo no es un nombre", () => {
 describe("entrar con Google", () => {
   /** El SDK, al hacer `login()`, llama al abridor de ventanas que se le dio, igual que el de verdad. */
   const alLoginAbre = (c: Record<string, unknown>): void => {
-    void (h.config as Config).openAuthUrl?.({ provider: "google", getUrl: async () => "https://pollar.example/auth", redirectUri: "https://tinkazo.app", signal: new AbortController().signal });
-    void c;
+    void Promise.resolve(
+      (h.config as Config).openAuthUrl?.({ provider: "google", getUrl: async () => "https://pollar.example/auth", redirectUri: "https://tinkazo.app", signal: new AbortController().signal }),
+    ).then(() => {
+      // Como el SDK (`loginOAuth`): con la ventana ya en Google pasa a autenticar, mientras la persona sigue en Google.
+      (c as unknown as { paso: string }).paso = "authenticating";
+    });
   };
+
+  /** El SDK manda el pedido de ingreso: el servidor ya dijo que la persona terminó en Google. */
+  const saleElPedido = (c: Record<string, unknown>): void => {
+    for (const m of (c as unknown as { _api: { miradores: Array<{ onRequest: (x: unknown) => unknown }> } })._api.miradores) {
+      m.onRequest({ request: { method: "POST" }, schemaPath: "/auth/login" });
+    }
+  };
+
+  /** Llega la cuenta, y el SDK lo avisa. */
+  const llegaLaCuenta = (c: Record<string, unknown>): void => {
+    (c as unknown as { wallet: { address: string }; paso: string }).wallet = { address: DIR };
+    (c as unknown as { paso: string }).paso = "authenticated";
+    for (const f of (c as unknown as { oyentes: Set<(s: { step: string }) => void> }).oyentes) f({ step: "authenticated" });
+  };
+
+  const cancelLogin = (): ReturnType<typeof vi.fn> => (h.cliente as unknown as { cancelLogin: ReturnType<typeof vi.fn> }).cancelLogin;
 
   /** Una ventana de mentira que el navegador sí deja abrir. */
   function ventanaQueAbre() {
@@ -297,7 +336,7 @@ describe("entrar con Google", () => {
     }
   });
 
-  it("si la persona cierra la ventana sin entrar, tras un respiro se corta y se puede volver a intentar", async () => {
+  it("si la persona cierra la ventana sin terminar en Google (no salió el pedido de ingreso), a los 6 segundos se corta como siempre", async () => {
     vi.useFakeTimers();
     almacen();
     const { ventana } = ventanaQueAbre();
@@ -309,12 +348,153 @@ describe("entrar con Google", () => {
     );
     await vi.advanceTimersByTimeAsync(300);
     ventana.closed = true;
-    // Al cerrarse sola tras entrar el SDK se entera enseguida: antes del respiro no se corta.
+    // El SDK está autenticando todo el rato que la persona pasa en Google: el paso solo no dice si terminó.
+    expect((h.cliente as unknown as { paso: string }).paso).toBe("authenticating");
     await vi.advanceTimersByTimeAsync(GRACIA_CIERRE_MS - 1_000);
-    expect((h.cliente as unknown as { cancelLogin: ReturnType<typeof vi.fn> }).cancelLogin).not.toHaveBeenCalled();
+    expect(cancelLogin()).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(2_000);
     expect(await r).toBe(ENTRADA_CERRADA);
-    expect((h.cliente as unknown as { cancelLogin: ReturnType<typeof vi.fn> }).cancelLogin).toHaveBeenCalledTimes(1);
+    // Y el SDK deja de esperar: no queda un intento colgado que cree la cuenta por detrás.
+    expect(cancelLogin()).toHaveBeenCalledTimes(1);
+  });
+
+  it("con la ventana cerrada y el pedido de ingreso en camino, a los 6 segundos no se corta: la cuenta llega a los 20 y se entra", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      // Una cuenta nueva: el pedido sale y la ventana se cierra, pero crear la cuenta lleva veinte segundos.
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+      setTimeout(() => llegaLaCuenta(c), 20_000);
+    };
+    const { pollarWallet, GRACIA_CIERRE_MS } = await modulo();
+    let fin = "";
+    const r = pollarWallet.connect().then(
+      (d) => (fin = d),
+      (e: Error) => (fin = e.message),
+    );
+    await vi.advanceTimersByTimeAsync(GRACIA_CIERRE_MS + 2_000);
+    expect(fin).toBe("");
+    expect(cancelLogin()).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(await r).toBe(DIR);
+    expect(cancelLogin()).not.toHaveBeenCalled();
+    // Ya no se mira nada del SDK.
+    expect((h.cliente as unknown as { _api: { miradores: unknown[] } })._api.miradores).toHaveLength(0);
+  });
+
+  it("con la ventana cerrada, si a los 3 segundos sale el pedido de ingreso, el corte se desarma", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      // Primero se cierra la ventana y recién después el SDK se entera de que la persona terminó.
+      setTimeout(() => (ventana.closed = true), 300);
+      setTimeout(() => saleElPedido(c), 3_300);
+      setTimeout(() => llegaLaCuenta(c), 15_000);
+    };
+    const { pollarWallet, GRACIA_CIERRE_MS } = await modulo();
+    let fin = "";
+    const r = pollarWallet.connect().then(
+      (d) => (fin = d),
+      (e: Error) => (fin = e.message),
+    );
+    await vi.advanceTimersByTimeAsync(GRACIA_CIERRE_MS + 4_000);
+    expect(fin).toBe("");
+    expect(cancelLogin()).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(await r).toBe(DIR);
+    expect(cancelLogin()).not.toHaveBeenCalled();
+  });
+
+  it("el plazo largo se cumple sin cuenta: se corta, se le avisa al SDK y falla con el plazo vencido", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+    };
+    const { pollarWallet, ESPERA_INGRESO_MS, ENTRADA_DEMORADA } = await modulo();
+    let fin = "";
+    const r = pollarWallet.connect().then(
+      (d) => (fin = d),
+      (e: Error) => (fin = e.message),
+    );
+    await vi.advanceTimersByTimeAsync(ESPERA_INGRESO_MS - 1_000);
+    expect(fin).toBe("");
+    expect(cancelLogin()).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await r).toBe(ENTRADA_DEMORADA);
+    // El mismo nombre que el plazo vencido de siempre: la pantalla muestra el error con su salida.
+    expect(ENTRADA_DEMORADA).toBe("pollar-timeout");
+    expect(cancelLogin()).toHaveBeenCalledTimes(1);
+  });
+
+  it("si mientras se espera el SDK termina con un error, se corta enseguida con ese error", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+      setTimeout(() => {
+        (c as unknown as { paso: string }).paso = "error";
+        for (const f of (c as unknown as { oyentes: Set<(s: { step: string; errorCode?: string }) => void> }).oyentes) f({ step: "error", errorCode: "AUTH_FAILED" });
+      }, 9_000);
+    };
+    const { pollarWallet } = await modulo();
+    let fin = "";
+    const r = pollarWallet.connect().then(
+      (d) => (fin = d),
+      (e: Error) => (fin = e.message),
+    );
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fin).toBe("AUTH_FAILED");
+    await r;
+  });
+
+  it("si la cuenta llega justo al cortar, se entra igual", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => (ventana.closed = true), 300);
+      // El SDK guarda la cuenta, pero el aviso no llega antes del corte.
+      setTimeout(() => void ((c as unknown as { wallet: { address: string } }).wallet = { address: DIR }), 6_200);
+    };
+    const { pollarWallet } = await modulo();
+    const r = pollarWallet.connect().then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(await r).toBe(DIR);
+    expect(pollarWallet.address).toBe(DIR);
+  });
+
+  it("si el SDK no deja mirar sus pedidos (otra versión), queda la regla de siempre: 6 segundos", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => (ventana.closed = true), 300);
+    };
+    h.sinApi = true;
+    const { pollarWallet, ENTRADA_CERRADA, GRACIA_CIERRE_MS } = await modulo();
+    const r = pollarWallet.connect().then(
+      () => "entró",
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(GRACIA_CIERRE_MS + 1_000);
+    expect(await r).toBe(ENTRADA_CERRADA);
   });
 
   it("si la ventana se cierra sola porque la entrada terminó, entra y no se corta nada", async () => {
@@ -325,16 +505,14 @@ describe("entrar con Google", () => {
       alLoginAbre(c);
       // La ventana se cierra y un par de segundos después el SDK se entera de que la cuenta está lista.
       setTimeout(() => (ventana.closed = true), 500);
-      setTimeout(() => {
-        (c as unknown as { wallet: { address: string } }).wallet = { address: DIR };
-        for (const f of (c as unknown as { oyentes: Set<(s: { step: string }) => void> }).oyentes) f({ step: "authenticated" });
-      }, 2_500);
+      setTimeout(() => saleElPedido(c), 1_000);
+      setTimeout(() => llegaLaCuenta(c), 2_500);
     };
     const { pollarWallet } = await modulo();
     const r = pollarWallet.connect();
     await vi.advanceTimersByTimeAsync(10_000);
     expect(await r).toBe(DIR);
-    expect((h.cliente as unknown as { cancelLogin: ReturnType<typeof vi.fn> }).cancelLogin).not.toHaveBeenCalled();
+    expect(cancelLogin()).not.toHaveBeenCalled();
   });
 });
 
