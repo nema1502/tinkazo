@@ -647,7 +647,7 @@ function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado
     };
   }
   const corto = p.conSaldo?.corto ?? null;
-  const panel: PanelDePago = panelDe(o, e.correoSesion, p.idioma, corto ? textoDelCorto(corto, p.idioma) : null, !!p.cambio);
+  const panel: PanelDePago = panelDe(o, e.correoSesion, p.idioma, corto ? textoDelCorto(corto, p.idioma) : null, !!p.cambio, p.noLlego);
   // Mientras se paga, el cupón y las salidas van de texto: lo que pesa a la vista son los datos y Ya pagué.
   const secundarios: Secundario[] = [{ ...boton("tengo-cupon", "altaTengoCupon"), forma: "texto" }];
   if (p.tarda && !p.noLlego && !p.buscando) secundarios.push({ ...boton("no-llego", "pagoNoLlegoBoton"), forma: "texto" });
