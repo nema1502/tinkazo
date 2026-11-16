@@ -19,7 +19,9 @@ import { armarQrDeEspectador, datosDeLaEspera, datosDelEnlace, enlaceEspectador,
 import { t } from "../i18n";
 
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani"];
-const datos = (g = "race"): DatosEspectador => ({ r: 10, g: g as DatosEspectador["g"], p: "normal", w: 1, n: [...NOMBRES] });
+/** El contrato oficial de Prueba (`stellar/deployments.json`). */
+const CONTRATO_PRUEBA = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A";
+const datos = (g = "race"): DatosEspectador => ({ r: 10, g: g as DatosEspectador["g"], p: "normal", w: 1, n: [...NOMBRES], net: "testnet", k: CONTRATO_PRUEBA, i: "42" });
 
 /** Una promesa que la prueba resuelve cuando quiere. */
 function aMano<T>(): { p: Promise<T>; dar: (v: T) => void } {
@@ -111,17 +113,22 @@ describe("el QR del espectador", () => {
 describe("el tamaño del enlace", () => {
   it("con 200 nombres el enlace largo pasa de lo que entra en un QR legible, y por eso va el corto", () => {
     const n = Array.from({ length: 200 }, (_, i) => `Participante número ${i + 1}`);
-    const largo = enlaceEspectador({ r: 10, g: "race", p: "normal", w: 3, n }, "https://tinkazo.app");
+    const largo = enlaceEspectador({ r: 10, g: "race", p: "normal", w: 3, n, net: "testnet", k: CONTRATO_PRUEBA, i: "42" }, "https://tinkazo.app");
     expect(largo.length).toBeGreaterThan(2_000);
     // Lo que el servicio guarda, cifrado: muy por debajo de su tope de 256 KB.
     expect(new TextEncoder().encode(largo).length).toBeLessThan(256 * 1024 / 4);
     expect(datosDelEnlace(new URL(largo).hash)?.n).toHaveLength(200);
   });
 
-  it("el enlace solo nombra un contrato oficial: con otro, el celular no esperaría lo grabado y no se manda", () => {
+  it("solo hay enlace con el sorteo sellado en un contrato oficial de su red: si no, no hay QR", () => {
     const f = { names: NOMBRES, listHash: "ab", ts: 1, at: "", prize: "", round: 10, raffleId: 7n };
     const base = { juego: "race" as const, ritmo: "normal" as const, premios: 1, red: "testnet" as const };
-    expect(datosDeLaEspera(f, { ...base, contrato: "C" + "A".repeat(55) }).i).toBeUndefined();
-    expect(datosDeLaEspera(f, { ...base, contrato: null }).i).toBeUndefined();
+    expect(datosDeLaEspera(f, { ...base, contrato: CONTRATO_PRUEBA })).toMatchObject({ net: "testnet", k: CONTRATO_PRUEBA, i: "7" });
+    expect(datosDeLaEspera(f, { ...base, contrato: "C" + "A".repeat(55) })).toBeNull();
+    expect(datosDeLaEspera(f, { ...base, contrato: null })).toBeNull();
+    expect(datosDeLaEspera(f, { ...base, red: "mainnet", contrato: CONTRATO_PRUEBA })).toBeNull();
+    // Sin sello en Stellar (el modo libre): el celular no sabría cuándo la sala lanza el sorteo.
+    const { raffleId: _sinNumero, ...libre } = f;
+    expect(datosDeLaEspera(libre, { ...base, contrato: CONTRATO_PRUEBA })).toBeNull();
   });
 });

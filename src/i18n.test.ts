@@ -297,6 +297,7 @@ describe("el modo espectador", () => {
   const CLAVES = [
     "espQrT", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda", "espNoCoincide",
     "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente", "espVerDeNuevo", "espHacerElTuyo",
+    "espMiraLaSala",
   ];
 
   it("sus textos existen en los dos idiomas", () => {

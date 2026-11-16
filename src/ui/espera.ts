@@ -14,6 +14,7 @@ import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
 import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
+import { fijarParaEspectadores, fijoPara } from "./espectador-fijo";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -329,17 +330,31 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       esconderQrDeEspectador(back);
       return;
     }
-    void armarQrDeEspectador(
-      back,
-      datosDeLaEspera(app.frozen, {
-        juego: app.game,
-        ritmo: currentPace(),
-        premios: sorteo.premios(),
-        red: network.name,
-        contrato: network.contractId,
-        equipo: nombreDelEquipo,
-      }),
-    );
+    const datos = datosDeLaEspera(app.frozen, {
+      juego: app.game,
+      ritmo: currentPace(),
+      premios: sorteo.premios(),
+      red: network.name,
+      contrato: network.contractId,
+      equipo: nombreDelEquipo,
+    });
+    // Sin el número del sorteo en Stellar no hay QR: el celular no sabría cuándo la sala lo lanza (coronaría antes) ni
+    // con qué comparar la lista del enlace.
+    if (!datos) {
+      esconderQrDeEspectador(back);
+      return;
+    }
+    void armarQrDeEspectador(back, datos).then((corto) => {
+      if (!back.isConnected) return;
+      // Desde que el QR se ve, quien escanea juega con este juego y este ritmo: quedan para este sorteo
+      // (`espectador-fijo.ts`). Si cambiaran, el celular coronaría antes que la sala.
+      if (corto) {
+        fijarParaEspectadores(datos.r, datos.g, datos.p);
+        fijarJuego();
+      }
+      // El QR llega después de medir la espera y ocupa más que la línea de preparando: se vuelve a medir para que entre.
+      ajusta();
+    });
   };
   armarQr();
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
@@ -446,6 +461,13 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
   };
+  /** Ya se mira en celulares con este juego (`espectador-fijo.ts`): se va el botón de cambiarlo, y el nombre queda. */
+  const fijarJuego = (): void => {
+    cerrarJuegos(false);
+    for (const b of botonesJuego) b.hidden = true;
+  };
+  // Vuelta a la espera de un sorteo que ya se mira en celulares: el juego ya está fijo.
+  if (fijoPara(app.frozen, !!app.drawn)) fijarJuego();
 
   /* ------------------------------------------------------------- el azar */
   /** El temporizador de la ruleta, y si está corriendo: un toque más no la arranca de nuevo, y cerrarla la para. */

@@ -4,9 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * El modo espectador (`espectador.ts`): quien escanea el QR de la espera abre el mismo enlace con la lista y la ronda,
  * ve la misma cuenta regresiva y, al nacer la ronda, trae él mismo el número de los servicios públicos, lo verifica,
- * calcula los mismos ganadores con `select` y lanza el mismo show, solo para mirar. Con un sorteo sellado, la cuenta
- * lleva el margen de la sala y el show espera a que el sorteo quede grabado, comprobando que es este. Sin servidor
- * nuevo: los nombres viajan en el enlace corto cifrado (`enlace-corto.ts`) y la matemática sale del protocolo.
+ * calcula los mismos ganadores con `select` y lanza el mismo show, solo para mirar. El sorteo está sellado en Stellar:
+ * la cuenta lleva el margen de la sala y el show espera a que el sorteo quede grabado, comprobando que es este. Sin
+ * servidor nuevo: los nombres viajan en el enlace corto cifrado (`enlace-corto.ts`) y la matemática sale del protocolo.
  */
 
 const h = vi.hoisted(() => ({
@@ -39,11 +39,13 @@ vi.mock("./espectador-reloj", () => ({ desfaseDelReloj: () => h.desfaseDelReloj(
 import { bytesToHex, hexToBytes, randomnessOf, roundTime } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { select } from "../protocol/select";
-import { app } from "../state";
+import { app, paceSeconds } from "../state";
+import { etiquetaConCuenta } from "../equipos/etiquetas";
+import { esSoloMirar, setSoloMirar } from "../solo-mirar";
 import { T } from "../i18n";
 import type { Registro } from "../protocol/verificacion";
 import { abrirEspectador, avisarEnlaceRoto, datosDelEnlace, enlaceEspectador, type DatosEspectador, type OpcionesDeLaVista } from "./espectador";
-import { LARGA_IGUAL_TRAS_MS, MARGEN_DE_LA_CADENA_S } from "./espectador-regla";
+import { LARGA_IGUAL_TRAS_MS, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
 
 /** Nombres de la lista sellada de prueba. */
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito"];
@@ -52,6 +54,7 @@ const CONTRATO_PRUEBA = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3
 const CONTRATO_OFICIAL = "CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K";
 const R = 1_000_000;
 
+/** Un enlace de espectador: siempre de un sorteo sellado en Stellar, en Prueba y con el número 42. */
 const datos = (extra: Partial<DatosEspectador> = {}): DatosEspectador => ({
   r: R,
   g: "race",
@@ -59,26 +62,43 @@ const datos = (extra: Partial<DatosEspectador> = {}): DatosEspectador => ({
   w: 1,
   z: "Una polera",
   n: [...NOMBRES],
+  net: "testnet",
+  k: CONTRATO_PRUEBA,
+  i: "42",
   ...extra,
 });
-const sellado = (extra: Partial<DatosEspectador> = {}): DatosEspectador => datos({ net: "testnet", k: CONTRATO_PRUEBA, i: "42", ...extra });
+const sellado = datos;
+/** Lo mismo sin la red, el contrato ni el número: un enlace que la sala ya no arma. */
+const sinSello = (): Omit<DatosEspectador, "net" | "k" | "i"> => {
+  const { net: _net, k: _k, i: _i, ...resto } = datos();
+  return resto;
+};
 
 /** La semilla y los ganadores que salen de la firma de prueba: lo que calcula el celular. */
 const semilla = (): string => bytesToHex(randomnessOf(h.firma));
 const ganadores = (n = NOMBRES, w = 1): number[] => select(hexToBytes(semilla()), listHash(n), n.length, w);
 
 /** Un registro de la cadena: el sello del enlace y, si se pide, el resultado grabado. */
-function registro(o: { grabado?: boolean; winners?: number[]; listHash?: string } = {}): Registro {
+function registro(o: { grabado?: boolean; winners?: number[]; listHash?: string; meta?: string; n?: string[] } = {}): Registro {
+  const n = o.n ?? NOMBRES;
   return {
     wasm: "w",
     siguiente: 100,
-    sello: { id: "42", organizer: "GAAA", listHash: o.listHash ?? bytesToHex(listHash(NOMBRES)), count: NOMBRES.length, numWinners: 1, round: R, sealedAt: 1, meta: "", drawn: !!o.grabado },
-    resultado: o.grabado ? { raffleId: "42", round: R, signature: h.firma, randomness: semilla(), winners: o.winners ?? ganadores(), drawnAt: 2 } : null,
+    sello: { id: "42", organizer: "GAAA", listHash: o.listHash ?? bytesToHex(listHash(n)), count: n.length, numWinners: 1, round: R, sealedAt: 1, meta: o.meta ?? "Una polera", drawn: !!o.grabado },
+    resultado: o.grabado ? { raffleId: "42", round: R, signature: h.firma, randomness: semilla(), winners: o.winners ?? ganadores(n), drawnAt: 2 } : null,
   };
 }
 
 const irA = vi.fn();
-const abrir = (d: DatosEspectador, op: OpcionesDeLaVista = {}): boolean => abrirEspectador(d, "es", { desfase: async () => 0, irA, ...op });
+/**
+ * Sin `leer`, la cadena ya lo muestra grabado: el show sale apenas el celular lo ve, con el retraso de la regla. El
+ * azar de las lecturas, en cero: sin desfase y con la pausa más corta (3 s el primer minuto, 6 s después).
+ */
+const abrir = (d: DatosEspectador, op: OpcionesDeLaVista = {}): boolean =>
+  abrirEspectador(d, "es", { desfase: async () => 0, irA, azar: () => 0, leer: async () => registro({ grabado: true, n: d.n }), ...op });
+/** Desde que se abre, 30 s antes de la ronda: la cuenta con el margen de la sala, y el show visto lo grabado. */
+const HASTA_EL_NUMERO = (30 + MARGEN_DE_LA_CADENA_S) * 1000;
+const HASTA_EL_SHOW = HASTA_EL_NUMERO + RETRASO_TRAS_LO_GRABADO_MS + 100;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -87,7 +107,8 @@ beforeEach(() => {
   h.verifyRoundAsync.mockResolvedValue(h.verificar);
   h.fetchRound.mockResolvedValue({ round: R, signature: h.firma });
   h.showDelEspectador.mockImplementation(() => ({ jugar: h.jugar, cancelar: h.cancelar }));
-  document.body.innerHTML = `<div id="stadium" style="display:none"></div>`;
+  document.body.innerHTML = `<div id="stadium" style="display:none"><button id="st-skip"></button></div>`;
+  setSoloMirar(false);
   app.frozen = null;
   app.drawn = null;
   app.game = "race";
@@ -114,7 +135,7 @@ describe("el enlace del espectador", () => {
   it("sin premio el enlace no lleva premio vacío", () => {
     const d = datos({ z: undefined });
     const vuelto = datosDelEnlace(new URL(enlaceEspectador(d, "https://tinkazo.app")).hash);
-    expect(vuelto).toEqual({ r: d.r, g: d.g, p: d.p, w: d.w, n: d.n });
+    expect(vuelto).toEqual({ r: d.r, g: d.g, p: d.p, w: d.w, n: d.n, net: d.net, k: d.k, i: d.i });
   });
 
   it("rechaza lo que no es un enlace de espectador", () => {
@@ -145,7 +166,12 @@ describe("el enlace del espectador", () => {
     expect(datosDelEnlace(hashDe(sellado({ k: "C" + "A".repeat(55) })))).toBeNull();
     expect(datosDelEnlace(hashDe(sellado({ i: "4x2" })))).toBeNull();
     // A medias tampoco: la red sin el número.
-    expect(datosDelEnlace(hashDe({ ...datos(), net: "testnet", k: CONTRATO_PRUEBA }))).toBeNull();
+    expect(datosDelEnlace(hashDe({ ...sinSello(), net: "testnet", k: CONTRATO_PRUEBA }))).toBeNull();
+  });
+
+  it("sin el número del sorteo no abre: no hay con qué comparar la lista ni cómo esperar a la sala", () => {
+    // Cualquiera podía armar uno con otra lista o una ronda ya pasada y mostrarlo como Vista de espectador.
+    expect(datosDelEnlace(hashDe(sinSello()))).toBeNull();
   });
 
   it("los nombres de equipo solo valen para cuentas de la lista", () => {
@@ -163,25 +189,22 @@ describe("la espera del espectador", () => {
     expect(capa().textContent).toContain("Se sortea");
     expect(capa().textContent).toContain("Una polera");
     expect(capa().textContent).toContain(T.es.espNadie);
-    expect(reloj()).toBe("0:30");
+    expect(reloj()).toBe(`0:${30 + MARGEN_DE_LA_CADENA_S}`);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(reloj()).toBe("0:29");
+    expect(reloj()).toBe(`0:${29 + MARGEN_DE_LA_CADENA_S}`);
     // Mientras cuenta, nadie va a buscar el número: todavía no existe.
     expect(h.fetchRound).not.toHaveBeenCalled();
-    // Sin sorteo sellado no hay número del sorteo ni modo que mostrar.
-    expect(capa().querySelector(".espera-id")).toBeNull();
-    expect(capa().querySelector(".espera-prueba")).toBeNull();
   });
 
   it("al nacer la ronda trae el número él mismo, lo verifica y lanza el show con los mismos ganadores que la sala", async () => {
     abrir(datos());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
     expect(h.fetchRound).toHaveBeenCalledWith(R, expect.anything());
     expect(h.verifyRoundAsync).toHaveBeenCalledWith(R, h.firma);
     expect(app.drawn?.winners).toEqual(ganadores());
     expect(app.drawn?.beacon).toMatchObject({ round: R, randomness: semilla(), signature: h.firma });
-    // Sin cadena, el show sale enseguida: la sala tampoco espera nada.
-    expect(h.showDelEspectador).toHaveBeenCalledWith(null);
+    // La tarjeta sale con la espera de lo grabado, como en la sala.
+    expect(h.showDelEspectador).toHaveBeenCalledWith(expect.any(Promise));
     expect(h.jugar).toHaveBeenCalledTimes(1);
     expect(app.frozen).toMatchObject({ names: NOMBRES, round: R, prize: "Una polera" });
     expect(app.game).toBe("race");
@@ -191,17 +214,18 @@ describe("la espera del espectador", () => {
   });
 
   it("con la ronda ya nacida (quien llega tarde o recarga) arranca el show enseguida", async () => {
-    vi.setSystemTime(roundTime(R) * 1000 + 5_000);
+    vi.setSystemTime(roundTime(R) * 1000 + (MARGEN_DE_LA_CADENA_S + 5) * 1000);
     abrir(datos());
     await vi.advanceTimersByTimeAsync(0);
     expect(h.fetchRound).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
   it("si el número no llega dice que el ganador va a ser el mismo, y Probar de nuevo lo vuelve a buscar", async () => {
     h.fetchRound.mockRejectedValueOnce(new Error("relay 500"));
     abrir(datos());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_NUMERO);
     expect(capa().textContent).toContain(T.es.espSinNumero);
     // El espectador no sortea: el botón no dice Reintentar el sorteo.
     const probar = capa().querySelector<HTMLButtonElement>(".espera-accion");
@@ -210,13 +234,14 @@ describe("la espera del espectador", () => {
     probar?.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.fetchRound).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
   it("si la firma no verifica muestra el error claro y no lanza ningún show", async () => {
     h.verifyRoundAsync.mockResolvedValue(false);
     abrir(datos());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_NUMERO);
     expect(capa().textContent).toContain(T.es.badSig);
     expect(h.showDelEspectador).not.toHaveBeenCalled();
     expect(app.drawn).toBeNull();
@@ -230,10 +255,10 @@ describe("la espera del espectador", () => {
       return new Promise((r) => (seguir = r));
     });
     abrir(datos());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_NUMERO);
     expect(capa().textContent).toContain(T.es.drandTry(2, 12));
     seguir({ round: R, signature: h.firma });
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
@@ -264,11 +289,20 @@ describe("la espera del espectador", () => {
 
   it("al terminar el show dice quién salió, cómo seguir con otro premio y deja verlo de nuevo", async () => {
     abrir(datos());
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
     const alTerminar = h.jugar.mock.calls[0]?.[0] as () => void;
+    // El show del celular termina a la hora que promete el ritmo, y Lo que salió espera un margen más (`horaDelFinal`).
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000);
     alTerminar();
+    expect(capa().querySelector(".espectador-ganadores")).toBeNull();
+    expect(capa().textContent).toContain(T.es.espMiraLaSala);
+    expect(esSoloMirar()).toBe(true);
+    await vi.advanceTimersByTimeAsync(10_000);
     const ganador = NOMBRES[ganadores()[0] ?? 0] ?? "";
     expect(capa().querySelector(".espectador-ganadores")?.textContent).toBe(ganador);
+    // La sala ya coronó: verlo de nuevo se puede saltar.
+    expect(esSoloMirar()).toBe(false);
+    expect(document.getElementById("st-skip")?.hidden).toBe(false);
     expect(capa().textContent).toContain(T.es.espFinSiguiente);
     capa().querySelector<HTMLButtonElement>("[data-otra-vez]")?.click();
     await vi.advanceTimersByTimeAsync(0);
@@ -276,15 +310,39 @@ describe("la espera del espectador", () => {
   });
 });
 
+describe("el show se mira entero", () => {
+  it("sin Saltar: la vista esconde el del estadio y el de la tarjeta (solo-mirar)", () => {
+    expect(esSoloMirar()).toBe(false);
+    abrir(datos());
+    expect(esSoloMirar()).toBe(true);
+    expect(document.getElementById("st-skip")?.hidden).toBe(true);
+  });
+
+  it("si el show del celular termina en el acto (pidió menos movimiento), Lo que salió espera la hora de la sala", async () => {
+    // Con menos movimiento no hay tarjeta ni juego: el show termina apenas se lanza.
+    h.jugar.mockImplementation((...a: unknown[]) => (a[0] as () => void)());
+    abrir(datos());
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    expect(h.jugar).toHaveBeenCalledTimes(1);
+    expect(capa().querySelector(".espectador-ganadores")).toBeNull();
+    expect(capa().textContent).toContain(T.es.espMiraLaSala);
+    const segundos = paceSeconds("normal");
+    await vi.advanceTimersByTimeAsync(segundos * 1000 - 200);
+    expect(capa().querySelector(".espectador-ganadores")).toBeNull();
+    await vi.advanceTimersByTimeAsync(400);
+    expect(capa().querySelector(".espectador-ganadores")?.textContent).toBe(NOMBRES[ganadores()[0] ?? 0]);
+  });
+});
+
 describe("el reloj del celular", () => {
   it("si el teléfono va atrasado, la cuenta dice lo mismo que la de la sala", async () => {
     abrir(datos(), { desfase: async () => 20 });
     await vi.advanceTimersByTimeAsync(300);
-    expect(reloj()).toBe("0:10");
+    expect(reloj()).toBe(`0:${10 + MARGEN_DE_LA_CADENA_S}`);
   });
 
   it("hasta saber si el reloj está corrido, la cuenta no llega a cero y no busca el número", async () => {
-    vi.setSystemTime(roundTime(R) * 1000 + 1_000);
+    vi.setSystemTime(roundTime(R) * 1000 + (MARGEN_DE_LA_CADENA_S + 1) * 1000);
     abrir(datos(), { desfase: () => new Promise(() => undefined) });
     await vi.advanceTimersByTimeAsync(3_000);
     expect(h.fetchRound).not.toHaveBeenCalled();
@@ -324,9 +382,12 @@ describe("un sorteo sellado en Stellar", () => {
     expect(capa().textContent).toContain(T.es.cortinaGraba);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(h.jugar).not.toHaveBeenCalled();
-    // Quedó grabado: el juego sale, y la espera de la tarjeta se cumplió.
+    // Quedó grabado: el celular lo ve en su vuelta siguiente, y espera un momento más para no adelantarse a la
+    // confirmación de la sala.
     grabado = true;
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(1_600);
+    expect(h.jugar).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS);
     expect(h.jugar).toHaveBeenCalledTimes(1);
     const espera = h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>;
     await expect(espera).resolves.toBeUndefined();
@@ -342,19 +403,32 @@ describe("un sorteo sellado en Stellar", () => {
     expect(h.jugar).not.toHaveBeenCalled();
   });
 
-  it("si nunca lo ve grabado no se queda colgado: pasado el tope de la regla juega igual, con lo que calculó", async () => {
-    abrir(sellado(), { leer: async () => registro() });
+  it("con la cadena diciendo sellado y sin resultado no juega aunque pase el tope: la sala todavía no lo lanzó", async () => {
+    let grabado = false;
+    abrir(sellado(), { leer: async () => registro({ grabado }) });
     await vi.advanceTimersByTimeAsync((30 + MARGEN_DE_LA_CADENA_S) * 1000);
-    await vi.advanceTimersByTimeAsync(LARGA_IGUAL_TRAS_MS - 5_000);
+    // Quien organiza volvió a la página para hablar: pasan el tope y varios minutos más.
+    await vi.advanceTimersByTimeAsync(LARGA_IGUAL_TRAS_MS + 5 * 60_000);
     expect(h.jugar).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(10_000);
+    expect(capa().textContent).toContain(T.es.espTarda);
+    // Lo lanzó: el celular lo ve grabado y juega detrás de la sala.
+    grabado = true;
+    await vi.advanceTimersByTimeAsync(10_000 + RETRASO_TRAS_LO_GRABADO_MS);
     expect(h.jugar).toHaveBeenCalledTimes(1);
     expect(app.drawn?.winners).toEqual(ganadores());
     // La tarjeta, que esperaba lo grabado, sigue con la cuenta.
     await expect(h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>).resolves.toBeUndefined();
   });
 
-  it("con la cadena sin contestar tampoco: pregunta a los dos servicios y, pasado el tope, juega", async () => {
+  it("si la cadena contesta y el sello de ese número nunca aparece, el enlace no es de un sorteo sellado", async () => {
+    abrir(sellado(), { leer: async () => ({ ...registro(), sello: null, siguiente: 7 }) });
+    await vi.advanceTimersByTimeAsync((30 + MARGEN_DE_LA_CADENA_S) * 1000 + LARGA_IGUAL_TRAS_MS + 10_000);
+    expect(capa().textContent).toContain(T.es.espNoCoincide);
+    expect(h.jugar).not.toHaveBeenCalled();
+    expect(h.cancelar).toHaveBeenCalled();
+  });
+
+  it("con la cadena sin contestar no se queda colgado: pregunta a los dos servicios y, pasado el tope, juega", async () => {
     const vistos = new Set<string>();
     abrir(sellado(), {
       leer: async (c) => {
@@ -375,7 +449,23 @@ describe("un sorteo sellado en Stellar", () => {
     await vi.advanceTimersByTimeAsync((30 + MARGEN_DE_LA_CADENA_S) * 1000);
     expect(capa().textContent).not.toContain(T.es.espNoCoincide);
     hay = true;
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(3_500 + RETRASO_TRAS_LO_GRABADO_MS);
+    expect(h.jugar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un premio que no es el sellado: lo dice al abrir y no deja a la vista el premio del enlace", async () => {
+    abrir(sellado({ z: "Un auto" }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(capa().textContent).toContain(T.es.espNoCoincide);
+    expect(capa().querySelector<HTMLElement>(".espera-premio")?.hidden).toBe(true);
+    expect(capa().querySelector<HTMLElement>(".espera-nombres")?.hidden).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(h.fetchRound).not.toHaveBeenCalled();
+  });
+
+  it("sin premio en el enlace no hay nada que comparar: el sello guarda el texto de siempre", async () => {
+    abrir(sellado({ z: undefined }), { leer: async () => registro({ grabado: true, meta: "Sorteo" }) });
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
@@ -395,7 +485,7 @@ describe("un sorteo sellado en Stellar", () => {
     abrir(sellado(), { leer: async () => registro(grabado ? { grabado, winners: otros } : {}) });
     await vi.advanceTimersByTimeAsync((30 + MARGEN_DE_LA_CADENA_S) * 1000);
     grabado = true;
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(3_500);
     expect(capa().textContent).toContain(T.es.espNoCoincide);
     expect(h.cancelar).toHaveBeenCalled();
     expect(h.jugar).not.toHaveBeenCalled();
@@ -423,5 +513,19 @@ describe("los equipos con cupón", () => {
     expect(cinta).toContain("Las Wawas");
     expect(cinta).toContain("Los Cóndores");
     expect(cinta).not.toContain(cuentas[0]);
+  });
+
+  it("al final, el equipo que ganó va con el comienzo de su cuenta, como en la sala: el nombre no está sellado", async () => {
+    const cuentas = ["G" + "A".repeat(55), "G" + "B".repeat(55)];
+    abrir(datos({ n: cuentas, e: [[cuentas[0]!, "Las Wawas"], [cuentas[1]!, "Los Cóndores"]] }));
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    expect(h.jugar).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    await vi.advanceTimersByTimeAsync(10_000);
+    const gana = cuentas[ganadores(cuentas)[0] ?? 0] ?? "";
+    const final = capa().querySelector(".espectador-ganadores")?.textContent ?? "";
+    expect(final).toBe(etiquetaConCuenta(gana));
+    expect(final).toContain(gana.slice(0, 4));
   });
 });

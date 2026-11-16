@@ -1003,7 +1003,10 @@
   .espera.espectador.detras { display: none; }
   /* Lo que salió, en el celular de quien mira: los ganadores grandes y, debajo, cómo seguir. */
   .espectador-fin-t { font-size: clamp(16px, 1.8vw, 24px); font-weight: 800; color: var(--ink2); }
-  .espectador-ganadores { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; justify-items: center; max-height: 46vh; overflow-y: auto; }
+  /* Sin caja que se recorra por dentro: con muchos ganadores se recorre la vista entera (`.espera` ya lo hace). */
+  .espectador-ganadores { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; justify-items: center; }
+  /* Al terminar, los nombres que pasaban se van: lo que se lee es quién salió. */
+  .espectador .espera-nombres[hidden], .espectador .espera-lectura[hidden] { display: none; }
   .espectador-ganadores li { display: flex; align-items: center; gap: 12px; font-size: clamp(30px, 6vw, 64px); font-weight: 900; line-height: 1.05; overflow-wrap: anywhere; text-wrap: balance; }
   .espectador-ganadores.varios li { font-size: clamp(22px, 4vw, 40px); }
   .espectador-ganadores img { width: 1.1em; height: 1.1em; flex: none; border-radius: 50%; border: 2px solid var(--ink); }
