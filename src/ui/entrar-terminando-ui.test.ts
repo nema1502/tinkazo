@@ -92,7 +92,8 @@ vi.mock("../ensayo-modo", () => ({ enPractica: () => false, sinGrabar: () => fal
 vi.mock("./modo-ui", () => ({ pasarAModo: () => undefined, abrirHojaDeModo: () => undefined }));
 
 const volcado = (): string => document.body.innerHTML.replace(/<svg[\s\S]*?<\/svg>/g, "<svg/>").slice(0, 1800);
-const esperar = { timeout: 5000 };
+// Terminando de entrar aparece recién 2,5 segundos después del cierre de la ventana (`AVISO_TERMINANDO_MS`).
+const esperar = { timeout: 10_000 };
 const aviso = (): HTMLElement | null => document.querySelector(".wallet-notice.bad");
 
 /** La ventana de Google: se abre, y la prueba decide cuándo se cierra. */

@@ -108,6 +108,13 @@ export const GRACIA_CIERRE_MS = 6_000;
  */
 export const ESPERA_INGRESO_MS = 50_000;
 
+/**
+ * Cuánto después del cierre de la ventana se avisa que se está terminando de entrar (`AvisosDeEntrada`). Quien ya tiene
+ * cuenta entra en uno o dos segundos y no ve ningún cambio. Con el aviso al instante, todos veían un momento Terminando
+ * de entrar con Cancelar, y un toque en ese momento cortaba un ingreso que estaba por llegar (16 de noviembre de 2026).
+ */
+export const AVISO_TERMINANDO_MS = 2_500;
+
 /** El plazo largo se cumplió sin cuenta: el mismo nombre del plazo vencido de `waitForWallet`, que la pantalla ya sabe decir. */
 export const ENTRADA_DEMORADA = "pollar-timeout";
 
@@ -124,7 +131,7 @@ export interface AvisosDeEntrada {
   /**
    * La ventana de Google se cerró y el ingreso ya está en camino: puede tardar (una cuenta nueva se crea en ese
    * momento). La pantalla dice que se está terminando de entrar y ofrece `cancelar`, que corta la entrada con
-   * `ENTRADA_CANCELADA`. Se llama una vez por entrada.
+   * `ENTRADA_CANCELADA`. Se llama una vez por entrada, y solo si la espera pasa de `AVISO_TERMINANDO_MS` desde el cierre.
    */
   terminando?: (cancelar: () => void) => void;
 }
@@ -1027,7 +1034,7 @@ class PollarWallet implements SubmittingWallet {
    * - con el pedido en camino (antes del cierre, o durante esos 6 segundos), se espera lo que espera el SDK, hasta
    *   `ESPERA_INGRESO_MS`, o hasta que el SDK diga que falló.
    * Cada corte le dice al SDK que pare (`cancelLogin`), y si la cuenta llegó justo en ese instante, se entra igual.
-   * Mientras se espera al SDK, `avisos.terminando` le da a la pantalla cómo cancelar.
+   * Si la espera al SDK pasa de 2,5 segundos desde el cierre, `avisos.terminando` le da a la pantalla cómo cancelar.
    */
   async connect(avisos: AvisosDeEntrada = {}): Promise<string> {
     const client = await this.#ensureClient();
@@ -1069,6 +1076,7 @@ class PollarWallet implements SubmittingWallet {
     let enCamino = false;
     let gracia = 0;
     let larga = 0;
+    let aviso = 0;
     let soltarPaso = (): void => undefined;
     // Ventana cerrada con el pedido en camino: se desarma el corte de los 6 segundos y se espera al SDK.
     const esperarAlIngreso = (): void => {
@@ -1081,12 +1089,20 @@ class PollarWallet implements SubmittingWallet {
         if (s.step === "error") rechazar(new Error(s.errorCode));
       });
       soltarPaso = () => void soltar();
-      // La pantalla no queda muda: dice que se está terminando de entrar, con Cancelar.
-      try {
-        avisos.terminando?.(() => rechazar(new Error(ENTRADA_CANCELADA)));
-      } catch {
-        /* lo que pinte la pantalla no corta la entrada */
-      }
+      // La pantalla no queda muda: si la espera pasa de 2,5 segundos desde el cierre, dice que se está terminando de
+      // entrar, con Cancelar. Quien entra antes no ve nada distinto.
+      const terminando = avisos.terminando;
+      if (!terminando) return;
+      aviso = window.setTimeout(
+        () => {
+          try {
+            terminando(() => rechazar(new Error(ENTRADA_CANCELADA)));
+          } catch {
+            /* lo que pinte la pantalla no corta la entrada */
+          }
+        },
+        Math.max(0, cerradaDesde + AVISO_TERMINANDO_MS - Date.now()),
+      );
     };
     const dejarDeMirar = mirarPedidoDeIngreso(client, () => {
       enCamino = true;
@@ -1122,6 +1138,7 @@ class PollarWallet implements SubmittingWallet {
       window.clearInterval(vigia);
       window.clearTimeout(gracia);
       window.clearTimeout(larga);
+      window.clearTimeout(aviso);
       soltarPaso();
       dejarDeMirar?.();
       this.#falla = null;

@@ -447,7 +447,7 @@ describe("entrar con Google", () => {
     expect(cancelLogin()).toHaveBeenCalledTimes(1);
   });
 
-  it("mientras se espera, avisa que se está terminando de entrar, y Cancelar corta y para al SDK", async () => {
+  it("si la espera pasa de 2,5 segundos, avisa que se está terminando de entrar, y Cancelar corta y para al SDK", async () => {
     vi.useFakeTimers();
     almacen();
     const { ventana } = ventanaQueAbre();
@@ -456,19 +456,40 @@ describe("entrar con Google", () => {
       setTimeout(() => saleElPedido(c), 400);
       setTimeout(() => (ventana.closed = true), 500);
     };
-    const { pollarWallet, ENTRADA_CANCELADA } = await modulo();
+    const { pollarWallet, ENTRADA_CANCELADA, AVISO_TERMINANDO_MS } = await modulo();
     const avisos: Array<() => void> = [];
     const r = pollarWallet.connect({ terminando: (cancelar) => avisos.push(cancelar) }).then(
       (d) => d,
       (e: Error) => e.message,
     );
-    await vi.advanceTimersByTimeAsync(1_500);
+    // La ventana se cerró a los 500 ms: antes de 2,5 segundos de eso, nada.
+    await vi.advanceTimersByTimeAsync(500 + AVISO_TERMINANDO_MS - 100);
+    expect(avisos).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1_600);
     // Un solo aviso, aunque el vigía vuelva a mirar cada medio segundo.
     expect(avisos).toHaveLength(1);
     expect(cancelLogin()).not.toHaveBeenCalled();
     avisos[0]?.();
     expect(await r).toBe(ENTRADA_CANCELADA);
     expect(cancelLogin()).toHaveBeenCalledTimes(1);
+  });
+
+  it("quien entra rápido (la cuenta llega antes de 2,5 segundos del cierre) no ve ningún aviso", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+      setTimeout(() => llegaLaCuenta(c), 2_500);
+    };
+    const { pollarWallet } = await modulo();
+    const terminando = vi.fn();
+    const r = pollarWallet.connect({ terminando });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await r).toBe(DIR);
+    expect(terminando).not.toHaveBeenCalled();
   });
 
   it("con la ventana cerrada sin el pedido de ingreso no avisa nada: se corta a los 6 segundos", async () => {
