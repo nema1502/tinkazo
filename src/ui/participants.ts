@@ -244,9 +244,9 @@ export function bindParticipants(): void {
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
   $("prize").addEventListener("input", guardarPronto);
   $("prize-chips").addEventListener("click", guardarPronto);
-  // El campo es un número: se escribe (`input`) y se confirma al salir (`change`). Los atajos mandan `change`.
+  // Los botones del contador y los atajos confirman la cantidad con `change`. También se escuchan los valores que otro código pone.
   for (const evento of ["input", "change"]) $("nw").addEventListener(evento, guardarPronto);
-  // El resumen de debajo de "Sellar la lista" sigue al premio y a la cantidad de ganadores.
+  // El resumen de junto a "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));

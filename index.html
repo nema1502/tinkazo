@@ -367,10 +367,10 @@
       <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas de ejemplo con quienes pasan</button>
       <!-- Al volver de entrar con una lista lista: lo que sigue, con el foco en "Sellar la lista". Nunca sella solo. -->
       <p class="ya-entraste" id="ya-entraste" role="status" style="display:none"></p>
-      <!-- Todo lo que no es pegar ni sellar va plegado (regla de letra, 26 de octubre de 2026): el premio, cuántos ganan, CSV y Luma.
-           Lo que se eligió se lee igual arriba del botón de sellar (sellar-resumen). src/ui/plegable.ts lo abre si ya hay algo elegido. -->
+      <!-- El premio y el CSV van plegados. Cuántos ganan queda a la vista junto a Sellar la lista y el resumen repite
+           lo que se va a sellar. src/ui/plegable.ts abre el pliegue si ya hay un premio elegido. -->
       <details class="mas" id="mas-opciones">
-        <summary data-i="masOpciones">Premio, cuántos ganan y subir CSV</summary>
+        <summary data-i="masOpciones">Premio y subir CSV</summary>
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
         </div>
@@ -381,19 +381,8 @@
         <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
       </div>
       <div class="row mas-fila">
-        <!-- Cuántos ganan (src/ui/ganadores.ts): un número y los atajos de lo común. El tope de la red lo pone el código al cargar
-             (el contrato de cada red admite lo suyo, ver topeDeGanadores en stellar/config.ts); el del HTML es el del protocolo,
-             MAX_WINNERS, y una prueba (ganadores.test.ts) lo compara. -->
-        <div class="nw-grupo">
-          <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
-          <input id="nw" class="mono" type="number" inputmode="numeric" min="1" max="300" step="1" value="1" autocomplete="off" aria-describedby="nw-nota" />
-          <div class="premio-chips nw-atajos" id="nw-atajos" role="group" data-i-aria="winnersAtajos" aria-label="Atajos para cuántos ganan">
-            <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button><button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="5" aria-pressed="false">5</button><button type="button" data-n="10" aria-pressed="false">10</button>
-          </div>
-        </div>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
       </div>
-      <p class="note nw-nota" id="nw-nota" role="status" hidden></p>
       </details>
       <!-- El logo de la comunidad (src/ui/logo-ui.ts): dos toques, sin confirmar. No es parte del sorteo. Se esconde con la lista cerrada. -->
       <div class="logo-fila" id="logo-fila">
@@ -409,7 +398,25 @@
         </div>
         <p class="note logo-error" id="logo-error" role="alert" hidden></p>
       </div>
-      <div class="row">
+      <!-- Cuántos ganan (src/ui/ganadores.ts): solo botones, nunca un número para escribir. El campo escondido conserva
+           el valor que leen el sello, el borrador y el resumen. El tope de la red lo pone el código al cargar; el del HTML
+           es el del protocolo, MAX_WINNERS, y ganadores.test.ts lo compara. -->
+      <div class="sellar-ganadores" id="ganadores-control">
+        <div class="nw-grupo">
+          <label class="kicker" id="nw-etiqueta" for="nw" data-i="winners">Cuántos ganan</label>
+          <input id="nw" type="hidden" min="1" max="300" step="1" value="1" autocomplete="off" aria-describedby="nw-nota" />
+          <div class="nw-contador" role="group" aria-labelledby="nw-etiqueta">
+            <button class="nw-paso" type="button" id="nw-menos" data-i-aria="winnersMenos" aria-label="Restar uno" disabled><span aria-hidden="true">−</span></button>
+            <output class="mono" id="nw-valor" for="nw" aria-live="polite">1</output>
+            <button class="nw-paso" type="button" id="nw-mas" data-i-aria="winnersMas" aria-label="Sumar uno"><span aria-hidden="true">+</span></button>
+          </div>
+          <div class="premio-chips nw-atajos" id="nw-atajos" role="group" data-i-aria="winnersAtajos" aria-label="Atajos para cuántos ganan">
+            <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button><button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="5" aria-pressed="false">5</button><button type="button" data-n="10" aria-pressed="false">10</button>
+          </div>
+        </div>
+        <p class="note nw-nota" id="nw-nota" role="status" hidden></p>
+      </div>
+      <div class="row sellar-acciones">
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
         <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista en grande</button>
       </div>

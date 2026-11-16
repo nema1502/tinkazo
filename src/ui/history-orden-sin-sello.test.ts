@@ -75,6 +75,13 @@ describe("lo demás conserva su enlace", () => {
     expect(html).toContain(VERIFICAR);
   });
 
+  it("el título dice Turnos una sola vez y el detalle cuenta a las personas", async () => {
+    const html = await pintar({ id: "982", proof: VERIFICAR });
+    expect(html.match(/Turnos/g)).toHaveLength(1);
+    expect(html).toContain("<h3>Turnos</h3>");
+    expect(html).toContain("#982, <b>3 personas</b>");
+  });
+
   it("un sorteo común sin sello", async () => {
     const html = await pintar({ sinSello: true, numWinners: 1, prize: "Termo", winners: ["Ana"], proof: VERIFICAR });
     expect(html).toContain(T.es.histSeeProof);

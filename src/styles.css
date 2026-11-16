@@ -948,6 +948,12 @@
   /* La capa recibe el foco al abrirse sola (espera.ts): sin el aro que le pone el foco a todo lo demás. */
   .espera:focus, .espera:focus-visible { outline: none; box-shadow: none; }
   .espera-top { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .espera-top [data-volver] { flex-shrink: 0; min-height: 44px; white-space: nowrap; }
+  .espera-volver-corto { display: none; }
+  @media (max-width: 480px) {
+    .espera-volver-largo { display: none; }
+    .espera-volver-corto { display: inline; }
+  }
   .espera-top .sticker { max-width: 60vw; text-align: left; }
   .espera-premio { font-size: calc(clamp(24px, 3.2vw, 56px) * var(--ajuste, 1)); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
@@ -2445,17 +2451,23 @@
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
 
-  /* «Cuántos ganan» (src/ui/ganadores.ts): el rótulo, un número y los atajos de lo común (1, 2, 3, 5 y 10), pegados.
-     Si no entran en un renglón (320 px) pasan al de abajo todos juntos: el campo nunca queda cortado. Los atajos son
-     los chips de los premios, con el mismo blanco de toque. */
-  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
+     de lo común. El grupo puede bajar de renglón y nunca impone un ancho mayor que su caja, también a 320 px. */
+  .sellar-ganadores { margin-top: 16px; max-width: 100%; }
+  .sellar-ganadores + .row { margin-top: 12px; }
+  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; }
   .nw-grupo > label { margin: 0; }
-  #nw {
-    box-sizing: border-box; width: 84px; min-height: 44px; padding: 9px 8px; text-align: center;
-    background: var(--card); color: var(--ink); border: 2px solid var(--ink); font-weight: 800; font-size: 16px;
+  .nw-contador { display: flex; align-items: center; flex: 0 0 auto; gap: 6px; }
+  .nw-paso {
+    width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    font-family: inherit; font-size: 24px; font-weight: 900; line-height: 1; cursor: pointer;
   }
-  #nw:disabled { cursor: not-allowed; color: var(--muted); }
-  .nw-atajos { margin: 0; gap: 6px; }
+  .nw-paso:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .nw-paso:disabled { cursor: not-allowed; color: var(--muted); border-color: var(--muted); box-shadow: none; }
+  .nw-paso:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 6px var(--yellow); }
+  #nw-valor { min-width: 44px; padding: 0 4px; text-align: center; font-size: 20px; font-weight: 900; }
+  .nw-atajos { margin: 0; gap: 6px; max-width: 100%; }
   .nw-atajos button { min-width: 44px; padding: 0 12px; }
   .nw-nota { margin-top: 8px; }
 
@@ -2523,7 +2535,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .enlace, .gate button, .langs button, #nw, button.netbadge, button.acct-badge { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, .nw-paso, button.netbadge, button.acct-badge { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector

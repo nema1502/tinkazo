@@ -122,7 +122,7 @@ function animarElCambio(): void {
   }
 }
 
-/** «En esta red el orden llega hasta N turnos», solo cuando la lista no entra: lo que cuenta son las líneas, no las personas. */
+/** El orden llega hasta N turnos en este modo. El aviso sale solo cuando la lista no entra: cuenta las líneas, no las personas. */
 function pintarAviso(): void {
   const nota = $id("turnos-nota");
   if (!nota) return;

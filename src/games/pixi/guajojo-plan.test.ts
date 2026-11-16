@@ -12,6 +12,7 @@ import {
 } from "./guajojo-plan";
 import { duracionBase, normalGuajojo } from "./guajojo-duracion";
 import { TEXTOS } from "./guajojo-textos";
+import { setResultadoDeTurnos } from "../../modos/turnos";
 
 const RONDA = "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829";
 
@@ -136,6 +137,28 @@ describe("Guajojó: el plan", () => {
     expect(p.datos.rival).toBe(5);
     expect(p.datos.sienta[5]).toBeGreaterThan(p.datos.sienta[9] as number);
     expect(Number.isFinite(p.datos.sienta[9] as number)).toBe(true);
+  });
+
+  it("en un orden, la última salida usa la frase neutra y no dice premio", () => {
+    const ultimaSalida = (c: Contexto): string => {
+      const p = planGuajojo(c);
+      const ultimo = p.datos.ciclos[p.datos.ciclos.length - 1] as Ciclo;
+      const linea = p.guion.find((l) => l.hecho?.tipo === "salio" && Math.abs(l.t - (ultimo.tCae[0] as number)) < 1e-6);
+      return typeof linea?.texto === "function" ? linea.texto() : (linea?.texto as string);
+    };
+    try {
+      for (const idioma of ["es", "en"] as const) {
+        const ganadores = [2, 0, 1];
+        expect(ultimaSalida(contexto(3, ganadores, 7, idioma))).toBe(TEXTOS[idioma].conPremio);
+        setResultadoDeTurnos(true);
+        const texto = ultimaSalida(contexto(3, ganadores, 7, idioma));
+        expect(texto).toBe(TEXTOS[idioma].crac("Persona aa"));
+        expect(texto).not.toMatch(/ganar|gana|premio|\bwin|\bwinner|\bprize/i);
+        setResultadoDeTurnos(false);
+      }
+    } finally {
+      setResultadoDeTurnos(false);
+    }
   });
 
   it("dura lo prometido: entre 25 y 60 segundos con el cartel, y Normal nunca pasa de 60", () => {

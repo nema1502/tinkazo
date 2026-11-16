@@ -110,7 +110,7 @@ describe("la barra de lo que sigue con un orden que no entra", () => {
 describe("el resumen de al lado del botón dice por qué no se puede sellar", () => {
   it("con 40 turnos y un tope de 32, el motivo va en la misma línea del resumen", async () => {
     await montar(40, 32);
-    expect(resumen()).toBe("40 personas, turnos del 1 al 40. En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect(resumen()).toBe("40 personas, turnos del 1 al 40. El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
     expect(resumen()).not.toContain("Al sellar");
   });
 
@@ -120,14 +120,14 @@ describe("el resumen de al lado del botón dice por qué no se puede sellar", ()
     ta.value = Array.from({ length: 20 }, (_, i) => [`Persona ${i + 1} (1/2)`, `Persona ${i + 1} (2/2)`]).flat().join("\n");
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     expect(resumen()).toContain("20 personas, 40 turnos");
-    expect(resumen()).toContain("En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect(resumen()).toContain("El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
   });
 
   it("en inglés el motivo también está", async () => {
     await montar(40, 32);
     const { setLang } = await import("../i18n");
     setLang("en");
-    expect(resumen()).toBe("40 people, turns 1 to 40. On this network the order goes up to 32 turns: with more, it can't be sealed.");
+    expect(resumen()).toBe("40 people, turns 1 to 40. The order goes up to 32 turns in this mode. Shorten the list to seal it.");
   });
 
   it("con una lista que entra no aparece, y la promesa del sello vuelve", async () => {

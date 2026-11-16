@@ -1,4 +1,5 @@
 import { enStand } from "../../ensayo-modo";
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import type { Textos } from "../pixi/kit";
 
 /**
@@ -16,8 +17,8 @@ import type { Textos } from "../pixi/kit";
  */
 export const TEXTOS_CARRERA: Textos = {
   es: {
-    // En una ronda de stand nadie gana: sale quien llegue a la meta.
-    carMeta: () => (enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
+    // En una ronda de stand o en un orden nadie gana: la meta solo cuenta la llegada.
+    carMeta: () => (esResultadoDeTurnos() ? "¡Turno uno al cruzar la meta!" : enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
     carBusquen: "¡Busquen su nombre!",
     carSalida: "¡Salida!",
     carRotuloMeta: "META",
@@ -55,7 +56,7 @@ export const TEXTOS_CARRERA: Textos = {
     carCierraTanda: "¡Se cierra el portón!",
   },
   en: {
-    carMeta: () => (enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
+    carMeta: () => (esResultadoDeTurnos() ? "Turn one at the finish!" : enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
     carBusquen: "Find your name!",
     carSalida: "Go!",
     carRotuloMeta: "FINISH",

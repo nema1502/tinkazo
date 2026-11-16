@@ -7,9 +7,9 @@ import { MAX_WINNERS } from "../protocol/select";
 import { ATAJOS, acotar, atajosHasta } from "./ganadores";
 
 /**
- * «Cuántos ganan»: el campo numérico con atajos (`ganadores.ts`) y su lugar en `index.html`.
+ * Cuántos ganan: el contador con botones y atajos (`ganadores.ts`) y su lugar en `index.html`.
  *
- * El markup es el de verdad: se saca de `index.html` el pliegue de las opciones y se prueba sobre él, sin navegador.
+ * El markup es el de verdad: se saca de `index.html` el control que va junto a Sellar la lista y se prueba sin navegador.
  */
 
 const h = vi.hoisted(() => ({ tope: 300 }));
@@ -17,39 +17,55 @@ vi.mock("../stellar/config", async (orig) => ({ ...(await orig<typeof import("..
 
 // La raíz del proyecto: con jsdom `import.meta.url` no es una URL de archivo.
 const html = readFileSync(join(process.cwd(), "index.html"), "utf8");
-const pliegue = (): string => {
+const control = (): string => {
   const doc = new DOMParser().parseFromString(html, "text/html");
-  return doc.getElementById("mas-opciones")?.outerHTML ?? "";
+  return doc.getElementById("ganadores-control")?.outerHTML ?? "";
 };
 
 const campo = (): HTMLInputElement => document.getElementById("nw") as HTMLInputElement;
 const nota = (): HTMLElement => document.getElementById("nw-nota") as HTMLElement;
 const chip = (n: number): HTMLButtonElement => document.querySelector(`#nw-atajos button[data-n="${n}"]`) as HTMLButtonElement;
-/** Escribe como lo hace la persona: pone el valor y avisa con `input`. */
+/** Pone un valor por código, como hacen el borrador y los auditores, y avisa con `input`. */
 const escribir = (valor: string): void => {
   campo().value = valor;
   campo().dispatchEvent(new Event("input", { bubbles: true }));
 };
 const salir = (): void => {
   campo().dispatchEvent(new Event("change", { bubbles: true }));
-  campo().dispatchEvent(new Event("blur"));
 };
 
-describe("el campo en index.html", () => {
+describe("el contador en index.html", () => {
   beforeEach(() => {
-    document.body.innerHTML = pliegue();
+    document.body.innerHTML = control();
   });
 
-  it("es un campo numérico (no un desplegable de cien renglones), con el tope del protocolo y 1 de inicio", () => {
+  it("se maneja con menos y más, nunca escribiendo un número, y conserva el tope del protocolo", () => {
     expect(campo().tagName).toBe("INPUT");
-    expect(campo().type).toBe("number");
+    expect(campo().type).toBe("hidden");
+    expect(document.querySelector("#ganadores-control input:not([type='hidden'])")).toBeNull();
     expect(document.querySelector("select#nw")).toBeNull();
     expect(campo().min).toBe("1");
     expect(campo().max).toBe(String(MAX_WINNERS));
     expect(campo().value).toBe("1");
-    expect(campo().getAttribute("inputmode")).toBe("numeric");
-    // Con rótulo: el que lee el lector de pantalla, y el mismo que ya traducen las dos lenguas.
+    expect(document.getElementById("nw-valor")?.textContent).toBe("1");
+    for (const id of ["nw-menos", "nw-mas"]) {
+      const b = document.getElementById(id) as HTMLButtonElement;
+      expect(b.type).toBe("button");
+      expect(b.getAttribute("data-i-aria")).toBe(id === "nw-menos" ? "winnersMenos" : "winnersMas");
+    }
+    // El rótulo nombra también al grupo de botones para el lector de pantalla.
     expect(document.querySelector('label[for="nw"]')?.getAttribute("data-i")).toBe("winners");
+    expect(document.querySelector(".nw-contador")?.getAttribute("aria-labelledby")).toBe("nw-etiqueta");
+  });
+
+  it("está fuera del pliegue, inmediatamente antes de la única acción principal", () => {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const ganadores = doc.getElementById("ganadores-control") as HTMLElement;
+    const sellar = doc.getElementById("btn-freeze") as HTMLButtonElement;
+    expect(doc.getElementById("mas-opciones")?.contains(ganadores)).toBe(false);
+    expect(ganadores.nextElementSibling).toBe(sellar.parentElement);
+    expect(sellar.parentElement?.querySelectorAll(".primary")).toHaveLength(1);
+    expect(sellar.classList.contains("primary")).toBe(true);
   });
 
   it("trae los atajos de lo común: 1, 2, 3, 5 y 10, en ese orden, y ninguno pasa del tope", () => {
@@ -66,10 +82,12 @@ describe("el campo en index.html", () => {
     expect(chip(5).getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("el grupo de atajos y el aviso tienen texto en español y en inglés", () => {
+  it("los botones, los atajos y el aviso tienen texto en español y en inglés", () => {
     const aria = document.getElementById("nw-atajos")?.getAttribute("data-i-aria") ?? "";
     for (const l of ["es", "en"] as const) {
       expect(typeof T[l][aria], `${l}.${aria}`).toBe("string");
+      expect(typeof T[l].winnersMenos, `${l}.winnersMenos`).toBe("string");
+      expect(typeof T[l].winnersMas, `${l}.winnersMas`).toBe("string");
       expect(T[l].winnersTope, `${l}.winnersTope`).toContain("{n}");
     }
     expect(nota().hidden).toBe(true);
@@ -114,7 +132,7 @@ describe("acotar: el número que queda", () => {
 describe("montado en la página", () => {
   beforeEach(() => {
     vi.resetModules();
-    document.body.innerHTML = pliegue();
+    document.body.innerHTML = control();
     h.tope = 300;
   });
 
@@ -160,7 +178,7 @@ describe("montado en la página", () => {
     expect(nota().hidden).toBe(true);
   });
 
-  it("mientras se teclea no se pisa: un campo vacío se deja y al salir vuelve a 1", async () => {
+  it("un valor vacío puesto por código vuelve a 1 al confirmarse", async () => {
     await montar();
     escribir("");
     expect(campo().value).toBe("");
@@ -169,7 +187,7 @@ describe("montado en la página", () => {
     expect(chip(1).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("al salir del campo queda un número válido: cero, negativo o decimal se arreglan", async () => {
+  it("al confirmar un valor por código queda un entero válido", async () => {
     await montar();
     for (const [escrito, queda] of [["0", "1"], ["-3", "1"], ["4.6", "4"]] as const) {
       escribir(escrito);
@@ -178,22 +196,49 @@ describe("montado en la página", () => {
     }
   });
 
-  it("tocar un atajo escribe el número, lo marca y avisa con change (el borrador, el resumen y el pliegue lo escuchan)", async () => {
+  it("menos y más cambian de a uno, muestran el número y avisan con change", async () => {
     await montar();
+    const menos = document.getElementById("nw-menos") as HTMLButtonElement;
+    const mas = document.getElementById("nw-mas") as HTMLButtonElement;
     const avisos = vi.fn();
     campo().addEventListener("change", avisos);
-    chip(5).click();
-    expect(campo().value).toBe("5");
+    expect(menos.disabled).toBe(true);
+    mas.click();
+    expect(campo().value).toBe("2");
+    expect(document.getElementById("nw-valor")?.textContent).toBe("2");
+    expect(menos.disabled).toBe(false);
     expect(avisos).toHaveBeenCalledTimes(1);
-    expect(chip(5).getAttribute("aria-pressed")).toBe("true");
-    expect(chip(1).getAttribute("aria-pressed")).toBe("false");
-    chip(10).click();
-    expect(campo().value).toBe("10");
-    expect(chip(10).getAttribute("aria-pressed")).toBe("true");
-    expect(chip(5).getAttribute("aria-pressed")).toBe("false");
+    mas.click();
+    expect(campo().value).toBe("3");
+    menos.click();
+    expect(campo().value).toBe("2");
+    menos.click();
+    expect(campo().value).toBe("1");
+    expect(menos.disabled).toBe(true);
+    expect(avisos).toHaveBeenCalledTimes(4);
   });
 
-  it("escribir otro número desmarca los atajos que no lo son", async () => {
+  it("más se apaga en el tope de la red y los atajos siguen eligiendo de un toque", async () => {
+    h.tope = 4;
+    const m = await montar();
+    const mas = document.getElementById("nw-mas") as HTMLButtonElement;
+    m.ponerGanadores(4);
+    expect(mas.disabled).toBe(true);
+    expect(document.getElementById("nw-valor")?.textContent).toBe("4");
+    mas.click();
+    expect(campo().value).toBe("4");
+    chip(2).click();
+    expect(campo().value).toBe("2");
+    expect(mas.disabled).toBe(false);
+    expect(chip(2).getAttribute("aria-pressed")).toBe("true");
+    expect(chip(1).getAttribute("aria-pressed")).toBe("false");
+    chip(3).click();
+    expect(campo().value).toBe("3");
+    expect(chip(3).getAttribute("aria-pressed")).toBe("true");
+    expect(chip(2).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("un valor sin atajo desmarca los que no coinciden", async () => {
     await montar();
     escribir("5");
     expect(chip(5).getAttribute("aria-pressed")).toBe("true");
@@ -231,15 +276,21 @@ describe("montado en la página", () => {
     expect(campo().value).toBe("1");
   });
 
-  it("con la lista cerrada se bloquean el campo y los atajos, y un atajo no hace nada", async () => {
+  it("con la lista cerrada se bloquean el contador y los atajos", async () => {
     const m = await montar();
+    const mas = document.getElementById("nw-mas") as HTMLButtonElement;
     m.bloquearGanadores(true);
     expect(campo().disabled).toBe(true);
+    expect(mas.disabled).toBe(true);
     for (const n of ATAJOS) expect(chip(n).disabled, `atajo ${n}`).toBe(true);
+    mas.click();
     chip(5).click();
     expect(campo().value).toBe("1");
     m.bloquearGanadores(false);
     expect(campo().disabled).toBe(false);
+    expect(mas.disabled).toBe(false);
+    mas.click();
+    expect(campo().value).toBe("2");
     chip(5).click();
     expect(campo().value).toBe("5");
   });

@@ -156,7 +156,7 @@ describe("elegir el modo con un toque", () => {
     expect($("modo-botones").dataset.modo).toBe("sorteo");
     expect(m.modoTurnosActivo()).toBe(false);
     expect(titulo()).toBe("Participantes");
-    expect(pliegue().querySelector("summary")?.textContent).toBe("Premio, cuántos ganan y subir CSV");
+    expect(pliegue().querySelector("summary")?.textContent).toBe("Premio y subir CSV");
   });
 
   it("tocar Orden de turnos lo elige: cambian el título del paso, la ayuda y el resumen de junto al botón, y el pliegue no se abre", async () => {
@@ -171,7 +171,7 @@ describe("elegir el modo con un toque", () => {
     expect(titulo()).toBe("Quiénes tienen turno");
     expect(ayuda()).toBe("Salen todos, en orden. Ese orden son los turnos.");
     expect($("sellar-resumen").textContent).toBe("8 personas, turnos del 1 al 8. Al sellar, la lista queda cerrada.");
-    // El nombre «Turnos» y la cantidad los pone la herramienta: no son algo elegido dentro del pliegue.
+    // El nombre Turnos y la cantidad los pone la herramienta: no son algo elegido dentro del pliegue.
     expect(pliegue().open).toBe(false);
     expect(pliegue().querySelector("summary")?.textContent).toBe("Nombre de los turnos y subir CSV");
     // El botón principal sigue siendo el mismo: sellar la lista es la misma acción en los dos modos.
@@ -211,13 +211,13 @@ describe("elegir el modo con un toque", () => {
     expect(pliegue().open).toBe(true);
   });
 
-  it("en el sorteo común, más de un ganador sigue abriendo el pliegue", async () => {
+  it("en el sorteo común, más de un ganador no abre el pliegue: la cantidad ya está a la vista", async () => {
     vi.stubEnv("VITE_MODOS", "1");
     await montar(8);
     const nw = $("nw") as HTMLInputElement;
     nw.value = "3";
     nw.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pliegue().open).toBe(true);
+    expect(pliegue().open).toBe(false);
   });
 
   it("cada cambio vuelve a disparar la animación del título y de la ayuda", async () => {

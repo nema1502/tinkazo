@@ -1,3 +1,4 @@
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import { normalGuajojo, POR_TANDA, T_AMANECER, T_CANTO, T_CRAC, T_LLAMADA, T_POR_TANDA, T_ULTIMO, TOPE_NORMAL, FIJOS, TARJETA, LISTA_MAX, silencioDe, silenciosPara } from "./guajojo-duracion";
 import { acotar } from "./kit/azar";
 import { planoEntero, planoSobre } from "./kit/director";
@@ -604,7 +605,7 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
     ci.victimas.forEach((i, j) => {
       const tc = ci.tCae[j] as number;
       if (j === 0) {
-        const textos = ci.ultimo && ctx.ganadores.length > 1 ? ctx.txt("conPremio") : ci.victimas.length > 3 ? ctx.txt("varios") : ctx.txt("crac", nom(i));
+        const textos = ci.ultimo && ctx.ganadores.length > 1 && !esResultadoDeTurnos() ? ctx.txt("conPremio") : ci.victimas.length > 3 ? ctx.txt("varios") : ctx.txt("crac", nom(i));
         guion.push({
           t: tc, texto: textos, calor: cal + 0.3, prioridad: PRIORIDAD.importante, hecho: { tipo: "salio", quien: i },
           hacer: (k) => { k.sonido.tono(8, "evento", { dur: 0.05, timbre: "square", vol: 0.055 }); k.sonido.salida(); },

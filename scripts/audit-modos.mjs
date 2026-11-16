@@ -186,7 +186,7 @@ async function elegirTurnos(page) {
   await sleep(900);
 }
 
-/** Pone cuantos ganan (#nw) como lo haria la persona, con los eventos del campo. */
+/** Pone cuantos ganan (#nw) y avisa como lo hacen los botones del contador. */
 async function ponerGanadores(page, n) {
   await page.eval(
     `(() => { const nw = document.getElementById('nw'); nw.value = ${JSON.stringify(String(n))}; nw.dispatchEvent(new Event('input', { bubbles: true })); nw.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`,

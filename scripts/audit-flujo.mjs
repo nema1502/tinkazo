@@ -1122,7 +1122,7 @@ async function anchosDeCelular(browser, ancho) {
       await page.screenshot(join(outDir, `flujo-ancho-${ancho}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
     };
     console.log(`\n  ${quien}`);
-    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('btn-sample').click(); true`);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
     await sleep(800);
     await mirar("lista cargada");
     await page.eval("document.getElementById('btn-freeze').click(); true");

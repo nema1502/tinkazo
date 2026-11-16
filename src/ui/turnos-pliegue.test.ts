@@ -7,8 +7,8 @@ import { T } from "../i18n";
 /**
  * El rótulo del pliegue de las opciones (`#mas-opciones`, `turnos.ts`). Hasta el 13 de noviembre de 2026 el orden de turnos se
  * elegía ahí adentro y el rótulo lo nombraba. Desde ese día se elige a la vista, en el selector de arriba de la lista
- * (`turnos-selector.test.ts`), así que el pliegue del sorteo común vuelve a decir lo que guarda: premio, cuántos ganan y
- * subir CSV. Con el orden elegido dice lo que guarda en ese modo: el nombre de los turnos y subir CSV.
+ * (`turnos-selector.test.ts`). Desde el 16 de noviembre cuántos ganan está a la vista junto a Sellar la lista y el pliegue
+ * guarda el premio y el CSV. Con el orden elegido dice lo que guarda en ese modo: el nombre de los turnos y subir CSV.
  */
 
 const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
@@ -45,12 +45,12 @@ describe("el rótulo del pliegue dice lo que guarda, con el modo elegido a la vi
   it("con los modos a la vista, el del sorteo común, en los dos idiomas: el orden se elige arriba", async () => {
     history.replaceState(null, "", "/?modo=varias");
     await montar(5);
-    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio y subir CSV");
     const { setLang } = await import("../i18n");
     setLang("en");
     expect(pliegue()).toBe(String(T.en.masOpciones));
     setLang("es");
-    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio y subir CSV");
   });
 
   it("elegido el orden, el rótulo del modo; al apagarlo, vuelve el del sorteo común", async () => {
@@ -60,12 +60,12 @@ describe("el rótulo del pliegue dice lo que guarda, con el modo elegido a la vi
     turnos.ponerModoTurnos(true);
     expect(pliegue()).toBe("Nombre de los turnos y subir CSV");
     turnos.ponerModoTurnos(false);
-    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio y subir CSV");
   });
 
   it("sin los modos a la vista, el rótulo de siempre", async () => {
     await montar(5);
-    expect(pliegue()).toBe("Premio, cuántos ganan y subir CSV");
+    expect(pliegue()).toBe("Premio y subir CSV");
   });
 
   it("el rótulo del orden existe en los dos idiomas y no usa palabras de apuesta", () => {
