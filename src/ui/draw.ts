@@ -424,7 +424,7 @@ function alGuardar(g: PorGrabar, txHash: string | undefined): void {
   caja.className = "txstatus ok";
   caja.dataset.grabacion = "guardado";
   caja.textContent = t("grabGuardado");
-  if (txHash) enlaceDelSorteo(caja, txHash, " ");
+  if (txHash) enlaceDelSorteo(caja, txHash, " ", true);
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
   btn.classList.remove("lista");
@@ -570,8 +570,11 @@ function anotarEnMisSorteos(g: PorGrabar, cambios: { porGrabar: boolean; drawTx?
     .catch((e: unknown) => console.warn("[tinkazo] Mis sorteos no se pudo anotar", e));
 }
 
-/** El enlace al sorteo grabado, al final de una línea, si todavía no lo tiene. */
-function enlaceDelSorteo(linea: HTMLElement, txHash: string, antes: string): void {
+/**
+ * El enlace al sorteo grabado, al final de una línea, si todavía no lo tiene. Cuando la línea termina en punto, el
+ * enlace empieza con mayúscula (`trasUnPunto`).
+ */
+function enlaceDelSorteo(linea: HTMLElement, txHash: string, antes: string, trasUnPunto = false): void {
   if (linea.querySelector("a[data-sorteo-grabado]")) return;
   linea.append(antes);
   const a = document.createElement("a");
@@ -579,7 +582,8 @@ function enlaceDelSorteo(linea: HTMLElement, txHash: string, antes: string): voi
   a.target = "_blank";
   a.rel = "noopener";
   a.dataset.sorteoGrabado = "1";
-  a.textContent = t("onChain") + " ↗";
+  const texto = t("onChain");
+  a.textContent = (trasUnPunto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto) + " ↗";
   linea.appendChild(a);
 }
 
