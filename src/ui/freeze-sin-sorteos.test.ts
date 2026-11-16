@@ -23,6 +23,9 @@ const h = vi.hoisted(() => ({
   sellandoAhora: [] as boolean[],
   cambio: vi.fn(),
   pendiente: null as unknown,
+  // Si paga el portero y qué error cuenta como un sello que no quedó grabado (se prueba con otra ronda).
+  conPortero: false,
+  sinGrabar: (_e: unknown): boolean => false,
 }));
 
 vi.mock("../stellar/config", async (orig) => {
@@ -37,11 +40,11 @@ vi.mock("./anchor", () => ({
   },
   hideTxStatus: () => undefined,
   margenParaAprobar: async () => 0,
-  pagaElPortero: async () => false,
+  pagaElPortero: async () => h.conPortero,
   precargarParaElSorteo: () => undefined,
   resolverSelloEnLaRed: async () => null,
   sealOnChain: (...a: unknown[]) => h.sealOnChain(...a),
-  selloSinGrabar: () => false,
+  selloSinGrabar: (e: unknown) => h.sinGrabar(e),
   showTxStatus: () => undefined,
   stepLabel: (paso: string) => paso,
 }));
@@ -49,9 +52,16 @@ vi.mock("./sello-seguro", async (orig) => ({
   ...(await orig<typeof import("./sello-seguro")>()),
   leerPendiente: () => h.pendiente,
   guardarPendiente: () => undefined,
-  sellarSinDuplicar: async (inicial: { round: number; ts: number }, o: { sellar: (r: number) => Promise<unknown> }) => {
-    await o.sellar(inicial.round);
-    return { raffleId: 1n, txHash: "H", round: inicial.round, ts: inicial.ts };
+  // Como el de verdad: lo que no quedó grabado se prueba con otra ronda, hasta tres intentos en total.
+  sellarSinDuplicar: async (inicial: { round: number; ts: number }, o: { sellar: (r: number) => Promise<unknown>; sinGrabar: (e: unknown) => boolean }) => {
+    for (let intento = 0; ; intento++) {
+      try {
+        await o.sellar(inicial.round + intento);
+        return { raffleId: 1n, txHash: "H", round: inicial.round, ts: inicial.ts };
+      } catch (e) {
+        if (!o.sinGrabar(e) || intento >= 2) throw e;
+      }
+    }
   },
 }));
 vi.mock("./cuenta-lista-flujo", () => ({
@@ -168,6 +178,8 @@ beforeEach(async () => {
   h.nombres = ["Ana", "Beto"];
   h.sellandoAhora = [];
   h.pendiente = null;
+  h.conPortero = false;
+  h.sinGrabar = () => false;
   armarPagina();
   vi.spyOn(performance, "now").mockReturnValue(10_000);
   const { app } = await import("../state");
@@ -347,5 +359,108 @@ describe("fuera del cobro por uso, como hoy", () => {
     await freeze().catch(() => undefined);
     expect(f).not.toHaveBeenCalled();
     expect(h.sealOnChain).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Un sello que entró a la cadena y falló ahí (la noche del 13 de noviembre de 2026: la firma tardó, entró tarde y el
+ * contrato lo rechazó). La pantalla dice qué pasó, que no fue un error de la persona y qué pasa con el sorteo oficial.
+ */
+describe("después de un sello que entró a la cadena y falló", () => {
+  const enLaCadena = (): Error => new Error("tx-FAILED");
+  const frenadoAntes = (): Error => Object.assign(new Error("la ronda quedó cerca antes de mandar el sello (faltan 31 s): Error(Contract, #5)"), { name: "RondaMuyCerca" });
+  const status = (): string => document.getElementById("seal-status")?.textContent ?? "";
+
+  beforeEach(() => {
+    h.conPortero = true;
+    h.sinGrabar = (e) => /tx-FAILED|Error\(Contract, #5\)/.test(String((e as Error)?.message));
+  });
+
+  /** El portero que devuelve lo anuncia en `/cupo`. */
+  const queDevuelve = (oficial: unknown, sellosQuedan: number): Record<string, unknown> => ({ ...cupo(oficial, sellosQuedan), devuelve: true });
+
+  it("con cero sorteos en el reintento no sale Se te acabaron: se dice que no fue su error y que el sorteo vuelve", async () => {
+    portero(queDevuelve(conSorteos(1), 1));
+    h.sealOnChain.mockRejectedValueOnce(enLaCadena()).mockRejectedValueOnce(errorDeRespuesta(402, { motivo: "sin-sorteos", vencieron: 0 }));
+    const { freeze } = await import("./freeze");
+    const { t } = await import("../i18n");
+    await freeze().catch(() => undefined);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(2);
+    expect(ventana()).toBeNull();
+    expect(status()).toBe(t("selloTardeSinSorteos"));
+  });
+
+  it("con un portero de antes, que no anuncia la devolución, no se la promete: Se te acabaron como siempre", async () => {
+    portero(cupo(conSorteos(1), 1));
+    h.sealOnChain.mockRejectedValueOnce(enLaCadena()).mockRejectedValueOnce(errorDeRespuesta(402, { motivo: "sin-sorteos", vencieron: 0 }));
+    const { freeze } = await import("./freeze");
+    const p = freeze();
+    await esperar(() => ventana() !== null);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(2);
+    expect(status()).not.toMatch(/vuelve solo|comes back/);
+    ventana()?.querySelector<HTMLButtonElement>('[data-accion="prueba"]')?.click();
+    await p.catch(() => undefined);
+  });
+
+  it("con el portero nuevo y el tope del día lleno, /cupo ya no promete la devolución: Se te acabaron como siempre", async () => {
+    // Antes del primer sello la cuenta estaba por debajo del tope. El intento entra tarde y falla, y el tope lo deja para
+    // devolver a mano. El candado de antes de la firma del reintento vuelve a preguntar (la firma lenta tardó más que lo
+    // que se guarda una respuesta de /cupo) y ahora el portero dice cero sorteos y devuelve:false.
+    portero(queDevuelve(conSorteos(1), 1), { ...cupo(conSorteos(0), 0), devuelve: false });
+    h.sealOnChain.mockRejectedValueOnce(enLaCadena()).mockImplementationOnce(async () => {
+      const { exigirAcceso } = await import("../stellar/acceso-oficial");
+      await exigirAcceso("GAAA", "sello", 1, { forzar: true });
+      throw new Error("el candado tenía que frenar la firma");
+    });
+    const { freeze } = await import("./freeze");
+    const p = freeze();
+    await esperar(() => ventana() !== null);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(2);
+    expect(status()).not.toMatch(/vuelve solo|comes back/);
+    expect(status()).not.toContain("hola@tinkazo.app");
+    ventana()?.querySelector<HTMLButtonElement>('[data-accion="prueba"]')?.click();
+    await p.catch(() => undefined);
+  });
+
+  it("con un portero de antes y otro error al final: el de siempre y que no fue su error, sin prometer que vuelve", async () => {
+    portero(cupo(conSorteos(5), 5));
+    h.sealOnChain.mockRejectedValue(enLaCadena());
+    const { freeze } = await import("./freeze");
+    const { t } = await import("../i18n");
+    await freeze().catch(() => undefined);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(3);
+    expect(status()).toBe(`tx-FAILED ${t("selloTardeAvisoSinDevolucion")}`);
+  });
+
+  it("si el primero se frenó antes de mandar, no gastó nada: con cero sorteos, Se te acabaron como siempre", async () => {
+    portero(cupo(conSorteos(1), 1));
+    h.sealOnChain.mockRejectedValueOnce(frenadoAntes()).mockRejectedValueOnce(errorDeRespuesta(402, { motivo: "sin-sorteos", vencieron: 0 }));
+    const { freeze } = await import("./freeze");
+    const p = freeze();
+    await esperar(() => ventana() !== null);
+    expect(status()).not.toContain("hola@tinkazo.app");
+    ventana()?.querySelector<HTMLButtonElement>('[data-accion="prueba"]')?.click();
+    await p.catch(() => undefined);
+  });
+
+  it("los tres intentos fallaron en la cadena: el error de siempre y, después, qué pasa con el sorteo", async () => {
+    portero(queDevuelve(conSorteos(5), 5));
+    h.sealOnChain.mockRejectedValue(enLaCadena());
+    const { freeze } = await import("./freeze");
+    const { t } = await import("../i18n");
+    await freeze().catch(() => undefined);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(3);
+    expect(status()).toBe(`tx-FAILED ${t("selloTardeAviso")}`);
+  });
+
+  it("con la billetera propia no pasa por el portero ni gasta sorteos oficiales: el error de siempre, sin nada más", async () => {
+    h.billetera = { kind: "external", submitsItself: false };
+    h.conPortero = false;
+    portero(queDevuelve(conSorteos(5), 5));
+    h.sealOnChain.mockRejectedValue(enLaCadena());
+    const { freeze } = await import("./freeze");
+    await freeze().catch(() => undefined);
+    expect(h.sealOnChain).toHaveBeenCalledTimes(3);
+    expect(status()).toBe("tx-FAILED");
   });
 });

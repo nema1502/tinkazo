@@ -38,7 +38,19 @@ export interface Consulta {
   status: "SUCCESS" | "FAILED" | "NOT_FOUND";
   /** Lo que cobró la red, en stroops, si la transacción entró. */
   feeCharged?: number;
+  /**
+   * Lo que guardó la red de una transacción que entró, para saber por qué falló un sello (`sello-tarde.ts`): la hora de
+   * cierre de su ledger (`createdAt`, en segundos), el sobre tal como quedó (`envelopeXdr`), su resultado (`resultXdr`) y,
+   * si el RPC los da, los eventos de diagnóstico. Nada de esto sale de la página.
+   */
+  cierreS?: number;
+  sobre?: string;
+  resultado?: string;
+  diagnosticos?: string[];
 }
+
+/** Cuántos eventos de diagnóstico se guardan de una consulta, como mucho: alcanzan para ver el error de un sello. */
+const MAX_DIAGNOSTICOS = 50;
 
 /** Los bytes de un valor del XDR nuevo, que guarda su contenido en `.value` o es el propio arreglo. */
 function bytesDe(v: unknown): Uint8Array | null {
@@ -59,10 +71,24 @@ export interface Red {
   simular(xdrTx: string): Promise<Simulacion>;
   leerCuenta(cuenta: string): Promise<CuentaEnRed | null>;
   enviar(xdrTx: string): Promise<Envio>;
-  consultar(hash: string): Promise<Consulta>;
+  /** Con `senal`, quien pregunta puede cortar la consulta: se deja de esperar y no se sigue con el RPC siguiente. */
+  consultar(hash: string, senal?: AbortSignal): Promise<Consulta>;
 }
 
 const TIEMPO_MS = 8000;
+
+/** La señal de un pedido al RPC: corta a los `TIEMPO_MS` o cuando corte `senal`, lo que pase primero. */
+function senalDelPedido(senal?: AbortSignal): AbortSignal {
+  const tope = AbortSignal.timeout(TIEMPO_MS);
+  if (!senal) return tope;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([tope, senal]);
+  const c = new AbortController();
+  const cortar = () => c.abort();
+  tope.addEventListener("abort", cortar, { once: true });
+  senal.addEventListener("abort", cortar, { once: true });
+  if (senal.aborted) cortar();
+  return c.signal;
+}
 
 export class RpcRed implements Red {
   constructor(
@@ -70,13 +96,16 @@ export class RpcRed implements Red {
     private readonly pedir: typeof fetch = (...a) => fetch(...a),
   ) {}
 
-  private async llamar<T>(metodo: string, params: unknown): Promise<T> {
+  /** Con `senal` cortada, no se pregunta al RPC siguiente: se avisa con `rpc-cortado`, un error de red. */
+  private async llamar<T>(metodo: string, params: unknown, senal?: AbortSignal): Promise<T> {
     let ultimo: unknown = new ErrorDeRed("sin-rpc");
     for (const url of this.urls) {
+      if (senal?.aborted) throw new ErrorDeRed("rpc-cortado");
       let r: Response;
       try {
-        r = await this.pedir(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: metodo, params }), signal: AbortSignal.timeout(TIEMPO_MS) });
+        r = await this.pedir(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: metodo, params }), signal: senalDelPedido(senal) });
       } catch (e) {
+        if (senal?.aborted) throw new ErrorDeRed("rpc-cortado", { cause: e });
         ultimo = new ErrorDeRed("rpc-corte", { cause: e });
         continue;
       }
@@ -149,11 +178,21 @@ export class RpcRed implements Red {
     return { status, ...(codigo ? { codigo } : {}) };
   }
 
-  async consultar(hash: string): Promise<Consulta> {
-    const r = await this.llamar<{ status: string; resultXdr?: string }>("getTransaction", { hash });
+  async consultar(hash: string, senal?: AbortSignal): Promise<Consulta> {
+    const r = await this.llamar<{ status: string; resultXdr?: string; createdAt?: number | string; envelopeXdr?: string; diagnosticEventsXdr?: unknown }>("getTransaction", { hash }, senal);
     if (r.status !== "SUCCESS" && r.status !== "FAILED") return { status: "NOT_FOUND" };
     const fee = r.resultXdr ? feeCobrada(r.resultXdr) : undefined;
-    return { status: r.status, ...(fee !== undefined ? { feeCharged: fee } : {}) };
+    // Un RPC de antes manda la hora como texto; uno de ahora, como número.
+    const cierre = Number(r.createdAt);
+    const diagnosticos = Array.isArray(r.diagnosticEventsXdr) ? r.diagnosticEventsXdr.filter((d): d is string => typeof d === "string").slice(0, MAX_DIAGNOSTICOS) : [];
+    return {
+      status: r.status,
+      ...(fee !== undefined ? { feeCharged: fee } : {}),
+      ...(Number.isFinite(cierre) && cierre > 0 ? { cierreS: cierre } : {}),
+      ...(typeof r.envelopeXdr === "string" && r.envelopeXdr ? { sobre: r.envelopeXdr } : {}),
+      ...(typeof r.resultXdr === "string" && r.resultXdr ? { resultado: r.resultXdr } : {}),
+      ...(diagnosticos.length ? { diagnosticos } : {}),
+    };
   }
 }
 

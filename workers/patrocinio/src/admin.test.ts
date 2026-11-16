@@ -227,6 +227,8 @@ describe("estado y exportar", () => {
       "cuentas",
       "cupones",
       "derechos",
+      "devoluciones",
+      "devoluciones_pendientes",
       "ordenes",
       "pagos",
       "pagos_sueltos",
