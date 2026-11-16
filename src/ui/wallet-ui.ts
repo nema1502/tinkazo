@@ -1589,10 +1589,11 @@ async function connect(
     }
   } finally {
     (enlaces as HTMLElement | null)?.remove();
+    // Primero deja de conectar y después se pinta la puerta, como en `entrar`: al revés quedaba en Conectando, sin botón.
+    conectando = false;
     const terminaba = cancelarEntrada !== null;
     cancelarEntrada = null;
     if (terminaba) applyGate();
-    conectando = false;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();
   }

@@ -197,3 +197,30 @@ describe("la puerta mientras se termina de entrar", () => {
     expect(T.en.loginTerminando).toBe("Finishing signing you in…");
   });
 });
+
+/** La ventana de opciones abierta y su botón de Google tocado, con el foco en él (como desde el teclado). */
+async function entrarDesdeLaVentana(ui: Awaited<ReturnType<typeof cargar>>["ui"]): Promise<HTMLButtonElement> {
+  await ui.openPicker();
+  const google = document.querySelector<HTMLButtonElement>(".login-google");
+  expect(google, volcado()).not.toBeNull();
+  google?.focus();
+  google?.click();
+  return google as HTMLButtonElement;
+}
+
+describe("en la ventana de opciones", () => {
+  it("después de Cancelar, la puerta no queda diciendo Conectando sin ningún botón", async () => {
+    const { ui, t } = await cargar();
+    const google = await entrarDesdeLaVentana(ui);
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(google.textContent, volcado()).toBe(t("loginTerminando")), esperar);
+    document.querySelector<HTMLButtonElement>(".login-links .login-link")?.click();
+    await vi.waitFor(() => expect(google.textContent, volcado()).toContain(t("loginGoogle")), esperar);
+    expect(h.cancelados).toBe(1);
+    expect(aviso(), volcado()).toBeNull();
+    expect(document.querySelector(".login-links"), volcado()).toBeNull();
+    // La puerta vuelve a como estaba antes de entrar.
+    expect(document.getElementById("gate")?.style.display, volcado()).toBe("none");
+    expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("fuera");
+  });
+});
