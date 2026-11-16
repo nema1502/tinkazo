@@ -294,15 +294,32 @@ describe("diccionario", () => {
 });
 
 describe("el modo espectador", () => {
-  it("sus textos nuevos existen en los dos idiomas", () => {
-    for (const k of ["espQrT", "espQrBoton", "espQrSub", "espVistaEspectador", "espLectura"]) {
+  const CLAVES = [
+    "espQrT", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda", "espNoCoincide",
+    "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente", "espVerDeNuevo", "espHacerElTuyo",
+  ];
+
+  it("sus textos existen en los dos idiomas", () => {
+    for (const k of CLAVES) {
       expect(typeof T.es[k], `es.${k}`).toBe("string");
       expect(typeof T.en[k], `en.${k}`).toBe("string");
       expect(T.es[k] as string).toBeTruthy();
       expect(T.en[k] as string).toBeTruthy();
     }
-    // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos.
-    expect(T.es.espQrBoton).toBe("QR para ver en vivo");
-    expect(T.en.espQrBoton).toBe("QR to watch live");
+  });
+
+  it("sin comillas angulares, sin punto y coma y sin palabras técnicas", () => {
+    for (const k of CLAVES) {
+      for (const lang of ["es", "en"] as const) {
+        const texto = T[lang][k] as string;
+        expect(texto, `${lang}.${k}`).not.toMatch(/[«»;]/);
+        expect(texto, `${lang}.${k}`).not.toMatch(/drand|beacon|hash|firma|signature|blockchain|Stellar|token|rifa|raffle|ticket|boleto|loter/i);
+      }
+    }
+  });
+
+  it("el QR del espectador va solo en la espera: la pantalla del resultado lleva uno solo, el del comprobante", () => {
+    expect(T.es.espQrBoton).toBeUndefined();
+    expect(T.en.espQrBoton).toBeUndefined();
   });
 });

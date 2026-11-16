@@ -808,6 +808,59 @@ export function verDeNuevo(juego?: Game): void {
   });
 }
 
+/** Lo que la vista de espectador hace con su show: lanzarlo cuando la sala también lo lanza, o sacar la tarjeta. */
+export interface ShowDelEspectador {
+  /** El juego, con lo que ya decidió la ronda. Una sola vez: para repetirlo está `verDeNuevo`. */
+  jugar: (alTerminar: () => void) => void;
+  /** El sorteo no se puede mostrar (no coincide con lo grabado): la tarjeta se va. */
+  cancelar: () => void;
+}
+
+/**
+ * El show de la vista de espectador (`espectador.ts`): el mismo de la sala, con lo que ya decidió la ronda
+ * (`app.frozen` y `app.drawn`, que arma la vista). Es lo que hace `draw` después de traer el número, sin sortear,
+ * grabar, tocar el historial ni el comprobante, y sin contar nada.
+ *
+ * Con un sorteo grabado en Stellar (`grabado`), la tarjeta del juego sale ya, como en la sala, y la cuenta y el juego
+ * esperan a que el sorteo quede grabado: la sala arranca en ese momento, y el celular también. Si la tarjeta se va sola
+ * antes (quien organiza tardó en lanzarlo), el juego sale con una tarjeta nueva. Sin cadena (el modo libre) la sala no
+ * espera nada, y la tarjeta sale al jugar.
+ */
+export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspectador | null {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn) return null;
+  const personas = frozen.names.length;
+  const premios = drawn.winners.length;
+  // El cartel final dice «¡El orden quedó listo!» cuando es un orden de turnos, como en la sala.
+  setResultadoDeTurnos(isTurnOrder(personas, premios, frozen.prize));
+  let tarjeta: Previa | null = null;
+  let seFue = false;
+  if (grabado) {
+    const juego = juegoDe(personas, premios);
+    const card = abrirTarjeta(juego, personas, premios, grabado);
+    if (card) {
+      tarjeta = { card, game: juego };
+      let llego = false;
+      void grabado.then(
+        () => (llego = true),
+        () => undefined,
+      );
+      void card.ready.then(() => {
+        if (!llego) seFue = true;
+      });
+    }
+  }
+  let jugado = false;
+  return {
+    jugar: (alTerminar) => {
+      if (jugado) return;
+      jugado = true;
+      playGame(frozen.names, drawn.winners, drawn.beacon, alTerminar, seFue ? null : tarjeta);
+    },
+    cancelar: () => tarjeta?.card.hide(),
+  };
+}
+
 /** Un toque en "Probar otro juego" o en "Ver de nuevo con otro juego": al selector, con el foco en otro juego. */
 export function elegirOtroJuegoParaVer(): void {
   if (!app.drawn || replaying) return;

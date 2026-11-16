@@ -10,10 +10,10 @@ import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
-import { paraMostrar } from "../equipos/etiquetas";
+import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
-import { armarQrDeEspectador, type DatosEspectador } from "./espectador";
+import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -300,9 +300,9 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     (enEnsayo() ? `<p class="espera-ensayo">${esc(t("ensEstadio"))}</p>` : "") +
     (f.prize ? `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>` : "") +
     `<div class="espera-reloj mono">0:00</div>` +
-    // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show.
-    // El dibujo llega aparte (enlace-corto.ts es asíncrono); hasta entonces queda escondido.
-    (conEspectador ? `<figure class="espera-qr" hidden><img alt="" /><figcaption>${esc(t("espQrT"))}</figcaption></figure>` : "") +
+    // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show. Lleva solo el
+    // enlace corto, que llega aparte (enlace-corto.ts): hasta entonces dice que se está preparando.
+    (conEspectador ? figuraDelQrHtml() : "") +
     // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error.
     `<div class="espera-sigue" hidden></div>` +
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
@@ -317,21 +317,31 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     juegoHtml(juegos, "flujo") +
     panelDeJuegosHtml(juegos, f.names.length);
   document.body.appendChild(back);
-  // El QR del espectador, solo en un sorteo real: la demo, el ensayo y el stand no comparten número ni lista
-  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar.
-  /** Los datos del enlace del espectador: si el juego cambia desde la espera, el QR se rearma con el nuevo. */
-  let datosEspectador: DatosEspectador | null = null;
-  if (conEspectador) {
-    datosEspectador = {
-      r: f.round,
-      g: app.game,
-      p: currentPace(),
-      w: Math.min(Math.max(1, sorteo.premios()), f.names.length),
-      ...(f.prize ? { z: f.prize } : {}),
-      n: f.names,
-    };
-    void armarQrDeEspectador(back, datosEspectador);
-  }
+  /**
+   * El QR del espectador (`espectador-enlace.ts`), con lo de ahora: el juego, el ritmo y, si ya está sellado en
+   * Stellar, la red y el número del sorteo. Se rearma si cambia el juego desde la espera o si el sello entra tarde.
+   */
+  const armarQr = (): void => {
+    if (!conEspectador || !app.frozen || !back.isConnected) return;
+    // El sello todavía se está reintentando: si entra, la sala va a esperar lo grabado, y un enlace sin el número del
+    // sorteo dejaría al celular adelantarse. Hasta saberlo, no hay QR (`alSello` lo arma cuando entra).
+    if (sinSelloAhora(app.frozen)) {
+      esconderQrDeEspectador(back);
+      return;
+    }
+    void armarQrDeEspectador(
+      back,
+      datosDeLaEspera(app.frozen, {
+        juego: app.game,
+        ritmo: currentPace(),
+        premios: sorteo.premios(),
+        red: network.name,
+        contrato: network.contractId,
+        equipo: nombreDelEquipo,
+      }),
+    );
+  };
+  armarQr();
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
   ajusta();
@@ -388,10 +398,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!actual) return;
     for (const el of back.querySelectorAll<HTMLElement>(".espera-juego-n b")) el.textContent = actual.nombre;
     // El enlace del espectador lleva el juego: si cambió desde la espera, el QR se rearma con el nuevo.
-    if (datosEspectador) {
-      datosEspectador.g = app.game;
-      void armarQrDeEspectador(back, datosEspectador);
-    }
+    armarQr();
   };
   /**
    * El alto de la barra de Sorprendeme y Listo, que va pegada abajo. Lo que se lleva a la vista (la tarjeta donde cae la
@@ -708,6 +715,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const alSello = (): void => {
     const pie = back.querySelector<HTMLElement>(".espera-pie");
     if (pie && app.frozen) pie.textContent = pieDeLaEspera(getLang(), app.frozen.names.length, sinSelloAhora(app.frozen));
+    // Ahora el sorteo está sellado: el enlace del espectador lleva su número, y el celular espera lo grabado como la sala.
+    armarQr();
   };
   document.addEventListener("tinkazo:sello", alSello);
 
