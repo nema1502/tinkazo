@@ -12,6 +12,7 @@ import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { hayModoOficial } from "../stellar/config";
 import { modesVisible } from "../modos/bandera";
+import { isTurnOrder } from "../modos/turnos";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
 import { NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
@@ -88,6 +89,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     return false;
   }
   setLang(lang);
+  // Un orden de turnos no tiene premio ni quien gane: el celular lo dice como la sala (`espera.ts`), con lo que está sellado.
+  const orden = isTurnOrder(datos.n.length, datos.w, datos.z ?? "");
   // El show sale con el mismo ritmo y el mismo juego que el de la sala, sin cambiar el ritmo guardado de este navegador.
   forzarRitmo(datos.p);
   app.game = datos.g;
@@ -122,7 +125,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     (hayModoOficial && datos.net === "testnet" ? `<span class="espera-prueba">${esc(t("netTest"))}</span>` : "") +
     `</div>` +
     `<p class="espera-lectura">${esc(t("espLectura"))}</p>` +
-    (datos.z ? `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(datos.z)}</b></p>` : "") +
+    (datos.z ? `<p class="espera-premio">${orden ? esc(t("cortinaSeOrden")) : `${esc(t("cortinaSe"))} <b>${esc(datos.z)}</b>`}</p>` : "") +
     `<div class="espera-reloj mono">0:00</div>` +
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
     // Lo que pasa cuando nace el número: la línea de lo que se espera, el error con su reintento o el resultado.
@@ -193,7 +196,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
         `<ol class="espectador-ganadores${nombres.length > 1 ? " varios" : ""}">` +
         nombres.map((n) => `<li><img src="${avatar(n, 56)}" alt="" />${esc(n)}</li>`).join("") +
         `</ol>` +
-        `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>` +
+        // Un orden no tiene otro premio: no se pregunta por uno.
+        (orden ? "" : `<p class="espectador-sigue">${esc(t("espFinSiguiente"))}</p>`) +
         `<div class="espectador-acc">` +
         `<button class="ghost" type="button" data-otra-vez>${esc(t("espVerDeNuevo"))}</button>` +
         `<a class="espectador-propio" href="/">${esc(t("espHacerElTuyo"))}</a>` +
@@ -218,7 +222,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       return;
     }
     correr();
-    linea(t("espMiraLaSala"));
+    linea(t(orden ? "espMiraLaSalaOrden" : "espMiraLaSala"));
     window.setTimeout(terminar, falta);
   };
 
@@ -288,7 +292,7 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       show?.cancelar();
       if (este !== intento) return;
       if (e instanceof NoCoincide) fallar("espNoCoincide", false);
-      else fallar(e instanceof Error && e.message === "bad-signature" ? "badSig" : "espSinNumero", true);
+      else fallar(e instanceof Error && e.message === "bad-signature" ? "badSig" : orden ? "espSinNumeroOrden" : "espSinNumero", true);
     }
   };
 
