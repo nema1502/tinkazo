@@ -2914,6 +2914,11 @@ export const T: Record<Lang, Dict> = {
     cuentaCerrada: "Cerraste la ventana de Google antes de entrar. Podés probar de nuevo.",
     cuentaPideGoogle: "Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.",
     cuentaPideEntrar: "Entrar con Google",
+    // La cuenta ya quedó abierta en el otro modo (nema1502/tinkazo#90): la puerta y la cabecera dicen dónde está y
+    // ponen el botón para ir, en vez de pedir entrar como si nunca hubiera entrado.
+    cuentaOtroModo: "Tu cuenta está abierta en el modo {modo}.",
+    cuentaOtroModoIr: "Ir a {modo}",
+    cuentaOtroModoChip: "Cuenta en {modo}",
     acctCargando: "Leyendo el saldo…",
     cuentaSinSesion: "No pudimos abrir la entrada con Google. Probá de nuevo o entrá con tu correo.",
     cuentaViaPruebaC: "Invitado",
@@ -5648,6 +5653,9 @@ export const T: Record<Lang, Dict> = {
     cuentaCerrada: "You closed Google's window before signing in. You can try again.",
     cuentaPideGoogle: "To draw with your list, sign in with Google: it's free and your account is created for you.",
     cuentaPideEntrar: "Sign in with Google",
+    cuentaOtroModo: "Your account is open in {modo}.",
+    cuentaOtroModoIr: "Go to {modo}",
+    cuentaOtroModoChip: "Account in {modo}",
     acctCargando: "Reading the balance…",
     cuentaSinSesion: "We couldn't start the Google sign-in. Try again or sign in with your email.",
     cuentaViaPruebaC: "Guest",
