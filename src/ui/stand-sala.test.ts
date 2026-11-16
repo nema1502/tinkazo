@@ -33,7 +33,7 @@ vi.mock("./participants", () => ({
   },
 }));
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
-vi.mock("./stand", () => ({ alSalirDelStand: () => undefined, nombresParaLaSiguiente: () => undefined }));
+vi.mock("./stand", () => ({ alAvisarEnStand: () => undefined, alSalirDelStand: () => undefined, nombresParaLaSiguiente: () => undefined }));
 
 import { initStandSala } from "./stand-sala";
 

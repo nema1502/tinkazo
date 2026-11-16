@@ -1879,11 +1879,15 @@
     .ensayo-banda p, .stand-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
     .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
   }
-  /* En un celular angosto el texto llegaba a tres líneas con el botón al lado: el texto arriba y el botón abajo, en una línea cada uno. */
+  /* En un celular angosto el ensayo lleva el texto arriba y el botón abajo, en una línea cada uno. El stand tiene su regla abajo. */
   @media (max-width: 480px) {
     body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: wrap; gap: 4px; padding: 6px 8px 8px; }
     .ensayo-banda p, .stand-banda p { flex: 1 1 100%; font-size: 14px; line-height: 1.25; }
     .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 1 1 100%; min-height: 44px; }
+    /* En el stand la acción queda al lado del texto, sin una fila entera que empuje la lista fuera de la primera pantalla. */
+    body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: nowrap; }
+    body[data-stand="1"] .stand-banda p { flex: 1 1 auto; }
+    body[data-stand="1"] .stand-banda button.ghost { flex: 0 0 auto; min-height: 44px; padding: 0 8px; font-size: 14px; white-space: nowrap; }
   }
   .ensayo-guia[hidden] { display: none; }
   body:not([data-ensayo="1"]):not([data-stand="1"]) .ensayo-guia { display: none; }
@@ -1911,6 +1915,7 @@
   body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
   body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
   body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
+  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion,
   body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
   /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
   .stand-sala { display: none; }
@@ -1943,7 +1948,7 @@
   /* Con el QR en toda la pantalla no hay otra barra de desplazamiento detrás. */
   html:has(.stand-sala.grande) { overflow: hidden; }
   .ss-rep { font-style: normal; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border: 2px solid currentColor; padding: 0 4px; color: var(--magenta-ink); }
-  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada { display: none; }
+  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada, .stand-sala.grande #sala-cerrar { display: none; }
   /* El cuadro se lee, pero no se escribe. */
   body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
   /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
@@ -2572,6 +2577,8 @@
     body[data-ensayo="1"] .st-top, body[data-stand="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
     body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
     body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
+    /* El rótulo del stand se parte en dos renglones antes de salirse de la pantalla. */
+    body[data-stand="1"] #st-round::after { white-space: normal; }
   }
 
   /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */

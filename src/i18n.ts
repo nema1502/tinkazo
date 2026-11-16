@@ -346,6 +346,8 @@ export interface Dict {
   cPasTwo: (n: string) => string;
   /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. Con equipos (`equipos`), cuenta equipos; sin el parámetro, la palabra la pone la lista del cuadro. */
   sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number, equipos?: boolean) => string;
+  /** Debajo de Empezar la ronda en el stand: solo cuántas personas participan. */
+  standResumen: (n: number) => string;
   /** La cuenta de junto al cuadro cuando la lista tiene varias participaciones por persona. */
   listaCuentaPart: (n: number, k: number) => string;
   /** La cuenta de junto al cuadro en un orden de turnos repartido: personas y turnos. */
@@ -1294,11 +1296,18 @@ export const T: Record<Lang, Dict> = {
     standLink: "Tengo un stand: rondas de ejemplo con quienes pasan",
     standBanda: "Ronda de ejemplo: no se puede comprobar",
     standSalir: "Hacer un sorteo de verdad",
+    standResumen: (n) => `${n} ${n === 1 ? "persona" : "personas"} en la ronda`,
+    standLlevarT: "¿Llevás la lista del stand?",
+    standLlevarB: "Las rondas de ejemplo no se guardan. Si llevás la lista, solo pasan los nombres que están en el cuadro.",
+    standLlevarReemplaza: "La lista del stand reemplaza a la que tenías armada.",
+    standLlevarError: "No se pudo pasar la lista al sorteo. Copiala a mano: sigue en el cuadro.",
+    standLlevarSi: "Llevar esta lista",
+    standLlevarNo: "Empezar sin ella",
     standEmpezar: "Empezar la ronda",
     standArranca: "Arranca en {s}",
     standGuia1: "Escribí los nombres de quienes están ahí, uno por línea, y tocá Empezar la ronda. No se graba nada.",
     standFinT: "Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.",
-    standFinB: "Entrar es gratis. El sorteo de cierre sí se puede comprobar, desde cualquier celular.",
+    standFinB: "Participar es gratis. El sorteo de cierre sí se puede comprobar desde cualquier celular.",
     standOtra: "Otra ronda",
     standEnMarcha: "Ronda en marcha",
     standListaT: "Ronda de ejemplo",
@@ -2885,7 +2894,7 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Entrar con Google",
     acctCargando: "Leyendo el saldo…",
     cuentaSinSesion: "No pudimos abrir la entrada con Google. Probá de nuevo o entrá con tu correo.",
-    cuentaViaPruebaC: "Prueba",
+    cuentaViaPruebaC: "Invitado",
     cuentaAriaSola: "Tu cuenta: {n}. Abrir el panel de la cuenta.",
     sigEntrarSellar: "Entrar para sellar",
     cuentaSalio: "Cerraste tu sesión.",
@@ -4012,11 +4021,18 @@ export const T: Record<Lang, Dict> = {
     standLink: "I run a booth: sample rounds with whoever stops by",
     standBanda: "Sample round: it can't be checked",
     standSalir: "Run a real draw",
+    standResumen: (n) => `${n} ${n === 1 ? "person" : "people"} in the round`,
+    standLlevarT: "Take the stand list?",
+    standLlevarB: "Sample rounds are not saved. If you take the list, only the names in the box are carried over.",
+    standLlevarReemplaza: "The stand list replaces the list you were working on.",
+    standLlevarError: "The list could not be carried into the draw. Copy it by hand: it is still in the box.",
+    standLlevarSi: "Take this list",
+    standLlevarNo: "Start without it",
     standEmpezar: "Start the round",
     standArranca: "Starting in {s}",
     standGuia1: "Type the names of the people there, one per line, and tap Start the round. Nothing is recorded.",
     standFinT: "That was a sample round: it can't be checked and nothing is handed out.",
-    standFinB: "Joining is free. The closing draw can be checked, from any phone.",
+    standFinB: "Taking part is free. The closing draw can be checked from any phone.",
     standOtra: "Another round",
     standEnMarcha: "Round under way",
     standListaT: "Sample round",
@@ -5593,7 +5609,7 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Sign in with Google",
     acctCargando: "Reading the balance…",
     cuentaSinSesion: "We couldn't start the Google sign-in. Try again or sign in with your email.",
-    cuentaViaPruebaC: "Test",
+    cuentaViaPruebaC: "Guest",
     cuentaAriaSola: "Your account: {n}. Open the account panel.",
     sigEntrarSellar: "Sign in to seal",
     cuentaSalio: "You signed out.",

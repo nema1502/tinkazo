@@ -69,3 +69,18 @@ describe("la sala antes de sellar cuenta como el cuadro", () => {
     expect(await tituloDeLaSala()).toBe("3 personas, 5 participaciones");
   });
 });
+
+describe("el juego en el enlace de la lista", () => {
+  it("viaja solo con Teleférico, sin alargar los enlaces de los demás juegos", async () => {
+    for (const [juego, esperado] of [["teleferico", "?juego=teleferico"], ["race", ""]] as const) {
+      await montar("/?lang=es");
+      escribir("Ana\nBeto");
+      const { app } = await import("../state");
+      app.game = juego;
+      const { mostrarLista } = await import("./sala");
+      await mostrarLista();
+      const url = document.querySelector<HTMLElement>(".sala")?.dataset.url ?? "";
+      expect(new URL(url).search).toBe(esperado);
+    }
+  });
+});

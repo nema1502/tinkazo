@@ -34,6 +34,13 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
+  it("la cuenta de prueba se presenta como Invitado para no repetir el nombre del modo", () => {
+    expect(T.es.cuentaViaPruebaC).toBe("Invitado");
+    expect(T.en.cuentaViaPruebaC).toBe("Guest");
+    expect(T.es.cuentaViaPruebaC).not.toBe(T.es.modeTest);
+    expect(T.en.cuentaViaPruebaC).not.toBe(T.en.modeTest);
+  });
+
   it("Sapo: the drop line names the prize, never the co-winner, the tally counts, 'almost' and the frog's lip exist", () => {
     // Al caer el co-ganador la línea dice su número de premio: no hay nombre que decir.
     expect(T.es.cSapDone(2)).toMatch(/premio 2/i);

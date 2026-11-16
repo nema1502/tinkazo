@@ -124,6 +124,8 @@ export async function mostrarLista(): Promise<void> {
   // El QR lleva la misma lista al celular de cada uno, para buscarse. La sellada
   // lo dice también allá: "antes de sellar" ya no es cierto (lista.ts).
   const enlace = new URL(await previewUrl(names, prize));
+  // La página de la lista no conoce el juego: solo Teleférico necesita saberlo para mostrar la cabina de cada nombre.
+  if (app.game === "teleferico") enlace.searchParams.set("juego", "teleferico");
   // "sin": lo que el celular de cada uno lee tampoco dice "sellada" (lista.ts).
   if (sellada) enlace.searchParams.set("sellada", sin ? "sin" : "1");
   // Con los modos a la vista y un reparto, el celular cuenta igual que el proyector: la página de la lista no

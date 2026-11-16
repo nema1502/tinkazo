@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
 import { anchoringAvailable, topeDeGanadores } from "../stellar/config";
-import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
+import { enEnsayo, enPractica, enStand, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
 import { MAX_WINNERS } from "../protocol/select";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
@@ -186,6 +186,16 @@ function pintarResumen(): void {
   // Se muestra cuando se puede sellar (la cuenta de siempre) y dice las personas con la regla de la cuenta.
   const nombres = parseNames();
   const n = cuentaParaMostrar(nombres).personas;
+  // En el stand no hay sello, premio ni ganador: solo la cuenta de esta ronda.
+  if (enStand()) {
+    if (!n || listaCerrada()) {
+      el.style.display = "none";
+      return;
+    }
+    el.textContent = T[getLang()].standResumen(n);
+    el.style.display = "";
+    return;
+  }
   if (contar(nombres, modesVisible()).personas < 2 || listaCerrada()) {
     el.style.display = "none";
     return;
@@ -916,7 +926,28 @@ export function setList(text: string, clearSummary = true): void {
  * importador no. La demo no guarda ni repone nada.
  */
 const BORRADOR = "tinkazo.borrador";
+/** La lista que quien atiende elige llevar del stand a la página nueva. Se borra al leerla. */
+export const CLAVE_LISTA_STAND = "tinkazo.stand-lista";
 let guardarLuego = 0;
+
+/** Si entrar al stand dejó un borrador con nombres, o hay uno que no se puede leer: llevar la lista nueva lo reemplaza y hay que avisarlo. */
+export function borradorConNombres(): boolean {
+  let guardado: string | null;
+  try {
+    guardado = sessionStorage.getItem(BORRADOR);
+  } catch {
+    return false;
+  }
+  if (guardado === null) return false;
+  try {
+    const b = JSON.parse(guardado) as { texto?: unknown } | null;
+    const texto = b?.texto;
+    return typeof texto === "string" && canonicalList(texto).length > 0;
+  } catch {
+    // Había algo guardado: aunque esté dañado, la lista nueva va a ocupar su lugar.
+    return true;
+  }
+}
 
 /** Guarda ya lo que hay en el cuadro, el premio y la cantidad. Lo llama también la ventana de ingreso, antes de irse a Google. */
 export function guardarBorrador(): void {
@@ -956,6 +987,18 @@ export function olvidarBorrador(): void {
  */
 export function reponerBorrador(): void {
   if (sinGrabar() || listaCerrada() || $<HTMLTextAreaElement>("ta").value.trim()) return;
+  // La lista elegida al salir del stand manda sobre el borrador anterior. Es de un solo uso, aunque esté vacía.
+  let listaStand: string | null = null;
+  try {
+    listaStand = sessionStorage.getItem(CLAVE_LISTA_STAND);
+    sessionStorage.removeItem(CLAVE_LISTA_STAND);
+  } catch {
+    /* sin almacenamiento, se repone el borrador como siempre */
+  }
+  if (listaStand?.trim()) {
+    setList(listaStand);
+    return;
+  }
   type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
   let b: Guardado;
   try {
