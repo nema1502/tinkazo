@@ -955,6 +955,13 @@
     .espera-volver-corto { display: inline; }
   }
   .espera-top .sticker { max-width: 60vw; text-align: left; }
+  /* En un celular la calcomanía, la pastilla de Prueba y Volver comparten la fila: el grupo de Volver conserva su ancho
+     (con nowrap su botón no se parte y, si el grupo se encogía, lo pisaba la pastilla) y la calcomanía cede partiendo su
+     texto. La pastilla solo achica su relleno y su espaciado: la letra se queda en 14 px, el piso de docs/ux.md. */
+  @media (max-width: 480px) {
+    .espera-top-acc { flex-shrink: 0; }
+    .espera-top .espera-prueba { font-size: 14px; padding: 2px 6px; letter-spacing: 0.04em; }
+  }
   .espera-premio { font-size: calc(clamp(24px, 3.2vw, 56px) * var(--ajuste, 1)); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
   .espera-reloj { font-size: calc(clamp(88px, 26vmin, 340px) * var(--ajuste, 1)); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
@@ -1910,12 +1917,13 @@
   body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
   body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel, body[data-ensayo="1"] #btn-stand { display: none !important; }
-  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto. */
+  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto.
+     Tampoco Cuántos ganan: las rondas del stand dicen quién salió, y el valor elegido antes de entrar sigue mandando. */
   body[data-stand="1"] #gate, body[data-stand="1"] #seed-label, body[data-stand="1"] #btn-ensayo, body[data-stand="1"] #btn-stand, body[data-stand="1"] #btn-sample,
   body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
   body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
   body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
-  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion,
+  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion, body[data-stand="1"] #ganadores-control,
   body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
   /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
   .stand-sala { display: none; }
