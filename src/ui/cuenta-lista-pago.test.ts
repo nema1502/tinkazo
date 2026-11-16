@@ -244,6 +244,47 @@ describe("comprar el primer paquete", () => {
     expect(srv.pago).toHaveBeenCalledTimes(vecesAntes + 1);
   });
 
+  it("tras «No llegó», los casos de otra moneda y de la nota llegan a Más detalles del panel, que sigue siendo uno y sigue abierto", async () => {
+    const srv = servidorFalso();
+    await hastaPagar(srv);
+    await tocar(principal());
+    const antes = panel() as HTMLElement;
+    expect(antes).not.toBeNull();
+    // Mientras nada cambia, a cada mirada y al pasar los 5 minutos, el panel es el mismo elemento y los dos casos no están.
+    await pasa(CADA_MS * 3);
+    expect(panel()).toBe(antes);
+    await pasa(DURANTE_MS);
+    expect(panel()).toBe(antes);
+    expect(antes.textContent).not.toContain(t("pagoOtraMoneda"));
+    expect(antes.textContent).not.toContain(t("pagoOtraNotaEnviada"));
+    // Quien abrió Más detalles lo ve abierto después de tocar No llegó.
+    (antes.querySelector("details") as HTMLDetailsElement).open = true;
+    await tocar(boton("no-llego"));
+    const despues = panel() as HTMLElement;
+    expect(raiz()?.querySelectorAll('[data-pago="panel"]').length).toBe(1);
+    expect(despues.textContent).toContain(t("pagoOtraMoneda"));
+    expect(despues.textContent).toContain(t("pagoOtraNotaEnviada"));
+    expect((despues.querySelector("details") as HTMLDetailsElement).open).toBe(true);
+    expect(despues.querySelector('[data-dato="nota"]')?.textContent).toBe(`tk:o:${ID}`);
+    // Al tocar Ya pagué de nuevo, los casos se van y el panel se arma otra vez: sigue habiendo uno solo.
+    await tocar(principal());
+    expect(raiz()?.querySelectorAll('[data-pago="panel"]').length).toBe(1);
+    expect(panel()?.textContent).not.toContain(t("pagoOtraMoneda"));
+  });
+
+  it("tras «No llegó» y en inglés, los dos casos salen en inglés", async () => {
+    const srv = servidorFalso();
+    await hastaPagar(srv);
+    await tocar(principal());
+    await pasa(DURANTE_MS);
+    await tocar(boton("no-llego"));
+    setLang("en");
+    await pasa();
+    expect(panel()?.textContent).toContain(t("pagoOtraMoneda"));
+    expect(panel()?.textContent).toContain(t("pagoOtraNotaEnviada"));
+    expect(t("pagoOtraMoneda")).toMatch(/^Sent another currency/);
+  });
+
   it("sin conexión: el motivo y «Probar de nuevo», que vuelve a mirar", async () => {
     const srv = servidorFalso();
     srv.s.pagos = [err("altaErrServicio", "sin-red", 0), NO_LLEGO];

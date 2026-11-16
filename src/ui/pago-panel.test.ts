@@ -5,7 +5,7 @@ const { pintarQr } = vi.hoisted(() => ({ pintarQr: vi.fn(async (_img: HTMLImageE
 vi.mock("./qr", () => ({ pintarQr }));
 
 import { setLang, t } from "../i18n";
-import { armarPanelDePago } from "./pago-panel";
+import { armarPanelDePago, panelDeLaOrden } from "./pago-panel";
 import type { PanelDePago } from "./pago-vista";
 
 /**
@@ -154,6 +154,51 @@ describe("el panel del pago", () => {
     expect(valor(el, "moneda")).toBe("USDC on Stellar");
     expect(el.textContent).toContain("Memo");
     expect(copiar(el, "destino").textContent).toBe(t("pagoCopiar"));
+    setLang("es");
+  });
+});
+
+describe("el panel de una orden se reusa mientras nada cambie", () => {
+  const abierto = (el: HTMLElement): boolean => (el.querySelector('details[data-pago="detalles"]') as HTMLDetailsElement).open;
+
+  it("con lo mismo, devuelve el mismo panel y no arma otro ni vuelve a pedir el QR", () => {
+    const a = panelDeLaOrden(null, PANEL, "es");
+    const b = panelDeLaOrden(a, { ...PANEL }, "es");
+    expect(b).toBe(a);
+    expect(b.el).toBe(a.el);
+    expect(pintarQr).toHaveBeenCalledTimes(1);
+  });
+
+  it("si se suman casos a Más detalles, arma el panel de nuevo con ellos y deja Más detalles como estaba", () => {
+    const a = panelDeLaOrden(null, PANEL, "es");
+    (a.el.querySelector('details[data-pago="detalles"]') as HTMLDetailsElement).open = true;
+    const conCasos = { ...PANEL, detalles: [...PANEL.detalles, { clave: "pagoOtraMoneda" }, { clave: "pagoOtraNotaEnviada" }] };
+    const b = panelDeLaOrden(a, conCasos, "es");
+    expect(b.el).not.toBe(a.el);
+    expect(b.el.textContent).toContain(t("pagoOtraMoneda"));
+    expect(b.el.textContent).toContain(t("pagoOtraNotaEnviada"));
+    expect(abierto(b.el)).toBe(true);
+    // Y con los casos ya puestos, vuelve a ser el mismo.
+    expect(panelDeLaOrden(b, { ...conCasos }, "es")).toBe(b);
+  });
+
+  it("Más detalles cerrado sigue cerrado, y con otra orden empieza cerrado", () => {
+    const a = panelDeLaOrden(null, PANEL, "es");
+    const b = panelDeLaOrden(a, { ...PANEL, detalles: [...PANEL.detalles, { clave: "pagoOtraMoneda" }] }, "es");
+    expect(abierto(b.el)).toBe(false);
+    (b.el.querySelector('details[data-pago="detalles"]') as HTMLDetailsElement).open = true;
+    const otra = panelDeLaOrden(b, { ...PANEL, nota: "tk:o:WXYZ2345", enlace: "web+stellar:pay?memo=tk%3Ao%3AWXYZ2345" }, "es");
+    expect(otra.el).not.toBe(b.el);
+    expect(otra.el.querySelector('[data-dato="nota"]')?.textContent).toBe("tk:o:WXYZ2345");
+    expect(abierto(otra.el)).toBe(false);
+  });
+
+  it("al cambiar el idioma arma el panel de nuevo, en el idioma nuevo", () => {
+    const a = panelDeLaOrden(null, PANEL, "es");
+    setLang("en");
+    const b = panelDeLaOrden(a, PANEL, "en");
+    expect(b.el).not.toBe(a.el);
+    expect(valor(b.el, "moneda")).toBe("USDC on Stellar");
     setLang("es");
   });
 });
