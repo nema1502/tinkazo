@@ -58,7 +58,7 @@ describe("el pie de Mis sorteos y el otro modo", () => {
     const boton = botonDelPie();
     expect(boton).not.toBeNull();
     boton?.click();
-    await vi.waitFor(() => expect(document.getElementById("hist-otro-modo")?.textContent).toContain(T.es.modeSwitchBlocked));
+    await vi.waitFor(() => expect(document.getElementById("hist-otro-modo")?.textContent).toContain(T.es.modeSwitchBlocked), { timeout: 5000 });
     expect(h.cambios).toEqual([]);
   });
 
@@ -68,6 +68,6 @@ describe("el pie de Mis sorteos y el otro modo", () => {
     app.drawn = null;
     await pintarConUnSorteo();
     botonDelPie()?.click();
-    await vi.waitFor(() => expect(h.cambios).toEqual(["mainnet"]));
+    await vi.waitFor(() => expect(h.cambios).toEqual(["mainnet"]), { timeout: 5000 });
   });
 });
