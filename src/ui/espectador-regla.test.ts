@@ -22,8 +22,8 @@ describe("cuándo arranca el show del espectador", () => {
 
   it("con el sorteo sellado, el juego espera lo grabado, porque la sala también lo espera", () => {
     // En la sala, la tarjeta del juego sale con la espera de lo grabado y el juego arranca después de `grabado()`.
-    expect(draw).toContain("const card = abrirTarjeta(juego, names.length, nWinners, espera);");
-    expect(draw).toMatch(/grabado\(\);[\s\S]*?playGame\(names, winners, beacon, finish, tarjeta\);/);
+    expect(draw).toContain("const card = abrirTarjeta(juego, names.length, nWinners, orden, espera);");
+    expect(draw).toMatch(/grabado\(\);[\s\S]*?playGame\(names, winners, beacon, finish, orden, tarjeta\);/);
     expect(reglaDelShow(true).esperaLoGrabado).toBe(true);
   });
 

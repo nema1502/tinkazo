@@ -13,6 +13,7 @@ interface TarjetaFalsa {
   update: (g: string) => void;
   soltar: () => void;
   espera: Promise<unknown> | undefined;
+  orden: boolean | undefined;
 }
 
 const h = vi.hoisted(() => ({
@@ -50,10 +51,10 @@ vi.mock("./pantalla-completa", () => ({ pedirPantallaCompleta: () => undefined, 
 // La tarjeta del juego: anota con qué espera salió y deja que la prueba la cierre.
 vi.mock("./gamecard", () => ({
   CARD_SECONDS: 5,
-  showGameCard: (_g: string, _p: number, _w: number, _c: number, _s: unknown, _z: string, espera?: Promise<unknown>) => {
+  showGameCard: (_g: string, _p: number, _w: number, _c: number, _s: unknown, _z: string, espera?: Promise<unknown>, orden?: boolean) => {
     let soltar: () => void = () => undefined;
     const ready = new Promise<void>((r) => (soltar = r));
-    const t: TarjetaFalsa = { ready, hide: () => soltar(), update: () => undefined, soltar: () => soltar(), espera };
+    const t: TarjetaFalsa = { ready, hide: () => soltar(), update: () => undefined, soltar: () => soltar(), espera, orden };
     h.tarjetas.push(t);
     return t;
   },
@@ -170,6 +171,21 @@ describe("el show de la vista de espectador", () => {
     await prepararEstado("Una pizza", [2]);
     showDelEspectador(null);
     expect(esResultadoDeTurnos()).toBe(false);
+  });
+
+  it("la tarjeta del espectador sabe si el resultado es un orden de turnos, como la de la sala", async () => {
+    await prepararEstado("Turnos de la semana", [2, 0, 1]);
+    let { showDelEspectador } = await import("./draw");
+    showDelEspectador(new Promise(() => undefined));
+    expect(h.tarjetas[0]?.orden).toBe(true);
+    const jugada = showDelEspectador(null);
+    jugada?.jugar(() => undefined);
+    expect(h.tarjetas[1]?.orden).toBe(true);
+    h.tarjetas = [];
+    await prepararEstado("Una pizza", [2]);
+    ({ showDelEspectador } = await import("./draw"));
+    showDelEspectador(new Promise(() => undefined));
+    expect(h.tarjetas[0]?.orden).toBe(false);
   });
 
   it("cancelar saca la tarjeta", async () => {
