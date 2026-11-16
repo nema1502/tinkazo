@@ -44,6 +44,7 @@ import { type Sondeo, vigilarPago } from "./pago-sondeo";
 import { MEDIOS_DE_PAGO, type MedioDePago, NO_SE_VENDE, type PanelDePago, faltaDe, textoDelErrorDeLaOrden, textoDelErrorDelPago } from "./pago-vista";
 import { recordarMedio } from "./medio-de-pago";
 import { soltarPantallaCompleta } from "./pantalla-completa";
+import { textoCuentaAlCambiar } from "./modo-ui";
 import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from "./proteger-cuenta";
 
 /**
@@ -504,7 +505,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     `<span class="cl-idiomas"><button type="button" class="cl-idioma" data-lang="es" lang="es">ES</button><button type="button" class="cl-idioma" data-lang="en" lang="en">EN</button></span></div>` +
     `<div class="cl-cuerpo"><div class="cl-contenido"><div class="cl-cabeza"><p class="cl-quien"></p><h2 id="cl-titulo" class="cl-titulo" tabindex="-1"></h2><p id="cl-bajada" class="cl-bajada"></p></div>` +
     `<div class="cl-pasos"></div><div class="cl-notas"></div></div></div>` +
-    `<div class="cl-pie"><div class="cl-pie-dentro"><div class="cl-salidas"><button type="button" class="cl-texto cl-salida" data-salida="pasar-a-prueba"></button><button type="button" class="cl-texto cl-salida" data-salida="cerrar-sesion"></button></div>` +
+    `<div class="cl-pie"><div class="cl-pie-dentro"><div class="cl-salidas"><div class="cl-salida-prueba"><button type="button" class="cl-texto cl-salida" data-salida="pasar-a-prueba"></button><p class="cl-cuenta-modo"></p></div><button type="button" class="cl-texto cl-salida" data-salida="cerrar-sesion"></button></div>` +
     `<div class="cl-accion"><p class="cl-primer"></p><p class="cl-estado" role="status" aria-live="polite"></p><button type="button" class="cl-principal"></button><button type="button" class="cl-texto cl-volver"></button></div></div></div>`;
   const $ = <T extends HTMLElement>(sel: string): T => raiz.querySelector(sel) as T;
   const quien = $<HTMLParagraphElement>(".cl-quien");
@@ -516,6 +517,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const pie = $<HTMLDivElement>(".cl-pie-dentro");
   const salidasFila = $<HTMLDivElement>(".cl-salidas");
   const aPrueba = $<HTMLButtonElement>('[data-salida="pasar-a-prueba"]');
+  const avisoPrueba = $<HTMLParagraphElement>(".cl-cuenta-modo");
   const cerrarSes = $<HTMLButtonElement>('[data-salida="cerrar-sesion"]');
   const primer = $<HTMLParagraphElement>(".cl-primer");
   const estado = $<HTMLParagraphElement>(".cl-estado");
@@ -849,6 +851,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
     salidasFila.hidden = !v.salidas;
     aPrueba.textContent = t("modeSwitchToTest");
+    avisoPrueba.hidden = !v.salidas?.prueba;
+    avisoPrueba.textContent = v.salidas?.prueba ? textoCuentaAlCambiar("mainnet", "testnet") : "";
     cerrarSes.textContent = t("acctSignOut");
     aPrueba.hidden = !v.salidas?.prueba;
     aPrueba.disabled = !!v.salidas?.prueba?.apagado;
@@ -1897,6 +1901,10 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "entrar-de-nuevo":
         return salir("entrar");
       case "seguir":
+        op.primerOficial?.marcar();
+        cerrar(true);
+        op.alSeguir?.();
+        return;
       case "sortear":
         cerrar(true);
         op.alSeguir?.();

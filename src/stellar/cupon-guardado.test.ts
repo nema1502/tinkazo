@@ -16,15 +16,21 @@ describe("cuponDelFragmento", () => {
     expect(cuponDelFragmento("#cupon=K7M29QXA4HTR")).toEqual({ hay: true, codigo: "K7M29QXA4HTR" });
     expect(cuponDelFragmento("#cupon=k7m2-9qxa-4htr")).toEqual({ hay: true, codigo: "K7M29QXA4HTR" });
     expect(cuponDelFragmento("#cupon=K7M2%209QXA%204HTR")).toEqual({ hay: true, codigo: "K7M29QXA4HTR" });
-    expect(cuponDelFragmento("#sortear&cupon=OIL0-1234-5678")).toEqual({ hay: true, codigo: "011012345678" });
   });
   it("uno mal formado se nota, pero no da código", () => {
     for (const mal of ["#cupon=", "#cupon=K7M2", "#cupon=K7M29QXA4HTU", "#cupon=%E0%A4%A", "#cupon=K7M2_9QXA_4HTR", "#cupon"]) {
       expect(cuponDelFragmento(mal), mal).toEqual({ hay: true, codigo: null });
     }
   });
-  it("sin cupón en el fragmento, nada", () => {
-    for (const x of ["", "#", "#sortear", "#portada", "#otro=K7M29QXA4HTR"]) expect(cuponDelFragmento(x), x).toEqual({ hay: false, codigo: null });
+  it("un cupón mezclado con otro fragmento no da un código", () => {
+    for (const x of ["#sortear&cupon=K7M29QXA4HTR", "#cupon=K7M29QXA4HTR&sortear", "#otro=1&cupon=K7M29QXA4HTR"]) {
+      expect(cuponDelFragmento(x), x).toEqual({ hay: true, codigo: null });
+    }
+  });
+  it("sin cupón en el fragmento, nada, aunque la palabra aparezca en otro valor", () => {
+    for (const x of ["", "#", "#sortear", "#portada", "#otro=K7M29QXA4HTR", "#sortear=cupon", "#miscupon=K7M29QXA4HTR"]) {
+      expect(cuponDelFragmento(x), x).toEqual({ hay: false, codigo: null });
+    }
   });
 });
 

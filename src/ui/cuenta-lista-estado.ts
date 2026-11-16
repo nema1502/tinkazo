@@ -803,7 +803,7 @@ export function vistaDe(e: EntradaVista): Vista {
       cajas,
       principal: e.corre === "cerrando" ? { ...p, apagado: true } : p,
       volver: e.para === "entrada" ? null : boton("volver", "clVolver"),
-      primerOficial: conLista && e.primerOficialPendiente,
+      primerOficial: (conLista || e.para === "entrada") && e.primerOficialPendiente,
       estado: lineaDeEstado(e),
       notas: [],
       salidas: null,

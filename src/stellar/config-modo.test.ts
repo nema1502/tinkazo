@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import deployments from "./deployments.json";
+import { CLAVE_PASO_CUPON } from "./cupon-paso-guardado";
 import { MODE_STORAGE_KEY, changeMode, hayModoOficial, network, parseModeValue, resolveNetworkName, urlForMode } from "./config";
 
 describe("el modo que se decide al cargar", () => {
@@ -27,6 +28,16 @@ describe("el modo que se decide al cargar", () => {
     expect(resolveNetworkName({ search: "?red=oficial", hasOfficialContract: false })).toBe("testnet");
     expect(resolveNetworkName({ stored: "oficial", hasOfficialContract: false })).toBe("testnet");
     expect(resolveNetworkName({ build: "mainnet", hasOfficialContract: false })).toBe("testnet");
+  });
+
+  it("un cupón bien formado en la dirección abre Oficial, sin pisar un ?red= escrito a propósito", () => {
+    expect(resolveNetworkName({ hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("mainnet");
+    expect(resolveNetworkName({ search: "https://tinkazo.app/#cupon=k7m2-9qxa-4htr", stored: "prueba", hasOfficialContract: true })).toBe("mainnet");
+    expect(resolveNetworkName({ hash: "#cupon=K7M2", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ hash: "#sortear&cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ search: "?red=prueba", hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ search: "https://tinkazo.app/?red=prueba#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: false })).toBe("testnet");
   });
 
   it("un valor que no se entiende no elige nada", () => {
@@ -70,6 +81,8 @@ describe("cambiar de modo recarga siempre, con red= en la dirección", () => {
     expect(urlForMode("/", "mainnet")).toBe("/?red=oficial");
     expect(urlForMode("/", "testnet")).toBe("/?red=prueba");
     expect(urlForMode("https://tinkazo.app/#sortear", "mainnet")).toBe("https://tinkazo.app/?red=oficial#sortear");
+    expect(urlForMode("/", "mainnet", "sortear")).toBe("/?red=oficial#sortear");
+    expect(urlForMode("/?lang=es#mis-sorteos", "mainnet", "sortear")).toBe("/?lang=es&red=oficial#sortear");
     for (const actual of ["/#sortear", "/#mis-sorteos", "/?demo=race#sortear", "/"]) {
       for (const [modo, red] of [["mainnet", "red=oficial"], ["testnet", "red=prueba"]] as const) {
         const nueva = urlForMode(actual, modo);
@@ -172,10 +185,10 @@ describe("con una lista que trae contrato en mainnet (simulada)", () => {
   });
 
   /** `./config` cargado de nuevo, con la entrada simulada en la lista y esta dirección. */
-  const cargar = async (search: string) => {
+  const cargar = async (search: string, hash = "#sortear") => {
     const assign = vi.fn();
     const reload = vi.fn();
-    vi.stubGlobal("location", { href: `/${search}#sortear`, assign, reload, hostname: "localhost", search, pathname: "/" });
+    vi.stubGlobal("location", { href: `/${search}${hash}`, assign, reload, hostname: "localhost", search, hash, pathname: "/" });
     vi.resetModules();
     vi.doMock("./deployments.json", () => ({ default: { ...deployments, mainnet: ENTRADA_SIMULADA } }));
     return { config: await import("./config"), assign, reload };
@@ -199,5 +212,31 @@ describe("con una lista que trae contrato en mainnet (simulada)", () => {
     expect(config.network.name).toBe("mainnet");
     expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
     expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("oficial");
+  });
+
+  it("con #cupon= válido abre en Oficial y recuerda ese modo en una segunda carga con el fragmento vacío", async () => {
+    const { config } = await cargar("", "#cupon=K7M29QXA4HTR");
+    expect(config.network.name).toBe("mainnet");
+    expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("oficial");
+
+    const { config: segunda } = await cargar("", "");
+    expect(segunda.network.name).toBe("mainnet");
+    expect(segunda.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+  });
+
+  it("evaluar la red en Prueba no borra el pedido del campo del cupón", async () => {
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    sessionStorage.setItem("tinkazo.ingresar", "1");
+    const { config } = await cargar("?red=prueba");
+    expect(config.network.name).toBe("testnet");
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBe("1");
+    expect(sessionStorage.getItem("tinkazo.ingresar")).toBe("1");
+  });
+
+  it("con ?red=prueba y un cupón válido queda en Prueba", async () => {
+    const { config } = await cargar("?red=prueba", "#cupon=K7M29QXA4HTR");
+    expect(config.network.name).toBe("testnet");
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("prueba");
   });
 });

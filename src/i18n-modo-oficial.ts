@@ -5,6 +5,7 @@ import deployments from "./stellar/deployments.json";
  * (`mainnet: null`, que es producción hoy) el sitio dice lo que decía: no hay otro modo del cual distinguir "Prueba", y
  * "En el modo Prueba, guardá…" le haría pensar a quien lee que existe uno. `i18n.ts` los pone encima del diccionario
  * solo si hay modo Oficial; las claves de este archivo son las que ya existían, con el texto de hoy en `i18n.ts`.
+ * La excepción es `cuentaPideGoogle`: `i18n.ts` la aplica solo con Oficial activo, porque en Prueba sigue valiendo la frase común.
  * Los textos que solo existen para el modo Oficial (la hoja, los avisos, la confirmación) están en `i18n.ts`.
  *
  * Cuando se agregue el contrato real, en el mismo commit, el texto del HTML de seis páginas pasa a ser el de este
@@ -24,7 +25,7 @@ import deployments from "./stellar/deployments.json";
  * páginas trae los mismos textos. Como los ve cualquiera que abra el sitio, la publicación de producción exige el
  * acceso por cupón en el build (`VITE_ALTA=1`, ver `stellar/alta-build.ts`).
  * `revision-textos.test.ts` falla hasta que estén, y dice cuál falta, pero solo mira `data-i`: el de `cfDura3`, que es
- * `data-i-html`, lo avisa `seo.test.ts`. Las claves de la ventana de entrar (`loginTestnet` y las `guest…`) no están
+ * `data-i-html`, lo avisa `seo.test.ts`. Las claves de la ventana de entrar (`loginTestnet`, `cuentaPideGoogle` y las `guest…`) no están
  * en ningún HTML. Las pruebas que dependen de estos textos (`revision-textos.test.ts`, `i18n.test.ts`,
  * `ui/compartir.test.ts` y `evento-modo.test.ts`) ya los toman del diccionario o miran `HAY_MODO_OFICIAL`: no hay
  * que tocarlas.
@@ -63,6 +64,7 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     cfDura3: "<b>El modo Prueba:</b> sus sorteos van a la red de prueba, que Stellar borra entera el 16 de diciembre de 2026, con los sellos y sus horas. Tu comprobante sigue sirviendo para rehacer la cuenta, pero nadie podrá confirmar la hora del sello. Los del modo Oficial van a la red principal, que Stellar no reinicia.",
     sgLimit3: "Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y los sorteos del modo Prueba están en la red de prueba, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.",
     loginTestnet: "Prueba",
+    cuentaPideGoogle: "Para sortear con tu lista, entrá con Google y dejá tu cuenta lista.",
     guestHint: "El navegador te arma una cuenta del modo Prueba y le pone fondos de prueba. No instalás nada.",
     guestReady: "Cuenta de prueba lista y con fondos de prueba.",
     guestTestnetOnly: "La cuenta de prueba solo funciona en el modo Prueba.",
@@ -96,6 +98,7 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     cfDura3: "<b>Test mode:</b> its draws go to the test network, which Stellar wipes on December 16, 2026, seals and their times included. Your receipt still lets anyone redo the math, but nobody will be able to confirm the seal time. Live mode draws go to the main network, which Stellar does not reset.",
     sgLimit3: "What the contract stores pays rent: if nobody extends it, the entry is archived and stops being readable until someone pays to restore it. And Test mode draws are on the test network, which Stellar wipes on December 16, 2026: there the record is lost and the verdict is no longer green.",
     loginTestnet: "Test",
+    cuentaPideGoogle: "To draw with your list, sign in with Google and get your account ready.",
     guestHint: "The browser makes you a Test mode account and funds it with test money. Nothing to install.",
     guestReady: "Test account ready, with test money.",
     guestTestnetOnly: "The test account only works in Test mode.",
