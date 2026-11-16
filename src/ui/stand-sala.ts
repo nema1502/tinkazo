@@ -49,6 +49,8 @@ let estadoRed: EstadoDeConexion = "conectando";
 let mensaje = "";
 /** Los que llegaron y esta pantalla no pudo descifrar: de otra clave, o basura. */
 const ilegibles = new Set<number>();
+/** Quitados que todavía pueden estar esperando el descifrado: no vuelven a entrar al terminar. */
+const quitados = new Set<number>();
 /** Con más ilegibles que esto, alguien está llenando la sala: se avisa que conviene abrir otra. */
 const TOPE_ILEGIBLES = 20;
 
@@ -128,8 +130,8 @@ async function llego(n: number, dato: string): Promise<void> {
   const s = sala;
   if (!s || entradas.has(n)) return;
   const claro = await descifrarNombre(s.clave, dato);
-  // Se cerró la sala mientras se descifraba: no hay a quién avisarle.
-  if (sala !== s) return;
+  // Se cerró la sala o quitaron este número mientras se descifraba: no hay nada que agregar.
+  if (sala !== s || quitados.has(n)) return;
   if (claro === null) {
     // De otra clave, o roto: no se muestra, y tampoco queda ocupando un lugar de los 400 de la sala.
     ilegibles.add(n);
@@ -152,6 +154,7 @@ async function llego(n: number, dato: string): Promise<void> {
 }
 
 function alQuitado(n: number): void {
+  quitados.add(n);
   const e = entradas.get(n);
   if (!e) return;
   entradas.delete(n);
@@ -240,6 +243,7 @@ function olvidar(): void {
   sala = null;
   dejados.clear();
   ilegibles.clear();
+  quitados.clear();
   guardar();
 }
 

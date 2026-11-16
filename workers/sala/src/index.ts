@@ -5,8 +5,9 @@
  * comprobante.
  *
  *   POST   /v1/sala                        → 201 {"id", "token", "vence"}   (solo desde los orígenes permitidos)
- *   POST   /v1/sala/<id>                   un nombre cifrado en text/plain → 201 {"n"}
- *   GET    /v1/sala/<id>/nombres?desde=N   Authorization: Bearer <token>   → 200 [{"n","d"}]
+ *   POST   /v1/sala/<id>                   JSON {"d","h","llave"}: alta 201 {"n"}, corrección 200 {"n","r"}
+ *                                          (una sala anterior a la forma 2 también acepta `d` solo en text/plain)
+ *   GET    /v1/sala/<id>/nombres?desde=N   Authorization: Bearer <token>   → 200 [{"n","d","r"?}]
  *   DELETE /v1/sala/<id>/nombres/<n>       Authorization: Bearer <token>   → 204
  *   GET    /v1/sala/<id>/pantalla          WebSocket; el token va en el primer mensaje, no en la dirección
  *   DELETE /v1/sala/<id>                   Authorization: Bearer <token>   → 204 (cierra la sala y borra todo)
@@ -23,9 +24,13 @@
  *   DELETE /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   → 204
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
- * viaja en el fragmento del QR y nunca llega acá), la huella SHA-256 del token y
- * la hora de creación. Una alarma a las 10 h de creada borra todo. No guarda
- * nombres en claro, ni direcciones IP, ni navegador, ni hora por persona (para
+ * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
+ * repetirlos, la huella SHA-256 de la llave de cada celular para permitir solo
+ * una alta y hasta cinco correcciones, la huella SHA-256 del token y la hora de
+ * creación. Una corrección borra la fila vieja y la nueva recuerda en `r` los
+ * números que reemplaza, para que la pantalla los quite también al consultar.
+ * Una alarma a las 10 h de creada borra todo. No guarda nombres en claro, la
+ * llave del celular, ni direcciones IP, ni navegador, ni hora por persona (para
  * contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella
  * con sal que no se devuelve a la dirección; para el tope de altas de equipos
  * por conexión, cada sala guarda una huella con una sal suya, que queda hasta
@@ -42,8 +47,8 @@ import {
   ES_TOKEN,
   MAX_CUERPO_CONFIG,
   MAX_CUERPO_EQUIPO,
+  MAX_CUERPO_NOMBRE,
   MAX_EQUIPOS,
-  MAX_NOMBRES,
   MAX_SOCKETS,
   EQUIPOS_POR_MINUTO,
   NOMBRES_POR_MINUTO,
@@ -61,7 +66,6 @@ import {
   horaUtc,
   intentarAlta,
   iguales,
-  nombreCifradoValido,
   origenPermitido,
   validarConfigEquipos,
 } from "./logica";
@@ -69,6 +73,7 @@ import type { AltasPorHora, ConfigEquipos, EstadoEquipo } from "./logica";
 import { paginaCelular } from "./pagina";
 import { ES_LLAVE, anotarEquipo as anotarEnRegistro, crearTablasDeEquipos, quitarEquipo as quitarDelRegistro, siguienteVersion } from "./registro";
 import type { Ejecutar } from "./registro";
+import { FORMA_NOMBRES, anotarNombre, crearTablasDeNombres, leerNombres, type NombreDeSala } from "./nombres";
 
 export interface Env {
   SALA: DurableObjectNamespace<Sala>;
@@ -194,7 +199,7 @@ interface Presentacion {
 /** Lo que el Worker le pide a la sala, por RPC. */
 export type Resultado<T = object> =
   | ({ ok: true } & T)
-  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" }
+  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" | "forma" | "repetido" | "correcciones" }
   | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
 export class Sala extends DurableObject<Env> {
@@ -215,7 +220,7 @@ export class Sala extends DurableObject<Env> {
    */
   private crearTablas(): void {
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sala (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
-    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS nombres (n INTEGER PRIMARY KEY AUTOINCREMENT, d TEXT NOT NULL)");
+    crearTablasDeNombres(this.sql);
     this.crearTablaDeEquipos();
   }
 
@@ -248,30 +253,25 @@ export class Sala extends DurableObject<Env> {
     if (this.dato("huella")) return false;
     const ahora = Date.now();
     this.crearTablas();
-    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('huella', ?), ('creada', ?)", huella, String(ahora));
+    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('huella', ?), ('creada', ?), ('forma', ?)", huella, String(ahora), FORMA_NOMBRES);
     await this.ctx.storage.setAlarm(ahora + vida);
     return true;
   }
 
-  /** Un nombre cifrado de un celular. */
-  async sumar(d: string): Promise<Resultado<{ n: number }>> {
+  /** Un alta o una corrección. Las reglas y el SQL viven en `nombres.ts`, que se prueba en Node. */
+  async sumar(cuerpo: string): Promise<Resultado<{ n: number; creada: boolean; r?: number[] }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
-    if (!this.porMinuto.intentar(Date.now())) return { ok: false, motivo: "rapido" };
-    const hay = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM nombres").one().c;
-    if (hay >= MAX_NOMBRES) return { ok: false, motivo: "llena" };
-    const n = this.ctx.storage.sql.exec<{ n: number }>("INSERT INTO nombres (d) VALUES (?) RETURNING n", d).one().n;
-    this.avisar({ t: "nombre", n, d });
-    return { ok: true, n };
+    const r = await anotarNombre(this.sql, cuerpo, this.dato("forma") === FORMA_NOMBRES, () => this.porMinuto.intentar(Date.now()));
+    if (!r.ok) return r;
+    for (const aviso of r.avisos) this.avisar(aviso);
+    return r;
   }
 
   /** Los nombres de `desde` en adelante, para quien tiene el token: la pantalla que se recargó, o que consulta cada 3 s. */
-  async leer(token: string, desde: number): Promise<Resultado<{ nombres: { n: number; d: string }[] }>> {
+  async leer(token: string, desde: number): Promise<Resultado<{ nombres: NombreDeSala[] }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
-    const nombres = this.ctx.storage.sql
-      .exec<{ n: number; d: string }>("SELECT n, d FROM nombres WHERE n > ? ORDER BY n LIMIT ?", desde, MAX_NOMBRES)
-      .toArray();
-    return { ok: true, nombres };
+    return { ok: true, nombres: leerNombres(this.sql, desde, this.dato("forma") === FORMA_NOMBRES) };
   }
 
   /** Saca un nombre, también del objeto. */
@@ -521,7 +521,7 @@ async function leerJson(req: Request, tope: number): Promise<unknown> {
   }
 }
 
-const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, "cupo-conexion": 429 };
+const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, repetido: 409, correcciones: 429, "cupo-conexion": 429 };
 
 function falla(r: { motivo: string; esperaS?: number }, h: Record<string, string>): Response {
   const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : r.motivo === "cupo-conexion" ? { ...h, "Retry-After": String(r.esperaS ?? 600) } : h;
@@ -563,11 +563,9 @@ export default {
       if (partes.length === 3 && req.method === "POST") {
         const largo = Number(req.headers.get("Content-Length") ?? "NaN");
         if (!Number.isFinite(largo)) return json({ error: "largo" }, 411, h);
-        if (largo <= 0 || largo > 400) return json({ error: "tamaño" }, 413, h);
-        const cuerpo = (await req.text()).trim();
-        if (!nombreCifradoValido(cuerpo)) return json({ error: "forma" }, 400, h);
-        const r = await salaDe(id).sumar(cuerpo);
-        return r.ok ? json({ n: r.n }, 201, h) : falla(r, h);
+        if (largo <= 0 || largo > MAX_CUERPO_NOMBRE) return json({ error: "tamaño" }, 413, h);
+        const r = await salaDe(id).sumar(await req.text());
+        return r.ok ? json({ n: r.n, ...(r.r ? { r: r.r } : {}) }, r.creada ? 201 : 200, h) : falla(r, h);
       }
 
       // Cerrar la sala.
