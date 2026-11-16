@@ -4189,7 +4189,7 @@ export const T: Record<Lang, Dict> = {
     rulDemo: "Watch the wheel in a demo",
     sorEvKicker: "For events and stands",
     sorEvH1: "A draw for events and stands, on the big screen",
-    sorEvLead: "For your meetup, your fair or your stand: the list comes from Luma or is pasted in, the draw can be read from the back of the room and the result is kept in a link anyone can check from their phone.",
+    sorEvLead: "For your meetup, fair or stand: the list comes from Luma or is pasted in, the draw can be read from the back of the room, and the result stays in a link anyone can check on their phone.",
     sorEvImgAlt: "A draw on the big screen, with the llama race",
     sorEvImgCap: "The llama race on the big screen: you can read it from the back of the room.",
     sorEvQueT: "What an event needs",
