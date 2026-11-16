@@ -180,8 +180,8 @@ describe("los textos de la compra con QR", () => {
     for (const k of CLAVES) for (const l of IDIOMAS) expect(TEXTOS_COMPRA[l][k], `${l} ${k}`).not.toMatch(/[«»‹›;·•—–―→←↑↓⇒⟶➜!¡]/);
   });
 
-  it("USDC y Stellar solo en el dato de la moneda de Pagá desde tu app", () => {
-    for (const l of IDIOMAS) expect(conClave(/\b(USDC|Stellar)\b/i, l), l).toEqual(["compraDatoMoneda"]);
+  it("USDC y Stellar solo en el dato de la moneda de Pagá desde tu app y en la línea de XLM de Más detalles", () => {
+    for (const l of IDIOMAS) expect(conClave(/\b(USDC|Stellar)\b/i, l), l).toEqual(["compraDatoMoneda", "compraDesdeXlm"]);
   });
 
   it("memo, en español solo en el plegado que lo explica, y en inglés donde se nombra la nota", () => {
@@ -222,10 +222,15 @@ describe("los textos de la compra con QR", () => {
     for (const k of [...TITULOS, ...LINEAS]) expect(PLEGADOS_DE_LA_CUENTA_DE_PASO, k).not.toContain(k);
   });
 
-  it("nunca token, hash, transacción, billetera, red, firma, KYC, blockchain, XLM ni drand", () => {
+  it("nunca token, hash, transacción, billetera, red, firma, KYC, blockchain, XLM ni drand, salvo la línea de XLM de Más detalles", () => {
     for (const k of CLAVES) {
-      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\b(token|hash|transacci[oó]n|billetera|wallet|red|redes|firma|firmar|KYC|blockchain|XLM|lumens?|drand|cripto)\b/i);
-      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\b(token|hash|transactions?|wallet|network|signature|sign it|KYC|blockchain|XLM|lumens?|drand|crypto)\b/i);
+      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\b(token|hash|transacci[oó]n|billetera|wallet|red|redes|firma|firmar|KYC|blockchain|lumens?|drand|cripto)\b/i);
+      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\b(token|hash|transactions?|wallet|network|signature|sign it|KYC|blockchain|lumens?|drand|crypto)\b/i);
+    }
+    // XLM solo se nombra en la línea que explica qué pasa con quien tiene XLM y no USDC (`compraDesdeXlm`).
+    for (const k of CLAVES.filter((k) => k !== "compraDesdeXlm")) {
+      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\bXLM\b/i);
+      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\bXLM\b/i);
     }
   });
 
@@ -428,6 +433,8 @@ describe("cada pantalla dice su texto, palabra por palabra", () => {
     compraDatoMoneda: ["Moneda: USDC en Stellar", "Currency: USDC on Stellar"],
     compraNotaMemo: ["En tu app, la nota puede llamarse memo.", "Your app may call it a memo or a note."],
     compraSinDolares: ["¿No tenés dólares digitales? Pedile un cupón a quien organiza tu evento.", "Don't have digital dollars? Ask whoever runs your event for a coupon."],
+    // La línea de XLM de Más detalles: para quien tiene XLM y no USDC.
+    compraDesdeXlm: ["¿Tenés XLM y no USDC? Si tu app lo ofrece, podés mandar XLM y llega como USDC a tu cuenta: el monto exacto que dice la orden.", "Got XLM instead of USDC? If your app offers it, you can send XLM and it arrives as USDC in your account: the exact amount the order says."],
     compraSinQrTitulo: ["Ahora no hay pago con QR", "QR payment isn't available now"],
     compraSinQrLinea: ["Probá más tarde, o pagá con dólares digitales.", "Try later, or pay with digital dollars."],
     compraRevisionTitulo: ["Tu verificación está en revisión", "Your check is under review"],

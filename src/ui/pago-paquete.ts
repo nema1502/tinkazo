@@ -176,7 +176,7 @@ export function vistaDelPaquete(e: EstadoDelPaquete): VistaDelPaquete {
   const linea = lineaDelPago(e, !!error);
   return {
     textos: linea.textos,
-    panel: panelDe(o, e.correo, e.idioma, e.corto ? textoDelCorto(e.corto, e.idioma) : null, e.cambio),
+    panel: panelDe(o, e.correo, e.idioma, e.corto ? textoDelCorto(e.corto, e.idioma) : null, e.cambio, e.noLlego),
     nota: linea.nota,
     error,
     secundarios,

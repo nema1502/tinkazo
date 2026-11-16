@@ -75,17 +75,20 @@ export interface PagandoEnLaVista {
 
 /**
  * Lo plegado en Más detalles: para qué cuenta es, hasta cuándo vale la nota, que en otra app la nota puede llamarse
- * memo, y qué hacer sin dólares digitales. El QR del enlace y Abrir en mi app de pagos van ahí también (`pago-panel.ts`).
+ * memo, qué hacer sin dólares digitales y qué hacer con XLM. El QR del enlace y Abrir en mi app de pagos van ahí
+ * también (`pago-panel.ts`).
  */
 export function detallesDelPago(o: OrdenDePago, correo: string, idioma: "es" | "en"): Texto[] {
-  return [...(correo ? [{ clave: "pagoParaCuenta", vars: { correo } }] : []), { clave: "pagoVence", vars: { fecha: fechaDeAlta(o.vence, idioma) } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }];
+  return [...(correo ? [{ clave: "pagoParaCuenta", vars: { correo } }] : []), { clave: "pagoVence", vars: { fecha: fechaDeAlta(o.vence, idioma) } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }, { clave: "compraDesdeXlm" }];
 }
 
 /**
  * Los datos para pagar, de la orden tal cual. `saldo`: el renglón del saldo que no alcanza, si lo hay. `cambio`: se
- * ofrece Estoy en Bolivia.
+ * ofrece Estoy en Bolivia. `noLlego`: después de «No llegó», los otros dos casos de un pago que no llega (otra moneda,
+ * sin la nota o con otra) se suman plegados a Más detalles; el de la red equivocada ya se ve en la nota del panel.
  */
-export function panelDe(o: OrdenDePago, correo: string, idioma: "es" | "en", saldo?: Texto | null, cambio = false): PanelDePago {
+export function panelDe(o: OrdenDePago, correo: string, idioma: "es" | "en", saldo?: Texto | null, cambio = false, noLlego = false): PanelDePago {
+  const detalles = detallesDelPago(o, correo, idioma);
   return {
     correo,
     destino: o.destino,
@@ -95,7 +98,7 @@ export function panelDe(o: OrdenDePago, correo: string, idioma: "es" | "en", sal
     nota: o.nota,
     enlace: o.enlace,
     vence: o.vence,
-    detalles: detallesDelPago(o, correo, idioma),
+    detalles: noLlego ? [...detalles, { clave: "pagoOtraMoneda" }, { clave: "pagoOtraNotaEnviada" }] : detalles,
     ...(saldo ? { saldo } : {}),
     ...(cambio ? { cambio: { clave: "compraEstoy" } } : {}),
   };

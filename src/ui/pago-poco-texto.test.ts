@@ -164,7 +164,7 @@ describe("comprar se ve simple", () => {
       const caja = vistaDe({ ...base, acceso: { ...ACCESO_LIBRE, modo: "servidor", estado: "ninguno", pago } }).cajas[0];
       expect(caja?.titulo).toBe("pagoTitulo");
       // La línea nueva, la de pagar desde tu app. Plegado, lo que no hace falta para pagar.
-      const plegado = ["pagoParaCuenta", "pagoVence", "compraNotaMemo", "compraSinDolares"];
+      const plegado = ["pagoParaCuenta", "pagoVence", "compraNotaMemo", "compraSinDolares", "compraDesdeXlm"];
       expect(caja?.textos.map((x) => x.clave)).toEqual(["compraAppLinea"]);
       expect(caja?.pago?.detalles.map((x) => x.clave)).toEqual(plegado);
       const ventana = vistaDelPaquete({ ...paqueteInicial(l, "a•••@gmail.com"), fase: "pagando", paquetes: [P10], elegido: P10, orden: orden("p10", "9") });
@@ -197,6 +197,15 @@ describe("comprar se ve simple", () => {
       expect(caja?.cierre ?? []).toEqual([]);
       expect(caja?.detalles?.map((x) => x.clave)).toEqual(activacion === "lista" ? ["altaNoTengo"] : ["altaPrimerPaqueteNota", "altaNoTengo"]);
     }
+  });
+
+  it("después de «No llegó», los dos casos nuevos van plegados en el panel de la ventana de sumar sorteos", () => {
+    const v = vistaDelPaquete({ ...paqueteInicial("es", "a•••@gmail.com"), fase: "pagando", paquetes: [P10], elegido: P10, orden: orden("p10", "9"), tarda: true, noLlego: true });
+    expect(v.panel?.detalles.map((x) => x.clave).slice(-2)).toEqual(["pagoOtraMoneda", "pagoOtraNotaEnviada"]);
+    // Antes de «No llega», el panel trae lo de siempre, sin los casos.
+    const antes = vistaDelPaquete({ ...paqueteInicial("es", "a•••@gmail.com"), fase: "pagando", paquetes: [P10], elegido: P10, orden: orden("p10", "9") });
+    expect(antes.panel?.detalles.map((x) => x.clave)).not.toContain("pagoOtraMoneda");
+    expect(antes.panel?.detalles.map((x) => x.clave)).not.toContain("pagoOtraNotaEnviada");
   });
 
   it("en los textos de la compra no hay comillas angulares ni punto y coma, en ninguna de las dos lenguas", () => {
