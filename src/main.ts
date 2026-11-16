@@ -18,6 +18,8 @@ import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
+import { network } from "./stellar/config";
+import { limpiarPasoDelCupon } from "./stellar/cupon-paso-guardado";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
@@ -254,6 +256,8 @@ initStand();
 iniciarRed({ sellar: (op) => freeze(op) });
 // Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
 iniciarCupo();
+// El campo del cupón pertenece a Oficial: al arrancar en Prueba se olvida un pedido que no se llegó a usar.
+if (network.name === "testnet") limpiarPasoDelCupon();
 ingresarSiLoPidio();
 initMenuMas();
 iniciarFeedback(

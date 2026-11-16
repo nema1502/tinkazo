@@ -6,6 +6,7 @@ import { TEXTOS_PAGOS } from "./ui/pagos-textos";
 import { TEXTOS_COSTOS } from "./ui/costos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
+import { network } from "./stellar/config";
 import { TEXTOS_ALTA } from "./alta-textos";
 import { TEXTOS_ALTA_PAGO } from "./alta-textos-pago";
 import { TEXTOS_COBRO, cobroEnElBuild, textosConCobro } from "./alta-textos-con-cobro";
@@ -475,6 +476,9 @@ export const T: Record<Lang, Dict> = {
     modeCurrent: "Estás en este modo",
     modeSwitchToOfficial: "Pasar a Oficial",
     modeSwitchToTest: "Pasar a Prueba",
+    modeSwitchAccount: "Cada modo tiene su propia cuenta. En {otro} vas a entrar una vez más, y tu cuenta de {actual} sigue acá cuando vuelvas.",
+    modeSwitchGuestAccount: "La Cuenta de prueba es solo de Prueba. En Oficial entrás con Google.",
+    modeHaveCoupon: "Tengo un cupón",
     modeSwitchBlocked: "Terminá este sorteo antes de cambiar de modo.",
     sealModeOfficial: "Modo Oficial: este sorteo queda registrado en Stellar.",
     sealModeTest: "Modo Prueba: se borra el 16 de diciembre. Para tu evento, pasá a Oficial.",
@@ -3223,6 +3227,9 @@ export const T: Record<Lang, Dict> = {
     modeCurrent: "You are in this mode",
     modeSwitchToOfficial: "Switch to Live",
     modeSwitchToTest: "Switch to Test",
+    modeSwitchAccount: "Each mode has its own account. You'll sign in once more in {otro}, and your {actual} account will still be here when you come back.",
+    modeSwitchGuestAccount: "The test account only works in Test. In Live, sign in with Google.",
+    modeHaveCoupon: "I have a coupon",
     modeSwitchBlocked: "Finish this draw before switching modes.",
     sealModeOfficial: "Live mode: this draw stays recorded on Stellar.",
     sealModeTest: "Test mode: it is wiped on December 16. For your event, switch to Live.",
@@ -5898,10 +5905,17 @@ Object.assign(T.en, TEXTOS_ALTA_PASO.en);
 Object.assign(T.es, TEXTOS_COMPRA.es);
 Object.assign(T.en, TEXTOS_COMPRA.en);
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
-// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`).
+// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
+// existe en los dos modos, pero su frase sobre dejar la cuenta lista solo vale cuando la persona está en Oficial.
 if (HAY_MODO_OFICIAL) {
-  Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
-  Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
+  const { cuentaPideGoogle: puertaOficialEs, ...textosOficialesEs } = TEXTOS_MODO_OFICIAL.es;
+  const { cuentaPideGoogle: puertaOficialEn, ...textosOficialesEn } = TEXTOS_MODO_OFICIAL.en;
+  Object.assign(T.es, textosOficialesEs);
+  Object.assign(T.en, textosOficialesEn);
+  if (network.name === "mainnet") {
+    T.es.cuentaPideGoogle = puertaOficialEs!;
+    T.en.cuentaPideGoogle = puertaOficialEn!;
+  }
 }
 
 // Con la compra de sorteos a la vista (en piloto, solo en una pestaña con su marca), las páginas públicas dicen que se

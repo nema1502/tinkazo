@@ -8,6 +8,7 @@ import type { EstadoOficial } from "../stellar/wallet-pollar";
 import type { Para } from "./cuenta-lista-estado";
 import type { OpcionesDelPaso } from "./cuenta-lista";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
+import { consumirPasoDelCupon, hayPedidoDePasoDelCupon } from "./cupon-paso";
 
 /**
  * Cuándo se abre «Dejá tu cuenta lista» (`cuenta-lista.ts`), y las compuertas del sello y del sorteo.
@@ -191,6 +192,13 @@ export async function revisarCuentaOficial(origen: "entrada" | "retomar"): Promi
   if (!aplica() || nadaSeAbreSolo()) return false;
   const w = billetera();
   if (!w) return false;
+  // La acción Tengo un cupón pidió este campo antes de recargar en Oficial. La elección se consume solo si el paso abre:
+  // si la descarga falla, la próxima carga todavía tiene que poder abrirlo.
+  if (hayPedidoDePasoDelCupon()) {
+    const a = await prepararPaso("entrada", { cupon: "escribir" });
+    if (a.abrio) consumirPasoDelCupon();
+    return a.abrio;
+  }
   let inicial: Partial<EstadoOficial> | null;
   const local = w.estadoOficialLocal();
   if (local.activacion === "falta") inicial = { activacion: "falta" };

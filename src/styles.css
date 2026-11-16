@@ -201,6 +201,7 @@
   .modo-opcion h4 { margin: 0 0 6px; }
   .modo-opcion p { margin: 0; }
   .modo-actual { font-weight: 800; margin-top: 8px !important; }
+  .modo-cuenta { color: var(--ink2); line-height: 1.45; }
   .modo-bloqueo { font-weight: 700; }
   /* El botón para pasar de modo es la acción principal de la hoja: lleva el estilo de
      `button.primary` (fondo magenta, borde y sombra duros) y el alto de un blanco de toque
@@ -3219,6 +3220,8 @@
   .cl-accion { display: flex; flex-direction: column; gap: 8px; width: 100%; }
   .cl-salidas { display: flex; justify-content: space-between; gap: 12px; width: 100%; }
   .cl-salidas .cl-texto { align-self: auto; }
+  .cl-salida-prueba { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+  .cl-cuenta-modo { max-width: 38ch; margin: 4px 0 0; color: var(--ink2); font-size: 14px; line-height: 1.35; }
   .cl-contenido > .cl-salidas { max-width: none; margin: 4px 0 0; border-top: 2px solid var(--ink2); padding-top: 8px; }
   .cl-primer { margin: 0; font-size: 16px; line-height: 1.45; color: var(--ink2); }
   .cl-estado { margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink2); font-weight: 600; }

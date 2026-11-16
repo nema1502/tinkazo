@@ -364,6 +364,11 @@ describe("vistaDe: el final", () => {
     expect(vista.cajas.every((c) => c.estado === "lista" && !c.abierta)).toBe(true);
   });
 
+  it("al entrar sin lista, el final lleva la información del primer sello solo si todavía hace falta", () => {
+    expect(v({ activacion: "lista", proteccion: "lista", para: "entrada", primerOficialPendiente: true }).primerOficial).toBe(true);
+    expect(v({ activacion: "lista", proteccion: "lista", para: "entrada", primerOficialPendiente: false }).primerOficial).toBe(false);
+  });
+
   it("la confirmación del primer sello va arriba de «Sellar la lista» si hace falta, y nunca para el sorteo", () => {
     expect(v({ activacion: "lista", proteccion: "lista", para: "sello", primerOficialPendiente: true }).primerOficial).toBe(true);
     expect(v({ activacion: "lista", proteccion: "lista", para: "entrada-con-lista", primerOficialPendiente: true }).primerOficial).toBe(true);

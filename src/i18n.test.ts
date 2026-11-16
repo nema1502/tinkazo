@@ -148,7 +148,11 @@ describe("diccionario", () => {
 
   it.runIf(HAY_MODO_OFICIAL)("con contrato en la red real, el diccionario lleva los textos del modo Oficial", () => {
     for (const l of ["es", "en"] as const) {
-      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) {
+        // Esta frase depende del modo activo, no solo de que Oficial exista. Tiene su prueba propia abajo.
+        if (k === "cuentaPideGoogle") continue;
+        expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      }
     }
   });
 
@@ -173,6 +177,37 @@ describe("diccionario", () => {
       expect(conOficial.en.tmMore3 as string).toContain("In Test mode, keep");
       expect(conOficial.es.loginTestnet).toBe("Prueba");
       expect(conOficial.es.cfDura3 as string).toContain("modo Oficial");
+    });
+  });
+
+  describe("la puerta de Google en cada modo", () => {
+    afterEach(() => {
+      vi.doUnmock("./stellar/deployments.json");
+      vi.resetModules();
+      vi.unstubAllGlobals();
+    });
+
+    it("en Oficial pide dejar la cuenta lista y en Prueba conserva el texto de siempre, con el mismo contrato disponible", async () => {
+      expect(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google y dejá tu cuenta lista.");
+      expect(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google and get your account ready.");
+
+      const real = (await import("./stellar/deployments.json")).default;
+      const lista = {
+        ...real,
+        mainnet: { contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", rpcUrl: "https://rpc.example" },
+      };
+      vi.resetModules();
+      vi.doMock("./stellar/deployments.json", () => ({ default: lista }));
+      vi.stubGlobal("location", { search: "", hash: "" });
+      const { T: enPrueba } = await import("./i18n");
+      expect(enPrueba.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.");
+      expect(enPrueba.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google: it's free and your account is created for you.");
+
+      vi.resetModules();
+      vi.stubGlobal("location", { search: "?red=oficial", hash: "#sortear" });
+      const { T: enOficial } = await import("./i18n");
+      expect(enOficial.es.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle);
+      expect(enOficial.en.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle);
     });
   });
 

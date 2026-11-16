@@ -1,12 +1,13 @@
 import deployments from "./deployments.json";
 import { MAX_WINNERS } from "../protocol/select";
+import { cuponDelFragmento } from "./cupon-guardado";
 
 /**
  * Configuración de red. El modo se decide una sola vez al cargar la página:
- * primero manda `?red=` de la dirección, después la elección de esta pestaña
- * y por último el modo con el que abre el sitio (`VITE_STELLAR_NETWORK`, con
- * Prueba por defecto). Si el modo elegido es Oficial pero todavía no hay
- * contrato en la lista oficial, abre en Prueba.
+ * primero manda `?red=` de la dirección, después un cupón bien formado en
+ * `#cupon=`, la elección de esta pestaña y por último el modo con el que abre
+ * el sitio (`VITE_STELLAR_NETWORK`, con Prueba por defecto). Si el modo elegido
+ * es Oficial pero todavía no hay contrato en la lista oficial, abre en Prueba.
  *
  * La app declara contra qué contrato habla. Nunca deduce la red de la wallet:
  * si la wallet está en otra, se avisa y se bloquea el sellado.
@@ -121,6 +122,8 @@ export function parseModeValue(raw: string | null | undefined): NetworkName | nu
 export interface ModeEnvironment {
   /** La parte de la dirección donde viaja `red`, o la dirección entera. */
   search?: string | null | undefined;
+  /** El fragmento de la dirección, donde puede viajar `cupon`. */
+  hash?: string | null | undefined;
   /** Lo guardado para esta pestaña. */
   stored?: string | null | undefined;
   /** El modo con el que abre el sitio, como llega de la construcción. */
@@ -133,24 +136,29 @@ const modeFromSearch = (search: string | null | undefined): NetworkName | null =
   if (!search) return null;
   try {
     const query = search.includes("?") ? search.slice(search.indexOf("?")) : search;
-    return parseModeValue(new URLSearchParams(query).get("red"));
+    return parseModeValue(new URLSearchParams(query.split("#")[0] ?? "").get("red"));
   } catch {
     return null;
   }
 };
 
-/** Las cuatro reglas del modo, en orden, sin tocar el navegador: así se prueban. */
+/** Un cupón bien formado en la dirección pide Oficial, igual que `?red=oficial`. */
+const modeFromCoupon = (hash: string | null | undefined): NetworkName | null => (cuponDelFragmento(hash ?? "").codigo ? "mainnet" : null);
+
+/** Las reglas del modo, en orden, sin tocar el navegador: así se prueban. */
 export function resolveNetworkName(env: ModeEnvironment = {}): NetworkName {
-  const chosen = modeFromSearch(env.search) ?? parseModeValue(env.stored) ?? (env.build === "mainnet" ? "mainnet" : "testnet");
+  const hash = env.hash ?? (env.search?.includes("#") ? env.search.slice(env.search.indexOf("#")) : null);
+  const chosen = modeFromSearch(env.search) ?? modeFromCoupon(hash) ?? parseModeValue(env.stored) ?? (env.build === "mainnet" ? "mainnet" : "testnet");
   if (chosen === "mainnet" && !env.hasOfficialContract) return "testnet";
   return chosen;
 }
 
-/** La dirección para recargar en otro modo: pone `red` con el modo pedido y conserva todo lo demás que traía. */
-export function urlForMode(current: string, target: NetworkName): string {
+/** La dirección para recargar en otro modo: pone `red` y conserva lo demás. Con `hash`, ese es el destino en la página. */
+export function urlForMode(current: string, target: NetworkName, hash?: string): string {
   try {
     const url = new URL(current, "https://tinkazo.app/");
     url.searchParams.set("red", target === "mainnet" ? "oficial" : "prueba");
+    if (hash) url.hash = hash;
     const base = current.trim().startsWith("http") ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
     return base;
   } catch {
@@ -186,16 +194,20 @@ function writeStoredMode(name: NetworkName): void {
 
 function pickNetwork(): NetworkConfig {
   let search: string | null = null;
+  let hash: string | null = null;
   try {
     search = typeof location !== "undefined" ? location.search : null;
+    hash = typeof location !== "undefined" ? location.hash : null;
   } catch {
     search = null;
+    hash = null;
   }
-  const fromUrl = modeFromSearch(search);
-  // Lo que trae la dirección queda guardado para esta pestaña: sobrevive a la recarga y a la ventana de Google.
+  const fromUrl = modeFromSearch(search) ?? modeFromCoupon(hash);
+  // Lo que trae la dirección queda guardado para esta pestaña: sobrevive a la recarga, a la ventana de Google y a quitar el cupón del fragmento.
   if (fromUrl && (fromUrl !== "mainnet" || NETWORKS.mainnet.contractId)) writeStoredMode(fromUrl);
   const name = resolveNetworkName({
     search,
+    hash,
     stored: readStoredMode(),
     build: import.meta.env.VITE_STELLAR_NETWORK as string | undefined,
     hasOfficialContract: !!NETWORKS.mainnet.contractId,
@@ -209,17 +221,18 @@ export const hayModoOficial = !!NETWORKS.mainnet.contractId;
 /**
  * Cambia de modo recargando la página en la otra red. Guarda la elección para
  * esta pestaña y conserva el resto de la dirección, con `red` del modo pedido.
+ * El `hash` opcional lleva a otro lugar de la página, como la herramienta.
  * Si la dirección nueva resulta igual a la actual (ya traía ese modo), recarga
  * igual: una dirección con fragmento no recarga por sí sola. Sin contrato
  * oficial no hay a dónde pasar: devuelve `false` y no toca nada. Y si la
  * recarga no se puede pedir, tampoco escribe el modo: nunca queda un cambio
  * pendiente sin recarga.
  */
-export function changeMode(target: NetworkName): boolean {
+export function changeMode(target: NetworkName, hash?: string): boolean {
   if (target === "mainnet" && !hayModoOficial) return false;
   try {
     if (typeof location === "undefined") return false;
-    const next = urlForMode(location.href, target);
+    const next = urlForMode(location.href, target, hash);
     if (next === location.href) location.reload();
     else location.assign(next);
   } catch {
