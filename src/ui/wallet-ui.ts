@@ -1568,6 +1568,10 @@ async function connect(
   row: HTMLElement,
   done: () => void,
 ): Promise<void> {
+  // Otro toque en el mismo botón mientras entra (el de Google dice Terminando de entrar y se puede tocar de nuevo) no
+  // empieza otra entrada: la que está en curso sigue, y al terminar entra una sola vez.
+  if (row.dataset.entrando) return;
+  row.dataset.entrando = "1";
   const original = row.innerHTML;
   row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
   conectando = true;
@@ -1610,6 +1614,7 @@ async function connect(
       if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
     }
   } finally {
+    delete row.dataset.entrando;
     // Si el foco estaba en Cancelar, vuelve al botón de Google: Cancelar se va.
     const volverAGoogle = (enlaces as HTMLElement | null)?.contains(document.activeElement) === true;
     (enlaces as HTMLElement | null)?.remove();

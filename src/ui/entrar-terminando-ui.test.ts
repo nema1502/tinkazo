@@ -229,6 +229,22 @@ describe("en la ventana de opciones", () => {
     expect(document.getElementById("gate")?.style.display, volcado()).toBe("none");
     expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("fuera");
   });
+
+  it("tocar otra vez Google mientras termina de entrar no empieza otra entrada: sigue la que está en curso", async () => {
+    const { ui, t } = await cargar();
+    const google = await entrarDesdeLaVentana(ui);
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(google.textContent, volcado()).toBe(t("loginTerminando")), esperar);
+    google.click();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(google.textContent, volcado()).toBe(t("loginTerminando"));
+    expect(document.querySelectorAll(".login-links"), volcado()).toHaveLength(1);
+    h.billetera = { address: DIR };
+    h.paso = "authenticated";
+    for (const f of [...h.oyentes]) f({ step: "authenticated" });
+    await vi.waitFor(() => expect(ui.currentSession()?.address, volcado()).toBe(DIR), esperar);
+    expect(h.cancelados).toBe(0);
+  });
 });
 
 describe("Terminando de entrar se anuncia y el foco no se pierde", () => {
