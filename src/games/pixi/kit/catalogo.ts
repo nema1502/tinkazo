@@ -165,6 +165,21 @@ export const CATALOGO = [
     historia: { q: "loreBolillasQ", a: "loreBolillasA", href: "https://es.wikipedia.org/wiki/Canica", src: "es.wikipedia.org, Canica", hue: "teal", borrador: true },
   },
   // --- /bolillas
+  // --- amigo
+  // Amigo secreto: la mesa de sobres del show. La asignación (a quién le toca regalar) sale del faro con el
+  // módulo puro `src/games/amigo-secreto/asignacion.ts`, y el sobre del premio se abre con el golpe. Nace
+  // apagado: sin captura aprobada todavía, abre con ?demo=amigo y ?pose=amigo, y entra al selector cuando el
+  // proyecto apruebe la captura (node scripts/nuevo-juego.mjs --encender amigo).
+  {
+    id: "amigo",
+    cargar: () => import("../amigo-secreto").then((m) => m.amigoPixi),
+    forma: "de-pie",
+    selector: false,
+    rango: { minimo: 2, ideal: [8, 30], maximo: 200 },
+    captura: false,
+    historia: { q: "loreAmigoQ", a: "loreAmigoA", href: "https://es.wikipedia.org/wiki/Amigo_invisible", src: "es.wikipedia.org, Amigo invisible", hue: "orange", borrador: true },
+  },
+  // --- /amigo
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];
 

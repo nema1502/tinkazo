@@ -2955,6 +2955,14 @@ export const T: Record<Lang, Dict> = {
     "rec.bolillas.alto": "Con mucha gente, la tanda previa cruza nombres antes de la troya.",
     "rec.bolillas.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: el círculo cabe hasta ${max}.`,
     "rec.bolillas.corto": "Con una sola persona no hay troya.",
+    // --- amigo
+    gameAmigo: "Amigo secreto", jgAmigoN: "Amigo secreto",
+    jgAmigoB: "La mesa de sobres del amigo secreto: una tarjeta con la cara de cada uno y, adentro, a quién le toca regalar. La asignación sale del faro —nadie la elige— y al final se abre el sobre del premio, con su tarjeta amarilla y confeti. Hasta doscientas.",
+    gcAmigo: "Cada uno abre su sobre y descubre a quién le toca regalar. El premio lo destaca el show al final.",
+    gcAmigoMany: "Con varios premios, el sobre destacado al final se lleva el primero. Los demás premios salen en el cartel del final.",
+    loreAmigoQ: "¿De dónde sale el amigo secreto?",
+    loreAmigoA: "Borrador: todavía no tiene su historia ni su fuente, y no sale en ningún sorteo hasta que se escriba.",
+    // --- /amigo
     // <<< kit:i18n-es
     // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
     lumaQ: "Cómo bajar tu lista de Luma",
@@ -5565,6 +5573,14 @@ export const T: Record<Lang, Dict> = {
     "rec.bolillas.alto": "With a big list, a first round crosses out names before the troya.",
     "rec.bolillas.largo": (n: number, _min: number, max: number) => `With ${n}, it does not offer: the circle holds up to ${max}.`,
     "rec.bolillas.corto": "With one person there is no troya.",
+    // --- amigo
+    gameAmigo: "Secret friend", jgAmigoN: "Secret friend",
+    jgAmigoB: "The secret friend table: one envelope per person with their face on it, and inside, who they give their gift to. The assignment comes from the beacon — nobody picks it — and at the end the prize envelope opens, with its yellow card and confetti. Up to two hundred.",
+    gcAmigo: "Everyone opens their envelope and finds out who they give their gift to. The show highlights the prize at the end.",
+    gcAmigoMany: "With several prizes, the envelope highlighted at the end takes the first one. The other prizes show on the final banner.",
+    loreAmigoQ: "Where does Secret friend come from?",
+    loreAmigoA: "Draft: it has no story or source yet, and it does not show in any draw until one is written.",
+    // --- /amigo
     // <<< kit:i18n-en
     // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
     lumaQ: "How to get your list from Luma",
