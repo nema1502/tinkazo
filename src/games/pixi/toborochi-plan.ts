@@ -1,4 +1,5 @@
 import { acotar, hashDe, sembrar } from "./kit/azar";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "./decisivo";
 import { planoEntero, planoSobre } from "./kit/director";
 import { PRIORIDAD } from "./kit/guion";
 import { planNombres } from "./kit/nombres";
@@ -165,6 +166,27 @@ export const VUELO_MAX = 10;
 
 /** El nombre de pila, para el relator: corto, y la sala sabe de quién se habla. */
 const pilaDe = (formas: readonly (readonly string[])[], i: number): string => (formas[i]?.[1] as string | undefined) ?? "";
+
+/**
+ * El momento decisivo del Toborochi (`decisivo.ts`), en segundos de juego. Lo primero de:
+ *
+ * - el colibrí: alterna entre las dos que quedan y su última visita es siempre a la ganadora;
+ * - con tres premios o más, la primera calma con premio: quien se va con su premio queda nombrado;
+ * - con dos premios o más, la ráfaga que deja solo a las dos finalistas, que son la ganadora y la segunda premiada.
+ */
+export function decisivoDelToborochi(d: { n: number; olas: readonly Pick<Ola, "t0" | "cae">[]; calmas: readonly Pick<Calma, "t0" | "premios">[]; tColibri0: number }, ganadores: readonly number[]): number {
+  const fuera = new Set<number>();
+  const hechos = [
+    ...d.olas.map((o) => ({ desde: o.t0, salen: o.cae })),
+    ...d.calmas.map((c) => ({ desde: c.t0, salen: c.premios.map((p) => p.quien) })),
+  ].sort((a, b) => a.desde - b.desde);
+  const tramos = hechos.map((h) => {
+    for (const q of h.salen) fuera.add(q);
+    return { desde: h.desde, siguen: Array.from({ length: d.n }, (_, i) => i).filter((i) => !fuera.has(i)) };
+  });
+  const conPremio = d.calmas.filter((c) => c.premios.length > 0).map((c) => c.t0);
+  return momentoDecisivo(d.tColibri0, ...conPremio, primeraQueDejaSoloPremiados(tramos, new Set(ganadores), d.n));
+}
 
 export function planToborochi(ctx: Contexto): Plan<Datos> {
   const n = Math.max(1, ctx.nombres.length);
@@ -506,6 +528,7 @@ export function planToborochi(ctx: Contexto): Plan<Datos> {
 
   return {
     duracion,
+    decisivo: decisivoDelToborochi({ n, olas, calmas, tColibri0 }, ctx.ganadores),
     arco,
     sentido: "arriba",
     marcador,

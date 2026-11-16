@@ -15,7 +15,7 @@ import { escalaChipLegible } from "./letra";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
 import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point, type Throw } from "./sapo-plan";
-import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_FIRST, HANG_SMALL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, tiemposDeTiros } from "./sapo-tiempos";
+import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_FIRST, HANG_SMALL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, decisivoDelSapo, tiemposDeTiros } from "./sapo-tiempos";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
@@ -188,6 +188,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
   const FOCO = tiemposFoco(story.arc);
   setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
+  /**
+   * El momento decisivo (`decisivo.ts`): antes de la primera argolla que entra. Cada argolla que entra es un premio, y se
+   * tiran del último al primero: con un premio es el último tiro; con varios, la primera que entra ya nombra a alguien.
+   */
+  const DECISIVO = decisivoDelSapo(tosses.map((o) => ({ kind: o.th.kind, start: o.start })));
 
   /* ---------------------------------------------------------------- geometría */
   /**
@@ -686,6 +691,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
   /* ------------------------------------------------------------------ el guion hablado */
   let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0, labioSonado = false, croo = false, silbido = false;
+  S.decisivoEn(() => tAll, DECISIVO);
   const saidWave = new Set<number>();
   /** El empuje del zoom de emoción: una sola vez, desde que tira la última argolla. */
   let empujeDado = false;

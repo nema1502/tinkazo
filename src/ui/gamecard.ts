@@ -2,7 +2,7 @@ import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
 import { esSoloMirar } from "../solo-mirar";
-import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
+import { LECTURA_DE_LA_TARJETA_S, lecturaMinimaS } from "../arranque-del-show";
 
 /**
  * La tarjeta de "cómo se juega", antes de que arranque el juego.
@@ -194,6 +194,8 @@ export function showGameCard(
   const overflowAntes = document.body.style.overflow;
   document.body.style.overflow = "hidden";
 
+  /** Cuándo abrió, en el reloj monótono: la hora fija del ancla se mide contra esto. */
+  const abierta = performance.now();
   let resolver: () => void = () => {};
   const ready = new Promise<void>((r) => (resolver = r));
   let listo = false;
@@ -248,28 +250,50 @@ export function showGameCard(
     contar(CARD_SECONDS * 1000);
   } else {
     let leida = false;
+    /** La hora fija (reloj monótono, ms) en que termina la tarjeta, si la sala va con horario y alcanza para leer. */
+    let fin: number | null = null;
     const seguir = (): void => {
       if (listo || !leida || !grabado) return;
       if (saltada) {
         terminar();
         return;
       }
-      reloj = window.setTimeout(terminar, cuenta * 1000);
-      contar(0);
+      // Con hora fija la cuenta cae justo antes de ella; sin hora, 3, 2, 1 desde ahora.
+      const falta = fin !== null ? Math.max(0, fin - performance.now()) : cuenta * 1000;
+      reloj = window.setTimeout(terminar, falta);
+      contar(Math.max(0, falta - cuenta * 1000));
       clearTimeout(tope);
-      tope = window.setTimeout(hide, (cuenta + 10) * 1000);
+      tope = window.setTimeout(hide, falta + 10_000);
     };
-    pasos.push(window.setTimeout(() => {
+    const lectura = window.setTimeout(() => {
       leida = true;
       // La barra se detiene donde termina la lectura hasta que quede grabado.
       if (!grabado) el.classList.add("gc-esperando");
       seguir();
-    }, CARD_SECONDS * 1000));
+    }, CARD_SECONDS * 1000);
+    pasos.push(lectura);
     void espera.then(
-      () => {
+      (valor) => {
         grabado = true;
         el.querySelector(".gc-graba")?.remove();
         el.classList.remove("gc-esperando");
+        // La sala con horario (`arranque-del-show.ts`): el resultado trae la hora en que arranca el juego. Si deja
+        // lectura de sobra y la cuenta todavía no tenía que empezar, la tarjeta termina a esa hora: la lectura dura hasta
+        // la cuenta. Si abrió con poca lectura por delante o el resultado llegó tarde, lee y cuenta como siempre.
+        const pedida = (valor as { terminaEn?: unknown } | undefined)?.terminaEn;
+        if (typeof pedida === "number" && !saltada) {
+          const cuentaEn = pedida - cuenta * 1000;
+          if (cuentaEn - abierta >= lecturaMinimaS() * 1000 && cuentaEn >= performance.now()) {
+            fin = pedida;
+            clearTimeout(lectura);
+            leida = false;
+            pasos.push(window.setTimeout(() => {
+              leida = true;
+              seguir();
+            }, cuentaEn - performance.now()));
+            return;
+          }
+        }
         // Saltada mientras se grababa: ya no hace falta esperar la lectura.
         if (saltada) leida = true;
         seguir();

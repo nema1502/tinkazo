@@ -5,8 +5,8 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, pintarNotaDelJuego, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
-import { fijoPara } from "./ui/espectador-fijo";
+import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { avisarCambioConQr } from "./ui/espectadores-de-la-sala";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
@@ -110,24 +110,15 @@ function paceLabels(): void {
 }
 onLangChange(paceLabels);
 paceSel.addEventListener("change", () => {
-  // Ya se mira en celulares desde el QR, con este ritmo (`ui/espectador-fijo.ts`): queda hasta el resultado, y se dice.
-  const fijo = fijoPara(app.frozen, !!app.drawn);
-  const notaDelRitmo = document.getElementById("pace-nota");
-  if (notaDelRitmo) {
-    notaDelRitmo.textContent = fijo ? t("juegoFijoEspectador") : "";
-    notaDelRitmo.hidden = !fijo;
-  }
-  if (fijo) {
-    paceSel.value = fijo.ritmo;
-    return;
-  }
   setPace(paceSel.value as Pace);
+  // Con el QR de espectadores ya visto, el cambio se anota y se publica (`ui/espectadores-de-la-sala.ts`); la espera,
+  // si está abierta, rehace su QR con la duración nueva.
+  if (!app.drawn) avisarCambioConQr(app.frozen, app.game, currentPace());
+  document.dispatchEvent(new CustomEvent("tinkazo:ritmo"));
   // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
   refrescarRecomendacion();
 });
 
-// El QR del espectador ya se ve (`ui/espectador-fijo.ts`): la nota del selector dice que el juego y la duración quedan.
-document.addEventListener("tinkazo:espectadores", () => pintarNotaDelJuego());
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {

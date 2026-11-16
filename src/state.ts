@@ -361,6 +361,9 @@ export function setGameLength(nominalSeconds: number, fixedSeconds = 0, normalSe
   normalPropio = normalSeconds;
 }
 
+/** Los segundos de juego del juego en curso hasta el revelado, sin estirar (lo que declaró con `setGameLength`). */
+export const largoNominal = (): number => nominal;
+
 /**
  * Los segundos de la tarjeta de "cómo se juega" que va antes del juego. Son
  * parte del show, así que salen del mismo total: "normal" sigue siendo

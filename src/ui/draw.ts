@@ -1,11 +1,15 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, currentPace, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
 import { beep, note, sonidoDelJuego } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "../protocol/quicknet";
 import { resultadoDelSello } from "../sorteo-local";
-import { LECTURA_DE_LA_TARJETA_S, msHasta } from "../arranque-del-show";
+import { LECTURA_DE_LA_TARJETA_S, arranqueDelShow, juegoTrasLaLlegada, msHasta } from "../arranque-del-show";
+import { anclaDeLaRondaUnaVez, anclaVirtual, horaDeLaRonda, salaALaParPorElAncla, type Ancla } from "../reloj-de-la-ronda";
+import { cerrarElShow, estadoDelShow, pedirHorario, ponerseAlDiaAlVolver, type Avisos, type Horario } from "../games/en-hora";
+import { cambioConQr, hayEspectadores, publicado } from "./espectadores-de-la-sala";
+import { puertaDeLaGrabacion, salaALaPar, type Apertura } from "./puerta-de-la-grabacion";
 import { type FinDeLaGrabacion, grabarElSorteo } from "./grabar-sorteo";
 import { marcarEnMarcha, soltarLaMarcha, sorteoEnMarcha } from "./sorteo-en-marcha";
 import { verifyRoundAsync } from "../protocol/firma";
@@ -97,7 +101,7 @@ export async function draw(opciones: { adelantado?: boolean } = {}): Promise<voi
   if (!app.frozen || app.drawn || sorteoEnMarcha(app.frozen)) return;
   // Adelantado, como mucho la lectura de la tarjeta antes de que nazca el número (con un segundo de holgura por el
   // reloj de la cuenta regresiva). Si no, recién cuando nació.
-  if (opciones.adelantado ? msHasta(roundTime(app.frozen.round)) > (LECTURA_DE_LA_TARJETA_S + 1) * 1000 : secondsToRound() > 0) return;
+  if (opciones.adelantado ? msHasta(roundTime(app.frozen.round), horaDeLaRonda() * 1000) > (LECTURA_DE_LA_TARJETA_S + 1) * 1000 : secondsToRound() > 0) return;
   // Uno a la vez: con el sorteo lanzado antes de que nazca el número, un toque cuando nace no puede lanzar otro show.
   // La marca la mira también la cuenta regresiva (`freeze.ts`), que no toca el botón mientras tanto. Si una compuerta
   // corta, la marca se va con el intento y el botón vuelve a encenderse (`sorteo-en-marcha.ts`). Es por sello y se
@@ -105,13 +109,18 @@ export async function draw(opciones: { adelantado?: boolean } = {}): Promise<voi
   const sello = app.frozen;
   marcarEnMarcha(sello);
   try {
-    await sortear();
+    await sortear(opciones.adelantado === true);
   } finally {
     soltarLaMarcha(sello);
   }
 }
 
-async function sortear(): Promise<void> {
+/**
+ * `adelantado`: lanzado por la espera en grande antes de que nazca el número. Entonces la sala sigue la línea de tiempo
+ * común (`arranque-del-show.ts`): trae el número con un pedido que espera su nacimiento (`reloj-de-la-ronda.ts`) y su
+ * juego arranca a una hora fija desde esa llegada, la misma regla que sigue el celular de quien mira, un poco después.
+ */
+async function sortear(adelantado = false): Promise<void> {
   if (!app.frozen) return;
   // En modo Oficial, si la memoria dice que a la cuenta le falta activarse, el paso «Dejá tu cuenta lista» antes de
   // sortear. Solo la memoria y sin red: el sorteo se lanza solo desde la espera. Fuera del modo Oficial no se baja nada.
@@ -169,8 +178,8 @@ async function sortear(): Promise<void> {
   // en los últimos segundos de la espera y termina de leerse cuando nace el número. La cuenta de la sala espera a que
   // haya resultado, y el juego arranca sin esperar a que el sorteo quede grabado: se graba aparte (`grabarAparte`).
   // Hasta el 15 de noviembre de 2026 la sala esperaba el margen de la cadena y la grabación, unos quince segundos.
-  let hayResultado: () => void = () => undefined;
-  const resultadoListo = new Promise<void>((r) => (hayResultado = r));
+  let hayResultado: (hora?: { terminaEn: number }) => void = () => undefined;
+  const resultadoListo = new Promise<{ terminaEn: number } | undefined>((r) => (hayResultado = r));
   const juego = juegoDe(names.length, nWinners);
   const card = abrirTarjeta(juego, names.length, nWinners, orden, resultadoListo);
   const tarjeta: Previa | null = card ? { card, game: juego } : null;
@@ -186,6 +195,11 @@ async function sortear(): Promise<void> {
   let contado = raffleId === undefined;
   /** La grabación, cuando ya arrancó: un error del show no la corta, y el sorteo termina cuando ella termina. */
   let grabando: Promise<void> | null = null;
+  /** La llegada del número con el pedido retenido, si se lanzó desde la espera (`reloj-de-la-ronda.ts`). */
+  let ancla: Ancla | null = null;
+  /** La sala mostró quién gana (el cartel del juego, o el resultado): la grabación que lo esperaba ya puede salir. */
+  let coronar: () => void = () => undefined;
+  const coronada = new Promise<void>((r) => (coronar = r));
   /** El resultado, desde que quedó fijado: si después falla el show, se muestra igual y se graba. */
   let fijado: { beacon: Beacon; winners: number[]; graba: PorGrabar | null } | null = null;
 
@@ -201,17 +215,30 @@ async function sortear(): Promise<void> {
     // El detalle de un error de antes ya no es de lo que se ve.
     limpiarDetalle("draw-status");
 
-    // Lanzado antes de que nazca el número: se lo pide recién cuando nace. Pedirlo antes es esperar los dos segundos
-    // que hay entre un intento y el siguiente.
-    const falta = enStand() ? 0 : msHasta(roundTime(sello.round));
-    if (falta > 0) await new Promise((r) => setTimeout(r, falta));
-
-    let beacon: Beacon;
-    try {
-      beacon = await resolveBeacon(sello.round, (attempt, total) => {
-        if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
-      });
+    // Lanzado por la espera en grande: el número llega con un pedido que espera su nacimiento, y esa llegada es la hora
+    // cero del juego (el ancla). Si el servicio que retiene no contesta, o la firma no da, como siempre.
+    const conAncla = adelantado && !enStand();
+    // La cuenta regresiva ya la pidió unos segundos antes (`freeze.ts`): esta es la misma, también en Rápido.
+    ancla = conAncla ? await anclaDeLaRondaUnaVez(sello.round) : null;
+    let beacon: Beacon | null = null;
+    let llegada = 0;
+    if (ancla?.firma && (await verifyRoundAsync(sello.round, ancla.firma).catch(() => false))) {
+      beacon = { round: sello.round, randomness: bytesToHex(randomnessOf(ancla.firma)), signature: ancla.firma };
+      llegada = ancla.llegada;
       status.style.display = "none";
+    } else ancla = null;
+    try {
+      if (!beacon) {
+        // Lanzado antes de que nazca el número: se lo pide recién cuando nace. Pedirlo antes es esperar los dos segundos
+        // que hay entre un intento y el siguiente.
+        const falta = enStand() ? 0 : msHasta(roundTime(sello.round), horaDeLaRonda() * 1000);
+        if (falta > 0) await new Promise((r) => setTimeout(r, falta));
+        beacon = await resolveBeacon(sello.round, (attempt, total) => {
+          if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
+        });
+        llegada = performance.now();
+        status.style.display = "none";
+      }
     } catch (e) {
       sinShow();
       btn.disabled = false;
@@ -232,8 +259,10 @@ async function sortear(): Promise<void> {
     // El resultado, calculado acá con lo sellado y el número ya comprobado: el mismo camino con sello y sin sello
     // (`sorteo-local.ts`). Con sello, el contrato hace la misma cuenta y no puede dar otro: al grabarlo se comparan.
     const winners = resultadoDelSello({ listHash, count: names.length, numWinners: nWinners }, beacon);
-    // Hay resultado: la tarjeta sigue con la cuenta de la sala, y después el juego.
-    hayResultado();
+    // Hay resultado: la tarjeta sigue con la cuenta de la sala, y después el juego. Lanzado por la espera, a la hora fija
+    // que da la llegada del número; el estadio arranca a esa misma hora (`en-hora.ts`).
+    const terminaEn = conAncla ? llegada + juegoTrasLaLlegada(conCuenta()) * 1000 : null;
+    hayResultado(terminaEn !== null ? { terminaEn } : undefined);
 
     // Apagado y diciendo por qué: un "Lanzar el sorteo" gris parecía roto. Con
     // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
@@ -253,7 +282,38 @@ async function sortear(): Promise<void> {
     if (graba) anotarEnMisSorteos(graba, { porGrabar: true }, false);
     const despuesDelShow = graba !== null && currentSession()?.aMano === true;
     if (graba) contado = true;
-    if (graba && !despuesDelShow) grabando = grabarAparte(graba);
+    // Con celulares mirando, la sala graba mientras juega solo si va a la par; si no, después de mostrar quién gana
+    // (`puerta-de-la-grabacion.ts`). Sin celulares, como siempre.
+    const pedido = { juego: app.game, ritmo: currentPace() };
+    const anclaDelSorteo = ancla;
+    // `?auditar=espectador`: lo que la sala miró para decidir, a la vista del recorrido de los espectadores.
+    const auditar = (params.get("auditar") ?? "").split(",").includes("espectador");
+    const puerta = graba && !despuesDelShow ? puertaDeLaGrabacion({
+      conEspectadores: hayEspectadores(sello),
+      grabable: arranqueDelShow(sello.round).grabable,
+      ahora: () => horaDeLaRonda() * 1000,
+      aLaPar: () => {
+        const e = {
+          conEspectadores: true,
+          cambioConQr: cambioConQr(sello),
+          anclaALaPar: salaALaParPorElAncla(anclaDelSorteo, anclaVirtual(sello.round)),
+          mismoJuego: mismoJuegoQueElQr(sello, pedido.juego, pedido.ritmo),
+          show: estadoDelShow(),
+        };
+        const par = salaALaPar(e);
+        // Grabada a la par, lo grabado suelta el final de los celulares: si la sala se esconde, al volver se pone al día.
+        if (par) ponerseAlDiaAlVolver();
+        if (auditar) {
+          const v = anclaVirtual(sello.round);
+          const trasSuHora = anclaDelSorteo && v !== null ? Math.round(anclaDelSorteo.llegada - v) : null;
+          document.documentElement.dataset.paraGrabar = JSON.stringify({ ...e, ancla: anclaDelSorteo && { retenido: anclaDelSorteo.retenido, idaYVuelta: anclaDelSorteo.idaYVuelta, trasSuHora }, aLaPar: par });
+        }
+        return par;
+      },
+      coronada,
+    }) : null;
+    if (auditar && puerta) void puerta.then((a) => (document.documentElement.dataset.puerta = a));
+    if (graba && !despuesDelShow) grabando = grabarAparte(graba, puerta);
     $("sec-draw").style.display = "block";
     $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
     // Arrancó desde la espera en grande (ella todavía hace de cortina): el show
@@ -262,12 +322,13 @@ async function sortear(): Promise<void> {
     seguirEnPantallaCompleta(granFinal?.pantalla === true);
     const finish = (): void => {
       reveal(names, winners, beacon, listHash);
+      coronar();
       if (graba && despuesDelShow) void grabarAparte(graba);
     };
     // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
     // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
     setResultadoDeTurnos(isTurnOrder(names.length, winners.length, sello.prize));
-    playGame(names, winners, beacon, finish, orden, tarjeta);
+    playGame(names, winners, beacon, finish, orden, tarjeta, terminaEn !== null ? { conHora: { horario: { inicio: terminaEn }, avisos: { alCoronar: coronar } } } : {});
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
     // El show arrancó y el resultado está fijado: este sello ya no está en marcha. Hasta el 16 de noviembre de 2026 la
@@ -292,10 +353,14 @@ async function sortear(): Promise<void> {
       } catch (r) {
         console.warn("[tinkazo] el resultado no se pudo mostrar", r);
       }
+      // El resultado ya está a la vista: si la grabación esperaba eso, ya puede salir.
+      coronar();
       if (fijado.graba && !grabando) grabando = grabarAparte(fijado.graba);
       await grabando;
       return;
     }
+    // Sin resultado a la vista (se soltó el sello): una grabación que esperaba la corona no espera más.
+    coronar();
     if (grabando) {
       await grabando;
       return;
@@ -335,6 +400,19 @@ let porGrabar: PorGrabar | null = null;
  */
 const grabandoAhora = new Set<object>();
 
+/** Salir de la página mientras la grabación espera su puerta o se manda: el navegador pregunta. */
+function avisarAntesDeSalir(ev: BeforeUnloadEvent): void {
+  ev.preventDefault();
+  // Los navegadores que no miran `preventDefault` en este evento miran esto.
+  ev.returnValue = "";
+}
+
+/** El juego y la duración que juega la sala son los del enlace del último QR de este sello. */
+function mismoJuegoQueElQr(sello: NonNullable<typeof app.frozen>, juego: Game, ritmo: string): boolean {
+  const p = publicado(sello);
+  return !!p && p.juego === juego && p.ritmo === ritmo;
+}
+
 /** La línea del resultado que dice si el sorteo ya quedó guardado. Sin ella, la de siempre, debajo del botón. */
 const cajaDeLaGrabacion = (): HTMLElement => document.getElementById("grab-estado") ?? $("draw-status");
 
@@ -348,12 +426,16 @@ const sigueEnPantalla = (g: PorGrabar): boolean => app.frozen === g.sello && app
  * puede, el ganador no cambia: lo dice, con el botón para volver a probar, y Mis sorteos lo puede terminar más tarde.
  * No lanza nunca: el show ya está en marcha.
  */
-async function grabarAparte(g: PorGrabar): Promise<void> {
+async function grabarAparte(g: PorGrabar, puerta: Promise<Apertura> | null = null): Promise<void> {
   const raffleId = g.sello.raffleId;
   if (raffleId === undefined) return;
   // Ya se está grabando este sorteo: otro toque no manda otra grabación. Las de otros sellos siguen cada una por su lado.
   if (grabandoAhora.has(g.sello)) return;
   grabandoAhora.add(g.sello);
+  // Con celulares mirando, la grabación espera su puerta (`puerta-de-la-grabacion.ts`). Mientras tanto, y hasta que
+  // quede guardado, salir de la página pregunta: cerrar justo después de quién gana lo dejaría sin grabar.
+  const conCelulares = puerta !== null && hayEspectadores(g.sello);
+  if (conCelulares) window.addEventListener("beforeunload", avisarAntesDeSalir);
   // Hasta que quede guardado, el botón de sortear de este sello la vuelve a probar (con el botón apagado mientras va).
   porGrabar = g;
   const caja = cajaDeLaGrabacion();
@@ -371,6 +453,7 @@ async function grabarAparte(g: PorGrabar): Promise<void> {
   let fin: FinDeLaGrabacion;
   try {
     const [{ errorKey }, { avisoDelReintento }] = await Promise.all([import("../stellar/errores"), import("./sorteo-seguro")]);
+    if (puerta) await puerta;
     fin = await grabarElSorteo({
       raffleId,
       round: g.sello.round,
@@ -392,6 +475,7 @@ async function grabarAparte(g: PorGrabar): Promise<void> {
   } finally {
     // Terminó este intento: lo que sigue (proteger la cuenta y volver a grabar, o el botón) puede mandar otro.
     grabandoAhora.delete(g.sello);
+    if (conCelulares) window.removeEventListener("beforeunload", avisarAntesDeSalir);
   }
   if (fin.estado !== "fallo" && porGrabar === g) porGrabar = null;
   try {
@@ -793,7 +877,7 @@ function juegoDe(people: number, prizes: number, names?: string[], winners?: num
  * tono por número, más alto en el 1. Los dos en la pentatónica, mi y do: el
  * 990 Hz de antes era un si, fuera de la escala de los juegos.
  */
-function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<void>, textoDeEspera?: string): GameCard | null {
+function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<unknown>, textoDeEspera?: string): GameCard | null {
   if (skipMotion()) return null;
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera, orden, textoDeEspera, enStand());
@@ -810,7 +894,14 @@ function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean
  * sorteo (`draw`). Si con los ganadores de verdad el juego cambia, la tarjeta
  * pasa a anunciar el que se juega.
  */
-function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, orden: boolean, previa: Previa | null = null): void {
+/**
+ * `extra.conHora`: el horario del estadio (`en-hora.ts`), para la sala lanzada desde la espera y el celular de quien mira.
+ * `extra.espectador`: el show del celular. Cuenta siempre la tarjeta en la duración, como la sala, aunque no la muestre
+ * (el que entra tarde): si no, el juego duraría otra cosa y no quedaría a la par. Y sin el motor nuevo no hay show: el de
+ * respaldo no sigue horario ni retiene el final, y podría coronar antes que la sala.
+ */
+function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, orden: boolean, previa: Previa | null = null, extra: { conHora?: { horario: Horario; avisos: Avisos } | null; espectador?: boolean } = {}): void {
+  const conHora = extra.conHora ?? null;
   // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
   names = paraMostrar(names);
   // Y su nombre va entero en el show: «¡Vamos, Las Wawas!», nunca «Las W.». Sin equipos la lista queda vacía.
@@ -823,8 +914,8 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   if (previa && previa.game !== game) previa.card.update(game);
-  const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length, orden);
-  setCardSeconds(card ? CARD_SECONDS : 0);
+  const card = previa ? previa.card : extra.espectador ? null : abrirTarjeta(game, names.length, winners.length, orden);
+  setCardSeconds(card || extra.espectador ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);
   // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
@@ -851,6 +942,13 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // arrancó, la tarjeta pasa a decir lo que de verdad se juega.
   const respaldo = (): void => {
     setShowGate(null);
+    // El motor de respaldo no sigue horario: esa pantalla no va a la par.
+    pedirHorario(null);
+    // En el celular de quien mira, sin el motor nuevo no hay show: el resultado sale cuando la sala ya lo mostró.
+    if (extra.espectador) {
+      fin();
+      return;
+    }
     const real = classicPlayable(app.game, names.length);
     if (app.drawn) app.drawn.juego = real;
     if (card && real !== game) card.update(real);
@@ -867,6 +965,8 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
   if (pixi) {
     setShowGate(card?.ready ?? null);
+    // El horario del estadio: la sala lanzada desde la espera y el celular de quien mira (`en-hora.ts`). Sin él, como siempre.
+    pedirHorario(conHora?.horario ?? null, conHora?.avisos);
     void import("../games/pixi")
       .then(
         async (m) => {
@@ -1075,6 +1175,58 @@ export function verDeNuevo(juego?: Game): void {
     forceMotion(false);
     if (volverA && volverA.isConnected && volverA.offsetParent !== null) volverA.focus({ preventScroll: true });
   }, isTurnOrder(frozen.names.length, drawn.winners.length, frozen.prize));
+}
+
+/** El show del celular a la par de la sala (`espectador.ts`): la tarjeta sale antes del número, como en la sala. */
+export interface ShowALaPar {
+  /** Si la sala cambió el juego a último momento (`app.game` ya es el nuevo), la tarjeta pasa a anunciarlo. */
+  actualizar: () => void;
+  /**
+   * El juego, con lo que decidió la ronda y el horario del estadio. `alTerminar` recibe si el show mostró quién gana (el
+   * cartel del juego). Sin movimiento, sin el motor nuevo o si el juego no bajó, no lo mostró. Tampoco si el estadio se
+   * cerró antes del cartel: un cuadro que falla o un juego a medio armar lo cierran (`cuadro-seguro.ts`), también con el
+   * final retenido, y eso no quiere decir que la sala ya lo mostró.
+   */
+  jugar: (conHora: { horario: Horario; avisos: Avisos }, alTerminar: (conShow: boolean) => void) => void;
+  /** No hay show (no coincide con lo grabado, no llegó el número): la tarjeta se va. */
+  cancelar: () => void;
+}
+
+/**
+ * El show del celular de quien mira, a la par de la sala (`espectador.ts`). La tarjeta sale ya, con la línea de que llega
+ * el número, y termina a la hora que dé el número que llegó (`resultado`, como la de la sala, un poco después). Después
+ * el mismo juego que la sala, con el horario del estadio: retiene su final hasta que se suelte y, si quedó atrás, se pone
+ * al día. Sin sortear, grabar, tocar el historial ni el comprobante, y sin contar nada. `conTarjeta`: false para quien
+ * entra con el show ya empezado, que se pone al día sin tarjeta.
+ */
+export function showALaPar(o: { personas: number; premios: number; orden: boolean; resultado: Promise<{ terminaEn: number } | undefined>; conTarjeta?: boolean }): ShowALaPar {
+  setResultadoDeTurnos(o.orden);
+  const juego = juegoDe(o.personas, o.premios);
+  const card = o.conTarjeta === false ? null : abrirTarjeta(juego, o.personas, o.premios, o.orden, o.resultado, "cortinaNumero");
+  let tarjeta: Previa | null = card ? { card, game: juego } : null;
+  let jugado = false;
+  return {
+    actualizar: () => {
+      if (!tarjeta || jugado) return;
+      const nuevo = juegoDe(o.personas, o.premios);
+      if (nuevo !== tarjeta.game) {
+        tarjeta.card.update(nuevo);
+        tarjeta = { card: tarjeta.card, game: nuevo };
+      }
+    },
+    jugar: (conHora, alTerminar) => {
+      const { frozen, drawn } = app;
+      if (jugado || !frozen || !drawn) return;
+      jugado = true;
+      // Con show solo si se vio el cartel: el estadio avisa que terminó en cualquier cierre (`cuadro-seguro.ts`).
+      playGame(frozen.names, drawn.winners, drawn.beacon, () => alTerminar(estadoDelShow()?.coronado === true), o.orden, tarjeta, { conHora, espectador: true });
+    },
+    cancelar: () => {
+      tarjeta?.card.hide();
+      // Si ya jugaba, el estadio se cierra sin soltar su final: no mostró quién gana.
+      if (jugado) cerrarElShow();
+    },
+  };
 }
 
 /** Lo que la vista de espectador hace con su show: lanzarlo cuando la sala también lo lanza, o sacar la tarjeta. */

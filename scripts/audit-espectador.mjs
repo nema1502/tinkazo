@@ -11,17 +11,26 @@
  *  - el celular nunca corona antes que la sala: su juego arranca después que el de la sala y termina después;
  *  - los ganadores que ve son los mismos que la sala.
  *
+ * Desde el 16 de noviembre de 2026 el celular juega a la par de la sala: arranca su juego a 2 s o menos de ella y
+ * corona después, comparado con las horas que anota el estadio de cada pestaña (`data-arranco` y `data-corona`, el
+ * mismo reloj en las dos), sin márgenes. Los recorridos (`--escenarios`, separados por comas, se pueden repetir):
+ * `normal` y `rapido` (la espera lanza sola), `tarde` (la espera se cierra y el sorteo sale con el botón 20 s después
+ * del número: el celular se detiene y no corona antes) y `cambio` (con el QR a la vista y el celular ya abierto, la sala
+ * cambia el juego; con `--servicio-nuevo`, un build con el servicio de enlaces que puede cambiar, el celular juega el
+ * nuevo; sin él, el del QR, sin romperse nada).
+ *
  * Antes, sin red ni sello: la vista de espectador con un enlace armado acá (una ronda que todavía no nació), en
  * anchos de celular de 320 a 414 px y en los dos temas, y el aviso de un enlace roto. Deja capturas en `--out`.
  *
  * Uso:
  *   CDP_PORT=<puerto> node scripts/audit-espectador.mjs --base http://localhost:4173 [--out DIR] [--sin-red]
+ *     [--escenarios normal,rapido,tarde,cambio] [--servicio-nuevo] [--solo-de-verdad] [--json ARCHIVO]
  *
- * `--sin-red` corre solo lo de antes (un par de minutos, sin sellar nada). El sorteo de verdad tarda unos cinco
+ * `--sin-red` corre solo lo de antes (un par de minutos, sin sellar nada). Cada sorteo de verdad tarda unos tres
  * minutos: el sello, la ronda y el show en las dos pestañas. Sale con código 1 si algo falla.
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
@@ -34,6 +43,12 @@ const opt = (name, def) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/espectador");
 const sinRed = args.includes("--sin-red");
+const soloDeVerdad = args.includes("--solo-de-verdad");
+const servicioNuevo = args.includes("--servicio-nuevo");
+const escenarios = opt("--escenarios", "normal").split(",").filter(Boolean);
+const archivoJson = opt("--json", "");
+/** Lo medido en cada sorteo de verdad. */
+const medidas = [];
 
 let fallas = 0;
 function check(nombre, ok, detalle = "") {
@@ -156,13 +171,54 @@ const segundosDe = (txt) => {
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 };
 
-async function deVerdad(browser) {
-  console.log("\nUn sorteo de verdad en Prueba, mirado desde el QR");
+/** La ronda de quicknet `r`: cuándo nace, en ms. */
+const nace = (r) => (GENESIS + (r - 1) * 3) * 1000;
+
+/** Lo que se ve en una pestaña: el estadio, la tarjeta, la línea de espera y las horas que anota el estadio. */
+const ESTADO = `JSON.stringify((() => {
+  const base = document.getElementById("race-canvas");
+  const st = document.getElementById("stadium");
+  return {
+    juego: !!st && st.style.display === "block",
+    tarjeta: !!document.querySelector(".game-card"),
+    tarjetaJuego: ((document.querySelector("#gc-nombre") || {}).textContent || "").trim(),
+    telon: ((document.querySelector(".espectador-telon") || {}).textContent || "").trim(),
+    arranco: base && base.dataset.arranco ? Number(base.dataset.arranco) : 0,
+    corona: base && base.dataset.corona ? Number(base.dataset.corona) : 0,
+    retenido: base && base.dataset.retenido ? Number(base.dataset.retenido) : 0,
+    finCel: !!document.querySelector(".espectador-ganadores"),
+    finSala: !!document.querySelector("#winner-cards .winner-card"),
+    vis: document.visibilityState,
+    paraGrabar: document.documentElement.dataset.paraGrabar || "",
+    puerta: document.documentElement.dataset.puerta || "",
+    ahora: Date.now(),
+  };
+})())`;
+
+/** Los datos del enlace del celular, del fragmento (sin la referencia al enlace corto, si la trae). */
+const DATOS_DEL_CELULAR = "JSON.stringify(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(location.hash.slice(12).split('.')[0].replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)))))";
+
+/**
+ * Un sorteo de verdad en Prueba, mirado desde el QR. `escenario`:
+ * - `normal` y `rapido`: la espera en grande lanza sola, en Normal o en Rápido. El celular arranca a 2 s o menos de la
+ *   sala y corona después, con el mismo ganador.
+ * - `tarde`: se cierra la espera antes de que lance y el sorteo se lanza con el botón 20 s después del número. El
+ *   celular no corona antes que la sala.
+ * - `cambio`: con el QR a la vista y el celular ya abierto, la sala cambia el juego. Con el servicio de enlaces que
+ *   puede cambiar (`--servicio-nuevo`), el QR queda y el celular juega el juego nuevo; con el de hoy, el QR se rearma y
+ *   el celular de antes juega el del QR, sin romperse nada.
+ */
+async function deVerdad(browser, escenario, n) {
+  const nombre = `${escenario}${n > 1 ? `-${n}` : ""}`;
+  console.log(`\nUn sorteo de verdad en Prueba, mirado desde el QR: ${nombre}`);
+  const ritmo = escenario === "rapido" ? "rapido" : "normal";
   const sala = await pestana(browser, { ancho: 1362, alto: 800, tema: "dark" });
-  await sala.send("Page.navigate", { url: `${base}/?theme=dark&lang=es&pace=rapido&red=prueba` });
+  // El 2D en las dos pestañas: este Chrome dibuja sin placa de video, y el 3D de las dos a la vez lo frena.
+  await sala.send("Page.navigate", { url: `${base}/?theme=dark&lang=es&pace=${ritmo}&red=prueba&auditar=espectador` });
   await sala.waitFor("document.readyState === 'complete'", 20000);
+  await sala.eval("localStorage.setItem('tinkazo.ver3d', '0'); true");
   const modo = await sala.eval("String(sessionStorage.getItem('tinkazo.red'))");
-  if (!check("la sala está en Prueba", modo === "prueba", modo)) return;
+  if (!check(`${nombre}: la sala está en Prueba`, modo === "prueba", modo)) return null;
   await conectarCuentaDePrueba(sala);
   await sala.eval(`document.getElementById('nw').value = '1'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
   await sleep(900);
@@ -171,116 +227,176 @@ async function deVerdad(browser) {
     `getComputedStyle(document.getElementById('sec-frozen')).display !== 'none' && getComputedStyle(document.getElementById('wait-box')).display !== 'none'`,
     240000,
   );
-  if (!check("la lista quedó sellada", sellada.ok, sellada.ok ? `${(sellada.elapsed / 1000).toFixed(1)} s` : await sala.eval("(document.getElementById('seal-status') || {}).textContent || ''"))) return;
+  if (!check(`${nombre}: la lista quedó sellada`, sellada.ok, sellada.ok ? `${(sellada.elapsed / 1000).toFixed(1)} s` : await sala.eval("(document.getElementById('seal-status') || {}).textContent || ''"))) return null;
   const id = await sala.eval("((document.getElementById('wait-id') || {}).textContent || '').match(/\\d+/)?.[0] || ''");
   info(`sorteo #${id}`);
 
-  await sala.eval("document.getElementById('btn-espera').click(); true");
-  if (!check("la espera en grande abre", (await sala.waitFor("document.querySelector('.espera')", 15000)).ok)) return;
+  if (!(await sala.eval("!!document.querySelector('.espera')"))) await sala.eval("document.getElementById('btn-espera').click(); true");
+  if (!check(`${nombre}: la espera en grande abre`, (await sala.waitFor("document.querySelector('.espera')", 15000)).ok)) return null;
   const qr = await sala.waitFor("document.querySelector('.espera-qr[data-estado=listo], .espera-qr[data-estado=fallo]')", 20000);
   const estado = await sala.eval("(document.querySelector('.espera-qr') || {}).dataset?.estado || 'sin QR'");
   const corto = await sala.eval("(document.querySelector('.espera-qr') || {}).dataset?.enlace || ''");
-  check("el QR sale con el enlace corto", qr.ok && estado === "listo" && /\/c\/[0-9A-Za-z]{8}#[A-Za-z0-9_-]{22}$/.test(corto), `${estado} ${corto.replace(/#.*/, "#…")}`);
-  check("el QR nunca lleva el enlace largo con los nombres", !/espectador=/.test(corto));
-  // Desde que el QR se ve, el juego de este sorteo queda (src/ui/espectador-fijo.ts): no hay Cambiar de juego.
-  check("con el QR a la vista el juego queda: no hay Cambiar de juego", await sala.eval("![...document.querySelectorAll('.espera [data-juego]')].some((b) => !b.hidden)"));
-  await sala.screenshot(join(outDir, "sala-espera-qr-1362-dark.png"));
-  await sala.eval("document.documentElement.dataset.theme = 'light'; true");
-  await sleep(400);
-  await sala.screenshot(join(outDir, "sala-espera-qr-1362-light.png"));
-  await sala.eval("document.documentElement.dataset.theme = 'dark'; true");
-  // El proyector de siempre.
-  await sala.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false, screenWidth: 1280, screenHeight: 720 });
-  await sleep(700);
-  await sala.screenshot(join(outDir, "sala-espera-qr-1280x720-dark.png"));
-  check("en el proyector, la espera sin scroll horizontal", await sala.eval(SIN_SCROLL_X));
-  await sala.send("Emulation.setDeviceMetricsOverride", { width: 1362, height: 800, deviceScaleFactor: 1, mobile: false, screenWidth: 1362, screenHeight: 800 });
-  if (!corto) return;
+  check(`${nombre}: el QR sale con el enlace corto`, qr.ok && estado === "listo" && /\/c\/[0-9A-Za-z]{8}#[A-Za-z0-9_-]{22}$/.test(corto), `${estado} ${corto.replace(/#.*/, "#…")}`);
+  check(`${nombre}: con el QR a la vista sigue Cambiar de juego`, await sala.eval("[...document.querySelectorAll('.espera [data-juego]')].some((b) => b.offsetParent !== null)"));
+  if (!corto) return null;
 
   const cel = await pestana(browser, { ancho: 390, alto: 844, dpr: 2, celular: true, tema: "dark" });
   await cel.send("Page.navigate", { url: corto });
   const abrio = await cel.waitFor("document.querySelector('.espectador .espera-reloj')", 30000);
-  if (!check("el celular abre la vista de espectador desde el enlace corto", abrio.ok)) return;
-  const datos = JSON.parse(
-    await cel.eval("JSON.stringify(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(location.hash.slice(12).replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)))))"),
-  );
-  check("el enlace lleva el número del sorteo y la red de Prueba", datos.i === id && datos.net === "testnet", `#${datos.i} en ${datos.net}`);
-  check("en el celular se lee el número del sorteo", (await cel.eval("(document.querySelector('.espectador .espera-id') || {}).textContent || ''")).includes(id));
-  check("en el celular, sin scroll horizontal", await cel.eval(SIN_SCROLL_X));
-  await sleep(1500);
+  if (!check(`${nombre}: el celular abre la vista de espectador desde el enlace corto`, abrio.ok)) return null;
+  const datos = JSON.parse(await cel.eval(DATOS_DEL_CELULAR));
+  check(`${nombre}: el enlace es de este sorteo, en Prueba, con la sala a la par (h)`, datos.i === id && datos.net === "testnet" && datos.h === 1, `#${datos.i} ${datos.net} h=${datos.h}`);
+  const conRef = await cel.eval("/\\.[0-9A-Za-z]{8}\\.[A-Za-z0-9_-]{22}\\.\\d+$/.test(location.hash)");
+  info(`el celular ${conRef ? "trae" : "no trae"} la referencia del enlace que puede cambiar`);
+  const N = nace(datos.r);
+  await sleep(1000);
   const [rs, rc] = await Promise.all([sala.eval("(document.querySelector('.espera .espera-reloj') || {}).textContent || ''"), cel.eval("(document.querySelector('.espectador .espera-reloj') || {}).textContent || ''")]);
-  const dif = Math.abs((segundosDe(rs) ?? -99) - (segundosDe(rc) ?? 99));
-  check("la cuenta del celular dice lo mismo que la de la sala", dif <= 1, `sala ${rs}, celular ${rc}`);
-  info(`visibilidad: sala ${await sala.eval("document.visibilityState")}, celular ${await cel.eval("document.visibilityState")}`);
-  await cel.screenshot(join(outDir, "espectador-espera-sellado-390-dark.png"));
+  check(`${nombre}: la cuenta del celular dice lo mismo que la de la sala`, Math.abs((segundosDe(rs) ?? -99) - (segundosDe(rc) ?? 99)) <= 1, `sala ${rs}, celular ${rc}`);
+  await cel.screenshot(join(outDir, `${nombre}-cel-1-cuenta-390.png`));
 
-  // Los dos a la vez: cuándo arranca el juego y cuándo corona cada uno.
-  const t = { salaJuego: 0, celJuego: 0, salaFin: 0, celFin: 0 };
-  const JUEGO = "document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'";
+  // El cambio de juego con el QR a la vista, con el celular ya abierto.
+  let juegoNuevo = "";
+  let nombreNuevo = "";
+  let nombreViejo = "";
+  if (escenario === "cambio") {
+    const antes = await sala.eval("(document.querySelector('.espera-qr') || {}).dataset?.enlace || ''");
+    nombreViejo = await sala.eval("(document.querySelector('.espera .espera-juego-n b') || {}).textContent || ''");
+    await sala.eval("[...document.querySelectorAll('.espera [data-juego]')].find((b) => b.offsetParent !== null).click(); true");
+    await sala.waitFor("document.querySelector('.espera-juegos') && !document.querySelector('.espera-juegos').hidden", 5000);
+    juegoNuevo = await sala.eval("(() => { const b = [...document.querySelectorAll('.espera-juego-op')].find((x) => x.getAttribute('aria-pressed') !== 'true' && !x.classList.contains('no-encaja')); b.click(); return b.dataset.game; })()");
+    await sala.waitFor(`document.querySelector('.espera-qr[data-estado=listo]') && (document.querySelector('.espera .espera-juego-n b') || {}).textContent !== ${JSON.stringify(nombreViejo)}`, 15000);
+    await sleep(2500);
+    nombreNuevo = await sala.eval("(document.querySelector('.espera .espera-juego-n b') || {}).textContent || ''");
+    const despues = await sala.eval("(document.querySelector('.espera-qr') || {}).dataset?.enlace || ''");
+    const anterior = await sala.eval("!(document.querySelector('.espera-qr-anterior') || { hidden: true }).hidden");
+    info(`la sala cambió de ${nombreViejo} a ${nombreNuevo} (${juegoNuevo}); el QR ${despues === antes ? "quedó igual" : "es otro"}; la línea del juego anterior ${anterior ? "se ve" : "no se ve"}`);
+    if (servicioNuevo) {
+      check(`${nombre}: con el servicio nuevo el QR queda igual y no hay línea del juego anterior`, despues === antes && !anterior);
+    } else {
+      check(`${nombre}: con el servicio de hoy el QR se rearma y dice que quienes escanearon lo ven con el juego anterior`, despues !== antes && anterior);
+    }
+    await sala.screenshot(join(outDir, `${nombre}-sala-espera-tras-el-cambio-1362.png`));
+  }
+
+  // La sala que lanza tarde: se cierra la espera antes de que lance y el sorteo sale con el botón 20 s después del número.
+  if (escenario === "tarde") {
+    const falta = N - 4000 - Date.now();
+    if (falta > 0) await sleep(falta);
+    await sala.eval("(document.querySelector('.espera [data-volver]') || {}).click?.(); true");
+    check(`${nombre}: la espera se cerró antes de lanzar`, await sala.eval("!document.querySelector('.espera')"));
+  }
+
+  const t = { salaJuego: 0, celJuego: 0, salaFin: 0, celFin: 0, celTarjeta: 0 };
+  const capturas = new Set();
+  const captura = async (clave, archivo) => {
+    if (capturas.has(clave)) return;
+    capturas.add(clave);
+    await cel.screenshot(join(outDir, `${nombre}-cel-${archivo}-390.png`));
+  };
+  let tarjetaDelCelular = "";
+  let lanzado = false;
+  let telonVisto = "";
   const t0 = Date.now();
-  let capturaShow = false;
-  let sinSaltar = null;
-  while (Date.now() - t0 < 6 * 60_000 && !(t.salaFin && t.celFin)) {
-    const [s, c] = await Promise.all([
-      // La sala corona cuando el juego termina y pasa al resultado (`reveal` llena los ganadores de la página en ese
-      // instante). La pantalla grande del resultado llega unos segundos después: no sirve para medir.
-      sala.eval(`JSON.stringify({ juego: !!(${JUEGO}), fin: !!document.querySelector('#winner-cards .winner-card') })`).then(JSON.parse),
-      cel.eval(`JSON.stringify({ juego: !!(${JUEGO}), fin: !!document.querySelector('.espectador-ganadores'), texto: (document.querySelector('.espectador .espera-sigue') || {}).textContent || '' })`).then(JSON.parse),
-    ]);
+  let ultimoS = null;
+  let ultimoC = null;
+  const escondidas = { sala: 0, celular: 0 };
+  while (Date.now() - t0 < 8 * 60_000 && !(t.salaFin && t.celFin)) {
+    if (escenario === "tarde" && !lanzado && Date.now() >= N + 20_000) {
+      lanzado = true;
+      await sala.eval("document.getElementById('btn-draw').click(); true");
+      info(`la sala lanzó con el botón ${((Date.now() - N) / 1000).toFixed(1)} s después del número`);
+    }
+    const [s, c] = await Promise.all([sala.eval(ESTADO).then(JSON.parse), cel.eval(ESTADO).then(JSON.parse)]);
+    ultimoS = s;
+    ultimoC = c;
+    if (s.vis !== "visible") escondidas.sala++;
+    if (c.vis !== "visible") escondidas.celular++;
     const ahora = Date.now();
     if (s.juego && !t.salaJuego) t.salaJuego = ahora;
     if (c.juego && !t.celJuego) t.celJuego = ahora;
-    if (s.fin && !t.salaFin) t.salaFin = ahora;
-    if (c.fin && !t.celFin) t.celFin = ahora;
-    // En el celular el show no se salta (src/solo-mirar.ts): ni el Saltar del estadio ni el de la tarjeta.
-    if (sinSaltar === null && (c.juego || (await cel.eval("!!document.querySelector('.game-card')")))) {
-      sinSaltar = await cel.eval("document.getElementById('st-skip').hidden && !document.querySelector('.gc-saltar')");
+    if (s.finSala && !t.salaFin) t.salaFin = ahora;
+    if (c.finCel && !t.celFin) t.celFin = ahora;
+    if (c.tarjeta && !t.celTarjeta) {
+      t.celTarjeta = ahora;
+      tarjetaDelCelular = c.tarjetaJuego;
     }
-    if (c.juego && !capturaShow && ahora - t.celJuego > 4000) {
-      capturaShow = true;
-      await cel.screenshot(join(outDir, "espectador-show-390-dark.png"));
+    if (c.tarjeta) await captura("tarjeta", "2-tarjeta");
+    if (c.juego && ahora - t.celJuego > 4000 && !c.telon) await captura("juego", "3-juego");
+    if (c.telon) {
+      telonVisto = c.telon;
+      await captura("telon", "4-retenido");
     }
+    if (c.finCel) await captura("fin", "5-lo-que-salio");
     await sleep(250);
   }
-  const s = (x) => (x ? `${((x - t0) / 1000).toFixed(1)} s` : "nunca");
-  info(`juego: sala ${s(t.salaJuego)}, celular ${s(t.celJuego)} · corona: sala ${s(t.salaFin)}, celular ${s(t.celFin)}`);
-  check("la sala y el celular llegan al resultado", !!(t.salaFin && t.celFin));
-  check("en el celular no hay Saltar, ni en el estadio ni en la tarjeta", sinSaltar === true, String(sinSaltar));
-  // Para leer los ganadores de la sala, su pantalla grande del resultado.
-  await sala.waitFor("document.querySelector('.sala.pantalla')", 30000);
-  check("el juego del celular no arranca antes que el de la sala", !!(t.salaJuego && t.celJuego) && t.celJuego >= t.salaJuego - 300);
-  // La coronación se compara solo si el juego duró lo mismo en las dos pestañas. Este Chrome dibuja sin placa de video,
-  // y con la máquina ocupada una pestaña puede atrasarse (medido el 15-nov: 54 s en el celular y 109 s en la sala, el
-  // mismo juego al mismo ritmo). Lo que decide la regla es cuándo arranca: eso se mide siempre, arriba.
-  const durSala = t.salaFin - t.salaJuego;
-  const durCel = t.celFin - t.celJuego;
-  if (t.salaFin && t.celFin && Math.abs(durSala - durCel) <= 0.15 * Math.max(durSala, durCel)) {
-    check("el celular no corona antes que la sala", t.celFin >= t.salaFin - 300, `${((t.celFin - t.salaFin) / 1000).toFixed(1)} s detrás`);
-  } else {
-    info(`la coronación no se compara: el juego duró ${(durSala / 1000).toFixed(1)} s en la sala y ${(durCel / 1000).toFixed(1)} s en el celular`);
+  const fin = { s: ultimoS, c: ultimoC };
+  const seg = (x) => (x ? `${((x - N) / 1000).toFixed(2)} s` : "nunca");
+  const medida = {
+    escenario: nombre,
+    sorteo: id,
+    ronda: datos.r,
+    salaArranco: fin.s?.arranco ? (fin.s.arranco - N) / 1000 : null,
+    celArranco: fin.c?.arranco ? (fin.c.arranco - N) / 1000 : null,
+    salaCorona: fin.s?.corona ? (fin.s.corona - N) / 1000 : null,
+    celCorona: fin.c?.corona ? (fin.c.corona - N) / 1000 : null,
+    celRetenido: fin.c?.retenido ?? 0,
+    salaResultado: t.salaFin ? (t.salaFin - N) / 1000 : null,
+    celLoQueSalio: t.celFin ? (t.celFin - N) / 1000 : null,
+    telon: telonVisto,
+    tarjetaDelCelular,
+    puerta: fin.s?.puerta ?? "",
+    paraGrabar: fin.s?.paraGrabar ?? "",
+    visibilidad: { sala: fin.s?.vis, celular: fin.c?.vis, salaEscondida: escondidas.sala, celularEscondido: escondidas.celular },
+  };
+  info(`desde el número: juego sala ${seg(fin.s?.arranco)}, celular ${seg(fin.c?.arranco)} · corona sala ${seg(fin.s?.corona)}, celular ${seg(fin.c?.corona)} · retenido ${medida.celRetenido} s · Lo que salió ${seg(t.celFin)}`);
+  check(`${nombre}: la sala y el celular llegan al resultado`, !!(t.salaFin && t.celFin));
+  check(`${nombre}: el estadio de los dos anotó su arranque y su corona`, !!(fin.s?.arranco && fin.c?.arranco && fin.s?.corona && fin.c?.corona));
+  if (fin.s?.corona && fin.c?.corona) {
+    // Estricto: el reloj de las dos pestañas es el mismo. Coronar a la vez o antes es una falla.
+    check(`${nombre}: el celular corona después que la sala`, fin.c.corona > fin.s.corona, `${((fin.c.corona - fin.s.corona) / 1000).toFixed(2)} s detrás`);
   }
-  const enSala = JSON.parse(await sala.eval("JSON.stringify([...document.querySelectorAll('.sala.pantalla .pantalla-nombre')].map((e) => e.textContent.trim()))"));
+  if (escenario === "normal" || escenario === "rapido" || (escenario === "cambio" && servicioNuevo)) {
+    if (fin.s?.arranco && fin.c?.arranco) {
+      const d = (fin.c.arranco - fin.s.arranco) / 1000;
+      check(`${nombre}: el celular arranca su juego a 2 s o menos de la sala, y no antes`, d >= 0 && d <= 2, `${d.toFixed(2)} s`);
+    }
+  }
+  if (escenario === "tarde") check(`${nombre}: con la sala tardía el celular se detuvo antes de su final`, medida.celRetenido > 0, `${medida.celRetenido} s`);
+  if (escenario === "cambio") {
+    if (servicioNuevo) check(`${nombre}: el celular que escaneó antes juega el juego nuevo`, tarjetaDelCelular === nombreNuevo || tarjetaDelCelular.includes(nombreNuevo), `tarjeta del celular: ${tarjetaDelCelular}`);
+    else check(`${nombre}: con el servicio de hoy el celular de antes juega el del QR`, tarjetaDelCelular === nombreViejo || tarjetaDelCelular.includes(nombreViejo), `tarjeta del celular: ${tarjetaDelCelular}`);
+  }
+  // Los ganadores de la sala: los de su pantalla grande del resultado, o los de la página si se cerró la espera (tarde).
+  if (escenario !== "tarde") await sala.waitFor("document.querySelector('.sala.pantalla')", 30000);
+  const enSala = JSON.parse(await sala.eval("JSON.stringify((() => { const g = [...document.querySelectorAll('.sala.pantalla .pantalla-nombre')]; return (g.length ? g : [...document.querySelectorAll('#winner-cards .winner-name')]).map((e) => e.textContent.trim()); })())"));
   const enCel = JSON.parse(await cel.eval("JSON.stringify([...document.querySelectorAll('.espectador-ganadores li')].map((e) => e.textContent.trim()))"));
-  check("los ganadores del celular son los de la sala", enSala.length > 0 && JSON.stringify(enSala) === JSON.stringify(enCel), `sala ${enSala.join(", ")} · celular ${enCel.join(", ")}`);
-  await sala.screenshot(join(outDir, "sala-resultado-1362-dark.png"));
-  await cel.screenshot(join(outDir, "espectador-fin-390-dark.png"));
-  await cel.eval("document.documentElement.dataset.theme = 'light'; true");
-  await sleep(400);
-  await cel.screenshot(join(outDir, "espectador-fin-390-light.png"));
-  check("al terminar, en el celular una sola acción principal", (await cel.eval("document.querySelectorAll('.espectador button.primary').length")) <= 1);
+  check(`${nombre}: los ganadores del celular son los de la sala`, enSala.length > 0 && JSON.stringify(enSala) === JSON.stringify(enCel), `sala ${enSala.join(", ")} · celular ${enCel.join(", ")}`);
+  check(`${nombre}: sin errores en la consola de las dos pestañas`, sala.exceptions.length === 0 && cel.exceptions.length === 0, [...sala.exceptions, ...cel.exceptions].join(" | ").slice(0, 200));
+  await cel.screenshot(join(outDir, `${nombre}-cel-5-lo-que-salio-390.png`));
+  check(`${nombre}: al terminar, en el celular una sola acción principal`, (await cel.eval("document.querySelectorAll('.espectador button.primary').length")) <= 1);
+  medidas.push(medida);
   await cerrar(cel);
   await cerrar(sala);
+  return medida;
 }
 
 await mkdir(outDir, { recursive: true });
 const browser = await launch({ width: 1362, height: 800 });
 try {
-  await sinSello(browser);
-  if (!sinRed) await deVerdad(browser);
+  if (!soloDeVerdad) await sinSello(browser);
+  if (!sinRed) {
+    const vistos = new Map();
+    for (const e of escenarios) {
+      vistos.set(e, (vistos.get(e) ?? 0) + 1);
+      await deVerdad(browser, e, vistos.get(e));
+    }
+  }
 } catch (e) {
   check("el recorrido terminó", false, String(e?.message ?? e).slice(0, 160));
 } finally {
   await browser.close();
 }
+if (archivoJson) await writeFile(archivoJson, JSON.stringify(medidas, null, 2));
+if (medidas.length) console.log(`\nLo medido (segundos desde el número):\n${medidas.map((m) => JSON.stringify(m)).join("\n")}`);
 console.log(`\n${fallas ? `${fallas} comprobaciones fallaron` : "Todo en orden"}. Capturas en ${outDir}`);
 process.exit(fallas ? 1 : 0);
