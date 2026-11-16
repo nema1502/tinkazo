@@ -2254,7 +2254,7 @@ export const T: Record<Lang, Dict> = {
     // casos en que igual no lo devuelve (un tope que se llenó después de preguntar, una falla que no se pudo comprobar):
     // por eso, si no lo ve de vuelta, que escriba. El tercero, sin el anuncio.
     selloTardeSinSorteos:
-      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial, que vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial. Si falló por llegar tarde, vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
     selloTardeAviso: "No fue un error tuyo. Si algún intento usó un sorteo oficial, vuelve solo en unos minutos. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
     selloTardeAvisoSinDevolucion: "No fue un error tuyo. Si algún intento usó un sorteo oficial y te hace falta, escribinos a hola@tinkazo.app.",
     "errAnchor.roundTooFar": "La hora de tu celular o tu compu está mal y el sorteo quedó a más de 30 días. Corregila y probá de nuevo.",
@@ -4993,7 +4993,7 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.badWinnerCountViejo": "This network still allows up to {tope} winners per draw. Pick {tope} or fewer and try again.",
     "errAnchor.roundTooSoon": "Sealing took longer than expected. Tap Seal the list again.",
     selloTardeSinSorteos:
-      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw, which comes back on its own in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
+      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw. If it failed because it arrived late, it comes back in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
     selloTardeAviso: "It wasn't your fault. If an attempt used a Live draw, it comes back on its own in a few minutes. If you don't see it back, write to us at hola@tinkazo.app.",
     selloTardeAvisoSinDevolucion: "It wasn't your fault. If an attempt used a Live draw and you need it back, write to us at hola@tinkazo.app.",
     "errAnchor.roundTooFar": "Your device's clock is off and the draw ended up more than 30 days away. Fix it and try again.",
