@@ -295,9 +295,14 @@ function rana(p: Pincel, cx: number, cy: number, fr: number): void {
   ovalo(p, cx, cy + fr * 0.1, fr * 0.95, fr * 0.72, bronce, 5, 10);
   for (const s of [-1, 1]) ovalo(p, cx + s * fr * 0.42, cy + fr * 0.74, fr * 0.22, fr * 0.1, oscuroB, 3);
   ovalo(p, cx, cy + fr * 0.36, fr * 0.6, fr * 0.3, "#d8b06a");
+  // Los ojos como en el juego (`sapo.ts`): la cuenca, el ojo crema, la pupila y el destello. Sin el ojo crema, la
+  // cuenca con la pupila se leía como las orejas de un oso.
   for (const s of [-1, 1]) {
-    ovalo(p, cx + s * fr * 0.5, cy - fr * 0.5, fr * 0.28, fr * 0.28, bronce, 4);
-    ovalo(p, cx + s * fr * 0.5, cy - fr * 0.52, fr * 0.13, fr * 0.13, TINTA);
+    const ox = cx + s * fr * 0.5, oy = cy - fr * 0.5;
+    ovalo(p, ox, oy, fr * 0.28, fr * 0.28, bronce, 4);
+    ovalo(p, ox, oy, fr * 0.2, fr * 0.2, "#fff6d8", 3);
+    ovalo(p, ox, oy, fr * 0.13, fr * 0.13, TINTA);
+    ovalo(p, ox + fr * 0.05, oy - fr * 0.05, fr * 0.045, fr * 0.045, "#ffffff");
   }
   ovalo(p, cx - fr * 0.42, cy - fr * 0.12, fr * 0.2, fr * 0.08, "#fff1c4");
   const mx = fr * 0.55, my = fr * 0.34;

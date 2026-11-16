@@ -6,8 +6,8 @@ import { isTurnOrder, ordenSinComprobante } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
-import { fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
-import { fotoDelJuegoActiva } from "./foto-juego-bandera";
+import { fotoDelJuegoEntra, fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoPara } from "./foto-juego-bandera";
 import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
@@ -29,10 +29,11 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
  *
  * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
- * tiene ilustración (`foto-fondos.ts`) y la bandera `VITE_FOTO_JUEGO` está
- * prendida (`foto-juego-bandera.ts`, apagada por defecto), van dos fotos lado a
- * lado: la del juego, elegida, y la de siempre. Tocar una la elige, y se
- * comparte, se descarga o se copia solo esa. Mis sorteos, la página de
+ * tiene ilustración (`foto-fondos.ts`), está entre los que pasaron la mirada y
+ * la bandera `VITE_FOTO_JUEGO` no la apaga (`foto-juego-bandera.ts`, prendida
+ * por defecto), con hasta tres ganadores (`TOPE_FOTO_JUEGO` en `foto.ts`; con
+ * más, la lista taparía el dibujo y va la de siempre, sola), van dos fotos lado a lado: la del juego, elegida, y la de
+ * siempre. Tocar una la elige, y se comparte, se descarga o se copia solo esa. Mis sorteos, la página de
  * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
@@ -681,8 +682,9 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
           fotos: [foto],
-          // La misma foto sobre el fondo del juego que se jugó: se ofrece con la bandera prendida y si ese juego tiene ilustración.
-          ...(d.juego && fotoDelJuegoActiva() ? { juego: { ...foto, fondo: d.juego } } : {}),
+          // La misma foto sobre el fondo del juego que se jugó: con la bandera prendida, si el juego está en la lista y tiene
+          // ilustración, y con hasta tres ganadores (`TOPE_FOTO_JUEGO`): con más, la lista taparía el dibujo.
+          ...(d.juego && fotoDelJuegoPara(d.juego) && fotoDelJuegoEntra(foto) ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };
