@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { Registro } from "../protocol/verificacion";
 import { contratoOficial, type ContratoOficial } from "../stellar/oficiales";
 import { DESFASE_MAX_MS, FRENO_MAX, esperarElGrabado, pausaTras, type SorteoDelEnlace } from "./espectador-cadena";
+import { LARGA_IGUAL_TRAS_MS } from "./espectador-regla";
 
 /**
  * Cómo lee la cadena el celular del espectador (`espectador-cadena.ts`). En un evento, cien celulares empiezan a leer en
@@ -68,6 +69,37 @@ describe("el celular reparte sus lecturas de la cadena", () => {
     // El desfase (0), cuatro 429 que frenan (2, 4 y 8 veces, el tope, dos veces), y la vuelta que contestó, ya pasado
     // el primer minuto, a la pausa de siempre.
     expect(r.pausas).toEqual([0, 6_000, 12_000, 24_000, 3_000 * FRENO_MAX, 6_000]);
+  });
+
+  it("un 429 es una respuesta: la cadena está viva, y con cien celulares en el mismo wifi no termina en sin confirmar", async () => {
+    const r = reloj();
+    const leer = async (): Promise<Registro> => {
+      // El RPC le corta a la dirección del wifi más de dos minutos, y después contesta con el sorteo grabado.
+      if (r.ahora() < LARGA_IGUAL_TRAS_MS + 60_000) throw new Error("rpc 429");
+      return registro(true);
+    };
+    expect(await esperarElGrabado(SORTEO, CALCULADO, { leer, ahora: r.ahora, dormir: r.dormir, azar: () => 0 })).toBe("grabado");
+  });
+
+  it("con alNoContestar, una cadena muda no termina la espera: avisa una vez pasado el tope y sigue mirando", async () => {
+    const r = reloj();
+    let avisos = 0;
+    const leer = async (): Promise<Registro> => {
+      if (r.ahora() < LARGA_IGUAL_TRAS_MS + 5 * 60_000) throw new Error("rpc caído");
+      return registro(true);
+    };
+    const visto = await esperarElGrabado(SORTEO, CALCULADO, { leer, ahora: r.ahora, dormir: r.dormir, azar: () => 0, alNoContestar: () => avisos++ });
+    expect(visto).toBe("grabado");
+    expect(avisos).toBe(1);
+  });
+
+  it("sin alNoContestar (el camino de antes), la cadena muda termina en sin confirmar pasado el tope", async () => {
+    const r = reloj();
+    const leer = async (): Promise<Registro> => {
+      throw new Error("rpc caído");
+    };
+    expect(await esperarElGrabado(SORTEO, CALCULADO, { leer, ahora: r.ahora, dormir: r.dormir, azar: () => 0 })).toBe("sin-confirmar");
+    expect(r.ahora()).toBeGreaterThanOrEqual(LARGA_IGUAL_TRAS_MS);
   });
 
   it("un RPC caído sin 429 no frena: se pregunta al otro en la vuelta siguiente, a la pausa de siempre", async () => {

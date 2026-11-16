@@ -1010,6 +1010,7 @@
   /* Mientras llega el enlace corto, o si no salió: una línea en el lugar del QR, y en el fallo el botón para probar de nuevo. */
   .espera-qr-estado { margin: 0; max-width: 28ch; font-size: clamp(14px, 1.5vw, 20px); font-weight: 700; color: var(--ink2); text-wrap: balance; }
   .espera-qr-otra { min-height: 44px; }
+  .espera-qr-anterior { margin: 0; max-width: 28ch; font-size: clamp(14px, 1.2vw, 17px); font-weight: 600; color: var(--ink2); text-align: center; text-wrap: balance; }
   /* La vista de espectador: la misma espera, con el rótulo que dice que nadie la maneja desde acá. */
   .espectador .sticker { background: var(--teal); }
   .espera-lectura { font-size: clamp(14px, 1.6vw, 22px); font-weight: 800; color: var(--ink2); max-width: 40ch; text-wrap: balance; }

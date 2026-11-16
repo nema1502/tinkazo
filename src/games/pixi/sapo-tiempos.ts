@@ -1,4 +1,5 @@
 import { throwTime, type Throw } from "./sapo-plan";
+import { decisivo as momentoDecisivo } from "./decisivo";
 
 /**
  * Los tiempos del sapo, en segundos de juego: lo que dura cada parte de la
@@ -61,4 +62,17 @@ export function tiemposDeTiros(throws: readonly Throw[], ultimoTurno: number, tS
     tt = start + flight + after;
   });
   return { tiros, corona: tt };
+}
+
+/** Lo que el momento decisivo del sapo se adelanta al tiro que entra: la mano apunta y sale la argolla. */
+export const ANTES_DEL_TIRO = 0.5;
+
+/**
+ * El momento decisivo del sapo (`decisivo.ts`), en segundos de juego: el comienzo del primer tiro que entra, con su
+ * margen. Cada argolla que entra es un premio y se tiran del último al primero: con un premio es el último tiro; con
+ * varios, la primera que entra ya nombra a alguien.
+ */
+export function decisivoDelSapo(tiros: readonly { kind: string; start: number }[]): number {
+  const primero = tiros.find((x) => x.kind === "hit");
+  return momentoDecisivo(primero ? primero.start - ANTES_DEL_TIRO : Infinity, ...tiros.slice(-1).map((x) => x.start - ANTES_DEL_TIRO));
 }

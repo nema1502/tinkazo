@@ -3,9 +3,10 @@ import { gsap } from "gsap";
 import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, anotarGolpe, auditaCon, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
+import { LCOLORS, anotarGolpe, auditaCon, drawAvatar, largoNominal, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
-import { beep, note } from "../../sound";
+import { beep, callarEfectos, note } from "../../sound";
+import { anotarCierre, avisarCorona, relojDelShow, tomarHorario } from "../en-hora";
 import { finalPropio } from "../../sonidos/carrera-eleccion";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
@@ -265,6 +266,12 @@ export interface PixiStage {
     cuerpo?: () => { x: number; y: number; w: number; h: number } | null,
     estado?: () => { activa: boolean; tiempo: number; fase: string }): void;
   run(fn: (dt: number, now: number) => void): void;
+  /**
+   * El momento decisivo del juego: desde ahí se empieza a ver quién gana (o, con varios premios, quién gana alguno). El
+   * juego da su propio reloj y la hora, en ese reloj. Con el final retenido (el celular de quien mira, `en-hora.ts`) el
+   * estadio no deja pasar el juego de ese momento hasta que se suelta. Sin decirlo, la mitad del juego.
+   */
+  decisivoEn(reloj: () => number, desde: number): void;
   onResize(fn: () => void): void;
   /** Algo que hay que soltar al cerrar: una línea de tiempo, un sonido. */
   onCleanup(fn: () => void): void;
@@ -455,6 +462,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   base.style.visibility = "hidden";
   delete base.dataset.cartel;
   delete base.dataset.mitad;
+  // La hora del arranque y de la corona son de este show (las lee el recorrido de los espectadores).
+  delete base.dataset.arranco;
+  delete base.dataset.corona;
+  delete base.dataset.retenido;
   document.getElementById("pixi-canvas")?.remove();
   const view = document.createElement("canvas");
   view.id = "pixi-canvas";
@@ -822,6 +833,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     base.dataset[key] = value;
     view.dataset[key] = value;
   };
+  /** Ya se vio el cartel de quien gana en este show. */
+  let coronaVista = false;
+  /** El momento decisivo que dijo el juego (`decisivoEn`), en su propio reloj. */
+  let decisivo: { reloj: () => number; desde: number } | null = null;
 
   let rafId = 0;
   let dead = false;
@@ -1193,6 +1208,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         lastFoco = foco;
         root.visible = true;
         plate.visible = placa && (conGolpe ? tg >= 0 : tp >= 0);
+        // La primera vez que se ve el cartel de quien gana: la hora queda anotada y la sala se entera (`en-hora.ts`).
+        if (plate.visible && !coronaVista) {
+          coronaVista = true;
+          mark("corona", String(Date.now()));
+          avisarCorona();
+        }
         // `?auditar=`: cuándo cae cada parte del golpe (la luz, el cartel), en segundos del reloj de la página: lo lee `scripts/medir-drama-carrera.mjs`.
         if (params.get("auditar")) {
           if (plate.visible) anotarGolpe("cartel");
@@ -1491,6 +1512,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     face, text, chip, tags, batch, breath, mark, crown,
     onResize: (fn) => resizers.push(fn),
     onCleanup: (fn) => cleaners.push(fn),
+    decisivoEn(reloj, desde) {
+      decisivo = { reloj, desde };
+    },
     run(fn) {
       loopFn = fn;
       let prev = 0;
@@ -1499,13 +1523,42 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
       let codigo = 0;
       const pace = paceFactor();
+      // Con horario (la sala lanzada desde la espera, el celular de quien mira), el juego sigue la hora del ancla y no
+      // la de cada cuadro (`en-hora.ts`). Sin horario, como siempre.
+      const conHora = tomarHorario();
+      const reloj = conHora ? relojDelShow(conHora.horario, { ritmo: pace, avisos: conHora.avisos, callar: callarEfectos }) : null;
+      /** Los segundos de juego corridos: el momento decisivo de un juego que no dice el suyo es la mitad. */
+      let tJuego = 0;
+      const mitad = largoNominal() / 2;
+      const enElDecisivo = (): boolean => (decisivo ? decisivo.reloj() >= decisivo.desde : mitad > 0 && tJuego >= mitad);
+      if (reloj) {
+        const visibilidad = (): void => (document.hidden ? reloj.esconder(performance.now()) : reloj.mostrar(performance.now()));
+        document.addEventListener("visibilitychange", visibilidad);
+        cleaners.push(() => document.removeEventListener("visibilitychange", visibilidad));
+        anotarCierre(() => stage.cleanup());
+        cleaners.push(() => anotarCierre(null));
+      }
       const cuadro = (now: number): void => {
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         if (prev) gobernador.cuadro(now - prev, codigo);
         const c0 = performance.now();
         prev = now;
-        if (start < 0) start = now;
-        loopFn?.(dt, (now - start) / 1000);
+        if (start < 0) {
+          start = now;
+          if (!reloj) mark("arranco", String(Date.now()));
+        }
+        if (reloj) {
+          const primero = !reloj.estado.arranco;
+          reloj.cuadro(now, (d, t) => {
+            if (dead) return false;
+            loopFn?.(d, t);
+            tJuego += d;
+            return !dead;
+          }, enElDecisivo);
+          // La hora (del reloj de la página) del segundo 0 del juego: con el horario, la del ancla, no la del cuadro.
+          if (primero) mark("arranco", String(Math.round(Date.now() - (performance.now() - reloj.inicioDelJuego()))));
+          if (reloj.estado.retenidoS > 0) mark("retenido", reloj.estado.retenidoS.toFixed(2));
+        } else loopFn?.(dt, (now - start) / 1000);
         if (dead) return;
         // El pico del zoom de emoción, en la hora de la cámara, para el auditor
         // de emoción: si no hubo zoom de emoción, no se anota nada.

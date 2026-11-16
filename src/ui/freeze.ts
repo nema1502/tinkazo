@@ -1,7 +1,8 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
-import { fijoPara } from "./espectador-fijo";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, conCuenta, currentPace, paceSeconds, params, type Game } from "../state";
+import { avisarCambioConQr } from "./espectadores-de-la-sala";
+import { ANCLA_ANTES_S, anclaDeLaRondaUnaVez, horaDeLaRonda, medirElReloj } from "../reloj-de-la-ronda";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { arranqueDelShow, msHasta } from "../arranque-del-show";
 import { sorteoEnMarcha } from "./sorteo-en-marcha";
@@ -112,12 +113,6 @@ export function elegirJuego(g: Game): void {
     if (!enShow) alElegirConResultado?.(g);
     return;
   }
-  // Ya se mira en celulares desde el QR, con este juego (`espectador-fijo.ts`): no cambia hasta el resultado, y la
-  // nota de arriba del selector lo dice.
-  if (fijoPara(app.frozen, false)) {
-    pintarNotaDelJuego();
-    return;
-  }
   juegoAMano = true;
   setGame(g);
 }
@@ -131,10 +126,10 @@ function marcarJuego(g: Game): void {
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
-  // Con el sorteo mirándose en celulares, ningún camino cambia su juego (`espectador-fijo.ts`).
-  const fijo = fijoPara(app.frozen, false);
-  if (fijo && g !== fijo.juego) return;
   marcarJuego(g);
+  // Si el sorteo ya se mira en celulares desde el QR, el cambio se anota y se publica (`espectadores-de-la-sala.ts`):
+  // desde el 16 de noviembre de 2026 el juego se puede cambiar con el QR a la vista, hasta que la sala lanza.
+  avisarCambioConQr(app.frozen, g, currentPace());
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
 }
@@ -170,11 +165,7 @@ export function marcarShow(en: boolean): void {
 export function pintarNotaDelJuego(): void {
   const el = document.getElementById("juego-nota");
   if (!el) return;
-  const fijo = fijoPara(app.frozen, false);
-  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : fijo ? "juegoFijoEspectador" : "";
-  // La nota de la duración (`main.ts`) sale cuando se la quiere cambiar con el juego fijo, y se va cuando ya no lo está.
-  const notaDelRitmo = document.getElementById("pace-nota");
-  if (notaDelRitmo && !fijo) notaDelRitmo.hidden = true;
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
   const texto = clave ? t(clave) : "";
   if (el.textContent !== texto) el.textContent = texto;
   el.hidden = !texto;
@@ -378,7 +369,9 @@ export function secondsToRound(): number {
   if (!app.frozen) return 0;
   // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
   if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
-  return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));
+  // Con el reloj de la ronda (`reloj-de-la-ronda.ts`): la cuenta de la sala y la del celular de quien mira dicen lo
+  // mismo aunque el reloj de la compu esté corrido. Sin medir, es el reloj de la compu.
+  return Math.max(0, roundTime(app.frozen.round) - Math.floor(horaDeLaRonda()));
 }
 
 let countdownTimer: number | undefined;
@@ -533,6 +526,9 @@ function startCountdown(): void {
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
   // El modo stand no pide ni verifica ningún número: nada que preparar ni conexión que abrir.
   if (!enStand()) prepararFirma();
+  // La hora de la ronda, medida con una ronda que nace (`reloj-de-la-ronda.ts`): la cuenta y el lanzamiento desde la
+  // espera la usan. Si no se puede medir, sigue el reloj de la compu.
+  if (!enStand()) void medirElReloj().catch(() => undefined);
   if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
   let preconectado = false;
   const tick = (): void => {
@@ -542,10 +538,13 @@ function startCountdown(): void {
         preconectado = true;
         preconectarDrand();
       }
+      // El ancla del número (`reloj-de-la-ronda.ts`), pedida antes de la tarjeta: en Rápido la tarjeta sale medio segundo
+      // antes del número, y el pedido ya no alcanzaría a esperar su nacimiento. El sorteo lanzado desde la espera la usa.
+      if (app.frozen && !enStand() && roundTime(app.frozen.round) - horaDeLaRonda() <= ANCLA_ANTES_S) void anclaDeLaRondaUnaVez(app.frozen.round);
       // Con la espera en grande, el sorteo se lanza solo: la tarjeta de cómo se juega sale en los últimos segundos y
       // termina de leerse cuando nace el número (`arranque-del-show.ts`). Con la billetera propia sigue el toque.
       if (!seAdelanto && !app.drawn && !enStand() && espera?.esperaAbierta() && !(app.frozen?.raffleId !== undefined && apruebaAMano())) {
-        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round).tarjeta) === 0) {
+        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round, conCuenta()).tarjeta, horaDeLaRonda() * 1000) === 0) {
           seAdelanto = true;
           // La espera pasa a decir que el número llega y lanza el sorteo (`lanzarDesdeLaEspera`): el mismo camino que su
           // Reintentar si una compuerta del modo Oficial corta.
