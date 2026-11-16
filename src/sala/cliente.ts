@@ -1,4 +1,6 @@
 import { generarClave } from "./cifra";
+import { validarRondaDeSala } from "../../workers/sala/src/logica";
+import type { RondaDeSala } from "../../workers/sala/src/logica";
 
 /**
  * La sala, vista desde la pantalla del stand: crear la sala, recibir los
@@ -89,6 +91,34 @@ export async function cerrarSala(s: Sala, dep: Dependencias = {}): Promise<boole
   }
 }
 
+/**
+ * La pantalla comparte la ronda que decide (la del sello, o la de ejemplo del stand) y la huella de
+ * la lista sellada: con eso cada celular calcula su resultado personal. Se puede volver a mandar:
+ * la última es la que vale. `true` si la sala la guardó.
+ */
+export async function compartirRonda(s: Sala, ronda: RondaDeSala, dep: Dependencias = {}): Promise<boolean> {
+  try {
+    const r = await (dep.fetch ?? fetch)(`${s.servicio}/v1/sala/${s.id}/ronda`, {
+      method: "PUT",
+      headers: { ...auth(s), "Content-Type": "application/json" },
+      body: JSON.stringify(ronda),
+    });
+    return r.status === 204;
+  } catch {
+    return false;
+  }
+}
+
+/** Quien organizó cierra la lista desde la pantalla: no entra nadie más. `true` si quedó cerrada (o ya lo estaba). */
+export async function cerrarListaEnSala(s: Sala, dep: Dependencias = {}): Promise<boolean> {
+  try {
+    const r = await (dep.fetch ?? fetch)(`${s.servicio}/v1/sala/${s.id}/cierre`, { method: "POST", headers: auth(s) });
+    return r.status === 204 || r.status === 404;
+  } catch {
+    return false;
+  }
+}
+
 export type EstadoDeConexion = "conectando" | "en-vivo" | "sondeo";
 
 export interface Escucha {
@@ -106,6 +136,10 @@ export interface Escucha {
   alEquipo?: (e: EquipoDeSala) => void;
   /** Un equipo se quitó (desde otra pestaña). */
   alEquipoQuitado?: (n: number) => void;
+  /** La pantalla compartió la ronda que decide (la del sello, o la de ejemplo del stand). */
+  alRonda?: (r: RondaDeSala) => void;
+  /** Quien organizó cerró la lista desde la pantalla: no entra nadie más. */
+  alCierreLista?: () => void;
 }
 
 /** Un equipo tal como lo guarda la sala: la cuenta en claro y el resto cifrado con la clave del QR. */
@@ -212,7 +246,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     });
     socket.addEventListener("message", (ev: MessageEvent) => {
       if (typeof ev.data !== "string" || ev.data === "pong") return;
-      let m: { t?: string; n?: number; d?: string; v?: number; cuenta?: string; estado?: string };
+      let m: { t?: string; n?: number; d?: string; v?: number; cuenta?: string; estado?: string; ronda?: unknown };
       try {
         m = JSON.parse(ev.data);
       } catch {
@@ -220,8 +254,21 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
       }
       if (m.t === "listo") {
         cambiar("en-vivo");
+        // Al presentarse, la sala dice el estado de la lista y la ronda compartida (si ya se mandó): la pantalla que se
+        // recarga se pone al día sin pedir nada más.
+        if (m.estado === "cerrada") e.alCierreLista?.();
+        if (m.ronda !== null && m.ronda !== undefined) {
+          const ronda = validarRondaDeSala(m.ronda);
+          if (ronda) e.alRonda?.(ronda);
+        }
         void consultar();
-      } else if (m.t === "nombre" && typeof m.n === "number" && typeof m.d === "string") recibir(m.n, m.d);
+      } else if (m.t === "ronda") {
+        // El mensaje viaja con su tipo; la ronda en sí son exactamente cuatro campos.
+        const { t: _, ...rondaCruda } = m as { t?: string } & Record<string, unknown>;
+        const ronda = validarRondaDeSala(rondaCruda);
+        if (ronda) e.alRonda?.(ronda);
+      } else if (m.t === "lista-cerrada") e.alCierreLista?.();
+      else if (m.t === "nombre" && typeof m.n === "number" && typeof m.d === "string") recibir(m.n, m.d);
       else if (m.t === "quitado" && typeof m.n === "number") e.alQuitado?.(m.n);
       else if (m.t === "equipo" && typeof m.n === "number" && typeof m.d === "string" && typeof m.v === "number" && typeof m.cuenta === "string" && typeof m.estado === "string")
         recibirEquipo({ n: m.n, cuenta: m.cuenta, d: m.d, estado: m.estado, v: m.v });

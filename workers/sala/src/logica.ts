@@ -19,6 +19,49 @@ export const MAX_BYTES_NOMBRE = 256;
 export const MIN_BYTES_NOMBRE = 13 + 16 + 1;
 /** Lo que mide, como mucho, ese mismo nombre en base64url. */
 export const MAX_CARACTERES = Math.ceil((MAX_BYTES_NOMBRE * 4) / 3);
+
+/* -------------------------------------------------- el flujo interactivo */
+
+/**
+ * El estado de la lista de la sala: «abierta» mientras la gente se suma y «cerrada» desde que quien
+ * organiza cierra la lista desde la pantalla (juegos interactivos). Cerrada, no entra nadie más; el
+ * resto de la sala (quitar un nombre, la ronda) sigue como estaba.
+ */
+export type EstadoDeLista = "abierta" | "cerrada";
+
+/** La ronda del faro que decide, tal como la comparte la pantalla. La de un stand es de ejemplo: no hay firma que la compruebe. */
+export interface RondaDeSala {
+  /** La ronda (de drand, o la de ejemplo del stand). */
+  r: number;
+  /** El número público de la ronda: 32 bytes en hex. */
+  randomness: string;
+  /** La huella de la lista sellada (SHA-256 de la lista canónica): 32 bytes en hex. */
+  listHash: string;
+  /** Cuántos ganadores salen. */
+  k: number;
+}
+
+const ES_HEX64 = /^[0-9a-f]{64}$/;
+/** Cuántos ganadores admite una ronda de sala: el mismo tope del protocolo (`MAX_WINNERS`). */
+export const MAX_GANADORES_SALA = 300;
+/** Lo más que pesa el cuerpo de un PUT de ronda. */
+export const MAX_CUERPO_RONDA = 300;
+
+/** La ronda tal como la manda la pantalla, o `null` si algo no cuadra. Lo que sobra se descarta: nada más entra. */
+export function validarRondaDeSala(x: unknown): RondaDeSala | null {
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  if (Object.keys(o).length !== 4) return null;
+  const r = o.r;
+  if (typeof r !== "number" || !Number.isInteger(r) || r < 1) return null;
+  const randomness = o.randomness;
+  if (typeof randomness !== "string" || !ES_HEX64.test(randomness)) return null;
+  const listHash = o.listHash;
+  if (typeof listHash !== "string" || !ES_HEX64.test(listHash)) return null;
+  const k = o.k;
+  if (typeof k !== "number" || !Number.isInteger(k) || k < 1 || k > MAX_GANADORES_SALA) return null;
+  return { r, randomness, listHash, k };
+}
 /**
  * Sockets abiertos a la vez por sala: más allá de esto, uno nuevo solo entra si
  * desplaza a otro que lleva callado más de `PRESENTARSE_MS`. Alguien que tenga el

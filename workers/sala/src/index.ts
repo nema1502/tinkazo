@@ -42,6 +42,7 @@ import {
   ES_TOKEN,
   MAX_CUERPO_CONFIG,
   MAX_CUERPO_EQUIPO,
+  MAX_CUERPO_RONDA,
   MAX_EQUIPOS,
   MAX_NOMBRES,
   MAX_SOCKETS,
@@ -63,7 +64,9 @@ import {
   nombreCifradoValido,
   origenPermitido,
   validarConfigEquipos,
+  validarRondaDeSala,
 } from "./logica";
+import type { EstadoDeLista, RondaDeSala } from "./logica";
 import type { AltasPorHora, ConfigEquipos, EstadoEquipo } from "./logica";
 import { paginaCelular } from "./pagina";
 import { ES_LLAVE, anotarEquipo as anotarEnRegistro, crearTablasDeEquipos, quitarEquipo as quitarDelRegistro, siguienteVersion } from "./registro";
@@ -250,9 +253,10 @@ export class Sala extends DurableObject<Env> {
     return true;
   }
 
-  /** Un nombre cifrado de un celular. */
+  /** Un nombre cifrado de un celular. Cerrada la lista, no entra nadie más. */
   async sumar(d: string): Promise<Resultado<{ n: number }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (this.estadoDeLista() === "cerrada") return { ok: false, motivo: "cerrada" };
     if (!this.porMinuto.intentar(Date.now())) return { ok: false, motivo: "rapido" };
     const hay = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM nombres").one().c;
     if (hay >= MAX_NOMBRES) return { ok: false, motivo: "llena" };
@@ -278,6 +282,22 @@ export class Sala extends DurableObject<Env> {
     this.ctx.storage.sql.exec("DELETE FROM nombres WHERE n = ?", n);
     this.avisar({ t: "quitado", n });
     return { ok: true };
+  }
+
+  /** El estado de la lista: «abierta» si nunca se cerró. */
+  private estadoDeLista(): EstadoDeLista {
+    return this.dato("estado") === "cerrada" ? "cerrada" : "abierta";
+  }
+
+  /** La ronda compartida que decide, o `null` si la pantalla todavía no la mandó. */
+  private ronda(): RondaDeSala | null {
+    const crudo = this.dato("ronda");
+    if (!crudo) return null;
+    try {
+      return validarRondaDeSala(JSON.parse(crudo));
+    } catch {
+      return null;
+    }
   }
 
   /** La configuración del registro de equipos, o null si todavía no se armó. */
@@ -388,6 +408,39 @@ export class Sala extends DurableObject<Env> {
     return { ok: true };
   }
 
+  /**
+   * La pantalla comparte la ronda que decide (la del sello, o la de ejemplo del stand): los celulares
+   * la leen por `GET /vivo` y calculan su resultado personal. Se puede volver a mandar (la pantalla
+   * re-sella): la última es la que vale.
+   */
+  async fijarRonda(token: string, ronda: RondaDeSala): Promise<Resultado> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('ronda', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", JSON.stringify(ronda));
+    this.avisar({ t: "ronda", ...ronda });
+    return { ok: true };
+  }
+
+  /** Quien organiza cierra la lista desde la pantalla: no entra nadie más, y los celulares lo ven. */
+  async cerrarLista(token: string): Promise<Resultado> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    if (this.estadoDeLista() === "cerrada") return { ok: true };
+    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('estado', 'cerrada') ON CONFLICT(k) DO UPDATE SET v = excluded.v");
+    this.avisar({ t: "lista-cerrada" });
+    return { ok: true };
+  }
+
+  /** Lo que mira el celular del participante, sin token: la lista cifrada, el estado y la ronda compartida. */
+  async vivo(desde: number): Promise<Resultado<{ hay: number; estado: EstadoDeLista; ronda: RondaDeSala | null; nombres: { n: number; d: string }[] }>> {
+    if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    const nombres = this.ctx.storage.sql
+      .exec<{ n: number; d: string }>("SELECT n, d FROM nombres WHERE n > ? ORDER BY n LIMIT ?", desde, MAX_NOMBRES)
+      .toArray();
+    const hay = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM nombres").one().c;
+    return { ok: true, hay, estado: this.estadoDeLista(), ronda: this.ronda(), nombres };
+  }
+
   /** Cierra la sala: avisa a la pantalla, suelta los sockets y borra todo, la alarma también. */
   async cerrar(token: string): Promise<Resultado> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
@@ -466,7 +519,8 @@ export class Sala extends DurableObject<Env> {
       }
       ws.serializeAttachment({ ok: true, desde: estado?.desde ?? Date.now() } satisfies Presentacion);
       const hay = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM nombres").one().c;
-      ws.send(JSON.stringify({ t: "listo", hay }));
+      // La pantalla que se recarga se pone al día: cuántos van, el estado de la lista y la ronda compartida (si ya se mandó).
+      ws.send(JSON.stringify({ t: "listo", hay, estado: this.estadoDeLista(), ronda: this.ronda() }));
       return;
     }
     // Cualquier otra cosa antes de presentarse es un error; después, no se espera nada.
@@ -518,7 +572,7 @@ async function leerJson(req: Request, tope: number): Promise<unknown> {
   }
 }
 
-const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, "cupo-conexion": 429 };
+const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, cerrada: 409, "cupo-conexion": 429 };
 
 function falla(r: { motivo: string; esperaS?: number }, h: Record<string, string>): Response {
   const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : r.motivo === "cupo-conexion" ? { ...h, "Retry-After": String(r.esperaS ?? 600) } : h;
@@ -632,6 +686,28 @@ export default {
           const r = await salaDe(id).cambiarEstado(bearer(req), n, cuerpo.estado);
           return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
         }
+      }
+
+      // La ronda compartida: la pantalla (con el token) fija qué ronda decide y con qué lista.
+      if (partes.length === 4 && partes[3] === "ronda" && req.method === "PUT") {
+        const cuerpo = await leerJson(req, MAX_CUERPO_RONDA);
+        const ronda = cuerpo === null ? null : validarRondaDeSala(cuerpo);
+        if (!ronda) return json({ error: "forma" }, 400, h);
+        const r = await salaDe(id).fijarRonda(bearer(req), ronda);
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+
+      // Cerrar la lista: con el token, desde la pantalla. Después ya no entra nadie.
+      if (partes.length === 4 && partes[3] === "cierre" && req.method === "POST") {
+        const r = await salaDe(id).cerrarLista(bearer(req));
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+
+      // Lo que mira el celular del participante cada 3 s: la lista cifrada (la clave viaja en el QR), el estado y la ronda.
+      if (partes.length === 4 && partes[3] === "vivo" && req.method === "GET") {
+        const desde = Math.max(0, Math.floor(Number(url.searchParams.get("desde") ?? "0")) || 0);
+        const r = await salaDe(id).vivo(desde);
+        return r.ok ? json({ hay: r.hay, estado: r.estado, ronda: r.ronda, nombres: r.nombres }, 200, h) : falla(r, h);
       }
 
       // La pantalla abre su WebSocket. Los navegadores mandan el origen: solo el sitio.

@@ -22,7 +22,21 @@ Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `
 | `DELETE /v1/sala/<id>` | Cierra la sala y borra todo. Con el token | |
 | `GET /<id>` | La página del celular: un HTML con su CSS y su JS adentro, en español y en inglés. Sin bajar el sitio, sin depender de Vercel y sin CORS | |
 
-Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N}`, `{"t":"nombre","n","d"}`, `{"t":"quitado","n"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N,"estado":...,"ronda":...}`, `{"t":"nombre","n","d"}`, `{"t":"quitado","n"}`, `{"t":"ronda",...}` y `{"t":"lista-cerrada"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+
+### El flujo interactivo (juegos interactivos)
+
+Además del stand, la misma sala sirve para que la gente viva el sorteo desde su celular (juegos interactivos, tipo Kahoot): la pantalla comparte la ronda que decide, cierra la lista y cada celular calcula su resultado personal.
+
+| Pedido | Qué hace | Límite |
+| --- | --- | --- |
+| `PUT /v1/sala/<id>/ronda` | La pantalla comparte la ronda que decide: `{"r","randomness","listHash","k"}` (el número de 32 bytes en hex, la huella de la lista sellada y cuántos ganadores). Con el token. `204`. Se puede volver a mandar: la última es la que vale | 300 bytes |
+| `POST /v1/sala/<id>/cierre` | Quien organiza cierra la lista desde la pantalla: con el token, `204`. Después ya no entra nadie (`409 {"error":"cerrada"}`) | |
+| `GET /v1/sala/<id>/vivo?desde=N` | Sin token, lo que mira el celular del participante cada 3 s: `{"hay","estado","ronda","nombres"}`. Los nombres siguen cifrados (la clave viaja en el QR); el estado es `abierta` o `cerrada` y la ronda es la compartida, o `null` | |
+
+Mensajes nuevos del socket hacia la pantalla: `{"t":"ronda","r","randomness","listHash","k"}` (la pantalla la volvió a compartir) y `{"t":"lista-cerrada"}`. Al presentarse, el `listo` trae además `estado` y `ronda`, así que la pantalla que se recarga se pone al día sin pedir nada más.
+
+La privacidad no cambia: este servicio sigue sin poder leer nombres (solo bytes cifrados), y la ronda compartida no publica la lista: la huella y el número alcanzan para que cada celular, que ya descifró la lista con la clave del QR, calcule los ganadores con el mismo `select` del protocolo y vea si le tocó. La lista del celular tiene que ser exactamente la que se selló: si la huella no cuadra, la vista no afirma nada.
 
 ### Los equipos de un evento (registro con cuenta)
 
