@@ -43,7 +43,7 @@ vi.mock("./cuenta-lista-flujo", () => ({ abrirSumarSorteos: (...a: unknown[]) =>
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => true, redPrincipalConPollar: () => true, esCuentaDePollar: () => true }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ kind: "external", address: CUENTA }) }));
-vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), puedeCambiarDeModo: () => true }));
+vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), puedeCambiarDeModo: () => true, textoCuentaAlCambiar: () => "" }));
 vi.mock("./red", () => ({ mostrarSinPatrocinio: vi.fn(async () => undefined) }));
 vi.mock("../stellar/patrocinador", async (orig) => ({
   ...(await orig<typeof import("../stellar/patrocinador")>()),
