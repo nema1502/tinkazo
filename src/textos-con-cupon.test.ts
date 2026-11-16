@@ -101,7 +101,7 @@ describe("los textos con cupón de las páginas de lectura", () => {
 
   it("precios: con un cupón de tu evento, el modo Oficial es gratis, y participar y comprobar es gratis siempre", () => {
     expect(texto("es", "prNote")).toBe("El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.");
-    expect(texto("en", "prNote")).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it is always free.");
+    expect(texto("en", "prNote")).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it are always free.");
   });
 
   it("con las reglas de escritura: sin tecnicismos, sin palabras de apuesta y con los nombres de los modos de cada idioma", () => {

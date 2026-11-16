@@ -232,6 +232,6 @@ describe("quien salió más de una vez, con varias participaciones", () => {
 
   it("el texto está en español y en inglés", () => {
     expect(T.es.salioVarias("Ana Quispe", 2, [0, 1])).toBe("Ana Quispe salió 2 veces: #1 y\u00a0#2.");
-    expect(T.en.salioVarias("Ana Quispe", 2, [0, 1])).toBe("Ana Quispe came out 2 times: #1 and\u00a0#2.");
+    expect(T.en.salioVarias("Ana Quispe", 2, [0, 1])).toBe("Ana Quispe was drawn 2 times: #1 and\u00a0#2.");
   });
 });

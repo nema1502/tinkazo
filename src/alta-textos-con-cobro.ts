@@ -87,12 +87,12 @@ const CON_COBRO: Textos = {
       "En el modo Prueba, Tinkazo cubre la comisión que cobra la red por sellar y sortear. Puede haber un tope por cuenta y por mes. Si se agota, se puede pagar con la propia cuenta o esperar a que vuelva. Si hay tope, para llevar la cuenta el servicio guarda cuántos sellos y sorteos hizo cada cuenta, sin nombres ni listas. En el modo Oficial, con el cupón de tu evento o un paquete de sorteos oficiales, Tinkazo cubre esa comisión mientras te queden sorteos oficiales. Quien entra con su propia billetera la paga de su cuenta.",
   },
   en: {
-    prNote: "Test mode is free. In Live mode, you use a coupon from your event or buy Live draws. Joining a draw and checking it is always free.",
-    descPrecios: "Test mode is free. In Live mode, a coupon from your event or a pack of Live draws. Taking part and checking a draw is always free.",
+    prNote: "Test mode is free. In Live mode, you use a coupon from your event or buy Live draws. Joining a draw and checking it are always free.",
+    descPrecios: "Test mode is free. In Live mode, a coupon from your event or a pack of Live draws. Taking part and checking a draw are always free.",
     faq3a:
       "Taking part and checking are always free. For organizers, Test mode is free. In Live mode, with a coupon from your event or a pack of Live draws, Tinkazo covers the network's charge. If you sign in with your own wallet, you pay it from your account. Prices are on the Pricing page.",
     rulF3B:
-      "Taking part in a draw and checking it is always free. For whoever runs the draw, Test mode is free. Live mode takes a coupon from your event or a pack of Live draws, with prices on the Pricing page.",
+      "Taking part in a draw and checking it are always free. For whoever runs the draw, Test mode is free. Live mode takes a coupon from your event or a pack of Live draws, with prices on the Pricing page.",
     nextBody:
       "When you close the list, it is sealed before the number that decides exists, and any later change shows. Tinkazo pays the cost of sealing in Test mode, and in Live mode too if you use a coupon from your event or a pack of Live draws. In Live mode, if you sign in with your own wallet, you pay the network's charge, which is a few cents. In Test mode, keep the receipts of your draws, because they let anyone check them again even after the record resets on December 16, 2026.",
     cfCostoB: `Recording each draw on the network has a cost. The network charges it, not Tinkazo, and almost all of it is storage rent: it changes with how much the network is used. In Test mode Tinkazo pays it. In Live mode Tinkazo pays it if you use a coupon from your event or a pack of Live draws, and if you sign in with your own wallet, you pay it from your account. The measured figures, with their dates, are in ${DEPLOYMENTS}.`,
