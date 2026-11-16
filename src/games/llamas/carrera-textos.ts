@@ -66,7 +66,7 @@ export const TEXTOS_CARRERA: Textos = {
     carBarro: "the mud",
     carPiedras: "the rocks",
     carViento: "the wind",
-    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lay down!`, `${n} rests a while!`][v % 3] ?? "",
+    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lies down!`, `${n} rests a while!`][v % 3] ?? "",
     carVa: (n: string) => `${n} is in front!`,
     carAdelante: (n: string, v: number) => [`${n} moves up front!`, `Now ${n} leads!`, `${n} takes the lead!`][v % 3] ?? "",
     carRecta: "On to the home stretch!",

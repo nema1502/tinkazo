@@ -44,7 +44,7 @@ describe("los textos del pulido de los modos", () => {
   });
 
   it("la tarjeta de la portada en inglés dice turns, como todo el modo", () => {
-    expect(String(T.en.uso3b)).toBe("Draw the year-end gift or the order of the turns, with a result anyone can check.");
+    expect(String(T.en.uso3b)).toBe("Draw who gets the year-end gift or the order of the turns, with a result anyone can check.");
     expect(String(T.en.uso3b)).not.toMatch(/shift/i);
     expect(String(T.es.uso3b)).toContain("turnos");
   });

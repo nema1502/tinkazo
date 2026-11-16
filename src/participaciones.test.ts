@@ -555,7 +555,7 @@ describe("los textos no mienten: personas y participaciones", () => {
       "2 personas, 5 participaciones, 1 ganador, Termo. Quien tiene varias participaciones puede salir más de una vez. Al sellar, la lista queda cerrada.",
     );
     expect(T.en.sellarResumen(2, 1, "Termo", 5)).toContain("2 people, 5 entries");
-    expect(T.en.sellarResumen(2, 1, "Termo", 5)).toContain("Anyone with several entries can come out more than once.");
+    expect(T.en.sellarResumen(2, 1, "Termo", 5)).toContain("Anyone with several entries can be drawn more than once.");
   });
 
   it("las bases dicen las dos cuentas y que las participaciones no se venden", () => {
