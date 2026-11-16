@@ -1088,9 +1088,9 @@ export interface ShowDelEspectador {
  *
  * Con un sorteo grabado en Stellar (`grabado`), la tarjeta del juego sale ya, y la cuenta y el juego esperan a que el
  * sorteo quede grabado, con la línea de que se está guardando. La sala ya no lo espera: juega con el número y graba
- * después. Esperarlo deja al celular detrás de la sala, nunca adelante (`espectador-regla.ts`). Si la tarjeta se va
- * sola antes (quien organiza tardó en lanzarlo), el juego sale con una tarjeta nueva. Sin cadena (el modo libre) la
- * sala no espera nada, y la tarjeta sale al jugar.
+ * después. Esperarlo, con la espera de la regla, deja al celular detrás de la sala (`espectador-regla.ts`). Si la
+ * tarjeta se va sola antes (quien organiza tardó en lanzarlo), el juego sale con una tarjeta nueva. Sin cadena (el modo
+ * libre) la sala no espera nada, y la tarjeta sale al jugar.
  */
 export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspectador | null {
   const { frozen, drawn } = app;
