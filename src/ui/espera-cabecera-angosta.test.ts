@@ -28,6 +28,62 @@ function bloque480(selector: string): string {
   return "";
 }
 
+/** El cuerpo completo del bloque que abre con `apertura` (por ejemplo `@media (max-width: 599px) {`), o "" si no está. */
+function bloqueDe(apertura: string): { cuerpo: string; entero: string } {
+  const ini = css.indexOf(apertura);
+  if (ini < 0) return { cuerpo: "", entero: "" };
+  let hondo = 1;
+  let i = ini + apertura.length;
+  for (; i < css.length && hondo > 0; i++) {
+    if (css[i] === "{") hondo++;
+    else if (css[i] === "}") hondo--;
+  }
+  return { cuerpo: css.slice(ini + apertura.length, i - 1), entero: css.slice(ini, i) };
+}
+
+describe("la barra de arriba de la espera en un celular no tapa lo de abajo", () => {
+  // Fija, la capa le reservaba 72 px de relleno, pensados para una calcomanía de un renglón. Con tres renglones (Todavía
+  // nadie sabe quién gana, a 390 px) la calcomanía llegaba más abajo y tapaba la cuenta o el título (Se sortea el orden
+  // de los turnos, a 320 px). En el flujo, su alto empuja a todo lo demás, sea cual sea.
+  const celular = bloqueDe("@media (max-width: 599px) and (min-height: 561px) {");
+
+  it("existe el bloque del celular, de 599 px para abajo y sin ser una pantalla baja", () => {
+    expect(celular.cuerpo).not.toBe("");
+  });
+
+  it("la barra va en el flujo y antes de los espaciadores que centran el resto, a todo el ancho", () => {
+    expect(celular.cuerpo).toMatch(/\.espera-top \{[^}]*position: static;/);
+    expect(celular.cuerpo).toMatch(/\.espera-top \{[^}]*order: -1;/);
+    expect(celular.cuerpo).toMatch(/\.espera-top \{[^}]*align-self: stretch;/);
+  });
+
+  it("entre 481 y 599 px el grupo de Volver tampoco se encoge: si no, el botón pisa la pastilla de Prueba", () => {
+    expect(celular.cuerpo).toMatch(/\.espera-top-acc \{ flex-shrink: 0; \}/);
+  });
+
+  it("la capa ya no reserva arriba el lugar de la barra fija, solo el aire y la muesca del aparato", () => {
+    expect(celular.cuerpo).toMatch(/\.espera \{[^}]*padding-top: max\(16px, env\(safe-area-inset-top, 0px\)\);/);
+  });
+
+  it("sin la barra fija, el hueco extra para la etiqueta del ensayo ya no hace falta", () => {
+    expect(celular.cuerpo).toMatch(/\.espera-ensayo \{[^}]*margin-top: 0;/);
+  });
+
+  it("de 600 px para arriba (laptop y proyector) la barra sigue fija arriba con sus 72 px de lugar", () => {
+    const resto = css.replace(celular.entero, "");
+    expect(resto).toMatch(/\.espera-top \{ position: fixed; top: 16px; left: 16px; right: 16px;/);
+    expect(resto).toMatch(/\.espera \{[^}]*padding: 72px 16px calc\(24px \* var\(--ajuste, 1\)\);/);
+    // La barra en el flujo vive solo en el bloque del celular.
+    expect(resto).not.toMatch(/\.espera-top \{[^}]*position: static;/);
+  });
+
+  it("una pantalla baja (un celular acostado) conserva la barra fija arriba con su fondo: se recorre por debajo", () => {
+    const baja = bloqueDe("@media (max-height: 560px) {");
+    expect(baja.cuerpo).toMatch(/\.espera-top \{[^}]*top: 0;[^}]*background: var\(--paper\);/);
+    expect(baja.cuerpo).not.toMatch(/position: static/);
+  });
+});
+
 describe("la cabecera de la espera en un celular", () => {
   it("el grupo del botón de volver no se encoge, para que no pise la pastilla de Prueba", () => {
     expect(bloque480(".espera-top-acc")).toMatch(/\.espera-top-acc \{ flex-shrink: 0; \}/);
