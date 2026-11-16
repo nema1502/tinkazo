@@ -16,7 +16,7 @@ import { isTurnOrder } from "../modos/turnos";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
 import { NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
-import { horaDeBuscarElNumero, horaDeMirarLaCadena, horaDelFinal, reglaDelShow } from "./espectador-regla";
+import { esperaTrasLoGrabadoMs, horaDeBuscarElNumero, horaDeMirarLaCadena, horaDelFinal, reglaDelShow } from "./espectador-regla";
 import { contratoDelEnlace, type DatosEspectador } from "./espectador-enlace";
 import type { ShowDelEspectador } from "./draw";
 
@@ -35,8 +35,9 @@ export { datosDelEnlace, enlaceEspectador, type DatosEspectador } from "./espect
  * `resolveBeacon` en `draw.ts`), lo verifica y calcula los ganadores con el protocolo (`select`). El ganador no existe
  * hasta que nace la ronda: la vista no lo puede revelar antes, porque no lo tiene. Con un sorteo sellado, además,
  * espera a que quede grabado en Stellar y comprueba que es este (`espectador-cadena.ts`): la sala lo graba recién con
- * su resultado a la vista, así que el celular va detrás de ella y no se le adelanta. Si no lo ve grabado en el tope de
- * la regla, juega igual. Después corre el mismo show (`showDelEspectador` en `draw.ts`).
+ * su resultado a la vista, así que el celular va detrás de ella. Visto lo grabado espera lo que dice la regla, más si la
+ * sala lanzó tarde (`esperaTrasLoGrabadoMs`). Si no lo ve grabado en el tope de la regla, juega igual. Después corre el
+ * mismo show (`showDelEspectador` en `draw.ts`).
  *
  * Es solo para mirar: no hay sellar ni sortear, no toca la cadena más que para leer y no graba nada. No cuenta nada del
  * sorteo: la página suma una visita anónima, como cualquiera que entra al sitio (`analytics.ts`, sin la dirección
@@ -269,18 +270,20 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       if (espera) {
         fase = "grabando";
         linea(t("cortinaGraba"));
+        // La cadena, recién cuando acepta el sorteo grabado (en el reloj del teléfono, con su desfase).
+        const mirarDesde = (horaDeMirarLaCadena(datos.r) - desfase) * 1000;
         // Termina cuando lo ve grabado o, pasado el tope de la regla, sin verlo: en los dos casos se juega.
         const visto = await esperarElGrabado(espera, { randomness: beacon.randomness, winners }, {
           ...(op.leer ? { leer: op.leer } : {}),
           ...(op.azar ? { azar: op.azar } : {}),
-          // La cadena, recién cuando acepta el sorteo grabado (en el reloj del teléfono, con su desfase).
-          noAntesDe: (horaDeMirarLaCadena(datos.r) - desfase) * 1000,
+          noAntesDe: mirarDesde,
           alTardar: () => {
             if (este === intento && fase === "grabando") linea(t("espTarda"));
           },
         });
-        // Visto grabado, todavía un momento: la sala se entera por la confirmación de su envío, un poco después.
-        if (visto === "grabado") await new Promise((r) => window.setTimeout(r, regla.retrasoTrasLoGrabadoMs));
+        // Visto grabado, todavía un momento. Si la sala lo lanzó tarde, además lo que ella tarda en leer su tarjeta
+        // después de lanzar y una parte del show: la del celular ya está leída (`esperaTrasLoGrabadoMs`).
+        if (visto === "grabado") await new Promise((r) => window.setTimeout(r, esperaTrasLoGrabadoMs(Date.now() - mirarDesde, paceSeconds(datos.p))));
         llego();
       }
       if (este !== intento) return;

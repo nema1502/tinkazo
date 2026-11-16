@@ -1,5 +1,5 @@
 import { roundTime } from "../protocol/quicknet";
-import { MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S } from "../arranque-del-show";
+import { LECTURA_DE_LA_TARJETA_S, MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S } from "../arranque-del-show";
 
 /**
  * Cuándo arranca el show en el celular de quien mira (`espectador.ts`), respecto de la ronda y de la sala.
@@ -13,9 +13,24 @@ import { MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S } from "../arranque-del-s
  *   y solo después de que la sala tiene el resultado: la grabación arranca con el resultado ya fijado, y la cadena
  *   no la acepta antes de `MARGEN_DE_LA_CADENA_S` después de la ronda (`grabar-sorteo.ts`). Con la billetera propia,
  *   recién al terminar el show. El celular no sabe cuándo lanzó la sala: lo único que ve es la cadena. Por eso
- *   sigue esperando a ver el sorteo grabado, que siempre llega después de que la sala tiene el resultado, más
- *   `retrasoTrasLoGrabadoMs`. Así queda detrás de la sala, más que antes (la sala ya no espera lo grabado), y nunca
- *   adelante: el ganador lo grita la sala primero.
+ *   sigue esperando a ver el sorteo grabado, que siempre llega después de que la sala tiene el resultado, y después
+ *   espera lo que dice `esperaTrasLoGrabadoMs`. Cuánto queda detrás depende de cuándo lanzó la sala:
+ *   - Con la espera en grande, o con el botón tocado apenas nace el número, la sala tiene su resultado varios segundos
+ *     antes de que la cadena acepte grabarlo, y juega mientras tanto. El celular espera solo
+ *     `RETRASO_TRAS_LO_GRABADO_MS` y arranca muy detrás (medido en Prueba el 16 de noviembre de 2026: 16 s).
+ *   - Si la sala lanza tarde (el botón tocado mucho después del número, el Reintentar de la espera o una compuerta de
+ *     Oficial que tardó), ese colchón no está. La sala abre la tarjeta al lanzar y la lee después de traer el número,
+ *     y lo grabado se ve apenas r + L después de lanzar (r es traer y comprobar el número, L lo que tarda en verse lo
+ *     grabado, en el mejor caso un segundo y medio). La tarjeta del celular, en cambio, está leída desde que nació el
+ *     número. Con el retraso solo, el celular arrancaba r + L - 1 s detrás, que puede ser casi nada, y con una sala que
+ *     dibuja más lento coronaba antes. Por eso, si ve lo grabado más de `LANZADO_TARDE_TRAS_MS` después de que la
+ *     cadena lo acepta, cuenta también la lectura de la tarjeta y un 10 % del show (`MARGEN_DEL_FINAL_PARTE`): arranca
+ *     al menos el retraso y ese 10 % detrás, y una sala hasta un 10 % más lenta corona primero.
+ *   - Entre los dos, la sala que lanza entre unos 6 y unos 16 s después del número, el celular ve lo grabado antes
+ *     del tope y no la distingue de una sala que lanzó a tiempo y grabó lento: arranca al menos r + L - 1 s detrás, y
+ *     con lo grabado lento varios segundos más. Es lo único que no queda cubierto del todo. Cubrirlo pide contar la
+ *     lectura siempre, entre 5,5 y 8,5 s más de atraso en cada sorteo según el ritmo: basta con
+ *     `LANZADO_TARDE_TRAS_MS` en cero.
  * - La cuenta del celular termina cuando la de la sala, al nacer la ronda, y ahí trae el número (`margenS`, cero). La
  *   cadena la empieza a mirar recién cuando acepta el sorteo grabado (`miraLaCadenaDesdeS`): antes no hay nada que
  *   ver, y cada lectura de más de cada celular de la sala es carga para el RPC.
@@ -30,7 +45,8 @@ import { MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S } from "../arranque-del-s
  *   del celular no se salta (`solo-mirar.ts`).
  *
  * Si la sala cambia cuándo arranca o cuándo graba, lo que cambia acá es `esperaLoGrabado`, `margenS`,
- * `miraLaCadenaDesdeS` y el retraso, y la prueba de este archivo dice qué tiene que coincidir con la sala.
+ * `miraLaCadenaDesdeS`, el retraso y `esperaTrasLoGrabadoMs`, y la prueba de este archivo dice qué tiene que coincidir
+ * con la sala.
  */
 
 /**
@@ -44,8 +60,8 @@ export const MARGEN_DE_LA_CADENA_S = MARGEN_PARA_GRABAR_S;
  * Lo que el celular espera después de ver el sorteo grabado, un margen más para no adelantarse a la sala.
  *
  * Desde el 16 de noviembre de 2026 la sala juega sin esperar lo grabado, y lo grabado llega siempre después de que la
- * sala tiene su resultado: este retraso queda de margen. Se deja como estaba: el celular ya va detrás, y bajarlo no
- * adelanta nada que importe.
+ * sala tiene su resultado. Con la sala a tiempo el celular ya va muy detrás y este retraso es margen de más. Con la sala
+ * que lanza poco después de que la cadena acepta grabar (ver arriba) es casi todo el margen que queda: no bajarlo.
  *
  * Se midió una sola vez, el 15 de noviembre de 2026, cuando la sala todavía esperaba lo grabado: el sorteo 992 en
  * Prueba, con la cuenta de prueba, que firma en la compu de la sala y se entera de lo grabado por la confirmación de su
@@ -64,6 +80,29 @@ export const MARGEN_DE_LA_CADENA_S = MARGEN_PARA_GRABAR_S;
  * mismo, y por eso el retraso no baja.
  */
 export const RETRASO_TRAS_LO_GRABADO_MS = 2_500;
+
+/**
+ * Si el celular ve lo grabado más de esto después de que la cadena acepta el sorteo grabado (`horaDeMirarLaCadena`), la
+ * sala lo lanzó tarde. Con la sala a tiempo suele verse antes: medido en Prueba el 16 de noviembre de 2026, 5,9 s
+ * después, con la lectura de la cadena cada 3 a 5 s. Cuando grabar tarda (la red ocupada, una cuenta de Google en
+ * Oficial) pasa el tope aunque la sala haya lanzado a tiempo, y es solo más atraso: el mismo día, en otro sorteo, lo
+ * grabado se vio unos 12,6 s después y el celular arrancó 30,5 s detrás de la sala, en vez de unos 23. Quien abre el
+ * enlace tarde también espera de más, porque no se sabe si la sala acaba de lanzar.
+ */
+export const LANZADO_TARDE_TRAS_MS = 10_000;
+
+/**
+ * Lo que el celular espera después de ver el sorteo grabado, antes de que su tarjeta siga con la cuenta.
+ * `vistoTrasMirarMs` es cuánto después de `horaDeMirarLaCadena` lo vio, en el reloj del teléfono, y `segundosDelShow` lo
+ * que promete el ritmo (`paceSeconds` de `state.ts`: la tarjeta, la cuenta y el juego).
+ *
+ * Con la sala a tiempo, el retraso de siempre. Con la sala que lanzó tarde, además la lectura de la tarjeta, que la sala
+ * hace después de lanzar y el celular ya hizo, y un 10 % del show, para una sala que dibuja más lento.
+ */
+export function esperaTrasLoGrabadoMs(vistoTrasMirarMs: number, segundosDelShow: number): number {
+  if (vistoTrasMirarMs <= LANZADO_TARDE_TRAS_MS) return RETRASO_TRAS_LO_GRABADO_MS;
+  return RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TARJETA_S * 1000 + segundosDelShow * 1000 * MARGEN_DEL_FINAL_PARTE;
+}
 
 /** Lo más que el celular espera a una cadena que no contesta antes de jugar igual (`espectador-cadena.ts`). */
 export const LARGA_IGUAL_TRAS_MS = 2 * 60_000;
@@ -124,8 +163,10 @@ export const MARGEN_DEL_FINAL_PARTE = 0.1;
  * - Lo que promete el ritmo, desde que lanzó. La sala, desde que tiene el resultado, hace la cuenta y el juego: lo
  *   mismo menos la tarjeta, que leyó mientras llegaba el número. El celular lanza después de verlo grabado, y lo
  *   grabado llega después de que la sala tiene el resultado, así que su final cae después del de la sala, con la
- *   tarjeta de margen. Cubre al celular que no muestra el juego (pidió menos movimiento: el juego termina en el acto y
- *   el final salía unos 40 s antes que en la sala).
+ *   tarjeta de margen. Si la sala lanzó tarde, lee la tarjeta después del número y su final cae a lo más el show entero
+ *   después de su resultado: el del celular cae igual después, con la espera tras lo grabado de margen. Cubre al
+ *   celular que no muestra el juego (pidió menos movimiento: el juego termina en el acto y el final salía unos 40 s
+ *   antes que en la sala).
  * - Un margen después de que terminó el show del celular: 3 s, o un 10 % de lo que duró si es más. Una sala que dibuja
  *   más lento que el celular estira su juego (medido el 16 de noviembre de 2026 sin placa de video: 60,8 s en la sala
  *   y 56,3 s en el celular, con el celular 2,1 s detrás al arrancar). Cubre una sala hasta un 10 % más lenta.

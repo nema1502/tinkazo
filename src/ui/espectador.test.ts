@@ -45,7 +45,8 @@ import { esSoloMirar, setSoloMirar } from "../solo-mirar";
 import { T, type Lang } from "../i18n";
 import type { Registro } from "../protocol/verificacion";
 import { abrirEspectador, avisarEnlaceRoto, datosDelEnlace, enlaceEspectador, type DatosEspectador, type OpcionesDeLaVista } from "./espectador";
-import { LARGA_IGUAL_TRAS_MS, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
+import { LARGA_IGUAL_TRAS_MS, MARGEN_DEL_FINAL_PARTE, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
+import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
 
 /** Nombres de la lista sellada de prueba. */
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito"];
@@ -102,6 +103,11 @@ const abrir = (d: DatosEspectador, op: OpcionesDeLaVista = {}): boolean =>
  */
 const HASTA_EL_NUMERO = 30 * 1000;
 const HASTA_EL_SHOW = (30 + MARGEN_DE_LA_CADENA_S) * 1000 + RETRASO_TRAS_LO_GRABADO_MS + 100;
+/**
+ * Lo que el celular espera después de ver lo grabado cuando la sala lo lanzó tarde: el retraso de siempre, la lectura de
+ * la tarjeta y un 10 % del show. Se llama con el sorteo ya traído (el ritmo de la carrera depende de cuántos corren).
+ */
+const ESPERA_TARDE = (): number => RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TARJETA_S * 1000 + paceSeconds("normal") * 1000 * MARGEN_DEL_FINAL_PARTE;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -421,11 +427,41 @@ describe("un sorteo sellado en Stellar", () => {
     await vi.advanceTimersByTimeAsync(LARGA_IGUAL_TRAS_MS + 5 * 60_000);
     expect(h.jugar).not.toHaveBeenCalled();
     expect(capa().textContent).toContain(T.es.espTarda);
-    // Lo lanzó: el celular lo ve grabado y juega detrás de la sala.
+    // Lo lanzó: el celular lo ve grabado y juega detrás de la sala. La lanzó tarde: el celular cuenta también la lectura
+    // de la tarjeta y una parte del show.
     grabado = true;
-    await vi.advanceTimersByTimeAsync(10_000 + RETRASO_TRAS_LO_GRABADO_MS);
+    await vi.advanceTimersByTimeAsync(10_000 + ESPERA_TARDE());
     expect(h.jugar).toHaveBeenCalledTimes(1);
     expect(app.drawn?.winners).toEqual(ganadores());
+    // La tarjeta, que esperaba lo grabado, sigue con la cuenta.
+    await expect(h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>).resolves.toBeUndefined();
+  });
+
+  it("si la sala lo lanza tarde, el celular cuenta la lectura de la tarjeta desde que lo ve grabado, y una parte del show", async () => {
+    // La sala que lanza tarde abre su tarjeta al lanzar y la lee después del número: lo grabado aparece apenas un par de
+    // segundos después de que lanzó. La tarjeta del celular está leída desde que nació el número.
+    let grabado = false;
+    let vistoEn = 0;
+    abrir(sellado(), {
+      leer: async () => {
+        if (grabado && !vistoEn) vistoEn = Date.now();
+        return registro({ grabado });
+      },
+    });
+    // Nace el número y quien organiza toca Lanzar el sorteo 30 s después.
+    await vi.advanceTimersByTimeAsync(30_000 + 30_000);
+    expect(h.showDelEspectador).toHaveBeenCalledOnce();
+    grabado = true;
+    // El celular lo ve en su vuelta siguiente.
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(vistoEn).toBeGreaterThan(0);
+    // Con solo el retraso de siempre arrancaba 1 s detrás de la sala. Ahora espera también la lectura y el 10 % del show.
+    await vi.advanceTimersByTimeAsync(vistoEn + RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TARJETA_S * 1000 - Date.now());
+    expect(h.jugar).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(vistoEn + ESPERA_TARDE() - 300 - Date.now());
+    expect(h.jugar).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(h.jugar).toHaveBeenCalledTimes(1);
     // La tarjeta, que esperaba lo grabado, sigue con la cuenta.
     await expect(h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>).resolves.toBeUndefined();
   });
