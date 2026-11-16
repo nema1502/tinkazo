@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   miradores: [] as Array<{ onRequest: (x: unknown) => unknown }>,
   cancelados: 0,
   activa: null as unknown,
+  /** Las veces que se cerró la sesión del proveedor. */
+  salidas: 0,
 }));
 
 vi.mock("../stellar/config", async (orig) => {
@@ -77,7 +79,9 @@ vi.mock("@pollar/core", () => {
       h.cancelados++;
       h.paso = "idle";
     }
-    logout = async (): Promise<void> => undefined;
+    logout = async (): Promise<void> => {
+      h.salidas++;
+    };
     getUserProfile(): null {
       return null;
     }
@@ -110,6 +114,7 @@ beforeEach(() => {
   h.miradores = [];
   h.cancelados = 0;
   h.activa = null;
+  h.salidas = 0;
   ventana.closed = false;
   localStorage.clear();
   sessionStorage.clear();
@@ -270,5 +275,26 @@ describe("Cancelar desde la portada", () => {
     // Sin una entrada en curso no hace nada.
     expect(() => ui.cancelarLaEntrada()).not.toThrow();
     expect(h.cancelados).toBe(1);
+  });
+});
+
+describe("Cancelar es quedar afuera", () => {
+  it("si la cuenta llega justo al cancelar, no se toma: se cierra esa sesión y se olvida la marca de Google", async () => {
+    const { ui } = await cargar();
+    const fin = ui.entrar();
+    await terminaEnGoogle();
+    await vi.waitFor(() => expect(document.querySelector("#gate button"), volcado()).not.toBeNull(), esperar);
+    expect(localStorage.getItem("tinkazo.pollar.intent.testnet")).toBe("google");
+    // El SDK ya guardó la cuenta, pero el aviso no llegó antes del toque.
+    h.billetera = { address: DIR };
+    document.querySelector<HTMLButtonElement>("#gate button")?.click();
+    await fin;
+    expect(ui.currentSession(), volcado()).toBeNull();
+    expect(aviso(), volcado()).toBeNull();
+    expect(document.querySelector("#wallet-box .cuenta-chip")?.getAttribute("data-estado"), volcado()).toBe("fuera");
+    await vi.waitFor(() => expect(h.salidas).toBe(1), esperar);
+    // La próxima carga no intenta retomarla.
+    expect(localStorage.getItem("tinkazo.pollar.intent.testnet")).toBeNull();
+    expect(localStorage.getItem("tinkazo.session.kind.testnet")).toBeNull();
   });
 });

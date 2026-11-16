@@ -118,13 +118,16 @@ export const AVISO_TERMINANDO_MS = 2_500;
 /** El plazo largo se cumplió sin cuenta: el mismo nombre del plazo vencido de `waitForWallet`, que la pantalla ya sabe decir. */
 export const ENTRADA_DEMORADA = "pollar-timeout";
 
-/** La persona tocó Cancelar mientras se terminaba de entrar: no es un error, la puerta vuelve a como estaba. */
+/**
+ * La persona tocó Cancelar mientras se terminaba de entrar: no es un error, la puerta vuelve a como estaba, y queda
+ * afuera aunque la cuenta llegue justo en ese momento (`connect`).
+ */
 export const ENTRADA_CANCELADA = "login-cancelled";
 
 /** Los cortes de la entrada con Google que dejan al SDK esperando algo que ya no va a llegar: se le dice que pare. */
 const CORTES: readonly string[] = [ENTRADA_BLOQUEADA, ENTRADA_CERRADA, ENTRADA_SIN_SESION, ENTRADA_DEMORADA, ENTRADA_CANCELADA];
-/** Los cortes con la entrada en curso, en los que la cuenta pudo llegar justo al cortar. */
-const TARDIAS: readonly string[] = [ENTRADA_CERRADA, ENTRADA_DEMORADA, ENTRADA_CANCELADA];
+/** Los cortes con la entrada en curso, en los que la cuenta pudo llegar justo al cortar y se toma. Cancelar no: es quedar afuera. */
+const TARDIAS: readonly string[] = [ENTRADA_CERRADA, ENTRADA_DEMORADA];
 
 /** Lo que la entrada con Google le cuenta a la pantalla mientras pasa. */
 export interface AvisosDeEntrada {
@@ -1126,8 +1129,10 @@ class PollarWallet implements SubmittingWallet {
       if (e instanceof Error && CORTES.includes(e.message)) {
         // El SDK sigue esperando algo que ya no va a llegar: se le dice que pare, y no queda un intento colgado.
         client.cancelLogin();
+        if (e.message === ENTRADA_CANCELADA) this.#quedarAfuera(client);
         // Si la cuenta llegó justo en este instante, ya está guardada en el SDK: se entra igual. Solo en los cortes con la
-        // entrada en curso: con la ventana bloqueada o sin dirección de Google no hay cuenta que pueda llegar.
+        // entrada en curso: con la ventana bloqueada o sin dirección de Google no hay cuenta que pueda llegar, y quien
+        // canceló pidió quedar afuera.
         const ya = TARDIAS.includes(e.message) ? client.getWallet() : null;
         if (ya?.address) return entro(ya.address);
         // La pantalla va a decir que se cerró la ventana antes de entrar: se cuenta cada vez.
@@ -1144,6 +1149,19 @@ class PollarWallet implements SubmittingWallet {
       this.#falla = null;
       this.#ventana = null;
     }
+  }
+
+  /**
+   * Cancelar es quedar afuera (16 de noviembre de 2026). Si la cuenta llegó justo al cancelar, no se toma: se cierra esa
+   * sesión del SDK, sin esperar a que el servidor conteste. Y se olvida la marca de Google que puso la entrada, para que la
+   * próxima carga no intente retomarla.
+   */
+  #quedarAfuera(client: PollarClient): void {
+    this.#olvidarMarca();
+    if (!client.getWallet()?.address) return;
+    void Promise.resolve()
+      .then(() => client.logout())
+      .catch(() => undefined);
   }
 
   /**

@@ -76,7 +76,7 @@ vi.mock("@pollar/core", () => ({
     login(): void {
       h.alLogin?.(this as unknown as Record<string, unknown>);
     }
-    async logout(): Promise<void> {}
+    logout = vi.fn(async (): Promise<void> => undefined);
   },
   // Una sesión del SDK parece buena si trae su identificador: lo único que esta prueba necesita.
   isValidSession: (s: unknown) => typeof s === "object" && s !== null && "clientSessionId" in s,
@@ -509,6 +509,60 @@ describe("entrar con Google", () => {
     await vi.advanceTimersByTimeAsync(8_000);
     expect(await r).toBe(ENTRADA_CERRADA);
     expect(terminando).not.toHaveBeenCalled();
+  });
+
+  it("Cancelar es quedar afuera: si la cuenta llega justo, no se toma, se cierra esa sesión y se olvida la marca", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+    };
+    const { pollarWallet, ENTRADA_CANCELADA } = await modulo();
+    const avisos: Array<() => void> = [];
+    const r = pollarWallet.connect({ terminando: (cancelar) => avisos.push(cancelar) }).then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(avisos).toHaveLength(1);
+    expect(pollarWallet.hayMarca()).toBe(true);
+    // El SDK ya guardó la cuenta, pero el aviso no llegó antes del toque.
+    (h.cliente as unknown as { wallet: { address: string } }).wallet = { address: DIR };
+    avisos[0]?.();
+    expect(await r).toBe(ENTRADA_CANCELADA);
+    expect(pollarWallet.address).toBeNull();
+    expect(cancelLogin()).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect((h.cliente as unknown as { logout: ReturnType<typeof vi.fn> }).logout).toHaveBeenCalledTimes(1);
+    // La próxima carga no intenta retomarla, y no cuenta como una entrada tardía.
+    expect(pollarWallet.hayMarca()).toBe(false);
+    expect(h.contados).toEqual([]);
+  });
+
+  it("Cancelar sin la cuenta también olvida la marca, y no hay sesión que cerrar", async () => {
+    vi.useFakeTimers();
+    almacen();
+    const { ventana } = ventanaQueAbre();
+    h.alLogin = (c) => {
+      alLoginAbre(c);
+      setTimeout(() => saleElPedido(c), 400);
+      setTimeout(() => (ventana.closed = true), 500);
+    };
+    const { pollarWallet, ENTRADA_CANCELADA } = await modulo();
+    const avisos: Array<() => void> = [];
+    const r = pollarWallet.connect({ terminando: (cancelar) => avisos.push(cancelar) }).then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(8_000);
+    avisos[0]?.();
+    expect(await r).toBe(ENTRADA_CANCELADA);
+    await vi.advanceTimersByTimeAsync(0);
+    expect((h.cliente as unknown as { logout: ReturnType<typeof vi.fn> }).logout).not.toHaveBeenCalled();
+    expect(pollarWallet.hayMarca()).toBe(false);
   });
 
   it("si mientras se espera el SDK termina con un error, se corta enseguida con ese error", async () => {
