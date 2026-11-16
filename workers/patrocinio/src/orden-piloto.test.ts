@@ -71,6 +71,30 @@ describe("la orden en dólares digitales y la lista del piloto", () => {
     expect((await todos.orden(todos.persona("usr_ana", ANA).token, "alta")).estado).toBe(200);
   });
 
+  it("con su propia variable abierta (`todos` confirmado), la orden mira la suya y la compra con QR la suya", async () => {
+    // La lista del QR puesta y la orden en USDC abierta: quien está fuera de la lista del QR crea su orden en USDC y no
+    // puede empezar una compra con QR.
+    const m = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: "todos", ORDEN_USDC_TODOS: "1" });
+    const [ana, nora] = [m.persona("usr_ana", ANA), m.persona("usr_nora", NORA)];
+    expect((await m.orden(nora.token, "alta")).estado).toBe(200);
+    expect(await m.empezar(nora.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    // En la lista del QR hay de las dos.
+    expect((await m.orden(ana.token, "alta")).estado).toBe(200);
+    expect((await m.empezar(ana.token, "alta")).estado).toBe(200);
+  });
+
+  it("con su propia lista puesta, solo esas cuentas crean la orden (ni las del QR); mal escrita, nadie", async () => {
+    const lista = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: NORA });
+    const [ana, nora] = [lista.persona("usr_ana", ANA), lista.persona("usr_nora", NORA)];
+    expect((await lista.orden(nora.token, "alta")).estado).toBe(200);
+    expect(await lista.orden(ana.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    // Mal escrita: la orden no nace para nadie, aunque esté en el piloto de la compra con QR; la compra sigue por su lista.
+    const mal = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: `${NORA},beto` });
+    const anaMal = mal.persona("usr_ana", ANA);
+    expect(await mal.orden(anaMal.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    expect((await mal.empezar(anaMal.token, "alta")).estado).toBe(200);
+  });
+
   it("una lista mal escrita no deja pasar a nadie, ni a las cuentas bien escritas ni a las sumadas a mano", async () => {
     for (const mal of [`${ANA},beto`, `${ANA};${BETO}`, "todos", "Todos"]) {
       const m = montarPagos({ ...PILOTO, COMPRAS_QR_PILOTO: mal });

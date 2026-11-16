@@ -105,6 +105,65 @@ describe("las altas nacen apagadas", () => {
   });
 });
 
+describe("ORDEN_USDC_PILOTO: la lista del piloto de la orden en dólares digitales", () => {
+  const G1 = Keypair.random().publicKey();
+  const G2 = Keypair.random().publicKey();
+
+  it("vacía (o en testnet) no pone lista propia: la orden mira el piloto de la compra con QR, como hoy", () => {
+    for (const vacia of [undefined, "", " , "]) {
+      const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ...(vacia === undefined ? {} : { ORDEN_USDC_PILOTO: vacia }) });
+      expect(cfg.ordenUsdcTodos, JSON.stringify(vacia)).toBe(false);
+      expect([...cfg.ordenUsdcPiloto], JSON.stringify(vacia)).toEqual([]);
+      expect(cfg.ordenUsdcEnVariable, JSON.stringify(vacia)).toBe("ninguna");
+      expect(cfg.faltaAltas, JSON.stringify(vacia)).toEqual([]);
+    }
+    const test = leerConfig({ RED: "testnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: G1 });
+    expect(test).toMatchObject({ ordenUsdcTodos: false, ordenUsdcEnVariable: "ninguna" });
+    expect([...test.ordenUsdcPiloto]).toEqual([]);
+    expect(test.faltaAltas).toEqual([]);
+  });
+
+  it("lista de cuentas bien escritas, con espacios alrededor: esas y solo esas", () => {
+    const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: ` ${G1} , ${G2} ` });
+    expect([...cfg.ordenUsdcPiloto].sort()).toEqual([G1, G2].sort());
+    expect(cfg.ordenUsdcTodos).toBe(false);
+    expect(cfg.ordenUsdcEnVariable).toBe("lista");
+    expect(cfg.faltaAltas).toEqual([]);
+  });
+
+  it("todos abre a cualquiera solo con ORDEN_USDC_TODOS en 1; sin la confirmación cierra y se anota", () => {
+    const base = { RED: "mainnet", ...TODO_PRENDIDO };
+    const abierto = leerConfig({ ...base, ORDEN_USDC_PILOTO: "todos", ORDEN_USDC_TODOS: "1" });
+    expect(abierto.ordenUsdcTodos).toBe(true);
+    expect([...abierto.ordenUsdcPiloto]).toEqual([]);
+    expect(abierto.faltaAltas).toEqual([]);
+    // Con cuentas al lado también; con la confirmación, nada cambia para ellas.
+    const conCuentas = leerConfig({ ...base, ORDEN_USDC_PILOTO: `todos, ${G1} `, ORDEN_USDC_TODOS: "1" });
+    expect(conCuentas.ordenUsdcTodos).toBe(true);
+    expect([...conCuentas.ordenUsdcPiloto]).toEqual([G1]);
+    // Sin la confirmación explícita, `todos` es como una palabra mal escrita.
+    for (const sinEso of [undefined, "0", "true", " 1"]) {
+      const cfg = leerConfig({ ...base, ORDEN_USDC_PILOTO: "todos", ...(sinEso === undefined ? {} : { ORDEN_USDC_TODOS: sinEso }) });
+      expect(cfg.ordenUsdcTodos, JSON.stringify(sinEso)).toBe(false);
+      expect([...cfg.ordenUsdcPiloto], JSON.stringify(sinEso)).toEqual([]);
+      expect(cfg.ordenUsdcEnVariable, JSON.stringify(sinEso)).toBe("mal");
+      expect(cfg.faltaAltas, JSON.stringify(sinEso)).toEqual(["orden-usdc-piloto"]);
+    }
+  });
+
+  it("mal escrita no se toma a medias: se anota con nombre fijo, sin valores, solo si la orden puede nacer", () => {
+    for (const mal of [`${G1},beto`, `${G1};${G2}`, "Todos", "todas", "*"]) {
+      const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: mal });
+      expect([...cfg.ordenUsdcPiloto], mal).toEqual([]);
+      expect(cfg.ordenUsdcTodos, mal).toBe(false);
+      expect(cfg.ordenUsdcEnVariable, mal).toBe("mal");
+    }
+    expect(leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: `${G1},beto` }).faltaAltas).toEqual(["orden-usdc-piloto"]);
+    // Con el pago apagado no se usa: no se anota.
+    expect(leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ALTAS_PAGO: "0", ORDEN_USDC_PILOTO: `${G1},beto` }).faltaAltas).toEqual([]);
+  });
+});
+
 describe("PRECIOS", () => {
   it("una cadena con los tres productos los da todos, con el monto en diezmillonésimas", () => {
     expect(leerPrecios("alta:2:3:365,p10:5:10:365,p50:20:50:365")).toEqual([
