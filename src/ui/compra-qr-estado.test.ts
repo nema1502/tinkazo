@@ -320,12 +320,12 @@ const FILAS: Fila[] = [
   {
     nombre: "otra app: fuera de Bolivia: Pagá desde tu app, con Estoy en Bolivia",
     s: base({ medio: "app", ordenDelPaquete: ORDEN_DEL_PAQUETE }),
-    espera: { id: "app", titulo: "compraAppTitulo", linea: "compraAppLinea", principal: ["ya-pague-app", "pagoYaPague"], enlace: "compraEstoy", datos: ["compraDatoMoneda"], plegado: ["compraNotaMemo", "compraSinDolares"] },
+    espera: { id: "app", titulo: "compraAppTitulo", linea: "compraAppLinea", principal: ["ya-pague-app", "pagoYaPague"], enlace: "compraEstoy", datos: ["compraDatoMoneda"], plegado: ["compraNotaMemo", "compraSinDolares", "compraDesdeXlm"] },
   },
   {
     nombre: "otra app: con el recargo de una compra con QR en curso, el plegado dice por qué va y que nunca se cobra dos veces",
     s: base({ medio: "app", ordenDelPaquete: { ...ORDEN_DEL_PAQUETE, usdc: "8.25", precio: "4", recargo: "4.25" } }),
-    espera: { id: "app", datos: ["compraDatoMoneda", "compraDatoIncluyeRecargo"], plegado: ["compraRecargoPendiente", "compraNotaMemo", "compraSinDolares"] },
+    espera: { id: "app", datos: ["compraDatoMoneda", "compraDatoIncluyeRecargo"], plegado: ["compraRecargoPendiente", "compraNotaMemo", "compraSinDolares", "compraDesdeXlm"] },
   },
   { nombre: "otra app: sin el QR para esta cuenta, sin enlace de cambio", s: base({ medio: "app", cambio: false, ordenDelPaquete: ORDEN_DEL_PAQUETE }), espera: { id: "app", enlace: null } },
   { nombre: "otra app: sin la orden del paquete todavía, la espera", s: base({ medio: "app" }), espera: { id: "espera" } },

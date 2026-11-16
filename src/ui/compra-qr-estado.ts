@@ -505,7 +505,7 @@ function pantallaDeApp(s: LoQueSeSabe): PantallaDeCompra {
     linea: t("compraAppLinea"),
     datos,
     enlace: enlace("estoy-en-bolivia", "compraEstoy"),
-    plegado: recargo !== null && recargo > 0n ? [t("compraRecargoPendiente"), t("compraNotaMemo"), t("compraSinDolares")] : [t("compraNotaMemo"), t("compraSinDolares")],
+    plegado: recargo !== null && recargo > 0n ? [t("compraRecargoPendiente"), t("compraNotaMemo"), t("compraSinDolares"), t("compraDesdeXlm")] : [t("compraNotaMemo"), t("compraSinDolares"), t("compraDesdeXlm")],
     app: { monto: o.usdc, nota: o.nota, cuenta: o.destino, cuentaCorta: cuentaCorta(o.destino), enlace: o.enlace, vence: o.vence },
   });
 }

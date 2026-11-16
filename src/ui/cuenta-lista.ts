@@ -38,7 +38,7 @@ import {
 } from "./cuenta-lista-estado";
 import type { MotivoDelPago } from "../stellar/pago-con-saldo";
 import { type SaldoDeDolares, alcanza, faltaPara } from "../stellar/saldo-dolares";
-import { armarPanelDePago } from "./pago-panel";
+import { type PanelArmado, panelDeLaOrden } from "./pago-panel";
 import { type FaseDelSaldo, type PagoConSaldo, type SaldoCorto, mediosConSaldo, trasPagar } from "./pago-saldo";
 import { type Sondeo, vigilarPago } from "./pago-sondeo";
 import { MEDIOS_DE_PAGO, type MedioDePago, NO_SE_VENDE, type PanelDePago, faltaDe, textoDelErrorDeLaOrden, textoDelErrorDelPago } from "./pago-vista";
@@ -449,7 +449,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   /** Lo que se pidió de la orden: la respuesta de un pedido viejo no pisa la de uno nuevo. */
   let pedidosDeOrden = 0;
   /** El panel con los datos de la orden, armado una vez por orden y por idioma: así no se pierde «Copiado» al repintar. */
-  let panelArmado: { clave: string; el: HTMLElement } | null = null;
+  let panelArmado: PanelArmado | null = null;
   /** El repintado del momento en que vence la nota que se está mostrando. */
   let relojDelVencimiento: ReturnType<typeof setTimeout> | null = null;
   /** Más detalles de la caja, abierto por la persona: sigue abierto al repintar. */
@@ -633,19 +633,13 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     };
   }
 
-  /** El panel de esta orden, en este idioma: el mismo elemento mientras no cambien. */
+  /** El panel de esta orden, en este idioma y con lo que dice Más detalles: el mismo elemento mientras no cambie nada. */
   function panelDePago(p: PanelDePago): HTMLElement {
-    const clave = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}|${p.correo}|${p.cambio ? "qr" : ""}|${getLang()}`;
-    if (panelArmado?.clave !== clave) {
-      panelArmado = {
-        clave,
-        el: armarPanelDePago(p, {
-          alCambiar: (ev) => {
-            if (confiable(ev)) void hacer("estoy-en-bolivia");
-          },
-        }),
-      };
-    }
+    panelArmado = panelDeLaOrden(panelArmado, p, getLang(), {
+      alCambiar: (ev) => {
+        if (confiable(ev)) void hacer("estoy-en-bolivia");
+      },
+    });
     return panelArmado.el;
   }
 
