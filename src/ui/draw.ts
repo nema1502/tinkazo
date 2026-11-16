@@ -841,13 +841,14 @@ export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspecta
   if (!frozen || !drawn) return null;
   const personas = frozen.names.length;
   const premios = drawn.winners.length;
-  // El cartel final dice «¡El orden quedó listo!» cuando es un orden de turnos, como en la sala.
-  setResultadoDeTurnos(isTurnOrder(personas, premios, frozen.prize));
+  // El cartel final dice «¡El orden quedó listo!» cuando es un orden de turnos, como en la sala, y la tarjeta también.
+  const orden = isTurnOrder(personas, premios, frozen.prize);
+  setResultadoDeTurnos(orden);
   let tarjeta: Previa | null = null;
   let seFue = false;
   if (grabado) {
     const juego = juegoDe(personas, premios);
-    const card = abrirTarjeta(juego, personas, premios, grabado);
+    const card = abrirTarjeta(juego, personas, premios, orden, grabado);
     if (card) {
       tarjeta = { card, game: juego };
       let llego = false;
@@ -865,7 +866,7 @@ export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspecta
     jugar: (alTerminar) => {
       if (jugado) return;
       jugado = true;
-      playGame(frozen.names, drawn.winners, drawn.beacon, alTerminar, seFue ? null : tarjeta);
+      playGame(frozen.names, drawn.winners, drawn.beacon, alTerminar, orden, seFue ? null : tarjeta);
     },
     cancelar: () => tarjeta?.card.hide(),
   };
