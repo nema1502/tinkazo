@@ -18,7 +18,11 @@ const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQ
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ soltarPantallaCompleta: () => undefined }));
-vi.mock("./espectador", () => ({ armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a) }));
+// El QR del espectador: el lugar y los datos son los de verdad; el dibujo (que pide el enlace corto) se anota.
+vi.mock("./espectador-enlace", async (orig) => ({
+  ...(await orig<typeof import("./espectador-enlace")>()),
+  armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a),
+}));
 
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito", "Gaby"];
 
@@ -69,11 +73,11 @@ interface Abierta {
  * Prende la ronda (`app.frozen`) y abre la espera con un `Sorteo` de prueba y el panel de juegos abierto. `premios`: cuántos
  * se sortean. `extra.nombres`: la gente de la lista. `extra.juegos`: los juegos que ofrece el panel.
  */
-async function abrirEspera(premios = 1, extra: { nombres?: string[]; juegos?: typeof BASE } = {}): Promise<Abierta> {
+async function abrirEspera(premios = 1, extra: { nombres?: string[]; juegos?: typeof BASE; raffleId?: bigint } = {}): Promise<Abierta> {
   const { mostrarEspera } = await import("./espera");
   const { app } = await import("../state");
   app.drawn = null;
-  app.frozen = { names: extra.nombres ?? NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1 };
+  app.frozen = { names: extra.nombres ?? NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1, ...(extra.raffleId !== undefined ? { raffleId: extra.raffleId } : {}) };
   app.game = "race";
   const elegirJuego = vi.fn((g: string) => {
     // Como `elegirJuego` de freeze.ts: queda elegido, y `juegos()` lo refleja.
@@ -156,10 +160,58 @@ function temporizadoresAsentados(): number {
   return vi.getTimerCount();
 }
 
-describe("el pase de tarjetas del panel Elegí el juego", () => {
+/** Semillas de toda clase: chicas, grandes y el máximo de 32 bits. Con la semilla 0 la ruleta arranca justo en la carrera. */
+const SEMILLAS = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 144, 12345, 2147483647, 4294967295];
+
+/**
+ * El pase entra apagado: en Mostrar en grande la tarjeta elegida se apagaba a la mitad cada vuelta, frente a la sala, y
+ * se podía leer como si el juego cambiara solo. Apagado, ni con el panel quieto ni después de un toque arranca.
+ */
+describe("el pase de tarjetas entra apagado", () => {
+  it("el interruptor viene apagado", async () => {
+    const { ATENCION_PRENDIDA, atencionPrendida } = await import("../estilos-atencion");
+    expect(ATENCION_PRENDIDA.pase).toBe(false);
+    expect(atencionPrendida("pase")).toBe(false);
+  });
+
+  it("con el panel quieto no arranca, y un toque dentro del panel tampoco lo arma", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    panel.dispatchEvent(new Event("pointermove"));
+    vi.advanceTimersByTime(12000);
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // La tarjeta elegida sigue con su marca: nada la apaga.
+    expect(resaltadas(panel)).toEqual(["race"]);
+  });
+});
+
+describe("el pase de tarjetas del selector", () => {
+  // El mecanismo, con el interruptor prendido a mano: el sitio lo trae apagado.
+  beforeEach(async () => {
+    const { forzarAtencion } = await import("../estilos-atencion");
+    forzarAtencion("pase", true);
+  });
+
   /** La tarjeta marcada como viva del pase. */
   const viva = (panel: HTMLElement): number =>
     [...panel.querySelectorAll<HTMLElement>("[data-game]")].findIndex((t) => t.classList.contains("pase-viva"));
+
+  it("al cerrar el panel y al cerrar la espera, el pase queda parado sin marcas puestas", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+    // Cerrar el panel apaga el pase: sin marcas ni bucles colgados.
+    (document.querySelector("[data-juegos-listo]") as HTMLButtonElement).click();
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // Y al volver a abrirlo, el pase se rearma: a los ~6 s vuelve a entrar.
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(false);
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+  });
 
   it("tras ~6 s sin tocar el panel, las tarjetas entran en pase y se recorren en bucle", async () => {
     const { panel } = await abrirEspera();
@@ -207,21 +259,6 @@ describe("el pase de tarjetas del panel Elegí el juego", () => {
     expect(panel.classList.contains("pase")).toBe(false);
   });
 
-  it("al cerrar el panel y al cerrar la espera, el pase queda parado sin marcas puestas", async () => {
-    const { panel } = await abrirEspera();
-    vi.advanceTimersByTime(6000);
-    expect(panel.classList.contains("pase")).toBe(true);
-    // Cerrar el panel apaga el pase: sin marcas ni bucles colgados.
-    (document.querySelector("[data-juegos-listo]") as HTMLButtonElement).click();
-    expect(panel.classList.contains("pase")).toBe(false);
-    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
-    // Y al volver a abrirlo, el pase se rearma: a los ~6 s vuelve a entrar.
-    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
-    expect(panel.hidden).toBe(false);
-    vi.advanceTimersByTime(6000);
-    expect(panel.classList.contains("pase")).toBe(true);
-  });
-
   it("con movimiento reducido no hay pase", async () => {
     h.reduce = true;
     const { panel } = await abrirEspera();
@@ -229,9 +266,6 @@ describe("el pase de tarjetas del panel Elegí el juego", () => {
     expect(panel.classList.contains("pase")).toBe(false);
   });
 });
-
-/** Semillas de toda clase: chicas, grandes y el máximo de 32 bits. Con la semilla 0 la ruleta arranca justo en la carrera. */
-const SEMILLAS = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55, 144, 12345, 2147483647, 4294967295];
 
 describe("el botón Sorprendeme", () => {
   it("está en el panel Elegí el juego, en español, sin dado ni ícono y sin la palabra azar", async () => {
@@ -594,11 +628,9 @@ describe("si nace el número con la ruleta andando", () => {
     const { nacioElNumero } = await import("./espera");
     const { elegirJuego, sortear, panel } = await abrirEspera();
     const base = temporizadoresAsentados();
-    // El pase armado por la apertura del panel es un temporizador suyo (estilos-atencion);
-    // el toque en Sorprendeme lo para (la ruleta manda) y arma el suyo: el total no cambia.
     botonAzar().click();
     vi.advanceTimersByTime(700);
-    expect(vi.getTimerCount()).toBe(base);
+    expect(vi.getTimerCount()).toBe(base + 1);
     expect(panel.classList.contains("girando")).toBe(true);
 
     nacioElNumero();
@@ -607,8 +639,8 @@ describe("si nace el número con la ruleta andando", () => {
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
     expect(panel.classList.contains("girando")).toBe(false);
-    // Sin temporizadores de la ruleta ni del pase: ni a que se venzan vuelve a elegir.
-    expect(vi.getTimerCount()).toBe(base - 1);
+    // Sin temporizadores de la ruleta: ni a que se venzan vuelve a elegir.
+    expect(vi.getTimerCount()).toBe(base);
     vi.advanceTimersByTime(10_000);
     expect(elegirJuego).not.toHaveBeenCalled();
     // El juego sigue siendo el de partida, y el nombre de la espera también.
@@ -622,7 +654,6 @@ describe("si nace el número con la ruleta andando", () => {
     const { elegirJuego, sortear, panel } = await abrirEspera();
     const base = temporizadoresAsentados();
     const esperado = elegirAlAzar(catalogo(), NOMBRES.length, 5, "race");
-    // El toque en Sorprendeme para el pase del panel (la ruleta manda) y arma el suyo: el total no cambia.
     botonAzar().click();
     vi.advanceTimersByTime(esperado.recorrido.slice(0, -1).reduce((a, p) => a + p.pausa, 0) + 300);
     expect(panel.querySelector(".azar-quedo")).not.toBeNull();
@@ -631,8 +662,8 @@ describe("si nace el número con la ruleta andando", () => {
 
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
-    // Sin temporizadores de la ruleta ni del pase.
-    expect(vi.getTimerCount()).toBe(base - 1);
+    // Sin temporizadores de la ruleta.
+    expect(vi.getTimerCount()).toBe(base);
     expect(elegirJuego).toHaveBeenCalledTimes(1);
     expect(h.elegido).toBe(esperado.elegido?.game);
     vi.advanceTimersByTime(10_000);
@@ -806,12 +837,12 @@ describe("el QR del espectador durante la espera", () => {
   const pedidos = (): Array<{ capa: HTMLElement; datos: Record<string, unknown> }> =>
     (h.armarQr.mock.calls as unknown as Array<[HTMLElement, Record<string, unknown>]>).map(([capa, datos]) => ({ capa, datos }));
 
-  it("arma el QR del espectador con la ronda, el juego, el pace, los ganadores y los nombres del sello", async () => {
-    await abrirEspera(2, { nombres: ["Ana", "Beto", "Cami"] });
+  it("arma el QR del espectador con la ronda, el juego, el pace, los ganadores, los nombres y el número del sello", async () => {
+    await abrirEspera(2, { nombres: ["Ana", "Beto", "Cami"], raffleId: 42n });
     const p = pedidos();
     expect(p).toHaveLength(1);
     expect(p[0]?.capa.classList.contains("espera")).toBe(true);
-    expect(p[0]?.datos).toEqual({ r: 1, g: "race", p: "normal", w: 2, z: "Un premio", n: ["Ana", "Beto", "Cami"] });
+    expect(p[0]?.datos).toMatchObject({ r: 1, g: "race", p: "normal", w: 2, z: "Un premio", n: ["Ana", "Beto", "Cami"], net: "testnet", i: "42" });
     // El lugar del QR está en la espera, junto a la cuenta, aunque el dibujo llegue después.
     expect(document.querySelector(".espera .espera-qr img")).toBeTruthy();
   });
@@ -825,5 +856,76 @@ describe("el QR del espectador durante la espera", () => {
     } finally {
       history.replaceState(null, "", "/");
     }
+  });
+
+  for (const modo of ["marcarEnsayo", "marcarStand"] as const) {
+    it(`con ${modo === "marcarEnsayo" ? "el ensayo" : "el modo stand"} tampoco: no se graba nada ni se comparte la lista`, async () => {
+      const m = await import("../ensayo-modo");
+      m[modo](true);
+      try {
+        await abrirEspera();
+        expect(pedidos()).toHaveLength(0);
+        expect(document.querySelector(".espera .espera-qr")).toBeNull();
+      } finally {
+        m[modo](false);
+      }
+    });
+  }
+
+  it("sin el número del sorteo en Stellar (el modo libre) no hay QR: el celular no sabría cuándo lo lanza la sala", async () => {
+    await abrirEspera();
+    expect(pedidos()).toHaveLength(0);
+    expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
+  });
+
+  it("cuando el QR ya se ve, el juego queda: se va Cambiar de juego, el panel se cierra y lo fijo es el del enlace", async () => {
+    h.armarQr.mockResolvedValueOnce("https://tinkazo.app/c/AbCd1234#" + "k".repeat(22));
+    // `abrirEspera` abre el panel de juegos con un toque, y el QR llega después.
+    const { panel, elegirJuego } = await abrirEspera(1, { raffleId: 42n });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(panel.hidden).toBe(true);
+    const cambiar = [...document.querySelectorAll<HTMLElement>(".espera [data-juego]")];
+    expect(cambiar.length).toBeGreaterThan(0);
+    expect(cambiar.every((b) => b.hidden)).toBe(true);
+    // El nombre del juego sigue a la vista.
+    expect(document.querySelector(".espera .espera-juego-n b")?.textContent).toBeTruthy();
+    const { fijoPara } = await import("./espectador-fijo");
+    const { app } = await import("../state");
+    expect(fijoPara(app.frozen, false)).toEqual({ juego: "race", ritmo: "normal" });
+    expect(elegirJuego).not.toHaveBeenCalled();
+  });
+
+  it("si el QR no salió, nadie mira desde un celular: el juego se sigue cambiando", async () => {
+    const { panel } = await abrirEspera(1, { raffleId: 42n });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(panel.hidden).toBe(false);
+    const { fijoPara } = await import("./espectador-fijo");
+    const { app } = await import("../state");
+    expect(fijoPara(app.frozen, false)).toBeNull();
+  });
+
+  it("mientras llega el enlace corto, el lugar del QR dice que se está preparando y no dibuja nada", async () => {
+    await abrirEspera(1, { raffleId: 42n });
+    const figura = document.querySelector<HTMLElement>(".espera .espera-qr");
+    expect(figura?.dataset.estado).toBe("preparando");
+    expect(figura?.querySelector("img")?.hidden).toBe(true);
+    expect(figura?.querySelector(".espera-qr-estado")?.textContent).toBeTruthy();
+  });
+
+  it("con el sello todavía en camino no hay QR, y aparece cuando el sello entra, con el número del sorteo", async () => {
+    const { app } = await import("../state");
+    const { mostrarEspera } = await import("./espera");
+    app.drawn = null;
+    app.frozen = { names: ["Ana", "Beto", "Cami"], listHash: "ab", ts: 1, at: "", prize: "", round: 1, sinSello: true };
+    mostrarEspera(() => 30, { sortear: vi.fn(), aMano: () => false, graba: false, juegos: (() => juegos()) as never, elegirJuego: vi.fn(), premios: () => 1 });
+    expect(pedidos()).toHaveLength(0);
+    expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
+    // Entró el sello: el sorteo pasa a tener número, y el QR se arma con él.
+    const f = app.frozen as { raffleId?: bigint; sinSello?: boolean };
+    f.raffleId = 42n;
+    delete f.sinSello;
+    document.dispatchEvent(new CustomEvent("tinkazo:sello"));
+    expect(pedidos()).toHaveLength(1);
+    expect(pedidos()[0]?.datos).toMatchObject({ i: "42" });
   });
 });

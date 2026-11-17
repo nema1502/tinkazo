@@ -24,6 +24,7 @@
  *   node scripts/audit-sound.mjs <juego> [--base http://localhost:4173]
  *   node scripts/audit-sound.mjs todos
  *   node scripts/audit-sound.mjs race --sonido pasos:b,musica:a   # la carrera con esas candidatas (src/sonidos/carrera.ts)
+ *   node scripts/audit-sound.mjs race --consulta "pistasdesde=http://127.0.0.1:8796/&auditar=1"   # con su música de archivo
  */
 
 import { launch } from "./lib/browser.mjs";
@@ -44,6 +45,10 @@ const motor = opt("--motor", "");
 const conBanco = args.includes("--con-banco");
 // Con `--sonido pieza:candidata,...` la carrera suena con esas candidatas (solo con `?auditar`; ver `src/sonidos/carrera-eleccion.ts`).
 const sonidoCarrera = opt("--sonido", "");
+// Con `--consulta "pistasdesde=http://127.0.0.1:8796/&auditar=1"` se suman esos parámetros a la dirección (por ejemplo, para
+// escuchar la música de archivo servida desde la máquina de quien mide). Con `auditar`, se dice también qué hizo el
+// reproductor de pistas: si la pista sonó o si cayó a la de osciladores.
+const consulta = opt("--consulta", "").replace(/^[?&]+/, "");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const lista = juegosDe(pedido);
 const registro = [];
@@ -184,7 +189,7 @@ async function correr(browser, juego) {
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
   // Los archivos están apagados en el sitio (`banco.ts`): con `--con-banco` se prenden por la dirección.
-  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}${sonidoCarrera ? `&auditar=sonido&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}` });
+  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}${sonidoCarrera ? `&auditar=sonido&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
 
   const arranco = await page.waitFor(
     `document.getElementById('stadium').style.display === 'block'`,
@@ -199,7 +204,14 @@ async function correr(browser, juego) {
   const crudo = await page.eval(`JSON.stringify(window.__snd || [])`);
   const voz = await page.eval(`JSON.stringify(window.__voz || { dichas: [], cortadas: [] })`);
   const musica = Number(await page.eval("window.__musica || 0"));
-  return { juego, notas: JSON.parse(crudo), voz: JSON.parse(voz), musica, termino: termino.ok };
+  let pista = null;
+  try {
+    const p = await page.eval("window.__tinkazoPista ? JSON.stringify(window.__tinkazoPista()) : null");
+    if (p) pista = JSON.parse(p);
+  } catch {
+    /* sin reproductor de archivo */
+  }
+  return { juego, notas: JSON.parse(crudo), voz: JSON.parse(voz), musica, pista, termino: termino.ok };
 }
 
 function medir(notas) {
@@ -327,6 +339,10 @@ async function run() {
         for (const f of fallas) console.log(`    ${f}`);
       } else {
         console.log(`✓ ${cab}`);
+      }
+      if (r.pista) {
+        const avisos = r.pista.registro.filter((x) => /^(pista|falla|cae|corre)|llegó tarde/.test(x.que)).map((x) => x.que);
+        console.log(`    música de archivo: ${r.pista.modo}${avisos.length ? `, ${avisos.join(" | ")}` : ", no sonó (la de osciladores)"}`);
       }
     }
   } finally {

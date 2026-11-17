@@ -43,6 +43,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { esperadoSinElParametro, evaluarRepetidos } from "./lib/modos-comprobaciones.mjs";
 
 const args = process.argv.slice(2);
@@ -142,9 +143,9 @@ async function conectarCuentaDePrueba(page) {
     await sleep(900);
     return;
   }
-  await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
+  await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   if (!ventana.ok) throw new Error("no se abrio la ventana de ingreso");
   await sleep(300);
@@ -177,17 +178,15 @@ async function repartir(page) {
   return "btn-part-si";
 }
 
-/** Abre el pliegue de opciones (#mas-opciones) y elige "Orden de turnos" (#btn-turnos). */
+/** Elige "Orden de turnos" (#btn-turnos) en el selector de modo, que está a la vista arriba de la lista. */
 async function elegirTurnos(page) {
-  await page.eval("(() => { const mas = document.getElementById('mas-opciones'); if (mas && !mas.open) mas.open = true; return true; })()");
-  await sleep(400);
   await page.eval("document.getElementById('btn-turnos').click(); true");
   const prendido = await page.waitFor("document.getElementById('btn-turnos').getAttribute('aria-pressed') === 'true'", 10000);
   if (!prendido.ok) throw new Error("no quedo prendido Orden de turnos");
   await sleep(900);
 }
 
-/** Pone cuantos ganan (#nw) como lo haria la persona, con los eventos del campo. */
+/** Pone cuantos ganan (#nw) y avisa como lo hacen los botones del contador. */
 async function ponerGanadores(page, n) {
   await page.eval(
     `(() => { const nw = document.getElementById('nw'); nw.value = ${JSON.stringify(String(n))}; nw.dispatchEvent(new Event('input', { bubbles: true })); nw.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`,
@@ -531,7 +530,7 @@ async function abrirComunConModo(browser, vista, enlace, modo, quien) {
     );
     check(
       `${quien}: con ?modo=${modo} un sorteo común se muestra como sorteo común`,
-      /Quién ganó|Who won/.test(datos.titulo) && /El ganador recomputado|The recomputed winner/.test(datos.comprobaciones) && datos.tarjetas > 0 && datos.filasTurnos === 0,
+      /Quién ganó|Who won/.test(datos.titulo) && /El ganador, calculado de nuevo|The winner, worked out again/.test(datos.comprobaciones) && datos.tarjetas > 0 && datos.filasTurnos === 0,
       `"${datos.titulo}" / ${datos.tarjetas} tarjetas / ${datos.filasTurnos} turnos`,
     );
     return datos;

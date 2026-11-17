@@ -30,25 +30,22 @@ function elDeLaPestana(): AlmacenDeCupon | null {
 }
 
 /**
- * Lo que trae un fragmento de dirección: si pide un cupón (`cupon=…`, venga bien o mal escrito) y cuál es, ya
- * normalizado, o `null` si no tiene la forma de un cupón.
+ * Lo que trae un fragmento de dirección: si menciona un cupón (`cupon=…`, venga bien o mal escrito) y, solo cuando
+ * todo el fragmento es `cupon=…`, cuál es, ya normalizado, o `null` si no tiene la forma de un cupón.
  */
 export function cuponDelFragmento(fragmento: string): { hay: boolean; codigo: string | null } {
   const sin = fragmento.startsWith("#") ? fragmento.slice(1) : fragmento;
-  let valor: string | null = null;
-  let hay = false;
-  for (const par of sin.split("&")) {
+  const hay = sin.split("&").some((par) => {
     const i = par.indexOf("=");
-    if ((i < 0 ? par : par.slice(0, i)).toLowerCase() !== "cupon") continue;
-    hay = true;
-    if (valor === null) {
-      const crudo = i < 0 ? "" : par.slice(i + 1);
-      try {
-        valor = decodeURIComponent(crudo);
-      } catch {
-        valor = null;
-      }
-    }
+    return (i < 0 ? par : par.slice(0, i)).toLowerCase() === "cupon";
+  });
+  const exacto = /^cupon=(.*)$/i.exec(sin);
+  if (!exacto) return { hay, codigo: null };
+  let valor: string | null;
+  try {
+    valor = decodeURIComponent(exacto[1] ?? "");
+  } catch {
+    valor = null;
   }
   return { hay, codigo: normalizar(valor) };
 }

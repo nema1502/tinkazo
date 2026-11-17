@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "trompo",
+  "version": "m1",
+  "pulso": {
+    "bpm": 115,
+    "tiempos": 2,
+    "compas": 1.0434467120181405
+  },
+  "ganancia": 0.35,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": true,
+  "secciones": {
+    "entrada": {
+      "archivo": "trompo-m1-entrada.mp3",
+      "inicio": 0,
+      "compases": 6
+    },
+    "cuerpo": {
+      "archivo": "trompo-m1-cuerpo.mp3",
+      "inicio": 0.3,
+      "compases": 14,
+      "bucleDesde": 6
+    },
+    "subida": {
+      "archivo": "trompo-m1-subida.mp3",
+      "inicio": 0.15,
+      "compases": 7,
+      "bucleDesde": 4,
+      "tension": 0.75,
+      "cuantizar": 2,
+      "fundido": 0.08
+    },
+    "golpe": {
+      "archivo": "trompo-m1-golpe.mp3",
+      "inicio": 0.05,
+      "compases": 2,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "trompo-m1-festejo.mp3",
+      "inicio": 0.3,
+      "salida": 2
+    }
+  }
+}

@@ -26,6 +26,10 @@
  * - **a mirar**: lo mismo con 1 en 100: vale otra corrida;
  * - **limpia**, o **pocos datos** con menos de diez semillas que informen.
  *
+ * Las filas a mirar de la carrera (`FILAS_A_MIRAR`, en `lib/delatores-carrera.mjs`)
+ * se juzgan igual, pero si dan delator cuentan como a mirar: salen en la tabla
+ * con su número y en el resumen, y no frenan. Cada una dice ahí por qué.
+ *
  * Con dieciséis semillas solo se ven los delatores groseros: con ocho
  * corredores, el azar acierta el 12,5% y duplicarlo pasa por casualidad una de
  * cada ocho veces. Con doscientas, un delator de 1,7 veces el azar ya no se
@@ -72,11 +76,11 @@ import { juegosDe } from "./lib/juegos.mjs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
-import { cargarCarrera, observar, rondaDe, semillaDe } from "./lib/delatores-carrera.mjs";
+import { cargarCarrera, cuentaComo, FILAS_A_MIRAR, observar, rondaDe, semillaDe } from "./lib/delatores-carrera.mjs";
 import { grabador } from "./lib/delatores-grabador.mjs";
 import { medirArcos, medirBayes } from "./lib/delatores-bayes.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
-import { UMBRAL, evaluarMedia, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
+import { UMBRAL, crearAcumulado, evaluarMedia, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct, probsDelAcumulado, sumarAlAcumulado } from "./lib/delatores.mjs";
 
 /** Los ocho del selector (`lib/juegos.mjs`). Los que salieron (tombola, pasanaku, stellar, quien, trueque…) se piden por nombre. */
 const args = process.argv.slice(2);
@@ -250,10 +254,13 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
 
   const fila = { juego: etiqueta, delator: [], mirar: [] };
   const detalle = { semillas: filas.length, sinGanador: malas, arcos: Object.fromEntries(arcos), senales: {}, repartos: {}, medias: {} };
+  // Una fila a mirar (`FILAS_A_MIRAR`) que da delator cuenta como a mirar: se ve en la tabla y en el resumen, y no frena.
   const sumar = (senal, veredicto) => {
     if (veredicto !== "pocos") juzgadas++;
-    if (veredicto === "delator" || veredicto === "mirar") fila[veredicto].push(senal);
+    const cuenta = cuentaComo(senal, veredicto);
+    if (cuenta === "delator" || cuenta === "mirar") fila[cuenta].push(senal);
   };
+  const noFrena = (senal, veredicto) => (veredicto === "delator" && FILAS_A_MIRAR.has(senal) ? " (fila a mirar: no frena)" : "");
 
   // Cada señal, con sus reglas, sobre todas las semillas.
   const familias = new Map();
@@ -280,7 +287,7 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
     }
     const veces = m.lift.toFixed(2).replace(".", ",");
     console.log(
-      `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${m.nombre.padEnd(14)} ${`${m.aciertos}/${m.n}`.padStart(9)} ${pct(m.tasa).padStart(7)} ${pct(m.azar).padStart(7)} ${veces.padStart(6)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}${ev.sentido === "abajo" ? " (al revés: lo que señala pierde)" : ""}`}`,
+      `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${m.nombre.padEnd(14)} ${`${m.aciertos}/${m.n}`.padStart(9)} ${pct(m.tasa).padStart(7)} ${pct(m.azar).padStart(7)} ${veces.padStart(6)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}${ev.sentido === "abajo" ? " (al revés: lo que señala pierde)" : ""}${noFrena(senal, ev.veredicto)}`}`,
     );
     if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
       // Por arco: un delator suele vivir en uno solo. Y cuánto antes del
@@ -300,19 +307,18 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
       console.log(`      por arco: ${[...porArco].map(([a, x]) => `${a} ${x.a}/${x.n}`).join(" · ")}${med ? ` · se ve a ${med} s del cartel (mediana)` : ""}`);
     }
   }
-  detalle.senales = Object.fromEntries(medidas.map(({ senal, ev }) => [senal, { veredicto: ev.veredicto, p: ev.p, sentido: ev.sentido, m: ev.m, reglas: ev.reglas }]));
+  detalle.senales = Object.fromEntries(medidas.map(({ senal, ev }) => [senal, { veredicto: ev.veredicto, cuenta: cuentaComo(senal, ev.veredicto), p: ev.p, sentido: ev.sentido, m: ev.m, reglas: ev.reglas }]));
 
   // Los repartos: en cuál de K casilleros cae la ganadora, contra el reparto parejo (chi cuadrado con K − 1 grados).
   const repartos = new Map();
   for (const f of filas) {
     for (const [senal, r] of Object.entries(f.repartos ?? {})) {
-      const x = repartos.get(senal) ?? { K: r.K, conteos: new Array(r.K).fill(0), probs: r.probs ?? null, porArco: new Map(), antes: [], malos: 0 };
-      if (r.K !== x.K) {
+      const x = repartos.get(senal) ?? { ...crearAcumulado(r.K), porArco: new Map(), antes: [], malos: 0 };
+      if (!sumarAlAcumulado(x, r)) {
         x.malos++;
         repartos.set(senal, x);
         continue;
       }
-      x.conteos[r.k]++;
       const pa = x.porArco.get(f.arco) ?? new Array(r.K).fill(0);
       pa[r.k]++;
       x.porArco.set(f.arco, pa);
@@ -323,14 +329,14 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
   }
   if (repartos.size) {
     console.log(`\n  ${"reparto".padEnd(18)} ${"casilleros".padStart(10)} ${"chi²".padStart(8)} ${"gl".padStart(3)} ${"p".padStart(8)}   el que más se aleja`);
-    const evs = [...repartos].map(([senal, x]) => ({ senal, x, ev: evaluarReparto(x.conteos, x.probs) }));
+    const evs = [...repartos].map(([senal, x]) => ({ senal, x, ev: evaluarReparto(x.conteos, probsDelAcumulado(x)) }));
     evs.sort((a, b) => orden[a.ev.veredicto] - orden[b.ev.veredicto] || a.ev.p - b.ev.p);
     for (const { senal, x, ev } of evs) {
       sumar(senal, ev.veredicto);
       const mas = ev.mas;
       const donde = mas ? `${casilleroDe(senal)} ${mas.indice + 1}: ${mas.observado} de ${coma(mas.esperado)} esperadas (${coma(mas.veces, 2)} veces)` : "";
       console.log(
-        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.K).padStart(10)} ${coma(ev.chi2).padStart(8)} ${String(ev.gl).padStart(3)} ${formatoP(ev.p).padStart(8)}   ${ev.veredicto === "pocos" ? "pocos datos" : donde}${ev.veredicto === "limpia" || ev.veredicto === "pocos" ? "" : `  ${ev.veredicto.toUpperCase()}`}`,
+        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.K).padStart(10)} ${coma(ev.chi2).padStart(8)} ${String(ev.gl).padStart(3)} ${formatoP(ev.p).padStart(8)}   ${ev.veredicto === "pocos" ? "pocos datos" : donde}${ev.veredicto === "limpia" || ev.veredicto === "pocos" ? "" : `  ${ev.veredicto.toUpperCase()}${noFrena(senal, ev.veredicto)}`}`,
       );
       if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
         console.log(`      cuántas veces en cada ${casilleroDe(senal)}: ${ev.conteos.join(" ")}`);
@@ -339,7 +345,7 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
         if (antes.length) console.log(`      se ve a ${coma(antes[Math.floor(antes.length / 2)])} s del cartel (mediana)`);
       }
       if (x.malos) console.log(`      ${x.malos} rondas con otra cantidad de casilleros: no se cuentan`);
-      detalle.repartos[senal] = { veredicto: ev.veredicto, K: ev.K, gl: ev.gl, chi2: ev.chi2, p: ev.p, conteos: ev.conteos, esperados: ev.esperados };
+      detalle.repartos[senal] = { veredicto: ev.veredicto, cuenta: cuentaComo(senal, ev.veredicto), K: ev.K, gl: ev.gl, chi2: ev.chi2, p: ev.p, conteos: ev.conteos, esperados: ev.esperados };
     }
   }
 
@@ -353,9 +359,9 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
     for (const { senal, ev } of evs) {
       sumar(senal, ev.veredicto);
       console.log(
-        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.n).padStart(7)} ${firmado(ev.media).padStart(8)} ${coma(ev.de, 3).padStart(7)} ${firmado(ev.z, 2).padStart(7)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}`}`,
+        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.n).padStart(7)} ${firmado(ev.media).padStart(8)} ${coma(ev.de, 3).padStart(7)} ${firmado(ev.z, 2).padStart(7)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}${noFrena(senal, ev.veredicto)}`}`,
       );
-      detalle.medias[senal] = { veredicto: ev.veredicto, n: ev.n, media: ev.media, de: ev.de, z: ev.z, p: ev.p };
+      detalle.medias[senal] = { veredicto: ev.veredicto, cuenta: cuentaComo(senal, ev.veredicto), n: ev.n, media: ev.media, de: ev.de, z: ev.z, p: ev.p };
     }
   }
 

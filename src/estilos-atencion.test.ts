@@ -2,12 +2,16 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  ATENCION_PRENDIDA,
   animarEntradaIngreso,
   animarSalidaIngreso,
+  atencionPrendida,
   destrabarCtas,
+  forzarAtencion,
   iniciarDestelloPie,
   iniciarHoverVivo,
   iniciarTemblorHero,
+  type PiezaDeAtencion,
 } from "./estilos-atencion";
 
 /**
@@ -71,9 +75,56 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   document.body.innerHTML = "";
+  // Cada prueba deja los interruptores como los trae el sitio.
+  for (const pieza of Object.keys(ATENCION_PRENDIDA) as PiezaDeAtencion[]) forzarAtencion(pieza, null);
+});
+
+/**
+ * Las piezas que se mueven solas entran apagadas: en Mostrar en grande, en la portada quieta y en el pie se vieron mal o
+ * podían confundir a la sala. El mecanismo de cada una sigue probado abajo con su interruptor prendido a mano.
+ */
+describe("los interruptores de la decoración", () => {
+  it("el pase, el temblor, el destello y el hover vivo entran apagados", () => {
+    expect(ATENCION_PRENDIDA).toEqual({ pase: false, temblor: false, destello: false, hoverVivo: false });
+    for (const pieza of Object.keys(ATENCION_PRENDIDA) as PiezaDeAtencion[]) expect(atencionPrendida(pieza)).toBe(false);
+  });
+
+  it("apagado, el temblor no arma ningún temporizador ni sacude nada", () => {
+    armarHero();
+    iniciarTemblorHero();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(60000);
+    for (const b of document.querySelectorAll<HTMLElement>(".hero-ctas *")) expect(b.classList.contains("temblor")).toBe(false);
+  });
+
+  it("apagado, el destello del pie no arma su intervalo", () => {
+    armarPie();
+    iniciarDestelloPie();
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(12000);
+    expect(document.querySelector('[data-i="footR"]')?.classList.contains("destello")).toBe(false);
+  });
+
+  it("apagado, el hover vivo no engancha las tarjetas", () => {
+    armarPortadaJuegos();
+    const race = document.querySelector(".tarjeta") as HTMLElement;
+    iniciarHoverVivo(".tarjeta");
+    race.dispatchEvent(new Event("pointerenter"));
+    expect(race.classList.contains("hover-vivo")).toBe(false);
+  });
+
+  it("forzar prende una pieza sola, y null la devuelve a lo que trae el sitio", () => {
+    forzarAtencion("temblor", true);
+    expect(atencionPrendida("temblor")).toBe(true);
+    expect(atencionPrendida("destello")).toBe(false);
+    forzarAtencion("temblor", null);
+    expect(atencionPrendida("temblor")).toBe(false);
+  });
 });
 
 describe("el temblor de los botones del hero", () => {
+  beforeEach(() => forzarAtencion("temblor", true));
+
   it("tras ~8 s de inactividad tiemblan los dos, y la sacudida se corta sola y rearma", () => {
     armarHero();
     const [cta, ensayo] = ([...document.querySelectorAll("[data-cta-entrar], [data-entrar-ensayo]")] as [HTMLElement, HTMLElement]);
@@ -118,6 +169,8 @@ describe("el temblor de los botones del hero", () => {
 });
 
 describe("el destello del pie", () => {
+  beforeEach(() => forzarAtencion("destello", true));
+
   it("cada ~4 s el brillo cruza el badge y se apaga solo", () => {
     armarPie();
     const pie = document.querySelector('[data-i="footR"]') as HTMLElement;
@@ -152,6 +205,8 @@ describe("el destello del pie", () => {
 });
 
 describe("el hover vivo de las capturas", () => {
+  beforeEach(() => forzarAtencion("hoverVivo", true));
+
   it("al pasar por encima de una tarjeta, esa captura se anima; al salir, vuelve", () => {
     armarPortadaJuegos();
     const [race, sapo] = [...document.querySelectorAll(".tarjeta")] as [HTMLElement, HTMLElement];

@@ -22,7 +22,7 @@ export { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO } from "
 /** Colores de lana de llama: blanca, café, crema, oscura, gris. */
 export const PELAJES = [0xf3ead8, 0xa0683a, 0xe4c99a, 0x5b3a29, 0xc2bab0, 0x8a5a3c, 0xefe3cc, 0x6e4a36] as const;
 
-export type Momento = { kind: string; p: number } | null;
+export type Momento = { kind: string; p: number; giro?: number } | null;
 
 export interface Llama {
   root: Container;
@@ -124,12 +124,7 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
         marca.visible = true;
         marca.text = "!";
       } else if (m?.kind === "tropiezo") lean = 0.35 * Math.sin(Math.PI * Math.min(1, m.p * 1.4));
-      else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
-      else if (m?.kind === "escupido") {
-        lean = -0.12 * Math.sin(Math.PI * m.p * 3);
-        marca.visible = true;
-        marca.text = "?!";
-      } else if (posturaObstaculo(m)) {
+      else if (posturaObstaculo(m)) {
         const o = posturaObstaculo(m);
         if (o?.patas) legA = o.patas.map((a) => -a);
         lean = o?.lean ?? lean;
@@ -138,6 +133,11 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
           marca.visible = true;
           marca.text = o.aviso;
         }
+      } else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
+      else if (m?.kind === "escupido") {
+        lean = -0.12 * Math.sin(Math.PI * m.p * 3);
+        marca.visible = true;
+        marca.text = "?!";
       } else if (m?.kind === "echada") {
         // Se echa: baja el cuerpo, pliega las patas, se pone gris y levanta polvo. Queda así.
         plegada = Math.min(1, m.p);

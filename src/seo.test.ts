@@ -761,7 +761,7 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
 
   it("abre diciendo que con el cupón de tu evento el modo Oficial es gratis, y que participar y comprobar lo es siempre", () => {
     expect(T.es.prNote).toBe("El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.");
-    expect(T.en.prNote).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it is always free.");
+    expect(T.en.prNote).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it are always free.");
     // El HTML trae el mismo texto, que es lo que ven los buscadores y quien no tiene JavaScript.
     expect(leer("precios.html")).toContain(`data-i="prNote">${T.es.prNote as string}</p>`);
   });

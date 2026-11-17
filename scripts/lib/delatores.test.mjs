@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UMBRAL, binomialArriba, chi2sf, colaAbajo, colaArriba, colaNormal, distribucion, evaluarMedia, evaluarRegla, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct, veredicto, veredictoP, wilson } from "./delatores.mjs";
+import { UMBRAL, binomialArriba, chi2sf, colaAbajo, colaArriba, colaNormal, crearAcumulado, distribucion, evaluarMedia, evaluarRegla, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct, probsDelAcumulado, sumarAlAcumulado, veredicto, veredictoP, wilson } from "./delatores.mjs";
 
 /** `n` observaciones con el mismo azar `p`, de las que aciertan las primeras `k`. */
 const obs = (n, p, k) => Array.from({ length: n }, (_, i) => ({ acierta: i < k, azar: p }));
@@ -307,5 +307,28 @@ describe("lo que se escribe", () => {
     expect(formatoP(1e-15)).toBe("<1e-12");
     expect(pct(0.125)).toBe("12,5%");
     expect(pct(0.5)).toBe("50%");
+  });
+});
+
+describe("el acumulado de un reparto que cambia de ronda a ronda", () => {
+  it("lo esperado es la suma de las probabilidades de cada ronda, no las de la primera", () => {
+    // Mitad de las rondas con 1 de 4 arriba y mitad con 3 de 4: la ganadora cae arriba según cada ronda.
+    const x = crearAcumulado(2);
+    for (let i = 0; i < 1000; i++) {
+      const arriba = i % 2 === 0 ? 0.25 : 0.75;
+      expect(sumarAlAcumulado(x, { K: 2, k: i % 4 === 0 || i % 4 === 1 ? 0 : 1, probs: [arriba, 1 - arriba] })).toBe(true);
+    }
+    expect(probsDelAcumulado(x)).toEqual([0.5, 0.5]);
+    expect(evaluarReparto(x.conteos, probsDelAcumulado(x)).veredicto).toBe("limpia");
+    // Con las de la primera ronda sola se veía un delator donde no lo hay.
+    expect(evaluarReparto(x.conteos, [0.25, 0.75]).veredicto).toBe("delator");
+  });
+
+  it("sin probabilidades en ninguna ronda es parejo, y otra cantidad de casilleros no suma", () => {
+    const x = crearAcumulado(3);
+    sumarAlAcumulado(x, { K: 3, k: 1 });
+    expect(probsDelAcumulado(x)).toBeNull();
+    expect(sumarAlAcumulado(x, { K: 4, k: 0 })).toBe(false);
+    expect(x.conteos).toEqual([0, 1, 0]);
   });
 });

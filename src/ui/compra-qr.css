@@ -1,0 +1,173 @@
+/* La ventana Tu compra (src/ui/compra-qr.ts). Se baja con la ventana: la portada no la carga.
+   El molde es el de las ventanas de la cuenta (encabezado y pie fijos, cuerpo que se recorre). Arriba el título, debajo
+   la llama que acompaña con la línea en su globo, después lo que hay que ver (el QR, las etapas, los datos) y lo demás
+   plegado. En el pie, la principal y como mucho un enlace de texto. Todo con las variables del tema. */
+.cq-card { max-width: min(460px, calc(100vw - 28px)); }
+.cq-card .dlg-cuerpo { gap: 14px; }
+.cq-card .dlg-pie { gap: 4px; }
+/* Tu compra es un rótulo chico: el título de cada pantalla es lo que manda. */
+.cq-card .dlg-h { font-size: 14px; font-weight: 700; letter-spacing: 0.02em; color: var(--ink2); }
+
+.cq-titulo { margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.2; }
+.cq-titulo:focus { outline: none; }
+.cq-titulo:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+/* El precio es el monto: grande, para leerlo de un vistazo. */
+.cq-card[data-pantalla="precio"] .cq-titulo, .cq-card[data-pantalla="precio-vencido"] .cq-titulo { font-size: 32px; }
+
+/* Sin línea, el globo de la llama no queda vacío. */
+.cq-card .llg-globo:empty { display: none; }
+.cq-card .llg { margin-bottom: 0; }
+/* Con el dinero en camino, el título y los datos ya cuentan pasos (Aprobá el paso 1 de 4, volvé para aprobar 3 pasos):
+   el Paso 4 de 4 del camino a la vista se confundía con ellos. Desde que llegó el dinero, el título ya dice dónde está, y
+   el rótulo En camino lo contradecía. El camino se sigue viendo y el lector de pantalla lo oye. */
+.cq-card:is([data-pantalla="camino"], [data-pantalla="antes"], [data-pantalla="aprobar"], [data-pantalla="aprobar-no-salio"], [data-pantalla="llego"], [data-pantalla="pagando"], [data-pantalla^="pago-"], [data-pantalla="listo"]) .llg-paso {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* Al trote o al saltar, la oreja de la llama no toca el rótulo Paso N de 4 que tiene arriba. */
+.cq-card .llg-paso { margin-bottom: 6px; }
+
+/* El final: la llama festeja más grande, con la bandera alcanzada. Sin el rótulo del paso, su caja quedaba pegada al
+   título y la cabeza lo tapaba en el celular: baja un poco, y el título queda encima del papel picado que vuela. */
+.cq-card[data-pantalla="listo"] .llg { --llg-alto: 112px; margin-top: 40px; }
+.cq-card[data-pantalla="listo"] .cq-titulo { position: relative; z-index: 1; }
+
+/* El QR del banco: una imagen sobre caja blanca, también en el tema oscuro, con aire alrededor para que se lea. */
+.cq-qr-caja { align-self: center; background: #fff; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 12px; line-height: 0; }
+.cq-qr { display: block; width: 216px; height: 216px; image-rendering: pixelated; }
+
+/* Los datos: rótulo a la izquierda y valor a la derecha, separados por una línea punteada. */
+.cq-datos, .cq-lista { margin: 0; display: flex; flex-direction: column; }
+.cq-dato {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px;
+  padding: 8px 0; border-top: 2px dashed var(--line);
+}
+.cq-dato:first-child { border-top-color: var(--ink2); }
+.cq-dato dt { font-size: 16px; line-height: 1.35; color: var(--ink2); }
+.cq-dato dd { margin: 0; flex: 1 1 auto; text-align: right; font-size: 16px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+.cq-dato dd::first-letter { text-transform: uppercase; }
+/* El monto del QR, grande. */
+.cq-dato-monto dd { font-size: 28px; font-weight: 900; letter-spacing: -0.01em; }
+/* Tu dinero, siempre a la vista: en una caja propia, el rótulo arriba y dónde está debajo, a la izquierda. */
+.cq-dato.cq-dato-dinero {
+  flex-direction: column; align-items: stretch; gap: 2px;
+  margin-top: 6px; padding: 10px 12px; border: 2px solid var(--ink); background: color-mix(in srgb, var(--teal) 14%, var(--card));
+}
+.cq-dato.cq-dato-dinero + .cq-dato { border-top: 0; }
+.cq-dato-dinero dt { color: var(--ink); font-weight: 800; }
+.cq-dato-dinero dd { font-weight: 700; text-align: left; }
+/* El número de compra: el rótulo arriba y el número con Copiar debajo, así no queda suelto contra el borde. */
+.cq-dato[data-clave="compraDatoNumero"] { flex-direction: column; align-items: stretch; }
+.cq-dato[data-clave="compraDatoNumero"] dd { justify-content: flex-start; text-align: left; }
+/* Lo que se copia: el valor en letra de máquina y Copiar al lado. */
+.cq-dato-copiar dd, .cq-dato[data-clave="compraDatoNumero"] dd { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; }
+.cq-dato code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.cq-copiar {
+  min-height: 44px; padding: 0 12px; background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  font: inherit; font-size: 16px; font-weight: 800; cursor: pointer;
+}
+.cq-copiar:active { transform: translate(2px, 2px); box-shadow: none; }
+
+/* Las cuatro etapas del dinero en camino, con su palabra. */
+.cq-etapas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 2px solid var(--ink2); }
+.cq-etapa { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; border-bottom: 2px dashed var(--line); font-size: 16px; }
+.cq-etapa-nombre { color: var(--ink2); }
+.cq-etapa-palabra { font-size: 14px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border: 2px solid var(--ink); }
+.cq-etapa[data-palabra="listo"] .cq-etapa-nombre { color: var(--ink); }
+.cq-etapa[data-palabra="listo"] .cq-etapa-palabra { background: var(--teal); color: var(--on-accent); }
+.cq-etapa[data-palabra="ahora"] .cq-etapa-nombre { color: var(--ink); font-weight: 800; }
+.cq-etapa[data-palabra="ahora"] .cq-etapa-palabra { background: var(--yellow); color: #191919; }
+.cq-etapa[data-palabra="despues"] .cq-etapa-palabra { border-style: dashed; color: var(--ink2); }
+.cq-etapa[data-palabra="frenada"] .cq-etapa-palabra, .cq-etapa[data-palabra="no-salio"] .cq-etapa-palabra { background: var(--orange); color: var(--on-accent); }
+
+/* El formulario de los datos. */
+.cq-form { display: flex; flex-direction: column; gap: 12px; }
+.cq-campo { display: flex; flex-direction: column; gap: 4px; }
+.cq-campo label { font-size: 16px; font-weight: 800; }
+.cq-campo input, .cq-campo select {
+  min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 16px;
+  background: var(--field, var(--paper)); color: var(--ink); border: 2px solid var(--ink);
+}
+.cq-campo [aria-invalid="true"] { border-color: var(--magenta-ink); box-shadow: 0 0 0 2px var(--magenta-ink); }
+
+/* Más detalles. */
+.cq-mas summary {
+  display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-size: 16px; font-weight: 700;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.cq-mas p { margin: 4px 0 8px; font-size: 16px; line-height: 1.5; color: var(--ink2); }
+.cq-qr-app { line-height: 0; margin: 8px 0; }
+.cq-qr-enlace { background: #fff; border: 2px solid var(--ink); padding: 6px; image-rendering: pixelated; }
+
+/* El pie: la principal, y debajo el enlace de texto. */
+.cq-card .dlg-pie .dlg-main { min-height: 52px; font-size: 18px; }
+.cq-card a.dlg-main { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; }
+.cq-card .dlg-main[aria-busy="true"] { background: var(--magenta); color: var(--on-accent); box-shadow: var(--sh-sm); cursor: progress; }
+.cq-card .dlg-main[aria-busy="true"]::before {
+  content: ""; display: inline-block; vertical-align: -0.1em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
+  border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%;
+  animation: cq-gira 0.8s linear infinite;
+}
+@keyframes cq-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cq-card .dlg-main[aria-busy="true"]::before { animation: none; } }
+.cq-enlace {
+  align-self: center; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 8px;
+  background: none; border: 0; color: var(--ink); font: inherit; font-size: 16px; font-weight: 700; text-align: center;
+  text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.cq-enlace:disabled { color: var(--muted); cursor: default; }
+@media (pointer: coarse) { .cq-enlace, .cq-copiar { min-height: 48px; } }
+
+/* El celular parado: el QR un poco más chico, así el monto y Tu dinero entran con él. */
+@media (max-width: 460px) {
+  .cq-card .dlg-cuerpo { gap: 12px; }
+  .cq-qr { width: 196px; height: 196px; }
+}
+
+/* En el celular la ventana ocupa toda la altura: el pie queda siempre abajo y el botón no cambia de lugar de una
+   pantalla a otra. */
+@media (max-width: 599px) {
+  .cq-card { height: calc(100vh - 2 * var(--modal-pad)); height: calc(100dvh - 2 * var(--modal-pad)); }
+  .cq-card .dlg-cuerpo { flex: 1 1 auto; }
+}
+
+/* La compu: la ventana más ancha y, con el QR, el QR a la izquierda y sus datos a la derecha, todo a la vista. */
+@media (min-width: 760px) {
+  .cq-card { max-width: min(540px, calc(100vw - 28px)); }
+  .cq-card:has(.cq-qr-caja) .dlg-cuerpo { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 20px; row-gap: 14px; align-content: start; }
+  .cq-card:has(.cq-qr-caja) .dlg-cuerpo > :not(.cq-qr-caja):not(.cq-datos) { grid-column: 1 / -1; }
+  .cq-card:has(.cq-qr-caja) .cq-qr-caja { align-self: start; }
+  .cq-card:has(.cq-qr-caja) .cq-datos { align-self: start; }
+}
+
+/* La compu con poca altura (1366 x 768): los datos y el SEGIP entran sin recorrer. */
+@media (min-width: 760px) and (max-height: 820px) {
+  .cq-card .dlg-cuerpo { gap: 12px; }
+  .cq-form { gap: 10px; }
+}
+
+/* Poca altura (celular acostado, 200 % de zoom): menos aire y el QR un poco más chico, con el pie siempre a la vista. */
+@media (max-height: 560px) {
+  .cq-card .dlg-cuerpo { gap: 10px; }
+  .cq-titulo { font-size: 20px; }
+  .cq-card[data-pantalla="precio"] .cq-titulo, .cq-card[data-pantalla="precio-vencido"] .cq-titulo { font-size: 26px; }
+  .cq-qr { width: 176px; height: 176px; }
+  .cq-card .dlg-pie { padding-block: 8px; }
+  .cq-card .dlg-pie .dlg-main { min-height: 48px; }
+}
+
+/* La demo de la compra (src/ui/compra-demo.ts): solo en la máquina de quien prueba. */
+.cq-demo {
+  position: fixed; left: 12px; bottom: 12px; z-index: 60; width: min(320px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow-y: auto;
+  padding: 14px 16px; background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+}
+.cq-demo h2 { margin: 0; font-size: 18px; font-weight: 900; }
+.cq-demo p { margin: 6px 0 10px; font-size: 15px; line-height: 1.4; color: var(--ink2); }
+.cq-demo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cq-demo button {
+  width: 100%; min-height: 44px; padding: 0 12px; text-align: left; background: var(--paper); color: var(--ink);
+  border: 2px solid var(--ink); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.cq-demo button:hover { background: color-mix(in srgb, var(--yellow) 30%, var(--paper)); }
+.cq-demo .cq-demo-nota:empty { display: none; }
+.cq-demo .cq-demo-nota { margin: 10px 0 0; color: var(--ink); font-weight: 700; }

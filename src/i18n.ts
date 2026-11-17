@@ -3,13 +3,18 @@ import { enStand } from "./ensayo-modo";
 import { TEXTOS_CREADORES } from "./marca-creadores-textos";
 import { TEXTOS_EQUIPOS } from "./equipos/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
+import { TEXTOS_COSTOS } from "./ui/costos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
+import { network } from "./stellar/config";
 import { TEXTOS_ALTA } from "./alta-textos";
-import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
+import { TEXTOS_ALTA_PAGO } from "./alta-textos-pago";
+import { TEXTOS_COBRO, cobroEnElBuild, textosConCobro } from "./alta-textos-con-cobro";
+import { TEXTOS_ALTA_SIN_PAGO, TEXTOS_ALTA_SIN_VENTA } from "./alta-textos-sin-pago";
 import { altaPagoActivo } from "./stellar/alta-config";
 import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
 import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
+import { TEXTOS_COMPRA } from "./compra-textos";
 import { cuadroEsDeEquipos } from "./equipos/etiquetas";
 
 // Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
@@ -341,6 +346,8 @@ export interface Dict {
   cPasTwo: (n: string) => string;
   /** Debajo de "Sellar la lista": cuántas personas, cuántos ganan y qué se sortea (vacío: sin premio; `null`: no se nombra, como en el ensayo). `participaciones`, cuando no es una por persona. Con equipos (`equipos`), cuenta equipos; sin el parámetro, la palabra la pone la lista del cuadro. */
   sellarResumen: (n: number, ganan: number, premio: string | null, participaciones?: number, equipos?: boolean) => string;
+  /** Debajo de Empezar la ronda en el stand: solo cuántas personas participan. */
+  standResumen: (n: number) => string;
   /** La cuenta de junto al cuadro cuando la lista tiene varias participaciones por persona. */
   listaCuentaPart: (n: number, k: number) => string;
   /** La cuenta de junto al cuadro en un orden de turnos repartido: personas y turnos. */
@@ -357,8 +364,11 @@ export interface Dict {
   kEntriesDe: (n: number) => string;
   /** El modo «Orden de turnos» (src/modos/): lo de antes de sellar y las bases, sin ganadores ni premio. */
   turnsSellarResumen: (n: number, personas?: number) => string;
-  /** El resumen de antes de sellar cuando la lista no entra en lo que la red admite: sin la promesa del sello. */
-  turnsSellarTope: (n: number, personas?: number) => string;
+  /**
+   * El resumen de antes de sellar cuando la lista no entra en lo que la red admite: sin la promesa del sello, y con el
+   * motivo (el tope de la red) si quien llama lo sabe, para que se lea junto al botón apagado.
+   */
+  turnsSellarTope: (n: number, personas?: number, tope?: number) => string;
   turnsRules: (p: RulesParams) => string;
   turnsRulesPre: (p: RulesPreParams) => string;
 }
@@ -468,6 +478,9 @@ export const T: Record<Lang, Dict> = {
     modeCurrent: "Estás en este modo",
     modeSwitchToOfficial: "Pasar a Oficial",
     modeSwitchToTest: "Pasar a Prueba",
+    modeSwitchAccount: "Cada modo tiene su propia cuenta. En {otro} vas a entrar una vez más, y tu cuenta de {actual} sigue acá cuando vuelvas.",
+    modeSwitchGuestAccount: "La Cuenta de prueba es solo de Prueba. En Oficial entrás con Google.",
+    modeHaveCoupon: "Tengo un cupón",
     modeSwitchBlocked: "Terminá este sorteo antes de cambiar de modo.",
     sealModeOfficial: "Modo Oficial: este sorteo queda registrado en Stellar.",
     sealModeTest: "Modo Prueba: se borra el 16 de diciembre. Para tu evento, pasá a Oficial.",
@@ -582,7 +595,8 @@ export const T: Record<Lang, Dict> = {
     impMailSame: "mismo correo",
     impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Cuántos ganan",
-    // El campo de «Cuántos ganan» (src/ui/ganadores.ts): los atajos y el aviso cuando se pidió de más.
+    // El contador de Cuántos ganan (src/ui/ganadores.ts): menos, más, atajos y el aviso del tope.
+    winnersMenos: "Restar uno", winnersMas: "Sumar uno",
     winnersAtajos: "Atajos para cuántos ganan", winnersTope: "Hasta {n} ganadores por sorteo.",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
@@ -814,7 +828,7 @@ export const T: Record<Lang, Dict> = {
     gameTeleferico: "Teleférico",
     cTelStop: (k, off, left) => (off === 1 ? `¡Estación ${k}! Se baja uno, quedan ${left}` : `¡Estación ${k}! Se bajan ${off}, quedan ${left}`),
     cTelGrupo: (k, g, off, left) => `¡Estación ${k}! Se bajan ${g.articulo} ${g.nombre} (${off}). Quedan ${left}`,
-    cTelWho: ["¿Quién llega arriba?", "¡Los dos juntos hasta la cumbre!"],
+    cTelWho: ["¿Quién llega arriba?", "¿Quién se baja?"],
     teleLinea0: "Roja",
     teleLinea1: "Amarilla",
     teleLinea2: "Verde",
@@ -955,6 +969,16 @@ export const T: Record<Lang, Dict> = {
     // son claves "rec.<juego>.<lado>": ideal, bajo y alto dentro del rango, y
     // largo o corto cuando no encaja. Las que llevan números son funciones.
     recBadge: "Recomendado",
+    // La llama que acompaña los recorridos largos (`ui/llama-guia.ts`): el paso arriba del camino, el nombre de la barra
+    // de progreso para el lector de pantalla y el nombre de cada tramo.
+    llamaPaso: (p: number, total: number) => `Paso ${p} de ${total}`,
+    llamaPasoAria: (p: number, total: number, tramo: string) => `Paso ${p} de ${total}: ${tramo}`,
+    llamaAvance: "Tu avance",
+    tramoCuenta: "Tu cuenta",
+    tramoIdentidad: "Tu identidad",
+    tramoMonto: "Cuánto",
+    tramoPago: "Tu pago",
+    tramoCamino: "En camino",
     recHead: (n: number) => `Para ${n} personas`,
     // Con varias participaciones, la cabecera dice las dos cuentas, como el resto de la pantalla (freeze.ts).
     recHeadPart: (p: number, n: number) => `Para ${p} personas, ${n} participaciones`,
@@ -968,6 +992,8 @@ export const T: Record<Lang, Dict> = {
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `Con ${premios} premios no entra: la carrera tiene ${carriles} carriles.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `Con ${premios} premios no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `Con ${turnos} turnos no entra: la carrera tiene ${carriles} carriles.`,
+    // En un orden de turnos solo se ofrecen los juegos que lo cuentan bien: los demás se ven apagados y dicen esto.
+    "rec.sinTurnos": "Este juego es para premios.",
     "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `Con ${turnos} turnos no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
     "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
@@ -1023,8 +1049,9 @@ export const T: Record<Lang, Dict> = {
     waitLine: "Nadie puede elegirlo, ni quien organiza.",
     waitLineSinSello: "Lo publica una red independiente en unos segundos. Sin sello: este sorteo no se puede comprobar.",
     volAviso: "Subí el volumen del celular: el show tiene música.",
-    waitNow: "Ya nació. Lanzalo.",
+    waitNow: "Ya salió el número. Tocá Lanzar el sorteo.",
     espSticker: "Todavía nadie sabe quién gana",
+    espStickerOrden: "Todavía nadie sabe el orden",
     espFaltan: "para que salga el número del sorteo",
     espVolver: "Volver a la página",
     espQrT: "Escaneá para ver en vivo",
@@ -1032,6 +1059,22 @@ export const T: Record<Lang, Dict> = {
     espQrSub: "La misma cuenta regresiva y el mismo show, en vivo en tu teléfono.",
     espVistaEspectador: "Vista de espectador",
     espLectura: "Solo lectura: el sorteo lo maneja quien organiza.",
+    // Los casos de No llegó (main): cuando el número del sorteo tarda o no coincide.
+    espProbar: "Probar de nuevo",
+    espSinNumero: "Todavía no llegó el número del sorteo. El ganador va a ser el mismo. Tocá Probar de nuevo.",
+    espSinNumeroOrden: "Todavía no llegó el número del sorteo. El orden va a ser el mismo. Tocá Probar de nuevo.",
+    espTarda: "La sala todavía no guardó el sorteo. Lo vas a ver acá en cuanto quede guardado.",
+    espNoCoincide: "Este enlace no es del sorteo que quedó grabado. Mirá la pantalla de la sala.",
+    espQrPreparando: "Preparando el QR para verlo en vivo…",
+    espQrFallo: "No pudimos preparar el QR para verlo en vivo.",
+    espEnlaceRoto: "Este enlace para ver el sorteo en vivo llegó incompleto. Escaneá de nuevo el QR de la pantalla.",
+    espIrALaPagina: "Ir a Tinkazo",
+    espFinSiguiente: "¿Hay otro premio? Escaneá el QR nuevo de la pantalla.",
+    espVerDeNuevo: "Ver de nuevo",
+    espHacerElTuyo: "Hacé tu propio sorteo",
+    espMiraLaSala: "El show sigue en la pantalla de la sala. Cuando termine, acá vas a ver quién salió.",
+    espMiraLaSalaOrden: "El show sigue en la pantalla de la sala. Cuando termine, acá vas a ver el orden de los turnos.",
+    espVolverCorto: "Volver",
     espVer: "Mostrar la espera en grande",
     // Los juegos interactivos (juegos-interactivos): la sala donde cada persona vive el sorteo desde su celular.
     jiLink: "Juegos interactivos: que cada quien viva el sorteo desde su celular",
@@ -1066,7 +1109,7 @@ export const T: Record<Lang, Dict> = {
     jiPErrOtro: "No entró. Probá otra vez.",
     jiPNombreMalo: "Probá con tu nombre o apodo, sin enlaces.",
     jiPEjemplo: "Ronda de ejemplo: no queda comprobante y no se entrega nada.",
-    masOpciones: "Premio, cuántos ganan y subir CSV",
+    masOpciones: "Premio y subir CSV",
     masAjustes: "Sonido, duración y más",
     recRangoAria: "Para {r} personas",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
@@ -1074,7 +1117,7 @@ export const T: Record<Lang, Dict> = {
     // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
     espStickerYa: "El número que decide ya existe",
     espAprobar: "Tu billetera te va a pedir que lo apruebes.",
-    winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
+    winnerLabel: "El resultado", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) Abrí la ronda de quicknet y verificá su prueba con la clave pública del faro. 2) randomness = sha256(prueba). 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
     tecnicoT: "Detalles técnicos",
@@ -1164,6 +1207,7 @@ export const T: Record<Lang, Dict> = {
     drandTry: (i, n) => `Todavía no llega el número del sorteo. Intento ${i} de ${n}…`,
     drawTry: (i, n) => `La red todavía no ve ese número. Reintento ${i} de ${n}…`,
     drawRetry: "Reintentar el sorteo",
+    drawCuentaSinLista: "Tu lista sigue sellada y el ganador va a ser el mismo. Para sortear en modo Oficial, primero dejá tu cuenta lista.",
     drawnDone: "Ya se sorteó",
     gcCuenta: "¡Cuenten conmigo!",
     pantallaBtn: "Mostrar en grande",
@@ -1184,9 +1228,16 @@ export const T: Record<Lang, Dict> = {
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "equipos" : "personas"} ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${new Intl.ListFormat("es", { type: "conjunction" }).format(nombres)} ya ganaron y no están en esta lista. Quedan ${n}.`),
     recuperarLista: "Recuperar la lista anterior",
     cortinaSe: "Se sortea",
+    cortinaSeOrden: "Se sortea el orden de los turnos",
     cortinaSin: "Ya sale el sorteo",
     cortinaGraba: "Grabando el sorteo para que nadie lo pueda cambiar…",
     cortinaNumero: "Ya casi llega el número del sorteo…",
+    grabGuardando: "Guardando el sorteo para que nadie lo pueda cambiar…",
+    grabGuardado: "Sorteo guardado. Ya nadie lo puede cambiar.",
+    grabReintentar: "Guardar el sorteo",
+    grabNoCoincide: "Algo falló en Tinkazo: lo que quedó guardado no coincide con el resultado de la pantalla. No compartas este resultado todavía y escribinos a hola@tinkazo.app.",
+    // La pantalla grande no ofrece lo que se lleva el proyector a otra página: lo dice y se sigue desde la página.
+    grabSigueEnLaPagina: "Lo que sigue se hace desde la página: tocá Cerrar.",
     // Suelto, "No está" se leía en el proyector como que la persona no estaba (evaluación crítica de experiencia, hallazgo 8).
     ausenteBtn: "¿No está? Sortear de nuevo",
     ausenteBtnCorto: "No está",
@@ -1284,16 +1335,24 @@ export const T: Record<Lang, Dict> = {
     otroJuegoBtn: "Ver de nuevo con otro juego",
     juegoEnShow: "Mientras corre el sorteo no se cambia de juego.",
     juegoVerDeNuevo: "Tocá un juego y ves este mismo resultado de nuevo con él.",
+    juegoFijoEspectador: "Este sorteo ya se mira en celulares desde el QR. El juego y la duración quedan como están hasta que salga el resultado.",
     feedbackFin: "¿Algo para mejorar? Contanos en 30 segundos",
     ensEstadio: "ENSAYO: no se graba",
     standLink: "Tengo un stand: rondas de ejemplo con quienes pasan",
     standBanda: "Ronda de ejemplo: no se puede comprobar",
     standSalir: "Hacer un sorteo de verdad",
+    standResumen: (n) => `${n} ${n === 1 ? "persona" : "personas"} en la ronda`,
+    standLlevarT: "¿Llevás la lista del stand?",
+    standLlevarB: "Las rondas de ejemplo no se guardan. Si llevás la lista, solo pasan los nombres que están en el cuadro.",
+    standLlevarReemplaza: "La lista del stand reemplaza a la que tenías armada.",
+    standLlevarError: "No se pudo pasar la lista al sorteo. Copiala a mano: sigue en el cuadro.",
+    standLlevarSi: "Llevar esta lista",
+    standLlevarNo: "Empezar sin ella",
     standEmpezar: "Empezar la ronda",
     standArranca: "Arranca en {s}",
     standGuia1: "Escribí los nombres de quienes están ahí, uno por línea, y tocá Empezar la ronda. No se graba nada.",
     standFinT: "Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.",
-    standFinB: "Entrar es gratis. El sorteo de cierre sí se puede comprobar, desde cualquier celular.",
+    standFinB: "Participar es gratis. El sorteo de cierre sí se puede comprobar desde cualquier celular.",
     standOtra: "Otra ronda",
     standEnMarcha: "Ronda en marcha",
     standListaT: "Ronda de ejemplo",
@@ -1589,6 +1648,11 @@ export const T: Record<Lang, Dict> = {
     // Un sorteo que quedó sin sortear en este navegador, arriba de la lista (21 de octubre de 2026).
     pendienteT: "Tenés un sorteo sellado sin sortear: {que}.",
     pendienteBtn: "Retomarlo",
+    pendienteGrabarBtn: "Guardarlo ahora",
+    grabarPropio: "Guardarlo pagando con mi cuenta",
+    grabOtraCuenta: "Este sorteo lo hizo otra cuenta. Entrá con esa cuenta para guardarlo.",
+    histStateSinGuardar: "Sorteado, falta guardarlo",
+    grabNoSePudo: "No se pudo guardar todavía. El ganador no cambia. Probá de nuevo en unos segundos.",
     histWon: "ganó",
     histWonMany: "ganaron",
     histOtherDevice: "La lista quedó en el equipo donde se selló.",
@@ -2063,23 +2127,28 @@ export const T: Record<Lang, Dict> = {
     // exclamación: explica, no relata.
     gcKicker: "Cómo se juega",
     gcHonest: "El ganador ya salió del número público. El juego solo lo cuenta.",
+    gcHonestOrden: "El orden ya salió del número público. El juego solo lo cuenta.",
+    gcOrdenGeneral: "El orden completo sale al final.",
     gcPeople: (n) => (n === 1 ? "1 participante" : `${n} participantes`),
     gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
     gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
     gcSapoMany: "Cada argolla que entra en un agujero es un premio.",
     gcQuienMany: "Una ronda por premio. Gana el último de pie.",
-    gcTelefericoMany: "Cada estación baja un grupo. Los últimos ganan premio.",
+    gcTelefericoMany: "Cada estación baja un grupo. Los que llegan a la cumbre ganan premio.",
     gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
     gcRace: "Gana la primera llama que cruza la meta.",
+    gcRaceOrden: "La primera llama que cruza la meta tiene el turno 1.",
     gcRaceMany: "La primera llama que cruza la meta gana el primer premio. Los demás ganadores salen en el cartel del final.",
     gcLuz: "Con luz roja, el que se mueve se sienta. Gana quien toca el Faro.",
     gcChovena: "Bailan en rueda. Gana el último que sigue bailando.",
+    gcChovenaOrden: "Bailan en rueda. El último que sigue bailando tiene el turno 1.",
     gcChovenaMany: "Bailan en rueda. Los últimos en salir ganan premio.",
     gcTrompo: "Los trompos chocan y se sacan. Gana el último que baila.",
     gcPinata: "Cada palo suelta caramelos. Gana el último adentro.",
     gcOruro: "Carnaval de Oruro: gana quien llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
     gcWheel: "Gana el gajo que queda bajo la flecha.",
+    gcWheelOrden: "El gajo bajo la flecha tiene el turno 1. El orden completo sale al final.",
     gcTeleferico: "Cada estación baja un grupo. Gana quien llega a la cumbre.",
     gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
     gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
@@ -2211,20 +2280,28 @@ export const T: Record<Lang, Dict> = {
     noAnchor: "sin registrar", onChain: "verlo en el registro público",
     txStarting: "Preparando el sello…",
     txSimulating: "Armando el sello…", txSimulatingSorteo: "Armando el sorteo…", txSigning: "Aprobá la operación en tu billetera…",
-    txSending: "Guardando el sello…", txConfirmed: "Quedó registrado", txCost: "Comisión de la red: hasta",
-    "errAnchor.notFound": "No pudimos encontrar ese sorteo. Revisalo antes de preparar otro sello.",
+    txSending: "Guardando el sello…", txSendingSorteo: "Grabando el sorteo…", txConfirmed: "Quedó registrado", txCost: "Comisión de la red: hasta",
+    "errAnchor.notFound": "No encontramos ese sorteo en el registro. Abrí Mis sorteos para ver si quedó sellado antes de sellar otra vez.",
     "errAnchor.alreadyDrawn": "Ese sorteo ya tiene ganador. Mirá el resultado registrado: se abre en otra página.",
     "errAnchor.tooFewEntries": "Con uno solo no hay sorteo. Agregá al menos dos.",
     "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.",
     "errAnchor.badWinnerCountViejo": "Esta red todavía admite hasta {tope} ganadores por sorteo. Elegí {tope} o menos y probá de nuevo.",
-    "errAnchor.roundTooSoon": "Ese momento está demasiado cerca. Probá de nuevo.",
-    "errAnchor.roundTooFar": "La hora de tu equipo está corrida y el sorteo quedó a más de 30 días. Corregila y probá de nuevo.",
+    "errAnchor.roundTooSoon": "El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.",
+    // Después de un sello pagado por el portero que entró a la cadena y falló ahí (`ui/sello-tarde-aviso.ts`). Los dos
+    // primeros, solo si el portero anunció en /cupo que devuelve ese sorteo (con el tope del día lleno no lo anuncia). Hay
+    // casos en que igual no lo devuelve (un tope que se llenó después de preguntar, una falla que no se pudo comprobar):
+    // por eso, si no lo ve de vuelta, que escriba. El tercero, sin el anuncio.
+    selloTardeSinSorteos:
+      "La lista no quedó sellada a tiempo, y no fue un error tuyo. Ese intento usó un sorteo oficial, que vuelve solo en unos minutos. Después tocá Sellar la lista otra vez. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+    selloTardeAviso: "No fue un error tuyo. Si algún intento usó un sorteo oficial, vuelve solo en unos minutos. Si no lo ves de vuelta, escribinos a hola@tinkazo.app.",
+    selloTardeAvisoSinDevolucion: "No fue un error tuyo. Si algún intento usó un sorteo oficial y te hace falta, escribinos a hola@tinkazo.app.",
+    "errAnchor.roundTooFar": "La hora de tu celular o tu compu está mal y el sorteo quedó a más de 30 días. Corregila y probá de nuevo.",
     "errAnchor.roundNotReady": "Ese número del sorteo todavía no se publica. Esperá unos segundos y probá de nuevo.",
     "errAnchor.invalidSignature": "No se pudo confirmar el número del sorteo. Probá de nuevo en unos segundos.",
     "errAnchor.metaTooLong": "El nombre del premio es muy largo. Cortalo un poco.",
     "errAnchor.noFunds": "Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.",
     "errAnchor.userRejected": "Cancelaste la aprobación. Apretá de nuevo y aprobala.",
-    "errAnchor.rpcDown": "No hay conexión con el registro. Revisá tu internet y probá de nuevo.",
+    "errAnchor.rpcDown": "No pudimos llegar al registro público. Probá de nuevo en unos segundos.",
     "errAnchor.busy": "El registro estaba ocupado. Probá de nuevo en unos segundos.",
     "errAnchor.unknown": "No se pudo registrar el sorteo. Probá de nuevo en unos segundos.",
     // Transacciones (21-oct): qué pasó, cuando no fue el contrato.
@@ -2275,8 +2352,8 @@ export const T: Record<Lang, Dict> = {
     vCannotFinish: "No pude terminar de revisar",
     vNoProof: "Este enlace no trae un sorteo",
     vNoProofDetail: "Pedile a quien organizó el sorteo el enlace completo, con todo lo que viene después del numeral.",
-    vCheckList: "La lista y su huella", vCheckRound: "La firma de la ronda",
-    vCheckSeed: "La semilla sale de la firma", vCheckWinner: "El ganador recomputado", vCheckOrden: "El orden recomputado",
+    vCheckList: "La lista y su huella", vCheckRound: "El número al azar es auténtico",
+    vCheckSeed: "El resultado sale de ese número", vCheckWinner: "El ganador, calculado de nuevo", vCheckOrden: "El orden recomputado",
     vCheckChain: "El registro en Stellar",
     vNotDrawnYet: "todavía no se sorteó en la cadena",
     vChainUnreachable: "no pude leer el contrato",
@@ -2299,8 +2376,8 @@ export const T: Record<Lang, Dict> = {
     vStepSig: "firma",
     vStep4: "el ganador, con contador desde 0 y salteando repetidos",
     vStepCounter: "contador",
-    vVerdictUnknown: "No pude comprobarlo del todo",
-    vVerdictUnknownDetail: "Las cuentas cierran, pero este sorteo dice estar registrado en Stellar y no pude leer ese registro. Puede ser la conexión o un registro archivado. Hasta poder leerlo, nadie atestigua que esta sea la lista sellada: recargá en unos minutos.",
+    vVerdictUnknown: "Todavía no pudimos leer el registro público",
+    vVerdictUnknownDetail: "Las cuentas cierran, pero falta leer el registro público que confirma que esta es la lista sellada. Casi siempre es la conexión. Volvé a abrir el enlace en unos minutos.",
     vRoundUnreachable: "no pude traer la ronda del faro",
     vListChanged: "La lista de este enlace no es la que se selló. Alguien la cambió después.",
     vBadSignature: "La firma de la ronda no verifica contra la clave pública del faro.",
@@ -2483,7 +2560,7 @@ export const T: Record<Lang, Dict> = {
     walletUnknown: "No pudimos entrar. Volvé a intentarlo o elegí otra forma de entrar.",
     friendbotFailed: "No pude ponerle fondos a la cuenta de prueba. Probá en unos minutos.",
     wrongNetwork: "Tu billetera está en otra red. Pasala a {red} para sellar.",
-    drandDown: "No llego al número del sorteo. Revisá tu conexión.",
+    drandDown: "Todavía no llegó el número del sorteo. La lista no cambia y el ganador va a ser el mismo. Tocá Reintentar el sorteo.",
     cReady: ["¡Llamas en la salida!", "¡Cada llama en su carril!", "¡Atentos, que ya salen!", "¡Todas listas!"],
     cReadyStellar: ["¡Cohetes en la rampa!", "¡Motores prendidos!", "¡Cuenta regresiva!", "¡Listos para despegar!"],
     cStart: ["¡ALLÁ VAN!", "¡Y SALIERON!", "¡ARRANCÓ!", "¡YA ESTÁN EN CARRERA!"],
@@ -2542,6 +2619,7 @@ export const T: Record<Lang, Dict> = {
     // --- El enlace corto y la foto con el QR (21 de octubre de 2026).
     cmpWa: "Compartir por WhatsApp", cmpPreparando: "Preparando la foto…",
     cmpFb: "Compartir en Facebook", cmpIg: "Compartir en Instagram",
+    cmpIgAviso: "La foto se descargó: subila desde Instagram.",
     cmpBajarFoto: "Descargar la foto", cmpBajarFotos: "Descargar las fotos",
     cmpPegaLaFoto: "Copiamos la foto: pegala en el chat de WhatsApp.",
     cmpAdjuntaLaFoto: "La foto se descargó: adjuntala en el chat de WhatsApp.",
@@ -2607,37 +2685,83 @@ export const T: Record<Lang, Dict> = {
     acctPending: "sin sortear",
     acctProofOf: "Comprobante de {sorteo}",
     acctSignOut: "Cerrar sesión",
-    // Cargá tu saldo, monedas, tiendita y plan del equipo (detrás de las banderas VITE_RAMPA, VITE_MONEDAS y VITE_PLAN_EQUIPO)
-    saldoBtn: "Cargá tu saldo",
-    saldoTitle: "Cargá tu saldo",
-    saldoLead: "Pasá bolivianos a dólares digitales en tu cuenta. El dinero es tuyo: queda en tu cuenta y lo retirás cuando quieras.",
-    saldoPasos: "Cuatro pasos",
-    saldoP1: "Descargá la app de Meru y creá tu cuenta.",
-    saldoP2: "Cargá bolivianos pagando con el QR de tu banco. Eso en Meru no tiene costo.",
-    saldoP3: "En Meru, elegí mandar dólares digitales (USDC) por la red Stellar y pegá tu dirección de abajo como destino.",
-    saldoP4: "Volvé acá y tocá el botón Ya cargué. Los primeros dólares pueden tardar unos minutos en llegar.",
-    saldoMeru: "Abrir Meru",
-    saldoCosto: "Cuánto cuesta: Meru cobra 1 % más 1 dólar al mandar. Tinkazo no cobra ni guarda nada.",
-    saldoMinimo: "Como la parte fija de la comisión (1 dólar) pesa más en los montos chicos, conviene cargar de a 25 dólares o más.",
+    // Tus dólares digitales, monedas, tiendita y plan del equipo (detrás de las banderas VITE_RAMPA, VITE_MONEDAS y VITE_PLAN_EQUIPO)
+    saldoBtn: "Tus dólares digitales",
+    saldoTitle: "Tus dólares digitales",
+    saldoLead: "Dólares digitales (USDC) en tu cuenta. Son tuyos: Tinkazo no los guarda ni los toca.",
+    saldoTenes: "Tenés {n} dólares digitales.",
+    saldoTenesPrueba: "Tenés {n} dólares digitales de prueba.",
+    cargaTenesNada: "Todavía no tenés dólares digitales en tu cuenta.",
+    saldoPractica: "Práctica: estos dólares digitales son de prueba y no valen dinero. Mandalos desde otra cuenta de prueba.",
+    cargaYaTengo: "Ya tengo dólares digitales",
+    cargaComoSaco: "¿Cómo saco mi dinero?",
+    cargaComoSacoTexto: "Tus dólares digitales están en tu cuenta y son tuyos. Pasarlos a tu banco todavía no se puede desde acá. Mientras tanto, podés mandarlos a otra cuenta tuya o a una app que los cambie a bolivianos.",
+    cargaCuentaPrimero: "Para cargar, primero dejá tu cuenta lista.",
+    cargaCuentaPrimeroBtn: "Dejar mi cuenta lista",
+    saldoSoloOficialTitulo: "Se hace en modo Oficial",
+    saldoSoloOficial: "En modo Prueba no se mueve dinero real.",
+    saldoMirandoCuenta: "Mirando si tu cuenta ya puede recibir dólares digitales…",
+    saldoMasDetalles: "Más detalles",
+    saldoRecibirTitulo: "Traé tus dólares digitales",
+    saldoRecibirOjo: "Solo USDC por la red Stellar. Otra moneda u otra red se puede perder.",
+    saldoRecibirComo: "En la otra app o exchange, elegí mandar USDC por la red Stellar y pegá tu dirección como destino. Si te pide una nota o memo, dejala vacía.",
     saldoDir: "Tu dirección",
-    saldoDirAyuda: "Pegala en Meru como destino. Es pública: sirve para recibir, nadie puede sacar nada con ella.",
-    saldoCopiarAria: "Copiar tu dirección para pegarla en Meru",
+    saldoDirAyuda: "Es pública: sirve para recibir, nadie puede sacar nada con ella.",
     saldoQrAlt: "Código QR con tu dirección",
-    saldoYaCargue: "Ya cargué",
+    saldoNota: "Nota o memo",
+    saldoNotaVacia: "Dejala vacía",
+    saldoYaMande: "Ya lo mandé",
     saldoMirando: "Mirando tu cuenta…",
+    saldoLlegaron: "Llegaron {n} dólares digitales.",
+    saldoNoVemosNuevo: "Todavía no vemos uno nuevo.",
+    saldoUltimoLlego: "El último llegó el {cuando}: {n} dólares digitales.",
+    saldoNoLlegoTodavia: "Todavía no vemos ninguno.",
+    saldoEsperaNoMandes: "Si lo mandaste hace poco, esperá unos minutos: no lo mandes de nuevo.",
     saldoLlego: "Tus primeros dólares digitales llegaron",
     saldoLlegoMonedas: "Sumaste {n} monedas de regalo.",
-    saldoNoLlego: "Todavía no los vemos. Pueden tardar un poco: probá de nuevo en unos minutos.",
     saldoError: "No pudimos mirar tu cuenta ahora. Probá de nuevo en unos minutos.",
-    saldoPollarTitle: "Cargar desde acá",
-    saldoPollarBs: "Bolivianos a cargar",
-    saldoPollarVer: "Ver cuánto recibís",
-    saldoPollarRecibis: "Recibirías unos {n} dólares digitales.",
-    saldoPollarTarda: "Tarda unos {m} minutos.",
-    saldoPollarSinRuta: "Ahora no hay un camino para ese monto. Probá con otro o cargá con Meru.",
-    saldoPollarError: "No pudimos pedir el precio ahora. Cargá con Meru mientras tanto.",
-    saldoPollarNoListo: "Cargar sin salir de Tinkazo todavía no está listo. Mientras tanto, cargá con la guía de Meru.",
-    saldoPollarCargar: "Cargar desde acá",
+    saldoVolverAMirar: "Volver a mirar",
+    saldoNoSeSabe: "No pudimos mirar tu cuenta ahora. Probá de nuevo en unos minutos.",
+    saldoNoSeSabeMas: "Hasta saber que puede recibir, no te mostramos tu dirección.",
+    saldoActivarTitulo: "Primero, activá los dólares digitales",
+    saldoActivarApp: "Activarlos lleva un momento y a vos no te cuesta nada.",
+    saldoActivarPropio: "La red aparta medio XLM de tu billetera mientras sigan activados.",
+    saldoActivarPropioMas: "También cobra una comisión mínima. Tu billetera te va a pedir que lo apruebes.",
+    saldoActivarBtn: "Activar dólares digitales",
+    saldoActivando: "Activando…",
+    saldoActivarAhoraNo: "Ahora no se puede activar. Tu cuenta está bien: probá más tarde.",
+    saldoActivarAprobar: "Aprobalo en tu billetera.",
+    saldoActivadoOk: "Listo: tu cuenta ya puede recibir dólares digitales.",
+    saldoActivarNoSalio: "No se pudo activar. Probá de nuevo en unos minutos.",
+    saldoActivarNoAprobado: "No lo aprobaste en tu billetera. Cuando quieras, probá de nuevo.",
+    saldoMonto: "{n} dólares digitales",
+    saldoMandarBtn: "Mandar mis dólares digitales",
+    saldoMandarA: "A dónde",
+    saldoMandarPegar: "Pegar dirección",
+    saldoMandarNota: "Pegar nota",
+    saldoMandarSinNota: "Sin nota",
+    saldoMandarNotaAyuda: "Si la app que recibe te dio una nota o memo, pegala acá.",
+    saldoMandarNotaMala: "Esa nota no sirve para mandar. Revisala en la otra app.",
+    saldoMandarCuanto: "Cuánto",
+    saldoMandarTodo: "Todo",
+    saldoMandarMitad: "La mitad",
+    saldoMandarMenos: "Un dólar menos",
+    saldoMandarMas: "Un dólar más",
+    saldoMandarResumen: "Vas a mandar {n} dólares digitales a {corta}.",
+    saldoMandarOk: "Mandar",
+    saldoMandarMirando: "Mirando esa cuenta…",
+    saldoMandarNoRecibe: "Esa cuenta no puede recibir dólares digitales. Revisá la dirección: no mandamos nada.",
+    saldoMandarListo: "Listo: mandaste {n} dólares digitales.",
+    saldoMandarEnCurso: "Se está mandando. No lo mandes de nuevo.",
+    saldoMandarNoSalio: "No se pudo mandar. Tus dólares digitales siguen en tu cuenta.",
+    saldoActivandoEspera: "Se está activando. Puede tardar un poco.",
+    saldoNoMandesTitulo: "No mandes dinero a esta cuenta",
+    saldoNoPuedeApp: "Por ahora no puede recibir dólares digitales. Volvé a mirar más adelante.",
+    saldoNoRecibeMas: "Por ahora no puede recibir más dólares digitales.",
+    saldoFaltaXlm: "Tu billetera necesita {n} XLM libres y tiene {m}. Sumale XLM.",
+    saldoBilleteraNuevaTitulo: "Tu billetera todavía no está activa",
+    saldoBilleteraNueva: "Primero tiene que recibir 2 XLM. Después volvé a mirar.",
+    saldoOtraRed: "Tu billetera está en otra red. Pasala a {red} y volvé a mirar.",
     monTitle: "Tus monedas",
     monSaldo: "{n} monedas",
     monCargando: "Mirando tus monedas…",
@@ -2736,6 +2860,8 @@ export const T: Record<Lang, Dict> = {
     sigListaPartUno: "1 persona, {n} participaciones",
     sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
+    // Un orden de turnos más largo de lo que admite la red: el botón está apagado y la barra dice por qué.
+    sigTope: "no se puede sellar, el orden llega hasta {tope} turnos",
     sigEspera: "Esperando el número",
     sigRonda: "El número ya salió",
     sigSorteando: "Sorteando",
@@ -2828,7 +2954,7 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Entrar con Google",
     acctCargando: "Leyendo el saldo…",
     cuentaSinSesion: "No pudimos abrir la entrada con Google. Probá de nuevo o entrá con tu correo.",
-    cuentaViaPruebaC: "Prueba",
+    cuentaViaPruebaC: "Invitado",
     cuentaAriaSola: "Tu cuenta: {n}. Abrir el panel de la cuenta.",
     sigEntrarSellar: "Entrar para sellar",
     cuentaSalio: "Cerraste tu sesión.",
@@ -2867,7 +2993,7 @@ export const T: Record<Lang, Dict> = {
     protOtroCorreo: "Usar otro correo",
     protReenviado: "Listo, te mandamos otro código.",
     protHaciendo: "Protegiendo tu cuenta…",
-    protBadMail: "A ese correo le falta algo.",
+    protBadMail: "Ese correo no está completo. Revisalo y probá de nuevo.",
     protBadCode: "Ese código no es o ya venció. Pedí otro y usalo enseguida.",
     protFalla: "No pudimos proteger tu cuenta. Probá de nuevo.",
     protPasskeyBloqueada: "¿No se abrió? Puede que este navegador no lo permita (pasa dentro de TikTok, Instagram, Facebook o WhatsApp). Usá el código por correo, o abrí el enlace en Chrome o Safari.",
@@ -2894,7 +3020,7 @@ export const T: Record<Lang, Dict> = {
     clConfirmadoActivar: "Listo. Ahora, activá tu cuenta.",
     clProtegerTitulo: "Proteger tu cuenta",
     clProtegerTextoCel: "Si no la protegés, tu cuenta solo anda en este celular. Protegela y vas a poder entrar desde otro.",
-    clProtegerTextoCompu: "Sin esto, tu cuenta solo anda en esta compu. Así vas a poder entrar desde otra.",
+    clProtegerTextoCompu: "Si no la protegés, tu cuenta solo anda en esta compu. Protegela y vas a poder entrar desde otra.",
     clDesbloqueoCel: "Usar el desbloqueo",
     clDesbloqueoCompu: "Usar el desbloqueo de la compu",
     clDesbloqueoAyudaCel: "El desbloqueo es lo mismo que usás para abrir tu celular: tu huella, tu cara o tu clave. No sale de ahí y Tinkazo no lo ve.",
@@ -2957,6 +3083,7 @@ export const T: Record<Lang, Dict> = {
     gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
     jgGuajojoB: "Un sendero del monte de noche. Mientras canta el guajojó, todos caminan. Cuando calla, quietos: sus ojos amarillos barren el sendero y al que hace crujir una rama lo escucha y se sienta. Gana quien llega de pie al amanecer. Hasta doscientas.",
     gcGuajojo: "Si canta, caminen. Si calla, quietos. Gana quien sigue de pie al amanecer.",
+    gcGuajojoOrden: "Si canta, caminen. Si calla, quietos. Quien sigue de pie al amanecer tiene el turno 1.",
     gcGuajojoMany: "Con varios premios, quien llega de pie al amanecer gana primero, y quien se sienta último también se lleva premio.",
     loreGuajojoQ: "¿Qué es el guajojó?",
     loreGuajojoA: "Un ave de la noche. De día se queda erguida e inmóvil en la punta de un palo seco, como si fuera parte de él, y al anochecer canta un silbo largo con notas que bajan.",
@@ -3012,32 +3139,41 @@ export const T: Record<Lang, Dict> = {
     againSigue: "Para la sala, tocá Mostrar en grande. Para quien no estuvo, tocá Avisarle por WhatsApp.",
     againSigueLuma: "Para la sala, tocá Mostrar en grande. Para tus invitados, copiá el mensaje de acá abajo y pegalo en Luma.",
     // --- El modo «Orden de turnos» (src/ui/turnos.ts, src/modos/): sortea a todas las personas de la lista, en orden.
-    //     Ahí no se habla de ganadores: la palabra es «turno». «Pasanaku» solo está en la línea de ejemplo de la ayuda.
+    //     Ahí no se habla de ganadores: la palabra es «turno». «Pasanaku» solo está en el ejemplo (`turnsExample`), que desde
+    //     el 13 de noviembre de 2026 va debajo del nombre, en el botón del selector de modo, con otro uso al lado.
     turnsOption: "Orden de turnos",
     turnsHelp: "Salen todos, en orden. Ese orden son los turnos.",
-    turnsExample: "Sirve para un pasanaku, para turnos de exposición o para repartir turnos de lo que sea. Tinkazo solo da el orden.",
+    turnsExample: "Para un pasanaku o exposiciones",
+    // El título del paso de la lista con el orden elegido: dice lo que va a pasar.
+    turnsTitulo: "Quiénes tienen turno",
     turnsCount: "Cuántos turnos",
     turnsPrizeLabel: "Nombre de los turnos (opcional)",
     turnsPrize: "Turnos",
-    turnsMas: "Orden de turnos, nombre y subir CSV",
-    turnsLimit: "En esta red el orden llega hasta {n} turnos: con más, no se puede sellar.",
+    turnsMas: "Nombre de los turnos y subir CSV",
+    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo.
+    modoRotulo: "¿Qué vas a hacer?",
+    modoSorteo: "Sortear premios",
+    modoSorteoSub: "Gana una persona o varias",
+    modoSorteoAyuda: "De la lista salen quienes ganan. Vos elegís cuántos.",
+    turnsLimit: "El orden llega hasta {n} turnos en este modo. Achicá la lista para poder sellar.",
     turnsWord: "Turno",
     turnsResultTitle: "El orden de los turnos",
     turnsCopy: "Copiar el orden",
     turnsPie: "Nadie eligió este orden: la lista se cerró antes de que existiera el número que lo decidió.",
     turnsAgainFew: "Ya están todos en el orden. Para otro orden, usá otra lista.",
-    turnsHist: "Turnos: {n} personas",
-    turnsHistPart: "Turnos: {n} personas, {k} turnos",
+    turnsHist: "{n} personas",
+    turnsHistPart: "{n} personas, {k} turnos",
     // Lo de antes de sellar y las bases de un orden de turnos: nada de ganar ni de premio.
     turnsSellarResumen: (n, personas = n) =>
       personas === n
         ? `${n} personas, turnos del 1 al ${n}. Al sellar, la lista queda cerrada.`
         : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una. Al sellar, la lista queda cerrada.`,
     // Sin la promesa del sello: esta lista no entra en lo que la red admite y no se puede sellar.
-    turnsSellarTope: (n, personas = n) =>
-      personas === n
+    turnsSellarTope: (n, personas = n, tope) =>
+      (personas === n
         ? `${n} personas, turnos del 1 al ${n}.`
-        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una.`,
+        : `${personas} personas, ${n} turnos, turnos del 1 al ${n}. Quien tiene más de una participación recibe un turno por cada una.`) +
+      (tope === undefined ? "" : ` El orden llega hasta ${tope} turnos en este modo. Achicá la lista para poder sellar.`),
     turnsRules: (p) => [
       `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
       "",
@@ -3069,7 +3205,9 @@ export const T: Record<Lang, Dict> = {
     // El mensaje para el grupo y el aviso a cada persona (src/modos/mensajes.ts).
     turnsMsgCab: "Orden de los turnos: {orden}",
     turnsTell: "Te tocó el turno {k} de {n}. Revisalo vos: {enlace}",
-    turnsTellSin: "Te tocó el turno {k} de {n}. Sin sello: no se puede comprobar. Para ver la lista y la cuenta: {enlace}",
+    turnsTellSin: "Te tocó el turno {k} de {n}. Este orden no se selló antes del sorteo, así que no se puede comprobar.",
+    // Un orden de turnos sin sello no tiene comprobante: la verificación mostraría un solo turno. No se ofrece enlace.
+    turnsSinComprobante: "Este orden no se selló antes del sorteo, así que no se puede comprobar.",
     turnsTellSubject: "Tu turno 🦙",
     turnsNotify: "Avisarle",
     turnsRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige el orden antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
@@ -3105,7 +3243,7 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.porteroCupoSellos": "Ya usaste los sorteos gratis de este mes. Podés sortear de nuevo el {fecha}.",
     "errAnchor.porteroCupoSorteos": "Tu lista sigue sellada y nadie la puede cambiar. Ya usaste los sorteos gratis de este mes: podés sortearla de nuevo el {fecha}.",
     "errAnchor.porteroFondo": "Ahora no podemos cubrir el costo de la red por vos. Probá en unos minutos, o escribinos a hola@tinkazo.app.",
-    "errAnchor.porteroFondoSorteo": "Tu lista está sellada y nadie la puede cambiar. Ahora no pudimos cubrir lo que cobra la red para sortear. Probá de nuevo en unos minutos: el ganador va a ser el mismo.",
+    "errAnchor.porteroFondoSorteo": "Tu lista sigue sellada y el ganador va a ser el mismo. No pudimos cubrir el costo de sortear.",
     "errAnchor.porteroAjena": "Esta cuenta no puede sortear gratis desde acá. Entrá con otra cuenta de Google o de correo.",
     "errAnchor.porteroAjenaPropia": "Esta cuenta no puede sortear gratis desde acá. Podés sellar pagando con tu cuenta.",
     "errAnchor.cupoPronto": "primero del mes que viene",
@@ -3176,6 +3314,9 @@ export const T: Record<Lang, Dict> = {
     modeCurrent: "You are in this mode",
     modeSwitchToOfficial: "Switch to Live",
     modeSwitchToTest: "Switch to Test",
+    modeSwitchAccount: "Each mode has its own account. You'll sign in once more in {otro}, and your {actual} account will still be here when you come back.",
+    modeSwitchGuestAccount: "The test account only works in Test. In Live, sign in with Google.",
+    modeHaveCoupon: "I have a coupon",
     modeSwitchBlocked: "Finish this draw before switching modes.",
     sealModeOfficial: "Live mode: this draw stays recorded on Stellar.",
     sealModeTest: "Test mode: it is wiped on December 16. For your event, switch to Live.",
@@ -3227,7 +3368,7 @@ export const T: Record<Lang, Dict> = {
     impAllSubFile: "every row in the file",
     impOther: "Another filter",
     impPriv: "The file never leaves your browser. Only names go into the draw: emails and everything else are neither used nor stored.",
-    impSearch: "Search a name",
+    impSearch: "Find a name",
     impAllOn: "Select all",
     impAllOff: "None",
     impCameAt: (h) => (h ? `came ${h}` : "came"),
@@ -3248,7 +3389,7 @@ export const T: Record<Lang, Dict> = {
     impOutDeclined: (n) => `${n} declined`,
     impOutWaitlist: (n) => `${n} on the waitlist`,
     impOutStatus: (n, st) => `${n} with the status ${st}`,
-    impOutHand: (n) => (n === 1 ? "1 who came, unchecked by hand" : `${n} who came, unchecked by hand`),
+    impOutHand: (n) => (n === 1 ? "1 who came, removed by hand" : `${n} who came, removed by hand`),
     impOutOther: (n) => `${n} not passing the filter`,
     impFixCase: (n) => (n === 1 ? "Fix the capitalization of 1 name" : `Fix the capitalization of ${n} names`),
     impFixCaseEx: (a, b) => `${a} becomes ${b}`,
@@ -3288,6 +3429,7 @@ export const T: Record<Lang, Dict> = {
     impMailSame: "same email",
     impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "How many win",
+    winnersMenos: "Decrease by one", winnersMas: "Increase by one",
     winnersAtajos: "Shortcuts for how many win", winnersTope: "Up to {n} winners per draw.",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
@@ -3387,21 +3529,21 @@ export const T: Record<Lang, Dict> = {
     cQualIn: "IN PLAY",
     rqTitle: "QUALIFYING",
     rqSub: (n, k) => `${n} at the start, ${k} make the final`,
-    rqStart: (n, k) => `${n} at the start! Only ${k} run the final.`,
+    rqStart: (n, k) => `${n} at the start! Only ${k} run in the final.`,
     rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
     rqIntro: "To the start, lane by lane!",
     pelCuenta: (k, n) => `${k} OF ${n} STILL RUNNING`,
     pelStart: (n, k) => `${n} at the start! Only ${k} reach the final.`,
     pelFinal: (k) => `${k} left! On to the final!`,
-    pelEcho: (nombre, quedan) => [`${nombre} lay down! ${quedan} left.`, `${nombre} stops to rest! ${quedan} left.`, `${nombre} stays behind to rest! ${quedan} left.`][quedan % 3] ?? "",
-    pelEchoDos: (a, b, quedan) => `${a} and ${b} lay down! ${quedan} left.`,
+    pelEcho: (nombre, quedan) => [`${nombre} lies down! ${quedan} left.`, `${nombre} stops to rest! ${quedan} left.`, `${nombre} stays behind to rest! ${quedan} left.`][quedan % 3] ?? "",
+    pelEchoDos: (a, b, quedan) => `${a} and ${b} lie down! ${quedan} left.`,
     pelTambalea: (nombre) => `${nombre} stumbles!`,
     pelCuesta: "THE HILL",
     pelBarro: "THE MUD",
     pelPiedras: "THE ROCKS",
     pelViento: "THE WIND",
     pelSubCuesta: "The hill! Whoever can't keep up lies down to rest.",
-    pelSubBarro: "The mud! Every step weighs double.",
+    pelSubBarro: "The mud! Every step is twice as hard.",
     pelSubPiedras: "The rocks! Watch where you step.",
     pelSubViento: "The wind! The ones left huddle together.",
     // --- Stand up (antes Who is it?): the room stands; each person checks their own name.
@@ -3490,8 +3632,8 @@ export const T: Record<Lang, Dict> = {
     cPiqueB: (n) => pick([`${n} paddles hard!`, `${n} caught the current!`, `Watch ${n}!`]),
     cEscupidaB: (a, b) => pick([`${a} splashed ${b}!`, `${a} soaked ${b}!`, `${b} took ${a}'s splash!`]),
     cTropiezoL: (n) => pick([`${n} tripped!`, `${n} missed a step!`, `Whoa, ${n} nearly fell!`]),
-    cTropiezoR: (n) => pick([`${n} lost course!`, `${n} hit an asteroid!`, `Whoa, ${n} drifted off!`]),
-    cPiqueL: (n) => pick([`Here comes ${n} on the outside!`, `${n} kicks it up!`, `Look at ${n}!`]),
+    cTropiezoR: (n) => pick([`${n} went off course!`, `${n} hit an asteroid!`, `Whoa, ${n} drifted off!`]),
+    cPiqueL: (n) => pick([`Here comes ${n} on the outside!`, `${n} picks up the pace!`, `Look at ${n}!`]),
     cPiqueR: (n) => pick([`${n} hits the turbo!`, `${n} at full throttle!`, `Look at ${n}!`]),
     cEscupidaL: (a, b) => pick([`${a} spat at ${b}!`, `Llama fight: ${a} versus ${b}!`, `${a} spat and ${b} slowed down!`]),
     cEscupidaR: (a, b) => pick([`${a} blew smoke at ${b}!`, `${a} blinded ${b}!`, `${a}'s smoke right in ${b}'s face!`]),
@@ -3507,7 +3649,7 @@ export const T: Record<Lang, Dict> = {
     gameTeleferico: "Cable car",
     cTelStop: (k, off, left) => (off === 1 ? `Station ${k}! One gets off, ${left} left` : `Station ${k}! ${off} get off, ${left} left`),
     cTelGrupo: (k, g, off, left) => `Station ${k}! The ${g.nombre} get off (${off}). ${left} left`,
-    cTelWho: ["Who makes it to the top?", "Both of them, all the way up!"],
+    cTelWho: ["Who makes it to the top?", "Who gets off?"],
     teleLinea0: "Red",
     teleLinea1: "Yellow",
     teleLinea2: "Green",
@@ -3597,19 +3739,19 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
     // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
     gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
-    gcTrueque: "A product moves stall to stall. Whoever gets it wins.",
+    gcTrueque: "A product moves from stall to stall. Whoever gets it wins.",
     gcTruequeMany: "Each prize is an order that changes hands.",
-    loreTruequeQ: "Where is trueque still done?",
+    loreTruequeQ: "Where is trueque still practiced?",
     loreTruequeA: "At Pongo K'asa, every Saturday at kilometer 94 of the Cochabamba–Oruro highway, and at Confital on Tuesdays, people trade potatoes, chuño (freeze-dried potato) and other products. An Opinión article calls it an ancestral practice: the chhalaku.",
     trFeria: "The fair is open!",
     trAcepta: "Each stall takes one product and gives another in return",
     trLeyenda: "What it takes on top, what it gives below",
     trSale: (p) => `The order leaves with ${p}`,
     trBusca: (p) => `Who takes ${p}?`,
-    trCambio: (p) => `Change! Now it's ${p}`,
+    trCambio: (p) => `Trade! Now it's ${p}`,
     trCallejon: ["Dead end!", "That way is closed", "No trade there!"],
     trNoEs: "No, it's for the other one!",
-    trCuenta: (k, K) => `CHANGE ${k} OF ${K}`,
+    trCuenta: (k, K) => `TRADE ${k} OF ${K}`,
     trRuta: (pasaron, llego) => `Nobody gets there alone: it went through ${pasaron} and reached ${llego}`,
     trDirecto: (llego) => `It went straight to ${llego}`,
     prPapa: "potato", prChuno: "chuño", prQuinua: "quinoa", prMaiz: "corn", prArroz: "rice", prYuca: "cassava", prPlatano: "plantain", prCafe: "coffee",
@@ -3630,7 +3772,7 @@ export const T: Record<Lang, Dict> = {
     cConstDecoy: ["NO, IT SWUNG AWAY!", "IT TURNED AROUND!",
       "IT CHANGED PATH!", "NOOO, IT KEEPS GOING!"],
     cHop: "HOP",
-    cLanes: (k, n) => `${k} OF ${n} ON TRACK. THE DRAW WAS AMONG ALL ${n}`,
+    cLanes: (k, n) => `${k} OF ${n} ON TRACK. THE DRAW INCLUDED ALL ${n}`,
     cLedgerSweep: ["The close begins!", "Here comes the sweep!", "First pass!"],
     cLedgerSweep2: ["Second pass!", "Only a few left!", "The table is emptying!"],
     cLedgerSweep3: ["Last pass!", "This is being decided!", "It stops here!"],
@@ -3642,6 +3784,14 @@ export const T: Record<Lang, Dict> = {
     // "rec.<game>.<side>" keys: ideal, bajo (low) and alto (high) within the
     // range; largo (too many) and corto (too few) when it doesn't fit.
     recBadge: "Recommended",
+    llamaPaso: (p: number, total: number) => `Step ${p} of ${total}`,
+    llamaPasoAria: (p: number, total: number, tramo: string) => `Step ${p} of ${total}: ${tramo}`,
+    llamaAvance: "Your progress",
+    tramoCuenta: "Your account",
+    tramoIdentidad: "Your identity",
+    tramoMonto: "How much",
+    tramoPago: "Your payment",
+    tramoCamino: "On its way",
     recHead: (n: number) => `For ${n} people`,
     // With several entries per person, the header says both counts, like the rest of the screen (freeze.ts).
     recHeadPart: (p: number, n: number) => `For ${p} people, ${n} entries`,
@@ -3650,11 +3800,13 @@ export const T: Record<Lang, Dict> = {
     "rec.race.ideal": "They all start together, lie down one by one, and eight reach the final.",
     "rec.race.bajo": "With so few llamas, it lasts just as long and has fewer moments.",
     "rec.race.alto": "With this many people it runs in heats: a few from each one get through and run together.",
-    "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, it is over the ${max} the race can take.`,
+    "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, that is more than the ${max} the race can take.`,
     "rec.race.corto": "With just one person, there's no race.",
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `With ${premios} prizes it doesn't fit: the race has ${carriles} lanes.`,
     "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `With ${premios} prizes it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.race.turnos": (_n: number, turnos: number, carriles: number) => `With ${turnos} turns it doesn't fit: the race has ${carriles} lanes.`,
+    // In a turn order only the games that tell it well are offered: the rest look off and say this.
+    "rec.sinTurnos": "This game is for prizes.",
     "rec.sapo.turnos": (_n: number, turnos: number, agujeros: number) => `With ${turnos} turns it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
     "rec.sapo.bajo": "With few people, the table has few holes and few throws.",
@@ -3668,7 +3820,7 @@ export const T: Record<Lang, Dict> = {
     "rec.chovena.ideal": "The wheel fills up and the room claps to the beat.",
     "rec.chovena.bajo": "With few people, there are few rounds and the wheel looks empty.",
     "rec.chovena.alto": "With this many people, the wheel is full.",
-    "rec.chovena.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it needs one wheel per comparsa. The maximum is ${max}.`,
+    "rec.chovena.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it needs one wheel per crew. The maximum is ${max}.`,
     "rec.chovena.corto": (_n: number, min: number) => `Under ${min}, there aren't enough rounds.`,
     "rec.teleferico.ideal": "Each group has its cabin and cheers for it.",
     "rec.teleferico.bajo": "With few cabins, every stop drags on.",
@@ -3680,9 +3832,9 @@ export const T: Record<Lang, Dict> = {
     "rec.trueque.alto": "With this many people, everyone can tell by their product whether they're still in.",
     "rec.trueque.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it goes up to ${max}.`,
     "rec.trueque.corto": (_n: number, min: number) => `Under ${min}, the route is three trades or fewer.`,
-    "rec.wheel.largo": (n: number, _min: number, max: number) => `With ${n}, the wheel doesn't read: it reaches ${max} names.`,
-    "rec.pinata.largo": (n: number, _min: number, max: number) => `With ${n}, the piñata doesn't read: it reaches ${max} names.`,
-    "rec.quien.alto": "Everyone checks their own name, so it works when the list is the people in the room.",
+    "rec.wheel.largo": (n: number, _min: number, max: number) => `With ${n}, the wheel can't be read: it goes up to ${max} names.`,
+    "rec.pinata.largo": (n: number, _min: number, max: number) => `With ${n}, the piñata can't be read: it goes up to ${max} names.`,
+    "rec.quien.alto": "Everyone checks their own name, so it works when the list matches the people in the room.",
     "rec.quien.largo": (n: number, _min: number, max: number) => `With ${n}, it plays, but the board can't be read from the back: it works best up to ${max}.`,
     "rec.quien.corto": (_n: number, min: number) => `Under ${min}, there are only two or three questions and it ends right away.`,
     "rec.oruro.alto": "Each fraternity dances its own piece and the room cheers for theirs all the way to the Socavón.",
@@ -3708,8 +3860,9 @@ export const T: Record<Lang, Dict> = {
     waitLine: "Nobody can pick it, not even the organizer.",
     waitLineSinSello: "An independent network publishes it in a few seconds. No seal: this draw can't be checked.",
     volAviso: "Turn your phone's volume up: the show has music.",
-    waitNow: "It is out. Go.",
+    waitNow: "The number is out. Tap Run the draw.",
     espSticker: "Nobody knows who wins yet",
+    espStickerOrden: "Nobody knows the order yet",
     espFaltan: "until the draw number comes out",
     espVolver: "Back to the page",
     espQrT: "Scan to watch live",
@@ -3717,6 +3870,21 @@ export const T: Record<Lang, Dict> = {
     espQrSub: "The same countdown and the same show, live on your phone.",
     espVistaEspectador: "Spectator view",
     espLectura: "Read-only: the organizer runs the draw.",
+    espProbar: "Try again",
+    espSinNumero: "The draw number hasn't arrived yet. The winner will be the same. Tap Try again.",
+    espSinNumeroOrden: "The draw number hasn't arrived yet. The order will be the same. Tap Try again.",
+    espTarda: "The room hasn't saved the draw yet. You'll see it here as soon as it's saved.",
+    espNoCoincide: "This link isn't for the draw that was recorded. Watch the screen in the room.",
+    espQrPreparando: "Preparing the QR to watch live…",
+    espQrFallo: "We couldn't prepare the QR to watch live.",
+    espEnlaceRoto: "This link to watch the draw live arrived incomplete. Scan the QR on the screen again.",
+    espIrALaPagina: "Go to Tinkazo",
+    espFinSiguiente: "Another prize? Scan the new QR on the screen.",
+    espVerDeNuevo: "Watch again",
+    espHacerElTuyo: "Run your own draw",
+    espMiraLaSala: "The show is still on the screen in the room. When it ends, you'll see who won here.",
+    espMiraLaSalaOrden: "The show is still on the screen in the room. When it ends, you'll see the turn order here.",
+    espVolverCorto: "Back",
     espVer: "Show the wait on the big screen",
     // Interactive games: the room where everyone lives the draw from their own phone.
     jiLink: "Interactive games: let everyone live the draw from their phone",
@@ -3751,7 +3919,7 @@ export const T: Record<Lang, Dict> = {
     jiPErrOtro: "Didn't get in. Try again.",
     jiPNombreMalo: "Try your name or nickname, no links.",
     jiPEjemplo: "Sample round: no receipt is kept and nothing is given out.",
-    masOpciones: "Prize, how many win and upload CSV",
+    masOpciones: "Prize and CSV upload",
     masAjustes: "Sound, length and more",
     recRangoAria: "For {r} people",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
@@ -3759,7 +3927,7 @@ export const T: Record<Lang, Dict> = {
     // The wait that flows into the show (Oct 21, 2026): once the number is out.
     espStickerYa: "The number that decides is out",
     espAprobar: "Your wallet will ask you to approve it.",
-    winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
+    winnerLabel: "The result", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can rerun this draw from their phone and will get the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) Open the quicknet round and check its proof against the beacon's public key. 2) randomness = sha256(proof). 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
     tecnicoT: "Technical details",
@@ -3776,7 +3944,7 @@ export const T: Record<Lang, Dict> = {
         "",
         "1. Entry is free. Nothing to buy and no account needed.",
         varias
-          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several can come out more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
+          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several entries can be drawn more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
           : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
         ...(varias ? ["3. Entries are not sold: the organizer sets them and they are written in the sealed list."] : []),
         `${varias ? 4 : 3}. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
@@ -3784,7 +3952,7 @@ export const T: Record<Lang, Dict> = {
         `${varias ? 5 : 4}. ${p.winners === 1 ? "The winner comes" : "The winners come"} from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
         `${varias ? 6 : 5}. ${p.raffleId
           ? `This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
-          : "This list was closed in the organizer's browser: nobody else can vouch for when."}`,
+          : "This list was closed in the organizer's browser: nobody else can confirm when it was closed."}`,
         `${varias ? 7 : 6}. The game on screen is presentation: it decides nothing.`,
         `${varias ? 8 : 7}. The organizer is responsible for the prize. Tinkazo is the tool.`,
         "",
@@ -3798,7 +3966,7 @@ export const T: Record<Lang, Dict> = {
         "",
         "1. Entry is free. Nothing to buy and no account needed.",
         varias
-          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several can come out more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
+          ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several entries can be drawn more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
           : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
         ...(varias ? ["3. Entries are not sold: the organizer sets them and they are written in the sealed list."] : []),
         `${varias ? 4 : 3}. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.`,
@@ -3814,14 +3982,16 @@ export const T: Record<Lang, Dict> = {
     tellBody: (w, prize, n, u, varios, sinSello, personas, eq = cuadroEsDeEquipos()) => {
       // With several entries per person, both counts are given.
       const of = personas && personas !== n ? `${n} entries from ${personas} people` : `${n} ${eq ? "teams" : "people"}`;
+      // With a prize it says what they take home. Without one it says they won the draw.
+      const gano = prize ? `You won, ${w}! You're taking home ${prize}.` : `You won the draw, ${w}!`;
       return sinSello
         ? // Without a seal it promises nothing that can't be checked: neither "nobody hand-picked you" nor "check it".
-          `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
-          `You came out of ${of}.\n\n` +
+          `${gano}\n\n` +
+          `You were drawn from ${of}.\n\n` +
           `No seal: it can't be checked. To see the list and the math: ${u}\n\n` +
           `Drawn with Tinkazo: https://tinkazo.app`
-        : `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
-          `You came out of ${of} and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
+        : `${gano}\n\n` +
+          `You were drawn from ${of}, and no one hand-picked you. The list was locked before the number that drew you existed, ` +
           `and that number is published by an open network of independent organizations that neither the organizer nor Tinkazo controls.\n\n` +
           `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
           `Drawn with Tinkazo: https://tinkazo.app`;
@@ -3836,9 +4006,10 @@ export const T: Record<Lang, Dict> = {
     src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the draw number ↗", proofOk: "proof verified",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
-    drandTry: (i, n) => `The draw's number hasn't arrived yet. Try ${i} of ${n}…`,
+    drandTry: (i, n) => `The draw's number hasn't arrived yet. Attempt ${i} of ${n}…`,
     drawTry: (i, n) => `The network doesn't see that number yet. Retry ${i} of ${n}…`,
     drawRetry: "Try the draw again",
+    drawCuentaSinLista: "Your list stays sealed and the winner will be the same. To draw in Official mode, get your account ready first.",
     drawnDone: "Already drawn",
     gcCuenta: "Count with me!",
     pantallaBtn: "Show it big",
@@ -3854,10 +4025,16 @@ export const T: Record<Lang, Dict> = {
     againFew: (n, eq = cuadroEsDeEquipos()) => (n === 1 ? `Only one ${eq ? "team" : "person"} is left without a prize: for another draw, use another list.` : "Everyone on the list has already won: for another prize, use another list."),
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "teams" : "people"} already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${new Intl.ListFormat("en", { type: "conjunction" }).format(nombres)} already won and are off this list. ${n} left.`),
     recuperarLista: "Bring back the previous list",
-    cortinaSe: "Up for grabs",
+    cortinaSe: "Now drawing",
+    cortinaSeOrden: "Drawing the turn order",
     cortinaSin: "The draw is coming",
     cortinaGraba: "Recording the draw so nobody can change it…",
     cortinaNumero: "Almost there: the draw number is on its way…",
+    grabGuardando: "Saving the draw so nobody can change it…",
+    grabGuardado: "Draw saved. Nobody can change it now.",
+    grabReintentar: "Save the draw",
+    grabNoCoincide: "Something went wrong in Tinkazo: what was saved doesn't match the result on screen. Please don't share this result yet, and write to us at hola@tinkazo.app.",
+    grabSigueEnLaPagina: "The next step is on the page: tap Close.",
     ausenteBtn: "Not here? Draw again",
     ausenteBtnCorto: "Not here",
     winnersOtros: "The other {n} winners, in order", winnersCadaUno: "Each one takes home:",
@@ -3869,10 +4046,10 @@ export const T: Record<Lang, Dict> = {
     salioVarias: (nombre, veces, premios) => {
       const nums = premios.map((p) => `#${p + 1}`);
       const lista = nums.length <= 1 ? nums.join("") : `${nums.slice(0, -1).join(", ")} and\u00a0${nums[nums.length - 1]}`;
-      return `${nombre} came out ${veces} times: ${lista}.`;
+      return `${nombre} was drawn ${veces} times: ${lista}.`;
     },
     repetidoVeces: "{nombre} ({n} times)",
-    salioVeces: "{nombre} came out {n} times.",
+    salioVeces: "{nombre} was drawn {n} times.",
     imgKicker: "Draw result",
     imgGano: "Winner",
     imgGanaron: "Winners",
@@ -3911,7 +4088,7 @@ export const T: Record<Lang, Dict> = {
         // With several entries the list is still one of people: teams go one per line, without them.
         `${varias ? `${n} people, ${participaciones} entries` : `${n} ${eq ? "teams" : "people"}`}, ` +
         `${k === 1 ? "1 winner" : `${k} winners`}${premio === null ? "" : `, ${premio || "no prize"}`}. ` +
-        `${varias ? "Anyone with several entries can come out more than once. " : ""}Sealing locks the list.`
+        `${varias ? "Anyone with several entries can be drawn more than once. " : ""}Sealing locks the list.`
       );
     },
     loginCorreoO: "or with your email",
@@ -3944,23 +4121,31 @@ export const T: Record<Lang, Dict> = {
     ensGuia1: "Sealing closes the list before the number exists: not even you can change it.",
     ensGuia2: "Sealed. The number comes out in {s} s. Meanwhile, choose the game.",
     ensGuia3: "The number is out. Tap Run the draw.",
-    ensFinT: "That was a rehearsal: whoever came up is pretend and nothing was recorded.",
+    ensFinT: "That was a rehearsal: the result was only for practice and nothing was recorded.",
     ensFinB: "That's how it goes. Live, sign in and paste your list before you put it on the projector: the wait is about a minute.",
     ensFinCta: "Draw with my list",
     ensOtroJuego: "Try another game",
     otroJuegoBtn: "Watch again with another game",
     juegoEnShow: "The game can't be changed while the draw is running.",
     juegoVerDeNuevo: "Tap a game to watch this same result again with it.",
+    juegoFijoEspectador: "This draw is already being watched on phones from the QR. The game and the length stay as they are until the result is out.",
     feedbackFin: "Anything to improve? Tell us in 30 seconds",
     ensEstadio: "REHEARSAL: not recorded",
     standLink: "I run a booth: sample rounds with whoever stops by",
     standBanda: "Sample round: it can't be checked",
     standSalir: "Run a real draw",
+    standResumen: (n) => `${n} ${n === 1 ? "person" : "people"} in the round`,
+    standLlevarT: "Take the stand list?",
+    standLlevarB: "Sample rounds are not saved. If you take the list, only the names in the box are carried over.",
+    standLlevarReemplaza: "The stand list replaces the list you were working on.",
+    standLlevarError: "The list could not be carried into the draw. Copy it by hand: it is still in the box.",
+    standLlevarSi: "Take this list",
+    standLlevarNo: "Start without it",
     standEmpezar: "Start the round",
     standArranca: "Starting in {s}",
     standGuia1: "Type the names of the people there, one per line, and tap Start the round. Nothing is recorded.",
     standFinT: "That was a sample round: it can't be checked and nothing is handed out.",
-    standFinB: "Joining is free. The closing draw can be checked, from any phone.",
+    standFinB: "Taking part is free. The closing draw can be checked from any phone.",
     standOtra: "Another round",
     standEnMarcha: "Round under way",
     standListaT: "Sample round",
@@ -3984,7 +4169,7 @@ export const T: Record<Lang, Dict> = {
     standSalaRevisarB: "These names have something worth a look before they go on the screen.",
     standSalaCerrar: "Close the room",
     standSalaCerradaMsg: "The room is closed and everything was deleted. Names already in the list stay there.",
-    standSalaVencida: "The room ended and everything was deleted. Set up another if you need one.",
+    standSalaVencida: "The room has expired and everything was deleted. Set up another one if you need one.",
     standSalaErrRed: "No connection to set up the room. Type the names in the box below.",
     standSalaErrCupoIp: "Several rooms were already set up from this connection. Try again in an hour, or type the names below.",
     standSalaErrCupoDia: "Today's limit of rooms was reached. Type the names in the box below.",
@@ -4007,7 +4192,7 @@ export const T: Record<Lang, Dict> = {
     masSeguridadT: "Where it can fail",
     masSeguridadB: "What the draw's rules prevent, which attacks are still open, and the limits.",
     masPreciosT: "What it costs",
-    masPreciosB: "Tinkazo is free today. Taking part in a draw and checking one is always free.",
+    masPreciosB: "Tinkazo is free today. Taking part in a draw and checking one are always free.",
     masMeetupT: "Meetup draw", masMeetupB: "Paste your meetup list, seal it and draw on the big screen. Anyone can check it afterwards.",
     masClaseT: "Class draw", masClaseB: "To pick who presents or forms groups, fairly and with nobody picking the winner.",
     masVerifT: "Verifiable draw", masVerifB: "How to redo a result with your own tools, and what it does not promise: whoever runs the draw builds the list.",
@@ -4035,19 +4220,19 @@ export const T: Record<Lang, Dict> = {
     titSeguridad: "Verifiable draw security: what it stops and what it doesn't",
     descSeguridad: "What the Tinkazo protocol prevents, which attacks are still open and what limits the tool has. A verifiable draw also has to say where it falls short.",
     titPrecios: "Tinkazo pricing: taking part and checking are free",
-    descPrecios: "Tinkazo is free today. We will publish pricing for organizers very soon, and we will tell you before we charge. Taking part and checking a draw is always free.",
+    descPrecios: "Tinkazo is free today. We will publish pricing for organizers very soon, and we will tell you before we charge. Taking part and checking a draw are always free.",
     titTerminos: "Tinkazo terms and privacy, short and with no fine print",
     descTerminos: "Taking part is free, whoever runs a draw answers for it, and names are not published: Tinkazo cannot read them. The terms and privacy, kept short.",
     titRuleta: "Free, verifiable name wheel to draw a winner fairly",
     descRuleta: "A name wheel for your event or class: it spins on the big screen, picks fairly and anyone can check the result. Taking part is free, with nothing to install.",
     titEventos: "Draws for events and stands: big screen and QR code",
-    descEventos: "A draw for events and stands: list from Luma or pasted, big screen, a QR so people find themselves and a receipt to share. Taking part is free.",
+    descEventos: "A draw for events and stands: list from Luma or pasted, big screen, a QR so people find their name and a receipt to share. Taking part is free.",
     navRuleta: "Name wheel",
     navEventos: "Event draws",
     masRuletaT: "Name wheel",
     masRuletaB: "Paste the names and watch the wheel spin. It's free, and afterwards anyone can check that nobody pushed it.",
     masEventosT: "Draws for events and stands",
-    masEventosB: "Big screen, QR code and a Luma list. The result stays in a link you can share.",
+    masEventosB: "Big screen, QR code and a Luma list. The result is kept in a link you can share.",
     rulKicker: "Name wheel",
     rulH1: "A name wheel, free and checkable",
     rulLead: "You paste the names, the wheel spins on the big screen and stops on the winner. And unlike an ordinary wheel, anyone can check that nobody pushed it.",
@@ -4066,10 +4251,10 @@ export const T: Record<Lang, Dict> = {
     rulS2T: "Seal the list",
     rulS2B: "It closes before the number that decides exists. After that it can't change without it showing.",
     rulS3T: "Pick the wheel and watch it spin",
-    rulS3B: "Two names are enough. Up to twenty-four, each slice is one person. With more, each slice gathers a group, up to two hundred names.",
+    rulS3B: "Two names are enough. Up to twenty-four, each slice is one person. With more, each slice represents a group, up to two hundred names.",
     rulParaT: "What it is for",
     rulP1: "Picking who presents, who goes first or who reads aloud in a class.",
-    rulP2: "Drawing a prize among those who came to your meetup or event.",
+    rulP2: "Drawing a prize winner from the people who came to your meetup or event.",
     rulP3: "Forming pairs or teams without anyone saying you picked them as you pleased.",
     rulSaberT: "What you should know",
     rulK1: "Taking part is free, and your people install nothing and create no account. Only the organizer signs in, with Google, in two taps.",
@@ -4079,13 +4264,13 @@ export const T: Record<Lang, Dict> = {
     rulF1T: "Is the name wheel really random?",
     rulF1B: "The wheel doesn't pick the winner: it shows the result. The winner comes from a public number that nobody can pick, and the spin stops on that name. That is why it can be checked, and an ordinary wheel can't.",
     rulF2T: "How many names does it take?",
-    rulF2B: "From two to two hundred. Up to twenty-four, each slice is one person. With more, each slice gathers a group.",
+    rulF2B: "From two to two hundred. Up to twenty-four, each slice is one person. With more, each slice represents a group.",
     rulF3T: "Does it cost anything?",
-    rulF3B: "Taking part in a draw and checking it is always free. Today Tinkazo is also free for whoever runs the draw. Pricing for organizers will be published very soon, and we will tell you before we charge.",
+    rulF3B: "Taking part in a draw and checking it are always free. Today Tinkazo is also free for whoever runs the draw. Pricing for organizers will be published very soon, and we will tell you before we charge.",
     rulDemo: "Watch the wheel in a demo",
     sorEvKicker: "For events and stands",
     sorEvH1: "A draw for events and stands, on the big screen",
-    sorEvLead: "For your meetup, your fair or your stand: the list comes from Luma or a paste, the draw can be read from the back of the room and the result stays in a link anyone can check from their phone.",
+    sorEvLead: "For your meetup, fair or stand: the list comes from Luma or is pasted in, the draw can be read from the back of the room, and the result stays in a link anyone can check on their phone.",
     sorEvImgAlt: "A draw on the big screen, with the llama race",
     sorEvImgCap: "The llama race on the big screen: you can read it from the back of the room.",
     sorEvQueT: "What an event needs",
@@ -4093,15 +4278,15 @@ export const T: Record<Lang, Dict> = {
     sorEvU1B: "Tap Show it big and the prize, the countdown and the game can be read from the back of the room, on a projector or a TV.",
     sorEvU2T: "A Luma list or a pasted one",
     sorEvU2B: "Upload the Luma guest CSV and choose who gets in, those who came or the approved ones. Without Luma, paste the names, one per line.",
-    sorEvU3T: "A QR so everyone can find themselves",
-    sorEvU3B: "Before sealing, the list is shown on the screen with a QR code. Everyone finds themselves on their phone, and if someone is missing there's time to fix it.",
+    sorEvU3T: "A QR so everyone can find their name",
+    sorEvU3B: "Before sealing, the list is shown on the screen with a QR code. Everyone finds their name on their phone, and if someone is missing there's time to fix it.",
     sorEvU4T: "A receipt to share",
     sorEvU4B: "At the end, a link and a QR: anyone can redo the draw from their phone. With several prizes, a single event link gathers them.",
     sorEvComoT: "How it goes at the event",
     sorEvS1T: "Build the list",
     sorEvS1B: "Before the event or when check-in closes. Rehearse once with the projector and the sound, with a sample list that isn't recorded.",
     sorEvS2T: "Show it and seal it",
-    sorEvS2B: "The room finds itself with the QR and you seal the list. The screen goes big and waits for the number that decides.",
+    sorEvS2B: "Everyone finds their name with the QR and you seal the list. The screen goes big and waits for the number that decides.",
     sorEvS3T: "Draw each prize",
     sorEvS3B: "The game tells the result and ends with who won and a QR. For the next prize, the list carries on without those who already won.",
     sorEvS4T: "Share the link",
@@ -4160,7 +4345,7 @@ export const T: Record<Lang, Dict> = {
     claseU3B: "Who answers, who reads aloud, who starts the round.",
     claseHowT: "How it works",
     claseS1T: "Paste the class list",
-    claseS1B: "One name per line. Before sealing, you can show it with a QR code so each person can look for themselves on their phone.",
+    claseS1B: "One name per line. Before sealing, you can show it with a QR code so each person can find their name on their phone.",
     claseS2T: "Seal it",
     claseS2B: "It is closed before the number that decides exists. After that, it can't change without it showing.",
     claseS3T: "Draw with the llama race or the wheel",
@@ -4173,7 +4358,7 @@ export const T: Record<Lang, Dict> = {
     claseW3T: "No accounts for students",
     claseW3B: "Students install nothing and create no account. Only the person running the draw signs in.",
     clasePrivT: "Privacy",
-    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. When you share or show it big, a copy is also kept for the short link, which only opens with the link: Tinkazo can't read it. But anyone with the link, the photo or the QR code on the screen sees the whole list: better it doesn't leave the class, especially if there are minors. If that copy needs to be deleted, write to hola@tinkazo.app.",
+    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. When you share or show it big, a copy is also kept for the short link, which only opens with the link: Tinkazo can't read it. But anyone with the link, the photo or the QR code on the screen sees the whole list: it's best not to share it outside the class, especially if there are minors. If that copy needs to be deleted, write to hola@tinkazo.app.",
     verifKicker: "To check it",
     verifH1: "Verifiable draw: anyone can redo the result",
     verifLead: "A verifiable draw leaves the evidence in plain sight. Here is what gets checked, who checks it and what it doesn't promise yet.",
@@ -4222,11 +4407,11 @@ export const T: Record<Lang, Dict> = {
     usosKicker: "Who it's for",
     usosT: "For whenever someone has to hand things out.",
     uso1t: "Meetups and communities",
-    uso1b: "The draw at the end, with the projector on and everyone watching. You upload your Luma CSV and draw only among those who came.",
+    uso1b: "The draw at the end, with the projector on and everyone watching. You upload your Luma CSV and draw winners only from the people who came.",
     uso2t: "Classrooms and workshops",
     uso2b: "Who presents first, who takes the book home. Without anyone saying the organizer picked a favorite.",
     uso3t: "Teams at work",
-    uso3b: "Draw the year-end gift or the order of the shifts, with a result anyone can check.",
+    uso3b: "Draw who gets the year-end gift or the order of the turns, with a result anyone can check.",
     uso4t: "Fairs and events",
     uso4b: "Prizes for the people who came, with no paperwork and no suspicion. Entering is always free.",
     faqKicker: "Questions",
@@ -4254,6 +4439,11 @@ export const T: Record<Lang, Dict> = {
     // A draw left undrawn on this device, above the list (Oct 21, 2026).
     pendienteT: "You have a sealed draw that hasn't been drawn: {que}.",
     pendienteBtn: "Resume it",
+    pendienteGrabarBtn: "Save it now",
+    grabarPropio: "Save it paying with my account",
+    grabOtraCuenta: "Another account made this draw. Sign in with that account to save it.",
+    histStateSinGuardar: "Drawn, not saved yet",
+    grabNoSePudo: "It couldn't be saved yet. The winner stays the same. Try again in a few seconds.",
     histWon: "won by",
     histWonMany: "won by",
     histOtherDevice: "The list stayed on the device where it was sealed.",
@@ -4267,7 +4457,7 @@ export const T: Record<Lang, Dict> = {
     // The list room, when it has several entries per person (lista.ts, sala.ts).
     salaPart: "{n} people, {k} entries",
     salaHuella: "Fingerprint",
-    salaQr: "Scan and find yourself",
+    salaQr: "Scan and find your name",
     salaCerrar: "Close",
     salaRep: "repeated",
     salaCopiar: "Copy the link for the group",
@@ -4295,7 +4485,7 @@ export const T: Record<Lang, Dict> = {
     waitId: "Draw #{n}. Write it down or take a photo",
     waitIdPagina: "Draw #{n}",
     vSealsElsewhere: "the same list, sealed by another account",
-    vSealsElsewhereWhy: "Another account also sealed this same list. It may be someone who repeated the draw with another account to publish only the convenient result. Ask for the receipts of all of them.",
+    vSealsElsewhereWhy: "Another account also sealed this same list. It may be someone who repeated the draw with another account to publish only the result they want. Ask for the receipts of all of them.",
     cfDuraT: "What is left of your draw, and for how long",
     cfDuraB1: "What proves your draw is the seal: the transaction recorded on Stellar, with its time, when you closed the list. The receipt is yours: you keep it, you send it and you use it whenever you want to check the draw again.",
     cfDura1: "<b>Your receipt:</b> it lasts as long as you keep it. While you have it, you can redo the math whenever you want.",
@@ -4321,7 +4511,7 @@ export const T: Record<Lang, Dict> = {
     cfH1: "Five steps, and every one of them can be checked.",
     cfLead: "This is how a winner comes out in Tinkazo, without jargon. For the technical detail, see the protocol and the security page.",
     cf1t: "You bring the list",
-    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find themselves on their phone and speak up if someone is missing or listed twice. Participants need nothing.",
+    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find their name on their phone and speak up if someone is missing or listed twice. Participants need nothing.",
     cf2t: "The list gets sealed",
     cf2b: "It gets a fingerprint, like a file's: change one letter and the whole thing changes. The fingerprint and the time are recorded on Stellar.",
     cf3t: "A number from the future is picked",
@@ -4490,7 +4680,7 @@ export const T: Record<Lang, Dict> = {
     maColNota: "They are die-cut along their outline, with a white border, 3 mm bleed and the layer named corte. The longest side is 5 or 7 cm and the sayings read well at 5 cm. Each one carries tinkazo.app on a small tag at the bottom, the same size on all of them. The PNG files have a transparent background, for social media or a video.",
     maColZip: "Download the collection (ZIP)",
     maTriptico: "Download the tri-fold (Word)",
-    maColZipNota: "All 28 as 5 and 7 cm PDF and SVG, the A4 print-ready sheets and every saying in Spanish and English. The PNG files come in another ZIP and the A3 sheet is a separate download.",
+    maColZipNota: "All 28 stickers in 5 and 7 cm sizes, as PDF and SVG files, the A4 print-ready sheets and every saying in Spanish and English. The PNG files come in another ZIP and the A3 sheet is a separate download.",
     maColFrases: "All the sayings (TXT)",
     maColZipPng: "All the PNG files (ZIP)",
     maColGJ: "The ten games, to collect",
@@ -4622,8 +4812,8 @@ export const T: Record<Lang, Dict> = {
     maSpImg3: "LinkedIn header, 1584 × 396",
     maSpImg4: "X header, 1500 × 500",
     maImpT: "For the booth: roll-up and table banner",
-    maImpB: "The files we take to events, ready for the printer. The roll-up comes 85 and 100 cm wide by 200 tall, and the banner for the front of the table 120 by 40 cm. They carry pictures of the games, the sticker characters, the large QR code to tinkazo.app and Instagram. For something small on top of the table, the A5 sign or the A3 poster further down.",
-    maImpNota: "They have 5 mm bleed. On the roll-up, the bottom 15 cm stay empty because the base covers them, and the QR code is 32.5 cm on each side (43.5 with its white border): it scans from about 3 m. On the banner, text and QR code sit 6 cm from every edge, for the hem and the grommets. Before printing, ask the printer for their template: some want 3 or 10 mm bleed. The SVG links the game pictures, and the ZIP below has them alongside.",
+    maImpB: "The files we take to events, ready for the printer. The roll-up comes in two sizes, 85 by 200 cm and 100 by 200 cm, and the banner for the front of the table is 120 by 40 cm. They carry pictures of the games, the sticker characters, the large QR code to tinkazo.app and Instagram. For something small on top of the table, the A5 sign or the A3 poster further down.",
+    maImpNota: "They have 5 mm bleed. On the roll-up, the bottom 15 cm stay empty because the base covers them, and the QR code is 32.5 cm on each side (43.5 with its white border): it can be scanned from about 3 m away. On the banner, text and QR code sit 6 cm from every edge, for the hem and the grommets. Before printing, ask the printer for their template: some want 3 or 10 mm bleed. The SVG links the game pictures, and the ZIP below has them alongside.",
     maImpColor: "Colors are RGB: the printer converts them to CMYK and the teal and purple may come out duller. Ask for a color proof before printing everything, and scan the proof's QR code with a phone.",
     maImpZip: "Download the SVGs with their pictures (ZIP)",
     maImpZipNota: "To edit the roll-up and the table banner: the six SVGs with the six game pictures they link. The print PDFs are downloaded one by one, above.",
@@ -4684,7 +4874,7 @@ export const T: Record<Lang, Dict> = {
     navPrecios: "Pricing", navCodigo: "Code", navInstagram: "Instagram", navFeedback: "Tell us what to improve",
     jgKicker: "Ten reveals",
     jgTitle: "A draw you watch",
-    jgLead: "When the animation starts, the winner is already decided: it came out of the beacon's public number. The game only tells it. Each one passes twenty checks before it ships, and the one that matters is that the name on screen is the one the protocol set.",
+    jgLead: "When the animation starts, the winner is already decided by the beacon's public number. The game only tells it. Each one passes twenty checks before it ships, and the one that matters is that the name on screen is the one the protocol set.",
     jgRaceN: "Llama race",
     jgRaceB: "Our flagship game. They all start together, lie down one by one, and eight are left. With more than 30, they race in heats. The draw was already made.",
     jgWheelN: "Wheel",
@@ -4699,7 +4889,7 @@ export const T: Record<Lang, Dict> = {
     jgTroB: "The schoolyard game: everyone throws their top into a chalk ring, they spin, clash and knock each other out, down to a head-to-head. The last one still spinning wins. Up to two hundred.",
     jgLuzN: "Red light, green light",
     loreLuzQ: "Why a lighthouse?",
-    loreLuzA: "drand calls itself a distributed randomness beacon: verifiable, unpredictable and unbiased random numbers. The League of Entropy runs it, and every Tinkazo draw is decided by one of its rounds.",
+    loreLuzA: "drand calls itself a distributed randomness beacon that provides verifiable, unpredictable and unbiased random numbers. The League of Entropy runs it, and every Tinkazo draw is decided by one of its rounds.",
     jgChoN: "Chovena",
     jgChoB: "The Chiquitano dance from Santa Cruz: the ring turns hand in hand and, when the music stops, whoever stumbles lets go and is out. The room claps to the beat and freezes with the cut. Best from twelve to eighty.",
     loreChoQ: "What is the chovena?",
@@ -4726,23 +4916,28 @@ export const T: Record<Lang, Dict> = {
     // --- The "how to play" card, before each game.
     gcKicker: "How to play",
     gcHonest: "The winner already came from the public number. The game only tells the story.",
+    gcHonestOrden: "The order already came from the public number. The game only tells the story.",
+    gcOrdenGeneral: "The full order appears at the end.",
     gcPeople: (n) => (n === 1 ? "1 participant" : `${n} participants`),
     gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
     gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
     gcSapoMany: "Every ring that drops into a hole is a prize.",
     gcQuienMany: "One round per prize. The last one standing wins.",
-    gcTelefericoMany: "Each station drops a group. The last ones off win prizes.",
+    gcTelefericoMany: "Each station drops a group. Everyone who reaches the top wins a prize.",
     gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
     gcRace: "The first llama across the finish line wins.",
+    gcRaceOrden: "The first llama across the finish line has turn 1.",
     gcRaceMany: "The first llama across the finish line wins the first prize. The other winners appear on the final card.",
     gcLuz: "On red, whoever moves sits down. Whoever touches the Lighthouse wins.",
     gcChovena: "They dance in a ring. The last one still dancing wins.",
+    gcChovenaOrden: "They dance in a ring. The last one still dancing has turn 1.",
     gcChovenaMany: "They dance in a ring. The last ones out win prizes.",
     gcTrompo: "Tops knock each other out. The last one spinning wins.",
     gcPinata: "Every swing drops candy. The last one inside wins.",
     gcOruro: "Oruro Carnival: whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
     gcWheel: "The slice under the pointer wins.",
+    gcWheelOrden: "The slice under the pointer has turn 1. The full order appears at the end.",
     gcTeleferico: "Each station drops a group. Whoever reaches the top wins.",
     gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
     gcStellar: "A packet hops from star to star. The last star it touches wins.",
@@ -4763,7 +4958,7 @@ export const T: Record<Lang, Dict> = {
     hiReglaT: "The Bolivian part earns its place",
     hiReglaB: "If an element can be removed and nothing stops working, it is decoration and it goes. Every Bolivian thing in the product does something: the name, the llama mascot, the wheel's tricolor pin that marks each full turn, the aguayo, which is the board of its game, the cable car, whose cable is the progress bar, and the Oruro entrada, whose blocks are the elimination rounds. No wiphalas in the background, no stock photos.",
     hiQuienT: "Who builds it",
-    hiQuienB: "I build it, Nicolás, from Santa Cruz de la Sierra. It is open source under MIT, and the draw protocol is written step by step so anyone can redo it with their own tools.",
+    hiQuienB: "I'm Nicolás, from Santa Cruz de la Sierra, and I build it. It is open source under the MIT license, and the draw protocol is written step by step so anyone can redo it with their own tools.",
     navTerminos: "Terms",
     tmKicker: "Terms",
     tmTitle: "Terms and privacy",
@@ -4793,7 +4988,7 @@ export const T: Record<Lang, Dict> = {
     tmStellarMarca: '"Stellar" is a trademark of the Stellar Development Foundation. All rights reserved. Tinkazo is an independent project, not affiliated with, sponsored or endorsed by the Stellar Development Foundation.',
     sgKicker: "Security",
     sgTitle: "Where it can fail",
-    sgLead: "A draw that claims to be verifiable also has to say where it stops. This is what the protocol prevents, what it does not yet, and what the tool cannot promise.",
+    sgLead: "A draw that claims to be verifiable also has to say where it stops. This is what the protocol prevents, what it does not yet prevent, and what the tool cannot promise.",
     sgQ1T: "Adding a name afterwards",
     sgQ1B: "Not without it showing. When the list is sealed, it is reduced to a 64-character fingerprint. Changing, adding or removing a name gives a different fingerprint, and the one that counts was recorded in the contract before the number existed.",
     sgQ2T: "Picking the number that decides",
@@ -4812,11 +5007,11 @@ export const T: Record<Lang, Dict> = {
     sgLimit3: "What the contract stores pays rent: if nobody extends it, the entry is archived and stops being readable until someone pays to restore it. And today the contract is on testnet, which Stellar wipes on December 16, 2026: there the record is lost and the verdict is no longer green.",
     sgLimit4: "If the public beacon went down entirely and forever, a sealed draw would be left without its number. There are four relays, three on drand.sh and one at Cloudflare, rotated until one answers.",
     sgLimitCorto: "The short link (tinkazo.app/c/…) keeps a copy of the receipt on Cloudflare, encrypted in the browser with a key that travels only in the link: Tinkazo can't read it, and anyone with the link or its QR code sees the whole list. It decides nothing: it opens the same receipt, which is recomputed as always. It doesn't expire, so the draw can be checked again. If someone needs it deleted, they ask at hola@tinkazo.app, and deleting it doesn't take the list back from those who already opened it. If the service goes down, the short link won't open while it lasts: the long link still works, and the organizer has it in My draws, on the device where they ran the draw.",
-    sgLimit5: "The seal stops the list from changing afterwards, not from being built wrong in the first place: the organizer can add filler or duplicate names, or leave someone out. That is why, before sealing, the list can be shown to the room with a QR so everyone can find themselves on their phone. For the same reason, duplicates are flagged, the receipt has a search box, and the Luma import proposes only those who checked in.",
+    sgLimit5: "The seal stops the list from changing afterwards, not from being built wrong in the first place: the organizer can add filler or duplicate names, or leave someone out. That is why, before sealing, the list can be shown to the room with a QR so everyone can find their name on their phone. For the same reason, duplicates are flagged, the receipt has a search box, and the Luma import proposes only those who checked in.",
     sgReportT: "If you find a way to skew a draw",
     sgReportB: "Open an issue. That is the most useful report there is, and the project is open source precisely for that: the full protocol, the contract and the known threats are written down and can be audited without asking anyone.",
     sgLinkProto: "The protocol ↗", sgLinkAmen: "The threats ↗", sgLinkIssue: "Open an issue ↗",
-    prTitle: "Pricing", prNote: "Today Tinkazo is free. We will publish pricing for organizers here very soon, and we will tell you before we charge. Taking part in a draw and checking it is always free.",
+    prTitle: "Pricing", prNote: "Today Tinkazo is free. We will publish pricing for organizers here very soon, and we will tell you before we charge. Taking part in a draw and checking it are always free.",
     // The plans table: Bolivia's prices in bolivianos, the rest of Latin America's in dollars.
     // Off the pricing page since November 8, 2026, while the prices are being defined: the prCol*, prP*, prTablaNota,
     // prSponsorNota, prPatrocinioNota and prPay* keys stay here. Putting the table back is pasting it again.
@@ -4857,7 +5052,7 @@ export const T: Record<Lang, Dict> = {
     prP9q: "Apps that use the draw with their own users",
     prP9b: "In the works, price to be defined. Each app pays its own network cost",
     prP9l: "Same",
-    prTablaNota: "In Bolivia, prices are in bolivianos, and in the rest of Latin America, in dollars. The bolivianos are not a conversion: they are Bolivia's own price.",
+    prTablaNota: "In Bolivia, prices are in bolivianos, and in the rest of Latin America, in dollars. The prices in bolivianos are not converted from dollars: they are Bolivia's own prices.",
     prSponsorNota: "A sponsor's brand never goes inside the draw.",
     prPayTitle: "How you'll pay",
     prPayBody: "We plan to charge the way people pay in your country: QR or card, in your local currency (in Bolivia, your bank's QR, in bolivianos). Today we charge nothing.",
@@ -4873,20 +5068,24 @@ export const T: Record<Lang, Dict> = {
     noAnchor: "not recorded", onChain: "see it in the public record",
     txStarting: "Getting the seal ready…",
     txSimulating: "Building the seal…", txSimulatingSorteo: "Building the draw…", txSigning: "Approve the operation in your wallet…",
-    txSending: "Saving the seal…", txConfirmed: "Recorded", txCost: "Network fee: up to",
-    "errAnchor.notFound": "We couldn't find that draw. Check it before preparing another seal.",
+    txSending: "Saving the seal…", txSendingSorteo: "Recording the draw…", txConfirmed: "Recorded", txCost: "Network fee: up to",
+    "errAnchor.notFound": "We couldn't find that draw on the record. Open My draws to see if it was sealed before you seal again.",
     "errAnchor.alreadyDrawn": "That draw already has a winner. See the recorded result: it opens on another page.",
     "errAnchor.tooFewEntries": "One name is not a draw. Add at least two.",
     "errAnchor.badWinnerCount": "That number of winners doesn't work. Pick fewer winners than people.",
     "errAnchor.badWinnerCountViejo": "This network still allows up to {tope} winners per draw. Pick {tope} or fewer and try again.",
-    "errAnchor.roundTooSoon": "That moment is too close. Try again.",
+    "errAnchor.roundTooSoon": "Sealing took longer than expected. Tap Seal the list again.",
+    selloTardeSinSorteos:
+      "Your list wasn't sealed in time, and it wasn't your fault. That attempt used a Live draw, which comes back on its own in a few minutes. Then tap Seal the list again. If you don't see it back, write to us at hola@tinkazo.app.",
+    selloTardeAviso: "It wasn't your fault. If an attempt used a Live draw, it comes back on its own in a few minutes. If you don't see it back, write to us at hola@tinkazo.app.",
+    selloTardeAvisoSinDevolucion: "It wasn't your fault. If an attempt used a Live draw and you need it back, write to us at hola@tinkazo.app.",
     "errAnchor.roundTooFar": "Your device's clock is off and the draw ended up more than 30 days away. Fix it and try again.",
     "errAnchor.roundNotReady": "That draw number isn't published yet. Wait a few seconds and try again.",
     "errAnchor.invalidSignature": "The draw number couldn't be confirmed. Try again in a few seconds.",
     "errAnchor.metaTooLong": "The prize name is too long. Trim it a bit.",
     "errAnchor.noFunds": "Your account has no balance to pay the network fee. Add some XLM and try again.",
     "errAnchor.userRejected": "You cancelled. Tap the button again and approve.",
-    "errAnchor.rpcDown": "Couldn't reach the public record. Check your internet and try again.",
+    "errAnchor.rpcDown": "We couldn't reach the public record. Try again in a few seconds.",
     "errAnchor.busy": "The record was busy. Try again in a few seconds.",
     "errAnchor.unknown": "The draw couldn't be recorded. Try again in a few seconds.",
     // Transactions (Oct 21): what happened, when it wasn't the contract.
@@ -4937,12 +5136,12 @@ export const T: Record<Lang, Dict> = {
     vCannotFinish: "Couldn't finish checking",
     vNoProof: "This link carries no draw",
     vNoProofDetail: "Ask whoever ran the draw for the full link, including everything after the hash sign.",
-    vCheckList: "The list and its fingerprint", vCheckRound: "The round signature",
-    vCheckSeed: "The seed comes from the signature", vCheckWinner: "The recomputed winner", vCheckOrden: "The recomputed order",
+    vCheckList: "The list and its fingerprint", vCheckRound: "The random number is genuine",
+    vCheckSeed: "The result comes from that number", vCheckWinner: "The winner, worked out again", vCheckOrden: "The recomputed order",
     vCheckChain: "The record on Stellar",
     vNotDrawnYet: "not drawn on chain yet",
     vChainUnreachable: "couldn't read the contract",
-    vSeals: "Other seals by this organizer, and of this list",
+    vSeals: "Other seals by this organizer and for this list",
     vSealsWhy: "An organizer could seal the same list several times and publish only the result that suits them. Every seal is public, so here are theirs, all the ones still on chain. None of them repeats this draw's list or its head count.",
     vSealsSameCount: "same number of people",
     vSealsSameCountWhy: "There are other seals with the same number of people as this one. It may be another draw at the same event, or the same list with the names in another order, which gives a different fingerprint. If they are close in time, ask the organizer for the receipts.",
@@ -4961,8 +5160,8 @@ export const T: Record<Lang, Dict> = {
     vStepSig: "signature",
     vStep4: "the winner, counter from 0, skipping repeats",
     vStepCounter: "counter",
-    vVerdictUnknown: "I couldn't finish checking",
-    vVerdictUnknownDetail: "The math adds up, but this draw says it is recorded on Stellar and I could not read that record. It may be the connection or an archived record. Until it can be read, nobody vouches that this is the sealed list: reload in a bit.",
+    vVerdictUnknown: "We couldn't read the public record yet",
+    vVerdictUnknownDetail: "The math adds up, but the public record that confirms this is the sealed list still has to be read. It's almost always the connection. Open the link again in a few minutes.",
     vRoundUnreachable: "couldn't fetch the beacon round",
     vListChanged: "The list in this link is not the one that was sealed. Someone changed it afterwards.",
     vBadSignature: "The round signature doesn't verify against the beacon's public key.",
@@ -4984,7 +5183,7 @@ export const T: Record<Lang, Dict> = {
     vRoundChanged: "This link uses a different public number than the one that was sealed.",
     vRoundEarly: "The deciding number already existed when the list was sealed.",
     vSeedChanged: "The number recorded on Stellar isn't the one the beacon published for that round.",
-    vRecordOdd: "The record on Stellar doesn't add up with itself.",
+    vRecordOdd: "The record on Stellar doesn't add up.",
     vTechContratoAjeno: "Network {red} and contract {c} are not among Tinkazo's (src/stellar/deployments.json).",
     vTechCodigoAjeno: "Contract {c} runs .wasm {w}, but Tinkazo's is {o}.",
     vTechAnclaDeforme: "The network, the contract or the draw number are missing or don't have the usual form.",
@@ -4998,16 +5197,16 @@ export const T: Record<Lang, Dict> = {
     vTechFirmaRegistro: "The recorded signature isn't the one for round {r}.",
     vTechSemilla: "Recorded seed: {a}. Seed from the signature: {b}.",
     vTechGanadores: "Recorded winners: [{a}]. Recomputed: [{b}].",
-    vTechRegistro: "The recorded seal and result don't add up with each other (number, round, status or number of winners).",
+    vTechRegistro: "The recorded seal and result don't match (number, round, status or number of winners).",
     vListLink: "The list in the link",
     vVerdictWaiting: "The number isn't out yet",
     vVerdictWaitingDetail: "The number that decides this draw comes out at {h}. Open the link again after that.",
     vVerdictSealedAgain: "It checks out, but this list was sealed more than once",
-    vVerdictSealedAgainDetail: "What the contract recorded matches, but the same list has other seals (they are further down). There may be a reason, but it is also how someone tries several times and publishes only the convenient result: ask for the receipts of all of them.",
+    vVerdictSealedAgainDetail: "What the contract recorded matches, but the same list has other seals (they are further down). There may be a reason, but it is also how someone tries several times and publishes only the result they want: ask for the receipts of all of them.",
     vSealsNear: "another account, same number of people, almost the same time",
-    vSealsNearWhy: "Another account sealed, at almost the same time, a draw with the same number of people. It may be another event, but it may also be the same list in another order, sealed from another account to keep the convenient result. If it matters to you, ask for both receipts.",
+    vSealsNearWhy: "Another account sealed, at almost the same time, a draw with the same number of people. It may be another event, but it may also be the same list in another order, sealed from another account to keep the result they want. If it matters to you, ask for both receipts.",
     vRetiredDetail: "The link points to a record Tinkazo no longer uses, and the draw was sealed there after it stopped being used. That record is still open and anyone can seal in it, so it proves nothing.",
-    vTechContratoRetirado: "Contract {c} stopped being the site's at draw {n}, and this draw is {id}.",
+    vTechContratoRetirado: "Contract {c} stopped being used by the site at draw {n}, and this draw is {id}.",
     // When the contract no longer keeps the draw, the seal is checked against Stellar's history (protocol §7.1).
     // {m} is one of the next two: the network's fast memory no longer holds the draw (it was archived) or it couldn't be read just now.
     vVerdictOkHistoryDetail: "{m}. It was checked against its public history on Stellar: the seal is from {f} (code {c}) and the public number came out after it. We ran it again here and got the same name, so nobody could pick the result. The draw number in the link can't be checked this way: the draw is recognized by that date and that code.",
@@ -5033,20 +5232,20 @@ export const T: Record<Lang, Dict> = {
     vTechHistorialFuente: "All of this is read from a single source, Horizon's history: if it lied about the transaction's time or ledger, this result would be wrong. A second source is planned for later.",
     vTechSelloFallo: "Transaction {tx} failed on the network: it sealed nothing.",
     vTechSelloOtra: "Transaction {tx} is not a call to seal.",
-    vTechHistorialDistinto: "The contract and transaction {tx} don't tell the same story about the seal in: {campos}.",
+    vTechHistorialDistinto: "The contract and transaction {tx} disagree on these seal fields: {campos}.",
     vTechHistorialOtroContrato: "Transaction {tx} is a seal of contract {a}, but the link says {b}.",
     vTechHistorialContratoAjeno: "Transaction {tx} calls seal on a contract that isn't Tinkazo's.",
     vTechHistorialRetirado: "Transaction {tx} sealed on contract {c} after its last official seal (ledger {u}).",
     shareProof: "Share the result",
     // Event link (evento.html): several draws from the same event, in one link.
     evKickerRevisando: "Checking", evTituloRevisando: "Checking the draws", evProgreso: "{i} of {n} done.",
-    evKickerOk: "All adds up", evTituloOk: "The draws add up",
+    evKickerOk: "Adds up", evTituloOk: "The draws add up",
     evDetalleOk: "All of them match what was sealed on Stellar: the list, the public number and the winner.",
     evKickerParcial: "Adds up, with a caveat", evTituloParcial: "They add up, but not all are anchored",
     evDetalleParcial: "The ones that aren't anchored have no witness on the chain: redoing them proves the numbers add up, not that the list is the one that was sealed.",
     evKickerMal: "Doesn't add up", evTituloMal: "Some draws don't add up",
     evDetalleMal: "Don't share this link as it is: one of them changed after it was sealed or was built wrong. See which one fails in the list below.",
-    evKickerSinRed: "Something is missing", evTituloSinRed: "Some draw is still unchecked",
+    evKickerSinRed: "Something is missing", evTituloSinRed: "Some draws are still unchecked",
     evDetalleSinRed: "The proof from some round did not arrive, or the chain or Stellar's history couldn't be read. Each draw says what happened. With a connection, reloading the page tries again.",
     evKickerError: "Link", evTituloError: "This link can't be opened",
     evNoEvento: "This link doesn't hold a Tinkazo event.",
@@ -5122,9 +5321,9 @@ export const T: Record<Lang, Dict> = {
     loginOtraVia: "Another way to sign in",
     ingresoCaidoTitulo: "Sign-in isn't responding",
     ingresoPlazoTitulo: "Sign-in didn't finish",
-    ingresoCaidoLinea: "You can try again or draw anyway. This draw won't be under your name or recorded on Stellar.",
+    ingresoCaidoLinea: "You can try again or draw anyway. This draw won't be linked to your account or recorded on Stellar.",
     sinCuentaBoton: "Draw without an account",
-    sinCuentaLinea: "You're drawing without an account. What you draw isn't under your name.",
+    sinCuentaLinea: "You're drawing without an account. This draw won't be linked to you.",
     sinCuentaEntrar: "Sign in with my account",
     loginConexion: "We couldn't complete the connection. Retry or choose another way to sign in.",
     loginSendFailed: "We couldn't send the code. Retry or choose another way to sign in.",
@@ -5143,13 +5342,13 @@ export const T: Record<Lang, Dict> = {
     walletUnknown: "We couldn't sign you in. Try again or choose another way to sign in.",
     friendbotFailed: "Couldn't fund the test account. Try again in a minute.",
     wrongNetwork: "Your wallet is on another network. Switch it to {red} to seal.",
-    drandDown: "I can't reach the draw's number. Check your connection.",
+    drandDown: "The draw's number hasn't arrived yet. The list doesn't change and the winner will be the same. Tap Try the draw again.",
     cReady: ["Llamas on your marks!", "Llamas lining up!", "Quiet down, here we go!", "Eyes on the screen!"],
     cReadyStellar: ["Rockets on the launchpad!", "Engines lit!", "Countdown!", "Hold on, they're lifting off!"],
     cStart: ["AND THEY'RE OFF!", "HERE WE GO!", "THERE THEY GO!", "GO GO GO!"],
     cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "THE FINISH IS IN SIGHT!", "THERE'S THE FINISH!"],
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
-    cWin: (n, many) => esDeTurnos() ? "The order is set!" : enStand() ? `${n} PICKED!` : pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
+    cWin: (n, many) => esDeTurnos() ? "The order is set!" : enStand() ? (many ? `${n} ARE PICKED!` : `${n} IS PICKED!`) : pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, premio, enlace, varios, sinSello, personas, equipos = false) =>
       `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, ${personas && personas !== n ? `out of ${n} entries from ${personas} people` : `out of ${n} ${equipos ? "teams" : "people"}`}.\n` +
       // Without a seal it promises nothing that can't be checked: neither "nobody picked" nor "verify it".
@@ -5201,11 +5400,12 @@ export const T: Record<Lang, Dict> = {
     // --- The short link and the photo with the QR code (21 October 2026).
     cmpWa: "Share on WhatsApp", cmpPreparando: "Getting the photo ready…",
     cmpFb: "Share on Facebook", cmpIg: "Share on Instagram",
+    cmpIgAviso: "The photo was downloaded: post it from Instagram.",
     cmpBajarFoto: "Download the photo", cmpBajarFotos: "Download the photos",
     cmpPegaLaFoto: "We copied the photo: paste it into the WhatsApp chat.",
     cmpAdjuntaLaFoto: "The photo was downloaded: attach it in the WhatsApp chat.",
     cmpAdjuntaLasFotos: "The photos were downloaded: attach them in the WhatsApp chat.",
-    cmpNoAparece: "WhatsApp wasn't there? Download the photo and copy the message to paste them in the chat.",
+    cmpNoAparece: "Don't see WhatsApp? Download the photo and copy the message to paste them in the chat.",
     cmpFotoAlt: "The photo with the result and the QR code to check it",
     cmpFotoJuego: "Photo with the game", cmpFotoClasica: "Classic photo",
     cmpSinFoto: "The photo couldn't be made: the message still has the link.",
@@ -5224,7 +5424,7 @@ export const T: Record<Lang, Dict> = {
     fotoEntreUnoPart: "Drawn from {n} entries from {k} people", fotoEntreVariosPart: "Drawn from {n} entries from {k} people",
     fotoMas: "and {n} more", fotoMasNombres: "{n} more",
     evnT: "My events",
-    evnLead: "An event groups draws under one name, to send them together. Add draws to it from each of your draws.",
+    evnLead: "An event groups draws under one name so you can send them together. Add a draw to an event from the draw itself.",
     evnNombre: "Event name", evnCrear: "Create event", evnGuardar: "Save the name",
     evnBorrar: "Delete the event", evnBorrarConf: "The event is deleted. Its draws go back to the list in My draws. Go ahead?",
     evnSumar: "Add to an event…", evnQuitar: "Remove from the event", evnVerLista: "See the draws",
@@ -5264,37 +5464,83 @@ export const T: Record<Lang, Dict> = {
     acctPending: "not drawn yet",
     acctProofOf: "Receipt for {sorteo}",
     acctSignOut: "Sign out",
-    // Add to your balance, coins, little shop and team plan (behind the VITE_RAMPA, VITE_MONEDAS and VITE_PLAN_EQUIPO flags)
-    saldoBtn: "Add to your balance",
-    saldoTitle: "Add to your balance",
-    saldoLead: "Turn bolivianos into digital dollars in your account. The money is yours: it stays in your account and you can take it out whenever you want.",
-    saldoPasos: "Four steps",
-    saldoP1: "Download the Meru app and create your account.",
-    saldoP2: "Add bolivianos by paying with your bank's QR. That costs nothing in Meru.",
-    saldoP3: "In Meru, choose to send digital dollars (USDC) over the Stellar network and paste your address from below as the destination.",
-    saldoP4: "Come back here and tap the I've added it button. The first dollars can take a few minutes to arrive.",
-    saldoMeru: "Open Meru",
-    saldoCosto: "What it costs: Meru charges 1 % plus 1 dollar when it sends. Tinkazo charges nothing and keeps nothing.",
-    saldoMinimo: "Because the fixed part of the fee (1 dollar) weighs more on small amounts, it's better to add 25 dollars or more at once.",
+    // Your digital dollars, coins, little shop and team plan (behind the VITE_RAMPA, VITE_MONEDAS and VITE_PLAN_EQUIPO flags)
+    saldoBtn: "Your digital dollars",
+    saldoTitle: "Your digital dollars",
+    saldoLead: "Digital dollars (USDC) in your account. They're yours: Tinkazo doesn't hold or touch them.",
+    saldoTenes: "You have {n} digital dollars.",
+    saldoTenesPrueba: "You have {n} test digital dollars.",
+    cargaTenesNada: "You don't have any digital dollars in your account yet.",
+    saldoPractica: "Practice: these digital dollars are test ones and have no value. Send them from another test account.",
+    cargaYaTengo: "I already have digital dollars",
+    cargaComoSaco: "How do I take my money out?",
+    cargaComoSacoTexto: "Your digital dollars are in your account and they're yours. Moving them to your bank isn't possible from here yet. In the meantime, you can send them to another account of yours or to an app that changes them into bolivianos.",
+    cargaCuentaPrimero: "To add money, first get your account ready.",
+    cargaCuentaPrimeroBtn: "Get my account ready",
+    saldoSoloOficialTitulo: "It happens in Live mode",
+    saldoSoloOficial: "In Test mode no real money moves.",
+    saldoMirandoCuenta: "Checking whether your account can receive digital dollars…",
+    saldoMasDetalles: "More details",
+    saldoRecibirTitulo: "Bring your digital dollars",
+    saldoRecibirOjo: "Only USDC on the Stellar network. Anything else you send can be lost.",
+    saldoRecibirComo: "In the other app or exchange, choose to send USDC on the Stellar network and paste your address as the destination. If it asks for a note or memo, leave it empty.",
     saldoDir: "Your address",
-    saldoDirAyuda: "Paste it into Meru as the destination. It's public: it only receives, nobody can take anything out with it.",
-    saldoCopiarAria: "Copy your address to paste it into Meru",
+    saldoDirAyuda: "It's public: it only receives, nobody can take anything out with it.",
     saldoQrAlt: "QR code with your address",
-    saldoYaCargue: "I've added it",
+    saldoNota: "Note or memo",
+    saldoNotaVacia: "Leave it empty",
+    saldoYaMande: "I've sent it",
     saldoMirando: "Checking your account…",
+    saldoLlegaron: "{n} digital dollars arrived.",
+    saldoNoVemosNuevo: "We don't see a new one yet.",
+    saldoUltimoLlego: "The last one arrived on {cuando}: {n} digital dollars.",
+    saldoNoLlegoTodavia: "We don't see any yet.",
+    saldoEsperaNoMandes: "If you sent it recently, wait a few minutes: don't send it again.",
     saldoLlego: "Your first digital dollars arrived",
     saldoLlegoMonedas: "You earned {n} coins as a gift.",
-    saldoNoLlego: "We don't see them yet. They can take a few minutes: try again soon.",
     saldoError: "We couldn't check your account right now. Try again in a few minutes.",
-    saldoPollarTitle: "Add from here",
-    saldoPollarBs: "Bolivianos to add",
-    saldoPollarVer: "See how much you'd get",
-    saldoPollarRecibis: "You'd get about {n} digital dollars.",
-    saldoPollarTarda: "It takes about {m} minutes.",
-    saldoPollarSinRuta: "There's no way to do that amount right now. Try another one or add with Meru.",
-    saldoPollarError: "We couldn't get the price right now. Add with Meru in the meantime.",
-    saldoPollarNoListo: "Adding without leaving Tinkazo isn't ready yet. In the meantime, add with the Meru guide.",
-    saldoPollarCargar: "Add from here",
+    saldoVolverAMirar: "Check again",
+    saldoNoSeSabe: "We couldn't check your account right now. Try again in a few minutes.",
+    saldoNoSeSabeMas: "Until we know it can receive, we won't show your address.",
+    saldoActivarTitulo: "First, turn on digital dollars",
+    saldoActivarApp: "Turning them on takes a moment and costs you nothing.",
+    saldoActivarPropio: "The network sets aside half an XLM from your wallet while they stay on.",
+    saldoActivarPropioMas: "It also charges a tiny fee. Your wallet will ask you to approve it.",
+    saldoActivarBtn: "Turn on digital dollars",
+    saldoActivando: "Turning them on…",
+    saldoActivarAhoraNo: "It can't be turned on right now. Your account is fine: try later.",
+    saldoActivarAprobar: "Approve it in your wallet.",
+    saldoActivadoOk: "Done: your account can now receive digital dollars.",
+    saldoActivarNoSalio: "It couldn't be turned on. Try again in a few minutes.",
+    saldoActivarNoAprobado: "You didn't approve it in your wallet. Try again whenever you want.",
+    saldoMonto: "{n} digital dollars",
+    saldoMandarBtn: "Send my digital dollars",
+    saldoMandarA: "To",
+    saldoMandarPegar: "Paste address",
+    saldoMandarNota: "Paste note",
+    saldoMandarSinNota: "No note",
+    saldoMandarNotaAyuda: "If the receiving app gave you a note or memo, paste it here.",
+    saldoMandarNotaMala: "That note can't be used to send. Check it in the other app.",
+    saldoMandarCuanto: "How much",
+    saldoMandarTodo: "All",
+    saldoMandarMitad: "Half",
+    saldoMandarMenos: "One dollar less",
+    saldoMandarMas: "One dollar more",
+    saldoMandarResumen: "You're going to send {n} digital dollars to {corta}.",
+    saldoMandarOk: "Send",
+    saldoMandarMirando: "Checking that account…",
+    saldoMandarNoRecibe: "That account can't receive digital dollars. Check the address: we didn't send anything.",
+    saldoMandarListo: "Done: you sent {n} digital dollars.",
+    saldoMandarEnCurso: "It's being sent. Don't send it again.",
+    saldoMandarNoSalio: "It couldn't be sent. Your digital dollars are still in your account.",
+    saldoActivandoEspera: "They're being turned on. It can take a little while.",
+    saldoNoMandesTitulo: "Don't send money to this account",
+    saldoNoPuedeApp: "For now it can't receive digital dollars. Check again later.",
+    saldoNoRecibeMas: "For now it can't receive more digital dollars.",
+    saldoFaltaXlm: "Your wallet needs {n} free XLM and has {m}. Add some XLM.",
+    saldoBilleteraNuevaTitulo: "Your wallet isn't active yet",
+    saldoBilleteraNueva: "It first needs to receive 2 XLM. Then check again.",
+    saldoOtraRed: "Your wallet is on another network. Switch it to {red} and check again.",
     monTitle: "Your coins",
     monSaldo: "{n} coins",
     monCargando: "Checking your coins…",
@@ -5393,6 +5639,8 @@ export const T: Record<Lang, Dict> = {
     sigListaPartUno: "1 person, {n} entries",
     sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
+    // A turn order longer than the network allows: the button is off and the bar says why.
+    sigTope: "can't seal, the order goes up to {tope} turns",
     sigEspera: "Waiting for the number",
     sigRonda: "The number is out",
     sigSorteando: "Drawing",
@@ -5485,7 +5733,7 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Sign in with Google",
     acctCargando: "Reading the balance…",
     cuentaSinSesion: "We couldn't start the Google sign-in. Try again or sign in with your email.",
-    cuentaViaPruebaC: "Test",
+    cuentaViaPruebaC: "Guest",
     cuentaAriaSola: "Your account: {n}. Open the account panel.",
     sigEntrarSellar: "Sign in to seal",
     cuentaSalio: "You signed out.",
@@ -5524,7 +5772,7 @@ export const T: Record<Lang, Dict> = {
     protOtroCorreo: "Use another email",
     protReenviado: "Done, we sent you another code.",
     protHaciendo: "Protecting your account…",
-    protBadMail: "That email is missing something.",
+    protBadMail: "That email isn't complete. Check it and try again.",
     protBadCode: "That code is wrong or has expired. Ask for another one and use it right away.",
     protFalla: "We couldn't protect your account. Try again.",
     protPasskeyBloqueada: "Didn't it open? This browser may not allow it (it happens inside TikTok, Instagram, Facebook or WhatsApp). Use the email code, or open the link in Chrome or Safari.",
@@ -5551,11 +5799,11 @@ export const T: Record<Lang, Dict> = {
     clConfirmadoActivar: "Done. Now activate your account.",
     clProtegerTitulo: "Protect your account",
     clProtegerTextoCel: "If you don't protect it, your account only works on this phone. Protect it and you'll be able to get in from another one.",
-    clProtegerTextoCompu: "Without this, your account only works on this computer. This way you can get in from another one.",
+    clProtegerTextoCompu: "If you don't protect it, your account only works on this computer. Protect it and you'll be able to get in from another one.",
     clDesbloqueoCel: "Unlock with your phone",
     clDesbloqueoCompu: "Unlock with this computer",
-    clDesbloqueoAyudaCel: "Unlocking uses what you open your phone with: your fingerprint, face or passcode. It never leaves it, and Tinkazo doesn't see it.",
-    clDesbloqueoAyudaCompu: "Unlocking uses what you open your computer with: your fingerprint, face or password. It never leaves it, and Tinkazo doesn't see it.",
+    clDesbloqueoAyudaCel: "You unlock with the same thing you use to open your phone: your fingerprint, face or passcode. It never leaves your phone, and Tinkazo doesn't see it.",
+    clDesbloqueoAyudaCompu: "You unlock with the same thing you use to open your computer: your fingerprint, face or password. It never leaves your computer, and Tinkazo doesn't see it.",
     clCorreoO: "Rather get a code by email?",
     clOtroCorreo: "Send the code to another email",
     clOSiPreferis: "or if you prefer",
@@ -5606,21 +5854,22 @@ export const T: Record<Lang, Dict> = {
     clNoSeSacoCel: "You're signed out, but we couldn't remove this phone from your account. Write to us at hola@tinkazo.app.",
     clNoSeSacoCompu: "You're signed out, but we couldn't remove this computer from your account. Write to us at hola@tinkazo.app.",
     "errAnchor.confirmation": "Your account couldn't confirm the operation. Reload the page and try again. If it keeps happening, write to hola@tinkazo.app.",
-    "errAnchor.sponsorEmpty": "Sealing didn't work just now, and it isn't your account: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
+    "errAnchor.sponsorEmpty": "Sealing didn't work just now, and your account isn't the problem: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
     "errAnchor.cosignRejected": "Your account didn't approve this operation, so nothing was done. Press the button again. If it keeps happening, write to hola@tinkazo.app.",
-    redSinSaldoPatrocinio: "Sealing didn't work just now, and it isn't your account: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
+    redSinSaldoPatrocinio: "Sealing didn't work just now, and your account isn't the problem: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // --- guajojo
     gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
     jgGuajojoB: "A forest trail at night. While the guajojó sings, everyone walks. When it goes quiet, freeze: its yellow eyes sweep the trail, and anyone who snaps a twig is heard and sits down. Whoever is still standing at dawn wins. Up to two hundred.",
     gcGuajojo: "It sings: walk. It stops: freeze. Whoever is still standing at dawn wins.",
+    gcGuajojoOrden: "It sings: walk. It stops: freeze. Whoever is still standing at dawn has turn 1.",
     gcGuajojoMany: "With several prizes, whoever reaches dawn standing wins first, and whoever sits down last wins a prize too.",
     loreGuajojoQ: "What is the guajojó, the night bird?",
     loreGuajojoA: "A night bird. By day it stays upright and motionless at the tip of a dry stick, as if part of it, and at dusk it sings one long whistle followed by falling notes.",
     // --- /guajojo
     // --- toborochi
     gameToborochi: "The Toborochi", jgToborochiN: "The Toborochi",
-    jgToborochiB: "The toborochi in bloom, the tree of Santa Cruz. Names arrive eight at a time and the south wind carries the flowers off little by little, until the finalists remain. The hummingbird lands on whoever wins. Up to two hundred.",
+    jgToborochiB: "The toborochi in bloom, the tree of Santa Cruz. Names arrive eight at a time and the south wind carries the flowers off little by little, until the finalists remain. The hummingbird lands on the winner's flower. Up to two hundred.",
     gcToborochi: "The wind blows the flowers away, a few at a time. The flower where the hummingbird lands wins.",
     gcToborochiMany: "With several prizes, some flowers fall with a prize and the hummingbird lands on the first prize's flower.",
     loreToborochiQ: "Where does The Toborochi come from?",
@@ -5647,7 +5896,7 @@ export const T: Record<Lang, Dict> = {
     "rec.bolillas.ideal": "The circle fills up and every throw counts.",
     "rec.bolillas.bajo": "With few marbles, the circle looks empty and throws run together.",
     "rec.bolillas.alto": "With a big list, a first round crosses out names before the troya.",
-    "rec.bolillas.largo": (n: number, _min: number, max: number) => `With ${n}, it does not offer: the circle holds up to ${max}.`,
+    "rec.bolillas.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: the circle holds up to ${max}.`,
     "rec.bolillas.corto": "With one person there is no troya.",
     // --- amigo
     gameAmigo: "Secret friend", jgAmigoN: "Secret friend",
@@ -5668,32 +5917,39 @@ export const T: Record<Lang, Dict> = {
     againSigue: "For the room, tap Show it big. For whoever wasn't there, tap Tell them on WhatsApp.",
     againSigueLuma: "For the room, tap Show it big. For your guests, copy the message below and paste it in Luma.",
     // --- The “Turn order” mode (src/ui/turnos.ts, src/modos/): draws everyone on the list, in order.
-    //     It never talks about winners: the word is “turn”. “Pasanaku” only shows in the help's example line.
+    //     It never talks about winners: the word is “turn”. “Pasanaku” only shows in the example (`turnsExample`), which since
+    //     13 November 2026 sits under the name, in the mode picker button, next to another use.
     turnsOption: "Turn order",
     turnsHelp: "Everyone is drawn, in order. That order sets the turns.",
-    turnsExample: "Useful for a pasanaku, for presentation turns or to hand out turns for anything. Tinkazo only gives the order.",
+    turnsExample: "For a pasanaku or presentations",
+    turnsTitulo: "Who gets a turn",
     turnsCount: "How many turns",
-    turnsPrizeLabel: "Name of the turns (optional)",
+    turnsPrizeLabel: "Name for the turns (optional)",
     turnsPrize: "Turns",
-    turnsMas: "Turn order, name and upload CSV",
-    turnsLimit: "On this network the order goes up to {n} turns: with more, it can't be sealed.",
+    turnsMas: "Name for the turns and CSV upload",
+    modoRotulo: "What do you want to do?",
+    modoSorteo: "Draw prizes",
+    modoSorteoSub: "One or more people win",
+    modoSorteoAyuda: "The winners come out of the list. You choose how many.",
+    turnsLimit: "The order goes up to {n} turns in this mode. Shorten the list to seal it.",
     turnsWord: "Turn",
     turnsResultTitle: "The turn order",
     turnsCopy: "Copy the order",
     turnsPie: "Nobody chose this order: the list was closed before the number that decided it existed.",
     turnsAgainFew: "Everyone is in the order. For another order, use another list.",
-    turnsHist: "Turns: {n} people",
-    turnsHistPart: "Turns: {n} people, {k} turns",
+    turnsHist: "{n} people",
+    turnsHistPart: "{n} people, {k} turns",
     // What shows before sealing and the rules of a turn order: nothing about winning or prizes.
     turnsSellarResumen: (n, personas = n) =>
       personas === n
         ? `${n} people, turns 1 to ${n}. Sealing locks the list.`
         : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each. Sealing locks the list.`,
     // Without the promise of sealing: this list is past what the network allows and cannot be sealed.
-    turnsSellarTope: (n, personas = n) =>
-      personas === n
+    turnsSellarTope: (n, personas = n, tope) =>
+      (personas === n
         ? `${n} people, turns 1 to ${n}.`
-        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each.`,
+        : `${personas} people, ${n} turns, turns 1 to ${n}. Whoever has more than one entry gets one turn for each.`) +
+      (tope === undefined ? "" : ` The order goes up to ${tope} turns in this mode. Shorten the list to seal it.`),
     turnsRules: (p) => [
       `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
       "",
@@ -5704,7 +5960,7 @@ export const T: Record<Lang, Dict> = {
       `4. The order comes from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
       p.raffleId
         ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
-        : "5. This list was closed in the organizer's browser: nobody else can vouch for when.",
+        : "5. This list was closed in the organizer's browser: nobody else can confirm when it was closed.",
       "6. The game on screen is presentation: it decides nothing.",
       "7. Tinkazo only gives the order. The organizer is responsible for what is done with the turns.",
       "",
@@ -5725,7 +5981,9 @@ export const T: Record<Lang, Dict> = {
     // The message for the group and the notice to each person (src/modos/mensajes.ts).
     turnsMsgCab: "Turn order: {orden}",
     turnsTell: "You got turn {k} of {n}. Check it yourself: {enlace}",
-    turnsTellSin: "You got turn {k} of {n}. No seal: it can't be checked. To see the list and the math: {enlace}",
+    turnsTellSin: "You got turn {k} of {n}. This order was not sealed before the draw, so it can't be checked.",
+    // A turn order with no seal has no proof: the check would show a single turn. No link is offered.
+    turnsSinComprobante: "This order was not sealed before the draw, so it can't be checked.",
     turnsTellSubject: "Your turn 🦙",
     turnsNotify: "Tell them",
     turnsRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the order is chosen before anyone knows it, and put on record which draw counts.",
@@ -5756,12 +6014,12 @@ export const T: Record<Lang, Dict> = {
     partSi: "Yes, use them",
     partNo: "No",
     partTopeAviso: (quienes: string, varios: boolean) =>
-      varios ? `The most is 10 per person: ${quienes} stayed at 10.` : `The most is 10 per person: ${quienes} stayed at 10.`,
+      varios ? `The maximum is 10 per person. ${quienes} were kept at 10.` : `The maximum is 10 per person. ${quienes} was kept at 10.`,
     // --- patrocinio
     "errAnchor.porteroCupoSellos": "You've used this month's free draws. You can draw again on {fecha}.",
     "errAnchor.porteroCupoSorteos": "Your list stays sealed and nobody can change it. You've used this month's free draws: you can run it again on {fecha}.",
     "errAnchor.porteroFondo": "We can't cover the network cost for you right now. Try again in a while, or write to hola@tinkazo.app.",
-    "errAnchor.porteroFondoSorteo": "Your list is sealed and nobody can change it. We couldn't cover the network charge for the draw right now. Try again in a while: the winner will be the same.",
+    "errAnchor.porteroFondoSorteo": "Your list stays sealed and the winner will be the same. We couldn't cover the cost of the draw.",
     "errAnchor.porteroAjena": "This account can't draw for free from here. Sign in with another Google or email account.",
     "errAnchor.porteroAjenaPropia": "This account can't draw for free from here. You can seal by paying with your account.",
     "errAnchor.cupoPronto": "the first of next month",
@@ -5785,9 +6043,22 @@ Object.assign(T.en, TEXTOS_EQUIPOS.en);
 // Los premios pagados y el panel de ganadores (src/ui/panel-ganadores.ts) tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_PAGOS.es);
 Object.assign(T.en, TEXTOS_PAGOS.en);
+// Lo que se ve cuando el modo Oficial frena algo para no costar de más (`src/ui/costos-textos.ts`).
+Object.assign(T.es, TEXTOS_COSTOS.es);
+Object.assign(T.en, TEXTOS_COSTOS.en);
 // El acceso al modo Oficial con cupón y lo que queda de sorteos oficiales tienen sus textos aparte (`alta-textos.ts`).
 Object.assign(T.es, TEXTOS_ALTA.es);
 Object.assign(T.en, TEXTOS_ALTA.en);
+// Los textos del pago de un paquete (`alta-textos-pago.ts`): claves propias, que solo se muestran con la compra prendida.
+Object.assign(T.es, TEXTOS_ALTA_PAGO.es);
+Object.assign(T.en, TEXTOS_ALTA_PAGO.en);
+// Las de la caja del acceso sin nada a la venta, con nombre propio (`altaTextoSinVenta`, `altaYaActivadaSinVenta`).
+Object.assign(T.es, TEXTOS_ALTA_SIN_VENTA.es);
+Object.assign(T.en, TEXTOS_ALTA_SIN_VENTA.en);
+// Las claves nuevas de las páginas públicas con la compra (la lista de precios y lo que se compra en los términos), que
+// se ven solo con la compra prendida (`alta-textos-con-cobro.ts`).
+Object.assign(T.es, TEXTOS_COBRO.es);
+Object.assign(T.en, TEXTOS_COBRO.en);
 // Mientras la compra de sorteos esté apagada no hay dónde comprar: ningún texto lo ofrece (`alta-textos-sin-pago.ts`).
 if (!altaPagoActivo()) {
   Object.assign(T.es, TEXTOS_ALTA_SIN_PAGO.es);
@@ -5797,11 +6068,31 @@ Object.assign(T.es, TEXTOS_ALTA_CUENTA.es);
 Object.assign(T.en, TEXTOS_ALTA_CUENTA.en);
 Object.assign(T.es, TEXTOS_ALTA_PASO.es);
 Object.assign(T.en, TEXTOS_ALTA_PASO.en);
+// La compra con el QR del banco (`compra-textos.ts`): claves propias, que ninguna pantalla muestra mientras la compra
+// con QR esté apagada.
+Object.assign(T.es, TEXTOS_COMPRA.es);
+Object.assign(T.en, TEXTOS_COMPRA.en);
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
-// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`).
+// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
+// existe en los dos modos, pero su frase sobre dejar la cuenta lista solo vale cuando la persona está en Oficial.
 if (HAY_MODO_OFICIAL) {
-  Object.assign(T.es, TEXTOS_MODO_OFICIAL.es);
-  Object.assign(T.en, TEXTOS_MODO_OFICIAL.en);
+  const { cuentaPideGoogle: puertaOficialEs, ...textosOficialesEs } = TEXTOS_MODO_OFICIAL.es;
+  const { cuentaPideGoogle: puertaOficialEn, ...textosOficialesEn } = TEXTOS_MODO_OFICIAL.en;
+  Object.assign(T.es, textosOficialesEs);
+  Object.assign(T.en, textosOficialesEn);
+  if (network.name === "mainnet") {
+    T.es.cuentaPideGoogle = puertaOficialEs!;
+    T.en.cuentaPideGoogle = puertaOficialEn!;
+  }
+}
+
+// Con la compra de sorteos a la vista (en piloto, solo en una pestaña con su marca), las páginas públicas dicen que se
+// compran y ya no que es gratis para todos (`alta-textos-con-cobro.ts`). Va al final: manda sobre los textos con cupón
+// y los del modo Oficial.
+if (cobroEnElBuild()) {
+  const conCobro = textosConCobro();
+  Object.assign(T.es, conCobro.es);
+  Object.assign(T.en, conCobro.en);
 }
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { iniciarHoverVivo } from "./estilos-atencion";
 
 /**
  * El tema forzado en las páginas de lectura: con `?theme=light|dark` cada
@@ -114,7 +113,36 @@ describe("el tema forzado en las páginas de lectura", () => {
 });
 
 describe("el hover vivo de las tarjetas de juego", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = "";
+    h.reduce = false;
+    h.hover = true;
+    vi.stubGlobal("matchMedia", (q: string) => ({
+      matches: q.includes("prefers-reduced-motion") ? h.reduce : q.includes("(hover: hover)") ? h.hover : false,
+      media: q,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  it("entra apagado: la página de juegos no anima sus tarjetas", async () => {
+    document.body.innerHTML = `<article class="juego"><img src="/juegos/race.webp" alt="race" /></article>`;
+    await import("./pagina");
+    const tarjeta = document.querySelector(".juego") as HTMLElement;
+    tarjeta.dispatchEvent(new Event("pointerenter"));
+    expect(tarjeta.classList.contains("hover-vivo")).toBe(false);
+  });
+
   it("la página de juegos conecta el hover vivo a sus tarjetas .juego", async () => {
+    // El mecanismo, con el interruptor prendido a mano: el sitio lo trae apagado.
+    const { forzarAtencion } = await import("./estilos-atencion");
+    forzarAtencion("hoverVivo", true);
     // Las tarjetas van antes de importar la página: el cableado se hace al arrancar.
     document.body.innerHTML = ["race", "sapo"]
       .map((g) => `<article class="juego"><picture><img src="/juegos/${g}.webp" alt="${g}" /></picture></article>`)
@@ -131,6 +159,8 @@ describe("el hover vivo de las tarjetas de juego", () => {
 
   it("en pantalla táctil no hay hover, y no aplica", async () => {
     h.hover = false;
+    const { forzarAtencion } = await import("./estilos-atencion");
+    forzarAtencion("hoverVivo", true);
     document.body.innerHTML = `<article class="juego"><img src="/juegos/race.webp" alt="race" /></article>`;
     await import("./pagina");
     const tarjeta = document.querySelector(".juego") as HTMLElement;

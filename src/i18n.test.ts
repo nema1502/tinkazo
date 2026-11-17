@@ -34,6 +34,13 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
+  it("la cuenta de prueba se presenta como Invitado para no repetir el nombre del modo", () => {
+    expect(T.es.cuentaViaPruebaC).toBe("Invitado");
+    expect(T.en.cuentaViaPruebaC).toBe("Guest");
+    expect(T.es.cuentaViaPruebaC).not.toBe(T.es.modeTest);
+    expect(T.en.cuentaViaPruebaC).not.toBe(T.en.modeTest);
+  });
+
   it("Sapo: the drop line names the prize, never the co-winner, the tally counts, 'almost' and the frog's lip exist", () => {
     // Al caer el co-ganador la línea dice su número de premio: no hay nombre que decir.
     expect(T.es.cSapDone(2)).toMatch(/premio 2/i);
@@ -148,7 +155,11 @@ describe("diccionario", () => {
 
   it.runIf(HAY_MODO_OFICIAL)("con contrato en la red real, el diccionario lleva los textos del modo Oficial", () => {
     for (const l of ["es", "en"] as const) {
-      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) {
+        // Esta frase depende del modo activo, no solo de que Oficial exista. Tiene su prueba propia abajo.
+        if (k === "cuentaPideGoogle") continue;
+        expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      }
     }
   });
 
@@ -176,6 +187,37 @@ describe("diccionario", () => {
     });
   });
 
+  describe("la puerta de Google en cada modo", () => {
+    afterEach(() => {
+      vi.doUnmock("./stellar/deployments.json");
+      vi.resetModules();
+      vi.unstubAllGlobals();
+    });
+
+    it("en Oficial pide dejar la cuenta lista y en Prueba conserva el texto de siempre, con el mismo contrato disponible", async () => {
+      expect(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google y dejá tu cuenta lista.");
+      expect(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google and get your account ready.");
+
+      const real = (await import("./stellar/deployments.json")).default;
+      const lista = {
+        ...real,
+        mainnet: { contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", rpcUrl: "https://rpc.example" },
+      };
+      vi.resetModules();
+      vi.doMock("./stellar/deployments.json", () => ({ default: lista }));
+      vi.stubGlobal("location", { search: "", hash: "" });
+      const { T: enPrueba } = await import("./i18n");
+      expect(enPrueba.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.");
+      expect(enPrueba.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google: it's free and your account is created for you.");
+
+      vi.resetModules();
+      vi.stubGlobal("location", { search: "?red=oficial", hash: "#sortear" });
+      const { T: enOficial } = await import("./i18n");
+      expect(enOficial.es.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle);
+      expect(enOficial.en.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle);
+    });
+  });
+
   it("en inglés ningún número se une con \"a\" (\"4 a 30\"): es la palabra del español, y en inglés se lee \"4 to 30\"", () => {
     const sueltas = Object.entries(T.en)
       .flatMap(([k, v]) => (typeof v === "string" ? [[k, v] as const] : Array.isArray(v) ? v.map((x) => [k, x] as const) : []))
@@ -195,12 +237,12 @@ describe("diccionario", () => {
     expect(T.en.freeRule).toContain("/terminos.html");
   });
 
-  it("el rótulo del pliegue de la lista nombra lo que guarda: el premio, cuántos ganan y el CSV", () => {
+  it("el rótulo del pliegue nombra el premio y el CSV, no la cantidad que quedó afuera", () => {
     expect(T.es.masOpciones).toMatch(/premio/i);
-    expect(T.es.masOpciones).toMatch(/ganan/i);
+    expect(T.es.masOpciones).not.toMatch(/ganan/i);
     expect(T.es.masOpciones).toMatch(/CSV/);
     expect(T.en.masOpciones).toMatch(/prize/i);
-    expect(T.en.masOpciones).toMatch(/win/i);
+    expect(T.en.masOpciones).not.toMatch(/win/i);
     expect(T.en.masOpciones).toMatch(/CSV/);
   });
 
@@ -239,9 +281,6 @@ describe("diccionario", () => {
   });
 
   it("en texto plano, un botón cuyo nombre es una frase se presenta como botón", () => {
-    // Sin comillas, tocá Ya cargué se lee como si lo dijera quien escribe.
-    expect(T.es.saldoP4).toContain(`tocá el botón ${T.es.saldoYaCargue}.`);
-    expect(T.en.saldoP4).toContain(`tap the ${T.en.saldoYaCargue} button.`);
     // Con Mostrar en grande seguido de una coma, el botón parecía el primero de una lista de cuatro.
     expect(T.es.sorEvU1B).toMatch(new RegExp(`^Tocá ${T.es.pantallaBtn} y el premio`));
     expect(T.en.sorEvU1B).toMatch(new RegExp(`^Tap ${T.en.pantallaBtn} and the prize`));
@@ -297,14 +336,41 @@ describe("diccionario", () => {
 });
 
 describe("el modo espectador", () => {
-  it("sus textos nuevos existen en los dos idiomas", () => {
-    for (const k of ["espQrT", "espQrBoton", "espQrSub", "espVistaEspectador", "espLectura"]) {
+  const CLAVES = [
+    "espQrT", "espQrBoton", "espQrSub", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda",
+    "espNoCoincide", "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente",
+    "espVerDeNuevo", "espHacerElTuyo", "espMiraLaSala",
+  ];
+
+  it("sus textos existen en los dos idiomas", () => {
+    for (const k of CLAVES) {
       expect(typeof T.es[k], `es.${k}`).toBe("string");
       expect(typeof T.en[k], `en.${k}`).toBe("string");
       expect(T.es[k] as string).toBeTruthy();
       expect(T.en[k] as string).toBeTruthy();
     }
-    // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos.
+    // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos (ver el
+    // TODO(merge-115) más abajo sobre el botón que origin/main había quitado).
+    expect(T.es.espQrBoton).toBe("QR para ver en vivo");
+    expect(T.en.espQrBoton).toBe("QR to watch live");
+  });
+
+  it("sin comillas angulares, sin punto y coma y sin palabras técnicas", () => {
+    for (const k of CLAVES) {
+      for (const lang of ["es", "en"] as const) {
+        const texto = T[lang][k] as string;
+        expect(texto, `${lang}.${k}`).not.toMatch(/[«»;]/);
+        expect(texto, `${lang}.${k}`).not.toMatch(/drand|beacon|hash|firma|signature|blockchain|Stellar|token|rifa|raffle|ticket|boleto|loter/i);
+      }
+    }
+  });
+
+  // TODO(merge-115): decisión de diseño por revisar: origin/main quitó el botón de espectador de la pantalla del
+  // resultado (su prueba exigía `espQrBoton` undefined: la pantalla del resultado lleva un solo QR, el del
+  // comprobante) y guido/final lo trae de vuelta como parte del modo espectador QR. En el árbol combinado
+  // `pantalla.ts` usa el botón y la clave, así que quedó el lado de guido/final; si se prefiere el diseño de main,
+  // quitar el botón en `pantalla.ts` y estas dos expectativas.
+  it("el botón del espectador en la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos", () => {
     expect(T.es.espQrBoton).toBe("QR para ver en vivo");
     expect(T.en.espQrBoton).toBe("QR to watch live");
   });
@@ -315,7 +381,7 @@ describe("los juegos interactivos", () => {
     for (const k of [
       "jiLink", "jiT", "jiB", "jiAbrir", "jiQrSub", "jiCerrarLista", "jiListaCerrada", "jiSellar", "jiAnunciando", "jiPocos",
       "jiErrRonda", "jiResultadoT", "jiRondaEjemplo", "jiPRotulo", "jiPEstadoEntra", "jiPNombreEt", "jiPNombrePh", "jiPNombreBtn",
-      "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPTeToco", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
+      "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
       "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo",
     ]) {
       expect(typeof T.es[k], `es.${k}`).toBe("string");

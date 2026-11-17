@@ -4,7 +4,7 @@ import { colorDeNombre } from "../pixi/foco-vista";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
-import { camara3D, type Borla3D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
+import { TAM3D, ZC, camara3D, type Borla3D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type SolidoDibujado, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
 import { cambiosDeCara, caraEn, cuantoCara, ponerCaras, quienDeCara } from "./carrera-cara";
 import { armarEtiqueta, olvidarEtiqueta, ponerEtiqueta as ponerFicha, type AspectoFicha, type Etiqueta, type EstiloFicha } from "./carrera-etiqueta";
 import { formaEn, nivelesDe } from "./carrera-nombre-nivel";
@@ -13,10 +13,15 @@ import { LLEGADA_ANTES, cajaFinal2D, crearCamara3D, grupoFinal2D, zoomDeCaja, zo
 import { unir } from "../pixi/encuadre";
 import { tarjetaRetrato, type DisenoTarjeta } from "./carrera-tarjeta";
 import { tiemposFoco } from "../pixi/foco";
-import { ECHADA_DUR, FONDO_CARTEL, arribaDelCartel, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
-import { LLEGADA_TARDE, crearCaminata, filaDeRango, ubicarTandas, type Caminata } from "./carrera-caminata";
-import { CARRIL_DURA, CUERPO } from "./carrera-marcha";
+import { ECHADA_DUR, FONDO_CARTEL, arribaDelCartel, carrilesDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
+import { formaDelGrupo } from "./carrera-filas";
+import { LLEGADA_TARDE, crearCaminata, enTanda, ubicarTandas, type Caminata } from "./carrera-caminata";
+import { CUERPO } from "./carrera-marcha";
 import { ENSANCHE, SALTO_MEDIO } from "./carrera-obstaculos";
+import { crearVistaObstaculos } from "./carrera-obstaculos-vista";
+import { crearTrayectorias, type Posicion } from "./carrera-trayectorias";
+import { finDeLaSiembra, sembrarRocas, type Roca } from "./carrera-rocas";
+import { crucesDe, descartarPiedritas, elegirTropiezo, MARCA_TROPIEZO, PIEDRITA_COLOR, piedritaEn, sembrarPiedritas, victimaDelTropiezo, type Tropiezo } from "./carrera-piedritas";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
 import { pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
 import { PASOS_POR_SEGUNDO, estadoNuevo, pasoDe, pasoFicha, type EstadoFicha } from "./carrera-fichas-mov";
@@ -46,6 +51,8 @@ import { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES
  *   polvo) y se queda donde pasó, con su nombre.
  */
 
+/** El peso de la ficha de a quien le pasa un obstáculo en el 3D: se ubica después de la amarilla (3e6) y antes de la recién echada (2e6). */
+const PESO_MARCADA = 2.5e6;
 /** Dónde va la primera en la pantalla en la carrera nueva, en fracción del ancho (entre 0,62 y 0,82 según corre). */
 const AIRE = 0.72;
 const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
@@ -53,11 +60,6 @@ const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const suave = (v: number): number => {
   const x = clamp01(v);
   return x * x * (3 - 2 * x);
-};
-/** Una subida suave de 0 a 1 (de quinto grado): continua en la velocidad y en la aceleración. */
-const suave5 = (v: number): number => {
-  const x = clamp01(v);
-  return x * x * x * (x * (6 * x - 15) + 10);
 };
 const ease = (v: number): number => {
   const x = clamp01(v);
@@ -71,20 +73,6 @@ interface Corredora {
   etiqueta: Etiqueta;
   fase: number;
   usada: boolean;
-}
-
-interface Posicion {
-  x: number;
-  y: number;
-  esc: number;
-  velocidad: number;
-  momento: Momento;
-  /** Las que esperan su tanda no se dibujan. */
-  visible: boolean;
-  /** Falso: todavía no tiene su nombre en la pista (el de las tandas está en el cartel). */
-  etiquetar?: boolean;
-  /** Cuánto se levanta del piso (el salto de la valla), en píxeles. */
-  alza?: number;
 }
 
 function crearEscena(k: Kit, d: Datos, fabrica3d: Fabrica3D | null = null) {
@@ -171,6 +159,8 @@ const MARGEN_LETRERO_Y = 0.5;
   const textoDe = (i: number, nivel: Nivel): string => (formasN[i] as readonly string[])[nivel - 1] ?? names[i] ?? "";
 
   let forma: Forma;
+  /** La fila de cada lugar del grupo según el carril, de `formaDelGrupo`: se renueva con la forma en cada geometría. */
+  let filaDeLugar: readonly number[] = [];
   let carr: Carriles;
   let F0 = 0;
   let Xs = 0;
@@ -188,7 +178,9 @@ const MARGEN_LETRERO_Y = 0.5;
     // El ancho de las fichas: el del nivel con que arrancan (con ocho o menos, el nombre entero), con un poco de aire para la ficha amarilla, que es más grande.
     const nivelInicial: Nivel = d.gente.length <= 8 ? 4 : 3;
     for (const g of d.gente) nombreW = Math.max(nombreW, ancho(textoDe(g, nivelInicial), px) * 1.15);
-    forma = formaDe(P, Math.max(1, d.gente.length), px, nombreW);
+    const grupo = formaDelGrupo({ P, d, nombrePx: px, nombreW, cuerpoPx: cuerpoPx() });
+    forma = grupo.forma;
+    filaDeLugar = grupo.filaDeLugar;
     // El grupo ocupa su distancia de verdad (`carrera-orden.ts`), no los casilleros de la flecha: el largo y dónde va el frente salen de ahí.
     forma.profundidad = Math.max(0, d.gente.length - 1) * d.orden.entrePuestos * cuerpoPx();
     const sobraGrupo = forma.arriba ? nombreW / 2 + forma.largo / 2 : nombreW + forma.largo;
@@ -215,8 +207,13 @@ const MARGEN_LETRERO_Y = 0.5;
   const caminataDe = (): Caminata | null => {
     if (!formaArena || !d.tandas.length) return null;
     caminata ??= crearCaminata(d.tandas, {
-      cuerpo: cuerpoPx(), arena: formaArena, arenaX, gateX, escCorral: forma.esc,
+      cuerpo: cuerpoPx(), arena: formaArena, arenaX, gateX, escCorral: forma.esc, retrato: P.retrato,
       corral: (persona) => corralDe(persona) ?? { x: F0, y: forma.yPie(0) },
+      // Por dónde entra cada una al corral sin tocar a ninguna de las que ya pasaron: mira sus lugares y de qué lado de su fila va.
+      lugar: (persona, t) => trayectorias.sinCaminata(persona, t),
+      frente: (t) => trayectorias.frente(t),
+      abre: d.tAbre,
+      subfila: (persona) => trayectorias.signoDe(persona) * trayectorias.delta(),
     }, { llegarAntesDe: d.tSalida + LLEGADA_TARDE - 0.1 });
     return caminata;
   };
@@ -224,6 +221,111 @@ const MARGEN_LETRERO_Y = 0.5;
   const corralDe = (persona: number): { x: number; y: number } | null => {
     if (!corralMemo.has(persona)) corralMemo.set(persona, lugarEnGrupo(persona, d.tSalida));
     return corralMemo.get(persona) ?? null;
+  };
+  /** El lugar de cada llama en el grupo y en la recta, puro (`carrera-trayectorias.ts`): la geometría se lee en cada llamada, porque cambia con la pantalla. */
+  const trayectorias = crearTrayectorias(d, {
+    get F0() {
+      return F0;
+    },
+    get Xs() {
+      return Xs;
+    },
+    get ancho() {
+      return P.w;
+    },
+    get cuerpo() {
+      return cuerpoPx();
+    },
+    get forma() {
+      return forma;
+    },
+    get filaDeLugar() {
+      return filaDeLugar;
+    },
+    get carr() {
+      return carr;
+    },
+    get caminata() {
+      return caminataDe();
+    },
+    get piedritas() {
+      return listaPiedritas();
+    },
+    get tropiezo() {
+      return tropiezoDe();
+    },
+  });
+  /** La lista de rocas y matas de la siembra nueva, armada una vez por geometría: la instancia el 3D y la pinta el 2D. */
+  let rocasCache: Roca[] | null = null;
+  /** Las piedritas que se saltan (`carrera-piedritas.ts`), armadas junto con las rocas. */
+  let piedritasCache: Roca[] = [];
+  /**
+   * Mientras se siembra, lo que las trayectorias ven como piedritas: ninguna mientras se siembran las rocas (que se descartan contra el
+   * camino sin brincos) y las candidatas mientras se mira quién las pisa sin saltar. Así la siembra nunca se llama a sí misma.
+   */
+  let piedritasEnSiembra: Roca[] | null = null;
+  const listaPiedritas = (): Roca[] => {
+    if (piedritasEnSiembra) return piedritasEnSiembra;
+    listaRocas();
+    return piedritasCache;
+  };
+  /**
+   * Quién tropieza y en qué tramo de piedras: de la semilla y del plan, una vez por ronda (`victimaDelTropiezo`). La pantalla solo ubica su
+   * piedrita, así que cambiar el tamaño de la ventana no la vuelve a elegir.
+   */
+  const victimaTropiezo = victimaDelTropiezo({ semilla: d.semillaRocas, tramos: d.tramos, gente: d.gente, cae: (p) => d.tiempos.cae.get(p) ?? Infinity });
+  /** El tropiezo de la carrera en esta pantalla (`elegirTropiezo`), ubicado con las piedritas: mientras se siembra no hay ninguno. */
+  let tropiezoCache: Tropiezo | null = null;
+  const tropiezoDe = (): Tropiezo | null => {
+    if (piedritasEnSiembra) return null;
+    listaRocas();
+    return tropiezoCache;
+  };
+  /** La piedrita del tropiezo a la hora `t`, para el 3D (que no la tiene entre las fijas): quieta hasta el tropiezo y después despedida. */
+  const piedritaMovil = (t: number): { x: number; y: number; a: number; b: number; alto: number; giro: number } | null => {
+    const tz = tropiezoDe();
+    const r = tz ? listaPiedritas()[tz.piedrita] : undefined;
+    if (!tz || !r) return null;
+    const p = piedritaEn(r, tz, tz.piedrita, t, forma.altoFila);
+    return { x: p.x, y: p.y, a: r.a, b: r.b, alto: r.alto, giro: p.giro };
+  };
+  const listaRocas = (): Roca[] => {
+    if (rocasCache) return rocasCache;
+    piedritasCache = [];
+    tropiezoCache = null;
+    if (!d.tramos.some((tr) => tr.terreno === "piedras" || tr.terreno === "cuesta")) return (rocasCache = []);
+    piedritasEnSiembra = [];
+    const zonas = d.tramos.map((tr, i) => ({ desde: i === 0 ? 0 : xDeT(tr.t0), hasta: xDeT(tr.t1), tipo: tr.terreno }));
+    const filasY = Array.from({ length: forma.filas }, (_, f) => forma.yPie(f));
+    rocasCache = sembrarRocas({
+      semilla: d.semillaRocas,
+      zonas,
+      filasY,
+      y0: forma.y0, y1: forma.y1,
+      huella: { atras: 36 * forma.esc * TAM3D, adelante: 38 * forma.esc * TAM3D, medio: (13 * forma.esc * TAM3D) / ZC, alto: 100 * forma.esc * TAM3D },
+      cuerpo: cuerpoPx(),
+      esc: forma.esc,
+      muestras: trayectorias.muestras(d.tSalida, finDeLaSiembra(d), 1 / 30),
+      echadas: d.tiempos.echadas.map((e) => ({ quien: e.quien, t: e.t })),
+      bandas: trayectorias.bandas(),
+    });
+    // Las piedritas: una por fila en cada tramo de piedras; se tira la que alguien pisaría sin saltar (la que se echa encima, la que ya
+    // pasa a su carril), mirando el camino con los brincos puestos.
+    const candidatas = sembrarPiedritas({
+      semilla: d.semillaRocas, zonas, filasY, esc: forma.esc, cuerpo: cuerpoPx(), profundidad: forma.profundidad,
+      velocidades: d.tramos.map((tr, i) => ((zonas[i]?.hasta ?? 0) - (zonas[i]?.desde ?? 0)) / Math.max(1e-9, tr.t1 - tr.t0)),
+    });
+    piedritasEnSiembra = candidatas;
+    const conBrincos = trayectorias.muestras(d.tSalida, finDeLaSiembra(d), 1 / 30);
+    piedritasCache = descartarPiedritas(candidatas, conBrincos);
+    // El tropiezo: el de la víctima del plan, en la piedrita de su fila de ese tramo, si en esta pantalla la cruza. Sacar piedritas solo saca
+    // sus brincos: las muestras sirven.
+    tropiezoCache = elegirTropiezo(
+      { semilla: d.semillaRocas, piedritas: piedritasCache, rocas: rocasCache, altoFila: forma.altoFila, muestras: conBrincos, desde: d.tSalida, paso: 1 / 30, victima: victimaTropiezo },
+      crucesDe(piedritasCache, conBrincos, d.tSalida, 1 / 30),
+    );
+    piedritasEnSiembra = null;
+    return rocasCache;
   };
   /** Dónde está el frente del grupo (el origen de la primera) en el mundo. */
   const xFrente = (t: number): number => F0 + d.dist(Math.min(t, d.tAbre)) * P.w;
@@ -247,9 +349,10 @@ const MARGEN_LETRERO_Y = 0.5;
     });
   }
   /** La ficha con el nombre `s` y, a mitad de un cambio de forma, el que se va (`sale`, con `mezcla` de 0 a 1): `carrera-etiqueta.ts`. */
-  function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha, conRotuloAdelante = true): void {
+  function ponerEtiqueta(e: Etiqueta, s: string, sale: string, mezcla: number, px: number, estilo: EstiloFicha, conRotuloAdelante = true, marcada = false): void {
     const conRotulo = d.nueva && P.retrato && estilo === "lider" && conRotuloAdelante;
-    ponerFicha(e, s, sale, mezcla, px, estilo, aspecto, conRotulo ? k.txt("carRotuloPunta") : null);
+    // A quien le pasa un obstáculo lleva la marca "!" pegada a su ficha: si va adelante, reemplaza a ADELANTE esos segundos.
+    ponerFicha(e, s, sale, mezcla, px, estilo, aspecto, marcada ? "!" : conRotulo ? k.txt("carRotuloPunta") : null, marcada);
   }
 
   /* ------------------------------------------------------------ corredoras */
@@ -288,145 +391,65 @@ const MARGEN_LETRERO_Y = 0.5;
    * `carrera-marcha.ts`), y su fila es la que tiene al salir y no cambia en toda la carrera. Una se escapa, la alcanzan y la pasan por al lado,
    * y cuando una se echa las de atrás avanzan de a poco: nada se salta de un casillero a otro.
    */
-  const genteSet = new Set(d.gente);
-  /**
-   * La fila de cada una: la del puesto con que sale, pero con las filas intercaladas (arriba, abajo, arriba...) para que la salida sea un
-   * pelotón y no una escalera. Dos de la misma fila siguen a `filas` puestos una de otra: los nombres no se pisan.
-   */
-  const filaDe = (persona: number): number => filaDeRango(d.orden.rango(persona), forma.filas);
-  /** Dónde va quien está en el grupo en `t` (desde el frente del grupo, que avanza parejo): fija desde que se abre la recta. */
+  /** Dónde va quien está en el grupo en `t`: lo calcula el módulo puro de trayectorias. */
   function lugarEnGrupo(persona: number, t: number): { x: number; y: number } | null {
-    if (!genteSet.has(persona)) return null;
-    const tt = Math.max(d.tSalida, Math.min(t, d.tAbre));
-    return { x: xFrente(tt) + d.orden.puntaje(persona, tt) * cuerpoPx(), y: forma.yPie(filaDe(persona)) };
+    return trayectorias.lugarEnGrupo(persona, t);
   }
-  /**
-   * El paso de las filas del grupo a los carriles de la recta (de a 1 cuerpo por segundo como mucho): empieza dos segundos antes de abrirse, sin pasar
-   * de la salida ni, con tandas, de cuando terminan de entrar al corral las últimas en pasar por el portón (`Datos.tCarriles`), y dura `CARRIL_DURA`.
-   */
-  const fraccionMovida = (t: number): number => suave5((t - d.tCarriles) / CARRIL_DURA);
-
   /** Una persona de una tanda: espera su turno en el grupo apretado; si pasa, sale por el portón al corral; si no, se echa cuando se cierra. */
   function posicionEnTanda(persona: number, t: number): Posicion {
     const oculta: Posicion = { x: 0, y: 0, esc: forma.esc, velocidad: 0, momento: null, visible: false, etiquetar: false };
     const hi = heatDe.get(persona);
     if (hi === undefined || !formaArena) return oculta;
-    const h = d.tandas[hi] as Tanda;
-    if (t < h.t0 - 0.2) return oculta;
-    const s = formaArena.slot(h.miembros.indexOf(persona));
-    const xa = arenaX - s.dx, ya = formaArena.yPie(s.fila), ea = formaArena.esc;
-    const j = h.pasan.indexOf(persona);
-    if (j < 0) {
-      if (t >= h.tFin + 1.2) return oculta;
-      if (t >= h.tCierra) return { x: xa, y: ya, esc: ea, velocidad: 0, momento: { kind: "echada", p: (t - h.tCierra) / ECHADA_DUR }, visible: true, etiquetar: false };
-      return { x: xa, y: ya, esc: ea, velocidad: 0.4, momento: null, visible: true, etiquetar: false };
-    }
-    const ts = h.salidas[j] as number;
-    if (t < ts) return { x: xa, y: ya, esc: ea, velocidad: 0.4, momento: null, visible: true, etiquetar: false };
-    // Sale del grupo de su tanda, pasa por el portón y va a su lugar en el corral caminando: un camino suave, a un cuerpo por segundo como
-    // mucho y sin carreras al final (`carrera-caminata.ts`). Nadie se teletransporta de la tanda al grupo.
-    const w = caminataDe()?.en(persona, t);
-    if (!w) return oculta;
-    return { x: w.x, y: w.y, esc: w.esc, velocidad: w.camina ? 1.4 : 0.35, momento: w.camina ? { kind: "trote", p: w.avance } : null, visible: true, etiquetar: w.avance >= 0.75 || d.lider(t) === persona };
+    // Espera en su tanda; si no pasa, se echa ahí; si pasa, sale por el portón y va a su lugar en el corral trotando: un camino suave, a un
+    // cuerpo y medio por segundo como mucho y sin carreras al final (`carrera-caminata.ts`). Nadie se teletransporta de la tanda al grupo, y la
+    // tanda que entra aparece cuando ya se fueron las echadas de la anterior, que ocupan los mismos lugares (`enTanda`).
+    const e = enTanda(d.tandas[hi] as Tanda, persona, t, formaArena, arenaX, caminataDe(), d.tandas[hi - 1]);
+    if (e.que === "oculta") return oculta;
+    if (e.que === "echada") return { x: e.x, y: e.y, esc: e.esc, velocidad: 0, momento: { kind: "echada", p: (t - e.desde) / ECHADA_DUR }, visible: true, etiquetar: false };
+    if (e.que === "espera") return { x: e.x, y: e.y, esc: e.esc, velocidad: 0.4, momento: null, visible: true, etiquetar: false };
+    const camina = e.que === "camina";
+    return { x: e.x, y: e.y, esc: e.esc, velocidad: camina ? 1.4 : 0.35, momento: camina ? { kind: "trote", p: e.avance } : null, visible: true, etiquetar: e.avance >= 0.75 || d.lider(t) === persona };
   }
 
-  /** La posición de `persona` en `t`, con su postura. */
+  /** La posición de `persona` en `t`, con su postura: las tandas quedan acá y el resto lo calcula el módulo puro. */
   function posicion(persona: number, t: number): Posicion {
     if (d.tandas.length && t < d.tSalida) return posicionEnTanda(persona, t);
-    const cae = d.tiempos.cae.get(persona) ?? Infinity;
-    const carril = d.lanes.indexOf(persona);
-    const corriendo: Momento = null;
-    // Antes de la salida: en el corral, quietas, en el orden de salida.
-    if (t < d.tSalida) {
-      const lg = corralDe(persona) ?? { x: F0, y: forma.yPie(0) };
-      return { x: lg.x, y: lg.y, esc: forma.esc, velocidad: 0.35, momento: corriendo, visible: true };
-    }
-    // Echada: se queda donde pasó, con un deslizón corto.
-    if (t >= cae) {
-      const lg = lugarEnGrupo(persona, cae) ?? { x: F0, y: forma.yPie(0) };
-      const s = t - cae;
-      // Frena hasta parar en 1,2 s (la velocidad del grupo baja pareja a cero): el grupo la rodea y la deja atrás.
-      const v0 = (xFrente(cae) - xFrente(cae - 0.1)) / 0.1;
-      const sd = Math.min(s, 1.2);
-      const desliza = v0 * (sd - (sd * sd) / 2.4);
-      return { x: lg.x + desliza, y: lg.y, esc: forma.esc, velocidad: 0, momento: { kind: "echada", p: s / ECHADA_DUR }, visible: true };
-    }
-    // Las últimas en pasar por el portón terminan de entrar al corral en los primeros segundos del grupo: caminan con el grupo ya en marcha, así que
-    // lo que les falta se suma a su lugar (la caminata es respecto del corral, que se mueve con el frente). De 76 a 100 y de 126 a 200 nadie se echa
-    // y la recta se abre en la salida: ahí lo que les falta se suma a su lugar en la recta. Llega a cero cuando llegan, así que se empalman solas.
-    const tarde = d.tandas.length && t < cae ? caminataDe() : null;
-    const w = tarde && t < tarde.llega(persona) ? tarde.en(persona, t) : null;
-    const c = w ? corralDe(persona) : null;
-    const falta = w && c ? { x: w.x - c.x, y: w.y - c.y } : null;
-    if (t < d.tAbre || carril < 0) {
-      const lg = lugarEnGrupo(persona, t) ?? { x: F0, y: forma.yPie(0) };
-      if (w && falta) return { x: lg.x + falta.x, y: lg.y + falta.y, esc: w.esc, velocidad: w.camina ? 1.4 : 1, momento: w.camina ? { kind: "trote", p: w.avance } : corriendo, visible: true };
-      // Las finalistas empiezan a pasar a su carril un poco antes de abrirse la recta (`CARRIL_ANTES`).
-      const e0 = carril >= 0 ? fraccionMovida(t) : 0;
-      if (e0 > 0) return { x: lg.x, y: lerp(lg.y, carr.yPie(carril), e0), esc: lerp(forma.esc, carr.esc, e0), velocidad: 1, momento: corriendo, visible: true };
-      return { x: lg.x, y: lg.y, esc: forma.esc, velocidad: 1, momento: corriendo, visible: true };
-    }
-    // La recta: de la forma del grupo a su carril, sin frenar.
-    const qq = d.q(t);
-    // Las diferencias entre carriles se ensanchan un 70 % en la pantalla: así los adelantamientos se ven (el orden y la llegada son los del plan).
-    const pq = d.final.pos(carril, qq);
-    const xl = Xs + (qq + (pq - qq) * ENSANCHE) * RECTA * P.w;
-    // La ráfaga corre a un grupo de carriles hacia un costado; la valla levanta a quien la salta (ambas del plan, `carrera-obstaculos.ts`).
-    const yl = carr.yPie(carril) + (d.final.lateral?.(carril, qq) ?? 0) * carr.altoFila;
-    const alza = (d.final.salto?.(carril, qq) ?? 0) * carr.altoFila;
-    const e = fraccionMovida(t);
-    const m = d.final.beatOf(carril, qq);
-    // La x es continua con la del grupo (el mismo cuerpo, el mismo lugar al abrirse): no hace falta empalmar. Lo que cambia de fila a carril
-    // (y de tamaño) lo hace de a poco.
-    const lg = lugarEnGrupo(persona, d.tAbre) ?? { x: xl, y: yl };
-    // La que todavía camina al corral: lo que le falta, y el tamaño de la caminata con lo que ya cambió de la fila al carril.
-    if (w && falta) return { x: xl + falta.x, y: lerp(lg.y, yl, e) + falta.y, esc: w.esc + lerp(forma.esc, carr.esc, e) - forma.esc, velocidad: w.camina ? 1.4 : 1.1, momento: w.camina ? { kind: "trote", p: w.avance } : m, visible: true, alza };
-    return { x: xl, y: lerp(lg.y, yl, e), esc: lerp(forma.esc, carr.esc, e), velocidad: e >= 1 ? (m?.kind === "plantada" ? 0 : 1.2) : 1.1, momento: m, visible: true, alza };
+    return trayectorias.posicion(persona, t);
   }
 
   /* ------------------------------------------------------------ los obstáculos */
-  /** Dónde está en el mundo el carril `kk` cuando la recta va en `q` (la misma cuenta que `posicion`). */
-  const xCarril = (kk: number, q: number): number => Xs + (q + (d.final.pos(kk, q) - q) * ENSANCHE) * RECTA * P.w;
   /** Las vallas del plan, en el mundo: cruzan los carriles de la final. */
   function vallasDelPlan(): Valla3D[] {
     return (d.final.obstaculos ?? []).filter((o) => o.tipo === "salto").map((o) => ({ x: Xs + o.valla * RECTA * P.w, y0: carr.y0, y1: carr.y1, alto: 0.34 * carr.altoFila }));
   }
+  // Lo que se ve de los obstáculos en cada cuadro, sin Pixi (`carrera-obstaculos-vista.ts`): la geometría se lee de los carriles de este momento.
+  const vistaObs = crearVistaObstaculos(d, {
+    get xs() {
+      return Xs;
+    },
+    get largo() {
+      return RECTA * P.w;
+    },
+    get ancho() {
+      return P.w;
+    },
+    get esc() {
+      return carr.esc;
+    },
+    get u() {
+      return P.u;
+    },
+    get altoFila() {
+      return carr.altoFila;
+    },
+    yPie: (kk) => carr.yPie(kk),
+    piso: (kk, t) => trayectorias.piso(kk, t),
+    escEn: (kk, t) => trayectorias.escEn(kk, t),
+  });
   /** Las piedras y la ráfaga que están pasando en `t`, tal como las ve el 2D y las dibuja el 3D. */
-  function efectosEn(t: number): Efecto3D[] {
-    const obs = d.final.obstaculos;
-    if (!obs?.length || t < d.tAbre || t > d.tCrown) return [];
-    const qq = d.q(t);
-    const out: Efecto3D[] = [];
-    obs.forEach((o, id) => {
-      if (o.tipo === "piedras") {
-        const qa = o.q - 0.05, qf = o.q + 0.1;
-        if (qq < qa || qq > qf) return;
-        const kk = o.carriles[0] as number;
-        out.push({ tipo: "piedras", s: (qq - qa) / (qf - qa), x: xCarril(kk, o.q + 0.004) + (LLAMA_HOCICO + 30) * carr.esc, y: carr.yPie(kk), y1: 0, ancho: 0, lado: 0, id });
-      } else if (o.tipo === "viento") {
-        const qa = o.q - 0.02, qf = o.q + o.dur * 1.7;
-        if (qq < qa || qq > qf) return;
-        const xs = o.carriles.map((kk) => xCarril(kk, qq));
-        out.push({ tipo: "viento", s: (qq - qa) / (qf - qa), x: xs.reduce((a, b) => a + b, 0) / xs.length, y: carr.yPie(Math.min(...o.carriles)), y1: carr.yPie(Math.max(...o.carriles)), ancho: 0.55 * P.w, lado: o.lado, id });
-      }
-    });
-    return out;
-  }
+  const efectosEn = (t: number): Efecto3D[] => vistaObs.efectos(t);
   /** Las personas a las que les está pasando algo en `t` (la piedra, la que salta mal, el grupo de la ráfaga): el director las incluye en el plano. */
-  function enApuros(t: number): number[] {
-    const obs = d.final.obstaculos;
-    if (!obs?.length) return [];
-    const qq = d.q(Math.max(t, d.tAbre));
-    const out = new Set<number>();
-    for (const o of obs) {
-      if (o.tipo === "piedras") {
-        if (qq > o.q - 0.03 && qq < o.q + 0.09) out.add(d.lanes[o.carriles[0] as number] as number);
-      } else if (o.tipo === "salto") {
-        for (const m of o.malas) if (qq > (o.llegan[m] as number) - 0.02 && qq < (o.llegan[m] as number) + 0.08) out.add(d.lanes[m] as number);
-      } else if (qq > o.q - 0.01 && qq < o.q + o.dur * 1.4) for (const kk of o.carriles) out.add(d.lanes[kk] as number);
-    }
-    return [...out];
-  }
+  const enApuros = (t: number): readonly number[] => vistaObs.enApuros(t);
   /** Una roca de seis puntas, irregular según `h`, centrada en (x, y). */
   const roca = (x: number, y: number, r: number, h: number, giro: number): number[] => {
     const pts: number[] = [];
@@ -444,26 +467,45 @@ const MARGEN_LETRERO_Y = 0.5;
     const u = P.u;
     for (const f of ef) {
       const env = Math.sin(Math.PI * Math.min(1, f.s));
-      if (f.tipo === "piedras") {
-        for (let j = 0; j < 5; j++) {
-          const dx = j === 0 ? 0 : (hash(f.id * 7 + j, 3) - 0.5) * 150 * u;
-          const dy = j === 0 ? 0 : (hash(f.id * 5 + j, 9) - 0.5) * carr.altoFila * 0.7;
-          const retraso = j === 0 ? 0 : hash(f.id * 3 + j, 1) * 0.06;
-          const w = (f.s - retraso) / 0.3;
-          if (w < 0) continue;
-          const gx = f.x + dx, gy = f.y + dy;
-          const r = (j === 0 ? 17 : 9 + 6 * hash(f.id + j, 2)) * u;
-          if (w < 1) {
+      if (f.tipo === "piedras" && f.piedras) {
+        // Las mismas piedras que el 3D y el auditor de sólidos (`carrera-obstaculos-vista.ts`): caen delante de la víctima y ruedan delante de ella.
+        for (let j = 0; j < f.piedras.length; j++) {
+          const p = f.piedras[j];
+          if (!p?.visible) continue;
+          const r = p.r2 * p.k;
+          if (p.cae < 1) {
             // Cae del cerro: viene de arriba y de atrás, con su sombra creciendo en el piso.
-            obstaculosG.ellipse(gx, gy, r * (0.5 + w), r * 0.3 * (0.5 + w)).fill({ color: 0x000000, alpha: 0.3 * w });
-            obstaculosG.poly(roca(gx - (1 - w * w) * 70 * u, gy - (1 - w * w) * 430 * u, r, hash(f.id, j), w * 9)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
+            const w = p.cae;
+            obstaculosG.ellipse(p.x, p.yPiso, r * (0.5 + w), r * 0.3 * (0.5 + w)).fill({ color: 0x000000, alpha: 0.3 * w });
+            obstaculosG.poly(roca(p.x, p.y - (p.alto - p.r), r, hash(f.id, j), w * 9)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
           } else {
-            const v = (f.s - retraso - 0.3) / 0.45;
-            if (v > 1) continue;
-            const rebote = Math.abs(Math.sin(v * Math.PI * 2.6)) * Math.exp(-v * 3.2) * 36 * u;
-            obstaculosG.ellipse(gx + v * 46 * u, gy, r, r * 0.3).fill({ color: 0x000000, alpha: 0.25 * (1 - v) });
-            obstaculosG.poly(roca(gx + v * 46 * u, gy - rebote - r * 0.3, r, hash(f.id, j), v * 12)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
-            if (v < 0.5) for (let i = 0; i < 4; i++) obstaculosG.circle(gx + (i - 1.5) * 18 * u, gy - 8 * u - v * 30 * u * (1 + (i % 2)), (9 + 36 * v) * u).fill({ color: 0xd9cdb4, alpha: 0.5 * (1 - v * 2) });
+            const v = p.rueda;
+            obstaculosG.ellipse(p.x, p.yPiso, r, r * 0.3).fill({ color: 0x000000, alpha: 0.25 * (1 - v) });
+            obstaculosG.poly(roca(p.x, p.yPiso - p.rebote - r * 0.3, r, hash(f.id, j), v * 12)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
+            if (v < 0.5) for (let i = 0; i < 4; i++) obstaculosG.circle(p.x + (i - 1.5) * 18 * u, p.yPiso - 8 * u - v * 30 * u * (1 + (i % 2)), (9 + 36 * v) * u).fill({ color: 0xd9cdb4, alpha: 0.5 * (1 - v * 2) });
+          }
+        }
+      } else if (f.tipo === "escupida" && f.boca && f.cara) {
+        // El arco y el salpicón, con círculos crema de borde de tinta: la gota grande, tres chicas detrás y ocho al llegar a la cara.
+        const esc = carr.esc;
+        // La boca y la cara con el tamaño de cada llama a esa hora: mientras pasa de su fila del grupo a su carril, todavía es más grande.
+        const boca = { x: f.boca.x, y: f.boca.y - 78 * f.boca.esc };
+        const cara = { x: f.cara.x, y: f.cara.y - 78 * f.cara.esc };
+        const gota = (x: number, y: number, r: number): void => {
+          obstaculosG.circle(x, y, r).fill(CREAM).stroke({ width: 2 * u, color: INK });
+        };
+        if (f.s <= 1) {
+          for (let j = 0; j < 4; j++) {
+            const a = f.s - j * 0.09;
+            if (a < 0) continue;
+            gota(boca.x + (cara.x - boca.x) * a, boca.y + (cara.y - boca.y) * a - Math.sin(Math.PI * a) * 0.3 * LLAMA_ALTO * esc, (j === 0 ? 0.13 : 0.1 - j * 0.018) * LLAMA_ALTO * esc);
+          }
+        } else {
+          const b = Math.max(0, Math.min(1, f.s - 1));
+          for (let i = 0; i < 8; i++) {
+            const ang = hash(f.id * 37 + i, 12) * Math.PI * 2;
+            const dist = 0.35 * LLAMA_ALTO * esc * Math.sin(Math.PI * Math.min(1, b * 1.15));
+            gota(cara.x + Math.cos(ang) * dist, cara.y - b * b * 0.5 * LLAMA_ALTO * esc + Math.sin(b * Math.PI) * 0.08 * LLAMA_ALTO * esc, 0.07 * LLAMA_ALTO * esc);
           }
         }
       } else {
@@ -486,7 +528,7 @@ const MARGEN_LETRERO_Y = 0.5;
   }
 
   /* --------------------------------------------------------------- el suelo */
-  function pintarSuelo(): void {
+  function pintarSuelo(t: number): void {
     const vz = cam.zoom || 1;
     const x0 = cam.x - P.w / (2 * vz) - 120;
     const x1 = cam.x + P.w / (2 * vz) + 120;
@@ -511,13 +553,27 @@ const MARGEN_LETRERO_Y = 0.5;
           if (px < a || px > b) continue;
           const c = TERRENO_ACENTO[z.tipo];
           if (z.tipo === "barro") suelo.ellipse(px, py, (16 + 22 * r3) * P.u, (5 + 5 * r3) * P.u).fill({ color: luz.charco, alpha: 0.55 });
-          else if (z.tipo === "piedras") suelo.poly([px, py, px + 12 * P.u * r3 + 6 * P.u, py - 7 * P.u, px + 20 * P.u, py + 2 * P.u]).fill({ color: c, alpha: 0.75 }).stroke({ width: 1.5 * P.u, color: INK, alpha: 0.5 });
+          else if (z.tipo === "piedras" || z.tipo === "cuesta") { /* Las rocas y las matas salen de la lista de la siembra nueva, más abajo. */ }
           else if (z.tipo === "viento") suelo.moveTo(px, py).lineTo(px + (28 + 40 * r3) * P.u, py - 2 * P.u).stroke({ width: 2 * P.u, color: 0xffffff, alpha: 0.5 });
-          else if (z.tipo === "cuesta") suelo.moveTo(px, py).lineTo(px + 7 * P.u, py - 12 * P.u).moveTo(px + 6 * P.u, py).lineTo(px + 13 * P.u, py - 14 * P.u).stroke({ width: 2 * P.u, color: c, alpha: 0.85 });
           else suelo.circle(px, py, 2.5 * P.u).fill({ color: c, alpha: 0.4 });
         }
       }
     }
+    // Las rocas y las matas de la lista, como manchas planas: las mismas que el 3D instancia.
+    for (const r of listaRocas()) {
+      if (r.x + r.a < x0 || r.x - r.a > x1) continue;
+      if (r.tipo === "roca") suelo.ellipse(r.x, r.y, r.a, r.b).fill({ color: TERRENO_ACENTO.piedras, alpha: 0.75 }).stroke({ width: 1.5 * P.u, color: INK, alpha: 0.5 });
+      else if (r.tipo === "mata") suelo.ellipse(r.x, r.y, r.a, r.b).fill({ color: TERRENO_ACENTO.cuesta, alpha: 0.85 });
+    }
+    // Las piedritas que se saltan, en el medio de cada fila: una piedra chica parada, con su sombra, que la llama pasa por encima.
+    // La del tropiezo sale despedida hacia el pasillo y tiembla (`piedritaEn`): se dibuja donde está a esta hora.
+    const tz = tropiezoDe();
+    listaPiedritas().forEach((r, k) => {
+      if (r.x + r.a < x0 || r.x - r.a > x1) return;
+      const p = piedritaEn(r, tz, k, t, forma.altoFila);
+      suelo.ellipse(p.x, p.y, r.a * 1.15, r.a * 0.32).fill({ color: 0x000000, alpha: 0.25 });
+      suelo.ellipse(p.x, p.y - r.alto * 0.5, r.a, r.alto * 0.5).fill(PIEDRITA_COLOR).stroke({ width: 1.5 * P.u, color: INK });
+    });
     // La recta: carriles con sus rayas.
     const aR = Math.max(x0, Xs - 160 * P.u);
     if (x1 > aR) {
@@ -1087,6 +1143,8 @@ const MARGEN_LETRERO_Y = 0.5;
     const s = new Set<number>();
     for (const e of d.tiempos.echadas) if (t >= e.t && t < e.t + NOMBRADA_DUR) s.add(e.quien);
     for (const c of d.cambiosDePunta) if (t >= c.t && t < c.t + NOMBRADA_DUR) s.add(c.quien);
+    // Y a quien le pasa un obstáculo, mientras lleva la marca: el relator la nombra y su ficha no puede apagarse.
+    for (const q of d.lanes) if (vistaObs.marcada(q, t)) s.add(q);
     return s;
   }
   /**
@@ -1182,10 +1240,37 @@ const MARGEN_LETRERO_Y = 0.5;
   /** Las fichas de este cuadro que el borde de la pantalla dejó pegadas (para la traza). */
   const pegadas = new Set<number>();
   const trazaMarcha: { t: number; ref: number; llamas: [number, number, number, string | null, number][]; fichas: number[][]; letreros?: number[][] }[] = [];
+  /**
+   * Para el auditor de sólidos con navegador (`?auditar=solidos`, `scripts/audit-solidos.mjs --navegador`): cada dos cuadros dibujados, cada
+   * llama (persona, x, dónde pisa, cuánto se levanta, tamaño y postura) y las piedras que se mueven, como las dibujó el motor; y una vez, los
+   * sólidos fijos que calculó la escena y los que dibujó (en el 3D, leídos de three.js), con las horas del plan (la salida, el paso a los
+   * carriles, la recta, la corona y cada echada) para sacar fotos en un momento dado. No cambia nada de lo que se dibuja.
+   */
+  const auditarSolidos = auditaCon("solidos");
+  const volcadoSolidos = auditarSolidos
+    ? { motor: "", cuadros: [] as { t: number; llamas: [number, number, number, number, number, string | null][]; moviles: SolidoDibujado[] }[], fijosCalculados: [] as SolidoDibujado[], fijosDibujados: [] as SolidoDibujado[], tropiezo: null as Tropiezo | null, tSalida: d.tSalida, tCarriles: d.tCarriles, tAbre: d.tAbre, tCrown: d.tCrown, echadas: d.tiempos.echadas.map((e) => e.t), n: d.n, w: 0, h: 0, done: false }
+    : null;
+  if (volcadoSolidos) (window as unknown as { __solidos: unknown }).__solidos = volcadoSolidos;
+  let cuadroSolidos = 0;
+  /** Las piedras que se mueven en `t` como las dibuja el 2D: las del cerro (con su tamaño del 2D) y la piedrita del tropiezo. */
+  const movilesDel2D = (t: number): SolidoDibujado[] => {
+    const out: SolidoDibujado[] = [];
+    for (const f of efectosEn(t)) {
+      if (f.tipo !== "piedras" || !f.piedras) continue;
+      for (const p of f.piedras) {
+        if (!p.visible) continue;
+        const r = p.r2 * p.k, z0 = Math.max(0, p.alto - p.r);
+        out.push({ tipo: "piedra", x: p.x, y: p.y, a: r, b: 0.5 * r, giro: 0, z0, z1: z0 + 1.64 * r });
+      }
+    }
+    const pm = piedritaMovil(t);
+    if (pm) out.push({ tipo: "piedrita", x: pm.x, y: pm.y, a: pm.a, b: pm.b, giro: pm.giro, z0: 0, z1: pm.alto, movil: true });
+    return out;
+  };
   if (auditarMarcha) {
     (window as unknown as { __marcha: unknown }).__marcha = {
       cuadros: trazaMarcha,
-      meta: () => ({ caminata: (() => { const c = caminataDe(); return c ? { tarde: Math.max(...d.gente.map((g) => c.llega(g))) - d.tSalida, escalaMax: Math.max(...d.gente.map((g) => c.escala(g))), largoMax: Math.max(...d.gente.map((g) => c.largo(g))), cuerpo: cuerpoPx() } : null; })(), causas: d.causas, cuerpo: cuerpoPx(), filaPx: carr.altoFila, n: d.n, gente: d.gente, lanes: d.lanes, campeona: d.campeona, tSalida: d.tSalida, tAbre: d.tAbre, tCrown: d.tCrown, w: P.w, h: P.h, recta: RECTA, xs: Xs, metaX, f0: F0, altoFila: carr.altoFila, altoLlama: forma.alto, escGrupo: forma.esc, escCarril: carr.esc, nueva: d.nueva, arco: d.final.story.arc, echadas: d.tiempos.echadas.map((e) => ({ t: e.t, quien: e.quien })), obstaculos: (d.final.obstaculos ?? []).map((o) => ({ tipo: o.tipo, tq: d.tDeQ(o.q), carriles: o.carriles, malas: o.malas })), cambiosDePunta: d.cambiosDePunta, tDeQ: [0.25, 0.5, 0.75, 0.9, 1].map((q) => d.tDeQ(q)) }),
+      meta: () => ({ caminata: (() => { const c = caminataDe(); return c ? { tarde: Math.max(...d.gente.map((g) => c.llega(g))) - d.tSalida, escalaMax: Math.max(...d.gente.map((g) => c.escala(g))), largoMax: Math.max(...d.gente.map((g) => c.largo(g))), cuerpo: cuerpoPx() } : null; })(), causas: d.causas, cuerpo: cuerpoPx(), filaPx: carr.altoFila, n: d.n, gente: d.gente, lanes: d.lanes, campeona: d.campeona, tSalida: d.tSalida, tAbre: d.tAbre, tCrown: d.tCrown, w: P.w, h: P.h, recta: RECTA, xs: Xs, metaX, f0: F0, altoFila: carr.altoFila, altoLlama: forma.alto, escGrupo: forma.esc, escCarril: carr.esc, nueva: d.nueva, arco: d.final.story.arc, echadas: d.tiempos.echadas.map((e) => ({ t: e.t, quien: e.quien })), obstaculos: (d.final.obstaculos ?? []).map((o) => ({ tipo: o.tipo, tq: d.tDeQ(o.q), carriles: o.carriles, malas: o.malas })), cambiosDePunta: d.cambiosDePunta, tDeQ: [0.25, 0.5, 0.75, 0.9, 1].map((q) => d.tDeQ(q)), tramos: d.tramos.map((tr) => ({ t0: tr.t0, t1: tr.t1, terreno: tr.terreno })), piedritas: listaPiedritas().map((r) => ({ x: r.x, fila: r.fila })), tropiezo: tropiezoDe() }),
     };
   }
 
@@ -1196,8 +1281,9 @@ const MARGEN_LETRERO_Y = 0.5;
 
   function dibujar(t: number): void {
     const vz = cam.zoom || 1;
-    if (!tres) pintarSuelo();
+    if (!tres) pintarSuelo(t);
     const cuadroMarcha: [number, number, number, string | null, number][] = [];
+    const llamasSolidos: [number, number, number, number, number, string | null][] = [];
     const gente3: Corredora3D[] = [];
     const fichas3: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[] = [];
     // El cielo se mueve con la cámara, más despacio.
@@ -1270,6 +1356,7 @@ const MARGEN_LETRERO_Y = 0.5;
         momento = null;
       }
       post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
+      if (volcadoSolidos) llamasSolidos.push([q, c.raiz.position.x, p.y, p.y - c.raiz.position.y, p.esc, momento?.kind ?? null]);
       if (tres) gente3.push({ persona: q, x: p.x, y: p.y, salto: p.y - c.raiz.position.y, esc: p.esc, velocidad: corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento, fase: ph });
       // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
       if (post.marca.visible) post.marca.scale.set(Math.max(1, minimoPx("nombre", P.w, P.h) / (26 * p.esc * vz)));
@@ -1284,7 +1371,10 @@ const MARGEN_LETRERO_Y = 0.5;
       // La forma del nombre sale de la hora: cuando cambia cuántas siguen en carrera, o cuando esta se echa, el nombre viejo se va
       // mientras llega el nuevo (`carrera-nombre-nivel.ts`).
       const fn = formaEn(niveles, t, lying ? (d.tiempos.cae.get(q) ?? t - (p.momento?.p ?? 0) * ECHADA_DUR) : Infinity);
-      ponerEtiqueta(et, textoDe(q, fn.a), fn.mezcla < 1 ? textoDe(q, fn.de) : "", fn.mezcla, px, estilo, !finalChip?.gold);
+      // La ficha lleva la marca de alerta mientras a la llama le pasa algo: un obstáculo de la recta o su tropiezo en la piedrita.
+      const tzm = tropiezoDe();
+      const marcada = !lying && (vistaObs.marcada(q, t) || (!!tzm && tzm.quien === q && t >= tzm.t - MARCA_TROPIEZO[0] && t < tzm.t + MARCA_TROPIEZO[1]));
+      ponerEtiqueta(et, textoDe(q, fn.a), fn.mezcla < 1 ? textoDe(q, fn.de) : "", fn.mezcla, px, estilo, !finalChip?.gold, marcada);
       // La ficha nunca se ve más chica que el piso del kit (16 px en el celular, el 2,6 % del alto en el proyector).
       const comp = Math.max(1, Math.min(2.2, minimoPx("nombre", P.w, P.h) / (px * vz)));
       et.raiz.scale.set(comp);
@@ -1292,7 +1382,7 @@ const MARGEN_LETRERO_Y = 0.5;
       const arriba = enCarril ? carr.arriba : forma.arriba;
       const esc = p.esc;
       // Desde el cruce, la ficha de quien gana manda como la amarilla: se ubica primero y queda por encima de las demás.
-      if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider || finalChip?.onTop ? 3e6 : reciente ? 2e6 : 1e6 });
+      if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider || finalChip?.onTop ? 3e6 : marcada ? PESO_MARCADA : reciente ? 2e6 : 1e6 });
       else ubicarFicha(et, p, arriba, comp, vz, soyLider);
       et.raiz.zIndex = nombrados.has(q) ? 4e6 : soyLider || finalChip?.onTop ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
@@ -1370,6 +1460,21 @@ const MARGEN_LETRERO_Y = 0.5;
     }
     // `ref` es el frente común del grupo en este cuadro (el camino que avanza igual para todas): contra él se mide lo que se mueve cada llama.
     if (tres) dibujar3D(t, gente3, fichas3, bp, corona);
+    if (volcadoSolidos && cuadroSolidos++ % 2 === 0) {
+      const tz = tropiezoDe();
+      if (!volcadoSolidos.motor) {
+        // Una vez: lo que calculó la escena y lo que dibujó. En el 2D las rocas y las matas son manchas del suelo, sin alto: solo cuentan las piedritas.
+        volcadoSolidos.motor = tres ? "3d" : "pixi";
+        volcadoSolidos.tropiezo = tz;
+        volcadoSolidos.w = P.w;
+        volcadoSolidos.h = P.h;
+        const fijas = listaPiedritas().filter((_, k2) => k2 !== tz?.piedrita);
+        volcadoSolidos.fijosCalculados = [...(tres ? listaRocas() : []), ...fijas].map((r) => ({ tipo: r.tipo, x: r.x, y: r.y, a: r.a, b: r.b, giro: r.giro, z0: 0, z1: r.alto }));
+        volcadoSolidos.fijosDibujados = tres?.solidos ? tres.solidos().fijos : volcadoSolidos.fijosCalculados.map((s) => ({ ...s }));
+      }
+      volcadoSolidos.cuadros.push({ t, llamas: llamasSolidos, moviles: tres?.solidos ? tres.solidos().moviles : movilesDel2D(t) });
+      if (t > d.tCrown + 1) volcadoSolidos.done = true;
+    }
     if (auditarMarcha) {
       // Las fichas, después de deslizar (M9): persona, x, y y transparencia (0 si no se ve).
       const cuadroFichas: number[][] = [];
@@ -1415,7 +1520,7 @@ const MARGEN_LETRERO_Y = 0.5;
     });
     const dirigida = director3D.cuadro({ t, puestos, puestosEn, base, ganadora: d.campeona, golpeEn, bajoCartel: S.placaBajo(k.ganadores.length) + 4 * P.u });
     const pose = dirigida.plano === "base" ? null : dirigida.pose;
-    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, pose, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
+    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, pose, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t), marcaMin: minimoPx("nombre", P.w, P.h), piedrita: piedritaMovil(t) });
     // Los letreros SALIDA y META, mientras se ven, cuentan como cajas ya puestas (como SALIDA en el 2D): las fichas los tapaban.
     const letreros = tres.letreros();
     if (auditarMarcha) letreros3Cuadro = letreros.map((c) => [c.x0, c.y0, c.x1, c.y1]);
@@ -1468,7 +1573,7 @@ const MARGEN_LETRERO_Y = 0.5;
       // Y en la llegada no se etiqueta a una echada: una que quedó atrás a la vista tenía su ficha flotando atenuada sobre el horizonte.
       const sigueEnCarrera = !enCabeza || (d.tiempos.cae.get(f.persona) ?? Infinity) > t;
       const enLargada = startChipShows(f.persona, ordenLargada, P.retrato, t, d.tSalida, d.tAbre);
-      et.raiz.visible = dentro && f.etiquetar && !f.sinLugar && sigueEnCarrera && (!pose || pan.alto >= minAlto) && enLargada;
+      et.raiz.visible = dentro && f.etiquetar && !f.sinLugar && sigueEnCarrera && (!pose || pan.alto >= minAlto || f.peso === PESO_MARCADA) && enLargada;
       // Ningún letrero a la vista queda debajo de una ficha, ni de la amarilla (con su rótulo de la izquierda). Con `margen`, la caja del letrero se agranda
       // `MARGEN_LETRERO_X` altos de ficha a los costados y `MARGEN_LETRERO_Y` arriba y abajo; sin él, se tocan cuando se pisan más de un píxel.
       const fw = et.w * e, fh = et.h * e, izq = et.rotuloW * e;
@@ -1701,6 +1806,7 @@ const MARGEN_LETRERO_Y = 0.5;
   /* -------------------------------------------------------------- reconstruir */
   function reconstruir(): void {
     medirGeometria();
+    rocasCache = null;
     cache.clear();
     corralMemo.clear();
     fichasMov.clear();
@@ -1721,12 +1827,16 @@ const MARGEN_LETRERO_Y = 0.5;
     const zonas: ZonaSuelo[] = [{ desde: -1e9, hasta: 0, tipo: "corral", color: TERRENO_COLOR.corral, acento: TERRENO_ACENTO.corral }];
     d.tramos.forEach((tr, i) => zonas.push({ desde: i === 0 ? 0 : xDeT(tr.t0), hasta: xDeT(tr.t1), tipo: tr.terreno, color: TERRENO_COLOR[tr.terreno], acento: TERRENO_ACENTO[tr.terreno] }));
     zonas.push({ desde: d.tramos.length ? Xs : 0, hasta: 1e9, tipo: "recta", color: TERRENO_COLOR.recta, acento: TERRENO_ACENTO.recta });
+    const corralAncho = d.tandas.length ? -gateX + P.w * 0.7 : forma.profundidad + nombreW + 260 * P.u;
     return {
       w: P.w, h: P.h, u: P.u, F0, Xs, metaX, gateX, y0: forma.y0, y1: forma.y1, carY0: carr.y0, carY1: carr.y1, carN: carr.n, zonas,
       pasoPostes: 0.2 * P.w, conPorton: d.tandas.length > 0, conPortonesRecta: d.tiempos.echadas.length > 0,
-      corral: d.tandas.length ? -gateX + P.w * 0.7 : forma.profundidad + nombreW + 260 * P.u,
+      tAbre: d.tAbre,
+      corral: corralAncho,
       rotuloMeta: k.txt("carRotuloMeta"), rotuloSalida: k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(),
       vallas: vallasDelPlan(),
+      // La piedrita del tropiezo se mueve: no va con las fijas, el 3D la pone en cada cuadro (`Entrada3D.piedrita`).
+      rocas: [...listaRocas(), ...listaPiedritas().filter((_, k) => k !== tropiezoDe()?.piedrita)],
     };
   }
   reconstruir();

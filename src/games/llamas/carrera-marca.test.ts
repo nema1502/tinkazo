@@ -6,8 +6,9 @@ import { tamanoLetra } from "../pixi/kit/nombres";
 import { aLaVistaPx, cajaEnPantalla, type Puesto } from "./carrera-camara";
 import { correr, pantallaDe, puestosDe, type Corrida } from "./carrera-camara-prueba";
 import { camara3D } from "./carrera-3d-mapa";
-import { filaDeRango } from "./carrera-caminata";
-import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, carrilesDe, formaDe, hudDe } from "./carrera-forma";
+import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, carrilesDe, hudDe } from "./carrera-forma";
+import { formaDelGrupo } from "./carrera-filas";
+import { subfilasDe } from "./carrera-trayectorias";
 import { ENSANCHE } from "./carrera-obstaculos";
 import { CARRIL_ANTES, CUERPO } from "./carrera-marcha";
 import { ctxDe } from "./carrera-prueba";
@@ -165,9 +166,13 @@ describe("la carrera de siempre: lo que se lee y lo que se ve dicen lo mismo", (
       for (const n of [18, 30, 60]) {
         for (const s of SEMILLAS) {
           const d = planDe(n, s).datos;
-          const forma = formaDe(P, Math.max(1, d.gente.length), px, px * 0.6 * 10);
           const cuerpo = CUERPO * ENSANCHE * RECTA * P.w;
-          const pos = (g: number, t: number): Puesto => ({ persona: g, x: d.orden.puntaje(g, t) * cuerpo, y: forma.yPie(filaDeRango(d.orden.rango(g), forma.filas)), esc: forma.esc });
+          const grupo = formaDelGrupo({ P, d, nombrePx: px, nombreW: px * 0.6 * 10, cuerpoPx: cuerpo });
+          const forma = grupo.forma;
+          // La y de la escena: la línea de su fila más su subfila (`lugarEnGrupo` de `carrera-trayectorias.ts`).
+          const filaDe = (g: number): number => grupo.filaDeLugar[d.orden.rango(g)] as number;
+          const sub = subfilasDe(d, forma, filaDe, cuerpo);
+          const pos = (g: number, t: number): Puesto => ({ persona: g, x: d.orden.puntaje(g, t) * cuerpo, y: forma.yPie(filaDe(g)) + (sub.signo.get(g) ?? 0) * sub.delta, esc: forma.esc });
           for (let i = 1; i < d.marcas.length; i++) {
             const m = d.marcas[i] as { t: number; quien: number }, a = d.marcas[i - 1] as { t: number; quien: number };
             if (m.t >= d.tAbre - CARRIL_ANTES || (d.tiempos.cae.get(a.quien) ?? Infinity) <= m.t) continue;

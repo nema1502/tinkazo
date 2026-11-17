@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CLAVE_PASO_CUPON } from "../stellar/cupon-paso-guardado";
 
 /**
  * Cuándo se abre «Dejá tu cuenta lista» (`cuenta-lista-flujo.ts`). En Prueba, con Freighter, en la demo y en el ensayo,
@@ -73,6 +74,7 @@ beforeEach(() => {
   h.estado.mockResolvedValue({ ...TODO });
   h.billetera = pollar({ activacion: "lista", proteccion: "lista" });
   document.body.innerHTML = "";
+  sessionStorage.clear();
 });
 
 const flujo = () => import("./cuenta-lista-flujo");
@@ -203,6 +205,20 @@ describe("al entrar y al retomar", () => {
     expect((h.abrir.mock.calls[0]?.[2] as { para: string }).para).toBe("entrada");
   });
 
+  it("tras elegir Tengo un cupón y cambiar de modo, abre directo en el campo y consume el pedido", async () => {
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    const f = await flujo();
+    expect(await f.revisarCuentaOficial("retomar")).toBe(true);
+    await vi.waitFor(() => expect(h.abrir).toHaveBeenCalledTimes(1));
+    const op = h.abrir.mock.calls[0]?.[2] as { para: string; cupon: unknown };
+    expect(op.para).toBe("entrada");
+    expect(op.cupon).toBe("escribir");
+    expect(h.estado).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBeNull();
+    expect(await f.revisarCuentaOficial("retomar")).toBe(false);
+    expect(h.abrir).toHaveBeenCalledTimes(1);
+  });
+
   it("con la cuenta activada: revisa de fondo y abre solo si falta algo", async () => {
     h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
     const f = await flujo();
@@ -290,6 +306,17 @@ describe("si el paso no se puede bajar", () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const f = await flujo();
     expect(await f.revisarCuentaOficial("entrada")).toBe(false);
+    expect(aviso()).not.toBeNull();
+  });
+
+  it("si el paso del cupón no abre, conserva el pedido para la próxima carga", async () => {
+    romperPaso();
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const f = await flujo();
+    expect(await f.revisarCuentaOficial("retomar")).toBe(false);
+    expect(h.abrir).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBe("1");
     expect(aviso()).not.toBeNull();
   });
 

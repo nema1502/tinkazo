@@ -97,6 +97,30 @@ describe("el selector de juegos", () => {
     expect(alVer).not.toHaveBeenCalled();
   });
 
+  it("con el sorteo mirándose en celulares desde el QR, el juego no cambia hasta el resultado y la nota lo dice", async () => {
+    const { app } = await import("../state");
+    app.drawn = null;
+    app.game = "race";
+    app.frozen = { names: ["Ana", "Beto"], listHash: "ab", ts: 1, at: "", prize: "", round: 77, raffleId: 5n };
+    const { fijarParaEspectadores } = await import("./espectador-fijo");
+    const { elegirJuego, setGame } = await import("./freeze");
+    fijarParaEspectadores(77, "race", "normal");
+    elegirJuego("sapo");
+    expect(app.game).toBe("race");
+    expect(marcados()).toEqual([]);
+    expect(nota().hidden).toBe(false);
+    expect(nota().textContent).toBe(t("juegoFijoEspectador"));
+    // Ningún otro camino lo cambia (la sugerencia por cantidad de gente, un orden de turnos).
+    setGame("wheel");
+    expect(app.game).toBe("race");
+    // Otro sorteo (otra ronda) lo suelta, y la nota de la duración se va.
+    document.body.insertAdjacentHTML("beforeend", `<p id="pace-nota">${t("juegoFijoEspectador")}</p>`);
+    app.frozen = { names: ["Ana", "Beto"], listHash: "ab", ts: 1, at: "", prize: "", round: 78, raffleId: 6n };
+    elegirJuego("sapo");
+    expect(app.game).toBe("sapo");
+    expect(document.getElementById("pace-nota")?.hidden).toBe(true);
+  });
+
   it("mientras corre el show está apagado y dice por qué; los toques no hacen nada", async () => {
     const { app } = await import("../state");
     app.drawn = RESULTADO;

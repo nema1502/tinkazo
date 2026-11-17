@@ -1,15 +1,22 @@
 import { t } from "../i18n";
 import { app } from "../state";
 import { changeMode, hayModoOficial, modeNameKey, network, type NetworkName } from "../stellar/config";
+import { cuponDelFragmento } from "../stellar/cupon-guardado";
+import { limpiarPasoDelCupon } from "../stellar/cupon-paso-guardado";
+import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
+import { loadSessionKind } from "../stellar/session-store";
+import { activeWallet } from "../stellar/wallet-lite";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
+import { MARCA_INGRESAR } from "./cuenta-estado";
+import { pedirPasoDelCupon } from "./cupon-paso";
 
 /**
  * La hoja para cambiar de modo.
  *
  * Tocar la marca no cambia nada todavía: explica los dos modos, marca el
  * actual y recién el botón recarga la página en el otro. Mientras se sella o
- * hay un sorteo sellado esperando su número, el botón queda apagado y dice por
- * qué. Sin contrato oficial, esta hoja no existe.
+ * hay un sorteo sellado esperando su número, los botones quedan apagados y la
+ * hoja dice por qué. Sin contrato oficial, esta hoja no existe.
  */
 
 /** Si un sorteo sellado sin sortear bloquea el cambio de modo. */
@@ -29,10 +36,69 @@ export function marcarSellandoAhora(v: boolean): void {
  */
 export const puedeCambiarDeModo = (): boolean => !sellandoAhora && !cambioBloqueado(app.frozen, app.drawn);
 
-/** Cambia de modo si la guarda lo deja (`changeMode` recarga la página). Devuelve si se pidió el cambio. */
-export function pasarAModo(target: NetworkName): boolean {
+/** La misma cuenta guardada que sabe retomar la herramienta, pero para el modo de destino. */
+function hayCuentaGuardada(name: NetworkName): boolean {
+  if (loadSessionKind(name)) return true;
+  try {
+    return hasPollarKey(name) && leerMarcaPollar(localStorage, name) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** Pide la puerta de entrar en la próxima carga. Su destino siempre es `#sortear`. */
+function pedirIngresar(): void {
+  try {
+    sessionStorage.setItem(MARCA_INGRESAR, "1");
+  } catch {
+    /* sin almacenamiento, la herramienta conserva su botón de entrar */
+  }
+}
+
+/** La cuenta abierta, distinguida por su billetera y no por su dirección. */
+type CuentaParaElModo = "sitio" | "propia" | "prueba" | null;
+
+function cuentaParaElModo(): CuentaParaElModo {
+  const w = activeWallet();
+  if (!w?.address) return null;
+  if (w.kind === "guest") return "prueba";
+  return (w as unknown as { submitsItself?: unknown }).submitsItself === true ? "sitio" : "propia";
+}
+
+/** El aviso de que cada modo retoma su propia cuenta, con los nombres visibles del idioma vigente. */
+export function textoCuentaAlCambiar(actual: NetworkName, otro: NetworkName): string {
+  return t("modeSwitchAccount").replace("{otro}", t(modeNameKey(otro))).replace("{actual}", t(modeNameKey(actual)));
+}
+
+/**
+ * Cambia de modo si la guarda lo deja (`changeMode` recarga la página). Devuelve si se pidió el cambio.
+ * Sin cuenta en el destino, abre `#sortear` y, si la cuenta abierta lo necesita, deja la marca de entrar después de
+ * confirmar el cambio. Tengo un cupón conserva un cupón válido del fragmento: ese enlace ya tiene su propia puerta.
+ */
+export function pasarAModo(target: NetworkName, o: { cupon?: boolean } = {}): boolean {
   if (!puedeCambiarDeModo()) return false;
-  return changeMode(target);
+  const conCupon = target === "mainnet" && o.cupon === true;
+  let conservarCupon = false;
+  if (conCupon) {
+    try {
+      conservarCupon = cuponDelFragmento(location.hash).codigo !== null;
+    } catch {
+      conservarCupon = false;
+    }
+  }
+  const cuentaEnDestino = hayCuentaGuardada(target);
+  const destino = conservarCupon ? undefined : conCupon || !cuentaEnDestino ? "sortear" : undefined;
+  const cambia = changeMode(target, destino);
+  if (!cambia) return false;
+  if (target === "testnet") limpiarPasoDelCupon();
+  const cuenta = cuentaParaElModo();
+  // Sin cuenta abierta sigue la puerta de siempre. Una billetera propia sirve en los dos modos y no la necesita.
+  // La Cuenta de prueba solo la necesita al pasar a Oficial, donde hay que entrar con Google o con correo.
+  const porLaCuenta = cuenta === null || cuenta === "sitio" || (cuenta === "prueba" && target === "mainnet");
+  const ingresar = porLaCuenta && !cuentaEnDestino && !conservarCupon;
+  if (conCupon) pedirPasoDelCupon(ingresar);
+  else if (ingresar) pedirIngresar();
+  return true;
 }
 
 /** El otro modo al que se puede pasar desde el vigente. */
@@ -141,6 +207,24 @@ export function abrirHojaDeModo(): void {
   boton.disabled = bloqueado;
   boton.addEventListener("click", () => pasarAModo(otro));
   card.appendChild(boton);
+
+  const cuenta = cuentaParaElModo();
+  if (cuenta === "sitio" || (cuenta === "prueba" && network.name === "testnet" && otro === "mainnet")) {
+    const aviso = document.createElement("p");
+    aviso.className = "modo-cuenta";
+    aviso.textContent = cuenta === "prueba" ? t("modeSwitchGuestAccount") : textoCuentaAlCambiar(network.name, otro);
+    card.appendChild(aviso);
+  }
+
+  if (network.name === "testnet") {
+    const cupon = document.createElement("button");
+    cupon.type = "button";
+    cupon.className = "ghost modo-cupon";
+    cupon.textContent = t("modeHaveCoupon");
+    cupon.disabled = bloqueado;
+    cupon.addEventListener("click", () => pasarAModo("mainnet", { cupon: true }));
+    card.appendChild(cupon);
+  }
 
   if (bloqueado) {
     const aviso = document.createElement("p");

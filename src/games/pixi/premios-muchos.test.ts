@@ -56,10 +56,11 @@ const PARES: ReadonlyArray<readonly [number, number]> = [[33, 33], [40, 33], [60
 const ganadoresDe = (n: number, k: number): number[] => Array.from({ length: k }, (_, i) => (3 + i * 7) % n).filter((v, i, a) => a.indexOf(v) === i);
 
 let planCableCar: typeof import("./cablecar-plan").planCableCar;
+let T_DOCK: number;
 beforeAll(async () => {
   // El plan del teleférico toma `clamp` de overlay.ts, que lee `location` al cargarse.
   vi.stubGlobal("location", { search: "" });
-  ({ planCableCar } = await import("./cablecar-plan"));
+  ({ planCableCar, T_DOCK } = await import("./cablecar-plan"));
 }, 60_000);
 
 describe("los juegos sin tope de premios arman su plan con muchos premios", () => {
@@ -70,10 +71,12 @@ describe("los juegos sin tope de premios arman su plan con muchos premios", () =
     expect(premios + (gs.slice(1).includes(P.rival) ? 1 : 0)).toBe(gs.length - 1);
   });
 
-  it.each(PARES)("el teleférico, con %i personas y %i premios: el primero llega arriba", (n, k) => {
+  it.each(PARES)("el teleférico, con %i personas y %i premios: a la cumbre llegan todos los premios y nadie más", (n, k) => {
     const gs = ganadoresDe(n, k);
     const P = planCableCar(Array.from({ length: n }, (_, i) => `Persona ${i + 1}`), gs, rngDe(3));
-    expect(P.rank.slice(0, 2)).toContain(gs[0]);
+    expect([...P.rank.slice(0, gs.length)].sort((a, b) => a - b)).toEqual([...gs].sort((a, b) => a - b));
+    expect(P.leftAt(T_DOCK)).toBe(gs.length);
+    expect(P.aboard(P.winnerCab, T_DOCK)).toHaveLength(gs.length);
   });
 
   it.each(PARES)("Guajojó, con %i personas y %i premios: el plan tiene duración", (n, k) => {

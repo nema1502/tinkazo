@@ -11,7 +11,7 @@ import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } f
  *
  * Tinkazo no firma ni guarda nada: arma el pago (`pagos-envio.ts`), se lo pasa a la billetera (Freighter, o la cuenta de
  * prueba en testnet) y manda lo firmado. Si la cuenta de quien organiza entró con Google (Pollar), no firma pagos desde
- * acá a propósito (su lista de firmas permitidas es solo la del sello y la del sorteo: `atenderFirmas`, wallet-pollar.ts):
+ * acá a propósito (su lista de firmas permitidas no incluye el pago de un premio: `atenderFirmas`, wallet-pollar.ts):
  * se muestra el pago listo para firmarlo afuera.
  *
  * Antes de pedir la firma se mira la red: si la cuenta de quien ganó no existe o no tiene USDC activado, se dice en

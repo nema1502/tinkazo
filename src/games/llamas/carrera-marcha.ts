@@ -23,6 +23,8 @@
 
 import { segundosDeQ } from "./carrera-ritmo";
 import type { Plan as PlanFinal } from "./plan";
+import type { Arc, Beat, BeatKind } from "../drama";
+import { TROPIEZO_ANTES, TROPIEZO_DESPUES, arcoDeEntrada, franjaDeEntrada, franjaDel50, franjaDel75, puestoDeFranja } from "./carrera-franjas";
 
 /** Un cuerpo de llama, en fracción de la recta (`carrera-obstaculos.ts`, `carrera-recta.ts`). */
 export const CUERPO = 0.0115;
@@ -237,6 +239,37 @@ export interface InfoMarcha {
   causas: CausaRecta[];
   /** El lugar de `k` (cuerpos desde la línea) `tau` segundos después de abrirse la recta; con `tau` negativo, el lugar de entrada. */
   enExtendido(k: number, tau: number): number;
+  /** Con la marcha pareja: los momentos que actúan (los ciegos y el tropiezo de cada susto), por carril, para la postura y el relator. */
+  momentos?: Beat[];
+  /** Con la marcha pareja: los carriles con arco susto (la ganadora, si el suyo lo es, y las demás que lo sacaron), para el auditor. */
+  sustos?: number[];
+  /** Con la marcha pareja: las del grupo de punta a tres segundos de la meta (la ganadora y las sorteadas), para que el plan final lo cumpla igual para todas. */
+  grupoT3?: number[];
+}
+
+/**
+ * Los momentos chicos de la recta, ciegos: cuántos según los carriles (como `writeStory`), a quién entre todos (la ganadora también), de qué
+ * tipo y cuándo, sin mirar a nadie. La escupida va a una vecina sorteada.
+ */
+export function momentosCiegos(L: number, rng: () => number): Beat[] {
+  if (L < 2) return [];
+  const quienes = Array.from({ length: L }, (_, i) => i);
+  for (let i = L - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [quienes[i], quienes[j]] = [quienes[j] as number, quienes[i] as number];
+  }
+  const cuantos = Math.min(L, L <= 3 ? 1 : L <= 5 ? 2 : 3);
+  const libre = Math.max(0, 0.72 - 0.2 - 0.11 * (cuantos - 1));
+  const cortes = Array.from({ length: cuantos }, () => rng() * libre).sort((x, y) => x - y);
+  const kinds: BeatKind[] = ["plantada", "tropiezo", "pique", "escupida"];
+  return cortes.map((c, i) => {
+    const actor = quienes[i] as number;
+    const at = 0.2 + c + i * 0.11;
+    const kind = kinds[Math.floor(rng() * kinds.length)] as BeatKind;
+    if (kind !== "escupida") return { kind, actor, at };
+    const vecinas = [actor - 1, actor + 1].filter((k) => k >= 0 && k < L);
+    return { kind, actor, at, target: vecinas[Math.floor(rng() * vecinas.length)] as number };
+  });
 }
 
 /** Una subida y bajada suave de 0 a 1 y otra vez a 0 (de quinto grado): sube `sube` s, sostiene y baja `baja` s, empezando `antes` s antes de `s = 0`. */
@@ -247,8 +280,11 @@ const suave5 = (v: number): number => {
   return x * x * x * (x * (6 * x - 15) + 10);
 };
 
-/** La interpolación de Hermite monótona (Fritsch y Carlson): continua en la velocidad y sin pasarse de los puntos. */
-function hermite(ts: readonly number[], ys: readonly number[], pendienteFinal = 0): (t: number) => number {
+/**
+ * La interpolación de Hermite monótona (Fritsch y Carlson): continua en la velocidad y sin pasarse de los puntos. Con `fija` (`[i, pendiente]`), la
+ * pendiente en el punto `i` es esa y no la que sale de los dos tramos vecinos.
+ */
+function hermite(ts: readonly number[], ys: readonly number[], pendienteFinal = 0, fija?: readonly [number, number]): (t: number) => number {
   const n = ts.length;
   const h: number[] = [], delta: number[] = [];
   for (let i = 0; i < n - 1; i++) {
@@ -266,6 +302,7 @@ function hermite(ts: readonly number[], ys: readonly number[], pendienteFinal = 
       d[i] = (w1 + w2) / (w1 / a + w2 / b);
     }
   }
+  if (fija && fija[0] > 0 && fija[0] < n - 1 && Number.isFinite(fija[1])) d[fija[0]] = fija[1];
   return (t: number): number => {
     if (t <= (ts[0] as number)) return ys[0] as number;
     if (t >= (ts[n - 1] as number)) return ys[n - 1] as number;
@@ -319,6 +356,27 @@ export function pesosAl90(L: number): number[][] {
   pesosAl90Memo.set(L, m);
   return m;
 }
+/**
+ * Lo que busca cada carril en la marcha pareja: su arco y sus puestos al 25, al 50 y al 75 % (1 es la primera), con la misma tabla con que
+ * `planRace` sortea los de la ganadora (`carrera-franjas.ts`). El arco de cada una sale de su puesto de entrada como sale el de la ganadora: el plan
+ * sortea el arco parejo y pone a la ganadora al entrar en la franja de su arco (adelante en el susto y el duelo, atrás en la remontada y la tapada),
+ * así que de una que entra `r`-ésima el arco se sortea con el peso que tendría la ganadora de entrar ahí con cada arco (uno sobre lo ancha que es su
+ * franja si `r` cae en ella, y cero si no). Con eso cada carril tiene, dado su puesto de entrada, la misma ley que la ganadora, y verla moverse no
+ * dice quién es. Con dos carriles no hay tapada, como en `writeStory`.
+ */
+export function metaDeUnCarril(L: number, r: number, rnd: () => number): { arco: Arc; metas: [number, number, number]; tropiezo: number } {
+  const arco = arcoDeEntrada(L, r, rnd);
+  const r25 = puestoDeFranja(L, franjaDeEntrada(arco), rnd);
+  const hora = arco === "susto" ? (rnd() < 0.5 ? TROPIEZO_ANTES : TROPIEZO_DESPUES) : null;
+  const tropiezo = hora ? hora.desde + rnd() * hora.ancho : -1;
+  const r50 = puestoDeFranja(L, franjaDel50(arco, tropiezo >= 0 && tropiezo < 0.5), rnd);
+  const r75 = puestoDeFranja(L, franjaDel75(arco), rnd);
+  return { arco, metas: [r25, r50, r75], tropiezo };
+}
+
+/** En la marcha pareja, cuánto pesa el puesto que traía cada una contra el que busca su arco (0: va derecho a lo que busca). */
+export const AMORTIGUA = 1;
+
 /** El puesto al 90 % de quien iba `r75`-ésima al 75 %, con el número `u` en [0, 1). */
 export function puestoAl90(L: number, r75: number, u: number): number {
   const fila = pesosAl90(L)[Math.min(L, Math.max(1, r75)) - 1] as number[];
@@ -346,12 +404,21 @@ export function puestoAl90(L: number, r75: number, u: number): number {
  *   anunciadas, con su rastro: causas en el guion.
  * - **La llegada**: la ganadora cruza primera, con el margen de siempre (entre 0,1 y 0,5 cuerpos), y las demás detrás.
  *
+ * **La marcha pareja** (`op.senuelos`, el interruptor `SENUELOS`): hasta tres segundos antes de la meta la ganadora es una llama más. Cada una de
+ * las demás saca su arco y sus puestos de la misma tabla que la ganadora (`metaDeUnCarril`), todas van a su lugar con la misma regla (los mismos
+ * cruces, la misma grilla, la misma hora corrida), los momentos le tocan a cualquiera (`op.momentos` y el tropiezo de cada arco susto) y nadie los
+ * compensa hasta el 75 %, y a tres segundos de la meta van adelante la ganadora y tres sorteadas sin mirar dónde iban, cada una en su lugar de la
+ * grilla. Los puestos hasta ahí salen del azar de los señuelos, una sola vez: los arreglos que se prueban no los eligen. Del corte de la cámara
+ * a la meta, lo de siempre.
+ *
  * El plan que devuelve tiene la misma forma: `pos(k, q)` en fracción de la recta. Sin `Math.random`.
  */
-export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng: () => number }): PlanFinal {
+export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng: () => number; senuelos?: () => number; momentos?: readonly Beat[] }): PlanFinal {
   const L = base.lanes.length;
   if (L < 2) return base;
   const rng = op.rng;
+  /** La marcha pareja (`SENUELOS`): todas con la misma regla. Su azar es aparte y el mismo en cada reintento de `capasDeLaRecta`. */
+  const par = op.senuelos;
   const foto = base.foto;
   const T = segundosDeQ(1, foto);
   const w = base.story.winner;
@@ -360,7 +427,9 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
 
   /* ------------------------------------------------------------------ compuertas */
   // La quinta compuerta es el corte de la cámara de la meta, exactamente a tres segundos de la meta (el 89,5 % de la recta): ahí la ganadora ya es una de las cuatro de adelante.
-  const t25 = tq(0.25), t50 = tq(0.5), t75 = tq(0.75), t90 = Math.min(tq(0.9), T - 3);
+  // En el duelo, con su cámara lenta, el 90 % llega unos dos décimos antes del corte. En la marcha pareja la compuerta es siempre el corte: si no, en
+  // esos décimos cada una ya va hacia su puesto de un segundo y medio antes de la meta, y la que más se mueve al llegar al corte es la ganadora.
+  const t25 = tq(0.25), t50 = tq(0.5), t75 = tq(0.75), t90 = par ? T - 3 : Math.min(tq(0.9), T - 3);
   const tiempos = [0, t25, t50, t75, t90, T - 1.5, T];
   const esp = [ENTRE_PUESTOS, 0.3, 0.25, 0.22, 0.2, 0.18, 0];
   const G = tiempos.length;
@@ -383,12 +452,41 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
   // al segundo y medio, una de las tres.
   rw[4] = puestoAl90(L, rw[3] as number, rng());
   const fija90 = true;
-  const compuertas = tiempos.map((t, c) => ({ t, puesto: rw[c] as number }));
+  let compuertas = tiempos.map((t, c) => ({ t, puesto: rw[c] as number }));
+
+  /* ------------------------------------- la marcha pareja: lo que busca cada una, sorteado una sola vez */
+  // metas[k][c - 1]: el puesto que busca `k` en la compuerta `c` (25, 50 y 75 %). La ganadora, los del plan, y las demás, los de su propio arco.
+  const metas: number[][] = [];
+  const sustos: Beat[] = [];
+  let punta: number[] = [];
+  let u90: number[] = [];
+  if (par) {
+    const tropiezoW = base.story.arc === "susto" ? base.story.beats.find((b) => b.kind === "tropiezo" && b.actor === w)?.at ?? -1 : -1;
+    for (let k = 0; k < L; k++) {
+      if (k === w) {
+        metas.push([rw[1] as number, rw[2] as number, rw[3] as number]);
+        if (tropiezoW >= 0) sustos.push({ kind: "tropiezo", actor: k, at: tropiezoW });
+        continue;
+      }
+      const m = metaDeUnCarril(L, (rangoEntrada.get(k) ?? k) + 1, par);
+      metas.push(m.metas);
+      if (m.tropiezo >= 0) sustos.push({ kind: "tropiezo", actor: k, at: m.tropiezo });
+    }
+    // El grupo de punta a tres segundos de la meta: la ganadora y las que faltan, sorteadas entre las demás sin mirar dónde van.
+    const demas = Array.from({ length: L }, (_, k) => k).filter((k) => k !== w);
+    for (let i = demas.length - 1; i > 0; i--) {
+      const j = Math.floor(par() * (i + 1));
+      [demas[i], demas[j]] = [demas[j] as number, demas[i] as number];
+    }
+    punta = demas.slice(0, Math.min(PUESTOS_AL_90, L) - 1);
+    u90 = Array.from({ length: L }, () => par());
+  }
+  const historia: readonly Beat[] = par ? [...(op.momentos ?? []), ...sustos].sort((a, b) => a.at - b.at) : base.story.beats;
 
   /* -------------------------------------------------- los momentos de la historia (efectos suaves) */
   const causas: CausaRecta[] = [];
   const efectos: { k: number; t: number; A: number; antes: number; sube: number; sostiene: number; baja: number }[] = [];
-  for (const b of base.story.beats) {
+  for (const b of historia) {
     const tb = tq(b.at);
     const pone = (k: number, A: number, antes: number, sube: number, sostiene: number, baja: number): void => {
       efectos.push({ k, t: tb, A, antes, sube, sostiene, baja });
@@ -415,14 +513,64 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
   const N = Math.ceil(T * 60) + 1;
   const dt = T / (N - 1);
 
+  // La marcha pareja: los puestos de todas en las compuertas 1 a 4 (25, 50 y 75 % y tres segundos antes de la meta) se arman una sola vez, con el
+  // azar de los señuelos, antes de probar arreglos. Los arreglos que se prueban y los reintentos de `capasDeLaRecta` cambian la hora de cada compuerta
+  // y los márgenes, nunca los puestos: si los puestos cambiaran de arreglo en arreglo, el que se queda (el que cumple los topes, que miran también lo
+  // que hace la ganadora después del corte) elegiría puestos mirándola a ella.
+  const parejos: number[][] = [];
+  if (par) {
+    let prev = Array.from({ length: L }, (_, k) => rangoEntrada.get(k) ?? k);
+    for (let c = 1; c <= 4; c++) {
+      // Todas, la ganadora también, con la misma regla. Hasta el 75 % cada una va al puesto que busca su arco (entre las que buscan lo mismo, como
+      // venían, con uno o dos cruces sorteados). A tres segundos de la meta adelante van la ganadora y las sorteadas.
+      const orden = ocupantes(prev);
+      let fila: number[];
+      if (c <= 3) {
+        const cruces = par() < 0.7 ? 1 + (par() < 0.3 ? 1 : 0) : 0;
+        for (let j = 0; j < cruces; j++) {
+          const i = Math.floor(par() * (L - 1));
+          [orden[i], orden[i + 1]] = [orden[i + 1] as number, orden[i] as number];
+        }
+        const antes = new Map(orden.map((k, i) => [k, i]));
+        // Cada una va hacia lo que busca sin olvidar dónde venía (`AMORTIGUA` veces su puesto anterior): menos cruces de golpe, la misma regla para todas.
+        const clave = (k: number): number => ((metas[k] as number[])[c - 1] as number) + AMORTIGUA * ((antes.get(k) as number) + 1);
+        fila = [...orden].sort((a, b) => clave(a) - clave(b) || (antes.get(a) as number) - (antes.get(b) as number));
+      } else {
+        const tope = Math.min(PUESTOS_AL_90, L);
+        const enPunta = new Set([w, ...punta]);
+        const anterior = prev;
+        const meta = (k: number): number => puestoAl90(L, (anterior[k] as number) + 1, u90[k] as number);
+        const delante = orden.filter((k) => enPunta.has(k)).sort((a, b) => meta(a) - meta(b) || (anterior[a] as number) - (anterior[b] as number));
+        // Nadie sube más de `SUBIDA_MAX` puestos: cada una toma el primer lugar libre desde el que alcanza.
+        const lugares = new Array<number>(tope).fill(-1);
+        for (const k of delante) {
+          let j = Math.max(0, (anterior[k] as number) - SUBIDA_MAX);
+          while (j < tope && (lugares[j] as number) >= 0) j++;
+          if (j >= tope) for (j = tope - 1; (lugares[j] as number) >= 0; j--);
+          lugares[j] = k;
+        }
+        fila = [...lugares, ...orden.filter((k) => !enPunta.has(k))];
+      }
+      const s = new Array<number>(L).fill(0);
+      fila.forEach((k, i) => (s[k] = i));
+      parejos.push(s);
+      prev = s;
+    }
+  }
+
   /** Un arreglo de las demás alrededor de la ganadora: sus lugares en cada compuerta, sus curvas y la de la ganadora, tabuladas a 60 por segundo. */
-  const armar = (): { serie: Float64Array[]; acel: number; vel: number; fuera: number } => {
+  const armar = (): { serie: Float64Array[]; acel: number; vel: number; fuera: number; slot: number[][] } => {
     // `slot[c][k]`: el lugar (0 es el primero) de `k` en la compuerta `c`. Las demás conservan su orden y dejan lugar a la ganadora; en cada
     // compuerta se sortean uno o dos cruces entre dos que van juntas, y si la que iba primera sigue primera, la pasa la de atrás.
     const slot: number[][] = [Array.from({ length: L }, (_, k) => rangoEntrada.get(k) ?? k)];
     let senuelo = -1;
     for (let c = 1; c < G; c++) {
       const prev = slot[c - 1] as number[];
+      // La marcha pareja: hasta tres segundos antes de la meta, los puestos armados una sola vez (arriba).
+      if (par && c <= 4) {
+        slot.push([...(parejos[c - 1] as number[])]);
+        continue;
+      }
       const otras = ocupantes(prev).filter((k) => k !== w);
       // En las compuertas cercanas (tramos de un segundo y medio) los cruces al azar se dejan: cada uno mueve a dos de a un puesto.
       const cruces = c >= 5 ? 0 : rng() < 0.7 ? 1 + (rng() < 0.3 ? 1 : 0) : 0;
@@ -433,9 +581,16 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
       // La señuelo: la última de las demás al 75 % remonta en el último cuarto (dos puestos al 90 %, uno antes de la foto y el resto en la llegada) y llega
       // segunda: la mayor remontada del final no es siempre de la ganadora y quien más sube puede perder en la foto.
       if (c === 4) senuelo = otras.length >= 4 && haySenuelo ? (otras[otras.length - 1] as number) : -1;
+      // En la marcha pareja el grupo de punta del corte ya está armado y los puestos hasta ahí no se tocan: la señuelo es la misma de siempre (la
+      // última de las demás al 75 %), y sube después del corte lo que la de siempre subía entre el 75 % y un segundo y medio antes de la meta.
+      if (par && c === 5) {
+        const al75 = slot[3] as number[];
+        const ultima = otras.reduce((a, k) => ((al75[k] as number) > (al75[a] as number) ? k : a), otras[0] as number);
+        senuelo = otras.length >= 4 && haySenuelo ? ultima : -1;
+      }
       if (senuelo >= 0 && c >= 4) {
         const i0 = otras.indexOf(senuelo);
-        const sube = c === 4 ? 2 : c === 5 ? 1 : 6;
+        const sube = c === 4 ? 2 : c === 5 ? (par ? 3 : 1) : 6;
         otras.splice(i0, 1);
         otras.splice(Math.max(0, i0 - sube), 0, senuelo);
       }
@@ -470,22 +625,35 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
     for (let k = 0; k < L; k++) {
       if (k === w) continue;
       // Cada compuerta se corre como mucho un tercio del tramo vecino más corto (nunca más de 0,6 s): así el orden no se invierte.
-      const ts = tiempos.map((t, c) => (c === 0 || c === G - 1 ? t : t + entre(-1, 1) * Math.min(0.6, Math.min(t - (tiempos[c - 1] as number), (tiempos[c + 1] as number) - t) / 3)));
+      // En la marcha pareja, a tres segundos de la meta (el corte de la cámara) todas llegan a su lugar a la misma hora, como la ganadora.
+      const ts = tiempos.map((t, c) => (c === 0 || c === G - 1 ? t : t + entre(-1, 1) * (par && c === 4 ? 0 : Math.min(0.6, Math.min(t - (tiempos[c - 1] as number), (tiempos[c + 1] as number) - t) / 3))));
       // La segunda se frena al final (la ganadora la pasa con su envión): si iba adelante, aguanta la punta hasta cerca de la línea.
-      const ys2 = tiempos.map((_, c) => lugar(c, k));
+      // En la marcha pareja todas compensan sus momentos en las dos compuertas del final (a 3 y a 1,5 s), como la ganadora: ahí el orden es el armado.
+      const ys2 = tiempos.map((_, c) => lugar(c, k) - (par && c >= 4 && c < G - 1 ? efectoEn(k, ts[c] as number) : 0));
       const sube2 = (ys2[G - 2] as number) - (ys2[G - 1] as number);
       const frena = k === segunda && sube2 > 0 ? -Math.min(0.5, (2.2 * sube2) / (T - (tiempos[G - 2] as number))) : 0;
-      curvas[k] = hermite(ts, ys2, frena);
+      // En la marcha pareja, la velocidad con que cada una llega al corte de la cámara (tres segundos antes de la meta) sale solo de su tramo del
+      // 75 % a ese corte, no de lo que hará después: si mirara el tramo siguiente, la que llega al corte todavía subiendo sería la ganadora, que es
+      // la que después sube a su puesto de un segundo y medio antes de la meta.
+      curvas[k] = par ? hermite(ts, ys2, frena, [4, ((ys2[4] as number) - (ys2[3] as number)) / ((ts[4] as number) - (ts[3] as number))]) : hermite(ts, ys2, frena);
     }
     const otraEn = (k: number, tau: number): number => (curvas[k] as (t: number) => number)(tau) + efectoEn(k, tau);
     const ys: number[] = [];
+    // En la marcha pareja la ganadora también corre sus compuertas hasta el 75 % unos décimos, como las demás.
+    const tw = tiempos.map((t, c) => (par && c >= 1 && c <= 3 ? t + entre(-1, 1) * Math.min(0.6, Math.min(t - (tiempos[c - 1] as number), (tiempos[c + 1] as number) - t) / 3) : t));
     for (let c = 0; c < G; c++) {
-      const t = tiempos[c] as number;
+      const t = tw[c] as number;
       if (c === 0) ys.push(lugar(0, w));
       else if ((c === 4 && !fija90) || c === G - 1) ys.push(0);
+      // En la marcha pareja, hasta el 75 % la ganadora va a su lugar de la grilla como cualquiera (no entre las que tiene al lado) y sin compensar
+      // sus momentos, que se ven enteros, en ella como en cualquiera: la misma regla.
+      else if (par && c <= 3) ys.push(lugar(c, w));
+      // Y a tres segundos de la meta también: a su lugar de la grilla, con su momento compensado, como las otras tres del grupo. Si fuera entre sus
+      // vecinas, con las otras exactas en la grilla, la de hueco distinto con su vecina sería ella.
+      else if (par && c === 4) ys.push(lugar(4, w) - efectoEn(w, t));
       else {
         const xs = Array.from({ length: L }, (_, k) => k).filter((k) => k !== w).map((k) => otraEn(k, t)).sort((a, b) => b - a);
-        const r = rw[c] as number;
+        const r = ((slot[c] as number[])[w] as number) + 1;
         const arriba = r - 2 >= 0 ? (xs[r - 2] as number) : (xs[0] as number) + 0.6 * (esp[c] as number);
         const abajo = r - 1 < xs.length ? (xs[r - 1] as number) : (xs[xs.length - 1] as number) - 0.6 * (esp[c] as number);
         // Dentro del hueco entre las dos que la rodean (no siempre en el medio): cada arreglo que se prueba la pone un poco distinto.
@@ -498,7 +666,11 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
     // segunda o tercera la pasa pegada a la meta, y la punta que lleva es la del final y no la de segundo y medio.
     const yPrev = ys[gw[gw.length - 2] as number] as number, hPrev = T - (tiempos[gw[gw.length - 2] as number] as number);
     const envion = Math.min(0.5, Math.max(0, (2.2 * (0 - yPrev)) / hPrev));
-    curvas[w] = hermite(gw.map((c) => tiempos[c] as number), gw.map((c) => ys[c] as number), envion);
+    // Y la de la ganadora, igual: la pendiente en el corte de la cámara sale de su tramo del 75 % a ese corte.
+    const i4 = gw.indexOf(4);
+    curvas[w] = par && i4 > 0
+      ? hermite(gw.map((c) => tw[c] as number), gw.map((c) => ys[c] as number), envion, [i4, ((ys[4] as number) - (ys[3] as number)) / ((tw[4] as number) - (tw[3] as number))])
+      : hermite(gw.map((c) => tw[c] as number), gw.map((c) => ys[c] as number), envion);
     const serie = Array.from({ length: L }, (_, k) => {
       const v = new Float64Array(N);
       for (let i = 0; i < N; i++) v[i] = k === w ? (curvas[w] as (t: number) => number)(i * dt) + efectoEn(w, i * dt) : otraEn(k, i * dt);
@@ -513,12 +685,17 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
     // (dos de las otras casi tocándose a esa hora le quitan el margen), no sirve.
     const iT3 = Math.round((T - 3) / dt);
     const wx = (serie[w] as Float64Array)[iT3] as number;
-    const fuera = serie.filter((v, k) => k !== w && (v[iT3] as number) > wx).length + 1 > Math.min(PUESTOS_AL_90, L) ? 1 : 0;
-    return { serie, acel, vel, fuera };
+    // En la marcha pareja la regla es la misma para las cuatro del grupo de punta: el arreglo sirve si las cuatro están adelante a esa hora, no solo
+    // la ganadora (si se mirara solo a ella, las otras tres podrían llegar tarde y la que llega tarde nunca sería la ganadora).
+    const adelanteEn = (k: number): boolean => serie.filter((v, j) => j !== k && (v[iT3] as number) > ((serie[k] as Float64Array)[iT3] as number)).length + 1 <= Math.min(PUESTOS_AL_90, L);
+    // La ganadora afuera es lo peor (2: no sirve nunca). Una del grupo afuera, 1 (sirve solo si no hay otro).
+    const fueraW = serie.filter((v, k) => k !== w && (v[iT3] as number) > wx).length + 1 > Math.min(PUESTOS_AL_90, L) ? 1 : 0;
+    const fuera = par ? (fueraW ? 2 : punta.every(adelanteEn) ? 0 : 1) : fueraW;
+    return { serie, acel, vel, fuera, slot };
   };
   // Se prueban hasta `INTENTOS` arreglos de las demás (cada uno con el azar siguiente) y se queda el primero que cumple los topes de la base;
   // si ninguno cumple, el que menos se pasa. Como el azar es sembrado, la misma ronda arma siempre la misma recta.
-  let mejor: { serie: Float64Array[]; acel: number; vel: number; fuera: number } | null = null;
+  let mejor: { serie: Float64Array[]; acel: number; vel: number; fuera: number; slot: number[][] } | null = null;
   const peso = (a: { acel: number; vel: number; fuera: number }): number => a.fuera * 1e3 + Math.max(a.acel / ACEL_BASE, a.vel / VEL_BASE);
   for (let i = 0; i < INTENTOS; i++) {
     const a = armar();
@@ -529,10 +706,17 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
   }
   const serie = (mejor as { serie: Float64Array[] }).serie;
   // Los piques grandes de la ganadora (tres puestos o más entre dos compuertas) son una causa a la vista: se anuncian y dejan rastro.
+  // En la marcha pareja, los de cualquiera: la regla es la misma para todas.
+  const slotElegido = (mejor as { slot: number[][] }).slot;
   for (let j = 1; j < gw.length; j++) {
     const c0 = gw[j - 1] as number, c1 = gw[j] as number;
-    if (Math.abs((rw[c1] as number) - (rw[c0] as number)) >= 3) causas.push({ tipo: "pique", carriles: [w], aviso: (tiempos[c0] as number) - AVISO, desde: tiempos[c0] as number, hasta: (tiempos[c1] as number) + RASTRO });
+    for (let k = 0; k < L; k++) {
+      if (!par && k !== w) continue;
+      const salto = par ? ((slotElegido[c1] as number[])[k] as number) - ((slotElegido[c0] as number[])[k] as number) : (rw[c1] as number) - (rw[c0] as number);
+      if (Math.abs(salto) >= 3) causas.push({ tipo: "pique", carriles: [k], aviso: (tiempos[c0] as number) - AVISO, desde: tiempos[c0] as number, hasta: (tiempos[c1] as number) + RASTRO });
+    }
   }
+  if (par) compuertas = tiempos.map((t, c) => ({ t, puesto: ((slotElegido[c] as number[])[w] as number) + 1 }));
   // El lugar a `tau` segundos de abrirse la recta: Catmull-Rom sobre lo tabulado; antes de abrirse (hasta 2 s) sigue la recta que traía.
   const en = (k: number, tau: number): number => {
     const sk = serie[k] as Float64Array;
@@ -550,6 +734,6 @@ export function conMarcha(base: PlanFinal, op: { entrada: readonly number[]; rng
     const xs = base.lanes.map((_, j) => pos(j, q));
     return 1 + xs.filter((v, j) => j !== w && v > (xs[w] as number)).length;
   };
-  const info: InfoMarcha = { duracion: T, compuertas, causas, enExtendido: en };
+  const info: InfoMarcha = { duracion: T, compuertas, causas, enExtendido: en, ...(par ? { momentos: [...historia], sustos: sustos.map((b) => b.actor), grupoT3: [w, ...punta] } : {}) };
   return { ...base, pos, marcha: info, puestos: base.puestos.map(({ q }) => ({ q, r: puestoEn(q) })) };
 }

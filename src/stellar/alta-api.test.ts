@@ -305,17 +305,17 @@ describe("los datos del texto", () => {
     expect(fallo(await abrir(TOKEN, { url: URL, fetch: f }))).toMatchObject({ clave: "altaErrIntentos1", vars: { min: "1" } });
   });
 
-  it("con un minuto, el texto va en singular en los dos idiomas: «Esperá 1 minuto», no «1 minutos»", async () => {
+  it("con un minuto, el texto va en singular en los dos idiomas: «en 1 minuto», no «en 1 minutos»", async () => {
     const { T } = await import("../i18n");
     const { f } = falso(() => responder(429, { motivo: "intentos", reintentarEn: 1_800_000_000_000 + 30_000 }));
     const e = fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: f, ahora: () => 1_800_000_000_000 }));
     expect(e).toMatchObject({ clave: "altaErrIntentos1", vars: { min: "1" } });
-    expect(textoDelError(e, (k) => String(T.es[k]))).toBe("Probaste muchas veces. Esperá 1 minuto y volvé a intentar.");
-    expect(textoDelError(e, (k) => String(T.en[k]))).toBe("Too many tries. Wait 1 minute and try again.");
+    expect(textoDelError(e, (k) => String(T.es[k]))).toBe("El canje de cupones quedó en pausa por un rato. Probá de nuevo en 1 minuto o pedile ayuda a quien organiza el evento.");
+    expect(textoDelError(e, (k) => String(T.en[k]))).toBe("Coupon redemption is paused for a while. Try again in 1 minute or ask the event organizer for help.");
     // Con más de uno, el plural de siempre.
     const { f: g } = falso(() => responder(429, { motivo: "intentos", reintentarEn: 1_800_000_000_000 + 2 * 60_000 }));
     const e2 = fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: g, ahora: () => 1_800_000_000_000 }));
-    expect(textoDelError(e2, (k) => String(T.es[k]))).toBe("Probaste muchas veces. Esperá 2 minutos y volvé a intentar.");
-    expect(textoDelError(e2, (k) => String(T.en[k]))).toBe("Too many tries. Wait 2 minutes and try again.");
+    expect(textoDelError(e2, (k) => String(T.es[k]))).toBe("El canje de cupones quedó en pausa por un rato. Probá de nuevo en 2 minutos o pedile ayuda a quien organiza el evento.");
+    expect(textoDelError(e2, (k) => String(T.en[k]))).toBe("Coupon redemption is paused for a while. Try again in 2 minutes or ask the event organizer for help.");
   });
 });

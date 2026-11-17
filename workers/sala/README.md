@@ -5,7 +5,7 @@ Un Worker de Cloudflare en `s.tinkazo.app` para que la gente de un stand escanee
 Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `workers/enlaces`), en la misma cuenta: un error de despliegue acá no puede tumbar los enlaces de los comprobantes. La cuenta, en cambio, comparte los 100.000 pedidos por día del plan gratis (ver [Plan y gasto](#plan-y-gasto)).
 
 - **Lo que guarda son bytes cifrados.** El navegador de la pantalla genera una clave (AES-GCM, 16 bytes) y la pone en el QR, después del `#`: `s.tinkazo.app/<id>#<clave>`. El fragmento no llega a ningún servidor. El celular cifra el nombre con esa clave antes de mandarlo, así que el servicio no puede leerlo.
-- **No guarda** nombres en claro, la clave, direcciones IP, navegador ni hora por persona. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección). Para el tope de altas de equipos por conexión, cada sala guarda una huella del grupo de dirección con una sal suya: queda hasta que se borra la sala, y las ventanas de 10 minutos que ya pasaron se limpian con cada envío.
+- **No guarda** nombres en claro, la clave del QR, la llave del celular, direcciones IP, navegador ni hora por persona. En las salas nuevas guarda una huella HMAC de cada nombre normalizado, calculada con una llave derivada de la clave del QR para rechazar repetidos sin poder probar candidatos, y solo la huella SHA-256 de la llave al azar del celular para reconocer sus correcciones. El celular sí recuerda localmente su llave y el nombre con que quedó, por sala y durante 12 horas como máximo. El token de la pantalla se guarda solo como huella SHA-256. Para contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella de la dirección con una sal de esa hora (no se puede devolver a la dirección). Para el tope de altas de equipos por conexión, cada sala guarda una huella del grupo de dirección con una sal suya: queda hasta que se borra la sala, y las ventanas de 10 minutos que ya pasaron se limpian con cada envío.
 - **Se borra solo:** una alarma a las 10 horas de creada hace `deleteAll()`; antes, «Cerrar la sala» hace lo mismo. Los nombres cifrados quedan en el objeto hasta entonces (no 5 minutos): una compu que se cuelga en una feria no puede perder la lista, y el servicio sigue sin poder leerlos.
 - **Quitar un nombre** con un toque lo saca también del objeto.
 - **El filtro de palabras corre en la pantalla** (`src/sala/filtro.ts`), no acá: ningún servidor lee los nombres. Lo que coincide queda en «Para revisar».
@@ -15,14 +15,24 @@ Es un script aparte (`tinkazo-sala`) del de los enlaces (`tinkazo-enlaces`, en `
 | Pedido | Qué hace | Límite |
 | --- | --- | --- |
 | `POST /v1/sala` | Crea la sala: `201 {"id", "token", "vence"}`. Solo desde `tinkazo.app`, `www`, las vistas de Vercel y `localhost` | 5 por dirección y por hora; 100 por día en total |
-| `POST /v1/sala/<id>` | Un nombre cifrado en `text/plain` (base64url, de 30 a 256 bytes): `201 {"n"}`. Es lo que manda la página del celular | 400 por sala; 120 por minuto por sala |
-| `GET /v1/sala/<id>/nombres?desde=N` | Los nombres cifrados desde `N`: `[{"n","d"}]`. Con `Authorization: Bearer <token>`. Lo usa la pantalla al recargarse y, si el WebSocket se cae, cada 3 s | |
+| `POST /v1/sala/<id>` | JSON `{"d","h","llave"}`: el nombre cifrado (base64url, de 30 a 256 bytes), su huella de 32 bytes y la llave del celular de 16 bytes, las dos en base64url sin relleno. `201 {"n"}` al anotarse; `200 {"n","r"}` al corregir. Cuerpo de hasta 700 bytes | 400 por sala; 240 por minuto por sala; cinco correcciones por celular |
+| `GET /v1/sala/<id>/nombres?desde=N` | Los nombres cifrados desde `N`: `[{"n","d","r"?}]`. `r` trae los números que reemplaza una corrección. Con `Authorization: Bearer <token>`. Lo usa la pantalla al recargarse y, si el WebSocket se cae, cada 3 s | |
 | `DELETE /v1/sala/<id>/nombres/<n>` | Saca un nombre. Con el token | |
 | `GET /v1/sala/<id>/pantalla` | WebSocket hacia la pantalla. El token va en el primer mensaje (`{"t":"hola","token"}`), no en la dirección. Una pantalla a la vez: la que se presenta desplaza a la anterior (cierre 4000). Un token malo cierra con 4401 | hasta 6 sockets sin presentarse |
 | `DELETE /v1/sala/<id>` | Cierra la sala y borra todo. Con el token | |
 | `GET /<id>` | La página del celular: un HTML con su CSS y su JS adentro, en español y en inglés. Sin bajar el sitio, sin depender de Vercel y sin CORS | |
 
-Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N,"estado":...,"ronda":...}`, `{"t":"nombre","n","d"}`, `{"t":"quitado","n"}`, `{"t":"ronda",...}` y `{"t":"lista-cerrada"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+Mensajes del socket hacia la pantalla: `{"t":"listo","hay":N,"estado":...,"ronda":...}`, `{"t":"nombre","n","d","r"?}`, `{"t":"quitado","n"}`, `{"t":"ronda",...}` y `{"t":"lista-cerrada"}`. Un `ping` de texto se contesta solo con `pong` sin despertar al objeto.
+
+### Una alta por celular y nombres únicos
+
+En una sala de la **forma 2**, el alta exige `h` y `llave`; sin alguno contesta `400 {"error":"forma"}`. La primera vez entra con `201`. Si otro celular ya anotó el mismo nombre, sin distinguir mayúsculas, espacios de más ni caracteres invisibles, contesta `409 {"error":"repetido"}` y no cambia nada. La huella se calcula como HMAC-SHA-256 del nombre normalizado en UTF-8, con una llave que es SHA-256 de `Tinkazo/sala/huella-de-nombre/v1` más los 16 bytes de la clave del QR. Otra sala tiene otra clave y, por tanto, otras huellas.
+
+Si la llave ya tiene una fila, el alta es una **corrección**: borra el número viejo e inserta uno nuevo, con `200`. La respuesta, el mensaje del socket y la consulta traen en `r` todos los números que ese celular tuvo antes. La pantalla quita primero esos números y después suma el nombre nuevo, incluso si perdió el WebSocket. Hay hasta cinco correcciones con cambio de nombre; la sexta contesta `429 {"error":"correcciones"}`. Volver a mandar el mismo nombre conserva el número, contesta `200`, no emite mensajes y no gasta una corrección. Si quien organiza quita la fila, se borran también las huellas y ese celular puede anotarse otra vez.
+
+Al recargar, el celular muestra con qué nombre se anotó desde ese navegador, pero no afirma que el nombre siga en la pantalla: quien organiza pudo quitarlo o la sala pudo terminar. Es una decisión deliberada no consultar a la sala por ese estado, para no agregar una consulta que diga quién está anotado. El texto pide corregir el nombre o avisar a quien atiende si la persona no se ve.
+
+Una sala creada antes de este cambio no tiene la marca `forma = 2` ni las columnas nuevas. Mientras viva (diez horas como máximo), acepta tanto el `text/plain` anterior con `d` solo como el JSON nuevo, del que usa únicamente `d`, y mantiene las reglas viejas: no reconoce al celular ni rechaza repetidos. No se migra su tabla.
 
 ### El flujo interactivo (juegos interactivos)
 
@@ -38,6 +48,7 @@ Mensajes nuevos del socket hacia la pantalla: `{"t":"ronda","r","randomness","li
 
 La privacidad no cambia: este servicio sigue sin poder leer nombres (solo bytes cifrados), y la ronda compartida no publica la lista: la huella y el número alcanzan para que cada celular, que ya descifró la lista con la clave del QR, calcule los ganadores con el mismo `select` del protocolo y vea si le tocó. La lista del celular tiene que ser exactamente la que se selló: si la huella no cuadra, la vista no afirma nada.
 
+
 ### Los equipos de un evento (registro con cuenta)
 
 La misma sala sirve para que los equipos de un evento (Space Apps y parecidos) se anoten con su cuenta de Stellar desde el celular de su encargado: la página `equipos.html` del sitio (no la de este Worker) abre el QR, y habla con estos pedidos desde `tinkazo.app`. Detrás de la bandera `VITE_EQUIPOS` del sitio; el Worker no sabe de banderas: sin registro armado, nadie puede anotar nada (`409`).
@@ -46,7 +57,7 @@ La misma sala sirve para que los equipos de un evento (Space Apps y parecidos) s
 | --- | --- | --- |
 | `PUT /v1/sala/<id>/config` | Quien organiza arma el registro: `{"modo","evento","cuenta"}`. `modo` es `cupon` (el equipo queda anotado y recibe el cupón gratis) o `sorteo` (pide participar, quien organiza lo acepta y tiene que haber hecho un sorteo con su cuenta). Con el token. `204` | 1.000 bytes |
 | `GET /v1/sala/<id>/publico` | Sin token: `{"config","equipos"}` (cuántos hay). Es lo que lee la página del celular antes de pedir nada | |
-| `POST /v1/sala/<id>/equipos` | `{"cuenta","d","llave"}`: la cuenta `G…` en claro (es pública), los datos del equipo cifrados con la clave del QR (de 30 a 1.100 bytes) y la llave del celular (ver abajo). Solo desde el sitio. `201 {"n","estado"}`; con la misma cuenta y la misma llave cambia los datos y conserva el número y el estado; con otra llave, `409 {"error":"ajena"}` y no cambia nada. Sin llave o con una mal formada, `400` | 200 por sala; 120 por minuto por sala (los mismos de los nombres); por conexión, 60 equipos nuevos y 300 envíos cada 10 minutos (`429 {"error":"cupo-conexion"}` con `Retry-After`) |
+| `POST /v1/sala/<id>/equipos` | `{"cuenta","d","llave"}`: la cuenta `G…` en claro (es pública), los datos del equipo cifrados con la clave del QR (de 30 a 1.100 bytes) y la llave del celular (ver abajo). Solo desde el sitio. `201 {"n","estado"}`; con la misma cuenta y la misma llave cambia los datos y conserva el número y el estado; con otra llave, `409 {"error":"ajena"}` y no cambia nada. Sin llave o con una mal formada, `400` | 200 por sala; 120 por minuto por sala, con una ventana propia e independiente de la de nombres; por conexión, 60 equipos nuevos y 300 envíos cada 10 minutos (`429 {"error":"cupo-conexion"}` con `Retry-After`) |
 | `GET /v1/sala/<id>/equipos?desde=V` | Con el token: los equipos que cambiaron desde la versión `V` (`[{"n","cuenta","d","estado","v"}]`). `v` sube con cada alta o cambio de estado | |
 | `GET /v1/sala/<id>/equipos/<cuenta>` | Sin token: `{"n","estado"}` de ese equipo, o `404`. Lo pregunta el celular del encargado cada 15 s mientras la página está a la vista | |
 | `PUT /v1/sala/<id>/equipos/<n>` | Con el token: `{"estado"}`, uno de `solicitud`, `aceptado`, `sorteo`, `cupon`. `204` | |
@@ -74,7 +85,7 @@ Este protocolo (`llave` en el alta, `ajena` y `cupo-conexion`) pide subir **junt
 
 Qué significa cada estado y cuándo lo cambia la pantalla de quien organiza (con lo que lee de la cadena: los pagos de la cuenta del evento y los sellos del contrato por organizador) está en `src/equipos/estado.ts`.
 
-**Los topes viven en los objetos, porque ahí son exactos:** 400 nombres por sala (exacto, en SQLite) y 120 por minuto (en memoria: si el objeto se desaloja a mitad de un minuto, ese minuto caben otros 120; solo frena el ritmo, el de 400 no se reinicia); 5 salas por dirección por hora (en IPv6, por bloque /64) y 100 por día en un objeto aparte (`Cupos`), los dos en su SQLite: dormirse o reiniciarse no los pone en cero. El límite es por sala y no por dirección porque todo un recinto puede salir por una sola IP.
+**Los topes viven en los objetos, porque ahí son exactos:** 400 nombres por sala (exacto, en SQLite) y 240 por minuto (en memoria: si el objeto se desaloja a mitad de un minuto, ese minuto cabe otra ventana entera; solo frena el ritmo, el de 400 no se reinicia); 5 salas por dirección por hora (en IPv6, por bloque /64) y 100 por día en un objeto aparte (`Cupos`), los dos en su SQLite: dormirse o reiniciarse no los pone en cero. El límite es por sala y no por dirección porque todo un recinto puede salir por una sola IP.
 
 ### Muchas direcciones
 
@@ -98,7 +109,7 @@ Cuentas de una feria (estimaciones, no medidas): 300 nombres son unos 300 pedido
 npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:600000
 node probar.mjs http://127.0.0.1:8792            # unos 50 chequeos (con la llave de cada celular y el tope por conexión); crea tres salas y no deja ninguna
 node probar.mjs http://127.0.0.1:8792 --cupos    # el tope de 5 salas por hora (queda guardado: para repetirlo, otra carpeta con --persist-to o esperar una hora)
-node probar.mjs http://127.0.0.1:8792 --tope     # 400 nombres por sala: cinco minutos
+node probar.mjs http://127.0.0.1:8792 --tope     # 400 nombres por sala: unos dos minutos
 # La alarma que borra la sala sola se prueba aparte, con una vida corta (conviene un Worker nuevo, por el cupo de salas por hora):
 npx wrangler@4 dev --port 8792 --var VIDA_PRUEBA_MS:4000
 node probar.mjs http://127.0.0.1:8792 --alarma
@@ -112,11 +123,13 @@ De punta a punta, con Chrome (desde la raíz del repo): `pnpm build && pnpm prev
 
 - En una ronda de ejemplo, el cartel final dice «Salió», pero las tarjetas de los juegos y parte del relato todavía dicen «Gana». Es solo presentación; no cambia nada de lo que se elige.
 - El filtro de palabras (`src/sala/filtro.ts`) es una lista corta y corre en la pantalla: no atrapa todo, alguien tiene que mirarla.
-- Los nombres repetidos se descartan en la lista canónica de la ronda; las variantes salen marcadas como repetidas.
+- En las salas nuevas, el servicio rechaza los nombres repetidos. En las que hayan quedado abiertas de la versión anterior, las variantes siguen marcadas como repetidas y se descartan en la lista canónica de la ronda.
 
 ## Desplegar y encender
 
-Son los pasos, en este orden:
+Para esta actualización de la sala de nombres, hay que publicar **primero el sitio y después el Worker**. Un sitio viejo que haya quedado consultando sin WebSocket puede mostrar el nombre anterior junto al corregido contra el servicio nuevo. Recargar esa pantalla lo resuelve, y publicar en ese orden evita la combinación.
+
+Con el sitio ya publicado, los pasos del Worker son:
 
 ```bash
 # 1. El Worker, desde esta carpeta, con la sesión de wrangler login de la cuenta de Tinkazo.

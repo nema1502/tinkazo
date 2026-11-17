@@ -233,6 +233,28 @@ export const veredictoP = (p) => (p < UMBRAL.alfa ? "delator" : p < UMBRAL.mirar
  *
  * `mas` es el casillero que más se aleja de lo esperado (en desvíos).
  */
+/**
+ * El acumulado de un reparto a lo largo de las rondas: los conteos y la suma de las probabilidades de cada casillero, ronda por ronda (las
+ * de la ronda si las trae; si no, parejas). Con la suma, lo esperado de cada casillero es lo que se espera de verdad aunque el reparto
+ * cambie de una ronda a otra (cuántas van arriba en la subfila, cuántas finalistas comparten fila). Antes se tomaban las de la primera ronda.
+ */
+export function crearAcumulado(K) {
+  return { K, conteos: new Array(K).fill(0), sumaProbs: new Array(K).fill(0), conProbs: false, rondas: 0 };
+}
+
+/** Suma la ronda `r` (`{ K, k, probs? }`) al acumulado; devuelve false, sin sumar nada, si trae otra cantidad de casilleros. */
+export function sumarAlAcumulado(x, r) {
+  if (r.K !== x.K) return false;
+  x.conteos[r.k]++;
+  x.rondas++;
+  if (r.probs) x.conProbs = true;
+  for (let j = 0; j < x.K; j++) x.sumaProbs[j] += r.probs ? r.probs[j] : 1 / x.K;
+  return true;
+}
+
+/** Las probabilidades con que se juzga el acumulado: la media de las de cada ronda, o null (parejas) si ninguna ronda trajo las suyas. */
+export const probsDelAcumulado = (x) => (x.conProbs && x.rondas ? x.sumaProbs.map((v) => v / x.rondas) : null);
+
 export function evaluarReparto(conteos, probs = null) {
   const K = conteos.length;
   const n = conteos.reduce((a, b) => a + b, 0);

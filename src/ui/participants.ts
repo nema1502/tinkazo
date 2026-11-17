@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
 import { anchoringAvailable, topeDeGanadores } from "../stellar/config";
-import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
+import { enEnsayo, enPractica, enStand, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
 import { MAX_WINNERS } from "../protocol/select";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
@@ -186,6 +186,16 @@ function pintarResumen(): void {
   // Se muestra cuando se puede sellar (la cuenta de siempre) y dice las personas con la regla de la cuenta.
   const nombres = parseNames();
   const n = cuentaParaMostrar(nombres).personas;
+  // En el stand no hay sello, premio ni ganador: solo la cuenta de esta ronda.
+  if (enStand()) {
+    if (!n || listaCerrada()) {
+      el.style.display = "none";
+      return;
+    }
+    el.textContent = T[getLang()].standResumen(n);
+    el.style.display = "";
+    return;
+  }
   if (contar(nombres, modesVisible()).personas < 2 || listaCerrada()) {
     el.style.display = "none";
     return;
@@ -204,7 +214,7 @@ function pintarResumen(): void {
   // las líneas. Con el modo prendido eso se decide por el modo (`ordenNoCabe`) y no por el recorte: sigue siendo un
   // orden que no se puede sellar, y no un sorteo común con ganadores.
   el.textContent = ordenNoCabe(entradas)
-    ? L.turnsSellarTope(entradas, n)
+    ? L.turnsSellarTope(entradas, n, topeDeGanadores())
     : isTurnOrder(entradas, k, premio)
       ? L.turnsSellarResumen(entradas, n)
       : L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio, entradas);
@@ -244,9 +254,9 @@ export function bindParticipants(): void {
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
   $("prize").addEventListener("input", guardarPronto);
   $("prize-chips").addEventListener("click", guardarPronto);
-  // El campo es un número: se escribe (`input`) y se confirma al salir (`change`). Los atajos mandan `change`.
+  // Los botones del contador y los atajos confirman la cantidad con `change`. También se escuchan los valores que otro código pone.
   for (const evento of ["input", "change"]) $("nw").addEventListener(evento, guardarPronto);
-  // El resumen de debajo de "Sellar la lista" sigue al premio y a la cantidad de ganadores.
+  // El resumen de junto a "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
@@ -651,6 +661,19 @@ function numerosDeLaLista(texto: string): Array<{ nombre: string; n: number }> {
 }
 
 /**
+ * ¿Esos números pueden ser las veces que participa cada uno? Solo si todos los números pegados están entre 1 y el máximo
+ * por persona (10). Una lista con edades, mesas o números de socio trae alguno más grande, y ahí no se pregunta nada: la
+ * pregunta es para quien de verdad pegó las veces que participa cada uno.
+ */
+function sonVecesQueParticipa(texto: string): boolean {
+  const pegados = texto
+    .split(/\r?\n/)
+    .filter(terminaEnNumero)
+    .map((linea) => Number(linea.slice(linea.lastIndexOf(",") + 1).trim()));
+  return pegados.length > 0 && pegados.every((n) => Number.isInteger(n) && n >= 1 && n <= TOPE_POR_PERSONA);
+}
+
+/**
  * Pinta todo lo del modo: la pregunta por los números que ya trae la lista, el botón que abre el panel y,
  * si está abierto, el panel entero. Lo llama `renderNames`, así que cualquier cambio del cuadro (tocar un
  * contador, editar a mano, cambiar de idioma o de modo) lo deja al día.
@@ -761,7 +784,7 @@ function pintarPreguntaDeNumeros(): void {
   const aviso = document.getElementById("participaciones-aviso");
   if (!aviso) return;
   const texto = $<HTMLTextAreaElement>("ta").value;
-  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros ? numerosDeLaLista(texto) : [];
+  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
   aviso.style.display = numeros.length ? "" : "none";
   if (!numeros.length) return;
   const pregunta = document.getElementById("part-pregunta-texto");
@@ -903,7 +926,28 @@ export function setList(text: string, clearSummary = true): void {
  * importador no. La demo no guarda ni repone nada.
  */
 const BORRADOR = "tinkazo.borrador";
+/** La lista que quien atiende elige llevar del stand a la página nueva. Se borra al leerla. */
+export const CLAVE_LISTA_STAND = "tinkazo.stand-lista";
 let guardarLuego = 0;
+
+/** Si entrar al stand dejó un borrador con nombres, o hay uno que no se puede leer: llevar la lista nueva lo reemplaza y hay que avisarlo. */
+export function borradorConNombres(): boolean {
+  let guardado: string | null;
+  try {
+    guardado = sessionStorage.getItem(BORRADOR);
+  } catch {
+    return false;
+  }
+  if (guardado === null) return false;
+  try {
+    const b = JSON.parse(guardado) as { texto?: unknown } | null;
+    const texto = b?.texto;
+    return typeof texto === "string" && canonicalList(texto).length > 0;
+  } catch {
+    // Había algo guardado: aunque esté dañado, la lista nueva va a ocupar su lugar.
+    return true;
+  }
+}
 
 /** Guarda ya lo que hay en el cuadro, el premio y la cantidad. Lo llama también la ventana de ingreso, antes de irse a Google. */
 export function guardarBorrador(): void {
@@ -943,6 +987,18 @@ export function olvidarBorrador(): void {
  */
 export function reponerBorrador(): void {
   if (sinGrabar() || listaCerrada() || $<HTMLTextAreaElement>("ta").value.trim()) return;
+  // La lista elegida al salir del stand manda sobre el borrador anterior. Es de un solo uso, aunque esté vacía.
+  let listaStand: string | null = null;
+  try {
+    listaStand = sessionStorage.getItem(CLAVE_LISTA_STAND);
+    sessionStorage.removeItem(CLAVE_LISTA_STAND);
+  } catch {
+    /* sin almacenamiento, se repone el borrador como siempre */
+  }
+  if (listaStand?.trim()) {
+    setList(listaStand);
+    return;
+  }
   type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
   let b: Guardado;
   try {
@@ -954,13 +1010,16 @@ export function reponerBorrador(): void {
   // El modo de varias participaciones vuelve con la lista, antes de pintarla: sin él, la lista repartida se
   // contaría por líneas y «No está» sacaría una línea en vez de a la persona entera.
   if (b.modo === "varias") recordarModo("varias");
+  // El orden de turnos también vuelve antes que la lista, y sin la cantidad guardada: en un orden la cantidad es la de la
+  // lista. Prendido después de poner la cantidad, el modo la tomaba como la de antes del orden, y volver a Sortear premios
+  // dejaba a todos como ganadores.
+  const enTurnos = b.modo === "turnos";
+  if (enTurnos) ponerModoTurnos(true);
   setList(b.texto);
   if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
   const nw = Number(b.nw);
   // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
-  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
-  // El modo «Orden de turnos» vuelve con la lista (la cantidad pasa a ser la de la lista, no la que quedó guardada).
-  if (b.modo === "turnos") ponerModoTurnos(true);
+  if (!enTurnos && Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
   if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 

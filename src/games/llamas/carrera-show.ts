@@ -3,9 +3,9 @@ import { planoSobre } from "../pixi/kit/director";
 import { PRIORIDAD, PROTECCION, crearGuion } from "../pixi/kit/guion";
 import type { Caja, Contexto, FocoPunto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoPaso, Toma, Vista, Zona } from "../pixi/kit/tipos";
 import { crearOrden, type Orden } from "./carrera-orden";
-import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, barajar, corto } from "./carrera-base";
+import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, SENUELOS, TARJETA, T_NOMBRES, T_VUELO, alfabetico, barajar, corto } from "./carrera-base";
 import { CIERRE_TRAMO, ESP_MIN, armarTiempos, duracionGrupo, type Terreno, type Tiempos, type Tramo } from "./carrera-tiempos";
-import { ENTRE_FINAL, LLEGADA_TARDE, MARCA_PORTON, armarTandas, tandasPara, type Tanda } from "./carrera-tandas";
+import { ENTRE_FINAL, LLEGADA_TARDE, MARCA_PORTON, armarTandas, grupoDeTandas, tandasPara, type Tanda } from "./carrera-tandas";
 import { duracionNominal, grupoDe, normalDe, tSalidaDe } from "./carrera-duracion";
 
 export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, corto, duracionNominal, grupoDe, normalDe, tSalidaDe };
@@ -13,9 +13,9 @@ import { planRace, type Plan as PlanFinal } from "./plan";
 import { carrilesDe, planRecta } from "./carrera-recta";
 import { conCierre } from "./carrera-cierre";
 import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
-import { conObstaculos } from "./carrera-obstaculos";
+import { conObstaculos, finDelEfecto, VUELO_ESCUPIDA } from "./carrera-obstaculos";
 import { conTopeDeAceleracion } from "./carrera-tope";
-import { AVISO, CARRIL_ANTES, CARRIL_DURA, CUERPO, RASTRO, conMarcha, type Causa } from "./carrera-marcha";
+import { AVISO, CARRIL_ANTES, CARRIL_DURA, CUERPO, PUESTOS_AL_90, RASTRO, conMarcha, momentosCiegos, type Causa } from "./carrera-marcha";
 import { programarFinal, sonarEchada, sonarObstaculo, sonarPaso } from "../../sonidos/carrera-ganchos";
 
 /**
@@ -103,6 +103,10 @@ export interface Datos {
   final: PlanFinal;
   /** Los índices de las ocho de la final, por carril. */
   lanes: number[];
+  /** La semilla de la lista de rocas y matas (`carrera-rocas.ts`): un sorteo propio, que no mueve ningún otro. */
+  semillaRocas: number;
+  /** La semilla del reparto de las filas del grupo según el carril (`carrera-filas.ts`): un sorteo propio, que no mueve ningún otro. */
+  semillaFilas: number;
   /** Las que salen del corral, en el orden de la fila de salida. */
   gente: number[];
   tiempos: Tiempos;
@@ -163,6 +167,47 @@ export interface Datos {
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
+/** Cuántos segundos antes del hecho dice el relator cada obstáculo: las piedras con la piedra en el aire, la valla si cabe, el remolino cuando entra. */
+export const AVISO_PIEDRAS = 0.8;
+export const AVISO_VALLA = 1.2;
+export const AVISO_REMOLINO = 1.0;
+
+/** Las posturas de los momentos de la historia (`plan.ts`): el tropiezo, la plantada, el pique y la escupida, de quien escupe y de quien la recibe. */
+const POSTURAS_HISTORIA = new Set(["tropiezo", "plantada", "pique", "escupida", "escupido"]);
+/**
+ * La recta de siempre sin las posturas de la historia. Los momentos los escribe el director alrededor de la ganadora: la escupida, la plantada y
+ * el pique nunca le tocan, y el tropiezo le toca el doble de lo parejo. Si se vieran, delatarían. Siguen actuando en la marcha (`conMarcha`), que
+ * no cambia: se ven como cambios de ritmo de una carrera. Lo que se ve como incidente sale de los obstáculos, que son ciegos.
+ */
+function sinMomentos(plan: PlanFinal): PlanFinal {
+  return {
+    ...plan,
+    beatOf: (k, q) => {
+      const m = plan.beatOf(k, q);
+      return m && POSTURAS_HISTORIA.has(m.kind) ? null : m;
+    },
+  };
+}
+
+/**
+ * Con los señuelos (`SENUELOS`): las posturas que se ven son las de los momentos que actúan en la marcha pareja (`InfoMarcha.momentos`), que
+ * le tocan a cualquiera. Las de la historia del director siguen ocultas. Cuánto dura cada postura, lo mismo que en `planRace`.
+ */
+function conMomentosCiegos(plan: PlanFinal): PlanFinal {
+  const ms = plan.marcha?.momentos ?? [];
+  return {
+    ...plan,
+    beatOf: (k, q) => {
+      for (const b of ms) {
+        const dura = b.kind === "plantada" ? 0.075 : b.kind === "pique" ? 0.09 : b.kind === "escupida" ? 0.05 : 0.035;
+        if ((b.actor === k || b.target === k) && q >= b.at && q < b.at + dura) return { kind: b.target === k && b.actor !== k ? "escupido" : b.kind, p: (q - b.at) / dura };
+      }
+      const m = plan.beatOf(k, q);
+      return m && POSTURAS_HISTORIA.has(m.kind) ? null : m;
+    },
+  };
+}
+
 /** La recta de la carrera nueva: los carriles con el azar de la ronda y el camino con el suyo, aparte del grupo y de la ganadora. */
 function rectaNueva(ctx: Contexto, campeona: number): PlanFinal {
   const lanes = carrilesDe(ctx.nombres, campeona, ctx.rng, ctx.ganadores.slice(1));
@@ -172,9 +217,25 @@ function rectaNueva(ctx: Contexto, campeona: number): PlanFinal {
 export interface OpcionesCarrera {
   /** La carrera nueva, detrás de `?carrera=nueva`. Sin ella, la de siempre. */
   nueva?: boolean;
+  /** La marcha pareja en la carrera de siempre (`SENUELOS`, que es lo que vale si no se dice). Las pruebas la piden apagada para comparar con la de antes. */
+  senuelos?: boolean;
 }
 
-export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos> {
+/**
+ * La recta de la final, por capas: el plan base (`sinObstaculos`), la marcha (`marchada`), los obstáculos sobre la marcha (`conObs`) y el plan final,
+ * con el tope de aceleración sobre la suma (`final`). Usa `ctx.rng` (el plan base de la de siempre), así que va primero. Las pruebas comparan `final`
+ * contra la marcha con el mismo tope y sin obstáculos para medir dónde termina de verdad cada efecto.
+ */
+/**
+ * Si con `n` personas las finalistas pasan a sus carriles tarde: con tandas y nadie más en el grupo, la recta se abre en la salida y las finalistas
+ * pasan a sus carriles hasta pasada la mitad de la recta (`t0Carriles` en `planCarrera`). Varias van por la misma fila, así que antes de C3 no
+ * caen piedras (`PIEDRAS_TARDE_DESDE` en `carrera-obstaculos.ts`). Depende solo de cuántas son.
+ */
+export function carrilesTardePara(n: number): boolean {
+  return tandasPara(n) > 0 && grupoDeTandas(n) <= FINALISTAS;
+}
+
+export function capasDeLaRecta(ctx: Contexto, op: OpcionesCarrera = {}): { sinObstaculos: PlanFinal; entradaLanes: number[]; marchada: PlanFinal; conObs: PlanFinal; final: PlanFinal } {
   const nueva = !!op.nueva;
   const names = ctx.nombres;
   const n = names.length;
@@ -183,15 +244,67 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   // que se decide en los últimos metros (`carrera-recta.ts`) y tiene su azar aparte.
   // La de siempre lleva además el cierre (`carrera-cierre.ts`): cómo se decide el último tramo, con su azar aparte.
   // Y, en las dos, los obstáculos (`carrera-obstaculos.ts`): piedras, valla y ráfaga, con su azar aparte.
+  // Los señuelos: la marcha pareja (`SENUELOS`). Con ellos la ganadora entra a la recta en cualquier puesto, una vez de cada L (`entradaPareja`),
+  // y con 2 a 7 personas corre en el carril que le tocó al barajar, en cualquier historia (`carrilParejo`).
+  const senuelos = (op.senuelos ?? SENUELOS) && !nueva;
   const sinObstaculos = nueva
     ? rectaNueva(ctx, campeona)
-    : conCierre(planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) }), sembrar(Math.floor(ctx.azar("carrera:cierre") * 4294967296)));
+    : conCierre(planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1), entradaPareja: senuelos, carrilParejo: senuelos }), sembrar(Math.floor(ctx.azar("carrera:cierre") * 4294967296)));
   // La marcha (`carrera-marcha.ts`): el orden en que entran a la recta es el de la final al 7 % (la carrera nueva, al 0 %), y la recta pasa a
   // ser una curva con la velocidad y la aceleración acotadas; después los obstáculos se suman sobre esa curva.
   const qEntrada = nueva ? 0 : 0.067;
   const entradaLanes = sinObstaculos.lanes.map((_, k) => k).sort((a, b) => sinObstaculos.pos(b, qEntrada) - sinObstaculos.pos(a, qEntrada) || a - b);
   // Las capas (la marcha y los obstáculos) se suman sin mirarse: el tope de aceleración se pone sobre la suma (`carrera-tope.ts`).
-  const final = conTopeDeAceleracion(conObstaculos(conMarcha(sinObstaculos, { entrada: entradaLanes, rng: sembrar(Math.floor(ctx.azar("carrera:marcha") * 4294967296)) }), sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296))));
+  const carrilesTarde = carrilesTardePara(n);
+  // Los señuelos: la marcha pareja con su azar aparte (el mismo en cada reintento) y los momentos ciegos. Sus sorteos salen de etiquetas propias
+  // (`carrera:momentos`, `carrera:senuelos`): pedirlas no mueve ningún otro sorteo, así que con el interruptor apagado la carrera es la de antes.
+  const momentos = senuelos ? momentosCiegos(sinObstaculos.lanes.length, sembrar(Math.floor(ctx.azar("carrera:momentos") * 4294967296))) : undefined;
+  const semillaSenuelos = Math.floor(ctx.azar("carrera:senuelos") * 4294967296);
+  const capas = (intento: number): { marchada: PlanFinal; conObs: PlanFinal; final: PlanFinal } => {
+    const marchada = conMarcha(sinObstaculos, { entrada: entradaLanes, rng: sembrar(Math.floor(ctx.azar(intento ? `carrera:marcha:${intento}` : "carrera:marcha") * 4294967296)), ...(senuelos ? { momentos, senuelos: sembrar(semillaSenuelos) } : {}) });
+    const conObs = conObstaculos(nueva ? marchada : senuelos ? conMomentosCiegos(marchada) : sinMomentos(marchada), sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296)), { carrilesTarde });
+    return { marchada, conObs, final: conTopeDeAceleracion(conObs) };
+  };
+  // A tres segundos de la meta la ganadora es una de las cuatro de adelante (`PUESTOS_AL_90`). La marcha lo cumple, pero los obstáculos se suman
+  // después y, si la deja apenas delante de la quinta, una valla mal saltada o una escupida le pueden quitar ese poco (la ronda 2890 del auditor de
+  // delatores con 60 personas). Se mira sobre el plan final y, si queda afuera, se arma otra marcha con el azar siguiente: los obstáculos salen del
+  // mismo sorteo, sin mirar a nadie. Es la misma regla de la marcha (descartar el arreglo que la deja afuera), puesta después de todas las capas.
+  const primera = capas(0);
+  // Con los señuelos se busca primero una que deje a las cuatro del grupo adelante. Si ninguna, la primera que deje a la ganadora (lo de siempre).
+  let deRepuesto: typeof primera | null = fueraAlT3(primera.final, true) ? null : primera;
+  for (let intento = 1; intento <= REINTENTOS_T3 && fueraAlT3(primera.final); intento++) {
+    const otra = capas(intento);
+    if (!fueraAlT3(otra.final)) return { sinObstaculos, entradaLanes, ...otra };
+    if (!deRepuesto && !fueraAlT3(otra.final, true)) deRepuesto = otra;
+  }
+  return { sinObstaculos, entradaLanes, ...(deRepuesto ?? primera) };
+}
+
+/** Cuántas marchas más se prueban si los obstáculos dejan a la ganadora fuera de las cuatro de adelante a tres segundos de la meta. */
+const REINTENTOS_T3 = 8;
+
+/**
+ * Si en el plan `p` la ganadora (`story.winner`) queda fuera de las cuatro de adelante a tres segundos de la meta, en el reloj de la recta. Con la
+ * marcha pareja, si queda afuera cualquiera del grupo de punta (`marcha.grupoT3`): la regla es la misma para las cuatro, y `soloLaGanadora` mira
+ * solo a ella (el repuesto, si ningún reintento deja a las cuatro).
+ */
+function fueraAlT3(p: PlanFinal, soloLaGanadora = false): boolean {
+  const L = p.lanes.length;
+  if (L < 2) return false;
+  const foto = Math.min(1, p.foto);
+  const qT = qDeSegundos(segundosDeQ(1, foto) - 3, foto);
+  const afuera = (k: number): boolean => p.lanes.filter((_, j) => j !== k && p.pos(j, qT) > p.pos(k, qT)).length + 1 > Math.min(PUESTOS_AL_90, L);
+  // Con los señuelos, la regla es para las cuatro del grupo de punta, no solo para la ganadora.
+  const grupo = p.marcha?.grupoT3;
+  return grupo && !soloLaGanadora ? grupo.some(afuera) : afuera(p.story.winner);
+}
+
+export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos> {
+  const nueva = !!op.nueva;
+  const names = ctx.nombres;
+  const n = names.length;
+  const campeona = ctx.ganadores[0] ?? 0;
+  const { entradaLanes, final } = capasDeLaRecta(ctx, op);
   const lanes = final.lanes;
   const arco = final.story.arc;
   const cortos = names.map(corto);
@@ -373,18 +486,23 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   // En la de siempre, los cambios que se dicen son los de la marca, y se arman con el guion (más abajo).
   const cambios = nueva ? orden.cambios.filter((c) => !pisaEchada(c.t) && c.t < tAbre - 0.6) : [];
   for (const c of cambios) sucesos.push({ desde: c.t, tipo: "adelante", quien: c.quien });
-  const bt = final.story.beats.map((b) => ({ b, t: tDeQ(b.at) })).sort((a, b) => a.t - b.t);
+  // En la de siempre los momentos de la historia no se ven (`sinMomentos`): no son sucesos ni líneas del relator.
+  // Con los señuelos, los momentos que actúan le tocan a cualquiera: se ven (`conMomentosCiegos`) y se dicen, sin nombre, como en la nueva.
+  const senuelos = (op.senuelos ?? SENUELOS) && !nueva;
+  const bt = (nueva ? final.story.beats : senuelos ? (final.marcha?.momentos ?? []) : []).map((b) => ({ b, t: tDeQ(b.at) })).sort((a, b) => a.t - b.t);
   for (const { b, t } of bt) {
     if (b.kind === "pique") sucesos.push({ desde: t, tipo: "adelante", quien: lanes[b.actor] });
     else if (b.kind === "tropiezo" || b.kind === "plantada") sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.actor] });
     else if (b.kind === "escupida" && b.target !== undefined) sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.target] });
   }
-  // Los obstáculos (`carrera-obstaculos.ts`): a quien le cae la piedra, a quien le toca el viento y a quien le sale mal el salto, también frenan.
+  // Los obstáculos (`carrera-obstaculos.ts`): a quien le cae la piedra y a quien tumba la valla, también frenan. El viento es de un grupo: no anota a nadie.
+  // El freno de las piedras se anota un instante antes de que la llama empieza a frenar (medio segundo antes de que caiga la piedra): así, a los 0,3 s
+  // de que el relator la nombra, el cuerpo ya lo está mostrando.
   const obstaculos = final.obstaculos ?? [];
   for (const o of obstaculos) {
-    if (o.tipo === "piedras") sucesos.push({ desde: tDeQ(o.q + 0.004), tipo: "freno", quien: lanes[o.carriles[0] as number] });
+    if (o.tipo === "piedras") sucesos.push({ desde: tDeQ(o.q) - AVISO_PIEDRAS + 0.25, tipo: "freno", quien: lanes[o.carriles[0] as number] });
+    else if (o.tipo === "escupida") sucesos.push({ desde: tDeQ(o.q) + VUELO_ESCUPIDA, tipo: "freno", quien: lanes[o.carriles[0] as number] });
     else if (o.tipo === "salto") for (const m of o.malas) sucesos.push({ desde: tDeQ(o.llegan[m] as number), tipo: "freno", quien: lanes[m] });
-    else sucesos.push({ desde: tDeQ(o.q + 0.02), tipo: "freno", quien: lanes[o.carriles[0] as number] });
   }
   sucesos.push({ desde: tCrown, tipo: "gano", quien: campeona });
   sucesos.sort((a, b) => a.desde - b.desde);
@@ -449,7 +567,7 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
 
   // La historia de la final, una línea por momento y sin nombres: quién se planta, tropieza o viene de atrás se ve en
   // la pista, y nombrarlo delataba: los momentos chicos nunca eran de la ganadora, y su momento del arco, siempre.
-  // Los nombres de la final son los de la tribuna, más abajo.
+  // Los nombres de la final son los de la tribuna, más abajo. Solo en la carrera nueva: en la de siempre los momentos se callan.
   for (const { b, t } of bt) {
     const quien = lanes[b.actor] as number;
     const calor = Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL));
@@ -459,18 +577,33 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     else if (b.kind === "pique") decir(3, t, { texto: () => ctx.txt("carPique"), calor, ...(solo ? { hecho: { tipo: "adelante" as const, quien } } : {}) });
     else if (b.kind === "escupida" && b.target !== undefined) decir(3, t, { texto: () => ctx.txt("carEscupida"), calor });
   }
-  // Los obstáculos: el relator avisa antes de que pasen y no nombra a nadie (le tocan a cualquiera, y nombrarla no dice quién gana).
+  // Los obstáculos: el relator nombra a quien le pasa (le toca a cualquiera, también a la ganadora, así que nombrarla no dice quién gana), con su ficha
+  // marcada (`carrera-obstaculos-vista.ts`). Las piedras, mientras caen; la valla, en el golpe; el viento es de un grupo y no lleva nombre.
   const semillaObst = Math.floor(ctx.azar("carrera:obstaculos:sonido") * 4294967296);
+  const hastaNombrar = tCrown - CINTA_SIN_SENALAR - 0.5;
+  // El hecho de una línea solo se anota si ningún otro suceso lo pisa en los 0,35 s siguientes (la misma regla que las líneas de la historia):
+  // si a la víctima le pasa otra cosa enseguida, a los 0,3 s el cuerpo ya muestra eso otro y la línea no puede decir que muestra lo suyo.
+  const hechoSiSolo = (t: number, quien: number): { hecho?: { tipo: "freno"; quien: number } } =>
+    sucesos.some((s) => s.desde > t + 0.001 && s.desde < t + 0.35 && !(s.tipo === "freno" && s.quien === quien)) ? {} : { hecho: { tipo: "freno" as const, quien } };
   for (const o of obstaculos) {
+    const calor = 0.5 + 0.3 * o.q;
     if (o.tipo === "piedras") {
-      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carAlud"), calor: 0.5 + 0.3 * o.q });
+      const quien = lanes[o.carriles[0] as number] as number;
+      decir(5, tDeQ(o.q) - AVISO_PIEDRAS, { texto: () => ctx.txt("carCuidadoPiedras", nom(quien)), calor, ...hechoSiSolo(tDeQ(o.q) - AVISO_PIEDRAS, quien) });
       sonar(tDeQ(o.q + 0.004), (k) => {
         if (!sonarObstaculo("piedras")) k.sonido.tono(0, "climax", { dur: 0.5, timbre: "sine", vol: 0.085 });
       });
     } else if (o.tipo === "salto") {
-      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carValla"), calor: 0.5 + 0.3 * o.q });
+      // El aviso de la valla, solo si cabe entre las demás líneas: la valla ya se ve, y el golpe importa más.
+      decir(3, tDeQ(o.q) - AVISO_VALLA, { texto: () => ctx.txt("carValla"), calor });
+      const golpes = o.malas.map((m) => ({ m, t: tDeQ(o.llegan[m] as number) })).filter((g) => g.t < hastaNombrar).sort((a, b) => a.t - b.t);
+      const juntas = golpes.length > 1 && (golpes[1] as { t: number }).t - (golpes[0] as { t: number }).t < ESP_MIN;
+      if (juntas) decir(5, (golpes[0] as { t: number }).t, { texto: () => ctx.txt("carTumbanValla"), calor: calor + 0.05 });
+      else for (const g of golpes) {
+        const quien = lanes[g.m] as number;
+        decir(5, g.t, { texto: () => ctx.txt("carTumbaValla", nom(quien)), calor: calor + 0.05, ...hechoSiSolo(g.t, quien) });
+      }
       for (const m of o.malas) {
-        decir(4, tDeQ((o.llegan[m] as number) + 0.012), { texto: () => ctx.txt("carSaltoMal"), calor: 0.55 + 0.3 * o.q });
         sonar(tDeQ(o.llegan[m] as number), (k) => {
           if (!sonarObstaculo("valla")) k.sonido.tono(1, "evento", { dur: 0.12, vol: 0.05 });
         });
@@ -478,15 +611,24 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
       sonar(tDeQ(o.q), (k) => {
         if (!sonarObstaculo("valla")) k.sonido.tono(9, "evento", { dur: 0.08, vol: 0.05 });
       });
+    } else if (o.tipo === "escupida") {
+      // Se dice cuando la gota ya va en el aire, nombrando a quien la recibe: le toca a cualquiera, así que nombrarla no dice quién gana.
+      const quien = lanes[o.carriles[0] as number] as number;
+      decir(5, tDeQ(o.q) + 0.1, { texto: () => ctx.txt("carEscupen", nom(quien)), calor: calor + 0.05, ...hechoSiSolo(tDeQ(o.q) + 0.1, quien) });
+      sonar(tDeQ(o.q) + 0.1, (k) => k.sonido.tono(7, "evento", { dur: 0.09, vol: 0.04 }));
     } else {
-      decir(5, tDeQ(o.q - 0.01), { texto: () => ctx.txt("carRafaga"), calor: 0.5 + 0.3 * o.q });
+      decir(5, tDeQ(o.q) - AVISO_REMOLINO, { texto: () => ctx.txt("carRemolino"), calor });
       sonar(tDeQ(o.q - 0.01), (k) => {
         if (!sonarObstaculo("viento")) k.sonido.viento(1.6, 0.8, semillaObst);
       });
     }
   }
   // En la carrera nueva el arco se nombra por cómo termina y la recta se decide al 88 %: las líneas del arco caen después.
-  if (arco === "remontada") decir(4, tDeQ(nueva ? 0.93 : 0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
+  if (senuelos) {
+    // Con los señuelos el arco de la ganadora no se dice antes del final: decirlo dice en qué franja iba ella (la sala recuerda quién iba adelante
+    // al 75 %). Queda la foto del duelo, que cae en la cámara lenta, después del corte de la cámara de la meta.
+    if (arco === "duelo") decir(5, tDeQ(final.foto), { texto: () => ctx.txt("carFoto"), calor: 0.95, grito: true, prioridad: PRIORIDAD.importante });
+  } else if (arco === "remontada") decir(4, tDeQ(nueva ? 0.93 : 0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
   else if (arco === "duelo") {
     decir(4, tDeQ(nueva ? 0.9 : 0.52), { texto: () => ctx.txt("carDuelo"), calor: 0.7 });
     if (!nueva) decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
@@ -724,6 +866,15 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
       marcas.sort((a, b) => a.t - b.t);
       if (!movio) break;
     }
+    // En la recta, cada vez que la ficha amarilla pasa a otra se ve un cambio de punta: es un hecho («adelante»), aunque el relator no lo diga. Hasta
+    // que la cinta deja de señalar, y nunca a menos de 0,35 s de otro suceso o de una línea con su hecho, para que a los 0,3 s el cuerpo muestre este.
+    const conHecho = guion.filter((l) => l.hecho).map((l) => l.t);
+    for (const m of marcas) {
+      if (m.t < tAbre || m.t >= tCrown - CINTA_SIN_SENALAR) continue;
+      if (conHecho.some((x) => Math.abs(m.t - x) < 0.35) || sucesos.some((x) => Math.abs(x.desde - m.t) < 0.35)) continue;
+      sucesos.push({ desde: m.t, tipo: "adelante", quien: m.quien });
+    }
+    sucesos.sort((a, b) => a.desde - b.desde);
   }
 
   /* ---------------------------------------------------------------- momentos */
@@ -789,13 +940,18 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
       });
     } else {
       const t0 = tDeQ(o.q);
-      causas.push({ tipo: o.tipo === "piedras" ? "piedra" : "viento", quienes: o.carriles.map((k) => lanes[k] as number), aviso: t0 - 1.5, desde: t0 - AVISO, hasta: t0 + 7 });
+      // Las tardías (pulso corto) terminan antes de los tres segundos finales: su motivo a la vista dura lo que el pulso, no siete segundos, más el
+      // rastro, porque el tope de aceleración puede correr el fin de verdad hasta un cuarto de segundo (`carrera-drama.test.ts`).
+      const hasta = o.corta && o.tipo !== "viento" ? t0 + finDelEfecto({ tipo: o.tipo, corta: true }) + RASTRO : t0 + 7;
+      causas.push({ tipo: o.tipo === "piedras" ? "piedra" : o.tipo === "escupida" ? "escupida" : "viento", quienes: (o.tipo === "escupida" ? [o.carriles[0] as number, o.escupe] : o.carriles).map((k) => lanes[k] as number), aviso: t0 - 1.5, desde: t0 - AVISO, hasta });
     }
   }
 
   const datos: Datos = {
     nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCarriles: t0Carriles, tCrown, tramos,
     dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, marcas, vivas, campeona, fase, sucesos, cursor: (t: number): number => 1 - suave((t - (tCrown - CINTA_SIN_SENALAR - 0.3)) / 0.3), cambiosDePunta: cambios, lineasAdelante, tandas, tanda, causas,
+    semillaRocas: Math.floor(ctx.azar("carrera:rocas") * 4294967296),
+    semillaFilas: Math.floor(ctx.azar("carrera:filas") * 4294967296),
   };
   return {
     duracion: tCrown,

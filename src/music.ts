@@ -3,6 +3,7 @@ import { anotarGolpe } from "./state";
 import { camaDeMusica } from "./sonidos/banco";
 import { ACORDES, curvaDeTecho, type AcordeId, type Golpe, type PerfilMusica } from "./sonidos/carrera";
 import { bomboYBajoChico, festejoPropio, golpePropio, perfilDeMusica } from "./sonidos/carrera-eleccion";
+import { permitirPistas, pistaArrancar, pistaCallar, pistaParar, pistaRemata, pistaRetener, pistaSuena, pistaTension } from "./sonidos/pistas-enganche";
 
 /**
  * La música del estadio: andina con beat.
@@ -48,6 +49,8 @@ function load(): boolean {
 }
 
 let enabled = load();
+// Las pistas de archivo (`src/sonidos/pistas-enganche.ts`) bajan solo con la música y el sonido prendidos.
+permitirPistas(() => enabled && !isMuted());
 
 export const musicOn = (): boolean => enabled;
 
@@ -263,14 +266,18 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
   // pide: volver a empezarla desde el primer compás se oía como un corte.
   if (cur && cur.seed === seed && cur.style === style) return;
   stopMusic();
+  // La cola del festejo del sorteo anterior no se queda debajo de este, tenga pista el juego o no.
+  pistaCallar();
   if (!enabled || isMuted()) return;
   const ctx = audio();
   if (!ctx) return;
   // La carrera puede tener su propia música (una de las candidatas que se eligieron escuchando). Las demás, la de siempre.
   const perfil = style === "andino" ? perfilDeMusica() : null;
   cur = armarSesion(ctx, destinoDeMezcla(ctx), seed, style, perfil, 0.6);
+  // La pista de archivo del juego, si la hay y está prendida: reemplaza al secuenciador (`src/sonidos/pistas-enganche.ts`).
+  const conPista = style === "andino" && !perfil && pistaArrancar(ctx, destinoDeMezcla(ctx), cur.bus, cur.vol);
   // La chovena no: sus bailarines pisan en el tiempo de la música y la cama no lo conoce.
-  const archivo = style === "andino" && !perfil ? camaDeMusica() : null;
+  const archivo = style === "andino" && !perfil && !conPista ? camaDeMusica() : null;
   if (archivo) cur.cama = armarCama(cur, archivo);
   cur.timer = window.setInterval(tick, 40);
   tick();
@@ -382,6 +389,11 @@ const acorde = (id: AcordeId): Chord => ({ root: ACORDES[id].raiz, strings: [...
 
 /** La corta con un fundido corto. Se llama al desmontar el estadio. */
 export function stopMusic(): void {
+  // La pista: en el festejo se apaga sola, salvo que se haya apagado la música o el sonido: entonces se calla ya, también la
+  // cola de un festejo que venía sonando de un show que ya había terminado.
+  const callada = !enabled || isMuted();
+  if (callada) pistaCallar();
+  pistaParar(callada);
   const s = cur;
   if (!s) return;
   cur = null;
@@ -404,12 +416,16 @@ export function musicHold(on: boolean): void {
   const s = cur;
   if (!s || s.won || s.hold === on) return;
   s.hold = on;
+  pistaRetener(on);
+  // `?auditar=`: la hora de la página en que se corta la música (`scripts/medir-drama-carrera.mjs`).
+  if (on) anotarGolpe("musicaCorte");
+  // La pista tiene la música: el bus de osciladores queda mudo, y con él la cama de archivo que hubiera armado antes de que la
+  // pista llegara. Subirlo al soltar sería tener dos músicas a la vez.
+  if (cederLaCama(s)) return;
   const t = s.ctx.currentTime;
   s.bus.gain.cancelScheduledValues(t);
   s.bus.gain.setValueAtTime(s.bus.gain.value, t);
   if (on) {
-    // `?auditar=`: la hora de la página en que se corta la música (`scripts/medir-drama-carrera.mjs`).
-    anotarGolpe("musicaCorte");
     s.bus.gain.linearRampToValueAtTime(0, t + 0.025);
     return;
   }
@@ -446,12 +462,18 @@ export function musicCue(heat: number): void {
     s.won = true;
     const at = Math.max(s.next, s.ctx.currentTime + 0.03);
     // Si el juego la dejó cortada (el silencio de antes del ganador, o el
-    // corte de la chovena), el remate la vuelve a abrir.
+    // corte de la chovena), el remate la vuelve a abrir. Con la pista sonando,
+    // el bus de osciladores no se toca: el golpe y el festejo son de la pista.
+    const conPista = cederLaCama(s);
     if (s.hold) {
       s.hold = false;
-      s.bus.gain.cancelScheduledValues(s.ctx.currentTime);
-      s.bus.gain.setValueAtTime(s.vol, s.ctx.currentTime);
+      if (!conPista) {
+        s.bus.gain.cancelScheduledValues(s.ctx.currentTime);
+        s.bus.gain.setValueAtTime(s.vol, s.ctx.currentTime);
+      }
     }
+    // Con la pista, el golpe y el festejo son los suyos.
+    if (pistaRemata()) return;
     if (s.cama) {
       // El remate lo hace el sintetizador: la cama se apaga rápido para dejarle lugar.
       s.cama.gain.gain.cancelScheduledValues(s.ctx.currentTime);
@@ -460,6 +482,10 @@ export function musicCue(heat: number): void {
     }
     if (s.style === "chovena") finaleChovena(s, at);
     else finale(s, at);
+    return;
+  }
+  if (pistaTension(heat, s.level)) {
+    s.target = Math.max(heat, s.target * 0.5);
     return;
   }
   if (s.style === "andino" && heat - s.level >= 0.3) {
@@ -519,6 +545,26 @@ function arrancarFuente(s: Session, cama: Cama, desde: number): void {
   cama.desde = desde;
 }
 
+/**
+ * `true` si la pista de archivo tiene la música del sorteo. Entonces la cama que el juego hubiera armado antes de que la pista
+ * llegara (entró dentro de la gracia de 1,5 s) se va en 0,1 s y no vuelve: sobre el bus de osciladores solo queda silencio.
+ * Sin esto, al soltar la retención o en el golpe el bus se abría de nuevo y sonaban dos músicas a la vez.
+ */
+function cederLaCama(s: Session): boolean {
+  if (!pistaSuena()) return false;
+  const c = s.cama;
+  if (c) {
+    s.cama = null;
+    const t = s.ctx.currentTime;
+    const g = c.gain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0, t + 0.1);
+    soltarCama(c);
+  }
+  return true;
+}
+
 /** La tensión abre el brillo y sube el volumen de la cama, de a poco. */
 function moverCama(s: Session): void {
   const c = s.cama;
@@ -576,8 +622,12 @@ function tick(): void {
   const want = Math.max(s.target, floor);
   s.level += (want - s.level) * 0.06;
   s.target = Math.max(floor, s.target - 0.004);
+  // La pista llegó con la cama ya sonando: la cama se va y queda sola la pista.
+  if (s.cama) cederLaCama(s);
   if (s.cama) moverCama(s);
   if (s.won) return;
+  // Con la pista sonando, el secuenciador no arma nada.
+  if (pistaSuena()) return;
   // Cortada por el juego: no se arma nada, y al volver arranca desde ahora.
   if (s.hold) {
     s.next = Math.max(s.next, s.ctx.currentTime);

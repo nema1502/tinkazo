@@ -14,13 +14,13 @@
 export const TEXTOS_ALTA_CUENTA: { es: Record<string, string>; en: Record<string, string> } = {
   es: {
     altaErrCuentaDeOtro: "No pudimos unir esta cuenta con tu acceso al modo Oficial y tenemos que revisarlo a mano. Escribinos a hola@tinkazo.app y lo arreglamos. En Prueba seguís gratis.",
-    altaErrIntentos1: "Probaste muchas veces. Esperá 1 minuto y volvé a intentar.",
+    altaErrIntentos1: "El canje de cupones quedó en pausa por un rato. Probá de nuevo en 1 minuto o pedile ayuda a quien organiza el evento.",
     cupoOfVence1: "1 vence el {fecha}.",
     cupoOfVenceSolo: "Vence el {fecha}.",
   },
   en: {
     altaErrCuentaDeOtro: "We couldn't link this account to your Live mode access and need to check it by hand. Write to us at hola@tinkazo.app and we'll fix it. Test mode is still free.",
-    altaErrIntentos1: "Too many tries. Wait 1 minute and try again.",
+    altaErrIntentos1: "Coupon redemption is paused for a while. Try again in 1 minute or ask the event organizer for help.",
     cupoOfVence1: "1 expires on {fecha}.",
     cupoOfVenceSolo: "It expires on {fecha}.",
   },

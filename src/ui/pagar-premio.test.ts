@@ -199,9 +199,13 @@ describe("lo que se le dice a la persona", () => {
     const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(codigo).not.toMatch(/signAndSubmit\(|signUnsponsored\(|atenderFirmas|esperadas/);
     const pollar = readFileSync(resolve(process.cwd(), "src/stellar/wallet-pollar.ts"), "utf8");
-    // La lista blanca sigue siendo la del sello y la del sorteo: dos firmas, las que arman `signAndSubmit` y `signUnsponsored`.
+    // La lista blanca sigue siendo la de las transacciones que arma la página: dos firmas, las de `signAndSubmit` y `signUnsponsored`.
     expect(pollar).toContain('p.kind !== "sign" && p.kind !== "sign_and_send"');
     expect(pollar).toContain("!esperadas.has(p.unsignedXdr)");
+    // La única rama nueva de la puerta es la de la línea del USDC de Circle que la persona pide activar.
+    const ramas = pollar.slice(pollar.indexOf("export function atenderFirmas("), pollar.indexOf("/* ------------------------------------------------ activar la cuenta en la red principal"));
+    expect(ramas.match(/p\.confirm\(\)/g)).toHaveLength(2);
+    expect(ramas).toContain("linea !== null && esLaLineaPedida(p, linea) && linea.tomar()");
   });
 });
 

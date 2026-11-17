@@ -9,8 +9,10 @@ import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
-import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
+import { banderasDeAlta } from "./stellar/alta-config";
+import { cargaElCobro } from "./cobro-en-la-pagina";
 import { fijarElTema } from "./tema-forzado";
+import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -83,17 +85,24 @@ function montarLaCuenta(): void {
 initMenuMas();
 iniciarFeedback();
 setLang(initialLang());
-// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
-// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
-// nada del sorteo.
-iniciarDestelloPie();
-iniciarHoverVivo(".juego");
 // El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
 // HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
 // borre.
 enlazarContrato(document, network.contractId ? contractUrl() : null);
+// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
+// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
+// nada del sorteo. Hoy entran apagadas: su interruptor está en ATENCION_PRENDIDA.
+iniciarDestelloPie();
+iniciarHoverVivo(".juego");
 montarLaCuenta();
 onLangChange(montarLaCuenta);
+// La compra de sorteos oficiales (precios y términos): entra solo con VITE_ALTA_PAGO en el build y la venta a la vista
+// (en piloto, solo en una pestaña con su marca, `stellar/venta-piloto.ts`), y la lista de precios la da el servidor, la
+// misma del panel de la compra (`paginas-cobro.ts`). Sin la compra no se baja nada.
+const banderasDeLaVenta = banderasDeAlta(undefined, "mainnet");
+const conCompra = banderasDeLaVenta.pago;
+// Con la compra con QR a la vista, la lista dice también lo que se suma pagando con QR.
+if (cargaElCobro(document, conCompra)) void cargaOpcional(import("./paginas-cobro").then((m) => m.montarCobro({ pago: conCompra, qr: banderasDeLaVenta.qr })));
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común. Si no baja (un
 // bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.

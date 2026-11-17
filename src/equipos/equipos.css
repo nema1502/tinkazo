@@ -81,6 +81,7 @@ html.con-pantalla-stand { overflow: hidden; }
 .stp-cupones { display: flex; flex-direction: column; gap: 0.4vh; }
 .stp-cupones span { font-size: max(16px, 3vh); font-weight: 800; }
 .stp-reloj { display: flex; flex-direction: column; gap: 0.6vh; background: var(--yellow); color: var(--on-accent); }
+.stp-reloj[hidden] { display: none; }
 .stp-reloj-t { font-size: max(16px, 2.8vh); font-weight: 800; }
 .stp-reloj .stp-num { font-size: max(26px, 6.2vh); }
 .stp-reloj[data-llego="1"] { background: var(--teal); }

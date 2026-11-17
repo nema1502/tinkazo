@@ -5,6 +5,7 @@ import deployments from "./stellar/deployments.json";
  * (`mainnet: null`, que es producción hoy) el sitio dice lo que decía: no hay otro modo del cual distinguir "Prueba", y
  * "En el modo Prueba, guardá…" le haría pensar a quien lee que existe uno. `i18n.ts` los pone encima del diccionario
  * solo si hay modo Oficial; las claves de este archivo son las que ya existían, con el texto de hoy en `i18n.ts`.
+ * La excepción es `cuentaPideGoogle`: `i18n.ts` la aplica solo con Oficial activo, porque en Prueba sigue valiendo la frase común.
  * Los textos que solo existen para el modo Oficial (la hoja, los avisos, la confirmación) están en `i18n.ts`.
  *
  * Cuando se agregue el contrato real, en el mismo commit, el texto del HTML de seis páginas pasa a ser el de este
@@ -24,7 +25,7 @@ import deployments from "./stellar/deployments.json";
  * páginas trae los mismos textos. Como los ve cualquiera que abra el sitio, la publicación de producción exige el
  * acceso por cupón en el build (`VITE_ALTA=1`, ver `stellar/alta-build.ts`).
  * `revision-textos.test.ts` falla hasta que estén, y dice cuál falta, pero solo mira `data-i`: el de `cfDura3`, que es
- * `data-i-html`, lo avisa `seo.test.ts`. Las claves de la ventana de entrar (`loginTestnet` y las `guest…`) no están
+ * `data-i-html`, lo avisa `seo.test.ts`. Las claves de la ventana de entrar (`loginTestnet`, `cuentaPideGoogle` y las `guest…`) no están
  * en ningún HTML. Las pruebas que dependen de estos textos (`revision-textos.test.ts`, `i18n.test.ts`,
  * `ui/compartir.test.ts` y `evento-modo.test.ts`) ya los toman del diccionario o miran `HAY_MODO_OFICIAL`: no hay
  * que tocarlas.
@@ -63,6 +64,7 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     cfDura3: "<b>El modo Prueba:</b> sus sorteos van a la red de prueba, que Stellar borra entera el 16 de diciembre de 2026, con los sellos y sus horas. Tu comprobante sigue sirviendo para rehacer la cuenta, pero nadie podrá confirmar la hora del sello. Los del modo Oficial van a la red principal, que Stellar no reinicia.",
     sgLimit3: "Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y los sorteos del modo Prueba están en la red de prueba, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.",
     loginTestnet: "Prueba",
+    cuentaPideGoogle: "Para sortear con tu lista, entrá con Google y dejá tu cuenta lista.",
     guestHint: "El navegador te arma una cuenta del modo Prueba y le pone fondos de prueba. No instalás nada.",
     guestReady: "Cuenta de prueba lista y con fondos de prueba.",
     guestTestnetOnly: "La cuenta de prueba solo funciona en el modo Prueba.",
@@ -82,7 +84,7 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     cfCostoB: 'Recording each draw on the network has a cost. The network charges it, not Tinkazo, and almost all of it is storage rent: it changes with how much the network is used. In Test mode Tinkazo pays it. In Live mode Tinkazo pays it if you use a coupon from your event, and if you sign in with your own wallet, you pay it from your account. The measured figures, with their dates, are in <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.',
     tmPatrocinio: "In Test mode, Tinkazo covers the charge the network makes for sealing and drawing. There may be a cap per account per month. If it runs out, you can pay with your own account or wait for it to come back. If there is a cap, to keep count the service stores how many seals and draws each account has made, with no names or lists. In Live mode, with a coupon from your event, Tinkazo covers that charge while you have Live draws left. In that mode, if you sign in with your own wallet, you pay it from your account.",
     tmMore1: "No ads, no trackers that follow you from site to site, no database of participants we can read. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network, from Pollar and from our service that covers the network charge, which runs on Cloudflare. To protect the balance Tinkazo pays it from, that service records each account's seals, with the time and the fingerprint of the list. It doesn't store the list, names or IP addresses. When you share or show it big, an encrypted copy of the receipt, which includes the list, is stored on Cloudflare. The key travels only in the link and never reaches us, so we can't read it. If you redeem an event coupon, that service checks your session with Pollar and stores the identifier Pollar gives your account, your public address, the event and a fingerprint of the coupon, the time you redeemed it and how many Live draws you have left. It doesn't store your email, your name, your session key or the coupon code. The limits per IP address are counted in memory, and the address is never written to disk or to logs.",
-    prNote: "Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it is always free.",
+    prNote: "Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it are always free.",
     verifN3: "In Test mode, keep the receipt of your draws: it lets anyone check them again even after the record resets on December 16, 2026.",
     tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. In Test mode, keep the receipt of your draws, because it lets anyone check them again even after the record resets on December 16, 2026. If something breaks in the middle of a draw, anyone can run it again with the list and the draw number: that is what the written, step-by-step rules are for.",
     vFinishNoWallet: "Finishing it needs Varial (formerly Freighter), or the test account from Test mode.",
@@ -96,6 +98,7 @@ export const TEXTOS_MODO_OFICIAL: { es: Record<string, string>; en: Record<strin
     cfDura3: "<b>Test mode:</b> its draws go to the test network, which Stellar wipes on December 16, 2026, seals and their times included. Your receipt still lets anyone redo the math, but nobody will be able to confirm the seal time. Live mode draws go to the main network, which Stellar does not reset.",
     sgLimit3: "What the contract stores pays rent: if nobody extends it, the entry is archived and stops being readable until someone pays to restore it. And Test mode draws are on the test network, which Stellar wipes on December 16, 2026: there the record is lost and the verdict is no longer green.",
     loginTestnet: "Test",
+    cuentaPideGoogle: "To draw with your list, sign in with Google and get your account ready.",
     guestHint: "The browser makes you a Test mode account and funds it with test money. Nothing to install.",
     guestReady: "Test account ready, with test money.",
     guestTestnetOnly: "The test account only works in Test mode.",

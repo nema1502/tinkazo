@@ -1,0 +1,46 @@
+{
+  "formato": 1,
+  "juego": "race",
+  "version": "d2",
+  "pulso": {
+    "bpm": 134,
+    "tiempos": 2,
+    "compas": 0.895498866
+  },
+  "ganancia": 0.4,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": false,
+  "secciones": {
+    "entrada": {
+      "archivo": "race-d2-entrada.mp3",
+      "inicio": 0,
+      "compases": 8
+    },
+    "cuerpo": {
+      "archivo": "race-d2-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 32,
+      "bucleDesde": 0
+    },
+    "subida": {
+      "archivo": "race-d2-subida.mp3",
+      "inicio": 0.5,
+      "compases": 10,
+      "bucleDesde": 6,
+      "tension": 0.75,
+      "cuantizar": 1
+    },
+    "golpe": {
+      "archivo": "race-d2-golpe.mp3",
+      "inicio": 0.02,
+      "compases": 2,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "race-d2-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 1.5
+    }
+  }
+}

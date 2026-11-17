@@ -175,12 +175,7 @@ export function crearLlamaAguayo(S: Estadio, o: { pelaje: number; manta: number 
         marca.visible = true;
         marca.text = "!";
       } else if (m?.kind === "tropiezo") lean = 0.35 * Math.sin(Math.PI * Math.min(1, m.p * 1.4));
-      else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
-      else if (m?.kind === "escupido") {
-        lean = -0.12 * Math.sin(Math.PI * m.p * 3);
-        marca.visible = true;
-        marca.text = "?!";
-      } else if (posturaObstaculo(m)) {
+      else if (posturaObstaculo(m)) {
         const o = posturaObstaculo(m);
         if (o?.patas) ang = o.patas;
         lean = o?.lean ?? lean;
@@ -189,6 +184,11 @@ export function crearLlamaAguayo(S: Estadio, o: { pelaje: number; manta: number 
           marca.visible = true;
           marca.text = o.aviso;
         }
+      } else if (m?.kind === "escupida") cuelloRot = -0.35 * Math.sin(Math.PI * m.p);
+      else if (m?.kind === "escupido") {
+        lean = -0.12 * Math.sin(Math.PI * m.p * 3);
+        marca.visible = true;
+        marca.text = "?!";
       } else if (m?.kind === "echada") {
         // Se echa: baja el cuerpo, pliega las patas, se pone gris y levanta polvo. Queda así, con los ojos cerrados y las "zZ".
         plegada = Math.min(1, m.p);

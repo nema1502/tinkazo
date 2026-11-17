@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
 import { type Entry, winnerLabel } from "./history";
 
-/** Mis sorteos con un orden de turnos: «Turnos: 12 personas» en lugar de los nombres unidos con comas. */
+/** Mis sorteos con un orden de turnos: el título ya dice Turnos y el detalle solo cuenta a las personas. */
 
 const WHO = "GBZQHWXF4I4ERXBLLHLQOENNXIJMHDGIYMFDYZVNX5KZM4OXTY4BDSQY";
 const entrada = (over: Partial<Entry>): Entry => ({
@@ -18,22 +18,22 @@ const entrada = (over: Partial<Entry>): Entry => ({
 const personas = (n: number): string[] => Array.from({ length: n }, (_, i) => `Participante ${i + 1}`);
 
 describe("winnerLabel con un orden de turnos", () => {
-  it("12 personas: «Turnos: 12 personas», no los doce nombres", () => {
+  it("12 personas: el detalle no repite Turnos ni muestra los doce nombres", () => {
     const e = entrada({ count: 12, numWinners: 12, prize: "Turnos de limpieza", winners: personas(12) });
-    expect(winnerLabel(e)).toBe("Turnos: 12 personas");
+    expect(winnerLabel(e)).toBe("12 personas");
     expect(winnerLabel(e)).not.toContain("Participante");
   });
 
   it("300 personas: una frase corta, no una fila de 300 nombres", () => {
     const e = entrada({ count: 300, numWinners: 300, prize: "Turnos", winners: personas(300) });
-    expect(winnerLabel(e)).toBe("Turnos: 300 personas");
+    expect(winnerLabel(e)).toBe("300 personas");
   });
 
   it("también cuando solo se sabe el puesto (lo trajo la cadena) y en inglés al revés de «ganó»", () => {
     const e = entrada({ count: 5, numWinners: 5, prize: "Turns", winnerIdx: [3, 0, 1, 4, 2] });
-    expect(winnerLabel(e)).toBe("Turnos: 5 personas");
-    expect(T.en.turnsHist).toBe("Turns: {n} people");
-    expect(T.es.turnsHist).toBe("Turnos: {n} personas");
+    expect(winnerLabel(e)).toBe("5 personas");
+    expect(T.en.turnsHist).toBe("{n} people");
+    expect(T.es.turnsHist).toBe("{n} personas");
   });
 
   it("un sorteo común sigue diciendo los nombres: 3 poleras entre 3, o turnos de 3 entre 12", () => {
@@ -66,7 +66,7 @@ describe("Mis sorteos con varias participaciones por persona", () => {
       winners: repartida,
       proof: "https://tinkazo.app/verificar.html?modo=turnos#rX",
     });
-    expect(winnerLabel(e)).toBe("Turnos: 3 personas, 5 turnos");
+    expect(winnerLabel(e)).toBe("3 personas, 5 turnos");
   });
 
   it("sin el modo, o sin la lista en este equipo, cada línea es una persona, como siempre", async () => {
@@ -74,11 +74,11 @@ describe("Mis sorteos con varias participaciones por persona", () => {
     const comun = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Otro"];
     expect(cuentaDeLaEntrada(entrada({ count: 3, names: comun, proof: "https://tinkazo.app/verificar.html#rX" }))).toBe("3 personas");
     expect(cuentaDeLaEntrada(entrada({ count: 5, proof: conModo }))).toBe("5 personas");
-    expect(winnerLabel(entrada({ count: 3, numWinners: 3, prize: "Turnos", names: comun, winners: comun }))).toBe("Turnos: 3 personas");
+    expect(winnerLabel(entrada({ count: 3, numWinners: 3, prize: "Turnos", names: comun, winners: comun }))).toBe("3 personas");
   });
 
   it("la frase del orden repartido está en los dos idiomas", () => {
-    expect(T.es.turnsHistPart).toBe("Turnos: {n} personas, {k} turnos");
-    expect(T.en.turnsHistPart).toBe("Turns: {n} people, {k} turns");
+    expect(T.es.turnsHistPart).toBe("{n} personas, {k} turnos");
+    expect(T.en.turnsHistPart).toBe("{n} people, {k} turns");
   });
 });

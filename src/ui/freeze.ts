@@ -1,10 +1,14 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
+import { fijoPara } from "./espectador-fijo";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
+import { arranqueDelShow, msHasta } from "../arranque-del-show";
+import { sorteoEnMarcha } from "./sorteo-en-marcha";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
+import type { IntentoDeSello } from "../stellar/envio";
 import { contractUrl, hayModoOficial, modeNameKey, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
@@ -25,7 +29,7 @@ import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
-import { ajustarPremioDeTurnos, ordenNoCabe } from "./turnos";
+import { ajustarPremioDeTurnos, ordenNoCabe, ponerModoTurnos } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
@@ -37,6 +41,7 @@ import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
 import { cobroPorUso } from "../stellar/cobro-oficial";
+import { avisoTrasFallarEnLaCadena, entroYFalloEnLaCadena } from "./sello-tarde-aviso";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -107,6 +112,12 @@ export function elegirJuego(g: Game): void {
     if (!enShow) alElegirConResultado?.(g);
     return;
   }
+  // Ya se mira en celulares desde el QR, con este juego (`espectador-fijo.ts`): no cambia hasta el resultado, y la
+  // nota de arriba del selector lo dice.
+  if (fijoPara(app.frozen, false)) {
+    pintarNotaDelJuego();
+    return;
+  }
   juegoAMano = true;
   setGame(g);
 }
@@ -120,6 +131,9 @@ function marcarJuego(g: Game): void {
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
+  // Con el sorteo mirándose en celulares, ningún camino cambia su juego (`espectador-fijo.ts`).
+  const fijo = fijoPara(app.frozen, false);
+  if (fijo && g !== fijo.juego) return;
   marcarJuego(g);
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
@@ -156,7 +170,11 @@ export function marcarShow(en: boolean): void {
 export function pintarNotaDelJuego(): void {
   const el = document.getElementById("juego-nota");
   if (!el) return;
-  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
+  const fijo = fijoPara(app.frozen, false);
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : fijo ? "juegoFijoEspectador" : "";
+  // La nota de la duración (`main.ts`) sale cuando se la quiere cambiar con el juego fijo, y se va cuando ya no lo está.
+  const notaDelRitmo = document.getElementById("pace-nota");
+  if (notaDelRitmo && !fijo) notaDelRitmo.hidden = true;
   const texto = clave ? t(clave) : "";
   if (el.textContent !== texto) el.textContent = texto;
   el.hidden = !texto;
@@ -224,8 +242,12 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
-/** Cuántos premios se sortean: el campo de "Cuántos ganan", que con la lista sellada ya no cambia. */
-const premiosElegidos = (): number => ganadoresPedidos();
+/**
+ * Cuántos premios se sortean entre `n` personas: el campo de "Cuántos ganan", que con la lista sellada ya no cambia, sin
+ * pasar de la lista. Es la misma cuenta del sello (`Math.min(ganadoresPedidos(), names.length)`): con tres personas y cinco
+ * pedidos salen tres, y el selector tiene que decidir con esos tres.
+ */
+const premiosElegidos = (n: number): number => Math.min(ganadoresPedidos(), Math.max(1, n));
 
 export function pintarRecomendacion(names: readonly string[]): void {
   const n = names.length;
@@ -238,13 +260,23 @@ export function pintarRecomendacion(names: readonly string[]): void {
   // Un orden de turnos no tiene premios: las notas de capacidad dicen turnos. Se decide como en el resto de
   // la pantalla, por la lista sellada y su nombre; antes de sellar vale el nombre del campo.
   const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
-  const turnos = isTurnOrder(n, premiosElegidos(), premio);
-  recomendar(n, premiosElegidos(), turnos).games.forEach((r, i) => {
+  const turnos = isTurnOrder(n, premiosElegidos(n), premio);
+  recomendar(n, premiosElegidos(n), turnos).games.forEach((r, i) => {
     const el = botones.get(r.game);
     if (!el) return;
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
     if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
     el.classList.toggle("atenuado", r.fits === false);
+    // Un orden de turnos solo ofrece los juegos que lo cuentan bien: el resto se apaga y no se puede elegir. Lo que este modo
+    // apagó se vuelve a encender con una lista que no es un orden, y nada más: la ruleta apagada por su tope no es cosa de acá.
+    const boton = el as HTMLButtonElement;
+    if (r.apagado) {
+      boton.disabled = true;
+      boton.dataset.sinTurnos = "1";
+    } else if (boton.dataset.sinTurnos) {
+      boton.disabled = false;
+      delete boton.dataset.sinTurnos;
+    }
     el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota, :scope > .rec-rango").forEach((x) => x.remove());
     if (r.fits === true) {
       const etiqueta = document.createElement("em");
@@ -266,13 +298,29 @@ export function pintarRecomendacion(names: readonly string[]): void {
     }
     if (r.note) {
       const nota = document.createElement("small");
-      nota.className = "rec-nota sr-only";
+      // Lo que se ofrece dice su nota solo para el lector de pantalla; lo apagado dice su motivo a la vista.
+      nota.className = r.apagado ? "rec-nota rec-nota-vista" : "rec-nota sr-only";
       nota.textContent = frase(r.note, r.args);
       el.appendChild(nota);
     }
   });
   pintarCabecera(names);
   pintarNotaElegida();
+}
+
+/**
+ * Un orden de turnos solo se cuenta en los juegos que lo cuentan bien (`apagado` en `recomendar.ts`). Si quedó elegido uno
+ * que no (el de otro sorteo), pasa solo a uno que sirva. La demo juega el que pide su enlace, y con una lista que ningún
+ * juego cuenta (más de doscientos turnos) no se apaga nada, así que no cambia nada.
+ */
+export function dejarUnJuegoQueSirva(names: readonly string[], prize: string): void {
+  if (params.has("demo")) return;
+  const n = names.length;
+  // La misma decisión que `pintarRecomendacion`: si ahí no se apagó nada, acá tampoco se cambia nada.
+  if (!isTurnOrder(n, premiosElegidos(n), prize)) return;
+  if (!recomendar(n, premiosElegidos(n), true).games.find((r) => r.game === app.game)?.apagado) return;
+  const g = juegoPorDefecto(n, premiosElegidos(n), true);
+  if (g !== app.game) setGame(g);
 }
 
 /**
@@ -292,7 +340,7 @@ export function pintarCabecera(names: readonly string[]): void {
   const n = names.length;
   const { personas } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
   const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
-  const turnos = isTurnOrder(n, premiosElegidos(), premio);
+  const turnos = isTurnOrder(n, premiosElegidos(n), premio);
   const cabeza = personas === n ? frase("recHead", [n]) : turnos ? frase("recHeadTurnos", [personas, n]) : frase("recHeadPart", [personas, n]);
   el.textContent = `${cabeza}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
   el.style.display = "";
@@ -320,27 +368,24 @@ export function cambiarJuego(): void {
 }
 
 /**
- * Segundos que faltan para poder sortear.
+ * Segundos que faltan para poder sortear: los que faltan para que nazca el número, con sello y sin sello.
  *
- * Para un sorteo anclado se esperan unos segundos de más. El contrato compara
- * la hora de la ronda contra la **hora de cierre del ledger**, que va detrás
- * del reloj del navegador porque un ledger cierra cada cinco segundos. Sin ese
- * margen hay una ventana en la que acá ya es hora, para la cadena todavía no,
- * y la transacción se cae delante de toda la sala.
+ * Hasta el 15 de noviembre de 2026, con sello se esperaban 8 segundos de más, porque el contrato compara la hora de la
+ * ronda con la hora de cierre del ledger, que va detrás del reloj. Ese margen ahora es parte de la grabación, que va
+ * aparte (`arranque-del-show.ts`, `grabar-sorteo.ts`): el juego arranca con el resultado calculado en el navegador.
  */
-const CHAIN_MARGIN_SECONDS = 8;
-
 export function secondsToRound(): number {
   if (!app.frozen) return 0;
   // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
   if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
-  const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;
-  return Math.max(0, roundTime(app.frozen.round) + margin - Math.floor(Date.now() / 1000));
+  return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));
 }
 
 let countdownTimer: number | undefined;
 /** La ronda de stand ya arrancó sola: una sola vez por cuenta regresiva. */
 let arrancoSola = false;
+/** La espera en grande ya lanzó el sorteo antes de que naciera el número: una sola vez por cuenta regresiva. */
+let seAdelanto = false;
 
 /**
  * Se apretó "Sellar la lista" con la pantalla en grande pedida (`vista-grande.ts`): cuando el sello esté, la
@@ -348,6 +393,12 @@ let arrancoSola = false;
  * sorteo desde Mis sorteos no abre nada por su cuenta.
  */
 let grandePendiente = false;
+
+/** Suelta la pantalla completa que pidió el toque de "Sellar la lista", si sigue pedida. Una sola vez: después ya no queda pedida. */
+function soltarLoPedido(): void {
+  if (grandePendiente) soltarPantallaCompleta();
+  grandePendiente = false;
+}
 
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
 let espera: typeof import("./espera") | null = null;
@@ -395,18 +446,31 @@ function abrirEspera(alSellar = false): void {
   void import("./espera").then((m) => {
     espera = m;
     const abrio = m.mostrarEspera(secondsToRound, {
-      sortear: () => $<HTMLButtonElement>("btn-draw").click(),
+      sortear: lanzarDesdeLaEspera,
       // Sin la cadena no hay nada que aprobar; con Freighter, cada operación se aprueba en su ventana.
       aMano: () => app.frozen?.raffleId !== undefined && apruebaAMano(),
       graba: app.frozen?.raffleId !== undefined,
       juegos: juegosParaElegir,
       elegirJuego: (g) => elegirJuego(g as Game),
-      premios: premiosElegidos,
+      // Los premios que de verdad se sortean (sin pasar de la lista), como el sello: Sorprendeme decide con esa cuenta.
+      premios: () => premiosElegidos(app.frozen?.names.length ?? 0),
       alSellar,
     });
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
     if (!abrio && (pedida || alSellar)) soltarPantallaCompleta();
   });
+}
+
+/**
+ * Lo que hace la espera en grande para lanzar el sorteo o volver a probarlo: el lanzamiento adelantado
+ * (`tinkazo:adelantar`, que escucha `main.ts`), que vale antes y después de que nazca el número. Antes de que nazca, el
+ * botón de la página todavía está apagado: hasta el 16 de noviembre de 2026 la espera lo apretaba igual, y un
+ * Reintentar después de una compuerta del modo Oficial que cortó (la cuenta sin activar, el acceso) no hacía nada. El
+ * modo stand no espera ningún número: aprieta el botón, como siempre.
+ */
+function lanzarDesdeLaEspera(): void {
+  if (enStand()) $<HTMLButtonElement>("btn-draw").click();
+  else document.dispatchEvent(new CustomEvent("tinkazo:adelantar"));
 }
 
 /**
@@ -442,6 +506,7 @@ function preconectarDrand(): void {
  */
 function startCountdown(): void {
   arrancoSola = false;
+  seAdelanto = false;
   const btn = $<HTMLButtonElement>("btn-draw");
   const box = document.getElementById("wait-box");
   const num = document.getElementById("wait-round");
@@ -477,22 +542,39 @@ function startCountdown(): void {
         preconectado = true;
         preconectarDrand();
       }
-      btn.disabled = true;
-      btn.classList.remove("lista");
+      // Con la espera en grande, el sorteo se lanza solo: la tarjeta de cómo se juega sale en los últimos segundos y
+      // termina de leerse cuando nace el número (`arranque-del-show.ts`). Con la billetera propia sigue el toque.
+      if (!seAdelanto && !app.drawn && !enStand() && espera?.esperaAbierta() && !(app.frozen?.raffleId !== undefined && apruebaAMano())) {
+        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round).tarjeta) === 0) {
+          seAdelanto = true;
+          // La espera pasa a decir que el número llega y lanza el sorteo (`lanzarDesdeLaEspera`): el mismo camino que su
+          // Reintentar si una compuerta del modo Oficial corta.
+          espera.nacioElNumero();
+        }
+      }
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      // El modo stand no espera ningún número: «Arranca en 3».
-      btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
+      // Mientras el sorteo lanzado por adelantado pasa por sus compuertas, el botón es de él (`sorteo-en-marcha.ts`).
+      if (!sorteoEnMarcha(app.frozen)) {
+        btn.disabled = true;
+        btn.classList.remove("lista");
+        // El modo stand no espera ningún número: «Arranca en 3».
+        btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
+      }
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
       if (left) left.textContent = reloj;
       // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
       if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
     } else {
-      btn.disabled = !!app.drawn;
-      btn.textContent = t("draw");
+      // Si el sorteo está en marcha (la espera en grande lo lanzó antes de que naciera el número), el botón es de él y
+      // no se enciende. Si una compuerta del modo Oficial lo cortó, ya no está en marcha y se enciende para volver a
+      // probar: hasta el 16 de noviembre de 2026 quedaba apagado para siempre.
+      const enMarcha = sorteoEnMarcha(app.frozen);
+      btn.disabled = !!app.drawn || enMarcha;
+      if (!enMarcha) btn.textContent = t("draw");
       // Se enciende con un pulso suave (que se apaga con `prefers-reduced-motion`)
       // hasta que alguien lo apriete: es lo único que hay que hacer ahora.
-      btn.classList.toggle("lista", !app.drawn);
+      btn.classList.toggle("lista", !app.drawn && !enMarcha);
       // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
@@ -574,6 +656,24 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
 let sellandoYa = false;
 
 /**
+ * El sello va camino a la red: recargar o cerrar la pestaña ahora lo deja sin saber si entró, y la lista vuelve
+ * abierta para sellarla otra vez con otra ronda (dos sellos de la misma lista). Mientras tanto, el navegador pregunta
+ * antes de salir.
+ */
+function avisarAntesDeSalir(ev: BeforeUnloadEvent): void {
+  ev.preventDefault();
+  // Los navegadores que no miran `preventDefault` en este evento miran esto.
+  ev.returnValue = "";
+}
+
+/** Mientras el sello va a la red, el cambio de modo lo espera (`modo-ui.ts`) y salir de la página pide confirmación. */
+function marcarMandandoElSello(v: boolean): void {
+  marcarSellandoAhora(v);
+  if (v) window.addEventListener("beforeunload", avisarAntesDeSalir);
+  else window.removeEventListener("beforeunload", avisarAntesDeSalir);
+}
+
+/**
  * Sella la lista.
  *
  * Con wallet conectada el sello va al contrato en Stellar, que deja constancia
@@ -599,10 +699,12 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
     }
     await sellar(opciones);
   } finally {
-    // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista.
-    grandePendiente = false;
+    // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista. Y la pantalla
+    // completa que pidió el toque se suelta: el proyector no se queda en grande mostrando la página con el error.
+    // Si se selló, la espera en grande ya la tomó (`startCountdown`) y esto no suelta nada.
+    soltarLoPedido();
     // Terminó de sellar, bien o mal: el cambio de modo ya no lo espera (`modo-ui.ts`). Si quedó sellado, lo bloquea el sorteo.
-    marcarSellandoAhora(false);
+    marcarMandandoElSello(false);
     sellandoYa = false;
   }
 }
@@ -656,10 +758,7 @@ async function cuentaListaParaSellar(btn: HTMLButtonElement): Promise<boolean> {
         btn.textContent = t(btn.dataset.i);
       }
     },
-    alAbrir: () => {
-      if (grandePendiente) soltarPantallaCompleta();
-      grandePendiente = false;
-    },
+    alAbrir: () => soltarLoPedido(),
     alSeguir: () => {
       if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
         pedirPantallaCompleta();
@@ -712,6 +811,19 @@ async function hayUnSelloPendiente(names: string[]): Promise<boolean> {
   }
 }
 
+/**
+ * El intento de sellar esta lista con esa ronda, tal como lo va a mandar `sealOnChain` (el premio recortado a 160 y su
+ * texto de siempre si está vacío). `sello-seguro.ts` lo guarda antes de mandarlo: si la pestaña muere con el sello en la
+ * red, el toque siguiente averigua primero y no manda otro. Todavía no tiene el hash de la transacción: no hace falta,
+ * el contrato lo encuentra por cuenta, huella y ronda.
+ */
+function intentoDeSello(c: { organizer: string; hash: string; count: number; numWinners: number; prize: string }, round: number): IntentoDeSello {
+  return { organizer: c.organizer, listHash: c.hash, round, count: c.count, numWinners: c.numWinners, meta: (c.prize || t("defaultMeta")).slice(0, 160), desde: Math.floor(Date.now() / 1000) };
+}
+
+/** El sello se mandó y no se pudo averiguar si entró (`SelloSinConfirmar` de `sello-seguro.ts`). */
+const esSelloSinConfirmar = (e: unknown): boolean => typeof e === "object" && e !== null && (e as { name?: unknown }).name === "SelloSinConfirmar";
+
 /** El no del portero fue que no le quedan sorteos oficiales: la ventana de «Se te acabaron». `false` si no era eso. */
 async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promise<boolean> {
   const x = e as { name?: unknown; motivo?: unknown } | null;
@@ -720,7 +832,7 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
     const m = await import("./sin-sorteos");
     if (!m.esSinSorteos(e)) return false;
     // Ya no se está sellando: «Pasar a Prueba» de la ventana tiene que poder cambiar de modo.
-    marcarSellandoAhora(false);
+    marcarMandandoElSello(false);
     await m.alQuedarseSinSorteos({ volverA: btn });
     return true;
   } catch {
@@ -738,7 +850,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
   // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
   if (hayModoOficial && !sinGrabar() && (await frenarPorOtraRed())) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
@@ -749,17 +861,29 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // Seguir sin sello con un sello de esta misma lista que se mandó y no se sabe si entró: el contrato no impide sellar dos
+  // veces la misma lista, así que primero se averigua. Si entró, ese es el sello y se sigue anclado, con su ronda. Si no se
+  // puede saber, se sigue sin sello pero no se manda ningún sello más de esa lista, ni ahora ni cada 15 segundos.
+  let sinReintento = false;
+  if (sinSello) {
+    const antes = await averiguarElSelloPendiente(names, btn);
+    if (antes === "entro") {
+      await sellar({ ...opciones, sinSello: false, saltarChequeo: true });
+      return;
+    }
+    sinReintento = antes === "no-se-sabe";
+  }
   // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
   // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
   if (anchoring && network.name === "mainnet" && cobroPorUso() && !(await hayUnSelloPendiente(names)) && !(await accesoOficialParaSellar(btn, Math.min(ganadoresPedidos(), names.length), opciones.conCupon === true))) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   // En modo Oficial con una cuenta de Google o de correo, la cuenta tiene que estar activada y protegida antes de sellar:
   // si falta algo, el paso «Dejá tu cuenta lista» a pantalla completa (`cuenta-lista-flujo.ts`). Va antes de la
   // confirmación del primer sello y de cerrar la lista, así sus salidas funcionan. Fuera del modo Oficial no se baja nada.
   if (anchoring && network.name === "mainnet" && !(await cuentaListaParaSellar(btn))) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
   const hash = bytesToHex(listHash(names));
@@ -787,7 +911,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // La primera vez que se sella en Oficial en este navegador, una confirmación corta antes de tocar la red. Si la
   // cierra o pasa a Prueba, la pantalla completa que pidió el toque de "Sellar la lista" se suelta: no hay espera.
   if (anchoring && !(await confirmarPrimerSelloOficial())) {
-    if (grandePendiente) soltarPantallaCompleta();
+    soltarLoPedido();
     return;
   }
 
@@ -811,13 +935,19 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`). Y el modo no se cambia hasta
     // que termine (`modo-ui.ts`): la recarga cortaría el envío.
     marcarSellado(true);
-    marcarSellandoAhora(true);
+    marcarMandandoElSello(true);
+    // Los intentos pagados por el portero que entraron a la cadena y fallaron ahí: si el sello no se termina, la pantalla
+    // dice qué pasó con el sorteo oficial que usaron (`sello-tarde-aviso.ts`).
+    let fallosEnLaCadena = 0;
     try {
       // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
       // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
       if (!opciones.saltarChequeo && !(await chequearAntesDeSellar())) {
         btn.disabled = false;
-        cerrarLista(false);
+        // Sin nada mandado, la lista se reabre. Pero si hay un sello de esta lista que se mandó y no se sabe si entró,
+        // sigue cerrada: reabrirla dejaría sumar a alguien, la huella cambiaría, el intento guardado no aparecería y
+        // saldría un segundo sello si el primero había entrado (otro sorteo oficial gastado).
+        cerrarLista(await hayUnSelloPendiente(names));
         hideTxStatus("seal-status");
         marcarSellado(false);
         return;
@@ -867,9 +997,12 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           rondaNueva,
           sinGrabar: (e) => {
             if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
+            if (conPortero && entroYFalloEnLaCadena(e)) fallosEnLaCadena++;
             return selloSinGrabar(e);
           },
-          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
+          // El lugar de esta cuenta y esta lista: guardar o borrar acá no toca el intento de otra lista ni de otra cuenta.
+          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize, { organizer: session.address, listHash: hash }),
+          intentoDe: (r) => intentoDeSello({ organizer: session.address, hash, count: names.length, numWinners, prize }, r),
           avisar: (que) => onStep(que === "verificando" ? "verifying" : que === "otra-ronda" ? "laterRound" : "retrying"),
         },
         previo?.intento ?? null,
@@ -899,7 +1032,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       if (!protegiendoLaCuenta && (await pideProtegerLaCuenta(e))) {
         hideTxStatus("seal-status");
         // El sello no salió: el cambio de modo ya no lo espera, así «Pasar a Prueba» del paso funciona.
-        marcarSellandoAhora(false);
+        marcarMandandoElSello(false);
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
@@ -912,7 +1045,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         }
       }
       btn.disabled = false;
-      cerrarLista(false);
+      // Se mandó y no se sabe si entró: la lista sigue cerrada. Si se cambiara, la huella sería otra, el intento
+      // guardado no aparecería y saldría un segundo sello. Con la misma lista, el próximo toque averigua primero.
+      cerrarLista(esSelloSinConfirmar(e));
       btn.dataset.i = claveDeSellar();
       btn.textContent = t(btn.dataset.i);
       marcarSellado(false);
@@ -926,6 +1061,21 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       if (esCostoAlto(e)) {
         hideTxStatus("seal-status");
         await mostrarCostoAlto(e.costoXlm, e.restaurar);
+        return;
+      }
+      // Antes, algún intento entró a la cadena y falló ahí, pagado por el portero (`sello-tarde-aviso.ts`). Si el último
+      // encontró la cuenta sin sorteos, no fue la persona quien los usó: en lugar de Se te acabaron, qué pasó y qué hacer.
+      // La devolución se promete solo si el portero la anunció en `/cupo`: el sitio puede estar delante de uno que no la hace.
+      const devuelve = fallosEnLaCadena > 0 && (await import("../stellar/patrocinador").then((m) => m.porteroDevuelveLosSellosTardios()).catch(() => false));
+      const tarde = avisoTrasFallarEnLaCadena(e, { fallosEnLaCadena, cobroPorUso: cobroPorUso(), devuelve });
+      if (tarde === "sin-sorteos") {
+        const status = $("seal-status");
+        status.style.display = "block";
+        status.className = "txstatus bad";
+        // El detalle plegado de siempre, y arriba lo que se lee.
+        await escribirError(status, e, "sello", numWinners);
+        status.textContent = t("selloTardeSinSorteos");
+        verError(status);
         return;
       }
       // Con el cobro por uso, el portero (o el candado de antes de la firma) dijo que no quedan sorteos oficiales.
@@ -957,6 +1107,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
       await escribirError(status, e, "sello", numWinners);
+      // Si antes algún intento entró a la cadena y falló, qué pasa con el sorteo oficial que usó.
+      if (tarde === "aviso" || tarde === "aviso-sin-devolucion") status.textContent = `${status.textContent ?? ""} ${t(tarde === "aviso" ? "selloTardeAviso" : "selloTardeAvisoSinDevolucion")}`.trim();
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -983,6 +1135,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     at: new Date().toLocaleString(getLang() === "es" ? "es-BO" : "en-US"),
     prize,
     round,
+    // Los ganadores que se sellaron: el resultado se calcula con esto, no con el campo.
+    numWinners,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
     ...(sinSello ? { sinSello: true } : {}),
@@ -1031,7 +1185,58 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   const quien = currentSession()?.address;
   if (sinSello && quien) {
     anotar({ red: network.name, paso: "sin-sello", accion: "seguir-sin-sello", final: `la ronda nace en ${Math.max(0, roundTime(round) - Math.floor(Date.now() / 1000))} s` });
-    seguirIntentandoElSello({ names, hash, round, ts, prize, numWinners, organizer: quien });
+    if (sinReintento) {
+      // Hay un sello de esta lista sin confirmar: este sorteo queda sin sello y no se manda otro (`averiguarElSelloPendiente`).
+      anotar({ red: network.name, paso: "sin-sello", accion: "seguir-sin-sello", final: "sin reintento: hay un sello de esta lista sin confirmar" });
+      verSinSello("vencio");
+    } else seguirIntentandoElSello({ names, hash, round, ts, prize, numWinners, organizer: quien });
+  }
+}
+
+/**
+ * "Seguir sin sello": antes de seguir, si de esta lista quedó un sello que se mandó y no se sabe si entró (el intento
+ * guardado de `sello-seguro.ts`), se averigua. Devuelve qué pasó con él:
+ *
+ * - `no-hay`: no quedó ninguno, y se sigue como siempre.
+ * - `entro`: ese es el sello de la lista. Queda guardado, y quien llama sella de nuevo sin "Seguir sin sello": retoma ese.
+ * - `no-entro`: no entró ni va a entrar. Se borró, y se sigue como siempre.
+ * - `no-se-sabe`: no se pudo averiguar. Se sigue sin sello y sin volver a mandar ninguno.
+ */
+async function averiguarElSelloPendiente(names: string[], btn: HTMLButtonElement): Promise<"no-hay" | "entro" | "no-entro" | "no-se-sabe"> {
+  const s = currentSession();
+  if (!s) return "no-hay";
+  let seguro: typeof import("./sello-seguro");
+  try {
+    seguro = await import("./sello-seguro");
+  } catch {
+    // Sin el módulo no se puede mirar si quedó uno: ante la duda, no se manda ninguno.
+    return "no-se-sabe";
+  }
+  const contrato = network.contractId ?? "";
+  const huella = bytesToHex(listHash(names));
+  const previo = seguro.leerPendiente(s.address, huella, network.name, contrato);
+  if (!previo) return "no-hay";
+  // Averiguar puede llevar unos segundos: el botón lo dice, la lista sigue como está y el modo no se cambia.
+  const onStep = (step: AnchorStep, detail?: string): void => {
+    btn.textContent = stepLabel(step);
+    showTxStatus("seal-status", step, detail);
+  };
+  btn.disabled = true;
+  onStep("verifying");
+  marcarSellado(true);
+  marcarMandandoElSello(true);
+  try {
+    const r = await seguro.averiguarPendiente(previo.intento, {
+      resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
+      guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, previo.premio, { organizer: s.address, listHash: huella }),
+    });
+    return r.estado;
+  } catch {
+    return "no-se-sabe";
+  } finally {
+    hideTxStatus("seal-status");
+    marcarMandandoElSello(false);
+    marcarSellado(false);
   }
 }
 
@@ -1062,6 +1267,7 @@ const sigueSiendo = (c: SorteoSinSello): boolean => app.frozen?.round === c.roun
 function seguirIntentandoElSello(c: SorteoSinSello): void {
   reintentoActual?.cancelar();
   const contrato = network.contractId ?? "";
+  const seguroListo = import("./sello-seguro");
   const reintento = reintentarSello({
     round: c.round,
     ts: c.ts,
@@ -1072,7 +1278,9 @@ function seguirIntentandoElSello(c: SorteoSinSello): void {
       ),
     resolver: (intento) => resolverSelloEnLaRed(intento),
     sinGrabar: selloSinGrabar,
-    guardarPendiente: (intento) => void import("./sello-seguro").then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize)),
+    // Un solo `import()`: lo que se guarda y lo que se borra pasa en el orden en que se pidió.
+    guardarPendiente: (intento) => void seguroListo.then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize, { organizer: c.organizer, listHash: c.hash })),
+    intentoDe: (r) => intentoDeSello({ organizer: c.organizer, hash: c.hash, count: c.names.length, numWinners: c.numWinners, prize: c.prize }, r),
     alIntento: (n) => {
       if (!sigueSiendo(c)) return;
       verSinSello("intentando");
@@ -1191,6 +1399,10 @@ export function resumeFrozen(e: {
   const ta = $<HTMLTextAreaElement>("ta");
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
+  // El modo de la pantalla pasa a ser el del sorteo sellado. Una recarga vuelve a Sortear premios aunque se haya sellado
+  // un orden, y el selector de modo sigue a mano hasta retomar: un orden se retoma como orden, y un sorteo común no queda
+  // con la cantidad de la lista porque antes se tocó Orden de turnos.
+  ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
   ponerPremio(e.prize);
   ponerGanadores(e.numWinners);
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
@@ -1201,6 +1413,7 @@ export function resumeFrozen(e: {
     at: new Date(e.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US"),
     prize: e.prize,
     round: e.round,
+    numWinners: e.numWinners,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(e.sealTx ? { sealTx: e.sealTx } : {}),
     ...(e.sinSello && raffleId === undefined ? { sinSello: true } : {}),
@@ -1319,11 +1532,13 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   if (!juegoAMano && !params.has("demo")) {
     // Después de un premio, otro juego; la primera vez, el de siempre (D02).
     // Un orden de turnos queda con la ruleta si la lista entra (`juegoPorDefecto`); con más de lo que admite, el de siempre.
-    const turnos = isTurnOrder(names.length, Math.min(premiosElegidos(), names.length), f.prize);
-    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos(), turnos);
+    const turnos = isTurnOrder(names.length, premiosElegidos(names.length), f.prize);
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos(names.length)) : juegoPorDefecto(names.length, premiosElegidos(names.length), turnos);
     juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
+  // Y un orden de turnos no se queda en un juego que habla de premios, aunque se haya elegido a mano en otro sorteo.
+  dejarUnJuegoQueSirva(names, f.prize);
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
@@ -1334,7 +1549,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
     // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame(recomendar(names.length, premiosElegidos()).games.find((r) => r.fits === true)?.game ?? "tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length, premiosElegidos(names.length)).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

@@ -11,7 +11,7 @@ import { type EstadoDelPatrocinio, fechaOCercana } from "./patrocinador";
 
 type Decir = (clave: string) => string;
 
-/** Hasta cuántos sorteos se avisa «Sumá más antes de tu próximo evento», y solo si hay con qué sumar (el pago prendido). */
+/** Hasta cuántos sorteos se avisa «Sumá más antes de tu próximo evento», y solo si hay con qué sumar (el botón al lado). */
 export const POCOS_SORTEOS = 2;
 
 /** Hasta cuántos ganadores un sello gasta un sorteo oficial; con más, dos (lo mismo que el portero y `acceso-oficial.ts`). */
@@ -50,11 +50,14 @@ function cuantosQuedan(n: number, decir: Decir, pocos: boolean): string {
 /**
  * La línea del cupo, junto a «Sellar la lista»: «Te quedan 13 sorteos oficiales. 3 vencen el 14 de enero.» Con cero, que
  * se acabaron y qué hacer; con sorteos de sobra pero el tope de sellos del mes alcanzado, cuándo se libera.
+ *
+ * `pago`: al lado de la línea va el botón de sumar sorteos (`ui/cupo-patrocinio.ts`). Solo entonces la línea ofrece sumar
+ * («Sumá más antes de tu próximo evento», «Usá un cupón o sumá sorteos»): un texto que ofrece comprar va con su botón.
  */
 export function lineaDelCupoOficial(estado: EstadoDelPatrocinio | null, idioma: string, decir: Decir, o: { pago?: boolean } = {}): string | null {
   const s = sorteosDe(estado);
   if (!s) return null;
-  if (s.quedan <= 0) return decir("errAnchor.porteroSinSorteos");
+  if (s.quedan <= 0) return decir(o.pago === true ? "cupoOfCeroSumar" : "errAnchor.porteroSinSorteos");
   if (estado?.rige === "portero" && estado.cupo.sellos.quedan <= 0) {
     // Sin el tope no hay número que decir: ante la duda, ninguna línea (la caja de la red ya explica el caso).
     if (estado.cupo.sellos.max <= 0) return null;

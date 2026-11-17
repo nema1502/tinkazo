@@ -1,9 +1,10 @@
 /// <reference types="vitest/config" />
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
+import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
 
 type Dict = Record<string, unknown>;
 
@@ -123,6 +124,28 @@ function validarBanderasDeAlta(): Plugin {
 }
 
 /**
+ * La publicación de producción con la compra de sorteos prendida no sale mientras las páginas digan lo de antes: que es
+ * gratis para todos, que los precios se publican pronto o que no se venden paquetes, o con lo de la compra todavía en un
+ * `<template data-con-cobro>` (`src/alta-textos-con-cobro.ts`). El HTML se cambia en el mismo commit que la prende. Las
+ * vistas previas, la CI y los builds locales no se frenan: ahí se prueba la compra.
+ */
+function validarPaginasConCobro(): Plugin {
+  return {
+    name: "tinkazo:paginas-con-cobro",
+    apply: "build",
+    config(_config, { mode }) {
+      const paginas = Object.fromEntries(
+        readdirSync(__dirname)
+          .filter((f) => f.endsWith(".html"))
+          .map((f) => [f, readFileSync(resolve(__dirname, f), "utf8")]),
+      );
+      const problemas = problemasDeLasPaginasConCobro(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]), paginas);
+      if (problemas.length) throw new Error(`Las páginas todavía dicen lo de antes de la compra de sorteos:\n- ${problemas.join("\n- ")}`);
+    },
+  };
+}
+
+/**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
  * hacer clic se muestra al instante. Solo esas once: son livianas y no tienen
@@ -234,7 +257,7 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [validarBanderasDeAlta(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
+  plugins: [validarBanderasDeAlta(), validarPaginasConCobro(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
   build: {
     target: "es2022",
     sourcemap: true,

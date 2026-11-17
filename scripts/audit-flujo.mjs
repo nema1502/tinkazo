@@ -80,6 +80,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -434,9 +435,9 @@ async function conectarCuentaDePrueba(page) {
     await sleep(900);
     return;
   }
-  await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
+  await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
   await sleep(300);
@@ -1121,7 +1122,7 @@ async function anchosDeCelular(browser, ancho) {
       await page.screenshot(join(outDir, `flujo-ancho-${ancho}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
     };
     console.log(`\n  ${quien}`);
-    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('btn-sample').click(); true`);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
     await sleep(800);
     await mirar("lista cargada");
     await page.eval("document.getElementById('btn-freeze').click(); true");

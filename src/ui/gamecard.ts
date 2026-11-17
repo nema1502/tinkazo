@@ -1,6 +1,8 @@
 import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
+import { esSoloMirar } from "../solo-mirar";
+import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
 
 /**
  * La tarjeta de "cómo se juega", antes de que arranque el juego.
@@ -17,8 +19,8 @@ import type { Game } from "../state";
  * con movimiento reducido no hay show. No suena por su cuenta: la música del
  * juego arranca con ella.
  */
-/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. */
-export const CARD_SECONDS = 3.5;
+/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. Vive en `arranque-del-show.ts`. */
+export const CARD_SECONDS = LECTURA_DE_LA_TARJETA_S;
 
 /** El nombre de cada juego, el mismo del selector. */
 export const NOMBRE: Partial<Record<Game, string>> = {
@@ -34,6 +36,11 @@ export const REGLA: Partial<Record<Game, string>> = {
   tombola: "gcTombola", wheel: "gcWheel", teleferico: "gcTeleferico", pasanaku: "gcPasanaku", stellar: "gcStellar",
   sapo: "gcSapo", quien: "gcQuien", ledger: "gcLedger", rockets: "gcRockets", totora: "gcTotora",
   chovena: "gcChovena", trueque: "gcTrueque",
+};
+
+/** La regla cuando el resultado es un orden: quién recibe el turno 1, sin ganadores ni premios. */
+export const REGLA_ORDEN: Partial<Record<Game, string>> = {
+  race: "gcRaceOrden", wheel: "gcWheelOrden", chovena: "gcChovenaOrden", guajojo: "gcGuajojoOrden",
 };
 
 /**
@@ -77,22 +84,27 @@ export interface GameCard {
 }
 
 /** El contenido de la tarjeta para un juego. */
-function caja(game: Game, people: number, prizes: number, premio = ""): string {
+function caja(game: Game, people: number, prizes: number, premio = "", orden = false): string {
   const L = T[getLang()];
-  const varios = prizes > 1 ? claveVarios(game) : undefined;
+  const varios = !orden && prizes > 1 ? claveVarios(game) : undefined;
   // Lo único que la tarjeta suma a la regla: con varios premios, en un juego que cuenta solo el primero, que el
   // cartel del final los muestra a todos. El pelotón, las tandas, la clasificatoria y cuántas personas y premios son
   // se fueron (regla de letra, 26 de octubre de 2026): la sala los ve en el juego, y la tarjeta se lee en tres segundos.
-  const extras = [prizes > 1 && !varios ? L.gcPrizesNote(prizes) : ""].filter(Boolean);
+  const extras = [!orden && prizes > 1 && !varios ? L.gcPrizesNote(prizes) : ""].filter(Boolean);
+  const regla = orden ? REGLA_ORDEN[game] ?? "gcOrdenGeneral" : varios ?? claveRegla(game);
   return (
     `<p class="gc-kicker">${esc(t("gcKicker"))}</p>` +
     `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(claveNombre(game)))}</span></h2>` +
-    `<p class="gc-regla" id="gc-regla">${esc(t(varios ?? claveRegla(game)))}</p>` +
+    `<p class="gc-regla" id="gc-regla">${esc(t(regla))}</p>` +
     extras.map((x) => `<p class="gc-extra">${esc(x)}</p>`).join("") +
     // Qué se sortea, con el nombre que le puso quien organiza: la tarjeta decía
     // "1 premio" sin decir cuál (revisión del experto en sorteos).
-    (premio ? `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>` : "") +
-    `<p class="gc-honesta" id="gc-honesta">${esc(t("gcHonest"))}</p>`
+    (premio
+      ? orden
+        ? `<p class="gc-premio"><span>${esc(t("cortinaSeOrden"))}</span></p>`
+        : `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>`
+      : "") +
+    `<p class="gc-honesta" id="gc-honesta">${esc(t(orden ? "gcHonestOrden" : "gcHonest"))}</p>`
   );
 }
 
@@ -123,6 +135,9 @@ export function showGameCard(
   sonar?: (n: number) => void,
   premio = "",
   espera?: Promise<unknown>,
+  orden = false,
+  /** La línea de arriba mientras tanto: desde que el juego no espera la grabación, la del número que llega. */
+  textoDeEspera = "cortinaNumero",
 ): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
@@ -142,10 +157,11 @@ export function showGameCard(
   el.innerHTML =
     `<div class="gc-fondo" aria-hidden="true"></div>` +
     (espera
-      ? `<p class="gc-graba" role="status"><span>${esc(t("cortinaGraba"))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
+      ? `<p class="gc-graba" role="status"><span>${esc(t(textoDeEspera))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
       : "") +
-    `<div class="gc-caja">${caja(game, people, prizes, premio)}</div>` +
-    `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>` +
+    `<div class="gc-caja">${caja(game, people, prizes, premio, orden)}</div>` +
+    // En la vista de espectador no hay Saltar: saltada mientras se graba, largaba sin la cuenta y antes que la sala.
+    (esSoloMirar() ? "" : `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>`) +
     `<div class="gc-barra" aria-hidden="true"><i></i></div>`;
   document.body.appendChild(el);
   // El foco a la tarjeta: con el foco en un botón de atrás, Enter o espacio
@@ -200,6 +216,7 @@ export function showGameCard(
   let grabado = !espera;
   let tope = 0;
   const saltar = (): void => {
+    if (esSoloMirar()) return;
     if (grabado) terminar();
     else saltada = true;
   };
@@ -283,7 +300,7 @@ export function showGameCard(
 
   const update = (g: Game): void => {
     const c = el.querySelector(".gc-caja");
-    if (c) c.innerHTML = caja(g, people, prizes, premio);
+    if (c) c.innerHTML = caja(g, people, prizes, premio, orden);
     fondo(g);
   };
   return { ready, hide, update };

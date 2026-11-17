@@ -15,6 +15,7 @@ import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import type { Montaje3D } from "../tres/tipos";
 import type { BailarinEntrada, EntradaChovena, ModoBailarin } from "../tres/chovena-3d-tipos";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
@@ -761,8 +762,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (x >= e.x0) once(`x${k}`, () => {
         const v = e.victims;
         const prize = v.filter((i) => prized.has(i));
-        if (v.length === 1) say(prized.has(v[0] as number) ? L().cChoPrize(nm(v[0] as number)) : L().cChoOut(nm(v[0] as number)), 0.55 + 0.25 * (1 - remainingAt(x) / n));
-        else if (prize.length === 1 && v.length <= 3) say(L().cChoPrize(nm(prize[0] as number)), 0.7);
+        if (v.length === 1) say(!esResultadoDeTurnos() && prized.has(v[0] as number) ? L().cChoPrize(nm(v[0] as number)) : L().cChoOut(nm(v[0] as number)), 0.55 + 0.25 * (1 - remainingAt(x) / n));
+        else if (!esResultadoDeTurnos() && prize.length === 1 && v.length <= 3) say(L().cChoPrize(nm(prize[0] as number)), 0.7);
         else if (v.length <= 3) say(L().cChoOutN(v.map(nm)), 0.6);
         else say(L().cChoMany(v.length), 0.6);
         beep(note(5), 0.12, "triangle", 0.05);
@@ -830,7 +831,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (story.arc === "susto" && !sustoInStop) say(L().cChoWobble(nm(sustoIdx)), 0.9);
     });
     if (x >= FX0) once("fx", () => {
-      say(prized.has(rivalIdx) ? L().cChoPrize(nm(rivalIdx)) : L().cChoOut(nm(rivalIdx)), 0.95);
+      say(!esResultadoDeTurnos() && prized.has(rivalIdx) ? L().cChoPrize(nm(rivalIdx)) : L().cChoOut(nm(rivalIdx)), 0.95);
       beep(note(5), 0.12, "triangle", 0.055);
       setTimeout(() => beep(note(2), 0.2, "triangle", 0.05), 90);
       cam.shake(6 * S.u());

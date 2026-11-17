@@ -14,8 +14,6 @@ export const TEXTOS_ALTA_SIN_PAGO: { es: Record<string, string>; en: Record<stri
     altaErrServicio: "Ahora no podemos revisar cupones. Probá de nuevo en un momento.",
     cupoOfCeroTexto: "Tu lista no se selló. Para sellar en modo Oficial, usá otro cupón. En Prueba seguís gratis.",
     cupoOfVencidoTexto: "Tus sorteos oficiales vencieron el {fecha}. Usá otro cupón o seguí gratis en Prueba.",
-    "errAnchor.porteroSinAlta": "Tu cuenta todavía no tiene acceso al modo Oficial. Activala con el cupón de tu evento.",
-    "errAnchor.porteroSinSorteos": "Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.",
   },
   en: {
     altaTexto: "To draw in Live mode, activate your account with your event's coupon.",
@@ -23,7 +21,23 @@ export const TEXTOS_ALTA_SIN_PAGO: { es: Record<string, string>; en: Record<stri
     altaErrServicio: "We can't check coupons right now. Try again in a moment.",
     cupoOfCeroTexto: "Your list wasn't sealed. To seal in Live mode, use another coupon. Test mode is still free.",
     cupoOfVencidoTexto: "Your Live draws expired on {fecha}. Use another coupon or keep going for free in Test mode.",
-    "errAnchor.porteroSinAlta": "Your account doesn't have access to Live mode yet. Activate it with your event's coupon.",
-    "errAnchor.porteroSinSorteos": "You're out of Live draws. Use another coupon or keep going for free in Test mode.",
+  },
+};
+
+/**
+ * Las de la caja del acceso y la de «Se te acabaron», con nombre propio y siempre en el diccionario: con la compra en el
+ * build, la pantalla las pide cuando el servidor no vende nada ahora (o con un cupón en mano, en la caja), para no
+ * nombrar un paquete sin su botón (`cuenta-lista-estado.ts`, `ui/sin-sorteos.ts`). Son las mismas de arriba.
+ */
+export const TEXTOS_ALTA_SIN_VENTA: { es: Record<string, string>; en: Record<string, string> } = {
+  es: {
+    altaTextoSinVenta: TEXTOS_ALTA_SIN_PAGO.es.altaTexto as string,
+    altaYaActivadaSinVenta: TEXTOS_ALTA_SIN_PAGO.es.altaYaActivada as string,
+    cupoOfCeroTextoSinVenta: TEXTOS_ALTA_SIN_PAGO.es.cupoOfCeroTexto as string,
+  },
+  en: {
+    altaTextoSinVenta: TEXTOS_ALTA_SIN_PAGO.en.altaTexto as string,
+    altaYaActivadaSinVenta: TEXTOS_ALTA_SIN_PAGO.en.altaYaActivada as string,
+    cupoOfCeroTextoSinVenta: TEXTOS_ALTA_SIN_PAGO.en.cupoOfCeroTexto as string,
   },
 };

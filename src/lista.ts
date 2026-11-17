@@ -34,6 +34,7 @@ function cabinaDe(i: number): string {
 }
 
 function pintar(): void {
+  const conCabina = new URLSearchParams(location.search).get("juego") === "teleferico";
   const rep = repetidos(names);
   const hash = bytesToHex(listHash(names));
   // Esta página no conoce la bandera de quien organiza: la regla de todos (`seCuentaPorPersona`) con el modo que
@@ -47,7 +48,7 @@ function pintar(): void {
       : t("salaPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
   $("l-huella").textContent = hash.slice(0, 12) + "…";
   $("l-lista").innerHTML = names
-    .map((n, i) => `<li data-p="${i + 1}"${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}<small class="cabina" style="display:block;opacity:.75">${esc(cabinaDe(i))}</small></li>`)
+    .map((n, i) => `<li data-p="${i + 1}"${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}${conCabina ? `<small class="cabina" style="display:block;opacity:.75">${esc(cabinaDe(i))}</small>` : ""}</li>`)
     .join("");
   buscarAhora();
 }

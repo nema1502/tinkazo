@@ -5,7 +5,8 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, pintarNotaDelJuego, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { fijoPara } from "./ui/espectador-fijo";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
@@ -17,6 +18,8 @@ import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
+import { network } from "./stellar/config";
+import { limpiarPasoDelCupon } from "./stellar/cupon-paso-guardado";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
@@ -29,7 +32,7 @@ import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
 import { initOrganizadorInteractivo } from "./sala/organizador";
 import { equiposActivo } from "./equipos/bandera";
-import { requestedMode } from "./modos/bandera";
+import { abreLaHerramienta } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
 import { fijarElTema } from "./tema-forzado";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
@@ -108,10 +111,24 @@ function paceLabels(): void {
 }
 onLangChange(paceLabels);
 paceSel.addEventListener("change", () => {
+  // Ya se mira en celulares desde el QR, con este ritmo (`ui/espectador-fijo.ts`): queda hasta el resultado, y se dice.
+  const fijo = fijoPara(app.frozen, !!app.drawn);
+  const notaDelRitmo = document.getElementById("pace-nota");
+  if (notaDelRitmo) {
+    notaDelRitmo.textContent = fijo ? t("juegoFijoEspectador") : "";
+    notaDelRitmo.hidden = !fijo;
+  }
+  if (fijo) {
+    paceSel.value = fijo.ritmo;
+    return;
+  }
   setPace(paceSel.value as Pace);
   // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
   refrescarRecomendacion();
 });
+
+// El QR del espectador ya se ve (`ui/espectador-fijo.ts`): la nota del selector dice que el juego y la duración quedan.
+document.addEventListener("tinkazo:espectadores", () => pintarNotaDelJuego());
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {
@@ -137,6 +154,8 @@ for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => ele
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 initPlegables();
 $("btn-draw").addEventListener("click", () => void draw());
+// La espera en grande lanza el sorteo unos segundos antes de que nazca el número, para leer la tarjeta mientras tanto (freeze.ts).
+document.addEventListener("tinkazo:adelantar", () => void draw({ adelantado: true }));
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 // Precargada con la página quieta: si se publica una versión nueva con la
@@ -242,6 +261,8 @@ initStand();
 iniciarRed({ sellar: (op) => freeze(op) });
 // Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
 iniciarCupo();
+// El campo del cupón pertenece a Oficial: al arrancar en Prueba se olvida un pedido que no se llegó a usar.
+if (network.name === "testnet") limpiarPasoDelCupon();
 ingresarSiLoPidio();
 initMenuMas();
 iniciarFeedback(
@@ -255,6 +276,9 @@ initSiguiente({ segundos: secondsToRound });
 initTutorial();
 initOnboarding();
 initLumaAyuda();
+// La demo de la compra con QR (`?compra-demo`): solo en la máquina de quien prueba y con VITE_RAMPA_DEMO=1, con datos
+// inventados y sin red (`ui/compra-demo.ts`). Se baja aparte, y nada se abre hasta tocar una compra de la lista.
+if (params.has("compra-demo")) void import("./ui/compra-demo").then((m) => m.montarDemoDeCompra());
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
@@ -271,8 +295,8 @@ initLumaAyuda();
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
   const body = document.body;
-  // `?modo=turnos` abre la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
-  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || requestedMode() === "turnos";
+  // `?modo=turnos` y `?modo=varias` abren la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || abreLaHerramienta();
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
@@ -581,7 +605,9 @@ setLang(initialLang());
 rotateWords();
 // Las animaciones de atención (estilos-atencion.ts): el temblor de los botones
 // del hero tras ~8 s sin interactuar, el destello periódico del pie y el hover
-// vivo en las capturas de la portada. Ninguna decide nada del sorteo.
+// vivo en las capturas de la portada. Ninguna decide nada del sorteo. Hoy entran
+// apagadas: cada una tiene su interruptor en ATENCION_PRENDIDA (ver TODO(merge-115)
+// en estilos-atencion.ts sobre los valores que traía guido/final).
 iniciarTemblorHero();
 iniciarDestelloPie();
 iniciarHoverVivo(".portada-juegos a");
@@ -594,11 +620,12 @@ if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);
 // El modo espectador (`ui/espectador.ts`): el enlace del QR de la espera llega a esta misma
 // página con los datos en el fragmento, y abre la vista de solo-lectura. Se baja aparte:
-// quien entra a sortear no lo descarga.
+// quien entra a sortear no lo descarga. Un enlace roto no cae callado en la herramienta: lo dice.
 if (location.hash.startsWith("#espectador=")) {
   void import("./ui/espectador").then((m) => {
     const datos = m.datosDelEnlace(location.hash);
     if (datos) m.abrirEspectador(datos, initialLang());
+    else m.avisarEnlaceRoto(initialLang());
   });
 }
 // La vista del participante (juegos interactivos): el QR de la sala llega a esta misma página con el

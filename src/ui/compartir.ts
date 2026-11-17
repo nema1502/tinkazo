@@ -2,12 +2,12 @@ import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
 import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { turnMessage } from "../modos/mensajes";
-import { isTurnOrder } from "../modos/turnos";
+import { isTurnOrder, ordenSinComprobante } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
-import { fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
-import { fotoDelJuegoActiva } from "./foto-juego-bandera";
+import { fotoDelJuegoEntra, fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoPara } from "./foto-juego-bandera";
 import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
@@ -29,10 +29,11 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
  *
  * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
- * tiene ilustración (`foto-fondos.ts`) y la bandera `VITE_FOTO_JUEGO` está
- * prendida (`foto-juego-bandera.ts`, apagada por defecto), van dos fotos lado a
- * lado: la del juego, elegida, y la de siempre. Tocar una la elige, y se
- * comparte, se descarga o se copia solo esa. Mis sorteos, la página de
+ * tiene ilustración (`foto-fondos.ts`), está entre los que pasaron la mirada y
+ * la bandera `VITE_FOTO_JUEGO` no la apaga (`foto-juego-bandera.ts`, prendida
+ * por defecto), con hasta tres ganadores (`TOPE_FOTO_JUEGO` en `foto.ts`; con
+ * más, la lista taparía el dibujo y va la de siempre, sola), van dos fotos lado a lado: la del juego, elegida, y la de
+ * siempre. Tocar una la elige, y se comparte, se descarga o se copia solo esa. Mis sorteos, la página de
  * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
@@ -263,6 +264,8 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   // Un orden de turnos: «Orden de turnos» arriba, las personas en el orden del sorteo (la foto muestra las primeras y «N más»)
   // y debajo cuántas son, sin «Premio:» ni «Entre N personas».
   const turnos = isTurnOrder(d.total, ganadores.length, d.premio);
+  // Un orden de turnos sin sello no tiene comprobante: la foto no lleva QR y dice por qué.
+  const sinComprobante = ordenSinComprobante(d.total, ganadores.length, d.premio, !!d.sinSello);
   // Las dos cuentas cuando no es una participación por persona.
   const part = !turnos && parte;
   // Quien salió más de una vez va en un solo renglón: «Ganó» o «Ganaron» según las personas que quedan, como el mensaje.
@@ -303,10 +306,10 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
         ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
-    enlace,
+    enlace: sinComprobante ? "" : enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
     escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
-    sinQr: cad(lang, d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
+    sinQr: cad(lang, sinComprobante ? "turnsSinComprobante" : d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
   };
 }
 
@@ -491,6 +494,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const urls: string[] = [];
   let archivos: File[] = [];
   let mensaje = "";
+  /** El enlace que se publica en Facebook: el del comprobante (el corto si salió). Sin comprobante, no hay. */
+  let enlaceParaPublicar = "";
   /** Dos fotos para elegir (la del juego y la de siempre): se comparte solo la elegida. */
   let elegir = false;
   let elegida = 0;
@@ -518,6 +523,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     if (!dlg.isConnected) return;
     mensaje = listo.mensaje;
     txt.value = mensaje;
+    enlaceParaPublicar = listo.fotos.find((f) => f.enlace)?.enlace ?? "";
     const ext = listo.fotos.length > 1;
     archivos = pngs.flatMap((png, i) =>
       png ? [new File([png], `${listo.archivo}${ext ? `-${i + 1}` : ""}.png`, { type: "image/png" })] : [],
@@ -576,8 +582,9 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     wa.disabled = false;
     // Facebook siempre puede (abre el publicador con el enlace); Instagram solo
     // en móvil, donde su app toma la foto: en computadora no hay camino y no se muestra.
-    fb.disabled = false;
-    fb.hidden = false;
+    // El publicador de Facebook recibe un enlace, no un mensaje: sin enlace (un sorteo sin sello) no se ofrece.
+    fb.disabled = !enlaceParaPublicar;
+    fb.hidden = !enlaceParaPublicar;
     const celular = matchMedia("(pointer: coarse)").matches;
     ig.disabled = !celular || !archivos.length;
     ig.hidden = !celular;
@@ -594,16 +601,16 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   let compartiendo = false;
   // Facebook: el publicador de la web con el enlace del sorteo (la foto va aparte, copiada o bajada).
   fb.addEventListener("click", () => {
-    const u = encodeURIComponent(mensaje);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${u}`, "_blank", "noopener,width=640,height=560");
+    if (!enlaceParaPublicar) return;
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(enlaceParaPublicar)}`, "_blank", "noopener,width=640,height=560");
     contarCompartido(p, "copy");
   });
-  // Instagram: en móvil, la foto de la elegida al portapapeles (o bajada) y la app abierta: ahí se pega.
-  ig.addEventListener("click", async () => {
+  // Instagram: en móvil, la foto elegida se baja y se abre Instagram, donde se sube.
+  ig.addEventListener("click", () => {
     const primera = elegidos()[0];
     if (primera) descargar(primera);
     window.open("https://www.instagram.com/", "_blank", "noopener");
-    avisar(cad(lang, "cmpAdjuntaLaFoto"));
+    avisar(cad(lang, "cmpIgAviso"));
     contarCompartido(p, "copy");
   });
   wa.addEventListener("click", () => {
@@ -668,14 +675,16 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         // El logo va dentro del enlace corto, cifrado; el largo y el comprobante no lo llevan.
         // Sin logo también: uno que se quitó después de sellar no puede seguir viajando en el corto.
         ponerLogoDeRuta(rutaDe(d.enlace), d.logo);
-        const c = op.corto === false ? null : await acortar(d.enlace);
+        // Un orden de turnos sin sello no tiene enlace que acortar.
+        const c = op.corto === false || ordenSinComprobante(d.total, d.ganadores.length, d.premio, !!d.sinSello) ? null : await acortar(d.enlace);
         const enlace = c?.corto ?? d.enlace;
         const foto = fotoDeSorteo(lang, d, enlace);
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
           fotos: [foto],
-          // La misma foto sobre el fondo del juego que se jugó: se ofrece con la bandera prendida y si ese juego tiene ilustración.
-          ...(d.juego && fotoDelJuegoActiva() ? { juego: { ...foto, fondo: d.juego } } : {}),
+          // La misma foto sobre el fondo del juego que se jugó: con la bandera prendida, si el juego está en la lista y tiene
+          // ilustración, y con hasta tres ganadores (`TOPE_FOTO_JUEGO`): con más, la lista taparía el dibujo.
+          ...(d.juego && fotoDelJuegoPara(d.juego) && fotoDelJuegoEntra(foto) ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };

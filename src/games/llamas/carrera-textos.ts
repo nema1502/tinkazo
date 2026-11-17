@@ -1,4 +1,5 @@
 import { enStand } from "../../ensayo-modo";
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import type { Textos } from "../pixi/kit";
 
 /**
@@ -9,14 +10,15 @@ import type { Textos } from "../pixi/kit";
  *
  * En la final los momentos (se plantó, tropezó, viene de atrás, mano a mano) no
  * llevan nombre: nombrarlos decía quién gana. Los nombres de la final son los de
- * la tribuna (`carHinchada`), sorteados sin mirar quién gana.
+ * la tribuna (`carHinchada`), sorteados sin mirar quién gana, y los de a quien le
+ * pasa un obstáculo, que le toca a cualquiera.
  *
  * "Salida", no "largada", y nada que huela a hipódromo de apuestas.
  */
 export const TEXTOS_CARRERA: Textos = {
   es: {
-    // En una ronda de stand nadie gana: sale quien llegue a la meta.
-    carMeta: () => (enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
+    // En una ronda de stand o en un orden nadie gana: la meta solo cuenta la llegada.
+    carMeta: () => (esResultadoDeTurnos() ? "¡Turno uno al cruzar la meta!" : enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
     carBusquen: "¡Busquen su nombre!",
     carSalida: "¡Salida!",
     carRotuloMeta: "META",
@@ -41,10 +43,12 @@ export const TEXTOS_CARRERA: Textos = {
     carCuela: "¡Alguien se cuela!",
     carHinchada: (n: string) => `¡Vamos, ${n}!`,
     carHinchadaTodas: "¡Vamos, vamos!",
-    carAlud: "¡Caen piedras del cerro!",
+    carCuidadoPiedras: (n: string) => `¡Cuidado, ${n}: piedras!`,
     carValla: "¡A saltar la valla!",
-    carSaltoMal: "¡Alguien salta mal!",
-    carRafaga: "¡Ráfaga del altiplano!",
+    carTumbaValla: (n: string) => `¡${n} tumba la valla!`,
+    carTumbanValla: "¡Tumban la valla!",
+    carRemolino: "¡Viene un remolino!",
+    carEscupen: (n: string) => `¡Le escupen a ${n}!`,
     carFoto: "¡Foto finish!",
     carCabeza: "¡Cabeza a cabeza!",
     carTanda: "¡Siguiente tanda!",
@@ -52,7 +56,7 @@ export const TEXTOS_CARRERA: Textos = {
     carCierraTanda: "¡Se cierra el portón!",
   },
   en: {
-    carMeta: () => (enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
+    carMeta: () => (esResultadoDeTurnos() ? "Turn one at the finish!" : enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
     carBusquen: "Find your name!",
     carSalida: "Go!",
     carRotuloMeta: "FINISH",
@@ -62,7 +66,7 @@ export const TEXTOS_CARRERA: Textos = {
     carBarro: "the mud",
     carPiedras: "the rocks",
     carViento: "the wind",
-    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lay down!`, `${n} rests a while!`][v % 3] ?? "",
+    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lies down!`, `${n} rests a while!`][v % 3] ?? "",
     carVa: (n: string) => `${n} is in front!`,
     carAdelante: (n: string, v: number) => [`${n} moves up front!`, `Now ${n} leads!`, `${n} takes the lead!`][v % 3] ?? "",
     carRecta: "On to the home stretch!",
@@ -77,10 +81,12 @@ export const TEXTOS_CARRERA: Textos = {
     carCuela: "Someone sneaks in!",
     carHinchada: (n: string) => `Go, ${n}!`,
     carHinchadaTodas: "Come on, come on!",
-    carAlud: "Rocks fall off the hill!",
+    carCuidadoPiedras: (n: string) => `Watch out, ${n}, rocks!`,
     carValla: "Jump the fence!",
-    carSaltoMal: "Someone botches the jump!",
-    carRafaga: "A gust off the highlands!",
+    carTumbaValla: (n: string) => `${n} knocks the fence over!`,
+    carTumbanValla: "They knock the fence over!",
+    carRemolino: "Here comes a dust devil!",
+    carEscupen: (n: string) => `${n} gets spat on!`,
     carFoto: "Photo finish!",
     carCabeza: "Head to head!",
     carTanda: "Next heat!",

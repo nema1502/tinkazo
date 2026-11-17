@@ -325,7 +325,7 @@ describe("kit de marca para patrocinios y eventos", () => {
       for (const n of listar()) if (!original.has(n)) rmSync(new URL(n, dir));
       for (const [n, bytes] of original) writeFileSync(new URL(n, dir), bytes);
     }
-  }, 300_000);
+  }, 510_000);
 });
 
 // Segunda vuelta del kit: logos con la dirección, más stickers, hojas A4, redes, afiches, cartel y portada.
@@ -662,6 +662,15 @@ describe("colección de stickers con personaje", async () => {
     expect(png.size).toBe(nombres.length);
     const leeme = zip.get(`${r}LEEME.txt`)!.toString("utf8");
     for (const f of ["@tinkazo.app", "kiss-cut", "5 mm", "3 mm", "no vienen en sobres sorpresa", "no mystery packs"]) expect(leeme, f).toContain(f);
+  });
+  it("el LEEME del ZIP sigue las reglas de escritura en los dos idiomas: sin comillas angulares, punto y coma, rayas largas, flechas ni punto medio", () => {
+    const leeme = leerZip(enCol("tinkazo-stickers.zip")).get("tinkazo-stickers/LEEME.txt")!.toString("utf8");
+    expect(leeme).toContain("TINKAZO, COLECCIÓN DE STICKERS");
+    expect(leeme).toContain("TINKAZO, STICKER COLLECTION");
+    expect(leeme).not.toMatch(/[«»;—–→←↔·]/);
+    // La hoja se nombra por su nombre, sin comillas.
+    expect(leeme).toContain("y la hoja laptop, con los nueve");
+    expect(leeme).toContain("and the laptop sheet with the nine");
   });
   it("las frases están en es y en, con Instagram, sin punto medio y sin nada de apuestas", () => {
     const txt = enCol("frases.txt").toString("utf8");

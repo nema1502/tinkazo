@@ -153,6 +153,20 @@ describe("la foto con el fondo del juego", () => {
     expect(await fotoDelJuegoPng({ ...fotoBase, fondo: "trompo" })).toBeNull();
     expect(await fotoDelJuegoPng(fotoBase)).toBeNull();
   });
+
+  it("fotoDelJuegoPng: de uno a tres ganadores. Con más, nada, y va la de siempre", async () => {
+    const { fotoDelJuegoPng, fotoDelJuegoEntra, TOPE_FOTO_JUEGO } = await import("./foto");
+    const varios = (n: number): string[] => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+    expect(TOPE_FOTO_JUEGO).toBe(3);
+    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(3), fondo: "race" })).toBeInstanceOf(Blob);
+    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(4), fondo: "race" })).toBeNull();
+    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(7), fondo: "race" })).toBeNull();
+    expect(fotoDelJuegoEntra({ personas: varios(1) })).toBe(true);
+    expect(fotoDelJuegoEntra({ personas: varios(3) })).toBe(true);
+    expect(fotoDelJuegoEntra({ personas: varios(4) })).toBe(false);
+    // Un evento no tiene personas: la de siempre.
+    expect(fotoDelJuegoEntra({})).toBe(false);
+  });
 });
 
 /* ------------------------------------------------------------- la ilustración se ve */
@@ -252,20 +266,118 @@ describe("la foto del juego deja ver la ilustración", () => {
     ["un nombre largo", ["María Fernanda Guadalupe Quispe"], {}],
     ["un nombre corto con premio", ["Beto"], { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }],
     ["un nombre largo con premio", ["María Fernanda Guadalupe Quispe"], { lineas: ["Se lleva: Polera", "Salió entre 2 personas"] }],
-  ])("%s: ningún panel pisa la ventana del arte (y 236 a 540); el medio va en su franja (556 a 800) y abraza el texto", async (_n, personas, extra) => {
+  ])("%s: ningún panel pisa la ventana del arte (y 236 a 540); el medio va debajo, en la franja (556 a 800) o en la columna de la izquierda", async (_n, personas, extra) => {
     const con = await dibujo(juego(personas, extra));
     const ps = paneles(con);
     expect(ps).toHaveLength(3);
     ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
-    const m = ps[1] as Rect;
+    const [, m, abajo] = ps as [Rect, Rect, Rect];
     expect(m.x).toBe(56);
     expect(m.y).toBeGreaterThanOrEqual(556);
-    expect(m.y + m.h).toBeLessThanOrEqual(800);
-    expect(m.w).toBeLessThan(968);
+    if (m.y + m.h > 800) {
+      // En la columna: del ancho del panel de "Escaneá", sin llegar a la tarjeta del QR, y con su sombra antes de ese panel.
+      expect(m.x + m.w).toBe(528);
+      expect(abajo.x + abajo.w).toBe(528);
+      expect(m.y + m.h + 12).toBeLessThan(abajo.y);
+    } else expect(m.w).toBeLessThan(968);
     // El nombre entero, sin recortar, y dentro del panel.
     const nombre = personas[0] as string;
     const renglones = con.filter((x) => x.startsWith("fillText(") && nombre.includes(x.slice(9).split(",")[0] as string) && (x.slice(9).split(",")[0] as string).length > 3);
     expect(renglones.map((x) => x.slice(9).split(",")[0]).join(" ")).toBe(nombre);
+  });
+
+  /** El tamaño de la letra con que se escribió el texto que empieza en el renglón `i`. */
+  const tamEn = (con: string[], i: number): number => Number(/(\d+)px/.exec(con.slice(0, i).reverse().find((x) => x.startsWith("set font=")) ?? "")?.[1]);
+  const primerRenglon = (con: string[], nombre: string): number =>
+    con.findIndex((x) => x.startsWith("fillText(") && nombre.startsWith(x.slice(9).split(",")[0] as string) && (x.slice(9).split(",")[0] as string).length > 2);
+
+  it.each([
+    ["un nombre corto", ["Beto"], ["Salió entre 12 personas"]],
+    ["un nombre y apellido con premio", ["Ana Quispe"], ["Se lleva: Auriculares", "Salió entre 48 personas"]],
+  ])("%s: el nombre es lo más grande de la foto, más que Ganó, que Escaneá y que la marca", async (_n, personas, lineas) => {
+    const con = await dibujo(juego(personas, { lineas }));
+    const nombre = tamEn(con, primerRenglon(con, personas[0] as string));
+    expect(nombre).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Ganó,"))));
+    expect(nombre).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá"))));
+    expect(nombre).toBeGreaterThan(60);
+  });
+
+  it("un nombre de 28 letras con premio: nunca más chico que Escaneá", async () => {
+    const personas = ["Guadalupe Villavicencio Mamani"];
+    const con = await dibujo(juego(personas, { lineas: ["Se lleva: Polera", "Salió entre 120 personas"] }));
+    expect(tamEn(con, primerRenglon(con, personas[0] as string))).toBeGreaterThanOrEqual(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá"))));
+  });
+
+  it("Escaneá en la foto del juego: más chico que en la de siempre (44 px como mucho), con su panel hasta el pie de la tarjeta del QR", async () => {
+    const con = await dibujo(juego(["Beto"]));
+    const abajo = paneles(con)[2] as Rect;
+    expect(abajo.y + abajo.h).toBe(1268);
+    const delJuego = tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá")));
+    expect(delJuego).toBeLessThanOrEqual(44);
+    const siempre = await dibujo({ ...juego(["Beto"]), fondo: undefined });
+    expect(tamEn(siempre, siempre.findIndex((x) => x.startsWith("fillText(Escaneá")))).toBeGreaterThan(delJuego);
+  });
+
+  it("cinco ganadores: la lista abraza sus nombres, con el número pegado al más largo, y deja ver el dibujo a su derecha", async () => {
+    const personas = ["Ana Quispe", "Beto Choque", "Nora Vargas", "Maximiliano Gutiérrez", "Luz Mamani"];
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas: ["Premio: Entradas", "Salieron entre 60 personas"] }));
+    const m = paneles(con)[1] as Rect;
+    expect(m.x + m.w).toBeLessThan(1080 - 200);
+    // Sube lo menos posible: deja libres al menos 90 px de arriba de la ventana del arte (236 a 540). Desde la escala 1
+    // subía hasta dejar unos 25.
+    expect(m.y).toBeGreaterThanOrEqual(236 + 90);
+    const numeros = con.filter((x) => /^fillText\(#\d,/.test(x)).map((x) => Number(x.split(",")[1]));
+    expect(numeros).toHaveLength(5);
+    numeros.forEach((x) => expect(x).toBeLessThanOrEqual(m.x + m.w - 28));
+    // Todos los nombres, enteros.
+    for (const p of personas) expect(con).toContainEqual(expect.stringMatching(new RegExp(`^fillText\\(${p},`)));
+  });
+
+  it.each([
+    ["dos ganadores", ["Ana Quispe", "Beto Choque"], ["Premio: Polera", "Salieron entre 30 personas"]],
+    ["tres ganadores", ["Ana Quispe", "Beto Choque", "Nora Vargas"], ["Premio: Polera", "Salieron entre 30 personas"]],
+    ["tres ganadores sin premio", ["Ana", "Beto", "Nora"], ["Salieron entre 3 personas"]],
+  ])("%s: la lista va en la columna de la izquierda, encima de Escaneá, y ningún panel pisa la ventana del arte", async (_n, personas, lineas) => {
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas }));
+    const ps = paneles(con);
+    expect(ps).toHaveLength(3);
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    const [, m, abajo] = ps as [Rect, Rect, Rect];
+    // Del ancho del panel de "Escaneá", sin llegar a la tarjeta del QR, y con su sombra antes de ese panel.
+    expect(m.x).toBe(56);
+    expect(m.y).toBeGreaterThanOrEqual(556);
+    expect(m.x + m.w).toBe(528);
+    expect(m.y + m.h + 12).toBeLessThan(abajo.y);
+    // Todos los nombres, enteros, y cada número dentro del panel.
+    for (const p of personas) expect(con).toContainEqual(expect.stringMatching(new RegExp(`^fillText\\(${p},`)));
+    const numeros = con.filter((x) => /^fillText\(#\d,/.test(x)).map((x) => Number(x.split(",")[1]));
+    expect(numeros).toHaveLength(personas.length);
+    numeros.forEach((x) => expect(x).toBeLessThanOrEqual(m.x + m.w - 28));
+  });
+
+  it("dos y tres ganadores: los nombres son lo más grande, más que Ganaron y que Escaneá, y el premio y entre cuántos se leen", async () => {
+    for (const personas of [["Ana Quispe", "Beto Choque"], ["Ana Quispe", "Beto Choque", "Nora Vargas"]]) {
+      const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas: ["Premio: Polera", "Salieron entre 30 personas"] }));
+      const nombre = tamEn(con, primerRenglon(con, "Ana Quispe"));
+      expect(nombre).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Ganaron,"))));
+      expect(nombre).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá"))));
+      expect(nombre).toBeGreaterThanOrEqual(36);
+      // En la franja salían a 24 y 18 px.
+      expect(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Premio: Polera,")))).toBeGreaterThanOrEqual(30);
+      expect(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Salieron entre")))).toBeGreaterThanOrEqual(24);
+    }
+  });
+
+  it("dos ganadores, uno de 28 letras que no entra entero en la columna: van en la franja y suben poco, como mucho 60 px sobre la ventana del arte", async () => {
+    const personas = ["Guadalupe Villavicencio Mamani", "Ana Quispe"];
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas: ["Premio: Polera", "Salieron entre 30 personas"] }));
+    const m = paneles(con)[1] as Rect;
+    expect(m.y).toBeGreaterThanOrEqual(540 - 60);
+    expect(m.y + m.h).toBe(800);
+    for (const p of personas) expect(con).toContainEqual(expect.stringMatching(new RegExp(`^fillText\\(${p},`)));
+    // Con la escala de la lista como piso: en 0,55 entraban sin subir, pero los nombres a 30 px y la cola a 19 y 14.
+    expect(tamEn(con, primerRenglon(con, "Ana Quispe"))).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá"))));
+    expect(tamEn(con, primerRenglon(con, "Ana Quispe"))).toBeGreaterThanOrEqual(36);
   });
 
   it("el nombre se lee: nunca más chico que 'Ganó' ni que 33 px", async () => {
@@ -339,8 +451,8 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
   const datos = { enlace, ganadores: ["Ana"], total: 12, premio: "Pizza", numero: "278", red: "testnet" };
 
   beforeEach(() => {
-    // La foto del juego vive detrás de su bandera (foto-juego-bandera.ts): acá, prendida.
-    vi.stubEnv("VITE_FOTO_JUEGO", "1");
+    // La foto del juego vive detrás de su bandera (foto-juego-bandera.ts), prendida por defecto: acá, sin decir nada.
+    vi.stubEnv("VITE_FOTO_JUEGO", "");
     bajadas.length = 0;
     h.contar.mockReset();
     document.body.innerHTML = "";
@@ -399,8 +511,8 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect(fotos.textContent ?? "").not.toMatch(/Tocá una foto|Tap a photo/);
   });
 
-  it("con la bandera apagada: aunque se sepa el juego, la foto de siempre, sola, como hasta hoy", async () => {
-    vi.stubEnv("VITE_FOTO_JUEGO", "");
+  it("con la bandera apagada (VITE_FOTO_JUEGO=0): aunque se sepa el juego, la foto de siempre, sola", async () => {
+    vi.stubEnv("VITE_FOTO_JUEGO", "0");
     h.fondo.mockClear();
     const dlg = await abrir({ juego: "race" });
     expect(opciones(dlg)).toEqual([]);
@@ -470,10 +582,39 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect(bajadas).toEqual(["tinkazo-sorteo-278.png"]);
   });
 
+  it("con dos y tres ganadores: las dos fotos, la del juego elegida", async () => {
+    for (const ganadores of [["Ana", "Beto"], ["Ana", "Beto", "Nora"]]) {
+      const dlg = await abrir({ juego: "race", ganadores });
+      expect(opciones(dlg)).toHaveLength(2);
+      expect(opciones(dlg)[0]?.getAttribute("aria-pressed")).toBe("true");
+      dlg.close();
+    }
+  });
+
+  it("con más de tres ganadores, la foto de siempre sola: la lista no entra al lado del dibujo y lo taparía", async () => {
+    for (const ganadores of [["Ana", "Beto", "Nora", "Luz"], Array.from({ length: 7 }, (_, i) => `Persona ${i + 1}`)]) {
+      h.fondo.mockClear();
+      const dlg = await abrir({ juego: "race", ganadores });
+      expect(opciones(dlg)).toEqual([]);
+      expect(dlg.querySelectorAll(".cmp-fotos img.cmp-png")).toHaveLength(1);
+      // Ni siquiera se dibuja: el fondo del juego no se pide.
+      expect(h.fondo).not.toHaveBeenCalled();
+      dlg.close();
+    }
+  });
+
   it("un juego sin ilustración: también la de siempre, sola", async () => {
     const dlg = await abrir({ juego: "trompo" });
     expect(opciones(dlg)).toEqual([]);
     expect(dlg.querySelectorAll(".cmp-fotos img.cmp-png")).toHaveLength(1);
+  });
+
+  it("un juego que no está entre los de foto lista (uno que salió del selector): la de siempre, sin pedir su dibujo", async () => {
+    h.fondo.mockClear();
+    const dlg = await abrir({ juego: "tombola" });
+    expect(opciones(dlg)).toEqual([]);
+    expect(dlg.querySelectorAll(".cmp-fotos img.cmp-png")).toHaveLength(1);
+    expect(h.fondo).not.toHaveBeenCalled();
   });
 
   it("un evento en varias partes: las fotos de siempre, sin elegir, y se bajan y comparten todas", async () => {

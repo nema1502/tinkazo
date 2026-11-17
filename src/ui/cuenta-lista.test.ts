@@ -501,6 +501,35 @@ describe("las salidas", () => {
     expect(textoDe()).toContain(t("modeSwitchBlocked"));
   });
 
+  it("junto a Pasar a Prueba avisa que ahí se entra de nuevo, en los dos idiomas", async () => {
+    await abrir();
+    const aviso = (): HTMLElement => raiz()?.querySelector(".cl-cuenta-modo") as HTMLElement;
+    expect(aviso().hidden).toBe(false);
+    expect(aviso().textContent).toBe("Cada modo tiene su propia cuenta. En Prueba vas a entrar una vez más, y tu cuenta de Oficial sigue acá cuando vuelvas.");
+    setLang("en");
+    expect(aviso().textContent).toBe("Each mode has its own account. You'll sign in once more in Test, and your Live account will still be here when you come back.");
+    setLang("es");
+  });
+
+  it("el aviso no queda cuando Pasar a Prueba ya es la principal", async () => {
+    await abrir({ activacion: "lista", proteccion: "sin-forma", unicoNavegador: false });
+    const salida = raiz()?.querySelector<HTMLButtonElement>('[data-salida="pasar-a-prueba"]') as HTMLButtonElement;
+    const aviso = raiz()?.querySelector<HTMLElement>(".cl-cuenta-modo") as HTMLElement;
+    expect(salida.hidden).toBe(true);
+    expect(aviso.hidden).toBe(true);
+    expect(aviso.textContent).toBe("");
+    expect(principal().textContent).toBe(t("modeSwitchToTest"));
+  });
+
+  it("el aviso tampoco queda al final, cuando ya no hay salidas", async () => {
+    const { promesa } = await abrir({ activacion: "lista", proteccion: "lista" });
+    expect(raiz()?.querySelector<HTMLElement>(".cl-salidas")?.hidden).toBe(true);
+    expect(raiz()?.querySelector<HTMLElement>(".cl-cuenta-modo")?.hidden).toBe(true);
+    expect(raiz()?.querySelector(".cl-cuenta-modo")?.textContent).toBe("");
+    principal().click();
+    await expect(promesa).resolves.toBe(true);
+  });
+
   it("«Cerrar sesión» con la red colgada: a los 12 segundos el paso se cierra igual y nadie queda encerrado", async () => {
     const { salidas, promesa } = await abrir();
     salidas.cerrarSesion.mockImplementation(() => new Promise<undefined>(() => undefined));
@@ -555,6 +584,18 @@ describe("los avisos de la cuenta", () => {
 });
 
 describe("el final", () => {
+  it("al entrar sin lista: el texto del primer sello y Seguir deja la confirmación marcada", async () => {
+    const marcar = vi.fn();
+    const alSeguir = vi.fn();
+    const { promesa } = await abrir({ activacion: "lista", proteccion: "lista" }, { para: "entrada", primerOficial: { pendiente: () => true, marcar }, alSeguir });
+    expect(textoDe()).toContain(t("firstOfficialBody"));
+    expect(principal().textContent).toBe(t("clSeguir"));
+    principal().click();
+    expect(marcar).toHaveBeenCalledTimes(1);
+    expect(alSeguir).toHaveBeenCalledTimes(1);
+    await expect(promesa).resolves.toBe(true);
+  });
+
   it("para sellar: el texto del primer sello en Oficial, lo marca al tocar, y el foco vuelve al botón", async () => {
     const marcar = vi.fn();
     const volverA = document.getElementById("btn-freeze") as HTMLButtonElement;

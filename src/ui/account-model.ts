@@ -1,4 +1,5 @@
 import { getLang, t } from "../i18n";
+import { ordenGuardadoSinSello } from "../modos/turnos";
 import { cuentaDeLaEntrada } from "./cuenta-entrada";
 import type { Entry } from "./history";
 
@@ -87,5 +88,6 @@ export function drawRow(e: Entry): DrawRow {
   const title = e.prize?.trim() || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
   const parts = [cuentaDeLaEntrada(e), shortDate(e.sealedAt)];
   if (!done) parts.push(t("acctPending"));
-  return { title, meta: parts.filter(Boolean).join(", "), proof: e.proof || null };
+  // Un orden de turnos sin sello no tiene comprobante: la fila no ofrece ningún enlace, como la tarjeta de Mis sorteos.
+  return { title, meta: parts.filter(Boolean).join(", "), proof: e.proof && !ordenGuardadoSinSello(e) ? e.proof : null };
 }

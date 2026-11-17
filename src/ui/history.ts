@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
-import { isTurnOrder } from "../modos/turnos";
+import { isTurnOrder, ordenGuardadoSinSello } from "../modos/turnos";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
@@ -9,6 +9,7 @@ import type { ChainRaffle } from "../stellar/seals";
 import { cuentaDeLaEntrada, cuentasDe } from "./cuenta-entrada";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 import { compartirEvento, compartirSorteo } from "./compartir";
+import { alTerminarDeGrabar, seEstaGrabando } from "./grabacion-en-curso";
 import {
   type EventoGuardado,
   type SorteoGuardado,
@@ -91,6 +92,16 @@ export interface Entry {
   names?: string[];
   sealTx?: string;
   drawTx?: string;
+  /**
+   * Con sello: la sala ya vio el resultado y el sorteo todavía no quedó grabado (el show no espera la grabación). Si se
+   * cerró la pestaña antes, Mis sorteos lo ofrece terminar (`terminarDeGrabar`). Lo apaga la grabación al terminar.
+   */
+  porGrabar?: boolean;
+  /**
+   * Con sello: lo que grabó el contrato no coincide con el resultado que vio la sala (no debería pasar nunca). Mis
+   * sorteos lo dice, no ofrece guardarlo otra vez ni compartirlo.
+   */
+  noCoincide?: boolean;
   /**
    * Se siguió sin sello porque la red no dejaba sellar: ese sorteo no se puede comprobar
    * (salvo que el sello haya entrado a tiempo, y entonces esto se apaga). Mis sorteos lo dice.
@@ -266,7 +277,7 @@ const esDeTurnos = (e: Entry | undefined): e is Entry => !!e && isTurnOrder(e.co
 
 export { cuentaDeLaEntrada };
 
-/** «Turnos: 12 personas», en lugar de los doce nombres unidos con comas: con 300 era una fila de 300 nombres. Repartido, también los turnos. */
+/** La cantidad de personas, en lugar de los nombres unidos con comas: el título de la tarjeta ya dice Turnos. Repartido, también los turnos. */
 function turnosDe(e: Entry): string {
   const { personas, participaciones } = cuentasDe(e);
   return personas === participaciones
@@ -329,9 +340,21 @@ const avisar = (texto: string): void => {
   avisoPendiente = texto;
 };
 
+/**
+ * Trae un enlace de verificación que se puede ofrecer: el de la ronda no cuenta, ni el de un orden de turnos sin sello, que
+ * no tiene comprobante (`ordenGuardadoSinSello`, la misma regla del panel de la cuenta y del archivo CSV). Tampoco el de
+ * un resultado en duda (`noCoincide`): no se comparte hasta revisarlo, ni en su tarjeta, ni en el evento de su día, ni
+ * sumado a uno con nombre. Hasta el 16 de noviembre de 2026 solo lo frenaba su tarjeta, y entraba al grupo del día con
+ * Compartir el evento.
+ */
+const conComprobante = (e: Entry): boolean => tieneComprobante(e) && !ordenGuardadoSinSello(e) && !e.noCoincide;
+
+/** El comprobante es el de un sorteo en duda de este equipo (`noCoincide`): un evento con nombre no lo comparte. */
+const enlaceEnDuda = (enlace: string): boolean => readAll().some((e) => e.proof === enlace && e.noCoincide);
+
 /** Se puede sumar a un evento o compartir: tiene el enlace del comprobante y sus ganadores. */
 const compartible = (e: Entry): e is Entry & { proof: string; winners: string[] } =>
-  !!(e.proof && tieneComprobante(e) && e.winners?.length);
+  !!(e.proof && conComprobante(e) && e.winners?.length);
 
 /**
  * La principal es lo que sigue con el sorteo más nuevo que tiene algo para
@@ -371,7 +394,7 @@ function logoDeLaEntrada(enlace: string): string | undefined {
 async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
   const out: SorteoDelEvento[] = [];
   for (const e of g) {
-    if (!tieneComprobante(e) || !e.winners?.length || !e.proof) continue;
+    if (!tieneComprobante(e) || !e.winners?.length || !e.proof || e.noCoincide) continue;
     const s = await aSorteoDelEvento(e.proof, e.winners);
     if (s) out.push(s);
   }
@@ -452,6 +475,103 @@ async function retomar(fila: Entry & { names: string[] }): Promise<void> {
   if (document.activeElement === document.body) document.getElementById("btn-espera")?.focus({ preventScroll: true });
 }
 
+/**
+ * Un sorteo que la sala ya vio y que no se llegó a guardar: se cerró la pestaña durante la grabación, o falló y nadie
+ * volvió a probar. Se puede terminar desde acá, en este contrato: el ganador ya está decidido por el sello y el número,
+ * y guardarlo no pide nada a quien organiza (cualquiera lo puede mandar).
+ */
+export const falteGrabar = (e: Entry): e is Entry & { id: string } =>
+  !!(e.porGrabar && !e.noCoincide && e.id && !e.drawTx && e.winners?.length && (!e.contract || e.contract === network.contractId));
+
+/** Los sorteos que se pintaron mientras se grababan: cuando termina esa grabación, Mis sorteos se vuelve a pintar una vez. */
+const vigilados = new Set<string>();
+
+/**
+ * Mientras un sorteo se está grabando (el show, o un toque anterior), su Guardarlo ahora sale apagado y diciendo que se
+ * está guardando (`grabacion-en-curso.ts`). Al terminar, se vuelve a pintar: si no se pudo, vuelve a ofrecerlo.
+ */
+function vigilarLaGrabacion(id: string): void {
+  if (vigilados.has(id)) return;
+  vigilados.add(id);
+  void alTerminarDeGrabar(id).then(() => {
+    vigilados.delete(id);
+    if (shown) paint(shown);
+  });
+}
+
+/** Una línea junto al botón de Guardarlo ahora: cómo salió, o lo que hay que hacer. Reemplaza la anterior. */
+function notaDeGrabar(boton: HTMLElement, texto: string, alerta = true): HTMLElement {
+  boton.parentElement?.querySelector(".hc-grab-nota")?.remove();
+  const nota = document.createElement("p");
+  nota.className = "note hc-grab-nota";
+  nota.setAttribute("role", alerta ? "alert" : "status");
+  nota.textContent = texto;
+  boton.insertAdjacentElement("afterend", nota);
+  return nota;
+}
+
+/**
+ * Termina de guardar un sorteo desde Mis sorteos (`terminarDeGrabar`) y dice cómo salió, junto al botón. Igual que el
+ * sorteo en la pantalla: con la billetera propia dice que hay que aprobarlo en su ventana, y si el servicio que cubre el
+ * costo no pudo y la cuenta puede pagar la suya, ofrece guardarlo pagando con ella (`sortear-propio.ts`). Lo guarda la
+ * cuenta que está entrada: si no es la que hizo el sorteo, lo dice y no lo guarda.
+ */
+async function grabarLoQueFalta(fila: Entry & { id: string }, boton: HTMLButtonElement, pagarConMiCuenta = false): Promise<void> {
+  boton.parentElement?.querySelectorAll(".hc-grab-nota, [data-grabar-propio]").forEach((n) => n.remove());
+  const { currentSession } = await import("./wallet-ui");
+  const sesion = currentSession();
+  if (sesion?.address && sesion.address !== fila.organizer) {
+    notaDeGrabar(boton, t("grabOtraCuenta"));
+    return;
+  }
+  boton.disabled = true;
+  boton.textContent = t("grabGuardando");
+  // Con la billetera propia, lo único que tiene que hacer la persona es aprobarlo en su ventana: se dice.
+  const alPaso = (paso: string): void => {
+    if (paso === "signing" && currentSession()?.aMano === true) notaDeGrabar(boton, t("txSigning"), false);
+  };
+  let fin: Awaited<ReturnType<typeof import("./grabar-sorteo").terminarDeGrabar>>;
+  try {
+    const { terminarDeGrabar } = await import("./grabar-sorteo");
+    fin = await terminarDeGrabar(fila, { pagarConMiCuenta, alPaso });
+  } catch (error) {
+    fin = { estado: "fallo", error };
+  }
+  if (fin.estado === "guardado") {
+    remember({ ...fila, porGrabar: false, ...(fin.txHash ? { drawTx: fin.txHash } : {}) });
+    renderHistory(fila.organizer);
+    return;
+  }
+  if (fin.estado === "no-coincide") {
+    console.error("[tinkazo] error grave: el sorteo grabado no coincide con el que se vio", fin);
+    // Queda anotado en la fila, como cuando lo detecta el sorteo (`draw.ts`): la tarjeta lo dice y no lo ofrece guardar
+    // otra vez ni compartir. Hasta el 16 de noviembre de 2026 solo lo decía una nota, y al volver a pintarse la fila
+    // decía otra vez que faltaba guardarlo y ofrecía Guardarlo ahora y Compartir.
+    remember({ ...fila, porGrabar: false, noCoincide: true });
+    renderHistory(fila.organizer);
+    return;
+  }
+  boton.disabled = false;
+  boton.textContent = t("pendienteGrabarBtn");
+  const nota = notaDeGrabar(boton, t("grabNoSePudo"));
+  // El servicio que cubre el costo no pudo: si la cuenta tiene con qué pagar la suya, la segunda salida, como en el
+  // sorteo. Hasta el 16 de noviembre de 2026 Mis sorteos solo ofrecía volver a probar, para siempre.
+  let puede = false;
+  try {
+    puede = await (await import("./sortear-propio")).sePuedeSortearPagando(fin.error);
+  } catch {
+    puede = false;
+  }
+  if (!puede || !nota.isConnected) return;
+  const propio = document.createElement("button");
+  propio.type = "button";
+  propio.className = "ghost mini";
+  propio.dataset.grabarPropio = "1";
+  propio.textContent = t("grabarPropio");
+  propio.addEventListener("click", () => void grabarLoQueFalta(fila, boton, true));
+  nota.insertAdjacentElement("afterend", propio);
+}
+
 function enlazarRearmado(): void {
   if (enlazado) return;
   enlazado = true;
@@ -461,6 +581,12 @@ function enlazarRearmado(): void {
     if (r) {
       const fila = pintadas[Number(r.dataset.retomar)];
       if (fila?.names?.length) void retomar(fila as Entry & { names: string[] });
+      return;
+    }
+    const g = el.closest<HTMLButtonElement>("[data-grabar]");
+    if (g) {
+      const fila = pintadas[Number(g.dataset.grabar)];
+      if (fila && falteGrabar(fila)) void grabarLoQueFalta(fila, g);
       return;
     }
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
@@ -588,7 +714,7 @@ function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void
   // El grupo del sorteo más nuevo que se puede sumar: "Ponerle nombre" lo vuelve un evento entero.
   const ultimo = candidatos[0]?.e;
   grupoNombrable = ultimo ? (grupos.find((g) => g.includes(ultimo)) ?? null) : null;
-  if (!guardados.length && !list.some(tieneComprobante)) {
+  if (!guardados.length && !list.some(conComprobante)) {
     caja.style.display = "none";
     caja.innerHTML = "";
     return;
@@ -721,9 +847,11 @@ function filaDeEvento(ev: EventoGuardado, s: SorteoGuardado, k: number, list: En
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b>${fecha ? ` <span class="hc-fecha">${esc(fecha)}</span>` : ""}</div>` +
     `<p class="hc-meta">${quien}</p>` +
     marcaSinSello(e) +
+    // Un resultado en duda (`noCoincide`) lo dice y no se comparte, tampoco desde el evento.
+    (e?.noCoincide ? `<p class="hc-meta hc-sin-sello" role="alert">${esc(t("grabNoCoincide"))}</p>` : "") +
     `<div class="hc-acciones">` +
     `<a class="ghost mini" href="${esc(s.enlace)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>` +
-    `<button class="ghost mini" type="button" data-compartir-enlace="${clave}">${esc(t("cmpBtn"))}</button>` +
+    (e?.noCoincide ? "" : `<button class="ghost mini" type="button" data-compartir-enlace="${clave}">${esc(t("cmpBtn"))}</button>`) +
     `<button class="ghost mini" type="button" data-evento-quitar="${clave}">${esc(t("evnQuitar"))}</button>` +
     `</div></li>`
   );
@@ -798,7 +926,9 @@ function enlazarEventos(): void {
     }
     const compartir = el.closest<HTMLButtonElement>("[data-evento-compartir]");
     if (compartir) {
-      const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
+      const guardado = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
+      // Sin los sorteos en duda: no se comparten hasta revisarlos.
+      const ev = guardado ? { ...guardado, sorteos: guardado.sorteos.filter((s) => !enlaceEnDuda(s.enlace)) } : undefined;
       if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos, getLang(), logoComun(ev.sorteos.map((s) => logoDeLaEntrada(s.enlace)))));
       return;
     }
@@ -822,7 +952,7 @@ function enlazarEventos(): void {
     const compartirEnlace = el.closest<HTMLButtonElement>("[data-compartir-enlace]");
     if (compartirEnlace) {
       const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
-      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores, getLang(), logoPorHuella(logoDeLaEntrada(r.s.enlace)));
+      if (r && !enlaceEnDuda(r.s.enlace)) void compartirSorteo(r.s.enlace, r.s.ganadores, getLang(), logoPorHuella(logoDeLaEntrada(r.s.enlace)));
     }
   });
   // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".
@@ -909,7 +1039,7 @@ function paint(organizer: string | null): void {
   const sueltos = list.filter((e) => !(e.proof && eventoDelEnlace.has(e.proof)));
   // Los sueltos que tienen comprobante se agrupan por fecha en eventos: una
   // cabecera con "Compartir el evento" y, debajo, sus sorteos en el orden de la lista.
-  const grupos = agrupar(sueltos);
+  const grupos = agrupar(sueltos.filter(conComprobante));
   eventoDe = new Map<Entry, number>();
   grupos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
   eventosPintados = grupos;
@@ -951,12 +1081,20 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const enCadena = e.drawTx ?? e.sealTx;
   const acciones: string[] = [];
   if (!hecho && e.names?.length) acciones.push(`<button ${comoPrincipal(`retomar:${i}`)} data-retomar="${i}">${esc(t("histResume"))}</button>`);
+  // Ya se vio el resultado y falta guardarlo: lo primero es terminarlo.
+  const falta = falteGrabar(e);
+  // Si ya se está grabando (el show, con la billetera propia, lo pide al terminar), apagado y diciéndolo: un toque más no
+  // manda otra grabación del mismo sorteo, con otra ventana para aprobar.
+  const grabando = falta && seEstaGrabando(e.id ?? "");
+  if (grabando) vigilarLaGrabacion(e.id ?? "");
+  if (falta) acciones.push(`<button class="primary mini" type="button" data-grabar="${i}"${grabando ? " disabled" : ""}>${esc(t(grabando ? "grabGuardando" : "pendienteGrabarBtn"))}</button>`);
   // El comprobante se puede compartir otra vez, con el QR y el mensaje: sale del enlace y de los ganadores.
-  const compartible = !!(e.proof && tieneComprobante(e) && e.winners?.length);
+  // Si lo guardado no coincide con lo que se vio, no se comparte hasta revisarlo.
+  const compartible = !!(e.proof && conComprobante(e) && e.winners?.length && !e.noCoincide);
   if (compartible) acciones.push(`<button ${comoPrincipal(`compartir:${i}`)} type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
   // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
   // está en la cadena. Con la lista a mano se rearma.
-  if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
+  if (e.proof && !ordenGuardadoSinSello(e)) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
   else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
   if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
   if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
@@ -971,12 +1109,13 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   }
   return (
     `<article class="hist-card${hecho ? " hecho" : ""}">` +
-    `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
+    `<div class="hc-top"><span class="hc-estado">${esc(t(falta ? "histStateSinGuardar" : hecho ? "histStateDone" : "histStatePending"))}</span>` +
     `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
-    // Un orden de turnos dice «Turnos: 12 personas» (que ya cuenta cuántos son), no los nombres ni «ganaron».
+    (e.noCoincide ? `<p class="hc-en hc-sin-sello" role="alert">${esc(t("grabNoCoincide"))}</p>` : "") +
+    // El título ya dice Turnos: el detalle cuenta a las personas, no muestra los nombres ni dice que ganaron.
     `<p class="hc-meta">${esc(id)}, ${hecho && esDeTurnos(e) ? `<b>${esc(winnerLabel(e))}</b>` : `${esc(cuentaDeLaEntrada(e))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}`}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`
@@ -1027,7 +1166,8 @@ export function toCsv(organizer: string): string {
       q(e.prize),
       q(e.sealTx ?? ""),
       q(e.drawTx ?? ""),
-      q(e.proof ?? ""),
+      // Un orden de turnos sin sello no tiene comprobante: la ronda ya está en su columna.
+      q(ordenGuardadoSinSello(e) ? "" : e.proof ?? ""),
       q(e.fromChain ? "cadena" : "equipo"),
       // El id solo no dice de qué contrato es: arrancan en 1 en cada uno.
       q(e.contract ?? ""),

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decidirAcceso } from "../stellar/acceso-oficial";
-import { banderasDeAlta } from "../stellar/alta-config";
+import { banderasDeAlta, pagoConSaldoActivo } from "../stellar/alta-config";
 import type { Diagnostico } from "../stellar/chequeo-red";
 import { cobroPorUso } from "../stellar/cobro-oficial";
 import { leerCupo } from "../stellar/patrocinador";
 import { ACCESO_LIBRE, type AccesoEnLaVista, activarPermitido } from "./cuenta-lista-estado";
-import { modoDelAcceso } from "./cuenta-lista-acceso";
+import { accesoDelServidor, modoDelAcceso } from "./cuenta-lista-acceso";
 import { panelDe, patrocinioQueFrena } from "./red-acciones";
 
 /**
@@ -232,4 +232,43 @@ describe("con el acceso confirmado, sí", () => {
     expect(activarPermitido({ acceso: { ...ACCESO_LIBRE, modo: "servidor", estado: "con" }, corre: null })).toBe(true);
     expect(modoDelAcceso("mainnet", banderasDeAlta({ ...env, VITE_ALTA_LIBRE: "1" }, "mainnet"))).toBe("servidor");
   });
+});
+/**
+ * Pagar un paquete con el saldo de la cuenta (`VITE_PAGO_CON_SALDO`) es una firma nueva de una cuenta de Google o de
+ * correo en la red principal, y la única que va sin el acceso confirmado: es la que compra el acceso. Por eso tiene sus
+ * propias filas: solo existe con la compra y la bandera prendidas en el build y la billetera del proveedor activa, y lo
+ * único que pide firmar es el pago de una orden del servidor, con su cuenta, su monto y su nota tal cual. Qué se aprueba
+ * de esa firma (una sola operación, de pago, exacta) lo fija `src/stellar/wallet-pollar-pago.test.ts`.
+ */
+describe("pagar con el saldo de la cuenta: solo con las banderas y la billetera del proveedor, y solo el pago de la orden", () => {
+  const ORDEN = { id: "ABCD2345", producto: "alta", usdc: "3", sorteos: 3, destino: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H", nota: "tk:o:ABCD2345", memoId: "1", enlace: "web+stellar:pay?x", vence: Date.UTC(2026, 11, 1) };
+  const COMPRA = [
+    { nombre: "sin la compra", env: {} },
+    { nombre: "con la compra", env: { VITE_ALTA_PAGO: "1" } },
+  ];
+  const SALDO = [
+    { nombre: "sin la bandera del saldo", env: {} },
+    { nombre: "con la bandera del saldo", env: { VITE_PAGO_CON_SALDO: "1" } },
+  ];
+  for (const b of BANDERAS)
+    for (const c of COMPRA)
+      for (const s of SALDO)
+        for (const conBilletera of [false, true]) {
+          it(`${b.nombre}, ${c.nombre}, ${s.nombre}, ${conBilletera ? "con" : "sin"} la billetera del proveedor`, async () => {
+            const env = { ...b.env, ...c.env, ...s.env, VITE_PATROCINIO_URL_MAINNET: URL };
+            const pagar = vi.fn(async () => ({ estado: "salio" as const, hash: HASH }));
+            const sesion = { token: async () => "tk", sesionViva: () => true, cuenta: () => CUENTA, ...(conBilletera ? { pagar } : {}) };
+            const acceso = accesoDelServidor(sesion, {}, banderasDeAlta(env, "mainnet"), pagoConSaldoActivo(env, "mainnet"));
+            // Con las dos banderas del acceso juntas el build no sale (`alta-build.ts`); si igual llegara, vale lo de la compra.
+            const vale = b.env.VITE_ALTA === "1" && c.env.VITE_ALTA_PAGO === "1" && s.env.VITE_PAGO_CON_SALDO === "1" && conBilletera;
+            expect(!!acceso.saldo).toBe(vale);
+            if (acceso.saldo) {
+              await acceso.saldo.pagar(ORDEN);
+              expect(pagar).toHaveBeenCalledTimes(1);
+              expect(pagar).toHaveBeenCalledWith({ destino: ORDEN.destino, monto: ORDEN.usdc, nota: ORDEN.nota });
+            } else expect(pagar).not.toHaveBeenCalled();
+            // Ninguna otra firma: ni el sello ni el sorteo.
+            expect(firmas()).toBe(0);
+          });
+        }
 });

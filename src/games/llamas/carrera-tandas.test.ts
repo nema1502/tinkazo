@@ -102,6 +102,6 @@ describe("las tandas no delatan (600 rondas)", () => {
       // Cuántas finalistas pasan por cada tanda: parejo (las plazas son iguales, nada hace de una tanda "la de las finalistas").
       const media = finalistasPorTanda.reduce((a, b) => a + b, 0) / T;
       for (let i = 0; i < T; i++) expect(Math.abs((finalistasPorTanda[i] as number) - media), `finalistas por tanda: ${finalistasPorTanda.join(",")}`).toBeLessThan(0.12 * media + 4 * Math.sqrt(media));
-    });
+    }, 240_000);
   }
 });

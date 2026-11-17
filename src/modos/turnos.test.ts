@@ -115,3 +115,19 @@ describe("modoDelComprobante: el modo que lleva el enlace de verificación", () 
     expect(modoDelComprobante(["Ana", "Beto", "Carla"], 1, "Una pizza", true)).toBeNull();
   });
 });
+
+describe("ordenSinComprobante: un orden de turnos sin sello no tiene comprobante", () => {
+  it("solo lo es el orden de turnos hecho sin sello", async () => {
+    const { ordenSinComprobante } = await import("./turnos");
+    expect(ordenSinComprobante(12, 12, "Turnos", true)).toBe(true);
+    expect(ordenSinComprobante(12, 12, "Turns for the lab", true)).toBe(true);
+    // Con sello hay comprobante, y la verificación sabe la cantidad.
+    expect(ordenSinComprobante(12, 12, "Turnos", false)).toBe(false);
+    // Un sorteo común sin sello sigue ofreciendo su enlace: muestra a quien ganó.
+    expect(ordenSinComprobante(12, 1, "Termo", true)).toBe(false);
+    expect(ordenSinComprobante(12, 3, "Turnos", true)).toBe(false);
+    expect(ordenSinComprobante(3, 3, "3 poleras", true)).toBe(false);
+    // Con una sola persona no hay orden.
+    expect(ordenSinComprobante(1, 1, "Turnos", true)).toBe(false);
+  });
+});

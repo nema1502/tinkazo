@@ -13,6 +13,8 @@ import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelIn
 import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
+import { esResultadoDeTurnos } from "../../modos/turnos";
+import { rotuloDelPanel } from "./rotulo";
 import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
 import { ajusteGanador, ENTRADA_RELATOR, nombreDeLaFicha, sobrepasoRelator } from "./ganador-altura";
 import { acomodarGanador, ajustarEnRenglones, formaQueEntra } from "../nombres";
@@ -22,6 +24,7 @@ import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
+import { cuadroOCierre } from "./cuadro-seguro";
 
 /**
  * El andamiaje de los juegos en PixiJS: lo mismo que `overlay.ts` hace para
@@ -967,14 +970,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       nombrePrevio = null;
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
-      // En una ronda de stand nadie gana nada: «SALIÓ», nunca «GANA».
-      const rotulo = enStand()
-        ? getLang() === "es"
-          ? all.length > 1 ? "SALIERON" : "SALIÓ"
-          : "PICKED"
-        : getLang() === "es"
-          ? all.length > 1 ? "GANAN" : "GANA"
-          : all.length > 1 ? "WINNERS" : "WINNER";
+      // En una ronda de stand nadie gana nada («SALIÓ», nunca «GANA») y en un orden de turnos tampoco: es «EL ORDEN».
+      const rotulo = rotuloDelPanel(getLang(), all.length, { stand: enStand(), turnos: esResultadoDeTurnos() });
       const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
@@ -1502,8 +1499,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
       let codigo = 0;
       const pace = paceFactor();
-      const loop = (now: number): void => {
-        if (dead) return;
+      const cuadro = (now: number): void => {
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         if (prev) gobernador.cuadro(now - prev, codigo);
         const c0 = performance.now();
@@ -1530,7 +1526,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           relojId = (now - start) / 1000;
           if (cuadros++ % 5 === 0) ident.mirar([scene, hud, tagLayer], relojId, sw(), sh());
         }
-        rafId = requestAnimationFrame(loop);
+      };
+      // Un cuadro que lanza no deja el estadio tapando la pantalla: se cierra y sale el resultado (`cuadro-seguro.ts`).
+      const loop = (now: number): void => {
+        if (dead) return;
+        if (cuadroOCierre(cuadro, now, () => stage.cleanup()) && !dead) rafId = requestAnimationFrame(loop);
       };
       const arrancar = (): void => {
         show();

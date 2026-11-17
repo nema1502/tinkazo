@@ -82,7 +82,7 @@ const CUENTA_NO_LISTA = /account-not-ready/;
  *   recuperarla (una llave de acceso, un código por correo u otro aparato), no firma nada. Se arregla en el paso
  *   "Protegé tu cuenta" (`ui/proteger-cuenta.ts`), no con otro intento.
  * - `SDK_CONFIRMATION_UNAVAILABLE` y `SDK_CONFIRMATION_DECLINED`: la firma pide confirmación y nadie la atendió, o la
- *   rechazamos nosotros (`wallet-pollar.ts` solo confirma el sello y el sorteo que la persona acaba de pedir).
+ *   rechazamos nosotros (`wallet-pollar.ts` solo confirma lo que la persona acaba de pedir con su botón).
  * - `SDK_CREDITS_INSUFFICIENT`, `SDK_BILLING_OVERDUE` y `FUND_XLM_FAILED`: a quien paga el servicio se le acabó con qué
  *   pagar. No es de la persona. (Pollar dice "Users see a generic message pointing to app support".)
  *

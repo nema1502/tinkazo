@@ -1,3 +1,4 @@
+import { precargarPista } from "../sonidos/pistas-enganche";
 import { paraCompartir, params, playableGame, ver3DGuardado, type Game } from "../state";
 import { aptoPorDefecto3D, permite3D, quiere3D, type Entorno3D } from "./permite3d";
 import { ofrece3D } from "./tres/ofrecidos";
@@ -87,9 +88,11 @@ function hasWebGL(): boolean {
 const pedidos = new Set<Game>();
 
 export function preloadGame(game: Game, people: number): void {
-  if (!usePixi()) return;
   // La misma sustitución que hace draw.ts: con mucha gente la ruleta no entra.
   const g: Game = playableGame(game, people);
+  // La pista de música del juego, si tiene y está prendida (`src/sonidos/pistas-enganche.ts`). Sin la bandera, nada.
+  precargarPista(g);
+  if (!usePixi()) return;
   if (pedidos.has(g)) return;
   pedidos.add(g);
   import("./pixi").then(

@@ -30,3 +30,15 @@ describe("el kit de Pollar que la activación de la cuenta da por sabido", () =>
     }
   });
 });
+
+const QUE_RELEER_EL_PAGO =
+  "Cambió el kit de Pollar. Antes de subirlo, releer en node_modules/@pollar/core/dist/index.mjs: buildTx, signTx, _signTx, " +
+  "_settleCosign, _outcomeOfCosign y submitTx, y comparar con pagarOrden (wallet-pollar.ts) y motivoContraElPago (pago-con-saldo.ts).";
+
+describe("el kit de Pollar que el pago con el saldo da por sabido", () => {
+  it("el cliente arma, firma y manda por separado: así lo armado se revisa antes de firmar y lo firmado antes de mandar", async () => {
+    const kit = await import("@pollar/core");
+    const proto = kit.PollarClient.prototype as unknown as Record<string, unknown>;
+    for (const m of ["buildTx", "signTx", "submitTx", "onConfirmationRequest"]) expect(typeof proto[m], `${m}: ${QUE_RELEER_EL_PAGO}`).toBe("function");
+  });
+});

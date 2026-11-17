@@ -44,8 +44,17 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(4, { ...ok, ganadores: 12, turnos: true })).toBe("sigTurnos");
   });
 
+  it("un orden que no entra en la red no está sellando, aunque el botón esté apagado: dice el tope", () => {
+    expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: true })).toBe("sigTope");
+    // Aunque el botón se viera prendido, si no entra no se puede sellar.
+    expect(claveDelPaso(2, { ...ok, noCabe: true })).toBe("sigTope");
+    // Fuera del paso 2 no cambia nada.
+    expect(claveDelPaso(3, { ...ok, noCabe: true })).toBe("sigRonda");
+    expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: false })).toBe("sigSellando");
+  });
+
   it("todos esos textos existen en los dos idiomas", () => {
-    const claves = ["sigPegar", "sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigTurnos", "sigAvisoRonda"];
+    const claves = ["sigPegar", "sigLista", "sigSellando", "sigTope", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigTurnos", "sigAvisoRonda"];
     const faltan = (["es", "en"] as const).flatMap((l) => claves.filter((k) => typeof T[l][k] !== "string" || !(T[l][k] as string).trim()).map((k) => `${l}.${k}`));
     expect(faltan).toEqual([]);
   });

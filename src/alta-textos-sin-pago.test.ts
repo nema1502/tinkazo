@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TEXTOS_ALTA } from "./alta-textos";
-import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
+import { TEXTOS_ALTA_SIN_PAGO, TEXTOS_ALTA_SIN_VENTA } from "./alta-textos-sin-pago";
 
 /**
  * Mientras la compra de sorteos esté apagada (`altaPagoActivo()`, `alta-config.ts`), ningún texto ofrece comprar: las
@@ -9,7 +9,7 @@ import { TEXTOS_ALTA_SIN_PAGO } from "./alta-textos-sin-pago";
  */
 
 const IDIOMAS = ["es", "en"] as const;
-const CLAVES = ["altaTexto", "altaYaActivada", "altaErrServicio", "cupoOfCeroTexto", "cupoOfVencidoTexto", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos"];
+const CLAVES = ["altaTexto", "altaYaActivada", "altaErrServicio", "cupoOfCeroTexto", "cupoOfVencidoTexto"];
 const variables = (s: string): string[] => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1] as string).sort();
 
 /** Lo que ofrece comprar: un paquete, un pago, dólares o sumar sorteos. */
@@ -54,7 +54,14 @@ describe("los textos sin pago", () => {
 
   it("los que dirige quien decide, palabra por palabra", () => {
     expect(TEXTOS_ALTA_SIN_PAGO.es.altaTexto).toBe("Para sortear en modo Oficial, activá tu cuenta con el cupón de tu evento.");
-    expect(TEXTOS_ALTA_SIN_PAGO.es["errAnchor.porteroSinSorteos"]).toBe("Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.");
+    expect(TEXTOS_ALTA.es["errAnchor.porteroSinSorteos"]).toBe("Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.");
+  });
+
+  it("los dos no del portero no ofrecen comprar ni con la compra en el build: van donde no hay un botón de comprar", () => {
+    // Antes estaban en la lista de arriba y, con la compra prendida, ofrecían «tu primer paquete» o «sumá sorteos» en la
+    // caja de la red y en el error del sorteo, sin dónde hacerlo. El aviso con su botón, junto a la línea, tiene su clave.
+    for (const k of ["errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos"]) for (const l of IDIOMAS) expect(TEXTOS_ALTA[l][k], `${l} ${k}`).not.toMatch(COMPRA);
+    for (const l of IDIOMAS) expect(TEXTOS_ALTA[l].cupoOfCeroSumar, l).toMatch(COMPRA);
   });
 });
 
@@ -81,8 +88,22 @@ describe("cuál llega al diccionario", () => {
     }
   });
 
-  it("con el pago prendido en la red principal, los de la sección 8", async () => {
-    const T = await diccionario({ VITE_ALTA: "1", VITE_ALTA_PAGO: "1", VITE_PATROCINIO_URL_MAINNET: "https://pm.tinkazo.app" }, "mainnet");
+  it("con el pago prendido y a la vista en la red principal, los de la sección 8", async () => {
+    const T = await diccionario({ VITE_ALTA: "1", VITE_ALTA_PAGO: "1", VITE_VENTA_ABIERTA: "1", VITE_PATROCINIO_URL_MAINNET: "https://pm.tinkazo.app" }, "mainnet");
     for (const k of CLAVES) for (const l of IDIOMAS) expect(T[l][k], `${l} ${k}`).toBe(TEXTOS_ALTA[l][k]);
+  });
+
+  it("las de la caja sin nada a la venta están siempre, con nombre propio, y no ofrecen comprar", async () => {
+    for (const env of [{}, { VITE_ALTA: "1", VITE_ALTA_PAGO: "1", VITE_PATROCINIO_URL_MAINNET: "https://pm.tinkazo.app" }] as Record<string, string>[]) {
+      const T = await diccionario(env, "mainnet");
+      for (const l of IDIOMAS) {
+        expect(T[l].altaTextoSinVenta, l).toBe(TEXTOS_ALTA_SIN_PAGO[l].altaTexto);
+        expect(T[l].altaYaActivadaSinVenta, l).toBe(TEXTOS_ALTA_SIN_PAGO[l].altaYaActivada);
+        expect(T[l].cupoOfCeroTextoSinVenta, l).toBe(TEXTOS_ALTA_SIN_PAGO[l].cupoOfCeroTexto);
+        for (const k of Object.keys(TEXTOS_ALTA_SIN_VENTA[l])) expect(T[l][k], `${l} ${k}`).not.toMatch(COMPRA);
+      }
+    }
+    expect(Object.keys(TEXTOS_ALTA_SIN_VENTA.es).sort()).toEqual(["altaTextoSinVenta", "altaYaActivadaSinVenta", "cupoOfCeroTextoSinVenta"]);
+    expect(Object.keys(TEXTOS_ALTA_SIN_VENTA.en).sort()).toEqual(["altaTextoSinVenta", "altaYaActivadaSinVenta", "cupoOfCeroTextoSinVenta"]);
   });
 });

@@ -17,8 +17,57 @@
  *   con fade y el panel sube; al cerrar, sale más corto antes de quitar el
  *   nodo. Las dos clases las conecta `wallet-ui.ts` (al abrir y en `shut`).
  * - `destrabarCtas`: muestra el texto de sesión del botón grande de la portada
- *   recién cuando el JS lo decidió (contra el FOUC de la recarga).
+ *   recién cuando el JS lo decidió (contra el FOUC de la recarga); la regla que
+ *   lo escondía hasta entonces está apagada (ver `styles.css`, interruptor
+ *   `data-cta-espera`).
+ *
+ * El pase, el temblor, el destello y el hover vivo tienen su interruptor en
+ * `ATENCION_PRENDIDA`, y hoy entran apagados.
+ * TODO(merge-115): conflicto de valores por resolver a revisión: guido/final
+ * trae estas animaciones prendidas (su versión no tenía interruptor y siempre
+ * corrían, conectadas desde `wallet-ui.ts` y `main.ts`); origin/main las trae
+ * apagadas por defecto con este interruptor. Se tomó el default de main; para
+ * volver al estado de guido/final, prender las piezas en `ATENCION_PRENDIDA`.
  */
+
+/* -------------------------------------------------- los interruptores */
+
+/** Las piezas que se mueven solas, cada una con su interruptor. */
+export type PiezaDeAtencion = "pase" | "temblor" | "destello" | "hoverVivo";
+
+/**
+ * Qué piezas corren en el sitio. Entran apagadas el 13 de noviembre de 2026,
+ * la víspera del primer evento con sorteos en la red principal, por lo que se
+ * vio a tamaño real:
+ * - pase (`ui/espera.ts`): en Mostrar en grande, frente a la sala, la tarjeta
+ *   elegida se apaga a la mitad cada vuelta y parece que el juego cambió solo.
+ * - temblor: vuelve cada 8,6 s sin fin, también en el recuadro del final de la
+ *   demo y sobre la portada oculta, y una sacudida se lee como un error.
+ * - destello: en el tema claro es una mancha gris sobre el texto del pie, y
+ *   corre cada 4 s en todas las páginas, también tapado por el show.
+ * - hoverVivo: al crecer la captura, su borde de abajo baja y engorda, en la
+ *   portada se come el aire del marco, y al salir vuelve de golpe.
+ * Para prender una, primero se arregla lo que dice su renglón.
+ */
+export const ATENCION_PRENDIDA: Readonly<Record<PiezaDeAtencion, boolean>> = {
+  pase: false,
+  temblor: false,
+  destello: false,
+  hoverVivo: false,
+};
+
+const forzadas: Partial<Record<PiezaDeAtencion, boolean>> = {};
+
+/** Para las pruebas: `true` prende la pieza, `false` la apaga y `null` la devuelve a lo que trae el sitio. */
+export function forzarAtencion(pieza: PiezaDeAtencion, valor: boolean | null): void {
+  if (valor === null) delete forzadas[pieza];
+  else forzadas[pieza] = valor;
+}
+
+/** ¿Corre hoy esta pieza? */
+export function atencionPrendida(pieza: PiezaDeAtencion): boolean {
+  return forzadas[pieza] ?? ATENCION_PRENDIDA[pieza];
+}
 
 /** ¿Pide el navegador poco movimiento? Sin `matchMedia` (pruebas sin stub) no anima. */
 function movimientoReducido(): boolean {
@@ -42,11 +91,11 @@ const BOTONES_HERO = ".hero-ctas [data-cta-entrar], .hero-ctas [data-entrar-ensa
 /**
  * Los dos botones del hero tiemblan sutilmente cuando nadie interactúa hace
  * ~8 s: una sacudida corta, y se vuelve a armar. Cualquier interacción corta el
- * ciclo en el acto. Con la herramienta abierta (portada oculta) no tiembla
- * nada oculto: espera, y si la portada vuelve, avisa. Devuelve la limpieza.
+ * ciclo en el acto. El filtro de lo visible mira el display del propio botón:
+ * la portada oculta desde un ancestro no lo frena. Devuelve la limpieza.
  */
 export function iniciarTemblorHero(raiz: ParentNode = document): () => void {
-  if (movimientoReducido()) return () => undefined;
+  if (!atencionPrendida("temblor") || movimientoReducido()) return () => undefined;
   const botones = (): HTMLElement[] => [...raiz.querySelectorAll<HTMLElement>(BOTONES_HERO)];
   let tArmado = 0;
   let tSacudida = 0;
@@ -103,7 +152,7 @@ export const SELECTOR_PIE = 'footer [data-i="footR"]';
  * clase con temporizador limpio, no un glow permanente. Devuelve la limpieza.
  */
 export function iniciarDestelloPie(selector: string = SELECTOR_PIE, raiz: ParentNode = document): () => void {
-  if (movimientoReducido()) return () => undefined;
+  if (!atencionPrendida("destello") || movimientoReducido()) return () => undefined;
   const pendientes = new Set<number>();
   const cruzar = (): void => {
     for (const el of raiz.querySelectorAll<HTMLElement>(selector)) {
@@ -132,7 +181,7 @@ export function iniciarDestelloPie(selector: string = SELECTOR_PIE, raiz: Parent
  * pantalla táctil no hay hover: no aplica. Devuelve la limpieza.
  */
 export function iniciarHoverVivo(selector: string, raiz: ParentNode = document): () => void {
-  if (movimientoReducido() || !conHover()) return () => undefined;
+  if (!atencionPrendida("hoverVivo") || movimientoReducido() || !conHover()) return () => undefined;
   const sueltos: { el: HTMLElement; entra: () => void; sale: () => void }[] = [];
   for (const el of raiz.querySelectorAll<HTMLElement>(selector)) {
     const entra = (): void => el.classList.add("hover-vivo");

@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorKey } from "./contract";
-import { type FirmaPendiente, atenderFirmas, pollarWallet } from "./wallet-pollar";
+import { USDC_MAINNET, USDC_TESTNET } from "./pagos";
+import { type FirmaPendiente, type LineaPedida, atenderFirmas, pollarWallet, resultadoDeLaLinea } from "./wallet-pollar";
 
 /**
  * Pollar 0.12: cada firma pide confirmación (`confirmation: 'prompt'` por defecto) y, sin la interfaz de Pollar, el SDK
@@ -15,7 +18,7 @@ import { type FirmaPendiente, atenderFirmas, pollarWallet } from "./wallet-polla
  */
 
 const hoisted = vi.hoisted(() => {
-  type Pend = { id: string; kind: string; operation?: string; unsignedXdr?: string; confirm: () => void; reject: () => void };
+  type Pend = { id: string; kind: string; network?: string; operation?: string; unsignedXdr?: string; details?: Record<string, unknown>; confirm: () => void; reject: () => void };
   const estado = {
     oyentes: new Set<(p: Pend[]) => void>(),
     pendientes: new Map<string, Pend>(),
@@ -31,12 +34,20 @@ const hoisted = vi.hoisted(() => {
     /** Cuántos clientes se armaron y con qué configuración. */
     construidos: 0,
     config: undefined as Record<string, unknown> | undefined,
+    /** Lo que contesta el servidor a la línea, una vez confirmada. */
+    respuestaLinea: { status: "success" } as Record<string, unknown>,
+    /** Los `details` que el SDK pone en la confirmación de la línea (por defecto, los de la línea pedida). */
+    detallesLinea: null as Record<string, unknown> | null,
+    /** El catálogo de Pollar y las co-firmas que esperan (en memoria del kit y en el servidor). */
+    activos: { step: "idle" } as Record<string, unknown>,
+    cofirmasEnMemoria: [] as Array<Record<string, unknown>>,
+    cofirmas: [] as Array<Record<string, unknown>> | "falla",
   };
   const emitir = (): void => {
     const lista = [...estado.pendientes.values()];
     for (const cb of estado.oyentes) cb(lista);
   };
-  const pedir = (input: { kind: string; operation?: string; unsignedXdr?: string }): Promise<{ ok: boolean; code?: string }> => {
+  const pedir = (input: { kind: string; network?: string; operation?: string; unsignedXdr?: string; details?: Record<string, unknown> }): Promise<{ ok: boolean; code?: string }> => {
     if (estado.oyentes.size === 0) return Promise.resolve({ ok: false, code: "SDK_CONFIRMATION_UNAVAILABLE" });
     const id = `c${++estado.contador}`;
     return new Promise((resolver) => {
@@ -76,7 +87,29 @@ vi.mock("@pollar/core", () => ({
           return { ...hoisted.estado.recuperacion };
         },
       },
+      pending: async () => {
+        hoisted.estado.llamadas.push("cosign.pending");
+        if (hoisted.estado.cofirmas === "falla") throw new Error("sin red");
+        return hoisted.estado.cofirmas;
+      },
     };
+    /** Como el SDK 0.12.0 (`setTrustline`, cuenta interna): pide la confirmación y, confirmada, la manda. */
+    async setTrustline(asset: { code: string; issuer: string }, opts?: unknown): Promise<unknown> {
+      hoisted.estado.llamadas.push(`setTrustline:${asset.code}:${asset.issuer}:${JSON.stringify(opts ?? null)}`);
+      const details = hoisted.estado.detallesLinea ?? { asset: { type: "credit_alphanum4", code: asset.code, issuer: asset.issuer } };
+      const r = await hoisted.pedir({ kind: "build_sign_submit", network: "STELLAR", operation: "change_trust", details });
+      if (!r.ok) return { status: "error", code: r.code };
+      return hoisted.estado.respuestaLinea;
+    }
+    async refreshAssets(): Promise<void> {
+      hoisted.estado.llamadas.push("refreshAssets");
+    }
+    getEnabledAssetsState(): unknown {
+      return hoisted.estado.activos;
+    }
+    getCosignState(): unknown {
+      return { pending: hoisted.estado.cofirmasEnMemoria };
+    }
     onConfirmationRequest(cb: (p: unknown[]) => void): () => void {
       hoisted.estado.oyentes.add(cb as never);
       cb([...hoisted.estado.pendientes.values()]);
@@ -111,6 +144,11 @@ beforeEach(() => {
   e.config = undefined;
   e.respuesta = { status: "success", hash: "deadbeef" };
   e.recuperacion = { required: true, configured: false };
+  e.respuestaLinea = { status: "success" };
+  e.detallesLinea = null;
+  e.activos = { step: "idle" };
+  e.cofirmasEnMemoria = [];
+  e.cofirmas = [];
 });
 afterEach(async () => {
   await pollarWallet.disconnect();
@@ -263,5 +301,194 @@ describe("PollarWallet: la cuenta pide una forma de recuperarla (SDK_WALLET_RECO
   it("con el desbloqueo del aparato: la cuenta queda protegida", async () => {
     await expect(pollarWallet.protegerConPasskey()).resolves.toBe(true);
     expect(e.llamadas).toEqual(["addPasskey:Tinkazo"]);
+  });
+});
+
+/* ------------------------------------------------ la línea del USDC (Activar dólares digitales) */
+
+const EMISOR = USDC_TESTNET.issuer;
+const lineaUsdc = (veces = 1): LineaPedida => {
+  let quedan = veces;
+  return { code: "USDC", issuer: EMISOR, tomar: () => quedan-- > 0 };
+};
+const confirmacion = (p: Partial<FirmaPendiente> & { id: string }) => {
+  const confirm = vi.fn();
+  const reject = vi.fn();
+  return {
+    kind: "build_sign_submit",
+    network: "STELLAR",
+    operation: "change_trust",
+    details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR } },
+    confirm,
+    reject,
+    ...p,
+  } as FirmaPendiente & { confirm: typeof confirm; reject: typeof reject };
+};
+
+describe("atenderFirmas: la rama angosta de la línea del USDC de Circle", () => {
+  it("confirma la línea que la persona acaba de pedir, aunque no haya ninguna transacción en curso", () => {
+    const f = confirmacion({ id: "1" });
+    atenderFirmas([f], new Set(), new Set(), vi.fn(), lineaUsdc());
+    expect(f.confirm).toHaveBeenCalledTimes(1);
+    expect(f.reject).not.toHaveBeenCalled();
+  });
+
+  const malas: Array<[string, Partial<FirmaPendiente>]> = [
+    ["el emisor de la otra red", { details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: USDC_MAINNET.issuer } } }],
+    ["otro código", { details: { asset: { type: "credit_alphanum4", code: "USDT", issuer: EMISOR } } }],
+    ["un código largo", { details: { asset: { type: "credit_alphanum12", code: "USDC", issuer: EMISOR } } }],
+    ["con un límite", { details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR }, limit: "1000" } }],
+    ["con límite cero, que la cerraría", { details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR }, limit: "0" } }],
+    ["una clave de más en details", { details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR }, extra: 1 } }],
+    ["una clave de más en el activo", { details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR, limit: "5" } } }],
+    ["sin details", { details: undefined }],
+    ["con una transacción armada", { unsignedXdr: "AAAA" }],
+    ["en otra cadena", { network: "POLYGON" }],
+    ["sin decir la cadena", { network: undefined }],
+    ["una firma común con change_trust", { kind: "sign" }],
+    ["otra operación", { operation: "payment" }],
+  ];
+
+  it.each(malas)("rechaza la que no es exactamente la pedida: %s", (_, cambio) => {
+    const f = confirmacion({ id: "1", ...cambio });
+    const anotar = vi.fn();
+    atenderFirmas([f], new Set(), new Set(), anotar, lineaUsdc());
+    expect(f.reject).toHaveBeenCalledTimes(1);
+    expect(f.confirm).not.toHaveBeenCalled();
+    expect(anotar).toHaveBeenCalledTimes(1);
+  });
+
+  it("sin la línea pedida (lo de siempre), la línea se rechaza", () => {
+    const f = confirmacion({ id: "1" });
+    atenderFirmas([f], new Set(["AAAA"]), new Set(), vi.fn());
+    expect(f.reject).toHaveBeenCalledTimes(1);
+  });
+
+  it("una segunda en el mismo toque se rechaza", () => {
+    const a = confirmacion({ id: "1" });
+    const b = confirmacion({ id: "2" });
+    atenderFirmas([a, b], new Set(), new Set(), vi.fn(), lineaUsdc());
+    expect(a.confirm).toHaveBeenCalledTimes(1);
+    expect(b.reject).toHaveBeenCalledTimes(1);
+    expect(b.confirm).not.toHaveBeenCalled();
+  });
+
+  it("una mala primero no gasta el toque: la buena que llega después se confirma", () => {
+    const mala = confirmacion({ id: "1", details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: USDC_MAINNET.issuer } } });
+    const buena = confirmacion({ id: "2" });
+    const linea = lineaUsdc();
+    const atendidas = new Set<string>();
+    atenderFirmas([mala], new Set(), atendidas, vi.fn(), linea);
+    atenderFirmas([mala, buena], new Set(), atendidas, vi.fn(), linea);
+    expect(mala.reject).toHaveBeenCalledTimes(1);
+    expect(buena.confirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("con la línea pedida, el sello en curso se sigue confirmando igual y lo demás se sigue rechazando", () => {
+    const sello = { id: "s", kind: "sign_and_send", unsignedXdr: "AAAA", confirm: vi.fn(), reject: vi.fn() } as FirmaPendiente & { confirm: ReturnType<typeof vi.fn>; reject: ReturnType<typeof vi.fn> };
+    const otra = { id: "o", kind: "sign", unsignedXdr: "BBBB", confirm: vi.fn(), reject: vi.fn() } as FirmaPendiente & { confirm: ReturnType<typeof vi.fn>; reject: ReturnType<typeof vi.fn> };
+    atenderFirmas([sello, otra], new Set(["AAAA"]), new Set(), vi.fn(), lineaUsdc());
+    expect(sello.confirm).toHaveBeenCalledTimes(1);
+    expect(otra.reject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("la forma del kit: lo que pide setTrustline sigue siendo lo que la rama angosta espera", () => {
+  it("node_modules/@pollar/core pide build_sign_submit en Stellar, change_trust y details con el activo", () => {
+    const kit = readFileSync(resolve(process.cwd(), "node_modules/@pollar/core/dist/index.mjs"), "utf8");
+    const i = kit.indexOf("async setTrustline(");
+    expect(i).toBeGreaterThan(0);
+    const cuerpo = kit.slice(i, i + 2500);
+    expect(cuerpo).toMatch(/const changeTrustParams = \{\s*asset: \{\s*type: [^,]+,\s*code: [^,]+,\s*issuer: [^}]+\}\s*,\s*\.\.\.limit !== void 0 && \{ limit \}\s*\}/);
+    expect(cuerpo).toMatch(/this\._confirm\(\{\s*kind: "build_sign_submit",\s*network: "STELLAR",\s*operation: "change_trust",\s*details: changeTrustParams\s*\}\)/);
+  });
+});
+
+describe("PollarWallet: Activar dólares digitales con Google (activarUsdc)", () => {
+  beforeEach(() => vi.stubEnv("VITE_RAMPA", "recibir"));
+
+  it("con la bandera apagada no arma el cliente ni llama a nada", async () => {
+    vi.stubEnv("VITE_RAMPA", "");
+    await expect(pollarWallet.activarUsdc()).resolves.toBe("apagada");
+    await expect(pollarWallet.catalogoUsdc()).resolves.toBeNull();
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBeNull();
+    expect(e.construidos).toBe(0);
+    expect(e.llamadas).toEqual([]);
+  });
+
+  it("pide la línea del USDC de Circle de la red, sin límite ni saltear el patrocinio, y la confirma", async () => {
+    await expect(pollarWallet.activarUsdc()).resolves.toBe("hecho");
+    expect(e.llamadas).toEqual([`setTrustline:USDC:${EMISOR}:null`]);
+    expect(e.registro).toEqual(["confirmada:build_sign_submit"]);
+  });
+
+  it("confirma solo mientras dura la llamada: después, la misma línea se rechaza", async () => {
+    await pollarWallet.activarUsdc();
+    e.registro = [];
+    void hoisted.pedir({ kind: "build_sign_submit", network: "STELLAR", operation: "change_trust", details: { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR } } });
+    expect(e.registro).toEqual(["rechazada:build_sign_submit"]);
+  });
+
+  it("si el SDK pide otra cosa que la línea exacta, la puerta la rechaza y no sale", async () => {
+    e.detallesLinea = { asset: { type: "credit_alphanum4", code: "USDC", issuer: EMISOR }, limit: "0" };
+    await expect(pollarWallet.activarUsdc()).resolves.toBe("no-salio");
+    expect(e.registro).toEqual(["rechazada:build_sign_submit"]);
+  });
+
+  it("dos toques seguidos piden una sola línea", async () => {
+    const [a, b] = await Promise.all([pollarWallet.activarUsdc(), pollarWallet.activarUsdc()]);
+    expect([a, b].sort()).toEqual(["en-curso", "hecho"]);
+    expect(e.llamadas.filter((x) => x.startsWith("setTrustline"))).toHaveLength(1);
+  });
+
+  it("cada respuesta del kit da lo suyo", async () => {
+    e.respuestaLinea = { status: "cosign_pending", request: { id: "r1" } };
+    await expect(pollarWallet.activarUsdc()).resolves.toBe("en-curso");
+    e.respuestaLinea = { status: "error", code: "SDK_CREDITS_INSUFFICIENT" };
+    await expect(pollarWallet.activarUsdc()).resolves.toBe("ahora-no");
+  });
+
+  it("resultadoDeLaLinea: cada caso de la tabla", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(resultadoDeLaLinea({ status: "success" })).toBe("hecho");
+    expect(resultadoDeLaLinea({ status: "pending" })).toBe("hecho");
+    expect(resultadoDeLaLinea({ status: "cosign_pending" })).toBe("en-curso");
+    expect(resultadoDeLaLinea({ status: "error", code: "TX_LOW_RESERVE" })).toBe("no-patrocina");
+    expect(resultadoDeLaLinea({ status: "error", code: "SDK_CREDITS_INSUFFICIENT" })).toBe("ahora-no");
+    expect(resultadoDeLaLinea({ status: "error", code: "SDK_WALLET_NOT_READY" })).toBe("cuenta-creandose");
+    expect(resultadoDeLaLinea({ status: "error", code: "SDK_WALLET_RECOVERY_REQUIRED" })).toBe("proteger");
+    expect(resultadoDeLaLinea({ status: "error", code: "SDK_CONFIRMATION_DECLINED" })).toBe("no-salio");
+    expect(resultadoDeLaLinea({ status: "error", details: "algo raro" })).toBe("no-salio");
+    expect(resultadoDeLaLinea({})).toBe("no-salio");
+    warn.mockRestore();
+  });
+
+  it("catalogoUsdc: patrocinada solo si el catálogo de Pollar dice que la app la paga", async () => {
+    const con = (assets: unknown[]) => ({ step: "loaded", data: { publicKey: "G", network: "testnet", exists: true, assets } });
+    e.activos = con([{ code: "USDC", issuer: EMISOR, chain: "STELLAR", sponsored: true }]);
+    await expect(pollarWallet.catalogoUsdc()).resolves.toBe("patrocinada");
+    expect(e.llamadas).toContain("refreshAssets");
+    e.activos = con([{ code: "USDC", issuer: EMISOR, sponsored: false }]);
+    await expect(pollarWallet.catalogoUsdc()).resolves.toBe("no-patrocinada");
+    e.activos = con([{ code: "USDC", issuer: USDC_MAINNET.issuer, sponsored: true }]);
+    await expect(pollarWallet.catalogoUsdc()).resolves.toBe("no-patrocinada");
+    e.activos = { step: "error", message: "sin red" };
+    await expect(pollarWallet.catalogoUsdc()).resolves.toBeNull();
+  });
+
+  it("pendienteDeActivacion: true solo con un pedido de la línea esperando; leer no aprueba nada", async () => {
+    e.cofirmas = [{ id: "r1", status: "PENDING", operation: "change_trust" }];
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBe(true);
+    e.cofirmas = [{ id: "r2", status: "PENDING", operation: "payment" }, { id: "r3", status: "COMPLETED", operation: "change_trust" }];
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBe(false);
+    // Lo que el kit ya tiene en memoria alcanza: no se vuelve a preguntar.
+    e.llamadas = [];
+    e.cofirmasEnMemoria = [{ id: "r1", status: "PENDING", operation: "change_trust" }];
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBe(true);
+    expect(e.llamadas).not.toContain("cosign.pending");
+    e.cofirmasEnMemoria = [];
+    e.cofirmas = "falla";
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBeNull();
+    expect(e.registro).toEqual([]);
   });
 });
