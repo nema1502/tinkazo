@@ -50,6 +50,7 @@ import {
   MAX_CUERPO_RONDA,
   MAX_CUERPO_NOMBRE,
   MAX_EQUIPOS,
+  MAX_NOMBRES,
   MAX_SOCKETS,
   EQUIPOS_POR_MINUTO,
   NOMBRES_POR_MINUTO,
@@ -202,7 +203,7 @@ interface Presentacion {
 /** Lo que el Worker le pide a la sala, por RPC. */
 export type Resultado<T = object> =
   | ({ ok: true } & T)
-  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" | "forma" | "repetido" | "correcciones" }
+  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" | "forma" | "repetido" | "correcciones" | "cerrada" }
   | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
 export class Sala extends DurableObject<Env> {
