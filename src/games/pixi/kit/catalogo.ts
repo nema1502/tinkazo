@@ -167,7 +167,7 @@ export const CATALOGO = [
   // --- /bolillas
   // --- amigo
   // Amigo secreto: la mesa de sobres del show. La asignación (a quién le toca regalar) sale del faro con el
-  // módulo puro `src/games/amigo-secreto/asignacion.ts`, y el sobre del premio se abre con el golpe. Nace
+  // módulo puro del protocolo (`src/modos/amigo.ts`, `reparto`), y el sobre del premio se abre con el golpe. Nace
   // apagado: sin captura aprobada todavía, abre con ?demo=amigo y ?pose=amigo, y entra al selector cuando el
   // proyecto apruebe la captura (node scripts/nuevo-juego.mjs --encender amigo).
   {
