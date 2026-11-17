@@ -98,6 +98,16 @@ export interface Dict {
   againFew: (n: number, equipos?: boolean) => string;
   /** Arriba del cuadro, después de "sin los ganadores": quién salió y cuántos quedan. */
   againQuitados: (nombres: string[], n: number, equipos?: boolean) => string;
+  /** Issue #102: el lugar que la sala acaba de ver, cuando el sello trajo varios ("Lugar 2 de 5"). */
+  lugarDe: (n: number, total: number) => string;
+  /** Issue #102: la verdad a la sala en el resultado: los lugares no se eligen después del número. */
+  lugaresFijos: string;
+  /** Issue #102: la misma verdad antes de sellar, cuando el sello trae varios lugares de una. */
+  fijosAlNacer: string;
+  /** Issue #102: el botón «Siguiente premio» mientras quedan lugares del mismo sello por mostrar. */
+  againLugarBoton: string;
+  /** Issue #102: qué sigue mientras quedan lugares por mostrar: el lugar que viene, sin otra espera. */
+  againLugar: (n: number, total: number) => string;
   /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
   /** `premios`: cuántos premios se llevaba quien no está (con varias participaciones pudo salir más de una vez). */
   ausenteNota: (nombre: string, n: number, otros: boolean, premios?: number, equipos?: boolean) => string;
@@ -416,6 +426,11 @@ export function setPickSeed(rng: (() => number) | null): void {
  * (`esResultadoDeTurnos` de `modos/turnos.ts`).
  */
 const esDeTurnos = (): boolean => esResultadoDeTurnos();
+
+/** Issue #102: la verdad a la sala antes de sellar, cuando el sello trae varios lugares de una. Igual a `fijosAlNacer`. */
+const FIJOS_AL_NACER_ES = "El número elige todos los lugares de una vez: cuando nazca quedan fijos, y desde ese momento cualquiera los puede calcular.";
+/** Issue #102: the room's truth before sealing, when one seal carries every place. Same as `fijosAlNacer`. */
+const FIJOS_AL_NACER_EN = "The number picks every place at once: they're fixed the moment it is born, and anyone can compute them from then on.";
 
 export const T: Record<Lang, Dict> = {
   es: {
@@ -1190,6 +1205,11 @@ export const T: Record<Lang, Dict> = {
     againNueva: "Usar otra lista",
     againFew: (n, eq = cuadroEsDeEquipos()) => (n === 1 ? `Queda ${eq ? "un solo equipo" : "una sola persona"} sin premio: para otro sorteo, usá otra lista.` : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "equipos" : "personas"} ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${new Intl.ListFormat("es", { type: "conjunction" }).format(nombres)} ya ganaron y no están en esta lista. Quedan ${n}.`),
+    lugarDe: (n, total) => `Lugar ${n} de ${total}`,
+    lugaresFijos: "Todos los lugares quedaron fijos al nacer el número: cualquiera los puede calcular desde ese momento.",
+    fijosAlNacer: "El número elige todos los lugares de una vez: cuando nazca quedan fijos, y desde ese momento cualquiera los puede calcular.",
+    againLugarBoton: "Siguiente premio",
+    againLugar: (n, total) => `El lugar ${n} de ${total} ya quedó decidido: se muestra sin sellar otra vez.`,
     recuperarLista: "Recuperar la lista anterior",
     cortinaSe: "Se sortea",
     cortinaSeOrden: "Se sortea el orden de los turnos",
@@ -1259,7 +1279,9 @@ export const T: Record<Lang, Dict> = {
         // Con varias participaciones la lista sigue siendo de personas: los equipos van uno por línea, sin ellas.
         `${varias ? `${n} personas, ${participaciones} participaciones` : `${n} ${eq ? "equipos" : "personas"}`}, ` +
         `${k === 1 ? "1 ganador" : `${k} ganadores`}${premio === null ? "" : `, ${premio || "sin premio"}`}. ` +
-        `${varias ? "Quien tiene varias participaciones puede salir más de una vez. " : ""}Al sellar, la lista queda cerrada.`
+        `${varias ? "Quien tiene varias participaciones puede salir más de una vez. " : ""}Al sellar, la lista queda cerrada.` +
+        // Issue #102: con varios lugares en un sello, la sala lo sabe antes de sellar.
+        (k > 1 ? ` ${FIJOS_AL_NACER_ES}` : "")
       );
     },
     loginCorreoO: "o con tu correo",
@@ -3943,6 +3965,11 @@ export const T: Record<Lang, Dict> = {
     againNueva: "Use another list",
     againFew: (n, eq = cuadroEsDeEquipos()) => (n === 1 ? `Only one ${eq ? "team" : "person"} is left without a prize: for another draw, use another list.` : "Everyone on the list has already won: for another prize, use another list."),
     againQuitados: (nombres, n, eq = cuadroEsDeEquipos()) => (nombres.length > 3 ? `${nombres.length} ${eq ? "teams" : "people"} already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${new Intl.ListFormat("en", { type: "conjunction" }).format(nombres)} already won and are off this list. ${n} left.`),
+    lugarDe: (n, total) => `Place ${n} of ${total}`,
+    lugaresFijos: "Every place was fixed the moment the number was born: anyone can compute them from then on.",
+    fijosAlNacer: "The number picks every place at once: they're fixed the moment it is born, and anyone can compute them from then on.",
+    againLugarBoton: "Next prize",
+    againLugar: (n, total) => `Place ${n} of ${total} is already decided: it gets shown without sealing again.`,
     recuperarLista: "Bring back the previous list",
     cortinaSe: "Now drawing",
     cortinaSeOrden: "Drawing the turn order",
@@ -4007,7 +4034,9 @@ export const T: Record<Lang, Dict> = {
         // With several entries the list is still one of people: teams go one per line, without them.
         `${varias ? `${n} people, ${participaciones} entries` : `${n} ${eq ? "teams" : "people"}`}, ` +
         `${k === 1 ? "1 winner" : `${k} winners`}${premio === null ? "" : `, ${premio || "no prize"}`}. ` +
-        `${varias ? "Anyone with several entries can be drawn more than once. " : ""}Sealing locks the list.`
+        `${varias ? "Anyone with several entries can be drawn more than once. " : ""}Sealing locks the list.` +
+        // Issue #102: the room knows before sealing that one seal carries every place.
+        (k > 1 ? ` ${FIJOS_AL_NACER_EN}` : "")
       );
     },
     loginCorreoO: "or with your email",

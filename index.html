@@ -549,6 +549,12 @@
         <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>
         <!-- Con sello, si el sorteo ya quedó guardado: el juego no espera la grabación, que va aparte (src/ui/draw.ts). -->
         <p class="txstatus" id="grab-estado" role="status" aria-live="polite" style="display:none"></p>
+        <!-- Issue #102: el lugar que la sala acaba de ver, cuando el sello trajo varios de una
+             («Lugar 2 de 5», y el premio de ese lugar si existiera). Lo pone draw.ts. Nace escondido. -->
+        <p class="kicker lugar-actual" id="lugar-actual" role="status" style="display:none"></p>
+        <!-- Issue #102: la verdad a la sala: todos los lugares quedaron fijos al nacer el número y
+             cualquiera los puede calcular desde ese momento. Nace escondida. -->
+        <p class="note lugares-fijos" id="lugares-fijos" data-i="lugaresFijos" style="display:none"></p>
         <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
              sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
         <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">

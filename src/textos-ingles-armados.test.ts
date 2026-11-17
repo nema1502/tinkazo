@@ -72,7 +72,10 @@ describe("las bases y el resumen antes de sellar: varias participaciones por per
     expect(en.sellarResumen(2, 1, "Termo", 5)).toBe(
       "2 people, 5 entries, 1 winner, Termo. Anyone with several entries can be drawn more than once. Sealing locks the list.",
     );
-    expect(en.sellarResumen(2, 3, "", 2, false)).toBe("2 people, 3 winners, no prize. Sealing locks the list.");
+    expect(en.sellarResumen(2, 3, "", 2, false)).toBe(
+      // Issue #102: con varios lugares el resumen dice la verdad: un sello, todos los lugares fijos al nacer el número.
+      `2 people, 3 winners, no prize. Sealing locks the list. ${en.fijosAlNacer}`,
+    );
   });
 });
 
