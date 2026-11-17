@@ -1310,7 +1310,7 @@ Lo mismo, el mismo día, en la página de verificación: los otros sellos del or
 
 Se evaluó y **no entra en v2**, por una razón que no es técnica.
 
-La promesa del producto es que **los participantes no necesitan nada**: ni wallet, ni cuenta, ni saldo, ni saber qué es Stellar. Alguien pega una lista de nombres y sortea. Pagar el premio en USDC rompe eso: para cobrar, quien gana necesita una cuenta de Stellar, una trustline al USDC de Circle y entender qué acaba de recibir. En un evento con cincuenta personas eso convierte un momento de dos segundos en una fila.
+La promesa del producto es que, salvo el registro de equipos de un evento con cupones, **los participantes no necesitan nada**: ni wallet, ni cuenta, ni saldo, ni saber qué es Stellar. Alguien pega una lista de nombres y sortea. Pagar el premio en USDC rompe eso: para cobrar, quien gana necesita una cuenta de Stellar, una trustline al USDC de Circle y entender qué acaba de recibir. En un evento con cincuenta personas eso convierte un momento de dos segundos en una fila.
 
 Y hay un segundo costo, más serio: hoy el contrato **no custodia valor**. No tiene admin, no se puede actualizar y no tiene fondos. Eso es lo que hace que la auditoría quepa en una tarde y que la promesa sea creíble. Cualquier cosa que ponga dinero adentro cambia el modelo de amenazas por completo y obliga a un tipo de auditoría que hoy no tenemos.
 

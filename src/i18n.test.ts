@@ -366,3 +366,36 @@ describe("el modo espectador", () => {
     expect(T.en.espQrBoton).toBeUndefined();
   });
 });
+
+/**
+ * La decisión sobre cómo se identifica quien se anota (issue 87): para verse en
+ * la sala de nombres y para comprobar un sorteo no hace falta nada, y solamente
+ * el registro de equipos de un evento con cupón pide una cuenta. Todo texto que
+ * dice que quien participa no necesita nada nombra esa excepción, en los dos
+ * idiomas, y el HTML de la portada dice lo mismo que el diccionario.
+ */
+describe("la excepción del registro de equipos con cupón, donde se dice que no hace falta cuenta", () => {
+  const indexHtml = readFileSync("index.html", "utf8");
+
+  it("el paso 1 de la portada y la nota del sellado nombran la excepción, en los dos idiomas", () => {
+    for (const k of ["s1b", "como2N"] as const) {
+      expect(T.es[k], `es.${k}`).toMatch(/cupón/);
+      expect(T.en[k], `en.${k}`).toMatch(/coupon/i);
+    }
+    expect(T.es.s1b, "es.s1b").toMatch(/comprobar/);
+    expect(T.en.s1b, "en.s1b").toMatch(/check/i);
+  });
+
+  it("las bases del sorteo, antes de sellar, nombran la excepción en los dos idiomas", () => {
+    const pre = { prize: "Termo", count: 18, winners: 1, verifyUrl: "https://tinkazo.app" };
+    expect(T.es.rulesPre(pre), "es.rulesPre").toMatch(/cupones/);
+    expect(T.en.rulesPre(pre), "en.rulesPre").toMatch(/coupons/i);
+  });
+
+  it("el HTML de la portada dice lo mismo que el diccionario en español", () => {
+    for (const k of ["s1b", "como2N"] as const) {
+      const enElHtml = indexHtml.match(new RegExp(`data-i="${k}">([^<]+)<`))?.[1];
+      expect(enElHtml, k).toBe(T.es[k]);
+    }
+  });
+});

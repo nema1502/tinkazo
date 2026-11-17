@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   app: { frozen: null as unknown, drawn: null as unknown },
   nombres: [] as string[],
   cargoPaso: false,
+  romper: false,
   abrir: vi.fn(),
   billetera: null as unknown,
   local: { activacion: "lista", proteccion: "lista" } as { activacion: string; proteccion: string },
@@ -38,7 +39,13 @@ vi.mock("../state", () => ({ app: h.app }));
 vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => h.billetera }));
 vi.mock("./cuenta-lista", () => {
   h.cargoPaso = true;
-  return { abrirCuentaLista: (...a: unknown[]) => h.abrir(...a) };
+  return {
+    abrirCuentaLista: (...a: unknown[]) => {
+      // Con la rotura pedida, la llamada falla como falla el paso que no se puede bajar: el flujo avisa y no sigue.
+      if (h.romper) throw new TypeError("Failed to fetch dynamically imported module");
+      return h.abrir(...a);
+    },
+  };
 });
 vi.mock("../stellar/wallet-pollar", () => ({ pollarWallet: { label: "Google" }, puedeUsarDesbloqueo: async () => false }));
 vi.mock("./wallet-ui", () => ({
@@ -276,13 +283,18 @@ describe("cuando el sello o el sorteo fallan por la cuenta", () => {
 describe("si el paso no se puede bajar", () => {
   const aviso = (): HTMLElement | null => document.querySelector(".cl-no-cargo");
   /** La descarga del paso falla, como en el wifi de un evento: el `import()` se rechaza. */
+  /**
+   * El paso no se puede bajar: la llamada de `abrirCuentaLista` falla (antes se lanzaba desde la fábrica del doMock,
+   * pero una fábrica que lanza no rige igual en cada descarga repetida y bajo la carga de la batería completa el flujo
+   * seguía a veces como si nada). El comportamiento cuidado no cambia: el flujo avisa con el aviso de volver a cargar y
+   * devuelve false, sin abrir el paso ni seguir callado.
+   */
   const romperPaso = (): void => {
-    vi.doMock("./cuenta-lista", () => {
-      throw new TypeError("Failed to fetch dynamically imported module");
-    });
+    h.romper = true;
   };
+
   afterEach(() => {
-    vi.doMock("./cuenta-lista", () => ({ abrirCuentaLista: (...a: unknown[]) => h.abrir(...a) }));
+    h.romper = false;
   });
 
   it("al sellar no sigue, pero lo dice con el aviso de volver a cargar la página", async () => {

@@ -13,8 +13,10 @@ import { alAvisarEnStand, alSalirDelStand, nombresParaLaSiguiente } from "./stan
  * La sala por QR, en la pantalla del stand: la gente escanea, escribe su nombre
  * en el celular y aparece acá, en la lista de la ronda de ejemplo.
  *
- * Solo alimenta rondas de ejemplo (modo stand): estos nombres nunca van a un
- * sorteo sellado ni a un comprobante. La clave que descifra los nombres la
+ * Para anotarse no hace falta nada, y estos nombres solo alimentan rondas de
+ * ejemplo (modo stand): nunca van a un sorteo sellado ni a un comprobante. El
+ * registro de equipos con cupón, donde sí hace falta la cuenta de quien anota
+ * a su equipo, se lleva en `equipos-sala.ts`. La clave que descifra los nombres la
  * genera esta pestaña y viaja solo en el QR, después del `#`; el servicio
  * (`workers/sala`) guarda bytes que no puede leer. Si no hay señal para crear la
  * sala, o se cae a media feria, el stand sigue escribiendo los nombres en la

@@ -5,7 +5,12 @@ import { generarClave } from "./cifra";
  * nombres cifrados por WebSocket (o consultando cada 3 s si se corta), quitar
  * uno y cerrar la sala. Habla con `workers/sala` (`s.tinkazo.app`).
  *
- * Solo alimenta rondas de ejemplo: lo que llega acá nunca va a un sorteo sellado.
+ * Los nombres solo alimentan rondas de ejemplo: nunca van a un sorteo sellado ni
+ * a un comprobante, y para anotarse no hace falta nada. La sala también lleva el
+ * registro de equipos de un evento con cupones (escucharSala los trae si se pasa
+ * `alEquipo`): ahí cada equipo entra con su cuenta de Stellar, y las cuentas con
+ * cupón son las que entran a la lista sellada.
+ *
  * La clave que descifra no pasa nunca por el servicio: la genera esta pestaña y
  * va en el QR, después del `#`.
  */

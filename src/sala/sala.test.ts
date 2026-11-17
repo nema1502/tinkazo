@@ -134,8 +134,8 @@ describe("la página del celular", () => {
     expect(gzipSync(html).length).toBeLessThan(15 * 1024);
   });
   it("está en español y en inglés, con el aviso de privacidad del celular", () => {
-    expect(TEXTOS.es.aviso).toBe("Tu nombre o apodo se ve en la pantalla grande del stand, en una ronda de ejemplo, y se borra cuando cierran la sala o a las 10 horas.");
-    expect(TEXTOS.en.aviso).toBe("Your name or nickname shows on the booth's big screen, in a sample round, and is deleted when the room is closed or after 10 hours.");
+    expect(TEXTOS.es.aviso).toBe("Tu nombre o apodo se ve en la pantalla grande del stand, en una ronda de ejemplo, y se borra cuando cierran la sala o a las 10 horas. Para sumarte no hace falta nada: ni cuenta, ni aplicación. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.");
+    expect(TEXTOS.en.aviso).toBe("Your name or nickname shows on the booth's big screen, in a sample round, and is deleted when the room is closed or after 10 hours. Joining needs nothing: no account, no app. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.");
     expect(Object.keys(TEXTOS.es).sort()).toEqual(Object.keys(TEXTOS.en).sort());
   });
   it("no carga nada de afuera ni nombra al sistema", () => {
