@@ -3122,7 +3122,7 @@ export const T: Record<Lang, Dict> = {
     "rec.bolillas.corto": "Con una sola persona no hay troya.",
     // --- amigo
     gameAmigo: "Amigo secreto", jgAmigoN: "Amigo secreto",
-    jgAmigoB: "La mesa de sobres del amigo secreto: una tarjeta con la cara de cada uno y, adentro, a quién le toca regalar. La asignación sale del faro —nadie la elige— y al final se abre el sobre del premio, con su tarjeta amarilla y confeti. Hasta doscientas.",
+    jgAmigoB: "La mesa de sobres del amigo secreto: una tarjeta con la cara de cada uno y, adentro, a quién le toca regalar. La ronda de regalos sale del protocolo —nadie la elige— y al final se abre el sobre del premio, con su tarjeta amarilla y confeti. Hasta doscientas.",
     gcAmigo: "Cada uno abre su sobre y descubre a quién le toca regalar. El premio lo destaca el show al final.",
     gcAmigoMany: "Con varios premios, el sobre destacado al final se lleva el primero. Los demás premios salen en el cartel del final.",
     loreAmigoQ: "¿De dónde sale el amigo secreto?",
@@ -5900,7 +5900,7 @@ export const T: Record<Lang, Dict> = {
     "rec.bolillas.corto": "With one person there is no troya.",
     // --- amigo
     gameAmigo: "Secret friend", jgAmigoN: "Secret friend",
-    jgAmigoB: "The secret friend table: one envelope per person with their face on it, and inside, who they give their gift to. The assignment comes from the beacon — nobody picks it — and at the end the prize envelope opens, with its yellow card and confetti. Up to two hundred.",
+    jgAmigoB: "The secret friend table: one envelope per person with their face on it, and inside, who they give their gift to. The gift round comes from the protocol — nobody picks it — and at the end the prize envelope opens, with its yellow card and confetti. Up to two hundred.",
     gcAmigo: "Everyone opens their envelope and finds out who they give their gift to. The show highlights the prize at the end.",
     gcAmigoMany: "With several prizes, the envelope highlighted at the end takes the first one. The other prizes show on the final banner.",
     loreAmigoQ: "Where does Secret friend come from?",

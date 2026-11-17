@@ -1,7 +1,7 @@
-import { asignarAmigos } from "./asignacion";
 import { acotar } from "../pixi/kit/azar";
 import { planoEntero, planoSobre } from "../pixi/kit/director";
 import { PRIORIDAD } from "../pixi/kit/guion";
+import { reparto } from "../../modos/amigo";
 import type { Textos } from "../pixi/kit";
 import type { Caja, Contexto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoPaso } from "../pixi/kit/tipos";
 
@@ -11,9 +11,10 @@ import type { Caja, Contexto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoP
  * El show del amigo secreto: una mesa de sobres con la cara y el nombre de cada
  * uno, que se abren de a uno revelando a quién le toca regalar, y al final el
  * sobre del premio se abre con el golpe y su tarjeta queda amarilla con
- * confeti. La asignación no la elige nadie: sale del faro con el módulo puro
- * `asignacion.ts` (S2), y el ganador del premio llega ya decidido del protocolo
- * (`ctx.ganadores`, S1): el juego solo lo cuenta.
+ * confeti. La ronda de regalos no la elige nadie: es el reparto del protocolo
+ * (`reparto` en `src/modos/amigo.ts`) sobre la lista sellada — el sorteo en que
+ * ganan todas las personas —, y el sobre del premio llega ya decidido
+ * (`ctx.ganadores[0]`): el juego solo lo cuenta.
  *
  * Los tiempos: cada sobre abierto de a uno dura un golpe de show (1,2 s), con
  * el ganador al final. Con listas largas (más de diez) no se abre todo en
@@ -32,7 +33,7 @@ export interface Datos {
   n: number;
   /** Quien gana el premio: su puesto en la lista. Su sobre es el último, y se abre con el golpe. */
   ganador: number;
-  /** La asignación del faro: `asignacion[i]` es a quién le regala la persona `i`. */
+  /** La ronda de regalos del protocolo: `asignacion[i]` es el puesto de quien recibe el regalo de la persona `i`. */
   asignacion: readonly number[];
   /** El orden de la revelación, en puestos de la lista. El ganador va último. */
   orden: readonly number[];
@@ -120,9 +121,15 @@ function unirCajas(cs: readonly Caja[]): Caja | null {
 export function planAmigo(ctx: Contexto): Plan<Datos> {
   const n = ctx.nombres.length;
   const ganador = ctx.ganadores[0] ?? 0;
-  // La asignación sale del faro, del módulo puro que comparte con la verificación: nadie la elige.
-  const asignacion = asignarAmigos(ctx.nombres, ctx.ronda);
-  if (!asignacion) throw new Error("amigo secreto: con menos de dos personas no hay juego");
+  if (n < 2) throw new Error("amigo secreto: con menos de dos personas no hay juego");
+  // La ronda de regalos sale del protocolo (`reparto` en src/modos/amigo.ts): el amigo secreto es un
+  // sorteo en que ganan todas las personas, y `reparto` convierte ese orden en la ronda — quien ocupa
+  // el lugar j le regala a quien ocupa el j + 1, y el último a la primera. Nadie la elige y no hay
+  // generador propio: para la misma lista sellada, la misma respuesta del protocolo.
+  const todos = Array.from({ length: n }, (_, i) => i);
+  const rondaDeRegalos = reparto(ctx.nombres, todos);
+  const puesto = new Map(ctx.nombres.map((nombre, i) => [nombre, i]));
+  const asignacion = rondaDeRegalos.map((regalo) => puesto.get(regalo.to) ?? -1);
 
   // La historia del director de emoción: su arco da el sabor de la cámara y del foco.
   const historia = ctx.historia(Math.max(2, n), ganador % Math.max(1, n));

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import vectors from "../../../docs/vectors.json";
+import { reparto } from "../../modos/amigo";
 import { writeStory } from "../drama";
 import { azarDe, sembrar } from "../pixi/kit/azar";
 import { problemasDeMomentos } from "../pixi/kit/director";
@@ -6,16 +8,16 @@ import { validarGuion } from "../pixi/kit/guion";
 import { problemasDeMarcador } from "../pixi/kit/marcador";
 import { DIRECCIONES, problemasDeRespuestas } from "../pixi/kit/respuestas";
 import type { Contexto, Kit } from "../pixi/kit/tipos";
-import { asignarAmigos } from "./asignacion";
 import { TEXTOS, cajaDe, layoutTarjetas, planAmigo, type Pant } from "./show";
 
 const RONDA = "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829";
 
 /** El contexto que arma el kit, con un azar sembrado y los textos del juego. */
-function contexto(n: number, ganadores: number[], semilla = 7, idioma: "es" | "en" = "es"): Contexto {
+function contexto(n: number, ganadores: number[], semilla = 7, idioma: "es" | "en" = "es", nombres?: readonly string[]): Contexto {
   const rng = sembrar(semilla);
+  const lista = nombres ?? Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
   return {
-    nombres: Array.from({ length: n }, (_, i) => `Persona ${i + 1}`),
+    nombres: [...lista],
     ganadores,
     ronda: RONDA,
     rng,
@@ -55,13 +57,20 @@ describe("Amigo secreto: el plan", () => {
     }
   });
 
-  it("la asignación sale del faro: es la del módulo puro, nadie se autoasigna y todos reciben", () => {
-    for (const n of LISTAS) {
-      const p = planAmigo(contexto(n, ganadoresDe(n)));
-      const esperada = asignarAmigos(Array.from({ length: n }, (_, i) => `Persona ${i + 1}`), RONDA);
-      expect(p.datos.asignacion).toEqual(esperada);
-      for (let i = 0; i < n; i++) expect(p.datos.asignacion[i]).not.toBe(i);
-      expect([...p.datos.asignacion].sort((a, b) => a - b)).toEqual(Array.from({ length: n }, (_, i) => i));
+  it("la ronda de regalos es la del protocolo: las parejas del show son las de reparto con las mismas entradas", () => {
+    // La lista de 18 del vector del protocolo y listas más cortas: cada sobre muestra a quien
+    // `reparto` de src/modos/amigo.ts asigna para las mismas entradas (en el sorteo de los
+    // regalos ganan todas las personas). Tienen que coincidir todas.
+    const listas: readonly string[][] = [vectors.list as string[], ...[2, 3, 8, 18, 40].map((n) => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`))];
+    for (const nombres of listas) {
+      const p = planAmigo(contexto(nombres.length, ganadoresDe(nombres.length), 7, "es", nombres));
+      const todos = Array.from({ length: nombres.length }, (_, i) => i);
+      const esperado = reparto(nombres, todos);
+      const parejas = p.datos.asignacion.map((destino, i) => ({ from: nombres[i] ?? "", to: nombres[destino] ?? "" }));
+      expect(parejas, `con ${nombres.length} personas`).toEqual(esperado);
+      // El show hereda las garantías del reparto: nadie se regala a sí mismo y todos reciben una vez.
+      for (let i = 0; i < nombres.length; i++) expect(p.datos.asignacion[i], `persona ${i} con n=${nombres.length}`).not.toBe(i);
+      expect([...p.datos.asignacion].sort((a, b) => a - b)).toEqual(todos);
     }
   });
 

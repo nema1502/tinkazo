@@ -376,6 +376,33 @@ describe("el modo espectador", () => {
   });
 });
 
+describe("el amigo secreto (el juego del sobre del premio)", () => {
+  const CLAVES = ["gameAmigo", "jgAmigoN", "jgAmigoB", "gcAmigo", "gcAmigoMany", "loreAmigoQ", "loreAmigoA"];
+
+  it("sus textos existen en los dos idiomas", () => {
+    for (const k of CLAVES) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect((T.es[k] as string).trim(), `es.${k}`).not.toBe("");
+      expect((T.en[k] as string).trim(), `en.${k}`).not.toBe("");
+    }
+  });
+
+  it("cuentan el modelo del sobre del premio: el show destaca el premio al final, en los dos idiomas", () => {
+    for (const k of ["jgAmigoB", "gcAmigo", "gcAmigoMany"]) {
+      expect(String(T.es[k]), `es.${k}`).toMatch(/premio/i);
+      expect(String(T.en[k]), `en.${k}`).toMatch(/prize/i);
+    }
+  });
+
+  it("la ronda de regalos sale del protocolo, no de un generador propio", () => {
+    expect(String(T.es.jgAmigoB), "es.jgAmigoB").toMatch(/protocolo/i);
+    expect(String(T.en.jgAmigoB), "en.jgAmigoB").toMatch(/protocol/i);
+    expect(String(T.es.jgAmigoB), "es.jgAmigoB").not.toMatch(/faro/i);
+    expect(String(T.en.jgAmigoB), "en.jgAmigoB").not.toMatch(/beacon/i);
+  });
+});
+
 describe("los juegos interactivos", () => {
   it("sus textos nuevos existen en los dos idiomas", () => {
     for (const k of [
