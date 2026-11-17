@@ -14,7 +14,7 @@ Está hecha sobre el kit de juegos (`src/games/pixi/kit/`, "Cómo nace un juego"
 | `src/games/llamas/carrera-rocas.ts` | Las rocas y las matas como lista: se siembran en los pasillos entre filas, sin tocar ninguna trayectoria |
 | `src/games/llamas/carrera-orden.ts` | `orden(t)`: quién va primera, segunda... en cada instante |
 | `src/games/llamas/carrera-tandas.ts` | De 31 a 200: las tandas, el portón y quiénes pasan |
-| `src/games/llamas/carrera-forma.ts` | Dónde va cada una en la pantalla (grupo, carriles, cinta) |
+| `src/games/llamas/carrera-forma.ts` | Dónde va cada una en la pantalla (grupo, carriles, cinta). Con 2 a 5 finalistas la banda de los carriles se comprime alrededor del centro: cada carril mide lo que la llama pide (mismo tope de alto de siempre) y la cámara se acerca, en 2D y en 3D |
 | `src/games/llamas/carrera-filas.ts` | Las filas del grupo según el carril: desde la salida, cada finalista larga en la fila de su carril, así al abrirse la recta ninguna atraviesa a otra |
 | `src/games/llamas/carrera.ts` | La escena de PixiJS y `crearJuego` |
 | `src/games/llamas/llama.ts` | La llama, la postura de echarse y la borla del líder |
@@ -45,7 +45,7 @@ Hechos (`respuestas(t)`): `empezo` (la salida), `salio` (una se echa, o al cerra
 2. **Los nombres** (3,7 s, hasta 30): todos, enteros y en orden alfabético, en un cartel. En Rápido el show se comprime hasta 0,82: 3,7 s del plan son 3 de verdad. Con más de 30, el cartel es el de cada tanda.
 3. **Las tandas** (de 31 a 200): hasta 25 por tanda, parejas, y de cada una pasa el mismo número por el portón, de a una y a 1,2 s (de 126 a 175 son ocho tandas más chicas, de a una: con cinco o seis no entra en los 90 s; de 31 a 50 son dos tandas de a cinco y con 60, tres de a tres, para que el show quede en un minuto y poco). El cartel de la tanda va a un costado (arriba en el celular), 3,7 s y sigue mientras corre (en Rápido, 3 s de verdad); quien pasa se pone amarilla y, cuando se cierra el portón, las demás se echan juntas y se apagan. Las que pasan entran al corral trotando por un camino suave, a un cuerpo y medio por segundo como mucho (`carrera-caminata.ts`), en el orden en que salen: la primera en salir va adelante en el corral y la última atrás, cerca del portón; las finalistas salen en el orden en que entran a la recta. Las que pasan esperan adelante en su tanda, en la primera columna y cada una en la fila más cerca de la altura de su lugar en el corral (`puestosEnTanda`): salen derecho al portón, sin nadie adelante, y entran al corral a su altura. Las demás esperan en orden alfabético. En la tanda no hay nombres, así que ese lugar no se ve. La tanda siguiente aparece cuando las que pasaron ya salieron de esos lugares.
 4. **La salida y el grupo**: corren todas, la punta cambia de dueña cada 4 a 6 s y de a una se van echando, con un terreno por tramo (la cuesta, el barro, las piedras, el viento). El grupo es una flecha que apunta a la derecha.
-5. **La recta**: quedan las ocho de la final, que entran sin frenar en el orden de la final y corren en carriles hasta la meta. Cada finalista corre su propia historia (remontada, susto, duelo o tapada), los momentos (un tropiezo, una plantada, un pique, una escupida) le tocan a cualquiera y se ven, con una línea del relator sin nombre, y a tres segundos de la meta van adelante cuatro, una de ellas la ganadora. Los nombres de la final son los de la tribuna.
+5. **La recta**: quedan las ocho de la final, que entran sin frenar en el orden de la final y corren en carriles hasta la meta. Con 2 a 5 finalistas los carriles no reparten la pista entera: la banda se comprime alrededor del centro, cada carril mide lo que la llama pide con su nombre, y la cámara de la recta se acerca sola (la llama no cambia de tamaño: manda el tope de alto de siempre). Cada finalista corre su propia historia (remontada, susto, duelo o tapada), los momentos (un tropiezo, una plantada, un pique, una escupida) le tocan a cualquiera y se ven, con una línea del relator sin nombre, y a tres segundos de la meta van adelante cuatro, una de ellas la ganadora. Los nombres de la final son los de la tribuna.
 6. **El golpe**: el silencio, el acercamiento del 20 %, el foco sobre quien gana y su nombre en grande; el cartel nunca queda encima de ella.
 
 ## El relator
@@ -115,6 +115,8 @@ Cómo lo hace. El interruptor es `SENUELOS` en `carrera-base.ts`, prendido. En `
 | cambios de punta en la recta, antes del cabeza a cabeza (media) | 60 | de 3 a 5 | 2,95 en rojo | 3,01 en verde |
 | cambios de punta en la recta, antes del cabeza a cabeza (media) | 200 | de 3 a 5 | 2,95 en rojo | 3,04 en verde |
 | cambios de punta por terreno del grupo (media) | 60 | de 1 a 2 | 0,10 en rojo | 0,10 en rojo |
+
+Con 2 a 5 personas (medición acotada del issue 106, 100 rondas) hay además metas de justicia y de drama en rojo en la línea de base — 14 del final y 7 del drama, con 2 a 5 personas —, que la presentación no mueve: antes y después de comprimir la banda de los carriles, las listas de metas en rojo salen idénticas. El detalle, con los números, está en `odd/reports/issue-106-linea-de-base.md`.
 
 **Lo que queda a mirar** (`audit-delatores race`, 1.500 carreras por tamaño). Ninguna fila frena con 2, 3, 4, 5, 6, 7, 8, 18, 30, 60, 100 y 200 personas. Estas salen a mirar, con su número y sin frenar:
 
