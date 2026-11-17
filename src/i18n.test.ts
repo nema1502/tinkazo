@@ -335,6 +335,22 @@ describe("diccionario", () => {
 
 });
 
+describe("un premio por lugar", () => {
+  it("el rótulo de cada lugar y el hueco existen en los dos idiomas, con sus reglas de escritura", () => {
+    for (const l of ["es", "en"] as const) {
+      expect(typeof T[l].prizeLugar).toBe("function");
+      expect(typeof T[l].prizeLugarPh).toBe("string");
+      expect(T[l].prizeLugar(1)).toMatch(/premio|prize/);
+      expect(T[l].prizeLugar(2)).toMatch(/premio|prize/);
+      expect(T[l].prizeLugarPh as string).not.toMatch(/[«»;·!¡]/);
+    }
+    // Los que nombra el issue: 1.er premio, 2.º premio.
+    expect(T.es.prizeLugar(1)).toBe("1.er premio");
+    expect(T.es.prizeLugar(2)).toBe("2.º premio");
+    expect(T.en.prizeLugar(1)).toBe("1st prize");
+    expect(T.en.prizeLugar(2)).toBe("2nd prize");
+  });
+});
 describe("el modo espectador", () => {
   const CLAVES = [
     "espQrT", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda", "espNoCoincide",

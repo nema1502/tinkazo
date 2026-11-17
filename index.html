@@ -379,6 +379,10 @@
         <!-- Los que más se sortean y los últimos que usaste: se arman en premios.ts. El cuadro de abajo sigue siendo lo que se sella. -->
         <div class="premio-chips" id="prize-chips" role="group" aria-labelledby="prize-etiqueta"></div>
         <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
+        <!-- Con más de un ganador, un campo por lugar (1.er premio, 2.º premio y así): los arma src/ui/premios.ts
+             y los rearma cuando cambia la cantidad de ganadores o el idioma. El cuadro de arriba queda como el del
+             1.er premio, y con un solo ganador esta caja queda vacía y escondida. -->
+        <div class="premio-lugares" id="prize-lugares" hidden></div>
       </div>
       <div class="row mas-fila">
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>

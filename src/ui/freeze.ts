@@ -27,9 +27,10 @@ import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
+import * as premiosModulo from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
-import { ajustarPremioDeTurnos, ordenNoCabe, ponerModoTurnos } from "./turnos";
+import { ajustarPremioDeTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
@@ -249,6 +250,20 @@ function frase(clave: string, args: readonly number[] = []): string {
  */
 const premiosElegidos = (n: number): number => Math.min(ganadoresPedidos(), Math.max(1, n));
 
+/**
+ * El premio que se lee de los campos: con más de un ganador, los lugares armados en un solo texto (`premioActual` de
+ * `premios.ts`). Las pruebas de la red y del sello reemplazan `premios.ts` con lo que usaban antes: ahí, y si el
+ * módulo no baja, la lectura es la de siempre, el cuadro único.
+ */
+function premioLeido(): string {
+  const solo = $<HTMLInputElement>("prize")?.value.trim().replace(/\s+/g, " ") ?? "";
+  try {
+    return premiosModulo.premioActual?.() ?? solo;
+  } catch {
+    return solo;
+  }
+}
+
 export function pintarRecomendacion(names: readonly string[]): void {
   const n = names.length;
   const botones = new Map<Game, HTMLElement>();
@@ -259,7 +274,7 @@ export function pintarRecomendacion(names: readonly string[]): void {
   const gp = $("gamepick");
   // Un orden de turnos no tiene premios: las notas de capacidad dicen turnos. Se decide como en el resto de
   // la pantalla, por la lista sellada y su nombre; antes de sellar vale el nombre del campo.
-  const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
+  const premio = app.frozen?.prize ?? premioLeido();
   const turnos = isTurnOrder(n, premiosElegidos(n), premio);
   recomendar(n, premiosElegidos(n), turnos).games.forEach((r, i) => {
     const el = botones.get(r.game);
@@ -339,7 +354,7 @@ export function pintarCabecera(names: readonly string[]): void {
   const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
   const n = names.length;
   const { personas } = contarPersonas(names, seCuentaPorPersona(names, modesVisible()));
-  const premio = app.frozen?.prize ?? (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "";
+  const premio = app.frozen?.prize ?? premioLeido();
   const turnos = isTurnOrder(n, premiosElegidos(n), premio);
   const cabeza = personas === n ? frase("recHead", [n]) : turnos ? frase("recHeadTurnos", [personas, n]) : frase("recHeadPart", [personas, n]);
   el.textContent = `${cabeza}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
@@ -901,8 +916,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
           ? ENSAYO_ESPERA_S
           : LEAD_SECONDS;
   let round = targetRound(ts, lead);
-  // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo es el cuadro, recortado.
-  let prize = ajustarPremioDeTurnos();
+  // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo, los campos por lugar
+  // se arman en un solo texto dentro de los 160 caracteres que admite `meta`.
+  let prize = modoTurnosActivo() ? ajustarPremioDeTurnos() : premioLeido();
   let numWinners = Math.min(ganadoresPedidos(), names.length);
 
   let raffleId: bigint | undefined;
@@ -1405,6 +1421,13 @@ export function resumeFrozen(e: {
   ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
   ponerPremio(e.prize);
   ponerGanadores(e.numWinners);
+  // Los campos por lugar del sorteo retomado: con la cantidad ya puesta, cada premio vuelve a su campo.
+  // (En las pruebas que reemplazan `premios.ts` no está: la lectura sigue siendo el cuadro único.)
+  try {
+    premiosModulo.actualizarLugares?.();
+  } catch {
+    /* el módulo reemplazado no lo trae: nada que rearmlar */
+  }
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
   app.frozen = {
     names: e.names,
@@ -1641,7 +1664,7 @@ export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   // Para copiar hacen falta dos personas, contadas como siempre; lo que dicen las bases, con la cuenta del cuadro.
   if (contarPersonas(names, modesVisible()).personas < 2) return;
   const { personas: count, participaciones: entries } = cuentaParaMostrar(names, modesVisible());
-  const prize = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
+  const prize = premioLeido();
   const winners = Math.min(ganadoresPedidos(), names.length);
   // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
   // (lo que se sella: cada línea, un turno), no por las personas.

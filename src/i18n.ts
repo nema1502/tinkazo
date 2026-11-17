@@ -102,6 +102,10 @@ export interface Dict {
   /** `premios`: cuántos premios se llevaba quien no está (con varias participaciones pudo salir más de una vez). */
   ausenteNota: (nombre: string, n: number, otros: boolean, premios?: number, equipos?: boolean) => string;
   salioVarias: (nombre: string, veces: number, premios: readonly number[]) => string;
+  /** El rótulo del campo de un lugar cuando ganan varios: "1.er premio", "2.º premio" / "1st prize", "2nd prize". Lo lee de vuelta `lugaresDeMeta` (src/ui/premios.ts), que reconoce el formato en los dos idiomas. */
+  prizeLugar: (k: number) => string;
+  /** El hueco de cada lugar: qué va ahí. */
+  prizeLugarPh: string;
   /** El nombre con su cuenta cuando una persona sale más de una vez: "Ana (2 veces)". */
   repetidoVeces: string;
   /** El aviso de la verificación, cuyas tarjetas no llevan el número de cada premio: "Ana salió 2 veces.". */
@@ -1041,6 +1045,9 @@ export const T: Record<Lang, Dict> = {
     // Los que más se sortean en un evento, en el orden en que se ofrecen.
     prizeSugeridos: ["Polera", "Libro", "Entrada", "Stickers", "Termo", "Kit de bienvenida", "Tarjeta de regalo", "Licencia"],
     prizeRecent: "Lo usaste antes", prizeUsed: "ya salió",
+    // Un premio por lugar cuando ganan varios: primero y tercero van con "er", los demás con "º".
+    prizeLugar: (k) => `${k}.${k === 1 || k === 3 ? "er" : "º"} premio`,
+    prizeLugarPh: "Lo que se lleva este lugar…",
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
     // La etiqueta de la cuenta sellada cuando las participaciones no son una por persona (freeze.ts).
     kEntriesDe: (n) => `participaciones de ${n === 1 ? "1 persona" : `${n} personas`}`,
@@ -3807,6 +3814,9 @@ export const T: Record<Lang, Dict> = {
     prizeLabel: "What are you giving away? (optional)", prizePh: "Or type your own…",
     prizeSugeridos: ["T-shirt", "Book", "Event pass", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
     prizeRecent: "You used it before", prizeUsed: "already drawn",
+    // One prize field per place when several win: 1st, 2nd, 3rd, then -th (and 11th to 13th).
+    prizeLugar: (k) => `${k}${k % 100 >= 11 && k % 100 <= 13 ? "th" : ["st", "nd", "rd"][k % 10 - 1] ?? "th"} prize`,
+    prizeLugarPh: "What this place takes home…",
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
     // The sealed-count label when entries are not one per person (freeze.ts).
     kEntriesDe: (n) => `entries from ${n === 1 ? "1 person" : `${n} people`}`,

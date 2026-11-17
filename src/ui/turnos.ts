@@ -3,7 +3,7 @@ import { modesVisible, requestedMode } from "../modos/bandera";
 import { isTurnPrize, turnPrize } from "../modos/turnos";
 import { topeDeGanadores } from "../stellar/config";
 import { fijarGanadores, ponerGanadores } from "./ganadores";
-import { ponerPremio } from "./premios";
+import { actualizarLugares, bloquearLugares, ponerPremio } from "./premios";
 
 /**
  * El modo del sorteo, elegido a la vista: el selector de arriba de la lista (`#turnos-opcion` de `index.html`), con dos
@@ -102,6 +102,9 @@ function pintar(): void {
     const el = $id(id);
     if (el) el.style.display = encendido ? "none" : "";
   }
+  // Tampoco los campos por lugar: un orden no tiene premios, y el nombre empieza con «Turnos» en el cuadro de siempre.
+  bloquearLugares(encendido);
+  actualizarLugares();
   // Con el modo prendido el selector se ve aunque la dirección ya no traiga `?modo=` (volver de entrar con Google).
   const opcion = $id("turnos-opcion");
   if (opcion) opcion.hidden = !(encendido || modesVisible());
