@@ -160,6 +160,26 @@ describe("el modo premios, con una cuenta de Google", () => {
     sinTraerNiMandar();
   });
 
+  it("pedir la vista de traer no cambia nada: la dirección para cargar todavía no se ofrece en este modo", async () => {
+    abrirSaldo({ address: YO }, mundo(), { vista: "traer" });
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-saldo="mirando"]')).toBeNull();
+      expect(principal().disabled).toBe(false);
+    });
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(principal().textContent).toBe(t("acctClose"));
+    sinTraerNiMandar();
+  });
+
+  it("al cerrarla avisa a quien la abrió, también en este modo", async () => {
+    const alCerrar = vi.fn();
+    abrirSaldo({ address: YO }, mundo(), { vista: "traer", alCerrar });
+    await vi.waitFor(() => expect(principal().disabled).toBe(false));
+    principal().click();
+    expect(dialogo()).toBeNull();
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+  });
+
   it("lo de cómo sacar el dinero va plegado y dice que retirar llega más adelante, no que se pueda mandar", async () => {
     await abrir(mundo());
     const plegado = document.querySelector<HTMLDetailsElement>(".saldo-mas");
@@ -168,6 +188,34 @@ describe("el modo premios, con una cuenta de Google", () => {
     expect(plegado?.textContent).toContain(T.es.saldoPremioRetirarLuego as string);
     expect(document.body.textContent).not.toContain(T.es.cargaComoSacoTexto as string);
     expect(document.body.textContent).not.toMatch(/mandarlos|podés mandar/i);
+  });
+
+  it("el plegado suma lo que cuesta retirar, después de decir que retirar llega más adelante", async () => {
+    await abrir(mundo({ costoDelRetiro: () => "0,50" }));
+    const parrafos = [...document.querySelectorAll(".saldo-mas p")].map((p) => p.textContent);
+    const porQue = "Cada retiro cuesta 0,50 dólares digitales, sea cual sea el monto. Recibir premios es gratis.";
+    expect(parrafos).toEqual([T.es.saldoPremioRetirarLuego, porQue]);
+    expect(document.body.textContent).not.toContain("{c}");
+  });
+
+  it("en inglés el costo lleva el punto decimal", async () => {
+    setLang("en");
+    await abrir(mundo({ costoDelRetiro: () => "0.50" }));
+    expect(document.querySelector(".saldo-mas")?.textContent).toContain("Each withdrawal costs 0.50 digital dollars, whatever the amount.");
+  });
+
+  it("sin costo configurado, el plegado dice solo lo de antes", async () => {
+    await abrir(mundo({ costoDelRetiro: () => null }));
+    const parrafos = [...document.querySelectorAll(".saldo-mas p")].map((p) => p.textContent);
+    expect(parrafos).toEqual([T.es.saldoPremioRetirarLuego]);
+  });
+
+  it("con la configuración del sitio de hoy, que no prende el costo, el plegado dice solo lo de antes", async () => {
+    vi.stubEnv("VITE_RETIRO_COSTO", "");
+    vi.stubEnv("VITE_RETIRO_CUENTA", "");
+    await abrir(mundo());
+    const parrafos = [...document.querySelectorAll(".saldo-mas p")].map((p) => p.textContent);
+    expect(parrafos).toEqual([T.es.saldoPremioRetirarLuego]);
   });
 
   it("no pide el historial de pagos: no se arma la base de Ya lo mandé", async () => {
@@ -295,6 +343,12 @@ describe("el modo premios, con una billetera propia", () => {
     expect(plegado?.textContent).toContain(T.es.saldoPremioRetirarPropia as string);
     expect(plegado?.textContent).not.toContain(T.es.saldoPremioRetirarLuego as string);
     sinTraerNiMandar();
+  });
+
+  it("con su billetera el plegado no dice lo que cuesta retirar: ese retiro no pasa por Tinkazo", async () => {
+    await abrir(propia({ lectura: conUsdc(), costoDelRetiro: () => "0,50" }));
+    const parrafos = [...document.querySelectorAll(".saldo-mas p")].map((p) => p.textContent);
+    expect(parrafos).toEqual([T.es.saldoPremioRetirarPropia]);
   });
 
   it("no mira los firmantes: una billetera puede tener las firmas que quiera", async () => {

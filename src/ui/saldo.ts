@@ -1,4 +1,5 @@
 import { type Lectura, type Pago, pagosEntrantes } from "../../workers/cuenta/src/pagos";
+import { costoDelRetiroTexto } from "../costo-del-retiro";
 import { esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { contextoHorizon, revisarCarga } from "../stellar/carga";
@@ -74,6 +75,8 @@ export interface DepsDeSaldo {
   pasarAOficial(): void;
   /** Abre Mandar mis dólares digitales con el saldo de la cuenta, en stroops. */
   mandar(cuenta: string, saldo: bigint): void;
+  /** Cuánto cuesta cada retiro, como se dice en pantalla (`0,50`), o `null` si no se cobra. Sin esto, el del sitio. */
+  costoDelRetiro?(): string | null;
 }
 
 /** Cómo terminó Activar dólares digitales. */
@@ -129,6 +132,7 @@ function depsDelSitio(): DepsDeSaldo {
     dejarLista: () => import("./cuenta-lista-flujo").then((m) => m.abrirDesdeTusDolares()),
     pasarAOficial: () => void import("./modo-ui").then((m) => m.abrirHojaDeModo()),
     mandar: (cuenta, saldo) => void import("./mandar-usdc").then((m) => m.abrirMandar({ address: cuenta, saldo })),
+    costoDelRetiro: () => costoDelRetiroTexto(),
   };
 }
 
@@ -172,7 +176,8 @@ function guardarBase(red: NetworkName, cuenta: string, b: BaseDeLlegadas, pisar:
 
 /* ------------------------------------------------------------------ la ventana */
 
-type Vista = "inicio" | "traer";
+/** Las dos vistas de la ventana: el inicio con el saldo, y «Traé tus dólares digitales» con la dirección para cargar. */
+export type Vista = "inicio" | "traer";
 
 interface Ventana {
   d: Dialogo;
@@ -245,6 +250,18 @@ function textoDelSaldo(v: Ventana, saldo: string): string {
   }
   if (cero) return t("cargaTenesNada");
   return con(t(enPractica(v) ? "saldoTenesPrueba" : "saldoTenes"), { n: legible(saldo) });
+}
+
+/**
+ * Lo que se suma al final del plegado de cómo sacar el dinero: cuánto cuesta cada retiro. Solo con una cuenta de Google
+ * de Tinkazo, que es la que paga ese costo (con una billetera propia el retiro no pasa por Tinkazo), solo en la red
+ * principal (el dinero de práctica de la otra red no se cobra) y solo si hay un costo. Sin una de las tres cosas no suma
+ * nada y el plegado queda como estaba.
+ */
+function textoDelCostoDelRetiro(v: Ventana): string[] {
+  if (v.billetera?.tipo !== "google" || v.deps.red !== "mainnet") return [];
+  const costo = v.deps.costoDelRetiro?.() ?? null;
+  return costo === null ? [] : [con(t("saldoRetiroPorQue"), { c: costo })];
 }
 
 /** Lo que tapa todo: sin resolverlo no hay nada más que hacer en la ventana. */
@@ -327,7 +344,7 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
       linea: t("saldoLead"),
       secundarios: mandar,
       secundariosArriba: true,
-      plegado: { resumen: t("cargaComoSaco"), textos: [t("cargaComoSacoTexto")] },
+      plegado: { resumen: t("cargaComoSaco"), textos: [t("cargaComoSacoTexto"), ...textoDelCostoDelRetiro(v)] },
       principal: {
         texto: t("cargaYaTengo"),
         accion: () => {
@@ -387,15 +404,17 @@ function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
   const ajena = !propia && v.lectura !== null && typeof v.lectura === "object" && tieneFirmanteAjeno(v.lectura, v.cuenta);
   const avisoAjena = ajena ? [t("saldoPremioNoApta")] : [];
   switch (e.estado) {
-    case "puede":
+    case "puede": {
+      const comoSaco = [t(propia ? "saldoPremioRetirarPropia" : "saldoPremioRetirarLuego"), ...textoDelCostoDelRetiro(v)];
       return {
         conSaldo: true,
         linea: t("saldoPremioLlegaSolo"),
         // Con Google, la cuenta que ya puede recibir un premio no sella ni sortea (la puerta del premio, `wallet-pollar.ts`).
         avisos: [...(propia ? [] : [t("saldoPremioNoOrganiza")]), ...avisoAjena],
-        plegado: { resumen: t("cargaComoSaco"), textos: [t(propia ? "saldoPremioRetirarPropia" : "saldoPremioRetirarLuego")] },
+        plegado: { resumen: t("cargaComoSaco"), textos: comoSaco },
         principal: cerrar,
       };
+    }
     case "falta-activar":
       return {
         titulo: t("saldoPremioRecibirTitulo"),
@@ -595,10 +614,22 @@ async function yaLoMande(v: Ventana): Promise<void> {
   else v.estadoLinea.textContent = `${t("saldoNoLlegoTodavia")} ${t("saldoEsperaNoMandes")}`;
 }
 
+/** Lo que quien abre la ventana puede pedir además de la cuenta. */
+export interface OpcionesDeSaldo {
+  /**
+   * La vista con que abre. Con `traer` va directo a la dirección para cargar dólares digitales, sin pasar por el inicio
+   * (lo usa «Pagar premio» cuando falta saldo). En el modo `premios` la ventana tiene una sola pantalla por estado y la
+   * vista no cambia nada: la dirección para cargar llega con la cuenta que organiza con Google.
+   */
+  vista?: Vista;
+  /** Se llama cuando la ventana se cierra, para que quien la abrió vuelva a leer el saldo. */
+  alCerrar?: () => void;
+}
+
 /**
  * Abre «Tus dólares digitales». Con la bandera apagada no abre nada. `deps` reemplaza lo del sitio (en las pruebas).
  */
-export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = {}): void {
+export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = {}, opciones: OpcionesDeSaldo = {}): void {
   const modo = modoDeRampa();
   if (modo === "apagada") return;
   const premios = modo === "premios";
@@ -610,7 +641,7 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
     deps: { ...depsDelSitio(), ...deps },
     abierta: true,
     premios,
-    vista: "inicio",
+    vista: opciones.vista ?? "inicio",
     estado: null,
     billetera: null,
     lectura: null,
@@ -624,6 +655,7 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
     titulo: t("saldoTitle"),
     onCerrar: () => {
       v.abierta = false;
+      opciones.alCerrar?.();
     },
   });
   v.d.pie.append(v.estadoLinea, v.boton);

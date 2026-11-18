@@ -63,9 +63,10 @@ export interface OpcionesDeGanadores {
   sinTitulo?: boolean;
   /**
    * Para quien organiza: arma el pago de una fila dentro de `caja`. Llama a `alTerminar` cuando el pago salió, para
-   * que la fila vuelva a mirar la red. Sin esto, el panel es de solo lectura.
+   * que la fila vuelva a mirar la red (con `yaEstaba`, el pago ya estaba en la red: se mira al instante). Sin esto, el
+   * panel es de solo lectura.
    */
-  pagar?: (fila: FilaPagable, caja: HTMLElement, alTerminar: () => void) => void;
+  pagar?: (fila: FilaPagable, caja: HTMLElement, alTerminar: (yaEstaba?: boolean) => void) => void;
 }
 
 export interface PanelDeGanadores {
@@ -231,7 +232,9 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
         break;
       case "pagado": {
         f.est.textContent = tx("pgEstPagado");
-        f.det.append(tx("pgDetPagado", { monto: montoLegible(s.monto), activo: op.activo.code, fecha: fechaLarga(s.cuando, getLang()) }), " ");
+        // El USDC se dice como en el resto de la pantalla: dólares digitales.
+        const unidad = op.activo.code === "USDC" ? tx("pgUnidadDolares") : op.activo.code;
+        f.det.append(tx("pgDetPagado", { monto: montoLegible(s.monto), activo: unidad, fecha: fechaLarga(s.cuando, getLang()) }), " ");
         const a = el("a", "gan-enlace", tx("pgVerPago"));
         a.href = txUrl(s.hash, op.red);
         a.target = "_blank";
@@ -360,9 +363,10 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
         } catch {
           return;
         }
-        op.pagar?.({ puesto: f.g.puesto, cuenta, nombre: f.etiqueta || shortAddress(cuenta), nota }, f.caja, () => {
-          // El pago acaba de salir: la red lo muestra en unos segundos.
-          setTimeout(() => void consultar(f, true), 2500);
+        op.pagar?.({ puesto: f.g.puesto, cuenta, nombre: f.etiqueta || shortAddress(cuenta), nota }, f.caja, (yaEstaba) => {
+          // Un pago que ya estaba en la red se muestra al instante. Uno que acaba de salir, en unos segundos.
+          if (yaEstaba === true) void consultar(f, true);
+          else setTimeout(() => void consultar(f, true), 2500);
         });
       });
     }

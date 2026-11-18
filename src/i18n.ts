@@ -11,6 +11,7 @@ import { network } from "./stellar/config";
 import { TEXTOS_ALTA } from "./alta-textos";
 import { TEXTOS_ALTA_PAGO } from "./alta-textos-pago";
 import { TEXTOS_COBRO, cobroEnElBuild, textosConCobro } from "./alta-textos-con-cobro";
+import { faqConElRetiro } from "./costo-del-retiro-portada";
 import { TEXTOS_ALTA_SIN_PAGO, TEXTOS_ALTA_SIN_VENTA } from "./alta-textos-sin-pago";
 import { altaPagoActivo } from "./stellar/alta-config";
 import { TEXTOS_ALTA_CUENTA } from "./alta-textos-cuenta";
@@ -2314,9 +2315,19 @@ export const T: Record<Lang, Dict> = {
     prNeverBody: "A quien participa: entrar a un sorteo es gratis, siempre, y por eso no es una apuesta. Una parte de los premios: el premio va del organizador al ganador, sin pasar por Tinkazo. Verificar: cualquiera rehace el sorteo gratis. Y los nombres de tu lista no se venden: ningún servidor nuestro los puede leer.",
     prPayM1: "QR o tarjeta, en tu moneda",
     prNever1: "Nunca cobramos por entrar a un sorteo.",
-    prNever2: "Nunca nos quedamos con una parte de lo que se reparte.",
+    prNever2: "El premio llega entero a quien gana.",
     prNever3: "Comprobar un sorteo es gratis, siempre.",
     prNever4: "Nunca vendemos los nombres de tu lista.",
+    // El costo de retirar, dicho en precios, en los términos y en la ventana del saldo. {c} es el monto (src/costo-del-retiro.ts).
+    prRetiroT: "Lo que cuesta retirar",
+    prRetiro:
+      "Recibir un premio es gratis, e ingresar dólares digitales a tu cuenta también. " +
+      "Retirarlos a otra cuenta cuesta {c} dólares digitales por retiro, sea cual sea el monto.",
+    tmRetiroT: "Si retirás tu dinero",
+    tmRetiroB:
+      "Recibir un premio en tu cuenta de Tinkazo es gratis, e ingresar dólares digitales a tu cuenta también. " +
+      "Retirar dólares digitales de tu cuenta de Google de Tinkazo a otra cuenta cuesta {c} dólares digitales por retiro, " +
+      "sea cual sea el monto, y lo ves antes de confirmar.",
     prDuraLink: "Qué queda de tu sorteo y por cuánto tiempo →",
     sealed: "Lista sellada ✓", defaultMeta: "Sorteo de comunidad",
     noAnchor: "sin registrar", onChain: "verlo en el registro público",
@@ -2742,6 +2753,7 @@ export const T: Record<Lang, Dict> = {
     cargaYaTengo: "Ya tengo dólares digitales",
     cargaComoSaco: "¿Cómo saco mi dinero?",
     cargaComoSacoTexto: "Tus dólares digitales están en tu cuenta y son tuyos. Pasarlos a tu banco todavía no se puede desde acá. Mientras tanto, podés mandarlos a otra cuenta tuya o a una app que los cambie a bolivianos.",
+    saldoRetiroPorQue: "Cada retiro cuesta {c} dólares digitales, sea cual sea el monto. Recibir premios es gratis.",
     cargaCuentaPrimero: "Para cargar, primero dejá tu cuenta lista.",
     cargaCuentaPrimeroBtn: "Dejar mi cuenta lista",
     saldoPremioPrimero: "Para recibir tu premio, dejá tu cuenta lista.",
@@ -2797,10 +2809,18 @@ export const T: Record<Lang, Dict> = {
     saldoMandarResumen: "Vas a mandar {n} dólares digitales a {corta}.",
     saldoMandarOk: "Mandar",
     saldoMandarMirando: "Mirando esa cuenta…",
-    saldoMandarNoRecibe: "Esa cuenta no puede recibir dólares digitales. Revisá la dirección: no mandamos nada.",
+    saldoMandarNoRecibe: "La dirección que pegaste no puede recibir dólares digitales. No mandamos nada.",
     saldoMandarListo: "Listo: mandaste {n} dólares digitales.",
     saldoMandarEnCurso: "Se está mandando. No lo mandes de nuevo.",
     saldoMandarNoSalio: "No se pudo mandar. Tus dólares digitales siguen en tu cuenta.",
+    saldoRetiroSale: "Sale de tu cuenta",
+    saldoRetiroCosto: "Costo del retiro",
+    saldoRetiroLlega: "Llega",
+    saldoRetiroResumen: "Llegan {m} a {corta}. Sale {n} y el costo es {c}.",
+    saldoRetiroListo: "Listo: retiraste {n}. Llegan {m} a {corta}.",
+    saldoRetiroNoAlcanza: "Cada retiro cuesta {c} dólares digitales. Todavía no te alcanza.",
+    saldoRetiroMinimo: "Necesitás al menos {m} dólares digitales: llega 1 y el costo es {c}.",
+    saldoRetiroNoDisponible: "Retirar no está disponible en este momento. Tus dólares digitales siguen en tu cuenta.",
     saldoActivandoEspera: "Se está activando. Puede tardar un poco.",
     saldoNoMandesTitulo: "No mandes dinero a esta cuenta",
     saldoNoPuedeApp: "Por ahora no puede recibir dólares digitales. Volvé a mirar más adelante.",
@@ -5146,9 +5166,19 @@ export const T: Record<Lang, Dict> = {
     prNeverBody: "Taking part: entering a draw is always free, which is why it isn't gambling. A cut of the prizes: the prize goes from the organizer to the winner, never through Tinkazo. Checking: anyone reruns the draw for free. And the names on your list are never sold: no server of ours can read them.",
     prPayM1: "QR or card, local currency",
     prNever1: "We never charge to enter a draw.",
-    prNever2: "We never keep a share of what gets handed out.",
+    prNever2: "The prize goes in full to whoever wins.",
     prNever3: "Checking a draw is free, always.",
     prNever4: "We never sell the names on your list.",
+    // The cost of withdrawing, said in pricing, in the terms and in the balance window. {c} is the amount (src/costo-del-retiro.ts).
+    prRetiroT: "What withdrawing costs",
+    prRetiro:
+      "Receiving a prize is free, and so is adding digital dollars to your account. " +
+      "Withdrawing them to another account costs {c} digital dollars per withdrawal, whatever the amount.",
+    tmRetiroT: "If you withdraw your money",
+    tmRetiroB:
+      "Receiving a prize in your Tinkazo account is free, and so is adding digital dollars to your account. " +
+      "Withdrawing digital dollars from your Tinkazo Google account to another account costs {c} digital dollars per withdrawal, " +
+      "whatever the amount, and you see it before you confirm.",
     prDuraLink: "What is left of your draw, and for how long →",
     sealed: "List sealed ✓", defaultMeta: "Community draw",
     noAnchor: "not recorded", onChain: "see it in the public record",
@@ -5565,6 +5595,7 @@ export const T: Record<Lang, Dict> = {
     cargaYaTengo: "I already have digital dollars",
     cargaComoSaco: "How do I take my money out?",
     cargaComoSacoTexto: "Your digital dollars are in your account and they're yours. Moving them to your bank isn't possible from here yet. In the meantime, you can send them to another account of yours or to an app that changes them into bolivianos.",
+    saldoRetiroPorQue: "Each withdrawal costs {c} digital dollars, whatever the amount. Receiving prizes is free.",
     cargaCuentaPrimero: "To add money, first get your account ready.",
     cargaCuentaPrimeroBtn: "Get my account ready",
     saldoPremioPrimero: "To receive your prize, get your account ready.",
@@ -5620,10 +5651,18 @@ export const T: Record<Lang, Dict> = {
     saldoMandarResumen: "You're going to send {n} digital dollars to {corta}.",
     saldoMandarOk: "Send",
     saldoMandarMirando: "Checking that account…",
-    saldoMandarNoRecibe: "That account can't receive digital dollars. Check the address: we didn't send anything.",
+    saldoMandarNoRecibe: "The address you pasted can't receive digital dollars. Nothing was sent.",
     saldoMandarListo: "Done: you sent {n} digital dollars.",
     saldoMandarEnCurso: "It's being sent. Don't send it again.",
     saldoMandarNoSalio: "It couldn't be sent. Your digital dollars are still in your account.",
+    saldoRetiroSale: "Leaves your account",
+    saldoRetiroCosto: "Withdrawal cost",
+    saldoRetiroLlega: "Arrives",
+    saldoRetiroResumen: "{m} arrive at {corta}. You send {n} and the cost is {c}.",
+    saldoRetiroListo: "Done: you withdrew {n}. {m} arrive at {corta}.",
+    saldoRetiroNoAlcanza: "Each withdrawal costs {c} digital dollars. You don't have enough yet.",
+    saldoRetiroMinimo: "You need at least {m} digital dollars: 1 arrives and the cost is {c}.",
+    saldoRetiroNoDisponible: "Withdrawing isn't available right now. Your digital dollars are still in your account.",
     saldoActivandoEspera: "They're being turned on. It can take a little while.",
     saldoNoMandesTitulo: "Don't send money to this account",
     saldoNoPuedeApp: "For now it can't receive digital dollars. Check again later.",
@@ -6196,6 +6235,14 @@ if (cobroEnElBuild()) {
   const conCobro = textosConCobro();
   Object.assign(T.es, conCobro.es);
   Object.assign(T.en, conCobro.en);
+}
+
+// Con el costo del retiro configurado (`stellar/retiro-config.ts`), la portada dice cuánto cuesta retirar en vez de que
+// no se cobra nada. Sin costo configurado, o con la compra de sorteos a la vista, no se toca (`costo-del-retiro-portada.ts`).
+const faqConRetiro = faqConElRetiro();
+if (faqConRetiro) {
+  T.es.faq3a = faqConRetiro.es;
+  T.en.faq3a = faqConRetiro.en;
 }
 
 // El diccionario entero, para la herramienta: `setLang` pinta con este, y los
