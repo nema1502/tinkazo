@@ -169,7 +169,7 @@ describe("el panel del pago", () => {
   it("cada «Copiar» dice qué copia a quien no ve la pantalla, y ningún botón nombra una moneda ni una red", () => {
     const el = armarPanelDePago(PANEL);
     document.body.append(el);
-    for (const dato of ["destino", "monto", "nota"]) {
+    for (const dato of ["destino", "monto", "nota", "memoId"]) {
       const b = copiar(el, dato) as HTMLButtonElement;
       const id = b.getAttribute("aria-describedby") ?? "";
       expect(document.getElementById(id)?.textContent?.trim(), dato).toBeTruthy();

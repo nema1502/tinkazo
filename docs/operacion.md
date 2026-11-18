@@ -197,7 +197,7 @@ Nace cuando la persona toca el paquete en el sitio (`POST /v1/alta/orden`). Hay 
 |---|---|
 | `id` | 8 letras y números del alfabeto de los cupones, al azar (`ABCD2345`) |
 | `nota` | `tk:o:` y el id. Es lo que la persona pone como nota de texto del pago. Se lee como un cupón: sin espacios ni guiones, en mayúsculas, la O por 0 y la I o la L por 1 |
-| `memoId` | El mismo id como número, para un exchange que solo acepta notas numéricas. El sitio no la muestra: se da por correo a quien la pida |
+| `memoId` | El mismo id como número, para un exchange que solo acepta notas numéricas. El sitio la muestra plegada en Más detalles del panel de pago, con su Copiar, para quien paga desde un exchange que solo acepta notas numéricas. |
 | `producto`, `usdc`, `sorteos`, `dias` | Lo que se vende y su precio, fijos desde que nace la orden (los de `PRECIOS` ese día) |
 | `destino` | `CUENTA_COBROS` |
 | `vence` | 72 horas después de nacer. Si ya llegó una parte, se renueva con la misma nota hasta 30 días. Un pago que llega tarde igual vale |
