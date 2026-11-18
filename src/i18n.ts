@@ -2,6 +2,7 @@ import { getLang, usarTextos, type Lang } from "./idioma";
 import { enStand } from "./ensayo-modo";
 import { TEXTOS_CREADORES } from "./marca-creadores-textos";
 import { TEXTOS_EQUIPOS } from "./equipos/textos";
+import { TEXTOS_CAMPANA } from "./campana/textos";
 import { TEXTOS_PAGOS } from "./ui/pagos-textos";
 import { TEXTOS_COSTOS } from "./ui/costos-textos";
 import { esResultadoDeTurnos } from "./modos/turnos";
@@ -6103,6 +6104,8 @@ Object.assign(T.en, TEXTOS_CREADORES.en);
 // Los equipos con cupón (bandera VITE_EQUIPOS) también tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_EQUIPOS.es);
 Object.assign(T.en, TEXTOS_EQUIPOS.en);
+Object.assign(T.es, TEXTOS_CAMPANA.es);
+Object.assign(T.en, TEXTOS_CAMPANA.en);
 // Los premios pagados y el panel de ganadores (src/ui/panel-ganadores.ts) tienen sus textos aparte.
 Object.assign(T.es, TEXTOS_PAGOS.es);
 Object.assign(T.en, TEXTOS_PAGOS.en);
