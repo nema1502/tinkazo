@@ -133,6 +133,94 @@ describe("entrar con Google", () => {
     });
   });
 
+  it("suelta la marca de la ventana apenas Google se abre, aunque connect siga esperando, y deja la de invitada", async () => {
+    let termina: (cuenta: string) => void = () => undefined;
+    let vistas: { ventana: string | null; invitada: string | null } | null = null;
+    h.billetera.connect.mockImplementation((alAbrir?: () => void) => new Promise<string>((resolver) => {
+      termina = resolver;
+      alAbrir?.();
+      vistas = { ventana: pestana.getItem(CLAVE_VENTANA), invitada: local.getItem(CLAVE_INVITADA) };
+    }));
+    const resultado = intentar(nuevaSesion());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vistas).toEqual({ ventana: null, invitada: String(reloj + 48 * 3_600_000) });
+    termina(CUENTA);
+    await resultado;
+  });
+
+  it("al cargar la página sin sesión que retomar no se pone ninguna marca", async () => {
+    const s = nuevaSesion();
+    await s.retomar();
+    expect(local.getItem(CLAVE_INVITADA)).toBeNull();
+    expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
+  });
+
+  it("al retomar una sesión de Google renueva la marca de invitada y no pone la de la ventana", async () => {
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    const resultado = nuevaSesion().retomar();
+    await vi.advanceTimersByTimeAsync(10);
+    await resultado;
+    expect(local.getItem(CLAVE_INVITADA)).toBe(String(reloj + 48 * 3_600_000));
+    expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
+  });
+
+  it("al retomar una sesión de correo no pone la marca de invitada", async () => {
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    h.billetera.label = "Email";
+    const resultado = nuevaSesion().retomar();
+    await vi.advanceTimersByTimeAsync(10);
+    await resultado;
+    expect(local.getItem(CLAVE_INVITADA)).toBeNull();
+  });
+
+  it("con una marca vieja a punto de vencer, retomar la corre otras 48 horas", async () => {
+    local.setItem(CLAVE_INVITADA, String(reloj + 1_000));
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    const resultado = nuevaSesion().retomar();
+    await vi.advanceTimersByTimeAsync(10);
+    await resultado;
+    expect(local.getItem(CLAVE_INVITADA)).toBe(String(reloj + 48 * 3_600_000));
+  });
+
+  it("renovar vuelve a poner la marca de invitada por 48 horas desde ahora", () => {
+    local.setItem(CLAVE_INVITADA, String(reloj + 1_000));
+    reloj += 3_600_000;
+    nuevaSesion().renovar();
+    expect(local.getItem(CLAVE_INVITADA)).toBe(String(reloj + 48 * 3_600_000));
+  });
+
+  it("si la página se va antes de que Google se abra, suelta la marca de la ventana y deja de avisar al terminar", async () => {
+    let soltarAlIrse: () => void = () => undefined;
+    const dejaDeAvisar = vi.fn();
+    let termina: (cuenta: string) => void = () => undefined;
+    h.billetera.connect.mockImplementation(() => new Promise<string>((resolver) => {
+      termina = resolver;
+    }));
+    const s = sesionDeGoogle({
+      local,
+      pestana,
+      ahora: () => reloj,
+      hayMarca: () => marca,
+      alIrse: (soltar) => {
+        soltarAlIrse = soltar;
+        return dejaDeAvisar;
+      },
+    });
+    const resultado = intentar(s);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pestana.getItem(CLAVE_VENTANA)).not.toBeNull();
+    soltarAlIrse();
+    expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
+    termina(CUENTA);
+    await resultado;
+    expect(dejaDeAvisar).toHaveBeenCalledTimes(1);
+  });
+
+  it("después de que Google contesta no queda ninguna marca de la ventana", async () => {
+    await intentar(nuevaSesion());
+    expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
+  });
+
   it("al terminar bien suelta la marca de la ventana y deja la de invitada", async () => {
     await intentar(nuevaSesion());
     expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
@@ -199,6 +287,14 @@ describe("entrar con Google", () => {
     expect(await intentar(nuevaSesion())).toEqual({ cuenta: CUENTA, nombre: "Ana P." });
     expect(h.billetera.connect).not.toHaveBeenCalled();
     expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
+  });
+
+  it("con una sesión de Google ya abierta renueva la marca de invitada aunque no llame a connect", async () => {
+    h.billetera.address = CUENTA;
+    local.setItem(CLAVE_INVITADA, String(reloj + 1_000));
+    await intentar(nuevaSesion());
+    expect(h.billetera.connect).not.toHaveBeenCalled();
+    expect(local.getItem(CLAVE_INVITADA)).toBe(String(reloj + 48 * 3_600_000));
   });
 
   it("con una sesión de correo abierta la cierra y entra con Google", async () => {
@@ -391,13 +487,13 @@ describe("retomar", () => {
     expect(pestana.getItem(CLAVE_VENTANA)).toBeNull();
   });
 
-  it("si la sesión tarda más de 4 segundos en retomarse, el toque sigue y abre la ventana", async () => {
+  it("si la sesión tarda más de un segundo en retomarse, el toque sigue y abre la ventana sin perder el gesto", async () => {
     h.billetera.restore.mockImplementation(() => new Promise<string>(() => undefined));
     const s = nuevaSesion();
     const retomada = s.retomar();
     await vi.advanceTimersByTimeAsync(3_100);
     await retomada;
-    expect(await intentar(s, 4_100)).toEqual({ cuenta: CUENTA, nombre: "Ana P." });
+    expect(await intentar(s, 1_100)).toEqual({ cuenta: CUENTA, nombre: "Ana P." });
     expect(h.billetera.connect).toHaveBeenCalledTimes(1);
   });
 

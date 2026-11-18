@@ -115,8 +115,11 @@ function copiarEnlace(
   }).catch(respaldo);
 }
 
-/** Las reglas se repiten donde hay una decisión, pero quedan plegadas para no tapar la acción. */
-export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular): void {
+/**
+ * Las reglas se repiten donde hay una decisión, pero quedan plegadas para no tapar la acción. La línea del correo va solo
+ * cuando la sala dice que de verdad avisa por correo (`correo`): una promesa que no se cumple no se escribe.
+ */
+export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular, correo = false): void {
   const idioma = deps.idioma();
   const detalles = document.createElement("details");
   detalles.className = "cmp-reglas";
@@ -126,9 +129,12 @@ export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular): void {
   detalles.append(resumen);
   parrafo(detalles, sustituir(deps.tx("cpOrganiza"), { empresa: deps.campana.empresa.nombre }));
   parrafo(detalles, sustituir(deps.tx("cpSiGanas"), { empresa: deps.campana.empresa.nombre }));
+  if (correo) parrafo(detalles, deps.tx("cpAvisoCorreo"));
   const costo = deps.costoDelRetiro();
   if (costo !== null) parrafo(detalles, sustituir(deps.tx("cpRetiro"), { costo }));
   parrafo(detalles, deps.tx("cpSoloAca"));
+  // La aclaración de los pedidos vive acá: afuera repetía lo que ya dicen las reglas y alargaba la pantalla.
+  if (deps.campana.pasos.length > 0) parrafo(detalles, deps.tx("cpPasosNota"));
   parrafo(detalles, deps.tx("cpRevisamosMas"));
   parrafo(detalles, deps.tx("cpComoSeEligeDetalle"));
   parrafo(detalles, deps.tx("cpQueGuardamos"));
@@ -229,7 +235,7 @@ export function pintarLaCampana(
   }), "cmp-cierre");
   der.append(datos);
   raiz.append(izq, der);
-  pintarReglas(raiz, deps);
+  pintarReglas(raiz, deps, publico.correo === true);
   const accion = caja("cmp-accion");
   raiz.append(accion);
   if (deps.enApp) {

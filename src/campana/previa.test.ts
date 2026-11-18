@@ -71,7 +71,7 @@ describe("la campaña abierta", () => {
     expect(raiz.querySelector(".cmp-premio-texto")?.textContent).toBe("40 dólares digitales");
     expect(raiz.querySelector(".cmp-contador")?.textContent).toBe("37 personas ya se anotaron");
     expect(raiz.querySelector(".cmp-contador > .cmp-cifra")?.textContent).toBe("37");
-    expect(raiz.querySelector(".cmp-cierre")?.textContent).toContain("Cierra a las 17:00.");
+    expect(raiz.querySelector(".cmp-cierre")?.textContent).toContain("Cierra a las 17:00");
     expect(raiz.querySelectorAll("#cmp-saber .primary")).toHaveLength(1);
     expect(raiz.querySelector("#cmp-saber .primary")?.textContent).toBe("Entrar con Google");
     expect(raiz.querySelector(".cmp-contador")?.getAttribute("aria-live")).toBeNull();
@@ -106,6 +106,38 @@ describe("la campaña abierta", () => {
     const hijos = [...seccion.children].map((hijo) => hijo.className);
     expect(hijos).toEqual(["cmp-izq", "cmp-der", "cmp-reglas", "cmp-accion"]);
     expect(raiz.querySelector(".cmp-accion")?.lastElementChild?.classList.contains("primary")).toBe(true);
+  });
+
+  it("con correo prendido, lo plegado de las reglas dice que avisan por correo", () => {
+    const { raiz, deps, publico } = preparar();
+    pintarLaCampana(raiz, deps, { ...publico, correo: true }, () => undefined);
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain("Si ganás, te avisamos por correo.");
+  });
+
+  it("con correo prendido y la interfaz en inglés, la línea sale en inglés", () => {
+    const { raiz, deps, publico } = preparar();
+    setLang("en");
+    pintarLaCampana(raiz, deps, { ...publico, correo: true }, () => undefined);
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain("If you win, we email you.");
+  });
+
+  it("con correo apagado, la línea del correo no aparece", () => {
+    const { raiz, deps, publico } = preparar();
+    pintarLaCampana(raiz, deps, { ...publico, correo: false }, () => undefined);
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).not.toContain("por correo");
+  });
+
+  it("con una sala vieja que no manda el campo, la línea del correo no aparece", () => {
+    const { raiz, deps, publico } = preparar();
+    pintarLaCampana(raiz, deps, publico, () => undefined);
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).not.toContain("por correo");
+  });
+
+  it("la hora de cierre y el contador de al lado terminan igual, sin punto", () => {
+    const { raiz, deps, publico } = preparar();
+    pintarLaCampana(raiz, deps, publico, () => undefined);
+    expect(raiz.querySelector(".cmp-cierre")?.textContent?.endsWith(".")).toBe(false);
+    expect(raiz.querySelector(".cmp-contador")?.textContent?.endsWith(".")).toBe(false);
   });
 
   it("usa singular y la invitación cuando todavía no hay nadie", () => {

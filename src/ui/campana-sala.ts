@@ -1,0 +1,1435 @@
+import "../campana/campana-sala.css";
+import { campanasActivo } from "../campana/bandera";
+import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
+import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
+import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
+import { descifrarEquipo, revisarEquipo } from "../equipos/datos";
+import type { DatosDeEquipo } from "../equipos/modelo";
+import { enEnsayo, enStand, conDemo } from "../ensayo-modo";
+import { getLang, onLangChange, t } from "../i18n";
+import type { Lang } from "../idioma";
+import {
+  type EstadoDeSala,
+  type FallaAlCrear,
+  type FallaDeSala,
+  type FaseDeSala,
+  MOTIVOS,
+  type MemoriaDeOrg,
+  type MotivoDeSalida,
+  type PaseDeSala,
+  type QuitaPendiente,
+  type RedDeCampana,
+  type SalaDeCampana,
+  borrarOrg,
+  borrarSalaVacia,
+  crearCampanaEnSala,
+  estadoConToken,
+  guardarOrg,
+  guardarTokenDeEvento,
+  leerCampanaDeSala,
+  leerOrg,
+  pedirPase,
+  ponerFase,
+  quitarConMotivo,
+  tokenDeEvento,
+} from "../sala/campana-org";
+import { generarClave } from "../sala/cifra";
+import { type Escucha, type EquipoDeSala, escucharSala } from "../sala/cliente";
+import { network } from "../stellar/config";
+import { activeWallet } from "../stellar/wallet-lite";
+import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
+import { pintarQr } from "./qr";
+
+/**
+ * El panel de una campaña de empresa, solo con `?campana` (y la bandera `VITE_CAMPANAS`), arriba del cuadro del sorteo.
+ * Quien organiza elige el archivo firmado que le mandó Tinkazo, abre la inscripción, muestra el QR en grande, mira cómo
+ * crece la lista, saca a quien no corresponde con un motivo y cierra. Todo lo de afuera (la sala, el reloj, el
+ * almacén, las pestañas) entra por `DepsDelPanelDeCampana`, para probarlo sin red ni reloj.
+ *
+ * Pasar la lista al cuadro del sorteo es de otra pieza: acá solo se avisa con `alCerrar`.
+ */
+
+/** Una persona de la lista, tal como la ve quien organiza. `nombre` es `null` si vino vacío o no se pudo leer. */
+export interface FilaDeCampana {
+  n: number;
+  cuenta: string;
+  nombre: string | null;
+  /** El filtro la marcó: no se muestra su nombre hasta tocar Mostrar. */
+  revisar: boolean;
+}
+type Fila = FilaDeCampana;
+
+/** Las pestañas del mismo navegador se avisan quién tiene la sala: dos escuchas con el mismo token se pisan. */
+export interface CanalDeCampana {
+  enviar: (sala: string) => void;
+  alRecibir: (f: (sala: string) => void) => void;
+  cerrar: () => void;
+}
+
+type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type ResultadoDeValidar = { ok: true } | { ok: false; campo: string; motivo: string };
+
+export interface DepsDelPanelDeCampana {
+  tx: (clave: string) => string;
+  idioma: () => Lang;
+  red: () => RedDeCampana;
+  enStand: () => boolean;
+  /** El ensayo tampoco graba nada: no abre campañas. */
+  enEnsayo: () => boolean;
+  conDemo: () => boolean;
+  ahora: () => number;
+  leerArchivo: (f: File) => Promise<string>;
+  /** Lo que la sala de la campaña va a exigir del texto, para decirlo antes de crear nada. */
+  validar: (texto: string, ahora: number) => Promise<ResultadoDeValidar>;
+  /** La cuenta con que se entró, si se entró: una campaña puede pedir que selle una cuenta en particular. */
+  cuenta: () => string | null;
+  crear: (
+    archivo: { texto: string; firma: string },
+    de: { evento: string; red: RedDeCampana; anterior: string | null; intento: string },
+  ) => Promise<{ ok: true; sala: SalaDeCampana } | { ok: false; motivo: FallaAlCrear }>;
+  pase: (s: SalaDeCampana) => Promise<PaseDeSala | FallaDeSala>;
+  fase: (s: SalaDeCampana, fase: "abierta" | "cerrada", cierraMs: number | null) => Promise<true | FallaDeSala>;
+  quitar: (s: SalaDeCampana, n: number, motivo: MotivoDeSalida) => Promise<true | FallaDeSala>;
+  estado: (s: SalaDeCampana) => Promise<EstadoDeSala | FallaDeSala>;
+  campanaDeSala: (s: SalaDeCampana) => Promise<Campana | FallaDeSala>;
+  /** Cierra y borra una sala que no llegó a abrirse, para que el archivo sirva otra vez. */
+  borrarVacia: (s: SalaDeCampana) => Promise<boolean>;
+  escuchar: (s: SalaDeCampana, e: Escucha) => { parar: () => void; consultar: () => Promise<void> };
+  descifrar: (clave: string, d: string) => Promise<DatosDeEquipo | null>;
+  qr: (img: HTMLImageElement, texto: string, ancho: number) => Promise<boolean>;
+  almacen: Almacen | null;
+  /** Corre `f` dentro de `ms` y devuelve cómo cancelarlo. En las pruebas, un reloj de mentira. */
+  esperar: (f: () => void, ms: number) => () => void;
+  pantallaCompleta: (el: HTMLElement) => Promise<void>;
+  /** El tamaño de la ventana, para dibujar el QR grande del tamaño en que se ve. */
+  ventana: () => { ancho: number; alto: number };
+  origen: () => string;
+  /** El canal entre pestañas, o `null` si el navegador no tiene. */
+  canal: () => CanalDeCampana | null;
+  /**
+   * Pasa la lista cerrada al cuadro del sorteo. Cada llamada REEMPLAZA a la anterior: si después de cerrar llega una alta
+   * tardía o se quita a alguien, se vuelve a llamar con la lista nueva. Por defecto no hace nada.
+   */
+  alCerrar: (s: SalaDeCampana, filas: readonly FilaDeCampana[]) => void;
+}
+
+const NOMBRE_DEL_CANAL = "tinkazo-campana-org";
+
+export function depsReales(): DepsDelPanelDeCampana {
+  return {
+    tx: (clave) => TEXTOS_SALA_CAMPANA[getLang()][clave] ?? t(clave),
+    idioma: getLang,
+    red: () => network.name,
+    enStand,
+    enEnsayo,
+    conDemo,
+    ahora: () => Date.now(),
+    leerArchivo: (f) => f.text(),
+    validar: async (texto, ahora) => {
+      // Lo trae al elegir un archivo y no antes: arrastra el lector de la sala, que el resto del sitio no usa.
+      const { validarCampanaParaFirmar } = await import("../sala/validar-campana");
+      return validarCampanaParaFirmar(texto, ahora);
+    },
+    cuenta: () => activeWallet()?.address ?? null,
+    crear: (archivo, de) => crearCampanaEnSala(archivo, de),
+    pase: (s) => pedirPase(s),
+    fase: (s, fase, cierraMs) => ponerFase(s, fase, cierraMs),
+    quitar: (s, n, motivo) => quitarConMotivo(s, n, motivo),
+    estado: (s) => estadoConToken(s),
+    campanaDeSala: (s) => leerCampanaDeSala(s),
+    borrarVacia: (s) => borrarSalaVacia(s),
+    escuchar: (s, e) => escucharSala(s, e),
+    descifrar: descifrarEquipo,
+    qr: (img, texto, ancho) => pintarQr(img, texto, ancho),
+    almacen: almacenDelNavegador(),
+    esperar: (f, ms) => {
+      const id = setTimeout(f, ms);
+      return () => clearTimeout(id);
+    },
+    pantallaCompleta: (el) =>
+      Promise.resolve(el.requestFullscreen?.({ navigationUI: "hide" }))
+        .then(() => undefined)
+        .catch(() => undefined),
+    ventana: () => ({ ancho: innerWidth, alto: innerHeight }),
+    origen: () => location.origin,
+    canal: canalDelNavegador,
+    alCerrar: () => undefined,
+  };
+}
+
+/** `localStorage` y no `sessionStorage`: el token de la sala no se pide de nuevo, y perderlo al cerrar la pestaña traba la campaña. */
+function almacenDelNavegador(): Almacen | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function canalDelNavegador(): CanalDeCampana | null {
+  if (typeof BroadcastChannel === "undefined") return null;
+  try {
+    const c = new BroadcastChannel(NOMBRE_DEL_CANAL);
+    return {
+      enviar: (sala) => c.postMessage({ sala }),
+      alRecibir: (f) =>
+        c.addEventListener("message", (e: MessageEvent) => {
+          const sala = (e.data as { sala?: unknown } | null)?.sala;
+          if (typeof sala === "string") f(sala);
+        }),
+      cerrar: () => c.close(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------ lo que no depende del panel */
+
+type Vista =
+  | "elegir"
+  | "previa"
+  | "abierta"
+  | "confirmar"
+  | "olvidar"
+  | "cerrada"
+  | "sellada"
+  | "sorteada"
+  | "cargando"
+  | "sin-red"
+  | "otra-pestana";
+
+const TEXTO_DE_FALLA_AL_CREAR: Record<FallaAlCrear, string> = {
+  forma: "cpoNoEsCampana",
+  firma: "cpoSinFirma",
+  "ya-existe": "cpoYaExiste",
+  vencida: "cpoVencida",
+  "cupo-campanas": "cpoMuchas",
+  origen: "cpoSinConexion",
+  red: "cpoSinConexion",
+};
+const TEXTO_DEL_MOTIVO: Record<MotivoDeSalida, string> = {
+  repetida: "cpoRepetida",
+  evento: "cpoNoEstaEnElEvento",
+  pidio: "cpoPidio",
+  otro: "cpoOtro",
+};
+
+const QUINCE_MIN = 15 * 60_000;
+const DESHACER_MS = 5_000;
+/** Si una quita no llegó a la sala, se vuelve a mandar sola: quitar dos veces es lo mismo que una. */
+const REINTENTO_QUITA_MS = 3_000;
+/** Si el pase no llega, se prueba otra vez a los 10 s y el QR de antes sigue. */
+const REINTENTO_PASE_MS = 10_000;
+/** Nunca se pide un pase nuevo antes de 5 s ni se espera más de lo que dura una ventana de la sala. */
+const PISO_PASE_MS = 5_000;
+const VENTANA_DEL_PASE_MS = 120_000;
+/** Cuánto puede ir adelantada esta compu y seguir contando como en hora: la sala repite el mismo pase hasta que su reloj cruza. */
+const HOLGURA_DEL_RELOJ_MS = 30_000;
+/** Un pase vale entre 14 y 16 minutos: pasados 12 sin uno nuevo, el QR se saca antes de que la sala lo rechace. */
+const VIGENCIA_DEL_PASE_MS = 12 * 60_000;
+/** Un doble toque en Cerrar no puede confirmar solo: el segundo toque cae sobre el botón de confirmar. */
+const GUARDA_DE_CONFIRMAR_MS = 600;
+const VUELTAS_AL_CERRAR = 4;
+const ESPERA_AL_LEER_MS = 1_000;
+/** Un archivo firmado pesa menos de 90.000 bytes: lo que pasa de eso no es una campaña y no se lee entero. */
+const MAX_ARCHIVO = 200_000;
+
+const esObjeto = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
+
+/** El archivo que manda Tinkazo: `{ texto, firma }`, los dos de texto. */
+function archivoFirmado(crudo: string): { texto: string; firma: string } | null {
+  try {
+    const x: unknown = JSON.parse(crudo);
+    if (!esObjeto(x) || typeof x.texto !== "string" || typeof x.firma !== "string") return null;
+    return { texto: x.texto, firma: x.firma };
+  } catch {
+    return null;
+  }
+}
+
+/** Lee el texto de la campaña con el lector del sitio, y dice la red que trae el archivo (de su campo, no del texto suelto). */
+function leerDelTexto(texto: string): { lectura: LecturaDeCampana; red: string | null; organizadora: string | null } {
+  let datos: unknown;
+  try {
+    datos = JSON.parse(texto);
+  } catch {
+    return { lectura: { ok: false, campo: "texto", motivo: "inválido" }, red: null, organizadora: null };
+  }
+  const objeto = esObjeto(datos) ? datos : {};
+  return {
+    lectura: leerCampana(datos),
+    red: typeof objeto.red === "string" ? objeto.red : null,
+    organizadora: typeof objeto.organizadora === "string" ? objeto.organizadora : null,
+  };
+}
+
+const nombreDeRed = (red: string | null): string => (red === "mainnet" ? "cpoModoMain" : "cpoModoTest");
+
+/* ------------------------------------------------------------ el panel */
+
+export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLElement; pintar: () => void; detener: () => void } {
+  const tx = (clave: string): string => deps.tx(clave);
+  const fmt = (clave: string, valores: Record<string, string | number>): string => rellenar(tx(clave), valores);
+
+  const raiz = document.createElement("section");
+  raiz.id = "cpo-panel";
+  raiz.className = "cpo-panel";
+  raiz.innerHTML =
+    '<div id="cpo-cab" class="cpo-cab">' +
+    '<h2 id="cpo-h"></h2>' +
+    '<p id="cpo-linea" class="cpo-linea"></p>' +
+    '<p id="cpo-aviso" class="cpo-aviso" role="status"></p>' +
+    '<p id="cpo-conexion" class="cpo-conexion" role="status" aria-live="polite" hidden></p>' +
+    "</div>" +
+    '<div id="cpo-previa" class="cpo-previa" hidden>' +
+    '<img id="cpo-logo" class="cpo-logo" alt="" hidden><p id="cpo-premio" class="cpo-premio"></p></div>' +
+    '<div id="cpo-qr" class="cpo-qr" hidden><img id="cpo-qr-img" alt=""></div>' +
+    '<p id="cpo-numero" class="cpo-numero" hidden><span id="cpo-n"></span> <span id="cpo-n-etiqueta" class="cpo-n-etiqueta"></span></p>' +
+    '<div id="cpo-acciones" class="cpo-acciones"></div>' +
+    '<div id="cpo-lista" class="cpo-lista" hidden>' +
+    '<p id="cpo-nota" class="cpo-nota" hidden></p><ul id="cpo-ul" class="cpo-ul"></ul><p id="cpo-pie" class="cpo-pie"></p></div>' +
+    '<input type="file" id="cpo-archivo" accept=".json,application/json" hidden>';
+  const q = <T extends HTMLElement>(id: string): T => raiz.querySelector<T>(`#${id}`) as T;
+  const tituloEl = q("cpo-h");
+  const lineaEl = q("cpo-linea");
+  const avisoEl = q("cpo-aviso");
+  const conexionEl = q("cpo-conexion");
+  const previaEl = q("cpo-previa");
+  const logoEl = q<HTMLImageElement>("cpo-logo");
+  const premioEl = q("cpo-premio");
+  const qrBloque = q("cpo-qr");
+  const qrImg = q<HTMLImageElement>("cpo-qr-img");
+  const numeroBloque = q("cpo-numero");
+  const numeroEl = q("cpo-n");
+  const etiquetaEl = q("cpo-n-etiqueta");
+  const accionesEl = q("cpo-acciones");
+  const listaBloque = q("cpo-lista");
+  const notaEl = q("cpo-nota");
+  const ulEl = q<HTMLUListElement>("cpo-ul");
+  const pieEl = q("cpo-pie");
+  const archivoEl = q<HTMLInputElement>("cpo-archivo");
+
+  /* --- estado --- */
+  let vista: Vista = "elegir";
+  let vistaAntes: Vista = "elegir";
+  let archivo: { texto: string; firma: string } | null = null;
+  /** El token que esta compu inventa para crear la sala de este archivo: igual en cada reintento, para no perder la sala. */
+  let intento: string | null = null;
+  let campana: Campana | null = null;
+  let sala: SalaDeCampana | null = null;
+  /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
+  let faseSala: FaseDeSala = "lista";
+  let cierraMs = 0;
+  let mensaje = "";
+  let trabajando = false;
+  let pase: string | null = null;
+  let paseDesde = 0;
+  let paseCaido = false;
+  /** La sala dijo que no a este panel (token que no vale): no se arregla reintentando, se deja de pedir y se dice. */
+  let paseRechazado = false;
+  let paseEnCurso = false;
+  /** Cuánto adelanta (o atrasa) la hora de la sala respecto de esta compu, estimado con cada pase. */
+  let desfase = 0;
+  const filas = new Map<number, Fila>();
+  /** Las filas que llegaron o están por descifrarse: cuenta lo que pidió la sala aunque la fila todavía no esté lista. */
+  const llegados = new Set<number>();
+  /**
+   * Las que la sala ya confirmó como quitadas: una consulta que salió antes de la quita puede traerlas de vuelta, y la sala
+   * ya no las tiene. Los números no se reusan. Se vacía con la lista, que siempre va junto con un cambio de sala o de lectura.
+   */
+  const quitadas = new Set<number>();
+  const enCurso = new Set<Promise<void>>();
+  const mostradas = new Set<number>();
+  const preguntando = new Set<number>();
+  const pendientes = new Map<number, { motivo: MotivoDeSalida; parar: () => void }>();
+  /** Las que ya se mandaron y la sala todavía no confirmó: siguen escondidas y se reintentan solas. */
+  const enviando = new Map<number, MotivoDeSalida>();
+  const reintentos = new Map<number, () => void>();
+  const vuelo = new Map<number, Promise<boolean>>();
+  /** El orden en que está dibujada la lista: mientras el dedo o el puntero están encima, no se reordena. */
+  let pintadas: number[] = [];
+  let firmaDeLista = "";
+  let firmaDeAcciones = "";
+  let punteroDentro = false;
+  let marca = 0;
+  let escucha: { parar: () => void; consultar: () => Promise<void> } | null = null;
+  let pararPase: (() => void) | null = null;
+  let pararCierre: (() => void) | null = null;
+  let pararVencimiento: (() => void) | null = null;
+  let reintentar: (() => void) | null = null;
+  let retomada = false;
+  /** Si ya se pasó la lista cerrada al sorteo: desde entonces cada cambio la vuelve a pasar. */
+  let pasada = false;
+  let sinLeer = false;
+  /** Mientras se cierra y se lee la lista desde esta pantalla: no es "retomada", no hace falta tocar Pasar la lista. */
+  let cerrandoAhora = false;
+  let entroAConfirmar = 0;
+  let ultimoEnlace = "";
+  let pararDespertar: (() => void) | null = null;
+
+  const canal = deps.canal();
+  const grande: PantallaGrande = crearPantallaGrande({
+    tx,
+    idioma: deps.idioma,
+    datos: () =>
+      sala && campana
+        ? {
+            campana,
+            enlace: enlaceDelQr(),
+            qrVigente: qrVigente(),
+            rechazado: paseRechazado,
+            total: visibles().length,
+            cierraMs,
+            cerrada: vista === "cerrada",
+          }
+        : null,
+    qr: deps.qr,
+    ahora: () => ahoraSala(),
+    esperar: deps.esperar,
+    pantallaCompleta: deps.pantallaCompleta,
+    ventana: deps.ventana,
+  });
+
+  /* --- el reloj de la sala --- */
+
+  const ahoraSala = (): number => deps.ahora() + desfase;
+
+  /**
+   * La sala contesta con su hora dentro de [hasta - 2 min, hasta). Si la de esta compu cae afuera, va atrasada o adelantada:
+   * se corre al medio de la ventana, así ni el pase ni el cierre se piden a destiempo ni cada 5 segundos todo el día.
+   * Una compu apenas adelantada pide el pase unos segundos antes de que la sala cruce y recibe el mismo `hasta`: eso no es
+   * un desfase de un minuto, y corregirlo así haría saltar la cuenta regresiva hacia atrás y hacia adelante.
+   */
+  function estimarDesfase(hasta: number): void {
+    const ahora = deps.ahora();
+    const dentro = ahora >= hasta - VENTANA_DEL_PASE_MS && ahora < hasta + HOLGURA_DEL_RELOJ_MS;
+    desfase = dentro ? 0 : hasta - VENTANA_DEL_PASE_MS / 2 - ahora;
+  }
+
+  const pasoLaHora = (): boolean => ahoraSala() >= cierraMs;
+
+  /* --- las filas --- */
+
+  /** Las que cuentan: sin las que se están quitando. La más nueva arriba, porque la sala numera en orden de llegada. */
+  function visibles(): Fila[] {
+    return [...filas.values()].filter((f) => !pendientes.has(f.n) && !enviando.has(f.n)).sort((a, b) => b.n - a.n);
+  }
+
+  /** Con el foco adentro se mira el elemento enfocado y no un aviso de salida: un botón que se saca del DOM no avisa que se fue. */
+  const congelada = (): boolean => preguntando.size > 0 || punteroDentro || ulEl.contains(document.activeElement);
+
+  /** Lo que se guarda para retomar: la sala, lo que ya se hizo y las quitas que todavía no confirmó la sala. */
+  function recordar(): void {
+    if (!sala || vista === "otra-pestana") return;
+    const sinConfirmar: QuitaPendiente[] = [
+      ...[...pendientes].map(([n, p]) => ({ n, motivo: p.motivo })),
+      ...[...enviando].map(([n, motivo]) => ({ n, motivo })),
+    ];
+    const memoria: MemoriaDeOrg = { sala, fase: faseSala, mostradas: [...mostradas], pendientes: sinConfirmar };
+    guardarOrg(deps.almacen, memoria);
+  }
+
+  function alCambiarLasFilas(): void {
+    pintar();
+    grande.pintar();
+    if (sala && vista === "cerrada" && pasada) deps.alCerrar(sala, visibles());
+  }
+
+  /** Deja la lista en blanco, con lo que se estaba por quitar: se vuelve a leer de la sala. */
+  function vaciarFilas(): void {
+    filas.clear();
+    llegados.clear();
+    pendientes.clear();
+    enviando.clear();
+    quitadas.clear();
+    vuelo.clear();
+    preguntando.clear();
+    pintadas = [];
+    firmaDeLista = "";
+  }
+
+  /** Una alta: se descifra con la clave que nunca salió de esta compu. Nada se quita solo: lo decide quien organiza. */
+  async function recibir(x: EquipoDeSala, m: number): Promise<void> {
+    const s = sala;
+    if (!s) return;
+    const datos = await deps.descifrar(s.clave, x.d);
+    if (m !== marca) return;
+    const rev = datos ? revisarEquipo(datos) : null;
+    const nombre = rev && rev.equipo.nombre.trim() !== "" ? rev.equipo.nombre : null;
+    const revisar = (rev?.revisar ?? false) && !mostradas.has(x.n);
+    filas.set(x.n, { n: x.n, cuenta: x.cuenta, nombre, revisar });
+    alCambiarLasFilas();
+  }
+
+  function alEquipo(x: EquipoDeSala, m: number): void {
+    if (!sala || m !== marca || quitadas.has(x.n)) return;
+    // Se anota antes de descifrar: así quien se pone al día sabe cuántas llegaron aunque falte descifrar.
+    llegados.add(x.n);
+    const trabajo = recibir(x, m);
+    enCurso.add(trabajo);
+    void trabajo.finally(() => enCurso.delete(trabajo));
+  }
+
+  /** Espera a que terminen los descifrados que ya empezaron (y los que empiecen mientras tanto). */
+  async function esperarDescifrados(): Promise<void> {
+    while (enCurso.size > 0) await Promise.allSettled([...enCurso]);
+  }
+
+  /** Alguien la quitó desde otra pestaña (o la sala confirmó la nuestra): ya no tiene que verse. */
+  function seQuito(n: number): void {
+    pendientes.get(n)?.parar();
+    pendientes.delete(n);
+    reintentos.get(n)?.();
+    reintentos.delete(n);
+    preguntando.delete(n);
+    enviando.delete(n);
+    llegados.delete(n);
+    quitadas.add(n);
+    if (filas.delete(n)) {
+      recordar();
+      alCambiarLasFilas();
+    }
+  }
+
+  /** El sondeo trae de a 200 y una campaña admite 300: se vuelve a pedir mientras falten filas y sigan llegando. */
+  async function ponerseAlDia(total: number): Promise<void> {
+    const m = marca;
+    for (let vuelta = 0; vuelta < 3 && llegados.size < total; vuelta++) {
+      const antes = llegados.size;
+      await escucha?.consultar();
+      if (m !== marca || llegados.size === antes) return;
+    }
+  }
+
+  /* --- escuchar la sala y las pestañas --- */
+
+  function oirLaSala(s: SalaDeCampana): void {
+    escucha?.parar();
+    const m = marca;
+    escucha = deps.escuchar(s, {
+      alNombre: () => undefined,
+      alEquipo: (x) => alEquipo(x, m),
+      alEquipoQuitado: (n) => {
+        if (m === marca) seQuito(n);
+      },
+      alCerrada: () => {
+        if (m === marca) void sospechaDeBorrada(s);
+      },
+    });
+    // La que escucha es la última en avisar: cualquier otra pestaña con esta sala deja de escucharla.
+    canal?.enviar(s.id);
+  }
+
+  function dejarDeEscuchar(): void {
+    escucha?.parar();
+    escucha = null;
+    pararPase?.();
+    pararPase = null;
+    pararCierre?.();
+    pararCierre = null;
+    pararVencimiento?.();
+    pararVencimiento = null;
+    paseEnCurso = false;
+    for (const p of pendientes.values()) p.parar();
+    for (const parar of reintentos.values()) parar();
+    reintentos.clear();
+  }
+
+  canal?.alRecibir((id) => {
+    // Solo cede quien está escuchando esa sala: una pestaña que apenas eligió su archivo no tiene nada que ceder.
+    if (!sala || sala.id !== id || escucha === null || vista === "otra-pestana") return;
+    dejarDeEscuchar();
+    marca++;
+    grande.cerrar();
+    vaciarFilas();
+    vistaAntes = vista;
+    vista = "otra-pestana";
+    mensaje = "";
+    pintar();
+  });
+
+  /** Esta pestaña pasa a ser la que escucha: la otra se entera por el canal y cede. */
+  function usarAca(): void {
+    const g = leerOrg(deps.almacen, deps.ahora(), deps.red());
+    if (g) void retomar(g);
+    else olvidar();
+  }
+
+  /* --- el pase del QR --- */
+
+  const qrVigente = (): boolean => pase !== null && ahoraSala() - paseDesde <= VIGENCIA_DEL_PASE_MS;
+
+  /** El enlace del celular: el evento, la sala, el pase y el modo antes del #, y la clave después. Nunca el token. */
+  function enlaceDelQr(): string | null {
+    if (!sala || !pase || !qrVigente()) return null;
+    const p = new URLSearchParams({ c: sala.evento, s: sala.id, p: pase, red: sala.red === "mainnet" ? "oficial" : "prueba" });
+    return `${deps.origen()}/participar.html?${p.toString()}#${sala.clave}`;
+  }
+
+  function pintarQrs(): void {
+    const enlace = enlaceDelQr();
+    if (enlace && enlace !== ultimoEnlace) {
+      ultimoEnlace = enlace;
+      void deps.qr(qrImg, enlace, 300);
+    }
+    pintar();
+    grande.pintar();
+  }
+
+  const conPase = (): boolean => vista === "abierta" || vista === "confirmar";
+
+  function pedirElPase(): void {
+    pararPase?.();
+    pararPase = null;
+    const s = sala;
+    if (!s || !conPase() || paseEnCurso) return;
+    const m = marca;
+    paseEnCurso = true;
+    void deps.pase(s).then((r) => {
+      if (m !== marca) return;
+      paseEnCurso = false;
+      if (!conPase()) return;
+      if (r === "no-existe") return void sospechaDeBorrada(s);
+      if (r === "rechazo") {
+        paseRechazado = true;
+        pintar();
+        grande.pintar();
+        return;
+      }
+      if (typeof r === "string") {
+        paseCaido = true;
+        pararPase = deps.esperar(pedirElPase, REINTENTO_PASE_MS);
+        pintar();
+        grande.pintar();
+        return;
+      }
+      paseCaido = false;
+      paseRechazado = false;
+      estimarDesfase(r.hasta);
+      pase = r.p;
+      paseDesde = ahoraSala();
+      const espera = Math.min(VENTANA_DEL_PASE_MS, Math.max(PISO_PASE_MS, r.hasta - ahoraSala()));
+      pararPase = deps.esperar(pedirElPase, espera);
+      pararVencimiento?.();
+      // Si no llega otro pase, a los 12 minutos el QR se saca solo: la sala lo rechaza a los 14 a 16.
+      pararVencimiento = deps.esperar(() => {
+        pararVencimiento = null;
+        pintar();
+        grande.pintar();
+      }, VIGENCIA_DEL_PASE_MS + 1_000);
+      pintarQrs();
+    });
+  }
+
+  /** Vuelve a pedir el pase si nadie lo está esperando ni lo tiene programado: pasa al volver de confirmar o de un fallo. */
+  function asegurarPase(): void {
+    if (!pararPase && !paseEnCurso) pedirElPase();
+  }
+
+  /** La hora de cierre cambia la principal sin que nadie toque nada. */
+  function programarCierre(): void {
+    pararCierre?.();
+    pararCierre = null;
+    const falta = cierraMs - ahoraSala();
+    if (falta <= 0) return;
+    pararCierre = deps.esperar(() => {
+      pararCierre = null;
+      pintar();
+    }, falta);
+  }
+
+  /* --- cuando la compu vuelve de dormir o de un corte --- */
+
+  /** Los temporizadores se frenan con la compu dormida: al volver, se pide todo de nuevo sin esperar a que venzan. */
+  function despertar(): void {
+    if (vista === "sin-red") return void reintentar?.();
+    if (!sala) return;
+    if (vista === "abierta" || vista === "confirmar") {
+      pedirElPase();
+      programarCierre();
+    }
+    if (vista === "abierta" || vista === "confirmar" || vista === "cerrada") {
+      pintar();
+      grande.pintar();
+      void escucha?.consultar();
+    }
+  }
+
+  const alVolverLaPestana = (): void => {
+    if (document.visibilityState === "visible") despertar();
+  };
+
+  function armarDespertar(): void {
+    if (pararDespertar) return;
+    document.addEventListener("visibilitychange", alVolverLaPestana);
+    addEventListener("online", despertar);
+    addEventListener("pageshow", despertar);
+    pararDespertar = () => {
+      document.removeEventListener("visibilitychange", alVolverLaPestana);
+      removeEventListener("online", despertar);
+      removeEventListener("pageshow", despertar);
+      pararDespertar = null;
+    };
+  }
+
+  /* --- O1 y O2: elegir el archivo y ver la vista previa --- */
+
+  function aviso(texto: string): void {
+    mensaje = texto;
+    pintar();
+  }
+
+  async function alElegir(f: File): Promise<void> {
+    if (deps.enStand()) return aviso(tx("cpoSalStand"));
+    if (deps.enEnsayo()) return aviso(tx("cpoSalEnsayo"));
+    if (f.size > MAX_ARCHIVO) return aviso(tx("cpoNoEsCampana"));
+    const crudo = await deps.leerArchivo(f).catch(() => "");
+    const leido = archivoFirmado(crudo);
+    if (!leido) return aviso(tx("cpoNoEsCampana"));
+    const { lectura, red, organizadora: pide } = leerDelTexto(leido.texto);
+    if (!lectura.ok) {
+      if (lectura.motivo === "otra-red") return aviso(fmt("cpoOtroModo", { modo: tx(nombreDeRed(red)) }));
+      return aviso(fmt("cpoRevisaCampo", { campo: lectura.campo }));
+    }
+    const c = lectura.campana;
+    if (!c.premios.every((p) => p === c.premios[0])) return aviso(tx("cpoPremiosIguales"));
+    // Lo mismo que va a exigir la sala, dicho acá y no al crearla: así no se gasta un cupo en un archivo que no sirve.
+    const v = await deps.validar(leido.texto, deps.ahora());
+    if (!v.ok) return aviso(v.motivo === "vencida" ? tx("cpoVencida") : fmt("cpoRevisaCampo", { campo: v.campo }));
+    if (c.cierraMs <= deps.ahora()) return aviso(tx("cpoVencida"));
+    archivo = leido;
+    intento = null;
+    campana = c;
+    // Si la campaña pide sellar con una cuenta en particular y esta no es, se dice ahora y no al sellar.
+    mensaje = pide !== null && deps.cuenta() !== pide ? tx("cpoOtraCuenta") : "";
+    vista = "previa";
+    pintar();
+  }
+
+  /** Cierra el trabajo de un botón: apaga `trabajando`, deja el aviso y pinta. */
+  function terminar(texto = ""): void {
+    trabajando = false;
+    mensaje = texto;
+    pintar();
+  }
+
+  async function abrirInscripcion(): Promise<void> {
+    if (trabajando || !campana) return;
+    trabajando = true;
+    mensaje = "";
+    pintar();
+    let s = sala;
+    // La sala ya creada (un intento anterior, o retomar en lista) no se vuelve a crear: su token es este.
+    if (!s) {
+      if (!archivo) return terminar();
+      const anterior = tokenDeEvento(deps.almacen, campana.evento);
+      intento ??= generarClave();
+      const r = await deps.crear(archivo, { evento: campana.evento, red: campana.red, anterior, intento });
+      if (!r.ok) return terminar(tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]));
+      s = r.sala;
+      sala = s;
+      marca++;
+      faseSala = "lista";
+      // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
+      guardarTokenDeEvento(deps.almacen, { evento: s.evento, token: s.token });
+      recordar();
+    }
+    const m = marca;
+    const r = await aplicarFase(s, "abierta", null, "lista");
+    if (m !== marca) return void (trabajando = false);
+    trabajando = false;
+    if (!r.ok) return pintar();
+    irA("abierta", campana.cierraMs);
+  }
+
+  /* --- las fases --- */
+
+  /**
+   * Pide una fase y la confirma con la sala. Si la respuesta se perdió (el cambio pudo haber llegado), pregunta qué fase
+   * tiene y obedece: si ya está en la pedida, se toma como hecha. Si no, adopta la que dice la sala.
+   */
+  async function aplicarFase(
+    s: SalaDeCampana,
+    fase: "abierta" | "cerrada",
+    cierra: number | null,
+    desde: FaseDeSala,
+  ): Promise<{ ok: true; cierraMs: number | null } | { ok: false }> {
+    const m = marca;
+    const f = await deps.fase(s, fase, cierra);
+    if (m !== marca) return { ok: false };
+    if (f === true) return { ok: true, cierraMs: cierra };
+    const e = await deps.estado(s);
+    if (m !== marca) return { ok: false };
+    if (e === "no-existe") {
+      olvidar("cpoSeBorro");
+      return { ok: false };
+    }
+    if (typeof e === "object") {
+      const hecha = e.fase === fase && (cierra === null || desde === "cerrada" || e.cierraMs === cierra);
+      if (hecha) return { ok: true, cierraMs: e.cierraMs };
+      irA(e.fase, e.cierraMs);
+    }
+    mensaje = tx(f === "forma" ? "cpoHoraNoVale" : "cpoSinConexion");
+    pintar();
+    grande.pintar();
+    return { ok: false };
+  }
+
+  /** Pone la pantalla en la fase que tiene la sala, con lo que cada una necesita andando. */
+  function irA(fase: FaseDeSala, cierra: number | null): void {
+    faseSala = fase;
+    if (cierra !== null) cierraMs = cierra;
+    mensaje = "";
+    if (fase === "lista") {
+      vista = "previa";
+    } else if (fase === "abierta") {
+      vista = "abierta";
+      if (sala && !escucha) oirLaSala(sala);
+      armarDespertar();
+      asegurarPase();
+      programarCierre();
+    } else if (fase === "cerrada") {
+      vista = "cerrada";
+      // Si la sala ya estaba cerrada (otra pestaña, una recarga) la lista todavía no se pasó: hay que tocar Pasar la lista.
+      retomada = !cerrandoAhora && !pasada;
+      pararPase?.();
+      pararPase = null;
+      pararCierre?.();
+      pararCierre = null;
+    } else {
+      vista = fase;
+      pararPase?.();
+      pararPase = null;
+      pararCierre?.();
+      pararCierre = null;
+      grande.cerrar();
+    }
+    recordar();
+    pintarQrs();
+  }
+
+  function volverAAbierta(): void {
+    vista = "abierta";
+    asegurarPase();
+    programarCierre();
+    pintar();
+  }
+
+  /** Quitar dos veces es lo mismo que una: si la respuesta se perdió, se manda otra vez y la sala dice que ya no estaba. */
+  function mandarQuitar(n: number): Promise<boolean> {
+    const previo = vuelo.get(n);
+    if (previo) return previo;
+    const p = enviar(n);
+    vuelo.set(n, p);
+    void p.finally(() => vuelo.delete(n));
+    return p;
+  }
+
+  async function enviar(n: number): Promise<boolean> {
+    const s = sala;
+    const motivo = pendientes.get(n)?.motivo ?? enviando.get(n);
+    if (!s || !motivo) return false;
+    pendientes.get(n)?.parar();
+    pendientes.delete(n);
+    enviando.set(n, motivo);
+    recordar();
+    const m = marca;
+    const r = await deps.quitar(s, n, motivo);
+    if (m !== marca) return false;
+    if (r === true) {
+      enviando.delete(n);
+      filas.delete(n);
+      llegados.delete(n);
+      quitadas.add(n);
+      recordar();
+      alCambiarLasFilas();
+      return true;
+    }
+    if (r === "no-existe") {
+      void sospechaDeBorrada(s);
+      return false;
+    }
+    if (r === "rechazo") {
+      // La sala dijo que no (ya no se puede quitar): la persona vuelve a la lista.
+      enviando.delete(n);
+      mensaje = tx("cpoSinConexion");
+      recordar();
+      alCambiarLasFilas();
+      return false;
+    }
+    // Sin respuesta: la sala pudo haberla sacado. Sigue escondida y se reintenta sola, sin dejar a nadie de más en la lista.
+    mensaje = tx("cpoSinConexion");
+    reintentos.set(
+      n,
+      deps.esperar(() => {
+        reintentos.delete(n);
+        void mandarQuitar(n);
+      }, REINTENTO_QUITA_MS),
+    );
+    pintar();
+    return false;
+  }
+
+  function elegirMotivo(n: number, motivo: MotivoDeSalida): void {
+    preguntando.delete(n);
+    // La sala recién se entera a los 5 s: hasta entonces Deshacer no deja rastro.
+    const parar = deps.esperar(() => void mandarQuitar(n), DESHACER_MS);
+    pendientes.set(n, { motivo, parar });
+    recordar();
+    alCambiarLasFilas();
+  }
+
+  function deshacer(n: number): void {
+    pendientes.get(n)?.parar();
+    pendientes.delete(n);
+    recordar();
+    alCambiarLasFilas();
+  }
+
+  function mostrar(n: number): void {
+    mostradas.add(n);
+    const f = filas.get(n);
+    if (f) filas.set(n, { ...f, revisar: false });
+    recordar();
+    alCambiarLasFilas();
+  }
+
+  async function masQuince(): Promise<void> {
+    const s = sala;
+    if (!s || trabajando) return;
+    // Desde la hora de ahora si el cierre ya pasó: la sala pide un cierre entre 1 minuto y 12 horas desde ahora.
+    const nuevo = Math.max(cierraMs, ahoraSala()) + QUINCE_MIN;
+    trabajando = true;
+    mensaje = "";
+    pintar();
+    const r = await aplicarFase(s, "abierta", nuevo, "abierta");
+    trabajando = false;
+    if (!r.ok) return pintar();
+    cierraMs = r.cierraMs ?? nuevo;
+    programarCierre();
+    recordar();
+    pintar();
+    grande.pintar();
+  }
+
+  function pedirCerrar(): void {
+    mensaje = "";
+    if (visibles().length < 2) return aviso(tx("cpoPocos"));
+    vista = "confirmar";
+    entroAConfirmar = deps.ahora();
+    pintar();
+  }
+
+  async function cerrarLista(): Promise<void> {
+    const s = sala;
+    if (!s || trabajando) return;
+    if (deps.ahora() - entroAConfirmar < GUARDA_DE_CONFIRMAR_MS) return;
+    trabajando = true;
+    mensaje = "";
+    pintar();
+    const m = marca;
+    // Lo que quien organiza ya decidió sacar sale antes de cerrar: así la lista que se confirmó es la que queda.
+    for (const n of [...pendientes.keys()]) void mandarQuitar(n);
+    await Promise.all([...vuelo.values()]);
+    if (m !== marca) return void (trabajando = false);
+    if (enviando.size > 0) {
+      trabajando = false;
+      mensaje = tx("cpoSinConexion");
+      return volverAAbierta();
+    }
+    const r = await aplicarFase(s, "cerrada", null, "abierta");
+    trabajando = false;
+    if (m !== marca) return;
+    if (!r.ok) {
+      if (vista === "confirmar") volverAAbierta();
+      return;
+    }
+    pasada = false;
+    cerrandoAhora = true;
+    irA("cerrada", r.cierraMs);
+    await leerListaCompleta(s);
+    cerrandoAhora = false;
+  }
+
+  /**
+   * Con la lista cerrada, se lee entera antes de pasarla: hay altas que viajan por el socket o se están descifrando en el
+   * instante del cierre. Se compara con el total de la sala y recién entonces se pasa. Si no coincide, se prueba de nuevo.
+   */
+  async function leerListaCompleta(s: SalaDeCampana): Promise<void> {
+    const m = marca;
+    sinLeer = false;
+    for (let vuelta = 0; vuelta < VUELTAS_AL_CERRAR; vuelta++) {
+      await escucha?.consultar();
+      await esperarDescifrados();
+      const e = await deps.estado(s);
+      if (m !== marca) return;
+      if (e === "no-existe") return void sospechaDeBorrada(s);
+      if (typeof e === "object" && e.total === visibles().length) {
+        mensaje = "";
+        pasada = true;
+        retomada = false;
+        pintar();
+        grande.pintar();
+        deps.alCerrar(s, visibles());
+        return;
+      }
+      mensaje = tx("cpoCargando");
+      pintar();
+      await new Promise<void>((seguir) => void deps.esperar(seguir, ESPERA_AL_LEER_MS));
+      if (m !== marca) return;
+    }
+    mensaje = "";
+    sinLeer = true;
+    pintar();
+  }
+
+  async function reabrir(): Promise<void> {
+    const s = sala;
+    if (!s || trabajando) return;
+    trabajando = true;
+    mensaje = "";
+    pintar();
+    // Con el cierre a menos de un minuto la sala no lo acepta y los celulares verían una hora que ya pasó.
+    const nuevo = cierraMs - ahoraSala() > 60_000 ? null : ahoraSala() + QUINCE_MIN;
+    const r = await aplicarFase(s, "abierta", nuevo, "cerrada");
+    trabajando = false;
+    if (!r.ok) return pintar();
+    pasada = false;
+    sinLeer = false;
+    retomada = false;
+    irA("abierta", r.cierraMs ?? nuevo);
+  }
+
+  /* --- retomar y olvidar --- */
+
+  async function retomar(g: MemoriaDeOrg): Promise<void> {
+    dejarDeEscuchar();
+    vaciarFilas();
+    marca++;
+    const m = marca;
+    vista = "cargando";
+    mensaje = "";
+    armarDespertar();
+    pintar();
+    const [c, e] = await Promise.all([deps.campanaDeSala(g.sala), deps.estado(g.sala)]);
+    if (m !== marca) return;
+    if (e === "no-existe") return olvidar("cpoSeBorro");
+    if (typeof c === "string" || typeof e === "string") return ponerSinRed(g);
+    sala = g.sala;
+    campana = c;
+    cierraMs = e.cierraMs;
+    mostradas.clear();
+    for (const n of g.mostradas ?? []) mostradas.add(n);
+    pasada = false;
+    sinLeer = false;
+    faseSala = e.fase;
+    // Las quitas que quedaron a medias (se recargó en los 5 segundos de Deshacer) salen antes de pintar la lista.
+    for (const p of g.pendientes ?? []) enviando.set(p.n, p.motivo);
+    await Promise.all((g.pendientes ?? []).map((p) => mandarQuitar(p.n)));
+    if (m !== marca) return;
+    if (e.fase !== "lista" && e.fase !== "sellada" && e.fase !== "sorteada") {
+      oirLaSala(g.sala);
+      void ponerseAlDia(e.total);
+    }
+    irA(e.fase, e.cierraMs);
+  }
+
+  /** No se pudo preguntarle a la sala: la memoria se conserva y se prueba de nuevo, a mano o al volver la red. */
+  function ponerSinRed(g: MemoriaDeOrg): void {
+    dejarDeEscuchar();
+    vista = "sin-red";
+    mensaje = "";
+    reintentar = () => void retomar(g);
+    pintar();
+  }
+
+  /** Un 404 aislado o un cierre del socket no alcanzan: solo si la sala de verdad no existe se borra lo que recuerda la compu. */
+  async function sospechaDeBorrada(s: SalaDeCampana): Promise<void> {
+    const m = marca;
+    const e = await deps.estado(s);
+    if (m !== marca || sala !== s) return;
+    if (e === "no-existe") return olvidar("cpoSeBorro");
+    if (typeof e === "string") {
+      const g = leerOrg(deps.almacen, deps.ahora(), s.red);
+      return ponerSinRed(g ?? { sala: s, fase: faseSala });
+    }
+    // La sala sigue ahí: el aviso de cierre era falso o pasajero, y esa escucha ya se cortó sola. Se escucha de nuevo.
+    if (conPase() || vista === "cerrada") oirLaSala(s);
+  }
+
+  function olvidar(clave?: string): void {
+    const red = sala?.red ?? deps.red();
+    dejarDeEscuchar();
+    marca++;
+    pararDespertar?.();
+    grande.cerrar();
+    vaciarFilas();
+    mostradas.clear();
+    sala = null;
+    campana = null;
+    archivo = null;
+    intento = null;
+    pase = null;
+    paseCaido = false;
+    paseRechazado = false;
+    paseEnCurso = false;
+    desfase = 0;
+    ultimoEnlace = "";
+    faseSala = "lista";
+    retomada = false;
+    pasada = false;
+    sinLeer = false;
+    reintentar = null;
+    trabajando = false;
+    pintadas = [];
+    firmaDeLista = "";
+    borrarOrg(deps.almacen, red);
+    vista = "elegir";
+    mensaje = clave ? tx(clave) : "";
+    pintar();
+  }
+
+  /** Dejar la campaña: pide una confirmación de una línea. Con la sala todavía vacía, además la borra para liberar el archivo. */
+  function pedirOlvidar(): void {
+    vistaAntes = vista;
+    vista = "olvidar";
+    mensaje = "";
+    pintar();
+  }
+
+  function cancelarOlvidar(): void {
+    vista = vistaAntes;
+    // Con la pregunta abierta el pase no se renueva: si venció ahí no quedó nada programado y hay que retomarlo.
+    if (conPase()) {
+      asegurarPase();
+      programarCierre();
+    }
+    pintar();
+  }
+
+  async function confirmarOlvidar(): Promise<void> {
+    const s = sala;
+    if (s && vistaAntes === "previa") {
+      if (trabajando) return;
+      trabajando = true;
+      pintar();
+      const hecho = await deps.borrarVacia(s);
+      trabajando = false;
+      if (s !== sala) return;
+      if (!hecho) return aviso(tx("cpoSinConexion"));
+    }
+    olvidar();
+  }
+
+  /* --- el dibujo --- */
+
+  type Estilo = "primary" | "ghost" | "enlace";
+
+  function boton(texto: string, estilo: Estilo, alTocar: (b: HTMLButtonElement) => void, apagado = false): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = estilo;
+    b.textContent = texto;
+    b.disabled = apagado;
+    b.addEventListener("click", () => alTocar(b));
+    return b;
+  }
+
+  function pintarAcciones(): void {
+    const hora = pasoLaHora();
+    const n = visibles().length;
+    const firma = [vista, vistaAntes, trabajando, hora, retomada, sinLeer, !!sala, deps.idioma(), vista === "confirmar" ? n : 0].join("|");
+    if (firma === firmaDeAcciones) return;
+    firmaDeAcciones = firma;
+    const botones: HTMLElement[] = [];
+    const principal = (texto: string, alTocar: (b: HTMLButtonElement) => void, apagado = false): HTMLElement =>
+      boton(texto, "primary", alTocar, apagado);
+    const otroArchivo = (): HTMLElement => boton(tx("cpoOtroArchivo"), "enlace", () => pedirOlvidar());
+    if (vista === "elegir") {
+      botones.push(principal(tx("cpoElegir"), () => elegir()));
+    } else if (vista === "previa") {
+      botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
+    } else if (vista === "abierta") {
+      const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
+      const cerrar = (): void => pedirCerrar();
+      if (hora) {
+        botones.push(principal(tx("cpoCerrar"), cerrar, trabajando));
+        botones.push(boton(tx("cpoGrande"), "ghost", abrirGrande));
+      } else {
+        botones.push(principal(tx("cpoGrande"), abrirGrande));
+        botones.push(boton(tx("cpoCerrar"), "ghost", cerrar, trabajando));
+      }
+      botones.push(boton(tx("cpoMas15"), "ghost", () => void masQuince(), trabajando));
+      botones.push(otroArchivo());
+    } else if (vista === "confirmar") {
+      botones.push(principal(fmt("cpoCerrarCon", { n }), () => void cerrarLista(), trabajando));
+      botones.push(boton(tx("cpoSeguirAbierta"), "ghost", () => volverAAbierta(), trabajando));
+    } else if (vista === "olvidar") {
+      botones.push(principal(tx("cpoOlvidarSi"), () => void confirmarOlvidar(), trabajando));
+      botones.push(boton(tx("cpoCancelar"), "ghost", () => cancelarOlvidar()));
+    } else if (vista === "cerrada") {
+      if (sinLeer) botones.push(principal(tx("cpoReintentar"), () => void (sala && leerListaCompleta(sala))));
+      else if (retomada) botones.push(principal(tx("cpoPasar"), () => void (sala && leerListaCompleta(sala))));
+      botones.push(boton(tx("cpoGrande"), "ghost", (b) => grande.abrir(b)));
+      botones.push(boton(tx("cpoReabrir"), "enlace", () => void reabrir(), trabajando));
+      botones.push(otroArchivo());
+    } else if (vista === "sellada" || vista === "sorteada") {
+      // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
+      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => olvidar()));
+    } else if (vista === "sin-red") {
+      botones.push(principal(tx("cpoReintentar"), () => reintentar?.()));
+      botones.push(otroArchivo());
+    } else if (vista === "otra-pestana") {
+      botones.push(principal(tx("cpoUsarAca"), () => usarAca()));
+    }
+    accionesEl.replaceChildren(...botones);
+  }
+
+  function elegir(): void {
+    archivoEl.value = "";
+    archivoEl.click();
+  }
+
+  function volverAElegir(): void {
+    archivo = null;
+    intento = null;
+    campana = null;
+    mensaje = "";
+    vista = "elegir";
+    pintar();
+  }
+
+  const TITULOS: Partial<Record<Vista, string>> = {
+    elegir: "cpoTitulo",
+    confirmar: "cpoCerrarT",
+    olvidar: "cpoOlvidarT",
+    cerrada: "cpoCerradaT",
+    sellada: "cpoSellada",
+    sorteada: "cpoSorteada",
+    cargando: "cpoCargando",
+    "sin-red": "cpoSinConexionT",
+    "otra-pestana": "cpoOtraPestana",
+  };
+
+  function pintarTextos(): void {
+    const idioma = deps.idioma();
+    const zona = campana?.zona ?? "UTC";
+    let titulo = tx(TITULOS[vista] ?? "cpoTitulo");
+    let linea = "";
+    if (vista === "elegir") linea = tx("cpoElegirLinea");
+    if (vista === "confirmar") linea = tx("cpoCerrarLinea");
+    if (vista === "cerrada" && sinLeer) linea = tx("cpoNoLeyo");
+    if (campana && vista === "previa") {
+      const hora = horaTexto(campana.cierraMs, zona, idioma);
+      const pedidos = campana.pasos.length;
+      titulo = fmt("cpTitulo", { empresa: campana.empresa.nombre });
+      const clave = pedidos === 0 ? "cpoCierraPedidos0" : pedidos === 1 ? "cpoCierraPedidos1" : "cpoCierraPedidosN";
+      linea = fmt(clave, { hora, n: pedidos });
+    }
+    if (campana && vista === "abierta") {
+      titulo = pasoLaHora() ? tx("cpoHoraDeCerrar") : fmt("cpoAbiertaHasta", { hora: horaTexto(cierraMs, zona, idioma) });
+    }
+    tituloEl.textContent = titulo;
+    lineaEl.textContent = linea;
+    avisoEl.textContent = mensaje;
+  }
+
+  function pintarBloques(): void {
+    const enAbierta = vista === "abierta";
+    const verLista = vista === "abierta" || vista === "cerrada";
+    previaEl.hidden = vista !== "previa" || !campana;
+    if (campana && vista === "previa") {
+      premioEl.textContent = premiosTexto(campana.premios, deps.idioma());
+      const logo = campana.empresa.logo;
+      logoEl.hidden = logo === null;
+      if (logo) logoEl.src = `data:${logo.tipo};base64,${logo.datos}`;
+      logoEl.alt = campana.empresa.nombre;
+    }
+    qrBloque.hidden = !enAbierta;
+    const enlace = enlaceDelQr();
+    qrImg.hidden = enlace === null;
+    qrImg.alt = tx("cpoQrAlt");
+    // Solo se dice algo cuando el pase dejó de renovarse: con el sondeo andando solo no hay nada que hacer.
+    conexionEl.hidden = !(enAbierta && (paseCaido || paseRechazado || (pase !== null && !qrVigente())));
+    // Con el QR a la vista se avisa que puede vencer. Sin QR no hay nada que pueda vencer: se dice que se reconecta.
+    // Si la sala no acepta este panel no hay nada que esperar: se dice eso, y el botón de otro archivo ya lo resuelve.
+    conexionEl.textContent = tx(paseRechazado ? "cpoPaseRechazado" : enlace === null ? "cpoSinConexionQr" : "cpoQrSinConexion");
+    numeroBloque.hidden = !verLista;
+    if (verLista) {
+      const total = visibles().length;
+      numeroEl.textContent = String(total);
+      etiquetaEl.textContent = tx(total === 1 ? "cpoEnLaLista1" : "cpoEnLaListaN");
+    }
+    listaBloque.hidden = !verLista;
+    pieEl.hidden = vista !== "cerrada" || !sala || !campana;
+    if (sala && campana && vista === "cerrada") {
+      const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
+      pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
+    }
+  }
+
+  /** Cada fila se arma con lo que importa: su número manda, nunca su lugar en la lista. */
+  function fila(f: Fila): HTMLLIElement {
+    const li = document.createElement("li");
+    li.className = "cpo-fila";
+    li.dataset.n = String(f.n);
+    const persona = fmt("cpoPersona", { n: f.n });
+    const nombre = f.revisar ? tx("cpoParaRevisar") : f.nombre ?? persona;
+    const motivoEnVuelo = pendientes.get(f.n)?.motivo ?? enviando.get(f.n);
+    if (motivoEnVuelo) {
+      const dicho = (f.revisar ? persona : f.nombre ?? persona);
+      const motivo = tx(TEXTO_DEL_MOTIVO[motivoEnVuelo]).toLocaleLowerCase(deps.idioma());
+      const p = document.createElement("p");
+      p.className = "cpo-salio";
+      p.textContent = fmt("cpoSalio", { nombre: dicho, motivo });
+      li.append(p);
+      if (pendientes.has(f.n)) li.append(botonDeFila("cpoDeshacer", "deshacer", f.n, "ghost"));
+      return li;
+    }
+    const span = document.createElement("span");
+    span.className = "cpo-nombre";
+    span.textContent = nombre;
+    li.append(span);
+    const quitar = botonDeFila("cpoQuitar", "quitar", f.n, "mini");
+    quitar.setAttribute("aria-label", `${tx("cpoQuitar")}: ${f.revisar ? persona : f.nombre ?? persona}`);
+    li.append(quitar);
+    if (f.revisar) li.append(botonDeFila("cpoMostrar", "mostrar", f.n, "mini"));
+    if (preguntando.has(f.n)) {
+      const motivos = document.createElement("div");
+      motivos.className = "cpo-motivos";
+      const p = document.createElement("p");
+      p.textContent = tx("cpoPorQue");
+      motivos.append(p);
+      for (const m of MOTIVOS) {
+        const b = botonDeFila(TEXTO_DEL_MOTIVO[m], "motivo", f.n, "ghost");
+        b.dataset.motivo = m;
+        motivos.append(b);
+      }
+      motivos.append(botonDeFila("cpoCancelar", "cancelar", f.n, "enlace"));
+      li.append(motivos);
+    }
+    return li;
+  }
+
+  function botonDeFila(clave: string, accion: string, n: number, estilo: string): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = estilo;
+    b.textContent = tx(clave);
+    b.dataset.accion = accion;
+    b.dataset.n = String(n);
+    return b;
+  }
+
+  /**
+   * La lista se rearma solo si cambió lo que se ve. Con el puntero encima, el foco adentro o una pregunta abierta, no se
+   * reordena ni se inserta arriba: las altas nuevas esperan y se pintan al soltar. Si no, la fila que se está por tocar
+   * baja justo cuando se toca Quitar y sale otra persona.
+   */
+  function pintarLista(): void {
+    if (listaBloque.hidden) return;
+    // Lo que hay que revisar va arriba, donde el aviso lo señala; el resto, de la alta más nueva a la más vieja.
+    const aRevisar = (n: number): number => Number(filas.get(n)?.revisar === true);
+    const todas = [...filas.keys()].sort((a, b) => aRevisar(b) - aRevisar(a) || b - a);
+    const ns = congelada() ? pintadas.filter((n) => filas.has(n)) : todas;
+    const dibujar = ns.map((n) => filas.get(n)).filter((f): f is Fila => f !== undefined);
+    const firma = JSON.stringify([
+      deps.idioma(),
+      dibujar.map((f) => [f.n, f.nombre, f.revisar, preguntando.has(f.n), pendientes.get(f.n)?.motivo, enviando.get(f.n)]),
+    ]);
+    notaEl.hidden = !visibles().some((f) => f.revisar);
+    notaEl.textContent = tx("cpoParaRevisarNota");
+    if (firma === firmaDeLista) return;
+    firmaDeLista = firma;
+    pintadas = ns;
+    ulEl.replaceChildren(...dibujar.map(fila));
+  }
+
+  function pintar(): void {
+    raiz.dataset.vista = vista;
+    pintarTextos();
+    pintarBloques();
+    pintarAcciones();
+    pintarLista();
+  }
+
+  /* --- lo que se toca --- */
+
+  archivoEl.addEventListener("change", () => {
+    const f = archivoEl.files?.[0];
+    if (f) void alElegir(f);
+  });
+
+  ulEl.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-accion]");
+    if (!b) return;
+    const n = Number(b.dataset.n);
+    const accion = b.dataset.accion;
+    if (accion === "quitar") {
+      // Una pregunta a la vez: abrir otra cierra la anterior.
+      preguntando.clear();
+      preguntando.add(n);
+    } else if (accion === "cancelar") {
+      preguntando.delete(n);
+    } else if (accion === "motivo") {
+      const motivo = MOTIVOS.find((m) => m === b.dataset.motivo);
+      if (motivo) return elegirMotivo(n, motivo);
+    } else if (accion === "deshacer") {
+      return deshacer(n);
+    } else if (accion === "mostrar") {
+      return mostrar(n);
+    }
+    firmaDeLista = "";
+    pintar();
+    // La pregunta del motivo se abre dentro de la caja de la lista: se la trae a la vista entera.
+    if (accion === "quitar") ulEl.querySelector(`li[data-n="${n}"]`)?.scrollIntoView?.({ block: "nearest" });
+  });
+  ulEl.addEventListener("pointerenter", () => {
+    punteroDentro = true;
+  });
+  ulEl.addEventListener("pointerleave", () => {
+    punteroDentro = false;
+    if (!congelada()) pintar();
+  });
+  ulEl.addEventListener("focusout", () => {
+    // El foco se va después de este evento: se mira en cuanto se asienta.
+    queueMicrotask(() => {
+      if (!congelada()) pintar();
+    });
+  });
+
+  /* --- arranque: retomar lo que recuerda la compu --- */
+
+  const guardada = leerOrg(deps.almacen, deps.ahora(), deps.red());
+  const otra: RedDeCampana = deps.red() === "mainnet" ? "testnet" : "mainnet";
+  if (guardada) {
+    void retomar(guardada);
+  } else if (leerOrg(deps.almacen, deps.ahora(), otra)) {
+    // Su sala sigue en su modo y no estorba: acá se puede abrir otra campaña.
+    mensaje = fmt("cpoOtroModoAbierta", { modo: tx(nombreDeRed(otra)) });
+  }
+  pintar();
+
+  function detener(): void {
+    dejarDeEscuchar();
+    marca++;
+    pararDespertar?.();
+    grande.cerrar();
+    canal?.cerrar();
+  }
+
+  return { raiz, pintar, detener };
+}
+
+/** Lo monta arriba del cuadro del sorteo. Sin la bandera de campañas, o con la demostración, no hace nada. */
+export function montarPanelDeCampana(deps: DepsDelPanelDeCampana = depsReales(), activo: boolean = campanasActivo()): void {
+  if (!activo || deps.conDemo()) return;
+  const origenes = document.getElementById("origenes");
+  if (!origenes || document.getElementById("cpo-panel")) return;
+  const panel = crearPanelDeCampana(deps);
+  origenes.before(panel.raiz);
+  onLangChange(() => panel.pintar());
+}
+

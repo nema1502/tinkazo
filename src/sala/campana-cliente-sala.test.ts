@@ -200,6 +200,18 @@ describe("el cliente contra el servicio de verdad", () => {
     expect(await resultadoDeCampana(BASE_LOCAL, "ZZZZZZZZ", dep())).toBe("terminada");
   });
 
-  it.todo("con PASE en 0 y un p viejo, estadoPublico no da vencido (necesita que la ruta estado mire la variable PASE)");
-  it.todo("con PASE prendido y sin p, estadoPublico da vencido y no sin (necesita el mismo cambio en la ruta estado)");
+  it("con PASE en 0 y un p viejo, estadoPublico no da vencido", async () => {
+    await montar({ PASE: "0" });
+    expect(await estadoPublico(BASE_LOCAL, sala.id, "AAAAAAAAAAAA", dep())).toMatchObject({ fase: "abierta", pase: "vale" });
+  });
+
+  it("con PASE en 0 y sin p, estadoPublico da vale", async () => {
+    await montar({ PASE: "0" });
+    expect(await estadoPublico(BASE_LOCAL, sala.id, null, dep())).toMatchObject({ pase: "vale" });
+  });
+
+  it("con PASE prendido y sin p, estadoPublico da vencido y no sin", async () => {
+    await montar({ PASE: "1" });
+    expect(await estadoPublico(BASE_LOCAL, sala.id, null, dep())).toMatchObject({ pase: "vencido" });
+  });
 });

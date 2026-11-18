@@ -73,18 +73,95 @@ describe("el saludo y el nombre abreviado", () => {
     expect(raiz.querySelector(".cmp-accion .primary")?.textContent).toBe("Acepto y me anoto");
   });
 
+  it.each(["solo-google", "sesion"] as const)(
+    "con el error %s el botón principal cambia de cuenta y ya no dice Acepto",
+    (motivo) => {
+      const { raiz, deps } = preparar([]);
+      let salidas = 0;
+      pintarHola(raiz, deps, { nombre: "Ana P.", error: motivo }, {
+        alAnotar: () => undefined,
+        alSalir: () => {
+          salidas += 1;
+        },
+      });
+      const principal = raiz.querySelectorAll(".cmp-accion .primary");
+      expect(principal).toHaveLength(1);
+      expect(principal[0]?.textContent).toBe("Usar otra cuenta");
+      expect(raiz.querySelector(".cmp-accion")?.textContent).not.toContain("Acepto y me anoto");
+      expect(raiz.querySelector(".cmp-otra-cuenta")).toBeNull();
+      expect(raiz.querySelectorAll(".cmp-accion .cmp-error")).toHaveLength(1);
+      raiz.querySelector<HTMLButtonElement>(".cmp-accion .primary")?.click();
+      expect(salidas).toBe(1);
+    },
+  );
+
+  it("con otro error el botón principal sigue siendo Acepto y el enlace de cambiar de cuenta sigue arriba", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: "red" });
+    expect(raiz.querySelector(".cmp-accion .primary")?.textContent).toBe("Acepto y me anoto");
+    expect(raiz.querySelector(".cmp-hero > .cmp-otra-cuenta")).not.toBeNull();
+  });
+
+  it("las reglas de esta pantalla no llevan la línea del correo", () => {
+    const { raiz, deps } = preparar([]);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).not.toContain("por correo");
+  });
+
   it("sin nombre ofrece usar otra cuenta", () => {
     const { raiz, deps } = preparar([]);
     pintarHola(raiz, deps, { nombre: null, error: null });
     expect(raiz.querySelector(".cmp-otra-cuenta")?.textContent).toBe("Usar otra cuenta");
   });
 
-  it("pone la nota de los pedidos debajo de su título y antes de las filas", () => {
+  it("los pedidos van debajo de su título y sin una nota aparte: la aclaración vive en las reglas", () => {
     const { raiz, deps } = preparar([{ tipo: "x", url: "https://x.com/alguien", texto: { es: "", en: "" } }]);
     pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
     const der = raiz.querySelector(".cmp-der") as HTMLElement;
     const hijos = [...der.children].map((hijo) => hijo.tagName + "." + hijo.className);
-    expect(hijos).toEqual(["H2.", "P.cmp-apoyo cmp-apoyo-izq", "DIV.cmp-pasos"]);
+    expect(hijos).toEqual(["H2.", "DIV.cmp-pasos"]);
+    expect(raiz.querySelector(".cmp-reglas")?.textContent).toContain("Es un pedido. No cambia quién gana.");
+  });
+
+  it("con tres pedidos Hola no pasa de 40 palabras fuera de las reglas", () => {
+    const pasos: Campana["pasos"] = ["instagram", "tiktok", "x"].map((tipo) => ({
+      tipo: tipo as "instagram" | "tiktok" | "x",
+      url: `https://${tipo}.example.org/alguien`,
+      texto: { es: "", en: "" },
+    }));
+    const { raiz, deps } = preparar(pasos);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
+    const copia = raiz.cloneNode(true) as HTMLElement;
+    copia.querySelector(".cmp-reglas")?.remove();
+    const palabras = (copia.textContent ?? "").trim().split(/\s+/u).filter(Boolean);
+    expect(palabras.length).toBeLessThanOrEqual(40);
+  });
+
+  it("con más de tres pedidos deja tres a la vista y pliega el resto con su cuenta", () => {
+    const pasos: Campana["pasos"] = Array.from({ length: 5 }, (_, i) => ({
+      tipo: "enlace" as const,
+      url: `https://sitio.example.org/${i}`,
+      texto: { es: "", en: "" },
+    }));
+    const { raiz, deps } = preparar(pasos);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
+    const der = raiz.querySelector(".cmp-der") as HTMLElement;
+    expect(der.querySelectorAll(":scope > .cmp-pasos > .cmp-paso")).toHaveLength(3);
+    const mas = der.querySelector<HTMLDetailsElement>(".cmp-mas-pedidos");
+    expect(mas?.open).toBe(false);
+    expect(mas?.querySelector("summary")?.textContent).toBe("Ver 2 más");
+    expect(mas?.querySelectorAll(".cmp-paso")).toHaveLength(2);
+  });
+
+  it("con tres pedidos o menos no hay nada plegado", () => {
+    const pasos: Campana["pasos"] = Array.from({ length: 3 }, (_, i) => ({
+      tipo: "enlace" as const,
+      url: `https://sitio.example.org/${i}`,
+      texto: { es: "", en: "" },
+    }));
+    const { raiz, deps } = preparar(pasos);
+    pintarHola(raiz, deps, { nombre: "Ana P.", error: null });
+    expect(raiz.querySelector(".cmp-mas-pedidos")).toBeNull();
   });
 });
 

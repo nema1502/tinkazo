@@ -29,7 +29,7 @@
  *
  * Las salas de campaña, creadas solo con un archivo firmado por Tinkazo:
  *   GET    /v1/sala/<id>/campana           el texto firmado y su firma → 200 {"texto","firma"}
- *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale y si hay aviso por correo
+ *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0) y si hay aviso por correo
  *   GET    /v1/sala/<id>/campana/pase      Authorization: Bearer <token> → 200 {"p","hasta"}
  *   PUT    /v1/sala/<id>/campana/fase      Authorization: Bearer <token> JSON {"fase","cierraMs"?,"sorteo"?} → 204
  *   PUT    /v1/sala/<id>/campana/resultado Authorization: Bearer <token> JSON {"sorteo","comprobante"} → 204
@@ -125,6 +125,7 @@ import {
   reingresoDeCampana,
   reservarAvisosPorCorreo,
   reservarEventoSql,
+  salaDelIntentoSql,
   sellar as sellarEnCampana,
   soltarEventoSql,
   ventanaDelPase,
@@ -228,6 +229,8 @@ function cors(origen: string | null, metodos: string): Record<string, string> {
     "Access-Control-Allow-Origin": origenPermitido(origen) && origen ? origen : SITIO,
     "Access-Control-Allow-Methods": metodos,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    // Sin esto el navegador, desde otro origen, no deja leer cuánto esperar y el celular espera siempre lo fijo.
+    "Access-Control-Expose-Headers": "Retry-After",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -316,6 +319,11 @@ export class Cupos extends DurableObject<Env> {
   /** Confirma la reserva con el id de la sala ya creada y la huella de su token. Recién entonces cuenta para el cupo del día. */
   async confirmarCampana(evento: string, reserva: string, sala: string, huella: string): Promise<boolean> {
     return confirmarEventoSql(this.sql, evento, { reserva, sala, huella, ahora: Date.now() });
+  }
+
+  /** La sala confirmada del evento si su token tiene esa huella: el pedido repetido de quien no recibió la respuesta. */
+  async salaDelIntento(evento: string, huella: string): Promise<{ sala: string; enMs: number } | null> {
+    return salaDelIntentoSql(this.sql, evento, huella);
   }
 
   /** Deshace la reserva si la sala no llegó a crearse. */
@@ -487,13 +495,14 @@ export class Sala extends DurableObject<Env> {
   /** Lo público de la fase, con el pase presentado por quien consulta. Los contadores por vía piden el token. */
   async estadoDeCampana(
     p: string | null,
+    exigirPase: boolean,
     token: string | null = null,
   ): Promise<
     Resultado<{
       fase: Fase;
       total: number;
       cierraMs: number;
-      pase: "vale" | "vencido" | "sin";
+      pase: "vale" | "vencido";
       quitadas: Record<MotivoDeSalida, number>;
       vias?: { google: number; sinDato: number };
     }>
@@ -503,7 +512,8 @@ export class Sala extends DurableObject<Env> {
     if (!esFase(fase)) return { ok: false, motivo: "no-existe" };
     const total = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c;
     const cierraMs = Number(this.dato("cierra"));
-    const vale = p !== null && (await paseValido(this.dato("pase") ?? "", p, Date.now()));
+    // Con el pase apagado (PASE en 0) el alta lo acepta siempre: el estado también dice que vale, para no frenar al celular.
+    const vale = !exigirPase || (p !== null && (await paseValido(this.dato("pase") ?? "", p, Date.now())));
     const conToken = token !== null && token !== "" && (await this.tokenValido(token));
     const vias = conToken
       ? { google: Number(this.dato("via-google") ?? 0), sinDato: Number(this.dato("via-sin-dato") ?? 0) }
@@ -513,7 +523,7 @@ export class Sala extends DurableObject<Env> {
       fase,
       total,
       cierraMs,
-      pase: p === null ? "sin" : vale ? "vale" : "vencido",
+      pase: vale ? "vale" : "vencido",
       quitadas: quitadasPorMotivo(this.sql),
       ...(vias ? { vias } : {}),
     };
@@ -1111,7 +1121,10 @@ export default {
         return json({ error: c.motivo }, estado, h);
       }
       const vida = vidaDeCampana(env, req.url);
-      const token = base64url(crypto.getRandomValues(new Uint8Array(16)));
+      // El token lo puede traer quien organiza (`intento`): así, si la respuesta se pierde, repetir el pedido devuelve la misma sala.
+      const propuesto = (cuerpo as { intento?: unknown } | null)?.intento;
+      const propio = typeof propuesto === "string" && ES_TOKEN.test(propuesto);
+      const token = propio ? propuesto : base64url(crypto.getRandomValues(new Uint8Array(16)));
       // Para reemplazar la sala de este evento que se cerró o venció, quien organizaba presenta el token de esa sala.
       const previo = bearer(req);
       const anterior = ES_TOKEN.test(previo) ? previo : null;
@@ -1126,6 +1139,7 @@ export default {
         c,
         vida,
         token,
+        propio,
         anterior,
         huellaDe: sha256Hex,
         nuevoId,
@@ -1136,7 +1150,7 @@ export default {
         const extra = creada.motivo === "cupo-campanas" ? { ...h, "Retry-After": "86400" } : h;
         return json({ error: creada.motivo }, estado, extra);
       }
-      return json({ id: creada.id, token, vence: Date.now() + vida }, 201, h);
+      return json({ id: creada.id, token, vence: (creada.creadaEn ?? Date.now()) + vida }, 201, h);
     }
 
     if (partes[0] === "v1" && partes[1] === "sala") {
@@ -1215,7 +1229,7 @@ export default {
         const presentado = url.searchParams.get("p");
         const p = presentado === null || ES_PASE.test(presentado) ? presentado : "";
         const token = bearer(req);
-        const r = await salaDe(id).estadoDeCampana(p, token || null);
+        const r = await salaDe(id).estadoDeCampana(p, env.PASE !== "0", token || null);
         return r.ok
           ? json(
               {

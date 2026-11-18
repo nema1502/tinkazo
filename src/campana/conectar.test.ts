@@ -5,7 +5,6 @@ import {
   cargarConUnReintento,
   depsConectadas,
   destinoDeRecibir,
-  teniaLlave,
   type PiezasDelCelular,
 } from "./conectar";
 import type { DepsDelCelular, SesionDelCelular } from "./celular";
@@ -53,6 +52,7 @@ function googleFalso(tokens: (string | null)[], sigue: boolean) {
     token: vi.fn(async (): Promise<string | null> => tokens[Math.min(n++, tokens.length - 1)] ?? null),
     sigueLaSesion: vi.fn(async (_cuenta: string) => sigue),
     salir: vi.fn(async () => undefined),
+    renovar: vi.fn(() => undefined),
   } satisfies SesionDeGoogle;
 }
 
@@ -71,12 +71,14 @@ function montar(
   o: {
     memoria?: Storage;
     enLinea?: boolean;
-    hayMarca?: boolean;
     azar?: number;
     tokens?: (string | null)[];
     sigue?: boolean;
     /** Cuánto espera el candado a que otra pestaña termine, en milisegundos del reloj falso. */
     esperaDelCandado?: number;
+    /** La configuración del build que dice el costo de retirar. */
+    entorno?: Record<string, unknown>;
+    idioma?: "es" | "en";
   } = {},
 ): Montaje {
   const { f, llamadas } = fetchFalso(guion);
@@ -92,7 +94,7 @@ function montar(
   const piezas: PiezasDelCelular = {
     base: {
       tx: (clave) => clave,
-      idioma: () => "es",
+      idioma: () => o.idioma ?? "es",
       enApp: false,
       ahora: () => Date.now(),
       cada: vi.fn(() => () => undefined),
@@ -110,14 +112,20 @@ function montar(
     memoria,
     red: "testnet",
     enLinea: () => o.enLinea ?? true,
-    hayMarcaDelProveedor: () => o.hayMarca ?? false,
     ir,
     enlace: () => "https://tinkazo.example.org/participar.html?c=x",
     bloquear,
     dep: { fetch: f, azar: () => o.azar ?? 0.5 },
+    ...(o.entorno ? { entorno: o.entorno } : {}),
   };
   return { deps: depsConectadas(piezas), llamadas, memoria, google, ir, bloqueos };
 }
+
+/** Una cuenta pública de testnet y un monto: lo mínimo para que el build diga que el retiro cuesta. */
+const CON_COSTO = {
+  VITE_RETIRO_COSTO: "0.50",
+  VITE_RETIRO_CUENTA: "GDALL7OBL7A44KEXQJPQPKUFMS4A56UXWLTHNB3VIARSEJ65ILAZCFIT",
+};
 
 const esperaReal = globalThis.setTimeout;
 
@@ -166,7 +174,7 @@ describe("la consulta pública", () => {
   it("si la primera respuesta falla, repite una vez a los 3 segundos y sigue sin pasar por sin-red", async () => {
     const m = montar({ estado: [{ estado: 500, texto: "caído" }, { estado: 200, cuerpo: ESTADO_BUENO }] });
     const r = await correr(m.deps.publico());
-    expect(r).toEqual({ fase: "abierta", total: 5, cierraMs: AHORA + 3_600_000, pase: "vale" });
+    expect(r).toEqual({ fase: "abierta", total: 5, cierraMs: AHORA + 3_600_000, pase: "vale", correo: false });
     expect(m.llamadas.map((l) => l.en - (m.llamadas[0]?.en ?? 0))).toEqual([0, 3_000]);
   });
 
@@ -189,27 +197,20 @@ describe("la consulta pública", () => {
     expect(m.llamadas[0]?.url).toContain(`?p=${PASE}`);
   });
 
-  it("con el pase vencido, una llave guardada antes y la marca del proveedor, sigue como sin pase", async () => {
+  it("con el pase vencido y una llave guardada antes, sigue vencido: la sala no la reconoce sin pase", async () => {
     const memoria = almacenFalso();
     memoria.setItem("tinkazo.equipo.llaves", JSON.stringify([[SALA, "L".repeat(22)]]));
-    const m = montar({ estado: [{ estado: 200, cuerpo: { ...ESTADO_BUENO, pase: "vencido" } }] }, { memoria, hayMarca: true });
-    expect(await correr(m.deps.publico())).toMatchObject({ pase: "sin" });
-  });
-
-  it("con el pase vencido y sin llave guardada antes, sigue vencido", async () => {
-    const m = montar({ estado: [{ estado: 200, cuerpo: { ...ESTADO_BUENO, pase: "vencido" } }] }, { hayMarca: true });
+    const m = montar({ estado: [{ estado: 200, cuerpo: { ...ESTADO_BUENO, pase: "vencido" } }] }, { memoria });
     expect(await correr(m.deps.publico())).toMatchObject({ pase: "vencido" });
   });
 
-  it("con el pase vencido y sin marca del proveedor, sigue vencido", async () => {
-    const memoria = almacenFalso();
-    memoria.setItem("tinkazo.equipo.llaves", JSON.stringify([[SALA, "L".repeat(22)]]));
-    const m = montar({ estado: [{ estado: 200, cuerpo: { ...ESTADO_BUENO, pase: "vencido" } }] }, { memoria, hayMarca: false });
+  it("con el pase vencido y sin llave guardada antes, sigue vencido", async () => {
+    const m = montar({ estado: [{ estado: 200, cuerpo: { ...ESTADO_BUENO, pase: "vencido" } }] });
     expect(await correr(m.deps.publico())).toMatchObject({ pase: "vencido" });
   });
 
   it("con el pase vigente no cambia nada", async () => {
-    const m = montar({ estado: [{ estado: 200, cuerpo: ESTADO_BUENO }] }, { hayMarca: true });
+    const m = montar({ estado: [{ estado: 200, cuerpo: ESTADO_BUENO }] });
     expect(await correr(m.deps.publico())).toMatchObject({ pase: "vale" });
   });
 });
@@ -244,11 +245,11 @@ describe("el ritmo de las consultas", () => {
         token: async () => null,
         sigueLaSesion: async () => false,
         salir: async () => undefined,
+        renovar: () => undefined,
       },
       memoria: almacenFalso(),
       red: "testnet",
       enLinea: () => true,
-      hayMarcaDelProveedor: () => false,
       ir: () => undefined,
       enlace: () => "x",
       dep: { fetch: f, azar: () => azar },
@@ -287,6 +288,27 @@ describe("anotar", () => {
     expect(cuerpo.d).not.toContain("Ana");
     expect(String(m.llamadas[0]?.init.body)).not.toContain(CLAVE);
     expect(m.llamadas[0]?.url).not.toContain(CLAVE);
+  });
+
+  it("al anotarse con éxito renueva la marca de invitada", async () => {
+    const m = montar({ alta: [ALTA_OK] });
+    await conSesion(m);
+    await alta(m);
+    expect(m.google.renovar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si la sala dice que ya estaba anotada también renueva la marca de invitada", async () => {
+    const m = montar({ alta: [{ estado: 200, cuerpo: { cuenta: CUENTA, ya: true } }] });
+    await conSesion(m);
+    await alta(m);
+    expect(m.google.renovar).toHaveBeenCalledTimes(1);
+  });
+
+  it("un alta que falla no toca la marca de invitada", async () => {
+    const m = montar({ alta: [error(409, "cerrada")] });
+    await conSesion(m);
+    await alta(m);
+    expect(m.google.renovar).not.toHaveBeenCalled();
   });
 
   it("espera su turno entre pestañas con un candado por sala", async () => {
@@ -472,15 +494,6 @@ describe("la llave de este celular", () => {
     expect((JSON.parse(String(m.llamadas[0]?.init.body)) as { cuenta: string }).cuenta).toBe(OTRA);
   });
 
-  it("teniaLlave dice si ya había una llave y no escribe nada", () => {
-    const memoria = almacenFalso();
-    expect(teniaLlave(SALA, memoria)).toBe(false);
-    expect(memoria.length).toBe(0);
-    memoria.setItem("tinkazo.equipo.llaves", JSON.stringify([[SALA, "L".repeat(22)]]));
-    expect(teniaLlave(SALA, memoria)).toBe(true);
-    expect(teniaLlave("OTRASALA", memoria)).toBe(false);
-  });
-
   it("el almacén en memoria guarda y devuelve", () => {
     const a = almacenEnMemoria();
     expect(a.getItem("x")).toBeNull();
@@ -520,10 +533,25 @@ describe("el resto de las dependencias", () => {
     expect(await alta(m)).toEqual({ ok: true, ya: false });
   });
 
-  it("no hay costo de retiro todavía y la sala es la del enlace", () => {
-    const m = montar({});
+  it("sin costo de retiro configurado en el build, no hay costo y la sala es la del enlace", () => {
+    const m = montar({}, { entorno: {} });
     expect(m.deps.costoDelRetiro()).toBeNull();
     expect(m.deps.sala).toBe(SALA);
+  });
+
+  it("con el costo sin la cuenta que lo recibe, tampoco hay costo", () => {
+    const m = montar({}, { entorno: { VITE_RETIRO_COSTO: "0.50" } });
+    expect(m.deps.costoDelRetiro()).toBeNull();
+  });
+
+  it("con el costo configurado, lo da escrito en español con coma", () => {
+    const m = montar({}, { entorno: CON_COSTO });
+    expect(m.deps.costoDelRetiro()).toBe("0,50");
+  });
+
+  it("con el costo configurado y la interfaz en inglés, lo da con punto", () => {
+    const m = montar({}, { entorno: CON_COSTO, idioma: "en" });
+    expect(m.deps.costoDelRetiro()).toBe("0.50");
   });
 });
 

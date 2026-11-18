@@ -21,8 +21,11 @@ export const ESPERA_DE_CUENTA_MS = 100_000;
 /** Cada cuánto se vuelve a mirar el nombre del perfil, y cuántas veces: 5 segundos en total. */
 export const MIRADA_DEL_NOMBRE_MS = 500;
 export const MIRADAS_DEL_NOMBRE = 10;
-/** Lo máximo que una entrada espera a que termine una sesión que ya se estaba retomando, antes de abrir la ventana de Google. */
-export const ESPERA_DEL_RESTAURO_MS = 4_000;
+/**
+ * Lo máximo que una entrada espera a que termine una sesión que ya se estaba retomando, antes de abrir la ventana de Google.
+ * Es corto a propósito: el navegador solo deja abrir la ventana mientras el toque está fresco, y una espera larga la bloquea.
+ */
+export const ESPERA_DEL_RESTAURO_MS = 1_000;
 /** Después de una falla del proveedor, no se vuelve a llamar durante este tiempo. */
 export const FRENO_DE_ENTRADA_MS = 30_000;
 /** Una segunda falla de Google dentro de este tiempo se dice como falla de la cuenta: nadie insiste en un bucle. */
@@ -51,6 +54,8 @@ export interface SesionDeGoogle {
   /** Si la sesión de esta cuenta sigue abierta en esta página. */
   sigueLaSesion: (cuenta: string) => Promise<boolean>;
   salir: () => Promise<void>;
+  /** Vuelve a poner la marca de invitada por otras 48 horas: la sesión de Google dura más que la marca y hay que renovarla. */
+  renovar: () => void;
 }
 
 type ModuloDeGoogle = typeof import("../stellar/wallet-pollar");
@@ -98,7 +103,13 @@ export function sesionDeGoogle(o: {
   ahora: () => number;
   /** Si este navegador guardó alguna vez una entrada con el proveedor de cuentas. Sin marca no hay sesión que retomar. */
   hayMarca: () => boolean;
+  /** Avisa cuando la página se va o se recarga y devuelve cómo dejar de avisar. Sin esto, la marca de la ventana no se suelta sola. */
+  alIrse?: (alIrse: () => void) => () => void;
 }): SesionDeGoogle {
+  /** La marca de invitada se renueva cada vez que se usa una sesión de Google: así nunca vence con la sesión abierta. */
+  const renovarInvitada = (): void => {
+    if (o.local) marcarInvitada(o.local, o.ahora());
+  };
   /** Si el almacenamiento falla, se toma como que no hay marca: sin ella no hay sesión que retomar. */
   const hayLaMarca = (): boolean => {
     try {
@@ -149,20 +160,31 @@ export function sesionDeGoogle(o: {
     const hay = m.pollarWallet.address;
     if (cuentaValida(hay)) {
       // Ya hay una sesión (la retomó el proveedor después de los 3 segundos): no se abre otra ventana de Google.
-      if (m.pollarWallet.label !== "Email") return { cuenta: hay, nombre: await esperarNombre(m.pollarWallet) };
+      if (m.pollarWallet.label !== "Email") {
+        // La sesión ya estaba abierta y no pasa por `connect`: la marca de invitada se renueva igual.
+        renovarInvitada();
+        return { cuenta: hay, nombre: await esperarNombre(m.pollarWallet) };
+      }
       // Una sesión de correo de la herramienta no sirve para este sorteo: se cierra recién ahora que la persona tocó Entrar.
       await m.pollarWallet.disconnect();
     }
     // Las marcas van antes de `connect`: la ventana se abre adentro y copia el `sessionStorage` en ese instante.
-    if (o.local) marcarInvitada(o.local, empezo);
-    if (o.pestana) marcarVentana(o.pestana, empezo);
+    renovarInvitada();
+    const pestana = o.pestana;
+    if (pestana) marcarVentana(pestana, empezo);
+    // Si la página se recarga o se va antes de que Google se abra, la marca no puede quedar tapando la herramienta en esta pestaña.
+    const dejarDeAvisar = o.alIrse && pestana ? o.alIrse(() => soltarVentana(pestana)) : () => undefined;
     let cuenta: string;
     try {
-      cuenta = await m.pollarWallet.connect();
+      // La marca de la ventana se suelta de esta pestaña apenas Google se abre: la ventana ya se llevó su copia.
+      cuenta = await m.pollarWallet.connect(() => {
+        if (pestana) soltarVentana(pestana);
+      });
     } catch (error) {
       throw new Error(registrar(fallaDeEntrada(error, o.ahora() - empezo, m)));
     } finally {
-      if (o.pestana) soltarVentana(o.pestana);
+      dejarDeAvisar();
+      if (pestana) soltarVentana(pestana);
     }
     if (!cuentaValida(cuenta)) throw new Error(registrar("google"));
     ultimaFalla = null;
@@ -191,6 +213,8 @@ export function sesionDeGoogle(o: {
         // Una sesión de correo de la herramienta no sirve para este sorteo, pero tampoco se cierra por abrir el enlace: quien
         // organiza la perdería sin tocar nada. Se cierra solo si la persona toca Entrar.
         if (listo.m.pollarWallet.label === "Email") return null;
+        // Una sesión de Google que sigue viva sin pasar por `connect`: la marca de invitada se renueva acá.
+        renovarInvitada();
         return { cuenta: listo.cuenta, nombre: nombreParaLaPantalla(listo.m.pollarWallet.profile()?.name) };
       } catch {
         return null;
@@ -226,5 +250,6 @@ export function sesionDeGoogle(o: {
       const m = await import("../stellar/wallet-pollar");
       await m.pollarWallet.disconnect();
     },
+    renovar: renovarInvitada,
   };
 }

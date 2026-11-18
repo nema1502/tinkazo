@@ -39,6 +39,8 @@ export interface EstadoPublico {
   total: number;
   cierraMs: number;
   pase: "vale" | "vencido" | "sin";
+  /** Si la sala le avisa por correo a quien gana. Una sala que no lo dice cuenta como que no. */
+  correo?: boolean;
 }
 export interface EstadoPropio {
   fase: Fase;
@@ -127,7 +129,8 @@ type Pantalla =
   | "cerrada"
   | "sorteada"
   | "sin-red"
-  | "pase";
+  | "pase"
+  | "llena";
 
 interface EstadoInterno {
   pantalla: Pantalla;
@@ -303,6 +306,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     if (estado.pantalla === "pase") {
       const seccion = raiz.querySelector<HTMLElement>("#cmp-estado");
       if (seccion) pintarEstadoDeCarga(seccion, deps.tx, "pase-vencido", () => undefined);
+      return;
+    }
+    if (estado.pantalla === "llena") {
+      avisoPublico(deps.tx("cpErrLlena"), null, true);
       return;
     }
     if (estado.pantalla === "lista") {
@@ -615,6 +622,19 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         ? propio.quitada
         : "otro";
       ir("salio");
+      return;
+    }
+    // Tres rechazos no se arreglan tocando otra vez Acepto: cada uno lleva a su pantalla, sin el botón de anotarse.
+    if (resultado.motivo === "pase") {
+      ir("pase");
+      return;
+    }
+    if (resultado.motivo === "cerro") {
+      ir("cerrada");
+      return;
+    }
+    if (resultado.motivo === "llena") {
+      ir("llena");
       return;
     }
     estado.errorAlta = resultado.motivo;

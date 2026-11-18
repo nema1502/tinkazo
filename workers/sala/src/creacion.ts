@@ -8,6 +8,10 @@
  * el archivo firmado es público desde que la sala existe, y sin esa condición cualquiera que lo copió se quedaría con el
  * evento (y con un token nuevo) apenas quien organiza cierra por error. Mientras la sala vive, un segundo pedido no crea
  * otra ni recibe el token de quien organiza.
+ *
+ * Si quien organiza inventa el token y lo manda con el pedido (`propio`), repetir el pedido es seguro: cuando la respuesta
+ * se perdió por el camino, el segundo pedido trae el mismo token, la sala viva lo reconoce por su huella y vuelve a
+ * entregar esa misma sala. Sin ese token, el evento quedaría con una sala viva y sin dueño hasta que venza.
  */
 import type { CampanaFirmada, ReemplazoDeSala, ReservaDeEvento } from "./campana";
 
@@ -15,6 +19,8 @@ import type { CampanaFirmada, ReemplazoDeSala, ReservaDeEvento } from "./campana
 export interface PuertoDeCupos {
   reservarCampana(evento: string, reemplazo: ReemplazoDeSala | null): Promise<ReservaDeEvento>;
   confirmarCampana(evento: string, reserva: string, sala: string, huella: string): Promise<boolean>;
+  /** La sala confirmada del evento si su token tiene esta huella, con el instante en que se reservó. */
+  salaDelIntento(evento: string, huella: string): Promise<{ sala: string; enMs: number } | null>;
   soltarCampana(evento: string, reserva: string): Promise<void>;
 }
 
@@ -27,7 +33,7 @@ export interface PuertoDeSalas {
 }
 
 export type CreacionDeCampana =
-  | { ok: true; id: string }
+  | { ok: true; id: string; /** Si ya estaba creada: cuándo, para que `vence` sea el de esa sala y no uno nuevo. */ creadaEn: number | null }
   | { ok: false; motivo: "ya-existe" | "cupo-campanas" | "ocupado" };
 
 /** Ids distintos que se prueban antes de rendirse: uno ocupado es rarísimo, cinco seguidos es un problema. */
@@ -40,12 +46,19 @@ export async function crearSalaDeCampana(a: {
   vida: number;
   /** El token de quien organiza, ya inventado: acá solo se guarda su huella. */
   token: string;
+  /** Si el token lo inventó quien organiza y vino en el pedido: solo entonces repetir el pedido devuelve la misma sala. */
+  propio: boolean;
   /** El token de la sala anterior del evento que presentó quien pide, o null: solo con él se reemplaza una sala muerta. */
   anterior: string | null;
   huellaDe: (token: string) => Promise<string>;
   nuevoId: () => string;
 }): Promise<CreacionDeCampana> {
   let permiso = await a.cupos.reservarCampana(a.c.evento, null);
+  if (!permiso.ok && permiso.motivo === "ya-existe" && permiso.sala !== null && a.propio) {
+    // El pedido de antes sí creó la sala y la respuesta no llegó: con el mismo token, es la misma persona y la misma sala.
+    const previa = await a.cupos.salaDelIntento(a.c.evento, await a.huellaDe(a.token));
+    if (previa && (await a.salas.viva(previa.sala))) return { ok: true, id: previa.sala, creadaEn: previa.enMs };
+  }
   if (!permiso.ok && permiso.motivo === "ya-existe" && permiso.sala !== null && a.anterior !== null) {
     // Si la sala del evento ya no existe, quien trae su token toma su lugar con el mismo archivo firmado. Sin token, ni se
     // mira: la respuesta es la misma que con la sala viva y no dice nada de ella.
@@ -75,5 +88,5 @@ export async function crearSalaDeCampana(a: {
     await a.salas.cerrar(creada, a.token);
     return { ok: false, motivo: "ya-existe" };
   }
-  return { ok: true, id: creada };
+  return { ok: true, id: creada, creadaEn: null };
 }
