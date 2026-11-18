@@ -24,7 +24,7 @@ vi.mock("../stellar/config", async (orig) => {
     },
   };
 });
-const signAndSubmit = vi.fn(async (_xdr: string) => HASH);
+const signAndSubmit = vi.fn(async (_xdr: string, _antes?: () => void) => HASH);
 const signUnsponsored = vi.fn(async (_xdr: string) => "XDR_FIRMADO");
 
 vi.mock("../stellar/wallet", () => ({ activeWallet: () => ({ submitsItself: true, address: CUENTA, signAndSubmit, signUnsponsored }) }));
@@ -92,6 +92,25 @@ describe("con el patrocinio del proveedor", () => {
       expect(sendTransaction).not.toHaveBeenCalled();
     });
   }
+
+  it("le pasa a la billetera el control del margen para que corra tras la puerta, antes de firmar", async () => {
+    portero("pollar");
+    const margen = vi.fn();
+    const { submitElsewhere } = await import("./envio-sdk");
+    await submitElsewhere(tx as never, () => undefined, 5000, intento, { antesDeFirmar: margen }).catch(() => undefined);
+    expect(signAndSubmit).toHaveBeenCalledTimes(1);
+    expect(signAndSubmit.mock.calls[0]?.[1]).toBe(margen);
+  });
+
+  it("un sello al que la puerta le dejó sin margen sale tal cual como RondaMuyCerca y no como incierto", async () => {
+    portero("pollar");
+    const e = Object.assign(new Error("la ronda quedó cerca antes de mandar el sello (faltan 20 s): Error(Contract, #5)"), { name: "RondaMuyCerca" });
+    signAndSubmit.mockRejectedValue(e);
+    const { submitElsewhere } = await import("./envio-sdk");
+    const salio = await submitElsewhere(tx as never, () => undefined, 5000, intento, { antesDeFirmar: () => undefined }).catch((x: unknown) => x);
+    expect(salio).toBe(e);
+    expect(getTransaction).not.toHaveBeenCalled();
+  });
 
   it("un sorteo (sin intento) sale tal cual", async () => {
     portero("pollar");

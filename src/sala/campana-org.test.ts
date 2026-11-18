@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { campanaDeEjemplo } from "../campana/ejemplo";
 import {
   CLAVE_EVENTOS_ORG,
+  CLAVE_INTENTOS_ORG,
   CLAVE_ORG,
   type MemoriaDeOrg,
   type SalaDeCampana,
@@ -9,10 +10,13 @@ import {
   borrarSalaVacia,
   crearCampanaEnSala,
   estadoConToken,
+  guardarIntentoDeArchivo,
   guardarOrg,
   guardarTokenDeEvento,
+  intentoDeArchivo,
   leerCampanaDeSala,
   leerOrg,
+  olvidarIntentoDeArchivo,
   pedirPase,
   ponerFase,
   quitarConMotivo,
@@ -299,6 +303,27 @@ describe("lo que recuerda la compu", () => {
     expect(JSON.parse(a.getItem(CLAVE_EVENTOS_ORG) ?? "[]")).toHaveLength(5);
     expect(tokenDeEvento(a, SALA.evento)).toBeNull();
     expect(tokenDeEvento(a, "evento-5x")).toBe("5".repeat(22));
+  });
+
+  it("recuerda el intento de cada archivo, solo uno por evento, y lo olvida", () => {
+    const firma = "S".repeat(86);
+    guardarIntentoDeArchivo(a, { evento: SALA.evento, firma, intento: TOKEN });
+    expect(intentoDeArchivo(a, SALA.evento, firma)).toBe(TOKEN);
+    // Otro archivo del mismo evento, otra firma: no es el mismo intento.
+    expect(intentoDeArchivo(a, SALA.evento, "T".repeat(86))).toBeNull();
+    expect(intentoDeArchivo(a, "otro-evento", firma)).toBeNull();
+    guardarIntentoDeArchivo(a, { evento: SALA.evento, firma: "T".repeat(86), intento: "N".repeat(22) });
+    expect(JSON.parse(a.getItem(CLAVE_INTENTOS_ORG) ?? "[]")).toHaveLength(1);
+    expect(intentoDeArchivo(a, SALA.evento, firma)).toBeNull();
+    olvidarIntentoDeArchivo(a, SALA.evento);
+    expect(a.getItem(CLAVE_INTENTOS_ORG)).toBeNull();
+  });
+
+  it("un intento guardado que no se entiende se ignora", () => {
+    a.setItem(CLAVE_INTENTOS_ORG, JSON.stringify([{ evento: SALA.evento, firma: "S", intento: "corto" }, 7, null]));
+    expect(intentoDeArchivo(a, SALA.evento, "S")).toBeNull();
+    a.setItem(CLAVE_INTENTOS_ORG, "no es json");
+    expect(intentoDeArchivo(a, SALA.evento, "S")).toBeNull();
   });
 
   it("el token de un evento se reemplaza por el de la sala nueva", () => {

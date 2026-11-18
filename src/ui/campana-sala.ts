@@ -35,9 +35,12 @@ import {
   crearCampanaEnSala,
   estadoConToken,
   guardarOrg,
+  guardarIntentoDeArchivo,
   guardarTokenDeEvento,
+  intentoDeArchivo,
   leerCampanaDeSala,
   leerOrg,
+  olvidarIntentoDeArchivo,
   pedirPase,
   ponerFase,
   quitarConMotivo,
@@ -779,7 +782,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (!s) {
       if (!archivo) return terminar();
       const anterior = tokenDeEvento(deps.almacen, campana.evento);
-      intento ??= generarClave();
+      // El intento se guarda antes de pedir: si la respuesta se pierde y la pestaña se recarga, el mismo archivo lo repite.
+      intento ??= intentoDeArchivo(deps.almacen, campana.evento, archivo.firma) ?? generarClave();
+      guardarIntentoDeArchivo(deps.almacen, { evento: campana.evento, firma: archivo.firma, intento });
       const r = await deps.crear(archivo, { evento: campana.evento, red: campana.red, anterior, intento });
       if (!r.ok) return terminar(tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]));
       s = r.sala;
@@ -788,6 +793,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       faseSala = "lista";
       // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
       guardarTokenDeEvento(deps.almacen, { evento: s.evento, token: s.token });
+      olvidarIntentoDeArchivo(deps.almacen, campana.evento);
       recordar();
     }
     const m = marca;

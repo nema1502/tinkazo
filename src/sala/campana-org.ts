@@ -424,6 +424,67 @@ export const CLAVE_EVENTOS_ORG = "tinkazo.campana.eventos";
 /** Cuántos eventos recuerda la compu. */
 const MAX_EVENTOS = 5;
 
+/**
+ * El intento con que se pidió la sala de cada archivo (evento y firma): si la respuesta de crearla se perdió y la pestaña se
+ * recargó, el mismo archivo repite el mismo intento y la sala lo reconoce. Sin esto el evento queda con una sala que nadie
+ * puede reclamar.
+ */
+export const CLAVE_INTENTOS_ORG = "tinkazo.campana.intentos";
+
+interface IntentoGuardado {
+  evento: string;
+  firma: string;
+  intento: string;
+}
+
+function leerIntentos(a: Almacen): IntentoGuardado[] {
+  try {
+    const x: unknown = JSON.parse(a.getItem(CLAVE_INTENTOS_ORG) ?? "[]");
+    if (!Array.isArray(x)) return [];
+    const lista: IntentoGuardado[] = [];
+    for (const e of x) {
+      if (!esObjeto(e)) continue;
+      const { evento, firma, intento } = e;
+      if (typeof evento !== "string" || !ES_EVENTO.test(evento)) continue;
+      if (typeof firma !== "string" || firma === "") continue;
+      if (typeof intento !== "string" || !ES_TOKEN.test(intento)) continue;
+      lista.push({ evento, firma, intento });
+    }
+    return lista;
+  } catch {
+    return [];
+  }
+}
+
+function escribirIntentos(a: Almacen, lista: IntentoGuardado[]): void {
+  try {
+    if (lista.length === 0) a.removeItem(CLAVE_INTENTOS_ORG);
+    else a.setItem(CLAVE_INTENTOS_ORG, JSON.stringify(lista.slice(0, MAX_EVENTOS)));
+  } catch {
+    /* sin lugar: se pierde solo la recuperación tras recargar */
+  }
+}
+
+/** El intento guardado para ese archivo (evento y firma), o `null`. */
+export function intentoDeArchivo(a: Almacen | null, evento: string, firma: string): string | null {
+  if (!a) return null;
+  return leerIntentos(a).find((e) => e.evento === evento && e.firma === firma)?.intento ?? null;
+}
+
+/** Guarda el intento de ese archivo antes de pedir la sala. Un evento recuerda uno solo, el último. */
+export function guardarIntentoDeArchivo(a: Almacen | null, e: IntentoGuardado): void {
+  if (!a) return;
+  escribirIntentos(a, [e, ...leerIntentos(a).filter((x) => x.evento !== e.evento)]);
+}
+
+/** Olvida el intento de ese evento: la sala ya se creó y llegó su token, o no hace falta repetirlo. */
+export function olvidarIntentoDeArchivo(a: Almacen | null, evento: string): void {
+  if (!a) return;
+  const lista = leerIntentos(a);
+  const quedan = lista.filter((x) => x.evento !== evento);
+  if (quedan.length !== lista.length) escribirIntentos(a, quedan);
+}
+
 /** Una persona que se está por quitar: se manda a la sala a los 5 segundos, y hasta entonces se puede deshacer. */
 export interface QuitaPendiente {
   n: number;

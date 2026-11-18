@@ -17,7 +17,7 @@ vi.mock("../stellar/config", async (orig) => {
 vi.mock("./qr", () => ({ pintarQr: async () => true, precargarQr: async () => undefined }));
 
 import { nadaSeAbreSolo } from "./cuenta-lista-flujo";
-import { CLAVE_EVENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
+import { CLAVE_EVENTOS_ORG, CLAVE_INTENTOS_ORG, CLAVE_ORG, guardarOrg, leerOrg } from "../sala/campana-org";
 import { montarPanelDeCampana } from "./campana-sala";
 import {
   $,
@@ -280,6 +280,26 @@ describe("abrir la inscripción", () => {
     expect(m.creadas[1]?.de.intento).toBe(m.creadas[0]?.de.intento);
   });
 
+  it("si la respuesta de crear se perdió y la pestaña se recargó, el mismo archivo repite el intento guardado", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await elegirArchivo(m, p, archivoDe());
+    m.respuestasAlCrear.push("perdida");
+    boton(p, "Abrir la inscripción").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-aviso")).toBe("Sin conexión. Probá de nuevo."));
+    expect(m.almacen.getItem(CLAVE_INTENTOS_ORG)).toContain(m.creadas[0]?.de.intento);
+    // Recargar: la memoria de la pantalla se pierde, el almacén queda.
+    p.detener();
+    const q = nuevoPanel(m);
+    await elegirArchivo(m, q, archivoDe());
+    boton(q, "Abrir la inscripción").click();
+    await vi.waitFor(() => expect(vistaDe(q)).toBe("abierta"));
+    expect(m.creadas).toHaveLength(2);
+    expect(m.creadas[1]?.de.intento).toBe(m.creadas[0]?.de.intento);
+    // Con la sala creada y su token guardado, el intento ya no hace falta.
+    expect(m.almacen.getItem(CLAVE_INTENTOS_ORG)).toBeNull();
+  });
+
   it("con otro archivo el intento es otro", async () => {
     const m = mundo();
     const p = nuevoPanel(m);
@@ -287,7 +307,8 @@ describe("abrir la inscripción", () => {
     m.respuestasAlCrear.push("red");
     boton(p, "Abrir la inscripción").click();
     await vi.waitFor(() => expect(texto(p, "#cpo-aviso")).toBe("Sin conexión. Probá de nuevo."));
-    await elegirArchivo(m, p, archivoDe());
+    // Otro archivo de verdad: otra firma.
+    await elegirArchivo(m, p, archivoDe().replace("F".repeat(86), "G".repeat(86)));
     boton(p, "Abrir la inscripción").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
     expect(m.creadas[1]?.de.intento).not.toBe(m.creadas[0]?.de.intento);

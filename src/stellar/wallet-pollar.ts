@@ -131,8 +131,11 @@ export function marcaViva(e: { listo: boolean; hayCuenta: boolean; guardada: str
 
 export interface SubmittingWallet extends WalletAdapter {
   readonly submitsItself: true;
-  /** Firma y envía en un solo paso. Devuelve el hash de la transacción. */
-  signAndSubmit(xdr: string): Promise<string>;
+  /**
+   * Firma y envía en un solo paso. Devuelve el hash de la transacción. `antesDeFirmar` corre justo antes de firmar, ya
+   * pasada la puerta del premio (que puede demorar): si lanza, no se firma.
+   */
+  signAndSubmit(xdr: string, antesDeFirmar?: () => void): Promise<string>;
   /**
    * Solo firma, sin pedirle a Pollar que patrocine la comisión: la paga la cuenta de la
    * persona y la transacción la manda quien la pidió. Devuelve el XDR firmado.
@@ -1033,11 +1036,14 @@ class PollarWallet implements SubmittingWallet {
    * `intencion` dice qué se le pide al kit (`sign` o `sign_and_send`). Con el voto a mano (`#aMano`) es obligatoria: antes
    * de pedir nada se mira lo permitido y el tope de la pestaña (`#antesDelVoto`), y lo que devuelve el kit pasa por la
    * regla (`#conLaRegla`). Sin el voto a mano, todo es como siempre.
+   *
+   * `antesDeFirmar` corre solo si la puerta del premio corrió, justo después de ella y antes de firmar: el sello lo usa para
+   * no firmar una ronda que la lectura de la red dejó sin margen. Si lanza, no se firma nada.
    */
   async #firmando<T>(
     xdr: string,
     firmar: (client: PollarClient) => Promise<T>,
-    o: { testigo?: boolean; intencion?: IntencionDeFirma } = {},
+    o: { testigo?: boolean; intencion?: IntencionDeFirma; antesDeFirmar?: () => void } = {},
   ): Promise<T> {
     const client = await this.#ensureClient();
     const aMano = this.#aMano;
@@ -1047,6 +1053,8 @@ class PollarWallet implements SubmittingWallet {
       const puerta = await this.#puertaDelPremio(client);
       // Una cuenta que Horizon no conoce no firma: ahí se trata como una lectura que no se pudo hacer.
       if (puerta !== "libre") throw new PremioGuardado(puerta === "puede-guardar" ? "puede-guardar" : "no-se-sabe");
+      // La lectura puede haber gastado hasta su presupuesto (unos 7 s): quien llama vuelve a mirar si todavía vale firmar.
+      o.antesDeFirmar?.();
     }
     if (aMano) await this.#antesDelVoto(client, xdr, o.intencion);
     // Sin el voto a mano, en la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado
@@ -1578,8 +1586,9 @@ class PollarWallet implements SubmittingWallet {
     throw new Error("pollar-submits-itself");
   }
 
-  async signAndSubmit(xdr: string): Promise<string> {
-    const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr), { intencion: "sign_and_send" })) as ResultadoDeEnvio;
+  async signAndSubmit(xdr: string, antesDeFirmar?: () => void): Promise<string> {
+    const opciones = { intencion: "sign_and_send" as const, ...(antesDeFirmar ? { antesDeFirmar } : {}) };
+    const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr), opciones)) as ResultadoDeEnvio;
     // Una co-firma pendiente sigue viva en el SDK: la transacción puede entrar después. No es un fallo ni se reintenta a ciegas.
     if (outcome.status === "cosign_pending") {
       throw new Error("pollar-pending");

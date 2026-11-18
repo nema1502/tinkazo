@@ -358,14 +358,14 @@ export interface Patrocinador {
    * Manda la transacción. Con el portero, `xdr` es la firmada. Con Pollar es la que se le entrega para que
    * la firme y la mande. Devuelve el hash y cómo la tomó la red (`PENDING` o `DUPLICATE`).
    */
-  mandar(xdr: string): Promise<RespuestaEnvio & { hash: string }>;
+  mandar(xdr: string, antesDeFirmar?: () => void): Promise<RespuestaEnvio & { hash: string }>;
   /** Quién rige y lo que le queda a la cuenta. */
   consultar(g: string): Promise<EstadoDelPatrocinio>;
 }
 
 /** Una billetera que firma y manda de una vez, como la de Pollar. */
 export interface BilleteraQueManda {
-  signAndSubmit(xdr: string): Promise<string>;
+  signAndSubmit(xdr: string, antesDeFirmar?: () => void): Promise<string>;
 }
 
 /** El camino de hoy: Pollar firma y paga. */
@@ -373,7 +373,10 @@ export function crearPollar(wallet: BilleteraQueManda, o: OpcionesDeEstado = {})
   return {
     nombre: "pollar",
     firmaAntes: false,
-    mandar: async (xdr) => ({ status: "PENDING", hash: await wallet.signAndSubmit(xdr) }),
+    mandar: async (xdr, antesDeFirmar) => {
+      const hash = await (antesDeFirmar ? wallet.signAndSubmit(xdr, antesDeFirmar) : wallet.signAndSubmit(xdr));
+      return { status: "PENDING", hash };
+    },
     consultar: (g) => estadoDelPatrocinio(g, o),
   };
 }
