@@ -247,6 +247,11 @@
 }
 /* La llama trae seis: en una sola fila en pantallas anchas, en dos de tres en las medianas. */
 @media (min-width: 1001px) { .marca-coleccion-seis { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* La serie de los departamentos: el botón de cada sticker queda abajo aunque su nombre ocupe dos renglones, y el PDF de
+   cada hoja va en un solo renglón. */
+.marca-departamentos .marca-coleccion { align-items: stretch; }
+.marca-departamentos .marca-col { grid-template-rows: auto 1fr auto; }
+.marca-departamentos .marca-hojas-col .marca-descargas { grid-template-columns: 1fr; }
 /* Los dos estilos de las imágenes para anunciar el patrocinio, cada uno con su rótulo. */
 .marca h5.marca-estilo { display: inline-block; margin: 18px 0 10px; padding: 4px 12px; font-size: 16px; font-weight: 900; background: #ffc83d; color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
 /* Las panorámicas ocupan la fila, sin pasar del ancho en que se leen. */
