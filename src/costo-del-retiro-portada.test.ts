@@ -133,8 +133,8 @@ describe("el diccionario del sitio", () => {
 });
 
 describe("la publicación de producción", () => {
-  it("la portada de hoy todavía dice que no se cobra nada", () => {
-    expect(HOY).toMatch(/data-i="faq3a">Hoy Tinkazo no cobra nada/);
+  it("la portada de hoy dice lo que cobra Tinkazo y lo que cuesta retirar", () => {
+    expect(HOY).toContain("data-i=\"faq3a\">Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.<");
   });
 
   it("con el costo prendido y la portada de hoy, no sale", () => {

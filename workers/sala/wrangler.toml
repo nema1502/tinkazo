@@ -41,5 +41,5 @@ PASE = "1"
 SOLO_GOOGLE = "estricto"
 # El aviso por correo a quien gana nace apagado: solo con "1" la sala lo manda. El remitente es una dirección del dominio ya
 # habilitado para el envío.
-CORREO_GANADORAS = "0"
+CORREO_GANADORAS = "1"
 CORREO_DE = "hola@tinkazo.app"
