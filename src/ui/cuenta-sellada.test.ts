@@ -101,6 +101,7 @@ describe("después de sellar un reparto con nombres a secas", () => {
   });
 
   it("sin los modos, la misma lista se cuenta como siempre: 5 personas", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     history.replaceState(null, "", "/?lang=es");
     const { copyRules, pintarCuentaSellada } = await sellada(MIXTA);
     await copyRules(boton());
@@ -112,6 +113,7 @@ describe("después de sellar un reparto con nombres a secas", () => {
 });
 
 describe("las bases de antes de sellar, sin los modos", () => {
+    beforeEach(() => vi.stubEnv("VITE_MODOS", "0"));
   const MESA = ["Mesa 1 (1/3)", "Mesa 1 (2/3)", "Mesa 1 (3/3)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"];
 
   it("un reparto entero dice 2 personas y 5 participaciones, como el cuadro y como después de sellar", async () => {

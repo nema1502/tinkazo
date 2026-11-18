@@ -997,18 +997,9 @@ describe("la bandera", () => {
     document.body.innerHTML = '<div id="origenes"></div><button id="btn-stand"></button>';
   };
 
-  it("apagada (por defecto) no agrega ni un elemento a la herramienta", () => {
+  it("prendida (por defecto) agrega el enlace «Tengo equipos» y el panel, plegado", async () => {
     armarPagina();
-    const antes = document.body.innerHTML;
-    expect(initEquiposSala(mundo().deps)).toBeNull();
-    expect(document.body.innerHTML).toBe(antes);
-  });
-
-  it("prendida, agrega el enlace «Tengo equipos» y el panel, plegado", async () => {
-    armarPagina();
-    vi.stubEnv("VITE_EQUIPOS", "1");
     const panel = initEquiposSala(mundo().deps);
-    vi.unstubAllEnvs();
     expect(panel).not.toBeNull();
     const entrada = document.getElementById("btn-equipos") as HTMLButtonElement;
     expect(entrada.textContent).toBe(t("eqEntrada"));
@@ -1017,6 +1008,14 @@ describe("la bandera", () => {
     expect(document.getElementById("equipos-panel")?.hidden).toBe(false);
     expect(entrada.getAttribute("aria-expanded")).toBe("true");
     await espera();
+  });
+
+  it("apagada a propósito (VITE_EQUIPOS=0) no agrega ni un elemento a la herramienta", () => {
+    armarPagina();
+    vi.stubEnv("VITE_EQUIPOS", "0");
+    const antes = document.body.innerHTML;
+    expect(initEquiposSala(mundo().deps)).toBeNull();
+    expect(document.body.innerHTML).toBe(antes);
   });
 });
 
