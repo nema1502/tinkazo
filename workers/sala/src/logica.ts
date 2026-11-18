@@ -16,9 +16,13 @@ export const NOMBRES_POR_MINUTO = 240;
  * contador que los nombres: con el id de la sala del QR, 120 nombres por minuto dejaban a todos los equipos afuera.
  */
 export const EQUIPOS_POR_MINUTO = 120;
-/** Salas nuevas por dirección y por hora, y en total por día. */
-export const SALAS_POR_IP_POR_HORA = 5;
-export const SALAS_POR_DIA = 100;
+/**
+ * Salas nuevas por dirección y por hora, y en total por día. En un evento todo el recinto sale a internet por una sola
+ * conexión, y el stand y el registro de equipos gastan del mismo tope: con 5 por hora, la sexta sala de un evento
+ * contestaba que se probara en una hora (noviembre de 2026). 30 por hora alcanzan para varios stands en un recinto.
+ */
+export const SALAS_POR_IP_POR_HORA = 30;
+export const SALAS_POR_DIA = 400;
 /** Lo que mide, como mucho, un nombre cifrado: `[1][IV de 12][texto cifrado + 16 de la etiqueta]`. */
 export const MAX_BYTES_NOMBRE = 256;
 export const MIN_BYTES_NOMBRE = 13 + 16 + 1;

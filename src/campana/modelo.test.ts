@@ -61,7 +61,28 @@ describe("leerCampana", () => {
     const ejemplo = campanaDeEjemplo(AHORA);
     const lectura = leerCampana(entradaDeEjemplo(ejemplo));
     expect(lectura.ok).toBe(true);
-    if (lectura.ok) expect(lectura.campana).toEqual(ejemplo);
+    if (lectura.ok) {
+      expect(lectura.campana).toEqual({
+        ...ejemplo,
+        pasos: [
+          {
+            tipo: "instagram",
+            url: "https://www.instagram.com/",
+            texto: { es: "Seguir en Instagram", en: "Follow on Instagram" },
+          },
+          {
+            tipo: "tiktok",
+            url: "https://www.tiktok.com/",
+            texto: { es: "Seguir en TikTok", en: "Follow on TikTok" },
+          },
+          {
+            tipo: "x",
+            url: "https://x.com/",
+            texto: { es: "Seguir en X", en: "Follow on X" },
+          },
+        ],
+      });
+    }
   });
 
   it("rechaza una versión distinta", () => {

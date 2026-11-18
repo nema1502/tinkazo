@@ -4,14 +4,14 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex" />
-<meta name="description" content="Anotate gratis en un sorteo de una empresa." />
+<meta name="description" content="Anotate gratis en el sorteo de una empresa." />
 <link rel="icon" href="/favicon.ico" sizes="48x48" />
 </head>
-<body>
+<body class="pg-campana">
 <header>
   <div class="stripe"></div>
   <div class="bar">
-    <a class="wordmark" href="/" aria-label="Tinkazo">
+    <a class="wordmark" aria-label="Tinkazo">
       <span class="wm-llama" aria-hidden="true">
         <svg viewBox="-1 -3 24 28">
           <rect x="2" y="11" width="16" height="7" />
@@ -27,6 +27,7 @@
       </span>
       <span class="wm-text">Tinka<b>zo</b></span>
     </a>
+    <span id="cmp-ejemplo" class="cmp-ejemplo" role="note" hidden data-i="cpEjemplo" data-i-title="cpEjemploAnotar">Demo</span>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
       <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
@@ -45,28 +46,17 @@
   </div>
 </header>
 <main class="cmp">
-  <p id="cmp-ejemplo" class="cmp-ejemplo" hidden data-i="cpEjemplo">
-    Vista de ejemplo: así lo va a ver la gente. Acá no se anota a nadie.
-  </p>
   <p id="cmp-mensaje" class="cmp-mensaje" role="status" aria-live="polite"></p>
   <section id="cmp-estado" class="cmp-estado"></section>
   <section id="cmp-saber" class="cmp-saber" hidden></section>
-  <section id="cmp-pasos" class="cmp-pasos" hidden></section>
+  <section id="cmp-hola" class="cmp-hola" hidden></section>
+  <section id="cmp-adentro" class="cmp-adentro" hidden></section>
 </main>
 <footer>
   <div class="bar">
     <span data-i="footL">Tinkazo</span>
     <nav class="pies" aria-label="secciones">
-      <a href="/juegos.html" data-i="navJuegos">Juegos</a>
-      <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
-      <a href="/historia.html" data-i="navHistoria">Historia</a>
-      <a href="/marca.html" data-i="navMarca">Marca</a>
-      <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
-      <a href="/precios.html" data-i="navPrecios">Precios</a>
       <a href="/terminos.html" data-i="navTerminos">Términos</a>
-      <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
-      <a href="https://www.instagram.com/tinkazo.app/" target="_blank" rel="noopener" data-i="navInstagram">Instagram</a>
-      <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
     </nav>
     <span data-i="footR">Hecho con ♥ en Bolivia</span>
   </div>

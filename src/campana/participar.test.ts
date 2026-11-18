@@ -1,29 +1,55 @@
 // @vitest-environment jsdom
-/** Pruebas de la entrada de participar.html con servicio, idioma y reloj controlados. */
+/** Pruebas de la entrada de participar.html con la sala, Google, el idioma y el reloj de mentira. */
 
-import { readFileSync } from "node:fs";
+import { webcrypto } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { campanaDeEjemplo } from "./ejemplo";
-import type { ResultadoDeCarga } from "./carga";
+import { fetchFalso, type Llamada, type Paso } from "../sala/fetch-falso";
+import { network } from "../stellar/config";
+import { pollarIntentKey } from "../stellar/pollar-config";
+
+const CUENTA = `G${"A".repeat(55)}`;
+const CLAVE = "abcdefghijklmnopqrstuv";
+const PASE = "ABCDEFGHIJKL";
+const TOKEN = `tok_${"q".repeat(30)}`;
+const ENLACE = `?c=evento-ejemplo&s=ABCDEFGH&p=${PASE}#${CLAVE}`;
 
 const h = vi.hoisted(() => ({
   lang: "es" as "es" | "en",
   activa: true,
-  portero: "https://servicio" as string | null,
+  enApp: false,
+  hayPollar: false,
   cambiarIdioma: null as null | (() => void),
   oyentes: 0,
-  cargar: vi.fn(),
+  precargar: vi.fn(),
+  billetera: {
+    address: null as string | null,
+    label: "Google",
+    restore: vi.fn(),
+    connect: vi.fn(),
+    profile: vi.fn(),
+    disconnect: vi.fn(),
+    tokenDeSesion: vi.fn(),
+  },
 }));
 
 vi.mock("../pagina", () => ({}));
 vi.mock("../version-nueva", () => ({}));
 vi.mock("./campana.css", () => ({}));
-vi.mock("../stellar/patrocinio-config", () => ({
-  configDelPortero: () => ({ url: h.portero }),
-}));
-vi.mock("../navegador", () => ({ enNavegadorDeApp: () => false }));
+vi.mock("../navegador", () => ({ enNavegadorDeApp: () => h.enApp }));
 vi.mock("./bandera", () => ({ campanasActivo: () => h.activa }));
-vi.mock("./carga", () => ({ cargarCampana: h.cargar }));
+vi.mock("../stellar/wallet-pollar", () => ({
+  ENTRADA_BLOQUEADA: "popup-blocked",
+  ENTRADA_CERRADA: "popup-closed",
+  ENTRADA_SIN_SESION: "popup-nosession",
+  pollarWallet: h.billetera,
+  precargarSdk: h.precargar,
+}));
+vi.mock("../stellar/pollar-config", async (importarOriginal) => ({
+  ...(await importarOriginal<typeof import("../stellar/pollar-config")>()),
+  hasPollarKey: () => h.hayPollar,
+}));
 vi.mock("../idioma", async () => {
   const { TEXTOS_CAMPANA } = await import("./textos");
   return {
@@ -43,13 +69,66 @@ vi.mock("../idioma", async () => {
 const html = readFileSync("participar.html", "utf8");
 const main = /<main[\s\S]*<\/main>/.exec(html)?.[0] ?? "";
 const AHORA = Date.UTC(2026, 10, 15, 18, 0);
-const sesionOriginal = Object.getOwnPropertyDescriptor(window, "sessionStorage");
+const memoriaOriginal = Object.getOwnPropertyDescriptor(window, "localStorage");
+const esperaReal = globalThis.setTimeout;
 
-async function abrir(search = "?c=evento-ejemplo"): Promise<void> {
-  window.history.replaceState(null, "", `/participar.html${search}`);
+/** La campaña como la guarda la sala, con el texto firmado adentro. */
+const campanaCruda = (cambios: Record<string, unknown> = {}): Record<string, unknown> => ({
+  v: 1,
+  evento: "evento-ejemplo",
+  red: "testnet",
+  estado: "abierta",
+  empresa: { nombre: "Alcancía Andina", logo: null, color: "verde" },
+  lugar: { es: "Hackathon", en: "Hackathon" },
+  zona: "America/La_Paz",
+  premios: ["400000000"],
+  abre_ms: 1,
+  cierra_ms: 2,
+  sorteo_ms: 3,
+  recibir_hasta_ms: 4,
+  entrada: "google",
+  pasos: [],
+  bases: { es: "Bases", en: "Rules" },
+  anotadas: 0,
+  contrato: null,
+  promo: null,
+  comprobante: null,
+  ...cambios,
+});
+const envuelta = (c: unknown = campanaCruda()): Paso => ({ estado: 200, cuerpo: { texto: JSON.stringify(c), firma: "f" } });
+const estadoDeSala = (cambios: Record<string, unknown> = {}): Paso => ({
+  estado: 200,
+  cuerpo: { fase: "abierta", total: 37, cierraMs: AHORA + 3_600_000, pase: "vale", quitadas: {}, ...cambios },
+});
+const yoDeSala = (anotada: boolean): Paso => ({
+  estado: 200,
+  cuerpo: { fase: "abierta", total: 37, cierraMs: AHORA + 3_600_000, anotada },
+});
+const noEsta: Paso = { estado: 404, cuerpo: { error: "no-existe" } };
+
+let llamadas: Llamada[] = [];
+
+/** Pone una sala de mentira detrás del `fetch` global. */
+function ponerSala(guion: Record<string, Paso[]>): void {
+  const sala = fetchFalso(guion);
+  llamadas = sala.llamadas;
+  vi.stubGlobal("fetch", sala.f);
+}
+
+/** Da respiros reales, para el cifrado y la lectura de las respuestas, y deja correr el reloj falso. */
+async function asentar(ms = 0, vueltas = 6): Promise<void> {
+  for (let vuelta = 0; vuelta < vueltas; vuelta += 1) {
+    await new Promise<void>((resolver) => {
+      esperaReal(resolver, 3);
+    });
+    await vi.advanceTimersByTimeAsync(vuelta === 0 ? ms : 0);
+  }
+}
+
+async function abrir(direccion = ENLACE): Promise<void> {
+  window.history.replaceState(null, "", `/participar.html${direccion}`);
   await import("../participar");
-  await Promise.resolve();
-  await Promise.resolve();
+  await asentar();
 }
 
 function cambiarAIngles(): void {
@@ -57,22 +136,39 @@ function cambiarAIngles(): void {
   h.cambiarIdioma?.();
 }
 
+const texto = (selector: string): string | undefined => document.querySelector(selector)?.textContent ?? undefined;
+
+/** La marca que deja una entrada anterior con Google en este navegador: sin ella la página no busca ninguna sesión. */
+const ponerMarcaDeGoogle = (): void => localStorage.setItem(pollarIntentKey(network.name), "google");
+
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(AHORA);
+  vi.stubGlobal("crypto", webcrypto);
   document.body.innerHTML = main;
   h.lang = "es";
   h.activa = true;
-  h.portero = "https://servicio";
+  h.enApp = false;
+  h.hayPollar = false;
   h.cambiarIdioma = null;
   h.oyentes = 0;
-  h.cargar.mockReset();
-  h.cargar.mockResolvedValue({ ok: true, campana: campanaDeEjemplo(AHORA) });
+  h.precargar.mockReset();
+  h.billetera.address = null;
+  h.billetera.label = "Google";
+  h.billetera.restore.mockReset().mockResolvedValue(null);
+  h.billetera.connect.mockReset().mockResolvedValue(CUENTA);
+  h.billetera.profile.mockReset().mockReturnValue({ name: "Ana Pérez", mail: "ana@example.org" });
+  h.billetera.disconnect.mockReset().mockResolvedValue(undefined);
+  h.billetera.tokenDeSesion.mockReset().mockResolvedValue(TOKEN);
+  localStorage.clear();
+  sessionStorage.clear();
+  llamadas = [];
+  ponerSala({ campana: [envuelta()], estado: [estadoDeSala()], yo: [yoDeSala(false)], resultado: [noEsta] });
 });
 
 afterEach(() => {
-  if (sesionOriginal) Object.defineProperty(window, "sessionStorage", sesionOriginal);
+  if (memoriaOriginal) Object.defineProperty(window, "localStorage", memoriaOriginal);
   vi.restoreAllMocks();
   vi.clearAllTimers();
   vi.useRealTimers();
@@ -81,137 +177,289 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-describe("participar.html", () => {
-  it("con la bandera apagada muestra el aviso y lo traduce sin cargar", async () => {
+describe("participar.html: antes de la sala", () => {
+  it("con la bandera apagada muestra el aviso y lo traduce sin pedir nada", async () => {
     h.activa = false;
     await abrir();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "Las campañas de empresas todavía no están abiertas.",
-    );
-    expect(h.cargar).not.toHaveBeenCalled();
+    expect(texto("#cmp-estado")).toBe("Las campañas de empresas todavía no están abiertas.");
+    expect(llamadas).toHaveLength(0);
     cambiarAIngles();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe("Company campaigns aren't open yet.");
+    expect(texto("#cmp-estado")).toBe("Company campaigns aren't open yet.");
   });
 
-  it("una campaña que no existe muestra su mensaje y lo traduce", async () => {
-    h.cargar.mockResolvedValue({ ok: false, estado: "no-esta" });
+  it("con la bandera apagada no se toca la billetera de Google ni se escribe la llave del celular", async () => {
+    h.activa = false;
+    h.hayPollar = true;
     await abrir();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "No encontramos esta campaña. Revisá que el código QR sea el del stand.",
-    );
-    expect(document.querySelector("#cmp-estado button")).toBeNull();
-    cambiarAIngles();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "We couldn't find this campaign. Check that the QR code is the one at the stand.",
-    );
+    expect(llamadas).toHaveLength(0);
+    expect(h.precargar).not.toHaveBeenCalled();
+    expect(h.billetera.restore).not.toHaveBeenCalled();
+    expect(localStorage.getItem("tinkazo.equipo.llaves")).toBeNull();
   });
 
-  it("una configuración inválida muestra su mensaje sin reintento y lo traduce", async () => {
-    h.cargar.mockResolvedValue({ ok: false, estado: "mal" });
+  it("la demostración no pide nada, no toca la billetera y no escribe la llave del celular", async () => {
+    h.hayPollar = true;
+    await abrir("?demo=campana&estado=hola");
+    await asentar(2_000);
+    expect(llamadas).toHaveLength(0);
+    expect(h.precargar).not.toHaveBeenCalled();
+    expect(h.billetera.restore).not.toHaveBeenCalled();
+    expect(h.billetera.connect).not.toHaveBeenCalled();
+    expect(localStorage.getItem("tinkazo.equipo.llaves")).toBeNull();
+  });
+
+  it("un enlace sin evento válido muestra que la campaña no existe, sin pedir nada", async () => {
+    await abrir("?c=NO");
+    expect(llamadas).toHaveLength(0);
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
+  });
+
+  it("un enlace sin s muestra que la campaña no existe, sin pedir nada", async () => {
+    await abrir(`?c=evento-ejemplo&p=${PASE}#${CLAVE}`);
+    expect(llamadas).toHaveLength(0);
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
+  });
+
+  it("un enlace sin clave muestra que la campaña no existe, sin pedir nada", async () => {
+    await abrir(`?c=evento-ejemplo&s=ABCDEFGH&p=${PASE}`);
+    expect(llamadas).toHaveLength(0);
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
+  });
+
+  it("una sala sin campaña muestra su mensaje y lo traduce", async () => {
+    ponerSala({ campana: [noEsta] });
     await abrir();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "No pudimos mostrar esta campaña. Avisale a quien atiende el stand.",
-    );
-    expect(document.querySelector("#cmp-estado button")).toBeNull();
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
     cambiarAIngles();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "We couldn't show this campaign. Let the people at the stand know.",
-    );
+    expect(texto("#cmp-estado")).toBe("This isn't the booth QR, or the campaign is over.");
+  });
+
+  it("una campaña de la red principal con la página en la de prueba muestra cpMal", async () => {
+    ponerSala({ campana: [envuelta(campanaCruda({ red: "mainnet" }))] });
+    await abrir();
+    expect(texto("#cmp-estado")).toBe("No pudimos mostrar esta campaña. Avisale a quien atiende el stand.");
+    expect(document.querySelector("#cmp-estado button")).toBeNull();
+  });
+
+  it("una configuración inválida muestra su mensaje sin reintento", async () => {
+    ponerSala({ campana: [envuelta({ v: 2 })] });
+    await abrir();
+    expect(texto("#cmp-estado")).toBe("No pudimos mostrar esta campaña. Avisale a quien atiende el stand.");
+    expect(document.querySelector("#cmp-estado button")).toBeNull();
   });
 
   it("mientras carga muestra el indicador y lo traduce", async () => {
-    let resolver: ((resultado: ResultadoDeCarga) => void) | undefined;
-    h.cargar.mockImplementation(() => new Promise<ResultadoDeCarga>((resolve) => {
-      resolver = resolve;
-    }));
+    ponerSala({ campana: ["colgado"] });
     await abrir();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe("Cargando la campaña…");
+    expect(texto("#cmp-estado")).toBe("Un momento…");
     cambiarAIngles();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe("Loading the campaign…");
-    resolver?.({ ok: true, campana: campanaDeEjemplo(AHORA) });
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(texto("#cmp-estado")).toBe("One moment…");
   });
 
-  it("sin red muestra Probar de nuevo, reintenta y traduce sin sumar oyentes", async () => {
-    h.cargar.mockResolvedValue({ ok: false, estado: "sin-red" });
+  it("sin la sala al cargar muestra Probar de nuevo, vuelve a pedir y no suma oyentes", async () => {
+    ponerSala({ campana: [{ estado: 500, texto: "caído" }] });
     await abrir();
-    expect(document.querySelector("#cmp-estado")?.textContent).toContain(
-      "No pudimos cargar la campaña. Revisá tu conexión y probá de nuevo.",
-    );
+    await asentar(3_100);
     const boton = document.querySelector<HTMLButtonElement>("#cmp-estado button");
+    expect(texto("#cmp-estado")).toContain("No hay conexión");
     expect(boton?.textContent).toBe("Probar de nuevo");
+    const antes = llamadas.length;
     boton?.click();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(h.cargar).toHaveBeenCalledTimes(2);
+    await asentar(3_100);
+    expect(llamadas.length).toBeGreaterThan(antes);
     expect(h.oyentes).toBe(1);
     cambiarAIngles();
-    expect(document.querySelector("#cmp-estado")?.textContent).toContain(
-      "We couldn't load the campaign. Check your connection and try again.",
-    );
     expect(document.querySelector("#cmp-estado button")?.textContent).toBe("Try again");
   });
 
-  it("usa el evento del enlace del QR para pedir la campaña", async () => {
-    await abrir("?c=evento-ejemplo&q=12.ABCDEFGHIJKLMNOP#abcdefghijklmnopqrstuv");
-    expect(h.cargar).toHaveBeenCalledWith(fetch, "https://servicio", "evento-ejemplo");
-    expect(document.querySelector("h1")?.textContent).toBe("Sorteo de Empresa de ejemplo en Evento de ejemplo");
-  });
-
-  it("un enlace sin evento válido muestra que la campaña no existe", async () => {
-    await abrir("?c=NO");
-    expect(h.cargar).not.toHaveBeenCalled();
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe(
-      "No encontramos esta campaña. Revisá que el código QR sea el del stand.",
-    );
-  });
-
-  it("la vista de ejemplo abre aunque leer sessionStorage lance SecurityError", async () => {
-    Object.defineProperty(window, "sessionStorage", {
-      configurable: true,
-      get: () => {
-        throw new DOMException("almacenamiento bloqueado", "SecurityError");
-      },
-    });
-    await abrir("?demo=campana");
-    expect(document.querySelector("h1")?.textContent).toBe("Sorteo de Empresa de ejemplo en Evento de ejemplo");
-    expect(document.querySelector("#cmp-estado")?.textContent).toBe("");
-    document.querySelector<HTMLButtonElement>("#cmp-saber .primary")?.click();
-    const casilla = document.querySelector<HTMLInputElement>(".cmp-paso input[type=checkbox]");
-    casilla?.click();
-    expect(casilla?.checked).toBe(true);
-  });
-
-  it("el aviso de la vista de ejemplo cambia de idioma y queda fijo en la raíz", async () => {
-    await abrir("?demo=campana");
-    document.querySelector<HTMLButtonElement>("#cmp-saber .primary")?.click();
-    document.querySelector<HTMLButtonElement>("#cmp-pasos .primary")?.click();
-    const mensaje = document.querySelector<HTMLElement>("#cmp-mensaje");
-    expect(mensaje?.textContent).toBe("En la vista de ejemplo no se anota a nadie.");
-    cambiarAIngles();
-    expect(mensaje?.textContent).toBe("Nobody signs up in the sample view.");
-    expect(mensaje?.parentElement).toBe(document.querySelector(".cmp"));
-  });
-
-  it("un aviso descartado al volver no reaparece al cambiar de idioma", async () => {
-    await abrir("?demo=campana");
-    document.querySelector<HTMLButtonElement>("#cmp-saber .primary")?.click();
-    document.querySelector<HTMLButtonElement>("#cmp-pasos .primary")?.click();
-    expect(document.querySelector("#cmp-mensaje")?.textContent).toBe("En la vista de ejemplo no se anota a nadie.");
-    document.querySelector<HTMLButtonElement>("#cmp-pasos .cmp-accion > .ghost")?.click();
-    expect(document.querySelector("#cmp-mensaje")?.textContent).toBe("");
-    cambiarAIngles();
-    expect(document.querySelector("#cmp-mensaje")?.textContent).toBe("");
-  });
-
-  it("el aviso de próxima apertura de Anotarme también cambia de idioma", async () => {
-    const campana = { ...campanaDeEjemplo(AHORA), pasos: [] };
-    h.cargar.mockResolvedValue({ ok: true, campana });
+  it("una primera carga que falla y una segunda buena pintan la campaña sin pasar por sin conexión", async () => {
+    ponerSala({ campana: [{ estado: 500, texto: "caído" }, envuelta()], estado: [estadoDeSala()] });
     await abrir();
-    document.querySelector<HTMLButtonElement>("#cmp-saber .primary")?.click();
-    expect(document.querySelector("#cmp-mensaje")?.textContent).toBe("Muy pronto vas a poder anotarte desde acá.");
+    expect(texto("#cmp-estado")).toBe("Un momento…");
+    await asentar(3_100, 8);
+    expect(texto("#cmp-estado")).not.toContain("No hay conexión");
+    expect(texto("h1")).toBe("Sorteo de Alcancía Andina");
+  });
+});
+
+describe("participar.html: con la sala", () => {
+  it("pinta la campaña con el contador de la sala y no el del archivo", async () => {
+    ponerSala({ campana: [envuelta(campanaCruda({ anotadas: 12 }))], estado: [estadoDeSala({ total: 37 })] });
+    await abrir();
+    expect(texto("h1")).toBe("Sorteo de Alcancía Andina");
+    expect(texto("#cmp-saber .cmp-contador")).toBe("37 personas ya se anotaron");
+  });
+
+  it("pide la campaña y el estado a la sala del enlace, con el pase y sin la clave", async () => {
+    await abrir();
+    expect(llamadas[0]?.url).toBe("https://s.tinkazo.app/v1/sala/ABCDEFGH/campana");
+    expect(llamadas.find((l) => l.ruta === "estado")?.url).toBe(`https://s.tinkazo.app/v1/sala/ABCDEFGH/campana/estado?p=${PASE}`);
+    expect(llamadas.some((l) => l.url.includes(CLAVE))).toBe(false);
+  });
+
+  it("con el pase vencido y nunca anotada muestra que el QR cambió", async () => {
+    ponerSala({ campana: [envuelta()], estado: [estadoDeSala({ pase: "vencido" })] });
+    await abrir();
+    expect(texto("#cmp-estado")).toBe("Este QR ya cambió. Escaneá el que está en la pantalla del stand.");
+  });
+
+  it("la sala que ya no existe y un recuerdo de que ganó muestran Recibir mi premio", async () => {
+    ponerSala({ campana: [noEsta] });
+    localStorage.setItem(
+      "tinkazo.campana.ABCDEFGH",
+      JSON.stringify({ cuenta: CUENTA, fase: "sorteada", resultado: "gano", comprobante: "/verificar.html?id=7", guardado: AHORA }),
+    );
+    await abrir();
+    expect(texto("#cmp-estado .cmp-grande")).toBe("Este sorteo ya terminó");
+    expect(texto("#cmp-estado .primary")).toBe("Recibir mi premio");
     cambiarAIngles();
-    expect(document.querySelector("#cmp-mensaje")?.textContent).toBe("Soon you'll be able to sign up from here.");
+    expect(texto("#cmp-estado .primary")).not.toBe("Recibir mi premio");
+  });
+
+  it("la sala que ya no existe y un recuerdo con comprobante muestran Ver cómo se eligió", async () => {
+    ponerSala({ campana: [noEsta] });
+    localStorage.setItem(
+      "tinkazo.campana.ABCDEFGH",
+      JSON.stringify({ cuenta: CUENTA, fase: "sorteada", resultado: "otra", comprobante: "/verificar.html?id=7", guardado: AHORA }),
+    );
+    await abrir();
+    const enlace = document.querySelector<HTMLAnchorElement>("#cmp-estado a.primary");
+    expect(enlace?.textContent).toBe("Ver cómo se eligió");
+    expect(enlace?.getAttribute("href")).toBe("/verificar.html?id=7");
+  });
+
+  it("la sala que ya no existe sin ningún recuerdo muestra que el QR no es del stand", async () => {
+    ponerSala({ campana: [noEsta] });
+    await abrir();
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
+  });
+
+  it("con la llave del proveedor y fuera de una aplicación baja Google enseguida, sin esperar un momento ocioso", async () => {
+    h.hayPollar = true;
+    await abrir();
+    expect(h.precargar).toHaveBeenCalledTimes(1);
+  });
+
+  it("dentro de una aplicación no baja Google y avisa que se abra en el navegador", async () => {
+    h.hayPollar = true;
+    h.enApp = true;
+    await abrir();
+    expect(h.precargar).not.toHaveBeenCalled();
+    expect(texto("#cmp-saber")).toContain("Chrome o Safari");
+  });
+
+  it("sin la llave del proveedor no baja Google ni muestra el aviso de la aplicación", async () => {
+    h.hayPollar = false;
+    h.enApp = true;
+    await abrir();
+    expect(h.precargar).not.toHaveBeenCalled();
+    expect(texto("#cmp-saber")).not.toContain("Chrome o Safari");
+  });
+
+  it("una sesión que retoma Google lleva a Hola con el nombre corto", async () => {
+    ponerMarcaDeGoogle();
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    await abrir();
+    expect(texto("#cmp-hola h1")).toBe("Hola, Ana P.");
+  });
+
+  it("sin la marca de una entrada anterior la campaña se ve enseguida y no se busca ninguna sesión", async () => {
+    h.hayPollar = true;
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    await abrir();
+    expect(h.billetera.restore).not.toHaveBeenCalled();
+    expect(texto("#cmp-saber h1")).toBe("Sorteo de Alcancía Andina");
+  });
+
+  it("no importa wallet-ui ni cuenta-lista con import estático", () => {
+    const vistos = new Set<string>();
+    const pendientes = [resolve("src/participar.ts")];
+    const especificadores: string[] = [];
+    const resolver = (desde: string, especificador: string): string | null => {
+      const base = resolve(dirname(desde), especificador);
+      for (const candidato of [base, `${base}.ts`, resolve(base, "index.ts")]) {
+        if (existsSync(candidato) && statSync(candidato).isFile()) return candidato;
+      }
+      return null;
+    };
+    while (pendientes.length > 0) {
+      const archivo = pendientes.pop() as string;
+      if (vistos.has(archivo) || !archivo.endsWith(".ts")) continue;
+      vistos.add(archivo);
+      const codigo = readFileSync(archivo, "utf8");
+      const importaciones = /^\s*(?:import|export)\s+(?!type\b)(?:[^"';]*?\sfrom\s*)?["']([^"']+)["']/gmu;
+      for (const coincidencia of codigo.matchAll(importaciones)) {
+        const especificador = coincidencia[1] ?? "";
+        especificadores.push(especificador);
+        if (!especificador.startsWith(".")) continue;
+        const resuelto = resolver(archivo, especificador);
+        if (resuelto) pendientes.push(resuelto);
+      }
+    }
+    expect(vistos.size).toBeGreaterThan(5);
+    expect(especificadores.filter((e) => /wallet-ui|cuenta-lista/u.test(e))).toEqual([]);
+    expect(especificadores.filter((e) => /wallet-pollar$/u.test(e))).toEqual([]);
+  });
+});
+
+describe("participar.html: anotarse", () => {
+  async function anotarse(): Promise<void> {
+    ponerMarcaDeGoogle();
+    h.billetera.restore.mockResolvedValue(CUENTA);
+    ponerSala({
+      campana: [envuelta()],
+      estado: [estadoDeSala()],
+      yo: [yoDeSala(false)],
+      alta: [{ estado: 201, cuerpo: { cuenta: CUENTA } }],
+    });
+    await abrir();
+    document.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+    await asentar(0, 10);
+  }
+
+  it("una persona que se anota queda adentro", async () => {
+    await anotarse();
+    expect(texto("#cmp-adentro h1")).toBe("Ya estás adentro");
+    expect(llamadas.filter((l) => l.ruta === "alta")).toHaveLength(1);
+  });
+
+  it("la dirección no se reescribe: la sala, el pase y la clave siguen ahí", async () => {
+    await anotarse();
+    expect(location.search).toBe(`?c=evento-ejemplo&s=ABCDEFGH&p=${PASE}`);
+    expect(location.hash).toBe(`#${CLAVE}`);
+  });
+
+  it("después de anotarse, nada guardado contiene la clave, el pase ni el token", async () => {
+    await anotarse();
+    const guardado: string[] = [];
+    for (const almacen of [localStorage, sessionStorage]) {
+      for (let i = 0; i < almacen.length; i += 1) {
+        const k = almacen.key(i) ?? "";
+        guardado.push(k, almacen.getItem(k) ?? "");
+      }
+    }
+    expect(guardado.length).toBeGreaterThan(0);
+    for (const valor of guardado) {
+      expect(valor).not.toContain(CLAVE);
+      expect(valor).not.toContain(PASE);
+      expect(valor).not.toContain(TOKEN);
+    }
+  });
+
+  it("ninguna dirección pedida contiene la clave ni el token, y el token solo viaja en el cuerpo del alta", async () => {
+    await anotarse();
+    for (const llamada of llamadas) {
+      expect(llamada.url).not.toContain(CLAVE);
+      expect(llamada.url).not.toContain(TOKEN);
+      expect(String(llamada.init.body ?? "")).not.toContain(CLAVE);
+      if (llamada.ruta !== "alta") expect(String(llamada.init.body ?? "")).not.toContain(TOKEN);
+    }
+    expect(String(llamadas.find((l) => l.ruta === "alta")?.init.body)).toContain(TOKEN);
+  });
+
+  it("el alta no manda cabeceras propias", async () => {
+    await anotarse();
+    const alta = llamadas.find((l) => l.ruta === "alta");
+    expect(alta?.init.headers).toBeUndefined();
   });
 });

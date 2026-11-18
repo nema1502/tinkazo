@@ -1,6 +1,6 @@
 /**
  * Configuración local de una campaña de muestra.
- * Permite trabajar en la pantalla previa sin pedir una respuesta al servicio.
+ * Permite trabajar en las pantallas sin pedirle nada al servicio.
  */
 
 import { network } from "../stellar/config";
@@ -14,8 +14,8 @@ export function campanaDeEjemplo(ahora: number): Campana {
     evento: "evento-ejemplo",
     red: network.name,
     estado: "abierta",
-    empresa: { nombre: "Empresa de ejemplo", logo: null, color: "verde" },
-    lugar: { es: "Evento de ejemplo", en: "Sample event" },
+    empresa: { nombre: "Alcancía Andina", logo: null, color: "verde" },
+    lugar: { es: "Hackathon", en: "Hackathon" },
     zona: "America/La_Paz",
     premios: [400000000n],
     abreMs: ahora - 60 * 60 * 1000,
@@ -24,21 +24,15 @@ export function campanaDeEjemplo(ahora: number): Campana {
     recibirHastaMs: sorteoMs + 180 * 24 * 60 * 60 * 1000,
     entrada: "google",
     pasos: [
-      {
-        tipo: "instagram",
-        url: "https://www.instagram.com/ejemplo",
-        texto: { es: "Seguí a {empresa} en Instagram", en: "Follow {empresa} on Instagram" },
-      },
-      {
-        tipo: "youtube",
-        url: "https://www.youtube.com/c/ejemplo",
-        texto: { es: "Suscribite al canal de {empresa} en YouTube", en: "Subscribe to {empresa}'s YouTube channel" },
-      },
-      { tipo: "texto", url: null, texto: { es: "Pasá por el stand a saludar", en: "Stop by the stand to say hi" } },
+      { tipo: "instagram", url: "https://www.instagram.com/", texto: { es: "", en: "" } },
+      { tipo: "tiktok", url: "https://www.tiktok.com/", texto: { es: "", en: "" } },
+      { tipo: "x", url: "https://x.com/", texto: { es: "", en: "" } },
     ],
     bases: {
-      es: "Participar es gratis. La lista cierra antes del sorteo.",
-      en: "Taking part is free. The list closes before the draw.",
+      es: "Participar es gratis y no hace falta comprar nada. Seguir a Alcancía Andina en sus redes es un pedido y no cambia quién gana.",
+      en:
+        "Taking part is free and you don't need to buy anything. " +
+        "Following Alcancía Andina on social media is a request and doesn't change who wins.",
     },
     anotadas: 37,
     contrato: null,

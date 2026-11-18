@@ -1,135 +1,204 @@
-/**
- * Entrada de la pantalla previa de campañas.
- * Decide si muestra la vista de ejemplo o si consulta la campaña indicada en el enlace.
- */
+/** Entrada de participar.html: carga la campaña y deja las pantallas en manos del estado del celular. */
 
 import "./pagina";
 import "./version-nueva";
 import "./campana/campana.css";
-import { configDelPortero } from "./stellar/patrocinio-config";
+import { cargaOpcional } from "./carga-opcional";
 import { enNavegadorDeApp } from "./navegador";
 import { getLang, initialLang, onLangChange, setLang, texto } from "./idioma";
 import { leerEnlaceDeCampana } from "./campana/enlace";
 import { campanaDeEjemplo } from "./campana/ejemplo";
 import { campanasActivo } from "./campana/bandera";
-import { cargarCampana } from "./campana/carga";
-import {
-  montarPrevia,
-  pintarEstadoDeCarga,
-  type EstadoDeCarga,
-  type VistaDePrevia,
-} from "./campana/previa";
+import { montarCelular, type DepsDelCelular, type VistaDelCelular } from "./campana/celular";
+import { cargarConUnReintento, depsConectadas, destinoDeRecibir, type BaseDelCelular } from "./campana/conectar";
+import { depsDeDemostracion } from "./campana/demostracion";
+import { leerMemoria } from "./campana/memoria";
+import { pintarAviso } from "./campana/piezas";
+import { pintarEstadoDeCarga, type EstadoDeCarga } from "./campana/previa";
+import { sesionDeGoogle } from "./campana/sesion";
 import type { Campana } from "./campana/modelo";
+import { servicioDeSala } from "./sala/cliente";
+import { network } from "./stellar/config";
+import { hasPollarKey, leerMarcaPollar } from "./stellar/pollar-config";
 
 const raiz = document.querySelector<HTMLElement>(".cmp");
 const estado = document.querySelector<HTMLElement>("#cmp-estado");
-const mensaje = document.querySelector<HTMLElement>("#cmp-mensaje");
-const ejemplo = new URLSearchParams(location.search).get("demo") === "campana";
+const parametros = new URLSearchParams(location.search);
+const ejemplo = parametros.get("demo") === "campana";
 const idioma = initialLang();
 setLang(idioma);
 
-let vista: VistaDePrevia | null = null;
-let ultimoEstado: { tipo: EstadoDeCarga | "cargando"; reintentar: () => void } | null = null;
-let claveAviso: string | null = null;
+let vista: VistaDelCelular | null = null;
+/** Cómo se pinta el aviso que está a la vista: se vuelve a llamar al cambiar el idioma. */
+let repintarAviso: (() => void) | null = null;
 
-/** Lee el almacenamiento de la pestaña sin impedir que la página abra si el navegador lo bloquea. */
-export function leerSesionDeCampana(): Storage | undefined {
+/** Lee el almacenamiento local sin impedir que la página abra si el navegador lo bloquea. */
+export function leerMemoriaDeCampana(): Storage | null {
   try {
-    return sessionStorage;
+    return localStorage;
   } catch {
-    return undefined;
+    return null;
   }
 }
 
-function estadoDeEjemplo(campana: Campana): Campana {
-  const estadoSolicitado = new URLSearchParams(location.search).get("estado");
-  if (!estadoSolicitado || !["borrador", "cerrada", "sorteada"].includes(estadoSolicitado)) {
-    return campana;
-  }
-  return { ...campana, estado: estadoSolicitado as Campana["estado"] };
-}
+const base: BaseDelCelular = {
+  tx: texto,
+  idioma: getLang,
+  enApp: enNavegadorDeApp(navigator.userAgent),
+  ahora: () => Date.now(),
+  cada: (f, ms) => {
+    const temporizador = window.setInterval(f, ms);
+    return () => window.clearInterval(temporizador);
+  },
+  visible: () => document.visibilityState === "visible",
+  alVolver: (f) => {
+    document.addEventListener("visibilitychange", f);
+    return () => document.removeEventListener("visibilitychange", f);
+  },
+  vibrar: (patron) => {
+    try {
+      navigator.vibrate?.(patron);
+    } catch {
+      /* La vibración es opcional y no puede frenar la pantalla. */
+    }
+  },
+  movimientoReducido: () => typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+};
 
-function pintarUltimoEstado(): void {
-  if (!estado || !ultimoEstado) return;
+function pintarUltimoAviso(): void {
+  if (!estado || !repintarAviso) return;
   estado.hidden = false;
-  if (ultimoEstado.tipo !== "cargando") {
-    pintarEstadoDeCarga(estado, texto, ultimoEstado.tipo, ultimoEstado.reintentar);
-    return;
-  }
-  estado.replaceChildren();
-  const cargando = document.createElement("p");
-  cargando.textContent = texto("cpCargando");
-  estado.append(cargando);
+  repintarAviso();
 }
 
 function mostrarCarga(tipo: EstadoDeCarga | "cargando", reintentar: () => void): void {
-  ultimoEstado = { tipo, reintentar };
-  pintarUltimoEstado();
+  repintarAviso = () => {
+    if (!estado) return;
+    if (tipo !== "cargando") {
+      pintarEstadoDeCarga(estado, texto, tipo, reintentar);
+      return;
+    }
+    pintarAviso(estado, texto("cpCargando"));
+  };
+  pintarUltimoAviso();
 }
 
-function pintarAviso(): void {
-  if (mensaje) mensaje.textContent = claveAviso ? texto(claveAviso) : "";
+/**
+ * La sala ya no está (se borra a las 24 horas) pero este celular recuerda la campaña: quien ganó ve de nuevo Recibir mi
+ * premio y quien no, el comprobante. Sin esto, la ganadora que vuelve al otro día vería que el QR no es del stand.
+ */
+function mostrarSalaTerminada(sala: string, recibir: () => void): boolean {
+  const recuerdo = leerMemoria(leerMemoriaDeCampana(), sala, Date.now());
+  if (!recuerdo) return false;
+  const accion = recuerdo.resultado === "gano"
+    ? { clave: "cpRecibir", alHacer: recibir }
+    : recuerdo.comprobante
+      ? { clave: "cpComoSeEligio", enlace: recuerdo.comprobante }
+      : null;
+  repintarAviso = () => {
+    if (!estado) return;
+    pintarAviso(estado, texto("cpTermino"), accion && { texto: texto(accion.clave), ...accion });
+  };
+  pintarUltimoAviso();
+  return true;
 }
 
-function mostrarAviso(clave: string): void {
-  claveAviso = clave;
-  pintarAviso();
-}
-
-function montarVista(campana: Campana, esEjemplo: boolean): void {
+function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: string; clave: string; pase: string | null } | null): void {
   if (!raiz) return;
-  ultimoEstado = null;
+  repintarAviso = null;
   vista?.desmontar();
-  vista = montarPrevia(raiz, {
-    tx: texto,
-    idioma: getLang,
+  const ejemploVisible = document.querySelector<HTMLElement>("#cmp-ejemplo");
+  if (ejemploVisible) ejemploVisible.hidden = !esEjemplo;
+  if (esEjemplo || !enlace) {
+    vista = montarCelular(raiz, depsDeDemostracion(base, campana, parametros.get("estado")));
+    return;
+  }
+  // Recién acá, con la campaña cargada, se arma lo que habla con la sala y con Google.
+  const deApp = enNavegadorDeApp(navigator.userAgent);
+  const hayGoogle = hasPollarKey(network.name);
+  // El módulo de Google baja ahora, en paralelo con la primera consulta: así la ventana sale del toque sin esperas.
+  if (hayGoogle && !deApp) void cargaOpcional(import("./stellar/wallet-pollar").then((m) => m.precargarSdk()));
+  const memoria = leerMemoriaDeCampana();
+  /** Si este navegador guardó una entrada con el proveedor de cuentas: sin ella no hay sesión que retomar ni módulo que bajar. */
+  const hayMarcaDelProveedor = (): boolean => {
+    try {
+      return memoria !== null && leerMarcaPollar(memoria, network.name) !== null;
+    } catch {
+      return false;
+    }
+  };
+  const deps: DepsDelCelular = depsConectadas({
+    base: { ...base, enApp: hayGoogle && deApp },
     campana,
-    ejemplo: esEjemplo,
-    enApp: enNavegadorDeApp(navigator.userAgent),
-    anotarme: () => mostrarAviso(esEjemplo ? "cpEjemploAnotar" : "cpPronto"),
-    sesion: leerSesionDeCampana(),
+    servicio: servicioDeSala(),
+    sala: enlace.sala,
+    clave: enlace.clave,
+    pase: enlace.pase,
+    google: sesionDeGoogle({
+      local: memoria,
+      pestana: leerAlmacenDePestana(),
+      ahora: () => Date.now(),
+      hayMarca: hayMarcaDelProveedor,
+    }),
+    memoria,
+    red: network.name,
+    enLinea: () => navigator.onLine !== false,
+    hayMarcaDelProveedor,
+    ir: (direccion) => location.assign(direccion),
     enlace: () => location.href,
+    ...(typeof navigator.locks?.request === "function"
+      ? { bloquear: <T>(nombre: string, trabajo: () => Promise<T>): Promise<T> => navigator.locks.request(nombre, trabajo) }
+      : {}),
   });
+  vista = montarCelular(raiz, deps);
+}
+
+/** El almacenamiento de esta pestaña, o null si el navegador lo bloquea. */
+function leerAlmacenDePestana(): Storage | null {
+  try {
+    return sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 async function cargar(): Promise<void> {
   if (!raiz || !estado) return;
-  const enlace = leerEnlaceDeCampana(location.search, location.hash);
+  // Primero la bandera y la demostración: con las campañas apagadas, nada de lo de la sala ni de Google corre.
   if (!campanasActivo() && !ejemplo) {
     mostrarCarga("cerrada", () => undefined);
     return;
   }
   if (ejemplo) {
-    const muestra = estadoDeEjemplo(campanaDeEjemplo(Date.now()));
-    document.querySelector<HTMLElement>("#cmp-ejemplo")?.removeAttribute("hidden");
-    montarVista(muestra, true);
+    montarVista(campanaDeEjemplo(Date.now()), true, null);
     return;
   }
-  if (!enlace) {
+  const enlace = leerEnlaceDeCampana(location.search, location.hash);
+  if (!enlace?.sala || !enlace.clave) {
     mostrarCarga("no-esta", () => undefined);
     return;
   }
-  const portero = configDelPortero().url;
-  if (!portero) {
-    mostrarCarga("sin-red", () => void cargar());
-    return;
-  }
+  const { sala, clave, pase } = enlace;
   mostrarCarga("cargando", () => void cargar());
-  const resultado = await cargarCampana(fetch, portero, enlace.evento);
+  const resultado = await cargarConUnReintento(fetch, servicioDeSala(), sala, enlace.evento);
   if (!resultado.ok) {
+    if (resultado.estado === "no-esta"
+      && mostrarSalaTerminada(sala, () => location.assign(destinoDeRecibir(network.name)))) return;
     const reintentar = resultado.estado === "sin-red" ? () => void cargar() : () => undefined;
     mostrarCarga(resultado.estado, reintentar);
     return;
   }
-  montarVista(resultado.campana, false);
+  if (resultado.campana.red !== network.name) {
+    mostrarCarga("mal", () => undefined);
+    return;
+  }
+  montarVista(resultado.campana, false, { sala, clave, pase });
 }
 
 onLangChange(() => {
-  const habiaAviso = Boolean(mensaje?.textContent);
   vista?.pintar();
-  pintarUltimoEstado();
-  if (!habiaAviso) claveAviso = null;
-  pintarAviso();
+  pintarUltimoAviso();
 });
 
 void cargar();
