@@ -70,6 +70,8 @@ interface Opciones {
   /** Sin la cuenta que paga sola: la billetera de siempre. */
   sinSola?: boolean;
   firmaAdentro?: boolean;
+  /** Si un pago de ese premio con la cuenta todavía puede entrar (su marca). Sin esto, la cuenta no lo dice. */
+  enCamino?: (nota: string) => boolean;
 }
 
 /** Dependencias de mentira: lo que contesta la red y la cuenta que paga sola, y quién fue llamado. */
@@ -87,7 +89,7 @@ function armar(o: Opciones = {}): Armado {
     return o.saldo === undefined ? dolares(100) : o.saldo;
   });
   const cargar = vi.fn();
-  const sola: PagoSolo = { saldo, pagar };
+  const sola: PagoSolo = { saldo, pagar, ...(o.enCamino ? { enCamino: o.enCamino } : {}) };
   const billetera: Billetera = {
     direccion: ORG,
     firmaAdentro: o.firmaAdentro ?? true,
@@ -381,6 +383,8 @@ function abrir(dep: Armado, extra: Partial<ContextoDePago> = {}): Abierto {
     pagadoras,
     desde: DESDE,
     dependencias: async () => dep.deps,
+    // La lista sellada dice que en el puesto de la fila está la cuenta de la fila.
+    destinoDe: (puesto) => (puesto === FILA.puesto ? GANA : null),
   };
   const pagar = pagarPremioEn({ ...base, ...extra });
   pagar(FILA, caja, (ya) => {
@@ -407,8 +411,9 @@ const vaciar = async (): Promise<void> => {
 };
 /** Espera a que el formulario se arme para la cuenta que paga sola y lea su saldo. */
 const lista = async (caja: HTMLElement): Promise<void> => {
-  await vi.waitFor(() => expect(texto(caja, ".gan-explica")).toContain("Pagás a"));
-  await vi.waitFor(() => expect(texto(caja, ".gan-explica") + falta(caja)).toMatch(/te quedan|Te faltan/));
+  // Con un pago de este premio en camino, el aviso ocupa el lugar de la línea de la plata.
+  await vi.waitFor(() => expect(texto(caja, ".gan-explica")).toMatch(/Pagás a|en camino/));
+  await vi.waitFor(() => expect(texto(caja, ".gan-explica") + falta(caja)).toMatch(/te quedan|Te faltan|en camino/));
 };
 
 describe("sin la cuenta que paga sola", () => {
@@ -924,6 +929,145 @@ describe("Pagar desde otra billetera", () => {
     expect(enter.defaultPrevented).toBe(true);
     await vi.waitFor(() => expect(dep.preparar).toHaveBeenCalledTimes(1));
     expect(dep.preparar.mock.calls[0]?.[0].origen).toBe(PAGA);
+    expect(dep.pagar).not.toHaveBeenCalled();
+  });
+});
+
+describe("la cuenta de quien ganó se relee de la lista sellada", () => {
+  const noPago = (dep: Armado): void => {
+    expect(dep.preparar).not.toHaveBeenCalled();
+    expect(dep.pagar).not.toHaveBeenCalled();
+    expect(dep.firmar).not.toHaveBeenCalled();
+    expect(dep.mandar).not.toHaveBeenCalled();
+  };
+
+  it("paga a la cuenta que dice la lista en ese puesto y se la pasa a la red y a la cuenta", async () => {
+    const destinoDe = vi.fn((puesto: number) => (puesto === 2 ? GANA : null));
+    const dep = armar();
+    const { caja, form } = abrir(dep, { destinoDe });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
+    expect(destinoDe).toHaveBeenCalledWith(2);
+    expect(dep.buscar.mock.calls[0]?.[0]).toMatchObject({ destino: GANA });
+    expect(dep.preparar.mock.calls[0]?.[0]).toMatchObject({ destino: GANA });
+    expect(dep.pagar.mock.calls[0]?.[1]).toMatchObject({ destino: GANA });
+  });
+
+  it("sin con qué releer la lista, la cuenta no paga nada", async () => {
+    const dep = armar();
+    const { caja, form } = abrir(dep, { destinoDe: undefined });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("No se pudo pagar. Tus dólares digitales siguen en tu cuenta."));
+    noPago(dep);
+    expect(q(caja, ".gan-msg").classList.contains("bad")).toBe(true);
+    expect(principal(caja).disabled).toBe(false);
+  });
+
+  it("si la lista ya no tiene una cuenta en ese puesto, no paga nada", async () => {
+    const dep = armar();
+    const { caja, form, terminados } = abrir(dep, { destinoDe: () => null });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toContain("No se pudo pagar"));
+    noPago(dep);
+    expect(terminados).toHaveLength(0);
+  });
+
+  it("si la lista dice otra cuenta que la de la fila, no paga ni a una ni a la otra", async () => {
+    const dep = armar();
+    const { caja, form } = abrir(dep, { destinoDe: () => OTRA });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toContain("No se pudo pagar"));
+    noPago(dep);
+    expect(dep.buscar).not.toHaveBeenCalled();
+  });
+
+  it("se relee en cada toque: tras un no, con la lista de nuevo en orden, se puede pagar", async () => {
+    let esLaLista = false;
+    const dep = armar();
+    const { caja, form } = abrir(dep, { destinoDe: () => (esLaLista ? GANA : null) });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toContain("No se pudo pagar"));
+    noPago(dep);
+    esLaLista = true;
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
+    expect(dep.pagar).toHaveBeenCalledTimes(1);
+  });
+
+  it("lo que se lea de un campo de la pantalla no cambia a quién se paga", async () => {
+    const dep = armar();
+    const { caja, form } = abrir(dep);
+    await lista(caja);
+    q<HTMLInputElement>(caja, "input").value = OTRA;
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Listo, el pago salió."));
+    expect(dep.pagar.mock.calls[0]?.[1]).toMatchObject({ destino: GANA });
+    expect(dep.preparar.mock.calls[0]?.[0]).toMatchObject({ destino: GANA });
+  });
+});
+
+describe("un pago de este premio con la cuenta que todavía puede entrar", () => {
+  it("con su marca viva, Pagar desde otra billetera no se ofrece", async () => {
+    const enCamino = vi.fn((_nota: string) => true);
+    const dep = armar({ enCamino });
+    const { caja } = abrir(dep);
+    await lista(caja);
+    expect(visible(q(caja, ".gan-otra"))).toBe(false);
+    expect(enCamino).toHaveBeenCalledWith(NOTA);
+    // En el lugar de la línea de la plata, el aviso de que ya hay un pago en camino.
+    expect(texto(caja, ".gan-explica")).toBe("Ya hay un pago de este premio en camino. No pagues de nuevo.");
+  });
+
+  it("si no se puede saber si está en camino, cuenta como que sí y no ofrece la otra billetera", async () => {
+    const dep = armar({
+      enCamino: () => {
+        throw new Error("sin almacenamiento");
+      },
+    });
+    const { caja } = abrir(dep);
+    await lista(caja);
+    expect(visible(q(caja, ".gan-otra"))).toBe(false);
+  });
+
+  it("tras la duda, un no está con el pago todavía en camino deja Pagar en pausa y la otra billetera escondida", async () => {
+    let vivo = true;
+    const dep = armar({ pago: { estado: "incierto" }, enCamino: () => vivo });
+    const { caja, form } = abrir(dep, { esperaMs: 0 });
+    await lista(caja);
+    enviar(form);
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Todavía no sabemos si salió. No vuelvas a pagar. Tocá Volver a mirar en un rato."));
+    expect(dep.buscar).toHaveBeenCalledTimes(2);
+    expect(principal(caja).disabled).toBe(true);
+    expect(visible(botonCon(caja, "Volver a mirar"))).toBe(true);
+    expect(visible(q(caja, ".gan-otra"))).toBe(false);
+    // Cuando el pago ya no puede entrar, un no está vuelve a habilitar Pagar.
+    vivo = false;
+    botonCon(caja, "Volver a mirar")?.click();
+    await vi.waitFor(() => expect(mensaje(caja)).toBe("Ese pago no salió. Podés volver a intentarlo."));
+    expect(principal(caja).disabled).toBe(false);
+    expect(dep.pagar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si el pago con la cuenta empieza mientras se arma el de otra billetera, no se muestra el pago para aprobar afuera", async () => {
+    let vivo = false;
+    const dep = armar({ enCamino: () => vivo });
+    dep.preparar.mockImplementationOnce(async (d: DatosDelPago): Promise<Preparacion> => {
+      vivo = true;
+      return { ok: true, xdr: XDR, nota: NOTA, monto: d.monto };
+    });
+    const { caja, pagadoras } = abrir(dep);
+    await lista(caja);
+    q<HTMLInputElement>(caja, "details.gan-otra input").value = PAGA;
+    q<HTMLButtonElement>(caja, "details.gan-otra button").click();
+    await vi.waitFor(() => expect(mensaje(caja)).toBe(TEXTOS_PAGOS.es.pgGoogleDuda));
+    expect(visible(q(caja, "details.gan-afuera"))).toBe(false);
+    expect(q<HTMLTextAreaElement>(caja, "details.gan-afuera textarea").value).toBe("");
+    expect(pagadoras.has(PAGA)).toBe(false);
     expect(dep.pagar).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ import {
   minimoDePrueba,
   modoDeRampa,
   monedasActivas,
+  pagarConGoogle,
   planDelEquipo,
   practicaDeRampa,
   registroDeRampa,
@@ -242,5 +243,104 @@ describe("quién lee VITE_VOTO_POR_CONTENIDO", () => {
 
   it("una comparación pegada al nombre, sin espacios, también es una lectura", () => {
     expect(lee('const x = e.VITE_VOTO_POR_CONTENIDO==="1";')).toBe(true);
+  });
+});
+
+describe("pagar con Google (VITE_PAGAR_CON_GOOGLE)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  const PEDIDA = { pagarConGoogle: "1", rampa: "premios", votoPorContenido: "1" };
+
+  it("nace apagada: sin nada puesto, vacía o en 0 no se pide", () => {
+    expect(pagarConGoogle({})).toBe(false);
+    for (const v of [undefined, "", " ", "0"]) {
+      expect(pagarConGoogle({ ...PEDIDA, pagarConGoogle: v }), String(v)).toBe(false);
+    }
+  });
+
+  it("se pide solo con un 1 exacto, el modo premios y el voto por contenido", () => {
+    expect(pagarConGoogle(PEDIDA)).toBe(true);
+    expect(pagarConGoogle({ ...PEDIDA, rampa: " Premios ", host: "tinkazo.app" })).toBe(true);
+  });
+
+  it("cualquier otro valor la deja apagada, aunque parezca un sí", () => {
+    for (const v of ["true", "TRUE", "on", "si", "sí", "encendida", "yes", " 1", "1 ", "01", "2", "11", "1.0", "uno"]) {
+      expect(pagarConGoogle({ ...PEDIDA, pagarConGoogle: v }), JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("sin el voto por contenido, o con un voto que no vale, queda apagada", () => {
+    for (const v of [undefined, "", "0", "true", " 1"]) {
+      expect(pagarConGoogle({ ...PEDIDA, votoPorContenido: v }), String(v)).toBe(false);
+    }
+  });
+
+  it("con otro modo de la rampa que premios, queda apagada", () => {
+    for (const rampa of [undefined, "", "pollar", "recibir", "meru", "apagada", "premio", "premios,recibir"]) {
+      expect(pagarConGoogle({ ...PEDIDA, rampa }), String(rampa)).toBe(false);
+    }
+  });
+
+  it("leída del entorno del build: apagada sin nada puesto, prendida con las tres y apagada con otro valor", () => {
+    expect(pagarConGoogle()).toBe(false);
+    expect(entornoDeCuenta().pagarConGoogle).toBeUndefined();
+    vi.stubEnv("VITE_PAGAR_CON_GOOGLE", "1");
+    vi.stubEnv("VITE_RAMPA", "premios");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    expect(entornoDeCuenta().pagarConGoogle).toBe("1");
+    expect(pagarConGoogle()).toBe(true);
+    vi.stubEnv("VITE_PAGAR_CON_GOOGLE", "true");
+    expect(pagarConGoogle()).toBe(false);
+    vi.stubEnv("VITE_PAGAR_CON_GOOGLE", "1");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "");
+    expect(pagarConGoogle()).toBe(false);
+  });
+
+  it("pedirla no cambia ninguna otra lectura de la configuración", () => {
+    const base = { rampa: "premios", monedas: "1", votoPorContenido: "1", host: "tinkazo.app" };
+    const con = { ...base, pagarConGoogle: "1" };
+    expect(modoDeRampa(con)).toBe(modoDeRampa(base));
+    expect(votoPorContenido(con)).toBe(votoPorContenido(base));
+    expect(monedasActivas(con)).toBe(monedasActivas(base));
+    expect(urlDeCuenta(con)).toBe(urlDeCuenta(base));
+    expect(cuentasDelPiloto(con)).toEqual(cuentasDelPiloto(base));
+    expect(planDelEquipo(con)).toEqual(planDelEquipo(base));
+    expect(minimoDePrueba(con)).toBe(minimoDePrueba(base));
+    expect(demoDeRampa(con)).toBe(demoDeRampa(base));
+    expect(practicaDeRampa(con)).toBe(practicaDeRampa(base));
+    expect(registroDeRampa(con)).toBe(registroDeRampa(base));
+    expect(PUERTA_DEL_PREMIO_EN).toEqual(["premios", "recibir", "apagada"]);
+  });
+});
+
+describe("quién lee VITE_PAGAR_CON_GOOGLE y quién usa pagarConGoogle", () => {
+  const RAIZ = fileURLToPath(new URL("../", import.meta.url));
+  const PERMITIDOS = ["stellar/cuenta-config.ts", "stellar/premios-build.ts"];
+  const sinComentarios = (codigo: string): string => codigo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/.*$/gm, "$1");
+  /** Una lectura: el nombre suelto, no un texto que nombra un valor («VITE_PAGAR_CON_GOOGLE=1 necesita…»). */
+  const lee = (codigo: string): boolean => /\bVITE_PAGAR_CON_GOOGLE\b(?!=)/.test(sinComentarios(codigo));
+  /** Un uso de la función: la llamada o el nombre importado, no un comentario. */
+  const usa = (codigo: string): boolean => /\bpagarConGoogle\b/.test(sinComentarios(codigo));
+  const fuentes = (): string[] =>
+    readdirSync(RAIZ, { recursive: true, encoding: "utf8" })
+      .map((ruta) => ruta.split(sep).join("/"))
+      .filter((ruta) => ruta.endsWith(".ts") && !ruta.endsWith(".test.ts"));
+
+  it("solo la configuración de la cuenta y el control del build: el resto pregunta por pagarConGoogle", () => {
+    const archivos = fuentes();
+    expect(archivos.length).toBeGreaterThan(50);
+    expect(archivos.filter((ruta) => lee(readFileSync(join(RAIZ, ruta), "utf8"))).sort()).toEqual(PERMITIDOS);
+  });
+
+  it("la definen la configuración de la cuenta y la usan solo la billetera, el formulario de Pagar premio y la ventana del saldo", () => {
+    const usos = fuentes().filter((ruta) => usa(readFileSync(join(RAIZ, ruta), "utf8")));
+    expect(usos).toEqual(["stellar/cuenta-config.ts", "stellar/wallet-pollar.ts", "ui/pagar-premio.ts", "ui/saldo.ts"]);
+  });
+
+  it("la prueba reconoce una lectura, y no un comentario ni un texto que nombra un valor", () => {
+    expect(lee("const x = e.VITE_PAGAR_CON_GOOGLE;")).toBe(true);
+    expect(lee("// VITE_PAGAR_CON_GOOGLE\n/** `VITE_PAGAR_CON_GOOGLE` */\nconst a = 1;")).toBe(false);
+    expect(lee('p.push("VITE_PAGAR_CON_GOOGLE=1 necesita el voto");')).toBe(false);
+    expect(usa("if (pagarConGoogle()) hacer();")).toBe(true);
+    expect(usa("// pagarConGoogle\nconst a = 1;")).toBe(false);
   });
 });

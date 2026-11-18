@@ -6,7 +6,7 @@ import { contextoHorizon, revisarCarga } from "../stellar/carga";
 import { type ResultadoDeLinea, activarLineaPropia } from "../stellar/linea-propia";
 import type { ResultadoDeActivarUsdc } from "../stellar/wallet-pollar";
 import { type NetworkName, network } from "../stellar/config";
-import { modoDeRampa, practicaDeRampa, urlDeCuenta } from "../stellar/cuenta-config";
+import { modoDeRampa, pagarConGoogle, practicaDeRampa, urlDeCuenta, votoPorContenido } from "../stellar/cuenta-config";
 import { passphraseDe } from "../stellar/oficiales";
 import { stroopsDe } from "../stellar/pagos";
 import {
@@ -40,8 +40,13 @@ import { pintarQr } from "./qr";
  * entraron desde la base guardada en este navegador (`queLlego`) y nunca invita a mandar de nuevo.
  *
  * Con `VITE_RAMPA=premios` la ventana deja ver el saldo y recibir un premio, y nada más: sin Mandar, sin la dirección ni
- * el QR para traer saldo de afuera y sin «Ya lo mandé» (`pantallaDelPremio`). Retirar llega más adelante, con el voto a
- * mano de las firmas (docs/architecture.md, La cuenta de Google o de correo en la red principal).
+ * el QR para traer saldo de afuera y sin «Ya lo mandé» (`pantallaDelPremio`). Cada estado dice un título, como mucho una
+ * línea y tiene una sola acción principal: lo que no evita un error no se escribe.
+ *
+ * Con el voto por contenido y el kit votando a mano (`votaPorContenido`), la cuenta de Google también retira con Mandar y
+ * la cuenta que ya puede recibir no deja de organizar. Con `VITE_PAGAR_CON_GOOGLE=1` además se prepara la cuenta para
+ * recibir y pagar, y «Cargar dólares digitales» muestra la dirección con el QR y «Ya lo mandé» (docs/architecture.md, La
+ * cuenta de Google o de correo en la red principal).
  */
 
 /** Lo que la ventana le pide al sitio. En las pruebas, un reemplazo. */
@@ -78,6 +83,11 @@ export interface DepsDeSaldo {
   pasarAOficial(): void;
   /** Abre Mandar mis dólares digitales con el saldo de la cuenta, en stroops. */
   mandar(cuenta: string, saldo: bigint): void;
+  /**
+   * Solo con Google: si el navegador vota a mano lo que arma la página (la cuenta que ya puede recibir sigue sellando y
+   * sorteando, y retira con Mandar). Sin esto, o si falla, no: la cuenta que puede recibir premios no organiza.
+   */
+  votaPorContenido?(): Promise<boolean>;
   /** Cuánto cuesta cada retiro, como se dice en pantalla (`0,50`), o `null` si no se cobra. Sin esto, el del sitio. */
   costoDelRetiro?(): string | null;
 }
@@ -135,6 +145,11 @@ function depsDelSitio(): DepsDeSaldo {
     dejarLista: () => import("./cuenta-lista-flujo").then((m) => m.abrirDesdeTusDolares()),
     pasarAOficial: () => void import("./modo-ui").then((m) => m.abrirHojaDeModo()),
     mandar: (cuenta, saldo) => void import("./mandar-usdc").then((m) => m.abrirMandar({ address: cuenta, saldo })),
+    async votaPorContenido() {
+      if (!votoPorContenido()) return false;
+      const { pollarWallet } = await import("../stellar/wallet-pollar");
+      return pollarWallet.votaPorContenido();
+    },
     costoDelRetiro: () => costoDelRetiroTexto(),
   };
 }
@@ -194,6 +209,8 @@ interface Ventana {
   vista: Vista;
   estado: EstadoParaRecibir | null;
   billetera: BilleteraParaRecibir | null;
+  /** Con Google: el navegador vota a mano lo que arma la página, así que la cuenta que puede recibir sigue organizando. */
+  vota: boolean;
   lectura: LecturaDeCuenta | null;
   /** La base de «Ya lo mandé» se está armando: «Ya lo mandé» la espera. */
   armandoBase: Promise<void> | null;
@@ -203,13 +220,15 @@ interface Ventana {
   llegaron: boolean;
   /** Ya se pidió activar en esta ventana: no se ofrece pedirlo otra vez, solo volver a mirar. */
   activado: boolean;
+  /** Un error ocupa el lugar de la línea del paso: se dice en el pie y la línea no se repite arriba. */
+  conFallo: boolean;
   accion: (() => void) | null;
 }
 
 interface Pantalla {
   titulo?: string;
   linea?: string;
-  /** Otras líneas, después de la primera (solo el modo premios). */
+  /** Avisos que ocupan el lugar de la línea (solo el modo premios). */
   avisos?: string[];
   /** HTML ya escapado. */
   datos?: string;
@@ -393,42 +412,118 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
 }
 
 /**
- * El modo `premios`: una sola pantalla según el estado de la cuenta. Ver el saldo y recibir un premio (activar la línea
- * del dólar digital con el recorrido de siempre), y nada más: ni Mandar, ni la dirección ni el QR para traer saldo de
- * afuera, ni «Ya lo mandé», ni «Ya tengo dólares digitales». Las pantallas que tapan todo (`bloquea`) ya se resolvieron.
+ * Con Google en la red principal, `VITE_PAGAR_CON_GOOGLE=1`, `VITE_RAMPA=premios` y el kit votando a mano: la ventana
+ * prepara la cuenta para recibir y para pagar, y deja cargar dólares digitales desde otra app. Si el kit no votó a mano, esa
+ * cuenta no podría pagar lo que cargue: la ventana queda como sin la variable.
+ */
+const conCarga = (v: Ventana): boolean => v.premios && v.billetera?.tipo === "google" && v.deps.red === "mainnet" && v.vota && pagarConGoogle();
+
+/**
+ * El modo `premios`: una sola pantalla según el estado de la cuenta, con un título, como mucho una línea y una acción
+ * principal. Ver el saldo y recibir un premio (activar la línea del dólar digital con el recorrido de siempre). Mandar y
+ * cargar dólares solo aparecen con el voto por contenido y con pagar con Google; sin ellos, ni Mandar, ni la dirección ni el
+ * QR para traer saldo de afuera, ni «Ya lo mandé», ni «Ya tengo dólares digitales». Las pantallas que tapan todo
+ * (`bloquea`) ya se resolvieron.
+ *
+ * Un aviso no suma una línea: ocupa su lugar. Dice lo que evita un error: que una cuenta con un acceso que Tinkazo no puso
+ * pida el premio en otra, y que mientras la cuenta reciba premios no sirve para organizar (solo cuando de verdad no puede
+ * sellar: con el kit votando a mano, sí sirve).
  */
 function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
   const volverAMirar = { texto: t("saldoVolverAMirar"), accion: () => void mirar(v) };
   const cerrar = { texto: t("acctClose"), accion: () => v.d.cerrar() };
+  const volver = {
+    id: "volver",
+    texto: t("clVolver"),
+    accion: () => {
+      v.vista = "inicio";
+      v.estadoLinea.textContent = "";
+      pintar(v);
+    },
+  };
   const propia = v.billetera?.tipo === "propia";
-  // Solo con Google: una cuenta con otra firma encima, que Tinkazo no puso. Es una línea suelta: avisa y no esconde Recibir
-  // un premio, porque la regla supone cómo nacen las cuentas del proveedor y se midió en una sola cuenta real
-  // (`tieneFirmanteAjeno`). Si la regla se equivocara con otras, no puede dejar a todos sin premios.
+  // Solo con Google: una cuenta con otra firma encima, que Tinkazo no puso. Avisa y no esconde Recibir un premio, porque la
+  // regla supone cómo nacen las cuentas del proveedor y se midió en una sola cuenta real (`tieneFirmanteAjeno`). Si la regla
+  // se equivocara con otras, no puede dejar a todos sin premios.
   const ajena = !propia && v.lectura !== null && typeof v.lectura === "object" && tieneFirmanteAjeno(v.lectura, v.cuenta);
-  const avisoAjena = ajena ? [t("saldoPremioNoApta")] : [];
+  // Cargar dólares en esa cuenta sí se esconde: lo que se carga lo podría mover ese otro acceso. Quedan Mandar y el aviso.
+  const carga = conCarga(v) && !ajena;
+  // Con Google, en la red principal y sin el voto a mano, la cuenta que recibe premios no sella ni sortea (la puerta del
+  // premio, `wallet-pollar.ts`, que fuera de la red principal no corre).
+  const noOrganiza = !propia && !v.vota && v.deps.red === "mainnet";
+  const avisos = [...(ajena ? [t("saldoPremioNoApta")] : []), ...(noOrganiza ? [t("saldoPremioNoOrganiza")] : [])];
+  /** La línea del estado, o sus avisos en su lugar: nunca las dos cosas. */
+  const dice = (linea: string): Pick<Pantalla, "linea" | "avisos"> => (avisos.length > 0 ? { avisos } : { linea });
   switch (e.estado) {
     case "puede": {
-      const comoSaco = [t(propia ? "saldoPremioRetirarPropia" : "saldoPremioRetirarLuego"), ...textoDelCostoDelRetiro(v)];
+      if (carga && v.vista === "traer") {
+        // Cargar: la dirección de la cuenta con su QR, y «Ya lo mandé». Una sola principal, y Volver.
+        return {
+          conSaldo: false,
+          titulo: t("saldoRecibirTitulo"),
+          linea: t("saldoCargarOjo"),
+          datos: datosParaRecibir(v),
+          plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoCargarComo")] },
+          principal: v.llegaron ? cerrar : { texto: t("saldoYaMande"), accion: () => void yaLoMande(v) },
+          secundarios: [volver],
+        };
+      }
+      const saldo = saldoUsdc(v);
+      let stroops = 0n;
+      try {
+        stroops = saldo === null ? 0n : stroopsDe(saldo);
+      } catch {
+        stroops = 0n;
+      }
+      const secundarios: Array<{ id: string; texto: string; accion: () => void }> = [];
+      if (carga) {
+        secundarios.push({
+          id: "cargar",
+          texto: t("saldoCargarBtn"),
+          accion: () => {
+            v.vista = "traer";
+            v.estadoLinea.textContent = "";
+            pintar(v);
+          },
+        });
+      }
+      // Mandar, solo con Google, el voto a mano y algo para mandar: es el retiro, con su costo a la vista.
+      const mandar = !propia && v.vota && stroops > 0n;
+      if (mandar) {
+        secundarios.push({
+          id: "mandar",
+          texto: t("saldoMandarBtn"),
+          accion: () => {
+            v.d.cerrar();
+            v.deps.mandar(v.cuenta, stroops);
+          },
+        });
+      }
+      // Cómo sacar el dinero va plegado. Con Mandar a la vista, solo lo que cuesta; sin Mandar, que todavía no se puede.
+      const costo = textoDelCostoDelRetiro(v);
+      const comoSaco = propia ? [t("saldoPremioRetirarPropia")] : mandar ? costo : [t("saldoPremioRetirarLuego"), ...costo];
+      // La acción de verdad es la principal (cargar, o mandar para quien ganó), y cerrar queda en la X. Sin acciones, Cerrar.
+      const [primera, ...resto] = secundarios;
+      // Con el saldo arriba, "Tu cuenta está lista" repite lo que ya se ve. Con un acceso ajeno, el título dice qué hacer.
+      const titulo = ajena ? t("saldoAjenaTitulo") : saldo !== null ? undefined : t("saldoPremioListoTitulo");
       return {
         conSaldo: true,
-        linea: t("saldoPremioLlegaSolo"),
-        // Con Google, la cuenta que ya puede recibir un premio no sella ni sortea (la puerta del premio, `wallet-pollar.ts`).
-        avisos: [...(propia ? [] : [t("saldoPremioNoOrganiza")]), ...avisoAjena],
-        plegado: { resumen: t("cargaComoSaco"), textos: comoSaco },
-        principal: cerrar,
+        ...(titulo !== undefined ? { titulo } : {}),
+        ...dice(t(carga ? "saldoPuedeLinea" : "saldoPremioLlegaSolo")),
+        ...(comoSaco.length > 0 ? { plegado: { resumen: t("cargaComoSaco"), textos: comoSaco } } : {}),
+        ...(resto.length > 0 ? { secundarios: resto, secundariosArriba: true } : {}),
+        principal: primera ? { texto: primera.texto, accion: primera.accion } : cerrar,
       };
     }
     case "falta-activar":
       return {
-        titulo: t("saldoPremioRecibirTitulo"),
-        linea: t(propia ? "saldoPremioActivarPropio" : "saldoPremioRecibirLinea"),
-        // Con Google, antes de prepararla: después no organiza con esa cuenta (la puerta del premio, `wallet-pollar.ts`).
-        avisos: [...(propia ? [] : [t("saldoPremioNoOrganiza")]), ...avisoAjena],
+        titulo: t(carga ? "saldoPrepTitulo" : "saldoPremioRecibirTitulo"),
+        ...dice(t(propia ? "saldoPremioActivarPropio" : carga ? "saldoPrepLinea" : "saldoPremioRecibirLinea")),
         ...(propia ? { plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoActivarPropioMas")] } } : {}),
-        principal: v.activado ? volverAMirar : { texto: t("saldoPremioRecibirBtn"), accion: () => void activar(v) },
+        principal: v.activado ? volverAMirar : { texto: t(carga ? "saldoPrepBtn" : "saldoPremioRecibirBtn"), accion: () => void activar(v) },
       };
     case "activandose":
-      return { titulo: t("saldoPremioRecibirTitulo"), linea: t("saldoActivandoEspera"), principal: volverAMirar };
+      return { titulo: t(carga ? "saldoPrepTitulo" : "saldoPremioRecibirTitulo"), linea: t("saldoActivandoEspera"), principal: volverAMirar };
     case "falta-xlm":
       return { titulo: t("saldoPremioRecibirTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita), m: legible(e.tiene) }), principal: volverAMirar };
     case "no-recibe-mas":
@@ -448,6 +543,23 @@ function datosParaRecibir(v: Ventana): string {
     `<img class="saldo-qr" data-saldo="qr" alt="${esc(t("saldoQrAlt"))}" width="176" height="176">` +
     ultimo
   );
+}
+
+/** Cuánto mide el QR: lo más grande que deja ver también la dirección y el botón sin recorrer, en celular y en laptop. */
+function anchoDelQr(): number {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  if (w >= 900) return Math.max(176, Math.min(Math.round(h * 0.4), 320));
+  return Math.max(120, Math.min(Math.round(w * 0.5), Math.round(h * 0.26)));
+}
+
+/** Un error del paso: ocupa el lugar de la línea, va en el pie y se marca como error. */
+function fallar(v: Ventana, texto: string): void {
+  v.conFallo = true;
+  pintar(v);
+  v.estadoLinea.classList.remove("ok");
+  v.estadoLinea.classList.add("bad");
+  v.estadoLinea.textContent = texto;
 }
 
 function pintar(v: Ventana): void {
@@ -472,7 +584,7 @@ function pintar(v: Ventana): void {
     (saldo !== null ? `<p class="saldo-total" data-saldo="total">${esc(textoDelSaldo(v, saldo))}</p>` : "") +
     `<section class="saldo-paso">` +
     (p.titulo ? `<h3 class="saldo-titulo">${esc(p.titulo)}</h3>` : "") +
-    (p.linea ? `<p class="saldo-lead">${esc(p.linea)}</p>` : "") +
+    (p.linea && !v.conFallo ? `<p class="saldo-lead">${esc(p.linea)}</p>` : "") +
     (p.avisos ?? []).map((a) => `<p class="saldo-lead" data-saldo="aviso">${esc(a)}</p>`).join("") +
     (p.datos ?? "") +
     (p.secundariosArriba ? otras : "") +
@@ -481,10 +593,15 @@ function pintar(v: Ventana): void {
     `</section>`;
 
   for (const s of p.secundarios ?? []) v.d.cuerpo.querySelector<HTMLButtonElement>(`[data-saldo="${s.id}"]`)?.addEventListener("click", s.accion);
+  // Al abrir "Más detalles", lo que aparece se ve: el cuerpo se recorre y el texto quedaría debajo del borde.
+  const mas = v.d.cuerpo.querySelector<HTMLDetailsElement>("details.saldo-mas");
+  mas?.addEventListener("toggle", () => {
+    if (mas.open) mas.scrollIntoView?.({ block: "nearest" });
+  });
   const copiarBtn = v.d.cuerpo.querySelector<HTMLButtonElement>('[data-saldo="copiar"]');
   copiarBtn?.addEventListener("click", () => void copiar(copiarBtn, v.cuenta, t("acctCopy")));
   const qr = v.d.cuerpo.querySelector<HTMLImageElement>('[data-saldo="qr"]');
-  if (qr) void pintarQr(qr, v.cuenta, 176).then((ok) => ok || qr.remove());
+  if (qr) void pintarQr(qr, v.cuenta, anchoDelQr()).then((ok) => ok || qr.remove());
 
   v.boton.textContent = p.principal.texto;
   v.boton.disabled = false;
@@ -500,6 +617,7 @@ async function leerEstado(v: Ventana): Promise<EstadoParaRecibir> {
     v.billetera = billetera;
     if (!billetera) return { estado: "no-se-sabe" };
     const google = billetera.tipo === "google";
+    v.vota = google && deps.votaPorContenido ? await deps.votaPorContenido().catch(() => false) : false;
     const [lectura, proteccion] = await Promise.all([deps.mirar(v.cuenta), google && deps.red === "mainnet" ? deps.proteccion() : Promise.resolve(undefined)]);
     v.lectura = lectura;
     const entrada: EntradaParaRecibir = { red: deps.red, practica: deps.practica, billetera, lectura, proteccion };
@@ -521,14 +639,15 @@ async function leerEstado(v: Ventana): Promise<EstadoParaRecibir> {
 async function mirar(v: Ventana): Promise<void> {
   // La primera mirada del modo premios deja Cerrar encendido (`pintar`): mientras tanto no hay otra cosa que apretar.
   v.boton.disabled = !(v.premios && v.estado === null);
-  v.estadoLinea.classList.remove("ok");
+  v.conFallo = false;
+  v.estadoLinea.classList.remove("ok", "bad");
   v.estadoLinea.textContent = t("saldoMirandoCuenta");
   const e = await leerEstado(v);
   if (!v.abierta) return;
   v.estado = e;
   v.estadoLinea.textContent = "";
-  // En el modo premios no hay «Ya lo mandé»: no se pide el historial de pagos.
-  if (e.estado === "puede" && !v.premios) v.armandoBase ??= armarBase(v);
+  // En el modo premios no hay «Ya lo mandé», salvo al cargar con pagar con Google: sin eso no se pide el historial de pagos.
+  if (e.estado === "puede" && (!v.premios || conCarga(v))) v.armandoBase ??= armarBase(v);
   pintar(v);
 }
 
@@ -539,22 +658,21 @@ async function mirar(v: Ventana): Promise<void> {
 async function activar(v: Ventana): Promise<void> {
   v.boton.disabled = true;
   v.accion = null;
-  v.estadoLinea.classList.remove("ok");
+  v.conFallo = false;
+  v.estadoLinea.classList.remove("ok", "bad");
   v.estadoLinea.textContent = t(v.billetera?.tipo === "propia" ? "saldoActivarAprobar" : "saldoActivando");
   const r: ResultadoDeActivacion = await v.deps.activar().catch(() => "no-salio" as const);
   if (!v.abierta) return;
   if (r === "no-aprobada" || r === "ahora-no") {
     // No se pidió nada que siga vivo: se puede probar de nuevo.
-    pintar(v);
-    v.estadoLinea.textContent = t(r === "no-aprobada" ? "saldoActivarNoAprobado" : "saldoActivarAhoraNo");
+    fallar(v, t(r === "no-aprobada" ? "saldoActivarNoAprobado" : "saldoActivarAhoraNo"));
     return;
   }
   if (r === "no-coincide" || r === "no-coincide-tope") {
     // La regla de la línea no votó el pedido y no se hizo nada. La primera vez se puede probar una vez más. Con el tope de
     // la pestaña ya no se ofrece pedirla otra vez en esta ventana, y se dice que escriba.
     if (r === "no-coincide-tope") v.activado = true;
-    pintar(v);
-    v.estadoLinea.textContent = `${t("saldoActivarNoCoincide")} ${t(r === "no-coincide" ? "cofirmaOtraVez" : "cofirmaEscribinos")}`;
+    fallar(v, `${t("saldoActivarNoCoincide")} ${t(r === "no-coincide" ? "cofirmaOtraVez" : "cofirmaEscribinos")}`);
     return;
   }
   // Lo que se pidió puede seguir vivo: en esta ventana ya no se ofrece pedirlo otra vez (cada pedido nuevo se apila).
@@ -570,8 +688,8 @@ async function activar(v: Ventana): Promise<void> {
     v.estadoLinea.textContent = t("saldoActivadoOk");
     v.estadoLinea.classList.add("ok");
   } else if (r === "hecho" || r === "en-curso" || r === "enviada") v.estadoLinea.textContent = t("saldoActivandoEspera");
-  else if (r === "no-patrocina") v.estadoLinea.textContent = t("saldoNoPuedeApp");
-  else if (r === "no-salio") v.estadoLinea.textContent = t("saldoActivarNoSalio");
+  else if (r === "no-patrocina") fallar(v, t("saldoNoPuedeApp"));
+  else if (r === "no-salio") fallar(v, t("saldoActivarNoSalio"));
 }
 
 /** La primera vez que la cuenta puede recibir en este aparato: el pago más nuevo que ya había. No pisa una guardada. */
@@ -588,7 +706,7 @@ async function armarBase(v: Ventana): Promise<void> {
 /** «Ya lo mandé»: qué llegó desde la base. Nunca invita a mandar de nuevo. */
 async function yaLoMande(v: Ventana): Promise<void> {
   v.boton.disabled = true;
-  v.estadoLinea.classList.remove("ok");
+  v.estadoLinea.classList.remove("ok", "bad");
   v.estadoLinea.textContent = t("saldoMirando");
   await v.armandoBase?.catch(() => undefined);
   const base = leerBase(v.deps.red, v.cuenta);
@@ -655,11 +773,13 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
     vista: opciones.vista ?? "inicio",
     estado: null,
     billetera: null,
+    vota: false,
     lectura: null,
     armandoBase: null,
     ultimo: null,
     llegaron: false,
     activado: false,
+    conFallo: false,
     accion: null,
   };
   v.d = abrirDialogo({
@@ -669,6 +789,7 @@ export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = 
       opciones.alCerrar?.();
     },
   });
+  v.d.card.classList.add("dlg-saldo");
   v.d.pie.append(v.estadoLinea, v.boton);
   v.boton.addEventListener("click", () => {
     if (!v.boton.disabled) v.accion?.();

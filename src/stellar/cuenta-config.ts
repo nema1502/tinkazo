@@ -20,6 +20,11 @@ import { SITIOS_DE_PRODUCCION } from "./patrocinio-config";
  *   transacción que armó la página (issue 180). Vacía o `0`, apagada, y cualquier otro valor frena el build
  *   (`premios-build.ts`). Esta lectura no mira la red ni decide nada por sí sola: quien la usa pregunta además por la red
  *   principal y por si el kit de cuentas de verdad tomó el voto a mano. Todavía nada la usa.
+ * - `VITE_PAGAR_CON_GOOGLE=1`: que quien organiza con una cuenta de Google de Tinkazo pueda cargar dólares digitales y
+ *   pagar el premio desde esa cuenta, en la red principal. El retiro de quien ganó no depende de ella: va con el voto por
+ *   contenido y el costo del retiro. Vacía o `0`, apagada, y cualquier otro valor frena el build
+ *   (`premios-build.ts`). Vale solo junto con `VITE_RAMPA=premios` y con el voto por contenido (`pagarConGoogle`). Todavía
+ *   nada la usa: esta lectura no cambia ningún comportamiento del sitio.
  */
 
 /** El Worker de la cuenta, desplegado en el dominio del proyecto. */
@@ -64,6 +69,8 @@ export interface EntornoDeCuenta {
   url?: string | undefined;
   /** Lo que trae `VITE_VOTO_POR_CONTENIDO`. */
   votoPorContenido?: string | undefined;
+  /** Lo que trae `VITE_PAGAR_CON_GOOGLE`. */
+  pagarConGoogle?: string | undefined;
   /** El `location.hostname` de la página. */
   host?: string | undefined;
 }
@@ -85,6 +92,7 @@ export function entornoDeCuenta(): EntornoDeCuenta {
     cuentaPlanes: e.VITE_CUENTA_PLANES as string | undefined,
     url: e.VITE_CUENTA_URL as string | undefined,
     votoPorContenido: e.VITE_VOTO_POR_CONTENIDO as string | undefined,
+    pagarConGoogle: e.VITE_PAGAR_CON_GOOGLE as string | undefined,
     host: hostActual(),
   };
 }
@@ -135,6 +143,17 @@ export const monedasActivas = (e: EntornoDeCuenta = entornoDeCuenta()): boolean 
  * vote a mano, no de esta bandera.
  */
 export const votoPorContenido = (e: EntornoDeCuenta = entornoDeCuenta()): boolean => e.votoPorContenido === "1";
+
+/**
+ * Si el build pide que quien organiza con una cuenta de Google cargue dólares digitales y pague el premio desde esa cuenta
+ * (`VITE_PAGAR_CON_GOOGLE`). Vale solo con un `1` exacto, y solo si además el modo de la rampa es `premios` y el voto por
+ * contenido está prendido: el pago firma con la cuenta que guarda el dinero, y sin esas dos cosas nada lo comprobaría ni
+ * lo dejaría ver. El retiro de quien ganó no pregunta por esta bandera. Ante la duda queda apagada. El build tampoco deja
+ * salir esas combinaciones (`problemasDePagarConGoogle`, `premios-build.ts`). No mira la red: quien la use pregunta
+ * además por la red principal.
+ */
+export const pagarConGoogle = (e: EntornoDeCuenta = entornoDeCuenta()): boolean =>
+  e.pagarConGoogle === "1" && modoDeRampa(e) === "premios" && votoPorContenido(e);
 
 /** Dónde está el Worker, o `null` si las monedas están apagadas o no hay a dónde hablar (localhost sin `VITE_CUENTA_URL`). */
 export function urlDeCuenta(e: EntornoDeCuenta = entornoDeCuenta()): string | null {

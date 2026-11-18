@@ -4,6 +4,7 @@ import { network } from "../stellar/config";
 import { USDC_MAINNET } from "../stellar/pagos";
 import { NOTA_DEL_RETIRO, VIDA_DEL_PAGO_S } from "../stellar/pagos-regla";
 import type { CuentaMirada, LecturaDeCuenta } from "../stellar/usdc-cuenta";
+import type { PedidoDeRetiro, ResultadoDelRetiro } from "../stellar/wallet-pollar";
 import { type DatosDelEnvio, armarEnvio, depsDelSitio, motivoContraElEnvio, notaDelEnvio, prepararEnvio } from "./mandar-usdc";
 
 // La billetera activa del sitio, de mentira: se mira si llega a firmar y a qué.
@@ -11,6 +12,10 @@ interface BilleteraFalsa {
   address: string;
   signTransaction: () => Promise<{ signedTxXdr: string }>;
   signAndSubmit: (xdr: string) => Promise<unknown>;
+  /** Si el kit de la cuenta de Google vota a mano lo que armó la página. */
+  votaPorContenido?: () => boolean;
+  /** El retiro de la billetera de Google, por el servicio de comisiones. */
+  retirar?: (xdr: string, pedido: PedidoDeRetiro) => Promise<ResultadoDelRetiro>;
 }
 const billetera = vi.hoisted(() => ({
   activa: null as null | BilleteraFalsa,
@@ -428,13 +433,14 @@ describe("mandar a firmar un retiro con costo", () => {
     mandarSola.mockClear();
   });
 
-  it("lo que armó la propia página, con una cuenta de Google, se manda a firmar", async () => {
+  it("un retiro con costo de una cuenta de Google que no vota a mano no va por el proveedor: no se pide nada", async () => {
     conCostoConfigurado();
     conGoogle();
     conLaHoraFija();
     const xdr = await armarEnvio(retiro(), "500");
-    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("listo");
-    expect(mandarSola).toHaveBeenCalledExactlyOnceWith(xdr);
+    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("no-salio");
+    expect(mandarSola).not.toHaveBeenCalled();
+    expect(firmar).not.toHaveBeenCalled();
   });
 
   it("con el costo configurado, unos datos sin costo no se mandan a firmar", async () => {
@@ -529,5 +535,159 @@ describe("mandar a firmar un retiro con costo", () => {
     conGoogle();
     expect(await depsDelSitio().enviar("XDR", YO)).toBe("listo");
     expect(mandarSola).toHaveBeenCalledExactlyOnceWith("XDR");
+  });
+});
+
+describe("mandar con el voto por contenido: el retiro de la billetera", () => {
+  const redInicial = network.name;
+  const firmar = vi.fn(async (): Promise<{ signedTxXdr: string }> => ({ signedTxXdr: "firmado" }));
+  const mandarSola = vi.fn(async (_xdr: string): Promise<unknown> => ({}));
+  const retirar = vi.fn(async (): Promise<ResultadoDelRetiro> => ({ estado: "salio", hash: "a".repeat(64) }));
+  /** Una cuenta de Google cuyo kit vota a mano (`aMano`) o no. */
+  const conGoogle = (aMano: boolean): void => {
+    billetera.google = true;
+    billetera.activa = { address: YO, signTransaction: firmar, signAndSubmit: mandarSola, votaPorContenido: () => aMano, retirar };
+  };
+  const conCostoConfigurado = (): void => {
+    vi.stubEnv("VITE_RETIRO_COSTO", "0.50");
+    vi.stubEnv("VITE_RETIRO_CUENTA", COBROS);
+    network.name = "mainnet";
+  };
+
+  afterEach(() => {
+    network.name = redInicial;
+    billetera.activa = null;
+    billetera.google = false;
+    firmar.mockClear();
+    mandarSola.mockClear();
+    retirar.mockClear();
+    retirar.mockImplementation(async () => ({ estado: "salio", hash: "a".repeat(64) }));
+  });
+
+  it("con el voto a mano, enviar llama a retirar con lo elegido y nunca a firmar y mandar por el proveedor", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    const xdr = await armarEnvio(retiro({ nota: { tipo: "id", valor: "4455" } }), "500");
+    expect(await depsDelSitio().enviar(xdr, YO, retiro({ nota: { tipo: "id", valor: "4455" } }))).toBe("listo");
+    expect(retirar).toHaveBeenCalledExactlyOnceWith(xdr, { destino: OTRA, sale: (125n * D) / 10n, nota: { tipo: "id", valor: "4455" } });
+    expect(mandarSola).not.toHaveBeenCalled();
+  });
+
+  it("un retiro incierto queda en curso: no se manda de nuevo", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    retirar.mockImplementation(async () => ({ estado: "incierto" }));
+    expect(await depsDelSitio().enviar(await armarEnvio(retiro(), "500"), YO, retiro())).toBe("en-curso");
+  });
+
+  it("la negativa de la regla es no-coincide, y con el tope no-coincide-tope", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    const xdr = await armarEnvio(retiro(), "500");
+    retirar.mockImplementation(async () => ({ estado: "no-salio", motivo: "no-coincide" }));
+    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("no-coincide");
+    retirar.mockImplementation(async () => ({ estado: "no-salio", motivo: "no-coincide-tope" }));
+    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("no-coincide-tope");
+  });
+
+  it("cortado por la persona es no aprobado, y lo demás que no salió es no salió", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    const xdr = await armarEnvio(retiro(), "500");
+    retirar.mockImplementation(async () => ({ estado: "no-salio", motivo: "cancelado" }));
+    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("no-aprobado");
+    for (const motivo of ["regla", "ahora-no", "red"] as const) {
+      retirar.mockImplementation(async () => ({ estado: "no-salio", motivo }));
+      expect(await depsDelSitio().enviar(xdr, YO, retiro()), motivo).toBe("no-salio");
+    }
+  });
+
+  it("un retiro que lanza igual queda en curso: no se dice que no salió", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    retirar.mockImplementation(async () => {
+      throw new Error("inesperado");
+    });
+    expect(await depsDelSitio().enviar(await armarEnvio(retiro(), "500"), YO, retiro())).toBe("en-curso");
+  });
+
+  it("sin los datos del envío no se pide el retiro", async () => {
+    vi.stubEnv("VITE_RETIRO_COSTO", "");
+    vi.stubEnv("VITE_RETIRO_CUENTA", "");
+    network.name = "mainnet";
+    conGoogle(true);
+    expect(await depsDelSitio().enviar("XDR", YO)).toBe("no-salio");
+    expect(retirar).not.toHaveBeenCalled();
+    expect(mandarSola).not.toHaveBeenCalled();
+  });
+
+  it("con el voto a mano, unos datos con otro costo que el configurado no llegan a la billetera", async () => {
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    const otro = retiro({ costo: { stroops: 4_000_000n, destino: COBROS } });
+    expect(await depsDelSitio().enviar(await armarEnvio(otro, "500"), YO, otro)).toBe("no-salio");
+    expect(retirar).not.toHaveBeenCalled();
+  });
+
+  it("en el modo premios con la variable del voto y un kit que no vota a mano, no se pide nada", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    conCostoConfigurado();
+    conGoogle(false);
+    conLaHoraFija();
+    expect(await depsDelSitio().enviar(await armarEnvio(retiro(), "500"), YO, retiro())).toBe("no-salio");
+    expect(retirar).not.toHaveBeenCalled();
+    expect(mandarSola).not.toHaveBeenCalled();
+  });
+
+  it("en el modo premios con el voto a mano se retira por la billetera", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    conCostoConfigurado();
+    conGoogle(true);
+    conLaHoraFija();
+    expect(await depsDelSitio().enviar(await armarEnvio(retiro(), "500"), YO, retiro())).toBe("listo");
+    expect(retirar).toHaveBeenCalledOnce();
+  });
+
+  it("sin el voto a mano y fuera del modo premios, un retiro con costo no va por el proveedor ni por la billetera", async () => {
+    conCostoConfigurado();
+    conGoogle(false);
+    conLaHoraFija();
+    const xdr = await armarEnvio(retiro(), "500");
+    expect(await depsDelSitio().enviar(xdr, YO, retiro())).toBe("no-salio");
+    expect(mandarSola).not.toHaveBeenCalled();
+    expect(retirar).not.toHaveBeenCalled();
+  });
+
+  it("sin el voto a mano, fuera del modo premios y sin costo, firma y manda como siempre", async () => {
+    vi.stubEnv("VITE_RETIRO_COSTO", "");
+    vi.stubEnv("VITE_RETIRO_CUENTA", "");
+    network.name = "mainnet";
+    conGoogle(false);
+    expect(await depsDelSitio().enviar("XDR", YO, retiro({ costo: null }))).toBe("listo");
+    expect(mandarSola).toHaveBeenCalledExactlyOnceWith("XDR");
+    expect(retirar).not.toHaveBeenCalled();
+  });
+
+  it("una billetera propia no retira por la billetera de Google aunque el modo vote", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    vi.stubEnv("VITE_RETIRO_COSTO", "");
+    vi.stubEnv("VITE_RETIRO_CUENTA", "");
+    network.name = "mainnet";
+    const firmarNo = vi.fn(async (): Promise<{ signedTxXdr: string }> => {
+      throw new Error("sin aprobar");
+    });
+    billetera.activa = { address: YO, signTransaction: firmarNo, signAndSubmit: mandarSola, retirar };
+    expect(await depsDelSitio().enviar("XDR", YO)).toBe("no-aprobado");
+    expect(firmarNo).toHaveBeenCalledOnce();
+    expect(retirar).not.toHaveBeenCalled();
   });
 });

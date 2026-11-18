@@ -1,7 +1,7 @@
 import { esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { type NetworkName, network } from "../stellar/config";
-import { type ModoDeRampa, modoDeRampa } from "../stellar/cuenta-config";
+import { type ModoDeRampa, modoDeRampa, votoPorContenido } from "../stellar/cuenta-config";
 import { esDeRed } from "../stellar/errores";
 import { passphraseDe } from "../stellar/oficiales";
 import { esDireccionG } from "../stellar/pagos";
@@ -19,6 +19,7 @@ import {
 import { costoDelRetiro, cuentaDelRetiro, montoEnTexto } from "../stellar/retiro-config";
 import { type CuentaMirada, type LecturaDeCuenta, mirarCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
 import { entornoDelBuild } from "../stellar/venta-piloto";
+import type { SubmittingWallet } from "../stellar/wallet-pollar";
 import { abrirDialogo, botonPrincipal, lineaDeEstado } from "./dialogo";
 import { con } from "./monedas-vista";
 
@@ -34,14 +35,21 @@ import { con } from "./monedas-vista";
  * guarda nada.
  *
  * Con `VITE_RAMPA=premios` Mandar no existe: la función que prepara el envío, la que lo manda y la que abre la ventana
- * se niegan (`mandarPermitido`), no solo se esconde el botón. Mandar vuelve cuando el sello y el sorteo se voten a mano.
+ * se niegan (`mandarPermitido`), no solo se esconde el botón. Mandar vuelve con el voto por contenido
+ * (`VITE_VOTO_POR_CONTENIDO=1`), y con una cuenta de Google solo si el kit de verdad vota a mano.
+ *
+ * Con el voto a mano, una cuenta de Google no manda por el proveedor de cuentas: el envío es un retiro de la billetera
+ * (`retirar` de `wallet-pollar.ts`), que lo pasa por su regla, lo firma con el voto por contenido y lo manda al servicio de
+ * comisiones de Tinkazo. Lo que vuelve es un resultado con su forma, nunca un texto que se interprete: una negativa de la
+ * regla dice que no se mandó nada, y la duda dice que no se mande de nuevo.
  *
  * Con el costo del retiro configurado (`stellar/retiro-config.ts`) y una cuenta de Google, Mandar es un retiro: una sola
  * transacción con dos pagos de la misma moneda, primero lo que llega al destino (lo que sale de la cuenta menos el costo) y
  * después el costo exacto a la cuenta del costo. La persona elige cuánto sale de su cuenta y ve tres números antes de
  * confirmar: lo que sale, el costo y lo que llega. Lo que llega es siempre 1 dólar digital o más, también con Todo y con La
  * mitad, y si el saldo no alcanza no se arma nada y la pantalla lo dice. Antes de firmar, la transacción armada pasa por
- * `motivoContraElRetiro` y, si no es exactamente la pedida, no se manda. Los montos son siempre enteros en stroops
+ * `motivoContraElRetiro` y, si no es exactamente la pedida, no se manda. Un retiro con costo va solo por `retirar`: sin
+ * el voto a mano no se pide nada, nunca va por `signAndSubmit`. Los montos son siempre enteros en stroops
  * (siete decimales), nunca decimales de coma flotante. Sin el costo configurado, o con otra cuenta que no sea de Google,
  * Mandar es el de siempre: un solo pago y los mismos textos.
  */
@@ -168,8 +176,11 @@ export interface DatosDelEnvio {
   costo?: CostoDelRetiro | null;
 }
 
-/** ¿Se puede mandar? No en el modo `premios`: ahí la cuenta solo ve su saldo y recibe. */
-export const mandarPermitido = (modo: ModoDeRampa = modoDeRampa()): boolean => modo !== "premios";
+/**
+ * ¿Se puede mandar? En el modo `premios`, solo con el voto por contenido (`voto`, la variable del build): sin él la cuenta
+ * solo ve su saldo y recibe. Con una cuenta de Google el envío pide además que el kit de verdad vote a mano (`enviar`).
+ */
+export const mandarPermitido = (modo: ModoDeRampa = modoDeRampa(), voto: boolean = votoPorContenido()): boolean => modo !== "premios" || voto;
 
 /**
  * La nota que lleva el pago. Con costo y sin nota pedida, la fija del retiro (`tkz-retiro`): así ningún lector de órdenes
@@ -259,8 +270,30 @@ export async function prepararEnvio(d: DatosDelEnvio, mirar: (cuenta: string) =>
   }
 }
 
-/** Cómo terminó: mandado, se está mandando (no se sabe todavía), no lo aprobó en su billetera, o no salió. */
-export type ResultadoDelEnvio = "listo" | "en-curso" | "no-aprobado" | "no-salio";
+/**
+ * Cómo terminó: mandado, se está mandando (no se sabe todavía), no lo aprobó en su billetera, no salió, o no se mandó nada
+ * porque no se pudo comprobar que fuera el envío preparado (`no-coincide`, y `no-coincide-tope` cuando ya no se vuelve a
+ * intentar desde esta pestaña).
+ */
+export type ResultadoDelEnvio = "listo" | "en-curso" | "no-aprobado" | "no-salio" | "no-coincide" | "no-coincide-tope";
+
+/** La billetera de Google, vista desde Mandar: lo que hace falta para retirar por el servicio de comisiones. */
+type BilleteraQueRetira = Pick<SubmittingWallet, "retirar">;
+
+/**
+ * El envío de una cuenta de Google con el voto a mano: un retiro de la billetera (`retirar`), con lo que la persona
+ * eligió. La billetera pone el costo de la configuración y revisa lo armado. Lo que vuelve se traduce por su forma: salió
+ * es listo, incierto es en curso (no se manda de nuevo), la negativa de la regla es que no se mandó nada, y cortarlo es
+ * que no se aprobó. Sin los datos del envío, o de otra cuenta, no se pide nada.
+ */
+async function retirarCon(w: BilleteraQueRetira, xdr: string, origen: string, datos: DatosDelEnvio | undefined): Promise<ResultadoDelEnvio> {
+  if (!datos || datos.origen !== origen || typeof w.retirar !== "function") return "no-salio";
+  const r = await w.retirar(xdr, { destino: datos.destino, sale: datos.monto, nota: datos.nota }).catch((): null => null);
+  if (r === null || r.estado === "incierto") return "en-curso";
+  if (r.estado === "salio") return "listo";
+  if (r.motivo === "no-coincide" || r.motivo === "no-coincide-tope") return r.motivo;
+  return r.motivo === "cancelado" ? "no-aprobado" : "no-salio";
+}
 
 /* ------------------------------------------------------------------ la ventana */
 
@@ -335,6 +368,14 @@ export function depsDelSitio(): DepsDeMandar {
         if (costo !== null && (await motivoContraElEnvio(xdr, datos)) !== null) return "no-salio";
       }
       if (submitsItself(w)) {
+        // Con el voto a mano, una cuenta de Google retira por el servicio de comisiones, nunca por el proveedor. En el modo
+        // premios, sin el voto a mano de verdad no se pide nada: la cuenta guarda dinero y su firma sería por hash.
+        const aMano = w.votaPorContenido?.() === true;
+        if (aMano) return retirarCon(w, xdr, origen, datos);
+        if (modoDeRampa() === "premios") return "no-salio";
+        // Un retiro con su costo tampoco: va solo por el servicio de comisiones, nunca por el proveedor (decisión 22). Acá
+        // `datos.costo` ya es el que rige por configuración.
+        if (datos?.costo) return "no-salio";
         try {
           await w.signAndSubmit(xdr);
           return "listo";
@@ -662,6 +703,15 @@ export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Part
       boton.textContent = t("acctClose");
       decir(r === "listo" ? textoDeListo(datos) : t("saldoMandarEnCurso"));
       if (r === "listo") linea.classList.add("ok");
+      return;
+    }
+    if (r === "no-coincide" || r === "no-coincide-tope") {
+      // No se mandó nada. La primera vez se puede probar otra vez. Con el tope, desde esta pestaña ya no.
+      if (r === "no-coincide-tope") {
+        estado.fin = true;
+        boton.textContent = t("acctClose");
+      }
+      decir(`${t("saldoMandarNoCoincide")} ${t(r === "no-coincide" ? "cofirmaOtraVez" : "cofirmaEscribinos")}`, true);
       return;
     }
     decir(t(r === "no-aprobado" ? "saldoActivarNoAprobado" : "saldoMandarNoSalio"), true);

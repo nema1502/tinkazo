@@ -14,8 +14,9 @@ vi.mock("./qr", () => ({
 
 /**
  * «Tus dólares digitales» con `VITE_RAMPA=premios`: ver el saldo y recibir un premio, y nada más. Sin Mandar, sin la
- * dirección ni el QR para traer saldo de afuera, sin «Ya lo mandé» y sin pedir el historial de pagos. Todo con la
- * cuenta y la red de mentira.
+ * dirección ni el QR para traer saldo de afuera, sin «Ya lo mandé» y sin pedir el historial de pagos. Cada estado dice un
+ * título, como mucho una línea y tiene una sola acción principal. Con el voto por contenido y pagar con Google (cada una
+ * con su variable) la ventana suma Mandar, preparar la cuenta y cargar dólares. Todo con la cuenta y la red de mentira.
  */
 
 let YO = Keypair.random().publicKey();
@@ -78,6 +79,9 @@ const abrir = async (m: Mundo): Promise<void> => {
     expect(principal().disabled).toBe(false);
   });
 };
+/** Lo que dice el cuerpo sin el saldo de arriba: las líneas y los avisos, uno por párrafo, y los títulos. */
+const lineas = (): string[] => [...document.querySelectorAll(".saldo-paso .saldo-lead")].map((p) => p.textContent ?? "");
+const titulos = (): string[] => [...document.querySelectorAll(".saldo-paso .saldo-titulo")].map((p) => p.textContent ?? "");
 const hayAlgunoDe = (...ids: string[]): boolean => ids.some((id) => document.querySelector(`[data-saldo="${id}"]`) !== null);
 
 /** Nada de traer saldo de afuera ni de mandarlo, en ningún estado. */
@@ -110,12 +114,13 @@ describe("el modo premios, con una cuenta de Google", () => {
   it("sin la línea del dólar digital: Recibir un premio es la principal y no hay dirección, QR ni Ya tengo dólares digitales", async () => {
     await abrir(mundo({ lectura: mirada() }));
     expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
-    expect(cuerpo()).toContain(T.es.saldoPremioRecibirLinea as string);
+    // Una sola línea: el aviso de que esa cuenta no organiza ocupa el lugar de la de siempre.
+    expect(lineas()).toEqual([T.es.saldoPremioNoOrganiza]);
     expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
     sinTraerNiMandar();
   });
 
-  it("tocar Recibir un premio activa la línea con el recorrido de siempre y, cuando aparece, dice que el premio llega solo", async () => {
+  it("tocar Recibir un premio activa la línea con el recorrido de siempre y, cuando aparece, dice que la cuenta está lista", async () => {
     const m = mundo({ lectura: mirada() });
     let vueltas = 0;
     m.pausa = async () => {
@@ -128,7 +133,8 @@ describe("el modo premios, con una cuenta de Google", () => {
     expect(estado()).toBe(t("saldoActivando"));
     await vi.waitFor(() => expect(estado()).toBe(t("saldoActivadoOk")));
     expect(m.activar).toHaveBeenCalledOnce();
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
+    expect(lineas()).toEqual([T.es.saldoPremioNoOrganiza]);
     expect(principal().textContent).toBe(t("acctClose"));
     sinTraerNiMandar();
   });
@@ -150,11 +156,24 @@ describe("el modo premios, con una cuenta de Google", () => {
     expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
   });
 
-  it("con la cuenta lista para recibir y con saldo: el saldo arriba, el premio llega solo, y Cerrar. Sin Mandar, dirección ni QR", async () => {
+  it("un error al activar se marca como error y ocupa el lugar de la línea del paso", async () => {
+    const m = propia({ activar: vi.fn(async () => "no-salio" as const) });
+    await abrir(m);
+    expect(lineas()).toEqual([T.es.saldoPremioActivarPropio]);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoActivarNoSalio")));
+    expect(document.querySelector(".dlg-estado")?.classList.contains("bad")).toBe(true);
+    // El error ocupa el lugar de la línea del paso: no se dice dos veces.
+    expect(lineas()).toEqual([]);
+    expect(titulos()).toEqual([T.es.saldoPremioRecibirTitulo]);
+  });
+
+  it("con la cuenta lista para recibir y con saldo: el saldo arriba, un título, una línea y Cerrar. Sin Mandar, dirección ni QR", async () => {
     const m = mundo();
     await abrir(m);
     expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,5 dólares digitales.");
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
+    expect(lineas()).toHaveLength(1);
     expect(principal().textContent).toBe(t("acctClose"));
     sinTraerNiMandar();
     expect(m.mandar).not.toHaveBeenCalled();
@@ -174,7 +193,7 @@ describe("el modo premios, con una cuenta de Google", () => {
       expect(document.querySelector('[data-saldo="mirando"]')).toBeNull();
       expect(principal().disabled).toBe(false);
     });
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
     expect(principal().textContent).toBe(t("acctClose"));
     sinTraerNiMandar();
   });
@@ -262,12 +281,13 @@ describe("el modo premios, con una cuenta de Google", () => {
   it("antes de prepararla, avisa que con esa cuenta ya no se organiza", async () => {
     await abrir(mundo({ lectura: mirada() }));
     expect(document.querySelector('[data-saldo="aviso"]')?.textContent).toBe(T.es.saldoPremioNoOrganiza);
+    expect(T.es.saldoPremioNoOrganiza).toBe("Mientras reciba premios, esta cuenta no organiza sorteos.");
   });
 
   it("una cuenta con una firma que no es la suya: una línea suelta que avisa, y Recibir un premio sigue a la vista", async () => {
     // La regla supone cómo nacen las cuentas del proveedor y se midió en una sola cuenta real: no puede esconder el premio.
     await abrir(mundo({ lectura: mirada({ firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 1 }] }) }));
-    expect(cuerpo()).toContain(T.es.saldoPremioNoApta as string);
+    expect(lineas()).toEqual([T.es.saldoPremioNoApta, T.es.saldoPremioNoOrganiza]);
     expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
     expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
     sinTraerNiMandar();
@@ -275,19 +295,16 @@ describe("el modo premios, con una cuenta de Google", () => {
 
   it("con la línea y una firma que no es la suya, también avisa y deja Cerrar", async () => {
     await abrir(mundo({ lectura: conUsdc("12.5000000", {}, { firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 1 }] }) }));
-    expect(cuerpo()).toContain(T.es.saldoPremioNoApta as string);
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(lineas()).toEqual([T.es.saldoPremioNoApta, T.es.saldoPremioNoOrganiza]);
     expect(principal().textContent).toBe(t("acctClose"));
   });
 
-  it("con la línea ya puesta, también avisa que esa cuenta no sella ni sortea, y dice dónde está la dirección", async () => {
+  it("con la línea ya puesta, también avisa que esa cuenta no sella ni sortea, en lugar de otra línea", async () => {
     await abrir(mundo());
     expect(document.querySelector('[data-saldo="aviso"]')?.textContent).toBe(T.es.saldoPremioNoOrganiza);
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
-    expect(T.es.saldoPremioLlegaSolo).toContain("quien organiza te lo manda a esta cuenta");
-    expect(T.es.saldoPremioLlegaSolo).toContain("panel de tu cuenta");
-    expect(T.es.saldoPremioLlegaSolo).not.toContain("no tenés que hacer nada más");
-    // La dirección sigue sin mostrarse en la ventana: está en el panel de la cuenta.
+    expect(lineas()).toEqual([T.es.saldoPremioNoOrganiza]);
+    expect(cuerpo()).not.toContain(T.es.saldoPremioLlegaSolo as string);
+    // La dirección no se muestra en la ventana: está en el panel de la cuenta.
     expect(document.body.textContent).not.toContain(YO);
   });
 
@@ -307,14 +324,13 @@ describe("el modo premios, con una cuenta de Google", () => {
     setLang("en");
     await abrir(mundo({ lectura: mirada() }));
     expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.en.saldoPremioRecibirTitulo);
-    expect(cuerpo()).toContain(T.en.saldoPremioRecibirLinea as string);
-    expect(cuerpo()).toContain(T.en.saldoPremioNoOrganiza as string);
-    expect(principal().textContent).toBe("Receive a prize");
+    expect(lineas()).toEqual([T.en.saldoPremioNoOrganiza]);
+    expect(principal().textContent).toBe("Get my account ready");
 
     document.body.innerHTML = "";
     await abrir(mundo());
     expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.5 digital dollars.");
-    expect(cuerpo()).toContain(T.en.saldoPremioLlegaSolo as string);
+    expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
     expect(document.querySelector(".saldo-mas")?.textContent).toContain(T.en.saldoPremioRetirarLuego as string);
     expect(principal().textContent).toBe("Close");
   });
@@ -339,7 +355,8 @@ describe("el modo premios, con una billetera propia", () => {
     m.lectura = conUsdc("0.0000000");
     terminar("activada");
     await vi.waitFor(() => expect(estado()).toBe(t("saldoActivadoOk")));
-    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(titulos(), "con el saldo arriba no se repite que la cuenta está lista").toEqual([]);
+    expect(lineas()).toEqual([T.es.saldoPremioLlegaSolo]);
     sinTraerNiMandar();
   });
 

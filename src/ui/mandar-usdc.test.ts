@@ -11,6 +11,7 @@ import type { CuentaMirada, LecturaDeCuenta } from "../stellar/usdc-cuenta";
 import {
   type DatosDelEnvio,
   type DepsDeMandar,
+  type ResultadoDelEnvio,
   abrirMandar,
   deAUnDolar,
   deAUnDolarConCosto,
@@ -92,7 +93,7 @@ interface Mundo extends DepsDeMandar {
   /** Los datos que la ventana pidió preparar, y los que entregó junto con cada envío. */
   preparados: DatosDelEnvio[];
   datosEnviados: (DatosDelEnvio | undefined)[];
-  respuesta: "listo" | "en-curso" | "no-aprobado" | "no-salio";
+  respuesta: ResultadoDelEnvio;
 }
 
 function mundo(o: Partial<Mundo> = {}): Mundo {
@@ -734,6 +735,20 @@ describe("el modo premios: Mandar no existe", () => {
     for (const modo of ["pollar", "recibir", "apagada"] as const) expect(mandarPermitido(modo), modo).toBe(true);
   });
 
+  it("con el voto por contenido, premios deja mandar, y sin él no", () => {
+    expect(mandarPermitido("premios", true)).toBe(true);
+    expect(mandarPermitido("premios", false)).toBe(false);
+    for (const modo of ["pollar", "recibir", "apagada"] as const) expect(mandarPermitido(modo, false), modo).toBe(true);
+  });
+
+  it("la variable del voto por contenido es la que decide en premios", () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    expect(mandarPermitido()).toBe(true);
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "");
+    expect(mandarPermitido()).toBe(false);
+  });
+
   it("abrirMandar no abre ninguna ventana", () => {
     vi.stubEnv("VITE_RAMPA", "premios");
     const m = mundo();
@@ -774,6 +789,37 @@ describe("el modo premios: Mandar no existe", () => {
       abrir(mundo());
       expect(dialogo(), modo).not.toBeNull();
       expect(principal().textContent).toBe(t("saldoMandarOk"));
+    }
+  });
+});
+
+describe("lo que no se pudo comprobar", () => {
+  it("no-coincide dice que no se mandó nada, invita a probar otra vez y deja el botón", async () => {
+    const m = mundo({ respuesta: "no-coincide" });
+    await conDestino(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoMandarNoCoincide")} ${t("cofirmaOtraVez")}`));
+    expect(principal().textContent).toBe(t("saldoMandarOk"));
+    expect(principal().disabled).toBe(false);
+    expect(document.querySelector(".dlg-estado")?.classList.contains("bad")).toBe(true);
+  });
+
+  it("con el tope dice que no se mandó nada, que escriba, y solo deja cerrar", async () => {
+    const m = mundo({ respuesta: "no-coincide-tope" });
+    await conDestino(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoMandarNoCoincide")} ${t("cofirmaEscribinos")}`));
+    expect(principal().textContent).toBe(t("acctClose"));
+    tocar("mitad");
+    expect(document.querySelector('[data-mandar="monto"]')?.textContent).toBe("12,5 dólares digitales");
+    expect(m.enviados).toHaveLength(1);
+  });
+
+  it("el texto existe en los dos idiomas y sin palabras técnicas", () => {
+    for (const idioma of ["es", "en"] as const) {
+      const texto = textos(idioma).saldoMandarNoCoincide;
+      expect(texto, idioma).toBeTruthy();
+      expect(texto, idioma).not.toMatch(/;|«|»|—|·|!|\b(?:firma|hash|red|co-firma|xdr|contrato|fee|signature|network|contract)\b/i);
     }
   });
 });
