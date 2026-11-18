@@ -77,8 +77,8 @@ describe("el aviso por correo a quien gana", () => {
   }
 
   /** Anota a tres personas, cierra, sella y deja la lectura de la red lista con dos ganadoras. */
-  async function dejarListoParaElResultado(): Promise<void> {
-    personas = [personaDePrueba(mundo, 1), personaDePrueba(mundo, 2), personaDePrueba(mundo, 3)];
+  async function dejarListoParaElResultado(desde: number = 1): Promise<void> {
+    personas = [personaDePrueba(mundo, desde), personaDePrueba(mundo, desde + 1), personaDePrueba(mundo, desde + 2)];
     for (const p of personas) expect((await altaDe(mundo, sala.id, p)).status).toBe(201);
     const cerrada = await pedir(`/v1/sala/${sala.id}/campana/fase`, { metodo: "PUT", cuerpo: { fase: "cerrada" }, cabeceras: auth() });
     expect(cerrada.status).toBe(204);
@@ -196,16 +196,28 @@ describe("el aviso por correo a quien gana", () => {
     expect(ana.html).toContain("Empresa de ejemplo");
   });
 
-  it("el enlace del correo es la página de la campaña, sin el pase ni la clave", async () => {
+  it("en una campaña de prueba el correo lleva a recibir en Prueba, sin la sala, el pase ni la clave", async () => {
     await guardarResultado();
     await mundo.esperarSegundoPlano();
     const [ana] = enviados as [Mensaje];
-    const enlaceEsperado = `https://tinkazo.app/participar.html?s=${sala.id}`;
-    expect(ana.text).toContain(`\n${enlaceEsperado}\n`);
-    expect(ana.html).toContain(`href="${enlaceEsperado}"`);
+    expect(ana.text).toContain("\nhttps://tinkazo.app/?red=prueba&premio=1\n");
+    expect(ana.html).toContain('href="https://tinkazo.app/?red=prueba&amp;premio=1"');
     const todo = `${ana.text}${ana.html}`;
+    expect(todo).not.toContain("participar.html");
+    expect(todo).not.toContain(sala.id);
     expect(todo).not.toContain(sala.token);
     expect(todo).not.toMatch(/[?&#](p|k|llave|token|pase)=/u);
+  });
+
+  it("en una campaña de la red principal el correo lleva a recibir en Oficial", async () => {
+    sala = await campanaAbierta(mundo, AHORA, { red: "mainnet", evento: "otra-feria", empresa: { nombre: "Empresa de ejemplo" } });
+    await dejarListoParaElResultado(11);
+    await guardarResultado();
+    await mundo.esperarSegundoPlano();
+    const [ana] = enviados as [Mensaje];
+    expect(ana.text).toContain("\nhttps://tinkazo.app/?red=oficial&premio=1\n");
+    expect(ana.html.split('href="https://tinkazo.app/?red=oficial&amp;premio=1"').length - 1).toBe(2);
+    expect(`${ana.text}${ana.html}`).not.toContain(sala.id);
   });
 
   it("un resultado repetido no manda otra vez", async () => {
