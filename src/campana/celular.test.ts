@@ -255,15 +255,12 @@ describe("anotarse y esperar", () => {
   });
 
   it.each([
-    ["llena", "cpErrLlena"],
     ["mucha", "cpErrMucha"],
     ["creando", "cpErrCreando"],
     ["wifi", "cpErrWifi"],
     ["espera", "cpErrEspera"],
     ["cuentas", "cpErrCuentas"],
     ["proveedor", "cpErrGoogle"],
-    ["cerro", "cpCerro"],
-    ["pase", "cpErrPase"],
     ["sesion", "cpErrSesion"],
     ["solo-google", "cpErrSoloGoogle"],
     ["red", "cpErrRed"],
@@ -277,6 +274,43 @@ describe("anotarse y esperar", () => {
     await asentar();
     expect(mundo.raiz.querySelector("#cmp-hola .cmp-error")?.textContent).toBe(TEXTOS_CAMPANA.es[clave]);
   });
+
+  it.each([
+    ["llena", "cpErrLlena"],
+    ["cerro", "cpCerro"],
+    ["pase", "cpPaseVencido"],
+  ] as const)("tras el rechazo %s pasa a su pantalla, sin el botón de anotarse y sin repetir el error", async (motivo, clave) => {
+    const mundo = await preparar({
+      sesion: async () => SESION,
+      anotar: async () => ({ ok: false, motivo }),
+    });
+    mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+    await asentar();
+    expect(mundo.raiz.querySelector<HTMLElement>("#cmp-hola")?.hidden).toBe(true);
+    expect(mundo.raiz.querySelector("#cmp-estado")?.textContent).toContain(TEXTOS_CAMPANA.es[clave]);
+    expect(principalesVisibles(mundo.raiz)).toHaveLength(0);
+  });
+
+  it.each(["solo-google", "sesion"] as const)(
+    "tras el error %s el botón principal sale de la sesión y vuelve a la primera pantalla",
+    async (motivo: MotivoDeAlta) => {
+      const salir = vi.fn(async () => undefined);
+      const mundo = await preparar({
+        sesion: async () => SESION,
+        anotar: async () => ({ ok: false, motivo }),
+        salir,
+      });
+      mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .primary")?.click();
+      await asentar();
+      const principal = mundo.raiz.querySelector<HTMLButtonElement>("#cmp-hola .cmp-accion .primary");
+      expect(principal?.textContent).toBe("Usar otra cuenta");
+      principal?.click();
+      await asentar();
+      expect(salir).toHaveBeenCalledOnce();
+      expect(mundo.raiz.querySelector<HTMLElement>("#cmp-saber")?.hidden).toBe(false);
+      expect(mundo.raiz.querySelector("#cmp-saber .primary")?.textContent).toBe("Entrar con Google");
+    },
+  );
 
   it("P3 pone el número de personas grande y las dos horas en dos columnas", async () => {
     const mundo = await preparar({ sesion: async () => SESION, yo: async () => propio() });

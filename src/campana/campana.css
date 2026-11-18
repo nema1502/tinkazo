@@ -556,6 +556,15 @@ a.cmp-suave {
   display: block;
 }
 
+/* Los pedidos que pasan de tres quedan plegados debajo, con el mismo aspecto que las filas de arriba. */
+.cmp-mas-pedidos {
+  margin-top: 10px;
+}
+
+.cmp-mas-pedidos > .cmp-pasos {
+  margin-top: 10px;
+}
+
 .cmp-paso-texto p {
   font-weight: 700;
 }
@@ -1030,15 +1039,20 @@ a.cmp-suave {
     background: var(--card);
   }
 
+  /* El botón puede achicarse hasta 180 px y el texto de apoyo o de error hasta 160: juntos entran en una sola fila desde
+     unos 410 px de ancho. El texto se queda con tres partes del espacio que sobra y el botón con una, así el texto no se
+     parte en muchos renglones y la barra se mantiene en los 84 px que el contenido le reserva. */
   .cmp-accion .primary {
-    flex: 0 0 auto;
-    width: min(100%, 360px);
+    flex: 1 1 180px;
+    width: auto;
+    max-width: 360px;
   }
 
   .cmp-accion > .cmp-apoyo,
   .cmp-accion > .cmp-error,
   .cmp-accion > .cmp-vuelve {
-    flex: 1 1 260px;
+    flex: 3 1 160px;
+    min-width: 0;
     text-align: left;
   }
 }

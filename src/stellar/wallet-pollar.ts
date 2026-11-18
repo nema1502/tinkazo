@@ -911,6 +911,8 @@ class PollarWallet implements SubmittingWallet {
   #falla: ((e: Error) => void) | null = null;
   /** La ventana de Google, para saber si la persona la cerró sin entrar. */
   #ventana: Window | null = null;
+  /** Qué hacer apenas la ventana de Google queda abierta (lo arma `connect`): la página de una campaña suelta su marca. */
+  #alAbrirLaVentana: (() => void) | null = null;
   /** Las transacciones que la persona acaba de pedir firmar (el XDR, y cuántas veces): lo único que se confirma. */
   readonly #esperadas = new Map<string, number>();
   /** Las confirmaciones ya resueltas (`atenderFirmas`). */
@@ -1345,6 +1347,12 @@ class PollarWallet implements SubmittingWallet {
       return;
     }
     this.#ventana = ventana;
+    // El navegador ya copió el almacenamiento de esta pestaña a la ventana nueva: lo que se dejó para ella se puede soltar.
+    try {
+      this.#alAbrirLaVentana?.();
+    } catch {
+      /* un aviso que falla no debe cortar la entrada */
+    }
     try {
       ventana.opener = null;
     } catch {
@@ -1377,7 +1385,8 @@ class PollarWallet implements SubmittingWallet {
    * cerró sin entrar: en los dos casos la entrada se corta y se puede volver a intentar. (La versión anterior del SDK
    * se iba a Google y volvía a la página; `restore` sigue sirviendo si la página se recarga.)
    */
-  async connect(): Promise<string> {
+  async connect(alAbrirLaVentana?: () => void): Promise<string> {
+    this.#alAbrirLaVentana = alAbrirLaVentana ?? null;
     const client = await this.#ensureClient();
     this.#remember("google");
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
@@ -1412,6 +1421,7 @@ class PollarWallet implements SubmittingWallet {
       window.clearTimeout(cierre);
       this.#falla = null;
       this.#ventana = null;
+      this.#alAbrirLaVentana = null;
     }
   }
 

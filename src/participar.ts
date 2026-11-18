@@ -140,11 +140,15 @@ function montarVista(campana: Campana, esEjemplo: boolean, enlace: { sala: strin
       pestana: leerAlmacenDePestana(),
       ahora: () => Date.now(),
       hayMarca: hayMarcaDelProveedor,
+      // Si la pestaña se recarga o se va antes de que Google abra su ventana, la marca de la ventana se suelta.
+      alIrse: (soltar) => {
+        window.addEventListener("pagehide", soltar);
+        return () => window.removeEventListener("pagehide", soltar);
+      },
     }),
     memoria,
     red: network.name,
     enLinea: () => navigator.onLine !== false,
-    hayMarcaDelProveedor,
     ir: (direccion) => location.assign(direccion),
     enlace: () => location.href,
     ...(typeof navigator.locks?.request === "function"

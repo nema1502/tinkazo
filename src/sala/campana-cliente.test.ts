@@ -326,9 +326,24 @@ describe("estadoPublico", () => {
     expect(sin.llamadas[0]?.url).toBe(`${SERVICIO}/v1/sala/${SALA}/campana/estado`);
   });
 
-  it("deja solo los cuatro campos que usa el celular", async () => {
+  it("deja solo los campos que usa el celular, y una sala que no dice del correo cuenta como sin correo", async () => {
     const r = await estadoPublico(SERVICIO, SALA, null, { fetch: fetchFalso([{ estado: 200, cuerpo: bueno }]).f });
-    expect(r).toEqual({ fase: "abierta", total: 37, cierraMs: 1_800_000_100_000, pase: "vale" });
+    expect(r).toEqual({ fase: "abierta", total: 37, cierraMs: 1_800_000_100_000, pase: "vale", correo: false });
+  });
+
+  it("con correo en true, lo pasa al celular", async () => {
+    const r = await estadoPublico(SERVICIO, SALA, null, { fetch: fetchFalso([{ estado: 200, cuerpo: { ...bueno, correo: true } }]).f });
+    expect(r).toMatchObject({ correo: true });
+  });
+
+  it("con correo en false, lo pasa como false", async () => {
+    const r = await estadoPublico(SERVICIO, SALA, null, { fetch: fetchFalso([{ estado: 200, cuerpo: { ...bueno, correo: false } }]).f });
+    expect(r).toMatchObject({ correo: false });
+  });
+
+  it("un correo que no es un booleano no se toma por verdadero", async () => {
+    const r = await estadoPublico(SERVICIO, SALA, null, { fetch: fetchFalso([{ estado: 200, cuerpo: { ...bueno, correo: "si" } }]).f });
+    expect(r).toMatchObject({ correo: false });
   });
 
   it("con una fase que no existe da red", async () => {

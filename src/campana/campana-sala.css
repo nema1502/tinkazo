@@ -1,0 +1,179 @@
+/*
+ * El panel de quien organiza una campaña (src/ui/campana-sala.ts) y la pantalla grande del proyector (src/ui/campana-grande.ts).
+ * Todo con las fichas del tema (--paper, --card, --ink, --ink2, --bw, --sh-sm): sigue los dos temas sin reglas aparte.
+ * Pensado primero para un celular de 360 por 640 y para un proyector de 1366 por 768: sin espacio muerto.
+ */
+
+/* Ningún estilo, de esta hoja o de la general, puede mostrar algo que tenga el atributo hidden. */
+.cpo-panel [hidden] { display: none !important; }
+.campana-grande [hidden] { display: none !important; }
+
+/* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
+body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
+/* La barra de lo que sigue solo se esconde mientras el panel tiene su propia acción principal: una sola a la vista. */
+body:has(#cpo-panel:not([data-vista="cerrada"]), #cpo-panel button.primary) #siguiente { display: none !important; }
+
+/* El panel: el aspecto del de equipos, a todo el ancho que le da el cuadro. */
+.cpo-panel {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 0 18px;
+  padding: 16px;
+  background: var(--card);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: var(--sh-sm);
+}
+/* En el celular no es una caja dentro de otra: usa el ancho completo de la página. */
+@media (max-width: 699px) {
+  .cpo-panel { padding: 0; border: 0; box-shadow: none; background: none; }
+  /* Elegir, vista previa y confirmar: lo esencial arriba y el botón principal abajo, no todo amontonado arriba. */
+  .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"]) {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 160px);
+  }
+  .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"]) > .cpo-acciones {
+    margin-top: auto;
+    padding-bottom: 16px;
+  }
+}
+.cpo-panel h2 { font-size: clamp(26px, 8vw, 40px); font-weight: 900; line-height: 1.1; margin: 0 0 4px; overflow-wrap: anywhere; }
+.cpo-linea { margin: 0 0 12px; color: var(--ink2); font-weight: 700; font-size: 18px; }
+.cpo-aviso { margin: 0 0 12px; font-weight: 800; font-size: 18px; }
+.cpo-aviso:not(:empty) { border-left: 6px solid var(--magenta); padding-left: 10px; }
+.cpo-aviso:empty, .cpo-linea:empty { display: none; }
+.cpo-conexion { margin: 0 0 12px; font-weight: 800; font-size: 20px; border-left: 6px solid var(--magenta); padding-left: 10px; }
+.cpo-panel button { min-height: 48px; }
+.cpo-panel button.primary { width: 100%; min-height: 56px; font-size: 18px; }
+.cpo-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cpo-acciones .primary { flex: 1 1 100%; }
+.cpo-previa .cpo-premio { font-size: clamp(26px, 8vw, 40px); font-weight: 900; line-height: 1.1; margin: 8px 0; overflow-wrap: anywhere; }
+.cpo-logo { max-height: 72px; max-width: 220px; object-fit: contain; }
+
+/* Abierta y cerrada: en una columna con la principal arriba del QR. Desde 900 px, el QR a la izquierda y el resto al lado. */
+.cpo-panel:is([data-vista="abierta"], [data-vista="cerrada"]) {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "cab" "num" "acc" "qr" "lista";
+}
+.cpo-panel > .cpo-cab { grid-area: cab; min-width: 0; }
+.cpo-panel > .cpo-numero { grid-area: num; }
+.cpo-panel > .cpo-acciones { grid-area: acc; }
+.cpo-panel > .cpo-qr { grid-area: qr; justify-self: center; text-align: center; max-width: 100%; }
+.cpo-panel > .cpo-lista { grid-area: lista; min-width: 0; }
+.cpo-numero { font-size: clamp(48px, 9vw, 96px); font-weight: 900; line-height: 1; margin: 0; }
+.cpo-n-etiqueta { font-size: clamp(18px, 2.4vw, 24px); font-weight: 800; }
+.cpo-qr img {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  background: #fff;
+  border: var(--bw) solid var(--ink);
+  image-rendering: pixelated;
+}
+@media (min-width: 900px) {
+  .cpo-panel[data-vista="abierta"] {
+    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-areas: "qr cab" "qr num" "qr acc" "qr lista";
+    align-items: start;
+  }
+  .cpo-panel[data-vista="cerrada"] { grid-template-areas: "cab" "num" "acc" "lista"; }
+  /* La caja de la lista termina dentro de la pantalla: sola se mueve ella y la página no tiene un segundo scroll encima. */
+  .cpo-lista .cpo-ul { max-height: max(220px, calc(100dvh - 480px)); overflow-y: auto; }
+}
+/* Sin QR a la vista el lugar no queda como un hueco: el panel pasa a una sola columna. */
+.cpo-panel > .cpo-qr:has(> img[hidden]) { display: none; }
+.cpo-panel[data-vista="abierta"]:has(.cpo-qr img[hidden]) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "cab" "num" "acc" "lista";
+}
+
+/* La lista: cada fila se toca con el dedo, 44 px como mínimo, y lo mismo los botones de los motivos. */
+.cpo-ul { list-style: none; margin: 0; padding: 0; }
+.cpo-fila {
+  min-height: 44px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 2px solid var(--ink);
+}
+.cpo-fila:has(.cpo-motivos) { border-left: 6px solid var(--magenta); padding-left: 10px; }
+.cpo-fila button, .cpo-motivos button { min-height: 44px; }
+.cpo-nombre { flex: 1 1 auto; min-width: 0; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.cpo-salio { margin: 0; flex: 1 1 auto; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
+.cpo-motivos { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.cpo-motivos p { width: 100%; margin: 0; font-weight: 800; }
+.cpo-nota { margin: 0 0 8px; font-weight: 800; }
+.cpo-pie { margin-top: 12px; font-size: 16px; color: var(--ink2); }
+
+/* La pantalla grande. `.sala` (styles.css) la pone fija y a ventana completa: acá se reparte el lugar. */
+.campana-grande.sala {
+  --cg-lado: min(calc(100dvh - 110px), calc(50vw - 40px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+  z-index: 70;
+  background: var(--paper);
+  color: var(--ink);
+}
+.cg-qr { display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 0; }
+/* Con una columna, el QR se mide por el ancho y por el alto: apaisado no cabe si solo se mide el ancho. */
+.campana-grande .cg-img {
+  display: block;
+  width: min(100%, calc(100dvh - 32px)) !important;
+  height: auto !important;
+  aspect-ratio: 1;
+  background: #fff;
+  image-rendering: pixelated;
+}
+.cg-lado { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.cg-arriba { display: flex; align-items: center; gap: 16px; }
+.cg-arriba h2 { font-size: clamp(28px, 5vh, 56px); font-weight: 900; line-height: 1.05; margin: 0; overflow-wrap: anywhere; }
+.cg-logo { max-height: 9vh; max-width: 30%; object-fit: contain; }
+.cg-premio { font-size: clamp(32px, min(8vh, 10vw), 96px); font-weight: 900; line-height: 1.05; margin: 0; overflow-wrap: anywhere; }
+.cg-sinqr { font-size: max(48px, 6vh); font-weight: 900; line-height: 1.05; margin: 0; text-wrap: balance; }
+.cg-cartel { font-size: clamp(26px, min(5vh, 7vw), 60px); font-weight: 900; line-height: 1.05; margin: 0; text-wrap: balance; }
+.cg-apps { font-size: max(22px, 3vh); font-weight: 700; color: var(--ink2); margin: 0; }
+.cg-cuenta { margin: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.3em; }
+.cg-numero { font-size: clamp(48px, 12vh, 140px); font-weight: 900; line-height: 1; display: inline-block; }
+.cg-etiqueta { font-size: max(24px, 3.4vh); font-weight: 800; }
+.cg-cierre { font-size: max(24px, 3.4vh); font-weight: 800; margin: 0; font-variant-numeric: tabular-nums; }
+.cg-cerro { font-size: clamp(40px, 6vh, 72px); font-weight: 900; text-align: center; margin: 0; overflow-wrap: anywhere; }
+.campana-grande .cg-volver { width: 100%; min-height: 64px; font-size: max(20px, 2.6vh); margin-top: auto; }
+.cg-numero.sube { animation: cg-salto 320ms ease-out; }
+@keyframes cg-salto { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+/* Con dos columnas (900 px o más, o apaisado de 640 en adelante) la capa ocupa la ventana: el QR tan grande como entre. */
+@media (min-width: 900px), (orientation: landscape) and (min-width: 640px) {
+  .campana-grande.sala {
+    grid-template-columns: var(--cg-lado) minmax(0, 1fr);
+    height: 100dvh;
+    padding: clamp(16px, 2.2vh, 24px) clamp(16px, 1.6vw, 24px);
+    gap: clamp(16px, 2vw, 32px);
+    align-items: stretch;
+  }
+  .cg-qr { justify-content: center; }
+  .campana-grande .cg-img { width: var(--cg-lado) !important; }
+  .cg-lado { justify-content: space-between; min-height: 0; gap: 2vh; }
+  /* El número manda: se agranda con el alto y llena lo que sobraba entre el cartel y el botón. */
+  .cg-numero { font-size: clamp(64px, 28vh, 320px); }
+  .cg-cerro { font-size: clamp(56px, 16vh, 200px); line-height: 1; }
+  /* Sin el margen automático el espacio libre se reparte entre los renglones y no queda un bloque vacío encima del botón. */
+  .campana-grande .cg-volver { margin-top: 0; }
+}
+/* Con alto de sobra, sin barras de desplazamiento sobre la imagen proyectada. En un celular acostado, con scroll. */
+@media (min-width: 900px) and (min-height: 560px) {
+  .campana-grande.sala { overflow: hidden; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cg-numero.sube { animation: none; }
+  .campana-grande *, .cpo-panel * { transition: none !important; }
+}

@@ -11,6 +11,7 @@
  *  - Con 150 celulares a la vez, las consultas se desparraman en el tiempo y los reintentos del alta tienen tope.
  */
 
+import { costoDelRetiroTexto } from "../costo-del-retiro";
 import { cifrarEquipo } from "../equipos/datos";
 import { llaveDelCelular } from "../equipos/celular";
 import {
@@ -47,18 +48,6 @@ export function almacenEnMemoria(): Pick<Storage, "getItem" | "setItem"> {
       datos.set(clave, valor);
     },
   };
-}
-
-/** Si este celular ya tenía una llave para esta sala antes de pedirla: leer no crea ninguna. */
-export function teniaLlave(sala: string, almacen: Pick<Storage, "getItem">): boolean {
-  let creada = false;
-  llaveDelCelular(sala, {
-    getItem: (clave) => almacen.getItem(clave),
-    setItem: () => {
-      creada = true;
-    },
-  });
-  return !creada;
 }
 
 /** El destino de Recibir mi premio, según la red de esta página. */
@@ -111,8 +100,6 @@ export interface PiezasDelCelular {
   red: NetworkName;
   /** Si el navegador dice que no hay conexión: sin ella no se pide ni el token. */
   enLinea: () => boolean;
-  /** Si hay una marca del proveedor de cuentas en este navegador, de cualquier billetera. */
-  hayMarcaDelProveedor: () => boolean;
   /** Lleva a la herramienta a recibir el premio. */
   ir: (direccion: string) => void;
   /** El enlace de esta página, para Copiar el enlace. */
@@ -121,6 +108,8 @@ export interface PiezasDelCelular {
   bloquear?: <T>(nombre: string, trabajo: () => Promise<T>) => Promise<T>;
   /** Para pedir sin la red de verdad. */
   dep?: DependenciasDeCampana;
+  /** La configuración del build que dice el costo de retirar. Sin ella, la de este sitio. */
+  entorno?: Record<string, unknown>;
 }
 
 /** Las dependencias del celular con lo de verdad. */
@@ -129,7 +118,6 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
   const ahora = dep.ahora ?? ((): number => Date.now());
   const azar = dep.azar ?? Math.random;
   const almacenDeLlaves = p.memoria ?? almacenEnMemoria();
-  const habiaLlave = teniaLlave(p.sala, almacenDeLlaves);
   const sosiego: SosiegoDelAlta = { finalDeFamiliaEn: null };
   const bloquear = p.bloquear ?? (<T>(_nombre: string, trabajo: () => Promise<T>): Promise<T> => trabajo());
   /** La sesión de esta página. Con ella `anotar` y `yo` saben la cuenta sin que las pantallas se la pasen. */
@@ -163,11 +151,8 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
         r = await estadoPublico(p.servicio, p.sala, p.pase, dep);
       }
     }
-    // Quien ya estuvo acá y tiene su cuenta guardada no se frena por un pase vencido: la sala la reconoce igual, y si no
-    // estaba anotada, el alta le dirá que escanee de nuevo.
-    if (r !== "red" && r !== "terminada" && r.pase === "vencido" && habiaLlave && p.hayMarcaDelProveedor()) {
-      return { ...r, pase: "sin" };
-    }
+    // Un pase vencido se dice tal cual, aunque la persona haya estado antes: la sala solo reconoce a quien ya anotó cuando
+    // lleva un pase vigente, y quien no lo lleva recibiría un rechazo recién al tocar Acepto. Con el QR nuevo entra igual.
     return r;
   }
 
@@ -201,6 +186,8 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       ultimoFinal = null;
       // La sala anotó otra cuenta que la de esta sesión: no se dice cuál.
       if (r.cuenta !== actual?.cuenta) return { ok: false, motivo: "otro" };
+      // Anotarse con éxito también renueva la marca de invitada: quien participa no es quien organiza, y no debe dejar de serlo.
+      p.google.renovar();
       return { ok: true, ya: r.ya };
     }
     // El tope de intentos de la sala dice lo mismo que el rechazo anterior: la traba es de la sesión o de la cuenta que no se
@@ -215,7 +202,10 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     if (cuenta !== null && sePudoPerder) {
       // La sala pudo anotarla y perderse la respuesta (o pasarse el tope de reingresos de quien ya estaba): se pregunta una vez.
       const propio = await miEstado(p.servicio, p.sala, cuenta, llave(), dep);
-      if (propio !== "red" && propio !== "terminada" && propio.anotada) return { ok: true, ya: true };
+      if (propio !== "red" && propio !== "terminada" && propio.anotada) {
+        p.google.renovar();
+        return { ok: true, ya: true };
+      }
     }
     return { ok: false, motivo };
   }
@@ -250,7 +240,8 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       olvidarRechazos();
       await p.google.salir();
     },
-    costoDelRetiro: () => null,
+    // Sin costo configurado en el build da null y las reglas no dicen nada del costo.
+    costoDelRetiro: () => costoDelRetiroTexto(p.base.idioma(), p.entorno),
     enlace: p.enlace,
     memoria: p.memoria,
     sala: p.sala,

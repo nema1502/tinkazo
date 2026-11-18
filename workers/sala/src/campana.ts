@@ -367,6 +367,20 @@ export function reservarEventoSql(
 }
 
 /**
+ * La sala confirmada de este evento si su token es el del intento que llega: quien pide otra vez porque no le llegó la
+ * respuesta de la primera. Solo quien inventó el token tiene su huella, así que el archivo público no alcanza para nada.
+ */
+export function salaDelIntentoSql(sql: Ejecutar, evento: string, huella: string): { sala: string; enMs: number } | null {
+  crearTablaDeEventos(sql);
+  const hay = sql<{ sala: string | null; huella: string | null; en_ms: number }>(
+    "SELECT sala, huella, en_ms FROM eventos_campana WHERE evento = ?",
+    evento,
+  )[0];
+  if (!hay || hay.sala === null || hay.huella === null || !iguales(hay.huella, huella)) return null;
+  return { sala: hay.sala, enMs: hay.en_ms };
+}
+
+/**
  * Confirma la reserva con el id de la sala ya creada y la huella de su token, y gasta un lugar del día. Falso si la reserva
  * ya no es la de este pedido.
  */

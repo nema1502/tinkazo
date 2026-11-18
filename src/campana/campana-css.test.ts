@@ -93,6 +93,17 @@ describe("la pantalla completa de la campaña", () => {
     expect(izquierda).toMatch(/position:\s*sticky\s*;/u);
   });
 
+  it("en celular acostado el botón y el aviso de la barra fija entran en una sola fila desde unos 410 px", () => {
+    const acostado = css.slice(css.indexOf("@media (orientation: landscape) and (max-height: 600px)"));
+    const boton = /\.cmp-accion \.primary\s*\{([^}]+)\}/u.exec(acostado)?.[1] ?? "";
+    const aviso = /\.cmp-accion > \.cmp-apoyo,[^{]*\{([^}]+)\}/u.exec(acostado)?.[1] ?? "";
+    const base = (bloque: string): number => Number(/flex:\s*\d+ \d+ (\d+)px/u.exec(bloque)?.[1] ?? "9999");
+    // Las dos bases más el hueco de 20 px tienen que caber en 410 px menos los 48 px de relleno de la barra.
+    expect(base(boton) + 20 + base(aviso)).toBeLessThanOrEqual(410 - 48);
+    expect(boton).toMatch(/flex:\s*1 1 \d+px/u);
+    expect(aviso).toMatch(/min-width:\s*0\s*;/u);
+  });
+
   it("el enlace de cambiar de cuenta no usa el estilo de botón de 56 px", () => {
     expect(css).not.toContain(".ghost");
     const enlace = /\.cmp-otra-cuenta\s*\{([^}]+)\}/u.exec(css)?.[1] ?? "";

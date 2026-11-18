@@ -93,7 +93,7 @@ const esHora = (x: unknown): x is number => typeof x === "number" && Number.isFi
 interface Respuesta {
   estado: number;
   cuerpo: unknown;
-  /** Lo que dice `Retry-After`, si el navegador deja leerlo (desde otro origen, la sala no lo expone). */
+  /** Lo que dice `Retry-After`, si el navegador deja leerlo (desde otro origen solo se lee si la sala lo expone, y lo hace). */
   espera: string | null;
 }
 
@@ -146,7 +146,8 @@ export async function estadoPublico(
   const vigencia = c.pase;
   if (!esFase(c.fase) || !esTotal(c.total) || !esHora(c.cierraMs)) return "red";
   if (typeof vigencia !== "string" || !PASES.includes(vigencia as EstadoPublico["pase"])) return "red";
-  return { fase: c.fase, total: c.total, cierraMs: c.cierraMs, pase: vigencia as EstadoPublico["pase"] };
+  // Una sala vieja no manda `correo`: sin el campo, no se promete ningún aviso.
+  return { fase: c.fase, total: c.total, cierraMs: c.cierraMs, pase: vigencia as EstadoPublico["pase"], correo: c.correo === true };
 }
 
 /** Lo que la sala sabe de este celular. Solo con la llave correcta suma si salió, si ganó y si le avisaron. */

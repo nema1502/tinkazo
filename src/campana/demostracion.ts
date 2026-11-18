@@ -57,6 +57,7 @@ export function depsDeDemostracion(
         total,
         cierraMs: campana.cierraMs,
         pase: estado === "pase" ? "vencido" as const : "vale" as const,
+        correo: false,
       };
       total += 1;
       return respuesta;

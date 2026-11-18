@@ -169,6 +169,9 @@ function pintarPaso(raiz: HTMLElement, deps: DepsDelCelular, paso: PasoDeCampana
   raiz.append(fila);
 }
 
+/** Cuántos pedidos se ven de entrada: el resto se pliega, para que Hola siga siendo un título, una línea y un botón. */
+export const PEDIDOS_A_LA_VISTA = 3;
+
 /** La confirmación de identidad y los pedidos de la empresa antes de anotarse. */
 export function pintarHola(
   raizPrincipal: HTMLElement,
@@ -183,24 +186,47 @@ export function pintarHola(
   titulo(izq, nombre ? sustituir(deps.tx("cpHola"), { nombre }) : deps.tx("cpHolaSolo"));
   parrafo(izq, deps.tx(nombre ? "cpRevisamosNombre" : "cpRevisamosSinNombre"), "cmp-apoyo");
   // Cambiar de cuenta es un enlace chico arriba, lejos del pulgar y del botón: un toque corrido no cierra la sesión.
-  const otraCuenta = nombre ? sustituir(deps.tx("cpNoSoy"), { nombre }) : deps.tx("cpOtraCuenta");
-  const salir = boton(izq, otraCuenta, "cmp-otra-cuenta", acciones.alSalir);
-  salir.disabled = acciones.anotando === true;
+  // Con una cuenta que no sirve para este sorteo, cambiarla es lo único que ayuda: pasa a ser el botón principal.
+  const cuentaNoSirve = datos.error === "solo-google" || datos.error === "sesion";
+  if (!cuentaNoSirve) {
+    const otraCuenta = nombre ? sustituir(deps.tx("cpNoSoy"), { nombre }) : deps.tx("cpOtraCuenta");
+    const salir = boton(izq, otraCuenta, "cmp-otra-cuenta", acciones.alSalir);
+    salir.disabled = acciones.anotando === true;
+  }
   raiz.append(izq);
   // Una campaña sin pedidos no deja un título vacío: el saludo ocupa el alto.
   if (deps.campana.pasos.length > 0) {
     const der = caja("cmp-der");
     titulo(der, sustituir(deps.tx("cpPasosT"), { empresa: deps.campana.empresa.nombre }), "h2");
-    parrafo(der, deps.tx("cpPasosNota"), "cmp-apoyo cmp-apoyo-izq");
     const pasos = caja("cmp-pasos");
-    deps.campana.pasos.forEach((paso, indice) => pintarPaso(pasos, deps, paso, indice));
+    const aparte = deps.campana.pasos.length > PEDIDOS_A_LA_VISTA;
+    deps.campana.pasos.slice(0, PEDIDOS_A_LA_VISTA).forEach((paso, indice) => pintarPaso(pasos, deps, paso, indice));
     der.append(pasos);
+    if (aparte) {
+      // Los pedidos que sobran quedan plegados, con el índice de siempre: lo que ya se tocó sigue marcado.
+      const mas = document.createElement("details");
+      mas.className = "cmp-mas-pedidos";
+      const resumen = document.createElement("summary");
+      resumen.className = "cmp-suave";
+      resumen.textContent = sustituir(deps.tx("cpMasPedidos"), { n: String(deps.campana.pasos.length - PEDIDOS_A_LA_VISTA) });
+      mas.append(resumen);
+      const resto = caja("cmp-pasos");
+      deps.campana.pasos.forEach((paso, indice) => {
+        if (indice >= PEDIDOS_A_LA_VISTA) pintarPaso(resto, deps, paso, indice);
+      });
+      mas.append(resto);
+      der.append(mas);
+    }
     raiz.append(der);
   }
   pintarReglas(raiz, deps);
   const accion = caja("cmp-accion");
   raiz.append(accion);
   if (datos.error) parrafo(accion, textoDeErrorDeAlta(deps, datos.error), "cmp-error");
+  if (cuentaNoSirve) {
+    boton(accion, deps.tx("cpOtraCuenta"), "primary", acciones.alSalir);
+    return;
+  }
   const acepto = boton(
     accion,
     deps.tx(acciones.anotando ? "cpAnotando" : "cpAcepto"),

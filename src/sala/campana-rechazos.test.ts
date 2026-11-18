@@ -87,6 +87,17 @@ describe("los rechazos de la conexión del recinto", () => {
     expect(Number(r.headers.get("Retry-After"))).toBeGreaterThan(0);
   });
 
+  it("la respuesta 429 trae Retry-After y el servicio deja que otro origen la lea", async () => {
+    await montar();
+    const mala = conFichaMala(1);
+    for (let i = 0; i < RECHAZOS_POR_FICHA; i++) await altaDe(mundo, sala.id, mala);
+    const r = await altaDe(mundo, sala.id, mala);
+    expect(r.status).toBe(429);
+    expect(r.headers.get("Retry-After")).not.toBeNull();
+    const expuestas = (r.headers.get("Access-Control-Expose-Headers") ?? "").split(",").map((x) => x.trim());
+    expect(expuestas).toContain("Retry-After");
+  });
+
   it("150 personas honestas que se equivocan una vez cada una entran todas", async () => {
     await montar();
     for (let n = 1; n <= 150; n++) {
