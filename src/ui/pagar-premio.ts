@@ -16,7 +16,7 @@ import {
 import { type DatosDelPago, type Envio, type MotivoDeRechazo, type MotivoSinPago, mandarPago, prepararPago } from "../stellar/pagos-envio";
 import { type BusquedaDePago, buscarPago } from "../stellar/pagos-red";
 import { mirarCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
-import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
+import { type ManejadorDePagar, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
 
 /**
  * "Pagar premio": el pago en USDC de quien organiza a quien ganó, armado acá y firmado en la billetera de quien organiza.
@@ -492,6 +492,8 @@ export interface ContextoDePago {
 interface FormularioGuardado {
   form: HTMLFormElement;
   retener: () => boolean;
+  /** Si el pago de ese premio quedó en duda (no se sabe si salió). */
+  enDuda: () => boolean;
   reabrir: () => void;
 }
 
@@ -502,10 +504,14 @@ interface FormularioGuardado {
  *
  * Con una cuenta que paga sola el formulario cambia apenas se sabe quién paga: sin campo de monto, con el monto fijo o el
  * contador, el saldo y el botón Pagar. Un toque que llegó antes del cambio no paga nada: la persona ve el formulario nuevo.
+ *
+ * Con el pago en duda, o con uno de ese premio con la cuenta que todavía puede entrar, Pagar y Otro monto no se ven: queda
+ * el aviso y Volver a mirar, que solo pregunta a la red. El manejador también dice si el pago de una fila está sin confirmar
+ * (`sinConfirmar`), para que el panel no la muestre como pendiente.
  */
-export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanadores["pagar"]> {
+export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
   const guardados = new Map<number, FormularioGuardado>();
-  return (fila, caja, alTerminar) => {
+  const manejador: ManejadorDePagar = (fila, caja, alTerminar, alCambiar) => {
     if (caja.firstElementChild) {
       caja.replaceChildren();
       return;
@@ -619,6 +625,10 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     // Un pago mandado sin respuesta de la red: hasta saber que no está, no se ofrece pagar otra vez.
     let enDuda: { deps: Dependencias; busqueda: BusquedaDePago; google: boolean } | null = null;
     let mirandoDuda = false;
+    // Las dependencias con que se armó la cuenta que paga sola: con ellas se mira un pago en camino que este formulario no mandó.
+    let depsDeLaCuenta: Dependencias | null = null;
+    // Si la última vez que se pintó había un pago en duda o en camino: el panel se entera solo cuando cambia.
+    let ultimaFrenada = false;
     let reloj: ReturnType<typeof setTimeout> | undefined;
     let ocupado = false;
     // La cuenta que paga sola: quién es, cuánto tiene, y qué monto va a pagar (fijo del premio o elegido con el contador).
@@ -653,12 +663,34 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       }
     };
 
+    /** Un pago de este premio con la cuenta que todavía puede entrar, y ninguno que este formulario esté mandando ahora. */
+    const enCaminoAhora = (): boolean => solo !== null && !hecho && !ocupado && enDuda === null && enCamino();
+
+    /**
+     * Qué botones se ven. Con un pago en duda, o uno de este premio con la cuenta que todavía puede entrar, Pagar no se ve ni
+     * se puede tocar: queda Volver a mirar como única acción principal. Cuando eso cambia, se le avisa al panel de la fila.
+     */
+    const pintarAcciones = (): void => {
+      const frenado = enDuda !== null || enCaminoAhora();
+      const sinSaldo = solo !== null && saldo !== null && cuanto > saldo;
+      volver.hidden = hecho || !frenado || mirandoDuda;
+      pagar.hidden = hecho || frenado || sinSaldo || cargarPorMensaje;
+      pagar.disabled = ocupado || frenado || hecho;
+      if (frenado !== ultimaFrenada) {
+        ultimaFrenada = frenado;
+        alCambiar?.();
+      }
+    };
+
     /** El formulario de la cuenta que paga sola: el monto, el saldo, lo que falta y qué botones se ven. */
     const pintarSola = (): void => {
       if (solo === null) return;
       const tiene = saldo;
       const sinSaldo = tiene !== null && cuanto > tiene;
-      const quieto = ocupado || enDuda !== null || hecho;
+      // Con un pago de este premio en camino (y sin que se esté pagando ahora), el aviso ocupa el lugar de la línea de la plata.
+      const camino = enCaminoAhora();
+      const frenado = enDuda !== null || camino;
+      const quieto = ocupado || frenado || hecho;
       const num = (n: bigint): string => formatoDeMonto(n);
       const conUnidad = (n: bigint): string => tx("saldoMonto", { n: num(n) });
       const { piso, techo } = limitesDelContador(tiene);
@@ -672,27 +704,26 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       mas.textContent = tx("saldoMandarMas");
       mas.disabled = quieto || cuanto >= techo;
       otroMonto.textContent = tx("pgGoogleOtroMonto");
-      otroMonto.hidden = enContador;
+      // Con un pago en duda o en camino no se elige otro monto: no hay nada que pagar de nuevo.
+      otroMonto.hidden = enContador || frenado;
       otroMonto.disabled = quieto;
-      // Con un pago de este premio en camino (y sin que se esté pagando ahora), el aviso ocupa el lugar de la línea de la plata.
-      const camino = !hecho && !ocupado && enDuda === null && enCamino();
       explica.hidden = hecho || enDuda !== null || (sinSaldo && !camino);
       explica.classList.toggle("aviso", camino);
       if (camino) explica.textContent = tx("pgGoogleEnCamino");
       else if (tiene === null) explica.textContent = tx("pgGoogleVasSinSaldo", { monto: num(cuanto), quien: fila.nombre });
       else if (!sinSaldo) explica.textContent = tx("pgGoogleVas", { monto: num(cuanto), quien: fila.nombre, resto: conUnidad(tiene - cuanto) });
-      falta.hidden = hecho || !sinSaldo;
+      falta.hidden = hecho || frenado || !sinSaldo;
       falta.textContent =
         tiene !== null && sinSaldo ? tx("pgGoogleNoAlcanza", { saldo: num(tiene), monto: num(cuanto), falta: num(cuanto - tiene) }) : "";
       cargar.textContent = tx("pgGoogleCargar");
-      cargar.hidden = hecho || !(sinSaldo || cargarPorMensaje);
-      // Sin saldo, la acción que importa es cargar: Pagar se esconde para que haya una sola principal a la vista.
-      pagar.hidden = hecho || sinSaldo || cargarPorMensaje;
+      cargar.hidden = hecho || frenado || !(sinSaldo || cargarPorMensaje);
       otraBResumen.textContent = tx("pgGoogleOtraBilletera");
       armarAfuera.textContent = tx("pgArmar");
       // Con un pago en duda, o uno de este premio con la cuenta que todavía puede entrar, no se arma otro desde otra
       // billetera: se esconde en vez de dejar un camino que pagaría dos veces.
       otraB.hidden = hecho || enDuda !== null || enCamino();
+      // Sin saldo la acción que importa es cargar, y con un pago frenado es Volver a mirar: Pagar se esconde para que haya una sola.
+      pintarAcciones();
     };
 
     const pintar = (): void => {
@@ -709,6 +740,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       if (dicho) msg.textContent = tx(dicho.clave, dicho.rehacer ? dicho.rehacer() : dicho.vars);
       if (progreso) msg.textContent = tx(progreso);
       pintarSola();
+      pintarAcciones();
     };
 
     /** Lee lo que tiene la cuenta que paga sola. Si no se puede, no se sabe: Pagar sigue y la red revisa el saldo al armar. */
@@ -733,6 +765,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     const entrarEnSola = (deps: Dependencias, lector: PagoSolo): void => {
       const primera = solo === null;
       solo = lector;
+      depsDeLaCuenta = deps;
       cuentaSola = deps.billetera?.direccion ?? "";
       abrirCarga = deps.cargar;
       if (!primera) return;
@@ -779,19 +812,37 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       alTerminar(yaEstaba);
     };
 
-    /** Mira en la red si el pago en duda entró. Solo un "no está" seguro vuelve a habilitar el botón. */
+    /** Lo que hay que mirar en la red por un pago de este premio que pudo salir con la cuenta sin que este formulario lo mandara. */
+    const dudaPorCamino = (): { deps: Dependencias; busqueda: BusquedaDePago; google: boolean } | null => {
+      const deps = depsDeLaCuenta;
+      if (deps === null) return null;
+      const origen = deps.billetera?.direccion ?? "";
+      const pagadoras = [...new Set([...ctx.pagadoras, origen])];
+      const busqueda: BusquedaDePago = { red: ctx.red, destino: fila.cuenta, activo: ctx.activo, nota: fila.nota, pagadoras, desde: ctx.desde };
+      return { deps, busqueda, google: true };
+    };
+
+    /**
+     * Mira en la red si el pago en duda, o el que está en camino, entró. Solo pregunta: no arma, no firma ni manda nada. Solo
+     * un "no está" seguro, con la cuenta ya sin poder pagarlo, vuelve a habilitar el botón.
+     */
     const mirarDuda = async (): Promise<void> => {
-      const duda = enDuda;
-      if (!duda || mirandoDuda) return;
+      if (mirandoDuda) return;
+      const guardada = enDuda;
+      // Sin duda guardada, lo que se ve es un pago en camino (`ultimaFrenada`): se pregunta aunque su marca haya vencido hace un momento.
+      const duda = guardada ?? (ultimaFrenada ? dudaPorCamino() : null);
+      if (!duda) return;
       clearTimeout(reloj);
       mirandoDuda = true;
-      volver.hidden = true;
-      pagar.disabled = true;
       progreso = null;
       decir(duda.google ? "pgGoogleDudaMirando" : "pgDudaMirando");
+      pintarAcciones();
       const l = await mirarSiSalio(duda.deps, duda.busqueda);
       mirandoDuda = false;
-      if (enDuda !== duda) return;
+      if (enDuda !== guardada) {
+        pintarAcciones();
+        return;
+      }
       if (l.tipo === "pagado") {
         enDuda = null;
         decir("pgListo");
@@ -799,12 +850,15 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       } else if (l.tipo === "no-hay" && !(duda.google && enCamino())) {
         // No está y, con la cuenta, ya no puede entrar: recién ahí se puede volver a intentar. Mientras pueda, sigue la duda.
         enDuda = null;
-        pagar.disabled = false;
         decir(duda.google ? "pgGoogleDudaNoEsta" : "pgDudaNoEsta");
         pintarSola();
+        pintarAcciones();
       } else {
+        // Sin un "no está" seguro, un pago en camino pasa a quedar en duda: aunque su marca venza, Pagar no vuelve sin preguntar.
+        if (guardada === null) enDuda = duda;
         decir(duda.google ? "pgGoogleDudaSinRed" : "pgDudaSinRed", {}, true);
-        volver.hidden = false;
+        pintarSola();
+        pintarAcciones();
       }
     };
     volver.addEventListener("click", () => void mirarDuda());
@@ -812,6 +866,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     guardados.set(fila.puesto, {
       form,
       retener: () => ocupado || enDuda !== null || hecho,
+      enDuda: () => enDuda !== null,
       reabrir: () => {
         alCambiarDeIdioma(pintar, form);
         pintar();
@@ -958,8 +1013,8 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
         }
       } finally {
         ocupado = false;
-        pagar.disabled = enDuda !== null || hecho;
         pintarSola();
+        pintarAcciones();
       }
     };
     form.addEventListener("submit", (e) => {
@@ -974,6 +1029,30 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       void pagarAhora(true);
     });
   };
+  /**
+   * Si el pago de ese premio está sin confirmar: quedó en duda en esta página, o hay uno de ese premio con la cuenta que
+   * todavía puede entrar (de otra pestaña o de antes de recargar). Solo mira: no arma, no firma ni manda nada.
+   */
+  manejador.sinConfirmar = async (fila) => {
+    if (guardados.get(fila.puesto)?.enDuda()) return true;
+    // Sin pagar con Google en la red principal no hay marca que mirar: no se carga la billetera para saberlo.
+    if (!ctx.dependencias && (ctx.red !== "mainnet" || !pagarConGoogle())) return false;
+    let billetera: Billetera | null;
+    try {
+      billetera = ctx.dependencias ? (await ctx.dependencias()).billetera : await billeteraActiva();
+    } catch {
+      return false;
+    }
+    const lector = billetera?.mandaSola;
+    if (lector?.enCamino === undefined) return false;
+    try {
+      return lector.enCamino(fila.nota);
+    } catch {
+      // Sin poder saberlo cuenta como que sí, igual que en el formulario.
+      return true;
+    }
+  };
+  return manejador;
 }
 
 /** Abre «Tus dólares digitales» directo en la dirección para cargar. `alCerrar` avisa cuando se cierra. */

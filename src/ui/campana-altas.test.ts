@@ -126,10 +126,27 @@ describe("las cuentas ganadoras al servicio del acceso", () => {
     expect(m.estados["0"]).toEqual({ estado: "puede" });
   });
 
+  it("con cupo-ip sin hora espera 2, 5 y 10 segundos y no tres veces el mínimo", async () => {
+    const m = mundo([mal("cupo-ip"), mal("cupo-ip"), mal("cupo-ip"), bien]);
+    await crearAltas(m.d).iniciar("777", ["GUNO"], () => undefined);
+    expect(m.esperas).toEqual([2_000, 5_000, 10_000]);
+    expect(m.estados["0"]).toEqual({ estado: "puede" });
+  });
+
   it("con apagado en un puesto, la fila no muestra nada", async () => {
     const m = mundo([mal("apagado")]);
     await iniciar(m);
     expect(m.estados["0"]).toEqual({ estado: "apagado" });
+  });
+
+  it("un puesto que contestó apagado no es final: al recargar se vuelve a preguntar y avisa los tres puestos", async () => {
+    const m = mundo([mal("apagado"), mal("apagado"), mal("apagado")]);
+    await iniciar(m);
+    expect(esFinal(m.estados["0"])).toBe(false);
+    expect(m.llamadas).toHaveLength(3);
+    await iniciar(m);
+    expect(m.llamadas).toHaveLength(6);
+    expect(Object.values(m.estados).every((e) => e.estado === "puede")).toBe(true);
   });
 
   it("con el servicio cerrado en /cupo no llama a nada y no recuerda nada como final", async () => {

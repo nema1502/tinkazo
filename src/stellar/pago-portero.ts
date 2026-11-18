@@ -203,6 +203,8 @@ export async function estadoEnLaRed(red: NetworkName, hash: string, o: { fetch?:
 
 /** Cuánto se espera antes de cada reenvío del mismo sobre cuando el portero no contestó: 8 reenvíos como mucho. */
 export const ESPERAS_DEL_REENVIO_MS: readonly number[] = [3_000, 6_000, 12_000, 20_000, 20_000, 20_000, 20_000, 20_000];
+/** Los detalles del 502 red con los que el portero deja el pago en el aire y pide reenviar el mismo sobre. */
+const DUDAS_QUE_SE_REENVIAN: readonly string[] = ["TRY_AGAIN_LATER", "ocupada", "sin-confirmar"];
 /** Lo que se espera, después de que el sobre ya no puede entrar, a que la red muestre si entró. */
 export const MARGEN_TRAS_VENCER_S = 60;
 /** Lo que tiene que quedarle de vida al sobre para reenviarlo cuando el portero dice que está ocupado. */
@@ -255,7 +257,8 @@ export async function seguirElPago(hash: string, hastaMs: number, d: Pick<DepsDe
  * El pedido entero de un sobre firmado (`sobre`: su hash y hasta cuándo puede entrar, en segundos). `hastaMs` es hasta
  * cuándo se sigue el pago en la red cuando queda en camino o en duda: nunca más allá del vencimiento más un minuto.
  *
- * 1. Se manda. Si el portero no contesta con algo que se entienda, el sobre queda en duda y se reenvía el MISMO, con las
+ * 1. Se manda. Si el portero no contesta con algo que se entienda, o dice que la red está cargada (502 red con
+ *    TRY_AGAIN_LATER, ocupada o sin-confirmar), el sobre queda en duda y se reenvía el MISMO, con las
  *    esperas de `ESPERAS_DEL_REENVIO_MS`, mientras le quede vida. Apenas contesta con el hash, no se reenvía más.
  * 2. Tomado: `ok` salió, `fallo` entró y falló, y en camino se sigue en la red por el hash.
  * 3. Un premio con su puesto ya pagado por esta ruta se sigue por el hash de ese pago, sin armar otro.
@@ -285,6 +288,15 @@ export async function mandarElPago(sobre: { hash: string; vence: number }, hasta
       continue;
     }
     if (r.motivo === "puesto-usado" && r.hash !== null) return seguirElPago(r.hash, fin, d);
+    // La red cargada (TRY_AGAIN_LATER, ocupada, sin-confirmar): el portero dejó el pago en el aire y espera el mismo sobre.
+    if (r.http === 502 && r.motivo === "red" && r.pudoSalir === true && DUDAS_QUE_SE_REENVIAN.includes(r.detalle ?? "")) {
+      enDuda = true;
+      const espera = ESPERAS_DEL_REENVIO_MS[reenvios];
+      if (espera === undefined || d.ahora() + espera >= venceMs) return seguirElPago(sobre.hash, fin, d);
+      await d.dormir(espera);
+      reenvios++;
+      continue;
+    }
     if (!esRechazoClaro(r, enDuda)) return seguirElPago(sobre.hash, fin, d);
     if (r.motivo === "fondo" && r.detalle === "ocupado" && r.reintentarEn !== null && reenvios < ESPERAS_DEL_REENVIO_MS.length) {
       const espera = Math.min(Math.max(0, r.reintentarEn - d.ahora()), ESPERA_MAXIMA_OCUPADO_MS);

@@ -37,8 +37,9 @@ const FINALES: readonly string[] = ["no-es-nuestro", "sin-acceso", "sorteo-ajeno
 const DE_RED: readonly string[] = ["red", "pollar"];
 const DE_TOPE: readonly string[] = ["intentos", "cupo-ip"];
 
+/** `apagado` no cuenta: una pausa del servicio es pasajera, y al recargar se vuelve a preguntar (como con `/cupo` en falso). */
 export function esFinal(e: EstadoDeAltaPremio | undefined): boolean {
-  return e !== undefined && (e.estado === "puede" || e.estado === "apagado" || (e.estado === "fallo" && e.final === true));
+  return e !== undefined && (e.estado === "puede" || (e.estado === "fallo" && e.final === true));
 }
 
 export interface AltasDelSorteo {
@@ -85,7 +86,8 @@ export function crearAltas(d: DepsDeLasAltas): AltasDelSorteo {
       const espera = ESPERAS_MS[reintentos];
       if (!reintentable || espera === undefined) return poner(puesto, { estado: "fallo", motivo: r.error });
       reintentos++;
-      const hasta = r.error === "intentos" || r.error === "cupo-ip" ? (r.reintentarEn ?? 0) - d.ahora() : espera;
+      // Sin `reintentarEn` (el cupo-ip del servicio no lo trae) vale la espera de siempre, 2, 5 y 10 segundos.
+      const hasta = (r.error === "intentos" || r.error === "cupo-ip") && r.reintentarEn !== undefined ? r.reintentarEn - d.ahora() : espera;
       await d.esperar(Math.min(ESPERA_MAXIMA_MS, Math.max(ESPERA_MINIMA_MS, hasta)));
     }
   }

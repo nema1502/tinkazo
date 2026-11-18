@@ -96,6 +96,9 @@ export interface LineaDelPaso {
   vars: Record<string, string>;
 }
 
+/** ¿El servicio del acceso dijo que no a esta ganadora y reintentar no cambia nada? */
+const conFalloFinal = (f: FilaDeGanadora): boolean => f.alta !== "esperando" && f.alta.estado === "fallo" && f.alta.final === true;
+
 export function lineaDelPaso(p: PasoDelPuente): LineaDelPaso | null {
   const sin = (clave: string): LineaDelPaso => ({ clave, vars: {} });
   switch (p.paso) {
@@ -105,8 +108,9 @@ export function lineaDelPaso(p: PasoDelPuente): LineaDelPaso | null {
     case "mandando":
       return null;
     case "resultado":
-      // Con otra billetera hay una sola línea de apoyo: la de avisarle a Tinkazo, no esa y la de los celulares.
-      return sin(p.otraBilletera ? "cpoAvisaleATinkazo" : "cpoCelularesResultado");
+      // Con otra billetera, o con una ganadora que el servicio dijo que no (un fallo final), hay una sola línea de apoyo: la de
+      // avisarle a Tinkazo, no esa y la de los celulares.
+      return sin(p.otraBilletera || p.filas.some(conFalloFinal) ? "cpoAvisaleATinkazo" : "cpoCelularesResultado");
     case "leyendo":
       return sin("cpoLeyendo");
     case "en-el-sorteo":
