@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { campanaDeEjemplo } from "./ejemplo";
 import { TEXTOS_CAMPANA } from "./textos";
@@ -75,6 +76,47 @@ describe("las palabras de la campaña", () => {
         expect(TEXTOS_CAMPANA[idioma][clave], `${idioma}.${clave}`).toContain("{n}");
       }
       expect(TEXTOS_CAMPANA[idioma].cpRetiro, `${idioma}.cpRetiro`).toContain("{costo}");
+    }
+  });
+});
+
+describe("los términos de los sorteos de empresas", () => {
+  const CLAVES_TM = ["tmCampanaT", "tmCampanaA", "tmCampanaB"] as const;
+
+  it("trae las tres claves, con texto, en los dos idiomas", () => {
+    for (const idioma of IDIOMAS) {
+      for (const clave of CLAVES_TM) {
+        expect(TEXTOS_CAMPANA[idioma][clave]?.length ?? 0, `${idioma}.${clave}`).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it("no usa signos ni palabras prohibidas", () => {
+    const signos = /[;«»"“”„—–·¡!]/u;
+    const prohibidas = /\b(?:rifa|lotería|boleto|ticket|apuesta|raffle|lottery|bet)\b/iu;
+    for (const idioma of IDIOMAS) {
+      for (const clave of CLAVES_TM) {
+        const texto = TEXTOS_CAMPANA[idioma][clave] ?? "";
+        expect(texto, `${idioma}.${clave}`).not.toMatch(signos);
+        expect(texto, `${idioma}.${clave}`).not.toMatch(prohibidas);
+      }
+    }
+  });
+
+  it("dice que participar es gratis y que el premio se recibe gratis", () => {
+    expect(TEXTOS_CAMPANA.es.tmCampanaA).toContain("Participar es gratis");
+    expect(TEXTOS_CAMPANA.es.tmCampanaB).toContain("recibirlo es gratis");
+    expect(TEXTOS_CAMPANA.en.tmCampanaA).toContain("Taking part is free");
+    expect(TEXTOS_CAMPANA.en.tmCampanaB).toContain("receiving it is free");
+  });
+
+  it("terminos.html los trae con su texto en español, fuera de lo que depende del cobro", () => {
+    const html = readFileSync("terminos.html", "utf8");
+    const sinCobro = html.replace(/<template\b[\s\S]*?<\/template>/gu, "");
+    for (const clave of CLAVES_TM) {
+      const hallazgo = new RegExp(`data-i="${clave}">([^<]*)<`, "u").exec(sinCobro);
+      expect(hallazgo, clave).not.toBeNull();
+      expect(hallazgo?.[1], clave).toBe(TEXTOS_CAMPANA.es[clave]);
     }
   });
 });
