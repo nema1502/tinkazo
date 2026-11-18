@@ -774,6 +774,8 @@ export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", gan
     // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
     // habla de "sellar" y al sortear confundía).
     if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // La puerta del premio con el sorteo ya sellado: el ganador no cambia y el sorteo se guarda desde el comprobante o más tarde.
+    if ((tipo === "premioGuardado" || tipo === "premioSinSaber") && paso === "sorteo") tipo = `${tipo}Sorteo`;
     // El error de cantidad con más ganadores de los que admitían los contratos viejos: no sobran ganadores, la red todavía no llega.
     // La clave del error (para el contador y el detalle) sigue siendo la del contrato; solo cambia lo que se lee.
     if (tipo === "badWinnerCount" && (ganadores ?? 0) > TOPE_DE_LOS_CONTRATOS_VIEJOS) tipo = "badWinnerCountViejo";

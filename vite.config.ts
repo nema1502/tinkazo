@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
+import { problemasDePremios } from "./src/stellar/premios-build";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
 
 type Dict = Record<string, unknown>;
@@ -119,6 +120,23 @@ function validarBanderasDeAlta(): Plugin {
     config(_config, { mode }) {
       const problemas = problemasDeAlta(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]));
       if (problemas.length) throw new Error(`Las banderas del cobro por uso están a medio poner:\n- ${problemas.join("\n- ")}`);
+    },
+  };
+}
+
+/**
+ * El build no sale con el modo premios (`VITE_RAMPA=premios`) junto con el pago con el saldo o la compra con QR
+ * (`src/stellar/premios-build.ts`): esos dos firman con la cuenta que guarda el premio o le traen dinero, y el modo
+ * promete que solo ve su saldo y recibe. No toca ninguna bandera: obliga a elegir cuál va. Falla antes de armar nada y
+ * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ */
+function validarModoPremios(): Plugin {
+  return {
+    name: "tinkazo:modo-premios",
+    apply: "build",
+    config(_config, { mode }) {
+      const problemas = problemasDePremios(loadEnv(mode, __dirname, ["VITE_"]));
+      if (problemas.length) throw new Error(`El modo premios no va con la venta prendida:\n- ${problemas.join("\n- ")}`);
     },
   };
 }
@@ -257,7 +275,7 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [validarBanderasDeAlta(), validarPaginasConCobro(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
+  plugins: [validarBanderasDeAlta(), validarModoPremios(), validarPaginasConCobro(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
   build: {
     target: "es2022",
     sourcemap: true,

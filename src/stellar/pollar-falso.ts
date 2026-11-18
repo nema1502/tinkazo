@@ -41,6 +41,8 @@ export interface EstadoPollarFalso {
   cofirma: { pending: unknown[]; lastResolved?: unknown };
   /** El último estado de la máquina de transacciones: se repite al suscribirse, como en el kit. */
   transaccion: unknown;
+  /** Quien atiende las confirmaciones de firma (`onConfirmationRequest`): la prueba le entrega pedidos, como el kit. */
+  alConfirmar: ((pendientes: unknown[]) => void) | null;
 }
 
 export const PASSPHRASE_MAINNET = "Public Global Stellar Network ; September 2015";
@@ -62,6 +64,7 @@ export function estadoPollarFalso(): EstadoPollarFalso {
     oyentes: { billetera: new Set(), cofirma: new Set(), transaccion: new Set(), sesion: new Set() },
     cofirma: { pending: [] },
     transaccion: null,
+    alConfirmar: null,
   };
 }
 
@@ -86,6 +89,7 @@ export function reiniciar(h: EstadoPollarFalso): void {
   h.oyentes.sesion.clear();
   h.cofirma = { pending: [] };
   h.transaccion = null;
+  h.alConfirmar = null;
 }
 
 /** Lo que devuelve `getAuthState()`: el paso, si Pollar ya revalidó la sesión, y su token. */
@@ -161,8 +165,11 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     }
     ready = asincrono("ready", () => undefined);
     refreshWalletState = asincrono("refreshWalletState", () => h.billetera?.provisioning ?? null);
-    onConfirmationRequest(): () => void {
-      return () => undefined;
+    onConfirmationRequest(cb?: (pendientes: unknown[]) => void): () => void {
+      h.alConfirmar = cb ?? null;
+      return () => {
+        if (h.alConfirmar === cb) h.alConfirmar = null;
+      };
     }
     onAuthStateChange(cb: (s: unknown) => void): () => void {
       h.oyentes.sesion.add(cb);

@@ -19,6 +19,7 @@ import {
   estadoParaRecibir,
   mirarCuenta,
   queLlego,
+  tieneFirmanteAjeno,
   usdcDeLaRed,
 } from "../stellar/usdc-cuenta";
 import { type Dialogo, abrirDialogo, botonPrincipal, copiar, lineaDeEstado } from "./dialogo";
@@ -36,6 +37,10 @@ import { pintarQr } from "./qr";
  *
  * Tinkazo no guarda ni mueve dinero: los dólares están en la cuenta de la persona. «Ya lo mandé» mira los pagos que
  * entraron desde la base guardada en este navegador (`queLlego`) y nunca invita a mandar de nuevo.
+ *
+ * Con `VITE_RAMPA=premios` la ventana deja ver el saldo y recibir un premio, y nada más: sin Mandar, sin la dirección ni
+ * el QR para traer saldo de afuera y sin «Ya lo mandé» (`pantallaDelPremio`). Retirar llega más adelante, con el voto a
+ * mano de las firmas (docs/architecture.md, La cuenta de Google o de correo en la red principal).
  */
 
 /** Lo que la ventana le pide al sitio. En las pruebas, un reemplazo. */
@@ -176,6 +181,8 @@ interface Ventana {
   cuenta: string;
   deps: DepsDeSaldo;
   abierta: boolean;
+  /** El modo `premios`: ver el saldo y recibir un premio, y nada más. */
+  premios: boolean;
   vista: Vista;
   estado: EstadoParaRecibir | null;
   billetera: BilleteraParaRecibir | null;
@@ -194,6 +201,8 @@ interface Ventana {
 interface Pantalla {
   titulo?: string;
   linea?: string;
+  /** Otras líneas, después de la primera (solo el modo premios). */
+  avisos?: string[];
   /** HTML ya escapado. */
   datos?: string;
   plegado?: { resumen: string; textos: string[] };
@@ -289,6 +298,8 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
     return { linea: t("saldoNoSeSabe"), plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoNoSeSabeMas")] }, principal: volverAMirar };
   }
 
+  if (v.premios) return pantallaDelPremio(v, e);
+
   if (v.vista === "inicio") {
     // Mandar, solo si la cuenta puede recibir (está lista y protegida) y tiene algo para mandar.
     const saldo = saldoUsdc(v);
@@ -361,6 +372,50 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
   }
 }
 
+/**
+ * El modo `premios`: una sola pantalla según el estado de la cuenta. Ver el saldo y recibir un premio (activar la línea
+ * del dólar digital con el recorrido de siempre), y nada más: ni Mandar, ni la dirección ni el QR para traer saldo de
+ * afuera, ni «Ya lo mandé», ni «Ya tengo dólares digitales». Las pantallas que tapan todo (`bloquea`) ya se resolvieron.
+ */
+function pantallaDelPremio(v: Ventana, e: EstadoParaRecibir): Pantalla {
+  const volverAMirar = { texto: t("saldoVolverAMirar"), accion: () => void mirar(v) };
+  const cerrar = { texto: t("acctClose"), accion: () => v.d.cerrar() };
+  const propia = v.billetera?.tipo === "propia";
+  // Solo con Google: una cuenta con otra firma encima, que Tinkazo no puso. Es una línea suelta: avisa y no esconde Recibir
+  // un premio, porque la regla supone cómo nacen las cuentas del proveedor y se midió en una sola cuenta real
+  // (`tieneFirmanteAjeno`). Si la regla se equivocara con otras, no puede dejar a todos sin premios.
+  const ajena = !propia && v.lectura !== null && typeof v.lectura === "object" && tieneFirmanteAjeno(v.lectura, v.cuenta);
+  const avisoAjena = ajena ? [t("saldoPremioNoApta")] : [];
+  switch (e.estado) {
+    case "puede":
+      return {
+        conSaldo: true,
+        linea: t("saldoPremioLlegaSolo"),
+        // Con Google, la cuenta que ya puede recibir un premio no sella ni sortea (la puerta del premio, `wallet-pollar.ts`).
+        avisos: [...(propia ? [] : [t("saldoPremioNoOrganiza")]), ...avisoAjena],
+        plegado: { resumen: t("cargaComoSaco"), textos: [t(propia ? "saldoPremioRetirarPropia" : "saldoPremioRetirarLuego")] },
+        principal: cerrar,
+      };
+    case "falta-activar":
+      return {
+        titulo: t("saldoPremioRecibirTitulo"),
+        linea: t(propia ? "saldoPremioActivarPropio" : "saldoPremioRecibirLinea"),
+        // Con Google, antes de prepararla: después no organiza con esa cuenta (la puerta del premio, `wallet-pollar.ts`).
+        avisos: [...(propia ? [] : [t("saldoPremioNoOrganiza")]), ...avisoAjena],
+        ...(propia ? { plegado: { resumen: t("saldoMasDetalles"), textos: [t("saldoActivarPropioMas")] } } : {}),
+        principal: v.activado ? volverAMirar : { texto: t("saldoPremioRecibirBtn"), accion: () => void activar(v) },
+      };
+    case "activandose":
+      return { titulo: t("saldoPremioRecibirTitulo"), linea: t("saldoActivandoEspera"), principal: volverAMirar };
+    case "falta-xlm":
+      return { titulo: t("saldoPremioRecibirTitulo"), linea: con(t("saldoFaltaXlm"), { n: legible(e.necesita), m: legible(e.tiene) }), principal: volverAMirar };
+    case "no-recibe-mas":
+      return { conSaldo: true, titulo: t("saldoNoMandesTitulo"), linea: t("saldoNoRecibeMas"), principal: cerrar };
+    default:
+      return { titulo: t("saldoNoMandesTitulo"), linea: t("saldoNoPuedeApp"), principal: cerrar };
+  }
+}
+
 function datosParaRecibir(v: Ventana): string {
   const ultimo = v.ultimo ? `<p class="saldo-ultimo" data-saldo="ultimo">${esc(con(t("saldoUltimoLlego"), { cuando: fechaCorta(v.ultimo.ms), n: formatoDeMonto(v.ultimo.monto) }))}</p>` : "";
   return (
@@ -377,11 +432,12 @@ function pintar(v: Ventana): void {
   if (!v.abierta) return;
   const e = v.estado;
   if (e === null) {
-    // Mientras mira la cuenta: la línea de siempre y la principal apagada, sin dirección.
-    v.d.cuerpo.innerHTML = `<section class="saldo-paso"><p class="saldo-lead">${esc(t("saldoLead"))}</p></section>`;
-    v.boton.textContent = t("cargaYaTengo");
-    v.boton.disabled = true;
-    v.accion = null;
+    // Mientras mira la cuenta: la línea de siempre y la principal apagada, sin dirección. En el modo premios la principal es
+    // Cerrar y no se apaga: un botón que dice Cerrar y no cierra engaña, y la mirada puede tardar hasta 10 segundos.
+    v.d.cuerpo.innerHTML = `<section class="saldo-paso" data-saldo="mirando"><p class="saldo-lead">${esc(t("saldoLead"))}</p></section>`;
+    v.boton.textContent = t(v.premios ? "acctClose" : "cargaYaTengo");
+    v.boton.disabled = !v.premios;
+    v.accion = v.premios ? () => v.d.cerrar() : null;
     return;
   }
   const p = pantallaDe(v, e);
@@ -395,6 +451,7 @@ function pintar(v: Ventana): void {
     `<section class="saldo-paso">` +
     (p.titulo ? `<h3 class="saldo-titulo">${esc(p.titulo)}</h3>` : "") +
     (p.linea ? `<p class="saldo-lead">${esc(p.linea)}</p>` : "") +
+    (p.avisos ?? []).map((a) => `<p class="saldo-lead" data-saldo="aviso">${esc(a)}</p>`).join("") +
     (p.datos ?? "") +
     (p.secundariosArriba ? otras : "") +
     (p.plegado ? `<details class="saldo-mas"><summary>${esc(p.plegado.resumen)}</summary>${p.plegado.textos.map((x) => `<p>${esc(x)}</p>`).join("")}</details>` : "") +
@@ -440,14 +497,16 @@ async function leerEstado(v: Ventana): Promise<EstadoParaRecibir> {
 
 /** Mira la cuenta y pinta lo que corresponde. Si puede recibir, arma la base de «Ya lo mandé». */
 async function mirar(v: Ventana): Promise<void> {
-  v.boton.disabled = true;
+  // La primera mirada del modo premios deja Cerrar encendido (`pintar`): mientras tanto no hay otra cosa que apretar.
+  v.boton.disabled = !(v.premios && v.estado === null);
   v.estadoLinea.classList.remove("ok");
   v.estadoLinea.textContent = t("saldoMirandoCuenta");
   const e = await leerEstado(v);
   if (!v.abierta) return;
   v.estado = e;
   v.estadoLinea.textContent = "";
-  if (e.estado === "puede") v.armandoBase ??= armarBase(v);
+  // En el modo premios no hay «Ya lo mandé»: no se pide el historial de pagos.
+  if (e.estado === "puede" && !v.premios) v.armandoBase ??= armarBase(v);
   pintar(v);
 }
 
@@ -540,14 +599,17 @@ async function yaLoMande(v: Ventana): Promise<void> {
  * Abre «Tus dólares digitales». Con la bandera apagada no abre nada. `deps` reemplaza lo del sitio (en las pruebas).
  */
 export function abrirSaldo(o: { address: string }, deps: Partial<DepsDeSaldo> = {}): void {
-  if (modoDeRampa() === "apagada") return;
+  const modo = modoDeRampa();
+  if (modo === "apagada") return;
+  const premios = modo === "premios";
   const v: Ventana = {
     d: undefined as unknown as Dialogo,
     estadoLinea: lineaDeEstado(),
-    boton: botonPrincipal(t("cargaYaTengo")),
+    boton: botonPrincipal(t(premios ? "acctClose" : "cargaYaTengo")),
     cuenta: o.address,
     deps: { ...depsDelSitio(), ...deps },
     abierta: true,
+    premios,
     vista: "inicio",
     estado: null,
     billetera: null,

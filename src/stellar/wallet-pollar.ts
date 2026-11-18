@@ -23,7 +23,7 @@ import {
   motivoDelRechazo,
   pedidoValido,
 } from "./pago-con-saldo";
-import { usdcDeLaRed } from "./usdc-cuenta";
+import { PremioGuardado, type PuertaDelPremio, mirarAntesDeActivar, mirarPuertaDelPremio, usdcDeLaRed } from "./usdc-cuenta";
 
 /**
  * Entrar con Google o con un correo, sin instalar nada.
@@ -52,6 +52,17 @@ import { usdcDeLaRed } from "./usdc-cuenta";
  * firma que llegue se rechaza y se anota. El cliente se
  * arma con `confirmation: "prompt"`: el SDK deja ganar a la política más estricta entre el código y el panel de
  * Pollar, así que fijarla en `"prompt"` hace que la lista blanca corra siempre, también con el panel en "Never ask".
+ *
+ * La puerta del premio (`#firmando`): con `VITE_RAMPA=premios`, en la red principal y con la cuenta de Google o de correo,
+ * antes de cada firma del sello o del sorteo se mira en la red si la cuenta puede guardar dinero (`puertaDelPremio` en
+ * `usdc-cuenta.ts`). Si puede, o si la red no deja saberlo, no se firma nada: sale `PremioGuardado`. El voto del kit firma
+ * el hash de cualquier transacción de la cuenta, y eso solo se acepta mientras la cuenta no pueda guardar dinero
+ * (docs/architecture.md). La puerta no tiene salida por parámetro, y `#pagar` se niega en este modo: el pago con el saldo
+ * firma por la misma vía y no se prende junto con `premios` (el build no lo deja, `premios-build.ts`), así que la negativa
+ * está también en la función y no solo en quien la llama. Ante una duda de la lectura (un corte, un 5xx, un 404) la puerta
+ * vuelve a leer unas veces antes de cerrar: todavía no se firmó nada. Pedir la línea del dólar digital (`activarUsdc`) es
+ * otro voto por hash y mira lo mismo antes: con la línea ya puesta no pide otra, y con otra línea con saldo sin la de
+ * Circle, o sin saber, no pide nada. El XLM no cuenta en ninguna de las dos miradas: cualquiera puede mandarlo.
  *
  * Sin verificar de punta a punta: hace falta una sesión real de Google, y la
  * política de transacciones de la app en el panel de Pollar tiene que permitir
@@ -885,6 +896,13 @@ class PollarWallet implements SubmittingWallet {
    */
   async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>, o: { testigo?: boolean } = {}): Promise<T> {
     const client = await this.#ensureClient();
+    // La puerta del premio, pegada a la firma: lo último antes de anotar el XDR y de firmar. Sin caché: cada firma vuelve a
+    // mirar. Fuera de la red principal y del modo `premios` no hace nada ni lee nada.
+    if (network.name === "mainnet" && modoDeRampa() === "premios") {
+      const puerta = await this.#puertaDelPremio(client);
+      // Una cuenta que Horizon no conoce no firma: ahí se trata como una lectura que no se pudo hacer.
+      if (puerta !== "libre") throw new PremioGuardado(puerta === "puede-guardar" ? "puede-guardar" : "no-se-sabe");
+    }
     // En la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado (riesgo aceptado,
     // docs/architecture.md). Solo mira, después de firmar. El pago con el saldo no lo usa: lo firmado se revisa entero
     // antes de mandarlo (`pagarOrden`).
@@ -1197,7 +1215,9 @@ class PollarWallet implements SubmittingWallet {
 
   async #pagar(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo> {
     const red = (): ResultadoDelPagoConSaldo => ({ estado: "no-salio", motivo: "red" });
-    if (network.name !== "mainnet") return { estado: "no-salio", motivo: "sin-cuenta" };
+    // En el modo premios la cuenta puede guardar dinero y el pago firma por la misma vía que no se revisa por contenido:
+    // no se arma ni se pide nada al proveedor (el build tampoco deja prender los dos, `premios-build.ts`).
+    if (network.name !== "mainnet" || modoDeRampa() === "premios") return { estado: "no-salio", motivo: "sin-cuenta" };
     let client: PollarClient;
     try {
       client = await this.#ensureClient();
@@ -1310,6 +1330,15 @@ class PollarWallet implements SubmittingWallet {
       client = await this.#ensureClient();
     } catch {
       return "no-salio";
+    }
+    // En el modo premios, la línea también es un voto por hash: no se pide para una cuenta que ya puede guardar un premio
+    // (el XLM no cuenta). Lo que la ventana mostraba (o lo que otra pestaña hizo) puede haber quedado viejo, así que se
+    // vuelve a mirar acá.
+    if (network.name === "mainnet" && modoDeRampa() === "premios") {
+      const cuenta = this.#cuentaParaActivar(client);
+      const antes = cuenta === null ? "no-se-sabe" : await mirarAntesDeActivar(network.name, cuenta);
+      if (antes === "ya-esta") return "hecho";
+      if (antes === "no-se-sabe") return "no-salio";
     }
     const usdc = usdcDeLaRed(network.name);
     let quedan = 1;
@@ -2013,6 +2042,28 @@ class PollarWallet implements SubmittingWallet {
       this.#memoria = { dir, activacion: false, proteccion: false };
     }
     return this.#memoria;
+  }
+
+  /**
+   * Lee en la red si la cuenta de la sesión puede guardar dinero. Sin la cuenta de la sesión, no se sabe. Ante una duda
+   * vuelve a leer unas veces (`mirarPuertaDelPremio`). `sinReintentarNoExiste`: un 404 no se repite (la consulta adelantada).
+   */
+  async #puertaDelPremio(client: PollarClient, o: { sinReintentarNoExiste?: boolean } = {}): Promise<PuertaDelPremio> {
+    const cuenta = this.#cuentaParaActivar(client);
+    return cuenta === null ? "no-se-sabe" : mirarPuertaDelPremio(network.name, cuenta, o);
+  }
+
+  /**
+   * La misma lectura que hace la puerta, sin firmar nada: para que `freeze.ts` avise antes de abrir el cupón o de cerrar
+   * la lista. Fuera de la red principal o del modo `premios` da `libre` sin leer. No reemplaza a la puerta de `#firmando`.
+   */
+  async revisarPuertaDelPremio(): Promise<PuertaDelPremio> {
+    if (network.name !== "mainnet" || modoDeRampa() !== "premios") return "libre";
+    try {
+      return await this.#puertaDelPremio(await this.#ensureClient(), { sinReintentarNoExiste: true });
+    } catch {
+      return "no-se-sabe";
+    }
   }
 
   /** La cuenta que se puede activar (C1 y C3): la de la sesión, la misma que dice el kit, una G, en la red principal. */

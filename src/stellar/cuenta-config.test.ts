@@ -22,8 +22,19 @@ describe("la carga de saldo (VITE_RAMPA)", () => {
     expect(modoDeRampa({ rampa: "RECIBIR" })).toBe("recibir");
     expect(modoDeRampa({ rampa: "meru" })).toBe("recibir");
   });
+  it("premios, con espacios o mayúsculas, es su propio modo y no cambia los demás", () => {
+    expect(modoDeRampa({ rampa: "premios" })).toBe("premios");
+    expect(modoDeRampa({ rampa: "  Premios " })).toBe("premios");
+    expect(modoDeRampa({ rampa: "PREMIOS" })).toBe("premios");
+    expect(modoDeRampa({ rampa: "pollar" })).toBe("pollar");
+    expect(modoDeRampa({ rampa: "recibir" })).toBe("recibir");
+    expect(modoDeRampa({ rampa: "meru" })).toBe("recibir");
+  });
   it("vacía o con cualquier otra cosa, apagada", () => {
     for (const r of [undefined, "", " ", "apagada", "stereum", "1", "true", "si", "pollar,recibir"]) expect(modoDeRampa({ rampa: r }), String(r)).toBe("apagada");
+  });
+  it("premios mezclado con otro valor, o escrito casi igual, queda apagada", () => {
+    for (const r of ["premios,recibir", "premios pollar", "premio", "premios.", "pre mios", "premiosx"]) expect(modoDeRampa({ rampa: r }), r).toBe("apagada");
   });
   it("leída del entorno, sin nada puesto, apagada", () => {
     expect(modoDeRampa()).toBe("apagada");

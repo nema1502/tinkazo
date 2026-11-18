@@ -1652,3 +1652,53 @@ describe("más ganadores de los que admite el contrato de la red", () => {
     expect(await anchorErrorText(simulacionFallida(), "sello")).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
   });
 });
+
+describe("la puerta del premio: el texto del sello y el del sorteo", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const claves = ["errAnchor.premioGuardado", "errAnchor.premioGuardadoSorteo", "errAnchor.premioSinSaber", "errAnchor.premioSinSaberSorteo"] as const;
+
+  it("al sellar: la cuenta puede guardar dinero, o no se pudo comprobar", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(premio("puede-guardar"), "sello")).toBe(T.es["errAnchor.premioGuardado"]);
+    expect(await anchorErrorText(premio("no-se-sabe"), "sello")).toBe(T.es["errAnchor.premioSinSaber"]);
+    // Sin decir el paso, es el del sello.
+    expect(await anchorErrorText(premio("puede-guardar"))).toBe(T.es["errAnchor.premioGuardado"]);
+  });
+
+  it("al sortear, con la lista ya sellada: dice que el ganador no cambia, sin el aviso de Mis sorteos", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    const guardado = await anchorErrorText(premio("puede-guardar"), "sorteo");
+    const sinSaber = await anchorErrorText(premio("no-se-sabe"), "sorteo");
+    expect(guardado).toBe(T.es["errAnchor.premioGuardadoSorteo"]);
+    expect(sinSaber).toBe(T.es["errAnchor.premioSinSaberSorteo"]);
+    for (const texto of [guardado, sinSaber]) {
+      expect(texto).toContain("El ganador no cambia");
+      expect(texto).not.toContain(T.es.sorteoMasTarde as string);
+    }
+    // El de guardado lleva al comprobante, donde se termina de guardar.
+    expect(guardado).toContain(T.es.vFinish as string);
+  });
+
+  it("los cuatro textos existen en los dos idiomas y ninguno dice hash, firma ni wallet", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) {
+        const texto = T[l][clave];
+        expect(typeof texto, `${l}: ${clave}`).toBe("string");
+        expect(texto as string).not.toMatch(/\bhash|\bfirmas?\b|\bsignatures?\b|\bXDR|drand|\bRPC\b/i);
+        if (l === "es") expect(texto as string).not.toMatch(/\bwallet\b/i);
+      }
+    }
+    expect(T.en["errAnchor.premioGuardadoSorteo"]).toContain("The winner stays the same");
+  });
+
+  it("no es un sello que no se grabó: no se reintenta con otra ronda", async () => {
+    const { selloSinGrabar } = await import("./anchor");
+    expect(selloSinGrabar(premio("puede-guardar"))).toBe(false);
+    expect(selloSinGrabar(premio("no-se-sabe"))).toBe(false);
+  });
+});

@@ -617,6 +617,10 @@ async function alNoGuardar(g: PorGrabar, error: unknown): Promise<void> {
     await ofrecerRecuperacion(caja, recupera, g.beacon);
     return;
   }
+  // La puerta del premio (`VITE_RAMPA=premios`): la cuenta ya puede guardar dinero y no firma. Volver a probar da lo mismo
+  // para siempre, así que Guardar el sorteo no se ofrece. La salida es el comprobante, donde cualquiera con una billetera
+  // termina el sorteo. Con `premioSinSaber` sí: la próxima lectura puede responder.
+  if (clave === "premioGuardado" && (await ofrecerElComprobante(caja, g))) return;
   // El servicio que cubre la comisión no pudo: si la cuenta tiene con qué pagar la suya, esa es la segunda salida.
   const segunda = (await sePuedeSortearPagando(error)) ? accionDePagarConMiCuenta() : undefined;
   verError(caja, { texto: t("grabReintentar"), ejecutar: () => void draw() }, segunda);
@@ -744,19 +748,44 @@ function ponerSegundaAccion(status: HTMLElement, segunda: AccionError): void {
   status.append(b);
 }
 
-/** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */
-async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alreadyDrawn", beacon: Beacon): Promise<void> {
-  const sello = app.frozen;
-  if (!sello || sello.raffleId === undefined) return;
-  const ausencia = causa === "notFound" && await existenciaDelSorteo(sello.raffleId) === "ausente";
-  // El comprobante consulta exactamente este número, contrato y red; no depende
-  // de que el historial local lo contenga, y conserva el hash del sello si existe.
-  const enlace = ausencia ? "" : await proofUrl({
+/**
+ * El enlace del comprobante de un sorteo sellado. Consulta exactamente este número, contrato y red; no depende de que el
+ * historial local lo contenga, y conserva el hash del sello si existe.
+ */
+async function enlaceDelComprobante(sello: NonNullable<typeof app.frozen>, beacon: Beacon): Promise<string> {
+  return proofUrl({
     v: PROOF_VERSION, names: sello.names, round: sello.round, sealedAt: sello.ts,
     prize: sello.prize, net: network.name, contract: network.contractId ?? "",
     id: String(sello.raffleId), signature: beacon.signature,
     ...(sello.sealTx ? { stx: sello.sealTx } : {}),
   });
+}
+
+/**
+ * La puerta del premio frenó la grabación: la acción es abrir el comprobante en otra pestaña, y no se vuelve a probar.
+ * El aviso de la caja ya dijo que cualquiera con Varial lo termina ahí y que la comisión sale de su XLM. `false` si el
+ * sello no tiene número (no hay comprobante que abrir) y hay que seguir con lo de siempre.
+ */
+async function ofrecerElComprobante(status: HTMLElement, g: PorGrabar): Promise<boolean> {
+  const { sello, beacon } = g;
+  if (sello.raffleId === undefined) return false;
+  const enlace = await enlaceDelComprobante(sello, beacon);
+  if (app.frozen !== sello) return true;
+  const accion: AccionError = { texto: t("histSeeProof"), ejecutar: () => void window.open(enlace, "_blank", "noopener") };
+  recuperacion = { sello, accion };
+  const btn = $("btn-draw");
+  btn.dataset.i = "histSeeProof";
+  btn.textContent = accion.texto;
+  verError(status, accion);
+  return true;
+}
+
+/** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */
+async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alreadyDrawn", beacon: Beacon): Promise<void> {
+  const sello = app.frozen;
+  if (!sello || sello.raffleId === undefined) return;
+  const ausencia = causa === "notFound" && await existenciaDelSorteo(sello.raffleId) === "ausente";
+  const enlace = ausencia ? "" : await enlaceDelComprobante(sello, beacon);
   if (app.frozen !== sello) return;
   const clave = ausencia ? "drawPreparar" : "drawConsultar";
   const accion: AccionError = {

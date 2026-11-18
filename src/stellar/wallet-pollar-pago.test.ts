@@ -377,3 +377,23 @@ describe("sin la cuenta de la sesión en la red principal, nada", () => {
     expect(veces("buildTx")).toBe(0);
   });
 });
+
+describe("en el modo premios el pago con el saldo se niega en la función", () => {
+  it("no arma el cliente, no pide nada al proveedor ni firma, y dice sin-cuenta (el build tampoco deja prender los dos: premios-build.ts)", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    const pedidos: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        pedidos.push(String(url));
+        throw new Error("el pago con el saldo no pide nada a la red en el modo premios");
+      }),
+    );
+    expect(await pollarWallet.pagarOrden(ORDEN)).toEqual({ estado: "no-salio", motivo: "sin-cuenta" });
+    expect(veces("buildTx")).toBe(0);
+    expect(veces("signTx")).toBe(0);
+    expect(veces("submitTx")).toBe(0);
+    expect(e.construidos).toBe(0);
+    expect(pedidos).toEqual([]);
+  });
+});

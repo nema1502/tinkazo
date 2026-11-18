@@ -19,7 +19,8 @@ import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomenda
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, billeteraEnOtraRed, canAnchor, claveDeSellar, currentSession, frenarPorOtraRed } from "./wallet-ui";
+import { apruebaAMano, billeteraEnOtraRed, canAnchor, cerrarSesion, claveDeSellar, currentSession, frenarPorOtraRed, openPicker } from "./wallet-ui";
+import type { AccionError } from "./error-accion";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { contar as contarPersonas, cuentaParaMostrar, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
 import { modesVisible } from "../modos/bandera";
@@ -41,7 +42,8 @@ import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-te
 import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
-import { cobroPorUso } from "../stellar/cobro-oficial";
+import { cobroPorUso, redPrincipalConPollar } from "../stellar/cobro-oficial";
+import { modoDeRampa } from "../stellar/cuenta-config";
 import { avisoTrasFallarEnLaCadena, entroYFalloEnLaCadena } from "./sello-tarde-aviso";
 
 /**
@@ -795,6 +797,73 @@ async function accesoOficialParaSellar(btn: HTMLButtonElement, ganadores: number
 }
 
 /**
+ * La consulta adelantada de la puerta del premio (`VITE_RAMPA=premios`): con una cuenta de Google o de correo en la red
+ * principal, mira si la cuenta puede guardar dinero antes del cupón y de cerrar la lista. Si puede, o si no se pudo saber,
+ * muestra el aviso y devuelve `true` (no se sella). Una cuenta que Horizon todavía no conoce pasa: se crea en el paso
+ * siguiente y la puerta de la firma la mira de nuevo. Fuera del caso no lee ni baja nada. Un sello pendiente de esta lista
+ * se averigua sin firmar: tampoco se frena.
+ */
+async function frenarPorElPremio(names: string[]): Promise<boolean> {
+  // Lo primero: fuera del modo `premios` no se baja ni se lee nada (ni el sello pendiente ni la billetera de Google).
+  if (modoDeRampa() !== "premios" || network.name !== "mainnet" || !redPrincipalConPollar()) return false;
+  let puerta: "libre" | "puede-guardar" | "no-se-sabe" | "no-existe";
+  try {
+    if (await hayUnSelloPendiente(names)) return false;
+    const { pollarWallet } = await import("../stellar/wallet-pollar");
+    puerta = await pollarWallet.revisarPuertaDelPremio();
+  } catch {
+    // Sin poder mirar, no se frena acá: la puerta de la firma mira igual.
+    return false;
+  }
+  if (puerta === "libre" || puerta === "no-existe") return false;
+  const { PremioGuardado } = await import("../stellar/usdc-cuenta");
+  await avisarDelPremio(new PremioGuardado(puerta), Math.min(ganadoresPedidos(), names.length));
+  return true;
+}
+
+/**
+ * El aviso de la puerta del premio, donde van los errores del sello. Con `premioGuardado`, dos salidas dentro del mensaje
+ * (con la forma de «Sortear pagando con mi cuenta»): usar otra cuenta o una billetera propia. Las dos cierran la sesión y
+ * abren la ventana para entrar, con su motivo y el foco de vuelta en «Sellar la lista». No se ofrece mandar el saldo a
+ * ningún lado. Con `premioSinSaber`, Probar de nuevo: «Sellar la lista» sigue encendido y vuelve a mirar.
+ */
+async function avisarDelPremio(e: unknown, numWinners: number): Promise<void> {
+  const status = $("seal-status");
+  status.style.display = "block";
+  status.className = "txstatus bad";
+  await escribirError(status, e, "sello", numWinners);
+  const { errorKey } = await import("../stellar/errores");
+  if (errorKey(e) === "premioSinSaber") {
+    verError(status, { texto: t("clProbarDeNuevo"), ejecutar: () => void freeze() });
+    return;
+  }
+  const salir = (motivo: string) => (): void => {
+    void cerrarSesion()
+      .catch(() => undefined)
+      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze") }));
+  };
+  const salidas: Array<{ id: string; clave: string; motivo: string }> = [
+    { id: "premio-otra-cuenta", clave: "premioOtraCuenta", motivo: "premioMotivoOtra" },
+    { id: "premio-billetera", clave: "premioBilletera", motivo: "premioMotivoBilletera" },
+  ];
+  const acciones: AccionError[] = salidas.map((s) => ({ texto: t(s.clave), ejecutar: salir(s.motivo) }));
+  // Para la espera en grande, primero el aviso; los botones se suman después, para que su texto no entre en él.
+  verError(status, acciones[0], acciones[1]);
+  salidas.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = s.id;
+    b.className = "ghost mini";
+    b.dataset.i = s.clave;
+    b.textContent = acciones[i]?.texto ?? t(s.clave);
+    b.style.display = "block";
+    b.style.marginTop = "10px";
+    b.addEventListener("click", () => acciones[i]?.ejecutar());
+    status.append(b);
+  });
+}
+
+/**
  * Hay un sello de esta lista que se cortó y todavía no se sabe si entró. Averiguarlo no pide ninguna firma, y si entró
  * pudo gastar el último sorteo oficial: la compuerta del acceso no lo frena. Si hay que sellar de nuevo, el candado de
  * antes de la firma (`envio-sdk.ts`) vuelve a mirar el acceso.
@@ -871,6 +940,12 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       return;
     }
     sinReintento = antes === "no-se-sabe";
+  }
+  // Con `VITE_RAMPA=premios`, una cuenta de Google o de correo que puede guardar dinero no sella: la puerta de `#firmando`
+  // (`wallet-pollar.ts`) es la que cuenta, y esta consulta solo evita gastar el cupón o cerrar la lista para enterarse tarde.
+  if (anchoring && (await frenarPorElPremio(names))) {
+    soltarLoPedido();
+    return;
   }
   // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
   // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
@@ -1055,6 +1130,11 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       void import("../stellar/errores")
         .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
         .catch(() => undefined);
+      // La puerta del premio frenó la firma: la cuenta puede guardar dinero, o no se pudo comprobar. Su aviso, con sus salidas.
+      if (await import("../stellar/errores").then((m) => m.esDelPremio(e)).catch(() => false)) {
+        await avisarDelPremio(e, numWinners);
+        return;
+      }
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
       if (esCostoAlto(e)) {

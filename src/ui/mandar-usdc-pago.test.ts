@@ -1,5 +1,5 @@
 import { Keypair, Networks, type Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { USDC_MAINNET } from "../stellar/pagos";
 import type { CuentaMirada, LecturaDeCuenta } from "../stellar/usdc-cuenta";
 import { armarEnvio, prepararEnvio } from "./mandar-usdc";
@@ -65,5 +65,23 @@ describe("el pago", () => {
     expect(await prepararEnvio(datos, con(mirada("4.0000000"), mirada("0.0000000")))).toEqual({ ok: false, motivo: "sin-saldo" });
     expect(await prepararEnvio(datos, con(mirada("12.5000000"), "sin-red"))).toEqual({ ok: false, motivo: "sin-red" });
     expect(await prepararEnvio({ ...datos, destino: YO }, con(mirada("12.5000000"), mirada("0.0000000")))).toEqual({ ok: false, motivo: "datos" });
+  });
+});
+
+describe("el modo premios", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  const datos = { red: "mainnet" as const, origen: YO, destino: OTRA, monto: D, nota: { tipo: "ninguna" as const } };
+
+  it("armarEnvio, llamado directo, no arma ningún pago", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    await expect(armarEnvio(datos, "500")).rejects.toThrow("mandar: apagado");
+  });
+
+  it("con cualquier otro valor de la bandera, el pago se arma como siempre", async () => {
+    for (const modo of ["pollar", "recibir", "meru", "", "otra-cosa"]) {
+      vi.stubEnv("VITE_RAMPA", modo);
+      expect(leer(await armarEnvio(datos, "500")).operations, modo).toHaveLength(1);
+    }
   });
 });

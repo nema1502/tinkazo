@@ -57,6 +57,10 @@ export const ERRORES = [
   "sponsorEmpty",
   /** Pollar 0.12: la co-firma de la cuenta no se aprobó (la rechazó quien aprueba, o la transacción no coincidía). */
   "cosignRejected",
+  /** La puerta del premio: la cuenta puede guardar dinero y por eso no sella ni sortea. */
+  "premioGuardado",
+  /** La puerta del premio: no se pudo comprobar si la cuenta puede guardar dinero y, ante la duda, no firma. */
+  "premioSinSaber",
   "rpcDown",
   "offline",
   /** Los motivos del portero del patrocinio: ver `ERRORES_DEL_PORTERO`. */
