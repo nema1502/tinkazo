@@ -4,8 +4,10 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
-import { problemasDePremios } from "./src/stellar/premios-build";
+import { avisosDelRetiro, problemasDePremios, problemasDelRetiro } from "./src/stellar/premios-build";
+import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
+import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
 
 type Dict = Record<string, unknown>;
 
@@ -164,6 +166,47 @@ function validarPaginasConCobro(): Plugin {
 }
 
 /**
+ * La `CUENTA_COBROS` de la red principal del portero, leída de `workers/patrocinio/wrangler.toml`, o `null` si el
+ * archivo no está o no la trae. Es contra la que el control del costo del retiro compara `VITE_RETIRO_CUENTA`.
+ */
+function cuentaDeCobrosDelWrangler(): string | null {
+  try {
+    return cuentaDeCobrosDelPortero(readFileSync(resolve(__dirname, "workers/patrocinio/wrangler.toml"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El build no sale con el costo del retiro a medio poner (`VITE_RETIRO_COSTO` y `VITE_RETIRO_CUENTA`): una de las dos
+ * mal escrita, la cuenta sin el costo, o un costo que se cobra sin las demás piezas que lo sostienen
+ * (`src/stellar/premios-build.ts`). La publicación de producción con el costo prendido tampoco sale mientras la portada
+ * diga que Tinkazo no cobra nada (`src/costo-del-retiro-portada.ts`). Con el costo puesto y sin la cuenta el build sale,
+ * no cobra nada, y lo deja dicho en la bitácora. Falla antes de armar nada y sin escribir los valores de las variables.
+ * Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ */
+function validarCostoDelRetiro(): Plugin {
+  let avisos: string[] = [];
+  return {
+    name: "tinkazo:costo-del-retiro",
+    apply: "build",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]);
+      const portada = { "index.html": readFileSync(resolve(__dirname, "index.html"), "utf8") };
+      const problemas = [
+        ...problemasDelRetiro(env, { cuentaDeCobros: cuentaDeCobrosDelWrangler() }),
+        ...problemasDeLaPortadaConRetiro(env, portada),
+      ];
+      if (problemas.length) throw new Error(`El costo del retiro está a medio poner:\n- ${problemas.join("\n- ")}`);
+      avisos = avisosDelRetiro(env);
+    },
+    buildStart() {
+      for (const aviso of avisos) this.warn(aviso);
+    },
+  };
+}
+
+/**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
  * hacer clic se muestra al instante. Solo esas once: son livianas y no tienen
@@ -275,7 +318,16 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [validarBanderasDeAlta(), validarModoPremios(), validarPaginasConCobro(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
+  plugins: [
+    validarBanderasDeAlta(),
+    validarModoPremios(),
+    validarCostoDelRetiro(),
+    validarPaginasConCobro(),
+    textosPorPagina(),
+    adelantarLectura(),
+    enlacesCortos(),
+    avisoDeTrozosGrandes(),
+  ],
   build: {
     target: "es2022",
     sourcemap: true,

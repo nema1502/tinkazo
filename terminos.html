@@ -82,6 +82,15 @@
       </details>
     </article>
     </template>
+    <!-- Lo que cuesta retirar: entra solo con el costo configurado (src/costo-del-retiro.ts), que cambia {c} por el monto. -->
+    <template data-con-retiro>
+    <article class="nota" id="retiro" data-retiro>
+      <h3 data-i="tmRetiroT">Si retirás tu dinero</h3>
+      <p data-i="tmRetiroB">Recibir un premio en tu cuenta de Tinkazo es gratis, e ingresar dólares digitales a tu cuenta también.
+        Retirar dólares digitales de tu cuenta de Google de Tinkazo a otra cuenta cuesta {c} dólares digitales por retiro,
+        sea cual sea el monto, y lo ves antes de confirmar.</p>
+    </article>
+    </template>
     <article class="nota">
       <h3 data-i="tmQ2T">Quien organiza responde</h3>
       <p data-i="tmQ2B">El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.</p>

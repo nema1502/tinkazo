@@ -2237,6 +2237,16 @@
   /* La tarjeta recibe el foco al abrir para que se anuncie, pero no es un
      control: sin el anillo amarillo, y conserva su sombra. */
   .acct-card:focus, .acct-card:focus-visible { outline: none; box-shadow: var(--sh); }
+  /* Mandar y retirar: en laptop la ventana se ensancha y los datos van en dos columnas; en el celular va pegada abajo. */
+  @media (min-width: 900px) {
+    .dlg-card.dlg-mandar { max-width: min(860px, calc(100vw - 48px)); }
+    .dlg-mandar .saldo-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; align-items: start; }
+    .dlg-mandar .saldo-datos > .saldo-dato:first-child { grid-column: 1 / -1; }
+    .dlg-mandar .saldo-total { font-size: 32px; }
+  }
+  @media (max-width: 460px) {
+    .acct-back:has(.dlg-mandar) .dlg-mandar { margin-block: auto 0; }
+  }
   .acct-head {
     flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px;
     border-bottom: var(--bw) solid var(--ink);
@@ -2345,6 +2355,7 @@
   .dlg-estado { min-height: 1.4em; font-size: 16px; line-height: 1.4; color: var(--ink2); overflow-wrap: anywhere; }
   .dlg-estado:empty { display: none; }
   .dlg-estado.ok { color: var(--teal-ink); font-weight: 700; }
+  .dlg-estado.bad { color: var(--magenta-ink); font-weight: 700; }
   .dlg-estado a { color: inherit; text-underline-offset: 3px; }
   .dlg-main {
     min-height: 48px; padding: 0 20px; background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink);
@@ -2374,6 +2385,8 @@
     min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 16px;
     background: var(--field, var(--paper)); color: var(--ink); border: 2px solid var(--ink);
   }
+  /* Retirar: lo que llega es el número que más pesa. */
+  .dlg-mandar .saldo-dato:has([data-mandar="llega"]) b { font-size: 24px; font-weight: 800; }
   .saldo-dato .saldo-pista { margin-top: 6px; font-size: 15px; line-height: 1.4; color: var(--ink2); }
   .saldo-montos { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
   .saldo-montos .mini { min-height: 44px; min-width: 56px; }
@@ -3247,7 +3260,7 @@
   .gan-est.sin-consulta { border-style: dashed; }
   .gan-est.cargando, .gan-est.en-mano { font-weight: 700; }
   .gan-det { grid-column: 2 / -1; font-size: 16px; color: var(--ink2); overflow-wrap: anywhere; }
-  .gan-enlace { color: var(--ink); font-weight: 700; }
+  .gan-enlace { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 700; }
   .gan-pagar { grid-column: 2 / -1; justify-self: start; }
   .gan-pago { grid-column: 1 / -1; }
   .gan-pago:empty { display: none; }
@@ -3262,13 +3275,51 @@
   .gan-msg.bad { color: var(--magenta-ink); }
   .gan-copia { width: 100%; padding: 8px 10px; font-size: 16px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); overflow-wrap: anywhere; }
   .gan-copia[hidden], .gan-afuera[hidden], .gan-form a[hidden], .gan-campo[hidden], .gan-form button[hidden] { display: none; }
+  .gan-form .row[hidden] { display: none; }
   .gan-afuera summary { min-height: 48px; display: flex; align-items: center; font-weight: 800; font-size: 16px; cursor: pointer; }
+  /* Pagar premio con la cuenta que paga sola: el monto en grande o el contador de a un dólar, sin campo para escribir. */
+  .gan-google { display: grid; gap: 10px; }
+  .gan-monto-grande { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+  .gan-contador { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .gan-contador button { flex: 1 1 9rem; }
+  .gan-contador-valor { flex: 1 1 100%; order: -1; text-align: center; font-size: 24px; font-weight: 800; }
+  .gan-otra > summary { min-height: 48px; display: flex; align-items: center; font-weight: 800; font-size: 16px; cursor: pointer; }
+  .gan-otra > :not(summary) { margin-top: 10px; }
+  .gan-falta { margin: 0; font-size: 16px; font-weight: 700; color: var(--magenta-ink); overflow-wrap: anywhere; }
+  .gan-falta:empty { display: none; }
+  .gan-google[hidden], .gan-contador[hidden], .gan-monto-grande[hidden], .gan-otra[hidden], .gan-falta[hidden] { display: none; }
+  /* La acción que mueve plata es la principal (magenta, llena) y no pesa lo mismo que las demás. */
+  .gan-google > button, .gan-form > .primary { justify-self: start; }
+  /* Con el pago hecho, la confirmación se lee de un vistazo y el enlace de la fila (el que ya está en el detalle) no se repite. */
+  .gan-form.gan-hecho .gan-msg:not(.bad) { font-size: 22px; line-height: 1.25; }
+  .gan-fila:has(.gan-est.pagado) .gan-form .gan-enlace { display: none; }
+  /* Pagar desde otra billetera: el pago para copiar va antes que la instrucción, y los títulos plegables parecen tocables. */
+  .gan-form:has(.gan-afuera:not([hidden])) > .gan-afuera { order: 1; }
+  .gan-form:has(.gan-afuera:not([hidden])) > .gan-msg { order: 2; }
+  .gan-otra > summary::before, .gan-afuera > summary::before { content: "+"; margin-right: 10px; }
+  .gan-otra[open] > summary::before, .gan-afuera[open] > summary::before { content: "\2212"; }
+  @media (min-width: 900px) {
+    .gan-form .row > button.primary { min-width: 240px; min-height: 56px; }
+    .gan-monto-grande, .gan-contador-valor { font-size: 44px; }
+  }
   @media (max-width: 460px) {
     .gan { padding: 12px; }
+    .block .body.gan { padding: 12px; }
     .gan-fila { column-gap: 10px; padding: 10px; }
     .gan-est { max-width: 8.5rem; padding: 4px 8px; }
-    .gan-form .row > button, .gan-pagar { flex: 1 1 100%; }
-    .gan-pagar { justify-self: stretch; }
+    .gan-cuenta { white-space: nowrap; }
+    .gan-form .row > button, .gan-pagar, .gan-form > .primary { flex: 1 1 100%; }
+    .gan-pagar, .gan-form > .primary, .gan-google > button { justify-self: stretch; }
+    /* Con el cuadro abierto, "Pagar premio" sobra: el botón de pagar va dentro y siempre al alcance del pulgar. */
+    .gan-fila:has(.gan-pago:not(:empty)) > .gan-pagar { display: none; }
+    .gan-form { padding: 10px 0 0; border-width: 2px 0 0; }
+    .gan-form > .row { margin-top: 0; }
+    /* Lo que dice la pantalla va justo arriba de los botones, a la vista; lo plegable, abajo. */
+    .gan-form > .gan-msg, .gan-form > button.ghost, .gan-form > .gan-copia { order: 1; }
+    .gan-form > .row { order: 2; }
+    .gan-form > .gan-otra, .gan-form > .gan-afuera, .gan-form > .gan-enlace { order: 3; }
+    .gan-form:has(.gan-afuera:not([hidden])) > .gan-afuera { order: 4; }
+    .gan-form:has(.gan-afuera:not([hidden])) > .gan-msg { order: 5; }
   }
 
   /* «Dejá tu cuenta lista» (src/ui/cuenta-lista.ts, 11 de noviembre de 2026): el paso a pantalla completa y obligatorio
