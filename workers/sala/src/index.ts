@@ -138,7 +138,7 @@ import {
   avisarPorCorreo,
   correoPrendido,
   datosDeLaCampana,
-  enlaceDeLaSala,
+  enlaceDeRecibir,
   llamarAlProveedor,
   mensajeroDeCloudflare,
 } from "./correo";
@@ -229,8 +229,9 @@ function cors(origen: string | null, metodos: string): Record<string, string> {
     "Access-Control-Allow-Origin": origenPermitido(origen) && origen ? origen : SITIO,
     "Access-Control-Allow-Methods": metodos,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    // Sin esto el navegador, desde otro origen, no deja leer cuánto esperar y el celular espera siempre lo fijo.
-    "Access-Control-Expose-Headers": "Retry-After",
+    // Sin esto el navegador, desde otro origen, no deja leer cuánto esperar (el celular esperaría siempre lo fijo) ni la hora
+    // de la sala (`Date`), que el sitio usa como respaldo de su reloj.
+    "Access-Control-Expose-Headers": "Retry-After, Date",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -1017,7 +1018,7 @@ const ES_SORTEO = /^[0-9]{1,20}$/;
  */
 async function avisarGanadorasPorCorreo(
   env: Env,
-  id: string,
+  red: "mainnet" | "testnet",
   aviso: AvisoDeLaSala,
   terminada: (cuenta: string) => Promise<void>,
 ): Promise<void> {
@@ -1025,7 +1026,7 @@ async function avisarGanadorasPorCorreo(
     if (!correoPrendido(env) || !env.CORREO || !env.CORREO_DE || !env.POLLAR_SECRETO) return;
     await avisarPorCorreo({
       aviso,
-      enlace: enlaceDeLaSala(id),
+      enlace: enlaceDeRecibir(red),
       llamar: llamarAlProveedor(env.POLLAR_SECRETO, (u, i) => fetch(u, i)),
       mensajero: mensajeroDeCloudflare(env.CORREO, env.CORREO_DE, registrar),
       registrar,
@@ -1319,7 +1320,7 @@ export default {
         // El aviso por correo sale aparte: la respuesta no lo espera, y si falla el resultado ya quedó guardado.
         if (r.correo.cuentas.length > 0) {
           const terminada = (cuenta: string): Promise<void> => sala.cerrarAvisoDeCorreo(cuenta);
-          ctx.waitUntil(avisarGanadorasPorCorreo(env, id, r.correo, terminada));
+          ctx.waitUntil(avisarGanadorasPorCorreo(env, deRed.red, r.correo, terminada));
         }
         return new Response(null, { status: 204, headers: h });
       }

@@ -135,9 +135,9 @@ export function escaparHtml(x: string): string {
     .replace(/'/gu, "&#39;");
 }
 
-/** La página de esa campaña en el sitio, armada con el id de la sala: sin el pase y sin la clave. */
-export function enlaceDeLaSala(id: string): string {
-  return `${SITIO}/participar.html?s=${encodeURIComponent(id)}`;
+/** La entrada de quien ganó, la misma de Recibir mi premio del celular. No lleva sala, pase ni clave, y no depende de la sala. */
+export function enlaceDeRecibir(red: "mainnet" | "testnet"): string {
+  return `${SITIO}/?red=${red === "mainnet" ? "oficial" : "prueba"}&premio=1`;
 }
 
 /** Un `fetch` que solo llega al proveedor de cuentas, con la llave en la cabecera, con tope de tiempo y de tamaño. */
@@ -240,7 +240,7 @@ const PALABRAS = {
     saludo: "Hola {nombre}.",
     saludoSinNombre: "Hola.",
     ganaste: "Ganaste {premio} en el sorteo de {empresa}.",
-    pedido: "Para recibirlo, abrí este enlace desde el mismo celular con el que te anotaste:",
+    pedido: "Para recibirlo, abrí este enlace y entrá con la misma cuenta de Google con la que te anotaste:",
     boton: "Recibir tu premio",
     cierre: "Recibir tu premio es gratis. Tinkazo nunca te pide una contraseña ni un pago.",
     dinero: "{monto} dólares digitales",
@@ -250,7 +250,7 @@ const PALABRAS = {
     saludo: "Hi {nombre}.",
     saludoSinNombre: "Hi.",
     ganaste: "You won {premio} in the {empresa} draw.",
-    pedido: "To receive it, open this link on the same phone you signed up with:",
+    pedido: "To receive it, open this link and sign in with the same Google account you signed up with:",
     boton: "Get your prize",
     cierre: "Receiving your prize is free. Tinkazo never asks you for a password or a payment.",
     dinero: "{monto} digital dollars",

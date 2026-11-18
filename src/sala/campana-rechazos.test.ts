@@ -98,6 +98,30 @@ describe("los rechazos de la conexión del recinto", () => {
     expect(expuestas).toContain("Retry-After");
   });
 
+  it("las respuestas de la sala dejan que el sitio lea su hora y siguen dejando leer cuánto esperar", async () => {
+    await montar();
+    const r = await mundo.pedir(`/v1/sala/${sala.id}/campana/fase`, {
+      metodo: "PUT",
+      cuerpo: { fase: "cerrada" },
+      cabeceras: { Authorization: `Bearer ${sala.token}`, Origin: "https://tinkazo.app" },
+    });
+    const expuestas = (r.headers.get("Access-Control-Expose-Headers") ?? "").split(",").map((x) => x.trim());
+    expect(expuestas).toContain("Date");
+    expect(expuestas).toContain("Retry-After");
+  });
+
+  it("el aviso del sello rechazado también deja que el sitio lea la hora de la sala", async () => {
+    await montar();
+    const r = await mundo.pedir(`/v1/sala/${sala.id}/campana/fase`, {
+      metodo: "PUT",
+      cuerpo: { fase: "sellada", sorteo: "no-es-un-numero" },
+      cabeceras: { Authorization: `Bearer ${sala.token}`, Origin: "https://tinkazo.app" },
+    });
+    expect(r.status).toBe(400);
+    const expuestas = (r.headers.get("Access-Control-Expose-Headers") ?? "").split(",").map((x) => x.trim());
+    expect(expuestas).toContain("Date");
+  });
+
   it("150 personas honestas que se equivocan una vez cada una entran todas", async () => {
     await montar();
     for (let n = 1; n <= 150; n++) {

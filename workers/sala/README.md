@@ -242,8 +242,10 @@ enlace simbólico o una junction.
 ### El aviso por correo a quien gana
 
 Al guardar el resultado, la sala puede escribirle un correo corto a cada cuenta ganadora, con el enlace para recibir su premio
-(`https://tinkazo.app/participar.html?s=<id de la sala>`, sin el pase y sin la clave). **Nace apagado.** Hace falta todo esto
-junto: `CORREO_GANADORAS = "1"`, el enlace de envío `CORREO`, un `CORREO_DE` con forma de correo y `POLLAR_SECRETO`. Si falta
+(`https://tinkazo.app/?red=oficial&premio=1`, o `red=prueba` si la campaña es de la red de prueba). Es la entrada de quien ganó, la
+misma de Recibir mi premio del celular: no lleva la sala, el pase ni la clave, así que sigue andando cuando la sala ya se borró.
+En la red de prueba el sitio no abre esa entrada: el correo de una campaña de prueba sirve solo para ver que llega.
+**Nace apagado.** Hace falta todo esto junto: `CORREO_GANADORAS = "1"`, el enlace de envío `CORREO`, un `CORREO_DE` con forma de correo y `POLLAR_SECRETO`. Si falta
 algo, la sala no reserva nada, no busca ni manda, y el estado público dice `"correo": false`. Con todo puesto dice
 `"correo": true`, y el sitio muestra su línea de aviso solo en ese caso.
 

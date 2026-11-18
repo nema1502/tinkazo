@@ -1,11 +1,12 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { destinoDeRecibir } from "../campana/conectar";
 import {
   avisarPorCorreo,
   correoDeLaCuenta,
   correoPrendido,
   datosDeLaCampana,
-  enlaceDeLaSala,
+  enlaceDeRecibir,
   escaparHtml,
   esCorreo,
   limpiarTexto,
@@ -20,7 +21,9 @@ import {
 
 const CUENTA = Keypair.random().publicKey();
 const OTRA = Keypair.random().publicKey();
-const ENLACE = "https://tinkazo.app/participar.html?s=Ab3dE6gH";
+const ENLACE = "https://tinkazo.app/?red=oficial&premio=1";
+/** El mismo enlace como lo escribe el HTML: el signo & va escapado. */
+const ENLACE_HTML = "https://tinkazo.app/?red=oficial&amp;premio=1";
 
 /** Una respuesta del proveedor de cuentas con estas filas, como la mide la búsqueda de usuarios. */
 const lista = (items: unknown[]): Response =>
@@ -229,7 +232,7 @@ describe("el texto del correo", () => {
         "",
         "Ganaste 400 dólares digitales en el sorteo de Empresa de ejemplo.",
         "",
-        "Para recibirlo, abrí este enlace desde el mismo celular con el que te anotaste:",
+        "Para recibirlo, abrí este enlace y entrá con la misma cuenta de Google con la que te anotaste:",
         ENLACE,
         "",
         "Recibir tu premio es gratis. Tinkazo nunca te pide una contraseña ni un pago.",
@@ -251,7 +254,7 @@ describe("el texto del correo", () => {
         "",
         "You won 400 digital dollars in the Empresa de ejemplo draw.",
         "",
-        "To receive it, open this link on the same phone you signed up with:",
+        "To receive it, open this link and sign in with the same Google account you signed up with:",
         ENLACE,
         "",
         "Receiving your prize is free. Tinkazo never asks you for a password or a payment.",
@@ -274,8 +277,9 @@ describe("el texto del correo", () => {
   it("el enlace va en el texto y, entero y como botón, en el HTML", () => {
     const c = textoDelCorreo("es", datos);
     expect(c.texto).toContain(`\n${ENLACE}\n`);
-    expect(c.html.split(`href="${ENLACE}"`).length - 1).toBe(2);
-    expect(c.html).toContain(`>${ENLACE}</a>`);
+    expect(c.html.split(`href="${ENLACE_HTML}"`).length - 1).toBe(2);
+    expect(c.html).toContain(`>${ENLACE_HTML}</a>`);
+    expect(c.html).not.toContain("participar.html");
     expect(c.html).toContain('lang="es"');
     expect(c.html).not.toMatch(/<img|<script|<link|url\(|@import/iu);
   });
@@ -308,8 +312,24 @@ describe("el texto del correo", () => {
     expect(textoDelCorreo("es", { ...datos, empresa: "x".repeat(500) }).asunto.length).toBeLessThan(100);
   });
 
-  it("el enlace de la sala lleva solo el id", () => {
-    expect(enlaceDeLaSala("Ab3dE6gH")).toBe(ENLACE);
+  it("el enlace de una campaña de la red principal es la entrada de quien ganó en Oficial", () => {
+    expect(enlaceDeRecibir("mainnet")).toBe("https://tinkazo.app/?red=oficial&premio=1");
+  });
+
+  it("el enlace de una campaña de prueba es la entrada de quien ganó en Prueba", () => {
+    expect(enlaceDeRecibir("testnet")).toBe("https://tinkazo.app/?red=prueba&premio=1");
+  });
+
+  it("el enlace del correo es el mismo destino que Recibir mi premio del celular", () => {
+    expect(enlaceDeRecibir("mainnet")).toBe(`https://tinkazo.app${destinoDeRecibir("mainnet")}`);
+    expect(enlaceDeRecibir("testnet")).toBe(`https://tinkazo.app${destinoDeRecibir("testnet")}`);
+  });
+
+  it("el enlace no lleva sala, evento, pase, clave ni datos de la persona", () => {
+    for (const red of ["mainnet", "testnet"] as const) {
+      const consulta = new URL(enlaceDeRecibir(red)).searchParams;
+      expect([...consulta.keys()].sort()).toEqual(["premio", "red"]);
+    }
   });
 });
 
