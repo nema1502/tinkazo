@@ -314,10 +314,32 @@ describe("el pedido entero, con sus reintentos", () => {
     expect(await mandarElPago(SOBRE, HASTA, m.deps)).toEqual({ que: "duda", hash: HASH });
   });
 
-  it("un no que dice que el sobre puede salir se sigue en la red y queda en duda", async () => {
-    const m = mundo({ respuestas: [no(502, "red", { pudoSalir: true })] });
+  it("un no que dice que el sobre puede salir, sin pedir reenvío, se sigue en la red y queda en duda", async () => {
+    const m = mundo({ respuestas: [no(502, "red", { pudoSalir: true, detalle: "horizon" })] });
     expect(await mandarElPago(SOBRE, HASTA, m.deps)).toEqual({ que: "duda", hash: HASH });
     expect(m.consultas.length).toBeGreaterThan(0);
+    expect(m.pedidos).toHaveLength(1);
+  });
+
+  it.each(["TRY_AGAIN_LATER", "ocupada", "sin-confirmar"])("con la red cargada (%s) se reenvía el mismo sobre y entra", async (detalle) => {
+    const m = mundo({ respuestas: [no(502, "red", { pudoSalir: true, detalle }), tomado("ok")] });
+    expect(await mandarElPago(SOBRE, HASTA, m.deps)).toEqual({ que: "salio", hash: HASH });
+    expect(m.pedidos.map((t) => t - T0)).toEqual([0, 3_000]);
+  });
+
+  it("con la red cargada siempre, se reenvía con las esperas de siempre mientras el sobre tenga vida y queda en duda", async () => {
+    const carga = no(502, "red", { pudoSalir: true, detalle: "TRY_AGAIN_LATER" });
+    const m = mundo({ respuestas: Array.from({ length: 30 }, () => carga) });
+    expect(await mandarElPago(SOBRE, T0 + 3_600_000, m.deps)).toEqual({ que: "duda", hash: HASH });
+    expect(m.pedidos.length).toBeLessThanOrEqual(1 + ESPERAS_DEL_REENVIO_MS.length);
+    expect(m.pedidos.length).toBeGreaterThan(2);
+    for (const t of m.pedidos) expect(t).toBeLessThan(SOBRE.vence * 1000);
+  });
+
+  it("un rechazo seguro después de una red cargada sigue en duda", async () => {
+    const carga = no(502, "red", { pudoSalir: true, detalle: "ocupada" });
+    const m = mundo({ respuestas: [carga, no(400, "rechazada", { pudoSalir: false })] });
+    expect(await mandarElPago(SOBRE, HASTA, m.deps)).toEqual({ que: "duda", hash: HASH });
   });
 
   it("el puesto ya pagado por esta ruta se sigue por el hash de ese pago, sin armar otro", async () => {

@@ -2376,10 +2376,12 @@
   .dlg-estado.bad { color: var(--magenta-ink); font-weight: 700; }
   .dlg-estado a { color: inherit; text-underline-offset: 3px; }
   .dlg-main {
-    min-height: 56px; padding: 0 20px; background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink);
+    min-height: 48px; padding: 0 20px; background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink);
     box-shadow: var(--sh-sm); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer;
   }
   .dlg-main:disabled { background: var(--card); color: var(--muted); box-shadow: none; cursor: default; }
+  /* El botón de Tus dólares digitales es más alto que el de los demás diálogos, que siguen en 48 px. */
+  .dlg-card.dlg-saldo .dlg-main { min-height: 56px; }
   /* Tus dólares digitales: el saldo arriba, y cada paso con su título, una línea, los datos y lo demás plegado. */
   .saldo-total { margin: 0 0 12px; font-size: 22px; font-weight: 800; line-height: 1.25; }
   .saldo-practica { margin: 0 0 12px; padding: 8px 12px; border: 2px solid var(--ink); background: var(--card); font-size: 15px; line-height: 1.4; }

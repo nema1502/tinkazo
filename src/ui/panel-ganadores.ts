@@ -66,8 +66,17 @@ export interface OpcionesDeGanadores {
    * que la fila vuelva a mirar la red (con `yaEstaba`, el pago ya estaba en la red: se mira al instante). Sin esto, el
    * panel es de solo lectura.
    */
-  pagar?: (fila: FilaPagable, caja: HTMLElement, alTerminar: (yaEstaba?: boolean) => void) => void;
+  pagar?: ManejadorDePagar;
 }
+
+/**
+ * Lo que arma el pago de una fila: se abre en `caja`, llama a `alTerminar` cuando el pago salió y a `alCambiar` cuando el
+ * pago pasa a estar en duda o en camino, o deja de estarlo. Con `sinConfirmar` el panel pregunta, sin mandar nada, si el pago
+ * de una fila no está confirmado: en ese caso su estado no dice Pendiente, que invita a pagar de nuevo.
+ */
+export type ManejadorDePagar = ((fila: FilaPagable, caja: HTMLElement, alTerminar: (yaEstaba?: boolean) => void, alCambiar?: () => void) => void) & {
+  sinConfirmar?: (fila: FilaPagable) => Promise<boolean>;
+};
 
 export interface PanelDeGanadores {
   /** Vuelve a mirar la red, para todas las filas. */
@@ -112,6 +121,8 @@ interface Fila {
   cuenta: string | null;
   etiqueta: string;
   estado: EstadoDeFila;
+  /** Hay un pago de este premio en duda o en camino: todavía no se sabe si salió. */
+  sinConfirmar: boolean;
   li: HTMLLIElement;
   quien: HTMLElement;
   est: HTMLElement;
@@ -168,6 +179,7 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
       cuenta,
       etiqueta,
       estado: cuenta ? { tipo: "cargando" } : { tipo: "en-mano" },
+      sinConfirmar: false,
       li,
       quien,
       est,
@@ -221,7 +233,9 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
       f.quien.title = f.cuenta;
     } else f.quien.append(el("b", "gan-nombre", f.g.entrada));
 
-    f.est.className = `gan-est ${s.tipo}`;
+    // Con un pago de este premio en duda o en camino no se dice Pendiente (ni Vencido): eso invita a pagar de nuevo.
+    const sinConfirmar = f.sinConfirmar && (s.tipo === "pendiente" || s.tipo === "vencido");
+    f.est.className = `gan-est ${sinConfirmar ? "sin-consulta" : s.tipo}`;
     f.det.replaceChildren();
     switch (s.tipo) {
       case "en-mano":
@@ -243,10 +257,18 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
         break;
       }
       case "pendiente":
+        if (sinConfirmar) {
+          f.est.textContent = tx("pgEstSinConfirmar");
+          break;
+        }
         f.est.textContent = tx("pgEstPendiente");
         f.det.textContent = tx("pgDetPendiente", { fecha: fechaLarga(s.vence, getLang()) });
         break;
       case "vencido":
+        if (sinConfirmar) {
+          f.est.textContent = tx("pgEstSinConfirmar");
+          break;
+        }
         f.est.textContent = tx("pgEstVencido");
         f.det.textContent = tx("pgDetVencido", { fecha: fechaLarga(s.vence, getLang()) });
         break;
@@ -324,8 +346,38 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
       lectura = { tipo: "sin-consulta" } as const;
     }
     f.estado = estadoDelPago(lectura, op.sorteoEn, ahora());
+    f.sinConfirmar = f.estado.tipo !== "pagado" && (await leerSinConfirmar(f));
     pintarFila(f);
     pintarCabecera();
+  }
+
+  /** Lo que el formulario de pago necesita saber de una fila, o `null` si no hay cuenta o la nota no sale. */
+  function filaPagableDe(f: Fila): FilaPagable | null {
+    if (!f.cuenta) return null;
+    try {
+      return { puesto: f.g.puesto, cuenta: f.cuenta, nombre: f.etiqueta || shortAddress(f.cuenta), nota: notaDelPremio(op.raffleId, f.g.puesto) };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Si el pago de esta fila está en duda o en camino, según quien arma los pagos. Sin esa pregunta, no. Nunca lanza. */
+  async function leerSinConfirmar(f: Fila): Promise<boolean> {
+    const fila = filaPagableDe(f);
+    if (!op.pagar?.sinConfirmar || !fila) return false;
+    try {
+      return await op.pagar.sinConfirmar(fila);
+    } catch {
+      return false;
+    }
+  }
+
+  /** El formulario avisó que el pago pasó a estar en duda o en camino, o dejó de estarlo: se vuelve a preguntar y se repinta la fila. */
+  async function releerSinConfirmar(f: Fila): Promise<void> {
+    const si = f.estado.tipo !== "pagado" && (await leerSinConfirmar(f));
+    if (si === f.sinConfirmar) return;
+    f.sinConfirmar = si;
+    pintarFila(f);
   }
 
   async function consultarTodas(forzar: boolean): Promise<void> {
@@ -351,23 +403,23 @@ export function montarGanadores(raiz: HTMLElement, op: OpcionesDeGanadores): Pan
   /* ---- el botón "Pagar premio" de quien organiza */
   if (op.pagar) {
     for (const f of conCuenta) {
-      const cuenta = f.cuenta as string;
       const btn = el("button", "ghost gan-pagar");
       btn.type = "button";
       f.pagar = btn;
       f.li.insertBefore(btn, f.caja);
       btn.addEventListener("click", () => {
-        let nota: string;
-        try {
-          nota = notaDelPremio(op.raffleId, f.g.puesto);
-        } catch {
-          return;
-        }
-        op.pagar?.({ puesto: f.g.puesto, cuenta, nombre: f.etiqueta || shortAddress(cuenta), nota }, f.caja, (yaEstaba) => {
-          // Un pago que ya estaba en la red se muestra al instante. Uno que acaba de salir, en unos segundos.
-          if (yaEstaba === true) void consultar(f, true);
-          else setTimeout(() => void consultar(f, true), 2500);
-        });
+        const fila = filaPagableDe(f);
+        if (!fila) return;
+        op.pagar?.(
+          fila,
+          f.caja,
+          (yaEstaba) => {
+            // Un pago que ya estaba en la red se muestra al instante. Uno que acaba de salir, en unos segundos.
+            if (yaEstaba === true) void consultar(f, true);
+            else setTimeout(() => void consultar(f, true), 2500);
+          },
+          () => void releerSinConfirmar(f),
+        );
       });
     }
   }
