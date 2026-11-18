@@ -17,6 +17,7 @@ const modulo = (await import(
     textoCrudo: string,
     ahora: number,
     validar: typeof validarCampanaParaFirmar | undefined,
+    opciones?: { conComision?: boolean },
   ) => { texto: string; firma: string };
   dentroDe: (ruta: string, carpeta: string) => boolean;
   llaveFueraDelRepositorio: (destino: string, raices?: string[]) => void;
@@ -241,5 +242,22 @@ describe("la llave privada nunca queda dentro del repositorio", () => {
     expect(control).toBeGreaterThan(-1);
     expect(control).toBeLessThan(cuerpo.indexOf("readFileSync(archivoLlave"));
     expect(control).toBeLessThan(cuerpo.indexOf("firmarCampana("));
+  });
+});
+
+describe("el cobro de la comisión al firmar", () => {
+  it("con el cobro prendido, un premio con fracción de centavo no se firma", () => {
+    const campana = JSON.stringify(completa({ premios: ["1000000001"] }));
+    expect(() => firmarCampana(secretoHex, campana, AHORA, validarCampanaParaFirmar, { conComision: true })).toThrow(/centavos justos/);
+  });
+
+  it("con el cobro prendido, premios en centavos justos se firman", () => {
+    const campana = JSON.stringify(completa({ premios: ["1000000000", "1000000000"] }));
+    expect(firmarCampana(secretoHex, campana, AHORA, validarCampanaParaFirmar, { conComision: true }).texto).toContain("1000000000");
+  });
+
+  it("sin el cobro prendido, firma como siempre", () => {
+    const campana = JSON.stringify(completa({ premios: ["1000000001"] }));
+    expect(firmarCampana(secretoHex, campana, AHORA, validarCampanaParaFirmar).texto).toContain("1000000001");
   });
 });

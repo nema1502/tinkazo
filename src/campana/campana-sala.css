@@ -10,6 +10,24 @@
 
 /* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
 body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
+/* Elegir, vista previa y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo (stand, premio y CSV,
+   logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y rodeaban el cobro de texto. */
+body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) :is(
+    #btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones, #sellar-modo, #freeze-hint, #free-rule,
+    #sellar-sin-cuenta, #sec-participants > .head
+  ) { display: none !important; }
+/* Mientras falta pagar el servicio, el premio grande no se muestra: debajo del título se leería como lo que falta pagar. */
+.cpo-panel[data-comision]:not([data-comision="pagada"]) > .cpo-previa { display: none; }
+/* La marca de que el servicio ya se pagó, bajo el título. */
+.cpo-cab .cpo-marca {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 10px;
+  border: 2px solid var(--ink);
+  background: var(--card);
+  font-size: 16px;
+  font-weight: 800;
+}
 /* La barra de lo que sigue solo se esconde mientras el panel tiene su propia acción principal: una sola a la vista. Con la lista
    cerrada o sellada la barra sigue ahí: es lo único que lleva a Lanzar el sorteo durante la cuenta regresiva. */
 body:has(#cpo-panel:not([data-vista="cerrada"]):not([data-vista="sellada"]), #cpo-panel button.primary) #siguiente { display: none !important; }
@@ -30,16 +48,29 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 /* En el celular no es una caja dentro de otra: usa el ancho completo de la página. */
 @media (max-width: 699px) {
   .cpo-panel { padding: 0; border: 0; box-shadow: none; background: none; }
-  /* Elegir, vista previa y confirmar: lo esencial arriba y el botón principal abajo, no todo amontonado arriba. */
-  .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"]) {
-    display: flex;
-    flex-direction: column;
-    min-height: calc(100dvh - 160px);
-  }
+  /* Elegir, vista previa y confirmar: lo esencial arriba y el botón principal pegado abajo, al alcance del pulgar. El panel no
+     fija su alto: arranca donde lo deja la cabecera, y un alto contado desde otro lugar lo empujaba fuera de la pantalla. */
   .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"]) > .cpo-acciones {
-    margin-top: auto;
-    padding-bottom: 16px;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 0;
+    padding: 12px 0 16px;
+    background: var(--paper);
   }
+  /* En esas tres pantallas la tarjeta Participantes no encierra al panel: sin borde ni relleno de más, a 16 px del borde. */
+  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) #sec-participants {
+    border: 0;
+    box-shadow: none;
+    background: none;
+  }
+  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) #sec-participants > .body {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  /* La dirección para copiar a mano pasa a una fila propia: en una columna de 120 px no se lee ni se compara. */
+  .cpo-cm-fila:has(button) .cpo-cm-dato { order: 3; flex: 1 1 100%; }
+  .cpo-cm-fila:has(button) .cpo-cm-et { flex: 1 1 auto; }
 }
 .cpo-panel h2 { font-size: clamp(26px, 8vw, 40px); font-weight: 900; line-height: 1.1; margin: 0 0 4px; overflow-wrap: anywhere; }
 .cpo-linea { margin: 0 0 12px; color: var(--ink2); font-weight: 700; font-size: 18px; }
@@ -53,6 +84,12 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-acciones .primary { flex: 1 1 100%; }
 .cpo-previa .cpo-premio { font-size: clamp(26px, 8vw, 40px); font-weight: 900; line-height: 1.1; margin: 8px 0; overflow-wrap: anywhere; }
 .cpo-logo { max-height: 72px; max-width: 220px; object-fit: contain; }
+/* Pantalla grande: el título y la línea suben con el ancho, para leerse de lejos. */
+@media (min-width: 1400px) {
+  .cpo-panel h2 { font-size: 52px; }
+  .cpo-linea, .cpo-aviso { font-size: 22px; }
+  .cpo-panel button.primary { min-height: 64px; font-size: 22px; }
+}
 
 /* Abierta y cerrada: en una columna con la principal arriba del QR. Desde 900 px, el QR a la izquierda y el resto al lado. */
 .cpo-panel:is([data-vista="abierta"], [data-vista="cerrada"]) {
@@ -92,6 +129,19 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
   grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "cab" "num" "acc" "lista";
 }
+
+/* El plegado de pagar desde otra billetera (src/ui/campana-comision.ts): a todo el ancho, con cada dato en su fila y a la vista. */
+.cpo-comision { margin: 0 0 12px; padding: 0 12px 12px; border: var(--bw) solid var(--ink); background: var(--card); color: var(--ink); }
+.cpo-comision:not([open]) { padding-bottom: 0; }
+.cpo-comision > summary { min-height: 48px; display: flex; align-items: center; justify-content: space-between; font-weight: 800; font-size: 18px; cursor: pointer; list-style: none; }
+.cpo-comision > summary::-webkit-details-marker { display: none; }
+/* Como los otros plegados del panel: un + que invita a tocar, y un - cuando está abierto. */
+.cpo-comision > summary::after { content: "+"; font-size: 24px; line-height: 1; }
+.cpo-comision[open] > summary::after { content: "\2212"; }
+.cpo-cm-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.cpo-cm-et { flex: 0 0 auto; font-weight: 800; }
+.cpo-cm-dato { flex: 1 1 0; min-width: 0; font-family: ui-monospace, monospace; font-size: 15px; overflow-wrap: anywhere; }
+.cpo-comision img { display: block; width: 200px; max-width: 100%; height: auto; margin: 8px auto 0; background: #fff; border: var(--bw) solid var(--ink); image-rendering: pixelated; }
 
 /* La lista: cada fila se toca con el dedo, 44 px como mínimo, y lo mismo los botones de los motivos. */
 .cpo-ul { list-style: none; margin: 0; padding: 0; }

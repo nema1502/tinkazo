@@ -44,7 +44,8 @@ describe("los textos del panel de quien organiza", () => {
 
   it("no usa palabras de juegos de azar ni términos técnicos", () => {
     const prohibidas = /\b(?:rifa|lotería|boleto|ticket|apuesta|raffle|lottery|bet)\b/iu;
-    const tecnicas = /stellar|usdc|blockchain|hash|wallet/iu;
+    // Comisión ya quiere decir otra cosa en el sitio (la de la red, que cubre Tinkazo): el panel no la usa para el cobro.
+    const tecnicas = /stellar|usdc|blockchain|hash|wallet|comisi[oó]n/iu;
     for (const idioma of IDIOMAS) {
       for (const [clave, texto] of Object.entries(TEXTOS_SALA_CAMPANA[idioma])) {
         expect(texto, `${idioma}.${clave}`).not.toMatch(prohibidas);

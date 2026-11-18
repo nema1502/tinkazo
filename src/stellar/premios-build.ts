@@ -33,6 +33,7 @@
 
 import { HOSTS_DEL_PORTERO_OFICIAL, esUrlDePorteroOficial } from "./alta-build";
 import { pagosActivos } from "./pagos-bandera";
+import { comisionDelBuild, leerMinimo, leerPb, minimoPosible } from "./comision-config";
 import { TOPE_DEL_COSTO, STROOPS_POR_DOLAR, leerElCosto, leerLaCuenta } from "./retiro-config";
 import { banderasDeVenta } from "./venta-piloto";
 
@@ -255,6 +256,90 @@ export function problemasDePagarConGoogle(env: Record<string, string | undefined
       "VITE_PAGAR_CON_GOOGLE=1 no va junto con VITE_COMPRA_QR=1: la compra con QR carga dólares en la cuenta y los paga " +
         "con el saldo, sin pasar por la regla del pago de un premio ni del retiro. Se elige cuál va en este sitio.",
     );
+  }
+  return problemas;
+}
+
+/** Lo que el control de la comisión necesita de afuera del entorno: lo que dice el portero de la red principal. */
+export interface OpcionesDeLaComision {
+  /** Las cuentas del portero (patrocinadora, cobros y sorteadora) de `workers/patrocinio/wrangler.toml`, o `null` si no se pudo leer. */
+  cuentasDelPortero: string[] | null;
+  /** El `COSTO_RETIRO` del portero en stroops, o `null` si no se pudo leer. */
+  costoDelPortero: bigint | null;
+  /** Si el portero atiende retiros (`RETIROS` en `1`), o `null` si no se pudo leer. */
+  retirosDelPortero: boolean | null;
+}
+
+/**
+ * Lo que frena el build por lo que Tinkazo cobra a una campaña (`VITE_COMISION_PB`, `VITE_COMISION_MINIMO` y
+ * `VITE_COMISION_CUENTA`, `comision-config.ts`). Devuelve lo que está mal, en español y sin los valores de las variables.
+ * Vacío: puede salir. Con las tres vacías no mira nada.
+ *
+ * - Las tres van juntas: con una sola o con dos, no sale.
+ * - Los puntos básicos son un entero de 1 a 1.000 y el mínimo está en dólares con punto y hasta dos decimales.
+ * - El mínimo no baja de lo que el camino del retiro puede pagar (el costo del retiro más 1 dólar digital).
+ * - La cuenta es una dirección válida, distinta de la de cobros del retiro y de las cuentas del portero.
+ * - Hace falta pagar con Google, el costo del retiro cobrándose y, del lado del portero de la red principal, el mismo costo
+ *   y los retiros prendidos: con otro costo o con los retiros apagados el panel nunca podría pagar.
+ * - Lo último: lo que pasa estos controles tiene que prender de verdad en el sitio. Nunca sale algo que quedaría apagado.
+ */
+export function problemasDeLaComision(env: Record<string, string | undefined>, opciones: OpcionesDeLaComision): string[] {
+  const pb = leerPb(env.VITE_COMISION_PB);
+  const minimo = leerMinimo(env.VITE_COMISION_MINIMO);
+  const cuenta = leerLaCuenta(env.VITE_COMISION_CUENTA);
+  const hay = [pb.tipo !== "vacio", minimo.tipo !== "vacio", cuenta.tipo !== "vacia"];
+  if (!hay.some(Boolean)) return [];
+  const problemas: string[] = [];
+  if (!hay.every(Boolean)) {
+    problemas.push("La comisión de las campañas pide VITE_COMISION_PB, VITE_COMISION_MINIMO y VITE_COMISION_CUENTA juntas: falta alguna.");
+  }
+  if (pb.tipo === "mal-escrito") {
+    problemas.push("VITE_COMISION_PB está mal escrita: va un entero de 1 a 1000 (200 es el 2 %), sin signo, sin letras y sin coma.");
+  }
+  if (minimo.tipo === "mal-escrito") {
+    problemas.push("VITE_COMISION_MINIMO está mal escrita: va un monto en dólares con punto y hasta 2 decimales, mayor que cero.");
+  }
+  if (cuenta.tipo === "invalida") {
+    problemas.push("VITE_COMISION_CUENTA no es una cuenta de Stellar válida: tiene que ser una dirección que empieza con G, con sus 56 caracteres.");
+  }
+  const costo = leerElCosto(env.VITE_RETIRO_COSTO);
+  const costoCobrado = costo.tipo === "valido" && costo.stroops > 0n && leerLaCuenta(env.VITE_RETIRO_CUENTA).tipo === "valida" ? costo.stroops : null;
+  if (env.VITE_PAGAR_CON_GOOGLE !== "1") {
+    problemas.push("La comisión de las campañas necesita VITE_PAGAR_CON_GOOGLE=1: la empresa la paga con su cuenta de Google.");
+  }
+  if (costoCobrado === null) {
+    problemas.push("La comisión de las campañas necesita el costo del retiro cobrándose (VITE_RETIRO_COSTO y VITE_RETIRO_CUENTA): viaja por ese camino.");
+  } else if (minimo.tipo === "valido" && minimo.valor < minimoPosible(costoCobrado)) {
+    problemas.push("VITE_COMISION_MINIMO no alcanza para el camino del retiro: tiene que ser por lo menos el costo del retiro más 1 dólar.");
+  }
+  if (cuenta.tipo === "valida") {
+    if (cuenta.cuenta === (env.VITE_RETIRO_CUENTA ?? "").trim()) {
+      problemas.push("VITE_COMISION_CUENTA no puede ser la cuenta de cobros del retiro: tiene que ser una cuenta común, solo para comisiones.");
+    }
+    if (opciones.cuentasDelPortero === null) {
+      problemas.push(
+        "No se pudo leer las cuentas del portero de workers/patrocinio/wrangler.toml: " +
+          "sin ellas no se puede comprobar que VITE_COMISION_CUENTA sea una cuenta común.",
+      );
+    } else if (opciones.cuentasDelPortero.includes(cuenta.cuenta)) {
+      problemas.push("VITE_COMISION_CUENTA es una de las cuentas del portero (workers/patrocinio/wrangler.toml): tiene que ser una cuenta común.");
+    }
+  }
+  if (costoCobrado !== null) {
+    if (opciones.costoDelPortero === null || opciones.retirosDelPortero === null) {
+      problemas.push("No se pudo leer COSTO_RETIRO ni RETIROS de workers/patrocinio/wrangler.toml: sin ellos no se puede comprobar que el portero atienda el cobro.");
+    } else {
+      if (opciones.costoDelPortero !== costoCobrado) {
+        problemas.push("El costo del retiro del sitio no es el COSTO_RETIRO del portero (workers/patrocinio/wrangler.toml): el portero rechazaría el cobro.");
+      }
+      if (!opciones.retirosDelPortero) {
+        problemas.push("El portero de la red principal tiene los retiros apagados (RETIROS en workers/patrocinio/wrangler.toml): el cobro no saldría.");
+      }
+    }
+  }
+  // Lo que pasa todos los controles tiene que prender en el sitio: nunca sale algo que allá quedaría apagado.
+  if (problemas.length === 0 && comisionDelBuild(env) === null) {
+    problemas.push("La comisión de las campañas quedaría apagada en el sitio con esta configuración: alguna variable no cuadra con el costo del retiro.");
   }
   return problemas;
 }

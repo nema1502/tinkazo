@@ -10,6 +10,7 @@ import {
   ponerRechazo,
   registrarAcciones,
 } from "../campana/puente";
+import { dolaresEnTexto, esDeCentavosJustos } from "../campana/comision";
 import { fechaTexto, horaTexto, premiosTexto } from "../campana/formato";
 import { type Campana, type LecturaDeCampana, leerCampana } from "../campana/modelo";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
@@ -51,6 +52,8 @@ import { type Escucha, type EquipoDeSala, escucharSala } from "../sala/cliente";
 import { network } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
+import { type AccionDeComision, type ControlDeComision, type DepsDeComision, crearControlDeComision } from "./campana-comision";
+import { depsDeComisionReales } from "./campana-comision-real";
 import type { ContextoDelPaso } from "./campana-pasar";
 import { alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
 import { claveDeSellar, openPicker } from "./wallet-ui";
@@ -143,6 +146,11 @@ export interface DepsDelPanelDeCampana {
   soltarElSello?: () => Promise<void> | void;
   /** Abre la ventana para entrar con otra cuenta. */
   cambiarDeCuenta?: () => void;
+  /**
+   * Lo que cobra Tinkazo antes de abrir la inscripción (`campana-comision.ts`). Sin esto, o con `comision()` en `null`, el
+   * panel es el de siempre: no mira nada y no cambia ninguna pantalla.
+   */
+  comision?: DepsDeComision;
 }
 
 const NOMBRE_DEL_CANAL = "tinkazo-campana-org";
@@ -195,6 +203,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
     alRetomar: () => void import("./campana-resultado-real").then((m) => m.alRetomarReal()).catch(() => undefined),
     cambiarDeCuenta: () => void openPicker(),
+    comision: depsDeComisionReales(),
   };
 }
 
@@ -334,6 +343,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     '<input type="file" id="cpo-archivo" accept=".json,application/json" hidden>';
   const q = <T extends HTMLElement>(id: string): T => raiz.querySelector<T>(`#${id}`) as T;
   const tituloEl = q("cpo-h");
+  /** La marca de servicio pagado: se arma recién cuando hace falta, así con el cobro apagado el DOM es el de siempre. */
+  let marcaEl: HTMLElement | null = null;
   const lineaEl = q("cpo-linea");
   const avisoEl = q("cpo-aviso");
   const conexionEl = q("cpo-conexion");
@@ -360,6 +371,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** El token que esta compu inventa para crear la sala de este archivo: igual en cada reintento, para no perder la sala. */
   let intento: string | null = null;
   let campana: Campana | null = null;
+  /** La cuenta que el archivo pide para sellar, si pide una. Al retomar una sala no se conoce y queda en `null`. */
+  let pide: string | null = null;
   let sala: SalaDeCampana | null = null;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
@@ -435,6 +448,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pantallaCompleta: deps.pantallaCompleta,
     ventana: deps.ventana,
   });
+
+  /**
+   * El cobro de Tinkazo antes de abrir la inscripción. Solo existe con sus dependencias: el panel de las pruebas de siempre
+   * no las trae y no cambia en nada. Con la comisión apagada, tampoco.
+   */
+  const cm: ControlDeComision | null = deps.comision
+    ? crearControlDeComision(deps.comision, {
+        campana: () => campana,
+        pide: () => pide,
+        cuenta: () => deps.cuenta(),
+        enPrevia: () => vista === "previa",
+        crearSala: () => crearLaSala(),
+        alCambiar: () => pintar(),
+        aviso: (texto) => aviso(texto),
+        tx,
+        idioma: () => deps.idioma(),
+        ahora: () => deps.ahora(),
+        esperar: (f, ms) => deps.esperar(f, ms),
+        almacen: deps.almacen,
+        puedeEntrar: () => deps.cambiarDeCuenta !== undefined,
+      })
+    : null;
 
   /* --- el reloj de la sala --- */
 
@@ -702,6 +737,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** Los temporizadores se frenan con la compu dormida: al volver, se pide todo de nuevo sin esperar a que venzan. */
   function despertar(): void {
     if (vista === "sin-red") return void reintentar?.();
+    // En la vista previa todavía no hay sala: el cobro vuelve a mirarse antes de salir por falta de sala.
+    if (vista === "previa" && cm?.activo()) {
+      const t = cm.estado().tipo;
+      if (t === "sin-mirar" || t === "duda" || t === "falta-cargar" || t === "mirando") void cm.mirar();
+    }
     if (!sala) return;
     if (vista === "abierta" || vista === "confirmar") {
       pedirElPase();
@@ -745,13 +785,16 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const crudo = await deps.leerArchivo(f).catch(() => "");
     const leido = archivoFirmado(crudo);
     if (!leido) return aviso(tx("cpoNoEsCampana"));
-    const { lectura, red, organizadora: pide } = leerDelTexto(leido.texto);
+    const { lectura, red, organizadora } = leerDelTexto(leido.texto);
     if (!lectura.ok) {
       if (lectura.motivo === "otra-red") return aviso(fmt("cpoOtroModo", { modo: tx(nombreDeRed(red)) }));
       return aviso(fmt("cpoRevisaCampo", { campo: lectura.campo }));
     }
     const c = lectura.campana;
     if (!c.premios.every((p) => p === c.premios[0])) return aviso(tx("cpoPremiosIguales"));
+    // Con el cobro prendido, el total de los premios se suma al centavo: un premio con fracción de centavo no se muestra igual
+    // que como se suma, así que no se acepta.
+    if (cm?.activo() && !c.premios.every(esDeCentavosJustos)) return aviso(fmt("cpoRevisaCampo", { campo: "premios" }));
     // Lo mismo que va a exigir la sala, dicho acá y no al crearla: así no se gasta un cupo en un archivo que no sirve.
     const v = await deps.validar(leido.texto, deps.ahora());
     if (!v.ok) return aviso(v.motivo === "vencida" ? tx("cpoVencida") : fmt("cpoRevisaCampo", { campo: v.campo }));
@@ -759,10 +802,16 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     archivo = leido;
     intento = null;
     campana = c;
-    // Si la campaña pide sellar con una cuenta en particular y esta no es, se dice ahora y no al sellar.
-    mensaje = pide !== null && deps.cuenta() !== pide ? fmt("cpoEntraCon", { fin: pide.slice(-4) }) : "";
+    pide = organizadora;
+    cm?.reiniciar();
+    // Si la campaña pide sellar con una cuenta en particular y esta no es, se dice ahora y no al sellar. Con el cobro prendido
+    // lo dice el título de la pantalla, y no se repite.
+    mensaje = pide !== null && deps.cuenta() !== pide && !cm?.activo() ? fmt("cpoEntraCon", { fin: pide.slice(-4) }) : "";
     vista = "previa";
+    // Sin sala todavía, al volver la compu de dormir o la red se vuelve a mirar el cobro.
+    if (cm?.activo()) armarDespertar();
     pintar();
+    void cm?.mirar();
   }
 
   /** Cierra el trabajo de un botón: apaga `trabajando`, deja el aviso y pinta. */
@@ -772,30 +821,42 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     pintar();
   }
 
+  /**
+   * Crea la sala del archivo si todavía no existe, en fase lista y sin abrir nada. `null` si quedó creada (o ya estaba), y si
+   * no, el texto de por qué no. La sala ya creada (un intento anterior, o retomar en lista) no se vuelve a crear: su token es
+   * este. Con el cobro prendido se crea ANTES de pagar: así un archivo sin firma, un evento ya tomado o el cupo del día lleno
+   * se ven antes de cobrar nada.
+   */
+  async function crearLaSala(): Promise<string | null> {
+    if (sala) return null;
+    if (!archivo || !campana) return tx("cpoNoEsCampana");
+    const anterior = tokenDeEvento(deps.almacen, campana.evento);
+    // El intento se guarda antes de pedir: si la respuesta se pierde y la pestaña se recarga, el mismo archivo lo repite.
+    intento ??= intentoDeArchivo(deps.almacen, campana.evento, archivo.firma) ?? generarClave();
+    guardarIntentoDeArchivo(deps.almacen, { evento: campana.evento, firma: archivo.firma, intento });
+    const r = await deps.crear(archivo, { evento: campana.evento, red: campana.red, anterior, intento });
+    if (!r.ok) return tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]);
+    sala = r.sala;
+    marca++;
+    faseSala = "lista";
+    // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
+    guardarTokenDeEvento(deps.almacen, { evento: r.sala.evento, token: r.sala.token });
+    olvidarIntentoDeArchivo(deps.almacen, campana.evento);
+    recordar();
+    return null;
+  }
+
   async function abrirInscripcion(): Promise<void> {
-    if (trabajando || !campana) return;
+    // Mientras el cobro no esté pagado no se abre nada, aunque alguien llame esto directo: no solo se esconde el botón.
+    if (trabajando || !campana || cm?.bloqueaElAbrir()) return;
     trabajando = true;
     mensaje = "";
     pintar();
-    let s = sala;
-    // La sala ya creada (un intento anterior, o retomar en lista) no se vuelve a crear: su token es este.
-    if (!s) {
-      if (!archivo) return terminar();
-      const anterior = tokenDeEvento(deps.almacen, campana.evento);
-      // El intento se guarda antes de pedir: si la respuesta se pierde y la pestaña se recarga, el mismo archivo lo repite.
-      intento ??= intentoDeArchivo(deps.almacen, campana.evento, archivo.firma) ?? generarClave();
-      guardarIntentoDeArchivo(deps.almacen, { evento: campana.evento, firma: archivo.firma, intento });
-      const r = await deps.crear(archivo, { evento: campana.evento, red: campana.red, anterior, intento });
-      if (!r.ok) return terminar(tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]));
-      s = r.sala;
-      sala = s;
-      marca++;
-      faseSala = "lista";
-      // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
-      guardarTokenDeEvento(deps.almacen, { evento: s.evento, token: s.token });
-      olvidarIntentoDeArchivo(deps.almacen, campana.evento);
-      recordar();
-    }
+    if (!sala && !archivo) return terminar();
+    const falla = await crearLaSala();
+    if (falla !== null) return terminar(falla);
+    const s = sala;
+    if (!s) return terminar();
     const m = marca;
     const r = await aplicarFase(s, "abierta", null, "lista");
     if (m !== marca) return void (trabajando = false);
@@ -844,6 +905,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     mensaje = "";
     if (fase === "lista") {
       vista = "previa";
+      // Una sala retomada en lista también pide el cobro antes de abrirse.
+      void cm?.mirar();
     } else if (fase === "abierta") {
       vista = "abierta";
       if (sala && !escucha) oirLaSala(sala);
@@ -1071,6 +1134,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     dejarDeEscuchar();
     vaciarFilas();
     marca++;
+    cm?.reiniciar();
     const m = marca;
     vista = "cargando";
     mensaje = "";
@@ -1082,6 +1146,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (typeof c === "string" || typeof e === "string") return ponerSinRed(g);
     sala = g.sala;
     campana = c;
+    pide = null;
     cierraMs = e.cierraMs;
     mostradas.clear();
     for (const n of g.mostradas ?? []) mostradas.add(n);
@@ -1140,6 +1205,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     mostradas.clear();
     sala = null;
     campana = null;
+    pide = null;
+    cm?.reiniciar();
     archivo = null;
     intento = null;
     pase = null;
@@ -1227,6 +1294,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       vista === "confirmar" ? n : 0,
       JSON.stringify(paso),
       listaTrabada(),
+      vista === "previa" ? (cm?.firma() ?? "") : "",
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
@@ -1247,8 +1315,29 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       armar.textContent = tx("cpoArmala");
       botones.push(armar);
     } else if (vista === "previa") {
-      botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
-      botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
+      // Con el cobro prendido y sin pagar, el botón es el del estado del cobro en lugar de Abrir la inscripción.
+      const d = cm?.activo() ? cm.descripcion() : null;
+      const hacer = (accion: AccionDeComision): void => {
+        if (accion === "cargar") cm?.cargar();
+        else if (accion === "pagar") void cm?.pagar();
+        else if (accion === "mirar") void cm?.mirar();
+        else deps.cambiarDeCuenta?.();
+      };
+      if (d?.principal) {
+        const { texto, accion, apagado } = d.principal;
+        botones.push(principal(texto, () => hacer(accion), apagado));
+        if (d.secundario) {
+          const { texto: textoDelOtro, accion: accionDelOtro } = d.secundario;
+          botones.push(boton(textoDelOtro, "ghost", () => hacer(accionDelOtro)));
+        }
+      } else {
+        botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
+      }
+      // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
+      const tipoDelCobro = cm?.estado().tipo;
+      if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda") {
+        botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
+      }
     } else if (vista === "abierta") {
       const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
       const cerrar = (): void => pedirCerrar();
@@ -1298,6 +1387,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     archivo = null;
     intento = null;
     campana = null;
+    pide = null;
+    cm?.reiniciar();
     mensaje = "";
     vista = "elegir";
     pintar();
@@ -1331,12 +1422,28 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       titulo = fmt("cpTitulo", { empresa: campana.empresa.nombre });
       const clave = pedidos === 0 ? "cpoCierraPedidos0" : pedidos === 1 ? "cpoCierraPedidos1" : "cpoCierraPedidosN";
       linea = fmt(clave, { hora, n: pedidos });
+      // Sin pagar lo que cobra Tinkazo, la pantalla dice qué falta: un título, una línea y un botón.
+      const d = cm?.activo() ? cm.descripcion() : null;
+      if (d?.titulo != null) titulo = d.titulo;
+      if (d?.linea != null) linea = d.linea;
     }
     if (campana && vista === "abierta") {
       titulo = pasoLaHora() ? tx("cpoHoraDeCerrar") : fmt("cpoAbiertaHasta", { hora: horaTexto(cierraMs, zona, idioma) });
     }
     tituloEl.textContent = titulo;
     lineaEl.textContent = linea;
+    // Con el cobro prendido y pagado, el panel lo dice: sin la marca se vería igual al que nunca cobró.
+    const pagadaConCobro = raiz.dataset.comision === "pagada";
+    if (pagadaConCobro && !marcaEl) {
+      marcaEl = document.createElement("p");
+      marcaEl.id = "cpo-marca";
+      marcaEl.className = "cpo-marca";
+      tituloEl.after(marcaEl);
+    }
+    if (marcaEl) {
+      marcaEl.hidden = !pagadaConCobro;
+      marcaEl.textContent = tx("cpoCmPagada");
+    }
     avisoEl.textContent = mensaje;
   }
 
@@ -1409,6 +1516,80 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (sala && campana && vista === "cerrada") {
       const fecha = fechaTexto(sala.vence, campana.zona, deps.idioma());
       pieEl.textContent = fmt("cpoSeBorra", { fecha, hora: horaTexto(sala.vence, campana.zona, deps.idioma()) });
+    }
+    pintarPlegado();
+  }
+
+  /* --- el plegado de pagar desde otra billetera --- */
+
+  /** Se arma recién la primera vez que hace falta: con el cobro apagado, el DOM del panel es el de siempre. */
+  let plegadoEl: HTMLDetailsElement | null = null;
+  let firmaDelPlegado = "";
+  let ultimoPlegado: "abierto" | "cerrado" | null = null;
+
+  function copiable(etiqueta: string, valor: string, conBoton: boolean): HTMLElement {
+    const fila = document.createElement("div");
+    fila.className = "cpo-cm-fila";
+    const et = document.createElement("span");
+    et.className = "cpo-cm-et";
+    et.textContent = etiqueta;
+    const dato = document.createElement("span");
+    dato.className = "cpo-cm-dato";
+    dato.textContent = valor;
+    fila.append(et, dato);
+    if (conBoton) {
+      const b = boton(t("acctCopy"), "ghost", (el) => {
+        try {
+          void navigator.clipboard?.writeText(valor);
+          el.textContent = t("acctCopied");
+        } catch {
+          /* sin portapapeles: el dato está a la vista para copiarlo a mano */
+        }
+      });
+      fila.append(b);
+    }
+    return fila;
+  }
+
+  function pintarPlegado(): void {
+    const d = vista === "previa" && cm?.activo() ? cm.descripcion() : null;
+    const datos = d?.plegado ? cm?.datosDelPlegado() : null;
+    if (!d?.plegado || !datos) {
+      if (plegadoEl) plegadoEl.hidden = true;
+      ultimoPlegado = null;
+      return;
+    }
+    const el = plegadoEl ?? document.createElement("details");
+    if (!plegadoEl) {
+      plegadoEl = el;
+      el.id = "cpo-comision";
+      el.className = "cpo-comision";
+      // Debajo de los botones: lo que se toca queda pegado a la línea y lo de copiar va después.
+      accionesEl.after(el);
+    }
+    el.hidden = false;
+    const firma = [datos.cuenta, datos.monto, datos.nota, deps.idioma()].join("|");
+    if (firma !== firmaDelPlegado) {
+      firmaDelPlegado = firma;
+      const resumen = document.createElement("summary");
+      resumen.textContent = tx("cpoCmPlegado");
+      const img = document.createElement("img");
+      img.alt = tx("cpoCmQrAlt");
+      img.width = 200;
+      img.height = 200;
+      el.replaceChildren(
+        resumen,
+        copiable(tx("cpoCmCuenta"), datos.cuenta, true),
+        copiable(tx("cpoCmMonto"), dolaresEnTexto(datos.monto, deps.idioma()), false),
+        copiable(tx("cpoCmNota"), datos.nota, true),
+        img,
+      );
+      void deps.qr(img, datos.enlace, 200);
+    }
+    // Se abre sola cuando es el único camino, y después queda como la dejó quien organiza.
+    if (d.plegado !== ultimoPlegado) {
+      el.open = d.plegado === "abierto";
+      ultimoPlegado = d.plegado;
     }
   }
 
@@ -1494,6 +1675,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function pintar(): void {
     raiz.dataset.vista = vista;
+    // Solo con el cobro prendido: apagado, el panel no lleva este atributo.
+    if (vista === "previa" && cm?.activo()) raiz.dataset.comision = cm.estado().tipo;
+    else if (raiz.dataset.comision !== undefined) delete raiz.dataset.comision;
     pintarTextos();
     pintarBloques();
     pintarAcciones();
@@ -1561,6 +1745,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   // campaña el cuadro se vacía y se dice con cuál entrar, en lugar de dejar Sellar a la vista; si es, se vuelve a pasar.
   const alCambiarLaSesion = (): void => {
     if (vista === "cerrada" && pasada) correrPaso();
+    // Con otra cuenta cambia con qué se paga y cuánto hay cargado: el cobro se vuelve a mirar.
+    if (vista === "previa") void cm?.mirar();
   };
   document.addEventListener("tinkazo:sesion", alCambiarLaSesion);
   dejarLaSesion = () => document.removeEventListener("tinkazo:sesion", alCambiarLaSesion);
@@ -1583,6 +1769,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function detener(): void {
     dejarDeEscuchar();
+    cm?.detener();
     marca++;
     pararDespertar?.();
     dejarElPuente?.();
