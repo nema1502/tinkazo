@@ -120,7 +120,7 @@ Antes de desplegar con `CUENTA_COBROS` cargada, mirar en la red principal que es
 | `COMPRAS_QR_PILOTO` | `""` | las dos cuentas G, separadas por coma, copiadas de la app y sin espacios de más |
 | `COMPRAS_QR_TODOS` | no va | no va |
 | `ORDEN_USDC_TODOS` | no va | no va |
-| `ORDEN_USDC_PILOTO` | no va | las dos cuentas G, separadas por coma |
+| `ORDEN_USDC_PILOTO` | no va | no va: sin ella, la orden mira el piloto de la compra con QR |
 | `CUENTA_COBROS` | la cuenta de cobros | la misma |
 | `RESERVA_CARGA_CREDITOS` | `"8400"` | `"8400"` |
 | `RECARGO_QR` | `"4:0.50"` | `"4:0.50"` |
@@ -197,7 +197,7 @@ Nace cuando la persona toca el paquete en el sitio (`POST /v1/alta/orden`). Hay 
 |---|---|
 | `id` | 8 letras y números del alfabeto de los cupones, al azar (`ABCD2345`) |
 | `nota` | `tk:o:` y el id. Es lo que la persona pone como nota de texto del pago. Se lee como un cupón: sin espacios ni guiones, en mayúsculas, la O por 0 y la I o la L por 1 |
-| `memoId` | El mismo id como número, para un exchange que solo acepta notas numéricas. El sitio la muestra plegada en Más detalles del panel de pago, con su Copiar, para quien paga desde un exchange que solo acepta notas numéricas. |
+| `memoId` | El mismo id como número. El sitio lo muestra plegado en Más detalles del panel de pago, con su Copiar, para quien paga desde un exchange que solo acepta notas numéricas |
 | `producto`, `usdc`, `sorteos`, `dias` | Lo que se vende y su precio, fijos desde que nace la orden (los de `PRECIOS` ese día) |
 | `destino` | `CUENTA_COBROS` |
 | `vence` | 72 horas después de nacer. Si ya llegó una parte, se renueva con la misma nota hasta 30 días. Un pago que llega tarde igual vale |
