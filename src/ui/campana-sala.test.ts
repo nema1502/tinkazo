@@ -61,6 +61,14 @@ afterEach(() => {
 });
 
 describe("elegir el archivo", () => {
+  it("al elegir el archivo hay un enlace a crear-campana.html con su texto y no es un botón principal", () => {
+    const p = nuevoPanel(mundo());
+    const enlace = p.raiz.querySelector<HTMLAnchorElement>("a[href=\"/crear-campana.html\"]");
+    expect(enlace?.textContent).toBe("¿Todavía no tenés tu campaña? Armala.");
+    expect(enlace?.className).toBe("enlace");
+    expect(p.raiz.querySelectorAll(".cpo-acciones .primary")).toHaveLength(1);
+  });
+
   it("un archivo que no es JSON dice que no es una campaña y no crea nada", async () => {
     const m = mundo();
     const p = nuevoPanel(m);

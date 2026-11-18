@@ -1,0 +1,23 @@
+/*
+ * La vista en vivo: participar.html dentro del marco de la página para armar campañas. Lo que todavía es de muestra se ve
+ * apagado, la etiqueta Demo no sale nunca de la vista y los botones de idioma de la cabecera no se muestran: el idioma lo
+ * manda la página de afuera. Solo la baja quien abre la vista, no quien escanea el QR de un evento.
+ */
+.pg-campana.cmp-muestra-nombre .cmp-saber h1,
+.pg-campana.cmp-muestra-nombre .cmp-estado h1 { opacity: 0.75; }
+.pg-campana.cmp-muestra-premio .cmp-premio-texto { opacity: 0.75; }
+.pg-campana.cmp-muestra-lugar .cmp-lugar { opacity: 0.75; }
+.pg-campana.cmp-muestra-horas .cmp-cierre,
+.pg-campana.cmp-muestra-horas .cmp-hora,
+.pg-campana.cmp-muestra-horas .cmp-bases { opacity: 0.75; }
+
+/* La cabecera de la página es estática: dentro del marco se desplaza con la pantalla y la marca de demostración se perdería. */
+body.cmp-vista .cmp-ejemplo {
+  position: fixed;
+  top: 8px;
+  right: 8px;
+  z-index: 2147483000;
+}
+body.cmp-vista .langs { display: none; }
+/* Ningún celular muestra una barra de desplazamiento: dentro del marco se desplaza igual, pero sin la barra de la laptop. */
+html:has(> body.cmp-vista) { scrollbar-width: none; }

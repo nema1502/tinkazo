@@ -37,6 +37,7 @@ const h = vi.hoisted(() => ({
 vi.mock("../pagina", () => ({}));
 vi.mock("../version-nueva", () => ({}));
 vi.mock("./campana.css", () => ({}));
+vi.mock("./vista-previa.css", () => ({}));
 vi.mock("../navegador", () => ({ enNavegadorDeApp: () => h.enApp }));
 vi.mock("./bandera", () => ({ campanasActivo: () => h.activa }));
 vi.mock("../stellar/wallet-pollar", () => ({
@@ -497,5 +498,69 @@ describe("participar.html: la demostración", () => {
     await abrir("?demo=campana&estado=ganaste");
     expect(texto("#cmp-estado h1")).toBe("Ganaste");
     expect(texto("#cmp-estado .primary")).toBe("Recibir mi premio");
+  });
+});
+
+describe("participar.html: el modo vista", () => {
+  const donde = Object.getOwnPropertyDescriptor(window, "parent");
+  afterEach(() => {
+    if (donde) Object.defineProperty(window, "parent", donde);
+  });
+
+  /** Una ventana de arriba de verdad para jsdom: un marco con su propia ventana. */
+  function ponerMarco(): Window {
+    const marco = document.createElement("iframe");
+    document.body.append(marco);
+    const arriba = marco.contentWindow as Window;
+    vi.spyOn(arriba, "postMessage");
+    Object.defineProperty(window, "parent", { value: arriba, configurable: true });
+    return arriba;
+  }
+
+  const mensaje = (): Record<string, unknown> => ({
+    t: "tinkazo:vista-de-campana",
+    campana: campanaCruda({ red: "mainnet", abre_ms: AHORA - 3_600_000, cierra_ms: AHORA + 3_600_000, sorteo_ms: AHORA + 7_200_000, recibir_hasta_ms: AHORA + 864_000_000 }),
+    pantalla: "previa",
+    idioma: "es",
+    muestras: { nombre: false, premio: false, lugar: false, horas: false },
+    festejar: false,
+    reglasAbiertas: false,
+  });
+
+  it("con vista=previa fuera de un marco la página sigue como siempre y dice que la campaña no está", async () => {
+    await abrir("?vista=previa");
+    expect(document.body.classList.contains("cmp-vista")).toBe(false);
+    expect(texto("#cmp-estado")).toBe("Este QR no es el del stand o la campaña ya terminó.");
+  });
+
+  it("con vista=previa dentro de un marco avisa que está lista, no pide nada y monta lo que le mandan", async () => {
+    const arriba = ponerMarco();
+    await abrir("?vista=previa");
+    expect(arriba.postMessage).toHaveBeenCalledWith({ t: "tinkazo:vista-lista" }, location.origin);
+    expect(document.body.classList.contains("cmp-vista")).toBe(true);
+    window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: arriba }));
+    await asentar();
+    expect(texto("#cmp-saber h1")).toBe("Sorteo de Alcancía Andina");
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it("un mensaje que no viene de la ventana de arriba no monta nada", async () => {
+    const arriba = ponerMarco();
+    await abrir("?vista=previa");
+    window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: window }));
+    await asentar();
+    expect(texto("#cmp-saber h1") ?? "").toBe("");
+    expect(arriba.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("después de la primera campaña, cambiar el idioma repinta el celular y no vuelve a decir Cargando", async () => {
+    const arriba = ponerMarco();
+    await abrir("?vista=previa");
+    window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: arriba }));
+    await asentar();
+    cambiarAIngles();
+    await asentar();
+    expect(texto("#cmp-saber h1")).toBe("Alcancía Andina draw");
+    expect(document.body.textContent).not.toContain("One moment");
   });
 });

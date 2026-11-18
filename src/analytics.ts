@@ -38,17 +38,29 @@ export function beforeSend<T extends { url: string }>(visit: T): T | null {
 
 type PrivacyNavigator = Pick<Navigator, "doNotTrack"> & { globalPrivacyControl?: boolean };
 
-/** Si esta visita se cuenta: el sitio de verdad, y un navegador que no pidió lo contrario. */
-export function shouldCount(where: Pick<Location, "hostname">, nav: PrivacyNavigator): boolean {
-  if (where.hostname !== HOST) return false;
+/**
+ * Si esta visita se cuenta: el sitio de verdad, y un navegador que no pidió lo contrario. Una página dentro de un marco
+ * (la vista en vivo de la página para armar campañas) no es una visita: no se cuenta.
+ */
+export function shouldCount(where: Pick<Location, "hostname">, nav: PrivacyNavigator, enMarco = false): boolean {
+  if (enMarco || where.hostname !== HOST) return false;
   return nav.globalPrivacyControl !== true && nav.doNotTrack !== "1";
 }
 
 type Va = (command: string, arg?: unknown) => void;
 
+/** Si esta página está dentro de un marco de otra. Si el navegador no deja mirarlo, se toma por sí. */
+function estaEnUnMarco(): boolean {
+  try {
+    return window.parent !== window;
+  } catch {
+    return true;
+  }
+}
+
 /** Carga el contador, con el filtro puesto antes de que corra. */
 export function countVisits(): void {
-  if (!shouldCount(location, navigator)) return;
+  if (!shouldCount(location, navigator, estaEnUnMarco())) return;
   // Una página prerenderizada (las de lectura se adelantan cuando el mouse se
   // posa sobre su enlace) todavía no la vio nadie: se cuenta si se muestra.
   if ((document as Document & { prerendering?: boolean }).prerendering) {

@@ -1240,6 +1240,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       delPaso ? principal(tx(delPaso.clave), () => accionesDelPuente()[delPaso.accion]?.()) : null;
     if (vista === "elegir") {
       botones.push(principal(tx("cpoElegir"), () => elegir()));
+      // Un enlace y no un botón: el paso sigue con una sola acción principal.
+      const armar = document.createElement("a");
+      armar.className = "enlace";
+      armar.href = "/crear-campana.html";
+      armar.textContent = tx("cpoArmala");
+      botones.push(armar);
     } else if (vista === "previa") {
       botones.push(principal(tx(trabajando ? "cpoAbriendo" : "cpoAbrir"), () => void abrirInscripcion(), trabajando));
       botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
