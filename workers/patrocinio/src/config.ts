@@ -232,7 +232,7 @@ export interface Config {
    * Qué dice `ORDEN_USDC_PILOTO` para la orden en dólares digitales: `lista` (cuentas bien escritas: la orden nueva
    * pide estar en la lista, sin mirar al piloto de la compra con QR), `mal` (algo mal escrito, o `todos` sin
    * confirmar: la orden nueva no nace para nadie) o `ninguna` (vacía, `todos` confirmado o fuera de mainnet: la orden
-   * mira el piloto de la compra con QR, como hasta ahora — `rutas-altas.ts`, `fueraDelPiloto`).
+   * mira el piloto de la compra con QR, como hasta ahora (`rutas-altas.ts`, `fueraDelPiloto`).
    */
   ordenUsdcEnVariable: "ninguna" | "lista" | "mal";
   /** Lo mínimo en bolivianos de una carga, para el sitio. */
@@ -335,6 +335,7 @@ export function leerRecargo(s: string): Recargo | null {
   return { primera, siguientes, primeraUsdc: p, siguientesUsdc: q };
 }
 
+/** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
 
 /**
