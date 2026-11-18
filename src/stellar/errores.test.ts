@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TOPE_DE_LOS_CONTRATOS_VIEJOS, codigoTecnico, errorKey, esDeRed, textoDelError } from "./errores";
+import { TOPE_DE_LOS_CONTRATOS_VIEJOS, codigoTecnico, errorKey, esDeRed, esDelPremio, textoDelError } from "./errores";
+import { PremioGuardado } from "./usdc-cuenta";
 
 /**
  * El corpus: los errores de verdad de cada fuente, con lo que tiene que decir la
@@ -195,6 +196,8 @@ const CORPUS: Fila[] = [
   ["app: el sorteo se mandó y no se pudo confirmar (con el corte en la causa)", "fuente", () => new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }), "unconfirmed"],
   ["app: el RPC contestó algo que no se entiende al armar", "fuente", () => new Error("rpc-sin-respuesta: Cannot read properties of undefined (reading 'headerXdr')"), "rpcDown"],
   ["app: la ronda quedó cerca antes de mandar", "fuente", () => new Error("la ronda quedó cerca antes de mandar el sello (faltan 12 s): Error(Contract, #5)"), "roundTooSoon"],
+  ["app: la puerta del premio, la cuenta puede guardar dinero", "fuente", () => new PremioGuardado("puede-guardar"), "premioGuardado"],
+  ["app: la puerta del premio, no se pudo comprobar", "fuente", () => new PremioGuardado("no-se-sabe"), "premioSinSaber"],
 ];
 
 describe("errorKey: el corpus", () => {
@@ -275,8 +278,34 @@ describe("más ganadores de los que admite la red (el contrato de testnet de hoy
   });
 });
 
+describe("la puerta del premio es un error con nombre propio", () => {
+  it("se reconoce por el nombre y la forma, sin importar la clase", () => {
+    expect(esDelPremio(new PremioGuardado("puede-guardar"))).toBe(true);
+    expect(esDelPremio(Object.assign(new Error("x"), { name: "PremioGuardado", que: "no-se-sabe" }))).toBe(true);
+    expect(esDelPremio(Object.assign(new Error("x"), { name: "PremioGuardado" }))).toBe(false);
+    expect(esDelPremio(Object.assign(new Error("x"), { name: "PremioGuardado", que: "otra-cosa" }))).toBe(false);
+    expect(esDelPremio(Object.assign(new Error("x"), { name: "Error", que: "puede-guardar" }))).toBe(false);
+    for (const x of [null, undefined, "premio-guardado", 3, {}]) expect(esDelPremio(x)).toBe(false);
+  });
+
+  it("tiene la misma clave con cualquier contexto, y no es un corte de la red", () => {
+    for (const contexto of [{}, { enLinea: false }, { patrocinada: true }, { cobroPorUso: true, enLinea: true }]) {
+      expect(errorKey(new PremioGuardado("puede-guardar"), contexto)).toBe("premioGuardado");
+      expect(errorKey(new PremioGuardado("no-se-sabe"), contexto)).toBe("premioSinSaber");
+    }
+    expect(esDeRed(new PremioGuardado("puede-guardar"))).toBe(false);
+    expect(esDeRed(new PremioGuardado("no-se-sabe"))).toBe(false);
+  });
+
+  it("manda sobre lo que digan su texto o su causa: ni un corte ni un sello incierto", () => {
+    const parecidoAUnCorte = Object.assign(new Error("Failed to fetch tx-FAILED sin-confirmar", { cause: new TypeError("Failed to fetch") }), { name: "PremioGuardado", que: "no-se-sabe" });
+    expect(esDeRed(parecidoAUnCorte)).toBe(false);
+    expect(errorKey(parecidoAUnCorte, { enLinea: true })).toBe("premioSinSaber");
+  });
+});
+
 describe("cada clave tiene su mensaje: qué pasó y qué hacer, sin tecnicismos", () => {
-  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown", "badWinnerCountViejo"])];
+  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown", "badWinnerCountViejo", "premioGuardadoSorteo", "premioSinSaberSorteo"])];
 
   it.each(claves)("errAnchor.%s", async (clave) => {
     const { T } = await import("../i18n");

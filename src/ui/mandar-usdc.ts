@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { getLang, t } from "../i18n";
 import { type NetworkName, network } from "../stellar/config";
+import { type ModoDeRampa, modoDeRampa } from "../stellar/cuenta-config";
 import { esDeRed } from "../stellar/errores";
 import { passphraseDe } from "../stellar/oficiales";
 import { esDireccionG } from "../stellar/pagos";
@@ -19,6 +20,9 @@ import { con } from "./monedas-vista";
  * de Google o de correo, va por `signAndSubmit`, que la puerta de firmas confirma porque es la transacción que la
  * página acaba de armar. Con una billetera propia la firma la billetera y la página la manda. Tinkazo no cobra ni
  * guarda nada.
+ *
+ * Con `VITE_RAMPA=premios` Mandar no existe: la función que prepara el envío, la que lo manda y la que abre la ventana
+ * se niegan (`mandarPermitido`), no solo se esconde el botón. Mandar vuelve cuando el sello y el sorteo se voten a mano.
  */
 
 const STROOPS = 10_000_000n;
@@ -96,8 +100,15 @@ export interface DatosDelEnvio {
   nota: Nota;
 }
 
-/** Arma el pago sin firmarlo: un `payment` de USDC de Circle con la nota pedida, con la secuencia de la cuenta. */
+/** ¿Se puede mandar? No en el modo `premios`: ahí la cuenta solo ve su saldo y recibe. */
+export const mandarPermitido = (modo: ModoDeRampa = modoDeRampa()): boolean => modo !== "premios";
+
+/**
+ * Arma el pago sin firmarlo: un `payment` de USDC de Circle con la nota pedida, con la secuencia de la cuenta. En el modo
+ * `premios` se niega: ningún camino arma un pago de esta cuenta, venga de donde venga la llamada.
+ */
 export async function armarEnvio(d: DatosDelEnvio, secuencia: string): Promise<string> {
+  if (!mandarPermitido()) throw new Error("mandar: apagado");
   if (!esDireccionG(d.origen) || !esDireccionG(d.destino) || d.origen === d.destino || d.monto <= 0n) throw new Error("mandar: datos inválidos");
   const usdc = usdcDeLaRed(d.red);
   const { Account, Asset, Memo, Operation, TransactionBuilder } = await import("@stellar/stellar-sdk");
@@ -109,10 +120,11 @@ export async function armarEnvio(d: DatosDelEnvio, secuencia: string): Promise<s
   return b.setTimeout(VALE_S).build().toXDR();
 }
 
-export type Preparado = { ok: true; xdr: string } | { ok: false; motivo: "no-recibe" | "sin-saldo" | "sin-red" | "datos" };
+export type Preparado = { ok: true; xdr: string } | { ok: false; motivo: "no-recibe" | "sin-saldo" | "sin-red" | "datos" | "apagado" };
 
-/** Mira las dos cuentas y arma el pago si va a entrar entero. No firma ni manda nada. */
+/** Mira las dos cuentas y arma el pago si va a entrar entero. No firma ni manda nada. El modo sale de `VITE_RAMPA`, no de quien llama. */
 export async function prepararEnvio(d: DatosDelEnvio, mirar: (cuenta: string) => Promise<LecturaDeCuenta>): Promise<Preparado> {
+  if (!mandarPermitido()) return { ok: false, motivo: "apagado" };
   if (!esDireccionG(d.origen) || !esDireccionG(d.destino) || d.origen === d.destino || d.monto <= 0n) return { ok: false, motivo: "datos" };
   const [origen, destino] = await Promise.all([mirar(d.origen), mirar(d.destino)]);
   if (origen === "sin-red" || destino === "sin-red") return { ok: false, motivo: "sin-red" };
@@ -142,7 +154,8 @@ export interface DepsDeMandar {
   enviar(xdr: string, origen: string): Promise<ResultadoDelEnvio>;
 }
 
-function depsDelSitio(): DepsDeMandar {
+/** Lo que usa la ventana en el sitio. Se exporta para probar que `enviar` se niega aunque se lo llame directo. */
+export function depsDelSitio(): DepsDeMandar {
   const mirar = (cuenta: string): Promise<LecturaDeCuenta> => mirarCuenta(network.name, cuenta);
   return {
     red: network.name,
@@ -156,6 +169,7 @@ function depsDelSitio(): DepsDeMandar {
       }
     },
     async enviar(xdr, origen) {
+      if (!mandarPermitido()) return "no-salio";
       const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
       const w = activeWallet();
       if (!w?.address || w.address !== origen) return "no-salio";
@@ -189,6 +203,7 @@ const corta = (g: string): string => `${g.slice(0, 4)}…${g.slice(-4)}`;
  * acaba de leer). `deps` reemplaza lo del sitio (en las pruebas).
  */
 export function abrirMandar(o: { address: string; saldo: bigint }, parcial: Partial<DepsDeMandar> = {}): void {
+  if (!mandarPermitido()) return;
   const deps: DepsDeMandar = { ...depsDelSitio(), ...parcial };
   const estado = {
     destino: null as string | null,

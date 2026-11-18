@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMISOR_USDC } from "../../workers/cuenta/src/reglas";
 import { USDC_MAINNET, USDC_TESTNET } from "./pagos";
 import {
@@ -8,9 +8,17 @@ import {
   abrePasoDeLaCuenta,
   disponibleXlm,
   estadoParaRecibir,
+  PAUSA_DE_LA_PUERTA_MS,
+  PRESUPUESTO_DE_LA_PUERTA_MS,
+  REINTENTOS_DE_LA_PUERTA,
+  TOPE_DE_LA_PUERTA_MS,
+  mirarAntesDeActivar,
   mirarCuenta,
+  mirarPuertaDelPremio,
   muestraDireccion,
+  puertaDelPremio,
   queLlego,
+  tieneFirmanteAjeno,
   usdcDeLaRed,
 } from "./usdc-cuenta";
 import type { Pago } from "../../workers/cuenta/src/pagos";
@@ -111,6 +119,347 @@ describe("mirarCuenta: la cuenta en la red", () => {
 
   it("si Horizon no contesta, corta al tope y no se sabe", async () => {
     expect(await mirarCuenta("mainnet", YO, { fetch: horizon("cuelga").fetch, tiempoMs: 20 })).toBe("sin-red");
+  });
+});
+
+describe("mirarCuenta: quién firma por la cuenta", () => {
+  const firmantes = (signers: unknown) => cuentaDeHorizon([nativo("0.0000000")], { signers });
+
+  it("lee la clave y el peso de cada firmante", async () => {
+    const h = horizon(firmantes([{ key: YO, weight: 1, type: "ed25519_public_key" }, { key: OTRO_EMISOR, weight: 2, type: "ed25519_public_key" }]));
+    const c = (await mirarCuenta("mainnet", YO, { fetch: h.fetch })) as CuentaMirada;
+    expect(c.firmantes).toEqual([{ clave: YO, peso: 1 }, { clave: OTRO_EMISOR, peso: 2 }]);
+  });
+
+  it("sin el dato, o con uno que no se lee, es null: nunca una lista a medias", async () => {
+    for (const signers of [undefined, "x", { key: YO }, [{ key: YO, weight: 1 }, { weight: 1 }], [{ key: YO, weight: "1" }], [{ key: YO, weight: -1 }], [null]]) {
+      const c = (await mirarCuenta("mainnet", YO, { fetch: horizon(firmantes(signers)).fetch })) as CuentaMirada;
+      expect(c.firmantes, JSON.stringify(signers)).toBeNull();
+    }
+  });
+
+  it("tieneFirmanteAjeno: solo una clave con peso que no es la de la cuenta", () => {
+    const con = (f: CuentaMirada["firmantes"]) => tieneFirmanteAjeno({ ...mirada(), firmantes: f }, YO);
+    expect(con([{ clave: YO, peso: 1 }])).toBe(false);
+    expect(con([{ clave: YO, peso: 1 }, { clave: OTRO_EMISOR, peso: 1 }])).toBe(true);
+    expect(con([{ clave: YO, peso: 0 }, { clave: OTRO_EMISOR, peso: 1 }])).toBe(true);
+    expect(con([{ clave: YO, peso: 1 }, { clave: OTRO_EMISOR, peso: 0 }])).toBe(false);
+    expect(con(null)).toBe(false);
+    expect(con(undefined)).toBe(false);
+    expect(con([])).toBe(false);
+  });
+
+  it("la forma de una cuenta de Google de la red principal, medida el 18 de noviembre de 2026: su sola llave, sin aviso y libre", async () => {
+    // Lo que contestó Horizon para una cuenta real creada por la activación, con direcciones inventadas.
+    const CUENTA = "GAYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTCMJRGEYTD543";
+    const PATROCINADORA = "GAZDEMRSGIZDEMRSGIZDEMRSGIZDEMRSGIZDEMRSGIZDEMRSGIZDENU4";
+    const respuesta = {
+      account_id: CUENTA,
+      sequence: "1",
+      subentry_count: 0,
+      num_sponsoring: 0,
+      num_sponsored: 2,
+      sponsor: PATROCINADORA,
+      thresholds: { low_threshold: 0, med_threshold: 0, high_threshold: 0 },
+      flags: { auth_required: false, auth_revocable: false, auth_immutable: false, auth_clawback_enabled: false },
+      signers: [{ weight: 1, key: CUENTA, type: "ed25519_public_key" }],
+      balances: [{ balance: "0.0000000", buying_liabilities: "0.0000000", selling_liabilities: "0.0000000", asset_type: "native" }],
+    };
+    const c = (await mirarCuenta("mainnet", CUENTA, { fetch: horizon(respuesta).fetch })) as CuentaMirada;
+    expect(c.firmantes).toEqual([{ clave: CUENTA, peso: 1 }]);
+    expect(c).toMatchObject({ xlm: "0.0000000", subentradas: 0, patrocinando: 0, patrocinadas: 2 });
+    expect(tieneFirmanteAjeno(c, CUENTA)).toBe(false);
+    expect(puertaDelPremio(respuesta, "mainnet")).toBe("libre");
+    // Con la misma forma y una segunda llave con peso, la regla sí avisa: lo que cambia es la firma, no lo demás.
+    const conOtraLlave = { ...respuesta, signers: [...respuesta.signers, { weight: 1, key: PATROCINADORA, type: "ed25519_public_key" }] };
+    const d = (await mirarCuenta("mainnet", CUENTA, { fetch: horizon(conOtraLlave).fetch })) as CuentaMirada;
+    expect(tieneFirmanteAjeno(d, CUENTA)).toBe(true);
+  });
+});
+
+describe("puertaDelPremio: ¿puede la cuenta guardar dinero?", () => {
+  const otra = (balance: string | undefined, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    asset_type: "credit_alphanum4",
+    asset_code: "EURC",
+    asset_issuer: OTRO_EMISOR,
+    limit: "100.0000000",
+    ...(balance === undefined ? {} : { balance }),
+    ...extra,
+  });
+  const decide = (balances: Record<string, unknown>[], red: "mainnet" | "testnet" = "mainnet") => puertaDelPremio(cuentaDeHorizon(balances), red);
+
+  it("la línea del dólar digital de Circle de la red frena con cualquier saldo, también cero, autorizada o no", () => {
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "0.0000000" })])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "12.5000000" })])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "0.0000000", is_authorized: false })])).toBe("puede-guardar");
+  });
+
+  it("la línea de Circle con un saldo que no se lee frena igual: no se toma por cero", () => {
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: undefined })])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "mucho" })])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: 5 })])).toBe("puede-guardar");
+  });
+
+  it("sin la línea y con XLM en cero, libre", () => {
+    expect(decide([nativo("0.0000000")])).toBe("libre");
+  });
+
+  it("con XLM mayor que cero, sin líneas, sigue libre: cualquiera puede mandarle XLM a una cuenta", () => {
+    expect(decide([nativo("0.0000001")])).toBe("libre");
+    expect(decide([nativo("2.0000000")])).toBe("libre");
+    expect(decide([nativo("5000000.0000000")])).toBe("libre");
+  });
+
+  it("el XLM, con cualquier saldo, no cambia lo que dicen las líneas: ni frena ni desfrena", () => {
+    for (const xlm of ["0.0000000", "0.0000001", "10000.0000000"]) {
+      expect(decide([nativo(xlm), lineaUsdc({ balance: "0.0000000" })]), xlm).toBe("puede-guardar");
+      expect(decide([nativo(xlm), otra("3.0000000")]), xlm).toBe("puede-guardar");
+      expect(decide([nativo(xlm), otra("0.0000000")]), xlm).toBe("libre");
+      expect(decide([nativo(xlm), otra(undefined)]), xlm).toBe("no-se-sabe");
+    }
+  });
+
+  it("otra moneda: con saldo frena, en cero no cuenta, con un saldo que no se lee no se sabe", () => {
+    expect(decide([nativo("0.0000000"), otra("3.0000000")])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), otra("0.0000000")])).toBe("libre");
+    expect(decide([nativo("0.0000000"), otra(undefined)])).toBe("no-se-sabe");
+    expect(decide([nativo("0.0000000"), otra("x")])).toBe("no-se-sabe");
+    // Si ya hay algo que frena, frena: lo que no se lee no lo desmiente.
+    expect(decide([nativo("0.0000000"), otra("3.0000000"), otra(undefined, { asset_code: "BRLT" })])).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "0.0000000" }), otra(undefined)])).toBe("puede-guardar");
+    // Con XLM no hay nada que frene: lo que no se lee deja la duda.
+    expect(decide([nativo("1.0000000"), otra(undefined)])).toBe("no-se-sabe");
+  });
+
+  it("las acciones de un fondo común con saldo también frenan", () => {
+    expect(decide([nativo("0.0000000"), { asset_type: "liquidity_pool_shares", liquidity_pool_id: "ab".repeat(32), balance: "4.0000000", limit: "100.0000000" }])).toBe("puede-guardar");
+  });
+
+  it("el dólar de la red de prueba, mirado en la red principal, no cuenta como el de Circle (y al revés)", () => {
+    const deTestnet = (balance: string): Record<string, unknown> => lineaUsdc({ asset_issuer: USDC_TESTNET.issuer, balance });
+    expect(decide([nativo("0.0000000"), deTestnet("0.0000000")], "mainnet")).toBe("libre");
+    expect(decide([nativo("0.0000000"), deTestnet("2.0000000")], "mainnet")).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), deTestnet("0.0000000")], "testnet")).toBe("puede-guardar");
+    expect(decide([nativo("0.0000000"), lineaUsdc({ balance: "0.0000000" })], "testnet")).toBe("libre");
+  });
+
+  it("lo que no se lee nunca da libre", () => {
+    const sinXlm = cuentaDeHorizon([lineaUsdc()]);
+    for (const cuerpo of [null, undefined, "texto", 3, {}, { balances: "x" }, { balances: [] }, { balances: [null] }, { balances: ["x"] }, sinXlm]) {
+      expect(puertaDelPremio(cuerpo, "mainnet"), JSON.stringify(cuerpo)).toBe("no-se-sabe");
+    }
+    for (const balance of [undefined, "", "abc", "1e3", "-1.0000000", "1.12345678", "1,5", 4, null]) {
+      expect(puertaDelPremio(cuentaDeHorizon([{ asset_type: "native", ...(balance === undefined ? {} : { balance }) }]), "mainnet"), String(balance)).toBe("no-se-sabe");
+    }
+  });
+});
+
+describe("mirarPuertaDelPremio: la lectura de la puerta", () => {
+  afterEach(() => vi.useRealTimers());
+
+  /** Un Horizon que anota el pedido completo y contesta lo que se le da. */
+  function lector(respuesta: unknown): { fetch: typeof fetch; pedidos: Array<{ url: string; init: RequestInit | undefined }> } {
+    const pedidos: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const f = (async (url: string | URL | Request, init?: RequestInit) => {
+      pedidos.push({ url: String(url), init });
+      if (respuesta === "cuelga") return new Promise<Response>((_, rechazar) => init?.signal?.addEventListener("abort", () => rechazar(new Error("abortado"))));
+      if (respuesta === "lanza") throw new TypeError("Failed to fetch");
+      if (typeof respuesta === "number") return new Response("", { status: respuesta });
+      if (typeof respuesta === "string") return new Response(respuesta, { status: 200 });
+      return new Response(JSON.stringify(respuesta), { status: 200 });
+    }) as typeof fetch;
+    return { fetch: f, pedidos };
+  }
+
+  it("pide al Horizon de la red indicada, sin caché y con la señal del tope", async () => {
+    const l = lector(cuentaDeHorizon([nativo("0.0000000")]));
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: l.fetch })).toBe("libre");
+    await mirarPuertaDelPremio("testnet", YO, { fetch: l.fetch });
+    expect(l.pedidos.map((p) => p.url)).toEqual([`https://horizon.stellar.org/accounts/${YO}`, `https://horizon-testnet.stellar.org/accounts/${YO}`]);
+    for (const p of l.pedidos) {
+      expect(p.init?.cache).toBe("no-store");
+      expect(p.init?.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
+  it("200 con la línea de Circle: puede guardar. 200 sin ella: libre. 200 con la línea sin saldo: puede guardar", async () => {
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: lector(cuentaDeHorizon([nativo("0.0000000"), lineaUsdc()])).fetch })).toBe("puede-guardar");
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: lector(cuentaDeHorizon([nativo("0.0000000")])).fetch })).toBe("libre");
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: lector(cuentaDeHorizon([nativo("0.0000000"), lineaUsdc({ balance: undefined })])).fetch })).toBe("puede-guardar");
+  });
+
+  it("200 sin líneas y con mucho XLM: libre, con una sola lectura", async () => {
+    const l = lector(cuentaDeHorizon([nativo("250000.0000000")]));
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: l.fetch, pausaMs: 0 })).toBe("libre");
+    expect(l.pedidos).toHaveLength(1);
+  });
+
+  it("404 es que Horizon no la conoce todavía: lo espera, y si sigue sin verla da no-existe", async () => {
+    const l = lector(404);
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: l.fetch, pausaMs: 0 })).toBe("no-existe");
+    expect(l.pedidos).toHaveLength(1 + REINTENTOS_DE_LA_PUERTA);
+  });
+
+  it("cualquier otra falla es que no se sabe: 500, 429, un corte, un cuerpo que no es JSON", async () => {
+    for (const r of [500, 503, 429, 403, "lanza", "no es json"]) {
+      expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: lector(r).fetch, pausaMs: 0 }), JSON.stringify(r)).toBe("no-se-sabe");
+    }
+  });
+
+  it("un pedido que no contesta se corta a los 5 segundos, se vuelve a probar con lo que queda y a los 7 no se sabe", async () => {
+    expect(TOPE_DE_LA_PUERTA_MS).toBe(5_000);
+    expect(PRESUPUESTO_DE_LA_PUERTA_MS).toBe(7_000);
+    vi.useFakeTimers();
+    let dicho: string | null = null;
+    const l = lector("cuelga");
+    const listo = mirarPuertaDelPremio("mainnet", YO, { fetch: l.fetch }).then((r) => (dicho = r));
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(dicho).toBeNull();
+    expect(l.pedidos).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(2);
+    // La primera lectura se cortó a los 5 segundos: queda poco, y la segunda espera su pausa.
+    expect(dicho).toBeNull();
+    await vi.advanceTimersByTimeAsync(PAUSA_DE_LA_PUERTA_MS + 1);
+    expect(l.pedidos).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(PRESUPUESTO_DE_LA_PUERTA_MS);
+    await listo;
+    expect(dicho).toBe("no-se-sabe");
+    // Nunca más de dos lecturas con lo que queda, ni más de siete segundos en total.
+    expect(l.pedidos).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("con otro Horizon y otro tope, usa esos", async () => {
+    const l = lector(cuentaDeHorizon([nativo("0.0000000")]));
+    await mirarPuertaDelPremio("mainnet", YO, { fetch: l.fetch, horizon: "http://localhost:8000" });
+    expect(l.pedidos[0]?.url).toBe(`http://localhost:8000/accounts/${YO}`);
+    expect(await mirarPuertaDelPremio("mainnet", YO, { fetch: lector("cuelga").fetch, tiempoMs: 20, pausaMs: 0 })).toBe("no-se-sabe");
+  });
+});
+
+describe("mirarPuertaDelPremio: ante una duda vuelve a leer, ante una respuesta no", () => {
+  afterEach(() => vi.useRealTimers());
+
+  const LIBRE = cuentaDeHorizon([nativo("0.0000000")]);
+  const GUARDA = cuentaDeHorizon([nativo("0.0000000"), lineaUsdc()]);
+
+  /** Un Horizon que contesta, en orden, lo que se le da (la última se repite) y anota cuántas veces lo llamaron. */
+  function enOrden(respuestas: unknown[]): { fetch: typeof fetch; pedidos: number } {
+    const estado = { fetch: undefined as unknown as typeof fetch, pedidos: 0 };
+    estado.fetch = (async () => {
+      const r = respuestas[Math.min(estado.pedidos, respuestas.length - 1)];
+      estado.pedidos += 1;
+      if (r === "lanza") throw new TypeError("Failed to fetch");
+      if (typeof r === "number") return new Response("", { status: r });
+      return new Response(JSON.stringify(r), { status: 200 });
+    }) as typeof fetch;
+    return estado;
+  }
+  const mira = (e: { fetch: typeof fetch }, extra: Record<string, unknown> = {}) => mirarPuertaDelPremio("mainnet", YO, { fetch: e.fetch, pausaMs: 0, ...extra });
+
+  it("una respuesta que dice algo no se repite: libre, una sola lectura", async () => {
+    const e = enOrden([LIBRE, GUARDA]);
+    expect(await mira(e)).toBe("libre");
+    expect(e.pedidos).toBe(1);
+  });
+
+  it("puede-guardar no se repite nunca, aunque una lectura siguiente diría otra cosa", async () => {
+    const e = enOrden([GUARDA, LIBRE]);
+    expect(await mira(e)).toBe("puede-guardar");
+    expect(e.pedidos).toBe(1);
+  });
+
+  it("un 5xx, un 429 o un corte seguidos de una respuesta: sale esa respuesta", async () => {
+    for (const falla of [500, 503, 429, "lanza"]) {
+      const libre = enOrden([falla, LIBRE]);
+      expect(await mira(libre), String(falla)).toBe("libre");
+      expect(libre.pedidos).toBe(2);
+      const guarda = enOrden([falla, falla, GUARDA]);
+      expect(await mira(guarda), String(falla)).toBe("puede-guardar");
+      expect(guarda.pedidos).toBe(3);
+    }
+  });
+
+  it("un 404 seguido de la cuenta (Horizon va unos segundos atrás): sale la respuesta de la cuenta", async () => {
+    const e = enOrden([404, LIBRE]);
+    expect(await mira(e)).toBe("libre");
+    expect(e.pedidos).toBe(2);
+    const g = enOrden([404, 404, GUARDA]);
+    expect(await mira(g)).toBe("puede-guardar");
+  });
+
+  it("tres dudas seguidas: la duda, con tres lecturas y no más", async () => {
+    const e = enOrden([500, 404, "lanza", LIBRE]);
+    expect(await mira(e)).toBe("no-se-sabe");
+    expect(e.pedidos).toBe(1 + REINTENTOS_DE_LA_PUERTA);
+    const nueva = enOrden([500, 500, 404, LIBRE]);
+    expect(await mira(nueva)).toBe("no-existe");
+    expect(nueva.pedidos).toBe(3);
+  });
+
+  it("un cuerpo que no se lee también se vuelve a pedir, y nunca da libre mientras no se lee", async () => {
+    const e = enOrden([{ sequence: "1" }, { balances: "x" }, { sequence: "2" }]);
+    expect(await mira(e)).toBe("no-se-sabe");
+    expect(e.pedidos).toBe(3);
+  });
+
+  it("sinReintentarNoExiste: un 404 se toma como respuesta, pero un 5xx se sigue reintentando", async () => {
+    const e = enOrden([404, LIBRE]);
+    expect(await mira(e, { sinReintentarNoExiste: true })).toBe("no-existe");
+    expect(e.pedidos).toBe(1);
+    const f = enOrden([500, 404, LIBRE]);
+    expect(await mira(f, { sinReintentarNoExiste: true })).toBe("no-existe");
+    expect(f.pedidos).toBe(2);
+  });
+
+  it("espera su pausa entre una lectura y la siguiente", async () => {
+    vi.useFakeTimers();
+    const e = enOrden([500, LIBRE]);
+    let dicho: string | null = null;
+    const listo = mirarPuertaDelPremio("mainnet", YO, { fetch: e.fetch }).then((r) => (dicho = r));
+    await vi.advanceTimersByTimeAsync(PAUSA_DE_LA_PUERTA_MS - 1);
+    expect(e.pedidos).toBe(1);
+    await vi.advanceTimersByTimeAsync(2);
+    await listo;
+    expect(e.pedidos).toBe(2);
+    expect(dicho).toBe("libre");
+  });
+});
+
+describe("mirarAntesDeActivar: lo que se mira antes de pedir la línea", () => {
+  function lector(r: unknown): typeof fetch {
+    return (async () => {
+      if (r === "lanza") throw new TypeError("Failed to fetch");
+      if (typeof r === "number") return new Response("", { status: r });
+      return new Response(JSON.stringify(r), { status: 200 });
+    }) as typeof fetch;
+  }
+  const mira = (r: unknown) => mirarAntesDeActivar("mainnet", YO, { fetch: lector(r), pausaMs: 0 });
+  const otraConSaldo = (): Record<string, unknown> => ({ asset_type: "credit_alphanum4", asset_code: "EURC", asset_issuer: OTRO_EMISOR, balance: "3.0000000", limit: "10.0000000" });
+
+  it("sin la línea y sin otra con saldo (tenga o no XLM), o una cuenta que Horizon no conoce: libre, se puede pedir", async () => {
+    expect(await mira(cuentaDeHorizon([nativo("0.0000000")]))).toBe("libre");
+    // El XLM no cuenta: si lo contara, mandarle unas fracciones a quien va a recibir un premio le cerraría la activación.
+    expect(await mira(cuentaDeHorizon([nativo("0.0000001")]))).toBe("libre");
+    expect(await mira(cuentaDeHorizon([nativo("1.0000000")]))).toBe("libre");
+    expect(await mira(404)).toBe("libre");
+  });
+
+  it("con la línea ya puesta (con saldo o sin él, y con XLM o sin él): ya está, no se pide otra", async () => {
+    expect(await mira(cuentaDeHorizon([nativo("0.0000000"), lineaUsdc()]))).toBe("ya-esta");
+    expect(await mira(cuentaDeHorizon([nativo("1.5000000"), lineaUsdc({ balance: "9.0000000" })]))).toBe("ya-esta");
+  });
+
+  it("con otra moneda con saldo y sin la línea, o si la red no deja saberlo: no se sabe, no se pide nada", async () => {
+    expect(await mira(cuentaDeHorizon([nativo("0.0000000"), otraConSaldo()]))).toBe("no-se-sabe");
+    expect(await mira(cuentaDeHorizon([nativo("1.0000000"), otraConSaldo()]))).toBe("no-se-sabe");
+    for (const r of [500, 429, "lanza", { sequence: "1" }]) expect(await mira(r), JSON.stringify(r)).toBe("no-se-sabe");
+  });
+
+  it("la línea del dólar de la otra red no cuenta como la línea de esta", async () => {
+    const deTestnet = lineaUsdc({ asset_issuer: USDC_TESTNET.issuer, balance: "0.0000000" });
+    expect(await mira(cuentaDeHorizon([nativo("0.0000000"), deTestnet]))).toBe("libre");
+    expect(await mira(cuentaDeHorizon([nativo("0.0000000"), deTestnet, lineaUsdc()]))).toBe("ya-esta");
   });
 });
 

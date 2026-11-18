@@ -277,6 +277,8 @@ export function textoDelError(e: unknown): string {
  * cuenta aunque diga "cancelled": eso no se reintenta.
  */
 export function esDeRed(e: unknown): boolean {
+  // La puerta del premio no es un corte de la red: ni cambia de RPC ni se reintenta sola (`esDelPremio`).
+  if (esDelPremio(e)) return false;
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
   // El portero que no llegó a la red es un corte más; sus otros no son una respuesta, no un corte.
@@ -286,6 +288,16 @@ export function esDeRed(e: unknown): boolean {
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
   if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
+}
+
+/**
+ * La puerta del premio frenó la firma (`PremioGuardado` en `usdc-cuenta.ts`): la cuenta de Google o de correo puede
+ * guardar dinero, o no se pudo saber. Se reconoce por el nombre y la forma, sin importar ese archivo. Tiene su clave y no
+ * es un corte de red ni un sello incierto: nadie lo reintenta solo ni averigua nada.
+ */
+export function esDelPremio(e: unknown): e is Error & { que: "puede-guardar" | "no-se-sabe" } {
+  const x = e as { name?: unknown; que?: unknown } | null;
+  return !!x && typeof x === "object" && x.name === "PremioGuardado" && (x.que === "puede-guardar" || x.que === "no-se-sabe");
 }
 
 /**
@@ -377,6 +389,8 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean; cobroPo
  * pasa, se le pregunta al navegador.
  */
 export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean; cobroPorUso?: boolean } = {}): string {
+  // La puerta del premio: `premioGuardado` (la cuenta puede guardar dinero) o `premioSinSaber` (no se pudo comprobar).
+  if (esDelPremio(e)) return e.que === "puede-guardar" ? "premioGuardado" : "premioSinSaber";
   if (esIncierto(e)) return "unconfirmed";
   if (esNoDelPortero(e)) {
     const clave = claveDelPortero(e, contexto);

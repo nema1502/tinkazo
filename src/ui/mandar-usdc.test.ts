@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLang, t } from "../i18n";
 import { USDC_MAINNET } from "../stellar/pagos";
 import type { CuentaMirada, LecturaDeCuenta } from "../stellar/usdc-cuenta";
-import { type DatosDelEnvio, type DepsDeMandar, abrirMandar, deAUnDolar, leerDireccion, leerNota, mitadDe, puedeRecibir } from "./mandar-usdc";
+import { type DatosDelEnvio, type DepsDeMandar, abrirMandar, deAUnDolar, depsDelSitio, leerDireccion, leerNota, mandarPermitido, mitadDe, prepararEnvio, puedeRecibir } from "./mandar-usdc";
+
+// La billetera activa del sitio, de mentira: solo se mira que `enviar` la deje o no sin tocar.
+const billetera = vi.hoisted(() => ({ activa: null as null | { address: string; signTransaction: () => Promise<{ signedTxXdr: string }> } }));
+vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => billetera.activa }));
+vi.mock("../stellar/wallet-pollar", () => ({ submitsItself: () => false }));
 
 /**
  * Mandar mis dólares digitales (`mandar-usdc.ts`): pegar la dirección y la nota, elegir cuánto con botones, mirar que la
@@ -276,5 +281,57 @@ describe("quién manda sin preguntar", () => {
       .filter((f) => /\.signAndSubmit\(/.test(readFileSync(join(raiz, f), "utf8")));
     expect(llaman).toContain("ui/mandar-usdc.ts");
     for (const f of llaman) expect(["stellar/patrocinador.ts", "ui/envio-sdk.ts", "ui/mandar-usdc.ts"], f).toContain(f);
+  });
+});
+
+describe("el modo premios: Mandar no existe", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("mandarPermitido da falso solo con premios", () => {
+    expect(mandarPermitido("premios")).toBe(false);
+    for (const modo of ["pollar", "recibir", "apagada"] as const) expect(mandarPermitido(modo), modo).toBe(true);
+  });
+
+  it("abrirMandar no abre ninguna ventana", () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    const m = mundo();
+    abrir(m);
+    expect(dialogo()).toBeNull();
+    expect(document.body.innerHTML).toBe("");
+  });
+
+  const datos = { red: "mainnet" as const, origen: YO, destino: OTRA, monto: 5n * D, nota: { tipo: "ninguna" as const } };
+
+  it("prepararEnvio, llamado directo, se niega sin mirar ninguna cuenta ni armar nada: el modo sale de la bandera y no de quien llama", async () => {
+    const mirar = vi.fn(async () => mirada("12.5000000"));
+    vi.stubEnv("VITE_RAMPA", "premios");
+    expect(await prepararEnvio(datos, mirar)).toEqual({ ok: false, motivo: "apagado" });
+    expect(mirar).not.toHaveBeenCalled();
+    expect(prepararEnvio.length).toBe(2);
+  });
+
+  it("el envío del sitio se niega aunque haya una billetera propia lista: ni la mira ni le pide firmar", async () => {
+    const firmar = vi.fn(async (): Promise<{ signedTxXdr: string }> => {
+      throw new Error("sin aprobar");
+    });
+    billetera.activa = { address: YO, signTransaction: firmar };
+    vi.stubEnv("VITE_RAMPA", "premios");
+    expect(await depsDelSitio().enviar("XDR", YO)).toBe("no-salio");
+    expect(firmar).not.toHaveBeenCalled();
+    // Con otro modo, la misma billetera sí llega a firmar: la prueba mide el corte y no otra cosa.
+    vi.stubEnv("VITE_RAMPA", "recibir");
+    expect(await depsDelSitio().enviar("XDR", YO)).toBe("no-aprobado");
+    expect(firmar).toHaveBeenCalledOnce();
+    billetera.activa = null;
+  });
+
+  it("con pollar y con recibir, Mandar abre como siempre", () => {
+    for (const modo of ["pollar", "recibir"]) {
+      document.body.innerHTML = "";
+      vi.stubEnv("VITE_RAMPA", modo);
+      abrir(mundo());
+      expect(dialogo(), modo).not.toBeNull();
+      expect(principal().textContent).toBe(t("saldoMandarOk"));
+    }
   });
 });

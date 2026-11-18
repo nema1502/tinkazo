@@ -7,7 +7,8 @@ import { SITIOS_DE_PRODUCCION } from "./patrocinio-config";
  *
  * - `VITE_MONEDAS=1`: "Tus monedas" y "Tu tiendita" en el panel de la cuenta, y "Canjear" para quien organiza.
  * - `VITE_RAMPA`: «Tus dólares digitales». Con `pollar`, la ventana entera (cargar con bolivianos, traer y mandar); con
- *   `recibir` (o `meru`, el nombre de antes), solo traer y mandar. Sin ella, o con otra cosa, no se ofrece nada.
+ *   `recibir` (o `meru`, el nombre de antes), solo traer y mandar; con `premios`, solo ver el saldo y recibir un premio,
+ *   y nada más (Mandar se niega en el código). Sin ella, o con otra cosa, no se ofrece nada.
  * - `VITE_RAMPA_CUENTAS=G…,G…`: si tiene alguna cuenta, cargar con bolivianos se ofrece solo a esas. No esconde una carga
  *   que ya está en camino.
  * - `VITE_RAMPA_MINIMO`, `VITE_RAMPA_DEMO=1` y `VITE_RAMPA_PRACTICA=1`: solo en `localhost` (el mínimo para una prueba,
@@ -20,7 +21,7 @@ import { SITIOS_DE_PRODUCCION } from "./patrocinio-config";
 /** El Worker de la cuenta, desplegado en el dominio del proyecto. */
 export const CUENTA_POR_DEFECTO = "https://cuenta.tinkazo.app";
 
-export type ModoDeRampa = "pollar" | "recibir" | "apagada";
+export type ModoDeRampa = "pollar" | "recibir" | "premios" | "apagada";
 
 export interface EntornoDeCuenta {
   /** Lo que trae `VITE_MONEDAS`. */
@@ -76,6 +77,7 @@ export function modoDeRampa(e: EntornoDeCuenta = entornoDeCuenta()): ModoDeRampa
   const r = (e.rampa ?? "").trim().toLowerCase();
   if (r === "pollar") return "pollar";
   if (r === "recibir" || r === "meru") return "recibir";
+  if (r === "premios") return "premios";
   return "apagada";
 }
 

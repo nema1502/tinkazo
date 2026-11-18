@@ -1,0 +1,311 @@
+// @vitest-environment jsdom
+import { Keypair } from "@stellar/stellar-sdk";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { T, setLang, t } from "../i18n";
+import { type CuentaMirada, type LecturaDeCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
+import { type DepsDeSaldo, abrirSaldo } from "./saldo";
+
+vi.mock("./qr", () => ({
+  pintarQr: vi.fn(async (img: HTMLImageElement, texto: string) => {
+    img.dataset.qr = texto;
+    return true;
+  }),
+}));
+
+/**
+ * «Tus dólares digitales» con `VITE_RAMPA=premios`: ver el saldo y recibir un premio, y nada más. Sin Mandar, sin la
+ * dirección ni el QR para traer saldo de afuera, sin «Ya lo mandé» y sin pedir el historial de pagos. Todo con la
+ * cuenta y la red de mentira.
+ */
+
+let YO = Keypair.random().publicKey();
+const OTRA = Keypair.random().publicKey();
+
+const mirada = (o: Partial<CuentaMirada> = {}): CuentaMirada => ({
+  secuencia: "1",
+  saldos: [],
+  xlm: "10.0000000",
+  xlmComprometido: "0.0000000",
+  subentradas: 0,
+  patrocinando: 0,
+  patrocinadas: 0,
+  ...o,
+});
+const conUsdc = (saldo = "12.5000000", o: Partial<CuentaMirada["saldos"][number]> = {}, extra: Partial<CuentaMirada> = {}): CuentaMirada =>
+  mirada({ saldos: [{ code: "USDC", issuer: usdcDeLaRed("mainnet").issuer, saldo, limite: "922337203685.4775807", autorizada: true, patrocinador: null, ...o }], ...extra });
+
+interface Mundo extends DepsDeSaldo {
+  lectura: LecturaDeCuenta;
+}
+
+/** Una cuenta de Google en la red principal, lista y con dólares digitales, salvo que se diga otra cosa. */
+function mundo(o: Partial<Mundo> = {}): Mundo {
+  const m: Mundo = {
+    red: "mainnet",
+    practica: false,
+    lectura: conUsdc(),
+    billetera: async () => ({ tipo: "google" }),
+    mirar: async () => m.lectura,
+    proteccion: async () => "lista",
+    pendiente: async () => false,
+    catalogo: async () => "patrocinada",
+    pagos: vi.fn(async () => ({ ok: true as const, valor: [] })),
+    activar: vi.fn(async () => "activada" as const),
+    pausa: async () => undefined,
+    monedas: null,
+    dejarLista: vi.fn(async () => false),
+    pasarAOficial: vi.fn(),
+    mandar: vi.fn(),
+    ...o,
+  };
+  return m;
+}
+const propia = (o: Partial<Mundo> = {}): Mundo => mundo({ billetera: async () => ({ tipo: "propia", red: "mainnet" }), lectura: mirada(), ...o });
+
+const dialogo = (): HTMLElement | null => document.querySelector(".dlg-card");
+const cuerpo = (): string => document.querySelector(".dlg-cuerpo")?.textContent ?? "";
+const estado = (): string => document.querySelector(".dlg-estado")?.textContent ?? "";
+const principal = (): HTMLButtonElement => {
+  const bs = document.querySelectorAll<HTMLButtonElement>(".dlg-main");
+  expect(bs, "una sola acción principal").toHaveLength(1);
+  return bs[0] as HTMLButtonElement;
+};
+const abrir = async (m: Mundo): Promise<void> => {
+  abrirSaldo({ address: YO }, m);
+  // Cerrar está encendido desde el primer momento: se espera a que la mirada termine y pinte lo que corresponde.
+  await vi.waitFor(() => {
+    expect(document.querySelector('[data-saldo="mirando"]')).toBeNull();
+    expect(principal().disabled).toBe(false);
+  });
+};
+const hayAlgunoDe = (...ids: string[]): boolean => ids.some((id) => document.querySelector(`[data-saldo="${id}"]`) !== null);
+
+/** Nada de traer saldo de afuera ni de mandarlo, en ningún estado. */
+const sinTraerNiMandar = (): void => {
+  expect(hayAlgunoDe("mandar", "dir", "qr", "copiar", "volver")).toBe(false);
+  expect(document.body.textContent).not.toContain(YO);
+  expect(cuerpo()).not.toContain(t("cargaYaTengo"));
+  expect(document.body.textContent).not.toContain(t("saldoYaMande"));
+  expect(document.body.textContent).not.toContain(t("saldoMandarBtn"));
+};
+
+beforeEach(() => {
+  YO = Keypair.random().publicKey();
+  document.body.innerHTML = "";
+  setLang("es");
+  vi.stubEnv("VITE_RAMPA", "premios");
+  try {
+    localStorage.clear();
+  } catch {
+    /* sin almacenamiento */
+  }
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("el modo premios, con una cuenta de Google", () => {
+  it("sin la línea del dólar digital: Recibir un premio es la principal y no hay dirección, QR ni Ya tengo dólares digitales", async () => {
+    await abrir(mundo({ lectura: mirada() }));
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
+    expect(cuerpo()).toContain(T.es.saldoPremioRecibirLinea as string);
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+    sinTraerNiMandar();
+  });
+
+  it("tocar Recibir un premio activa la línea con el recorrido de siempre y, cuando aparece, dice que el premio llega solo", async () => {
+    const m = mundo({ lectura: mirada() });
+    let vueltas = 0;
+    m.pausa = async () => {
+      vueltas++;
+      if (vueltas === 2) m.lectura = conUsdc("0.0000000");
+    };
+    m.activar = vi.fn(async () => "hecho" as const);
+    await abrir(m);
+    principal().click();
+    expect(estado()).toBe(t("saldoActivando"));
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoActivadoOk")));
+    expect(m.activar).toHaveBeenCalledOnce();
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(principal().textContent).toBe(t("acctClose"));
+    sinTraerNiMandar();
+  });
+
+  it("si la línea todavía no aparece, no ofrece pedirla otra vez: Volver a mirar", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "hecho" as const) });
+    await abrir(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoActivandoEspera")));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+    expect(m.activar).toHaveBeenCalledOnce();
+  });
+
+  it("con la cuenta lista para recibir y con saldo: el saldo arriba, el premio llega solo, y Cerrar. Sin Mandar, dirección ni QR", async () => {
+    const m = mundo();
+    await abrir(m);
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,5 dólares digitales.");
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(principal().textContent).toBe(t("acctClose"));
+    sinTraerNiMandar();
+    expect(m.mandar).not.toHaveBeenCalled();
+    principal().click();
+    expect(dialogo()).toBeNull();
+  });
+
+  it("sin saldo todavía, lo dice tal cual y tampoco ofrece mandar", async () => {
+    await abrir(mundo({ lectura: conUsdc("0.0000000") }));
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe(t("cargaTenesNada"));
+    sinTraerNiMandar();
+  });
+
+  it("lo de cómo sacar el dinero va plegado y dice que retirar llega más adelante, no que se pueda mandar", async () => {
+    await abrir(mundo());
+    const plegado = document.querySelector<HTMLDetailsElement>(".saldo-mas");
+    expect(plegado?.open).toBe(false);
+    expect(plegado?.querySelector("summary")?.textContent).toBe(t("cargaComoSaco"));
+    expect(plegado?.textContent).toContain(T.es.saldoPremioRetirarLuego as string);
+    expect(document.body.textContent).not.toContain(T.es.cargaComoSacoTexto as string);
+    expect(document.body.textContent).not.toMatch(/mandarlos|podés mandar/i);
+  });
+
+  it("no pide el historial de pagos: no se arma la base de Ya lo mandé", async () => {
+    const m = mundo();
+    await abrir(m);
+    // Un respiro para que cualquier lectura pendiente salga.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(m.pagos).not.toHaveBeenCalled();
+  });
+
+  it("mientras mira la cuenta, la principal dice Cerrar y cierra: no hay un botón que diga Cerrar y no haga nada", async () => {
+    abrirSaldo({ address: YO }, mundo({ mirar: () => new Promise<LecturaDeCuenta>(() => undefined) }));
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoMirandoCuenta")));
+    expect(document.querySelector('[data-saldo="mirando"]')).not.toBeNull();
+    expect(principal().textContent).toBe(t("acctClose"));
+    expect(principal().disabled).toBe(false);
+    expect(document.body.textContent).not.toContain(YO);
+    principal().click();
+    expect(dialogo()).toBeNull();
+  });
+
+  it("mientras se activa: Volver a mirar. Si no puede recibir más: Cerrar. Sin Volver en ninguno", async () => {
+    await abrir(mundo({ lectura: mirada(), pendiente: async () => true }));
+    expect(cuerpo()).toContain(t("saldoActivandoEspera"));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+    sinTraerNiMandar();
+
+    document.body.innerHTML = "";
+    await abrir(mundo({ lectura: conUsdc("12.5000000", { autorizada: false }) }));
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(t("saldoNoMandesTitulo"));
+    expect(cuerpo()).toContain(t("saldoNoRecibeMas"));
+    expect(principal().textContent).toBe(t("acctClose"));
+    sinTraerNiMandar();
+  });
+
+  it("antes de prepararla, avisa que con esa cuenta ya no se organiza", async () => {
+    await abrir(mundo({ lectura: mirada() }));
+    expect(document.querySelector('[data-saldo="aviso"]')?.textContent).toBe(T.es.saldoPremioNoOrganiza);
+  });
+
+  it("una cuenta con una firma que no es la suya: una línea suelta que avisa, y Recibir un premio sigue a la vista", async () => {
+    // La regla supone cómo nacen las cuentas del proveedor y se midió en una sola cuenta real: no puede esconder el premio.
+    await abrir(mundo({ lectura: mirada({ firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 1 }] }) }));
+    expect(cuerpo()).toContain(T.es.saldoPremioNoApta as string);
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+    sinTraerNiMandar();
+  });
+
+  it("con la línea y una firma que no es la suya, también avisa y deja Cerrar", async () => {
+    await abrir(mundo({ lectura: conUsdc("12.5000000", {}, { firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 1 }] }) }));
+    expect(cuerpo()).toContain(T.es.saldoPremioNoApta as string);
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(principal().textContent).toBe(t("acctClose"));
+  });
+
+  it("con la línea ya puesta, también avisa que esa cuenta no sella ni sortea, y dice dónde está la dirección", async () => {
+    await abrir(mundo());
+    expect(document.querySelector('[data-saldo="aviso"]')?.textContent).toBe(T.es.saldoPremioNoOrganiza);
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    expect(T.es.saldoPremioLlegaSolo).toContain("quien organiza te lo manda a esta cuenta");
+    expect(T.es.saldoPremioLlegaSolo).toContain("panel de tu cuenta");
+    expect(T.es.saldoPremioLlegaSolo).not.toContain("no tenés que hacer nada más");
+    // La dirección sigue sin mostrarse en la ventana: está en el panel de la cuenta.
+    expect(document.body.textContent).not.toContain(YO);
+  });
+
+  it("una cuenta como las del proveedor (solo su llave), o sin el dato de los firmantes, se ve como siempre", async () => {
+    await abrir(mundo({ lectura: mirada({ firmantes: [{ clave: YO, peso: 1 }] }) }));
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+    document.body.innerHTML = "";
+    await abrir(mundo({ lectura: mirada({ firmantes: null }) }));
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+    document.body.innerHTML = "";
+    // Una firma ajena sin peso no firma nada.
+    await abrir(mundo({ lectura: mirada({ firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 0 }] }) }));
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+  });
+
+  it("en inglés dice lo mismo", async () => {
+    setLang("en");
+    await abrir(mundo({ lectura: mirada() }));
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.en.saldoPremioRecibirTitulo);
+    expect(cuerpo()).toContain(T.en.saldoPremioRecibirLinea as string);
+    expect(cuerpo()).toContain(T.en.saldoPremioNoOrganiza as string);
+    expect(principal().textContent).toBe("Receive a prize");
+
+    document.body.innerHTML = "";
+    await abrir(mundo());
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.5 digital dollars.");
+    expect(cuerpo()).toContain(T.en.saldoPremioLlegaSolo as string);
+    expect(document.querySelector(".saldo-mas")?.textContent).toContain(T.en.saldoPremioRetirarLuego as string);
+    expect(principal().textContent).toBe("Close");
+  });
+});
+
+describe("el modo premios, con una billetera propia", () => {
+  it("sin la línea: Recibir un premio usa el mismo activar y pide aprobarlo en la billetera", async () => {
+    const m = propia();
+    let terminar: (r: "activada") => void = () => undefined;
+    m.activar = vi.fn(() => new Promise<"activada">((r) => (terminar = r)));
+    await abrir(m);
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+    expect(cuerpo()).toContain(t("saldoPremioActivarPropio"));
+    // El texto de antes hablaba de dólares digitales que ya no están en el título: no se mezcla.
+    expect(cuerpo()).not.toContain(t("saldoActivarPropio"));
+    expect(T.es.saldoPremioActivarPropio).not.toContain("sigan activados");
+    // Su billetera sí organiza: el aviso de la cuenta de Google no va.
+    expect(document.querySelector('[data-saldo="aviso"]')).toBeNull();
+    principal().click();
+    expect(estado()).toBe(t("saldoActivarAprobar"));
+    expect(m.activar).toHaveBeenCalledOnce();
+    m.lectura = conUsdc("0.0000000");
+    terminar("activada");
+    await vi.waitFor(() => expect(estado()).toBe(t("saldoActivadoOk")));
+    expect(cuerpo()).toContain(T.es.saldoPremioLlegaSolo as string);
+    sinTraerNiMandar();
+  });
+
+  it("con la línea: el plegado dice que lo mueve desde su billetera, no que retirar llega más adelante", async () => {
+    await abrir(propia({ lectura: conUsdc() }));
+    // Su billetera sí organiza: ni siquiera con la línea puesta sale el aviso de la cuenta de Google.
+    expect(document.querySelector('[data-saldo="aviso"]')).toBeNull();
+    const plegado = document.querySelector(".saldo-mas");
+    expect(plegado?.textContent).toContain(T.es.saldoPremioRetirarPropia as string);
+    expect(plegado?.textContent).not.toContain(T.es.saldoPremioRetirarLuego as string);
+    sinTraerNiMandar();
+  });
+
+  it("no mira los firmantes: una billetera puede tener las firmas que quiera", async () => {
+    await abrir(propia({ lectura: mirada({ firmantes: [{ clave: YO, peso: 1 }, { clave: OTRA, peso: 1 }] }) }));
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+  });
+
+  it("sin XLM libre, dice cuánto falta bajo el título del premio", async () => {
+    await abrir(propia({ lectura: mirada({ xlm: "1.2000000" }) }));
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(T.es.saldoPremioRecibirTitulo);
+    expect(cuerpo()).toContain("0,5001 XLM libres y tiene 0,2");
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+  });
+});
