@@ -43,7 +43,7 @@ import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
 import { cobroPorUso, redPrincipalConPollar } from "../stellar/cobro-oficial";
-import { modoDeRampa } from "../stellar/cuenta-config";
+import { PUERTA_DEL_PREMIO_EN, modoDeRampa } from "../stellar/cuenta-config";
 import { avisoTrasFallarEnLaCadena, entroYFalloEnLaCadena } from "./sello-tarde-aviso";
 
 /**
@@ -797,15 +797,16 @@ async function accesoOficialParaSellar(btn: HTMLButtonElement, ganadores: number
 }
 
 /**
- * La consulta adelantada de la puerta del premio (`VITE_RAMPA=premios`): con una cuenta de Google o de correo en la red
- * principal, mira si la cuenta puede guardar dinero antes del cupón y de cerrar la lista. Si puede, o si no se pudo saber,
- * muestra el aviso y devuelve `true` (no se sella). Una cuenta que Horizon todavía no conoce pasa: se crea en el paso
- * siguiente y la puerta de la firma la mira de nuevo. Fuera del caso no lee ni baja nada. Un sello pendiente de esta lista
- * se averigua sin firmar: tampoco se frena.
+ * La consulta adelantada de la puerta del premio (en los modos de `PUERTA_DEL_PREMIO_EN`): con una cuenta de Google o de
+ * correo en la red principal, mira si la cuenta puede guardar dinero antes del cupón y de cerrar la lista. Si puede, o si
+ * no se pudo saber, muestra el aviso y devuelve `true` (no se sella). Una cuenta que Horizon todavía no conoce pasa: se
+ * crea en el paso siguiente y la puerta de la firma la mira de nuevo. Fuera del caso no lee ni baja nada. Un sello
+ * pendiente de esta lista se averigua sin firmar: tampoco se frena. Con el voto por contenido la billetera dice `libre`
+ * sin leer (`revisarPuertaDelPremio`), y no se frena.
  */
 async function frenarPorElPremio(names: string[]): Promise<boolean> {
-  // Lo primero: fuera del modo `premios` no se baja ni se lee nada (ni el sello pendiente ni la billetera de Google).
-  if (modoDeRampa() !== "premios" || network.name !== "mainnet" || !redPrincipalConPollar()) return false;
+  // Lo primero: fuera de los modos que cuida la puerta no se baja ni se lee nada (ni el sello pendiente ni la billetera).
+  if (!PUERTA_DEL_PREMIO_EN.includes(modoDeRampa()) || network.name !== "mainnet" || !redPrincipalConPollar()) return false;
   let puerta: "libre" | "puede-guardar" | "no-se-sabe" | "no-existe";
   try {
     if (await hayUnSelloPendiente(names)) return false;

@@ -442,6 +442,34 @@ describe("Activar dólares digitales con Google", () => {
     principal().click();
     await vi.waitFor(() => expect(principal().textContent).toBe(t("cargaCuentaPrimeroBtn")));
   });
+
+  it("si la regla no votó el pedido, dice que no se hizo nada, invita a probar una vez más y deja el botón", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "no-coincide" as const) });
+    await aTraer(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoActivarNoCoincide")} ${t("cofirmaOtraVez")}`));
+    expect(principal().textContent).toBe(t("saldoActivarBtn"));
+    expect(principal().disabled).toBe(false);
+  });
+
+  it("con el tope de la pestaña dice que escriba y no ofrece pedirla otra vez", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "no-coincide-tope" as const) });
+    await aTraer(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoActivarNoCoincide")} ${t("cofirmaEscribinos")}`));
+    expect(estado()).not.toContain(t("cofirmaOtraVez"));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+  });
+
+  it("el texto de la regla que no votó es una sola oración en los dos idiomas, sin palabras técnicas", () => {
+    const tecnicas = /\bhash|\bfirmas?\b|\bsignatures?\b|\bred\b|\bnetwork\b|co-?firma|co-?sign|\bXDR|contrato|contract/i;
+    for (const l of ["es", "en"] as const) {
+      const texto = T[l].saldoActivarNoCoincide;
+      expect(typeof texto, l).toBe("string");
+      expect(String(texto).split(/(?<=[.:!?])\s+/).filter(Boolean), l).toHaveLength(1);
+      expect(String(texto), l).not.toMatch(tecnicas);
+    }
+  });
 });
 
 describe("Ya lo mandé", () => {

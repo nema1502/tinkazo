@@ -1,9 +1,15 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Keypair } from "@stellar/stellar-sdk";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CUENTA_POR_DEFECTO,
+  PUERTA_DEL_PREMIO_EN,
+  type ModoDeRampa,
   cuentasDelPiloto,
   demoDeRampa,
+  entornoDeCuenta,
   minimoDePrueba,
   modoDeRampa,
   monedasActivas,
@@ -11,6 +17,7 @@ import {
   practicaDeRampa,
   registroDeRampa,
   urlDeCuenta,
+  votoPorContenido,
 } from "./cuenta-config";
 
 const PLANES = Keypair.random().publicKey();
@@ -134,5 +141,106 @@ describe("el plan del equipo (VITE_PLAN_EQUIPO)", () => {
     expect(planDelEquipo({ ...prendido, cuentaPlanes: `${PLANES.slice(0, 30)}${otraLetra}${PLANES.slice(31)}` })).toBeNull();
     expect(planDelEquipo({ ...prendido, monedas: undefined })).toBeNull();
     expect(planDelEquipo({ ...prendido, host: "localhost" })).toBeNull();
+  });
+});
+
+describe("el voto por contenido (VITE_VOTO_POR_CONTENIDO)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("nace apagado: sin nada puesto, vacío o en 0 no se pide", () => {
+    expect(votoPorContenido({})).toBe(false);
+    for (const v of [undefined, "", " ", "0"]) expect(votoPorContenido({ votoPorContenido: v }), String(v)).toBe(false);
+  });
+
+  it("se pide solo con un 1 exacto", () => {
+    expect(votoPorContenido({ votoPorContenido: "1" })).toBe(true);
+    expect(votoPorContenido({ votoPorContenido: "1", host: "tinkazo.app" })).toBe(true);
+  });
+
+  it("cualquier otro valor lo deja apagado, aunque parezca un sí", () => {
+    for (const v of ["true", "TRUE", "on", "si", "sí", "encendida", "yes", " 1", "1 ", "01", "2", "11", "1.0", "uno"]) {
+      expect(votoPorContenido({ votoPorContenido: v }), JSON.stringify(v)).toBe(false);
+    }
+  });
+
+  it("leída del entorno del build: apagada sin nada puesto, prendida con 1 y apagada con otro valor", () => {
+    expect(votoPorContenido()).toBe(false);
+    expect(entornoDeCuenta().votoPorContenido).toBeUndefined();
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    expect(entornoDeCuenta().votoPorContenido).toBe("1");
+    expect(votoPorContenido()).toBe(true);
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "true");
+    expect(votoPorContenido()).toBe(false);
+  });
+
+  it("pedirlo no cambia ninguna otra lectura de la configuración", () => {
+    const base = { rampa: "premios", monedas: "1", host: "tinkazo.app" };
+    const con = { ...base, votoPorContenido: "1" };
+    expect(modoDeRampa(con)).toBe(modoDeRampa(base));
+    expect(monedasActivas(con)).toBe(monedasActivas(base));
+    expect(urlDeCuenta(con)).toBe(urlDeCuenta(base));
+    expect(cuentasDelPiloto(con)).toEqual(cuentasDelPiloto(base));
+    expect(planDelEquipo(con)).toEqual(planDelEquipo(base));
+    expect(minimoDePrueba(con)).toBe(minimoDePrueba(base));
+    expect(demoDeRampa(con)).toBe(demoDeRampa(base));
+    expect(practicaDeRampa(con)).toBe(practicaDeRampa(base));
+    expect(registroDeRampa(con)).toBe(registroDeRampa(base));
+  });
+});
+
+describe("qué modos cuida la puerta del premio (PUERTA_DEL_PREMIO_EN)", () => {
+  // Un Record obliga a decidir cada modo: sumar uno nuevo a ModoDeRampa rompe los tipos hasta que se lo ponga acá.
+  const CUIDA: Record<ModoDeRampa, boolean> = { premios: true, recibir: true, apagada: true, pollar: false };
+  const cuidado = (rampa: string | undefined): boolean => PUERTA_DEL_PREMIO_EN.includes(modoDeRampa({ rampa }));
+
+  it("cuida premios, recibir y apagada, y deja afuera pollar, donde la venta paga con el saldo", () => {
+    for (const modo of Object.keys(CUIDA) as ModoDeRampa[]) expect(PUERTA_DEL_PREMIO_EN.includes(modo), modo).toBe(CUIDA[modo]);
+    expect([...PUERTA_DEL_PREMIO_EN].sort()).toEqual(["apagada", "premios", "recibir"]);
+  });
+
+  it("no repite modos ni nombra uno que no existe", () => {
+    expect(new Set(PUERTA_DEL_PREMIO_EN).size).toBe(PUERTA_DEL_PREMIO_EN.length);
+    for (const modo of PUERTA_DEL_PREMIO_EN) expect(Object.keys(CUIDA), modo).toContain(modo);
+  });
+
+  it("está congelada: nadie la cambia en ejecución", () => {
+    expect(Object.isFrozen(PUERTA_DEL_PREMIO_EN)).toBe(true);
+    expect(() => (PUERTA_DEL_PREMIO_EN as ModoDeRampa[]).push("pollar")).toThrow();
+    expect(PUERTA_DEL_PREMIO_EN.includes("pollar")).toBe(false);
+  });
+
+  it("con lo que se escribe en VITE_RAMPA: sin la variable o con una desconocida también se cuida", () => {
+    for (const r of [undefined, "", "apagada", "algo raro", "premios", " Premios ", "recibir", "meru"]) expect(cuidado(r), String(r)).toBe(true);
+    for (const r of ["pollar", " POLLAR "]) expect(cuidado(r), r).toBe(false);
+  });
+});
+
+describe("quién lee VITE_VOTO_POR_CONTENIDO", () => {
+  const RAIZ = fileURLToPath(new URL("../", import.meta.url));
+  const PERMITIDOS = ["stellar/cuenta-config.ts", "stellar/premios-build.ts"];
+  const sinComentarios = (codigo: string): string => codigo.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:\\])\/\/.*$/gm, "$1");
+  /**
+   * Una lectura: el nombre suelto, no un texto que nombra un valor («VITE_VOTO_POR_CONTENIDO=1 no va junto con…»). Solo
+   * un `=` solo lo descarta: `===` pegado al nombre sigue siendo una lectura.
+   */
+  const lee = (codigo: string): boolean => /\bVITE_VOTO_POR_CONTENIDO\b(?!=(?!=))/.test(sinComentarios(codigo));
+
+  it("solo la configuración de la cuenta y el control del build: el resto pregunta por votoPorContenido", () => {
+    const archivos = readdirSync(RAIZ, { recursive: true, encoding: "utf8" })
+      .map((ruta) => ruta.split(sep).join("/"))
+      .filter((ruta) => ruta.endsWith(".ts") && !ruta.endsWith(".test.ts"));
+    const lecturas = archivos.filter((ruta) => lee(readFileSync(join(RAIZ, ruta), "utf8")));
+    expect(archivos.length).toBeGreaterThan(50);
+    expect(lecturas.sort()).toEqual(PERMITIDOS);
+  });
+
+  it("la prueba reconoce una lectura, y no un comentario ni un texto que nombra un valor", () => {
+    expect(lee("const x = e.VITE_VOTO_POR_CONTENIDO;")).toBe(true);
+    expect(lee("// VITE_VOTO_POR_CONTENIDO\n/** `VITE_VOTO_POR_CONTENIDO` */\nconst a = 1;")).toBe(false);
+    expect(lee('p.push("VITE_VOTO_POR_CONTENIDO=1 no va junto");')).toBe(false);
+  });
+
+  it("una comparación pegada al nombre, sin espacios, también es una lectura", () => {
+    expect(lee('const x = e.VITE_VOTO_POR_CONTENIDO==="1";')).toBe(true);
   });
 });

@@ -2793,6 +2793,7 @@ export const T: Record<Lang, Dict> = {
     saldoActivadoOk: "Listo: tu cuenta ya puede recibir dólares digitales.",
     saldoActivarNoSalio: "No se pudo activar. Probá de nuevo en unos minutos.",
     saldoActivarNoAprobado: "No lo aprobaste en tu billetera. Cuando quieras, probá de nuevo.",
+    saldoActivarNoCoincide: "No pudimos comprobar este paso, así que tu cuenta no lo aprobó y no se hizo nada.",
     saldoMonto: "{n} dólares digitales",
     saldoMandarBtn: "Mandar mis dólares digitales",
     saldoMandarA: "A dónde",
@@ -3146,6 +3147,10 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.confirmation": "Tu cuenta no pudo confirmar la operación. Recargá la página y probá de nuevo. Si sigue igual, escribinos a hola@tinkazo.app.",
     "errAnchor.sponsorEmpty": "Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
     "errAnchor.cosignRejected": "Tu cuenta no aprobó esta operación y no se hizo nada. Volvé a apretar el botón. Si sigue igual, escribinos a hola@tinkazo.app.",
+    "errAnchor.cofirmaDistinta": "No pudimos comprobar este paso, así que tu cuenta no lo aprobó y no se hizo nada.",
+    "errAnchor.cofirmaDistintaSorteo": "No pudimos comprobar el sorteo, así que todavía no se guardó y el ganador no cambia.",
+    cofirmaOtraVez: "Probá una vez más y, si vuelve a pasar, escribinos a hola@tinkazo.app.",
+    cofirmaEscribinos: "No lo intentes de nuevo en esta pestaña y escribinos a hola@tinkazo.app.",
     redSinSaldoPatrocinio: "Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // --- guajojo
@@ -5635,6 +5640,7 @@ export const T: Record<Lang, Dict> = {
     saldoActivadoOk: "Done: your account can now receive digital dollars.",
     saldoActivarNoSalio: "It couldn't be turned on. Try again in a few minutes.",
     saldoActivarNoAprobado: "You didn't approve it in your wallet. Try again whenever you want.",
+    saldoActivarNoCoincide: "We couldn't confirm this step, so your account didn't approve it and nothing was done.",
     saldoMonto: "{n} digital dollars",
     saldoMandarBtn: "Send my digital dollars",
     saldoMandarA: "To",
@@ -5988,6 +5994,10 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.confirmation": "Your account couldn't confirm the operation. Reload the page and try again. If it keeps happening, write to hola@tinkazo.app.",
     "errAnchor.sponsorEmpty": "Sealing didn't work just now, and your account isn't the problem: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
     "errAnchor.cosignRejected": "Your account didn't approve this operation, so nothing was done. Press the button again. If it keeps happening, write to hola@tinkazo.app.",
+    "errAnchor.cofirmaDistinta": "We couldn't confirm this step, so your account didn't approve it and nothing was done.",
+    "errAnchor.cofirmaDistintaSorteo": "We couldn't confirm the draw, so it isn't saved yet and the winner stays the same.",
+    cofirmaOtraVez: "Try once more, and if it happens again, write to hola@tinkazo.app.",
+    cofirmaEscribinos: "Don't try again in this tab, and write to hola@tinkazo.app.",
     redSinSaldoPatrocinio: "Sealing didn't work just now, and your account isn't the problem: we couldn't cover the network cost. Let us know at hola@tinkazo.app and try again later.",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // --- guajojo

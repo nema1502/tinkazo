@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
-import { avisosDelRetiro, problemasDePremios, problemasDelRetiro } from "./src/stellar/premios-build";
+import { avisosDelRetiro, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
 import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
 import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
@@ -131,14 +131,18 @@ function validarBanderasDeAlta(): Plugin {
  * (`src/stellar/premios-build.ts`): esos dos firman con la cuenta que guarda el premio o le traen dinero, y el modo
  * promete que solo ve su saldo y recibe. No toca ninguna bandera: obliga a elegir cuál va. Falla antes de armar nada y
  * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ *
+ * Con la misma lectura del entorno frena también el voto por contenido (`VITE_VOTO_POR_CONTENIDO`, issue 180): un valor
+ * que no es 1 ni 0, o el 1 junto con el pago con el saldo, la compra con QR o la carga con bolivianos.
  */
 function validarModoPremios(): Plugin {
   return {
     name: "tinkazo:modo-premios",
     apply: "build",
     config(_config, { mode }) {
-      const problemas = problemasDePremios(loadEnv(mode, __dirname, ["VITE_"]));
-      if (problemas.length) throw new Error(`El modo premios no va con la venta prendida:\n- ${problemas.join("\n- ")}`);
+      const env = loadEnv(mode, __dirname, ["VITE_"]);
+      const problemas = [...problemasDePremios(env), ...problemasDelVoto(env)];
+      if (problemas.length) throw new Error(`Hay banderas del modo premios o del voto por contenido que no van juntas:\n- ${problemas.join("\n- ")}`);
     },
   };
 }

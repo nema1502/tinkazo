@@ -104,6 +104,12 @@ const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
  * "rejected" o "declined".
  */
 const COFIRMA_NO_APROBADA = /SDK_COSIGN_(?:REJECTED|VERIFICATION_FAILED)/;
+/**
+ * El voto por contenido (issue 180, `cofirma-regla.ts`): no se pudo comprobar que lo que había que aprobar fuera la
+ * transacción que armó la página, y no se votó. Calza también con el tope de la pestaña (`tinkazo-cofirma-distinta-tope`).
+ * Sale solo antes de estampar, así que es un no de verdad: no es un corte ni se reintenta solo, y no es un sello incierto.
+ */
+const COFIRMA_DISTINTA = /tinkazo-cofirma-distinta/;
 const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
 /** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
 const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
@@ -286,7 +292,7 @@ export function esDeRed(e: unknown): boolean {
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
-  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto) || COFIRMA_DISTINTA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
 }
 
@@ -397,6 +403,8 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?
     if (clave) return clave;
   }
   const texto = textoDelError(e);
+  // El voto por contenido no votó: va antes que todo lo de la co-firma, así un texto del kit que venga en la causa no la tapa.
+  if (COFIRMA_DISTINTA.test(texto)) return "cofirmaDistinta";
   if (RECUPERACION.test(texto)) return "recoveryRequired";
   if (APARATO.test(texto)) return "deviceNotEnrolled";
   if (CONFIRMACION.test(texto)) return "confirmation";

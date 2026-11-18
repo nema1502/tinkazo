@@ -245,6 +245,37 @@ describe("la co-firma que no se aprobó es una respuesta de Pollar, no un corte"
   });
 });
 
+describe("el voto por contenido que no votó (issue 180)", () => {
+  it("la negativa de la regla tiene su clave", () => {
+    expect(errorKey(new Error("tinkazo-cofirma-distinta"), { enLinea: true })).toBe("cofirmaDistinta");
+  });
+
+  it("la negativa que llegó al tope tiene la misma clave", () => {
+    expect(errorKey(new Error("tinkazo-cofirma-distinta-tope"), { enLinea: true })).toBe("cofirmaDistinta");
+  });
+
+  it("no es un corte de la red: nadie la reintenta sola", () => {
+    expect(esDeRed(new Error("tinkazo-cofirma-distinta"))).toBe(false);
+    expect(esDeRed(new Error("tinkazo-cofirma-distinta-tope"))).toBe(false);
+  });
+
+  it("no es un sello del que no se sabe si entró", () => {
+    expect(errorKey(new Error("tinkazo-cofirma-distinta"), { enLinea: true })).not.toBe("unconfirmed");
+  });
+
+  it("manda sobre un código del kit que venga en la causa", () => {
+    const e = new Error("tinkazo-cofirma-distinta", { cause: pollar("SDK_COSIGN_REJECTED · Failed to fetch") });
+    expect(errorKey(e, { enLinea: true })).toBe("cofirmaDistinta");
+    expect(esDeRed(e)).toBe(false);
+  });
+
+  it("vale con cualquier contexto", () => {
+    for (const contexto of [{}, { enLinea: false }, { patrocinada: true }, { cobroPorUso: true, enLinea: true }]) {
+      expect(errorKey(new Error("tinkazo-cofirma-distinta"), contexto)).toBe("cofirmaDistinta");
+    }
+  });
+});
+
 describe("sin saldo con una cuenta que no paga la comisión (Pollar patrocina)", () => {
   it("lo dice el servicio y no la persona", () => {
     for (const msg of ["txInsufficientBalance", "TX_INSUFFICIENT_BALANCE · Insufficient balance to complete this transaction.", "tx-REJECTED tx_insufficient_balance"]) {

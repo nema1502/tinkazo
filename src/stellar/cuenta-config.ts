@@ -16,12 +16,30 @@ import { SITIOS_DE_PRODUCCION } from "./patrocinio-config";
  * - `VITE_RAMPA_REGISTRO=1`: el registro de la carga en la consola.
  * - `VITE_PLAN_EQUIPO=1` y `VITE_CUENTA_PLANES=G…`: la compra del plan del equipo. Sin las dos, no se ofrece.
  * - `VITE_CUENTA_URL`: el Worker. En tinkazo.app y www.tinkazo.app, con las monedas prendidas, vale `cuenta.tinkazo.app`.
+ * - `VITE_VOTO_POR_CONTENIDO=1`: que, en la red principal, el navegador de una cuenta de Google o de correo vote solo la
+ *   transacción que armó la página (issue 180). Vacía o `0`, apagada, y cualquier otro valor frena el build
+ *   (`premios-build.ts`). Esta lectura no mira la red ni decide nada por sí sola: quien la usa pregunta además por la red
+ *   principal y por si el kit de cuentas de verdad tomó el voto a mano. Todavía nada la usa.
  */
 
 /** El Worker de la cuenta, desplegado en el dominio del proyecto. */
 export const CUENTA_POR_DEFECTO = "https://cuenta.tinkazo.app";
 
 export type ModoDeRampa = "pollar" | "recibir" | "premios" | "apagada";
+
+/**
+ * En qué modos de la rampa la puerta del premio frena, en la red principal, el sello y el sorteo de una cuenta de Google
+ * o de correo que puede guardar dinero, mientras el kit de cuentas no vote a mano lo que armó la página (issue 180).
+ *
+ * Son `premios`, `recibir` y `apagada`: un build sin `VITE_RAMPA` también cuida el premio, así que esconder la ventana
+ * de los dólares digitales no deja a una cuenta con dinero firmando por hash. `pollar` queda afuera porque la venta
+ * paga con el saldo de la cuenta y frenarla rompería la compra. Quien suma un modo nuevo a `ModoDeRampa` tiene que
+ * decidir acá si entra (la prueba lo exige).
+ *
+ * Todavía nada la usa: la puerta de `wallet-pollar.ts` y la consulta adelantada de `freeze.ts` la leerán junto con el
+ * voto a mano, que es lo que levanta la puerta. Está congelada para que ningún código la cambie en ejecución.
+ */
+export const PUERTA_DEL_PREMIO_EN: readonly ModoDeRampa[] = Object.freeze<ModoDeRampa[]>(["premios", "recibir", "apagada"]);
 
 export interface EntornoDeCuenta {
   /** Lo que trae `VITE_MONEDAS`. */
@@ -44,6 +62,8 @@ export interface EntornoDeCuenta {
   cuentaPlanes?: string | undefined;
   /** Lo que trae `VITE_CUENTA_URL`. */
   url?: string | undefined;
+  /** Lo que trae `VITE_VOTO_POR_CONTENIDO`. */
+  votoPorContenido?: string | undefined;
   /** El `location.hostname` de la página. */
   host?: string | undefined;
 }
@@ -64,6 +84,7 @@ export function entornoDeCuenta(): EntornoDeCuenta {
     plan: e.VITE_PLAN_EQUIPO as string | undefined,
     cuentaPlanes: e.VITE_CUENTA_PLANES as string | undefined,
     url: e.VITE_CUENTA_URL as string | undefined,
+    votoPorContenido: e.VITE_VOTO_POR_CONTENIDO as string | undefined,
     host: hostActual(),
   };
 }
@@ -106,6 +127,14 @@ export const practicaDeRampa = (e: EntornoDeCuenta = entornoDeCuenta()): boolean
 export const registroDeRampa = (e: EntornoDeCuenta = entornoDeCuenta()): boolean => prendida(e.rampaRegistro);
 
 export const monedasActivas = (e: EntornoDeCuenta = entornoDeCuenta()): boolean => prendida(e.monedas);
+
+/**
+ * Si el build pide el voto por contenido (`VITE_VOTO_POR_CONTENIDO`). Vale solo con un `1` exacto: ni un espacio, ni
+ * `true`, ni `si`. El build no deja pasar esos valores (`problemasDelVoto`, `premios-build.ts`) y, ante la duda, acá queda
+ * apagada. No mira la red ni el kit de cuentas: lo que se levanta con el voto depende de que el cliente armado de verdad
+ * vote a mano, no de esta bandera.
+ */
+export const votoPorContenido = (e: EntornoDeCuenta = entornoDeCuenta()): boolean => e.votoPorContenido === "1";
 
 /** Dónde está el Worker, o `null` si las monedas están apagadas o no hay a dónde hablar (localhost sin `VITE_CUENTA_URL`). */
 export function urlDeCuenta(e: EntornoDeCuenta = entornoDeCuenta()): string | null {

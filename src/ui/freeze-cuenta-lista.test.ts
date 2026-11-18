@@ -165,11 +165,14 @@ beforeEach(() => {
   });
   armarPagina();
   vi.spyOn(performance, "now").mockReturnValue(10_000);
+  // Fuera de los modos que cuida la puerta del premio (`freeze-premio.test.ts`): esto mira la compuerta de la cuenta.
+  vi.stubEnv("VITE_RAMPA", "pollar");
 });
 
 
 afterEach(() => {
   vi.doMock("./cuenta-lista-flujo", () => ({ cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a) }));
+  vi.unstubAllEnvs();
 });
 
 describe("la compuerta del sello en modo Oficial", () => {

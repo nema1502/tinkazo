@@ -767,9 +767,15 @@ export function selloSinGrabar(e: unknown): boolean {
  */
 export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
-    const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
+    const { errorKey, esNoDelPortero, textoDelError, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
     // Con el cobro por uso, una cuenta que el portero no cubre oye lo mismo que en la caja de la red: que todavía no tiene acceso.
     let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada(), cobroPorUso: await rigeElCobroPorUso() });
+    // El voto por contenido no aprobó: lo que pasó, en el sello o en el sorteo, y qué hacer. Con el tope de la pestaña ya no
+    // se invita a probar de nuevo. El conteo sigue diciendo `cofirmaDistinta`: las variantes son solo de lo que se lee.
+    if (tipo === "cofirmaDistinta") {
+      const base = t(paso === "sorteo" ? "errAnchor.cofirmaDistintaSorteo" : "errAnchor.cofirmaDistinta");
+      return `${base} ${t(/tinkazo-cofirma-distinta-tope/.test(textoDelError(e)) ? "cofirmaEscribinos" : "cofirmaOtraVez")}`;
+    }
     // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
     // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
     // habla de "sellar" y al sortear confundía).
