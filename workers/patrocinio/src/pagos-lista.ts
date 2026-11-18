@@ -1,5 +1,5 @@
 /**
- * La forma de los pagos clásicos que el portero paga: el pago de un premio y el retiro con su costo. Es el evaluador, y es
+ * La forma de los pagos clásicos que el portero paga: el pago de un premio y el retiro con su costo. Es el lector de pagos, y es
  * puro: lee un sobre firmado y dice si tiene exactamente la forma de una de las dos. No tiene red, ni reloj, ni cuentas
  * guardadas: lo que necesita de afuera (la hora, los firmantes de la cuenta) entra como argumento. Por eso se prueba
  * entero con sobres armados a propósito (`armar-pago.ts`).

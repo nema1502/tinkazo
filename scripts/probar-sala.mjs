@@ -249,7 +249,7 @@ try {
   await sleep(6000);
   const cerrada = await fetch(`${sala}/v1/sala/${id}/nombres`, { headers: { Authorization: `Bearer ${token}`, Origin: "https://tinkazo.app" } });
   check("cerrar el QR la borra del servicio (404)", cerrada.status === 404);
-  check("el celular ya no puede sumar: dice que la sala terminó", (await sumar("Tarde")) && (await cel.eval(`/ya terminó/.test(document.getElementById('msg').textContent)`)));
+  check("el celular ya no puede sumar: dice que el QR ya se cerró", (await sumar("Tarde")) && (await cel.eval(`/ya se cerró/.test(document.getElementById('msg').textContent)`)));
   check("no quedan los datos de la sala en la pestaña", await pantalla.eval(`sessionStorage.getItem('tinkazo.sala') === null`));
   check("sin excepciones en las dos páginas", pantalla.exceptions.length === 0 && cel.exceptions.length === 0, [...pantalla.exceptions, ...cel.exceptions].slice(0, 2).join(" | "));
 
