@@ -108,6 +108,8 @@ describe("sin servicio, cerrado", () => {
       [200, { ...estadoBueno, fondeo: "ya" }],
       [200, { ...estadoBueno, cuenta: 7 }],
       [200, { ...estadoBueno, orden: { id: 1 } }],
+      // El premio es de una cuenta: sin saber de cuál, no se acepta.
+      [200, { ...estadoBueno, acceso: "premio", cuenta: null }],
     ];
     for (const [s, cuerpo] of malas) {
       const { f } = falso(() => responder(s, cuerpo));
@@ -193,6 +195,12 @@ describe("lo que sale bien", () => {
       ok: true,
       datos: { acceso: "cupon", cuenta: CUENTA, abierta: false, pedido: "req-1", sorteos, orden: { id: "ABCD2345", producto: "alta", usdc: "2", nota: "tk:o:ABCD2345", vence: 5 }, fondeo: "inmediato" },
     });
+  });
+
+  it("estado con el acceso premio, de la cuenta ganadora y con cero sorteos", async () => {
+    const cero = { quedan: 0, proximoVence: null };
+    const { f } = falso(() => responder(200, { ...estadoBueno, acceso: "premio", sorteos: cero }));
+    expect(await estado(TOKEN, { url: URL, fetch: f })).toMatchObject({ ok: true, datos: { acceso: "premio", cuenta: CUENTA, sorteos: cero } });
   });
 
   it("estado sin cuenta ni vencimiento", async () => {

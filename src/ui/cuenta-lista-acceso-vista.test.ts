@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { ACCESO_LIBRE, type AccesoEnLaVista, type EntradaVista, activarPermitido, faltaElAcceso, portadaDe, vistaDe } from "./cuenta-lista-estado";
+import {
+  ACCESO_LIBRE,
+  type AccesoEnLaVista,
+  type EntradaVista,
+  type Para,
+  activarPermitido,
+  faltaElAcceso,
+  portadaDe,
+  vistaDe,
+} from "./cuenta-lista-estado";
 
 /**
  * «Dejá tu cuenta lista» con el cobro por uso del modo Oficial (W3 y W7), sin DOM. Lo que no se negocia:
@@ -42,7 +51,9 @@ const CUPON = "K7M2-9QXA-4HTR";
 /** Todas las acciones a la vista: la principal y las de las cajas. */
 const acciones = (vista: ReturnType<typeof vistaDe>): string[] => [vista.principal?.accion ?? "", ...vista.cajas.flatMap((c) => c.secundarios.map((s) => s.accion))].filter(Boolean);
 
-/** Una muestra amplia: cada estado de la cuenta, con cada cosa que corre y cada forma del acceso. */
+const PARAS: Para[] = ["entrada", "entrada-con-lista", "sello", "sorteo", "premio"];
+
+/** Una muestra amplia: cada estado de la cuenta, con cada cosa que corre, cada forma del acceso y cada `para`. */
 function todas(): EntradaVista[] {
   const out: EntradaVista[] = [];
   const accesos: Partial<AccesoEnLaVista>[] = [
@@ -62,12 +73,17 @@ function todas(): EntradaVista[] {
     { estado: "con", por: "cupon" },
     { estado: "con", por: "admin", pideCupon: true },
     { estado: "con", por: "cupon", pideCupon: true, escribiendo: true },
+    { estado: "con", por: "premio" },
+    { estado: "ninguno", por: null },
   ];
-  for (const activacion of ["lista", "falta", "preparando", "fallo", "no-se-sabe"] as const)
-    for (const proteccion of ["lista", "falta", "aparato-nuevo", "sin-forma"] as const)
-      for (const corre of [null, "revisando", "activando", "canjeando"] as const)
-        for (const puedePasarAPrueba of [true, false])
-          for (const a of accesos) out.push({ ...base, activacion, proteccion, corre, puedePasarAPrueba, correoConfirmado: true, acceso: conAcceso(a) });
+  for (const para of PARAS)
+    for (const activacion of ["lista", "falta", "preparando", "fallo", "no-se-sabe"] as const)
+      for (const proteccion of ["lista", "falta", "aparato-nuevo", "sin-forma"] as const)
+        for (const corre of [null, "revisando", "activando", "canjeando"] as const)
+          for (const puedePasarAPrueba of [true, false])
+            for (const a of accesos) {
+              out.push({ ...base, para, activacion, proteccion, corre, puedePasarAPrueba, correoConfirmado: true, acceso: conAcceso(a) });
+            }
   return out;
 }
 
@@ -144,7 +160,9 @@ describe("W7: la caja del acceso es la parte 1", () => {
       const vista = vistaDe(e);
       expect(vista.salidas, JSON.stringify(e)).not.toBeNull();
       expect(vista.salidas?.cerrar.apagado).toBe(false);
-      if (vista.salidas?.prueba) expect(vista.salidas.prueba.apagado).toBe(!e.puedePasarAPrueba);
+      // Quien vino a recibir un premio no tiene nada que hacer en Prueba: ninguna salida lo ofrece.
+      if (e.para === "premio") expect(vista.salidas?.prueba).toBeNull();
+      else if (vista.salidas?.prueba) expect(vista.salidas.prueba.apagado).toBe(!e.puedePasarAPrueba);
       else expect(vista.principal?.accion).toBe("pasar-a-prueba");
     }
   });

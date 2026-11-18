@@ -28,8 +28,11 @@ import { configDelPortero } from "./patrocinio-config";
 /** Cuánto se espera cada pedido. */
 export const ESPERA_MS = 8_000;
 
-/** Qué acceso tiene la persona al modo Oficial. */
-export type Acceso = "ninguno" | "cupon" | "pago" | "admin";
+/**
+ * Qué acceso tiene la persona al modo Oficial. `premio`: la cuenta que quien organiza nombró como ganadora de un sorteo suyo
+ * ya sorteado. Activa la cuenta, trae cero sorteos y no sirve para organizar.
+ */
+export type Acceso = "ninguno" | "cupon" | "pago" | "admin" | "premio";
 /** Si la cuenta se abre en el momento (`inmediato`) o cuando el servidor lo pide (`diferido`). */
 export type Fondeo = "inmediato" | "diferido";
 /** Qué falta hacer después de un canje. */
@@ -520,7 +523,7 @@ function leerPago(x: Record<string, unknown>): PagoDeOrden | null {
   return null;
 }
 
-const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin"];
+const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin", "premio"];
 const SIGUE: readonly string[] = ["crear-billetera", "abrir", "activar", "lista"];
 
 function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
@@ -528,6 +531,8 @@ function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
   const orden = leerOrden(x.orden);
   if (!esTexto(x.acceso) || !ACCESOS.includes(x.acceso) || !sorteos || orden === undefined) return null;
   if (x.cuenta !== null && !esTexto(x.cuenta)) return null;
+  // El premio es de una cuenta: sin saber de cuál, no se acepta (el paso lo tomaría por el acceso de cualquiera).
+  if (x.acceso === "premio" && x.cuenta === null) return null;
   if (typeof x.abierta !== "boolean") return null;
   if (x.pedido !== null && x.pedido !== undefined && !esTexto(x.pedido)) return null;
   if (x.fondeo !== "inmediato" && x.fondeo !== "diferido") return null;

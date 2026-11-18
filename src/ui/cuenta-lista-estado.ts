@@ -24,7 +24,9 @@ export type { PanelDePago } from "./pago-vista";
  * - con la compra en el build (`acceso.pago`), las filas del pago: comprar el primer paquete solo si el servidor lo vende
  *   ahora, y la cuenta, el monto y la nota que se muestran son los de la orden, tal cual. Pagar nunca da «Activar»: eso
  *   lo da el acceso que confirma el servidor. Solo medios automáticos (`pago-vista.ts`): con uno solo no se pregunta cómo
- *   pagar. Sin `acceso.pago`, el paso de siempre.
+ *   pagar. Sin `acceso.pago`, el paso de siempre;
+ * - con `para: "premio"` (quien ganó) no hay cupón, compra, sorteos ni Pasar a Prueba: el acceso solo se mira para activar
+ *   una cuenta sin activar, y sin él la parte 1 espera (`premioActual`).
  */
 
 /**
@@ -40,8 +42,8 @@ export interface AccesoEnLaVista {
   modo: ModoDelAcceso;
   /** Con servidor: preguntándole, sin acceso, con acceso, o no contestó. */
   estado: "revisando" | "ninguno" | "con" | "error";
-  /** Por qué tiene acceso: cambia el texto de la activación. */
-  por: "cupon" | "pago" | "admin" | null;
+  /** Por qué tiene acceso: cambia el texto de la activación (con `premio`, el de siempre). */
+  por: "cupon" | "pago" | "admin" | "premio" | null;
   /** Se abrió para usar un cupón aunque ya tenga acceso (se quedó sin sorteos oficiales). */
   pideCupon: boolean;
   /** El cupón listo para usar (el del enlace, o el que se escribió), como se muestra, o `null`. */
@@ -126,8 +128,11 @@ export function pagoInicial(idioma: "es" | "en", alta: ProductoALaVenta | null, 
   return { idioma, alta, medios, fase: "ofrecer", orden: null, falta: null, buscando: false, noVisto: false, tarda: false, noLlego: false, vencida: false, error: null, arreglo: "probar" };
 }
 
-/** Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar o antes de sortear. */
-export type Para = "entrada" | "entrada-con-lista" | "sello" | "sorteo";
+/** Para qué se abrió el paso: al entrar, al entrar con una lista lista, antes de sellar, antes de sortear o para recibir un premio. */
+export type Para = "entrada" | "entrada-con-lista" | "sello" | "sorteo" | "premio";
+
+/** El paso del premio se porta como el de la entrada (Seguir al final, sin Volver, sin cupón) y cambia solo lo que dice. */
+export const comoEntrada = (p: Para): boolean => p === "entrada" || p === "premio";
 
 export type Parte = "activar" | "proteger";
 
@@ -299,10 +304,11 @@ export interface Portada {
  */
 export function portadaDe(v: Vista): Portada {
   if (v.final) {
-    // El aviso de la compu o el celular que no es tuyo va debajo del título, como la línea de los demás estados: en el
-    // pie empujaría el botón hacia abajo. El del primer sello, que es más importante, conserva ese lugar.
+    // La línea del final: la propia de la vista (la del premio), la del primer sello, o el aviso de la compu o el celular
+    // que no es tuyo, que va debajo del título como la línea de los demás estados (en el pie empujaría el botón). Una sola.
     const aviso = v.estado && v.estado.clave.startsWith("clAparatoListo") ? v.estado : null;
-    return { forma: "final", titulo: v.titulo, linea: v.primerOficial ? { clave: "clPrimerSello" } : aviso, filas: [] };
+    const linea: Texto | null = v.bajada ? { clave: v.bajada } : v.primerOficial ? { clave: "clPrimerSello" } : aviso;
+    return { forma: "final", titulo: v.titulo, linea, filas: [] };
   }
   if (v.cajas.some((c) => c.estado === "revisando")) {
     return { forma: "revisando", titulo: "clTitulo", linea: null, filas: [] };
@@ -380,11 +386,15 @@ const accesoDe = (e: Pick<EntradaVista, "acceso">): AccesoEnLaVista => e.acceso 
 
 /**
  * Falta el acceso: la parte 1 es la caja del cupón, o lo que pasa con él. Con servidor y sin acceso confirmado, aunque
- * la cuenta ya esté activada y protegida; y también si el paso se abrió para usar un cupón y todavía no se usó.
+ * la cuenta ya esté activada y protegida; y también si el paso se abrió para usar un cupón y todavía no se usó. Con
+ * `premio`, el acceso solo cuenta para activar una cuenta que todavía no existe en la red: ya activada no se le piden
+ * sorteos, cupón ni compra. Sin `para`, como siempre.
  */
-export function faltaElAcceso(e: Pick<EntradaVista, "acceso" | "corre">): boolean {
+export function faltaElAcceso(e: Pick<EntradaVista, "acceso" | "corre"> & Partial<Pick<EntradaVista, "para" | "activacion">>): boolean {
   const a = accesoDe(e);
   if (a.modo !== "servidor") return false;
+  // Quien ganó no canjea ni compra: sin la cuenta activada, solo el acceso que confirma el servidor la deja activar.
+  if (e.para === "premio") return e.activacion !== "lista" && a.estado !== "con";
   if (a.fallaTrasCanje || a.cadena || e.corre === "canjeando") return true;
   return a.estado !== "con" || (a.pideCupon && a.canjeado === null);
 }
@@ -396,11 +406,12 @@ export function faltaElAcceso(e: Pick<EntradaVista, "acceso" | "corre">): boolea
  */
 export function puedeVolverDelCupon(e: Pick<EntradaVista, "acceso" | "corre" | "activacion" | "proteccion" | "para">): boolean {
   const a = accesoDe(e);
-  return a.modo === "servidor" && a.pideCupon && !a.cadena && e.corre !== "canjeando" && e.activacion === "lista" && e.proteccion === "lista" && e.para !== "entrada";
+  if (a.modo !== "servidor" || !a.pideCupon || a.cadena || e.corre === "canjeando") return false;
+  return e.activacion === "lista" && e.proteccion === "lista" && !comoEntrada(e.para);
 }
 
 /** «Activar» se puede ofrecer: como siempre, o con el acceso confirmado por el servidor. Nunca en `cerrado`. */
-export function activarPermitido(e: Pick<EntradaVista, "acceso" | "corre">): boolean {
+export function activarPermitido(e: Pick<EntradaVista, "acceso" | "corre"> & Partial<Pick<EntradaVista, "para" | "activacion">>): boolean {
   const a = accesoDe(e);
   if (a.modo === "libre") return true;
   return a.modo === "servidor" && a.estado === "con" && !faltaElAcceso(e);
@@ -892,16 +903,43 @@ function lineaDeEstado(e: EntradaVista): Texto | null {
   return e.aviso ? { clave: e.aviso } : null;
 }
 
+/**
+ * La parte 1 de quien ganó, con la cuenta sin activar y sin el acceso confirmado: espera a que su premio quede a su nombre.
+ * Sin cupón, sin compra y sin Pasar a Prueba. La principal solo vuelve a preguntar el acceso, nunca activa.
+ */
+function premioActual(e: EntradaVista, caja: CajaVista): Armado {
+  const a = accesoDe(e);
+  const base: CajaVista = { ...caja, titulo: "clPremioEsperaTitulo", abierta: true, sola: true };
+  // La sesión se cerró: lo único que sirve es entrar de nuevo.
+  if (e.falla === "sesion" || (a.estado === "error" && a.arreglo === "entrar")) {
+    const err = textos(["clErrSesion"]);
+    return { caja: { ...base, titulo: "clActivarTitulo", estado: "no-salio", error: err }, principal: principalDeLaFalla("sesion") };
+  }
+  if (a.estado === "revisando" || e.corre === "revisando") {
+    return { caja: { ...base, estado: "revisando", abierta: false, ocupada: true }, principal: ocupado("leer-acceso", "clRevisando") };
+  }
+  // El acceso quedó en otra cuenta: probar de nuevo no lo arregla. Se dice con su texto y queda solo Cerrar sesión.
+  if (a.estado === "error" && a.arreglo === "ninguno") {
+    const err = a.error ? [a.error] : textos(["clPremioEspera"]);
+    return { caja: { ...base, titulo: "clActivarTitulo", estado: "no-salio", error: err }, principal: null };
+  }
+  // Sin acceso todavía (quien organiza no la nombró) o el servicio no contestó: la espera, con Probar de nuevo.
+  return { caja: { ...base, estado: "falta", textos: textos(["clPremioEspera"]) }, principal: boton("leer-acceso", "clProbarDeNuevo") };
+}
+
 /** La parte 1 cuando es la que toca: la caja del cupón si falta el acceso, cerrada sin a quién preguntar, o activar. */
 function parte1Actual(e: EntradaVista, caja: CajaVista): Armado {
   const a = accesoDe(e);
-  if (faltaElAcceso(e)) return accesoActual(e, caja);
+  if (faltaElAcceso(e)) return e.para === "premio" ? premioActual(e, caja) : accesoActual(e, caja);
   if (a.modo === "cerrado" && e.activacion !== "lista") return cerradoActual(e, caja);
   return activarActual(e, caja);
 }
 
 /** La vista del paso para lo que se sabe ahora. */
-export function vistaDe(e: EntradaVista): Vista {
+export function vistaDe(entrada: EntradaVista): Vista {
+  // Quien vino a recibir un premio no tiene nada que hacer en Prueba: ninguna caja lo ofrece y no hay salida a Prueba.
+  const premio = entrada.para === "premio";
+  const e: EntradaVista = premio ? { ...entrada, puedePasarAPrueba: false } : entrada;
   const orden = ordenDe(e);
   const final = listaLa(e, "activar") && listaLa(e, "proteger");
   const actual = orden.find((p) => !listaLa(e, p)) ?? null;
@@ -919,14 +957,16 @@ export function vistaDe(e: EntradaVista): Vista {
 
   if (final) {
     const conLista = e.para === "entrada-con-lista" || e.para === "sello";
-    const p = e.para === "entrada" ? boton("seguir", "clSeguir") : e.para === "sorteo" ? boton("sortear", "draw") : boton("sellar", "freeze");
+    const p = comoEntrada(e.para) ? boton("seguir", "clSeguir") : e.para === "sorteo" ? boton("sortear", "draw") : boton("sellar", "freeze");
     return {
       final: true,
       titulo: "clListaTitulo",
-      bajada: "",
+      // Con el premio, la línea dice para qué quedó lista. Para quien organiza, como siempre, sin línea propia.
+      bajada: premio ? "clPremioListo" : "",
       cajas,
       principal: e.corre === "cerrando" ? { ...p, apagado: true } : p,
-      volver: e.para === "entrada" ? null : boton("volver", "clVolver"),
+      volver: comoEntrada(e.para) ? null : boton("volver", "clVolver"),
+      // La confirmación del primer sello es de quien organiza: con `premio`, nunca (por eso acá queda `=== "entrada"`).
       primerOficial: (conLista || e.para === "entrada") && e.primerOficialPendiente,
       estado: lineaDeEstado(e),
       notas: [],
@@ -937,7 +977,7 @@ export function vistaDe(e: EntradaVista): Vista {
   // Cerrando sesión, la principal espera: la salida ya está en marcha.
   const p = principal as Boton | null;
   const principalFinal = p && e.corre === "cerrando" ? { ...p, apagado: true } : p;
-  const notas: string[] = e.puedePasarAPrueba ? [] : ["modeSwitchBlocked"];
+  const notas: string[] = e.puedePasarAPrueba || premio ? [] : ["modeSwitchBlocked"];
   return {
     final: false,
     titulo: "clTitulo",
@@ -949,7 +989,7 @@ export function vistaDe(e: EntradaVista): Vista {
     estado: lineaDeEstado(e),
     notas,
     salidas: {
-      prueba: principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
+      prueba: premio || principalFinal?.accion === "pasar-a-prueba" ? null : { apagado: !e.puedePasarAPrueba },
       cerrar: { apagado: e.corre === "cerrando" },
     },
   };

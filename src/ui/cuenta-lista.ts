@@ -34,6 +34,7 @@ import {
   type Texto,
   type Vista,
   activarPermitido,
+  comoEntrada,
   portadaDe,
   vistaDe,
 } from "./cuenta-lista-estado";
@@ -276,7 +277,8 @@ const FOCO = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]
 /** La pantalla en la que el pie va pegado al contenido y no al borde (la misma condición que en `src/styles.css`). */
 const ANCHA = "(min-width: 760px) and (min-height: 481px)";
 
-const PRIORIDAD: Record<Para, number> = { entrada: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
+// El premio vale lo mismo que la entrada: se reemplazan entre sí, y el sello, el sorteo y la entrada con lista le ganan.
+const PRIORIDAD: Record<Para, number> = { entrada: 0, premio: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
 
 const vacio = (): EstadoOficial => ({ activacion: "no-se-sabe", proteccion: "no-se-sabe", correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null });
 
@@ -1906,7 +1908,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "entrar-de-nuevo":
         return salir("entrar");
       case "seguir":
-        op.primerOficial?.marcar();
+        // El primer sello es de quien organiza: el paso del premio no lo da por visto.
+        if (op.para !== "premio") op.primerOficial?.marcar();
         cerrar(true);
         op.alSeguir?.();
         return;
@@ -2092,9 +2095,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       ev.preventDefault();
       ev.stopPropagation();
       if (vistaActual?.final || vistaActual?.volver) {
-        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar). Nunca sella ni sortea. Antes del final, solo
-        // cuando el paso se abrió para usar un cupón con la cuenta ya lista: ahí también es «Volver».
-        cerrar(op.para === "entrada");
+        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar o para recibir un premio). Nunca sella ni sortea.
+        // Antes del final, solo cuando el paso se abrió para usar un cupón con la cuenta ya lista: ahí también es «Volver».
+        cerrar(comoEntrada(op.para));
         return;
       }
       (aPrueba.hidden || aPrueba.disabled ? cerrarSes : aPrueba).focus({ preventScroll: true });
