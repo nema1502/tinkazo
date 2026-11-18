@@ -1,6 +1,22 @@
 import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { actividadDe, calcular, comprobar, decodificarEvento, dia, marcaDe, mes, partesDelId, semana, unir, unirFuentes } from "./metricas-cadena.mjs";
+import {
+  actividadDe,
+  calcular,
+  compararVentana,
+  comprobar,
+  datosDesde,
+  decodificarEvento,
+  dia,
+  marcaDe,
+  mes,
+  mezclarFuentes,
+  partesDelId,
+  registroDesdeRpc,
+  semana,
+  unir,
+  unirFuentes,
+} from "./metricas-cadena.mjs";
 
 /**
  * Eventos inventados: no se toca la red. Las direcciones son de mentira.
@@ -378,6 +394,72 @@ describe("unirFuentes", () => {
   });
   it("dos copias que no vienen del RPC y con ids distintos son una anomalía: se dejan las dos", () => {
     expect(unirFuentes([porIndice, { ...porIndice, eventoId: "otra" }])).toHaveLength(2);
+  });
+});
+
+describe("la mezcla de fuentes", () => {
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const crudoRpc = (id, extra = {}) => registroDesdeRpc({
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    txHash: h(String(id)),
+    topic: [tema("sealed"), u64(id), new Address(A).toScVal().toXdr("base64")],
+    value: xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("count"), val: nativeToScVal(10, { type: "u32" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("list_hash"), val: nativeToScVal(Buffer.alloc(32, 7), { type: "bytes" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("num_winners"), val: nativeToScVal(1, { type: "u32" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("round"), val: nativeToScVal(BigInt(id), { type: "u64" }) }),
+    ]).toXdr("base64"),
+    ...extra,
+  }, C1);
+  const contratos = [{ contractId: C1 }];
+
+  it("descarta crudos de otra red y conserva solo contratos y ledgers válidos", () => {
+    const crudo = crudoRpc(1);
+    const mezcla = mezclarFuentes({
+      crudos: { red: "mainnet", eventos: [crudo] },
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.eventos).toEqual([]);
+    expect(mezcla.crudosDescartados).toBe(1);
+  });
+  it("une la copia del índice con la del RPC y deja ganar al índice", () => {
+    const rpc = crudoRpc(1);
+    const indice = { ...rpc, id: "023897352653787137-0000", rpc: undefined };
+    const mezcla = mezclarFuentes({
+      registrosIndice: [indice],
+      registrosRpc: [rpc],
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.eventos).toHaveLength(1);
+    expect(mezcla.eventos[0].eventoId).toBe(indice.id);
+  });
+  it("conserva el hash de un crudo RPC viejo aunque no haya transacción cacheada", () => {
+    const rpc = crudoRpc(1);
+    const mezcla = mezclarFuentes({
+      crudos: { red: "testnet", eventos: [rpc] },
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.hashRpc.get(rpc.id)).toBe(rpc.txHash);
+  });
+  it("distingue un índice atrasado de uno que tiene más eventos", () => {
+    const rpc = [sello(1, A, "2026-11-05T10:00:00Z")];
+    expect(compararVentana(rpc, [])).toMatchObject({ indiceAtrasado: true, rpcAtrasado: false });
+    expect(compararVentana([], rpc)).toMatchObject({ indiceAtrasado: false, rpcAtrasado: true });
+  });
+  it("no inventa una fecha cuando no hay eventos", () => {
+    expect(datosDesde([])).toBeNull();
+    expect(datosDesde([
+      sello(1, A, "2026-11-05T10:00:00Z"),
+      sello(2, A, "2026-11-04T10:00:00Z"),
+    ])).toBe("2026-11-04T10:00:00Z");
   });
 });
 

@@ -34,8 +34,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   calcular,
+  compararVentana,
   comprobar,
-  decodificarEvento,
   dia,
   leerNextId,
   partesDelId,
@@ -47,7 +47,8 @@ import {
   traerTransaccion,
   traerTransaccionPorHash,
   unir,
-  unirFuentes,
+  mezclarFuentes,
+  datosDesde,
 } from "./lib/metricas-cadena.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -144,11 +145,14 @@ async function principal() {
   let nextIds = {};
   let ventanaRpc = null;
   let registrosRpc = [];
+  let registrosIndice = [];
+  let crudosArchivo = { eventos: [] };
+  let mezcla;
   const hashRpc = new Map();
 
   if (a.desdeCrudos) {
     const ev = leerJson(join(a.desdeCrudos, "eventos.json"));
-    registrosEventos = ev.eventos;
+    crudosArchivo = ev;
     corteLedger = ev.corteLedger;
     ahora = ev.ahora;
     nextIds = ev.nextIds ?? {};
@@ -163,7 +167,7 @@ async function principal() {
     ahora = Math.floor(Date.parse(ledger.closed_at) / 1000);
     log(`Corte: ledger ${corteLedger}, ${iso(ahora)}`);
 
-    registrosEventos = [];
+    registrosIndice = [];
     // El índice de StellarExpert: la fuente histórica. Si falla, se sigue con las otras fuentes;
     // el aviso final dirá desde qué fecha hay datos de verdad.
     for (const c of contratos) {
@@ -172,17 +176,16 @@ async function principal() {
           alPagina: (n) => process.stderr.write(`\r  ${c.contractId.slice(0, 8)}… ${n} eventos`),
         });
         process.stderr.write("\n");
-        registrosEventos.push(...regs.filter((r) => partesDelId(r.id).ledger <= corteLedger));
+        registrosIndice.push(...regs.filter((r) => partesDelId(r.id).ledger <= corteLedger));
       } catch (e) {
         process.stderr.write("\n");
-        log(`-- el índice no dio los eventos de ${c.contractId.slice(0, 8)}… (${e.message}); se sigue con los crudos y el RPC`);
+        log(`-- el índice no dio los eventos de ${c.contractId.slice(0, 8)}… (${e.message}). Se sigue con los crudos y el RPC`);
       }
     }
 
     // Los crudos guardados de corridas anteriores: la historia que conviene conservar aunque el
-    // índice se atrasé y que el RPC no tiene (su ventana es de unos 7 días).
-    const crudosPrevios = a.crudos && existsSync(join(a.crudos, "eventos.json")) ? leerJson(join(a.crudos, "eventos.json")).eventos ?? [] : [];
-    registrosEventos.push(...crudosPrevios.filter((r) => partesDelId(r.id).ledger <= corteLedger));
+    // índice se atrase y que el RPC no tiene (su ventana es de unos 7 días).
+    if (a.crudos && existsSync(join(a.crudos, "eventos.json"))) crudosArchivo = leerJson(join(a.crudos, "eventos.json"));
 
     // La segunda fuente: los eventos que el RPC todavía guarda (unos 7 días). Con getEvents cada
     // pedido revisa un tramo de ledgers y puede devolver un cursor aunque no encuentre eventos:
@@ -195,8 +198,12 @@ async function principal() {
     } catch (e) {
       log(`  (el RPC no dio sus eventos recientes: ${e.message})`);
     }
-    registrosEventos.push(...registrosRpc);
-    for (const r of registrosRpc) hashRpc.set(r.id, r.txHash);
+    mezcla = mezclarFuentes({ registrosIndice, crudos: crudosArchivo, registrosRpc, red: a.red, contratos, corteLedger });
+    registrosEventos = mezcla.registrosEventos;
+    for (const [id, hash] of mezcla.hashRpc) hashRpc.set(id, hash);
+    if (mezcla.crudosDescartados) {
+      log(`-- se descartaron ${mezcla.crudosDescartados} crudos que no corresponden a ${a.red} o a sus contratos`);
+    }
 
     // Cada evento con su transacción, de Horizon (caché de una corrida anterior si hay). Los que
     // llegaron solo por el RPC se buscan por el hash de su transacción: su id es sintético.
@@ -230,12 +237,16 @@ async function principal() {
     for (const c of contratos) nextIds[c.contractId] = await leerNextId(red.rpc, c.contractId).catch(() => null);
   }
 
-  // Decodificar y unir. El mismo evento que llegó por el índice, los crudos y el RPC se cuenta
-  // una sola vez. Un anterior vale hasta su último sello oficial: lo posterior no es de Tinkazo.
-  const idsRpc = new Set([...registrosRpc.map((r) => r.id), ...registrosEventos.filter((r) => r.rpc).map((r) => r.id)]);
-  const todos = unirFuentes(
-    registrosEventos.map(decodificarEvento).filter(Boolean).map((e) => (idsRpc.has(e.eventoId) ? { ...e, fuenteRpc: true } : e)),
-  );
+  if (!mezcla) {
+    mezcla = mezclarFuentes({ registrosIndice, crudos: crudosArchivo, registrosRpc, red: a.red, contratos, corteLedger });
+    registrosEventos = mezcla.registrosEventos;
+    for (const [id, hash] of mezcla.hashRpc) hashRpc.set(id, hash);
+    if (mezcla.crudosDescartados) {
+      log(`-- se descartaron ${mezcla.crudosDescartados} crudos que no corresponden a ${a.red} o a sus contratos`);
+    }
+  }
+  // Un anterior vale hasta su último sello oficial: lo posterior no es de Tinkazo.
+  const todos = mezcla.eventos;
   const ultimoDe = new Map(contratos.filter((c) => !c.vigente).map((c) => [c.contractId, c.ultimoId]));
   const ajenos = todos.filter((e) => ultimoDe.has(e.contrato) && Number.isFinite(ultimoDe.get(e.contrato)) && e.id > ultimoDe.get(e.contrato));
   const eventos = todos.filter((e) => !ajenos.includes(e));
@@ -249,29 +260,44 @@ async function principal() {
 
   const cuadre = comprobar({ contratos, eventos, nextIds, problemas, sinTransaccion });
   // Una segunda fuente para lo reciente: el RPC cuenta los mismos eventos en su ventana.
-  if (ventanaRpc?.desdeLedger) {
+  if (ventanaRpc?.desdeLedger && (!a.desdeCrudos || !crudosArchivo.red || crudosArchivo.red === a.red)) {
     const vigente = contratos.find((c) => c.vigente).contractId;
-    const propios = eventos.filter((e) => e.contrato === vigente && e.ledger >= ventanaRpc.desdeLedger);
-    const cuenta = (xs, t) => xs.filter((e) => e.tipo === t).length;
-    const igual = cuenta(propios, "sealed") === cuenta(ventanaRpc.eventos, "sealed") && cuenta(propios, "drawn") === cuenta(ventanaRpc.eventos, "drawn");
-    cuadre.lineas.push(
-      `${igual ? "ok " : "MAL"} el RPC, en su ventana de unos 7 días, cuenta ${cuenta(ventanaRpc.eventos, "sealed")} sellos y ${cuenta(ventanaRpc.eventos, "drawn")} registros; el índice, ${cuenta(propios, "sealed")} y ${cuenta(propios, "drawn")}`,
-    );
-    if (!igual) cuadre.ok = false;
+    const propios = mezcla.eventosSinRpc.filter((e) => e.contrato === vigente && e.ledger >= ventanaRpc.desdeLedger);
+    const cruce = compararVentana(ventanaRpc.eventos, propios);
+    const { sealed: rpcSellos, drawn: rpcRegistros } = cruce.rpc;
+    const { sealed: indiceSellos, drawn: indiceRegistros } = cruce.indice;
+    if (cruce.indiceAtrasado) {
+      cuadre.lineas.push(
+        `-- el RPC tiene más eventos recientes que el índice: ${rpcSellos} sellos y ` +
+          `${rpcRegistros} registros frente a ${indiceSellos} y ${indiceRegistros}`,
+      );
+    }
+    if (cruce.rpcAtrasado) {
+      cuadre.lineas.push(
+        `MAL el índice tiene más eventos en la ventana que el RPC: ${indiceSellos} sellos y ` +
+          `${indiceRegistros} registros frente a ${rpcSellos} y ${rpcRegistros}`,
+      );
+    }
+    if (!cruce.indiceAtrasado && !cruce.rpcAtrasado) cuadre.lineas.push(`ok el RPC y el índice cuentan ${rpcSellos} sellos y ${rpcRegistros} registros en la ventana de unos 7 días`);
+    if (cruce.rpcAtrasado) cuadre.ok = false;
   }
   if (ajenos.length) cuadre.lineas.push(`-- ${ajenos.length} eventos en contratos anteriores después de su último sello oficial: no se cuentan`);
-  // El aviso de cobertura: desde qué fecha hay datos. El RPC solo trae la ventana reciente (unos
-  // 7 días) y nunca se presenta como la historia completa: lo histórico sale del índice y de los
-  // crudos guardados de corridas anteriores.
-  const datosDesde = iso(eventos.length ? Math.min(...eventos.map((e) => e.ts)) : ahora);
-  cuadre.lineas.push(`-- hay datos desde ${datosDesde}: el RPC solo cubre la ventana reciente (unos 7 días); el resto sale del índice y de los crudos de corridas anteriores`);
+  // El aviso de cobertura dice qué fuentes se usaron y no inventa una fecha cuando no hay datos.
+  const fechaDatos = datosDesde(eventos);
+  const fuentesUsadas = Object.entries(mezcla.fuentes)
+    .filter(([, usada]) => usada)
+    .map(([fuente]) => fuente)
+    .join(", ");
+  cuadre.lineas.push(
+    fechaDatos ? `-- hay datos desde ${fechaDatos}: fuentes usadas ${fuentesUsadas || "ninguna"}` : "-- no hay datos en las fuentes consultadas",
+  );
 
   const r = calcular(sorteos, { internas, ejemplos, ahora });
   const salida = {
     red: a.red,
     nota: "Cuántos, nunca quiénes: sin cuentas, listas ni nombres. `todas` es lo que hay en la cadena; `sinInternas` descuenta las cuentas de docs/cuentas-internas.json; `sinInternasNiEjemplo` descuenta además los sellos de la lista de ejemplo del sitio, que es la que sellan las pruebas.",
     corte: { ledger: corteLedger, cerroEn: iso(ahora) },
-    datosDesde,
+    datosDesde: fechaDatos,
     contratos: contratos.map((c) => ({
       contrato: c.contractId,
       vigente: c.vigente,
