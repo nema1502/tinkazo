@@ -3,6 +3,7 @@
 import { horaTexto, premiosTexto } from "./formato";
 import { leerCampana, type Campana } from "./modelo";
 import { caja, conDestacado, pintarAviso } from "./piezas";
+import { sustituir } from "./sustituir";
 import type {
   DepsDelCelular,
   EstadoPublico,
@@ -41,16 +42,7 @@ const CLAVES_DE_ENTRADA: Record<FallaDeEntrada, string> = {
   cuentas: "cpErrCuentas",
 };
 
-/**
- * Pone los valores en su lugar. Si un valor ya termina en punto, como el nombre abreviado Ana P.,
- * y la plantilla lo cierra con otro punto, queda uno solo.
- */
-export function sustituir(texto: string, valores: Record<string, string>): string {
-  return texto.replace(/\{(\w+)\}(\.?)/g, (_, clave: string, punto: string) => {
-    const valor = valores[clave] ?? "";
-    return punto && valor.endsWith(".") ? valor : `${valor}${punto}`;
-  });
-}
+export { sustituir };
 
 function limpiar(raiz: HTMLElement): void {
   raiz.replaceChildren();

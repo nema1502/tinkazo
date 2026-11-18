@@ -156,7 +156,8 @@ function leerHoras(
   return { abreMs, cierraMs, sorteoMs, recibirHastaMs };
 }
 
-function leerUrl(url: unknown, tipo: TipoDePaso): string | null {
+/** Lee una dirección de un pedido: https, sin puerto ni usuario y, para cada red, de su dominio. Null si no sirve. */
+export function leerUrl(url: unknown, tipo: TipoDePaso): string | null {
   if (!esCadena(url)) return null;
   try {
     const direccion = new URL(url);

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es" data-titulo-clave="ccTituloPagina">
+<head>
+<meta charset="utf-8" />
+<title>Armá tu campaña, en Tinkazo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<meta name="description" content="Armá la campaña de tu empresa por pasos y mirá cómo la ve tu gente." />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+</head>
+<body class="pg-campana pg-crear">
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" aria-label="Tinkazo">
+      <span class="wm-llama" aria-hidden="true">
+        <svg viewBox="-1 -3 24 28">
+          <rect x="2" y="11" width="16" height="7" />
+          <rect x="15" y="3" width="4" height="10" />
+          <rect x="14" y="0" width="8" height="4" />
+          <rect x="20" y="-2" width="2" height="3" />
+          <rect x="3" y="18" width="2.5" height="6" />
+          <rect x="8" y="18" width="2.5" height="6" />
+          <rect x="12.5" y="18" width="2.5" height="6" />
+          <rect x="16" y="18" width="2.5" height="6" />
+          <rect x="0" y="9" width="3" height="4" />
+        </svg>
+      </span>
+      <span class="wm-text">Tinka<b>zo</b></span>
+    </a>
+    <span id="cmp-ejemplo" class="cmp-ejemplo" role="note" hidden data-i="cpEjemplo" data-i-title="ccEjemploAyuda" title="Es una demostración: no se guarda nada.">Demo</span>
+    <nav class="topnav" aria-label="páginas">
+      <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
+      <div class="mas">
+        <button type="button" class="mas-btn" data-i="navMas">Más</button>
+        <div class="mas-lista">
+          <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+          <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+        </div>
+      </div>
+    </nav>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+<main class="ccp" id="ccp">
+  <h1 id="ccp-aviso" class="ccp-aviso" aria-live="polite"></h1>
+</main>
+<footer>
+  <div class="bar">
+    <span data-i="footL">Tinkazo</span>
+    <nav class="pies" aria-label="secciones">
+      <a href="/terminos.html" data-i="navTerminos">Términos</a>
+    </nav>
+    <span data-i="footR">Hecho con ♥ en Bolivia</span>
+  </div>
+</footer>
+<script type="module" src="/src/crear-campana.ts"></script>
+</body>
+</html>

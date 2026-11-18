@@ -25,6 +25,12 @@ const raiz = document.querySelector<HTMLElement>(".cmp");
 const estado = document.querySelector<HTMLElement>("#cmp-estado");
 const parametros = new URLSearchParams(location.search);
 const ejemplo = parametros.get("demo") === "campana";
+/**
+ * El modo vista: participar.html como celular de muestra dentro del marco de la página para armar campañas. Solo dentro de un
+ * marco y con el parámetro: afuera de un marco la página sigue como siempre. Su código se baja recién acá, así quien escanea
+ * el QR de un evento no baja nada de esto.
+ */
+const enVistaPrevia = parametros.get("vista") === "previa" && window.parent !== window;
 const idioma = initialLang();
 setLang(idioma);
 
@@ -167,8 +173,37 @@ function leerAlmacenDePestana(): Storage | null {
   }
 }
 
+/** El modo vista: baja la vista, la deja escuchando y muestra Cargando hasta que llegue la primera campaña. */
+async function entrarEnVistaPrevia(contenedor: HTMLElement): Promise<void> {
+  mostrarCarga("cargando", () => undefined);
+  const { montarVistaPrevia, avisarListaAlPadre } = await import("./campana/vista-previa");
+  const origen = location.origin;
+  montarVistaPrevia({
+    raiz: contenedor,
+    base,
+    escuchar: (f) => {
+      window.addEventListener("message", f);
+      return () => window.removeEventListener("message", f);
+    },
+    origen,
+    padre: window.parent,
+    avisarLista: () => avisarListaAlPadre(window.parent, origen),
+    cambiarIdioma: setLang,
+    alCambiarIdioma: onLangChange,
+    red: network.name,
+    // Con la primera vista montada el aviso de carga no se vuelve a pintar al cambiar el idioma.
+    alMontar: () => {
+      repintarAviso = null;
+    },
+  });
+}
+
 async function cargar(): Promise<void> {
   if (!raiz || !estado) return;
+  if (enVistaPrevia) {
+    await entrarEnVistaPrevia(raiz);
+    return;
+  }
   // Primero la bandera y la demostración: con las campañas apagadas, nada de lo de la sala ni de Google corre.
   if (!campanasActivo() && !ejemplo) {
     mostrarCarga("cerrada", () => undefined);

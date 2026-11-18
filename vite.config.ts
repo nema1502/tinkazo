@@ -360,6 +360,7 @@ export default defineConfig({
         lista: resolve(__dirname, "lista.html"),
         equipos: resolve(__dirname, "equipos.html"),
         participar: resolve(__dirname, "participar.html"),
+        "crear-campana": resolve(__dirname, "crear-campana.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
