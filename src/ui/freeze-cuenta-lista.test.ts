@@ -69,6 +69,9 @@ const romperFlujo = (): void => {
   vi.doMock("./cuenta-lista-flujo", () => {
     throw new TypeError("Failed to fetch dynamically imported module");
   });
+  // Si una continuación del caso anterior dejó ese módulo cargado después de la limpieza de `beforeEach`, la importación
+  // del caso de ahora lo tomaría de ahí y no pasaría por la fábrica que falla. Se limpia de nuevo, ya con la fábrica puesta.
+  vi.resetModules();
 };
 vi.mock("../stellar/wallet-lite", async (orig) => ({ ...(await orig<typeof import("../stellar/wallet-lite")>()), activeWallet: () => h.billetera }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: async () => false, protegerLaCuenta: async () => false }));
