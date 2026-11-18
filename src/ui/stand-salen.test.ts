@@ -12,17 +12,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * del stand recarga la página, y eso es lo que se prueba, con el cierre de la página (`pagehide`) incluido.
  */
 
-const h = vi.hoisted(() => ({ recargar: vi.fn() }));
+const h = vi.hoisted(() => ({ recargar: vi.fn(), conCuenta: true }));
 vi.mock("./wallet-ui", () => ({
   MARCA_INGRESAR: "tinkazo.abrir",
-  currentSession: () => ({ address: "Cuenta de prueba" }),
+  currentSession: () => h.conCuenta ? { address: "Cuenta de prueba" } : null,
   refrescarPuerta: vi.fn(),
 }));
-vi.mock("./freeze", () => ({ refreshFreezeLabel: vi.fn(), rotarJuego: vi.fn() }));
+vi.mock("./freeze", () => ({
+  GUARDA_DESPUES_DE_SOLTAR_MS: 700,
+  refreshFreezeLabel: vi.fn(),
+  rotarJuego: vi.fn(),
+  unfreeze: vi.fn(),
+}));
 vi.mock("./draw", () => ({ newDraw: vi.fn() }));
 vi.mock("./siguiente", () => ({ actualizarPaso: vi.fn() }));
 
 const html = readFileSync(join(process.cwd(), "index.html"), "utf8");
+const css = readFileSync(join(process.cwd(), "src/styles.css"), "utf8");
 const BORRADOR = "tinkazo.borrador";
 const CLAVE_LISTA = "tinkazo.stand-lista";
 const CINCO = "Flor\nGus\nHana\nIvo\nJuli";
@@ -58,6 +64,7 @@ const quitarOyentes = (): void => {
 
 /** Una página nueva: HTML limpio, módulos nuevos y el almacenamiento de la pestaña tal como estaba. */
 async function cargar(search = "", hash = "#sortear"): Promise<Pagina> {
+  h.conCuenta = true;
   vi.resetModules();
   quitarOyentes();
   document.body.removeAttribute("data-stand");
@@ -123,6 +130,7 @@ afterEach(() => {
   quitarOyentes();
   sessionStorage.clear();
   document.body.removeAttribute("data-stand");
+  document.body.removeAttribute("data-stand-arrancando");
   document.body.innerHTML = "";
 });
 
@@ -174,17 +182,11 @@ describe("entrar al stand", () => {
     expect((el("btn-freeze") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("el pliegue de opciones solo guarda el CSV: su rótulo no nombra el premio, en los dos idiomas", async () => {
+  it("el pliegue para subir un archivo no se muestra en el stand", async () => {
     const pg = await cargar();
     arrancar(pg);
-    const rotulo = (): HTMLElement => document.querySelector("#mas-opciones > summary") as HTMLElement;
-    expect(rotulo().textContent).toBe("Premio y subir CSV");
     pg.stand.entrarAlStand();
-    expect(rotulo().textContent).toBe("Subir CSV");
-    expect(rotulo().textContent).not.toMatch(/premio|prize/i);
-    pg.i18n.setLang("en");
-    expect(rotulo().textContent).toBe("Upload CSV");
-    expect(rotulo().textContent).not.toMatch(/premio|prize/i);
+    expect(css).toMatch(/body\[data-stand="1"\] #mas-opciones,[\s\S]{0,200}display:\s*none !important/);
   });
 
   it("un premio escrito antes de entrar no viaja a las rondas del stand, y queda guardado", async () => {
@@ -206,6 +208,8 @@ describe("entrar al stand", () => {
     expect(pg.modo.enStand()).toBe(false);
     expect(document.body.dataset.stand).toBeUndefined();
     expect(sessionStorage.getItem(BORRADOR)).toBeNull();
+    expect(el("stand-aviso").textContent).toBe(pg.i18n.T.es.standNoSorteo);
+    expect(el("stand-aviso").hidden).toBe(false);
   });
 
   it("el enlace Tengo un stand se esconde mientras la lista está cerrada y vuelve al abrirse", async () => {
@@ -231,6 +235,136 @@ describe("entrar al stand", () => {
     expect(el("nw-etiqueta").dataset.i).toBe("standSalen");
     expect(campo().value).toBe("1");
     expect(campo().disabled).toBe(false);
+  });
+});
+
+describe("Cambiar la lista durante la cuenta", () => {
+  it("se ve solo con la ronda por arrancar", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    const { app } = await import("../state");
+    app.frozen = { names: ["Ana", "Beto"] } as never;
+    app.drawn = null;
+
+    document.dispatchEvent(new CustomEvent("tinkazo:paso"));
+    expect(el("stand-cambiar").hidden).toBe(false);
+
+    app.drawn = { winners: [0] } as never;
+    document.dispatchEvent(new CustomEvent("tinkazo:paso"));
+    expect(el("stand-cambiar").hidden).toBe(true);
+    app.frozen = null;
+    app.drawn = null;
+  });
+});
+
+describe("las entradas al stand", () => {
+  it("Tengo un stand en la portada entra al modo", async () => {
+    const pg = await cargar("", "");
+    arrancar(pg);
+    const boton = document.querySelector<HTMLButtonElement>(".hero [data-entrar-stand]");
+    expect(boton?.textContent).toBe("Tengo un stand");
+    boton?.click();
+    expect(pg.modo.enStand()).toBe(true);
+    expect(document.body.dataset.stand).toBe("1");
+  });
+
+  it("con ?stand en la dirección entra al modo y borra el parámetro", async () => {
+    const pg = await cargar("?stand", "");
+    const reemplazar = vi.spyOn(history, "replaceState");
+    arrancar(pg);
+    expect(pg.modo.enStand()).toBe(true);
+    expect(reemplazar.mock.calls[0]).toEqual([null, "", "/#sortear"]);
+  });
+
+  it("con ?lang=en&stand=1 los demás parámetros se quedan", async () => {
+    const pg = await cargar("?lang=en&stand=1", "");
+    const reemplazar = vi.spyOn(history, "replaceState");
+    arrancar(pg);
+    expect(pg.modo.enStand()).toBe(true);
+    expect(reemplazar.mock.calls[0]).toEqual([null, "", "/?lang=en#sortear"]);
+  });
+
+  it("en la demo, ?demo=race&stand no entra al modo y avisa que hay que salir del ejemplo", async () => {
+    const pg = await cargar("?demo=race&stand", "");
+    arrancar(pg);
+    expect(pg.modo.enStand()).toBe(false);
+    expect(document.body.dataset.stand).toBeUndefined();
+    expect(el("stand-aviso").textContent).toBe("Salí del ejemplo para abrir el stand.");
+    expect(el("stand-aviso").hidden).toBe(false);
+  });
+
+  it("Tengo un stand con un sorteo en curso explica que primero hay que terminarlo", async () => {
+    const pg = await cargar("", "");
+    arrancar(pg);
+    const { app } = await import("../state");
+    app.frozen = { names: ["Ana", "Beto"] } as never;
+
+    document.querySelector<HTMLButtonElement>(".hero [data-entrar-stand]")?.click();
+
+    expect(pg.modo.enStand()).toBe(false);
+    expect(el("stand-aviso").textContent).toBe("Hay un sorteo en curso. Terminalo antes de abrir el stand.");
+    expect(el("stand-aviso").hidden).toBe(false);
+    expect(pg.i18n.T.en.standNoSorteo).toBe("A draw is in progress. Finish it before opening booth mode.");
+    app.frozen = null;
+  });
+
+  it("Tengo un stand durante el ensayo avisa que hay que salir del ejemplo", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.modo.marcarEnsayo(true);
+
+    el<HTMLButtonElement>("btn-stand").click();
+
+    expect(pg.modo.enStand()).toBe(false);
+    expect(el("stand-aviso").textContent).toBe(pg.i18n.T.es.standNoEjemplo);
+    expect(pg.i18n.T.en.standNoEjemplo).toBe("Leave the example to open booth mode.");
+  });
+
+  it("adentro, los títulos dicen Tu stand, En la ronda y La ronda, también en inglés", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    const titulo = document.querySelector<HTMLElement>(".appbar-t h2.tab-nuevo");
+    const participantes = document.querySelector<HTMLElement>("#p1-titulo");
+    const ronda = document.querySelector<HTMLElement>("#sec-draw .head h2 [data-i]");
+    expect(titulo?.textContent).toBe("Tu stand");
+    expect(participantes?.textContent).toBe("En la ronda");
+    expect(ronda?.textContent).toBe("La ronda");
+    pg.i18n.setLang("en");
+    expect(titulo?.textContent).toBe("Your booth");
+    expect(participantes?.textContent).toBe("In the round");
+    expect(ronda?.textContent).toBe("The round");
+  });
+
+  it("con la lista vacía no se muestra la guía de arriba", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    expect(el("ensayo-guia").textContent).toBe("");
+    expect(el("ensayo-guia").hidden).toBe(true);
+  });
+
+  it("con el QR abierto y nombres, la guía pide que lo escaneen", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    poner(pg, "Ana\nBeto");
+    pg.stand.alPreguntarPorElQr(() => true);
+    pg.stand.repintarGuia();
+    expect(el("ensayo-guia").textContent).toBe(pg.i18n.T.es.standGuiaSala);
+  });
+  it("el botón apagado del resultado dice La ronda terminó en los dos idiomas", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    const { app } = await import("../state");
+    app.drawn = { winners: [0] } as never;
+    document.dispatchEvent(new CustomEvent("tinkazo:paso"));
+    expect(el("btn-draw").textContent).toBe("La ronda terminó");
+    pg.i18n.setLang("en");
+    expect(el("btn-draw").textContent).toBe("The round is over");
+    app.drawn = null;
   });
 });
 
@@ -362,6 +496,28 @@ describe("salir del stand con la página de verdad", () => {
   });
 });
 
+describe("las dos salidas del stand", () => {
+  it("el botón de la banda sale sin dejar la marca que abre la entrada", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    h.conCuenta = false;
+    el<HTMLButtonElement>("stand-salir-banda").click();
+    await vi.waitFor(() => expect(h.recargar).toHaveBeenCalledTimes(1));
+    expect(sessionStorage.getItem("tinkazo.abrir")).toBeNull();
+  });
+
+  it("Hacer un sorteo de verdad sí deja la marca de entrada cuando no hay cuenta", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    h.conCuenta = false;
+    el<HTMLButtonElement>("stand-salir").click();
+    await vi.waitFor(() => expect(h.recargar).toHaveBeenCalledTimes(1));
+    expect(sessionStorage.getItem("tinkazo.abrir")).toBe("1");
+  });
+});
+
 describe("una pestaña de stand que se abre fuera del sorteo", () => {
   it("el stand se termina y vuelve lo que se estaba armando", async () => {
     const pg = await cargar("", "");
@@ -396,5 +552,40 @@ describe("una pestaña de stand que se abre fuera del sorteo", () => {
     expect(pg.modo.enStand()).toBe(false);
     expect(cuadro().value).toBe("");
     expect(campo().value).toBe("1");
+  });
+});
+
+describe("la lista del stand sobrevive a una recarga", () => {
+  it("recargar en el stand repone la lista escrita a mano", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    poner(pg, OCHO);
+    window.dispatchEvent(new Event("pagehide"));
+    const nueva = await cargar();
+    arrancar(nueva);
+    expect(cuadro().value).toBe(OCHO);
+  });
+
+  it("al salir del stand no queda la lista guardada", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    poner(pg, OCHO);
+    await salir(pg, false);
+    const nueva = await cargar();
+    arrancar(nueva);
+    expect(sessionStorage.getItem("tinkazo.stand-cuadro")).toBeNull();
+  });
+
+  it("en el stand, tocar el logo no saca del modo", async () => {
+    const pg = await cargar();
+    arrancar(pg);
+    pg.stand.entrarAlStand();
+    const logo = document.querySelector<HTMLAnchorElement>("a.wordmark");
+    const clic = new MouseEvent("click", { bubbles: true, cancelable: true });
+    logo?.dispatchEvent(clic);
+    expect(clic.defaultPrevented).toBe(true);
+    expect(pg.modo.enStand()).toBe(true);
   });
 });

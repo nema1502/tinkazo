@@ -148,10 +148,11 @@ describe("el número de una ronda de stand", () => {
 describe("los textos del modo stand y de la sala", () => {
   it("el final habla de participar, no de entrar, en los dos idiomas", async () => {
     const { T } = await import("./i18n");
-    expect(T.es.standFinB).toContain("Participar es gratis");
-    expect(T.es.standFinB).not.toMatch(/\bEntrar\b/i);
-    expect(T.en.standFinB).toContain("Taking part is free");
-    expect(T.en.standFinB).not.toMatch(/\bJoining\b/i);
+    expect(T.es.standFinNota).toContain("Participar es gratis");
+    expect(T.es.standFinNota).not.toMatch(/\bEntrar\b/i);
+    expect(T.en.standFinNota).toContain("Taking part is free");
+    expect(T.en.standFinNota).not.toMatch(/\bJoining\b/i);
+    for (const texto of [T.es.standFinNota, T.en.standFinNota]) expect(texto).not.toMatch(/gan|premio|prize|win/i);
   });
 
   it("cada clave que usan stand.ts, stand-sala.ts y el HTML existe en español y en inglés, sin punto medio", async () => {

@@ -1895,7 +1895,7 @@
     /* En el stand la acción queda al lado del texto, sin una fila entera que empuje la lista fuera de la primera pantalla. */
     body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: nowrap; }
     body[data-stand="1"] .stand-banda p { flex: 1 1 auto; }
-    body[data-stand="1"] .stand-banda button.ghost { flex: 0 0 auto; min-height: 44px; padding: 0 8px; font-size: 14px; white-space: nowrap; }
+    body[data-stand="1"] .stand-banda button.ghost { flex: 0 1 auto; min-height: 44px; padding: 0 8px; font-size: 14px; }
   }
   .ensayo-guia[hidden] { display: none; }
   body:not([data-ensayo="1"]):not([data-stand="1"]) .ensayo-guia { display: none; }
@@ -1903,15 +1903,23 @@
   body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]), body[data-stand="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
     display: block; margin: -8px 0 18px; padding: 0; color: var(--ink); font-weight: 600; font-size: 16px; line-height: 1.45;
   }
-  body[data-ensayo="1"] .ensayo-fin, body[data-stand="1"] .stand-fin {
+  body[data-ensayo="1"] .ensayo-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
-  .ensayo-fin h3, .stand-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
-  .ensayo-fin p, .stand-fin p { font-size: 16px; line-height: 1.5; }
-  .ensayo-fin .row, .stand-fin .row { margin-top: 14px; }
-  .ensayo-fin button, .stand-fin button { min-height: 48px; }
-  .ensayo-fin .enlace, .stand-fin .enlace { color: var(--on-purple); }
+  .ensayo-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .ensayo-fin p { font-size: 16px; line-height: 1.5; }
+  .ensayo-fin .row { margin-top: 14px; }
+  .ensayo-fin button { min-height: 48px; }
+  .ensayo-fin .enlace { color: var(--on-purple); }
+  /* El final de una ronda del stand: sin caja. Otra ronda pegada a quien salió, una línea chica y la salida como enlace. */
+  body[data-stand="1"] .stand-fin { display: block; margin-top: 16px; }
+  .stand-fin .row { margin: 0; }
+  .stand-fin .primary { min-height: 56px; }
+  .stand-fin-nota { margin: 12px 0 0; font-size: 14px; font-weight: 400; line-height: 1.45; color: var(--ink2); }
+  .stand-fin .enlace { margin-top: 4px; }
+  /* En el stand lo más grande del resultado es quién salió. */
+  body[data-stand="1"] .winner-card .winner-name { font-size: clamp(36px, 7vw, 72px); }
   /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
      las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
   body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] .mas-origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
@@ -1928,6 +1936,25 @@
   body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion,
   body[data-stand="1"] #btn-varias, body[data-stand="1"] #varias-panel, body[data-stand="1"] #participaciones-aviso,
   body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
+  /* Lo que en el stand sobra a la vista: pegar o traer una lista, el logo, la lista en grande, los equipos con cupón y
+     la cuenta de junto al cuadro (la dice el resumen de junto a Empezar la ronda). En el stand no se suben archivos. */
+  body[data-stand="1"] #origenes, body[data-stand="1"] #pegar-ayuda, body[data-stand="1"] #luma-ayuda,
+  body[data-stand="1"] #logo-fila, body[data-stand="1"] #btn-sala, body[data-stand="1"] #btn-equipos,
+  body[data-stand="1"] #equipos-panel, body[data-stand="1"] #lista-cuenta { display: none !important; }
+  /* Poco texto y una sola acción por paso: sin el pliegue, la opinión, el título repetido ni la explicación del 3D. */
+  body[data-stand="1"] #mas-opciones, body[data-stand="1"] #feedback-fin,
+  body[data-stand="1"] #sec-draw > .head, body[data-stand="1"] #ver3d-row > .note { display: none !important; }
+  /* Con el QR abierto los nombres ya están en su tarjeta: no se repiten como fichas debajo del cuadro. */
+  body[data-stand="1"]:has(#sala-abierta:not([hidden])) #names { display: none !important; }
+  /* Entre Otra ronda y el estadio no asoman la lista ni el selector, y la página conserva foco y posición. */
+  body[data-stand-arrancando="1"] #sec-participants, body[data-stand-arrancando="1"] #gamepick,
+  body[data-stand-arrancando="1"] #pick-label, body[data-stand-arrancando="1"] #rec-head,
+  body[data-stand-arrancando="1"] #rec-sel-nota, body[data-stand-arrancando="1"] #juego-nota,
+  body[data-stand-arrancando="1"] #ver3d-row { display: none !important; }
+  @media (min-width: 900px) {
+    /* Hasta 1200 px de contenido: el resultado y la lista armada aprovechan la laptop sin cambiar su orden. */
+    body[data-stand="1"] main { max-width: 1240px; }
+  }
   /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
   .stand-sala { display: none; }
   body[data-stand="1"] .stand-sala { display: block; margin: 0 0 18px; padding: 16px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
@@ -1937,29 +1964,154 @@
   .stand-sala .mini { min-height: 44px; }
   .stand-sala [hidden] { display: none !important; }
   .ss-error { margin-top: 10px; font-weight: 700; font-size: 16px; line-height: 1.4; }
+  .ss-deshacer {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-weight: 700; font-size: 16px;
+  }
+  /* Deshacer queda a la vista aunque la tarjeta acabe de cerrarse y la página esté en cualquier posición. */
+  .ss-deshacer:not([hidden]) {
+    position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 70; box-sizing: border-box; margin: 0; padding: 12px;
+    background: var(--yellow); color: #191919; border: 3px solid #191919; box-shadow: var(--sh-sm);
+  }
+  .ss-deshacer:not([hidden]) > span { flex: 1 1 220px; }
+  .ss-deshacer:not([hidden]) #sala-deshacer-b {
+    min-height: 44px; padding: 8px 14px; background: var(--card); color: var(--ink); border: 2px solid var(--ink);
+  }
+  /* Cerrar el QR: un enlace tranquilo, lejos de Empezar la ronda y de Ver el QR en grande. */
+  .ss-cerrar { margin-top: 18px; color: var(--ink2); font-weight: 600; }
+  /* La cruz de cada nombre: 44 px de blanco de toque, más liviana que el nombre. */
+  .ss-quitar { min-width: 44px; padding: 0; font-size: 18px; line-height: 1; }
   .ss-qr { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; }
-  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto; }
+  /* `pintarQr` (qr.ts) fija ancho y alto en píxeles: sin el !important, en un celular angosto el QR se angostaba y no se
+     achataba (194 x 270 en 320 px). */
+  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto !important; aspect-ratio: 1; }
   .ss-lado { flex: 1 1 220px; min-width: 0; }
   .ss-estado { font-weight: 800; font-size: 16px; }
-  .ss-estado[data-estado="sondeo"] { color: var(--bad, #b3261e); }
   .ss-cuenta { font-size: 28px; font-weight: 900; margin: 6px 0 12px; line-height: 1.15; }
   .ss-nombres, .ss-revisar ul { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; max-height: 28vh; overflow: auto; }
   .ss-nombres li, .ss-revisar li { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--ink); background: var(--paper); padding: 2px 4px 2px 10px; font-size: 16px; font-weight: 600; }
   .ss-nombre { overflow-wrap: anywhere; }
-  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. */
-  .stand-sala.grande { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 60; margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: center; justify-content: center; padding: 16px 20px; background: var(--paper); text-align: center; }
-  .stand-sala.grande #sala-abierta { display: flex; flex-direction: column; align-items: center; }
-  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; }
-  .stand-sala.grande .ss-qr img { width: min(560px, 62vh, 90vw) !important; height: min(560px, 62vh, 90vw) !important; }
-  .stand-sala.grande .ss-lado { flex: 0 0 auto; text-align: center; }
-  .stand-sala.grande .ss-lado .row { justify-content: center; }
-  .stand-sala.grande .ss-cuenta { margin: 2px 0 8px; font-size: clamp(22px, 4vh, 28px); }
-  .ss-titqr { display: none; font-weight: 900; font-size: clamp(24px, 4.6vh, 40px); line-height: 1.15; margin: 0 0 10px; }
-  .stand-sala.grande .ss-titqr { display: block; }
+  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. Al lado, la marca, cuántos hay, Empezar la ronda
+     y los nombres que van llegando, como la pantalla de los equipos (src/equipos/equipos.css, .stp). */
+  body[data-stand="1"] .stand-sala.grande {
+    position: fixed; inset: 0; box-sizing: border-box; width: 100%; height: 100vh; height: 100dvh; z-index: 60;
+    margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: stretch; justify-content: flex-start;
+    padding: 16px; background: var(--paper); border: 0; box-shadow: none; text-align: center;
+  }
+  .stand-sala.grande #sala-abierta {
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; margin: auto 0;
+  }
+  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; width: 100%; }
+  .stand-sala.grande .ss-qr img {
+    width: min(calc(100vw - 32px), calc(100dvh - 360px)) !important; max-width: 100%; height: auto !important;
+    aspect-ratio: 1; image-rendering: pixelated; border: 0;
+  }
+  .stand-sala.grande .ss-lado { flex: 0 0 auto; width: 100%; text-align: center; }
+  .stand-sala.grande .ss-lado .row { justify-content: center; flex-wrap: wrap; gap: 10px; margin: 0; }
+  .stand-sala.grande .ss-lado .row > button { flex: 1 1 0; min-width: 0; }
+  .stand-sala.grande .ss-cuenta { margin: 0; font-size: max(18px, 2.4vh); line-height: 1.15; }
+  .stand-sala.grande .ss-cuenta strong { font-size: clamp(36px, 6vh, 64px); line-height: 1; }
+  .ss-titqr { display: none; font-weight: 900; font-size: clamp(18px, 3vh, 32px); line-height: 1.15; margin: 0; }
+  .stand-sala.grande .ss-titqr { display: block; white-space: nowrap; }
+  /* El aviso va primero y en el flujo: nunca tapa el QR aunque la pantalla se tenga que recorrer. */
+  .ss-banda-grande { display: none; }
+  .stand-sala.grande .ss-banda-grande {
+    display: block; position: static; flex-shrink: 0; margin: 0; padding: 8px 12px;
+    background: var(--yellow); color: #191919; font-size: max(18px, 2.6vh); font-weight: 900; line-height: 1.2;
+  }
+  /* La marca y Empezar la ronda: solo en la pantalla grande. En la página, Empezar la ronda está en su lugar de siempre. */
+  .ss-marca, .stand-sala:not(.grande) #sala-empezar { display: none; }
+  .stand-sala.grande .ss-marca {
+    display: none; align-items: center; gap: 0.35em; margin: 0;
+    font-size: max(18px, 2.6vh); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase;
+  }
+  .stand-sala.grande .ss-marca svg { width: 1.15em; height: 1.15em; }
+  .stand-sala.grande .ss-marca b { color: var(--magenta-ink); }
+  .stand-sala.grande #sala-empezar { flex: 1 0 100%; width: 100%; min-height: 64px; font-size: max(20px, 3vh); }
+  /* Los nombres de la pantalla grande. En celular son fichas chicas con su propio recorrido. En laptop y proyector llenan
+     su columna (más abajo): el tamaño va en el contenedor, así el ancho de cada columna crece con la letra, y cada nombre
+     ocupa un renglón sin partirse. */
+  .stand-sala.grande .ss-nombres {
+    display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 8px; max-height: 30vh; min-height: 0;
+    margin: 0; overflow: auto; font-size: 18px;
+  }
+  .stand-sala.grande .ss-nombres li { justify-content: center; font-size: inherit; font-weight: 800; padding: 0.15em 0.6em; }
+  .stand-sala.grande .ss-nombres .ss-nombre { overflow-wrap: normal; }
+  .stand-sala.grande .ss-nombres .ss-rep { font-size: max(14px, 0.45em); }
+  .stand-sala.grande .ss-nombres button { display: none; }
+  /* En una pantalla baja y ancha, dos columnas compactas dejan el QR y las acciones enteros a la vista. */
+  @media (max-width: 899px) and (orientation: landscape) {
+    body[data-stand="1"] .stand-sala.grande { padding: 8px 16px; }
+    .stand-sala.grande #sala-abierta {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 100%; margin: 0; gap: 6px 16px;
+      grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+      grid-template-areas:
+        "banda banda banda banda"
+        "img img tit tit"
+        "img img cuenta cuenta"
+        "img img empezar empezar"
+        "img img volver nueva"
+        "img img nombres nombres";
+    }
+    .stand-sala.grande .ss-qr, .stand-sala.grande .ss-lado, .stand-sala.grande .ss-lado .row { display: contents; }
+    .stand-sala.grande .ss-banda-grande { grid-area: banda; padding: 4px 8px; font-size: 16px; }
+    .stand-sala.grande .ss-titqr { grid-area: tit; font-size: 18px; }
+    .stand-sala.grande .ss-marca { display: none; }
+    .stand-sala.grande .ss-qr img {
+      grid-area: img; align-self: center; justify-self: center;
+      width: min(calc(50vw - 24px), calc(100dvh - 80px)) !important;
+    }
+    .stand-sala.grande .ss-cuenta { grid-area: cuenta; align-self: center; }
+    .stand-sala.grande #sala-empezar { grid-area: empezar; }
+    .stand-sala.grande #sala-grande { grid-area: volver; }
+    .stand-sala.grande #sala-nueva { grid-area: nueva; }
+    .stand-sala.grande .ss-nombres { grid-area: nombres; }
+  }
+  /* En laptop y proyector, el QR y los nombres reparten toda la ventana sin espacio muerto. */
+  @media (min-width: 900px) {
+    body[data-stand="1"] .stand-sala.grande { padding: 16px 24px; overflow: hidden; }
+    .stand-sala.grande #sala-abierta {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 100%; min-height: 0; margin: 0; gap: 8px 24px;
+      grid-template-rows: auto auto auto auto auto minmax(0, 1fr); align-items: start;
+      grid-template-areas:
+        "banda banda banda banda"
+        "tit tit marca marca"
+        "img img cuenta cuenta"
+        "img img empezar empezar"
+        "img img volver nueva"
+        "img img nombres nombres";
+    }
+    .stand-sala.grande .ss-qr, .stand-sala.grande .ss-lado, .stand-sala.grande .ss-lado .row { display: contents; }
+    .stand-sala.grande .ss-banda-grande { grid-area: banda; }
+    .stand-sala.grande .ss-titqr { grid-area: tit; }
+    .stand-sala.grande .ss-marca { grid-area: marca; display: inline-flex; justify-self: start; }
+    .stand-sala.grande .ss-qr img {
+      grid-area: img; align-self: center; justify-self: center;
+      width: min(calc(100dvh - 190px), calc(50vw - 40px)) !important;
+    }
+    .stand-sala.grande .ss-cuenta {
+      grid-area: cuenta; display: flex; align-items: baseline; justify-content: flex-start; gap: 12px; text-align: left;
+    }
+    .stand-sala.grande .ss-cuenta strong { font-size: clamp(48px, 12vh, 140px); }
+    .stand-sala.grande #sala-empezar { grid-area: empezar; }
+    .stand-sala.grande #sala-grande { grid-area: volver; }
+    .stand-sala.grande #sala-nueva { grid-area: nueva; }
+    .stand-sala.grande .ss-nombres {
+      grid-area: nombres; display: grid; grid-template-columns: repeat(var(--ss-cols, 2), minmax(0, 1fr));
+      align-content: start; gap: 10px; max-height: none; min-height: 0; overflow: hidden;
+    }
+    .stand-sala.grande .ss-nombres li {
+      display: block; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .stand-sala.grande[data-tramo="hasta-6"] .ss-nombres { --ss-cols: 1; font-size: clamp(22px, 6vh, 72px); }
+    .stand-sala.grande[data-tramo="7-12"] .ss-nombres { --ss-cols: 2; font-size: clamp(20px, 4.2vh, 50px); }
+    .stand-sala.grande[data-tramo="13-24"] .ss-nombres { --ss-cols: 3; font-size: clamp(20px, 3.2vh, 38px); }
+    .stand-sala.grande[data-tramo="25-mas"] .ss-nombres { --ss-cols: 3; font-size: clamp(20px, 2.6vh, 30px); }
+  }
   /* Con el QR en toda la pantalla no hay otra barra de desplazamiento detrás. */
   html:has(.stand-sala.grande) { overflow: hidden; }
   .ss-rep { font-style: normal; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border: 2px solid currentColor; padding: 0 4px; color: var(--magenta-ink); }
-  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada, .stand-sala.grande #sala-cerrar { display: none; }
+  .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada, .stand-sala.grande #sala-cerrar,
+  .stand-sala.grande .ss-estado { display: none; }
   /* El cuadro se lee, pero no se escribe. */
   body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
   /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
@@ -2570,6 +2722,9 @@
   /* "ENSAYO: no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
   body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
   body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
+  @media (min-width: 900px) {
+    body[data-stand="1"] #st-round::after { font-size: clamp(14px, 2.6vh, 28px); }
+  }
   .st-brand > span:last-child { display: none; }
   .st-brand { padding: 4px 6px; }
   .st-top {
@@ -2590,10 +2745,13 @@
     .st-actions button { padding: 8px 14px; }
     /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
        dos se partía en cuatro renglones ("ENSAYO: / NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
-    body[data-ensayo="1"] .st-top, body[data-stand="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
+    body[data-ensayo="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
     body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
     body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
-    /* El rótulo del stand se parte en dos renglones antes de salirse de la pantalla. */
+    /* En el stand los botones ceden una fila: el rótulo usa el ancho y queda en dos renglones como mucho. */
+    body[data-stand="1"] .st-top { flex-wrap: wrap; row-gap: 6px; }
+    body[data-stand="1"] #st-round { flex: 1 1 0; min-width: 0; }
+    body[data-stand="1"] .st-actions { order: 3; flex: 1 0 100%; justify-content: flex-end; }
     body[data-stand="1"] #st-round::after { white-space: normal; }
   }
 

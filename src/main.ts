@@ -30,6 +30,7 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { conservarVistaEnLaCabecera } from "./ui/enlaces-cabecera";
 import { equiposActivo } from "./equipos/bandera";
 import { abreLaHerramienta } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
@@ -225,13 +226,16 @@ montarPremios();
 montarGanadores();
 // «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();
-// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
-cerrarSalidaDelStand();
+// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad. La salida dejó
+// la página arriba (`scrollRestoration` en manual): desde acá, recargar vuelve a donde se estaba, como siempre.
+if (cerrarSalidaDelStand()) history.scrollRestoration = "auto";
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 // Con ?modo=turnos la herramienta abre con «Orden de turnos» ya elegido, después del borrador: lo que pide la dirección manda.
 abrirConElModoPedido();
 initVistas();
+// Sortear y Mis sorteos de la cabecera no pierden ?lang= ni ?theme= (enlaces-cabecera.ts).
+conservarVistaEnLaCabecera();
 initWalletUI();
 // El cupón que llegó en el enlace (`#cupon=`): se guarda y se saca de la dirección con la sesión. Sin el acceso por cupón a la vista, no hace nada.
 iniciarCupon();

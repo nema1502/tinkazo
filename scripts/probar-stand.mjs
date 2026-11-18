@@ -5,15 +5,15 @@
  *   node scripts/probar-stand.mjs --base http://localhost:4173 [--rondas 8] [--captura salida/]
  *
  * Lo que comprueba (docs/ux.md y la sección 3 de la especificación del stand):
- *  1. El botón «Tengo un stand» entra al modo, que queda en la pestaña
+ *  1. Desde la portada, Tengo un stand entra al modo, que queda en la pestaña
  *     (sessionStorage) y no en la dirección.
  *  2. Con la red cortada de verdad (`Network.emulateNetworkConditions`, offline),
  *     cada ronda arranca sola, sale alguien, y no hay NINGÚN pedido a drand, a
  *     Stellar ni a nada de afuera. Cero pedidos que fallen.
  *  3. Nada se graba: ni Mis sorteos, ni borrador, ni premio recordado, ni enlace corto.
- *  4. El rótulo «Ronda de ejemplo: no se puede comprobar» está en la banda, en el
- *     estadio y a la vista cuando sale el cartel (captura), y no hay QR de
- *     comprobación, compartir ni «ganó».
+ *  4. El rótulo Ronda de ejemplo: no se puede comprobar está en el estadio y
+ *     en el final de la ronda, la banda dice que es el modo stand, y no hay QR
+ *     de comprobación, compartir ni ganó.
  *  5. Con `--salen N` (por defecto 1): el contador «Cuántos salen» marca N, el
  *     resumen lo dice, en cada ronda salen N personas distintas de la lista, y
  *     «Otra ronda» conserva la cantidad.
@@ -21,6 +21,7 @@
  *  6. Lo que dice el relator dentro del estadio (la caja del relator y la línea para lectores de pantalla)
  *     tampoco habla de ganar, de premios ni de sellar: con varias personas por ronda el sapo, la chovena, el
  *     trompo, la piñata, La Entrada, Guajojó y El Toborochi dicen quién sale.
+ *  7. Otra ronda arranca sola, y Cambiar la lista la frena y vuelve al cuadro.
  *
  * Con `--juegos` se elige cuántos juegos de la lista de siempre (un número) o cuáles (ids de botón separados por
  * comas, por ejemplo g-sapo,g-chovena,g-oruro).
@@ -64,17 +65,44 @@ try {
   });
   await page.send("Network.enable");
   await page.send("Page.navigate", { url: `${base}/?lang=es` });
-  await page.waitFor("document.getElementById('btn-stand')", 20000);
+  await page.waitFor("document.querySelector('.hero [data-entrar-stand]')", 20000);
   await sleep(1500);
 
-  // 1. Entrar.
-  await page.eval(`document.getElementById('btn-stand').click()`);
+  // 1. Entrar desde la portada.
+  check(
+    "la portada ofrece Tengo un stand",
+    await page.eval(`(() => {
+      const b = document.querySelector('.hero [data-entrar-stand]');
+      return !!b && b.textContent.trim() === 'Tengo un stand';
+    })()`),
+  );
+  await page.eval(`document.querySelector('.hero [data-entrar-stand]').click()`);
   await sleep(500);
   check("el modo se marca en la pestaña y no en la dirección", await page.eval(`sessionStorage.getItem('tinkazo.stand') === '1' && !location.search.includes('stand')`));
-  check("la banda fija dice que es una ronda de ejemplo", await page.eval(`(() => { const b = document.getElementById('stand-banda'); return !!b && b.offsetParent !== null && /no se puede comprobar/.test(b.textContent); })()`));
+  check(
+    "la banda fija dice que es el modo stand, con rondas de ejemplo",
+    await page.eval(`(() => {
+      const b = document.getElementById('stand-banda');
+      return !!b && b.offsetParent !== null && /rondas de ejemplo/.test(b.textContent);
+    })()`),
+  );
   check("el cuadro de la lista se puede escribir", await page.eval(`!document.getElementById('ta').readOnly && !document.getElementById('ta').disabled`));
   check("no hay campo de premio a la vista", await page.eval(`(() => { const p = document.getElementById('prize'); return !p || p.offsetParent === null; })()`));
   check("«Empezar la ronda» en lugar de «Sellar»", await page.eval(`/Empezar la ronda/.test(document.getElementById('btn-freeze').textContent)`));
+
+  // El atajo y la recarga pasan también por el estado de la red: ninguno puede volver a decir Sellar la lista.
+  await page.send("Page.navigate", { url: `${base}/?stand&lang=es` });
+  await page.waitFor("document.body.dataset.stand === '1'", 10000);
+  check(
+    "entrar por /?stand mantiene Empezar la ronda",
+    await page.eval(`/Empezar la ronda/.test(document.getElementById('btn-freeze').textContent)`),
+  );
+  await page.send("Page.reload");
+  await page.waitFor("document.body.dataset.stand === '1'", 10000);
+  check(
+    "recargar dentro del stand mantiene Empezar la ronda",
+    await page.eval(`/Empezar la ronda/.test(document.getElementById('btn-freeze').textContent)`),
+  );
 
   // Los juegos de la prueba. Primero una vuelta con la red, para que cada juego quede cargado en la pestaña (como en el
   // stand: «los juegos visitados antes»); después se corta la red de verdad y se juegan las rondas.
@@ -119,21 +147,37 @@ try {
       const cartel = await page.waitFor(`document.querySelector('canvas[data-cartel]') !== null`, 90000);
       if (cartel.ok) {
         await sleep(600);
-        const c = JSON.parse(
-          await page.eval(`(() => {
-            const cv = document.querySelector('canvas[data-cartel]');
-            if (!cv) return JSON.stringify({ hay: false });
-            const [x, y, w, h] = cv.dataset.cartel.split(',').map(Number);
-            const k = cv.getBoundingClientRect().width / cv.width;
-            const r = document.getElementById('st-round').getBoundingClientRect();
-            const s = getComputedStyle(document.getElementById('st-round'), '::after');
-            const cx = cv.getBoundingClientRect().left + x * k, cy = cv.getBoundingClientRect().top + y * k;
-            const choca = !(r.right <= cx || r.left >= cx + w * k || r.bottom <= cy || r.top >= cy + h * k);
-            return JSON.stringify({ hay: true, visible: r.width > 40 && r.height > 10 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth, contenido: s.content, choca, rect: [r.left, r.top, r.width, r.height].map(Math.round) });
-          })()`),
-        );
-        check("en el cuadro del cartel el rótulo de ejemplo está a la vista", c.hay && c.visible && /no se puede comprobar/.test(c.contenido), JSON.stringify(c));
-        check("y el cartel no lo tapa", c.hay && !c.choca);
+        const tamanos = [
+          { ancho: 1280, alto: 720, nombre: "1280 por 720" },
+          { ancho: 390, alto: 844, nombre: "390 por 844" },
+          { ancho: 320, alto: 568, nombre: "320 por 568" },
+        ];
+        for (const v of tamanos) {
+          await page.send("Emulation.setDeviceMetricsOverride", { width: v.ancho, height: v.alto, deviceScaleFactor: 1, mobile: false });
+          await sleep(120);
+          const c = JSON.parse(
+            await page.eval(`(() => {
+              const cv = document.querySelector('canvas[data-cartel]');
+              if (!cv) return JSON.stringify({ hay: false });
+              const [x, y, w, h] = cv.dataset.cartel.split(',').map(Number);
+              const k = cv.getBoundingClientRect().width / cv.width;
+              const r = document.getElementById('st-round').getBoundingClientRect();
+              const s = getComputedStyle(document.getElementById('st-round'), '::after');
+              const cx = cv.getBoundingClientRect().left + x * k, cy = cv.getBoundingClientRect().top + y * k;
+              const choca = !(r.right <= cx || r.left >= cx + w * k || r.bottom <= cy || r.top >= cy + h * k);
+              const visible = r.width > 40 && r.height > 10 && r.top >= 0 && r.bottom <= innerHeight && r.left >= 0 && r.right <= innerWidth;
+              const rect = [r.left, r.top, r.width, r.height].map(Math.round);
+              return JSON.stringify({ hay: true, visible, contenido: s.content, choca, rect });
+            })()`),
+          );
+          check(
+            `${v.nombre}: el rótulo de ejemplo está a la vista`,
+            c.hay && c.visible && /no se puede comprobar/.test(c.contenido),
+            JSON.stringify(c),
+          );
+          check(`${v.nombre}: el cartel no tapa el rótulo`, c.hay && !c.choca, JSON.stringify(c));
+        }
+        await page.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
         if (salida) {
           mkdirSync(salida, { recursive: true });
           await page.screenshot(join(salida, "stand-cartel.png"));
@@ -150,6 +194,7 @@ try {
     const r = JSON.parse(
       await page.eval(`JSON.stringify({
         rotulo: getComputedStyle(document.getElementById('st-round'), '::after').content,
+        nota: document.getElementById('stand-fin').textContent,
         ganó: /\bgan[óo]\b/i.test(document.body.innerText),
         finVisible: document.getElementById('stand-fin').offsetParent !== null,
         compartir: ['btn-proof','btn-whatsapp','btn-email','btn-grande'].some(id => { const e = document.getElementById(id); return e && e.offsetParent !== null; }),
@@ -157,6 +202,7 @@ try {
       })`),
     );
     check(`${etiqueta} ${n}: el rótulo del estadio es el de ejemplo`, /no se puede comprobar/.test(r.rotulo), r.rotulo);
+    check(`${etiqueta} ${n}: el final dice una vez que no se puede comprobar`, /no se puede comprobar/.test(r.nota));
     check(`${etiqueta} ${n}: el final avisa que fue de ejemplo, sin compartir ni QR de comprobación`, r.finVisible && !r.compartir && !r.qr);
     check(`${etiqueta} ${n}: nunca dice «ganó»`, !r.ganó);
     const dichas = JSON.parse(await page.eval(`JSON.stringify(window.__dichas || [])`));
@@ -168,6 +214,12 @@ try {
       check(`${etiqueta} ${n}: salen ${salen} personas distintas, todas de la lista`, nombres.length === salen && new Set(nombres).size === salen && nombres.every((x) => lista.includes(x)), nombres.join(" | "));
     }
     await page.eval(`document.getElementById('stand-otra').click()`);
+    const arranque = await page.waitFor(`/Arranca en/.test(document.getElementById('btn-draw').textContent)`, 4000);
+    check(`${etiqueta} ${n}: Otra ronda arranca sola`, arranque.ok);
+    await page.eval(`document.getElementById('stand-cambiar').click()`);
+    const cambio = await page.waitFor(`document.getElementById('sec-frozen').style.display === 'none'`, 4000);
+    check(`${etiqueta} ${n}: Cambiar la lista la frena y vuelve al cuadro`, cambio.ok);
+    // Empezar la ronda no responde 700 ms después de soltar la ronda anterior.
     await sleep(1000);
     return true;
   };
