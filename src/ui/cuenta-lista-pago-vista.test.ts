@@ -82,7 +82,7 @@ const claves = (vista: Vista): string[] =>
       ...c.secundarios.map((s) => s.clave),
     ]),
   ].filter(
-    (x): x is string => typeof x === "string",
+    (x): x is string => typeof x === "string" && x !== "",
   );
 
 /** Todas las fases y marcas del pago, con y sin el producto a la venta, con y sin error. */
@@ -224,7 +224,7 @@ describe("las filas, una por una", () => {
     const vista = v({}, { cuponEnMano: CUPON });
     expect(vista.principal).toMatchObject({ accion: "usar-cupon", clave: "altaActivarConCupon" });
     expect(acciones(vista)).not.toContain("comprar");
-    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["altaTextoSinVenta", "altaCuponListo"]);
+    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["altaCuponListo"]);
   });
 
   it("con acceso y sin sorteos (abierto para usar un cupón), el cupón: el primer paquete no es para quien ya tiene acceso", () => {
@@ -246,7 +246,8 @@ describe("las filas, una por una", () => {
       ["pago-medio", "otro", "boton"],
       ["volver-pago", null, "texto"],
     ]);
-    expect(vista.bajada).toBe("clBajadaConPago");
+    expect(vista.bajada).toBe("clBajada");
+    expect(vista.cajas[0]?.sola).toBe(true);
   });
 
   it("ninguna fila manda a escribir para pagar ni ofrece un QR del banco: nada depende de que alguien confirme a mano", () => {

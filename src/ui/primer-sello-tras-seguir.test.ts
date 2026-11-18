@@ -61,7 +61,13 @@ const pasa = (ms = GUARDA_DE_TOQUE_MS + 50): Promise<void> => vi.advanceTimersBy
 
 /** Abre el paso al final de la entrada, como al entrar sin lista (`revisarCuentaOficial`, para «entrada»). */
 async function abrirAlFinal(o: Partial<Parameters<typeof abrirCuentaLista>[2]> = {}): Promise<{ promesa: Promise<boolean> }> {
-  const promesa = abrirCuentaLista(cuentaSimulada(), salidasSimuladas(), { para: "entrada", correo: "nora@gmail.com", aviso: "Entraste con Google como Nora.", celular: false, inicial: { activacion: "lista", proteccion: "lista" }, ...o });
+  const promesa = abrirCuentaLista(cuentaSimulada(), salidasSimuladas(), {
+    para: "entrada",
+    correo: "nora@gmail.com",
+    celular: false,
+    inicial: { activacion: "lista", proteccion: "lista" },
+    ...o,
+  });
   await pasa();
   return { promesa };
 }
@@ -90,7 +96,7 @@ describe("una pantalla menos entre el cupón y el primer sello", () => {
     expect(primerOficialDeVerdad.pendiente()).toBe(true);
     const { promesa } = await abrirAlFinal({ primerOficial: primerOficialDeVerdad });
     // S3: la información del registro público se muestra antes del primer sello.
-    expect(textoDe()).toContain(t("firstOfficialBody"));
+    expect(textoDe()).toContain("Solo se publica el sello, nunca los nombres.");
     expect(principal().textContent).toBe(t("clSeguir"));
     // Toque 1: Seguir.
     principal().click();
@@ -106,7 +112,7 @@ describe("una pantalla menos entre el cupón y el primer sello", () => {
   it("sin la marca del final de entrada (como antes del arreglo), el primer sello pide su confirmación: 2 toques", async () => {
     const { promesa } = await abrirAlFinal();
     // El final de entrada no trae el texto ni marca: la pantalla de antes.
-    expect(textoDe()).not.toContain(t("firstOfficialBody"));
+    expect(textoDe()).not.toContain(t("clPrimerSello"));
     // Toque 1: Seguir, sin marca.
     principal().click();
     await expect(promesa).resolves.toBe(true);

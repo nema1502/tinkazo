@@ -3305,7 +3305,12 @@
   }
   .cl-idioma[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); }
   /* El hueco de la barra de recorrido, a los dos lados: con o sin ella, la columna queda alineada con el pie. */
-  .cl-cuerpo { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges; }
+  /* En columna: el contenido se centra en el alto con márgenes automáticos, que nunca quedan negativos. Si no entra,
+     el cuerpo se recorre como siempre. */
+  .cl-cuerpo {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges;
+    display: flex; flex-direction: column;
+  }
   /* Lo que no entra se esfuma contra el pie: se nota que sigue más abajo y ningún renglón parece cortado. Al final del
      recorrido queda sobre el margen de abajo del contenido, donde no tapa nada. */
   .cl-cuerpo::after {
@@ -3313,21 +3318,20 @@
     background: linear-gradient(to bottom, transparent, var(--paper));
   }
   .cl-contenido {
-    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: 0 auto; padding: 16px var(--cl-margen) 28px;
-    display: flex; flex-direction: column; gap: 12px;
+    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: auto; padding: 16px var(--cl-margen) 28px;
+    width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;
   }
   .cl-cabeza { display: flex; flex-direction: column; gap: 12px; }
-  .cl-quien { margin: 0; font-size: 16px; color: var(--ink2); font-weight: 600; }
-  .cl-titulo { margin: 0; font-size: 24px; line-height: 1.2; font-weight: 900; text-wrap: balance; }
+  .cl-titulo { margin: 0; font-size: clamp(28px, 8vw, 32px); line-height: 1.2; font-weight: 900; text-wrap: balance; }
   .cuenta-lista .cl-titulo:focus, .cuenta-lista .cl-titulo:focus-visible { outline: none; box-shadow: none; }
-  .cl-bajada { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink2); }
+  .cl-bajada { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ink2); }
+  .cl-bajada[hidden] { display: none; }
   .cl-pasos { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
   .cl-paso { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
   .cl-paso.cl-actual { box-shadow: var(--sh); }
   .cl-paso[data-estado="espera"] { border: 2px dashed var(--ink2); box-shadow: none; background: transparent; }
-  /* La fila de arriba de cada caja: el círculo, el título y la palabra del estado. Si el título no entra, se parte él;
-     la palabra no baja sola a un renglón vacío. */
-  .cl-paso-cab { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 12px 14px; }
+  /* Con dos pasos pendientes, la fila lleva solo el círculo y el título. */
+  .cl-paso-cab { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; padding: 12px 14px; }
   .cl-circulo {
     grid-column: 1; grid-row: 1;
     flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
@@ -3335,13 +3339,12 @@
   }
   .cl-circulo svg { width: 22px; height: 22px; }
   .cl-paso[data-estado="espera"] .cl-circulo { color: var(--ink2); border-color: var(--ink2); border-width: 2px; background: transparent; }
-  .cl-paso[data-estado="lista"] .cl-circulo { background: var(--teal); color: var(--on-accent); }
   .cl-paso[data-estado="no-salio"] .cl-circulo { background: var(--orange); color: var(--on-accent); }
   .cl-paso[data-estado="haciendo"] .cl-circulo, .cl-paso[data-estado="revisando"] .cl-circulo { position: relative; }
   .cl-paso-titulo { grid-column: 2; grid-row: 1; min-width: 0; margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; }
-  .cl-palabra { grid-column: 3; grid-row: 1; justify-self: end; text-align: right; font-size: 16px; font-weight: 700; color: var(--ink2); }
-  .cl-paso[data-estado="lista"] .cl-palabra { color: var(--teal-ink); }
-  .cl-paso[data-estado="no-salio"] .cl-palabra { color: var(--magenta-ink); }
+  /* Con un solo paso a la vista, el título y la línea están afuera: la caja no repite marco ni cabecera. */
+  .cl-paso.cl-sola, .cl-paso.cl-sola.cl-actual { border: 0; box-shadow: none; background: transparent; }
+  .cl-sola .cl-paso-cuerpo { padding: 0; }
   .cl-paso-cuerpo { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; }
   .cl-texto-caja, .cl-nota-caja { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
   .cl-nota-caja { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
@@ -3358,6 +3361,7 @@
   .cl-form input.cl-cupon { text-align: center; letter-spacing: 0.12em; font-family: ui-monospace, Consolas, monospace; font-size: 20px; text-transform: uppercase; }
   .cl-form input.cl-cupon::placeholder { letter-spacing: 0.12em; }
   /* El cupón queda seleccionado tras un error («revisá las letras»): con los colores de la casa se lee, no en el gris del sistema. */
+  .cl-form input.cl-codigo::selection { background: var(--magenta); color: var(--on-accent); }
   .cl-form input.cl-cupon::selection { background: var(--magenta); color: var(--on-accent); }
   .cl-form .cl-ayuda { margin: 0; font-size: 16px; line-height: 1.45; }
   .cl-cupon-listo { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap; }
@@ -3399,14 +3403,15 @@
   /* El botón de sumar sorteos, junto a la línea del cupo y en «Se te acabaron»: secundario, nunca como la principal. */
   .cupo-sumar { margin: 4px 0 0; min-height: 44px; }
   .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }
-  .cl-raya { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; font-size: 16px; font-weight: 600; color: var(--ink2); }
-  .cl-raya::before, .cl-raya::after { content: ""; flex: 1; border-top: 2px solid var(--ink2); }
+  /* El error y el campo van siempre arriba de lo demás: lo que aparece después (la ayuda de Spam) no los empuja. */
+  .cl-paso-cuerpo > .cl-error { order: -2; }
+  .cl-paso-cuerpo > .cl-form { order: -1; }
   .cl-secundario {
     min-height: 44px; padding: 8px 16px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
     font: inherit; font-size: 16px; font-weight: 800; text-align: center; cursor: pointer; overflow-wrap: anywhere;
   }
   .cl-texto {
-    min-height: 44px; padding: 0 6px; border: 0; background: none; color: var(--ink); align-self: flex-start;
+    min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink); align-self: flex-start;
     font: inherit; font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   }
   .cl-secundario:disabled, .cl-texto:disabled { color: var(--ink2); border-color: var(--ink2); cursor: default; text-decoration: none; }
@@ -3427,9 +3432,7 @@
   .cl-salidas { display: flex; justify-content: space-between; gap: 12px; width: 100%; }
   .cl-salidas .cl-texto { align-self: auto; }
   .cl-salida-prueba { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
-  .cl-cuenta-modo { max-width: 38ch; margin: 4px 0 0; color: var(--ink2); font-size: 14px; line-height: 1.35; }
   .cl-contenido > .cl-salidas { max-width: none; margin: 4px 0 0; border-top: 2px solid var(--ink2); padding-top: 8px; }
-  .cl-primer { margin: 0; font-size: 16px; line-height: 1.45; color: var(--ink2); }
   .cl-estado { margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink2); font-weight: 600; }
   /* Vacía sigue en el árbol (sin alto y sin sumar hueco): los lectores de pantalla oyen lo que se escriba después. */
   .cl-estado:empty { height: 0; overflow: hidden; margin-bottom: -8px; }
@@ -3462,13 +3465,6 @@
     .cl-idioma, .cl-secundario, .cl-texto { min-height: 48px; }
     .cl-idioma { min-width: 48px; }
   }
-  @media (min-width: 400px) { .cl-titulo { font-size: 28px; } }
-  @media (max-width: 759px) {
-    /* La palabra larga («Después del paso 1») va debajo del título, no en un renglón propio que agranda la caja. */
-    .cl-paso[data-estado="espera"] .cl-circulo { grid-row: 1 / 3; }
-    .cl-paso[data-estado="espera"] .cl-paso-titulo { align-self: end; }
-    .cl-paso[data-estado="espera"] .cl-palabra { grid-column: 2; grid-row: 2; justify-self: start; align-self: start; text-align: left; }
-  }
   @media (max-width: 359px) {
     /* El celular chico: un poco menos de aire para que los dos pasos entren a la vista sin recorrer. */
     .cl-nombre { display: none; }
@@ -3495,6 +3491,7 @@
     .cl-paso-cuerpo { flex-flow: row wrap; column-gap: 12px; row-gap: 8px; }
     .cl-paso-cuerpo > * { flex: 1 1 100%; }
     .cl-paso-cuerpo > .cl-secundario[data-accion="otro-codigo"] { flex: 1 1 auto; }
+    .cl-paso-cuerpo > .cl-texto { text-align: start; }
     .cl-paso-cuerpo > .cl-texto[data-accion="otro-correo"] { flex: 0 0 auto; align-self: center; }
   }
   @media (min-width: 1000px) and (min-height: 481px) {
@@ -3511,7 +3508,12 @@
     .cl-pie-dentro > .cl-accion { grid-column: 2; grid-row: 1; }
     .cl-pie-dentro > .cl-salidas { grid-column: 2; grid-row: 2; }
     .cl-titulo { font-size: 40px; line-height: 1.1; }
-    .cl-bajada { font-size: 18px; }
+    /* El cuerpo ocupa todo el alto sobrante y el contenido se apoya abajo; el pie tiene un alto mínimo fijo. Así la
+       principal arranca siempre a la misma altura, sea cual sea el paso, y el título queda sobre la base de los pasos. */
+    .cl-cuerpo { flex: 1 1 auto; margin-top: 0; }
+    .cl-contenido { margin-top: auto; margin-bottom: 0; }
+    .cl-cabeza { align-self: end; }
+    .cl-pie { margin-bottom: 0; min-height: 30vh; }
   }
   @media (min-width: 760px) and (min-height: 481px) and (max-height: 640px) {
     /* Una pantalla baja (tablet acostada, laptop chica): menos aire arriba y abajo, para que el paso entre sin recorrer. */
@@ -3519,10 +3521,9 @@
     .cl-pasos { gap: 10px; }
     .cl-pie { padding-top: 8px; padding-bottom: 12px; }
   }
-  @media (min-width: 1600px) and (min-height: 900px) {
-    /* Pantalla grande: más ancho y letra acorde, sin agrandar los huecos. */
+  @media (min-width: 1280px) and (min-height: 720px) {
+    /* Pantalla grande (desde la laptop de 1366 por 768): más ancho y letra acorde, sin agrandar los huecos. */
     .cuenta-lista { --cl-ancho: 1200px; --cl-der: 640px; --cl-medio: 96px; }
-    .cl-quien { font-size: 18px; }
     .cl-titulo { font-size: 56px; }
     .cl-bajada { font-size: 22px; }
     .cl-paso-titulo { font-size: 24px; }
@@ -3530,8 +3531,8 @@
     .cl-circulo svg { width: 26px; height: 26px; }
     .cl-paso-cab { padding: 16px 18px; column-gap: 14px; }
     .cl-paso-cuerpo { padding: 0 18px 18px; gap: 12px; }
-    .cl-texto-caja, .cl-nota-caja, .cl-nota, .cl-error-texto, .cl-etiqueta, .cl-palabra, .cl-raya, .cl-secundario, .cl-texto,
-    .cl-estado, .cl-primer { font-size: 18px; }
+    .cl-texto-caja, .cl-nota-caja, .cl-nota, .cl-error-texto, .cl-etiqueta, .cl-secundario, .cl-texto,
+    .cl-estado { font-size: 18px; }
     .cl-secundario, .cl-texto { min-height: 48px; }
     .cl-form input { min-height: 56px; font-size: 18px; }
     .cl-form input.cl-codigo { font-size: 26px; }
@@ -3544,7 +3545,7 @@
     .cl-principal { min-height: 48px; font-size: 20px; }
   }
   /* El teclado abierto en un celular chico: se esconde lo que sobra mientras se escribe. */
-  .cuenta-lista.cl-tecleando .cl-quien, .cuenta-lista.cl-tecleando .cl-bajada,
+  .cuenta-lista.cl-tecleando .cl-bajada,
   .cuenta-lista.cl-tecleando .cl-paso:not(.cl-actual), .cuenta-lista.cl-tecleando .cl-notas { display: none; }
   @media (prefers-reduced-motion: no-preference) {
     .cuenta-lista { animation: cl-entra 150ms ease-out; }

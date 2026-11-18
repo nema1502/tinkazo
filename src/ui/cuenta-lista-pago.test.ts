@@ -175,8 +175,9 @@ describe("comprar el primer paquete", () => {
     expect(panel()?.querySelector('[data-dato="monto"]')?.textContent).toBe("3 USDC");
     // Poco texto: a la vista, el título del paquete, una sola línea (cómo pagar) y los datos; lo demás, plegado.
     const cuerpo = raiz()?.querySelector(".cl-actual .cl-paso-cuerpo");
-    expect(raiz()?.querySelector(".cl-actual .cl-paso-titulo")?.textContent).toContain(t("pagoTitulo"));
-    expect([...(cuerpo?.querySelectorAll(":scope > p, :scope > .cl-error") ?? [])].map((p) => p.textContent)).toEqual([t("compraAppLinea")]);
+    expect(raiz()?.querySelector(".cl-titulo")?.textContent).toBe(t("pagoTitulo"));
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("compraAppLinea"));
+    expect([...(cuerpo?.querySelectorAll(":scope > p, :scope > .cl-error") ?? [])].map((p) => p.textContent)).toEqual([]);
     const mas = panel()?.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]');
     expect(mas?.open).toBe(false);
     expect(mas?.textContent).toContain(t("pagoParaCuenta").replace("{correo}", "a•••@gmail.com"));
@@ -205,7 +206,8 @@ describe("comprar el primer paquete", () => {
     expect(principal().dataset.accion).toBe("activar");
     expect(principal().textContent).toBe(t("clActivarBoton"));
     expect(textoDe()).toContain(t("pagoListo"));
-    expect(textoDe()).toContain(t("altaActivarPago"));
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(2);
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clBajada"));
     expect(panel()).toBeNull();
     expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
     // Llegó: no se pregunta más.

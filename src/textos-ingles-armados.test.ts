@@ -200,12 +200,8 @@ describe("el tope de personas de cada juego: lo que dice la recomendación", () 
 
 describe("la ayuda del botón de desbloqueo al proteger la cuenta", () => {
   it("dice que se desbloquea con lo mismo que abre el celular o la computadora, sin igualar una acción con un objeto", () => {
-    expect(en.clDesbloqueoAyudaCel).toBe(
-      "You unlock with the same thing you use to open your phone: your fingerprint, face or passcode. It never leaves your phone, and Tinkazo doesn't see it.",
-    );
-    expect(en.clDesbloqueoAyudaCompu).toBe(
-      "You unlock with the same thing you use to open your computer: your fingerprint, face or password. It never leaves your computer, and Tinkazo doesn't see it.",
-    );
+    expect(en.clDesbloqueoAyudaCel).toBe("It's your fingerprint, face or phone passcode. Tinkazo never sees it.");
+    expect(en.clDesbloqueoAyudaCompu).toBe("It's your fingerprint, face or computer password. Tinkazo never sees it.");
     for (const clave of ["clDesbloqueoAyudaCel", "clDesbloqueoAyudaCompu"] as const) {
       expect(en[clave], clave).not.toMatch(/^Unlocking is/);
     }
