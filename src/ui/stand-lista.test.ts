@@ -11,7 +11,12 @@ vi.mock("./wallet-ui", () => ({
   currentSession: () => ({ address: "Cuenta de prueba" }),
   refrescarPuerta: vi.fn(),
 }));
-vi.mock("./freeze", () => ({ refreshFreezeLabel: vi.fn(), rotarJuego: vi.fn() }));
+vi.mock("./freeze", () => ({
+  GUARDA_DESPUES_DE_SOLTAR_MS: 700,
+  refreshFreezeLabel: vi.fn(),
+  rotarJuego: vi.fn(),
+  unfreeze: vi.fn(),
+}));
 vi.mock("./draw", () => ({ newDraw: vi.fn() }));
 vi.mock("./siguiente", () => ({ actualizarPaso: vi.fn() }));
 
@@ -29,6 +34,7 @@ async function montar(lista: string, enStand = true, search = "") {
   history.replaceState(null, "", "/#sortear");
   h.recargar = vi.fn();
   vi.stubGlobal("location", { search, pathname: "/", hash: "#sortear", reload: h.recargar });
+  vi.stubGlobal("scrollTo", () => undefined);
   const [p, stand, modo, i18n] = await Promise.all([
     import("./participants"),
     import("./stand"),
@@ -48,9 +54,12 @@ function poner(p: typeof import("./participants"), lista: string): void {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   sessionStorage.clear();
+  document.body.removeAttribute("data-stand");
+  document.body.removeAttribute("data-stand-arrancando");
   document.body.innerHTML = "";
 });
 
@@ -143,7 +152,203 @@ describe("el resumen dice cuántas salen", () => {
   });
 });
 
+describe("Otra ronda y Cambiar la lista", () => {
+  async function conResultado(lista: string[], eventos = false) {
+    const { stand } = await montar(lista.join("\n"));
+    if (eventos) stand.initStand();
+    const { app } = await import("../state");
+    const draw = await import("./draw");
+    app.frozen = { names: lista } as never;
+    app.drawn = { winners: [0] } as never;
+    vi.mocked(draw.newDraw).mockImplementation(() => {
+      app.frozen = null;
+      app.drawn = null;
+    });
+    return stand;
+  }
+
+  it("Otra ronda arranca sola a los 0,8 segundos", async () => {
+    const stand = await conResultado(["Ana", "Beto", "Carla"]);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+
+    stand.otraRonda();
+    expect(clic).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(800);
+    expect(clic).toHaveBeenCalledTimes(1);
+  });
+
+  it("Otra ronda no arranca sola si quedan menos de dos personas", async () => {
+    const stand = await conResultado(["Ana"]);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+
+    stand.otraRonda();
+    vi.advanceTimersByTime(2000);
+    expect(clic).not.toHaveBeenCalled();
+  });
+
+  it("Cambiar la lista frena la ronda y vuelve con la misma lista", async () => {
+    const { stand } = await montar("Ana\nBeto");
+    const { app } = await import("../state");
+    const freeze = await import("./freeze");
+    app.frozen = { names: ["Ana", "Beto"] } as never;
+    app.drawn = null;
+
+    stand.cambiarLaLista();
+    expect(freeze.unfreeze).toHaveBeenCalledTimes(1);
+    expect(freeze.unfreeze).toHaveBeenCalledWith("Ana\nBeto");
+  });
+
+  it("Cambiar la lista suelta el resultado y vuelve al cuadro sin arrancar otra ronda", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    const draw = await import("./draw");
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+
+    (document.getElementById("stand-editar") as HTMLButtonElement).click();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(draw.newDraw).toHaveBeenCalledWith("otraLista");
+    expect(cuadro().value).toBe("Ana\nBeto");
+    expect(document.activeElement).toBe(cuadro());
+    expect(clic).not.toHaveBeenCalled();
+  });
+
+  it("Otra ronda deja Cambiar la lista a la vista sin mover el foco durante la espera", async () => {
+    const stand = await conResultado(["Ana", "Beto"]);
+    vi.useFakeTimers();
+    const otra = document.getElementById("stand-otra") as HTMLButtonElement;
+    otra.focus();
+
+    stand.otraRonda();
+
+    const cambiar = document.getElementById("stand-cambiar") as HTMLButtonElement;
+    expect(cambiar.hidden).toBe(false);
+    expect(document.activeElement).toBe(otra);
+    expect(document.activeElement).not.toBe(cuadro());
+    expect(document.body.dataset.standArrancando).toBe("1");
+  });
+
+  it("al abrir el estadio termina la marca de espera", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    vi.useFakeTimers();
+    stand.otraRonda();
+    expect(document.body.dataset.standArrancando).toBe("1");
+    (document.getElementById("stadium") as HTMLElement).style.display = "block";
+    await vi.waitFor(() => expect(document.body.dataset.standArrancando).toBeUndefined());
+  });
+
+  it("escribir en el cuadro durante la guarda frena el arranque y saca la marca", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+    stand.otraRonda();
+
+    cuadro().dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(clic).not.toHaveBeenCalled();
+    expect(document.getElementById("stand-cambiar")?.hidden).toBe(true);
+    expect(document.body.dataset.standArrancando).toBeUndefined();
+  });
+
+  it("tocar el cuadro durante la guarda frena el arranque", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+    stand.otraRonda();
+
+    cuadro().dispatchEvent(new Event("focus"));
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(clic).not.toHaveBeenCalled();
+  });
+
+  it("Cambiar la lista frena la guarda antes de que empiece la cuenta", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+    stand.otraRonda();
+
+    (document.getElementById("stand-cambiar") as HTMLButtonElement).click();
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(clic).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(cuadro());
+    expect(document.body.dataset.standArrancando).toBeUndefined();
+  });
+
+  it("un diálogo abierto impide que la ronda arranque detrás", async () => {
+    const stand = await conResultado(["Ana", "Beto"], true);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+    stand.otraRonda();
+    const { abrirDialogo } = await import("./dialogo");
+    const dlg = abrirDialogo({ titulo: "Decisión pendiente" });
+    expect(document.getElementById("stand-cambiar")?.hidden).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(clic).not.toHaveBeenCalled();
+    dlg.cerrar();
+  });
+
+  it("salir del stand frena la guarda aunque se cancele la pregunta", async () => {
+    const stand = await conResultado(["Ana", "Beto", "Carla"]);
+    const empezar = document.getElementById("btn-freeze") as HTMLButtonElement;
+    const clic = vi.fn();
+    empezar.addEventListener("click", clic);
+    vi.useFakeTimers();
+    stand.otraRonda();
+
+    const salida = stand.salirDelStand();
+    expect(document.body.dataset.standArrancando).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(clic).not.toHaveBeenCalled();
+    (dialogo()?.querySelector('[data-dlg="x"]') as HTMLButtonElement).click();
+    await salida;
+  });
+
+  it("si Ver de nuevo impide otra ronda, no consume las llegadas ni las quitas", async () => {
+    const stand = await conResultado(["Ana", "Beto"]);
+    const draw = await import("./draw");
+    const freeze = await import("./freeze");
+    vi.mocked(draw.newDraw).mockImplementation(() => undefined);
+    const cambios = vi.fn(() => ({ quitar: ["Ana"], sumar: ["Carla"] }));
+    stand.nombresParaLaSiguiente(cambios);
+
+    stand.otraRonda();
+
+    expect(cambios).not.toHaveBeenCalled();
+    expect(freeze.rotarJuego).not.toHaveBeenCalled();
+    expect(cuadro().value).toBe("Ana\nBeto");
+  });
+});
+
 describe("llevar la lista del stand al sorteo de verdad", () => {
+  it("la pregunta dice cuántos nombres se llevan", async () => {
+    const { stand } = await montar("Llama Lupe\nCóndor Beto\nVicuña Vale");
+    const salida = stand.salirDelStand();
+    expect(dialogo()?.textContent).toContain("¿Llevás estos 3 nombres a un sorteo de verdad?");
+    (dialogo()?.querySelector('[data-dlg="x"]') as HTMLButtonElement).click();
+    await salida;
+  });
+
   it("con dos nombres pregunta, avisa qué borrador reemplaza y guarda el texto antes de recargar", async () => {
     const { stand, i18n } = await montar("Llama Lupe\nCóndor Beto\nVicuña Vale");
     sessionStorage.setItem(BORRADOR, JSON.stringify({ texto: "Ana\nBeto", premio: "Termo" }));
@@ -247,5 +452,16 @@ describe("llevar la lista del stand al sorteo de verdad", () => {
     p.reponerBorrador();
     expect(cuadro().value).toBe("Llama Lupe\nCóndor Beto");
     expect(sessionStorage.getItem(CLAVE)).toBeNull();
+  });
+});
+
+describe("al salir, la página nueva arranca arriba", () => {
+  it("hace scroll al tope con la restauración en manual antes de recargar", async () => {
+    const { stand } = await montar("Llama Lupe");
+    const espia = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    await stand.salirDelStand();
+    expect(espia).toHaveBeenCalledWith(0, 0);
+    expect(history.scrollRestoration).toBe("manual");
+    expect(h.recargar).toHaveBeenCalledTimes(1);
   });
 });

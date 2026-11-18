@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   consultas: 0,
 }));
 
-vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false }));
+vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enStand: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => h.cobro }));
 vi.mock("../stellar/alta-config", () => ({ altaPagoActivo: () => h.pago }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => h.sesion }));
