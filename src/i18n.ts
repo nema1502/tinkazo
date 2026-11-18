@@ -2329,6 +2329,19 @@ export const T: Record<Lang, Dict> = {
       "Recibir un premio en tu cuenta de Tinkazo es gratis, e ingresar dólares digitales a tu cuenta también. " +
       "Retirar dólares digitales de tu cuenta de Google de Tinkazo a otra cuenta cuesta {c} dólares digitales por retiro, " +
       "sea cual sea el monto, y lo ves antes de confirmar.",
+    // Lo que cobra Tinkazo a una campaña de empresa, dicho en precios y en los términos. {p} es el porcentaje, {m} el mínimo y
+    // {e} lo que carga una empresa que reparte 120 (src/comision-texto.ts). Solo entran con la comisión configurada.
+    prComisionT: "Lo que cuesta una campaña de empresa",
+    prComision:
+      "Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}. " +
+      "Se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.",
+    prNoteComision:
+      "El modo Prueba es gratis, y el Oficial también con el cupón de tu evento. " +
+      "Las campañas de empresa con premios pagan un porcentaje. Participar y comprobar es gratis, siempre.",
+    tmComisionT: "Si tu empresa sortea premios",
+    tmComisionB:
+      "Una campaña de empresa con premios en dólares digitales paga a Tinkazo {p} del total de los premios, con un mínimo de {m}, " +
+      "antes de abrir la inscripción. Se suma a los premios y no sale de ellos. Participar es gratis, siempre.",
     prDuraLink: "Qué queda de tu sorteo y por cuánto tiempo →",
     sealed: "Lista sellada ✓", defaultMeta: "Sorteo de comunidad",
     noAnchor: "sin registrar", onChain: "verlo en el registro público",
@@ -5195,6 +5208,20 @@ export const T: Record<Lang, Dict> = {
       "Receiving a prize in your Tinkazo account is free, and so is adding digital dollars to your account. " +
       "Withdrawing digital dollars from your Tinkazo Google account to another account costs {c} digital dollars per withdrawal, " +
       "whatever the amount, and you see it before you confirm.",
+    // What Tinkazo charges a company campaign, said on pricing and in the terms. {p} is the percentage, {m} the minimum and {e}
+    // what a company giving away 120 loads (src/comision-texto.ts). They only appear with the charge configured.
+    prComisionT: "What a company campaign costs",
+    prComision:
+      "When a company gives away prizes in digital dollars, it pays Tinkazo {p} of the prize total, with a minimum of {m}. " +
+      "It is added to what the company loads and never comes out of the prize: to give away 120, it loads {e}. " +
+      "The winner gets the full prize and signing up is free.",
+    prNoteComision:
+      "Test mode is free, and so is Live mode with your event coupon. " +
+      "Company campaigns with prizes pay a percentage. Taking part and checking are always free.",
+    tmComisionT: "If your company gives away prizes",
+    tmComisionB:
+      "A company campaign with prizes in digital dollars pays Tinkazo {p} of the prize total, with a minimum of {m}, " +
+      "before sign-up opens. It is added to the prizes and never comes out of them. Taking part is always free.",
     prDuraLink: "What is left of your draw, and for how long →",
     sealed: "List sealed ✓", defaultMeta: "Community draw",
     noAnchor: "not recorded", onChain: "see it in the public record",

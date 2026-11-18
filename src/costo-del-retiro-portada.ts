@@ -1,4 +1,6 @@
 import { cobroEnElBuild } from "./alta-textos-con-cobro";
+import { dolaresEnTexto, porcentajeEnTexto } from "./campana/comision";
+import { comisionDelBuild } from "./stellar/comision-config";
 import { costoDelRetiro, montoEnPalabras } from "./stellar/retiro-config";
 import { entornoDelBuild, ventaAbiertaATodos } from "./stellar/venta-piloto";
 
@@ -25,12 +27,47 @@ const FAQ_CON_RETIRO = {
   en: "Organizing is free today. Taking part, checking and receiving a prize are always free. Withdrawing money from your account costs {c}.",
 };
 
-/** La respuesta de la portada con un costo de retiro de esos stroops, en los dos idiomas. */
-export function textoDeLaPortadaConRetiro(stroops: bigint): { es: string; en: string } {
-  return {
-    es: FAQ_CON_RETIRO.es.replace("{c}", montoEnPalabras(stroops, "es")),
-    en: FAQ_CON_RETIRO.en.replace("{c}", montoEnPalabras(stroops, "en")),
+/**
+ * La respuesta con lo que se cobra a una campaña de empresa además del costo del retiro. `{p}` es el porcentaje, `{m}` el mínimo
+ * dicho de palabra (`1,50 dólares digitales`) y `{c}` el costo del retiro dicho de palabra.
+ */
+const FAQ_CON_RETIRO_Y_COMISION = {
+  es:
+    "Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga {p} de los premios. " +
+    "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta {c}.",
+  en:
+    "Organizing is free. If your company gives away prizes in digital dollars, it pays {p} of the prizes. " +
+    "Taking part, checking and receiving a prize are always free. Withdrawing costs {c}.",
+};
+
+/** Lo que cobra Tinkazo a una campaña, tal como lo necesita la respuesta: el porcentaje en puntos básicos y el mínimo en stroops. */
+export interface ComisionDeLaPortada {
+  pb: bigint;
+  minimo: bigint;
+}
+
+/**
+ * La respuesta de la portada con un costo de retiro de esos stroops, en los dos idiomas. Con la comisión de las campañas
+ * configurada, la respuesta dice también cuánto cobra Tinkazo a una empresa.
+ */
+export function textoDeLaPortadaConRetiro(stroops: bigint, comision: ComisionDeLaPortada | null = null): { es: string; en: string } {
+  if (comision === null) {
+    return {
+      es: FAQ_CON_RETIRO.es.replace("{c}", montoEnPalabras(stroops, "es")),
+      en: FAQ_CON_RETIRO.en.replace("{c}", montoEnPalabras(stroops, "en")),
+    };
+  }
+  const dicho = (l: "es" | "en"): string => {
+    const m = `${dolaresEnTexto(comision.minimo, l)} ${l === "es" ? "dólares digitales" : "digital dollars"}`;
+    return FAQ_CON_RETIRO_Y_COMISION[l].replace("{p}", porcentajeEnTexto(comision.pb, l)).replace("{m}", m).replace("{c}", montoEnPalabras(stroops, l));
   };
+  return { es: dicho("es"), en: dicho("en") };
+}
+
+/** La comisión de las campañas que dice el entorno, o `null` si no se cobra (las tres variables válidas, `comision-config.ts`). */
+function comisionDelEntorno(env: Entorno): ComisionDeLaPortada | null {
+  const c = comisionDelBuild(env);
+  return c === null ? null : { pb: c.pb, minimo: c.minimo };
 }
 
 /**
@@ -40,7 +77,7 @@ export function textoDeLaPortadaConRetiro(stroops: bigint): { es: string; en: st
 export function faqConElRetiro(env?: Entorno): { es: string; en: string } | null {
   const stroops = costoDelRetiro(env ?? entornoDelBuild());
   if (stroops === null || cobroEnElBuild(env)) return null;
-  return textoDeLaPortadaConRetiro(stroops);
+  return textoDeLaPortadaConRetiro(stroops, comisionDelEntorno(env ?? entornoDelBuild()));
 }
 
 /** La respuesta `faq3a` del HTML de una página, o `null` si la página no la trae. */
@@ -65,7 +102,7 @@ export function problemasDeLaPortadaConRetiro(env: Record<string, string | undef
     ];
   }
   const html = paginas["index.html"] ?? "";
-  if (faqDelHtml(html) === textoDeLaPortadaConRetiro(stroops).es) return [];
+  if (faqDelHtml(html) === textoDeLaPortadaConRetiro(stroops, comisionDelEntorno(env)).es) return [];
   return [
     "index.html todavía dice lo de antes sobre cuánto cuesta: con el costo del retiro prendido, la respuesta data-i=\"faq3a\" tiene que traer " +
       "el texto de costo-del-retiro-portada.ts, en el mismo commit que lo prende.",

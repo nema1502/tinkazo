@@ -161,8 +161,20 @@ describe("el panel de quien organiza", () => {
 
   it("en el celular elegir, la vista previa y confirmar dejan el botón principal abajo", () => {
     const celular = bloque("@media (max-width: 699px)");
-    expect(celular).toContain("min-height: calc(100dvh - 160px)");
-    expect(celular).toContain("margin-top: auto");
+    // Sin alto contado desde otro lugar (empujaba el botón fuera de la pantalla): el botón queda pegado abajo.
+    expect(celular).not.toContain("100dvh - 160px");
+    expect(celular).toContain("position: sticky");
+    expect(celular).toContain("bottom: 0");
+  });
+
+  it("con el cobro pendiente se esconde el premio grande y con el cobro pagado aparece la marca", () => {
+    expect(css).toContain('.cpo-panel[data-comision]:not([data-comision="pagada"]) > .cpo-previa { display: none; }');
+    expect(css).toContain(".cpo-cab .cpo-marca {");
+  });
+
+  it("en elegir, la vista previa y confirmar se esconde el editor de la lista de debajo del panel", () => {
+    expect(css).toContain("#btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones");
+    expect(css).toContain("#sec-participants > .head");
   });
 
   it("cada bloque del panel tiene una clase igual a su id", () => {

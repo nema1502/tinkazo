@@ -26,9 +26,11 @@ const hexadecimal = (bytes) => Buffer.from(bytes).toString("hex");
 /**
  * Normaliza y firma una campaña. `ahora` se pasa aparte para que la comprobación del cierre sea reproducible, y `validar`
  * es el validador de la campaña (`validarCampanaParaFirmar`): sin él no se firma, porque firmar a ciegas es lo que esto evita.
- * Lanza con el campo que falta o no sirve, nunca con material de la llave.
+ * Con `conComision` (lo que cobra Tinkazo a la campaña está prendido) los premios van en centavos justos: el panel suma el total al
+ * centavo y un premio con fracción de centavo se mostraría distinto de lo que se suma. Lanza con el campo que falta o no sirve,
+ * nunca con material de la llave.
  */
-export function firmarCampana(secretoHex, textoCrudo, ahora, validar) {
+export function firmarCampana(secretoHex, textoCrudo, ahora, validar, { conComision = false } = {}) {
   if (typeof validar !== "function") throw new Error("falta el validador de la campaña: no se firma a ciegas");
   if (typeof secretoHex !== "string" || !/^[0-9a-f]{64}$/u.test(secretoHex)) {
     throw new Error("la llave privada tiene que ser de 64 caracteres hexadecimales");
@@ -59,6 +61,9 @@ export function firmarCampana(secretoHex, textoCrudo, ahora, validar) {
     const campo = lectura?.campo ?? "desconocido";
     const motivo = lectura?.motivo ?? "sin motivo";
     throw new Error(`${quien} rechazaría esta campaña: revisá el campo ${campo} (${motivo})`);
+  }
+  if (conComision && !(Array.isArray(datos.premios) && datos.premios.every((p) => /^\d{1,16}$/u.test(String(p)) && BigInt(p) % 100_000n === 0n))) {
+    throw new Error("con el cobro de la comisión prendido los premios van en centavos justos: revisá el campo premios");
   }
   const firma = ed25519.sign(new TextEncoder().encode(texto), Buffer.from(secretoHex, "hex"));
   return { texto, firma: Buffer.from(firma).toString("base64url") };
@@ -158,12 +163,17 @@ async function firmarArchivo(archivoLlave, archivoCampana) {
   firmadaFueraDelRepositorio(salida);
   const secretoHex = readFileSync(archivoLlave, "utf8").trim();
   const crudo = readFileSync(archivoCampana, "utf8");
-  const firmada = firmarCampana(secretoHex, crudo, Date.now(), await cargarValidador());
+  const conComision = ["VITE_COMISION_PB", "VITE_COMISION_MINIMO", "VITE_COMISION_CUENTA"].every((v) => (process.env[v] ?? "").trim() !== "");
+  const firmada = firmarCampana(secretoHex, crudo, Date.now(), await cargarValidador(), { conComision });
   writeFileSync(salida, `${JSON.stringify(firmada, null, 2)}\n`, "utf8");
   const datos = JSON.parse(firmada.texto);
   console.log(`Evento: ${datos.evento}`);
   console.log(`Tamaño del texto firmado: ${Buffer.byteLength(firmada.texto)} bytes`);
   console.log(`Archivo: ${salida}`);
+  if (conComision) {
+    // El pago del cobro se reconoce por el evento: repetirlo haría que un pago de antes valga para esta campaña.
+    console.log("Con el cobro de la comisión prendido, el pago se reconoce por el nombre del evento: el ensayo y la campaña del día llevan eventos distintos.");
+  }
 }
 
 async function principal() {

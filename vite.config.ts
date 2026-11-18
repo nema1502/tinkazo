@@ -4,7 +4,8 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
-import { avisosDelRetiro, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
+import { avisosDelRetiro, problemasDeLaComision, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
+import { comisionDelBuild, costoDelRetiroDelToml, cuentasDelPorteroEnElToml, retirosDelToml } from "./src/stellar/comision-config";
 import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
 import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
@@ -85,7 +86,7 @@ function textosPorPagina(): Plugin {
 
         const T = await diccionario();
         const claves = new Set<string>();
-        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|i-con-comision|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
         for (const k of delHtml) {
           if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
             this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);
@@ -213,6 +214,46 @@ function validarCostoDelRetiro(): Plugin {
   };
 }
 
+/** El texto de `workers/patrocinio/wrangler.toml` (solo se lee), o `null` si el archivo no está. */
+function wranglerDelPortero(): string | null {
+  try {
+    return readFileSync(resolve(__dirname, "workers/patrocinio/wrangler.toml"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El build no sale con lo que Tinkazo cobra a una campaña a medio poner (`VITE_COMISION_PB`, `VITE_COMISION_MINIMO` y
+ * `VITE_COMISION_CUENTA`): las tres van juntas, bien escritas, con el costo del retiro cobrándose y pagar con Google
+ * prendido, con la cuenta común (no la de cobros ni otra del portero) y con el mismo costo y los retiros prendidos del lado
+ * del portero (`src/stellar/premios-build.ts`). Ningún mensaje escribe el valor de una variable. Con la comisión prendida
+ * el build deja además `comision.json` en la carpeta publicada, con los datos públicos que usa el guion de quien activa
+ * campañas para comprobar que lo que calcula es lo mismo que muestra el sitio.
+ */
+function validarComision(): Plugin {
+  let publicar: Record<string, string> | null = null;
+  return {
+    name: "tinkazo:comision",
+    apply: "build",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_"]);
+      const toml = wranglerDelPortero();
+      const problemas = problemasDeLaComision(env, {
+        cuentasDelPortero: toml === null ? null : cuentasDelPorteroEnElToml(toml),
+        costoDelPortero: toml === null ? null : costoDelRetiroDelToml(toml),
+        retirosDelPortero: toml === null ? null : retirosDelToml(toml),
+      });
+      if (problemas.length) throw new Error(`La comisión de las campañas está a medio poner:\n- ${problemas.join("\n- ")}`);
+      const c = comisionDelBuild(env);
+      publicar = c ? { pb: String(c.pb), minimo: String(c.minimo), cuenta: c.cuenta, costo: String(c.costo) } : null;
+    },
+    generateBundle() {
+      if (publicar) this.emitFile({ type: "asset", fileName: "comision.json", source: `${JSON.stringify(publicar)}\n` });
+    },
+  };
+}
+
 /**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
@@ -329,6 +370,7 @@ export default defineConfig({
     validarBanderasDeAlta(),
     validarModoPremios(),
     validarCostoDelRetiro(),
+    validarComision(),
     validarPaginasConCobro(),
     textosPorPagina(),
     adelantarLectura(),

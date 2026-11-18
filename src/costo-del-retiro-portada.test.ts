@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cuentaDePrueba } from "./campana/cuentas-de-prueba";
 import { faqConElRetiro, problemasDeLaPortadaConRetiro, textoDeLaPortadaConRetiro } from "./costo-del-retiro-portada";
 
 /**
@@ -200,5 +201,63 @@ describe("la publicación de producción", () => {
       ...problemasDeLaPortadaConRetiro({ ...PRODUCCION, ...CON_COMPRA }, { "index.html": HOY }),
     ];
     for (const mensaje of todo) expect(mensaje).not.toMatch(/[«»;·—!¡]/);
+  });
+});
+
+describe("con lo que cobra Tinkazo a una campaña de empresa", () => {
+  const CON_COMISION = { ...CON_COSTO, VITE_COMISION_PB: "200", VITE_COMISION_MINIMO: "1.50", VITE_COMISION_CUENTA: cuentaDePrueba(2) };
+  const COMISION = { pb: 200n, minimo: 15_000_000n };
+  const frase = textoDeLaPortadaConRetiro(5_000_000n, COMISION);
+  const conFrase = (): string => HOY.replace(/(data-i="faq3a">)[^<]*(<)/, `$1${frase.es}$2`);
+
+  it("la respuesta dice que organizar es gratis, lo que paga una empresa y lo que cuesta retirar, en español", () => {
+    expect(frase.es).toBe(
+      "Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. " +
+        "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.",
+    );
+  });
+
+  it("y en inglés", () => {
+    expect(frase.en).toBe(
+      "Organizing is free. If your company gives away prizes in digital dollars, it pays 2% of the prizes. " +
+        "Taking part, checking and receiving a prize are always free. Withdrawing costs 50 cents.",
+    );
+  });
+
+  it("no empieza diciendo que hoy es gratis para después decir que se paga", () => {
+    expect(frase.es).not.toMatch(/^Hoy/);
+    expect(frase.en).not.toMatch(/today/i);
+  });
+
+  it("nunca deja un marcador a la vista, ni signos que no van", () => {
+    for (const t of [frase.es, frase.en]) {
+      expect(t).not.toMatch(/{[pmc]}/);
+      expect(t).not.toMatch(/[«»;·—!¡"]/);
+    }
+  });
+
+  it("sin la comisión, la respuesta es la de siempre", () => {
+    expect(textoDeLaPortadaConRetiro(5_000_000n, null)).toEqual(textoDeLaPortadaConRetiro(5_000_000n));
+  });
+
+  it("la portada sale con la respuesta combinada cuando la comisión está configurada", async () => {
+    vi.resetModules();
+    for (const [k, v] of Object.entries(CON_COMISION)) vi.stubEnv(k, v);
+    const { faqConElRetiro: faq } = await import("./costo-del-retiro-portada");
+    expect(faq()).toEqual(frase);
+  });
+
+  it("con la comisión prendida y la portada que solo dice el costo del retiro, la publicación de producción no sale", () => {
+    const p = problemasDeLaPortadaConRetiro({ ...CON_COMISION, VERCEL_ENV: "production" }, { "index.html": prendida(5_000_000n) });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("faq3a");
+  });
+
+  it("con la comisión prendida y la portada con la respuesta combinada, sale", () => {
+    expect(problemasDeLaPortadaConRetiro({ ...CON_COMISION, VERCEL_ENV: "production" }, { "index.html": conFrase() })).toEqual([]);
+  });
+
+  it("sin la comisión, la portada con la respuesta combinada tampoco sale: dice más de lo que se cobra", () => {
+    expect(problemasDeLaPortadaConRetiro(PRODUCCION, { "index.html": conFrase() })).toHaveLength(1);
   });
 });

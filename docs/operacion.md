@@ -430,6 +430,37 @@ La sala vive 24 horas desde que se crea, no desde el sorteo, y su alarma borra t
 - **Si un premio no se recibe en el plazo.** Nada vence solo, y la etiqueta Vencido del comprobante no cambia eso: quien organiza decide. Si resuelve sortearlo de nuevo, hace otro sorteo con una lista nueva por el camino de siempre, y a la nueva ganadora hay que darle el alta a mano, avisarle y pagarle, porque ya no hay panel de campaña ni correo.
 - **Bajar los topes** y sumar a mano los sorteos que falten a la cuenta que organiza, como en Después del evento.
 
+## El cobro a las campañas de empresa
+
+Una empresa que sortea premios en dólares digitales paga a Tinkazo un porcentaje del total de los premios, con un mínimo, **antes de abrir la inscripción**. Se suma a lo que la empresa carga (para repartir 120, carga 122,40) y nunca sale del premio. Participar sigue siendo gratis. Viaja por el camino del retiro: una transacción con dos pagos, el cobro menos el costo del retiro a la cuenta que cobra y el costo exacto a `CUENTA_COBROS`. Con el costo de 0,50 el **mínimo real es 1,50**, no 1: el retiro pide que lleguen al menos 1 dólar digital a su destino. Un premio de 1 paga 1,50 y se cargan 2,50.
+
+**Las tres variables del build** (`.env.example`), que van juntas y nacen vacías. Sin las tres, el panel de quien organiza es el de siempre y no cambia ninguna pantalla:
+
+| Variable | Forma | Qué es |
+|---|---|---|
+| `VITE_COMISION_PB` | entero de 1 a 1000 | Los puntos básicos del total de los premios. 200 es el 2 % |
+| `VITE_COMISION_MINIMO` | dólares con punto y hasta 2 decimales | Lo menos que se cobra. No baja del costo del retiro más 1 |
+| `VITE_COMISION_CUENTA` | dirección G | La cuenta de Tinkazo que recibe el cobro: común, solo para comisiones, con la línea del USDC de Circle autorizada. Nunca la de cobros ni otra del portero |
+
+El build no sale con una sola o con dos de las tres, con la cuenta repetida, sin pagar con Google, sin el costo del retiro, con otro costo del retiro que el `COSTO_RETIRO` del portero, o con `RETIROS` apagado en `workers/patrocinio/wrangler.toml`. Con la comisión prendida deja `comision.json` en la carpeta publicada, con los datos públicos que usa el guion.
+
+**Qué hace falta antes (no es código):**
+
+1. El portero de la red principal con `RETIROS = "1"` y `PAGOS_PREMIO = "1"`: es un cambio en `workers/patrocinio/wrangler.toml` y un despliegue del portero, que pide la palabra de quien mantiene el proyecto. **Hoy `RETIROS` está en `"0"`: sin eso, el panel muestra el pago desde otra billetera como único camino.**
+2. La cuenta que cobra, creada en la red principal con su línea del USDC de Circle. Sin la línea, el retiro da `no-recibe`.
+3. Créditos de Pollar para la firma del retiro.
+
+**Cómo sabe el panel que ya se pagó:** mira en Horizon los pagos del USDC de Circle de la cuenta de quien organiza a la cuenta que cobra, con la nota del evento (un número que sale del nombre del evento). Quien los pagó no importa: también cuenta un pago desde otra billetera, con la nota como número o como texto. Antes de mandar, una sola respuesta de la red tiene que mostrar la cuenta justo en la secuencia del pago y sin un pago con esa nota: así un nodo atrasado no deja salir un segundo pago. Con un pago que quizás salió, el panel dice que no sabe y no ofrece pagar hasta que la marca vence (360 s) y la mirada sea consistente.
+
+**Reglas para el día:**
+
+- **El evento de la campaña es único.** El pago se reconoce por el nombre del evento: el ensayo y la campaña del día llevan eventos distintos, y `campana-firmar.mjs` lo recuerda. Un evento repetido hereda los pagos de los últimos 30 días.
+- **Recomendá pagar al cargar el archivo, antes del evento**, y no con la gente esperando. El panel crea la sala antes de cobrar (un archivo sin firma, un evento tomado o el cupo del día lleno no cobran nada) y la sala queda en esa compu: la inscripción se abre desde la compu que pagó.
+- **El ensayo** es una campaña firmada en Oficial con un premio de 1, fuera del modo ensayo y del stand: paga 1,50, carga 2,50, llegan 1,00 a la cuenta que cobra y 0,50 a la de cobros.
+- Antes de abrir: `node scripts/campana-comision.mjs <archivo> --portero <url> --sitio <url>` dice el monto, la nota, si ya está pagada, cada pago que cuenta (para devolver lo de más), si la cuenta que cobra existe con su línea, si el portero atiende retiros con ese costo y si la cuenta de quien organiza tiene los premios más el cobro. Sale con 0 pagada, 3 sin pagar, 2 sin poder mirar, 1 uso o desacuerdo con el sitio y 4 solo cálculo.
+- **El plan B de los planes B:** vaciar las tres variables y volver a publicar deja el panel como hoy, y el guion confirma a mano si se pagó. Quien activa la campaña también puede pagar el cobro desde su propia billetera con el enlace y el código que imprime el guion: quién paga no importa y eso destraba el panel.
+- Si se paga y la inscripción no llega a abrirse, hoy no hay una regla escrita de devolución: la decide quien dirige el proyecto.
+
 ## La venta de paquetes, día a día
 
 Con el pago prendido (`ALTAS_PAGO = "1"` y `CUENTA_COBROS` cargada), quien entra con Google o con su correo en el modo Oficial puede comprar un paquete de sorteos oficiales. El portero no mueve plata: crea la orden, lee en Horizon lo que llega a `CUENTA_COBROS` y da los sorteos cuando el pago alcanza. Devolver lo hace a mano quien tiene la llave de `CUENTA_COBROS`. Las órdenes, los pagos sueltos y las devoluciones se atienden con la clave de cupones (`scripts/cupones.mjs`). Pausar la venta, con la clave de operar.
