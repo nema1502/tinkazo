@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { textoDeLaPortadaConRetiro } from "./costo-del-retiro-portada";
 import { T } from "./i18n";
 import { metasDePagina } from "./idioma";
 
@@ -519,7 +520,15 @@ const copiasDe = (html: string): Copia[] => {
 const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria|-alt)?="/g) ?? []).length;
 
 /** Cuánto se aparta una copia de lo que dice T.es; null si coincide. Los textos se comparan con los espacios normalizados; los atributos, tal cual. */
+/**
+ * La respuesta de la portada sobre cuánto cuesta: con el costo de retirar y la comisión prendidos en producción, el build
+ * exige que el HTML traiga la frase de costo-del-retiro-portada.ts (problemasDeLaPortadaConRetiro), con los valores de
+ * producción de docs/operacion.md: retirar 0,50 y la comisión del 2 % con mínimo de 1,50. El diccionario base no la tiene.
+ */
+const PORTADA_CON_COSTO = textoDeLaPortadaConRetiro(5_000_000n, { pb: 200n, minimo: 15_000_000n }).es;
+
 const diferencia = (c: Copia): string | null => {
+  if (c.clave === "faq3a" && c.valor === espacios(PORTADA_CON_COSTO)) return null;
   const es = T.es[c.clave];
   if (typeof es !== "string") return `${c.clave}: sin texto en T.es`;
   const igual = c.tipo === "texto" || c.tipo === "html" ? c.valor === espacios(es) : c.valor === es;

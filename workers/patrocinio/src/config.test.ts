@@ -538,11 +538,11 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(valor("vars", "POR_IP_POR_HORA")).toBeUndefined();
   });
 
-  it("las siete variables de los pagos están solo en mainnet: las tres de prender en 0 y los números de siempre", () => {
+  it("las siete variables de los pagos están solo en mainnet: las tres de prender en 1 y los números de siempre", () => {
     expect(varsDeMainnet()).toMatchObject({
-      PAGOS_PREMIO: "0",
-      RETIROS: "0",
-      ALTAS_PREMIO: "0",
+      PAGOS_PREMIO: "1",
+      RETIROS: "1",
+      ALTAS_PREMIO: "1",
       COSTO_RETIRO: "0.50",
       TOPE_PAGOS_STROOPS: "20000000",
       PAGOS_RECHAZADOS_DIA: "20",
@@ -554,13 +554,13 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     }
   });
 
-  it("con las siete líneas, el portero de hoy no falta nada y las tres formas siguen apagadas", () => {
+  it("con las siete líneas, el portero de hoy no falta nada y las tres formas están prendidas", () => {
     const cfg = leerConfig(varsDeMainnet());
     expect(cfg.faltaAltas).toEqual([]);
     expect(cfg).toMatchObject({
-      pagosPremio: false,
-      retiros: false,
-      altasPremio: false,
+      pagosPremio: true,
+      retiros: true,
+      altasPremio: true,
       costoRetiro: { usdc: "0.50", monto: 5_000_000 },
       topePagos: 20_000_000,
       pagosRechazadosDia: 20,
