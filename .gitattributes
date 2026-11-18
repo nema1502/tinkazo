@@ -9,3 +9,5 @@ public/marca/qr/* -text
 public/marca/departamentos/** -text
 # Los guiones de bash van con LF en cualquier copia: con CRLF, Git Bash corta en la primera línea (core.autocrlf).
 *.sh text eol=lf
+# La referencia de lo que ve quien organiza se compara byte a byte: siempre con LF.
+src/ui/__referencia__/* text eol=lf

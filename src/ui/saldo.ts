@@ -280,7 +280,7 @@ function pantallaDe(v: Ventana, e: EstadoParaRecibir): Pantalla {
     }
     if (abrePasoDeLaCuenta(e, v.deps.red)) {
       return {
-        linea: t("cargaCuentaPrimero"),
+        linea: t(v.premios ? "saldoPremioPrimero" : "cargaCuentaPrimero"),
         principal: {
           texto: t("cargaCuentaPrimeroBtn"),
           accion: () => {

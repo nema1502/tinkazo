@@ -48,6 +48,7 @@ import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
+import { campanasActivo } from "./campana/bandera";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
@@ -619,3 +620,5 @@ if (location.hash.startsWith("#espectador=")) {
     else m.avisarEnlaceRoto(initialLang());
   });
 }
+// Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
+if (campanasActivo()) void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);

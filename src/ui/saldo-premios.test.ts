@@ -309,3 +309,29 @@ describe("el modo premios, con una billetera propia", () => {
     expect(principal().textContent).toBe(t("saldoVolverAMirar"));
   });
 });
+
+describe("la cuenta que todavía necesita el paso, en el modo premios", () => {
+  const CASOS: Array<[string, () => Mundo]> = [
+    ["se está creando", () => mundo({ lectura: "no-existe" })],
+    ["falta proteger", () => mundo({ proteccion: async () => "falta" })],
+  ];
+
+  it.each(CASOS)("%s: la línea habla de recibir el premio y la principal deja la cuenta lista", async (_nombre, m) => {
+    await abrir(m());
+    expect(cuerpo()).toContain("Para recibir tu premio, dejá tu cuenta lista.");
+    expect(principal().textContent).toBe("Dejar mi cuenta lista");
+  });
+
+  it.each(CASOS)("%s: en inglés dice lo mismo, en inglés", async (_nombre, m) => {
+    setLang("en");
+    await abrir(m());
+    expect(cuerpo()).toContain("To receive your prize, get your account ready.");
+  });
+
+  it.each(CASOS)("%s: fuera del modo premios sigue la línea de siempre", async (_nombre, m) => {
+    vi.stubEnv("VITE_RAMPA", "pollar");
+    await abrir(m());
+    expect(cuerpo()).toContain("Para cargar, primero dejá tu cuenta lista.");
+    expect(cuerpo()).not.toContain("premio");
+  });
+});

@@ -1,4 +1,6 @@
 import { app } from "../state";
+import { campanasActivo } from "../campana/bandera";
+import { VIDA_PREMIO_MS, esInvitada, leerPremio, marcarPremio, soltarInvitada, soltarPremio } from "../campana/invitada";
 import { compraQrActiva } from "../stellar/alta-config";
 import { network } from "../stellar/config";
 import { enPractica, sinGrabar } from "../ensayo-modo";
@@ -8,6 +10,7 @@ import type { Para } from "./cuenta-lista-estado";
 import type { OpcionesDelPaso } from "./cuenta-lista";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
 import { consumirPasoDelCupon, hayPedidoDePasoDelCupon } from "./cupon-paso";
+import { pideElPremioAqui } from "./premio-pide";
 
 /**
  * Cuándo se abre «Dejá tu cuenta lista» (`cuenta-lista.ts`), y las compuertas del sello y del sorteo.
@@ -24,6 +27,11 @@ import { consumirPasoDelCupon, hayPedidoDePasoDelCupon } from "./cupon-paso";
  * - al sortear (`cuentaListaParaGrabar("sorteo")`), solo con la memoria y sin red: el sorteo se lanza solo desde la
  *   espera;
  * - cuando el sello o el sorteo fallan por la cuenta (`abrirParaElError`, desde `proteger-flujo.ts`).
+ *
+ * Quien participó en el sorteo de una empresa (la marca de invitada de `src/campana/invitada.ts`) no organiza: lo que se
+ * abre solo (al entrar y al retomar la sesión) se queda cerrado, salvo la entrada de quien ganó, que lo pide con su
+ * permiso (`permitirPasoDelPremio`). Lo que pide un toque (sellar, sortear, arreglar el error, Tus dólares) sigue
+ * abriéndose: sellar, sortear o arreglar el error es organizar, y suelta la marca.
  */
 
 /** Lo que el flujo le mira a la billetera de Pollar sin cargar su módulo (ya está cargado si es la activa). */
@@ -84,6 +92,84 @@ export function nadaSeAbreSolo(): boolean {
   return typeof document !== "undefined" && document.querySelector(SALA) !== null;
 }
 
+/** Quien participó en el sorteo de una empresa, en este navegador y en las últimas 48 horas. Sin las campañas, nunca. */
+function invitada(): boolean {
+  if (!campanasActivo()) return false;
+  try {
+    return esInvitada(localStorage, Date.now());
+  } catch {
+    return false;
+  }
+}
+
+/** Sellar, sortear o arreglar el error es organizar: quien lo pide con un toque deja de ser solo invitada. */
+function soltarLaMarca(): void {
+  try {
+    soltarInvitada(localStorage);
+  } catch {
+    /* sin almacenamiento, no hay marca que soltar */
+  }
+}
+
+function pestana(): Storage | null {
+  try {
+    return sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El permiso de la entrada del premio vale para una cuenta. Vive en la memoria de la página y también en la pestaña por 30
+ * minutos (`invitada.ts`): sobrevive a una recarga y se copia a la ventana de Google que esa pestaña abre. Con `null` se
+ * apaga: la cuenta cambió, se cerró la sesión o terminó el paso.
+ */
+let cuentaDelPremio: string | null = null;
+/** Hasta cuándo vale el permiso de la memoria: los mismos 30 minutos de la marca de la pestaña, y no más. */
+let venceElPremio = 0;
+export function permitirPasoDelPremio(cuenta: string | null): void {
+  cuentaDelPremio = cuenta;
+  venceElPremio = cuenta === null ? 0 : Date.now() + VIDA_PREMIO_MS;
+  const p = pestana();
+  if (!p) return;
+  if (cuenta === null) soltarPremio(p);
+  else marcarPremio(p, Date.now(), cuenta);
+}
+
+/** Esta pestaña espera a quien ganó: el permiso queda pendiente hasta la primera sesión, que lo toma para su cuenta. */
+export function esperarAQuienGano(): void {
+  const p = pestana();
+  if (p) marcarPremio(p, Date.now());
+}
+
+/** El permiso vale para la cuenta de ahora: el de la memoria, o el de la pestaña (que, pendiente, se queda con la primera). */
+export function pasoDelPremio(): boolean {
+  const cuenta = billetera()?.address ?? null;
+  // El permiso de la memoria vence con el de la pestaña: pasados los 30 minutos, quien sigue acá organiza como siempre.
+  if (cuentaDelPremio !== null && Date.now() >= venceElPremio) cuentaDelPremio = null;
+  if (cuentaDelPremio !== null) return cuenta === cuentaDelPremio;
+  const p = pestana();
+  const marca = p ? leerPremio(p, Date.now()) : null;
+  if (!marca) return false;
+  if (marca.cuenta !== null) return cuenta === marca.cuenta;
+  if (cuenta !== null) permitirPasoDelPremio(cuenta);
+  return true;
+}
+
+/** En esta carga se atendió la ventana de Google (`campana-ventana.ts`): esa pestaña no es para usar la herramienta. */
+let ventanaAtendida = false;
+export function callarPasoEnEstaCarga(): void {
+  ventanaAtendida = true;
+}
+
+/**
+ * Nada de lo que se abre solo se abre en esta carga: mandan la entrada del premio (su permiso, o la dirección que todavía la
+ * pide) o la ventana de Google. Sin esto, el paso de quien organiza le ganaría a la ventana del premio.
+ */
+function cedeAlPremio(): boolean {
+  return ventanaAtendida || pasoDelPremio() || pideElPremioAqui();
+}
+
 function conTope<T>(p: Promise<T>, ms: number): Promise<T> {
   let reloj: ReturnType<typeof setTimeout> | undefined;
   const tope = new Promise<never>((_, no) => {
@@ -142,7 +228,11 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
     const eleccion = abrirCuentaLista(
       wp.pollarWallet,
       {
-        cerrarSesion: () => ui.cerrarSesion(),
+        // Quien cierra la sesión se lleva el permiso del premio: el de la cuenta siguiente es otro.
+        cerrarSesion: () => {
+          permitirPasoDelPremio(null);
+          return ui.cerrarSesion();
+        },
         pasarAPrueba: () => void modo.pasarAModo("testnet"),
         puedePasarAPrueba: () => modo.puedeCambiarDeModo(),
         entrarDeNuevo: () => (porCorreo ? ui.openPicker() : ui.entrar()),
@@ -194,16 +284,22 @@ async function hayListaLista(): Promise<boolean> {
  * (no espera a que se cierre).
  */
 export async function revisarCuentaOficial(origen: "entrada" | "retomar"): Promise<boolean> {
+  // La entrada del premio o la ventana de Google mandan: el paso se abre por el botón de quien ganó, con textos de premio.
+  if (cedeAlPremio()) return false;
   if (!aplica() || nadaSeAbreSolo()) return false;
   const w = billetera();
   if (!w) return false;
   // La acción Tengo un cupón pidió este campo antes de recargar en Oficial. La elección se consume solo si el paso abre:
   // si la descarga falla, la próxima carga todavía tiene que poder abrirlo.
   if (hayPedidoDePasoDelCupon()) {
+    // Lo pidió un toque (Tengo un cupón): quien lo pidió organiza, y la marca de invitada ya no va.
+    soltarLaMarca();
     const a = await prepararPaso("entrada", { cupon: "escribir" });
     if (a.abrio) consumirPasoDelCupon();
     return a.abrio;
   }
+  // Quien participó no organiza: lo que se abre solo se queda cerrado.
+  if (invitada()) return false;
   let inicial: Partial<EstadoOficial> | null;
   const local = w.estadoOficialLocal();
   if (local.activacion === "falta") inicial = { activacion: "falta" };
@@ -226,7 +322,7 @@ export async function revisarCuentaOficial(origen: "entrada" | "retomar"): Promi
 
 /** Sabe decir, sin red, si el paso se va a abrir apenas entra: así la página no anuncia la entrada dos veces. */
 export function vaAAbrirseAlEntrar(): boolean {
-  if (!aplica()) return false;
+  if (!aplica() || cedeAlPremio() || invitada()) return false;
   try {
     return billetera()?.estadoOficialLocal().activacion === "falta";
   } catch {
@@ -254,6 +350,7 @@ export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGra
   if (!aplica()) return true;
   const w = billetera();
   if (!w) return true;
+  soltarLaMarca();
   const local = w.estadoOficialLocal();
   if (para === "sorteo") {
     if (local.activacion !== "falta") return true;
@@ -276,11 +373,17 @@ export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGra
 /**
  * «Tus dólares digitales» con una cuenta de Google o de correo a la que le falta algo para recibir (crearse o
  * protegerse): el paso, abierto por el toque de la persona. Se abre como al entrar, con Seguir al final. `true` si siguió
- * con la cuenta lista.
+ * con la cuenta lista. Solo con el permiso de la entrada del premio se abre para recibir (`premio`): sin cupón, sin compra y
+ * sin Pasar a Prueba. La marca de invitada sola no alcanza: quien participó y no ganó nada no recibe un premio, y puede
+ * organizar, así que ve el paso de siempre. Siempre viene de un toque, así que la marca de invitada no lo frena.
  */
 export async function abrirDesdeTusDolares(): Promise<boolean> {
   if (!aplica()) return false;
-  return abrirPaso("entrada");
+  const recibe = pasoDelPremio();
+  const siguio = await abrirPaso(recibe ? "premio" : "entrada");
+  // Con la cuenta lista el permiso ya no hace falta: se apaga, y la marca de la pestaña con él.
+  if (recibe && siguio) permitirPasoDelPremio(null);
+  return siguio;
 }
 
 /**
@@ -289,6 +392,7 @@ export async function abrirDesdeTusDolares(): Promise<boolean> {
  */
 export async function abrirParaElError(para: "sello" | "sorteo", volverA: HTMLElement | null, o: Pick<OpcionesDelPaso, "cupon"> = {}): Promise<boolean> {
   if (!aplica()) return false;
+  soltarLaMarca();
   return abrirPaso(para, { volverA, ...(o.cupon ? { cupon: o.cupon } : {}) });
 }
 
