@@ -310,7 +310,7 @@ Pedido: "letras chiquitas, horribles, ilegibles; el juego no se lee, se juega". 
 
 ## Ganadores y premios pagados (6 de noviembre de 2026)
 
-Con la bandera `VITE_PAGOS` prendida (apagada en producción, ver [premios.md](premios.md)), debajo de "Siguiente premio" aparece el panel de ganadores: una fila por ganador con su puesto, su nombre o su cuenta acortada y el estado de su premio a la derecha (Pagado, Pendiente, Vencido, Sin consulta o "Lo entrega quien organiza"). Reglas:
+Con la bandera `VITE_PAGOS` prendida (apagada en producción, ver [premios.md](premios.md)), debajo de "Siguiente premio" aparece el panel de ganadores: una fila por ganador con su puesto, su nombre o su cuenta acortada y el estado de su premio a la derecha (Pagado, Pendiente, Vencido, Sin confirmar, Sin consulta o "Lo entrega quien organiza"). Reglas:
 
 - **No compite con la acción principal.** "Siguiente premio" o "Compartir el resultado" siguen siendo lo único magenta de la pantalla. "Pagar premio", "Actualizar", "Ver los N ganadores" y "Firmar y pagar" son secundarios (`ghost`). El panel va debajo, nunca entre el ganador y la acción principal.
 - **Una consulta al abrir y un botón "Actualizar"**, sin reintentos. El estado lo dice con palabras, no solo con el color.
@@ -420,6 +420,33 @@ Comprar un paquete de sorteos pagando el QR del banco en bolivianos es un recorr
 
 **La demo.** Con `VITE_RAMPA_DEMO=1`, en `localhost` y con `?compra-demo` en la dirección, el sitio muestra una lista de compras de mentira (`src/ui/compra-demo.ts`): la primera compra de punta a punta, Ya pagué por error, sin QR hoy, la verificación en revisión, el QR vencido con la compra abierta, frenada de nuestro lado, sin ver el pago, pagar con el saldo y pagar desde otra app. Usa la ventana de verdad con órdenes inventadas, sin red, y no guarda nada en el navegador. `?aparato=celular` muestra lo del celular en una compu.
 
+## La campaña de una empresa (18 de noviembre de 2026)
+
+En el sorteo de una empresa por QR hay tres pantallas distintas y cada una tiene su regla: el celular de quien se anota (`participar.html` y `src/campana/`), el panel de quien organiza y la pantalla grande (`src/ui/campana-sala.ts`, `campana-grande.ts` y sus vecinos, que se abren en la herramienta con `?campana`), y la plata, que es el pago del premio y el retiro (`src/ui/pagar-premio.ts` y `src/ui/mandar-usdc.ts`). Cómo se opera, qué se despliega y qué se hace el día está en [operacion.md](operacion.md), en La campaña de una empresa.
+
+**El celular.** Lo abre alguien parado en un stand, con una mano y con poca atención.
+
+- **Una acción principal por pantalla, pegada abajo.** Entrar con Google, Acepto y me anoto, Recibir mi premio: cada pantalla tiene un solo botón principal, de 56 px de alto, en una barra pegada al pie de borde a borde (`.cmp-accion` en `src/campana/campana.css`, que se fija cuando la pantalla es baja). La entrada con Google empieza solo con el toque, nunca sola. Cambiar de cuenta es un enlace chico arriba, lejos del pulgar y del botón: un toque corrido no cierra la sesión. Si alguien abre el enlace desde dentro de Instagram o de otra app, la acción principal es Copiar el enlace, con la línea que dice que hay que abrirlo en Chrome o en Safari, porque ahí Google no entra.
+- **Poco texto a la vista, y lo demás en Reglas del sorteo.** Cada pantalla es un título, una línea y el botón: el premio, que participar es gratis, cuántas personas ya se anotaron y a qué hora cierra. Cómo se elige, qué se guarda, cuánto cuesta retirar, el aviso por correo (solo si la sala dice que de verdad avisa) y las bases completas van plegados en Reglas del sorteo (`pintarReglas`). De los pedidos de la empresa se ven tres, y el resto queda en N pedidos más.
+- **La página cambia con la fase de la sala, no con el reloj del celular.** El celular le pregunta a la sala cada 30 segundos más o menos (entre 24 y 36, distinto en cada celular para que no pidan todos juntos) mientras la pestaña se ve, y cada 60 más o menos cuando ya sabe si ganó y pinta lo que la sala dice: la lista todavía no abrió, está abierta, cerró, quedó sellada o ya se sorteó. Las horas que lee (Cierra a las, Sorteo a las) son las de la campaña y están en su zona horaria. El reloj del celular solo mide cuánto tarda la ventana de Google, así que uno atrasado o adelantado no cambia lo que se ve.
+- **La espera no tiene botón.** Adentro dice Ya estás adentro, cuántas personas hay y las dos horas, y nada para tocar: se deja el celular y la pantalla se actualiza sola. La línea de fase es la única que se anuncia (`aria-live`) cuando cambia.
+- **El festejo respeta el movimiento reducido.** Anotarse y ganar sueltan una tilde y papelitos de colores, sin sonido y sin nada que parezca plata. Con `prefers-reduced-motion` no hay papelitos ni animación: la tilde queda quieta y el contador no salta. La vibración corta, si el equipo puede, no depende de eso.
+- **Siempre se entiende qué pasó.** Quien salió de la lista ve el motivo en palabras. Quien no ganó ve un gracias y el enlace a cómo se eligió. Quien ganó ve el premio y Recibir mi premio, y lo sigue viendo cuando la campaña terminó: el premio se recibe aunque ya no esté en el stand.
+
+**El panel de quien organiza.** Una persona con la compu en la mano y la gente alrededor.
+
+- **Una acción principal por estado.** Elegir el archivo, Abrir la inscripción, Mostrar en grande (y Cerrar la lista cuando llegó la hora de cerrar), Cerrar con N personas, Pasar la lista al sorteo, y después el botón que lleva el paso de la herramienta (sellar, avisar a los celulares). Lo demás es secundario: Cerrar la lista, 15 minutos más y Elegir otro archivo son botones o enlaces sin el color de la casa, y dejar la campaña pide confirmar. Cada estado tiene un título, una línea y un botón, y nada más (`src/campana/textos-sala.ts`).
+- **La pantalla grande no muestra ningún nombre.** Solo el QR, tan grande como entra, cuántas personas se anotaron y cuánto falta para que cierre (la cuenta regresiva aparece cuando falta menos de una hora, y antes se lee la hora de cierre). Mostrar nombres en el orden en que llegaron deja unir un nombre con su cuenta. Los nombres los ve solo quien organiza, en su panel, y son el primer nombre y la inicial del apellido (Ana P.): así los arma el celular antes de cifrarlos. Los que el filtro marcó salen tapados hasta tocar Mostrar.
+- **Un QR que no sirve se retira.** Si el panel no consigue un pase nuevo en 12 minutos, saca el QR y lo avisa, en lugar de dejar en el proyector un código que ya no entra.
+
+**La plata.** Acá un error cuesta dinero de verdad, así que la regla es la de no empujar.
+
+- **En la duda, nunca se invita a pagar de nuevo.** Si no se sabe si un pago salió, o si hay un pago de ese premio en camino (de esta pestaña, de otra o de antes de recargar), Pagar y Otro monto no se ven: queda el aviso (No vuelvas a pagar, lo estamos revisando, o Ya hay un pago de este premio en camino, no pagues de nuevo) y Volver a mirar, que solo pregunta a la red y no arma ni firma nada. Tampoco se ofrece armar el pago desde otra billetera. En el panel, esa fila dice Sin confirmar y no Pendiente. Recién cuando la red dice con certeza que ese pago no está, se vuelve a poder intentar.
+- **Una sola principal, también con la plata.** Si a quien organiza le falta saldo, Pagar se esconde y la principal pasa a ser Cargar, que muestra la dirección y su QR, y Ya lo mandé vuelve a leer el saldo. Con la cuenta de Google no hay campo para escribir el monto: sale fijo del premio o se elige con un contador de a un dólar. Con una billetera propia queda el formulario de siempre, con el monto y la cuenta que paga.
+- **Lo que cuesta se dice antes.** Recibir un premio es gratis y participar también, y el bloque del premio lo dice en la pantalla. Cuánto cuesta retirar aparece en Reglas del sorteo del celular cuando hay un costo, y en los términos.
+
+**La regla de pantalla** (18 de noviembre de 2026). Un título, una línea y un botón por estado, y la pantalla aprovechada: lo que importa ocupa toda la pantalla, en el celular y en la laptop. En el celular parado la página es una columna con el botón al pie. Desde 900 px de ancho, o apaisado desde 640, pasa a dos columnas (lo que se dice a la izquierda, lo que se hace a la derecha) y el panel y la pantalla grande hacen lo mismo, sin dejar espacio muerto. Se mira a mano con la demostración, `participar.html?demo=campana` y `&estado=` con cada una de las pantallas (`hola`, `adentro`, `cerrada`, `sellada`, `ganaste`, `avisado`, `otra`, `quitada`, `termino`, `sin-red`, `pase` y `app`), que no graba nada y no necesita sala ni Google.
+
 ## La lista de comprobación
 
 Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperando, ronda lista, resultado, siguiente premio) y en cada pantalla:
@@ -450,6 +477,16 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] En modo Oficial con una cuenta de Google o de correo, no se sella ni se sortea sin las dos partes de Dejá tu cuenta lista listas, y Pasar a Prueba y Cerrar sesión se ven siempre en el paso (`src/ui/cuenta-lista.test.ts`, `src/ui/cuenta-lista-flujo.test.ts`). Con un solo paso pendiente se ve solo ese; con dos, dos renglones breves.
 - [ ] Con el cobro por uso, en la red principal no hay «Activar» sin el acceso confirmado por el servidor; sin acceso, la parte 1 es la caja del cupón (aunque la cuenta ya esté activada y protegida), con una sola principal y las salidas a la vista en cada estado, también a 320 x 640; y un cupón no se canjea dos veces (`src/ui/cuenta-lista-acceso-vista.test.ts`, `src/ui/cuenta-lista-cupon.test.ts`, `src/ui/cuenta-lista-red-principal.test.ts`).
 - [ ] Una captura de cada paso, para mirarla con los ojos.
+
+Para la campaña de una empresa, que `audit-flujo.mjs` no recorre. Se mira a mano con `participar.html?demo=campana&estado=...` y con las pruebas de `src/campana/` y de `src/ui/campana-*`:
+
+- [ ] En cada pantalla del celular hay una sola acción principal, pegada abajo y a la vista sin hacer scroll en 360 x 640, y no hay scroll horizontal. Adentro, que es la espera, no tiene ninguna.
+- [ ] Lo que no es la acción ni lo que hay que saber en el momento (cómo se elige, qué se guarda, cuánto cuesta retirar, las bases) está plegado en Reglas del sorteo, y de los pedidos de la empresa se ven tres.
+- [ ] La pantalla sale de la fase que dice la sala y no del reloj del celular: con el reloj corrido, se ve lo mismo.
+- [ ] Con movimiento reducido el festejo no suelta papelitos ni mueve la tilde ni el contador, y nunca suena.
+- [ ] Cada estado del panel de quien organiza tiene un título, una línea y una sola acción principal, y la pantalla grande no muestra ningún nombre.
+- [ ] Con un pago en duda o en camino no se ve Pagar ni Pagar desde otra billetera, y la fila dice Sin confirmar. Queda Volver a mirar, y el texto dice que no se pague otra vez. Con falta de saldo, la principal es Cargar.
+- [ ] En el celular y en la laptop la pantalla se aprovecha: una columna con el botón al pie en el celular parado, dos columnas desde 900 px o apaisado desde 640, sin espacio muerto.
 
 ## El auditor
 

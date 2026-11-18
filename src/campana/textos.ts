@@ -119,6 +119,15 @@ export const TEXTOS_CAMPANA: { es: Record<string, string>; en: Record<string, st
     cpPronto: "Muy pronto vas a poder anotarte desde acá.",
     cpErrEspera: "Probá de nuevo en unos minutos.",
     cpAvisoCorreo: "Si ganás, te avisamos por correo.",
+    tmCampanaT: "Sorteos de empresas",
+    tmCampanaA:
+      "Cuando una empresa organiza un sorteo en Tinkazo, la empresa pone el premio, escribe las " +
+      "bases y responde por ellas. Participar es gratis y no hace falta comprar nada. Seguir a la empresa " +
+      "en sus redes es un pedido y no cambia quién gana.",
+    tmCampanaB:
+      "Para anotarte entrás con Google y Tinkazo te crea una cuenta, gratis. Antes de sellar la " +
+      "lista, quien organiza la revisa y saca, con su motivo, lo que no cumple. El premio llega a la cuenta " +
+      "con la que te anotaste, y recibirlo es gratis.",
   },
   en: {
     cpTituloPagina: "Sign up for the draw, on Tinkazo",
@@ -234,5 +243,14 @@ export const TEXTOS_CAMPANA: { es: Record<string, string>; en: Record<string, st
     cpPronto: "Soon you'll be able to sign up from here.",
     cpErrEspera: "Try again in a few minutes.",
     cpAvisoCorreo: "If you win, we email you.",
+    tmCampanaT: "Company draws",
+    tmCampanaA:
+      "When a company runs a draw on Tinkazo, the company puts up the prize, writes the rules and " +
+      "is responsible for them. Taking part is free and you don't need to buy anything. Following the " +
+      "company on social media is a request and doesn't change who wins.",
+    tmCampanaB:
+      "To sign up you sign in with Google and Tinkazo creates an account for you, for free. " +
+      "Before sealing the list, the organizer checks it and removes, with a reason, anything that doesn't " +
+      "comply. The prize goes to the account you signed up with, and receiving it is free.",
   },
 };

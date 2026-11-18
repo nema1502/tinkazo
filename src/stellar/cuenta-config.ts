@@ -41,8 +41,9 @@ export type ModoDeRampa = "pollar" | "recibir" | "premios" | "apagada";
  * paga con el saldo de la cuenta y frenarla rompería la compra. Quien suma un modo nuevo a `ModoDeRampa` tiene que
  * decidir acá si entra (la prueba lo exige).
  *
- * Todavía nada la usa: la puerta de `wallet-pollar.ts` y la consulta adelantada de `freeze.ts` la leerán junto con el
- * voto a mano, que es lo que levanta la puerta. Está congelada para que ningún código la cambie en ejecución.
+ * La usan la puerta de `wallet-pollar.ts` (`#puertaActiva` y `revisarPuertaDelPremio`) y la consulta
+ * adelantada de `freeze.ts` (`frenarPorElPremio`). La puerta no corre cuando el voto a mano está prendido y el kit lo tomó:
+ * eso es lo que la levanta. Está congelada para que ningún código la cambie en ejecución.
  */
 export const PUERTA_DEL_PREMIO_EN: readonly ModoDeRampa[] = Object.freeze<ModoDeRampa[]>(["premios", "recibir", "apagada"]);
 
