@@ -33,6 +33,20 @@ Todo lo que no está acá da `400` (o `403`) sin gastar cupo:
 - ventana de tiempo de 5 minutos o menos, que no haya vencido;
 - las firmas, contra el hash de **esta** red y contra los firmantes y umbrales que la cadena dice de la cuenta de origen: vale si la suma de los pesos de las firmas válidas alcanza el umbral **medio** (el que pide una invocación de contrato). La maestra con su peso sigue valiendo, y una cuenta con dos firmas de dos o con firmantes aparte también. Se verifican a lo sumo **5** firmas por pedido. La cuenta se lee de la cadena en cada pedido, a lo sumo una vez;
 
+### La lista blanca de los pagos (premios y retiros)
+
+El pago de un premio y el retiro con su costo entran por `POST /v1/patrocinio/pago` (más abajo), con su propio evaluador (`src/pagos-lista.ts`): `lista-blanca.ts` sigue siendo la puerta del sello y un pago sigue sin entrar por `POST /v1/patrocinio`. Todo lo que no está acá da `400` (o `403`) sin gastar cupo:
+
+- una transacción común (ni fee-bump ni versión vieja) de una cuenta G que no es del portero (ni la que paga, ni la sorteadora, ni la de cobros), sin ninguna operación con origen propio ni datos de Soroban, con solo condiciones de tiempo, que no haya vencido ni venza a más de 300 segundos y que declare como mucho 1000 stroops de comisión por operación;
+- **premio**: una sola operación `payment` de USDC de Circle a otra cuenta G, con la nota de texto `tk:premio:<sorteo>:<puesto>` (sin ceros adelante). La cuenta de origen tiene que estar en el libro. El sorteo se lee de la red (`get_raffle`) y tiene que ser de esa cuenta, estar sorteado, tener ese puesto y haber sido sellado por el portero: sin eso, una cuenta con su propio XLM sellaría por fuera un sorteo de 300 ganadores y se mandaría 300 pagos sin costo. Un solo pago por contrato, sorteo y puesto mientras el anterior esté reservado, enviado o entrado;
+- **retiro**: dos operaciones `payment` de USDC de Circle, en este orden: la primera a otra cuenta G (distinta de la de origen y de la de cobros), por cualquier monto positivo, y la segunda a `CUENTA_COBROS` por exactamente `COSTO_RETIRO`. Sin nota, o con una nota de texto o numérica que no se lea como la de una orden (`tk:o:`, sin espacios ni guiones y sin distinguir mayúsculas): nunca una de tipo hash o retorno. Desde cualquier cuenta;
+- las firmas, contra los firmantes y el umbral **medio** de la cuenta, leídos de la cadena (la misma cuenta que el sello);
+- antes de pagar, una mirada en Horizon (en lugar de la simulación, que es del RPC y no sirve para un pago clásico): la cuenta de origen con la línea autorizada y saldo para todo lo que sale, y cada destino con la cuenta, la línea autorizada y lugar, y sin exigir una nota que falta. Si Horizon no contesta, `502` y no se paga.
+
+### Quién paga los pagos y qué no comparten con los sellos
+
+Lo que paga el portero lo paga la cuenta patrocinadora, con un envoltorio de comisión de la misma forma que el del sello (la llave del Worker, con peso 1, alcanza: lo pide el umbral bajo, lleve lo que lleve adentro). Los pagos no comparten nada con los sellos: tabla propia (`pagos_portero`), presupuesto propio y topes propios (abajo), así un abuso de pagos no deja sin sellos al evento ni al revés. Un pago que la red rechaza al aplicarlo le cuesta la comisión a la cuenta patrocinadora y no trae el costo del retiro: lo cierran la mirada en Horizon y los topes de rechazos.
+
 ### La cuenta tiene que ser de la app
 
 Se lee de la cadena (`getLedgerEntries`, campo `extXdr`) que el patrocinador de la reserva de la cuenta sea la billetera de fondos del proveedor de cuentas (`PATROCINADORES_APP`). Sin eso, cualquiera con llaves propias entraría. Se recuerda (400 días). Varial sigue pagando lo suyo.
@@ -56,6 +70,28 @@ Se lee de la cadena (`getLedgerEntries`, campo `extXdr`) que el patrocinador de 
 | Alerta del saldo de la patrocinadora | **20 XLM** (más que el tope de un día) | `SALDO_ALERTA_STROOPS` |
 | Ventana de la transacción | 300 s | `VENTANA_MAX_S` |
 | Pedidos de pago por dirección y por hora | 240 (una wifi de evento con varios organizadores comparte dirección), en memoria, sin guardar la IP (en IPv6, el /64). Las consultas de cupo tienen su propio contador: 3.000 en mainnet, como las altas (todo un stand sale por la misma wifi y el sitio pregunta el cupo antes de cada sello y cada sorteo), y 600 en testnet (`cupoPorHora`, `src/por-ip.ts`). El tope de verdad es la regla de Cloudflare de abajo | `POR_IP_POR_HORA` |
+
+### Los topes de los pagos
+
+Los de las dos primeras filas y los de las altas del día se mueven sin desplegar (`POST /v1/admin/pagos/tope`, con su techo); el resto está en el código (`src/pagos-uso.ts` y `src/altas-premio.ts`) y cambiarlo pide un commit y un despliegue.
+
+| Tope | Valor | Cómo se cambia |
+| --- | --- | --- |
+| Comisiones de los pagos, en ventana móvil de 24 h | **2 XLM** (`20000000` stroops), aparte del `TOPE_GENERAL_STROOPS` de los sellos. Cada pago reserva la oferta de su envoltorio (20.000 stroops el premio, 30.000 el retiro) hasta que la alarma anota lo que cobró la red | `TOPE_PAGOS_STROOPS`, o en caliente `presupuestoXlm`, hasta 10 XLM |
+| Pagos rechazados por la red al aplicarse, más los que están en el aire, por forma y entre todas las cuentas, en 24 h | **20 premios y 20 retiros** | `PAGOS_RECHAZADOS_DIA`, o en caliente `rechazosPorDia`, hasta 100 |
+| Retiros por cuenta, en 24 h, y de ellos los que la red rechazó | **10** y **2** | El código |
+| Premios por cuenta que organiza, en 24 h, y de ellos los que la red rechazó | **60** y **5** | El código |
+| Premios por sorteo | el menor entre los ganadores y **50** | El código |
+| Premios que la red rechazó hacia una misma cuenta, en 24 h (se guarda una huella del destino, no la dirección) | **2**: pasado, `403 destino-frenado` | El código |
+| Intentos que la red no tomó, por cuenta, en 24 h, sumando las dos formas | **10** | El código |
+| Lo que Horizon dice que fallaría, por cuenta y por hora | **20**, en la memoria del objeto, antes de ir a Horizon | El código |
+| Pagos en el aire por cuenta | **1**: la red guarda una sola transacción pendiente por cuenta | El código |
+| Pedidos a `/v1/patrocinio/pago` por dirección y por hora | **600**, con su propio contador | `POR_IP_POR_HORA` |
+| Altas de quien ganó, por sorteo | el menor entre los ganadores y **50**, y **50** entre todos los sorteos que se apoyan en el mismo sello del portero (el contrato acepta otro sorteo con el mismo organizador, la misma lista y la misma ronda, sellado por fuera) | El código |
+| Altas de quien ganó, por cuenta que organiza, en 24 h | **30** | El código |
+| Altas de quien ganó, entre todos, en 24 h | **100** | `ALTAS_PREMIO_DIA`, o en caliente `altasPremioDia`, hasta 300 |
+
+Además, cada alta de quien ganó pasa por el mismo piso de créditos que un canje (`CREDITOS_POR_ALTA`) y por la pausa de las altas.
 
 ### El plan del equipo sube el cupo
 
@@ -159,9 +195,11 @@ Todo un stand sale por la misma wifi, por eso el bloqueo es corto. Si otra ruta 
 
 `GET /v1/patrocinio/cupo` no pasa por esa regla: lo limita el propio Worker, por dirección y por hora (`cupoPorHora`, `src/por-ip.ts`: 3.000 en mainnet y 600 en testnet), porque todo un stand sale por la misma wifi y el sitio pregunta el cupo antes de cada sello y cada sorteo.
 
+`POST /v1/patrocinio/pago` y `POST /v1/alta/premio` no pasan por esta regla: los limitan sus contadores propios por dirección y los topes del portero.
+
 ## Lo que guarda
 
-El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el contador, los hashes pagados con su resultado (`reservado`, `enviado`, `ok`, `fallo`, `devuelto`), lo estimado y lo real que cobró la red, lo guardado para sorteos, las cuentas que ya se vieron como de la app y los sellos que entraron tarde y se devolvieron (`devoluciones`: el hash, la cuenta, la hora, cuántos sorteos volvieron, la ronda y cuántos segundos le faltaban; ver `docs/architecture.md`, Una firma lenta no le cuesta un sorteo a nadie) o que quedaron por probar o por devolver a mano (`devoluciones_pendientes`: el hash, la cuenta, la hora, el motivo y los intentos). **No guarda nombres, listas ni direcciones IP.** En la red de prueba, lo único de la persona es su cuenta de Stellar, que ya es pública en la cadena. En la red principal, el libro de accesos guarda además el identificador que Pollar le da a la cuenta de quien canjea un cupón, el evento y una huella del cupón (nunca el código), la hora y los sorteos que le quedan, y de cada sello, la huella de la lista (no la lista). No guarda correos, nombres ni la llave de la sesión. Si `CUENTA_URL` está cargada, le manda esa misma dirección pública al Worker de la cuenta para saber si tiene el plan, y recuerda la respuesta en memoria (no en el SQLite) unos minutos. `uso` se purga a los 35 días. Todo sale como JSON por `GET /v1/patrocinio/exportar` (con la clave de administración). El código que decide está en funciones sin Cloudflare (`cupos.ts`, `servicio.ts`, `lista-blanca.ts`), con reloj falso en las pruebas; las clases del objeto solo llaman a `cupos.ts`, sin SQL afuera, para poder migrar.
+El objeto `Patrocinio` (SQLite, uno por red) guarda cuentas (G…), el mes y el contador, los hashes pagados con su resultado (`reservado`, `enviado`, `ok`, `fallo`, `devuelto`), lo estimado y lo real que cobró la red, lo guardado para sorteos, las cuentas que ya se vieron como de la app y los sellos que entraron tarde y se devolvieron (`devoluciones`: el hash, la cuenta, la hora, cuántos sorteos volvieron, la ronda y cuántos segundos le faltaban; ver `docs/architecture.md`, Una firma lenta no le cuesta un sorteo a nadie) o que quedaron por probar o por devolver a mano (`devoluciones_pendientes`: el hash, la cuenta, la hora, el motivo y los intentos). **No guarda nombres, listas ni direcciones IP.** En la red de prueba, lo único de la persona es su cuenta de Stellar, que ya es pública en la cadena. En la red principal, el libro de accesos guarda además el identificador que Pollar le da a la cuenta de quien canjea un cupón, el evento y una huella del cupón (nunca el código), la hora y los sorteos que le quedan, y de cada sello, la huella de la lista (no la lista). No guarda correos, nombres ni la llave de la sesión. Si `CUENTA_URL` está cargada, le manda esa misma dirección pública al Worker de la cuenta para saber si tiene el plan, y recuerda la respuesta en memoria (no en el SQLite) unos minutos. `uso` se purga a los 35 días. Con los pagos y el alta de quien ganó, tres tablas más, cada una creada aparte y con su propio `try/catch` (un `CREATE` que lanzara en el constructor de los cupos tumbaría el objeto entero, y con él los sellos): `pagos_portero` (una fila por pago, con la forma, la cuenta que paga, su estado y lo estimado y lo real que cobró la red; de la cuenta de destino de un premio solo una huella, nunca la dirección; se purga a los 35 días, salvo los premios entrados), `retiros_cobrados` (el hash de cada retiro que se pagó, con su costo exacto: es lo que reconoce el costo en la cuenta de cobros por la transacción y no se purga) y `altas_premio` (una fila por contrato, sorteo y puesto: la cuenta que entró, quien la nombró y el hash del sello del portero que respalda ese sorteo; no se purga, como el libro). Todo sale como JSON por `GET /v1/patrocinio/exportar` (con la clave de administración), también esas tablas cuando alguna forma está prendida o tienen algo guardado. El código que decide está en funciones sin Cloudflare (`cupos.ts`, `servicio.ts`, `lista-blanca.ts`), con reloj falso en las pruebas; las clases del objeto solo llaman a `cupos.ts`, sin SQL afuera, para poder migrar.
 
 ## Administración
 
@@ -177,6 +215,75 @@ Con `Authorization: Bearer <ADMIN_TOKEN>` (secreto de 32 caracteres o más; si n
 | `GET /v1/patrocinio/exportar` | Todas las tablas, en JSON |
 
 `APAGADO=1` como variable apaga aunque el objeto diga otra cosa.
+
+## Los pagos de premios, los retiros y el alta de quien ganó
+
+Solo en mainnet, con `ALTAS = "1"` y cada forma con su variable (`PAGOS_PREMIO`, `RETIROS` y `ALTAS_PREMIO`), las tres apagadas por defecto: apagadas, las rutas de abajo dan `404 no-existe`, `/cupo` y `/estado` no cambian y la alarma no tiene nada nuevo que mirar. Qué son, cómo se prenden, se pausan y se ensayan está en la hoja de operación ([operacion.md](../../docs/operacion.md), «Los pagos de premios, los retiros y el alta de quien ganó»). Acá, el contrato.
+
+### `POST /v1/patrocinio/pago`
+
+`{"forma":"premio"|"retiro","xdr":"<el sobre firmado, en base64>"}`, sin sesión: la cuenta sale del sobre y la prueba su firma. `xdr` es el sobre tal como lo devolvió la firma sin patrocinio, sin envolver. CORS como `/v1/patrocinio`, con su `OPTIONS` en `204`. Cuerpo de hasta 8 KB. Si el sobre no es de la `forma` que dice, `400 no-permitida`.
+
+`200 {hash, forma, vence, status, estado}`: `hash` es el de la transacción interna (el que busca el RPC con `getTransaction` y acepta Horizon), `vence` su `maxTime` en segundos, `status` es `PENDING` (la red la acaba de tomar) o `DUPLICATE` (ya la tenía) y `estado` es `en-camino`, `ok` o `fallo` (entró y falló: no se movió ningún dólar y la comisión la pagó el portero). Reenviar el mismo sobre es inofensivo: tiene el mismo hash y el portero lo encuentra sin contarlo dos veces.
+
+Los errores traen `motivo`, y los que salen del objeto traen además `pudoSalir`: `true` solo si el portero tiene ese hash reservado o enviado al contestar, o sea, si el sobre todavía puede entrar a un ledger. Con `pudoSalir: false` se puede armar otro pago.
+
+| HTTP | `motivo` | Campos de más | Cuándo |
+| --- | --- | --- | --- |
+| 404 | `no-existe` | | En la red de prueba, o con `PAGOS_PREMIO` y `RETIROS` apagadas |
+| 405, 403, 429, 400 | `metodo`, `origen`, `cupo-ip`, `cuerpo` | | La puerta: otro método que `POST` u `OPTIONS`, un `Origin` ajeno, más de 600 pedidos por hora de esa dirección, más de 8 KB, JSON roto o `forma` o `xdr` que faltan |
+| 503 | `apagado` | `forma`, `detalle`: `variable`, `pausado`, `modo` o `config` | Esa forma sin su variable, pausada, el portero apagado o devuelto a Pollar (los pagos nunca vuelven a Pollar), o le falta la llave, la cuenta que paga, las tablas, el contrato (premio) o la cuenta de cobros y el costo (retiro) |
+| 400 | `no-permitida` | `razon`, `detalle` | El sobre no tiene exactamente la forma. Con `razon:"puesto"`, el puesto no existe en ese sorteo |
+| 403 | `cuenta-ajena` | | Premio desde una cuenta que no está en el libro |
+| 403 | `sorteo-ajeno` | `detalle`: `no-existe` u `otro-organizador` | El sorteo de la nota no existe en el contrato oficial, o lo organizó otra cuenta |
+| 403 | `no-es-nuestro` | | El sello de ese sorteo no lo pagó el portero |
+| 409 | `sin-sortear` | | El sorteo todavía no tiene resultado |
+| 409 | `cupo-sorteo` | `max` | Ese sorteo ya tiene todos los premios que se pagan por acá |
+| 409 | `puesto-usado` | `hash`, `estado` | Ese sorteo y puesto ya tiene un pago por esta ruta: `hash` es el de ese pago |
+| 403 | `destino-frenado` | `liberaEn` (ms) | Dos premios a esa cuenta fallaron al aplicarse en las últimas 24 horas |
+| 409 | `otro-en-curso` | `hash`, `vence` | La cuenta ya tiene otro pago en el aire |
+| 400 | `fallaria` | `detalle`: `origen-sin-cuenta`, `origen-sin-linea`, `origen-sin-saldo`, `destino-sin-cuenta`, `destino-sin-linea`, `destino-lleno` o `destino-pide-nota` | La mirada en Horizon dice que la red lo rechazaría |
+| 429 | `cupo-cuenta` | `que`: `retiros`, `rechazos`, `premios`, `intentos` o `fallaria`, y `liberaEn` (ms) | Los topes por cuenta |
+| 503 | `fondo` | `detalle`: `presupuesto`, `rechazos` (con `liberaEn`), `ocupado` (con `reintentarEn`, en ms) o `saldo` | Sin presupuesto de pagos, el tope de pagos rechazados del día lleno, demasiados pagos de esa forma en el aire a la vez, o la cuenta que paga sin saldo |
+| 502 | `red` | `detalle` | El RPC u Horizon no contestaron, el pedido tardó demasiado antes de reservar (36 segundos), la red dijo `TRY_AGAIN_LATER` o se cortó al mandar |
+| 400 | `rechazada` | `codigo` | La red no la tomó en el primer envío de ese sobre (secuencia vieja, vencida): no entró y no se cobró nada |
+| 500 | `interno` | | Un error nuestro |
+
+**Tiempos y reintentos.** El sobre vence a los 240 segundos del reloj de quien lo arma y el portero acepta hasta 300 desde el suyo. El portero no reserva nada si ya pasaron 36 segundos desde que recibió el pedido: lo normal es contestar en 1 a 3. Una fila que sigue en el aire solo se da por no entrada pasado `vence + 600` segundos y con los dos RPC y Horizon diciendo que no la ven: devolver algo que ya entró dejaría un premio pagado con su puesto libre, y se pagaría dos veces. Hasta entonces, otro pago de esa cuenta recibe `otro-en-curso` y el mismo puesto `puesto-usado`. Quien no recibe respuesta con JSON reenvía el mismo sobre, nunca arma otro antes de su vencimiento más 60 segundos.
+
+### `POST /v1/alta/premio`
+
+`{"sorteo":"<número>","puesto":<entero desde 0>,"cuenta":"G..."}`, con la sesión de Google de quien organiza en `Authorization: Bearer`. Misma puerta, CORS, origen, contador por dirección (`ALTAS_POR_IP_HORA`) y tamaño de cuerpo (2 KB) que las demás de `/v1/alta`. Solo con `ALTAS_PREMIO = "1"`: apagada, `404 no-existe`. Quien organiza nombra la cuenta que salió en un puesto de su sorteo y esa cuenta entra al libro con un alta propia (motivo `premio`, `autorizada`, sin sorteos): puede activarse y recibir, no sellar ni sortear. Después, `POST /v1/alta/estado` de esa cuenta contesta `acceso: "premio"` con `sorteos.quedan: 0`. Es idempotente y una vez por contrato, sorteo y puesto. Llamarla de más no cuesta nada: lo ya hecho se contesta sin ir a la red.
+
+En este orden: la forma del cuerpo, la sesión, la cuenta de quien organiza (en el libro), lo ya hecho, si la cuenta ya tiene acceso o ya existe en la red, el sorteo (de quien organiza, sorteado, con ese puesto y sellado por el portero) y los créditos. Después, sin ningún `await`, una sola transacción mira los topes y el piso de créditos y escribe la fila de `altas_premio`, el alta y la cuenta en el libro.
+
+| HTTP | Cuerpo | Cuándo |
+| --- | --- | --- |
+| 200 | `{estado:"admitida", repetido:false}` | La cuenta entró al libro con su alta por premio |
+| 200 | `{estado:"admitida", repetido:true}` | Ya se había hecho para ese sorteo, puesto y cuenta: no se escribió nada |
+| 200 | `{estado:"ya-tiene-acceso"}` | La cuenta ya estaba en el libro o ya era la cuenta de un alta |
+| 200 | `{estado:"no-hace-falta"}` | La cuenta ya existe en la red: no necesita activarse. Si la red no contesta, se toma como que no existe |
+| 404, 405, 403, 429, 400 | `no-existe`, `metodo`, `origen`, `cupo-ip`, `cuerpo` | La puerta, como las demás de `/v1/alta` |
+| 400 | `forma` con `detalle`: `sorteo`, `puesto` (de 0 a 299), `cuenta` (una G válida), `propia` o `del-portero` | El cuerpo no tiene la forma, o la cuenta es la de quien organiza o una del portero |
+| 401, 403, 502, 429 | `sesion`, `otra-app`, `pollar`, `intentos` | La sesión, como en `/v1/alta/estado` |
+| 409 | `cuenta-de-otro` | Como en `/v1/alta/estado` |
+| 403 | `sin-acceso` | Quien organiza no tiene cuenta o no está en el libro |
+| 403 | `sorteo-ajeno` con `detalle`: `no-existe` u `otro-organizador` | |
+| 403 | `no-es-nuestro` | El sello de ese sorteo no lo pagó el portero |
+| 409 | `sin-sortear` | El sorteo todavía no tiene resultado |
+| 400 | `puesto` | El puesto no existe en ese sorteo |
+| 409 | `puesto-usado` | Ese puesto ya se dio de alta para otra cuenta |
+| 429 | `cupo` con `que`: `sorteo`, `organizador` o `dia`, y `liberaEn` (ms, no en `sorteo`) | Más de `min(ganadores, 50)` por sorteo o 50 por sello del portero, 30 por quien organiza en 24 horas o `ALTAS_PREMIO_DIA` entre todos |
+| 503 | `altas-pausadas` | El piso de créditos, los créditos sin leer o las altas pausadas a mano: no se escribió nada, se puede probar más tarde |
+| 503 | `apagado` con `detalle`: `config` o `pausado` | Falta la configuración o la tabla, o está pausada con `pagos/pausar` |
+| 502 | `red` | No se pudo leer el sorteo |
+| 500 | `interno` | Un error nuestro |
+
+Quien pide un puesto de un sorteo ajeno recibe `sorteo-ajeno` aunque ese puesto ya se haya dado: no se entera de lo que no es suyo.
+
+### Antes de pedir una firma: `/cupo`
+
+Cada firma de una cuenta co-firmada le cuesta 20 créditos a Tinkazo, así que el sitio pregunta antes. Con alguna de las tres formas prendida, `GET /v1/patrocinio/cupo?cuenta=G...` suma `pagos: {premio, retiro, altaPremio, costoRetiro, enCurso}`: `premio`, `retiro` y `altaPremio` dicen si el portero atendería esa forma ahora (la variable, la pausa, el modo para los pagos, la configuración y las tablas), `costoRetiro` es `{usdc, monto}` con el costo que exige el portero (si no es igual al del sitio, el sitio no ofrece retirar) y `enCurso` es el pago de esa cuenta que está en el aire, `{hash, forma, vence}`, o `null`. `/v1/patrocinio/estado` suma su bloque `pagos` y, aparte de `firmas`, `firmasPagos`. Sin el bloque (un portero de antes, o todo apagado), no hay pagos con la cuenta de Google ni alta de quien ganó.
 
 ## Probar
 
@@ -317,7 +424,9 @@ Solo en mainnet con `ALTAS = "1"` (`src/admin.ts`); en testnet `/v1/admin/` no e
 | `GET /v1/admin/cupones?lote=` | Cupones | | `{lote, creados, canjeados, cuentas, sorteosUsados, vence, anulado, anulados}`; `404 lote` |
 | `POST /v1/admin/cupones/anular` | Cupones | `{lote}` o `{codigo}` | `{anulados}`. Lo ya canjeado sigue valiendo |
 | `POST /v1/admin/altas` | Cupones | `{cuenta, sorteos, dias, ref}` | Admite una cuenta que ya existe y le da sus sorteos con `ref` `admin:<ref>`: `{ok, repetido, altaNueva, sorteos}`. El mismo `ref` para otra cuenta, `409 ref-usado` |
-| `POST /v1/admin/altas/pausar` y `/reanudar` | Operar | | `{pausadas}`. Pausadas, un canje nuevo da `503 altas-pausadas` sin gastar el cupón |
+| `POST /v1/admin/altas/pausar` y `/reanudar` | Operar | | `{pausadas}`. Pausadas, un canje nuevo da `503 altas-pausadas` sin gastar el cupón. Frena también el alta de quien ganó |
+| `POST /v1/admin/pagos/pausar` y `/reanudar` | Operar | `{forma:"premio"\|"retiro"\|"alta-premio"\|"todas"}` | `{pausadas:{premio, retiro, "alta-premio"}}`. Es un ajuste, no una variable: anda también con las variables apagadas y sobrevive a un despliegue. Frena lo nuevo de esa forma (`503 apagado` con `detalle:"pausado"`) y no los sellos, los sorteos, los cupones ni el reenvío de un pago ya reservado |
+| `POST /v1/admin/pagos/tope` | Operar | `{presupuestoXlm?, rechazosPorDia?, altasPremioDia?}` | `{topeStroops, rechazosPorDia, altasPremioDia}`. Mueve esos topes en caliente: hasta 10 XLM, 100 y 300. Más que el techo da `400 techo` y no escribe nada. Sin ninguno, `400 cuerpo` |
 | `POST /v1/admin/derechos` | Cupones | `{cuenta, sorteos, dias, ref}` | Suma sorteos a una cuenta que ya está en el libro (`ref` `admin:<ref>`): `{ok, repetido, sorteos}`. Fuera del libro, `409 fuera-del-libro`; el mismo `ref` para otra cuenta, `409 ref-usado` |
 | `POST /v1/admin/ordenes/pagada` | Cupones | `{orden, metodo:"a-mano"\|"qr-bs", ref}` | Una orden pagada por fuera: queda pagada y da lo mismo que un pago en USDC. `{ok, repetido}`; `404 orden`; una orden cerrada, `409 orden-cerrada` |
 | `POST /v1/admin/ordenes/cerrar` | Cupones | `{orden, ref}` | Cierra una orden pagada a medias para devolver lo recibido. Lee antes los pagos nuevos (con Horizon caído, `502 red` y no cierra). `{ok, repetido, recibido, devolver:[{operacion, de, cantidad, tx}]}`: lo que hay que devolver a mano y a quién. Ya completada, `409 orden-pagada`; sin nada recibido, `409 sin-pagos`; `404 orden` |

@@ -5,8 +5,11 @@
  * el gasto; en mainnet con altas, también el libro de cuentas y sus tablas (huellas de
  * cupones, el identificador de Pollar, derechos y pagos). Nada más: ni nombres, ni
  * correos, ni listas, ni direcciones IP, ni códigos en claro. Las clases del objeto
- * solo llaman a estas funciones; ningún SQL queda afuera de este archivo y de
- * `altas.ts` (los cupones), para poder migrar el día que haga falta (ver README.md).
+ * solo llaman a estas funciones y a las de los archivos que tienen su propio SQL:
+ * `altas.ts` (los cupones), `cobros.ts` (las órdenes y los pagos), `compras.ts` (la
+ * compra con QR), `pagos-uso.ts` (los pagos de premios y los retiros) y `altas-premio.ts`
+ * (el alta de quien ganó). Ningún SQL queda afuera de este archivo y de esos cinco, para
+ * poder migrar el día que haga falta (ver README.md).
  *
  * Es código síncrono a propósito: un objeto de Cloudflare atiende de a uno mientras
  * no haya un `await` en el medio, así que comprobar el cupo y reservarlo es una sola
@@ -32,9 +35,9 @@ export interface Sql {
   transaccion<T>(fn: () => T): T;
 }
 
-/** Por qué una cuenta entró al libro: un cupón, un pago o un alta a mano. */
-export type MotivoAlta = "cupon" | "pago" | "admin";
-const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin"];
+/** Por qué una cuenta entró al libro: un cupón, un pago, un alta a mano o el premio de un sorteo (la nombró quien lo organizó). */
+export type MotivoAlta = "cupon" | "pago" | "admin" | "premio";
+const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin", "premio"];
 
 /**
  * Las tablas de las altas (ver el modelo de datos del diseño de cupones). Viven en el mismo SQLite que los cupos para
