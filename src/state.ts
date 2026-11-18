@@ -265,6 +265,13 @@ export const ANCHOR_LEAD_SECONDS = 45;
 export const SIN_SELLO_LEAD_SECONDS = 90;
 
 /**
+ * Margen del sello de una lista de campaña de empresa (`campana/en-curso.ts`). La sala solo acepta el aviso de sellada si
+ * la ronda todavía no salió: a 90 segundos quedan más de 60 para avisarle aunque el wifi del evento falle un rato.
+ * Fuera de una campaña no se usa: el margen es el de siempre.
+ */
+export const CAMPANA_LEAD_SECONDS = 90;
+
+/**
  * Cuánto dura el show, **en segundos**.
  *
  * No es un número fijo porque no hay uno bueno para todos los casos. Un sorteo

@@ -1,4 +1,5 @@
 import { $, esc } from "../dom";
+import { campanaDeLaLista, esSorteoDeCampana } from "../campana/en-curso";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, currentPace, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
@@ -1097,7 +1098,10 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // en "Otro premio". Quien salió se va entero, con todas sus participaciones.
   // Sin la bandera de los modos ni `?modo=`, se saca por línea, como siempre: «Grupo (1/2)» puede ser un nombre.
   const porPersona = modesVisible();
-  const reemplazo = contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
+  // En el sorteo de una empresa no hay No está: el premio llega a la cuenta aunque la persona ya no esté en el stand. Una lista
+  // de campaña que quedó sin sello (sin número de sorteo) tampoco lo ofrece.
+  const deCampana = esSorteoDeCampana(app.frozen?.raffleId) || campanaDeLaLista(app.frozen?.listHash ?? "") !== null;
+  const reemplazo = !deCampana && contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
   // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
   // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
   // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
@@ -1133,6 +1137,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
   const enlace = buildProof(names, winners, url);
+  // El sorteo de una empresa (detrás de VITE_CAMPANAS): la sala de la campaña se entera y lo comprueba en la red.
+  if (deCampana) void import("./campana-resultado-real").then((m) => m.alRevelarReal(enlace)).catch(() => undefined);
   // Desde la espera en grande, el resultado sale en grande, con el QR en cuanto
   // esté el comprobante; al cerrarlo, la página sigue con "Siguiente premio".
   const final = granFinal;

@@ -683,3 +683,96 @@ export async function anularCompra(token: string, producto: string, o: OpcionesD
   if (!PRODUCTO.test(producto)) return error("producto", 0);
   return llamarCompra("/v1/compra/anular", token, { producto }, o, (x) => (x.anulada === true && typeof x.repetido === "boolean" ? { anulada: true, repetido: x.repetido } : null));
 }
+
+/* ------------------------------------------------------- el acceso de quien ganó una campaña */
+
+/** Por qué no salió el alta de una cuenta ganadora: los motivos de `POST /v1/alta/premio` (`rutas-altas.ts` del servicio). */
+export type MotivoDeAltaPremio =
+  | "apagado"
+  | "forma"
+  | "sesion"
+  | "otra-app"
+  | "cuenta-de-otro"
+  | "sin-acceso"
+  | "puesto-usado"
+  | "sorteo-ajeno"
+  | "sin-sortear"
+  | "puesto"
+  | "no-es-nuestro"
+  | "cupo"
+  | "altas-pausadas"
+  | "red"
+  | "pollar"
+  | "intentos"
+  | "cupo-ip";
+
+export type ResultadoDeAltaPremio =
+  | { estado: "admitida" | "ya-tiene-acceso" | "no-hace-falta" }
+  | { error: MotivoDeAltaPremio; reintentarEn?: number };
+
+const MOTIVOS_DEL_PREMIO: readonly MotivoDeAltaPremio[] = [
+  "apagado",
+  "forma",
+  "sesion",
+  "otra-app",
+  "cuenta-de-otro",
+  "sin-acceso",
+  "puesto-usado",
+  "sorteo-ajeno",
+  "sin-sortear",
+  "puesto",
+  "no-es-nuestro",
+  "cupo",
+  "altas-pausadas",
+  "red",
+  "pollar",
+  "intentos",
+  "cupo-ip",
+];
+const ESTADOS_DEL_PREMIO: readonly string[] = ["admitida", "ya-tiene-acceso", "no-hace-falta"];
+
+/**
+ * `POST /v1/alta/premio` `{sorteo, puesto, cuenta}`: quien organiza, con su sesión de Google, nombra la cuenta que salió en un
+ * puesto de un sorteo suyo ya sorteado, y esa cuenta queda con un acceso propio (`premio`, sin sorteos) para activarse y
+ * recibir su premio. Nunca lanza.
+ *
+ * La ruta apagada contesta 404 (`no-existe`) y la pausada o sin configurar 503 `apagado`: las dos son `apagado`. `origen`,
+ * `cuerpo`, `metodo` y cualquier respuesta que no tenga la forma de las de arriba son `red`. `ya-tiene-acceso` y
+ * `no-hace-falta` llegan como 200 con `estado`, nunca como error.
+ */
+export async function admitirPorPremio(
+  token: string,
+  p: { sorteo: string; puesto: number; cuenta: string },
+  o: OpcionesDeAlta = {},
+): Promise<ResultadoDeAltaPremio> {
+  if (!token.trim()) return { error: "sesion" };
+  const r = await pedir("/v1/alta/premio", "POST", token, { sorteo: p.sorteo, puesto: p.puesto, cuenta: p.cuenta }, o);
+  if ("ok" in r) return { error: r.motivo === "sin-portero" ? "apagado" : "red" };
+  const c = objeto(r.cuerpo);
+  if (r.estado === 200) {
+    const estado = c && typeof c.estado === "string" ? ESTADOS_DEL_PREMIO.find((e) => e === c.estado) : undefined;
+    return estado ? { estado: estado as "admitida" | "ya-tiene-acceso" | "no-hace-falta" } : { error: "red" };
+  }
+  if (r.estado === 404) return { error: "apagado" };
+  const motivo = typeof c?.motivo === "string" ? c.motivo : r.estado === 401 ? "sesion" : "";
+  const conocido = MOTIVOS_DEL_PREMIO.find((m) => m === motivo);
+  if (!conocido) return { error: "red" };
+  const cuando = c?.reintentarEn;
+  const conTope = conocido === "intentos" || conocido === "cupo-ip";
+  return typeof cuando === "number" && Number.isFinite(cuando) && conTope ? { error: conocido, reintentarEn: cuando } : { error: conocido };
+}
+
+/**
+ * Si el servicio atiende hoy el alta de quien ganó: lo dice `/cupo` (`pagos.altaPremio`). `true` o `false` solo cuando el
+ * servicio contestó: sin servicio configurado, o con una respuesta buena que no trae el bloque, es `false` (no ofrece el
+ * alta). Si no se pudo saber (un corte, el tiempo que se acabó, un error del servicio o una respuesta que no se entiende),
+ * es `null`: no es lo mismo que apagado, y quien llama vuelve a preguntar.
+ */
+export async function altaPremioAbierta(cuenta: string, o: OpcionesDeAlta = {}): Promise<boolean | null> {
+  const r = await pedir(`/v1/patrocinio/cupo?cuenta=${encodeURIComponent(cuenta)}`, "GET", null, null, o);
+  if ("ok" in r) return r.motivo === "sin-portero" ? false : null;
+  if (r.estado !== 200) return null;
+  const cuerpo = objeto(r.cuerpo);
+  if (cuerpo === null) return null;
+  return objeto(cuerpo.pagos)?.altaPremio === true;
+}

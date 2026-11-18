@@ -10,7 +10,8 @@
 import type { MotivoDeSalida } from "../../workers/sala/src/campana";
 import { type Campana, leerCampana } from "../campana/modelo";
 import { generarClave } from "./cifra";
-import { type Dependencias, type Sala, servicioDeSala } from "./cliente";
+import { esCuentaValida } from "../../workers/sala/src/logica";
+import { type Dependencias, type EquipoDeSala, type Sala, servicioDeSala } from "./cliente";
 
 export type { MotivoDeSalida };
 /** Los motivos en el orden de los botones. La sala acepta exactamente estos (`MOTIVOS_DE_SALIDA`). */
@@ -37,6 +38,8 @@ export interface EstadoDeSala {
   fase: FaseDeSala;
   total: number;
   cierraMs: number;
+  /** Cuántas personas se quitaron en total (la suma por motivo). Si la sala no lo dice, no está. */
+  quitadas?: number;
 }
 export interface PaseDeSala {
   p: string;
@@ -182,14 +185,26 @@ export async function quitarConMotivo(
 const FASES: readonly string[] = ["lista", "abierta", "cerrada", "sellada", "sorteada"];
 const esFase = (x: unknown): x is FaseDeSala => typeof x === "string" && FASES.includes(x);
 
-/** La fase, el total de personas y la hora de cierre que tiene la sala. */
+/** Las quitadas por motivo, sumadas. `undefined` si la sala no las dice. */
+function sumaDeQuitadas(x: unknown): number | undefined {
+  if (!esObjeto(x) || Object.keys(x).length === 0) return undefined;
+  let suma = 0;
+  for (const v of Object.values(x)) {
+    if (!esEntero(v) || v < 0) return undefined;
+    suma += v;
+  }
+  return suma;
+}
+
+/** La fase, el total de personas, la hora de cierre y cuántas se quitaron, que tiene la sala. */
 export async function estadoConToken(s: Sala, dep: DependenciasOrg = {}): Promise<EstadoDeSala | FallaDeSala> {
   const r = await llamar(dep, rutaDe(s, "/campana/estado"), { headers: auth(s) });
   if (!r) return "red";
   if (!r.ok) return fallaDe(r);
-  const x = (await r.json().catch(() => null)) as { fase?: unknown; total?: unknown; cierraMs?: unknown } | null;
+  const x = (await r.json().catch(() => null)) as { fase?: unknown; total?: unknown; cierraMs?: unknown; quitadas?: unknown } | null;
   if (!x || !esFase(x.fase) || !Number.isSafeInteger(x.total) || !Number.isSafeInteger(x.cierraMs)) return "red";
-  return { fase: x.fase, total: x.total as number, cierraMs: x.cierraMs as number };
+  const quitadas = sumaDeQuitadas(x.quitadas);
+  return { fase: x.fase, total: x.total as number, cierraMs: x.cierraMs as number, ...(quitadas === undefined ? {} : { quitadas }) };
 }
 
 /** La campaña tal como la firmó Tinkazo, para retomar sin tener el archivo. */
@@ -213,6 +228,192 @@ export async function leerCampanaDeSala(s: Sala, dep: DependenciasOrg = {}): Pro
 export async function borrarSalaVacia(s: Sala, dep: DependenciasOrg = {}): Promise<boolean> {
   const r = await llamar(dep, rutaDe(s, ""), { method: "DELETE", headers: auth(s) });
   return r !== null && (r.status === 204 || r.status === 404);
+}
+
+/* ------------------------------------------------------------ la lista completa, el sello y el resultado */
+
+/** Cuántas vueltas de 200 se piden como mucho al leer la lista entera: una campaña admite 300. */
+const VUELTAS_DE_LECTURA = 10;
+
+/** Una fila de `GET equipos` tal como la devuelve la sala, o `null` si no tiene la forma: no se descarta en silencio. */
+function leerFila(x: unknown): EquipoDeSala | null {
+  if (!esObjeto(x)) return null;
+  const { n, cuenta, d, estado, v } = x;
+  if (!esEntero(n) || n < 1 || !esEntero(v) || v < 0 || typeof d !== "string" || typeof estado !== "string") return null;
+  if (!esCuentaValida(cuenta)) return null;
+  return { n, cuenta, d, estado, v };
+}
+
+/** Una vuelta de la lista: las filas con versión mayor que `desde`, o `null` si el pedido falló o alguna fila no se entiende. */
+async function leerVuelta(s: Sala, desde: number, dep: DependenciasOrg): Promise<EquipoDeSala[] | null> {
+  const r = await llamar(dep, rutaDe(s, `/equipos?desde=${desde}`), { headers: auth(s) });
+  if (!r || !r.ok) return null;
+  const x: unknown = await r.json().catch(() => null);
+  if (!Array.isArray(x)) return null;
+  const filas: EquipoDeSala[] = [];
+  for (const crudo of x) {
+    const fila = leerFila(crudo);
+    if (!fila) return null;
+    filas.push(fila);
+  }
+  return filas;
+}
+
+/**
+ * Todas las anotadas de la sala con la lista cerrada, de a 200 (lo que trae la sala por vuelta). Mira el estado ANTES y
+ * DESPUÉS de las páginas: tiene que estar cerrada las dos veces, con el mismo total y las mismas quitadas, y una última
+ * página vacía, pedida después del segundo estado, confirma que nadie entró entre medio. La cantidad leída tiene que ser
+ * el total. Si algo no coincide, o cualquier pedido falla, `null` y la lista no se pasa.
+ */
+export async function leerTodasLasAnotadas(s: Sala, dep: DependenciasOrg = {}): Promise<EquipoDeSala[] | null> {
+  const antes = await estadoConToken(s, dep);
+  if (typeof antes === "string" || antes.fase !== "cerrada") return null;
+  const leidas: EquipoDeSala[] = [];
+  let desde = 0;
+  let terminada = false;
+  for (let vuelta = 0; vuelta < VUELTAS_DE_LECTURA && !terminada; vuelta++) {
+    const filas = await leerVuelta(s, desde, dep);
+    if (!filas) return null;
+    if (filas.length === 0) terminada = true;
+    leidas.push(...filas);
+    desde = Math.max(desde, ...filas.map((f) => f.v));
+  }
+  if (!terminada) return null;
+  const despues = await estadoConToken(s, dep);
+  if (typeof despues === "string" || despues.fase !== "cerrada") return null;
+  if (despues.total !== antes.total || despues.quitadas !== antes.quitadas) return null;
+  if (leidas.length !== despues.total || new Set(leidas.map((f) => f.n)).size !== leidas.length) return null;
+  const ultima = await leerVuelta(s, desde, dep);
+  return ultima !== null && ultima.length === 0 ? leidas : null;
+}
+
+/** Lo que la sala contesta a un aviso de sellada: su motivo, o `red` si no hubo respuesta que se entienda. */
+export type RespuestaDeSellada =
+  | "ok"
+  | "fase"
+  | "sin-sorteo"
+  | "ronda-pasada"
+  | "ganadores-distintos"
+  | "organizador-distinto"
+  | "lista-distinta"
+  | "no-existe"
+  | "token"
+  | "forma"
+  | "red";
+const DE_SELLADA: readonly RespuestaDeSellada[] = [
+  "fase",
+  "sin-sorteo",
+  "ronda-pasada",
+  "ganadores-distintos",
+  "organizador-distinto",
+  "lista-distinta",
+  "no-existe",
+  "token",
+  "forma",
+];
+
+/** La hora de la sala según su cabecera `Date` (con un segundo de precisión), si el navegador la deja leer. */
+function horaDeLaSala(r: Response | null): number | null {
+  const crudo = r?.headers.get("Date");
+  const ms = crudo ? Date.parse(crudo) : Number.NaN;
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Le avisa a la sala el número del sorteo sellado. La sala comprueba todo en la red, así que el sitio no manda lista ni
+ * huella. `plazoMs` es lo que vive este pedido: no se corta antes, porque el Worker lee la red hasta 10 s por cada RPC y un
+ * aviso que tarda igual entra. El número va como texto: es un bigint y JSON no lo escribe.
+ */
+export async function ponerSellada(
+  s: Sala,
+  sorteo: string,
+  dep: DependenciasOrg = {},
+  plazoMs?: number,
+): Promise<{ r: RespuestaDeSellada; horaSala: number | null }> {
+  const conPlazo: DependenciasOrg = plazoMs === undefined ? dep : { ...dep, senal: () => AbortSignal.timeout(Math.max(1, Math.floor(plazoMs))) };
+  const r = await llamar(conPlazo, rutaDe(s, "/campana/fase"), {
+    method: "PUT",
+    headers: conCuerpo(s),
+    body: JSON.stringify({ fase: "sellada", sorteo }),
+  });
+  const horaSala = horaDeLaSala(r);
+  if (!r) return { r: "red", horaSala };
+  if (r.status === 204) return { r: "ok", horaSala };
+  const motivo = await motivoDe(r);
+  return { r: DE_SELLADA.find((m) => m === motivo) ?? "red", horaSala };
+}
+
+export type RespuestaDeResultado = "ok" | "sin-resultado" | "fase" | "distinto" | "no-existe" | "token" | "forma" | "red";
+const DE_RESULTADO: readonly RespuestaDeResultado[] = ["sin-resultado", "fase", "distinto", "no-existe", "token", "forma"];
+
+/** Le avisa a la sala el comprobante del sorteo: ella lee las ganadoras del contrato, nunca de lo que manda el sitio. */
+export async function guardarResultadoEnSala(
+  s: Sala,
+  sorteo: string,
+  comprobante: string,
+  dep: DependenciasOrg = {},
+): Promise<RespuestaDeResultado> {
+  const r = await llamar(dep, rutaDe(s, "/campana/resultado"), {
+    method: "PUT",
+    headers: conCuerpo(s),
+    body: JSON.stringify({ sorteo, comprobante }),
+  });
+  if (!r) return "red";
+  if (r.status === 204) return "ok";
+  const motivo = await motivoDe(r);
+  return DE_RESULTADO.find((m) => m === motivo) ?? "red";
+}
+
+/** El resultado como lo ve un celular: las ganadoras en orden de puesto, sacadas del contrato por la sala. */
+export interface ResultadoDeSala {
+  sorteo: string;
+  ganadoras: string[];
+  comprobante: string;
+}
+
+/** Lee el resultado que la sala guardó, sin token. En este pedido `sin-resultado` es un 404. */
+export async function resultadoDeSala(s: Sala, dep: DependenciasOrg = {}): Promise<ResultadoDeSala | "sin-resultado" | "no-existe" | "red"> {
+  const r = await llamar(dep, rutaDe(s, "/campana/resultado"), {});
+  if (!r) return "red";
+  if (r.status === 404) return (await motivoDe(r)) === "sin-resultado" ? "sin-resultado" : "no-existe";
+  if (!r.ok) return "red";
+  const x = (await r.json().catch(() => null)) as { sorteo?: unknown; ganadoras?: unknown; comprobante?: unknown } | null;
+  if (!x || typeof x.sorteo !== "string" || typeof x.comprobante !== "string" || !Array.isArray(x.ganadoras)) return "red";
+  const ganadoras: string[] = [];
+  for (const g of x.ganadoras as unknown[]) {
+    if (!esCuentaValida(g)) return "red";
+    ganadoras.push(g);
+  }
+  return { sorteo: x.sorteo, ganadoras, comprobante: x.comprobante };
+}
+
+export type RespuestaDeAviso = "ok" | "no-gano" | "no-existe" | "token" | "forma" | "red";
+const DE_AVISO: readonly RespuestaDeAviso[] = ["no-gano", "no-existe", "token", "forma"];
+
+/** Marca a una ganadora como avisada en su celular. `no-gano` es que la sala no la tiene entre las ganadoras. */
+export async function avisarEnSala(s: Sala, cuenta: string, dep: DependenciasOrg = {}): Promise<RespuestaDeAviso> {
+  const r = await llamar(dep, rutaDe(s, "/campana/avisar"), { method: "POST", headers: conCuerpo(s), body: JSON.stringify({ cuenta }) });
+  if (!r) return "red";
+  if (r.status === 204) return "ok";
+  const motivo = await motivoDe(r);
+  return DE_AVISO.find((m) => m === motivo) ?? "red";
+}
+
+/** La cuenta que la campaña nombra para sellar (campo `organizadora` del texto firmado), `null` si no nombra ninguna. */
+export async function leerOrganizadora(s: Sala, dep: DependenciasOrg = {}): Promise<string | null | FallaDeSala> {
+  const r = await llamar(dep, rutaDe(s, "/campana"), {});
+  if (!r) return "red";
+  if (!r.ok) return fallaDe(r);
+  const x = (await r.json().catch(() => null)) as { texto?: unknown } | null;
+  if (!x || typeof x.texto !== "string") return "red";
+  try {
+    const datos: unknown = JSON.parse(x.texto);
+    const org = esObjeto(datos) ? datos.organizadora : undefined;
+    if (org === undefined || org === null) return null;
+    return esCuentaValida(org) ? org : "rechazo";
+  } catch {
+    return "rechazo";
+  }
 }
 
 /* ------------------------------------------------------------ lo que recuerda la compu */
