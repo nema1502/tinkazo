@@ -1,6 +1,21 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, conCuenta, currentPace, paceSeconds, params, type Game } from "../state";
+import {
+  ANCHOR_LEAD_SECONDS,
+  CAMPANA_LEAD_SECONDS,
+  LEAD_SECONDS,
+  SIN_SELLO_LEAD_SECONDS,
+  WHEEL_MAX,
+  app,
+  conCuenta,
+  currentPace,
+  paceSeconds,
+  params,
+  type Game,
+} from "../state";
+import { campanaDeLaLista, esListaDeCampana, listaCambiadaDeLaCampana } from "../campana/en-curso";
+import { ponerPaso } from "../campana/puente";
+import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { avisarCambioConQr } from "./espectadores-de-la-sala";
 import { ANCLA_ANTES_S, anclaDeLaRondaUnaVez, horaDeLaRonda, medirElReloj } from "../reloj-de-la-ronda";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
@@ -29,7 +44,7 @@ import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
-import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { fijarPorCampana, fijoPorCampana, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
 import { ajustarPremioDeTurnos, ordenNoCabe, ponerModoTurnos } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
@@ -393,6 +408,20 @@ let grandePendiente = false;
 function soltarLoPedido(): void {
   if (grandePendiente) soltarPantallaCompleta();
   grandePendiente = false;
+}
+
+/**
+ * Una lista de campaña de empresa que no se puede sellar como está: la línea de por qué, en la caja de los errores del sello.
+ * Usa los textos del panel de quien organiza (`campana/textos-sala.ts`), con la cuenta o la cantidad que corresponde.
+ */
+function frenarLaCampana(clave: string, vars: Record<string, string> = {}): void {
+  const status = $("seal-status");
+  status.style.display = "block";
+  status.className = "txstatus bad";
+  let texto = TEXTOS_SALA_CAMPANA[getLang()][clave] ?? "";
+  for (const [k, v] of Object.entries(vars)) texto = texto.replaceAll(`{${k}}`, v);
+  status.textContent = texto;
+  verError(status);
 }
 
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
@@ -915,6 +944,15 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   if (!puedeSellar()) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
+  const hash = bytesToHex(listHash(names));
+  // La lista de una campaña de empresa (detrás de VITE_CAMPANAS) que se cambió en el cuadro después de pasarla: la sala la
+  // rechazaría y costaría un sorteo de quien organiza. Se frena antes de cualquier firma y se ofrece volver a pasarla.
+  if (!sinGrabar() && listaCambiadaDeLaCampana(hash)) {
+    frenarLaCampana("cpoListaCambio");
+    ponerPaso({ paso: "lista-cambio" });
+    soltarLoPedido();
+    return;
+  }
   // Con el modo Oficial a la vista, una cuenta con la billetera en la otra red no cae callada al modo libre: se frena
   // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
   // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
@@ -930,6 +968,30 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // La lista que pasó el panel de una campaña de empresa (detrás de VITE_CAMPANAS) solo se sortea sellada y con cuenta: sin
+  // sello o sin cuenta (otra red, o seguir sin cuenta) no hay aviso a la sala, los celulares quedarían esperando y el show
+  // tendría un ganador que nadie puede verificar. Cuenta también con un sello dudoso en curso. Fuera de una campaña, nada.
+  if (!sinGrabar() && (!conCuenta || sinSello) && esListaDeCampana(hash)) {
+    frenarLaCampana(conCuenta ? "cpoSinSelloNo" : "cpoSinCuenta");
+    soltarLoPedido();
+    return;
+  }
+  // La campaña puede pedir una cantidad de personas y una cuenta para sellar: se mira antes de las puertas del acceso y de la
+  // cuenta lista, que abren pasos y gastan un sorteo, así quien organiza oye primero con qué cuenta entrar.
+  const deLaCampana = anchoring ? campanaDeLaLista(hash) : null;
+  if (deLaCampana !== null) {
+    if (names.length < deLaCampana.premios) {
+      frenarLaCampana(deLaCampana.premios === 1 ? "cpoPocos" : "cpoPocosPremios", { n: String(deLaCampana.premios) });
+      soltarLoPedido();
+      return;
+    }
+    const quienSella = deLaCampana.organizadora;
+    if (quienSella !== null && quienSella !== currentSession()?.address) {
+      frenarLaCampana("cpoEntraCon", { fin: quienSella.slice(-4) });
+      soltarLoPedido();
+      return;
+    }
+  }
   // Seguir sin sello con un sello de esta misma lista que se mandó y no se sabe si entró: el contrato no impide sellar dos
   // veces la misma lista, así que primero se averigua. Si entró, ese es el sello y se sigue anclado, con su ronda. Si no se
   // puede saber, se sigue sin sello pero no se manda ningún sello más de esa lista, ni ahora ni cada 15 segundos.
@@ -961,13 +1023,13 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     soltarLoPedido();
     return;
   }
-  const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
   // elegir el juego, y la línea que guía dice que de verdad es cerca de un minuto.
+  // Una lista de campaña se sella a 90 segundos: la sala solo acepta el aviso con la ronda por salir.
   const lead = anchoring
-    ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
+    ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS, deLaCampana === null ? 0 : CAMPANA_LEAD_SECONDS)
     : sinSello
       ? SIN_SELLO_LEAD_SECONDS
       : enStand()
@@ -978,7 +1040,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   let round = targetRound(ts, lead);
   // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo es el cuadro, recortado.
   let prize = ajustarPremioDeTurnos();
-  let numWinners = Math.min(ganadoresPedidos(), names.length);
+  // La cantidad de ganadoras de una campaña es la de sus premios firmados: la sala no acepta otra.
+  let numWinners = deLaCampana === null ? Math.min(ganadoresPedidos(), names.length) : deLaCampana.premios;
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -1223,7 +1286,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ...(sinCuentaElegido() ? { sinCuenta: true } : {}),
     ...(logo ? { logo } : {}),
   };
-  // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.
+  // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso. La cantidad de ganadoras
+  // de una campaña ya quedó sellada: la traba del contador no tiene que sobrevivir a este sorteo.
+  if (fijoPorCampana()) fijarPorCampana(false);
   marcarSellado(false);
   limpiarRed();
 
@@ -1519,6 +1584,8 @@ export function unfreeze(lista: string): void {
   countdownTimer = undefined;
   app.frozen = null;
   cerrarLista(false);
+  // Después de soltar el sello, el contador de ganadoras vuelve a ser de quien sortea (el paso de la campaña lo vuelve a fijar).
+  if (fijoPorCampana()) fijarPorCampana(false);
   ponerPremio("");
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";

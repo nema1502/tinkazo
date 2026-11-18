@@ -168,7 +168,7 @@ describe("elegir el archivo", () => {
     const pide = Keypair.random().publicKey();
     m.cuenta = Keypair.random().publicKey();
     await elegirArchivo(m, p, archivoDe({ organizadora: pide }));
-    expect(texto(p, "#cpo-aviso")).toBe("Hay que sellar con otra cuenta.");
+    expect(texto(p, "#cpo-aviso")).toBe(`Entrá con la cuenta que termina en ${pide.slice(-4)}.`);
     m.cuenta = pide;
     await elegirArchivo(m, p, archivoDe({ organizadora: pide }));
     expect(texto(p, "#cpo-aviso")).toBe("");

@@ -137,9 +137,16 @@ describe("el panel de quien organiza", () => {
     expect(css).toContain("body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }");
   });
 
-  it("la barra de lo que sigue vuelve con la lista cerrada y sin botón principal en el panel", () => {
+  it("la barra de lo que sigue vuelve con la lista cerrada o sellada y sin botón principal en el panel", () => {
     expect(css).toContain(
-      'body:has(#cpo-panel:not([data-vista="cerrada"]), #cpo-panel button.primary) #siguiente { display: none !important; }',
+      'body:has(#cpo-panel:not([data-vista="cerrada"]):not([data-vista="sellada"]), ' +
+        "#cpo-panel button.primary) #siguiente { display: none !important; }",
+    );
+  });
+
+  it("con la lista sellada o sorteada el botón de Siguiente premio no se ve", () => {
+    expect(css).toContain(
+      'body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-again-sin { display: none !important; }',
     );
   });
 

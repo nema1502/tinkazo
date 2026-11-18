@@ -17,6 +17,17 @@ export function montoTexto(unidades: bigint, idioma: Lang): string {
   }).format(numero);
 }
 
+/**
+ * El premio de una campaña como se pone en el cuadro del sorteo: siempre en español y sin separador de miles, con coma para
+ * los centavos. Quien paga el premio lee el monto de ese texto, y "1.000" se leería como 1.
+ */
+export function premioParaElCuadro(unidades: bigint): string {
+  const entero = unidades / 10000000n;
+  const centavos = (unidades % 10000000n) / 100000n;
+  const monto = centavos > 0n ? `${entero},${String(centavos).padStart(2, "0")}` : String(entero);
+  return (TEXTOS_CAMPANA.es.cpPremio1 ?? "").replace("{monto}", monto);
+}
+
 /** Junta montos sin coma de serie en inglés y sin ambigüedad entre decimales en español. */
 function listaDeMontos(montos: readonly string[], idioma: Lang): string {
   if (montos.length < 2) return montos[0] ?? "";

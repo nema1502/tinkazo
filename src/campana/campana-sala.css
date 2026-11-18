@@ -10,8 +10,11 @@
 
 /* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
 body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
-/* La barra de lo que sigue solo se esconde mientras el panel tiene su propia acción principal: una sola a la vista. */
-body:has(#cpo-panel:not([data-vista="cerrada"]), #cpo-panel button.primary) #siguiente { display: none !important; }
+/* La barra de lo que sigue solo se esconde mientras el panel tiene su propia acción principal: una sola a la vista. Con la lista
+   cerrada o sellada la barra sigue ahí: es lo único que lleva a Lanzar el sorteo durante la cuenta regresiva. */
+body:has(#cpo-panel:not([data-vista="cerrada"]):not([data-vista="sellada"]), #cpo-panel button.primary) #siguiente { display: none !important; }
+/* Con la lista sellada o sorteada, Siguiente premio arma otro sorteo que no cuenta para la campaña: no es lo que sigue. */
+body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-again-sin { display: none !important; }
 
 /* El panel: el aspecto del de equipos, a todo el ancho que le da el cuadro. */
 .cpo-panel {

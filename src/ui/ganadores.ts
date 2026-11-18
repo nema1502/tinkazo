@@ -50,6 +50,8 @@ const boton = (id: string): HTMLButtonElement | null => {
 let cerrado = false;
 /** El modo Orden de turnos fija la cantidad a la de la lista (`fijarGanadores`). */
 let fijo = false;
+/** Una campaña de empresa fija la cantidad a la de sus premios firmados (`fijarPorCampana`): la sala no acepta otra. */
+let deCampana = false;
 /** El modo stand (`ponerContadorDelStand`): el contador se llama Cuántos salen y el tope es la lista de la ronda. */
 let enElStand = false;
 /** Cuántas líneas tiene la lista ahora (`lineasDeLaLista`, desde `renderNames`). Solo cuenta en el stand. */
@@ -81,7 +83,7 @@ function sincronizar(): void {
   if (control && enElStand) control.hidden = lineas < 2;
   const visible = document.getElementById("nw-valor");
   if (visible) visible.textContent = String(actual);
-  const bloqueado = cerrado || fijo;
+  const bloqueado = cerrado || fijo || deCampana;
   for (const b of atajos()) {
     const n = Number(b.dataset.n);
     b.hidden = n > tope;
@@ -104,7 +106,7 @@ export function ponerGanadores(n: number): void {
 
 function aplicarBloqueo(): void {
   const el = campo();
-  if (el) el.disabled = cerrado || fijo;
+  if (el) el.disabled = cerrado || fijo || deCampana;
   sincronizar();
 }
 
@@ -122,6 +124,18 @@ export function fijarGanadores(si: boolean): void {
   fijo = si;
   aplicarBloqueo();
 }
+
+/**
+ * Una campaña de empresa fija la cantidad de ganadoras a la de sus premios (`campana-pasar.ts`): el contador y los atajos
+ * quedan bloqueados, y apagar el modo de turnos no los suelta. Se apaga al sellar, al soltar el sello y al olvidar la campaña.
+ */
+export function fijarPorCampana(si: boolean): void {
+  deCampana = si;
+  aplicarBloqueo();
+}
+
+/** Si la cantidad está fija por una campaña. */
+export const fijoPorCampana = (): boolean => deCampana;
 
 /** El aviso del tope, solo cuando un valor anterior lo superaba y bajó. El stand no lo tiene: su tope es la lista. */
 function avisarTope(si: boolean): void {
