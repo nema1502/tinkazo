@@ -1,4 +1,11 @@
-/** Estilos de la pantalla previa de campañas, separados de los estilos comunes del sitio. */
+/**
+ * Estilos de las pantallas de campaña: pensados primero para un celular, a pantalla completa
+ * (el bloque principal ocupa el alto y el botón queda abajo), y en dos columnas desde 900 px
+ * o con el celular acostado.
+ */
+
+/* Ningún estilo, de esta hoja o de la general, puede mostrar algo que tenga el atributo hidden. */
+.cmp [hidden] { display: none !important; }
 
 :root {
   --cmp-rojo: #e93d9c;
@@ -6,7 +13,7 @@
   --cmp-amarillo: #ffc629;
   --cmp-verde: #00a896;
   --cmp-azul: #2b8cbe;
-  /* El morado claro repite el tono oscuro: #6c4ce0 no llegaba a 4,5 a 1 con la tinta del botón. */
+  /* El morado claro repite el tono oscuro: el anterior no llegaba al contraste del botón. */
   --cmp-morado: #9b7bff;
 }
 
@@ -30,42 +37,68 @@
   }
 }
 
-.cmp {
-  width: min(760px, calc(100% - 32px));
-  margin: 28px auto 48px;
+/* La cabecera es una franja baja: marca e idioma, sin quitarle alto a la campaña. */
+.pg-campana {
+  --cmp-cab: 66px;
+  /* La tinta fija de los bloques de color: el acento cambia con el tema, esta no, y siempre se lee. */
+  --cmp-tinta: #191919;
 }
 
-.cmp-estado,
-.cmp-saber,
-.cmp-pasos {
-  background: var(--card);
-  border: var(--bw) solid var(--ink);
-  box-shadow: var(--sh);
-  padding: 22px;
+.pg-campana header { position: static; }
+
+.pg-campana .stripe { height: 6px; }
+
+.pg-campana header .bar {
+  max-width: 1100px;
+  height: calc(var(--cmp-cab) - 9px);
+  padding: 0 16px;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
-.cmp-estado {
+/* La cabecera deja solo marca e idioma para no sacar a la persona de la campaña. */
+.pg-campana .topnav, .pg-campana .pg-auth { display: none; }
+
+/* La marca de la cabecera no es un enlace: un toque corrido no saca a nadie de la campaña. */
+.pg-campana .wordmark { cursor: default; }
+
+.pg-campana .langs button { min-width: 44px; }
+
+.pg-campana footer { margin-top: 0; }
+
+.pg-campana footer .bar {
+  justify-content: center;
+  gap: 8px 20px;
+  padding-block: 12px;
   text-align: center;
-  font-size: 22px;
-  font-weight: 800;
 }
 
-.cmp-estado a,
-.cmp-accion > .ghost {
-  display: inline-flex;
-  margin-top: 12px;
+/* La página es una columna que usa todo el ancho menos 16 px por lado. */
+.cmp {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px;
 }
 
-.cmp-ejemplo {
+/* La demostración se marca con una etiqueta chica en la cabecera: no le suma alto a la pantalla. */
+.pg-campana .cmp-ejemplo {
+  padding: 2px 8px;
   background: var(--cmp-amarillo);
-  color: #191919;
+  color: var(--cmp-tinta);
   border: 2px solid var(--ink);
-  padding: 10px 14px;
+  font-size: 12px;
   font-weight: 800;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .cmp-mensaje {
-  margin-bottom: 12px;
+  margin: 0;
   font-weight: 700;
 }
 
@@ -73,165 +106,956 @@
   display: none;
 }
 
-.cmp-logo {
-  display: block;
-  max-width: min(220px, 100%);
-  max-height: 120px;
-  object-fit: contain;
-  border: 4px solid var(--cmp-acento, var(--magenta));
-  margin: 0 auto 18px;
+/* El bloque principal ocupa el alto que queda debajo de la cabecera y reparte su contenido. */
+.cmp-estado,
+.cmp-saber,
+.cmp-hola,
+.cmp-adentro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Un navegador que no entiende dvh se queda con vh. */
+  min-height: calc(100vh - var(--cmp-cab));
+  min-height: calc(100dvh - var(--cmp-cab));
+  padding: 12px 0;
 }
 
-.cmp-saber h1 {
-  margin: 0 0 8px;
-  font-size: clamp(27px, 5vw, 42px);
-  line-height: 1.05;
+.cmp-izq,
+.cmp-der {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* El premio, el saludo, el resultado y los avisos absorben el alto sobrante. */
+.cmp-saber > .cmp-izq,
+.cmp-hola > .cmp-izq,
+.cmp-adentro > .cmp-izq,
+.cmp-estado > .cmp-izq {
+  flex: 1 1 auto;
+}
+
+/* El bloque de color: el acento de la empresa con la tinta fija encima. */
+.cmp-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 16px;
+  background: var(--cmp-acento, var(--magenta));
+  color: var(--cmp-tinta);
+  border: var(--bw) solid var(--ink);
+  box-shadow: var(--sh);
+  text-align: center;
 }
 
 .cmp-premio {
-  color: var(--cmp-acento, var(--magenta));
-  border-left: 8px solid var(--cmp-acento, var(--magenta));
-  padding-left: 12px;
-  font-size: 21px;
+  flex: 1 1 auto;
+}
+
+.cmp-logo {
+  display: block;
+  max-width: min(180px, 100%);
+  max-height: 56px;
+  object-fit: contain;
+  border: 4px solid var(--cmp-acento, var(--magenta));
+  margin: 0 auto;
+}
+
+.cmp h1 {
+  margin: 0;
+  font-size: clamp(32px, 10vw, 56px);
+  font-weight: 900;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.cmp h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.cmp p {
+  margin: 0;
+}
+
+/* En la primera pantalla el título dice de quién es el sorteo, en una línea que se lee desde lejos. */
+.cmp-saber h1 {
+  font-size: clamp(22px, 6.5vw, 30px);
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.cmp-premio-etiqueta {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* El rótulo que va debajo del monto no se pega a la letra de arriba. */
+.cmp-premio-texto + .cmp-premio-etiqueta {
+  margin-top: 4px;
+}
+
+/* Uno o dos rótulos chicos arriba de un bloque: de quién es el sorteo y qué se sortea. */
+.cmp-rotulos {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  text-align: center;
+}
+
+.cmp-premio-texto {
+  font-size: clamp(40px, 14vw, 72px);
+  /* El monto crece con el ancho y con el alto, sin pasarse del ancho: 100 dólares sigue en dos renglones. */
+  font-size: clamp(40px, min(14vw, 10dvh), 84px);
+  font-weight: 900;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.cmp-premio-texto.cmp-largo {
+  font-size: clamp(28px, 9vw, 48px);
+}
+
+.cmp-datos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px 18px;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cmp-contador {
   font-weight: 900;
 }
 
-.cmp-saber ul {
-  padding-left: 24px;
-  line-height: 1.45;
+/* El número de personas se lee primero: más grande que la frase que lo rodea. */
+.cmp-cifra {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
 }
 
-.cmp-saber li + li {
-  margin-top: 8px;
+.cmp-contador.sube {
+  animation: cmp-sube-contador 400ms ease-out;
+}
+
+@keyframes cmp-sube-contador {
+  50% { transform: translateY(-4px); }
+}
+
+.cmp-cierre {
+  color: var(--ink2);
+}
+
+.cmp-apoyo,
+.cmp-en-app,
+.cmp-vuelve {
+  color: var(--ink2);
+  font-size: var(--letra-sec);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
+/* La nota de los pedidos va pegada a su título, a la izquierda como él. */
+.cmp-apoyo.cmp-apoyo-izq {
+  text-align: left;
+}
+
+.cmp-hero .cmp-apoyo {
+  color: var(--cmp-tinta);
+  font-size: 17px;
+}
+
+.cmp-error {
+  padding: 8px 10px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-size: var(--letra-sec);
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+/* Un aviso a pantalla completa: el mensaje grande y centrado, del mismo tamaño que los títulos. */
+.cmp-grande {
+  font-size: clamp(36px, 12vw, 64px);
+  font-weight: 900;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+/* El adorno de los avisos: la llama de la casa, con el color del texto. */
+.cmp-llama {
+  flex: none;
+  width: clamp(72px, 26vw, 112px);
+  height: auto;
+  fill: currentColor;
+}
+
+/* Un aviso de problema no usa el color de fiesta de la empresa: queda en el fondo neutro. */
+.cmp-hero.cmp-alerta {
+  background: var(--card);
+  color: var(--ink);
+}
+
+.cmp-alerta .cmp-apoyo {
+  color: var(--ink2);
+}
+
+.cmp-solo h1 {
+  font-size: clamp(36px, 12vw, 64px);
+}
+
+/* La tilde grande de Ya estás adentro. */
+.cmp-marca {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  background: #fff;
+  color: var(--cmp-tinta);
+  border: var(--bw) solid var(--cmp-tinta);
+  border-radius: 50%;
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cmp-adentro .cmp-contador {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.cmp-numero {
+  font-size: clamp(48px, 18vw, 96px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+/* Cuándo cierra y cuándo es el sorteo: dos columnas, planas porque no se tocan. */
+.cmp-horas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cmp-celda {
+  padding: 12px;
+  background: var(--card);
+  border: var(--bw) solid var(--ink);
+  font-size: var(--letra-sec);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+/* La hora va en su propio renglón: nunca comparte línea con el final de la frase. */
+.cmp-hora {
+  display: block;
+  font-size: 1.7em;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+/* El botón principal de cada pantalla: abajo, a todo el ancho y siempre a la vista. */
+.cmp-accion {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: auto -16px -12px;
+  padding: 10px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: var(--bw) solid var(--ink);
+  background: var(--card);
+}
+
+.cmp .primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  font-size: var(--letra-prin);
+  text-align: center;
+  text-decoration: none;
 }
 
 .cmp-estado .primary,
 .cmp-saber .primary,
-.cmp-pasos .primary {
+.cmp-hola .primary {
   background: var(--cmp-acento, var(--magenta));
 }
 
-.cmp .primary,
-.cmp .ghost {
+/* Cambiar de cuenta es un enlace chico dentro del bloque de arriba, y responde solo en su texto. */
+.cmp-otra-cuenta {
+  align-self: center;
   min-height: 44px;
+  padding: 0 12px;
+  background: none;
+  color: var(--cmp-tinta);
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: var(--letra-sec);
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cmp-otra-cuenta:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cmp-accion input {
+  width: 100%;
+  min-height: 48px;
+}
+
+.cmp details {
+  margin: 0;
+  border-top: 2px solid var(--ink);
+}
+
+.cmp summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  cursor: pointer;
+  font-weight: 900;
+  list-style: none;
+}
+
+.cmp summary::-webkit-details-marker {
+  display: none;
+}
+
+/* El más y el menos avisan que las reglas se abren y se cierran. */
+.cmp summary::after {
+  content: "+";
+  font-size: 26px;
+  line-height: 1;
+}
+
+.cmp details[open] > summary::after {
+  content: "\2212";
+}
+
+.cmp details p {
+  margin: 0 0 10px;
+  font-size: var(--letra-sec);
+}
+
+.cmp-bases {
+  white-space: pre-wrap;
+}
+
+.cmp-suave {
+  color: var(--ink2);
+  font-size: var(--letra-sec);
+  font-weight: 700;
+}
+
+a.cmp-suave {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
 }
 
-.cmp-accion {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  margin-top: 16px;
-  padding: 12px 0 max(12px, env(safe-area-inset-bottom));
-  border-top: 2px solid var(--ink);
-  background: var(--card);
+/* Dentro del bloque de color, el enlace usa la tinta fija y no el gris de la página. */
+.cmp-hero .cmp-suave {
+  color: var(--cmp-tinta);
+  text-decoration: underline;
 }
 
-.cmp-accion input {
-  min-height: 44px;
-  margin-top: 12px;
-}
-
-.cmp-saber details {
-  margin-top: 20px;
-  border-top: 2px solid var(--ink);
-  padding-top: 14px;
-}
-
-.cmp-saber summary {
+/* Los pedidos de la empresa. */
+.cmp-pasos {
   display: flex;
-  align-items: center;
-  min-height: 44px;
-  cursor: pointer;
-  font-weight: 900;
-}
-
-.cmp-organiza,
-.cmp-en-app,
-.cmp-pasos > p {
-  color: var(--ink2);
-  font-weight: 700;
-}
-
-.cmp-pasos h2 {
-  margin-top: 0;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .cmp-paso {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
   align-items: center;
-  border: 2px solid var(--ink);
-  padding: 12px;
-  margin: 12px 0;
-}
-
-.cmp-paso p {
-  margin: 0;
-  font-weight: 700;
-}
-
-.cmp-paso label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   width: 100%;
-  min-height: 44px;
-  cursor: pointer;
+  min-height: 64px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--card);
+  border: var(--bw) solid var(--ink);
+  box-shadow: var(--sh-sm);
+  color: var(--ink);
+  font-size: 18px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.cmp-paso-red {
+  grid-column: 1;
+  align-self: center;
   font-weight: 800;
 }
 
-.cmp-paso input {
-  flex: none;
-  width: 24px;
-  height: 24px;
+.cmp-paso-cuenta {
+  grid-column: 1;
+  color: var(--ink2);
+  font-size: var(--letra-sec);
 }
 
-@media (max-width: 600px) {
+/* La segunda columna dice Abrir antes de tocar y Listo después: así se sabe que la fila se toca. */
+.cmp-listo {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  color: var(--ink2);
+  font-size: var(--letra-sec);
+  font-weight: 900;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+.cmp-listo.cmp-hecho {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Con la cuenta debajo del nombre, la segunda columna ocupa los dos renglones y queda al medio. */
+.cmp-paso-cuenta + .cmp-listo {
+  grid-row: 1 / span 2;
+}
+
+.cmp-paso-texto {
+  display: block;
+}
+
+.cmp-paso-texto p {
+  font-weight: 700;
+}
+
+/* Ganaste: el título y el premio grandes y centrados. */
+.cmp-gano h1 {
+  font-size: clamp(48px, 18vw, 96px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.cmp-premio-resultado {
+  font-size: clamp(26px, 8.5vw, 44px);
+  font-weight: 900;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+/* El cartel del stand es de tinta y papel: no se confunde con el color de ninguna empresa. */
+.cmp-cartel {
+  padding: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  border: var(--bw) solid var(--ink);
+  font-size: clamp(18px, 5.6vw, 22px);
+  font-weight: 900;
+  text-align: center;
+}
+
+/* El festejo vive dentro de su bloque: no sale de él ni tapa la cabecera. */
+.cmp-festejo {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* La tilde grande de la pantalla salta una vez cuando el festejo la despierta. */
+.cmp-marca.cmp-tilde {
+  animation: cmp-pop 700ms ease-out both;
+}
+
+@keyframes cmp-pop {
+  0% { transform: scale(0.4); }
+  60% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+/* Si la pantalla no tiene tilde propia, aparece una encima, se agranda un poco y se va antes de los dos segundos. */
+.cmp-festejo .cmp-tilde {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  background: #fff;
+  color: var(--cmp-tinta);
+  border: var(--bw) solid var(--cmp-tinta);
+  border-radius: 50%;
+  font-size: 76px;
+  line-height: 1;
+  font-weight: 900;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0;
+  animation: cmp-tilde 1100ms ease-out both;
+}
+
+.cmp-festejo-grande .cmp-tilde {
+  width: 160px;
+  height: 160px;
+  font-size: 100px;
+}
+
+@keyframes cmp-tilde {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  25% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+.cmp-papelito {
+  position: absolute;
+  top: -16px;
+  width: 9px;
+  height: 14px;
+  pointer-events: none;
+  animation-name: cmp-papelito;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+
+@keyframes cmp-papelito {
+  to { transform: translateY(105vh) rotate(480deg); }
+}
+
+/* En un celular parado y corto, Hola entra con sus pedidos y el botón sin necesidad de bajar. */
+@media (max-width: 899px) and (orientation: portrait) {
+  .cmp-hola > .cmp-izq {
+    gap: 4px;
+    padding: 12px 16px;
+  }
+
+  .cmp-hola h1 {
+    font-size: clamp(30px, 9vw, 44px);
+  }
+
+  .cmp-hola .cmp-hero .cmp-apoyo {
+    font-size: var(--letra-sec);
+  }
+
+  /* El enlace conserva su blanco de toque de 44 px pero come menos alto: se acerca a su renglón. */
+  .cmp-hola .cmp-otra-cuenta {
+    margin-block: -4px -10px;
+  }
+
+  .cmp-hola > .cmp-der,
+  .cmp-hola .cmp-pasos {
+    gap: 8px;
+  }
+
+  .cmp-gano .cmp-marca {
+    width: 60px;
+    height: 60px;
+    font-size: 36px;
+  }
+
+  .cmp-hola .cmp-paso {
+    min-height: 56px;
+    padding: 8px 14px;
+    font-size: 17px;
+  }
+}
+
+/* Un celular parado y muy corto: el bloque de color se achica para que el botón y el cartel entren sin tapar nada. */
+@media (max-width: 899px) and (orientation: portrait) and (max-height: 600px) {
+  .cmp-hero {
+    gap: 8px;
+    padding: 14px 16px;
+  }
+
+  .cmp-gano h1 {
+    font-size: clamp(44px, 14vw, 64px);
+  }
+
+  .cmp-gano .cmp-marca {
+    width: 48px;
+    height: 48px;
+    font-size: 30px;
+  }
+
+  .cmp-premio-resultado {
+    font-size: clamp(22px, 7vw, 32px);
+  }
+
+  .cmp-llama {
+    width: 64px;
+  }
+}
+
+/* Laptop o celular acostado: el bloque usa el ancho, en dos columnas cuando hay con qué. */
+@media (min-width: 900px), (orientation: landscape) and (min-width: 640px) {
   .cmp {
-    width: min(100% - 20px, 760px);
-    margin-top: 16px;
+    padding: 0 24px;
+  }
+
+  .pg-campana header .bar {
+    padding: 0 24px;
   }
 
   .cmp-estado,
   .cmp-saber,
-  .cmp-pasos {
-    padding: 16px;
+  .cmp-hola,
+  .cmp-adentro {
+    padding: 24px 0;
   }
 
-  .cmp-paso {
-    grid-template-columns: minmax(0, 1fr) auto;
+  /* A la izquierda de quién es y lo que importa, a la derecha los datos, el botón y las reglas. */
+  .cmp-dos {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    grid-template-rows: 1fr auto auto auto 1fr;
+    gap: 16px 40px;
   }
 
-  .cmp-paso label {
-    grid-column: 1 / -1;
+  /* La izquierda queda fija con el alto de la pantalla: abrir las reglas no la estira ni la corre. */
+  .cmp-dos > .cmp-izq {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    align-self: start;
+    position: sticky;
+    top: 24px;
+    min-height: calc(100vh - var(--cmp-cab) - 48px);
+    min-height: calc(100dvh - var(--cmp-cab) - 48px);
   }
-}
 
-/* En ventanas muy bajas (un celular acostado o con mucho zoom) la tarjeta casi no entra: la acción deja de ir pegada
-   adentro de la tarjeta y queda fija al borde de abajo de la ventana, con lugar reservado para que no tape el final. */
-@media (max-height: 480px) {
-  .cmp {
-    margin-bottom: 0;
-    padding-bottom: 104px;
+  .cmp-dos > .cmp-der {
+    grid-column: 2;
+    grid-row: 2;
+    gap: 16px;
+  }
+
+  /* El botón va arriba de las reglas: a la vista aunque las reglas estén abiertas. */
+  .cmp-dos > .cmp-accion {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .cmp-dos > details {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .cmp-solo {
+    width: min(100%, 880px);
+    margin-inline: auto;
   }
 
   .cmp-accion {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 5;
-    margin-top: 0;
-    padding: 8px 16px max(8px, env(safe-area-inset-bottom));
-    border-top: var(--bw) solid var(--ink);
+    position: static;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
   }
 
-  .cmp-accion .cmp-en-app {
-    margin: 0 0 6px;
-    font-size: 14px;
+  .cmp-solo > .cmp-accion {
+    margin-top: 4px;
+  }
+
+  .cmp-hero {
+    gap: 16px;
+    padding: 32px 28px;
+  }
+
+  .cmp h1 {
+    font-size: clamp(44px, 5vw, 72px);
+  }
+
+  .cmp-saber h1 {
+    font-size: clamp(22px, 2vw, 28px);
+  }
+
+  .cmp-premio-etiqueta {
+    font-size: 18px;
+  }
+
+  .cmp-premio-texto {
+    font-size: clamp(64px, 7.5vw, 112px);
+  }
+
+  .cmp-premio-texto.cmp-largo {
+    font-size: clamp(40px, 4.6vw, 64px);
+  }
+
+  .cmp-datos {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 26px;
+  }
+
+  .cmp-cifra {
+    font-size: 56px;
+  }
+
+  .cmp-apoyo,
+  .cmp-en-app,
+  .cmp-vuelve {
+    font-size: 20px;
+  }
+
+  .cmp-hero .cmp-apoyo {
+    font-size: 24px;
+  }
+
+  .cmp summary {
+    font-size: 18px;
+  }
+
+  .cmp details p {
+    font-size: 17px;
+  }
+
+  .cmp-grande {
+    font-size: clamp(44px, 5vw, 72px);
+  }
+
+  .cmp-gano h1 {
+    font-size: clamp(72px, 9vw, 128px);
+  }
+
+  .cmp-premio-resultado {
+    font-size: clamp(34px, 3.6vw, 52px);
+  }
+
+  .cmp-numero {
+    font-size: clamp(96px, 12vw, 160px);
+  }
+
+  .cmp-adentro .cmp-contador {
+    font-size: 26px;
+  }
+
+  .cmp-marca {
+    width: 96px;
+    height: 96px;
+    font-size: 60px;
+  }
+
+  .cmp-celda {
+    padding: 18px 14px;
+    font-size: 18px;
+  }
+
+  .cmp-paso {
+    min-height: 76px;
+    font-size: 22px;
+  }
+
+  .cmp-paso-cuenta,
+  .cmp-listo {
+    font-size: 17px;
+  }
+
+  .cmp h2 {
+    font-size: 26px;
+  }
+
+  .cmp .primary {
+    min-height: 64px;
+    font-size: 22px;
+  }
+
+  .cmp-otra-cuenta {
+    font-size: 18px;
+  }
+
+  .cmp-cartel {
+    font-size: 22px;
+  }
+
+  .cmp-logo {
+    max-height: 72px;
+  }
+}
+
+/* Un celular acostado es ancho pero bajo: las letras grandes se miden con el alto para que entren. */
+@media (orientation: landscape) and (max-height: 600px) {
+  /* La barra de abajo va fija y mide unos 84 px: el bloque termina donde ella empieza. */
+  .cmp-estado,
+  .cmp-saber,
+  .cmp-hola,
+  .cmp-adentro {
+    padding: 12px 0;
+    min-height: calc(100vh - var(--cmp-cab) - 84px);
+    min-height: calc(100dvh - var(--cmp-cab) - 84px);
+  }
+
+  .cmp-dos > .cmp-izq {
+    top: 12px;
+    min-height: calc(100vh - var(--cmp-cab) - 108px);
+    min-height: calc(100dvh - var(--cmp-cab) - 108px);
+  }
+
+  .cmp-hero {
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  /* El enlace de dentro del bloque conserva su toque de 44 px pero se mete en el relleno. */
+  .cmp-hero > a.cmp-suave {
+    margin-block: -6px;
+  }
+
+  .cmp h1 {
+    font-size: clamp(30px, 8vh, 48px);
+  }
+
+  .cmp-saber h1 {
+    font-size: 20px;
+  }
+
+  .cmp-premio-texto {
+    font-size: clamp(36px, 10vh, 64px);
+  }
+
+  .cmp-premio-texto.cmp-largo {
+    font-size: clamp(26px, 7vh, 40px);
+  }
+
+  .cmp-gano h1 {
+    font-size: clamp(40px, 12vh, 72px);
+  }
+
+  .cmp-premio-resultado {
+    font-size: clamp(22px, 6vh, 36px);
+  }
+
+  .cmp-numero {
+    font-size: clamp(56px, 14vh, 96px);
+  }
+
+  .cmp-marca {
+    width: 44px;
+    height: 44px;
+    font-size: 28px;
+  }
+
+  .cmp-llama {
+    width: 64px;
+  }
+
+  .cmp-grande {
+    font-size: clamp(30px, 8vh, 48px);
+  }
+
+  .cmp-datos {
+    gap: 2px;
+    font-size: 22px;
+  }
+
+  .cmp-cifra {
+    font-size: 34px;
+  }
+
+  .cmp-celda {
+    padding: 10px;
+    font-size: 16px;
+  }
+
+  .cmp-paso {
+    min-height: 52px;
+    font-size: 18px;
+  }
+
+  .cmp h2 {
+    font-size: 20px;
+  }
+
+  .cmp .primary {
+    min-height: 56px;
+  }
+
+  .cmp-hero .cmp-apoyo,
+  .cmp-apoyo {
+    font-size: 16px;
+  }
+
+  /* El botón vuelve a la barra de abajo, de borde a borde, para que no quede fuera de la pantalla baja. */
+  .cmp {
+    padding-bottom: 84px;
+  }
+
+  .cmp section > .cmp-accion {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    flex-flow: row wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px 20px;
+    margin: 0;
+    padding: 8px 24px max(8px, env(safe-area-inset-bottom));
+    border-top: var(--bw) solid var(--ink);
+    background: var(--card);
+  }
+
+  .cmp-accion .primary {
+    flex: 0 0 auto;
+    width: min(100%, 360px);
+  }
+
+  .cmp-accion > .cmp-apoyo,
+  .cmp-accion > .cmp-error,
+  .cmp-accion > .cmp-vuelve {
+    flex: 1 1 260px;
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmp-contador.sube,
+  .cmp-papelito {
+    animation: none;
+    transition: none;
+  }
+
+  /* Sin movimiento la tilde de la pantalla queda quieta y no aparece otra encima. */
+  .cmp-marca.cmp-tilde {
+    animation: none;
+  }
+
+  .cmp-festejo .cmp-tilde {
+    display: none;
   }
 }

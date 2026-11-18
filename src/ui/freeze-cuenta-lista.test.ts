@@ -26,6 +26,8 @@ const h = vi.hoisted(() => ({
   gate: vi.fn(),
   /** La billetera activa, para saber si el paso aplica cuando el flujo no bajó. */
   billetera: { submitsItself: true } as unknown,
+  /** El flujo del paso no baja (`romperFlujo`). */
+  flujoRoto: false,
 }));
 
 vi.mock("../stellar/config", async (orig) => {
@@ -63,15 +65,25 @@ vi.mock("./sello-seguro", async (orig) => ({
     return { raffleId: 1n, txHash: "H", round: inicial.round, ts: inicial.ts };
   },
 }));
-vi.mock("./cuenta-lista-flujo", () => ({ cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a) }));
-/** La descarga del flujo del paso falla, como en el wifi de un evento: el `import()` se rechaza. Se deshace al final. */
+/**
+ * El flujo del paso. Un solo simulacro para todo el archivo: la descarga fallida no se arma con `vi.doMock` ni con
+ * `vi.resetModules`, porque `doMock` solo deja el cambio en una cola y lo aplica la próxima descarga de cualquier módulo.
+ * Si otra importación que quedó suelta de un caso anterior se lleva esa cola y todavía no terminó de registrarla, la
+ * importación del caso de ahora ve el simulacro viejo, el paso "baja" y se sella (la falla de a ratos, solo con la
+ * máquina cargada). Acá la falla la decide `h.flujoRoto`, que se lee en el momento: no hay cola ni orden que respetar.
+ * Al resolver `await import()` el motor lee `then` del módulo; si eso lanza, la importación se rechaza, igual que una
+ * descarga cortada, y cae en el `catch` de `freeze.ts`.
+ */
+vi.mock("./cuenta-lista-flujo", () => ({
+  get then() {
+    if (h.flujoRoto) throw new TypeError("Failed to fetch dynamically imported module");
+    return undefined;
+  },
+  cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a),
+}));
+/** La descarga del flujo del paso falla, como en el wifi de un evento. Cada caso empieza con el flujo sano (`beforeEach`). */
 const romperFlujo = (): void => {
-  vi.doMock("./cuenta-lista-flujo", () => {
-    throw new TypeError("Failed to fetch dynamically imported module");
-  });
-  // Si una continuación del caso anterior dejó ese módulo cargado después de la limpieza de `beforeEach`, la importación
-  // del caso de ahora lo tomaría de ahí y no pasaría por la fábrica que falla. Se limpia de nuevo, ya con la fábrica puesta.
-  vi.resetModules();
+  h.flujoRoto = true;
 };
 vi.mock("../stellar/wallet-lite", async (orig) => ({ ...(await orig<typeof import("../stellar/wallet-lite")>()), activeWallet: () => h.billetera }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: async () => false, protegerLaCuenta: async () => false }));
@@ -158,6 +170,7 @@ beforeEach(() => {
   h.canAnchor = true;
   h.otraRed = false;
   h.billetera = { submitsItself: true };
+  h.flujoRoto = false;
   h.gate.mockReset();
   h.gate.mockImplementation(async () => {
     h.orden.push("compuerta");
@@ -171,7 +184,6 @@ beforeEach(() => {
 
 
 afterEach(() => {
-  vi.doMock("./cuenta-lista-flujo", () => ({ cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a) }));
   vi.unstubAllEnvs();
 });
 

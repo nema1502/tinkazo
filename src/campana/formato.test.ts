@@ -37,12 +37,12 @@ describe("montoTexto", () => {
 
 describe("premiosTexto", () => {
   it("fija el texto de un premio", () => {
-    expect(premiosTexto([400000000n], "es")).toBe("Premio: 40 dólares digitales para 1 persona.");
+    expect(premiosTexto([400000000n], "es")).toBe("40 dólares digitales");
   });
 
   it("fija el texto de varios premios iguales", () => {
     expect(premiosTexto([400000000n, 400000000n], "en")).toBe(
-      "Prize: 40 digital dollars for each of 2 people.",
+      "2 prizes of 40 digital dollars",
     );
   });
 
@@ -111,7 +111,7 @@ describe("TEXTOS_CAMPANA", () => {
 
   it("explica los pasos con vocabulario cotidiano en español", () => {
     expect(TEXTOS_CAMPANA.es.cpPasosNota).toBe(
-      "Es un pedido de {empresa}. Es voluntario y no cambia tus posibilidades.",
+      "Es un pedido. No cambia quién gana.",
     );
   });
 

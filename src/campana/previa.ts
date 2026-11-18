@@ -1,33 +1,17 @@
+/** Pantallas públicas de una campaña y estados de carga, sin consultar la sala por su cuenta. */
 
-/** Pantalla previa de una campaña y estados de carga, sin depender de una red. */
-
-import type { Lang } from "../idioma";
 import { fechaTexto, horaTexto, premiosTexto } from "./formato";
-import { leerCampana, type Campana, type EstadoDeCampana } from "./modelo";
+import { leerCampana, type Campana } from "./modelo";
+import { caja, conDestacado, pintarAviso } from "./piezas";
+import type {
+  DepsDelCelular,
+  EstadoPublico,
+  FallaDeEntrada,
+  SesionDelCelular,
+} from "./celular";
 
-/** Dependencias de la pantalla previa. */
-export interface DepsDePrevia {
-  tx: (clave: string) => string;
-  idioma: () => Lang;
-  campana: Campana;
-  ejemplo: boolean;
-  enApp: boolean;
-  anotarme: () => void;
-  ahora?: () => number;
-  enlace?: () => string;
-  sesion?: Storage;
-}
-
-/** Estados que puede mostrar el cargador antes de tener una campaña. */
-export type EstadoDeCarga = "cerrada" | "no-esta" | "sin-red" | "mal";
-
-/** Controles de una pantalla montada. */
-export interface VistaDePrevia {
-  pintar: () => void;
-  desmontar: () => void;
-}
-
-const COLORES: Record<NonNullable<Campana["empresa"]["color"]>, string> = {
+/** Colores de la empresa compartidos por todas las pantallas. */
+export const COLORES: Record<NonNullable<Campana["empresa"]["color"]>, string> = {
   rojo: "var(--cmp-rojo)",
   naranja: "var(--cmp-naranja)",
   amarillo: "var(--cmp-amarillo)",
@@ -35,25 +19,46 @@ const COLORES: Record<NonNullable<Campana["empresa"]["color"]>, string> = {
   azul: "var(--cmp-azul)",
   morado: "var(--cmp-morado)",
 };
-const MAXIMO_TEMPORIZADOR = 2_147_483_647;
 
-function sustituir(texto: string, valores: Record<string, string>): string {
-  return texto.replace(/\{(\w+)\}/g, (_, clave: string) => valores[clave] ?? "");
-}
+/** Estados que puede mostrar el cargador antes de entrar a una campaña. */
+export type EstadoDeCarga = "cerrada" | "no-esta" | "sin-red" | "mal" | "pase-vencido";
 
-function fecha(campana: Campana, ms: number, idioma: Lang, conAnio = false): string {
-  return fechaTexto(ms, campana.zona, idioma, conAnio);
-}
+const CLAVES_DE_CARGA: Record<EstadoDeCarga, string> = {
+  cerrada: "cpNoAbierta",
+  "no-esta": "cpNoEsta",
+  "sin-red": "cpSinRed",
+  mal: "cpMal",
+  "pase-vencido": "cpPaseVencido",
+};
 
-function estadoPorHora(campana: Campana, ahora: number): EstadoDeCampana {
-  if (ahora < campana.abreMs || campana.estado === "borrador") return "borrador";
-  if (ahora < campana.cierraMs && campana.estado === "abierta") return "abierta";
-  if (campana.estado === "sorteada" || campana.estado === "terminada") return campana.estado;
-  return "cerrada";
+/** Desde este largo el premio se escribe más chico para que quepa en la pantalla sin cortarse. */
+const TEXTO_LARGO_DEL_PREMIO = 26;
+
+const CLAVES_DE_ENTRADA: Record<FallaDeEntrada, string> = {
+  ventana: "cpErrVentana",
+  cerrada: "cpErrCerrada",
+  google: "cpErrGoogle",
+  cuentas: "cpErrCuentas",
+};
+
+/**
+ * Pone los valores en su lugar. Si un valor ya termina en punto, como el nombre abreviado Ana P.,
+ * y la plantilla lo cierra con otro punto, queda uno solo.
+ */
+export function sustituir(texto: string, valores: Record<string, string>): string {
+  return texto.replace(/\{(\w+)\}(\.?)/g, (_, clave: string, punto: string) => {
+    const valor = valores[clave] ?? "";
+    return punto && valor.endsWith(".") ? valor : `${valor}${punto}`;
+  });
 }
 
 function limpiar(raiz: HTMLElement): void {
   raiz.replaceChildren();
+}
+
+function seccion(raiz: HTMLElement, selector: string): HTMLElement | null {
+  if (raiz.matches(selector)) return raiz;
+  return raiz.querySelector<HTMLElement>(selector);
 }
 
 function boton(raiz: HTMLElement, texto: string, clase: string, alHacer: () => void): HTMLButtonElement {
@@ -66,7 +71,15 @@ function boton(raiz: HTMLElement, texto: string, clase: string, alHacer: () => v
   return elemento;
 }
 
-function mostrarRespaldoDeCopia(deps: DepsDePrevia, raiz: HTMLElement, enlace: string): void {
+function parrafo(raiz: HTMLElement, texto: string, clase = ""): HTMLParagraphElement {
+  const p = document.createElement("p");
+  if (clase) p.className = clase;
+  p.textContent = texto;
+  raiz.append(p);
+  return p;
+}
+
+function mostrarRespaldoDeCopia(deps: DepsDelCelular, raiz: HTMLElement, enlace: string): void {
   let campo = raiz.querySelector<HTMLInputElement>("input[data-cmp-copiar]");
   if (!campo) {
     campo = document.createElement("input");
@@ -81,8 +94,13 @@ function mostrarRespaldoDeCopia(deps: DepsDePrevia, raiz: HTMLElement, enlace: s
   campo.select();
 }
 
-function copiarEnlace(deps: DepsDePrevia, aviso: HTMLElement, raiz: HTMLElement): void {
-  const enlace = deps.enlace?.() ?? window.location.href;
+function copiarEnlace(
+  deps: DepsDelCelular,
+  aviso: HTMLElement,
+  raiz: HTMLElement,
+  programar: (f: () => void, ms: number) => number,
+): void {
+  const enlace = deps.enlace();
   const respaldo = (): void => mostrarRespaldoDeCopia(deps, raiz, enlace);
   const portapapeles = navigator.clipboard;
   if (!portapapeles) {
@@ -91,291 +109,191 @@ function copiarEnlace(deps: DepsDePrevia, aviso: HTMLElement, raiz: HTMLElement)
   }
   void portapapeles.writeText(enlace).then(() => {
     aviso.textContent = deps.tx("cpCopiado");
-    window.setTimeout(() => {
+    programar(() => {
       aviso.textContent = deps.tx("cpEnApp");
     }, 3000);
   }).catch(respaldo);
 }
 
-function accionPrincipal(
-  raiz: HTMLElement,
-  deps: DepsDePrevia,
-  hayPasos: boolean,
-  irAPasos: () => void,
-): HTMLElement {
-  const accion = document.createElement("div");
-  accion.className = "cmp-accion";
-  raiz.append(accion);
-  if (deps.enApp) {
-    const aviso = document.createElement("p");
-    aviso.className = "cmp-en-app";
-    aviso.setAttribute("role", "status");
-    aviso.setAttribute("aria-live", "polite");
-    aviso.textContent = deps.tx("cpEnApp");
-    accion.append(aviso);
-    boton(accion, deps.tx("cpCopiar"), "primary", () => copiarEnlace(deps, aviso, accion));
-    return accion;
-  }
-  boton(accion, deps.tx(hayPasos ? "cpSeguir" : "cpAnotarme"), "primary", () => {
-    if (hayPasos) irAPasos();
-    else deps.anotarme();
-  });
-  return accion;
+/** Las reglas se repiten donde hay una decisión, pero quedan plegadas para no tapar la acción. */
+export function pintarReglas(raiz: HTMLElement, deps: DepsDelCelular): void {
+  const idioma = deps.idioma();
+  const detalles = document.createElement("details");
+  detalles.className = "cmp-reglas";
+  const resumen = document.createElement("summary");
+  resumen.className = "cmp-suave";
+  resumen.textContent = deps.tx("cpReglas");
+  detalles.append(resumen);
+  parrafo(detalles, sustituir(deps.tx("cpOrganiza"), { empresa: deps.campana.empresa.nombre }));
+  parrafo(detalles, sustituir(deps.tx("cpSiGanas"), { empresa: deps.campana.empresa.nombre }));
+  const costo = deps.costoDelRetiro();
+  if (costo !== null) parrafo(detalles, sustituir(deps.tx("cpRetiro"), { costo }));
+  parrafo(detalles, deps.tx("cpSoloAca"));
+  parrafo(detalles, deps.tx("cpRevisamosMas"));
+  parrafo(detalles, deps.tx("cpComoSeEligeDetalle"));
+  parrafo(detalles, deps.tx("cpQueGuardamos"));
+  parrafo(detalles, deps.campana.bases[idioma], "cmp-bases");
+  raiz.append(detalles);
 }
 
-function mostrarSaber(raiz: HTMLElement, deps: DepsDePrevia, irAPasos: () => void): void {
-  const campana = deps.campana;
-  const idioma = deps.idioma();
+/** Lo que se sabe de la entrada con Google, guardado afuera de la pantalla: repintar no lo puede perder. */
+export interface EstadoDeEntrada {
+  /** Cuándo se tocó Entrar, mientras la ventana de Google sigue abierta. Si no hay una entrada en curso, null. */
+  desde: number | null;
+  /** Cómo terminó la última entrada, si falló. */
+  falla: FallaDeEntrada | null;
+}
+
+/** Cuánto tarda en aparecer el aviso de volver a la pestaña después de tocar Entrar. */
+const AVISO_TARDIO_MS = 6000;
+
+export function motivoDeEntrada(error: unknown): FallaDeEntrada {
+  const motivo = error instanceof Error ? error.message : "";
+  return motivo === "ventana" || motivo === "cerrada" || motivo === "google" || motivo === "cuentas"
+    ? motivo
+    : "google";
+}
+
+/** Pinta la campaña abierta. La entrada con Google empieza únicamente con el toque del botón. */
+export function pintarLaCampana(
+  raizPrincipal: HTMLElement,
+  deps: DepsDelCelular,
+  publico: EstadoPublico,
+  alEntrar: (sesion: SesionDelCelular) => void,
+  entrada: EstadoDeEntrada = { desde: null, falla: null },
+): () => void {
+  const raiz = seccion(raizPrincipal, "#cmp-saber");
+  if (!raiz) return () => undefined;
+  const temporizadores = new Set<number>();
+  const programar = (f: () => void, ms: number): number => {
+    const id = window.setTimeout(() => {
+      temporizadores.delete(id);
+      f();
+    }, ms);
+    temporizadores.add(id);
+    return id;
+  };
+  const cancelar = (id: number | null): void => {
+    if (id === null) return;
+    window.clearTimeout(id);
+    temporizadores.delete(id);
+  };
+  const limpiarTemporizadores = (): void => {
+    for (const id of temporizadores) window.clearTimeout(id);
+    temporizadores.clear();
+  };
+  const anterior = Number(raiz.querySelector<HTMLElement>(".cmp-contador")?.dataset.total ?? -1);
   limpiar(raiz);
   raiz.hidden = false;
+  raiz.className = "cmp-saber cmp-dos";
+  const campana = deps.campana;
+  const idioma = deps.idioma();
+  const izq = caja("cmp-izq");
   if (campana.empresa.logo) {
     const logo = document.createElement("img");
     logo.className = "cmp-logo";
     logo.alt = campana.empresa.nombre;
     logo.src = `data:${campana.empresa.logo.tipo};base64,${campana.empresa.logo.datos}`;
-    raiz.append(logo);
+    izq.append(logo);
   }
   const titulo = document.createElement("h1");
   titulo.textContent = sustituir(deps.tx("cpTitulo"), {
     empresa: campana.empresa.nombre,
     lugar: campana.lugar[idioma],
   });
-  raiz.append(titulo);
-  const organiza = document.createElement("p");
-  organiza.className = "cmp-organiza";
-  organiza.textContent = sustituir(deps.tx("cpOrganiza"), { empresa: campana.empresa.nombre });
-  raiz.append(organiza);
-  const premio = document.createElement("p");
-  premio.className = "cmp-premio";
-  premio.textContent = premiosTexto(campana.premios, idioma);
-  raiz.append(premio);
-  const lista = document.createElement("ul");
-  for (const clave of ["cpGratis", "cpRevisamos", "cpPublica"] as const) {
-    const item = document.createElement("li");
-    item.textContent = sustituir(deps.tx(clave), { empresa: campana.empresa.nombre });
-    lista.append(item);
+  izq.append(titulo);
+  const premio = caja("cmp-premio cmp-hero");
+  parrafo(premio, deps.tx("cpPremioEtiqueta"), "cmp-premio-etiqueta");
+  const textoDelPremio = premiosTexto(campana.premios, idioma);
+  const largo = textoDelPremio.length > TEXTO_LARGO_DEL_PREMIO;
+  parrafo(premio, textoDelPremio, largo ? "cmp-premio-texto cmp-largo" : "cmp-premio-texto");
+  // Que participar es gratis va en el bloque del premio, como rótulo: una caja sola parecería un botón.
+  parrafo(premio, deps.tx("cpGratisCorto"), "cmp-premio-etiqueta");
+  izq.append(premio);
+  const der = caja("cmp-der");
+  const datos = caja("cmp-datos");
+  const claveContador = publico.total === 0
+    ? "cpContador0"
+    : publico.total === 1
+      ? "cpContador1"
+      : "cpContadorN";
+  const contador = parrafo(datos, "", "cmp-contador");
+  conDestacado(contador, deps.tx(claveContador), "n", String(publico.total), "cmp-cifra");
+  contador.dataset.total = String(publico.total);
+  if (anterior >= 0 && publico.total > anterior && !deps.movimientoReducido()) {
+    contador.classList.add("sube");
+    programar(() => contador.classList.remove("sube"), 400);
   }
-  const cierre = document.createElement("li");
-  cierre.textContent = sustituir(deps.tx("cpCierre"), {
-    fecha: fecha(campana, campana.cierraMs, idioma),
-    hora: horaTexto(campana.cierraMs, campana.zona, idioma),
-  });
-  lista.append(cierre);
-  raiz.append(lista);
-  accionPrincipal(raiz, deps, campana.pasos.length > 0, irAPasos);
-  const mas = document.createElement("details");
-  const resumenMas = document.createElement("summary");
-  resumenMas.textContent = deps.tx("cpMas");
-  mas.append(resumenMas);
-  const listaMas = document.createElement("ul");
-  for (const clave of ["cpCuenta", "cpSiGanas", "cpPlazo"] as const) {
-    const item = document.createElement("li");
-    item.textContent = sustituir(deps.tx(clave), {
-      empresa: campana.empresa.nombre,
-      fecha: fecha(campana, campana.recibirHastaMs, idioma, clave === "cpPlazo"),
+  parrafo(datos, sustituir(deps.tx("cpGratisCierra"), {
+    hora: horaTexto(publico.cierraMs, campana.zona, idioma),
+  }), "cmp-cierre");
+  der.append(datos);
+  raiz.append(izq, der);
+  pintarReglas(raiz, deps);
+  const accion = caja("cmp-accion");
+  raiz.append(accion);
+  if (deps.enApp) {
+    const aviso = parrafo(accion, deps.tx("cpEnApp"), "cmp-en-app");
+    aviso.setAttribute("role", "status");
+    aviso.setAttribute("aria-live", "polite");
+    boton(accion, deps.tx("cpCopiar"), "primary", () => copiarEnlace(deps, aviso, accion, programar));
+    return limpiarTemporizadores;
+  }
+  parrafo(accion, deps.tx("cpEntrarNota"), "cmp-apoyo");
+  const error = parrafo(accion, "", "cmp-error");
+  error.hidden = true;
+  // La línea de espera va antes del botón: así el botón no se corre cuando aparece.
+  const espera = parrafo(accion, deps.tx("cpVolveALaPestana"), "cmp-vuelve");
+  espera.hidden = true;
+  const entrar = boton(accion, deps.tx("cpEntrar"), "primary", () => undefined);
+  let avisoTardio: number | null = null;
+  entrar.addEventListener("click", () => {
+    if (entrar.disabled) return;
+    entrar.disabled = true;
+    entrar.textContent = deps.tx("cpEntrando");
+    error.hidden = true;
+    avisoTardio = programar(() => {
+      espera.hidden = false;
+    }, AVISO_TARDIO_MS);
+    void Promise.resolve().then(deps.entrar).then((sesion) => {
+      cancelar(avisoTardio);
+      alEntrar(sesion);
+    }).catch((falla: unknown) => {
+      cancelar(avisoTardio);
+      espera.hidden = true;
+      entrar.disabled = false;
+      entrar.textContent = deps.tx("cpEntrar");
+      error.textContent = deps.tx(CLAVES_DE_ENTRADA[motivoDeEntrada(falla)]);
+      error.hidden = false;
     });
-    listaMas.append(item);
+  });
+  // Si la pantalla se pintó de nuevo con Google abierto (volver a la pestaña, el reloj o el idioma), el botón y el aviso
+  // siguen como estaban, y un error que ya llegó no se pierde.
+  if (entrada.desde !== null) {
+    entrar.disabled = true;
+    entrar.textContent = deps.tx("cpEntrando");
+    const falta = AVISO_TARDIO_MS - (deps.ahora() - entrada.desde);
+    if (falta <= 0) espera.hidden = false;
+    else avisoTardio = programar(() => {
+      espera.hidden = false;
+    }, falta);
+  } else if (entrada.falla !== null) {
+    error.textContent = deps.tx(CLAVES_DE_ENTRADA[entrada.falla]);
+    error.hidden = false;
   }
-  mas.append(listaMas);
-  raiz.append(mas);
-  const detalles = document.createElement("details");
-  const resumen = document.createElement("summary");
-  resumen.textContent = deps.tx("cpVerBases");
-  detalles.append(resumen);
-  const bases = document.createElement("p");
-  bases.textContent = campana.bases[idioma];
-  detalles.append(bases);
-  const eleccion = document.createElement("p");
-  eleccion.textContent = deps.tx("cpComoSeEligeDetalle");
-  detalles.append(eleccion);
-  const guardamos = document.createElement("p");
-  guardamos.textContent = deps.tx("cpQueGuardamos");
-  detalles.append(guardamos);
-  raiz.append(detalles);
+  return limpiarTemporizadores;
 }
 
-function mostrarPasos(raizPrincipal: HTMLElement, deps: DepsDePrevia, volver: () => void): void {
-  const raiz = raizPrincipal.querySelector<HTMLElement>("#cmp-pasos");
-  const saber = raizPrincipal.querySelector<HTMLElement>("#cmp-saber");
-  if (!raiz || !saber) return;
-  saber.hidden = true;
-  raiz.hidden = false;
-  limpiar(raiz);
-  const idioma = deps.idioma();
-  const titulo = document.createElement("h2");
-  titulo.textContent = sustituir(deps.tx("cpPasosT"), { empresa: deps.campana.empresa.nombre });
-  raiz.append(titulo);
-  for (const [indice, paso] of deps.campana.pasos.entries()) {
-    const tarjeta = document.createElement("article");
-    tarjeta.className = "cmp-paso";
-    const texto = document.createElement("p");
-    texto.textContent = sustituir(paso.texto[idioma], { empresa: deps.campana.empresa.nombre });
-    tarjeta.append(texto);
-    if (paso.url) {
-      const abrir = document.createElement("a");
-      abrir.className = "ghost";
-      abrir.href = paso.url;
-      abrir.target = "_blank";
-      abrir.rel = "noopener noreferrer";
-      abrir.textContent = deps.tx("cpAbrir");
-      tarjeta.append(abrir);
-    }
-    const etiqueta = document.createElement("label");
-    const listo = document.createElement("input");
-    listo.type = "checkbox";
-    listo.checked = leerPaso(deps, indice);
-    listo.addEventListener("change", () => guardarPaso(deps, indice, listo.checked));
-    etiqueta.append(listo, document.createTextNode(deps.tx("cpListo")));
-    tarjeta.append(etiqueta);
-    raiz.append(tarjeta);
-  }
-  const nota = document.createElement("p");
-  nota.textContent = sustituir(deps.tx("cpPasosNota"), { empresa: deps.campana.empresa.nombre });
-  raiz.append(nota);
-  const accion = accionPrincipal(raiz, deps, false, () => undefined);
-  boton(accion, deps.tx("cpVolver"), "ghost", volver);
-}
-
-function leerPaso(deps: DepsDePrevia, indice: number): boolean {
-  try {
-    return deps.sesion?.getItem(`tinkazo.campana.${deps.campana.evento}.${indice}`) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function guardarPaso(deps: DepsDePrevia, indice: number, marcado: boolean): void {
-  try {
-    if (marcado) deps.sesion?.setItem(`tinkazo.campana.${deps.campana.evento}.${indice}`, "1");
-    else deps.sesion?.removeItem(`tinkazo.campana.${deps.campana.evento}.${indice}`);
-  } catch {
-    /* Si falla el almacenamiento, la lectura de la pantalla continúa. */
-  }
-}
-
-/** Monta la pantalla previa dentro de la raíz recibida y conserva la pantalla activa. */
-export function montarPrevia(raiz: HTMLElement, deps: DepsDePrevia): VistaDePrevia {
-  const estado = raiz.querySelector<HTMLElement>("#cmp-estado");
-  const saber = raiz.querySelector<HTMLElement>("#cmp-saber");
-  const pasos = raiz.querySelector<HTMLElement>("#cmp-pasos");
-  if (!estado || !saber || !pasos) return { pintar: () => undefined, desmontar: () => undefined };
-  const mensaje = raiz.querySelector<HTMLElement>("#cmp-mensaje");
-  const ejemplo = raiz.querySelector<HTMLElement>("#cmp-ejemplo");
-  if (ejemplo) ejemplo.hidden = !deps.ejemplo;
-  const acento = deps.campana.empresa.color;
-  raiz.style.setProperty("--cmp-acento", acento ? COLORES[acento] : "var(--magenta)");
-  let pantalla: "saber" | "pasos" = "saber";
-  let estadoVisible = estadoPorHora(deps.campana, deps.ahora?.() ?? Date.now());
-  let temporizador: number | null = null;
-
-  const limpiarTemporizador = (): void => {
-    if (temporizador !== null) window.clearTimeout(temporizador);
-    temporizador = null;
-  };
-  const limpiarAviso = (): void => {
-    if (mensaje) mensaje.textContent = "";
-  };
-  const pintar = (): void => {
-    limpiarTemporizador();
-    const ahora = deps.ahora?.() ?? Date.now();
-    const actual = estadoPorHora(deps.campana, ahora);
-    estadoVisible = actual;
-    limpiar(estado);
-    estado.hidden = false;
-    saber.hidden = true;
-    pasos.hidden = true;
-    if (actual === "borrador") {
-      const texto = document.createElement("p");
-      texto.textContent = sustituir(deps.tx("cpAbre"), {
-        fecha: fecha(deps.campana, deps.campana.abreMs, deps.idioma()),
-        hora: horaTexto(deps.campana.abreMs, deps.campana.zona, deps.idioma()),
-      });
-      estado.append(texto);
-    } else if (actual === "cerrada" || actual === "sellada") {
-      const texto = document.createElement("p");
-      texto.textContent = deps.tx("cpCerro");
-      estado.append(texto);
-    } else if (actual === "sorteada" || actual === "terminada") {
-      const texto = document.createElement("p");
-      texto.textContent = deps.tx("cpSorteado");
-      estado.append(texto);
-      if (deps.campana.comprobante) {
-        const enlace = document.createElement("a");
-        enlace.className = "primary";
-        enlace.href = deps.campana.comprobante;
-        enlace.textContent = deps.tx("cpComoSeEligio");
-        estado.append(enlace);
-      }
-    } else {
-      estado.hidden = true;
-      limpiarAviso();
-      if (pantalla === "pasos") mostrarPasos(raiz, depsConAccion, irASaber);
-      else mostrarSaber(saber, depsConAccion, irAPasos);
-    }
-    const objetivo = actual === "borrador" && ahora < deps.campana.abreMs
-      ? deps.campana.abreMs
-      : actual === "abierta"
-        ? deps.campana.cierraMs
-        : null;
-    if (objetivo !== null) {
-      const espera = Math.min(Math.max(objetivo - ahora, 0), MAXIMO_TEMPORIZADOR);
-      temporizador = window.setTimeout(() => {
-        temporizador = null;
-        pintar();
-      }, espera);
-    }
-  };
-  const comprobarHora = (): boolean => {
-    const actual = estadoPorHora(deps.campana, deps.ahora?.() ?? Date.now());
-    if (actual === "abierta" && actual === estadoVisible) return true;
-    pintar();
-    return false;
-  };
-  const irAPasos = (): void => {
-    if (!comprobarHora()) return;
-    pantalla = "pasos";
-    limpiarAviso();
-    mostrarPasos(raiz, depsConAccion, irASaber);
-  };
-  const irASaber = (): void => {
-    pantalla = "saber";
-    pasos.hidden = true;
-    saber.hidden = false;
-    limpiarAviso();
-    mostrarSaber(saber, depsConAccion, irAPasos);
-  };
-  const depsConAccion: DepsDePrevia = {
-    ...deps,
-    get enApp() {
-      return deps.enApp;
-    },
-    anotarme: () => {
-      if (comprobarHora()) deps.anotarme();
-    },
-  };
-  pintar();
-  return { pintar, desmontar: limpiarTemporizador };
-}
-
-/** Pinta un estado de carga antes de que exista una campaña. */
+/** Pinta un estado de carga antes de que exista una sesión o una respuesta de la sala. */
 export function pintarEstadoDeCarga(
   raiz: HTMLElement,
   tx: (clave: string) => string,
   estado: EstadoDeCarga,
   reintentar: () => void,
 ): void {
-  limpiar(raiz);
-  const texto = document.createElement("p");
-  const clave = estado === "no-esta"
-    ? "cpNoEsta"
-    : estado === "mal"
-      ? "cpMal"
-      : estado === "sin-red"
-        ? "cpSinRed"
-        : "cpNoAbierta";
-  texto.textContent = tx(clave);
-  raiz.append(texto);
-  if (estado === "sin-red") boton(raiz, tx("cpProbarDeNuevo"), "ghost", reintentar);
+  const accion = estado === "sin-red" ? { texto: tx("cpProbarDeNuevo"), alHacer: reintentar } : null;
+  const problema = estado !== "cerrada";
+  pintarAviso(raiz, tx(CLAVES_DE_CARGA[estado]), accion, problema);
 }
 
 /** Valida la respuesta del servicio y distingue los errores que puede mostrar la página. */

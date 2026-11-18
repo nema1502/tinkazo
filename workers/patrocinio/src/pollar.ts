@@ -35,7 +35,9 @@ const MAX_RECORDADAS = 5_000;
 const USUARIO = /^[A-Za-z0-9_\-.:|@]{1,200}$/;
 
 /** Quién es la persona de una sesión, según Pollar. `cuenta` es su billetera de Stellar si el verify la trae sin dudas. */
-export type Sesion = { ok: true; usuario: string; vence: number; cuenta: string | null } | { ok: false; motivo: "sesion" | "otra-app" | "pollar" };
+export type Sesion =
+  | { ok: true; usuario: string; vence: number; cuenta: string | null; via: "google" | "otra" | null }
+  | { ok: false; motivo: "sesion" | "otra-app" | "pollar" };
 export type Billetera = { ok: true; cuenta: string | null } | { ok: false };
 export type Creditos = { ok: true; disponibles: number; leido: number; deMemoria: boolean } | { ok: false };
 /** Cómo terminó pedirle a Pollar que abra una cuenta: un pedido que la persona aprueba, o ya abierta. */
@@ -113,6 +115,27 @@ function redDe(x: unknown): Red {
   if (/(^|[^a-z])(mainnet|pubnet|public)$/.test(n)) return "principal";
   if (/(^|[^a-z])(testnet|futurenet|devnet)$/.test(n)) return "prueba";
   return null;
+}
+
+/**
+ * Dónde dice el verify por dónde entró la persona, y cómo dice que es Google. Es el único lugar donde viven las dos
+ * cosas, y los dos valores son una SUPOSICIÓN: todavía falta confirmarlos con una respuesta de verdad del verify, una con
+ * una cuenta de Google y otra con una de correo (se mide antes de abrir una campaña). Mientras no se confirmen, la sala de
+ * las campañas rechaza a todos si el campo no viene o dice otra cosa, que es lo seguro. Para corregirlos se cambia
+ * esta constante y nada más.
+ */
+export const VIA_DE_LA_SESION = { campo: "authProvider", google: "google" } as const;
+
+/**
+ * Por dónde entró la persona. Lo usa la sala de las campañas, que solo anota cuentas de Google, con una lista de lo
+ * permitido: `google` solo si el campo dice exactamente el valor de Google. Cualquier otro texto (`email`, `apple.com`,
+ * `auth0|123`, `Google `) es `otra`, sin importar cómo esté escrito. `null` es que el verify no lo dice: el campo falta, no
+ * es texto o viene vacío.
+ */
+function viaDe(contenido: Record<string, unknown>): "google" | "otra" | null {
+  const x = contenido[VIA_DE_LA_SESION.campo];
+  if (typeof x !== "string" || x.trim() === "") return null;
+  return x === VIA_DE_LA_SESION.google ? "google" : "otra";
 }
 
 /** Una G de Stellar con su suma de control, o null. */
@@ -299,7 +322,7 @@ export class Pollar {
     if (c.applicationId !== this.appId || red === "prueba") return { ok: false, motivo: "otra-app" };
     if (red === null) return this.rota("forma-red");
     if (vence <= ahora) return { ok: false, motivo: "sesion" };
-    return { ok: true, usuario, vence, cuenta: unica(cuentasDe(c.wallet)) };
+    return { ok: true, usuario, vence, cuenta: unica(cuentasDe(c.wallet)), via: viaDe(c) };
   }
 
   /** Una respuesta del verify que no se entiende: queda anotada y es «Pollar». */

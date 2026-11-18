@@ -23,6 +23,12 @@ const cuerpo = (): Record<string, unknown> => ({
   comprobante: null,
 });
 
+/** Lo que contesta la sala: el texto firmado de la campaña y su firma. */
+const envuelto = (campana: unknown = cuerpo()): { texto: string; firma: string } => ({
+  texto: JSON.stringify(campana),
+  firma: "f",
+});
+
 function respuesta(status: number, json: () => Promise<unknown>): Response {
   return { status, ok: status >= 200 && status < 300, json } as Response;
 }
@@ -51,18 +57,18 @@ function relojFalso(): {
 
 function pedir(fetchServicio: typeof fetch, evento = "abc") {
   const reloj = relojFalso();
-  const resultado = cargarCampana(fetchServicio, "https://servicio", evento, reloj.reloj);
+  const resultado = cargarCampana(fetchServicio, "https://servicio", "ABCDEFGH", evento, reloj.reloj);
   return { ...reloj, resultado };
 }
 
 describe("cargarCampana", () => {
   it("carga y valida una campaña válida", async () => {
-    const pedido = pedir(async () => respuesta(200, async () => cuerpo()));
+    const pedido = pedir(async () => respuesta(200, async () => envuelto()));
     await expect(pedido.resultado).resolves.toMatchObject({ ok: true });
   });
 
   it("programa el tope en exactamente 8000 ms y lo limpia al terminar", async () => {
-    const pedido = pedir(async () => respuesta(200, async () => cuerpo()));
+    const pedido = pedir(async () => respuesta(200, async () => envuelto()));
     expect(pedido.programar).toHaveBeenCalledWith(expect.any(Function), 8000);
     await pedido.resultado;
     expect(pedido.limpiar).toHaveBeenCalledTimes(1);
@@ -72,7 +78,7 @@ describe("cargarCampana", () => {
     let opciones: RequestInit | undefined;
     const fetchServicio: typeof fetch = async (_url, recibidas) => {
       opciones = recibidas;
-      return respuesta(200, async () => cuerpo());
+      return respuesta(200, async () => envuelto());
     };
     const pedido = pedir(fetchServicio);
     await pedido.resultado;
@@ -90,12 +96,12 @@ describe("cargarCampana", () => {
   });
 
   it("traduce una configuración inválida a mal", async () => {
-    const pedido = pedir(async () => respuesta(200, async () => ({ v: 2 })));
+    const pedido = pedir(async () => respuesta(200, async () => envuelto({ v: 2 })));
     await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
   });
 
   it("rechaza una campaña válida de otro evento", async () => {
-    const pedido = pedir(async () => respuesta(200, async () => ({ ...cuerpo(), evento: "otro" })));
+    const pedido = pedir(async () => respuesta(200, async () => envuelto({ ...cuerpo(), evento: "otro" })));
     await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
   });
 
@@ -103,6 +109,31 @@ describe("cargarCampana", () => {
     const pedido = pedir(async () => respuesta(200, async () => {
       throw new SyntaxError("JSON inválido");
     }));
+    await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
+  });
+
+  it("pide la campaña a la ruta de la sala", async () => {
+    let direccion = "";
+    const fetchServicio: typeof fetch = async (url) => {
+      direccion = String(url);
+      return respuesta(200, async () => envuelto());
+    };
+    await pedir(fetchServicio).resultado;
+    expect(direccion).toBe("https://servicio/v1/sala/ABCDEFGH/campana");
+  });
+
+  it("un texto firmado que no es JSON da mal", async () => {
+    const pedido = pedir(async () => respuesta(200, async () => ({ texto: "no es json", firma: "f" })));
+    await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
+  });
+
+  it("un cuerpo sin texto da mal", async () => {
+    const pedido = pedir(async () => respuesta(200, async () => ({ firma: "f" })));
+    await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
+  });
+
+  it("un texto que no es una campaña da mal aunque sea JSON", async () => {
+    const pedido = pedir(async () => respuesta(200, async () => ({ texto: "[1,2]", firma: "f" })));
     await expect(pedido.resultado).resolves.toEqual({ ok: false, estado: "mal" });
   });
 
