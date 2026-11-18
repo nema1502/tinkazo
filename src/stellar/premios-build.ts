@@ -21,10 +21,18 @@
  * Con el voto por contenido (`VITE_VOTO_POR_CONTENIDO=1`, issue 180) el navegador deja de aprobar solo lo que pide el
  * servidor de cuentas y vota lo que armó la página. `problemasDelVoto` frena el build con un valor que la dejaría apagada
  * sin aviso y con lo que firma sin pasar por esa regla en la red principal: pagar con el saldo, la compra con QR, la carga
- * con bolivianos y Mandar (abierto en el modo recibir, y la regla solo deja pasar el sello y el sorteo). Con la variable
- * vacía o en `0` no mira nada más.
+ * con bolivianos y el modo recibir, que deja Mandar abierto por fuera del modo premios. Con la variable vacía o en `0` no
+ * mira nada más.
+ *
+ * Con pagar con Google (`VITE_PAGAR_CON_GOOGLE=1`) quien organiza carga dólares y paga el premio desde su cuenta de
+ * Google. El retiro de quien ganó no depende de esta bandera: va con el voto y el costo (`problemasDelRetiro`).
+ * `problemasDePagarConGoogle` frena el build con un valor que la dejaría apagada sin aviso y con lo que le falta o la
+ * contradice: el voto por contenido, el modo premios, los premios pagados, la dirección del portero de la red principal
+ * (que manda lo firmado) y la venta que paga con el saldo o con QR. Con la variable vacía o en `0` no mira nada más.
  */
 
+import { HOSTS_DEL_PORTERO_OFICIAL, esUrlDePorteroOficial } from "./alta-build";
+import { pagosActivos } from "./pagos-bandera";
 import { TOPE_DEL_COSTO, STROOPS_POR_DOLAR, leerElCosto, leerLaCuenta } from "./retiro-config";
 import { banderasDeVenta } from "./venta-piloto";
 
@@ -179,6 +187,73 @@ export function problemasDelVoto(env: Record<string, string | undefined>): strin
     problemas.push(
       "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_RAMPA=recibir: Mandar queda abierto en ese modo y firma un pago, " +
         "que la regla del voto no deja pasar, así que siempre fallaría. Se elige cuál va en este sitio.",
+    );
+  }
+  return problemas;
+}
+
+/**
+ * Lo que frena el build por pagar con Google (`VITE_PAGAR_CON_GOOGLE`, `cuenta-config.ts`). Devuelve lo que está mal, en
+ * español y sin los valores de las variables. Vacío: el entorno está bien.
+ *
+ * - Un valor que no es `1`, `0` ni vacío (`true`, `on`, ` 1`) la dejaría apagada sin que nadie se enterara: no sale.
+ * - Con `1`, no sale sin `VITE_VOTO_POR_CONTENIDO=1` (sin él, la cuenta firmaría el pago sin comprobar qué paga), sin
+ *   `VITE_RAMPA=premios` (las pantallas de cargar y de pagar se arman sobre ese modo), sin `VITE_PAGOS=1` (no aparecería
+ *   Pagar premio) ni sin `VITE_PATROCINIO_URL_MAINNET` (el pago lo manda el portero de la red principal). La dirección se
+ *   lee como el sitio (sin espacios ni barras al final: `patrocinio-config.ts`) y tiene que ser la del portero oficial
+ *   (`esUrlDePorteroOficial`): una barra sola deja al sitio sin portero, y otra dirección recibiría los pagos firmados.
+ * - Con `1`, no sale junto con lo que contradice la regla: pagar con el saldo (`VITE_PAGO_CON_SALDO=1`) y la compra con QR
+ *   (`VITE_COMPRA_QR=1`), que firman con la misma cuenta sin pasar por la regla del pago de un premio.
+ *
+ * Con un valor que no vale solo dice eso: las combinaciones se miran con un `1` exacto, que es el único valor que prende
+ * la bandera en el sitio. El costo del retiro (`problemasDelRetiro`) y el modo premios (`problemasDePremios`) son
+ * controles aparte, que se suman en `vite.config.ts`.
+ */
+export function problemasDePagarConGoogle(env: Record<string, string | undefined>): string[] {
+  const valor = env.VITE_PAGAR_CON_GOOGLE;
+  if (valor === undefined || valor.trim() === "" || valor === "0") return [];
+  if (valor !== "1") {
+    return ["VITE_PAGAR_CON_GOOGLE solo acepta 1 o 0 (vacía es apagada): con otro valor la bandera queda apagada sin aviso."];
+  }
+  const problemas: string[] = [];
+  if (env.VITE_VOTO_POR_CONTENIDO !== "1") {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 necesita VITE_VOTO_POR_CONTENIDO=1: " +
+        "sin el voto por contenido, la cuenta de Google firmaría el pago del premio sin comprobar qué paga.",
+    );
+  }
+  if (!pideElModoPremios(env)) {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 necesita VITE_RAMPA=premios: " +
+        "las pantallas de cargar y de pagar se arman sobre ese modo, y con otro la bandera quedaría apagada sin aviso.",
+    );
+  }
+  if (!pagosActivos(env)) {
+    problemas.push("VITE_PAGAR_CON_GOOGLE=1 necesita VITE_PAGOS=1: sin los premios pagados no aparece Pagar premio.");
+  }
+  const portero = (env.VITE_PATROCINIO_URL_MAINNET ?? "").trim().replace(/\/+$/, "");
+  if (portero === "") {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 necesita VITE_PATROCINIO_URL_MAINNET: " +
+        "sin el portero de la red principal no hay quien mande el pago del premio.",
+    );
+  } else if (!esUrlDePorteroOficial(portero)) {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 manda el pago firmado a VITE_PATROCINIO_URL_MAINNET, y esa dirección no es la del portero " +
+        `de la red principal: tiene que ser https, sin ruta ni consulta, en ${HOSTS_DEL_PORTERO_OFICIAL.join(" o ")}.`,
+    );
+  }
+  const venta = banderasDeVenta(env);
+  if (venta.saldo) {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 no va junto con VITE_PAGO_CON_SALDO=1: pagar con el saldo firma con la misma cuenta " +
+        "sin pasar por la regla del pago de un premio ni del retiro. Se elige cuál va en este sitio.",
+    );
+  }
+  if (venta.qr) {
+    problemas.push(
+      "VITE_PAGAR_CON_GOOGLE=1 no va junto con VITE_COMPRA_QR=1: la compra con QR carga dólares en la cuenta y los paga " +
+        "con el saldo, sin pasar por la regla del pago de un premio ni del retiro. Se elige cuál va en este sitio.",
     );
   }
   return problemas;

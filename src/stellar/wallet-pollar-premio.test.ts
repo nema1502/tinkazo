@@ -545,9 +545,10 @@ describe("las fuentes: la puerta no se saltea por otro lado", () => {
     expect(firma).toContain("testigo?: boolean");
     expect(firma).not.toContain("puertaDelPremio");
     expect(fuente.slice(aqui, fuente.indexOf("finally", aqui))).not.toContain("o.puertaDelPremio");
-    // Cada llamada a `#firmando` solo pasa `testigo` y la intención de la firma.
+    // Cada llamada a `#firmando` solo pasa `testigo`, la intención de la firma y, en el pago con la cuenta, su forma: el
+    // sello por Pollar, el sello por el portero, el pago con el saldo y el pago de un premio o un retiro.
     const llamadas = [...fuente.matchAll(/this\.#firmando\(/g)];
-    expect(llamadas).toHaveLength(3);
+    expect(llamadas).toHaveLength(4);
     for (const llamada of llamadas) expect(fuente.slice(llamada.index, fuente.indexOf(";", llamada.index))).not.toContain("puertaDelPremio");
     // Y nadie, en ningún archivo, pasa la puerta en falso.
     expect(fuentes.filter((f) => /puertaDelPremio:\s*false/.test(leer(f)))).toEqual([]);

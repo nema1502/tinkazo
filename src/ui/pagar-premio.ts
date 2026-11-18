@@ -1,7 +1,8 @@
 import { getLang } from "../idioma";
 import { passphraseDe } from "../stellar/oficiales";
 import type { NetworkName } from "../stellar/config";
-import { txUrl } from "../stellar/config";
+import { network, txUrl } from "../stellar/config";
+import { pagarConGoogle } from "../stellar/cuenta-config";
 import {
   type ActivoDePago,
   type LecturaDePago,
@@ -14,6 +15,7 @@ import {
 } from "../stellar/pagos";
 import { type DatosDelPago, type Envio, type MotivoDeRechazo, type MotivoSinPago, mandarPago, prepararPago } from "../stellar/pagos-envio";
 import { type BusquedaDePago, buscarPago } from "../stellar/pagos-red";
+import { mirarCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
 import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
 
 /**
@@ -27,9 +29,12 @@ import { type OpcionesDeGanadores, alCambiarDeIdioma, el, textoDePagos as tx } f
  * Una cuenta que puede pagar sola (`Billetera.mandaSola`) cambia la pantalla: sin campo para escribir el monto. El monto
  * sale fijo del texto del premio cuando se puede leer, o se elige con un contador de a un dólar. Se muestra el saldo de la
  * cuenta que paga y, si no alcanza, se dice cuánto falta y se ofrece cargar dólares digitales. El pago lo hace esa
- * billetera: acá solo se arma, se le pasa y se traduce lo que contesta. Hoy ninguna billetera del sitio la ofrece (falta
- * conectar la cuenta de Google con este formulario), así que sin ella todo queda como estaba. El camino de siempre, el
+ * billetera: acá solo se arma, se le pasa y se traduce lo que contesta. La ofrece la cuenta de Google de la red principal
+ * con pagar con Google prendido (`billeteraActiva`); sin la bandera todo queda como estaba. El camino de siempre, el
  * pago listo para aprobarlo en otra billetera, queda plegado en «Pagar desde otra billetera».
+ *
+ * La cuenta de quien ganó se vuelve a leer de la lista sellada justo antes de pagar con esa cuenta (`destinoDe`): nunca de
+ * un campo de la pantalla ni de lo que quedó pintado. Si ya no se puede asegurar que sea la misma, no se paga nada.
  *
  * Antes de pedir la firma se mira la red: si la cuenta de quien ganó no existe o no tiene USDC activado, se dice en
  * palabras simples y se ofrece "Avisarle" (copiar un mensaje), en vez de hacer firmar algo que va a fallar.
@@ -70,6 +75,11 @@ export interface PagoSolo {
   saldo(): Promise<bigint | null>;
   /** Paga el pago armado. Nunca lanza: lo que sale mal es un resultado. */
   pagar(xdr: string, pedido: PedidoDeLaCuenta): Promise<ResultadoDelPremio>;
+  /**
+   * Si un pago de este premio (por su nota) con la cuenta todavía puede entrar: lo pidió esta pestaña, otra o la página
+   * antes de recargar, y su marca sigue viva. Mientras tanto no se arma otro pago de ese premio por ningún camino.
+   */
+  enCamino?(nota: string): boolean;
 }
 
 /** La billetera con que se firma, vista desde acá. */
@@ -289,20 +299,69 @@ async function pagarSola(
 }
 
 /**
- * La billetera activa de la página, si firma pagos acá. Con Pollar, `firmaAdentro` es falso. `mandaSola` no se arma
- * todavía: la cuenta de Google paga sola cuando su billetera se conecte con este formulario.
+ * Lo que dice cuánto tiene una cuenta en dólares digitales (stroops): `0` si no tiene la línea o la cuenta no existe, y
+ * `null` si no se pudo saber. Nunca lanza.
  */
-export async function billeteraActiva(): Promise<Billetera | null> {
-  const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+export async function saldoDeLaCuenta(red: NetworkName, cuenta: string, leer: typeof mirarCuenta = mirarCuenta): Promise<bigint | null> {
+  try {
+    const l = await leer(red, cuenta);
+    if (l === "no-existe") return 0n;
+    if (typeof l !== "object") return null;
+    const usdc = usdcDeLaRed(red);
+    const linea = l.saldos.find((s) => s.code === usdc.code && s.issuer === usdc.issuer);
+    return linea ? stroopsDe(linea.saldo) : 0n;
+  } catch {
+    return null;
+  }
+}
+
+/** De lo que depende armar la billetera, para reemplazarlo en las pruebas. */
+export interface EntornoDeLaBilletera {
+  /** La red de este sitio. */
+  red: NetworkName;
+  /** ¿Pagar con la cuenta de Google está prendido en el build? */
+  pagarConGoogle: () => boolean;
+  /** Cuánto tiene la cuenta en dólares digitales. */
+  saldo: (red: NetworkName, cuenta: string) => Promise<bigint | null>;
+}
+
+/**
+ * La billetera activa de la página, si firma pagos acá. Una billetera propia firma adentro. Una cuenta de Google de la red
+ * principal, con pagar con Google prendido y su billetera lista para pagar premios, paga sola (`mandaSola`): lee su saldo
+ * y le pasa el pago a la billetera, que lo revisa, lo aprueba con su voto y lo manda por el servicio de comisiones. Esa
+ * billetera nunca firma un pago desde acá por otro camino (`firmar` lanza), y sin la bandera queda como siempre: no firma
+ * adentro y el pago se arma para aprobarlo afuera.
+ */
+export async function billeteraActiva(entorno: Partial<EntornoDeLaBilletera> = {}): Promise<Billetera | null> {
+  const [{ activeWallet }, pollar] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
   const w = activeWallet();
   if (!w?.address) return null;
   const direccion = w.address;
-  return {
+  const red = entorno.red ?? network.name;
+  const hayBandera = entorno.pagarConGoogle ?? pagarConGoogle;
+  const leerSaldo = entorno.saldo ?? ((r, c) => saldoDeLaCuenta(r, c));
+  const google = pollar.submitsItself(w);
+  const paga = google ? w.pagarPremio?.bind(w) : undefined;
+  const base: Billetera = {
     direccion,
-    firmaAdentro: !submitsItself(w),
+    firmaAdentro: !google,
     red: () => w.networkPassphrase(),
     firmar: async (xdr, networkPassphrase, address) => (await w.signTransaction(xdr, { networkPassphrase, address })).signedTxXdr,
   };
+  if (paga === undefined || red !== "mainnet" || !hayBandera()) return base;
+  const saldo = (): Promise<bigint | null> => leerSaldo(red, direccion);
+  // La marca del premio que pone la billetera al pedir la firma, y que vive mientras ese pago pueda entrar.
+  const enCamino = (nota: string): boolean => {
+    const hasta = pollar.leerMarcaDeLaCuenta(pollar.MARCA_DEL_PREMIO + nota);
+    return hasta !== null && hasta > Math.floor(Date.now() / 1000);
+  };
+  const mandaSola: PagoSolo = { saldo, pagar: (xdr, pedido) => paga(xdr, pedido), enCamino };
+  return { ...base, firmaAdentro: true, firmar: noFirmaAcaPorEllaSola, mandaSola };
+}
+
+/** Una cuenta de Google no firma un pago desde este formulario: paga con `mandaSola` o se arma el pago para aprobarlo afuera. */
+async function noFirmaAcaPorEllaSola(): Promise<string> {
+  throw new Error("pago-sin-firma-aca");
 }
 
 /* ----------------------------------------------------------------- el mensaje */
@@ -422,6 +481,11 @@ export interface ContextoDePago {
   esperaMs?: number;
   /** Para las pruebas: las dependencias de la red y la billetera. */
   dependencias?: () => Promise<Dependencias>;
+  /**
+   * Vuelve a leer de la lista sellada la cuenta de quien ganó en ese puesto, o `null` si ya no se puede asegurar (otro
+   * sorteo, otra lista, un puesto que no es una cuenta). Es lo que paga la cuenta que paga sola: sin esto, esa cuenta no paga.
+   */
+  destinoDe?: (puesto: number) => string | null;
 }
 
 /** Lo que queda de un formulario cerrado, para reabrirlo tal cual si un pago está en camino, en duda o ya hecho. */
@@ -503,7 +567,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     const pagar = el("button", "primary");
     pagar.type = "submit";
     // Tras un pago en duda: vuelve a mirar en la red si entró.
-    const volver = el("button", "ghost");
+    const volver = el("button", "primary gan-volver");
     volver.type = "button";
     volver.hidden = true;
     const cancelar = el("button", "ghost");
@@ -575,6 +639,20 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       msg.classList.toggle("bad", error);
     };
 
+    /**
+     * Un pago de este premio con la cuenta que todavía puede entrar (de esta pestaña, de otra o de antes de recargar). Si no
+     * se puede saber, cuenta como que sí: armar otro pago de ese premio puede pagarlo dos veces.
+     */
+    const enCamino = (): boolean => {
+      const lector = solo;
+      if (lector?.enCamino === undefined) return false;
+      try {
+        return lector.enCamino(fila.nota);
+      } catch {
+        return true;
+      }
+    };
+
     /** El formulario de la cuenta que paga sola: el monto, el saldo, lo que falta y qué botones se ven. */
     const pintarSola = (): void => {
       if (solo === null) return;
@@ -596,8 +674,12 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       otroMonto.textContent = tx("pgGoogleOtroMonto");
       otroMonto.hidden = enContador;
       otroMonto.disabled = quieto;
-      explica.hidden = hecho || sinSaldo;
-      if (tiene === null) explica.textContent = tx("pgGoogleVasSinSaldo", { monto: num(cuanto), quien: fila.nombre });
+      // Con un pago de este premio en camino (y sin que se esté pagando ahora), el aviso ocupa el lugar de la línea de la plata.
+      const camino = !hecho && !ocupado && enDuda === null && enCamino();
+      explica.hidden = hecho || enDuda !== null || (sinSaldo && !camino);
+      explica.classList.toggle("aviso", camino);
+      if (camino) explica.textContent = tx("pgGoogleEnCamino");
+      else if (tiene === null) explica.textContent = tx("pgGoogleVasSinSaldo", { monto: num(cuanto), quien: fila.nombre });
       else if (!sinSaldo) explica.textContent = tx("pgGoogleVas", { monto: num(cuanto), quien: fila.nombre, resto: conUnidad(tiene - cuanto) });
       falta.hidden = hecho || !sinSaldo;
       falta.textContent =
@@ -608,8 +690,9 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       pagar.hidden = hecho || sinSaldo || cargarPorMensaje;
       otraBResumen.textContent = tx("pgGoogleOtraBilletera");
       armarAfuera.textContent = tx("pgArmar");
-      // Con un pago en duda, armar el pago afuera no hace nada: se esconde en vez de dejar un botón que no responde.
-      otraB.hidden = hecho || enDuda !== null;
+      // Con un pago en duda, o uno de este premio con la cuenta que todavía puede entrar, no se arma otro desde otra
+      // billetera: se esconde en vez de dejar un camino que pagaría dos veces.
+      otraB.hidden = hecho || enDuda !== null || enCamino();
     };
 
     const pintar = (): void => {
@@ -654,6 +737,9 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       abrirCarga = deps.cargar;
       if (!primera) return;
       montoL.remove();
+      // Lo que importa (a quién se paga y cuánto queda) va pegado al monto y en tinta, no en gris después del botón.
+      explica.classList.remove("note");
+      montos.insertBefore(explica, otroMonto);
       otraB.insertBefore(cuentaL, armarAfuera);
       cuentaL.hidden = false;
       void leerSaldo();
@@ -672,7 +758,9 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
       pintar();
       return deps;
     };
-    void preparar().catch(() => undefined);
+    void preparar()
+      .then(() => form.scrollIntoView?.({ block: "nearest" }))
+      .catch(() => undefined);
 
     // Un pago mandado o encontrado: queda la confirmación y el enlace, y el botón no vuelve.
     const terminarPagado = (hash: string, origen: string, yaEstaba = false): void => {
@@ -708,7 +796,8 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
         enDuda = null;
         decir("pgListo");
         terminarPagado(l.hash, l.de, true);
-      } else if (l.tipo === "no-hay") {
+      } else if (l.tipo === "no-hay" && !(duda.google && enCamino())) {
+        // No está y, con la cuenta, ya no puede entrar: recién ahí se puede volver a intentar. Mientras pueda, sigue la duda.
         enDuda = null;
         pagar.disabled = false;
         decir(duda.google ? "pgGoogleDudaNoEsta" : "pgDudaNoEsta");
@@ -777,6 +866,12 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
     const pagarAhora = async (fuera: boolean): Promise<void> => {
       // Un toque doble, un Enter con el botón en pausa o un premio ya pagado no arman otro pago.
       if (ocupado || enDuda || hecho) return;
+      // Un pago de este premio con la cuenta que todavía puede entrar: no se arma otro para pagarlo desde otra billetera.
+      if (fuera && enCamino()) {
+        decir("pgGoogleDuda", {}, true);
+        pintarSola();
+        return;
+      }
       const eraDeLaCuenta = solo !== null;
       ocupado = true;
       pagar.disabled = true;
@@ -795,6 +890,18 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
           return;
         }
         const conLaCuenta = solo !== null && !fuera;
+        // Con la cuenta que paga sola, la cuenta de quien ganó se relee de la lista sellada y tiene que ser la que se ve en la
+        // fila. Si no se puede asegurar, no se arma ni se paga nada.
+        let destino = fila.cuenta;
+        if (conLaCuenta) {
+          const sellado = ctx.destinoDe?.(fila.puesto) ?? null;
+          if (sellado === null || sellado !== fila.cuenta) {
+            progreso = null;
+            decir("pgGoogleNoSalio", {}, true);
+            return;
+          }
+          destino = sellado;
+        }
         const montoTexto = solo !== null ? montoEnTexto(cuanto) : monto.value;
         const r = await pagarUnPremio(
           {
@@ -810,7 +917,7 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
             red: ctx.red,
             raffleId: ctx.raffleId,
             puesto: fila.puesto,
-            destino: fila.cuenta,
+            destino,
             activo: ctx.activo,
             monto: montoTexto,
             desde: ctx.desde,
@@ -832,7 +939,10 @@ export function pagarPremioEn(ctx: ContextoDePago): NonNullable<OpcionesDeGanado
           decir(m.clave, m.vars, m.error, () => mensajeDe(r, contexto).vars);
         }
         avisar.hidden = !m.avisar;
-        if (r.tipo === "afuera") {
+        if (r.tipo === "afuera" && solo !== null && enCamino()) {
+          // Mientras se armaba, un pago de este premio con la cuenta empezó (en otra pestaña): no se muestra el de afuera.
+          decir("pgGoogleDuda", {}, true);
+        } else if (r.tipo === "afuera") {
           // El panel reconoce el pago de esa cuenta cuando se haga.
           ctx.pagadoras.add(r.origen);
           if (solo !== null) decir("pgGoogleAfuera");

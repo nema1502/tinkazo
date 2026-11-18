@@ -2,7 +2,12 @@ import type { AuthOpenContext, CosignRequest, CosignVerification, PollarClient, 
 import { network } from "./config";
 import { compraQrActiva } from "./alta-config";
 import type { DepsDelDesenlace, Desenlace, EnvioDelKit, EstadoDelEnvio, IntencionDeFirma } from "./cofirma-regla";
-import { PUERTA_DEL_PREMIO_EN, modoDeRampa, votoPorContenido } from "./cuenta-config";
+import { PUERTA_DEL_PREMIO_EN, modoDeRampa, pagarConGoogle, votoPorContenido } from "./cuenta-config";
+import type { DesenlaceDelPago, FormaDelPago } from "./pago-portero";
+import type { NotaDelPago, PagoArmado } from "./pagos-regla";
+import { configDelPortero } from "./patrocinio-config";
+import { STROOPS_POR_DOLAR, costoDelRetiro, cuentaDelRetiro } from "./retiro-config";
+import { entornoDelBuild } from "./venta-piloto";
 import { errorKey, esDeRed } from "./errores";
 import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
@@ -68,6 +73,11 @@ import { PremioGuardado, type PuertaDelPremio, mirarAntesDeActivar, mirarPuertaD
  * Circle, o sin saber, no pide nada. El XLM no cuenta en ninguna de las dos miradas: cualquiera puede mandarlo. Con el
  * voto a mano la línea se vota con su regla por forma (`#votarLaLinea`), y el pedido de la línea que abre solo el
  * proveedor se vota igual, con esa regla y el toque de la persona, con el voto a mano o sin él (`#antesDeLaLinea`).
+ *
+ * Los pagos de la cuenta (el premio de un sorteo, `pagarPremio`, y el retiro con su costo, `retirar`) existen solo con el
+ * voto a mano: cada uno pasa su regla de contenido, entra en la lista de lo permitido solo para su firma, se firma sin el
+ * patrocinio del proveedor y lo firmado va al servicio de comisiones de Tinkazo (`pago-portero.ts`), nunca al envío del
+ * proveedor. Una marca por pago en `localStorage` y un candado entre pestañas hacen que un mismo pago salga una sola vez.
  *
  * Sin verificar de punta a punta: hace falta una sesión real de Google, y la
  * política de transacciones de la app en el panel de Pollar tiene que permitir
@@ -145,7 +155,46 @@ export interface SubmittingWallet extends WalletAdapter {
   pagarOrden?(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo>;
   /** Si el navegador vota a mano lo que armó la página (`votaPorContenido` de `PollarWallet`, issue 180). */
   votaPorContenido?(): boolean;
+  /** Retira dólares digitales con su costo, por el servicio de comisiones (`retirar` de `PollarWallet`). Nunca lanza. */
+  retirar?(xdr: string, pedido: PedidoDeRetiro): Promise<ResultadoDelRetiro>;
+  /** Paga el premio de un sorteo, por el servicio de comisiones (`pagarPremio` de `PollarWallet`). Nunca lanza. */
+  pagarPremio?(xdr: string, pedido: PedidoDelPremioConLaCuenta): Promise<ResultadoDelPagoConLaCuenta>;
 }
+
+/**
+ * El retiro que pide la ventana de Mandar: a quién, cuánto sale de la cuenta (en stroops) y la nota que pegó la persona.
+ * El costo no viene acá: lo pone la billetera con lo que dice la configuración del build, nunca con lo que diga la pantalla.
+ */
+export interface PedidoDeRetiro {
+  destino: string;
+  sale: bigint;
+  nota: NotaDelPago;
+}
+
+/**
+ * El pago de un premio que se pide: la cuenta que paga, el destino releído de la lista sellada, el monto con siete
+ * decimales y la nota del premio. Tiene la misma forma que `PedidoDeLaCuenta` de `ui/pagar-premio.ts`.
+ */
+export interface PedidoDelPremioConLaCuenta {
+  cuenta: string;
+  destino: string;
+  monto: string;
+  nota: string;
+}
+
+/**
+ * Cómo terminó un pago de la cuenta de Google. `salio`: entró, con su hash. `incierto`: no se sabe todavía, y hasta saberlo
+ * no se arma otro. `no-salio`: no se pagó nada, con el motivo: la regla del pago no lo dejó (`regla`), lo que había que
+ * aprobar no era lo armado (`no-coincide`), la persona lo cortó (`cancelado`), ahora no se puede (`ahora-no`) o no se pudo
+ * preguntar antes de firmar (`red`). Tiene la misma forma que `ResultadoDelPremio` de `ui/pagar-premio.ts`.
+ */
+export type ResultadoDelPagoConLaCuenta =
+  | { estado: "salio"; hash: string }
+  | { estado: "incierto" }
+  | { estado: "no-salio"; motivo: "regla" | "no-coincide" | "cancelado" | "ahora-no" | "red" };
+
+/** Lo mismo para un retiro, que además dice cuándo la pestaña llegó al tope de negativas (`no-coincide-tope`). */
+export type ResultadoDelRetiro = ResultadoDelPagoConLaCuenta | { estado: "no-salio"; motivo: "no-coincide-tope" };
 
 export const pollarConfigured = (): boolean => pollarKeyFor(network.name) !== "";
 
@@ -605,6 +654,115 @@ function borrarMarcaDelPago(nota: string): void {
   }
 }
 
+/**
+ * Las marcas de los pagos con la cuenta que quizás salieron: el premio por su nota y el retiro, uno por navegador. Guardan
+ * hasta cuándo puede entrar el pago, con la vida más larga que acepta la regla, más el margen (segundos Unix) en
+ * `localStorage`, para que otra pestaña o una recarga
+ * no arme otro mientras tanto. No guardan la cuenta, el monto ni la transacción. Sin almacenamiento, vale lo que vive la
+ * pestaña (`#pagandoConLaCuenta` y `#pagosEnDuda`).
+ */
+export const MARCA_DEL_PREMIO = "tinkazo.pago-premio.";
+export const MARCA_DEL_RETIRO = "tinkazo.pago-retiro";
+
+/** Hasta cuándo vale la marca de un pago con la cuenta (segundos Unix), o `null` si no hay. */
+export function leerMarcaDeLaCuenta(clave: string): number | null {
+  try {
+    const n = Number(localStorage.getItem(clave));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch {
+    return null;
+  }
+}
+function ponerMarcaDeLaCuenta(clave: string, hasta: number): void {
+  try {
+    localStorage.setItem(clave, String(Math.floor(hasta)));
+  } catch {
+    /* sin almacenamiento, la marca vive lo que vive la pestaña */
+  }
+}
+function borrarMarcaDeLaCuenta(clave: string): void {
+  try {
+    localStorage.removeItem(clave);
+  } catch {
+    /* ya no está */
+  }
+}
+
+/** La nota de un premio en su forma única: con ella se arma la marca del premio. */
+const NOTA_DE_UN_PREMIO = /^tk:premio:[1-9]\d{0,19}:(?:0|[1-9]\d{0,8})$/;
+
+/** Lo que dice cada código del kit sobre un pago de la cuenta que no se llegó a firmar: palabras fijas, código exacto. */
+const NO_HAY_CREDITOS: readonly string[] = ["SDK_CREDITS_INSUFFICIENT", "SDK_BILLING_OVERDUE"];
+const LO_CORTO_LA_PERSONA: readonly string[] = ["SDK_CONFIRMATION_DECLINED", "SDK_COSIGN_REJECTED", "SDK_COSIGN_TURNKEY_REJECTED"];
+
+/**
+ * Un pago de la cuenta que no llegó al voto (ningún `relay` en la llamada): nada se firmó, así que un no es verdad. La
+ * negativa de la regla se reconoce solo por su código exacto. Sin red es `red`, y lo demás, `ahora-no`.
+ */
+function noSeFirmo(codigo: string | undefined, deRed: boolean, regla: { COFIRMA_DISTINTA: string; COFIRMA_TOPE: string }): ResultadoDelRetiro {
+  if (codigo === regla.COFIRMA_TOPE) return { estado: "no-salio", motivo: "no-coincide-tope" };
+  if (codigo === regla.COFIRMA_DISTINTA) return { estado: "no-salio", motivo: "no-coincide" };
+  if (codigo !== undefined && NO_HAY_CREDITOS.includes(codigo)) return { estado: "no-salio", motivo: "ahora-no" };
+  if (codigo !== undefined && LO_CORTO_LA_PERSONA.includes(codigo)) return { estado: "no-salio", motivo: "cancelado" };
+  return { estado: "no-salio", motivo: deRed ? "red" : "ahora-no" };
+}
+
+/**
+ * Un error del kit después del voto (hubo un `relay` en la llamada). Solo es un no lo que el servidor cerró sin firmar, con
+ * su código exacto: sin créditos, o el pedido rechazado. Todo lo demás es incierto, también un código con las palabras de
+ * la negativa de la regla: después del voto nunca se dice que no se hizo nada sin saberlo.
+ */
+function trasElVoto(codigo: string | undefined): ResultadoDelRetiro {
+  if (codigo === "SDK_CREDITS_INSUFFICIENT") return { estado: "no-salio", motivo: "ahora-no" };
+  if (codigo === "SDK_COSIGN_REJECTED" || codigo === "SDK_COSIGN_TURNKEY_REJECTED") return { estado: "no-salio", motivo: "cancelado" };
+  return { estado: "incierto" };
+}
+
+/**
+ * Cómo se le dice a la pantalla lo que contestó el servicio de comisiones. Un rechazo de la forma del pago es de la regla,
+ * uno de red antes de mandar nada es de red, y los demás (apagado, sin fondo, los topes, un sorteo ajeno) son ahora no.
+ */
+function motivoDelPortero(motivo: string): "regla" | "red" | "ahora-no" {
+  if (motivo === "no-permitida") return "regla";
+  return motivo === "red" ? "red" : "ahora-no";
+}
+
+/**
+ * Cuánto se sigue en la red, dentro de la misma llamada, un pago que el servicio de comisiones ya tomó: lo normal es que
+ * aparezca en unos segundos. Pasado esto queda incierto, con la marca viva hasta que el pago ya no pueda entrar, y un
+ * toque más vuelve a mirar en la red por el mismo hash sin mandar nada.
+ */
+export const SEGUIR_EL_PAGO_MS = 45_000;
+
+/** Un pago con la cuenta, con lo armado y lo pedido según su forma. */
+type PagoConLaCuenta =
+  | { forma: "premio"; xdr: string; pedido: PedidoDelPremioConLaCuenta }
+  | { forma: "retiro"; xdr: string; pedido: PedidoDeRetiro };
+
+/** Ahora no se puede pagar desde la cuenta: no se firmó nada. El motivo va a la consola, con palabras fijas. */
+function ahoraNo(motivo: string): ResultadoDelRetiro {
+  console.warn(`[tinkazo] pago con la cuenta: ahora no (${motivo})`);
+  return { estado: "no-salio", motivo: "ahora-no" };
+}
+
+/** Lo armado no pasó la regla del pago: no se pidió nada. El motivo va a la consola, con palabras fijas. */
+function porLaRegla(motivo: string): ResultadoDelRetiro {
+  console.warn(`[tinkazo] pago con la cuenta no aprobado: ${motivo}`);
+  return { estado: "no-salio", motivo: "regla" };
+}
+
+/** No se sabe cómo quedó: puede haber salido, y hasta saberlo no se arma otro. El motivo va a la consola. */
+function incierto(motivo: string): ResultadoDelRetiro {
+  console.warn(`[tinkazo] pago con la cuenta en duda: ${motivo}`);
+  return { estado: "incierto" };
+}
+
+/** El resultado de un premio no distingue el tope de negativas: es la misma negativa de la regla. */
+function sinElTope(r: ResultadoDelRetiro): ResultadoDelPagoConLaCuenta {
+  if (r.estado !== "no-salio") return r;
+  return r.motivo === "no-coincide-tope" ? { estado: "no-salio", motivo: "no-coincide" } : { estado: "no-salio", motivo: r.motivo };
+}
+
 /** Corre `f` con el candado entre pestañas de Web Locks; sin Web Locks, sin candado. */
 function conCandado<T>(nombre: string, f: () => Promise<T>): Promise<T> {
   const locks = typeof navigator !== "undefined" ? (navigator as { locks?: LockManager }).locks : undefined;
@@ -963,6 +1121,17 @@ class PollarWallet implements SubmittingWallet {
    * y el toque siguiente no los vuelve a mirar.
    */
   readonly #rechazadosAqui = new Set<string>();
+  /**
+   * Los pagos que pasaron su regla y que el voto a mano puede firmar, solo mientras dura su llamada: el XDR, con su cuenta
+   * y su forma. Es la lista de lo permitido de los pagos (decisión 24), como `#esperadas` lo es de las confirmaciones.
+   */
+  readonly #pagosRevisados = new Map<string, { cuenta: string; forma: FormaDelPago }>();
+  /** Cuántos votos salieron por `relay` desde esta pestaña: si cambia durante una firma, esa firma ya pudo votarse. */
+  #votosEstampados = 0;
+  /** El pago con la cuenta en curso en esta pestaña, por su marca: dos toques del mismo comparten uno solo. */
+  #pagandoConLaCuenta: { marca: string; promesa: Promise<ResultadoDelRetiro> } | null = null;
+  /** Los pagos con la cuenta que quedaron en duda en esta pestaña, por su marca: el hash para volver a mirar sin mandar. */
+  readonly #pagosEnDuda = new Map<string, string>();
 
   /** Lo que muestra el panel de la cuenta: por dónde entró, no un nombre fijo. */
   get label(): string {
@@ -1039,14 +1208,17 @@ class PollarWallet implements SubmittingWallet {
    *
    * `antesDeFirmar` corre solo si la puerta del premio corrió, justo después de ella y antes de firmar: el sello lo usa para
    * no firmar una ronda que la lectura de la red dejó sin margen. Si lanza, no se firma nada.
+   * `pago` dice que la firma es de un pago que ya pasó su regla (`#pagarConLaCuenta`): solo así un pago entra en la lista de
+   * lo permitido, y solo con el voto a mano. Sin el voto a mano, un pago no se firma nunca por acá.
    */
   async #firmando<T>(
     xdr: string,
     firmar: (client: PollarClient) => Promise<T>,
-    o: { testigo?: boolean; intencion?: IntencionDeFirma; antesDeFirmar?: () => void } = {},
+    o: { testigo?: boolean; intencion?: IntencionDeFirma; antesDeFirmar?: () => void; pago?: FormaDelPago } = {},
   ): Promise<T> {
     const client = await this.#ensureClient();
     const aMano = this.#aMano;
+    if (o.pago !== undefined && !aMano) throw new Error("tinkazo-pago-sin-voto");
     // La puerta del premio, pegada a la firma: lo último antes de anotar el XDR y de firmar. Sin caché: cada firma vuelve a
     // mirar. Fuera de la red principal, de los modos que cuida y con el voto a mano, no hace nada ni lee nada.
     if (this.#puertaActiva()) {
@@ -1056,7 +1228,7 @@ class PollarWallet implements SubmittingWallet {
       // La lectura puede haber gastado hasta su presupuesto (unos 7 s): quien llama vuelve a mirar si todavía vale firmar.
       o.antesDeFirmar?.();
     }
-    if (aMano) await this.#antesDelVoto(client, xdr, o.intencion);
+    if (aMano) await this.#antesDelVoto(client, xdr, o.intencion, o.pago);
     // Sin el voto a mano, en la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado
     // (riesgo aceptado, docs/architecture.md). Solo mira, después de firmar. El pago con el saldo no lo usa: lo firmado se
     // revisa entero antes de mandarlo (`pagarOrden`). Con el voto a mano no hace falta: la regla anota antes de votar.
@@ -1088,10 +1260,11 @@ class PollarWallet implements SubmittingWallet {
   /**
    * Con el voto a mano, antes de pedirle nada al servidor: la cuenta de la sesión, el tope de negativas de la pestaña (con
    * el tope no nace otro pedido), la intención (un error nuestro si falta) y la lista de lo permitido (solo el sello y
-   * el sorteo del contrato oficial, `motivoContraLoPermitido`). Lanza el error que corresponde. Lo que se corta acá no se
-   * pidió, así que no cuenta para el tope.
+   * el sorteo del contrato oficial, `motivoContraLoPermitido`, o un pago que pasó su regla en `retirar` o `pagarPremio`
+   * para esta misma llamada, solo para firmar sin mandar). Lanza el error que corresponde. Lo que se corta acá no se pidió,
+   * así que no cuenta para el tope.
    */
-  async #antesDelVoto(client: PollarClient, xdr: string, intencion: IntencionDeFirma | undefined): Promise<void> {
+  async #antesDelVoto(client: PollarClient, xdr: string, intencion: IntencionDeFirma | undefined, pago?: FormaDelPago): Promise<void> {
     const regla = await import("./cofirma-regla");
     const cuenta = this.#cuentaParaActivar(client);
     if (!cuenta) throw new Error("account-wait-cancelled");
@@ -1101,10 +1274,21 @@ class PollarWallet implements SubmittingWallet {
       throw new Error(regla.COFIRMA_DISTINTA);
     }
     const motivo = await regla.motivoContraLoPermitido(xdr, cuenta, network.contractId, network.networkPassphrase);
+    if (motivo !== null && this.#esUnPagoRevisado(xdr, cuenta, intencion, pago)) return;
     if (motivo !== null) {
       console.warn(`[tinkazo] co-firma no votada: fuera de lo permitido (${motivo})`);
       throw new Error(regla.COFIRMA_DISTINTA);
     }
+  }
+
+  /**
+   * ¿Es un pago que ya pasó su regla para esta misma llamada? Lo puso `#pagarConLaCuenta` en `#pagosRevisados` justo antes
+   * de firmar, con su cuenta y su forma, y lo saca al terminar. Solo para firmar sin mandar: un pago nunca se manda por el
+   * proveedor de cuentas, siempre por el servicio de comisiones.
+   */
+  #esUnPagoRevisado(xdr: string, cuenta: string, intencion: IntencionDeFirma, pago: FormaDelPago | undefined): boolean {
+    const revisado = this.#pagosRevisados.get(xdr);
+    return pago !== undefined && intencion === "sign" && revisado !== undefined && revisado.cuenta === cuenta && revisado.forma === pago;
   }
 
   /** Las negativas de esta pestaña para esa cuenta y esa regla: si la cuenta cambió, empiezan de cero. */
@@ -1221,7 +1405,9 @@ class PollarWallet implements SubmittingWallet {
     // 2. La sesión otra vez.
     const sigue = this.#client === client && this.#cuentaParaActivar(client) === cuenta;
     if (!sigue) return { que: "negativa", motivo: "sesión cambiada", rechazar: false };
-    // 3. El voto. Desde acá, lo que no se entiende es incierto.
+    // 3. El voto. Desde acá, lo que no se entiende es incierto. Se cuenta antes de votar: quien pagó con la cuenta sabe así
+    // que su llamada ya llegó al voto y que un error de después no dice que no se hizo nada.
+    this.#votosEstampados++;
     let res: unknown;
     try {
       res = await client.cosign.relay(propuesta.path, propuesta.body, { requestId: pedido.id });
@@ -1565,6 +1751,9 @@ class PollarWallet implements SubmittingWallet {
     this.#distintasDeLaLineaEnMemoria = 0;
     this.#rechazadosAqui.clear();
     this.#cuentaDeLasDistintas = null;
+    // La marca de un pago en duda queda (vive en `localStorage` hasta que el pago ya no pueda entrar): solo se olvida el
+    // hash para volver a mirar, así otra sesión en esta pestaña no mira el pago de la anterior.
+    this.#pagosEnDuda.clear();
     try {
       await this.#client?.logout();
     } catch {
@@ -1736,6 +1925,239 @@ class PollarWallet implements SubmittingWallet {
       }
     }
     return { estado: "incierto", vence };
+  }
+
+  /* ------------------------------------------------ pagar un premio y retirar, por el servicio de comisiones */
+
+  /**
+   * Paga el premio de un sorteo desde esta cuenta de Google. `xdr` es el pago que armó la página y `pedido` lo que la
+   * persona vio: la cuenta, el destino releído de la lista sellada, el monto y la nota del premio. Solo en la red principal
+   * y con la bandera de pagar con Google (que pide el modo premios y el voto por contenido): si no, no arma el cliente ni
+   * llama a nada. Un mismo premio se paga una sola vez: la marca por su nota frena otro pago en esta pestaña, en otra o
+   * después de recargar, mientras el primero pueda entrar. Nunca lanza.
+   */
+  pagarPremio(xdr: string, pedido: PedidoDelPremioConLaCuenta): Promise<ResultadoDelPagoConLaCuenta> {
+    if (network.name !== "mainnet" || !pagarConGoogle()) return Promise.resolve(sinElTope(ahoraNo("apagado")));
+    if (typeof pedido?.nota !== "string" || !NOTA_DE_UN_PREMIO.test(pedido.nota)) return Promise.resolve(sinElTope(porLaRegla("pedido")));
+    const marca = MARCA_DEL_PREMIO + pedido.nota;
+    return this.#unaVezPorMarca(marca, "tinkazo-pagar-premio", () => this.#pagarConLaCuenta(marca, { forma: "premio", xdr, pedido })).then(sinElTope);
+  }
+
+  /**
+   * Retira dólares digitales de esta cuenta de Google a otra cuenta, con el costo del retiro. `xdr` es lo que armó Mandar
+   * y `pedido` lo que la persona eligió: a quién, cuánto sale y la nota. El costo y su cuenta salen de la configuración
+   * del build, nunca de la pantalla: sin ellos no hay retiro, porque el servicio de comisiones solo paga un retiro que
+   * trae su costo. Solo en la red principal y con el voto por contenido. Un retiro por vez en este navegador. Nunca lanza.
+   */
+  retirar(xdr: string, pedido: PedidoDeRetiro): Promise<ResultadoDelRetiro> {
+    if (network.name !== "mainnet" || !votoPorContenido()) return Promise.resolve(ahoraNo("apagado"));
+    const pago: PagoConLaCuenta = { forma: "retiro", xdr, pedido };
+    return this.#unaVezPorMarca(MARCA_DEL_RETIRO, "tinkazo-retirar", () => this.#pagarConLaCuenta(MARCA_DEL_RETIRO, pago));
+  }
+
+  /**
+   * Un pago con la cuenta por vez en esta pestaña, y de a uno entre pestañas (el candado). Dos toques del mismo pago (la
+   * misma marca) comparten uno solo. Otro pago mientras tanto no se arma. Lo que se escape es incierto: no se sabe cómo
+   * quedó, así que no se dice que no pasó nada.
+   */
+  #unaVezPorMarca(marca: string, candado: string, f: () => Promise<ResultadoDelRetiro>): Promise<ResultadoDelRetiro> {
+    const enCurso = this.#pagandoConLaCuenta;
+    if (enCurso) return enCurso.marca === marca ? enCurso.promesa : Promise.resolve(ahoraNo("otro pago en curso"));
+    const promesa = conCandado(candado, f)
+      .catch((): ResultadoDelRetiro => incierto("se cortó"))
+      .finally(() => {
+        if (this.#pagandoConLaCuenta?.promesa === promesa) this.#pagandoConLaCuenta = null;
+      });
+    this.#pagandoConLaCuenta = { marca, promesa };
+    return promesa;
+  }
+
+  /**
+   * El pago con la cuenta, en orden:
+   *
+   * 1. El servicio de comisiones de la red principal, el cliente que vota a mano y la cuenta de la sesión. Sin eso, nada.
+   * 2. Un pago de esta marca que quizás salió: no se arma otro, se vuelve a mirar en la red sin mandar nada.
+   * 3. Lo armado pasa su regla (`motivoContraElPremio` o `motivoContraElRetiro`), con el costo y la cuenta de cobros de la
+   *    configuración. Si no la pasa, no se pide nada.
+   * 4. Antes de pedir la firma, que cuesta: el servicio atiende esa forma, con el mismo costo, y la cuenta no tiene otro pago
+   *    en el aire.
+   * 5. La marca, y la firma con el voto por contenido, con lo armado en la lista de lo permitido solo para esta llamada.
+   * 6. Lo firmado tiene que ser lo armado, con la misma regla. Si no, ya se votó: no se manda y queda en duda.
+   * 7. Lo firmado va al servicio de comisiones, que paga la comisión de la red (`mandarElPago`). Nunca al proveedor.
+   *
+   * Desde la firma, lo que no sea un rechazo claro es incierto y la marca queda hasta que el pago ya no pueda entrar.
+   */
+  async #pagarConLaCuenta(marca: string, p: PagoConLaCuenta): Promise<ResultadoDelRetiro> {
+    const url = configDelPortero().url;
+    if (!url) return ahoraNo("sin el servicio de comisiones");
+    let client: PollarClient;
+    try {
+      client = await this.#ensureClient();
+    } catch {
+      return { estado: "no-salio", motivo: "red" };
+    }
+    if (!this.#aMano) return ahoraNo("sin el voto a mano");
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return ahoraNo("sin la cuenta de la sesión");
+    const ahora = (): number => Math.floor(Date.now() / 1000);
+    const enVuelo = leerMarcaDeLaCuenta(marca);
+    if (enVuelo !== null && enVuelo > ahora()) return this.#volverAMirar(marca);
+    const [regla, cofirma, portero] = await Promise.all([import("./pagos-regla"), import("./cofirma-regla"), import("./pago-portero")]);
+    const deLaRegla = this.#reglaDelPago(regla, p, cuenta);
+    if ("no" in deLaRegla) return deLaRegla.no;
+    const passphrase = network.networkPassphrase;
+    const leido = await regla.leerPagoArmado(p.xdr, passphrase);
+    const motivo = deLaRegla.revisar(leido, ahora());
+    if (motivo !== null || !leido?.vence) return porLaRegla(motivo ?? "sin vencimiento");
+    const armada = await cofirma.leerLaArmada(p.xdr, passphrase);
+    if (!armada || armada.cuenta !== cuenta) return porLaRegla("la armada");
+    const antes = await this.#antesDePagar(portero, url, cuenta, p.forma, deLaRegla.costo);
+    if (antes) return antes;
+    // La marca dura lo más que la regla deja vivir un pago, contado desde ahora, más el margen (decisión 18): así cubre
+    // también un reloj adelantado, con el que lo armado puede entrar en la red hasta un minuto más tarde de lo que parece.
+    const hastaLaMarca = Math.max(leido.vence, ahora() + regla.VIDA_MAXIMA_DEL_PAGO_S) + portero.MARGEN_TRAS_VENCER_S;
+    ponerMarcaDeLaCuenta(marca, hastaLaMarca);
+    const firma = await this.#firmarElPago(client, cuenta, p, cofirma);
+    if (firma.que === "resultado") {
+      if (firma.r.estado !== "incierto") borrarMarcaDeLaCuenta(marca);
+      return firma.r;
+    }
+    const deLaFirma = await cofirma.leerLaArmada(firma.signedXdr, passphrase);
+    const otraVez = deLaRegla.revisar(await regla.leerPagoArmado(firma.signedXdr, passphrase), ahora());
+    if (!deLaFirma || deLaFirma.hash !== armada.hash || otraVez !== null) return incierto("lo firmado no es lo armado");
+    if (this.#client !== client || this.#cuentaParaActivar(client) !== cuenta) return incierto("sesión cambiada");
+    const deps = {
+      pedir: () => portero.pedirElPago(url, p.forma, firma.signedXdr),
+      enLaRed: (h: string) => portero.estadoEnLaRed("mainnet", h),
+      dormir: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+      ahora: () => Date.now(),
+    };
+    const desenlace = await portero.mandarElPago({ hash: armada.hash, vence: leido.vence }, Date.now() + SEGUIR_EL_PAGO_MS, deps);
+    return this.#trasElPortero(marca, desenlace);
+  }
+
+  /**
+   * La regla de este pago, con lo que rige por configuración. Del premio: la cuenta del pedido es la de la sesión y el
+   * destino no es la cuenta de cobros. Del retiro: el costo y su cuenta de la configuración (sin ellos no hay retiro), el
+   * destino no es la cuenta de cobros, llega al menos 1 dólar digital y, sin nota pedida, lleva la nota fija del retiro.
+   */
+  #reglaDelPago(
+    regla: typeof import("./pagos-regla"),
+    p: PagoConLaCuenta,
+    cuenta: string,
+  ): { revisar: (leido: PagoArmado | null, ahora: number) => string | null; costo: bigint | null } | { no: ResultadoDelRetiro } {
+    const entorno = entornoDelBuild();
+    const cobros = cuentaDelRetiro(entorno);
+    if (p.forma === "premio") {
+      const { destino, monto, nota } = p.pedido;
+      if (p.pedido.cuenta !== cuenta) return { no: porLaRegla("otra cuenta") };
+      if (cobros !== null && destino === cobros) return { no: porLaRegla("destino de cobros") };
+      return { revisar: (leido, ahora) => regla.motivoContraElPremio(leido, { cuenta, destino, monto, nota }, { ahora }), costo: null };
+    }
+    const stroops = costoDelRetiro(entorno);
+    if (stroops === null || cobros === null) return { no: ahoraNo("sin el costo del retiro") };
+    const { destino, sale, nota } = p.pedido;
+    if (typeof destino !== "string" || typeof sale !== "bigint" || destino === cobros) return { no: porLaRegla("pedido") };
+    const llega = sale - stroops;
+    if (llega < STROOPS_POR_DOLAR) return { no: porLaRegla("llega poco") };
+    const conNota: NotaDelPago = nota.tipo === "ninguna" ? { tipo: "texto", valor: regla.NOTA_DEL_RETIRO } : nota;
+    const pedido = { cuenta, destino, llega, nota: conNota, costo: { stroops, destino: cobros } };
+    return { revisar: (leido, ahora) => regla.motivoContraElRetiro(leido, pedido, { ahora }), costo: stroops };
+  }
+
+  /**
+   * Lo que se pregunta al servicio de comisiones antes de pedir la firma (cada firma le cuesta a Tinkazo): que atienda esta
+   * forma, que el costo del retiro que exige sea el de la configuración y que la cuenta no tenga otro pago en el aire (uno
+   * que la red ya cerró no cuenta). `null` si se puede seguir. Sin respuesta, no se pide nada.
+   */
+  async #antesDePagar(
+    portero: typeof import("./pago-portero"),
+    url: string,
+    cuenta: string,
+    forma: FormaDelPago,
+    costo: bigint | null,
+  ): Promise<ResultadoDelRetiro | null> {
+    const lectura = await portero.mirarPagos(url, cuenta);
+    if (lectura.tipo === "sin-respuesta") return { estado: "no-salio", motivo: "red" };
+    if (lectura.tipo === "sin-pagos") return ahoraNo("el servicio no atiende pagos");
+    const { pagos } = lectura;
+    if (!pagos[forma]) return ahoraNo("el servicio no atiende esta forma");
+    if (forma === "retiro" && pagos.costoRetiro !== costo) return ahoraNo("otro costo del retiro");
+    if (pagos.enCurso !== null) {
+      const e = await portero.estadoEnLaRed("mainnet", pagos.enCurso.hash);
+      if (e !== "entro" && e !== "fallo") return ahoraNo("otro pago en camino");
+    }
+    return null;
+  }
+
+  /**
+   * Firma el pago con el voto por contenido, sin el patrocinio del proveedor (lo manda después el servicio de comisiones).
+   * Lo armado entra en la lista de lo permitido solo mientras dura esta firma. Lo que vuelve se lee por su forma y con
+   * códigos exactos, nunca por el texto: antes del voto un no es verdad, y después del voto solo es un no lo que el
+   * servidor cerró sin firmar. Lo demás es incierto.
+   */
+  async #firmarElPago(
+    client: PollarClient,
+    cuenta: string,
+    p: PagoConLaCuenta,
+    cofirma: typeof import("./cofirma-regla"),
+  ): Promise<{ que: "firmada"; signedXdr: string } | { que: "resultado"; r: ResultadoDelRetiro }> {
+    const votos = this.#votosEstampados;
+    this.#pagosRevisados.set(p.xdr, { cuenta, forma: p.forma });
+    let r: unknown;
+    try {
+      const firmar = (c: PollarClient): Promise<unknown> => c.signTx(p.xdr, { skipSponsorship: true });
+      r = await this.#firmando(p.xdr, firmar, { testigo: false, intencion: "sign", pago: p.forma });
+    } catch (e) {
+      if (this.#votosEstampados !== votos) return { que: "resultado", r: incierto("la firma se cortó tras el voto") };
+      const codigo = codigoDelKit(e) ?? (e instanceof Error ? e.message : undefined);
+      return { que: "resultado", r: noSeFirmo(codigo, esDeRed(e), cofirma) };
+    } finally {
+      this.#pagosRevisados.delete(p.xdr);
+    }
+    const x = (r ?? {}) as { status?: unknown; signedXdr?: unknown; code?: unknown };
+    if (x.status === "signed" && typeof x.signedXdr === "string" && x.signedXdr !== "") return { que: "firmada", signedXdr: x.signedXdr };
+    const codigo = typeof x.code === "string" ? x.code : undefined;
+    const votado = this.#votosEstampados !== votos;
+    if (x.status !== "error") return { que: "resultado", r: incierto("sin firma") };
+    return { que: "resultado", r: votado ? trasElVoto(codigo) : noSeFirmo(codigo, codigo === "SDK_NETWORK_TIMEOUT", cofirma) };
+  }
+
+  /**
+   * Lo que dijo el servicio de comisiones. Salió: la marca se borra. Entró y falló, o un rechazo claro: no se movió nada, la
+   * marca se borra y se puede volver a intentar. En duda: la marca queda y se guarda el hash para volver a mirar.
+   */
+  #trasElPortero(marca: string, d: DesenlaceDelPago): ResultadoDelRetiro {
+    if (d.que === "duda") {
+      this.#pagosEnDuda.set(marca, d.hash);
+      return incierto("sin confirmar");
+    }
+    borrarMarcaDeLaCuenta(marca);
+    this.#pagosEnDuda.delete(marca);
+    if (d.que === "salio") {
+      console.info("[tinkazo] pago con la cuenta: salió");
+      return { estado: "salio", hash: d.hash };
+    }
+    if (d.que === "fallo") return ahoraNo("entró y falló");
+    const motivo = motivoDelPortero(d.motivo);
+    console.warn(`[tinkazo] pago con la cuenta no pagado por el servicio: ${d.motivo.replace(/[^a-z-]/g, "")}`);
+    return { estado: "no-salio", motivo };
+  }
+
+  /**
+   * Un pago de esta marca que quizás salió: se pregunta a la red por su hash, si esta pestaña lo tiene, sin firmar ni
+   * mandar nada. Entró: salió. Entró y falló: se puede volver a intentar. Lo demás, o sin el hash (otra pestaña, una
+   * recarga), sigue incierto hasta que la marca venza.
+   */
+  async #volverAMirar(marca: string): Promise<ResultadoDelRetiro> {
+    const hash = this.#pagosEnDuda.get(marca);
+    if (!hash) return incierto("otro pago de esta marca en camino");
+    const { estadoEnLaRed } = await import("./pago-portero");
+    const e = await estadoEnLaRed("mainnet", hash);
+    if (e === "no-esta" || e === "no-se-sabe") return incierto("todavía sin confirmar");
+    borrarMarcaDeLaCuenta(marca);
+    this.#pagosEnDuda.delete(marca);
+    return e === "entro" ? { estado: "salio", hash } : ahoraNo("entró y falló");
   }
 
   /* ------------------------------------------------ activar los dólares digitales (la línea del USDC de Circle) */

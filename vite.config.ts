@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
-import { avisosDelRetiro, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
+import { avisosDelRetiro, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
 import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
 import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
@@ -133,7 +133,9 @@ function validarBanderasDeAlta(): Plugin {
  * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
  *
  * Con la misma lectura del entorno frena también el voto por contenido (`VITE_VOTO_POR_CONTENIDO`, issue 180): un valor
- * que no es 1 ni 0, o el 1 junto con el pago con el saldo, la compra con QR o la carga con bolivianos.
+ * que no es 1 ni 0, o el 1 junto con el pago con el saldo, la compra con QR o la carga con bolivianos. Y pagar con Google
+ * (`VITE_PAGAR_CON_GOOGLE`): un valor que no es 1 ni 0, o el 1 sin el voto por contenido, sin el modo premios, sin los premios
+ * pagados, sin el portero de la red principal o junto con la venta que paga con el saldo o con QR.
  */
 function validarModoPremios(): Plugin {
   return {
@@ -141,8 +143,9 @@ function validarModoPremios(): Plugin {
     apply: "build",
     config(_config, { mode }) {
       const env = loadEnv(mode, __dirname, ["VITE_"]);
-      const problemas = [...problemasDePremios(env), ...problemasDelVoto(env)];
-      if (problemas.length) throw new Error(`Hay banderas del modo premios o del voto por contenido que no van juntas:\n- ${problemas.join("\n- ")}`);
+      const problemas = [...problemasDePremios(env), ...problemasDelVoto(env), ...problemasDePagarConGoogle(env)];
+      const dicen = "Hay banderas del modo premios, del voto por contenido o de pagar con Google que no van juntas";
+      if (problemas.length) throw new Error(`${dicen}:\n- ${problemas.join("\n- ")}`);
     },
   };
 }

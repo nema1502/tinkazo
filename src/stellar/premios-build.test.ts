@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import viteConfig from "../../vite.config";
-import { votoPorContenido } from "./cuenta-config";
-import { avisosDelRetiro, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./premios-build";
+import { pagarConGoogle, votoPorContenido } from "./cuenta-config";
+import { avisosDelRetiro, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./premios-build";
 import { cuentaDeCobrosDelPortero } from "./retiro-config";
 
 /**
@@ -481,5 +481,319 @@ describe("el control del costo del retiro, armado como lo arma el build", () => 
     const warn = vi.fn();
     control.buildStart.call({ warn });
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Pagar con Google (`VITE_PAGAR_CON_GOOGLE=1`): el build no sale con un valor que la dejaría apagada sin aviso, ni sin el voto
+ * por contenido, el modo premios, los premios pagados o el portero de la red principal, ni junto con la venta que paga con
+ * el saldo o con QR. Apagada, vacía o en 0, el build sale como siempre.
+ */
+describe("pagar con Google y el build", () => {
+  const COMPLETA: Record<string, string> = {
+    VITE_PAGAR_CON_GOOGLE: "1",
+    VITE_RAMPA: "premios",
+    VITE_VOTO_POR_CONTENIDO: "1",
+    VITE_PAGOS: "1",
+    VITE_PATROCINIO_URL_MAINNET: PORTERO,
+  };
+  /** La combinación completa sin una de sus variables. */
+  const sin = (nombre: string): Record<string, string> => {
+    const copia = { ...COMPLETA };
+    delete copia[nombre];
+    return copia;
+  };
+  const TODO_LO_DEMAS = { VITE_PAGO_CON_SALDO: "1", VITE_COMPRA_QR: "1", VITE_RAMPA: "pollar", VITE_PAGOS: "1" };
+
+  it("la combinación completa sale, en los cuatro controles", () => {
+    expect(problemasDePagarConGoogle(COMPLETA)).toEqual([]);
+    expect(problemasDePremios(COMPLETA)).toEqual([]);
+    expect(problemasDelVoto(COMPLETA)).toEqual([]);
+    expect(problemasDelRetiro(COMPLETA, DEL_PORTERO)).toEqual([]);
+  });
+
+  it("apagada, vacía o en 0, no mira nada más: el build sale con todo lo demás faltando o prendido", () => {
+    for (const v of [undefined, "", "0", "   "]) {
+      const bandera = v === undefined ? {} : { VITE_PAGAR_CON_GOOGLE: v };
+      expect(problemasDePagarConGoogle({ ...bandera, ...TODO_LO_DEMAS }), String(v)).toEqual([]);
+      expect(problemasDePagarConGoogle(bandera), String(v)).toEqual([]);
+    }
+    expect(problemasDePagarConGoogle({})).toEqual([]);
+  });
+
+  it("sin el voto por contenido no sale, con cualquier valor que no sea 1", () => {
+    for (const v of [undefined, "", "0", "true", " 1"]) {
+      const p = problemasDePagarConGoogle(v === undefined ? sin("VITE_VOTO_POR_CONTENIDO") : { ...COMPLETA, VITE_VOTO_POR_CONTENIDO: v });
+      expect(p, String(v)).toHaveLength(1);
+      expect(p[0], String(v)).toContain("VITE_VOTO_POR_CONTENIDO=1");
+    }
+  });
+
+  it("con otro modo de la rampa que premios no sale, lo escriba como lo escriba", () => {
+    for (const rampa of ["", "pollar", "  Pollar ", "recibir", "meru", "apagada", "premio"]) {
+      const p = problemasDePagarConGoogle({ ...COMPLETA, VITE_RAMPA: rampa });
+      expect(p, rampa).toHaveLength(1);
+      expect(p[0], rampa).toContain("VITE_RAMPA=premios");
+    }
+    expect(problemasDePagarConGoogle(sin("VITE_RAMPA"))).toHaveLength(1);
+  });
+
+  it("lee el modo como lo lee el sitio: sin mayúsculas ni espacios que importen", () => {
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_RAMPA: "  Premios " })).toEqual([]);
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_RAMPA: "PREMIOS" })).toEqual([]);
+  });
+
+  it("sin los premios pagados no sale: Pagar premio no aparecería", () => {
+    for (const v of [undefined, "", "0", "true", " 1"]) {
+      const p = problemasDePagarConGoogle(v === undefined ? sin("VITE_PAGOS") : { ...COMPLETA, VITE_PAGOS: v });
+      expect(p, String(v)).toHaveLength(1);
+      expect(p[0], String(v)).toContain("VITE_PAGOS=1");
+    }
+  });
+
+  it("sin la dirección del portero de la red principal no sale, ni vacía ni con solo espacios", () => {
+    for (const v of [undefined, "", "   "]) {
+      const p = problemasDePagarConGoogle(v === undefined ? sin("VITE_PATROCINIO_URL_MAINNET") : { ...COMPLETA, VITE_PATROCINIO_URL_MAINNET: v });
+      expect(p, String(v)).toHaveLength(1);
+      expect(p[0], String(v)).toContain("VITE_PATROCINIO_URL_MAINNET");
+    }
+  });
+
+  it("una dirección que el sitio lee como vacía, por ejemplo una barra sola, tampoco sale", () => {
+    for (const v of ["/", " // ", "///"]) {
+      const p = problemasDePagarConGoogle({ ...COMPLETA, VITE_PATROCINIO_URL_MAINNET: v });
+      expect(p, v).toHaveLength(1);
+      expect(p[0], v).toContain("VITE_PAGAR_CON_GOOGLE=1 necesita VITE_PATROCINIO_URL_MAINNET");
+    }
+  });
+
+  it("la dirección del portero oficial sale también con una barra al final o con espacios", () => {
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_PATROCINIO_URL_MAINNET: `${PORTERO}/` })).toEqual([]);
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_PATROCINIO_URL_MAINNET: `  ${PORTERO}  ` })).toEqual([]);
+  });
+
+  it("una dirección que no es la del portero de la red principal no sale, y no se escribe", () => {
+    const ajenas = [
+      "http://pm.tinkazo.app",
+      "https://p.tinkazo.app",
+      "https://otro-portero.example",
+      "https://pm.tinkazo.app/v1/patrocinio",
+      "https://pm.tinkazo.app:8443",
+      "https://pm.tinkazo.app?x=1",
+      "https://usuario@pm.tinkazo.app",
+      "ftp://pm.tinkazo.app",
+    ];
+    for (const v of ajenas) {
+      const p = problemasDePagarConGoogle({ ...COMPLETA, VITE_PATROCINIO_URL_MAINNET: v });
+      expect(p, v).toHaveLength(1);
+      expect(p[0], v).toContain("no es la del portero de la red principal");
+      expect(p[0], v).not.toContain(v);
+    }
+  });
+
+  it("con el pago con el saldo prendido no sale, y nombra las dos banderas", () => {
+    const p = problemasDePagarConGoogle({ ...COMPLETA, VITE_PAGO_CON_SALDO: "1" });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("VITE_PAGAR_CON_GOOGLE=1");
+    expect(p[0]).toContain("VITE_PAGO_CON_SALDO=1");
+  });
+
+  it("con la compra con QR prendida tampoco", () => {
+    const p = problemasDePagarConGoogle({ ...COMPLETA, VITE_COMPRA_QR: "1" });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("VITE_COMPRA_QR=1");
+  });
+
+  it("lee la venta como el control del modo premios: solo un 1 la prende", () => {
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_PAGO_CON_SALDO: "0", VITE_COMPRA_QR: "", VITE_ALTA_PAGO: "1" })).toEqual([]);
+    expect(problemasDePagarConGoogle({ ...COMPLETA, VITE_PAGO_CON_SALDO: "true", VITE_COMPRA_QR: " 1" })).toEqual([]);
+  });
+
+  it("lo que falta se dice junto, cada problema una vez y en el mismo orden", () => {
+    const p = problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: "1", VITE_PAGO_CON_SALDO: "1", VITE_COMPRA_QR: "1" });
+    expect(p).toHaveLength(6);
+    expect(new Set(p).size).toBe(6);
+    expect(p[0]).toContain("VITE_VOTO_POR_CONTENIDO=1");
+    expect(p[1]).toContain("VITE_RAMPA=premios");
+    expect(p[2]).toContain("VITE_PAGOS=1");
+    expect(p[3]).toContain("VITE_PATROCINIO_URL_MAINNET");
+    expect(p[4]).toContain("VITE_PAGO_CON_SALDO=1");
+    expect(p[5]).toContain("VITE_COMPRA_QR=1");
+  });
+
+  it("un valor que no es 1, 0 ni vacío no sale: dice que acepta 1 o 0 y no escribe el valor", () => {
+    for (const v of ["true", "TRUE", "on", "si", "sí", "yes", "2", "01", " 1", "1 ", "uno", "1,0"]) {
+      const p = problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: v });
+      expect(p, JSON.stringify(v)).toHaveLength(1);
+      expect(p[0], JSON.stringify(v)).toContain("VITE_PAGAR_CON_GOOGLE solo acepta 1 o 0");
+      expect(p[0], JSON.stringify(v)).not.toContain(`=${v}`);
+    }
+    const secreto = "https://pm.tinkazo.app/ruta-secreta";
+    expect(problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: secreto }).join(" ")).not.toContain(secreto);
+  });
+
+  it("con un valor raro dice solo eso: las combinaciones se miran con un 1 exacto", () => {
+    expect(problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: "true", ...TODO_LO_DEMAS })).toHaveLength(1);
+  });
+
+  it("no escribe valores de otras variables: ni una dirección ni una llave llegan a la bitácora", () => {
+    const secreto = "https://pm.tinkazo.app/ruta-secreta";
+    const env = { VITE_PAGAR_CON_GOOGLE: "1", VITE_PATROCINIO_URL_MAINNET: secreto, VITE_POLLAR_PUBLISHABLE_KEY_MAINNET: "pub_llave" };
+    const p = problemasDePagarConGoogle({ ...env, ...TODO_LO_DEMAS, VITE_RETIRO_CUENTA: COBROS });
+    expect(p.length).toBeGreaterThan(0);
+    expect(p.join(" ")).not.toContain(secreto);
+    expect(p.join(" ")).not.toContain("pub_llave");
+    expect(p.join(" ")).not.toContain(COBROS);
+  });
+
+  it("los mensajes no llevan punto y coma, comillas angulares ni signos de exclamación", () => {
+    const todos = [
+      ...problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: "1", VITE_PAGO_CON_SALDO: "1", VITE_COMPRA_QR: "1" }),
+      ...problemasDePagarConGoogle({ VITE_PAGAR_CON_GOOGLE: "true" }),
+    ];
+    expect(todos.length).toBe(7);
+    for (const m of todos) expect(m).not.toMatch(/[;«»!¡]/);
+  });
+
+  it("no pisa los otros controles: cada uno dice lo suyo", () => {
+    const env = { ...COMPLETA, VITE_VOTO_POR_CONTENIDO: "", VITE_PAGO_CON_SALDO: "1" };
+    expect(problemasDePremios(env)).toHaveLength(1);
+    expect(problemasDelVoto(env)).toEqual([]);
+    expect(problemasDePagarConGoogle(env)).toHaveLength(2);
+    expect(problemasDelRetiro(env, DEL_PORTERO)).toEqual([]);
+  });
+
+  it("la lectura del sitio y la del build coinciden: lo que el build deja pasar vale 1 solo con un 1 exacto", () => {
+    for (const v of [undefined, "", "   ", "0", "1", "true", "on", "si", " 1", "1 ", "01", "2"]) {
+      const env = v === undefined ? sin("VITE_PAGAR_CON_GOOGLE") : { ...COMPLETA, VITE_PAGAR_CON_GOOGLE: v };
+      const dejaPasar = problemasDePagarConGoogle(env).length === 0;
+      const sitio = pagarConGoogle({ pagarConGoogle: v, rampa: "premios", votoPorContenido: "1" });
+      expect(sitio, String(v)).toBe(v === "1");
+      if (!dejaPasar) expect(sitio, String(v)).toBe(false);
+    }
+  });
+
+  it("lo que el build deja pasar con la bandera prendida es lo que el sitio toma como prendido", () => {
+    expect(problemasDePagarConGoogle(COMPLETA)).toEqual([]);
+    expect(pagarConGoogle({ pagarConGoogle: "1", rampa: COMPLETA.VITE_RAMPA, votoPorContenido: COMPLETA.VITE_VOTO_POR_CONTENIDO })).toBe(true);
+  });
+});
+
+describe("el control de pagar con Google, armado como lo arma el build", () => {
+  const control = (viteConfig.plugins as unknown as ControlDelBuild[]).find((p) => p?.name === "tinkazo:modo-premios") as ControlDelBuild;
+  const NOMBRES = [
+    "VITE_PAGAR_CON_GOOGLE",
+    "VITE_VOTO_POR_CONTENIDO",
+    "VITE_RAMPA",
+    "VITE_PAGOS",
+    "VITE_PATROCINIO_URL_MAINNET",
+    "VITE_PAGO_CON_SALDO",
+    "VITE_COMPRA_QR",
+  ];
+  const completo: Record<string, string> = {
+    VITE_PAGAR_CON_GOOGLE: "1",
+    VITE_RAMPA: "premios",
+    VITE_VOTO_POR_CONTENIDO: "1",
+    VITE_PAGOS: "1",
+    VITE_PATROCINIO_URL_MAINNET: PORTERO,
+  };
+
+  /** Pone el entorno del build: lo que no se dice queda vacío, aunque la máquina tenga esas variables en su `.env.local`. */
+  function entorno(env: Record<string, string>): void {
+    for (const k of NOMBRES) vi.stubEnv(k, env[k] ?? "");
+  }
+  const correr = (): void => control.config({}, { mode: "production", command: "build" });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("está entre los plugins del build", () => {
+    expect(control).toBeTruthy();
+    expect(control.name).toBe("tinkazo:modo-premios");
+  });
+
+  it("sin nada configurado, el build sale como hoy", () => {
+    entorno({});
+    expect(() => correr()).not.toThrow();
+  });
+
+  it("con la combinación completa, el build sale", () => {
+    entorno(completo);
+    expect(() => correr()).not.toThrow();
+  });
+
+  it("sin el voto por contenido, el build no sale y dice qué falta", () => {
+    entorno({ ...completo, VITE_VOTO_POR_CONTENIDO: "" });
+    expect(() => correr()).toThrow(/VITE_PAGAR_CON_GOOGLE=1 necesita VITE_VOTO_POR_CONTENIDO=1/);
+  });
+
+  it("sin el portero de la red principal, el build no sale", () => {
+    entorno({ ...completo, VITE_PATROCINIO_URL_MAINNET: "" });
+    expect(() => correr()).toThrow(/VITE_PAGAR_CON_GOOGLE=1 necesita VITE_PATROCINIO_URL_MAINNET/);
+  });
+
+  it("con otra dirección que la del portero oficial, el build no sale", () => {
+    entorno({ ...completo, VITE_PATROCINIO_URL_MAINNET: "https://p.tinkazo.app" });
+    expect(() => correr()).toThrow(/no es la del portero de la red principal/);
+  });
+
+  it("con un valor raro, el build no sale y no escribe el valor", () => {
+    entorno({ ...completo, VITE_PAGAR_CON_GOOGLE: "verdadero" });
+    expect(() => correr()).toThrow(/VITE_PAGAR_CON_GOOGLE solo acepta 1 o 0/);
+    try {
+      correr();
+    } catch (e) {
+      expect(String((e as Error).message)).not.toContain("verdadero");
+    }
+  });
+
+  it("con el pago con el saldo prendido, el build no sale, lo diga el control que lo diga", () => {
+    entorno({ ...completo, VITE_PAGO_CON_SALDO: "1" });
+    expect(() => correr()).toThrow(/VITE_PAGO_CON_SALDO=1/);
+  });
+
+  it("con el modo premios mal escrito, el build no sale", () => {
+    entorno({ ...completo, VITE_RAMPA: "recibir" });
+    expect(() => correr()).toThrow(/VITE_PAGAR_CON_GOOGLE=1 necesita VITE_RAMPA=premios/);
+  });
+
+  it("con la bandera apagada y todo lo demás sin poner, el build no la menciona", () => {
+    entorno({ VITE_RAMPA: "premios", VITE_VOTO_POR_CONTENIDO: "1", VITE_PAGOS: "1" });
+    expect(() => correr()).not.toThrow();
+  });
+});
+
+describe("vite.config.ts frena el build con pagar con Google", () => {
+  const config = readFileSync(new URL("../../vite.config.ts", import.meta.url), "utf8");
+  const control = config.slice(config.indexOf("function validarModoPremios"), config.indexOf("function validarPaginasConCobro"));
+
+  it("suma el control de pagar con Google al del modo premios y al del voto, con la misma lectura del entorno", () => {
+    expect(config).toMatch(/import \{[^}]*\bproblemasDePagarConGoogle\b[^}]*\} from "\.\/src\/stellar\/premios-build";/);
+    expect(control).toContain("problemasDePagarConGoogle(env)");
+    expect(control).toContain("problemasDePremios(env)");
+    expect(control).toContain("problemasDelVoto(env)");
+    expect(control.match(/loadEnv\(/g)).toHaveLength(1);
+    expect(control).toContain('apply: "build"');
+  });
+});
+
+describe("VITE_PAGAR_CON_GOOGLE en .env.example", () => {
+  const lineas = readFileSync(new URL("../../.env.example", import.meta.url), "utf8").split(/\r?\n/);
+
+  it("está vacía y con su comentario encima", () => {
+    const i = lineas.indexOf("VITE_PAGAR_CON_GOOGLE=");
+    expect(i).toBeGreaterThan(0);
+    expect(lineas[i - 1]).toMatch(/^#/);
+  });
+
+  it("el comentario dice con qué va y con qué no", () => {
+    const i = lineas.indexOf("VITE_PAGAR_CON_GOOGLE=");
+    const comentario = lineas.slice(Math.max(0, i - 5), i).join(" ");
+    for (const nombre of ["VITE_RAMPA=premios", "VITE_VOTO_POR_CONTENIDO=1", "VITE_PAGOS=1", "VITE_PATROCINIO_URL_MAINNET"]) {
+      expect(comentario, nombre).toContain(nombre);
+    }
+    expect(comentario).toContain("VITE_PAGO_CON_SALDO=1");
+    expect(comentario).toContain("VITE_COMPRA_QR=1");
   });
 });
