@@ -1,7 +1,8 @@
 import type { AuthOpenContext, CosignRequest, CosignVerification, PollarClient, ProviderRegistration, RegistryCheck, RequirementForm, RequirementFormAnswers, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import { compraQrActiva } from "./alta-config";
-import { modoDeRampa } from "./cuenta-config";
+import type { DepsDelDesenlace, Desenlace, EnvioDelKit, EstadoDelEnvio, IntencionDeFirma } from "./cofirma-regla";
+import { PUERTA_DEL_PREMIO_EN, modoDeRampa, votoPorContenido } from "./cuenta-config";
 import { errorKey, esDeRed } from "./errores";
 import type { LecturaDeCotizacion, LoQueFalta, PasoDeVerificacion, PrecioDeCarga, QueSeAprueba, RutaDeBolivia } from "./rampa-pollar";
 import { ingresoPlanB } from "./ingreso-bandera";
@@ -53,16 +54,20 @@ import { PremioGuardado, type PuertaDelPremio, mirarAntesDeActivar, mirarPuertaD
  * arma con `confirmation: "prompt"`: el SDK deja ganar a la política más estricta entre el código y el panel de
  * Pollar, así que fijarla en `"prompt"` hace que la lista blanca corra siempre, también con el panel en "Never ask".
  *
- * La puerta del premio (`#firmando`): con `VITE_RAMPA=premios`, en la red principal y con la cuenta de Google o de correo,
- * antes de cada firma del sello o del sorteo se mira en la red si la cuenta puede guardar dinero (`puertaDelPremio` en
- * `usdc-cuenta.ts`). Si puede, o si la red no deja saberlo, no se firma nada: sale `PremioGuardado`. El voto del kit firma
- * el hash de cualquier transacción de la cuenta, y eso solo se acepta mientras la cuenta no pueda guardar dinero
- * (docs/architecture.md). La puerta no tiene salida por parámetro, y `#pagar` se niega en este modo: el pago con el saldo
+ * La puerta del premio (`#firmando`): en los modos de `PUERTA_DEL_PREMIO_EN` (premios, recibir y apagada), en la red
+ * principal y con la cuenta de Google o de correo, antes de cada firma del sello o del sorteo se mira en la red si la
+ * cuenta puede guardar dinero (`puertaDelPremio` en `usdc-cuenta.ts`). Si puede, o si la red no deja saberlo, no se firma
+ * nada: sale `PremioGuardado`. El voto del kit firma el hash de cualquier transacción de la cuenta, y eso solo se acepta
+ * mientras la cuenta no pueda guardar dinero (docs/architecture.md). Con el voto por contenido (issue 180, la variable
+ * del build y el kit que de verdad vota a mano, `#aMano`) la puerta no corre: el navegador vota solo lo que armó la
+ * página (`#votarLoArmado`). La puerta no tiene salida por parámetro, y `#pagar` se niega en premios: el pago con el saldo
  * firma por la misma vía y no se prende junto con `premios` (el build no lo deja, `premios-build.ts`), así que la negativa
  * está también en la función y no solo en quien la llama. Ante una duda de la lectura (un corte, un 5xx, un 404) la puerta
  * vuelve a leer unas veces antes de cerrar: todavía no se firmó nada. Pedir la línea del dólar digital (`activarUsdc`) es
  * otro voto por hash y mira lo mismo antes: con la línea ya puesta no pide otra, y con otra línea con saldo sin la de
- * Circle, o sin saber, no pide nada. El XLM no cuenta en ninguna de las dos miradas: cualquiera puede mandarlo.
+ * Circle, o sin saber, no pide nada. El XLM no cuenta en ninguna de las dos miradas: cualquiera puede mandarlo. Con el
+ * voto a mano la línea se vota con su regla por forma (`#votarLaLinea`), y el pedido de la línea que abre solo el
+ * proveedor se vota igual, con esa regla y el toque de la persona, con el voto a mano o sin él (`#antesDeLaLinea`).
  *
  * Sin verificar de punta a punta: hace falta una sesión real de Google, y la
  * política de transacciones de la app en el panel de Pollar tiene que permitir
@@ -135,6 +140,8 @@ export interface SubmittingWallet extends WalletAdapter {
   signUnsponsored?(xdr: string): Promise<string>;
   /** Paga la orden de un paquete con el saldo de la cuenta (`pagarOrden` de `PollarWallet`). Nunca lanza. */
   pagarOrden?(p: Omit<PagoPedido, "cuenta">): Promise<ResultadoDelPagoConSaldo>;
+  /** Si el navegador vota a mano lo que armó la página (`votaPorContenido` de `PollarWallet`, issue 180). */
+  votaPorContenido?(): boolean;
 }
 
 export const pollarConfigured = (): boolean => pollarKeyFor(network.name) !== "";
@@ -248,7 +255,11 @@ export interface PedidoDeCofirma {
   subOrgId?: string | undefined;
   createdAt?: string | undefined;
   expiresAt?: string | undefined;
-  submit?: { status?: string | undefined; hash?: string | undefined } | undefined;
+  /** Lo que firmó la llave de la cuenta, cuando el pedido ya se aprobó: lo leen el testigo y el voto por contenido. */
+  signedXdr?: string | undefined;
+  /** Por qué se cerró sin aprobarse, cuando Pollar lo dice. */
+  failureReason?: string | undefined;
+  submit?: { status?: string | undefined; hash?: string | undefined; resultCode?: string | undefined; message?: string | undefined } | undefined;
 }
 
 /** Una operación de la transacción de un pedido, con lo que la regla compara. */
@@ -379,10 +390,17 @@ export const TOPE_DE_VOTOS_FALLADOS = 2;
 
 /**
  * Lo que la cuenta de la red principal deja en `sessionStorage`, sin datos de la cuenta: los votos fallados de esta
- * pestaña (un número), que este navegador se sumó a la cuenta en esta pestaña, y que se mandó un código. Se borran al
- * cerrar sesión.
+ * pestaña (un número), que este navegador se sumó a la cuenta en esta pestaña, que se mandó un código, y las negativas
+ * de esta pestaña de la regla del voto por contenido (un número, `distintas`) y de la regla de la línea del dólar digital
+ * (otro número, `distintasLinea`). Se borran al cerrar sesión.
  */
-export const MARCAS_DE_LA_CUENTA = { votos: "tinkazo.cl.votos", inscrito: "tinkazo.cl.inscrito", codigo: "tinkazo.cl.codigo" } as const;
+export const MARCAS_DE_LA_CUENTA = {
+  votos: "tinkazo.cl.votos",
+  inscrito: "tinkazo.cl.inscrito",
+  codigo: "tinkazo.cl.codigo",
+  distintas: "tinkazo.cl.distintas",
+  distintasLinea: "tinkazo.cl.distintas-linea",
+} as const;
 
 /** El canal con que una pestaña avisa a las otras que la cuenta cambió. El mensaje es `{ tipo: "cambio" }`, sin la dirección. */
 export const CANAL_DE_LA_CUENTA = "tinkazo-cuenta-oficial";
@@ -412,6 +430,28 @@ const votosFallados = (): number => {
   const n = Number(leerMarca(MARCAS_DE_LA_CUENTA.votos));
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 };
+/** Las negativas de una regla que guarda esta pestaña, bajo su marca. Lo que no se lee no cuenta. */
+const negativasGuardadas = (clave: string): number => {
+  const n = Number(leerMarca(clave));
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+};
+
+/** De qué regla es una negativa: la de lo que armó la página (el sello y el sorteo) o la de la línea del dólar digital. */
+type DeLaNegativa = "armada" | "linea";
+const MARCA_DE_LA_NEGATIVA: Record<DeLaNegativa, string> = { armada: MARCAS_DE_LA_CUENTA.distintas, linea: MARCAS_DE_LA_CUENTA.distintasLinea };
+
+/** Un pedido de la línea del dólar digital que todavía espera, tal como llega de la lista del kit. */
+const esLineaPendiente = (p: unknown): p is PedidoDeCofirma =>
+  esObjetoPlano(p) && typeof p.id === "string" && p.status === "PENDING" && p.operation === "change_trust";
+
+/**
+ * Lo que trae el servidor nunca se lee como la negativa de la regla, que le dice a la persona que no se hizo nada: esa
+ * sale solo de la regla, antes del voto. Un código del servidor con esas palabras queda como una falla del servicio.
+ */
+function sinLaNegativa<R extends { status?: unknown; code?: unknown }>(r: R): R {
+  const pareceLaNegativa = r.status === "error" && typeof r.code === "string" && r.code.includes("tinkazo-cofirma-distinta");
+  return pareceLaNegativa ? { ...r, code: "SDK_COSIGN_UPSTREAM_ERROR" } : r;
+}
 const sumarVotoFallado = (): void => ponerMarca(MARCAS_DE_LA_CUENTA.votos, String(votosFallados() + 1));
 
 /** Avisa a las otras pestañas (y a quien escuche en esta) que la cuenta cambió, para que vuelvan a leer. */
@@ -466,6 +506,43 @@ const codigoDelKit = (e: unknown): string | undefined => {
   const c = (e as { code?: unknown } | null)?.code;
   return typeof c === "string" ? c : undefined;
 };
+
+/** El detalle de un error del kit, si trae uno en texto: va junto al código, como lo devuelve el kit. */
+const detalleDelKit = (e: unknown): { details?: string } => {
+  const d = (e as { details?: unknown } | null)?.details;
+  return typeof d === "string" && d !== "" ? { details: d } : {};
+};
+
+/**
+ * Un pedido al servidor que se cortó, y no una respuesta suya: lo que el kit cuenta como reintentable
+ * (`isRetryableTransportError`: su error de red, un `AbortError` o un `TypeError`) o, si no es del kit, un error de red.
+ * Una respuesta del kit (`PollarApiError`) nunca es un corte, aunque su texto lo parezca.
+ */
+function esCorteDelVoto(e: unknown): boolean {
+  const nombre = (e as { name?: unknown } | null)?.name;
+  if (nombre === "PollarApiError") return false;
+  return nombre === "PollarNetworkError" || nombre === "AbortError" || e instanceof TypeError || esDeRed(e);
+}
+
+/**
+ * Lo que devuelve el voto por contenido, con la forma de lo que devuelve el kit: firmada (para el portero), mandada (con el
+ * hash de la armada), un error con sus códigos, o pendiente, que quiere decir que no se sabe cómo terminó.
+ */
+type SalidaDelVoto =
+  | { status: "signed"; signedXdr: string }
+  | { status: "success"; hash: string }
+  | { status: "error"; code?: string; details?: string; resultCode?: string; message?: string; hash?: string }
+  | { status: "cosign_pending"; request?: PedidoDeCofirma };
+
+/**
+ * Cómo quedó el voto de `#estampar`: votado (con el pedido como quedó), una negativa de antes del `relay` (con o sin
+ * rechazo del pedido), cerrado sin firmar nada (con el código del kit) o incierto.
+ */
+type Estampado =
+  | { que: "votado"; pedido: PedidoDeCofirma }
+  | { que: "negativa"; motivo: string; rechazar: boolean }
+  | { que: "no-salio"; code: string; details?: string }
+  | { que: "incierto"; motivo: string };
 
 /** El error del kit, convertido en uno nuestro que solo trae el código: de créditos, de red o la falla de siempre. */
 function errorDeActivar(e: unknown): Error {
@@ -602,63 +679,92 @@ export async function puedeUsarDesbloqueo(tope = 800): Promise<boolean> {
 /* ------------------------------------------------ el testigo del sello en la red principal */
 
 /**
- * Compara la transacción que se votó en la co-firma con la que armó Tinkazo: la cuenta de origen y las operaciones, en
- * XDR, una por una, y si la votada vino envuelta. Devuelve la línea para la consola, sin direcciones, o `null` si no se
- * pudo leer alguna de las dos.
+ * Mientras dura una firma, escucha si el kit quedó esperando una co-firma. Lo que devuelve se llama al terminar la firma:
+ * suelta la escucha y entrega el pedido ya resuelto, solo si es el que esta firma esperó (`null` si no hubo co-firma). Lo
+ * que el kit repite al suscribirse no cuenta: es de una firma anterior. Todo dentro de `try`: nunca lanza. La escucha
+ * también, porque el kit llama a quienes escuchan sin atajar lo que lanzan: un error ahí cortaría la firma misma.
  */
-export async function compararCofirma(armada: string, votada: string, passphrase: string): Promise<string | null> {
+function vigilarLaCofirma(client: PollarClient): (() => PedidoDeCofirma | null) | null {
   try {
-    const { FeeBumpTransaction, TransactionBuilder } = await import("@stellar/stellar-sdk");
-    const a0 = TransactionBuilder.fromXDR(armada, passphrase);
-    const v0 = TransactionBuilder.fromXDR(votada, passphrase);
-    const envuelta = v0 instanceof FeeBumpTransaction && !(a0 instanceof FeeBumpTransaction);
-    const a = a0 instanceof FeeBumpTransaction ? a0.innerTransaction : a0;
-    const v = v0 instanceof FeeBumpTransaction ? v0.innerTransaction : v0;
-    const opsA = a.tx.operations.map((o) => o.toXDR("base64"));
-    const opsV = v.tx.operations.map((o) => o.toXDR("base64"));
-    const misma = a.source === v.source && opsA.length === opsV.length && opsA.every((x, i) => x === opsV[i]);
-    const cola = envuelta ? ", envuelta" : "";
-    return misma ? `[tinkazo] co-firma del sello: misma operación${cola}` : `[tinkazo] co-firma del sello: distinta (${v.operations.map((o) => o.type).join(",")})${cola}`;
+    if (typeof client.onTransactionStateChange !== "function") return null;
+    let armado = false;
+    let pedido: string | null = null;
+    const soltar = client.onTransactionStateChange((s) => {
+      try {
+        if (armado && s.step === "awaiting_cosign") pedido = s.request.id;
+      } catch {
+        /* el testigo nunca frena nada */
+      }
+    });
+    armado = true;
+    return () => {
+      try {
+        soltar();
+        if (!pedido) return null;
+        const r = client.getCosignState().lastResolved;
+        return r && r.id === pedido ? (r as unknown as PedidoDeCofirma) : null;
+      } catch {
+        return null;
+      }
+    };
   } catch {
     return null;
   }
 }
 
 /**
- * Mientras dura una firma del sello o del sorteo, escucha si el kit quedó esperando una co-firma; al terminar, si el
- * pedido que se resolvió es ese, compara lo votado con lo que se mandó (`compararCofirma`) y lo anota. Lo que el kit
- * repite al suscribirse no cuenta: es de una firma anterior. Todo dentro de `try`: nunca lanza ni cambia el resultado.
+ * La línea del testigo a la consola, en una vía o en otra según lo que dijo: `info` si lo que Pollar pidió votar es la
+ * misma transacción que armó la página, `warn` si no. La línea nunca lleva direcciones ni hashes.
+ */
+const anotarElTestigo = (linea: string): void => {
+  if (linea.includes(": misma transacción")) console.info(linea);
+  else console.warn(linea);
+};
+
+/**
+ * El testigo de una firma del sello, del sorteo o de Mandar: mientras dura la firma escucha si el kit quedó esperando
+ * una co-firma y, al terminar, si el pedido que se resolvió es ese, lo compara con lo que armó la página y anota en la
+ * consola una sola línea (`describirPedido`: qué campos difieren, la intención, si se puede volver a pedir, cómo vino lo
+ * firmado y cómo se ata el hash del envío). Solo mira: nunca frena nada ni cambia lo que devuelve la firma, y todo va
+ * dentro de `try`.
  */
 function armarTestigo(client: PollarClient): ((xdr: string) => void) | null {
-  try {
-    if (typeof client.onTransactionStateChange !== "function") return null;
-    let armado = false;
-    let pedido: string | null = null;
-    const soltar = client.onTransactionStateChange((s) => {
-      if (armado && s.step === "awaiting_cosign") pedido = s.request.id;
-    });
-    armado = true;
-    return (xdr) => {
-      try {
-        soltar();
-        if (!pedido) return;
-        const r = client.getCosignState().lastResolved;
-        if (!r || r.id !== pedido || !r.unsignedPayload) return;
-        void compararCofirma(xdr, r.unsignedPayload, network.networkPassphrase).then(
-          (linea) => {
-            if (!linea) return;
-            if (linea.includes(": misma")) console.info(linea);
-            else console.warn(linea);
-          },
-          () => undefined,
-        );
-      } catch {
-        /* el testigo nunca frena nada */
-      }
-    };
-  } catch {
-    return null;
-  }
+  const vigia = vigilarLaCofirma(client);
+  if (!vigia) return null;
+  return (xdr) => {
+    try {
+      const r = vigia();
+      if (!r) return;
+      void import("./cofirma-regla")
+        .then(({ describirPedido }) => describirPedido(xdr, r, network.networkPassphrase))
+        .then(anotarElTestigo)
+        .catch(() => undefined);
+    } catch {
+      /* el testigo nunca frena nada */
+    }
+  };
+}
+
+/**
+ * El testigo del pedido de la línea del dólar digital, que arma Pollar y no una transacción de la página: al terminar el
+ * pedido cuenta cómo era lo que el kit votó (`describirLinea`). Es lo que dice la forma real de la línea antes de que
+ * ninguna regla la apruebe. Solo mira, y todo va dentro de `try`. Sin cuenta de la sesión no anota, pero suelta la escucha.
+ */
+function armarTestigoDeLaLinea(client: PollarClient, cuenta: string | null, usdc: { code: string; issuer: string }): (() => void) | null {
+  const vigia = vigilarLaCofirma(client);
+  if (!vigia) return null;
+  return () => {
+    try {
+      const r = vigia();
+      if (!r || !cuenta) return;
+      void import("./cofirma-regla")
+        .then(({ describirLinea }) => describirLinea(r, cuenta, network.networkPassphrase, usdc))
+        .then((linea) => console.info(linea))
+        .catch(() => undefined);
+    } catch {
+      /* el testigo nunca frena nada */
+    }
+  };
 }
 
 /** Cómo está la protección de la cuenta (la recuperación de Turnkey): lo que la pantalla necesita saber. */
@@ -734,7 +840,9 @@ export function estadoDeVerificacion(r: unknown): EstadoDeVerificacion {
 }
 
 const esObjetoPlano = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
-const soloTextos = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
+/** Lo leído es el pedido de co-firma con ese id: el estado de otro pedido no dice nada del votado (voto por contenido). */
+const esElPedido = (x: unknown, id: string): x is PedidoDeCofirma => esObjetoPlano(x) && x.id === id;
+const soloTextos =(x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string") : []);
 const cuerpoDelError = (e: unknown): Record<string, unknown> => {
   const b = (e as { body?: unknown } | null)?.body;
   return esObjetoPlano(b) ? b : {};
@@ -834,6 +942,22 @@ class PollarWallet implements SubmittingWallet {
   #preparando: Promise<ResultadoDePreparar> | null = null;
   /** El último cierre de sesión no pudo sacar este navegador de la cuenta: la página lo avisa. */
   ultimoCierreDejoNavegador = false;
+  /**
+   * El cliente armado vota a mano (issue 180): se pidió con la variable del build en la red principal y el kit lo tomó
+   * (`_cosignManual`). Todo lo que se levanta con el voto por contenido mira esto, nunca la variable sola.
+   */
+  #aMano = false;
+  /** Las negativas del voto por contenido de esta pestaña, también en memoria por si el almacenamiento falla. */
+  #distintasEnMemoria = 0;
+  /** Las negativas de la regla de la línea de esta pestaña, también en memoria. */
+  #distintasDeLaLineaEnMemoria = 0;
+  /** La cuenta de esas negativas, solo en memoria: otra cuenta empieza de cero. */
+  #cuentaDeLasDistintas: string | null = null;
+  /**
+   * Los pedidos de la línea que la regla no votó en esta pestaña, rechazados o no: no dejan la ventana en Se está activando
+   * y el toque siguiente no los vuelve a mirar.
+   */
+  readonly #rechazadosAqui = new Set<string>();
 
   /** Lo que muestra el panel de la cuenta: por dónde entró, no un nombre fijo. */
   get label(): string {
@@ -862,6 +986,9 @@ class PollarWallet implements SubmittingWallet {
     const apiKey = pollarKeyFor(network.name);
     if (!apiKey) throw new Error("pollar-not-configured");
     const { PollarClient: Ctor } = await import("@pollar/core");
+    // El voto por contenido (issue 180): solo en la red principal y con la variable del build. Sin ella, el cliente nace
+    // con la misma configuración de siempre, sin el campo.
+    const votoPedido = network.name === "mainnet" && votoPorContenido();
     const client = new Ctor({
       apiKey,
       // El SDK deja ganar a la política más estricta entre esta y la del panel: fijada en "prompt", la firma siempre
@@ -872,7 +999,14 @@ class PollarWallet implements SubmittingWallet {
       openAuthUrl: (ctx) => this.#abrirVentana(ctx),
       // Para la recuperación de la cuenta (`protegerConPasskey`): el navegador sabe hacerlo, `@pollar/core` solo lo pide.
       ...(hayPasskeys() ? { recoveryPasskey: ceremoniaDelNavegador } : {}),
+      // Con el voto a mano el kit devuelve el pedido de co-firma sin votarlo (`_settleCosign`): lo vota `#votarLoArmado`.
+      ...(votoPedido ? { cosignManual: true } : {}),
     });
+    // Lo que se levanta con el voto mira lo que el kit de verdad tomó, no la variable: un kit que ignore el campo deja
+    // todo como con la variable apagada (la puerta del premio arriba).
+    this.#aMano = votoPedido && (client as unknown as { _cosignManual?: unknown })._cosignManual === true;
+    if (this.#aMano) console.info("[tinkazo] voto por contenido: prendido");
+    else if (votoPedido) console.warn("[tinkazo] voto por contenido: el kit no lo tomó");
     // Pollar 0.12: sin esto cada firma falla con SDK_CONFIRMATION_UNAVAILABLE. Con `confirmation: "prompt"` toda firma
     // llega acá, sea cual sea el modo del panel de Pollar (`atenderFirmas`).
     if (typeof client.onConfirmationRequest === "function") {
@@ -893,29 +1027,309 @@ class PollarWallet implements SubmittingWallet {
   /**
    * Corre una firma que la persona acaba de pedir con su botón: mientras dura, esa transacción (y solo esa) se confirma
    * sola cuando el SDK lo pide. La persona ya dio su consentimiento al apretar "Sellar" o "Sortear".
+   *
+   * `intencion` dice qué se le pide al kit (`sign` o `sign_and_send`). Con el voto a mano (`#aMano`) es obligatoria: antes
+   * de pedir nada se mira lo permitido y el tope de la pestaña (`#antesDelVoto`), y lo que devuelve el kit pasa por la
+   * regla (`#conLaRegla`). Sin el voto a mano, todo es como siempre.
    */
-  async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>, o: { testigo?: boolean } = {}): Promise<T> {
+  async #firmando<T>(
+    xdr: string,
+    firmar: (client: PollarClient) => Promise<T>,
+    o: { testigo?: boolean; intencion?: IntencionDeFirma } = {},
+  ): Promise<T> {
     const client = await this.#ensureClient();
+    const aMano = this.#aMano;
     // La puerta del premio, pegada a la firma: lo último antes de anotar el XDR y de firmar. Sin caché: cada firma vuelve a
-    // mirar. Fuera de la red principal y del modo `premios` no hace nada ni lee nada.
-    if (network.name === "mainnet" && modoDeRampa() === "premios") {
+    // mirar. Fuera de la red principal, de los modos que cuida y con el voto a mano, no hace nada ni lee nada.
+    if (this.#puertaActiva()) {
       const puerta = await this.#puertaDelPremio(client);
       // Una cuenta que Horizon no conoce no firma: ahí se trata como una lectura que no se pudo hacer.
       if (puerta !== "libre") throw new PremioGuardado(puerta === "puede-guardar" ? "puede-guardar" : "no-se-sabe");
     }
-    // En la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado (riesgo aceptado,
-    // docs/architecture.md). Solo mira, después de firmar. El pago con el saldo no lo usa: lo firmado se revisa entero
-    // antes de mandarlo (`pagarOrden`).
-    const testigo = network.name === "mainnet" && o.testigo !== false ? armarTestigo(client) : null;
+    if (aMano) await this.#antesDelVoto(client, xdr, o.intencion);
+    // Sin el voto a mano, en la red principal el kit vota solo la co-firma: el testigo anota si lo votado fue lo armado
+    // (riesgo aceptado, docs/architecture.md). Solo mira, después de firmar. El pago con el saldo no lo usa: lo firmado se
+    // revisa entero antes de mandarlo (`pagarOrden`). Con el voto a mano no hace falta: la regla anota antes de votar.
+    const testigo = !aMano && network.name === "mainnet" && o.testigo !== false ? armarTestigo(client) : null;
     this.#esperadas.set(xdr, (this.#esperadas.get(xdr) ?? 0) + 1);
     try {
-      return await firmar(client);
+      const r = await firmar(client);
+      return aMano ? ((await this.#conLaRegla(client, xdr, r, o.intencion)) as T) : r;
     } finally {
       const quedan = (this.#esperadas.get(xdr) ?? 1) - 1;
       if (quedan > 0) this.#esperadas.set(xdr, quedan);
       else this.#esperadas.delete(xdr);
       testigo?.(xdr);
     }
+  }
+
+  /* ------------------------------------------------ el voto por contenido (issue 180) */
+
+  /** Si el navegador vota a mano lo que armó la página: hay cliente y el kit tomó el voto a mano. Sincrónico. */
+  votaPorContenido(): boolean {
+    return this.#client !== null && this.#aMano;
+  }
+
+  /** La puerta del premio corre: en la red principal, en un modo que cuida y sin el voto a mano. */
+  #puertaActiva(): boolean {
+    return network.name === "mainnet" && PUERTA_DEL_PREMIO_EN.includes(modoDeRampa()) && !this.#aMano;
+  }
+
+  /**
+   * Con el voto a mano, antes de pedirle nada al servidor: la cuenta de la sesión, el tope de negativas de la pestaña (con
+   * el tope no nace otro pedido), la intención (un error nuestro si falta) y la lista de lo permitido (solo el sello y
+   * el sorteo del contrato oficial, `motivoContraLoPermitido`). Lanza el error que corresponde. Lo que se corta acá no se
+   * pidió, así que no cuenta para el tope.
+   */
+  async #antesDelVoto(client: PollarClient, xdr: string, intencion: IntencionDeFirma | undefined): Promise<void> {
+    const regla = await import("./cofirma-regla");
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) throw new Error("account-wait-cancelled");
+    if (this.#distintasPara(cuenta) >= regla.TOPE_DE_DISTINTAS) throw new Error(regla.COFIRMA_TOPE);
+    if (!intencion) {
+      console.warn("[tinkazo] co-firma no votada: sin-intencion");
+      throw new Error(regla.COFIRMA_DISTINTA);
+    }
+    const motivo = await regla.motivoContraLoPermitido(xdr, cuenta, network.contractId, network.networkPassphrase);
+    if (motivo !== null) {
+      console.warn(`[tinkazo] co-firma no votada: fuera de lo permitido (${motivo})`);
+      throw new Error(regla.COFIRMA_DISTINTA);
+    }
+  }
+
+  /** Las negativas de esta pestaña para esa cuenta y esa regla: si la cuenta cambió, empiezan de cero. */
+  #distintasPara(cuenta: string, de: DeLaNegativa = "armada"): number {
+    if (this.#cuentaDeLasDistintas !== null && this.#cuentaDeLasDistintas !== cuenta) this.#olvidarDistintas();
+    this.#cuentaDeLasDistintas = cuenta;
+    const enMemoria = de === "linea" ? this.#distintasDeLaLineaEnMemoria : this.#distintasEnMemoria;
+    return Math.max(enMemoria, negativasGuardadas(MARCA_DE_LA_NEGATIVA[de]));
+  }
+
+  #olvidarDistintas(): void {
+    this.#distintasEnMemoria = 0;
+    this.#distintasDeLaLineaEnMemoria = 0;
+    this.#rechazadosAqui.clear();
+    borrarMarca(MARCAS_DE_LA_CUENTA.distintas);
+    borrarMarca(MARCAS_DE_LA_CUENTA.distintasLinea);
+  }
+
+  /**
+   * Lo que devolvió el kit con el voto a mano. Un pedido de co-firma de esta llamada se vota con la regla
+   * (`#votarLoArmado`). Un error es de antes de cualquier co-firma y sale tal cual. Algo firmado sin pedido al pedir solo la
+   * firma no pasó por la regla y no se usa (negativa): nadie lo manda. Algo firmado o mandado sin pedido al pedir firmar y
+   * mandar, o lo que no se entiende, es incierto: pudo haber salido, así que no se dice que no pasó nada.
+   */
+  async #conLaRegla(client: PollarClient, armadaXdr: string, r: unknown, intencion: IntencionDeFirma | undefined): Promise<unknown> {
+    const x = (r ?? {}) as { status?: unknown; request?: unknown };
+    if (x.status === "error") return r;
+    if (!intencion) return this.#noVotada(client, "sin-intencion", null);
+    const conId = esObjetoPlano(x.request) && typeof x.request.id === "string" && x.request.id !== "";
+    const pedido = conId ? (x.request as unknown as PedidoDeCofirma) : null;
+    if (x.status === "cosign_pending" && pedido) return this.#votarLoArmado(client, armadaXdr, pedido, intencion);
+    if (x.status === "signed" && intencion === "sign") return this.#noVotada(client, "sin-pedido", null);
+    return this.#incierto(pedido, "sin pedido");
+  }
+
+  /**
+   * Vota el pedido que devolvió esta llamada si y solo si su transacción es la armada, byte a byte. En orden: la cuenta
+   * de la sesión, la organización y, si se puede, la versión releída (que es la que se vota), lo que ya no espera nuestro
+   * voto, la armada de esta cuenta, la forma del pedido y la comparación, el voto (`#estampar`) y cómo terminó
+   * (`desenlaceDelVoto`). Antes del voto una negativa es verdad (no se hizo nada) y sale
+   * `COFIRMA_DISTINTA` o el tope. Desde el voto, lo que no se sabe es incierto. Nunca vota un pedido de la lista de
+   * pendientes: solo el id que devolvió la llamada.
+   */
+  async #votarLoArmado(client: PollarClient, armadaXdr: string, pedido: PedidoDeCofirma, intencion: IntencionDeFirma): Promise<SalidaDelVoto> {
+    const regla = await import("./cofirma-regla");
+    // 1. La cuenta de la sesión. Sin ella no se vota ni se rechaza nada.
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return { status: "error", code: "account-wait-cancelled" };
+    const deLaLlamada = { id: pedido.id, intencion, linea: false };
+    // 2. La organización y la versión releída. Un corte es de red, como siempre: no se estampó nada.
+    let subOrg: string | null;
+    let leido: PedidoDeCofirma | null;
+    try {
+      const [recuperacion, releido] = await Promise.all([
+        client.cosign.recovery.status(),
+        pedido.refreshable ? client.cosign.refresh(pedido.id) : Promise.resolve(pedido as unknown as CosignRequest),
+      ]);
+      subOrg = recuperacion.subOrgId ?? null;
+      leido = esObjetoPlano(releido) ? (releido as unknown as PedidoDeCofirma) : null;
+    } catch (e) {
+      if (esCorteDelVoto(e)) return { status: "error", code: "SDK_NETWORK_TIMEOUT" };
+      if (regla.esDeEstaLlamada(pedido, deLaLlamada)) await this.#rechazarElNuestro(client, pedido.id);
+      return { status: "error", code: codigoDelKit(e) ?? "SDK_COSIGN_UPSTREAM_ERROR", ...detalleDelKit(e) };
+    }
+    // 3. Lo que ya no espera nuestro voto. Otro id después de releer, o algo que no se lee, no se vota ni se rechaza.
+    if (leido === null || leido.id !== pedido.id) return this.#noVotada(client, "otro pedido", null);
+    if (typeof leido.status !== "string" || leido.status === "") return this.#noVotada(client, "estado", null);
+    if (leido.status === "APPROVED") return this.#incierto(leido, "ya aprobado");
+    const porQue = leido.failureReason ? { details: leido.failureReason } : {};
+    if (leido.status !== "PENDING") return { status: "error", code: `SDK_COSIGN_${leido.status}`, ...porQue };
+    const deEsta = regla.esDeEstaLlamada(leido, deLaLlamada) ? leido.id : null;
+    if (leido.activityId) {
+      if (deEsta !== null) await this.#rechazarElNuestro(client, deEsta);
+      return this.#incierto(leido, "ya votado");
+    }
+    // 4. La regla: la armada es de esta cuenta, el pedido tiene la forma de la llamada y su transacción es la armada.
+    const armada = await regla.leerLaArmada(armadaXdr, network.networkPassphrase);
+    if (!armada || armada.cuenta !== cuenta) return this.#noVotada(client, "la armada", deEsta);
+    const motivo = regla.motivoContraElPedido(leido, { id: pedido.id, cuenta, intencion, subOrg, hashDeLaArmada: armada.hash });
+    // El cuerpo se compara solo: el hash que dice el pedido ya lo mira `motivoContraElPedido`, y `verify` lo vuelve a mirar.
+    const comparacion = await regla.compararConLaArmada(armadaXdr, leido.unsignedPayload, network.networkPassphrase);
+    if (motivo !== null || !comparacion.igual) return this.#noVotada(client, regla.describirLaNegativa(motivo, comparacion), deEsta);
+    // 5. El voto: lo que se estampa es el hash de la armada.
+    const estampado = await this.#estampar(client, leido, cuenta, subOrg ?? "", armada.hash);
+    if (estampado.que === "negativa") {
+      return estampado.rechazar ? this.#noVotada(client, estampado.motivo, deEsta) : { status: "error", code: "account-wait-cancelled" };
+    }
+    if (estampado.que === "no-salio") return { status: "error", code: estampado.code, ...(estampado.details ? { details: estampado.details } : {}) };
+    if (estampado.que === "incierto") return this.#incierto(leido, estampado.motivo);
+    console.info(`[tinkazo] co-firma votada: la misma transacción (intención ${intencion}, firmas en el sobre: ${comparacion.firmasEnElSobre})`);
+    // 6. Cómo terminó.
+    const desenlace = await regla.desenlaceDelVoto(estampado.pedido, this.#depsDelDesenlace(client, cuenta, intencion, armada.hash));
+    return this.#salidaDe(desenlace, estampado.pedido);
+  }
+
+  /**
+   * Estampa con la llave de este navegador el hash de la armada, y nada más. Antes del voto: `verify` tiene que dar ese
+   * hash y la propuesta tiene que ser la nuestra (`propuestaEsLaNuestra`), y la sesión tiene que seguir siendo la misma.
+   * Si no, negativa (con rechazo, salvo si cambió la sesión). Desde que se llamó a `relay`, una negativa no es verdad
+   * nunca: lo que vuelve se lee (`#trasElRelay` si falló) y lo que no se sabe es incierto. No reusa `#votar` de la
+   * carga, que propaga un corte como error de red: el sello lo reintentaría con otro voto cuando el primero pudo salir.
+   */
+  async #estampar(client: PollarClient, pedido: PedidoDeCofirma, cuenta: string, subOrg: string, hash: string): Promise<Estampado> {
+    // 1. Lo que se va a estampar. Lo que falle acá, también una propuesta que no se lee, es de antes del voto.
+    let propuesta: Extract<CosignVerification, { ok: true }>["proposal"];
+    try {
+      const verificacion = await client.cosign.verify(pedido as unknown as CosignRequest);
+      if (!verificacion.ok || verificacion.localHash !== hash) return { que: "negativa", motivo: "la verificación del kit", rechazar: true };
+      if (!propuestaEsLaNuestra(verificacion.proposal, cuenta, hash, subOrg)) return { que: "negativa", motivo: "la propuesta", rechazar: true };
+      propuesta = verificacion.proposal;
+    } catch {
+      return { que: "negativa", motivo: "la verificación del kit", rechazar: true };
+    }
+    // 2. La sesión otra vez.
+    const sigue = this.#client === client && this.#cuentaParaActivar(client) === cuenta;
+    if (!sigue) return { que: "negativa", motivo: "sesión cambiada", rechazar: false };
+    // 3. El voto. Desde acá, lo que no se entiende es incierto.
+    let res: unknown;
+    try {
+      res = await client.cosign.relay(propuesta.path, propuesta.body, { requestId: pedido.id });
+    } catch (e) {
+      return this.#trasElRelay(client, pedido.id, e);
+    }
+    let votado: unknown;
+    try {
+      votado = (esObjetoPlano(res) ? res.request : undefined) ?? (await client.cosign.get(pedido.id, { sync: true }));
+    } catch {
+      return { que: "incierto", motivo: "sin confirmar" };
+    }
+    return this.#asentar(client, pedido.id, votado);
+  }
+
+  /**
+   * El `relay` falló: se lee el pedido una vez. Ya no pendiente, un corte o algo que no es una respuesta del kit: el voto
+   * pudo salir, así que no se rechaza y se toma lo leído. Otra respuesta del kit (un 502, un aparato que la cuenta no
+   * conoce, sin créditos): aprobado o cerrado se toma lo leído; pendiente se rechaza, y solo sin actividad y con el
+   * rechazo hecho quiere decir que nada se llegó a firmar y sale con el código del kit. Lo demás es incierto: un rechazo
+   * que no salió (el pedido pudo aprobarse entre la lectura y el rechazo), una actividad, o una lectura que no es la
+   * del pedido votado.
+   */
+  async #trasElRelay(client: PollarClient, id: string, e: unknown): Promise<Estampado> {
+    const codigo = codigoDelKit(e);
+    const respuestaDelKit = (e as { name?: unknown } | null)?.name === "PollarApiError";
+    let leido: unknown;
+    try {
+      leido = await client.cosign.get(id, { sync: true });
+    } catch {
+      return { que: "incierto", motivo: respuestaDelKit ? "relay con error" : "relay cortado" };
+    }
+    if (!respuestaDelKit || codigo === "SDK_COSIGN_REQUEST_NOT_PENDING") return this.#asentar(client, id, leido);
+    if (!esElPedido(leido, id)) return { que: "incierto", motivo: "sin confirmar" };
+    if (leido.status !== "PENDING") return { que: "votado", pedido: leido };
+    const rechazado = await this.#rechazarElNuestro(client, id);
+    if (leido.activityId) return { que: "incierto", motivo: "relay con error y actividad" };
+    if (!rechazado) return { que: "incierto", motivo: "relay con error y sin rechazo" };
+    return { que: "no-salio", code: codigo ?? "SDK_COSIGN_UPSTREAM_ERROR", ...detalleDelKit(e) };
+  }
+
+  /**
+   * Lo que se leyó después del voto. Si no es el pedido votado (otro id, o algo que no se lee), incierto: su estado no
+   * dice nada del nuestro. Si sigue pendiente, espera a que se cierre como el kit (`settle`), y si eso falla, incierto.
+   */
+  async #asentar(client: PollarClient, id: string, leido: unknown): Promise<Estampado> {
+    if (!esElPedido(leido, id)) return { que: "incierto", motivo: "sin confirmar" };
+    if (leido.status !== "PENDING") return { que: "votado", pedido: leido };
+    let asentado: unknown;
+    try {
+      asentado = await client.cosign.settle(leido as unknown as CosignRequest);
+    } catch {
+      return { que: "incierto", motivo: "sin confirmar" };
+    }
+    return esElPedido(asentado, id) ? { que: "votado", pedido: asentado } : { que: "incierto", motivo: "sin confirmar" };
+  }
+
+  /**
+   * Rechaza el pedido de esta llamada (el kit lo lee antes y cancela solo si sigue pendiente). Devuelve si quedó rechazado
+   * de verdad: el kit contestó con el pedido cerrado, ni pendiente ni aprobado. Si no, se anota y da falso.
+   */
+  async #rechazarElNuestro(client: PollarClient, id: string): Promise<boolean> {
+    let r: unknown = null;
+    try {
+      r = await client.cosign.reject(id);
+    } catch {
+      r = null;
+    }
+    const rechazado = esObjetoPlano(r) && typeof r.status === "string" && r.status !== "PENDING" && r.status !== "APPROVED";
+    if (!rechazado) console.warn("[tinkazo] co-firma no rechazada");
+    return rechazado;
+  }
+
+  /**
+   * Una negativa de la regla, antes de estampar: se anota con palabras fijas, suma una a la pestaña en la cuenta de su
+   * regla (`de`), rechaza el pedido si es claramente el de esta llamada (`rechazar`, su id) y sale `COFIRMA_DISTINTA`, o
+   * `COFIRMA_TOPE` si llegó al tope.
+   */
+  async #noVotada(client: PollarClient, motivo: string, rechazar: string | null, de: DeLaNegativa = "armada"): Promise<SalidaDelVoto> {
+    const { COFIRMA_DISTINTA, COFIRMA_TOPE, TOPE_DE_DISTINTAS } = await import("./cofirma-regla");
+    const linea = de === "linea";
+    console.warn(linea ? `[tinkazo] línea no votada: ${motivo}` : `[tinkazo] co-firma no votada: ${motivo}`);
+    const enMemoria = linea ? this.#distintasDeLaLineaEnMemoria : this.#distintasEnMemoria;
+    const n = Math.max(enMemoria, negativasGuardadas(MARCA_DE_LA_NEGATIVA[de])) + 1;
+    if (linea) this.#distintasDeLaLineaEnMemoria = n;
+    else this.#distintasEnMemoria = n;
+    ponerMarca(MARCA_DE_LA_NEGATIVA[de], String(n));
+    if (rechazar !== null) await this.#rechazarElNuestro(client, rechazar);
+    return { status: "error", code: n >= TOPE_DE_DISTINTAS ? COFIRMA_TOPE : COFIRMA_DISTINTA };
+  }
+
+  /** Ya se votó, o pudo votarse, y no se sabe cómo terminó: la firma lo dice como pendiente (`pollar-pending`). */
+  #incierto(pedido: PedidoDeCofirma | null, motivo: string): SalidaDelVoto {
+    console.warn(`[tinkazo] co-firma incierta: ${motivo}`);
+    return { status: "cosign_pending", ...(pedido ? { request: pedido } : {}) };
+  }
+
+  /** Lo que el desenlace necesita del cliente: preguntar por un hash, mandar una firmada, esperar y si la sesión sigue. */
+  #depsDelDesenlace(client: PollarClient, cuenta: string, intencion: IntencionDeFirma, hash: string): DepsDelDesenlace {
+    return {
+      intencion,
+      hashDeLaArmada: hash,
+      passphrase: network.networkPassphrase,
+      estado: async (h) => (await client.getTxStatus(h)) as EstadoDelEnvio,
+      mandar: async (x) => (await client.submitTx(x)) as unknown as EnvioDelKit,
+      dormir: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+      sigue: () => this.#client === client && this.#cuentaParaActivar(client) === cuenta,
+    };
+  }
+
+  /** El desenlace, con la forma de lo que devuelve el kit, que es lo que leen `signAndSubmit` y `signUnsponsored`. */
+  #salidaDe(d: Desenlace, pedido: PedidoDeCofirma): SalidaDelVoto {
+    if (d.que === "firmada") return { status: "signed", signedXdr: d.signedXdr };
+    if (d.que === "entro") return { status: "success", hash: d.hash };
+    if (d.que === "no-salio") return { status: "error", code: d.code, ...(d.details ? { details: d.details } : {}) };
+    if (d.que === "incierto") return this.#incierto(pedido, d.motivo);
+    const codigos = { ...(d.resultCode ? { resultCode: d.resultCode, details: d.resultCode } : {}), ...(d.code ? { code: d.code } : {}) };
+    return { status: "error", hash: d.hash, ...codigos, ...(d.message ? { message: d.message } : {}) };
   }
 
   /**
@@ -1129,12 +1543,17 @@ class PollarWallet implements SubmittingWallet {
     this.#dejarDeAtender?.();
     this.#dejarDeAtender = null;
     this.#esperadas.clear();
+    this.#distintasEnMemoria = 0;
+    this.#distintasDeLaLineaEnMemoria = 0;
+    this.#rechazadosAqui.clear();
+    this.#cuentaDeLasDistintas = null;
     try {
       await this.#client?.logout();
     } catch {
       /* la sesión ya podía estar cerrada */
     }
     this.#client = null;
+    this.#aMano = false;
     this.#listo = null;
   }
 
@@ -1150,7 +1569,7 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async signAndSubmit(xdr: string): Promise<string> {
-    const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr))) as ResultadoDeEnvio;
+    const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr), { intencion: "sign_and_send" })) as ResultadoDeEnvio;
     // Una co-firma pendiente sigue viva en el SDK: la transacción puede entrar después. No es un fallo ni se reintenta a ciegas.
     if (outcome.status === "cosign_pending") {
       throw new Error("pollar-pending");
@@ -1162,7 +1581,8 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async signUnsponsored(xdr: string): Promise<string> {
-    const outcome = (await this.#firmando(xdr, (client) => client.signTx(xdr, { skipSponsorship: true }))) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
+    const firmar = (client: PollarClient): Promise<unknown> => client.signTx(xdr, { skipSponsorship: true });
+    const outcome = (await this.#firmando(xdr, firmar, { intencion: "sign" })) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
     // Con la cuenta de Turnkey en mainnet, firmar sin enviar también puede quedar en co-firma pendiente. Es lo mismo que
     // en `signAndSubmit`: sigue viva en el SDK, no es un fallo cualquiera ni se reintenta a ciegas (cada reintento apilaría
     // otra solicitud sin atender).
@@ -1255,7 +1675,7 @@ class PollarWallet implements SubmittingWallet {
     ponerMarcaDelPago(p.nota, ahora() + VIDA_MAXIMA_S + MARGEN_DEL_PAGO_S);
     let firma: { status?: string; signedXdr?: string; submissionToken?: string; code?: string; details?: string; message?: string };
     try {
-      firma = (await this.#firmando(xdr, (c) => c.signTx(xdr), { testigo: false })) as typeof firma;
+      firma = (await this.#firmando(xdr, (c) => c.signTx(xdr), { testigo: false, intencion: "sign" })) as typeof firma;
     } catch {
       borrarMarcaDelPago(p.nota);
       return red();
@@ -1304,7 +1724,9 @@ class PollarWallet implements SubmittingWallet {
   /**
    * Activa los dólares digitales de la cuenta de Google o de correo: le pide a Pollar la línea del USDC de Circle de la
    * red, sin límite y sin saltear el patrocinio. Sale solo del toque de la persona en Activar dólares digitales: mientras
-   * dura, la puerta confirma esa línea y nada más. Con la bandera apagada no arma el cliente ni llama a nada. Dos toques
+   * dura, la puerta confirma esa línea y nada más. En la red principal, si ya espera el pedido de la línea que abre solo el
+   * proveedor, vota ese con la regla de la línea en lugar de pedir otro (`#antesDeLaLinea`). Con el voto a mano, el pedido
+   * que devuelve el kit también pasa por esa regla. Con la bandera apagada no arma el cliente ni llama a nada. Dos toques
    * seguidos piden una sola.
    */
   activarUsdc(): Promise<ResultadoDeActivarUsdc> {
@@ -1341,16 +1763,156 @@ class PollarWallet implements SubmittingWallet {
       if (antes === "no-se-sabe") return "no-salio";
     }
     const usdc = usdcDeLaRed(network.name);
+    const aMano = this.#aMano;
+    // En la red principal, antes de pedir otra: un pedido de la línea que ya espera (el que abre solo el proveedor) se vota
+    // con la regla y el toque de la persona, o se espera si ya tiene un voto (`#antesDeLaLinea`).
+    if (network.name === "mainnet") {
+      const antes = await this.#antesDeLaLinea(client, aMano);
+      if (antes !== null) return antes;
+    }
     let quedan = 1;
     this.#lineaPedida = { code: usdc.code, issuer: usdc.issuer, tomar: () => quedan-- > 0 };
+    // Sin el voto a mano, en la red principal el kit vota solo el pedido de la línea: el testigo cuenta cómo era lo que
+    // votó. Solo mira. Con el voto a mano no hace falta: la regla anota antes de votar.
+    const testigo = !aMano && network.name === "mainnet" ? armarTestigoDeLaLinea(client, this.address, usdc) : null;
     try {
       const r = (await client.setTrustline({ code: usdc.code, issuer: usdc.issuer })) as { status?: string; code?: string; details?: string };
-      return resultadoDeLaLinea(r);
+      return resultadoDeLaLinea(aMano ? await this.#laLineaConLaRegla(client, r) : sinLaNegativa(r));
     } catch {
       return "no-salio";
     } finally {
       this.#lineaPedida = null;
+      testigo?.();
     }
+  }
+
+  /**
+   * Lo que se mira antes de pedirle la línea al kit, en la red principal. `null` quiere decir que se pide, como siempre.
+   *
+   * El proveedor abre solo un pedido de la línea para cada cuenta, sin que nadie toque Recibir un premio. Si hay uno que
+   * espera sin voto, el toque de la persona vota ESE pedido con la regla de la línea (`#votarLaLinea`), y no se pide otro.
+   * Es la excepción angosta a no votar pedidos de la lista: solo la línea, con su forma exacta y con el toque. Vale con el
+   * voto a mano y sin él: sin él, pedir otra línea con uno esperando podría hacer que el servidor devuelva ese mismo y el
+   * kit lo vote solo por hash, así que mientras quede un pedido de la línea esperando nunca se llama a `setTrustline`.
+   *
+   * Uno con un voto en curso se espera (`en-curso`). Los que la regla ya no votó en esta pestaña no se vuelven a mirar, y
+   * mientras sigan esperando el toque dice que no se pudo comprobar, sin invitar a probar otra vez. Con el voto a mano, o
+   * con un pedido para votar, el tope de negativas de la línea corta antes de leer o votar nada. Sin la cuenta de la
+   * sesión, o sin poder leer la lista, no se pide nada.
+   */
+  async #antesDeLaLinea(client: PollarClient, aMano: boolean): Promise<ResultadoDeActivarUsdc | null> {
+    const { TOPE_DE_DISTINTAS } = await import("./cofirma-regla");
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return "no-salio";
+    const enElTope = (): boolean => this.#distintasPara(cuenta, "linea") >= TOPE_DE_DISTINTAS;
+    if (aMano && enElTope()) return "no-coincide-tope";
+    let lista: unknown;
+    try {
+      lista = await client.cosign.pending();
+    } catch {
+      return "no-salio";
+    }
+    // Una lista que no se lee no dice que no haya ninguno esperando: no se pide otro.
+    if (!Array.isArray(lista)) return "no-salio";
+    const lineas = lista.filter(esLineaPendiente);
+    const nuevas = lineas.filter((p) => !this.#rechazadosAqui.has(p.id));
+    if (nuevas.some((p) => !!p.activityId)) return "en-curso";
+    const votable = elMasNuevo(nuevas);
+    if (votable) return enElTope() ? "no-coincide-tope" : resultadoDeLaLinea(await this.#votarLaLinea(client, votable, false));
+    if (lineas.length === 0) return null;
+    console.warn("[tinkazo] línea no votada: ya revisada en esta pestaña");
+    return "no-coincide-tope";
+  }
+
+  /**
+   * Lo que devolvió `setTrustline` con el voto a mano. El pedido de esta llamada se vota con la regla de la línea. Un error
+   * es de antes de cualquier co-firma y sale tal cual. Cualquier otra cosa no pasó por la regla y pudo haber salido: es
+   * incierto, que para la ventana es en curso.
+   */
+  async #laLineaConLaRegla(client: PollarClient, r: unknown): Promise<SalidaDelVoto> {
+    const x = (r ?? {}) as { status?: unknown; code?: unknown; details?: unknown; request?: unknown };
+    if (x.status === "error") {
+      const codigo = typeof x.code === "string" ? { code: x.code } : {};
+      return sinLaNegativa<SalidaDelVoto>({ status: "error", ...codigo, ...(typeof x.details === "string" ? { details: x.details } : {}) });
+    }
+    const conId = esObjetoPlano(x.request) && typeof x.request.id === "string" && x.request.id !== "";
+    const pedido = conId ? (x.request as unknown as PedidoDeCofirma) : null;
+    if (x.status === "cosign_pending" && pedido) return this.#votarLaLinea(client, pedido, true);
+    return this.#incierto(pedido, "sin pedido");
+  }
+
+  /**
+   * Vota un pedido de la línea del dólar digital si y solo si tiene la forma exacta de la línea de esta cuenta
+   * (`motivoContraLaLinea`, con el lector del kit como segunda llave). `deLaLlamada`: el pedido lo devolvió nuestro
+   * `setTrustline` (solo ese se rechaza cuando la regla no lo vota, y solo si es claramente una línea de esta llamada). Si
+   * no, es el que abrió el proveedor y esperaba en la lista: la regla nunca lo rechaza. Si el voto ya salió y el servidor
+   * contesta con un error, se rechaza como lo haría el kit (`#trasElRelay`). En orden, como `#votarLoArmado`: la cuenta,
+   * la organización y la versión releída (que es la que se vota), lo que ya no espera nuestro voto, la regla, el voto
+   * (`#estampar` con el hash de la transacción del pedido) y cómo terminó (`desenlaceDelVoto`, firmar y mandar). Lo que
+   * contesta el servidor pasa por `sinLaNegativa`: después del voto nunca puede decir que no se hizo nada.
+   */
+  async #votarLaLinea(client: PollarClient, pedido: PedidoDeCofirma, deLaLlamada: boolean): Promise<SalidaDelVoto> {
+    const regla = await import("./cofirma-regla");
+    const cuenta = this.#cuentaParaActivar(client);
+    if (!cuenta) return { status: "error", code: "account-wait-cancelled" };
+    const laLlamada = { id: pedido.id, intencion: "sign_and_send" as const, linea: true };
+    const paraRechazar = (p: PedidoDeCofirma): string | null => (deLaLlamada && regla.esDeEstaLlamada(p, laLlamada) ? p.id : null);
+    // 1. La organización y la versión releída. Un corte es de red: no se estampó nada.
+    let subOrg: string | null;
+    let leido: PedidoDeCofirma | null;
+    try {
+      const [recuperacion, releido] = await Promise.all([
+        client.cosign.recovery.status(),
+        pedido.refreshable ? client.cosign.refresh(pedido.id) : Promise.resolve(pedido as unknown as CosignRequest),
+      ]);
+      subOrg = recuperacion.subOrgId ?? null;
+      leido = esObjetoPlano(releido) ? (releido as unknown as PedidoDeCofirma) : null;
+    } catch (e) {
+      if (esCorteDelVoto(e)) return { status: "error", code: "SDK_NETWORK_TIMEOUT" };
+      const id = paraRechazar(pedido);
+      if (id !== null) await this.#rechazarElNuestro(client, id);
+      return sinLaNegativa<SalidaDelVoto>({ status: "error", code: codigoDelKit(e) ?? "SDK_COSIGN_UPSTREAM_ERROR", ...detalleDelKit(e) });
+    }
+    // 2. Lo que ya no espera nuestro voto.
+    if (leido === null || leido.id !== pedido.id) return this.#lineaNoVotada(client, pedido.id, "otro pedido", null);
+    if (typeof leido.status !== "string" || leido.status === "") return this.#lineaNoVotada(client, pedido.id, "estado", null);
+    if (leido.status === "APPROVED") return this.#incierto(leido, "ya aprobado");
+    const porQue = leido.failureReason ? { details: leido.failureReason } : {};
+    if (leido.status !== "PENDING") return { status: "error", code: `SDK_COSIGN_${leido.status}`, ...porQue };
+    const rechazar = paraRechazar(leido);
+    if (leido.activityId) {
+      if (rechazar !== null) await this.#rechazarElNuestro(client, rechazar);
+      return this.#incierto(leido, "ya votado");
+    }
+    // 3. La regla de la línea, con nuestra lectura, y el lector del kit como segunda llave.
+    const tx = await regla.leerLaLinea(leido.unsignedPayload, network.networkPassphrase);
+    const motivo = regla.motivoContraLaLinea(leido, cuenta, tx, subOrg, usdcDeLaRed(network.name));
+    if (motivo !== null || !tx) return this.#lineaNoVotada(client, leido.id, motivo ?? "no se lee", rechazar);
+    const { recognizedSetupRequest } = await import("@pollar/core");
+    const reconocido = recognizedSetupRequest(leido as unknown as CosignRequest);
+    if (!reconocido.ok || reconocido.kind !== "change_trust") {
+      return this.#lineaNoVotada(client, leido.id, "el lector del kit no la reconoce", rechazar);
+    }
+    // 4. El voto: lo que se estampa es el hash de la transacción que se revisó.
+    const estampado = await this.#estampar(client, leido, cuenta, subOrg ?? "", tx.hash);
+    if (estampado.que === "negativa") {
+      if (!estampado.rechazar) return { status: "error", code: "account-wait-cancelled" };
+      return this.#lineaNoVotada(client, leido.id, estampado.motivo, rechazar);
+    }
+    if (estampado.que === "no-salio") {
+      return sinLaNegativa<SalidaDelVoto>({ status: "error", code: estampado.code, ...(estampado.details ? { details: estampado.details } : {}) });
+    }
+    if (estampado.que === "incierto") return this.#incierto(leido, estampado.motivo);
+    console.info("[tinkazo] línea votada");
+    // 5. Cómo terminó.
+    const desenlace = await regla.desenlaceDelVoto(estampado.pedido, this.#depsDelDesenlace(client, cuenta, "sign_and_send", tx.hash));
+    return sinLaNegativa(this.#salidaDe(desenlace, estampado.pedido));
+  }
+
+  /** La regla no votó un pedido de la línea: queda anotado en la pestaña y es una negativa de la línea. */
+  #lineaNoVotada(client: PollarClient, id: string, motivo: string, rechazar: string | null): Promise<SalidaDelVoto> {
+    this.#rechazadosAqui.add(id);
+    return this.#noVotada(client, motivo, rechazar, "linea");
   }
 
   /**
@@ -1373,9 +1935,12 @@ class PollarWallet implements SubmittingWallet {
   }
 
   /**
-   * Si ya espera un pedido de activar la línea (una co-firma `change_trust` pendiente): así Se está activando se ve en
-   * cualquier pestaña y después de recargar, y el botón no vuelve mientras el pedido siga vivo. Leer no aprueba nada.
-   * `null` si no se pudo leer, o con la bandera apagada.
+   * Si ya espera un pedido de activar la línea con un voto en curso (una co-firma `change_trust` pendiente que ya tiene su
+   * actividad): así Se está activando se ve en cualquier pestaña y después de recargar, y el botón no vuelve mientras ese
+   * voto siga vivo. Un pedido que espera sin voto (el que abre solo el proveedor) no cuenta: la ventana ofrece Recibir un
+   * premio y el toque lo vota con la regla (`#antesDeLaLinea`). Tampoco cuentan los que la regla no votó en esta pestaña.
+   * Eso es solo en la red principal, donde corre `#antesDeLaLinea`: en la de prueba cuenta cualquier pedido de la línea
+   * que espera, como siempre. Leer no aprueba nada. `null` si no se pudo leer, o con la bandera apagada.
    */
   async pendienteDeActivacion(): Promise<boolean | null> {
     if (modoDeRampa() === "apagada") return null;
@@ -1386,9 +1951,11 @@ class PollarWallet implements SubmittingWallet {
   async #pendienteDeLinea(): Promise<boolean | null> {
     try {
       const client = await this.#ensureClient();
-      let lista = (client.getCosignState().pending ?? []) as PedidoDeCofirma[];
-      if (lista.length === 0) lista = (await client.cosign.pending()) as PedidoDeCofirma[];
-      return lista.some((p) => p.status === "PENDING" && p.operation === "change_trust");
+      let lista: unknown[] = client.getCosignState().pending ?? [];
+      if (lista.length === 0) lista = await client.cosign.pending();
+      // Fuera de la red principal el toque no vota el pedido que ya espera: el botón no vuelve mientras espere uno.
+      if (network.name !== "mainnet") return (lista as PedidoDeCofirma[]).some((p) => p.status === "PENDING" && p.operation === "change_trust");
+      return lista.some((p) => esLineaPendiente(p) && !!p.activityId && !this.#rechazadosAqui.has(p.id));
     } catch {
       return null;
     }
@@ -2038,7 +2605,10 @@ class PollarWallet implements SubmittingWallet {
   /** La memoria de lo que está listo, para esta dirección. Si la dirección cambió, empieza de cero y sin votos fallados. */
   #memoriaDe(dir: string): { dir: string; activacion: boolean; proteccion: boolean } {
     if (this.#memoria?.dir !== dir) {
-      if (this.#memoria) borrarMarca(MARCAS_DE_LA_CUENTA.votos);
+      if (this.#memoria) {
+        borrarMarca(MARCAS_DE_LA_CUENTA.votos);
+        this.#olvidarDistintas();
+      }
       this.#memoria = { dir, activacion: false, proteccion: false };
     }
     return this.#memoria;
@@ -2055,12 +2625,16 @@ class PollarWallet implements SubmittingWallet {
 
   /**
    * La misma lectura que hace la puerta, sin firmar nada: para que `freeze.ts` avise antes de abrir el cupón o de cerrar
-   * la lista. Fuera de la red principal o del modo `premios` da `libre` sin leer. No reemplaza a la puerta de `#firmando`.
+   * la lista. Fuera de la red principal o de los modos que cuida la puerta (`PUERTA_DEL_PREMIO_EN`) da `libre` sin leer.
+   * Arma el cliente y, si vota a mano, también da `libre` sin leer: ahí la puerta no corre. No reemplaza a la puerta de
+   * `#firmando`.
    */
   async revisarPuertaDelPremio(): Promise<PuertaDelPremio> {
-    if (network.name !== "mainnet" || modoDeRampa() !== "premios") return "libre";
+    if (network.name !== "mainnet" || !PUERTA_DEL_PREMIO_EN.includes(modoDeRampa())) return "libre";
     try {
-      return await this.#puertaDelPremio(await this.#ensureClient(), { sinReintentarNoExiste: true });
+      const client = await this.#ensureClient();
+      if (this.#aMano) return "libre";
+      return await this.#puertaDelPremio(client, { sinReintentarNoExiste: true });
     } catch {
       return "no-se-sabe";
     }
@@ -2505,8 +3079,21 @@ class PollarWallet implements SubmittingWallet {
   }
 }
 
-/** Cómo terminó Activar dólares digitales con Google o correo (`activarUsdc`). */
-export type ResultadoDeActivarUsdc = "apagada" | "en-curso" | "hecho" | "no-patrocina" | "ahora-no" | "cuenta-creandose" | "proteger" | "no-salio";
+/**
+ * Cómo terminó Activar dólares digitales con Google o correo (`activarUsdc`). `no-coincide`: la regla de la línea no votó
+ * el pedido y no se hizo nada. `no-coincide-tope`: lo mismo, y en esta pestaña ya no se vuelve a intentar.
+ */
+export type ResultadoDeActivarUsdc =
+  | "apagada"
+  | "en-curso"
+  | "hecho"
+  | "no-patrocina"
+  | "ahora-no"
+  | "cuenta-creandose"
+  | "proteger"
+  | "no-coincide"
+  | "no-coincide-tope"
+  | "no-salio";
 
 /* ------------------------------------------------ lo que devuelve cada método de la carga */
 
@@ -2603,10 +3190,17 @@ function pasoRaro(motivo: string): ResultadoDeAprobar {
   return { estado: "raro", motivo };
 }
 
-/** Lo que contestó `setTrustline`, en lo que la pantalla necesita. El detalle del error no se muestra nunca. */
+/**
+ * Lo que contestó `setTrustline` (o la regla de la línea, con la misma forma), en lo que la pantalla necesita. La negativa
+ * de la regla va antes que los códigos del kit y se reconoce solo por su código exacto, nunca por el detalle. El detalle
+ * del error no se muestra nunca.
+ */
 export function resultadoDeLaLinea(r: { status?: string; code?: string; details?: string }): ResultadoDeActivarUsdc {
   if (r.status === "success" || r.status === "pending") return "hecho";
   if (r.status === "cosign_pending") return "en-curso";
+  // La negativa de la regla, solo por su código exacto: el detalle lo escribe el servidor y no puede decir que no se hizo nada.
+  if (r.code === "tinkazo-cofirma-distinta-tope") return "no-coincide-tope";
+  if (r.code === "tinkazo-cofirma-distinta") return "no-coincide";
   const codigo = `${r.code ?? ""} ${r.details ?? ""}`;
   if (codigo.includes("TX_LOW_RESERVE")) {
     console.warn("[tinkazo] la línea del USDC no la paga la app (TX_LOW_RESERVE)");

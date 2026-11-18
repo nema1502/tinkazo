@@ -142,6 +142,14 @@ describe("el modo premios, con una cuenta de Google", () => {
     expect(m.activar).toHaveBeenCalledOnce();
   });
 
+  it("si la regla no votó el pedido, dice que no se hizo nada y Recibir un premio sigue a la vista", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "no-coincide" as const) });
+    await abrir(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoActivarNoCoincide")} ${t("cofirmaOtraVez")}`));
+    expect(principal().textContent).toBe(T.es.saldoPremioRecibirBtn);
+  });
+
   it("con la cuenta lista para recibir y con saldo: el saldo arriba, el premio llega solo, y Cerrar. Sin Mandar, dirección ni QR", async () => {
     const m = mundo();
     await abrir(m);

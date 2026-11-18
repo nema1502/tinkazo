@@ -325,7 +325,7 @@ describe("la consulta adelantada, antes del cupón y de cerrar la lista", () => 
     expect(h.revisar).not.toHaveBeenCalled();
   });
 
-  it.each(["pollar", "recibir", "meru", "", "otra-cosa"])("con VITE_RAMPA=%s (sin el modo premios): no se lee nada, no se baja ninguna pieza y se sella como siempre", async (modo) => {
+  it.each(["pollar", " POLLAR "])("con VITE_RAMPA=%s, donde la venta paga con el saldo: no se lee nada y se sella como siempre", async (modo) => {
     vi.stubEnv("VITE_RAMPA", modo);
     h.revisar.mockResolvedValue("puede-guardar");
     await sellar();
@@ -335,12 +335,29 @@ describe("la consulta adelantada, antes del cupón y de cerrar la lista", () => 
     expect(estado().querySelectorAll("button")).toHaveLength(0);
   });
 
-  it("sin la bandera puesta del todo: lo mismo", async () => {
+  it.each(["recibir", "meru", "", "otra-cosa"])("con VITE_RAMPA=%s la puerta también cuida: frena sin gastar nada", async (modo) => {
+    vi.stubEnv("VITE_RAMPA", modo);
+    h.revisar.mockResolvedValue("puede-guardar");
+    await sellar();
+    expect(h.revisar).toHaveBeenCalledTimes(1);
+    expect(h.sealOnChain).not.toHaveBeenCalled();
+    expect(estado().textContent).toContain(T.es["errAnchor.premioGuardado"] as string);
+  });
+
+  it("sin la bandera puesta del todo también cuida", async () => {
     vi.unstubAllEnvs();
     h.revisar.mockResolvedValue("puede-guardar");
     await sellar();
-    expect(h.revisar).not.toHaveBeenCalled();
+    expect(h.revisar).toHaveBeenCalledTimes(1);
+    expect(h.sealOnChain).not.toHaveBeenCalled();
+  });
+
+  it("con la billetera que vota a mano (dice libre sin leer), no frena y se sella como siempre", async () => {
+    h.revisar.mockResolvedValue("libre");
+    await sellar();
+    expect(h.revisar).toHaveBeenCalledTimes(1);
     expect(h.sealOnChain).toHaveBeenCalledTimes(1);
+    expect(estado().textContent).not.toContain(T.es["errAnchor.premioGuardado"] as string);
   });
 
   it("con una billetera propia, o sin cuenta de Google en la red principal: no se lee nada", async () => {

@@ -54,7 +54,10 @@ export interface DepsDeSaldo {
   mirar(cuenta: string): Promise<LecturaDeCuenta>;
   /** Solo con Google en la red principal: si la cuenta está lista (creada y protegida), o `null` si no se sabe. */
   proteccion(): Promise<"lista" | "falta" | null>;
-  /** Solo con Google: si ya espera un pedido de activar los dólares digitales, o `null` si no se sabe. */
+  /**
+   * Solo con Google: si ya espera un pedido de activar los dólares digitales con un voto en curso, o `null` si no se sabe.
+   * Uno sin voto (el que abre solo el proveedor) no cuenta: la ventana ofrece activar y el toque lo vota.
+   */
   pendiente(): Promise<boolean | null>;
   /** Solo con Google: si la app pone la reserva al activarlos, o `null` si no se sabe. */
   catalogo(): Promise<"patrocinada" | "no-patrocinada" | null>;
@@ -544,6 +547,14 @@ async function activar(v: Ventana): Promise<void> {
     // No se pidió nada que siga vivo: se puede probar de nuevo.
     pintar(v);
     v.estadoLinea.textContent = t(r === "no-aprobada" ? "saldoActivarNoAprobado" : "saldoActivarAhoraNo");
+    return;
+  }
+  if (r === "no-coincide" || r === "no-coincide-tope") {
+    // La regla de la línea no votó el pedido y no se hizo nada. La primera vez se puede probar una vez más. Con el tope de
+    // la pestaña ya no se ofrece pedirla otra vez en esta ventana, y se dice que escriba.
+    if (r === "no-coincide-tope") v.activado = true;
+    pintar(v);
+    v.estadoLinea.textContent = `${t("saldoActivarNoCoincide")} ${t(r === "no-coincide" ? "cofirmaOtraVez" : "cofirmaEscribinos")}`;
     return;
   }
   // Lo que se pidió puede seguir vivo: en esta ventana ya no se ofrece pedirlo otra vez (cada pedido nuevo se apila).

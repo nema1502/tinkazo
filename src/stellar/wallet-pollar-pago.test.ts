@@ -142,6 +142,8 @@ const veces = (nombre: string): number => e.llamadas.filter((x) => x === nombre)
 
 beforeEach(() => {
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_MAINNET", "pub_mainnet_prueba");
+  // La venta vive en el modo pollar, que la puerta del premio no cuida: estas pruebas miran el pago, no la puerta.
+  vi.stubEnv("VITE_RAMPA", "pollar");
   vi.stubGlobal("localStorage", enMemoria());
   vi.stubGlobal("sessionStorage", enMemoria());
   vi.spyOn(console, "warn").mockImplementation(() => undefined);

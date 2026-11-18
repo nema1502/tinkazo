@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import viteConfig from "../../vite.config";
-import { avisosDelRetiro, problemasDePremios, problemasDelRetiro } from "./premios-build";
+import { votoPorContenido } from "./cuenta-config";
+import { avisosDelRetiro, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./premios-build";
 import { cuentaDeCobrosDelPortero } from "./retiro-config";
 
 /**
@@ -217,12 +218,125 @@ describe("el costo del retiro: lo que el build avisa y no frena", () => {
   });
 });
 
+/**
+ * El voto por contenido (`VITE_VOTO_POR_CONTENIDO`): el build no sale con un valor que la dejaría apagada sin aviso, ni con
+ * ella junto con lo que firma sin pasar por la regla del voto y nadie probó así en la red principal. Con la variable
+ * apagada, el build sale como siempre. No toca ninguna bandera: obliga a elegir.
+ */
+describe("el voto por contenido y el build", () => {
+  const VOTO = { VITE_VOTO_POR_CONTENIDO: "1" };
+  const TODO_LO_DEMAS = { VITE_PAGO_CON_SALDO: "1", VITE_COMPRA_QR: "1", VITE_RAMPA: "pollar" };
+
+  it("con la bandera sola, o con el modo premios, recibir o apagada, el build sale", () => {
+    expect(problemasDelVoto(VOTO)).toEqual([]);
+    for (const rampa of ["", "premios", " Premios ", "recibir", "meru", "apagada", "algo raro"]) {
+      expect(problemasDelVoto({ ...VOTO, VITE_RAMPA: rampa }), rampa).toEqual([]);
+    }
+  });
+
+  it("la combinación esperada, el modo premios con el voto y sin la venta, no tiene ningún problema en los dos controles", () => {
+    const esperada = { ...VOTO, VITE_RAMPA: "premios" };
+    expect(problemasDelVoto(esperada)).toEqual([]);
+    expect(problemasDePremios(esperada)).toEqual([]);
+    expect(problemasDelVoto({ ...esperada, VITE_PAGO_CON_SALDO: "0", VITE_COMPRA_QR: "", VITE_ALTA_PAGO: "1" })).toEqual([]);
+  });
+
+  it("apagada, vacía o en 0, no mira nada más: el build sale con todo lo demás prendido", () => {
+    for (const v of [undefined, "", "0", "   "]) {
+      expect(problemasDelVoto({ ...(v === undefined ? {} : { VITE_VOTO_POR_CONTENIDO: v }), ...TODO_LO_DEMAS }), String(v)).toEqual([]);
+    }
+    expect(problemasDelVoto({})).toEqual([]);
+  });
+
+  it("con el pago con el saldo prendido, el build no sale: nombra las banderas y no sus valores", () => {
+    const p = problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "1" });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("VITE_VOTO_POR_CONTENIDO=1");
+    expect(p[0]).toContain("VITE_PAGO_CON_SALDO=1");
+  });
+
+  it("con la compra con QR prendida, tampoco", () => {
+    const p = problemasDelVoto({ ...VOTO, VITE_COMPRA_QR: "1" });
+    expect(p).toHaveLength(1);
+    expect(p[0]).toContain("VITE_COMPRA_QR=1");
+  });
+
+  it("con la carga con bolivianos (el modo pollar), tampoco, lo escriba como lo escriba", () => {
+    for (const rampa of ["pollar", "  Pollar ", "POLLAR"]) {
+      const p = problemasDelVoto({ ...VOTO, VITE_RAMPA: rampa });
+      expect(p, rampa).toHaveLength(1);
+      expect(p[0], rampa).toContain("VITE_RAMPA=pollar");
+    }
+  });
+
+  it("con las tres, dice las tres, cada una con lo suyo", () => {
+    const p = problemasDelVoto({ ...VOTO, ...TODO_LO_DEMAS });
+    expect(p).toHaveLength(3);
+    expect(p[0]).toContain("VITE_PAGO_CON_SALDO=1");
+    expect(p[1]).toContain("VITE_COMPRA_QR=1");
+    expect(p[2]).toContain("VITE_RAMPA=pollar");
+  });
+
+  it("lee la venta como el control del modo premios: solo un 1 la prende", () => {
+    expect(problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "0", VITE_COMPRA_QR: "", VITE_RAMPA: "recibir" })).toEqual([]);
+    expect(problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "true", VITE_COMPRA_QR: " 1" })).toEqual([]);
+  });
+
+  it("un valor que no es 1, 0 ni vacío no sale: dice que acepta 1 o 0 y no escribe el valor", () => {
+    for (const v of ["true", "TRUE", "on", "si", "sí", "yes", "2", "01", " 1", "1 ", "uno", "1,0"]) {
+      const p = problemasDelVoto({ VITE_VOTO_POR_CONTENIDO: v });
+      expect(p, JSON.stringify(v)).toHaveLength(1);
+      expect(p[0], JSON.stringify(v)).toContain("VITE_VOTO_POR_CONTENIDO solo acepta 1 o 0");
+      expect(p[0], JSON.stringify(v)).not.toContain(`=${v}`);
+    }
+    const secreto = "https://pm.tinkazo.app/ruta-secreta";
+    expect(problemasDelVoto({ VITE_VOTO_POR_CONTENIDO: secreto }).join(" ")).not.toContain(secreto);
+  });
+
+  it("con un valor raro dice solo eso: las combinaciones se miran con un 1 exacto", () => {
+    expect(problemasDelVoto({ VITE_VOTO_POR_CONTENIDO: "true", ...TODO_LO_DEMAS })).toHaveLength(1);
+  });
+
+  it("no escribe valores de otras variables: ni una dirección ni una llave llegan a la bitácora", () => {
+    const secreto = "https://pm.tinkazo.app/ruta-secreta";
+    const p = problemasDelVoto({ ...VOTO, ...TODO_LO_DEMAS, VITE_PATROCINIO_URL_MAINNET: secreto, VITE_POLLAR_PUBLISHABLE_KEY_MAINNET: "pub_llave" });
+    expect(p.join(" ")).not.toContain(secreto);
+    expect(p.join(" ")).not.toContain("pub_llave");
+  });
+
+  it("el control del modo premios y el del voto dicen cada uno lo suyo y no se pisan", () => {
+    const env = { ...VOTO, VITE_RAMPA: "premios", VITE_PAGO_CON_SALDO: "1" };
+    expect(problemasDePremios(env)).toHaveLength(1);
+    expect(problemasDePremios(env)[0]).toContain("VITE_RAMPA=premios");
+    expect(problemasDelVoto(env)).toHaveLength(1);
+    expect(problemasDelVoto(env)[0]).toContain("VITE_VOTO_POR_CONTENIDO=1");
+  });
+
+  it("la lectura del sitio y la del build coinciden: lo que el build deja pasar vale 1 solo con un 1 exacto", () => {
+    for (const v of [undefined, "", "   ", "0", "1", "true", "on", "si", " 1", "1 ", "01", "2"]) {
+      const env = v === undefined ? {} : { VITE_VOTO_POR_CONTENIDO: v };
+      const dejaPasar = problemasDelVoto(env).length === 0;
+      const sitio = votoPorContenido({ votoPorContenido: v });
+      expect(sitio, String(v)).toBe(v === "1");
+      if (!dejaPasar) expect(sitio, String(v)).toBe(false);
+    }
+  });
+});
+
 describe("vite.config.ts frena el build con esta regla", () => {
   const config = readFileSync(new URL("../../vite.config.ts", import.meta.url), "utf8");
+  const control = config.slice(config.indexOf("function validarModoPremios"), config.indexOf("function validarPaginasConCobro"));
+
+  it("suma el control del voto al del modo premios, con la misma lectura del entorno y solo al construir", () => {
+    expect(config).toMatch(/import \{[^}]*\bproblemasDePremios\b[^}]*\} from "\.\/src\/stellar\/premios-build";/);
+    expect(config).toMatch(/import \{[^}]*\bproblemasDelVoto\b[^}]*\} from "\.\/src\/stellar\/premios-build";/);
+    expect(control).toContain("problemasDePremios(env)");
+    expect(control).toContain("problemasDelVoto(env)");
+    expect(control.match(/loadEnv\(/g)).toHaveLength(1);
+    expect(control).toContain('apply: "build"');
+  });
 
   it("arma el control solo al construir, con las variables VITE_ del entorno, y lo pone entre los plugins", () => {
-    expect(config).toMatch(/import \{[^}]*\bproblemasDePremios\b[^}]*\} from "\.\/src\/stellar\/premios-build";/);
-    const control = config.slice(config.indexOf("function validarModoPremios"), config.indexOf("function validarPaginasConCobro"));
     expect(control).toContain('apply: "build"');
     expect(control).toContain('loadEnv(mode, __dirname, ["VITE_"])');
     expect(control).toMatch(/if \(problemas\.length\) throw new Error/);
@@ -230,7 +344,6 @@ describe("vite.config.ts frena el build con esta regla", () => {
   });
 
   it("no frena pnpm dev ni las pruebas: el control es solo del build", () => {
-    const control = config.slice(config.indexOf("function validarModoPremios"), config.indexOf("function validarPaginasConCobro"));
     expect(control).not.toContain("configureServer");
     expect(control).not.toMatch(/apply:\s*"serve"/);
   });

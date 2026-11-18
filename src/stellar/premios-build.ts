@@ -17,13 +17,22 @@
  *
  * Acá vive también el control del costo del retiro (`problemasDelRetiro` y `avisosDelRetiro`, que leen sus dos variables
  * con `retiro-config.ts`): el costo y el modo premios son de la misma cuenta de Google, y se comprueban juntos.
+ *
+ * Con el voto por contenido (`VITE_VOTO_POR_CONTENIDO=1`, issue 180) el navegador deja de aprobar solo lo que pide el
+ * servidor de cuentas y vota lo que armó la página. `problemasDelVoto` frena el build con un valor que la dejaría apagada
+ * sin aviso y con lo que firma sin pasar por esa regla en la red principal: pagar con el saldo, la compra con QR y la carga
+ * con bolivianos. Con la variable vacía o en `0` no mira nada más.
  */
 
 import { TOPE_DEL_COSTO, STROOPS_POR_DOLAR, leerElCosto, leerLaCuenta } from "./retiro-config";
 import { banderasDeVenta } from "./venta-piloto";
 
 /** El modo de la rampa que pide el entorno, escrito como lo lee `modoDeRampa` (`cuenta-config.ts`). */
-const pideElModoPremios = (env: Record<string, string | undefined>): boolean => (env.VITE_RAMPA ?? "").trim().toLowerCase() === "premios";
+const modoPedido = (env: Record<string, string | undefined>): string => (env.VITE_RAMPA ?? "").trim().toLowerCase();
+
+const pideElModoPremios = (env: Record<string, string | undefined>): boolean => modoPedido(env) === "premios";
+
+const pideElModoPollar = (env: Record<string, string | undefined>): boolean => modoPedido(env) === "pollar";
 
 export function problemasDePremios(env: Record<string, string | undefined>): string[] {
   if (!pideElModoPremios(env)) return [];
@@ -120,4 +129,46 @@ export function avisosDelRetiro(env: Record<string, string | undefined>): string
   const sinCuenta = leerLaCuenta(env.VITE_RETIRO_CUENTA).tipo === "vacia";
   if (costo.tipo !== "valido" || costo.stroops === 0n || !sinCuenta) return [];
   return ["VITE_RETIRO_COSTO está puesta sin VITE_RETIRO_CUENTA: no se cobra nada y el sitio no dice nada del costo."];
+}
+
+/**
+ * Lo que frena el build por el voto por contenido (`VITE_VOTO_POR_CONTENIDO`, `cuenta-config.ts`). Devuelve lo que está
+ * mal, en español y sin los valores de las variables. Vacío: el entorno está bien.
+ *
+ * - Un valor que no es `1`, `0` ni vacío («true», «on», « 1») la dejaría apagada sin que nadie se enterara: no sale.
+ * - Con `1`, no sale si además está prendido lo que firma con la misma cuenta sin pasar por la regla del voto y nadie
+ *   probó así en la red principal: pagar con el saldo (`VITE_PAGO_CON_SALDO=1`), la compra con QR (`VITE_COMPRA_QR=1`, que
+ *   además carga dólares y los paga con ese saldo) y la carga con bolivianos (`VITE_RAMPA=pollar`).
+ *
+ * Con un valor que no vale solo dice eso: las combinaciones se miran con un `1` exacto, que es el único valor que
+ * prende la bandera en el sitio. La combinación que se espera, `VITE_RAMPA=premios` con `VITE_VOTO_POR_CONTENIDO=1` y
+ * sin la venta, no tiene ningún problema.
+ */
+export function problemasDelVoto(env: Record<string, string | undefined>): string[] {
+  const valor = env.VITE_VOTO_POR_CONTENIDO;
+  if (valor === undefined || valor.trim() === "" || valor === "0") return [];
+  if (valor !== "1") {
+    return ["VITE_VOTO_POR_CONTENIDO solo acepta 1 o 0 (vacía es apagada): con otro valor la bandera queda apagada sin aviso."];
+  }
+  const venta = banderasDeVenta(env);
+  const problemas: string[] = [];
+  if (venta.saldo) {
+    problemas.push(
+      "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_PAGO_CON_SALDO=1: pagar con el saldo pasaría por el voto a mano " +
+        "y nadie lo probó así en la red principal. Se elige cuál va en este sitio.",
+    );
+  }
+  if (venta.qr) {
+    problemas.push(
+      "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_COMPRA_QR=1: la compra con QR carga dólares en la cuenta y los paga " +
+        "con el saldo, y nada de eso se probó con el voto a mano en la red principal. Se elige cuál va en este sitio.",
+    );
+  }
+  if (pideElModoPollar(env)) {
+    problemas.push(
+      "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_RAMPA=pollar: la carga con bolivianos no se probó con el voto a mano " +
+        "en la red principal. Se elige cuál va en este sitio.",
+    );
+  }
+  return problemas;
 }

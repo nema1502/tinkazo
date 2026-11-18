@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Account, Asset, Keypair, Networks, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
+import { Account, Asset, Keypair, Networks, Operation, StrKey, TransactionBuilder } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { errorKey, esDeRed } from "./errores";
 import { USDC_MAINNET } from "./pagos";
@@ -8,9 +8,10 @@ import { PASSPHRASE_TESTNET, almacenEnMemoria, reiniciar } from "./pollar-falso"
 import { PremioGuardado } from "./usdc-cuenta";
 
 /**
- * La puerta del premio en la billetera de Google (`#firmando` de `wallet-pollar.ts`). Con `VITE_RAMPA=premios`, en la red
- * principal, antes de cada firma del sello o del sorteo se mira en la red si la cuenta puede guardar dinero. Si puede, o si
- * no se pudo saber, no se firma: el cliente de Pollar ni se entera. Todo con un cliente y un Horizon de mentira.
+ * La puerta del premio en la billetera de Google (`#firmando` de `wallet-pollar.ts`). En los modos que cuida
+ * (`PUERTA_DEL_PREMIO_EN`: premios, recibir y apagada), en la red principal y sin el voto por contenido, antes de cada firma
+ * del sello o del sorteo se mira en la red si la cuenta puede guardar dinero. Si puede, o si no se pudo saber, no se firma:
+ * el cliente de Pollar ni se entera. Con el voto a mano no se mira nada. Todo con un cliente y un Horizon de mentira.
  */
 
 const h = await vi.hoisted(async () => (await import("./pollar-falso")).estadoPollarFalso());
@@ -372,15 +373,78 @@ describe("la puerta del premio solo corre en el caso: nada se lee ni se demora e
     expect(pedidos).toEqual([]);
   });
 
-  for (const modo of ["pollar", "recibir", "meru", "", "otra-cosa"]) {
-    it(`en la red principal con VITE_RAMPA=${modo === "" ? "(sin poner)" : modo}: no se pide nada a Horizon y se firma`, async () => {
+  it("en la red principal con VITE_RAMPA=pollar, donde la venta paga con el saldo: no se pide nada a Horizon y se firma", async () => {
+    vi.stubEnv("VITE_RAMPA", "pollar");
+    horizon = cuenta([nativo("100.0000000"), circle("9.0000000")]);
+    await expect(pollarWallet.signAndSubmit(sello())).resolves.toBe("deadbeef");
+    await expect(pollarWallet.signUnsponsored(sello("11"))).resolves.toBe("FIRMADA");
+    expect(pedidos).toEqual([]);
+  });
+});
+
+describe("con el voto por contenido apagado, la puerta cuida premios, recibir y apagada", () => {
+  for (const modo of ["premios", "recibir", "meru", "", "otra-cosa"]) {
+    it(`con VITE_RAMPA=${modo === "" ? "(sin poner)" : modo}: una cuenta con dinero no firma, y se lee Horizon antes`, async () => {
       vi.stubEnv("VITE_RAMPA", modo);
       horizon = cuenta([nativo("100.0000000"), circle("9.0000000")]);
-      await expect(pollarWallet.signAndSubmit(sello())).resolves.toBe("deadbeef");
-      await expect(pollarWallet.signUnsponsored(sello("11"))).resolves.toBe("FIRMADA");
-      expect(pedidos).toEqual([]);
+      expect((await rechazo(() => pollarWallet.signUnsponsored(sello()))).que).toBe("puede-guardar");
+      expect(pedidos).toHaveLength(1);
+      expect(h.llamadas).not.toContain("signTx");
     });
   }
+
+  for (const modo of ["recibir", ""]) {
+    it(`con VITE_RAMPA=${modo === "" ? "(sin poner)" : modo}: una cuenta libre firma como siempre, después de una lectura`, async () => {
+      vi.stubEnv("VITE_RAMPA", modo);
+      await expect(pollarWallet.signUnsponsored(sello())).resolves.toBe("FIRMADA");
+      expect(orden).toEqual(["horizon", "firma"]);
+    });
+  }
+});
+
+describe("con el voto por contenido, la puerta no corre", () => {
+  const CONTRATO = StrKey.encodeContract(new Uint8Array(32).fill(7));
+  /** El sello de verdad: una invocación del contrato oficial, lo único que se firma con el voto a mano. */
+  const selloDelContrato = (): string =>
+    new TransactionBuilder(new Account(P, "10"), { fee: "1000", networkPassphrase: Networks.PUBLIC })
+      .addOperation(Operation.invokeContractFunction({ contract: CONTRATO, function: "seal", args: [] }))
+      .setTimeout(300)
+      .build()
+      .toXDR();
+
+  beforeEach(() => {
+    vi.stubEnv("VITE_VOTO_POR_CONTENIDO", "1");
+    h.red.contractId = CONTRATO;
+    horizon = cuenta([nativo(), circle("12.5000000")]);
+  });
+  afterEach(() => {
+    h.red.contractId = null;
+  });
+
+  it("una cuenta con dinero no lee Horizon antes de la firma: la frena la regla, no la puerta", async () => {
+    // El kit de mentira firma sin pedido de co-firma: la regla no lo usa, y eso no es la puerta.
+    const e = await pollarWallet.signUnsponsored(selloDelContrato()).then(
+      () => null,
+      (x: unknown) => x,
+    );
+    expect(e).toBeInstanceOf(Error);
+    expect((e as Error).name).not.toBe("PremioGuardado");
+    expect(errorKey(e)).toBe("cofirmaDistinta");
+    expect(pedidos).toEqual([]);
+    expect(h.llamadas).toContain("signTx");
+  });
+
+  it("revisarPuertaDelPremio da libre sin leer", async () => {
+    await expect(pollarWallet.revisarPuertaDelPremio()).resolves.toBe("libre");
+    expect(pedidos).toEqual([]);
+  });
+
+  it("con un kit que no toma el voto a mano, la puerta vuelve a leer y frena", async () => {
+    h.kitTomaElVotoAMano = false;
+    await rechazo(() => pollarWallet.signUnsponsored(selloDelContrato()));
+    expect(pedidos).toHaveLength(1);
+    await expect(pollarWallet.revisarPuertaDelPremio()).resolves.toBe("puede-guardar");
+  });
 });
 
 describe("revisarPuertaDelPremio: la misma lectura, sin firmar nada", () => {
@@ -415,8 +479,8 @@ describe("revisarPuertaDelPremio: la misma lectura, sin firmar nada", () => {
     expect(pedidos).toEqual([]);
   });
 
-  it("fuera del modo premios o de la red principal da libre sin leer", async () => {
-    vi.stubEnv("VITE_RAMPA", "recibir");
+  it("fuera de los modos que cuida la puerta o de la red principal da libre sin leer", async () => {
+    vi.stubEnv("VITE_RAMPA", "pollar");
     await expect(pollarWallet.revisarPuertaDelPremio()).resolves.toBe("libre");
     vi.stubEnv("VITE_RAMPA", "premios");
     h.red.name = "testnet";
@@ -450,14 +514,14 @@ describe("las fuentes: la puerta no se saltea por otro lado", () => {
 
   it("la puerta no tiene salida por parámetro: ninguna llamada a #firmando pasa la opción", () => {
     const fuente = leer("stellar/wallet-pollar.ts");
-    // Ni se declara ni se pasa: la puerta no mira nada más que la red y el modo.
+    // Ni se declara ni se pasa: la puerta no mira nada más que la red, el modo y si el cliente vota a mano (`#aMano`).
     const aqui = fuente.indexOf("async #firmando<T>");
     expect(aqui).toBeGreaterThan(0);
     const firma = fuente.slice(aqui, fuente.indexOf("const client", aqui));
     expect(firma).toContain("testigo?: boolean");
     expect(firma).not.toContain("puertaDelPremio");
     expect(fuente.slice(aqui, fuente.indexOf("finally", aqui))).not.toContain("o.puertaDelPremio");
-    // Cada llamada a `#firmando` solo pasa `testigo`.
+    // Cada llamada a `#firmando` solo pasa `testigo` y la intención de la firma.
     const llamadas = [...fuente.matchAll(/this\.#firmando\(/g)];
     expect(llamadas).toHaveLength(3);
     for (const llamada of llamadas) expect(fuente.slice(llamada.index, fuente.indexOf(";", llamada.index))).not.toContain("puertaDelPremio");
