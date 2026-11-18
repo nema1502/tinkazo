@@ -37,12 +37,14 @@ import {
   type FilaDePago,
   type FrenoDePago,
   type LimitesDePagos,
+  PENDIENTES_POR_VUELTA,
   type PedidoDePago,
+  type PuntoDeLaRonda,
   type UsoDePagos,
   limitesDePagos,
   topeEnCaliente,
 } from "./pagos-uso";
-import { type Consulta, ErrorDeRed, type Red } from "./red";
+import { type Consulta, type Envio, ErrorDeRed, type Red } from "./red";
 import type { Registrar } from "./registrador";
 import { ESPERA_RECONCILIAR_MS, type Firmante, MARGEN_VENCIMIENTO_S, type Modo, type Respuesta, autoridadDe } from "./servicio";
 import { type SorteoEnRed, leerNumeroDeSorteo, leerSorteo } from "./sorteadora";
@@ -62,6 +64,54 @@ export const ESPERA_CONFIRMAR_MS = 2_500;
 
 const HORA_MS = 3_600_000;
 const LIMPIAR_DESDE = 5000;
+
+/**
+ * Los rechazos de la red al primer envío que prueban que el sobre no está en la cola ni va a entrar: la secuencia (después de
+ * preguntarle a cada RPC), el tiempo, las firmas, la forma, el saldo de la cuenta que paga, la cuenta y lo que la red no admite.
+ * Cualquier otra respuesta (TRY_AGAIN_LATER, txInsufficientFee, un error sin código o uno nuevo) es una duda y no se devuelve.
+ */
+const RECHAZO_SEGURO = new RegExp(
+  [
+    "txBadSeq",
+    "txTooEarly",
+    "txTooLate",
+    "txBadAuth",
+    "txMalformed",
+    "txInsufficientBalance",
+    "txNoAccount",
+    "txBadMinSeqAgeOrGap",
+    "txNotSupported",
+    "txBadSponsorship",
+    "txSorobanInvalid",
+  ].join("|"),
+);
+
+/** Cuántas devueltas recientes mira la alarma en cada vuelta: le pregunta a la red si alguna entró igual. */
+const DEVUELTAS_POR_VUELTA = 25;
+/** Cuántos premios devueltos del mismo puesto se miran, como mucho, antes de reservar otro pago de ese puesto. */
+const DEVUELTOS_DEL_PUESTO_POR_PEDIDO = 3;
+
+/**
+ * Una vuelta de una ronda de la alarma: `leer` da las filas que siguen a un punto (desde el principio con null), a lo sumo `max`.
+ * Si después del punto quedan menos que `max`, sigue desde el principio. Devuelve las filas de esta vuelta y dónde empieza la
+ * siguiente: null si esta vuelta ya miró todas.
+ */
+export function vueltaDeRonda(
+  leer: (desde: PuntoDeLaRonda | null, max: number) => FilaDePago[],
+  desde: PuntoDeLaRonda | null,
+  max: number,
+): { filas: FilaDePago[]; siguiente: PuntoDeLaRonda | null } {
+  const primeras = leer(desde, max);
+  let filas = primeras;
+  if (primeras.length < max && desde !== null) {
+    const vistas = new Set(primeras.map((f) => f.hash));
+    const desdeElPrincipio = leer(null, max - primeras.length).filter((f) => !vistas.has(f.hash));
+    filas = [...primeras, ...desdeElPrincipio];
+  }
+  const ultima = filas[filas.length - 1];
+  const siguiente = ultima === undefined || filas.length < max ? null : { creado: ultima.creado, hash: ultima.hash };
+  return { filas, siguiente };
+}
 
 type Cuerpo = Record<string, unknown>;
 const resp = (estado: number, cuerpo: Cuerpo): Respuesta => ({ estado, cuerpo });
@@ -138,6 +188,11 @@ export class PorteroDePagos {
   private readonly memoria: MemoriaDeHorizon;
   /** Cuándo dijo Horizon, por cuenta, que un pago fallaría: el tope por hora se mira antes de ir a Horizon. Vive en la memoria del objeto. */
   private readonly fallarias = new Map<string, number[]>();
+  /** El último turno de cada sobre que se está atendiendo, por el hash de su interna: los pedidos del mismo sobre van de a uno. */
+  private readonly enCurso = new Map<string, Promise<void>>();
+  /** Dónde sigue la alarma con lo que está en el aire y con las devueltas recientes. Vive en la memoria: al reiniciar, desde el principio. */
+  private rondaDePendientes: PuntoDeLaRonda | null = null;
+  private rondaDeDevueltas: PuntoDeLaRonda | null = null;
 
   constructor(private readonly d: DependenciasDePagos) {
     this.reloj = d.reloj ?? (() => Date.now());
@@ -217,8 +272,38 @@ export class PorteroDePagos {
 
   // ---------- el pedido ----------
 
-  /** `POST /v1/patrocinio/pago`: paga la comisión de un premio o de un retiro. Los errores que salen de acá llevan `pudoSalir`. */
+  /**
+   * `POST /v1/patrocinio/pago`: paga la comisión de un premio o de un retiro. Los errores que salen de acá llevan `pudoSalir`.
+   *
+   * Los pedidos del mismo sobre (el sitio que reintenta) se atienden de a uno: el segundo espera a que el primero conteste y
+   * recién entonces mira el hash, que ya está reservado, enviado, cerrado o devuelto. Así nunca hay dos envíos del mismo sobre
+   * en vuelo con respuestas distintas de la red, y la respuesta de uno no deshace lo que la red le dijo al otro.
+   */
   async procesar(forma: FormaDePago, xdrBase64: string): Promise<Respuesta> {
+    const clave = hashDeInterna(xdrBase64, this.d.cfg.passphrase);
+    if (clave === null) {
+      return this.atender(forma, xdrBase64);
+    }
+    const anterior = this.enCurso.get(clave) ?? Promise.resolve();
+    let soltar: () => void = () => {};
+    const turno = new Promise<void>((r) => {
+      soltar = r;
+    });
+    const cola = anterior.then(() => turno);
+    this.enCurso.set(clave, cola);
+    try {
+      await anterior;
+      return await this.atender(forma, xdrBase64);
+    } finally {
+      soltar();
+      if (this.enCurso.get(clave) === cola) {
+        this.enCurso.delete(clave);
+      }
+    }
+  }
+
+  /** Un pedido de pago, ya en su turno: nadie más atiende ese mismo sobre en este momento. */
+  private async atender(forma: FormaDePago, xdrBase64: string): Promise<Respuesta> {
     const t0 = this.reloj();
     let hash: string | null = null;
     const no = (estado: number, cuerpo: Cuerpo): Respuesta => resp(estado, { ...cuerpo, pudoSalir: this.pudoSalir(xdrBase64, hash) });
@@ -320,6 +405,11 @@ export class PorteroDePagos {
         return sorteo.respuesta;
       }
       ganadores = sorteo.ganadores;
+      // Un premio de este puesto que se dio por devuelto hace poco y entró igual vuelve a ocuparlo antes de mirar los topes.
+      const sinConfirmar = await this.mirarDevueltosDelPuesto(c);
+      if (sinConfirmar) {
+        return sinConfirmar;
+      }
       const freno = await this.frenoAhora(this.pedido(c, null, ganadores));
       if (freno) {
         return this.respuestaDelFreno(freno, c);
@@ -483,7 +573,9 @@ export class PorteroDePagos {
     if (premio.puesto >= s.ganadores) {
       return { ok: false, respuesta: no(400, { motivo: "no-permitida", razon: "puesto", detalle: "no-existe" }) };
     }
-    if (this.d.cupos.selloDelPortero(s.organizador, s.huellaLista, s.ronda) === null) {
+    // El sello tiene que respaldar ESTE sorteo (el portero pagó su `draw` con ese sello), no solo uno con la misma lista y ronda:
+    // el contrato deja sellar varios iguales y uno solo pagado no puede respaldar a todos. Un sello de antes, sin ese dato, no vale.
+    if (this.d.cupos.selloDelSorteo(contrato, String(id), s) === null) {
       return { ok: false, respuesta: no(403, { motivo: "no-es-nuestro" }) };
     }
     return { ok: true, ganadores: s.ganadores };
@@ -539,9 +631,10 @@ export class PorteroDePagos {
 
   /**
    * Firma y manda el envoltorio. `nacio` dice si la fila de este pago se reservó en este mismo pedido: solo en ese caso se
-   * puede devolver, porque nada más la reservó este pedido y nada la mandó antes. Si ya estaba en el aire, una respuesta de la
-   * red que no sea tomarla casi siempre quiere decir que ya entró (la secuencia ya se usó): no se devuelve nunca desde acá, la
-   * alarma lo confirma con los dos RPC y Horizon.
+   * puede devolver, porque nada más la reservó este pedido y nada la mandó antes, y solo si la red lo rechazó con un código que
+   * prueba que quedó afuera (`RECHAZO_SEGURO`) y la fila sigue reservada. Si ya estaba en el aire, una respuesta de la red que no
+   * sea tomarla casi siempre quiere decir que ya entró (la secuencia ya se usó): no se devuelve nunca desde acá, la alarma lo
+   * confirma con los dos RPC y Horizon.
    */
   private async mandar(c: Contexto, envoltorio: FeeBumpTransaction, nacio: boolean): Promise<Respuesta> {
     const { forma, pago, no } = c;
@@ -552,8 +645,9 @@ export class PorteroDePagos {
       await this.firmarEnvoltorio(envoltorio);
       envuelta = envoltorio.toXDR();
     } catch (e) {
+      // Todavía no salió nada a la red: si este pedido la reservó y sigue reservada, vuelve.
       if (nacio) {
-        d.uso.devolver(hash);
+        d.uso.devolverSiReservado(hash);
       }
       this.registrar("error-interno", { donde: "envolver-pago", forma, hash: corto(hash), error: nombreDe(e) });
       return no(500, { motivo: "interno" });
@@ -571,33 +665,62 @@ export class PorteroDePagos {
       throw e;
     }
     if (envio.status === "PENDING" || envio.status === "DUPLICATE") {
-      d.uso.marcarEnviado(hash);
+      d.uso.marcarEnviado(hash, this.reloj());
       this.alQuedarEnElAire();
       this.registrar("pago-enviado", { forma, hash: corto(hash), red: envio.status });
       return resp(200, { hash, forma, vence: pago.venceS, status: envio.status, estado: "en-camino" });
     }
+    const codigo = envio.status === "ERROR" ? (envio.codigo ?? null) : null;
     if (!nacio) {
       this.alQuedarEnElAire();
+      // Una fila que la red nunca tomó (quedó en duda en su primer envío, o ese envío se cortó) y que la red sigue sin tomar es
+      // todavía una duda: el sitio tiene que volver a mandar el mismo sobre. Contestarle en camino lo dejaría esperando a que
+      // venza algo que la red no tiene. Una que la red ya tomó sí está en camino. Ninguna de las dos se devuelve desde acá.
+      const nuncaTomada = d.uso.buscar(hash)?.estado === "reservado";
+      if (nuncaTomada && (codigo === null || !RECHAZO_SEGURO.test(codigo))) {
+        d.uso.marcarEnDuda(hash, this.reloj());
+        return this.respuestaDeDuda(c, envio.status, codigo);
+      }
       return resp(200, { hash, forma, vence: pago.venceS, status: "DUPLICATE", estado: "en-camino" });
     }
     // Una secuencia ya usada puede ser la de este mismo pago: el primer RPC lo tomó, se cortó antes de contestar, entró en el
     // ledger siguiente y el segundo RPC dice txBadSeq. Antes de devolverlo se le pregunta a cada RPC: si alguno lo tiene, se
     // cierra con lo que diga. Devolverlo diría que no salió, y el sitio armaría otro pago del mismo premio.
-    const fila = envio.codigo && /txBadSeq/.test(envio.codigo) ? d.uso.buscar(hash) : null;
+    // Una respuesta que no prueba que el sobre quedó afuera (TRY_AGAIN_LATER, txInsufficientFee, un error sin código o uno que
+    // no está en la lista): la misma interna puede estar en la cola o entrar igual. No se devuelve: queda en el aire, el sitio
+    // lo toma como duda y reenvía el mismo sobre, y la alarma lo confirma con los dos RPC y Horizon antes de soltar su puesto.
+    // Queda anotado desde cuándo está en el aire: si vence sin entrar, cuenta para el tope por hora de la cuenta.
+    if (codigo === null || !RECHAZO_SEGURO.test(codigo)) {
+      this.alQuedarEnElAire();
+      d.uso.marcarEnDuda(hash, this.reloj());
+      this.registrar("pago-en-duda", { forma, hash: corto(hash), red: codigo ?? envio.status });
+      return this.respuestaDeDuda(c, envio.status, codigo);
+    }
+    const fila = /txBadSeq/.test(codigo) ? d.uso.buscar(hash) : null;
     const entro = fila ? await this.entroRecien(fila) : null;
     if (entro !== null) {
       return resp(200, { hash, forma, vence: pago.venceS, status: "DUPLICATE", estado: entro });
     }
-    // La red no lo tomó: no entró a ningún ledger y no se cobró nada. El puesto y el lugar de la cuenta vuelven.
-    d.uso.devolver(hash);
-    this.registrar("pago-devuelto", { forma, hash: corto(hash), motivo: envio.codigo ?? envio.status });
-    if (envio.status === "TRY_AGAIN_LATER") {
-      return no(502, { motivo: "red", detalle: "TRY_AGAIN_LATER" });
+    // La red no lo tomó: no entró a ningún ledger y no se cobró nada. El puesto y el lugar de la cuenta vuelven, pero solo si la
+    // fila sigue reservada: una que ya está enviada la tomó la red y no se toca desde acá.
+    if (!d.uso.devolverSiReservado(hash)) {
+      this.alQuedarEnElAire();
+      return resp(200, { hash, forma, vence: pago.venceS, status: "DUPLICATE", estado: "en-camino" });
     }
-    if (envio.codigo && /InsufficientBalance|InsufficientFee/.test(envio.codigo)) {
-      return no(503, { motivo: "fondo", detalle: "saldo", codigo: envio.codigo });
+    this.registrar("pago-devuelto", { forma, hash: corto(hash), motivo: codigo });
+    if (/InsufficientBalance/.test(codigo)) {
+      return no(503, { motivo: "fondo", detalle: "saldo", codigo });
     }
-    return no(400, { motivo: "rechazada", codigo: envio.codigo ?? "desconocido" });
+    return no(400, { motivo: "rechazada", codigo });
+  }
+
+  /** Lo que se contesta ante una duda: el pago sigue en el aire (`pudoSalir` verdadero) y el sitio reenvía el mismo sobre. */
+  private respuestaDeDuda(c: Contexto, status: Envio["status"], codigo: string | null): Respuesta {
+    if (status === "TRY_AGAIN_LATER") {
+      return c.no(502, { motivo: "red", detalle: "TRY_AGAIN_LATER" });
+    }
+    const detalle = codigo !== null && /InsufficientFee/.test(codigo) ? "ocupada" : "sin-confirmar";
+    return c.no(502, { motivo: "red", detalle, codigo: codigo ?? "desconocido" });
   }
 
   // ---------- lo que quedó en el aire ----------
@@ -617,20 +740,55 @@ export class PorteroDePagos {
    * que se cortó, y el cliente de la lista se queda con la primera respuesta que recibe.
    */
   private async entroRecien(f: FilaDePago): Promise<"ok" | "fallo" | null> {
-    const preguntar = async (red: Pick<Red, "consultar">): Promise<Consulta | null> => {
+    const { encontrada } = await this.preguntarACadaRpc(f);
+    return encontrada ? this.cerrarConLaRed(f, encontrada) : null;
+  }
+
+  /**
+   * Le pregunta por un pago a cada RPC a la vez, con `ESPERA_CONFIRMAR_MS` como mucho: lo que dice el primero que lo tiene (o
+   * null) y cuántos contestaron, aunque sea que no está. No cierra nada.
+   */
+  private async preguntarACadaRpc(f: FilaDePago): Promise<{ encontrada: Consulta | null; contestaron: number }> {
+    const preguntar = async (red: Pick<Red, "consultar">): Promise<Consulta | "sin-respuesta"> => {
       try {
-        const c = await red.consultar(f.hash, AbortSignal.timeout(ESPERA_CONFIRMAR_MS));
-        return c.status === "NOT_FOUND" ? null : c;
+        return await red.consultar(f.hash, AbortSignal.timeout(ESPERA_CONFIRMAR_MS));
       } catch (e) {
         if (e instanceof ErrorDeRed) {
-          return null;
+          return "sin-respuesta";
         }
         throw e;
       }
     };
     const respuestas = await Promise.all(this.d.redesSueltas.map(preguntar));
-    const encontrada = respuestas.find((c): c is Consulta => c !== null);
-    return encontrada ? this.cerrarConLaRed(f, encontrada) : null;
+    const contestadas = respuestas.filter((c): c is Consulta => c !== "sin-respuesta");
+    const encontrada = contestadas.find((c) => c.status !== "NOT_FOUND") ?? null;
+    return { encontrada, contestaron: contestadas.length };
+  }
+
+  /**
+   * Un premio de este puesto que se dio por devuelto hace poco pudo entrar igual (un RPC lo tomó, se cortó, y los dos dijeron que
+   * no lo tenían a tiempo): antes de reservar otro pago del mismo puesto se le pregunta a cada RPC por él. Si entró, se cierra y
+   * vuelve a ocupar su puesto, y el pago nuevo da `puesto-usado` en vez de pagar el premio dos veces. Es lo que la alarma mira en
+   * `mirarDevueltas`, sin esperarla. Si ningún RPC contesta por alguno, no se paga (502 red): el lado seguro. null si se puede seguir.
+   */
+  private async mirarDevueltosDelPuesto(c: Contexto): Promise<Respuesta | null> {
+    const premio = c.pago.premio;
+    const contrato = this.d.cfg.contractId;
+    if (premio === null || contrato === null) {
+      return null;
+    }
+    const ahoraS = Math.floor(this.reloj() / 1000);
+    const puesto = { contrato, sorteo: premio.sorteo, puesto: premio.puesto };
+    const filas = this.d.uso.devueltosDelPuesto(puesto, c.pago.hash, ahoraS, MARGEN_VENCIMIENTO_S, DEVUELTOS_DEL_PUESTO_POR_PEDIDO);
+    for (const f of filas) {
+      const { encontrada, contestaron } = await this.preguntarACadaRpc(f);
+      if (encontrada) {
+        this.cerrarConLaRed(f, encontrada);
+      } else if (contestaron === 0) {
+        return c.no(502, { motivo: "red", detalle: "confirmar" });
+      }
+    }
+    return null;
   }
 
   /** Borra lo viejo de las tablas. Si no se puede, se anota y se sigue: limpiar nunca es razón para no mandar ni para no cerrar. */
@@ -704,7 +862,11 @@ export class PorteroDePagos {
    */
   async reconciliar(): Promise<boolean> {
     const ahora = this.reloj();
-    const pendientes = this.d.uso.pendientes(ahora - ESPERA_RECONCILIAR_MS);
+    // Una vuelta mira a lo sumo `PENDIENTES_POR_VUELTA` y la siguiente sigue desde ahí: ninguna fila queda sin mirar.
+    const leer = (desde: PuntoDeLaRonda | null, max: number) => this.d.uso.pendientes(ahora - ESPERA_RECONCILIAR_MS, desde, max);
+    const ronda = vueltaDeRonda(leer, this.rondaDePendientes, PENDIENTES_POR_VUELTA);
+    this.rondaDePendientes = ronda.siguiente;
+    const pendientes = ronda.filas;
     for (const f of pendientes) {
       try {
         const c = await this.d.red.consultar(f.hash);
@@ -720,13 +882,32 @@ export class PorteroDePagos {
         // Sin red: se vuelve a intentar en la próxima vuelta.
       }
     }
+    const ahoraS = Math.floor(ahora / 1000);
+    const devueltas = await this.mirarDevueltas(ahoraS);
     this.purgarSinCaerse(ahora);
     const quedan = this.d.uso.enElAire();
+    const porAparecer = this.d.uso.devueltosRecientes(ahoraS, MARGEN_VENCIMIENTO_S, 1).length;
     // Sin nada que mirar ni nada en el aire, la vuelta no deja rastro: con los pagos apagados la bitácora es la de siempre.
-    if (pendientes.length > 0 || quedan > 0) {
+    if (pendientes.length > 0 || devueltas > 0 || quedan > 0) {
       this.registrar("alarma-pagos", { enElAire: quedan });
     }
-    return quedan > 0;
+    return quedan > 0 || porAparecer > 0;
+  }
+
+  /**
+   * Las devueltas que todavía podrían aparecer en un ledger (no pasaron `vence + 600`): se le pregunta a la red por cada una y, si
+   * entró igual, se cierra con lo que dice. Un premio que entró vuelve a ocupar su puesto (`UsoDePagos.cerrar`), así no se paga
+   * dos veces. Devuelve cuántas miró. Sin red, se vuelve a preguntar en la vuelta siguiente.
+   */
+  private async mirarDevueltas(ahoraS: number): Promise<number> {
+    const leer = (desde: PuntoDeLaRonda | null, max: number) => this.d.uso.devueltosRecientes(ahoraS, MARGEN_VENCIMIENTO_S, max, desde);
+    const ronda = vueltaDeRonda(leer, this.rondaDeDevueltas, DEVUELTAS_POR_VUELTA);
+    this.rondaDeDevueltas = ronda.siguiente;
+    const devueltas = ronda.filas;
+    for (const f of devueltas) {
+      await this.cerrarSiEntro(f);
+    }
+    return devueltas.length;
   }
 
   // ---------- lo que se ve de afuera ----------

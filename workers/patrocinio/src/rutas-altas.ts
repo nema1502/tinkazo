@@ -42,10 +42,10 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Altas, huella, normalizar, SECRETO_MINIMO } from "./altas";
-import type { AltasPorPremio } from "./altas-premio";
+import { type AltasPorPremio, type PedidoDeAltaPorPremio, cercaDelTope } from "./altas-premio";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type FilaOrden, type LectorDeCobros, enlaceDePago, estaCerrada, memoIdDe, normalizarOrden, notaDe, puedeHonrarse, usdcTexto } from "./cobros";
 import { AVISOS_POR_COMPRA, COMPRAS_POR_PERSONA_DIA, type ComprasQr, FIRMAS_POR_COMPRA, type FilaCompra } from "./compras";
-import { type Config, type Producto, TECHO_ALTAS_PREMIO_DIA, grupoDeIp } from "./config";
+import { type Config, DIA_MS, type Producto, TECHO_ALTAS_PREMIO_DIA, grupoDeIp } from "./config";
 import { type Cupos, type FilaAlta, type Quedan } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
 import { PUESTO_MAXIMO } from "./pagos-lista";
@@ -86,6 +86,15 @@ export const AJUSTE_CREDITOS = "creditos_ultimo";
 export const ESPERA_ABRIR_MS = 60_000;
 /** La ventana de la vigilancia de firmas: las últimas 24 horas. */
 const VENTANA_FIRMAS_MS = 86_400_000;
+/**
+ * Las respuestas del alta de quien ganó que dicen algo de una cuenta sin dar ningún alta (`ya-tiene-acceso` y `no-hace-falta`),
+ * por sorteo y en 24 horas, además de una por cada ganador del sorteo: quien organiza nombra a cada ganador una vez y le sobran
+ * estas para corregir un error. Sin este tope, con un solo sorteo suyo sorteado por el portero, una cuenta del libro preguntaría
+ * por cualquier cuenta G, sin fin, si usa Tinkazo o si existe en la red, y cada pregunta gastaría lecturas de la red.
+ */
+export const CONSULTAS_PREMIO_DE_MAS = 10;
+/** Desde cuántos sorteos anotados en memoria se limpian los que ya pasaron su ventana. */
+const LIMPIAR_CONSULTAS_DESDE = 5000;
 
 /** Por qué se pausó algo nuevo: el piso, Pollar sin responder (sin un saldo reciente) o a mano. */
 export type MotivoPausa = "piso" | "creditos" | "a-mano";
@@ -264,6 +273,11 @@ export class PuertaAltas {
   private readonly tokensPorIp: Intentos;
   /** Cuándo se le pidió a Pollar abrir la cuenta de cada alta, para hacerlo como mucho una vez por minuto. */
   private readonly aperturas = new Map<string, number>();
+  /**
+   * Por sorteo (`contrato:número`), cuántas respuestas del alta de quien ganó dijeron algo de una cuenta sin darle un alta, y desde
+   * cuándo cuenta la ventana de 24 horas. Vive en la memoria del objeto: un reinicio la vacía, y el tope vuelve a empezar.
+   */
+  private readonly consultasPorSorteo = new Map<string, { desde: number; n: number }>();
 
   constructor(private readonly d: DependenciasAltas) {
     this.reloj = d.reloj ?? (() => Date.now());
@@ -957,16 +971,39 @@ export class PuertaAltas {
   }
 
   /**
-   * Lo que `/estado` dice del alta de quien ganó: si la configuración la prende y cuántas se dieron en las últimas 24 horas. Sin la
-   * tabla, o si no se puede leer, cero: nunca hace fallar al estado.
+   * Lo que `/estado` dice del alta de quien ganó: si la configuración la prende, cuántas se dieron en las últimas 24 horas y si
+   * llegaron al 80 por ciento del tope del día (`cercaDelTope`), para subirlo en caliente o mirar quién las pide antes de que los
+   * ganadores de verdad se queden afuera. Sin la tabla, o si no se puede leer, cero: nunca hace fallar al estado.
    */
-  altaPremioDelEstado(): { prendido: boolean; hoy: number } {
+  altaPremioDelEstado(): { prendido: boolean; hoy: number; cercaDelTope: boolean } {
     const prendido = this.d.cfg.altasPremio;
     try {
-      return { prendido, hoy: this.d.altasPremio?.disponible() ? this.d.altasPremio.hoy(this.reloj()) : 0 };
+      const hoy = this.d.altasPremio?.disponible() ? this.d.altasPremio.hoy(this.reloj()) : 0;
+      return { prendido, hoy, cercaDelTope: cercaDelTope(hoy, this.topeDeAltasPremio()) };
     } catch {
-      return { prendido, hoy: 0 };
+      return { prendido, hoy: 0, cercaDelTope: false };
     }
+  }
+
+  /**
+   * Si el alta que se acaba de dar hizo que las del día llegaran al 80 por ciento del tope, lo anota una vez (solo cifras): la
+   * vigilancia y quien opera lo ven sin esperar a mirar `/estado`. Nunca hace fallar al alta.
+   */
+  private avisarSiCruzaElTope(ahora: number, tope: number): void {
+    try {
+      const hoy = this.d.altasPremio?.hoy(ahora) ?? 0;
+      if (cercaDelTope(hoy, tope) && !cercaDelTope(hoy - 1, tope)) {
+        this.registrar("alerta-altas-premio", { hoy, tope });
+      }
+    } catch {
+      // Contar las del día no es razón para que el alta dé error: ya se escribió.
+    }
+  }
+
+  /** El tope de las altas de quien ganó en 24 horas que vale ahora: el ajuste en caliente o la variable, siempre con su techo. */
+  private topeDeAltasPremio(): number {
+    const { cfg, cupos } = this.d;
+    return topeEnCaliente(cupos.ajuste(AJUSTE_ALTAS_PREMIO_DIA), cfg.altasPremioDia, TECHO_ALTAS_PREMIO_DIA);
   }
 
   /** Las cuentas del portero, que nunca pueden ser la de quien ganó: la que paga, la sorteadora y la de cobros. */
@@ -982,9 +1019,11 @@ export class PuertaAltas {
    * huella de la lista, no las cuentas): lo único que comprueba es que quien lo pide organizó ese sorteo, que ya se sorteó, que
    * el puesto existe y que el sello lo pagó el portero. Una vez por contrato, sorteo y puesto.
    *
-   * El orden es de lo más barato a lo más caro: la forma del cuerpo, la sesión, lo que ya se hizo (una llamada repetida no
-   * llega a la red), si la cuenta ya tiene acceso o ya existe en la red, el sorteo y los créditos. Después, sin ningún `await`,
-   * una sola transacción mira los topes y el piso de créditos y escribe (`AltasPorPremio.admitir`).
+   * El orden: la forma del cuerpo, la sesión, lo que ya se hizo (una llamada repetida no llega a la red), el sorteo (que sea de
+   * quien pregunta, sorteado, con ese puesto y respaldado por un sello del portero), recién entonces si la cuenta ya tiene acceso
+   * o ya existe en la red (así nadie se entera de eso por un sorteo ajeno, y con su tope por sorteo, `CONSULTAS_PREMIO_DE_MAS`,
+   * así tampoco se pregunta sin fin con uno propio), y los créditos. Después, sin ningún `await`, una sola
+   * transacción mira los topes y el piso de créditos y escribe (`AltasPorPremio.admitir`).
    */
   async premio(p: PedidoAlta): Promise<Respuesta> {
     const no = this.apagado();
@@ -1014,13 +1053,10 @@ export class PuertaAltas {
     if (previa && previa.organizador === organizador) {
       return previa.cuenta === pedido.cuenta ? r(200, { estado: "admitida", repetido: true }) : r(409, { motivo: "puesto-usado" });
     }
-    if (cupos.estaEnElLibro(pedido.cuenta) || cupos.altaDeCuenta(pedido.cuenta) !== null || cupos.altaDe(`cuenta:${pedido.cuenta}`) !== null) {
-      return r(200, { estado: "ya-tiene-acceso" });
-    }
-    // Una cuenta que ya existe en la red no necesita activarse: la línea del dólar digital la pide el proveedor solo. Si la red no
-    // contesta, se toma como que no existe: lo peor es apartar créditos de más.
-    if (await this.abierta(pedido.cuenta, null)) return r(200, { estado: "no-hace-falta" });
 
+    // Primero el sorteo: que exista, sea de quien pregunta, esté sorteado, tenga ese puesto y lo respalde un sello del portero.
+    // Recién después se dice si la cuenta ya tiene acceso o ya existe en la red: si no, cualquier cuenta del libro sabría, de
+    // cualquier cuenta G, si usa Tinkazo o si existe, y cada pregunta gastaría una lectura de la red.
     let sorteo: SorteoEnRed | null;
     try {
       sorteo = await leerSorteo(organizador, pedido.id);
@@ -1032,9 +1068,41 @@ export class PuertaAltas {
     if (sorteo.organizador !== organizador) return r(403, { motivo: "sorteo-ajeno", detalle: "otro-organizador" });
     if (!sorteo.sorteado) return r(409, { motivo: "sin-sortear" });
     if (pedido.puesto >= sorteo.ganadores) return r(400, { motivo: "puesto" });
-    // El sello va a la fila: otro sorteo igual sellado por fuera da el mismo sello y comparte su tope de altas.
-    const sello = cupos.selloDelPortero(sorteo.organizador, sorteo.huellaLista, sorteo.ronda);
+    // El sello tiene que respaldar ESTE sorteo (el portero pagó su `draw` con él): otro sorteo igual sellado por fuera no tiene
+    // sello y da no-es-nuestro. Un sello de antes de que se guardara a qué sorteo respalda tampoco vale. El sello va a la fila.
+    const sello = cupos.selloDelSorteo(contrato, pedido.sorteo, sorteo);
     if (sello === null) return r(403, { motivo: "no-es-nuestro" });
+
+    // Lo que se dice de una cuenta sin darle un alta tiene su tope por sorteo (`CONSULTAS_PREMIO_DE_MAS`). El lugar se toma antes
+    // de mirar la cuenta, así pedidos a la vez no lo pasan, y vuelve si al final no se dijo nada de ella sin darle un alta.
+    const clave = `${contrato}:${pedido.sorteo}`;
+    if (!this.tomarConsulta(clave, sorteo.ganadores)) return r(429, { motivo: "cupo", que: "sorteo" });
+    const alta = { contrato, sorteo: pedido.sorteo, puesto: pedido.puesto, cuenta: pedido.cuenta, organizador, ganadores: sorteo.ganadores, sello };
+    let revela = false;
+    try {
+      const fin = await this.nombrarGanador(alta, altasPremio);
+      revela = fin.revela;
+      return fin.respuesta;
+    } finally {
+      if (!revela) this.devolverConsulta(clave);
+    }
+  }
+
+  /**
+   * El final del alta de quien ganó, con el sorteo ya comprobado: si la cuenta ya tiene acceso o ya existe en la red, y si no, los
+   * créditos y el alta. `revela` dice si la respuesta contó algo de la cuenta sin darle un alta: eso es lo que gasta el tope por
+   * sorteo de `CONSULTAS_PREMIO_DE_MAS`.
+   */
+  private async nombrarGanador(alta: PedidoDeAltaPorPremio, altasPremio: AltasPorPremio): Promise<{ respuesta: Respuesta; revela: boolean }> {
+    const { cfg, cupos } = this.d;
+    const yaTiene = { respuesta: r(200, { estado: "ya-tiene-acceso" }), revela: true };
+    const fin = (respuesta: Respuesta) => ({ respuesta, revela: false });
+    if (cupos.estaEnElLibro(alta.cuenta) || cupos.altaDeCuenta(alta.cuenta) !== null || cupos.altaDe(`cuenta:${alta.cuenta}`) !== null) {
+      return yaTiene;
+    }
+    // Una cuenta que ya existe en la red no necesita activarse: la línea del dólar digital la pide el proveedor solo. Si la red no
+    // contesta, se toma como que no existe: lo peor es apartar créditos de más.
+    if (await this.abierta(alta.cuenta, null)) return { respuesta: r(200, { estado: "no-hace-falta" }), revela: true };
     // El saldo se lee antes (con su memoria de 60 s); si el alta resulta repetida, ni se mira.
     const creditos = await (this.d.pollar as Pollar).creditos();
 
@@ -1045,21 +1113,50 @@ export class PuertaAltas {
       pausa.motivo = this.pausa(creditos, cfg.creditosPorAlta, ahora);
       return pausa.motivo ? ("altas-pausadas" as const) : null;
     };
-    const altasPremioDia = topeEnCaliente(cupos.ajuste(AJUSTE_ALTAS_PREMIO_DIA), cfg.altasPremioDia, TECHO_ALTAS_PREMIO_DIA);
-    const alta = { contrato, sorteo: pedido.sorteo, puesto: pedido.puesto, cuenta: pedido.cuenta, organizador, ganadores: sorteo.ganadores, sello };
+    const altasPremioDia = this.topeDeAltasPremio();
     const res = altasPremio.admitir(alta, ahora, { altasPremioDia }, freno);
     if (!res.ok) {
       if (res.motivo === "altas-pausadas") {
         this.registrar("alta-pausa", { motivo: pausa.motivo ?? "piso", donde: "premio" });
-        return r(503, { motivo: "altas-pausadas" });
+        return fin(r(503, { motivo: "altas-pausadas" }));
       }
-      if (res.motivo === "puesto-usado") return r(409, { motivo: "puesto-usado" });
-      return r(429, res.que === "sorteo" ? { motivo: "cupo", que: "sorteo" } : { motivo: "cupo", que: res.que, liberaEn: res.liberaEn });
+      if (res.motivo === "puesto-usado") return fin(r(409, { motivo: "puesto-usado" }));
+      return fin(r(429, res.que === "sorteo" ? { motivo: "cupo", que: "sorteo" } : { motivo: "cupo", que: res.que, liberaEn: res.liberaEn }));
     }
-    if (res.estado === "ya-tiene-acceso") return r(200, { estado: "ya-tiene-acceso" });
+    if (res.estado === "ya-tiene-acceso") return yaTiene;
     // Sin la cuenta, el sorteo ni el puesto: nada de esto vuelve a la bitácora.
-    if (!res.repetido) this.registrar("alta-premio");
-    return r(200, { estado: "admitida", repetido: res.repetido });
+    if (!res.repetido) {
+      this.registrar("alta-premio");
+      this.avisarSiCruzaElTope(ahora, altasPremioDia);
+    }
+    return fin(r(200, { estado: "admitida", repetido: res.repetido }));
+  }
+
+  /**
+   * Toma un lugar del tope de lo que se dice de una cuenta sin darle un alta, en ese sorteo: los ganadores más
+   * `CONSULTAS_PREMIO_DE_MAS` en 24 horas desde la primera. false si ya no queda.
+   */
+  private tomarConsulta(clave: string, ganadores: number): boolean {
+    const ahora = this.reloj();
+    if (this.consultasPorSorteo.size > LIMPIAR_CONSULTAS_DESDE) {
+      for (const [k, c] of this.consultasPorSorteo) {
+        if (ahora - c.desde >= DIA_MS) this.consultasPorSorteo.delete(k);
+      }
+    }
+    const previa = this.consultasPorSorteo.get(clave);
+    const actual = previa && ahora - previa.desde < DIA_MS ? previa : { desde: ahora, n: 0 };
+    if (actual.n >= ganadores + CONSULTAS_PREMIO_DE_MAS) {
+      this.consultasPorSorteo.set(clave, actual);
+      return false;
+    }
+    this.consultasPorSorteo.set(clave, { desde: actual.desde, n: actual.n + 1 });
+    return true;
+  }
+
+  /** Devuelve el lugar que tomó `tomarConsulta` cuando la respuesta no dijo nada de la cuenta sin darle un alta. */
+  private devolverConsulta(clave: string): void {
+    const c = this.consultasPorSorteo.get(clave);
+    if (c && c.n > 0) this.consultasPorSorteo.set(clave, { desde: c.desde, n: c.n - 1 });
   }
 
   // ---------- el pago de quien llega de afuera ----------

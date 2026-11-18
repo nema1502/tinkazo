@@ -18,11 +18,10 @@
  * índices ganadores, no las cuentas. Lo nombra quien organiza, con su sesión, y lo peor que logra es un alta por cada puesto
  * de sus propios sorteos sellados por el portero, acotado por los topes de abajo.
  *
- * Cada fila guarda también el sello del portero que respalda ese sorteo (`Cupos.selloDelPortero`). El contrato acepta dos
- * sorteos con el mismo organizador, la misma lista y la misma ronda, y el portero reconoce su sello por esos tres datos: sin
- * esto, quien organiza sellaría una vez con el portero y después, por fuera y con su propio XLM, otros sorteos iguales de 300
- * ganadores, cada uno con su tope de 50. Con el sello en la fila, todos los sorteos que se apoyan en el mismo sello comparten
- * ese tope.
+ * Cada fila guarda también el sello del portero que respalda ese sorteo (`Cupos.selloDelSorteo`). El contrato acepta dos
+ * sorteos con el mismo organizador, la misma lista y la misma ronda: sin atar el sello a un sorteo, quien organiza sellaría una
+ * vez con el portero y después, por fuera y con su propio XLM, otros sorteos iguales de 300 ganadores, cada uno con su tope de
+ * 50. Un sello respalda un solo sorteo (el primero cuyo `draw` pagó el portero con él), y el tope por sello queda como segunda red.
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import { DIA_MS } from "./config";
@@ -30,11 +29,24 @@ import type { Cupos, Sql } from "./cupos";
 
 /**
  * Lo más que se da de alta por un sorteo. El tope de verdad es el menor entre esto y la cantidad de ganadores. Vale también por
- * sello del portero: los sorteos que se apoyan en el mismo sello suman juntos.
+ * sello del portero, como segunda red: un sello respalda un solo sorteo.
  */
 export const ALTAS_PREMIO_POR_SORTEO = 50;
-/** Altas de quien ganó que da una misma cuenta de quien organiza en 24 horas. */
+/** Altas de quien ganó que da una misma cuenta de quien organiza en 24 horas, como mucho (ver también `ALTAS_PREMIO_PARTES_DEL_DIA`). */
 export const ALTAS_PREMIO_POR_ORGANIZADOR_DIA = 30;
+/**
+ * En cuántas partes se divide el tope del día: ninguna cuenta de quien organiza da más de una parte en 24 horas (20 de 100, y nunca
+ * menos de una), y la última parte del día queda para quienes casi no dieron altas hoy. Así pocas cuentas del libro, nombrando
+ * cuentas inventadas, no dejan sin lugar a los ganadores de verdad de los demás.
+ */
+export const ALTAS_PREMIO_PARTES_DEL_DIA = 5;
+/** En la última parte del día solo entra quien dio menos de estas altas en 24 horas. */
+export const ALTAS_PREMIO_EN_LA_RESERVA = 3;
+
+/** Si las altas del día llegaron al 80 por ciento del tope: el estado lo avisa para subir el tope o mirar quién las pide. */
+export function cercaDelTope(hoy: number, tope: number): boolean {
+  return hoy > 0 && hoy * 5 >= tope * 4;
+}
 /** Los ganadores que puede tener un sorteo, como los acepta el contrato. */
 const GANADORES_MAXIMOS = 300;
 
@@ -67,7 +79,7 @@ export interface PedidoDeAltaPorPremio {
   organizador: string;
   /** Cuántos ganadores tiene el sorteo, según la red. */
   ganadores: number;
-  /** El hash del sello que pagó el portero para ese sorteo, el de `Cupos.selloDelPortero`. */
+  /** El hash del sello que pagó el portero y respalda ese sorteo, el de `Cupos.selloDelSorteo`. */
   sello: string;
 }
 
@@ -179,8 +191,9 @@ export class AltasPorPremio {
    *
    * - El mismo puesto con la misma cuenta es `repetido` y no escribe nada. Con otra cuenta, `puesto-usado`.
    * - Una cuenta que ya está en el libro, o que ya es la cuenta de un alta, es `ya-tiene-acceso`: no hace falta darle nada.
-   * - Los topes: por sorteo (el menor entre los ganadores y 50), por sello del portero (50 entre todos los sorteos que se apoyan
-   *   en ese sello), por organizador en 24 horas y entre todos en 24 horas.
+   * - Los topes: por sorteo (el menor entre los ganadores y 50), por sello del portero (50), entre todos en 24 horas y, por
+   *   organizador en 24 horas, el menor entre 30 y una quinta parte del tope del día. En la última quinta parte del día solo entra
+   *   quien dio menos de 3 altas hoy.
    * - `freno` (el piso de créditos y la pausa a mano) puede parar el alta antes de escribir: no queda nada.
    * - Si pasa: la fila de `altas_premio`, el alta de la cuenta (`cuenta:<G>`, motivo `premio`, `autorizada`, sin sorteos) y la
    *   cuenta en el libro con el motivo `premio`.
@@ -208,13 +221,21 @@ export class AltasPorPremio {
         return { ok: false, motivo: "cupo", que: "sorteo" };
       }
       const desde = ahora - DIA_MS;
-      const delOrganizador = this.contar("organizador = ? AND ms > ?", p.organizador, desde);
-      if (delOrganizador.n >= ALTAS_PREMIO_POR_ORGANIZADOR_DIA) {
-        return { ok: false, motivo: "cupo", que: "organizador", liberaEn: (delOrganizador.masVieja ?? ahora) + DIA_MS };
-      }
       const delDia = this.contar("ms > ?", desde);
       if (delDia.n >= lim.altasPremioDia) {
         return { ok: false, motivo: "cupo", que: "dia", liberaEn: (delDia.masVieja ?? ahora) + DIA_MS };
+      }
+      // Ninguna cuenta de quien organiza da más de una parte del tope del día, ni más de 30, y en la última parte solo entra quien
+      // casi no dio altas hoy: el resto del día queda para los demás.
+      const delOrganizador = this.contar("organizador = ? AND ms > ?", p.organizador, desde);
+      const liberaOrganizador = (delOrganizador.masVieja ?? ahora) + DIA_MS;
+      const parte = Math.max(1, Math.floor(lim.altasPremioDia / ALTAS_PREMIO_PARTES_DEL_DIA));
+      if (delOrganizador.n >= Math.min(ALTAS_PREMIO_POR_ORGANIZADOR_DIA, parte)) {
+        return { ok: false, motivo: "cupo", que: "organizador", liberaEn: liberaOrganizador };
+      }
+      const enLaReserva = delDia.n >= lim.altasPremioDia - Math.ceil(lim.altasPremioDia / ALTAS_PREMIO_PARTES_DEL_DIA);
+      if (enLaReserva && delOrganizador.n >= ALTAS_PREMIO_EN_LA_RESERVA) {
+        return { ok: false, motivo: "cupo", que: "organizador", liberaEn: liberaOrganizador };
       }
       if (freno() !== null) {
         return { ok: false, motivo: "altas-pausadas" };

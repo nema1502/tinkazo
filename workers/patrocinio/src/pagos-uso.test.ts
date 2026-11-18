@@ -8,7 +8,10 @@ import {
   AJUSTE_TOPE_PAGOS,
   AJUSTES_DE_PAUSA,
   DEVUELTOS_POR_CUENTA_DIA,
+  EN_EL_AIRE_POR_FORMA,
+  EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA,
   type LimitesDePagos,
+  MARGEN_OCUPADO_S,
   PREMIOS_POR_ORGANIZADOR_DIA,
   PREMIOS_POR_SORTEO,
   PREMIOS_RECHAZADOS_POR_DESTINO_DIA,
@@ -141,7 +144,7 @@ describe("el puesto de un premio", () => {
     const { uso } = nueva();
     const enviado = premio({ puesto: 1 });
     expect(uso.reservar(enviado, AHORA, LIM)).toEqual(NUEVO);
-    uso.marcarEnviado(enviado.hash);
+    uso.marcarEnviado(enviado.hash, AHORA);
     expect(uso.reservar(premio({ puesto: 1 }), AHORA, LIM)).toMatchObject({ ok: false, motivo: "puesto-usado", estado: "enviado" });
     uso.cerrar(enviado.hash, "ok", 200);
     expect(uso.reservar(premio({ puesto: 1 }), AHORA, LIM)).toMatchObject({ ok: false, motivo: "puesto-usado", estado: "ok" });
@@ -444,6 +447,89 @@ describe("los topes por cuenta", () => {
     expect(uso.reservar(retiro({ cuenta: c }), AHORA + DIA_MS, LIM)).toEqual(NUEVO);
   });
 
+  it("(ataque) una cuenta con dos pagos que la red tomó y nunca entraron en la última hora da cupo-cuenta intentos por una hora", () => {
+    const { uso } = nueva();
+    const c = cuenta();
+    for (let i = 0; i < EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA; i++) {
+      const p = retiro({ cuenta: c });
+      expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
+      uso.marcarEnviado(p.hash, AHORA);
+      uso.devolver(p.hash);
+    }
+    const max = EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA;
+    expect(uso.reservar(retiro({ cuenta: c }), AHORA, LIM)).toEqual(llenoPorCuenta("intentos", max, AHORA + 3_600_000));
+    expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+    expect(uso.reservar(retiro({ cuenta: c }), AHORA + 3_600_001, LIM)).toEqual(NUEVO);
+  });
+
+  it("(ataque) dos pagos que quedaron en duda (TRY_AGAIN_LATER) y la alarma devolvió también dan cupo-cuenta intentos por una hora", () => {
+    const { uso } = nueva();
+    const c = cuenta();
+    for (let i = 0; i < EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA; i++) {
+      const p = retiro({ cuenta: c });
+      expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
+      uso.marcarEnDuda(p.hash, AHORA);
+      uso.devolver(p.hash);
+    }
+    const max = EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA;
+    expect(uso.reservar(retiro({ cuenta: c }), AHORA, LIM)).toEqual(llenoPorCuenta("intentos", max, AHORA + 3_600_000));
+  });
+
+  it("marcarEnDuda anota desde cuándo está en el aire sin cambiar su estado, y no toca una fila ya enviada", () => {
+    const { uso } = nueva();
+    const p = retiro();
+    uso.reservar(p, AHORA, LIM);
+    uso.marcarEnDuda(p.hash, AHORA + 5);
+    expect(uso.buscar(p.hash)).toMatchObject({ estado: "reservado", tomado: AHORA + 5 });
+    uso.marcarEnDuda(p.hash, AHORA + 9);
+    expect(uso.buscar(p.hash)?.tomado).toBe(AHORA + 5);
+    const q = retiro();
+    uso.reservar(q, AHORA, LIM);
+    uso.marcarEnviado(q.hash, AHORA + 1);
+    uso.marcarEnDuda(q.hash, AHORA + 7);
+    expect(uso.buscar(q.hash)).toMatchObject({ estado: "enviado", tomado: AHORA + 1 });
+  });
+
+  it("devueltosDelPuesto da los premios devueltos de ese puesto que todavía podrían entrar, sin el propio ni los de otro puesto", () => {
+    const { uso } = nueva();
+    const c = cuenta();
+    const a = premio({ cuenta: c, puesto: 0 });
+    const b = premio({ cuenta: c, puesto: 1 });
+    for (const p of [a, b]) {
+      uso.reservar(p, AHORA, LIM);
+      uso.devolverSiReservado(p.hash);
+    }
+    const puesto = { contrato: CONTRATO, sorteo: "5", puesto: 0 };
+    const ahoraS = Math.floor(AHORA / 1000);
+    expect(uso.devueltosDelPuesto(puesto, "f".repeat(64), ahoraS, 600, 5).map((f) => f.hash)).toEqual([a.hash]);
+    expect(uso.devueltosDelPuesto(puesto, a.hash, ahoraS, 600, 5)).toEqual([]);
+    expect(uso.devueltosDelPuesto(puesto, "f".repeat(64), a.vence + 601, 600, 5)).toEqual([]);
+  });
+
+  it("un pago que la red rechazó al primer envío (nunca lo tomó) no cuenta para el tope por hora de lo que no entró", () => {
+    const { uso } = nueva();
+    const c = cuenta();
+    for (let i = 0; i < EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA + 1; i++) {
+      const p = retiro({ cuenta: c });
+      expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
+      uso.devolverSiReservado(p.hash);
+    }
+    expect(uso.reservar(retiro({ cuenta: c }), AHORA, LIM)).toEqual(NUEVO);
+  });
+
+  it("un pago tomado que se devolvió y se vuelve a reservar ya no cuenta como tomado hasta que la red lo tome otra vez", () => {
+    const { uso } = nueva();
+    const c = cuenta();
+    const p = retiro({ cuenta: c });
+    uso.reservar(p, AHORA, LIM);
+    uso.marcarEnviado(p.hash, AHORA);
+    uso.devolver(p.hash);
+    expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
+    expect(uso.buscar(p.hash)?.tomado).toBeNull();
+    uso.marcarEnviado(p.hash, AHORA);
+    expect(uso.buscar(p.hash)?.tomado).toBe(AHORA);
+  });
+
   it("lo devuelto no cuenta para el presupuesto, ni para los topes de retiros, premios o rechazos, y sí para el de intentos", () => {
     const { uso } = nueva();
     const c = cuenta();
@@ -471,19 +557,57 @@ describe("la última red: lo que falló y lo que está en el aire, por forma y e
     expect(uso.reservar(retiro(), AHORA + DIA_MS, LIM)).toEqual(NUEVO);
   });
 
-  it("(ataque) con 15 fallados y 5 en el aire, el siguiente da fondo ocupado con reintentarEn, y pasa cuando uno de los del aire cierra bien", () => {
+  it("(ataque) veinte cuentas con un retiro en el aire cada una no frenan a una persona nueva: lo del aire no comparte el tope de los fallos", () => {
+    const { uso } = nueva();
+    for (let i = 0; i < LIM.rechazosPorDia; i++) {
+      const p = retiro();
+      expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
+      uso.marcarEnviado(p.hash, AHORA);
+    }
+    expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+  });
+
+  it("(ataque) con 15 fallados y 5 en el aire, un retiro nuevo pasa: los 5 del aire no cuentan como fallos", () => {
     const { uso } = nueva();
     for (let i = 0; i < 15; i++) {
       pagar(uso, retiro(), "fallo");
     }
-    const enElAire = Array.from({ length: 5 }, () => retiro());
+    for (let i = 0; i < 5; i++) {
+      expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+    }
+    expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+  });
+
+  it("(ataque) lo que está en el aire tiene su propio tope por forma: lleno, fondo ocupado con reintentarEn, y pasa cuando uno cierra", () => {
+    const { uso } = nueva();
+    const enElAire = Array.from({ length: EN_EL_AIRE_POR_FORMA }, () => retiro());
     for (const p of enElAire) {
       expect(uso.reservar(p, AHORA, LIM)).toEqual(NUEVO);
     }
     expect(uso.reservar(retiro(), AHORA, LIM)).toEqual({ ok: false, motivo: "fondo", detalle: "ocupado", reintentarEn: REINTENTAR_OCUPADO_MS });
     expect(REINTENTAR_OCUPADO_MS).toBe(5_000);
+    expect(uso.reservar(premio(), AHORA, LIM)).toEqual(NUEVO);
     uso.cerrar((enElAire[0] as PedidoDePago).hash, "ok", 300);
     expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+  });
+
+  it("lo del aire que ya venció (más su margen) no ocupa lugar: no puede entrar ni cobrar, aunque la alarma no lo haya cerrado", () => {
+    const { uso } = nueva();
+    for (let i = 0; i < EN_EL_AIRE_POR_FORMA; i++) {
+      expect(uso.reservar(retiro(), AHORA, LIM)).toEqual(NUEVO);
+    }
+    const pasado = AHORA + (240 + MARGEN_OCUPADO_S + 1) * 1000;
+    expect(uso.reservar(retiro(), pasado, LIM)).toEqual(NUEVO);
+    expect(uso.enElAire()).toBe(EN_EL_AIRE_POR_FORMA + 1);
+  });
+
+  it("los fallos que pagaron comisión siguen con su tope: con 20 fallados el siguiente da fondo rechazos aunque nada esté en el aire", () => {
+    const { uso } = nueva();
+    for (let i = 0; i < LIM.rechazosPorDia; i++) {
+      pagar(uso, retiro(), "fallo");
+    }
+    expect(uso.enElAire()).toBe(0);
+    expect(uso.reservar(retiro(), AHORA, LIM)).toMatchObject({ ok: false, motivo: "fondo", detalle: "rechazos" });
   });
 
   it("un tope en caliente más bajo se aplica en el momento", () => {
@@ -626,8 +750,39 @@ describe("cerrar, devolver y lo que queda en el aire", () => {
     const { uso } = nueva();
     uso.cerrar(hash(), "ok", 1);
     uso.devolver(hash());
-    uso.marcarEnviado(hash());
+    expect(uso.devolverSiReservado(hash())).toBe(false);
+    uso.marcarEnviado(hash(), AHORA);
     expect(uso.exportar().pagos_portero).toEqual([]);
+  });
+
+  it("devolverSiReservado devuelve un pago reservado y dice que lo hizo", () => {
+    const { uso } = nueva();
+    const p = premio();
+    uso.reservar(p, AHORA, LIM);
+    expect(uso.devolverSiReservado(p.hash)).toBe(true);
+    expect(uso.buscar(p.hash)?.estado).toBe("devuelto");
+  });
+
+  it("(ataque) devolverSiReservado nunca devuelve un pago enviado: la red ya lo tomó y su puesto sigue ocupado", () => {
+    const { uso } = nueva();
+    const p = premio({ sorteo: "9", puesto: 0 });
+    uso.reservar(p, AHORA, LIM);
+    uso.marcarEnviado(p.hash, AHORA);
+    expect(uso.devolverSiReservado(p.hash)).toBe(false);
+    expect(uso.buscar(p.hash)?.estado).toBe("enviado");
+    expect(uso.puestoUsado(CONTRATO, "9", 0)).toEqual({ hash: p.hash, estado: "enviado" });
+  });
+
+  it("devueltosRecientes da las devueltas que todavía podrían aparecer (vence más el margen), y no las viejas ni las del aire", () => {
+    const { uso } = nueva();
+    const reciente = retiro();
+    const enElAire = retiro();
+    uso.reservar(reciente, AHORA, LIM);
+    uso.devolverSiReservado(reciente.hash);
+    uso.reservar(enElAire, AHORA, LIM);
+    const ahoraS = Math.floor(AHORA / 1000);
+    expect(uso.devueltosRecientes(ahoraS, 600, 50).map((f) => f.hash)).toEqual([reciente.hash]);
+    expect(uso.devueltosRecientes(VENCE + 601, 600, 50)).toEqual([]);
   });
 
   it("pendientes lista lo que sigue en el aire desde antes de un momento, el más viejo primero", () => {
@@ -641,8 +796,18 @@ describe("cerrar, devolver y lo que queda en el aire", () => {
     expect(uso.pendientes(AHORA + 30_000).map((f) => f.hash)).toEqual([viejo.hash]);
     expect(uso.pendientes(AHORA + 120_000).map((f) => f.hash)).toEqual([viejo.hash, nuevo.hash]);
     expect(uso.enElAire()).toBe(2);
-    uso.marcarEnviado(viejo.hash);
+    uso.marcarEnviado(viejo.hash, AHORA);
     expect(uso.pendientes(AHORA + 30_000)).toHaveLength(1);
+  });
+
+  it("pendientes con un punto de la ronda sigue desde la fila siguiente, y a lo sumo las que se piden", () => {
+    const { uso } = nueva();
+    const filas = [retiro(), retiro(), retiro()];
+    filas.forEach((p, i) => uso.reservar(p, AHORA + i, LIM));
+    const [a, b, c] = filas.map((p) => p.hash);
+    expect(uso.pendientes(AHORA + 10, null, 2).map((f) => f.hash)).toEqual([a, b]);
+    expect(uso.pendientes(AHORA + 10, { creado: AHORA + 1, hash: b as string }, 2).map((f) => f.hash)).toEqual([c]);
+    expect(uso.pendientes(AHORA + 10, { creado: AHORA + 2, hash: c as string }, 2)).toEqual([]);
   });
 
   it("la fila guarda lo que se le pidió, con los nombres del código", () => {
@@ -664,6 +829,7 @@ describe("cerrar, devolver y lo que queda en el aire", () => {
       estimado: OFERTA_PREMIO,
       real: null,
       vence: VENCE,
+      tomado: null,
     });
   });
 });

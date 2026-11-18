@@ -25,9 +25,10 @@ import {
   armarPorteroDePagos,
   pagosPrendidos,
   vueltaDeAlarma,
+  vueltaDeRonda,
   type DependenciasDePagos,
 } from "./pagos-servicio";
-import { UsoDePagos } from "./pagos-uso";
+import { EN_EL_AIRE_POR_FORMA, type FilaDePago, PENDIENTES_POR_VUELTA, UsoDePagos } from "./pagos-uso";
 import { ErrorDeRed, type Consulta, type CuentaEnRed, type Envio, type Red, type Simulacion } from "./red";
 import { type Modo, firmanteDe } from "./servicio";
 import { haciaHorizon } from "./servidores";
@@ -221,6 +222,8 @@ interface OpcionesDeSorteo {
   estado?: "Sealed" | "Drawn";
   /** Si el portero pagó el sello. Por defecto sí. */
   sello?: boolean;
+  /** Si el portero pagó el `draw` de este sorteo con ese sello, que lo ata a él. Por defecto sí: un sello de antes no lo tiene. */
+  atado?: boolean;
   /** El organizador que dice la red, si no es el que paga. */
   en?: string;
 }
@@ -231,6 +234,9 @@ function sorteoSellado(m: Montaje, organizador: string, o: OpcionesDeSorteo = {}
   if (o.sello !== false) {
     const insertar = "INSERT INTO sellos_portero (hash, organizador, huella_lista, ronda, ms) VALUES (?, ?, ?, ?, ?)";
     m.sql.exec(insertar, `sello-${id}`, o.en ?? organizador, hex(LISTA), RONDA, T0);
+    if (o.atado !== false) {
+      m.cupos.atarSorteo({ sello: `sello-${id}`, contrato: CONTRATO, sorteo: String(id), draw: `draw-${id}` }, T0);
+    }
   }
 }
 
@@ -420,6 +426,34 @@ describe("el premio mira el sorteo en la red", () => {
     }
   });
 
+  it("(ataque) un sorteo gemelo, con la misma lista y ronda que el que selló el portero y sellado por fuera, da no-es-nuestro", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey());
+    const gemelo = "987654322";
+    m.red.sorteos.set(BigInt(gemelo), { organizador: org.publicKey(), ganadores: 3, estado: "Drawn" });
+    const t = premio(org, { sorteo: gemelo });
+    expect(await m.p.procesar("premio", t.xdr)).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro", pudoSalir: false } });
+    expect(m.uso.buscar(t.hash)).toBeNull();
+    expect(m.red.enviados).toHaveLength(0);
+  });
+
+  it("el sorteo que el portero sí sorteó con su sello sigue pagando aunque exista un gemelo", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey());
+    m.red.sorteos.set(987654322n, { organizador: org.publicKey(), ganadores: 3, estado: "Drawn" });
+    expect(await m.p.procesar("premio", premio(org).xdr)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
+  });
+
+  it("(ataque) un sello de antes, sin el sorteo que respalda guardado, da no-es-nuestro: falla cerrado", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey(), { atado: false });
+    expect(await m.p.procesar("premio", premio(org).xdr)).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro", pudoSalir: false } });
+    expect(m.red.enviados).toHaveLength(0);
+  });
+
   it("si la red no deja leer el sorteo, 502 red y no se reserva nada ni se le pregunta a Horizon", async () => {
     const m = await montar();
     const org = delLibro(m);
@@ -467,6 +501,48 @@ describe("el premio mira el sorteo en la red", () => {
     expect(rb).toMatchObject({ estado: 200, cuerpo: { hash: t.hash, estado: "en-camino" } });
     expect(m.sql.exec("SELECT COUNT(*) AS n FROM pagos_portero").toArray()).toEqual([{ n: 1 }]);
     expect(m.uso.resumen(T0).gasto24h).toBe(20_000);
+  });
+
+  it("(ataque) el mismo sobre dos veces a la vez, TRY_AGAIN_LATER para uno y PENDING para el otro: sigue en el aire y ocupa su puesto", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey());
+    const t = premio(org);
+    const respuestas: Envio[] = [{ status: "TRY_AGAIN_LATER" }, { status: "PENDING" }];
+    m.red.envio = () => respuestas.shift() ?? { status: "DUPLICATE" };
+    const [ra, rb] = await Promise.all([m.p.procesar("premio", t.xdr), m.p.procesar("premio", t.xdr)]);
+    expect(m.red.enviados).toHaveLength(2);
+    expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
+    expect(rb).toMatchObject({ estado: 200, cuerpo: { hash: t.hash, estado: "en-camino" } });
+    expect(ra).toMatchObject({ cuerpo: { pudoSalir: true } });
+    const otro = premio(org, { secuencia: "101" });
+    expect(await m.p.procesar("premio", otro.xdr)).toMatchObject({ estado: 409, cuerpo: { motivo: "puesto-usado", hash: t.hash } });
+  });
+
+  it("(ataque) el mismo sobre dos veces a la vez, txInsufficientFee para uno y PENDING para el otro: no queda devuelto", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey());
+    const t = premio(org);
+    const respuestas: Envio[] = [{ status: "ERROR", codigo: "txInsufficientFee" }, { status: "PENDING" }];
+    m.red.envio = () => respuestas.shift() ?? { status: "DUPLICATE" };
+    await Promise.all([m.p.procesar("premio", t.xdr), m.p.procesar("premio", t.xdr)]);
+    expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
+    expect(m.uso.puestoUsado(CONTRATO, SORTEO, 0)).toEqual({ hash: t.hash, estado: "enviado" });
+  });
+
+  it("el mismo sobre dos veces a la vez, rechazado de verdad el primero y tomado el segundo: queda enviado una sola vez", async () => {
+    const m = await montar();
+    const org = delLibro(m);
+    sorteoSellado(m, org.publicKey());
+    const t = premio(org);
+    const respuestas: Envio[] = [{ status: "ERROR", codigo: "txFeeBumpInnerFailed/txBadSeq" }, { status: "PENDING" }];
+    m.red.envio = () => respuestas.shift() ?? { status: "DUPLICATE" };
+    const [ra, rb] = await Promise.all([m.p.procesar("premio", t.xdr), m.p.procesar("premio", t.xdr)]);
+    expect(ra).toMatchObject({ estado: 400, cuerpo: { motivo: "rechazada" } });
+    expect(rb).toMatchObject({ estado: 200, cuerpo: { status: "PENDING", estado: "en-camino" } });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
+    expect(m.sql.exec("SELECT COUNT(*) AS n FROM pagos_portero").toArray()).toEqual([{ n: 1 }]);
   });
 });
 
@@ -639,12 +715,85 @@ describe("lo que la red no toma", () => {
     expect(m.uso.firmas(0)).toEqual({ premios: 0, retiros: 1 });
   });
 
-  it("TRY_AGAIN_LATER en una nueva da 502 red y la fila queda devuelta", async () => {
+  it("TRY_AGAIN_LATER en una nueva es una duda: 502 red con pudoSalir verdadero y la fila sigue en el aire", async () => {
     const m = await montar();
     const t = retiro(delLibro(m));
     m.red.envio = { status: "TRY_AGAIN_LATER" };
-    expect(await m.p.procesar("retiro", t.xdr)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "TRY_AGAIN_LATER", pudoSalir: false } });
-    expect(m.uso.buscar(t.hash)?.estado).toBe("devuelto");
+    expect(await m.p.procesar("retiro", t.xdr)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "TRY_AGAIN_LATER", pudoSalir: true } });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("reservado");
+    expect(m.estado.alAire).toBeGreaterThan(0);
+  });
+
+  it("(ataque) txInsufficientFee en una nueva es una duda (la misma interna puede estar en la cola): 502 red ocupada, sin devolver", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "ERROR", codigo: "txInsufficientFee" };
+    expect(await m.p.procesar("retiro", t.xdr)).toEqual({
+      estado: 502,
+      cuerpo: { motivo: "red", detalle: "ocupada", codigo: "txInsufficientFee", pudoSalir: true },
+    });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("reservado");
+  });
+
+  it("un rechazo de la red sin código es una duda: 502 red sin-confirmar, sin devolver", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "ERROR" };
+    expect(await m.p.procesar("retiro", t.xdr)).toEqual({
+      estado: 502,
+      cuerpo: { motivo: "red", detalle: "sin-confirmar", codigo: "desconocido", pudoSalir: true },
+    });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("reservado");
+  });
+
+  it("después de una duda, el mismo sobre otra vez se reenvía: si la red lo toma, queda enviado", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    await m.p.procesar("retiro", t.xdr);
+    m.red.envio = { status: "PENDING" };
+    expect(await m.p.procesar("retiro", t.xdr)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING", estado: "en-camino" } });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
+  });
+
+  it("después de una duda, si el reenvío vuelve a dar TRY_AGAIN_LATER sigue siendo una duda: 502 y no en camino", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    await m.p.procesar("retiro", t.xdr);
+    expect(await m.p.procesar("retiro", t.xdr)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "TRY_AGAIN_LATER", pudoSalir: true } });
+    expect(m.red.enviados).toHaveLength(2);
+    expect(m.uso.buscar(t.hash)?.estado).toBe("reservado");
+  });
+
+  it("después de una duda, un reenvío con txInsufficientFee sigue siendo una duda: 502 red ocupada", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    await m.p.procesar("retiro", t.xdr);
+    m.red.envio = { status: "ERROR", codigo: "txInsufficientFee" };
+    expect(await m.p.procesar("retiro", t.xdr)).toEqual({
+      estado: 502,
+      cuerpo: { motivo: "red", detalle: "ocupada", codigo: "txInsufficientFee", pudoSalir: true },
+    });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("reservado");
+  });
+
+  it("uno que la red ya tomó y en el reenvío da TRY_AGAIN_LATER sigue en camino, sin devolverse", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    await m.p.procesar("retiro", t.xdr);
+    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    expect(await m.p.procesar("retiro", t.xdr)).toMatchObject({ estado: 200, cuerpo: { status: "DUPLICATE", estado: "en-camino" } });
+    expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
+  });
+
+  it("(ataque) una duda queda anotada como en el aire: si vence sin entrar, cuenta para el tope por hora de la cuenta", async () => {
+    const m = await montar();
+    const t = retiro(delLibro(m));
+    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    await m.p.procesar("retiro", t.xdr);
+    expect(m.uso.buscar(t.hash)).toMatchObject({ estado: "reservado", tomado: T0 });
   });
 
   it("sin saldo en la cuenta que paga, 503 fondo saldo", async () => {
@@ -661,8 +810,9 @@ describe("lo que la red no toma", () => {
   it("un devuelto se puede mandar otra vez: se reserva de nuevo", async () => {
     const m = await montar();
     const t = retiro(delLibro(m));
-    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    m.red.envio = { status: "ERROR", codigo: "txFeeBumpInnerFailed/txBadSeq" };
     await m.p.procesar("retiro", t.xdr);
+    expect(m.uso.buscar(t.hash)?.estado).toBe("devuelto");
     m.red.envio = { status: "PENDING" };
     expect(await m.p.procesar("retiro", t.xdr)).toMatchObject({ estado: 200, cuerpo: { status: "PENDING" } });
     expect(m.uso.buscar(t.hash)?.estado).toBe("enviado");
@@ -688,7 +838,7 @@ describe("lo que la red no toma", () => {
   it("una devuelta que ya entró no se manda de nuevo: se cierra con lo que dice la red", async () => {
     const m = await montar();
     const t = retiro(delLibro(m));
-    m.red.envio = { status: "TRY_AGAIN_LATER" };
+    m.red.envio = { status: "ERROR", codigo: "txFeeBumpInnerFailed/txBadSeq" };
     await m.p.procesar("retiro", t.xdr);
     expect(m.uso.buscar(t.hash)?.estado).toBe("devuelto");
     m.red.consultas.set(t.hash, entro(230));
@@ -801,10 +951,21 @@ describe("los topes de las tablas se traducen para el sitio", () => {
     expect(m.uso.buscar(a.hash)).toMatchObject({ estado: "ok", real: 300 });
   });
 
-  it("con muchos en el aire a la vez, 503 fondo ocupado con la hora hasta la que esperar", async () => {
-    const m = await montar({ PAGOS_RECHAZADOS_DIA: "2" });
-    for (let i = 0; i < 2; i++) {
-      await m.p.procesar("retiro", retiro(delLibro(m)).xdr);
+  it("(ataque) veinte cuentas con un retiro en el aire cada una no traban los retiros: una persona nueva igual puede retirar", async () => {
+    const m = await montar();
+    for (let i = 0; i < 20; i++) {
+      // Cada una manda un retiro válido que queda en el aire: después gasta su secuencia por fuera y el nuestro nunca entra.
+      expect(await m.p.procesar("retiro", retiro(Keypair.random()).xdr)).toMatchObject({ estado: 200, cuerpo: { estado: "en-camino" } });
+    }
+    expect(m.uso.resumen(T0).retiro.enElAire).toBe(20);
+    const nueva = retiro(Keypair.random());
+    expect(await m.p.procesar("retiro", nueva.xdr)).toMatchObject({ estado: 200, cuerpo: { hash: nueva.hash, status: "PENDING" } });
+  });
+
+  it("con lo del aire en su propio tope, 503 fondo ocupado con la hora hasta la que esperar", async () => {
+    const m = await montar();
+    for (let i = 0; i < EN_EL_AIRE_POR_FORMA; i++) {
+      await m.p.procesar("retiro", retiro(Keypair.random()).xdr);
     }
     expect(await m.p.procesar("retiro", retiro(delLibro(m)).xdr)).toEqual({
       estado: 503,
@@ -845,6 +1006,87 @@ describe("la alarma", () => {
     const m = await montar({ PAGOS_PREMIO: "0", RETIROS: "0" });
     expect(await m.p.reconciliar()).toBe(false);
     expect(m.registros).toEqual([]);
+  });
+
+  it("(ataque) con más pagos en el aire que los que mira una vuelta, la alarma rota: el último también se cierra", async () => {
+    const m = await montar();
+    const hashes: string[] = [];
+    for (let i = 0; i <= PENDIENTES_POR_VUELTA; i++) {
+      const t = retiro(Keypair.random());
+      await m.p.procesar("retiro", t.xdr);
+      hashes.push(t.hash);
+      m.estado.ahora += 1;
+    }
+    const ultimo = hashes[hashes.length - 1] as string;
+    m.red.consultas.set(ultimo, entro(240));
+    m.estado.ahora += 20_000;
+    await m.p.reconciliar();
+    await m.p.reconciliar();
+    expect(m.uso.buscar(ultimo)).toMatchObject({ estado: "ok", real: 240 });
+  });
+
+  describe("las devueltas recientes", () => {
+    /** Un premio que la red rechazó al primer envío: queda devuelto y su puesto libre. */
+    async function devuelto() {
+      const m = await montar();
+      const org = delLibro(m);
+      sorteoSellado(m, org.publicKey());
+      const t = premio(org);
+      m.red.envio = { status: "ERROR", codigo: "txFeeBumpInnerFailed/txBadSeq" };
+      await m.p.procesar("premio", t.xdr);
+      return { m, t, org };
+    }
+
+    it("(ataque) una devuelta que entró igual se cierra con lo que dice la red y vuelve a ocupar su puesto", async () => {
+      const { m, t } = await devuelto();
+      expect(m.uso.puestoUsado(CONTRATO, SORTEO, 0)).toBeNull();
+      m.red.consultas.set(t.hash, entro(220));
+      m.estado.ahora += 20_000;
+      expect(await m.p.reconciliar()).toBe(false);
+      expect(m.uso.buscar(t.hash)).toMatchObject({ estado: "ok", real: 220 });
+      expect(m.uso.puestoUsado(CONTRATO, SORTEO, 0)).toEqual({ hash: t.hash, estado: "ok" });
+    });
+
+    it("mientras una devuelta todavía podría aparecer, la alarma se vuelve a pedir", async () => {
+      const { m, t } = await devuelto();
+      m.estado.ahora += 20_000;
+      expect(await m.p.reconciliar()).toBe(true);
+      expect(m.uso.buscar(t.hash)?.estado).toBe("devuelto");
+    });
+
+    it("pasado vence + 600 una devuelta ya no se pregunta y la alarma no se vuelve a pedir por ella", async () => {
+      const { m, t } = await devuelto();
+      m.red.consultas.set(t.hash, entro(220));
+      m.estado.ahora = (VENCE + 601) * 1000;
+      expect(await m.p.reconciliar()).toBe(false);
+      expect(m.uso.buscar(t.hash)?.estado).toBe("devuelto");
+    });
+
+    it("(ataque) otro pago del mismo puesto, antes de la alarma, pregunta por la devuelta: si entró, da puesto-usado y no se paga", async () => {
+      const { m, t, org } = await devuelto();
+      m.rpc[0]?.consultas.set(t.hash, entro(220));
+      m.red.envio = { status: "PENDING" };
+      const otro = premio(org, { secuencia: "101" });
+      expect(await m.p.procesar("premio", otro.xdr)).toMatchObject({ estado: 409, cuerpo: { motivo: "puesto-usado", hash: t.hash } });
+      expect(m.uso.buscar(t.hash)).toMatchObject({ estado: "ok", real: 220 });
+      expect(m.uso.buscar(otro.hash)).toBeNull();
+    });
+
+    it("(ataque) otro pago del mismo puesto con los dos RPC caídos no se paga: 502 red confirmar, sin reservar", async () => {
+      const { m, org } = await devuelto();
+      for (const r of m.rpc) r.caido = true;
+      m.red.envio = { status: "PENDING" };
+      const otro = premio(org, { secuencia: "101" });
+      expect(await m.p.procesar("premio", otro.xdr)).toEqual({ estado: 502, cuerpo: { motivo: "red", detalle: "confirmar", pudoSalir: false } });
+      expect(m.uso.buscar(otro.hash)).toBeNull();
+    });
+
+    it("otro pago del mismo puesto, con la devuelta que no entró, se paga como siempre", async () => {
+      const { m, org } = await devuelto();
+      m.red.envio = { status: "PENDING" };
+      const otro = premio(org, { secuencia: "101" });
+      expect(await m.p.procesar("premio", otro.xdr)).toMatchObject({ estado: 200, cuerpo: { hash: otro.hash, estado: "en-camino" } });
+    });
   });
 
   describe("(ataque) pasado vence + 600, antes de devolver se pregunta a cada RPC y a Horizon", () => {
@@ -1072,6 +1314,43 @@ describe("el bloque pagos de /estado", () => {
 });
 
 // ---------- fuera de la clase ----------
+
+describe("vueltaDeRonda", () => {
+  /** Una tabla de mentira con `n` filas en orden, leída como la lee `UsoDePagos`: después de un punto y a lo sumo `max`. */
+  function tabla(n: number) {
+    const filas = Array.from({ length: n }, (_, i) => ({ creado: i, hash: i.toString(16).padStart(64, "0") }) as FilaDePago);
+    const leer = (desde: { creado: number; hash: string } | null, max: number) =>
+      filas.filter((f) => desde === null || f.creado > desde.creado).slice(0, max);
+    return { filas, leer };
+  }
+
+  it("con 120 filas y 50 por vuelta, tres vueltas miran todas, cada una una sola vez, y la cuarta vuelve a empezar", () => {
+    const { leer } = tabla(120);
+    const vistas: number[] = [];
+    let desde: { creado: number; hash: string } | null = null;
+    for (let i = 0; i < 3; i++) {
+      const v = vueltaDeRonda(leer, desde, 50);
+      vistas.push(...v.filas.map((f) => f.creado));
+      desde = v.siguiente;
+    }
+    expect(new Set(vistas).size).toBe(120);
+    expect(vueltaDeRonda(leer, desde, 50).filas[0]?.creado).toBe(30);
+  });
+
+  it("con menos filas que las de una vuelta, las mira todas y la siguiente empieza desde el principio", () => {
+    const { leer } = tabla(7);
+    const v = vueltaDeRonda(leer, null, 50);
+    expect(v.filas).toHaveLength(7);
+    expect(v.siguiente).toBeNull();
+  });
+
+  it("si después del punto quedan pocas, completa la vuelta desde el principio sin repetir ninguna", () => {
+    const { leer } = tabla(60);
+    const v = vueltaDeRonda(leer, { creado: 49, hash: "" }, 50);
+    expect(v.filas.map((f) => f.creado)).toEqual([...Array.from({ length: 10 }, (_, i) => 50 + i), ...Array.from({ length: 40 }, (_, i) => i)]);
+    expect(v.siguiente?.creado).toBe(39);
+  });
+});
 
 describe("vueltaDeAlarma", () => {
   const sin = () => {

@@ -281,6 +281,7 @@ export class Portero {
     if (!previa || previa.estado === "devuelto") {
       let recursosSimulados = 0;
       let selloHash: string | null = null;
+      let sorteoDelDraw: bigint | null = null;
       try {
         if (!(await this.laAbrioNuestraApp(tx.cuenta, ahora, leer))) return r(403, { motivo: "cuenta-ajena" });
         // En mainnet con las altas, un `draw` se paga solo si su sello lo pagó el portero (con o sin el sorteo del servidor):
@@ -288,6 +289,7 @@ export class Portero {
         // no cuesta nada; si la red no deja leer, 502 red y no se paga.
         if (this.cfg.soloSellosDelPortero && tx.metodo === "draw") {
           const id = tx.sorteo === null ? null : leerNumeroDeSorteo(tx.sorteo);
+          sorteoDelDraw = id;
           const s = id === null ? null : await leerSorteo(this.red, { passphrase: this.cfg.passphrase, contractId: this.cfg.contractId, origen: tx.cuenta }, id);
           selloHash = s ? this.cupos.selloDelPortero(s.organizador, s.huellaLista, s.ronda) : null;
           if (!selloHash) return r(403, { motivo: "no-es-nuestro" });
@@ -322,6 +324,9 @@ export class Portero {
       esElPrimero = !res.yaContado;
       quedan = { quedan: res.quedan, quedanSorteos: res.quedanSorteos };
       this.cupos.purgar(ahora);
+      if (selloHash !== null && sorteoDelDraw !== null) {
+        this.atarAlSello(selloHash, sorteoDelDraw, tx.hash, ahora);
+      }
       // La alarma se pide ya, antes de importar la llave, envolver y mandar: si el objeto muere en el medio,
       // la fila `reservado` no queda sin nadie que la mire (la alarma le pregunta a la red y, si no entró, la devuelve).
       if (esElPrimero) {
@@ -477,6 +482,7 @@ export class Portero {
           return r(503, { motivo: "fondo" });
         }
         this.cupos.purgar(ahora);
+        this.atarAlSello(selloHash, id, firmada.hash, ahora);
         this.alQuedarEnElAire();
         this.registrar("sorteo-servidor", { hash: corto(firmada.hash), estimado, intento: intento + 1 });
 
@@ -527,6 +533,21 @@ export class Portero {
       }
       return r(502, { motivo: "red", detalle: "secuencia" });
     });
+  }
+
+  /**
+   * Ata el sello a este sorteo si es el primer `draw` que el portero paga con él (`Cupos.atarSorteo`): así un sello pagado
+   * respalda los premios y las altas de quien ganó de un solo sorteo, y no de cada sorteo igual sellado por fuera. Nunca hace
+   * fallar al sorteo: si no se pudo, se anota, y ese sorteo queda sin premios ni altas por el portero (el lado seguro).
+   */
+  private atarAlSello(selloHash: string, sorteo: bigint, draw: string, ahora: number): void {
+    const contrato = this.cfg.contractId;
+    if (contrato === null) {
+      return;
+    }
+    if (!this.cupos.atarSorteo({ sello: selloHash, contrato, sorteo: String(sorteo), draw }, ahora)) {
+      this.registrar("error-interno", { donde: "atar-sorteo", hash: corto(draw) });
+    }
   }
 
   /**

@@ -48,12 +48,36 @@ export const DEVUELTOS_POR_CUENTA_DIA = 10;
 export const FALLARIA_POR_CUENTA_HORA = 20;
 /** Cuánto espera quien se topa con demasiados pagos de su forma en el aire a la vez, en ms. */
 export const REINTENTAR_OCUPADO_MS = 5_000;
+/**
+ * Los pagos de una forma que pueden estar en el aire a la vez, entre todas las cuentas. Es aparte del tope de los fallos del día
+ * y más alto: un pago en el aire que nunca entra no cuesta comisión, y si compartiera ese tope, veinte cuentas con un retiro en el
+ * aire cada una (y su secuencia gastada por fuera) trabarían los retiros de todos sin gastar nada. El gasto de verdad lo siguen
+ * frenando el presupuesto, que cuenta lo del aire por lo que ofrece, y el tope de los fallos.
+ */
+export const EN_EL_AIRE_POR_FORMA = 60;
+/**
+ * Cuánto después de su vencimiento (en segundos) un pago en el aire deja de ocupar lugar en `EN_EL_AIRE_POR_FORMA`: pasado su
+ * `maxTime` la red ya no lo aplica, así que no puede cobrar nada. Sigue en el aire para su puesto y su cuenta hasta que la alarma
+ * lo confirme. El margen cubre un reloj de la red atrasado.
+ */
+export const MARGEN_OCUPADO_S = 60;
+/**
+ * Los pagos de una cuenta que quedaron en el aire y nunca entraron (vencieron y la alarma los devolvió), por hora. Es lo que hace
+ * quien manda un pago válido y después gasta su secuencia por fuera: no le cuesta nada y ocupa un lugar en el aire. Cuentan los que
+ * la red tomó y también los que quedaron en duda (TRY_AGAIN_LATER con otra transacción de la cuenta en la cola, por ejemplo), que
+ * ocupan el mismo lugar. Frena solo a esa cuenta.
+ */
+export const EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA = 2;
+/** Cuántos pagos en el aire mira la alarma en cada vuelta, como mucho. */
+export const PENDIENTES_POR_VUELTA = 50;
+
+const HORA_MS = 3_600_000;
 
 // Los ajustes en caliente, en la tabla `ajustes` de `cupos.ts`. Los escribe administración sin desplegar. Cada tope tiene techo.
 
 /** El presupuesto de las comisiones de los pagos, en stroops. Techo: `TECHO_TOPE_PAGOS_STROOPS`. */
 export const AJUSTE_TOPE_PAGOS = "tope_pagos_stroops";
-/** Los pagos por forma que la red rechazó, más los que están en el aire, en 24 horas. Techo: `TECHO_PAGOS_RECHAZADOS_DIA`. */
+/** Los pagos por forma que la red rechazó al aplicarlos en 24 horas. Techo: `TECHO_PAGOS_RECHAZADOS_DIA`. */
 export const AJUSTE_RECHAZOS_DIA = "pagos_rechazos_dia";
 /** Las altas de quien ganó que se aceptan en 24 horas. Techo: `TECHO_ALTAS_PREMIO_DIA`. */
 export const AJUSTE_ALTAS_PREMIO_DIA = "altas_premio_dia";
@@ -90,6 +114,9 @@ const COLUMNAS_PAGOS = [
   "estimado INTEGER NOT NULL",
   "real INTEGER",
   "vence INTEGER NOT NULL",
+  // Desde cuándo quedó en el aire, en ms: cuando la red lo tomó (PENDING o DUPLICATE) o cuando su respuesta fue una duda que no
+  // se devuelve. null si todavía no: lo que separa un pago que estuvo en el aire y no entró de uno que la red rechazó al recibirlo.
+  "tomado INTEGER",
 ];
 
 const COLUMNAS_RETIROS = ["hash TEXT PRIMARY KEY", "envuelta TEXT", "cuenta TEXT NOT NULL", "costo INTEGER NOT NULL", "ms INTEGER NOT NULL"];
@@ -140,6 +167,8 @@ export interface FilaDePago {
   real: number | null;
   /** Hasta cuándo vale la transacción (`maxTime`), en segundos de la red. */
   vence: number;
+  /** Desde cuándo quedó en el aire (la tomó la red o quedó en duda), en ms, o null si no (o se volvió a reservar después de devuelta). */
+  tomado: number | null;
 }
 
 /** Lo que hace falta para reservar un pago. */
@@ -165,7 +194,7 @@ export interface PedidoDePago {
 export interface LimitesDePagos {
   /** El presupuesto de las comisiones de los pagos en 24 horas, en stroops. */
   topePagos: number;
-  /** Los pagos por forma que la red rechazó al aplicarlos, más los que están en el aire, en 24 horas, entre todas las cuentas. */
+  /** Los pagos por forma que la red rechazó al aplicarlos en 24 horas, entre todas las cuentas. Lo del aire tiene su propio tope. */
   rechazosPorDia: number;
 }
 
@@ -291,7 +320,22 @@ function filaDePago(f: Record<string, unknown>): FilaDePago {
     estimado: Number(f.estimado),
     real: nulo(f.real) ? null : Number(f.real),
     vence: Number(f.vence),
+    tomado: nulo(f.tomado) ? null : Number(f.tomado),
   };
+}
+
+/** Dónde quedó una vuelta de la alarma: la fila que miró última, por su orden (`creado` y después `hash`). */
+export interface PuntoDeLaRonda {
+  creado: number;
+  hash: string;
+}
+
+/** Las filas que van después de un punto de la ronda, o todas si no hay punto: con `enlacesDe`. */
+const DESPUES_DE = "(? IS NULL OR creado > ? OR (creado = ? AND hash > ?))";
+
+/** Los enlaces de `DESPUES_DE`, en su orden. */
+function enlacesDe(p: PuntoDeLaRonda | null): unknown[] {
+  return p === null ? [null, 0, 0, ""] : [1, p.creado, p.creado, p.hash];
 }
 
 /** Cuántas filas cumplen una condición y cuál es la hora de la más vieja (para decir cuándo se libera el tope). */
@@ -319,6 +363,25 @@ export class UsoDePagos {
       } catch {
         this.sinCrear.push(nombre);
       }
+    }
+    this.sumarTomado();
+  }
+
+  /**
+   * Una tabla `pagos_portero` creada antes de la columna `tomado` la suma acá, con su propio try/catch. Si no se puede, los
+   * pagos quedan apagados (`disponible()` da false y `faltan()` la nombra): sin ella el tope por hora de lo que no entró no se mira.
+   */
+  private sumarTomado(): void {
+    if (this.sinCrear.includes("pagos_portero")) {
+      return;
+    }
+    try {
+      const columnas = this.filas("PRAGMA table_info(pagos_portero)").map((f) => String(f.name));
+      if (!columnas.includes("tomado")) {
+        this.sql.exec("ALTER TABLE pagos_portero ADD COLUMN tomado INTEGER");
+      }
+    } catch {
+      this.sinCrear.push("pagos_portero.tomado");
     }
   }
 
@@ -425,6 +488,12 @@ export class UsoDePagos {
     if (devueltos.n >= DEVUELTOS_POR_CUENTA_DIA) {
       return { motivo: "cupo-cuenta", que: "intentos", liberaEn: dia(devueltos), max: DEVUELTOS_POR_CUENTA_DIA };
     }
+    // Los que quedaron en el aire y nunca entraron, en la última hora: el pago válido con la secuencia gastada por fuera.
+    const sinEntrar = this.contar("cuenta = ? AND estado = 'devuelto' AND tomado IS NOT NULL AND creado > ?", p.cuenta, ahora - HORA_MS);
+    if (sinEntrar.n >= EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA) {
+      const liberaEn = (sinEntrar.masVieja ?? ahora) + HORA_MS;
+      return { motivo: "cupo-cuenta", que: "intentos", liberaEn, max: EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA };
+    }
     const esRetiro = p.forma === "retiro";
     const rechazadosMax = esRetiro ? RETIROS_RECHAZADOS_POR_CUENTA_DIA : PREMIOS_RECHAZADOS_POR_ORGANIZADOR_DIA;
     const rechazados = this.contar("cuenta = ? AND forma = ? AND estado = 'fallo' AND creado > ?", p.cuenta, p.forma, desde);
@@ -447,13 +516,15 @@ export class UsoDePagos {
       }
     }
 
-    // La última red, entre todas las cuentas: lo que falló y lo que está en el aire (puede fallar) no pasa del tope por forma.
+    // La última red, entre todas las cuentas y por forma: lo que falló y pagó comisión no pasa de su tope del día.
     const fallados = this.contar("forma = ? AND estado = 'fallo' AND creado > ?", p.forma, desde);
     if (fallados.n >= lim.rechazosPorDia) {
       return { motivo: "fondo", detalle: "rechazos", liberaEn: dia(fallados) };
     }
-    const enElAire = this.contar(`forma = ? AND estado IN ${EN_EL_AIRE}`, p.forma);
-    if (fallados.n + enElAire.n >= lim.rechazosPorDia) {
+    // Lo que está en el aire tiene su propio tope, aparte y más alto. Lo que ya venció no cuenta: la red ya no lo aplica.
+    const vigente = Math.floor(ahora / 1000) - MARGEN_OCUPADO_S;
+    const enElAire = this.contar(`forma = ? AND estado IN ${EN_EL_AIRE} AND vence >= ?`, p.forma, vigente);
+    if (enElAire.n >= EN_EL_AIRE_POR_FORMA) {
       return { motivo: "fondo", detalle: "ocupado", reintentarEn: REINTENTAR_OCUPADO_MS };
     }
 
@@ -492,7 +563,7 @@ export class UsoDePagos {
           "ON CONFLICT(hash) DO UPDATE SET envuelta = excluded.envuelta, forma = excluded.forma, cuenta = excluded.cuenta,",
           "del_libro = excluded.del_libro, contrato = excluded.contrato, sorteo = excluded.sorteo, puesto = excluded.puesto,",
           "destino_huella = excluded.destino_huella, creado = excluded.creado, estado = 'reservado', estimado = excluded.estimado,",
-          "real = NULL, vence = excluded.vence",
+          "real = NULL, vence = excluded.vence, tomado = NULL",
         ].join(" "),
         p.hash,
         p.envuelta,
@@ -521,9 +592,21 @@ export class UsoDePagos {
     return { ok: true, yaContado: false };
   }
 
-  /** El portero mandó el pago a la red y esta lo tomó. */
-  marcarEnviado(hashInterno: string): void {
-    this.sql.exec("UPDATE pagos_portero SET estado = 'enviado' WHERE hash = ? AND estado = 'reservado'", hashInterno);
+  /** El portero mandó el pago a la red y esta lo tomó, a la hora `ahora` (ms). La primera vez que la tomó es la que queda. */
+  marcarEnviado(hashInterno: string, ahora: number): void {
+    const consulta = "UPDATE pagos_portero SET estado = 'enviado', tomado = COALESCE(tomado, ?) WHERE hash = ? AND estado = 'reservado'";
+    this.sql.exec(consulta, ahora, hashInterno);
+  }
+
+  /**
+   * La red contestó algo que no prueba que el pago quedó afuera (TRY_AGAIN_LATER, por ejemplo) y la fila sigue `reservado`, en el
+   * aire. Se anota desde cuándo, como `marcarEnviado`, sin cambiar su estado: si vence sin entrar, cuenta para el tope por hora de
+   * lo que quedó en el aire y no entró (`EN_EL_AIRE_SIN_ENTRAR_POR_CUENTA_HORA`). Si no, quien pone otra transacción de su cuenta
+   * en la cola justo antes de la nuestra lo esquivaría.
+   */
+  marcarEnDuda(hashInterno: string, ahora: number): void {
+    const consulta = "UPDATE pagos_portero SET tomado = COALESCE(tomado, ?) WHERE hash = ? AND estado = 'reservado'";
+    this.sql.exec(consulta, ahora, hashInterno);
   }
 
   /**
@@ -571,9 +654,56 @@ export class UsoDePagos {
     this.sql.exec("UPDATE pagos_portero SET estado = 'devuelto' WHERE hash = ? AND estado IN ('reservado','enviado')", hashInterno);
   }
 
-  /** Lo que sigue en el aire desde antes de `antes` (ms): para preguntarle a la red qué fue de cada uno. */
-  pendientes(antes: number): FilaDePago[] {
-    return this.filas(`SELECT * FROM pagos_portero WHERE estado IN ${EN_EL_AIRE} AND creado < ? ORDER BY creado LIMIT 50`, antes).map(filaDePago);
+  /**
+   * Devuelve un pago que la red rechazó al primer envío, solo si sigue `reservado`, y dice si lo devolvió. Uno `enviado` no se
+   * toca nunca desde el envío: la red ya lo tomó (quizás por otro pedido del mismo sobre) y puede entrar, así que su puesto
+   * sigue ocupado hasta que la alarma lo confirme con los dos RPC y Horizon (`devolver`).
+   */
+  devolverSiReservado(hashInterno: string): boolean {
+    const f = this.buscar(hashInterno);
+    if (f === null || f.estado !== "reservado") {
+      return false;
+    }
+    this.sql.exec("UPDATE pagos_portero SET estado = 'devuelto' WHERE hash = ? AND estado = 'reservado'", hashInterno);
+    return true;
+  }
+
+  /**
+   * Las devueltas que todavía podrían aparecer en un ledger: las que no pasaron `vence + margenS` (en segundos de la red), las
+   * más viejas primero, a lo sumo `max`. La alarma le pregunta a la red por ellas: si una entró igual, se cierra con lo que dice
+   * la red y, si es un premio, vuelve a ocupar su puesto.
+   */
+  devueltosRecientes(ahoraS: number, margenS: number, max: number, despuesDe: PuntoDeLaRonda | null = null): FilaDePago[] {
+    const donde = `estado = 'devuelto' AND vence + ? >= ? AND ${DESPUES_DE}`;
+    const consulta = `SELECT * FROM pagos_portero WHERE ${donde} ORDER BY creado, hash LIMIT ?`;
+    return this.filas(consulta, margenS, ahoraS, ...enlacesDe(despuesDe), max).map(filaDePago);
+  }
+
+  /**
+   * Los premios devueltos de ese puesto que todavía podrían aparecer en un ledger (no pasaron `vence + margenS`), salvo el de
+   * `hashInterno`, a lo sumo `max`. Antes de reservar otro pago del mismo puesto se le pregunta a la red por ellos: si uno entró
+   * igual, ocupa su puesto y el nuevo no se paga. Sin esto, entre la devolución y la vuelta de la alarma el puesto queda libre.
+   */
+  devueltosDelPuesto(
+    premio: { contrato: string; sorteo: string; puesto: number },
+    hashInterno: string,
+    ahoraS: number,
+    margenS: number,
+    max: number,
+  ): FilaDePago[] {
+    const donde = "forma = 'premio' AND contrato = ? AND sorteo = ? AND puesto = ? AND estado = 'devuelto' AND hash <> ? AND vence + ? >= ?";
+    const consulta = `SELECT * FROM pagos_portero WHERE ${donde} ORDER BY creado DESC, hash LIMIT ?`;
+    return this.filas(consulta, premio.contrato, premio.sorteo, premio.puesto, hashInterno, margenS, ahoraS, max).map(filaDePago);
+  }
+
+  /**
+   * Lo que sigue en el aire desde antes de `antes` (ms), en orden de creación, a lo sumo `max`: para preguntarle a la red qué fue
+   * de cada uno. Con `despuesDe`, desde el que sigue a ese: así la alarma rota y ninguna fila queda sin mirar aunque haya más que
+   * las que entran en una vuelta.
+   */
+  pendientes(antes: number, despuesDe: PuntoDeLaRonda | null = null, max = PENDIENTES_POR_VUELTA): FilaDePago[] {
+    const consulta = `SELECT * FROM pagos_portero WHERE estado IN ${EN_EL_AIRE} AND creado < ? AND ${DESPUES_DE} ORDER BY creado, hash LIMIT ?`;
+    return this.filas(consulta, antes, ...enlacesDe(despuesDe), max).map(filaDePago);
   }
 
   /** Cuántos hay en el aire, para saber si queda trabajo para la alarma. */
