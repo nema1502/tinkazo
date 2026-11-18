@@ -599,6 +599,61 @@ export function unirFuentes(eventos) {
   return salida;
 }
 
+/** Mezcla las fuentes crudas, sin red, y conserva el índice para la comprobación reciente. */
+export function mezclarFuentes({
+  registrosIndice = [],
+  crudos = {},
+  registrosRpc = [],
+  red,
+  contratos,
+  corteLedger,
+}) {
+  const contratosValidos = new Set(contratos.map((c) => c.contractId ?? c));
+  const dentro = (r) => contratosValidos.has(r.contract) && partesDelId(r.id).ledger <= corteLedger;
+  const crudosRed = !crudos.red || crudos.red === red;
+  const crudosFiltrados = crudosRed ? (crudos.eventos ?? []).filter(dentro) : [];
+  const registros = [...registrosIndice.filter(dentro), ...crudosFiltrados, ...registrosRpc.filter(dentro)];
+  const unicos = [...new Map(registros.map((r) => [r.id, r])).values()];
+  const decodificados = unicos
+    .map((r) => {
+      const e = decodificarEvento(r);
+      return e ? { ...e, ...(r.rpc ? { fuenteRpc: true } : {}) } : null;
+    })
+    .filter(Boolean);
+  const eventos = unirFuentes(decodificados);
+  const sinRpc = unirFuentes(decodificados.filter((e) => !e.fuenteRpc));
+  const hashRpc = new Map(unicos.filter((r) => r.rpc && r.txHash).map((r) => [r.id, r.txHash]));
+  return {
+    registrosEventos: unicos,
+    eventos,
+    eventosSinRpc: sinRpc,
+    hashRpc,
+    crudosDescartados: crudosRed
+      ? (crudos.eventos ?? []).length - crudosFiltrados.length
+      : (crudos.eventos ?? []).length,
+    fuentes: { indice: registrosIndice.some(dentro), crudos: crudosFiltrados.length > 0, rpc: registrosRpc.some(dentro) },
+  };
+}
+
+/** Fecha UTC del primer evento, o `null` cuando no hay datos. */
+export function datosDesde(eventos) {
+  if (!eventos.length) return null;
+  return new Date(Math.min(...eventos.map((e) => e.ts)) * 1000).toISOString().replace(".000Z", "Z");
+}
+
+/** Compara los eventos recientes del RPC con la copia que no viene del RPC. */
+export function compararVentana(eventosRpc, eventosIndice) {
+  const cuenta = (xs, tipo) => xs.filter((e) => e.tipo === tipo).length;
+  const rpc = { sealed: cuenta(eventosRpc, "sealed"), drawn: cuenta(eventosRpc, "drawn") };
+  const indice = { sealed: cuenta(eventosIndice, "sealed"), drawn: cuenta(eventosIndice, "drawn") };
+  return {
+    rpc,
+    indice,
+    rpcAtrasado: rpc.sealed < indice.sealed || rpc.drawn < indice.drawn,
+    indiceAtrasado: rpc.sealed > indice.sealed || rpc.drawn > indice.drawn,
+  };
+}
+
 /* ------------------------------------------------------------- comprobar */
 
 /**
