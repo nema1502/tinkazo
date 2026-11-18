@@ -269,6 +269,32 @@ describe("el sello frenado porque no se pudo comprobar (premioSinSaber)", () => 
 });
 
 describe("la consulta adelantada, antes del cupón y de cerrar la lista", () => {
+  it("mientras lee la red, el botón se apaga y dice Revisando tu cuenta, y al terminar vuelve a como estaba", async () => {
+    let terminar: (puerta: string) => void = () => undefined;
+    h.revisar.mockReturnValue(new Promise<string>((resolver) => (terminar = resolver)));
+    const { t } = await import("../i18n");
+    const enCurso = sellar();
+    await vi.waitFor(() => expect(h.revisar).toHaveBeenCalledTimes(1));
+    expect(boton("btn-freeze")?.disabled).toBe(true);
+    expect(boton("btn-freeze")?.textContent).toBe(t("clRevisando"));
+    terminar("puede-guardar");
+    await enCurso;
+    expect(boton("btn-freeze")?.disabled).toBe(false);
+    expect(boton("btn-freeze")?.textContent).toBe(t("freeze"));
+    expect(estado().textContent).toContain(T.es["errAnchor.premioGuardado"] as string);
+  });
+
+  it("si la lectura sale libre, el botón vuelve a estar listo antes de seguir con el cupón", async () => {
+    let enElCupon: { disabled: boolean | undefined; texto: string | null | undefined } | null = null;
+    h.acceso.mockImplementation(async () => {
+      enElCupon = { disabled: boton("btn-freeze")?.disabled, texto: boton("btn-freeze")?.textContent };
+      return true;
+    });
+    const { t } = await import("../i18n");
+    await sellar();
+    expect(enElCupon).toEqual({ disabled: false, texto: t("freeze") });
+  });
+
   it("con Google, la red principal y una cuenta que puede guardar dinero: el aviso, sin tocar el cupón, la lista ni la pantalla completa", async () => {
     h.revisar.mockResolvedValue("puede-guardar");
     await sellar();

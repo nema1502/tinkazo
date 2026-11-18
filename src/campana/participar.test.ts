@@ -67,7 +67,7 @@ vi.mock("../idioma", async () => {
 });
 
 const html = readFileSync("participar.html", "utf8");
-const main = /<main[\s\S]*<\/main>/.exec(html)?.[0] ?? "";
+const main = (/<header[\s\S]*<\/header>/.exec(html)?.[0] ?? "") + (/<main[\s\S]*<\/main>/.exec(html)?.[0] ?? "");
 const AHORA = Date.UTC(2026, 10, 15, 18, 0);
 const memoriaOriginal = Object.getOwnPropertyDescriptor(window, "localStorage");
 const esperaReal = globalThis.setTimeout;
@@ -461,5 +461,41 @@ describe("participar.html: anotarse", () => {
     await anotarse();
     const alta = llamadas.find((l) => l.ruta === "alta");
     expect(alta?.init.headers).toBeUndefined();
+  });
+});
+
+describe("participar.html: la demostración", () => {
+  it("abre aunque el almacenamiento lance un error, con la etiqueta de ejemplo a la vista", async () => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new DOMException("almacenamiento bloqueado", "SecurityError");
+      },
+    });
+    await abrir("?demo=campana");
+    expect(texto("h1")).toBe("Sorteo de Alcancía Andina");
+    expect(document.querySelector<HTMLElement>("header #cmp-ejemplo")?.hidden).toBe(false);
+    expect(texto("#cmp-estado")).toBe("");
+  });
+
+  it("con una campaña real la etiqueta de ejemplo queda oculta", async () => {
+    await abrir();
+    expect(document.querySelector<HTMLElement>("header #cmp-ejemplo")?.hidden).toBe(true);
+  });
+
+  it("entra a Hola y cambia de idioma sin red", async () => {
+    await abrir("?demo=campana&estado=hola");
+    expect(texto("#cmp-hola h1")).toBe("Hola, Ana P.");
+    expect(texto("#cmp-hola .primary")).toBe("Acepto y me anoto");
+    cambiarAIngles();
+    expect(texto("#cmp-hola h1")).toBe("Hi, Ana P.");
+    expect(texto("#cmp-hola .primary")).toBe("I accept, sign me up");
+    expect(llamadas).toHaveLength(0);
+  });
+
+  it("prepara la pantalla pedida por la dirección", async () => {
+    await abrir("?demo=campana&estado=ganaste");
+    expect(texto("#cmp-estado h1")).toBe("Ganaste");
+    expect(texto("#cmp-estado .primary")).toBe("Recibir mi premio");
   });
 });

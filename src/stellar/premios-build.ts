@@ -20,8 +20,9 @@
  *
  * Con el voto por contenido (`VITE_VOTO_POR_CONTENIDO=1`, issue 180) el navegador deja de aprobar solo lo que pide el
  * servidor de cuentas y vota lo que armó la página. `problemasDelVoto` frena el build con un valor que la dejaría apagada
- * sin aviso y con lo que firma sin pasar por esa regla en la red principal: pagar con el saldo, la compra con QR y la carga
- * con bolivianos. Con la variable vacía o en `0` no mira nada más.
+ * sin aviso y con lo que firma sin pasar por esa regla en la red principal: pagar con el saldo, la compra con QR, la carga
+ * con bolivianos y Mandar (abierto en el modo recibir, y la regla solo deja pasar el sello y el sorteo). Con la variable
+ * vacía o en `0` no mira nada más.
  */
 
 import { TOPE_DEL_COSTO, STROOPS_POR_DOLAR, leerElCosto, leerLaCuenta } from "./retiro-config";
@@ -33,6 +34,9 @@ const modoPedido = (env: Record<string, string | undefined>): string => (env.VIT
 const pideElModoPremios = (env: Record<string, string | undefined>): boolean => modoPedido(env) === "premios";
 
 const pideElModoPollar = (env: Record<string, string | undefined>): boolean => modoPedido(env) === "pollar";
+
+/** `meru` es el otro nombre de `recibir`, como en `modoDeRampa`. */
+const pideElModoRecibir = (env: Record<string, string | undefined>): boolean => ["recibir", "meru"].includes(modoPedido(env));
 
 export function problemasDePremios(env: Record<string, string | undefined>): string[] {
   if (!pideElModoPremios(env)) return [];
@@ -138,11 +142,12 @@ export function avisosDelRetiro(env: Record<string, string | undefined>): string
  * - Un valor que no es `1`, `0` ni vacío («true», «on», « 1») la dejaría apagada sin que nadie se enterara: no sale.
  * - Con `1`, no sale si además está prendido lo que firma con la misma cuenta sin pasar por la regla del voto y nadie
  *   probó así en la red principal: pagar con el saldo (`VITE_PAGO_CON_SALDO=1`), la compra con QR (`VITE_COMPRA_QR=1`, que
- *   además carga dólares y los paga con ese saldo) y la carga con bolivianos (`VITE_RAMPA=pollar`).
+ *   además carga dólares y los paga con ese saldo), la carga con bolivianos (`VITE_RAMPA=pollar`) y Mandar, que en el modo
+ *   `recibir` queda abierto y firma un pago, algo que la regla del voto no deja pasar: siempre fallaría.
  *
  * Con un valor que no vale solo dice eso: las combinaciones se miran con un `1` exacto, que es el único valor que
- * prende la bandera en el sitio. La combinación que se espera, `VITE_RAMPA=premios` con `VITE_VOTO_POR_CONTENIDO=1` y
- * sin la venta, no tiene ningún problema.
+ * prende la bandera en el sitio. La combinación que se espera, `VITE_RAMPA=premios` (donde Mandar no existe) con
+ * `VITE_VOTO_POR_CONTENIDO=1` y sin la venta, no tiene ningún problema.
  */
 export function problemasDelVoto(env: Record<string, string | undefined>): string[] {
   const valor = env.VITE_VOTO_POR_CONTENIDO;
@@ -168,6 +173,12 @@ export function problemasDelVoto(env: Record<string, string | undefined>): strin
     problemas.push(
       "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_RAMPA=pollar: la carga con bolivianos no se probó con el voto a mano " +
         "en la red principal. Se elige cuál va en este sitio.",
+    );
+  }
+  if (pideElModoRecibir(env)) {
+    problemas.push(
+      "VITE_VOTO_POR_CONTENIDO=1 no va junto con VITE_RAMPA=recibir: Mandar queda abierto en ese modo y firma un pago, " +
+        "que la regla del voto no deja pasar, así que siempre fallaría. Se elige cuál va en este sitio.",
     );
   }
   return problemas;

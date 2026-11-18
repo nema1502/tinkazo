@@ -354,17 +354,28 @@ export function reservarEventoSql(
   const dia = diaUtc(ahora);
   const creadas = sql<{ n: number }>("SELECT n FROM campanas_creadas WHERE dia = ?", dia)[0]?.n ?? 0;
   if (creadas >= CAMPANAS_POR_DIA) return { ok: false, motivo: "cupo-campanas" };
-  if (hay) sql("DELETE FROM eventos_campana WHERE evento = ?", evento);
-  const reserva = hexadecimal(crypto.getRandomValues(new Uint8Array(16)));
-  sql(
-    "INSERT INTO eventos_campana (evento, dia, sala, reserva, en_ms) VALUES (?, ?, NULL, ?, ?)",
-    evento,
-    dia,
-    reserva,
-    ahora,
-  );
+  const reserva = nuevaReserva();
+  if (hay?.sala === null) {
+    // Una reserva abandonada: la fila sigue sin sala y sin huella, y vuelve a correr la espera.
+    sql("UPDATE eventos_campana SET dia = ?, reserva = ?, en_ms = ? WHERE evento = ?", dia, reserva, ahora, evento);
+  } else if (hay) {
+    // El reemplazo de una sala muerta: la fila conserva la sala y la huella de su token hasta que la nueva se confirme.
+    // Si la creación falla o el Worker se corta, el evento no queda libre para quien solo tenga el archivo público.
+    sql("UPDATE eventos_campana SET reserva = ? WHERE evento = ?", reserva, evento);
+  } else {
+    sql(
+      "INSERT INTO eventos_campana (evento, dia, sala, reserva, en_ms) VALUES (?, ?, NULL, ?, ?)",
+      evento,
+      dia,
+      reserva,
+      ahora,
+    );
+  }
   return { ok: true, reserva };
 }
+
+/** Una reserva nueva, que nadie puede adivinar. */
+const nuevaReserva = (): string => hexadecimal(crypto.getRandomValues(new Uint8Array(16)));
 
 /**
  * La sala confirmada de este evento si su token es el del intento que llega: quien pide otra vez porque no le llegó la
@@ -390,23 +401,35 @@ export function confirmarEventoSql(
   a: { reserva: string; sala: string; huella: string; ahora: number },
 ): boolean {
   crearTablaDeEventos(sql);
-  const hay = sql<{ reserva: string }>(
-    "SELECT reserva FROM eventos_campana WHERE evento = ? AND sala IS NULL",
-    evento,
-  )[0];
+  // La fila puede traer la sala muerta que esta reserva viene a reemplazar: manda la reserva, no que no tenga sala.
+  const hay = sql<{ reserva: string }>("SELECT reserva FROM eventos_campana WHERE evento = ?", evento)[0];
   if (!hay || !iguales(hay.reserva, a.reserva)) return false;
   const ahora = a.ahora;
   const dia = diaUtc(ahora);
-  sql("UPDATE eventos_campana SET sala = ?, huella = ?, dia = ? WHERE evento = ?", a.sala, a.huella, dia, evento);
+  // La reserva usada se cambia: no sirve para confirmar otra vez. En un reemplazo, `en_ms` pasa a ser el de la sala nueva.
+  sql(
+    "UPDATE eventos_campana SET sala = ?, huella = ?, dia = ?, reserva = ?, en_ms = CASE WHEN sala IS NULL THEN en_ms ELSE ? END WHERE evento = ?",
+    a.sala,
+    a.huella,
+    dia,
+    nuevaReserva(),
+    ahora,
+    evento,
+  );
   sql("INSERT INTO campanas_creadas (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
   sql("DELETE FROM campanas_creadas WHERE dia < ?", diaUtc(ahora - 3 * 86_400_000));
   return true;
 }
 
-/** Deshace una reserva que no llegó a confirmarse (la creación falló). No toca una sala ya confirmada. */
+/**
+ * Deshace una reserva que no llegó a confirmarse (la creación falló). Una reserva nueva se borra. La de un reemplazo deja
+ * la fila como estaba, con la sala y la huella de su token (solo se invalida la reserva): así quien organiza puede volver a
+ * intentar y quien solo tiene el archivo público sigue sin poder tomar el evento. No toca una sala confirmada.
+ */
 export function soltarEventoSql(sql: Ejecutar, evento: string, reserva: string): void {
   crearTablaDeEventos(sql);
   sql("DELETE FROM eventos_campana WHERE evento = ? AND sala IS NULL AND reserva = ?", evento, reserva);
+  sql("UPDATE eventos_campana SET reserva = ? WHERE evento = ? AND sala IS NOT NULL AND reserva = ?", nuevaReserva(), evento, reserva);
 }
 
 /** Las tablas de una sala de campaña. Se crean al crearla, nunca al despertar. Los paquetes 4 y 6 suman las suyas acá. */

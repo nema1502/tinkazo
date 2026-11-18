@@ -227,9 +227,9 @@ describe("el voto por contenido y el build", () => {
   const VOTO = { VITE_VOTO_POR_CONTENIDO: "1" };
   const TODO_LO_DEMAS = { VITE_PAGO_CON_SALDO: "1", VITE_COMPRA_QR: "1", VITE_RAMPA: "pollar" };
 
-  it("con la bandera sola, o con el modo premios, recibir o apagada, el build sale", () => {
+  it("con la bandera sola, o con el modo premios o apagada, el build sale", () => {
     expect(problemasDelVoto(VOTO)).toEqual([]);
-    for (const rampa of ["", "premios", " Premios ", "recibir", "meru", "apagada", "algo raro"]) {
+    for (const rampa of ["", "premios", " Premios ", "apagada", "algo raro"]) {
       expect(problemasDelVoto({ ...VOTO, VITE_RAMPA: rampa }), rampa).toEqual([]);
     }
   });
@@ -269,6 +269,15 @@ describe("el voto por contenido y el build", () => {
     }
   });
 
+  it("con el modo recibir, donde Mandar queda abierto y la regla del voto no deja pasar un pago, tampoco", () => {
+    for (const rampa of ["recibir", " Recibir ", "meru", "MERU"]) {
+      const p = problemasDelVoto({ ...VOTO, VITE_RAMPA: rampa });
+      expect(p, rampa).toHaveLength(1);
+      expect(p[0], rampa).toContain("VITE_RAMPA=recibir");
+      expect(p[0], rampa).toContain("Mandar");
+    }
+  });
+
   it("con las tres, dice las tres, cada una con lo suyo", () => {
     const p = problemasDelVoto({ ...VOTO, ...TODO_LO_DEMAS });
     expect(p).toHaveLength(3);
@@ -278,7 +287,7 @@ describe("el voto por contenido y el build", () => {
   });
 
   it("lee la venta como el control del modo premios: solo un 1 la prende", () => {
-    expect(problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "0", VITE_COMPRA_QR: "", VITE_RAMPA: "recibir" })).toEqual([]);
+    expect(problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "0", VITE_COMPRA_QR: "", VITE_RAMPA: "premios" })).toEqual([]);
     expect(problemasDelVoto({ ...VOTO, VITE_PAGO_CON_SALDO: "true", VITE_COMPRA_QR: " 1" })).toEqual([]);
   });
 

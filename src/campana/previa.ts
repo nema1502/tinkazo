@@ -1,6 +1,6 @@
 /** Pantallas públicas de una campaña y estados de carga, sin consultar la sala por su cuenta. */
 
-import { fechaTexto, horaTexto, premiosTexto } from "./formato";
+import { horaTexto, premiosTexto } from "./formato";
 import { leerCampana, type Campana } from "./modelo";
 import { caja, conDestacado, pintarAviso } from "./piezas";
 import type {

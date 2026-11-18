@@ -832,11 +832,16 @@ async function accesoOficialParaSellar(btn: HTMLButtonElement, ganadores: number
  * crea en el paso siguiente y la puerta de la firma la mira de nuevo. Fuera del caso no lee ni baja nada. Un sello
  * pendiente de esta lista se averigua sin firmar: tampoco se frena. Con el voto por contenido la billetera dice `libre`
  * sin leer (`revisarPuertaDelPremio`), y no se frena.
+ *
+ * La lectura de la red puede tardar unos segundos: mientras corre, el botón se apaga y dice «Revisando tu cuenta…», como
+ * en las otras compuertas del sello, y vuelve a como estaba al terminar.
  */
-async function frenarPorElPremio(names: string[]): Promise<boolean> {
+async function frenarPorElPremio(names: string[], btn: HTMLButtonElement): Promise<boolean> {
   // Lo primero: fuera de los modos que cuida la puerta no se baja ni se lee nada (ni el sello pendiente ni la billetera).
   if (!PUERTA_DEL_PREMIO_EN.includes(modoDeRampa()) || network.name !== "mainnet" || !redPrincipalConPollar()) return false;
   let puerta: "libre" | "puede-guardar" | "no-se-sabe" | "no-existe";
+  btn.disabled = true;
+  btn.textContent = t("clRevisando");
   try {
     if (await hayUnSelloPendiente(names)) return false;
     const { pollarWallet } = await import("../stellar/wallet-pollar");
@@ -844,6 +849,10 @@ async function frenarPorElPremio(names: string[]): Promise<boolean> {
   } catch {
     // Sin poder mirar, no se frena acá: la puerta de la firma mira igual.
     return false;
+  } finally {
+    btn.disabled = false;
+    btn.dataset.i = claveDeSellar();
+    btn.textContent = t(btn.dataset.i);
   }
   if (puerta === "libre" || puerta === "no-existe") return false;
   const { PremioGuardado } = await import("../stellar/usdc-cuenta");
@@ -1006,7 +1015,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   }
   // Con `VITE_RAMPA=premios`, una cuenta de Google o de correo que puede guardar dinero no sella: la puerta de `#firmando`
   // (`wallet-pollar.ts`) es la que cuenta, y esta consulta solo evita gastar el cupón o cerrar la lista para enterarse tarde.
-  if (anchoring && (await frenarPorElPremio(names))) {
+  if (anchoring && (await frenarPorElPremio(names, btn))) {
     soltarLoPedido();
     return;
   }

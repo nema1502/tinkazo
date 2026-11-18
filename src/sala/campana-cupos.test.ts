@@ -5,6 +5,7 @@ import {
   ESPERA_RESERVA_MS,
   confirmarEventoSql,
   reservarEventoSql,
+  salaDelIntentoSql,
   soltarEventoSql,
 } from "../../workers/sala/src/campana";
 import type { Ejecutar, ValorSql } from "../../workers/sala/src/registro";
@@ -106,6 +107,44 @@ describe("el permiso de un evento de campaña", () => {
     crearEvento(sql, "otro-evento", "AbCd1234");
     soltarEventoSql(sql, "otro-evento", "cualquiera");
     expect(reservarEventoSql(sql, "otro-evento", DIA)).toMatchObject({ ok: false, motivo: "ya-existe" });
+  });
+
+  it("un reemplazo que falla al crear y se suelta no deja el evento libre para quien solo tiene el archivo", () => {
+    const sql = nuevaBase();
+    crearEvento(sql, "feria-del-libro", "AbCd1234");
+    const r = reservarEventoSql(sql, "feria-del-libro", DIA + 5_000, conSuToken("AbCd1234"));
+    if (!r.ok) throw new Error("no se reservó");
+    soltarEventoSql(sql, "feria-del-libro", r.reserva);
+    // Sin token, ni siquiera pasado el tiempo de una reserva abandonada.
+    for (const cuando of [DIA + 6_000, DIA + 5_000 + ESPERA_RESERVA_MS + 1]) {
+      expect(reservarEventoSql(sql, "feria-del-libro", cuando)).toEqual({ ok: false, motivo: "ya-existe", sala: "AbCd1234" });
+      expect(reservarEventoSql(sql, "feria-del-libro", cuando, { sala: "AbCd1234", huella: "otra-huella" }).ok).toBe(false);
+    }
+    // Quien organiza, con su token, puede volver a intentar.
+    const otra = reservarEventoSql(sql, "feria-del-libro", DIA + 7_000, conSuToken("AbCd1234"));
+    expect(otra).toMatchObject({ ok: true });
+    // La reserva soltada ya no confirma nada.
+    expect(confirmar(sql, "feria-del-libro", r.reserva, "Cualquiera", DIA + 7_000)).toBe(false);
+  });
+
+  it("un reemplazo cortado entre reservar y confirmar tampoco deja el evento a quien solo tiene el archivo", () => {
+    const sql = nuevaBase();
+    crearEvento(sql, "feria-del-libro", "AbCd1234");
+    expect(reservarEventoSql(sql, "feria-del-libro", DIA + 5_000, conSuToken("AbCd1234"))).toMatchObject({ ok: true });
+    // Nadie confirma ni suelta: pasa la espera de una reserva abandonada.
+    const tarde = DIA + 5_000 + ESPERA_RESERVA_MS + 1;
+    expect(reservarEventoSql(sql, "feria-del-libro", tarde)).toEqual({ ok: false, motivo: "ya-existe", sala: "AbCd1234" });
+    expect(reservarEventoSql(sql, "feria-del-libro", tarde, conSuToken("AbCd1234"))).toMatchObject({ ok: true });
+  });
+
+  it("una reserva ya usada no confirma otra vez, y el reemplazo confirmado trae el instante de la sala nueva", () => {
+    const sql = nuevaBase();
+    crearEvento(sql, "feria-del-libro", "AbCd1234");
+    const r = reservarEventoSql(sql, "feria-del-libro", DIA + 5_000, conSuToken("AbCd1234"));
+    if (!r.ok) throw new Error("no se reservó");
+    expect(confirmar(sql, "feria-del-libro", r.reserva, "NuEvA567", DIA + 6_000)).toBe(true);
+    expect(confirmar(sql, "feria-del-libro", r.reserva, "OtraMas1", DIA + 7_000)).toBe(false);
+    expect(salaDelIntentoSql(sql, "feria-del-libro", huellaDe("NuEvA567"))).toEqual({ sala: "NuEvA567", enMs: DIA + 6_000 });
   });
 
   it("confirmar con una reserva que no es la vigente da falso y no toca nada", () => {

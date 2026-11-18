@@ -224,8 +224,11 @@ async function pollarNoSabe(e: unknown): Promise<boolean> {
  *
  * `antesDeMandar` corre con la transacción recién firmada por Pollar y antes de entregársela al portero. Si lanza, no se
  * le entrega nada y sale ese error: es lo que usa el sello para no mandar una ronda que ya no alcanza (`anchor.ts`).
+ *
+ * `antesDeFirmar` es lo mismo para el camino en que paga Pollar y firma y manda de una vez: corre dentro de la billetera, tras
+ * la puerta del premio y antes de firmar, porque la lectura de la red de esa puerta gasta margen de la ronda.
  */
-export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean; antesDeMandar?: () => void } = {}): Promise<{ hash: string; value: unknown } | null> {
+export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean; antesDeMandar?: () => void; antesDeFirmar?: () => void } = {}): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet"),
     import("../stellar/wallet-pollar"),
@@ -338,7 +341,7 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
       };
     } else {
       try {
-        hash = (await patrocinador.mandar(tx.toXDR())).hash;
+        hash = (await patrocinador.mandar(tx.toXDR(), opciones.antesDeFirmar)).hash;
       } catch (e) {
         if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
         throw e;

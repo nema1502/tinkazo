@@ -241,6 +241,30 @@ describe("la puerta del premio: una cuenta que no puede guardar nada firma como 
   });
 });
 
+describe("la puerta del premio: antesDeFirmar vuelve a mirar el margen después de la lectura", () => {
+  it("corre después de la lectura y antes de la firma", async () => {
+    await expect(pollarWallet.signAndSubmit(sello(), () => orden.push("margen"))).resolves.toBe("deadbeef");
+    expect(orden).toEqual(["horizon", "margen", "firma"]);
+  });
+
+  it("si lanza, no se firma nada: la lectura ya gastó el margen de la ronda", async () => {
+    const sinMargen = new Error("la ronda quedó cerca antes de mandar el sello (faltan 20 s): Error(Contract, #5)");
+    await expect(
+      pollarWallet.signAndSubmit(sello(), () => {
+        throw sinMargen;
+      }),
+    ).rejects.toBe(sinMargen);
+    expect(orden).toEqual(["horizon"]);
+  });
+
+  it("si la puerta frena, no corre: antes manda el aviso del premio", async () => {
+    horizon = cuenta([nativo(), circle("5.0000000")]);
+    const margen = vi.fn();
+    await rechazo(() => pollarWallet.signAndSubmit(sello(), margen));
+    expect(margen).not.toHaveBeenCalled();
+  });
+});
+
 describe("la puerta del premio: ante una duda vuelve a leer antes de cerrar", () => {
   it("un corte y después la cuenta libre: firma, con dos lecturas y antes de la firma", async () => {
     horizon = [500, cuenta([nativo()])];

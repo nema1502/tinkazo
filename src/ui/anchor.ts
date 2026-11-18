@@ -379,6 +379,11 @@ async function sellarEnUnRpc(args: SealArgs, onStep: OnStep, opciones: OpcionesD
       const quedan = roundTime(args.round) - Date.now() / 1000;
       if (quedan < MARGEN_AL_ENTREGAR_AL_PORTERO_S) throw new RondaMuyCerca(quedan);
     },
+    // Con Pollar pagando, la puerta del premio lee la red justo antes de firmar y gasta margen: se vuelve a mirar después.
+    antesDeFirmar: () => {
+      const quedan = roundTime(args.round) - Date.now() / 1000;
+      if (quedan < MARGEN_AL_MANDAR_S) throw new RondaMuyCerca(quedan);
+    },
   });
   if (delegated) {
     return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
