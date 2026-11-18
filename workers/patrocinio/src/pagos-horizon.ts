@@ -45,7 +45,7 @@ export type DetalleFallaria =
   | "destino-lleno"
   | "destino-pide-nota";
 
-/** Lo que se va a pagar, tal como lo leyó el evaluador. */
+/** Lo que se va a pagar, tal como lo leyó el lector de pagos. */
 export interface PagoPorMirar {
   forma: FormaDePago;
   /** La cuenta G que paga. */
@@ -227,7 +227,7 @@ function notaDeLaPersona(forma: FormaDePago, nota: NotaDePago): boolean {
  * - un destino que pide nota no recibe un premio nunca, ni un retiro sin la nota de la persona
  *
  * Si alguna lectura falla, la respuesta es `red` aunque otra ya diga que fallaría: no se afirma nada a medias. Un pago sin
- * salidas o con un monto que no es positivo no llega acá (lo frena el evaluador): si llegara, tampoco se afirma nada y no se
+ * salidas o con un monto que no es positivo no llega acá (lo frena el lector de pagos): si llegara, tampoco se afirma nada y no se
  * le pregunta nada a Horizon, porque sin salidas no habría ningún destino que mirar y daría que pasa.
  */
 export async function mirarParaPagar(pedir: PedirHorizon, pago: PagoPorMirar, memoria: MemoriaDeHorizon): Promise<MiradaDePago> {

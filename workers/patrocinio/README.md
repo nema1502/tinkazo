@@ -35,7 +35,7 @@ Todo lo que no está acá da `400` (o `403`) sin gastar cupo:
 
 ### La lista blanca de los pagos (premios y retiros)
 
-El pago de un premio y el retiro con su costo entran por `POST /v1/patrocinio/pago` (más abajo), con su propio evaluador (`src/pagos-lista.ts`): `lista-blanca.ts` sigue siendo la puerta del sello y un pago sigue sin entrar por `POST /v1/patrocinio`. Todo lo que no está acá da `400` (o `403`) sin gastar cupo:
+El pago de un premio y el retiro con su costo entran por `POST /v1/patrocinio/pago` (más abajo), con su propio lector de pagos (`src/pagos-lista.ts`): `lista-blanca.ts` sigue siendo la puerta del sello y un pago sigue sin entrar por `POST /v1/patrocinio`. Todo lo que no está acá da `400` (o `403`) sin gastar cupo:
 
 - una transacción común (ni fee-bump ni versión vieja) de una cuenta G que no es del portero (ni la que paga, ni la sorteadora, ni la de cobros), sin ninguna operación con origen propio ni datos de Soroban, con solo condiciones de tiempo, que no haya vencido ni venza a más de 300 segundos y que declare como mucho 1000 stroops de comisión por operación;
 - **premio**: una sola operación `payment` de USDC de Circle a otra cuenta G, con la nota de texto `tk:premio:<sorteo>:<puesto>` (sin ceros adelante). La cuenta de origen tiene que estar en el libro. El sorteo se lee de la red (`get_raffle`) y tiene que ser de esa cuenta, estar sorteado, tener ese puesto y haber sido sellado por el portero: sin eso, una cuenta con su propio XLM sellaría por fuera un sorteo de 300 ganadores y se mandaría 300 pagos sin costo. Un solo pago por contrato, sorteo y puesto mientras el anterior esté reservado, enviado o entrado;

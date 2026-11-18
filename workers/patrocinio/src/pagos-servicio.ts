@@ -235,7 +235,7 @@ export class PorteroDePagos {
     return limitesDePagos(this.d.cfg, (clave) => this.d.cupos.ajuste(clave));
   }
 
-  /** Lo que el evaluador necesita saber de nuestra configuración. */
+  /** Lo que el lector de pagos necesita saber de nuestra configuración. */
   private reglas(forma: FormaDePago) {
     const cfg = this.d.cfg;
     const delPortero = [this.d.cuentaPatrocinadora, cfg.cuentaSorteadora, cfg.cuentaCobros];
@@ -618,7 +618,7 @@ export class PorteroDePagos {
   private armarEnvoltorio(xdrBase64: string): FeeBumpTransaction {
     const passphrase = this.d.cfg.passphrase;
     const interna = TransactionBuilder.fromXDR(xdrBase64, passphrase) as Transaction;
-    // La oferta de inclusión es la nuestra: el evaluador ya exigió que la interna no declare más de 1000 por operación.
+    // La oferta de inclusión es la nuestra: el lector de pagos ya exigió que la interna no declare más de 1000 por operación.
     return TransactionBuilder.buildFeeBumpTransaction(this.d.cuentaPatrocinadora as string, String(this.d.cfg.inclusionBump), interna, passphrase);
   }
 

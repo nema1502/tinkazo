@@ -54,7 +54,7 @@ function aceptado(l: LecturaDePago): PagoLeido {
   return l.pago;
 }
 
-describe("el evaluador de pagos acepta lo que debe", () => {
+describe("el lector de pagos acepta lo que debe", () => {
   it("un premio bien armado, con su hash, su cuenta, su nota y su destino", () => {
     const persona = otraCuenta();
     const t = armar("premio", { persona, sorteo: "5", puesto: 0 });
@@ -99,7 +99,7 @@ describe("el evaluador de pagos acepta lo que debe", () => {
   });
 });
 
-describe("el evaluador de pagos rechaza lo que no tiene exactamente la forma", () => {
+describe("el lector de pagos rechaza lo que no tiene exactamente la forma", () => {
   const OTRAS: Array<[string, () => xdr.Operation]> = [
     [
       "pathPaymentStrictSend",
@@ -351,7 +351,7 @@ describe("la nota del retiro nunca se lee como la orden de una compra", () => {
   });
 });
 
-describe("el evaluador no mezcla las dos formas", () => {
+describe("el lector de pagos no mezcla las dos formas", () => {
   it("un retiro mandado como premio da forma, y un premio mandado como retiro también", () => {
     expect(dice(leerPago(armar("retiro").xdr, reglas("premio")))).toBe("forma/de-retiro");
     expect(dice(leerPago(armar("premio").xdr, reglas("retiro")))).toBe("forma/de-premio");

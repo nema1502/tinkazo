@@ -363,8 +363,8 @@ describe("la guía y la comprobación de la sala siguen lo que existe", () => {
     const script = readFileSync(join(process.cwd(), "scripts/probar-sala.mjs"), "utf8");
     const servicio = readFileSync(join(process.cwd(), "workers/sala/src/pagina.ts"), "utf8");
     const cerrada = servicio.match(/cerrada:\s*"([^"]+)"/)?.[1] ?? "";
-    expect(cerrada).toMatch(/ya terminó/);
-    expect(script).toContain("/ya terminó/.test(document.getElementById('msg').textContent)");
+    expect(cerrada).toMatch(/ya se cerró/);
+    expect(script).toContain("/ya se cerró/.test(document.getElementById('msg').textContent)");
     expect(script).not.toContain("/ya terminó|ya se cerró/");
   });
 });
