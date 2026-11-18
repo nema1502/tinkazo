@@ -10,6 +10,8 @@
  * guarda sin comprimir y el enlace sigue funcionando, solo más largo.
  */
 
+import "../version-nueva";
+
 /** Versión del formato. Sube si cambia la forma, no si cambia el contenido. */
 export const PROOF_VERSION = 2;
 
