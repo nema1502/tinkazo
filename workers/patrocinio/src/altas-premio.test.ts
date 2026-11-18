@@ -1,6 +1,14 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
-import { ALTAS_PREMIO_POR_ORGANIZADOR_DIA, ALTAS_PREMIO_POR_SORTEO, AltasPorPremio, type PedidoDeAltaPorPremio } from "./altas-premio";
+import {
+  ALTAS_PREMIO_EN_LA_RESERVA,
+  ALTAS_PREMIO_PARTES_DEL_DIA,
+  ALTAS_PREMIO_POR_ORGANIZADOR_DIA,
+  ALTAS_PREMIO_POR_SORTEO,
+  AltasPorPremio,
+  type PedidoDeAltaPorPremio,
+  cercaDelTope,
+} from "./altas-premio";
 import { DIA_MS } from "./config";
 import { Cupos } from "./cupos";
 import { sqlDePrueba, sqlQueFallaEn } from "./sqlite-prueba";
@@ -9,6 +17,8 @@ const T0 = Date.UTC(2026, 10, 18, 12, 0, 0);
 const CONTRATO = `C${"A".repeat(55)}`;
 const LIMITES = { altasPremioDia: 100 };
 const LIBRE = () => null;
+/** Lo que da una cuenta de quien organiza por día con el tope de `LIMITES`: el menor entre 30 y una quinta parte. */
+const POR_ORGANIZADOR = Math.min(ALTAS_PREMIO_POR_ORGANIZADOR_DIA, LIMITES.altasPremioDia / ALTAS_PREMIO_PARTES_DEL_DIA);
 
 /** El objeto de verdad de las altas, sin Cloudflare: el SQLite de prueba, los cupos y la tabla del alta de quien ganó. */
 function montar(sql = sqlDePrueba()) {
@@ -117,7 +127,7 @@ describe("dar de alta a quien ganó", () => {
     const { altas, filas } = montar();
     // Repartidas en varios días para que no frene el tope por organizador: el del sorteo no tiene ventana.
     for (let i = 0; i < ALTAS_PREMIO_POR_SORTEO; i++) {
-      const cuando = T0 + Math.floor(i / ALTAS_PREMIO_POR_ORGANIZADOR_DIA) * 2 * DIA_MS;
+      const cuando = T0 + Math.floor(i / POR_ORGANIZADOR) * 2 * DIA_MS;
       expect(altas.admitir(pedido({ puesto: i, ganadores: 300 }), cuando, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
     }
     expect(filas("altas_premio")).toHaveLength(ALTAS_PREMIO_POR_SORTEO);
@@ -130,7 +140,7 @@ describe("dar de alta a quien ganó", () => {
     const sello = "s".repeat(64);
     // Diez por sorteo y repartidas en varios días: lo único que las junta es el sello en que se apoyan.
     for (let i = 0; i < ALTAS_PREMIO_POR_SORTEO; i++) {
-      const cuando = T0 + Math.floor(i / ALTAS_PREMIO_POR_ORGANIZADOR_DIA) * 2 * DIA_MS;
+      const cuando = T0 + Math.floor(i / POR_ORGANIZADOR) * 2 * DIA_MS;
       const p = pedido({ sorteo: String(10 + Math.floor(i / 10)), puesto: i % 10, ganadores: 300, sello });
       expect(altas.admitir(p, cuando, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
     }
@@ -142,23 +152,75 @@ describe("dar de alta a quien ganó", () => {
     const { altas } = montar();
     const sello = "s".repeat(64);
     for (let i = 0; i < ALTAS_PREMIO_POR_SORTEO; i++) {
-      const cuando = T0 + Math.floor(i / ALTAS_PREMIO_POR_ORGANIZADOR_DIA) * 2 * DIA_MS;
+      const cuando = T0 + Math.floor(i / POR_ORGANIZADOR) * 2 * DIA_MS;
       altas.admitir(pedido({ puesto: i, ganadores: 300, sello }), cuando, LIMITES, LIBRE);
     }
     const conSuSello = pedido({ sorteo: "6", sello: "t".repeat(64) });
     expect(altas.admitir(conSuSello, T0 + 10 * DIA_MS, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
   });
 
-  it("(ataque) un organizador da 30 altas en el día: la 31 da cupo organizador con la hora en que se libera el lugar más viejo", () => {
-    const { altas } = montar();
-    for (let i = 0; i < ALTAS_PREMIO_POR_ORGANIZADOR_DIA; i++) {
-      const p = pedido({ sorteo: String(1 + Math.floor(i / 10)), puesto: i % 10, ganadores: 50 });
-      expect(altas.admitir(p, T0 + i * 1000, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
+  /** Da `n` altas de `organizador` en sorteos de 50 ganadores, desde `desde`: todas tienen que pasar. */
+  const dar = (altas: AltasPorPremio, organizador: string, n: number, lim = LIMITES, desde = T0) => {
+    for (let i = 0; i < n; i++) {
+      const p = pedido({ organizador, sorteo: `${organizador.slice(1, 9)}-${Math.floor(i / 10)}`, puesto: i % 10, ganadores: 50 });
+      expect(altas.admitir(p, desde + i * 1000, lim, LIBRE)).toMatchObject({ ok: true, repetido: false });
     }
+  };
+
+  it("(ataque) con el tope del día en 100, un organizador da 20 (una quinta parte): la 21 da cupo organizador con la hora en que se libera", () => {
+    const { altas } = montar();
+    dar(altas, ORG, 20);
     const siguiente = pedido({ sorteo: "9", puesto: 0, ganadores: 50 });
     expect(altas.admitir(siguiente, T0 + 60_000, LIMITES, LIBRE)).toEqual({ ok: false, motivo: "cupo", que: "organizador", liberaEn: T0 + DIA_MS });
     // Pasadas las 24 horas del primero, vuelve a haber lugar.
     expect(altas.admitir(siguiente, T0 + DIA_MS + 1, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
+  });
+
+  it("con el tope del día en 300 la quinta parte es 60, y el tope por organizador sigue en 30", () => {
+    const { altas } = montar();
+    const grande = { altasPremioDia: 300 };
+    dar(altas, ORG, ALTAS_PREMIO_POR_ORGANIZADOR_DIA, grande);
+    const siguiente = pedido({ sorteo: "9", puesto: 0, ganadores: 50 });
+    expect(altas.admitir(siguiente, T0 + 60_000, grande, LIBRE)).toMatchObject({ ok: false, motivo: "cupo", que: "organizador" });
+  });
+
+  it("(ataque) cuatro organizadores no llenan el día: cada uno llega a 20 y quien recién llega igual da de alta a su ganador", () => {
+    const { altas } = montar();
+    for (let i = 0; i < 4; i++) {
+      dar(altas, Keypair.random().publicKey(), 20);
+    }
+    expect(altas.hoy(T0 + 100_000)).toBe(80);
+    const nuevo = pedido({ organizador: Keypair.random().publicKey(), sorteo: "700" });
+    expect(altas.admitir(nuevo, T0 + 100_000, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
+  });
+
+  it("(ataque) en la última quinta parte del día solo entra quien dio menos de 3 altas hoy: el resto da cupo organizador", () => {
+    const { altas } = montar();
+    for (let i = 0; i < 4; i++) {
+      dar(altas, Keypair.random().publicKey(), 20);
+    }
+    const tercero = Keypair.random().publicKey();
+    dar(altas, tercero, ALTAS_PREMIO_EN_LA_RESERVA, LIMITES, T0 + 200_000);
+    const otra = pedido({ organizador: tercero, sorteo: "701", ganadores: 50 });
+    const lleno = { ok: false, motivo: "cupo", que: "organizador", liberaEn: T0 + 200_000 + DIA_MS };
+    expect(altas.admitir(otra, T0 + 300_000, LIMITES, LIBRE)).toEqual(lleno);
+    const nuevo = pedido({ organizador: Keypair.random().publicKey(), sorteo: "702" });
+    expect(altas.admitir(nuevo, T0 + 300_000, LIMITES, LIBRE)).toMatchObject({ ok: true, repetido: false });
+  });
+
+  it("con un tope del día muy chico, cada organizador tiene al menos una", () => {
+    const { altas } = montar();
+    expect(altas.admitir(pedido(), T0, { altasPremioDia: 2 }, LIBRE)).toMatchObject({ ok: true });
+    expect(altas.admitir(pedido({ puesto: 1 }), T0, { altasPremioDia: 2 }, LIBRE)).toMatchObject({ ok: false, motivo: "cupo", que: "organizador" });
+    const deOtro = pedido({ organizador: Keypair.random().publicKey(), sorteo: "6" });
+    expect(altas.admitir(deOtro, T0, { altasPremioDia: 2 }, LIBRE)).toMatchObject({ ok: true });
+  });
+
+  it("cercaDelTope dice si las altas del día llegaron al 80 por ciento del tope", () => {
+    expect(cercaDelTope(79, 100)).toBe(false);
+    expect(cercaDelTope(80, 100)).toBe(true);
+    expect(cercaDelTope(0, 1)).toBe(false);
+    expect(cercaDelTope(1, 1)).toBe(true);
   });
 
   it("(ataque) entre todos hay 100 altas en el día: la 101 de otra cuenta de organizador da cupo dia", () => {
