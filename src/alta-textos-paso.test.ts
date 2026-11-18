@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { TEXTOS_ALTA_PASO } from "./alta-textos-paso";
 import { T } from "./i18n";
 
-/** Los dos textos del paso de la cuenta que la sección 8 no trae, con las reglas de escritura de `alta-textos.test.ts`. */
+/** El título del paso de la cuenta que la sección 8 no trae, con las reglas de escritura de `alta-textos.test.ts`. */
 
 const CLAVES = Object.keys(TEXTOS_ALTA_PASO.es);
 const IDIOMAS = ["es", "en"] as const;
 
-describe("los textos del paso cuando solo falta el acceso", () => {
+describe("el título del paso cuando solo falta el acceso", () => {
   it("están en español y en inglés, con texto, y llegan al diccionario del sitio", () => {
     expect(Object.keys(TEXTOS_ALTA_PASO.en).sort()).toEqual([...CLAVES].sort());
-    expect(CLAVES.sort()).toEqual(["altaBajadaUnPaso", "altaTituloSorteos"]);
+    expect(CLAVES.sort()).toEqual(["altaTituloSorteos"]);
     for (const k of CLAVES) for (const l of IDIOMAS) {
       expect(TEXTOS_ALTA_PASO[l][k]?.trim(), `${l} ${k}`).toBeTruthy();
       expect(T[l][k], `${l} ${k}`).toBe(TEXTOS_ALTA_PASO[l][k]);

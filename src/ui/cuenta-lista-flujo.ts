@@ -1,4 +1,3 @@
-import { t } from "../i18n";
 import { app } from "../state";
 import { compraQrActiva } from "../stellar/alta-config";
 import { network } from "../stellar/config";
@@ -106,10 +105,22 @@ type Apertura = { abrio: true; eleccion: Promise<boolean> } | { abrio: false };
  * dice con un aviso que ofrece volver a cargar la página, y no se abre: en Oficial no se sigue, pero tampoco en silencio.
  */
 async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
-  let mods: [typeof import("./cuenta-lista"), typeof import("../stellar/wallet-pollar"), typeof import("./wallet-ui"), typeof import("./modo-ui"), typeof import("./cuenta-estado"), typeof import("./cuenta-lista-acceso")];
+  let mods: [
+    typeof import("./cuenta-lista"),
+    typeof import("../stellar/wallet-pollar"),
+    typeof import("./wallet-ui"),
+    typeof import("./modo-ui"),
+    typeof import("./cuenta-lista-acceso"),
+  ];
   let alSeguir = extra.alSeguir;
   try {
-    mods = await Promise.all([import("./cuenta-lista"), import("../stellar/wallet-pollar"), import("./wallet-ui"), import("./modo-ui"), import("./cuenta-estado"), import("./cuenta-lista-acceso")]);
+    mods = await Promise.all([
+      import("./cuenta-lista"),
+      import("../stellar/wallet-pollar"),
+      import("./wallet-ui"),
+      import("./modo-ui"),
+      import("./cuenta-lista-acceso"),
+    ]);
     if (para === "entrada-con-lista" && !alSeguir) {
       // Sella en el mismo toque del botón del final: `freeze` ya tiene que estar cargado.
       const { freeze } = await import("./freeze");
@@ -120,16 +131,11 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
     avisarQueNoCargo();
     return { abrio: false };
   }
-  const [{ abrirCuentaLista }, wp, ui, modo, { claveDelAviso }, { fuenteDelAcceso }] = mods;
+  const [{ abrirCuentaLista }, wp, ui, modo, { fuenteDelAcceso }] = mods;
   // La activación lee la transacción con el SDK de Stellar: se baja mientras la persona mira el paso.
   void import("@stellar/stellar-sdk").catch(() => undefined);
   try {
     const sesion = ui.currentSession();
-    // Se arma en cada pintada: con los botones ES y EN del paso, la línea cambia de idioma con todo lo demás.
-    const aviso = (): string | undefined => {
-      const e = ui.estadoDeLaCuenta();
-      return e.estado === "dentro" ? `${t(claveDelAviso(e)).replace("{n}", e.nombre)}.` : undefined;
-    };
     const porCorreo = wp.pollarWallet.label === "Email";
     // El acceso al modo Oficial (W3): el servidor, con el token de la sesión verificada, o cerrado sin él.
     const acceso = fuenteDelAcceso(sesionDelAcceso(wp, ui));
@@ -145,7 +151,6 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
         para,
         correo: sesion?.mail,
         viaCorreo: porCorreo,
-        aviso,
         direccion: sesion?.address ?? null,
         puedeUsarDesbloqueo: () => wp.puedeUsarDesbloqueo(),
         primerOficial: { pendiente: () => modo.haceFaltaConfirmar(network.name, modo.yaConfirmoPrimerOficial()), marcar: () => modo.marcarPrimerOficial() },

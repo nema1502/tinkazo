@@ -225,11 +225,10 @@ export interface Boton extends Texto {
   ocupado?: boolean;
 }
 
-/** Lo secundario dentro de una caja: un botón con borde, o uno de texto subrayado, con una raya antes si va. */
+/** Lo secundario dentro de una caja: un botón con borde, o uno de texto subrayado. */
 export interface Secundario extends Boton {
   forma: "boton" | "texto";
-  raya?: string;
-  /** Un renglón debajo del botón que dice qué es (el desbloqueo: qué se usa y que Tinkazo no lo ve). */
+  /** La explicación del desbloqueo, plegada hasta que la persona la pida. */
   ayuda?: Texto;
 }
 
@@ -240,9 +239,11 @@ export interface CajaVista {
   numero: 1 | 2;
   estado: EstadoDeCaja;
   titulo: string;
-  /** La palabra del estado («Falta», «Listo»). Vacía mientras algo corre en la caja: lo dice la principal apagada. */
-  palabra: string;
   abierta: boolean;
+  /** La caja pide la pantalla para ella sola, aunque la otra parte todavía falte. */
+  sola?: true;
+  /** La explicación del desbloqueo cuando su botón es la principal, plegada hasta que la persona la pida. */
+  ayuda?: Texto;
   /** Los párrafos de la caja abierta, en orden. */
   textos: Texto[];
   /** Una nota que no es una falla (el navegador no deja abrir el desbloqueo, el código de antes de recargar). */
@@ -280,6 +281,42 @@ export interface Vista {
   notas: string[];
   /** Las dos salidas. Sin ellas, al final. `prueba` falta cuando «Pasar a Prueba» ya es la principal. */
   salidas: { prueba: { apagado: boolean } | null; cerrar: { apagado: boolean } } | null;
+}
+
+/** La forma de la pantalla que le toca a una vista, ya decidida sin DOM. */
+export interface Portada {
+  forma: "final" | "revisando" | "uno" | "dos";
+  titulo: string;
+  linea: Texto | null;
+  /** Las cajas que se dibujan: la actual en `uno`, las dos pendientes en `dos`, ninguna en las otras formas. */
+  filas: CajaVista[];
+}
+
+/**
+ * Decide cuánto se ve sin cambiar el orden ni el estado del paso. Mientras se revisa no se adivina cuánto falta. Con una
+ * sola parte pendiente se muestra solo esa; con dos, dos renglones breves. Un campo, un error, una nota o una caja que
+ * pide estar sola llevan siempre a la forma de un solo paso, aunque la otra parte todavía falte.
+ */
+export function portadaDe(v: Vista): Portada {
+  if (v.final) {
+    // El aviso de la compu o el celular que no es tuyo va debajo del título, como la línea de los demás estados: en el
+    // pie empujaría el botón hacia abajo. El del primer sello, que es más importante, conserva ese lugar.
+    const aviso = v.estado && v.estado.clave.startsWith("clAparatoListo") ? v.estado : null;
+    return { forma: "final", titulo: v.titulo, linea: v.primerOficial ? { clave: "clPrimerSello" } : aviso, filas: [] };
+  }
+  if (v.cajas.some((c) => c.estado === "revisando")) {
+    return { forma: "revisando", titulo: "clTitulo", linea: null, filas: [] };
+  }
+  const pendientes = v.cajas.filter((c) => c.estado !== "lista");
+  const actual = v.cajas.find((c) => c.abierta) ?? pendientes[0] ?? v.cajas[0];
+  if (!actual) return { forma: "revisando", titulo: "clTitulo", linea: null, filas: [] };
+  const sola = pendientes.length <= 1 || actual.campo !== null || !!actual.error?.length || actual.nota !== null || actual.sola === true;
+  if (sola) {
+    // Con un error a la vista, la primera línea de la caja sigue ahí: el error va debajo y no la reemplaza.
+    const linea = actual.textos[0] ?? null;
+    return { forma: "uno", titulo: actual.titulo, linea, filas: [actual] };
+  }
+  return { forma: "dos", titulo: "clTitulo", linea: v.bajada ? { clave: v.bajada } : null, filas: pendientes };
 }
 
 export interface EntradaVista {
@@ -403,7 +440,7 @@ const TEXTO_DE_LA_FALLA: Record<Falla, string[]> = {
   tarda: ["clErrTarda"],
   fallo: ["clErrFallo"],
   tope: ["clErrTope"],
-  rara: ["clErrRara", "clContacto"],
+  rara: ["clErrRara"],
   "sin-pedido": ["clErrSinPedido"],
   "sin-pedido-fin": ["clErrSinPedidoFin"],
   servicio: ["clErrServicio"],
@@ -433,7 +470,6 @@ function cajaVacia(parte: Parte, numero: 1 | 2): CajaVista {
     numero,
     estado: "espera",
     titulo: parte === "activar" ? "clActivarTitulo" : "clProtegerTitulo",
-    palabra: "clEstadoEspera",
     abierta: false,
     textos: [],
     nota: null,
@@ -456,20 +492,27 @@ function activarActual(e: EntradaVista, caja: CajaVista): Armado {
   const lead = textoDeActivar(e);
   if (e.falla === "sesion" || (e.falla && !FALLAS_DE_PROTEGER.has(e.falla))) {
     const f = e.falla;
-    return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(TEXTO_DE_LA_FALLA[f]) }, principal: principalDeLaFalla(f) };
+    return { caja: { ...caja, estado: "no-salio", abierta: true, error: textos(TEXTO_DE_LA_FALLA[f]) }, principal: principalDeLaFalla(f) };
   }
   if (e.corre === "activando" || e.corre === "esperando") {
     return {
-      caja: { ...caja, estado: "haciendo", palabra: "", abierta: true, textos: textos([lead]), ocupada: true },
+      caja: { ...caja, estado: "haciendo", abierta: true, textos: textos([lead]), ocupada: true },
       principal: ocupado("activar", "clActivarHaciendo"),
     };
   }
   if (e.corre === "revisando" || e.activacion === "preparando") {
-    return { caja: { ...caja, estado: "revisando", palabra: "", ocupada: true }, principal: ocupado("leer", "clRevisando") };
+    return { caja: { ...caja, estado: "revisando", ocupada: true }, principal: ocupado("leer", "clRevisando") };
   }
-  if (e.activacion === "fallo") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrFallo"]) }, principal: boton("leer", "clProbarDeNuevo") };
-  if (e.activacion === "no-se-sabe") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrRed"]) }, principal: boton("leer", "clProbarDeNuevo") };
-  return { caja: { ...caja, estado: "falta", palabra: "clEstadoFalta", abierta: true, textos: textos([lead]) }, principal: boton("activar", "clActivarBoton", e.corre !== null) };
+  if (e.activacion === "fallo") {
+    return { caja: { ...caja, estado: "no-salio", abierta: true, error: textos(["clErrFallo"]) }, principal: boton("leer", "clProbarDeNuevo") };
+  }
+  if (e.activacion === "no-se-sabe") {
+    return { caja: { ...caja, estado: "no-salio", abierta: true, error: textos(["clErrRed"]) }, principal: boton("leer", "clProbarDeNuevo") };
+  }
+  return {
+    caja: { ...caja, estado: "falta", abierta: true, textos: textos([lead]) },
+    principal: boton("activar", "clActivarBoton", e.corre !== null),
+  };
 }
 
 /**
@@ -477,9 +520,11 @@ function activarActual(e: EntradaVista, caja: CajaVista): Armado {
  * Se dice lo cierto (ahora no se pueden activar cuentas nuevas) y la principal es «Pasar a Prueba», si se puede.
  */
 function cerradoActual(e: EntradaVista, caja: CajaVista): Armado {
-  if (e.falla === "sesion") return { caja: { ...caja, estado: "no-salio", palabra: "clEstadoNoSalio", abierta: true, error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  if (e.falla === "sesion") {
+    return { caja: { ...caja, estado: "no-salio", abierta: true, error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  }
   return {
-    caja: { ...caja, estado: "falta", palabra: "clEstadoFalta", abierta: true, textos: textos(["clErrServicio"]) },
+    caja: { ...caja, estado: "no-salio", abierta: true, sola: true, error: textos(["clErrServicio"]) },
     principal: e.puedePasarAPrueba ? boton("pasar-a-prueba", "modeSwitchToTest") : null,
   };
 }
@@ -507,21 +552,27 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   const base: CajaVista = { ...caja, titulo: activada ? "altaTituloSorteos" : "clActivarTitulo", abierta: true };
   const usar = activada ? "cupoOfUsarCupon" : "altaActivarConCupon";
   const cierre = textos(["altaNoTengo"]);
-  if (e.falla === "sesion") return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  if (e.falla === "sesion") {
+    return { caja: { ...base, estado: "no-salio", error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  }
   // Algo después del canje no salió: el cupón quedó en la cuenta, y «Probar de nuevo» sigue desde ahí.
-  if (a.fallaTrasCanje) return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["altaCuponGuardado"]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
+  if (a.fallaTrasCanje) {
+    return { caja: { ...base, estado: "no-salio", error: textos(["altaCuponGuardado"]) }, principal: boton("seguir-cupon", "clProbarDeNuevo") };
+  }
   // Lo que sigue al canje: esperar el pedido, activar y volver a preguntar.
   if (a.cadena) {
     const n = a.canjeado ?? 0;
     const t: Texto[] = !activada && n > 0 ? [n === 1 ? { clave: "altaCuponOk1" } : { clave: "altaCuponOk", vars: { n: String(n) } }] : [];
-    return { caja: { ...base, estado: "haciendo", palabra: "", textos: t, ocupada: true }, principal: ocupado("usar-cupon", e.corre === "revisando" ? "clRevisando" : "clActivarHaciendo") };
+    const principal = ocupado("usar-cupon", e.corre === "revisando" ? "clRevisando" : "clActivarHaciendo");
+    return { caja: { ...base, estado: "haciendo", sola: true, textos: t, ocupada: true }, principal };
   }
   if (a.estado === "revisando" || (e.corre === "revisando" && e.activacion !== "lista")) {
-    return { caja: { ...base, estado: "revisando", palabra: "", abierta: false, ocupada: true }, principal: ocupado("leer-acceso", "clRevisando") };
+    return { caja: { ...base, estado: "revisando", abierta: false, ocupada: true }, principal: ocupado("leer-acceso", "clRevisando") };
   }
   if (a.estado === "error") {
     const err = a.error ? [a.error] : textos(["altaErrServicio"]);
-    return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: err }, principal: principalDelArreglo(e, a.arreglo, boton("leer-acceso", "clProbarDeNuevo")) };
+    const principal = principalDelArreglo(e, a.arreglo, boton("leer-acceso", "clProbarDeNuevo"));
+    return { caja: { ...base, estado: "no-salio", error: err }, principal };
   }
   // La compra del primer paquete: solo sin acceso (quien ya tiene acceso no compra el primero) y con la compra en el build.
   const pago = a.pago && a.estado === "ninguno" && !a.pideCupon ? a.pago : null;
@@ -531,7 +582,6 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   const canjeando = e.corre === "canjeando";
   const error = a.error ? [a.error] : null;
   const estado: EstadoDeCaja = canjeando ? "haciendo" : error ? "no-salio" : "falta";
-  const palabra = canjeando ? "" : error ? "clEstadoNoSalio" : "clEstadoFalta";
   // Con la compra en el build, el texto que nombra un paquete va solo con el botón de comprarlo; si no, el de sin compra.
   const sinVenta = a.pago ? "SinVenta" : "";
   // Con un error a la vista, el motivo va antes que la explicación de siempre: en un celular chico no entran los dos.
@@ -540,7 +590,15 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   if (a.escribiendo) {
     return {
       // Con «Volver» a la página a la vista, el campo no repite otro «Volver».
-      caja: { ...base, estado, palabra, error, campo: "cupon", ocupada: canjeando, secundarios: puedeVolverDelCupon(e) ? [] : [{ ...boton("volver-cupon", "clVolver", canjeando), forma: "texto" }], cierre },
+      caja: {
+        ...base,
+        estado,
+        error,
+        campo: "cupon",
+        ocupada: canjeando,
+        secundarios: puedeVolverDelCupon(e) ? [] : [{ ...boton("volver-cupon", "clVolver", canjeando), forma: "texto" }],
+        cierre,
+      },
       principal: canjeando ? ocupado("usar-cupon", "altaRevisando") : conArreglo(boton("usar-cupon", usar, !a.campoOk)),
     };
   }
@@ -549,8 +607,8 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
       caja: {
         ...base,
         estado,
-        palabra,
-        textos: [...lead, { clave: "altaCuponListo", vars: { codigo: a.cuponEnMano } }],
+        sola: true,
+        textos: [{ clave: "altaCuponListo", vars: { codigo: a.cuponEnMano } }],
         error,
         ocupada: canjeando,
         secundarios: [{ ...boton("otro-cupon", "altaOtroCupon", canjeando), forma: "texto" }],
@@ -567,7 +625,15 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
     const detalles: Texto[] = [...(activada ? [] : [{ clave: "altaPrimerPaqueteNota" }]), ...cierre];
     const comprar = boton("comprar", "altaPrimerPaquete", false, varsDelProducto(pago.alta, pago.idioma));
     return {
-      caja: { ...base, estado: errores ? "no-salio" : "falta", palabra: errores ? "clEstadoNoSalio" : "clEstadoFalta", textos: textosCompra, error: errores, secundarios: [{ ...boton("tengo-cupon", "altaTengoCupon"), forma: "boton" }], cierre: [], detalles },
+      caja: {
+        ...base,
+        estado: errores ? "no-salio" : "falta",
+        textos: textosCompra,
+        error: errores,
+        secundarios: [{ ...boton("tengo-cupon", "altaTengoCupon"), forma: "boton" }],
+        cierre: [],
+        detalles,
+      },
       principal: principalDelArreglo(e, error ? a.arreglo : pago.arreglo, comprar),
     };
   }
@@ -575,7 +641,9 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
   // la única línea a la vista: qué hacer sin cupón queda plegado en Más detalles.
   const errores = error ?? (pago?.error ? [pago.error] : null);
   const frenada = !!errores && !error;
-  const sinCompra = frenada ? { estado: "no-salio" as const, palabra: "clEstadoNoSalio", textos: [] as Texto[], cierre: [] as Texto[], detalles: cierre } : { estado, palabra, textos: lead, cierre };
+  const sinCompra = frenada
+    ? { estado: "no-salio" as const, textos: [] as Texto[], cierre: [] as Texto[], detalles: cierre }
+    : { estado, textos: lead, cierre };
   return { caja: { ...base, ...sinCompra, error: errores }, principal: conArreglo(boton("tengo-cupon", "altaTengoCupon")) };
 }
 
@@ -586,14 +654,13 @@ function accesoActual(e: EntradaVista, caja: CajaVista): Armado {
  * demás plegado en Más detalles, dentro del panel.
  */
 function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado {
-  const base: CajaVista = { ...caja, titulo: "pagoTitulo" };
+  const base: CajaVista = { ...caja, titulo: "pagoTitulo", sola: true };
   const error = p.error ? [p.error] : null;
   const estado: EstadoDeCaja = error ? "no-salio" : "falta";
-  const palabra = error ? "clEstadoNoSalio" : "clEstadoFalta";
   const volver: Secundario = { ...boton("volver-pago", "clVolver"), forma: "texto" };
   const conArreglo = (b: Boton): Boton | null => principalDelArreglo(e, p.arreglo, b);
   const medio = (m: MedioDePago): Boton => (m.id === "saldo" ? boton("pago-saldo", m.clave) : { ...boton("pago-medio", m.clave), medio: m.id });
-  if (p.fase === "pidiendo") return { caja: { ...base, estado: "haciendo", palabra: "", ocupada: true }, principal: ocupado("pago-medio", "pagoPreparando") };
+  if (p.fase === "pidiendo") return { caja: { ...base, estado: "haciendo", ocupada: true }, principal: ocupado("pago-medio", "pagoPreparando") };
   const o = p.orden;
   const saldo = p.conSaldo?.saldo ?? null;
   if (p.fase === "elegir" || !o) {
@@ -601,7 +668,7 @@ function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado
     // Con el saldo entre los medios, la línea dice cuánto hay: con eso se entiende qué se está eligiendo.
     const linea: Texto = saldo && p.medios.some((m) => m.id === "saldo") ? lineaDelSaldo(saldo, p.idioma) : { clave: "pagoComoPagar" };
     return {
-      caja: { ...base, estado: "falta", palabra: "clEstadoFalta", textos: [linea], secundarios: [...otros.map((m): Secundario => ({ ...medio(m), forma: "boton" })), volver] },
+      caja: { ...base, estado: "falta", textos: [linea], secundarios: [...otros.map((m): Secundario => ({ ...medio(m), forma: "boton" })), volver] },
       principal: primero ? medio(primero) : null,
     };
   }
@@ -617,7 +684,6 @@ function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado
       caja: {
         ...base,
         estado: err ? "no-salio" : corriendo ? "haciendo" : "falta",
-        palabra: err ? "clEstadoNoSalio" : corriendo ? "" : "clEstadoFalta",
         textos: s.textos,
         error: err,
         ocupada: corriendo,
@@ -637,7 +703,6 @@ function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado
       caja: {
         ...base,
         estado,
-        palabra,
         textos: error ? [] : [{ clave: "pagoVencida", vars: { fecha } }],
         error,
         ocupada: p.buscando,
@@ -654,7 +719,7 @@ function filaDelPago(e: EntradaVista, caja: CajaVista, p: PagoEnLaVista): Armado
   secundarios.push(volver);
   const linea = lineaDelPago(p, !!error);
   return {
-    caja: { ...base, estado, palabra, textos: linea.textos, nota: linea.nota, error, ocupada: p.buscando, secundarios, cierre: [], pago: panel },
+    caja: { ...base, estado, textos: linea.textos, nota: linea.nota, error, ocupada: p.buscando, secundarios, cierre: [], pago: panel },
     principal: p.buscando ? buscando : conArreglo(boton("ya-pague", error ? "clProbarDeNuevo" : "pagoYaPague")),
   };
 }
@@ -664,52 +729,87 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
   const aparato = e.proteccion === "aparato-nuevo";
   const base: CajaVista = { ...caja, titulo: aparato ? "clAparatoTitulo" : "clProtegerTitulo", abierta: true };
   // La sesión se cerró: nada de lo de acá sirve sin entrar de nuevo.
-  if (e.falla === "sesion") return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
-  if (e.corre === "revisando") return { caja: { ...base, estado: "revisando", palabra: "", abierta: false, ocupada: true }, principal: ocupado("leer", "clRevisando") };
+  if (e.falla === "sesion") {
+    return { caja: { ...base, estado: "no-salio", error: textos(["clErrSesion"]) }, principal: principalDeLaFalla("sesion") };
+  }
+  if (e.corre === "revisando") {
+    return { caja: { ...base, estado: "revisando", abierta: false, ocupada: true }, principal: ocupado("leer", "clRevisando") };
+  }
   if (sinForma(e)) {
     return {
-      caja: { ...base, titulo: "clProtegerTitulo", estado: "falta", palabra: "clEstadoFalta", textos: textos(["clSinForma", "clSinFormaPista", "clContacto"]) },
+      caja: {
+        ...base,
+        titulo: "clSinFormaTitulo",
+        estado: "falta",
+        sola: true,
+        textos: textos(["clSinForma"]),
+        detalles: textos(["clSinFormaPista", "clContacto"]),
+      },
       principal: e.puedePasarAPrueba ? boton("pasar-a-prueba", "modeSwitchToTest") : null,
     };
   }
   if (e.proteccion === "no-se-sabe") {
-    return { caja: { ...base, estado: "no-salio", palabra: "clEstadoNoSalio", error: textos(["clErrRed"]) }, principal: boton("leer", "clProbarDeNuevo") };
+    return { caja: { ...base, estado: "no-salio", error: textos(["clErrRed"]) }, principal: boton("leer", "clProbarDeNuevo") };
   }
   const falla = e.falla && FALLAS_DE_PROTEGER.has(e.falla) ? e.falla : null;
   const esNota = falla === "desbloqueo-bloqueado";
   const errorDeLaCaja = falla && !esNota ? textos(TEXTO_DE_LA_FALLA[falla]) : null;
   const nota: Texto | null = esNota ? { clave: "protPasskeyBloqueada" } : null;
-  const palabraFalta = errorDeLaCaja ? "clEstadoNoSalio" : "clEstadoFalta";
   const estadoFalta: EstadoDeCaja = errorDeLaCaja ? "no-salio" : "falta";
   const desbloqueoClave = cel(e, "clDesbloqueo");
   // El desbloqueo se ofrece si el navegador lo tiene; para confirmar este navegador, además, la cuenta tiene que tener
   // una llave guardada (el desbloqueo de otro celular no sirve acá en una compu).
   const ofreceDesbloqueo = e.hayDesbloqueo && (!aparato || e.tieneLlaves);
-  // El desbloqueo nunca aparece sin decir qué es: debajo de su botón, o en la caja si su botón es la principal del pie.
+  // El desbloqueo siempre ofrece su explicación plegada: en su botón, o en la caja si es la principal del pie.
   const ayudaDesbloqueo: Texto = { clave: cel(e, "clDesbloqueoAyuda") };
-  const desbloqueoSecundario = (): Secundario => ({ ...boton("desbloqueo", desbloqueoClave), forma: "boton", raya: "clOSiPreferis", ayuda: ayudaDesbloqueo });
+  const desbloqueoSecundario = (): Secundario => ({ ...boton("desbloqueo", desbloqueoClave), forma: "texto", ayuda: ayudaDesbloqueo });
 
   if (e.corre === "desbloqueo" || e.corre === "confirmando") {
     return {
-      caja: { ...base, titulo: e.codigo ? "protCodeTitulo" : base.titulo, estado: "haciendo", palabra: "", ocupada: true, campo: e.codigo && e.corre === "confirmando" ? "codigo" : null },
+      caja: {
+        ...base,
+        titulo: e.codigo ? "protCodeTitulo" : base.titulo,
+        estado: "haciendo",
+        ocupada: true,
+        campo: e.codigo && e.corre === "confirmando" ? "codigo" : null,
+      },
       principal: ocupado(e.corre === "desbloqueo" ? "desbloqueo" : "confirmar-codigo", aparato ? "clEstadoConfirmando" : "protHaciendo"),
     };
   }
 
   // Con el código mandado: el campo del código y «Confirmar».
   if (e.codigo) {
-    const t: Texto[] = [{ clave: "protCodeLead", vars: { mail: e.codigo.a } }, { clave: "clCorreoLlega" }];
-    if (e.entroConCorreo && !aparato) t.push({ clave: "clCorreoOtroCodigo" });
+    const t: Texto[] = [{ clave: "protCodeLead", vars: { mail: e.codigo.a } }];
     if (e.codigo.segundos >= SPAM_S) t.push({ clave: "clCorreoSpam" });
     const falta = Math.max(0, OTRO_CODIGO_S - e.codigo.segundos);
     const vencio = falla === "codigo-vencido" || falla === "codigo-viejo";
+    // Con un código que no sirvió, la salida (otro código, el desbloqueo) se ve enseguida: no hay por qué esperar.
+    const pideOtro = vencio || falla === "codigo-malo";
+    const conSalidas = pideOtro || e.codigo.segundos >= SPAM_S;
     const sec: Secundario[] = [];
-    if (!vencio) sec.push({ ...(falta > 0 ? boton("otro-codigo", "clOtroCodigoEn", true, { s: String(falta) }) : boton("otro-codigo", "protOtroCodigo", e.corre === "mandando")), forma: "boton" });
+    // Sin error, otro código y el desbloqueo aparecen junto al aviso de Spam, no desde el segundo cero.
+    if (!vencio && conSalidas) {
+      const otro = falta > 0
+        ? boton("otro-codigo", "clOtroCodigoEn", true, { s: String(falta) })
+        : boton("otro-codigo", "protOtroCodigo", e.corre === "mandando");
+      sec.push({ ...otro, forma: "texto" });
+    }
     if (!aparato) sec.push({ ...boton("otro-correo", "protOtroCorreo"), forma: "texto" });
-    if (ofreceDesbloqueo) sec.push(desbloqueoSecundario());
+    if (ofreceDesbloqueo && conSalidas) sec.push(desbloqueoSecundario());
     return {
-      caja: { ...base, titulo: "protCodeTitulo", estado: estadoFalta, palabra: palabraFalta, textos: t, error: errorDeLaCaja, nota, campo: vencio ? null : "codigo", secundarios: sec },
-      principal: vencio ? (e.corre === "mandando" ? ocupado("otro-codigo", "protEnviando") : boton("otro-codigo", "protOtroCodigo")) : boton("confirmar-codigo", "protCodeGo", !e.campoOk),
+      caja: {
+        ...base,
+        titulo: "protCodeTitulo",
+        estado: estadoFalta,
+        textos: t,
+        error: errorDeLaCaja,
+        nota,
+        campo: vencio ? null : "codigo",
+        secundarios: sec,
+      },
+      principal: vencio
+        ? e.corre === "mandando" ? ocupado("otro-codigo", "protEnviando") : boton("otro-codigo", "protOtroCodigo")
+        : boton("confirmar-codigo", "protCodeGo", !e.campoOk),
     };
   }
 
@@ -718,26 +818,50 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
 
   // Otro celular u otra compu: siempre el correo de la cuenta primero.
   if (aparato) {
-    const t = textos([cel(e, "clAparatoTexto"), cel(e, "clAparatoAjeno")]);
+    const t = textos([cel(e, "clAparatoTexto")]);
     if (!e.correoConfirmado) {
       // Sin correo, solo con una llave guardada.
-      return { caja: { ...base, estado: estadoFalta, palabra: palabraFalta, textos: [...t, ayudaDesbloqueo], error: errorDeLaCaja, nota: notaRecarga }, principal: boton("desbloqueo", desbloqueoClave) };
+      const caja: CajaVista = {
+        ...base,
+        estado: estadoFalta,
+        sola: true,
+        textos: t,
+        ayuda: ayudaDesbloqueo,
+        error: errorDeLaCaja,
+        nota: notaRecarga,
+      };
+      return { caja, principal: boton("desbloqueo", desbloqueoClave) };
     }
     const sec: Secundario[] = ofreceDesbloqueo && e.celular ? [desbloqueoSecundario()] : [];
-    const mandar = mandando ? ocupado("mandar-codigo", "protEnviando") : e.correoCuenta ? boton("mandar-codigo", "clMandarA", false, { mail: e.correoCuenta }) : boton("mandar-codigo", "clMandarATuCorreo");
-    return { caja: { ...base, estado: estadoFalta, palabra: palabraFalta, textos: t, error: errorDeLaCaja, nota: notaRecarga, secundarios: sec }, principal: mandar };
+    const mandar = mandando
+      ? ocupado("mandar-codigo", "protEnviando")
+      : e.correoCuenta
+        ? boton("mandar-codigo", "clMandarA", false, { mail: e.correoCuenta })
+        : boton("mandar-codigo", "clMandarATuCorreo");
+    return { caja: { ...base, estado: estadoFalta, textos: t, error: errorDeLaCaja, nota: notaRecarga, secundarios: sec }, principal: mandar };
   }
 
   // La cuenta nueva: proteger con el desbloqueo o con un código al correo.
   const t = textos([cel(e, "clProtegerTexto")]);
   const aMano = e.eligioCorreo || !e.correoSesion;
-  const mandarSesion = (): Boton => (mandando ? ocupado("mandar-codigo", "protEnviando") : boton("mandar-codigo", "clMandarA", false, { mail: e.correoSesion }));
+  const mandarSesion = (): Boton => (mandando
+    ? ocupado("mandar-codigo", "protEnviando")
+    : boton("mandar-codigo", "clMandarA", false, { mail: e.correoSesion }));
   const mandarAMano = (): Boton => (mandando ? ocupado("mandar-a-mano", "protEnviando") : boton("mandar-a-mano", "protMailGo", !e.campoOk));
   const desbloqueoPrimero = e.celular && ofreceDesbloqueo && !e.desbloqueoFallo && !e.eligioCorreo && !e.codigoRecargado;
   if (desbloqueoPrimero) {
-    const sec: Secundario[] = [aMano ? { ...mandarAMano(), forma: "boton", raya: "clCorreoO" } : { ...mandarSesion(), forma: "boton", raya: "clCorreoO" }];
+    const sec: Secundario[] = [aMano ? { ...mandarAMano(), forma: "texto" } : { ...mandarSesion(), forma: "texto" }];
     return {
-      caja: { ...base, estado: estadoFalta, palabra: palabraFalta, textos: [...t, ayudaDesbloqueo], error: errorDeLaCaja, nota, campo: aMano ? "correo" : null, secundarios: sec },
+      caja: {
+        ...base,
+        estado: estadoFalta,
+        textos: t,
+        ayuda: ayudaDesbloqueo,
+        error: errorDeLaCaja,
+        nota,
+        campo: aMano ? "correo" : null,
+        secundarios: sec,
+      },
       principal: boton("desbloqueo", desbloqueoClave, mandando),
     };
   }
@@ -746,7 +870,7 @@ function protegerActual(e: EntradaVista, caja: CajaVista): Armado {
   if (!aMano) sec.push({ ...boton("otro-correo", "clOtroCorreo"), forma: "texto" });
   if (ofreceDesbloqueo) sec.push(desbloqueoSecundario());
   return {
-    caja: { ...base, estado: estadoFalta, palabra: palabraFalta, textos: t, error: errorDeLaCaja, nota: notaRecarga, campo: aMano ? "correo" : null, secundarios: sec },
+    caja: { ...base, estado: estadoFalta, textos: t, error: errorDeLaCaja, nota: notaRecarga, campo: aMano ? "correo" : null, secundarios: sec },
     principal: aMano ? mandarAMano() : mandarSesion(),
   };
 }
@@ -786,7 +910,7 @@ export function vistaDe(e: EntradaVista): Vista {
     const vacia = cajaVacia(parte, (i + 1) as 1 | 2);
     if (parte === "proteger" && e.proteccion === "aparato-nuevo") vacia.titulo = "clAparatoTitulo";
     if (parte === "activar" && e.activacion === "lista" && faltaElAcceso(e)) vacia.titulo = "altaTituloSorteos";
-    if (listaLa(e, parte)) return { ...vacia, estado: "lista" as const, palabra: "clEstadoListo" };
+    if (listaLa(e, parte)) return { ...vacia, estado: "lista" as const };
     if (parte !== actual) return vacia;
     const armado = parte === "activar" ? parte1Actual(e, vacia) : protegerActual(e, vacia);
     principal = armado.principal;
@@ -799,7 +923,7 @@ export function vistaDe(e: EntradaVista): Vista {
     return {
       final: true,
       titulo: "clListaTitulo",
-      bajada: "clListaTexto",
+      bajada: "",
       cajas,
       principal: e.corre === "cerrando" ? { ...p, apagado: true } : p,
       volver: e.para === "entrada" ? null : boton("volver", "clVolver"),
@@ -813,18 +937,11 @@ export function vistaDe(e: EntradaVista): Vista {
   // Cerrando sesión, la principal espera: la salida ya está en marcha.
   const p = principal as Boton | null;
   const principalFinal = p && e.corre === "cerrando" ? { ...p, apagado: true } : p;
-  const notas: string[] = [];
-  if (e.proteccion === "falta" && e.unicoNavegador) notas.push(cel(e, "clSalirAviso"));
-  notas.push(e.puedePasarAPrueba ? "clAPruebaNota" : "modeSwitchBlocked");
-  // Con la cuenta activada y protegida, lo único que falta es el acceso: no son «dos pasos».
-  const soloElAcceso = faltaElAcceso(e) && e.activacion === "lista" && e.proteccion === "lista";
-  // Con la compra empezada y la cuenta a medias: primero los sorteos, después los dos pasos.
-  const a = accesoDe(e);
-  const comprando = faltaElAcceso(e) && a.estado === "ninguno" && !a.pideCupon && a.pago !== undefined && a.pago.fase !== "ofrecer";
+  const notas: string[] = e.puedePasarAPrueba ? [] : ["modeSwitchBlocked"];
   return {
     final: false,
     titulo: "clTitulo",
-    bajada: soloElAcceso ? "altaBajadaUnPaso" : comprando ? "clBajadaConPago" : "clBajada",
+    bajada: "clBajada",
     cajas,
     principal: principalFinal,
     volver: puedeVolverDelCupon(e) ? boton("volver", "clVolver") : null,

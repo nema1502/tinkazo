@@ -127,20 +127,10 @@ describe("el sello en modo Oficial", () => {
     const volverA = document.createElement("button");
     expect(await f.cuentaListaParaGrabar("sello", { volverA })).toBe(false);
     expect(h.abrir).toHaveBeenCalledTimes(1);
-    const op = h.abrir.mock.calls[0]?.[2] as { para: string; inicial: { proteccion: string }; volverA: unknown; aviso: () => string };
+    const op = h.abrir.mock.calls[0]?.[2] as { para: string; inicial: { proteccion: string }; volverA: unknown };
     expect(op.para).toBe("sello");
     expect(op.inicial.proteccion).toBe("falta");
     expect(op.volverA).toBe(volverA);
-    expect(op.aviso()).toBe("Entraste con Google como Ana.");
-    // La línea se arma en cada pintada: con los botones ES y EN del paso, cambia de idioma con lo demás.
-    const { setLang } = await import("../i18n");
-    setLang("en");
-    try {
-      expect(op.aviso()).not.toBe("Entraste con Google como Ana.");
-      expect(op.aviso()).toContain("Ana");
-    } finally {
-      setLang("es");
-    }
   });
 
   it("si no se pudo saber en 4 segundos, abre el paso igual", async () => {
