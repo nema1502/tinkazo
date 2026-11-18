@@ -123,3 +123,21 @@ POR_IP_POR_HORA = "600"
 TOPE_GENERAL_STROOPS = "150000000"
 # Lo guardado para el draw de cada sello: el de mainnet (unos 824.000 stroops) más la mitad.
 RESERVA_SORTEO_STROOPS = "1236000"
+# Los pagos de premios, los retiros y el alta de quien ganó. Cada forma se prende sola con "1" y solo con ALTAS = "1": las tres
+# nacen apagadas ("0"), y con todo en "0" el portero se comporta como antes. Prenderlas pide desplegar con la palabra de quien mantiene el proyecto.
+# El portero paga la comisión de la red de un pago de premio desde una cuenta del libro hacia la cuenta de quien ganó.
+PAGOS_PREMIO = "0"
+# El portero paga la comisión de un retiro: dos pagos de USDC, el primero a la persona y el segundo, el costo, a CUENTA_COBROS.
+# Pide CUENTA_COBROS propia y COSTO_RETIRO bien escrito.
+RETIROS = "0"
+# Quien organiza deja entrar a su cuenta a quien ganó un puesto de su sorteo, sin cupón y sin sorteos, para que active y cobre.
+ALTAS_PREMIO = "0"
+# Lo que cuesta un retiro, en USDC con punto, de 0,01 a 5: 50 centavos fijos. Es la segunda operación del retiro y manda sobre
+# la del sitio. Vacío o mal escrito, el retiro no se prende y se anota.
+COSTO_RETIRO = "0.50"
+# El presupuesto de las comisiones de los pagos en 24 horas, en stroops (2 XLM), aparte del de los sellos. Solo dígitos.
+TOPE_PAGOS_STROOPS = "20000000"
+# Cuántos pagos por forma que la red rechazó al aplicarlos se aceptan en 24 horas, entre todas las cuentas. Solo dígitos.
+PAGOS_RECHAZADOS_DIA = "20"
+# Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos.
+ALTAS_PREMIO_DIA = "100"

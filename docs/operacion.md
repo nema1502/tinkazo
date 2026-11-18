@@ -15,7 +15,7 @@ curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/estado
 ## Antes del evento
 
 1. **El portero comprobado, un día antes como mínimo.** `estado` dice `modo: "portero"` y `alerta: false`; `POST /v1/alta/estado` sin sesión da `401` con `motivo: "sesion"`; `/v1/patrocinio/cupo?cuenta=G...` dice `prendido: true`.
-2. **Los créditos de Pollar.** El piso reserva el peor caso y cada tarjeta canjeada se come 165 de margen. Cuánto cargar: **300 + 165 × tarjetas + 15 × curiosos + 20 × reintentos + 40 × sorteos admitidos a mano**. Con 40 tarjetas, cien curiosos y unos 15 reintentos: **8.700**, más 40 por cada sorteo admitido a mano (con 5, 8.900). Con 30 tarjetas: unos 7.100 más lo admitido a mano. Con 7.000 entran unas 29 tarjetas. La carga la hace quien mantiene el proyecto, en el panel de Pollar, a más tardar el mediodía del día anterior.
+2. **Los créditos de Pollar.** El piso reserva el peor caso y cada tarjeta canjeada se come 165 de margen. Cuánto cargar: **300 + 165 × tarjetas + 15 × curiosos + 20 × reintentos + 40 × sorteos admitidos a mano**. Con 40 tarjetas, cien curiosos y unos 15 reintentos: **8.700**, más 40 por cada sorteo admitido a mano (con 5, 8.900). Con 30 tarjetas: unos 7.100 más lo admitido a mano. Con 7.000 entran unas 29 tarjetas. La carga la hace quien mantiene el proyecto, en el panel de Pollar, a más tardar el mediodía del día anterior. Cada ganador con cuenta nueva suma 30 al piso hasta que activa y le cuesta a Tinkazo unos 40 créditos al activarse y abrir la línea.
 3. **La alerta de créditos bajos de Pollar** en piso + 165 × tarjetas por repartir, no en un número fijo.
 4. **La cuenta que paga con 25 XLM o más.** Por debajo de 20 el portero da `alerta: true`. Se carga desde la cuenta fría, en tramos chicos: la cuenta que paga guarda solo lo del día.
 5. **El tope general a 45 XLM** por 24 horas:
@@ -25,13 +25,15 @@ curl -fsS -H "Authorization: Bearer $T" $P/v1/patrocinio/estado
 7. **Dos lotes de cupones**, el del evento y uno de reserva, con los códigos y las tarjetas fuera del repositorio:
    `node scripts/cupones.mjs crear --lote <evento> --cantidad 30 --sorteos 3 --dias 60 --vence AAAA-MM-DD --salida <carpeta privada>`
    y lo mismo con `--lote <evento>-reserva --cantidad 10`. Imprimir al 100 %, a doble faz; las tarjetas van en sobre o boca abajo (una foto del QR lo canjea) y la reserva aparte.
-8. **La regla de límite de Cloudflare**, una sola porque el plan gratis de la zona deja una: 60 pedidos en 10 segundos por dirección, con bloqueo de 10 segundos, para `POST /v1/patrocinio` en `p.tinkazo.app` y en `pm.tinkazo.app`, y para `POST /v1/alta/estado` y `POST /v1/alta/cupon` en `pm.tinkazo.app`. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto. `GET /v1/patrocinio/cupo` no pasa por esta regla: lo limita el propio portero, a 3.000 consultas por dirección y por hora (en la memoria de cada nodo).
+8. **La regla de límite de Cloudflare**, una sola porque el plan gratis de la zona deja una: 60 pedidos en 10 segundos por dirección, con bloqueo de 10 segundos, para `POST /v1/patrocinio` en `p.tinkazo.app` y en `pm.tinkazo.app`, y para `POST /v1/alta/estado` y `POST /v1/alta/cupon` en `pm.tinkazo.app`. Todo el stand sale por la misma wifi: el bloqueo tiene que ser corto. `GET /v1/patrocinio/cupo` no pasa por esta regla: lo limita el propio portero, a 3.000 consultas por dirección y por hora (en la memoria de cada nodo). `POST /v1/patrocinio/pago` y `POST /v1/alta/premio` no pasan por esta regla: los limitan sus contadores propios por dirección y los topes del portero.
 9. **La vigilancia: el vigilante cada diez minutos y, de respaldo, la de GitHub por hora.** La alarma es el Worker `tinkazo-vigilante` (la sección El vigilante, más abajo), que avisa por correo y manda un resumen cada mañana. El de GitHub queda de respaldo porque dispara solo cerca del 10 % de las corridas programadas. El workflow `vigilar-portero.yml` mira `estado` cada hora y manda un correo cuando aparece un problema nuevo o uno que empeora (y una vez por día mientras siga el mismo). Su registro es público y no lleva cifras: dice qué problemas hay, y las cifras se miran en `estado`. Una corrida a mano o repetida falla siempre que haya un problema, aunque ya se haya avisado: sirve para comprobar que se arregló. Es el respaldo de la mirada a mano de abajo, no la alarma. Necesita el Environment `vigilancia` de GitHub, con las ramas elegidas y solo `main`, y la clave de operar cargada ahí como `PORTERO_MAINNET_ADMIN_TOKEN`, sin copia entre los secretos del repositorio. Los pasos están en [workers/patrocinio/README.md](../workers/patrocinio/README.md), en «La vigilancia del portero de mainnet».
 10. **A la mañana, antes de abrir el stand**: `estado` y la cuenta de abajo con todas las tarjetas por repartir.
 
 ## Durante el evento, cada hora
 
 Mirar `estado` y anotar la hora, `creditos`, `piso`, `margen`, `altasPausadas`, `alerta`, el saldo de la cuenta que paga (`balanceStroops`), `gasto24h` contra `topeGeneralStroops`, `altas24h` y `cuponesHoy`.
+
+Con alguna forma de pago prendida, o con alguna pausa puesta, `estado` trae además el bloque `pagos` (la sección Los pagos de premios, los retiros y el alta de quien ganó, más abajo). Anotar `pagos.gasto24h` contra `pagos.topeStroops`, `pagos.premio.fallo24h` y `pagos.retiro.fallo24h` contra `pagos.rechazosPorDia`, `pagos.altaPremio.hoy` contra `pagos.altasPremioDia`, `firmasPagos` y `costosRetiro24h`.
 
 **La cuenta: `margen` tiene que ser al menos 165 × tarjetas sin canjear + 15 × curiosos esperados + 20 × reintentos esperados.**
 
@@ -44,6 +46,9 @@ Mirar `estado` y anotar la hora, `creditos`, `piso`, `margen`, `altasPausadas`, 
 | `creditos: null` | Pollar no contesta. Diez minutos se usa el último saldo; después, los canjes nuevos se pausan solos | Esperar y avisar. Quien ya canjeó sigue sellando |
 | `cuponesHoy` sube sin tarjetas repartidas | Alguien está usando códigos que no se dieron (una foto de la pila) | `pausar` y anular el lote |
 | `error-config` o `error-interno` en el registro del Worker | Algo de configuración o del objeto | `pausar` y revisar, sin desplegar |
+| `pagos.gasto24h` pasa el 80 % de `pagos.topeStroops` | El portero va a dejar de pagar premios y retiros al llegar al tope de sus comisiones (el de los sellos es otro) | Subir el tope en caliente (hasta 10 XLM) o pausar la forma que más gasta |
+| `pagos.premio.fallo24h` o `pagos.retiro.fallo24h` cerca de `pagos.rechazosPorDia` | Los pagos que la red rechazó al aplicarse se acercan al tope de esa forma: pasado, da `503 fondo` hasta que el día corra | Mirar el registro del Worker, pausar esa forma y ver por qué la red los rechaza (una línea sacada, un saldo gastado) |
+| `faltaAltas` con `pagos-premio`, `retiros`, `costo-retiro`, `alta-premio`, `tablas-pagos` o `tablas-alta-premio` | Esa forma quedó apagada: variable mal escrita, sin su configuración o sin su tabla | Sin desplegar: lo demás, los sellos y los sorteos siguen. Avisar a quien mantiene el proyecto |
 
 ```bash
 curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/pausar      # {"pausadas":true}
@@ -70,12 +75,14 @@ Durante el evento no se toca Pollar ni ninguna bandera del sitio o del portero, 
 
 ## Cómo cortar, de menos a más
 
-1. **Pausar las altas**: nadie canjea un cupón nuevo; quien ya canjeó sigue sellando y sorteando.
+1. **Pausar una forma de pago o el alta de quien ganó**: solo frena lo nuevo de esa forma, sin desplegar. Los sellos, los sorteos, los cupones y el reenvío de un pago ya reservado siguen. `forma` es `premio`, `retiro`, `alta-premio` o `todas`.
+   `curl -fsS -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d '{"forma":"retiro"}' $P/v1/admin/pagos/pausar`
+2. **Pausar las altas**: nadie canjea un cupón nuevo; quien ya canjeó sigue sellando y sorteando. También frena el alta de quien ganó.
    `curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/admin/altas/pausar`
-2. **Apagar el portero**: no paga nada; el sitio deja de ofrecer el patrocinio. Se vuelve con `/v1/patrocinio/encender`.
+3. **Apagar el portero**: no paga nada; el sitio deja de ofrecer el patrocinio. Se vuelve con `/v1/patrocinio/encender`. Corta también los premios y los retiros: nunca vuelven a Pollar.
    `curl -fsS -X POST -H "Authorization: Bearer $T" $P/v1/patrocinio/apagar`
-3. **El corte**: `ALTAS = "0"` en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml` (y nada más cambiado) y desplegar desde `workers/patrocinio` con `npx wrangler@4.160.0 deploy --config wrangler.toml --env mainnet`. El portero de mainnet no le paga a nadie. No hace falta un commit nuevo ni esperar la CI. Pide desplegar y reinicia el objeto: durante el evento, solo si 1 y 2 no alcanzan. Para volver: el `wrangler.toml` como estaba y desplegar de nuevo, igual.
-4. **Si el Worker no contesta**: en el panel de Cloudflare, Workers, `tinkazo-patrocinio-mainnet`, quitar el dominio `pm.tinkazo.app`.
+4. **El corte**: `ALTAS = "0"` en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml` (y nada más cambiado) y desplegar desde `workers/patrocinio` con `npx wrangler@4.160.0 deploy --config wrangler.toml --env mainnet`. El portero de mainnet no le paga a nadie: ni sellos, ni sorteos, ni premios, ni retiros, ni da altas de quien ganó. No hace falta un commit nuevo ni esperar la CI. Pide desplegar y reinicia el objeto: durante el evento, solo si 1, 2 y 3 no alcanzan. Para volver: el `wrangler.toml` como estaba y desplegar de nuevo, igual.
+5. **Si el Worker no contesta**: en el panel de Cloudflare, Workers, `tinkazo-patrocinio-mainnet`, quitar el dominio `pm.tinkazo.app`.
 
 Lo sellado no se pierde: el resultado depende solo de la ronda y de la lista, así que se sortea cuando el portero vuelve.
 
@@ -183,7 +190,83 @@ Las rutas nuevas:
 - **No desplegar sin `--env mainnet` ni sin `--config wrangler.toml`.** Sin `--env` se despliega el portero de Prueba en `p.tinkazo.app`; sin `--config`, wrangler puede tomar otro `wrangler.json` que encuentre hacia arriba. Y siempre con la versión probada de wrangler (4.160.0), no la última del día.
 - **No cargar toda la plata en la cuenta que paga.** La llave del Worker solo puede gastar comisiones, pero hasta lo cargado.
 - **No dejar las tarjetas boca arriba ni sacarles foto.**
+- **No prender los pagos de premios, los retiros ni el alta de quien ganó el día de un evento.** Prenderlos pide desplegar, y un despliegue reinicia el objeto.
+- **No volver a una versión anterior del portero con pagos en el aire.** La versión de antes no ve las tablas nuevas, y un costo de retiro que no se leyó todavía se podría atar a una orden abierta. El orden para volver está en la sección de los pagos.
 - **No vaciar `VITE_ALTA` en Vercel antes de revertir los textos.** Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis, y la publicación de producción (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1` (`src/stellar/alta-build.ts`): con la variable vacía el build falla y queda la publicación anterior. Para quitar el acceso por cupón, primero se revierte el commit que puso esos textos y después se vacía la variable.
+
+## Los pagos de premios, los retiros y el alta de quien ganó
+
+Además de los sellos y los sorteos, el portero de mainnet puede pagar la comisión de la red de dos pagos de dólares digitales y dar de alta a quien ganó un premio. Son tres cosas aparte, cada una con su variable en `[env.mainnet.vars]` de `workers/patrocinio/wrangler.toml`. Nacen apagadas y solo valen en la red principal y con `ALTAS = "1"`. Con las tres apagadas el portero hace lo de siempre: las rutas nuevas dan `404 no-existe` y `estado` y `cupo` no traen nada nuevo.
+
+- **El pago de un premio** (`POST /v1/patrocinio/pago` con `{"forma":"premio","xdr":...}`). Quien organizó un sorteo le paga a quien ganó, desde su propia cuenta, con la nota `tk:premio:<sorteo>:<puesto>`. No lleva sesión: la firma de la cuenta que paga prueba quién es. El portero lo paga solo si esa cuenta está en su libro, el sorteo es suyo, ya se sorteó, el puesto existe, el sello lo pagó el portero y ese puesto no se pagó antes por esta ruta.
+- **El retiro con su costo** (`forma: "retiro"`). Una persona saca dólares digitales de su cuenta a otra, y en la misma transacción paga el costo de `COSTO_RETIRO` a `CUENTA_COBROS`. Vale desde cualquier cuenta. El portero reconoce ese costo por la transacción que él mismo pagó: no cae a los pagos sueltos ni se confunde con una orden, y la nota de un retiro nunca se lee como la de una orden.
+- **El alta de quien ganó** (`POST /v1/alta/premio`, con la sesión de Google de quien organiza y `{"sorteo","puesto","cuenta"}`). La cuenta de quien ganó entra al libro sin cupón y sin sorteos, solo para activarse y recibir su premio: no puede sellar ni sortear. El portero no puede saber quién ganó (el contrato guarda la huella de la lista, no las cuentas): lo nombra quien organiza, y lo único que se comprueba es que el sorteo sea suyo, esté sorteado, tenga ese puesto y lo haya sellado el portero. Una vez por sorteo y puesto. Mientras no se active, aparta 30 créditos del piso como cualquier alta, y si la cuenta ya existe en la red no hace falta nada (`no-hace-falta`).
+
+La comisión de la red la paga la cuenta que paga los sellos, con un presupuesto de 24 horas aparte del de ellos: un abuso de pagos no deja sin sellos al evento, ni al revés. **Los pagos nunca vuelven a Pollar**: con el portero apagado o devuelto a Pollar, un premio o un retiro no sale (`503 apagado`) y el sitio lo dice. El alta de quien ganó no mira ese modo, como los cupones. El contrato de las dos rutas está en [workers/patrocinio/README.md](../workers/patrocinio/README.md).
+
+| Variable | Hoy | Qué hace |
+|---|---|---|
+| `PAGOS_PREMIO` | `"0"` | Con `"1"`, el pago de un premio. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `pagos-premio` y queda apagada |
+| `RETIROS` | `"0"` | Con `"1"`, el retiro con su costo. Pide `ALTAS = "1"`, `CUENTA_COBROS` propia y `COSTO_RETIRO` bien escrito. Si falta algo, `faltaAltas` dice `retiros` o `costo-retiro` |
+| `ALTAS_PREMIO` | `"0"` | Con `"1"`, el alta de quien ganó. Pide `ALTAS = "1"` y el contrato oficial. Sin `ALTAS`, `faltaAltas` dice `alta-premio` |
+| `COSTO_RETIRO` | `"0.50"` | El costo exacto del retiro, en USDC con punto, de 0,01 a 5. Manda sobre el del sitio: si no son iguales, el portero rechaza todo retiro y nunca cobra de más. Vacío, en 0, en 6, con coma o con letras, el retiro no se prende y `faltaAltas` dice `costo-retiro` |
+| `TOPE_PAGOS_STROOPS` | `"20000000"` | El presupuesto de las comisiones de los pagos en 24 horas: 2 XLM, aparte del de los sellos. **Solo dígitos** y hasta `"100000000"` (10 XLM): mal escrita apaga los pagos y `faltaAltas` dice `tope-pagos`, también con las formas apagadas |
+| `PAGOS_RECHAZADOS_DIA` | `"20"` | Cuántos pagos de cada forma que la red rechazó al aplicarse, más los que están en el aire, se aceptan en 24 horas entre todas las cuentas. **Solo dígitos** y hasta `"100"`: mal escrita apaga los pagos y `faltaAltas` dice `pagos-rechazos` |
+| `ALTAS_PREMIO_DIA` | `"100"` | Cuántas altas de quien ganó se dan en 24 horas entre todos. **Solo dígitos** y hasta `"300"`: mal escrita apaga el alta y `faltaAltas` dice `altas-premio-dia` |
+
+Los topes que se cambian pidiendo un despliegue (están en el código) y los que se mueven en caliente:
+
+| Tope | Cuánto | Cómo se cambia |
+|---|---|---|
+| Comisiones de los pagos, en 24 horas | 2 XLM | `TOPE_PAGOS_STROOPS`, o en caliente hasta 10 XLM |
+| Pagos rechazados por la red, por forma y entre todos, en 24 horas | 20 | `PAGOS_RECHAZADOS_DIA`, o en caliente hasta 100 |
+| Altas de quien ganó entre todos, en 24 horas | 100 | `ALTAS_PREMIO_DIA`, o en caliente hasta 300 |
+| Retiros por cuenta, en 24 horas | 10, y 2 los que la red rechazó | el código |
+| Premios por quien organiza, en 24 horas | 60, y 5 los que la red rechazó | el código |
+| Premios por sorteo | el menor entre los ganadores y 50 | el código |
+| Premios que la red rechazó hacia una misma cuenta, en 24 horas | 2 | el código |
+| Intentos que la red no tomó, por cuenta, en 24 horas | 10 | el código |
+| Lo que Horizon dice que fallaría, por cuenta y por hora | 20 | el código |
+| Pagos en el aire por cuenta | 1 | el código |
+| Altas de quien ganó por sorteo y por quien organiza, en 24 horas | el menor entre los ganadores y 50 (también entre los sorteos que se apoyan en un mismo sello del portero), y 30 | el código |
+| Pedidos de pagos por dirección y por hora | 600, con su propio contador | `POR_IP_POR_HORA` |
+
+**Qué mirar en `estado`.** El bloque `pagos`, que aparece con alguna forma prendida, con algún pago o alta en el día o con alguna pausa: `premio`, `retiro` y `altaPremio`, cada uno con si está prendido y pausado y, además, `enElAire`, `ok24h` y `fallo24h` en los dos pagos y `hoy` en el alta, y también `gasto24h` contra `topeStroops`, `rechazosPorDia`, `altasPremioDia`, y `costosRetiro24h` y `cobradoRetiros24h`, que cuentan los costos de retiro que reconoció la cuenta de cobros. Aparte de `firmas` va `firmasPagos`: las firmas de Pollar que explican los premios y los retiros pagados a cuentas del libro, así `firmasSinExplicar` sigue midiendo solo lo que alguien firma por fuera. Si aparece `faltaAltas`, lo que nombra quedó apagado.
+
+**Pausar y reanudar.** Cada forma se frena sin desplegar, con la clave de operar. `forma` es `premio`, `retiro`, `alta-premio` o `todas`, y la respuesta dice cuáles quedan pausadas. La pausa es un ajuste, no una variable: anda también con las variables apagadas y sobrevive a un despliegue. Frena lo nuevo (`503 apagado` con `detalle: "pausado"`) y deja pasar el reenvío de un pago ya reservado.
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d '{"forma":"retiro"}' $P/v1/admin/pagos/pausar
+curl -fsS -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d '{"forma":"retiro"}' $P/v1/admin/pagos/reanudar
+```
+
+**Subir un tope en caliente.** Con uno o más de `presupuestoXlm` (hasta 10), `rechazosPorDia` (hasta 100) y `altasPremioDia` (hasta 300). Más que su techo da `400 techo` y no escribe nada, tampoco de los otros campos. Contesta los topes que quedan y rige en el pedido siguiente. Queda en los ajustes: sobrevive a un despliegue.
+
+```bash
+curl -fsS -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d '{"presupuestoXlm":4}' $P/v1/admin/pagos/tope
+```
+
+**Cómo se prenden.** Cambiando las variables y desplegando, con la palabra de quien mantiene el proyecto y nunca el día de un evento. Dos despliegues, los dos antes: primero el código con las tres en `"0"`, y al terminar todo pausado (`forma` en `todas`), y después las tres en `"1"`, todavía pausado hasta el ensayo. La pausa del primero sobrevive al segundo. Después del primero, ya pausado, `estado` trae el bloque `pagos` con las tres formas en `prendido: false` y `pausado: true`, sin `faltaAltas`, y `POST /v1/patrocinio/pago` y `POST /v1/alta/premio` dan `404 no-existe`. Después del segundo, las tres formas dicen `prendido: true` y `pausado: true`, `pagos.retiro.costo.usdc` dice `"0.50"`, `/cupo` trae el bloque `pagos` con `costoRetiro.monto` en 5000000 y las dos rutas contestan `503 apagado` con `detalle: "pausado"`. Antes de cada uno, el exporte de `/v1/patrocinio/exportar` fuera del repositorio. Los créditos: lo de Antes del evento más unos 40 por cada ganador que se espera con cuenta nueva.
+
+**Si quien organiza no tiene la cuenta de Google.** Con una billetera propia no hay sesión y `POST /v1/alta/premio` no sirve. El respaldo es el de siempre, a mano por cada cuenta nueva que ganó, con un sorteo (suma 40 créditos más al piso):
+`node scripts/cupones.mjs admitir --cuenta G... --sorteos 1 --dias 30 --ref premio-<sorteo>-<puesto>`
+
+**Volver atrás.** Durante el evento, solo pausar: no se despliega. Para volver a una versión anterior, primero pausar las tres formas y esperar a que `pagos.premio.enElAire` y `pagos.retiro.enElAire` lleguen a 0 (hasta unos 15 minutos), correr `node scripts/cupones.mjs sueltos` para que ningún costo de retiro quede sin leer, guardar el exporte y recién entonces volver. La versión de antes no ve las tablas nuevas: un costo que leyera con la nota numérica de una orden abierta se ataría a esa orden, y eso no se reclasifica. Las altas de quien ganó siguen en el libro y la versión de antes las lee igual.
+
+### El ensayo con plata de verdad
+
+Solo se puede en la red principal. Hace falta una vista previa del sitio que pague premios y retiros con la cuenta de Google y deje activar a quien ganó, y tres cuentas: quien organiza (en el libro, con su línea de dólares digitales y 3 de ellos), **una cuenta de Google nueva que nunca entró al modo Oficial y sin cupón**, y una cuenta propia de destino para los retiros. Se empieza reanudando las tres formas (`forma` en `todas`).
+
+1. **El alta de quien gana.** Quien organiza sella una lista de 2 entradas (la cuenta nueva y otra propia) con 2 ganadores, así la cuenta nueva sale seguro en un puesto, y sortea. Su panel llama a `POST /v1/alta/premio` con el puesto de la cuenta nueva: `200` con `admitida`. La cuenta nueva entra con `/?red=oficial&premio=1`: el paso ofrece Activar sin pedir cupón, activa, llega solo el pedido de la línea y Recibir un premio lo vota. En `estado`: `altas24h` sube uno, `pagos.altaPremio.hoy` queda en 1 y, ya activada, `firmas.activaciones` sube uno. La misma llamada otra vez da `repetido`. Con otra cuenta para el mismo puesto, `409 puesto-usado`.
+2. **Premio de 3.** Quien organiza paga el puesto de la cuenta nueva. `200` con `PENDING` y después `ok`. En Horizon, `fee_account` es la cuenta que paga, `inner_transaction.hash` es el hash, la nota es la del premio y `fee_charged` ronda los 200. El comprobante dice Pagado. En `estado`: `pagos.premio.ok24h` en 1 y `firmasPagos.premios` en 1.
+3. **El mismo sobre otra vez**: `200` con `DUPLICATE` y `ok`. Otro sobre para el mismo puesto: `409 puesto-usado` con el hash del primero.
+4. **Retiro con la nota fija.** Quien ganó retira: llega 1 a la cuenta propia de destino y 0,50 va a cobros, con la nota `tkz-retiro`. En Horizon, los dos pagos van en una transacción que pagó la cuenta del portero. `node scripts/cupones.mjs sueltos` no muestra nada nuevo y `pagosSueltos` queda igual. En el exporte hay una fila en `pagos_sueltos` con `costo-retiro` y `cobrado`, y la de `retiros_cobrados`. **Lo más importante del ensayo**: anotar cuál de los dos hashes trae Horizon en el `transaction_hash` del pago a cobros y si trae `transaction.inner_transaction.hash`.
+5. **Otro retiro de 1, con una nota numérica** (12345), a otra cuenta propia: también `costo-retiro`, y ninguna orden tocada.
+6. **Un sobre armado a mano** (con un guion local, no con el sitio) con el costo en 0,49: `400 no-permitida` con `costo-monto` y nada en la red.
+7. **Pausar el retiro** con la clave de operar: `503 apagado` con `detalle: "pausado"`. Reanudar.
+8. **`estado` y el vigilante**: `firmasSinExplicar` no sube por estos pagos ni por la activación.
+
+Mueve 3 dólares digitales entre cuentas propias (1 queda en cobros), unos cientos de stroops de XLM, una activación y unas siete firmas (unos 180 créditos). Si sale bien, se deja reanudado o pausado según decida quien mantiene el proyecto. Si la vista previa del sitio no está a tiempo, el paso 1 se hace con `curl` y el token de la sesión de quien organiza, copiado de la vista previa y sin escribirlo en ningún archivo, y la cuenta nueva se activa con la vista previa del paso.
 
 ## La venta de paquetes, día a día
 
@@ -224,6 +307,9 @@ Un pago que llegó a `CUENTA_COBROS` y no se pudo atar a una orden, o la parte q
 | `cerrada` | Llegó a una orden que se cerró para devolver | Se devuelve, o se asigna a la orden nueva de esa persona |
 | `sobrante` | Lo que pasó del monto de una orden | Solo se devuelve |
 | `otro-activo` | Llegó XLM, un USDC que no es el de Circle u otra moneda | Solo se devuelve, en la misma moneda |
+| `costo-retiro` | El costo de un retiro que pagó el portero, reconocido por su transacción | Nada: es un cobro, no un suelto. Queda en `cobrado` y no se lista |
+
+Un suelto de exactamente el costo de un retiro, que viene de una cuenta que hizo otro pago en la misma transacción, es el costo de un retiro y no se devuelve ni se asigna. Con el reconocimiento por la transacción no debería aparecer: si aparece, falló ese reconocimiento y se avisa.
 
 Asignar: `node scripts/cupones.mjs asignar --operacion <operación> --orden <id>`. Ata el pago a una orden abierta. Si con eso llega al 95 %, la orden queda pagada y da sus sorteos, y lo que sobre vuelve a los sueltos como `sobrante`. A una orden pagada o cerrada no se asigna nada: contesta `409 orden-pagada` u `orden-cerrada` y el suelto queda como estaba.
 

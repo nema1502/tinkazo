@@ -47,7 +47,7 @@ export const ESPERA_RECONCILIAR_MS = 15_000;
  * un RPC atrasado (el segundo de la lista) puede contestar NOT_FOUND por algo que ya entró, y devolver el cupo
  * de algo que se pagó dejaría un pago sin contar.
  */
-const MARGEN_VENCIMIENTO_S = 600;
+export const MARGEN_VENCIMIENTO_S = 600;
 
 /**
  * Cuántas veces en 24 horas móviles se le devuelve a una cuenta lo que gastó un sello que entró tarde (`sello-tarde.ts`).
@@ -776,7 +776,7 @@ export class Portero {
 }
 
 /** Los firmantes y el umbral medio de una cuenta leída de la cadena, o null si no se leyó (entonces vale solo su llave, con peso 1). */
-function autoridadDe(c: CuentaEnRed | null): Autoridad | null {
+export function autoridadDe(c: CuentaEnRed | null): Autoridad | null {
   if (!c?.firmantes) return null;
   return { firmantes: c.firmantes, umbral: c.umbralMedio ?? 1 };
 }

@@ -121,6 +121,25 @@ export interface Env {
   PATROCINIO_PERMITIDO?: string;
   /** El recargo por pagar con QR, `primera:siguientes` en USDC (ver `leerRecargo`). Vacía, vale el de la oferta. */
   RECARGO_QR?: string;
+
+  // ---------- los pagos de premios, los retiros y el alta de quien ganó: solo en mainnet, y solo con un `1` ----------
+  /** Con `1` (y con `ALTAS` y el contrato), el portero paga la comisión del pago de un premio. Apagada por defecto. */
+  PAGOS_PREMIO?: string;
+  /** Con `1` (y con `ALTAS`, la cuenta de cobros y `COSTO_RETIRO`), el portero paga la comisión de un retiro con su costo. Apagada por defecto. */
+  RETIROS?: string;
+  /** Con `1` (y con `ALTAS` y el contrato), quien organiza puede dar de alta la cuenta de quien ganó. Apagada por defecto. */
+  ALTAS_PREMIO?: string;
+  /**
+   * El costo exacto de un retiro, en USDC con punto (`0.50`), de 0,01 a 5. Es la segunda operación del retiro, a la cuenta de
+   * cobros, y manda sobre la del sitio. Vacía: no hay costo y el retiro no se prende. Mal escrita: se anota y el retiro no se prende.
+   */
+  COSTO_RETIRO?: string;
+  /** El presupuesto de las comisiones de los pagos en 24 horas, en stroops, aparte del de los sellos. Solo dígitos, hasta 10 XLM. */
+  TOPE_PAGOS_STROOPS?: string;
+  /** Cuántos pagos por forma que la red rechazó al aplicarlos se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 100. */
+  PAGOS_RECHAZADOS_DIA?: string;
+  /** Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 300. */
+  ALTAS_PREMIO_DIA?: string;
   /** Secreto: la llave secreta de la app de mainnet en Pollar. */
   POLLAR_SECRETO?: string;
   /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
@@ -241,8 +260,38 @@ export interface Config {
   patrocinioPermitido: string[];
   /** El recargo por pagar con QR, o null si `RECARGO_QR` está mal escrito: entonces la compra con QR no se abre. */
   recargoQr: Recargo | null;
+
+  // ---------- los pagos de premios, los retiros y el alta de quien ganó (siempre apagados fuera de mainnet) ----------
+  /**
+   * El portero paga la comisión del pago de un premio: solo en mainnet con `ALTAS=1`, el contrato oficial y los topes de los
+   * pagos bien escritos. Nace apagada: solo `PAGOS_PREMIO=1` la prende.
+   */
+  pagosPremio: boolean;
+  /**
+   * El portero paga la comisión de un retiro con su costo: solo en mainnet con `ALTAS=1`, la cuenta de cobros propia, el costo
+   * bien escrito y los topes de los pagos bien escritos. Nace apagada: solo `RETIROS=1` la prende.
+   */
+  retiros: boolean;
+  /** Quien organiza da de alta la cuenta de quien ganó: solo en mainnet con `ALTAS=1`, el contrato y el tope del día bien escrito. */
+  altasPremio: boolean;
+  /** El costo del retiro, o null si `COSTO_RETIRO` está vacío o mal escrito: sin costo el retiro no se prende. */
+  costoRetiro: CostoRetiro | null;
+  /** El presupuesto de las comisiones de los pagos en 24 horas, en stroops. Mal escrito, vale el de por defecto y los pagos no se prenden. */
+  topePagos: number;
+  /** Los pagos por forma que la red rechazó al aplicarlos y se aceptan en 24 horas. Mal escrito: vale el de por defecto y no se prenden. */
+  pagosRechazadosDia: number;
+  /** Las altas de quien ganó que se aceptan en 24 horas, entre todas las cuentas. Mal escrito, vale el de por defecto y el alta no se prende. */
+  altasPremioDia: number;
   /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
   faltaAltas: string[];
+}
+
+/** El costo de un retiro: la segunda operación del pago, a la cuenta de cobros. */
+export interface CostoRetiro {
+  /** El monto como se escribió (`"0.50"`), para mostrarlo. */
+  usdc: string;
+  /** El monto en diezmillonésimas de USDC (7 decimales, como la red). */
+  monto: number;
 }
 
 export type Fondeo = "inmediato" | "diferido";
@@ -334,6 +383,39 @@ export function leerRecargo(s: string): Recargo | null {
   if (primera === null || siguientes === null || primera > tope || siguientes > tope) return null;
   return { primera, siguientes, primeraUsdc: p, siguientesUsdc: q };
 }
+
+/**
+ * El costo más bajo y el más alto que se acepta en `COSTO_RETIRO` (0,01 y 5 USDC), en diezmillonésimas de USDC: fuera de
+ * eso es un error de tipeo, no un precio.
+ */
+export const MIN_COSTO_RETIRO = 100_000;
+export const MAX_COSTO_RETIRO = 50_000_000;
+
+/**
+ * Lee `COSTO_RETIRO`: un monto de USDC con punto y hasta 7 decimales, de 0,01 a 5. Todo lo demás (vacío, 0, 6, la coma
+ * decimal, letras) da null: un costo a medias no se cobra, y sin costo el retiro no se prende.
+ */
+export function leerCostoRetiro(s: string): CostoRetiro | null {
+  const usdc = s.trim();
+  const monto = montoUsdc(usdc);
+  if (monto === null || monto < MIN_COSTO_RETIRO || monto > MAX_COSTO_RETIRO) {
+    return null;
+  }
+  return { usdc, monto };
+}
+
+/** Lo que valen los topes de los pagos si su variable queda vacía: 2 XLM de comisiones, 20 rechazados por forma y 100 altas por día. */
+export const TOPE_PAGOS_STROOPS_POR_DEFECTO = 20_000_000;
+export const PAGOS_RECHAZADOS_DIA_POR_DEFECTO = 20;
+export const ALTAS_PREMIO_DIA_POR_DEFECTO = 100;
+/**
+ * Lo más que puede valer cada tope de los pagos, en la variable y en el ajuste en caliente: 10 XLM de comisiones, 100
+ * rechazados por forma y 300 altas por día. Un número más grande es un error de tipeo (un cero de más), no un tope: se
+ * toma como mal escrito, así el presupuesto nunca crece sin aviso.
+ */
+export const TECHO_TOPE_PAGOS_STROOPS = 100_000_000;
+export const TECHO_PAGOS_RECHAZADOS_DIA = 100;
+export const TECHO_ALTAS_PREMIO_DIA = 300;
 
 /** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
@@ -475,10 +557,47 @@ export function leerConfig(env: Partial<Env>): Config {
   const cargas = altas && prende(env.CARGAS) && ventaBienEscrita;
   // El patrocinio permitido es el de la venta: con la carga y la compra con QR apagadas, se espera todo apagado.
   const conVenta = comprasQr || cargas;
+  // Los pagos de premios, los retiros y el alta de quien ganó: cerrados salvo un "1" con el libro. Los topes se leen solo con
+  // dígitos y el costo con su regla (`leerCostoRetiro`). Lo mal escrito apaga lo suyo y se anota aunque la forma esté
+  // apagada, así se corrige antes de prenderla. Con las tres apagadas, nada de esto cambia lo que corre.
+  const contractId = d?.contractId ?? null;
+  const pidePremio = prende(env.PAGOS_PREMIO);
+  const pideRetiros = prende(env.RETIROS);
+  const pideAltaPremio = prende(env.ALTAS_PREMIO);
+  const costoTexto = (env.COSTO_RETIRO ?? "").trim();
+  const costoRetiro = enMainnet ? leerCostoRetiro(costoTexto) : null;
+  const costoMal = costoTexto !== "" && costoRetiro === null;
+  // Por encima de su techo, un tope se toma como mal escrito y vale el de por defecto.
+  const digitosEnMainnet = (s: string | undefined, porDefecto: number, techo: number) => {
+    if (!enMainnet) {
+      return { valor: porDefecto, mal: false };
+    }
+    const leido = soloDigitos(s, porDefecto);
+    return leido.valor > techo ? { valor: porDefecto, mal: true } : leido;
+  };
+  const topePagos = digitosEnMainnet(env.TOPE_PAGOS_STROOPS, TOPE_PAGOS_STROOPS_POR_DEFECTO, TECHO_TOPE_PAGOS_STROOPS);
+  const rechazosDia = digitosEnMainnet(env.PAGOS_RECHAZADOS_DIA, PAGOS_RECHAZADOS_DIA_POR_DEFECTO, TECHO_PAGOS_RECHAZADOS_DIA);
+  const altasDia = digitosEnMainnet(env.ALTAS_PREMIO_DIA, ALTAS_PREMIO_DIA_POR_DEFECTO, TECHO_ALTAS_PREMIO_DIA);
+  const pagosBienEscritos = !topePagos.mal && !rechazosDia.mal;
+  const pagosPremio = altas && pidePremio && contractId !== null && pagosBienEscritos;
+  const retiros = altas && pideRetiros && cuentaCobros !== null && costoRetiro !== null && pagosBienEscritos;
+  const altasPremio = altas && pideAltaPremio && contractId !== null && !altasDia.mal;
+  const anotar = (cuando: boolean, nombre: string): void => {
+    if (cuando) {
+      faltaAltas.push(nombre);
+    }
+  };
+  anotar(pidePremio && (!altas || contractId === null), "pagos-premio");
+  anotar(pideRetiros && (!altas || cuentaCobros === null), "retiros");
+  anotar(altas && (costoMal || (pideRetiros && costoRetiro === null)), "costo-retiro");
+  anotar(pideAltaPremio && (!altas || contractId === null), "alta-premio");
+  anotar(altas && topePagos.mal, "tope-pagos");
+  anotar(altas && rechazosDia.mal, "pagos-rechazos");
+  anotar(altas && altasDia.mal, "altas-premio-dia");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
-    contractId: d?.contractId ?? null,
+    contractId,
     rpcUrls: rpcUrls.length ? rpcUrls : RPC_POR_DEFECTO[red],
     maxSellos,
     maxSellosVerificada,
@@ -522,6 +641,13 @@ export function leerConfig(env: Partial<Env>): Config {
     cargaMinimoBs: entero(env.CARGA_MINIMO_BS, 0),
     patrocinioPermitido: enMainnet && permitidoBien && conVenta ? [...new Set(permitido)].sort() : [],
     recargoQr,
+    pagosPremio,
+    retiros,
+    altasPremio,
+    costoRetiro,
+    topePagos: topePagos.valor,
+    pagosRechazadosDia: rechazosDia.valor,
+    altasPremioDia: altasDia.valor,
     faltaAltas,
   };
 }
