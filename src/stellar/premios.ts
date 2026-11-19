@@ -203,7 +203,7 @@ function premioDe(raw: unknown, promocionId: string, posicion: number): PremioDe
     index: entero(raw.index, "indice", 0xffff_ffff),
     amount: monto(raw.amount, "monto"),
     state: variante(raw.state, ESTADOS_DEL_PREMIO, "estado del premio"),
-    winner: direccion(raw.winner, "ganador"),
+    winner: direccion(raw.winner, "quien gana"),
   };
 }
 
