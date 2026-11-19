@@ -136,9 +136,9 @@ describe("entrar con Google", () => {
   it("suelta la marca de la ventana apenas Google se abre, aunque connect siga esperando, y deja la de invitada", async () => {
     let termina: (cuenta: string) => void = () => undefined;
     let vistas: { ventana: string | null; invitada: string | null } | null = null;
-    h.billetera.connect.mockImplementation((alAbrir?: () => void) => new Promise<string>((resolver) => {
+    h.billetera.connect.mockImplementation((avisos?: { alAbrirLaVentana?: () => void }) => new Promise<string>((resolver) => {
       termina = resolver;
-      alAbrir?.();
+      avisos?.alAbrirLaVentana?.();
       vistas = { ventana: pestana.getItem(CLAVE_VENTANA), invitada: local.getItem(CLAVE_INVITADA) };
     }));
     const resultado = intentar(nuevaSesion());
