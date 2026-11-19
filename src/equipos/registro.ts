@@ -37,6 +37,11 @@ export interface DepsDelRegistro {
   enApp: boolean;
   /** La cuenta de la sesión abierta en este navegador, sea cual sea la vía (`cuentaDeLaSesion` en `sesion.ts`). */
   cuentaRecordada: () => Promise<string | null>;
+  /**
+   * Si en este navegador quedó algo que retomar (el tipo de sesión o la marca de Google). Solo entonces, mientras se busca
+   * la cuenta, se dice Retomando tu cuenta. Sin esto, no se dice.
+   */
+  hayCuentaGuardada?: () => boolean;
   /** Abre Google y devuelve la cuenta. Falla con el motivo de la entrada (`popup-blocked`, `popup-closed`…). */
   entrarConGoogle: () => Promise<string>;
   leerPublico: typeof leerPublico;
@@ -340,9 +345,12 @@ export function montarRegistro(raiz: HTMLElement, deps: DepsDelRegistro): { dete
         return ver("error");
       }
       config = p.config;
-      mensaje("", false);
+      // Retomar la cuenta de Google puede tardar hasta 8 segundos con la red lenta: mientras, se dice qué pasa. Sin nada
+      // guardado no hay nada que retomar, la búsqueda termina enseguida y el aviso era un parpadeo de más.
+      mensaje(deps.hayCuentaGuardada?.() ? "eqpRetomando" : "", false);
       const conocida = (await deps.cuentaRecordada().catch(() => null)) ?? leerEquipoLocal(deps.sala.id, deps.local)?.cuenta ?? null;
       if (miCarga !== cargaActual) return;
+      mensaje("", false);
       if (conocida && esCuenta(conocida)) return await conCuenta(conocida);
       ver("cuenta");
     } finally {

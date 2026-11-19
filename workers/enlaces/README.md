@@ -84,6 +84,8 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 
 **La lista cerrada** está en [`src/conteo.ts`](src/conteo.ts), y el sitio toma de ahí los tipos (`src/contar.ts`): un evento, una propiedad o un valor que no está en la lista no compila en el sitio, y el Worker lo rechaza entero.
 
+**El Worker se despliega antes que el sitio** cada vez que la lista cerrada suma un evento o un valor. Al revés, el sitio manda algo que el Worker desplegado todavía no conoce: cada conteo vuelve con `400`, no se suma, y cada pedido rechazado gasta uno del tope de 100.000 por día que la cuenta comparte con los enlaces. Ninguna CI despliega el Worker: se hace a mano, desde esta carpeta (más abajo). Pasa con `google_window`, que nace con `closed` y `late` y suma `timeout` y `no_api` en el mismo cambio: el Worker con esos cuatro valores va primero, y recién después sube el sitio que los manda.
+
 | Evento | Cuándo lo manda el sitio | Propiedades |
 | --- | --- | --- |
 | `tutorial_open` | Se abre "¿Cómo se usa?" | `step` (1 a 4); `from`, opcional: `offer`, `button`, `menu`, `end` |
@@ -105,6 +107,7 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 | `video_made` | Se arma el video del resultado | `format`: `mp4`, `webm`; `result`: `ok`, `fail`, `unsupported` |
 | `video_shared` | Se manda o se descarga el video | `channel`: `native`, `download` |
 | `proof_cta` | Quien miró un comprobante o un video toca "Hacer mi sorteo" | `from`: `proof`, `video` |
+| `google_window` | Entrar con Google con la ventana ya cerrada: sale el aviso de que se cerró antes de entrar, se entra igual con la ventana cerrada hace más de 6 segundos, vence el plazo largo de 50 segundos sin cuenta, o el SDK no deja mirar sus pedidos y vuelve la regla de los 6 segundos | `what`: `closed`, `late`, `timeout`, `no_api` |
 
 **El origen** (`from` en `account_connected` y en `seal_confirmed`) es de qué enlace llegó quien sortea: la marca `?o=` de la dirección a la que entró, una palabra de la lista cerrada `ORIGENES`: `home` (la portada, y lo que se asume sin marca), `aula`, `meetup`, `ruleta`, `eventos`, `proof` (el comprobante de otro sorteo) y `video`. La pestaña la recuerda mientras vive, y `conOrigen` la pone dentro de un enlace para que siga al cambiar de navegador en los enlaces que la usen; no lleva nada de nadie. `?o=qr` y `?o=short` son otra cosa: dicen por dónde se abrió un comprobante (`via`).
 

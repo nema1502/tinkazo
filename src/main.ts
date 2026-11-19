@@ -24,7 +24,8 @@ import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, 
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { MARCA_INGRESAR, cancelarLaEntrada, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { pintarCancelarEnPortada } from "./ui/cancelar-en-portada";
 import { initOnboarding } from "./ui/onboarding";
 import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
@@ -390,9 +391,12 @@ function initVistas(): void {
    * "Conectando…" o "Retomando tu cuenta…", sin la G y sin invitar a tocar otra vez. Lo mismo dice la cabecera.
    */
   const pintarCta = (): void => {
-    const estado = estadoDeLaCuenta().estado;
+    const cuenta = estadoDeLaCuenta();
+    const estado = cuenta.estado;
     const ocupado = estado === "conectando" || estado === "retomando";
-    const clave = estado === "conectando" ? "connecting" : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
+    // Con la ventana de Google ya cerrada y la cuenta creándose, dice "Terminando de entrar…", como la cabecera.
+    const conectandoDice = cuenta.estado === "conectando" && cuenta.terminando ? "loginTerminando" : "connecting";
+    const clave = estado === "conectando" ? conectandoDice : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
     for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
       const boton = el.closest<HTMLElement>("[data-cta-entrar]");
       // El botón no se achica mientras dice "Conectando…": lo que tiene al lado ("Probar con un ejemplo") no salta de
@@ -415,6 +419,8 @@ function initVistas(): void {
         boton.style.minHeight = "";
       }
     }
+    // Terminando de entrar, debajo del botón grande va Cancelar: la puerta con el suyo está en la herramienta y acá no se ve.
+    pintarCancelarEnPortada(document, { terminando: cuenta.estado === "conectando" && cuenta.terminando === true, cancelar: cancelarLaEntrada, tx: t });
     // El estado está pintado: el texto del botón grande puede verse (contra el FOUC de la recarga, estilos-atencion.ts).
     destrabarCtas();
   };

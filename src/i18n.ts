@@ -3036,6 +3036,8 @@ export const T: Record<Lang, Dict> = {
     cuentaEntrar: "Entrar",
     cuentaEntrarAria: "Entrar con tu cuenta",
     cuentaRetomando: "Retomando…",
+    // La ventana de Google ya se cerró y la cuenta se está creando o abriendo: puede tardar, y se puede cancelar.
+    loginTerminando: "Terminando de entrar…",
     cuentaViaGoogle: "Entraste con Google",
     cuentaViaGoogleC: "Google",
     cuentaViaCorreo: "Entraste con tu correo",
@@ -5907,6 +5909,7 @@ export const T: Record<Lang, Dict> = {
     cuentaEntrar: "Sign in",
     cuentaEntrarAria: "Sign in to your account",
     cuentaRetomando: "Resuming…",
+    loginTerminando: "Finishing signing you in…",
     cuentaViaGoogle: "Signed in with Google",
     cuentaViaGoogleC: "Google",
     cuentaViaCorreo: "Signed in with your email",

@@ -177,9 +177,9 @@ export function sesionDeGoogle(o: {
     let cuenta: string;
     try {
       // La marca de la ventana se suelta de esta pestaña apenas Google se abre: la ventana ya se llevó su copia.
-      cuenta = await m.pollarWallet.connect(() => {
+      cuenta = await m.pollarWallet.connect({ alAbrirLaVentana: () => {
         if (pestana) soltarVentana(pestana);
-      });
+      } });
     } catch (error) {
       throw new Error(registrar(fallaDeEntrada(error, o.ahora() - empezo, m)));
     } finally {
