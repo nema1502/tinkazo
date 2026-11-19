@@ -527,6 +527,20 @@ describe("participar.html: el modo vista", () => {
     reglasAbiertas: false,
   });
 
+  /**
+   * Espera a que la vista avise que está lista. La cadena arranca con `void cargar()` al importar la página y sigue
+   * por un import dinámico: en una VPS cargada puede tardar más que los respiros de `asentar`, y el aviso tardío
+   * sangraba al espía del marco del test siguiente (0 avisos en el suyo, 2 en el de después).
+   */
+  async function esperarVistaLista(arriba: Window, vueltas = 600): Promise<void> {
+    const lista = (): boolean => vi.mocked(arriba.postMessage).mock.calls.some((c) => (c[0] as { t?: string })?.t === "tinkazo:vista-lista");
+    for (let vuelta = 0; !lista(); vuelta += 1) {
+      if (vuelta >= vueltas) throw new Error("la vista no avisó que está lista");
+      await new Promise<void>((resolver) => esperaReal(resolver, 5));
+      await vi.advanceTimersByTimeAsync(0);
+    }
+  }
+
   it("con vista=previa fuera de un marco la página sigue como siempre y dice que la campaña no está", async () => {
     await abrir("?vista=previa");
     expect(document.body.classList.contains("cmp-vista")).toBe(false);
@@ -536,6 +550,7 @@ describe("participar.html: el modo vista", () => {
   it("con vista=previa dentro de un marco avisa que está lista, no pide nada y monta lo que le mandan", async () => {
     const arriba = ponerMarco();
     await abrir("?vista=previa");
+    await esperarVistaLista(arriba);
     expect(arriba.postMessage).toHaveBeenCalledWith({ t: "tinkazo:vista-lista" }, location.origin);
     expect(document.body.classList.contains("cmp-vista")).toBe(true);
     window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: arriba }));
@@ -547,6 +562,7 @@ describe("participar.html: el modo vista", () => {
   it("un mensaje que no viene de la ventana de arriba no monta nada", async () => {
     const arriba = ponerMarco();
     await abrir("?vista=previa");
+    await esperarVistaLista(arriba);
     window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: window }));
     await asentar();
     expect(texto("#cmp-saber h1") ?? "").toBe("");
@@ -556,6 +572,7 @@ describe("participar.html: el modo vista", () => {
   it("después de la primera campaña, cambiar el idioma repinta el celular y no vuelve a decir Cargando", async () => {
     const arriba = ponerMarco();
     await abrir("?vista=previa");
+    await esperarVistaLista(arriba);
     window.dispatchEvent(new MessageEvent("message", { data: mensaje(), origin: location.origin, source: arriba }));
     await asentar();
     cambiarAIngles();
