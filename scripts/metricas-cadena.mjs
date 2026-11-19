@@ -12,6 +12,10 @@
  * Al final muestra un aviso con la fecha desde la que hay datos: el RPC solo cubre la
  * ventana reciente y nunca se presenta como la historia completa.
  *
+ * Un sello puede llegar por la llamada directa a `seal` del sorteo o desde otro contrato que llama
+ * al del sorteo adentro (el de premios sella sus listas así): los dos son válidos y cuentan, y los
+ * que llegaron por otro contrato se informan y se cuentan aparte (`sellosAnidados`).
+ *
  * Cualquiera lo corre y le da lo mismo si fija el mismo ledger de corte:
  *
  *   node scripts/metricas-cadena.mjs --red testnet --hasta-ledger 5565782
@@ -33,6 +37,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  anidadosDe,
   calcular,
   compararVentana,
   comprobar,
@@ -259,6 +264,13 @@ async function principal() {
   const { sorteos, problemas } = unir(eventos, resumenes);
 
   const cuadre = comprobar({ contratos, eventos, nextIds, problemas, sinTransaccion });
+  const anidados = anidadosDe(sorteos);
+  if (anidados.sellos) {
+    cuadre.lineas.push(
+      `-- ${anidados.sellos} sellos llegaron a través de otro contrato (válidos, contados aparte): ` +
+        anidados.contratos.map((c) => c.slice(0, 8)).join(", "),
+    );
+  }
   // Una segunda fuente para lo reciente: el RPC cuenta los mismos eventos en su ventana.
   if (ventanaRpc?.desdeLedger && (!a.desdeCrudos || !crudosArchivo.red || crudosArchivo.red === a.red)) {
     const vigente = contratos.find((c) => c.vigente).contractId;

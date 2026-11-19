@@ -9,8 +9,9 @@ Los totales de cada red están en `totales-<red>.json` (hoy `totales-testnet.jso
 | Número | Qué es en la cadena |
 |---|---|
 | Sorteos sellados | Un evento `sealed` del contrato: una llamada a `seal` que salió bien |
+| Sellos a través de otro contrato | Esos mismos sellos, cuando el `seal` del sorteo salió de adentro de la llamada a otro contrato (el de premios sella sus listas así). Son válidos y cuentan como sorteo sellado; `sellosAnidados` dice cuántos y en la salida se nombran los contratos |
 | Sorteos registrados | Un evento `drawn`: una llamada a `draw` que salió bien. El contrato verificó la firma BLS de drand y guardó los ganadores. Es la comprobación en cadena de cada sorteo |
-| Organizadores distintos | Cuentas que firmaron al menos un `seal` |
+| Organizadores distintos | Cuentas que firmaron al menos un `seal` (o el contrato que selló llamando al sorteo desde adentro) |
 | Organizadores que vuelven | Cuentas con sellos en dos o más días distintos, o en dos o más semanas (la semana va de lunes a domingo, UTC) |
 | Lugares en listas | La suma de `count` de los sellos. **No son personas únicas**: la misma persona está en muchas listas |
 | Cierres sin sortear | Listas selladas que no tienen registro una hora después de sellarse |
@@ -21,6 +22,13 @@ Los totales de cada red están en `totales-<red>.json` (hoy `totales-testnet.jso
 | Transacciones y comisión | Cada `seal` y cada `draw` es una transacción; la comisión cobrada por la red está en stroops (10 000 000 stroops = 1 XLM). `patrocinadas` son las que pagó otra cuenta (Pollar) |
 
 Los días, semanas y meses son UTC y salen de la hora en que cerró el ledger de la transacción. Un registro cuenta en el día en que se registró, no en el que se selló.
+
+Un sello puede llegar de dos maneras, y las dos son válidas:
+
+- **Directo**: la transacción invoca el `seal` del contrato del sorteo. Se comprueba el sobre contra el evento (organizador, huella de la lista y cantidad tienen que decir lo mismo), y de ahí sale el texto de la marca (`#fila`, `#premios=N`).
+- **A través de otro contrato**: el contrato del sorteo emitió el `sealed` adentro de la llamada a otro contrato, como hace el de premios cuando sella sus listas. El sobre no trae los argumentos del `seal` del sorteo, pero sí el contrato que la transacción invocó; el `seal` exige la firma del organizador, así que el sello es de ese contrato cuando el organizador del evento **es** el contrato invocado. Se cuenta marcado (`selloViaContrato`) y en `sellosAnidados`. El texto de la marca no viaja en esas transacciones: cuenta como sin marca.
+
+Lo que no coincide de ninguna de las dos maneras sigue siendo un problema, y el script sale con error.
 
 **No están acá** las aperturas de la página de comprobación, ni los videos, ni los clics: no pasan por la cadena. Esas viven en el contador y se publican aparte.
 
@@ -53,7 +61,7 @@ De dónde sale cada dato, para no creerle a un solo servidor:
 3. **Comprobaciones que el script hace solo** (sale con error si alguna falla):
    - los números de sorteo de cada contrato van de 1 a N, sin huecos ni repetidos;
    - N coincide con `next_id - 1` que el contrato lleva en su instancia (leído del RPC);
-   - cada evento tiene su transacción y los dos dicen lo mismo;
+   - cada evento tiene su transacción y los dos dicen lo mismo: la llamada directa al `seal` del sorteo con sus argumentos, o —cuando el sello llegó por otro contrato— el contrato invocado igual al organizador del evento;
    - en la ventana de 7 días, el RPC y el índice se cruzan. Si el RPC tiene eventos que todavía no aparecen en el índice, se informa sin fallar. Si el índice tiene más eventos, la comprobación falla.
 4. Cuenta el contrato vigente y los anteriores de `src/stellar/deployments.json`. De un contrato anterior solo entra lo que llega a su `ultimoId`: lo que se selle después ya no es un sorteo de Tinkazo.
 
