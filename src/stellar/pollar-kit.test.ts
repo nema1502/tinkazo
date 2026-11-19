@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
 const QUE_RELEER =
   "Cambió la versión de @pollar/core. Antes de subirla, releer en node_modules/@pollar/core/dist/index.mjs: " +
   "verify, relay, refresh, settle, get, approve, recognizedSetupRequest, revokeDevice y recovery.status, y comparar con " +
-  "la sección 5 del diseño de «Dejá tu cuenta lista» (la regla de la firma) y con motivoContraLaActivacion y propuestaEsLaNuestra.";
+  "la sección 5 del diseño de «Dejá tu cuenta lista» (la regla de la firma) y con motivoContraLaActivacion y propuestaEsLaNuestra. " +
+  "Para el voto por contenido (issue 180), además: cosignManual, _settleCosign, _outcomeOfCosign, _awaitTxConfirmation, " +
+  "getTxStatus, submitTx, reject y transactionBodyOf, y comparar con #votarLoArmado, #estampar y desenlaceDelVoto.";
 
 describe("el kit de Pollar que la activación de la cuenta da por sabido", () => {
   it("es la versión 0.12.0", () => {
@@ -40,5 +42,34 @@ describe("el kit de Pollar que el pago con el saldo da por sabido", () => {
     const kit = await import("@pollar/core");
     const proto = kit.PollarClient.prototype as unknown as Record<string, unknown>;
     for (const m of ["buildTx", "signTx", "submitTx", "onConfirmationRequest"]) expect(typeof proto[m], `${m}: ${QUE_RELEER_EL_PAGO}`).toBe("function");
+  });
+});
+
+describe("el kit de Pollar que el voto por contenido da por sabido", () => {
+  const fuente = readFileSync(resolve(process.cwd(), "node_modules/@pollar/core/dist/index.mjs"), "utf8");
+
+  it("el cliente toma cosignManual de su configuración, y así lo lee la billetera", () => {
+    expect(fuente, QUE_RELEER).toContain("this._cosignManual = config.cosignManual === true");
+  });
+
+  it("con el voto a mano, el pedido vuelve sin votar", () => {
+    expect(fuente, QUE_RELEER).toContain('if (this._cosignManual) return { status: "cosign_pending"');
+  });
+
+  it("la espera de la confirmación es de dieciséis consultas cada dos segundos y medio, la que copia el desenlace", () => {
+    expect(fuente, QUE_RELEER).toContain("const POLL_INTERVAL_MS = 2500");
+    expect(fuente, QUE_RELEER).toContain("const MAX_POLLS = 16");
+  });
+
+  it("un sobre envuelto nunca se puede votar con el kit", () => {
+    expect(fuente, QUE_RELEER).toContain("only ENVELOPE_TYPE_TX can be co-signed");
+  });
+
+  it("la co-firma sabe rechazar y el cliente sabe preguntar por un hash y mandar una firmada", async () => {
+    const kit = await import("@pollar/core");
+    const cofirma = kit.CosignManager.prototype as unknown as Record<string, unknown>;
+    const cliente = kit.PollarClient.prototype as unknown as Record<string, unknown>;
+    expect(typeof cofirma.reject, `reject: ${QUE_RELEER}`).toBe("function");
+    for (const m of ["getTxStatus", "submitTx"]) expect(typeof cliente[m], `${m}: ${QUE_RELEER}`).toBe("function");
   });
 });

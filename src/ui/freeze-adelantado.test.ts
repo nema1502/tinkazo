@@ -136,7 +136,7 @@ vi.mock("../games/lore", () => ({ loreFor: () => null }));
 vi.mock("../games/overlay", () => ({ seguirEnPantallaCompleta: () => undefined }));
 vi.mock("../music", () => ({ startMusic: () => undefined, stopMusic: () => undefined }));
 vi.mock("../sound", () => ({ beep: () => undefined, note: () => 0, sonidoDelJuego: () => "" }));
-vi.mock("../enlace-corto", () => ({ acortar: async () => "", alAcortar: () => undefined, cortoGuardado: () => null, enlaceParaElQr: async (l: string) => ({ ahora: l, despues: Promise.resolve(null) }), ponerLogoDeRuta: () => undefined, rutaDe: () => "" }));
+vi.mock("../enlace-corto", () => ({ acortar: async () => "", acortarEspectador: async () => null, actualizarCorto: async () => ({ ok: false, motivo: "red" }), alAcortar: () => undefined, cortoGuardado: () => null, enlaceParaElQr: async (l: string) => ({ ahora: l, despues: Promise.resolve(null) }), ponerLogoDeRuta: () => undefined, rutaDe: () => "" }));
 
 const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
 const $ = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;

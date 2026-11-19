@@ -872,6 +872,8 @@ export class CompraDeVerdad implements MotorDeCompra {
         if (r.resultado === "hecho" || r.resultado === "en-curso" || r.resultado === "cuenta-creandose") return this.cotizar({ ...s, cotizacion: null });
         if (r.resultado === "proteger") return { ...s, cotizacion: { estado: "falta", falta: [{ que: "proteger-cuenta" }] } };
         if (r.resultado === "ahora-no" || r.resultado === "no-patrocina") return { ...s, cotizacion: { estado: "sin-creditos" } };
+        // La regla de la línea que no votó hace lo mismo que una línea que no salió: no se hizo nada.
+        if (r.resultado === "no-salio" || r.resultado === "no-coincide" || r.resultado === "no-coincide-tope") return { ...s, sinRed: true };
         return { ...s, sinRed: true };
       case "sin-red":
         return { ...s, sinRed: true };

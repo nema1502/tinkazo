@@ -27,6 +27,8 @@ export interface PagoHorizon {
   /** El id de la operación; si no, uno que crece, más grande que un entero seguro de JavaScript. */
   op?: string;
   tx?: string;
+  /** El hash de la transacción de adentro, si la transacción viene envuelta en un fee-bump (`inner_transaction.hash`). */
+  interna?: string;
   de?: string;
   a?: string;
   /** Por defecto, el USDC de Circle. */
@@ -54,6 +56,16 @@ export function horizonDeCobros(cuenta: string) {
       pagos.push({ ...p, id });
       return id;
     });
+  /** La nota de la transacción como la cuenta Horizon: de texto, numérica o ninguna. */
+  const memoDe = (p: PagoHorizon) => {
+    if (p.nota !== undefined) {
+      return { memo_type: "text", memo: p.nota };
+    }
+    if (p.memoId !== undefined) {
+      return { memo_type: "id", memo: p.memoId };
+    }
+    return { memo_type: "none" };
+  };
   const registro = (p: PagoHorizon & { id: string }) => ({
     id: p.id,
     paging_token: p.id,
@@ -65,7 +77,7 @@ export function horizonDeCobros(cuenta: string) {
     to: p.a ?? cuenta,
     ...(p.nativo ? { asset_type: "native" } : { asset_type: "credit_alphanum4", asset_code: p.codigo ?? "USDC", asset_issuer: p.emisor ?? EMISOR_USDC }),
     amount: p.monto,
-    transaction: p.nota !== undefined ? { memo_type: "text", memo: p.nota } : p.memoId !== undefined ? { memo_type: "id", memo: p.memoId } : { memo_type: "none" },
+    transaction: { ...memoDe(p), ...(p.interna !== undefined ? { inner_transaction: { hash: p.interna } } : {}) },
   });
   const resp = (status: number, cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
   const fetch = async (url: string) => {

@@ -35,3 +35,18 @@ export function sqlDePrueba(db: DatabaseSync = new DatabaseSync(":memory:")): Sq
     },
   };
 }
+
+/**
+ * El mismo SQLite de prueba, donde toda consulta que cumpla `falla` lanza como lo haría una base llena o rota. Sirve para ver
+ * que lo que se crea o se escribe al arrancar no tumba al objeto. Cambia `exec` del `sql` que recibe y lo devuelve.
+ */
+export function sqlQueFallaEn(falla: RegExp, sql: ReturnType<typeof sqlDePrueba> = sqlDePrueba()): ReturnType<typeof sqlDePrueba> {
+  const exec = sql.exec;
+  sql.exec = (consulta, ...enlaces) => {
+    if (falla.test(consulta)) {
+      throw new Error("SQLITE_FULL: database or disk is full");
+    }
+    return exec(consulta, ...enlaces);
+  };
+  return sql;
+}

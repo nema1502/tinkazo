@@ -202,6 +202,50 @@ describe("Ya tengo dólares digitales", () => {
     expect(document.querySelector('[data-saldo="dir"]')).toBeNull();
   });
 
+  it("con la vista traer abre directo en la dirección para cargar, sin pasar por el inicio", async () => {
+    abrirSaldo({ address: YO }, mundo(), { vista: "traer" });
+    await lista();
+    expect(document.querySelector(".saldo-titulo")?.textContent).toBe(t("saldoRecibirTitulo"));
+    expect(document.querySelector('[data-saldo="dir"]')?.textContent).toBe(YO);
+    expect((document.querySelector('[data-saldo="qr"]') as HTMLImageElement).dataset.qr).toBe(YO);
+    expect(principal().textContent).toBe(t("saldoYaMande"));
+    // Desde acá se puede volver al inicio, como siempre.
+    document.querySelector<HTMLButtonElement>('[data-saldo="volver"]')?.click();
+    expect(principal().textContent).toBe(t("cargaYaTengo"));
+  });
+
+  it("con la vista traer, si la cuenta no puede recibir, dice qué falta en vez de mostrar la dirección", async () => {
+    abrirSaldo({ address: YO }, mundo({ lectura: mirada() }), { vista: "traer" });
+    await lista();
+    expect(document.querySelector('[data-saldo="dir"]')).toBeNull();
+    expect(document.body.textContent).not.toContain(YO);
+    expect(principal().textContent).toBe(t("saldoActivarBtn"));
+  });
+
+  it("sin vista abre en el inicio, como siempre", async () => {
+    abrirSaldo({ address: YO }, mundo(), {});
+    await lista();
+    expect(principal().textContent).toBe(t("cargaYaTengo"));
+    expect(document.querySelector('[data-saldo="dir"]')).toBeNull();
+  });
+
+  it("al cerrarla, avisa a quien la abrió una sola vez, la cierre quien la cierre", async () => {
+    const alCerrar = vi.fn();
+    abrirSaldo({ address: YO }, mundo(), { vista: "traer", alCerrar });
+    await lista();
+    expect(alCerrar).not.toHaveBeenCalled();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(dialogo()).toBeNull();
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+
+    const otra = vi.fn();
+    abrirSaldo({ address: YO }, mundo(), { alCerrar: otra });
+    await lista();
+    // Cerrar desde la principal del inicio no existe: se cierra con la X.
+    document.querySelector<HTMLButtonElement>('[data-dlg="x"]')?.click();
+    expect(otra).toHaveBeenCalledTimes(1);
+  });
+
   /** Cada estado que no es «puede», con lo que tiene que decir y su única acción. */
   const casos: Array<{ nombre: string; m: () => Mundo; dice: string; boton: string; directo?: boolean }> = [
     { nombre: "solo en Oficial", m: () => mundo({ red: "testnet" }), dice: "saldoSoloOficial", boton: "modeSwitchToOfficial", directo: true },
@@ -398,6 +442,34 @@ describe("Activar dólares digitales con Google", () => {
     principal().click();
     await vi.waitFor(() => expect(principal().textContent).toBe(t("cargaCuentaPrimeroBtn")));
   });
+
+  it("si la regla no votó el pedido, dice que no se hizo nada, invita a probar una vez más y deja el botón", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "no-coincide" as const) });
+    await aTraer(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoActivarNoCoincide")} ${t("cofirmaOtraVez")}`));
+    expect(principal().textContent).toBe(t("saldoActivarBtn"));
+    expect(principal().disabled).toBe(false);
+  });
+
+  it("con el tope de la pestaña dice que escriba y no ofrece pedirla otra vez", async () => {
+    const m = mundo({ lectura: mirada(), activar: vi.fn(async () => "no-coincide-tope" as const) });
+    await aTraer(m);
+    principal().click();
+    await vi.waitFor(() => expect(estado()).toBe(`${t("saldoActivarNoCoincide")} ${t("cofirmaEscribinos")}`));
+    expect(estado()).not.toContain(t("cofirmaOtraVez"));
+    expect(principal().textContent).toBe(t("saldoVolverAMirar"));
+  });
+
+  it("el texto de la regla que no votó es una sola oración en los dos idiomas, sin palabras técnicas", () => {
+    const tecnicas = /\bhash|\bfirmas?\b|\bsignatures?\b|\bred\b|\bnetwork\b|co-?firma|co-?sign|\bXDR|contrato|contract/i;
+    for (const l of ["es", "en"] as const) {
+      const texto = T[l].saldoActivarNoCoincide;
+      expect(typeof texto, l).toBe("string");
+      expect(String(texto).split(/(?<=[.:!?])\s+/).filter(Boolean), l).toHaveLength(1);
+      expect(String(texto), l).not.toMatch(tecnicas);
+    }
+  });
 });
 
 describe("Ya lo mandé", () => {
@@ -496,6 +568,72 @@ describe("Ya lo mandé", () => {
     principal().click();
     await vi.waitFor(() => expect(estado()).toBe("Llegaron 10 dólares digitales. Sumaste 50 monedas de regalo."));
     expect(pedidos.some((u) => u.startsWith("https://cuenta.example.org"))).toBe(true);
+  });
+});
+
+describe("lo que cuesta retirar, al final de cómo sacar el dinero", () => {
+  const POR_QUE = "Cada retiro cuesta 0,50 dólares digitales, sea cual sea el monto. Recibir premios es gratis.";
+  const plegado = (): string => document.querySelector(".saldo-mas")?.textContent ?? "";
+  /** Una ventana con el costo del retiro configurado: hoy el sitio no lo configura, y la ventana lo recibe de afuera. */
+  const conCosto = (o: Partial<Mundo> = {}, costo = "0,50"): Mundo => mundo({ costoDelRetiro: () => costo, ...o });
+  const conLaPropia = (o: Partial<Mundo> = {}): Mundo => conCosto({ billetera: async () => ({ tipo: "propia", red: "mainnet" }), ...o });
+
+  it("con una cuenta de Google, el plegado dice cuánto cuesta cada retiro y que recibir premios es gratis", async () => {
+    await abrir(conCosto());
+    expect(plegado()).toContain(T.es.cargaComoSacoTexto as string);
+    expect(plegado()).toContain(POR_QUE);
+  });
+
+  it("el costo va al final del plegado, después de lo de siempre", async () => {
+    await abrir(conCosto());
+    const parrafos = [...document.querySelectorAll(".saldo-mas p")].map((p) => p.textContent);
+    expect(parrafos).toEqual([T.es.cargaComoSacoTexto, POR_QUE]);
+  });
+
+  it("en inglés lo dice con el punto decimal", async () => {
+    setLang("en");
+    await abrir(conCosto({}, "0.50"));
+    expect(plegado()).toContain("Each withdrawal costs 0.50 digital dollars, whatever the amount. Receiving prizes is free.");
+  });
+
+  it("el plegado sigue cerrado: el costo no se abre solo", async () => {
+    await abrir(conCosto());
+    expect(document.querySelector<HTMLDetailsElement>(".saldo-mas")?.open).toBe(false);
+  });
+
+  it("con una billetera propia no lo dice: ese retiro no pasa por Tinkazo", async () => {
+    await abrir(conLaPropia({ lectura: conUsdc() }));
+    expect(plegado()).toContain(T.es.cargaComoSacoTexto as string);
+    expect(plegado()).not.toContain("Cada retiro cuesta");
+    expect(plegado()).not.toContain("{c}");
+  });
+
+  it("en la práctica, en la red de prueba, no lo dice: ahí no se cobra nada", async () => {
+    await abrir(conCosto({ red: "testnet", practica: true, lectura: conUsdc("3.0000000", {}, "testnet") }));
+    expect(plegado()).toContain(T.es.cargaComoSacoTexto as string);
+    expect(plegado()).not.toContain("Cada retiro cuesta");
+    expect(document.querySelectorAll(".saldo-mas p")).toHaveLength(1);
+  });
+
+  it("sin costo configurado el plegado queda como siempre", async () => {
+    await abrir(mundo({ costoDelRetiro: () => null }));
+    expect(plegado()).toContain(T.es.cargaComoSacoTexto as string);
+    expect(plegado()).not.toContain("Cada retiro cuesta");
+    expect(document.querySelectorAll(".saldo-mas p")).toHaveLength(1);
+  });
+
+  it("con la configuración del sitio de hoy, que no prende el costo, el plegado queda como siempre", async () => {
+    vi.stubEnv("VITE_RETIRO_COSTO", "");
+    vi.stubEnv("VITE_RETIRO_CUENTA", "");
+    await abrir(mundo());
+    expect(plegado()).toContain(T.es.cargaComoSacoTexto as string);
+    expect(plegado()).not.toContain("Cada retiro cuesta");
+    expect(document.querySelectorAll(".saldo-mas p")).toHaveLength(1);
+  });
+
+  it("nunca deja el marcador a la vista", async () => {
+    await abrir(conCosto());
+    expect(document.body.textContent).not.toContain("{c}");
   });
 });
 

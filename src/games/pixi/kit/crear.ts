@@ -97,6 +97,8 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     let coronado = false;
     let muerto = false;
     let escena: E | undefined;
+    // El momento decisivo del plan, en la hora del juego: el celular de quien mira no pasa de ahí sin soltarlo (`en-hora.ts`).
+    if (plan.decisivo !== undefined) S.decisivoEn?.(() => t, plan.decisivo);
     // `?auditar=nino`: la verdad del plan en cada instante, para la prueba del niño (`audit-nino`).
     // `duracion` es la hora del golpe (el 100 %): `audit-nino` para al 25 % y al 60 % de ella.
     // Si la escena sabe dónde cae en la pantalla quien va adelante (`puntoDelFrente`), la zona de la verdad es esa y no una que declaró el plan.

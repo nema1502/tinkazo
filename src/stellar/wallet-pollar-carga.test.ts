@@ -679,10 +679,17 @@ describe("Preparar mi cuenta: la línea y la cuenta de paso, en orden y sin rein
     expect(h.llamadas).not.toContain("runRampWalletStep");
   });
 
-  it("una línea que ya se pidió y espera no se pide otra vez", async () => {
-    pendientes = [{ ...pedidoDeCuenta(), id: "linea-1", kind: "TX", network: "STELLAR", operation: "change_trust" }];
+  it("una línea que ya se pidió y espera con su voto en camino no se pide otra vez", async () => {
+    pendientes = [{ ...pedidoDeCuenta(), id: "linea-1", kind: "TX", network: "STELLAR", operation: "change_trust", activityId: "actividad-linea" }];
     expect(await pollarWallet.cargaPreparar([LINEA])).toEqual({ estado: "linea", resultado: "en-curso" });
     expect(h.llamadas).not.toContain("setTrustline");
+  });
+
+  it("una línea que espera sin voto y no tiene la forma de la línea no se vota ni se pide otra", async () => {
+    pendientes = [{ ...pedidoDeCuenta(), id: "linea-1", kind: "TX", network: "STELLAR", operation: "change_trust" }];
+    expect(await pollarWallet.cargaPreparar([LINEA])).toEqual({ estado: "linea", resultado: "no-coincide" });
+    expect(h.llamadas).not.toContain("setTrustline");
+    expect(votos()).toBe(0);
   });
 
   it("un pedido de cuenta que ya esperaba se vota sin crear otra cuenta", async () => {

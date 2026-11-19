@@ -120,7 +120,8 @@ describe("los estados de la página del celular", () => {
     await enviar("Ana");
     esperarListo("Ana");
     expect(el("sr").hidden).toBe(true);
-    expect(pedir).toHaveBeenCalledTimes(1);
+    expect(pedir).toHaveBeenCalledTimes(2);
+    expect(pedir).toHaveBeenNthCalledWith(1, "/v1/sala/AbCd1234/publico");
     expect(JSON.parse(almacen.getItem(CLAVE_LOCAL) ?? "{}").nombre).toBe("Ana");
     const botones = [...el("hecho").querySelectorAll("button")];
     expect(botones).toHaveLength(1);
@@ -128,6 +129,34 @@ describe("los estados de la página del celular", () => {
     botones[0]?.click();
     expect(el("form").hidden).toBe(false);
     expect(el<HTMLInputElement>("n").value).toBe("Ana");
+  });
+
+  it("si el QR ya se cerró, lo dice al cargar y no deja escribir", async () => {
+    const pedir = vi.fn(async () => respuesta(404, { error: "no-existe" }));
+    montar(new AlmacenFalso(), pedir as unknown as typeof fetch);
+    await vi.waitFor(() => expect(el("msg").textContent).toBe(TEXTOS.es.cerrada));
+    expect(el("msg").className).toBe("mal");
+    expect(el<HTMLInputElement>("n").disabled).toBe(true);
+    expect(el<HTMLButtonElement>("b").disabled).toBe(true);
+    expect(pedir).toHaveBeenNthCalledWith(1, "/v1/sala/AbCd1234/publico");
+  });
+
+  it("con el QR abierto, al cargar no dice nada", async () => {
+    const pedir = vi.fn(async () => respuesta(200));
+    montar(new AlmacenFalso(), pedir as unknown as typeof fetch);
+    await vi.waitFor(() => expect(pedir).toHaveBeenCalledTimes(1));
+    expect(el("msg").textContent).toBe("");
+    expect(el<HTMLInputElement>("n").disabled).toBe(false);
+  });
+
+  it("sin conexión al cargar, no dice nada y deja escribir", async () => {
+    const pedir = vi.fn(async () => {
+      throw new TypeError("sin conexión");
+    });
+    montar(new AlmacenFalso(), pedir as unknown as typeof fetch);
+    await vi.waitFor(() => expect(pedir).toHaveBeenCalledTimes(1));
+    expect(el("msg").textContent).toBe("");
+    expect(el<HTMLButtonElement>("b").disabled).toBe(false);
   });
 
   it("una recarga usa el recuerdo, no pide nada y permite corregir ese mismo nombre", () => {

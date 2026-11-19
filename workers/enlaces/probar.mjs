@@ -66,6 +66,47 @@ ver("borrar con el token da 204", r.status === 204, `estado ${r.status}`);
 r = await fetch(`${base}/v1/${alta?.id}`);
 ver("después de borrar da 404", r.status === 404, `estado ${r.status}`);
 
+// Reescribir: solo el enlace del QR de espectadores, que se crea pidiendo que pueda cambiar (`?cambia=1`).
+r = await fetch(`${base}/v1?cambia=1`, { method: "POST", headers: { Origin: SITIO }, body: datos });
+const cambia = r.status === 201 ? await r.json() : null;
+ver("crear uno que puede cambiar da 201 y lo dice, con su versión", r.status === 201 && cambia?.cambia === true && cambia?.version === '"1"', JSON.stringify(cambia));
+r = await fetch(`${base}/v1/${cambia?.id}`, { headers: { Origin: SITIO } });
+await r.arrayBuffer();
+ver("leerlo dice que cambia, su versión y que no se guarde", r.headers.get("x-enlace-cambia") === "1" && r.headers.get("etag") === '"1"' && (r.headers.get("cache-control") ?? "").includes("no-cache"));
+ver("la página puede leer esas cabeceras", (r.headers.get("access-control-expose-headers") ?? "").includes("X-Enlace-Cambia"));
+r = await fetch(`${base}/v1/${cambia?.id}`, { method: "OPTIONS", headers: { Origin: SITIO, "Access-Control-Request-Method": "PUT", "Access-Control-Request-Headers": "authorization, if-match" } });
+ver("la consulta previa deja reescribir con el permiso y la versión", r.status === 204 && (r.headers.get("access-control-allow-methods") ?? "").includes("PUT") && (r.headers.get("access-control-allow-headers") ?? "").includes("If-Match"));
+const otrosDatos = crypto.getRandomValues(new Uint8Array(3000));
+const reescribir = (id, token, version, origen = SITIO, cuerpo = otrosDatos) =>
+  fetch(`${base}/v1/${id}`, { method: "PUT", headers: { Origin: origen, Authorization: `Bearer ${token}`, ...(version ? { "If-Match": version } : {}) }, body: cuerpo });
+r = await reescribir(cambia?.id, cambia?.borrar, '"1"');
+ver("reescribir con el permiso y la versión da 204 con la versión nueva", r.status === 204 && r.headers.get("etag") === '"2"', `estado ${r.status} ${r.headers.get("etag")}`);
+r = await fetch(`${base}/v1/${cambia?.id}`);
+const nuevos = new Uint8Array(await r.arrayBuffer());
+ver("lo leído es lo reescrito", nuevos.length === otrosDatos.length && nuevos.every((b, i) => b === otrosDatos[i]) && r.headers.get("etag") === '"2"');
+r = await reescribir(cambia?.id, cambia?.borrar, '"1"');
+ver("con la versión vieja da 412 y no pisa la nueva", r.status === 412, `estado ${r.status}`);
+r = await reescribir(cambia?.id, "equivocado", null);
+ver("con otro permiso da 403", r.status === 403, `estado ${r.status}`);
+r = await fetch(`${base}/v1/${cambia?.id}`, { method: "PUT", headers: { Origin: SITIO }, body: otrosDatos });
+ver("sin permiso da 401", r.status === 401, `estado ${r.status}`);
+r = await reescribir(cambia?.id, cambia?.borrar, null, "https://otro.example");
+ver("desde otro sitio da 403", r.status === 403, `estado ${r.status}`);
+r = await reescribir(cambia?.id, cambia?.borrar, null, SITIO, new Uint8Array(256 * 1024 + 1));
+ver("más de 256 KB da 413", r.status === 413, `estado ${r.status}`);
+r = await reescribir("ZZZZZZZZ", "x", null);
+ver("uno que no existe da 404", r.status === 404, `estado ${r.status}`);
+// Un enlace creado como siempre (un comprobante) no se reescribe nunca, ni con su permiso.
+r = await fetch(`${base}/v1`, { method: "POST", headers: { Origin: SITIO }, body: datos });
+const fijo = r.status === 201 ? await r.json() : null;
+ver("crear como siempre no dice que cambia", r.status === 201 && fijo?.cambia === undefined);
+r = await reescribir(fijo?.id, fijo?.borrar, null);
+ver("reescribir uno que no nació para cambiar da 409", r.status === 409, `estado ${r.status}`);
+r = await fetch(`${base}/v1/${fijo?.id}`);
+await r.arrayBuffer();
+ver("leer uno que no cambia sigue igual (cinco minutos, sin la marca)", r.headers.get("x-enlace-cambia") === null && (r.headers.get("cache-control") ?? "").includes("max-age=300"));
+for (const x of [cambia, fijo]) if (x?.borrar) await fetch(`${base}/v1/${x.id}`, { method: "DELETE", headers: { Origin: SITIO, Authorization: `Bearer ${x.borrar}` } });
+
 // Borrar a pedido, con el secreto de administración del Worker.
 const admin = process.env.ADMIN_TOKEN ?? "";
 if (!admin) {

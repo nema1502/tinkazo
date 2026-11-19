@@ -108,6 +108,8 @@ describe("sin servicio, cerrado", () => {
       [200, { ...estadoBueno, fondeo: "ya" }],
       [200, { ...estadoBueno, cuenta: 7 }],
       [200, { ...estadoBueno, orden: { id: 1 } }],
+      // El premio es de una cuenta: sin saber de cuál, no se acepta.
+      [200, { ...estadoBueno, acceso: "premio", cuenta: null }],
     ];
     for (const [s, cuerpo] of malas) {
       const { f } = falso(() => responder(s, cuerpo));
@@ -193,6 +195,12 @@ describe("lo que sale bien", () => {
       ok: true,
       datos: { acceso: "cupon", cuenta: CUENTA, abierta: false, pedido: "req-1", sorteos, orden: { id: "ABCD2345", producto: "alta", usdc: "2", nota: "tk:o:ABCD2345", vence: 5 }, fondeo: "inmediato" },
     });
+  });
+
+  it("estado con el acceso premio, de la cuenta ganadora y con cero sorteos", async () => {
+    const cero = { quedan: 0, proximoVence: null };
+    const { f } = falso(() => responder(200, { ...estadoBueno, acceso: "premio", sorteos: cero }));
+    expect(await estado(TOKEN, { url: URL, fetch: f })).toMatchObject({ ok: true, datos: { acceso: "premio", cuenta: CUENTA, sorteos: cero } });
   });
 
   it("estado sin cuenta ni vencimiento", async () => {
@@ -310,12 +318,12 @@ describe("los datos del texto", () => {
     const { f } = falso(() => responder(429, { motivo: "intentos", reintentarEn: 1_800_000_000_000 + 30_000 }));
     const e = fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: f, ahora: () => 1_800_000_000_000 }));
     expect(e).toMatchObject({ clave: "altaErrIntentos1", vars: { min: "1" } });
-    expect(textoDelError(e, (k) => String(T.es[k]))).toBe("El canje de cupones quedó en pausa por un rato. Probá de nuevo en 1 minuto o pedile ayuda a quien organiza el evento.");
-    expect(textoDelError(e, (k) => String(T.en[k]))).toBe("Coupon redemption is paused for a while. Try again in 1 minute or ask the event organizer for help.");
+    expect(textoDelError(e, (k) => String(T.es[k]))).toBe("Hay una pausa con los cupones, probá de nuevo en 1 minuto.");
+    expect(textoDelError(e, (k) => String(T.en[k]))).toBe("Coupons are paused for now, try again in 1 minute.");
     // Con más de uno, el plural de siempre.
     const { f: g } = falso(() => responder(429, { motivo: "intentos", reintentarEn: 1_800_000_000_000 + 2 * 60_000 }));
     const e2 = fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: g, ahora: () => 1_800_000_000_000 }));
-    expect(textoDelError(e2, (k) => String(T.es[k]))).toBe("El canje de cupones quedó en pausa por un rato. Probá de nuevo en 2 minutos o pedile ayuda a quien organiza el evento.");
-    expect(textoDelError(e2, (k) => String(T.en[k]))).toBe("Coupon redemption is paused for a while. Try again in 2 minutes or ask the event organizer for help.");
+    expect(textoDelError(e2, (k) => String(T.es[k]))).toBe("Hay una pausa con los cupones, probá de nuevo en 2 minutos.");
+    expect(textoDelError(e2, (k) => String(T.en[k]))).toBe("Coupons are paused for now, try again in 2 minutes.");
   });
 });
