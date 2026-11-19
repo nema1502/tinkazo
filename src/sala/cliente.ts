@@ -92,7 +92,7 @@ export async function cerrarSala(s: Sala, dep: Dependencias = {}): Promise<boole
 export type EstadoDeConexion = "conectando" | "en-vivo" | "sondeo";
 
 export interface Escucha {
-  /** Llegó un nombre cifrado (nuevo, o al volver a pedir los que ya había). Cada `n` se avisa una sola vez. */
+  /** Llegó un nombre cifrado (nuevo, o al volver a pedir los que ya había). Cada `n` se avisa una sola vez. Si trae `r`, antes se avisa cada número quitado. */
   alNombre: (n: number, dato: string) => void;
   /** Alguien lo quitó (desde otra pestaña): ya no tiene que verse. */
   alQuitado?: (n: number) => void;
@@ -141,7 +141,9 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     estado = nuevo;
     e.alEstado?.(nuevo);
   };
-  const recibir = (n: number, d: string): void => {
+  const recibir = (n: number, d: string, r?: number[]): void => {
+    // Una corrección borra e inserta: la consulta no trae el `quitado`, así que `r` recupera todos los números viejos.
+    if (r) for (const anterior of r) e.alQuitado?.(anterior);
     if (visto.has(n)) return;
     visto.add(n);
     ultimo = Math.max(ultimo, n);
@@ -172,7 +174,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
       const r = await f(`${s.servicio}/v1/sala/${s.id}/nombres?desde=${ultimo}`, { headers: auth(s) });
       if (r.status === 404) return cerrada();
       if (!r.ok) return;
-      for (const x of (await r.json()) as { n: number; d: string }[]) recibir(x.n, x.d);
+      for (const x of (await r.json()) as { n: number; d: string; r?: number[] }[]) recibir(x.n, x.d, x.r);
       if (e.alEquipo) {
         const q = await f(`${s.servicio}/v1/sala/${s.id}/equipos?desde=${desdeV}`, { headers: auth(s) });
         if (q.status === 404) return cerrada();
@@ -212,7 +214,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
     });
     socket.addEventListener("message", (ev: MessageEvent) => {
       if (typeof ev.data !== "string" || ev.data === "pong") return;
-      let m: { t?: string; n?: number; d?: string; v?: number; cuenta?: string; estado?: string };
+      let m: { t?: string; n?: number; d?: string; r?: number[]; v?: number; cuenta?: string; estado?: string };
       try {
         m = JSON.parse(ev.data);
       } catch {
@@ -221,7 +223,7 @@ export function escucharSala(s: Sala, e: Escucha, dep: Dependencias = {}, vistos
       if (m.t === "listo") {
         cambiar("en-vivo");
         void consultar();
-      } else if (m.t === "nombre" && typeof m.n === "number" && typeof m.d === "string") recibir(m.n, m.d);
+      } else if (m.t === "nombre" && typeof m.n === "number" && typeof m.d === "string") recibir(m.n, m.d, Array.isArray(m.r) ? m.r.filter((n): n is number => typeof n === "number") : undefined);
       else if (m.t === "quitado" && typeof m.n === "number") e.alQuitado?.(m.n);
       else if (m.t === "equipo" && typeof m.n === "number" && typeof m.d === "string" && typeof m.v === "number" && typeof m.cuenta === "string" && typeof m.estado === "string")
         recibirEquipo({ n: m.n, cuenta: m.cuenta, d: m.d, estado: m.estado, v: m.v });

@@ -18,12 +18,13 @@ import { decodeProof, esSinSello, type Proof } from "./protocol/proof";
 import { anclaDe, premioDe, revisarComprobante, type Revision } from "./protocol/verificacion";
 import { hayModoOficial, network, shortAddress, txUrl } from "./stellar/config";
 import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
-import { leerRegistro } from "./stellar/registro";
+import { leerRegistroConRespaldo } from "./registro-con-respaldo";
+import { PLAZO_DEL_RELAY_MS, conPlazo } from "./pedido-con-plazo";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
 import { detalleDeLaRed, rotuloDelModo } from "./verificacion-modo";
 import { codigoDelSello, detalleDelHistorial, detalleSinHistorial, detalleTecnico, porQueDelHistorial, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
-import { agruparPorPersona, contar as contarPersonas, seCuentaPorPersona } from "./participaciones";
+import { agruparPorPersona, cierraComoReparto, contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "./participaciones";
 import { modesFlagOn, requestedMode, withMode } from "./modos/bandera";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
@@ -181,8 +182,10 @@ function pintarTecnico(lineas: string[]): void {
  */
 const DEPENDENCIAS = {
   verificarFirma: verifyRoundAsync,
-  traerFirma: async (round: number): Promise<string> => (await fetchRound(round, { attempts: 6, delayMs: 1500 })).signature,
-  leerRegistro,
+  // Con plazo por pedido: un relay colgado cuenta como uno que falló, y se pasa al siguiente (`pedido-con-plazo.ts`).
+  traerFirma: async (round: number): Promise<string> => (await fetchRound(round, { attempts: 6, delayMs: 1500, fetchFn: conPlazo(fetch, PLAZO_DEL_RELAY_MS) })).signature,
+  // Si el servicio de lectura no contesta, el otro de su lista (`registro-con-respaldo.ts`).
+  leerRegistro: leerRegistroConRespaldo,
   leerHistorial: crearLectorDeHistorial(),
 };
 
@@ -197,6 +200,27 @@ const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
 let estadoDelVeredicto: "ok" | "partial" | "bad" | "working" = "working";
 /** Lo que se está mostrando, para volver a contarlo en otro idioma o cuando llegan los otros sellos. */
 let actual: { proof: Proof; r: Revision } | null = null;
+
+/**
+ * Desde cuántas personas se avisa de un sello cercano: otra cuenta, la misma cantidad de gente, casi a la misma hora.
+ * Es la señal de alguien que reordenó la lista para cambiar el resultado. Con listas chicas no dice nada: dos equipos
+ * de 5 que sellan con minutos de diferencia se mostraban uno al otro con el aviso. El veredicto no depende de esto.
+ */
+export const CERCANOS_DESDE = 20;
+
+/** Los sellos cercanos que merecen el aviso: los de listas de `CERCANOS_DESDE` personas o más. */
+export function cercanosParaAvisar<R extends { count: number }>(cercanos: readonly R[]): R[] {
+  return cercanos.filter((r) => r.count >= CERCANOS_DESDE);
+}
+
+/**
+ * El fragmento cambió con la página abierta. Si el nuevo es un comprobante (empieza con `#z` o `#r`, como los arma
+ * `encodeFragment`), lo que se ve ya no es lo que dice el enlace: se vuelve a verificar desde cero. Cualquier otro
+ * fragmento no trae un sorteo, y recargar con él mostraba en rojo Algo no cuadra.
+ */
+export function alCambiarElFragmento(hash: string, recargar: () => void): void {
+  if (/^#[zr]./.test(hash)) recargar();
+}
 
 async function main(): Promise<void> {
   let proof: Proof | null = null;
@@ -213,7 +237,15 @@ async function main(): Promise<void> {
   // se lo puede cambiar sin recargarla), lo que se ve ya no es lo que dice el
   // enlace, y "Compartir" mandaba el nuevo con el ganador del viejo: se vuelve a
   // verificar desde cero.
-  window.addEventListener("hashchange", () => location.reload());
+  // Solo si el fragmento nuevo es un comprobante: uno que no lo es no puede mostrar otro ganador, y
+  // "Compartir" manda siempre el enlace que se verificó.
+  window.addEventListener("hashchange", () => alCambiarElFragmento(location.hash, () => location.reload()));
+  // Quiero comprobarlo lleva a las comprobaciones sin tocar el enlace. Como enlace a `#sec-checks`, el
+  // cambio de fragmento recargaba la página, y la recarga leía `#sec-checks` como comprobante: salía en rojo.
+  document.getElementById("btn-comprobar")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("sec-checks")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   enlaceVerificado = withMode(location.origin + location.pathname + location.hash, modoDelEnlace);
 
   try {
@@ -603,7 +635,7 @@ function pintarSellos(): void {
   // cuenta con la misma cantidad de gente casi a la misma hora: la misma jugada
   // con la lista reordenada.
   const fuera = found.elsewhere ?? [];
-  const cerca = found.cercanos ?? [];
+  const cerca = cercanosParaAvisar(found.cercanos ?? []);
   const ajena = (r: ChainRaffle, clave: string, fuerte: boolean): string =>
     `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)}: ${esc(t(clave))}, ` +
     `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))}, ${esc(t("vSealsRound"))} ${r.round}</p>`;
@@ -692,7 +724,7 @@ function offerToFinish(proof: Proof, r: Revision): void {
       setActiveWallet(wallet);
 
       note.textContent = t("fetching");
-      const { signature } = await drand.fetchRound(r.ronda, { attempts: 8, delayMs: 1500 });
+      const { signature } = await drand.fetchRound(r.ronda, { attempts: 8, delayMs: 1500, fetchFn: conPlazo(fetch, PLAZO_DEL_RELAY_MS) });
       await anchor.drawOnChain(BigInt(proof.id as string), drand.decompressG1(signature), (step) => {
         note.textContent = anchor.stepLabel(step);
       });
@@ -791,9 +823,12 @@ export function renderResult(
   $("v-winners").onclick = turnos ? (e) => void alCopiarOrden(e) : null;
   // Un orden repartido muestra el nombre de cada persona sin el sufijo de la línea, como el resultado en la herramienta;
   // solo cuando la lista sellada se cuenta por persona en esta página. Si no, cada línea tal cual se selló.
+  const reparto = repartoParaVerificacion(names);
+  // Las tarjetas nombran a la persona, sin la marca de la línea sellada, cuando la lista cierra como reparto.
+  const mostrar = (linea: string): string => (reparto && cierraComoReparto(names) ? nombreDePersona(linea) : linea);
   $("v-winners").innerHTML = turnos
-    ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: repartoParaVerificacion(names) })
-    : htmlDeLosGanadores(names, winners, premio, avatar);
+    ? htmlDeTurnos(names, winners, { titulo: false, sinSufijos: reparto })
+    : htmlDeLosGanadores(names, winners, premio, avatar, reparto);
   $("v-proof").textContent =
     `round=${r.ronda}, signature=${signature.slice(0, 20)}…, randomness=${randomness.slice(0, 20)}…, winners=[${winners.join(",")}]${extra.fromChain ? ", on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
@@ -806,11 +841,11 @@ export function renderResult(
   compartir.onclick = () =>
     abrirSorteo({
       enlace: enlaceVerificado,
-      ganadores: winners.map((i) => names[i] ?? ""),
+      ganadores: winners.map((i) => mostrar(names[i] ?? "")),
       total: names.length,
       // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas: cuando la lista
       // sellada agrupa por persona en esta página, nunca por el parámetro del enlace solo.
-      personas: contarPersonas(names, repartoParaVerificacion(names)).personas,
+      personas: contarPersonas(names, reparto).personas,
       premio,
       ...(extra.fecha ? { fecha: extra.fecha } : {}),
       ...(extra.numero ? { numero: extra.numero } : {}),

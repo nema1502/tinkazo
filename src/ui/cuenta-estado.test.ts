@@ -42,18 +42,20 @@ describe("los tres estados de la cabecera", () => {
     });
   });
 
-  it("dentro con la cuenta de prueba y con Freighter: sin nombre y sin letra, la cara es el dibujo de la casa", () => {
+  it("dentro con la cuenta de prueba y con Varial: sin nombre y sin letra, la cara es el dibujo de la casa", () => {
     const prueba = estadoCuenta({ sesion: { label: "Cuenta de prueba", address: DIR }, retomando: false, conectando: false });
     expect(prueba).toMatchObject({ estado: "dentro", via: "prueba", nombre: "", inicial: "", foto: "" });
-    const freighter = estadoCuenta({ sesion: { label: "Freighter", address: DIR }, retomando: false, conectando: false });
+    const freighter = estadoCuenta({ sesion: { label: "Varial", address: DIR }, retomando: false, conectando: false });
     expect(freighter).toMatchObject({ estado: "dentro", via: "freighter", nombre: "", inicial: "" });
   });
 });
 
 describe("la vía por la etiqueta de la cuenta", () => {
-  it("Google, correo, Freighter y la cuenta de prueba", () => {
+  it("Google, correo, Varial y la cuenta de prueba", () => {
     expect(viaDe("Google")).toBe("google");
     expect(viaDe("Email")).toBe("email");
+    expect(viaDe("Varial")).toBe("freighter");
+    // El nombre anterior de la billetera sigue valiendo como etiqueta.
     expect(viaDe("Freighter")).toBe("freighter");
     expect(viaDe("Cuenta de prueba")).toBe("prueba");
   });

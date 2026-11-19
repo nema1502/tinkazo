@@ -199,9 +199,13 @@ describe("lo que se le dice a la persona", () => {
     const codigo = fuente.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     expect(codigo).not.toMatch(/signAndSubmit\(|signUnsponsored\(|atenderFirmas|esperadas/);
     const pollar = readFileSync(resolve(process.cwd(), "src/stellar/wallet-pollar.ts"), "utf8");
-    // La lista blanca sigue siendo la del sello y la del sorteo: dos firmas, las que arman `signAndSubmit` y `signUnsponsored`.
+    // La lista blanca sigue siendo la de las transacciones que arma la página: dos firmas, las de `signAndSubmit` y `signUnsponsored`.
     expect(pollar).toContain('p.kind !== "sign" && p.kind !== "sign_and_send"');
     expect(pollar).toContain("!esperadas.has(p.unsignedXdr)");
+    // La única rama nueva de la puerta es la de la línea del USDC de Circle que la persona pide activar.
+    const ramas = pollar.slice(pollar.indexOf("export function atenderFirmas("), pollar.indexOf("/* ------------------------------------------------ activar la cuenta en la red principal"));
+    expect(ramas.match(/p\.confirm\(\)/g)).toHaveLength(2);
+    expect(ramas).toContain("linea !== null && esLaLineaPedida(p, linea) && linea.tomar()");
   });
 });
 
@@ -244,7 +248,7 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(caja.textContent).toContain("Vas a pagar a Equipo Cohete");
     expect(caja.textContent).toContain("tk:premio:777:2");
     expect(boton.textContent).toBe("Firmar y pagar");
-    expect(botonCon(caja, "Cancelar")).toBeDefined();
+    expect(botonCon(caja, "Cerrar")).toBeDefined();
   });
 
   it("sin un monto claro en el premio, el campo queda vacío para escribirlo", () => {
@@ -252,10 +256,10 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(campos(caja).monto.value).toBe("");
   });
 
-  it("Cancelar o Escape lo cierran; tocar 'Pagar premio' otra vez también", () => {
+  it("Cerrar o Escape lo cierran; tocar 'Pagar premio' otra vez también", () => {
     const dep = armar();
     const a = abrir(dep);
-    botonCon(a.caja, "Cancelar")?.click();
+    botonCon(a.caja, "Cerrar")?.click();
     expect(a.caja.childElementCount).toBe(0);
 
     const b = abrir(dep);
@@ -297,7 +301,7 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(mensaje.classList.contains("bad")).toBe(false);
   });
 
-  it("con el pago hecho, el monto, la explicación y 'Cancelar' se van: queda la confirmación y el enlace", async () => {
+  it("con el pago hecho, el monto, la explicación y 'Cerrar' se van: queda la confirmación y el enlace", async () => {
     const dep = armar();
     const { caja, form } = abrir(dep);
     expect(caja.querySelector<HTMLElement>(".gan-campo")?.hidden).toBe(false);
@@ -518,6 +522,8 @@ describe("si la red no confirma si el pago salió, no se vuelve a ofrecer pagar 
     const { caja, form } = abrir(dep, { esperaMs: 0 });
     enviar(form);
     await vi.waitFor(() => expect(campos(caja).mensaje.textContent).toContain("Todavía no pudimos mirar en la red si el pago salió"));
+    // Es texto plano: sin decir que es un botón, Volver a mirar se lee como parte de la frase.
+    expect(campos(caja).mensaje.textContent).toContain("En un momento, tocá el botón Volver a mirar.");
     expect(campos(caja).mensaje.classList.contains("bad")).toBe(true);
     expect(campos(caja).enviar.disabled).toBe(true);
     const volver = botonCon(caja, "Volver a mirar") as HTMLButtonElement;
@@ -585,7 +591,7 @@ describe("el premio pagado desde otra parte", () => {
     const despues = red.armar();
     const b = abrir(despues);
     enviar(b.form);
-    await vi.waitFor(() => expect(campos(b.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    await vi.waitFor(() => expect(campos(b.caja).mensaje.textContent).toBe("Este premio ya estaba pagado. No se pagó de nuevo."));
     expect(campos(b.caja).mensaje.classList.contains("bad")).toBe(false);
     expect(campos(b.caja).enviar.hidden).toBe(true);
     expect((b.caja.querySelector("a") as HTMLAnchorElement).hidden).toBe(false);
@@ -601,7 +607,7 @@ describe("el premio pagado desde otra parte", () => {
     enviar(una.form);
     await vi.waitFor(() => expect(campos(una.caja).mensaje.textContent).toBe("Listo, el pago salió."));
     enviar(otra.form);
-    await vi.waitFor(() => expect(campos(otra.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    await vi.waitFor(() => expect(campos(otra.caja).mensaje.textContent).toBe("Este premio ya estaba pagado. No se pagó de nuevo."));
     expect(red.mandados()).toBe(1);
   });
 
@@ -628,7 +634,7 @@ describe("el premio pagado desde otra parte", () => {
     enviar(form);
     await vi.waitFor(() => expect(botonCon(caja, "Volver a mirar")?.hidden).toBe(false));
     setLang("en");
-    expect(campos(caja).mensaje.textContent).toBe("We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. Try Check again in a moment.");
+    expect(campos(caja).mensaje.textContent).toBe("We still couldn't check the network for the payment. So it isn't paid twice, the button stays paused. In a moment, tap the Check again button.");
     expect(botonCon(caja, "Check again")).toBeDefined();
   });
 });

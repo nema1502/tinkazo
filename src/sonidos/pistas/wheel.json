@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "juego": "wheel",
+  "version": "f1",
+  "pulso": {
+    "bpm": 108,
+    "tiempos": 2,
+    "compas": 1.110589569
+  },
+  "ganancia": 0.35,
+  "fundido": 0.03,
+  "retomarEn": "compas",
+  "sorpresas": true,
+  "secciones": {
+    "entrada": {
+      "archivo": "wheel-f1-entrada.mp3",
+      "inicio": 0,
+      "compases": 6
+    },
+    "cuerpo": {
+      "archivo": "wheel-f1-cuerpo.mp3",
+      "inicio": 0.5,
+      "compases": 16,
+      "bucleDesde": 0
+    },
+    "subida": {
+      "archivo": "wheel-f1-subida.mp3",
+      "inicio": 0.5,
+      "compases": 8,
+      "bucleDesde": 4,
+      "tension": 0.75,
+      "cuantizar": 2,
+      "fundido": 0.08
+    },
+    "golpe": {
+      "archivo": "wheel-f1-golpe.mp3",
+      "inicio": 0.05,
+      "compases": 1,
+      "fundido": 0.005
+    },
+    "festejo": {
+      "archivo": "wheel-f1-festejo.mp3",
+      "inicio": 0.1,
+      "salida": 2.5
+    }
+  }
+}

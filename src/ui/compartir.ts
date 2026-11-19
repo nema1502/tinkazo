@@ -2,14 +2,16 @@ import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
 import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { turnMessage } from "../modos/mensajes";
-import { isTurnOrder } from "../modos/turnos";
+import { isTurnOrder, ordenSinComprobante } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
-import { fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoEntra, fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoPara } from "./foto-juego-bandera";
+import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
-import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
+import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { modesFlagOn, requestedMode } from "../modos/bandera";
 import { hayModoOficial } from "../stellar/config";
 import { eventoEsDePrueba } from "../evento-modo";
@@ -25,6 +27,13 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * frena compartir: si el servicio no contesta en unos segundos, sigue con el
  * largo. Un evento va primero entero en un solo enlace corto, con una sola
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
+ *
+ * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
+ * tiene ilustración (`foto-fondos.ts`), está entre los que pasaron la mirada y
+ * la bandera `VITE_FOTO_JUEGO` no la apaga (`foto-juego-bandera.ts`, prendida
+ * por defecto), van dos fotos lado a lado, con cualquier cantidad de ganadores: la del juego, elegida, y la de
+ * siempre. Tocar una la elige, y se comparte, se descarga o se copia solo esa. Mis sorteos, la página de
+ * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
  * historial) y la página de verificación (con lo que ella misma rehizo). Por
@@ -70,6 +79,10 @@ function listasCortas(lang: Lang, nombres: string[]): string[] {
 export interface DatosSorteo {
   /** El enlace de verificación del sorteo: el comprobante, tal como quedó. */
   enlace: string;
+  /**
+   * Quienes salieron, en orden, con el nombre que se muestra: quien llama ya le quitó la marca de la línea sellada
+   * si la lista se lee por persona. Acá no se vuelve a quitar: un nombre que termina en «(1/2)» la perdería dos veces.
+   */
   ganadores: string[];
   /** Cuántas participaciones había en la lista (una línea cada una). */
   total: number;
@@ -92,6 +105,17 @@ export interface DatosSorteo {
    * cifrado, en el enlace corto. No cambia el mensaje ni el comprobante.
    */
   logo?: Logo;
+  /**
+   * El juego que contó el resultado, solo desde la pantalla del sorteo: suma
+   * la foto con su fondo, si tiene ilustración. No cambia el mensaje, la foto
+   * de siempre ni el comprobante.
+   */
+  juego?: string;
+  /**
+   * La lista sellada es de equipos: el mensaje y la foto cuentan equipos y no personas. Quien llama lo sabe por la
+   * lista sellada (`shareProof`). Sin este dato, o con varias participaciones por persona, se cuentan personas.
+   */
+  equipos?: boolean;
 }
 
 /**
@@ -101,18 +125,30 @@ export interface DatosSorteo {
  * ni "verificarlo". Palabra por palabra igual a `T.summary` (una prueba lo compara).
  */
 export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
-  // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts).
-  if (isTurnOrder(d.total, d.ganadores.length, d.premio)) return turnMessage(lang, { orden: d.ganadores, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
-  const varios = d.ganadores.length > 1;
-  const w = lista(lang, d.ganadores);
-  // Con varias participaciones por persona, la cabeza dice las dos cuentas: «entre 5 participaciones de 2 personas».
+  // Con varias participaciones por persona, el mensaje dice las dos cuentas y junta a quien se repite. Los nombres
+  // ya llegan sin la marca de la línea sellada (`DatosSorteo.ganadores`).
   const part = d.personas !== undefined && d.personas !== d.total;
+  // Con una lista de equipos la cuenta es de equipos (las claves con sufijo Equipos, citadas enteras para que el build las incluya).
+  const eq = !!d.equipos && !part;
+  const porPersona = d.ganadores;
+  // Un orden de turnos dice el orden, no quién ganó (src/modos/mensajes.ts): ahí no se junta a nadie.
+  if (isTurnOrder(d.total, porPersona.length, d.premio)) return turnMessage(lang, { orden: porPersona, enlace: d.enlace, ...(d.sinSello ? { sinSello: true } : {}) });
+  // Quien salió más de una vez va una sola vez, con su cuenta: no «Ana y Ana».
+  const ganadores = part ? withRepeatCounts(lang, porPersona) : porPersona;
+  // Singular o plural según los nombres que nombra la frase, ya juntos: «Ganó Ana (2 veces)», como la tarjeta del evento.
+  const varios = ganadores.length > 1;
+  const w = lista(lang, ganadores);
   const cabeza = d.premio
     ? rellenar(
-        cad(lang, varios ? (part ? "cmpCabPremioVariosPart" : "cmpCabPremioVarios") : part ? "cmpCabPremioUnoPart" : "cmpCabPremioUno"),
+        cad(
+          lang,
+          varios
+            ? part ? "cmpCabPremioVariosPart" : eq ? "cmpCabPremioVariosEquipos" : "cmpCabPremioVarios"
+            : part ? "cmpCabPremioUnoPart" : eq ? "cmpCabPremioUnoEquipos" : "cmpCabPremioUno",
+        ),
         { premio: d.premio, w, n: d.total, ...(part ? { k: d.personas } : {}) },
       )
-    : rellenar(cad(lang, varios ? (part ? "cmpCabVariosPart" : "cmpCabVarios") : part ? "cmpCabUnoPart" : "cmpCabUno"), {
+    : rellenar(cad(lang, varios ? (part ? "cmpCabVariosPart" : eq ? "cmpCabVariosEquipos" : "cmpCabVarios") : part ? "cmpCabUnoPart" : eq ? "cmpCabUnoEquipos" : "cmpCabUno"), {
         w,
         n: d.total,
         ...(part ? { k: d.personas } : {}),
@@ -151,7 +187,11 @@ function personasDelOrden(s: { prize?: string; ganadores: readonly string[]; nam
 export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[]; names?: readonly string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
     const personas = personasDelOrden(s);
-    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores);
+    // La tarjeta del evento nombra a la persona, sin la marca de la línea sellada, solo cuando la lista se cuenta por persona.
+    const porPersona = !!(s.names && seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+    const ganadores = porPersona ? s.ganadores.map(nombreDePersona) : s.ganadores;
+    // Quien salió más de una vez en este sorteo va una sola vez, con su cuenta (en un orden de turnos no se lista a nadie).
+    const quien = personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, porPersona ? withRepeatCounts(lang, ganadores) : ganadores);
     const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${quien}`;
     return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
@@ -209,20 +249,48 @@ function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
     .join(", ");
 }
 
+/** Los números de premio de una persona, en orden: «#1 #3». Con más de tres, los tres primeros y «…». */
+function numerosDePremio(ganadores: readonly string[], persona: string): string {
+  const numeros = ganadores.flatMap((g, i) => (g === persona ? [`#${i + 1}`] : []));
+  return numeros.length > 3 ? `${numeros.slice(0, 3).join(" ")} …` : numeros.join(" ");
+}
+
+/**
+ * Dónde está la lista completa, para la foto del juego cuando no se ven todos los nombres: el QR (`qr`) o el mensaje
+ * (`mensaje`), y «orden» en lugar de «lista» en un orden de turnos. El QR lleva la lista entera solo si el sorteo está
+ * anclado: sin sello (modo libre, demo, un sorteo que siguió sin sello), el comprobante rehace un solo ganador, y la frase
+ * del QR sería falsa. Ahí dice que está en el mensaje, que nombra a todos.
+ */
+function completaDe(lang: Lang, turnos: boolean, anclado: boolean): { qr: string; mensaje: string } {
+  const mensaje = cad(lang, turnos ? "fotoOrdenEnMensaje" : "fotoListaEnMensaje");
+  return { qr: anclado ? cad(lang, turnos ? "fotoOrdenEnQr" : "fotoListaEnQr") : mensaje, mensaje };
+}
+
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
-  const varios = d.ganadores.length > 1;
+  // Los nombres ya llegan sin la marca de la línea sellada cuando la lista se lee por persona (`DatosSorteo.ganadores`).
+  const parte = d.personas !== undefined && d.personas !== d.total;
+  const ganadores = d.ganadores;
   // Un orden de turnos: «Orden de turnos» arriba, las personas en el orden del sorteo (la foto muestra las primeras y «N más»)
   // y debajo cuántas son, sin «Premio:» ni «Entre N personas».
-  const turnos = isTurnOrder(d.total, d.ganadores.length, d.premio);
+  const turnos = isTurnOrder(d.total, ganadores.length, d.premio);
+  // Un orden de turnos sin sello no tiene comprobante: la foto no lleva QR y dice por qué.
+  const sinComprobante = ordenSinComprobante(d.total, ganadores.length, d.premio, !!d.sinSello);
   // Las dos cuentas cuando no es una participación por persona.
-  const part = !turnos && d.personas !== undefined && d.personas !== d.total;
+  const part = !turnos && parte;
+  // Quien salió más de una vez va en un solo renglón: «Ganó» o «Ganaron» según las personas que quedan, como el mensaje.
+  const caras = part ? [...new Set(ganadores)] : null;
+  const varios = (caras ?? ganadores).length > 1;
   return {
     // El logo, y el "Hecho con Tinkazo" que va siempre a su lado. Sin logo, la foto es la de siempre, píxel por píxel.
     ...(d.logo ? { logo: d.logo, hecho: cad(lang, "logoHecho") } : {}),
     rotulo: rotuloDeSorteo(lang, d),
     titulo: cad(lang, turnos ? "turnsOption" : varios ? "imgGanaron" : "imgGano"),
-    personas: d.ganadores,
+    // Quien salió más de una vez va en un solo renglón, con su cuenta; su cara sale del nombre limpio (`caras`).
+    // En un orden de turnos no se junta a nadie: cada turno es su renglón.
+    // Cada renglón lleva los números de sus premios («#1 #3»), los mismos de la herramienta y la verificación.
+    personas: part ? withRepeatCounts(lang, ganadores) : ganadores,
+    ...(caras ? { caras, numeros: caras.map((p) => numerosDePremio(ganadores, p)) } : {}),
     lineas: turnos
       ? [
           // El nombre que le puso quien organiza, si es más que la palabra «Turnos».
@@ -237,16 +305,22 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.premio ? `${cad(lang, varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "",
           // Con varias participaciones por persona, la foto dice las dos cuentas.
           rellenar(
-            cad(lang, varios ? (part ? "fotoEntreVariosPart" : "fotoEntreVarios") : part ? "fotoEntreUnoPart" : "fotoEntreUno"),
+            cad(
+              lang,
+              varios
+                ? part ? "fotoEntreVariosPart" : d.equipos ? "fotoEntreVariosEquipos" : "fotoEntreVarios"
+                : part ? "fotoEntreUnoPart" : d.equipos ? "fotoEntreUnoEquipos" : "fotoEntreUno",
+            ),
             { n: d.total, ...(part ? { k: d.personas } : {}) },
           ),
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
         ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
-    enlace,
+    completa: completaDe(lang, turnos, !d.sinSello && d.numero !== undefined),
+    enlace: sinComprobante ? "" : enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
     escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
-    sinQr: cad(lang, d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
+    sinQr: cad(lang, sinComprobante ? "turnsSinComprobante" : d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
   };
 }
 
@@ -270,10 +344,14 @@ export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvent
     filas: enOrden.map((s) => {
       // Un orden de turnos no lista a nadie: dice cuántas personas hay, como el mensaje del evento.
       const personas = personasDelOrden(s);
+      const porPersona = !!(s.names && seCuentaPorPersona(s.names, requestedMode() === "varias" || modesFlagOn()));
+      const ganadores = porPersona ? s.ganadores.map(nombreDePersona) : s.ganadores;
+      // Quien salió más de una vez va una sola vez, con su cuenta, como en el mensaje del evento.
+      const mostrados = porPersona && personas === null ? withRepeatCounts(lang, ganadores) : ganadores;
       return {
         premio: s.prize?.trim() || cad(lang, "histDraw"),
-        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, s.ganadores),
-        cortos: personas !== null ? [] : listasCortas(lang, s.ganadores),
+        ganadores: personas !== null ? rellenar(cad(lang, "evPersonas"), { n: personas }) : lista(lang, mostrados),
+        cortos: personas !== null ? [] : listasCortas(lang, mostrados),
         ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
       };
     }),
@@ -292,6 +370,11 @@ export interface Listo {
   mensaje: string;
   /** Una foto por enlace: una sola, o una por parte del evento. */
   fotos: Foto[];
+  /**
+   * La foto con el fondo del juego, para elegir entre ella (primero, elegida) y
+   * la de siempre. Si el juego no tiene ilustración, no se ofrece.
+   */
+  juego?: Foto;
   /** Una nota arriba, por ejemplo que el evento va en varios enlaces. */
   nota?: string;
   /** El nombre de los archivos, sin la extensión. */
@@ -394,6 +477,10 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     `<div class="cmp-lado">` +
     `<p class="note cmp-nota" style="display:none"></p>` +
     `<button class="primary cmp-wa" type="button" data-whatsapp disabled>${esc(cad(lang, "cmpPreparando"))}</button>` +
+    `<div class="cmp-mas">` +
+    `<button class="ghost cmp-fb" type="button" data-facebook disabled hidden>${esc(cad(lang, "cmpFb"))}</button>` +
+    `<button class="ghost cmp-ig" type="button" data-instagram disabled hidden>${esc(cad(lang, "cmpIg"))}</button>` +
+    `</div>` +
     `<p class="cmp-aviso" role="status" aria-live="polite"></p>` +
     `<div class="cmp-acc">` +
     `<button class="ghost" type="button" data-bajar disabled>${esc(cad(lang, "cmpBajarFoto"))}</button>` +
@@ -407,6 +494,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const q = <T extends HTMLElement>(sel: string): T => dlg.querySelector(sel) as T;
   const fotos = q<HTMLElement>(".cmp-fotos");
   const wa = q<HTMLButtonElement>("[data-whatsapp]");
+  const fb = q<HTMLButtonElement>("[data-facebook]");
+  const ig = q<HTMLButtonElement>("[data-instagram]");
   const bajar = q<HTMLButtonElement>("[data-bajar]");
   const copiar = q<HTMLButtonElement>("[data-copiar]");
   const txt = q<HTMLTextAreaElement>("#cmp-txt");
@@ -416,6 +505,13 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const urls: string[] = [];
   let archivos: File[] = [];
   let mensaje = "";
+  /** El enlace que se publica en Facebook: el del comprobante (el corto si salió). Sin comprobante, no hay. */
+  let enlaceParaPublicar = "";
+  /** Dos fotos para elegir (la del juego y la de siempre): se comparte solo la elegida. */
+  let elegir = false;
+  let elegida = 0;
+  /** Lo que se comparte, se descarga o se copia: la elegida, o todas si no hay que elegir. */
+  const elegidos = (): File[] => (elegir ? archivos.slice(elegida, elegida + 1) : archivos);
 
   const avisar: Aviso = (texto) => {
     aviso.textContent = texto;
@@ -430,27 +526,54 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       if (dlg.isConnected) fotos.innerHTML = `<p class="note">${esc(cad(lang, "cmpSinFoto"))}</p>`;
       return;
     }
-    const pngs = await Promise.all(listo.fotos.map((f) => fotoPng(f)));
+    const [pngs, delJuego] = await Promise.all([
+      Promise.all(listo.fotos.map((f) => fotoPng(f))),
+      listo.juego ? fotoDelJuegoPng(listo.juego) : Promise.resolve(null),
+    ]);
     // Si se cerró mientras tanto, no hay nada que pintar.
     if (!dlg.isConnected) return;
     mensaje = listo.mensaje;
     txt.value = mensaje;
+    enlaceParaPublicar = listo.fotos.find((f) => f.enlace)?.enlace ?? "";
     const ext = listo.fotos.length > 1;
     archivos = pngs.flatMap((png, i) =>
       png ? [new File([png], `${listo.archivo}${ext ? `-${i + 1}` : ""}.png`, { type: "image/png" })] : [],
     );
+    // La del juego y la de siempre, para elegir: solo con una foto de siempre (un sorteo, nunca las partes de un evento).
+    elegir = !!delJuego && archivos.length === 1;
+    if (delJuego && elegir) archivos = [new File([delJuego], `${listo.archivo}-juego.png`, { type: "image/png" }), ...archivos];
+    elegida = 0;
     fotos.innerHTML = "";
     fotos.removeAttribute("aria-busy");
     fotos.classList.toggle("varias", archivos.length > 1);
-    for (const f of archivos) {
+    const opciones: HTMLButtonElement[] = [];
+    archivos.forEach((f, i) => {
       const url = URL.createObjectURL(f);
       urls.push(url);
       const img = document.createElement("img");
       img.src = url;
       img.alt = cad(lang, "cmpFotoAlt");
       img.className = "cmp-png";
-      fotos.appendChild(img);
-    }
+      if (!elegir) {
+        fotos.appendChild(img);
+        return;
+      }
+      // Cada foto es un botón: se elige con un toque, con Enter o con espacio, y dice cuál está elegida.
+      const op = document.createElement("button");
+      op.type = "button";
+      op.className = "cmp-elegir";
+      op.setAttribute("aria-label", cad(lang, i === 0 ? "cmpFotoJuego" : "cmpFotoClasica"));
+      op.setAttribute("aria-pressed", String(i === elegida));
+      img.alt = "";
+      op.appendChild(img);
+      op.addEventListener("click", () => {
+        elegida = i;
+        opciones.forEach((o, k) => o.setAttribute("aria-pressed", String(k === elegida)));
+        avisar("");
+      });
+      opciones.push(op);
+      fotos.appendChild(op);
+    });
     if (!archivos.length) fotos.innerHTML = `<p class="note">${esc(cad(lang, "cmpSinFoto"))}</p>`;
     if (listo.nota) {
       nota.textContent = listo.nota;
@@ -468,8 +591,16 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       .join(" ");
     wa.textContent = cad(lang, "cmpWa");
     wa.disabled = false;
+    // Facebook siempre puede (abre el publicador con el enlace); Instagram solo
+    // en móvil, donde su app toma la foto: en computadora no hay camino y no se muestra.
+    // El publicador de Facebook recibe un enlace, no un mensaje: sin enlace (un sorteo sin sello) no se ofrece.
+    fb.disabled = !enlaceParaPublicar;
+    fb.hidden = !enlaceParaPublicar;
+    const celular = matchMedia("(pointer: coarse)").matches;
+    ig.disabled = !celular || !archivos.length;
+    ig.hidden = !celular;
     bajar.disabled = !archivos.length;
-    bajar.textContent = cad(lang, archivos.length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
+    bajar.textContent = cad(lang, elegidos().length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
     copiar.disabled = false;
     // Si nadie movió el foco, va a la acción principal.
     const a = document.activeElement;
@@ -479,10 +610,24 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   // Un segundo toque mientras la hoja del sistema está abierta haría fallar al
   // primero y abriría WhatsApp Web encima: se espera a que termine.
   let compartiendo = false;
+  // Facebook: el publicador de la web con el enlace del sorteo (la foto va aparte, copiada o bajada).
+  fb.addEventListener("click", () => {
+    if (!enlaceParaPublicar) return;
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(enlaceParaPublicar)}`, "_blank", "noopener,width=640,height=560");
+    contarCompartido(p, "copy");
+  });
+  // Instagram: en móvil, la foto elegida se baja y se abre Instagram, donde se sube.
+  ig.addEventListener("click", () => {
+    const primera = elegidos()[0];
+    if (primera) descargar(primera);
+    window.open("https://www.instagram.com/", "_blank", "noopener");
+    avisar(cad(lang, "cmpIgAviso"));
+    contarCompartido(p, "copy");
+  });
   wa.addEventListener("click", () => {
     if (compartiendo) return;
     compartiendo = true;
-    void compartirPorWhatsapp(archivos, mensaje, avisar, lang)
+    void compartirPorWhatsapp(elegidos(), mensaje, avisar, lang)
       .then((canal) => {
         if (canal) contarCompartido(p, canal);
       })
@@ -491,7 +636,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       });
   });
   bajar.addEventListener("click", () => {
-    archivos.forEach(descargar);
+    elegidos().forEach(descargar);
     avisar("");
   });
   copiar.addEventListener("click", async () => {
@@ -541,11 +686,16 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         // El logo va dentro del enlace corto, cifrado; el largo y el comprobante no lo llevan.
         // Sin logo también: uno que se quitó después de sellar no puede seguir viajando en el corto.
         ponerLogoDeRuta(rutaDe(d.enlace), d.logo);
-        const c = op.corto === false ? null : await acortar(d.enlace);
+        // Un orden de turnos sin sello no tiene enlace que acortar.
+        const c = op.corto === false || ordenSinComprobante(d.total, d.ganadores.length, d.premio, !!d.sinSello) ? null : await acortar(d.enlace);
         const enlace = c?.corto ?? d.enlace;
+        const foto = fotoDeSorteo(lang, d, enlace);
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
-          fotos: [fotoDeSorteo(lang, d, enlace)],
+          fotos: [foto],
+          // La misma foto sobre el fondo del juego que se jugó: con la bandera prendida, si el juego está en la lista y tiene
+          // ilustración, con cualquier cantidad de ganadores.
+          ...(d.juego && fotoDelJuegoPara(d.juego) && fotoDelJuegoEntra(foto) ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };
@@ -562,13 +712,14 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
  * sin sello (el mensaje y la foto lo dicen, y no prometen que se pueda comprobar).
  */
 export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores: string[]): DatosSorteo {
+  // La regla de todos (`seCuentaPorPersona`) con el modo que trae el enlace del comprobante: lo mismo que cuenta la
+  // verificación al abrirlo. Decide las dos cuentas y si se nombra a la persona, sin la marca de la línea sellada.
+  const porPersona = seCuentaPorPersona(comprobante.names, modoVariasDelEnlace(enlace));
   return {
     enlace,
-    ganadores,
+    ganadores: porPersona ? ganadores.map(nombreDePersona) : ganadores,
     total: comprobante.names.length,
-    // Las dos cuentas si no es una por persona, con la regla de todos (`seCuentaPorPersona`) y el modo que trae
-    // el enlace del comprobante: lo mismo que cuenta la verificación al abrirlo.
-    personas: contarPersonas(comprobante.names, seCuentaPorPersona(comprobante.names, modoVariasDelEnlace(enlace))).personas,
+    personas: contarPersonas(comprobante.names, porPersona).personas,
     premio: comprobante.prize ?? "",
     ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
     ...(comprobante.id ? { numero: comprobante.id } : {}),

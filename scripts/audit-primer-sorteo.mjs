@@ -33,6 +33,7 @@
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { SELECTOR_CHIP_ENTRAR } from "./lib/entrar.mjs";
 
 const args = process.argv.slice(2);
 const arg = (k, def) => {
@@ -260,7 +261,7 @@ const resultados = [];
 async function flujoCuenta(browser, vista, tema) {
   const nombre = `cuenta-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/?red=prueba`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.hero [data-cta-entrar]')", 30000);
@@ -319,7 +320,7 @@ async function flujoCuenta(browser, vista, tema) {
 async function flujoSinCuenta(browser, vista, tema) {
   const nombre = `sincuenta-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  const { page } = await nuevaPagina(browser, vista, tema, `${BASE}/?red=prueba`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.nav-app')", 30000);
@@ -330,7 +331,7 @@ async function flujoSinCuenta(browser, vista, tema) {
     unaPrincipal(puerta, `${nombre} · la herramienta sin cuenta`, /Pegar lista|Paste list/);
     // Desde la segunda vuelta de ux-simple (1 de noviembre de 2026) no hay línea de la cuenta encima de "Pegar lista": la
     // cuenta se pide con el chip "Entrar" de la cabecera (secundario) y, con la lista armada, con "Entrar para sellar".
-    const gate = await page.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), visible: getComputedStyle(document.getElementById('gate')).display !== 'none', chip: (() => { const b = document.querySelector('#wallet-box button'); const r = b ? b.getBoundingClientRect() : null; return !!r && r.width > 0 && r.bottom > 0 && !b.classList.contains('primary'); })() })");
+    const gate = await page.eval(`JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), visible: getComputedStyle(document.getElementById('gate')).display !== 'none', chip: (() => { const b = document.querySelector(${JSON.stringify(SELECTOR_CHIP_ENTRAR)}); const r = b ? b.getBoundingClientRect() : null; return !!r && r.width > 0 && r.bottom > 0 && !b.classList.contains('primary'); })() })`);
     const g = JSON.parse(gate);
     check(`${nombre} · nada pide entrar encima de "Pegar lista", y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
     const oferta = await page.eval("getComputedStyle(document.getElementById('primera-vez')).display !== 'none'");
@@ -367,7 +368,8 @@ async function flujoSinCuenta(browser, vista, tema) {
 async function flujoEnsayo(browser, vista, tema, conCuenta) {
   const nombre = `${conCuenta ? "ensayo-cuenta" : "ensayo"}-${vista}-${tema}`;
   log(`\n== ${nombre}`);
-  const { page, red } = await nuevaPagina(browser, vista, tema, `${BASE}/`);
+  // Solo el recorrido con la cuenta de prueba necesita la red de prueba; el ensayo sin cuenta sigue como estaba.
+  const { page, red } = await nuevaPagina(browser, vista, tema, conCuenta ? `${BASE}/?red=prueba` : `${BASE}/`);
   const m = new Medicion(page, nombre);
   try {
     await page.waitFor("document.readyState === 'complete' && document.querySelector('.hero [data-entrar-ensayo]')", 30000);

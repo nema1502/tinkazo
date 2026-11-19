@@ -28,6 +28,23 @@ export const isTurnPrize = (prize: string): boolean => TURN_PRIZE.test(prize.nor
 export const isTurnOrder = (people: number, winners: number, prize: string): boolean => people >= 2 && winners === people && isTurnPrize(prize);
 
 /**
+ * Un orden de turnos hecho sin sello no tiene comprobante: la verificación de un sorteo sin sello no lleva la cantidad de
+ * ganadores y mostraría un solo turno como si fuera quien ganó. En ese caso no se ofrece ningún enlace de verificación (ni
+ * el QR, ni lo que se comparte, ni la pantalla grande) y el resultado lo dice. Con sello, y para un sorteo común sin sello,
+ * todo sigue como siempre.
+ */
+export const ordenSinComprobante = (people: number, winners: number, prize: string, sinSello: boolean): boolean => sinSello && isTurnOrder(people, winners, prize);
+
+/**
+ * Lo mismo, visto desde una entrada de Mis sorteos: se siguió sin sello, no llegó a tener número en el contrato y es un orden
+ * de turnos. Hoy se anota con el enlace de la ronda, pero una entrada guardada antes puede traer el enlace de verificación, y
+ * tampoco se ofrece. La usan la tarjeta de Mis sorteos, el panel de la cuenta y el archivo CSV: ninguno le muestra un
+ * comprobante a un orden que no lo tiene.
+ */
+export const ordenGuardadoSinSello = (e: { sinSello?: boolean; id?: string; count: number; numWinners: number; prize: string }): boolean =>
+  !!e.sinSello && !e.id && isTurnOrder(e.count, e.numWinners, e.prize);
+
+/**
  * El modo que lleva el enlace de verificación de un sorteo, para que quien lo abre lo cuente como la herramienta. Solo con
  * los modos a la vista: sin ellos el enlace queda como siempre, también el de un orden de turnos (que la verificación
  * reconoce igual por lo sellado, con `isTurnOrder`). Un orden lleva `turnos`; un reparto que se cuenta por persona con la

@@ -80,6 +80,7 @@ import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -434,9 +435,9 @@ async function conectarCuentaDePrueba(page) {
     await sleep(900);
     return;
   }
-  await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
+  await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
   await sleep(300);
@@ -551,13 +552,26 @@ const RPC_DE_TESTNET = ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"];
 
 const fixture = (nombre) => readFileSync(new URL(`../src/stellar/fixtures/${nombre}`, import.meta.url), "utf8");
 
+/**
+ * El modo queda anotado en la pestaña al cargar: el sitio lo guarda en
+ * `sessionStorage` (`tinkazo.red`, ver `pickNetwork` en `src/stellar/config.ts`)
+ * y `?red=prueba` de la dirección manda sobre todo lo demás. Si la página no
+ * quedó en modo de prueba, la cuenta de prueba no existe ahí y el recorrido
+ * fallaría más adelante por un motivo confuso: se corta acá con la frase clara.
+ */
+async function exigirModoPrueba(page) {
+  const modo = await page.eval("String(sessionStorage.getItem('tinkazo.red'))");
+  hayFalla(modo !== "prueba", `el sitio no abrió en modo de prueba (tinkazo.red=${modo})`);
+}
+
 /** Una pantalla lista para probar la red: la cuenta de prueba conectada, el ejemplo cargado y la tarjeta arriba. */
 async function abrirParaLaRed(browser, vista, tema, antesDeLaLista) {
   const [, ancho, alto, dpr, celular] = vista;
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
-  await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+  await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido&red=prueba` });
   await page.waitFor("document.readyState === 'complete'", 20000);
+  await exigirModoPrueba(page);
   await conectarCuentaDePrueba(page);
   await antesDeLaLista?.(page);
   await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
@@ -895,8 +909,9 @@ async function recorrer(browser, vista, tema, caso) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
-    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido&red=prueba` });
     await page.waitFor("document.readyState === 'complete'", 20000);
+    await exigirModoPrueba(page);
 
     await conectarCuentaDePrueba(page);
 
@@ -997,7 +1012,9 @@ async function recorrer(browser, vista, tema, caso) {
     const o = res.m.otro;
     check(
       `${quien} · 4 resultado: lo que sigue va pegado al ganador`,
-      !!g && !!o && o.top >= g.bottom - 1 && o.top - g.bottom <= 90,
+      // 110 px: entre los ganadores y lo que sigue va la línea de guardado, que con el enlace al registro ocupa tres
+      // renglones en 390 px. Una caja entera en el medio pasa de eso.
+      !!g && !!o && o.top >= g.bottom - 1 && o.top - g.bottom <= 110,
       g && o ? `${Math.round(o.top - g.bottom)} px debajo de los ganadores` : "falta el bloque",
     );
     check(
@@ -1085,8 +1102,9 @@ async function anchosDeCelular(browser, ancho) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 740, deviceScaleFactor: 2, mobile: true, screenWidth: ancho, screenHeight: 740 });
-    await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido#sortear` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido&red=prueba#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
+    await exigirModoPrueba(page);
     await sleep(900);
     // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
     await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true`);
@@ -1106,7 +1124,7 @@ async function anchosDeCelular(browser, ancho) {
       await page.screenshot(join(outDir, `flujo-ancho-${ancho}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
     };
     console.log(`\n  ${quien}`);
-    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('btn-sample').click(); true`);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
     await sleep(800);
     await mirar("lista cargada");
     await page.eval("document.getElementById('btn-freeze').click(); true");

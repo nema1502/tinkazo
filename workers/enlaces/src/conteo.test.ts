@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import deployments from "../../../src/stellar/deployments.json";
 import { CONTRACT_ERRORS } from "../../../src/stellar/errores";
 import {
@@ -121,9 +121,34 @@ describe("la lista cerrada del contador", () => {
     expect(contratoOficial(ajeno)).toBe(false);
     expect(validarRef(ajeno)).toBeNull();
     expect(validarConteo({ e: "proof_verdict", p: { verdict: "green" }, ref: ajeno })).toEqual({ ok: false, motivo: "ref" });
-    // En mainnet todavía no hay contrato: nada de mainnet con referencia entra hasta desplegarlo.
-    expect(OFICIALES.mainnet).toEqual([]);
-    expect(validarRef({ ...REF, net: "mainnet" })).toBeNull();
+    // La lista cerrada de mainnet es la de deployments.json: vacía mientras no haya contrato, y su vigente cuando lo haya.
+    const mainnetEnLista = (deployments as unknown as { mainnet: { contractId?: string } | null }).mainnet;
+    expect(OFICIALES.mainnet).toEqual(mainnetEnLista?.contractId ? [mainnetEnLista.contractId] : []);
+    // Sin contrato de mainnet en la lista, nada de mainnet con referencia entra.
+    const sinMainnet = { mainnet: [], testnet: [CONTRATO] };
+    expect(validarRef({ ...REF, net: "mainnet" }, sinMainnet)).toBeNull();
+    expect(validarConteo({ e: "proof_verdict", p: { verdict: "green" }, ref: { ...REF, net: "mainnet" } }, sinMainnet)).toEqual({ ok: false, motivo: "ref" });
+  });
+
+  describe("con una lista que trae contrato en mainnet (simulada: corre siempre)", () => {
+    afterEach(() => {
+      vi.doUnmock("../../../src/stellar/deployments.json");
+      vi.resetModules();
+    });
+
+    it("el contador toma el contrato de mainnet de deployments.json", async () => {
+      // Inventado, con la forma de uno real: 32 bytes en cero, nunca un contrato real.
+      const simulado = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4";
+      vi.resetModules();
+      vi.doMock("../../../src/stellar/deployments.json", () => ({ default: { ...deployments, mainnet: { ...deployments.testnet, contractId: simulado, anteriores: [] } } }));
+      const conteo = await import("./conteo");
+      expect(conteo.OFICIALES.mainnet).toEqual([simulado]);
+      expect(conteo.OFICIALES.testnet).toEqual([CONTRATO]);
+      const ref = { net: "mainnet", contract: simulado, id: "1" };
+      expect(conteo.validarRef(ref)).toEqual(ref);
+      // El contrato de testnet no vale como referencia de mainnet.
+      expect(conteo.validarRef({ ...REF, net: "mainnet" })).toBeNull();
+    });
   });
 
   it("el tope por dirección agrupa IPv6 por /64", () => {

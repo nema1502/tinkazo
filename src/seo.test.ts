@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { textoDeLaPortadaConRetiro } from "./costo-del-retiro-portada";
 import { T } from "./i18n";
 import { metasDePagina } from "./idioma";
 
@@ -32,7 +33,7 @@ const PUBLICAS: Record<string, string> = {
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
-const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html"];
+const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html", "crear-campana.html"];
 
 /** Las páginas nuevas, con el título y el h1 que se pidieron para cada una. */
 const NUEVAS: Record<string, { titulo: string; h1: string }> = {
@@ -519,7 +520,15 @@ const copiasDe = (html: string): Copia[] => {
 const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria|-alt)?="/g) ?? []).length;
 
 /** Cuánto se aparta una copia de lo que dice T.es; null si coincide. Los textos se comparan con los espacios normalizados; los atributos, tal cual. */
+/**
+ * La respuesta de la portada sobre cuánto cuesta: con el costo de retirar y la comisión prendidos en producción, el build
+ * exige que el HTML traiga la frase de costo-del-retiro-portada.ts (problemasDeLaPortadaConRetiro), con los valores de
+ * producción de docs/operacion.md: retirar 0,50 y la comisión del 2 % con mínimo de 1,50. El diccionario base no la tiene.
+ */
+const PORTADA_CON_COSTO = textoDeLaPortadaConRetiro(5_000_000n, { pb: 200n, minimo: 15_000_000n }).es;
+
 const diferencia = (c: Copia): string | null => {
+  if (c.clave === "faq3a" && c.valor === espacios(PORTADA_CON_COSTO)) return null;
   const es = T.es[c.clave];
   if (typeof es !== "string") return `${c.clave}: sin texto en T.es`;
   const igual = c.tipo === "texto" || c.tipo === "html" ? c.valor === espacios(es) : c.valor === es;
@@ -705,8 +714,8 @@ describe("la portada y las páginas de lectura no dicen lo que el sitio no puede
 });
 
 /** La lista que sube a Stellar, completa: la misma frase en la interfaz, en las páginas y en la documentación. */
-const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.";
-const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.";
+const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo. Al sortear se suman la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.";
+const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number. Running the draw adds the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.";
 
 describe("la lista que sube a Stellar está completa en la documentación, en los dos idiomas", () => {
   it.each([
@@ -747,7 +756,7 @@ describe("frases fijas de la segunda ronda", () => {
 
 describe("frases fijas de la tercera ronda", () => {
   it("uso2b en inglés dice lo mismo que en español", () => {
-    expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked it to their liking.");
+    expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked a favorite.");
   });
 });
 
@@ -759,18 +768,22 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
     expect(leer("precios.html")).not.toMatch(/doble|double/i);
   });
 
-  it("abre diciendo que hoy es gratis y que los precios se publican muy pronto", () => {
-    expect(T.es.prNote).toMatch(/^Hoy Tinkazo es gratis\. Los precios para quien organiza los vamos a publicar acá muy pronto/);
-    expect(T.en.prNote).toMatch(/^Today Tinkazo is free\. We will publish pricing for organizers here very soon/);
-    expect(T.es.prNote).toContain("Participar en un sorteo y comprobarlo es gratis, siempre.");
-    expect(T.en.prNote).toContain("Taking part in a draw and checking it is always free.");
+  it("abre diciendo que con el cupón de tu evento el modo Oficial es gratis, y que participar y comprobar lo es siempre", () => {
+    expect(T.es.prNote).toBe("El modo Prueba es gratis. El modo Oficial también, con el cupón de tu evento. Participar en un sorteo y comprobarlo es gratis, siempre.");
+    expect(T.en.prNote).toBe("Test mode is free. So is Live mode, with a coupon from your event. Joining a draw and checking it are always free.");
+    // El HTML trae el mismo texto, que es lo que ven los buscadores y quien no tiene JavaScript.
+    expect(leer("precios.html")).toContain(`data-i="prNote">${T.es.prNote as string}</p>`);
   });
 
   it("dice lo mismo del cobro en la portada, la ruleta y precios, y no queda el 'si algún día'", () => {
+    const muyPronto = {
+      faq3a: ["Muy pronto publicamos los precios para quien organiza", "We'll publish pricing for organizers very soon"],
+      rulF3B: ["se publican muy pronto", "will be published very soon"],
+    } as const;
     for (const clave of ["faq3a", "rulF3B"] as const) {
-      expect(T.es[clave]).toContain("se publican muy pronto");
+      expect(T.es[clave]).toContain(muyPronto[clave][0]);
       expect(T.es[clave]).toContain("te avisamos antes de cobrar");
-      expect(T.en[clave]).toContain("will be published very soon");
+      expect(T.en[clave]).toContain(muyPronto[clave][1]);
       expect(T.en[clave]).toContain("before we charge");
       expect(T.es[clave]).not.toMatch(/algún día/);
       expect(T.en[clave]).not.toMatch(/ever charge/);
@@ -796,11 +809,12 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
   it("las claves de la tabla se quedan en el diccionario con los números aprobados, para volver a ponerla", () => {
     expect(T.es.prP1b).toContain("20 sorteos por mes por cuenta (50 si la comunidad está verificada)");
     expect(T.en.prP1b).toContain("20 draws a month per account (50 if the community is verified)");
-    expect(T.es.prP2b).toBe("10 sorteos por Bs 20; 50 por Bs 90");
-    expect(T.es.prP2l).toBe("10 sorteos por US$ 2; 50 por US$ 9");
-    expect(T.en.prP2b).toBe("10 draws for Bs 20; 50 for Bs 90");
-    expect(T.en.prP2l).toBe("10 draws for US$ 2; 50 for US$ 9");
-    expect(T.es.prP3b).toBe("Bs 100 hasta 100 personas; Bs 200 hasta 500; Bs 400 hasta 5.000; Bs 1.500 con más");
+    // Los dos paquetes, cada uno con su cantidad de sorteos: Bs 20 o 50, pegado, se lee como un precio entre dos.
+    expect(T.es.prP2b).toBe("10 sorteos por Bs 20, o 50 sorteos por Bs 90");
+    expect(T.es.prP2l).toBe("10 sorteos por US$ 2, o 50 sorteos por US$ 9");
+    expect(T.en.prP2b).toBe("10 draws for Bs 20, or 50 draws for Bs 90");
+    expect(T.en.prP2l).toBe("10 draws for US$ 2, or 50 draws for US$ 9");
+    expect(T.es.prP3b).toBe("Bs 100 hasta 100 personas, Bs 200 hasta 500, Bs 400 hasta 5.000 y Bs 1.500 con más");
     expect(T.es.prP5b).toBe("Bs 1.200 al año");
   });
 

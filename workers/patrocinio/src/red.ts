@@ -7,7 +7,14 @@
  */
 import { StrKey, xdr } from "@stellar/stellar-sdk/base";
 
-export type Simulacion = { ok: true; minResourceFee: number } | { ok: false; motivo: "fallaria" | "restaurar"; detalle: string };
+/**
+ * Lo que dijo la simulación. Cuando pasa, también los recursos que calculó la red (`datos`, el `SorobanTransactionData`
+ * en base64, para armar una transacción propia) y el valor que devuelve el contrato (`retorno`, un `ScVal` en base64):
+ * los usa el sorteo del servidor. Cuando falla por un error del contrato, su número (`codigoContrato`: 2 es `AlreadyDrawn`).
+ */
+export type Simulacion =
+  | { ok: true; minResourceFee: number; datos?: string; retorno?: string }
+  | { ok: false; motivo: "fallaria" | "restaurar"; detalle: string; codigoContrato?: number };
 
 export interface CuentaEnRed {
   /** Quién patrocina la reserva de la cuenta (la billetera de fondos de Pollar, si la abrió nuestra app), o null. */
@@ -17,6 +24,8 @@ export interface CuentaEnRed {
   firmantes?: Array<{ clave: Uint8Array; peso: number }>;
   /** El umbral medio de la cuenta: el que pide una invocación de contrato. */
   umbralMedio?: number;
+  /** La secuencia de la cuenta (la de su última transacción), como texto: es un entero de 64 bits. */
+  secuencia?: string;
 }
 
 export interface Envio {
@@ -29,7 +38,19 @@ export interface Consulta {
   status: "SUCCESS" | "FAILED" | "NOT_FOUND";
   /** Lo que cobró la red, en stroops, si la transacción entró. */
   feeCharged?: number;
+  /**
+   * Lo que guardó la red de una transacción que entró, para saber por qué falló un sello (`sello-tarde.ts`): la hora de
+   * cierre de su ledger (`createdAt`, en segundos), el sobre tal como quedó (`envelopeXdr`), su resultado (`resultXdr`) y,
+   * si el RPC los da, los eventos de diagnóstico. Nada de esto sale de la página.
+   */
+  cierreS?: number;
+  sobre?: string;
+  resultado?: string;
+  diagnosticos?: string[];
 }
+
+/** Cuántos eventos de diagnóstico se guardan de una consulta, como mucho: alcanzan para ver el error de un sello. */
+const MAX_DIAGNOSTICOS = 50;
 
 /** Los bytes de un valor del XDR nuevo, que guarda su contenido en `.value` o es el propio arreglo. */
 function bytesDe(v: unknown): Uint8Array | null {
@@ -50,10 +71,24 @@ export interface Red {
   simular(xdrTx: string): Promise<Simulacion>;
   leerCuenta(cuenta: string): Promise<CuentaEnRed | null>;
   enviar(xdrTx: string): Promise<Envio>;
-  consultar(hash: string): Promise<Consulta>;
+  /** Con `senal`, quien pregunta puede cortar la consulta: se deja de esperar y no se sigue con el RPC siguiente. */
+  consultar(hash: string, senal?: AbortSignal): Promise<Consulta>;
 }
 
 const TIEMPO_MS = 8000;
+
+/** La señal de un pedido al RPC: corta a los `TIEMPO_MS` o cuando corte `senal`, lo que pase primero. */
+function senalDelPedido(senal?: AbortSignal): AbortSignal {
+  const tope = AbortSignal.timeout(TIEMPO_MS);
+  if (!senal) return tope;
+  if (typeof AbortSignal.any === "function") return AbortSignal.any([tope, senal]);
+  const c = new AbortController();
+  const cortar = () => c.abort();
+  tope.addEventListener("abort", cortar, { once: true });
+  senal.addEventListener("abort", cortar, { once: true });
+  if (senal.aborted) cortar();
+  return c.signal;
+}
 
 export class RpcRed implements Red {
   constructor(
@@ -61,13 +96,16 @@ export class RpcRed implements Red {
     private readonly pedir: typeof fetch = (...a) => fetch(...a),
   ) {}
 
-  private async llamar<T>(metodo: string, params: unknown): Promise<T> {
+  /** Con `senal` cortada, no se pregunta al RPC siguiente: se avisa con `rpc-cortado`, un error de red. */
+  private async llamar<T>(metodo: string, params: unknown, senal?: AbortSignal): Promise<T> {
     let ultimo: unknown = new ErrorDeRed("sin-rpc");
     for (const url of this.urls) {
+      if (senal?.aborted) throw new ErrorDeRed("rpc-cortado");
       let r: Response;
       try {
-        r = await this.pedir(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: metodo, params }), signal: AbortSignal.timeout(TIEMPO_MS) });
+        r = await this.pedir(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: metodo, params }), signal: senalDelPedido(senal) });
       } catch (e) {
+        if (senal?.aborted) throw new ErrorDeRed("rpc-cortado", { cause: e });
         ultimo = new ErrorDeRed("rpc-corte", { cause: e });
         continue;
       }
@@ -94,10 +132,15 @@ export class RpcRed implements Red {
   }
 
   async simular(xdrTx: string): Promise<Simulacion> {
-    const r = await this.llamar<{ error?: string; minResourceFee?: string; restorePreamble?: unknown }>("simulateTransaction", { transaction: xdrTx });
-    if (r.error) return { ok: false, motivo: "fallaria", detalle: r.error.slice(0, 200) };
+    const r = await this.llamar<{ error?: string; minResourceFee?: string; restorePreamble?: unknown; transactionData?: string; results?: Array<{ xdr?: string }> }>("simulateTransaction", { transaction: xdrTx });
+    if (r.error) {
+      const codigo = /Error\(Contract, #(\d{1,4})\)/.exec(r.error)?.[1];
+      return { ok: false, motivo: "fallaria", detalle: r.error.slice(0, 200), ...(codigo ? { codigoContrato: Number(codigo) } : {}) };
+    }
     if (r.restorePreamble) return { ok: false, motivo: "restaurar", detalle: "hay entradas archivadas" };
-    return { ok: true, minResourceFee: Number(r.minResourceFee ?? 0) };
+    const datos = typeof r.transactionData === "string" && r.transactionData ? r.transactionData : undefined;
+    const retorno = typeof r.results?.[0]?.xdr === "string" && r.results[0].xdr ? r.results[0].xdr : undefined;
+    return { ok: true, minResourceFee: Number(r.minResourceFee ?? 0), ...(datos ? { datos } : {}), ...(retorno ? { retorno } : {}) };
   }
 
   async leerCuenta(cuenta: string): Promise<CuentaEnRed | null> {
@@ -125,7 +168,7 @@ export class RpcRed implements Red {
       const clave = bytesDe(f.key.ed25519);
       if (clave) firmantes.push({ clave, peso: Number(f.weight) });
     }
-    return { patrocinador, balance: datos.value.balance, firmantes, umbralMedio: umbrales?.[2] ?? 0 };
+    return { patrocinador, balance: datos.value.balance, firmantes, umbralMedio: umbrales?.[2] ?? 0, secuencia: String(datos.value.seqNum) };
   }
 
   async enviar(xdrTx: string): Promise<Envio> {
@@ -135,11 +178,21 @@ export class RpcRed implements Red {
     return { status, ...(codigo ? { codigo } : {}) };
   }
 
-  async consultar(hash: string): Promise<Consulta> {
-    const r = await this.llamar<{ status: string; resultXdr?: string }>("getTransaction", { hash });
+  async consultar(hash: string, senal?: AbortSignal): Promise<Consulta> {
+    const r = await this.llamar<{ status: string; resultXdr?: string; createdAt?: number | string; envelopeXdr?: string; diagnosticEventsXdr?: unknown }>("getTransaction", { hash }, senal);
     if (r.status !== "SUCCESS" && r.status !== "FAILED") return { status: "NOT_FOUND" };
     const fee = r.resultXdr ? feeCobrada(r.resultXdr) : undefined;
-    return { status: r.status, ...(fee !== undefined ? { feeCharged: fee } : {}) };
+    // Un RPC de antes manda la hora como texto; uno de ahora, como número.
+    const cierre = Number(r.createdAt);
+    const diagnosticos = Array.isArray(r.diagnosticEventsXdr) ? r.diagnosticEventsXdr.filter((d): d is string => typeof d === "string").slice(0, MAX_DIAGNOSTICOS) : [];
+    return {
+      status: r.status,
+      ...(fee !== undefined ? { feeCharged: fee } : {}),
+      ...(Number.isFinite(cierre) && cierre > 0 ? { cierreS: cierre } : {}),
+      ...(typeof r.envelopeXdr === "string" && r.envelopeXdr ? { sobre: r.envelopeXdr } : {}),
+      ...(typeof r.resultXdr === "string" && r.resultXdr ? { resultado: r.resultXdr } : {}),
+      ...(diagnosticos.length ? { diagnosticos } : {}),
+    };
   }
 }
 

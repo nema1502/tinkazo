@@ -1,4 +1,4 @@
-import { CUERPO, FILA_CUERPOS, medirMarcha, type Causa, type MedidasMarcha, type SerieLlama } from "./carrera-marcha";
+import { CUERPO, FILA_CUERPOS, medirMarcha, type Causa, type MedidasMarcha, type Pase, type SerieLlama } from "./carrera-marcha";
 import type { Datos } from "./carrera-show";
 
 /**
@@ -49,4 +49,30 @@ export function seriesDelShow(d: Datos, dt = 1 / 60): SeriesDelShow {
 export function medirShow(d: Datos, dt = 1 / 60): MedidasMarcha {
   const s = seriesDelShow(d, dt);
   return medirMarcha(s.series, s.t0, s.dt, s.causas);
+}
+
+/**
+ * Las dos varas de los adelantamientos (regla M4 de la dirección). Sin un obstáculo encima, más de 0,88 de los cruces duran 1,2 s o más.
+ * Con un obstáculo encima de la que pasa o de la pasada, nueve de cada diez duran 0,8 s o más: es la misma regla que la velocidad, que con
+ * una causa a la vista permite ir una vez y media más rápido (1,2 dividido 1,5). Se miden con 64 semillas por cantidad de personas: con 16,
+ * la misma carrera daba entre 0,79 y 0,92 según qué semillas tocaran. Las usan la prueba de la marcha y `scripts/audit-tacto.mjs`.
+ */
+export const VARAS_CRUCE = {
+  sinObstaculo: { cruce: 1.2, parte: 0.88 },
+  conObstaculo: { cruce: 0.8, parte: 0.9 },
+} as const;
+
+/**
+ * Las causas del guion que vienen de un obstáculo de la recta: la piedra, la valla, el remolino y la escupida de los obstáculos. Las escupidas
+ * de la historia (`carrera-marcha.ts`) llevan el mismo tipo pero no son obstáculos: se separan por su aviso, que en los obstáculos es 1,5 s
+ * antes de que el obstáculo llegue.
+ */
+export function causasDeObstaculos(d: Datos): Causa[] {
+  const escupidas = (d.final.obstaculos ?? []).filter((o) => o.tipo === "escupida").map((o) => d.tDeQ(o.q) - 1.5);
+  return d.causas.filter((c) => c.tipo === "piedra" || c.tipo === "valla" || c.tipo === "viento" || (c.tipo === "escupida" && escupidas.some((a) => Math.abs(a - c.aviso) < 1e-6)));
+}
+
+/** Si el adelantamiento `p` pasa con un obstáculo encima de la que pasa o de la pasada: entre el aviso del obstáculo y el fin de su efecto. */
+export function conObstaculoEncima(obstaculos: readonly Causa[], p: Pase): boolean {
+  return obstaculos.some((c) => (c.quienes.includes(p.pasa) || c.quienes.includes(p.pasada)) && p.t >= c.aviso - 1e-9 && p.t <= c.hasta + 1e-9);
 }

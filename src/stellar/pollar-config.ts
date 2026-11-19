@@ -47,3 +47,11 @@ export function leerMarcaPollar(almacen: Pick<Storage, "getItem">, name: Network
   if (actual !== null || name !== "testnet") return actual;
   return almacen.getItem(LEGACY_POLLAR_INTENT_KEY);
 }
+
+/**
+ * Cuánto se espera a que la sesión de Pollar quede verificada para entregar su token (`tokenDeSesion` de
+ * `wallet-pollar.ts`). En un stand con la red lenta, verificarla puede tardar varios segundos, y alguien con un cupón
+ * válido no tiene que ver «probá de nuevo». Vive acá, sin la billetera, para que el paso «Dejá tu cuenta lista» lo use
+ * sin traerla.
+ */
+export const TOPE_TOKEN_MS = 8_000;

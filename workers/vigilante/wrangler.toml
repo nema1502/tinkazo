@@ -1,0 +1,44 @@
+# El vigilante del portero de mainnet: lo mira cada diez minutos y avisa por correo (ver README.md).
+# Un Worker aparte del portero, de los enlaces, de la sala, de la cuenta y de la música: un error acá no puede tumbarlos.
+# NO se despliega sin la palabra de quien mantiene el proyecto: pide crear el KV, el dominio, el correo y los secretos.
+# Los pasos, en orden, están en docs/operacion.md ("El vigilante") y en el README.
+# En local: npx wrangler@4 dev --port 8795 (desde esta carpeta, con .dev.vars), y una vuelta se dispara con
+# curl "http://localhost:8795/cdn-cgi/local/scheduled" (la ruta que da la documentación de Cloudflare)
+name = "tinkazo-vigilante"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+# Dominio propio para la ruta pública GET / (la hora de la última vuelta): el despliegue crea el registro y el certificado.
+routes = [{ pattern = "vigilante.tinkazo.app", custom_domain = true }]
+
+# El reloj: una vuelta cada diez minutos.
+[triggers]
+crons = ["*/10 * * * *"]
+
+# El registro del Worker (console.log de los hechos clave, sin secretos) queda en el panel de Cloudflare y en `wrangler tail`.
+[observability]
+enabled = true
+
+# Lo ya avisado entre una vuelta y la otra: una sola entrada, escrita una vez por vuelta.
+# El id se pide con: npx wrangler@4 kv namespace create MEMORIA   (y se pega acá antes de desplegar).
+[[kv_namespaces]]
+binding = "MEMORIA"
+id = "fc4a53dd04fa4ba6899d487352437025"
+
+# El correo: el binding de Cloudflare para mandar. Sin restricciones acá: la dirección de destino es un secreto (AVISAR_A)
+# y no se escribe en el repositorio. Cloudflare solo deja mandar a direcciones ya verificadas de la cuenta.
+[[send_email]]
+name = "CORREO"
+
+# Valores que no son secretos. Los secretos (PORTERO_ADMIN_TOKEN, AVISAR_A y, si se prende Telegram, TELEGRAM_BOT_TOKEN y
+# TELEGRAM_CHAT_ID) van por `wrangler secret put` y, en local, en .dev.vars (que no se versiona).
+[vars]
+# El portero que se mira: el de mainnet.
+PORTERO_URL = "https://pm.tinkazo.app"
+# Desde qué dirección sale el correo: usuario y dominio. El dominio tiene que ser de la cuenta, con el ruteo de correo prendido.
+CORREO_USUARIO = "avisos"
+CORREO_DOMINIO = "tinkazo.app"
+# Cada cuántas horas sale el resumen: 24 es uno por día, a las 12:00 UTC (las 8 de la mañana en Bolivia). El día de un evento
+# se puede bajar (por ejemplo 6 o 3) y volver a 24 después.
+RESUMEN_CADA_HORAS = "24"

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import deployments from "./deployments.json";
+import { CLAVE_PASO_CUPON } from "./cupon-paso-guardado";
 import { MODE_STORAGE_KEY, changeMode, hayModoOficial, network, parseModeValue, resolveNetworkName, urlForMode } from "./config";
 
 describe("el modo que se decide al cargar", () => {
@@ -29,6 +30,16 @@ describe("el modo que se decide al cargar", () => {
     expect(resolveNetworkName({ build: "mainnet", hasOfficialContract: false })).toBe("testnet");
   });
 
+  it("un cupón bien formado en la dirección abre Oficial, sin pisar un ?red= escrito a propósito", () => {
+    expect(resolveNetworkName({ hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("mainnet");
+    expect(resolveNetworkName({ search: "https://tinkazo.app/#cupon=k7m2-9qxa-4htr", stored: "prueba", hasOfficialContract: true })).toBe("mainnet");
+    expect(resolveNetworkName({ hash: "#cupon=K7M2", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ hash: "#sortear&cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ search: "?red=prueba", hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ search: "https://tinkazo.app/?red=prueba#cupon=K7M29QXA4HTR", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ hash: "#cupon=K7M29QXA4HTR", hasOfficialContract: false })).toBe("testnet");
+  });
+
   it("un valor que no se entiende no elige nada", () => {
     expect(parseModeValue("cualquiera")).toBeNull();
     expect(parseModeValue("")).toBeNull();
@@ -43,9 +54,17 @@ describe("el modo que se decide al cargar", () => {
     expect(urlForMode("/equipos.html?sala=ABCD1234&red=oficial#clave", "mainnet")).toBe("/equipos.html?sala=ABCD1234&red=oficial#clave");
   });
 
-  it("con la lista real de hoy el sitio es el de siempre: Prueba y nada nuevo a la vista", () => {
+  // Mientras la lista no tenga contrato en mainnet corre esta; el día que lo tenga, la de abajo.
+  it.runIf(!hayModoOficial)("con la lista real de hoy el sitio es el de siempre: Prueba y nada nuevo a la vista", () => {
     expect((deployments as { mainnet: unknown }).mainnet).toBeNull();
     expect(hayModoOficial).toBe(false);
+    expect(network.name).toBe("testnet");
+    expect(network.contractId).toBe(deployments.testnet.contractId);
+  });
+
+  it.runIf(hayModoOficial)("con contrato en la red real, Oficial existe y el sitio sigue abriendo en Prueba", () => {
+    expect((deployments as unknown as { mainnet: { contractId?: string } | null }).mainnet?.contractId).toMatch(/^C[A-Z2-7]{55}$/);
+    expect(hayModoOficial).toBe(true);
     expect(network.name).toBe("testnet");
     expect(network.contractId).toBe(deployments.testnet.contractId);
   });
@@ -62,6 +81,8 @@ describe("cambiar de modo recarga siempre, con red= en la dirección", () => {
     expect(urlForMode("/", "mainnet")).toBe("/?red=oficial");
     expect(urlForMode("/", "testnet")).toBe("/?red=prueba");
     expect(urlForMode("https://tinkazo.app/#sortear", "mainnet")).toBe("https://tinkazo.app/?red=oficial#sortear");
+    expect(urlForMode("/", "mainnet", "sortear")).toBe("/?red=oficial#sortear");
+    expect(urlForMode("/?lang=es#mis-sorteos", "mainnet", "sortear")).toBe("/?lang=es&red=oficial#sortear");
     for (const actual of ["/#sortear", "/#mis-sorteos", "/?demo=race#sortear", "/"]) {
       for (const [modo, red] of [["mainnet", "red=oficial"], ["testnet", "red=prueba"]] as const) {
         const nueva = urlForMode(actual, modo);
@@ -126,7 +147,7 @@ describe("cambiar de modo recarga siempre, con red= en la dirección", () => {
       expect(reload).not.toHaveBeenCalled();
     });
 
-    it("a Oficial no hay a dónde pasar mientras no haya contrato: no toca nada", () => {
+    it.runIf(!hayModoOficial)("a Oficial no hay a dónde pasar mientras no haya contrato: no toca nada", () => {
       const assign = vi.fn();
       const reload = vi.fn();
       vi.stubGlobal("location", { href: "/#sortear", assign, reload, hostname: "localhost", search: "", pathname: "/" });
@@ -136,5 +157,86 @@ describe("cambiar de modo recarga siempre, con red= en la dirección", () => {
       expect(reload).not.toHaveBeenCalled();
       expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBeNull();
     });
+  });
+});
+
+/** Una entrada de mainnet inventada, con la forma de la real. La dirección son 32 bytes en cero: nunca un contrato real. */
+const ENTRADA_SIMULADA = {
+  contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4",
+  deployedAt: "2026-01-01",
+  wasmSha256: "0".repeat(64),
+  maxWinners: 300,
+  rpcUrl: "https://mainnet.sorobanrpc.com",
+  networkPassphrase: "Public Global Stellar Network ; September 2015",
+  anteriores: [],
+};
+
+// Corre siempre, con o sin contrato en la lista real: el caso con Oficial no espera al día del despliegue para probarse.
+describe("con una lista que trae contrato en mainnet (simulada)", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.doUnmock("./deployments.json");
+    vi.resetModules();
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  /** `./config` cargado de nuevo, con la entrada simulada en la lista y esta dirección. */
+  const cargar = async (search: string, hash = "#sortear") => {
+    const assign = vi.fn();
+    const reload = vi.fn();
+    vi.stubGlobal("location", { href: `/${search}${hash}`, assign, reload, hostname: "localhost", search, hash, pathname: "/" });
+    vi.resetModules();
+    vi.doMock("./deployments.json", () => ({ default: { ...deployments, mainnet: ENTRADA_SIMULADA } }));
+    return { config: await import("./config"), assign, reload };
+  };
+
+  it("Oficial existe, el sitio sigue abriendo en Prueba y changeMode a Oficial navega con red=oficial", async () => {
+    const { config, assign, reload } = await cargar("");
+    expect(config.hayModoOficial).toBe(true);
+    expect(config.network.name).toBe("testnet");
+    expect(config.network.contractId).toBe(deployments.testnet.contractId);
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBeNull();
+    expect(config.changeMode("mainnet")).toBe(true);
+    expect(reload).not.toHaveBeenCalled();
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(assign.mock.calls[0]?.[0] as string).toContain("red=oficial");
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("oficial");
+  });
+
+  it("con ?red=oficial abre en Oficial, con el contrato de la entrada, y lo guarda para la pestaña", async () => {
+    const { config } = await cargar("?red=oficial");
+    expect(config.network.name).toBe("mainnet");
+    expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("oficial");
+  });
+
+  it("con #cupon= válido abre en Oficial y recuerda ese modo en una segunda carga con el fragmento vacío", async () => {
+    const { config } = await cargar("", "#cupon=K7M29QXA4HTR");
+    expect(config.network.name).toBe("mainnet");
+    expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("oficial");
+
+    const { config: segunda } = await cargar("", "");
+    expect(segunda.network.name).toBe("mainnet");
+    expect(segunda.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+  });
+
+  it("evaluar la red en Prueba no borra el pedido del campo del cupón", async () => {
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    sessionStorage.setItem("tinkazo.ingresar", "1");
+    const { config } = await cargar("?red=prueba");
+    expect(config.network.name).toBe("testnet");
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBe("1");
+    expect(sessionStorage.getItem("tinkazo.ingresar")).toBe("1");
+  });
+
+  it("con ?red=prueba y un cupón válido queda en Prueba", async () => {
+    const { config } = await cargar("?red=prueba", "#cupon=K7M29QXA4HTR");
+    expect(config.network.name).toBe("testnet");
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBe("prueba");
   });
 });

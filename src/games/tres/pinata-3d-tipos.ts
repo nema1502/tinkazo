@@ -1,4 +1,4 @@
-import type { EntradaBase } from "./tipos";
+import type { EntradaBase, OpcionesVista, Vista3D } from "./tipos";
 
 /**
  * Lo que el 2D de la piñata (`pixi/pinata.ts`) le pasa a su vista 3D en cada cuadro. Solo tipos: el archivo del juego
@@ -83,3 +83,22 @@ export interface EntradaPinata extends EntradaBase {
   /** Segundos desde que llega el cartel (negativo antes). */
   corona: number;
 }
+
+/** Una caja en la pantalla, en píxeles. */
+export interface Caja { x: number; y: number; w: number; h: number }
+
+/**
+ * La vista 3D de la piñata, con lo que el 2D necesita para el primer plano del final: la pieza destacada (la que el 2D
+ * marca `ganadora` en `car`) medida como la dibuja el 3D, con su contorno y su giro, en píxeles de la pantalla.
+ */
+export interface VistaPinata3D extends Vista3D<EntradaPinata> {
+  /** Si en esta pantalla el despeje del final se mide en el 3D (el celular apaisado); si no, se mide como antes. */
+  despejaDestacada(w: number, h: number): boolean;
+  /** La caja de la pieza destacada tal como la dibujaría `frame(e)`, sin dibujar; null si no hay o no se ve. */
+  cajaParaDespejar(e: EntradaPinata): Caja | null;
+  /** La caja de la pieza destacada en el último cuadro dibujado; null si no hay o no se ve. */
+  cajaDestacada(): Caja | null;
+}
+
+/** El montaje de la piñata en 3D: como `Montaje3D`, con la vista de arriba. */
+export type MontajePinata3D = (lienzoPixi: HTMLCanvasElement, o: OpcionesVista) => VistaPinata3D | null;

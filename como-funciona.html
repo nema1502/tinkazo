@@ -82,7 +82,7 @@
         <tr><td data-label-i="cfColQue" data-i="cfG1a">La huella de la lista, cuántos son y cuántos ganan, el premio, la ronda y el resultado (lista completa en Seguridad)</td><td data-label-i="cfColDonde" data-i="cfG1b">En Stellar, a nombre de tu cuenta</td><td data-label-i="cfColQuien" data-i="cfG1c">Cualquiera</td></tr>
         <tr><td data-label-i="cfColQue" data-i="cfG2a">Tus sorteos</td><td data-label-i="cfColDonde" data-i="cfG2b">En Mis sorteos, desde cualquier equipo donde entres con tu cuenta</td><td data-label-i="cfColQuien" data-i="cfG2c">Vos, y cualquiera con tu dirección</td></tr>
         <tr><td data-label-i="cfColQue" data-i="cfG3a">Los nombres</td><td data-label-i="cfColDonde" data-i="cfG3b">En tu equipo y en el comprobante que compartís: nunca en la cadena</td><td data-label-i="cfColQuien" data-i="cfG3c">Quien tenga el enlace</td></tr>
-        <tr><td data-label-i="cfColQue" data-i="cfG4a">Tu llave</td><td data-label-i="cfColDonde" data-i="cfG4b">Con Google, la guarda Pollar; con Freighter, tu extensión; con la cuenta de prueba, tu navegador</td><td data-label-i="cfColQuien" data-i="cfG4c">Nadie más</td></tr>
+        <tr><td data-label-i="cfColQue" data-i="cfG4a">Tu llave</td><td data-label-i="cfColDonde" data-i="cfG4b">Con Google, Pollar (en el modo Oficial, con Turnkey). Con Varial (antes Freighter), tu extensión. Con la cuenta de prueba, tu navegador</td><td data-label-i="cfColQuien" data-i="cfG4c">Nadie más</td></tr>
         <tr><td data-label-i="cfColQue" data-i="cfG5a">La copia del enlace corto, al compartir o mostrar en grande</td><td data-label-i="cfColDonde" data-i="cfG5b">En Cloudflare, sin vencimiento, para que el sorteo se pueda volver a comprobar. Se borra si lo pedís a hola@tinkazo.app</td><td data-label-i="cfColQuien" data-i="cfG5c">Quien tenga el enlace o su QR. Tinkazo no la puede leer</td></tr>
       </tbody>
     </table>
@@ -94,11 +94,11 @@
     <ul style="max-width: 680px; color: var(--ink2); font-size: 15px; margin: 14px 0 0 18px; display: grid; gap: 8px">
       <li data-i-html="cfDura1"><b>Tu comprobante:</b> dura lo que vos lo guardes. Mientras lo tengas, podés rehacer la cuenta cuando quieras.</li>
       <li data-i-html="cfDura2"><b>La memoria del contrato:</b> 7 días en la red de prueba (testnet) y 120 en la red principal (mainnet). Es corta y no es lo que prueba el sorteo: lo prueba el sello.</li>
-      <li data-i-html="cfDura3"><b>La red de prueba:</b> hoy Tinkazo funciona ahí, y Stellar la borra entera el 16 de diciembre de 2026, con los sellos y sus horas. Tu comprobante sigue sirviendo para rehacer la cuenta, pero nadie podrá confirmar la hora del sello.</li>
+      <li data-i-html="cfDura3"><b>El modo Prueba:</b> sus sorteos van a la red de prueba, que Stellar borra entera el 16 de diciembre de 2026, con los sellos y sus horas. Tu comprobante sigue sirviendo para rehacer la cuenta, pero nadie podrá confirmar la hora del sello. Los del modo Oficial van a la red principal, que Stellar no reinicia.</li>
     </ul>
     <details class="tecnico">
       <summary data-i="cfCostoT">Para quien quiera el detalle: cuánto cuesta la red</summary>
-      <p class="sec-b" data-i-html="cfCostoB">Grabar cada sorteo en la red tiene un costo. Lo cobra la red, no Tinkazo, y casi todo es renta de almacenamiento: cambia con el uso de la red. Hoy lo paga Tinkazo. Las cifras medidas, con su fecha, están en <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.</p>
+      <p class="sec-b" data-i-html="cfCostoB">Grabar cada sorteo en la red tiene un costo. Lo cobra la red, no Tinkazo, y casi todo es renta de almacenamiento: cambia con el uso de la red. En el modo Prueba lo paga Tinkazo. En el modo Oficial lo paga Tinkazo si usás el cupón de tu evento, y quien entra con su propia billetera lo paga de su cuenta. Las cifras medidas, con su fecha, están en <a href="https://github.com/nema1502/tinkazo/blob/main/docs/deployments.md" target="_blank" rel="noopener">docs/deployments.md</a>.</p>
     </details>
     <p class="sec-b promesa" data-i="cfDuraPromesa">Este comprobante lleva lo necesario para volver a comprobar el sorteo con herramientas abiertas. La hora del sello la confirman los archivos públicos de Stellar mientras existan: nadie garantiza ese plazo, tampoco nosotros. Guardalo.</p>
   </section>
@@ -109,7 +109,7 @@
     <details class="tecnico">
       <summary data-i="detalleT">Para quien quiera el detalle</summary>
       <ol class="linea">
-        <li><h3 data-i="cfSin1t">El sello y el resultado, en un explorador</h3><p data-i="cfSin1b">Buscá el contrato en stellar.expert, que no es nuestro: ahí está cada sello, con su huella, su ronda y quién ganó.</p><a class="sec-link" href="https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A" target="_blank" rel="noopener" data-i="cfSin1a">El contrato en stellar.expert →</a></li>
+        <li><h3 data-i="cfSin1t">El sello y el resultado, en un explorador</h3><p data-i="cfSin1b">Buscá el contrato en stellar.expert, que no es nuestro: ahí está cada sello, con su huella, su ronda y quién ganó.</p><a class="sec-link" href="https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A" target="_blank" rel="noopener" data-contrato data-i="cfSin1a">El contrato en stellar.expert →</a></li>
         <li><h3 data-i="cfSin2t">El número, en drand</h3><p data-i="cfSin2b">La firma de la ronda la publica drand, en una dirección pública que cualquiera abre: api.drand.sh, la red quicknet y el número de la ronda.</p><a class="sec-link" href="https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/latest" target="_blank" rel="noopener" data-i="cfSin2a">La ronda más reciente, en la API pública de drand →</a></li>
         <li><h3 data-i="cfSin3t">La cuenta, a mano</h3><p data-i="cfSin3b">Con la lista, la huella y la firma, la cuenta está escrita paso a paso en el protocolo. Cualquiera la rehace en cualquier lenguaje y le tiene que dar el mismo ganador.</p><a class="sec-link" href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="cfSin3a">El protocolo, en GitHub →</a></li>
       </ol>
@@ -126,7 +126,7 @@
   <section class="portada-fin">
     <h2 data-i="finT">¿Lo usamos en tu próximo evento?</h2>
     <div class="hero-ctas">
-      <a class="primary cta" href="/#sortear" data-i="ctaHero">Entrar y sortear, es gratis</a>
+      <a class="primary cta" href="/#sortear" data-i="ctaHero">Entrar y sortear gratis</a>
       <a class="ghost" href="/?demo=race&amp;lead=3" data-i="ctaDemo">Ver una demo</a>
     </div>
   </section>

@@ -27,6 +27,12 @@ export interface Frozen {
   prize: string;
   /** Ronda objetivo de quicknet (protocolo §3). */
   round: number;
+  /**
+   * Cuántos ganan, tal como se selló. El resultado se calcula en el navegador con esto y no con el campo, que después
+   * de sellar se puede tocar (`sorteo-local.ts`). Lo traen el sello y el retomado desde Mis sorteos; un estado viejo sin
+   * este dato cae al campo, como antes.
+   */
+  numWinners?: number;
   /** Id del sorteo en el contrato, si quedó anclado en Stellar. */
   raffleId?: bigint;
   /** Hash de la transacción del sello. */
@@ -38,6 +44,11 @@ export interface Frozen {
    * esté, el resultado, lo compartido y Mis sorteos lo dicen.
    */
   sinSello?: boolean;
+  /**
+   * Nació sin cuenta: se eligió seguir sin cuenta cuando el ingreso falló (plan B del ingreso, `ui/ingreso-plan-b.ts`). No
+   * queda a nombre de nadie: aunque después se entre con una cuenta, no se anota en Mis sorteos.
+   */
+  sinCuenta?: boolean;
   /**
    * La huella del logo de la comunidad de este sorteo (`logo.ts`), leída al
    * sellar: así volver a compartir un sorteo de septiembre no le pone el logo de
@@ -52,6 +63,23 @@ export interface Drawn {
   winners: number[];
   /** Hash de la transacción del sorteo, si se registró en el contrato. */
   drawTx?: string;
+  /**
+   * Con sello: el sorteo ya quedó grabado en el contrato. El show no lo espera (se graba aparte, `draw.ts`), así que
+   * hasta que se grabe falta, y Mis sorteos lo sabe. Si ya estaba grabado de antes, queda grabado sin `drawTx`.
+   */
+  guardado?: boolean;
+  /**
+   * Con sello: lo que grabó el contrato no coincide con el resultado de la pantalla (no debería pasar nunca). Mientras
+   * tanto ese resultado no se comparte ni se muestra su QR (`alNoCoincidir` en `draw.ts`).
+   */
+  noCoincide?: boolean;
+  /**
+   * El juego que de verdad contó este resultado la última vez (`playGame` en
+   * src/ui/draw.ts): el elegido, o el que lo reemplazó por la cantidad de gente
+   * o por el motor de respaldo. Va a la foto para compartir (su fondo). No es
+   * parte del sorteo: no entra en el comprobante ni en el historial.
+   */
+  juego?: Game;
 }
 
 /** Estado de la pantalla principal. Un solo sorteo por carga de página. */
@@ -237,6 +265,13 @@ export const ANCHOR_LEAD_SECONDS = 45;
 export const SIN_SELLO_LEAD_SECONDS = 90;
 
 /**
+ * Margen del sello de una lista de campaña de empresa (`campana/en-curso.ts`). La sala solo acepta el aviso de sellada si
+ * la ronda todavía no salió: a 90 segundos quedan más de 60 para avisarle aunque el wifi del evento falle un rato.
+ * Fuera de una campaña no se usa: el margen es el de siempre.
+ */
+export const CAMPANA_LEAD_SECONDS = 90;
+
+/**
  * Cuánto dura el show, **en segundos**.
  *
  * No es un número fijo porque no hay uno bueno para todos los casos. Un sorteo
@@ -332,6 +367,9 @@ export function setGameLength(nominalSeconds: number, fixedSeconds = 0, normalSe
   fijo = Math.max(0, fixedSeconds);
   normalPropio = normalSeconds;
 }
+
+/** Los segundos de juego del juego en curso hasta el revelado, sin estirar (lo que declaró con `setGameLength`). */
+export const largoNominal = (): number => nominal;
 
 /**
  * Los segundos de la tarjeta de "cómo se juega" que va antes del juego. Son

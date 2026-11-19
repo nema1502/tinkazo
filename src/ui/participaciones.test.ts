@@ -81,6 +81,20 @@ describe("sin la bandera y sin el parámetro, la herramienta es la de siempre", 
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 3 personas");
     expect(sellar().disabled).toBe(false);
   });
+
+  it("una lista hecha toda de marcas que cierran cuenta igual antes y después de sellar", async () => {
+    // La cabecera del selector y el resultado leen este reparto entero por persona aun sin modos: antes de sellar
+    // la cuenta dice lo mismo, «2 personas, 5 participaciones», y no «5 personas».
+    await montar();
+    escribir("Mesa 1 (1/3)\nMesa 1 (2/3)\nMesa 1 (3/3)\nMesa 2 (1/2)\nMesa 2 (2/2)");
+    expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 2 personas, 5 participaciones");
+    const { contar, seCuentaPorPersona } = await import("../participaciones");
+    const lineas = ["Mesa 1 (1/3)", "Mesa 1 (2/3)", "Mesa 1 (3/3)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"];
+    // La misma cuenta que usa la cabecera del selector después de sellar (freeze.ts).
+    expect(contar(lineas, seCuentaPorPersona(lineas, false)).personas).toBe(2);
+    // Se sigue pudiendo sellar, como siempre.
+    expect(sellar().disabled).toBe(false);
+  });
 });
 
 describe("el panel de contadores", () => {
@@ -212,6 +226,29 @@ describe("el panel de contadores", () => {
   });
 });
 
+describe("«Alguien participa más de una vez» es un enlace chico, no un botón", () => {
+  it("en el markup es un enlace como «Tengo un stand», no un botón de los grandes, y nace escondido", () => {
+    const html = new DOMParser().parseFromString(pagina, "text/html");
+    const abrir = html.getElementById("btn-varias") as HTMLElement;
+    expect(abrir.classList.contains("enlace")).toBe(true);
+    expect(abrir.classList.contains("ghost")).toBe(false);
+    expect(abrir.classList.contains("part-abrir")).toBe(true);
+    expect(abrir.hasAttribute("hidden")).toBe(true);
+    expect(abrir.getAttribute("aria-controls")).toBe("varias-panel");
+    // Igual que el enlace del stand, que está al lado.
+    expect(html.getElementById("btn-stand")?.classList.contains("enlace")).toBe(true);
+  });
+
+  it("sigue abriendo el panel con un toque, y con la lista de dos nombres se ve", async () => {
+    await montar("varias");
+    escribir("Ana Quispe\nBeto Rojas");
+    expect(boton().hidden).toBe(false);
+    expect(boton().classList.contains("enlace")).toBe(true);
+    abrirPanel();
+    expect(panel().hidden).toBe(false);
+  });
+});
+
 describe("la pregunta por los números que ya trae una lista pegada", () => {
   it("pregunta con dos botones y, con el sí, aplica los números y abre el panel", async () => {
     const p = await montar("varias");
@@ -235,15 +272,40 @@ describe("la pregunta por los números que ya trae una lista pegada", () => {
     expect(aviso().textContent).toContain("Tu lista trae un número al lado de 1 nombre. ¿Son las veces que participa?");
   });
 
-  it("quien pasa de 10 queda en 10, y el panel lo dice en una sola línea", async () => {
+  it("si algún número pasa de 10 no se pregunta: es una edad, una mesa o un número de socio, no las veces que participa", async () => {
     await montar("varias");
     escribir("Ana Quispe, 25\nBeto Rojas");
-    document.getElementById("btn-part-si")?.click();
-    expect(canonicalList(ta().value)).toHaveLength(11);
-    expect(numeroDe("Ana Quispe")).toBe("10");
-    const tope = document.getElementById("varias-tope");
-    expect(tope?.hidden).toBe(false);
-    expect(tope?.textContent).toBe("El máximo es 10 por persona: Ana Quispe quedó en 10.");
+    expect(aviso().style.display).toBe("none");
+    // Un solo número fuera de 1 a 10 alcanza para no preguntar, aunque los otros sirvan.
+    escribir("Ana Quispe, 3\nBeto Rojas, 31\nCarla Pérez, 2");
+    expect(aviso().style.display).toBe("none");
+    escribir("Ana Quispe, 3\nBeto Rojas, 11");
+    expect(aviso().style.display).toBe("none");
+    // Y la lista queda como está: nada se reparte sin que la persona lo pida.
+    expect(ta().value).toBe("Ana Quispe, 3\nBeto Rojas, 11");
+  });
+
+  it("el cero tampoco son veces que participa: no se pregunta", async () => {
+    await montar("varias");
+    escribir("Ana Quispe, 0\nBeto Rojas, 2");
+    expect(aviso().style.display).toBe("none");
+  });
+
+  it("con todos los números entre 1 y 10, incluidos el 1 y el 10, sí se pregunta", async () => {
+    await montar("varias");
+    escribir("Ana Quispe, 1\nBeto Rojas, 10\nCarla Pérez");
+    expect(aviso().style.display).toBe("");
+    expect(aviso().textContent).toContain("Tu lista trae un número al lado de 2 nombres.");
+  });
+
+  it("al corregir la lista y quedar todos entre 1 y 10, la pregunta aparece; al volver a pasarse, se va", async () => {
+    await montar("varias");
+    escribir("Ana Quispe, 25\nBeto Rojas, 2");
+    expect(aviso().style.display).toBe("none");
+    escribir("Ana Quispe, 5\nBeto Rojas, 2");
+    expect(aviso().style.display).toBe("");
+    escribir("Ana Quispe, 5\nBeto Rojas, 20");
+    expect(aviso().style.display).toBe("none");
   });
 
   it("con el no, la lista queda como está y por esa lista no se pregunta de nuevo", async () => {
@@ -286,6 +348,8 @@ describe("para sellar una lista repartida hacen falta dos personas distintas", (
     expect(ta().value).toBe("Ana Quispe (1/3)\nAna Quispe (2/3)\nAna Quispe (3/3)");
     expect(sellar().disabled).toBe(true);
     expect(document.getElementById("freeze-hint")?.style.display).toBe("block");
+    // Hay tres renglones: la explicación habla de personas, no de nombres.
+    expect(document.getElementById("freeze-hint")?.textContent).toBe("Hacen falta al menos dos personas.");
     // Con otra persona, vuelve a poder sellarse.
     escribir(`${ta().value}\nBeto Rojas`);
     expect(sellar().disabled).toBe(false);
@@ -415,14 +479,12 @@ describe("una tabla de dos columnas con enteros en la segunda: una pregunta, nun
     expect(ta().value).toBe("Ana, 3\nBeto, 2");
   });
 
-  it("con números que pasan de 10 también entra: quedan en 10 si la respuesta es sí", async () => {
+  it("con números que pasan de 10 también entra al cuadro tal cual, y no se pregunta nada", async () => {
     const p = await montar("varias");
     p.loadFile("Ana, 25\nBeto, 30", "");
     expect(laVentana()).toBe(false);
     expect(ta().value).toBe("Ana, 25\nBeto, 30");
-    document.getElementById("btn-part-si")?.click();
-    expect(canonicalList(ta().value)).toHaveLength(20);
-    expect(document.getElementById("varias-tope")?.textContent).toContain("quedaron en 10.");
+    expect(aviso().style.display).toBe("none");
   });
 
   it("sin la bandera y sin el parámetro, la ventana de importar de siempre", async () => {

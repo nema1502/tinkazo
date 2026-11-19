@@ -1,7 +1,7 @@
 import {
   BoxGeometry, CanvasTexture, CircleGeometry, ConeGeometry, CylinderGeometry, DoubleSide, Euler, Float32BufferAttribute, Fog, Group,
   IcosahedronGeometry, LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, PointsMaterial, Quaternion,
-  RingGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Vector2, Vector3, BufferGeometry, type Material,
+  RingGeometry, SRGBColorSpace, Sprite, SpriteMaterial, Vector2, Vector3, BufferGeometry, type Material, type MeshLambertMaterialParameters,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { perfil } from "./camara";
@@ -28,6 +28,15 @@ import type { EntradaBase, Fabrica3D, Lanzador } from "./tipos";
 export const APLASTADO_2D = 0.55;
 /** El borde de la tiza, en radios del ruedo (`LIM` en `pixi/trompo.ts`). */
 export const LIM_RUEDO = 0.9;
+
+/**
+ * Los parámetros del material liso de una pieza del trompo. `side` va solo cuando la pieza se ve por las dos caras:
+ * three.js avisa por la consola con cada propiedad que le llega con valor undefined, y con `side: undefined` eran
+ * cinco avisos iguales por show.
+ */
+export function parametrosLambert(color: number, doble = false): MeshLambertMaterialParameters {
+  return { color, flatShading: true, ...(doble ? { side: DoubleSide } : {}) };
+}
 
 /** Cómo se mira: a la misma altura de cámara que el 2D (el ruedo se ve con el mismo alto en la pantalla) y con perspectiva. */
 export const PERFIL_TROMPO = perfil({ elevacion: Math.asin(APLASTADO_2D), azimut: 0, zc: 1 / APLASTADO_2D, fov: (38 * Math.PI) / 180, acerca: 1, tam: 1 });
@@ -171,7 +180,7 @@ const fabrica: Fabrica3D<EntradaTrompo> = (motor, o) => {
       c.translate(0, y, 0);
       return c;
     })));
-    const m = (c: number, doble = false): MeshLambertMaterial => B.add(new MeshLambertMaterial({ color: c, flatShading: true, side: doble ? DoubleSide : undefined }));
+    const m = (c: number, doble = false): MeshLambertMaterial => B.add(new MeshLambertMaterial(parametrosLambert(c, doble)));
     const mk = (geo: BufferGeometry, material: Material): Instancias => {
       const inst = new Instancias(geo, material, Math.max(1, n), B);
       inst.malla.castShadow = true;

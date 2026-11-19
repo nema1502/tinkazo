@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { DoubleSide, FrontSide, MeshLambertMaterial } from "three";
+import { describe, expect, it, vi } from "vitest";
 import { crearMapa } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
-import { APLASTADO_2D, LIM_RUEDO, PERFIL_TROMPO } from "./trompo-3d";
+import { APLASTADO_2D, LIM_RUEDO, PERFIL_TROMPO, parametrosLambert } from "./trompo-3d";
 import { hash } from "./ids";
 
 /**
@@ -27,6 +28,30 @@ describe("el trompo en 3D usa las cuentas del 2D", () => {
     for (const l of lineas) {
       if (/tres\/(trompo-3d|tipos)/.test(l)) expect(l).toMatch(/^\s*import\s+type\b/);
       else expect(l).toContain("tres/enchufe");
+    }
+  });
+});
+
+describe("los materiales del trompo en 3D", () => {
+  it("no reciben ninguna propiedad sin valor: side va solo en las piezas de dos caras y three.js no avisa", () => {
+    const avisos = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      // El testigo: three.js sí avisa cuando una propiedad llega sin valor, así que callar con las de abajo significa algo.
+      new MeshLambertMaterial({ color: 0xffffff, side: undefined }).dispose();
+      expect(avisos).toHaveBeenCalledTimes(1);
+      avisos.mockClear();
+      for (const doble of [false, true]) {
+        const parametros = parametrosLambert(0xffffff, doble);
+        expect(Object.values(parametros).every((v) => v !== undefined), `doble = ${doble}`).toBe(true);
+        expect("side" in parametros).toBe(doble);
+        const material = new MeshLambertMaterial(parametros);
+        expect(material.side).toBe(doble ? DoubleSide : FrontSide);
+        expect(material.flatShading).toBe(true);
+        material.dispose();
+      }
+      expect(avisos).not.toHaveBeenCalled();
+    } finally {
+      avisos.mockRestore();
     }
   });
 });

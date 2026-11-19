@@ -4,7 +4,7 @@ import { verifyRound } from "../protocol/drand";
 import { PROOF_VERSION, type Proof } from "../protocol/proof";
 import { revisarComprobante } from "../protocol/verificacion";
 import { contratoOficial, type ContratoOficial } from "./oficiales";
-import { RegistroDeforme, leerRegistro, leerRegistros, resultadoDe, selloDe } from "./registro";
+import { RegistroDeforme, esLimiteDelRpc, leerRegistro, leerRegistros, resultadoDe, selloDe } from "./registro";
 
 /**
  * La lectura del registro, con respuestas de verdad del RPC de testnet, grabadas
@@ -243,6 +243,18 @@ describe("el registro, leído de la cadena", () => {
     const r = await leerRegistro(TESTNET, "165", unaFalla, 0);
     expect(veces).toBe(2);
     expect(r.sello?.id).toBe("165");
+  });
+
+  it("quien pide un solo intento no reintenta: la vista de espectador espacia sus vueltas y frena con el 429", async () => {
+    let veces = 0;
+    const limite: typeof fetch = async () => {
+      veces++;
+      return new Response("", { status: 429 });
+    };
+    const error = await leerRegistro(TESTNET, "165", limite, 0, 1).catch((e: unknown) => e);
+    expect(veces).toBe(1);
+    expect(esLimiteDelRpc(error)).toBe(true);
+    expect(esLimiteDelRpc(new Error("rpc 503"))).toBe(false);
   });
 
   it("los parsers rechazan lo que no tiene la forma del contrato", () => {

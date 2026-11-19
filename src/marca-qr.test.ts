@@ -228,6 +228,10 @@ describe("QR clave: el ZIP", () => {
     expect(leeme).not.toContain("verificar.html");
     for (const f of ["2 cm", "3 cm", "Corrección de errores nivel Q", "Error correction level Q", "REGLAS PARA QUE SIEMPRE LEA", "RULES SO IT ALWAYS READS", "#191919", "#fff6e9"]) expect(leeme, f).toContain(f);
     expect(leeme).not.toMatch(/·|apuest|casino|rifa/i);
+    // Como todo lo que se lee en el sitio y en sus descargas: sin comillas angulares ni punto y coma, y la dirección sin comillas.
+    expect(leeme).not.toMatch(/[«»;"]/);
+    expect(leeme).toContain("la dirección tinkazo.app abajo");
+    expect(leeme).toContain("the address tinkazo.app below");
   });
   it("regenerar los códigos solos y el ZIP deja los mismos bytes, y los SVG son los del repositorio", async () => {
     const m = await import(/* @vite-ignore */ new URL("../scripts/marca/qr-clave.mjs", import.meta.url).href) as { generarQrClave: (dir: URL) => { archivos: number; zip: number } };

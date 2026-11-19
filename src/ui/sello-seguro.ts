@@ -9,7 +9,8 @@ import { esDeRed, textoDelError } from "../stellar/errores";
  *
  * 1. Si quedó un intento que no se sabe si entró (de recién, o de antes de
  *    recargar la página), primero se averigua. Si entró, ese es el sello: no se
- *    manda otro. Si no se puede averiguar, no se manda nada.
+ *    manda otro. Si no se puede averiguar, no se manda nada. Si no entró, la
+ *    ronda se elige de nuevo después de averiguar, con el margen entero.
  * 2. Si el envío se corta y no se sabe si entró (`SelloIncierto`), se averigua
  *    antes de hacer cualquier otra cosa. Entró: listo. No entró ni puede entrar:
  *    se prueba con otra ronda. No se sabe: se guarda y se le dice a la persona.
@@ -47,6 +48,14 @@ export interface PasosDelSello {
   sinGrabar: (e: unknown) => boolean;
   /** Guarda (o borra, con `null`) el intento del que no se sabe si entró. */
   guardarPendiente: (intento: IntentoDeSello | null) => void;
+  /**
+   * El intento que se va a mandar con esa ronda, todavía sin el hash de la transacción. Si está, se guarda ANTES de
+   * mandar y se borra cuando se sabe cómo terminó. Si la página se recarga o la pestaña muere con el sello ya en la red
+   * (el navegador de un iPhone no pregunta antes de salir), lo que quedó guardado hace que el toque siguiente averigüe
+   * primero en vez de mandar otro sello de la misma lista. `resolverSello` lo encuentra sin el hash: por cuenta, huella
+   * y ronda. Sin esto el intento se guarda recién cuando el envío falla sin saberse.
+   */
+  intentoDe?: (round: number) => IntentoDeSello;
   dormir?: (ms: number) => Promise<void>;
   /**
    * Para la línea de estado: se está averiguando, se va a volver a probar tras un corte,
@@ -134,12 +143,29 @@ function corteAntesDeMandar(e: unknown): boolean {
 
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Averigua si un intento pendiente entró, sin mandar ningún sello. Es para quien no va a sellar de nuevo pero tiene que
+ * saber si la lista ya quedó sellada: "Seguir sin sello" (`freeze.ts`) no puede mandar otro sello de una lista que ya
+ * tiene uno, porque el contrato no lo impide y quedarían dos.
+ *
+ * - Entró: lo dice y NO lo borra. Quien sigue lo retoma con `sellarSinDuplicar(..., pendiente)`, que lo borra al terminar.
+ * - No entró ni puede entrar: lo borra.
+ * - No se pudo averiguar: queda guardado, y el próximo intento empieza por ahí.
+ */
+export async function averiguarPendiente(pendiente: IntentoDeSello, p: Pick<PasosDelSello, "resolver" | "guardarPendiente" | "avisar">): Promise<Resolucion> {
+  p.avisar?.("verificando");
+  const r = await p.resolver(pendiente);
+  if (r.estado === "no-entro") p.guardarPendiente(null);
+  return r;
+}
+
 export async function sellarSinDuplicar(
   inicial: { round: number; ts: number },
   p: PasosDelSello,
   pendiente?: IntentoDeSello | null,
 ): Promise<SelloHecho> {
   const dormir = p.dormir ?? dormirDeVerdad;
+  let { round, ts } = inicial;
   if (pendiente) {
     p.avisar?.("verificando");
     const r = await p.resolver(pendiente);
@@ -149,15 +175,20 @@ export async function sellarSinDuplicar(
     }
     if (r.estado === "no-se-sabe") throw new SelloSinConfirmar(pendiente, r.error);
     p.guardarPendiente(null);
+    // Saber que no entró puede llevar hasta un minuto: se espera a que el contrato ya no acepte ese intento. La ronda
+    // elegida antes de averiguar llegaría cerca y gastaría un cambio de ronda, así que se elige de nuevo desde ahora, con
+    // el margen entero. Sin `rondaNueva` (los reintentos de "Seguir sin sello") la ronda es una sola y sigue siendo esa.
+    if (p.rondaNueva) ({ round, ts } = p.rondaNueva());
   }
 
-  let { round, ts } = inicial;
   let otrasRondas = 0;
   let otrasPorRed = 0;
   for (;;) {
+    // Antes de mandar: si la pestaña muere con el sello en la red, queda dicho qué se mandó.
+    if (p.intentoDe) p.guardarPendiente(p.intentoDe(round));
+    let res: { raffleId: bigint; txHash: string };
     try {
-      const res = await p.sellar(round);
-      return { raffleId: res.raffleId, txHash: res.txHash, round, ts };
+      res = await p.sellar(round);
     } catch (e) {
       if (esSelloIncierto(e)) {
         p.guardarPendiente(e.intento);
@@ -177,6 +208,9 @@ export async function sellarSinDuplicar(
         ({ round, ts } = p.rondaNueva(MAS_LEJOS_POR_INTENTO_S * otrasRondas));
         continue;
       }
+      // Cualquier otro error es de un sello que no entró: no quedó nada en el aire, y el intento que se guardó antes de
+      // mandar ya no tiene qué averiguar.
+      if (p.intentoDe) p.guardarPendiente(null);
       if (corteAntesDeMandar(e) && otrasPorRed < OTRAS_POR_RED) {
         otrasPorRed++;
         p.avisar?.("reintentando");
@@ -200,15 +234,24 @@ export async function sellarSinDuplicar(
       }
       throw e;
     }
+    // Entró y se sabe: el intento guardado antes de mandar ya no hace falta.
+    if (p.intentoDe) p.guardarPendiente(null);
+    return { raffleId: res.raffleId, txHash: res.txHash, round, ts };
   }
 }
 
 /* ------------------------------------------- el intento que quedó en el aire */
 
-/** Dónde se guarda el intento del que no se sabe si entró, por si la página se recarga. */
+/**
+ * Dónde se guardan los intentos de los que no se sabe si entraron, por si la página se recarga. Es una lista con un
+ * lugar por cuenta, lista, red y contrato: sellar otra lista, con otra cuenta o en la otra red no toca el intento de
+ * esta. Con un solo lugar para todos, el sello bueno de otra lista pisaba al mandarse el intento sin confirmar de esta
+ * y lo borraba al terminar, y al volver a esta lista no quedaba nada que averiguar: salía un segundo sello. La versión
+ * anterior guardaba un intento solo, sin lista, y se sigue leyendo.
+ */
 export const CLAVE_PENDIENTE = "tinkazo.sello.pendiente";
 
-/** Lo que se guarda: el intento, la red y el contrato (en otra red no vale) y el premio tal como se escribió. */
+/** Lo que se guarda de cada intento: el intento, la red y el contrato (en otra red no vale) y el premio tal como se escribió. */
 interface Guardado {
   intento: IntentoDeSello;
   red: string;
@@ -216,8 +259,14 @@ interface Guardado {
   premio: string;
 }
 
-/** El mismo, en memoria: sin almacenamiento (una ventana privada) dura lo que la pestaña. */
-let enMemoria: Guardado | null = null;
+/** De quién es un intento: la cuenta y la huella de la lista. Con la red y el contrato, es su lugar. */
+export interface DuenoDelIntento {
+  organizer: string;
+  listHash: string;
+}
+
+/** Los mismos, en memoria: sin almacenamiento (una ventana privada) duran lo que la pestaña. */
+let enMemoria: Guardado[] = [];
 
 /**
  * Cuánto vale un intento pendiente: seis horas después de su ronda. Para
@@ -239,29 +288,57 @@ export function leerPendiente(
   contrato: string,
   ahoraS = Date.now() / 1000,
 ): { intento: IntentoDeSello; premio: string } | null {
-  let g: Partial<Guardado> | null = enMemoria;
-  if (!g) {
-    try {
-      const raw = localStorage.getItem(CLAVE_PENDIENTE);
-      g = raw ? (JSON.parse(raw) as Partial<Guardado>) : null;
-    } catch {
-      g = null;
-    }
-  }
-  const i = g?.intento;
-  if (!g || !i || typeof i.round !== "number" || typeof i.organizer !== "string" || typeof i.listHash !== "string") return null;
-  if (i.organizer !== organizer || i.listHash !== listHash || g.red !== red || g.contrato !== contrato) return null;
-  if (roundTime(i.round) < ahoraS - VIDA_DEL_PENDIENTE_S) return null;
-  return { intento: i, premio: typeof g.premio === "string" ? g.premio : "" };
+  const quien = { organizer, listHash };
+  // Primero lo de esta pestaña: si el almacenamiento no dejó guardar, está acá.
+  const g = enMemoria.find((x) => esDe(x, quien, red, contrato)) ?? delAlmacenamiento().find((x) => esDe(x, quien, red, contrato));
+  if (!g || !vigente(g, ahoraS)) return null;
+  return { intento: g.intento, premio: g.premio };
 }
 
-/** Guarda el intento pendiente (uno solo: el último), o lo borra con `null`. */
-export function guardarPendiente(intento: IntentoDeSello | null, red: string, contrato: string, premio: string): void {
-  enMemoria = intento ? { intento, red, contrato, premio } : null;
+/**
+ * Guarda el intento pendiente en su lugar (el de su cuenta y su lista, en esa red y con ese contrato), o borra con
+ * `null` el de `de`. Los de las otras listas, cuentas o redes quedan como estaban, y lo vencido se limpia.
+ */
+export function guardarPendiente(intento: IntentoDeSello | null, red: string, contrato: string, premio: string, de: DuenoDelIntento): void {
+  const quien = intento ? { organizer: intento.organizer, listHash: intento.listHash } : de;
+  const ahoraS = Date.now() / 1000;
+  const nuevo: Guardado[] = intento ? [{ intento, red, contrato, premio }] : [];
+  const conEste = (l: Guardado[]): Guardado[] => [...l.filter((g) => !esDe(g, quien, red, contrato) && vigente(g, ahoraS)), ...nuevo];
+  enMemoria = conEste(enMemoria);
   try {
-    if (!enMemoria) localStorage.removeItem(CLAVE_PENDIENTE);
-    else localStorage.setItem(CLAVE_PENDIENTE, JSON.stringify(enMemoria));
+    const quedan = conEste(delAlmacenamiento());
+    if (!quedan.length) localStorage.removeItem(CLAVE_PENDIENTE);
+    else localStorage.setItem(CLAVE_PENDIENTE, JSON.stringify(quedan));
   } catch {
     /* sin almacenamiento: queda en memoria mientras dure la pestaña */
+  }
+}
+
+/** Si el intento guardado es de esa cuenta y esa lista, en esa red y con ese contrato. */
+const esDe = (g: Guardado, quien: DuenoDelIntento, red: string, contrato: string): boolean =>
+  g.intento.organizer === quien.organizer && g.intento.listHash === quien.listHash && g.red === red && g.contrato === contrato;
+
+/** Si todavía vale (`VIDA_DEL_PENDIENTE_S`). */
+const vigente = (g: Guardado, ahoraS: number): boolean => roundTime(g.intento.round) >= ahoraS - VIDA_DEL_PENDIENTE_S;
+
+/** Un intento guardado que se entiende, o `null`. */
+function comoGuardado(x: unknown): Guardado | null {
+  if (!x || typeof x !== "object") return null;
+  const g = x as Partial<Guardado>;
+  const i = g.intento;
+  if (!i || typeof i !== "object" || typeof i.round !== "number" || typeof i.organizer !== "string" || typeof i.listHash !== "string") return null;
+  if (typeof g.red !== "string" || typeof g.contrato !== "string") return null;
+  return { intento: i, red: g.red, contrato: g.contrato, premio: typeof g.premio === "string" ? g.premio : "" };
+}
+
+/** Los intentos del almacenamiento: la lista de ahora, o el intento solo que guardaba la versión anterior. Lo que no se entiende no cuenta. */
+function delAlmacenamiento(): Guardado[] {
+  try {
+    const raw = localStorage.getItem(CLAVE_PENDIENTE);
+    if (!raw) return [];
+    const v: unknown = JSON.parse(raw);
+    return (Array.isArray(v) ? v : [v]).map(comoGuardado).filter((g): g is Guardado => g !== null);
+  } catch {
+    return [];
   }
 }

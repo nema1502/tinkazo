@@ -9,7 +9,7 @@ import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { contar } from "../contar";
-import { contar as contarPersonas, seCuentaPorPersona } from "../participaciones";
+import { contar as contarPersonas, cuentaParaMostrar, seCuentaPorPersona } from "../participaciones";
 import { modesVisible } from "../modos/bandera";
 import { etiquetaDe } from "../equipos/etiquetas";
 import { LEGIBLE } from "../games/pixi/letra";
@@ -67,11 +67,11 @@ export async function mostrarLista(): Promise<void> {
   const sin = sinSelloAhora(sellada);
   const titulo = t(sellada ? claveDelSello("tituloDeLaSala", sin) : "salaT");
   // Con varias participaciones por persona, el título de la sala dice las dos cuentas. Antes del sello manda
-  // la bandera de la herramienta, como el panel de la lista; la lista ya sellada se cuenta con la regla de
-  // todos (`seCuentaPorPersona`), como la espera, las bases y la verificación. Sin los modos: cada línea, una
-  // persona, salvo un reparto entero.
+  // la cuenta del cuadro (`cuentaParaMostrar`); la lista ya sellada se cuenta con la regla de todos
+  // (`seCuentaPorPersona`), como la espera, las bases y la verificación. Sin los modos: cada línea, una
+  // persona, salvo un reparto entero, antes y después de sellar.
   const modos = modesVisible();
-  const { personas, participaciones } = contarPersonas(names, sellada ? seCuentaPorPersona(names, modos) : modos);
+  const { personas, participaciones } = sellada ? contarPersonas(names, seCuentaPorPersona(names, modos)) : cuentaParaMostrar(names, modos);
   const cuenta =
     personas === participaciones
       ? t("salaN").replace("{n}", String(participaciones))
@@ -124,6 +124,8 @@ export async function mostrarLista(): Promise<void> {
   // El QR lleva la misma lista al celular de cada uno, para buscarse. La sellada
   // lo dice también allá: "antes de sellar" ya no es cierto (lista.ts).
   const enlace = new URL(await previewUrl(names, prize));
+  // La página de la lista no conoce el juego: solo Teleférico necesita saberlo para mostrar la cabina de cada nombre.
+  if (app.game === "teleferico") enlace.searchParams.set("juego", "teleferico");
   // "sin": lo que el celular de cada uno lee tampoco dice "sellada" (lista.ts).
   if (sellada) enlace.searchParams.set("sellada", sin ? "sin" : "1");
   // Con los modos a la vista y un reparto, el celular cuenta igual que el proyector: la página de la lista no

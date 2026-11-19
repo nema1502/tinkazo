@@ -12,9 +12,13 @@
  * No importa `state.ts` a propósito: ese módulo lee la dirección al cargar y esta bandera tiene que poder probarse sola.
  */
 
-/** Los modos que la dirección puede pedir. */
-export type ModeName = "turnos" | "varias";
+/** Los modos que conoce el código, incluso los que todavía no tienen pantalla. */
+export type ModeName = "turnos" | "varias" | "amigo";
 
+/**
+ * Los modos que la dirección puede pedir. Amigo secreto queda afuera a propósito hasta que tenga pantalla: sumarlo acá
+ * haría que `?modo=amigo` abriera la herramienta y mostrara los modos que sí existen, sin ofrecer todavía el modo pedido.
+ */
 const MODES: readonly ModeName[] = ["turnos", "varias"];
 
 /** La parte de la dirección que trae los parámetros (`?modo=turnos`), o vacía si no hay dirección (pruebas). */
@@ -30,6 +34,12 @@ export function requestedMode(search: string = currentSearch()): ModeName | null
   const value = (new URLSearchParams(search).get("modo") ?? "").trim().toLowerCase();
   return MODES.find((mode) => mode === value) ?? null;
 }
+
+/**
+ * ¿La dirección pide un modo, y por eso la herramienta abre directo y no la portada? Es el enlace que se publica en un
+ * grupo: `?modo=turnos` o `?modo=varias`. Cualquiera de los dos.
+ */
+export const abreLaHerramienta = (search: string = currentSearch()): boolean => requestedMode(search) !== null;
 
 /** Donde queda el modo elegido en esta pestaña: vive en `sessionStorage`, como el borrador. */
 const CLAVE_MODO = "tinkazo.modo";

@@ -54,6 +54,15 @@ describe("eventos: los sorteos de una cuenta, a doce horas o menos", () => {
     expect(tieneComprobante({ proof: "https://api.drand.sh/public/1" })).toBe(false);
     expect(tieneComprobante({})).toBe(false);
   });
+
+  it("un sorteo hecho con un modo lleva el modo en el enlace y también entra en el evento", () => {
+    expect(tieneComprobante({ proof: "https://tinkazo.app/verificar.html?modo=varias#rABC" })).toBe(true);
+    expect(tieneComprobante({ proof: "https://tinkazo.app/verificar.html?modo=turnos#rABC" })).toBe(true);
+    // Sin fragmento no hay comprobante, con modo o sin él.
+    expect(tieneComprobante({ proof: "https://tinkazo.app/verificar.html?modo=varias" })).toBe(false);
+    const conModo: Sorteado & { id: number } = { organizer: "A", sealedAt: T0 + HORA, proof: "https://tinkazo.app/verificar.html?modo=varias#r1", id: 1 };
+    expect(agrupar([con("A", T0, 0), conModo]).map(ids)).toEqual([[0, 1]]);
+  });
 });
 
 describe("fecha del evento", () => {

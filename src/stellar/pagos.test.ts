@@ -24,10 +24,12 @@ const GANA = "GD57ZSBU5BVZ5WG65SJKSNTYF54DEHBZSW4TAHGH6442XGWHIFHQWUP6";
 const EMISOR = "GCQPYIVQSYUCGFCGTZ7KTLEZ62PML72P6XND4V2YQLRFK22QQJRPFIAE";
 
 describe("la bandera de los premios pagados", () => {
-  it("se prende con VITE_PAGOS=1 o con VITE_EQUIPOS=1, y por defecto está apagada", () => {
+  it("se prende solo con VITE_PAGOS=1, y por defecto está apagada", () => {
     expect(pagosActivos({})).toBe(false);
     expect(pagosActivos({ VITE_PAGOS: "1" })).toBe(true);
-    expect(pagosActivos({ VITE_EQUIPOS: "1" })).toBe(true);
+    // La del registro de equipos sola no la prende; las dos juntas, sí.
+    expect(pagosActivos({ VITE_EQUIPOS: "1" })).toBe(false);
+    expect(pagosActivos({ VITE_PAGOS: "1", VITE_EQUIPOS: "1" })).toBe(true);
     expect(pagosActivos({ VITE_PAGOS: "0", VITE_EQUIPOS: "" })).toBe(false);
     expect(pagosActivos({ VITE_PAGOS: "true" })).toBe(false);
   });

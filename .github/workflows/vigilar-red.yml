@@ -106,11 +106,13 @@ jobs:
       # El fondo del portero de patrocinio (workers/patrocinio/README.md, «Bitácora y alerta del fondo»).
       # Una vez al día, con el recordatorio de las 12:07 UTC: llama a `/estado` y falla si el saldo de la
       # cuenta patrocinadora está por debajo de la alerta (`alerta: true`) o si el portero no contesta.
+      # Lleva `always()` porque el recordatorio diario falla a propósito (una red en naranja o la línea base
+      # vieja) y, sin él, la alerta del fondo se saltaría justo ese día (scripts/lib/vigilar-red-workflow.test.mjs).
       # COMENTADO hasta que exista el despliegue en p.tinkazo.app: hoy no hay nada que llamar y la CI fallaría.
       # Para activarlo: descomentar el paso y cargar el secreto PORTERO_ADMIN_TOKEN (la clave de administración
       # del portero) en los secretos del repositorio. El secreto va por `env`, nunca dentro del comando.
       # - name: Fondo del portero de patrocinio
-      #   if: ${{ github.event.schedule == '7 12 * * *' || inputs.diario }}
+      #   if: ${{ always() && (github.event.schedule == '7 12 * * *' || inputs.diario) }}
       #   env:
       #     PORTERO_URL: https://p.tinkazo.app
       #     PORTERO_ADMIN_TOKEN: ${{ secrets.PORTERO_ADMIN_TOKEN }}

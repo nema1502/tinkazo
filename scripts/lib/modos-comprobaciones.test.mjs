@@ -21,8 +21,8 @@ describe("evaluarRepetidos: el aviso de «salió N veces»", () => {
     expect(evaluarRepetidos(repetida, "Ana Quispe salió 3 veces: #1, #2 y #3.").ok).toBe(false);
   });
 
-  it("en inglés: «came out 2 times»", () => {
-    expect(evaluarRepetidos(repetida, "Ana Quispe came out 2 times: #1 and #3.").ok).toBe(true);
+  it("en inglés: «was drawn 2 times»", () => {
+    expect(evaluarRepetidos(repetida, "Ana Quispe was drawn 2 times: #1 and #3.").ok).toBe(true);
     expect(evaluarRepetidos(repetida, "").ok).toBe(false);
   });
 

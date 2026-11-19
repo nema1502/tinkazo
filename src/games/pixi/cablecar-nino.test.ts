@@ -58,16 +58,19 @@ describe("las respuestas del teleférico", () => {
       expect(despues.paso).toMatchObject({ tipo: "salio", desde: st.tOff });
       previo = despues.adelante.quienes.length;
     }
-    expect(previo).toBe(2);
+    expect(previo).toBe(1);
   });
 
-  it("los dos que llegan arriba incluyen a quien gana, y la cabina sola con los dos sigue hasta el golpe", () => {
+  it("a la última estación llegan dos, uno se baja, y a la cumbre sube solo quien gana hasta el golpe", () => {
     for (let semilla = 1; semilla <= 10; semilla++) {
       const { P, ganador, plan } = armar(18, semilla, 0.95);
+      const ult = P.stops.find((s) => s.last);
+      const antes = nino.respuestasTeleferico(plan, (ult?.tOff ?? 0) - 0.01, "derecha");
+      expect(antes.adelante.quienes).toHaveLength(2);
+      expect(antes.adelante.quienes).toContain(ganador);
       const arriba = nino.respuestasTeleferico(plan, T_RUN + 0.5, "derecha");
-      expect(arriba.adelante.quienes).toHaveLength(2);
-      expect(arriba.adelante.quienes).toContain(ganador);
-      expect(arriba.adelante.quienes).toEqual(expect.arrayContaining([...P.surv]));
+      expect(arriba.adelante.quienes).toEqual([ganador]);
+      expect(arriba.adelante.quienes).toEqual([...P.surv]);
       expect(nino.respuestasTeleferico(plan, plan.tCartel - 0.01, "derecha").paso.tipo).not.toBe("gano");
       const fin = nino.respuestasTeleferico(plan, plan.tCartel + 1, "derecha");
       expect(fin.adelante.quienes).toEqual([ganador]);

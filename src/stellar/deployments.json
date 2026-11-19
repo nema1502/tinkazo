@@ -24,5 +24,13 @@
       }
     ]
   },
-  "mainnet": null
+  "mainnet": {
+    "contractId": "CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K",
+    "deployedAt": "2026-11-11",
+    "wasmSha256": "555c5a3810e284f4ae5c8b973ea9f1ed4dbda96bce4507865875acd1b6aa03c3",
+    "maxWinners": 300,
+    "rpcUrl": "https://mainnet.sorobanrpc.com",
+    "networkPassphrase": "Public Global Stellar Network ; September 2015",
+    "anteriores": []
+  }
 }

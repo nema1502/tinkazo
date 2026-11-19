@@ -1,0 +1,29 @@
+{
+  "descripcion": "Cómo se lee un cupón de Tinkazo. Lo comparten el portero (workers/patrocinio/src/altas.ts), el sitio y la herramienta de cupones: las tres implementaciones tienen que dar exactamente esto. Doce caracteres del alfabeto de Crockford sin I, L, O ni U; se quitan espacios y guiones (también los largos que pone el teclado del celular), se pasa a mayúsculas, la O se lee como 0 y la I o la L como 1. Lo que no da doce caracteres del alfabeto es null. Los códigos de acá son inventados.",
+  "alfabeto": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+  "largo": 12,
+  "casos": [
+    { "entrada": "K7M2-9QXA-4HTR", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "K7M29QXA4HTR", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "k7m2-9qxa-4htr", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "  K7M2 9QXA 4HTR\n", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "K7M2\t9QXA 4HTR", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "K7M2–9QXA—4HTR", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "K7M2--9QXA--4HTR", "normalizado": "K7M29QXA4HTR", "mostrado": "K7M2-9QXA-4HTR" },
+    { "entrada": "OIL0-1234-5678", "normalizado": "011012345678", "mostrado": "0110-1234-5678" },
+    { "entrada": "oil0 1234 5678", "normalizado": "011012345678", "mostrado": "0110-1234-5678" },
+    { "entrada": "ZZZZ-YYYY-XXXX", "normalizado": "ZZZZYYYYXXXX", "mostrado": "ZZZZ-YYYY-XXXX" },
+    { "entrada": "K7M2-9QXA-4HTU", "normalizado": null },
+    { "entrada": "K7M2-9QXA-4HT", "normalizado": null },
+    { "entrada": "K7M2-9QXA-4HTRX", "normalizado": null },
+    { "entrada": "", "normalizado": null },
+    { "entrada": "   ", "normalizado": null },
+    { "entrada": "K7M2_9QXA_4HTR", "normalizado": null },
+    { "entrada": "K7M2.9QXA.4HTR", "normalizado": null },
+    { "entrada": "#cupon=K7M29QXA4HTR", "normalizado": null },
+    { "entrada": "https://tinkazo.app/?red=oficial#cupon=K7M29QXA4HTR", "normalizado": null },
+    { "entrada": "K7M2-9QXA-4HTı", "normalizado": null },
+    { "entrada": "K7M2-9QXA-4HTÑ", "normalizado": null },
+    { "entrada": "Ｋ7M2-9QXA-4HTR", "normalizado": null }
+  ]
+}

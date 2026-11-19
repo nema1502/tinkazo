@@ -9,6 +9,11 @@ describe("el navegador de una app, donde Google no deja entrar", () => {
     ["LinkedIn", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [LinkedInApp]/9.29.6000"],
     ["TikTok", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36 trill_340 BytedanceWebview/d8a21c6 musical_ly_2023"],
     ["una vista web de Android", "Mozilla/5.0 (Linux; Android 12; moto g(60); wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/118.0.0.0 Mobile Safari/537.36"],
+    ["Snapchat", "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 Snapchat/12.80.0"],
+    ["Pinterest", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile Safari/537.36 Pinterest/12.1"],
+    ["WeChat", "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 MicroMessenger/8.0.47"],
+    ["Telegram", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Mobile Safari/537.36 Telegram/10.12"],
+    ["la aplicación de Google en iPhone", "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Mobile/15E148 GSA/303.0"],
   ])("%s: sí", (_, ua) => {
     expect(enNavegadorDeApp(ua)).toBe(true);
   });

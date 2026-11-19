@@ -6,16 +6,20 @@ import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, 
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { avisarCambioConQr } from "./ui/espectadores-de-la-sala";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
 import { initPlegables } from "./ui/plegable";
 import { iniciarCupo } from "./ui/cupo-patrocinio";
+import { iniciarCupon } from "./ui/cupon-enlace-entorno";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
+import { network } from "./stellar/config";
+import { limpiarPasoDelCupon } from "./stellar/cupon-paso-guardado";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
@@ -26,9 +30,11 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { conservarVistaEnLaCabecera } from "./ui/enlaces-cabecera";
 import { equiposActivo } from "./equipos/bandera";
-import { requestedMode } from "./modos/bandera";
+import { abreLaHerramienta } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
+import { fijarElTema } from "./tema-forzado";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -41,13 +47,15 @@ import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
+import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
+import { campanasActivo } from "./campana/bandera";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
 
-// `?theme=light|dark` fuerza el tema (capturas).
+// `?theme=light|dark` fuerza el tema (capturas), también en la captura de la portada (`tema-forzado.ts`).
 const themeParam = params.get("theme");
-if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+fijarElTema(themeParam);
 
 // `?lavado=1`: solo para auditar. El estadio se ve como en un proyector pobre, con luz en la sala (menos contraste, negros grises y más brillo).
 // Lo mide `scripts/audit-lavado.mjs`; ninguna persona lo ve si no lo pide en la dirección.
@@ -105,9 +113,14 @@ function paceLabels(): void {
 onLangChange(paceLabels);
 paceSel.addEventListener("change", () => {
   setPace(paceSel.value as Pace);
+  // Con el QR de espectadores ya visto, el cambio se anota y se publica (`ui/espectadores-de-la-sala.ts`); la espera,
+  // si está abierta, rehace su QR con la duración nueva.
+  if (!app.drawn) avisarCambioConQr(app.frozen, app.game, currentPace());
+  document.dispatchEvent(new CustomEvent("tinkazo:ritmo"));
   // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
   refrescarRecomendacion();
 });
+
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {
@@ -133,6 +146,8 @@ for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => ele
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 initPlegables();
 $("btn-draw").addEventListener("click", () => void draw());
+// La espera en grande lanza el sorteo unos segundos antes de que nazca el número, para leer la tarjeta mientras tanto (freeze.ts).
+document.addEventListener("tinkazo:adelantar", () => void draw({ adelantado: true }));
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 // Precargada con la página quieta: si se publica una versión nueva con la
@@ -212,14 +227,19 @@ montarPremios();
 montarGanadores();
 // «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();
-// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
-cerrarSalidaDelStand();
+// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad. La salida dejó
+// la página arriba (`scrollRestoration` en manual): desde acá, recargar vuelve a donde se estaba, como siempre.
+if (cerrarSalidaDelStand()) history.scrollRestoration = "auto";
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 // Con ?modo=turnos la herramienta abre con «Orden de turnos» ya elegido, después del borrador: lo que pide la dirección manda.
 abrirConElModoPedido();
 initVistas();
+// Sortear y Mis sorteos de la cabecera no pierden ?lang= ni ?theme= (enlaces-cabecera.ts).
+conservarVistaEnLaCabecera();
 initWalletUI();
+// El cupón que llegó en el enlace (`#cupon=`): se guarda y se saca de la dirección con la sesión. Sin el acceso por cupón a la vista, no hace nada.
+iniciarCupon();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
 // El modo stand, si se recargó en él.
@@ -234,6 +254,8 @@ initStand();
 iniciarRed({ sellar: (op) => freeze(op) });
 // Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
 iniciarCupo();
+// El campo del cupón pertenece a Oficial: al arrancar en Prueba se olvida un pedido que no se llegó a usar.
+if (network.name === "testnet") limpiarPasoDelCupon();
 ingresarSiLoPidio();
 initMenuMas();
 iniciarFeedback(
@@ -247,6 +269,9 @@ initSiguiente({ segundos: secondsToRound });
 initTutorial();
 initOnboarding();
 initLumaAyuda();
+// La demo de la compra con QR (`?compra-demo`): solo en la máquina de quien prueba y con VITE_RAMPA_DEMO=1, con datos
+// inventados y sin red (`ui/compra-demo.ts`). Se baja aparte, y nada se abre hasta tocar una compra de la lista.
+if (params.has("compra-demo")) void import("./ui/compra-demo").then((m) => m.montarDemoDeCompra());
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
@@ -263,8 +288,8 @@ initLumaAyuda();
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
   const body = document.body;
-  // `?modo=turnos` abre la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
-  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || requestedMode() === "turnos";
+  // `?modo=turnos` y `?modo=varias` abren la herramienta directo: es el enlace que se publica en un grupo (src/modos/bandera.ts).
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k)) || abreLaHerramienta();
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
@@ -390,6 +415,8 @@ function initVistas(): void {
         boton.style.minHeight = "";
       }
     }
+    // El estado está pintado: el texto del botón grande puede verse (contra el FOUC de la recarga, estilos-atencion.ts).
+    destrabarCtas();
   };
   document.addEventListener("tinkazo:cuenta", pintarCta);
   document.addEventListener("tinkazo:sesion", (e) => {
@@ -444,7 +471,7 @@ function avisarQueYaEntro(): void {
   // línea de la cuenta, el foco volvía a un botón que ya no está.
   const hasta = Date.now() + 60_000;
   const enfocar = (): void => {
-    if (document.querySelector(".modal-back")) {
+    if (document.querySelector(".modal-back, .cuenta-lista")) {
       if (Date.now() < hasta) setTimeout(enfocar, 200);
       return;
     }
@@ -569,6 +596,13 @@ unlockAudioOnGesture();
 setLang(initialLang());
 // La palabra del sticker rota después de traducir: el texto sale del diccionario.
 rotateWords();
+// Las animaciones de atención (estilos-atencion.ts): el temblor de los botones
+// del hero tras ~8 s sin interactuar, el destello periódico del pie y el hover
+// vivo en las capturas de la portada. Ninguna decide nada del sorteo. Hoy entran
+// apagadas: cada una tiene su interruptor en ATENCION_PRENDIDA.
+iniciarTemblorHero();
+iniciarDestelloPie();
+iniciarHoverVivo(".portada-juegos a");
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común. Si no baja (un
 // bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.
@@ -576,3 +610,15 @@ void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);
+// El modo espectador (`ui/espectador.ts`): el enlace del QR de la espera llega a esta misma
+// página con los datos en el fragmento, y abre la vista de solo-lectura. Se baja aparte:
+// quien entra a sortear no lo descarga. Un enlace roto no cae callado en la herramienta: lo dice.
+if (location.hash.startsWith("#espectador=")) {
+  void import("./ui/espectador").then((m) => {
+    const datos = m.datosDelEnlace(location.hash);
+    if (datos) m.abrirEspectador(datos, initialLang());
+    else m.avisarEnlaceRoto(initialLang());
+  });
+}
+// Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
+if (campanasActivo()) void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);

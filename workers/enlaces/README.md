@@ -13,12 +13,27 @@ Un Worker de Cloudflare en `c.tinkazo.app` que guarda el comprobante de un sorte
 | Pedido | Qué hace |
 | --- | --- |
 | `POST /v1` con el cuerpo binario (hasta 256 KB) | Crea el enlace. Responde `201 {"id", "borrar"}`. Solo desde tinkazo.app, www, las vistas de Vercel y localhost |
-| `GET /v1/<id>` | Devuelve los mismos bytes, desde cualquier origen |
+| `POST /v1?cambia=1` | Lo mismo, para un enlace que se puede reescribir: el del QR de espectadores. Responde `201 {"id", "borrar", "cambia": true, "version": "\"1\""}`. El servicio de antes no mira el `?cambia=1` y no lo dice: así la sala sabe si puede reescribirlo |
+| `GET /v1/<id>` | Devuelve los mismos bytes, desde cualquier origen. Uno que puede cambiar suma `X-Enlace-Cambia: 1`, su versión en `ETag` y `Cache-Control: no-cache`; los demás, `max-age=300` como siempre |
+| `PUT /v1/<id>` con `Authorization: Bearer <borrar>` y, si se quiere, `If-Match: <versión>` | Reescribe los bytes de un enlace que nació para cambiar. `204` con la versión nueva en `ETag`; `412` si la versión pedida ya no es la que está; `409` si no nació para cambiar o pasaron más de 6 horas desde que se creó; `429` pasadas 50 reescrituras, o el cupo de 300 por hora por dirección o de 20.000 por día; `401`, `403`, `404`, `411` y `413` como el alta |
 | `DELETE /v1/<id>` con `Authorization: Bearer <borrar>` | Lo borra con el permiso de ese enlace. El navegador que lo creó lo guarda en silencio; la interfaz ya no lo usa |
 | `DELETE /v1/<id>` con `Authorization: Bearer <ADMIN_TOKEN>` | Lo borra Tinkazo, a pedido. Existe solo si el Worker tiene el secreto `ADMIN_TOKEN`, de 32 caracteres o más; se compara en tiempo constante |
 | `GET /<id>` | Redirige a `https://tinkazo.app/c/<id>`; el navegador conserva el fragmento |
 
 Límites: 256 KB por enlace, 60 altas por hora por dirección IP (se cuentan en memoria, sin guardar la IP) y 2.000 altas por día en total (`POR_DIA` en `src/index.ts`). El tope del día era de 20.000, y 20.000 × 256 KB llenan los 5 GB gratis de la cuenta en un día; con 2.000 son 512 MB por día y llenarlos lleva unos diez. Si el uso real pasa de 2.000 enlaces por día, se sube `POR_DIA` a la vez que se pasa a Workers Paid.
+
+## Reescribir el enlace del QR de espectadores
+
+Desde el 16 de noviembre de 2026 (escrito y probado con `wrangler dev`, todavía sin desplegar). Con el QR de espectadores de la espera en grande a la vista, quien organiza puede cambiar el juego. La sala reescribe su propio enlace con el juego nuevo, cifrado con la misma clave, y los celulares que ya escanearon lo vuelven a leer antes del show (`src/enlace-corto.ts`, `actualizarCorto` y `releerCorto`). El QR no cambia y el servicio sigue sin ver nada:
+
+- **Solo cambia un enlace que nació para cambiar.** Un comprobante no puede cambiar nunca: con una reescritura libre, quien armó uno podría cambiarlo por el de otro sorteo después de compartirlo. Un `PUT` a un enlace creado sin `?cambia=1` contesta `409`. Y la página del enlace corto (`src/c.ts`) no abre un comprobante ni un evento desde un enlace que puede cambiar: lo dice como un enlace roto.
+- **Con el permiso de ese enlace**, el mismo que sirve para borrarlo, y desde los mismos orígenes que el alta.
+- **Sin pisar una versión más nueva.** La sala manda la versión que tiene anotada en `If-Match`; un reintento lento u otra pestaña con una versión vieja reciben `412`. Dentro de lo cifrado va además un contador, y el celular nunca vuelve a uno menor.
+- **Todas las versiones de un enlace miden lo mismo.** La página rellena el contenido hasta un múltiplo de 256 bytes antes de cifrarlo: el servicio no puede saber, por el largo, qué juego se eligió.
+- **Vence y tiene tope.** Se reescribe hasta 6 horas después de creado y hasta 50 veces (`src/reescribir.ts`), con 300 reescrituras por hora por dirección y 20.000 por día en total. Reescribir no hace crecer lo guardado.
+- **La migración:** las columnas `cambia`, `version` y `cambios` se suman a la tabla de enlaces al despertar cada objeto. Los enlaces de antes quedan sin poder cambiar.
+
+Mientras no se despliegue, el sitio anda igual: el servicio de hoy crea el enlace como siempre, la sala no intenta reescribirlo y, si se cambia el juego con el QR a la vista, arma un QR nuevo para quienes escanean después.
 
 ## Borrar a pedido
 
@@ -75,7 +90,7 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 | `practice_done` | El ensayo o la demo llegaron al ganador | `kind`: `practice`, `demo` |
 | `account_connected` | La primera cuenta conectada de la pestaña (retomar una sesión no cuenta) | `kind`: `google`, `email`, `freighter`, `test`; `from`, opcional: el origen (abajo) |
 | `list_ready` | La primera lista de dos o más de la pestaña, puesta por la persona | `source`: `paste`, `typed`, `csv`, `luma`; `size`: `2-9`, `10-49`, `50-199`, `200+` |
-| `list_shown` | "Mostrar la lista a la sala" | — |
+| `list_shown` | "Mostrar la lista en grande" | — |
 | `seal_sent`, `seal_confirmed`, `seal_failed` | Se pide sellar con cuenta, se confirma o falla | `network`: `mainnet`, `testnet`; en la falla, `error`: la clave de `errorKey` (`src/stellar/errores.ts`); al confirmar, `from`, opcional: el origen (abajo) |
 | `draw_confirmed`, `draw_failed` | El sorteo anclado queda grabado o no se pudo grabar | `network`; en la falla, `error` (las mismas claves) |
 | `share` | Se copia o se comparte el mensaje, se avisa al ganador o se muestra el QR en grande | `channel`: `copy`, `native`, `whatsapp`, `email`, `qr_big`, `event`; `ref` si el sorteo está anclado (un evento va sin `ref`) |

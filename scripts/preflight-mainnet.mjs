@@ -7,21 +7,51 @@
  * contrato es inmutable, no tiene administrador ni actualización.
  *
  * Esto no despliega nada. Cuando todo esté en verde, el despliegue es
- * `scripts/deploy.sh mainnet`.
+ * `scripts/deploy.sh mainnet <identidad> --wasm <archivo> --sha256 <huella>`,
+ * primero con `--ensayo`.
  *
  * Uso:
- *   node scripts/preflight-mainnet.mjs [--account GXXXX…]
+ *   node scripts/preflight-mainnet.mjs --wasm <archivo.wasm> --sha256 <huella>
+ *     --account GXXXX… --necesario <XLM> [--sin-pruebas]
  *
- * Con `--account` comprueba además que esa cuenta exista y tenga saldo para el
- * despliegue y para un año de alquiler.
+ *   --wasm, --sha256  el .wasm del release (en mainnet no se compila acá) y la
+ *                     huella del release. Sin --wasm la línea sale «ojo»; sin
+ *                     --sha256 muestra la huella calculada para compararla a mano.
+ *   --account         la cuenta de despliegue: que exista en mainnet.
+ *   --necesario       los XLM que pide la simulación del día. Sin esta opción el
+ *                     saldo sale «ojo»: el costo depende de qué tan llena esté la
+ *                     red y no hay una cifra fija. Se compara con lo que la cuenta
+ *                     puede gastar (el saldo menos su reserva mínima), con un 10 %
+ *                     de margen: sin el margen sale «ojo».
+ *   --sin-pruebas     no corre `cargo test` ni la suite de Vitest y los marca
+ *                     «ojo». Sirve para comprobar el guion, o si las pruebas ya se
+ *                     corrieron aparte ese mismo día.
+ *
+ * Cada corrida de pruebas tiene un tope de 15 minutos (la suite tarda unos 5 con
+ * VITEST_MAX_WORKERS=3, el valor por defecto). Si se corta, la fila dice que fue
+ * por tiempo y no una prueba roja.
+ *
+ * Salidas: 0 listo, 1 algo en rojo, 2 una opción mal escrita.
  */
 
-import { readFile, stat } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { correrConTope } from "./lib/correr-con-tope.mjs";
 import { promisify } from "node:util";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import {
+  TOPE_DE_PRUEBAS_MS,
+  filaDePruebas,
+  huellaDe,
+  leerOpciones,
+  lineaDeCosto,
+  ordenesDeDespliegue,
+  reservaDeLaCuenta,
+  revisarSaldo,
+  revisarWasm,
+} from "./lib/prevuelo.mjs";
 
 const run = promisify(execFile);
 
@@ -37,16 +67,14 @@ function cargoBin() {
   }
   return "cargo";
 }
-const args = process.argv.slice(2);
-const account = args[args.indexOf("--account") + 1];
-const wantAccount = args.includes("--account") && account && !account.startsWith("--");
-
-/** Lo que cuesta desplegar y mantener, medido en testnet y anotado en docs/deployments.md. */
-const DEPLOY_XLM = 16;
-const RENT_YEAR_XLM = 49;
-/** Reserva base de la cuenta más un colchón para las primeras invocaciones. */
-const CUSHION_XLM = 5;
-const NEEDED_XLM = DEPLOY_XLM + RENT_YEAR_XLM + CUSHION_XLM;
+let opciones;
+try {
+  opciones = leerOpciones(process.argv.slice(2));
+} catch (e) {
+  console.error(`${e.message}\nUso: node scripts/preflight-mainnet.mjs --wasm <archivo.wasm> --sha256 <huella> --account G… --necesario <XLM> [--sin-pruebas]`);
+  process.exit(2);
+}
+const { account, necesario, sinPruebas } = opciones;
 
 // La fuente de verdad es `RPC_URLS` en `src/stellar/config.ts`. Acá se repite
 // porque esto es un script de Node suelto y no compila TypeScript; si allá se
@@ -69,37 +97,46 @@ function note(name, detail = "") {
   warn++;
   rows.push(["ojo", name, detail]);
 }
+/** Suma las filas que devuelven las piezas de scripts/lib/prevuelo.mjs. */
+function sumar(filas) {
+  for (const [state, name, detail] of filas) {
+    if (state === "ok") ok(name, detail);
+    else if (state === "ojo") note(name, detail);
+    else fail(name, detail);
+  }
+}
 
 /* ------------------------------------------------------------------ código */
 
-const cargo = cargoBin();
-try {
-  await run(cargo, ["test", "--workspace", "--quiet"], { cwd: ".", timeout: 600_000 });
-  ok("los tests del contrato pasan");
-} catch (e) {
-  const msg = String(e).split("\n")[0];
+if (sinPruebas) {
+  note("los tests del contrato pasan", "salteadas con --sin-pruebas");
+  note("los tests del protocolo en TypeScript pasan", "salteadas con --sin-pruebas");
+} else {
+  const cargo = await correrConTope(cargoBin(), ["test", "--workspace", "--quiet"], { tope: TOPE_DE_PRUEBAS_MS });
   // Sin cargo instalado no se puede afirmar nada, pero tampoco es un rojo
   // del contrato: es una máquina sin el toolchain.
-  if (msg.includes("ENOENT")) note("los tests del contrato pasan", "no encontré cargo en esta máquina");
-  else fail("los tests del contrato pasan", msg);
+  if (cargo.codigo === null && /ENOENT/.test(cargo.error)) note("los tests del contrato pasan", "no encontré cargo en esta máquina");
+  else sumar([filaDePruebas("los tests del contrato pasan", cargo)]);
+
+  // La suite entera, con los trabajadores que aguanta la máquina (VITEST_MAX_WORKERS, o 3).
+  const trabajadores = process.env.VITEST_MAX_WORKERS || "3";
+  const vitest = await correrConTope("pnpm", ["exec", "vitest", "run", `--maxWorkers=${trabajadores}`], { tope: TOPE_DE_PRUEBAS_MS, shell: true });
+  sumar([filaDePruebas("los tests del protocolo en TypeScript pasan", vitest)]);
 }
 
-try {
-  await run("pnpm", ["test"], { shell: true, timeout: 300_000 });
-  ok("los tests del protocolo en TypeScript pasan");
-} catch (e) {
-  fail("los tests del protocolo en TypeScript pasan", String(e).split("\n")[0]);
-}
-
-try {
-  const wasm = "target/wasm32v1-none/release/tinkazo_raffle.wasm";
-  const s = await stat(wasm);
-  // La renta del código depende del tamaño del módulo compilado, así que un
-  // salto acá se paga todos los años.
-  ok("el contrato compila", `${(s.size / 1024).toFixed(1)} KB`);
-  if (s.size > 20 * 1024) note("el contrato creció", "arriba de 20 KB la renta anual sube");
-} catch {
-  fail("el contrato compila", "falta el .wasm: corré `stellar contract build`");
+// En mainnet se despliega el .wasm del release, tal cual: se mira ese archivo
+// y su huella, no uno compilado en esta máquina. La ruta se resuelve contra la
+// carpeta desde donde se llamó (pnpm corre el guion desde la raíz).
+if (opciones.wasm) {
+  const ruta = resolve(process.env.INIT_CWD || process.cwd(), opciones.wasm);
+  try {
+    const contenido = await readFile(ruta);
+    sumar(revisarWasm({ ruta: opciones.wasm, bytes: contenido.length, sha256: huellaDe(contenido), esperado: opciones.sha256 }));
+  } catch (e) {
+    fail("el .wasm coincide con la huella", `no pude leer ${ruta}: ${String(e).split("\n")[0]}`);
+  }
+} else {
+  sumar(revisarWasm({ ruta: null, esperado: opciones.sha256 }));
 }
 
 /* ------------------------------------------------------------- despliegues */
@@ -193,7 +230,7 @@ try {
 
 /* ----------------------------------------------------------------- la cuenta */
 
-if (wantAccount) {
+if (account) {
   try {
     const res = await fetch(`${HORIZON}/accounts/${account}`, { signal: AbortSignal.timeout(15_000) });
     if (res.status === 404) {
@@ -205,8 +242,8 @@ if (wantAccount) {
       const native = body.balances?.find((b) => b.asset_type === "native");
       const xlm = Number(native?.balance ?? 0);
       ok("la cuenta existe en mainnet", `${xlm.toFixed(2)} XLM`);
-      if (xlm >= NEEDED_XLM) ok("el saldo alcanza", `${xlm.toFixed(2)} de ${NEEDED_XLM} XLM`);
-      else fail("el saldo alcanza", `${xlm.toFixed(2)} XLM, hacen falta ${NEEDED_XLM}`);
+      // Lo que pide la simulación no puede salir de la reserva mínima de la cuenta.
+      sumar(revisarSaldo({ xlm, necesario, reserva: reservaDeLaCuenta(body) }));
     }
   } catch (e) {
     fail("la cuenta existe en mainnet", String(e).split("\n")[0]);
@@ -223,7 +260,7 @@ for (const [state, name, detail] of rows) {
   console.log(`${mark} ${name}${detail ? ` — ${detail}` : ""}`);
 }
 console.log("");
-console.log(`Costo estimado: ${DEPLOY_XLM} XLM de despliegue y unos ${RENT_YEAR_XLM} al año de alquiler.`);
+console.log(lineaDeCosto(necesario));
 console.log("El contrato es inmutable: no tiene administrador, no se puede actualizar y no custodia fondos.\n");
 
 if (bad) {
@@ -231,4 +268,8 @@ if (bad) {
   process.exit(1);
 }
 console.log(`LISTO PARA DESPLEGAR${warn ? ` (${warn} cosa(s) para mirar antes)` : ""}.`);
-console.log("El paso siguiente es `scripts/deploy.sh mainnet`, y después actualizar src/stellar/deployments.json en el mismo commit.\n");
+const [ensayo, despliegue] = ordenesDeDespliegue({ wasm: opciones.wasm, sha256: opciones.sha256 });
+console.log("El paso siguiente es deploy.sh, primero con --ensayo:");
+console.log(`  ${ensayo}`);
+console.log(`  ${despliegue}`);
+console.log("Después, la dirección y el sha256 van a src/stellar/deployments.json y a docs/deployments.md en el mismo commit.\n");

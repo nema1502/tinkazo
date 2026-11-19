@@ -398,7 +398,9 @@ describe("en un orden de turnos, las notas de capacidad dicen turnos", () => {
   it("sin turnos, las notas de siempre quedan como estaban", () => {
     expect(recomendar(18, 18).games.find((r) => r.game === "race")?.note).toBe("rec.race.premios");
     expect(recomendar(18, 18).games.find((r) => r.game === "sapo")?.note).toBe("rec.sapo.premios");
-    expect(recomendar(18, 18, true).games.map((r) => r.fits)).toEqual(recomendar(18, 18).games.map((r) => r.fits));
+    // Con una lista que ninguno de los juegos de turnos puede contar (más de 200), el modo no cambia lo que encaja.
+    const fits = (turnos: boolean): Array<[string, boolean | null]> => recomendar(250, 250, turnos).games.map((r): [string, boolean | null] => [r.game, r.fits]).sort();
+    expect(fits(true)).toEqual(fits(false));
   });
 });
 

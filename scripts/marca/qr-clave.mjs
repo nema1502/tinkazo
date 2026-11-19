@@ -120,12 +120,12 @@ Códigos QR listos para poner en un afiche, un volante, una historia, una diapos
 EL PRINCIPAL
 ${lineasDestinos("es", true)}
   etiquetas/qr-etiqueta-magenta.png y qr-etiqueta-amarilla.png
-    El QR con la llamita arriba y «tinkazo.app» abajo, de 2000 por 2580 px y con fondo transparente. La placa es blanca, así que se lee sobre cualquier fondo: elegí el color de etiqueta que más contraste con tu arte.
+    El QR con la llamita arriba y la dirección tinkazo.app abajo, de 2000 por 2580 px y con fondo transparente. La placa es blanca, así que se lee sobre cualquier fondo: elegí el color de etiqueta que más contraste con tu arte.
   tarjetas/qr-tarjeta-cuadrada-<fondo>-<es|en>.png   1080 por 1080 px, para una publicación.
-  tarjetas/qr-tarjeta-historia-<fondo>-<es|en>.png   1080 por 1920 px, para una historia o un Reel; el contenido respeta las zonas de Instagram.
+  tarjetas/qr-tarjeta-historia-<fondo>-<es|en>.png   1080 por 1920 px, para una historia o un Reel. El contenido respeta las zonas de Instagram.
     Los fondos son papel (el crema de la marca), amarillo y noche.
   codigos/qr-tinkazo-app-blanco, -papel y -transparente (.svg y .png)
-    El código solo: módulos de tinta (#191919) sobre blanco (el más seguro), sobre el crema de la marca (#fff6e9) o sin fondo, solo para ponerlo sobre un fondo CLARO. El SVG es vectorial, para imprimir en grande; el PNG mide unos 2000 px.
+    El código solo: módulos de tinta (#191919) sobre blanco (el más seguro), sobre el crema de la marca (#fff6e9) o sin fondo, solo para ponerlo sobre un fondo CLARO. El SVG es vectorial, para imprimir en grande. El PNG mide unos 2000 px.
 
 MÁS DESTINOS (codigos/mas-destinos, sobre blanco, en SVG y en PNG)
 ${lineasDestinos("es", false)}
@@ -152,12 +152,12 @@ QR codes ready to drop into a poster, a flyer, a story, a slide or a sticker. Th
 THE MAIN ONE
 ${lineasDestinos("en", true)}
   etiquetas/qr-etiqueta-magenta.png and qr-etiqueta-amarilla.png
-    The QR with the little llama on top and "tinkazo.app" below, 2000 by 2580 px with a transparent background. The plate is white, so it reads on any background: pick the label color that contrasts most with your artwork.
+    The QR with the little llama on top and the address tinkazo.app below, 2000 by 2580 px with a transparent background. The plate is white, so it reads on any background: pick the label color that contrasts most with your artwork.
   tarjetas/qr-tarjeta-cuadrada-<background>-<es|en>.png   1080 by 1080 px, for a post.
-  tarjetas/qr-tarjeta-historia-<background>-<es|en>.png   1080 by 1920 px, for a story or a Reel; the content respects Instagram's safe zones.
+  tarjetas/qr-tarjeta-historia-<background>-<es|en>.png   1080 by 1920 px, for a story or a Reel. The content respects Instagram's safe zones.
     The backgrounds are papel (the brand cream), amarillo (yellow) and noche (night).
   codigos/qr-tinkazo-app-blanco, -papel and -transparente (.svg and .png)
-    The code on its own: ink-colored modules (#191919) on white (the safest), on the brand cream (#fff6e9) or with no background, only to place over a LIGHT background. The SVG is a vector, for printing large; the PNG is about 2000 px.
+    The code on its own: ink-colored modules (#191919) on white (the safest), on the brand cream (#fff6e9) or with no background, only to place over a LIGHT background. The SVG is a vector, for printing large. The PNG is about 2000 px.
 
 MORE DESTINATIONS (codigos/mas-destinos, on white, as SVG and PNG)
 ${lineasDestinos("en", false)}

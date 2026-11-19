@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { roundTime, targetRound } from "../protocol/quicknet";
 import { type SelloIncierto, esSelloIncierto } from "../stellar/envio";
 import { selloSinGrabar, type AnchorStep, type DrawResult, type SealResult } from "./anchor";
+import { MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S } from "./sello-seguro";
 
 // La primera prueba paga la carga en frío del SDK de Stellar (cada una vuelve a cargar
 // `anchor` con `vi.resetModules()`). Con la máquina ocupada, 5 s no alcanzaban (20 de
@@ -60,6 +61,8 @@ vi.mock("../stellar/wallet-lite", async (orig) => {
 const DIR = "GBZQHWXF4I4ERXBLLHLQOENNXIJMHDGIYMFDYZVNX5KZM4OXTY4BDSQY";
 /** Los argumentos del sello, con la ronda que elegiría `freeze.ts` ahora mismo: 45 s de margen. */
 const argsDeAhora = () => ({ organizer: DIR, listHash: new Uint8Array(32), count: 5, numWinners: 1, round: targetRound(Date.now() / 1000, 45), meta: "premio" });
+/** Los mismos cuando paga el portero: `freeze.ts` le da a la ronda `MARGEN_CON_PORTERO_S` (65 s) y no 45. */
+const argsConPortero = () => ({ ...argsDeAhora(), round: targetRound(Date.now() / 1000, MARGEN_CON_PORTERO_S) });
 
 /** El hash (en hex) de la transacción que se arma (`built`) y de la que se firma acá (`signed`), en las de mentira. */
 const HASH_ARMADA = "01".repeat(32);
@@ -108,6 +111,55 @@ const sinSaldo = () => new Error("txInsufficientBalance");
 
 const pollar = (signAndSubmit = vi.fn(async () => "deadbeef")) => ({ kind: "external", address: DIR, submitsItself: true, signAndSubmit });
 
+/** El portero de la red principal de mentira, en su dirección de prueba. */
+const PORTERO = "https://portero.prueba";
+/**
+ * Una respuesta del portero hecha a mano, con lo único que lee el sitio (`status` y `json`): sin la de verdad, que lee el
+ * cuerpo con vueltas del reloj real y, con el reloj de mentira avanzando, se comería el margen de la ronda.
+ */
+const responder = (estado: number, cuerpo: unknown): Response => ({ status: estado, ok: estado >= 200 && estado < 300, json: async () => cuerpo }) as unknown as Response;
+
+/**
+ * En la red principal, una cuenta de Pollar sin portero no firma nada (`elegirPatrocinador` lanza «cerrado»), así que
+ * las pruebas de esa red ponen un portero de mentira, como `envio-portero.test.ts`: `/cupo` dice quién rige y el pago
+ * contesta lo que se le pide.
+ *
+ * - `"pollar"`: el portero está y le devolvió el pago a Pollar (el modo `pollar` del servidor). Pollar firma y manda, y
+ *   lo que contesta llega como siempre: es la forma de probar en la red principal lo que hace el sitio con las
+ *   respuestas de Pollar.
+ * - `"portero"`: paga el portero. Pollar solo firma (`signUnsponsored`) y la transacción firmada va al portero.
+ *
+ * Como el de verdad (con las altas), `/cupo` trae lo oficial de la cuenta: tiene acceso y le quedan sorteos. Sin eso, el
+ * candado de `submitElsewhere` no deja firmar nada en la red principal.
+ */
+function porteroDeMentira(rige: "pollar" | "portero", pago: () => Response = () => responder(200, { hash: HASH_FIRMADA, status: "PENDING", quedan: 19, quedanSorteos: 39 })) {
+  vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", PORTERO);
+  const oficial = { acceso: true, sorteos: { quedan: 19, proximoVence: null } };
+  const cupo =
+    rige === "pollar"
+      ? { red: "mainnet", rige: "pollar", prendido: false, motivo: "pollar", oficial }
+      : { red: "mainnet", rige: "portero", prendido: true, sellos: { usados: 1, max: 20, quedan: 19 }, sorteos: { usados: 1, max: 40, quedan: 39 }, liberaEn: Date.UTC(2026, 11, 1), oficial };
+  const f = vi.fn(async (u: string) => (String(u).includes("/cupo") ? responder(200, cupo) : pago()));
+  vi.stubGlobal("fetch", f);
+  return f;
+}
+
+/** Los pagos que se le pidieron al portero (todo lo que no es `/cupo`). */
+const pagosAlPortero = (f: { mock: { calls: unknown[][] } }): unknown[][] => f.mock.calls.filter((c) => !String(c[0]).includes("/cupo"));
+
+/**
+ * Una cuenta de Pollar que sabe firmar sin patrocinio, y `TransactionBuilder.fromXDR` de mentira para leer lo que firmó:
+ * lo que hace falta para que pague el portero. Devuelve cómo deshacerlo.
+ */
+function pollarParaElPortero(firmar = vi.fn(async (_xdr: string) => "FIRMADA")) {
+  vi.doMock("@stellar/stellar-sdk", async (orig) => {
+    const real = await orig<typeof import("@stellar/stellar-sdk")>();
+    const firmada = { hash: () => new Uint8Array(32).fill(2), toXDR: () => "FIRMADA", timeBounds: { maxTime: String(cierre() + 60) } };
+    return { ...real, TransactionBuilder: { ...real.TransactionBuilder, fromXDR: () => firmada } };
+  });
+  return { wallet: { ...pollar(vi.fn(async () => "no-se-usa")), signUnsponsored: firmar }, firmar, deshacer: () => vi.doUnmock("@stellar/stellar-sdk") };
+}
+
 /** Corre el sellado y devuelve lo que vio la pantalla, en orden, y cómo terminó. */
 async function sellar(args = argsDeAhora()): Promise<{ pasos: [AnchorStep, string | undefined][]; r?: SealResult; error?: unknown }> {
   const { sealOnChain } = await import("./anchor");
@@ -136,6 +188,11 @@ async function sortear(): Promise<{ pasos: [AnchorStep, string | undefined][]; r
 }
 
 let eventos: string[];
+/**
+ * Los avisos de la página, sin el de lo que queda del portero (`tinkazo:patrocinio`, que sale cada vez que se le
+ * pregunta): lo que se mira es que no salga la caja de fondos ni ningún otro.
+ */
+const avisos = (): string[] => eventos.filter((e) => e !== "tinkazo:patrocinio");
 beforeEach(() => {
   vi.resetModules();
   h.red.name = "testnet";
@@ -154,9 +211,29 @@ beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
 });
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+/**
+ * Mueve el reloj de mentira, pero solo cuando las cargas pendientes ya terminaron.
+ *
+ * `anchor` carga sus piezas con `import()` y cada prueba las vuelve a cargar en frío (`vi.resetModules()`): tarda tiempo de
+ * verdad, y mucho más en una máquina lenta o recién encendida. Si el reloj de mentira corre mientras tanto, se come el margen
+ * de la ronda (`MARGEN_DE_RONDA_S`) o los 20 s del grifo antes de que el código llegue a mirarlos, y la prueba pasa o no según
+ * la velocidad de la máquina. `vi.dynamicImportSettled()` espera a que no quede ninguna carga pendiente, también las que se
+ * encadenan; recién ahí se mueve el reloj.
+ */
+async function avanzar(ms: number): Promise<void> {
+  await vi.dynamicImportSettled();
+  await vi.advanceTimersByTimeAsync(ms);
+}
+
+/** Mueve el reloj de mentira, de a `pasoMs`, hasta que `listo()` o hasta que pasaron `hastaMs` de reloj de mentira: no cuenta vueltas. */
+async function correrElReloj(listo: () => boolean, hastaMs: number, pasoMs = 250): Promise<void> {
+  for (let t = 0; t < hastaMs && !listo(); t += pasoMs) await avanzar(pasoMs);
+}
 
 describe("con una cuenta de Pollar", () => {
   it("no muestra la comisión al firmar: quizá la paga la app", async () => {
@@ -229,6 +306,8 @@ describe("con una cuenta de Pollar", () => {
   it("en mainnet nunca hay grifo: no se pide nada, no se reintenta y no sale la caja de fondos", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada (ver más abajo).
+    porteroDeMentira("pollar");
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
     h.wallet = pollar(enviar);
     const { pasos, error } = await sellar();
@@ -238,7 +317,7 @@ describe("con una cuenta de Pollar", () => {
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(pasos.map(([p]) => p)).not.toContain("funding");
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 
   it("si la simulación falló (la ronda quedó cerca) no manda una transacción sin armar: lanza el error del contrato", async () => {
@@ -305,6 +384,8 @@ describe("con una cuenta de Pollar", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // En mainnet Pollar manda solo con el portero puesto, que le devolvió el pago.
+    porteroDeMentira("pollar");
     const { error } = await sellar();
     expect(esSelloIncierto(error)).toBe(false);
     expect((error as Error).message).toBe(mensaje);
@@ -319,6 +400,74 @@ describe("con una cuenta de Pollar", () => {
     const { r } = await sellar();
     expect(r?.raffleId).toBe(7n);
     expect(h.getTx).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * En la red principal con una cuenta de Google o de correo, sin portero configurado: cada firma de esa cuenta le cuesta
+ * a Tinkazo y nadie la contaría, así que no se pide ninguna (`elegirPatrocinador` y el candado de `submitElsewhere`).
+ */
+describe("en mainnet, una cuenta de Pollar sin portero", () => {
+  beforeEach(() => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", "");
+  });
+
+  const billetera = () => {
+    const signAndSubmit = vi.fn(async () => "deadbeef");
+    const signUnsponsored = vi.fn(async (_xdr: string) => "FIRMADA");
+    return { w: { ...pollar(signAndSubmit), signUnsponsored }, signAndSubmit, signUnsponsored };
+  };
+
+  it("el sello da «cerrado» y no se pide ninguna firma ni se manda nada", async () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    const { error, pasos } = await sellar();
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+    expect(f).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).not.toContain("sending");
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+    // Lo que lee la persona: que ahora no se pudo cubrir, lo mismo que cualquier cierre del portero.
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe(await anchorErrorText({ name: "ErrorPortero", motivo: "cerrado", estado: 0 }));
+  });
+
+  it("el sorteo, igual: «cerrado» sin firma", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    h.getTx.mockImplementation(async () => resultadoDelSorteo());
+    const { error } = await sortear();
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("y pagar con mi cuenta tampoco existe: «cerrado» antes de firmar", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const { w, signAndSubmit, signUnsponsored } = billetera();
+    h.wallet = w;
+    const { sealOnChain } = await import("./anchor");
+    const error = await sealOnChain(argsDeAhora(), () => undefined, { pagarConMiCuenta: true }).catch((x: unknown) => x);
+    expect(error).toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(signUnsponsored).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("con Freighter no cambia nada: firma y sella como siempre, sin portero", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    const { r, error } = await sellar();
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
   });
 });
 
@@ -338,8 +487,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       () => (listo = true),
       () => (listo = true),
     );
-    // Las piezas de afuera se cargan con import(): el reloj de mentira avanza de a poco.
-    for (let t = 0; t < hastaMs && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    await correrElReloj(() => listo, hastaMs);
     expect(listo).toBe(true);
     return { ...(await corrida), transcurrido: Date.now() - t0 };
   }
@@ -448,7 +596,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     h.wallet = pollar();
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("No pudimos llegar al registro público. Probá de nuevo en unos segundos.");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });
@@ -468,7 +616,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       // Lo que hace freeze.ts: lo reconoce y reintenta con otra ronda, sin que haya quedado nada en la cadena.
       const { selloSinGrabar, anchorErrorText } = await import("./anchor");
       expect(selloSinGrabar(error)).toBe(true);
-      expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
+      expect(await anchorErrorText(error)).toBe("El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.");
       // Ni simuló, ni firmó, ni mandó nada.
       expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
       expect(h.seal).not.toHaveBeenCalled();
@@ -535,15 +683,15 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValue(false);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(3500);
+      await avanzar(3500);
       const preguntas = h.accountOnRpc.mock.calls.length;
       expect(preguntas).toBeGreaterThanOrEqual(2);
       expect(doc.oyentes("tinkazo:sesion")).toBe(1);
       doc.avisarSesion(null);
-      await vi.advanceTimersByTimeAsync(1000);
+      await avanzar(1000);
       const { error } = await corrida;
       expect((error as Error).message).toBe("account-wait-cancelled");
-      await vi.advanceTimersByTimeAsync(10_000);
+      await avanzar(10_000);
       expect(h.accountOnRpc.mock.calls.length).toBeLessThanOrEqual(preguntas + 1);
       expect(h.seal).not.toHaveBeenCalled();
       expect(doc.oyentes("tinkazo:sesion")).toBe(0);
@@ -554,9 +702,9 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValue(false);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(2500);
+      await avanzar(2500);
       doc.avisarSesion("GOTRACUENTA");
-      await vi.advanceTimersByTimeAsync(1000);
+      await avanzar(1000);
       expect(((await corrida).error as Error).message).toBe("account-wait-cancelled");
     });
 
@@ -565,7 +713,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       h.accountOnRpc.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true);
       h.wallet = pollar();
       const corrida = sellar();
-      await vi.advanceTimersByTimeAsync(1500);
+      await avanzar(1500);
       doc.avisarSesion(DIR);
       const { r } = await correr(corrida);
       expect(r?.txHash).toBe("deadbeef");
@@ -593,6 +741,14 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: así llega a Pollar cada error que se prueba acá. Sin portero no
+    // se firmaría nada y estas pruebas pasarían sin mirar nada.
+    porteroDeMentira("pollar");
+  });
+  // Lo que carga el camino del portero, cargado antes de que el reloj de mentira empiece a correr: cargarlo lleva tiempo
+  // de verdad, y mientras tanto `correr` adelanta el reloj y se come el margen de la ronda.
+  beforeEach(async () => {
+    await Promise.all([import("./anchor"), import("./envio-sdk"), import("../stellar/patrocinador"), import("../stellar/cobro-oficial"), import("../stellar/envio"), import("../stellar/errores")]);
   });
   afterEach(() => vi.useRealTimers());
 
@@ -602,7 +758,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
       () => (listo = true),
       () => (listo = true),
     );
-    for (let t = 0; t < 200_000 && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    await correrElReloj(() => listo, 200_000);
     return corrida;
   }
 
@@ -619,10 +775,14 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     ["la ronda quedó cerca", () => new Error("HostError: Error(Contract, #5)")],
     ["algo que nadie esperaba", () => new Error("boom")],
   ])("%s", async (_nombre, hacer) => {
-    h.wallet = pollar(vi.fn().mockRejectedValue(hacer()));
+    const enviar = vi.fn().mockRejectedValue(hacer());
+    h.wallet = pollar(enviar);
     const { error } = await correr(sellar());
     expect(error).toBeInstanceOf(Error);
-    expect(eventos).toEqual([]);
+    // El error es el que dijo Pollar, no el cierre por falta de portero.
+    expect((error as { name?: string }).name).not.toBe("ErrorPortero");
+    expect(enviar).toHaveBeenCalled();
+    expect(avisos()).toEqual([]);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
   });
 
@@ -630,7 +790,25 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     h.accountOnRpc.mockResolvedValue(false);
     h.wallet = pollar();
     await correr(sellar());
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
+  });
+
+  it("tampoco cuando paga el portero y se quedó sin fondo: sale su no, sin grifo ni caja", async () => {
+    const f = porteroDeMentira("portero", () => responder(503, { motivo: "fondo" }));
+    const { wallet, firmar, deshacer } = pollarParaElPortero();
+    try {
+      // El SDK de mentira y el cliente del contrato, cargados antes de que corra el reloj (ver arriba).
+      await Promise.all([import("@stellar/stellar-sdk"), import("../stellar/contract")]);
+      h.wallet = wallet;
+      const { error } = await correr(sellar(argsConPortero()));
+      expect(error).toMatchObject({ name: "ErrorPortero", motivo: "fondo" });
+      expect(firmar).toHaveBeenCalledTimes(1);
+      expect(pagosAlPortero(f).length).toBeGreaterThan(0);
+      expect(avisos()).toEqual([]);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    } finally {
+      deshacer();
+    }
   });
 
   it("la falta de saldo se le dice sin culparla y sin mandarla a ningún lado", async () => {
@@ -643,7 +821,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
   it("al sortear, con la lista ya sellada, el patrocinio vacío habla de sortear y no culpa a la cuenta", async () => {
     const { anchorErrorText } = await import("./anchor");
     const alSortear =
-      "Tu lista está sellada y nadie la puede cambiar. Ahora no pudimos cubrir lo que cobra la red para sortear. Probá de nuevo en unos minutos: el ganador va a ser el mismo. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
+      "Tu lista sigue sellada y el ganador va a ser el mismo. No pudimos cubrir el costo de sortear. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
     h.wallet = pollar();
     // Las dos formas en que se queda sin con qué pagar el patrocinio de Pollar, y la del portero de Tinkazo.
     for (const e of [new Error("txInsufficientBalance"), new Error("SDK_CREDITS_INSUFFICIENT"), { name: "ErrorPortero", motivo: "fondo", estado: 503 }]) {
@@ -721,7 +899,90 @@ describe("el margen de la ronda al empezar a armar el sello", () => {
     const { error } = await sellar(conMargen(10));
     const { selloSinGrabar, anchorErrorText } = await import("./anchor");
     expect(selloSinGrabar(error)).toBe(true);
-    expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("El sello tardó más de lo previsto. Tocá Sellar la lista otra vez.");
+  });
+});
+
+/**
+ * La prueba de punta a punta del 13 de noviembre de 2026 en la red principal, con la cuenta de Google y el portero: la
+ * ronda nació a 65 s (`MARGEN_CON_PORTERO_S`), armar el sello llevó unos 2,5 s y la firma de Pollar llegó 32 s después de
+ * pedirla. El portero la mandó, entró a un ledger 6,5 s después, a 25 s de la ronda, y el contrato la rechazó
+ * (`RoundTooSoon`). Para el portero un sello que entró a un ledger y falló gasta el sorteo oficial, y la cuenta tenía uno.
+ *
+ * La red de mentira hace lo mismo: cada paso adelanta el reloj lo que tardó esa noche, y el ledger rechaza el sello si su
+ * ronda nace a menos de 30 s, como el contrato. Lo que se mira es si la transacción le llega al portero.
+ */
+describe("la firma de Pollar que tarda, con el portero de la red principal", () => {
+  beforeEach(() => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    vi.useFakeTimers({ toFake: ["Date"] });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /**
+   * Sella con la ronda que elige `freeze.ts` cuando paga el portero (`margenS` desde ahora). Armar tarda 2,5 s, la firma de
+   * Pollar lo que diga `firma`, y del portero al ledger pasan 6,5 s. Devuelve cómo terminó y cuántas veces se le pidió al
+   * portero que pague, que es lo que gasta el sorteo.
+   */
+  async function sellarConElPortero(firma: { ms: number } | { faltanAlFirmar: number }, margenS = MARGEN_CON_PORTERO_S) {
+    const round = targetRound(Date.now() / 1000, margenS);
+    const f = porteroDeMentira("portero", () => {
+      vi.setSystemTime(Date.now() + 6_500);
+      return responder(200, { hash: HASH_FIRMADA, status: "PENDING", quedan: 0, quedanSorteos: 0 });
+    });
+    const firmar = vi.fn(async (_xdr: string) => {
+      vi.setSystemTime("ms" in firma ? Date.now() + firma.ms : (roundTime(round) - firma.faltanAlFirmar) * 1000);
+      return "FIRMADA";
+    });
+    const { wallet, deshacer } = pollarParaElPortero(firmar);
+    try {
+      await Promise.all([import("@stellar/stellar-sdk"), import("../stellar/contract")]);
+      h.wallet = wallet;
+      h.seal.mockImplementation(async () => {
+        vi.setSystemTime(Date.now() + 2_500);
+        return txSimulada();
+      });
+      // El ledger: con la ronda a menos de 30 s, el contrato dice que no (`RoundTooSoon`) y la transacción queda FAILED.
+      h.getTx.mockImplementation(async () => (roundTime(round) - cierre() < 30 ? { status: "FAILED", latestLedgerCloseTime: cierre() } : entro(nativeToScVal(7n, { type: "u64" }))));
+      const res = await sellar({ ...argsDeAhora(), round });
+      return { ...res, pagos: pagosAlPortero(f).length, firmas: firmar.mock.calls.length };
+    } finally {
+      deshacer();
+    }
+  }
+
+  it("como esa noche, la firma 32 s: no se le entrega al portero, no se gasta el sorteo y se pide otra ronda", async () => {
+    const { error, pagos, firmas } = await sellarConElPortero({ ms: 32_000 });
+    expect(firmas).toBe(1);
+    expect(pagos).toBe(0);
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    expect(selloSinGrabar(error)).toBe(true);
+  });
+
+  it("la ronda siguiente (20 s más lejos) con la firma igual de lenta entra: un solo pago al portero", async () => {
+    const { r, error, pagos } = await sellarConElPortero({ ms: 32_000 }, MARGEN_CON_PORTERO_S + MAS_LEJOS_POR_INTENTO_S);
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
+    expect(pagos).toBe(1);
+  });
+
+  it("con la firma de siempre (la de esa mañana, un segundo) entra a la primera", async () => {
+    const { r, error, pagos } = await sellarConElPortero({ ms: 1_000 });
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
+    expect(pagos).toBe(1);
+  });
+
+  it.each([60, 46, 45])("a la ronda le faltan %s s al llegar la firma: se le entrega al portero", async (faltan) => {
+    const { pagos } = await sellarConElPortero({ faltanAlFirmar: faltan });
+    expect(pagos).toBe(1);
+  });
+
+  it.each([44.9, 40, 31.5, 10])("a la ronda le faltan %s s al llegar la firma: no se le entrega, entraría y fallaría", async (faltan) => {
+    const { error, pagos } = await sellarConElPortero({ faltanAlFirmar: faltan });
+    expect(pagos).toBe(0);
+    expect(selloSinGrabar(error)).toBe(true);
   });
 });
 
@@ -776,11 +1037,13 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     conGrifoApagado();
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada.
+    porteroDeMentira("pollar");
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 });
 
@@ -913,7 +1176,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
         () => (listo = true),
         () => (listo = true),
       );
-      for (let t = 0; t < 120_000 && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+      await correrElReloj(() => listo, 120_000);
       return corrida;
     }
 
@@ -1014,13 +1277,15 @@ describe("el sorteo (drawOnChain) se ayuda igual que el sellado", () => {
   it("en mainnet nunca hay grifo ni caja de fondos: no se pide nada y el error sale tal cual", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
+    // Con el portero, que le devolvió el pago a Pollar: sin portero, en mainnet no se firma nada.
+    porteroDeMentira("pollar");
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
     h.wallet = pollar(enviar);
     const { error } = await sortear();
-    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
-    expect(eventos).toEqual([]);
+    expect(avisos()).toEqual([]);
   });
 
   it("con otra wallet no cambia nada: el error sale tal cual, sin grifo ni caja de fondos", async () => {
@@ -1137,8 +1402,7 @@ describe("un grifo que no contesta", () => {
       listo = true;
       return r;
     });
-    // Las piezas de afuera se cargan con import() y el reloj de mentira avanza de a poco.
-    for (let i = 0; i < 60 && !listo; i++) await vi.advanceTimersByTimeAsync(1000);
+    await correrElReloj(() => listo, 60_000, 1000);
     const { error } = await corrida;
     expect(listo).toBe(true);
     expect((error as Error).message).toContain("txInsufficientBalance");
@@ -1162,7 +1426,7 @@ describe("escribirError: sin conexión, igual dice algo", () => {
     expect(status.textContent).toBe("Estás sin internet. Conectate y probá de nuevo.");
     vi.stubGlobal("navigator", { onLine: true });
     await escribirError(status, new TypeError("Failed to fetch"), "sorteo");
-    expect(status.textContent).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
+    expect(status.textContent).toBe("No pudimos llegar al registro público. Probá de nuevo en unos segundos.");
   });
 });
 
@@ -1231,11 +1495,24 @@ describe("el costo del sello de verdad (antes de firmar o de entregarlo)", () =>
   it("en mainnet el tope es otro: 0,5 XLM ya corta, 0,1 no", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
-    h.wallet = pollar();
-    h.seal.mockImplementation(async () => txSimulada("5000000"));
-    expect(nombre((await sellar()).error)).toBe("CostoAlto");
-    h.seal.mockImplementation(async () => txSimulada("1000000"));
-    expect((await sellar()).r?.txHash).toBe("deadbeef");
+    // Con el portero que paga, como en mainnet con el cobro por uso: el tope corta antes de pedir la firma.
+    const f = porteroDeMentira("portero");
+    const { wallet, firmar, deshacer } = pollarParaElPortero();
+    try {
+      h.wallet = wallet;
+      h.seal.mockImplementation(async () => txSimulada("5000000"));
+      expect(nombre((await sellar(argsConPortero())).error)).toBe("CostoAlto");
+      expect(firmar).not.toHaveBeenCalled();
+      expect(pagosAlPortero(f)).toHaveLength(0);
+      h.seal.mockImplementation(async () => txSimulada("1000000"));
+      const { r, error } = await sellar(argsConPortero());
+      expect(error).toBeUndefined();
+      expect(r?.txHash).toBe(HASH_FIRMADA);
+      expect(firmar).toHaveBeenCalledTimes(1);
+      expect(pagosAlPortero(f)).toHaveLength(1);
+    } finally {
+      deshacer();
+    }
   });
 
   it("con un costo normal no pasa nada raro: sella como siempre", async () => {
@@ -1373,5 +1650,123 @@ describe("más ganadores de los que admite el contrato de la red", () => {
     const { anchorErrorText } = await import("./anchor");
     expect(await anchorErrorText(simulacionFallida(), "sello", 32)).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
     expect(await anchorErrorText(simulacionFallida(), "sello")).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
+  });
+});
+
+describe("la puerta del premio: el texto del sello y el del sorteo", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const claves = ["errAnchor.premioGuardado", "errAnchor.premioGuardadoSorteo", "errAnchor.premioSinSaber", "errAnchor.premioSinSaberSorteo"] as const;
+
+  it("al sellar: la cuenta puede guardar dinero, o no se pudo comprobar", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(premio("puede-guardar"), "sello")).toBe(T.es["errAnchor.premioGuardado"]);
+    expect(await anchorErrorText(premio("no-se-sabe"), "sello")).toBe(T.es["errAnchor.premioSinSaber"]);
+    // Sin decir el paso, es el del sello.
+    expect(await anchorErrorText(premio("puede-guardar"))).toBe(T.es["errAnchor.premioGuardado"]);
+  });
+
+  it("al sortear, con la lista ya sellada: dice que el ganador no cambia, sin el aviso de Mis sorteos", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    const guardado = await anchorErrorText(premio("puede-guardar"), "sorteo");
+    const sinSaber = await anchorErrorText(premio("no-se-sabe"), "sorteo");
+    expect(guardado).toBe(T.es["errAnchor.premioGuardadoSorteo"]);
+    expect(sinSaber).toBe(T.es["errAnchor.premioSinSaberSorteo"]);
+    for (const texto of [guardado, sinSaber]) {
+      expect(texto).toContain("El ganador no cambia");
+      expect(texto).not.toContain(T.es.sorteoMasTarde as string);
+    }
+    // El de guardado lleva al comprobante, donde se termina de guardar.
+    expect(guardado).toContain(T.es.vFinish as string);
+  });
+
+  it("los cuatro textos existen en los dos idiomas y ninguno dice hash, firma ni wallet", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) {
+        const texto = T[l][clave];
+        expect(typeof texto, `${l}: ${clave}`).toBe("string");
+        expect(texto as string).not.toMatch(/\bhash|\bfirmas?\b|\bsignatures?\b|\bXDR|drand|\bRPC\b/i);
+        if (l === "es") expect(texto as string).not.toMatch(/\bwallet\b/i);
+      }
+    }
+    expect(T.en["errAnchor.premioGuardadoSorteo"]).toContain("The winner stays the same");
+  });
+
+  it("no es un sello que no se grabó: no se reintenta con otra ronda", async () => {
+    const { selloSinGrabar } = await import("./anchor");
+    expect(selloSinGrabar(premio("puede-guardar"))).toBe(false);
+    expect(selloSinGrabar(premio("no-se-sabe"))).toBe(false);
+  });
+});
+
+describe("el voto por contenido que no votó: el texto del sello y el del sorteo", () => {
+  const negativa = new Error("tinkazo-cofirma-distinta");
+  const tope = new Error("tinkazo-cofirma-distinta-tope");
+  const claves = ["errAnchor.cofirmaDistinta", "errAnchor.cofirmaDistintaSorteo", "cofirmaOtraVez", "cofirmaEscribinos"] as const;
+
+  it("al sellar, la primera vez: lo que pasó y probar una vez más", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(negativa, "sello")).toBe(`${T.es["errAnchor.cofirmaDistinta"]} ${T.es.cofirmaOtraVez}`);
+  });
+
+  it("al sellar, con el tope de la pestaña: lo que pasó y escribir, sin invitar a probar de nuevo", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    const texto = await anchorErrorText(tope, "sello");
+    expect(texto).toBe(`${T.es["errAnchor.cofirmaDistinta"]} ${T.es.cofirmaEscribinos}`);
+    expect(texto).not.toContain(T.es.cofirmaOtraVez as string);
+  });
+
+  it("al sortear, la primera vez: el ganador no cambia y probar una vez más", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(negativa, "sorteo")).toBe(`${T.es["errAnchor.cofirmaDistintaSorteo"]} ${T.es.cofirmaOtraVez}`);
+  });
+
+  it("al sortear, con el tope: el ganador no cambia y escribir", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(tope, "sorteo")).toBe(`${T.es["errAnchor.cofirmaDistintaSorteo"]} ${T.es.cofirmaEscribinos}`);
+  });
+
+  it("los cuatro textos existen en los dos idiomas, con una sola oración cada uno", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) {
+        const texto = T[l][clave];
+        expect(typeof texto, `${l}: ${clave}`).toBe("string");
+        expect((texto as string).split(/(?<=[.:!?])\s+/).filter(Boolean), `${l}: ${clave}`).toHaveLength(1);
+      }
+    }
+  });
+
+  it("ninguno trae punto y coma, comillas angulares, raya larga, punto medio ni signos de exclamación", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) expect(T[l][clave] as string, `${l}: ${clave}`).not.toMatch(/[;«»—·!¡]/);
+    }
+  });
+
+  it("ninguno dice hash, firma, red, co-firma, XDR ni contrato", async () => {
+    const { T } = await import("../i18n");
+    const tecnicas = /\bhash|\bfirmas?\b|\bsignatures?\b|\bred\b|\bnetwork\b|co-?firma|co-?sign|\bXDR|contrato|contract/i;
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) expect(T[l][clave] as string, `${l}: ${clave}`).not.toMatch(tecnicas);
+    }
+  });
+
+  it("solo el sello y el sorteo arman la variante: la clave que se cuenta sigue siendo cofirmaDistinta", async () => {
+    const { errorKey } = await import("../stellar/errores");
+    expect(errorKey(negativa)).toBe("cofirmaDistinta");
+    expect(errorKey(tope)).toBe("cofirmaDistinta");
   });
 });

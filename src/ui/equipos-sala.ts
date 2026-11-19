@@ -15,10 +15,9 @@ import { type EquipoDeSala, type EstadoDeConexion, type Sala, cerrarSala, crearS
 import { cambiarEstadoEnSala, configurarRegistro, quitarEquipoEnSala } from "../sala/equipos";
 import { type NetworkName, accountUrl, hayModoOficial, network, txUrl } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
-import { app } from "../state";
 import { type DatosDePantalla, type DepsDePantalla, type PantallaDelStand, crearPantallaDelStand } from "./pantalla-stand";
 import { pintarQr, precargarQr } from "./qr";
-import { setList } from "./participants";
+import { listaBloqueada, setList } from "./participants";
 
 /**
  * Los equipos con cupón, en la pantalla de quien organiza (Space Apps y parecidos). Detrás de la bandera
@@ -79,6 +78,8 @@ export interface DepsDelPanel {
   aprobar: (xdr: string, origen: string) => Promise<Aprobacion>;
   /** Pone el texto en el cuadro de la lista. `false` si no pudo (la lista ya está sellada). */
   ponerLista: (texto: string) => boolean;
+  /** Si la lista no se puede tocar: se está sellando o ya está sellada. */
+  listaCerrada: () => boolean;
   ponerEtiquetas: (m: ReadonlyMap<string, string>) => void;
   qr: (img: HTMLImageElement, enlace: string) => Promise<void>;
   precargarQr: () => Promise<void>;
@@ -114,8 +115,9 @@ export function depsReales(): DepsDelPanel {
     leerCuenta: (c) => leerCuenta(c, horizon),
     armar: armarCupones,
     aprobar: (xdr, origen) => aprobarYEnviar(xdr, origen, { billetera: activeWallet(), passphrase: network.networkPassphrase }),
+    listaCerrada: () => listaBloqueada(),
     ponerLista: (texto) => {
-      if (app.frozen) return false;
+      if (listaBloqueada()) return false;
       setList(texto);
       return true;
     },
@@ -723,8 +725,11 @@ export function crearPanelDeEquipos(deps: DepsDelPanel): PanelDeEquipos {
       const quedan = sinConfirmar();
       const { lineas, etiquetas } = listaDesdeCupones(lista(), evidencias);
       if (lineas.length < 2) return aviso(quedan.length ? textoSinConfirmar(quedan.length) : tx("eqListaPocos"));
-      if (!deps.ponerLista(lineas.join("\n"))) return aviso(tx("eqListaSellada"));
+      // Con la lista cerrada no se toca nada: ni la lista ni los nombres con que se muestra la que está sellada.
+      if (deps.listaCerrada()) return aviso(tx("eqListaSellada"));
+      // Las etiquetas van antes que la lista: al pintarla, el resumen de Sellar la lista y la cuenta del cuadro ya saben que son equipos.
       deps.ponerEtiquetas(etiquetas);
+      if (!deps.ponerLista(lineas.join("\n"))) return aviso(tx("eqListaSellada"));
       // Quien figura con cupón en la sala y no se leyó en la red no entra, pero se dice: no queda afuera en silencio.
       aviso(quedan.length ? `${fmt("eqListaPuesta", { n: lineas.length })} ${textoSinConfirmar(quedan.length)}` : fmt("eqListaPuesta", { n: lineas.length }));
     } finally {
@@ -1001,14 +1006,25 @@ export function initEquiposSala(deps: DepsDelPanel = depsReales()): PanelDeEquip
   entrada.addEventListener("click", () => {
     panel.raiz.hidden = !panel.raiz.hidden;
     entrada.setAttribute("aria-expanded", String(!panel.raiz.hidden));
-    if (!panel.raiz.hidden) panel.pintar();
+    if (!panel.raiz.hidden) {
+      panel.pintar();
+      // El panel está arriba del cuadro y el enlace dentro del pliegue de abajo: se lo lleva a la vista.
+      const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+      panel.raiz.scrollIntoView?.({ behavior: reducido ? "auto" : "smooth", block: "nearest" });
+    }
   });
   origenes.before(panel.raiz);
-  pie.after(entrada);
+  // El enlace va dentro del pliegue de las opciones: quien sortea sin equipos no lo ve en el camino común. Sin ese pliegue
+  // (otra pantalla), queda junto al del stand.
+  const pliegue = document.getElementById("mas-opciones");
+  if (pliegue) pliegue.append(entrada);
+  else pie.after(entrada);
   // Si el registro sigue abierto (se recargó la pantalla), el panel se ve.
   if (panel.raiz.querySelector("#eq-sala:not([hidden])")) {
     panel.raiz.hidden = false;
     entrada.setAttribute("aria-expanded", "true");
+    // El enlace vive dentro del pliegue de las opciones: con el panel a la vista, el pliegue no puede quedar cerrado.
+    if (pliegue instanceof HTMLDetailsElement) pliegue.open = true;
   }
   onLangChange(() => {
     texto();

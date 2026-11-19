@@ -2,7 +2,8 @@ import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
 import { modesVisible } from "../modos/bandera";
-import { isTurnOrder, turnOrder, turnOrderDisplayNames } from "../modos/turnos";
+import { isTurnOrder, turnOrder } from "../modos/turnos";
+import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { etiquetaDe } from "../equipos/etiquetas";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
@@ -61,11 +62,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // caras: lo que se lee desde el fondo es el orden.
   const turnos = isTurnOrder(frozen.names.length, n, premio);
   const lista = n > MAX_CON_CARA || turnos;
-  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo. En un orden
-  // repartido se lee el nombre de la persona, sin el sufijo de la línea, como en el resultado.
-  // Sin los modos a la vista no se toca ningún nombre: la página del resultado y la verificación muestran las líneas
-  // tal cual, y la pantalla grande dice lo mismo.
-  const orden = turnos && modesVisible() ? turnOrderDisplayNames(frozen.names, drawn.winners) : turnOrder(frozen.names, drawn.winners);
+  // Un sorteo que se cuenta por persona muestra a la persona, sin el sufijo de la línea sellada, como el
+  // resultado: la misma lectura que la cuenta (`seCuentaPorPersona`). Sin ella, cada línea tal cual se selló.
+  const mostrar = (linea: string): string => (seCuentaPorPersona(frozen.names, modesVisible()) ? nombreDePersona(linea) : linea);
+  // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo, y cada renglón
+  // pasa una sola vez por `mostrar`. Sin la lectura por persona (`seCuentaPorPersona`) cada línea queda tal cual se
+  // selló, como en el resultado y la verificación.
+  const orden = turnOrder(frozen.names, drawn.winners);
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -94,13 +97,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
       ? `<ol class="pantalla-lista">${orden
           .map((nombre, k) => {
             const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
-            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(etiquetaDe(nombre))}</span></li>`;
+            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(mostrar(etiquetaDe(nombre)))}</span></li>`;
           })
           .join("")}</ol>`
       : drawn.winners
           .map((i, k) => {
             // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
-            const nombre = etiquetaDe(frozen.names[i] ?? "");
+            const nombre = mostrar(etiquetaDe(frozen.names[i] ?? ""));
             const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
             return (
               `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
@@ -111,7 +114,8 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `</div>` +
     `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
-    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
+    `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : turnos ? "turnsPie" : varios ? "imgPieVarios" : "pantallaPie"))}</p>` +
+    `<p class="pantalla-grab" hidden></p>`;
   document.body.appendChild(back);
 
   const ajustar = (): void => encajar(back, n);
@@ -124,10 +128,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   addEventListener("resize", ajustar);
 
   let cerrada = false;
+  const grabacion = seguirLaGrabacion(back, ajustar);
   const cerrar = (): void => {
     if (cerrada) return;
     cerrada = true;
     back.remove();
+    grabacion.soltar();
+    document.removeEventListener("tinkazo:comprobante", alComprobante);
     removeEventListener("keydown", tecla);
     removeEventListener("resize", ajustar);
     document.removeEventListener("fullscreenchange", pantalla);
@@ -169,17 +176,97 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
       : varios
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
+  /** Cada QR que se pinta lleva su vuelta: si llega otro comprobante mientras tanto, el viejo ya no se pinta encima. */
+  let vuelta = 0;
+  const sigue = (mia: number): boolean => mia === vuelta && !cerrada && back.isConnected && !grabacion.enDuda();
+  const pintarQr = async (link: string, primero: boolean): Promise<void> => {
+    const mia = ++vuelta;
+    const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
+    // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
+    if (!sigue(mia)) return;
+    const listo = ahora && img ? await pintarQrDelComprobante(img, ahora, lado) : false;
+    if (!listo && primero) back.querySelector(".pantalla-qr")?.remove();
+    ajustar();
+    if (!listo || !img) return;
+    // El corto que llegó tarde reemplaza al largo.
+    const corto = await despues;
+    if (corto && sigue(mia) && (await pintarQrDelComprobante(img, corto, lado))) ajustar();
+  };
+  // Cuando el sorteo termina de guardarse, el comprobante suma el enlace del sorteo grabado (`draw.ts`): el QR pasa a
+  // ese. Hasta el 16 de noviembre de 2026 la pantalla grande se quedaba con el de antes de guardar.
+  alComprobante = (e: Event): void => {
+    const nuevo = (e as CustomEvent<string>).detail;
+    if (nuevo && img?.isConnected && !cerrada) void pintarQr(nuevo, false);
+  };
+  document.addEventListener("tinkazo:comprobante", alComprobante);
   const link = await Promise.resolve(enlace).catch(() => "");
-  const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
-  // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
-  if (cerrada || !back.isConnected) return;
-  const listo = ahora && img ? await pintarQrDelComprobante(img, ahora, lado) : false;
-  if (!listo) back.querySelector(".pantalla-qr")?.remove();
-  ajustar();
-  if (!listo || !img) return;
-  // El corto que llegó tarde reemplaza al largo.
-  const corto = await despues;
-  if (corto && !cerrada && back.isConnected && (await pintarQrDelComprobante(img, corto, lado))) ajustar();
+  if (vuelta === 0) await pintarQr(link, true);
+}
+
+/** El QR de la pantalla grande que está abierta escucha los comprobantes nuevos (`mostrarResultado`). */
+let alComprobante: (e: Event) => void = () => undefined;
+
+/**
+ * El sorteo se graba aparte del show (`draw.ts`), y la línea que dice cómo va (`#grab-estado`) queda tapada por la
+ * pantalla grande. Esta la repite abajo, discreta: guardando, guardado, o que no se pudo con el botón para volver a
+ * probar (el mismo de la página). Si lo que sigue no es guardar (el sorteo ya estaba grabado, o hay que volver a
+ * preparar la lista), lo dice sin botón: eso se hace desde la página. Si lo guardado no coincide con lo que se ve, lo
+ * dice como alerta y el QR se va: ese resultado no se comparte hasta revisarlo. Sin sorteo grabado (sin sello, la demo)
+ * no se ve nada.
+ */
+function seguirLaGrabacion(back: HTMLElement, ajustar: () => void): { soltar: () => void; enDuda: () => boolean } {
+  const grab = document.getElementById("grab-estado");
+  const linea = back.querySelector<HTMLElement>(".pantalla-grab");
+  const enDuda = (): boolean => grab?.dataset.grabacion === "no-coincide";
+  if (!grab || !linea) return { soltar: () => undefined, enDuda };
+  const pintar = (): void => {
+    const estado = grab.dataset.grabacion;
+    const visible = !!estado && grab.style.display !== "none";
+    linea.hidden = !visible;
+    if (!visible || !estado) {
+      linea.replaceChildren();
+      return;
+    }
+    linea.dataset.grabacion = estado;
+    const grave = estado === "error" || estado === "no-coincide" || estado === "recuperar";
+    linea.setAttribute("role", grave ? "alert" : "status");
+    // El texto de la línea, sin el enlace al registro ni los botones de la página: eso se usa desde la página.
+    const texto = [...grab.childNodes]
+      .filter((n) => n.nodeType === Node.TEXT_NODE)
+      .map((n) => n.textContent ?? "")
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    const parrafo = document.createElement("span");
+    parrafo.textContent = texto;
+    linea.replaceChildren(parrafo);
+    if (estado === "error") {
+      const otraVez = document.createElement("button");
+      otraVez.type = "button";
+      otraVez.className = "ghost mini";
+      otraVez.textContent = t("grabReintentar");
+      // El botón de la página vuelve a probar la grabación, sin otro show. Solo si eso es lo que hace: Guardar el sorteo
+      // solo guarda, nunca se lleva el proyector a otra página ni suelta el sello.
+      otraVez.addEventListener("click", () => {
+        const btn = document.getElementById("btn-draw");
+        if (btn?.dataset.i === "grabReintentar") btn.click();
+      });
+      linea.append(otraVez);
+    }
+    // Lo que sigue no es guardar (ver el sorteo que ya estaba grabado, o volver a preparar la lista): se dice y se hace
+    // desde la página, que tiene el botón para eso.
+    if (estado === "recuperar") {
+      const sigue = document.createElement("span");
+      sigue.textContent = ` ${t("grabSigueEnLaPagina")}`;
+      linea.append(sigue);
+    }
+    if (estado === "no-coincide") back.querySelector(".pantalla-qr")?.remove();
+    ajustar();
+  };
+  pintar();
+  const mira = new MutationObserver(pintar);
+  mira.observe(grab, { attributes: true, attributeFilter: ["data-grabacion", "style"], childList: true, characterData: true, subtree: true });
+  return { soltar: () => mira.disconnect(), enDuda };
 }
 
 /**
@@ -195,20 +282,91 @@ function encajar(back: HTMLElement, n: number): void {
   if (!caja || !cuerpo) return;
   const celular = innerWidth <= 700;
   const nombres = [...back.querySelectorAll<HTMLElement>(".pantalla-nombre")];
-  const entra = (): boolean =>
-    nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
-    cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
-    (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1);
-  // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
-  let chico = celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec));
-  let grande = n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52;
-  caja.style.setProperty("--letra", `${grande}px`);
-  if (entra()) return;
+  // En el celular, el orden de turnos se lee en una lista que se desplaza: cada nombre en su renglón. Un nombre
+  // partido en dos no desborda a lo ancho, así que el ajuste lo daba por bueno y quedaba partido pudiendo entrar
+  // en uno con una letra un poco más chica. Se cuenta en cuántos renglones sale cada nombre; sin medidas (el ensayo)
+  // se da por bueno. En el resto la partición vale como siempre y nada cambia.
+  const rango = document.createRange();
+  const enUnRenglon = (e: HTMLElement): boolean => {
+    rango.selectNodeContents(e);
+    const renglones = rango.getClientRects().length;
+    return renglones <= 1;
+  };
+  const listaDeTurnos = celular && back.classList.contains("turnos");
+  const ponerLetra = (letra: number): void => caja.style.setProperty("--letra", `${letra}px`);
+  const cabe = (letra: number, exigidos: readonly HTMLElement[]): boolean => {
+    ponerLetra(letra);
+    return (
+      nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
+      exigidos.every(enUnRenglon) &&
+      cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
+      (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1)
+    );
+  };
+  const letra = letraDeLosNombres({
+    tope: n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52,
+    // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
+    piso: celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec)),
+    pisoUnRenglon: listaDeTurnos ? PISO_UN_RENGLON : null,
+    nombres,
+    cabe,
+    enUnRenglon: (l, e) => {
+      ponerLetra(l);
+      return enUnRenglon(e);
+    },
+  });
+  caja.style.setProperty("--letra", `${letra}px`);
+}
+
+/**
+ * La letra más chica con la que se busca, en el orden de turnos del celular, que cada nombre entre en un
+ * renglón. Por debajo de esto la lista ya no se lee desde lejos: antes que achicar a todos por un nombre
+ * largo, ese nombre se parte por sus espacios.
+ */
+export const PISO_UN_RENGLON = 22;
+
+/**
+ * La letra más grande entre `piso` y `tope` con la que `cabe` da verdadero, buscando a la mitad: `cabe`
+ * tiene que ser monótona (si entra con una letra, entra con cualquiera más chica). Si no entra ni con el
+ * piso, queda el piso.
+ */
+export function letraQueEntra(tope: number, piso: number, cabe: (letra: number) => boolean): number {
+  if (cabe(tope)) return tope;
+  let chico = piso;
+  let grande = tope;
   while (grande - chico > 1) {
     const medio = Math.floor((chico + grande) / 2);
-    caja.style.setProperty("--letra", `${medio}px`);
-    if (entra()) chico = medio;
+    if (cabe(medio)) chico = medio;
     else grande = medio;
   }
-  caja.style.setProperty("--letra", `${chico}px`);
+  return chico;
+}
+
+/**
+ * La letra de los nombres de la pantalla grande, en dos pasadas cuando hay `pisoUnRenglon` (el orden de
+ * turnos en el celular). Primero, con ese piso, exigiendo un renglón por nombre. Si con ese piso no entran
+ * todos en un renglón, se exige el renglón solo a los que entran en uno con ese piso, con el piso de siempre:
+ * la letra queda grande, los nombres que entraban siguen en un renglón y solo el largo se parte por sus
+ * espacios. El conjunto se mide una vez, así que cada pasada es monótona (con una letra más chica nadie sale
+ * de su renglón) y la búsqueda a la mitad sirve. Sin `pisoUnRenglon`, la búsqueda de siempre, sin exigirlo.
+ * `cabe(letra, exigidos)` mide con esa letra, exigiendo un renglón a `exigidos`; `enUnRenglon(letra, nombre)`
+ * dice si ese nombre sale en un renglón con esa letra.
+ */
+export function letraDeLosNombres<N>(op: {
+  tope: number;
+  piso: number;
+  pisoUnRenglon: number | null;
+  nombres: readonly N[];
+  cabe: (letra: number, exigidos: readonly N[]) => boolean;
+  enUnRenglon: (letra: number, nombre: N) => boolean;
+}): number {
+  const { tope, piso, pisoUnRenglon, nombres, cabe, enUnRenglon } = op;
+  if (pisoUnRenglon !== null && pisoUnRenglon < tope) {
+    const exigidos = nombres.filter((n) => enUnRenglon(pisoUnRenglon, n));
+    if (exigidos.length === nombres.length && cabe(pisoUnRenglon, nombres)) {
+      return letraQueEntra(tope, pisoUnRenglon, (letra) => cabe(letra, nombres));
+    }
+    if (exigidos.length) return letraQueEntra(tope, piso, (letra) => cabe(letra, exigidos));
+  }
+  return letraQueEntra(tope, piso, (letra) => cabe(letra, []));
 }

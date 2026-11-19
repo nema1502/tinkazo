@@ -119,6 +119,51 @@ describe("los textos nuevos", () => {
   });
 });
 
+describe("lo que el portero dice antes de apretar, con el cobro por uso del modo Oficial", () => {
+  // Con el bloque `oficial`, los sellos que quedan son lo menor entre el mes y los sorteos oficiales (servicio.ts): cero no
+  // siempre es el tope del mes.
+  const conOficial = (sellos: number, oficial: { acceso: boolean; quedan: number | null }) => ({
+    rige: "portero" as const,
+    cupo: { sellos: { usados: 0, max: 100, quedan: sellos }, sorteos: { usados: 0, max: 100, quedan: 100 }, liberaEn: LIBERA },
+    oficial: { acceso: oficial.acceso, sorteos: oficial.quedan === null ? null : { quedan: oficial.quedan, proximoVence: null } },
+  });
+
+  it("sin acceso al modo Oficial no es el tope del mes: no frena, lo resuelve la compuerta del sello (la caja del cupón)", async () => {
+    const { patrocinioQueFrena } = await import("./red-acciones");
+    expect(patrocinioQueFrena(conOficial(0, { acceso: false, quedan: 0 }), true)).toBeNull();
+    expect(patrocinioQueFrena(conOficial(0, { acceso: false, quedan: null }), true)).toBeNull();
+  });
+  it("con acceso y sin sorteos oficiales tampoco: lo resuelve «Se te acabaron»", async () => {
+    const { patrocinioQueFrena } = await import("./red-acciones");
+    expect(patrocinioQueFrena(conOficial(0, { acceso: true, quedan: 0 }), true)).toBeNull();
+    expect(patrocinioQueFrena(conOficial(0, { acceso: true, quedan: null }), true)).toBeNull();
+  });
+  it("con sorteos de sobra, cero sellos sí es el tope del mes", async () => {
+    const { patrocinioQueFrena } = await import("./red-acciones");
+    expect(patrocinioQueFrena(conOficial(0, { acceso: true, quedan: 5 }), true)).toEqual({ motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA });
+    expect(patrocinioQueFrena(conOficial(3, { acceso: true, quedan: 5 }), true)).toBeNull();
+  });
+  it("con el cobro por uso apagado (VITE_ALTA sin prender), una cuenta sin acceso o sin sorteos sigue frenada como antes", async () => {
+    // Sin el cobro por uso no corre la compuerta del acceso: si esto no frena, la cuenta firma un sello que el portero
+    // rechaza, y esa firma cuesta igual.
+    const { patrocinioQueFrena } = await import("./red-acciones");
+    const tope = { motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA };
+    for (const o of [{ acceso: false, quedan: 0 }, { acceso: false, quedan: null }, { acceso: true, quedan: 0 }, { acceso: true, quedan: null }, { acceso: true, quedan: 5 }]) {
+      expect(patrocinioQueFrena(conOficial(0, o), false), JSON.stringify(o)).toEqual(tope);
+      expect(patrocinioQueFrena(conOficial(0, o)), `${JSON.stringify(o)} sin decir`).toEqual(tope);
+    }
+    expect(patrocinioQueFrena(conOficial(3, { acceso: true, quedan: 5 }), false)).toBeNull();
+  });
+  it("sin el bloque oficial (Prueba, o sin cobro por uso), como siempre", async () => {
+    const { patrocinioQueFrena } = await import("./red-acciones");
+    const { oficial: _o, ...sinOficial } = conOficial(0, { acceso: false, quedan: 0 });
+    expect(patrocinioQueFrena(sinOficial)).toEqual({ motivo: "cupo-cuenta", que: "sellos", liberaEn: LIBERA });
+    expect(patrocinioQueFrena({ ...sinOficial, cupo: { ...sinOficial.cupo, sellos: { usados: 2, max: 20, quedan: 18 } } })).toBeNull();
+    expect(patrocinioQueFrena({ rige: "cerrado", motivo: "sin-respuesta" })).toEqual({ motivo: "cerrado" });
+    expect(patrocinioQueFrena({ rige: "pollar", configurado: true })).toBeNull();
+  });
+});
+
 describe("la línea del cupo", () => {
   const portero = (quedan: number) => ({ rige: "portero" as const, cupo: { sellos: { usados: 20 - quedan, max: 20, quedan }, sorteos: { usados: 0, max: 40, quedan: 40 }, liberaEn: LIBERA } });
   const decir = (l: "es" | "en") => (k: string): string => String(T[l][k]);

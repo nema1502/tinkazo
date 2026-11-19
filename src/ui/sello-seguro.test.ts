@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { roundTime, targetRound } from "../protocol/quicknet";
 import { type IntentoDeSello, SelloIncierto, resolverSello } from "../stellar/envio";
-import { AVISO_OTRA_RONDA_MS, CLAVE_PENDIENTE, MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S, SelloSinConfirmar, guardarPendiente, leerPendiente, margenDelPrimerIntento, rondasDesde, sellarSinDuplicar } from "./sello-seguro";
+import { AVISO_OTRA_RONDA_MS, CLAVE_PENDIENTE, MARGEN_CON_PORTERO_S, MAS_LEJOS_POR_INTENTO_S, SelloSinConfirmar, averiguarPendiente, guardarPendiente, leerPendiente, margenDelPrimerIntento, rondasDesde, sellarSinDuplicar } from "./sello-seguro";
 
 /**
  * "Ningún reintento puede crear un segundo sello", contra una red de mentira: el
@@ -226,6 +226,35 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
     expect(e.pasos.sellar).not.toHaveBeenCalled();
   });
 
+  it("un pendiente que tarda en averiguarse y no entró: la ronda se elige de nuevo después de averiguar, con el margen entero", async () => {
+    // La pestaña murió con el intento guardado y antes de mandarlo: en la red no hay nada. Al volver, averiguarlo espera
+    // a que el contrato ya no lo acepte (unos 20 s con este margen). Con la ronda elegida antes de esa espera, el sello
+    // nuevo quedaba cerca, fallaba y gastaba uno de los dos cambios de ronda.
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const antes = e.inicial();
+    const pendiente: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: antes.round, count: 8, numWinners: 1, meta: "premio", desde: antes.ts };
+    e.avanzar(5000);
+    const inicial = e.inicial();
+    const avisos: string[] = [];
+    const r = await sellarSinDuplicar(inicial, { ...e.pasos, avisar: (q) => void avisos.push(q) }, pendiente);
+    expect(avisos).toEqual(["verificando"]);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+    expect(r.round).toBeGreaterThan(inicial.round);
+    expect(r.retomado).toBeUndefined();
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+
+  it("sin rondaNueva (los reintentos de Seguir sin sello), la ronda sigue siendo la misma después de averiguar", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    e.avanzar(90_000);
+    const inicial = e.inicial();
+    const pendiente: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: inicial.round - 40, count: 8, numWinners: 1, meta: "premio", desde: inicial.ts - 120 };
+    const { sellar, resolver, sinGrabar, guardarPendiente: guardar, dormir } = e.pasos;
+    const r = await sellarSinDuplicar(inicial, { sellar, resolver, sinGrabar, guardarPendiente: guardar, dormir }, pendiente);
+    expect(e.pasos.sellar.mock.calls.map(([round]) => round)).toEqual([inicial.round]);
+    expect(r.round).toBe(inicial.round);
+  });
+
   it("un corte antes de mandar nada (al simular) se reintenta solo, con espera creciente", async () => {
     const e = escenario([
       { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Failed to fetch") },
@@ -294,6 +323,169 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
     e.avanzar(200_000);
     expect(e.sellosDeLaLista()).toBe(1);
     expect(r.raffleId).toBe(500n);
+  });
+});
+
+describe("sellarSinDuplicar: el intento queda guardado antes de mandarlo", () => {
+  /**
+   * Hasta acá el intento se guardaba solo cuando el envío fallaba sin saberse. Si la página se recargaba o la
+   * pestaña moría con el sello ya en la red (en el iPhone el navegador no pregunta antes de salir), no quedaba
+   * nada guardado, la lista volvía abierta y el toque siguiente mandaba otro sello con otra ronda: dos sellos de
+   * la misma lista. `intentoDe` da el intento que se va a mandar con cada ronda, todavía sin el hash.
+   */
+  const intentoDe = (round: number): IntentoDeSello => ({ organizer: ORG, listHash: HUELLA, round, count: 8, numWinners: 1, meta: "premio", desde: 1_792_600_000 });
+
+  it("antes de cada envío el intento ya está guardado, con la ronda que se manda", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const alMandar: (IntentoDeSello | null)[] = [];
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      sellar: async (round) => {
+        alMandar.push(e.pendientes.at(-1) ?? null);
+        return e.pasos.sellar(round);
+      },
+    });
+    const ronda = e.pasos.sellar.mock.calls[0]?.[0] as number;
+    expect(alMandar).toEqual([intentoDe(ronda)]);
+  });
+
+  it("si el sello entra, el intento se borra al terminar", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    const r = await sellarSinDuplicar(e.inicial(), { ...e.pasos, intentoDe });
+    expect(r.raffleId).toBe(500n);
+    expect(e.pendientes.at(0)).not.toBeNull();
+    expect(e.pendientes.at(-1)).toBeNull();
+  });
+
+  it("si el envío falla sin dejar nada, cada ronda se guarda antes de mandarla y al final no queda nada", async () => {
+    const e = escenario([
+      { entra: "nunca", respuesta: "vuelve" },
+      { entra: "nunca", respuesta: "vuelve" },
+      { entra: "nunca", respuesta: "vuelve" },
+    ]);
+    const alMandar: (IntentoDeSello | null)[] = [];
+    await expect(
+      sellarSinDuplicar(e.inicial(), {
+        ...e.pasos,
+        intentoDe,
+        sellar: async (round) => {
+          alMandar.push(e.pendientes.at(-1) ?? null);
+          return e.pasos.sellar(round);
+        },
+      }),
+    ).rejects.toThrow("tx-FAILED");
+    const rondas = e.pasos.sellar.mock.calls.map(([round]) => round);
+    expect(alMandar).toEqual(rondas.map(intentoDe));
+    expect(e.pendientes.at(-1)).toBeNull();
+  });
+
+  it("un corte antes de mandar nada tampoco deja un intento guardado de más", async () => {
+    const e = escenario([
+      { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Failed to fetch") },
+      { entra: "ya", respuesta: "vuelve" },
+    ]);
+    const r = await sellarSinDuplicar(e.inicial(), { ...e.pasos, intentoDe });
+    expect(r.raffleId).toBe(500n);
+    expect(e.pendientes.at(-1)).toBeNull();
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+
+  it("si no se sabe si entró, queda guardado el de la red, con el hash de su transacción", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "se-pierde" }]);
+    const corrida = sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+    });
+    await expect(corrida).rejects.toBeInstanceOf(SelloSinConfirmar);
+    expect(e.pendientes.at(-1)?.hash).toBe("tx0");
+  });
+
+  it("si la página se recarga con el sello ya en la red, el próximo toque lo encuentra y no manda otro", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    // Lo que quedó en el almacenamiento del navegador.
+    let guardado: IntentoDeSello | null = null;
+    let alAire!: () => void;
+    const llegoAlAire = new Promise<void>((r) => (alAire = r));
+    // La pestaña muere con el sello hecho: este envío nunca vuelve.
+    void sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      intentoDe,
+      guardarPendiente: (i) => void (guardado = i),
+      sellar: async (round) => {
+        await e.pasos.sellar(round);
+        alAire();
+        return new Promise<never>(() => undefined);
+      },
+    });
+    await llegoAlAire;
+    expect(guardado).not.toBeNull();
+
+    // La página nueva, con la misma lista: empieza por lo que quedó guardado.
+    const r = await sellarSinDuplicar(e.inicial(), e.pasos, guardado);
+    expect(r.retomado).toEqual(guardado);
+    expect(r.raffleId).toBe(500n);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+});
+
+describe("averiguarPendiente: saber si un sello entró sin mandar ninguno", () => {
+  it("si entró, lo dice y no lo borra: quien sigue lo retoma", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "se-pierde" }]);
+    let pendiente: IntentoDeSello | null = null;
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+      guardarPendiente: (i) => void (pendiente = i ?? pendiente),
+    }).catch(() => undefined);
+    e.cortar(false);
+    const avisos: string[] = [];
+    const r = await averiguarPendiente(pendiente as unknown as IntentoDeSello, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente, avisar: (q) => void avisos.push(q) });
+    expect(r.estado).toBe("entro");
+    expect(avisos).toEqual(["verificando"]);
+    // No se borró nada: el que sigue lo retoma y lo borra al saber cómo terminó.
+    expect(e.pendientes).toEqual([]);
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si no entró ni puede entrar, lo borra y no manda nada", async () => {
+    const e = escenario([{ entra: "nunca", respuesta: "se-pierde" }]);
+    let pendiente: IntentoDeSello | null = null;
+    await sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      sellar: async (round) => {
+        const r = e.pasos.sellar(round);
+        e.cortar(true);
+        return r;
+      },
+      guardarPendiente: (i) => void (pendiente = i ?? pendiente),
+    }).catch(() => undefined);
+    e.cortar(false);
+    e.avanzar(90_000);
+    const r = await averiguarPendiente(pendiente as unknown as IntentoDeSello, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente });
+    expect(r.estado).toBe("no-entro");
+    expect(e.pendientes.at(-1)).toBeNull();
+    expect(e.pasos.sellar).toHaveBeenCalledTimes(1);
+  });
+
+  it("si no se puede averiguar, lo dice y deja el intento guardado", async () => {
+    const e = escenario([{ entra: "ya", respuesta: "vuelve" }]);
+    e.cortar(true);
+    const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: e.inicial().round, count: 8, numWinners: 1, meta: "premio", desde: 0 };
+    const r = await averiguarPendiente(i, { resolver: e.pasos.resolver, guardarPendiente: e.pasos.guardarPendiente });
+    expect(r.estado).toBe("no-se-sabe");
+    expect(e.pendientes).toEqual([]);
+    expect(e.pasos.sellar).not.toHaveBeenCalled();
   });
 });
 
@@ -485,6 +677,23 @@ describe("el margen de cada intento según quién paga la comisión", () => {
 
 describe("el intento pendiente se guarda para después de recargar", () => {
   const datos = new Map<string, string>();
+  const HUELLA_B = "ef".repeat(32);
+  /** De quién es cada intento: la cuenta y la lista. Con la red y el contrato, es su lugar. */
+  const de = { organizer: ORG, listHash: HUELLA };
+  const deB = { organizer: ORG, listHash: HUELLA_B };
+  const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: 33_300_000, count: 8, numWinners: 2, meta: "Una bici", desde: 1_792_600_000, hash: "ab12" };
+  // La hora de estas pruebas es fija: el pendiente vence a las 6 h de su ronda y, con la
+  // hora real, esta ronda ya venció y las pruebas fallaban solo por el paso del tiempo.
+  // Lo vencido también se limpia al guardar, así que el reloj queda en esa hora.
+  const AHORA = roundTime(i.round) + 60;
+  /** Los lugares que usan estas pruebas: se vacían al terminar cada una, también en la memoria de la pestaña. */
+  const lugares: [string, string, { organizer: string; listHash: string }][] = [
+    ["testnet", "CCONTRATO", de],
+    ["testnet", "CCONTRATO", deB],
+    ["mainnet", "CCONTRATO", de],
+    ["testnet", "CPRUEBA", deB],
+    ["testnet", "CCONTRATO", { organizer: "GOTRA", listHash: HUELLA }],
+  ];
   beforeEach(() => {
     datos.clear();
     vi.stubGlobal("localStorage", {
@@ -492,42 +701,92 @@ describe("el intento pendiente se guarda para después de recargar", () => {
       setItem: (k: string, v: string) => void datos.set(k, v),
       removeItem: (k: string) => void datos.delete(k),
     });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(AHORA * 1000);
   });
   afterEach(() => {
-    guardarPendiente(null, "", "", "");
+    for (const [red, contrato, quien] of lugares) guardarPendiente(null, red, contrato, "", quien);
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
-  const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: 33_300_000, count: 8, numWinners: 2, meta: "Una bici", desde: 1_792_600_000, hash: "ab12" };
-  // La hora de estas pruebas es fija: el pendiente vence a las 6 h de su ronda y, con la
-  // hora real, esta ronda ya venció y las pruebas fallaban solo por el paso del tiempo.
-  const AHORA = roundTime(i.round) + 60;
-
   it("lo guarda con la red, el contrato y el premio, y lo devuelve solo para la misma cuenta, lista, red y contrato", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici");
-    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toEqual({ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" });
+    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici", de);
+    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toEqual([{ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" }]);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
     expect(leerPendiente("GOTRA", HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
-    expect(leerPendiente(ORG, "ef".repeat(32), "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
     expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO", AHORA)).toBeNull();
     expect(leerPendiente(ORG, HUELLA, "testnet", "COTRO", AHORA)).toBeNull();
   });
 
   it("vence seis horas después de su ronda: si había entrado, se retoma desde Mis sorteos", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "");
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
     const ronda = roundTime(i.round);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 5 * 3600)).not.toBeNull();
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 6 * 3600 + 1)).toBeNull();
   });
 
   it("con null lo borra", () => {
-    guardarPendiente(i, "testnet", "CCONTRATO", "");
-    guardarPendiente(null, "testnet", "CCONTRATO", "");
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    guardarPendiente(null, "testnet", "CCONTRATO", "", de);
     expect(datos.has(CLAVE_PENDIENTE)).toBe(false);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
   });
 
-  it("sin almacenamiento, dura en memoria mientras dure la pestaña", () => {
+  it("cada cuenta, lista, red y contrato tiene su lugar: guardar o borrar uno no toca a los demás", () => {
+    const b: IntentoDeSello = { ...i, listHash: HUELLA_B, round: i.round + 10, meta: "Una pizza" };
+    guardarPendiente(i, "testnet", "CCONTRATO", "Una bici", de);
+    guardarPendiente(b, "testnet", "CCONTRATO", "Una pizza", deB);
+    // Borrar el de otra cuenta, o el de esta lista en la otra red, no borra nada de lo que hay.
+    guardarPendiente(null, "testnet", "CCONTRATO", "", { organizer: "GOTRA", listHash: HUELLA });
+    guardarPendiente(null, "mainnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: b, premio: "Una pizza" });
+    // Y borrar el de la lista B deja el de la lista A.
+    guardarPendiente(null, "testnet", "CCONTRATO", "", deB);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+  });
+
+  it("un sello bueno de otra lista deja intacto el intento sin confirmar de esta", async () => {
+    // La lista A quedó en Oficial con un sello que no se sabe si entró. Se pasa a Prueba y se sella bien la lista B:
+    // guardar antes de mandar y borrar al terminar son de B. Al volver a la lista A, el suyo sigue ahí.
+    guardarPendiente(i, "mainnet", "CCONTRATO", "Una bici", de);
+    const r = await sellarSinDuplicar(
+      { round: i.round + 20, ts: AHORA },
+      {
+        sellar: async () => ({ raffleId: 9n, txHash: "tx9" }),
+        resolver: async () => ({ estado: "no-entro" as const }),
+        sinGrabar: () => false,
+        guardarPendiente: (x) => guardarPendiente(x, "testnet", "CPRUEBA", "Una pizza", deB),
+        intentoDe: (round) => ({ ...i, listHash: HUELLA_B, round, meta: "Una pizza" }),
+      },
+    );
+    expect(r.raffleId).toBe(9n);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CPRUEBA", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+  });
+
+  it("lee el intento que guardó la versión de antes, uno solo, y guardar el de otra lista lo conserva", () => {
+    datos.set(CLAVE_PENDIENTE, JSON.stringify({ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" }));
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    guardarPendiente({ ...i, listHash: HUELLA_B }, "testnet", "CCONTRATO", "", deB);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    guardarPendiente(null, "testnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
+  });
+
+  it("lo vencido se limpia al guardar otro", () => {
+    // Ocho horas antes que la de `i`: 9.600 rondas de 3 s.
+    const viejo: IntentoDeSello = { ...i, listHash: HUELLA_B, round: i.round - 9600 };
+    guardarPendiente(viejo, "testnet", "CCONTRATO", "", deB);
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    const quedan = JSON.parse(datos.get(CLAVE_PENDIENTE) as string) as { intento: IntentoDeSello }[];
+    expect(quedan.map((g) => g.intento.listHash)).toEqual([HUELLA]);
+  });
+
+  it("sin almacenamiento, dura en memoria mientras dure la pestaña, cada uno en su lugar", () => {
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("bloqueado");
@@ -539,15 +798,65 @@ describe("el intento pendiente se guarda para después de recargar", () => {
         throw new Error("bloqueado");
       },
     });
-    guardarPendiente(i, "testnet", "CCONTRATO", "x");
+    guardarPendiente(i, "testnet", "CCONTRATO", "x", de);
+    guardarPendiente({ ...i, listHash: HUELLA_B }, "testnet", "CCONTRATO", "y", deB);
+    guardarPendiente(null, "testnet", "CCONTRATO", "", deB);
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)?.intento).toEqual(i);
+    expect(leerPendiente(ORG, HUELLA_B, "testnet", "CCONTRATO", AHORA)).toBeNull();
   });
 
-  it("algo que no se entiende en el almacenamiento no es un pendiente", () => {
-    guardarPendiente(null, "", "", "");
+  it("algo que no se entiende en el almacenamiento no es un pendiente, y guardar encima funciona", () => {
     datos.set(CLAVE_PENDIENTE, "{roto");
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
     datos.set(CLAVE_PENDIENTE, JSON.stringify({ intento: { organizer: ORG } }));
     expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
+    datos.set(CLAVE_PENDIENTE, JSON.stringify([null, 3, "x", { intento: { organizer: ORG } }]));
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
+    guardarPendiente(i, "testnet", "CCONTRATO", "", de);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)?.intento).toEqual(i);
+    expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toHaveLength(1);
+  });
+});
+
+describe("sellarSinDuplicar: la puerta del premio frena antes de mandar", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const intentoDe = (round: number): IntentoDeSello => ({ organizer: ORG, listHash: HUELLA, round, count: 8, numWinners: 1, meta: "premio", desde: 1 });
+
+  for (const que of ["puede-guardar", "no-se-sabe"] as const) {
+    it(`${que}: sale el mismo error, sin otra ronda ni reintento de corte, y el intento guardado se borra`, async () => {
+      const e = escenario([]);
+      const error = premio(que);
+      const sellar = vi.fn(async () => {
+        throw error;
+      });
+      const rondaNueva = vi.fn(e.pasos.rondaNueva);
+      const dormir = vi.fn(async () => undefined);
+      const avisar = vi.fn();
+      const corrida = sellarSinDuplicar(e.inicial(), { ...e.pasos, sellar, rondaNueva, dormir, avisar, intentoDe });
+      await expect(corrida).rejects.toBe(error);
+      expect(sellar).toHaveBeenCalledTimes(1);
+      expect(rondaNueva).not.toHaveBeenCalled();
+      expect(dormir).not.toHaveBeenCalled();
+      expect(avisar).not.toHaveBeenCalled();
+      // Se anotó antes de mandar y se borró al ver que nada salió: no queda un sello que averiguar.
+      expect(e.pendientes).toHaveLength(2);
+      expect(e.pendientes[0]).not.toBeNull();
+      expect(e.pendientes.at(-1)).toBeNull();
+    });
+  }
+
+  it("no se toma por un sello incierto: no se averigua nada en la red", async () => {
+    const e = escenario([]);
+    const resolver = vi.fn(e.pasos.resolver);
+    const corrida = sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      resolver,
+      intentoDe,
+      sellar: async () => {
+        throw premio("no-se-sabe");
+      },
+    });
+    await expect(corrida).rejects.toMatchObject({ name: "PremioGuardado" });
+    expect(resolver).not.toHaveBeenCalled();
   });
 });

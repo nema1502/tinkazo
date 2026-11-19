@@ -1,3 +1,4 @@
+import { canonicalList } from "../protocol/canonical";
 import { cuentaCorta } from "./modelo";
 
 /**
@@ -55,6 +56,29 @@ export function nombreDelEquipo(cuenta: string): string | undefined {
 }
 
 export const hayEtiquetas = (): boolean => etiquetas.size > 0;
+
+/**
+ * Si una lista es de equipos: no está vacía y cada línea es la cuenta de un equipo que este navegador conoce. Una sola
+ * línea que no lo sea (una persona, o un equipo de otro día) la vuelve una lista de personas. Es lo que decide la palabra
+ * de los textos que cuentan la lista: tener etiquetas en memoria no alcanza, porque después de sortear con equipos
+ * pueden quedar ahí mientras se pega otra lista.
+ */
+export const esListaDeEquipos = (lineas: readonly string[]): boolean => lineas.length > 0 && lineas.every((l) => etiquetas.has(l));
+
+/** La lista que está en el cuadro de la herramienta. Vacía en una página que no lo tiene. */
+function lineasDelCuadro(): string[] {
+  if (typeof document === "undefined") return [];
+  const ta = document.getElementById("ta");
+  return ta instanceof HTMLTextAreaElement ? canonicalList(ta.value) : [];
+}
+
+/**
+ * Si la lista del cuadro es de equipos. Se lee al momento, sin recordar nada: es la palabra de los textos que no traen
+ * su lista a mano (la barra de lo que sigue, el aviso de que ya entraste, el motivo para entrar, la cuenta de junto al
+ * cuadro y el resumen de Sellar la lista). Sin etiquetas, que es lo de quien sortea con una lista común, no se recorre
+ * el cuadro: se responde antes de leerlo.
+ */
+export const cuadroEsDeEquipos = (): boolean => etiquetas.size > 0 && esListaDeEquipos(lineasDelCuadro());
 
 /** Los nombres de los equipos de ahora, como se ven en el show: los que nunca se acortan (`games/nombres-enteros.ts`). */
 export const nombresDeLosEquipos = (): string[] => [...etiquetas.values()];

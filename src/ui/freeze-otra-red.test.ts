@@ -188,6 +188,45 @@ describe("la billetera en la otra red, con el modo Oficial a la vista", () => {
   });
 });
 
+describe("la línea de debajo de Sellar la lista sigue al idioma", () => {
+  it("con la página abierta en inglés la línea sale en inglés: main.ts la arma en español y después aplica el idioma", async () => {
+    h.canAnchor = true;
+    h.otraRed = false;
+    const { refreshFreezeLabel } = await import("./freeze");
+    const { setLang } = await import("../i18n");
+    setLang("es");
+    // Lo que hace main.ts al armar la herramienta, todavía con el idioma de arranque.
+    refreshFreezeLabel();
+    expect(linea().textContent).toBe(T.es.sealModeOfficial);
+    // Y lo que hace al final, con ?lang=en o con el navegador en inglés: sin que nadie vuelva a pedir la línea.
+    setLang("en");
+    expect(linea().textContent).toBe(T.en.sealModeOfficial);
+    setLang("es");
+    expect(linea().textContent).toBe(T.es.sealModeOfficial);
+  });
+
+  it("con la billetera en la otra red el cambio de idioma conserva ese aviso, en el idioma nuevo", async () => {
+    const { refreshFreezeLabel } = await import("./freeze");
+    const { setLang } = await import("../i18n");
+    setLang("es");
+    refreshFreezeLabel();
+    setLang("en");
+    expect(linea().textContent).toBe(String(T.en.sealModeOtraRed).replace("{modo}", String(T.en.netMain)));
+    expect(linea().style.display).toBe("");
+  });
+
+  it("en el Ensayo y en la demo la línea sigue escondida y vacía al cambiar el idioma", async () => {
+    h.sinGrabar = true;
+    const { refreshFreezeLabel } = await import("./freeze");
+    const { setLang } = await import("../i18n");
+    setLang("es");
+    refreshFreezeLabel();
+    setLang("en");
+    expect(linea().style.display).toBe("none");
+    expect(linea().textContent).toBe("");
+  });
+});
+
 describe("el Ensayo y la demo no graban nada", () => {
   it("la línea no se ve y se sella sin grabar como siempre, aunque la billetera esté en otra red", async () => {
     h.sinGrabar = true;

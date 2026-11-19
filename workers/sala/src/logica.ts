@@ -9,11 +9,20 @@ export const SITIO = "https://tinkazo.app";
 export const VIDA_MS = 10 * 3_600_000;
 /** Nombres por sala. */
 export const MAX_NOMBRES = 400;
-/** Nombres por minuto por sala: todo un recinto puede salir por una sola IP, por eso el tope es de la sala y no de la dirección. */
-export const NOMBRES_POR_MINUTO = 120;
-/** Salas nuevas por dirección y por hora, y en total por día. */
-export const SALAS_POR_IP_POR_HORA = 5;
-export const SALAS_POR_DIA = 100;
+/** Nombres por minuto por sala: 200 personas que escanean a la vez entran en un minuto. Es de la sala y no de la dirección porque todo un recinto puede salir por una sola IP. */
+export const NOMBRES_POR_MINUTO = 240;
+/**
+ * Altas de equipos por minuto por sala, con su propia ventana. Hasta el 13 de noviembre de 2026 gastaban el mismo
+ * contador que los nombres: con el id de la sala del QR, 120 nombres por minuto dejaban a todos los equipos afuera.
+ */
+export const EQUIPOS_POR_MINUTO = 120;
+/**
+ * Salas nuevas por dirección y por hora, y en total por día. En un evento todo el recinto sale a internet por una sola
+ * conexión, y el stand y el registro de equipos gastan del mismo tope: con 5 por hora, la sexta sala de un evento
+ * contestaba que se probara en una hora (noviembre de 2026). 30 por hora alcanzan para varios stands en un recinto.
+ */
+export const SALAS_POR_IP_POR_HORA = 30;
+export const SALAS_POR_DIA = 400;
 /** Lo que mide, como mucho, un nombre cifrado: `[1][IV de 12][texto cifrado + 16 de la etiqueta]`. */
 export const MAX_BYTES_NOMBRE = 256;
 export const MIN_BYTES_NOMBRE = 13 + 16 + 1;
@@ -32,8 +41,12 @@ export const PRESENTARSE_MS = 3_000;
 
 export const ES_ID = /^[0-9A-Za-z]{8}$/;
 const ES_BASE64URL = /^[A-Za-z0-9_-]+$/;
-/** 16 bytes en base64url, sin relleno. */
+/** 16 bytes en base64url, sin relleno. También es la forma de la llave al azar del celular. */
 export const ES_TOKEN = /^[A-Za-z0-9_-]{22}$/;
+/** 32 bytes en base64url, sin relleno: la huella del nombre calculada en el celular. */
+export const ES_HUELLA_NOMBRE = /^[A-Za-z0-9_-]{43}$/;
+/** Lo más que pesa el alta de un nombre, con el nombre cifrado, su huella y la llave del celular en JSON. */
+export const MAX_CUERPO_NOMBRE = 700;
 
 /** Si es un nombre cifrado bien formado: base64url, del largo que puede tener. No lo descifra: nadie acá puede. */
 export function nombreCifradoValido(s: string): boolean {
@@ -72,7 +85,7 @@ export function grupoDeIp(ip: string): string {
 /**
  * Cuenta eventos por minuto, en memoria. `intentar` suma uno y dice si cabe.
  * Si el objeto se desaloja a mitad de un minuto, la cuenta vuelve a cero y ese
- * minuto caben otros 120: el tope por minuto solo frena el ritmo, no es exacto.
+ * minuto cabe otra ventana entera: el tope por minuto solo frena el ritmo, no es exacto.
  * Lo exacto es el de 400 nombres por sala, que vive en SQLite y no se reinicia;
  * lo peor que gana alguien que desaloje el objeto es llenar la sala más rápido.
  */

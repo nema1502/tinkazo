@@ -1,5 +1,6 @@
 import { respuestasDePie, type PlanDeDePie } from "./de-pie-nino";
 import type { Respuestas } from "./kit/respuestas";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "./decisivo";
 
 /**
  * Las respuestas de la prueba del niño para la chovena (`kit/respuestas.ts`).
@@ -26,3 +27,19 @@ export const FORMA_CHOVENA = "de-pie" as const;
 export type PlanDeLaChovena = PlanDeDePie;
 
 export const respuestasChovena = (p: PlanDeLaChovena, t: number): Respuestas => respuestasDePie(p, t, SENTIDO_CHOVENA);
+
+/**
+ * El momento decisivo de la chovena (`decisivo.ts`), en segundos de juego: el corte de la final (`final`) o, con varios
+ * premios, el primer corte que deja solo a premiados (desde que se corta la música en él). En un orden de turnos todos
+ * tienen premio y salen del último turno al segundo: cada salida ya dice un puesto, desde el primer corte.
+ */
+export function decisivoDeLaChovena(n: number, premiados: ReadonlySet<number>, cortes: readonly { kind: string; s0: number; victims: readonly number[] }[], final: number): number {
+  const fuera = new Set<number>();
+  const conSalidas = cortes.filter((e) => e.kind === "stop" && e.victims.length > 0);
+  const tramos = conSalidas.map((e) => {
+    for (const v of e.victims) fuera.add(v);
+    return { desde: e.s0, siguen: Array.from({ length: n }, (_, i) => i).filter((i) => !fuera.has(i)) };
+  });
+  const orden = premiados.size >= n && conSalidas[0] ? conSalidas[0].s0 : Infinity;
+  return momentoDecisivo(final, orden, primeraQueDejaSoloPremiados(tramos, premiados, n));
+}

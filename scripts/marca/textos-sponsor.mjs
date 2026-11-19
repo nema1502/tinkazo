@@ -13,7 +13,7 @@ export const TEXTOS_SPONSOR = {
       "Tinkazo, sponsor del DevFest Tarija, hace sorteos que cualquiera puede comprobar. Probá uno con tus amigos en tinkazo.app y comprobá el resultado vos mismo. Gracias, @tinkazo.app",
       "Gracias a Tinkazo por acompañarnos como sponsor del DevFest Tarija. En sus sorteos, cada ganador se puede comprobar desde el enlace del sorteo. Seguilos en @tinkazo.app",
     ],
-    nombre: "Tinkazo, todo junto, con K y con la T mayúscula. Nunca «Tincazo», «TinkaZo» ni «Tinkazo App».",
+    nombre: "Tinkazo, todo junto, con K y con la T mayúscula. Nunca Tincazo, TinkaZo ni Tinkazo App.",
     donde: "Sitio: tinkazo.app. Instagram: @tinkazo.app. Contacto: hola@tinkazo.app",
   },
   en: {
@@ -25,7 +25,7 @@ export const TEXTOS_SPONSOR = {
       "Tinkazo, a sponsor of DevFest Tarija, runs draws anyone can check. Try one with your friends at tinkazo.app and check the result yourself. Thanks, @tinkazo.app",
       "Thank you to Tinkazo for joining us as a sponsor of DevFest Tarija. In their draws, every winner can be checked from the draw's link. Follow them at @tinkazo.app",
     ],
-    nombre: "Tinkazo, one word, with a K and a capital T. Never «Tincazo», «TinkaZo» or «Tinkazo App».",
+    nombre: "Tinkazo, one word, with a K and a capital T. Never Tincazo, TinkaZo or Tinkazo App.",
     donde: "Site: tinkazo.app. Instagram: @tinkazo.app. Contact: hola@tinkazo.app",
   },
 };
@@ -52,8 +52,8 @@ export function textosSponsorTxt() {
       es ? "Texto sugerido, cuando se anuncia:" : "Suggested text, when it is announced:", t.posts[0], "",
       es ? "Texto sugerido, el día del evento:" : "Suggested text, on the day:", t.posts[1], "",
       es ? "Texto sugerido, para agradecer:" : "Suggested text, to say thanks:", t.posts[2], "",
-      es ? "Sumá las etiquetas del evento. Decí «sorteo», no «rifa»: entrar a un sorteo de Tinkazo es gratis."
-        : "Add the event's tags. Say «draw», not «raffle»: entering a Tinkazo draw is free.",
+      es ? "Sumá las etiquetas del evento. Decí sorteo, no rifa. Entrar a un sorteo de Tinkazo es gratis."
+        : "Add the event's tags. Say draw, not raffle. Entering a Tinkazo draw is free.",
     ].join("\n");
   };
   return `${bloque("es")}\n\n-------------------------------------------------------------------------------\n\n${bloque("en")}\n`.replace(/\n/g, "\r\n");

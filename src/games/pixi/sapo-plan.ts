@@ -270,6 +270,38 @@ export function planThrows(n: number, winnerSlots: readonly number[], rng: () =>
   return out;
 }
 
+/**
+ * La toma de la cámara 3D para cada tiro (`sapo-3d.ts`). La cámara no decide nada: es cosmética y solo cambia desde
+ * dónde se mira lo que el plan ya puso.
+ *
+ * - `seguir`: la cámara baja y se acerca a la argolla mientras vuela, desde el lado de la mano, y se aleja al golpe.
+ * - `moneda`: el tiro del ganador, el último del plan (el acierto del último ganador, en su agujero): la cámara se va
+ *   detrás de la argolla desde que sale de la mano, se acerca con ella y la ve entrar.
+ *
+ * Pura: no consume azar ni cambia los tiros, así que la misma ronda da el mismo plan y las mismas tomas.
+ */
+export type Toma = "seguir" | "moneda";
+
+export function tomasDeTiros(throws: readonly Throw[]): Toma[] {
+  const ultimo = throws.length - 1;
+  return throws.map((t, i) => (i === ultimo && t.kind === "hit" ? "moneda" : "seguir"));
+}
+
+/**
+ * Los momentos de la toma `moneda`, en fracción del vuelo del último tiro (de 0 a 1), en orden: `suelta` (la cámara
+ * baja desde la del director hasta quedar detrás de la argolla), `vuela` (la sigue de cerca) y `entra` (se acerca y
+ * cierra el cuadro sobre el agujero hasta verla hundirse).
+ */
+export const MOMENTOS_MONEDA = { suelta: 0, vuela: 0.2, entra: 0.68 } as const;
+export type MomentoMoneda = keyof typeof MOMENTOS_MONEDA;
+
+/** En qué momento de la toma `moneda` va el vuelo en la fracción `u` (antes de salir, la suelta; después de caer, entra). */
+export function momentoMoneda(u: number): MomentoMoneda {
+  if (u >= MOMENTOS_MONEDA.entra) return "entra";
+  if (u >= MOMENTOS_MONEDA.vuela) return "vuela";
+  return "suelta";
+}
+
 /** Duration of a throw's flight, in game seconds. The grand (last winner's) throws are slower. */
 export function throwTime(kind: ThrowKind, grand: boolean): number {
   const base = kind === "miss" ? 0.75 : kind === "near" ? 0.9 : 0.85;

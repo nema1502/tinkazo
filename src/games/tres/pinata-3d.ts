@@ -2,17 +2,17 @@ import {
   BackSide, CircleGeometry, Color, Group, HemisphereLight, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, RingGeometry,
   type Fog,
 } from "three";
-import { perfilFiel } from "./camara";
+import { perfilFiel, type Pose3D } from "./camara";
 import { crearAmbiente, SombrasDeContacto } from "./escena";
 import { Materiales } from "./figuras";
-import { definir3D } from "./motor";
+import { definir3D, type Motor3D } from "./motor";
 import { crearChico } from "./pinata-3d-chico";
-import { Proyector, azimutDe, clamp, elevacionDe, escala, poseFrontal, suave, ELEVACION } from "./pinata-3d-mapa";
+import { Proyector, azimutDe, cajaEnPantalla, clamp, elevacionDe, escala, poseFrontal, primerPlano, suave, ELEVACION, type Pieza3D } from "./pinata-3d-mapa";
 import { crearPatio } from "./pinata-3d-patio";
 import { crearPina, crearRotura } from "./pinata-3d-pina";
 import { INK, contorno, geometriaCaramelo, type Ctx } from "./pinata-3d-piezas";
-import type { EntradaPinata } from "./pinata-3d-tipos";
-import type { Fabrica3D, Lanzador } from "./tipos";
+import type { Caja, Caramelo3D, EntradaPinata, MontajePinata3D, VistaPinata3D } from "./pinata-3d-tipos";
+import type { Lanzador, OpcionesVista } from "./tipos";
 import { hash } from "./ids";
 
 export type { EntradaPinata } from "./pinata-3d-tipos";
@@ -38,7 +38,10 @@ export const luzDeCorona = (corona: number): number => (corona < 0 ? 1 : 1 - 0.6
 
 type V3 = [number, number, number];
 
-const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
+/** Cuánto más grande que el caramelo es su contorno de tinta: es lo que se ve de él, y lo que mide el primer plano. */
+const CONTORNO = 1.1;
+
+const fabrica = (motor: Motor3D, o: OpcionesVista): VistaPinata3D => {
   const B = motor.basura;
   const tema = motor.tema;
   const oscuro = tema === "oscuro";
@@ -69,7 +72,9 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
   const col = new Color();
   const matGanadora = B.add(new MeshLambertMaterial({ color: 0xffffff, flatShading: true, emissive: 0xffffff, emissiveIntensity: 0 }));
   const ganadora = new Mesh(geoCar, matGanadora);
-  contorno(c, ganadora, 1.1);
+  contorno(c, ganadora, CONTORNO);
+  // La silueta del caramelo, para medir en la pantalla la pieza destacada tal como se dibuja.
+  const silueta = geoCar.getAttribute("position").array as ArrayLike<number>;
   const matAsoma = B.add(new MeshLambertMaterial({ color: 0xffffff, flatShading: true }));
   const asoma = new Mesh(geoCar, matAsoma);
   contorno(c, asoma, 1.1);
@@ -115,6 +120,33 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
     return fuera;
   };
 
+  /** La cámara del cuadro: la misma cuenta para dibujar y para medir antes de dibujar. */
+  const poseDe = (e: EntradaPinata): Pose3D =>
+    poseFrontal(e.cam, e.w, e.h, e.u, e.mundo.piso, elevacionDe(e.cam.zoom, e.rotura, e.corona), azimutDe(e.t));
+  /** Fija el proyector, la escala y el piso del escenario para el cuadro `e` visto con `p`. */
+  const fijar = (e: EntradaPinata, p: Pose3D): void => {
+    sEsc = escala(e.u);
+    proy.fijar(p, e.cam, e.w, e.h);
+    // El piso del 2D es el piso del 3D: la altura donde cae, en el plano de la piñata, la línea del suelo.
+    proy.plano(e.cam.x, e.mundo.piso, 0, W);
+    yGlobal = W[1];
+  };
+  /** Dónde va, cómo gira y cuánto mide la pieza destacada (en el plano de la piñata), con el proyector ya fijado. */
+  const ponerDestacada = (ca: Caramelo3D, corona: number, fuera: Pieza3D): Pieza3D => {
+    lugar(ca.x, ca.y, 0);
+    fuera.x = L[0];
+    fuera.y = L[1];
+    fuera.z = L[2];
+    fuera.giroY = Math.max(0, corona) * 1.4;
+    fuera.giroZ = -ca.rot;
+    fuera.tam = ca.tam * comp;
+    return fuera;
+  };
+  /** La pieza destacada del último cuadro dibujado y con qué cámara se dibujó; `medida`, la de la cuenta previa. */
+  const destacada: Pieza3D = { x: 0, y: 0, z: 0, giroY: 0, giroZ: 0, tam: 0 };
+  const medida: Pieza3D = { x: 0, y: 0, z: 0, giroY: 0, giroZ: 0, tam: 0 };
+  let dibujada: { pose: Pose3D; w: number; h: number; base: { y: number; s: number } } | null = null;
+
   const prepararCaramelos = (n: number): void => {
     const cap = Math.max(8, n);
     cuerpos = new InstancedMesh(geoCar, B.add(new MeshLambertMaterial({ flatShading: true })), cap);
@@ -132,17 +164,13 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
     frame(e) {
       motor.cuadro(e, PERFIL, (_mapa, pose) => {
         const m = e.mundo;
-        sEsc = escala(e.u);
         // La cámara de frente y apenas desde arriba: mira lo que mira el director del 2D, a la distancia en que el plano de la piñata se ve del mismo alto.
-        const p = poseFrontal(e.cam, e.w, e.h, e.u, m.piso, elevacionDe(e.cam.zoom, e.rotura, e.corona), azimutDe(e.t));
+        const p = poseDe(e);
         pose.pos = p.pos;
         pose.mira = p.mira;
         pose.fov = p.fov;
         pose.giro = p.giro;
-        proy.fijar(pose, e.cam, e.w, e.h);
-        // El piso del 2D es el piso del 3D: la altura donde cae, en el plano de la piñata, la línea del suelo.
-        proy.plano(e.cam.x, m.piso, 0, W);
-        yGlobal = W[1];
+        fijar(e, p);
         escenario.position.set(0, yGlobal, 0);
         escenario.scale.setScalar(sEsc);
         const fog = motor.escena.fog as Fog | null;
@@ -213,9 +241,10 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
               // La ganadora se dibuja aparte, con su color pleno y su aro en el piso.
               hayGanadora = true;
               ganadora.visible = true;
-              ganadora.position.set(L[0], L[1], L[2]);
-              ganadora.rotation.set(0, Math.max(0, e.corona) * 1.4, -ca.rot);
-              ganadora.scale.setScalar(tam);
+              ponerDestacada(ca, e.corona, destacada);
+              ganadora.position.set(destacada.x, destacada.y, destacada.z);
+              ganadora.rotation.set(0, destacada.giroY, destacada.giroZ);
+              ganadora.scale.setScalar(destacada.tam);
               if (matGanadora.color.getHex() !== ca.color) {
                 matGanadora.color.setHex(ca.color);
                 matGanadora.emissive.setHex(ca.color);
@@ -259,6 +288,7 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
           ganadora.visible = false;
           aro.visible = false;
         }
+        dibujada = hayGanadora ? { pose: { pos: p.pos, mira: p.mira, fov: p.fov, giro: p.giro }, w: e.w, h: e.h, base: { y: yGlobal, s: sEsc } } : null;
 
         // El caramelo del susto que se asoma por la rajadura: el mismo dibujo sea quien sea.
         const so = e.asoma;
@@ -291,6 +321,21 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
     },
     // Los nombres de la piñata son los de PixiJS, sobre los caramelos del 2D: no se apoyan en cabezas.
     pantallaDe: () => null,
+    despejaDestacada: (w, h) => primerPlano(w, h),
+    cajaParaDespejar(e): Caja | null {
+      // La misma cámara y el mismo lugar que el cuadro va a dibujar con `e`, sin dibujar: el 2D despeja con esto y recién
+      // después se dibuja, así el cuadro que se ve ya trae el despeje.
+      const ca = e.car.find((x) => !x.dentro && x.ganadora);
+      if (!ca) return null;
+      const p = poseDe(e);
+      fijar(e, p);
+      ponerDestacada(ca, e.corona, medida);
+      return cajaEnPantalla(p, e.w, e.h, { y: yGlobal, s: sEsc }, medida, silueta, CONTORNO);
+    },
+    cajaDestacada(): Caja | null {
+      const d = dibujada;
+      return d ? cajaEnPantalla(d.pose, d.w, d.h, d.base, destacada, silueta, CONTORNO) : null;
+    },
     destruir() {
       cuerpos = null;
       contornos = null;
@@ -298,7 +343,22 @@ const fabrica: Fabrica3D<EntradaPinata> = (motor, o) => {
   };
 };
 
-export const montaje = definir3D(fabrica);
+/** La vista sin el motor de WebGL: para las pruebas, con un motor de mentira. */
+export const fabricaPinata = fabrica;
+
+/** `definir3D` arma el motor y la vista; acá se le suman las medidas del primer plano, que son de la piñata. */
+export const montaje: MontajePinata3D = (lienzoPixi, o) => {
+  const hecha: { vista?: VistaPinata3D } = {};
+  const base = definir3D<EntradaPinata>((motor, op) => (hecha.vista = fabrica(motor, op)))(lienzoPixi, o);
+  const propia = hecha.vista;
+  if (!base || !propia) return null;
+  return {
+    ...base,
+    despejaDestacada: (w, h) => propia.despejaDestacada(w, h),
+    cajaParaDespejar: (e) => propia.cajaParaDespejar(e),
+    cajaDestacada: () => propia.cajaDestacada(),
+  };
+};
 
 /** Lo que `registro.ts` busca: no hay que editar ningún otro archivo para que la piñata aparezca en 3D. */
 export const lanzador3D = async (): Promise<Lanzador> => {

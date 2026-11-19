@@ -92,7 +92,8 @@ describe("premios: los textos", () => {
   });
 
   it("nada que huela a casino ni a plata: son cosas que se regalan en un evento", () => {
-    const prohibidas = /dinero|efectivo|cash|bono|apuesta|bet|jackpot|casino|loter/i;
+    // Tampoco un boleto: al lado de un sorteo, un premio que se llama así hace pensar en una rifa.
+    const prohibidas = /dinero|efectivo|cash|bono|apuesta|bet|jackpot|casino|loter|ticket|boleto|rifa|raffle/i;
     for (const l of ["es", "en"] as const) {
       for (const p of T[l].prizeSugeridos as string[]) expect(p).not.toMatch(prohibidas);
     }

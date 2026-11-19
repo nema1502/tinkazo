@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { HORIZON_URLS } from "./config";
 import { crearLectorDeHistorial, leerHistorial } from "./historial";
 import { contratosOficiales, type ContratoOficial } from "./oficiales";
@@ -101,8 +101,17 @@ describe("el sello de una transacción, del historial", () => {
   });
 
   it("armado con el SDK: una transacción simple y una envuelta por un fee-bump dan lo mismo", async () => {
-    const simple = armarSello(VIGENTE, SELLO);
-    const envuelta = armarSello(VIGENTE, SELLO, { feeBump: true });
+    // Los dos armados del ejemplo tienen que llevar los mismos tiempos límite, aunque el reloj cambie de segundo entre uno y otro.
+    const relojOriginal = Date.now;
+    const [simple, envuelta] = (() => {
+      const reloj = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+      try {
+        return [armarSello(VIGENTE, SELLO), armarSello(VIGENTE, SELLO, { feeBump: true })] as const;
+      } finally {
+        reloj.mockRestore();
+      }
+    })();
+    expect(Date.now).toBe(relojOriginal);
     expect(envuelta.hash).not.toBe(simple.hash);
     expect(envuelta.hashInterior).toBe(simple.hash);
     const a = await leer(simple.hash, { [simple.hash]: registroDeHorizon(simple, { ledger: 7_000, cierre: 1_790_000_100 }) });

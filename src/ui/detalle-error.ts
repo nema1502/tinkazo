@@ -36,7 +36,7 @@ async function tipoDeCuenta(): Promise<string> {
 export async function lineaDelError(e: unknown, paso: "sello" | "sorteo"): Promise<string> {
   const { errorKey, codigoTecnico } = await import("../stellar/errores");
   const cuando = new Date().toISOString().slice(0, 19) + "Z";
-  return [cuando, paso, network.name, await tipoDeCuenta(), errorKey(e, { patrocinada: await cuentaPatrocinada() }), codigoTecnico(e)].join(" · ");
+  return [cuando, paso, network.name, await tipoDeCuenta(), errorKey(e, { patrocinada: await cuentaPatrocinada() }), codigoTecnico(e)].join(" / ");
 }
 
 /** Guarda la línea entre los últimos errores de este navegador. Sin almacenamiento, no pasa nada. */

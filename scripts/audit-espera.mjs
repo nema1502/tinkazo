@@ -7,7 +7,7 @@
  * nace el número, el sorteo arranca solo y el show ocupa la pantalla sin pasar
  * por la página (src/ui/espera.ts).
  *
- * Esto lo comprueba en el modo libre, con `?lead=3`, sin Stellar: carga la
+ * Esto lo comprueba en el modo libre, con `?lead=10`, sin Stellar: carga la
  * lista de ejemplo, la sella, abre la espera en grande con un clic de verdad
  * (el gesto que pide la pantalla completa) y no toca nada más. Mide cuadro por
  * cuadro, desde adentro de la página, que:
@@ -183,7 +183,9 @@ async function leerQr(page, sel) {
 /** La herramienta en modo libre, con la lista de ejemplo sellada y la espera corriendo. */
 async function sellar(page, v) {
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
-  await page.send("Page.navigate", { url: `${base}/?lead=3&pace=rapido&theme=${tema}&lang=${lang}#sortear` });
+  // Diez segundos de margen: desde el 16 de noviembre de 2026 la espera en grande lanza el sorteo 3,5 s antes de que nazca
+  // el número, y con `?lead=3` ya estaba lanzado al abrirla. El caso de la espera cerrada la cierra antes de ese momento.
+  await page.send("Page.navigate", { url: `${base}/?lead=10&pace=rapido&theme=${tema}&lang=${lang}#sortear` });
   await page.waitFor("document.readyState === 'complete'", 20000);
   await sleep(900);
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.

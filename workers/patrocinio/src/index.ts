@@ -12,31 +12,72 @@
  *        403 {motivo:"cuenta-ajena"|"origen"}   502 {motivo:"red"}
  *   GET  /v1/patrocinio/cupo?cuenta=G…   lo que queda, si está prendido y quién rige (portero o pollar)
  *
+ * Solo en mainnet con ALTAS=1, con la sesión de Pollar (Authorization: Bearer <token>), ver `rutas-altas.ts`:
+ *   POST /v1/alta/estado   POST /v1/alta/cupon   POST /v1/alta/abrir   POST /v1/alta/orden   POST /v1/alta/pago
+ * y abierta: GET /v1/alta/precios. Los pagos en USDC se leen de Horizon (`cobros.ts`).
+ * La compra con QR, también con la sesión: POST /v1/compra/empezar | cargar | anular (`compras.ts`).
+ * Abierta como el cupo, sin sesión: GET /v1/carga/cupo {abierta}, si el sitio ofrece la carga con QR (`CARGAS=1`).
+ *
+ * Solo en mainnet con ALTAS=1 y SORTEO_SERVIDOR=1, abierta desde el sitio, ver `sorteadora.ts`:
+ *   POST /v1/sorteo {"sorteo","firma"}   el `draw` de un sello del portero, mandado desde la cuenta sorteadora
+ *
+ * Solo en mainnet con ALTAS=1 y PAGOS_PREMIO=1 o RETIROS=1, abierta desde el sitio y sin sesión, ver `pagos-ruta.ts`:
+ *   POST /v1/patrocinio/pago {"forma":"premio"|"retiro","xdr"}   la comisión de un pago de premio o de un retiro con su costo
+ *        200 {hash, forma, vence, status, estado}   Sus errores traen `pudoSalir`. Lo que paga y lo que mira: `pagos-servicio.ts`.
+ *   Con alguna de las dos prendida, `GET /v1/patrocinio/cupo` suma el bloque `pagos` y `/estado` el suyo.
+ *
+ * Solo en mainnet con ALTAS=1 y ALTAS_PREMIO=1, con la sesión de Google de quien organiza, ver `altas-premio.ts` y `rutas-altas.ts`:
+ *   POST /v1/alta/premio {"sorteo","puesto","cuenta"}   quien organiza deja entrar a la cuenta de quien ganó un puesto de su sorteo
+ *        200 {estado:"admitida"|"ya-tiene-acceso"|"no-hace-falta"}   Sin cupón ni sorteos: la cuenta solo puede activarse y recibir.
+ *   Con esa prendida, aunque no lo esté ninguna de las otras dos, `/cupo` y `/estado` también traen el bloque `pagos`.
+ *
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
  *   GET  /v1/patrocinio/estado                         GET /v1/patrocinio/exportar
+ *
+ * Solo en mainnet con ALTAS=1, con dos claves, ver `admin.ts`: cupones y altas a mano con CUPONES_TOKEN,
+ * y pausar o reanudar las altas con ADMIN_TOKEN:
+ *   POST|GET /v1/admin/cupones   POST /v1/admin/cupones/anular   POST /v1/admin/altas   POST /v1/admin/altas/pausar | reanudar
+ *   POST /v1/admin/derechos   POST /v1/admin/ordenes/pagada   GET /v1/admin/sueltos   POST /v1/admin/sueltos/asignar
+ *   POST /v1/admin/ventas/pausar | reanudar   POST /v1/admin/compras/cerrar (con ADMIN_TOKEN)
+ *   POST /v1/admin/pagos/pausar | reanudar {"forma"}   POST /v1/admin/pagos/tope   (con ADMIN_TOKEN, también con los pagos apagados)
  *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
  */
 import { DurableObject } from "cloudflare:workers";
-import { type Env, leerConfig } from "./config";
-import { Cupos } from "./cupos";
+import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
+import { Altas } from "./altas";
+import { AltasPorPremio } from "./altas-premio";
+import { registrador } from "./registrador";
+import { Cobros, LectorDeCobros } from "./cobros";
+import { ComprasQr } from "./compras";
+import { type Config, type Env, leerConfig } from "./config";
+import { Cupos, type Sql } from "./cupos";
+import { cors, json, origenPermitido } from "./http";
+import type { FormaDePago } from "./pagos-lista";
+import { atenderPagoClasico } from "./pagos-ruta";
+import { type PorteroDePagos, armarPorteroDePagos, pagosPrendidos, vueltaDeAlarma } from "./pagos-servicio";
+import { UsoDePagos } from "./pagos-uso";
 import { Planes } from "./plan";
-import { PorIp } from "./por-ip";
+import { pollarDe } from "./pollar";
+import { PorIp, cupoPorHora } from "./por-ip";
 import { RpcRed } from "./red";
+import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
+import { haciaHorizon } from "./servidores";
+import { Sorteadora, atenderSorteo, leerSorteo } from "./sorteadora";
 
-/** El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres ni llaves. */
-function registrar(evento: string, datos: Record<string, string | number> = {}): void {
-  (evento.startsWith("error-") ? console.error : console.log)(JSON.stringify({ evento, ...datos }));
-}
+/**
+ * El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres,
+ * llaves, el id de Pollar, tokens, correos, códigos ni cuentas: `registrador.ts` lo tapa por si algo se escapa.
+ */
+const registrar = registrador();
 
 /** Lo más que se acepta de cuerpo: una transacción firmada de `seal` pesa unos 2 KB. */
 const MAX_CUERPO = 8 * 1024;
 const ADMIN_MINIMO = 32;
 const ALARMA_MS = 20_000;
-const SITIO = "https://tinkazo.app";
 
 interface EnvPortero extends Env {
   /** La cuenta patrocinadora (G…): la que paga y reparte el peso de sus llaves. Pública. */
@@ -45,12 +86,31 @@ interface EnvPortero extends Env {
 
 export class Patrocinio extends DurableObject<EnvPortero> {
   private cupos: Cupos;
+  private sql: Sql;
   private portero: Portero | null = null;
   private firmante: Firmante | null = null;
+  /** Las rutas de altas: solo en mainnet. Sin la llave de Pollar o el secreto de los cupones, contestan `503 apagado`. */
+  private puerta: PuertaAltas | null = null;
+  /** La administración de las altas: solo en mainnet. */
+  private administracion: Administracion | null = null;
+  private exportaAltas = false;
+  /** Lo que guardan los pagos de premios y los retiros: solo en mainnet. Sus tablas se crean aparte, con su propio try/catch. */
+  private usoPagos: UsoDePagos | null = null;
+  /** El portero de los pagos clásicos: solo en mainnet. Null si no se pudo armar: la ruta contesta `503 apagado` y los sellos siguen. */
+  private pagos: PorteroDePagos | null = null;
+  /** Las órdenes y los pagos que llegan a la cuenta de cobros: de acá sale cuántos costos de retiro se cobraron, para `/estado`. */
+  private cobros: Cobros | null = null;
+  /** Lo que guarda el alta de quien ganó: solo mainnet. Su tabla se crea aparte, con su propio try/catch. */
+  private altasPremio: AltasPorPremio | null = null;
+  /** Si alguna forma de pago está prendida en la configuración: con todo apagado, el exporte no suma las tablas vacías de los pagos. */
+  private pagosEnConfig = false;
 
   constructor(ctx: DurableObjectState, env: EnvPortero) {
     super(ctx, env);
-    this.cupos = new Cupos(ctx.storage.sql);
+    const sql = ctx.storage.sql;
+    // Lo que vale plata se escribe todo o nada: `transactionSync` del objeto.
+    this.sql = { exec: (consulta, ...enlaces) => sql.exec(consulta, ...enlaces), transaccion: (fn) => ctx.storage.transactionSync(fn) };
+    this.cupos = new Cupos(this.sql);
   }
 
   private async obtener(): Promise<Portero> {
@@ -68,29 +128,311 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     // El plan del equipo sube el cupo: sin `CUENTA_URL` no se pregunta nada. Una dirección mal escrita se avisa y se ignora (no apaga al portero).
     if ((this.env.CUENTA_URL ?? "").trim() && !cfg.cuentaUrl) console.error(JSON.stringify({ evento: "error-config", falta: ["cuenta-url"] }));
     const planes = cfg.cuentaUrl ? new Planes(cfg.cuentaUrl, (...a: Parameters<typeof fetch>) => fetch(...a), () => Date.now(), registrar) : null;
-    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes);
+    const red = new RpcRed(cfg.rpcUrls);
+    // La sorteadora, solo con el sorteo del servidor prendido y su llave cargada. Sin ella, `/v1/sorteo` da 503 apagado.
+    let sorteadora: Sorteadora | null = null;
+    if (cfg.sorteoServidor && cfg.cuentaSorteadora && cfg.contractId) {
+      try {
+        if (this.env.CLAVE_SORTEADORA) {
+          const firmante = await firmanteDe(this.env.CLAVE_SORTEADORA);
+          sorteadora = new Sorteadora({ passphrase: cfg.passphrase, contractId: cfg.contractId, cuenta: cfg.cuentaSorteadora, red, firmante });
+        }
+      } catch {
+        sorteadora = null;
+      }
+      if (!sorteadora) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["clave-sorteadora"] }));
+    }
+    this.portero = new Portero(cfg, this.cupos, red, this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar, planes, sorteadora);
+    if (cfg.red === "mainnet") {
+      // El último saldo de créditos vive en los ajustes: si el objeto arranca de nuevo con Pollar caído, sigue valiendo sus 10 minutos.
+      const pollar = pollarDe({ secreto: this.env.POLLAR_SECRETO, appId: cfg.pollarAppId, fetch: (u, i) => fetch(u, i), registrar, memoriaCreditos: memoriaEnAjustes(this.cupos) });
+      const altas = new Altas(this.sql, this.cupos);
+      // Los pagos de premios y los retiros: sus tablas y su portero, cada uno con su try/catch (lo nuevo no tumba a los sellos).
+      this.armarPagos(cfg, red, this.portero);
+      // La tabla del alta de quien ganó, igual: apagada o no, se crea sin poder tumbar nada.
+      this.armarAltaPremio();
+      // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual. Con las tablas de
+      // los retiros, el costo que paga quien retira se reconoce por su transacción y no cae a los pagos sueltos.
+      const cobros = new Cobros(this.sql, this.cupos, this.usoPagos ? { costos: this.usoPagos } : {});
+      this.cobros = cobros;
+      const lector = cfg.cuentaCobros ? new LectorDeCobros({ cobros, cuenta: cfg.cuentaCobros, fetch: (u, i) => fetch(u, i), registrar }) : null;
+      // La compra con QR: las compras en curso y sus reservas se leen siempre (también con COMPRAS_QR en "0"), para
+      // terminar lo que ya empezó y para el piso.
+      const compras = new ComprasQr(this.sql, cfg);
+      // Sin la hora del último aviso (no se pudo sumar al arrancar), la vigilancia de firmas cuenta sin ella.
+      if (this.cupos.faltaColumna("compras_qr", "avisada")) compras.sinHoraDeAviso();
+      // Cómo lee la puerta un sorteo de la red, para el alta de quien ganó: solo existe con el contrato oficial de la red.
+      const contrato = cfg.contractId;
+      const leerElSorteo = contrato
+        ? (origen: string, id: bigint) => leerSorteo(red, { passphrase: cfg.passphrase, contractId: contrato, origen }, id)
+        : null;
+      this.puerta = new PuertaAltas({
+        cfg,
+        cupos: this.cupos,
+        altas,
+        pollar,
+        cuponSecreto: this.env.CUPON_SECRETO ?? null,
+        red,
+        registrar,
+        cobros,
+        lector,
+        compras,
+        pagos: this.usoPagos,
+        altasPremio: this.altasPremio,
+        cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
+        ...(leerElSorteo ? { leerSorteo: leerElSorteo } : {}),
+      });
+      this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
+      this.exportaAltas = true;
+      if (cfg.altas && (this.env.CUPONES_TOKEN ?? "").length >= 32 && this.env.CUPONES_TOKEN === this.env.ADMIN_TOKEN) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
+      // Los secretos que faltan para las altas (nombres fijos, sin valores): las rutas dan 503 apagado hasta cargarlos.
+      const faltaSecretos = [...(cfg.altas && !pollar ? ["pollar-llave"] : []), ...(cfg.altas && (this.env.CUPON_SECRETO ?? "").length < 32 ? ["cupon-secreto"] : [])];
+      if (faltaSecretos.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: faltaSecretos }));
+    }
     const falta = this.portero.faltaDeConfig();
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
+    // Lo que se prendió de las altas y no se puede usar (nombres fijos, sin valores): no apaga al portero, solo eso.
+    if (cfg.faltaAltas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: cfg.faltaAltas }));
+    // Una columna nueva que no se pudo sumar al arrancar: el objeto sigue (sellos, sorteos y cupones) y la venta queda cerrada.
+    const columnas = this.cupos.columnasQueFaltan();
+    if (columnas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["columnas-nuevas"], columnas, error: this.cupos.errorDeColumnas() }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
-    if (this.cupos.enElAire() > 0) await this.programar();
+    if (this.cupos.enElAire() > 0 || this.pagosEnElAire() > 0) await this.programar();
     return this.portero;
+  }
+
+  /**
+   * Las tablas y el portero de los pagos de premios y de los retiros (solo mainnet). Cada cosa se arma adentro de su try/catch: un
+   * `CREATE` o una dependencia que lanzaran acá tumbarían el objeto entero, y con él todos los sellos. Si algo falla, lo de los pagos
+   * queda apagado (la ruta contesta `503 apagado`), se anota y el portero de los sellos sigue como siempre.
+   */
+  private armarPagos(cfg: Config, red: RpcRed, portero: Portero): void {
+    this.usoPagos = null;
+    this.pagos = null;
+    this.pagosEnConfig = pagosPrendidos(cfg);
+    try {
+      this.usoPagos = new UsoDePagos(this.sql, registrar);
+    } catch {
+      console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["pagos"] }));
+      return;
+    }
+    const uso = this.usoPagos;
+    this.pagos = armarPorteroDePagos(
+      () => ({
+        cfg,
+        uso,
+        cupos: this.cupos,
+        red,
+        redesSueltas: cfg.rpcUrls.map((url) => new RpcRed([url])),
+        pedirHorizon: haciaHorizon((u, i) => fetch(u, i)),
+        firmante: this.firmante,
+        cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
+        modo: () => portero.modo(),
+        alQuedarEnElAire: () => void this.programar(),
+        registrar,
+      }),
+      registrar,
+    );
+  }
+
+  /**
+   * La tabla del alta de quien ganó (solo mainnet), con su propio try/catch: como las de los pagos, un `CREATE` que lanzara acá
+   * tumbaría el objeto entero y con él todos los sellos. Si algo falla, esa ruta queda apagada (`503 apagado`) y se anota.
+   */
+  private armarAltaPremio(): void {
+    this.altasPremio = null;
+    try {
+      this.altasPremio = new AltasPorPremio(this.sql, this.cupos);
+    } catch {
+      console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["alta-premio"] }));
+    }
+  }
+
+  /** Cuántos pagos de premios y retiros siguen en el aire. Nunca lanza: unas tablas rotas no pueden tumbar el arranque. */
+  private pagosEnElAire(): number {
+    try {
+      return this.usoPagos?.disponible() ? this.usoPagos.enElAire() : 0;
+    } catch {
+      return 0;
+    }
   }
 
   private async programar(): Promise<void> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
   }
 
+  /**
+   * La alarma cierra lo que quedó en el aire, en dos partes, cada una en su try/catch: los sellos y los sorteos, y los pagos de
+   * premios y retiros. Si una lanza, la otra corre igual, queda anotado y se vuelve a pedir la alarma: lo que sigue en el aire
+   * no se queda sin nadie que lo mire.
+   */
   override async alarm(): Promise<void> {
     const p = await this.obtener();
-    if (await p.reconciliar()) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
+    const pagos = this.pagos;
+    const hayQueVolver = await vueltaDeAlarma(
+      [
+        { donde: "alarma-sellos", correr: () => p.reconciliar() },
+        { donde: "alarma-pagos", correr: () => (pagos ? pagos.reconciliar() : Promise.resolve(false)) },
+      ],
+      registrar,
+    );
+    if (hayQueVolver) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
   }
 
   async pagar(xdr: string): Promise<Respuesta> {
     return (await this.obtener()).procesar(xdr);
   }
 
+  /**
+   * `GET /v1/patrocinio/cupo`: lo de siempre y, con alguna forma de pago prendida, el bloque `pagos`. Ese bloque nunca hace fallar
+   * al cupo: si no se puede armar, el cupo sale como antes (y el sitio lo toma como un portero sin pagos).
+   */
   async cupo(cuenta: string): Promise<Respuesta> {
-    return (await this.obtener()).cupoDe(cuenta);
+    const r = await (await this.obtener()).cupoDe(cuenta);
+    if (r.estado !== 200 || !this.pagos) return r;
+    try {
+      const pagos = this.pagos.cupoDe(cuenta);
+      // El alta de quien ganó la conoce la puerta de las altas: dice si la atendería ahora (variable, pausa, configuración y tabla).
+      const altaPremio = this.puerta?.altaPremioAtiende() ?? false;
+      return pagos ? { ...r, cuerpo: { ...r.cuerpo, pagos: { ...pagos, altaPremio } } } : r;
+    } catch (e) {
+      registrar("error-interno", { donde: "cupo-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return r;
+    }
+  }
+
+  /**
+   * `POST /v1/patrocinio/pago` (solo mainnet): la comisión de la red de un pago de premio o de un retiro. Cualquier error que se
+   * escape sale como 500 `interno`, con `pudoSalir` según el hash del sobre: verdadero solo si ese pago sigue reservado o enviado.
+   */
+  async pagoClasico(forma: FormaDePago, xdr: string): Promise<Respuesta> {
+    try {
+      await this.obtener();
+      if (!this.pagos) return { estado: 503, cuerpo: { motivo: "apagado", forma, detalle: "config", pudoSalir: false } };
+      return await this.pagos.procesar(forma, xdr);
+    } catch (e) {
+      registrar("error-interno", { donde: "pago-clasico", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno", pudoSalir: this.pagos?.pudoSalir(xdr) ?? false } };
+    }
+  }
+
+  /** `POST /v1/sorteo` (solo mainnet): el `draw` mandado desde la cuenta sorteadora. */
+  async sortear(sorteo: string, firma: string): Promise<Respuesta> {
+    try {
+      return await (await this.obtener()).sortear(sorteo, firma);
+    } catch (e) {
+      registrar("error-interno", { donde: "sorteo", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas `/v1/alta/*` (solo mainnet). */
+  async alta(accion: AccionAlta, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atender(accion, pedido);
+    } catch (e) {
+      // Solo el nombre del error: el mensaje podría llevar algo del pedido.
+      registrar("error-interno", { donde: "alta", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas de la compra con QR, `/v1/compra/empezar` y `/v1/compra/cargar` (solo mainnet). */
+  async compra(accion: AccionCompra, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atenderCompra(accion, pedido);
+    } catch (e) {
+      registrar("error-interno", { donde: "compra", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** `GET /v1/carga/cupo` (solo mainnet): si la carga con QR está abierta. Ante cualquier error, cerrada. */
+  async carga(): Promise<boolean> {
+    try {
+      await this.obtener();
+      return this.puerta ? await this.puerta.cargaAbierta() : false;
+    } catch (e) {
+      registrar("error-interno", { donde: "carga", error: e instanceof Error ? e.name : "desconocido" });
+      return false;
+    }
+  }
+
+  /** Las rutas del pago, `/v1/alta/orden` y `/v1/alta/pago` (solo mainnet). */
+  async pagoAlta(accion: AccionPago, pedido: PedidoAlta): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.puerta.atenderPago(accion, pedido);
+    } catch (e) {
+      registrar("error-interno", { donde: "pago", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** Las rutas `/v1/admin/*` (solo mainnet): cupones, altas a mano, pagos y las pausas. La clave ya la miró el Worker. */
+  async adminAltas(accion: AccionAdmin, datos: unknown): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.administracion) return { estado: 503, cuerpo: { motivo: "apagado" } };
+    try {
+      return await this.administracion.atender(accion, datos);
+    } catch (e) {
+      registrar("error-interno", { donde: "admin", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
+  /** El bloque `pagos` de `/estado`, o null si no hay nada que mostrar. Nunca hace fallar al estado. */
+  private estadoDePagos(): Record<string, unknown> | null {
+    try {
+      const sinCostos = { cuantos: 0, monto: 0 };
+      const bloque = this.pagos?.resumenDeEstado(Date.now(), (desde) => this.cobros?.costosDeRetiro(desde) ?? sinCostos) ?? null;
+      if (!bloque) return null;
+      // El alta de quien ganó la conoce la puerta de las altas: si está prendida y cuántas se dieron en el día. La pausa ya viene.
+      const altaPremio = { ...(bloque.altaPremio as Record<string, unknown>), ...(this.puerta?.altaPremioDelEstado() ?? {}) };
+      return { ...bloque, altaPremio };
+    } catch (e) {
+      registrar("error-interno", { donde: "estado-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return null;
+    }
+  }
+
+  /**
+   * Las tablas de los pagos de premios y retiros, para el exporte: con alguna forma prendida o con algo guardado. Con todo apagado
+   * y sin nada guardado el exporte es el de siempre. Vacío si las tablas no están: unas tablas rotas no tumban el exporte.
+   */
+  private tablasDePagos(): Record<string, Array<Record<string, unknown>>> {
+    try {
+      const uso = this.usoPagos;
+      if (!this.exportaAltas || !uso?.disponible()) return {};
+      const tablas = uso.exportar();
+      const hayDatos = tablas.pagos_portero.length > 0 || tablas.retiros_cobrados.length > 0;
+      return this.pagosEnConfig || hayDatos ? tablas : {};
+    } catch (e) {
+      registrar("error-interno", { donde: "exportar-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return {};
+    }
+  }
+
+  /**
+   * La tabla del alta de quien ganó, para el exporte: con la forma prendida o con algo guardado. Con todo apagado y sin nada
+   * guardado el exporte es el de siempre. Vacío si la tabla no está: una tabla rota no tumba el exporte.
+   */
+  private tablaDeAltaPremio(): Record<string, Array<Record<string, unknown>>> {
+    try {
+      const altas = this.altasPremio;
+      if (!this.exportaAltas || !altas?.disponible()) return {};
+      const tabla = altas.exportar();
+      const prendida = this.puerta?.altaPremioDelEstado().prendido ?? false;
+      return prendida || tabla.altas_premio.length > 0 ? tabla : {};
+    } catch (e) {
+      registrar("error-interno", { donde: "exportar-alta-premio", error: e instanceof Error ? e.name : "desconocido" });
+      return {};
+    }
   }
 
   async administrar(accion: string, datos?: { clave?: string; valor?: number }): Promise<Respuesta> {
@@ -107,10 +449,29 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         return { estado: 200, cuerpo: { modo: p.modo() } };
       case "ajustes":
         return p.ajustar(String(datos?.clave), Number(datos?.valor)) ? { estado: 200, cuerpo: { ok: true } } : { estado: 400, cuerpo: { motivo: "ajuste" } };
-      case "estado":
-        return p.estado();
-      case "exportar":
-        return { estado: 200, cuerpo: { exportado: Date.now(), tablas: this.cupos.exportar() } };
+      case "estado": {
+        // En mainnet con las altas, también el saldo de créditos de Pollar y el piso.
+        // Y las altas de 24 horas y los cupones de hoy, y la vigilancia de firmas: firmasSinExplicar y patrocinioPollar.
+        // Y, con los pagos de premios y retiros prendidos, con algún pago en el día o con alguna pausa puesta, el bloque `pagos`.
+        const e = await p.estado();
+        if (!this.puerta) return e;
+        const pagos = this.estadoDePagos();
+        return {
+          ...e,
+          cuerpo: {
+            ...e.cuerpo,
+            ...(await this.puerta.resumen()),
+            ...(this.administracion?.resumen() ?? {}),
+            ...(await this.puerta.vigilancia()),
+            ...(pagos ? { pagos } : {}),
+          },
+        };
+      }
+      case "exportar": {
+        // En mainnet, también las tablas de las altas, las de los pagos de premios y retiros y la del alta de quien ganó.
+        const tablas = { ...this.cupos.exportar(this.exportaAltas), ...this.tablasDePagos(), ...this.tablaDeAltaPremio() };
+        return { estado: 200, cuerpo: { exportado: Date.now(), tablas } };
+      }
       default:
         return { estado: 404, cuerpo: { motivo: "accion" } };
     }
@@ -122,29 +483,14 @@ export class Patrocinio extends DurableObject<EnvPortero> {
 /** Dos contadores aparte: consultar el cupo no le gasta pedidos al POST. Ver `por-ip.ts`. */
 const cupoPorIp = new PorIp();
 const pagoPorIp = new PorIp();
-/** Consultas de cupo por dirección y por hora. */
-const CUPO_POR_HORA = 600;
-
-function origenPermitido(origen: string | null): boolean {
-  if (!origen) return false;
-  if (origen === SITIO || origen === "https://www.tinkazo.app") return true;
-  if (/^https:\/\/tinkazo(-[a-z0-9-]+)?\.vercel\.app$/.test(origen)) return true;
-  return /^http:\/\/localhost:\d{2,5}$/.test(origen);
-}
-
-function json(cuerpo: unknown, estado: number, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(cuerpo), { status: estado, headers: { "Content-Type": "application/json; charset=utf-8", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", ...extra } });
-}
-
-function cors(origen: string | null, abierto: boolean): Record<string, string> {
-  return {
-    "Access-Control-Allow-Origin": abierto ? "*" : origenPermitido(origen) && origen ? origen : "null",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400",
-    Vary: "Origin",
-  };
-}
+/** Los pedidos a `/v1/alta/*`, con su propio contador. */
+const altaPorIp = new PorIp();
+/** Los pedidos a `/v1/sorteo`, con el suyo. */
+const sorteoPorIp = new PorIp();
+/** Los pedidos a `/v1/patrocinio/pago`, con el suyo: agotar los de los sellos no frena los pagos, ni al revés. */
+const pagoClasicoPorIp = new PorIp();
+/** Las consultas de `/v1/carga/cupo`, con el suyo: consultar la carga no le gasta consultas al cupo. */
+const cargaPorIp = new PorIp();
 
 /** Si `dado` es la clave de administración, en tiempo constante. Sin clave cargada (o de menos de 32 caracteres) siempre da false. */
 async function esAdmin(dado: string, env: Env): Promise<boolean> {
@@ -161,12 +507,50 @@ export default {
     const origen = request.headers.get("Origin");
     const objeto = env.PATROCINIO.get(env.PATROCINIO.idFromName(env.RED === "mainnet" ? "mainnet" : "testnet")) as unknown as DurableObjectStub<Patrocinio>;
 
+    // Las rutas de altas y de la compra con QR existen solo en mainnet; en testnet siguen sin existir, como siempre.
+    if ((url.pathname.startsWith("/v1/alta/") || url.pathname.startsWith("/v1/compra/")) && env.RED === "mainnet") {
+      const r = await atenderAlta(
+        request,
+        leerConfig(env),
+        (accion, pedido) => objeto.alta(accion, pedido),
+        altaPorIp,
+        (accion, pedido) => objeto.pagoAlta(accion, pedido),
+        (accion, pedido) => objeto.compra(accion, pedido),
+      );
+      if (r) return r;
+    }
+
+    // La administración de las altas, también solo en mainnet: en testnet `/v1/admin/` sigue sin existir.
+    if (url.pathname.startsWith("/v1/admin/") && env.RED === "mainnet") {
+      const r = await atenderAdmin(request, env, leerConfig(env), (accion, datos) => objeto.adminAltas(accion, datos));
+      if (r) return r;
+    }
+
+    // El sorteo del servidor, también solo en mainnet: en testnet `/v1/sorteo` sigue sin existir.
+    if (url.pathname === "/v1/sorteo" && env.RED === "mainnet") {
+      const r = await atenderSorteo(request, leerConfig(env), sorteoPorIp, (sorteo, firma) => objeto.sortear(sorteo, firma));
+      if (r) return r;
+    }
+
+    // El tope de la carga con QR, también solo en mainnet: abierta y de solo lectura, como el cupo.
+    if (url.pathname === "/v1/carga/cupo" && env.RED === "mainnet") {
+      const r = await atenderCarga(request, leerConfig(env), cargaPorIp, () => objeto.carga());
+      if (r) return r;
+    }
+
+    // Los pagos de premios y retiros, también solo en mainnet y con alguna forma prendida: si no, la ruta no existe y el pedido
+    // sigue de largo hasta el 404 del final, como siempre.
+    if (url.pathname === "/v1/patrocinio/pago" && env.RED === "mainnet") {
+      const r = await atenderPagoClasico(request, leerConfig(env), pagoClasicoPorIp, (forma, xdr) => objeto.pagoClasico(forma, xdr));
+      if (r) return r;
+    }
+
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(origen, url.pathname.endsWith("/cupo")) });
 
     // La consulta del cupo: abierta, solo lectura.
     if (url.pathname === "/v1/patrocinio/cupo" && request.method === "GET") {
       const ip = request.headers.get("CF-Connecting-IP") ?? "0.0.0.0";
-      if (!cupoPorIp.toca(ip, CUPO_POR_HORA)) return json({ motivo: "cupo-ip" }, 429, cors(origen, true));
+      if (!cupoPorIp.toca(ip, cupoPorHora(env.RED ?? ""))) return json({ motivo: "cupo-ip" }, 429, cors(origen, true));
       const r = await objeto.cupo(url.searchParams.get("cuenta") ?? "");
       return json(r.cuerpo, r.estado, cors(origen, true));
     }

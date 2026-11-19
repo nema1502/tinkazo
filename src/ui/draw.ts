@@ -1,15 +1,24 @@
 import { $, esc } from "../dom";
+import { campanaDeLaLista, esSorteoDeCampana } from "../campana/en-curso";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, currentPace, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
 import { beep, note, sonidoDelJuego } from "../sound";
-import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "../protocol/quicknet";
+import { resultadoDelSello } from "../sorteo-local";
+import { LECTURA_DE_LA_TARJETA_S, arranqueDelShow, juegoTrasLaLlegada, msHasta } from "../arranque-del-show";
+import { anclaDeLaRondaUnaVez, anclaVirtual, horaDeLaRonda, salaALaParPorElAncla, type Ancla } from "../reloj-de-la-ronda";
+import { cerrarElShow, estadoDelShow, pedirHorario, ponerseAlDiaAlVolver, type Avisos, type Horario } from "../games/en-hora";
+import { cambioConQr, hayEspectadores, publicado } from "./espectadores-de-la-sala";
+import { puertaDeLaGrabacion, salaALaPar, type Apertura } from "./puerta-de-la-grabacion";
+import { type FinDeLaGrabacion, grabarElSorteo } from "./grabar-sorteo";
+import { marcarEnMarcha, soltarLaMarcha, sorteoEnMarcha } from "./sorteo-en-marcha";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
-import { cuentaPatrocinada, drawOnChain, escribirError, existenciaDelSorteo, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
+import { cuentaPatrocinada, escribirError, existenciaDelSorteo, limpiarDetalle, showTxStatus } from "./anchor";
 import type { AccionError } from "./error-accion";
 import { loreFor } from "../games/lore";
 import { pintarLeyenda } from "./leyenda";
@@ -23,11 +32,12 @@ import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { turnMessage, turnNotice } from "../modos/mensajes";
-import { isTurnOrder, modoDelComprobante, setResultadoDeTurnos } from "../modos/turnos";
-import { contar as contarPersonas, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
+import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos } from "../modos/turnos";
+import { contar as contarPersonas, cuentaParaMostrar, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
 import { modesVisible, withMode } from "../modos/bandera";
 import { alCopiarOrden } from "./lista-de-turnos";
 import { alTocarAusente, htmlDeGanadores } from "./resultado-ganadores";
+import { withRepeatCounts } from "./repeated-names";
 import { acortar, alAcortar, cortoGuardado, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { logoPorHuella } from "../logo-guardado";
 import { pintarLogoEnElResultado, quitarLogoDelResultado } from "./logo-sorteo";
@@ -37,10 +47,19 @@ import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-comple
 import { contar, contarPractica, errorContable, refDe } from "../contar";
 import { acreditarEnSegundoPlano } from "../stellar/monedas-eventos";
 import { ponerTextoDelSello } from "./sin-sello-textos";
-import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
-import { etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+import { accionDePagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
+import { esListaDeEquipos, etiquetaConCuenta, etiquetaDe, hayEtiquetas, nombresDeLosEquipos, paraMostrar } from "../equipos/etiquetas";
+
+/**
+ * Si la lista que se selló es de equipos. Lo dicen la lista sellada y no el cuadro, que después del sorteo ya pudo
+ * cambiar: así las frases de abajo del resultado, el mensaje y la foto cuentan siempre lo mismo. `undefined` si todavía
+ * no hay lista sellada, y entonces las frases miran el cuadro.
+ */
+const selladaEsDeEquipos = (): boolean | undefined => (app.frozen ? esListaDeEquipos(app.frozen.names) : undefined);
 import { ponerNombresEnteros } from "../games/nombres-enteros";
 import { pagosActivos } from "../stellar/pagos-bandera";
+import { cobroPorUso } from "../stellar/cobro-oficial";
+import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -49,7 +68,8 @@ async function resolveBeacon(
 ): Promise<Beacon> {
   // El modo stand nunca toca la red para elegir, con o sin internet: no hay dos caminos ni detección de red que falle en vivo.
   if (enStand()) return faroDeStand(round);
-  const { signature } = await fetchRound(round, { onAttempt });
+  // Con plazo por pedido: un relay colgado cuenta como uno que falló, y se pasa al siguiente (`pedido-con-plazo.ts`).
+  const { signature } = await fetchRound(round, { onAttempt, fetchFn: conPlazo(fetch, PLAZO_DEL_RELAY_MS) });
   // En un worker, que la cuenta regresiva levantó: la cortina no se traba.
   if (!(await verifyRoundAsync(round, signature))) throw new Error("bad-signature");
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
@@ -61,13 +81,78 @@ let recuperacion: { sello: NonNullable<typeof app.frozen>; accion: AccionError }
 /** Ya se abrió "Protegé tu cuenta" en este intento de sortear: si vuelve a pedirla, se dice y no se repite. */
 let protegiendoElSorteo = false;
 
-export async function draw(): Promise<void> {
+/** Un sorteo está pasando por las compuertas del modo Oficial (el paso de la cuenta, el acceso). */
+let enLasCompuertas = false;
+
+/**
+ * `adelantado`: lo lanza la espera en grande en los últimos segundos antes de que nazca el número (`freeze.ts`), para
+ * que la tarjeta de cómo se juega se lea mientras tanto. El número se pide recién cuando nace.
+ */
+export async function draw(opciones: { adelantado?: boolean } = {}): Promise<void> {
   if (recuperacion?.sello === app.frozen) {
     recuperacion.accion.ejecutar();
     return;
   }
   recuperacion = null;
-  if (!app.frozen || app.drawn || secondsToRound() > 0) return;
+  // El sorteo ya se jugó y falta grabarlo (falló, o la billetera no lo aprobó): el botón vuelve a probar, sin otro show.
+  if (porGrabar && porGrabar.sello === app.frozen && app.drawn) {
+    await grabarAparte({ ...porGrabar, pagarConMiCuenta: tomarLaEleccion() });
+    return;
+  }
+  if (!app.frozen || app.drawn || sorteoEnMarcha(app.frozen)) return;
+  // Adelantado, como mucho la lectura de la tarjeta antes de que nazca el número (con un segundo de holgura por el
+  // reloj de la cuenta regresiva). Si no, recién cuando nació.
+  if (opciones.adelantado ? msHasta(roundTime(app.frozen.round), horaDeLaRonda() * 1000) > (LECTURA_DE_LA_TARJETA_S + 1) * 1000 : secondsToRound() > 0) return;
+  // Uno a la vez: con el sorteo lanzado antes de que nazca el número, un toque cuando nace no puede lanzar otro show.
+  // La marca la mira también la cuenta regresiva (`freeze.ts`), que no toca el botón mientras tanto. Si una compuerta
+  // corta, la marca se va con el intento y el botón vuelve a encenderse (`sorteo-en-marcha.ts`). Es por sello y se
+  // suelta cuando arranca el show: la grabación, que sigue aparte, no frena el sorteo del premio siguiente.
+  const sello = app.frozen;
+  marcarEnMarcha(sello);
+  try {
+    await sortear(opciones.adelantado === true);
+  } finally {
+    soltarLaMarcha(sello);
+  }
+}
+
+/**
+ * `adelantado`: lanzado por la espera en grande antes de que nazca el número. Entonces la sala sigue la línea de tiempo
+ * común (`arranque-del-show.ts`): trae el número con un pedido que espera su nacimiento (`reloj-de-la-ronda.ts`) y su
+ * juego arranca a una hora fija desde esa llegada, la misma regla que sigue el celular de quien mira, un poco después.
+ */
+async function sortear(adelantado = false): Promise<void> {
+  if (!app.frozen) return;
+  // En modo Oficial, si la memoria dice que a la cuenta le falta activarse, el paso «Dejá tu cuenta lista» antes de
+  // sortear. Solo la memoria y sin red: el sorteo se lanza solo desde la espera. Fuera del modo Oficial no se baja nada.
+  if (app.frozen.raffleId !== undefined && network.name === "mainnet") {
+    // Un toque mientras otro sigue en las compuertas no hace nada: el botón se apaga recién después de ellas, y con el
+    // portero lento (hasta 6 s) un segundo toque pedía otra firma del mismo sorteo.
+    if (enLasCompuertas) return;
+    enLasCompuertas = true;
+    try {
+      let flujo: typeof import("./cuenta-lista-flujo") | null = null;
+      try {
+        flujo = await import("./cuenta-lista-flujo");
+      } catch {
+        // No bajó: el sorteo sigue sin la compuerta. Ya está sellado, así que la cuenta estaba lista al sellar; si igual
+        // le faltara algo, el sorteo falla antes de firmar y lo dice. Frenarlo acá lo dejaba muerto hasta recargar.
+        flujo = null;
+      }
+      if (flujo && flujo.faltaEnLaMemoria() && !(await flujo.cuentaListaParaGrabar("sorteo", { volverA: document.getElementById("btn-draw"), alSeguir: pedirPantallaDelSorteo }))) {
+        // Salió del paso sin dejar la cuenta lista: no se sortea, y se dice por qué, con el botón para volver a probar.
+        // Hasta el 16 de noviembre de 2026 no se decía nada, y lanzado desde la espera en grande la dejaba sin salida.
+        if (app.frozen && !app.drawn) cortoLaCompuerta("drawCuentaSinLista");
+        return;
+      }
+      if (!app.frozen || app.drawn) return;
+      // Con el cobro por uso del modo Oficial, ninguna firma del sorteo sin el acceso de la cuenta (`sin-sorteos.ts`).
+      if (cobroPorUso() && !(await accesoOficialParaSortear())) return;
+      if (!app.frozen || app.drawn) return;
+    } finally {
+      enLasCompuertas = false;
+    }
+  }
   // "Sortear pagando con mi cuenta", si se eligió: vale para este intento y no se hereda al siguiente.
   const pagarConMiCuenta = tomarLaEleccion();
   // Tiene que correr dentro del clic: los navegadores no dejan hablar a una
@@ -84,17 +169,40 @@ export async function draw(): Promise<void> {
   // Desde la espera en grande, el resultado también sale en grande: se baja ya,
   // para abrirlo en el mismo instante en que se va el estadio.
   if (enGrande()) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
-  // Desde la espera en grande, ella misma hace de cortina hasta que el show la
-  // tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
-  const cortina = skipMotion() || enGrande() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
+  const sello = app.frozen;
+  const { names, listHash, raffleId } = sello;
+  // Los ganadores que se sellaron: el campo se puede tocar después de sellar, el sello no.
+  const nWinners = sello.numWinners ?? Math.min(ganadoresPedidos(), names.length);
+  // Una sola lectura del sello y del contador: la cortina y la tarjeta no pueden discrepar sobre qué se sortea.
+  const orden = isTurnOrder(names.length, nWinners, sello.prize);
+  // La tarjeta de cómo se juega sale ya, antes del número: no dice quién gana. Lanzado desde la espera en grande, sale
+  // en los últimos segundos de la espera y termina de leerse cuando nace el número. La cuenta de la sala espera a que
+  // haya resultado, y el juego arranca sin esperar a que el sorteo quede grabado: se graba aparte (`grabarAparte`).
+  // Hasta el 15 de noviembre de 2026 la sala esperaba el margen de la cadena y la grabación, unos quince segundos.
+  let hayResultado: (hora?: { terminaEn: number }) => void = () => undefined;
+  const resultadoListo = new Promise<{ terminaEn: number } | undefined>((r) => (hayResultado = r));
+  const juego = juegoDe(names.length, nWinners);
+  const card = abrirTarjeta(juego, names.length, nWinners, orden, resultadoListo);
+  const tarjeta: Previa | null = card ? { card, game: juego } : null;
+  // Sin tarjeta, la cortina mientras llega el número. Desde la espera en grande, ella misma hace de cortina hasta que
+  // el show la tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
+  const cortina = card || skipMotion() || enGrande() ? null : abrirCortina(sello.prize, orden);
   const sinShow = (): void => {
+    tarjeta?.card.hide();
     cortina?.cerrar();
     if (!enGrande()) soltarPantallaCompleta();
   };
-  /** Con cuenta, la tarjeta del juego sale mientras se graba (ver abajo); si algo falla, se va con la cortina. */
-  let tarjeta: Previa | null = null;
-  /** Para el contador: un sorteo sin anclar no se cuenta, y uno anclado se cuenta una vez, al saber cómo terminó. */
-  let contado = app.frozen.raffleId === undefined;
+  /** Para el contador: un sorteo sin anclar no se cuenta, y uno anclado lo cuenta su grabación, al saber cómo terminó. */
+  let contado = raffleId === undefined;
+  /** La grabación, cuando ya arrancó: un error del show no la corta, y el sorteo termina cuando ella termina. */
+  let grabando: Promise<void> | null = null;
+  /** La llegada del número con el pedido retenido, si se lanzó desde la espera (`reloj-de-la-ronda.ts`). */
+  let ancla: Ancla | null = null;
+  /** La sala mostró quién gana (el cartel del juego, o el resultado): la grabación que lo esperaba ya puede salir. */
+  let coronar: () => void = () => undefined;
+  const coronada = new Promise<void>((r) => (coronar = r));
+  /** El resultado, desde que quedó fijado: si después falla el show, se muestra igual y se graba. */
+  let fijado: { beacon: Beacon; winners: number[]; graba: PorGrabar | null } | null = null;
 
   try {
     // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
@@ -108,12 +216,30 @@ export async function draw(): Promise<void> {
     // El detalle de un error de antes ya no es de lo que se ve.
     limpiarDetalle("draw-status");
 
-    let beacon: Beacon;
-    try {
-      beacon = await resolveBeacon(app.frozen.round, (attempt, total) => {
-        if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
-      });
+    // Lanzado por la espera en grande: el número llega con un pedido que espera su nacimiento, y esa llegada es la hora
+    // cero del juego (el ancla). Si el servicio que retiene no contesta, o la firma no da, como siempre.
+    const conAncla = adelantado && !enStand();
+    // La cuenta regresiva ya la pidió unos segundos antes (`freeze.ts`): esta es la misma, también en Rápido.
+    ancla = conAncla ? await anclaDeLaRondaUnaVez(sello.round) : null;
+    let beacon: Beacon | null = null;
+    let llegada = 0;
+    if (ancla?.firma && (await verifyRoundAsync(sello.round, ancla.firma).catch(() => false))) {
+      beacon = { round: sello.round, randomness: bytesToHex(randomnessOf(ancla.firma)), signature: ancla.firma };
+      llegada = ancla.llegada;
       status.style.display = "none";
+    } else ancla = null;
+    try {
+      if (!beacon) {
+        // Lanzado antes de que nazca el número: se lo pide recién cuando nace. Pedirlo antes es esperar los dos segundos
+        // que hay entre un intento y el siguiente.
+        const falta = enStand() ? 0 : msHasta(roundTime(sello.round), horaDeLaRonda() * 1000);
+        if (falta > 0) await new Promise((r) => setTimeout(r, falta));
+        beacon = await resolveBeacon(sello.round, (attempt, total) => {
+          if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
+        });
+        llegada = performance.now();
+        status.style.display = "none";
+      }
     } catch (e) {
       sinShow();
       btn.disabled = false;
@@ -126,121 +252,18 @@ export async function draw(): Promise<void> {
       return;
     }
 
-    const { names, listHash, raffleId } = app.frozen;
-    const nWinners = Math.min(ganadoresPedidos(), names.length);
-    let winners: number[] = [];
-    let drawTx: string | undefined;
-
-    if (raffleId !== undefined) {
-      // La tarjeta de "cómo se juega" sale ya, mientras se graba: antes la sala
-      // miraba la cortina siete u ocho segundos y recién después la tarjeta
-      // (evaluación crítica de experiencia, hallazgo 3). No dice quién ganó, y
-      // la cuenta de la sala y el juego esperan a que quede grabado.
-      let grabado: () => void = () => undefined;
-      const espera = new Promise<void>((r) => (grabado = r));
-      const juego = juegoDe(names.length, nWinners);
-      const card = abrirTarjeta(juego, names.length, nWinners, espera);
-      if (card) {
-        tarjeta = { card, game: juego };
-        cortina?.cerrar();
-      }
-      // Anclado: el contrato verifica la firma y decide. Lo que muestra la
-      // pantalla es lo que quedó registrado, no un cálculo nuestro.
-      //
-      // Se reintenta solo, y no es capricho (`sorteo-seguro.ts`). El contrato
-      // compara la hora de la ronda contra la **hora de cierre del ledger**, que
-      // va unos segundos atrás del reloj del navegador: hay una ventana en la que
-      // acá ya es hora y para la cadena todavía no. Y con el wifi de un evento, un
-      // corte. Pedirle a alguien que vuelva a apretar el botón, con la sala
-      // mirando, es inaceptable. Reintentar el sorteo es seguro: el contrato
-      // acepta uno solo por sello.
-      // La curva, para pasar la firma al formato del contrato. La cuenta
-      // regresiva ya la bajó (ver `freeze`).
-      const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable, avisoDelReintento }, { errorKey }] = await Promise.all([
-        import("../protocol/drand"),
-        import("./sorteo-seguro"),
-        import("../stellar/errores"),
-      ]);
-      const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
-        intentar: () =>
-          drawOnChain(
-            raffleId,
-            decompressG1(beacon.signature),
-            (step, detail) => {
-              btn.textContent = stepLabel(step, "sorteo");
-              showTxStatus("draw-status", step, detail);
-            },
-            { pagarConMiCuenta },
-          ),
-        yaEsta: () => readDraw(raffleId),
-        reintentable: sorteoReintentable,
-        alReintentar: (proximo, total, e) => {
-          // Dice lo que pasó: la red no contestó, estaba ocupada, la cadena todavía no ve la ronda u otra cosa.
-          const aviso = avisoDelReintento(errorKey(e));
-          showTxStatus("draw-status", "retrying");
-          const status = $("draw-status");
-          status.textContent =
-            aviso === "drawTry" ? T[getLang()].drawTry(proximo, total) : t(aviso).replace("{i}", String(proximo)).replace("{n}", String(total));
-        },
-      });
-      contado = true;
-      // Pollar 0.12 (mainnet): la cuenta pide una forma de recuperarla antes de firmar. Se abre "Protegé tu cuenta" y, si
-      // la protege, se sortea de nuevo, una sola vez por intento (el contrato acepta un solo sorteo por sello, así que
-      // repetirlo es seguro). Si no la protege, se cuenta y se dice como cualquier otro fallo, con el botón para volver.
-      if (!fin.ok && !protegiendoElSorteo && (await pideProtegerLaCuenta(fin.error))) {
-        tarjeta?.card.hide();
-        sinShow();
-        protegiendoElSorteo = true;
-        try {
-          if (await protegerLaCuenta(btn, "draw-status")) {
-            // Lo elegido para este intento sigue valiendo para el que se repite.
-            if (pagarConMiCuenta) elegirPagarConMiCuenta();
-            await draw();
-            return;
-          }
-        } finally {
-          protegiendoElSorteo = false;
-        }
-      }
-      if (!fin.ok) {
-        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error, { patrocinada: await cuentaPatrocinada() }), fin.error) });
-        tarjeta?.card.hide();
-        sinShow();
-        // El mensaje de la pantalla es para la sala; el detalle queda plegado
-        // debajo, en este navegador y en la consola, por si se repite.
-        console.warn("[tinkazo] el sorteo no se pudo grabar", fin.error);
-        btn.disabled = false;
-        btn.classList.add("lista");
-        btn.textContent = t("drawRetry");
-        const status = $("draw-status");
-        status.style.display = "block";
-        status.className = "txstatus bad";
-        await escribirError(status, fin.error, "sorteo");
-        const clave = errorKey(fin.error);
-        if (clave === "notFound" || clave === "alreadyDrawn") {
-          await ofrecerRecuperacion(status, clave, beacon);
-        } else {
-          // El servicio que cubre la comisión no pudo y la lista ya está sellada: si la cuenta tiene con qué pagar la
-          // suya, esa es la segunda salida (la primera sigue siendo reintentar).
-          const segunda = (await sePuedeSortearPagando(fin.error)) ? accionDePagarConMiCuenta() : undefined;
-          verError(status, undefined, segunda);
-          if (segunda) ponerSegundaAccion(status, segunda);
-        }
-        return;
-      }
-      winners = fin.valor.winners;
-      if (fin.valor.txHash) drawTx = fin.valor.txHash;
-      // Ya estaba registrado (un intento cortado que sí entró, u otra persona): sin enlace a la transacción.
-      if (fin.yaEstaba) showTxStatus("draw-status", "confirmed");
-      // Quedó grabado: la tarjeta sigue con la cuenta de la sala, y después el juego.
-      grabado();
-      contar("draw_confirmed", { network: network.name });
-      // El primer sorteo de la cuenta suma monedas (detrás de VITE_MONEDAS; el demo y el ensayo no cuentan: no graban).
-      const cuenta = sinGrabar() ? undefined : currentSession()?.address;
-      if (cuenta) acreditarEnSegundoPlano(cuenta, "primer_sorteo");
-    } else {
-      winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
+    // Se soltó el sello mientras llegaba el número (se empezó otro sorteo): este no sigue.
+    if (app.frozen !== sello || app.drawn) {
+      sinShow();
+      return;
     }
+    // El resultado, calculado acá con lo sellado y el número ya comprobado: el mismo camino con sello y sin sello
+    // (`sorteo-local.ts`). Con sello, el contrato hace la misma cuenta y no puede dar otro: al grabarlo se comparan.
+    const winners = resultadoDelSello({ listHash, count: names.length, numWinners: nWinners }, beacon);
+    // Hay resultado: la tarjeta sigue con la cuenta de la sala, y después el juego. Lanzado por la espera, a la hora fija
+    // que da la llegada del número; el estadio arranca a esa misma hora (`en-hora.ts`).
+    const terminaEn = conAncla ? llegada + juegoTrasLaLlegada(conCuenta()) * 1000 : null;
+    hayResultado(terminaEn !== null ? { terminaEn } : undefined);
 
     // Apagado y diciendo por qué: un "Lanzar el sorteo" gris parecía roto. Con
     // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
@@ -248,28 +271,101 @@ export async function draw(): Promise<void> {
     btn.textContent = t("drawnDone");
     // Y la caja de la espera deja de decir "Ya nació. Dale.": ya se sorteó.
     ponerHecho(document.getElementById("wait-left"));
-    app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
+    app.drawn = { beacon, winners };
+    // Con sello, el sorteo se graba aparte y el show no lo espera. Con la billetera propia, recién después del show:
+    // su ventana para aprobar no puede tapar el juego. Con las demás cuentas, ya: la grabación espera sola el margen
+    // de la cadena mientras se juega.
+    const graba: PorGrabar | null = raffleId !== undefined ? { sello, beacon, winners, pagarConMiCuenta } : null;
+    fijado = { beacon, winners, graba };
+    // Mis sorteos lo sabe ya, antes del show: con sus ganadores y por guardar. Si la pestaña se cierra o se recarga
+    // durante el show, la fila ofrece Guardarlo ahora. Hasta el 16 de noviembre de 2026 se anotaba recién con el
+    // resultado a la vista, y con la billetera propia cerrar durante el show dejaba el sorteo sin grabar y sin marca.
+    if (graba) anotarEnMisSorteos(graba, { porGrabar: true }, false);
+    const despuesDelShow = graba !== null && currentSession()?.aMano === true;
+    if (graba) contado = true;
+    // Con celulares mirando, la sala graba mientras juega solo si va a la par; si no, después de mostrar quién gana
+    // (`puerta-de-la-grabacion.ts`). Sin celulares, como siempre.
+    const pedido = { juego: app.game, ritmo: currentPace() };
+    const anclaDelSorteo = ancla;
+    // `?auditar=espectador`: lo que la sala miró para decidir, a la vista del recorrido de los espectadores.
+    const auditar = (params.get("auditar") ?? "").split(",").includes("espectador");
+    const puerta = graba && !despuesDelShow ? puertaDeLaGrabacion({
+      conEspectadores: hayEspectadores(sello),
+      grabable: arranqueDelShow(sello.round).grabable,
+      ahora: () => horaDeLaRonda() * 1000,
+      aLaPar: () => {
+        const e = {
+          conEspectadores: true,
+          cambioConQr: cambioConQr(sello),
+          anclaALaPar: salaALaParPorElAncla(anclaDelSorteo, anclaVirtual(sello.round)),
+          mismoJuego: mismoJuegoQueElQr(sello, pedido.juego, pedido.ritmo),
+          show: estadoDelShow(),
+        };
+        const par = salaALaPar(e);
+        // Grabada a la par, lo grabado suelta el final de los celulares: si la sala se esconde, al volver se pone al día.
+        if (par) ponerseAlDiaAlVolver();
+        if (auditar) {
+          const v = anclaVirtual(sello.round);
+          const trasSuHora = anclaDelSorteo && v !== null ? Math.round(anclaDelSorteo.llegada - v) : null;
+          document.documentElement.dataset.paraGrabar = JSON.stringify({ ...e, ancla: anclaDelSorteo && { retenido: anclaDelSorteo.retenido, idaYVuelta: anclaDelSorteo.idaYVuelta, trasSuHora }, aLaPar: par });
+        }
+        return par;
+      },
+      coronada,
+    }) : null;
+    if (auditar && puerta) void puerta.then((a) => (document.documentElement.dataset.puerta = a));
+    if (graba && !despuesDelShow) grabando = grabarAparte(graba, puerta);
     $("sec-draw").style.display = "block";
     $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
     // Arrancó desde la espera en grande (ella todavía hace de cortina): el show
     // termina en el resultado en grande, sin soltar la pantalla completa.
     granFinal = enGrande() ? { pantalla: !!document.fullscreenElement } : null;
     seguirEnPantallaCompleta(granFinal?.pantalla === true);
-    const finish = (): void => reveal(names, winners, beacon, listHash);
+    const finish = (): void => {
+      reveal(names, winners, beacon, listHash);
+      coronar();
+      if (graba && despuesDelShow) void grabarAparte(graba);
+    };
     // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
     // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
-    setResultadoDeTurnos(isTurnOrder(names.length, winners.length, app.frozen.prize));
-    playGame(names, winners, beacon, finish, tarjeta);
+    setResultadoDeTurnos(isTurnOrder(names.length, winners.length, sello.prize));
+    playGame(names, winners, beacon, finish, orden, tarjeta, terminaEn !== null ? { conHora: { horario: { inicio: terminaEn }, avisos: { alCoronar: coronar } } } : {});
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
+    // El show arrancó y el resultado está fijado: este sello ya no está en marcha. Hasta el 16 de noviembre de 2026 la
+    // marca seguía hasta que terminaba la grabación (con la red lenta, más de un minuto), y el sorteo del premio
+    // siguiente no arrancaba ni decía por qué. La grabación tiene su propia guarda, por sello (`grabarAparte`).
+    soltarLaMarcha(sello);
+    await grabando;
   } catch (e) {
     // Lo inesperado, en cualquier paso: sin esto la cortina quedaba tapando la
     // pantalla y el botón apagado, con la sala mirando. Se dice lo que fue (un
     // corte de red ya no sale como "la red rechazó la transacción"), con el
     // detalle plegado debajo.
-    tarjeta?.card.hide();
     sinShow();
     console.warn("[tinkazo] el sorteo se cortó", e);
+    // El resultado ya estaba fijado: lo que falló fue el show, no el sorteo. Se ve sin show, como cuando el juego no se
+    // alcanza a bajar, y se graba: la grabación dice cómo terminó y su botón la vuelve a probar. Con la billetera propia
+    // la grabación se iba a pedir al terminar el show, así que se pide ahora. Hasta el 16 de noviembre de 2026 ese
+    // sorteo quedaba sin grabar, sin resultado a la vista y con un botón que no hacía nada.
+    if (fijado && app.frozen === sello && app.drawn?.beacon === fijado.beacon) {
+      try {
+        reveal(names, fijado.winners, fijado.beacon, listHash);
+      } catch (r) {
+        console.warn("[tinkazo] el resultado no se pudo mostrar", r);
+      }
+      // El resultado ya está a la vista: si la grabación esperaba eso, ya puede salir.
+      coronar();
+      if (fijado.graba && !grabando) grabando = grabarAparte(fijado.graba);
+      await grabando;
+      return;
+    }
+    // Sin resultado a la vista (se soltó el sello): una grabación que esperaba la corona no espera más.
+    coronar();
+    if (grabando) {
+      await grabando;
+      return;
+    }
     if (!contado) {
       void import("../stellar/errores")
         .then(async ({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
@@ -285,6 +381,351 @@ export async function draw(): Promise<void> {
     await escribirError(status, e, "sorteo");
     verError(status);
   }
+}
+
+/** Un sorteo con sello que la sala ya vio y que se graba aparte (`grabarAparte`). */
+interface PorGrabar {
+  sello: NonNullable<typeof app.frozen>;
+  beacon: Beacon;
+  winners: number[];
+  pagarConMiCuenta: boolean;
+}
+
+/** El sorteo de la pantalla cuya grabación no terminó bien: el botón de sortear la vuelve a probar (`draw`). */
+let porGrabar: PorGrabar | null = null;
+
+/**
+ * Los sellos cuya grabación esta página está esperando: otro toque no la vuelve a esperar ni dice dos veces cómo terminó.
+ * Que la grabación misma vaya de a una por sorteo, también entre el show y Guardarlo ahora de Mis sorteos, lo cuida
+ * `grabarElSorteo` (`grabacion-en-curso.ts`).
+ */
+const grabandoAhora = new Set<object>();
+
+/** Salir de la página mientras la grabación espera su puerta o se manda: el navegador pregunta. */
+function avisarAntesDeSalir(ev: BeforeUnloadEvent): void {
+  ev.preventDefault();
+  // Los navegadores que no miran `preventDefault` en este evento miran esto.
+  ev.returnValue = "";
+}
+
+/** El juego y la duración que juega la sala son los del enlace del último QR de este sello. */
+function mismoJuegoQueElQr(sello: NonNullable<typeof app.frozen>, juego: Game, ritmo: string): boolean {
+  const p = publicado(sello);
+  return !!p && p.juego === juego && p.ritmo === ritmo;
+}
+
+/** La línea del resultado que dice si el sorteo ya quedó guardado. Sin ella, la de siempre, debajo del botón. */
+const cajaDeLaGrabacion = (): HTMLElement => document.getElementById("grab-estado") ?? $("draw-status");
+
+/** El sorteo que se graba sigue siendo el de la pantalla (no se pasó al siguiente premio). */
+const sigueEnPantalla = (g: PorGrabar): boolean => app.frozen === g.sello && app.drawn?.beacon === g.beacon;
+
+/**
+ * Graba aparte un sorteo que la sala ya vio (`grabar-sorteo.ts`): cuando la cadena lo acepta, con los reintentos de
+ * siempre. Mientras tanto el resultado dice que se está guardando, y al terminar lo dice y completa el comprobante con
+ * el enlace del sorteo grabado. Si la pantalla ya pasó a otro sorteo, sigue igual y lo anota en Mis sorteos. Si no se
+ * puede, el ganador no cambia: lo dice, con el botón para volver a probar, y Mis sorteos lo puede terminar más tarde.
+ * No lanza nunca: el show ya está en marcha.
+ */
+async function grabarAparte(g: PorGrabar, puerta: Promise<Apertura> | null = null): Promise<void> {
+  const raffleId = g.sello.raffleId;
+  if (raffleId === undefined) return;
+  // Ya se está grabando este sorteo: otro toque no manda otra grabación. Las de otros sellos siguen cada una por su lado.
+  if (grabandoAhora.has(g.sello)) return;
+  grabandoAhora.add(g.sello);
+  // Con celulares mirando, la grabación espera su puerta (`puerta-de-la-grabacion.ts`). Mientras tanto, y hasta que
+  // quede guardado, salir de la página pregunta: cerrar justo después de quién gana lo dejaría sin grabar.
+  const conCelulares = puerta !== null && hayEspectadores(g.sello);
+  if (conCelulares) window.addEventListener("beforeunload", avisarAntesDeSalir);
+  // Hasta que quede guardado, el botón de sortear de este sello la vuelve a probar (con el botón apagado mientras va).
+  porGrabar = g;
+  const caja = cajaDeLaGrabacion();
+  const escribir = (texto: string): void => {
+    if (!sigueEnPantalla(g)) return;
+    limpiarDetalle(caja.id);
+    caja.style.display = "block";
+    caja.className = "txstatus";
+    caja.dataset.grabacion = "guardando";
+    caja.textContent = texto;
+  };
+  escribir(t("grabGuardando"));
+  const btn = document.getElementById("btn-draw");
+  if (btn instanceof HTMLButtonElement && sigueEnPantalla(g)) btn.disabled = true;
+  let fin: FinDeLaGrabacion;
+  try {
+    const [{ errorKey }, { avisoDelReintento }] = await Promise.all([import("../stellar/errores"), import("./sorteo-seguro")]);
+    if (puerta) await puerta;
+    fin = await grabarElSorteo({
+      raffleId,
+      round: g.sello.round,
+      signature: g.beacon.signature,
+      esperados: g.winners,
+      pagarConMiCuenta: g.pagarConMiCuenta,
+      // Con la billetera propia, se ve lo que hay que aprobar: es lo único que tiene que hacer la persona.
+      alPaso: (step, detail) => {
+        if (step === "signing" && currentSession()?.aMano === true && sigueEnPantalla(g)) showTxStatus(caja.id, step, detail);
+      },
+      // Dice lo que pasó: la red no contestó, estaba ocupada, todavía no se puede grabar u otra cosa.
+      alReintentar: (proximo, total, e) => {
+        const aviso = avisoDelReintento(errorKey(e));
+        escribir(aviso === "drawTry" ? T[getLang()].drawTry(proximo, total) : t(aviso).replace("{i}", String(proximo)).replace("{n}", String(total)));
+      },
+    });
+  } catch (e) {
+    fin = { estado: "fallo", error: e };
+  } finally {
+    // Terminó este intento: lo que sigue (proteger la cuenta y volver a grabar, o el botón) puede mandar otro.
+    grabandoAhora.delete(g.sello);
+    if (conCelulares) window.removeEventListener("beforeunload", avisarAntesDeSalir);
+  }
+  if (fin.estado !== "fallo" && porGrabar === g) porGrabar = null;
+  try {
+    if (fin.estado === "guardado") alGuardar(g, fin.txHash);
+    else if (fin.estado === "no-coincide") alNoCoincidir(g, fin.esperados, fin.grabados);
+    else await alNoGuardar(g, fin.error);
+  } catch (e) {
+    console.warn("[tinkazo] no se pudo decir cómo terminó la grabación", e);
+  }
+}
+
+/** Quedó grabado: el resultado lo dice, y el comprobante y Mis sorteos se completan con el enlace del sorteo grabado. */
+function alGuardar(g: PorGrabar, txHash: string | undefined): void {
+  contar("draw_confirmed", { network: network.name });
+  // El primer sorteo de la cuenta suma monedas (detrás de VITE_MONEDAS; el demo y el ensayo no cuentan: no graban).
+  const cuenta = sinGrabar() ? undefined : currentSession()?.address;
+  if (cuenta) acreditarEnSegundoPlano(cuenta, "primer_sorteo");
+  if (!sigueEnPantalla(g) || !app.drawn) {
+    // La pantalla ya pasó a otro sorteo: solo Mis sorteos se entera.
+    anotarEnMisSorteos(g, { porGrabar: false, ...(txHash ? { drawTx: txHash } : {}) });
+    return;
+  }
+  // Todavía en el show: Mis sorteos ya lo sabe guardado, por si la pestaña se cierra antes del resultado.
+  if ($("winner-box").style.display !== "block") anotarEnMisSorteos(g, { porGrabar: false, ...(txHash ? { drawTx: txHash } : {}) }, false);
+  app.drawn.guardado = true;
+  if (txHash) app.drawn.drawTx = txHash;
+  const caja = cajaDeLaGrabacion();
+  limpiarDetalle(caja.id);
+  caja.style.display = "block";
+  caja.className = "txstatus ok";
+  caja.dataset.grabacion = "guardado";
+  caja.textContent = t("grabGuardado");
+  if (txHash) enlaceDelSorteo(caja, txHash, " ", true);
+  const btn = $<HTMLButtonElement>("btn-draw");
+  btn.disabled = true;
+  btn.classList.remove("lista");
+  btn.dataset.i = "drawnDone";
+  btn.textContent = t("drawnDone");
+  // Con el resultado ya a la vista, el comprobante y Mis sorteos se rehacen con el sorteo grabado.
+  if ($("winner-box").style.display === "block") {
+    if (txHash) enlaceDelSorteo($("proof"), txHash, ", ");
+    // Si el enlace corto ya se había armado (se compartió o se mostró en grande), se arma también el del comprobante
+    // nuevo: el QR y los avisos pasan a él cuando llega (`alAcortar`).
+    const habiaCorto = !!cortoLink;
+    void buildProof(g.sello.names, g.winners, roundUrl(g.beacon.round)).then((enlace) => {
+      if (!enlace || !sigueEnPantalla(g)) return;
+      if (habiaCorto && puedeAcortar()) void acortar(enlace);
+      // La pantalla grande, si está abierta, pasa su QR al comprobante con el sorteo grabado (`pantalla.ts`).
+      document.dispatchEvent(new CustomEvent("tinkazo:comprobante", { detail: enlace }));
+    });
+  }
+}
+
+/**
+ * El contrato grabó otros ganadores que los que vio la sala. No puede pasar (la misma cuenta, con lo mismo), y si
+ * pasa es un error grave del programa: se dice en grande y en la consola, nunca en silencio. Queda anotado en Mis
+ * sorteos, que no lo ofrece guardar otra vez ni compartir. Si la pantalla ya pasó a otro sorteo, el aviso no se
+ * escribe en el nuevo. Si sigue en pantalla, ese resultado no se comparte ni se muestra su QR hasta revisarlo. Hasta
+ * el 16 de noviembre de 2026 el aviso caía en el sorteo que estuviera a la vista y compartir seguía andando.
+ */
+function alNoCoincidir(g: PorGrabar, esperados: number[], grabados: number[]): void {
+  console.error("[tinkazo] error grave: el sorteo grabado no coincide con el resultado de la pantalla", { esperados, grabados });
+  contar("draw_failed", { network: network.name, error: errorContable("unknown") });
+  anotarEnMisSorteos(g, { porGrabar: false, noCoincide: true });
+  if (!sigueEnPantalla(g) || !app.drawn) return;
+  app.drawn.noCoincide = true;
+  apagarCompartir();
+  const caja = cajaDeLaGrabacion();
+  limpiarDetalle(caja.id);
+  caja.style.display = "block";
+  caja.className = "txstatus bad";
+  caja.dataset.grabacion = "no-coincide";
+  caja.setAttribute("role", "alert");
+  caja.textContent = t("grabNoCoincide");
+  verError(caja);
+}
+
+/** El resultado de la pantalla está en duda: lo grabado no coincide (`alNoCoincidir`). No se comparte hasta revisarlo. */
+const enDuda = (): boolean => app.drawn?.noCoincide === true;
+
+/**
+ * Apaga lo que comparte un resultado en duda: el QR, los avisos por WhatsApp y por correo, compartir, copiar el mensaje
+ * y mostrarlo en grande. La pantalla grande, si está abierta, saca su QR sola (`pantalla.ts`). `newDraw` los devuelve.
+ */
+function apagarCompartir(): void {
+  const qr = document.getElementById("qr-box");
+  if (qr) qr.style.display = "none";
+  for (const id of ["btn-whatsapp", "btn-email"]) {
+    const a = document.getElementById(id);
+    a?.removeAttribute("href");
+    a?.setAttribute("aria-disabled", "true");
+  }
+  for (const id of ["btn-proof", "btn-copy", "btn-grande"]) {
+    const b = document.getElementById(id);
+    if (b instanceof HTMLButtonElement) b.disabled = true;
+  }
+}
+
+/** No se pudo grabar: el ganador no cambia. Se dice por qué, con el botón para volver a probar. */
+async function alNoGuardar(g: PorGrabar, error: unknown): Promise<void> {
+  const { errorKey } = await import("../stellar/errores");
+  const caja = cajaDeLaGrabacion();
+  // Pollar 0.12 (mainnet): la cuenta pide una forma de recuperarla antes de firmar. Se abre "Protegé tu cuenta" y, si
+  // la protege, se graba de nuevo, una sola vez por intento (el contrato acepta un solo sorteo por sello).
+  if (!protegiendoElSorteo && (await pideProtegerLaCuenta(error))) {
+    protegiendoElSorteo = true;
+    try {
+      if (await protegerLaCuenta($("btn-draw"), caja.id)) {
+        await grabarAparte(g);
+        return;
+      }
+    } finally {
+      protegiendoElSorteo = false;
+    }
+  }
+  // Un solo fallo contado: el del final, no el que abrió la ventana de proteger la cuenta.
+  contar("draw_failed", { network: network.name, error: errorContable(errorKey(error, { patrocinada: await cuentaPatrocinada() }), error) });
+  console.warn("[tinkazo] el sorteo no se pudo grabar", error);
+  if (!sigueEnPantalla(g)) {
+    anotarEnMisSorteos(g, { porGrabar: true });
+    return;
+  }
+  const clave = errorKey(error);
+  const recupera = clave === "notFound" || clave === "alreadyDrawn" ? clave : null;
+  caja.style.display = "block";
+  caja.className = "txstatus bad";
+  // Si lo que sigue no es guardar (ver el sorteo que ya estaba grabado, o volver a preparar la lista), la pantalla grande
+  // lo dice sin botón (`pantalla.ts`): se sigue desde la página. Hasta el 16 de noviembre de 2026 decía "error" y su
+  // Guardar el sorteo ejecutaba la recuperación, que se llevaba el proyector al comprobante o soltaba el sello con el
+  // ganador todavía en grande.
+  caja.dataset.grabacion = recupera ? "recuperar" : "error";
+  await escribirError(caja, error, "sorteo");
+  const btn = $<HTMLButtonElement>("btn-draw");
+  btn.disabled = false;
+  btn.classList.add("lista");
+  btn.dataset.i = "grabReintentar";
+  btn.textContent = t("grabReintentar");
+  if (recupera) {
+    await ofrecerRecuperacion(caja, recupera, g.beacon);
+    return;
+  }
+  // La puerta del premio (`VITE_RAMPA=premios`): la cuenta ya puede guardar dinero y no firma. Volver a probar da lo mismo
+  // para siempre, así que Guardar el sorteo no se ofrece. La salida es el comprobante, donde cualquiera con una billetera
+  // termina el sorteo. Con `premioSinSaber` sí: la próxima lectura puede responder.
+  if (clave === "premioGuardado" && (await ofrecerElComprobante(caja, g))) return;
+  // El servicio que cubre la comisión no pudo: si la cuenta tiene con qué pagar la suya, esa es la segunda salida.
+  const segunda = (await sePuedeSortearPagando(error)) ? accionDePagarConMiCuenta() : undefined;
+  verError(caja, { texto: t("grabReintentar"), ejecutar: () => void draw() }, segunda);
+  if (segunda) ponerSegundaAccion(caja, segunda);
+}
+
+/**
+ * Completa la fila de Mis sorteos de un sorteo jugado, con sus ganadores y su número: alcanza para que Mis sorteos lo
+ * termine de guardar (`falteGrabar`). La demo, el ensayo y lo que nació sin cuenta no se anotan. `pintar`: vuelve a
+ * dibujar Mis sorteos, que pregunta a la cadena; con el show recién arrancando no hace falta.
+ */
+function anotarEnMisSorteos(g: PorGrabar, cambios: { porGrabar: boolean; drawTx?: string; noCoincide?: boolean }, pintar = true): void {
+  const quien = sinGrabar() ? undefined : currentSession()?.address;
+  if (!quien || g.sello.sinCuenta) return;
+  const { sello } = g;
+  void import("./history")
+    .then((h) => {
+      h.remember({
+        organizer: quien,
+        listHash: sello.listHash,
+        count: sello.names.length,
+        numWinners: g.winners.length,
+        round: sello.round,
+        sealedAt: sello.ts,
+        prize: sello.prize,
+        winners: g.winners.map((i) => sello.names[i] ?? ""),
+        ...(sello.logo ? { logo: sello.logo } : {}),
+        ...(sello.raffleId !== undefined ? { id: String(sello.raffleId) } : {}),
+        ...(sello.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
+        ...cambios,
+      });
+      if (pintar) h.renderHistory(quien);
+    })
+    // Mis sorteos no está en la página (otra vista) o no bajó: lo anotado queda para la próxima vez que se pinte.
+    .catch((e: unknown) => console.warn("[tinkazo] Mis sorteos no se pudo anotar", e));
+}
+
+/**
+ * El enlace al sorteo grabado, al final de una línea, si todavía no lo tiene. Cuando la línea termina en punto, el
+ * enlace empieza con mayúscula (`trasUnPunto`).
+ */
+function enlaceDelSorteo(linea: HTMLElement, txHash: string, antes: string, trasUnPunto = false): void {
+  if (linea.querySelector("a[data-sorteo-grabado]")) return;
+  linea.append(antes);
+  const a = document.createElement("a");
+  a.href = txUrl(txHash);
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.dataset.sorteoGrabado = "1";
+  const texto = t("onChain");
+  a.textContent = (trasUnPunto ? texto.charAt(0).toUpperCase() + texto.slice(1) : texto) + " ↗";
+  linea.appendChild(a);
+}
+
+/**
+ * La compuerta del sorteo con el cobro por uso: el portero tiene que decir que la cuenta tiene acceso al modo Oficial.
+ * Sin acceso, el paso de la cuenta; si no contesta, no se firma y se dice, con el botón para volver a probar. Sortear lo
+ * que ya está sellado no gasta sorteos oficiales. Si el módulo no baja, tampoco se firma.
+ */
+async function accesoOficialParaSortear(): Promise<boolean> {
+  const btn = document.getElementById("btn-draw");
+  const status = document.getElementById("draw-status");
+  let clave = "errAnchor.porteroFondoSorteo";
+  try {
+    const { accesoParaSortear } = await import("./sin-sorteos");
+    const r = await accesoParaSortear({
+      volverA: btn,
+      alRevisar: (revisando) => {
+        // Como la compuerta del sello: mientras se revisa, el botón no se aprieta.
+        if (btn instanceof HTMLButtonElement) btn.disabled = revisando;
+        if (!status) return;
+        status.style.display = revisando ? "block" : "none";
+        status.className = "txstatus";
+        if (revisando) status.textContent = t("clRevisando");
+      },
+    });
+    if (r.sigue) return true;
+    clave = r.clave;
+  } catch {
+    /* no bajó: cerrado, con el mensaje de volver a probar */
+  }
+  cortoLaCompuerta(clave);
+  return false;
+}
+
+/**
+ * Una compuerta del modo Oficial no dejó seguir (la cuenta sin activar, el acceso): el sorteo no arrancó. El motivo
+ * junto al botón, que vuelve a probar, y la espera en grande lo muestra en grande con su Reintentar (`verError`).
+ * Lanzado por adelantado, antes de que nazca el número, la cuenta regresiva vuelve a mandar el botón y lo enciende
+ * cuando nace (`sorteo-en-marcha.ts`).
+ */
+function cortoLaCompuerta(clave: string): void {
+  const btn = document.getElementById("btn-draw");
+  if (btn instanceof HTMLButtonElement) {
+    btn.disabled = false;
+    btn.classList.add("lista");
+    btn.textContent = t("drawRetry");
+  }
+  const status = document.getElementById("draw-status");
+  if (!status) return;
+  status.style.display = "block";
+  status.className = "txstatus bad";
+  status.textContent = t(clave);
+  verError(status);
 }
 
 /**
@@ -308,19 +749,44 @@ function ponerSegundaAccion(status: HTMLElement, segunda: AccionError): void {
   status.append(b);
 }
 
-/** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */
-async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alreadyDrawn", beacon: Beacon): Promise<void> {
-  const sello = app.frozen;
-  if (!sello || sello.raffleId === undefined) return;
-  const ausencia = causa === "notFound" && await existenciaDelSorteo(sello.raffleId) === "ausente";
-  // El comprobante consulta exactamente este número, contrato y red; no depende
-  // de que el historial local lo contenga, y conserva el hash del sello si existe.
-  const enlace = ausencia ? "" : await proofUrl({
+/**
+ * El enlace del comprobante de un sorteo sellado. Consulta exactamente este número, contrato y red; no depende de que el
+ * historial local lo contenga, y conserva el hash del sello si existe.
+ */
+async function enlaceDelComprobante(sello: NonNullable<typeof app.frozen>, beacon: Beacon): Promise<string> {
+  return proofUrl({
     v: PROOF_VERSION, names: sello.names, round: sello.round, sealedAt: sello.ts,
     prize: sello.prize, net: network.name, contract: network.contractId ?? "",
     id: String(sello.raffleId), signature: beacon.signature,
     ...(sello.sealTx ? { stx: sello.sealTx } : {}),
   });
+}
+
+/**
+ * La puerta del premio frenó la grabación: la acción es abrir el comprobante en otra pestaña, y no se vuelve a probar.
+ * El aviso de la caja ya dijo que cualquiera con Varial lo termina ahí y que la comisión sale de su XLM. `false` si el
+ * sello no tiene número (no hay comprobante que abrir) y hay que seguir con lo de siempre.
+ */
+async function ofrecerElComprobante(status: HTMLElement, g: PorGrabar): Promise<boolean> {
+  const { sello, beacon } = g;
+  if (sello.raffleId === undefined) return false;
+  const enlace = await enlaceDelComprobante(sello, beacon);
+  if (app.frozen !== sello) return true;
+  const accion: AccionError = { texto: t("histSeeProof"), ejecutar: () => void window.open(enlace, "_blank", "noopener") };
+  recuperacion = { sello, accion };
+  const btn = $("btn-draw");
+  btn.dataset.i = "histSeeProof";
+  btn.textContent = accion.texto;
+  verError(status, accion);
+  return true;
+}
+
+/** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */
+async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alreadyDrawn", beacon: Beacon): Promise<void> {
+  const sello = app.frozen;
+  if (!sello || sello.raffleId === undefined) return;
+  const ausencia = causa === "notFound" && await existenciaDelSorteo(sello.raffleId) === "ausente";
+  const enlace = ausencia ? "" : await enlaceDelComprobante(sello, beacon);
   if (app.frozen !== sello) return;
   const clave = ausencia ? "drawPreparar" : "drawConsultar";
   const accion: AccionError = {
@@ -397,15 +863,19 @@ function ponerHecho(el: HTMLElement | null): void {
  * espera dura más que un instante, para no parpadear cuando el juego sale
  * enseguida.
  */
-function abrirCortina(premio: string, graba: boolean): { cerrar: () => void } {
+function abrirCortina(premio: string, orden: boolean): { cerrar: () => void } {
   let el: HTMLElement | null = null;
   const reloj = setTimeout(() => {
     el = document.createElement("div");
     el.className = "cortina";
     el.setAttribute("role", "status");
     el.innerHTML =
-      (premio ? `<p class="kicker">${esc(t("cortinaSe"))}</p><h2>${esc(premio)}</h2>` : `<h2>${esc(t("cortinaSin"))}</h2>`) +
-      `<p class="cortina-t">${esc(t(graba ? "cortinaGraba" : "cortinaNumero"))}</p>` +
+      (premio
+        ? orden
+          ? `<h2>${esc(t("cortinaSeOrden"))}</h2>`
+          : `<p class="kicker">${esc(t("cortinaSe"))}</p><h2>${esc(premio)}</h2>`
+        : `<h2>${esc(t("cortinaSin"))}</h2>`) +
+      `<p class="cortina-t">${esc(t("cortinaNumero"))}</p>` +
       `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`;
     document.body.appendChild(el);
   }, 350);
@@ -437,10 +907,10 @@ function juegoDe(people: number, prizes: number, names?: string[], winners?: num
  * tono por número, más alto en el 1. Los dos en la pentatónica, mi y do: el
  * 990 Hz de antes era un si, fuera de la escala de los juegos.
  */
-function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promise<void>): GameCard | null {
+function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<unknown>, textoDeEspera?: string): GameCard | null {
   if (skipMotion()) return null;
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
-  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera);
+  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera, orden, textoDeEspera, enStand());
 }
 
 /**
@@ -454,19 +924,28 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
  * sorteo (`draw`). Si con los ganadores de verdad el juego cambia, la tarjeta
  * pasa a anunciar el que se juega.
  */
-function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
+/**
+ * `extra.conHora`: el horario del estadio (`en-hora.ts`), para la sala lanzada desde la espera y el celular de quien mira.
+ * `extra.espectador`: el show del celular. Cuenta siempre la tarjeta en la duración, como la sala, aunque no la muestre
+ * (el que entra tarde): si no, el juego duraría otra cosa y no quedaría a la par. Y sin el motor nuevo no hay show: el de
+ * respaldo no sigue horario ni retiene el final, y podría coronar antes que la sala.
+ */
+function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, orden: boolean, previa: Previa | null = null, extra: { conHora?: { horario: Horario; avisos: Avisos } | null; espectador?: boolean } = {}): void {
+  const conHora = extra.conHora ?? null;
   // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
   names = paraMostrar(names);
   // Y su nombre va entero en el show: «¡Vamos, Las Wawas!», nunca «Las W.». Sin equipos la lista queda vacía.
   ponerNombresEnteros(hayEtiquetas() ? nombresDeLosEquipos() : []);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
+  // El juego que cuenta este resultado: la foto para compartir lleva su fondo (y el último, si se ve de nuevo con otro).
+  if (app.drawn) app.drawn.juego = game;
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   if (previa && previa.game !== game) previa.card.update(game);
-  const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length);
-  setCardSeconds(card ? CARD_SECONDS : 0);
+  const card = previa ? previa.card : extra.espectador ? null : abrirTarjeta(game, names.length, winners.length, orden);
+  setCardSeconds(card || extra.espectador ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);
   // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
@@ -493,7 +972,15 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // arrancó, la tarjeta pasa a decir lo que de verdad se juega.
   const respaldo = (): void => {
     setShowGate(null);
+    // El motor de respaldo no sigue horario: esa pantalla no va a la par.
+    pedirHorario(null);
+    // En el celular de quien mira, sin el motor nuevo no hay show: el resultado sale cuando la sala ya lo mostró.
+    if (extra.espectador) {
+      fin();
+      return;
+    }
     const real = classicPlayable(app.game, names.length);
+    if (app.drawn) app.drawn.juego = real;
     if (card && real !== game) card.update(real);
     const carga = classicModule(real);
     carga.catch(() => undefined);
@@ -508,6 +995,8 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
   if (pixi) {
     setShowGate(card?.ready ?? null);
+    // El horario del estadio: la sala lanzada desde la espera y el celular de quien mira (`en-hora.ts`). Sin él, como siempre.
+    pedirHorario(conHora?.horario ?? null, conHora?.avisos);
     void import("../games/pixi")
       .then(
         async (m) => {
@@ -609,23 +1098,21 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // en "Otro premio". Quien salió se va entero, con todas sus participaciones.
   // Sin la bandera de los modos ni `?modo=`, se saca por línea, como siempre: «Grupo (1/2)» puede ser un nombre.
   const porPersona = modesVisible();
-  const reemplazo = contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
+  // En el sorteo de una empresa no hay No está: el premio llega a la cuenta aunque la persona ya no esté en el stand. Una lista
+  // de campaña que quedó sin sello (sin número de sorteo) tampoco lo ofrece.
+  const deCampana = esSorteoDeCampana(app.frozen?.raffleId) || campanaDeLaLista(app.frozen?.listHash ?? "") !== null;
+  const reemplazo = !deCampana && contarPersonas(sinLasPersonasQueSalieron(names, winners, porPersona), porPersona).personas >= 2;
   // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
   // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
-  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona });
+  // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
+  // que decide a quién se saca, que sigue siendo `porPersona`.
+  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()), stand: enStand() });
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
+  // El enlace del sorteo grabado. Si todavía se está grabando, lo agrega la grabación al terminar (`alGuardar`).
   const drawTx = app.drawn?.drawTx;
-  if (drawTx) {
-    proof.append(", ");
-    const a = document.createElement("a");
-    a.href = txUrl(drawTx);
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = t("onChain") + " ↗";
-    proof.appendChild(a);
-  }
+  if (drawTx) enlaceDelSorteo(proof, drawTx, ", ");
   const url = roundUrl(beacon.round);
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
@@ -650,6 +1137,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
   const enlace = buildProof(names, winners, url);
+  // El sorteo de una empresa (detrás de VITE_CAMPANAS): la sala de la campaña se entera y lo comprueba en la red.
+  if (deCampana) void import("./campana-resultado-real").then((m) => m.alRevelarReal(enlace)).catch(() => undefined);
   // Desde la espera en grande, el resultado sale en grande, con el QR en cuanto
   // esté el comprobante; al cerrarlo, la página sigue con "Siguiente premio".
   const final = granFinal;
@@ -657,10 +1146,12 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   seguirEnPantallaCompleta(false);
   // En el ensayo el resultado se queda en la página, con su final: en grande
   // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
+  // Fuera del ensayo, en grande aunque se haya perdido la pantalla completa durante el show (Windows la suelta al
+  // cambiar de proyector): es una capa de la página, y con varios ganadores el cartel del juego no los muestra a todos.
   if (final && enPractica()) {
     soltarPantallaCompleta();
     enfocarDespues(principal);
-  } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
+  } else if (final) resultadoEnGrande(enlace, principal);
   else enfocarDespues(principal);
 }
 
@@ -718,7 +1209,115 @@ export function verDeNuevo(juego?: Game): void {
     if (btn) btn.disabled = false;
     forceMotion(false);
     if (volverA && volverA.isConnected && volverA.offsetParent !== null) volverA.focus({ preventScroll: true });
-  });
+  }, isTurnOrder(frozen.names.length, drawn.winners.length, frozen.prize));
+}
+
+/** El show del celular a la par de la sala (`espectador.ts`): la tarjeta sale antes del número, como en la sala. */
+export interface ShowALaPar {
+  /** Si la sala cambió el juego a último momento (`app.game` ya es el nuevo), la tarjeta pasa a anunciarlo. */
+  actualizar: () => void;
+  /**
+   * El juego, con lo que decidió la ronda y el horario del estadio. `alTerminar` recibe si el show mostró quién gana (el
+   * cartel del juego). Sin movimiento, sin el motor nuevo o si el juego no bajó, no lo mostró. Tampoco si el estadio se
+   * cerró antes del cartel: un cuadro que falla o un juego a medio armar lo cierran (`cuadro-seguro.ts`), también con el
+   * final retenido, y eso no quiere decir que la sala ya lo mostró.
+   */
+  jugar: (conHora: { horario: Horario; avisos: Avisos }, alTerminar: (conShow: boolean) => void) => void;
+  /** No hay show (no coincide con lo grabado, no llegó el número): la tarjeta se va. */
+  cancelar: () => void;
+}
+
+/**
+ * El show del celular de quien mira, a la par de la sala (`espectador.ts`). La tarjeta sale ya, con la línea de que llega
+ * el número, y termina a la hora que dé el número que llegó (`resultado`, como la de la sala, un poco después). Después
+ * el mismo juego que la sala, con el horario del estadio: retiene su final hasta que se suelte y, si quedó atrás, se pone
+ * al día. Sin sortear, grabar, tocar el historial ni el comprobante, y sin contar nada. `conTarjeta`: false para quien
+ * entra con el show ya empezado, que se pone al día sin tarjeta.
+ */
+export function showALaPar(o: { personas: number; premios: number; orden: boolean; resultado: Promise<{ terminaEn: number } | undefined>; conTarjeta?: boolean }): ShowALaPar {
+  setResultadoDeTurnos(o.orden);
+  const juego = juegoDe(o.personas, o.premios);
+  const card = o.conTarjeta === false ? null : abrirTarjeta(juego, o.personas, o.premios, o.orden, o.resultado, "cortinaNumero");
+  let tarjeta: Previa | null = card ? { card, game: juego } : null;
+  let jugado = false;
+  return {
+    actualizar: () => {
+      if (!tarjeta || jugado) return;
+      const nuevo = juegoDe(o.personas, o.premios);
+      if (nuevo !== tarjeta.game) {
+        tarjeta.card.update(nuevo);
+        tarjeta = { card: tarjeta.card, game: nuevo };
+      }
+    },
+    jugar: (conHora, alTerminar) => {
+      const { frozen, drawn } = app;
+      if (jugado || !frozen || !drawn) return;
+      jugado = true;
+      // Con show solo si se vio el cartel: el estadio avisa que terminó en cualquier cierre (`cuadro-seguro.ts`).
+      playGame(frozen.names, drawn.winners, drawn.beacon, () => alTerminar(estadoDelShow()?.coronado === true), o.orden, tarjeta, { conHora, espectador: true });
+    },
+    cancelar: () => {
+      tarjeta?.card.hide();
+      // Si ya jugaba, el estadio se cierra sin soltar su final: no mostró quién gana.
+      if (jugado) cerrarElShow();
+    },
+  };
+}
+
+/** Lo que la vista de espectador hace con su show: lanzarlo cuando la sala también lo lanza, o sacar la tarjeta. */
+export interface ShowDelEspectador {
+  /** El juego, con lo que ya decidió la ronda. Una sola vez: para repetirlo está `verDeNuevo`. */
+  jugar: (alTerminar: () => void) => void;
+  /** El sorteo no se puede mostrar (no coincide con lo grabado): la tarjeta se va. */
+  cancelar: () => void;
+}
+
+/**
+ * El show de la vista de espectador (`espectador.ts`): el mismo de la sala, con lo que ya decidió la ronda
+ * (`app.frozen` y `app.drawn`, que arma la vista). Es lo que hace `draw` después de traer el número, sin sortear,
+ * grabar, tocar el historial ni el comprobante, y sin contar nada.
+ *
+ * Con un sorteo grabado en Stellar (`grabado`), la tarjeta del juego sale ya, y la cuenta y el juego esperan a que el
+ * sorteo quede grabado, con la línea de que se está guardando. La sala ya no lo espera: juega con el número y graba
+ * después. Esperarlo, con la espera de la regla, deja al celular detrás de la sala (`espectador-regla.ts`). Si la
+ * tarjeta se va sola antes (quien organiza tardó en lanzarlo), el juego sale con una tarjeta nueva. Sin cadena (el modo
+ * libre) la sala no espera nada, y la tarjeta sale al jugar.
+ */
+export function showDelEspectador(grabado: Promise<void> | null): ShowDelEspectador | null {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn) return null;
+  const personas = frozen.names.length;
+  const premios = drawn.winners.length;
+  // El cartel final dice «¡El orden quedó listo!» cuando es un orden de turnos, como en la sala, y la tarjeta también.
+  const orden = isTurnOrder(personas, premios, frozen.prize);
+  setResultadoDeTurnos(orden);
+  let tarjeta: Previa | null = null;
+  let seFue = false;
+  if (grabado) {
+    const juego = juegoDe(personas, premios);
+    // Lo que espera es lo grabado, no el número, que ya llegó: la línea de arriba lo dice.
+    const card = abrirTarjeta(juego, personas, premios, orden, grabado, "cortinaGraba");
+    if (card) {
+      tarjeta = { card, game: juego };
+      let llego = false;
+      void grabado.then(
+        () => (llego = true),
+        () => undefined,
+      );
+      void card.ready.then(() => {
+        if (!llego) seFue = true;
+      });
+    }
+  }
+  let jugado = false;
+  return {
+    jugar: (alTerminar) => {
+      if (jugado) return;
+      jugado = true;
+      playGame(frozen.names, drawn.winners, drawn.beacon, alTerminar, orden, seFue ? null : tarjeta);
+    },
+    cancelar: () => tarjeta?.card.hide(),
+  };
 }
 
 /** Un toque en "Probar otro juego" o en "Ver de nuevo con otro juego": al selector, con el foco en otro juego. */
@@ -759,12 +1358,15 @@ function sinGanadores(): string[] {
 function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
   // Los textos hablan de personas: quien salió se va entero, con todas sus participaciones.
-  const quedan = contarPersonas(sinGanadores(), modesVisible()).personas;
+  const lineas = sinGanadores();
+  const quedan = contarPersonas(lineas, modesVisible()).personas;
   const alcanza = quedan >= 2;
+  // El número de los textos, con la cuenta del cuadro que va a quedar al tocar «Siguiente premio».
+  const mostrar = cuentaParaMostrar(lineas, modesVisible()).personas;
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
   sin.style.display = alcanza ? "" : "none";
-  sin.textContent = L.againSin(quedan);
+  sin.textContent = L.againSin(mostrar);
   comprobante.className = alcanza ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector. Solo
@@ -777,7 +1379,7 @@ function showAgain(): HTMLButtonElement {
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = alcanza ? L.againLeft(quedan) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(quedan);
+  $("again-left").textContent = alcanza ? L.againLeft(mostrar, selladaEsDeEquipos()) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar, selladaEsDeEquipos());
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
   const sigue = $("again-sigue");
   sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
@@ -831,6 +1433,8 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Para seguir hace falta dos personas distintas: una lista repartida puede dejar muchas líneas de una sola.
   const personas = contarPersonas(quedan, modesVisible()).personas;
   if (conLista && personas < 2) return;
+  // El número de la nota, con la cuenta que va a decir el cuadro con esas líneas.
+  const mostrar = cuentaParaMostrar(quedan, modesVisible()).personas;
   // Quiénes salieron, por persona y sin repetidos: con varias participaciones, una misma persona puede salir más
   // de una vez. Sin la bandera de los modos ni `?modo=`, quien salió es la línea que salió: los nombres tal cual.
   const porPersona = modesVisible();
@@ -843,8 +1447,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   const premiosDelAusente = modo === "ausente" ? drawn.winners.filter((i) => elNombre(frozen.names[i] ?? "") === ausente).length : 0;
   const premio = frozen.prize;
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
-  // equivocado frente a la sala no puede costar la lista de Luma filtrada.
-  anterior = frozen.names;
+  // equivocado frente a la sala no puede costar la lista de Luma filtrada. Sin
+  // quienes ya ganaron: recuperarla no puede devolverle la chance a nadie.
+  anterior = conLista ? quedan : sinGanadores();
   app.drawn = null;
   // Con "Siguiente premio", el próximo sello sugiere otro juego: seguir sorteando es seguir jugando.
   if (modo === "sinGanadores") rotarJuego();
@@ -865,9 +1470,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Con equipos, en la lista van las cuentas: la nota dice el nombre del equipo, nunca las 56 letras de la cuenta.
   nota.textContent =
     modo === "sinGanadores"
-      ? L.againQuitados(salieron.map(etiquetaDe), personas)
+      ? L.againQuitados(salieron.map(etiquetaDe), mostrar, selladaEsDeEquipos())
       : modo === "ausente"
-        ? L.ausenteNota(etiquetaDe(ausente), personas, salieron.length > 1, premiosDelAusente)
+        ? L.ausenteNota(etiquetaDe(ausente), mostrar, salieron.length > 1, premiosDelAusente, selladaEsDeEquipos())
         : "";
   nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
@@ -884,6 +1489,14 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   const masResultado = document.getElementById("mas-resultado");
   if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
   limpiarDetalle("draw-status");
+  // La línea de la grabación del anterior se va con él: si todavía se está grabando, termina y lo anota en Mis sorteos.
+  const grab = document.getElementById("grab-estado");
+  if (grab) {
+    limpiarDetalle("grab-estado");
+    grab.style.display = "none";
+    grab.textContent = "";
+    delete grab.dataset.grabacion;
+  }
   $("winner-cards").innerHTML = "";
   // El panel de ganadores y pagos del sorteo anterior (pagos-resultado.ts) no se queda para el siguiente.
   const pagosBox = document.getElementById("pagos-box");
@@ -892,11 +1505,17 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
     pagosBox.style.display = "none";
   }
   quitarLogoDelResultado();
+  // Lo que apagó un resultado en duda (`apagarCompartir`) vuelve para el próximo.
+  for (const id of ["btn-proof", "btn-copy", "btn-grande"]) {
+    const b = document.getElementById(id);
+    if (b instanceof HTMLButtonElement) b.disabled = false;
+  }
+  for (const id of ["btn-whatsapp", "btn-email"]) document.getElementById(id)?.removeAttribute("aria-disabled");
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
   // (sin los que ya ganaron, o con "No está"), sellar; con otra lista, cargarla. Hasta el 26 de octubre de 2026,
-  // con un mouse caía en el premio, para nombrar el próximo, pero el premio quedó dentro del pliegue "Premio,
-  // cuántos ganan y subir CSV", que está cerrado: `focus()` sobre algo escondido no hace nada, y el foco se
+  // con un mouse caía en el premio, para nombrar el próximo, pero el premio quedó dentro del pliegue "Premio y
+  // subir CSV", que está cerrado: `focus()` sobre algo escondido no hace nada, y el foco se
   // perdía junto con el botón "Siguiente premio" que acababa de desaparecer. El premio se escribe igual, un Tab
   // más arriba, y el resumen de arriba del botón dice qué se va a sellar ("sin premio" o el que quedó).
   if (modo === "otraLista") $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
@@ -920,7 +1539,7 @@ export function alTocarGanadores(e: Event): void {
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */
 let anterior: string[] = [];
 
-/** Vuelve a poner en el cuadro la lista del sorteo anterior, entera. */
+/** Vuelve a poner en el cuadro la lista del sorteo anterior, sin quienes ya ganaron (`newDraw`). */
 export function recuperarLista(): void {
   if (!anterior.length || app.frozen) return;
   setList(anterior.join("\n"));
@@ -951,14 +1570,15 @@ alAcortar((ruta, c) => {
   cortoLink = c.corto;
   const f = app.frozen;
   const d = app.drawn;
+  if (enDuda()) return;
   if (f && d) setNotifyLinks(f.names, d.winners, cortoLink);
   void paintQr(cortoLink);
 });
 
 /** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
 export function mostrarGrande(): void {
-  // Una ronda de ejemplo no tiene comprobante que mostrar.
-  if (enStand()) return;
+  // Una ronda de ejemplo no tiene comprobante que mostrar, y uno en duda no se muestra hasta revisarlo.
+  if (enStand() || enDuda()) return;
   contarCompartido("qr_big");
   void import("./pantalla").then((m) => m.mostrarResultado(proofLink, { corto: puedeAcortar() }));
 }
@@ -975,7 +1595,13 @@ async function paintQr(link: string): Promise<void> {
   const box = $("qr-box");
   const img = $<HTMLImageElement>("qr-img");
   try {
-    if (!(await pintarQrDelComprobante(img, link))) {
+    const listo = await pintarQrDelComprobante(img, link);
+    // Lo grabado no coincide con lo que se ve: el QR no sale (`alNoCoincidir`).
+    if (enDuda()) {
+      box.style.display = "none";
+      return;
+    }
+    if (!listo) {
       // Una lista enorme no entra en un QR. El enlace se sigue pudiendo
       // copiar y compartir, así que se esconde el recuadro y ya.
       box.style.display = "none";
@@ -999,6 +1625,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Se siguió sin sello y el sello no llegó a entrar: el comprobante lo lleva marcado, para que el
   // mensaje, la foto, el enlace del evento y la página de verificación lo digan (protocolo §8).
   const sinSello = !!f.sinSello && f.raffleId === undefined;
+  // Un orden de turnos sin sello no tiene comprobante: no se ofrece ningún enlace de verificación (`ordenSinComprobante`).
+  const sinComprobante = ordenSinComprobante(names.length, winners.length, f.prize, sinSello);
   const proof: Proof = {
     v: PROOF_VERSION,
     names,
@@ -1035,22 +1663,28 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     // Sin comprobante, el QR al menos lleva a la ronda del faro.
     link = roundLink;
   }
-  proofLink = link;
+  proofLink = sinComprobante ? "" : link;
   // El logo de la comunidad va solo en el enlace corto: se registra una vez, y quienes acortan no cambian.
   ponerLogoDeRuta(rutaDe(link), logoPorHuella(f.logo));
   // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
   const nota = document.getElementById("sin-sello-nota");
-  if (nota) nota.style.display = sinSello ? "block" : "none";
+  if (nota) {
+    nota.style.display = sinSello ? "block" : "none";
+    // Un orden de turnos sin sello lo dice con su propia línea: no tiene comprobante.
+    nota.dataset.i = sinComprobante ? "turnsSinComprobante" : "redSinSelloEtiqueta";
+    nota.textContent = t(nota.dataset.i);
+  }
   // Y el QR no invita a comprobar lo que no se puede comprobar: dice que no hay sello y qué se ve al escanearlo.
   ponerTextoDelSello(document.querySelector<HTMLElement>("#qr-box .kicker"), "qrDelResultado", sinSello);
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
-  cortoLink = cortoGuardado(link)?.corto ?? "";
+  cortoLink = sinComprobante ? "" : (cortoGuardado(link)?.corto ?? "");
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
   // La demo y el ensayo no son sorteos: no se anotan en Mis sorteos aunque haya
   // cuenta, igual que en el sello (freeze.ts).
   const f2 = app.frozen;
   const who = sinGrabar() ? undefined : currentSession()?.address;
-  if (f2 && who) {
+  // Lo que nació sin cuenta no se anota, aunque la persona haya entrado con una mientras esperaba la ronda.
+  if (f2 && who && !f2.sinCuenta) {
     void import("./history").then((h) => {
       h.remember({
         organizer: who,
@@ -1062,11 +1696,16 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         prize: f2.prize,
         winners: winners.map((i) => names[i] ?? ""),
         ...(f2.logo ? { logo: f2.logo } : {}),
-        proof: link,
+        // Un orden de turnos sin sello se anota con la ronda: Mis sorteos no le ofrece enlace de verificación.
+        proof: sinComprobante ? roundLink : link,
         ...(f2.raffleId !== undefined ? { id: String(f2.raffleId) } : {}),
         // El número solo no dice de qué contrato es (cada uno arranca en 1).
         ...(f2.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(d.drawTx ? { drawTx: d.drawTx } : {}),
+        // Con sello, si todavía no quedó grabado: Mis sorteos lo puede terminar si se cierra la pestaña antes.
+        ...(f2.raffleId !== undefined ? { porGrabar: !d.guardado && !d.noCoincide } : {}),
+        // Lo grabado no coincide con lo que se vio: Mis sorteos lo dice y no lo ofrece compartir.
+        ...(d.noCoincide ? { noCoincide: true } : {}),
         // Sin sello (la red no dejó sellar): Mis sorteos lo dice.
         ...(sinSello ? { sinSello: true } : {}),
       });
@@ -1076,9 +1715,16 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Los avisos primero: el QR carga su librería aparte y tarda, y hacer
   // esperar a los botones de "avisarle por WhatsApp" por un cuadradito los
   // dejaba sin armar justo cuando el ganador aparece en pantalla.
-  setNotifyLinks(names, winners, cortoLink || link);
-  void paintQr(cortoLink || link);
-  return link;
+  // Un resultado en duda (lo grabado no coincide) no se comparte ni muestra su QR hasta revisarlo.
+  if (d.noCoincide) {
+    apagarCompartir();
+    return "";
+  }
+  setNotifyLinks(names, winners, sinComprobante ? "" : cortoLink || link);
+  // Sin comprobante no hay qué escanear: el QR se esconde, y la pantalla grande tampoco lo muestra (`proofLink` vacío).
+  if (sinComprobante) $("qr-box").style.display = "none";
+  else void paintQr(cortoLink || link);
+  return sinComprobante ? "" : link;
 }
 
 /**
@@ -1091,15 +1737,20 @@ function mensajeDelSorteo(): string {
   if (!app.frozen || !app.drawn) return "";
   const { names, prize } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
-  const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  // Quien salió, por persona cuando la lista se lee por persona: la marca (k/m) es interna, la sala lee el nombre.
+  const porPersona = seCuentaPorPersona(names, modesVisible());
+  const mostrar = (linea: string): string => (porPersona ? nombreDePersona(linea) : linea);
+  const lista = winners.map((i) => mostrar(etiquetaDe(names[i] ?? "")));
   // Sin sello: que lo diga también lo que se pega en el grupo, y que no prometa lo que no se puede comprobar.
   const sinSello = !!app.frozen.sinSello && app.frozen.raffleId === undefined;
   const enlace = cortoLink || proofLink || roundUrl(beacon.round);
   // Un orden de turnos dice el orden, y que nadie lo eligió, y no quién ganó (src/modos/mensajes.ts).
   if (isTurnOrder(names.length, winners.length, prize)) return turnMessage(getLang(), { orden: lista, enlace, ...(sinSello ? { sinSello: true } : {}) });
+  // Quien salió más de una vez va una sola vez, con su cuenta: no «Ana y Ana». Singular o plural según los nombres ya juntos.
+  const juntos = porPersona ? withRepeatCounts(getLang(), lista) : lista;
+  const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   // Con varias participaciones por persona, el mensaje dice las dos cuentas y no solo las líneas de la lista.
-  return T[getLang()].summary(quienes, names.length, prize, enlace, lista.length > 1, sinSello, personasDeLaLista(names));
+  return T[getLang()].summary(quienes, names.length, prize, enlace, juntos.length > 1, sinSello, personasDeLaLista(names), esListaDeEquipos(names));
 }
 
 /**
@@ -1128,19 +1779,24 @@ async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copi
  * de quién ganó y el QR, y el mensaje. Intenta el enlace corto, salvo en la demo.
  */
 export function shareProof(): void {
-  // Una ronda de ejemplo no tiene comprobante que compartir: su número no es público.
-  if (enStand()) return;
+  // Una ronda de ejemplo no tiene comprobante que compartir: su número no es público. Uno en duda, hasta revisarlo, tampoco.
+  if (enStand() || enDuda()) return;
   const f = app.frozen;
   const d = app.drawn;
   if (!f || !d) return;
-  const enlace = proofLink || roundUrl(d.beacon.round);
+  // Un orden de turnos sin sello no tiene comprobante: se comparte sin enlace (`buildProof`).
+  const sinEnlace = ordenSinComprobante(f.names.length, d.winners.length, f.prize, !!f.sinSello && f.raffleId === undefined);
+  const enlace = sinEnlace ? "" : proofLink || roundUrl(d.beacon.round);
+  const mostrar = (linea: string): string => (seCuentaPorPersona(f.names, modesVisible()) ? nombreDePersona(linea) : linea);
   const datos = {
     enlace,
-    ganadores: d.winners.map((i) => etiquetaDe(f.names[i] ?? "")),
+    ganadores: d.winners.map((i) => mostrar(etiquetaDe(f.names[i] ?? ""))),
     total: f.names.length,
     // Con varias participaciones por persona, el mensaje y la foto dicen las dos cuentas, con la misma regla
     // que la espera, las bases y la verificación (`seCuentaPorPersona`).
     personas: personasDeLaLista(f.names),
+    // Con una lista de equipos, el mensaje y la foto cuentan equipos y no personas (lo dice la lista sellada).
+    ...(esListaDeEquipos(f.names) ? { equipos: true } : {}),
     premio: f.prize,
     fecha: f.ts,
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
@@ -1148,6 +1804,8 @@ export function shareProof(): void {
     ...(f.sinSello && f.raffleId === undefined ? { sinSello: true } : {}),
     // El logo con el que se selló, no el de ahora (src/logo.ts).
     ...(logoPorHuella(f.logo) ? { logo: logoPorHuella(f.logo) as NonNullable<ReturnType<typeof logoPorHuella>> } : {}),
+    // El juego que contó el resultado (el último, si se vio de nuevo con otro): la segunda foto lleva su fondo.
+    ...(d.juego ? { juego: d.juego } : {}),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }
@@ -1160,17 +1818,23 @@ export function shareProof(): void {
  */
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const prize = app.frozen?.prize ?? "";
-  // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
-  const lista = winners.map((i) => etiquetaDe(names[i] ?? ""));
-  const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios. Cuando la lista se lee por persona, el nombre
+  // de la persona, sin la marca de la línea.
+  const porPersona = seCuentaPorPersona(names, modesVisible());
+  const mostrar = (linea: string): string => (porPersona ? nombreDePersona(linea) : linea);
+  const lista = winners.map((i) => mostrar(etiquetaDe(names[i] ?? "")));
   // Al ganador de un sorteo sin sello tampoco se le dice que nadie lo eligió a dedo ni que lo revise: no se puede comprobar.
   const sinSello = !!app.frozen?.sinSello && app.frozen.raffleId === undefined;
   // Un orden de turnos: los botones de abajo mandan el orden entero, y cada renglón de la lista tiene su «Avisarle» con
   // «Te tocó el turno 3 de 12». Nadie «ganó» nada: las frases de ganar no se usan (src/modos/mensajes.ts).
   const turnos = isTurnOrder(names.length, winners.length, prize);
+  // En un sorteo común, quien salió más de una vez va una sola vez, con su cuenta; en un orden de turnos no se junta a nadie.
+  // Singular o plural según los nombres ya juntos: a quien se lleva todo se le habla de vos.
+  const juntos = porPersona && !turnos ? withRepeatCounts(getLang(), lista) : lista;
+  const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(juntos);
   const body = turnos
     ? turnMessage(getLang(), { orden: lista, enlace: url, ...(sinSello ? { sinSello: true } : {}) })
-    : T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1, sinSello, personasDeLaLista(names));
+    : T[getLang()].tellBody(who, prize, names.length, url, juntos.length > 1, sinSello, personasDeLaLista(names), esListaDeEquipos(names));
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
     `mailto:?subject=${encodeURIComponent(t(turnos ? "turnsResultTitle" : "tellSubject"))}&body=${encodeURIComponent(body)}`;
@@ -1198,6 +1862,7 @@ export async function reverify(): Promise<void> {
 
 /** "Copiar el mensaje": el mismo texto que "Compartir el resultado", siempre al portapapeles. */
 export async function copySummary(btn: HTMLButtonElement): Promise<void> {
+  if (enDuda()) return;
   const texto = mensajeDelSorteo();
   if (texto && (await copiarMensaje(btn, texto, "copied", 1600))) contarCompartido("copy");
 }

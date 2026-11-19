@@ -1,14 +1,25 @@
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CIFRA_JS, TEXTOS, paginaCelular } from "../../workers/sala/src/pagina";
-import { VentanaPorMinuto, horaUtc, intentarAlta, grupoDeIp, nombreCifradoValido, origenPermitido } from "../../workers/sala/src/logica";
-import { cifrarNombre, descifrarNombre, generarClave } from "./cifra";
+import {
+  SALAS_POR_DIA,
+  SALAS_POR_IP_POR_HORA,
+  VentanaPorMinuto,
+  grupoDeIp,
+  horaUtc,
+  intentarAlta,
+  nombreCifradoValido,
+  origenPermitido,
+} from "../../workers/sala/src/logica";
+import { cifrarNombre, descifrarNombre, generarClave, huellaNombre, normalizarNombreParaHuella } from "./cifra";
 import { MAX_NOMBRE, hayPalabraFea, llevaEnlace, revisarNombre } from "./filtro";
 import { crearSala, enlaceDeSala, escucharSala, type Sala } from "./cliente";
 
 /** El cifrado de la página del celular, tal cual va dentro del HTML. */
-const celular = new Function(`${CIFRA_JS}; return { cifrar, b64, deB64 };`)() as {
+const celular = new Function(`${CIFRA_JS}; return { cifrar, b64, deB64, huellaNombre, normalizarNombreParaHuella };`)() as {
   cifrar: (clave: string, texto: string) => Promise<string>;
+  huellaNombre: (clave: string, texto: string) => Promise<string>;
+  normalizarNombreParaHuella: (nombre: string) => string;
 };
 
 describe("el cifrado de los nombres", () => {
@@ -43,6 +54,46 @@ describe("el cifrado de los nombres", () => {
   });
 });
 
+describe("la huella de los nombres", () => {
+  it("las dos escrituras normalizan igual y dan la misma huella", async () => {
+    const k = generarClave();
+    for (const n of ["Ana Pérez", " ana  pérez ", "José Ñandú", "Zoë 🦙", "A​na\nQuispe"]) {
+      expect(celular.normalizarNombreParaHuella(n)).toBe(normalizarNombreParaHuella(n));
+      expect(await celular.huellaNombre(k, n)).toBe(await huellaNombre(k, n));
+    }
+    expect(await huellaNombre(k, "Ana Pérez")).toBe(await huellaNombre(k, " ana  pérez "));
+    expect(await huellaNombre(k, "Ana Pérez")).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it("no depende del idioma del celular, ni siquiera con I, İ e ı en turco", async () => {
+    const k = generarClave();
+    const nombres = ["Ivan", "İpek", "ırmak"];
+    const antes = await Promise.all(nombres.map(async (n) => [n, normalizarNombreParaHuella(n), await huellaNombre(k, n)] as const));
+    const original = String.prototype.toLocaleLowerCase;
+    expect(original.call("Iİı", "tr")).toBe("ıiı");
+    const turco = vi.spyOn(String.prototype, "toLocaleLowerCase").mockImplementation(function (this: string) {
+      return original.call(this, "tr");
+    });
+    try {
+      for (const [n, normal, huella] of antes) {
+        expect(normalizarNombreParaHuella(n)).toBe(normal);
+        expect(celular.normalizarNombreParaHuella(n)).toBe(normal);
+        expect(await huellaNombre(k, n)).toBe(huella);
+        expect(await celular.huellaNombre(k, n)).toBe(huella);
+      }
+      expect(turco).not.toHaveBeenCalled();
+    } finally {
+      turco.mockRestore();
+    }
+  });
+
+  it("cambia con otra clave y con otro nombre", async () => {
+    const k = generarClave();
+    expect(await huellaNombre(k, "Ana")).not.toBe(await huellaNombre(generarClave(), "Ana"));
+    expect(await huellaNombre(k, "Ana")).not.toBe(await huellaNombre(k, "Beto"));
+  });
+});
+
 describe("las formas que acepta el servicio", () => {
   it("rechaza lo que no es un nombre cifrado", () => {
     for (const x of ["", "hola mundo!", "A".repeat(400), "AAAA", "ñ".repeat(60)]) expect(nombreCifradoValido(x)).toBe(false);
@@ -65,7 +116,11 @@ describe("las formas que acepta el servicio", () => {
     expect(v.intentar(1_000)).toBe(false);
     expect(v.intentar(61_000)).toBe(true);
   });
-  it("5 salas por dirección y por hora, en un almacén que sobrevive a dormirse", () => {
+  it("el tope de salas aguanta un evento", () => {
+    expect(SALAS_POR_IP_POR_HORA).toBe(30);
+    expect(SALAS_POR_DIA).toBe(400);
+  });
+  it("el tope de salas por dirección y por hora, en un almacén que sobrevive a dormirse", () => {
     // El almacén es el SQLite del objeto: se comparte entre «despertares», no vive en la instancia.
     const filas = new Map<string, number>();
     const almacen = () => ({
@@ -75,13 +130,15 @@ describe("las formas que acepta el servicio", () => {
         for (const k of [...filas.keys()]) if (Number(k.split("|")[1]) < h) filas.delete(k);
       },
     });
-    for (let i = 0; i < 5; i++) expect(intentarAlta(almacen(), "a", 0, 5)).toBe(true);
-    // El objeto se duerme y despierta (otro `almacen()` sobre las mismas filas): la sexta sigue frenada.
-    expect(intentarAlta(almacen(), "a", 1_000, 5)).toBe(false);
-    expect(intentarAlta(almacen(), "b", 1_000, 5)).toBe(true);
+    for (let i = 0; i < SALAS_POR_IP_POR_HORA; i++) {
+      expect(intentarAlta(almacen(), "a", 0, SALAS_POR_IP_POR_HORA)).toBe(true);
+    }
+    // El objeto se duerme y despierta (otro `almacen()` sobre las mismas filas): la siguiente sigue frenada.
+    expect(intentarAlta(almacen(), "a", 1_000, SALAS_POR_IP_POR_HORA)).toBe(false);
+    expect(intentarAlta(almacen(), "b", 1_000, SALAS_POR_IP_POR_HORA)).toBe(true);
     // Pasada la hora se puede de nuevo, y las filas viejas se borran.
     expect(horaUtc(3_600_000)).toBe(1);
-    expect(intentarAlta(almacen(), "a", 3_600_000, 5)).toBe(true);
+    expect(intentarAlta(almacen(), "a", 3_600_000, SALAS_POR_IP_POR_HORA)).toBe(true);
     expect([...filas.keys()].every((k) => k.endsWith("|1"))).toBe(true);
   });
 });
@@ -91,6 +148,25 @@ describe("la página del celular", () => {
   it("pesa menos de 15 KB comprimida", () => {
     expect(gzipSync(html).length).toBeLessThan(15 * 1024);
   });
+  it("usa la paleta de la casa en oscuro", () => {
+    expect(html).toContain("--fondo:#171126");
+    expect(html).toContain("--tarjeta:#221a33");
+    expect(html).not.toContain("#1d1a16");
+    expect(html).not.toContain("#2a2620");
+  });
+  it("la marca lleva la llama", () => {
+    const marca = /<p class="marca">([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
+    expect(marca).toContain("<svg");
+    expect(marca).toContain('aria-hidden="true"');
+  });
+  it("ningún texto tiene signos de exclamación", () => {
+    for (const idioma of [TEXTOS.es, TEXTOS.en]) {
+      for (const texto of Object.values(idioma)) {
+        expect(texto).not.toContain("¡");
+        expect(texto).not.toContain("!");
+      }
+    }
+  });
   it("está en español y en inglés, con el aviso de privacidad del celular", () => {
     expect(TEXTOS.es.aviso).toBe("Tu nombre o apodo se ve en la pantalla grande del stand, en una ronda de ejemplo, y se borra cuando cierran la sala o a las 10 horas.");
     expect(TEXTOS.en.aviso).toBe("Your name or nickname shows on the booth's big screen, in a sample round, and is deleted when the room is closed or after 10 hours.");
@@ -99,7 +175,35 @@ describe("la página del celular", () => {
   it("no carga nada de afuera ni nombra al sistema", () => {
     expect(html).not.toMatch(/<script[^>]+src=|<link[^>]+href=|<img/);
     const visibles = JSON.stringify(TEXTOS);
-    expect(visibles).not.toMatch(/drand|hash|bytes|firma|AES|cifr|servidor|raffle|rifa|apuest|·/i);
+    expect(visibles).not.toMatch(/drand|hash|bytes|firma|AES|cifr|servidor|raffle|rifa|apuest|\u00b7|\u00ab|\u00bb/i);
+  });
+  it("ya no ofrece sumar a otra persona y explica la corrección en los dos idiomas", () => {
+    expect(html).not.toContain("Sumar a otra persona");
+    expect(html).not.toContain("Add someone else");
+    expect(TEXTOS.es.ya).toBe("Desde este celular te anotaste como {nombre}.");
+    expect(TEXTOS.en.ya).toBe("From this phone, you joined as {nombre}.");
+    expect(TEXTOS.es.listoB).toBe("Mirá la pantalla grande. Si no te ves, tocá Corregir mi nombre o avisale a quien atiende.");
+    expect(TEXTOS.en.listoB).toBe(
+      "Watch the big screen. If you don't see yourself, tap Correct my name or tell whoever is running the booth.",
+    );
+    expect(TEXTOS.es.corregir).toBe("Corregir mi nombre");
+    expect(TEXTOS.en.corregir).toBe("Correct my name");
+    expect(TEXTOS.es.repetido).toBe("Si ese nombre es el tuyo, ya estás en la ronda. Si es de otra persona, sumá tu apellido o un apodo.");
+    expect(TEXTOS.en.repetido).toBe("If that name is yours, you are already in the round. If it belongs to someone else, add your last name or a nickname.");
+    expect(TEXTOS.es.recuerda).toContain("hasta 12 horas");
+    expect(TEXTOS.en.recuerda).toContain("up to 12 hours");
+    expect(TEXTOS.es.sinRecuerdo).toContain("no vas a poder corregirlo después");
+    expect(TEXTOS.en.sinRecuerdo).toContain("not be able to correct it");
+    expect(TEXTOS.es.correcciones).toContain("Pedile ayuda");
+    expect(TEXTOS.en.correcciones).toContain("for help");
+    expect(html).toContain('"tk-sala:"+id');
+    for (const idioma of [TEXTOS.es, TEXTOS.en]) {
+      expect(idioma.corregir.length).toBeGreaterThan(0);
+      expect(idioma.repetido.length).toBeGreaterThan(0);
+      expect(idioma.correcciones.length).toBeGreaterThan(0);
+      expect(idioma.recuerda.length).toBeGreaterThan(0);
+      expect(idioma.sinRecuerdo.length).toBeGreaterThan(0);
+    }
   });
   it("el JS de adentro es sintaxis válida", () => {
     const js = /<script>([\s\S]*)<\/script>/.exec(html)?.[1] ?? "";
@@ -211,6 +315,27 @@ describe("el cliente de la sala", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(alNombre.mock.calls).toEqual([[1, "uno"], [2, "dos"]]);
     expect(alEstado).toHaveBeenLastCalledWith("en-vivo");
+  });
+
+  it("una corrección por el socket quita todos sus números anteriores antes de entregar el nombre", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta([]));
+    const eventos: string[] = [];
+    escucharSala(
+      sala,
+      { alNombre: (n) => eventos.push(`n:${n}`), alQuitado: (n) => eventos.push(`q:${n}`) },
+      { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket },
+    );
+    const s = SocketFalso.ultimo as SocketFalso;
+    s.emitir("message", { data: JSON.stringify({ t: "nombre", n: 8, d: "nuevo", r: [3, 6] }) });
+    expect(eventos).toEqual(["q:3", "q:6", "n:8"]);
+  });
+
+  it("una corrección por la consulta también quita los números anteriores antes del nombre", async () => {
+    const f = vi.fn().mockResolvedValue(respuesta([{ n: 8, d: "nuevo", r: [3, 6] }]));
+    const eventos: string[] = [];
+    escucharSala(sala, { alNombre: (n) => eventos.push(`n:${n}`), alQuitado: (n) => eventos.push(`q:${n}`) }, { fetch: f, socket: (u) => new SocketFalso(u) as unknown as WebSocket });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(eventos).toEqual(["q:3", "q:6", "n:8"]);
   });
 
   it("si el socket se corta consulta cada 3 s y no pierde ningún nombre al volver", async () => {

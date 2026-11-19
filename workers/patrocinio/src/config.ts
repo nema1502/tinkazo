@@ -2,9 +2,13 @@
  * Lo que se configura del portero: los valores por defecto y cómo se leen de las
  * variables del Worker. Sin red ni objetos: lo usan el Worker, el objeto y las pruebas.
  *
- * Los secretos (`CLAVE_PATROCINADOR`, `ADMIN_TOKEN`) no se leen acá: los usa quien
- * los necesita, una sola vez.
+ * Los secretos (`CLAVE_PATROCINADOR`, `ADMIN_TOKEN`, `POLLAR_SECRETO`, `CUPONES_TOKEN`,
+ * `CUPON_SECRETO`, `CLAVE_SORTEADORA`) no se leen acá: los usa quien los necesita, una sola vez.
+ *
+ * Lo de las altas (el libro de cuentas, los cupones, el pago y el sorteo del servidor) nace
+ * apagado y vale solo en mainnet: en testnet sus variables se ignoran.
  */
+import { StrKey } from "@stellar/stellar-sdk/base";
 import deployments from "../../../src/stellar/deployments.json";
 import { leerCuentaUrl } from "./plan";
 
@@ -47,6 +51,103 @@ export interface Env {
   POR_IP_POR_HORA?: string;
   /** Con `1` el portero nace apagado, aunque el objeto diga otra cosa. */
   APAGADO?: string;
+
+  // ---------- las altas: solo en mainnet, y solo con un `1` ----------
+  /** Con `1`, el libro de cuentas, las rutas `/v1/alta` y la puerta que mira solo el libro. En testnet se ignora. */
+  ALTAS?: string;
+  /** Con `1` (y con `ALTAS`), las órdenes de pago nuevas. */
+  ALTAS_PAGO?: string;
+  /** Con `1` (y con `ALTAS`), el sorteo que manda el servidor (`/v1/sorteo`). */
+  SORTEO_SERVIDOR?: string;
+  /**
+   * Con `ALTAS`, el portero paga un `draw` solo de un sello que pagó él. Viene prendido; solo un `0` lo apaga, y es para
+   * el plan B: si la lectura de `get_raffle` falla en la red principal, el `draw` de una cuenta del libro vuelve a pagarse
+   * sea de quien sea el sorteo, dentro del tope general.
+   */
+  SOLO_SELLOS_PORTERO?: string;
+  /** El id de la app de mainnet en Pollar (es público). */
+  POLLAR_APP_ID?: string;
+  /** `inmediato` o `diferido`: cómo abre Pollar las cuentas. Tiene que coincidir con lo que dice Pollar. */
+  POLLAR_FONDEO?: string;
+  /**
+   * La cuenta (G…) que recibe los pagos. El Worker no tiene su llave. Tiene que ser propia: si repite la patrocinadora o
+   * la sorteadora, no se toma (el pago queda apagado y nadie lee sus pagos).
+   */
+  CUENTA_COBROS?: string;
+  /** La cuenta patrocinadora (G…), la que paga las comisiones. Pública. Acá solo para que no sea también la de cobros. */
+  CUENTA_PATROCINADORA?: string;
+  /** La cuenta (G…) desde la que el servidor manda el `draw`. */
+  CUENTA_SORTEADORA?: string;
+  /** Los productos: `producto:usdc:sorteos:dias`, separados por coma (ver `leerPrecios`). */
+  PRECIOS?: string;
+  /** Lo que se guarda en créditos de Pollar por cada sorteo prometido, para el piso. */
+  CREDITOS_POR_SORTEO?: string;
+  /** Lo que se guarda en créditos de Pollar por cada alta autorizada sin activar, para el piso. */
+  CREDITOS_POR_ALTA?: string;
+  /** Con `1` (y con `ALTAS`), la carga con QR: `GET /v1/carga/cupo` puede decir `abierta`. */
+  CARGAS?: string;
+  /**
+   * Los créditos de Pollar que tienen que quedar libres por encima del piso para que la carga siga abierta, empiece una
+   * compra con QR o nazca una orden nueva (400 por defecto). Solo dígitos: mal escrita cierra la venta y se anota.
+   */
+  RESERVA_CARGA_CREDITOS?: string;
+  /** Con `1` (y con `ALTAS`), la compra de un paquete pagando con QR: `POST /v1/compra/empezar` puede dar el permiso. */
+  COMPRAS_QR?: string;
+  /**
+   * Cuántas compras con QR se pueden empezar por día (UTC), entre todas las personas. `0` por defecto: ninguna. Solo
+   * dígitos: mal escrita cierra la venta y se anota.
+   */
+  COMPRAS_QR_DIA?: string;
+  /**
+   * La lista del piloto por variable: cuentas G… separadas por coma, además de las que se suman por administración. La
+   * palabra `todos` la abre a cualquier cuenta (el freno es `COMPRAS_QR_DIA`), pero solo con `COMPRAS_QR_TODOS = "1"`:
+   * sin eso, `todos` cierra la compra entera. Vacía: nadie más que la administración.
+   */
+  COMPRAS_QR_PILOTO?: string;
+  /** Solo `1` deja que `todos` en `COMPRAS_QR_PILOTO` abra la compra con QR a cualquier cuenta. Es la confirmación explícita. */
+  COMPRAS_QR_TODOS?: string;
+  /**
+   * La lista del piloto de la orden en dólares digitales, aparte de la de la compra con QR: cuentas G… separadas por
+   * coma, con las mismas reglas de escritura que `COMPRAS_QR_PILOTO`. La palabra `todos` la abre a cualquier cuenta,
+   * pero solo con `ORDEN_USDC_TODOS = "1"`; sin eso, o mal escrita, cierra. Vacía: la orden mira el piloto de la
+   * compra con QR, como hasta ahora.
+   */
+  ORDEN_USDC_PILOTO?: string;
+  /** Solo `1` deja que `todos` en `ORDEN_USDC_PILOTO` abra la orden a cualquier cuenta. Es la confirmación explícita. */
+  ORDEN_USDC_TODOS?: string;
+  /** Lo mínimo en bolivianos de una carga con QR, para que el sitio no cotice menos. `0` por defecto: no se sabe. */
+  CARGA_MINIMO_BS?: string;
+  /** Las banderas del patrocinio de Pollar que la vigilancia acepta prendidas, separadas por coma. Vacía: todo apagado. */
+  PATROCINIO_PERMITIDO?: string;
+  /** El recargo por pagar con QR, `primera:siguientes` en USDC (ver `leerRecargo`). Vacía, vale el de la oferta. */
+  RECARGO_QR?: string;
+
+  // ---------- los pagos de premios, los retiros y el alta de quien ganó: solo en mainnet, y solo con un `1` ----------
+  /** Con `1` (y con `ALTAS` y el contrato), el portero paga la comisión del pago de un premio. Apagada por defecto. */
+  PAGOS_PREMIO?: string;
+  /** Con `1` (y con `ALTAS`, la cuenta de cobros y `COSTO_RETIRO`), el portero paga la comisión de un retiro con su costo. Apagada por defecto. */
+  RETIROS?: string;
+  /** Con `1` (y con `ALTAS` y el contrato), quien organiza puede dar de alta la cuenta de quien ganó. Apagada por defecto. */
+  ALTAS_PREMIO?: string;
+  /**
+   * El costo exacto de un retiro, en USDC con punto (`0.50`), de 0,01 a 5. Es la segunda operación del retiro, a la cuenta de
+   * cobros, y manda sobre la del sitio. Vacía: no hay costo y el retiro no se prende. Mal escrita: se anota y el retiro no se prende.
+   */
+  COSTO_RETIRO?: string;
+  /** El presupuesto de las comisiones de los pagos en 24 horas, en stroops, aparte del de los sellos. Solo dígitos, hasta 10 XLM. */
+  TOPE_PAGOS_STROOPS?: string;
+  /** Cuántos pagos por forma que la red rechazó al aplicarlos se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 100. */
+  PAGOS_RECHAZADOS_DIA?: string;
+  /** Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 300. */
+  ALTAS_PREMIO_DIA?: string;
+  /** Secreto: la llave secreta de la app de mainnet en Pollar. */
+  POLLAR_SECRETO?: string;
+  /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
+  CUPONES_TOKEN?: string;
+  /** Secreto: con qué se calcula la huella de un cupón (32 bytes al azar). Rotarlo anula los cupones vivos. */
+  CUPON_SECRETO?: string;
+  /** Secreto: la llave de la cuenta sorteadora. */
+  CLAVE_SORTEADORA?: string;
 }
 
 export type NombreRed = "testnet" | "mainnet";
@@ -59,7 +160,7 @@ export interface Config {
   rpcUrls: string[];
   maxSellos: number;
   maxSellosVerificada: number;
-  /** Los sorteos de un mes por cuenta: el doble de sus sellos. Sortear no se frena por el cupo de sellos. */
+  /** Los sorteos de un mes por cuenta: en testnet, el doble de sus sellos; en mainnet, tantos como sus sellos (`sorteosDelMes`). */
   maxSorteos: number;
   maxSorteosVerificada: number;
   verificadas: Set<string>;
@@ -84,6 +185,267 @@ export interface Config {
   ventanaMaxS: number;
   porIpPorHora: number;
   apagadoPorVariable: boolean;
+
+  // ---------- las altas (siempre apagadas fuera de mainnet) ----------
+  /** El libro de cuentas, las rutas `/v1/alta` y la puerta del libro: solo en mainnet con `ALTAS=1`. */
+  altas: boolean;
+  /**
+   * Órdenes de pago nuevas: con `altas`, `ALTAS_PAGO=1`, precios bien escritos, la cuenta de cobros y la reserva del evento
+   * y las compras del día bien escritas (`RESERVA_CARGA_CREDITOS` y `COMPRAS_QR_DIA`, solo dígitos).
+   */
+  altasPago: boolean;
+  /** El sorteo del servidor: con `altas`, `SORTEO_SERVIDOR=1` y la cuenta sorteadora. */
+  sorteoServidor: boolean;
+  /**
+   * El portero paga un `draw` (lo mande la persona o la sorteadora) solo si su sello lo pagó él: con `altas`, con o sin
+   * el sorteo del servidor (así nadie de afuera sella con Freighter y le pasa el sorteo de 300 ganadores). Solo
+   * `SOLO_SELLOS_PORTERO=0` lo apaga, para el plan B.
+   */
+  soloSellosDelPortero: boolean;
+  pollarAppId: string | null;
+  /** null si `POLLAR_FONDEO` está mal escrito: no se adivina. */
+  pollarFondeo: Fondeo | null;
+  cuentaCobros: string | null;
+  cuentaSorteadora: string | null;
+  /** null si `PRECIOS` está mal escrito: entonces no se vende nada. */
+  precios: Producto[] | null;
+  creditosPorSorteo: number;
+  creditosPorAlta: number;
+  /**
+   * La carga con QR: solo en mainnet con `ALTAS=1`, `CARGAS=1` y la reserva del evento y las compras del día bien
+   * escritas. Abierta, además, solo con créditos de sobra.
+   */
+  cargas: boolean;
+  /**
+   * Lo libre por encima del piso que tiene que haber para que la carga esté abierta, empiece una compra con QR o nazca una
+   * orden nueva, en créditos: la reserva del evento. Mal escrita vale 400 y la venta queda cerrada (`faltaAltas`).
+   */
+  reservaCargaCreditos: number;
+  /** La compra con QR: solo en mainnet con `ALTAS=1` y `COMPRAS_QR=1`. El permiso pide además lo que mira `compras.ts`. */
+  comprasQr: boolean;
+  /** Las compras con QR que se pueden empezar por día (UTC), entre todas las personas. Mal escrita, 0 y la venta cerrada. */
+  comprasQrDia: number;
+  /** Las cuentas del piloto que vienen de la variable (vacía fuera de mainnet o si está mal escrita). */
+  comprasQrPiloto: Set<string>;
+  /**
+   * Si `COMPRAS_QR_PILOTO` trae `todos`: la compra con QR, abierta a cualquier cuenta. Falso fuera de mainnet o con la
+   * variable mal escrita (una cuenta mal escrita junto a `todos` la deja cerrada).
+   */
+  comprasQrTodos: boolean;
+  /**
+   * Qué dice `COMPRAS_QR_PILOTO` para la orden en dólares digitales mientras la orden no tenga su propia lista puesta
+   * (`ORDEN_USDC_PILOTO`): `lista` (cuentas bien escritas: la orden nueva pide estar en la lista), `mal` (algo mal
+   * escrito, o `todos` sin confirmar: la orden nueva no nace para nadie) o `ninguna` (vacía, `todos` confirmado o
+   * fuera de mainnet). Con `ninguna` y la variable vacía, la orden mira igual las cuentas sumadas por administración:
+   * si hay alguna, esa es la lista puesta (`rutas-altas.ts`, `fueraDelPiloto`).
+   */
+  pilotoEnVariable: "ninguna" | "lista" | "mal";
+  /** Las cuentas del piloto de la orden en dólares digitales que vienen de `ORDEN_USDC_PILOTO` (vacía fuera de mainnet o si está mal escrita). */
+  ordenUsdcPiloto: Set<string>;
+  /**
+   * Si `ORDEN_USDC_PILOTO` trae `todos`: la orden en dólares digitales, abierta a cualquier cuenta. Falso fuera de
+   * mainnet, sin la variable o con ella mal escrita.
+   */
+  ordenUsdcTodos: boolean;
+  /**
+   * Qué dice `ORDEN_USDC_PILOTO` para la orden en dólares digitales: `lista` (cuentas bien escritas: la orden nueva
+   * pide estar en la lista, sin mirar al piloto de la compra con QR), `mal` (algo mal escrito, o `todos` sin
+   * confirmar: la orden nueva no nace para nadie) o `ninguna` (vacía, `todos` confirmado o fuera de mainnet: la orden
+   * mira el piloto de la compra con QR, como hasta ahora (`rutas-altas.ts`, `fueraDelPiloto`).
+   */
+  ordenUsdcEnVariable: "ninguna" | "lista" | "mal";
+  /** Lo mínimo en bolivianos de una carga, para el sitio. */
+  cargaMinimoBs: number;
+  /** Las banderas del patrocinio de Pollar que se aceptan prendidas, en orden. */
+  patrocinioPermitido: string[];
+  /** El recargo por pagar con QR, o null si `RECARGO_QR` está mal escrito: entonces la compra con QR no se abre. */
+  recargoQr: Recargo | null;
+
+  // ---------- los pagos de premios, los retiros y el alta de quien ganó (siempre apagados fuera de mainnet) ----------
+  /**
+   * El portero paga la comisión del pago de un premio: solo en mainnet con `ALTAS=1`, el contrato oficial y los topes de los
+   * pagos bien escritos. Nace apagada: solo `PAGOS_PREMIO=1` la prende.
+   */
+  pagosPremio: boolean;
+  /**
+   * El portero paga la comisión de un retiro con su costo: solo en mainnet con `ALTAS=1`, la cuenta de cobros propia, el costo
+   * bien escrito y los topes de los pagos bien escritos. Nace apagada: solo `RETIROS=1` la prende.
+   */
+  retiros: boolean;
+  /** Quien organiza da de alta la cuenta de quien ganó: solo en mainnet con `ALTAS=1`, el contrato y el tope del día bien escrito. */
+  altasPremio: boolean;
+  /** El costo del retiro, o null si `COSTO_RETIRO` está vacío o mal escrito: sin costo el retiro no se prende. */
+  costoRetiro: CostoRetiro | null;
+  /** El presupuesto de las comisiones de los pagos en 24 horas, en stroops. Mal escrito, vale el de por defecto y los pagos no se prenden. */
+  topePagos: number;
+  /** Los pagos por forma que la red rechazó al aplicarlos y se aceptan en 24 horas. Mal escrito: vale el de por defecto y no se prenden. */
+  pagosRechazadosDia: number;
+  /** Las altas de quien ganó que se aceptan en 24 horas, entre todas las cuentas. Mal escrito, vale el de por defecto y el alta no se prende. */
+  altasPremioDia: number;
+  /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
+  faltaAltas: string[];
+}
+
+/** El costo de un retiro: la segunda operación del pago, a la cuenta de cobros. */
+export interface CostoRetiro {
+  /** El monto como se escribió (`"0.50"`), para mostrarlo. */
+  usdc: string;
+  /** El monto en diezmillonésimas de USDC (7 decimales, como la red). */
+  monto: number;
+}
+
+export type Fondeo = "inmediato" | "diferido";
+export type IdProducto = "alta" | "p10" | "p50";
+
+export interface Producto {
+  id: IdProducto;
+  /** El monto como se escribió (`"2"`, `"1.5"`), para mostrarlo. */
+  usdc: string;
+  /** El monto en diezmillonésimas de USDC (7 decimales, como la red). */
+  monto: number;
+  sorteos: number;
+  dias: number;
+}
+
+/**
+ * Los precios de la venta, mientras la persona firma su sorteo (sin el sorteo del servidor): el primer paquete trae el
+ * alta y 3 sorteos por 4 USDC, que vencen a los 90 días; después, 10 sorteos por 10 USDC por un año. Sin el de 50, que
+ * así perdería. Son también los que valen si `PRECIOS` queda vacía: un precio que pierde nunca entra por defecto.
+ */
+export const PRECIOS_POR_DEFECTO = "alta:4:3:90,p10:10:10:365";
+const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50"];
+/** Lo más que se acepta en un producto: un número más grande es un error de tipeo, no un precio. */
+const MAX_SORTEOS_PRODUCTO = 1000;
+const MAX_DIAS_PRODUCTO = 3650;
+
+/**
+ * Lee `PRECIOS`: `producto:usdc:sorteos:dias` separados por coma, por ejemplo `alta:2:3:365,p10:5:10:365`.
+ * El producto es `alta`, `p10` o `p50`, sin repetir, y `alta` tiene que estar. El monto es positivo, con punto y
+ * hasta 7 decimales. Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza
+ * todo** (devuelve null): un precio a medias no se vende.
+ */
+export function leerPrecios(s: string): Producto[] | null {
+  const productos: Producto[] = [];
+  for (const parte of s.split(",")) {
+    const campos = parte.trim().split(":");
+    if (campos.length !== 4) return null;
+    const [id, usdc, sorteos, dias] = campos as [string, string, string, string];
+    if (!(PRODUCTOS as readonly string[]).includes(id) || productos.some((p) => p.id === id)) return null;
+    const m = /^(\d{1,6})(?:\.(\d{1,7}))?$/.exec(usdc);
+    if (!m?.[1]) return null;
+    const monto = Number(m[1]) * 10_000_000 + Number((m[2] ?? "").padEnd(7, "0"));
+    if (!/^\d{1,4}$/.test(sorteos) || !/^\d{1,4}$/.test(dias)) return null;
+    const ns = Number(sorteos);
+    const nd = Number(dias);
+    if (monto <= 0 || ns < 1 || ns > MAX_SORTEOS_PRODUCTO || nd < 1 || nd > MAX_DIAS_PRODUCTO) return null;
+    productos.push({ id: id as IdProducto, usdc, monto, sorteos: ns, dias: nd });
+  }
+  return productos.some((p) => p.id === "alta") ? productos : null;
+}
+
+/** El recargo por pagar con QR: la primera vez de cada persona (con su verificación) y las siguientes. */
+export interface Recargo {
+  /** En diezmillonésimas de USDC. */
+  primera: number;
+  siguientes: number;
+  /** Como se escribieron, para mostrarlos. */
+  primeraUsdc: string;
+  siguientesUsdc: string;
+}
+
+/**
+ * El recargo de la oferta: 4,25 USDC la primera vez que una persona paga con QR (paga su verificación y su primera
+ * carga) y 0,50 las siguientes. Vale también si `RECARGO_QR` queda vacía.
+ */
+export const RECARGO_QR_POR_DEFECTO = "4.25:0.5";
+/** Lo más que se acepta de recargo: un número más grande es un error de tipeo, no un precio. */
+export const MAX_RECARGO_USDC = 50;
+
+/** Un monto de USDC como se escribe en las variables (`4.25`, `0`), en diezmillonésimas, o null. */
+function montoUsdc(s: string): number | null {
+  const m = /^(\d{1,6})(?:\.(\d{1,7}))?$/.exec(s);
+  if (!m?.[1]) return null;
+  return Number(m[1]) * 10_000_000 + Number((m[2] ?? "").padEnd(7, "0"));
+}
+
+/**
+ * Lee `RECARGO_QR`: `primera:siguientes`, cada uno un monto de USDC con punto y hasta 7 decimales, de 0 a 50. Como
+ * `PRECIOS`, **cualquier cosa mal escrita rechaza todo** (devuelve null): un recargo a medias no se cobra, y sin recargo
+ * la compra con QR no se abre.
+ */
+export function leerRecargo(s: string): Recargo | null {
+  const partes = s.trim().split(":");
+  if (partes.length !== 2) return null;
+  const [p, q] = partes as [string, string];
+  const primera = montoUsdc(p);
+  const siguientes = montoUsdc(q);
+  const tope = MAX_RECARGO_USDC * 10_000_000;
+  if (primera === null || siguientes === null || primera > tope || siguientes > tope) return null;
+  return { primera, siguientes, primeraUsdc: p, siguientesUsdc: q };
+}
+
+/**
+ * El costo más bajo y el más alto que se acepta en `COSTO_RETIRO` (0,01 y 5 USDC), en diezmillonésimas de USDC: fuera de
+ * eso es un error de tipeo, no un precio.
+ */
+export const MIN_COSTO_RETIRO = 100_000;
+export const MAX_COSTO_RETIRO = 50_000_000;
+
+/**
+ * Lee `COSTO_RETIRO`: un monto de USDC con punto y hasta 7 decimales, de 0,01 a 5. Todo lo demás (vacío, 0, 6, la coma
+ * decimal, letras) da null: un costo a medias no se cobra, y sin costo el retiro no se prende.
+ */
+export function leerCostoRetiro(s: string): CostoRetiro | null {
+  const usdc = s.trim();
+  const monto = montoUsdc(usdc);
+  if (monto === null || monto < MIN_COSTO_RETIRO || monto > MAX_COSTO_RETIRO) {
+    return null;
+  }
+  return { usdc, monto };
+}
+
+/** Lo que valen los topes de los pagos si su variable queda vacía: 2 XLM de comisiones, 20 rechazados por forma y 100 altas por día. */
+export const TOPE_PAGOS_STROOPS_POR_DEFECTO = 20_000_000;
+export const PAGOS_RECHAZADOS_DIA_POR_DEFECTO = 20;
+export const ALTAS_PREMIO_DIA_POR_DEFECTO = 100;
+/**
+ * Lo más que puede valer cada tope de los pagos, en la variable y en el ajuste en caliente: 10 XLM de comisiones, 100
+ * rechazados por forma y 300 altas por día. Un número más grande es un error de tipeo (un cero de más), no un tope: se
+ * toma como mal escrito, así el presupuesto nunca crece sin aviso.
+ */
+export const TECHO_TOPE_PAGOS_STROOPS = 100_000_000;
+export const TECHO_PAGOS_RECHAZADOS_DIA = 100;
+export const TECHO_ALTAS_PREMIO_DIA = 300;
+
+/** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
+export const PILOTO_TODOS = "todos";
+
+/**
+ * La lista del piloto: cuentas G… separadas por coma y, si está, la palabra `todos`. null si algo está mal escrito (una
+ * cuenta, `Todos` en mayúscula, otra palabra): no se toma a medias, y así una mal escrita junto a `todos` la cierra.
+ */
+function listaDelPiloto(s: string | undefined, todosConfirmado: boolean): { todos: boolean; cuentas: string[] } | null {
+  const partes = lista(s);
+  const cuentas = partes.filter((c) => c !== PILOTO_TODOS);
+  const todos = cuentas.length < partes.length;
+  // `todos` sin la confirmación explícita (`COMPRAS_QR_TODOS = "1"`, u `ORDEN_USDC_TODOS = "1"` en su piloto) es como una
+  // palabra mal escrita: cierra.
+  if (todos && !todosConfirmado) return null;
+  return cuentas.every((c) => StrKey.isValidEd25519PublicKey(c)) ? { todos, cuentas } : null;
+}
+
+/** Una bandera del patrocinio de Pollar, como la lee `pollar.ts`. */
+const BANDERA_PATROCINIO = /^sponsor_[a-z0-9_]{1,60}$/;
+
+/** Una cuenta G… con su suma de control, o null. */
+function cuentaG(s: string | undefined): string | null {
+  const g = (s ?? "").trim();
+  return g && StrKey.isValidEd25519PublicKey(g) ? g : null;
+}
+
+/** Los sorteos de un mes: en mainnet, tantos como los sellos; en testnet, el doble (sortear no se frena por el cupo de sellos). */
+export function sorteosDelMes(red: NombreRed, sellos: number): number {
+  return red === "mainnet" ? sellos : sellos * 2;
 }
 
 /** El patrocinador que Pollar usa en testnet (medido el 20 de octubre de 2026: `num_sponsored = 2`). */
@@ -109,6 +471,8 @@ export const SALDO_ALERTA_STROOPS = 20 * 10_000_000;
 export const INCLUSION_BUMP_STROOPS = 10_000;
 /** Recursos declarados: hasta 1,5 veces la simulación más esto. */
 export const MARGEN_RECURSOS_STROOPS = 50_000;
+/** Los créditos de Pollar libres por encima del piso que la carga con QR deja siempre sin tocar. */
+export const RESERVA_CARGA_CREDITOS = 400;
 
 const RPC_POR_DEFECTO: Record<NombreRed, string[]> = {
   testnet: ["https://soroban-testnet.stellar.org", "https://rpc.ankr.com/stellar_testnet_soroban"],
@@ -128,21 +492,117 @@ function entero(s: string | undefined, porDefecto: number): number {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : porDefecto;
 }
 
+/**
+ * Un entero escrito SOLO con dígitos (con espacios alrededor, que no cambian nada). Vacía o sin poner, `porDefecto`. Lo
+ * demás (`8.400` y `8,400` con el separador de los miles, `8 400`, un signo, `1e4`, letras) es `mal`: no se adivina qué
+ * se quiso decir. Para las variables de la venta donde un número leído a medias deja una reserva chica sin aviso.
+ */
+function soloDigitos(s: string | undefined, porDefecto: number): { valor: number; mal: boolean } {
+  const t = (s ?? "").trim();
+  if (t === "") return { valor: porDefecto, mal: false };
+  return /^\d{1,15}$/.test(t) ? { valor: Number(t), mal: false } : { valor: porDefecto, mal: true };
+}
+
 export function leerConfig(env: Partial<Env>): Config {
   const red: NombreRed = env.RED === "mainnet" ? "mainnet" : "testnet";
   const d = deployments[red] as { contractId?: string; networkPassphrase?: string } | null;
   const maxSellos = entero(env.MAX_SELLOS_MES, 20);
   const maxSellosVerificada = entero(env.MAX_SELLOS_VERIFICADA, 50);
   const rpcUrls = lista(env.RPC_URLS);
+  const enMainnet = red === "mainnet";
+  // Solo un "1" prende, y solo en mainnet. En testnet todo esto se ignora.
+  const prende = (v: string | undefined) => enMainnet && v === "1";
+  const altas = prende(env.ALTAS);
+  const pideCobros = altas && prende(env.ALTAS_PAGO);
+  const pideSorteo = altas && prende(env.SORTEO_SERVIDOR);
+  const appId = (env.POLLAR_APP_ID ?? "").trim();
+  const pollarAppId = enMainnet && /^[A-Za-z0-9_-]{1,128}$/.test(appId) ? appId : null;
+  const fondeo = (env.POLLAR_FONDEO ?? "").trim();
+  const pollarFondeo: Fondeo | null = !enMainnet || fondeo === "" || fondeo === "inmediato" ? "inmediato" : fondeo === "diferido" ? "diferido" : null;
+  const precios = leerPrecios((env.PRECIOS ?? "").trim() || PRECIOS_POR_DEFECTO);
+  const cuentaSorteadora = enMainnet ? cuentaG(env.CUENTA_SORTEADORA) : null;
+  // La cuenta de cobros es propia: si repite la que paga las comisiones o la sorteadora, sus pagos se mezclarían con las
+  // cargas de esas cuentas y una devolución saldría de la cuenta equivocada. No se toma, y se anota.
+  const cobrosLeida = enMainnet ? cuentaG(env.CUENTA_COBROS) : null;
+  const cobrosRepetida = cobrosLeida !== null && (cobrosLeida === cuentaG(env.CUENTA_PATROCINADORA) || cobrosLeida === cuentaSorteadora);
+  const cuentaCobros = cobrosRepetida ? null : cobrosLeida;
+  const faltaAltas: string[] = [];
+  if (altas && !pollarAppId) faltaAltas.push("pollar-app");
+  if (altas && !pollarFondeo) faltaAltas.push("pollar-fondeo");
+  if (pideCobros && !precios) faltaAltas.push("precios");
+  if (altas && cobrosRepetida) faltaAltas.push("cuenta-cobros-repetida");
+  else if (pideCobros && !cuentaCobros) faltaAltas.push("cuenta-cobros");
+  if (pideSorteo && !cuentaSorteadora) faltaAltas.push("cuenta-sorteadora");
+  // La compra con QR: cerrada salvo un "1" con el libro. El recargo y la lista mal escritos no se toman a medias.
+  const comprasQr = altas && prende(env.COMPRAS_QR);
+  const recargoQr = leerRecargo((env.RECARGO_QR ?? "").trim() || RECARGO_QR_POR_DEFECTO);
+  if (comprasQr && !recargoQr) faltaAltas.push("recargo-qr");
+  const piloto = enMainnet ? listaDelPiloto(env.COMPRAS_QR_PILOTO, env.COMPRAS_QR_TODOS === "1") : { todos: false, cuentas: [] };
+  if (comprasQr && piloto === null) faltaAltas.push("compras-qr-piloto");
+  // La orden en dólares digitales tiene su propia lista, con las mismas reglas de escritura. Sin ponerla, la orden
+  // mira igual el piloto de la compra con QR: desplegar con la variable nueva sin poner no cambia nada.
+  const pilotoOrden = enMainnet ? listaDelPiloto(env.ORDEN_USDC_PILOTO, env.ORDEN_USDC_TODOS === "1") : { todos: false, cuentas: [] };
+  const permitido = lista(env.PATROCINIO_PERMITIDO);
+  const permitidoBien = permitido.every((b) => BANDERA_PATROCINIO.test(b));
+  if (altas && !permitidoBien) faltaAltas.push("patrocinio-permitido");
+  // La reserva del evento y las compras del día, solo con dígitos. Mal escritas, la venta entera queda cerrada (ni orden
+  // nueva, ni carga, ni compra con QR) y se anota, también con la venta cerrada: así se corrige antes de abrirla.
+  const reservaCarga = soloDigitos(env.RESERVA_CARGA_CREDITOS, RESERVA_CARGA_CREDITOS);
+  const comprasDia = soloDigitos(env.COMPRAS_QR_DIA, 0);
+  if (altas && reservaCarga.mal) faltaAltas.push("reserva-carga-creditos");
+  if (altas && comprasDia.mal) faltaAltas.push("compras-qr-dia");
+  const ventaBienEscrita = !reservaCarga.mal && !comprasDia.mal;
+  const altasPago = pideCobros && precios !== null && cuentaCobros !== null && ventaBienEscrita;
+  if (altasPago && pilotoOrden === null) faltaAltas.push("orden-usdc-piloto");
+  const cargas = altas && prende(env.CARGAS) && ventaBienEscrita;
+  // El patrocinio permitido es el de la venta: con la carga y la compra con QR apagadas, se espera todo apagado.
+  const conVenta = comprasQr || cargas;
+  // Los pagos de premios, los retiros y el alta de quien ganó: cerrados salvo un "1" con el libro. Los topes se leen solo con
+  // dígitos y el costo con su regla (`leerCostoRetiro`). Lo mal escrito apaga lo suyo y se anota aunque la forma esté
+  // apagada, así se corrige antes de prenderla. Con las tres apagadas, nada de esto cambia lo que corre.
+  const contractId = d?.contractId ?? null;
+  const pidePremio = prende(env.PAGOS_PREMIO);
+  const pideRetiros = prende(env.RETIROS);
+  const pideAltaPremio = prende(env.ALTAS_PREMIO);
+  const costoTexto = (env.COSTO_RETIRO ?? "").trim();
+  const costoRetiro = enMainnet ? leerCostoRetiro(costoTexto) : null;
+  const costoMal = costoTexto !== "" && costoRetiro === null;
+  // Por encima de su techo, un tope se toma como mal escrito y vale el de por defecto.
+  const digitosEnMainnet = (s: string | undefined, porDefecto: number, techo: number) => {
+    if (!enMainnet) {
+      return { valor: porDefecto, mal: false };
+    }
+    const leido = soloDigitos(s, porDefecto);
+    return leido.valor > techo ? { valor: porDefecto, mal: true } : leido;
+  };
+  const topePagos = digitosEnMainnet(env.TOPE_PAGOS_STROOPS, TOPE_PAGOS_STROOPS_POR_DEFECTO, TECHO_TOPE_PAGOS_STROOPS);
+  const rechazosDia = digitosEnMainnet(env.PAGOS_RECHAZADOS_DIA, PAGOS_RECHAZADOS_DIA_POR_DEFECTO, TECHO_PAGOS_RECHAZADOS_DIA);
+  const altasDia = digitosEnMainnet(env.ALTAS_PREMIO_DIA, ALTAS_PREMIO_DIA_POR_DEFECTO, TECHO_ALTAS_PREMIO_DIA);
+  const pagosBienEscritos = !topePagos.mal && !rechazosDia.mal;
+  const pagosPremio = altas && pidePremio && contractId !== null && pagosBienEscritos;
+  const retiros = altas && pideRetiros && cuentaCobros !== null && costoRetiro !== null && pagosBienEscritos;
+  const altasPremio = altas && pideAltaPremio && contractId !== null && !altasDia.mal;
+  const anotar = (cuando: boolean, nombre: string): void => {
+    if (cuando) {
+      faltaAltas.push(nombre);
+    }
+  };
+  anotar(pidePremio && (!altas || contractId === null), "pagos-premio");
+  anotar(pideRetiros && (!altas || cuentaCobros === null), "retiros");
+  anotar(altas && (costoMal || (pideRetiros && costoRetiro === null)), "costo-retiro");
+  anotar(pideAltaPremio && (!altas || contractId === null), "alta-premio");
+  anotar(altas && topePagos.mal, "tope-pagos");
+  anotar(altas && rechazosDia.mal, "pagos-rechazos");
+  anotar(altas && altasDia.mal, "altas-premio-dia");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
-    contractId: d?.contractId ?? null,
+    contractId,
     rpcUrls: rpcUrls.length ? rpcUrls : RPC_POR_DEFECTO[red],
     maxSellos,
     maxSellosVerificada,
-    maxSorteos: maxSellos * 2,
-    maxSorteosVerificada: maxSellosVerificada * 2,
+    maxSorteos: sorteosDelMes(red, maxSellos),
+    maxSorteosVerificada: sorteosDelMes(red, maxSellosVerificada),
     verificadas: new Set(lista(env.CUENTAS_VERIFICADAS)),
     cuentaUrl: leerCuentaUrl(env.CUENTA_URL),
     // Una cuenta de prueba salta el control de "la abrió nuestra app": en mainnet no existe esa puerta, aunque la variable esté puesta.
@@ -157,6 +617,38 @@ export function leerConfig(env: Partial<Env>): Config {
     ventanaMaxS: entero(env.VENTANA_MAX_S, 300),
     porIpPorHora: entero(env.POR_IP_POR_HORA, 240),
     apagadoPorVariable: env.APAGADO === "1",
+    altas,
+    altasPago,
+    sorteoServidor: pideSorteo && cuentaSorteadora !== null,
+    soloSellosDelPortero: altas && (env.SOLO_SELLOS_PORTERO ?? "").trim() !== "0",
+    pollarAppId,
+    pollarFondeo,
+    cuentaCobros,
+    cuentaSorteadora,
+    precios,
+    creditosPorSorteo: entero(env.CREDITOS_POR_SORTEO, 40),
+    creditosPorAlta: entero(env.CREDITOS_POR_ALTA, 30),
+    cargas,
+    reservaCargaCreditos: reservaCarga.valor,
+    comprasQr,
+    comprasQrDia: comprasDia.valor,
+    comprasQrPiloto: new Set(piloto?.cuentas ?? []),
+    comprasQrTodos: piloto?.todos ?? false,
+    pilotoEnVariable: !enMainnet || lista(env.COMPRAS_QR_PILOTO).length === 0 || piloto?.todos ? "ninguna" : piloto === null ? "mal" : "lista",
+    ordenUsdcPiloto: new Set(pilotoOrden?.cuentas ?? []),
+    ordenUsdcTodos: pilotoOrden?.todos ?? false,
+    ordenUsdcEnVariable: !enMainnet || lista(env.ORDEN_USDC_PILOTO).length === 0 || pilotoOrden?.todos ? "ninguna" : pilotoOrden === null ? "mal" : "lista",
+    cargaMinimoBs: entero(env.CARGA_MINIMO_BS, 0),
+    patrocinioPermitido: enMainnet && permitidoBien && conVenta ? [...new Set(permitido)].sort() : [],
+    recargoQr,
+    pagosPremio,
+    retiros,
+    altasPremio,
+    costoRetiro,
+    topePagos: topePagos.valor,
+    pagosRechazadosDia: rechazosDia.valor,
+    altasPremioDia: altasDia.valor,
+    faltaAltas,
   };
 }
 

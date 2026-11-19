@@ -8,10 +8,11 @@ import { respuestasDeSalidas, type HechoDelPlan, type PlanDeSalidas } from "./sa
  *
  * La forma es **de pie**, no una carrera: el convoy sube parejo, todas las
  * cabinas a la vez, y nadie va adelante de nadie. Lo que cambia es quién sigue
- * arriba: en cada estación se baja un grupo entero, en la última se bajan de a
- * uno, y suben dos. Un chico mira quiénes siguen. La cabina de adelante no es la
- * ganadora (en la carrera «adelante» es ganar; acá no), así que preguntar «¿quién
- * va adelante?» daría una respuesta que no dice nada. Lo común, en `salidas-nino.ts`.
+ * arriba: en cada estación se baja un grupo entero sin premio, después los que
+ * no ganan de las cabinas con premio, y a la cumbre suben solo quienes ganan.
+ * Un chico mira quiénes siguen. La cabina de adelante no es la ganadora (en la
+ * carrera «adelante» es ganar; acá no), así que preguntar «¿quién va adelante?»
+ * daría una respuesta que no dice nada. Lo común, en `salidas-nino.ts`.
  *
  * - **adelante**: quienes siguen arriba. Con el golpe, quien gana.
  * - **hacia**: la cumbre. En horizontal el cable sube hacia la derecha; en el
@@ -24,7 +25,7 @@ import { respuestasDeSalidas, type HechoDelPlan, type PlanDeSalidas } from "./sa
 export interface PlanDelTeleferico {
   n: number;
   ganador: number;
-  /** Los puestos en el orden de bajada: los dos que llegan arriba, primero. */
+  /** Los puestos en el orden de bajada: los que llegan arriba (quienes ganan), primero. */
   rank: readonly number[];
   /** Cuántos quedan después de cada parada (la primera cuenta es la lista entera). */
   left: readonly number[];

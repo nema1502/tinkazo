@@ -82,13 +82,19 @@ const CUENTA_NO_LISTA = /account-not-ready/;
  *   recuperarla (una llave de acceso, un código por correo u otro aparato), no firma nada. Se arregla en el paso
  *   "Protegé tu cuenta" (`ui/proteger-cuenta.ts`), no con otro intento.
  * - `SDK_CONFIRMATION_UNAVAILABLE` y `SDK_CONFIRMATION_DECLINED`: la firma pide confirmación y nadie la atendió, o la
- *   rechazamos nosotros (`wallet-pollar.ts` solo confirma el sello y el sorteo que la persona acaba de pedir).
+ *   rechazamos nosotros (`wallet-pollar.ts` solo confirma lo que la persona acaba de pedir con su botón).
  * - `SDK_CREDITS_INSUFFICIENT`, `SDK_BILLING_OVERDUE` y `FUND_XLM_FAILED`: a quien paga el servicio se le acabó con qué
  *   pagar. No es de la persona. (Pollar dice "Users see a generic message pointing to app support".)
  *
  * Van antes que `CANCELO`: el rechazo del SDK trae "the user declined the transaction" en el detalle.
  */
 const RECUPERACION = /SDK_WALLET_RECOVERY_REQUIRED/;
+/**
+ * Este navegador no es uno de los de la cuenta: la cuenta de Turnkey se abrió en otro celular o en otra compu, y acá no
+ * puede votar nada hasta confirmar que es la misma persona (un código al correo de la cuenta o una llave guardada). Se
+ * arregla en "Confirmar que sos vos", no con otro intento.
+ */
+const APARATO = /SDK_COSIGN_DEVICE_NOT_ENROLLED/;
 const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
 /**
  * La cuenta de Turnkey (mainnet) co-firma cada operación, y la co-firma no se aprobó: `SDK_COSIGN_REJECTED` (la rechazó quien
@@ -98,6 +104,12 @@ const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
  * "rejected" o "declined".
  */
 const COFIRMA_NO_APROBADA = /SDK_COSIGN_(?:REJECTED|VERIFICATION_FAILED)/;
+/**
+ * El voto por contenido (issue 180, `cofirma-regla.ts`): no se pudo comprobar que lo que había que aprobar fuera la
+ * transacción que armó la página, y no se votó. Calza también con el tope de la pestaña (`tinkazo-cofirma-distinta-tope`).
+ * Sale solo antes de estampar, así que es un no de verdad: no es un corte ni se reintenta solo, y no es un sello incierto.
+ */
+const COFIRMA_DISTINTA = /tinkazo-cofirma-distinta/;
 const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
 /** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
 const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
@@ -271,6 +283,8 @@ export function textoDelError(e: unknown): string {
  * cuenta aunque diga "cancelled": eso no se reintenta.
  */
 export function esDeRed(e: unknown): boolean {
+  // La puerta del premio no es un corte de la red: ni cambia de RPC ni se reintenta sola (`esDelPremio`).
+  if (esDelPremio(e)) return false;
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
   // El portero que no llegó a la red es un corte más; sus otros no son una respuesta, no un corte.
@@ -278,8 +292,18 @@ export function esDeRed(e: unknown): boolean {
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
-  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto) || COFIRMA_DISTINTA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
+}
+
+/**
+ * La puerta del premio frenó la firma (`PremioGuardado` en `usdc-cuenta.ts`): la cuenta de Google o de correo puede
+ * guardar dinero, o no se pudo saber. Se reconoce por el nombre y la forma, sin importar ese archivo. Tiene su clave y no
+ * es un corte de red ni un sello incierto: nadie lo reintenta solo ni averigua nada.
+ */
+export function esDelPremio(e: unknown): e is Error & { que: "puede-guardar" | "no-se-sabe" } {
+  const x = e as { name?: unknown; que?: unknown } | null;
+  return !!x && typeof x === "object" && x.name === "PremioGuardado" && (x.que === "puede-guardar" || x.que === "no-se-sabe");
 }
 
 /**
@@ -318,13 +342,13 @@ export function esNoDelPortero(e: unknown): e is NoDelPortero & Error {
  * Los demás (la simulación dice que va a fallar, la comisión pedida quedó corta, la ventana venció, la red del
  * portero) se cuentan como cualquier error de la red: ver `errorKey`.
  */
-export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena"]);
+export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena", "sin-alta"]);
 /** Lo que dice `razon` cuando el problema no es de la cuenta sino de la transacción o del sitio: no es "esta cuenta no puede". */
 const RAZONES_QUE_NO_SON_DE_LA_CUENTA = new Set(["restaurar", "tamano", "xdr"]);
 export const esNoQueBloquea = (e: unknown): boolean =>
   esNoDelPortero(e) && MOTIVOS_QUE_BLOQUEAN.has(e.motivo) && !(e.razon === "fee-alta" || e.razon === "ventana" || (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)));
 
-function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): string | null {
+function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean; cobroPorUso?: boolean }): string | null {
   switch (e.motivo) {
     case "cupo-cuenta":
       return e.que === "sorteos" ? "porteroCupoSorteos" : "porteroCupoSellos";
@@ -342,7 +366,17 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): stri
       if (e.razon === "fee-alta" || e.razon === "ventana") return "busy";
       // El estado archivado del contrato, una transacción demasiado grande o un XDR que no se lee no son de la cuenta.
       if (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)) return "unknown";
+      // Con el cobro por uso del modo Oficial, el portero dice `cuenta-ajena` de una cuenta que no está en su libro: es
+      // una cuenta sin acceso todavía, lo mismo que dice la caja de la red (`red-acciones.ts`), y no la frase de Prueba.
+      if (e.motivo === "cuenta-ajena" && contexto.cobroPorUso) return "porteroSinAlta";
       return "porteroAjena";
+    case "sin-alta":
+      // El candado de antes de la firma: la cuenta todavía no tiene acceso al modo Oficial. Con el cobro por uso, un cupón
+      // lo arregla; sin él no hay caja del cupón, y es la frase de una cuenta que el portero no cubre.
+      return contexto.cobroPorUso === false ? "porteroAjena" : "porteroSinAlta";
+    case "sin-sorteos":
+      // 402 del portero de la red principal: a la cuenta no le quedan sorteos oficiales que alcancen para este sello.
+      return "porteroSinSorteos";
     case "fee-alta":
     case "rechazada":
       return "busy";
@@ -360,14 +394,19 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): stri
  * (`errAnchor.<clave>`). `contexto.enLinea` dice si hay internet; si no se
  * pasa, se le pregunta al navegador.
  */
-export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean } = {}): string {
+export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean; cobroPorUso?: boolean } = {}): string {
+  // La puerta del premio: `premioGuardado` (la cuenta puede guardar dinero) o `premioSinSaber` (no se pudo comprobar).
+  if (esDelPremio(e)) return e.que === "puede-guardar" ? "premioGuardado" : "premioSinSaber";
   if (esIncierto(e)) return "unconfirmed";
   if (esNoDelPortero(e)) {
     const clave = claveDelPortero(e, contexto);
     if (clave) return clave;
   }
   const texto = textoDelError(e);
+  // El voto por contenido no votó: va antes que todo lo de la co-firma, así un texto del kit que venga en la causa no la tapa.
+  if (COFIRMA_DISTINTA.test(texto)) return "cofirmaDistinta";
   if (RECUPERACION.test(texto)) return "recoveryRequired";
+  if (APARATO.test(texto)) return "deviceNotEnrolled";
   if (CONFIRMACION.test(texto)) return "confirmation";
   if (COFIRMA_NO_APROBADA.test(texto)) return "cosignRejected";
   if (SERVICIO_SIN_FONDOS.test(texto)) return "sponsorEmpty";

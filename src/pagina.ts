@@ -1,13 +1,20 @@
 import "./styles.css";
 import { cargaOpcional } from "./version-nueva";
 import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
-import { network } from "./stellar/config";
+import { pintarElCostoDelRetiro } from "./costo-del-retiro";
+import { pintarLaComision } from "./comision-texto";
+import { contractUrl, network } from "./stellar/config";
+import { enlazarContrato } from "./enlace-contrato";
 import { leerMarcaPollar } from "./stellar/pollar-config";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
+import { banderasDeAlta } from "./stellar/alta-config";
+import { cargaElCobro } from "./cobro-en-la-pagina";
+import { fijarElTema } from "./tema-forzado";
+import { iniciarDestelloPie, iniciarHoverVivo } from "./estilos-atencion";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -25,14 +32,10 @@ textosDeLaPagina();
 // para las capturas y para mirar las dos versiones sin tocar el sistema. Se
 // lee acá y no de `state`, que es de la herramienta y arrastra a los juegos.
 const tema = new URLSearchParams(location.search).get("theme");
-if (tema === "light" || tema === "dark") {
-  document.documentElement.dataset.theme = tema;
-  // Las imágenes con versión clara la eligen por el tema del sistema: con
-  // el tema forzado, la versión del tema del sitio.
-  document.querySelectorAll<HTMLSourceElement>('picture source[media*="prefers-color-scheme"]').forEach((s) => {
-    s.media = tema === "light" ? "all" : "not all";
-  });
-}
+
+// Fijar el tema y las capturas vive en `tema-forzado.ts`, que también usa la portada.
+export { fijarElTema };
+fijarElTema(tema);
 
 /**
  * La cuenta, siempre a la vista también acá (26 de octubre de 2026): "Entrar" si no hay cuenta (un enlace a la
@@ -83,9 +86,30 @@ function montarLaCuenta(): void {
 }
 initMenuMas();
 iniciarFeedback();
+// El costo de retirar va en precios y en términos, dentro de un molde que solo se abre con el costo configurado (hoy no
+// lo está, y la página queda como estaba). Se pone después de cada `setLang`, que escribe el texto con su marcador.
+onLangChange(() => pintarElCostoDelRetiro(document));
+// Lo que cobra Tinkazo a una campaña de empresa, igual: dentro de un molde que solo se abre con la comisión configurada (src/comision-texto.ts).
+onLangChange(() => pintarLaComision(document));
 setLang(initialLang());
+// El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
+// HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se
+// borre.
+enlazarContrato(document, network.contractId ? contractUrl() : null);
+// Las animaciones de atención (estilos-atencion.ts): el destello periódico del
+// pie y el hover vivo en las capturas de la página de juegos. Ninguna decide
+// nada del sorteo. Hoy entran apagadas: su interruptor está en ATENCION_PRENDIDA.
+iniciarDestelloPie();
+iniciarHoverVivo(".juego");
 montarLaCuenta();
 onLangChange(montarLaCuenta);
+// La compra de sorteos oficiales (precios y términos): entra solo con VITE_ALTA_PAGO en el build y la venta a la vista
+// (en piloto, solo en una pestaña con su marca, `stellar/venta-piloto.ts`), y la lista de precios la da el servidor, la
+// misma del panel de la compra (`paginas-cobro.ts`). Sin la compra no se baja nada.
+const banderasDeLaVenta = banderasDeAlta(undefined, "mainnet");
+const conCompra = banderasDeLaVenta.pago;
+// Con la compra con QR a la vista, la lista dice también lo que se suma pagando con QR.
+if (cargaElCobro(document, conCompra)) void cargaOpcional(import("./paginas-cobro").then((m) => m.montarCobro({ pago: conCompra, qr: banderasDeLaVenta.qr })));
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común. Si no baja (un
 // bloqueador, el wifi), no pasa nada y no despierta el aviso de versión nueva.

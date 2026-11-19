@@ -143,6 +143,12 @@ export interface Recomendacion {
   note: string | null;
   /** Lo que completa la nota: la cantidad, el mínimo y el máximo del juego. */
   args: number[];
+  /**
+   * En un orden de turnos este juego no se ofrece: se ve apagado, con su motivo a la vista, y no se puede elegir. A
+   * diferencia de `fits: false`, que atenúa pero deja tocar. Solo en un orden de turnos y solo si algún juego de
+   * `JUEGOS_DE_TURNOS` puede con la lista.
+   */
+  apagado?: boolean;
 }
 
 export interface Recomendaciones {
@@ -186,6 +192,31 @@ function ordenar(a: Recomendacion, b: Recomendacion): number {
     return Number(b.ideal) - Number(a.ideal) || meta(b.game) - meta(a.game) || indice(a.game) - indice(b.game);
   }
   return indice(a.game) - indice(b.game);
+}
+
+/**
+ * Los juegos que cuentan bien un orden de turnos: en medio del show nadie «gana» ni «se lleva el premio». Los demás
+ * hablan de premios (la piñata, el teleférico, el trompo, el Toborochi, La Entrada) o no cuentan el orden (el sapo), y en
+ * un orden de turnos no se ofrecen (`Recomendacion.apagado`). La carrera cuenta hasta tantos turnos como carriles tiene.
+ */
+export const JUEGOS_DE_TURNOS: readonly Game[] = ["wheel", "chovena", "guajojo", "race"];
+
+/**
+ * En un orden de turnos solo se ofrecen los juegos de `JUEGOS_DE_TURNOS` que pueden con la lista. Los demás se apagan,
+ * y también el de la lista que no entra por los turnos (la carrera con más de ocho). Si ninguno de los cuatro puede con
+ * la lista (más de doscientos turnos), no se apaga nada: sortear tiene que seguir siendo posible.
+ */
+function soloLosDeTurnos(rs: Recomendacion[]): Recomendacion[] {
+  const sirve = (r: Recomendacion): boolean => JUEGOS_DE_TURNOS.includes(r.game) && r.fits !== false;
+  if (!rs.some(sirve)) return rs;
+  return rs.map((r) => {
+    if (sirve(r)) return r;
+    const porTurnos = !!r.note?.endsWith(".turnos");
+    // Uno de los cuatro que no puede con esta cantidad de turnos: se apaga solo si es por los turnos, y si no queda atenuado.
+    if (JUEGOS_DE_TURNOS.includes(r.game)) return porTurnos ? { ...r, apagado: true } : r;
+    // Los que hablan de premios: su motivo es ese, salvo que ya digan por qué no entran los turnos (el sapo con más de doce).
+    return { ...r, fits: false, ideal: false, apagado: true, note: porTurnos ? (r.note as string) : "rec.sinTurnos" };
+  });
 }
 
 /** El juego que sale elegido cuando nadie eligió otro (`app.game` en state.ts). */
@@ -245,7 +276,8 @@ export function juegoSiguiente(n: number, actual: Game, premios = 1): Game {
 export function recomendar(n: number, premios = 1, turnos = false): Recomendaciones {
   const k = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
   const p = Number.isFinite(premios) ? Math.max(1, Math.floor(premios)) : 1;
-  const games = SELECTOR.map((g) => evaluar(g, k, p, turnos)).sort(ordenar);
+  const evaluados = SELECTOR.map((g) => evaluar(g, k, p, turnos));
+  const games = (turnos ? soloLosDeTurnos(evaluados) : evaluados).sort(ordenar);
   const tramo = VENTANA_NORMAL.find(({ personas: [de, a] }) => k >= de && k <= a);
   return {
     games,

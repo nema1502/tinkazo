@@ -4,11 +4,13 @@ import { enEnsayo, enStand } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
-import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { type Paso, acortarPremio, claveDelPaso, claveEnElStand, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
 import { esResultadoDeTurnos } from "../modos/turnos";
 import { modesVisible } from "../modos/bandera";
-import { contar } from "../participaciones";
+import { contar, seCuentaPorPersona } from "../participaciones";
 import { canonicalList } from "../protocol/canonical";
+import { topeDeGanadores } from "../stellar/config";
+import { ordenNoCabe } from "./turnos";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -41,12 +43,19 @@ interface Toca {
   /** De qué se trata el paso. Cambia con el paso y no con el reloj: es lo que se anuncia. */
   clave: string;
   detalle: string;
+  /** La línea lleva las dos cuentas (personas y participaciones o turnos): en el celular vale hasta dos renglones. */
+  doble: boolean;
   /** "0:25" mientras corre la cuenta regresiva de la ronda; si no, vacío. */
   reloj: string;
+  /**
+   * Solo en el paso 2 y con premio: el premio entero y cómo queda el detalle con otra versión suya (cortada, o vacía
+   * para dejar solo la lista). La barra mide cuál entra en su renglón (`lineaQueEntra`). `detalle` lleva el entero.
+   */
+  premio: { texto: string; detalleCon: (premio: string) => string } | null;
 }
 
 /** Los textos que tapan toda la página: con uno abierto la barra se va. */
-const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
+const SUPERPUESTOS = ".modal-back, .cuenta-lista, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
 
 let segundos: () => number = () => 0;
 let listo = false;
@@ -59,6 +68,12 @@ let moBoton: MutationObserver | null = null;
 /** El botón de la lista de equipos con cupón y sus contenedores: si aparece, desaparece o se esconde, la barra se recalcula. */
 let moLista: MutationObserver | null = null;
 let listaObservada: Element | null = null;
+
+/**
+ * La página ya no existe: el ambiente de una prueba se desarmó (sin `document`) y los observadores de la barra, que siguen
+ * vivos, avisaron igual. Sin nada que mirar no hay nada que hacer. En el navegador `document` siempre está: nunca corta.
+ */
+const sinPagina = (): boolean => typeof document === "undefined";
 
 function vigilarListaDeCupones(): void {
   const b = document.getElementById("eq-lista");
@@ -184,27 +199,48 @@ function calcular(): Toca {
   // Con equipos con cupón, manda usar esa lista que ofrece el panel.
   const boton = paso === 1 && mandaListaDeCupones() ? null : botonReal;
   const restan = paso === 3 ? segundos() : 0;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos() });
-  let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
-  // Con los modos a la vista, la barra cuenta personas y líneas como el cuadro y el resumen: en un orden de
-  // turnos las líneas son turnos, y con varias participaciones son participaciones, no personas.
+  // En el paso 2 el botón también se apaga cuando falta una segunda persona (participants.ts): eso no es que se esté
+  // sellando, y la barra sigue diciendo qué hay en la lista. Se cuenta con la misma regla que apaga el botón.
+  const ta2 = paso === 2 ? (document.getElementById("ta") as HTMLTextAreaElement | null) : null;
+  const faltaOtraPersona = !!ta2 && contar(canonicalList(ta2.value), modesVisible()).personas < 2;
+  // Un orden de turnos más largo de lo que admite la red también deja el botón apagado, y tampoco es sellar: no se puede,
+  // y la barra lo dice con el tope. Se cuenta con la misma regla que apaga el botón (`ordenNoCabe`, participants.ts).
+  const noCabe = paso === 2 && ordenNoCabe(n);
+  const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe;
+  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos(), noCabe });
+  // En el stand nadie gana: el aviso del resultado dice quién salió (la clave del paso no cambia, solo el texto).
+  const delTexto = enStand() ? claveEnElStand(clave, app.drawn?.winners.length ?? 1) : clave;
+  let detalle = delTexto ? t(delTexto).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
+  // La frase del tope es larga: en el celular vale hasta dos renglones, como la de las dos cuentas.
+  let doble = clave === "sigTope";
+  // Con los modos a la vista, o sin ellos con una lista que es un reparto entero (`seCuentaPorPersona` sin modos, como
+  // la cuenta del cuadro y la cabecera después de sellar), la barra cuenta personas y líneas: en un orden de turnos
+  // las líneas son turnos, y con varias participaciones son participaciones, no personas.
   const turnosActivo = document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
-  if (clave === "sigLista" && (turnosActivo || modesVisible())) {
+  const lineasDelCuadro = clave === "sigLista" ? canonicalList((document.getElementById("ta") as HTMLTextAreaElement | null)?.value ?? "") : [];
+  if (clave === "sigLista" && (turnosActivo || modesVisible() || seCuentaPorPersona(lineasDelCuadro, false))) {
     // Las personas se cuentan con la misma función que el resto, desde el cuadro: leer el texto de las
     // fichas dependía de cómo se pintan y podía contar distinto que el cuadro y el resumen.
-    const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
-    const personas = contar(canonicalList(ta?.value ?? ""), true).personas;
+    const personas = contar(lineasDelCuadro, true).personas;
     if (personas > 0 && personas < n) {
+      doble = true;
       detalle = turnosActivo
-        ? t("sigListaTurnos").replace("{p}", String(personas)).replace("{n}", String(n))
-        : t("sigListaPart").replace("{p}", String(personas)).replace("{n}", String(n));
+        ? t(personas === 1 ? "sigListaTurnosUno" : "sigListaTurnos").replace("{p}", String(personas)).replace("{n}", String(n))
+        : t(personas === 1 ? "sigListaPartUno" : "sigListaPart").replace("{p}", String(personas)).replace("{n}", String(n));
     }
   }
   // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
   // el premio que falta: nada se sella de verdad. En un orden de turnos no hay premio que nombrar.
   // En el stand no hay premio: la línea dice solo cuántas personas hay.
-  if (clave === "sigLista") detalle = enStand() || turnosActivo ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
-  return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
+  // El premio va entero: cuánto de él se ve lo decide el ancho de la barra al pintarla (lineaQueEntra), no un tope fijo.
+  let premio: Toca["premio"] = null;
+  if (clave === "sigLista" && !enStand() && !turnosActivo) {
+    const lista = detalle;
+    const texto = premioLimpio((document.getElementById("prize") as HTMLInputElement | null)?.value ?? "");
+    detalle = detalleDeLista(lista, texto, enEnsayo() ? null : t("sigSinPremio"), Infinity);
+    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, p) };
+  }
+  return { paso, boton, clave, detalle, doble, reloj: restan > 0 ? relojDe(restan) : "", premio };
 }
 
 /**
@@ -242,7 +278,39 @@ function pintarPasos(paso: Paso): void {
 }
 
 /** La línea de la barra: "Paso 3 de 4: esperando el número, 0:25". */
-const linea = (s: Toca): string => enStand() ? s.detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
+const linea = (s: Toca, detalle = s.detalle): string => enStand() ? detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), detalle, s.reloj);
+
+/** Sin medidas (una prueba sin pantalla, o la barra sin ancho) el premio se corta en las letras que entran en un celular de 320 px. */
+const PREMIO_SIN_MEDIDAS = 18;
+
+/** El renglón se pasa de lo que tiene: el texto no entra de ancho o, con las dos cuentas (hasta dos renglones), de alto. */
+const desborda = (p: HTMLElement): boolean => p.scrollWidth > p.clientWidth + 1 || (p.classList.contains("doble") && p.scrollHeight > p.clientHeight + 1);
+
+/** La última línea medida y lo que se decidió para ella: mientras nada cambie no se vuelve a medir ni a escribir. */
+let ajustada = { clave: "", linea: "" };
+
+/**
+ * La línea del paso 2 con el premio que entra: entero si la pantalla tiene lugar, y si no cortado en el último espacio
+ * que entra, o ninguno si ni la primera palabra entra. Se mide de verdad (el texto en su propio renglón, con el
+ * ancho que tiene ahora), probando unas pocas versiones en el mismo instante, antes de que el navegador dibuje nada:
+ * no hay parpadeo. Lo decidido queda guardado según lo que lo determina (ancho de la barra, del botón, renglones y
+ * texto), y se vuelve a medir solo si algo de eso cambia: otra ventana, otro idioma, otro premio u otra lista.
+ */
+function lineaQueEntra(s: Toca & { premio: NonNullable<Toca["premio"]> }, p: HTMLElement, btn: HTMLElement): string {
+  const { texto, detalleCon } = s.premio;
+  const con = (premio: string): string => linea(s, detalleCon(premio));
+  const ancho = $("siguiente").clientWidth;
+  if (ancho === 0) return con(acortarPremio(texto, PREMIO_SIN_MEDIDAS));
+  const clave = [ancho, btn.offsetWidth, p.classList.contains("doble"), con(texto)].join("|");
+  if (clave === ajustada.clave) return ajustada.linea;
+  const entra = (premio: string): boolean => {
+    p.textContent = con(premio);
+    return !desborda(p);
+  };
+  const l = con(premioQueEntra(texto, entra));
+  ajustada = { clave, linea: l };
+  return l;
+}
 
 /**
  * El cambio de paso, dicho con calma (`role="status"`, polite). Solo cuando
@@ -278,8 +346,11 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
     if (btn.textContent !== texto) btn.textContent = texto;
     btn.disabled = s.boton.disabled;
     btn.classList.toggle("lista", s.boton.classList.contains("lista"));
-    const l = linea(s);
     const p = $("sig-paso");
+    // Con las dos cuentas, hasta dos renglones en el celular (styles.css): sin reparto, un solo renglón como siempre.
+    // Primero la clase y después el texto: lo que entra se mide con los renglones que va a tener.
+    p.classList.toggle("doble", s.doble);
+    const l = s.premio ? lineaQueEntra({ ...s, premio: s.premio }, p, btn) : linea(s);
     if (p.textContent !== l) p.textContent = l;
   }
   const entra = mostrar && !bar.classList.contains("on");
@@ -294,7 +365,7 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
 }
 
 function render(): void {
-  if (!listo) return;
+  if (!listo || sinPagina()) return;
   // Con la lista sellada, la pantalla no se apaga: la espera del número, el juego y el
   // resultado se miran en el celular o se proyectan desde él. Se suelta al pasar a otra lista.
   if (app.frozen) mantenerDespierta("sorteo");
@@ -434,6 +505,7 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // El botón de la lista de equipos vive adentro del panel: hay que descubrirlo cuando el panel aparece y vigilarlo desde ahí.
   vigilarListaDeCupones();
   const descubreLista = new MutationObserver(() => {
+    if (sinPagina()) return;
     const antes = listaObservada;
     vigilarListaDeCupones();
     if (listaObservada !== antes) render();
@@ -462,7 +534,18 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // La barra cambia de alto mientras está puesta: el botón pasa de "Sellar la lista" a "Se habilita en 0:25" y la
   // línea del paso se acomoda. Medirla solo al entrar dejaba el aire de abajo de la página en el alto de antes, y el
   // pie quedaba hasta 8 px debajo de la barra (audit-flujo, "sellada y esperando", 26 de octubre de 2026).
-  if (typeof ResizeObserver !== "undefined") new ResizeObserver(medirBarra).observe($("siguiente"));
+  // Si cambia el ancho (una ventana más angosta, la barra de scroll que aparece), el premio que entra puede ser otro.
+  let anchoVisto = 0;
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => {
+      if (sinPagina()) return;
+      medirBarra();
+      const ancho = $("siguiente").clientWidth;
+      if (ancho === anchoVisto) return;
+      anchoVisto = ancho;
+      render();
+    }).observe($("siguiente"));
+  }
   listo = true;
   armar();
   render();

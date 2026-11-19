@@ -1,0 +1,10 @@
+/* La franja del cupón (src/ui/cupon-enlace.ts): arriba de todo, para quien llegó con un enlace de cupón. */
+.cupon-franja { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; padding: 10px 16px; background: var(--yellow); color: var(--on-accent); border-bottom: var(--bw, 3px) solid var(--ink); text-align: center; }
+.cupon-franja-t { margin: 0; font-size: var(--letra-sec, 16px); font-weight: 700; line-height: 1.35; max-width: 60ch; }
+.cupon-franja-b { min-height: 44px; padding: 8px 16px; border: 2px solid var(--on-accent); border-radius: 0; background: var(--on-accent); color: #fff6e9; font: inherit; font-weight: 800; cursor: pointer; }
+.cupon-franja-b.cupon-franja-x { background: transparent; color: var(--on-accent); }
+.cupon-franja-b:focus-visible { outline: 3px solid var(--on-accent); outline-offset: 3px; }
+/* En el navegador de una app lo que sirve es copiar el enlace: el botón rosa de entrar de la portada no compite con él. */
+body[data-cupon-franja="afuera"] [data-cta-entrar] { display: none; }
+/* Para el pulgar: 48 px en las pantallas táctiles, como el resto del sitio. */
+@media (pointer: coarse), (max-width: 760px) { .cupon-franja-b { min-height: 48px; } }

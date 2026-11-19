@@ -25,6 +25,7 @@ import {
   senalesTrueque,
   afueraTrueque,
   afueraPinata,
+  afueraTeleferico,
   senalesEntrada,
   senalesFarol,
 } from "./delatores-senales.mjs";
@@ -81,7 +82,7 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     cPinOut: conNombre, cPinAlmost: conNombre, cPinBreak: [],
     cOruArriveFrat: ["los", "Diablos de Oruro"],
     cChoOut: conNombre, cChoWobble: conNombre, cChoHold: conNombre, cChoBack: conNombre,
-    cTelDoor: conNombre, cTelSlip: conNombre, cTelDock: [],
+    cTelDoor: conNombre, cTelSlip: conNombre, cTelDock: [], cTelOff: conNombre,
     cPasClose: conNombre, cPasOut: conNombre,
     cConstNear: conNombre, cConstHeading: conNombre, cConstDecoy: [],
     trBusca: ["papa"], trCambio: ["maíz"], trCallejon: [], trNoEs: [],
@@ -100,6 +101,18 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     expect(TEXTOS.es.engancha("Ana Vargas")).toMatch(MARCADORES.tobEngancha);
     expect(TEXTOS.es.conPremio("Ana Vargas")).toMatch(MARCADORES.tobPremio);
     expect(TEXTOS.es.conPremio("Ana Vargas")).not.toMatch(MARCADORES.tobHilo);
+  });
+
+  it("las bajadas del teleférico, de a uno y de a varios, sin confundirse con la puerta ni con un grupo entero", () => {
+    for (const s of variantes("cTelOffN", [["Ana Vargas", "Diego Rojas"], 0])) expect(s).toMatch(MARCADORES.cTelOffN);
+    for (const s of variantes("cTelOffN", [["Ana Vargas", "Diego Rojas", "Nora Paz"], 4])) expect(s).toMatch(MARCADORES.cTelOffN);
+    for (const s of variantes("cTelDoor", ["Ana Vargas"])) {
+      expect(s).not.toMatch(MARCADORES.cTelOff);
+      expect(s).not.toMatch(MARCADORES.cTelOffN);
+    }
+    const grupo = T.es.cTelGrupo(3, { nombre: "Vicuñas", articulo: "las" }, 4, 10);
+    expect(grupo).not.toMatch(MARCADORES.cTelOff);
+    expect(grupo).not.toMatch(MARCADORES.cTelOffN);
   });
 
   it("las que llevan un número", () => {
@@ -184,6 +197,24 @@ describe("quién sigue en juego", () => {
     expect(P.sigue(3, 9)).toBe(false);
     expect(P.sigue(4, 0)).toBe(false);
     expect(preparar(tr, { candidatos: "todos" }).vivos(29)).toHaveLength(8);
+  });
+
+  it("en el teleférico sale el que nombran al bajarse, aunque su nombre siga tachado en el andén, y decide la última bajada", () => {
+    // Todos a la vista todo el show (las cabinas y el andén). A los 5 baja un grupo entero (sin nombres); a los 10 la
+    // bajada grande nombra al 0 y al 1; a los 17 baja el 3, el que acompañaba al 2 hasta la última estación.
+    const tr = traza({
+      pos: todosEnFila,
+      subs: [[5, "¡Estación 1! Se bajan las Vicuñas (4). Quedan 4"], [10, "¡Se bajan María Quispe y Jorge Mamani!"], [14, "¿Quién llega arriba?"], [17, "¡Se baja Carlos Choque!"], [22, "¡TOCÓ LA CUMBRE!"]],
+    });
+    const P = preparar(tr, JUEGOS.teleferico);
+    expect(P.corte).toBe(17);
+    expect([...afueraTeleferico(P)]).toEqual([[0, 10], [1, 10], [3, 17]]);
+    // Como con los que desaparecen: el que sale en menos de `GRACIA` ya está afuera.
+    expect(P.sigue(0, 7)).toBe(true);
+    expect(P.sigue(0, 8)).toBe(false);
+    expect(P.sigue(3, 16)).toBe(true);
+    // La línea que despide a los de la bajada grande no es una pista: es el embudo.
+    expect(senales(tr, "teleferico").senales["nombra-primero"]).toBeUndefined();
   });
 
   it("en la piñata sale el que nombran al caer, aunque todos los nombres estén a la vista", () => {

@@ -131,7 +131,7 @@ export function problemasDeRespuestas(plan: PlanDeRespuestas, o: { n: number; ga
   const fin = plan.respuestas(plan.duracion);
   if (fin.progreso < 0.99) falla.add("con el golpe el progreso no llega a 1");
   const primero = o.ganadores[0];
-  if (primero !== undefined && !fin.adelante.quienes.includes(primero)) falla.add("con el golpe, quien gana no va adelante");
+  if (primero !== undefined && !fin.adelante.quienes.includes(primero)) falla.add("con el golpe, la persona elegida no va adelante");
   const orden = [...salidas].sort((a, b) => a - b);
   for (let i = 1; i < orden.length; i++) {
     if ((orden[i] as number) - (orden[i - 1] as number) < SALIDAS_APARTE - 1e-9) {

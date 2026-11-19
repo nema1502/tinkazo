@@ -29,7 +29,7 @@ La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga 
 
 ### 2.1 Personas
 
-- **Organizadora de comunidad ("Vale").** Organiza meetups de tecnología en Santa Cruz. Cierra cada evento con un sorteo de libros o licencias. Usa Luma para inscripciones y un proyector. Tiene una wallet de Stellar o puede instalar Freighter en cinco minutos. Quiere que el sorteo se vea bien y que nadie le discuta el resultado.
+- **Organizadora de comunidad ("Vale").** Organiza meetups de tecnología en Santa Cruz. Cierra cada evento con un sorteo de libros o licencias. Usa Luma para inscripciones y un proyector. Tiene una wallet de Stellar o puede instalar Varial (antes Freighter) en cinco minutos. Quiere que el sorteo se vea bien y que nadie le discuta el resultado.
 - **Participante escéptico ("Rodrigo").** Asistió al evento, no ganó, y quiere saber si el sorteo fue limpio. No tiene wallet ni quiere una. Tiene un celular y puede escanear un QR.
 - **Auditor externo ("Ana").** Semanas después, alguien que no estuvo en el evento quiere comprobar el resultado a partir de la lista publicada. Puede ser una sponsor, otra comunidad o una persona técnica.
 
@@ -50,7 +50,7 @@ La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga 
 ### 2.4 Recorridos clave
 
 **UJ-1. Vale sella y sortea en vivo, anclado en Stellar.**
-Vale, en el cierre de un meetup con 60 asistentes y un proyector, abre Tinkazo en su laptop con Freighter instalado. Pega la lista exportada de Luma, escribe el premio, elige "1 ganador" y pulsa **Sellar en Stellar**. Freighter le pide firmar una transacción; la app le muestra el hash de la lista, la ronda objetivo del faro y el enlace al explorador. Una cuenta regresiva de 45 segundos indica cuándo nace la semilla. Al llegar a cero, pulsa **Sortear**: la app trae la firma del faro, la envía al contrato, el contrato la verifica y registra el ganador. La carrera de llamas arranca en pantalla completa y la llama ganadora cruza la meta. El QR en pantalla lleva a la página de verificación. **Edge case:** si Freighter está en la red equivocada, la app lo dice antes de firmar y no envía nada.
+Vale, en el cierre de un meetup con 60 asistentes y un proyector, abre Tinkazo en su laptop con Varial instalado. Pega la lista exportada de Luma, escribe el premio, elige "1 ganador" y pulsa **Sellar en Stellar**. Varial le pide firmar una transacción; la app le muestra el hash de la lista, la ronda objetivo del faro y el enlace al explorador. Una cuenta regresiva de 45 segundos indica cuándo nace la semilla. Al llegar a cero, pulsa **Sortear**: la app trae la firma del faro, la envía al contrato, el contrato la verifica y registra el ganador. La carrera de llamas arranca en pantalla completa y la llama ganadora cruza la meta. El QR en pantalla lleva a la página de verificación. **Edge case:** si Varial está en la red equivocada, la app lo dice antes de firmar y no envía nada.
 
 **UJ-2. Rodrigo verifica desde el celular.**
 Rodrigo escanea el QR. Sin cuenta ni wallet, ve en su celular: la lista sellada con su nombre, el hash, la ronda del faro con enlace a drand, el ganador y un veredicto "Verificado: el resultado coincide con la cadena y con el faro". Puede tocar "Recomputar aquí" y el navegador rehace el cálculo delante de él. **Edge case:** si la lista no coincide con el hash sellado, el veredicto es rojo y explica qué falló.
@@ -102,8 +102,8 @@ El Sello solo se habilita con `count >= 2` y `1 <= ganadores <= min(count, 300)`
 **Descripción:** Con wallet conectada, el Organizador sella la lista en el Contrato. La transacción registra `list_hash`, `count`, cantidad de ganadores, Ronda objetivo y un texto corto (premio o título). Realiza UJ-1.
 
 #### FR-4: Conectar wallet
-El Organizador puede conectar Freighter y ver su dirección abreviada y la red activa.
-- Consecuencias: si la red de la wallet no coincide con la configurada en la app, se muestra el aviso y se bloquea el Sello; si Freighter no está instalado, se muestra el enlace de instalación y el Modo libre sigue disponible.
+El Organizador puede conectar Varial y ver su dirección abreviada y la red activa.
+- Consecuencias: si la red de la wallet no coincide con la configurada en la app, se muestra el aviso y se bloquea el Sello; si Varial no está instalado, se muestra el enlace de instalación y el Modo libre sigue disponible.
 
 #### FR-5: Sellar
 El Organizador puede firmar una transacción que llama a `seal` con la Lista canónica ya hasheada.
@@ -245,13 +245,13 @@ El resto sigue igual: sin backend para sortear, sin fondos en el contrato, sin c
 - Contrato `seal` / `draw` con verificación BLS de quicknet on-chain, desplegado en testnet y luego mainnet.
 - Sitio migrado a build (Vite + TypeScript) conservando la interfaz actual y el Modo libre.
 - Protocolo v2 implementado en Rust y TypeScript con vectores compartidos.
-- Conexión con Freighter, Sello, cuenta regresiva y Sorteo desde la interfaz.
+- Conexión con Varial, Sello, cuenta regresiva y Sorteo desde la interfaz.
 - Página de verificación con veredicto y Comprobante con lista embebida.
 - Documentación: README, protocolo, despliegues.
 
 ### 6.2 Fuera del MVP
 - Importación desde Luma / Eventbrite (v2: es el motor de adopción, pero requiere claves de API por Organizador).
-- Wallets adicionales vía Stellar Wallets Kit y cuentas con passkeys más relayer sin gas (v2: quita la fricción de Freighter).
+- Wallets adicionales vía Stellar Wallets Kit y cuentas con passkeys más relayer sin gas (v2: quita la fricción de Varial).
 - Lista opcional en la cadena para Sorteos chicos (v2: comprobante autocontenido, a cambio de exponer nombres). `[NOTE FOR PM]` Emocionalmente importante para la narrativa "todo en la cadena"; revisar tras medir costos.
 - Sponsor mode y branding.
 - Avatares generados y otros juegos.

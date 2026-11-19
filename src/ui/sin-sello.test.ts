@@ -133,6 +133,19 @@ describe("el reintento del sello", () => {
     expect(sellar).toHaveBeenCalledTimes(1);
   });
 
+  it("guarda el intento antes de cada envío y lo borra al terminar: una recarga en el medio no deja otro sello", async () => {
+    let alMandar: IntentoDeSello | null | undefined;
+    const sellar = vi.fn(async (_round: number) => {
+      alMandar = c.pendientes.at(-1) ?? null;
+      return { raffleId: 5n, txHash: "tx5" };
+    });
+    const c = parametros(sellar, reloj(), { intentoDe: (round: number) => intento(round) });
+    const fin = await reintentarSello(c.p).fin;
+    expect(fin.estado).toBe("entro");
+    expect(alMandar).toEqual(intento(RONDA));
+    expect(c.pendientes.at(-1)).toBeNull();
+  });
+
   it("cancelar corta antes del próximo intento", async () => {
     const r = reloj();
     const sellar = vi.fn(async (_round: number) => {

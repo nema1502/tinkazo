@@ -180,7 +180,7 @@
       "fecha": "2026-11-02"
     },
     {
-      "archivo": "src/games/pixi/stage.ts",
+      "archivo": "src/games/pixi/rotulo.ts",
       "regla": "stand-relator",
       "motivo": "el cartel de quien gana ya tiene su rama de stand (SALIO / PICKED); estas son las del sorteo de verdad",
       "fecha": "2026-11-02"

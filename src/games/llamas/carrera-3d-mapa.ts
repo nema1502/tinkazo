@@ -18,6 +18,7 @@
  */
 
 import { LLAMA_ALTO } from "./carrera-forma";
+import type { Roca } from "./carrera-rocas";
 import type { TemaCarrera } from "./carrera-luz";
 import type { Momento } from "./llama";
 
@@ -81,8 +82,8 @@ export interface Camara2D {
  * cuándo y a quién; el 3D solo lo dibuja: las piedras que caen y ruedan, el polvo y el pasto de la ráfaga.
  */
 export interface Efecto3D {
-  tipo: "piedras" | "viento";
-  /** Cuánto lleva la animación, de 0 a 1. */
+  tipo: "piedras" | "viento" | "escupida";
+  /** Cuánto lleva la animación, de 0 a 1. En la escupida, el vuelo va de 0 a 1 y el salpicón de 1 a 2. */
   s: number;
   /** Piedras: donde cae la principal (x) y el piso del carril (y). Viento: el centro del grupo (x) y el piso del primer carril (y). */
   x: number;
@@ -94,6 +95,37 @@ export interface Efecto3D {
   lado: number;
   /** Cuál de los obstáculos de la recta es (para repartir lo que parece azar con un hash). */
   id: number;
+  /** Escupida: la boca de quien escupe, en píxeles del mundo 2D (el hocico, y donde pisa), y su tamaño a esa hora (`esc`). */
+  boca?: { x: number; y: number; esc: number };
+  /** Escupida: la cara de quien la recibe, en píxeles del mundo 2D (la cara, y donde pisa), y su tamaño a esa hora (`esc`). */
+  cara?: { x: number; y: number; esc: number };
+  /** Piedras: cada piedra en este cuadro, ya puesta (`carrera-obstaculos-vista.ts`). El 2D, el 3D y el auditor de sólidos leen las mismas. */
+  piedras?: PiedraCerro[];
+}
+
+/**
+ * Una piedra del cerro en un cuadro, en píxeles del mundo 2D: la misma cuenta para el 2D y el 3D, que solo la visten. El 3D la dibuja de
+ * radio `r` (en unidades, `r` por `escala3D(u)`) y el 2D de radio `r2`: la del 3D es más grande, y es la que manda dónde cae.
+ */
+export interface PiedraCerro {
+  visible: boolean;
+  /** Dónde está su centro sobre el piso: `x` el avance, `y` el fondo. Mientras cae, viene de atrás (del lado del cerro) y de arriba. */
+  x: number;
+  y: number;
+  /** El piso donde cae: la y de su sombra. */
+  yPiso: number;
+  /** A qué altura va su centro, en píxeles. */
+  alto: number;
+  /** El radio en el 3D y en el 2D, en píxeles del mundo. */
+  r: number;
+  r2: number;
+  /** El tamaño, de 1 (entera) a 0 (ya se deshizo). */
+  k: number;
+  /** Cuánto lleva la caída (de 0 a 1, y 1 cuando ya rueda) y cuánto el rodar (0 mientras cae, 1 al terminar). */
+  cae: number;
+  rueda: number;
+  /** Cuánto rebota sobre el piso mientras rueda, en píxeles. */
+  rebote: number;
 }
 
 /** La valla del salto: cruza los carriles de la final en `x`, con `alto` píxeles de altura. */
@@ -123,8 +155,15 @@ export interface Entrada3D {
   corona: number;
   /** Los obstáculos que están pasando en este cuadro. */
   efectos: Efecto3D[];
+  /** El alto mínimo en píxeles de la marca de una llama ("!", "?!"): nunca menos que un nombre. Si falta, no se agranda. */
+  marcaMin?: number;
   /** Para los auditores: la hora de juego en que la recta está al 25, 50, 70, 88 y 100 % (`d.tDeQ`). */
   horas: number[];
+  /**
+   * La piedrita del tropiezo en este cuadro (`carrera-piedritas.ts`), en píxeles del mundo 2D: se mueve, así que no va con las fijas de
+   * `Geometria3D.rocas`. Sin tropiezo, falta.
+   */
+  piedrita?: { x: number; y: number; a: number; b: number; alto: number; giro: number } | null;
 }
 
 /** El terreno de cada tramo del camino, con sus colores. */
@@ -159,12 +198,31 @@ export interface Geometria3D {
   conPorton: boolean;
   /** Hay portones de la recta, donde el grupo se abre en carriles. */
   conPortonesRecta: boolean;
+  /** Cuándo se abre la recta, en segundos del show: los postes del portón que quedan en el camino bajan antes de esa hora. */
+  tAbre: number;
   /** Cuánto mide el corral hacia atrás de la línea de salida. */
   corral: number;
   rotuloMeta: string;
   rotuloSalida: string;
   /** Las vallas del salto, si la carrera las tiene. */
   vallas: Valla3D[];
+  /** Las rocas y las matas del terreno, como lista (`carrera-rocas.ts`): el 3D pone una instancia por cada una. */
+  rocas: readonly Roca[];
+}
+
+/** Un sólido tal como lo dibujó el 3D, pasado al mundo 2D (en píxeles): para el auditor de sólidos con navegador. */
+export interface SolidoDibujado {
+  tipo: "roca" | "mata" | "piedrita" | "piedra";
+  x: number;
+  y: number;
+  a: number;
+  b: number;
+  giro: number;
+  /** De qué altura a qué altura llega, en píxeles (lo que asoma sobre el piso). */
+  z0: number;
+  z1: number;
+  /** La piedrita del tropiezo, que se mueve. */
+  movil?: boolean;
 }
 
 export interface Pantalla3D {
@@ -196,6 +254,11 @@ export interface Vista3D {
   /** El mundo cambió (otro tamaño de pantalla): rearma lo fijo. */
   reconstruir(g: Geometria3D): void;
   destruir(): void;
+  /**
+   * Para el auditor de sólidos: lo que dibujó de verdad, leído de three.js y pasado al mundo 2D. Los fijos (rocas, matas y piedritas, de las
+   * instancias) y los que se mueven en el último cuadro (las piedras del cerro y la piedrita del tropiezo).
+   */
+  solidos?(): { fijos: SolidoDibujado[]; moviles: SolidoDibujado[] };
 }
 
 export interface OpcionesFabrica3D {
@@ -285,6 +348,18 @@ export function corrimientoLider(x0: number, x1: number, w: number, h: number, a
   return 0;
 }
 
+/** Lo que mide de alto la marca de una llama ("!", "?!") en unidades del dibujo, antes de agrandarla para que se lea. */
+export const MARCA_ALTO = 38;
+
+/**
+ * La marca de la llama se lee desde el fondo: en la pantalla nunca mide menos que un nombre (`minimo` píxeles), la misma regla que el 2D.
+ * `alto` es lo que mide la llama en la pantalla, de los pies a la cabeza. Devuelve cuánto hay que agrandar la marca.
+ */
+export function escalaMarca(alto: number, minimo: number): number {
+  const mide = (MARCA_ALTO / LLAMA_ALTO) * alto;
+  return mide > 0 ? Math.max(1, minimo / mide) : 1;
+}
+
 /** La opacidad más baja de los postes de la meta justo en el cruce. */
 export const FINISH_POST_MIN_OPACITY = 0.22;
 /** Cuánto antes del cruce empiezan a apagarse los postes de la meta, en segundos. */
@@ -307,6 +382,28 @@ export function finishPostOpacity(crown: number): number {
   const fadesIn = smoothFinish((crown + FINISH_POST_FADE_BEFORE) / FINISH_POST_FADE_BEFORE);
   const fadesOut = 1 - smoothFinish(crown / FINISH_POST_FADE_AFTER);
   return 1 - (1 - FINISH_POST_MIN_OPACITY) * fadesIn * fadesOut;
+}
+
+/** Cuánto miden parados los postes del portón de la recta, en unidades del mundo 3D. */
+export const PORTON_POSTE_ALTO = 1.3;
+/**
+ * Cuántos segundos antes de abrirse la recta empiezan a bajar los postes del portón que quedan en el camino de las finalistas. El
+ * plan arrancaba en 1,0 s, pero el auditor midió que la primera finalista cruza el portón hasta 1,25 s antes de `tAbre` (en una
+ * pantalla parada); con 2,2 s, al cruzar ya están en el piso.
+ */
+export const PORTON_BAJA_ANTES = 2.2;
+/** Cuánto dura la bajada de esos postes: en el piso quedan desde 1,6 s antes de que se abra la recta. */
+export const PORTON_BAJA_DURA = 0.6;
+
+/**
+ * El alto de los postes del portón que quedan en el camino de las finalistas (todos menos el del borde de arriba, que ninguna
+ * cruza: cada carril pisa casi sobre la línea de su poste de abajo) en la hora `t`, en unidades del mundo 3D: parados hasta 2,2
+ * segundos antes de que se abra la recta (`tAbre`) y en el piso desde 1,6 s antes, para que ninguna los atraviese al cruzar a su
+ * carril. Es función de la hora y nada más: la misma ronda da el mismo alto yendo hacia adelante o hacia atrás.
+ */
+export function altoPostePorton(t: number, tAbre: number): number {
+  if (!Number.isFinite(tAbre)) return PORTON_POSTE_ALTO;
+  return PORTON_POSTE_ALTO * (1 - smoothFinish((t - (tAbre - PORTON_BAJA_ANTES)) / PORTON_BAJA_DURA));
 }
 
 /** Las puntas de una llama, en unidades del dibujo y desde su origen (pies, centro): nariz, cola, cabeza arriba y los costados del cuerpo. */

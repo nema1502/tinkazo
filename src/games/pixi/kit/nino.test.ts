@@ -295,7 +295,7 @@ describe("respuestas: la prueba del niño", () => {
   });
 
   it("quien gana tiene que ir adelante con el golpe", () => {
-    expect(problemasDeRespuestas(base(), { n: 8, ganadores: [6] }).join(" ")).toContain("quien gana no va adelante");
+    expect(problemasDeRespuestas(base(), { n: 8, ganadores: [6] }).join(" ")).toContain("la persona elegida no va adelante");
   });
 
   it("dos salidas a menos de 1 s: ninguna se ve", () => {

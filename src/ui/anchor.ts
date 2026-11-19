@@ -244,6 +244,19 @@ async function vidaDelSorteo(): Promise<number> {
 const MARGEN_AL_MANDAR_S = 35;
 
 /**
+ * Lo mismo cuando paga el portero (`MARGEN_CON_PORTERO_S`): recién firmada por Pollar y antes de entregársela al portero,
+ * cuántos segundos tienen que faltar para que nazca la ronda. Son los 30 que pide el contrato, lo que tarda el portero en
+ * revisarla, simularla y mandarla, y lo que tarda en entrar a un ledger. Con menos no se le entrega: no queda nada en la
+ * cadena, no se gasta ningún sorteo oficial y `freeze.ts` prueba con otra ronda.
+ *
+ * Se vio el 13 de noviembre de 2026 en la red principal: la firma de Pollar llegó medio minuto después de pedirla, el
+ * portero la mandó con 31 s por delante, entró a un ledger con 25 y el contrato la rechazó (`RoundTooSoon`). El portero
+ * cuenta como gastado el sorteo oficial de un sello que entró a un ledger aunque haya fallado, y la cuenta tenía uno solo.
+ * Del portero al ledger pasaron 6,5 s esa noche y 2,4 esa mañana: con 45 sobra.
+ */
+export const MARGEN_AL_ENTREGAR_AL_PORTERO_S = 45;
+
+/**
  * Cuánto se espera, ya mandada la transacción, sin poder hablar con la red antes
  * de decir que no se sabe. Con el sello, después viene la pregunta de si entró
  * (otro tanto como mucho): medido el 21 de octubre de 2026 en la testnet, con la
@@ -358,7 +371,20 @@ async function sellarEnUnRpc(args: SealArgs, onStep: OnStep, opciones: OpcionesD
     desde: Math.floor(Date.now() / 1000),
   };
 
-  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento, { pagarConMiCuenta: !!opciones.pagarConMiCuenta });
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento, {
+    pagarConMiCuenta: !!opciones.pagarConMiCuenta,
+    // Recién firmada por Pollar, que puede tardar: si la ronda ya no alcanza para pasar por el portero, no se le entrega.
+    // Entraría a un ledger y fallaría, y el sorteo oficial quedaría gastado.
+    antesDeMandar: () => {
+      const quedan = roundTime(args.round) - Date.now() / 1000;
+      if (quedan < MARGEN_AL_ENTREGAR_AL_PORTERO_S) throw new RondaMuyCerca(quedan);
+    },
+    // Con Pollar pagando, la puerta del premio lee la red justo antes de firmar y gasta margen: se vuelve a mirar después.
+    antesDeFirmar: () => {
+      const quedan = roundTime(args.round) - Date.now() / 1000;
+      if (quedan < MARGEN_AL_MANDAR_S) throw new RondaMuyCerca(quedan);
+    },
+  });
   if (delegated) {
     return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
   }
@@ -663,6 +689,8 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
  */
 export function stepLabel(step: AnchorStep, que: "sello" | "sorteo" = "sello"): string {
   if (step === "simulating" && que === "sorteo") return t("txSimulatingSorteo");
+  // Guardar es guardar el sello al sellar, y grabar el sorteo al sortear.
+  if (que === "sorteo" && (step === "sending" || (step === "signing" && firmaSinVentana))) return t("txSendingSorteo");
   return t(step === "signing" ? (firmaSinVentana ? "txSending" : "txSigning") : CLAVE_DEL_PASO[step]);
 }
 
@@ -744,12 +772,21 @@ export function selloSinGrabar(e: unknown): boolean {
  */
 export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
-    const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
-    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
+    const { errorKey, esNoDelPortero, textoDelError, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
+    // Con el cobro por uso, una cuenta que el portero no cubre oye lo mismo que en la caja de la red: que todavía no tiene acceso.
+    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada(), cobroPorUso: await rigeElCobroPorUso() });
+    // El voto por contenido no aprobó: lo que pasó, en el sello o en el sorteo, y qué hacer. Con el tope de la pestaña ya no
+    // se invita a probar de nuevo. El conteo sigue diciendo `cofirmaDistinta`: las variantes son solo de lo que se lee.
+    if (tipo === "cofirmaDistinta") {
+      const base = t(paso === "sorteo" ? "errAnchor.cofirmaDistintaSorteo" : "errAnchor.cofirmaDistinta");
+      return `${base} ${t(/tinkazo-cofirma-distinta-tope/.test(textoDelError(e)) ? "cofirmaEscribinos" : "cofirmaOtraVez")}`;
+    }
     // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
     // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
     // habla de "sellar" y al sortear confundía).
     if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // La puerta del premio con el sorteo ya sellado: el ganador no cambia y el sorteo se guarda desde el comprobante o más tarde.
+    if ((tipo === "premioGuardado" || tipo === "premioSinSaber") && paso === "sorteo") tipo = `${tipo}Sorteo`;
     // El error de cantidad con más ganadores de los que admitían los contratos viejos: no sobran ganadores, la red todavía no llega.
     // La clave del error (para el contador y el detalle) sigue siendo la del contrato; solo cambia lo que se lee.
     if (tipo === "badWinnerCount" && (ganadores ?? 0) > TOPE_DE_LOS_CONTRATOS_VIEJOS) tipo = "badWinnerCountViejo";
@@ -779,6 +816,15 @@ export async function cuentaPatrocinada(): Promise<boolean> {
   try {
     const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
     return submitsItself(activeWallet());
+  } catch {
+    return false;
+  }
+}
+
+/** Rige el cobro por uso del modo Oficial (`cobro-oficial.ts`). Si no se puede saber, no: la frase de siempre. */
+async function rigeElCobroPorUso(): Promise<boolean> {
+  try {
+    return (await import("../stellar/cobro-oficial")).cobroPorUso();
   } catch {
     return false;
   }

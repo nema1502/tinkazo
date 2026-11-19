@@ -79,3 +79,17 @@ export type Montaje3D<E extends EntradaBase = EntradaBase> = (lienzoPixi: HTMLCa
 
 /** Cómo arranca un juego (la firma de `PIXI[...]` en `pixi/index.ts`). */
 export type Lanzador = (names: string[], winners: readonly number[], beacon: Beacon, done: () => void) => Promise<void>;
+
+/**
+ * La señal de la mano que tira: qué hacen los dedos y en qué parte del lanzamiento va. La calcula el 2D, que ya
+ * tiene el guion de tiros y su reloj, y la consume el 3D, así las dos escenas lanzan con la misma hora. Son campos
+ * opcionales: una vista que todavía no los lee sigue funcionando con los valores por defecto.
+ */
+export interface SenalMano {
+  /** Cuánto están abiertos los dedos, de 0 a 1: 0 curvados agarrando la moneda, 1 abiertos de golpe tras soltar.
+   * Si falta, la mano descansa con los dedos a medio encoger (0,4). */
+  flex?: number;
+  /** La fase del lanzamiento: de 0 a 1 se echa atrás (toma impulso); de 0 a -1 látiga tras soltar.
+   * Si falta, 0: mano quieta. */
+  fase?: number;
+}

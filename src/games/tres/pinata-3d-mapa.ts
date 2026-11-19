@@ -1,4 +1,5 @@
 import { escala3D, type Pose3D } from "./camara";
+import type { Caja } from "./pinata-3d-tipos";
 import type { Camara2D } from "./tipos";
 
 /**
@@ -105,6 +106,53 @@ export function proyectar(pose: Pose3D, w: number, h: number, p: readonly [numbe
   const nx = (v[0] * der[0] + v[1] * der[1] + v[2] * der[2]) / (fz * th * (w / Math.max(1, h)));
   const ny = (v[0] * arriba[0] + v[1] * arriba[1] + v[2] * arriba[2]) / (fz * th);
   return { x: ((nx + 1) / 2) * w, y: ((1 - ny) / 2) * h };
+}
+
+export type { Caja } from "./pinata-3d-tipos";
+
+/**
+ * Una pieza puesta en el escenario: dónde (en unidades del escenario), cómo gira (los ángulos de `rotation.set(0, giroY,
+ * giroZ)` de three.js, en su orden XYZ) y de qué tamaño (`scale.setScalar(tam)`).
+ */
+export interface Pieza3D { x: number; y: number; z: number; giroY: number; giroZ: number; tam: number }
+
+/**
+ * El primer plano del final se mide en el 3D solo en el celular apaisado: la misma pantalla del acercamiento del 2D
+ * (más ancha que alta y con el lado corto de 520 px o menos). En retrato y en la pantalla grande queda el de antes.
+ */
+export const primerPlano = (w: number, h: number): boolean => w > h && h <= 520;
+
+/**
+ * La caja en la pantalla de una pieza tal como la dibuja three.js con esta pose: cada punto de su silueta (`puntos`, de a
+ * tres, en unidades de la pieza, agrandados `k` veces como su contorno), girado, escalado, llevado al escenario (que
+ * está en `y = base.y` y mide `base.s` por unidad) y proyectado con `proyectar`. Null si algún punto queda detrás de la
+ * cámara.
+ */
+export function cajaEnPantalla(
+  pose: Pose3D, w: number, h: number, base: { y: number; s: number }, pieza: Pieza3D, puntos: ArrayLike<number>, k = 1,
+): Caja | null {
+  const cy = Math.cos(pieza.giroY), sy = Math.sin(pieza.giroY);
+  const cz = Math.cos(pieza.giroZ), sz = Math.sin(pieza.giroZ);
+  const t = pieza.tam * k;
+  const p: V3 = [0, 0, 0];
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i + 2 < puntos.length; i += 3) {
+    const ax = puntos[i]! * t, ay = puntos[i + 1]! * t, az = puntos[i + 2]! * t;
+    // Primero el giro en el plano (z) y después el de su eje vertical (y), como la matriz de three.js con orden XYZ.
+    const bx = ax * cz - ay * sz, by = ax * sz + ay * cz;
+    const ox = bx * cy + az * sy, oz = -bx * sy + az * cy;
+    p[0] = (pieza.x + ox) * base.s;
+    p[1] = base.y + (pieza.y + by) * base.s;
+    p[2] = (pieza.z + oz) * base.s;
+    const q = proyectar(pose, w, h, p);
+    if (!q) return null;
+    if (q.x < x0) x0 = q.x;
+    if (q.x > x1) x1 = q.x;
+    if (q.y < y0) y0 = q.y;
+    if (q.y > y1) y1 = q.y;
+  }
+  if (x0 > x1) return null;
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
 /**

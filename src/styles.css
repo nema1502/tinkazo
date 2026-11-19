@@ -95,8 +95,10 @@
   }
   .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
   .auth { display: flex; gap: 8px; align-items: center; }
-  /* Sin cuenta, la caja de la cuenta va vacía: no debe dejar el hueco de su gap. */
-  .auth:empty { display: none; }
+  /* Sin cuenta, la caja de la cuenta va vacía, pero guarda su lugar (contra el
+     salto al montar el chip, FOUC de la recarga): escondida, no quitada. */
+  .auth:empty { visibility: hidden; min-height: 44px; min-width: 92px; justify-content: flex-end; }
+  @media (max-width: 700px) { .auth:empty { min-width: 64px; } }
   button.mini, a.mini {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 5px 12px; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
@@ -155,7 +157,7 @@
   textarea { min-height: 120px; resize: vertical; }
   textarea:focus, input:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 0; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
-  /* El botón principal, también cuando es un enlace: "Entrar y sortear, es
+  /* El botón principal, también cuando es un enlace: "Entrar y sortear
      gratis" se veía como un link azul del navegador (lo encontró la revisión visual,
      30 de septiembre de 2026). */
   button.primary, a.primary {
@@ -199,7 +201,14 @@
   .modo-opcion h4 { margin: 0 0 6px; }
   .modo-opcion p { margin: 0; }
   .modo-actual { font-weight: 800; margin-top: 8px !important; }
+  .modo-cuenta { color: var(--ink2); line-height: 1.45; }
   .modo-bloqueo { font-weight: 700; }
+  /* El botón para pasar de modo es la acción principal de la hoja: lleva el estilo de
+     `button.primary` (fondo magenta, borde y sombra duros) y el alto de un blanco de toque
+     cómodo, 48 px en todos los anchos, igual que el botón principal de las ventanas
+     (`.dlg-main`). Antes llevaba `solid` a secas, que solo existe junto a `mini`, y se veía
+     como un botón del navegador. */
+  .modo-card .modo-cambiar { min-height: 48px; padding: 0 24px; font-size: 17px; }
   /* Una ventana siempre entra o se recorre (19 de octubre de 2026). Centrar con
      `align-items: center` cortaba por arriba y por abajo toda tarjeta más alta
      que la pantalla, y lo cortado no se alcanzaba ni con scroll: el panel de la
@@ -344,6 +353,25 @@
     position: static; transform: none; width: auto; max-width: none; margin: 0 0 14px; z-index: auto;
     box-shadow: none; padding: 10px 16px; overflow-wrap: anywhere;
   }
+  /* El plan B del ingreso (wallet-ui.ts): el título y la línea del aviso, y la salida debajo del error del correo. */
+  .ingreso-salida-t { font-size: 18px; font-weight: 800; }
+  .ingreso-salida-l { font-weight: 600; }
+  .login-err .ingreso-salida-t, .login-err .ingreso-salida-l { display: block; }
+  .login-err .ingreso-salida-l { margin-top: 4px; }
+  .login-salida { display: flex; justify-content: center; }
+  .login-salida-b { min-height: 48px; }
+  /* La línea permanente de quien siguió sin cuenta (sin-cuenta-franja.ts): discreta, debajo de la cabecera, con el botón para entrar. */
+  .sin-cuenta-franja {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0 12px;
+    padding: 2px 16px; background: var(--field); color: var(--ink); border-bottom: 2px solid var(--ink); text-align: center;
+  }
+  .sin-cuenta-franja-t { margin: 0; padding: 4px 0; font-size: 16px; font-weight: 600; line-height: 1.35; max-width: 70ch; }
+  .sin-cuenta-franja-b {
+    min-height: 44px; padding: 0 6px; background: none; border: 0; cursor: pointer; color: var(--ink);
+    font: inherit; font-size: 16px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .sin-cuenta-franja-b:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  @media (pointer: coarse), (max-width: 760px) { .sin-cuenta-franja-b { min-height: 48px; } }
   .txstatus {
     margin-top: 12px; font-size: 16px; font-weight: 700; color: var(--ink2);
     border-left: 4px solid var(--purple); padding-left: 10px;
@@ -362,6 +390,8 @@
   .red-estado.verde { border-left-color: var(--teal); }
   .red-estado.amarillo { border-left-color: var(--yellow); }
   .red-estado.rojo { border-left-color: var(--orange); }
+  /* Sin sorteos oficiales (src/ui/cupo-patrocinio.ts): la línea del cupo pesa como un aviso, con la marca naranja de la caja de la red. */
+  .note.cupo-linea--cero { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
   .red-estado .red-frase { margin: 0; display: flex; align-items: baseline; gap: 10px; }
   .red-estado .red-ico { flex: none; width: 1.4em; text-align: center; font-weight: 800; }
   .red-estado .red-sub { margin-top: 10px; gap: 8px; }
@@ -626,11 +656,24 @@
   /* El de arriba de una lista larga: separa de la lista que sigue, no del título. */
   .turnos-copiar-arriba { margin-top: 0; margin-bottom: 14px; }
   .winner-turnos .turno-avisar { flex: 0 0 auto; margin: 0; }
-  /* En el celular, «Avisarle» no aprieta el nombre: si no entra, baja a su propio renglón. */
+  /* El nombre y «Avisarle» van juntos al lado del número (src/ui/lista-de-turnos.ts): el número nunca queda solo en su
+     renglón. */
+  .winner-turnos .turno-resto { flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 4px 10px; }
+  /* En el celular, «Avisarle» va en el mismo renglón que el nombre cuando entra el nombre entero, y si no, baja a su
+     renglón, a la derecha. La base del nombre es el nombre entero, así que nunca se parte un nombre que entra en un
+     renglón y todas las filas siguen la misma regla. El nombre tiene de tope el lugar que le deja su número, sea cual
+     sea su ancho en la letra de cada teléfono: el nombre largo se acomoda al lado del número, partido por sus espacios,
+     y break-word solo parte una palabra que no entra ni sola. Con un tope fijo de 80 px el «Turno 10» medía más que lo
+     que el tope le dejaba y el nombre largo bajaba debajo del número. El número mide lo mismo del «Turno 1» al
+     «Turno 99» (8ch en su letra), así que los nombres empiezan en la misma columna. Una base fija o la palabra más
+     larga como base dejaban filas de formas distintas en la misma lista. */
   @media (max-width: 460px) {
-    .winner-turnos .winner-fila:has(.turno-avisar) { flex-wrap: wrap; }
-    .winner-turnos .winner-fila:has(.turno-avisar) .winner-name { flex: 1 1 150px; }
-    .winner-turnos .winner-fila:has(.turno-avisar) .turno-avisar { margin-left: auto; }
+    /* El número a la altura del primer renglón del nombre, no a la mitad del nombre y de «Avisarle». */
+    .winner-turnos .winner-fila:has(.turno-resto) { align-items: baseline; }
+    .winner-turnos .winner-fila:has(.turno-avisar) .winner-num { min-width: 8ch; }
+    .winner-turnos .turno-resto { flex-wrap: wrap; }
+    .winner-turnos .turno-resto .winner-name { flex: 1 1 auto; min-width: auto; max-width: 100%; overflow-wrap: break-word; }
+    .winner-turnos .turno-resto .turno-avisar { margin-left: auto; }
   }
   .turnos-texto { display: block; box-sizing: border-box; width: 100%; min-height: 6em; margin-top: 10px; font: inherit; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
@@ -806,7 +849,7 @@
   }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
   .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
-  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary {
+  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary, button.netbadge, button.acct-badge {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   /* Visible para el teclado y para el lector, invisible en pantalla. Con
@@ -905,7 +948,20 @@
   /* La capa recibe el foco al abrirse sola (espera.ts): sin el aro que le pone el foco a todo lo demás. */
   .espera:focus, .espera:focus-visible { outline: none; box-shadow: none; }
   .espera-top { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .espera-top [data-volver] { flex-shrink: 0; min-height: 44px; white-space: nowrap; }
+  .espera-volver-corto { display: none; }
+  @media (max-width: 480px) {
+    .espera-volver-largo { display: none; }
+    .espera-volver-corto { display: inline; }
+  }
   .espera-top .sticker { max-width: 60vw; text-align: left; }
+  /* En un celular la calcomanía, la pastilla de Prueba y Volver comparten la fila: el grupo de Volver conserva su ancho
+     (con nowrap su botón no se parte y, si el grupo se encogía, lo pisaba la pastilla) y la calcomanía cede partiendo su
+     texto. La pastilla solo achica su relleno y su espaciado: la letra se queda en 14 px, el piso de docs/ux.md. */
+  @media (max-width: 480px) {
+    .espera-top-acc { flex-shrink: 0; }
+    .espera-top .espera-prueba { font-size: 14px; padding: 2px 6px; letter-spacing: 0.04em; }
+  }
   .espera-premio { font-size: calc(clamp(24px, 3.2vw, 56px) * var(--ajuste, 1)); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
   .espera-reloj { font-size: calc(clamp(88px, 26vmin, 340px) * var(--ajuste, 1)); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
@@ -946,6 +1002,33 @@
   button.espera-accion-2 { font-size: clamp(14px, 1.8vw, 22px); min-height: 44px; max-width: 100%; }
   @keyframes espera-cinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   html:has(.espera) { overflow: hidden; }
+  /* El QR del espectador en la espera, junto a la cuenta: chico, con la misma tinta de siempre. */
+  .espera-qr { display: grid; justify-items: center; gap: 8px; margin: 0; }
+  .espera-qr img { display: block; background: #fff; padding: 8px; border: 2px solid var(--ink); box-shadow: var(--sh-sm); image-rendering: pixelated; }
+  .espera-qr figcaption { font-size: clamp(14px, 1.5vw, 20px); font-weight: 700; color: var(--ink2); }
+  .espera-qr[hidden], .espera-qr [hidden] { display: none; }
+  /* Mientras llega el enlace corto, o si no salió: una línea en el lugar del QR, y en el fallo el botón para probar de nuevo. */
+  .espera-qr-estado { margin: 0; max-width: 28ch; font-size: clamp(14px, 1.5vw, 20px); font-weight: 700; color: var(--ink2); text-wrap: balance; }
+  .espera-qr-otra { min-height: 44px; }
+  .espera-qr-anterior { margin: 0; max-width: 28ch; font-size: clamp(14px, 1.2vw, 17px); font-weight: 600; color: var(--ink2); text-align: center; text-wrap: balance; }
+  /* La vista de espectador: la misma espera, con el rótulo que dice que nadie la maneja desde acá. */
+  .espectador .sticker { background: var(--teal); }
+  .espera-lectura { font-size: clamp(14px, 1.6vw, 22px); font-weight: 800; color: var(--ink2); max-width: 40ch; text-wrap: balance; }
+  /* Mientras el estadio está arriba la vista del espectador se corre: el estadio va debajo de la espera (40 y 65). */
+  .espera.espectador.detras { display: none; }
+  /* Lo que salió, en el celular de quien mira: los ganadores grandes y, debajo, cómo seguir. */
+  .espectador-fin-t { font-size: clamp(16px, 1.8vw, 24px); font-weight: 800; color: var(--ink2); }
+  /* Sin caja que se recorra por dentro: con muchos ganadores se recorre la vista entera (`.espera` ya lo hace). */
+  .espectador-ganadores { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 10px; justify-items: center; }
+  /* Al terminar, los nombres que pasaban se van: lo que se lee es quién salió. */
+  .espectador .espera-nombres[hidden], .espectador .espera-lectura[hidden] { display: none; }
+  .espectador-ganadores li { display: flex; align-items: center; gap: 12px; font-size: clamp(30px, 6vw, 64px); font-weight: 900; line-height: 1.05; overflow-wrap: anywhere; text-wrap: balance; }
+  .espectador-ganadores.varios li { font-size: clamp(22px, 4vw, 40px); }
+  .espectador-ganadores img { width: 1.1em; height: 1.1em; flex: none; border-radius: 50%; border: 2px solid var(--ink); }
+  .espectador-sigue { font-size: clamp(16px, 1.8vw, 22px); font-weight: 700; color: var(--ink2); max-width: 36ch; text-wrap: balance; margin-top: 6px; }
+  .espectador-acc { display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: center; align-items: center; margin-top: 6px; }
+  .espectador-acc button { min-height: 48px; font-size: 16px; }
+  .espectador-propio { display: inline-flex; align-items: center; min-height: 44px; font-size: 16px; font-weight: 700; color: var(--ink); }
   @media (prefers-reduced-motion: reduce) {
     .espera-cinta { animation: none; }
     .cortina-puntos i { animation: none; }
@@ -984,6 +1067,11 @@
     margin: 0 0 12px; padding: 10px 14px; font-size: 16px; font-weight: 700;
     background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
+  /* Debajo de los ganadores, quién salió más de una vez: una nota sobre el fondo, con una raya al costado, y no una
+     caja amarilla con sombra, que de lejos parecía otro ganador. */
+  .again-note.veces {
+    padding: 4px 0 4px 12px; background: none; color: var(--ink); border: 0; border-left: 4px solid var(--ink); box-shadow: none;
+  }
   /* La pregunta por los números que ya trae una lista pegada: corta, con dos botones, debajo del cuadro. */
   .part-pregunta {
     margin: 10px 0 4px; padding: 10px 14px; font-size: 16px; font-weight: 700;
@@ -992,8 +1080,10 @@
   .part-pregunta p { margin: 0; }
   .part-pregunta-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
   .part-pregunta-btns .mini { min-height: 44px; padding: 6px 16px; }
-  /* El botón que abre el panel de contadores: secundario, a la vista, con su blanco de toque. */
-  .part-abrir { min-height: 48px; margin-top: 10px; padding: 8px 18px; font-size: 16px; font-weight: 800; }
+  /* El enlace que abre el panel de contadores: chico, como el del stand que viene después, con el blanco de toque de
+     todo enlace (`.enlace`). Oculto no ocupa nada, así que ahí no se mueve nada. En su propia línea también en
+     escritorio: en línea compartía el renglón con el del stand. */
+  button.part-abrir { display: flex; width: fit-content; margin-top: 4px; margin-bottom: 4px; }
   /* El panel de contadores: una fila por persona, con menos, el número y más para tocar. */
   .varias-panel {
     margin-top: 12px; padding: 14px 16px; background: var(--card);
@@ -1003,14 +1093,88 @@
   .varias-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
   .varias-cab h3 { font-size: 18px; font-weight: 800; line-height: 1.25; }
   .varias-cab .mini { flex: 0 0 auto; min-height: 44px; padding: 6px 16px; }
-  .varias-cuenta { margin-top: 8px; font-size: 18px; font-weight: 900; }
+  /* Las dos cuentas en dos renglones parejos: sin balance, «5» quedaba solo al final y «participaciones» abajo. */
+  .varias-cuenta { margin-top: 8px; font-size: 18px; font-weight: 900; text-wrap: balance; }
   .varias-tope { margin-top: 6px; font-size: 16px; font-weight: 700; color: var(--ink2); }
   .varias-tope[hidden] { display: none; }
   .varias-buscar { margin-top: 12px; }
   .varias-buscar[hidden] { display: none; }
   .varias-buscar label { display: block; font-size: 16px; font-weight: 800; margin-bottom: 6px; }
   .varias-buscar input { min-height: 48px; font-size: 16px; }
-  .varias-lista { margin-top: 10px; max-height: 320px; overflow-y: auto; }
+
+  /* El modo, a la vista (src/ui/turnos.ts, 13 de noviembre de 2026): dos botones grandes arriba de la lista, Sortear premios
+     y Orden de turnos. Es una elección previa: no lleva el magenta de la acción principal ni el amarillo de la cabecera, y
+     queda chico frente a Pegar lista y a Sellar la lista. El elegido lleva el morado del juego elegido en el selector de
+     juegos, y la marca se desliza de uno al otro en 200 ms. Con la lista cerrada los botones se apagan, el borde pasa a
+     punteado como el de los orígenes, y nada se mueve. */
+  .modo-elegir { margin: 0 0 18px; max-width: 640px; }
+  .modo-elegir[hidden] { display: none; }
+  /* El rótulo es un .kicker, como los de los campos: la letra de máquina en mayúsculas que acompaña a un control. */
+  .modo-rotulo { margin: 0 0 6px; }
+  .modo-botones {
+    position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 6px; padding: 5px;
+    background: var(--paper); border: 2px solid var(--ink);
+  }
+  .modo-botones::before {
+    content: ""; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 16px) / 2); box-sizing: border-box;
+    background: var(--purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 6px)); }
+  .modo-op {
+    position: relative; z-index: 1; min-height: 56px; display: grid; grid-template-columns: auto 1fr;
+    grid-template-areas: "ico tit" "ico sub"; align-items: center; column-gap: 10px; row-gap: 2px;
+    padding: 8px 12px; text-align: left; font: inherit; color: var(--ink2);
+    background: transparent; border: 2px solid transparent; cursor: pointer;
+    /* La letra cambia de color mientras la marca llega, no de golpe antes. El que se deja pierde su fondo enseguida. */
+    transition: color 200ms ease, background-color 0s, border-color 0s;
+  }
+  .modo-op:hover:not(:disabled):not([aria-pressed="true"]) { background: var(--card); border-color: var(--ink); }
+  /* El elegido lleva también su propio fondo, que aparece cuando la marca termina de llegar: el mismo morado en el mismo
+     lugar, así que no se nota, y lo que mide el contraste lee el fondo de verdad y no el de la caja. */
+  .modo-op[aria-pressed="true"] {
+    color: var(--on-purple); background-color: var(--purple); border-color: var(--ink); cursor: default;
+    transition: color 200ms ease, background-color 0s linear 200ms, border-color 0s linear 200ms;
+  }
+  .modo-op:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .modo-op:disabled { cursor: default; }
+  .modo-op:disabled[aria-pressed="false"] { color: var(--muted); }
+  .modo-ico { grid-area: ico; width: 28px; height: 28px; transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .modo-op[aria-pressed="true"] .modo-ico { transform: rotate(-8deg) scale(1.12); }
+  .modo-tit { grid-area: tit; font-size: 18px; font-weight: 800; line-height: 1.2; }
+  .modo-sub { grid-area: sub; font-size: 16px; font-weight: 600; line-height: 1.25; }
+  .modo-elegir .modo-ayuda { margin-top: 8px; color: var(--ink2); text-wrap: balance; }
+  .lista-cerrada .modo-botones { border-style: dashed; }
+  /* El título del paso y la ayuda entran con un movimiento corto cada vez que cambia el modo. */
+  .modo-cambia { animation: modo-entra 200ms ease-out; }
+  span.modo-cambia { display: inline-block; }
+  @keyframes modo-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  /* En el celular el selector va compacto: los dos botones lado a lado, cada uno con su dibujo y su nombre (que puede ir
+     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice la ayuda de abajo, que cambia
+     con él. Uno debajo del otro y con todo medía 231 px (271 a 360 px de ancho), y con las barras del navegador
+     (390 x 664) sacaba Pegar lista de la pantalla. Así mide 109. */
+  @media (max-width: 460px) {
+    .modo-elegir { margin-bottom: 12px; }
+    .modo-rotulo, .modo-sub { display: none; }
+    .modo-botones { gap: 4px; padding: 4px; }
+    .modo-botones::before { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 12px) / 2); }
+    .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 4px)); }
+    .modo-op { min-height: 48px; grid-template-areas: "ico tit"; column-gap: 6px; padding: 4px 8px; }
+    .modo-ico { width: 20px; height: 20px; }
+    .modo-tit { font-size: 16px; line-height: 1.1; }
+    .modo-elegir .modo-ayuda { margin-top: 6px; line-height: 1.35; }
+  }
+  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. */
+  @media (max-width: 359px) {
+    .modo-ico { display: none; }
+    .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .modo-botones::before, .modo-ico, .modo-op, .modo-op[aria-pressed="true"] { transition: none; }
+    .modo-cambia { animation: none; }
+  }
+  /* La barra del scroll propio va en su lugar y no encima del «+». */
+  .varias-lista { margin-top: 10px; max-height: 320px; overflow-y: auto; padding-right: 6px; scrollbar-gutter: stable; }
   .varias-fila {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 6px 0; border-top: 2px solid var(--ink);
@@ -1018,6 +1182,13 @@
   .varias-fila:first-child { border-top: 0; }
   .varias-nombre { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 17px; font-weight: 700; line-height: 1.3; }
   .varias-control { flex: 0 0 auto; display: flex; align-items: flex-start; gap: 6px; }
+  /* En el celular, los contadores van al lado del nombre cuando el nombre entero entra, y si no, bajan a su renglón, a
+     la derecha: con anywhere y sin base, «María Fernanda Rodríguez» se partía letra por letra a 320 px. */
+  @media (max-width: 460px) {
+    .varias-fila { flex-wrap: wrap; }
+    .varias-nombre { flex: 1 1 auto; min-width: auto; max-width: 100%; overflow-wrap: break-word; }
+    .varias-control { margin-left: auto; }
+  }
   .varias-mas, .varias-menos {
     width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto;
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -1094,7 +1265,8 @@
     .primera-vez p { margin-right: -20px; }
   }
   .pegar-ayuda { margin: -4px 0 10px; }
-  .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); }
+  .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); text-wrap: balance; }
+  .lista-cuenta-nota { margin: 2px 0 8px; }
   /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
   .sellar-resumen { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }
   .ya-entraste {
@@ -1229,13 +1401,6 @@
     /* Con cantidad impar, el último enlace ocupa las dos columnas: solo abajo a
        la izquierda se leía como un renglón suelto. */
     footer .pies a:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  }
-  /* El aviso de marca de la portada: una línea chica, en su propia fila debajo de los enlaces del pie, con la letra de la página y no la del pie. */
-  footer .bar .trademark-note {
-    flex: 1 1 100%; max-width: 760px; margin: 0 auto; text-align: center; text-transform: none; letter-spacing: normal;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: var(--letra-sec); font-weight: 500; line-height: 1.45; color: var(--muted);
-    /* En angosto la última palabra quedaba sola en su renglón: se reparte parejo. */
-    text-wrap: balance;
   }
 
   /* ------------------------------------------------ la ventana de importar
@@ -1615,9 +1780,15 @@
   .cmp-fotos > .note { margin: 0; }
   .cmp-espera { aspect-ratio: 4 / 5; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 12px; border: var(--bw) dashed var(--ink2); background: var(--card); color: var(--ink2); font-weight: 700; font-size: 14px; text-align: center; }
   .cmp-png { display: block; width: 100%; height: auto; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+  /* Dos fotos para elegir (la del juego y la de siempre): cada una es un botón; la elegida, con el borde grueso y ✓. */
+  .cmp-elegir { position: relative; display: block; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; min-width: 0; }
+  .cmp-elegir[aria-pressed="true"] .cmp-png { outline: 5px solid var(--magenta-ink); outline-offset: 3px; }
+  .cmp-elegir[aria-pressed="true"]::after { content: "✓"; position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 30px; height: 30px; border: var(--bw) solid var(--ink); background: var(--yellow); color: #191919; font-weight: 900; font-size: 18px; line-height: 1; }
   .cmp-lado { display: grid; gap: 12px; align-content: start; min-width: 0; }
   .cmp-nota { font-weight: 700; margin: 0; }
   .cmp-wa { min-height: 52px; font-size: 17px; justify-content: center; text-align: center; }
+  .cmp-mas { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cmp-mas button { min-height: 44px; display: inline-flex; align-items: center; flex: 1 1 45%; justify-content: center; }
   .cmp-aviso { font-weight: 800; margin: 0; }
   .cmp-aviso:empty { display: none; }
   .cmp-txt { width: 100%; min-height: 120px; padding: 10px; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--card); border: var(--bw) solid var(--ink); resize: vertical; }
@@ -1716,11 +1887,15 @@
     .ensayo-banda p, .stand-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
     .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
   }
-  /* En un celular angosto el texto llegaba a tres líneas con el botón al lado: el texto arriba y el botón abajo, en una línea cada uno. */
+  /* En un celular angosto el ensayo lleva el texto arriba y el botón abajo, en una línea cada uno. El stand tiene su regla abajo. */
   @media (max-width: 480px) {
     body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: wrap; gap: 4px; padding: 6px 8px 8px; }
     .ensayo-banda p, .stand-banda p { flex: 1 1 100%; font-size: 14px; line-height: 1.25; }
     .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 1 1 100%; min-height: 44px; }
+    /* En el stand la acción queda al lado del texto, sin una fila entera que empuje la lista fuera de la primera pantalla. */
+    body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: nowrap; }
+    body[data-stand="1"] .stand-banda p { flex: 1 1 auto; }
+    body[data-stand="1"] .stand-banda button.ghost { flex: 0 1 auto; min-height: 44px; padding: 0 8px; font-size: 14px; }
   }
   .ensayo-guia[hidden] { display: none; }
   body:not([data-ensayo="1"]):not([data-stand="1"]) .ensayo-guia { display: none; }
@@ -1728,27 +1903,58 @@
   body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]), body[data-stand="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
     display: block; margin: -8px 0 18px; padding: 0; color: var(--ink); font-weight: 600; font-size: 16px; line-height: 1.45;
   }
-  body[data-ensayo="1"] .ensayo-fin, body[data-stand="1"] .stand-fin {
+  body[data-ensayo="1"] .ensayo-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
-  .ensayo-fin h3, .stand-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
-  .ensayo-fin p, .stand-fin p { font-size: 16px; line-height: 1.5; }
-  .ensayo-fin .row, .stand-fin .row { margin-top: 14px; }
-  .ensayo-fin button, .stand-fin button { min-height: 48px; }
-  .ensayo-fin .enlace, .stand-fin .enlace { color: var(--on-purple); }
+  .ensayo-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .ensayo-fin p { font-size: 16px; line-height: 1.5; }
+  .ensayo-fin .row { margin-top: 14px; }
+  .ensayo-fin button { min-height: 48px; }
+  .ensayo-fin .enlace { color: var(--on-purple); }
+  /* El final de una ronda del stand: sin caja. Otra ronda pegada a quien salió, una línea chica y la salida como enlace. */
+  body[data-stand="1"] .stand-fin { display: block; margin-top: 16px; }
+  .stand-fin .row { margin: 0; }
+  .stand-fin .primary { min-height: 56px; }
+  .stand-fin-nota { margin: 12px 0 0; font-size: 14px; font-weight: 400; line-height: 1.45; color: var(--ink2); }
+  .stand-fin .enlace { margin-top: 4px; }
+  /* En el stand lo más grande del resultado es quién salió. */
+  body[data-stand="1"] .winner-card .winner-name { font-size: clamp(36px, 7vw, 72px); }
   /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
      las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
   body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] .mas-origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
   body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
   body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel, body[data-ensayo="1"] #btn-stand { display: none !important; }
-  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto. */
+  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto.
+     Tampoco orden de turnos ni participaciones por persona: una ronda de ejemplo no se reparte ni se ordena. La cantidad sí
+     está: es el contador de siempre, que ahí se llama Cuántos salen (src/ui/ganadores.ts). */
   body[data-stand="1"] #gate, body[data-stand="1"] #seed-label, body[data-stand="1"] #btn-ensayo, body[data-stand="1"] #btn-stand, body[data-stand="1"] #btn-sample,
   body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
   body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
   body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
+  body[data-stand="1"] #free-rule, body[data-stand="1"] #sellar-sin-cuenta, body[data-stand="1"] #turnos-opcion,
+  body[data-stand="1"] #btn-varias, body[data-stand="1"] #varias-panel, body[data-stand="1"] #participaciones-aviso,
   body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
+  /* Lo que en el stand sobra a la vista: pegar o traer una lista, el logo, la lista en grande, los equipos con cupón y
+     la cuenta de junto al cuadro (la dice el resumen de junto a Empezar la ronda). En el stand no se suben archivos. */
+  body[data-stand="1"] #origenes, body[data-stand="1"] #pegar-ayuda, body[data-stand="1"] #luma-ayuda,
+  body[data-stand="1"] #logo-fila, body[data-stand="1"] #btn-sala, body[data-stand="1"] #btn-equipos,
+  body[data-stand="1"] #equipos-panel, body[data-stand="1"] #lista-cuenta { display: none !important; }
+  /* Poco texto y una sola acción por paso: sin el pliegue, la opinión, el título repetido ni la explicación del 3D. */
+  body[data-stand="1"] #mas-opciones, body[data-stand="1"] #feedback-fin,
+  body[data-stand="1"] #sec-draw > .head, body[data-stand="1"] #ver3d-row > .note { display: none !important; }
+  /* Con el QR abierto los nombres ya están en su tarjeta: no se repiten como fichas debajo del cuadro. */
+  body[data-stand="1"]:has(#sala-abierta:not([hidden])) #names { display: none !important; }
+  /* Entre Otra ronda y el estadio no asoman la lista ni el selector, y la página conserva foco y posición. */
+  body[data-stand-arrancando="1"] #sec-participants, body[data-stand-arrancando="1"] #gamepick,
+  body[data-stand-arrancando="1"] #pick-label, body[data-stand-arrancando="1"] #rec-head,
+  body[data-stand-arrancando="1"] #rec-sel-nota, body[data-stand-arrancando="1"] #juego-nota,
+  body[data-stand-arrancando="1"] #ver3d-row { display: none !important; }
+  @media (min-width: 900px) {
+    /* Hasta 1200 px de contenido: el resultado y la lista armada aprovechan la laptop sin cambiar su orden. */
+    body[data-stand="1"] main { max-width: 1240px; }
+  }
   /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
   .stand-sala { display: none; }
   body[data-stand="1"] .stand-sala { display: block; margin: 0 0 18px; padding: 16px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
@@ -1758,29 +1964,154 @@
   .stand-sala .mini { min-height: 44px; }
   .stand-sala [hidden] { display: none !important; }
   .ss-error { margin-top: 10px; font-weight: 700; font-size: 16px; line-height: 1.4; }
+  .ss-deshacer {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 10px; font-weight: 700; font-size: 16px;
+  }
+  /* Deshacer queda a la vista aunque la tarjeta acabe de cerrarse y la página esté en cualquier posición. */
+  .ss-deshacer:not([hidden]) {
+    position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 70; box-sizing: border-box; margin: 0; padding: 12px;
+    background: var(--yellow); color: #191919; border: 3px solid #191919; box-shadow: var(--sh-sm);
+  }
+  .ss-deshacer:not([hidden]) > span { flex: 1 1 220px; }
+  .ss-deshacer:not([hidden]) #sala-deshacer-b {
+    min-height: 44px; padding: 8px 14px; background: var(--card); color: var(--ink); border: 2px solid var(--ink);
+  }
+  /* Cerrar el QR: un enlace tranquilo, lejos de Empezar la ronda y de Ver el QR en grande. */
+  .ss-cerrar { margin-top: 18px; color: var(--ink2); font-weight: 600; }
+  /* La cruz de cada nombre: 44 px de blanco de toque, más liviana que el nombre. */
+  .ss-quitar { min-width: 44px; padding: 0; font-size: 18px; line-height: 1; }
   .ss-qr { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; }
-  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto; }
+  /* `pintarQr` (qr.ts) fija ancho y alto en píxeles: sin el !important, en un celular angosto el QR se angostaba y no se
+     achataba (194 x 270 en 320 px). */
+  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto !important; aspect-ratio: 1; }
   .ss-lado { flex: 1 1 220px; min-width: 0; }
   .ss-estado { font-weight: 800; font-size: 16px; }
-  .ss-estado[data-estado="sondeo"] { color: var(--bad, #b3261e); }
   .ss-cuenta { font-size: 28px; font-weight: 900; margin: 6px 0 12px; line-height: 1.15; }
   .ss-nombres, .ss-revisar ul { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; max-height: 28vh; overflow: auto; }
   .ss-nombres li, .ss-revisar li { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--ink); background: var(--paper); padding: 2px 4px 2px 10px; font-size: 16px; font-weight: 600; }
   .ss-nombre { overflow-wrap: anywhere; }
-  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. */
-  .stand-sala.grande { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 60; margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: center; justify-content: center; padding: 16px 20px; background: var(--paper); text-align: center; }
-  .stand-sala.grande #sala-abierta { display: flex; flex-direction: column; align-items: center; }
-  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; }
-  .stand-sala.grande .ss-qr img { width: min(560px, 62vh, 90vw) !important; height: min(560px, 62vh, 90vw) !important; }
-  .stand-sala.grande .ss-lado { flex: 0 0 auto; text-align: center; }
-  .stand-sala.grande .ss-lado .row { justify-content: center; }
-  .stand-sala.grande .ss-cuenta { margin: 2px 0 8px; font-size: clamp(22px, 4vh, 28px); }
-  .ss-titqr { display: none; font-weight: 900; font-size: clamp(24px, 4.6vh, 40px); line-height: 1.15; margin: 0 0 10px; }
-  .stand-sala.grande .ss-titqr { display: block; }
+  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. Al lado, la marca, cuántos hay, Empezar la ronda
+     y los nombres que van llegando, como la pantalla de los equipos (src/equipos/equipos.css, .stp). */
+  body[data-stand="1"] .stand-sala.grande {
+    position: fixed; inset: 0; box-sizing: border-box; width: 100%; height: 100vh; height: 100dvh; z-index: 60;
+    margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: stretch; justify-content: flex-start;
+    padding: 16px; background: var(--paper); border: 0; box-shadow: none; text-align: center;
+  }
+  .stand-sala.grande #sala-abierta {
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; margin: auto 0;
+  }
+  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; width: 100%; }
+  .stand-sala.grande .ss-qr img {
+    width: min(calc(100vw - 32px), calc(100dvh - 360px)) !important; max-width: 100%; height: auto !important;
+    aspect-ratio: 1; image-rendering: pixelated; border: 0;
+  }
+  .stand-sala.grande .ss-lado { flex: 0 0 auto; width: 100%; text-align: center; }
+  .stand-sala.grande .ss-lado .row { justify-content: center; flex-wrap: wrap; gap: 10px; margin: 0; }
+  .stand-sala.grande .ss-lado .row > button { flex: 1 1 0; min-width: 0; }
+  .stand-sala.grande .ss-cuenta { margin: 0; font-size: max(18px, 2.4vh); line-height: 1.15; }
+  .stand-sala.grande .ss-cuenta strong { font-size: clamp(36px, 6vh, 64px); line-height: 1; }
+  .ss-titqr { display: none; font-weight: 900; font-size: clamp(18px, 3vh, 32px); line-height: 1.15; margin: 0; }
+  .stand-sala.grande .ss-titqr { display: block; white-space: nowrap; }
+  /* El aviso va primero y en el flujo: nunca tapa el QR aunque la pantalla se tenga que recorrer. */
+  .ss-banda-grande { display: none; }
+  .stand-sala.grande .ss-banda-grande {
+    display: block; position: static; flex-shrink: 0; margin: 0; padding: 8px 12px;
+    background: var(--yellow); color: #191919; font-size: max(18px, 2.6vh); font-weight: 900; line-height: 1.2;
+  }
+  /* La marca y Empezar la ronda: solo en la pantalla grande. En la página, Empezar la ronda está en su lugar de siempre. */
+  .ss-marca, .stand-sala:not(.grande) #sala-empezar { display: none; }
+  .stand-sala.grande .ss-marca {
+    display: none; align-items: center; gap: 0.35em; margin: 0;
+    font-size: max(18px, 2.6vh); font-weight: 900; letter-spacing: -0.02em; text-transform: uppercase;
+  }
+  .stand-sala.grande .ss-marca svg { width: 1.15em; height: 1.15em; }
+  .stand-sala.grande .ss-marca b { color: var(--magenta-ink); }
+  .stand-sala.grande #sala-empezar { flex: 1 0 100%; width: 100%; min-height: 64px; font-size: max(20px, 3vh); }
+  /* Los nombres de la pantalla grande. En celular son fichas chicas con su propio recorrido. En laptop y proyector llenan
+     su columna (más abajo): el tamaño va en el contenedor, así el ancho de cada columna crece con la letra, y cada nombre
+     ocupa un renglón sin partirse. */
+  .stand-sala.grande .ss-nombres {
+    display: flex; flex-wrap: wrap; justify-content: center; align-content: start; gap: 8px; max-height: 30vh; min-height: 0;
+    margin: 0; overflow: auto; font-size: 18px;
+  }
+  .stand-sala.grande .ss-nombres li { justify-content: center; font-size: inherit; font-weight: 800; padding: 0.15em 0.6em; }
+  .stand-sala.grande .ss-nombres .ss-nombre { overflow-wrap: normal; }
+  .stand-sala.grande .ss-nombres .ss-rep { font-size: max(14px, 0.45em); }
+  .stand-sala.grande .ss-nombres button { display: none; }
+  /* En una pantalla baja y ancha, dos columnas compactas dejan el QR y las acciones enteros a la vista. */
+  @media (max-width: 899px) and (orientation: landscape) {
+    body[data-stand="1"] .stand-sala.grande { padding: 8px 16px; }
+    .stand-sala.grande #sala-abierta {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 100%; margin: 0; gap: 6px 16px;
+      grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+      grid-template-areas:
+        "banda banda banda banda"
+        "img img tit tit"
+        "img img cuenta cuenta"
+        "img img empezar empezar"
+        "img img volver nueva"
+        "img img nombres nombres";
+    }
+    .stand-sala.grande .ss-qr, .stand-sala.grande .ss-lado, .stand-sala.grande .ss-lado .row { display: contents; }
+    .stand-sala.grande .ss-banda-grande { grid-area: banda; padding: 4px 8px; font-size: 16px; }
+    .stand-sala.grande .ss-titqr { grid-area: tit; font-size: 18px; }
+    .stand-sala.grande .ss-marca { display: none; }
+    .stand-sala.grande .ss-qr img {
+      grid-area: img; align-self: center; justify-self: center;
+      width: min(calc(50vw - 24px), calc(100dvh - 80px)) !important;
+    }
+    .stand-sala.grande .ss-cuenta { grid-area: cuenta; align-self: center; }
+    .stand-sala.grande #sala-empezar { grid-area: empezar; }
+    .stand-sala.grande #sala-grande { grid-area: volver; }
+    .stand-sala.grande #sala-nueva { grid-area: nueva; }
+    .stand-sala.grande .ss-nombres { grid-area: nombres; }
+  }
+  /* En laptop y proyector, el QR y los nombres reparten toda la ventana sin espacio muerto. */
+  @media (min-width: 900px) {
+    body[data-stand="1"] .stand-sala.grande { padding: 16px 24px; overflow: hidden; }
+    .stand-sala.grande #sala-abierta {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 100%; min-height: 0; margin: 0; gap: 8px 24px;
+      grid-template-rows: auto auto auto auto auto minmax(0, 1fr); align-items: start;
+      grid-template-areas:
+        "banda banda banda banda"
+        "tit tit marca marca"
+        "img img cuenta cuenta"
+        "img img empezar empezar"
+        "img img volver nueva"
+        "img img nombres nombres";
+    }
+    .stand-sala.grande .ss-qr, .stand-sala.grande .ss-lado, .stand-sala.grande .ss-lado .row { display: contents; }
+    .stand-sala.grande .ss-banda-grande { grid-area: banda; }
+    .stand-sala.grande .ss-titqr { grid-area: tit; }
+    .stand-sala.grande .ss-marca { grid-area: marca; display: inline-flex; justify-self: start; }
+    .stand-sala.grande .ss-qr img {
+      grid-area: img; align-self: center; justify-self: center;
+      width: min(calc(100dvh - 190px), calc(50vw - 40px)) !important;
+    }
+    .stand-sala.grande .ss-cuenta {
+      grid-area: cuenta; display: flex; align-items: baseline; justify-content: flex-start; gap: 12px; text-align: left;
+    }
+    .stand-sala.grande .ss-cuenta strong { font-size: clamp(48px, 12vh, 140px); }
+    .stand-sala.grande #sala-empezar { grid-area: empezar; }
+    .stand-sala.grande #sala-grande { grid-area: volver; }
+    .stand-sala.grande #sala-nueva { grid-area: nueva; }
+    .stand-sala.grande .ss-nombres {
+      grid-area: nombres; display: grid; grid-template-columns: repeat(var(--ss-cols, 2), minmax(0, 1fr));
+      align-content: start; gap: 10px; max-height: none; min-height: 0; overflow: hidden;
+    }
+    .stand-sala.grande .ss-nombres li {
+      display: block; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .stand-sala.grande[data-tramo="hasta-6"] .ss-nombres { --ss-cols: 1; font-size: clamp(22px, 6vh, 72px); }
+    .stand-sala.grande[data-tramo="7-12"] .ss-nombres { --ss-cols: 2; font-size: clamp(20px, 4.2vh, 50px); }
+    .stand-sala.grande[data-tramo="13-24"] .ss-nombres { --ss-cols: 3; font-size: clamp(20px, 3.2vh, 38px); }
+    .stand-sala.grande[data-tramo="25-mas"] .ss-nombres { --ss-cols: 3; font-size: clamp(20px, 2.6vh, 30px); }
+  }
   /* Con el QR en toda la pantalla no hay otra barra de desplazamiento detrás. */
   html:has(.stand-sala.grande) { overflow: hidden; }
   .ss-rep { font-style: normal; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border: 2px solid currentColor; padding: 0 4px; color: var(--magenta-ink); }
-  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada { display: none; }
+  .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada, .stand-sala.grande #sala-cerrar,
+  .stand-sala.grande .ss-estado { display: none; }
   /* El cuadro se lee, pero no se escribe. */
   body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
   /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
@@ -1814,6 +2145,11 @@
   /* El resultado en grande (pantalla.ts): el nombre es lo más grande, y el QR lo segundo, para leerlo desde el fondo. */
   .grande-row { margin-top: 14px; }
   .pantalla-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(20px, 4vw, 56px); align-items: center; }
+  /* El guardado del sorteo en la pantalla grande (pantalla.ts): una línea discreta abajo, con el botón si no se pudo. */
+  .pantalla-grab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0; font-size: clamp(14px, 1.3vw, 18px); font-weight: 700; color: var(--ink2); border-left: 4px solid var(--purple); padding-left: 10px; }
+  .pantalla-grab[hidden] { display: none; }
+  .pantalla-grab[data-grabacion="guardado"] { border-left-color: var(--teal); }
+  .pantalla-grab[data-grabacion="error"], .pantalla-grab[data-grabacion="recuperar"], .pantalla-grab[data-grabacion="no-coincide"] { border-left-color: var(--orange); color: var(--ink); }
   /* La letra la ajusta pantalla.ts (--letra) para que entren todos sin partir
      palabras; la cara, el relleno y el premio van en em y crecen con ella. */
   .pantalla-ganadores { font-size: var(--letra, 64px); display: flex; flex-direction: column; gap: max(10px, 0.24em); align-items: flex-start; min-width: 0; }
@@ -1842,8 +2178,10 @@
   .pantalla-fila { display: flex; align-items: baseline; gap: 0.35em; break-inside: avoid; padding: 0.08em 0; border-bottom: 2px solid var(--ink); }
   .pantalla-num { flex: 0 0 auto; min-width: 3.1ch; font: 800 0.55em/1.2 ui-monospace, Consolas, monospace; color: var(--ink2); }
   .pantalla-fila .pantalla-nombre { display: block; flex: 1 1 0; min-width: 0; font-size: 1em; line-height: 1.12; }
-  /* El orden de turnos en grande: «Turno 12» en lugar de «#12», en columnas un poco más anchas. */
-  .pantalla.turnos .pantalla-num { min-width: 8ch; }
+  /* El orden de turnos en grande: «Turno 12» en lugar de «#12», en columnas un poco más anchas. La etiqueta mide
+     9ch, uno más que «Turno 12»: desde «Turno 10» el nombre quedaba pegado a su número y ya no empezaba en la misma
+     columna que los de una cifra. */
+  .pantalla.turnos .pantalla-num { min-width: 9ch; }
   .pantalla.turnos .pantalla-lista { columns: 15em; }
   .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
   /* El tamaño lo fija pantalla.ts al dibujarlo, con módulos enteros: estirado por CSS se rompía. */
@@ -1899,6 +2237,34 @@
   /* La tarjeta recibe el foco al abrir para que se anuncie, pero no es un
      control: sin el anillo amarillo, y conserva su sombra. */
   .acct-card:focus, .acct-card:focus-visible { outline: none; box-shadow: var(--sh); }
+  /* Mandar y retirar: en laptop la ventana se ensancha y los datos van en dos columnas; en el celular va pegada abajo. */
+  @media (min-width: 900px) {
+    .dlg-card.dlg-mandar { max-width: min(860px, calc(100vw - 48px)); }
+    .dlg-mandar .saldo-datos { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; align-items: start; }
+    .dlg-mandar .saldo-datos > .saldo-dato:first-child { grid-column: 1 / -1; }
+    .dlg-mandar .saldo-total { font-size: 32px; }
+  }
+  @media (max-width: 460px) {
+    .acct-back:has(.dlg-mandar) .dlg-mandar { margin-block: auto 0; }
+  }
+  /* Tus dólares digitales: aprovecha la pantalla. En el celular va pegada abajo, al alcance del pulgar, y la dirección y el QR
+     entran sin recorrer. En laptop se ensancha, con la letra más grande, y el QR va a la izquierda de la dirección. */
+  @media (min-width: 900px) {
+    .dlg-card.dlg-saldo { max-width: min(640px, calc(100vw - 48px)); }
+    .dlg-card.dlg-saldo:has(.saldo-qr) { max-width: min(860px, calc(100vw - 48px)); }
+    .dlg-saldo .saldo-lead { font-size: 18px; }
+    .dlg-saldo .saldo-titulo { font-size: 22px; }
+    .dlg-saldo .saldo-paso:has(.saldo-qr) { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 32px; align-items: start; }
+    .dlg-saldo .saldo-paso:has(.saldo-qr) > * { grid-column: 1 / -1; }
+    .dlg-saldo .saldo-paso:has(.saldo-qr) > .saldo-qr { grid-column: 1; grid-row: 3; align-self: center; }
+    .dlg-saldo .saldo-paso:has(.saldo-qr) > .saldo-datos { grid-column: 2; grid-row: 3; align-self: center; }
+  }
+  @media (max-width: 460px) {
+    .acct-back:has(.dlg-saldo) .dlg-saldo { margin-block: auto 0; }
+    .dlg-saldo .saldo-dir { font-size: 15px; padding: 8px 10px; }
+    .dlg-saldo .saldo-dato:not(:first-child) { display: flex; align-items: baseline; gap: 8px; }
+    .dlg-saldo .saldo-dato:not(:first-child) dd { margin: 0; }
+  }
   .acct-head {
     flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px;
     border-bottom: var(--bw) solid var(--ink);
@@ -2007,23 +2373,53 @@
   .dlg-estado { min-height: 1.4em; font-size: 16px; line-height: 1.4; color: var(--ink2); overflow-wrap: anywhere; }
   .dlg-estado:empty { display: none; }
   .dlg-estado.ok { color: var(--teal-ink); font-weight: 700; }
+  .dlg-estado.bad { color: var(--magenta-ink); font-weight: 700; }
   .dlg-estado a { color: inherit; text-underline-offset: 3px; }
   .dlg-main {
     min-height: 48px; padding: 0 20px; background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink);
     box-shadow: var(--sh-sm); font: inherit; font-size: 17px; font-weight: 800; cursor: pointer;
   }
   .dlg-main:disabled { background: var(--card); color: var(--muted); box-shadow: none; cursor: default; }
+  /* El botón de Tus dólares digitales es más alto que el de los demás diálogos, que siguen en 48 px. */
+  .dlg-card.dlg-saldo .dlg-main { min-height: 56px; }
+  /* Tus dólares digitales: el saldo arriba, y cada paso con su título, una línea, los datos y lo demás plegado. */
+  .saldo-total { margin: 0 0 12px; font-size: 22px; font-weight: 800; line-height: 1.25; }
+  .saldo-practica { margin: 0 0 12px; padding: 8px 12px; border: 2px solid var(--ink); background: var(--card); font-size: 15px; line-height: 1.4; }
+  .saldo-paso { display: flex; flex-direction: column; gap: 10px; }
+  .saldo-titulo { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.25; }
   .saldo-lead { font-size: 16px; line-height: 1.5; color: var(--ink2); }
-  .saldo-pasos { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 8px; font-size: 16px; line-height: 1.5; }
-  .saldo-nota { margin: 0; }
+  .saldo-paso .saldo-lead { margin: 0; }
+  .saldo-datos { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .saldo-dato dt { font-size: 14px; font-weight: 800; letter-spacing: 0.02em; color: var(--ink2); }
+  .saldo-dato dd { margin: 4px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 16px; }
   .saldo-dir {
     display: block; font-family: ui-monospace, Consolas, monospace; font-size: 18px; font-weight: 700; line-height: 1.4;
     background: var(--paper); border: 2px solid var(--ink); padding: 10px 12px; overflow-wrap: anywhere; user-select: all;
   }
+  .saldo-dato .saldo-dir { flex: 1 1 100%; }
+  .saldo-dato .mini { min-height: 44px; }
+  .saldo-dato .mini:disabled { opacity: 0.5; box-shadow: none; cursor: default; }
   .saldo-qr { align-self: center; background: #fff; border: 2px solid var(--ink); width: 176px; height: 176px; image-rendering: pixelated; }
+  .saldo-paso .saldo-qr { border-width: 3px; padding: 8px; box-sizing: content-box; }
+  .dlg-saldo .saldo-paso .saldo-qr { padding: 0; }
+  .dlg-saldo .saldo-total { font-size: clamp(26px, 7vw, 36px); line-height: 1.15; }
   .saldo-bs {
     min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 12px; font: inherit; font-size: 16px;
     background: var(--field, var(--paper)); color: var(--ink); border: 2px solid var(--ink);
+  }
+  /* Retirar: lo que llega es el número que más pesa. */
+  .dlg-mandar .saldo-dato:has([data-mandar="llega"]) b { font-size: 24px; font-weight: 800; }
+  .saldo-dato .saldo-pista { margin-top: 6px; font-size: 15px; line-height: 1.4; color: var(--ink2); }
+  .saldo-montos { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+  .saldo-montos .mini { min-height: 44px; min-width: 56px; }
+  .saldo-montos .mini[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .saldo-ultimo { margin: 0; font-size: 15px; line-height: 1.4; color: var(--ink2); }
+  .saldo-mas summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+  .saldo-mas p { margin: 4px 0 8px; font-size: 15px; line-height: 1.5; color: var(--ink2); }
+  .saldo-otras { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .saldo-link {
+    min-height: 44px; padding: 0; background: none; border: 0; color: var(--ink); font: inherit; font-size: 16px; font-weight: 700;
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   }
   .saldo-aviso { font-size: 16px; line-height: 1.4; color: var(--teal-ink); }
   .mon-saldo { font-size: 24px; line-height: 1.2; }
@@ -2091,6 +2487,10 @@
     margin: 0; min-width: 0; min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: 14px; font-weight: 700; color: var(--ink2);
   }
+  /* Con las dos cuentas (personas y participaciones o turnos) no entra en un renglón ni en el celular: hasta dos.
+     Sin reparto, un solo renglón con puntos suspensivos como siempre (D19). La barra mide su alto y la página
+     deja ese aire abajo, así que no tapa nada ni mueve la acción principal. */
+  .sig-paso.doble { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
   /* Aire abajo: el pie y lo último de la página llegan a verse enteros por encima
      de la barra. Siempre en la herramienta, esté la barra o no: si el relleno
@@ -2259,17 +2659,23 @@
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
 
-  /* «Cuántos ganan» (src/ui/ganadores.ts): el rótulo, un número y los atajos de lo común (1, 2, 3, 5 y 10), pegados.
-     Si no entran en un renglón (320 px) pasan al de abajo todos juntos: el campo nunca queda cortado. Los atajos son
-     los chips de los premios, con el mismo blanco de toque. */
-  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
+     de lo común. El grupo puede bajar de renglón y nunca impone un ancho mayor que su caja, también a 320 px. */
+  .sellar-ganadores { margin-top: 16px; max-width: 100%; }
+  .sellar-ganadores + .row { margin-top: 12px; }
+  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; }
   .nw-grupo > label { margin: 0; }
-  #nw {
-    box-sizing: border-box; width: 84px; min-height: 44px; padding: 9px 8px; text-align: center;
-    background: var(--card); color: var(--ink); border: 2px solid var(--ink); font-weight: 800; font-size: 16px;
+  .nw-contador { display: flex; align-items: center; flex: 0 0 auto; gap: 6px; }
+  .nw-paso {
+    width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 auto;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    font-family: inherit; font-size: 24px; font-weight: 900; line-height: 1; cursor: pointer;
   }
-  #nw:disabled { cursor: not-allowed; color: var(--muted); }
-  .nw-atajos { margin: 0; gap: 6px; }
+  .nw-paso:hover:not(:disabled) { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .nw-paso:disabled { cursor: not-allowed; color: var(--muted); border-color: var(--muted); box-shadow: none; }
+  .nw-paso:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; box-shadow: 0 0 0 6px var(--yellow); }
+  #nw-valor { min-width: 44px; padding: 0 4px; text-align: center; font-size: 20px; font-weight: 900; }
+  .nw-atajos { margin: 0; gap: 6px; max-width: 100%; }
   .nw-atajos button { min-width: 44px; padding: 0 12px; }
   .nw-nota { margin-top: 8px; }
 
@@ -2313,6 +2719,11 @@
   .gamepick .rec-nota {
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
+  /* Un juego que un orden de turnos no ofrece se ve apagado y dice su motivo a la vista, no solo para el lector de pantalla. */
+  .gamepick .rec-nota.rec-nota-vista, .gamepick button.atenuado:not(.on) .rec-nota.rec-nota-vista {
+    position: static; width: auto; height: auto; margin: 0; padding: 0; overflow: visible; clip: auto; white-space: normal;
+    font-size: 14px; line-height: 1.3; font-weight: 700; color: var(--ink2); text-align: center;
+  }
   .rec-sel-nota { font-size: 16px; font-weight: 700; color: var(--ink2); margin: 8px 0 0; }
   .rec-sel-nota:empty { display: none; }
   /* Mientras corre el show el selector no se toca: apagado (inert) y con su motivo arriba. Con el resultado puesto sirve para verlo de nuevo con otro juego. */
@@ -2332,7 +2743,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .enlace, .gate button, .langs button, #nw { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, .nw-paso, button.netbadge, button.acct-badge { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector
@@ -2346,6 +2757,9 @@
   /* "ENSAYO: no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
   body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
   body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
+  @media (min-width: 900px) {
+    body[data-stand="1"] #st-round::after { font-size: clamp(14px, 2.6vh, 28px); }
+  }
   .st-brand > span:last-child { display: none; }
   .st-brand { padding: 4px 6px; }
   .st-top {
@@ -2366,9 +2780,14 @@
     .st-actions button { padding: 8px 14px; }
     /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
        dos se partía en cuatro renglones ("ENSAYO: / NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
-    body[data-ensayo="1"] .st-top, body[data-stand="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
+    body[data-ensayo="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
     body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
     body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
+    /* En el stand los botones ceden una fila: el rótulo usa el ancho y queda en dos renglones como mucho. */
+    body[data-stand="1"] .st-top { flex-wrap: wrap; row-gap: 6px; }
+    body[data-stand="1"] #st-round { flex: 1 1 0; min-width: 0; }
+    body[data-stand="1"] .st-actions { order: 3; flex: 1 0 100%; justify-content: flex-end; }
+    body[data-stand="1"] #st-round::after { white-space: normal; }
   }
 
   /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */
@@ -2418,23 +2837,107 @@
   .espera-juego-n { font-size: var(--letra-sala-sec); font-weight: 700; color: var(--ink2); }
   .espera-juego-n b { color: var(--ink); font-weight: 900; }
   .espera-juego .ghost { min-height: 48px; font-size: 16px; }
-  /* La lista de juegos, sobre toda la espera: una tarjeta que se recorre por dentro si no entra. */
+  /* La lista de juegos, sobre toda la espera: una tarjeta que se recorre por dentro si no entra. El fondo es de papel
+     lleno: con un velo, la espera de atrás (los nombres, el reloj gigante, la cabecera) se transparentaba, y la barra de
+     abajo, que es de papel, la cortaba en pedazos. `--barra` (espera.ts) es el alto de esa barra: lo que se lleva a la
+     vista (la tarjeta donde cae Sorprendeme, el foco con Tab) no queda debajo de ella. */
   .espera-juegos {
     position: fixed; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px;
-    padding: 16px; background: color-mix(in srgb, var(--paper) 94%, transparent); overflow-y: auto; overscroll-behavior: contain;
+    padding: 16px 16px 0; background: var(--paper); overflow-y: auto; overscroll-behavior: contain; scroll-padding-bottom: var(--barra, 96px);
   }
-  .espera-juegos::before, .espera-juegos::after { content: ""; flex: 1 0 0; }
-  .espera-juegos-t { font-size: var(--letra-sala-prin); font-weight: 900; }
-  .espera-juegos-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; width: min(100%, 760px); }
+  /* Centrado arriba y abajo con márgenes automáticos: sobra lugar y queda al medio, falta y se recorre desde el borde. */
+  .espera-juegos-t { margin-top: auto; font-size: var(--letra-sala-prin); font-weight: 900; }
+  /* Qué quiere decir la estrella de las tarjetas: una línea bajo el título, a 16 px como todo lo que mira la sala. */
+  .espera-juegos-sub { margin-top: -4px; font-size: var(--letra-sec); font-weight: 700; color: var(--ink2); }
+  .espera-juegos-sub i { font-style: normal; color: var(--magenta-ink); }
+  /* Grilla compacta: dos columnas en un teléfono (la lista de botones de texto se comía la pantalla entera) y más
+     en pantallas anchas. */
+  .espera-juegos-lista { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: min(100%, 760px); }
+  @media (min-width: 640px) { .espera-juegos-lista { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 720px) { .espera-juegos-lista { grid-template-columns: repeat(4, 1fr); } }
   .espera-juego-op {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; padding: 8px 12px;
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: var(--letra-sec); cursor: pointer;
   }
   .espera-juego-op i { font-style: normal; color: var(--magenta-ink); }
   .espera-juego-op small { font-family: ui-monospace, Consolas, monospace; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); }
-  .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); }
+  /* La marca de la tarjeta encendida es de toda la tarjeta: el contorno la rodea entera. En una tarjeta con captura el
+     violeta del fondo es solo la franja del nombre, y quedaba escondida si la barra de abajo la tapaba. */
+  .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); outline: 4px solid var(--purple); outline-offset: 2px; }
   .espera-juego-op[aria-pressed="true"] small, .espera-juego-op[aria-pressed="true"] i { color: inherit; }
+  /* El juego que no encaja con esta cantidad de gente se ve apagado, para que su rango no se lea como un marcador. En el
+     tema claro el papel blanco deja la captura a media luz y hace falta apagarla más (0,3), y en el oscuro 0,45 ya se ve
+     apagada. Las dos reglas del tema oscuro, la de la elección explícita y la del sistema, van con la misma guarda que
+     la elección de la captura de arriba. */
+  .espera-juego-op.no-encaja .sel-img { opacity: 0.3; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .espera-juego-op.no-encaja .sel-img { opacity: 0.45; }
+  }
+  :root[data-theme="dark"] .espera-juego-op.no-encaja .sel-img { opacity: 0.45; }
+  .espera-juego-op.no-encaja:not([aria-pressed="true"]) small { color: var(--muted); }
+  /* La captura del juego manda: la escena a todo lo ancho del botón y debajo el nombre y el rango, a 16 px como todo lo
+     que mira la sala. Es el selector de la página (`botones-kit.ts`): la misma pareja de archivos y la misma selección
+     por tema. */
+  .espera-juego-op.con-captura { padding: 0 0 8px; gap: 3px; }
+  .espera-juego-op.con-captura .sel-img {
+    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover;
+    border: 0; border-bottom: 2px solid var(--ink); background: var(--field);
+  }
+  .espera-juego-op.con-captura .espera-juego-nombre { font-size: var(--letra-sec); line-height: 1.25; padding: 0 6px; }
+  .espera-juego-op.con-captura small { font-size: var(--letra-sec); }
+  /* Con la misma fuerza que la regla de la imagen, y después de ella: sin esto, en el tema claro se ven las dos capturas. */
+  .espera-juego-op.con-captura .sel-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .espera-juego-op .sel-osc { display: block; }
+    :root:not([data-theme="light"]) .espera-juego-op .sel-cla { display: none; }
+  }
+  :root[data-theme="dark"] .espera-juego-op .sel-osc { display: block; }
+  :root[data-theme="dark"] .espera-juego-op .sel-cla { display: none; }
   .espera-juegos .ghost { min-height: 48px; font-size: 16px; }
+  /* Sorprendeme y Listo quedan siempre a la vista, pegados abajo: diez tarjetas en dos columnas no entran en un celular ni
+     en una laptop a 200 % de zoom, y la lista se recorre por dentro. */
+  /* La sombra de papel a los costados tapa las sombras de las tarjetas que pasan por debajo, que se asomarían 4 px. Es una
+     sombra y no más ancho: no suma desborde, y a 390 px la barra no puede pasar del ancho de la pantalla. */
+  .espera-juegos-acc {
+    position: sticky; bottom: 0; align-self: center; width: min(100%, 760px); display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 12px;
+    margin-bottom: auto; padding: 10px 0 max(14px, env(safe-area-inset-bottom, 0px)); background: var(--paper); border-top: 2px solid var(--ink);
+    box-shadow: -6px 0 0 var(--paper), 6px 0 0 var(--paper);
+    /* Por encima de la tarjeta donde cayó Sorprendeme (`.azar-quedo` va con z-index 1): su contorno y su sombra pasan por debajo. */
+    z-index: 2;
+  }
+  /* Mientras Sorprendeme gira, lo que no puede salir se ve apagado y el botón avisa que ya está en marcha. */
+  .espera-juegos.girando .espera-juego-op:not([data-en-juego]) { opacity: 0.4; }
+  .espera-juegos [data-azar][aria-disabled="true"] { opacity: 0.6; cursor: default; }
+  /* Donde cayó: borde grueso de tinta, sombra grande y un poco más grande, para que se distinga del paso de la luz y se
+     lea desde el fondo de la sala. Con movimiento reducido, la misma marca sin la escala. */
+  .espera-juego-op.azar-quedo {
+    position: relative; z-index: 1; outline: 4px solid var(--ink); outline-offset: 0; box-shadow: 6px 6px 0 var(--ink);
+    transform: scale(1.04); transition: transform 0.15s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .espera-juego-op.azar-quedo { transform: none; transition: none; } }
+  /* En una pantalla apaisada, cinco columnas: diez juegos son dos filas parejas y entran sin recorrerse. Con cuatro eran
+     4, 4 y 2, y a 1362 x 632 pasaban de la altura por 17 px: una barra de desplazamiento sobre la imagen proyectada. */
+  @media (min-width: 900px) and (orientation: landscape) {
+    .espera-juegos-lista { grid-template-columns: repeat(5, 1fr); width: min(100%, 1000px); }
+    .espera-juegos-acc { width: min(100%, 1000px); }
+  }
+  /* Un escalón intermedio para los proyectores comunes (1280 x 720) y las laptops de 1366 x 768: con la letra de 16 px
+     sobraba un tercio del alto. El panel crece hasta 1180 px y el nombre y el rango pasan a 20 px. Pide 700 px de alto: a
+     1362 x 632 no hay lugar y queda como está. Va antes de la regla del proyector, que gana por orden con sus 24 px. */
+  @media (min-width: 1180px) and (min-height: 700px) and (orientation: landscape) {
+    .espera-juegos-lista, .espera-juegos-acc { width: min(100%, 1180px); }
+    .espera-juego-op.con-captura .espera-juego-nombre, .espera-juego-op.con-captura small { font-size: 20px; }
+    .espera-juegos-sub { font-size: 18px; }
+    .espera-juegos .ghost { font-size: 18px; min-height: 52px; }
+  }
+  /* En el proyector el panel es de la sala: tarjetas de unos 270 px y el nombre y el rango a 24 px. Los webp del selector
+     son de 320 x 180, así que más grandes no se agrandan de más. */
+  @media (min-width: 1600px) and (min-height: 900px) {
+    .espera-juegos-lista, .espera-juegos-acc { width: min(100%, 1400px); }
+    .espera-juego-op.con-captura .espera-juego-nombre, .espera-juego-op.con-captura small { font-size: 24px; }
+    .espera-juegos-sub { font-size: 22px; }
+    .espera-juegos .ghost { font-size: 22px; min-height: 56px; }
+  }
 
   /* Una pantalla baja (una laptop chica a 200 % de zoom, un celular acostado): la espera se aprieta para que entre, y si
      aun así no entra se recorre por dentro, con la calcomanía y "Volver" siempre arriba. */
@@ -2443,8 +2946,6 @@
     .espera-top { top: 0; left: 0; right: 0; padding: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: var(--paper); }
     .espera-top .sticker { padding: 4px 12px; font-size: 14px; letter-spacing: 0.02em; max-width: 48vw; }
     .espera-top .ghost { min-height: 44px; white-space: nowrap; }
-    /* En la barra, solo "Cambiar de juego": el nombre del juego no entra y el botón abre la lista con el actual marcado. */
-    .espera-juego.en-barra .espera-juego-n { display: none; }
     .espera-premio { font-size: clamp(18px, 6vh, 30px); }
     .espera-ensayo { font-size: clamp(14px, 3.4vh, 20px); padding: 2px 10px; }
     .espera-reloj { font-size: clamp(52px, 20vmin, 340px); }
@@ -2456,6 +2957,24 @@
     .espera-id { font-size: clamp(14px, 3.2vh, 20px); }
     .espera-juego-n { font-size: clamp(16px, 3.6vh, 22px); }
     .espera-juego .ghost { min-height: 44px; }
+  }
+  /* En la barra, solo "Cambiar de juego": en una pantalla baja y angosta (un celular acostado) el nombre del juego no entra y
+     el botón abre la lista con el actual marcado. Si hay ancho (una tablet o una laptop de 1024 x 560) el nombre se queda. */
+  @media (max-height: 560px) and (max-width: 999px) {
+    .espera-juego.en-barra .espera-juego-n { display: none; }
+  }
+  /* En un celular la barra de arriba (calcomanía, Prueba y Volver) va en el flujo y no fija. Fija, la capa le reservaba
+     72 px de relleno, pensados para una calcomanía de un renglón: con tres (Todavía nadie sabe quién gana, a 390 px) la
+     calcomanía llegaba más abajo y tapaba la cuenta, y a 320 px el título. En el flujo su alto empuja a todo lo demás, y
+     `ajustar` (espera.ts) ya lo cuenta al achicar. `order: -1` la deja antes de los espaciadores que centran el resto. Entre 481
+     y 599 px el grupo de Volver también conserva su ancho (hasta 480 lo hace el bloque de arriba): si se encoge, el botón
+     pisa la pastilla de Prueba. Desde 600 px (laptop y proyector) nada cambia, y una pantalla baja conserva su barra fija
+     con fondo, siempre arriba. */
+  @media (max-width: 599px) and (min-height: 561px) {
+    .espera { padding-top: max(16px, env(safe-area-inset-top, 0px)); }
+    .espera-top { position: static; order: -1; align-self: stretch; }
+    .espera-top-acc { flex-shrink: 0; }
+    .espera-ensayo { margin-top: 0; }
   }
 
   /* La lista y el resultado en grande. */
@@ -2609,10 +3128,13 @@
     .cc-via-l { display: inline; }
     .cc-via-c { display: none; }
   }
-  /* Con la cuenta abierta, el color de la red va en el borde del chip, y la insignia se esconde donde no entra: en un
-     celular, y en la fila de una línea entre 1101 y 1439 px. */
+  /* Con la cuenta abierta, el color de la red va en el borde del chip, y la insignia de siempre (un span) se esconde donde
+     no entra: en un celular, y en la fila de una línea entre 1101 y 1439 px. Con el modo Oficial la marca es un botón y se
+     ve en todos los anchos, porque confundir Prueba con Oficial es lo peor que puede pasar. La excepción es la de la
+     billetera en la otra red, en 460 px o menos: ahí la marca queda para el lector de pantalla y en pantalla la dice el
+     borde doble del chip (más abajo). */
   @media (max-width: 760px), (min-width: 1101px) and (max-width: 1439px) {
-    .auth .netbadge:not(.bad) { display: none; }
+    .auth span.netbadge:not(.bad) { display: none; }
     .auth .netbadge:not(.main):not(.bad) + .hello { border-left: 7px solid var(--orange); }
     .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
   }
@@ -2648,13 +3170,41 @@
     header .cuenta-chip { min-width: 44px; }
     header .topnav { margin: 0; padding-inline: 0; }
     header .topnav a, header .topnav .mas-btn { padding-inline: 7px; }
+    /* La marca del modo, cuando es botón, se queda a la vista y se angosta sin bajar del piso de 14 px de letra
+       (docs/ux.md): menos aire entre letras y a los lados. El alto lo da la regla de 48 px de las pantallas táctiles,
+       y con el botón la cuenta se arrima más para que la fila del logo no se parta. */
+    header .auth button.netbadge { font-size: 14px; padding: 0 4px; letter-spacing: 0.02em; }
+    header .auth:has(> button.netbadge) { gap: 4px; }
     /* La advertencia completa sigue en la página y en el panel. En el chip, el borde
        doble distingue la red incorrecta; la insignia conserva su texto accesible. */
     header .auth .netbadge.bad {
-      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+      position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; margin: -1px;
       overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
     }
     header .auth .netbadge.bad + .hello { border-left: 7px double var(--orange); }
+  }
+  /* Con la marca del modo como botón (cuando existe el modo Oficial) la fila del logo no entraba entre 320 y 374 px ni
+     entre 461 y 560 px: idioma, marca y cuenta caían juntos a una fila nueva y la cabecera crecía 54 px (medido el 10 de
+     noviembre de 2026 sobre el build del ensayo, con ?red=oficial, en es y en). Con el botón a la vista, el borde de la
+     cuenta no repite el color del modo, que ya dice el botón; hasta 700 px el idioma muestra solo el botón del otro,
+     el que se puede elegir, y la cuenta queda en su cara o en su silueta, como en el celular; y debajo de 350 px el
+     logo es la llama sola (la palabra sigue para el lector de pantalla en el aria-label del enlace). */
+  @media (max-width: 760px), (min-width: 1101px) and (max-width: 1439px) {
+    header .auth:has(> button.netbadge:not(.bad)) .netbadge + .hello { border-left: 2px solid var(--ink); }
+  }
+  @media (max-width: 700px) {
+    header .bar:has(button.netbadge) .langs button.on { display: none; }
+  }
+  @media (min-width: 461px) and (max-width: 700px) {
+    header .auth:has(> button.netbadge) .cuenta-chip.fuera, header .auth:has(> button.netbadge) .cuenta-chip.ocupado { padding: 4px 10px; }
+    header .auth:has(> button.netbadge) .cuenta-chip.dentro { padding: 3px 12px 3px 6px; }
+    header .auth:has(> button.netbadge) .cuenta-chip.dentro .cc-txt { display: none; }
+    header .auth:has(> button.netbadge) .cuenta-chip.fuera .cc-t, header .auth:has(> button.netbadge) .cuenta-chip.ocupado .cc-t {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  }
+  @media (max-width: 349px) {
+    header .bar:has(button.netbadge) .wm-text { display: none; }
   }
   /* La cuenta que acaba de abrirse aparece con un pulso corto, y sin movimiento queda el aro quieto un instante. */
   .cuenta-chip.recien { animation: cc-recien 1.4s ease-out 1; }
@@ -2732,7 +3282,7 @@
   .gan-est.sin-consulta { border-style: dashed; }
   .gan-est.cargando, .gan-est.en-mano { font-weight: 700; }
   .gan-det { grid-column: 2 / -1; font-size: 16px; color: var(--ink2); overflow-wrap: anywhere; }
-  .gan-enlace { color: var(--ink); font-weight: 700; }
+  .gan-enlace { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 700; }
   .gan-pagar { grid-column: 2 / -1; justify-self: start; }
   .gan-pago { grid-column: 1 / -1; }
   .gan-pago:empty { display: none; }
@@ -2747,11 +3297,430 @@
   .gan-msg.bad { color: var(--magenta-ink); }
   .gan-copia { width: 100%; padding: 8px 10px; font-size: 16px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); overflow-wrap: anywhere; }
   .gan-copia[hidden], .gan-afuera[hidden], .gan-form a[hidden], .gan-campo[hidden], .gan-form button[hidden] { display: none; }
+  .gan-form .row[hidden] { display: none; }
   .gan-afuera summary { min-height: 48px; display: flex; align-items: center; font-weight: 800; font-size: 16px; cursor: pointer; }
+  /* Pagar premio con la cuenta que paga sola: el monto en grande o el contador de a un dólar, sin campo para escribir. */
+  .gan-google { display: grid; gap: 10px; }
+  .gan-monto-grande { margin: 0; font-size: 28px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+  .gan-contador { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .gan-contador button { flex: 1 1 9rem; }
+  .gan-contador-valor { flex: 1 1 100%; order: -1; text-align: center; font-size: 24px; font-weight: 800; }
+  .gan-otra > summary { min-height: 48px; display: flex; align-items: center; font-weight: 800; font-size: 16px; cursor: pointer; }
+  .gan-otra > :not(summary) { margin-top: 10px; }
+  .gan-falta { margin: 0; font-size: 16px; font-weight: 700; color: var(--magenta-ink); overflow-wrap: anywhere; }
+  .gan-falta:empty { display: none; }
+  .gan-google[hidden], .gan-contador[hidden], .gan-monto-grande[hidden], .gan-otra[hidden], .gan-falta[hidden] { display: none; }
+  /* La acción que mueve plata es la principal (magenta, llena) y no pesa lo mismo que las demás. */
+  .gan-google > button, .gan-form > .primary { justify-self: start; }
+  /* Con el pago hecho, la confirmación se lee de un vistazo y el enlace de la fila (el que ya está en el detalle) no se repite. */
+  .gan-form.gan-hecho .gan-msg:not(.bad) { font-size: 22px; line-height: 1.25; }
+  .gan-fila:has(.gan-est.pagado) .gan-form .gan-enlace { display: none; }
+  /* Pagar desde otra billetera: el pago para copiar va antes que la instrucción, y los títulos plegables parecen tocables. */
+  .gan-form:has(.gan-afuera:not([hidden])) > .gan-afuera { order: 1; }
+  .gan-form:has(.gan-afuera:not([hidden])) > .gan-msg { order: 2; }
+  .gan-otra > summary::before, .gan-afuera > summary::before { content: "+"; margin-right: 10px; }
+  .gan-otra[open] > summary::before, .gan-afuera[open] > summary::before { content: "\2212"; }
+  /* Pagar y Volver a mirar: el botón principal mide 56 px en todos los anchos. Apagado, queda plano y sin sombra, para que no
+     parezca el que se toca; y con un pago en duda, Volver a mirar va primero. */
+  .gan-form .row > button.primary { min-height: 56px; }
+  .gan-form .row > button.primary:disabled { background: var(--card); color: var(--muted); border-color: var(--muted); box-shadow: none; cursor: default; }
+  .gan-form .gan-volver { order: -1; }
+  /* La línea de la plata, pegada al monto y en tinta: a quién se paga y cuánto queda. */
+  .gan-google > .gan-explica { color: var(--ink); font-size: 18px; font-weight: 700; line-height: 1.3; }
+  .gan-google > .gan-explica.aviso { color: var(--magenta-ink); }
+  /* Con el cuadro abierto, "Pagar premio" de la fila sobra en cualquier ancho: el botón de pagar va dentro. */
+  .gan-fila:has(.gan-pago:not(:empty)) > .gan-pagar { display: none; }
+  @media (min-width: 900px) {
+    .gan-form .row > button.primary { min-width: 240px; }
+    .gan-monto-grande, .gan-contador-valor { font-size: 44px; }
+  }
   @media (max-width: 460px) {
     .gan { padding: 12px; }
+    .block .body.gan { padding: 12px; }
     .gan-fila { column-gap: 10px; padding: 10px; }
     .gan-est { max-width: 8.5rem; padding: 4px 8px; }
-    .gan-form .row > button, .gan-pagar { flex: 1 1 100%; }
-    .gan-pagar { justify-self: stretch; }
+    .gan-cuenta { white-space: nowrap; }
+    .gan-form .row > button, .gan-pagar, .gan-form > .primary { flex: 1 1 100%; }
+    .gan-pagar, .gan-form > .primary, .gan-google > button { justify-self: stretch; }
+    /* El cuadro usa todo el ancho de la fila: sin una caja más adentro. */
+    .gan-fila:has(.gan-pago:not(:empty)) { padding-inline: 0; border-inline-width: 0; }
+    .gan-fila:has(.gan-pago:not(:empty)) > :not(.gan-pago) { margin-inline: 10px; }
+    .gan-form { padding: 10px 0 0; border-width: 2px 0 0; }
+    .gan-form > .row { margin-top: 0; }
+    /* Lo que dice la pantalla va justo arriba de los botones, a la vista; lo plegable, abajo. */
+    .gan-form > .gan-msg, .gan-form > button.ghost, .gan-form > .gan-copia { order: 1; }
+    .gan-form > .row { order: 2; }
+    .gan-form > .gan-otra, .gan-form > .gan-afuera, .gan-form > .gan-enlace { order: 3; }
+    .gan-form:has(.gan-afuera:not([hidden])) > .gan-afuera { order: 4; }
+    .gan-form:has(.gan-afuera:not([hidden])) > .gan-msg { order: 5; }
+  }
+
+  /* «Dejá tu cuenta lista» (src/ui/cuenta-lista.ts, 11 de noviembre de 2026): el paso a pantalla completa y obligatorio
+     del modo Oficial. Tapa todo, también la cabecera y los avisos. Tres franjas: la barra, el cuerpo que se recorre y el
+     pie con la acción principal y las dos salidas, siempre a la vista. Cajas con borde de tinta y sombra dura, sin
+     radios ni sombras difusas, como el resto del sitio.
+     En el celular el pie va fijo abajo, de borde a borde. Desde 760 px de ancho (y con más de 480 de alto) el cuerpo y
+     el pie forman un solo bloque al medio de la pantalla, con el mismo ancho: la acción queda pegada a los pasos. Desde
+     1000 px, dos columnas: a la izquierda el título (y abajo, las notas de las salidas), a la derecha los pasos y,
+     debajo de ellos, la principal y las salidas, en el mismo orden que en el celular. Las notas pasan al pie desde
+     760 px (`ubicarPiezas`, `src/ui/cuenta-lista.ts`). */
+  html.con-cuenta-lista, html.con-cuenta-lista body { overflow: hidden; }
+  .cuenta-lista {
+    position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh; background: var(--paper); color: var(--ink);
+    /* La página va de borde a borde (viewport-fit=cover): la muesca y las esquinas del celular no tapan la barra ni el pie. */
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px);
+    /* El ancho de la columna (o de las dos) y su margen: el cuerpo, el pie y la barra se alinean con esto. */
+    --cl-ancho: 560px; --cl-margen: 16px;
+  }
+  .cuenta-lista [hidden] { display: none !important; }
+  .cl-barra {
+    flex: none; display: flex; align-items: center; gap: 12px; height: 56px;
+    padding: 0 max(var(--cl-margen), calc((100% - var(--cl-ancho)) / 2));
+    border-bottom: var(--bw) solid var(--ink); background: var(--paper);
+  }
+  .cl-marca { display: inline-flex; align-items: center; gap: 8px; font-weight: 900; font-size: 20px; letter-spacing: 0.04em; }
+  .cl-marca svg { width: 28px; height: 32px; fill: var(--ink); }
+  .cl-modo { margin-left: auto; box-shadow: none; }
+  .cl-idiomas { display: inline-flex; gap: 6px; }
+  .cl-idioma {
+    min-width: 44px; min-height: 44px; padding: 0 8px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 800; letter-spacing: 0.08em; cursor: pointer;
+  }
+  .cl-idioma[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); }
+  /* El hueco de la barra de recorrido, a los dos lados: con o sin ella, la columna queda alineada con el pie. */
+  /* En columna: el contenido se centra en el alto con márgenes automáticos, que nunca quedan negativos. Si no entra,
+     el cuerpo se recorre como siempre. */
+  .cl-cuerpo {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable both-edges;
+    display: flex; flex-direction: column;
+  }
+  /* Lo que no entra se esfuma contra el pie: se nota que sigue más abajo y ningún renglón parece cortado. Al final del
+     recorrido queda sobre el margen de abajo del contenido, donde no tapa nada. */
+  .cl-cuerpo::after {
+    content: ""; display: block; position: sticky; bottom: 0; height: 24px; margin-top: -24px; pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--paper));
+  }
+  .cl-contenido {
+    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: auto; padding: 16px var(--cl-margen) 28px;
+    width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px;
+  }
+  .cl-cabeza { display: flex; flex-direction: column; gap: 12px; }
+  .cl-titulo { margin: 0; font-size: clamp(28px, 8vw, 32px); line-height: 1.2; font-weight: 900; text-wrap: balance; }
+  .cuenta-lista .cl-titulo:focus, .cuenta-lista .cl-titulo:focus-visible { outline: none; box-shadow: none; }
+  .cl-bajada { margin: 0; font-size: 18px; line-height: 1.5; color: var(--ink2); }
+  .cl-bajada[hidden] { display: none; }
+  .cl-pasos { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+  .cl-paso { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+  .cl-paso.cl-actual { box-shadow: var(--sh); }
+  .cl-paso[data-estado="espera"] { border: 2px dashed var(--ink2); box-shadow: none; background: transparent; }
+  /* Con dos pasos pendientes, la fila lleva solo el círculo y el título. */
+  .cl-paso-cab { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; padding: 12px 14px; }
+  .cl-circulo {
+    grid-column: 1; grid-row: 1;
+    flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+    border: var(--bw) solid var(--ink); border-radius: 50%; background: var(--card); color: var(--ink); font-weight: 900; font-size: 18px;
+  }
+  .cl-circulo svg { width: 22px; height: 22px; }
+  .cl-paso[data-estado="espera"] .cl-circulo { color: var(--ink2); border-color: var(--ink2); border-width: 2px; background: transparent; }
+  .cl-paso[data-estado="no-salio"] .cl-circulo { background: var(--orange); color: var(--on-accent); }
+  .cl-paso[data-estado="haciendo"] .cl-circulo, .cl-paso[data-estado="revisando"] .cl-circulo { position: relative; }
+  .cl-paso-titulo { grid-column: 2; grid-row: 1; min-width: 0; margin: 0; font-size: 20px; line-height: 1.25; font-weight: 800; }
+  /* Con un solo paso a la vista, el título y la línea están afuera: la caja no repite marco ni cabecera. */
+  .cl-paso.cl-sola, .cl-paso.cl-sola.cl-actual { border: 0; box-shadow: none; background: transparent; }
+  .cl-sola .cl-paso-cuerpo { padding: 0; }
+  .cl-paso-cuerpo { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .cl-texto-caja, .cl-nota-caja { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+  .cl-nota-caja { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
+  .cl-error { border: 2px solid var(--ink); border-left: 8px solid var(--orange); background: var(--paper); padding: 8px 12px; display: grid; gap: 4px; }
+  .cl-error-texto { margin: 0; font-size: 16px; line-height: 1.45; font-weight: 700; color: var(--ink); }
+  .cl-form { display: grid; gap: 6px; }
+  .cl-etiqueta { font-size: 16px; font-weight: 700; }
+  .cl-form input {
+    min-height: 48px; width: 100%; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--ink);
+    background: var(--paper); border: var(--bw) solid var(--ink); border-radius: 0;
+  }
+  .cl-form input.cl-codigo { text-align: center; letter-spacing: 0.4em; font-family: ui-monospace, Consolas, monospace; font-size: 22px; }
+  /* El cupón: como en la tarjeta, en tres grupos y en letra que no confunde la O con el 0. */
+  .cl-form input.cl-cupon { text-align: center; letter-spacing: 0.12em; font-family: ui-monospace, Consolas, monospace; font-size: 20px; text-transform: uppercase; }
+  .cl-form input.cl-cupon::placeholder { letter-spacing: 0.12em; }
+  /* El cupón queda seleccionado tras un error («revisá las letras»): con los colores de la casa se lee, no en el gris del sistema. */
+  .cl-form input.cl-codigo::selection { background: var(--magenta); color: var(--on-accent); }
+  .cl-form input.cl-cupon::selection { background: var(--magenta); color: var(--on-accent); }
+  .cl-form .cl-ayuda { margin: 0; font-size: 16px; line-height: 1.45; }
+  .cl-cupon-listo { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; white-space: nowrap; }
+  /* Los datos para pagar un paquete (`src/ui/pago-panel.ts`): cada dato con su rótulo arriba y, al lado, «Copiar». En la
+     letra que no confunde la O con el 0, y elegible entero de un toque. El QR siempre oscuro sobre blanco. */
+  .pago-panel { display: grid; gap: 10px; }
+  .pago-dato { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 4px; }
+  .pago-et { grid-column: 1 / -1; margin: 0; font-size: 14px; font-weight: 800; letter-spacing: 0.04em; color: var(--ink2); }
+  .pago-valor {
+    min-width: 0; font-family: ui-monospace, Consolas, monospace; font-size: 16px; font-weight: 700; line-height: 1.4;
+    background: var(--paper); border: 2px solid var(--ink); padding: 8px 10px; overflow-wrap: anywhere; user-select: all;
+  }
+  .pago-copiar { align-self: stretch; padding-inline: 12px; }
+  /* El saldo que no alcanza: un dato para leer, sin caja ni nada que copiar. */
+  .pago-valor-saldo { grid-column: 1 / -1; margin: 0; font-family: inherit; background: none; border: 0; padding: 0; user-select: text; }
+  .pago-qr-caja { display: flex; align-items: center; gap: 12px; }
+  .pago-qr { flex: none; background: #fff; border: 2px solid var(--ink); image-rendering: pixelated; }
+  .pago-qr-ayuda { line-height: 1.35; }
+  .pago-app { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+  /* La moneda: un dato para leer, sin caja ni nada que copiar. Estoy en Bolivia, como enlace de texto antes de los datos. */
+  .pago-valor[data-dato="moneda"] { grid-column: 1 / -1; font-family: inherit; background: none; border: 0; padding: 0; user-select: text; }
+  .pago-panel > .pago-cambio { justify-self: start; }
+  .pago-mas > .pago-qr-caja, .pago-mas > .pago-app { margin-top: 10px; }
+  /* Más detalles: lo que no hace falta para pagar, plegado (dentro del panel y al final de la caja de la compra). */
+  /* Va como un enlace de texto, no como un botón: no compite con la acción principal ni con Copiar. */
+  details.mas.pago-mas, details.mas.cl-detalles { margin: 0; }
+  details.mas.pago-mas > summary, details.mas.cl-detalles > summary {
+    min-height: 48px; padding: 0; background: none; border: 0; box-shadow: none; color: var(--ink2);
+    font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .pago-mas > p, .cl-detalles > p { margin: 10px 0 0; font-size: 16px; line-height: 1.5; color: var(--ink2); overflow-wrap: anywhere; }
+  @media (max-width: 359px) { .pago-qr-caja { flex-direction: column; align-items: flex-start; } }
+  /* La ventana «Sumar sorteos» (`src/ui/pago-paquete.ts`): los mismos datos, en la ventana de las pantallas de la cuenta. */
+  .pago-cuerpo { display: flex; flex-direction: column; gap: 10px; }
+  .pago-texto { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+  .pago-nota { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
+  .pago-cierre { color: var(--ink2); border-top: 2px solid var(--ink2); padding-top: 10px; }
+  .pago-cuerpo .cl-secundario, .pago-cuerpo .cl-texto, .pago-cuerpo .pago-app { min-height: 48px; }
+  /* El botón de sumar sorteos, junto a la línea del cupo y en «Se te acabaron»: secundario, nunca como la principal. */
+  .cupo-sumar { margin: 4px 0 0; min-height: 44px; }
+  .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }
+  /* El error y el campo van siempre arriba de lo demás: lo que aparece después (la ayuda de Spam) no los empuja. */
+  .cl-paso-cuerpo > .cl-error { order: -2; }
+  .cl-paso-cuerpo > .cl-form { order: -1; }
+  .cl-secundario {
+    min-height: 44px; padding: 8px 16px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font: inherit; font-size: 16px; font-weight: 800; text-align: center; cursor: pointer; overflow-wrap: anywhere;
+  }
+  .cl-texto {
+    min-height: 44px; padding: 0; border: 0; background: none; color: var(--ink); align-self: flex-start;
+    font: inherit; font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+  }
+  .cl-secundario:disabled, .cl-texto:disabled { color: var(--ink2); border-color: var(--ink2); cursor: default; text-decoration: none; }
+  .cl-notas { display: grid; gap: 8px; }
+  .cl-nota { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink2); }
+  .cl-pie {
+    flex: none; padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    border-top: var(--bw) solid var(--ink); background: var(--card);
+    /* Los mismos huecos a los costados que el cuerpo cuando se recorre: así sus bordes coinciden siempre. */
+    overflow: hidden; scrollbar-gutter: stable both-edges;
+  }
+  /* Adentro del pie, la misma columna que la del contenido: la principal y las salidas tienen su ancho exacto. */
+  .cl-pie-dentro {
+    max-width: calc(var(--cl-ancho) + 2 * var(--cl-margen)); margin: 0 auto; padding: 0 var(--cl-margen);
+    display: flex; flex-direction: column-reverse; gap: 8px;
+  }
+  .cl-accion { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+  .cl-salidas { display: flex; justify-content: space-between; gap: 12px; width: 100%; }
+  .cl-salidas .cl-texto { align-self: auto; }
+  .cl-salida-prueba { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+  .cl-contenido > .cl-salidas { max-width: none; margin: 4px 0 0; border-top: 2px solid var(--ink2); padding-top: 8px; }
+  .cl-estado { margin: 0; font-size: 16px; line-height: 1.4; color: var(--ink2); font-weight: 600; }
+  /* Vacía sigue en el árbol (sin alto y sin sumar hueco): los lectores de pantalla oyen lo que se escriba después. */
+  .cl-estado:empty { height: 0; overflow: hidden; margin-bottom: -8px; }
+  .cl-principal {
+    width: 100%; min-height: 56px; padding: 8px 18px; background: var(--magenta); color: var(--on-accent);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); font: inherit; font-size: 22px; font-weight: 900;
+    line-height: 1.2; cursor: pointer; overflow-wrap: anywhere;
+  }
+  /* Apagada sigue siendo la que viene: la misma forma y el mismo tamaño, un rosa claro y el borde punteado (como el paso
+     que espera). Se prende entera cuando se puede tocar. */
+  .cl-principal:disabled {
+    background: color-mix(in srgb, var(--magenta) 24%, var(--card)); color: var(--ink);
+    border-style: dashed; box-shadow: none; cursor: default;
+  }
+  /* Apagada porque corre lo suyo («Activando tu cuenta…»): entera, con la ruedita del botón de entrar. No se confunde con
+     la que espera que se escriba algo, que es la del borde punteado. */
+  .cl-principal[aria-busy="true"] {
+    background: var(--magenta); color: var(--on-accent); border-style: solid; box-shadow: var(--sh-sm); cursor: progress;
+  }
+  .cl-principal[aria-busy="true"]::before {
+    content: ""; display: inline-block; vertical-align: -0.1em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
+    border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%;
+    animation: cc-gira 0.8s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { .cl-principal[aria-busy="true"]::before { animation: none; } }
+  /* Lo que dice qué es el desbloqueo, debajo de su botón. */
+  .cl-ayuda { color: var(--ink2); }
+  .cl-volver { align-self: center; }
+  @media (pointer: coarse) {
+    .cl-idioma, .cl-secundario, .cl-texto { min-height: 48px; }
+    .cl-idioma { min-width: 48px; }
+  }
+  @media (max-width: 359px) {
+    /* El celular chico: un poco menos de aire para que los dos pasos entren a la vista sin recorrer. */
+    .cl-nombre { display: none; }
+    .cl-contenido, .cl-cabeza { gap: 10px; }
+    .cl-contenido { padding-top: 12px; }
+    .cl-paso-cab { column-gap: 10px; padding: 10px 12px; }
+    .cl-paso-cuerpo { padding: 0 12px 12px; }
+    .cl-circulo { width: 32px; height: 32px; font-size: 16px; }
+    .cl-circulo svg { width: 20px; height: 20px; }
+    .cl-paso-titulo { font-size: 18px; }
+    /* Con la ruedita, «Activando tu cuenta…» sigue en un renglón. */
+    .cl-principal[aria-busy="true"] { padding-inline: 10px; font-size: 18px; }
+  }
+  @media (min-width: 760px) and (min-height: 481px) {
+    /* El cuerpo y el pie, un solo bloque al medio: la principal queda debajo de los pasos y no en el borde de la pantalla.
+       Si no entra, el cuerpo se recorre y el pie sigue a la vista. */
+    .cuenta-lista { --cl-ancho: 600px; --cl-margen: 24px; }
+    .cl-cuerpo { flex: 0 1 auto; margin-top: auto; }
+    .cl-contenido { padding-top: 24px; }
+    .cl-pie { margin-bottom: auto; padding: 8px 0 24px; border-top: 0; background: none; }
+    .cl-titulo { font-size: 32px; }
+    /* En la caja, «Otro código en…» y «Usar otro correo» van en una fila: el paso del código entra sin recorrer en la tablet
+       y en la compu. */
+    .cl-paso-cuerpo { flex-flow: row wrap; column-gap: 12px; row-gap: 8px; }
+    .cl-paso-cuerpo > * { flex: 1 1 100%; }
+    .cl-paso-cuerpo > .cl-secundario[data-accion="otro-codigo"] { flex: 1 1 auto; }
+    .cl-paso-cuerpo > .cl-texto { text-align: start; }
+    .cl-paso-cuerpo > .cl-texto[data-accion="otro-correo"] { flex: 0 0 auto; align-self: center; }
+  }
+  @media (min-width: 1000px) and (min-height: 481px) {
+    /* Dos columnas. Los pasos van abajo de la suya, pegados a la principal; el título arriba de la otra. */
+    .cuenta-lista { --cl-ancho: 1024px; --cl-margen: 32px; --cl-der: 560px; --cl-medio: 64px; }
+    .cl-contenido, .cl-pie-dentro {
+      display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, var(--cl-der)); column-gap: var(--cl-medio); align-items: start;
+    }
+    .cl-cabeza { grid-column: 1; grid-row: 1; }
+    .cl-pasos { grid-column: 2; grid-row: 1; align-self: end; margin-top: 0; }
+    /* La tercera fila se lleva lo que las notas tengan de más: las salidas quedan pegadas a la principal. */
+    .cl-pie-dentro { row-gap: 8px; grid-template-rows: auto auto 1fr; }
+    .cl-pie-dentro > .cl-notas { grid-column: 1; grid-row: 1 / span 3; padding-top: 6px; }
+    .cl-pie-dentro > .cl-accion { grid-column: 2; grid-row: 1; }
+    .cl-pie-dentro > .cl-salidas { grid-column: 2; grid-row: 2; }
+    .cl-titulo { font-size: 40px; line-height: 1.1; }
+    /* El cuerpo ocupa todo el alto sobrante y el contenido se apoya abajo; el pie tiene un alto mínimo fijo. Así la
+       principal arranca siempre a la misma altura, sea cual sea el paso, y el título queda sobre la base de los pasos. */
+    .cl-cuerpo { flex: 1 1 auto; margin-top: 0; }
+    .cl-contenido { margin-top: auto; margin-bottom: 0; }
+    .cl-cabeza { align-self: end; }
+    .cl-pie { margin-bottom: 0; min-height: 30vh; }
+  }
+  @media (min-width: 760px) and (min-height: 481px) and (max-height: 640px) {
+    /* Una pantalla baja (tablet acostada, laptop chica): menos aire arriba y abajo, para que el paso entre sin recorrer. */
+    .cl-contenido { padding-top: 12px; padding-bottom: 20px; }
+    .cl-pasos { gap: 10px; }
+    .cl-pie { padding-top: 8px; padding-bottom: 12px; }
+  }
+  @media (min-width: 1280px) and (min-height: 720px) {
+    /* Pantalla grande (desde la laptop de 1366 por 768): más ancho y letra acorde, sin agrandar los huecos. */
+    .cuenta-lista { --cl-ancho: 1200px; --cl-der: 640px; --cl-medio: 96px; }
+    .cl-titulo { font-size: 56px; }
+    .cl-bajada { font-size: 22px; }
+    .cl-paso-titulo { font-size: 24px; }
+    .cl-circulo { width: 44px; height: 44px; font-size: 20px; }
+    .cl-circulo svg { width: 26px; height: 26px; }
+    .cl-paso-cab { padding: 16px 18px; column-gap: 14px; }
+    .cl-paso-cuerpo { padding: 0 18px 18px; gap: 12px; }
+    .cl-texto-caja, .cl-nota-caja, .cl-nota, .cl-error-texto, .cl-etiqueta, .cl-secundario, .cl-texto,
+    .cl-estado { font-size: 18px; }
+    .cl-secundario, .cl-texto { min-height: 48px; }
+    .cl-form input { min-height: 56px; font-size: 18px; }
+    .cl-form input.cl-codigo { font-size: 26px; }
+    .cl-principal { min-height: 64px; font-size: 26px; }
+  }
+  @media (max-height: 560px) { .cl-barra { height: 48px; } }
+  @media (max-height: 480px) {
+    .cl-contenido { padding-top: 10px; gap: 8px; }
+    .cl-titulo { font-size: 22px; }
+    .cl-principal { min-height: 48px; font-size: 20px; }
+  }
+  /* El teclado abierto en un celular chico: se esconde lo que sobra mientras se escribe. */
+  .cuenta-lista.cl-tecleando .cl-bajada,
+  .cuenta-lista.cl-tecleando .cl-paso:not(.cl-actual), .cuenta-lista.cl-tecleando .cl-notas { display: none; }
+  @media (prefers-reduced-motion: no-preference) {
+    .cuenta-lista { animation: cl-entra 150ms ease-out; }
+    .cl-paso[data-estado="haciendo"] .cl-circulo::after, .cl-paso[data-estado="revisando"] .cl-circulo::after {
+      content: ""; position: absolute; inset: -7px; border: 3px solid transparent; border-top-color: var(--magenta-ink);
+      border-radius: 50%; animation: cl-gira 0.9s linear infinite;
+    }
+  }
+  @keyframes cl-entra { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes cl-gira { to { transform: rotate(360deg); } }
+  /* ====================================================  Animaciones de atención.
+     Decoración que avisa por dónde empezar y qué se puede tocar. Ninguna decide
+     nada del sorteo, y todas se apagan con prefers-reduced-motion. La lógica de
+     los temporizadores y las clases vive en `estilos-atencion.ts`; acá, el CSS. */
+
+  /* --- El texto de sesión del botón grande de la portada no se ve hasta que el
+     JS lo decidió (`destrabarCtas`): visibilidad, no display, para que la caja
+     no salte; y la caja de la cuenta de la cabecera guarda su lugar (ver
+     `.auth:empty`, arriba). Contra el FOUC de la recarga.
+     APAGADO: solo vale con `data-cta-espera` en la etiqueta html de index.html,
+     que hoy no está. Medido en un celular con datos lentos, el botón principal
+     quedaba vacío más de un segundo (para siempre si el JS no corre) y el salto
+     seguía igual: viene del cambio de tamaño, no del texto. Antes de prenderlo,
+     que el HTML traiga el texto que va a quedar. --- */
+  html[data-cta-espera] [data-cta-entrar]:not([data-cta-listo]) .cta-t { visibility: hidden; }
+
+  /* --- El pase de tarjetas del selector "Elegí el juego" (espera.ts): tras ~6 s
+     sin toques, las tarjetas se recorren una a una en bucle; la que va adelante
+     se marca `pase-viva` y la que se va hacia atrás, `pase-atras`. El primer
+     toque lo corta. No toca aria-pressed: esa es la elección de verdad. --- */
+  .espera-juego-op { position: relative; }
+  .espera-juegos.pase .espera-juego-op { transition: opacity 0.55s ease, transform 0.55s ease; }
+  .espera-juegos.pase .espera-juego-op.pase-viva { opacity: 1; transform: scale(1.03); z-index: 2; }
+  .espera-juegos.pase .espera-juego-op.pase-atras { opacity: 0.5; transform: scale(0.96); z-index: 1; }
+  @media (prefers-reduced-motion: reduce) { .espera-juegos.pase .espera-juego-op { transition: none; } }
+
+  /* --- El temblor de los dos botones del hero (estilos-atencion.ts): tras ~8 s
+     sin interactuar, una sacudida sutil de ~0,5 s con dos vaivenes. --- */
+  @keyframes temblor-atencion {
+    0%, 100% { transform: none; }
+    18% { transform: translateX(-2px) rotate(-0.3deg); }
+    38% { transform: translateX(2px) rotate(0.3deg); }
+    58% { transform: translateX(-2px) rotate(-0.3deg); }
+    78% { transform: translateX(2px) rotate(0.3deg); }
+  }
+  .hero-ctas .temblor { animation: temblor-atencion 0.55s ease-in-out; }
+  @media (prefers-reduced-motion: reduce) { .hero-ctas .temblor { animation: none; } }
+
+  /* --- El destello del pie (estilos-atencion.ts): cada ~4 s un brillo cruza el
+     badge en ~0,8 s y se apaga: sin glow permanente. El recorte del marco lo da
+     la propia caja del badge (un ítem flex de `.bar`). --- */
+  footer .bar [data-i="footR"] { position: relative; overflow: clip; }
+  @keyframes destello-atencion { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+  [data-i="footR"].destello::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 40%, color-mix(in srgb, currentColor 28%, transparent) 50%, transparent 60%);
+    animation: destello-atencion 0.8s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { [data-i="footR"].destello::after { animation: none; content: none; } }
+
+  /* --- El hover vivo de las capturas (estilos-atencion.ts): la captura de la
+     tarjeta bajo el mouse se mueve suave dentro de su marco (Ken Burns) mientras
+     el hover dura, y al salir vuelve. En pantalla táctil no hay hover: todo el
+     bloque vive dentro de (hover: hover). `.juego` ya recorta con overflow
+     hidden; la tarjeta de la portada recorta con hover-vivo. --- */
+  @keyframes ken-burns-atencion {
+    from { transform: scale(1) translate(0, 0); }
+    to { transform: scale(1.06) translate(-1.2%, -1%); }
+  }
+  @media (hover: hover) {
+    .portada-juegos a.hover-vivo { overflow: clip; }
+    .portada-juegos a .pj-img, .juego img { transition: transform 1s ease; }
+    .portada-juegos a.hover-vivo .pj-img, .juego.hover-vivo img { animation: ken-burns-atencion 7s ease-in-out infinite alternate; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .portada-juegos a.hover-vivo .pj-img, .juego.hover-vivo img { animation: none; }
+  }
+
+  /* --- La entrada de la ventana de ingreso (estilos-atencion.ts, wallet-ui.ts):
+     el fondo hace fade y el panel sube con una escala leve; al cerrar, sale más
+     corto antes de quitar el nodo. La ventana no es un <dialog> nativo; si pasa
+     a serlo, estas mismas animaciones valen con ::backdrop. --- */
+  @keyframes ingreso-entra-fondo { from { opacity: 0; } }
+  @keyframes ingreso-entra-panel { from { opacity: 0; transform: translateY(12px) scale(0.97); } }
+  @keyframes ingreso-sale-fondo { to { opacity: 0; } }
+  @keyframes ingreso-sale-panel { to { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  .modal-back.ingreso-entra { animation: ingreso-entra-fondo 0.18s ease-out; }
+  .modal-back.ingreso-entra .modal-card.login { animation: ingreso-entra-panel 0.22s ease-out; }
+  .modal-back.ingreso-sale { animation: ingreso-sale-fondo 0.15s ease-in forwards; }
+  .modal-back.ingreso-sale .modal-card.login { animation: ingreso-sale-panel 0.15s ease-in forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .modal-back.ingreso-entra, .modal-back.ingreso-entra .modal-card.login,
+    .modal-back.ingreso-sale, .modal-back.ingreso-sale .modal-card.login { animation: none; }
   }

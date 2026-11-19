@@ -21,6 +21,24 @@
       ]
     },
     {
+      "source": "/participar.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self'"
+        }
+      ]
+    },
+    {
+      "source": "/crear-campana.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self'"
+        }
+      ]
+    },
+    {
       "source": "/c/(.*)",
       "headers": [
         {

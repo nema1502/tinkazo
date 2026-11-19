@@ -259,6 +259,26 @@ describe("la ficha de nombre, pura", () => {
     }
   });
 
+  it("el rótulo de la marca de un obstáculo no corre la ficha más que su ancho y va en crema", () => {
+    const sin = nuevaEtiqueta();
+    ponerEtiqueta(sin, "Ana V.", "", 1, 20, "normal", aspecto, null);
+    const con = nuevaEtiqueta();
+    const piezas = cuenta.piezas;
+    ponerEtiqueta(con, "Ana V.", "", 1, 20, "normal", aspecto, "!", true);
+    expect(con.w).toBe(sin.w);
+    expect(con.rotuloW).toBeGreaterThan(0);
+    expect(con.rotuloW).toBeCloseTo(con.rw - 3, 9);
+    expect((con.rotuloTexto as unknown as FalsoTexto).text).toBe("!");
+    expect((con.rotuloTexto as unknown as { style: { fill: unknown } }).style.fill).toBe(aspecto.crema);
+    // El rótulo queda a la izquierda del fondo: su borde derecho toca el de la ficha.
+    expect(con.rotulo.visible).toBe(true);
+    expect(cuenta.piezas).toBe(piezas);
+    // Sin marca, el rótulo se apaga y la ficha vuelve a su ancho solo.
+    ponerEtiqueta(con, "Ana V.", "", 1, 20, "normal", aspecto, null);
+    expect(con.rotulo.visible).toBe(false);
+    expect(con.rotuloW).toBe(0);
+  });
+
   it("el fondo pasa del ancho del nombre que se va al del que llega, sin saltar", () => {
     const e = nuevaEtiqueta();
     const anchos: number[] = [];

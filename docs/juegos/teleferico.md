@@ -1,6 +1,6 @@
 # Teleférico
 
-Un convoy de cabinas sube por el cable, una cabina por grupo. En cada estación se baja un grupo entero; en la última cabina se baja de a uno hasta que quedan dos, y esos dos suben juntos. La duda dura hasta la cumbre, donde se abre la puerta.
+Un convoy de cabinas sube por el cable, una cabina por grupo. En cada estación se baja un grupo entero. En la penúltima parada, de la cabina de quien gana se bajan todos menos dos, y en la última estación se baja uno de esos dos. A la cumbre llega una sola cabina, con quien gana adentro y nadie más.
 
 **Identificador:** `teleferico` · **Probalo:** [tinkazo.app/?demo=teleferico](https://tinkazo.app/?demo=teleferico) · **Agregado:** 24 de septiembre de 2026 · **Por grupos:** 20 de octubre de 2026
 
@@ -18,13 +18,42 @@ La regla de la casa es que un elemento boliviano tiene que hacer algo o no entra
 
 **Embarque.** Los pasajeros suben a la cabina de su grupo en la base. El contador de arriba a la izquierda cuenta los que subieron, con una marca por persona debajo.
 
-**Las paradas.** El convoy sube hasta una estación y frena; las cabinas se hamacan para adelante. En cada estación se baja un grupo entero: "¡Estación 4! Se bajan los Tatús (4). Quedan 24". Los que se bajan salen por la ventana de su cabina, cada uno con su cara, y vuelan a su renglón del andén, donde aparece su nombre. El andén es una lista en la pantalla, al costado de la estación donde menos tapa, y se queda quieta hasta que se bajan los de la estación siguiente. En un proyector entran hasta veinticuatro renglones (tres columnas de ocho). En un celular, una columna de hasta siete renglones: seis nombres y el "+N". Si se bajan más, el último renglón dice cuántos faltan y el resto salta en cascada al piso de la estación. La cabina que quedó vacía se suelta y vuelve para abajo, y las demás cierran el hueco. Un co-ganador que se baja antes de la última estación sale "con premio", y el relator lo nombra siempre.
+**Las paradas.** El convoy sube hasta una estación y frena; las cabinas se hamacan para adelante. En cada estación se baja un grupo entero: "¡Estación 4! Se bajan los Tatús (4). Quedan 24". Los que se bajan salen por la ventana de su cabina, cada uno con su cara, y vuelan a su renglón del andén, donde aparece su nombre. El andén es una lista en la pantalla, al costado de la estación donde menos tapa, y se queda quieta hasta que se bajan los de la estación siguiente. En un proyector entran hasta veinticuatro renglones (tres columnas de ocho). En un celular, una columna de hasta siete renglones: seis nombres y el "+N". Si se bajan más, el último renglón dice cuántos faltan y el resto salta en cascada al piso de la estación. La cabina que quedó vacía se suelta y vuelve para abajo, y las demás cierran el hueco. Nadie que gana se baja: con varios premios, las cabinas con premio siguen hasta el final (ver "A la cumbre llegan quienes ganan", abajo).
 
-**La última estación.** Queda una sola cabina: la del grupo del ganador, con los que todavía no bajaron. Ahí se baja de a uno, hasta que quedan dos: "¡Acá bajan de a uno!", y cada uno sale con su cara y su nombre. Los dos que quedan son el ganador y otro del mismo grupo, sorteado, y también se sortea cuál de los dos va primero en la cabina (su cara a la izquierda, su nombre en el mejor costado). Si el arco tiene su giro ahí (la puerta o la mordaza), pasa antes de la bajada (ver la tabla de abajo).
+**La bajada grande.** Cuando ya no quedan grupos sin premio, en la penúltima parada se bajan de la cabina de quien gana todos los que no ganan menos uno: "¡Se bajan Ana, Iván y 2 más!", cada uno con su cara y su nombre en el andén. Quedan dos, y la cabina lleva el nombre de cada uno. El que acompaña a quien gana sale de la semilla, a ciegas, entre todos los de su grupo, y también es a ciegas el orden de los dos en la cabina (su cara a la izquierda, su nombre en el mejor costado). Rumbo a la última estación el relator pregunta "¿Quién llega arriba?".
 
-**El último tramo.** Los dos suben juntos, en la misma cabina, con el latido cada vez más seguido y más agudo. El relator dice "¿Quién llega arriba?". Llega a la cumbre, golpe, se abren las puertas y sale el cartel. La duda se resuelve recién ahí.
+**La última estación.** "¡QUEDAN DOS!". Si el arco tiene su giro ahí (la puerta o la mordaza), pasa primero (ver la tabla de abajo). Después se baja uno: se lo ve salir por la ventana y volar con su cara al andén, el relator lo nombra ("¡Se baja Beto!") y el contador pasa a 1. Esa bajada es la que decide.
+
+**El último tramo.** La cabina sube sola, con quien gana adentro: su cara grande en la ventana y su nombre al costado. El relator dice "¡Sube solita!" o "¡Ya se ve la cumbre!", y el latido se acelera. Llega a la cumbre, golpe, se abren las puertas y sale el cartel.
 
 **Las banderas.** Cada estación tiene la suya, en su color, en un mástil alto sobre la esquina izquierda del techo; cada cabina lleva un banderín en la esquina de atrás; y la cumbre tiene banderines de los diez colores colgados de esquina a esquina, que se sacuden de fiesta cuando llega la cabina ganadora. Flamean para la izquierda, que es para donde sopla el viento en este valle, y con la ráfaga se estiran y ondulan más. Como todo lo demás, salen de la hora de juego.
+
+## A la cumbre llegan quienes ganan (13 de noviembre de 2026)
+
+Hasta el 13 de noviembre de 2026 a la cumbre llegaban dos personas en una cabina con "x2", y la duda se resolvía recién con el foco: en la sala no se entendía quién había ganado ni por qué. Con varios premios era peor: los premios de otros grupos se bajaban antes con su grupo, y arriba seguían llegando dos. La causa estaba en el plan (`cablecar-plan.ts`), que dejaba siempre a dos en la cabina final.
+
+La regla de ahora, con M premios:
+
+1. Cada grupo sin premio se baja entero, en su estación.
+2. En cada cabina con premio, en la penúltima parada (la bajada grande) se bajan todos los que no ganan menos uno, sorteado a ciegas con la semilla: el que la acompaña.
+3. En la última estación se baja ese uno de cada cabina con premio. Es la bajada que decide: se ve, y el relator la nombra.
+4. Si los premios iban en varias cabinas, después de esa bajada vuelan con su cara a la cabina anfitriona, y las otras se sueltan y vuelven cable abajo. La anfitriona se sortea con la semilla entre las cabinas con premio: no es la del primer premio, para que el show no deje adivinar el orden antes de que lo diga el relator.
+5. A la cumbre sube una sola cabina, con los M que ganan. El contador dice QUEDAN M.
+
+Lo que la sala ve: con un premio, a la última estación llegan dos, uno se baja, y sube uno. Con cinco premios repartidos en cinco cabinas, a la última llegan diez (cada premio con su acompañante), se bajan cinco, cuatro premios se pasan a la cabina anfitriona, y sube una cabina con cinco.
+
+Los casos borde:
+
+| Caso | Qué pasa |
+|---|---|
+| 2 personas, 1 premio | Un solo grupo. No hay bajada grande: en la última estación se baja el otro y sube quien gana |
+| Premios = personas menos una | El único que no gana es el acompañante de su cabina y se baja en la última. Las demás cabinas solo tienen premios y se juntan con la anfitriona |
+| Premios = personas | Nadie se baja. Las cabinas se juntan en la última estación y sube una con todos |
+| Una cabina con premio sin nadie más | No lleva acompañante: llega a la última con sus premios y se junta con la anfitriona, o es la anfitriona |
+| Premios impares, o más premios que lugares de una cabina | La cabina final lleva a todos los premios. Muestra tres caras y la cuenta (x5, x10). El cartel del final los nombra |
+| 200 personas, 1 premio | Diez cabinas de veinte. Nueve se bajan enteras, en la bajada grande se bajan dieciocho (el andén muestra los que entran y el resto con +N) y en la última se baja uno |
+
+**Justicia.** Todo lo que le pasa a quien gana antes de la bajada que decide le puede pasar igual a cualquiera de su grupo: el acompañante sale a ciegas entre todos los que no ganan, el orden de las caras y de los nombres en la cabina es a ciegas, y a quién nombra la puerta, la mordaza o el apagón se sortea entre los que van en la cabina anfitriona en la última estación. Con premios en varias cabinas, la anfitriona se sortea entre las cabinas con premio y la onda del foco va en el dorado de siempre, no en el color de una cara: nada del final dice cuál es el primer premio antes del cartel (hasta el 13 de noviembre de 2026 la junta volaba siempre a la cabina del primero). Nada sale de `Math.random`, del reloj ni del tamaño de la pantalla. El auditor de delatores mide hasta la bajada que decide (`corte` del teleférico en `scripts/lib/delatores-senales.mjs`: la última línea "¡Se baja X!"), que ahora es el momento que resuelve la duda.
 
 ## El giro de cada arco
 
@@ -32,8 +61,8 @@ El director de emoción ([`src/games/drama.ts`](../../src/games/drama.ts)) elige
 
 | Arco | Giro | Qué se ve |
 |---|---|---|
-| Susto | La puerta | En la última estación se abre la puerta de la cabina, todavía llena; uno de los que van adentro, sorteado entre todos, está en la puerta ("¿Se baja X?") y la cabina se sacude. La puerta se cierra: si X es de los dos que llegan arriba, "¡NO! ¡SE QUEDA!"; si no, se baja con los demás. Después bajan los del grupo, de a uno, y en la cumbre se abre la puerta para el que llega |
-| Duelo | La mordaza | En la última estación la cabina de los dos que quedan se suelta: la banda se calla de golpe, la cámara queda quieta y la cabina resbala cable abajo casi una cabina entera, con un aro rojo que titila, vetas de velocidad y un chirrido que baja de tono. La mordaza la agarra con un fogonazo, chispas y un tirón que la deja hamacándose, la banda vuelve, y después bajan los del grupo, de a uno, y los dos suben juntos. Se nombra a uno cualquiera de los que van en la cabina, sorteado, así que la que se salva no delata a nadie |
+| Susto | La puerta | En la última estación se abre la puerta de la cabina de los dos que quedan. Uno de los dos, sorteado, está en la puerta ("¿Se baja X?") y la cabina se sacude. La puerta se cierra: si X es quien gana, "¡NO! ¡SE QUEDA!" y se baja el otro, y si no, X se baja enseguida. En la cumbre se abre la puerta para quien llega |
+| Duelo | La mordaza | En la última estación la cabina de los dos que quedan se suelta: la banda se calla de golpe, la cámara queda quieta y la cabina resbala cable abajo casi una cabina entera, con un aro rojo que titila, vetas de velocidad y un chirrido que baja de tono. La mordaza la agarra con un fogonazo, chispas y un tirón que la deja hamacándose, la banda vuelve, y después se baja el que no gana y la cabina sube con quien gana. Se nombra a uno de los dos, sorteado, así que la que se salva no delata a nadie |
 | Tapada | El apagón | En el tramo que llega a la última estación, cuando más rápido va, la luz titila dos veces y se corta. Se apaga todo menos las cabinas, que quedan colgando con su luz de emergencia y las caras a la vista; la banda se calla, y el convoy frena de golpe en el aire, con un golpe seco, hamacándose con un latido. La luz vuelve titilando, la banda con ella, y el convoy recupera el paso |
 | Remontada | La ráfaga | A mitad de viaje entra un viento: vetas que cruzan la pantalla, cabinas que se hamacan cada una a su tiempo y banderas estiradas. La hora se siembra, pero se corre si cae encima de una estación, para no pisar al relator |
 
@@ -51,12 +80,12 @@ El apagón no alarga el juego: se lleva un pedazo del viaje, igual que la últim
 
 | Participantes | Grupos (cabinas) | Paradas | Qué se ve |
 |---|---|---|---|
-| 8 | 2 | 2 de 4 estaciones | Dos cabinas de cuatro; la última se baja de a uno hasta quedar dos |
-| 16 | 4 | 4 | Cuatro cabinas de cuatro |
-| 40 | 10 | 10 | Diez cabinas de cuatro, una por estación |
-| 200 | 10 | 10 | Diez cabinas de veinte. En cada estación baja una de veinte; en la última, dieciocho bajan de a uno |
+| 8 | 2 | 3 de 4 estaciones | Dos cabinas de cuatro: una se baja entera, en la de quien gana se bajan dos y en la última uno |
+| 16 | 4 | 5 | Cuatro cabinas de cuatro |
+| 40 | 10 | 11 | Diez cabinas de cuatro: nueve se bajan enteras, después la bajada grande y la última |
+| 200 | 10 | 11 | Diez cabinas de veinte. En cada estación baja una de veinte, en la bajada grande dieciocho y en la última uno |
 
-Los tiempos no cambian con la cantidad: las paradas se reparten entre el fin del embarque y el último tramo. La parada de la última estación se alarga con la cantidad que baja de a uno.
+Los tiempos no cambian con la cantidad: las paradas se reparten entre el fin del embarque y el último tramo. La parada de la última estación se alarga un poco con cada cabina con premio, y más si sus premios se juntan. Con muchas cabinas, la última parada, el viaje que llega a ella y el apagón tienen un piso en segundos (ver "Los pisos del final").
 
 ## La coronación
 
@@ -70,10 +99,24 @@ En segundos de juego, sin estirar. En "normal" se estiran para que el show enter
 |---|---|
 | 0,0 – 2,0 s | Embarque. "¡Suban, suban, que se va!" |
 | 2,0 s | Campana de salida |
-| 2,0 – 14,0 s | Viajes y paradas. Viajar pesa 1, parar 0,8, y la última parada 1,7 más 0,1 por cada uno que baja de a uno (2,4 con la puerta, 2,6 con la mordaza). El apagón pesa 1,3 |
-| 14,0 – 15,8 s | El último tramo, con los dos juntos |
+| 2,0 – 14,0 s | Viajes y paradas. Viajar pesa 1, parar 0,8 (también la bajada grande), y la última parada 1,7 más 0,1 por cada uno que se baja ahí (2,4 con la puerta, 2,6 con la mordaza), más 0,6 si los premios se juntan. El apagón pesa 1,3. Tres tramos tienen además un piso en segundos de juego (ver "Los pisos del final", abajo) |
+| 14,0 – 15,8 s | El último tramo, con quien gana |
 | 15,8 s | Llega a la cumbre: destello, temblor y golpe |
 | 16,4 s | Corona: se abren las puertas y arranca el foco (silencio y penumbra). El golpe llega a los 0,5 a 0,95 s reales según el arco, y el cartel una décima después; se sostiene tres segundos reales |
+
+### Los pisos del final (13 de noviembre de 2026)
+
+Con 37 personas o más hay diez cabinas y once paradas en los mismos doce segundos, y por pesos la parada que decide quedaba en 1 s de juego. Con la puerta, el relator decía cuatro líneas en 0,9 s ("¡Última estación!", "¿Se baja X?", "¡Falsa alarma!" y "¡Se baja Y!"), el "¡se queda!" se veía 0,2 s y la pregunta "¿Quién llega arriba?" tenía una ventana de una décima, o ninguna con el apagón. Justo en el rango que mejor le sienta al juego, el momento que explica quién ganó pasaba de largo.
+
+Ahora tres tramos no bajan de un piso, y lo que les falta sale de los otros viajes:
+
+| Tramo | Piso |
+|---|---|
+| La última parada | 2,2 s, o 2,7 con la puerta o la mordaza, más 0,6 si los premios se juntan |
+| El viaje que llega a la última estación | 1,3 s |
+| El apagón entero | 1,2 s |
+
+Con la puerta, la bajada que decide llega al 68 % de la parada y no al 64 %, para que el "¡se queda!" se alcance a leer. La pregunta tiene su hora en el plan (`tPregunta`): 0,6 s después de la bajada grande, o de que vuelve la luz, y al menos 0,45 s antes de la llegada, y la ráfaga no cae a menos de 0,7 s de ella. Con 200 personas y un premio cada parada de un grupo entero queda entre 0,32 y 0,38 s y cada viaje entre 0,41 y 0,47 s (antes, 0,43 a 0,46 y 0,54 a 0,58): los grupos se bajan más seguido, y el final se toma su tiempo. Con ocho personas o menos los pesos ya dan más que los pisos, y solo cambia la puerta.
 
 ## El sonido
 
@@ -101,7 +144,7 @@ Todo por la escala de `note()` y dentro de los grados 0 a 20.
 
 ## Cómo está hecho
 
-El motor nuevo ([`src/games/pixi/cablecar.ts`](../../src/games/pixi/cablecar.ts)) dibuja el plan de [`src/games/pixi/cablecar-plan.ts`](../../src/games/pixi/cablecar-plan.ts): quién baja en cada parada, en qué cabina va cada grupo, los cuatro giros y los horarios. Los grupos vienen de [`src/games/grupos.ts`](../../src/games/grupos.ts). Las pruebas del plan (cada parada baja un grupo entero, quedan dos, la cabina del ganador no se suelta) están en `cablecar-plan.test.ts`.
+El motor nuevo ([`src/games/pixi/cablecar.ts`](../../src/games/pixi/cablecar.ts)) dibuja el plan de [`src/games/pixi/cablecar-plan.ts`](../../src/games/pixi/cablecar-plan.ts): quién baja en cada parada, en qué cabina va cada grupo, los cuatro giros y los horarios. Los grupos vienen de [`src/games/grupos.ts`](../../src/games/grupos.ts). Las pruebas del plan (los grupos sin premio bajan enteros, a la cumbre llegan exactamente quienes ganan con 1 a 10 premios y de 2 a 200 personas, el acompañante sale parejo entre los del grupo, el contador es siempre la gente que sigue arriba, la cabina del ganador no se suelta y las demás sí) están en `cablecar-plan.test.ts`.
 
 El motor anterior ([`src/games/cablecar.ts`](../../src/games/cablecar.ts), con `?motor=clasico` o sin WebGL) conserva el plan de antes: hasta cinco cabinas y la mitad que se baja en cada parada, con el aro de la última estación. No se tocó, así que cuenta otra versión de la misma historia.
 
@@ -109,4 +152,4 @@ El convoy es una función a trozos del tiempo: tramos de viaje con aceleración 
 
 En vertical el cable se empina (54 grados en vez de 23) y los nombres van al costado de cada cabina, no debajo, porque la cabina de abajo queda justo ahí.
 
-En el motor nuevo los nombres van en la pantalla y no en el mundo: pegados a las cabinas crecían con el acercamiento de la cámara, y en un celular quedaban cortados contra el borde. Cada cabina lleva el nombre de su grupo, o los nombres de los dos que llegan juntos, y prueba los costados de su cabina (en vertical izquierda, derecha, abajo y arriba; en horizontal abajo, derecha, izquierda y arriba) y se queda en el primero donde entra entero sin tapar otra cabina con gente, otro nombre ni el número de una estación. Si ninguno entra, un rótulo de grupo se oculta (la cabina ya lleva su color y su cuenta), y un nombre de persona se queda en el que menos tapa. El andén de cada parada se ubica una vez, con el encuadre al que va la cámara, donde menos tapa a la estación y a las cabinas con gente; sus renglones se arman de a dos por cuadro durante el viaje anterior, porque armar los veinticuatro juntos, con doscientas personas, trababa la escena 63 ms.
+En el motor nuevo los nombres van en la pantalla y no en el mundo: pegados a las cabinas crecían con el acercamiento de la cámara, y en un celular quedaban cortados contra el borde. Cada cabina lleva el nombre de su grupo, o, desde la bajada grande, el nombre de cada uno de los dos que siguen en ella, y prueba los costados de su cabina (en vertical izquierda, derecha, abajo y arriba; en horizontal abajo, derecha, izquierda y arriba) y se queda en el primero donde entra entero sin tapar otra cabina con gente, otro nombre ni el número de una estación. Si ninguno entra, un rótulo de grupo se oculta (la cabina ya lleva su color y su cuenta), y un nombre de persona se queda en el que menos tapa. El andén de cada parada se ubica una vez, con el encuadre al que va la cámara, donde menos tapa a la estación y a las cabinas con gente; sus renglones se arman de a dos por cuadro durante el viaje anterior, porque armar los veinticuatro juntos, con doscientas personas, trababa la escena 63 ms.

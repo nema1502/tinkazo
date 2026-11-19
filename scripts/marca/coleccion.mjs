@@ -1069,8 +1069,8 @@ const LEEME = `TINKAZO, COLECCIÓN DE STICKERS
 28 stickers dibujados por nosotros: los diez juegos de Tinkazo numerados del 1 al 10 para completar la serie (cada uno se elige, no vienen en sobres sorpresa), el especial de Tarija, la llama en sus días buenos, frases nuestras y una tanda para quienes programan. Todos llevan tinkazo.app en una etiqueta chica abajo.
 
 QUÉ HAY ADENTRO
-  stickers/  Cada sticker suelto a tamaño real, en PDF de 5 y de 7 cm (la medida mayor del troquel) y en SVG de 5 cm (1 unidad = 1 mm; se agranda sin perder calidad). Con 3 mm de sangrado y la capa 'corte' con la línea de troquelado, que sigue la silueta del dibujo con un borde blanco. Los de texto vienen en español (-es) y en inglés (-en).
-  hojas/     Listas para la imprenta, en PDF: hoja A4 de los juegos y la llama, hoja A4 de frases, devs y Tarija (de 5 cm), y la hoja «laptop», con los nueve que más dan ganas de pegar, de 6 cm. Con 5 mm de aire entre troqueles y 2 mm de sangrado. La hoja A3 con los 28 se baja suelta desde https://tinkazo.app/marca.html.
+  stickers/  Cada sticker suelto a tamaño real, en PDF de 5 y de 7 cm (la medida mayor del troquel) y en SVG de 5 cm (1 unidad = 1 mm). El SVG se agranda sin perder calidad. Con 3 mm de sangrado y la capa 'corte' con la línea de troquelado, que sigue la silueta del dibujo con un borde blanco. Los de texto vienen en español (-es) y en inglés (-en).
+  hojas/     Listas para la imprenta, en PDF: hoja A4 de los juegos y la llama, hoja A4 de frases, devs y Tarija (de 5 cm), y la hoja laptop, con los nueve que más dan ganas de pegar, de 6 cm. Con 5 mm de aire entre troqueles y 2 mm de sangrado. La hoja A3 con los 28 se baja suelta desde https://tinkazo.app/marca.html.
   Los PNG de 512 px con fondo transparente, para redes o para un video, van aparte en tinkazo-stickers-png.zip (con todo junto pasaba de los 4 MB): https://tinkazo.app/marca.html
   frases.txt Todas las frases en español y en inglés, con lo que quieren decir las palabras bolivianas.
 
@@ -1089,8 +1089,8 @@ TINKAZO, STICKER COLLECTION
 28 stickers we drew ourselves: the ten Tinkazo games numbered 1 to 10 to complete the series (you pick each one, there are no mystery packs), the Tarija special, the llama on its good days, our own sayings and a batch for people who code. Each one carries tinkazo.app on a small tag at the bottom.
 
 WHAT IS INSIDE
-  stickers/  Each sticker on its own at true size, as 5 and 7 cm PDF (the longest side of the cut) and 5 cm SVG (1 unit = 1 mm; it scales up without losing quality). With 3 mm bleed and the 'corte' layer holding the die-cut line, which follows the drawing with a white border. The ones with text come in Spanish (-es) and English (-en).
-  hojas/     Print-ready PDF sheets: an A4 sheet with the games and the llama, an A4 sheet with sayings, developer stickers and Tarija (at 5 cm), and the "laptop" sheet with the nine you most want to stick on one, at 6 cm. 5 mm apart with 2 mm bleed. The A3 sheet with all 28 is a separate download at https://tinkazo.app/marca.html.
+  stickers/  Each sticker on its own at true size, as 5 and 7 cm PDF (the longest side of the cut) and 5 cm SVG (1 unit = 1 mm). The SVG scales up without losing quality. With 3 mm bleed and the 'corte' layer holding the die-cut line, which follows the drawing with a white border. The ones with text come in Spanish (-es) and English (-en).
+  hojas/     Print-ready PDF sheets: an A4 sheet with the games and the llama, an A4 sheet with sayings, developer stickers and Tarija (at 5 cm), and the laptop sheet with the nine you most want to stick on one, at 6 cm. 5 mm apart with 2 mm bleed. The A3 sheet with all 28 is a separate download at https://tinkazo.app/marca.html.
   The 512 px PNG files with a transparent background, for social media or a video, come separately in tinkazo-stickers-png.zip (all together it went over 4 MB): https://tinkazo.app/marca.html
   frases.txt Every saying in Spanish and English, with what the Bolivian words mean.
 

@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CLAVE_ETIQUETAS } from "./equipos/etiquetas";
 import { EVENTO_POR_DEFECTO, MAX_NOTA_BYTES, bytesDe, memoCupon } from "./equipos/modelo";
+import { modoDeRampa, monedasActivas, planDelEquipo } from "./stellar/cuenta-config";
 import { pagosActivos } from "./stellar/pagos-bandera";
 
 /**
@@ -26,9 +27,21 @@ describe("las piezas del stand hablan entre sí", () => {
     expect(raiz("docs/premios.md")).not.toContain('localStorage["tinkazo.etiquetas"]');
   });
 
-  it("los premios pagados se prenden con la bandera de los equipos", () => {
-    expect(pagosActivos({ VITE_EQUIPOS: "1" })).toBe(true);
+  it("los premios pagados no se prenden con la bandera de los equipos", () => {
+    expect(pagosActivos({ VITE_EQUIPOS: "1" })).toBe(false);
     expect(pagosActivos({})).toBe(false);
+  });
+
+  it("la bandera de los equipos sola no prende nada más: ni pagos, ni monedas, ni rampa, ni plan", () => {
+    vi.stubEnv("VITE_EQUIPOS", "1");
+    try {
+      expect(pagosActivos()).toBe(false);
+      expect(monedasActivas()).toBe(false);
+      expect(modoDeRampa()).toBe("apagada");
+      expect(planDelEquipo()).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("todas las banderas del stand están documentadas en .env.example", () => {

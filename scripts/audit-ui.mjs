@@ -42,6 +42,7 @@ import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 import { BOTON_APAGADO_JS } from "./lib/juegos.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 
@@ -288,9 +289,9 @@ async function sembrarHistorial(page) {
  */
 async function connect(page, p, tema) {
   const etiqueta = p.etiqueta;
-  await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await sleep(500);
-  await page.eval(`(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click()`);
+  await page.eval(TOCAR_ENTRAR_JS);
   const abrio = await page.waitFor(`document.querySelector('.login-opt')`, 15000);
   check(`${etiqueta} ${tema}: se abre la ventana de ingreso`, abrio.ok);
   if (!abrio.ok) return false;
@@ -333,18 +334,18 @@ async function pasoDeFondos(browser, p, tema) {
     });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: freighterFalsa() });
     await sinSesionGuardada(page);
-    await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba` });
     await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-    await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
+    await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
     await sleep(600);
-    await page.eval(`(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click()`);
+    await page.eval(TOCAR_ENTRAR_JS);
     await page.waitFor(`document.querySelector('.login-opt')`, 15000);
     await sleep(500);
     const i = await page.eval(
-      `String([...document.querySelectorAll('.login-opt')].findIndex(e => /Freighter/.test(e.textContent) && !/instalar|install/.test(e.textContent)))`,
+      `String([...document.querySelectorAll('.login-opt')].findIndex(e => /Varial/.test(e.textContent) && !/instalar|install/.test(e.textContent)))`,
     );
     if (i === "-1") {
-      check(`${pre}: el paso de fondos se abre`, false, "la Freighter de mentira no aparece instalada");
+      check(`${pre}: el paso de fondos se abre`, false, "la billetera Varial de mentira no aparece instalada");
       return;
     }
     await page.eval(`[...document.querySelectorAll('.login-opt')][${i}].click()`);
@@ -531,14 +532,14 @@ async function variantesDelPanel(page, p, tema) {
     await page.screenshot(join(outDir, `ui-cuenta-google-${p.etiqueta}-${tema}.png`));
   } else check(`${pre}: se abre el panel de una cuenta de Google`, false);
 
-  if (await abrirCon({ address: CUENTA_FALSA, label: "Freighter", balance: 5 })) {
+  if (await abrirCon({ address: CUENTA_FALSA, label: "Varial", balance: 5 })) {
     const f = JSON.parse(
       await page.eval(`JSON.stringify({ saldo: !!document.querySelector('.acct-badge:not(.net)'), grifo: !!document.querySelector('[data-k=fund]') })`),
     );
-    check(`${pre}: con Freighter y 5 XLM el panel muestra el saldo y el grifo`, f.saldo && f.grifo, JSON.stringify(f));
-    chequearVentana(`${pre}: el panel de una cuenta de Freighter con poco saldo`, JSON.parse(await page.eval(ALCANCE(".acct-card"))), p.movil);
+    check(`${pre}: con Varial y 5 XLM el panel muestra el saldo y el grifo`, f.saldo && f.grifo, JSON.stringify(f));
+    chequearVentana(`${pre}: el panel de una cuenta de Varial con poco saldo`, JSON.parse(await page.eval(ALCANCE(".acct-card"))), p.movil);
     await page.screenshot(join(outDir, `ui-cuenta-freighter-${p.etiqueta}-${tema}.png`));
-  } else check(`${pre}: se abre el panel de una cuenta de Freighter`, false);
+  } else check(`${pre}: se abre el panel de una cuenta de Varial`, false);
   await cerrar();
 }
 
@@ -655,7 +656,7 @@ async function resaltadoTapa(page) {
  */
 const SIN_CUENTA = `JSON.stringify((() => {
   const opacidad = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 1; return o; };
-  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#nw-atajos button', '#prize-chips button', 'label.chip.live']
+  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw-valor', '#nw-menos', '#nw-mas', 'label[for="nw"]', '#nw-atajos button', '#prize-chips button', 'label.chip.live']
     .map(s => document.querySelector(s)).filter(e => e && opacidad(e) < 1).map(e => e.id || e.className || e.tagName);
   const sellar = document.getElementById('btn-freeze');
   const linea = document.getElementById('sellar-sin-cuenta');
@@ -808,7 +809,7 @@ async function chipsFueraYRetomando(browser, sinCuenta, p, tema) {
   try {
     await r.send("Emulation.setDeviceMetricsOverride", { width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil, screenWidth: p.w, screenHeight: p.h });
     await r.send("Page.addScriptToEvaluateOnNewDocument", { source: "(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', 'freighter'); } catch {} })()" });
-    await r.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+    await r.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
     const vi = await r.waitFor("document.querySelector('#wallet-box [data-estado=\"retomando\"]')", 6000);
     check(`${pre}: mientras la sesión guardada vuelve, el chip dice "Retomando…"`, vi.ok);
     if (vi.ok) {
@@ -836,7 +837,7 @@ async function chipsFueraYRetomando(browser, sinCuenta, p, tema) {
           ? `(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', '${guardada}'); localStorage.setItem('tinkazo.pollar.intent', 'google'); } catch {} })()`
           : "(() => { try { for (const k of Object.keys(localStorage)) if (/^tinkazo\\.session\\.kind\\.|^tinkazo\\.pollar\\.intent$/.test(k)) localStorage.removeItem(k); } catch {} })()",
       });
-      await l.send("Page.navigate", { url: `${base}/juegos.html?theme=${tema}` });
+      await l.send("Page.navigate", { url: `${base}/juegos.html?theme=${tema}&red=prueba` });
       await l.waitFor("document.readyState === 'complete' && !!document.querySelector('header .pg-auth')", 20000);
       await sleep(400);
       const c = JSON.parse(await l.eval(SONDA_CHIP));
@@ -879,7 +880,7 @@ async function run() {
           screenWidth: p.w, screenHeight: p.h,
         });
         await sinSesionGuardada(page);
-        await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
+        await page.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba` });
         await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
 
         const tapa = await resaltadoTapa(page);
@@ -898,7 +899,7 @@ async function run() {
           await sinSesionGuardada(sinCuenta);
           await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-          await sinCuenta.waitFor(`!!document.querySelector('#wallet-box button') && !!document.getElementById('btn-sample')`, 20000);
+          await sinCuenta.waitFor(`${HAY_BOTON_ENTRAR_JS} && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
           await sleep(900);
           const f = JSON.parse(await sinCuenta.eval(SIN_CUENTA));
@@ -924,7 +925,7 @@ async function run() {
           }
           // Nada pide entrar encima de "Pegar lista" (1 de noviembre de 2026): la cuenta se pide con el chip "Entrar" de la
           // cabecera, que es secundario, y con "Entrar para sellar".
-          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector('#wallet-box button'); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })"));
+          const g = JSON.parse(await sinCuenta.eval(`JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector(${JSON.stringify(SELECTOR_CHIP_ENTRAR)}); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })`));
           check(`${etiqueta} ${tema}: sin cuenta, la puerta no se ve y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
           // La cuenta, siempre a la vista: "Entrar", "Retomando…" y las páginas de lectura.
           await chipsFueraYRetomando(browser, sinCuenta, p, tema);

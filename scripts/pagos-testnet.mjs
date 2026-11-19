@@ -64,7 +64,7 @@ console.log(`
 
    localStorage.setItem("tinkazo.guest.secret.testnet", "${organiza.secret()}")
 
-   recargá y entrá con "Cuenta de prueba". (O importá esa llave en Freighter, en testnet.)
+   recargá y entrá con "Cuenta de prueba". (O importá esa llave en Varial, antes Freighter, en testnet.)
 
 3. Pegá esta lista, poné "50 USDC" como premio (el monto se propone de ahí), sellala y sorteá con 3 ganadores:
 

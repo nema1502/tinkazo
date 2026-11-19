@@ -29,11 +29,18 @@ function aLaVista(html: string, archivo: string): string {
   return s;
 }
 
-const clavesDe = (html: string): string[] => [...html.matchAll(/\bdata-i(?:-html)?="([^"]+)"/g)].map((m) => m[1] as string);
+/**
+ * Textos legales que tienen que nombrar la marca tal como es: el aviso de marca de Stellar, al final de los términos
+ * (docs/marca.md, "Marcas de otros"). No son una explicación técnica: son la nota que pide el dueño de la marca.
+ */
+const AVISOS_LEGALES: Record<string, string[]> = { "terminos.html": ["tmStellarMarca"] };
+
+const clavesDe = (html: string, archivo: string): string[] =>
+  [...html.matchAll(/\bdata-i(?:-html)?="([^"]+)"/g)].map((m) => m[1] as string).filter((clave) => !(AVISOS_LEGALES[archivo] ?? []).includes(clave));
 
 describe("sin jerga a la vista (portada, precios, términos y sorteo verificable)", () => {
   it.each(PAGINAS)("%s: ni cifras de la red ni palabras de la cadena fuera de los plegados", (archivo) => {
-    const claves = clavesDe(aLaVista(readFileSync(archivo, "utf8"), archivo));
+    const claves = clavesDe(aLaVista(readFileSync(archivo, "utf8"), archivo), archivo);
     expect(claves.length).toBeGreaterThan(5);
     const hallazgos = (["es", "en"] as const).flatMap((idioma) =>
       claves

@@ -3,6 +3,7 @@ import { paceFactor, type Game } from "./state";
 import { ambiente, decidir, elegirJuego, ganador as ganadorDeArchivo, type Disparo, type Jugada } from "./sonidos/banco";
 import { curvaDeTecho } from "./sonidos/carrera";
 import { avisarJuego, festejoPropio, golpePropio, hayCandidatas } from "./sonidos/carrera-eleccion";
+import { pistaCallar, pistaDelJuego, pistaRemata, pistasConContexto } from "./sonidos/pistas-enganche";
 
 /* Sonido con WebAudio: osciladores, y archivos cuando el banco (`src/sonidos/banco.ts`) los tiene. */
 
@@ -19,6 +20,16 @@ function initialMute(): boolean {
 }
 
 let muted = initialMute();
+/**
+ * Los efectos callados un momento, sin tocar lo que eligió la persona: mientras el show de quien mira se pone al día
+ * (`games/en-hora.ts`), los efectos de los segundos que se saltan no suenan todos de golpe. La música sigue.
+ */
+let callados = false;
+export function callarEfectos(c: boolean): void {
+  callados = c;
+}
+/** Si los efectos no suenan ahora: silenciado, o callados mientras el show se pone al día. */
+const sinEfectos = (): boolean => muted || callados;
 
 /** Los archivos de viento y de colibrí vienen a la sonoridad de todos: este factor los baja al nivel del ruido y del zumbido de siempre. */
 const AMBIENTE_K = 4;
@@ -42,6 +53,7 @@ function contexto(): { ctx: AudioContext; out: GainNode } | null {
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   const ctx = audioCtx ?? new Ctor();
+  if (!audioCtx) pistasConContexto(ctx);
   audioCtx = ctx;
   if (!master) master = cadenaDeEfectos(ctx);
   return { ctx, out: master };
@@ -166,7 +178,7 @@ function sonarAmbiente(buffer: AudioBuffer, id: string, dur: number, curva: Floa
  * archivo que acaba de sonar, no suena; si no, el oscilador de siempre.
  */
 export function beep(f: number, d = 0.09, type: OscillatorType = "square", g = 0.05): void {
-  if (muted) return;
+  if (sinEfectos()) return;
   if (type !== "custom") {
     const o: Disparo = { f, d, tipo: type, g };
     const j = decidir(o, performance.now());
@@ -177,7 +189,7 @@ export function beep(f: number, d = 0.09, type: OscillatorType = "square", g = 0
 }
 
 function oscilador(f: number, d: number, type: OscillatorType, g: number): void {
-  if (muted) return;
+  if (sinEfectos()) return;
   try {
     const c = chain();
     if (!c) return;
@@ -245,7 +257,7 @@ export function beepFor(
  * No son osciladores: `audit-sound` no lo ve y lo mide `audit-mezcla`, que graba lo que sale por el parlante.
  */
 export function wind(gameSeconds: number, vol: number, hz0: number, hz1: number, seed: number): void {
-  if (muted) return;
+  if (sinEfectos()) return;
   try {
     const c = chain();
     if (!c) return;
@@ -306,7 +318,7 @@ export function vientoEn(ctx: BaseAudioContext, out: AudioNode, t0: number, dur:
  * curva de ganancia (no un segundo oscilador), así el único oscilador es la nota, en la escala. Segundos del juego.
  */
 export function hum(f: number, gameSeconds: number, vol0: number, vol1: number): void {
-  if (muted) return;
+  if (sinEfectos()) return;
   try {
     const c = chain();
     if (!c) return;
@@ -367,6 +379,10 @@ export function note(degree: number, octaveShift = 0): number {
 }
 
 export function fanfare(): void {
+  // Mientras el show se pone al día no suena el remate de un golpe que ya pasó.
+  if (callados) return;
+  // Con la pista de música de archivo, el golpe y el festejo son los de la pista: un solo final (`src/sonidos/pistas-enganche.ts`).
+  if (pistaRemata()) return;
   // Con archivo, el remate del ganador es uno solo (la tribuna, el golpe): el acorde de osciladores no suena encima.
   if (!muted) {
     const j = ganadorDeArchivo();
@@ -417,6 +433,8 @@ export function toggleSound(): void {
   } catch {
     /* que no se guarde no rompe nada */
   }
+  // La cola del festejo de una pista cuyo show ya terminó sigue sonando unos segundos: al apagar el sonido se calla.
+  if (muted) pistaCallar();
   // La voz del narrador es parte del sonido: un solo botón las apaga a las dos.
   soundLabel();
 }
@@ -430,6 +448,7 @@ export function sonidoDelJuego(game: Game, reinicia = true): void {
   avisarJuego(game);
   try {
     elegirJuego(game, audioCtx ?? contexto()?.ctx ?? null, reinicia);
+    pistaDelJuego(game, audioCtx);
     if (audioCtx) techoDeLaMezcla(audioCtx, hayCandidatas());
   } catch {
     /* sin audio: suenan los osciladores */
@@ -438,7 +457,7 @@ export function sonidoDelJuego(game: Game, reinicia = true): void {
 
 /** El contexto y la entrada de la cadena de efectos, para tocar desde afuera lo mismo que `beep` (el sonido de la carrera). `null` si no hay audio o está silenciado. */
 export function salidaDeEfectos(): { ctx: AudioContext; out: AudioNode } | null {
-  return muted ? null : chain();
+  return sinEfectos() ? null : chain();
 }
 
 /** `true` si el estadio está en silencio. */

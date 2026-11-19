@@ -49,12 +49,20 @@ export const ERRORES = [
   "wallet",
   /** Pollar 0.12: la cuenta no firma hasta tener una forma de recuperarla. */
   "recoveryRequired",
+  /** Pollar 0.12 (modo Oficial): este navegador todavía no es uno de los de la cuenta; se confirma en el paso de la cuenta. */
+  "deviceNotEnrolled",
   /** Pollar 0.12: la firma pidió confirmación y nadie la atendió, o no era la que la persona pidió. */
   "confirmation",
   /** Quien paga la comisión por la persona (Pollar) se quedó sin con qué: no es de su cuenta. */
   "sponsorEmpty",
   /** Pollar 0.12: la co-firma de la cuenta no se aprobó (la rechazó quien aprueba, o la transacción no coincidía). */
   "cosignRejected",
+  /** El voto a mano: no se pudo comprobar que lo que había que aprobar fuera la transacción que armó la página, y no se votó. */
+  "cofirmaDistinta",
+  /** La puerta del premio: la cuenta puede guardar dinero y por eso no sella ni sortea. */
+  "premioGuardado",
+  /** La puerta del premio: no se pudo comprobar si la cuenta puede guardar dinero y, ante la duda, no firma. */
+  "premioSinSaber",
   "rpcDown",
   "offline",
   /** Los motivos del portero del patrocinio: ver `ERRORES_DEL_PORTERO`. */
@@ -93,7 +101,7 @@ export const EVENTOS = {
   account_connected: { p: { kind: ["google", "email", "freighter", "test"] }, o: { from: ORIGENES }, ref: "no" },
   /** Prepara: la primera lista de dos o más de la pestaña: pegada, escrita a mano, de un archivo o de Luma. */
   list_ready: { p: { source: ["paste", "typed", "csv", "luma"], size: TAMANOS }, o: {}, ref: "no" },
-  /** Muestra: "Mostrar la lista a la sala". */
+  /** Muestra: "Mostrar la lista en grande". */
   list_shown: { p: {}, o: {}, ref: "no" },
   /** Sella: se pidió sellar con cuenta, se confirmó o falló. La verdad del sello es la cadena (`sealed`). */
   seal_sent: { p: { network: REDES }, o: {}, ref: "no" },

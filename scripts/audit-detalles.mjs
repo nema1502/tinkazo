@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -129,8 +130,8 @@ async function pegar(page, texto) {
  * nada a la red: alcanza para Mis sorteos, no para sellar.
  */
 async function cuentaDePrueba(page) {
-  await page.waitFor("document.querySelector('#wallet-box button')", 20000);
-  await page.eval("document.querySelector('#wallet-box button').click(); true");
+  await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
+  await page.eval(TOCAR_ENTRAR_JS);
   await page.waitFor("document.querySelector('.login-opt')", 15000);
   await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
   const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
@@ -191,7 +192,7 @@ const DETALLES = {
               ),
             )
           : {};
-        check(`${quien} · "Mostrar la lista a la sala" muestra la sellada`, sala.ok && s.n === 22 && /sellada/i.test(s.sticker) && s.sello.startsWith(s.huella), sala.ok ? `"${s.sticker}" · ${s.n} nombres · huella ${s.huella} / sello ${s.sello}` : "no se abrió");
+        check(`${quien} · "Mostrar la lista en grande" muestra la sellada`, sala.ok && s.n === 22 && /sellada/i.test(s.sticker) && s.sello.startsWith(s.huella), sala.ok ? `"${s.sticker}" · ${s.n} nombres · huella ${s.huella} / sello ${s.sello}` : "no se abrió");
         await captura(page, "D01", v, tema, "sala");
         await page.eval("document.querySelector('.sala [data-cerrar]')?.click(); true");
         await sleep(300);
@@ -396,7 +397,7 @@ const DETALLES = {
         await sleep(900);
         await sellar(page);
         const cuenta = await page.eval("document.getElementById('wait-left').textContent");
-        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya nació/.test(cuenta), `"${cuenta}"`);
+        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya salió el número/.test(cuenta), `"${cuenta}"`);
         await sortearYSaltar(page);
         await page.eval("document.getElementById('btn-grande').focus({ preventScroll: true }); true");
         await sleep(1400);
@@ -537,7 +538,7 @@ const DETALLES = {
   },
 
   D17: {
-    que: '"Entrar y sortear" al final de la demo abre la ventana de ingreso',
+    que: '"Entrar y sortear gratis" al final de la demo abre la ventana de ingreso',
     async correr(browser, v, tema, quien) {
       const page = await abrir(browser, v, tema, "?demo=race&instant=1&lead=3", "");
       try {
@@ -592,6 +593,17 @@ const DETALLES = {
           const m = JSON.parse(await page.eval("JSON.stringify((() => { const e = document.getElementById('sig-paso'); return { entra: e.scrollWidth <= e.clientWidth + 1, barra: document.getElementById('siguiente').classList.contains('on'), texto: e.textContent, scroll: document.documentElement.scrollWidth > innerWidth, linea: e.scrollWidth, caja: e.clientWidth, pagina: document.documentElement.scrollWidth }; })())"));
           check(`${quien} · a 320 px la línea entra entera y no hay scroll de costado`, m.entra && !m.scroll, `"${m.texto}"${m.barra ? " (con la barra)" : ""} · la línea mide ${m.linea} px en una caja de ${m.caja}, la página ${m.pagina} de 320`);
         }
+        // Un premio de más de 18 letras: con lugar va entero y, si no, se corta en el último espacio que entra y no a media palabra.
+        const largo = "¿Quién presenta primero?";
+        await page.eval(`(() => { const p = document.getElementById('prize'); p.value = ${js(largo)}; p.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+        await sleep(400);
+        const g = JSON.parse(await page.eval("JSON.stringify((() => { const e = document.getElementById('sig-paso'); return { texto: e.textContent, entra: e.scrollWidth <= e.clientWidth + 1 }; })())"));
+        const clave = "personas, ";
+        const visto = g.texto.includes(clave) ? g.texto.slice(g.texto.indexOf(clave) + clave.length) : "";
+        const entero = visto === largo;
+        const cortado = visto === "" || (visto.endsWith("…") && largo.startsWith(visto.slice(0, -1)) && largo.charAt(visto.length - 1) === " ");
+        check(`${quien} · un premio largo no se corta a media palabra${v.celular ? "" : " y se ve entero"}`, g.entra && (v.celular ? entero || cortado : entero), `"${g.texto}"`);
+        await captura(page, "D19", v, tema, "premio-largo");
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }

@@ -6,8 +6,8 @@
 const SUFIJO = /\s*\(\d+\/\d+\)\s*$/;
 
 /** El aviso de que alguien salio mas de una vez, en los dos idiomas. La app escribe «salió», con tilde. */
-const AVISO = (nombre) => new RegExp(`${escapar(nombre)}\\s+(?:sali[oó]|came out)\\s+(\\d+)\\s+(?:veces|times)`, "i");
-const AVISO_CUALQUIERA = /sali[oó]\s+\d+\s+veces|came out\s+\d+\s+times/i;
+const AVISO = (nombre) => new RegExp(`${escapar(nombre)}\\s+(?:sali[oó]|was drawn)\\s+(\\d+)\\s+(?:veces|times)`, "i");
+const AVISO_CUALQUIERA = /sali[oó]\s+\d+\s+veces|was drawn\s+\d+\s+times/i;
 
 const escapar = (texto) => texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

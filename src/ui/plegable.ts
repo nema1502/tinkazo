@@ -1,9 +1,12 @@
 import { t } from "../i18n";
 
 /**
- * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo
- * ahí adentro, para que lo que eligió no quede escondido (un premio escrito, más de un ganador). Lo que se
- * eligió se lee igual arriba del botón de sellar.
+ * Lo plegado de la lista (Premio y subir CSV, o con el orden de turnos elegido Nombre de los turnos y subir CSV,
+ * `#mas-opciones`): se abre solo si la persona ya eligió algo ahí adentro, para que lo que eligió no quede escondido.
+ * Cuántos ganan quedó afuera, junto al botón de sellar: cambiarlo no abre este pliegue.
+ *
+ * Con el orden de turnos elegido en el selector de arriba (`src/ui/turnos.ts`), el nombre Turnos lo pone la herramienta:
+ * eso no es algo elegido ahí adentro y no abre el pliegue. Un nombre escrito por la persona, sí.
  *
  * Y lo plegado del resultado (`#mas-resultado`, ver `plegarElResultado`).
  */
@@ -12,13 +15,13 @@ export function initPlegables(): void {
   const mas = document.getElementById("mas-opciones") as HTMLDetailsElement | null;
   if (!mas) return;
   const prize = document.getElementById("prize") as HTMLInputElement | null;
-  const nw = document.getElementById("nw") as HTMLInputElement | null;
+  const enOrden = (): boolean => document.getElementById("btn-turnos")?.getAttribute("aria-pressed") === "true";
   const revisar = (): void => {
-    if ((prize?.value.trim() ?? "") !== "" || (nw !== null && nw.value !== "1")) mas.open = true;
+    const premio = prize?.value.trim() ?? "";
+    const premioElegido = premio !== "" && !(enOrden() && ["Turnos", "Turns"].includes(premio));
+    if (premioElegido) mas.open = true;
   };
   prize?.addEventListener("input", revisar);
-  nw?.addEventListener("change", revisar);
-  nw?.addEventListener("input", revisar);
   // Un premio que se pone por código (los chips, "Siguiente premio") no avisa con un evento: se mira al tocar.
   mas.parentElement?.addEventListener("click", () => setTimeout(revisar, 0));
   window.addEventListener("pageshow", revisar);
@@ -30,7 +33,7 @@ export function initPlegables(): void {
  * 2026): después del ganador queda "Siguiente premio" (o "Compartir el
  * resultado" si no queda con quién sortear), "Mostrar en grande" y "Avisarle por WhatsApp". "Usar otra lista",
  * "Copiar el mensaje" y "Avisarle por correo" se usan poco y estaban todos a la vista: eran siete botones en una
- * pantalla donde se pide uno. Se pliegan en «Otra lista, copiar el mensaje y más», debajo de la acción principal.
+ * pantalla donde se pide uno. Se pliegan en "Otra lista, copiar el mensaje y más", debajo de la acción principal.
  *
  * Los botones son los de siempre, con sus ids y sus manejadores: solo cambian de lugar, así que nada de lo que los
  * usa se entera. Se arma acá y no en `index.html` para no repetir el markup de tres controles que otro código ya

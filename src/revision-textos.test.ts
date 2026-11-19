@@ -2,6 +2,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
+import { textoDeLaPortadaConRetiro } from "./costo-del-retiro-portada";
+
+/** La respuesta de la portada con los valores de producción (docs/operacion.md): retirar 0,50 y la comisión del 2 % con mínimo de 1,50. */
+const PORTADA_CON_COSTO = textoDeLaPortadaConRetiro(5_000_000n, { pb: 200n, minimo: 15_000_000n }).es;
 
 const leer = (ruta: string): string => readFileSync(new URL(`../${ruta}`, import.meta.url), "utf8");
 const t = (idioma: "es" | "en", clave: string): string => String(T[idioma][clave]);
@@ -30,12 +34,28 @@ describe("revisión de redacción de los textos visibles", () => {
       for (const clave of Object.keys(TEXTOS_MODO_OFICIAL.es)) {
         if (!html.includes(`data-i="${clave}"`)) continue;
         vistas.push(`${pagina}:${clave}`);
+        // La portada con el costo de retirar y la comisión prendidos: el build de producción exige esa frase en el HTML.
+        if (pagina === "index.html" && clave === "faq3a" && html.includes(`data-i="faq3a">${PORTADA_CON_COSTO}<`)) continue;
         if (!html.includes(`data-i="${clave}">${t("es", clave)}<`)) desfasadas.push(`${pagina}, data-i="${clave}"`);
       }
     }
-    expect(vistas).toEqual(expect.arrayContaining(["precios.html:nextBody", "sorteo-verificable.html:verifN3", "terminos.html:tmMore3"]));
+    expect(vistas).toEqual(
+      expect.arrayContaining([
+        "precios.html:nextBody",
+        "precios.html:prNote",
+        "index.html:faq3a",
+        "terminos.html:tmPatrocinio",
+        "terminos.html:tmMore1",
+        "sorteo-verificable.html:verifN3",
+        "terminos.html:tmMore3",
+      ]),
+    );
     const donde = HAY_MODO_OFICIAL ? "el de i18n-modo-oficial.ts" : "el de i18n.ts";
     expect(desfasadas, `El HTML tiene que llevar el texto del diccionario (${donde}) en`).toEqual([]);
+  });
+
+  it("como-funciona.html trae en el HTML el texto de quién paga la comisión, el único que lleva un enlace", () => {
+    expect(leer("como-funciona.html")).toContain(`data-i-html="cfCostoB">${t("es", "cfCostoB")}</p>`);
   });
 
   it("precios.html usa «comprobar» en el título, la descripción y los datos estructurados", () => {
@@ -52,8 +72,8 @@ describe("revisión de redacción de los textos visibles", () => {
     expect(t("es", "monReglas")).toContain("nunca te dan más probabilidades en un sorteo");
     expect(t("en", "monReglas")).toContain("never improve your odds in a draw");
     for (const idioma of ["es", "en"] as const) {
-      expect(t(idioma, "monReglas"), idioma).not.toMatch(/chances?/i);
-      expect(t(idioma, "monNoCambia"), idioma).not.toMatch(/chances?/i);
+      expect(t(idioma, "monReglas"), idioma).not.toMatch(/\bchances?\b/i);
+      expect(t(idioma, "monNoCambia"), idioma).not.toMatch(/\bchances?\b/i);
     }
     for (const ruta of ["workers/cuenta/src/reglas.ts", "workers/cuenta/src/servidor.ts", "workers/cuenta/README.md"]) {
       expect(leer(ruta), ruta).not.toMatch(/compra(n)? chances/);
@@ -79,9 +99,10 @@ describe("revisión de redacción de los textos visibles", () => {
     expect(leer("marca.html")).toContain(`data-i="maQrEtB">${t("es", "maQrEtB")}</p>`);
   });
 
-  it("el saldo mínimo dice qué parte de la comisión es la fija", () => {
-    expect(t("es", "saldoMinimo")).toContain("la parte fija de la comisión (1 dólar)");
-    expect(t("en", "saldoMinimo")).toContain("the fixed part of the fee (1 dollar)");
-    expect(`${t("es", "saldoMinimo")} ${t("en", "saldoMinimo")}`).not.toMatch(/dólar fijo|fixed dollar/);
+  it("la cuenta 3, 2, 1 de la tarjeta del juego no vuelve a decir Contemos juntos, que quien organiza rechazó", () => {
+    // La primera versión de la espera cerraba con esa frase y salió el 17 de octubre de 2026 (`ui/espera.ts`).
+    expect(t("es", "gcCuenta")).toBe("¡Cuenten conmigo!");
+    expect(t("en", "gcCuenta")).toBe("Count with me!");
+    expect(`${t("es", "gcCuenta")} ${t("en", "gcCuenta")}`).not.toMatch(/contemos juntos|count down together/i);
   });
 });

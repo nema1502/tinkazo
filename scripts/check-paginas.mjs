@@ -63,6 +63,11 @@ const HERRAMIENTAS = [
   },
   { p: "evento", hash: "", listo: "!/working/.test(document.getElementById('ev-veredicto').className)" },
   { p: "c", hash: "", listo: "!!document.body.dataset.estado && document.body.dataset.estado !== 'abriendo'" },
+  // La vuelta de la verificación de identidad de la compra con QR: suelta, sin nada del sitio, en public/.
+  { p: "verificado", hash: "", listo: "document.body.dataset.listo === '1'" },
+  // La página del celular de una campaña, con su demostración: sin sala, sin Google y sin red, y abre aunque la bandera
+  // de las campañas esté apagada. `consulta` suma el parámetro de la demostración a la dirección.
+  { p: "participar", consulta: "&demo=campana", hash: "", listo: "!!document.querySelector('#cmp-saber .primary')" },
 ];
 
 let fallos = 0;
@@ -100,12 +105,17 @@ try {
       // vuelo cuando se cuenta y figuraba como rota sin estarlo (siempre la
       // primera página, la primera pantalla). Antes de contar se espera a que
       // todas las pedidas terminen, cargadas o con error, hasta 10 segundos.
-      // Si alguna sigue sin terminar, puede ser la carrera del tema forzado
-      // (`?theme=` reescribe el `media` de los `source` en pagina.ts mientras
-      // el precargador ya pidió la otra versión): la imagen queda sin pedir
-      // hasta que vuelve a entrar en pantalla. Se vuelve arriba de a una
-      // pantalla, como quien relee, y se espera otra vez antes de contarla
-      // como colgada.
+      // Si alguna sigue sin terminar, se vuelve arriba de a una pantalla, como
+      // quien relee, y se espera otra vez antes de contarla como colgada. Ese
+      // reintento nació de la carrera del tema forzado: pagina.ts corre con el
+      // HTML ya abierto y el navegador podía haber pedido ya la versión del
+      // sistema. Desde que fijarElTema deja cada captura con una sola fuente, la
+      // del tema, esa carrera no debería darse, y el reintento queda como red de
+      // seguridad para una imagen lenta. Por eso avisa en la consola cada vez que
+      // entra: si vuelve a hacer falta, el arreglo del tema dejó de funcionar y
+      // el aviso no puede quedar tapado por una corrida en verde. La carrera en
+      // sí, sin reintento y con diez recargas sin caché, la mira
+      // check-tema-capturas.mjs.
       await page.waitFor("[...document.images].every((i) => i.complete)", 10000);
       const mirar = async () => JSON.parse(await page.eval(`JSON.stringify((() => {
         const pedidas = [...document.images];
@@ -128,6 +138,7 @@ try {
       })())`));
       let r = await mirar();
       if (r.colgadas > 0) {
+        console.log(`  ! ${p}.html ${tema} ${como}: entró el reintento, ${r.colgadas} de ${r.total} imágenes seguían sin terminar (${r.cualesColgadas})`);
         for (let i = 0; i < 90; i++) {
           const inicio = await page.eval("window.scrollBy(0, -window.innerHeight); window.scrollY <= 0");
           await sleep(120);
@@ -135,6 +146,7 @@ try {
         }
         await page.waitFor("[...document.images].every((i) => i.complete)", 10000);
         r = await mirar();
+        console.log(`    ${r.colgadas === 0 ? "el reintento las dejó cargadas" : `el reintento no alcanzó, quedan ${r.colgadas}`}`);
       }
       const etiqueta = `${tema} ${como}`;
       check(!!r.titulo, `${etiqueta}: tiene título`, r.titulo);
@@ -157,7 +169,7 @@ try {
     check(ingles.length > 0, "inglés: el titular está traducido", ingles);
   }
 
-  for (const { p, hash, listo } of HERRAMIENTAS) {
+  for (const { p, consulta = "", hash, listo } of HERRAMIENTAS) {
     console.log(`\n${p}.html`);
     let titular = "";
     for (const { tema, ancho, alto, como } of VISTAS) {
@@ -168,7 +180,7 @@ try {
       // Estas páginas siguen el idioma del navegador (un enlace compartido se abre
       // en el idioma de quien lo recibe): el castellano se pide explícito, porque
       // el Chrome de la CI está en inglés y el titular salía igual en los dos.
-      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}&lang=es${hash}` });
+      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}&lang=es${consulta}${hash}` });
       await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
       const termino = await page.waitFor(listo, 30000);
       await sleep(500);
@@ -215,7 +227,7 @@ try {
       await page.send("Page.close").catch(() => {});
     }
     // En inglés el titular lo pone el script: tiene que cambiar de idioma.
-    const en = await browser.open(`${base}/${p}.html?lang=en${hash}`);
+    const en = await browser.open(`${base}/${p}.html?lang=en${consulta}${hash}`);
     await en.waitFor(listo, 30000);
     await sleep(500);
     const ingles = await en.eval(`document.querySelector('h1')?.textContent || ''`);

@@ -96,7 +96,8 @@ describe("sortear cuando la cuenta pide protección", () => {
     expect(h.orden.filter((x) => x === "escribirError")).toHaveLength(1);
     // Un solo fallo contado: el del final, no el que abrió la ventana.
     expect(cuentas("draw_failed")).toBe(1);
-    expect(document.getElementById("btn-draw")?.textContent).toBe(t("drawRetry"));
+    // El show ya se jugó con el resultado calculado: lo que se vuelve a probar es guardarlo.
+    expect(document.getElementById("btn-draw")?.textContent).toBe(t("grabReintentar"));
   });
 
   it("a la ventana le dice a dónde devolver el foco: el botón de sortear, apagado, y su línea de estado", async () => {
@@ -118,7 +119,7 @@ describe("sortear cuando la cuenta pide protección", () => {
     expect(h.orden).toContain("escribirError");
     expect(cuentas("draw_failed")).toBe(1);
     expect((document.getElementById("btn-draw") as HTMLButtonElement).disabled).toBe(false);
-    expect(document.getElementById("btn-draw")?.textContent).toBe(t("drawRetry"));
+    expect(document.getElementById("btn-draw")?.textContent).toBe(t("grabReintentar"));
   });
 
   it("otro error no abre la ventana", async () => {

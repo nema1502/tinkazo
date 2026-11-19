@@ -1,6 +1,7 @@
 import { HORIZON_URLS, type NetworkName } from "./config";
 import { passphraseDe } from "./oficiales";
 import { type ActivoDePago, esDireccionG, notaDelPremio, stroopsDe } from "./pagos";
+import { mirarCuenta } from "./usdc-cuenta";
 
 /**
  * Armar el pago de un premio y mandarlo.
@@ -70,40 +71,6 @@ async function conEspera<T>(ms: number, hacer: (senal: AbortSignal) => Promise<T
   }
 }
 
-/** Una cuenta de Horizon: su número de secuencia y sus saldos, o que no existe, o que no se pudo leer. */
-interface CuentaLeida {
-  secuencia: string;
-  saldos: Array<{ code: string; issuer: string; saldo: string; limite: string; autorizada: boolean }>;
-}
-
-async function leerCuenta(base: string, cuenta: string, op: OpcionesDeEnvio): Promise<CuentaLeida | "no-existe" | "sin-red"> {
-  const f = op.fetch ?? fetch;
-  try {
-    return await conEspera(op.tiempoMs ?? TIEMPO_MS, async (signal) => {
-      const r = await f(`${base}/accounts/${encodeURIComponent(cuenta)}`, { signal });
-      if (r.status === 404) return "no-existe" as const;
-      if (!r.ok) return "sin-red" as const;
-      const j = (await r.json()) as { sequence?: unknown; balances?: unknown };
-      if (typeof j.sequence !== "string" || !/^\d{1,20}$/.test(j.sequence) || !Array.isArray(j.balances)) return "sin-red" as const;
-      const saldos: CuentaLeida["saldos"] = [];
-      for (const b of j.balances as Array<Record<string, unknown>>) {
-        if (typeof b.asset_code !== "string" || typeof b.asset_issuer !== "string") continue;
-        saldos.push({
-          code: b.asset_code,
-          issuer: b.asset_issuer,
-          saldo: typeof b.balance === "string" ? b.balance : "0",
-          limite: typeof b.limit === "string" ? b.limit : "0",
-          // Sin el dato, se supone que sí: la mayoría de los emisores no pide autorización.
-          autorizada: b.is_authorized !== false,
-        });
-      }
-      return { secuencia: j.sequence, saldos };
-    });
-  } catch {
-    return "sin-red";
-  }
-}
-
 /** Los siete decimales de un monto de Horizon, para mostrarlo y compararlo. */
 const siete = (m: string): string => {
   const [e = "0", d = ""] = m.split(".");
@@ -133,8 +100,7 @@ export async function armarPago(d: DatosDelPago, secuencia: string): Promise<{ x
  */
 export async function prepararPago(d: DatosDelPago, op: OpcionesDeEnvio = {}): Promise<Preparacion> {
   if (!esDireccionG(d.origen) || !esDireccionG(d.destino) || d.origen === d.destino) return { ok: false, motivo: "datos-invalidos" };
-  const base = op.horizon ?? HORIZON_URLS[d.red];
-  const [origen, destino] = await Promise.all([leerCuenta(base, d.origen, op), leerCuenta(base, d.destino, op)]);
+  const [origen, destino] = await Promise.all([mirarCuenta(d.red, d.origen, op), mirarCuenta(d.red, d.destino, op)]);
   if (origen === "sin-red" || destino === "sin-red") return { ok: false, motivo: "sin-red" };
   if (origen === "no-existe") return { ok: false, motivo: "origen-sin-cuenta" };
   if (destino === "no-existe") return { ok: false, motivo: "destino-sin-cuenta" };

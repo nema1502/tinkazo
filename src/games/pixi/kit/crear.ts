@@ -97,6 +97,8 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     let coronado = false;
     let muerto = false;
     let escena: E | undefined;
+    // El momento decisivo del plan, en la hora del juego: el celular de quien mira no pasa de ahí sin soltarlo (`en-hora.ts`).
+    if (plan.decisivo !== undefined) S.decisivoEn?.(() => t, plan.decisivo);
     // `?auditar=nino`: la verdad del plan en cada instante, para la prueba del niño (`audit-nino`).
     // `duracion` es la hora del golpe (el 100 %): `audit-nino` para al 25 % y al 60 % de ella.
     // Si la escena sabe dónde cae en la pantalla quien va adelante (`puntoDelFrente`), la zona de la verdad es esa y no una que declaró el plan.
@@ -201,7 +203,10 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
         const rampa = (v: number): number => Math.max(0, Math.min(1, v / 0.3));
         marcadorUI.alfa(coronado ? rampa(tHold - F.golpe) : 1 - rampa(t - plan.marcadorApagado));
       }
-      if (t >= plan.duracion) crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+      if (t >= plan.duracion) {
+        crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+        def.trasCorona?.(k, plan, escena as E, t);
+      }
       if (tHold >= anf.espera + F.placa) {
         muerto = true;
         S.cleanup();

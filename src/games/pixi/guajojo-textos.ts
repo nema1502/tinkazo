@@ -1,3 +1,4 @@
+import { enStand } from "../../ensayo-modo";
 import type { Textos } from "./kit";
 
 /**
@@ -10,6 +11,9 @@ import type { Textos } from "./kit";
  *
  * Nunca: eliminado, perdió, muerte ni agüero. Quien se sienta no pierde, escucha;
  * el final es el amanecer. La leyenda no se cuenta durante el show: solo el juego.
+ *
+ * En una ronda del stand nadie se lleva un premio: quien se sienta último también sale. La frase se elige al
+ * decirla (un `get`), no al cargar el archivo, porque el stand se prende y se apaga en la pestaña.
  */
 export const TEXTOS = {
   es: {
@@ -27,7 +31,9 @@ export const TEXTOS = {
     alguien: "¿Quién aguanta?",
     crac: (n: string) => `¡Crac! Te escuchó, ${n}`,
     varios: "¡Crac! ¡Se sientan varios!",
-    conPremio: "¡Se sienta, pero con premio!",
+    get conPremio() {
+      return enStand() ? "¡Se sienta, y también sale!" : "¡Se sienta, pero con premio!";
+    },
     amanece: "¡Amanece!",
   },
   en: {
@@ -45,7 +51,9 @@ export const TEXTOS = {
     alguien: "Who holds on?",
     crac: (n: string) => `Snap! It heard you, ${n}`,
     varios: "Snap! Several sit down!",
-    conPremio: "Sits down, but with a prize!",
+    get conPremio() {
+      return enStand() ? "Sits down, and is picked too!" : "Sits down, but with a prize!";
+    },
     amanece: "Dawn breaks!",
   },
 } satisfies Textos;
