@@ -151,7 +151,7 @@ describe("la sala lanzada desde la espera, a la hora del ancla", () => {
     await sellar();
     const { draw } = await import("./draw");
     const sorteo = draw({ adelantado: true });
-    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledWith(ESPERADOS));
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledWith([ESPERADOS[0]]));
     // El número es el del ancla: no se pidió otra vez.
     expect(h.fetchRound).not.toHaveBeenCalled();
     // La tarjeta termina a la llegada más 4,4 s (Normal), y el estadio arranca a esa misma hora.
