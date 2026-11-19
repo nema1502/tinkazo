@@ -528,7 +528,11 @@ describe("la red la rechaza sin que entre, o no se sabe", () => {
     red.consultas.set(bien.hash, { status: "SUCCESS", feeCharged: 31_000 });
     red.consultas.set(mal.hash, { status: "FAILED", feeCharged: 12_000 });
     ahora += ESPERA_RECONCILIAR_MS + 1;
-    expect(await p.reconciliar()).toBe(false);
+    // Nada queda en el aire. La alarma sigue igual: el sello fallido vino sin lo que guardó la red (el sobre, el resultado,
+    // la hora) y se vuelve a probar si entró tarde (`devolucion-reintento.test.ts`).
+    expect(await p.reconciliar()).toBe(true);
+    expect(cupos.enElAire()).toBe(0);
+    expect(cupos.cuantosPorProbar()).toBe(1);
     expect(cupos.buscar(bien.hash)).toMatchObject({ estado: "ok", real: 31_000 });
     expect(cupos.buscar(mal.hash)).toMatchObject({ estado: "fallo", real: 12_000 });
     expect(cupos.consultar(org.publicKey(), ahora, { maxSellos: 20, maxSorteos: 40 }).sellos).toBe(2);

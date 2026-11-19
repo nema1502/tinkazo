@@ -34,6 +34,13 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
+  it("la cuenta de prueba se presenta como Invitado para no repetir el nombre del modo", () => {
+    expect(T.es.cuentaViaPruebaC).toBe("Invitado");
+    expect(T.en.cuentaViaPruebaC).toBe("Guest");
+    expect(T.es.cuentaViaPruebaC).not.toBe(T.es.modeTest);
+    expect(T.en.cuentaViaPruebaC).not.toBe(T.en.modeTest);
+  });
+
   it("Sapo: the drop line names the prize, never the co-winner, the tally counts, 'almost' and the frog's lip exist", () => {
     // Al caer el co-ganador la línea dice su número de premio: no hay nombre que decir.
     expect(T.es.cSapDone(2)).toMatch(/premio 2/i);
@@ -230,12 +237,12 @@ describe("diccionario", () => {
     expect(T.en.freeRule).toContain("/terminos.html");
   });
 
-  it("el rótulo del pliegue de la lista nombra lo que guarda: el premio, cuántos ganan y el CSV", () => {
+  it("el rótulo del pliegue nombra el premio y el CSV, no la cantidad que quedó afuera", () => {
     expect(T.es.masOpciones).toMatch(/premio/i);
-    expect(T.es.masOpciones).toMatch(/ganan/i);
+    expect(T.es.masOpciones).not.toMatch(/ganan/i);
     expect(T.es.masOpciones).toMatch(/CSV/);
     expect(T.en.masOpciones).toMatch(/prize/i);
-    expect(T.en.masOpciones).toMatch(/win/i);
+    expect(T.en.masOpciones).not.toMatch(/win/i);
     expect(T.en.masOpciones).toMatch(/CSV/);
   });
 

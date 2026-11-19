@@ -117,6 +117,16 @@ export interface Opciones {
   dormir?: (ms: number) => Promise<void>;
   /** El azar del desfase y de las pausas, entre 0 y 1: en las pruebas, fijo. */
   azar?: () => number;
+  /**
+   * La primera lectura, no antes de esta hora (en el reloj de `ahora`): la cadena no acepta el sorteo grabado antes de
+   * su margen (`espectador-regla.ts`), y leer antes es carga de más para el RPC con toda la sala mirando.
+   */
+  noAntesDe?: number;
+  /**
+   * Si está, una cadena que no contesta no termina la espera: pasado el tope se avisa una vez con esto y se sigue mirando
+   * hasta verlo grabado. Lo usa el celular a la par, que no suelta su final sin ver lo grabado (`espectador.ts`).
+   */
+  alNoContestar?: () => void;
 }
 
 const leerDeVerdad: Leer = async (contrato, id) => {
@@ -158,7 +168,9 @@ export async function mirarUnaVez(s: SorteoDelEnlace, leer: Leer = leerDeVerdad)
  *   la página). Se sigue esperando, sin tope, y pasado `avisoTardeMs` se avisa: jugar ahora sería coronar antes que la
  *   sala.
  * - No contesta: pasado el tope sin ninguna respuesta, termina con `sin-confirmar` y el celular juega igual con lo que
- *   calculó (los mismos ganadores que va a grabar el contrato). No se queda colgado.
+ *   calculó (los mismos ganadores que va a grabar el contrato). No se queda colgado. Con `alNoContestar` (el celular a
+ *   la par, que ya jugó hasta su momento decisivo) no termina: avisa una vez y sigue mirando. Un RPC que dice que son
+ *   demasiados pedidos (429) sí contestó: la cadena está viva, y con cien celulares en el mismo wifi es lo esperable.
  * - Contesta, pero el sello de este número nunca aparece: pasado el tope, el enlace no es de un sorteo sellado
  *   (`NoCoincide`). Un servicio que va un ledger atrás lo muestra en segundos.
  */
@@ -168,32 +180,45 @@ export async function esperarElGrabado(s: SorteoDelEnlace, calculado: LoCalculad
   const dormir = op.dormir ?? dormirDeVerdad;
   const azar = op.azar ?? Math.random;
   const regla = reglaDelShow(true);
+  // Antes de que la cadena pueda tener el sorteo grabado no hay nada que leer. Los topes cuentan desde la primera lectura.
+  const antes = (op.noAntesDe ?? 0) - ahora();
+  if (antes > 0) await dormir(antes);
   const desde = ahora();
   /** La última vez que la cadena contestó: el tope de una cadena muda cuenta desde ahí. */
   let contesto = desde;
   let selloVisto = false;
   let avisado = false;
+  let mudoAvisado = false;
   let freno = 1;
   // Los celulares de la sala llegan acá en el mismo segundo: cada uno sale con su desfase.
   await dormir(azar() * DESFASE_MAX_MS);
   for (let vuelta = 0; ; vuelta++) {
     if (op.signal?.aborted) return "sin-confirmar";
     let reg: Registro | null = null;
+    let limite = false;
     try {
       reg = await leerConRpc(leer, s, vuelta);
       freno = 1;
     } catch (e) {
       reg = null;
-      if (esLimiteDelRpc(e)) freno = Math.min(freno * 2, FRENO_MAX);
+      limite = esLimiteDelRpc(e);
+      if (limite) freno = Math.min(freno * 2, FRENO_MAX);
     }
     const hay = reg ? leerLoQueHay(reg, s, calculado) : null;
     if (hay === "grabado") return "grabado";
     const t = ahora();
     const lleva = t - desde;
-    if (hay) contesto = t;
+    // Un 429 también es una respuesta: el RPC está vivo y frena a esta dirección.
+    if (hay || limite) contesto = t;
     if (hay === "sellado") selloVisto = true;
     if (hay === "nada" && !selloVisto && lleva >= regla.largaIgualTrasMs) throw new NoCoincide("sello");
-    if (!hay && t - contesto >= regla.largaIgualTrasMs) return "sin-confirmar";
+    if (!hay && t - contesto >= regla.largaIgualTrasMs) {
+      if (!op.alNoContestar) return "sin-confirmar";
+      if (!mudoAvisado) {
+        mudoAvisado = true;
+        op.alNoContestar();
+      }
+    }
     if (!avisado && selloVisto && lleva >= regla.avisoTardeMs) {
       avisado = true;
       op.alTardar?.();

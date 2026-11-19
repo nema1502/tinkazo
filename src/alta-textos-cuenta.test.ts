@@ -22,11 +22,11 @@ describe("los textos del acceso que la sección 8 no trae", () => {
     expect(CLAVES).toContain("altaErrCuentaDeOtro");
   });
 
-  it("dicen qué hacer: escribir a hola@tinkazo.app, y que en Prueba se sigue gratis", () => {
-    expect(TEXTOS_ALTA_CUENTA.es.altaErrCuentaDeOtro).toContain("hola@tinkazo.app");
-    expect(TEXTOS_ALTA_CUENTA.en.altaErrCuentaDeOtro).toContain("hola@tinkazo.app");
-    expect(TEXTOS_ALTA_CUENTA.es.altaErrCuentaDeOtro).toContain("En Prueba seguís gratis.");
-    expect(TEXTOS_ALTA_CUENTA.en.altaErrCuentaDeOtro).toContain("Test mode is still free.");
+  it("la cuenta que no coincide dice qué hacer, sin explicaciones de más", () => {
+    expect(TEXTOS_ALTA_CUENTA.es.altaErrCuentaDeOtro).toBe(
+      "No pudimos unir esta cuenta con tu acceso, escribinos a hola@tinkazo.app y lo arreglamos.",
+    );
+    expect(TEXTOS_ALTA_CUENTA.en.altaErrCuentaDeOtro).toBe("We couldn't link this account to your access, write to us at hola@tinkazo.app.");
   });
 
   it("ninguno lleva punto medio, raya larga o media, flecha ni signo de exclamación", () => {

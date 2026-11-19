@@ -1012,7 +1012,9 @@ async function recorrer(browser, vista, tema, caso) {
     const o = res.m.otro;
     check(
       `${quien} · 4 resultado: lo que sigue va pegado al ganador`,
-      !!g && !!o && o.top >= g.bottom - 1 && o.top - g.bottom <= 90,
+      // 110 px: entre los ganadores y lo que sigue va la línea de guardado, que con el enlace al registro ocupa tres
+      // renglones en 390 px. Una caja entera en el medio pasa de eso.
+      !!g && !!o && o.top >= g.bottom - 1 && o.top - g.bottom <= 110,
       g && o ? `${Math.round(o.top - g.bottom)} px debajo de los ganadores` : "falta el bloque",
     );
     check(
@@ -1122,7 +1124,7 @@ async function anchosDeCelular(browser, ancho) {
       await page.screenshot(join(outDir, `flujo-ancho-${ancho}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
     };
     console.log(`\n  ${quien}`);
-    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('btn-sample').click(); true`);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
     await sleep(800);
     await mirar("lista cargada");
     await page.eval("document.getElementById('btn-freeze').click(); true");

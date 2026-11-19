@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   falta: false,
   gate: vi.fn(),
   cargoFlujo: false,
+  /** El flujo del paso no baja: la importación se rechaza, como con el wifi de un evento cortado. */
+  flujoRoto: false,
 }));
 
 const recuperacion = () => new Error("SDK_WALLET_RECOVERY_REQUIRED");
@@ -30,10 +32,23 @@ vi.mock("../stellar/config", async (orig) => {
     },
   };
 });
-vi.mock("./cuenta-lista-flujo", () => {
-  h.cargoFlujo = true;
-  return { faltaEnLaMemoria: () => h.falta, cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a) };
-});
+/**
+ * El flujo del paso. Un solo simulacro para todo el archivo: la descarga fallida no se arma con `vi.doMock`, porque eso
+ * solo deja el cambio en una cola que aplica la próxima descarga de cualquier módulo. Si otra importación suelta se lleva
+ * esa cola y todavía no terminó de registrarla, la importación del caso ve el simulacro viejo (la falla de a ratos, solo
+ * con la máquina cargada). Acá lo decide `h.flujoRoto`, leído en el momento. Al resolver `await import()` el motor lee
+ * `then` del módulo: ahí se anota que se bajó (en cada importación, no solo la primera) y, si el flujo está roto, se
+ * lanza y la importación se rechaza igual que una descarga cortada.
+ */
+vi.mock("./cuenta-lista-flujo", () => ({
+  get then() {
+    h.cargoFlujo = true;
+    if (h.flujoRoto) throw new TypeError("Failed to fetch dynamically imported module");
+    return undefined;
+  },
+  faltaEnLaMemoria: () => h.falta,
+  cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a),
+}));
 vi.mock("./anchor", () => ({
   cuentaPatrocinada: async () => true,
   drawOnChain: async () => undefined,
@@ -94,6 +109,7 @@ beforeEach(() => {
   h.red = "mainnet";
   h.falta = false;
   h.cargoFlujo = false;
+  h.flujoRoto = false;
   h.gate.mockReset();
   h.sortear.mockResolvedValue({ ok: false, error: new Error("boom") });
   document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><input id="nw" type="number" value="1">`;
@@ -141,20 +157,12 @@ describe("la compuerta del sorteo en modo Oficial", () => {
   });
 
   it("si el flujo del paso no se pudo bajar, el sorteo sellado sigue: no queda muerto hasta recargar", async () => {
-    vi.doMock("./cuenta-lista-flujo", () => {
-      throw new TypeError("Failed to fetch dynamically imported module");
-    });
+    h.flujoRoto = true;
     h.falta = true;
     await prepararEstado();
     const { draw } = await import("./draw");
-    try {
-      await draw();
-    } finally {
-      vi.doMock("./cuenta-lista-flujo", () => {
-        h.cargoFlujo = true;
-        return { faltaEnLaMemoria: () => h.falta, cuentaListaParaGrabar: (...a: unknown[]) => h.gate(...a) };
-      });
-    }
+    await draw();
+    expect(h.cargoFlujo).toBe(true);
     expect(h.gate).not.toHaveBeenCalled();
     expect(h.sortear).toHaveBeenCalledTimes(1);
   });

@@ -2,10 +2,23 @@ import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
 import { IP, LOTE, SECRETO_CUPON, T0, codigo, montarAltas, tokenDe } from "./altas-prueba";
 import { mostrar } from "./altas";
+import { AltasPorPremio } from "./altas-premio";
 import { DIA_MS, leerConfig } from "./config";
 import { MEMORIA_SESION_MS } from "./pollar";
 import { PorIp } from "./por-ip";
-import { ALTAS_POR_IP_HORA, FALLIDOS_POR_IP_HORA, FALLIDOS_POR_USUARIO_HORA, TOKENS_NUEVOS_POR_IP_HORA, atenderAlta } from "./rutas-altas";
+import { type PedidoDePago, UsoDePagos } from "./pagos-uso";
+import { ErrorDeRed } from "./red";
+import {
+  ALTAS_POR_IP_HORA,
+  CONSULTAS_PREMIO_DE_MAS,
+  FALLIDOS_POR_IP_HORA,
+  FALLIDOS_POR_USUARIO_HORA,
+  PuertaAltas,
+  TOKENS_NUEVOS_POR_IP_HORA,
+  atenderAlta,
+} from "./rutas-altas";
+import type { SorteoEnRed } from "./sorteadora";
+import { sqlQueFallaEn } from "./sqlite-prueba";
 
 const HORA = 3_600_000;
 const C1 = codigo(1);
@@ -455,5 +468,666 @@ describe("la puerta del Worker (atenderAlta)", () => {
     expect(ultimo?.status).toBe(429);
     expect(await ultimo?.json()).toMatchObject({ motivo: "cupo-ip" });
     expect(e.vistos).toHaveLength(ALTAS_POR_IP_HORA);
+  });
+});
+
+describe("la vigilancia y lo que falta con los pagos de premios y retiros", () => {
+  const CONTRATO = `C${"A".repeat(55)}`;
+  const LIM = { topePagos: 20_000_000, rechazosPorDia: 20 };
+  const firma = (ms: number) => ({ event: "cosign.signature:STELLAR", amount: -20, createdAt: new Date(ms).toISOString() });
+  let contador = 0;
+  const hash = () => (++contador).toString(16).padStart(64, "0");
+
+  /** Un pago reservado por el portero a esta hora, de una cuenta que estaba (o no) en el libro. */
+  function reservar(uso: UsoDePagos, forma: "premio" | "retiro", delLibro: boolean, cuando: number): void {
+    const pedido: PedidoDePago = {
+      hash: hash(),
+      envuelta: null,
+      forma,
+      cuenta: Keypair.random().publicKey(),
+      delLibro,
+      estimado: forma === "premio" ? 20_000 : 30_000,
+      vence: 1,
+      premio:
+        forma === "premio"
+          ? { contrato: CONTRATO, sorteo: "5", puesto: contador % 300, destino: Keypair.random().publicKey(), ganadores: 300 }
+          : null,
+      costo: forma === "retiro" ? 5_000_000 : null,
+    };
+    expect(uso.reservar(pedido, cuando, LIM)).toEqual({ ok: true, yaContado: false });
+  }
+
+  /** Las rutas de siempre, con las tablas de los pagos del mismo SQLite. */
+  function conPagos(env: Parameters<typeof montarAltas>[0] = {}, opciones: Parameters<typeof montarAltas>[1] = {}) {
+    const m = montarAltas(env, opciones);
+    const uso = new UsoDePagos(m.sql);
+    const puerta = new PuertaAltas({
+      cfg: m.cfg,
+      cupos: m.cupos,
+      altas: m.altas,
+      pollar: m.pollar,
+      cuponSecreto: SECRETO_CUPON,
+      red: m.red,
+      reloj: m.hora,
+      registrar: () => {},
+      pagos: uso,
+    });
+    return { m, uso, puerta };
+  }
+
+  it("los premios y los retiros de cuentas del libro suman a las firmas explicadas y salen en firmasPagos, aparte de firmas", async () => {
+    const { m, uso, puerta } = conPagos();
+    reservar(uso, "premio", true, T0 - HORA);
+    reservar(uso, "retiro", true, T0 - HORA);
+    // Una cuenta de una billetera propia no le cuesta firmas a Pollar: no tapa nada.
+    reservar(uso, "retiro", false, T0 - HORA);
+    // Lo de antes del día no cuenta.
+    reservar(uso, "retiro", true, T0 - 2 * DIA_MS);
+    m.pm.movimientos = [firma(T0 - HORA), firma(T0 - HORA), firma(T0 - HORA)];
+    const v = await puerta.vigilancia();
+    expect(v).toEqual({
+      firmasSinExplicar: 1,
+      firmas: {
+        cobradas: 3,
+        explicadas: 2,
+        sellos: 0,
+        sorteos: 0,
+        activaciones: 0,
+        compras: 0,
+        pagosConSaldo: 0,
+        completo: true,
+        desde: T0 - DIA_MS,
+      },
+      firmasPagos: { premios: 1, retiros: 1 },
+      patrocinioPollar: { esperado: true, prendidos: [] },
+    });
+  });
+
+  it("los renglones que lee el vigilante quedan como están: las mismas claves de firmas, con o sin pagos", async () => {
+    const claves = ["activaciones", "cobradas", "completo", "compras", "desde", "explicadas", "pagosConSaldo", "sellos", "sorteos"];
+    const { uso, puerta } = conPagos();
+    reservar(uso, "retiro", true, T0 - HORA);
+    expect(Object.keys((await puerta.vigilancia()).firmas as object).sort()).toEqual(claves);
+    expect(Object.keys((await montarAltas().puerta.vigilancia()).firmas as object).sort()).toEqual(claves);
+  });
+
+  it("con las tablas y sin nada prendido ni nada en el día, la vigilancia es la de siempre: no aparece firmasPagos", async () => {
+    const { m, puerta } = conPagos();
+    const sinPagos = await montarAltas().puerta.vigilancia();
+    expect(await puerta.vigilancia()).toEqual(sinPagos);
+    expect(Object.keys(await puerta.vigilancia())).not.toContain("firmasPagos");
+    expect(m.pm.llamadas.length).toBeGreaterThan(0);
+  });
+
+  it("con alguna forma prendida aparece firmasPagos aunque no haya nada: así quien opera lo ve en cero", async () => {
+    const { puerta } = conPagos({ PAGOS_PREMIO: "1" });
+    expect(await puerta.vigilancia()).toMatchObject({ firmasPagos: { premios: 0, retiros: 0 } });
+  });
+
+  it("sin las tablas la vigilancia no falla: firmasPagos en cero y el resto igual", async () => {
+    const roto = sqlQueFallaEn(/CREATE TABLE IF NOT EXISTS pagos_portero/);
+    const { uso, puerta } = conPagos({ PAGOS_PREMIO: "1" }, { sql: roto });
+    expect(uso.disponible()).toBe(false);
+    expect(await puerta.vigilancia()).toMatchObject({ firmasSinExplicar: 0, firmasPagos: { premios: 0, retiros: 0 } });
+  });
+
+  it("faltaAltas dice tablas-pagos si las tablas de los pagos no se pudieron crear, y el resto de las rutas sigue andando", async () => {
+    const roto = sqlQueFallaEn(/CREATE TABLE IF NOT EXISTS pagos_portero/);
+    const { m, uso, puerta } = conPagos({}, { sql: roto });
+    expect(uso.faltan()).toContain("pagos_portero");
+    expect(await puerta.resumen()).toMatchObject({ faltaAltas: ["tablas-pagos"] });
+    // Las altas no se enteran: un cupón se sigue canjeando.
+    const ana = m.persona("usr_ana");
+    await m.lote([C1]);
+    expect(await m.cupon(ana.token, C1)).toMatchObject({ estado: 200, cuerpo: { ok: true } });
+    // Con las tablas bien, o sin la dependencia, no dice nada.
+    expect(await conPagos().puerta.resumen()).not.toHaveProperty("faltaAltas");
+    expect(await montarAltas().puerta.resumen()).not.toHaveProperty("faltaAltas");
+  });
+});
+
+describe("el alta de quien ganó (POST /v1/alta/premio)", () => {
+  const HUELLA = "ab".repeat(32);
+  const RONDA = 77;
+  const SORTEO = "5";
+  const GANADORES = 3;
+
+  /**
+   * Las rutas de siempre con el alta de quien ganó prendida y un sorteo de mentira: lo que la red dice de cada sorteo se pone en
+   * `sorteos`, y `lecturas` cuenta las veces que la puerta fue a leerlo.
+   */
+  function conPremio(env: Parameters<typeof montarAltas>[0] = {}, opciones: Parameters<typeof montarAltas>[1] = {}) {
+    const m = montarAltas({ ALTAS_PREMIO: "1", ...env }, opciones);
+    const altasPremio = new AltasPorPremio(m.sql, m.cupos);
+    const sorteos = new Map<string, SorteoEnRed | null>();
+    const lecturas: bigint[] = [];
+    const red = { sorteoCaido: false };
+    const patrocinadora = Keypair.random().publicKey();
+    const puerta = new PuertaAltas({
+      cfg: m.cfg,
+      cupos: m.cupos,
+      altas: m.altas,
+      pollar: m.pollar,
+      cuponSecreto: SECRETO_CUPON,
+      red: m.red,
+      reloj: m.hora,
+      registrar: (e, d) => void m.anotado.push([e, d]),
+      altasPremio,
+      cuentaPatrocinadora: patrocinadora,
+      leerSorteo: async (_origen, id) => {
+        lecturas.push(id);
+        if (red.sorteoCaido) throw new ErrorDeRed("lectura-sorteo");
+        return sorteos.get(String(id)) ?? null;
+      },
+    });
+    /**
+     * Un sorteo ya sorteado de esta cuenta, con su sello pagado por el portero y atado a él (el portero pagó su `draw` con ese
+     * sello). Con `atado` en falso, un sello de antes, que no sabe a qué sorteo respalda.
+     */
+    const ponerSorteo = (organizador: string, extra: Partial<SorteoEnRed> = {}, selloDelPortero = true, atado = true) => {
+      sorteos.set(SORTEO, { id: BigInt(SORTEO), organizador, huellaLista: HUELLA, ronda: RONDA, ganadores: GANADORES, sorteado: true, ...extra });
+      if (selloDelPortero) {
+        const sello = "INSERT INTO sellos_portero (hash, organizador, huella_lista, ronda, ms) VALUES (?, ?, ?, ?, ?)";
+        m.sql.exec(sello, "s".repeat(64), organizador, HUELLA, RONDA, T0);
+        if (atado) {
+          m.cupos.atarSorteo({ sello: "s".repeat(64), contrato: m.cfg.contractId as string, sorteo: SORTEO, draw: "d".repeat(64) }, T0);
+        }
+      }
+    };
+    /** Quien organiza: una persona con su cuenta en el libro y un sorteo suyo, sorteado y sellado por el portero. */
+    const organiza = () => {
+      const org = m.persona("usr_org");
+      m.cupos.admitir(org.cuenta as string, "cupon", T0);
+      ponerSorteo(org.cuenta as string);
+      return org;
+    };
+    const pedir = (token: string | null, cuerpo: unknown) => puerta.atender("premio", { token, ip: IP, cuerpo });
+    /** Pide el alta de `cuenta` en un puesto del sorteo de mentira (el 1 si no se dice). */
+    const ped = (token: string | null, cuenta: unknown, puesto = 1) => pedir(token, { sorteo: SORTEO, puesto, cuenta });
+    const filas = (tabla: string) => m.sql.exec(`SELECT * FROM ${tabla}`).toArray();
+    return { m, puerta, altasPremio, sorteos, lecturas, red, patrocinadora, ponerSorteo, organiza, pedir, ped, filas };
+  }
+
+  it("admite a quien ganó con la sesión de quien organiza: su alta sin sorteos y su cuenta en el libro", async () => {
+    const { m, organiza, filas, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 200, cuerpo: { estado: "admitida", repetido: false } });
+    expect(filas("altas_premio")).toMatchObject([{ sorteo: SORTEO, puesto: 1, cuenta: gana.cuenta, organizador: org.cuenta }]);
+    expect(m.cupos.estaEnElLibro(gana.cuenta as string)).toBe(true);
+    expect(m.cupos.quedan({ cuenta: gana.cuenta as string }, m.hora()).quedan).toBe(0);
+  });
+
+  it("después, /estado de quien ganó dice acceso premio, sin sorteos y sin la cuenta abierta todavía", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    await ped(org.token, gana.cuenta);
+    expect(await m.estado(gana.token)).toMatchObject({
+      estado: 200,
+      cuerpo: { acceso: "premio", cuenta: gana.cuenta, abierta: false, sorteos: { quedan: 0, proximoVence: null } },
+    });
+  });
+
+  it("con la cuenta ya abierta en la red, el alta pasa a abierta y cuenta como activación; mientras no, suma al piso de créditos", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    await ped(org.token, gana.cuenta);
+    expect(m.cupos.prometido(m.hora()).altas).toBe(1);
+    m.mover(1000);
+    m.abiertas.add(gana.cuenta as string);
+    expect(await m.estado(gana.token)).toMatchObject({ estado: 200, cuerpo: { acceso: "premio", abierta: true } });
+    expect(m.cupos.altaDeCuenta(gana.cuenta as string)?.estado).toBe("abierta");
+    expect(m.cupos.prometido(m.hora()).altas).toBe(0);
+    expect(m.cupos.firmasExplicadas(T0 - DIA_MS, { sorteos: false }).activaciones).toBe(1);
+  });
+
+  it("el mismo puesto con la misma cuenta otra vez da repetido, sin escribir ni volver a la red", async () => {
+    const { m, organiza, filas, lecturas, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    await ped(org.token, gana.cuenta);
+    const antes = JSON.stringify(m.cupos.exportar(true));
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 200, cuerpo: { estado: "admitida", repetido: true } });
+    expect(JSON.stringify(m.cupos.exportar(true))).toBe(antes);
+    expect(filas("altas_premio")).toHaveLength(1);
+    expect(lecturas).toHaveLength(1);
+  });
+
+  it("el mismo puesto con otra cuenta da 409 puesto-usado, y esa otra cuenta no entra", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    const otra = Keypair.random().publicKey();
+    await ped(org.token, gana.cuenta);
+    expect(await ped(org.token, otra)).toEqual({ estado: 409, cuerpo: { motivo: "puesto-usado" } });
+    expect(m.cupos.estaEnElLibro(otra)).toBe(false);
+  });
+
+  it("(ataque) otro sorteo con la misma lista y la misma ronda, sellado por fuera, da no-es-nuestro: el sello respalda uno solo", async () => {
+    const { m, organiza, sorteos, filas, ped, pedir } = conPremio();
+    const org = organiza();
+    // El contrato acepta otro sorteo con el mismo organizador, lista y ronda, pero el portero no pagó su draw con su sello.
+    sorteos.set("6", { ...(sorteos.get(SORTEO) as SorteoEnRed), id: 6n });
+    expect(await ped(org.token, m.persona("usr_g1").cuenta)).toMatchObject({ estado: 200 });
+    const gemelo = m.persona("usr_g2").cuenta;
+    expect(await pedir(org.token, { sorteo: "6", puesto: 1, cuenta: gemelo })).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro" } });
+    expect(filas("altas_premio").map((f) => f.sorteo)).toEqual([SORTEO]);
+    expect(m.cupos.estaEnElLibro(gemelo as string)).toBe(false);
+  });
+
+  it("(ataque) un sello de antes, que no sabe a qué sorteo respalda, da 403 no-es-nuestro: falla cerrado", async () => {
+    const { m, ponerSorteo, filas, ped } = conPremio();
+    const org = m.persona("usr_org");
+    m.cupos.admitir(org.cuenta as string, "cupon", T0);
+    ponerSorteo(org.cuenta as string, {}, true, false);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("(ataque) otro organizador que pide un puesto que ya se dio no se entera: da sorteo-ajeno y no puesto-usado", async () => {
+    const { m, organiza, ped } = conPremio();
+    const dueno = organiza();
+    await ped(dueno.token, m.persona("usr_gana").cuenta);
+    const intruso = m.persona("usr_intruso");
+    m.cupos.admitir(intruso.cuenta as string, "cupon", T0);
+    expect(await ped(intruso.token, Keypair.random().publicKey())).toEqual({
+      estado: 403,
+      cuerpo: { motivo: "sorteo-ajeno", detalle: "otro-organizador" },
+    });
+  });
+
+  it("una cuenta que ya está en el libro da ya-tiene-acceso sin escribir nada", async () => {
+    const { m, organiza, filas, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    m.cupos.admitir(gana.cuenta as string, "admin", T0);
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 200, cuerpo: { estado: "ya-tiene-acceso" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("una cuenta que ya existe en la red da no-hace-falta sin escribir nada, después de comprobar el sorteo", async () => {
+    const { m, organiza, filas, lecturas, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    m.abiertas.add(gana.cuenta as string);
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 200, cuerpo: { estado: "no-hace-falta" } });
+    expect(filas("altas_premio")).toEqual([]);
+    expect(m.cupos.estaEnElLibro(gana.cuenta as string)).toBe(false);
+    expect(lecturas).toEqual([BigInt(SORTEO)]);
+  });
+
+  it("(ataque) con el sorteo de otro organizador no se revela si una cuenta usa Tinkazo: da sorteo-ajeno y no ya-tiene-acceso", async () => {
+    const { m, organiza, ped } = conPremio();
+    organiza();
+    const intruso = m.persona("usr_intruso");
+    m.cupos.admitir(intruso.cuenta as string, "cupon", T0);
+    const ajena = Keypair.random().publicKey();
+    m.cupos.admitir(ajena, "admin", T0);
+    expect(await ped(intruso.token, ajena)).toEqual({ estado: 403, cuerpo: { motivo: "sorteo-ajeno", detalle: "otro-organizador" } });
+  });
+
+  it("(ataque) con el sorteo de otro organizador no se revela si una cuenta existe en la red, y no se gasta una lectura de esa cuenta", async () => {
+    const { m, organiza, ped } = conPremio();
+    organiza();
+    const intruso = m.persona("usr_intruso");
+    m.cupos.admitir(intruso.cuenta as string, "cupon", T0);
+    const ajena = Keypair.random().publicKey();
+    m.abiertas.add(ajena);
+    const leidas: string[] = [];
+    const leer = m.red.leerCuenta.bind(m.red);
+    m.red.leerCuenta = async (g: string) => {
+      leidas.push(g);
+      return leer(g);
+    };
+    expect(await ped(intruso.token, ajena)).toEqual({ estado: 403, cuerpo: { motivo: "sorteo-ajeno", detalle: "otro-organizador" } });
+    expect(leidas).not.toContain(ajena);
+  });
+
+  it("(ataque) con un sorteo que no existe, sin sortear o sin sello del portero tampoco se revela si la cuenta ya tiene acceso", async () => {
+    const { m, organiza, sorteos, ponerSorteo, ped } = conPremio();
+    const org = organiza();
+    const ajena = Keypair.random().publicKey();
+    m.cupos.admitir(ajena, "admin", T0);
+    sorteos.delete(SORTEO);
+    expect(await ped(org.token, ajena)).toEqual({ estado: 403, cuerpo: { motivo: "sorteo-ajeno", detalle: "no-existe" } });
+    ponerSorteo(org.cuenta as string, { sorteado: false }, false);
+    expect(await ped(org.token, ajena)).toEqual({ estado: 409, cuerpo: { motivo: "sin-sortear" } });
+    m.sql.exec("DELETE FROM sellos_portero");
+    ponerSorteo(org.cuenta as string, {}, false);
+    expect(await ped(org.token, ajena)).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro" } });
+  });
+
+  it("(ataque) con un sorteo propio no se pregunta sin fin por otras cuentas: pasados los ganadores y unas pocas más, 429 cupo sorteo", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const leidas: string[] = [];
+    const leer = m.red.leerCuenta.bind(m.red);
+    m.red.leerCuenta = async (g: string) => {
+      leidas.push(g);
+      return leer(g);
+    };
+    for (let i = 0; i < GANADORES + CONSULTAS_PREMIO_DE_MAS; i++) {
+      const ajena = Keypair.random().publicKey();
+      m.abiertas.add(ajena);
+      expect(await ped(org.token, ajena)).toEqual({ estado: 200, cuerpo: { estado: "no-hace-falta" } });
+    }
+    const otra = Keypair.random().publicKey();
+    m.cupos.admitir(otra, "admin", T0);
+    const leidasAntes = leidas.length;
+    expect(await ped(org.token, otra)).toEqual({ estado: 429, cuerpo: { motivo: "cupo", que: "sorteo" } });
+    expect(leidas).toHaveLength(leidasAntes);
+  });
+
+  it("el tope de lo que se dice sin dar un alta no lo gastan las altas dadas, y vuelve a las 24 horas", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    for (let i = 0; i < GANADORES + CONSULTAS_PREMIO_DE_MAS - 1; i++) {
+      const ajena = Keypair.random().publicKey();
+      m.cupos.admitir(ajena, "admin", T0);
+      expect(await ped(org.token, ajena)).toEqual({ estado: 200, cuerpo: { estado: "ya-tiene-acceso" } });
+    }
+    expect(await ped(org.token, m.persona("usr_g1").cuenta, 0)).toEqual({ estado: 200, cuerpo: { estado: "admitida", repetido: false } });
+    expect(await ped(org.token, m.persona("usr_g2").cuenta, 1)).toEqual({ estado: 200, cuerpo: { estado: "admitida", repetido: false } });
+    const ultima = Keypair.random().publicKey();
+    m.cupos.admitir(ultima, "admin", T0);
+    expect(await ped(org.token, ultima, 2)).toEqual({ estado: 200, cuerpo: { estado: "ya-tiene-acceso" } });
+    const sobra = Keypair.random().publicKey();
+    m.cupos.admitir(sobra, "admin", T0);
+    expect(await ped(org.token, sobra, 2)).toEqual({ estado: 429, cuerpo: { motivo: "cupo", que: "sorteo" } });
+    m.mover(DIA_MS);
+    expect(await ped(org.token, sobra, 2)).toEqual({ estado: 200, cuerpo: { estado: "ya-tiene-acceso" } });
+  });
+
+  it("si la red no contesta si la cuenta existe, se toma como que no existe y sigue", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    m.red.caida = true;
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 200, cuerpo: { estado: "admitida", repetido: false } });
+  });
+
+  it("(ataque) quien organiza y no está en el libro da 403 sin-acceso", async () => {
+    const { m, organiza, ped } = conPremio();
+    organiza();
+    const fuera = m.persona("usr_fuera");
+    expect(await ped(fuera.token, Keypair.random().publicKey())).toEqual({ estado: 403, cuerpo: { motivo: "sin-acceso" } });
+  });
+
+  it("(ataque) un sorteo de otro organizador da 403 sorteo-ajeno", async () => {
+    const { m, organiza, ponerSorteo, ped } = conPremio();
+    const org = organiza();
+    ponerSorteo(Keypair.random().publicKey(), {}, false);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({
+      estado: 403,
+      cuerpo: { motivo: "sorteo-ajeno", detalle: "otro-organizador" },
+    });
+  });
+
+  it("(ataque) un sorteo que no existe da 403 sorteo-ajeno no-existe", async () => {
+    const { m, organiza, sorteos, ped } = conPremio();
+    const org = organiza();
+    sorteos.delete(SORTEO);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({
+      estado: 403,
+      cuerpo: { motivo: "sorteo-ajeno", detalle: "no-existe" },
+    });
+  });
+
+  it("(ataque) un sorteo sin sortear da 409 sin-sortear", async () => {
+    const { m, organiza, ponerSorteo, ped } = conPremio();
+    const org = organiza();
+    ponerSorteo(org.cuenta as string, { sorteado: false }, false);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 409, cuerpo: { motivo: "sin-sortear" } });
+  });
+
+  it("(ataque) un puesto que no existe en el sorteo (igual a los ganadores) da 400 puesto", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    expect(await ped(org.token, m.persona("usr_gana").cuenta, GANADORES)).toEqual({ estado: 400, cuerpo: { motivo: "puesto" } });
+  });
+
+  it("(ataque) un sello que no pagó el portero da 403 no-es-nuestro", async () => {
+    const { m, organiza, ponerSorteo, filas, ped } = conPremio();
+    const org = organiza();
+    m.sql.exec("DELETE FROM sellos_portero");
+    ponerSorteo(org.cuenta as string, {}, false);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 403, cuerpo: { motivo: "no-es-nuestro" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("si no se puede leer el sorteo da 502 red y no escribe nada", async () => {
+    const { m, organiza, red, filas, ped } = conPremio();
+    const org = organiza();
+    red.sorteoCaido = true;
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 502, cuerpo: { motivo: "red" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("con los créditos por debajo del piso da 503 altas-pausadas, sin escribir, y lo anota sin cuenta, sorteo ni puesto", async () => {
+    const { m, organiza, filas, ped } = conPremio();
+    const org = organiza();
+    m.pm.creditos = 0;
+    const gana = m.persona("usr_gana");
+    expect(await ped(org.token, gana.cuenta)).toEqual({ estado: 503, cuerpo: { motivo: "altas-pausadas" } });
+    expect(filas("altas_premio")).toEqual([]);
+    expect(m.cupos.estaEnElLibro(gana.cuenta as string)).toBe(false);
+    expect(m.anotado).toContainEqual(["alta-pausa", { motivo: "piso", donde: "premio" }]);
+  });
+
+  it("con las altas pausadas a mano da 503 altas-pausadas sin escribir", async () => {
+    const { m, organiza, filas, ped } = conPremio();
+    const org = organiza();
+    m.cupos.fijarAjuste("altas_pausadas", "1", T0);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 503, cuerpo: { motivo: "altas-pausadas" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("con la pausa de alta-premio da 503 apagado pausado, sin leer nada, y las altas de siempre siguen", async () => {
+    const { m, organiza, lecturas, ped } = conPremio();
+    const org = organiza();
+    m.cupos.fijarAjuste("altas_premio_pausado", "1", T0);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 503, cuerpo: { motivo: "apagado", detalle: "pausado" } });
+    expect(lecturas).toEqual([]);
+    await m.lote([C1]);
+    expect(await m.cupon(m.persona("usr_ana").token, C1)).toMatchObject({ estado: 200, cuerpo: { ok: true } });
+  });
+
+  it("sin la tabla (no se pudo crear) da 503 apagado config y el resto de las rutas sigue andando", async () => {
+    const roto = sqlQueFallaEn(/CREATE TABLE IF NOT EXISTS altas_premio/);
+    const { m, organiza, altasPremio, puerta, ped } = conPremio({}, { sql: roto });
+    const org = organiza();
+    expect(altasPremio.disponible()).toBe(false);
+    expect(await ped(org.token, m.persona("usr_gana").cuenta)).toEqual({ estado: 503, cuerpo: { motivo: "apagado", detalle: "config" } });
+    expect(await puerta.resumen()).toMatchObject({ faltaAltas: ["tablas-alta-premio"] });
+    expect(puerta.altaPremioAtiende()).toBe(false);
+  });
+
+  it("(ataque) el tope de altas del día se mueve en caliente: pasado, 429 cupo dia con la hora en que se libera", async () => {
+    const { m, organiza, altasPremio, ped } = conPremio();
+    const org = organiza();
+    m.cupos.fijarAjuste("altas_premio_dia", "2", T0);
+    // Una de otro organizador: con el tope en 2, cada organizador tiene una por día y el día se llena entre los dos.
+    const otra = { contrato: m.cfg.contractId as string, sorteo: "21", puesto: 0, ganadores: 3, sello: "sello-21" };
+    const deOtro = { ...otra, cuenta: Keypair.random().publicKey(), organizador: Keypair.random().publicKey() };
+    expect(altasPremio.admitir(deOtro, T0, { altasPremioDia: 2 }, () => null)).toMatchObject({ ok: true });
+    expect(await ped(org.token, m.persona("usr_g0").cuenta, 0)).toMatchObject({ estado: 200 });
+    expect(await ped(org.token, m.persona("usr_g1").cuenta)).toEqual({
+      estado: 429,
+      cuerpo: { motivo: "cupo", que: "dia", liberaEn: T0 + DIA_MS },
+    });
+  });
+
+  it("(ataque) con el tope del día en 100, una cuenta que organiza da 20 altas: la 21 da 429 cupo organizador", async () => {
+    const { m, organiza, sorteos, ped } = conPremio();
+    const org = organiza();
+    sorteos.set(SORTEO, { ...(sorteos.get(SORTEO) as SorteoEnRed), ganadores: 50 });
+    for (let puesto = 0; puesto < 20; puesto++) {
+      expect(await ped(org.token, Keypair.random().publicKey(), puesto)).toMatchObject({ estado: 200, cuerpo: { estado: "admitida" } });
+    }
+    expect(await ped(org.token, Keypair.random().publicKey(), 20)).toMatchObject({ estado: 429, cuerpo: { motivo: "cupo", que: "organizador" } });
+  });
+
+  it("(ataque) sin sesión da 401, y con la sesión de otra app 403", async () => {
+    const { m, ped } = conPremio();
+    const cuenta = m.persona("usr_gana").cuenta;
+    expect(await ped(null, cuenta)).toEqual({ estado: 401, cuerpo: { motivo: "sesion" } });
+    m.pm.sesiones.set(tokenDe("usr_otra"), { usuario: "usr_otra", app: "app_de_otro" });
+    expect(await ped(tokenDe("usr_otra"), cuenta)).toEqual({ estado: 403, cuerpo: { motivo: "otra-app" } });
+  });
+
+  it("(ataque) la cuenta de quien organiza como ganadora da 400 forma propia", async () => {
+    const { organiza, ped } = conPremio();
+    const org = organiza();
+    expect(await ped(org.token, org.cuenta)).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "propia" } });
+  });
+
+  it("(ataque) una cuenta del portero (la que paga, la sorteadora o la de cobros) como ganadora da 400 forma del-portero", async () => {
+    const sorteadora = Keypair.random().publicKey();
+    const cobros = Keypair.random().publicKey();
+    const { organiza, patrocinadora, filas, ped } = conPremio({ CUENTA_SORTEADORA: sorteadora, CUENTA_COBROS: cobros });
+    const org = organiza();
+    for (const cuenta of [patrocinadora, sorteadora, cobros]) {
+      expect(await ped(org.token, cuenta)).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "del-portero" } });
+    }
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("el cuerpo sin la forma da 400 forma con el campo que falla, antes de preguntar la sesión", async () => {
+    const { m, pedir } = conPremio();
+    const cuenta = Keypair.random().publicKey();
+    const forma = (cuerpo: unknown) => pedir(tokenDe("usr_nadie"), cuerpo);
+    expect(await forma({ puesto: 1, cuenta })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "sorteo" } });
+    expect(await forma({ sorteo: "0", puesto: 1, cuenta })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "sorteo" } });
+    expect(await forma({ sorteo: SORTEO, puesto: -1, cuenta })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "puesto" } });
+    expect(await forma({ sorteo: SORTEO, puesto: 300, cuenta })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "puesto" } });
+    expect(await forma({ sorteo: SORTEO, puesto: "1", cuenta })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "puesto" } });
+    expect(await forma({ sorteo: SORTEO, puesto: 1 })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "cuenta" } });
+    expect(await forma({ sorteo: SORTEO, puesto: 1, cuenta: "GABC" })).toEqual({ estado: 400, cuerpo: { motivo: "forma", detalle: "cuenta" } });
+    expect(m.pm.llamadas).toEqual([]);
+  });
+
+  it("(ataque) con el acceso atado a otra cuenta que la de esta sesión da 409 cuenta-de-otro, como /estado", async () => {
+    const { m, organiza, filas, ped } = conPremio();
+    const org = organiza();
+    await m.lote([C1]);
+    expect(await m.cupon(org.token, C1)).toMatchObject({ estado: 200, cuerpo: { ok: true } });
+    m.mover(MEMORIA_SESION_MS + 1);
+    m.pm.sesiones.set(org.token, { usuario: "usr_org", wallet: { publicKey: Keypair.random().publicKey(), chain: "STELLAR" } });
+    expect(await ped(org.token, Keypair.random().publicKey())).toEqual({ estado: 409, cuerpo: { motivo: "cuenta-de-otro" } });
+    expect(filas("altas_premio")).toEqual([]);
+  });
+
+  it("no deja nada de la cuenta, del sorteo ni del puesto en la bitácora", async () => {
+    const { m, organiza, ped } = conPremio();
+    const org = organiza();
+    const gana = m.persona("usr_gana");
+    await ped(org.token, gana.cuenta, 2);
+    expect(m.anotado.filter(([evento]) => evento === "alta-premio")).toEqual([["alta-premio", undefined]]);
+    const todo = JSON.stringify(m.anotado);
+    for (const prohibido of [gana.cuenta as string, org.cuenta as string, org.token, gana.token, HUELLA]) expect(todo).not.toContain(prohibido);
+  });
+
+  it("altaPremioAtiende y altaPremioDelEstado dicen lo que ve el sitio: prendida, pausada y cuántas se dieron", async () => {
+    const { m, organiza, puerta, ped } = conPremio();
+    const org = organiza();
+    expect(puerta.altaPremioAtiende()).toBe(true);
+    expect(puerta.altaPremioDelEstado()).toEqual({ prendido: true, hoy: 0, cercaDelTope: false });
+    await ped(org.token, m.persona("usr_gana").cuenta);
+    expect(puerta.altaPremioDelEstado()).toEqual({ prendido: true, hoy: 1, cercaDelTope: false });
+    m.cupos.fijarAjuste("altas_premio_pausado", "1", T0);
+    expect(puerta.altaPremioAtiende()).toBe(false);
+  });
+
+  it("el estado avisa cuando las altas del día llegan al 80 por ciento del tope, y la bitácora lo anota al cruzarlo, sin cuentas", async () => {
+    const { m, organiza, puerta, altasPremio, ped } = conPremio();
+    const org = organiza();
+    m.cupos.fijarAjuste("altas_premio_dia", "5", T0);
+    // Tres altas de otros organizadores, cada uno con su sorteo: con el tope en 5, cada organizador tiene una por día.
+    for (const sorteo of ["21", "22", "23"]) {
+      const alta = { contrato: m.cfg.contractId as string, sorteo, puesto: 0, ganadores: 3, sello: `sello-${sorteo}` };
+      const p = { ...alta, cuenta: Keypair.random().publicKey(), organizador: Keypair.random().publicKey() };
+      expect(altasPremio.admitir(p, T0, { altasPremioDia: 5 }, () => null)).toMatchObject({ ok: true });
+    }
+    expect(puerta.altaPremioDelEstado()).toEqual({ prendido: true, hoy: 3, cercaDelTope: false });
+    expect(m.anotado.filter(([e]) => e === "alerta-altas-premio")).toEqual([]);
+    const gana = m.persona("usr_gana");
+    expect(await ped(org.token, gana.cuenta, 0)).toMatchObject({ estado: 200, cuerpo: { estado: "admitida" } });
+    expect(puerta.altaPremioDelEstado()).toEqual({ prendido: true, hoy: 4, cercaDelTope: true });
+    expect(m.anotado.filter(([e]) => e === "alerta-altas-premio")).toEqual([["alerta-altas-premio", { hoy: 4, tope: 5 }]]);
+  });
+
+  it("con las altas pausadas a mano altaPremioAtiende dice que no, porque la ruta contestaría altas-pausadas", async () => {
+    const { m, puerta } = conPremio();
+    expect(puerta.altaPremioAtiende()).toBe(true);
+    m.cupos.fijarAjuste("altas_pausadas", "1", T0);
+    expect(puerta.altaPremioAtiende()).toBe(false);
+  });
+
+  it("con ALTAS_PREMIO apagada nada atiende: la puerta no la conoce y las otras rutas siguen como hoy", async () => {
+    const apagada = conPremio({ ALTAS_PREMIO: "0" });
+    expect(apagada.puerta.altaPremioAtiende()).toBe(false);
+    expect(apagada.puerta.altaPremioDelEstado()).toEqual({ prendido: false, hoy: 0, cercaDelTope: false });
+    const org = apagada.organiza();
+    expect(await apagada.ped(org.token, Keypair.random().publicKey())).toEqual({
+      estado: 503,
+      cuerpo: { motivo: "apagado", detalle: "config" },
+    });
+  });
+});
+
+describe("la puerta del Worker para el alta de quien ganó", () => {
+  const apagada = leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: "app" });
+  const prendida = leerConfig({ RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: "app", ALTAS_PREMIO: "1" });
+  /** Un pedido de un navegador del sitio: con su origen, su dirección y, si se dice, la sesión. */
+  const pedido = (ruta: string, init: { metodo?: string; cuerpo?: string; token?: string } = {}) => {
+    const headers: Record<string, string> = { Origin: "https://tinkazo.app", "CF-Connecting-IP": IP };
+    if (init.token) headers.Authorization = `Bearer ${init.token}`;
+    return new Request(`https://pm.tinkazo.app${ruta}`, { method: init.metodo ?? "POST", headers, ...(init.cuerpo ? { body: init.cuerpo } : {}) });
+  };
+  /** Lo que el objeto vería: cada acción con su sesión y su cuerpo. */
+  const espia = () => {
+    const vistos: Array<{ accion: string; token: string | null; cuerpo: unknown }> = [];
+    const llamar = async (accion: string, p: { token: string | null; cuerpo: unknown }) => {
+      vistos.push({ accion, token: p.token, cuerpo: p.cuerpo });
+      return { estado: 200, cuerpo: {} };
+    };
+    return { vistos, llamar };
+  };
+
+  it("con ALTAS_PREMIO apagada la ruta no existe: 404 no-existe, sin llegar al objeto", async () => {
+    expect(apagada.altasPremio).toBe(false);
+    const e = espia();
+    const r = (await atenderAlta(pedido("/v1/alta/premio", { cuerpo: "{}" }), apagada, e.llamar, new PorIp())) as Response;
+    expect(r.status).toBe(404);
+    expect(await r.json()).toEqual({ motivo: "no-existe" });
+    expect(e.vistos).toEqual([]);
+  });
+
+  it("con ALTAS_PREMIO apagada las demás rutas de /v1/alta siguen como hoy", async () => {
+    const e = espia();
+    for (const ruta of ["estado", "cupon", "abrir"]) {
+      const r = (await atenderAlta(pedido(`/v1/alta/${ruta}`, { cuerpo: "{}" }), apagada, e.llamar, new PorIp())) as Response;
+      expect(r.status).toBe(200);
+    }
+    expect(e.vistos.map((v) => v.accion)).toEqual(["estado", "cupon", "abrir"]);
+  });
+
+  it("con ALTAS_PREMIO prendida la ruta llega al objeto con la sesión y el cuerpo", async () => {
+    expect(prendida.altasPremio).toBe(true);
+    const e = espia();
+    const cuerpo = { sorteo: "5", puesto: 1, cuenta: "G" };
+    const req = pedido("/v1/alta/premio", { cuerpo: JSON.stringify(cuerpo), token: "tok_abc" });
+    const r = (await atenderAlta(req, prendida, e.llamar, new PorIp())) as Response;
+    expect(r.status).toBe(200);
+    expect(e.vistos).toEqual([{ accion: "premio", token: "tok_abc", cuerpo }]);
+  });
+
+  it("el preflight de la ruta es el de siempre, con la variable apagada o prendida", async () => {
+    for (const cfg of [apagada, prendida]) {
+      const r = (await atenderAlta(pedido("/v1/alta/premio", { metodo: "OPTIONS" }), cfg, espia().llamar, new PorIp())) as Response;
+      expect(r.status).toBe(204);
+    }
   });
 });

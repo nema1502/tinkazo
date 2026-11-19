@@ -53,7 +53,7 @@ describe("los textos sin pago", () => {
   });
 
   it("los que dirige quien decide, palabra por palabra", () => {
-    expect(TEXTOS_ALTA_SIN_PAGO.es.altaTexto).toBe("Para sortear en modo Oficial, activá tu cuenta con el cupón de tu evento.");
+    expect(TEXTOS_ALTA_SIN_PAGO.es.altaTexto).toBe("Usá el cupón de tu evento.");
     expect(TEXTOS_ALTA.es["errAnchor.porteroSinSorteos"]).toBe("Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.");
   });
 

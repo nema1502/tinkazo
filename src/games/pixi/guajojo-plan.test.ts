@@ -12,6 +12,8 @@ import {
 } from "./guajojo-plan";
 import { duracionBase, normalGuajojo } from "./guajojo-duracion";
 import { TEXTOS } from "./guajojo-textos";
+import { setResultadoDeTurnos } from "../../modos/turnos";
+import { marcarStand } from "../../ensayo-modo";
 
 const RONDA = "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829";
 
@@ -136,6 +138,28 @@ describe("Guajojó: el plan", () => {
     expect(p.datos.rival).toBe(5);
     expect(p.datos.sienta[5]).toBeGreaterThan(p.datos.sienta[9] as number);
     expect(Number.isFinite(p.datos.sienta[9] as number)).toBe(true);
+  });
+
+  it("en un orden, la última salida usa la frase neutra y no dice premio", () => {
+    const ultimaSalida = (c: Contexto): string => {
+      const p = planGuajojo(c);
+      const ultimo = p.datos.ciclos[p.datos.ciclos.length - 1] as Ciclo;
+      const linea = p.guion.find((l) => l.hecho?.tipo === "salio" && Math.abs(l.t - (ultimo.tCae[0] as number)) < 1e-6);
+      return typeof linea?.texto === "function" ? linea.texto() : (linea?.texto as string);
+    };
+    try {
+      for (const idioma of ["es", "en"] as const) {
+        const ganadores = [2, 0, 1];
+        expect(ultimaSalida(contexto(3, ganadores, 7, idioma))).toBe(TEXTOS[idioma].conPremio);
+        setResultadoDeTurnos(true);
+        const texto = ultimaSalida(contexto(3, ganadores, 7, idioma));
+        expect(texto).toBe(TEXTOS[idioma].crac("Persona aa"));
+        expect(texto).not.toMatch(/ganar|gana|premio|\bwin|\bwinner|\bprize/i);
+        setResultadoDeTurnos(false);
+      }
+    } finally {
+      setResultadoDeTurnos(false);
+    }
   });
 
   it("dura lo prometido: entre 25 y 60 segundos con el cartel, y Normal nunca pasa de 60", () => {
@@ -477,5 +501,33 @@ describe("Guajojó: los textos", () => {
     // Los grados que pide el guion son de 0 a 20: lo asegura `sonido.tono`, que los acota; acá, que el plan no pide otros.
     const texto = (idioma: "es" | "en"): string => JSON.stringify(Object.keys(TEXTOS[idioma]));
     expect(texto("es")).toBe(texto("en"));
+  });
+
+  it("en el stand, con varias personas, el guion dice quién sale y no habla de premios ni de ganar", () => {
+    const PROHIBIDO = /\bgan\p{L}*|premio|sell|\bwin(s|ner|ners|ning)?\b|prize|seal/iu;
+    marcarStand(true);
+    try {
+      for (const idioma of ["es", "en"] as const) {
+        for (const n of [3, 8, 18, 60]) {
+          const c = contexto(n, [2, 0, 1], 7, idioma);
+          const p = planGuajojo(c);
+          const dichas = p.guion.map((l) => (typeof l.texto === "function" ? l.texto() : l.texto)).filter((t): t is string => Boolean(t));
+          expect(dichas.length, `${idioma} con ${n}`).toBeGreaterThan(5);
+          expect(dichas.filter((t) => PROHIBIDO.test(t)), `${idioma} con ${n}`).toEqual([]);
+          expect(validarGuion(p.guion, p.duracion, { nino: true, nombres: c.nombres }).problemas, `${idioma} con ${n}`).toEqual([]);
+          // Quien se sienta último también sale: la frase del stand reemplaza a la de «con premio».
+          const ultimo = p.datos.ciclos[p.datos.ciclos.length - 1] as Ciclo;
+          const linea = p.guion.find((l) => l.hecho?.tipo === "salio" && Math.abs(l.t - (ultimo.tCae[0] as number)) < 1e-6);
+          expect(typeof linea?.texto === "function" ? linea.texto() : linea?.texto, `${idioma} con ${n}`).toBe(TEXTOS[idioma].conPremio);
+        }
+      }
+      expect(TEXTOS.es.conPremio).toBe("¡Se sienta, y también sale!");
+      expect(TEXTOS.en.conPremio).toBe("Sits down, and is picked too!");
+    } finally {
+      marcarStand(false);
+    }
+    // Fuera del stand, la frase de siempre.
+    expect(TEXTOS.es.conPremio).toBe("¡Se sienta, pero con premio!");
+    expect(TEXTOS.en.conPremio).toBe("Sits down, but with a prize!");
   });
 });

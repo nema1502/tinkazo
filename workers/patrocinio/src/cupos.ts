@@ -5,8 +5,11 @@
  * el gasto; en mainnet con altas, también el libro de cuentas y sus tablas (huellas de
  * cupones, el identificador de Pollar, derechos y pagos). Nada más: ni nombres, ni
  * correos, ni listas, ni direcciones IP, ni códigos en claro. Las clases del objeto
- * solo llaman a estas funciones; ningún SQL queda afuera de este archivo y de
- * `altas.ts` (los cupones), para poder migrar el día que haga falta (ver README.md).
+ * solo llaman a estas funciones y a las de los archivos que tienen su propio SQL:
+ * `altas.ts` (los cupones), `cobros.ts` (las órdenes y los pagos), `compras.ts` (la
+ * compra con QR), `pagos-uso.ts` (los pagos de premios y los retiros) y `altas-premio.ts`
+ * (el alta de quien ganó). Ningún SQL queda afuera de este archivo y de esos cinco, para
+ * poder migrar el día que haga falta (ver README.md).
  *
  * Es código síncrono a propósito: un objeto de Cloudflare atiende de a uno mientras
  * no haya un `await` en el medio, así que comprobar el cupo y reservarlo es una sola
@@ -32,9 +35,9 @@ export interface Sql {
   transaccion<T>(fn: () => T): T;
 }
 
-/** Por qué una cuenta entró al libro: un cupón, un pago o un alta a mano. */
-export type MotivoAlta = "cupon" | "pago" | "admin";
-const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin"];
+/** Por qué una cuenta entró al libro: un cupón, un pago, un alta a mano o el premio de un sorteo (la nombró quien lo organizó). */
+export type MotivoAlta = "cupon" | "pago" | "admin" | "premio";
+const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin", "premio"];
 
 /**
  * Las tablas de las altas (ver el modelo de datos del diseño de cupones). Viven en el mismo SQLite que los cupos para
@@ -144,6 +147,18 @@ export interface Quedan {
   vencieron: number;
 }
 
+/**
+ * Lo mínimo que tiene que quedarle a un derecho para que el sorteo de un sello que entró tarde vuelva a él
+ * (`devolverSelloTardio`). Con menos, o ya vencido, vuelve en un derecho nuevo: la persona que vio fallar su sello tiene
+ * que tener tiempo de leer el aviso, esperar a que el sorteo vuelva y sellar otra vez. Media hora alcanza para eso.
+ */
+export const MINIMO_PARA_USAR_MS = 30 * 60_000;
+/**
+ * Cuánto dura el derecho nuevo de un sorteo devuelto que no podía volver al suyo: un día. Alcanza para volver a sellar
+ * esa misma noche o al día siguiente, sin regalar un sorteo que dure lo que un paquete.
+ */
+export const VIGENCIA_DEVUELTO_MS = DIA_MS;
+
 /** Hasta cuántos ganadores un sello gasta un sorteo oficial; de ahí al tope del contrato (300), dos. */
 export const GANADORES_POR_SORTEO = 50;
 
@@ -196,6 +211,8 @@ export class Cupos {
   /** Las columnas de `COLUMNAS_NUEVAS` que no se pudieron sumar al arrancar (`tabla.columna`), y el primer error. */
   private readonly faltan: string[] = [];
   private errorAlSumar: string | null = null;
+  /** Si la tabla `sorteos_de_sellos` no se pudo crear al arrancar: sin ella ningún sello respalda un premio ni un alta. */
+  private sinSorteosDeSellos = false;
 
   constructor(private readonly sql: Sql) {
     for (const q of [
@@ -208,11 +225,41 @@ export class Cupos {
       "CREATE TABLE IF NOT EXISTS ajustes (clave TEXT PRIMARY KEY, valor TEXT NOT NULL, cambiado INTEGER NOT NULL)",
       "CREATE TABLE IF NOT EXISTS cuenta_app (cuenta TEXT PRIMARY KEY, visto INTEGER NOT NULL)",
       "CREATE INDEX IF NOT EXISTS cuenta_app_visto ON cuenta_app (visto)",
+      // Los sellos que entraron tarde y el contrato rechazó, con lo que se les devolvió (`devolverSelloTardio`). Una fila
+      // por hash: es lo que hace que se devuelva una sola vez. Nace vacía en un portero ya desplegado.
+      "CREATE TABLE IF NOT EXISTS devoluciones (hash TEXT PRIMARY KEY, cuenta TEXT NOT NULL, ms INTEGER NOT NULL, sorteos INTEGER NOT NULL, ronda INTEGER NOT NULL, faltaban INTEGER NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS devoluciones_cuenta ON devoluciones (cuenta, ms)",
+      // Los sellos fallidos que no se devolvieron solos (`anotarSinProbar`, `anotarPorDevolver`): `sin-datos`, que la alarma
+      // vuelve a probar, y los que quedan para devolver a mano (`sin-probar`, `tope`, `tope-general`). Nace vacía.
+      "CREATE TABLE IF NOT EXISTS devoluciones_pendientes (hash TEXT PRIMARY KEY, cuenta TEXT NOT NULL, ms INTEGER NOT NULL, motivo TEXT NOT NULL, intentos INTEGER NOT NULL DEFAULT 0, ultimo INTEGER NOT NULL)",
       ...TABLAS_ALTAS,
     ]) {
       this.sql.exec(q);
     }
     this.sumarColumnas();
+    this.crearSorteosDeSellos();
+  }
+
+  /**
+   * La tabla que ata cada sello del portero a UN sorteo: el primero cuyo `draw` pagó el portero con ese sello. Se crea con su
+   * propio try/catch y no en la lista de arriba: un `CREATE` que lanzara tumbaría el objeto entero, y con él los sellos del
+   * evento. Si falla, los premios y las altas de quien ganó fallan cerrados (`selloDelSorteo` da null) y todo lo demás sigue.
+   */
+  private crearSorteosDeSellos(): void {
+    const consultas = [
+      [
+        "CREATE TABLE IF NOT EXISTS sorteos_de_sellos (sello TEXT PRIMARY KEY, contrato TEXT NOT NULL, sorteo TEXT NOT NULL,",
+        "draw TEXT NOT NULL, ms INTEGER NOT NULL)",
+      ].join(" "),
+      "CREATE UNIQUE INDEX IF NOT EXISTS sorteos_de_sellos_sorteo ON sorteos_de_sellos (contrato, sorteo)",
+    ];
+    try {
+      for (const q of consultas) {
+        this.sql.exec(q);
+      }
+    } catch {
+      this.sinSorteosDeSellos = true;
+    }
   }
 
   /**
@@ -451,6 +498,130 @@ export class Cupos {
     });
   }
 
+  /**
+   * Un sello que entró a un ledger y el contrato rechazó por la ronda muy cerca (lo comprueba quien llama con lo que
+   * guardó la red, `sello-tarde.ts`): la cuenta vuelve a como estaba antes de ese intento. Vuelven los sorteos oficiales
+   * que gastó (los de `consumos`, a sus derechos) y el sello del mes. La comisión que cobró la red sigue contada en el
+   * gasto (la fila queda en `fallo` con lo real), y la fila de `devoluciones` lo deja anotado.
+   *
+   * Una sola vez por intento: con la fila de `devoluciones` de ese hash, `repetido`. Y a lo sumo `tope` por cuenta en 24
+   * horas móviles (`tope`): más que eso se parece a alguien que provoca rechazos a propósito. Con `topeGeneral`, además, a
+   * lo sumo eso entre todas las cuentas en 24 horas (`tope-general`): con muchas cuentas tampoco. Solo un `seal` en `fallo`;
+   * lo demás es `no-aplica`. Todo en una transacción, sin `await`: un reintento que reserva en el medio no puede tomar
+   * un sorteo a medio devolver.
+   *
+   * Si el derecho del que salió un sorteo ya venció, o le queda menos que `MINIMO_PARA_USAR_MS`, volver a él no serviría:
+   * la cuenta seguiría sin sorteo aunque el registro dijera devuelto. Entonces ese sorteo vuelve en un derecho nuevo, del
+   * mismo dueño y el mismo origen, que vence `VIGENCIA_DEVUELTO_MS` después, y el viejo queda como estaba (lo que no se
+   * usó de él sigue vencido). `aNuevo` dice cuántos fueron así.
+   */
+  devolverSelloTardio(
+    hash: string,
+    ahora: number,
+    d: { ronda: number; faltaban: number; tope: number; topeGeneral?: number },
+  ): { que: "devuelto"; sorteos: number; aNuevo?: number } | { que: "repetido" | "tope" | "tope-general" | "no-aplica" } {
+    const f = this.buscar(hash);
+    if (!f || f.metodo !== "seal" || f.estado !== "fallo") return { que: "no-aplica" };
+    if (this.filas("SELECT 1 AS n FROM devoluciones WHERE hash = ?", hash).length) return { que: "repetido" };
+    const lleno = this.topeDeDevoluciones(f.cuenta, ahora, d);
+    if (lleno) return { que: lleno };
+    return this.sql.transaccion(() => {
+      let sorteos = 0;
+      let aNuevo = 0;
+      const consumos = this.filas(
+        "SELECT c.derecho AS derecho, c.cuantos AS cuantos, d.vence AS vence, d.usuario AS usuario, d.cuenta AS cuenta, d.origen AS origen FROM consumos c LEFT JOIN derechos d ON d.id = c.derecho WHERE c.hash = ?",
+        hash,
+      );
+      for (const c of consumos) {
+        const cuantos = Number(c.cuantos);
+        sorteos += cuantos;
+        if (c.vence !== null && c.vence !== undefined && Number(c.vence) - ahora >= MINIMO_PARA_USAR_MS) {
+          this.sql.exec("UPDATE derechos SET usados = MAX(0, usados - ?) WHERE id = ?", cuantos, Number(c.derecho));
+          continue;
+        }
+        // Vencido o por vencer (o un derecho que ya no está): vuelve en uno nuevo, con el mismo dueño y el mismo origen.
+        const origen = ORIGENES.includes(String(c.origen) as OrigenDerecho) ? String(c.origen) : "admin";
+        this.sql.exec(
+          "INSERT INTO derechos (usuario, cuenta, origen, ref, sorteos, usados, creado, vence) VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
+          c.usuario === null || c.usuario === undefined ? `cuenta:${f.cuenta}` : String(c.usuario),
+          c.cuenta === null || c.cuenta === undefined ? f.cuenta : String(c.cuenta),
+          origen,
+          `devuelto:${hash}:${Number(c.derecho)}`,
+          cuantos,
+          ahora,
+          ahora + VIGENCIA_DEVUELTO_MS,
+        );
+        aNuevo += cuantos;
+      }
+      this.sql.exec("DELETE FROM consumos WHERE hash = ?", hash);
+      this.sql.exec("UPDATE cuentas SET sellos = MAX(0, sellos - 1) WHERE cuenta = ? AND mes = ?", f.cuenta, f.mes);
+      this.sql.exec("INSERT INTO devoluciones (hash, cuenta, ms, sorteos, ronda, faltaban) VALUES (?, ?, ?, ?, ?, ?)", hash, f.cuenta, ahora, sorteos, d.ronda, Math.round(d.faltaban));
+      this.sql.exec("DELETE FROM devoluciones_pendientes WHERE hash = ?", hash);
+      return { que: "devuelto" as const, sorteos, ...(aNuevo ? { aNuevo } : {}) };
+    });
+  }
+
+  /**
+   * Qué tope de devoluciones está lleno ahora para esta cuenta, o `null` si ninguno: `tope` si la cuenta ya tuvo `tope`
+   * devoluciones en las últimas 24 horas, y `tope-general` si el portero ya hizo `topeGeneral` entre todas las cuentas.
+   * Lo usan las dos puntas: `devolverSelloTardio`, para no devolver, y `/cupo`, para no prometer una devolución que el
+   * portero ya sabe que no va a hacer (`devuelve`).
+   */
+  topeDeDevoluciones(cuenta: string, ahora: number, d: { tope: number; topeGeneral?: number }): "tope" | "tope-general" | null {
+    if (this.numero("SELECT COUNT(*) AS n FROM devoluciones WHERE cuenta = ? AND ms > ?", cuenta, ahora - DIA_MS) >= d.tope) return "tope";
+    // Además del de la cuenta, el de todo el portero (`topeGeneral`): muchas cuentas no lo pasan entre todas.
+    if (d.topeGeneral !== undefined && this.numero("SELECT COUNT(*) AS n FROM devoluciones WHERE ms > ?", ahora - DIA_MS) >= d.topeGeneral) return "tope-general";
+    return null;
+  }
+
+  /**
+   * Un sello fallido que no se pudo probar con lo que trajo la red (`sin-datos`): queda para que la alarma vuelva a
+   * preguntar (`porProbar`). Cada vez suma un intento, y con `max` intentos pasa a `sin-probar`: se deja de preguntar y
+   * queda para devolverlo a mano. Devuelve los intentos y si se agotaron con este.
+   */
+  anotarSinProbar(hash: string, cuenta: string, ahora: number, max: number): { intentos: number; agotado: boolean } {
+    this.sql.exec(
+      "INSERT INTO devoluciones_pendientes (hash, cuenta, ms, motivo, intentos, ultimo) VALUES (?, ?, ?, 'sin-datos', 1, ?) ON CONFLICT(hash) DO UPDATE SET intentos = devoluciones_pendientes.intentos + 1, ultimo = excluded.ultimo WHERE devoluciones_pendientes.motivo = 'sin-datos'",
+      hash,
+      cuenta,
+      ahora,
+      ahora,
+    );
+    const f = this.filas("SELECT intentos, motivo FROM devoluciones_pendientes WHERE hash = ?", hash)[0];
+    const intentos = Number(f?.intentos ?? 0);
+    const agotado = f?.motivo === "sin-datos" && intentos >= max;
+    if (agotado) this.sql.exec("UPDATE devoluciones_pendientes SET motivo = 'sin-probar' WHERE hash = ?", hash);
+    return { intentos, agotado };
+  }
+
+  /** Un sello que entró tarde y no se devolvió solo por un tope (`tope` o `tope-general`): queda para devolverlo a mano. */
+  anotarPorDevolver(hash: string, cuenta: string, ahora: number, motivo: "tope" | "tope-general"): void {
+    this.sql.exec("INSERT INTO devoluciones_pendientes (hash, cuenta, ms, motivo, intentos, ultimo) VALUES (?, ?, ?, ?, 0, ?) ON CONFLICT(hash) DO UPDATE SET motivo = excluded.motivo, ultimo = excluded.ultimo", hash, cuenta, ahora, motivo, ahora);
+  }
+
+  /** Ya no hay nada que devolver de ese sello (se probó que la falla fue otra): sale de lo pendiente. */
+  soltarPendiente(hash: string): void {
+    this.sql.exec("DELETE FROM devoluciones_pendientes WHERE hash = ? AND motivo = 'sin-datos'", hash);
+  }
+
+  /**
+   * Los sellos `sin-datos` que la alarma tiene que volver a probar: los que se miraron por última vez en `antes` (ms) o
+   * antes. Con la espera cumplida justo, se prueba: si no, cada intento se corría una vuelta entera de la alarma.
+   */
+  porProbar(antes: number): string[] {
+    return this.filas("SELECT hash FROM devoluciones_pendientes WHERE motivo = 'sin-datos' AND ultimo <= ? ORDER BY ultimo LIMIT 20", antes).map((f) => String(f.hash));
+  }
+
+  /** Cuántos sellos esperan que la alarma los vuelva a probar: mientras haya, la alarma sigue. */
+  cuantosPorProbar(): number {
+    return this.numero("SELECT COUNT(*) AS n FROM devoluciones_pendientes WHERE motivo = 'sin-datos'");
+  }
+
+  /** Los sellos de una cuenta que siguen en el aire, creados después de `desde` (ms), los más nuevos primero, a lo sumo `max`. */
+  sellosEnElAire(cuenta: string, desde: number, max: number): FilaUso[] {
+    return this.filas("SELECT * FROM uso WHERE cuenta = ? AND metodo = 'seal' AND estado IN ('reservado','enviado') AND creado > ? ORDER BY creado DESC LIMIT ?", cuenta, desde, max) as unknown as FilaUso[];
+  }
+
   /** Lo que sigue en el aire desde antes de `antes` (ms): para preguntarle a la red qué fue de cada una. */
   pendientes(antes: number): FilaUso[] {
     return this.filas("SELECT * FROM uso WHERE estado IN ('reservado','enviado') AND creado < ? ORDER BY creado LIMIT 50", antes) as unknown as FilaUso[];
@@ -469,6 +640,64 @@ export class Cupos {
    */
   selloDelPortero(organizador: string, huellaLista: string, ronda: number): string | null {
     const f = this.filas("SELECT hash FROM sellos_portero WHERE organizador = ? AND huella_lista = ? AND ronda = ? ORDER BY ms DESC LIMIT 1", organizador, huellaLista.toLowerCase(), ronda)[0];
+    return f ? String(f.hash) : null;
+  }
+
+  /**
+   * Ata un sello del portero a UN sorteo: el del primer `draw` que el portero paga con ese sello (`draw` es su hash). El contrato
+   * deja sellar varias veces la misma lista con la misma ronda y cada sello crea un sorteo nuevo, así que el organizador, la huella
+   * y la ronda no alcanzan para saber cuál de esos sorteos selló el portero: sin esto, un solo sello pagado respaldaría todos los
+   * sorteos iguales que la cuenta sellara por fuera.
+   *
+   * - Si ese sorteo ya está atado a un sello, no cambia nada (un `draw` que se reintenta no ata otro).
+   * - Si no, se ata al sello más viejo con el mismo organizador, huella y ronda que todavía no respalda a ningún sorteo. Un sello
+   *   ya atado nunca se desata ni se ata a otro sorteo.
+   * - Sin un sello libre, no se ata nada: ese sorteo no tiene premios ni altas por el portero.
+   *
+   * Nunca lanza: lo llama el camino del sorteo, que no se puede caer por esto. Devuelve false si la tabla no está o algo falló.
+   */
+  atarSorteo(p: { sello: string; contrato: string; sorteo: string; draw: string }, ahora: number): boolean {
+    if (this.sinSorteosDeSellos) return false;
+    try {
+      const s = this.filas("SELECT organizador, huella_lista, ronda FROM sellos_portero WHERE hash = ?", p.sello)[0];
+      if (!s) return true;
+      if (this.filas("SELECT 1 AS n FROM sorteos_de_sellos WHERE contrato = ? AND sorteo = ?", p.contrato, p.sorteo).length > 0) return true;
+      const libre = this.filas(
+        [
+          "SELECT s.hash AS hash FROM sellos_portero s LEFT JOIN sorteos_de_sellos d ON d.sello = s.hash",
+          "WHERE s.organizador = ? AND s.huella_lista = ? AND s.ronda = ? AND d.sello IS NULL ORDER BY s.ms, s.hash LIMIT 1",
+        ].join(" "),
+        s.organizador,
+        s.huella_lista,
+        s.ronda,
+      )[0];
+      if (!libre) return true;
+      const insertar = "INSERT OR IGNORE INTO sorteos_de_sellos (sello, contrato, sorteo, draw, ms) VALUES (?, ?, ?, ?, ?)";
+      this.sql.exec(insertar, String(libre.hash), p.contrato, p.sorteo, p.draw, ahora);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * El sello del portero que respalda ESTE sorteo (el contrato y el número, en decimal), si el portero pagó su `draw` con un sello
+   * del mismo organizador, huella y ronda que dice la red. null si no lo pagó, si el sello es de un sorteo gemelo, si es un sello
+   * de antes de que se guardara esto o si la tabla no está: el premio y el alta de quien ganó fallan cerrados.
+   */
+  selloDelSorteo(contrato: string, sorteo: string, enRed: { organizador: string; huellaLista: string; ronda: number }): string | null {
+    if (this.sinSorteosDeSellos) return null;
+    const f = this.filas(
+      [
+        "SELECT s.hash AS hash FROM sorteos_de_sellos d JOIN sellos_portero s ON s.hash = d.sello",
+        "WHERE d.contrato = ? AND d.sorteo = ? AND s.organizador = ? AND s.huella_lista = ? AND s.ronda = ? LIMIT 1",
+      ].join(" "),
+      contrato,
+      sorteo,
+      enRed.organizador,
+      enRed.huellaLista.toLowerCase(),
+      enRed.ronda,
+    )[0];
     return f ? String(f.hash) : null;
   }
 
@@ -670,6 +899,8 @@ export class Cupos {
   purgar(ahora: number): void {
     this.sql.exec("DELETE FROM uso WHERE creado < ? AND estado NOT IN ('reservado','enviado')", ahora - PURGA_USO_MS);
     this.sql.exec("DELETE FROM reserva WHERE creado < ?", ahora - PURGA_USO_MS);
+    this.sql.exec("DELETE FROM devoluciones WHERE ms < ?", ahora - PURGA_USO_MS);
+    this.sql.exec("DELETE FROM devoluciones_pendientes WHERE ms < ?", ahora - PURGA_USO_MS);
     this.sql.exec("DELETE FROM cuentas WHERE mes < ?", mesUtc(ahora - 400 * DIA_MS));
     // Lo del libro no se purga: es el registro de a quién se le dio acceso.
     this.sql.exec("DELETE FROM cuenta_app WHERE visto < ? AND permanente = 0", ahora - 400 * DIA_MS);
@@ -693,6 +924,10 @@ export class Cupos {
             altas: this.filas("SELECT * FROM altas ORDER BY creada"),
             derechos: this.filas("SELECT * FROM derechos ORDER BY id"),
             consumos: this.filas("SELECT * FROM consumos ORDER BY hash, derecho"),
+            // Los sellos que entraron tarde y se devolvieron (`devolverSelloTardio`): van con los consumos que devolvieron.
+            devoluciones: this.filas("SELECT * FROM devoluciones ORDER BY ms, hash"),
+            // Los que no se devolvieron solos: los que la alarma vuelve a probar y los que hay que devolver a mano.
+            devoluciones_pendientes: this.filas("SELECT * FROM devoluciones_pendientes ORDER BY ms, hash"),
             sellos_portero: this.filas("SELECT * FROM sellos_portero ORDER BY ms"),
             ordenes: this.filas("SELECT * FROM ordenes ORDER BY creada"),
             pagos: this.filas("SELECT * FROM pagos ORDER BY ms"),
@@ -707,9 +942,21 @@ export class Cupos {
     };
   }
 
-  /** Las sumas del día móvil, sin ninguna cuenta. */
-  resumen(ahora: number): { gasto24h: number; sellos24h: number; sorteos24h: number; reservadoParaSorteos: number; enElAire: number } {
+  /**
+   * Las sumas del día móvil, sin ninguna cuenta. `devueltos24h` son los sellos que entraron tarde y se devolvieron: siguen
+   * en `sellos24h` (la red los cobró) y su comisión en `gasto24h`. `porDevolver24h`: los del último día que no se
+   * devolvieron solos y quedan para devolver a mano (un tope o una falla que nunca se pudo probar).
+   */
+  resumen(ahora: number): { gasto24h: number; sellos24h: number; sorteos24h: number; reservadoParaSorteos: number; enElAire: number; devueltos24h: number; porDevolver24h: number } {
     const n = (m: Metodo) => this.numero(`SELECT COUNT(*) AS n FROM uso WHERE creado > ? AND metodo = ? AND estado IN ${ESTADOS_QUE_GASTAN}`, ahora - DIA_MS, m);
-    return { gasto24h: this.gastoDeLaVentana(ahora), sellos24h: n("seal"), sorteos24h: n("draw"), reservadoParaSorteos: this.reservadoParaSorteos(ahora), enElAire: this.enElAire() };
+    return {
+      gasto24h: this.gastoDeLaVentana(ahora),
+      sellos24h: n("seal"),
+      sorteos24h: n("draw"),
+      reservadoParaSorteos: this.reservadoParaSorteos(ahora),
+      enElAire: this.enElAire(),
+      devueltos24h: this.numero("SELECT COUNT(*) AS n FROM devoluciones WHERE ms > ?", ahora - DIA_MS),
+      porDevolver24h: this.numero("SELECT COUNT(*) AS n FROM devoluciones_pendientes WHERE motivo <> 'sin-datos' AND ms > ?", ahora - DIA_MS),
+    };
   }
 }

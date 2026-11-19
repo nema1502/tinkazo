@@ -2,6 +2,7 @@ import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
 import { esSoloMirar } from "../solo-mirar";
+import { LECTURA_DE_LA_TARJETA_S, lecturaMinimaS } from "../arranque-del-show";
 
 /**
  * La tarjeta de "cómo se juega", antes de que arranque el juego.
@@ -18,8 +19,8 @@ import { esSoloMirar } from "../solo-mirar";
  * con movimiento reducido no hay show. No suena por su cuenta: la música del
  * juego arranca con ella.
  */
-/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. */
-export const CARD_SECONDS = 3.5;
+/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. Vive en `arranque-del-show.ts`. */
+export const CARD_SECONDS = LECTURA_DE_LA_TARJETA_S;
 
 /** El nombre de cada juego, el mismo del selector. */
 export const NOMBRE: Partial<Record<Game, string>> = {
@@ -37,6 +38,11 @@ export const REGLA: Partial<Record<Game, string>> = {
   chovena: "gcChovena", trueque: "gcTrueque",
 };
 
+/** La regla cuando el resultado es un orden: quién recibe el turno 1, sin ganadores ni premios. */
+export const REGLA_ORDEN: Partial<Record<Game, string>> = {
+  race: "gcRaceOrden", wheel: "gcWheelOrden", chovena: "gcChovenaOrden", guajojo: "gcGuajojoOrden",
+};
+
 /**
  * Los que cuentan cada premio en pantalla, con su regla en plural. Los demás
  * cuentan el primero y muestran a todos en el cartel final, y la tarjeta lo
@@ -44,6 +50,22 @@ export const REGLA: Partial<Record<Game, string>> = {
  * el segundo y el tercero.
  */
 export const VARIOS: Partial<Record<Game, string>> = { sapo: "gcSapoMany", quien: "gcQuienMany", teleferico: "gcTelefericoMany", chovena: "gcChovenaMany", trueque: "gcTruequeMany" };
+
+/**
+ * La regla de cada juego en una ronda del stand: quién sale. Ahí nadie gana ni se lleva un premio y no hay número público.
+ * Cubre los diez del selector y la tómbola, a la que pasa la ruleta con más de doscientas personas. Un juego que no
+ * esté acá (solo abre con `?demo=`) cae a una línea general (`gcStandGeneral`).
+ */
+export const REGLA_STAND: Partial<Record<Game, string>> = {
+  race: "gcStandRace", chovena: "gcStandChovena", trompo: "gcStandTrompo", pinata: "gcStandPinata", oruro: "gcStandOruro",
+  wheel: "gcStandWheel", teleferico: "gcStandTeleferico", sapo: "gcStandSapo", guajojo: "gcStandGuajojo", toborochi: "gcStandToborochi",
+  tombola: "gcStandTombola",
+};
+
+/** Los que cuentan a cada persona que sale, en una ronda del stand. Los demás cuentan a la primera y suman la nota general. */
+export const VARIOS_STAND: Partial<Record<Game, string>> = {
+  sapo: "gcStandSapoMany", teleferico: "gcStandTelefericoMany", chovena: "gcStandChovenaMany", guajojo: "gcStandGuajojoMany", toborochi: "gcStandToborochiMany",
+};
 
 /** Los que tienen captura en public/juegos, para el fondo. */
 const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"]);
@@ -78,22 +100,32 @@ export interface GameCard {
 }
 
 /** El contenido de la tarjeta para un juego. */
-function caja(game: Game, people: number, prizes: number, premio = ""): string {
+function caja(game: Game, people: number, prizes: number, premio = "", orden = false, stand = false): string {
   const L = T[getLang()];
-  const varios = prizes > 1 ? claveVarios(game) : undefined;
+  // En el stand nadie gana ni hay premios: la regla dice quién sale (un orden de turnos no existe ahí).
+  const enElStand = stand && !orden;
+  const varios = !orden && prizes > 1 ? (enElStand ? VARIOS_STAND[game] : claveVarios(game)) : undefined;
   // Lo único que la tarjeta suma a la regla: con varios premios, en un juego que cuenta solo el primero, que el
   // cartel del final los muestra a todos. El pelotón, las tandas, la clasificatoria y cuántas personas y premios son
   // se fueron (regla de letra, 26 de octubre de 2026): la sala los ve en el juego, y la tarjeta se lee en tres segundos.
-  const extras = [prizes > 1 && !varios ? L.gcPrizesNote(prizes) : ""].filter(Boolean);
+  const nota = enElStand ? L.gcStandNota : L.gcPrizesNote;
+  const extras = [!orden && prizes > 1 && !varios ? nota(prizes) : ""].filter(Boolean);
+  const regla = orden ? REGLA_ORDEN[game] ?? "gcOrdenGeneral" : varios ?? (enElStand ? REGLA_STAND[game] ?? "gcStandGeneral" : claveRegla(game));
+  // La línea de abajo no se ve (styles.css) pero la lee el lector de pantalla: en el stand no hay número público.
+  const honesta = orden ? "gcHonestOrden" : enElStand ? "standBanda" : "gcHonest";
   return (
     `<p class="gc-kicker">${esc(t("gcKicker"))}</p>` +
     `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(claveNombre(game)))}</span></h2>` +
-    `<p class="gc-regla" id="gc-regla">${esc(t(varios ?? claveRegla(game)))}</p>` +
+    `<p class="gc-regla" id="gc-regla">${esc(t(regla))}</p>` +
     extras.map((x) => `<p class="gc-extra">${esc(x)}</p>`).join("") +
     // Qué se sortea, con el nombre que le puso quien organiza: la tarjeta decía
     // "1 premio" sin decir cuál (revisión del experto en sorteos).
-    (premio ? `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>` : "") +
-    `<p class="gc-honesta" id="gc-honesta">${esc(t("gcHonest"))}</p>`
+    (premio
+      ? orden
+        ? `<p class="gc-premio"><span>${esc(t("cortinaSeOrden"))}</span></p>`
+        : `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>`
+      : "") +
+    `<p class="gc-honesta" id="gc-honesta">${esc(t(honesta))}</p>`
   );
 }
 
@@ -124,6 +156,11 @@ export function showGameCard(
   sonar?: (n: number) => void,
   premio = "",
   espera?: Promise<unknown>,
+  orden = false,
+  /** La línea de arriba mientras tanto: desde que el juego no espera la grabación, la del número que llega. */
+  textoDeEspera = "cortinaNumero",
+  /** Una ronda del stand: la regla dice quién sale, no quién gana (`REGLA_STAND`). */
+  stand = false,
 ): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
@@ -143,9 +180,9 @@ export function showGameCard(
   el.innerHTML =
     `<div class="gc-fondo" aria-hidden="true"></div>` +
     (espera
-      ? `<p class="gc-graba" role="status"><span>${esc(t("cortinaGraba"))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
+      ? `<p class="gc-graba" role="status"><span>${esc(t(textoDeEspera))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
       : "") +
-    `<div class="gc-caja">${caja(game, people, prizes, premio)}</div>` +
+    `<div class="gc-caja">${caja(game, people, prizes, premio, orden, stand)}</div>` +
     // En la vista de espectador no hay Saltar: saltada mientras se graba, largaba sin la cuenta y antes que la sala.
     (esSoloMirar() ? "" : `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>`) +
     `<div class="gc-barra" aria-hidden="true"><i></i></div>`;
@@ -157,6 +194,8 @@ export function showGameCard(
   const overflowAntes = document.body.style.overflow;
   document.body.style.overflow = "hidden";
 
+  /** Cuándo abrió, en el reloj monótono: la hora fija del ancla se mide contra esto. */
+  const abierta = performance.now();
   let resolver: () => void = () => {};
   const ready = new Promise<void>((r) => (resolver = r));
   let listo = false;
@@ -211,28 +250,50 @@ export function showGameCard(
     contar(CARD_SECONDS * 1000);
   } else {
     let leida = false;
+    /** La hora fija (reloj monótono, ms) en que termina la tarjeta, si la sala va con horario y alcanza para leer. */
+    let fin: number | null = null;
     const seguir = (): void => {
       if (listo || !leida || !grabado) return;
       if (saltada) {
         terminar();
         return;
       }
-      reloj = window.setTimeout(terminar, cuenta * 1000);
-      contar(0);
+      // Con hora fija la cuenta cae justo antes de ella; sin hora, 3, 2, 1 desde ahora.
+      const falta = fin !== null ? Math.max(0, fin - performance.now()) : cuenta * 1000;
+      reloj = window.setTimeout(terminar, falta);
+      contar(Math.max(0, falta - cuenta * 1000));
       clearTimeout(tope);
-      tope = window.setTimeout(hide, (cuenta + 10) * 1000);
+      tope = window.setTimeout(hide, falta + 10_000);
     };
-    pasos.push(window.setTimeout(() => {
+    const lectura = window.setTimeout(() => {
       leida = true;
       // La barra se detiene donde termina la lectura hasta que quede grabado.
       if (!grabado) el.classList.add("gc-esperando");
       seguir();
-    }, CARD_SECONDS * 1000));
+    }, CARD_SECONDS * 1000);
+    pasos.push(lectura);
     void espera.then(
-      () => {
+      (valor) => {
         grabado = true;
         el.querySelector(".gc-graba")?.remove();
         el.classList.remove("gc-esperando");
+        // La sala con horario (`arranque-del-show.ts`): el resultado trae la hora en que arranca el juego. Si deja
+        // lectura de sobra y la cuenta todavía no tenía que empezar, la tarjeta termina a esa hora: la lectura dura hasta
+        // la cuenta. Si abrió con poca lectura por delante o el resultado llegó tarde, lee y cuenta como siempre.
+        const pedida = (valor as { terminaEn?: unknown } | undefined)?.terminaEn;
+        if (typeof pedida === "number" && !saltada) {
+          const cuentaEn = pedida - cuenta * 1000;
+          if (cuentaEn - abierta >= lecturaMinimaS() * 1000 && cuentaEn >= performance.now()) {
+            fin = pedida;
+            clearTimeout(lectura);
+            leida = false;
+            pasos.push(window.setTimeout(() => {
+              leida = true;
+              seguir();
+            }, cuentaEn - performance.now()));
+            return;
+          }
+        }
         // Saltada mientras se grababa: ya no hace falta esperar la lectura.
         if (saltada) leida = true;
         seguir();
@@ -286,7 +347,7 @@ export function showGameCard(
 
   const update = (g: Game): void => {
     const c = el.querySelector(".gc-caja");
-    if (c) c.innerHTML = caja(g, people, prizes, premio);
+    if (c) c.innerHTML = caja(g, people, prizes, premio, orden, stand);
     fondo(g);
   };
   return { ready, hide, update };

@@ -42,10 +42,11 @@ import { select } from "../protocol/select";
 import { app, paceSeconds } from "../state";
 import { etiquetaConCuenta } from "../equipos/etiquetas";
 import { esSoloMirar, setSoloMirar } from "../solo-mirar";
-import { T } from "../i18n";
+import { T, type Lang } from "../i18n";
 import type { Registro } from "../protocol/verificacion";
 import { abrirEspectador, avisarEnlaceRoto, datosDelEnlace, enlaceEspectador, type DatosEspectador, type OpcionesDeLaVista } from "./espectador";
-import { LARGA_IGUAL_TRAS_MS, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
+import { LARGA_IGUAL_TRAS_MS, MARGEN_DEL_FINAL_PARTE, MARGEN_DE_LA_CADENA_S, RETRASO_TRAS_LO_GRABADO_MS } from "./espectador-regla";
+import { LECTURA_DE_LA_TARJETA_S } from "../arranque-del-show";
 
 /** Nombres de la lista sellada de prueba. */
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito"];
@@ -79,12 +80,12 @@ const semilla = (): string => bytesToHex(randomnessOf(h.firma));
 const ganadores = (n = NOMBRES, w = 1): number[] => select(hexToBytes(semilla()), listHash(n), n.length, w);
 
 /** Un registro de la cadena: el sello del enlace y, si se pide, el resultado grabado. */
-function registro(o: { grabado?: boolean; winners?: number[]; listHash?: string; meta?: string; n?: string[] } = {}): Registro {
+function registro(o: { grabado?: boolean; winners?: number[]; listHash?: string; meta?: string; n?: string[]; numWinners?: number } = {}): Registro {
   const n = o.n ?? NOMBRES;
   return {
     wasm: "w",
     siguiente: 100,
-    sello: { id: "42", organizer: "GAAA", listHash: o.listHash ?? bytesToHex(listHash(n)), count: n.length, numWinners: 1, round: R, sealedAt: 1, meta: o.meta ?? "Una polera", drawn: !!o.grabado },
+    sello: { id: "42", organizer: "GAAA", listHash: o.listHash ?? bytesToHex(listHash(n)), count: n.length, numWinners: o.numWinners ?? 1, round: R, sealedAt: 1, meta: o.meta ?? "Una polera", drawn: !!o.grabado },
     resultado: o.grabado ? { raffleId: "42", round: R, signature: h.firma, randomness: semilla(), winners: o.winners ?? ganadores(n), drawnAt: 2 } : null,
   };
 }
@@ -96,9 +97,17 @@ const irA = vi.fn();
  */
 const abrir = (d: DatosEspectador, op: OpcionesDeLaVista = {}): boolean =>
   abrirEspectador(d, "es", { desfase: async () => 0, irA, azar: () => 0, leer: async () => registro({ grabado: true, n: d.n }), ...op });
-/** Desde que se abre, 30 s antes de la ronda: la cuenta con el margen de la sala, y el show visto lo grabado. */
-const HASTA_EL_NUMERO = (30 + MARGEN_DE_LA_CADENA_S) * 1000;
-const HASTA_EL_SHOW = HASTA_EL_NUMERO + RETRASO_TRAS_LO_GRABADO_MS + 100;
+/**
+ * Desde que se abre, 30 s antes de la ronda: la cuenta termina con la de la sala, al nacer la ronda, y el show sale
+ * visto lo grabado, que se mira desde el margen de la cadena.
+ */
+const HASTA_EL_NUMERO = 30 * 1000;
+const HASTA_EL_SHOW = (30 + MARGEN_DE_LA_CADENA_S) * 1000 + RETRASO_TRAS_LO_GRABADO_MS + 100;
+/**
+ * Lo que el celular espera después de ver lo grabado cuando la sala lo lanzó tarde: el retraso de siempre, la lectura de
+ * la tarjeta y un 10 % del show. Se llama con el sorteo ya traído (el ritmo de la carrera depende de cuántos corren).
+ */
+const ESPERA_TARDE = (): number => RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TARJETA_S * 1000 + paceSeconds("normal") * 1000 * MARGEN_DEL_FINAL_PARTE;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -189,9 +198,9 @@ describe("la espera del espectador", () => {
     expect(capa().textContent).toContain("Se sortea");
     expect(capa().textContent).toContain("Una polera");
     expect(capa().textContent).toContain(T.es.espNadie);
-    expect(reloj()).toBe(`0:${30 + MARGEN_DE_LA_CADENA_S}`);
+    expect(reloj()).toBe("0:30");
     await vi.advanceTimersByTimeAsync(1000);
-    expect(reloj()).toBe(`0:${29 + MARGEN_DE_LA_CADENA_S}`);
+    expect(reloj()).toBe("0:29");
     // Mientras cuenta, nadie va a buscar el número: todavía no existe.
     expect(h.fetchRound).not.toHaveBeenCalled();
   });
@@ -234,7 +243,8 @@ describe("la espera del espectador", () => {
     probar?.click();
     await vi.advanceTimersByTimeAsync(0);
     expect(h.fetchRound).toHaveBeenCalledTimes(2);
-    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
+    // Con el número, la cadena desde su margen, y lo grabado con su momento más.
+    await vi.advanceTimersByTimeAsync(MARGEN_DE_LA_CADENA_S * 1000 + RETRASO_TRAS_LO_GRABADO_MS + 100);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
@@ -258,7 +268,7 @@ describe("la espera del espectador", () => {
     await vi.advanceTimersByTimeAsync(HASTA_EL_NUMERO);
     expect(capa().textContent).toContain(T.es.drandTry(2, 12));
     seguir({ round: R, signature: h.firma });
-    await vi.advanceTimersByTimeAsync(RETRASO_TRAS_LO_GRABADO_MS + 100);
+    await vi.advanceTimersByTimeAsync(MARGEN_DE_LA_CADENA_S * 1000 + RETRASO_TRAS_LO_GRABADO_MS + 100);
     expect(h.jugar).toHaveBeenCalledTimes(1);
   });
 
@@ -338,7 +348,7 @@ describe("el reloj del celular", () => {
   it("si el teléfono va atrasado, la cuenta dice lo mismo que la de la sala", async () => {
     abrir(datos(), { desfase: async () => 20 });
     await vi.advanceTimersByTimeAsync(300);
-    expect(reloj()).toBe(`0:${10 + MARGEN_DE_LA_CADENA_S}`);
+    expect(reloj()).toBe("0:10");
   });
 
   it("hasta saber si el reloj está corrido, la cuenta no llega a cero y no busca el número", async () => {
@@ -353,10 +363,10 @@ describe("el reloj del celular", () => {
 });
 
 describe("un sorteo sellado en Stellar", () => {
-  it("la cuenta lleva el margen de la sala, el mismo de freeze.ts", () => {
-    // Que el margen sea el de la sala lo prueba espectador-regla.test.ts, que lee freeze.ts.
+  it("la cuenta termina con la de la sala, que ya no suma margen", () => {
+    // Que la sala no sume margen lo prueba espectador-regla.test.ts, que lee freeze.ts.
     abrir(sellado(), { leer: async () => registro() });
-    expect(reloj()).toBe(`0:${30 + MARGEN_DE_LA_CADENA_S}`);
+    expect(reloj()).toBe("0:30");
     // El número del sorteo, escrito como en la página de quien organiza.
     expect(capa().querySelector(".espera-id")?.textContent).toBe((T.es.waitIdPagina as string).replace("{n}", "42"));
     // En Prueba la sala ve el modo, y el celular también.
@@ -371,19 +381,25 @@ describe("un sorteo sellado en Stellar", () => {
       return registro({ grabado });
     });
     abrir(sellado(), { leer });
-    // Nació el número, pero la sala todavía no sortea: espera su margen.
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(29_000);
     expect(h.fetchRound).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(MARGEN_DE_LA_CADENA_S * 1000);
+    // Nació el número: el celular lo trae, como la sala.
+    await vi.advanceTimersByTimeAsync(1_000);
     expect(h.fetchRound).toHaveBeenCalledOnce();
     // La tarjeta, con la espera de lo grabado; el juego, todavía no.
     expect(h.showDelEspectador).toHaveBeenCalledWith(expect.any(Promise));
     expect(h.jugar).not.toHaveBeenCalled();
     expect(capa().textContent).toContain(T.es.cortinaGraba);
+    // La cadena no acepta el sorteo grabado antes de su margen: hasta ahí, el celular no la mira.
+    const leidasAlNacer = leer.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(MARGEN_DE_LA_CADENA_S * 1000 - 100);
+    expect(leer.mock.calls.length).toBe(leidasAlNacer);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(leer.mock.calls.length).toBeGreaterThan(leidasAlNacer);
     await vi.advanceTimersByTimeAsync(5_000);
     expect(h.jugar).not.toHaveBeenCalled();
-    // Quedó grabado: el celular lo ve en su vuelta siguiente, y espera un momento más para no adelantarse a la
-    // confirmación de la sala.
+    // Quedó grabado: el celular lo ve en su vuelta siguiente, y espera un momento más, de margen. La sala ya jugaba:
+    // no espera lo grabado.
     grabado = true;
     await vi.advanceTimersByTimeAsync(1_600);
     expect(h.jugar).not.toHaveBeenCalled();
@@ -411,11 +427,41 @@ describe("un sorteo sellado en Stellar", () => {
     await vi.advanceTimersByTimeAsync(LARGA_IGUAL_TRAS_MS + 5 * 60_000);
     expect(h.jugar).not.toHaveBeenCalled();
     expect(capa().textContent).toContain(T.es.espTarda);
-    // Lo lanzó: el celular lo ve grabado y juega detrás de la sala.
+    // Lo lanzó: el celular lo ve grabado y juega detrás de la sala. La lanzó tarde: el celular cuenta también la lectura
+    // de la tarjeta y una parte del show.
     grabado = true;
-    await vi.advanceTimersByTimeAsync(10_000 + RETRASO_TRAS_LO_GRABADO_MS);
+    await vi.advanceTimersByTimeAsync(10_000 + ESPERA_TARDE());
     expect(h.jugar).toHaveBeenCalledTimes(1);
     expect(app.drawn?.winners).toEqual(ganadores());
+    // La tarjeta, que esperaba lo grabado, sigue con la cuenta.
+    await expect(h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>).resolves.toBeUndefined();
+  });
+
+  it("si la sala lo lanza tarde, el celular cuenta la lectura de la tarjeta desde que lo ve grabado, y una parte del show", async () => {
+    // La sala que lanza tarde abre su tarjeta al lanzar y la lee después del número: lo grabado aparece apenas un par de
+    // segundos después de que lanzó. La tarjeta del celular está leída desde que nació el número.
+    let grabado = false;
+    let vistoEn = 0;
+    abrir(sellado(), {
+      leer: async () => {
+        if (grabado && !vistoEn) vistoEn = Date.now();
+        return registro({ grabado });
+      },
+    });
+    // Nace el número y quien organiza toca Lanzar el sorteo 30 s después.
+    await vi.advanceTimersByTimeAsync(30_000 + 30_000);
+    expect(h.showDelEspectador).toHaveBeenCalledOnce();
+    grabado = true;
+    // El celular lo ve en su vuelta siguiente.
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(vistoEn).toBeGreaterThan(0);
+    // Con solo el retraso de siempre arrancaba 1 s detrás de la sala. Ahora espera también la lectura y el 10 % del show.
+    await vi.advanceTimersByTimeAsync(vistoEn + RETRASO_TRAS_LO_GRABADO_MS + LECTURA_DE_LA_TARJETA_S * 1000 - Date.now());
+    expect(h.jugar).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(vistoEn + ESPERA_TARDE() - 300 - Date.now());
+    expect(h.jugar).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(h.jugar).toHaveBeenCalledTimes(1);
     // La tarjeta, que esperaba lo grabado, sigue con la cuenta.
     await expect(h.showDelEspectador.mock.calls[0]?.[0] as Promise<void>).resolves.toBeUndefined();
   });
@@ -527,5 +573,65 @@ describe("los equipos con cupón", () => {
     const final = capa().querySelector(".espectador-ganadores")?.textContent ?? "";
     expect(final).toBe(etiquetaConCuenta(gana));
     expect(final).toContain(gana.slice(0, 4));
+  });
+});
+
+describe("un orden de turnos visto desde el celular", () => {
+  const NOMBRE_DEL_ORDEN = "Turnos de la tarde";
+  const orden = (): DatosEspectador => datos({ z: NOMBRE_DEL_ORDEN, w: NOMBRES.length });
+  const abrirOrden = (lang: Lang): boolean =>
+    abrirEspectador(orden(), lang, {
+      desfase: async () => 0,
+      irA,
+      azar: () => 0,
+      leer: async () => registro({ grabado: true, meta: NOMBRE_DEL_ORDEN, numWinners: NOMBRES.length, winners: ganadores(NOMBRES, NOMBRES.length) }),
+    });
+  /** Lo que el celular no puede decir de un orden: no hay premio ni quien gane. Con borde de palabra: organiza no es ganar. */
+  const habla = /\bgan|\bpremio|\bwon\b|\bwin|\bprize/i;
+
+  for (const lang of ["es", "en"] as const) {
+    it(`mientras espera dice el orden de los turnos, como la sala, y no un premio (${lang})`, () => {
+      abrirOrden(lang);
+      expect(capa().textContent).toContain(T[lang].cortinaSeOrden);
+      expect(capa().textContent).not.toContain(NOMBRE_DEL_ORDEN);
+      expect(capa().textContent).not.toMatch(habla);
+    });
+
+    it(`si el número no llega, dice que el orden va a ser el mismo (${lang})`, async () => {
+      h.fetchRound.mockRejectedValueOnce(new Error("relay 500"));
+      abrirOrden(lang);
+      await vi.advanceTimersByTimeAsync(HASTA_EL_NUMERO);
+      expect(capa().textContent).toContain(T[lang].espSinNumeroOrden);
+      expect(capa().textContent).not.toMatch(habla);
+    });
+
+    it(`mientras sigue el show de la sala y al terminar no habla de ganar ni de otro premio (${lang})`, async () => {
+      abrirOrden(lang);
+      await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+      const alTerminar = h.jugar.mock.calls[0]?.[0] as () => void;
+      await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000);
+      alTerminar();
+      expect(capa().textContent).toContain(T[lang].espMiraLaSalaOrden);
+      expect(capa().textContent).not.toMatch(habla);
+      await vi.advanceTimersByTimeAsync(10_000);
+      // Los turnos, uno por persona y en el orden en que salieron.
+      const turnos = [...capa().querySelectorAll(".espectador-ganadores li")].map((li) => li.textContent);
+      expect(turnos).toEqual(ganadores(NOMBRES, NOMBRES.length).map((i) => NOMBRES[i]));
+      expect(capa().textContent).not.toContain(T[lang].espFinSiguiente);
+      expect(capa().textContent).not.toMatch(habla);
+      // Verlo de nuevo sigue estando.
+      expect(capa().querySelector("[data-otra-vez]")).not.toBeNull();
+    });
+  }
+
+  it("un sorteo común sigue como siempre: el premio, quién salió y cómo seguir con otro premio", async () => {
+    abrir(datos());
+    expect(capa().textContent).toContain(`${T.es.cortinaSe} Una polera`);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000);
+    (h.jugar.mock.calls[0]?.[0] as () => void)();
+    expect(capa().textContent).toContain(T.es.espMiraLaSala);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(capa().textContent).toContain(T.es.espFinSiguiente);
   });
 });

@@ -8,7 +8,9 @@
  * vuelve a calcular el sello de la lista y lo compara con el que está en Stellar.
  *
  *   POST   /v1        cuerpo binario, hasta 256 KB      → 201 {"id", "borrar"}
+ *   POST   /v1?cambia=1  lo mismo, para un enlace que se puede reescribir: 201 {"id", "borrar", "cambia": true, "version"}
  *   GET    /v1/<id>                                     → 200 los mismos bytes
+ *   PUT    /v1/<id>   Authorization: Bearer <borrar>, If-Match opcional: 204 (solo los que nacieron para cambiar)
  *   DELETE /v1/<id>   Authorization: Bearer <borrar>    → 204
  *   DELETE /v1/<id>   Authorization: Bearer <ADMIN_TOKEN> → 204 (Tinkazo, a pedido)
  *   GET    /<id>                                        → 302 a tinkazo.app/c/<id>
@@ -31,6 +33,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import { type ConteoValido, type Fila, MAX_CUERPO, claveDeProps, claveDeRef, diaUtc, filaDe, grupoDeIp, rangoDeDias, validarConteo } from "./conteo";
+import { type Decision, decidirReescritura, etiqueta } from "./reescribir";
 
 export interface Env {
   ALMACEN: DurableObjectNamespace<Almacen>;
@@ -60,6 +63,9 @@ const POR_IP_POR_HORA = 60;
 const POR_DIA = 2_000;
 /** El largo mínimo del secreto de administración: uno más corto se podría adivinar probando. */
 const ADMIN_MINIMO = 32;
+/** Reescrituras por dirección IP y por hora (en memoria) y por día en total: cuidan las filas escritas del plan gratis. */
+const REESCRITURAS_POR_IP_POR_HORA = 300;
+const REESCRITURAS_POR_DIA = 20_000;
 
 /**
  * Desde dónde se pueden crear enlaces. Leer, desde cualquier lado: los bytes van
@@ -76,7 +82,9 @@ function cors(origen: string | null, metodos: string): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": origenPermitido(origen) && origen ? origen : "*",
     "Access-Control-Allow-Methods": metodos,
-    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type, If-Match",
+    // La versión y si el enlace puede cambiar: los lee la vista de espectador al volver a leer su enlace.
+    "Access-Control-Expose-Headers": "ETag, X-Enlace-Cambia",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -130,12 +138,35 @@ type Permiso = { ok: true } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
 export class Almacen extends DurableObject<Env> {
   private porIp = new Map<string, { n: number; vence: number }>();
 
+  private reescriturasPorIp = new Map<string, { n: number; vence: number }>();
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec(
       "CREATE TABLE IF NOT EXISTS enlaces (id TEXT PRIMARY KEY, datos BLOB NOT NULL, borrar TEXT NOT NULL, creado INTEGER NOT NULL)",
     );
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS cuotas (dia TEXT PRIMARY KEY, n INTEGER NOT NULL)");
+    // Los enlaces que se pueden reescribir (el QR de espectadores): las columnas se suman a las tablas de antes, y los
+    // enlaces que ya estaban quedan sin poder cambiar.
+    const columnas = new Set(ctx.storage.sql.exec<{ name: string }>("PRAGMA table_info(enlaces)").toArray().map((c) => c.name));
+    if (!columnas.has("cambia")) ctx.storage.sql.exec("ALTER TABLE enlaces ADD COLUMN cambia INTEGER NOT NULL DEFAULT 0");
+    if (!columnas.has("version")) ctx.storage.sql.exec("ALTER TABLE enlaces ADD COLUMN version INTEGER NOT NULL DEFAULT 1");
+    if (!columnas.has("cambios")) ctx.storage.sql.exec("ALTER TABLE enlaces ADD COLUMN cambios INTEGER NOT NULL DEFAULT 0");
+  }
+
+  /** Solo en el objeto de los cupos: cuenta una reescritura, o dice por qué no. */
+  async permitirReescritura(ip: string): Promise<Permiso> {
+    const ahora = Date.now();
+    const c = this.reescriturasPorIp.get(ip);
+    if (c && c.vence > ahora && c.n >= REESCRITURAS_POR_IP_POR_HORA) return { ok: false, motivo: "cupo-ip" };
+    const dia = `r:${new Date(ahora).toISOString().slice(0, 10)}`;
+    const hoy = this.ctx.storage.sql.exec<{ n: number }>("SELECT n FROM cuotas WHERE dia = ?", dia).toArray()[0]?.n ?? 0;
+    if (hoy >= REESCRITURAS_POR_DIA) return { ok: false, motivo: "cupo-dia" };
+    this.ctx.storage.sql.exec("INSERT INTO cuotas (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
+    if (!c || c.vence <= ahora) this.reescriturasPorIp.set(ip, { n: 1, vence: ahora + 3_600_000 });
+    else c.n += 1;
+    if (this.reescriturasPorIp.size > 10_000) this.reescriturasPorIp.clear();
+    return { ok: true };
   }
 
   /** Solo en el objeto de los cupos: cuenta un alta, o dice por qué no. */
@@ -157,23 +188,35 @@ export class Almacen extends DurableObject<Env> {
     return { ok: true };
   }
 
-  /** Guarda bajo `id` y devuelve el token para borrarlo, o null si el id ya estaba usado. */
-  async guardar(id: string, datos: ArrayBuffer): Promise<string | null> {
+  /** Guarda bajo `id` y devuelve el token para borrarlo, o null si el id ya estaba usado. `cambia`: se puede reescribir. */
+  async guardar(id: string, datos: ArrayBuffer, cambia = false): Promise<string | null> {
     if (this.ctx.storage.sql.exec("SELECT 1 FROM enlaces WHERE id = ?", id).toArray().length) return null;
     const borrar = base64url(crypto.getRandomValues(new Uint8Array(16)));
     this.ctx.storage.sql.exec(
-      "INSERT INTO enlaces (id, datos, borrar, creado) VALUES (?, ?, ?, ?)",
+      "INSERT INTO enlaces (id, datos, borrar, creado, cambia, version, cambios) VALUES (?, ?, ?, ?, ?, 1, 0)",
       id,
       datos,
       await sha256Hex(borrar),
       Date.now(),
+      cambia ? 1 : 0,
     );
     return borrar;
   }
 
-  async leer(id: string): Promise<ArrayBuffer | null> {
-    const fila = this.ctx.storage.sql.exec<{ datos: ArrayBuffer }>("SELECT datos FROM enlaces WHERE id = ?", id).toArray()[0];
-    return fila ? fila.datos : null;
+  async leer(id: string): Promise<{ datos: ArrayBuffer; cambia: boolean; version: number } | null> {
+    const fila = this.ctx.storage.sql.exec<{ datos: ArrayBuffer; cambia: number; version: number }>("SELECT datos, cambia, version FROM enlaces WHERE id = ?", id).toArray()[0];
+    return fila ? { datos: fila.datos, cambia: fila.cambia === 1, version: fila.version } : null;
+  }
+
+  /** Reescribe los bytes de un enlace que nació para cambiar (`reescribir.ts`). Sin esperas en el medio: dos no se pisan. */
+  async reescribir(id: string, token: string, siEs: string | null, datos: ArrayBuffer): Promise<Decision> {
+    const huella = await sha256Hex(token);
+    const fila = this.ctx.storage.sql
+      .exec<{ borrar: string; cambia: number; version: number; cambios: number; creado: number }>("SELECT borrar, cambia, version, cambios, creado FROM enlaces WHERE id = ?", id)
+      .toArray()[0] ?? null;
+    const d = decidirReescritura(fila, huella, siEs, Date.now());
+    if (d.ok) this.ctx.storage.sql.exec("UPDATE enlaces SET datos = ?, version = ?, cambios = cambios + 1 WHERE id = ?", datos, d.version, id);
+    return d;
   }
 
   async borrar(id: string, token: string): Promise<"borrado" | "no-existe" | "prohibido"> {
@@ -408,7 +451,7 @@ export default {
     if (partes[0] === "v1") {
       const id = partes[1];
       if (req.method === "OPTIONS") {
-        return new Response(null, { status: 204, headers: cors(origen, "GET, POST, DELETE, OPTIONS") });
+        return new Response(null, { status: 204, headers: cors(origen, "GET, POST, PUT, DELETE, OPTIONS") });
       }
 
       if (partes.length === 1 && req.method === "POST") {
@@ -424,10 +467,12 @@ export default {
         if (!permiso.ok) {
           return json({ error: permiso.motivo }, 429, { ...h, "Retry-After": permiso.motivo === "cupo-ip" ? "3600" : "86400" });
         }
+        // `?cambia=1`: el enlace del QR de espectadores, que la sala puede reescribir después (`reescribir.ts`).
+        const cambia = url.searchParams.get("cambia") === "1";
         for (let intento = 0; intento < 5; intento++) {
           const nuevo = nuevoId();
-          const borrar = await de(nuevo).guardar(nuevo, datos);
-          if (borrar) return json({ id: nuevo, borrar }, 201, h);
+          const borrar = await de(nuevo).guardar(nuevo, datos, cambia);
+          if (borrar) return json(cambia ? { id: nuevo, borrar, cambia: true, version: etiqueta(1) } : { id: nuevo, borrar }, 201, h);
         }
         return json({ error: "ocupado" }, 503, h);
       }
@@ -435,17 +480,35 @@ export default {
       if (partes.length === 2 && id && ES_ID.test(id)) {
         if (req.method === "GET" || req.method === "HEAD") {
           const h = cors(origen, "GET, OPTIONS");
-          const datos = await de(id).leer(id);
-          if (!datos) return json({ error: "no-existe" }, 404, h);
-          return new Response(req.method === "HEAD" ? null : datos, {
+          const fila = await de(id).leer(id);
+          if (!fila) return json({ error: "no-existe" }, 404, h);
+          return new Response(req.method === "HEAD" ? null : fila.datos, {
             status: 200,
             headers: {
               ...h,
               "Content-Type": "application/octet-stream",
-              "Cache-Control": "public, max-age=300",
+              // Uno que puede cambiar se vuelve a pedir siempre: el celular relee el juego antes del show.
+              ...(fila.cambia ? { "Cache-Control": "no-cache", "X-Enlace-Cambia": "1", ETag: etiqueta(fila.version) } : { "Cache-Control": "public, max-age=300" }),
               "X-Content-Type-Options": "nosniff",
             },
           });
+        }
+        if (req.method === "PUT") {
+          const h = cors(origen, "PUT, OPTIONS");
+          if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+          const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+          if (!token) return json({ error: "token" }, 401, h);
+          const largo = Number(req.headers.get("Content-Length") ?? "NaN");
+          if (!Number.isFinite(largo)) return json({ error: "largo" }, 411, h);
+          if (largo <= 0 || largo > MAX_BYTES) return json({ error: "tamaño" }, 413, h);
+          const datos = await req.arrayBuffer();
+          if (datos.byteLength === 0 || datos.byteLength > MAX_BYTES) return json({ error: "tamaño" }, 413, h);
+          const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
+          const permiso = await env.ALMACEN.get(env.ALMACEN.idFromName("cupos")).permitirReescritura(ip);
+          if (!permiso.ok) return json({ error: permiso.motivo }, 429, { ...h, "Retry-After": permiso.motivo === "cupo-ip" ? "3600" : "86400" });
+          const d = await de(id).reescribir(id, token, req.headers.get("If-Match"), datos);
+          if (!d.ok) return json({ error: d.error }, d.estado, h);
+          return new Response(null, { status: 204, headers: { ...h, ETag: etiqueta(d.version) } });
         }
         if (req.method === "DELETE") {
           const h = cors(origen, "DELETE, OPTIONS");
@@ -463,7 +526,7 @@ export default {
           return new Response(null, { status: 204, headers: h });
         }
       }
-      return json({ error: "no-existe" }, 404, cors(origen, "GET, POST, DELETE, OPTIONS"));
+      return json({ error: "no-existe" }, 404, cors(origen, "GET, POST, PUT, DELETE, OPTIONS"));
     }
 
     // Quien abre c.tinkazo.app/<id> en el navegador va a la página del comprobante.

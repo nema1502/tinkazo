@@ -10,6 +10,7 @@ import { ctxDe } from "./carrera-prueba";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import { ESP_MIN } from "./carrera-tiempos";
 import { MARCA_PORTON } from "./carrera-tandas";
+import { setResultadoDeTurnos } from "../../modos/turnos";
 
 // Armar la recta prueba hasta 160 arreglos por ronda (`carrera-marcha.ts`): unos 40 ms por plan, y estas pruebas arman cientos.
 vi.setConfig({ testTimeout: 120_000 });
@@ -266,6 +267,23 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     expect(Object.keys(TEXTOS_CARRERA.en).sort()).toEqual(Object.keys(TEXTOS_CARRERA.es).sort());
     expect(TEXTOS_CARRERA.es.carRotuloMeta).toBe("META");
     expect(TEXTOS_CARRERA.en.carRotuloMeta).toBe("FINISH");
+  });
+
+  it("en un orden, la meta anuncia el turno uno sin hablar de ganar ni de premios", () => {
+    setResultadoDeTurnos(true);
+    try {
+      for (const idioma of ["es", "en"] as const) {
+        const carMeta = TEXTOS_CARRERA[idioma].carMeta as () => string;
+        const texto = carMeta();
+        expect(texto).not.toMatch(/\d/);
+        expect(texto).not.toMatch(/ganar|gana|premio|\bwin|\bwinner|\bprize/i);
+        expect(texto.toLowerCase()).toContain(idioma === "es" ? "turno uno" : "turn one");
+      }
+    } finally {
+      setResultadoDeTurnos(false);
+    }
+    expect((TEXTOS_CARRERA.es.carMeta as () => string)()).toBe("¡Gana quien llegue a la meta!");
+    expect((TEXTOS_CARRERA.en.carMeta as () => string)()).toBe("Whoever reaches the finish wins!");
   });
 
   it("el rótulo de quien va primera en el celular existe en los dos idiomas y es una sola palabra (ADELANTE / AHEAD)", () => {

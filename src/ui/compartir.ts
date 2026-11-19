@@ -31,8 +31,7 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
  * tiene ilustración (`foto-fondos.ts`), está entre los que pasaron la mirada y
  * la bandera `VITE_FOTO_JUEGO` no la apaga (`foto-juego-bandera.ts`, prendida
- * por defecto), con hasta tres ganadores (`TOPE_FOTO_JUEGO` en `foto.ts`; con
- * más, la lista taparía el dibujo y va la de siempre, sola), van dos fotos lado a lado: la del juego, elegida, y la de
+ * por defecto), van dos fotos lado a lado, con cualquier cantidad de ganadores: la del juego, elegida, y la de
  * siempre. Tocar una la elige, y se comparte, se descarga o se copia solo esa. Mis sorteos, la página de
  * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
@@ -256,6 +255,17 @@ function numerosDePremio(ganadores: readonly string[], persona: string): string 
   return numeros.length > 3 ? `${numeros.slice(0, 3).join(" ")} …` : numeros.join(" ");
 }
 
+/**
+ * Dónde está la lista completa, para la foto del juego cuando no se ven todos los nombres: el QR (`qr`) o el mensaje
+ * (`mensaje`), y «orden» en lugar de «lista» en un orden de turnos. El QR lleva la lista entera solo si el sorteo está
+ * anclado: sin sello (modo libre, demo, un sorteo que siguió sin sello), el comprobante rehace un solo ganador, y la frase
+ * del QR sería falsa. Ahí dice que está en el mensaje, que nombra a todos.
+ */
+function completaDe(lang: Lang, turnos: boolean, anclado: boolean): { qr: string; mensaje: string } {
+  const mensaje = cad(lang, turnos ? "fotoOrdenEnMensaje" : "fotoListaEnMensaje");
+  return { qr: anclado ? cad(lang, turnos ? "fotoOrdenEnQr" : "fotoListaEnQr") : mensaje, mensaje };
+}
+
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   // Los nombres ya llegan sin la marca de la línea sellada cuando la lista se lee por persona (`DatosSorteo.ganadores`).
@@ -306,6 +316,7 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
         ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
+    completa: completaDe(lang, turnos, !d.sinSello && d.numero !== undefined),
     enlace: sinComprobante ? "" : enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
     escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
@@ -683,7 +694,7 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
           fotos: [foto],
           // La misma foto sobre el fondo del juego que se jugó: con la bandera prendida, si el juego está en la lista y tiene
-          // ilustración, y con hasta tres ganadores (`TOPE_FOTO_JUEGO`): con más, la lista taparía el dibujo.
+          // ilustración, con cualquier cantidad de ganadores.
           ...(d.juego && fotoDelJuegoPara(d.juego) && fotoDelJuegoEntra(foto) ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,

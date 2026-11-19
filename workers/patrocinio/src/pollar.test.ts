@@ -1,6 +1,15 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
-import { ESPERA_POLLAR_MS, MEMORIA_CREDITOS_MS, MEMORIA_SESION_MS, Pollar, ULTIMO_CREDITOS_MS, formaDeToken, pollarDe } from "./pollar";
+import {
+  ESPERA_POLLAR_MS,
+  MEMORIA_CREDITOS_MS,
+  MEMORIA_SESION_MS,
+  Pollar,
+  ULTIMO_CREDITOS_MS,
+  VIA_DE_LA_SESION,
+  formaDeToken,
+  pollarDe,
+} from "./pollar";
 import { POLLAR_SERVIDOR } from "./servidores";
 
 const T0 = Date.UTC(2026, 10, 14, 12, 0, 0);
@@ -64,7 +73,7 @@ describe("la forma del token, antes de llamar a nadie", () => {
 describe("verificar", () => {
   it("pregunta a tokens/verify con la llave en x-pollar-api-key y devuelve quién es", async () => {
     const { p, falso } = montar(() => verificado({ wallet: { publicKey: G } }));
-    expect(await p.verificar(TOKEN)).toEqual({ ok: true, usuario: USUARIO, vence: T0 + 3_600_000, cuenta: G });
+    expect(await p.verificar(TOKEN)).toEqual({ ok: true, usuario: USUARIO, vence: T0 + 3_600_000, cuenta: G, via: "google" });
     expect(falso.llamadas).toHaveLength(1);
     const [l] = falso.llamadas;
     expect(l?.url).toBe(`${POLLAR_SERVIDOR}/v3/tokens/verify`);
@@ -73,6 +82,35 @@ describe("verificar", () => {
     expect(JSON.parse(String(l?.init?.body))).toEqual({ token: TOKEN });
     // El token va en el cuerpo, nunca en la dirección.
     expect(l?.url).not.toContain(TOKEN.slice(0, 20));
+  });
+
+  it("el campo y el valor de Google salen de una sola constante, todavía por confirmar con una respuesta real", () => {
+    expect(VIA_DE_LA_SESION).toEqual({ campo: "authProvider", google: "google" });
+  });
+
+  it("una sesión que dice exactamente el valor de Google trae via google", async () => {
+    const { p } = montar(() => verificado({ [VIA_DE_LA_SESION.campo]: VIA_DE_LA_SESION.google }));
+    expect(await p.verificar(TOKEN)).toMatchObject({ ok: true, via: "google" });
+  });
+
+  it("el nombre del campo sale de la constante: con otro nombre la sesión queda sin dato", async () => {
+    const { p } = montar(() => verificado({ authProvider: undefined, [`${VIA_DE_LA_SESION.campo}Otro`]: VIA_DE_LA_SESION.google }));
+    expect(await p.verificar(TOKEN)).toMatchObject({ ok: true, via: null });
+  });
+
+  it("cualquier otro texto es otra vía, escrito como se escriba", async () => {
+    const otros = ["email", "apple.com", "auth0|123", "github2", "google.com", "google-oauth2", "Google", "GOOGLE", " google", "google "];
+    for (const authProvider of otros) {
+      const { p } = montar(() => verificado({ authProvider }));
+      expect(await p.verificar(TOKEN), authProvider).toMatchObject({ ok: true, via: "otra" });
+    }
+  });
+
+  it("sin authProvider, con un número, un objeto o un texto vacío, la vía queda sin dato", async () => {
+    for (const authProvider of [undefined, 12, null, {}, ["google"], "", "   "]) {
+      const { p } = montar(() => verificado({ authProvider }));
+      expect(await p.verificar(TOKEN), String(authProvider)).toMatchObject({ ok: true, via: null });
+    }
   });
 
   it("un token con forma rara no llama a Pollar", async () => {

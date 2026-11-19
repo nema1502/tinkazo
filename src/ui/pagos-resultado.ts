@@ -19,6 +19,20 @@ import { currentSession } from "./wallet-ui";
 /** Un solo lector para la página: lo que ya se leyó no se vuelve a pedir enseguida. */
 const lector = crearLectorDePagos();
 
+/**
+ * La cuenta de quien ganó en un puesto, releída de la lista sellada en este momento (`app.frozen` y `app.drawn`): nunca de
+ * lo que quedó pintado en la pantalla ni de un campo que se pueda editar. Es `null` si el sorteo que está en la página ya
+ * no es el de `raffleId`, si el puesto no existe o si lo que dice la lista en ese puesto no es una cuenta de Stellar.
+ */
+export function destinoDeLaLista(raffleId: string, puesto: number): string | null {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn || frozen.raffleId === undefined || String(frozen.raffleId) !== raffleId) return null;
+  const indice = drawn.winners[puesto];
+  if (indice === undefined) return null;
+  const entrada = frozen.names[indice];
+  return typeof entrada === "string" && esDireccionG(entrada) ? entrada : null;
+}
+
 export function mostrarPagosDelResultado(): void {
   const caja = document.getElementById("pagos-box");
   const { frozen, drawn } = app;
@@ -36,6 +50,7 @@ export function mostrarPagosDelResultado(): void {
   const activo = activoDePagos(network.name);
   const desde = sorteoEn - 600;
 
+  const destinoDe = (puesto: number): string | null => destinoDeLaLista(raffleId, puesto);
   montarGanadores(caja, {
     red: network.name,
     raffleId,
@@ -46,7 +61,7 @@ export function mostrarPagosDelResultado(): void {
     desde,
     pagadoras,
     lector,
-    ...(sesion ? { pagar: pagarPremioEn({ red: network.name, raffleId, premio: frozen.prize, activo, pagadoras, desde }) } : {}),
+    ...(sesion ? { pagar: pagarPremioEn({ red: network.name, raffleId, premio: frozen.prize, activo, pagadoras, desde, destinoDe }) } : {}),
   });
   caja.style.display = "block";
 }

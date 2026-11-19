@@ -1,5 +1,6 @@
 import { writeStory, type Arc, type Story } from "../drama";
 import { COLORES, GRUPOS, cuantosGrupos, grupoDe } from "../grupos";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "./decisivo";
 
 /**
  * El plan de La Entrada (puro: sin Pixi ni DOM). Sección 7.8 del plan de
@@ -175,6 +176,30 @@ export function memberRounds(s: number): number[] {
 }
 
 const hexColor = (css: string): number => parseInt(css.replace("#", ""), 16) || 0xd52b1e;
+
+/** Lo que el momento decisivo se adelanta al salto que cae: el salto empieza antes de tocar el piso. */
+export const ANTES_DEL_SALTO = 0.1;
+
+/**
+ * El momento decisivo de La Entrada (`decisivo.ts`), en segundos de juego. Lo primero de:
+ *
+ * - el salto del contrapunto que termina en el piso: antes, los dos saltan alternados y trastabillar le pasa a cualquiera;
+ * - un arco donde se quedan solo premiados: el relator dice cuántos tienen premio, y si son todos, ya los nombra;
+ * - un arco que deja solo a premiados en la comparsa.
+ *
+ * En cada arco se cuenta desde que la comparsa llega a él.
+ */
+export function decisivoDeLaEntrada(P: Pick<EntradaPlan, "n" | "winners" | "arches" | "jumps">): number {
+  const premiados = new Set(P.winners);
+  const fuera = new Set<number>();
+  const tramos = P.arches.map((a) => {
+    for (const i of a.exit.ids) fuera.add(i);
+    return { desde: a.t, siguen: Array.from({ length: P.n }, (_, i) => i).filter((i) => !fuera.has(i)) };
+  });
+  const todosPremiados = P.arches.filter((a) => a.exit.ids.length > 0 && a.exit.ids.every((i) => premiados.has(i)) && premiados.size < P.n).map((a) => a.t);
+  const cae = P.jumps.find((j) => j.stumble === "fall");
+  return momentoDecisivo(cae ? cae.t - ANTES_DEL_SALTO : Infinity, ...todosPremiados, primeraQueDejaSoloPremiados(tramos, premiados, P.n));
+}
 
 /**
  * Escribe el plan. `rng` es el azar sembrado con la ronda; la misma ronda

@@ -42,6 +42,12 @@ describe("la bandera de los modos nuevos", () => {
     }
   });
 
+  it("el amigo secreto todavía no se puede pedir por la dirección ni mostrar por ese parámetro", () => {
+    expect(requestedMode("?modo=amigo")).toBeNull();
+    expect(modesVisible(undefined, "?modo=amigo")).toBe(false);
+    expect(abreLaHerramienta("?modo=amigo")).toBe(false);
+  });
+
   it("con el parámetro los modos están a la vista aunque la bandera esté apagada", () => {
     expect(modesVisible(undefined, "?modo=turnos")).toBe(true);
     expect(modesVisible("0", "?modo=turnos")).toBe(true);

@@ -248,7 +248,7 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(caja.textContent).toContain("Vas a pagar a Equipo Cohete");
     expect(caja.textContent).toContain("tk:premio:777:2");
     expect(boton.textContent).toBe("Firmar y pagar");
-    expect(botonCon(caja, "Cancelar")).toBeDefined();
+    expect(botonCon(caja, "Cerrar")).toBeDefined();
   });
 
   it("sin un monto claro en el premio, el campo queda vacío para escribirlo", () => {
@@ -256,10 +256,10 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(campos(caja).monto.value).toBe("");
   });
 
-  it("Cancelar o Escape lo cierran; tocar 'Pagar premio' otra vez también", () => {
+  it("Cerrar o Escape lo cierran; tocar 'Pagar premio' otra vez también", () => {
     const dep = armar();
     const a = abrir(dep);
-    botonCon(a.caja, "Cancelar")?.click();
+    botonCon(a.caja, "Cerrar")?.click();
     expect(a.caja.childElementCount).toBe(0);
 
     const b = abrir(dep);
@@ -301,7 +301,7 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(mensaje.classList.contains("bad")).toBe(false);
   });
 
-  it("con el pago hecho, el monto, la explicación y 'Cancelar' se van: queda la confirmación y el enlace", async () => {
+  it("con el pago hecho, el monto, la explicación y 'Cerrar' se van: queda la confirmación y el enlace", async () => {
     const dep = armar();
     const { caja, form } = abrir(dep);
     expect(caja.querySelector<HTMLElement>(".gan-campo")?.hidden).toBe(false);
@@ -591,7 +591,7 @@ describe("el premio pagado desde otra parte", () => {
     const despues = red.armar();
     const b = abrir(despues);
     enviar(b.form);
-    await vi.waitFor(() => expect(campos(b.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    await vi.waitFor(() => expect(campos(b.caja).mensaje.textContent).toBe("Este premio ya estaba pagado. No se pagó de nuevo."));
     expect(campos(b.caja).mensaje.classList.contains("bad")).toBe(false);
     expect(campos(b.caja).enviar.hidden).toBe(true);
     expect((b.caja.querySelector("a") as HTMLAnchorElement).hidden).toBe(false);
@@ -607,7 +607,7 @@ describe("el premio pagado desde otra parte", () => {
     enviar(una.form);
     await vi.waitFor(() => expect(campos(una.caja).mensaje.textContent).toBe("Listo, el pago salió."));
     enviar(otra.form);
-    await vi.waitFor(() => expect(campos(otra.caja).mensaje.textContent).toBe("Este premio ya está pagado, así que no hace falta pagarlo de nuevo."));
+    await vi.waitFor(() => expect(campos(otra.caja).mensaje.textContent).toBe("Este premio ya estaba pagado. No se pagó de nuevo."));
     expect(red.mandados()).toBe(1);
   });
 

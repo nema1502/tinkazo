@@ -60,7 +60,7 @@ describe("los textos de la lista con una lista común (sin equipos)", () => {
 
   it("el mensaje para quien salió dice entre cuántas personas, en los dos idiomas", () => {
     expect(T.es.tellBody("Ana", "", 12, ENLACE, false)).toContain("entre 12 personas");
-    expect(T.en.tellBody("Ana", "", 12, ENLACE, false)).toContain("out of 12 people");
+    expect(T.en.tellBody("Ana", "", 12, ENLACE, false)).toContain("drawn from 12 people");
   });
 
   it("el resumen del sello cuenta personas, en los dos idiomas", () => {
@@ -126,7 +126,7 @@ describe("los textos de la lista cuando el cuadro tiene la lista de los equipos 
     conEquipos();
     expect(T.es.tellBody("Los Cóndores", "", 12, ENLACE, false)).toContain("entre 12 equipos");
     expect(T.es.tellBody("Los Cóndores", "", 12, ENLACE, false)).not.toContain("personas");
-    expect(T.en.tellBody("Los Cóndores", "", 12, ENLACE, false)).toContain("out of 12 teams");
+    expect(T.en.tellBody("Los Cóndores", "", 12, ENLACE, false)).toContain("drawn from 12 teams");
     expect(T.en.tellBody("Los Cóndores", "", 12, ENLACE, false)).not.toContain("people");
   });
 

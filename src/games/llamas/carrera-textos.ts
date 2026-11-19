@@ -1,4 +1,5 @@
 import { enStand } from "../../ensayo-modo";
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import type { Textos } from "../pixi/kit";
 
 /**
@@ -16,8 +17,8 @@ import type { Textos } from "../pixi/kit";
  */
 export const TEXTOS_CARRERA: Textos = {
   es: {
-    // En una ronda de stand nadie gana: sale quien llegue a la meta.
-    carMeta: () => (enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
+    // En una ronda de stand o en un orden nadie gana: la meta solo cuenta la llegada.
+    carMeta: () => (esResultadoDeTurnos() ? "¡Turno uno al cruzar la meta!" : enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
     carBusquen: "¡Busquen su nombre!",
     carSalida: "¡Salida!",
     carRotuloMeta: "META",
@@ -55,7 +56,7 @@ export const TEXTOS_CARRERA: Textos = {
     carCierraTanda: "¡Se cierra el portón!",
   },
   en: {
-    carMeta: () => (enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
+    carMeta: () => (esResultadoDeTurnos() ? "Turn one at the finish!" : enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
     carBusquen: "Find your name!",
     carSalida: "Go!",
     carRotuloMeta: "FINISH",
@@ -65,7 +66,7 @@ export const TEXTOS_CARRERA: Textos = {
     carBarro: "the mud",
     carPiedras: "the rocks",
     carViento: "the wind",
-    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lay down!`, `${n} rests a while!`][v % 3] ?? "",
+    carEcha: (n: string, v: number) => [`${n} lies down to rest!`, `${n} lies down!`, `${n} rests a while!`][v % 3] ?? "",
     carVa: (n: string) => `${n} is in front!`,
     carAdelante: (n: string, v: number) => [`${n} moves up front!`, `Now ${n} leads!`, `${n} takes the lead!`][v % 3] ?? "",
     carRecta: "On to the home stretch!",

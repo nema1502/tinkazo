@@ -1,5 +1,7 @@
 import { PACES, type Frozen, type Game, type Pace } from "../state";
-import { acortar } from "../enlace-corto";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { acortarEspectador, actualizarCorto, rutaDe } from "../enlace-corto";
+import { anotarQrMostrado, anotarVersion, delSello, type EnlaceMostrado } from "./espectadores-de-la-sala";
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { pintarQr } from "./qr";
@@ -45,6 +47,12 @@ export interface DatosEspectador {
   i: string;
   /** Los nombres de los equipos con cupón, de las cuentas de la lista: `[cuenta, nombre]`. */
   e?: [string, string][];
+  /**
+   * 1 si la sala sigue la línea de tiempo común (`arranque-del-show.ts`) y elige cuándo grabar con celulares mirando
+   * (`puerta-de-la-grabacion.ts`): el celular juega a la par. Sin esto (una sala con el sitio de antes), el celular
+   * espera lo grabado como antes.
+   */
+  h?: 1;
 }
 
 const VERSION = 1;
@@ -91,13 +99,22 @@ function nombresValidos(n: unknown): n is string[] {
  * vista a medio armar. Tiene que nombrar un sorteo de un contrato oficial de Tinkazo (`stellar/oficiales.ts`): sin eso
  * no hay con qué comparar la lista, y no se abre.
  */
+/** El fragmento del espectador: los datos y, si el enlace corto puede cambiar, su id, su clave y su contador (`c.ts`). */
+const FRAGMENTO = /^#espectador=([A-Za-z0-9_-]+)(?:\.([0-9A-Za-z]{8})\.([A-Za-z0-9_-]{22})\.(\d{1,9}))?$/;
+
+/** La referencia al enlace corto que puede cambiar, si el fragmento la trae: la vista lo vuelve a leer antes del show. */
+export function refDelEnlace(hash: string = location.hash): { id: string; clave: string; n: number } | null {
+  const m = FRAGMENTO.exec(hash);
+  return m?.[2] && m[3] && m[4] ? { id: m[2], clave: m[3], n: Number(m[4]) } : null;
+}
+
 export function datosDelEnlace(hash: string = location.hash): DatosEspectador | null {
-  const m = /^#espectador=([A-Za-z0-9_-]+)$/.exec(hash);
+  const m = FRAGMENTO.exec(hash);
   if (!m?.[1]) return null;
   try {
     const j = JSON.parse(deB64url(m[1])) as Partial<DatosEspectador> & { v?: unknown };
     if (j.v !== VERSION) return null;
-    const { r, g, p, w, z, n, net, k, i, e } = j;
+    const { r, g, p, w, z, n, net, k, i, e, h } = j;
     if (!Number.isSafeInteger(r) || (r as number) < 1) return null;
     if (typeof g !== "string" || !ES_JUEGO.test(g)) return null;
     // Sin `Object.hasOwn`: hay navegadores en uso que no lo traen.
@@ -106,8 +123,10 @@ export function datosDelEnlace(hash: string = location.hash): DatosEspectador | 
     if (!Number.isInteger(w) || (w as number) < 1 || (w as number) > n.length) return null;
     if (z !== undefined && (typeof z !== "string" || z.length > 200)) return null;
     if (typeof i !== "string" || !ES_ID.test(i) || !contratoOficial(net, k)) return null;
+    if (h !== undefined && h !== 1) return null;
     const datos: DatosEspectador = { r: r as number, g: g as Game, p: p as Pace, w: w as number, n, net: net as NetworkName, k: k as string, i };
     if (z) datos.z = z;
+    if (h === 1) datos.h = 1;
     if (e !== undefined) {
       if (!Array.isArray(e)) return null;
       const deLaLista = new Set(n);
@@ -157,10 +176,12 @@ export function datosDeLaEspera(f: Frozen, d: DeLaEspera): DatosEspectador | nul
     w: Math.min(Math.max(1, d.premios), f.names.length),
     ...(f.prize ? { z: f.prize } : {}),
     n: f.names,
-    // El celular espera a que quede grabado, como la sala, y en la red de este sorteo.
+    // El celular mira lo grabado en la red de este sorteo, para soltar su final y comprobar que es este.
     net: d.red,
     k: d.contrato,
     i: String(f.raffleId),
+    // La sala sigue la línea de tiempo común: el celular juega a la par.
+    h: 1,
   };
   const equipos = d.equipo ? f.names.flatMap((c): [string, string][] => {
     const nombre = d.equipo?.(c);
@@ -189,6 +210,8 @@ export function figuraDelQrHtml(): string {
     `<figcaption hidden>${esc(t("espQrT"))}</figcaption>` +
     `<p class="espera-qr-estado" role="status">${esc(t("espQrPreparando"))}</p>` +
     `<button class="ghost espera-qr-otra" type="button" hidden>${esc(t("espProbar"))}</button>` +
+    // Se cambió el juego con el QR a la vista y no se pudo reescribir el enlace de antes: este QR es nuevo.
+    `<p class="espera-qr-anterior" hidden>${esc(t("espQrJuegoAnterior"))}</p>` +
     `</figure>`
   );
 }
@@ -210,33 +233,104 @@ function ponerEstado(figura: HTMLElement, estado: EstadoDelQr): void {
   if (otra) otra.hidden = estado !== "fallo";
 }
 
+/** La huella de una ruta: lo que se recuerda de cada enlace para no armar otro con lo mismo (la ruta lleva los nombres). */
+const huellaDe = (ruta: string): string => Array.from(sha256(new TextEncoder().encode(ruta)).slice(0, 12), (b) => b.toString(16).padStart(2, "0")).join("");
+/** Lo que da `hacer`, o null si falla de cualquier modo: el QR dice que no salió y ofrece probar de nuevo, nunca se rompe. */
+async function intentar<T>(hacer: () => Promise<T>): Promise<T | null> {
+  try {
+    return await hacer();
+  } catch {
+    return null;
+  }
+}
+
+/** El enlace corto de un enlace mostrado. */
+const cortoDe = (e: Pick<EnlaceMostrado, "id" | "clave">): string => `${location.origin}/c/${e.id}#${e.clave}`;
+
 /**
- * El QR del espectador en la espera en grande. Lleva SOLO el enlace corto: los nombres viajan cifrados y la clave va
- * en el QR. El enlace largo los lleva legibles (en base64, que cualquiera decodifica de una foto de la pantalla), así
- * que nunca se dibuja. Mientras el servicio contesta (`acortar`, con su propia espera) se ve que se está preparando;
- * si no sale, no hay QR: lo dice y ofrece Probar de nuevo. Si mientras tanto se pidió otro (cambió el juego), el
- * anterior no se dibuja. Devuelve el enlace que quedó dibujado, o null.
+ * El QR del espectador en la espera en grande, con lo de ahora. Lleva SOLO el enlace corto: los nombres viajan cifrados
+ * y la clave va en el QR. El enlace largo los lleva legibles (en base64, que cualquiera decodifica de una foto de la
+ * pantalla), así que nunca se dibuja.
+ *
+ * Lo que ya se mostró de este sello se recuerda (`espectadores-de-la-sala.ts`):
+ *
+ * - Con lo mismo que un enlace ya mostrado (volver a abrir la espera), el mismo QR.
+ * - Con otro juego o duración, si el enlace a la vista se puede reescribir (el servicio lo dijo al crearlo), se reescribe
+ *   ese y los demás que se puedan: el QR no cambia, y quien ya escaneó lo relee antes del show (`espectador.ts`).
+ * - Si no (el servicio de hoy, o la reescritura no salió), uno nuevo, para quienes escaneen después. Si antes ya se vio
+ *   otro que no se pudo reescribir, debajo del QR se dice que quienes ya escanearon lo ven con el juego anterior.
+ *
+ * Mientras el servicio contesta se ve que se está preparando; si no sale, no hay QR: lo dice y ofrece Probar de nuevo.
+ * Si mientras tanto se pidió otro (cambió el juego), el anterior no se dibuja. Devuelve el enlace que quedó dibujado, o
+ * null.
  */
-export async function armarQrDeEspectador(capa: HTMLElement, datos: DatosEspectador): Promise<string | null> {
+export async function armarQrDeEspectador(capa: HTMLElement, datos: DatosEspectador, sello: { raffleId?: bigint } | null = null): Promise<string | null> {
   const figura = capa.querySelector<HTMLElement>(".espera-qr");
   const img = figura?.querySelector("img");
   if (!(figura && img instanceof HTMLImageElement)) return null;
   const enlace = enlaceEspectador(datos);
   // Lo que se pidió último manda: si el juego cambia mientras llega el corto del anterior, ese ya no se dibuja.
+  if (figura.dataset.pedido === enlace && figura.dataset.estado !== "fallo") return figura.dataset.enlace ?? null;
   figura.dataset.pedido = enlace;
-  delete figura.dataset.enlace;
-  ponerEstado(figura, "preparando");
   const otra = figura.querySelector<HTMLButtonElement>(".espera-qr-otra");
-  if (otra) otra.onclick = () => void armarQrDeEspectador(capa, datos);
-  const corto = (await acortar(enlace).catch(() => null))?.corto ?? null;
-  if (!capa.isConnected || figura.dataset.pedido !== enlace) return null;
-  if (!corto || !(await pintarQr(img, corto, ladoDelQr(innerWidth, innerHeight)))) {
-    if (figura.dataset.pedido === enlace) ponerEstado(figura, "fallo");
-    return null;
+  if (otra) otra.onclick = () => {
+    delete figura.dataset.pedido;
+    void armarQrDeEspectador(capa, datos, sello);
+  };
+  const anterior = figura.querySelector<HTMLElement>(".espera-qr-anterior");
+  const ruta = rutaDe(enlace) ?? "";
+  const huella = huellaDe(ruta);
+  const vistos = delSello(sello)?.enlaces ?? [];
+  const sigue = (): boolean => capa.isConnected && figura.dataset.pedido === enlace;
+
+  // Lo mismo que uno ya mostrado: ese QR.
+  const igual = vistos.find((e) => e.huella === huella);
+  // Uno a la vista que se puede reescribir: se reescriben todos los que se puedan, y el QR queda.
+  const aLaVista = vistos.find((e) => e.cambia && figura.dataset.enlace === cortoDe(e));
+  let corto: string | null = null;
+  let quedanViejos = false;
+  if (igual) {
+    corto = cortoDe(igual);
+    quedanViejos = vistos.some((e) => e.huella !== huella);
+  } else if (aLaVista) {
+    let todos = true;
+    for (const e of vistos) {
+      const r = e.cambia ? await intentar(() => actualizarCorto({ ...e, borrar: e.permiso }, enlace)) : null;
+      if (r?.ok) {
+        anotarVersion(sello ?? {}, e.id, r.version, r.n);
+        if (sello) anotarQrMostrado(sello, datos.g, datos.p, { ...e, version: r.version, n: r.n, largo: r.largo, huella });
+      } else todos = false;
+    }
+    if (!sigue()) return null;
+    const reescrito = delSello(sello)?.enlaces.find((e) => e.id === aLaVista.id && e.huella === huella);
+    if (reescrito) {
+      corto = cortoDe(reescrito);
+      quedanViejos = !todos;
+    }
   }
-  if (!capa.isConnected || figura.dataset.pedido !== enlace) return null;
+  if (!corto) {
+    delete figura.dataset.enlace;
+    ponerEstado(figura, "preparando");
+    const nuevo = await intentar(() => acortarEspectador(enlace));
+    if (!sigue()) return null;
+    if (!nuevo || !(await pintarQr(img, nuevo.corto, ladoDelQr(innerWidth, innerHeight)))) {
+      if (sigue()) ponerEstado(figura, "fallo");
+      return null;
+    }
+    if (!sigue()) return null;
+    corto = nuevo.corto;
+    quedanViejos = vistos.length > 0;
+    if (sello) anotarQrMostrado(sello, datos.g, datos.p, { id: nuevo.id, clave: nuevo.clave, permiso: nuevo.borrar, cambia: nuevo.cambia, version: nuevo.version, largo: nuevo.largo, n: nuevo.n, huella });
+  } else if (figura.dataset.enlace !== corto) {
+    if (!(await pintarQr(img, corto, ladoDelQr(innerWidth, innerHeight)))) {
+      if (sigue()) ponerEstado(figura, "fallo");
+      return null;
+    }
+    if (!sigue()) return null;
+  }
   figura.dataset.enlace = corto;
   ponerEstado(figura, "listo");
+  if (anterior) anterior.hidden = !quedanViejos;
   return corto;
 }
 

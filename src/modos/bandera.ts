@@ -12,9 +12,13 @@
  * No importa `state.ts` a propósito: ese módulo lee la dirección al cargar y esta bandera tiene que poder probarse sola.
  */
 
-/** Los modos que la dirección puede pedir. */
-export type ModeName = "turnos" | "varias";
+/** Los modos que conoce el código, incluso los que todavía no tienen pantalla. */
+export type ModeName = "turnos" | "varias" | "amigo";
 
+/**
+ * Los modos que la dirección puede pedir. Amigo secreto queda afuera a propósito hasta que tenga pantalla: sumarlo acá
+ * haría que `?modo=amigo` abriera la herramienta y mostrara los modos que sí existen, sin ofrecer todavía el modo pedido.
+ */
 const MODES: readonly ModeName[] = ["turnos", "varias"];
 
 /** La parte de la dirección que trae los parámetros (`?modo=turnos`), o vacía si no hay dirección (pruebas). */

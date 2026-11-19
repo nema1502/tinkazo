@@ -7,7 +7,7 @@ import { type SaldoDeDolares, alcanza, faltaPara } from "../stellar/saldo-dolare
 import type { Texto } from "./cuenta-lista-estado";
 import { abrirDialogo, botonPrincipal, lineaDeEstado } from "./dialogo";
 import { recordarMedio } from "./medio-de-pago";
-import { armarPanelDePago } from "./pago-panel";
+import { type PanelArmado, panelDeLaOrden } from "./pago-panel";
 import { type FaseDelSaldo, type PagoConSaldo, type SaldoCorto, lineaDelSaldo, mediosConSaldo, textoDelCorto, trasPagar, vistaDelSaldo } from "./pago-saldo";
 import { type Sondeo, vigilarPago } from "./pago-sondeo";
 import { MEDIOS_DE_PAGO, type MedioDePago, NO_SE_VENDE, type PanelDePago, faltaDe, lineaDelPago, panelDe, textoDelErrorDeLaOrden, textoDelErrorDelPago, vencidaSinPagar } from "./pago-vista";
@@ -176,7 +176,7 @@ export function vistaDelPaquete(e: EstadoDelPaquete): VistaDelPaquete {
   const linea = lineaDelPago(e, !!error);
   return {
     textos: linea.textos,
-    panel: panelDe(o, e.correo, e.idioma, e.corto ? textoDelCorto(e.corto, e.idioma) : null, e.cambio),
+    panel: panelDe(o, e.correo, e.idioma, e.corto ? textoDelCorto(e.corto, e.idioma) : null, e.cambio, e.noLlego),
     nota: linea.nota,
     error,
     secundarios,
@@ -279,7 +279,7 @@ export function abrirSumarSorteos(c: CompraDePaquetes, o: OpcionesDeSumar = {}):
   let sondeo: Sondeo | null = null;
   let pedidos = 0;
   let reloj: ReturnType<typeof setTimeout> | null = null;
-  let panelArmado: { clave: string; el: HTMLElement } | null = null;
+  let panelArmado: PanelArmado | null = null;
 
   const dlg = abrirDialogo({
     titulo: t("cupoOfSumar"),
@@ -299,8 +299,7 @@ export function abrirSumarSorteos(c: CompraDePaquetes, o: OpcionesDeSumar = {}):
   dlg.pie.append(estado, principal);
 
   const panelDe_ = (p: PanelDePago): HTMLElement => {
-    const clave = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}|${p.correo}|${p.cambio ? "qr" : ""}|${getLang()}`;
-    if (panelArmado?.clave !== clave) panelArmado = { clave, el: armarPanelDePago(p, { alCambiar: () => alQr() }) };
+    panelArmado = panelDeLaOrden(panelArmado, p, getLang(), { alCambiar: () => alQr() });
     return panelArmado.el;
   };
 

@@ -1,10 +1,26 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
 import { codigo } from "./altas-prueba";
-import { COBROS, IDS, PAGADOR, horizonDeCobros, montarPagos } from "./cobros-prueba";
-import { AJUSTE_CURSOR, AJUSTE_VENTA_PAUSADA, Cobros, EMISOR_USDC, HORIZON_CADA_MS, LectorDeCobros, ORDEN_VIVE_MS, leerPagos, memoIdDe, minimoDe, normalizarOrden, ordenDeNota, usdcTexto } from "./cobros";
+import { COBROS, IDS, PAGADOR, type PagoHorizon, horizonDeCobros, montarPagos } from "./cobros-prueba";
+import {
+  AJUSTE_CURSOR,
+  AJUSTE_VENTA_PAUSADA,
+  Cobros,
+  EMISOR_USDC,
+  HORIZON_CADA_MS,
+  LectorDeCobros,
+  ORDEN_VIVE_MS,
+  leerPagos,
+  memoIdDe,
+  minimoDe,
+  normalizarOrden,
+  ordenDeNota,
+  pagoDe,
+  usdcTexto,
+} from "./cobros";
 import { DIA_MS, leerConfig } from "./config";
 import { Cupos } from "./cupos";
+import { type PedidoDePago, UsoDePagos } from "./pagos-uso";
 import { haciaHorizon } from "./servidores";
 import { sqlDePrueba } from "./sqlite-prueba";
 
@@ -546,5 +562,322 @@ describe("la bitácora de los pagos", () => {
     const todo = JSON.stringify(m.anotado);
     expect(m.anotado.map(([e]) => e)).toEqual(expect.arrayContaining(["alta-orden", "alta-pago", "pago-suelto", "error-horizon"]));
     for (const prohibido of ["usr_ana", ana.cuenta as string, COBROS, PAGADOR, ID, ana.token]) expect(todo).not.toContain(prohibido);
+  });
+});
+
+describe("el costo de un retiro que pagó el portero", () => {
+  const CUENTA_RETIRO = Keypair.random().publicKey();
+  const COSTO = 5_000_000;
+  const INTERNA = "a".repeat(64);
+  const EXTERNA = "b".repeat(64);
+  const LIMITES = { topePagos: 20_000_000, rechazosPorDia: 20 };
+
+  /** El portero de la red principal con los retiros que paga: sus tablas, y una lectura de los cobros que las usa. */
+  function conCostos() {
+    const m = montarPagos();
+    const uso = new UsoDePagos(m.sql);
+    const registrar = (e: string, d?: Record<string, string | number>) => void m.anotado.push([e, d]);
+    const cobros = new Cobros(m.sql, m.cupos, { idAlAzar: () => ID, costos: uso });
+    const lector = new LectorDeCobros({ cobros, cuenta: COBROS, fetch: m.h.fetch, reloj: m.hora, registrar, cadaMs: 0 });
+    return { m, uso, cobros, lector };
+  }
+
+  /** El portero paga un retiro: guarda su transacción con la cuenta que paga y el costo que exigía. */
+  function pagaUnRetiro(uso: UsoDePagos, ahora: number, o: { hash?: string; envuelta?: string; cuenta?: string } = {}): void {
+    const pedido: PedidoDePago = {
+      hash: o.hash ?? INTERNA,
+      envuelta: o.envuelta ?? EXTERNA,
+      forma: "retiro",
+      cuenta: o.cuenta ?? CUENTA_RETIRO,
+      delLibro: true,
+      estimado: 30_000,
+      vence: 1,
+      premio: null,
+      costo: COSTO,
+    };
+    expect(uso.reservar(pedido, ahora, LIMITES)).toEqual({ ok: true, yaContado: false });
+  }
+
+  /** El pago del costo, como llega a la cuenta de cobros. */
+  const elCosto = (o: Partial<PagoHorizon> = {}): PagoHorizon => ({ monto: "0.5000000", de: CUENTA_RETIRO, ...o });
+
+  /** La fila de los pagos sueltos de un costo ya cobrado. */
+  const cobrado = (operacion: string) => ({
+    operacion,
+    activo: "USDC",
+    monto: COSTO,
+    nota: null,
+    motivo: "costo-retiro",
+    estado: "cobrado",
+    orden: null,
+  });
+
+  it("queda como costo-retiro y cobrado, reconocido por el hash de la transacción de adentro", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    const [op] = m.h.sumar(elCosto({ tx: INTERNA }));
+    expect(await lector.leer()).toEqual({ ok: true });
+    expect(m.sueltos()).toEqual([cobrado(op as string)]);
+    expect(cobros.sueltos()).toEqual([]);
+    expect(cobros.sueltosSinResolver()).toBe(0);
+    expect(cobros.costosDeRetiro(0)).toEqual({ cuantos: 1, monto: COSTO });
+    expect(m.anotado.filter(([e]) => e === "costo-retiro")).toEqual([["costo-retiro", {}]]);
+    expect(m.anotado.some(([e]) => e === "pago-suelto")).toBe(false);
+  });
+
+  it("también por el hash de la transacción de afuera, el fee-bump", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: EXTERNA }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["costo-retiro", "cobrado"]]);
+    expect(cobros.sueltosSinResolver()).toBe(0);
+  });
+
+  it("también por el hash de adentro que trae el pago en inner_transaction", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: "c".repeat(64), interna: INTERNA }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["costo-retiro", "cobrado"]]);
+    expect(cobros.sueltosSinResolver()).toBe(0);
+  });
+
+  it("un retiro que se devolvió pero entró igual se reconoce: conserva su fila de costo", async () => {
+    const { m, uso, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    uso.devolver(INTERNA);
+    m.h.sumar(elCosto({ tx: INTERNA }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => s.motivo)).toEqual(["costo-retiro"]);
+  });
+
+  it("pagoDe lee el hash de adentro de una transacción envuelta, y solo si tiene forma de hash", () => {
+    const registro = (transaction: unknown) => ({
+      id: "250000000000000001",
+      paging_token: "250000000000000001",
+      type: "payment",
+      transaction_successful: true,
+      transaction_hash: EXTERNA,
+      created_at: "2026-11-18T10:00:00Z",
+      from: CUENTA_RETIRO,
+      to: COBROS,
+      asset_type: "credit_alphanum4",
+      asset_code: "USDC",
+      asset_issuer: EMISOR_USDC,
+      amount: "0.5000000",
+      transaction,
+    });
+    expect(pagoDe(registro({ memo_type: "none", inner_transaction: { hash: INTERNA } }), COBROS)).toMatchObject({ tx: EXTERNA, txInterna: INTERNA });
+    expect(pagoDe(registro({ memo_type: "none" }), COBROS)?.txInterna).toBeNull();
+    expect(pagoDe(registro(undefined), COBROS)?.txInterna).toBeNull();
+    for (const malo of [{ hash: "ZZ" }, { hash: INTERNA.toUpperCase() }, { hash: 7 }, {}, "texto", null]) {
+      expect(pagoDe(registro({ memo_type: "none", inner_transaction: malo }), COBROS)?.txInterna, JSON.stringify(malo)).toBeNull();
+    }
+  });
+
+  it("(ataque) el costo con la nota numérica de una orden abierta no toca esa orden", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    const ana = await conOrden(m);
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: INTERNA, memoId: memoIdDe(ana.id) }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado, s.orden])).toEqual([["costo-retiro", "cobrado", null]]);
+    expect(m.filasDePagos()).toEqual([]);
+    expect(cobros.recibido(ana.id)).toBe(0);
+    expect(cobros.orden(ana.id)?.pagada).toBeNull();
+    expect(await m.pago(ana.token, ana.id)).toMatchObject({ estado: 200, cuerpo: { pagada: false, recibido: "0" } });
+  });
+
+  it("(ataque) el costo con la nota de texto de una orden abierta tampoco la toca", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    const ana = await conOrden(m);
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: EXTERNA, nota: NOTA }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado, s.orden])).toEqual([["costo-retiro", "cobrado", null]]);
+    expect(cobros.recibido(ana.id)).toBe(0);
+  });
+
+  it("(ataque) ocho costos con la nota de una orden no la completan", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    const ana = await conOrden(m);
+    for (let i = 0; i < 8; i++) {
+      const cuenta = Keypair.random().publicKey();
+      const hash = i.toString(16).padStart(64, "0");
+      pagaUnRetiro(uso, m.hora(), { hash, envuelta: `f${hash.slice(1)}`, cuenta });
+      m.h.sumar(elCosto({ tx: hash, de: cuenta, memoId: memoIdDe(ana.id) }));
+    }
+    await lector.leer();
+    expect(cobros.recibido(ana.id)).toBe(0);
+    expect(cobros.orden(ana.id)?.pagada).toBeNull();
+    expect(cobros.costosDeRetiro(0)).toEqual({ cuantos: 8, monto: 8 * COSTO });
+  });
+
+  it("el mismo monto desde otra cuenta sigue siendo un pago suelto", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: INTERNA, de: Keypair.random().publicKey() }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+    expect(cobros.sueltosSinResolver()).toBe(1);
+  });
+
+  it("el mismo monto desde la misma cuenta en una transacción que no está en retiros_cobrados sigue siendo suelto", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: "d".repeat(64) }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+    expect(cobros.sueltosSinResolver()).toBe(1);
+  });
+
+  it("otro monto en la transacción de un retiro sigue siendo suelto", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    const montos = ["0.4999999", "0.5000001", "1.0000000"];
+    m.h.sumar(...montos.map((monto) => elCosto({ tx: INTERNA, monto })));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([
+      ["sin-nota", "suelto"],
+      ["sin-nota", "suelto"],
+      ["sin-nota", "suelto"],
+    ]);
+    expect(cobros.sueltosSinResolver()).toBe(3);
+  });
+
+  it("otro activo en la transacción de un retiro sigue siendo suelto", async () => {
+    const { m, uso, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: INTERNA, nativo: true }), elCosto({ tx: INTERNA, emisor: Keypair.random().publicKey() }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => s.motivo)).toEqual(["otro-activo", "otro-activo"]);
+  });
+
+  it("un costo que una versión anterior dejó suelto se reclasifica en la vuelta siguiente", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    // Lo lee una versión del código que todavía no reconoce los retiros: queda como suelto sin nota.
+    const [op] = m.h.sumar(elCosto({ tx: INTERNA }));
+    await m.lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+    // Vuelve a estar el reconocimiento: la tabla de retiros tiene esa transacción.
+    pagaUnRetiro(uso, m.hora());
+    await lector.leer();
+    expect(m.sueltos()).toEqual([cobrado(op as string)]);
+    expect(cobros.sueltosSinResolver()).toBe(0);
+  });
+
+  it("también se reclasifica el que tenía una nota que no era de ninguna orden", async () => {
+    const { m, uso, lector } = conCostos();
+    m.h.sumar(elCosto({ tx: EXTERNA, nota: "tkz-retiro" }));
+    await m.lector.leer();
+    expect(m.sueltos().map((s) => s.motivo)).toEqual(["nota-desconocida"]);
+    pagaUnRetiro(uso, m.hora());
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["costo-retiro", "cobrado"]]);
+  });
+
+  it("la reclasificación no toca lo que ya está atado a una orden, ni lo repetido de una orden", async () => {
+    const { m, uso, cobros, lector } = conCostos();
+    const ana = await conOrden(m);
+    // El primer costo llegó con la nota de la orden: la versión anterior lo sumó a su orden.
+    m.h.sumar(elCosto({ tx: INTERNA, memoId: memoIdDe(ana.id) }));
+    await m.lector.leer();
+    expect(cobros.recibido(ana.id)).toBe(COSTO);
+    // La orden se completa y un segundo costo llega después: queda suelto como repetido de esa orden.
+    m.h.sumar({ monto: "1.5000000", nota: NOTA });
+    await m.lector.leer();
+    expect(cobros.orden(ana.id)?.pagada).not.toBeNull();
+    m.h.sumar(elCosto({ tx: EXTERNA, memoId: memoIdDe(ana.id) }));
+    await m.lector.leer();
+    pagaUnRetiro(uso, m.hora(), { envuelta: "9".repeat(64) });
+    uso.cerrar(INTERNA, "ok", 200);
+    pagaUnRetiro(uso, m.hora(), { hash: EXTERNA, envuelta: "f".repeat(64) });
+    await lector.leer();
+    expect(cobros.recibido(ana.id)).toBe(COSTO + 15_000_000);
+    expect(m.sueltos().map((s) => [s.motivo, s.estado, s.orden])).toEqual([["repetido", "suelto", ID]]);
+    expect(cobros.costosDeRetiro(0)).toEqual({ cuantos: 0, monto: 0 });
+  });
+
+  it("sin costos la lectura es la de hoy: el costo queda suelto, y con una nota numérica suma a la orden", async () => {
+    const m = montarPagos();
+    const ana = await conOrden(m);
+    m.h.sumar(elCosto({ tx: INTERNA }), elCosto({ tx: EXTERNA, memoId: memoIdDe(ana.id) }));
+    expect(await m.lector.leer()).toEqual({ ok: true });
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+    expect(m.cobros.recibido(ana.id)).toBe(COSTO);
+    expect(m.cobros.costosDeRetiro(0)).toEqual({ cuantos: 0, monto: 0 });
+  });
+
+  it("con las tablas de pagos no disponibles la lectura es la de hoy y nunca las consulta", async () => {
+    const m = montarPagos();
+    let consultas = 0;
+    const roto = {
+      disponible: () => false,
+      costoDeRetiro: () => {
+        consultas++;
+        return true;
+      },
+    };
+    const cobros = new Cobros(m.sql, m.cupos, { idAlAzar: () => ID, costos: roto });
+    const lector = new LectorDeCobros({ cobros, cuenta: COBROS, fetch: m.h.fetch, reloj: m.hora, cadaMs: 0 });
+    m.h.sumar(elCosto({ tx: INTERNA }));
+    await lector.leer();
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+    expect(consultas).toBe(0);
+  });
+
+  it("con las tablas rotas después de arrancar la lectura sigue y el costo queda suelto", async () => {
+    const { m, uso, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.sql.db.exec("DROP TABLE retiros_cobrados");
+    m.h.sumar(elCosto({ tx: INTERNA }));
+    expect(await lector.leer()).toEqual({ ok: true });
+    expect(m.sueltos().map((s) => [s.motivo, s.estado])).toEqual([["sin-nota", "suelto"]]);
+  });
+
+  it("la bitácora del costo no lleva cuentas, hashes ni la cuenta de cobros", async () => {
+    const { m, uso, lector } = conCostos();
+    pagaUnRetiro(uso, m.hora());
+    m.h.sumar(elCosto({ tx: INTERNA }));
+    await lector.leer();
+    const todo = JSON.stringify(m.anotado);
+    expect(todo).toContain("costo-retiro");
+    for (const prohibido of [CUENTA_RETIRO, COBROS, INTERNA, EXTERNA]) {
+      expect(todo).not.toContain(prohibido);
+    }
+  });
+
+  it("con los retiros apagados la tabla vacía no cambia nada: la lectura da exactamente lo mismo que sin costos", async () => {
+    // Así queda el portero con `RETIROS` en "0": la lectura de los cobros recibe las tablas, pero nadie guardó ningún retiro.
+    const leer = async (conLaTabla: boolean) => {
+      const m = montarPagos();
+      const ana = await conOrden(m);
+      const registrar = (e: string, d?: Record<string, string | number>) => void m.anotado.push([e, d]);
+      const cobros = conLaTabla ? new Cobros(m.sql, m.cupos, { costos: new UsoDePagos(m.sql) }) : m.cobros;
+      const conTabla = () => new LectorDeCobros({ cobros, cuenta: COBROS, fetch: m.h.fetch, reloj: m.hora, registrar, cadaMs: 0 });
+      const lector = conLaTabla ? conTabla() : m.lector;
+      // Todo lo que puede llegar: la orden pagada, un costo sin nota, uno con la nota de la orden, otro activo y la nota fija.
+      m.h.sumar(
+        { monto: "2.0000000", nota: NOTA },
+        elCosto({ tx: INTERNA }),
+        elCosto({ tx: EXTERNA, memoId: memoIdDe(ana.id) }),
+        elCosto({ tx: INTERNA, nativo: true }),
+        elCosto({ tx: EXTERNA, nota: "tkz-retiro" }),
+      );
+      expect(await lector.leer()).toEqual({ ok: true });
+      return {
+        sueltos: m.sueltos(),
+        pagos: m.filasDePagos(),
+        pagada: cobros.orden(ana.id)?.pagada !== null,
+        recibido: cobros.recibido(ana.id),
+        eventos: m.anotado,
+        costos: cobros.costosDeRetiro(0),
+      };
+    };
+    const hoy = await leer(false);
+    expect(hoy.sueltos.map((s) => s.motivo)).toEqual(["sin-nota", "repetido", "otro-activo", "nota-desconocida"]);
+    expect(hoy.pagada).toBe(true);
+    expect(await leer(true)).toEqual(hoy);
   });
 });

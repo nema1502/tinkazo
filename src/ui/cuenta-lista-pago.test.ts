@@ -175,8 +175,9 @@ describe("comprar el primer paquete", () => {
     expect(panel()?.querySelector('[data-dato="monto"]')?.textContent).toBe("3 USDC");
     // Poco texto: a la vista, el título del paquete, una sola línea (cómo pagar) y los datos; lo demás, plegado.
     const cuerpo = raiz()?.querySelector(".cl-actual .cl-paso-cuerpo");
-    expect(raiz()?.querySelector(".cl-actual .cl-paso-titulo")?.textContent).toContain(t("pagoTitulo"));
-    expect([...(cuerpo?.querySelectorAll(":scope > p, :scope > .cl-error") ?? [])].map((p) => p.textContent)).toEqual([t("compraAppLinea")]);
+    expect(raiz()?.querySelector(".cl-titulo")?.textContent).toBe(t("pagoTitulo"));
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("compraAppLinea"));
+    expect([...(cuerpo?.querySelectorAll(":scope > p, :scope > .cl-error") ?? [])].map((p) => p.textContent)).toEqual([]);
     const mas = panel()?.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]');
     expect(mas?.open).toBe(false);
     expect(mas?.textContent).toContain(t("pagoParaCuenta").replace("{correo}", "a•••@gmail.com"));
@@ -205,7 +206,8 @@ describe("comprar el primer paquete", () => {
     expect(principal().dataset.accion).toBe("activar");
     expect(principal().textContent).toBe(t("clActivarBoton"));
     expect(textoDe()).toContain(t("pagoListo"));
-    expect(textoDe()).toContain(t("altaActivarPago"));
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(2);
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clBajada"));
     expect(panel()).toBeNull();
     expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
     // Llegó: no se pregunta más.
@@ -242,6 +244,47 @@ describe("comprar el primer paquete", () => {
     expect(srv.pago).toHaveBeenCalledTimes(vecesAntes);
     await tocar(principal());
     expect(srv.pago).toHaveBeenCalledTimes(vecesAntes + 1);
+  });
+
+  it("tras «No llegó», los casos de otra moneda y de la nota llegan a Más detalles del panel, que sigue siendo uno y sigue abierto", async () => {
+    const srv = servidorFalso();
+    await hastaPagar(srv);
+    await tocar(principal());
+    const antes = panel() as HTMLElement;
+    expect(antes).not.toBeNull();
+    // Mientras nada cambia, a cada mirada y al pasar los 5 minutos, el panel es el mismo elemento y los dos casos no están.
+    await pasa(CADA_MS * 3);
+    expect(panel()).toBe(antes);
+    await pasa(DURANTE_MS);
+    expect(panel()).toBe(antes);
+    expect(antes.textContent).not.toContain(t("pagoOtraMoneda"));
+    expect(antes.textContent).not.toContain(t("pagoOtraNotaEnviada"));
+    // Quien abrió Más detalles lo ve abierto después de tocar No llegó.
+    (antes.querySelector("details") as HTMLDetailsElement).open = true;
+    await tocar(boton("no-llego"));
+    const despues = panel() as HTMLElement;
+    expect(raiz()?.querySelectorAll('[data-pago="panel"]').length).toBe(1);
+    expect(despues.textContent).toContain(t("pagoOtraMoneda"));
+    expect(despues.textContent).toContain(t("pagoOtraNotaEnviada"));
+    expect((despues.querySelector("details") as HTMLDetailsElement).open).toBe(true);
+    expect(despues.querySelector('[data-dato="nota"]')?.textContent).toBe(`tk:o:${ID}`);
+    // Al tocar Ya pagué de nuevo, los casos se van y el panel se arma otra vez: sigue habiendo uno solo.
+    await tocar(principal());
+    expect(raiz()?.querySelectorAll('[data-pago="panel"]').length).toBe(1);
+    expect(panel()?.textContent).not.toContain(t("pagoOtraMoneda"));
+  });
+
+  it("tras «No llegó» y en inglés, los dos casos salen en inglés", async () => {
+    const srv = servidorFalso();
+    await hastaPagar(srv);
+    await tocar(principal());
+    await pasa(DURANTE_MS);
+    await tocar(boton("no-llego"));
+    setLang("en");
+    await pasa();
+    expect(panel()?.textContent).toContain(t("pagoOtraMoneda"));
+    expect(panel()?.textContent).toContain(t("pagoOtraNotaEnviada"));
+    expect(t("pagoOtraMoneda")).toMatch(/^Sent another currency/);
   });
 
   it("sin conexión: el motivo y «Probar de nuevo», que vuelve a mirar", async () => {

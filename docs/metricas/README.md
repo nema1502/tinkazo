@@ -40,21 +40,21 @@ Lo que pesa ante quien financia son los números de mainnet, que son los que no 
 
 ```bash
 pnpm install
-node scripts/metricas-cadena.mjs --red testnet --hasta-ledger <el ledger de corte del archivo> --totales /tmp/mis-totales.json
-cmp /tmp/mis-totales.json docs/metricas/totales-testnet.json     # idéntico
+node scripts/metricas-cadena.mjs --red testnet --hasta-ledger LEDGER_DE_CORTE --crudos RUTA_CRUDOS --totales /tmp/mis-totales.json
+cmp /tmp/mis-totales.json docs/metricas/totales-testnet.json     # comparar los totales
 ```
 
-`corte.ledger` dice dónde cortó el archivo. Con ese ledger sale el mismo archivo, byte por byte (se probó recalculando desde cero). Sin `--hasta-ledger` corta en el último ledger cerrado. En Actions, el flujo «Metricas de la cadena» hace lo mismo a mano (`workflow_dispatch`).
+`corte.ledger` dice dónde cortó el archivo. Sin `--hasta-ledger` corta en el último ledger cerrado. `--crudos RUTA_CRUDOS` aporta los eventos y transacciones guardados de corridas anteriores, y `--desde-crudos RUTA_CRUDOS` recalcula sin red. En Actions, el flujo Metricas de la cadena hace lo mismo a mano (`workflow_dispatch`). La salida guarda `datosDesde` y avisa qué fuentes se usaron.
 
 De dónde sale cada dato, para no creerle a un solo servidor:
 
-1. **Eventos**: el índice de eventos del contrato de StellarExpert (todo el historial; el RPC de Stellar solo guarda unos 7 días). El índice solo dice dónde mirar.
-2. **Transacciones**: cada evento se confronta con su transacción en Horizon, por el identificador del evento. De la transacción se decodifica el sobre (`envelope_xdr`): organizador, huella de la lista, cantidad, texto, hora de cierre y quién pagó la comisión.
+1. **Eventos**: se mezclan tres fuentes. El índice de eventos de StellarExpert aporta el historial, los crudos de `--crudos` conservan lo que ya se consultó y el RPC de Stellar aporta los eventos recientes, de unos 7 días. Las copias del mismo evento se unen una sola vez.
+2. **Transacciones**: cada evento se confronta con su transacción en Horizon, por el identificador del evento o por el hash cuando viene del RPC. De la transacción se decodifica el sobre (`envelope_xdr`): organizador, huella de la lista, cantidad, texto, hora de cierre y quién pagó la comisión.
 3. **Comprobaciones que el script hace solo** (sale con error si alguna falla):
    - los números de sorteo de cada contrato van de 1 a N, sin huecos ni repetidos;
    - N coincide con `next_id - 1` que el contrato lleva en su instancia (leído del RPC);
    - cada evento tiene su transacción y los dos dicen lo mismo;
-   - en la ventana de 7 días, el RPC cuenta los mismos sellos y registros que el índice.
+   - en la ventana de 7 días, el RPC y el índice se cruzan. Si el RPC tiene eventos que todavía no aparecen en el índice, se informa sin fallar. Si el índice tiene más eventos, la comprobación falla.
 4. Cuenta el contrato vigente y los anteriores de `src/stellar/deployments.json`. De un contrato anterior solo entra lo que llega a su `ultimoId`: lo que se selle después ya no es un sorteo de Tinkazo.
 
 ## Los datos crudos de testnet

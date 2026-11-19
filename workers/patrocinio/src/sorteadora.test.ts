@@ -252,6 +252,17 @@ describe("POST /v1/sorteo: el camino entero", () => {
     // Se leyó solo la sorteadora (su secuencia).
     expect(red.lecturas - antes).toBe(1);
   });
+
+  it("ata el sello a ese sorteo: respalda sus premios, y un gemelo con la misma lista y ronda sorteado después no queda atado", async () => {
+    const org = admitida();
+    const sello = await selloDelPortero(org, 1n);
+    expect(await p.sortear("1", FIRMA)).toMatchObject({ estado: 200 });
+    const enRed = { organizador: org.publicKey(), huellaLista: "ab".repeat(32), ronda: RONDA };
+    expect(cupos.selloDelSorteo(CONTRATO, "1", enRed)).toBe(sello);
+    red.sorteos.set(2n, { organizador: org.publicKey(), lista: LISTA, ronda: RONDA });
+    await p.sortear("2", FIRMA);
+    expect(cupos.selloDelSorteo(CONTRATO, "2", enRed)).toBeNull();
+  });
 });
 
 describe("POST /v1/sorteo: lo que no se paga", () => {
@@ -552,6 +563,23 @@ describe("el draw que manda la persona, con ALTAS=1 (con o sin el sorteo del ser
     expect(cupos.exportar(true).reserva?.find((f) => f.hash === sello)?.usada).toBe(t.hash);
     // Y el servidor ya no lo vuelve a mandar.
     expect(await p.sortear("1", FIRMA)).toEqual({ estado: 200, cuerpo: { hash: t.hash, status: "DUPLICATE" } });
+  });
+
+  it("el draw de un sello del portero ata el sello a ese sorteo", async () => {
+    const org = admitida();
+    const sello = await selloDelPortero(org, 1n);
+    expect(await p.procesar(drawDe(org, 1n).xdr)).toMatchObject({ estado: 200 });
+    const enRed = { organizador: org.publicKey(), huellaLista: "ab".repeat(32), ronda: RONDA };
+    expect(cupos.selloDelSorteo(CONTRATO, "1", enRed)).toBe(sello);
+  });
+
+  it("con SOLO_SELLOS_PORTERO=0 el draw no mira el sello y no ata nada", async () => {
+    await montar({ SOLO_SELLOS_PORTERO: "0" });
+    const org = admitida();
+    await selloDelPortero(org, 1n);
+    expect(await p.procesar(drawDe(org, 1n).xdr)).toMatchObject({ estado: 200 });
+    const enRed = { organizador: org.publicKey(), huellaLista: "ab".repeat(32), ronda: RONDA };
+    expect(cupos.selloDelSorteo(CONTRATO, "1", enRed)).toBeNull();
   });
 
   it("de un sello que no pagó el portero, 403 no-es-nuestro, sin simular ni reservar", async () => {

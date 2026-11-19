@@ -135,6 +135,8 @@ function montar(): void {
   (els["btn-freeze"] as El).textContent = "Sellar la lista";
   oyentesDoc = {};
   vi.stubGlobal("document", {
+    // `setLang` actualiza el idioma de la raíz también en esta prueba bilingüe.
+    documentElement: { lang: "", dataset: {} },
     getElementById: (id: string) => els[id] ?? null,
     createElement: (tag: string) => new El(tag),
     querySelector: (sel: string) =>
@@ -226,6 +228,25 @@ describe("la red está bien", () => {
     expect(boton().textContent).toBe("Sellar la lista");
     expect(r.hayAccionDeRed()).toBe(false);
     expect(r.alApretarSellar()).toBe(false);
+  });
+
+  it("al repintar en el stand conserva Empezar la ronda en español y en inglés", async () => {
+    red(bien());
+    const { r } = await cargar();
+    const modo = await import("../ensayo-modo");
+    const i18n = await import("../i18n");
+    modo.marcarStand(true);
+    try {
+      i18n.setLang("es");
+      r.limpiarRed();
+      expect(boton().textContent).toBe("Empezar la ronda");
+      i18n.setLang("en");
+      r.limpiarRed();
+      expect(boton().textContent).toBe("Start the round");
+    } finally {
+      modo.marcarStand(false);
+      i18n.setLang("es");
+    }
   });
 
   it("con una lista de un solo nombre no mira nada", async () => {
@@ -669,6 +690,7 @@ describe("'Seguir sin sello' pide confirmar y desalienta", () => {
     const { r, sellar } = await enRojo();
     // El documento de mentira no tiene las clases del DOM: con que existan, `instanceof` dice que no son campos.
     vi.stubGlobal("HTMLInputElement", class {});
+    vi.stubGlobal("HTMLButtonElement", class {});
     // El modo «Orden de turnos» con una lista que pasa del tope de la red: no se puede sellar (turnos.ts).
     const { ponerModoTurnos, seguirLaLista } = await import("./turnos");
     const { topeDeGanadores } = await import("../stellar/config");
