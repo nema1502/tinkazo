@@ -154,18 +154,18 @@ describe("la foto con el fondo del juego", () => {
     expect(await fotoDelJuegoPng(fotoBase)).toBeNull();
   });
 
-  it("fotoDelJuegoPng: de uno a tres ganadores. Con más, nada, y va la de siempre", async () => {
-    const { fotoDelJuegoPng, fotoDelJuegoEntra, TOPE_FOTO_JUEGO } = await import("./foto");
+  it("fotoDelJuegoPng: la foto del juego con cualquier cantidad de ganadores. A un evento, no", async () => {
+    const foto = await import("./foto");
     const varios = (n: number): string[] => Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
-    expect(TOPE_FOTO_JUEGO).toBe(3);
-    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(3), fondo: "race" })).toBeInstanceOf(Blob);
-    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(4), fondo: "race" })).toBeNull();
-    expect(await fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(7), fondo: "race" })).toBeNull();
-    expect(fotoDelJuegoEntra({ personas: varios(1) })).toBe(true);
-    expect(fotoDelJuegoEntra({ personas: varios(3) })).toBe(true);
-    expect(fotoDelJuegoEntra({ personas: varios(4) })).toBe(false);
+    // Ya no hay tope: la regla que escondía la foto con cuatro o más ganadores se fue.
+    expect("TOPE_FOTO_JUEGO" in foto).toBe(false);
+    for (const n of [1, 2, 3, 4, 5, 7, 8, 12, 20, 50, 300]) {
+      expect(await foto.fotoDelJuegoPng({ ...fotoBase, titulo: "Ganaron", personas: varios(n), fondo: "race" }), `${n} ganadores`).toBeInstanceOf(Blob);
+      expect(foto.fotoDelJuegoEntra({ personas: varios(n) })).toBe(true);
+    }
     // Un evento no tiene personas: la de siempre.
-    expect(fotoDelJuegoEntra({})).toBe(false);
+    expect(foto.fotoDelJuegoEntra({})).toBe(false);
+    expect(foto.fotoDelJuegoEntra({ personas: [] })).toBe(false);
   });
 });
 
@@ -217,6 +217,10 @@ function paneles(con: string[]): Rect[] {
 }
 
 const ARTE = { arriba: 236, abajo: 540 };
+/** Dónde está la lista completa, como lo arma `fotoDeSorteo`. */
+const FRASES = {
+  es: { qr: "La lista completa está en el QR.", mensaje: "La lista completa está en el mensaje." },
+};
 const seCruzaConElArte = (r: Rect): boolean => r.y < ARTE.abajo && r.y + r.h + 12 > ARTE.arriba;
 
 describe("la foto del juego deja ver la ilustración", () => {
@@ -288,6 +292,24 @@ describe("la foto del juego deja ver la ilustración", () => {
 
   /** El tamaño de la letra con que se escribió el texto que empieza en el renglón `i`. */
   const tamEn = (con: string[], i: number): number => Number(/(\d+)px/.exec(con.slice(0, i).reverse().find((x) => x.startsWith("set font=")) ?? "")?.[1]);
+  /** Cada texto dibujado, con la letra (tamaño y peso) que tenía el lienzo en ese momento. */
+  const trazosDe = (con: string[]): Array<{ t: string; x: number; y: number; px: number; peso: number }> => {
+    const out: Array<{ t: string; x: number; y: number; px: number; peso: number }> = [];
+    let px = 0;
+    let peso = 0;
+    for (const x of con) {
+      if (x.startsWith("set font=")) {
+        px = Number(/(\d+)px/.exec(x)?.[1] ?? 0);
+        peso = Number(/^set font=(\d+) /.exec(x)?.[1] ?? 0);
+      } else if (x.startsWith("fillText(")) {
+        const partes = x.slice(9, -1).split(",");
+        const y = Number(partes.pop());
+        const xx = Number(partes.pop());
+        out.push({ t: partes.join(","), x: xx, y, px, peso });
+      }
+    }
+    return out;
+  };
   const primerRenglon = (con: string[], nombre: string): number =>
     con.findIndex((x) => x.startsWith("fillText(") && nombre.startsWith(x.slice(9).split(",")[0] as string) && (x.slice(9).split(",")[0] as string).length > 2);
 
@@ -318,19 +340,28 @@ describe("la foto del juego deja ver la ilustración", () => {
     expect(tamEn(siempre, siempre.findIndex((x) => x.startsWith("fillText(Escaneá")))).toBeGreaterThan(delJuego);
   });
 
-  it("cinco ganadores: la lista abraza sus nombres, con el número pegado al más largo, y deja ver el dibujo a su derecha", async () => {
+  it("cinco ganadores: todos a la vista, la ventana del arte libre y Escaneá arriba de la tarjeta del QR", async () => {
     const personas = ["Ana Quispe", "Beto Choque", "Nora Vargas", "Maximiliano Gutiérrez", "Luz Mamani"];
     const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas: ["Premio: Entradas", "Salieron entre 60 personas"] }));
-    const m = paneles(con)[1] as Rect;
-    expect(m.x + m.w).toBeLessThan(1080 - 200);
-    // Sube lo menos posible: deja libres al menos 90 px de arriba de la ventana del arte (236 a 540). Desde la escala 1
-    // subía hasta dejar unos 25.
-    expect(m.y).toBeGreaterThanOrEqual(236 + 90);
+    const ps = paneles(con);
+    expect(ps).toHaveLength(3);
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    const [, m, esc] = ps as [Rect, Rect, Rect];
+    // La lista en la columna, desde y=556, nunca más arriba.
+    expect(m.x).toBe(56);
+    expect(m.y).toBe(556);
+    expect(m.x + m.w).toBe(528);
+    // Todos los nombres, enteros (uno largo puede ir en dos renglones), y cada número adentro del panel.
+    for (const p of personas) for (const palabra of p.split(" ")) expect(con.some((x) => x.startsWith("fillText(") && x.includes(palabra)), p).toBe(true);
     const numeros = con.filter((x) => /^fillText\(#\d,/.test(x)).map((x) => Number(x.split(",")[1]));
     expect(numeros).toHaveLength(5);
     numeros.forEach((x) => expect(x).toBeLessThanOrEqual(m.x + m.w - 28));
-    // Todos los nombres, enteros.
-    for (const p of personas) expect(con).toContainEqual(expect.stringMatching(new RegExp(`^fillText\\(${p},`)));
+    // Si la columna pide su alto entero, Escaneá sube arriba de la tarjeta del QR: ni la pisa ni pisa la lista.
+    if (esc.y < 816) {
+      expect(esc).toMatchObject({ x: 544, y: 556, w: 452, h: 244 });
+      expect(m.x + m.w + 12).toBeLessThanOrEqual(esc.x);
+    }
+    expect(con).toContain("fillRect(544,816,452,452)");
   });
 
   it.each([
@@ -368,14 +399,17 @@ describe("la foto del juego deja ver la ilustración", () => {
     }
   });
 
-  it("dos ganadores, uno de 28 letras que no entra entero en la columna: van en la franja y suben poco, como mucho 60 px sobre la ventana del arte", async () => {
+  it("dos ganadores, uno de 28 letras: va en la columna, en dos o tres renglones, sin subir sobre el dibujo", async () => {
     const personas = ["Guadalupe Villavicencio Mamani", "Ana Quispe"];
     const con = await dibujo(juego(personas, { titulo: "Ganaron", lineas: ["Premio: Polera", "Salieron entre 30 personas"] }));
-    const m = paneles(con)[1] as Rect;
-    expect(m.y).toBeGreaterThanOrEqual(540 - 60);
-    expect(m.y + m.h).toBe(800);
-    for (const p of personas) expect(con).toContainEqual(expect.stringMatching(new RegExp(`^fillText\\(${p},`)));
-    // Con la escala de la lista como piso: en 0,55 entraban sin subir, pero los nombres a 30 px y la cola a 19 y 14.
+    const ps = paneles(con);
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    const m = ps[1] as Rect;
+    expect(m.y).toBeGreaterThanOrEqual(556);
+    // Los dos nombres, enteros: el largo, partido por palabras, juntos son el nombre.
+    const renglones = con.filter((x) => x.startsWith("fillText(") && /^(Guadalupe|Villavicencio|Mamani)/.test(x.slice(9)));
+    expect(renglones.map((x) => x.slice(9).split(",")[0]).join(" ")).toBe(personas[0]);
+    expect(con).toContainEqual(expect.stringMatching(/^fillText\(Ana Quispe,/));
     expect(tamEn(con, primerRenglon(con, "Ana Quispe"))).toBeGreaterThan(tamEn(con, con.findIndex((x) => x.startsWith("fillText(Escaneá"))));
     expect(tamEn(con, primerRenglon(con, "Ana Quispe"))).toBeGreaterThanOrEqual(36);
   });
@@ -392,34 +426,104 @@ describe("la foto del juego deja ver la ilustración", () => {
     }
   });
 
-  it("lo que no entra en la franja (muchos ganadores) sube desde y=800, nunca debajo del panel de arriba", async () => {
-    const ps = paneles(await dibujo(juego(["Ana", "Beto", "Carla", "Diego", "Elena"], { titulo: "Ganaron" })));
-    expect(ps).toHaveLength(3);
-    const [arriba, m] = ps as [Rect, Rect];
-    expect(m.y + m.h).toBe(800);
-    expect(m.y).toBeGreaterThanOrEqual(arriba.y + arriba.h + 16);
-  });
-
-  // Con muchos nombres el panel del medio sube y puede tapar el dibujo, por diseño: la lista entera se lee antes que la
-  // ilustración. Lo que no puede pasar es que pise el panel de arriba, pase del renglón de 800 o toque el QR.
+  // Con cualquier cantidad de ganadores el medio no sube de la franja: la ventana del arte queda libre. Lo que no entra se
+  // resuelve con los primeros nombres, "y N más" y dónde está la lista completa.
   it.each([
-    ["doce ganadores, en dos columnas", Array.from({ length: 12 }, (_, i) => `Persona ${i + 1}`), { titulo: "Ganaron" }],
-    ["cuarenta nombres, como un orden de turnos", Array.from({ length: 40 }, (_, i) => `Persona ${i + 1}`), { titulo: "Ganaron" }],
-    ["un nombre de 60 letras seguidas", ["A".repeat(60)], {}],
-  ])("%s: el panel del medio sube desde 800 sin pisar el de arriba ni el QR", async (_n, personas, extra) => {
-    const con = await dibujo(juego(personas, extra));
+    ["cinco", 5],
+    ["ocho", 8],
+    ["doce", 12],
+    ["veinte", 20],
+    ["cincuenta", 50],
+    ["trescientos", 300],
+  ])("%s ganadores: ningún panel pisa la ventana del arte, ni el de arriba, ni la tarjeta del QR", async (_n, n) => {
+    const personas = Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", completa: FRASES.es }));
     const ps = paneles(con);
     expect(ps).toHaveLength(3);
-    const [arriba, m, abajo] = ps as [Rect, Rect, Rect];
-    expect(m.y + m.h).toBeLessThanOrEqual(800);
+    const [arriba, m, esc] = ps as [Rect, Rect, Rect];
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    expect(m.y).toBeGreaterThanOrEqual(556);
     expect(m.y).toBeGreaterThanOrEqual(arriba.y + arriba.h + 16);
-    expect(abajo.y).toBeGreaterThan(816);
+    // El panel de la lista y el de Escaneá no se pisan (con sus sombras) ni tocan la tarjeta del QR (544 a 996, 816 a 1268).
+    expect(m.x + m.w + 12).toBeLessThanOrEqual(544);
+    for (const r of [m, esc]) if (r.x >= 544) expect(r.y + r.h + 12).toBeLessThan(816);
     expect(con).toContain("fillRect(544,816,452,452)");
+    // Los nombres que se ven, enteros y en orden.
+    const vistos = con.filter((x) => /^fillText\(Persona \d+,/.test(x)).map((x) => x.slice(9).split(",")[0]);
+    expect(vistos).toEqual(personas.slice(0, vistos.length));
+    expect(vistos.length).toBeGreaterThanOrEqual(Math.min(n, 4));
+    // Si faltan, "y N más" con el N justo y la frase de dónde está la lista completa; si no, ninguna de las dos.
+    const mas = con.find((x) => /^fillText\(y \d+ más,/.test(x));
+    if (vistos.length < n) {
+      expect(mas, "y N más").toBeDefined();
+      expect(Number(/y (\d+) más/.exec(mas ?? "")?.[1])).toBe(n - vistos.length);
+      expect(con.some((x) => x.startsWith("fillText(") && x.includes("QR."))).toBe(true);
+    } else expect(mas).toBeUndefined();
   });
 
-  it("un nombre de 60 letras seguidas no pisa la ventana del arte", async () => {
-    const ps = paneles(await dibujo(juego(["A".repeat(60)])));
+  it.each([5, 12, 50])("%i ganadores sin QR (el enlace no entra): la lista de lado a lado en la franja, sin pisar la tarjeta de abajo, y la frase dice que está en el mensaje", async (n) => {
+    const personas = Array.from({ length: n }, (_, i) => `Persona ${i + 1}`);
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", completa: FRASES.es, enlace: "https://tinkazo.app/verificar.html#" + "x".repeat(4000) }));
+    const ps = paneles(con);
+    // Arriba y la lista: la tarjeta sin QR no es un panel de tinta.
+    expect(ps).toHaveLength(2);
     ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    const m = ps[1] as Rect;
+    expect(m.y).toBeGreaterThanOrEqual(556);
+    expect(m.y + m.h + 12).toBeLessThan(968);
+    expect(con).not.toContain("fillRect(544,816,452,452)");
+    if (n > 8) expect(con.some((x) => x.includes("mensaje."))).toBe(true);
+    expect(con.some((x) => x.includes("QR."))).toBe(false);
+  });
+
+  it("la frase de dónde está la lista es la del QR con QR y la del mensaje sin él", async () => {
+    const personas = Array.from({ length: 20 }, (_, i) => `Persona ${i + 1}`);
+    const conQr = (await dibujo(juego(personas, { titulo: "Ganaron", completa: FRASES.es }))).join("\n");
+    expect(conQr).toContain("QR.,");
+    expect(conQr).not.toContain("mensaje.");
+    const sinQr = (await dibujo(juego(personas, { titulo: "Ganaron", completa: FRASES.es, enlace: "https://tinkazo.app/verificar.html#" + "x".repeat(4000) }))).join("\n");
+    expect(sinQr).toContain("mensaje.");
+    expect(sinQr).not.toContain("QR.");
+  });
+
+  it("sin `completa` no hay frase, solo 'y N más'", async () => {
+    const personas = Array.from({ length: 20 }, (_, i) => `Persona ${i + 1}`);
+    const con = await dibujo(juego(personas, { titulo: "Ganaron" }));
+    expect(con.some((x) => /^fillText\(y \d+ más,/.test(x))).toBe(true);
+    expect(con.some((x) => x.includes("lista completa"))).toBe(false);
+  });
+
+  it("el nombre es lo más grande del medio con muchos ganadores: más que Ganaron, que y N más, que la frase, que el premio y que Escaneá", async () => {
+    const personas = Array.from({ length: 12 }, (_, i) => `Persona ${i + 1}`);
+    const con = await dibujo(juego(personas, { titulo: "Ganaron", completa: FRASES.es, lineas: ["Premio: Polera", "Salieron entre 60 personas"] }));
+    const nombre = tamEn(con, con.findIndex((x) => x.startsWith("fillText(Persona 1,")));
+    expect(nombre).toBeGreaterThanOrEqual(36);
+    for (const t of ["fillText(Ganaron,", "fillText(y ", "fillText(La lista", "fillText(Premio: Polera,", "fillText(Salieron entre", "fillText(Escaneá", "fillText(tinkazo.app,"]) {
+      const i = con.findIndex((x) => x.startsWith(t));
+      expect(i, t).toBeGreaterThan(0);
+      expect(tamEn(con, i), t).toBeLessThan(nombre);
+    }
+  });
+
+  it("un solo ganador con un nombre de 60 letras seguidas y un premio de 60 letras, sin sello: nunca sube sobre el dibujo", async () => {
+    const ps = paneles(await dibujo(juego(["A".repeat(60)], { lineas: ["Se lleva: " + "P".repeat(50), "Salió entre 85 personas", "Sin sello: no se puede comprobar."] })));
+    expect(ps.length).toBeGreaterThanOrEqual(3);
+    ps.forEach((r) => expect(seCruzaConElArte(r)).toBe(false));
+    // El de arriba es el primero: el medio y Escaneá no suben de 556.
+    ps.slice(1).forEach((r) => expect(r.y).toBeGreaterThanOrEqual(556));
+  });
+
+  it("la tarjeta que reemplaza al QR: su texto no llega a la calcomanía de tinkazo.app, por largo que sea (un orden de turnos sin sello)", async () => {
+    const largo = "Este orden no se selló antes del sorteo, así que no se puede comprobar.";
+    for (const sinQr of [largo, "Para comprobarlo, abrí el enlace que va con esta foto.", "Short"]) {
+      const con = await dibujo(juego(["Ana", "Beto", "Nora"], { titulo: "Ganaron", sinQr, enlace: "https://tinkazo.app/verificar.html#" + "x".repeat(4000) }));
+      // Los renglones del texto: a 124 px del borde, con la letra de 800 y debajo de la tarjeta (y 968).
+      const renglones = trazosDe(con).filter((t) => t.x === 124 && t.y > 968 && t.peso === 800);
+      expect(renglones.length, sinQr).toBeGreaterThan(0);
+      const tam = renglones[0]?.px ?? 0;
+      // El texto empieza 40 px debajo del borde de la tarjeta; la calcomanía, 112 px arriba del pie (y 1268): 16 px de hueco.
+      expect(renglones.length * Math.round(tam * 1.15), sinQr).toBeLessThanOrEqual(1268 - 112 - 16 - (968 + 40));
+    }
   });
 
   it("la fila de abajo no cambia: 'Escaneá' a la izquierda y la tarjeta del QR en 544 a 996 × 816 a 1268", async () => {
@@ -582,23 +686,14 @@ describe("el diálogo: dos fotos lado a lado y se comparte la elegida", () => {
     expect(bajadas).toEqual(["tinkazo-sorteo-278.png"]);
   });
 
-  it("con dos y tres ganadores: las dos fotos, la del juego elegida", async () => {
-    for (const ganadores of [["Ana", "Beto"], ["Ana", "Beto", "Nora"]]) {
-      const dlg = await abrir({ juego: "race", ganadores });
-      expect(opciones(dlg)).toHaveLength(2);
-      expect(opciones(dlg)[0]?.getAttribute("aria-pressed")).toBe("true");
-      dlg.close();
-    }
-  });
-
-  it("con más de tres ganadores, la foto de siempre sola: la lista no entra al lado del dibujo y lo taparía", async () => {
-    for (const ganadores of [["Ana", "Beto", "Nora", "Luz"], Array.from({ length: 7 }, (_, i) => `Persona ${i + 1}`)]) {
+  it("con cualquier cantidad de ganadores: las dos fotos, la del juego elegida, y se pide su dibujo", async () => {
+    for (const n of [2, 3, 4, 7, 12, 50]) {
       h.fondo.mockClear();
-      const dlg = await abrir({ juego: "race", ganadores });
-      expect(opciones(dlg)).toEqual([]);
-      expect(dlg.querySelectorAll(".cmp-fotos img.cmp-png")).toHaveLength(1);
-      // Ni siquiera se dibuja: el fondo del juego no se pide.
-      expect(h.fondo).not.toHaveBeenCalled();
+      const dlg = await abrir({ juego: "race", ganadores: Array.from({ length: n }, (_, i) => `Persona ${i + 1}`) });
+      expect(opciones(dlg), `${n}`).toHaveLength(2);
+      expect(opciones(dlg)[0]?.getAttribute("aria-pressed")).toBe("true");
+      expect(dlg.querySelector(".cmp-fotos")?.classList.contains("varias")).toBe(true);
+      expect(h.fondo.mock.calls.some((c) => c[1] === "race")).toBe(true);
       dlg.close();
     }
   });

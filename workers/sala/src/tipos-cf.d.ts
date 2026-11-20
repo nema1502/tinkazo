@@ -2,7 +2,7 @@
  * `@cloudflare/workers-types` instalado, este es el mínimo que el typecheck necesita; si algún día entra
  * el paquete, este archivo se reemplaza por `"types": ["@cloudflare/workers-types"]` en el tsconfig. */
 declare module "cloudflare:workers" {
-  export class DurableObject<State = unknown, Env = unknown> {
+  export class DurableObject<Env = unknown, State = unknown> {
     ctx: DurableObjectState;
     env: Env;
     constructor(state: DurableObjectState, env: Env);
@@ -12,6 +12,13 @@ declare module "cloudflare:workers" {
     webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): void;
     webSocketError(ws: WebSocket, error: unknown): void;
   }
+}
+
+/** El contexto del evento que Cloudflare pasa al export default del servicio (`fetch(req, env, ctx)`). */
+interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+  passThroughOnException(): void;
+  props<T>(): T;
 }
 interface ExportedHandler<Env = unknown> {
   fetch?(request: Request, env: Env, ctx: { waitUntil(p: Promise<unknown>): void; passThroughOnException(): void }): Response | Promise<Response>;

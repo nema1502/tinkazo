@@ -172,6 +172,21 @@ describe("antes de pedir nada", () => {
     const m3 = await montar({ leerPublico: async () => ({ ok: false, motivo: "red" }) });
     await vi.waitFor(() => expect(mensaje(m3)).toBe(t("eqpRed")));
   });
+  it("mientras busca la cuenta guardada dice Retomando tu cuenta, solo si hay una sesión guardada", async () => {
+    for (const guardada of [true, false]) {
+      let buscando = false;
+      const m = await montar({
+        hayCuentaGuardada: () => guardada,
+        cuentaRecordada: () => {
+          buscando = true;
+          return new Promise<string | null>(() => undefined);
+        },
+      });
+      await vi.waitFor(() => expect(buscando).toBe(true));
+      // Sin nada guardado no hay nada que retomar: la búsqueda termina enseguida, y el aviso era un parpadeo de más.
+      expect(mensaje(m), String(guardada)).toBe(guardada ? t("eqpRetomando") : "");
+    }
+  });
 });
 
 describe("tu cuenta", () => {

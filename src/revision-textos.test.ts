@@ -2,6 +2,10 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
+import { textoDeLaPortadaConRetiro } from "./costo-del-retiro-portada";
+
+/** La respuesta de la portada con los valores de producción (docs/operacion.md): retirar 0,50 y la comisión del 2 % con mínimo de 1,50. */
+const PORTADA_CON_COSTO = textoDeLaPortadaConRetiro(5_000_000n, { pb: 200n, minimo: 15_000_000n }).es;
 
 const leer = (ruta: string): string => readFileSync(new URL(`../${ruta}`, import.meta.url), "utf8");
 const t = (idioma: "es" | "en", clave: string): string => String(T[idioma][clave]);
@@ -30,6 +34,8 @@ describe("revisión de redacción de los textos visibles", () => {
       for (const clave of Object.keys(TEXTOS_MODO_OFICIAL.es)) {
         if (!html.includes(`data-i="${clave}"`)) continue;
         vistas.push(`${pagina}:${clave}`);
+        // La portada con el costo de retirar y la comisión prendidos: el build de producción exige esa frase en el HTML.
+        if (pagina === "index.html" && clave === "faq3a" && html.includes(`data-i="faq3a">${PORTADA_CON_COSTO}<`)) continue;
         if (!html.includes(`data-i="${clave}">${t("es", clave)}<`)) desfasadas.push(`${pagina}, data-i="${clave}"`);
       }
     }

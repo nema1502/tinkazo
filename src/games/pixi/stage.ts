@@ -3,9 +3,10 @@ import { gsap } from "gsap";
 import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, anotarGolpe, auditaCon, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
+import { LCOLORS, anotarGolpe, auditaCon, drawAvatar, largoNominal, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
-import { beep, note } from "../../sound";
+import { beep, callarEfectos, note } from "../../sound";
+import { anotarCierre, avisarCorona, relojDelShow, tomarHorario } from "../en-hora";
 import { finalPropio } from "../../sonidos/carrera-eleccion";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
@@ -14,6 +15,7 @@ import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
 import { esResultadoDeTurnos } from "../../modos/turnos";
+import { altoCartelDe, centroCartel, filasCorona, filasEnCartel, nombresEnCartel } from "./stage-cartel";
 import { rotuloDelPanel } from "./rotulo";
 import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
 import { ajusteGanador, ENTRADA_RELATOR, nombreDeLaFicha, sobrepasoRelator } from "./ganador-altura";
@@ -146,14 +148,10 @@ export const MONO = "ui-monospace, Consolas, monospace";
 export { CHIP_SCALE, escalaChipLegible } from "./letra";
 
 /**
- * Las filas del cartel de la corona con `m` premios: uno solo, grande; o hasta
- * tres nombres y un "y N más". La altura de cada una, en unidades `k`.
+ * Las filas del cartel de la corona y todo lo que se cuenta de él (cuántos
+ * nombres muestra, su alto, dónde va su centro) vive en `stage-cartel.ts`, aparte para poder probarlo sin una placa de video, igual que `letra.ts`.
  */
-export const filasCorona = (m: number, k: number): number[] => {
-  if (m === 1) return [60 * k];
-  const n = m <= 3 ? m : 4;
-  return Array.from({ length: n }, (_, i) => (i === 0 ? 46 : 38) * k * 1.22);
-};
+export { altoCartelDe, centroCartel, filasCorona, filasEnCartel, nombresEnCartel } from "./stage-cartel";
 
 export interface PixiStage {
   app: Application;
@@ -265,6 +263,12 @@ export interface PixiStage {
     cuerpo?: () => { x: number; y: number; w: number; h: number } | null,
     estado?: () => { activa: boolean; tiempo: number; fase: string }): void;
   run(fn: (dt: number, now: number) => void): void;
+  /**
+   * El momento decisivo del juego: desde ahí se empieza a ver quién gana (o, con varios premios, quién gana alguno). El
+   * juego da su propio reloj y la hora, en ese reloj. Con el final retenido (el celular de quien mira, `en-hora.ts`) el
+   * estadio no deja pasar el juego de ese momento hasta que se suelta. Sin decirlo, la mitad del juego.
+   */
+  decisivoEn(reloj: () => number, desde: number): void;
   onResize(fn: () => void): void;
   /** Algo que hay que soltar al cerrar: una línea de tiempo, un sonido. */
   onCleanup(fn: () => void): void;
@@ -455,6 +459,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   base.style.visibility = "hidden";
   delete base.dataset.cartel;
   delete base.dataset.mitad;
+  // La hora del arranque y de la corona son de este show (las lee el recorrido de los espectadores).
+  delete base.dataset.arranco;
+  delete base.dataset.corona;
+  delete base.dataset.retenido;
   document.getElementById("pixi-canvas")?.remove();
   const view = document.createElement("canvas");
   view.id = "pixi-canvas";
@@ -822,6 +830,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     base.dataset[key] = value;
     view.dataset[key] = value;
   };
+  /** Ya se vio el cartel de quien gana en este show. */
+  let coronaVista = false;
+  /** El momento decisivo que dijo el juego (`decisivoEn`), en su propio reloj. */
+  let decisivo: { reloj: () => number; desde: number } | null = null;
 
   let rafId = 0;
   let dead = false;
@@ -961,6 +973,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
     textoGanador = nombreDeLaFicha(all);
+    /** El modo del sorteo, fijo para toda la corona: el tope de nombres del cartel depende de él. */
+    const deTurnos = esResultadoDeTurnos();
     /** Cuándo entra cada premio después del primero, en segundos de la corona. */
     let entradas: number[] = [];
     const sonados = new Set<number>();
@@ -975,21 +989,26 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
-      // Hasta tres nombres y "y N más", igual que el relator.
-      const resto = all.length - 3;
-      const lines = all.length <= 3 ? all : [...all.slice(0, 3), getLang() === "es" ? `y ${resto} más` : `and ${resto} more`];
+      // El tope de nombres (`nombresEnCartel`, `stage-cartel.ts`): hasta ocho en un orden de turnos — seis en un celular
+      // vertical, donde no caben ocho filas — y tres en un sorteo de premios, como siempre. Con más, los primeros y
+      // «y N más». El relato no contradice: en un orden no nombra a nadie («El orden quedó listo») y en los premios nombra
+      // el mismo tres (`winnersLabel`, `overlay.ts`).
+      const nombres = nombresEnCartel(all.length, deTurnos, portrait());
+      const resto = all.length - nombres;
+      const lines = resto > 0 ? [...all.slice(0, nombres), getLang() === "es" ? `y ${resto} más` : `and ${resto} more`] : all;
       const big = lines.length === 1;
       // Con varios premios, el primero un poco más grande y cada uno con su
       // cara: antes eran renglones chicos e iguales, sin cara, y desde el fondo
-      // no se sabía quién era quién ni cuál era el primero.
-      const conCara = (i: number): boolean => !big && (all.length <= 3 || i < 3);
+      // no se sabía quién era quién ni cuál era el primero. En un orden, cada
+      // nombre del orden lleva su cara; solo el renglón del resto no.
+      const conCara = (i: number): boolean => !big && i < nombres;
       const talla = (i: number): number => (big ? 54 : i === 0 ? 46 : 38) * k * (compartir ? 1.2 : 1);
       const nameTexts = lines.map((n, i) =>
         text(conCara(i) ? `${i + 1}. ${n}` : n, { fontSize: talla(i), fontWeight: "900", fill: INK }),
       );
       const cara = (i: number): number => (conCara(i) ? talla(i) * 1.1 : 0);
       const hueco = (i: number): number => (conCara(i) ? cara(i) + 12 * k : 0);
-      const altos = filasCorona(all.length, k);
+      const altos = filasCorona(filasEnCartel(all.length, deTurnos, portrait()), k);
       // El cartel entra con un rebote (`REBOTE`: la elástica llega a 1,18 de su tamaño) y un poco girado, y a ese tamaño
       // tiene que entrar en la pantalla: en un celular de 390 rebotaba a 414 y se cortaba contra los dos costados. Su ancho
       // máximo sale de ahí (y no del 86 % de la pantalla de antes), descontando su sombra y lo que da el giro.
@@ -1110,7 +1129,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         plate.addChild(fila);
         renglones.push(fila);
       });
-      plate.position.set(sw() / 2, portrait() ? sh() * 0.24 : sh() * 0.26);
+      plate.position.set(sw() / 2, centroCartel(ph, k, sh(), portrait()));
       tl.clear();
       tl.fromTo(flash, { alpha: 0.9 }, { alpha: 0, duration: 0.5, ease: "power2.out" }, 0)
         .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, entraCartel)
@@ -1138,8 +1157,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // selector de duración estira, y en "épico" el tercer premio entraba
       // cuando el cartel ya se iba.
       const real = (s: number): number => s / paceFactor();
-      entradas = big ? [] : renglones.slice(1).map((_, i) => real(0.55 + (i + 1) * 0.35));
-      if (!big) {
+      // En un orden de turnos los renglones no llegan de a uno: es una lista, no premios que se van entregando, y con
+      // ocho turnos el último entraría cuando el cartel ya se va. Cada premio que suena es de los premios.
+      entradas = big || deTurnos ? [] : renglones.slice(1).map((_, i) => real(0.55 + (i + 1) * 0.35));
+      if (!big && !deTurnos) {
         renglones.forEach((fila, i) => {
           if (i === 0) return;
           tl.fromTo(fila, { alpha: 0, x: x0 - 40 * k }, { alpha: 1, x: x0, duration: real(0.35), ease: "back.out(2)" }, real(0.55 + i * 0.35));
@@ -1193,6 +1214,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         lastFoco = foco;
         root.visible = true;
         plate.visible = placa && (conGolpe ? tg >= 0 : tp >= 0);
+        // La primera vez que se ve el cartel de quien gana: la hora queda anotada y la sala se entera (`en-hora.ts`).
+        if (plate.visible && !coronaVista) {
+          coronaVista = true;
+          mark("corona", String(Date.now()));
+          avisarCorona();
+        }
         // `?auditar=`: cuándo cae cada parte del golpe (la luz, el cartel), en segundos del reloj de la página: lo lee `scripts/medir-drama-carrera.mjs`.
         if (params.get("auditar")) {
           if (plate.visible) anotarGolpe("cartel");
@@ -1453,12 +1480,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     placaBajo: (m) => {
       const k = u();
       // El alto de verdad del cartel, si la corona de `m` premios ya se armó; si no, la estimación con las mismas partes.
-      // Hasta el 26 de octubre de 2026 esto era 40k + filas + 16k, de cuando «GANA» era chico: con «GANA» a 48 px en 1080
-      // el cartel bajaba 12 px más de lo que decía, y lo protegido quedaba debajo de él.
+      // El conteo de renglones es el del cartel (`stage-cartel.ts`): en un orden de turnos son muchos más que antes, y la
+      // protección de la cámara tiene que usarlos, para que el cartel no tape a nadie. Hasta el 26 de octubre de 2026 esto
+      // era 40k + filas + 16k, de cuando «GANA» era chico: con «GANA» a 48 px en 1080 el cartel bajaba 12 px más de lo que
+      // decía, y lo protegido quedaba debajo de él.
+      const filas = filasEnCartel(m, esResultadoDeTurnos(), portrait());
       const ph = cartelAlto && cartelAlto.m === m && cartelAlto.k === k
         ? cartelAlto.ph
-        : 18 * k + 1.2 * letra(LEGIBLE.prin) + filasCorona(m, k).reduce((a, h) => a + h, 0) + 20 * k;
-      return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
+        : altoCartelDe(filas, k, 1.2 * letra(LEGIBLE.prin));
+      return centroCartel(ph, k, sh(), portrait()) + ph / 2 + 10 * k;
     },
     ganadorEn(fn, cuerpo, estado) {
       const T = (window as unknown as { __tinkazo?: { ganador: unknown; cuerpoGanador: unknown; estadoGanador: unknown } }).__tinkazo;
@@ -1491,6 +1521,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     face, text, chip, tags, batch, breath, mark, crown,
     onResize: (fn) => resizers.push(fn),
     onCleanup: (fn) => cleaners.push(fn),
+    decisivoEn(reloj, desde) {
+      decisivo = { reloj, desde };
+    },
     run(fn) {
       loopFn = fn;
       let prev = 0;
@@ -1499,13 +1532,42 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
       let codigo = 0;
       const pace = paceFactor();
+      // Con horario (la sala lanzada desde la espera, el celular de quien mira), el juego sigue la hora del ancla y no
+      // la de cada cuadro (`en-hora.ts`). Sin horario, como siempre.
+      const conHora = tomarHorario();
+      const reloj = conHora ? relojDelShow(conHora.horario, { ritmo: pace, avisos: conHora.avisos, callar: callarEfectos }) : null;
+      /** Los segundos de juego corridos: el momento decisivo de un juego que no dice el suyo es la mitad. */
+      let tJuego = 0;
+      const mitad = largoNominal() / 2;
+      const enElDecisivo = (): boolean => (decisivo ? decisivo.reloj() >= decisivo.desde : mitad > 0 && tJuego >= mitad);
+      if (reloj) {
+        const visibilidad = (): void => (document.hidden ? reloj.esconder(performance.now()) : reloj.mostrar(performance.now()));
+        document.addEventListener("visibilitychange", visibilidad);
+        cleaners.push(() => document.removeEventListener("visibilitychange", visibilidad));
+        anotarCierre(() => stage.cleanup());
+        cleaners.push(() => anotarCierre(null));
+      }
       const cuadro = (now: number): void => {
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         if (prev) gobernador.cuadro(now - prev, codigo);
         const c0 = performance.now();
         prev = now;
-        if (start < 0) start = now;
-        loopFn?.(dt, (now - start) / 1000);
+        if (start < 0) {
+          start = now;
+          if (!reloj) mark("arranco", String(Date.now()));
+        }
+        if (reloj) {
+          const primero = !reloj.estado.arranco;
+          reloj.cuadro(now, (d, t) => {
+            if (dead) return false;
+            loopFn?.(d, t);
+            tJuego += d;
+            return !dead;
+          }, enElDecisivo);
+          // La hora (del reloj de la página) del segundo 0 del juego: con el horario, la del ancla, no la del cuadro.
+          if (primero) mark("arranco", String(Math.round(Date.now() - (performance.now() - reloj.inicioDelJuego()))));
+          if (reloj.estado.retenidoS > 0) mark("retenido", reloj.estado.retenidoS.toFixed(2));
+        } else loopFn?.(dt, (now - start) / 1000);
         if (dead) return;
         // El pico del zoom de emoción, en la hora de la cámara, para el auditor
         // de emoción: si no hubo zoom de emoción, no se anota nada.

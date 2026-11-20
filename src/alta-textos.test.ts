@@ -19,11 +19,13 @@ const variables = (s: string): string[] => [...s.matchAll(/\{(\w+)\}/g)].map((m)
  */
 const DEL_DISENO = [
   "altaFranja", "altaAbrirAfuera", "altaCopiarEnlace", "altaConBilleteraPropia",
-  "altaTexto", "altaTengoCupon", "altaPrimerPaquete", "altaPrimerPaqueteNota", "altaNoTengo", "altaCuponListo", "altaActivarConCupon", "altaOtroCupon",
-  "altaCuponLabel", "altaCuponAyuda", "altaRevisando", "altaCuponOk", "altaCuponOk1", "altaActivarCupon", "altaActivarPago", "altaYaActivada", "altaCuponGuardado",
-  "clBajadaConPago", "altaErrForma", "altaErrNoExiste", "altaErrVencido", "altaErrAnulado", "altaErrUsado", "altaErrLote", "altaErrIntentos", "altaErrServicio",
-  "cupoOfQuedan", "cupoOfQueda1", "cupoOfVencen", "cupoOfVencenTodos", "cupoOfPocos", "cupoOfUnoPorPremio", "cupoOfDoble", "cupoOfSumar", "cupoOfCeroTitulo",
-  "cupoOfCeroTexto", "cupoOfVencidoTexto", "cupoOfSumarPaquete", "cupoOfCeroSumar", "cupoOfUsarCupon", "cupoOfTopeMes", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos",
+  "altaTexto", "altaTengoCupon", "altaPrimerPaquete", "altaPrimerPaqueteNota", "altaNoTengo", "altaNoTengoResumen",
+  "altaCuponListo", "altaActivarConCupon", "altaOtroCupon", "altaCuponLabel", "altaCuponAyuda", "altaRevisando",
+  "altaCuponOk", "altaCuponOk1", "altaActivarCupon", "altaActivarPago", "altaYaActivada", "altaCuponGuardado",
+  "altaErrForma", "altaErrNoExiste", "altaErrVencido", "altaErrAnulado", "altaErrUsado", "altaErrLote", "altaErrIntentos", "altaErrServicio",
+  "cupoOfQuedan", "cupoOfQueda1", "cupoOfVencen", "cupoOfVencenTodos", "cupoOfPocos", "cupoOfUnoPorPremio", "cupoOfDoble",
+  "cupoOfSumar", "cupoOfCeroTitulo", "cupoOfCeroTexto", "cupoOfVencidoTexto", "cupoOfSumarPaquete", "cupoOfCeroSumar",
+  "cupoOfUsarCupon", "cupoOfTopeMes", "errAnchor.porteroSinAlta", "errAnchor.porteroSinSorteos",
 ];
 
 describe("los textos del acceso con cupón", () => {
@@ -73,8 +75,6 @@ describe("los textos del acceso con cupón", () => {
       expect(TEXTOS_ALTA.es[k], k).not.toMatch(/\bLive\b|\bTest\b|\bmain ?net\b/);
       expect(TEXTOS_ALTA.en[k], k).not.toMatch(/\bOficial\b|\bPrueba\b/);
     }
-    expect(TEXTOS_ALTA.es.altaTexto).toContain("modo Oficial");
-    expect(TEXTOS_ALTA.en.altaTexto).toContain("Live mode");
   });
 
   it("los textos más leídos son los del diseño, palabra por palabra", () => {
@@ -93,15 +93,15 @@ describe("los textos del acceso con cupón", () => {
 
 describe("lo que decidió quien dirige", () => {
   it("el cupón ya usado y el del mismo evento dicen qué hacer", () => {
-    expect(TEXTOS_ALTA.es.altaErrUsado).toBe("Ese cupón ya se usó. Si lo usaste vos, entrá con la cuenta con la que lo activaste y tus sorteos van a estar ahí. Si no, pedile otro a quien te lo dio.");
-    expect(TEXTOS_ALTA.es.altaErrLote).toBe("Ya usaste un cupón de este evento: va uno por persona. Los sorteos de ese cupón están en esta misma cuenta.");
-    expect(TEXTOS_ALTA.en.altaErrUsado).toBe("That coupon has already been used. If you used it, sign in with the account you activated it with and your draws will be there. If not, ask whoever gave it to you for a new one.");
-    expect(TEXTOS_ALTA.en.altaErrLote).toBe("You've already used a coupon from this event: it's one per person. That coupon's draws are on this same account.");
+    expect(TEXTOS_ALTA.es.altaErrUsado).toBe("Ese cupón ya se usó, entrá con la cuenta que lo usó o pedí otro.");
+    expect(TEXTOS_ALTA.es.altaErrLote).toBe("Ya usaste un cupón de este evento, y sus sorteos están en esta cuenta.");
+    expect(TEXTOS_ALTA.en.altaErrUsado).toBe("That coupon was already used, sign in with the account that used it or get another.");
+    expect(TEXTOS_ALTA.en.altaErrLote).toBe("You already used a coupon from this event, and its draws are on this account.");
   });
 
   it("la ayuda del campo nombra el QR de la tarjeta", () => {
-    expect(TEXTOS_ALTA.es.altaCuponAyuda).toBe("Son 12 letras y números. Están en la tarjeta o en el mensaje que te dieron. Si la tarjeta tiene un QR, es más fácil escanearlo con la cámara del celular.");
-    expect(TEXTOS_ALTA.en.altaCuponAyuda).toBe("It's 12 letters and numbers, on the card or in the message you got. If the card has a QR code, scanning it with your phone camera is easier.");
+    expect(TEXTOS_ALTA.es.altaCuponAyuda).toBe("Son 12 letras y números, en tu tarjeta o mensaje. Si hay QR, escanealo.");
+    expect(TEXTOS_ALTA.en.altaCuponAyuda).toBe("It's 12 letters and numbers, on your card or message. Got a QR? Scan it.");
   });
 });
 

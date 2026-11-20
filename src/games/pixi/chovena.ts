@@ -12,7 +12,7 @@ import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
-import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
+import { FORMA_CHOVENA, decisivoDeLaChovena, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
 import { esResultadoDeTurnos } from "../../modos/turnos";
@@ -290,6 +290,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
   const FOCO = tiemposFoco(story.arc);
   setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
+  /**
+   * El momento decisivo (`decisivo.ts`): el último corte de la final, donde uno de los dos se suelta. Con varios premios
+   * salen primero los que no ganan y después los premiados: el corte que deja solo a premiados ya los nombra, desde que
+   * se corta la música en él.
+   */
+  const DECISIVO = decisivoDeLaChovena(n, prized, evs, n >= 2 ? FS0 : FD0);
   /** La hora del golpe en segundos de juego: ahí los que salieron se paran a festejar. */
   const T_GOLPE = T_CROWN + FOCO.golpe / paceFactor();
   const pace = paceFactor();
@@ -654,6 +660,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
 
   /* ------------------------------------------------------------ el relator */
   let tAll = 0, tHold = 0;
+  S.decisivoEn(() => tAll, DECISIVO);
   /** Cuándo fue el último corte: el fogonazo, el cartel y el tambaleo cuentan desde ahí. */
   let stopAt = -9;
   let crowned = false, dead = false;

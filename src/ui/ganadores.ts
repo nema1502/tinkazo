@@ -50,6 +50,12 @@ const boton = (id: string): HTMLButtonElement | null => {
 let cerrado = false;
 /** El modo Orden de turnos fija la cantidad a la de la lista (`fijarGanadores`). */
 let fijo = false;
+/** Una campaña de empresa fija la cantidad a la de sus premios firmados (`fijarPorCampana`): la sala no acepta otra. */
+let deCampana = false;
+/** El modo stand (`ponerContadorDelStand`): el contador se llama Cuántos salen y el tope es la lista de la ronda. */
+let enElStand = false;
+/** Cuántas líneas tiene la lista ahora (`lineasDeLaLista`, desde `renderNames`). Solo cuenta en el stand. */
+let lineas = 0;
 
 /**
  * Cuántos ganadores se piden, ya acotado: lo que leen el sello, el sorteo, el resumen y las bases. Sin el campo (la
@@ -59,13 +65,25 @@ export function ganadoresPedidos(): number {
   return acotar(campo()?.value);
 }
 
-/** El número visible, el atajo elegido y los botones que se pueden tocar con el tope de la red. */
+/** Lo que se ofrece: el tope de la red y, en el stand, además las líneas de la lista de la ronda. Nunca menos de 1. */
+const topeAhora = (): number => (enElStand ? Math.max(1, Math.min(lineas, topeDeGanadores())) : topeDeGanadores());
+
+/**
+ * Lo que muestra el contador. En el stand, lo pedido sin pasar de la lista: lo que va a salir en la ronda. Lo pedido
+ * (`#nw`) no se toca, y si la lista vuelve a crecer, vuelve a lo pedido.
+ */
+const mostrado = (): number => (enElStand ? Math.min(ganadoresPedidos(), topeAhora()) : ganadoresPedidos());
+
+/** El número visible, el atajo elegido y los botones que se pueden tocar con el tope que corresponde. */
 function sincronizar(): void {
-  const tope = topeDeGanadores();
-  const actual = ganadoresPedidos();
+  const tope = topeAhora();
+  const actual = mostrado();
+  // En el stand el contador aparece cuando la ronda se puede empezar: con menos de dos nombres sería un control sin uso.
+  const control = document.getElementById("ganadores-control");
+  if (control && enElStand) control.hidden = lineas < 2;
   const visible = document.getElementById("nw-valor");
   if (visible) visible.textContent = String(actual);
-  const bloqueado = cerrado || fijo;
+  const bloqueado = cerrado || fijo || deCampana;
   for (const b of atajos()) {
     const n = Number(b.dataset.n);
     b.hidden = n > tope;
@@ -88,7 +106,7 @@ export function ponerGanadores(n: number): void {
 
 function aplicarBloqueo(): void {
   const el = campo();
-  if (el) el.disabled = cerrado || fijo;
+  if (el) el.disabled = cerrado || fijo || deCampana;
   sincronizar();
 }
 
@@ -107,12 +125,60 @@ export function fijarGanadores(si: boolean): void {
   aplicarBloqueo();
 }
 
-/** El aviso del tope, solo cuando un valor anterior lo superaba y bajó. */
+/**
+ * Una campaña de empresa fija la cantidad de ganadoras a la de sus premios (`campana-pasar.ts`): el contador y los atajos
+ * quedan bloqueados, y apagar el modo de turnos no los suelta. Se apaga al sellar, al soltar el sello y al olvidar la campaña.
+ */
+export function fijarPorCampana(si: boolean): void {
+  deCampana = si;
+  aplicarBloqueo();
+}
+
+/** Si la cantidad está fija por una campaña. */
+export const fijoPorCampana = (): boolean => deCampana;
+
+/** El aviso del tope, solo cuando un valor anterior lo superaba y bajó. El stand no lo tiene: su tope es la lista. */
 function avisarTope(si: boolean): void {
   const nota = document.getElementById("nw-nota");
   if (!nota) return;
-  nota.textContent = si ? t("winnersTope").replace("{n}", String(topeDeGanadores())) : "";
-  nota.hidden = !si;
+  const ver = si && !enElStand;
+  nota.textContent = ver ? t("winnersTope").replace("{n}", String(topeDeGanadores())) : "";
+  nota.hidden = !ver;
+}
+
+/**
+ * Cuántas líneas tiene la lista ahora. La llama `renderNames` cada vez que la lista cambia. En el stand mueve el tope
+ * y muestra o esconde el contador. Fuera de él solo la anota.
+ */
+export function lineasDeLaLista(n: number): void {
+  lineas = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+  if (enElStand) sincronizar();
+}
+
+/**
+ * El contador del modo stand: Cuántos salen, desde 1 y con el tope en la lista de la ronda. El stand no sortea con
+ * premio ni habla de ganar: sus rondas dicen quién salió. La cantidad sigue en el mismo campo escondido (`#nw`), así
+ * que el sello de la ronda, la elección del juego y el resumen la leen sin enterarse. Lo pedido se respeta en cada
+ * ronda: con la lista más corta muestra y saca las que hay, y si vuelve a crecer, vuelve a lo pedido.
+ *
+ * Es de un solo sentido: salir del stand recarga la página, y el borrador (`participants.ts`) repone el valor y el
+ * rótulo de siempre. Llamarlo otra vez no hace nada.
+ */
+export function ponerContadorDelStand(): void {
+  if (enElStand) return;
+  enElStand = true;
+  const rotulo = document.getElementById("nw-etiqueta");
+  if (rotulo) {
+    rotulo.dataset.i = "standSalen";
+    rotulo.textContent = t("standSalen");
+  }
+  const grupo = document.getElementById("nw-atajos");
+  if (grupo) {
+    grupo.dataset.iAria = "standSalenAtajos";
+    grupo.setAttribute("aria-label", t("standSalenAtajos"));
+  }
+  avisarTope(false);
+  ponerGanadores(1);
 }
 
 let montado = false;
@@ -153,8 +219,9 @@ export function montarGanadores(): void {
     // Lo escuchan el borrador y el resumen de Sellar la lista.
     el.dispatchEvent(new Event("change", { bubbles: true }));
   };
-  boton("nw-menos")?.addEventListener("click", () => elegir(Math.max(1, ganadoresPedidos() - 1)));
-  boton("nw-mas")?.addEventListener("click", () => elegir(Math.min(tope, ganadoresPedidos() + 1)));
+  // Menos y más parten de lo que se ve: en el stand, con la lista más corta que lo pedido, no de lo pedido.
+  boton("nw-menos")?.addEventListener("click", () => elegir(Math.max(1, mostrado() - 1)));
+  boton("nw-mas")?.addEventListener("click", () => elegir(Math.min(topeAhora(), mostrado() + 1)));
   document.getElementById("nw-atajos")?.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-n]");
     if (!b) return;

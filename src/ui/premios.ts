@@ -1,5 +1,6 @@
 import { esc } from "../dom";
 import { getLang, onLangChange, t, T } from "../i18n";
+import { ganadoresPedidos } from "./ganadores";
 
 /**
  * "¿Qué sorteás?", con opciones.
@@ -70,7 +71,93 @@ export const esElegido = (valor: string, texto: string): boolean => clave(valor)
 export const alternar = (valor: string, texto: string): string => (esElegido(valor, texto) ? "" : texto);
 
 /** Lo que el cuadro tiene que decir al elegir: el premio, tal cual, cortado al largo que admite. */
-export const recortar = (texto: string, largo = 60): string => Array.from(texto).slice(0, largo).join("");
+export const recortar = (texto: string, largoMax = 60): string => Array.from(texto).slice(0, largoMax).join("");
+
+/* --------------------------------------------------------- un premio por lugar */
+
+/**
+ * Con más de un ganador hay un campo por lugar: el cuadro `#prize` es el del 1.er premio y los demás se arman acá
+ * (`actualizarLugares`). Al sellar, los campos se arman en un solo texto para `meta` (`armarMeta`), con un formato
+ * que el sitio sabe leer de vuelta (`lugaresDeMeta`): un `meta` que no lo siga se muestra tal cual, así los sorteos
+ * de antes se ven igual. Todo el texto es el que ya lee el resultado, la pantalla grande, el comprobante y la
+ * verificación: cada lugar va con su rótulo adentro.
+ */
+
+/** El largo que admite el texto del sello (`meta`), el mismo que recorta `intentoDeSello` (freeze.ts). */
+export const MAX_META = 160;
+
+/** Un lugar de los premios, como lo devuelve la lectura del texto armado. */
+export interface LugarDePremio {
+  /** El lugar, contando desde el 1: el 1.er premio, el 2.º premio y así. */
+  lugar: number;
+  /** Lo que se lleva, limpio de espacios de más. */
+  premio: string;
+}
+
+/** El rótulo de un lugar, en el idioma dado: «1.er premio», «2.º premio» / «1st prize», «2nd prize». */
+export const etiquetaDeLugar = (lugar: number, lang: "es" | "en"): string => T[lang].prizeLugar(lugar);
+
+/** Cuántos caracteres tiene un texto contando por letras: un emoji vale una, no dos. */
+const largoDe = (s: string): number => Array.from(s).length;
+
+/** Un texto cortado a `max` letras sin partir una. */
+const recortarA = (s: string, max: number): string => Array.from(s).slice(0, max).join("");
+
+/**
+ * Arma el texto que va al sello con el premio de cada lugar. Con un solo lugar con texto queda tal cual: es el sello
+ * de siempre y un `meta` viejo no se distingue de uno nuevo con un solo premio. Con varios, cada uno con su rótulo
+ * («1.er premio: Bici, 2.º premio: Termo»), dentro de los 160 caracteres que admite `meta`: el lugar que no entra
+ * se queda fuera.
+ */
+export function armarMeta(lugares: readonly string[], lang: "es" | "en", max = MAX_META): string {
+  const conTexto = lugares
+    .map(limpio)
+    .map((premio, i) => ({ lugar: i + 1, premio }))
+    .filter((x) => x.premio !== "");
+  if (conTexto.length === 0) return "";
+  if (conTexto.length === 1) return recortarA(conTexto[0]?.premio ?? "", max);
+  const partes: string[] = [];
+  for (const { lugar, premio } of conTexto) {
+    const parte = `${etiquetaDeLugar(lugar, lang)}: ${premio}`;
+    // El que no entra no se corta a la mitad: se deja fuera, con su lugar completo.
+    if (partes.length > 0 && largoDe([...partes, parte].join(", ")) > max) break;
+    partes.push(parte);
+  }
+  return recortarA(partes.join(", "), max);
+}
+
+/**
+ * El rótulo de un lugar en el texto del sello: el número, su marca y la palabra, con los dos puntos. La marca está
+ * suelta (`\.?`) para reconocer «1.er premio» como «1er premio», y las dos palabras para leer lo sellado en
+ * cualquiera de los dos idiomas.
+ */
+const ROTULO_DE_LUGAR = /(\d{1,3})\s*\.?\s*(?:er|º|ª|st|nd|rd|th)\s+(?:premio|prize)\s*:\s*/gi;
+
+/**
+ * Lee de vuelta el texto de lugares que armó `armarMeta`, con el premio de cada uno. Si el texto no sigue el formato
+ * (un `meta` de antes, un premio escrito a mano) devuelve `null`: quien lo muestra lo deja tal cual.
+ */
+export function lugaresDeMeta(meta: string): LugarDePremio[] | null {
+  const texto = meta;
+  const rotulos = [...texto.matchAll(ROTULO_DE_LUGAR)];
+  // Un solo rótulo no es el formato: lo armado con más de un lugar lleva por lo menos dos.
+  if (rotulos.length < 2) return null;
+  // Antes del primer rótulo no puede haber nada.
+  if (texto.slice(0, rotulos[0]?.index ?? 0).trim() !== "") return null;
+  const lugares: LugarDePremio[] = [];
+  for (let i = 0; i < rotulos.length; i++) {
+    const m = rotulos[i] as RegExpMatchArray;
+    const desde = (m.index ?? 0) + (m[0] ?? "").length;
+    const hasta = i + 1 < rotulos.length ? (rotulos[i + 1] as RegExpMatchArray).index ?? texto.length : texto.length;
+    const crudo = texto.slice(desde, hasta).trim().replace(/\s+/g, " ");
+    // La coma que separa de los lugares era del armado, no del premio. En el último no hay nada que separar.
+    const premio = i + 1 < rotulos.length ? crudo.replace(/,\s*$/, "") : crudo;
+    if (!premio) return null;
+    lugares.push({ lugar: Number(m[1]), premio });
+  }
+  return lugares;
+}
+
 
 /* -------------------------------------------------------------- recuerdo */
 
@@ -96,6 +183,65 @@ function guardarRecientes(lista: string[]): void {
 }
 
 /* ---------------------------------------------------------------- pantalla */
+
+/** Los campos por lugar no se ofrecen en el modo Orden de turnos (lo pone `src/ui/turnos.ts`, que no se puede importar acá). */
+let lugaresApagados = false;
+
+/** El modo de turnos prende o apaga la oferta de campos por lugar: un orden no tiene premios. */
+export const bloquearLugares = (si: boolean): void => {
+  lugaresApagados = si;
+};
+
+const cajaLugares = (): HTMLElement | null => document.getElementById("prize-lugares");
+
+/** Los campos por lugar que hay ahora, con lo que cada uno dice. */
+const camposDeLugares = (): HTMLInputElement[] => [...(cajaLugares()?.querySelectorAll<HTMLInputElement>("input[data-lugar]") ?? [])];
+
+/** Arma `cuantos - 1` campos por lugar, conservando lo que ya estaba escrito. */
+function armarCampos(cuantos: number): void {
+  const caja = cajaLugares();
+  if (!caja) return;
+  const campo = document.getElementById("prize");
+  const valores = camposDeLugares().map((i) => i.value);
+  caja.hidden = cuantos <= 1;
+  if (caja.hidden) {
+    caja.replaceChildren();
+    return;
+  }
+  caja.replaceChildren(
+    ...Array.from({ length: cuantos - 1 }, (_, i) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 60;
+      input.autocomplete = "off";
+      input.dataset.lugar = String(i + 2);
+      // En renglón, como el cuadro de arriba: cada lugar debajo del otro.
+      input.style.display = "block";
+      input.placeholder = t("prizeLugarPh");
+      input.setAttribute("aria-label", etiquetaDeLugar(i + 2, getLang()));
+      input.value = valores[i] ?? "";
+      input.disabled = campo instanceof HTMLInputElement ? campo.disabled : false;
+      return input;
+    }),
+  );
+}
+
+/**
+ * Los campos por lugar que se ofrecen ahora: con más de un ganador y fuera del modo de turnos. Lo llaman el cambio
+ * de la cantidad (`#nw`), el cambio de idioma y el modo de turnos.
+ */
+export function actualizarLugares(): void {
+  armarCampos(lugaresApagados ? 1 : ganadoresPedidos());
+}
+
+/** El premio de cada lugar tal como está en los campos: el cuadro de siempre es el del 1.er. */
+export const premiosDeLosCampos = (): string[] => {
+  const campo = document.getElementById("prize");
+  return [campo instanceof HTMLInputElement ? campo.value : "", ...camposDeLugares().map((i) => i.value)];
+};
+
+/** El premio que se sella: los lugares armados en un solo texto; con el campo único queda tal cual. */
+export const premioActual = (): string => armarMeta(premiosDeLosCampos(), getLang());
 
 /** Los premios que ya salieron en esta sentada: se marcan para no repetir sin querer. */
 let salieron: string[] = [];
@@ -145,11 +291,27 @@ export function sincronizarPremios(): void {
   }
 }
 
-/** Escribe el premio en el cuadro (el sello, la imagen y las bases lo leen de ahí) y refleja el cambio. */
+/**
+ * Escribe el premio en el cuadro (el sello, la imagen y las bases lo leen de ahí) y refleja el cambio. Un texto
+ * armado por lugares vuelve a sus campos: el 1.er al cuadro de siempre y los demás a los suyos, aunque la cantidad
+ * de ganadores de ahora no los ofrezca (se restauro un sorteo ya sellado).
+ */
 export function ponerPremio(valor: string): void {
   const p = partes();
   if (!p) return;
-  p.campo.value = recortar(valor);
+  const lugares = lugaresDeMeta(valor);
+  if (lugares && lugares.length > 1) {
+    armarCampos(Math.max(lugaresApagados ? 1 : ganadoresPedidos(), lugares.length));
+    p.campo.value = recortar(lugares[0]?.premio ?? "");
+    const caja = cajaLugares();
+    for (const { lugar, premio } of lugares.slice(1)) {
+      const input = caja?.querySelector<HTMLInputElement>(`input[data-lugar="${lugar}"]`);
+      if (input) input.value = recortar(premio);
+    }
+  } else {
+    actualizarLugares();
+    p.campo.value = recortar(valor);
+  }
   sincronizarPremios();
   // Sin `input`, que es del teclado: lo escuchan el resumen de "Sellar la lista" y la barra, que lo muestran.
   p.campo.dispatchEvent(new CustomEvent("tinkazo:premio"));
@@ -190,7 +352,14 @@ export function montarPremios(): void {
     ponerPremio(alternar(p.campo.value, b.dataset.premio ?? ""));
   });
   p.campo.addEventListener("input", sincronizarPremios);
-  onLangChange(pintar);
+  // Con más de un ganador, un campo por lugar: sigue la cantidad y, al cambiar de idioma, los rótulos.
+  document.getElementById("nw")?.addEventListener("change", actualizarLugares);
+  document.getElementById("nw")?.addEventListener("input", actualizarLugares);
+  onLangChange(() => {
+    pintar();
+    actualizarLugares();
+  });
+  actualizarLugares();
   pintar();
 }
 

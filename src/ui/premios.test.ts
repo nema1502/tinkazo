@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { isTurnPrize } from "../modos/turnos";
 import { T } from "../i18n";
-import { MAX_RECIENTES, agregarReciente, alternar, esElegido, opciones, recortar } from "./premios";
+import { MAX_META, MAX_RECIENTES, agregarReciente, alternar, armarMeta, etiquetaDeLugar, esElegido, lugaresDeMeta, opciones, recortar } from "./premios";
 
 describe("premios: los recientes", () => {
   it("el último va primero y no se repite aunque cambie la mayúscula o los espacios", () => {
@@ -75,6 +76,110 @@ describe("premios: elegir y desmarcar", () => {
     expect(recortar("Libro")).toBe("Libro");
     // Un emoji vale una letra, no dos.
     expect(Array.from(recortar("🦙".repeat(70)))).toHaveLength(60);
+  });
+});
+
+describe("premios: un premio por lugar", () => {
+  it("con un solo lugar con premio queda tal cual, como el campo único de siempre", () => {
+    expect(armarMeta(["Termo"], "es")).toBe("Termo");
+    expect(armarMeta(["Termo"], "en")).toBe("Termo");
+    // Los lugares sin texto no se nombran: con uno solo, el sello es el de siempre.
+    expect(armarMeta(["", "Termo"], "es")).toBe("Termo");
+    expect(armarMeta(["", "  "], "es")).toBe("");
+    expect(armarMeta([], "es")).toBe("");
+  });
+
+  it("con varios lugares, cada premio con su rótulo, en el idioma en que se sella", () => {
+    expect(armarMeta(["Bici", "Termo"], "es")).toBe("1.er premio: Bici, 2.º premio: Termo");
+    expect(armarMeta(["Bici", "Termo", "Libro"], "es")).toBe("1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
+    expect(armarMeta(["Bici", "Termo", "Libro"], "en")).toBe("1st prize: Bici, 2nd prize: Termo, 3rd prize: Libro");
+  });
+
+  it("un lugar que se dejó vacío no se nombra, y el que sigue conserva su número", () => {
+    expect(armarMeta(["Bici", "", "Libro"], "es")).toBe("1.er premio: Bici, 3.er premio: Libro");
+  });
+
+  it("los premios con comas y con números quedan enteros", () => {
+    const meta = armarMeta(["Polera (talle M), 2 unidades", "Kit con 3 stickers"], "es");
+    expect(meta).toBe("1.er premio: Polera (talle M), 2 unidades, 2.º premio: Kit con 3 stickers");
+    expect(lugaresDeMeta(meta)).toEqual([
+      { lugar: 1, premio: "Polera (talle M), 2 unidades" },
+      { lugar: 2, premio: "Kit con 3 stickers" },
+    ]);
+  });
+
+  it("todo entra en los 160 caracteres que admite meta: el lugar que no cabe se queda fuera", () => {
+    expect(MAX_META).toBe(160);
+    const meta = armarMeta(["x".repeat(80), "x".repeat(80), "x".repeat(80)], "es");
+    expect(Array.from(meta).length).toBeLessThanOrEqual(160);
+    expect(meta.startsWith("1.er premio: ")).toBe(true);
+    // Un premio solo que no cabe se corta, como se cortaba el del campo único.
+    expect(Array.from(armarMeta(["y".repeat(200)], "es")).length).toBe(160);
+  });
+
+  it("ida y vuelta: lo armado se lee de vuelta lugar por lugar", () => {
+    expect(lugaresDeMeta(armarMeta(["Bici", "Termo", "Libro"], "es"))).toEqual([
+      { lugar: 1, premio: "Bici" },
+      { lugar: 2, premio: "Termo" },
+      { lugar: 3, premio: "Libro" },
+    ]);
+    // El formato lo reconocen los dos idiomas: lo sellado en uno se lee en el otro.
+    expect(lugaresDeMeta(armarMeta(["Bici", "Termo"], "en"))).toEqual([
+      { lugar: 1, premio: "Bici" },
+      { lugar: 2, premio: "Termo" },
+    ]);
+    expect(lugaresDeMeta("1st prize: Bici, 2nd prize: Termo")).toEqual([
+      { lugar: 1, premio: "Bici" },
+      { lugar: 2, premio: "Termo" },
+    ]);
+    expect(lugaresDeMeta(armarMeta(["Bici", "", "Libro"], "es"))).toEqual([
+      { lugar: 1, premio: "Bici" },
+      { lugar: 3, premio: "Libro" },
+    ]);
+  });
+
+  it("un meta que no sigue el formato se lee tal cual: los sorteos de antes no cambian", () => {
+    expect(lugaresDeMeta("Termo")).toBeNull();
+    expect(lugaresDeMeta("Turnos de limpieza")).toBeNull();
+    expect(lugaresDeMeta("Polera (talle M), 2 unidades")).toBeNull();
+    // Un premio que nombra los premios sin ser el texto del sello: no es el formato.
+    expect(lugaresDeMeta("Gana el 1.er premio: una bici")).toBeNull();
+    expect(lugaresDeMeta("1.er premio: Bici")).toBeNull();
+    expect(lugaresDeMeta("1.er premio: Bici, 2.º premio: ")).toBeNull();
+    expect(lugaresDeMeta("otro texto 1.er premio: Bici, 2.º premio: Termo")).toBeNull();
+  });
+
+  it("los rótulos de cada lugar, en los dos idiomas", () => {
+    expect(etiquetaDeLugar(1, "es")).toBe("1.er premio");
+    expect(etiquetaDeLugar(2, "es")).toBe("2.º premio");
+    expect(etiquetaDeLugar(3, "es")).toBe("3.er premio");
+    expect(etiquetaDeLugar(4, "es")).toBe("4.º premio");
+    expect(etiquetaDeLugar(1, "en")).toBe("1st prize");
+    expect(etiquetaDeLugar(2, "en")).toBe("2nd prize");
+    expect(etiquetaDeLugar(3, "en")).toBe("3rd prize");
+    expect(etiquetaDeLugar(4, "en")).toBe("4th prize");
+    expect(etiquetaDeLugar(11, "en")).toBe("11th prize");
+    expect(etiquetaDeLugar(12, "en")).toBe("12th prize");
+    expect(etiquetaDeLugar(21, "en")).toBe("21st prize");
+  });
+
+  it("con turnos el nombre de siempre no se toca y se sigue reconociendo", () => {
+    // En el modo de turnos no se ofrecen los campos por lugar: el cuadro queda solo, y el modo lo maneja otro módulo.
+    expect(armarMeta(["Turnos de limpieza"], "es")).toBe("Turnos de limpieza");
+    expect(isTurnPrize(armarMeta(["Turnos de limpieza"], "es"))).toBe(true);
+    expect(isTurnPrize(armarMeta(["Turns"], "en"))).toBe(true);
+    expect(isTurnPrize("Turnstile")).toBe(false);
+  });
+
+  it("los textos nuevos existen en los dos idiomas, con sus reglas de escritura", () => {
+    for (const l of ["es", "en"] as const) {
+      expect(typeof T[l].prizeLugar).toBe("function");
+      expect(typeof T[l].prizeLugarPh).toBe("string");
+      expect(T[l].prizeLugar(1)).toMatch(/premio|prize/);
+      expect(T[l].prizeLugarPh as string).not.toMatch(/[«»;·]/);
+    }
+    expect(T.es.prizeLugar(2)).toBe("2.º premio");
+    expect(T.en.prizeLugar(2)).toBe("2nd prize");
   });
 });
 

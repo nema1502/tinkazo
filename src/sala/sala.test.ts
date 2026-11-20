@@ -1,7 +1,16 @@
 import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CIFRA_JS, TEXTOS, paginaCelular } from "../../workers/sala/src/pagina";
-import { VentanaPorMinuto, horaUtc, intentarAlta, grupoDeIp, nombreCifradoValido, origenPermitido } from "../../workers/sala/src/logica";
+import {
+  SALAS_POR_DIA,
+  SALAS_POR_IP_POR_HORA,
+  VentanaPorMinuto,
+  grupoDeIp,
+  horaUtc,
+  intentarAlta,
+  nombreCifradoValido,
+  origenPermitido,
+} from "../../workers/sala/src/logica";
 import { cifrarNombre, descifrarNombre, generarClave, huellaNombre, normalizarNombreParaHuella } from "./cifra";
 import { MAX_NOMBRE, hayPalabraFea, llevaEnlace, revisarNombre } from "./filtro";
 import { crearSala, enlaceDeSala, escucharSala, type Sala } from "./cliente";
@@ -107,7 +116,11 @@ describe("las formas que acepta el servicio", () => {
     expect(v.intentar(1_000)).toBe(false);
     expect(v.intentar(61_000)).toBe(true);
   });
-  it("5 salas por dirección y por hora, en un almacén que sobrevive a dormirse", () => {
+  it("el tope de salas aguanta un evento", () => {
+    expect(SALAS_POR_IP_POR_HORA).toBe(30);
+    expect(SALAS_POR_DIA).toBe(400);
+  });
+  it("el tope de salas por dirección y por hora, en un almacén que sobrevive a dormirse", () => {
     // El almacén es el SQLite del objeto: se comparte entre «despertares», no vive en la instancia.
     const filas = new Map<string, number>();
     const almacen = () => ({
@@ -117,13 +130,15 @@ describe("las formas que acepta el servicio", () => {
         for (const k of [...filas.keys()]) if (Number(k.split("|")[1]) < h) filas.delete(k);
       },
     });
-    for (let i = 0; i < 5; i++) expect(intentarAlta(almacen(), "a", 0, 5)).toBe(true);
-    // El objeto se duerme y despierta (otro `almacen()` sobre las mismas filas): la sexta sigue frenada.
-    expect(intentarAlta(almacen(), "a", 1_000, 5)).toBe(false);
-    expect(intentarAlta(almacen(), "b", 1_000, 5)).toBe(true);
+    for (let i = 0; i < SALAS_POR_IP_POR_HORA; i++) {
+      expect(intentarAlta(almacen(), "a", 0, SALAS_POR_IP_POR_HORA)).toBe(true);
+    }
+    // El objeto se duerme y despierta (otro `almacen()` sobre las mismas filas): la siguiente sigue frenada.
+    expect(intentarAlta(almacen(), "a", 1_000, SALAS_POR_IP_POR_HORA)).toBe(false);
+    expect(intentarAlta(almacen(), "b", 1_000, SALAS_POR_IP_POR_HORA)).toBe(true);
     // Pasada la hora se puede de nuevo, y las filas viejas se borran.
     expect(horaUtc(3_600_000)).toBe(1);
-    expect(intentarAlta(almacen(), "a", 3_600_000, 5)).toBe(true);
+    expect(intentarAlta(almacen(), "a", 3_600_000, SALAS_POR_IP_POR_HORA)).toBe(true);
     expect([...filas.keys()].every((k) => k.endsWith("|1"))).toBe(true);
   });
 });
@@ -132,6 +147,25 @@ describe("la página del celular", () => {
   const html = paginaCelular();
   it("pesa menos de 15 KB comprimida", () => {
     expect(gzipSync(html).length).toBeLessThan(15 * 1024);
+  });
+  it("usa la paleta de la casa en oscuro", () => {
+    expect(html).toContain("--fondo:#171126");
+    expect(html).toContain("--tarjeta:#221a33");
+    expect(html).not.toContain("#1d1a16");
+    expect(html).not.toContain("#2a2620");
+  });
+  it("la marca lleva la llama", () => {
+    const marca = /<p class="marca">([\s\S]*?)<\/p>/.exec(html)?.[1] ?? "";
+    expect(marca).toContain("<svg");
+    expect(marca).toContain('aria-hidden="true"');
+  });
+  it("ningún texto tiene signos de exclamación", () => {
+    for (const idioma of [TEXTOS.es, TEXTOS.en]) {
+      for (const texto of Object.values(idioma)) {
+        expect(texto).not.toContain("¡");
+        expect(texto).not.toContain("!");
+      }
+    }
   });
   it("está en español y en inglés, con el aviso de privacidad del celular", () => {
     expect(TEXTOS.es.aviso).toBe("Tu nombre o apodo se ve en la pantalla grande del stand, en una ronda de ejemplo, y se borra cuando cierran la sala o a las 10 horas.");
@@ -148,8 +182,10 @@ describe("la página del celular", () => {
     expect(html).not.toContain("Add someone else");
     expect(TEXTOS.es.ya).toBe("Desde este celular te anotaste como {nombre}.");
     expect(TEXTOS.en.ya).toBe("From this phone, you joined as {nombre}.");
-    expect(TEXTOS.es.listoB).toBe("Si no te ves en la pantalla, tocá Corregir mi nombre o avisale a quien atiende.");
-    expect(TEXTOS.en.listoB).toBe("If you don't see yourself on the screen, tap Correct my name or tell whoever is running the booth.");
+    expect(TEXTOS.es.listoB).toBe("Mirá la pantalla grande. Si no te ves, tocá Corregir mi nombre o avisale a quien atiende.");
+    expect(TEXTOS.en.listoB).toBe(
+      "Watch the big screen. If you don't see yourself, tap Correct my name or tell whoever is running the booth.",
+    );
     expect(TEXTOS.es.corregir).toBe("Corregir mi nombre");
     expect(TEXTOS.en.corregir).toBe("Correct my name");
     expect(TEXTOS.es.repetido).toBe("Si ese nombre es el tuyo, ya estás en la ronda. Si es de otra persona, sumá tu apellido o un apodo.");

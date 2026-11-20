@@ -25,6 +25,18 @@
  * Los umbrales del parlante y del revelado no tienen norma: salen de la
  * investigación y se calibran con lo que hoy suena bien.
  *
+ * En el sitio publicado (y en cualquier origen que no sea la máquina de quien mide) las pistas de archivo no bajan
+ * sin un gesto de la persona (`huboToque` en `src/sonidos/pistas-enganche.ts`), y el Chrome del auditor no lo tiene:
+ * sin él, mediría la música de siempre creyendo que mide la de archivo. El auditor hace de persona: una tecla que
+ * nada usa (F15) —o un clic en un punto libre, si la tecla no alcanzara— viajada por el protocolo del navegador,
+ * vale como gesto de la persona y la pista baja igual que baja cuando la sala va a escuchar.
+ *
+ * Y hay un camino donde ni el gesto alcanza: la escena fija (`pose=`) en un navegador sin WebGL corre en el motor
+ * anterior, y ese camino no llama a `sonidoDelJuego`, así que nadie pide la pista y `cargas` queda vacío pase lo que
+ * pase (solo `playPixi` y el sorteo real la piden). Para los juegos que traen pista, si la escena fija no la pidió en
+ * los primeros segundos, se descarta esa medición y se mide con la demo (`?demo=`), que pasa por el sorteo real
+ * (`draw()` → `sonidoDelJuego`) en cualquier motor y espera la ronda menos de tres segundos.
+ *
  * Uso (con `pnpm preview` corriendo):
  *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica] [--motor pixi] [--espectro]
  *   node scripts/audit-mezcla.mjs race --sonido musica:a,final:b   # la carrera con esas candidatas de sonido (src/sonidos/carrera.ts)
@@ -46,7 +58,7 @@
  * cuenta regresiva y la tarjeta de cómo se juega, como en una sala, y por eso la música de archivo ya bajó cuando
  * arranca. Espera la ronda de verdad, así que necesita red.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
@@ -90,6 +102,32 @@ function escribirWav(ruta, L, R, sr, seg) {
   writeFileSync(ruta, buf);
 }
 const lista = juegosDe(cual);
+
+/**
+ * Los juegos que traen pista de música de archivo: los `import` de `pistas-lista.ts` (los JSON que viajan con el sitio).
+ * Solo para estos vale esperar que la escena pida la pista; los demás no piden ninguna y la medición no cambia.
+ */
+const juegosConPista = (() => {
+  try {
+    const texto = readFileSync(new URL("../src/sonidos/pistas-lista.ts", import.meta.url), "utf8");
+    return new Set([...texto.matchAll(/import\s+\w+\s+from\s+"\.\/pistas\/(\w+)\.json"/g)].map((m) => m[1]));
+  } catch {
+    return new Set();
+  }
+})();
+
+/** El anfitrión de `--base`: la pista solo baja en producción o en la máquina de quien mide con `?pistasdesde=`. */
+const anfitrion = (() => {
+  try {
+    return new URL(base).hostname;
+  } catch {
+    return "";
+  }
+})();
+const pistaPosible = !sinMusica && (consulta.includes("pistasdesde=") || !["localhost", "127.0.0.1", "[::1]", "::1"].includes(anfitrion));
+
+/** El error con que `medirUna` dice que la escena fija no pidió la pista (y `medir` vuelve a medir con la demo). */
+const ESCENA_SIN_PEDIDO = "la escena fija no pidió la pista de archivo";
 
 /** Los umbrales. */
 const PICO_REAL_MAX = -1.0;
@@ -293,17 +331,97 @@ const SIN_MUSICA = `(() => { try { localStorage.setItem('tinkazo.musica', '0'); 
 const db = (v) => (v > 0 ? 20 * Math.log10(v) : -120);
 const f1 = (v) => (v === null || v === undefined ? "—" : v.toFixed(1));
 
-async function medirUna(browser, juego) {
+/**
+ * El gesto de la persona que este Chrome no tiene: sin él las pistas de archivo no bajan fuera de la máquina de quien
+ * mide (`huboToque` en `src/sonidos/pistas-enganche.ts`) y, si el juego tiene pista, la medición caería a la música de
+ * siempre midiendo otra cosa. La tecla viaja por el protocolo del navegador, que vale como gesto (enciende
+ * `navigator.userActivation` y llega a los oyentes de la página), y F15 es una tecla que nada de la página usa. Si la
+ * tecla no enciende la activación, cada tercer intento va con un clic real en un punto que no es un enlace ni un botón
+ * (`elementFromPoint` lo elige): `pointerdown` es el otro gesto que la página escucha. Devuelve `true` si el gesto
+ * quedó hecho (la activación quedó encendida).
+ */
+async function activarAudio(page) {
+  let punto = null;
+  for (let i = 0; i < 25; i++) {
+    try {
+      if (await page.eval("navigator.userActivation ? navigator.userActivation.hasBeenActive : false") === true) return true;
+      if (i > 0 && i % 3 === 0 && punto === null) {
+        punto = await page.eval(`(() => { for (const [x, y] of [[640, 360], [20, 20], [1260, 700], [640, 690]]) { const e = document.elementFromPoint(x, y); if (e && !e.closest("a, button, input, select, textarea, label")) return { x, y }; } return null; })()`).catch(() => null);
+      }
+      if (i >= 6 && i % 3 === 0 && punto) {
+        await page.send("Input.dispatchMouseEvent", { type: "mousePressed", x: punto.x, y: punto.y, button: 0, clickCount: 1 });
+        await page.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: punto.x, y: punto.y, button: 0, clickCount: 1 });
+      } else {
+        await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "F15", code: "F15", windowsVirtualKeyCode: 126, nativeVirtualKeyCode: 126 });
+        await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "F15", code: "F15", windowsVirtualKeyCode: 126, nativeVirtualKeyCode: 126 });
+      }
+    } catch {
+      /* la página todavía no tiene contexto (navegando) */
+    }
+    await sleep(200);
+  }
+  return false;
+}
+
+/**
+ * Una página corta que baja la pista del juego para llenar la caché HTTP del Chrome.
+ *
+ * En la sala, la pista está lista antes de que arranca la música: la baja el preload de la cuenta regresiva. La escena
+ * fija del auditor no tiene cuenta regresiva, y la bajada en frío no entra en la gracia de 1,5 s (`GRACIA` en
+ * `src/sonidos/pistas-enganche.ts`): ese sorteo suena con la de siempre y la medición mide otra cosa. Los archivos de
+ * la pista van immutable (`Cache-Control: max-age=31520760`, el servicio los entrega como inmutables), así que una
+ * página que los baja una vez deja la caché del navegador caliente, y en la página de la medición la bajada tarda
+ * milisegundos. Devuelve `true` si la pista quedó lista (o `false` si el juego no tiene, o no llegó).
+ */
+async function calentarPista(browser, juego, enDemo = false) {
+  const page = await browser.open("about:blank");
+  try {
+    const escena = enDemo || demo ? `demo=${juego}&lead=3&pace=normal` : `pose=${juego === "race" ? "1" : juego}`;
+    await page.send("Page.navigate", { url: `${base}/?${escena}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
+    if (!(await activarAudio(page))) return false;
+    for (let i = 0; i < 100; i++) {
+      const estado = await page.eval(`window.__tinkazoPista ? window.__tinkazoPista().cargas[${JSON.stringify(juego)}] ?? "" : ""`);
+      // "fallo" también termina la espera: si el juego no tiene pista (o no llega), no hay nada que calentar.
+      if (estado === "lista" || estado === "fallo") return estado === "lista";
+      await sleep(300);
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    try {
+      await page.send("Page.close");
+    } catch {
+      /* ya cerrada */
+    }
+  }
+}
+
+async function medirUna(browser, juego, enDemo = false) {
   const page = await browser.open("about:blank");
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: OIDO });
     if (sinMusica) await page.send("Page.addScriptToEvaluateOnNewDocument", { source: SIN_MUSICA });
-    const escena = demo ? `demo=${juego}&lead=3&pace=normal` : `pose=${juego === "race" ? "1" : juego}`;
+    const escena = enDemo || demo ? `demo=${juego}&lead=3&pace=normal` : `pose=${juego === "race" ? "1" : juego}`;
     await page.send("Page.navigate", { url: `${base}/?${escena}&auditar=mezcla${motor ? `&motor=${motor}` : ""}${sonidoCarrera ? `&sonido=${encodeURIComponent(sonidoCarrera)}` : ""}${consulta ? `&${consulta}` : ""}` });
+    // El gesto de la persona, antes de que el juego pida la pista: si no entra, la línea de "música de archivo" lo dice.
+    if (!(await activarAudio(page))) console.log(`${juego.padEnd(11)} no se pudo hacer el gesto del usuario: si el juego tiene pista de archivo, la medición cae a la música de siempre`);
     // El sorteo de ejemplo espera su ronda antes de abrir el estadio: por eso más tiempo.
-    const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", demo ? 90_000 : 30_000);
+    const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", demo || enDemo ? 90_000 : 30_000);
     if (!ok.ok) return { error: "el estadio no apareció" };
+    // Si el juego trae pista y la escena no la pidió, la medición no sería la de archivo: la escena fija sin WebGL corre
+    // en el motor anterior y ese camino no llama a `sonidoDelJuego` (nadie pide la pista, pase lo que pase con el gesto).
+    // Se descarta acá, en los primeros segundos, y `medir` vuelve a medir con la demo, que pasa por el sorteo real.
+    if (pistaPosible && juegosConPista.has(juego) && !(demo || enDemo)) {
+      let pedida = false;
+      for (let i = 0; i < 12; i++) {
+        const cargas = await page.eval("window.__tinkazoPista ? window.__tinkazoPista().cargas : null").catch(() => null);
+        if (cargas && Object.keys(cargas).length > 0) { pedida = true; break; }
+        await sleep(500);
+      }
+      if (!pedida) return { error: ESCENA_SIN_PEDIDO };
+    }
     // Hasta que el juego cierra solo (o sale el resultado), o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
     // pelotón (`normalCarrera` en src/duraciones.ts) y con 60 s se cortaba antes del ganador.
     const t0 = Date.now();
@@ -386,6 +504,7 @@ async function medirUna(browser, juego) {
  */
 async function medir(browser, juego) {
   let r;
+  let enDemo = false;
   try {
     r = await medirUna(browser, juego);
   } catch (e) {
@@ -393,9 +512,24 @@ async function medir(browser, juego) {
     console.log(`${juego.padEnd(11)} la página no contestó (${String(e.message ?? e).slice(0, 80)}): repito una vez`);
     r = await medirUna(browser, juego);
   }
+  // La escena fija no pidió la pista (el motor que arrancó no llama a `sonidoDelJuego`, pase lo que pase con el gesto):
+  // la demo pasa por el sorteo real (`draw()` → `sonidoDelJuego`) y la pide en cualquier motor. Sin este relevo, medir
+  // la carrera en un navegador sin WebGL era medir la caída a la música de siempre, no lo que oye la sala.
+  if (r.error === ESCENA_SIN_PEDIDO) {
+    console.log(`${juego.padEnd(11)} ${r.error} (el motor que arrancó no la pide): mido con la demo, que pasa por el sorteo real`);
+    enDemo = true;
+    r = await medirUna(browser, juego, true);
+  }
   if (!r.error && hayQueRepetir({ corta: r.corta, cartelMs: r.cartel, golpe: r.golpe })) {
     console.log(`${juego.padEnd(11)} la grabación no quedó completa (${r.seg.toFixed(1)} s de ${r.sonadoSeg.toFixed(1)} s${r.cartel > 0 && r.golpe === null ? ", sin golpe" : ""}): repito una vez`);
-    r = await medirUna(browser, juego);
+    r = await medirUna(browser, juego, enDemo);
+  }
+  // La pista llegó tarde y el sorteo sonó con la de siempre: la medición no sería la de archivo. Calienta la caché del
+  // navegador con una página corta (los archivos van immutable) y mide una vez más; en la página de la medición la
+  // bajada tarda milisegundos. Solo una vez: si tampoco entra, la línea de "música de archivo" lo dice.
+  if (!r.error && r.pista?.modo === "pistas" && !r.pista.suena && r.pista.registro.some((x) => x.que.includes("llegó tarde"))) {
+    console.log(`${juego.padEnd(11)} la pista llegó tarde: caliento la caché del navegador con una página corta y mido una vez más`);
+    if (await calentarPista(browser, juego, enDemo)) r = await medirUna(browser, juego, enDemo);
   }
   return r;
 }
@@ -415,7 +549,12 @@ async function run() {
       if (!r.error) console.log(`${juego.padEnd(11)} ${f1(r.I)} LUFS · pico real ${f1(db(r.picoReal))} dBTP · corto máx ${f1(r.corto)} · sin graves de 150 Hz ${f1(r.I - r.I150)} LU, de 300 Hz ${f1(r.I - r.I300)} LU · golpe ${f1(r.golpe)} LU · ${r.seg.toFixed(1)} s`);
       if (!r.error && r.pista) {
         const avisos = r.pista.registro.filter((x) => /^(pista|falla|cae|corre)|llegó tarde/.test(x.que)).map((x) => x.que);
-        console.log(`             música de archivo: ${r.pista.modo}${r.pista.suena ? ", sonando al cerrar" : ""}${avisos.length ? `, ${avisos.join(" | ")}` : ", sin avisos"}`);
+        // Con el modo pistas y ninguna pista bajada, algo anterior a la red la bloqueó (sin gesto, sin servicio, sin permitido): decirlo,
+        // para que nadie lea la medición como si fuera la de archivo. Y si la pista ya terminó (el festejo del demo se apaga solo), el
+        // registro dice si tocó el sorteo: "pista <juego>" sin "cae" es que la música del sorteo fue la de archivo.
+        const sinBajada = r.pista.modo === "pistas" && !r.pista.suena && Object.keys(r.pista.cargas ?? {}).length === 0 ? ", sin pistas bajadas" : "";
+        const tocoElSorteo = !r.pista.suena && r.pista.registro.some((x) => x.que.startsWith(`pista ${juego}`)) && !r.pista.registro.some((x) => x.que.startsWith("cae")) ? ", tocó el sorteo" : "";
+        console.log(`             música de archivo: ${r.pista.modo}${r.pista.suena ? ", sonando al cerrar" : ""}${avisos.length ? `, ${avisos.join(" | ")}` : ", sin avisos"}${sinBajada}${tocoElSorteo}`);
       }
       if (!r.error && r.wav) console.log(`             grabado en ${r.wav.archivo}${r.wav.cartelSeg !== null ? `, el cartel del ganador a los ${r.wav.cartelSeg.toFixed(2)} s del archivo` : ", sin cartel"}`);
     }

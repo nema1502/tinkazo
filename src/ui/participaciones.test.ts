@@ -59,8 +59,9 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("sin la bandera y sin el parámetro, la herramienta es la de siempre", () => {
+describe("con la bandera apagada a propósito (VITE_MODOS=0), la herramienta es la de siempre", () => {
   it("ni el botón ni el panel ni la pregunta se ven, y la lista se lee como siempre", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar();
     expect(boton().hidden).toBe(true);
     expect(panel().hidden).toBe(true);

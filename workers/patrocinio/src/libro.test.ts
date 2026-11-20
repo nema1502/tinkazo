@@ -1,5 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
+import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
+import { Altas } from "./altas";
+import { AltasPorPremio } from "./altas-premio";
 import { DIA_MS } from "./config";
 import { Cupos } from "./cupos";
 import { sqlDePrueba } from "./sqlite-prueba";
@@ -55,10 +58,37 @@ describe("el libro de cuentas", () => {
     expect(c.estaEnElLibro(CUENTA)).toBe(true);
   });
 
-  it("un motivo que no es cupón, pago ni admin no se escribe", () => {
+  it("un motivo que no es cupón, pago, admin ni premio no se escribe", () => {
     const { c } = nuevo();
     expect(() => c.admitir(CUENTA, "regalo" as never, T0)).toThrow();
     expect(c.estaEnElLibro(CUENTA)).toBe(false);
+  });
+
+  it("el motivo premio vale: la cuenta entra al libro con ese motivo y no se purga", () => {
+    const { c, sql } = nuevo();
+    c.admitir(CUENTA, "premio", T0);
+    expect(c.estaEnElLibro(CUENTA)).toBe(true);
+    expect(fila(sql, CUENTA)).toMatchObject({ cuenta: CUENTA, motivo: "premio", permanente: 1 });
+    c.purgar(T0 + 401 * DIA_MS);
+    expect(c.estaEnElLibro(CUENTA)).toBe(true);
+  });
+
+  it("quien entró por premio y después canjea un cupón conserva su primer motivo y recibe sus sorteos", () => {
+    const { c, sql } = nuevo();
+    const ganadora = Keypair.random().publicKey();
+    const altas = new Altas(sql, c);
+    const huella = "a".repeat(64);
+    const lote = { lote: "evento", huellas: [huella], sorteos: 3, dias: 60, vence: T0 + 30 * DIA_MS, usos: 1 };
+    expect(altas.crearCupones(lote, T0)).toMatchObject({ ok: true });
+    const contrato = `C${"A".repeat(55)}`;
+    const organizador = Keypair.random().publicKey();
+    const pedido = { contrato, sorteo: "5", puesto: 0, cuenta: ganadora, organizador, ganadores: 3, sello: "s".repeat(64) };
+    expect(new AltasPorPremio(sql, c).admitir(pedido, T0, { altasPremioDia: 100 }, () => null)).toMatchObject({ ok: true, repetido: false });
+    expect(c.quedan({ cuenta: ganadora }, T0).quedan).toBe(0);
+
+    expect(altas.canjear({ huella, usuario: "usr_ana", cuenta: ganadora }, T0 + 1)).toMatchObject({ ok: true, sorteosSumados: 3 });
+    expect(fila(sql, ganadora)).toMatchObject({ motivo: "premio", permanente: 1 });
+    expect(c.quedan({ cuenta: ganadora }, T0 + 1).quedan).toBe(3);
   });
 });
 

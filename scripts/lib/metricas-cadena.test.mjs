@@ -1,6 +1,25 @@
-import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Account, Address, Operation, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
-import { actividadDe, calcular, comprobar, decodificarEvento, dia, marcaDe, mes, partesDelId, semana, unir } from "./metricas-cadena.mjs";
+import {
+  actividadDe,
+  anidadosDe,
+  calcular,
+  compararVentana,
+  comprobar,
+  datosDesde,
+  decodificarEvento,
+  decodificarLlamada,
+  dia,
+  marcaDe,
+  mes,
+  mezclarFuentes,
+  partesDelId,
+  registroDesdeRpc,
+  resumirTransaccion,
+  semana,
+  unir,
+  unirFuentes,
+} from "./metricas-cadena.mjs";
 
 /**
  * Eventos inventados: no se toca la red. Las direcciones son de mentira.
@@ -186,6 +205,96 @@ describe("unir avisa lo que no cuadra", () => {
   });
 });
 
+describe("un sello que llega a través de otro contrato", () => {
+  const RED = "Test SDF Network ; September 2015";
+  // Los contratos que sellaron llamando al `seal` del sorteo en testnet (issues #190): el de premios y dos ensayos.
+  const C2 = "CD5UZXNVKZILVXEF2AGZSJUUVUN74AACXZPAZFY7HOPKOHFK6F6Y3PPE";
+  const C3 = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+
+  /** Un sobre de verdad con una sola invocación de contrato, como el que baja Horizon. */
+  const sobre = (contrato, funcion, args) =>
+    new TransactionBuilder(new Account(A, "1"), { fee: "100", networkPassphrase: RED })
+      .addOperation(Operation.invokeContractFunction({ contract: contrato, function: funcion, args }))
+      .setTimeout(0)
+      .build()
+      .toXDR();
+  /** Los seis argumentos del `seal` del sorteo: organizador, huella, cantidad, ganadores, ronda y texto. */
+  const argsDelSorteo = (e, cambios = {}) => {
+    const d = { ...e, meta: "", ...cambios };
+    return [
+      new Address(d.organizador).toScVal(),
+      nativeToScVal(Buffer.from(d.listHash, "hex"), { type: "bytes" }),
+      nativeToScVal(d.count, { type: "u32" }),
+      nativeToScVal(d.numWinners, { type: "u32" }),
+      nativeToScVal(BigInt(d.round), { type: "u64" }),
+      nativeToScVal(d.meta, { type: "string" }),
+    ];
+  };
+  /** Los tres argumentos del `seal` del contrato de premios: su número, la lista de cuentas y la ronda. */
+  const argsDePremios = () => [nativeToScVal(1n, { type: "u64" }), xdr.ScVal.scvVec([new Address(A).toScVal(), new Address(B).toScVal()]), nativeToScVal(33683763n, { type: "u64" })];
+  const resumen = (e, envelope, extra = {}) =>
+    resumirTransaccion(
+      { hash: `tx-${e.id}`, ledger: 5566182, created_at: "2026-11-04T10:00:00Z", successful: true, fee_charged: "1000", source_account: A, fee_account: A, envelope_xdr: envelope, ...extra },
+      RED,
+    );
+
+  it("se reconoce por la llamada y se cuenta marcado, sin problema", () => {
+    const e = sello(571, C2, "2026-11-04T10:00:00Z");
+    const tx = resumen(e, sobre(C2, "seal", argsDePremios()));
+    const u = unir([e], { [e.eventoId]: tx });
+    expect(u.problemas).toEqual([]);
+    expect(u.sorteos[0]).toMatchObject({ id: 571, contrato: C1, organizador: C2, count: 10, selloViaContrato: C2, selloTx: tx.hash });
+    const r = calcular(u.sorteos, { ahora });
+    expect(r.todas.totales).toMatchObject({ sorteosSellados: 1, lugaresEnListas: 10, sellosAnidados: 1, marcas: { fila: 0, premios: 0, sinMarca: 1 } });
+    expect(r.todas.porDia["2026-11-04"].sellosAnidados).toBe(1);
+    expect(anidadosDe(u.sorteos)).toEqual({ sellos: 1, contratos: [C2] });
+  });
+
+  it("el sello directo sigue igual: coincide y no se marca como anidado", () => {
+    const e = sello(1, A, "2026-11-04T10:00:00Z");
+    const tx = resumen(e, sobre(C1, "seal", argsDelSorteo(e, { meta: "#fila" })));
+    const u = unir([e], { [e.eventoId]: tx });
+    expect(u.problemas).toEqual([]);
+    expect(u.sorteos[0]).toMatchObject({ selloViaContrato: null, meta: "#fila" });
+    expect(calcular(u.sorteos, { ahora }).todas.totales.sellosAnidados).toBe(0);
+    expect(anidadosDe(u.sorteos)).toEqual({ sellos: 0, contratos: [] });
+  });
+
+  it("un sello que de verdad no coincide sigue fallando", () => {
+    // La transacción invoca un contrato que no es el organizador del evento.
+    const e = sello(571, C2, "2026-11-04T10:00:00Z");
+    expect(unir([e], { [e.eventoId]: resumen(e, sobre(C3, "seal", argsDePremios())) }).problemas[0]).toMatch(/no coincide/);
+    // Un sello anidado cuya transacción no salió bien tampoco pasa.
+    expect(unir([e], { [e.eventoId]: resumen(e, sobre(C2, "seal", argsDePremios()), { successful: false }) }).problemas[0]).toMatch(/no coincide/);
+    // Un organizador que es una cuenta y no el contrato invocado no se toma como anidado.
+    const org = sello(2, A, "2026-11-04T10:00:00Z");
+    expect(unir([org], { [org.eventoId]: resumen(org, sobre(C3, "seal", argsDePremios())) }).problemas[0]).toMatch(/no coincide/);
+    // Y el sello directo del sorteo con otra lista sigue fallando.
+    const s = sello(3, A, "2026-11-04T10:00:00Z");
+    expect(unir([s], { [s.eventoId]: resumen(s, sobre(C1, "seal", argsDelSorteo(s, { listHash: h("f") }))) }).problemas[0]).toMatch(/no coincide/);
+  });
+
+  it("decodificarLlamada no toma el seal de otro contrato por el del sorteo", () => {
+    const ajena = decodificarLlamada(sobre(C2, "seal", argsDePremios()), RED);
+    expect(ajena).toMatchObject({ contrato: C2, funcion: "seal" });
+    expect(ajena.organizador).toBeUndefined();
+    expect(ajena.listHash).toBeUndefined();
+    expect(ajena.count).toBeUndefined();
+    // El del sorteo se sigue decodificando entero.
+    const e = sello(571, A, "2026-11-04T10:00:00Z");
+    expect(decodificarLlamada(sobre(C1, "seal", argsDelSorteo(e, { meta: "#fila" })), RED)).toMatchObject({
+      contrato: C1,
+      funcion: "seal",
+      organizador: A,
+      listHash: e.listHash,
+      count: e.count,
+      numWinners: e.numWinners,
+      round: e.round,
+      meta: "#fila",
+    });
+  });
+});
+
 describe("comprobar", () => {
   const contratos = [{ contractId: C1 }];
   const sellos = (...ids) => ids.map((id) => ({ contrato: C1, tipo: "sealed", id }));
@@ -256,6 +365,209 @@ describe("la lista pública de cuentas internas y el archivo de totales", () => 
       expect(texto, f).not.toMatch(/\bG[A-Z2-7]{55}\b/);
       expect(texto, f).not.toMatch(/[0-9a-f]{64}/);
     }
+  });
+});
+
+describe("la segunda fuente por RPC: traerEventosRpc", () => {
+  const json = (o) => Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve(o) });
+  const cursorEn = (l) => `${(BigInt(l) << 32n).toString()}-0`;
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const eventoRpc = (tipo, id, extra = {}) => ({
+    type: "contract",
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    contractId: C1,
+    txHash: "ab".repeat(32),
+    topic: tipo === "sealed" ? [tema(tipo), u64(id), new Address(A).toScVal().toXdr("base64")] : [tema(tipo), u64(id)],
+    value: nativeToScVal(1, { type: "u32" }).toXdr("base64"),
+    inSuccessfulContractCall: true,
+    ...extra,
+  });
+  it("sigue el cursor hasta el último ledger aunque las respuestas no traigan eventos", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const pedidos = [];
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      pedidos.push(p);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      const n = pedidos.filter((q) => q.method === "getEvents").length;
+      // Dos respuestas sin eventos pero con cursor: la primera lejos del final, la segunda en él.
+      return n === 1 ? json({ result: { events: [], cursor: cursorEn(150), latestLedger: 300 } }) : json({ result: { events: [], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.desdeLedger).toBe(101);
+    expect(r.eventos).toEqual([]);
+    const g = pedidos.filter((q) => q.method === "getEvents");
+    expect(g).toHaveLength(2); // la primera respuesta vacía no corta el recorrido
+    expect(g[0].params.startLedger).toBe(101);
+    expect(g[1].params.pagination.cursor).toBe(cursorEn(150));
+  });
+  it("trae los eventos que aparecen en el camino y se corta cuando el cursor alcanza el último ledger", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const pedidos = [];
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      pedidos.push(p);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      const n = pedidos.filter((q) => q.method === "getEvents").length;
+      return n === 1
+        ? json({ result: { events: [eventoRpc("sealed", 1)], cursor: cursorEn(250), latestLedger: 300 } })
+        : json({ result: { events: [eventoRpc("drawn", 1)], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.eventos.map((x) => `${x.tipo}#${x.id}`)).toEqual(["sealed#1", "drawn#1"]);
+    expect(r.eventos[0].ledger).toBe(5564036);
+    expect(r.eventos[0].topic).toBeDefined(); // el crudo del RPC viaja con el evento, para unirlo a los registros
+    expect(pedidos.filter((q) => q.method === "getEvents")).toHaveLength(2);
+  });
+  it("descarta los eventos de llamadas fallidas y los que no son sealed ni drawn", async () => {
+    const { traerEventosRpc } = await import("./metricas-cadena.mjs");
+    const f = (url, init) => {
+      const p = JSON.parse(init.body);
+      if (p.method === "getHealth") return json({ result: { status: "healthy", oldestLedger: 100, latestLedger: 300 } });
+      return json({ result: { events: [eventoRpc("sealed", 1), eventoRpc("otro", 2), { ...eventoRpc("sealed", 3), inSuccessfulContractCall: false }], cursor: cursorEn(300), latestLedger: 300 } });
+    };
+    const r = await traerEventosRpc("rpc", C1, { fetch: f });
+    expect(r.eventos.map((x) => x.id)).toEqual([1]);
+  });
+});
+
+describe("registroDesdeRpc", () => {
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const mapa = (campos) => xdr.ScVal.scvMap(Object.entries(campos).map(([k, v]) => new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol(k), val: v }))).toXdr("base64");
+  const selloRpc = (extra = {}) => ({
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    txHash: "ab".repeat(32),
+    topic: [tema("sealed"), u64(570), new Address(A).toScVal().toXdr("base64")],
+    value: mapa({ count: nativeToScVal(18, { type: "u32" }), list_hash: nativeToScVal(Buffer.alloc(32, 7), { type: "bytes" }), num_winners: nativeToScVal(3, { type: "u32" }), round: nativeToScVal(99n, { type: "u64" }) }),
+    ...extra,
+  });
+  it("un evento del RPC se vuelve el registro crudo que decodificarEvento entiende", async () => {
+    const { decodificarEvento, registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const reg = registroDesdeRpc(selloRpc(), C1);
+    expect(decodificarEvento(reg)).toMatchObject({ tipo: "sealed", id: 570, organizador: A, count: 18, round: 99, ledger: 5564036, contrato: C1, ts: t("2026-11-05T10:00:00Z") });
+    expect(reg.txHash).toBe("ab".repeat(32));
+    expect(reg.rpc).toBe(true); // la marca queda en los crudos: al recargar, la unión sabe que vino por el RPC
+  });
+  it("un registro del RPC, lo mismo dos veces, da el mismo id; otro ledger o transacción, otro id", async () => {
+    const { registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const reg = registroDesdeRpc(selloRpc(), C1);
+    expect(registroDesdeRpc(selloRpc(), C1).id).toBe(reg.id);
+    expect(registroDesdeRpc({ ...selloRpc(), ledger: "5564037" }, C1).id).not.toBe(reg.id);
+    expect(registroDesdeRpc({ ...selloRpc(), txHash: "cd".repeat(32) }, C1).id).not.toBe(reg.id);
+  });
+  it("un registro drawn del RPC también se decodifica", async () => {
+    const { decodificarEvento, registroDesdeRpc } = await import("./metricas-cadena.mjs");
+    const value = mapa({ round: nativeToScVal(99n, { type: "u64" }), randomness: nativeToScVal(Buffer.alloc(32, 2), { type: "bytes" }), winners: xdr.ScVal.scvVec([nativeToScVal(3n, { type: "u64" })]) });
+    const reg = registroDesdeRpc({ ...selloRpc(), topic: [tema("drawn"), u64(570)], value }, C1);
+    expect(decodificarEvento(reg)).toMatchObject({ tipo: "drawn", id: 570, round: 99, ganadores: [3] });
+  });
+});
+
+describe("unirFuentes", () => {
+  const porIndice = sello(1, A, "2026-11-04T10:00:00Z");
+  it("el mismo evento visto por el índice, los crudos y el RPC se cuenta una vez, y manda la copia del índice", () => {
+    const porRpc = { ...sello(1, A, "2026-11-04T10:00:00Z"), eventoId: `rpc-${porIndice.eventoId}`, fuenteRpc: true };
+    const u = unirFuentes([porIndice, { ...porIndice }, porRpc]);
+    expect(u).toHaveLength(1);
+    expect(u[0].eventoId).toBe(porIndice.eventoId); // con el id real se puede buscar su transacción
+  });
+  it("un evento que solo trae el RPC se suma a los que ya había", () => {
+    const nuevo = { ...sello(2, A, "2026-11-05T10:00:00Z"), eventoId: "rpc-nuevo", fuenteRpc: true };
+    expect(unirFuentes([porIndice, nuevo])).toHaveLength(2);
+    expect(unirFuentes([porIndice, nuevo]).some((e) => e.eventoId === "rpc-nuevo")).toBe(true);
+  });
+  it("una copia del RPC que solo repite lo que guardaron los crudos no suma", () => {
+    const deCorridaPasada = { ...porIndice, eventoId: "rpc-viejo", fuenteRpc: true };
+    expect(unirFuentes([deCorridaPasada, porIndice])).toHaveLength(1);
+    expect(unirFuentes([deCorridaPasada, porIndice])[0].eventoId).toBe(porIndice.eventoId);
+  });
+  it("dos copias que no vienen del RPC y con ids distintos son una anomalía: se dejan las dos", () => {
+    expect(unirFuentes([porIndice, { ...porIndice, eventoId: "otra" }])).toHaveLength(2);
+  });
+});
+
+describe("la mezcla de fuentes", () => {
+  const tema = (x) => nativeToScVal(x, { type: "symbol" }).toXdr("base64");
+  const u64 = (n) => nativeToScVal(BigInt(n), { type: "u64" }).toXdr("base64");
+  const crudoRpc = (id, extra = {}) => registroDesdeRpc({
+    ledger: "5564036",
+    ledgerClosedAt: "2026-11-05T10:00:00Z",
+    txHash: h(String(id)),
+    topic: [tema("sealed"), u64(id), new Address(A).toScVal().toXdr("base64")],
+    value: xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("count"), val: nativeToScVal(10, { type: "u32" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("list_hash"), val: nativeToScVal(Buffer.alloc(32, 7), { type: "bytes" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("num_winners"), val: nativeToScVal(1, { type: "u32" }) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol("round"), val: nativeToScVal(BigInt(id), { type: "u64" }) }),
+    ]).toXdr("base64"),
+    ...extra,
+  }, C1);
+  const contratos = [{ contractId: C1 }];
+
+  it("descarta crudos de otra red y conserva solo contratos y ledgers válidos", () => {
+    const crudo = crudoRpc(1);
+    const mezcla = mezclarFuentes({
+      crudos: { red: "mainnet", eventos: [crudo] },
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.eventos).toEqual([]);
+    expect(mezcla.crudosDescartados).toBe(1);
+  });
+  it("une la copia del índice con la del RPC y deja ganar al índice", () => {
+    const rpc = crudoRpc(1);
+    const indice = { ...rpc, id: "023897352653787137-0000", rpc: undefined };
+    const mezcla = mezclarFuentes({
+      registrosIndice: [indice],
+      registrosRpc: [rpc],
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.eventos).toHaveLength(1);
+    expect(mezcla.eventos[0].eventoId).toBe(indice.id);
+  });
+  it("conserva el hash de un crudo RPC viejo aunque no haya transacción cacheada", () => {
+    const rpc = crudoRpc(1);
+    const mezcla = mezclarFuentes({
+      crudos: { red: "testnet", eventos: [rpc] },
+      red: "testnet",
+      contratos,
+      corteLedger: 5564036,
+    });
+    expect(mezcla.hashRpc.get(rpc.id)).toBe(rpc.txHash);
+  });
+  it("distingue un índice atrasado de uno que tiene más eventos", () => {
+    const rpc = [sello(1, A, "2026-11-05T10:00:00Z")];
+    expect(compararVentana(rpc, [])).toMatchObject({ indiceAtrasado: true, rpcAtrasado: false });
+    expect(compararVentana([], rpc)).toMatchObject({ indiceAtrasado: false, rpcAtrasado: true });
+  });
+  it("no inventa una fecha cuando no hay eventos", () => {
+    expect(datosDesde([])).toBeNull();
+    expect(datosDesde([
+      sello(1, A, "2026-11-05T10:00:00Z"),
+      sello(2, A, "2026-11-04T10:00:00Z"),
+    ])).toBe("2026-11-04T10:00:00Z");
+  });
+});
+
+describe("la transacción de un evento que llegó por el RPC", () => {
+  const json = (o) => Promise.resolve({ status: 200, ok: true, json: () => Promise.resolve(o) });
+  it("se pide por su hash y da null si Horizon no la tiene", async () => {
+    const { traerTransaccionPorHash } = await import("./metricas-cadena.mjs");
+    const vistas = [];
+    const f = (u) => {
+      vistas.push(u);
+      return u === "hz/transactions/ab" ? json({ hash: "ab", successful: true }) : Promise.resolve({ status: 404, ok: false });
+    };
+    expect(await traerTransaccionPorHash("hz", "ab", { fetch: f })).toMatchObject({ hash: "ab" });
+    expect(await traerTransaccionPorHash("hz", "cd", { fetch: f })).toBeNull();
+    expect(vistas).toEqual(["hz/transactions/ab", "hz/transactions/cd"]);
   });
 });
 

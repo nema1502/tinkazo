@@ -4,6 +4,8 @@
  * de ejemplo (modo stand): esos nombres nunca van a un sorteo sellado ni a un
  * comprobante.
  *
+ *   POST   /v1/campana                     JSON {"texto","firma"} → 201 {"id", "token", "vence"}
+ *                                           (reemplazar la sala de ese evento que se cerró o venció pide su token en Authorization)
  *   POST   /v1/sala                        → 201 {"id", "token", "vence"}   (solo desde los orígenes permitidos)
  *   POST   /v1/sala/<id>                   JSON {"d","h","llave"}: alta 201 {"n"}, corrección 200 {"n","r"}
  *                                          (una sala anterior a la forma 2 también acepta `d` solo en text/plain)
@@ -16,12 +18,27 @@
  * Los equipos de un evento (el registro con cuenta de `equipos.html` en el sitio):
  *   PUT    /v1/sala/<id>/config            Authorization: Bearer <token>   JSON {modo, evento, cuenta} → 204
  *   GET    /v1/sala/<id>/publico           sin token: cómo es el registro y cuántos equipos van → 200 {config, equipos}
+ *                                           (en una sala de campaña contesta {config: null, equipos: 0})
  *   POST   /v1/sala/<id>/equipos           JSON {cuenta, d, llave}, con d cifrado con la clave del QR (solo desde el sitio) → 201 {n, estado}
  *                                           (una cuenta ya anotada solo se reescribe con la misma llave: si no, 409 {"error":"ajena"})
  *   GET    /v1/sala/<id>/equipos?desde=V   Authorization: Bearer <token>   → 200 [{n, cuenta, d, estado, v}]
  *   GET    /v1/sala/<id>/equipos/<cuenta>  sin token: en qué punto está ese equipo → 200 {n, estado}
+ *                                           (en una sala de campaña contesta siempre 404, como si el equipo no estuviera)
  *   PUT    /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   JSON {estado} → 204
  *   DELETE /v1/sala/<id>/equipos/<n>       Authorization: Bearer <token>   → 204
+ *
+ * Las salas de campaña, creadas solo con un archivo firmado por Tinkazo:
+ *   GET    /v1/sala/<id>/campana           el texto firmado y su firma → 200 {"texto","firma"}
+ *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0) y si hay aviso por correo
+ *   GET    /v1/sala/<id>/campana/pase      Authorization: Bearer <token> → 200 {"p","hasta"}
+ *   PUT    /v1/sala/<id>/campana/fase      Authorization: Bearer <token> JSON {"fase","cierraMs"?,"sorteo"?} → 204
+ *   PUT    /v1/sala/<id>/campana/resultado Authorization: Bearer <token> JSON {"sorteo","comprobante"} → 204
+ *                                           (con el correo prendido, además le avisa a quien ganó, sin que la respuesta lo espere)
+ *   GET    /v1/sala/<id>/campana/resultado sin token → 200 {"sorteo","ganadoras","comprobante"}
+ *   POST   /v1/sala/<id>/campana/quitar    Authorization: Bearer <token> JSON {"n","motivo"} → 204
+ *   POST   /v1/sala/<id>/campana/avisar    Authorization: Bearer <token> JSON {"cuenta"} → 204
+ *   POST   /v1/sala/<id>/campana/alta      JSON {"token","d","llave","p"?} → 201 {"cuenta"} o 200 {"cuenta","ya"}
+ *   POST   /v1/sala/<id>/campana/yo        JSON {"cuenta","llave"} → 200 {"fase","total","cierraMs","anotada"}
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -29,7 +46,7 @@
  * una alta y hasta cinco correcciones, la huella SHA-256 del token y la hora de
  * creación. Una corrección borra la fila vieja y la nueva recuerda en `r` los
  * números que reemplaza, para que la pantalla los quite también al consultar.
- * Una alarma a las 10 h de creada borra todo. No guarda nombres en claro, la
+ * Una alarma al vencer su vida borra todo (10 h, o 24 h en una campaña). No guarda nombres en claro, la
  * llave del celular, ni direcciones IP, ni navegador, ni hora por persona (para
  * contar las salas que arma cada dirección guarda, a lo sumo una hora, una huella
  * con sal que no se devuelve a la dirección; para el tope de altas de equipos
@@ -78,6 +95,63 @@ import { paginaCelular } from "./pagina";
 import { ES_LLAVE, anotarEquipo as anotarEnRegistro, crearTablasDeEquipos, quitarEquipo as quitarDelRegistro, siguienteVersion } from "./registro";
 import type { Ejecutar } from "./registro";
 import { FORMA_NOMBRES, anotarNombre, crearTablasDeNombres, leerNombres, type NombreDeSala } from "./nombres";
+import {
+  CAMPANA_POR_MINUTO,
+  ES_PASE,
+  FichasVerificadas,
+  MAX_CUERPO_ALTA,
+  MAX_CUERPO_CAMPANA,
+  anotarPersona as anotarEnCampana,
+  avisarGanadora as avisarEnCampana,
+  cambioValido,
+  cierreValido,
+  confirmarEventoSql,
+  contarRechazo,
+  crearTablasDeCampana,
+  esFase,
+  esMotivoDeSalida,
+  estadoDeCelular as leerEstadoDeCelular,
+  ganadorasGuardadas,
+  grupoDeConexion,
+  guardarResultado as guardarResultadoEnCampana,
+  hastaDelPase,
+  huellaDeFicha,
+  huellaDeLlave,
+  huellaDePersona,
+  leerCampanaFirmada,
+  modoSoloGoogle,
+  paseDe,
+  paseValido,
+  prealtaDeCampana,
+  quitarPersona as quitarDeCampana,
+  quitadasPorMotivo,
+  cerrarAvisoPorCorreo,
+  reingresoDeCampana,
+  reservarAvisosPorCorreo,
+  reservarEventoSql,
+  salaDelIntentoSql,
+  sellar as sellarEnCampana,
+  soltarEventoSql,
+  ventanaDelPase,
+  viaPermitida,
+  vidaDeCampana,
+} from "./campana";
+import type { CampanaFirmada, EstadoDeCelular, Fase, MotivoDeSalida, ReemplazoDeSala, ReservaDeEvento } from "./campana";
+import { leerSorteoEnLaRed } from "./cadena";
+import {
+  avisarPorCorreo,
+  correoPrendido,
+  datosDeLaCampana,
+  enlaceDeRecibir,
+  llamarAlProveedor,
+  mensajeroDeCloudflare,
+} from "./correo";
+import type { AvisoDeLaSala, EnlaceDeCorreo } from "./correo";
+import type { SelloEnLaRed } from "./cadena";
+import { crearSalaDeCampana } from "./creacion";
+import { llaveDeCampanas } from "./firma";
+import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
+import deployments from "../../../src/stellar/deployments.json";
 
 export interface Env {
   SALA: DurableObjectNamespace<Sala>;
@@ -85,6 +159,49 @@ export interface Env {
   CUPOS: DurableObjectNamespace<Cupos>;
   /** Solo para probar la alarma en local: `wrangler dev --var VIDA_PRUEBA_MS:3000`. En producción no existe. */
   VIDA_PRUEBA_MS?: string;
+  /**
+   * Solo en un Worker local, con VIDA_PRUEBA_MS puesta: otra llave pública de campañas, para probar sin la de verdad.
+   * Vale únicamente para pedidos que llegan a localhost o a 127.0.0.1: en un Worker desplegado se ignora (ver `llaveDeCampanas`).
+   */
+  LLAVE_CAMPANAS_PRUEBA?: string;
+  /** La misma llave secreta del portero de la red principal. Se carga con `wrangler secret put`, nunca en el archivo. */
+  POLLAR_SECRETO?: string;
+  /** El id público de la app del proveedor de cuentas en la red principal. */
+  POLLAR_APP_ID?: string;
+  /** En "0" se apaga la exigencia del pase, solo como salida de emergencia el día del evento. */
+  PASE?: string;
+  /**
+   * Solo entra quien el proveedor dice, exactamente, que es de Google. El valor "suave" es un interruptor de emergencia:
+   * también deja entrar (y cuenta aparte) a quien el proveedor no dice por dónde entró. Cualquier otro valor es estricto.
+   */
+  SOLO_GOOGLE?: string;
+  /** Los RPC de la red principal, separados por comas. Se prueban en ese orden. */
+  RPC_MAINNET?: string;
+  /** El enlace de envío de correo de Cloudflare (`[[send_email]]`). Sin él, no se manda nada y nada falla. */
+  CORREO?: EnlaceDeCorreo;
+  /** La dirección del dominio habilitado desde la que se manda. Sin ella, no se manda nada. */
+  CORREO_DE?: string;
+  /** El interruptor: solo con "1" la sala le avisa por correo a quien gana. Por defecto "0". */
+  CORREO_GANADORAS?: string;
+}
+
+/** Solo códigos fijos del proveedor: nunca una sesión, un id, un nombre, un correo ni una cuenta. */
+function registrar(evento: string, datos: Record<string, string | number> = {}): void {
+  console.log(JSON.stringify({ evento, datos }));
+}
+
+let pollar: Pollar | null | undefined;
+/** Uno por aislamiento: su memoria de 60 segundos sirve para los reintentos del mismo celular. */
+function pollarDeLaSala(env: Env): Pollar | null {
+  if (pollar === undefined) {
+    pollar = pollarDe({
+      secreto: env.POLLAR_SECRETO,
+      appId: env.POLLAR_APP_ID ?? null,
+      fetch: (u, i) => fetch(u, i),
+      registrar,
+    });
+  }
+  return pollar;
 }
 
 const ALFABETO = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -116,6 +233,9 @@ function cors(origen: string | null, metodos: string): Record<string, string> {
     "Access-Control-Allow-Origin": origenPermitido(origen) && origen ? origen : SITIO,
     "Access-Control-Allow-Methods": metodos,
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    // Sin esto el navegador, desde otro origen, no deja leer cuánto esperar (el celular esperaría siempre lo fijo) ni la hora
+    // de la sala (`Date`), que el sitio usa como respaldo de su reloj.
+    "Access-Control-Expose-Headers": "Retry-After, Date",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -133,9 +253,9 @@ function json(cuerpo: unknown, estado: number, extra: Record<string, string> = {
 type Permiso = { ok: true } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
 
 /**
- * Cuántas salas se crean: 5 por dirección y por hora y 100 por día en total,
+ * Cuántas salas se crean: 30 por dirección y por hora y 400 por día en total,
  * las dos cuentas en el SQLite de este objeto, para que dormirse o reiniciarse
- * no las ponga en cero (una cuenta en memoria dejaba a un script pedir otras 5
+ * no las ponga en cero (una cuenta en memoria dejaba a un script pedir otras 30
  * salas cada vez que el objeto se dormía, hasta agotar el día).
  *
  * La dirección no se guarda: el grupo es una huella SHA-256 de la dirección más
@@ -146,10 +266,12 @@ type Permiso = { ok: true } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
  *
  * Sobre el binding de límite de pedidos de Cloudflare (`[[ratelimits]]`): solo
  * admite ventanas de 10 o 60 segundos y sus conteos son aproximados, por
- * ubicación. No puede decir «5 por hora» ni «100 por día», así que no se usa
+ * ubicación. No puede decir 30 por hora ni 400 por día, así que no se usa
  * para esto; los topes exactos viven acá y en cada sala.
  */
 export class Cupos extends DurableObject<Env> {
+  private readonly sql: Ejecutar = (consulta, ...parametros) => this.ctx.storage.sql.exec(consulta, ...parametros).toArray() as never;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS cuotas (dia TEXT PRIMARY KEY, n INTEGER NOT NULL)");
@@ -189,6 +311,30 @@ export class Cupos extends DurableObject<Env> {
     if (hoy === 0) sql.exec("DELETE FROM cuotas WHERE dia < ?", diaUtc(ahora - 3 * 86_400_000));
     return { ok: true };
   }
+
+  /**
+   * Reserva el evento de una campaña firmada, con su propio cupo fuera de las salas de todos los días. `reemplazo` es la
+   * sala que tenía el evento, que quien llama comprobó que ya no existe, con la huella del token de esa sala que presentó:
+   * así el evento se vuelve a usar con el mismo archivo, pero solo en manos de quien lo organizaba.
+   */
+  async reservarCampana(evento: string, reemplazo: ReemplazoDeSala | null): Promise<ReservaDeEvento> {
+    return reservarEventoSql(this.sql, evento, Date.now(), reemplazo);
+  }
+
+  /** Confirma la reserva con el id de la sala ya creada y la huella de su token. Recién entonces cuenta para el cupo del día. */
+  async confirmarCampana(evento: string, reserva: string, sala: string, huella: string): Promise<boolean> {
+    return confirmarEventoSql(this.sql, evento, { reserva, sala, huella, ahora: Date.now() });
+  }
+
+  /** La sala confirmada del evento si su token tiene esa huella: el pedido repetido de quien no recibió la respuesta. */
+  async salaDelIntento(evento: string, huella: string): Promise<{ sala: string; enMs: number } | null> {
+    return salaDelIntentoSql(this.sql, evento, huella);
+  }
+
+  /** Deshace la reserva si la sala no llegó a crearse. */
+  async soltarCampana(evento: string, reserva: string): Promise<void> {
+    soltarEventoSql(this.sql, evento, reserva);
+  }
 }
 
 /* ------------------------------------------------------------------- la sala */
@@ -203,13 +349,43 @@ interface Presentacion {
 /** Lo que el Worker le pide a la sala, por RPC. */
 export type Resultado<T = object> =
   | ({ ok: true } & T)
-  | { ok: false; motivo: "no-existe" | "token" | "llena" | "rapido" | "sin-registro" | "ajena" | "forma" | "repetido" | "correcciones" | "cerrada" }
-  | { ok: false; motivo: "cupo-conexion"; esperaS: number };
+  | {
+      ok: false;
+      motivo:
+        | "no-existe"
+        | "token"
+        | "llena"
+        | "rapido"
+        | "sin-registro"
+        | "ajena"
+        | "forma"
+        | "repetido"
+        | "correcciones"
+        | "campana"
+        | "transicion"
+        | "cerrada"
+        | "pase"
+        | "quitada"
+        | "fase"
+        | "lista-distinta"
+        | "ganadores-distintos"
+        | "organizador-distinto"
+        | "ronda-pasada"
+        | "distinto"
+        | "sin-resultado"
+        | "no-esta"
+        | "no-gano";
+    }
+  | { ok: false; motivo: "cupo-conexion" | "rechazos"; esperaS: number };
 
 export class Sala extends DurableObject<Env> {
   private porMinuto = new VentanaPorMinuto(NOMBRES_POR_MINUTO);
   /** Las altas de equipos, aparte de los nombres: unos no pueden dejar afuera a los otros (`EQUIPOS_POR_MINUTO`). */
   private equiposPorMinuto = new VentanaPorMinuto(EQUIPOS_POR_MINUTO);
+  /** Las personas verificadas de una campaña tienen su propio ritmo, independiente de los otros registros. */
+  private campanaPorMinuto = new VentanaPorMinuto(CAMPANA_POR_MINUTO);
+  /** Las fichas que el proveedor dio por buenas hace menos de un minuto: evita llamarlo de nuevo por la misma. Solo en memoria. */
+  private fichasVerificadas = new FichasVerificadas();
   private readonly sql: Ejecutar = (consulta, ...parametros) => this.ctx.storage.sql.exec(consulta, ...parametros).toArray() as never;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -252,6 +428,24 @@ export class Sala extends DurableObject<Env> {
     return iguales(huella, await sha256Hex(token));
   }
 
+  private esCampana(): boolean {
+    return this.dato("campana") !== null;
+  }
+
+  /** La red queda dentro del texto firmado: no la puede cambiar un pedido posterior. */
+  private red(): "mainnet" | "testnet" | null {
+    const texto = this.dato("campana");
+    if (texto === null) return null;
+    try {
+      const datos: unknown = JSON.parse(texto);
+      if (!datos || typeof datos !== "object") return null;
+      const red = (datos as Record<string, unknown>).red;
+      return red === "mainnet" || red === "testnet" ? red : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Crea la sala. Una sola vez: un id ya usado devuelve false. */
   async crear(huella: string, vida: number = VIDA_MS): Promise<boolean> {
     if (this.dato("huella")) return false;
@@ -262,9 +456,301 @@ export class Sala extends DurableObject<Env> {
     return true;
   }
 
+  /** Crea una sala de campaña con el texto que ya pasó la firma, una sola vez por id. */
+  async crearCampana(huella: string, c: CampanaFirmada, vida: number): Promise<boolean> {
+    if (this.dato("huella")) return false;
+    const ahora = Date.now();
+    this.crearTablas();
+    crearTablasDeCampana(this.sql);
+    const secreto = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, "0")).join("");
+    this.ctx.storage.sql.exec(
+      "INSERT INTO sala (k, v) VALUES ('huella', ?), ('creada', ?), ('forma', 'campana'), " +
+        "('campana', ?), ('firma', ?), ('evento', ?), ('fase', 'lista'), ('pase', ?), ('cierra', ?), ('sorteo', ?)",
+      huella,
+      String(ahora),
+      c.texto,
+      c.firma,
+      c.evento,
+      secreto,
+      String(c.cierraMs),
+      String(c.sorteoMs),
+    );
+    // Lo firmado que el sello de la red tiene que cumplir: cuántos premios y, si la campaña la nombra, quién sella.
+    this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('premios', ?)", String(c.premios));
+    if (c.organizadora !== null) {
+      this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('organizadora', ?)", c.organizadora);
+    }
+    await this.ctx.storage.setAlarm(ahora + vida);
+    return true;
+  }
+
+  /** Si la sala existe. Una sala cerrada, vencida o que nunca se creó no tiene nada guardado. */
+  async viva(): Promise<boolean> {
+    return this.dato("huella") !== null;
+  }
+
+  /** El archivo público de la campaña, exactamente como fue firmado. */
+  async campana(): Promise<Resultado<{ texto: string; firma: string }>> {
+    const texto = this.dato("campana");
+    const firma = this.dato("firma");
+    if (texto === null || firma === null) return { ok: false, motivo: "no-existe" };
+    return { ok: true, texto, firma };
+  }
+
+  /** Lo público de la fase, con el pase presentado por quien consulta. Los contadores por vía piden el token. */
+  async estadoDeCampana(
+    p: string | null,
+    exigirPase: boolean,
+    token: string | null = null,
+  ): Promise<
+    Resultado<{
+      fase: Fase;
+      total: number;
+      cierraMs: number;
+      pase: "vale" | "vencido";
+      quitadas: Record<MotivoDeSalida, number>;
+      vias?: { google: number; sinDato: number };
+    }>
+  > {
+    if (!this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const fase = this.dato("fase");
+    if (!esFase(fase)) return { ok: false, motivo: "no-existe" };
+    const total = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c;
+    const cierraMs = Number(this.dato("cierra"));
+    // Con el pase apagado (PASE en 0) el alta lo acepta siempre: el estado también dice que vale, para no frenar al celular.
+    const vale = !exigirPase || (p !== null && (await paseValido(this.dato("pase") ?? "", p, Date.now())));
+    const conToken = token !== null && token !== "" && (await this.tokenValido(token));
+    const vias = conToken
+      ? { google: Number(this.dato("via-google") ?? 0), sinDato: Number(this.dato("via-sin-dato") ?? 0) }
+      : undefined;
+    return {
+      ok: true,
+      fase,
+      total,
+      cierraMs,
+      pase: vale ? "vale" : "vencido",
+      quitadas: quitadasPorMotivo(this.sql),
+      ...(vias ? { vias } : {}),
+    };
+  }
+
+  /**
+   * Las comprobaciones anteriores a la llamada externa, con todas las esperas resueltas primero: fase, pase y los topes de
+   * rechazos. Si la ficha es de una sesión que ya se verificó hace menos de un minuto y su persona ya está anotada, es un
+   * reingreso: se resuelve acá, sin llamar al proveedor (`cuenta` trae su cuenta). Si no, `cuenta` es null y sigue la
+   * verificación. Las reglas viven en `prealtaDeCampana`, que se prueba en Node.
+   */
+  async prealta(
+    ip: string,
+    p: string | null,
+    exigirPase: boolean,
+    token: string,
+    llave: string,
+  ): Promise<Resultado<{ cuenta: string | null }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const ahora = Date.now();
+    const grupo = await grupoDeConexion(this.sql, ip);
+    const ficha = await huellaDeFicha(this.sql, token);
+    const huella = await huellaDeLlave(llave);
+    const paseVale = !exigirPase || (await paseValido(this.dato("pase") ?? "", p, ahora));
+    return prealtaDeCampana(this.sql, this.fichasVerificadas, { grupo, ficha, llave: huella, paseVale, ahora });
+  }
+
+  /**
+   * Una sesión que el proveedor rechazó. La ficha siempre cuenta; la conexión, solo la primera vez que se ve esa ficha
+   * (repetirla no cuesta otra llamada), así una persona no deja afuera a las demás. Los rechazos de antes de llamar
+   * (forma, pase, fase) no pasan por acá.
+   */
+  async rechazo(ip: string, token: string): Promise<Resultado> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const grupo = await grupoDeConexion(this.sql, ip);
+    const ficha = await huellaDeFicha(this.sql, token);
+    contarRechazo(this.sql, grupo, ficha, Date.now());
+    return { ok: true };
+  }
+
+  /**
+   * El reingreso de una persona ya verificada, antes de buscar una cuenta que no hace falta consultar. Cada persona tiene su
+   * propio tope por hora: pasado, da `cupo-conexion` y no toca nada.
+   */
+  async yaEsta(
+    usuario: string,
+    llave: string,
+    ip: string,
+    token: string,
+    vence: number,
+  ): Promise<Resultado<{ cuenta: string | null }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const persona = await huellaDePersona(this.sql, usuario);
+    const huella = await huellaDeLlave(llave);
+    const grupo = await grupoDeConexion(this.sql, ip);
+    const ficha = await huellaDeFicha(this.sql, token);
+    const ahora = Date.now();
+    const r = reingresoDeCampana(this.sql, this.fichasVerificadas, { persona, llave: huella, grupo, ahora, ficha, vence });
+    if (r === null) return { ok: true, cuenta: null };
+    if (!r.ok) return r;
+    return { ok: true, cuenta: r.cuenta };
+  }
+
+  /** El alta verificada: primero todas las esperas y después un único bloque de lecturas y escrituras SQL. */
+  async anotarPersona(alta: {
+    usuario: string;
+    cuenta: string;
+    d: string;
+    llave: string;
+    ip: string;
+    p: string | null;
+    exigirPase: boolean;
+    via: "google" | "sin-dato";
+    token: string;
+    vence: number;
+  }): Promise<Resultado<{ cuenta: string; ya: boolean; v: number; n: number }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const ahora = Date.now();
+    const persona = await huellaDePersona(this.sql, alta.usuario);
+    const llave = await huellaDeLlave(alta.llave);
+    const grupo = await grupoDeConexion(this.sql, alta.ip);
+    const ficha = await huellaDeFicha(this.sql, alta.token);
+    if (alta.exigirPase && !(await paseValido(this.dato("pase") ?? "", alta.p, ahora))) {
+      return { ok: false, motivo: "pase" };
+    }
+    const r = anotarEnCampana(
+      this.sql,
+      { persona, cuenta: alta.cuenta, d: alta.d, llave, grupo, ahora, via: alta.via },
+      () => this.campanaPorMinuto.intentar(ahora),
+    );
+    // Quien salió con su motivo también queda recordada: si repite el alta con la misma sesión, la sala le contesta sin
+    // volver a llamar al proveedor (`prealtaDeCampana`).
+    if (!r.ok && r.motivo === "quitada") this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
+    if (!r.ok) return r;
+    this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
+    if (!r.ya) this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
+    return r;
+  }
+
+  /** Saca a una persona antes del sello y avisa a la pantalla con el mensaje que ya entiende. */
+  async quitarPersona(token: string, n: number, motivo: MotivoDeSalida): Promise<Resultado> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const r = quitarDeCampana(this.sql, n, motivo);
+    if (!r.ok) return r;
+    this.avisar({ t: "equipo-quitado", n });
+    return { ok: true };
+  }
+
+  /** Marca el aviso para una ganadora. El celular lo consulta con su propia llave. */
+  async avisarGanadora(token: string, cuenta: string): Promise<Resultado> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    return avisarEnCampana(this.sql, cuenta);
+  }
+
+  /** El celular pregunta por sí mismo con su llave; la respuesta nunca incluye su número de anotación. */
+  async estadoDeCelular(cuenta: string, llave: string): Promise<Resultado<EstadoDeCelular>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const huella = await huellaDeLlave(llave);
+    return { ok: true, ...leerEstadoDeCelular(this.sql, cuenta, huella) };
+  }
+
+  /** El pase que la pantalla presenta al entrar con Google; solo lo renueva quien tiene el token. */
+  async paseDeLaPantalla(token: string): Promise<Resultado<{ p: string; hasta: number }>> {
+    if (!this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const ahora = Date.now();
+    const p = await paseDe(this.dato("pase") ?? "", ventanaDelPase(ahora));
+    return { ok: true, p, hasta: hastaDelPase(ahora) };
+  }
+
+  /** Cambia la fase dentro de las transiciones permitidas y conserva el cierre si no se manda uno nuevo. */
+  async ponerFase(token: string, fase: Fase, cierraMs: number | null): Promise<Resultado> {
+    if (!this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const actual = this.dato("fase");
+    if (!esFase(actual)) return { ok: false, motivo: "no-existe" };
+    if (fase === "sellada" || !cambioValido(actual, fase)) return { ok: false, motivo: "transicion" };
+    let cierre = Number(this.dato("cierra"));
+    if (cierraMs !== null && fase === "abierta") {
+      if (!cierreValido(cierraMs, Date.now())) return { ok: false, motivo: "forma" };
+      cierre = cierraMs;
+      this.ctx.storage.sql.exec(
+        "INSERT INTO sala (k, v) VALUES ('cierra', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        String(cierre),
+      );
+    }
+    this.ctx.storage.sql.exec(
+      "INSERT INTO sala (k, v) VALUES ('fase', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+      fase,
+    );
+    this.avisar({ t: "fase", fase, cierraMs: cierre });
+    return { ok: true };
+  }
+
+  /**
+   * Sella solo con los datos que el Worker ya leyó del contrato; la decisión y la escritura no tienen esperas. La hora se
+   * toma acá, después de la última espera: la ronda del sello tiene que estar todavía por salir en el momento de sellar.
+   */
+  async sellarCampana(token: string, sorteo: string, sello: SelloEnLaRed): Promise<Resultado> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const r = sellarEnCampana(this.sql, sorteo, sello, Date.now());
+    if (!r.ok) return r;
+    this.avisar({ t: "fase", fase: "sellada" });
+    return r;
+  }
+
+  /** Guarda las cuentas que la propia sala traduce desde los índices leídos en la red. */
+  async guardarResultadoDeCampana(
+    token: string,
+    datos: { sorteo: string; ganadores: readonly number[]; numWinners: number; comprobante: string },
+  ): Promise<Resultado<{ primera: boolean; correo: AvisoDeLaSala }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
+    const r = guardarResultadoEnCampana(this.sql, datos);
+    if (!r.ok) return r;
+    this.avisar({ t: "fase", fase: "sorteada" });
+    // Las cuentas a las que se les escribe las reserva la propia sala, de lo que guardó, en este mismo bloque sin esperas.
+    // Con el correo apagado no reserva nada, así que un interruptor que se prende después todavía puede avisar.
+    const cuentas = correoPrendido(this.env) ? reservarAvisosPorCorreo(this.sql, Date.now()) : [];
+    const campana = cuentas.length > 0 ? datosDeLaCampana(this.dato("campana")) : { empresa: "", premios: [] };
+    return { ...r, correo: { cuentas, ...campana } };
+  }
+
+  /**
+   * Deja la marca de una cuenta en "hecha" cuando su aviso por correo ya se intentó. Solo la llama el Worker, nunca un
+   * pedido de afuera, y solo cambia una reserva que ya existe: no crea marcas ni guarda nada de la persona.
+   */
+  async cerrarAvisoDeCorreo(cuenta: string): Promise<void> {
+    if (!esCuentaValida(cuenta)) return;
+    cerrarAvisoPorCorreo(this.sql, cuenta);
+  }
+
+  /** El resultado público del evento. Antes del sorteo se distingue de una sala que no existe. */
+  async resultadoDeCampana(): Promise<
+    Resultado<{ sorteo: string; ganadoras: string[]; comprobante: string }>
+  > {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const ganadoras = ganadorasGuardadas(this.sql);
+    const sorteo = this.dato("sorteo");
+    const comprobante = this.dato("comprobante");
+    if (ganadoras.length === 0 || sorteo === null || comprobante === null) {
+      return { ok: false, motivo: "sin-resultado" };
+    }
+    return { ok: true, sorteo, ganadoras, comprobante };
+  }
+
+  /** El Worker necesita la red antes de consultar el contrato; este dato no modifica la sala. */
+  async redDeCampana(): Promise<Resultado<{ red: "mainnet" | "testnet" }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    const red = this.red();
+    if (red === null) return { ok: false, motivo: "no-existe" };
+    return { ok: true, red };
+  }
+
   /** Un alta o una corrección. Las reglas y el SQL viven en `nombres.ts`, que se prueba en Node. */
   async sumar(cuerpo: string): Promise<Resultado<{ n: number; creada: boolean; r?: number[] }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
+    if (this.esCampana()) return { ok: false, motivo: "campana" };
     // Cerrada la lista no entra nadie más (juegos interactivos): la respuesta sería «cerrada» de todos modos.
     if (this.estadoDeLista() === "cerrada") return { ok: false, motivo: "cerrada" };
     const r = await anotarNombre(this.sql, cuerpo, this.dato("forma") === FORMA_NOMBRES, () => this.porMinuto.intentar(Date.now()));
@@ -319,6 +805,8 @@ export class Sala extends DurableObject<Env> {
   /** Quien organiza arma (o rearma) el registro: con qué modo y con qué cuenta del evento. */
   async configurar(token: string, config: ConfigEquipos): Promise<Resultado> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
+    if (this.esCampana()) return { ok: false, motivo: "campana" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     this.crearTablaDeEquipos();
     this.ctx.storage.sql.exec("INSERT INTO sala (k, v) VALUES ('config', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", JSON.stringify(config));
@@ -328,6 +816,8 @@ export class Sala extends DurableObject<Env> {
   /** Lo que ve cualquiera con el enlace: cómo es el registro y cuántos equipos van. Nada de nombres. */
   async publico(): Promise<Resultado<{ config: ConfigEquipos | null; equipos: number }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // Una campaña contesta como una sala sin registro de equipos: lo suyo se lee por `campana/estado`, que es público a propósito.
+    if (this.esCampana()) return { ok: true, config: null, equipos: 0 };
     let equipos = 0;
     try {
       equipos = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c;
@@ -347,6 +837,8 @@ export class Sala extends DurableObject<Env> {
    */
   async anotarEquipo(cuenta: string, d: string, llave: string, ip: string): Promise<Resultado<{ n: number; estado: EstadoEquipo }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
+    if (this.esCampana()) return { ok: false, motivo: "campana" };
     const config = this.config();
     if (!config) return { ok: false, motivo: "sin-registro" };
     const r = await anotarEnRegistro(this.sql, { cuenta, d, llave, ip, ahora: Date.now(), modo: config.modo }, () => this.equiposPorMinuto.intentar(Date.now()));
@@ -373,6 +865,9 @@ export class Sala extends DurableObject<Env> {
   /** En qué punto está el equipo de esta cuenta. Lo pregunta el celular de su encargado. */
   async equipoDe(cuenta: string): Promise<Resultado<{ n: number; estado: string }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En una campaña las anotadas son personas: con solo el id de la sala no se dice nada de nadie, ni que está ni su número.
+    // Contesta igual que una sala sin ese equipo. Cada celular consulta lo suyo por `campana/yo`, con su llave.
+    if (this.esCampana()) return { ok: false, motivo: "no-existe" };
     let fila: { n: number; estado: string } | undefined;
     try {
       fila = this.ctx.storage.sql.exec<{ n: number; estado: string }>("SELECT n, estado FROM equipos WHERE cuenta = ?", cuenta).toArray()[0];
@@ -385,6 +880,8 @@ export class Sala extends DurableObject<Env> {
   /** Quien organiza cambia el punto en que está un equipo: lo ve el celular de su encargado. */
   async cambiarEstado(token: string, n: number, estado: EstadoEquipo): Promise<Resultado> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
+    if (this.esCampana()) return { ok: false, motivo: "campana" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     const sql = this.ctx.storage.sql;
     let fila: { cuenta: string; d: string } | undefined;
@@ -403,6 +900,8 @@ export class Sala extends DurableObject<Env> {
   /** Saca un equipo, también del objeto. */
   async quitarEquipo(token: string, n: number): Promise<Resultado> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
+    // En campaña solo se anota por el alta con sesión verificada: el token no abre otra puerta ni saca a nadie sin motivo.
+    if (this.esCampana()) return { ok: false, motivo: "campana" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     try {
       quitarDelRegistro(this.sql, n);
@@ -466,7 +965,7 @@ export class Sala extends DurableObject<Env> {
     await this.ctx.storage.deleteAll();
   }
 
-  /** A las 10 h de creada: no queda nada. */
+  /** Al vencer la vida de la sala no queda nada: 10 h en una sala común y 24 h en una campaña. */
   override async alarm(): Promise<void> {
     await this.borrarTodo("vencida");
   }
@@ -566,6 +1065,42 @@ function bearer(req: Request): string {
   return (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
 }
 
+const ES_SORTEO = /^[0-9]{1,20}$/;
+
+/** Los puntos de entrada de la red de la campaña, en el orden en que se prueban. */
+/**
+ * Busca el correo de las cuentas que la sala reservó y les manda el aviso. Todo se traga: lo que falla deja solo un código
+ * fijo en el registro, nunca un correo, un nombre ni una cuenta.
+ */
+async function avisarGanadorasPorCorreo(
+  env: Env,
+  red: "mainnet" | "testnet",
+  aviso: AvisoDeLaSala,
+  terminada: (cuenta: string) => Promise<void>,
+): Promise<void> {
+  try {
+    if (!correoPrendido(env) || !env.CORREO || !env.CORREO_DE || !env.POLLAR_SECRETO) return;
+    await avisarPorCorreo({
+      aviso,
+      enlace: enlaceDeRecibir(red),
+      llamar: llamarAlProveedor(env.POLLAR_SECRETO, (u, i) => fetch(u, i)),
+      mensajero: mensajeroDeCloudflare(env.CORREO, env.CORREO_DE, registrar),
+      registrar,
+      terminada,
+    });
+  } catch {
+    registrar("correo-envio", { codigo: "inesperado" });
+  }
+}
+
+function rpcsDe(env: Env, red: "mainnet" | "testnet"): string[] {
+  if (red === "testnet") return [deployments.testnet.rpcUrl];
+  return (env.RPC_MAINNET ?? "")
+    .split(",")
+    .map((rpc) => rpc.trim())
+    .filter((rpc) => rpc.length > 0);
+}
+
 /** El cuerpo de un pedido como JSON, o `null` si no es JSON o pasa del tope. */
 async function leerJson(req: Request, tope: number): Promise<unknown> {
   const largo = Number(req.headers.get("Content-Length") ?? "NaN");
@@ -577,19 +1112,103 @@ async function leerJson(req: Request, tope: number): Promise<unknown> {
   }
 }
 
-const MOTIVOS: Record<string, number> = { "no-existe": 404, token: 403, llena: 429, rapido: 429, "sin-registro": 409, ajena: 409, repetido: 409, correcciones: 429, cerrada: 409, "cupo-conexion": 429 };
+const MOTIVOS: Record<string, number> = {
+  "no-existe": 404,
+  token: 403,
+  llena: 429,
+  rapido: 429,
+  "sin-registro": 409,
+  ajena: 409,
+  repetido: 409,
+  correcciones: 429,
+  "cupo-conexion": 429,
+  campana: 409,
+  transicion: 409,
+  cerrada: 409,
+  pase: 409,
+  quitada: 409,
+  fase: 409,
+  "lista-distinta": 409,
+  "ganadores-distintos": 409,
+  "organizador-distinto": 409,
+  "ronda-pasada": 409,
+  "sin-sorteo": 409,
+  distinto: 409,
+  "no-esta": 404,
+  "no-gano": 400,
+  "sin-billetera": 409,
+  rechazos: 429,
+  sesion: 401,
+  "otra-app": 403,
+  "solo-google": 403,
+  pollar: 502,
+  "sin-pollar": 503,
+};
 
 function falla(r: { motivo: string; esperaS?: number }, h: Record<string, string>): Response {
-  const extra = r.motivo === "rapido" ? { ...h, "Retry-After": "30" } : r.motivo === "cupo-conexion" ? { ...h, "Retry-After": String(r.esperaS ?? 600) } : h;
+  const espera = r.motivo === "cupo-conexion" || r.motivo === "rechazos";
+  const extra =
+    r.motivo === "rapido"
+      ? { ...h, "Retry-After": "30" }
+      : espera
+        ? { ...h, "Retry-After": String(r.esperaS ?? 600) }
+        : h;
   return json({ error: r.motivo }, MOTIVOS[r.motivo] ?? 400, extra);
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const origen = req.headers.get("Origin");
     const partes = url.pathname.split("/").filter(Boolean);
     const salaDe = (id: string) => env.SALA.get(env.SALA.idFromName(id));
+
+    // Una campaña nace solo con el texto firmado por Tinkazo. Su cupo no gasta el de las salas comunes.
+    if (partes[0] === "v1" && partes[1] === "campana" && partes.length === 2) {
+      const h = cors(origen, "POST, OPTIONS");
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+      if (req.method !== "POST") return json({ error: "no-existe" }, 404, h);
+      if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+      const llave = llaveDeCampanas(env, req.url);
+      if (!llave) return json({ error: "sin-llave" }, 503, h);
+      const cuerpo = await leerJson(req, MAX_CUERPO_CAMPANA);
+      const c = leerCampanaFirmada(cuerpo, llave, Date.now());
+      if (!c.ok) {
+        const estado = c.motivo === "forma" ? 400 : c.motivo === "firma" ? 403 : 409;
+        return json({ error: c.motivo }, estado, h);
+      }
+      const vida = vidaDeCampana(env, req.url);
+      // El token lo puede traer quien organiza (`intento`): así, si la respuesta se pierde, repetir el pedido devuelve la misma sala.
+      const propuesto = (cuerpo as { intento?: unknown } | null)?.intento;
+      const propio = typeof propuesto === "string" && ES_TOKEN.test(propuesto);
+      const token = propio ? propuesto : base64url(crypto.getRandomValues(new Uint8Array(16)));
+      // Para reemplazar la sala de este evento que se cerró o venció, quien organizaba presenta el token de esa sala.
+      const previo = bearer(req);
+      const anterior = ES_TOKEN.test(previo) ? previo : null;
+      // El permiso del evento se confirma recién con la sala creada, y se deshace si la creación falla (`creacion.ts`).
+      const creada = await crearSalaDeCampana({
+        cupos: env.CUPOS.get(env.CUPOS.idFromName("cupos")),
+        salas: {
+          viva: (sala) => salaDe(sala).viva(),
+          crearCampana: (sala, huella, campana, duracion) => salaDe(sala).crearCampana(huella, campana, duracion),
+          cerrar: (sala, clave) => salaDe(sala).cerrar(clave),
+        },
+        c,
+        vida,
+        token,
+        propio,
+        anterior,
+        huellaDe: sha256Hex,
+        nuevoId,
+      });
+      if (!creada.ok) {
+        // Con la sala viva solo se dice que ya existe: el token de quien organiza es de quien la creó.
+        const estado = creada.motivo === "ya-existe" ? 409 : creada.motivo === "ocupado" ? 503 : 429;
+        const extra = creada.motivo === "cupo-campanas" ? { ...h, "Retry-After": "86400" } : h;
+        return json({ error: creada.motivo }, estado, extra);
+      }
+      return json({ id: creada.id, token, vence: (creada.creadaEn ?? Date.now()) + vida }, 201, h);
+    }
 
     if (partes[0] === "v1" && partes[1] === "sala") {
       const id = partes[2];
@@ -657,6 +1276,241 @@ export default {
         const r = await salaDe(id).publico();
         return r.ok ? json({ config: r.config, equipos: r.equipos }, 200, h) : falla(r, h);
       }
+
+      // El archivo firmado es público. El pase nuevo y los cambios de fase piden el token de quien organiza.
+      if (partes[3] === "campana" && partes.length === 4 && req.method === "GET") {
+        const r = await salaDe(id).campana();
+        return r.ok ? json({ texto: r.texto, firma: r.firma }, 200, h) : falla(r, h);
+      }
+      if (partes[3] === "campana" && partes[4] === "estado" && partes.length === 5 && req.method === "GET") {
+        const presentado = url.searchParams.get("p");
+        const p = presentado === null || ES_PASE.test(presentado) ? presentado : "";
+        const token = bearer(req);
+        const r = await salaDe(id).estadoDeCampana(p, env.PASE !== "0", token || null);
+        return r.ok
+          ? json(
+              {
+                fase: r.fase,
+                total: r.total,
+                cierraMs: r.cierraMs,
+                pase: r.pase,
+                quitadas: r.quitadas,
+                // Si la sala le avisa por correo a quien gana: la pantalla de quien se anota lo dice solo si es verdad.
+                correo: correoPrendido(env),
+                ...(r.vias ? { vias: r.vias } : {}),
+              },
+              200,
+              h,
+            )
+          : falla(r, h);
+      }
+      if (partes[3] === "campana" && partes[4] === "pase" && partes.length === 5 && req.method === "GET") {
+        const r = await salaDe(id).paseDeLaPantalla(bearer(req));
+        return r.ok ? json({ p: r.p, hasta: r.hasta }, 200, h) : falla(r, h);
+      }
+      if (partes[3] === "campana" && partes[4] === "fase" && partes.length === 5 && req.method === "PUT") {
+        const cuerpo = (await leerJson(req, 200)) as {
+          fase?: unknown;
+          cierraMs?: unknown;
+          sorteo?: unknown;
+        } | null;
+        const cierra = cuerpo?.cierraMs;
+        if (!cuerpo || !esFase(cuerpo.fase) || (cierra !== undefined && typeof cierra !== "number")) {
+          return json({ error: "forma" }, 400, h);
+        }
+        if (cuerpo.fase === "sellada") {
+          if (typeof cuerpo.sorteo !== "string" || !ES_SORTEO.test(cuerpo.sorteo)) {
+            return json({ error: "forma" }, 400, h);
+          }
+          const sala = salaDe(id);
+          const deRed = await sala.redDeCampana();
+          if (!deRed.ok) return json({ error: deRed.motivo }, 404, h);
+          const leido = await leerSorteoEnLaRed(deRed.red, cuerpo.sorteo, rpcsDe(env, deRed.red), fetch);
+          if (leido === "red") return json({ error: "red" }, 502, h);
+          if (leido.sello === null) return json({ error: "sin-sorteo" }, 409, h);
+          const r = await sala.sellarCampana(bearer(req), cuerpo.sorteo, leido.sello);
+          if (!r.ok) {
+            const estado = r.motivo === "no-existe" ? 404 : r.motivo === "token" ? 403 : 409;
+            return json({ error: r.motivo }, estado, h);
+          }
+          return new Response(null, { status: 204, headers: h });
+        }
+        const r = await salaDe(id).ponerFase(bearer(req), cuerpo.fase, typeof cierra === "number" ? cierra : null);
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+
+      // El resultado nunca se toma del pedido: el Worker lee los índices del contrato y la sala pone las cuentas.
+      if (partes[3] === "campana" && partes[4] === "resultado" && partes.length === 5 && req.method === "PUT") {
+        const cuerpo = (await leerJson(req, 24_000)) as {
+          sorteo?: unknown;
+          comprobante?: unknown;
+        } | null;
+        if (
+          !cuerpo ||
+          typeof cuerpo.sorteo !== "string" ||
+          !ES_SORTEO.test(cuerpo.sorteo) ||
+          typeof cuerpo.comprobante !== "string" ||
+          !cuerpo.comprobante.startsWith("/verificar.html") ||
+          cuerpo.comprobante.length > 24_000
+        ) {
+          return json({ error: "forma" }, 400, h);
+        }
+        const sala = salaDe(id);
+        const deRed = await sala.redDeCampana();
+        if (!deRed.ok) return json({ error: deRed.motivo }, 404, h);
+        const leido = await leerSorteoEnLaRed(deRed.red, cuerpo.sorteo, rpcsDe(env, deRed.red), fetch);
+        if (leido === "red") return json({ error: "red" }, 502, h);
+        if (leido.sello === null || leido.ganadores === null) {
+          return json({ error: "sin-resultado" }, 409, h);
+        }
+        const r = await sala.guardarResultadoDeCampana(bearer(req), {
+          sorteo: cuerpo.sorteo,
+          ganadores: leido.ganadores,
+          numWinners: leido.sello.numWinners,
+          comprobante: cuerpo.comprobante,
+        });
+        if (!r.ok) {
+          const estado = r.motivo === "no-existe" ? 404 : r.motivo === "token" ? 403 : 409;
+          return json({ error: r.motivo }, estado, h);
+        }
+        // El aviso por correo sale aparte: la respuesta no lo espera, y si falla el resultado ya quedó guardado.
+        if (r.correo.cuentas.length > 0) {
+          const terminada = (cuenta: string): Promise<void> => sala.cerrarAvisoDeCorreo(cuenta);
+          ctx.waitUntil(avisarGanadorasPorCorreo(env, deRed.red, r.correo, terminada));
+        }
+        return new Response(null, { status: 204, headers: h });
+      }
+      if (partes[3] === "campana" && partes[4] === "resultado" && partes.length === 5 && req.method === "GET") {
+        const r = await salaDe(id).resultadoDeCampana();
+        if (!r.ok) return json({ error: r.motivo }, 404, h);
+        return json({ sorteo: r.sorteo, ganadoras: r.ganadoras, comprobante: r.comprobante }, 200, h);
+      }
+
+      // Quitar deja constancia del motivo y avisar marca a una ganadora. Las dos escrituras piden el token.
+      if (partes[3] === "campana" && partes[4] === "quitar" && partes.length === 5 && req.method === "POST") {
+        const cuerpo = (await leerJson(req, 200)) as { n?: unknown; motivo?: unknown } | null;
+        if (
+          !cuerpo ||
+          typeof cuerpo.n !== "number" ||
+          !Number.isSafeInteger(cuerpo.n) ||
+          cuerpo.n < 1 ||
+          !esMotivoDeSalida(cuerpo.motivo)
+        ) {
+          return json({ error: "forma" }, 400, h);
+        }
+        const r = await salaDe(id).quitarPersona(bearer(req), cuerpo.n, cuerpo.motivo);
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+      if (partes[3] === "campana" && partes[4] === "avisar" && partes.length === 5 && req.method === "POST") {
+        const cuerpo = (await leerJson(req, 200)) as { cuenta?: unknown } | null;
+        if (!cuerpo || !esCuentaValida(cuerpo.cuenta)) return json({ error: "forma" }, 400, h);
+        const r = await salaDe(id).avisarGanadora(bearer(req), cuerpo.cuenta);
+        return r.ok ? new Response(null, { status: 204, headers: h }) : falla(r, h);
+      }
+
+      // La sesión se verifica acá, fuera del objeto: una espera de red dentro dejaría entrar otros pedidos en el medio.
+      if (partes[3] === "campana" && partes[4] === "alta" && partes.length === 5 && req.method === "POST") {
+        if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+        const cuerpo = (await leerJson(req, MAX_CUERPO_ALTA)) as {
+          token?: unknown;
+          d?: unknown;
+          llave?: unknown;
+          p?: unknown;
+        } | null;
+        if (!cuerpo) return json({ error: "forma" }, 400, h);
+        const token = cuerpo.token;
+        const d = cuerpo.d;
+        const llave = cuerpo.llave;
+        if (
+          !formaDeToken(token, Date.now()) ||
+          !equipoCifradoValido(d) ||
+          typeof llave !== "string" ||
+          !ES_LLAVE.test(llave)
+        ) {
+          return json({ error: "forma" }, 400, h);
+        }
+        let p: string | null = null;
+        if (cuerpo.p !== undefined && cuerpo.p !== null) {
+          if (typeof cuerpo.p !== "string" || !ES_PASE.test(cuerpo.p)) return json({ error: "forma" }, 400, h);
+          p = cuerpo.p;
+        }
+        const exigirPase = env.PASE !== "0";
+        if (exigirPase && p === null) return falla({ motivo: "pase" }, h);
+        const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
+        const sala = salaDe(id);
+        // Antes de llamar al proveedor: fase, pase, topes de rechazos y, si la ficha ya se verificó hace poco, el reingreso.
+        const antes = await sala.prealta(ip, p, exigirPase, token, llave);
+        if (!antes.ok) return falla(antes, h);
+        if (antes.cuenta !== null) return json({ cuenta: antes.cuenta, ya: true }, 200, h);
+        const proveedor = pollarDeLaSala(env);
+        if (!proveedor) return falla({ motivo: "sin-pollar" }, h);
+        const sesion = await proveedor.verificar(token);
+        if (!sesion.ok) {
+          if (sesion.motivo === "pollar") return falla({ motivo: "pollar" }, h);
+          await sala.rechazo(ip, token);
+          return falla({ motivo: sesion.motivo }, h);
+        }
+        // Solo entra quien el proveedor dice que es de Google. El modo suave es solo un interruptor de emergencia.
+        const via = viaPermitida(sesion.via, modoSoloGoogle(env.SOLO_GOOGLE));
+        if (!via.ok) {
+          await sala.rechazo(ip, token);
+          return falla({ motivo: "solo-google" }, h);
+        }
+        const anterior = await sala.yaEsta(sesion.usuario, llave, ip, token, sesion.vence);
+        if (!anterior.ok) return falla(anterior, h);
+        if (anterior.cuenta !== null) return json({ cuenta: anterior.cuenta, ya: true }, 200, h);
+        let cuenta = sesion.cuenta;
+        if (cuenta === null) {
+          const billetera = await proveedor.billeteraDe(sesion.usuario);
+          if (!billetera.ok) return falla({ motivo: "pollar" }, h);
+          if (billetera.cuenta === null) {
+            // Costó dos llamadas al proveedor: cuenta como un rechazo de esa ficha, así repetirla no lo llama sin límite.
+            await sala.rechazo(ip, token);
+            return falla({ motivo: "sin-billetera" }, h);
+          }
+          cuenta = billetera.cuenta;
+        }
+        const r = await sala.anotarPersona({
+          usuario: sesion.usuario,
+          cuenta,
+          d,
+          llave,
+          ip,
+          p,
+          exigirPase,
+          via: via.via,
+          token,
+          vence: sesion.vence,
+        });
+        if (!r.ok) return falla(r, h);
+        return r.ya ? json({ cuenta: r.cuenta, ya: true }, 200, h) : json({ cuenta: r.cuenta }, 201, h);
+      }
+
+      // Consulta de solo lectura: no exige origen, pero sin la llave del celular no dice si la cuenta está anotada.
+      if (partes[3] === "campana" && partes[4] === "yo" && partes.length === 5 && req.method === "POST") {
+        const cuerpo = (await leerJson(req, 300)) as { cuenta?: unknown; llave?: unknown } | null;
+        if (!cuerpo || !esCuentaValida(cuerpo.cuenta) || typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) {
+          return json({ error: "forma" }, 400, h);
+        }
+        const r = await salaDe(id).estadoDeCelular(cuerpo.cuenta, cuerpo.llave);
+        return r.ok
+          ? json(
+              {
+                fase: r.fase,
+                total: r.total,
+                cierraMs: r.cierraMs,
+                anotada: r.anotada,
+                ...(r.quitada ? { quitada: r.quitada } : {}),
+                ...(r.gano !== undefined ? { gano: r.gano } : {}),
+                ...(r.puesto !== undefined ? { puesto: r.puesto } : {}),
+                ...(r.avisado ? { avisado: true } : {}),
+              },
+              200,
+              h,
+            )
+          : falla(r, h);
+      }
+
       if (partes[3] === "equipos") {
         if (partes.length === 4 && req.method === "POST") {
           if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);

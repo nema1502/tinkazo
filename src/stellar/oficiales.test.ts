@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import deployments from "./deployments.json";
 import { network } from "./config";
-import { contratosOficiales, passphraseDe } from "./oficiales";
+import { contratosDePremios, contratosOficiales, contratoDePremios, passphraseDe } from "./oficiales";
 
 /**
  * Una sola fuente para el contrato de cada red. El sitio sella con el de
@@ -9,6 +9,51 @@ import { contratosOficiales, passphraseDe } from "./oficiales";
  * despegan, los comprobantes nuevos salen "no es el registro de Tinkazo"
  * (escéptico C, 22 de octubre de 2026).
  */
+const CCJGBEFC = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+
+describe("la tabla de contratos de premios", () => {
+  it("está en la fuente única y vacía en las dos redes mientras la designación oficial esté pendiente (issue #167)", () => {
+    const tabla = (deployments as unknown as { premios?: Record<string, unknown> }).premios;
+    expect(tabla).toBeDefined();
+    expect(tabla?.testnet).toEqual([]);
+    expect(tabla?.mainnet).toEqual([]);
+  });
+
+  it("sin entradas, ningún sello de premios es de Tinkazo, ni en la red que se pregunte", () => {
+    expect(contratosDePremios()).toEqual([]);
+    expect(contratosDePremios("testnet")).toEqual([]);
+    expect(contratosDePremios("mainnet")).toEqual([]);
+    expect(contratoDePremios("testnet", CCJGBEFC)).toBeNull();
+    expect(contratoDePremios("mainnet", CCJGBEFC)).toBeNull();
+  });
+
+  it("una tabla inyectada da el contrato designado, con el RPC y la passphrase de su red", () => {
+    const tabla = { testnet: [{ contractId: CCJGBEFC, wasmSha256: "e8e8", deployedAt: "2026-11-05" }] };
+    expect(contratosDePremios("testnet", tabla)).toEqual([
+      {
+        red: "testnet",
+        contractId: CCJGBEFC,
+        wasmSha256: "e8e8",
+        rpcUrl: "https://soroban-testnet.stellar.org",
+        passphrase: "Test SDF Network ; September 2015",
+      },
+    ]);
+    expect(contratoDePremios("testnet", CCJGBEFC, tabla)).toMatchObject({ red: "testnet", contractId: CCJGBEFC });
+    // La designación es por red: el mismo contrato en otra red no vale.
+    expect(contratoDePremios("mainnet", CCJGBEFC, tabla)).toBeNull();
+    expect(contratoDePremios("otra", CCJGBEFC, tabla)).toBeNull();
+    expect(contratoDePremios("testnet", "COTRO", tabla)).toBeNull();
+    // Una entrada sin dirección no designa nada.
+    expect(contratosDePremios("testnet", { testnet: [{ contractId: "" }] })).toEqual([]);
+    // Sin `wasmSha256` no se declara código y la clave no viaja.
+    expect(contratosDePremios("testnet", { testnet: [{ contractId: CCJGBEFC }] })[0]).not.toHaveProperty("wasmSha256");
+    // El RPC y la passphrase se pueden declarar por contrato; sin ellos valen los de la red.
+    expect(contratosDePremios("testnet", { testnet: [{ contractId: CCJGBEFC, rpcUrl: "https://otro.example", networkPassphrase: "otra" }] })[0]).toMatchObject({
+      rpcUrl: "https://otro.example",
+      passphrase: "otra",
+    });
+  });
+});
 describe("el tope de los contratos anteriores", () => {
   it("cada anterior trae el número y el ledger de su último sello oficial, y el vigente no lleva tope", () => {
     for (const c of contratosOficiales()) {

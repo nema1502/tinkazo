@@ -127,6 +127,12 @@ export interface Plan<P> {
   arco: Arc;
   /** Cuándo se corta la música antes del golpe (la duración si no se pide otro). */
   respiro?: number;
+  /**
+   * El momento decisivo, en segundos de juego: desde ahí lo que se ve empieza a nombrar a quien gana (o, con varios
+   * premios, a alguien con premio). Sale de los hechos del plan (`decisivo.ts`). El celular de quien mira no pasa de acá
+   * hasta saber que la sala ya lo pasó. Sin decirlo, la mitad del juego.
+   */
+  decisivo?: number;
   momentos: Momentos;
   guion: readonly LineaGuion[];
   /** Hacia dónde avanza el juego: un solo sentido de principio a fin, y `respuestas.hacia` lo repite en todo cuadro. */

@@ -2,7 +2,7 @@ import { type Lang, textos } from "../idioma";
 import { turnOrderText } from "./turnos";
 
 /**
- * Los mensajes de un orden de turnos: el que se pega en el grupo y el aviso a cada persona.
+ * Los mensajes de un orden de turnos y de un Amigo secreto: el que se pega en el grupo y el aviso a cada persona.
  *
  * Usan solo `idioma.ts`, sin el diccionario entero, para que los pueda cargar la página de verificación (que comparte el
  * sorteo otra vez con `compartir.ts`). Las frases son las del diccionario, en los dos idiomas: nada de ganar ni de premio.
@@ -37,4 +37,20 @@ export function turnMessage(lang: Lang, d: { orden: readonly string[]; enlace: s
 /** El aviso a una persona: «Te tocó el turno 3 de 12. Revisalo vos: {enlace}». `turn` cuenta desde 1. */
 export function turnNotice(lang: Lang, d: { turn: number; of: number; enlace: string; sinSello?: boolean }): string {
   return [rellenar(cad(lang, d.sinSello ? "turnsTellSin" : "turnsTell"), { k: d.turn, n: d.of, enlace: d.enlace }), "", cad(lang, "cmpPie")].join("\n");
+}
+
+/**
+ * El mensaje del grupo para un Amigo secreto: que ya salió y que cada quien va a recibir su enlace, sin el reparto
+ * y sin enlace de verificación (el comprobante completo lo revela, y se comparte después del intercambio). Con
+ * nombre propio lo dice; con el de por siempre, no.
+ */
+export function amigoMessage(lang: Lang, d: { prize?: string }): string {
+  const propio = (d.prize ?? "").normalize("NFKC").trim().replace(/\s+/g, " ");
+  const esElDeSiempre = !propio || /^(?:amigo\s+secreto|secret\s+santa)$/i.test(propio);
+  return [
+    rellenar(cad(lang, esElDeSiempre ? "amigoMsgCab" : "amigoMsgNombre"), esElDeSiempre ? {} : { nombre: propio }),
+    cad(lang, "amigoMsgPie"),
+    "",
+    cad(lang, "cmpPie"),
+  ].join("\n");
 }

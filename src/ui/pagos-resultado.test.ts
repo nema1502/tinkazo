@@ -161,6 +161,7 @@ describe("los textos y la página", () => {
 
   it("el botón de pagar está en el código que carga la herramienta solo con la bandera prendida", () => {
     const draw = dir("src/ui/draw.ts");
-    expect(draw).toMatch(/if \(pagosActivos\(\)\) void import\("\.\/pagos-resultado"\)/);
+    // En el resultado del amigo secreto el panel no aplica (el modo no muestra pagos): la rama lleva !amigo.
+    expect(draw).toMatch(/if \(pagosActivos\(\) && !amigo\) void import\("\.\/pagos-resultado"\)/);
   });
 });

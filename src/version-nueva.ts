@@ -389,4 +389,5 @@ export function resetVersionNotice(): void {
   cerrada = false;
 }
 
-installVersionNotice();
+// En el navegador se instala solo: en pruebas sin ventana, no.
+if (typeof window !== "undefined") installVersionNotice();

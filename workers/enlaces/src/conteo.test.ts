@@ -215,6 +215,7 @@ describe("los eventos del aula y el origen", () => {
       ...["mp4", "webm"].flatMap((format) => ["ok", "fail", "unsupported"].map((result) => ({ e: "video_made", p: { format, result } }))),
       ...["native", "download"].map((channel) => ({ e: "video_shared", p: { channel } })),
       ...["proof", "video"].map((from) => ({ e: "proof_cta", p: { from } })),
+      ...["closed", "late", "timeout", "no_api"].map((what) => ({ e: "google_window", p: { what } })),
       { e: "proof_open", p: { via: "video" } },
       { e: "proof_open", p: { via: "video" }, ref: REF },
     ];
@@ -242,6 +243,8 @@ describe("los eventos del aula y el origen", () => {
       [{ e: "video_shared", p: { channel: "whatsapp" } }, "valor"],
       [{ e: "proof_cta", p: { from: "home" } }, "valor"],
       [{ e: "proof_cta" }, "falta"],
+      [{ e: "google_window", p: { what: "open" } }, "valor"],
+      [{ e: "google_window" }, "falta"],
       [{ e: "proof_open", p: { via: "aula" } }, "valor"],
       [{ e: "seal_confirmed", p: { network: "mainnet", from: "https://ejemplo.org" } }, "valor"],
       [{ e: "seal_confirmed", p: { network: "mainnet", from: "qr" } }, "valor"],

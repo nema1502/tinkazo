@@ -878,30 +878,37 @@ describe("el QR del espectador durante la espera", () => {
     expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
   });
 
-  it("cuando el QR ya se ve, el juego queda: se va Cambiar de juego, el panel se cierra y lo fijo es el del enlace", async () => {
+  it("con el QR a la vista Cambiar de juego sigue, y el juego nuevo vuelve a publicar el QR con el mismo sello", async () => {
     h.armarQr.mockResolvedValueOnce("https://tinkazo.app/c/AbCd1234#" + "k".repeat(22));
     // `abrirEspera` abre el panel de juegos con un toque, y el QR llega después.
     const { panel, elegirJuego } = await abrirEspera(1, { raffleId: 42n });
     await vi.advanceTimersByTimeAsync(0);
-    expect(panel.hidden).toBe(true);
+    // El panel sigue abierto y Cambiar de juego sigue a la vista: hasta el 16 de noviembre de 2026 se escondía.
+    expect(panel.hidden).toBe(false);
     const cambiar = [...document.querySelectorAll<HTMLElement>(".espera [data-juego]")];
     expect(cambiar.length).toBeGreaterThan(0);
-    expect(cambiar.every((b) => b.hidden)).toBe(true);
-    // El nombre del juego sigue a la vista.
-    expect(document.querySelector(".espera .espera-juego-n b")?.textContent).toBeTruthy();
-    const { fijoPara } = await import("./espectador-fijo");
+    expect(cambiar.some((b) => !b.hidden)).toBe(true);
+    // Se elige otro juego: queda elegido y el QR se vuelve a publicar con él, para el mismo sello.
+    const otro = panel.querySelector<HTMLButtonElement>('.espera-juego-op:not([aria-pressed="true"])');
+    otro?.click();
+    expect(elegirJuego).toHaveBeenCalledWith(otro?.dataset.game);
     const { app } = await import("../state");
-    expect(fijoPara(app.frozen, false)).toEqual({ juego: "race", ritmo: "normal" });
-    expect(elegirJuego).not.toHaveBeenCalled();
+    app.game = otro?.dataset.game as never;
+    const ultimo = h.armarQr.mock.calls.at(-1) as unknown as [HTMLElement, Record<string, unknown>, unknown];
+    expect(h.armarQr.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(ultimo[2]).toBe(app.frozen);
   });
 
-  it("si el QR no salió, nadie mira desde un celular: el juego se sigue cambiando", async () => {
-    const { panel } = await abrirEspera(1, { raffleId: 42n });
+  it("un cambio de duración desde la página, con la espera abierta, rehace el QR", async () => {
+    await abrirEspera(1, { raffleId: 42n });
     await vi.advanceTimersByTimeAsync(0);
-    expect(panel.hidden).toBe(false);
-    const { fijoPara } = await import("./espectador-fijo");
-    const { app } = await import("../state");
-    expect(fijoPara(app.frozen, false)).toBeNull();
+    const antes = h.armarQr.mock.calls.length;
+    const { setPace } = await import("../state");
+    setPace("rapido");
+    document.dispatchEvent(new CustomEvent("tinkazo:ritmo"));
+    expect(h.armarQr.mock.calls.length).toBe(antes + 1);
+    expect((h.armarQr.mock.calls.at(-1) as unknown as [HTMLElement, Record<string, unknown>])[1]).toMatchObject({ p: "rapido" });
+    setPace("normal");
   });
 
   it("mientras llega el enlace corto, el lugar del QR dice que se está preparando y no dibuja nada", async () => {

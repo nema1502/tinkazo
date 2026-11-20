@@ -23,6 +23,11 @@
  *   completa, salvo un pago que ya estaba en camino: si entró a la red como mucho 2 minutos después del reemplazo y
  *   llega al 95 %, se honra. Lo que entró después, o no llega, va a los sueltos como `cerrada`.
  * - El cursor de Horizon y los pagos de cada vuelta se escriben en la misma transacción, y el cursor nunca retrocede.
+ * - **El costo de un retiro que pagó el portero no es un pago suelto ni de una orden.** Es el segundo pago de una transacción
+ *   que el portero guardó en `retiros_cobrados` (`pagos-uso.ts`): se reconoce por el hash de esa transacción, de la misma
+ *   cuenta y por el costo exacto, antes de mirar la nota. Queda en `pagos_sueltos` como `costo-retiro` y `cobrado`, fuera de lo
+ *   que se lista, se asigna o se devuelve, y sin atarse a ninguna orden aunque su nota se lea como una. Sin esa tabla (`costos`
+ *   no se pasa o no está disponible) la lectura es la de siempre.
  *
  * Todo lo que escribe es síncrono (el objeto atiende de a uno mientras no haya un `await`); lo único que espera es la
  * lectura de Horizon, que va antes. El servidor de Horizon va fijo en el código (`servidores.ts`). El reloj y el
@@ -32,6 +37,7 @@ import { StrKey } from "@stellar/stellar-sdk/base";
 import type { Producto } from "./config";
 import { ALFABETO } from "./cupon-codigo";
 import { type Cupos, type Sql, texto } from "./cupos";
+import type { UsoDePagos } from "./pagos-uso";
 import { type Fetch, haciaHorizon } from "./servidores";
 
 /**
@@ -78,6 +84,8 @@ const DIGITOS = /^\d{1,30}$/;
 const ID_ORDEN = new RegExp(`^[${ALFABETO}]{${LARGO_ORDEN}}$`);
 const DOS_A_LA_40 = 2n ** 40n;
 const MAX_NOTA = 64;
+/** Un hash de transacción en hexadecimal minúscula. */
+const HASH_DE_TX = /^[0-9a-f]{64}$/;
 
 /* ------------------------------------------------------------------ la nota y los montos */
 
@@ -87,7 +95,7 @@ function comoCupon(s: string): string {
 }
 
 /** Sin espacios de ningún tipo ni guiones (también los largos del teclado del celular). */
-const sinSeparadores = (s: string) => s.replace(/[\s\-\u2010-\u2015\u2212]/g, "");
+export const sinSeparadores = (s: string) => s.replace(/[\s\-\u2010-\u2015\u2212]/g, "");
 
 /** El id de una orden como lo manda el sitio o la herramienta: con o sin el prefijo `tk:o:`. null si no tiene forma. */
 export function normalizarOrden(x: unknown): string | null {
@@ -201,6 +209,12 @@ export interface PagoLeido {
   monto: number;
   memo: Memo | null;
   ms: number;
+  /**
+   * El hash de la transacción de adentro si Horizon trae la transacción envuelta en un fee-bump (`inner_transaction.hash`), o
+   * null. Un retiro que paga el portero va envuelto, y no se mide cuál de los dos hashes pone Horizon en `tx`: el costo se
+   * reconoce por cualquiera. Opcional: lo que se arma a mano sin esto es un pago sin envoltorio.
+   */
+  txInterna?: string | null;
 }
 
 /**
@@ -236,7 +250,22 @@ export function pagoDe(r: unknown, cuenta: string): PagoLeido | null {
     else memo = { tipo: "otro", valor: t.memo_type.slice(0, 16) };
   }
   const ms = typeof x.created_at === "string" ? Date.parse(x.created_at) : Number.NaN;
-  return { operacion: x.id, pagingToken, tx, de: x.from.slice(0, 69), esUsdc, activo, monto, memo, ms: Number.isFinite(ms) ? ms : 0 };
+  // Con `join=transactions`, una transacción envuelta trae la de adentro: su hash es el que guarda el portero.
+  const interna = t?.inner_transaction;
+  const adentro = interna && typeof interna === "object" ? (interna as Record<string, unknown>).hash : undefined;
+  const txInterna = typeof adentro === "string" && HASH_DE_TX.test(adentro) ? adentro : null;
+  return {
+    operacion: x.id,
+    pagingToken,
+    tx,
+    de: x.from.slice(0, 69),
+    esUsdc,
+    activo,
+    monto,
+    memo,
+    ms: Number.isFinite(ms) ? ms : 0,
+    txInterna,
+  };
 }
 
 /**
@@ -348,11 +377,18 @@ export type OrdenCreada = { ok: true; orden: FilaOrden; nueva: boolean } | { ok:
  * Lo que pasó en una vuelta de lectura, para la bitácora: sin personas, cuentas, notas ni ids de orden. `orden-honrada`
  * va junto con `alta-pago` cuando la orden pagada estaba reemplazada y el pago ya estaba en camino.
  */
-export type EventoCobro = { evento: "alta-pago" | "orden-honrada"; producto: string } | { evento: "pago-suelto"; motivo: MotivoSuelto };
+export type EventoCobro =
+  | { evento: "alta-pago" | "orden-honrada"; producto: string }
+  | { evento: "pago-suelto"; motivo: MotivoSuelto }
+  /** El costo de un retiro que pagó el portero, reconocido por su transacción: no es un suelto ni una orden. */
+  | { evento: "costo-retiro" };
 
-/** Por qué un pago quedó suelto. `repetido`: llegó a una orden ya pagada (no da otro paquete). `cerrada`: a una cerrada. */
-export type MotivoSuelto = "sin-nota" | "nota-desconocida" | "otro-activo" | "sobrante" | "repetido" | "cerrada";
-/** Lo suelto de USDC que se puede asignar a mano a una orden abierta. Lo que sobra de una orden y otro activo, no. */
+/**
+ * Por qué un pago quedó suelto. `repetido`: llegó a una orden ya pagada (no da otro paquete). `cerrada`: a una cerrada.
+ * `costo-retiro`: el costo de un retiro que pagó el portero. Ese no es un suelto: queda `cobrado` y no se resuelve.
+ */
+export type MotivoSuelto = "sin-nota" | "nota-desconocida" | "otro-activo" | "sobrante" | "repetido" | "cerrada" | "costo-retiro";
+/** Lo suelto de USDC que se puede asignar a mano a una orden abierta. Lo que sobra de una orden, otro activo y un costo, no. */
 const ASIGNABLES: ReadonlySet<MotivoSuelto> = new Set(["sin-nota", "nota-desconocida", "repetido", "cerrada"]);
 
 export interface FilaSuelto {
@@ -365,7 +401,8 @@ export interface FilaSuelto {
   cantidad: string;
   nota: string | null;
   motivo: MotivoSuelto;
-  estado: "suelto" | "asignado" | "devuelto";
+  /** `cobrado`: el costo de un retiro, que ya es nuestro. No se lista, no se asigna y no se devuelve. */
+  estado: "suelto" | "asignado" | "devuelto" | "cobrado";
   orden: string | null;
   ref: string | null;
   ms: number;
@@ -396,16 +433,24 @@ interface Operacion {
   ms: number;
 }
 
+/** Lo que `Cobros` necesita de lo que guarda el portero de los retiros que pagó (`UsoDePagos`). */
+export type CostosDeRetiro = Pick<UsoDePagos, "disponible" | "costoDeRetiro">;
+
 export class Cobros {
   private readonly idAlAzar: () => string;
+  private readonly costos: CostosDeRetiro | undefined;
 
-  /** `sql` es el mismo SQLite de `cupos`, que ya creó las tablas. */
+  /**
+   * `sql` es el mismo SQLite de `cupos`, que ya creó las tablas. `costos` es opcional: sin él, o con sus tablas rotas, un
+   * costo de retiro se lee como cualquier otro pago (`registrarLectura`).
+   */
   constructor(
     private readonly sql: Sql,
     private readonly cupos: Cupos,
-    opciones: { idAlAzar?: () => string } = {},
+    opciones: { idAlAzar?: () => string; costos?: CostosDeRetiro } = {},
   ) {
     this.idAlAzar = opciones.idAlAzar ?? ordenAlAzar;
+    this.costos = opciones.costos;
   }
 
   private filas(consulta: string, ...enlaces: unknown[]): Array<Record<string, unknown>> {
@@ -593,8 +638,81 @@ export class Cobros {
   }
 
   /**
+   * Anota el costo de un retiro que pagó el portero: un cobro, no un suelto. Queda `cobrado` y sin orden, así `sueltos`, la
+   * cuenta de `/estado`, `asignar` y `devolver` no lo ven (todos miran `estado = 'suelto'`).
+   */
+  private costoCobrado(p: { operacion: string; tx: string; de: string; activo: string; monto: number; nota: string | null }, ms: number): void {
+    this.sql.exec(
+      [
+        "INSERT INTO pagos_sueltos (operacion, tx, de, activo, monto, nota, motivo, estado, orden, ref, ms)",
+        "VALUES (?, ?, ?, ?, ?, ?, 'costo-retiro', 'cobrado', NULL, NULL, ?)",
+      ].join(" "),
+      p.operacion,
+      p.tx,
+      p.de,
+      p.activo,
+      p.monto,
+      p.nota,
+      ms,
+    );
+  }
+
+  /**
+   * Si este pago es el costo de un retiro que pagó el portero: de USDC, de una transacción que el portero guardó (por el hash
+   * de afuera o el de adentro), de la cuenta que pagó el retiro y por el costo exacto que exigía. Sin `costos`, o con sus tablas
+   * rotas, nunca: la lectura es la de siempre.
+   */
+  private esCostoDeRetiro(p: PagoLeido): boolean {
+    if (!p.esUsdc || !this.costos?.disponible()) {
+      return false;
+    }
+    const hashes = [p.tx, p.txInterna].filter((h): h is string => typeof h === "string" && HASH_DE_TX.test(h));
+    return hashes.length > 0 && this.costos.costoDeRetiro(hashes, p.de, p.monto);
+  }
+
+  /**
+   * Pasa a `costo-retiro` lo que una lectura anterior dejó suelto y que, visto ahora, es el costo de un retiro del portero: de
+   * USDC, sin nota o con una nota que no era de ninguna orden, de una transacción guardada, de la misma cuenta y por el costo
+   * exacto. Cubre lo que leyó una versión del código sin este reconocimiento, que no se vuelve a leer (`visto`). No toca lo ya
+   * atado a una orden. Si la consulta falla no hace nada: la lectura sigue.
+   */
+  private reclasificarCostos(): void {
+    const costos = this.costos;
+    if (!costos?.disponible()) {
+      return;
+    }
+    try {
+      const candidatos = this.filas(
+        [
+          "SELECT operacion, tx, de, monto FROM pagos_sueltos",
+          "WHERE estado = 'suelto' AND activo = 'USDC' AND orden IS NULL AND motivo IN ('sin-nota','nota-desconocida')",
+          "ORDER BY ms, operacion LIMIT 500",
+        ].join(" "),
+      );
+      for (const c of candidatos) {
+        if (costos.costoDeRetiro([String(c.tx)], String(c.de), Number(c.monto))) {
+          const cobrado = "UPDATE pagos_sueltos SET motivo = 'costo-retiro', estado = 'cobrado' WHERE operacion = ? AND estado = 'suelto'";
+          this.sql.exec(cobrado, String(c.operacion));
+        }
+      }
+    } catch {
+      // Una consulta que falla no tumba la lectura de los pagos: queda para la vuelta siguiente.
+    }
+  }
+
+  /** Los costos de retiro cobrados desde `desde` (ms): cuántos y cuánto suman, en diezmillonésimas de USDC. Para `/estado`. */
+  costosDeRetiro(desde: number): { cuantos: number; monto: number } {
+    const f = this.filas("SELECT COUNT(*) AS n, COALESCE(SUM(monto), 0) AS m FROM pagos_sueltos WHERE motivo = 'costo-retiro' AND ms > ?", desde)[0];
+    return { cuantos: Number(f?.n ?? 0), monto: Number(f?.m ?? 0) };
+  }
+
+  /**
    * Una vuelta de lectura, todo o nada: cada pago a su orden o a los sueltos, y el cursor (el mayor entre el guardado y
    * el leído). Una operación que ya se anotó no se vuelve a anotar. Devuelve lo que pasó, para la bitácora.
+   *
+   * El costo de un retiro que pagó el portero se reconoce antes de mirar la nota (`esCostoDeRetiro`): queda `cobrado` y no
+   * se ata a ninguna orden aunque su nota se lea como una. Al final de la vuelta, `reclasificarCostos` hace lo mismo con lo
+   * que una lectura anterior dejó suelto.
    */
   registrarLectura(pagos: readonly PagoLeido[], cursor: string | null, ahora: number): EventoCobro[] {
     return this.cupos.transaccion(() => {
@@ -606,6 +724,11 @@ export class Cobros {
         if (!p.esUsdc) {
           this.suelto(base, "otro-activo", null, p.ms);
           eventos.push({ evento: "pago-suelto", motivo: "otro-activo" });
+          continue;
+        }
+        if (this.esCostoDeRetiro(p)) {
+          this.costoCobrado(base, p.ms);
+          eventos.push({ evento: "costo-retiro" });
           continue;
         }
         const id = ordenDeNota(p.memo);
@@ -624,6 +747,7 @@ export class Cobros {
         if (r.concedido) eventos.push({ evento: "alta-pago", producto: o.producto });
         if (r.concedido && estaCerrada(o)) eventos.push({ evento: "orden-honrada", producto: o.producto });
       }
+      this.reclasificarCostos();
       // El cursor va después de los pagos, en la misma transacción: si no se puede escribir, no queda ningún pago.
       const nuevo = mayor(this.cursor(), cursor);
       if (nuevo !== null && nuevo !== this.cursor()) this.cupos.fijarAjuste(AJUSTE_CURSOR, nuevo, ahora);
@@ -836,7 +960,7 @@ export class LectorDeCobros {
         }
         // Desde acá, sin await: los pagos y el cursor, en una transacción.
         const eventos = this.o.cobros.registrarLectura(l.pagos, l.cursor, this.reloj());
-        for (const e of eventos) this.registrar(e.evento, "producto" in e ? { producto: e.producto } : { motivo: e.motivo });
+        for (const e of eventos) this.registrar(e.evento, "producto" in e ? { producto: e.producto } : "motivo" in e ? { motivo: e.motivo } : {});
         if (!l.completo) this.registrar("error-horizon", { donde: "cobros", completo: 0 });
         return (this.ultimo = { ok: l.completo });
       } catch (e) {
