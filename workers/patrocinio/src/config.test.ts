@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it, vi } from "vitest";
-import { PRECIOS_POR_DEFECTO, leerConfig, leerPrecios } from "./config";
+import { PRECIOS_POR_DEFECTO, leerConfig, leerPrecios, unidadDe } from "./config";
 import { PorIp } from "./por-ip";
 import { HORIZON_MAINNET, POLLAR_SERVIDOR, ServidorAjeno, haciaHorizon, haciaPollar } from "./servidores";
 
@@ -368,6 +368,27 @@ describe("PRECIOS", () => {
     expect(cfg.precios).toBeNull();
     expect(cfg.altasPago).toBe(false);
     expect(cfg.faltaAltas).toEqual(["precios"]);
+  });
+
+  it("el producto por unidad solo: un precio por sorteo, sin el primer paquete", () => {
+    expect(leerPrecios("sorteo:1:1:365")).toEqual([{ id: "sorteo", usdc: "1", monto: 10_000_000, sorteos: 1, dias: 365 }]);
+    expect(unidadDe({ precios: leerPrecios("sorteo:1:1:365") })).toEqual({ id: "sorteo", usdc: "1", monto: 10_000_000, sorteos: 1, dias: 365 });
+  });
+
+  it("el producto por unidad con los paquetes fijos al lado", () => {
+    expect(leerPrecios("alta:2:3:365,sorteo:1.5:1:180,p10:5:10:365")).toEqual([
+      { id: "alta", usdc: "2", monto: 20_000_000, sorteos: 3, dias: 365 },
+      { id: "sorteo", usdc: "1.5", monto: 15_000_000, sorteos: 1, dias: 180 },
+      { id: "p10", usdc: "5", monto: 50_000_000, sorteos: 10, dias: 365 },
+    ]);
+    expect(unidadDe({ precios: leerPrecios(PRECIOS_POR_DEFECTO) })).toBeNull();
+  });
+
+  it("el producto por unidad mal escrito rechaza todo", () => {
+    const malos = ["sorteo:1:2:365", "sorteo:1:1", "sorteo:0:1:365", "sorteo:1:1:365,sorteo:2:1:365", "alta:2:3:365,sorteo:uno:1:365", "SORTEO:1:1:365"];
+    for (const mal of malos) {
+      expect(leerPrecios(mal), mal).toBeNull();
+    }
   });
 
   it("sin PRECIOS (o vacío) valen los del diseño", () => {
