@@ -162,6 +162,17 @@ describe("retomar un sorteo sellado con el modo de la pantalla distinto", () => 
     expect(m.ganadores.ganadoresPedidos()).toBe(3);
   });
 
+  it("después de una recarga, el sello retomado guarda los ganadores que se sellaron, aunque se toque el campo", async () => {
+    const m = await montar();
+    m.freeze.resumeFrozen(m.fila(nombres(8), "Polera", 3));
+    const { app } = await import("../state");
+    expect(app.frozen?.numWinners).toBe(3);
+    // El campo ya no decide: el resultado se calcula con lo sellado.
+    campo().value = "5";
+    campo().dispatchEvent(new Event("input", { bubbles: true }));
+    expect(app.frozen?.numWinners).toBe(3);
+  });
+
   it("el sorteo común de siempre se retoma igual que antes", async () => {
     const m = await montar();
     m.freeze.resumeFrozen(m.fila(nombres(8), "Termo", 2));

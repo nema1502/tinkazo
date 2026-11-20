@@ -12,6 +12,7 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { FORMA_TROMPO, respuestasTrompo, type PlanDelTrompo } from "./trompo-nino";
 import { medidasContador, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { decisivo as momentoDecisivo } from "./decisivo";
 import type { Montaje3D } from "../tres/tipos";
 import type { EntradaTrompo, ImpactoEntrada, PolvoEntrada, TrompoEntrada } from "../tres/trompo-3d";
 
@@ -262,6 +263,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   // cámara lenta, y el de los efectos, que nunca para. La estrella del golpe
   // tiene que aparecer justo mientras todo lo demás está quieto.
   let tAll = 0, tFx = 0, acc = 0, tHold = 0, landed = 0, saidUpTo = -1, steps = 0;
+  // El momento decisivo (`decisivo.ts`): el amague del último choque del mano a mano. Antes, en cada embestida cabecea
+  // uno de los dos al azar, y los otros premios salen sembrados con todos: nada nombra a nadie que gane.
+  S.decisivoEn(() => tAll, momentoDecisivo(duo ? T_DUEL + (clashes.at(-1) as number) - D_WIND : T_CROWN));
   let lastTick = -9, lastOutSaid = -9, lastBoom = -9, lastThud = -9, lastSpark = -9, edgeAt = -9;
   let stop = 0, slowUntil = -1, flashAt = -9, flashPow = 0;
   let clashIdx = 0, clashHits = 0;

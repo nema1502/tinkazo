@@ -97,6 +97,30 @@ describe("el selector de juegos", () => {
     expect(alVer).not.toHaveBeenCalled();
   });
 
+  it("con el sorteo mirándose en celulares desde el QR, el juego se cambia igual y el cambio queda anotado", async () => {
+    const { app } = await import("../state");
+    app.drawn = null;
+    app.game = "race";
+    app.frozen = { names: ["Ana", "Beto"], listHash: "ab", ts: 1, at: "", prize: "", round: 77, raffleId: 5n };
+    const r = await import("./espectadores-de-la-sala");
+    r.olvidarEspectadores();
+    r.anotarQrMostrado(app.frozen, "race", "normal", { id: "Ab12Cd34", clave: "k".repeat(22), permiso: "p", cambia: false, version: null, largo: 256, n: 1 });
+    const avisos: Event[] = [];
+    const oir = (e: Event): number => avisos.push(e);
+    document.addEventListener("tinkazo:cambio-con-qr", oir);
+    const { elegirJuego } = await import("./freeze");
+    elegirJuego("sapo");
+    document.removeEventListener("tinkazo:cambio-con-qr", oir);
+    // Hasta el 16 de noviembre de 2026 quedaba el del QR y la nota decía que no se cambiaba.
+    expect(app.game).toBe("sapo");
+    expect(marcados()).toEqual(["g-sapo"]);
+    expect(nota().hidden).toBe(true);
+    // Queda anotado (la sala grabará después de su final) y la espera se entera para publicarlo.
+    expect(r.cambioConQr(app.frozen)).toBe(true);
+    expect(avisos).toHaveLength(1);
+    r.olvidarEspectadores();
+  });
+
   it("mientras corre el show está apagado y dice por qué; los toques no hacen nada", async () => {
     const { app } = await import("../state");
     app.drawn = RESULTADO;

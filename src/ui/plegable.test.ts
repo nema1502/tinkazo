@@ -1,16 +1,48 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 
 /**
- * El pliegue del resultado se arma en el navegador (`plegarElResultado`, en `plegable.ts`): no hay DOM en las pruebas,
- * así que lo que se cuida acá es lo que podría romperlo sin que nadie se entere. Que cada id que el módulo busca esté
- * en `index.html` (si no, el pliegue no se arma y los tres botones quedan sueltos como antes) y que su texto esté en
- * los dos idiomas.
+ * El pliegue de las opciones ya no depende de cuántos ganan, porque ese control está a la vista. El del resultado se arma
+ * en el navegador (`plegarElResultado`): también se cuida que cada id que busca esté en `index.html` y su texto en los dos
+ * idiomas.
  */
+describe("el pliegue de las opciones", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML =
+      '<div><details id="mas-opciones"><summary>Premio y subir CSV</summary><input id="prize" /></details>' +
+      '<input id="nw" type="hidden" value="1" /></div>';
+  });
+
+  it("la cantidad ya no lo abre: está a la vista junto a Sellar la lista", async () => {
+    const { initPlegables } = await import("./plegable");
+    initPlegables();
+    const mas = document.getElementById("mas-opciones") as HTMLDetailsElement;
+    const nw = document.getElementById("nw") as HTMLInputElement;
+    nw.value = "3";
+    nw.dispatchEvent(new Event("input", { bubbles: true }));
+    nw.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(mas.open).toBe(false);
+  });
+
+  it("un premio escrito sí lo abre, porque sigue plegado", async () => {
+    const { initPlegables } = await import("./plegable");
+    initPlegables();
+    const mas = document.getElementById("mas-opciones") as HTMLDetailsElement;
+    const prize = document.getElementById("prize") as HTMLInputElement;
+    prize.value = "Termo";
+    prize.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(mas.open).toBe(true);
+  });
+});
+
 describe("el pliegue del resultado", () => {
-  const fuente = readFileSync(new URL("./plegable.ts", import.meta.url), "utf8");
-  const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+  // Con jsdom, import.meta.url no es una URL de archivo: las rutas salen de la raíz del proyecto.
+  const fuente = readFileSync(join(process.cwd(), "src", "ui", "plegable.ts"), "utf8");
+  const html = readFileSync(join(process.cwd(), "index.html"), "utf8");
   const creados = new Set(["mas-resultado"]);
   const buscados = [...fuente.matchAll(/getElementById\("([^"]+)"\)/g)].map((m) => m[1] as string).filter((id) => !creados.has(id));
 

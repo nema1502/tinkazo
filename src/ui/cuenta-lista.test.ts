@@ -82,6 +82,15 @@ const boton = (texto: string): HTMLButtonElement => {
 const hayBoton = (texto: string): boolean => botones().some((x) => x.textContent === texto);
 const alerta = (): string => [...(raiz()?.querySelectorAll<HTMLElement>('[role="alert"]') ?? [])].map((x) => x.textContent).join(" ");
 const textoDe = (): string => raiz()?.textContent ?? "";
+/** Las palabras del contenido y del pie, sin la barra de marca e idiomas ni el texto solo para lectores de pantalla. */
+const palabrasVisibles = (): number => {
+  const selectores = [".cl-titulo", ".cl-bajada", ".cl-pasos", ".cl-notas", ".cl-estado", ".cl-principal", ".cl-volver", ".cl-salidas"];
+  const texto = selectores.flatMap((sel) => [...(raiz()?.querySelectorAll<HTMLElement>(sel) ?? [])])
+    .filter((el) => !el.closest("[hidden]") && !el.classList.contains("sr-only"))
+    .map((el) => el.textContent ?? "")
+    .join(" ");
+  return texto.split(/\s+/u).filter((x) => /[\p{L}\p{N}]/u.test(x)).length;
+};
 const esc = (): boolean => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 const pasa = (ms = GUARDA_DE_TOQUE_MS + 50): Promise<void> => vi.advanceTimersByTimeAsync(ms).then(() => undefined);
 const escribir = (sel: string, valor: string): void => {
@@ -93,7 +102,7 @@ const escribir = (sel: string, valor: string): void => {
 async function abrir(inicial: Partial<Est> = {}, o: Partial<OpcionesDelPaso> = {}, partes: Partial<CuentaDelPaso> = {}, puede = true) {
   const sim = cuentaSimulada(inicial, partes);
   const salidas = salidasSimuladas(puede);
-  const promesa = abrirCuentaLista(sim.cuenta, salidas, { para: "entrada", correo: "nora@gmail.com", aviso: "Entraste con Google como Nora.", celular: false, inicial, ...o });
+  const promesa = abrirCuentaLista(sim.cuenta, salidas, { para: "entrada", correo: "nora@gmail.com", celular: false, inicial, ...o });
   await pasa();
   return { ...sim, salidas, promesa };
 }
@@ -132,7 +141,7 @@ describe("la forma del paso", () => {
     expect(raiz()?.querySelectorAll(".cl-principal").length).toBe(1);
     expect(principal().textContent).toBe(t("clActivarBoton"));
     expect(document.activeElement).toBe(principal());
-    expect(textoDe()).toContain("Entraste con Google como Nora.");
+    expect(textoDe()).not.toContain("Entraste con Google como Nora.");
     expect(textoDe()).toContain(t("clTitulo"));
   });
 
@@ -264,6 +273,14 @@ describe("la sucesión de una cuenta nueva", () => {
 });
 
 describe("proteger con el correo", () => {
+  it("la explicación del desbloqueo queda plegada hasta que la persona la pida", async () => {
+    await abrir({ activacion: "lista" }, { celular: true, puedeUsarDesbloqueo: async () => true });
+    const ayuda = raiz()?.querySelector<HTMLDetailsElement>("details.cl-detalles");
+    expect(ayuda?.open).toBe(false);
+    expect(ayuda?.querySelector("summary")?.textContent).toBe("¿Qué es el desbloqueo?");
+    expect(ayuda?.textContent).toContain("Es tu huella, tu cara o tu clave del celular. Tinkazo no la ve.");
+  });
+
   it("mandar, código malo, vencido, y el bueno; el código se confirma con Enter", async () => {
     const malos = ["SDK_INVALID_OTP", "OTP EXPIRED"];
     const ref: { estado?: { est: Est } } = {};
@@ -373,12 +390,14 @@ describe("proteger con el correo", () => {
     });
   });
 
-  it("los textos del código dicen cómo es y que puede estar vencido, en las dos lenguas", () => {
-    expect(T.es.protBadCode).toBe("Ese código no es o ya venció. Pedí otro y usalo enseguida.");
-    expect(T.en.protBadCode).toBe("That code is wrong or has expired. Ask for another one and use it right away.");
-    expect(T.es.clCorreoLlega).toBe("El correo puede venir en inglés. El código tiene letras y números, y vence en pocos minutos.");
-    // En inglés no hace falta avisar que el correo puede venir en inglés.
-    expect(T.en.clCorreoLlega).toBe("The code has letters and numbers, and expires in a few minutes.");
+  it("los textos del código dicen cómo es y qué hacer si no llega, en las dos lenguas", () => {
+    expect(T.es.protBadCode).toBe("Ese código no sirve. Revisalo o pedí otro.");
+    expect(T.en.protBadCode).toBe("That code doesn't work. Check it or ask for a new one.");
+    expect(T.es.clCorreoSpam).toBe("¿No llegó? Mirá en Spam. Puede venir en inglés.");
+    // En inglés no hace falta avisar que el correo puede venir en inglés, y no se nombran las Promociones.
+    expect(T.en.clCorreoSpam).toBe("Not there? Check Spam.");
+    expect(T.es.clCodigoLabel).toBe("Código de letras y números");
+    expect(T.en.clCodigoLabel).toBe("Code with letters and numbers");
   });
 
   it("con otro correo escrito a mano, se muestra entero", async () => {
@@ -393,7 +412,7 @@ describe("proteger con el correo", () => {
     principal().click();
     await pasa();
     expect(llamadas).toContain("mandar:otra@correo.com");
-    expect(raiz()?.querySelector(".cl-texto-caja b")?.textContent).toBe("otra@correo.com");
+    expect(raiz()?.querySelector(".cl-bajada b")?.textContent).toBe("otra@correo.com");
   });
 
   it("«¿No llegó?» a los 20 segundos y otro código recién a los 30", async () => {
@@ -401,15 +420,15 @@ describe("proteger con el correo", () => {
     principal().click();
     await pasa();
     expect(textoDe()).not.toContain(t("clCorreoSpam"));
-    const otro = (): HTMLButtonElement => raiz()?.querySelector('[data-accion="otro-codigo"]') as HTMLButtonElement;
-    expect(otro().disabled).toBe(true);
-    expect(otro().textContent).toMatch(/Otro código en \d+ segundos/);
+    const otro = (): HTMLButtonElement | null => raiz()?.querySelector('[data-accion="otro-codigo"]') ?? null;
+    expect(otro()).toBeNull();
     await pasa(20_000);
     expect(textoDe()).toContain(t("clCorreoSpam"));
-    expect(otro().disabled).toBe(true);
+    expect(otro()?.disabled).toBe(true);
+    expect(otro()?.textContent).toMatch(/Otro código en \d+ segundos/);
     await pasa(10_000);
-    expect(otro().disabled).toBe(false);
-    expect(otro().textContent).toBe(t("protOtroCodigo"));
+    expect(otro()?.disabled).toBe(false);
+    expect(otro()?.textContent).toBe(t("protOtroCodigo"));
   });
 
   it("si la página se recargó con un código mandado, lo dice y no manda otro solo", async () => {
@@ -444,9 +463,16 @@ describe("proteger con el correo", () => {
 });
 
 describe("otro celular u otra compu", () => {
+  it("el aviso del aparato prestado queda para después de confirmar, en los dos idiomas", () => {
+    expect(T.es.clAparatoListoCel).toBe("Si este celular no es tuyo, cerrá sesión al terminar.");
+    expect(T.es.clAparatoListoCompu).toBe("Si esta compu no es tuya, cerrá sesión al terminar.");
+    expect(T.en.clAparatoListoCel).toBe("If this phone isn't yours, sign out when you finish.");
+    expect(T.en.clAparatoListoCompu).toBe("If this computer isn't yours, sign out when you finish.");
+  });
+
   it("confirmar que sos vos va primero, por el correo de la cuenta, y después activar", async () => {
     const inicial = { proteccion: "aparato-nuevo" as const, correoConfirmado: true, correoDeLaCuenta: "cuenta@mail.com", unicoNavegador: false };
-    const { llamadas } = await abrir(inicial);
+    const { llamadas } = await abrir(inicial, { celular: true });
     const cajas = [...(raiz()?.querySelectorAll<HTMLElement>(".cl-paso") ?? [])];
     expect(cajas[0]?.dataset.parte).toBe("proteger");
     expect(cajas[0]?.textContent).toContain(t("clAparatoTitulo"));
@@ -458,8 +484,78 @@ describe("otro celular u otra compu", () => {
     principal().click();
     await pasa();
     expect(llamadas).toContain("aparatoConfirmar:123456");
-    expect(textoDe()).toContain(t("clConfirmadoActivar"));
+    expect(textoDe()).toContain("Si este celular no es tuyo, cerrá sesión al terminar.");
+    expect(raiz()?.querySelector(".cl-estado")?.classList.contains("sr-only")).toBe(false);
     expect(principal().textContent).toBe(t("clActivarBoton"));
+  });
+});
+
+describe("la pantalla con un solo paso pendiente", () => {
+  const CAPTURA = {
+    activacion: "lista" as const,
+    proteccion: "aparato-nuevo" as const,
+    correoConfirmado: true,
+    correoDeLaCuenta: "nora@gmail.com",
+    unicoNavegador: false,
+  };
+
+  it("la captura muestra solo confirmar, su línea, el botón con el correo tapado y las dos salidas, en español", async () => {
+    await abrir(CAPTURA, { celular: true });
+    expect(raiz()?.querySelector(".cl-titulo")?.textContent).toBe("Confirmá que sos vos");
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe("Es una sola vez en este celular.");
+    expect(principal().textContent).toBe("Mandar un código a n•••@gmail.com");
+    expect(boton("Pasar a Prueba")).toBeTruthy();
+    expect(boton("Cerrar sesión")).toBeTruthy();
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(1);
+    expect(raiz()?.querySelector(".cl-paso-cab")).toBeNull();
+    expect(raiz()?.querySelector(".cl-quien")).toBeNull();
+    expect(raiz()?.querySelector(".cl-cuenta-modo")).toBeNull();
+    expect(textoDe()).not.toContain("dos pasos");
+    expect(textoDe()).not.toContain("En Prueba los sorteos son de ensayo");
+  });
+
+  it("la captura muestra solo confirmar, su línea, el botón con el correo tapado y las dos salidas, en inglés", async () => {
+    setLang("en");
+    await abrir(CAPTURA, { celular: true });
+    expect(raiz()?.querySelector(".cl-titulo")?.textContent).toBe("Confirm it's you");
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe("You only do this once on this phone.");
+    expect(principal().textContent).toBe("Send a code to n•••@gmail.com");
+    expect(boton("Switch to Test")).toBeTruthy();
+    expect(boton("Sign out")).toBeTruthy();
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(1);
+    expect(raiz()?.querySelector(".cl-paso-cab")).toBeNull();
+    expect(raiz()?.querySelector(".cl-quien")).toBeNull();
+    expect(raiz()?.querySelector(".cl-cuenta-modo")).toBeNull();
+    expect(textoDe()).not.toContain("two steps");
+    expect(textoDe()).not.toContain("In Test, draws are for practice");
+    setLang("es");
+  });
+
+  it("la captura no pasa de 25 palabras visibles", async () => {
+    await abrir(CAPTURA, { celular: true });
+    expect(palabrasVisibles()).toBeLessThanOrEqual(25);
+    setLang("en");
+    expect(palabrasVisibles()).toBeLessThanOrEqual(25);
+    setLang("es");
+  });
+
+  it("con solo activar pendiente, no muestra la parte ya lista ni cuántos pasos faltan", async () => {
+    await abrir({ proteccion: "lista" });
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(1);
+    expect(raiz()?.querySelector(".cl-paso")?.classList.contains("cl-sola")).toBe(true);
+    expect(raiz()?.querySelector(".cl-paso-cab")).toBeNull();
+    expect(raiz()?.querySelector(".cl-titulo")?.textContent).toBe("Activá tu cuenta");
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).not.toContain("dos pasos");
+  });
+
+  it("con dos pasos pendientes, hay dos filas breves y ninguna palabra de estado", async () => {
+    await abrir();
+    const filas = [...(raiz()?.querySelectorAll(".cl-paso") ?? [])];
+    expect(filas).toHaveLength(2);
+    expect(filas[0]?.querySelector(".cl-paso-titulo")?.textContent).toBe("Paso 1 de 2: Activá tu cuenta");
+    expect(filas[1]?.querySelector(".cl-paso-titulo")?.textContent).toBe("Paso 2 de 2: Protegé tu cuenta");
+    expect(raiz()?.querySelector(".cl-palabra")).toBeNull();
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe("Es una sola vez.");
   });
 });
 
@@ -499,6 +595,13 @@ describe("las salidas", () => {
     await abrir({}, { para: "sorteo" }, {}, false);
     expect(boton(t("modeSwitchToTest")).disabled).toBe(true);
     expect(textoDe()).toContain(t("modeSwitchBlocked"));
+  });
+
+  it("no hay explicación bajo Pasar a Prueba", async () => {
+    await abrir();
+    expect(raiz()?.querySelector(".cl-cuenta-modo")).toBeNull();
+    const notaVieja = "Cada modo tiene su propia cuenta. En Prueba vas a entrar una vez más, y tu cuenta de Oficial sigue acá cuando vuelvas.";
+    expect(textoDe()).not.toContain(notaVieja);
   });
 
   it("«Cerrar sesión» con la red colgada: a los 12 segundos el paso se cierra igual y nadie queda encerrado", async () => {
@@ -555,12 +658,24 @@ describe("los avisos de la cuenta", () => {
 });
 
 describe("el final", () => {
+  it("al entrar sin lista: el texto del primer sello y Seguir deja la confirmación marcada", async () => {
+    const marcar = vi.fn();
+    const alSeguir = vi.fn();
+    const { promesa } = await abrir({ activacion: "lista", proteccion: "lista" }, { para: "entrada", primerOficial: { pendiente: () => true, marcar }, alSeguir });
+    expect(textoDe()).toContain("Solo se publica el sello, nunca los nombres.");
+    expect(principal().textContent).toBe(t("clSeguir"));
+    principal().click();
+    expect(marcar).toHaveBeenCalledTimes(1);
+    expect(alSeguir).toHaveBeenCalledTimes(1);
+    await expect(promesa).resolves.toBe(true);
+  });
+
   it("para sellar: el texto del primer sello en Oficial, lo marca al tocar, y el foco vuelve al botón", async () => {
     const marcar = vi.fn();
     const volverA = document.getElementById("btn-freeze") as HTMLButtonElement;
     const alSeguir = vi.fn();
     const { promesa } = await abrir({ activacion: "lista", proteccion: "lista" }, { para: "sello", primerOficial: { pendiente: () => true, marcar }, volverA, alSeguir });
-    expect(textoDe()).toContain(t("firstOfficialBody"));
+    expect(textoDe()).toContain("Solo se publica el sello, nunca los nombres.");
     expect(principal().textContent).toBe(t("freeze"));
     principal().click();
     expect(marcar).toHaveBeenCalledTimes(1);
@@ -592,17 +707,6 @@ describe("el idioma", () => {
     setLang("es");
   });
 
-  it("la línea de quién entró, dada como función, cambia de idioma con ES y EN", async () => {
-    const aviso = (): string => `${t("cuentaAvisoGoogle").replace("{n}", "Nora")}.`;
-    await abrir({}, { aviso });
-    expect(raiz()?.querySelector(".cl-quien")?.textContent).toBe("Entraste con Google como Nora.");
-    boton("EN").click();
-    await pasa(10);
-    expect(raiz()?.querySelector(".cl-quien")?.textContent).toBe("Signed in with Google as Nora.");
-    boton("ES").click();
-    await pasa(10);
-    expect(raiz()?.querySelector(".cl-quien")?.textContent).toBe("Entraste con Google como Nora.");
-  });
 });
 
 describe("lo que se ve mientras activa", () => {
@@ -617,8 +721,7 @@ describe("lo que se ve mientras activa", () => {
     const estado = raiz()?.querySelector(".cl-estado") as HTMLElement;
     expect(estado.textContent).toBe(t("clActivarHaciendo"));
     expect(estado.classList.contains("sr-only")).toBe(true);
-    const palabra = raiz()?.querySelector('.cl-paso[data-parte="activar"] .cl-palabra') as HTMLElement;
-    expect(palabra.hidden).toBe(true);
+    expect(raiz()?.querySelector(".cl-palabra")).toBeNull();
     // A los 8 segundos la línea dice otra cosa, y entonces sí se ve.
     await pasa(8_100);
     expect(estado.textContent).toBe(t("clActivarLento"));
@@ -631,5 +734,98 @@ describe("la muestra y la pantalla no traen la billetera", () => {
     const fuente = readFileSync(resolve(process.cwd(), "src/ui/cuenta-lista.ts"), "utf8");
     const imports = fuente.split("\n").filter((l) => /^import /.test(l) && l.includes("wallet-pollar"));
     expect(imports.every((l) => l.startsWith("import type"))).toBe(true);
+  });
+});
+
+describe("con un error a la vista, la pantalla conserva su primera línea", () => {
+  const MALO = new Error("SDK_INVALID_OTP");
+
+  it.each(["es", "en"] as const)("con el código mandado y un código malo se ve el error y a qué correo se mandó (%s)", async (lang) => {
+    setLang(lang);
+    const confirmar = vi.fn(async (_c: string): Promise<boolean> => {
+      throw MALO;
+    });
+    await abrir({ activacion: "lista" }, {}, { confirmarCodigoDeProteccion: confirmar });
+    principal().click();
+    await pasa();
+    escribir("#cl-codigo", "AB12CD34E");
+    principal().click();
+    await pasa();
+    expect(alerta()).toContain(t("protBadCode"));
+    const [antes = "", despues = ""] = t("protCodeLead").split("{mail}");
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(`${antes}n•••@gmail.com${despues}`);
+    expect(raiz()?.querySelector(".cl-bajada b")?.textContent).toBe("n•••@gmail.com");
+    // Y pedir otro código está a la vista aunque no pasaron los 20 segundos.
+    expect(raiz()?.querySelector('[data-accion="otro-codigo"]')).not.toBeNull();
+  });
+
+  it.each(["es", "en"] as const)("con otro celular y un error se ve el error y la línea de confirmar (%s)", async (lang) => {
+    setLang(lang);
+    const inicial = { proteccion: "aparato-nuevo" as const, correoConfirmado: true, correoDeLaCuenta: "cuenta@mail.com", unicoNavegador: false };
+    const mandar = vi.fn(async (): Promise<void> => {
+      throw new Error("algo raro");
+    });
+    await abrir(inicial, { celular: true }, { mandarCodigoParaEsteAparato: mandar });
+    principal().click();
+    await pasa();
+    expect(mandar).toHaveBeenCalledTimes(1);
+    expect(alerta()).toContain(t("protFalla"));
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clAparatoTextoCel"));
+  });
+});
+
+describe("el tic del código repinta al cruzar los 20 y los 30 segundos, aunque se atrase", () => {
+  it("si el reloj salta de 19 a 21 segundos, aparecen el aviso de Spam y otro código", async () => {
+    await abrir({ activacion: "lista" });
+    principal().click();
+    await pasa();
+    await pasa(18_000);
+    expect(textoDe()).not.toContain(t("clCorreoSpam"));
+    // El navegador frenó el intervalo: en el próximo tic ya pasaron más de 20 segundos.
+    vi.setSystemTime(Date.now() + 2_500);
+    await pasa(1_000);
+    expect(textoDe()).toContain(t("clCorreoSpam"));
+    expect(raiz()?.querySelector('[data-accion="otro-codigo"]')).not.toBeNull();
+  });
+
+  it("si salta de 25 a 34, el botón queda listo para pedir otro código", async () => {
+    await abrir({ activacion: "lista" });
+    principal().click();
+    await pasa();
+    await pasa(24_000);
+    const otro = (): HTMLButtonElement | null => raiz()?.querySelector('[data-accion="otro-codigo"]') ?? null;
+    expect(otro()?.disabled).toBe(true);
+    vi.setSystemTime(Date.now() + 8_000);
+    await pasa(1_000);
+    expect(otro()?.disabled).toBe(false);
+    expect(otro()?.textContent).toBe(t("protOtroCodigo"));
+  });
+});
+
+describe("el foco vuelve al pliegue que lo tenía", () => {
+  it("un resumen igual en otra parte de la pantalla no roba el foco al repintar", async () => {
+    const { avisar } = await abrir({ activacion: "lista", proteccion: "sin-forma", unicoNavegador: false });
+    const resumen = raiz()?.querySelector<HTMLElement>("summary[data-pliegue]") as HTMLElement;
+    expect(resumen.dataset.pliegue).toBe("pagoMasDetalles");
+    // Otro resumen con la misma acción y antes en el documento: antes del arreglo, el repintado le daba el foco a este.
+    const impostor = document.createElement("summary");
+    impostor.dataset.accion = "mas-detalles";
+    impostor.tabIndex = 0;
+    raiz()?.prepend(impostor);
+    resumen.tabIndex = 0;
+    resumen.focus();
+    expect(document.activeElement).toBe(resumen);
+    avisar();
+    await pasa(2_000);
+    const despues = raiz()?.querySelector<HTMLElement>("summary[data-pliegue]") as HTMLElement;
+    expect(despues).not.toBe(resumen);
+    expect(document.activeElement).toBe(despues);
+    expect(document.activeElement).not.toBe(impostor);
+  });
+
+  it("cada pliegue lleva su propio identificador", async () => {
+    await abrir({ activacion: "lista" }, { celular: true, puedeUsarDesbloqueo: async () => true });
+    const claves = [...(raiz()?.querySelectorAll<HTMLElement>("summary[data-pliegue]") ?? [])].map((s) => s.dataset.pliegue);
+    expect(claves).toEqual(["clQueEsDesbloqueo"]);
   });
 });

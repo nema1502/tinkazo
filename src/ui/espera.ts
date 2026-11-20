@@ -1,18 +1,20 @@
 import { esc } from "../dom";
 import type { AccionError, EventoError } from "./error-accion";
-import { getLang, t } from "../i18n";
-import { app, avatar, type Game } from "../state";
+import { getLang, onLangChange, t } from "../i18n";
+import { app, avatar, currentPace, type Game } from "../state";
 import { beep, note } from "../sound";
 import { RANGOS, SELECTOR, cabenLosPremios, rangoParaLeer } from "./recomendar";
 import { entradaDe } from "../games/pixi/kit/catalogo";
 import { QUEDA_MS, elegirAlAzar, enRueda, posiblesDe, type JuegoAzar } from "./azar";
-import { enEnsayo } from "../ensayo-modo";
+import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
-import { paraMostrar } from "../equipos/etiquetas";
+import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
+import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
+import { isTurnOrder } from "../modos/turnos";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -42,6 +44,8 @@ import { atencionPrendida } from "../estilos-atencion";
  *   salir, la persona dijo que no, y no se le vuelve a forzar en esta sesión.
  * - "Cambiar de juego": el selector está detrás de esta capa, así que el juego
  *   se elige sin salir (secundario: la acción principal sigue siendo una sola).
+ *   Desde el 16 de noviembre de 2026 sigue con el QR de espectadores a la vista:
+ *   el cambio se publica en el mismo enlace o en uno nuevo (`espectador-enlace.ts`).
  * - Si la cuenta pide aprobar cada operación en una ventana (Freighter), el
  *   sorteo no puede arrancar solo: la espera queda abierta con una sola acción
  *   grande, "Lanzar el sorteo". La cuenta de prueba y la de Google (Pollar)
@@ -278,24 +282,36 @@ export function opcionesHtml(juegos: OpcionDeJuego[]): string {
 export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const f = app.frozen;
   if (!f || app.drawn || abierta || segundos() <= 0) return false;
+  // Todavía no hay ganadores: con la cantidad elegida alcanza para saber si la lista sellada es un orden.
+  const orden = isTurnOrder(f.names.length, sorteo.premios(), f.prize);
   const back = document.createElement("div");
   back.className = "espera";
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
-  back.setAttribute("aria-label", t("espSticker"));
+  back.setAttribute("aria-label", t(orden ? "espStickerOrden" : "espSticker"));
   back.tabIndex = -1;
+  // El QR del espectador, solo en un sorteo real: la demo, el ensayo y el stand no comparten número ni lista
+  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar.
+  const conEspectador = !sinGrabar();
   const juegos = sorteo.juegos();
   back.innerHTML =
     `<div class="espera-top">` +
-    `<span class="sticker">${esc(t("espSticker"))}</span>` +
+    `<span class="sticker">${esc(t(orden ? "espStickerOrden" : "espSticker"))}</span>` +
     // En Prueba, la sala entera ve en qué modo está el sorteo; en Oficial, nada.
     (hayModoOficial && network.name === "testnet" ? `<span class="espera-prueba">${esc(t("netTest"))}</span>` : "") +
-    `<div class="espera-top-acc">${juegoHtml(juegos, "barra")}<button class="ghost" type="button" data-volver>${esc(t("espVolver"))}</button></div>` +
+    `<div class="espera-top-acc">${juegoHtml(juegos, "barra")}<button class="ghost" type="button" data-volver data-i-aria="espVolver" aria-label="${esc(t("espVolver"))}"><span class="espera-volver-largo" data-i="espVolver">${esc(t("espVolver"))}</span><span class="espera-volver-corto" data-i="espVolverCorto">${esc(t("espVolverCorto"))}</span></button></div>` +
     `</div>` +
     // En el ensayo también se ve que no se graba, como en el estadio (ensayo.ts).
     (enEnsayo() ? `<p class="espera-ensayo">${esc(t("ensEstadio"))}</p>` : "") +
-    (f.prize ? `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>` : "") +
+    (f.prize
+      ? orden
+        ? `<p class="espera-premio">${esc(t("cortinaSeOrden"))}</p>`
+        : `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>`
+      : "") +
     `<div class="espera-reloj mono">0:00</div>` +
+    // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show. Lleva solo el
+    // enlace corto, que llega aparte (enlace-corto.ts): hasta entonces dice que se está preparando.
+    (conEspectador ? figuraDelQrHtml() : "") +
     // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error.
     `<div class="espera-sigue" hidden></div>` +
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
@@ -310,6 +326,41 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     juegoHtml(juegos, "flujo") +
     panelDeJuegosHtml(juegos, f.names.length);
   document.body.appendChild(back);
+  /**
+   * El QR del espectador (`espectador-enlace.ts`), con lo de ahora: el juego, el ritmo y, si ya está sellado en
+   * Stellar, la red y el número del sorteo. Se rearma si cambia el juego desde la espera o si el sello entra tarde.
+   */
+  const armarQr = (): void => {
+    if (!conEspectador || !app.frozen || !back.isConnected) return;
+    // El sello todavía se está reintentando: si entra, la sala va a esperar lo grabado, y un enlace sin el número del
+    // sorteo dejaría al celular adelantarse. Hasta saberlo, no hay QR (`alSello` lo arma cuando entra).
+    if (sinSelloAhora(app.frozen)) {
+      esconderQrDeEspectador(back);
+      return;
+    }
+    const datos = datosDeLaEspera(app.frozen, {
+      juego: app.game,
+      ritmo: currentPace(),
+      premios: sorteo.premios(),
+      red: network.name,
+      contrato: network.contractId,
+      equipo: nombreDelEquipo,
+    });
+    // Sin el número del sorteo en Stellar no hay QR: el celular no sabría cuándo la sala lo lanza (coronaría antes) ni
+    // con qué comparar la lista del enlace.
+    if (!datos) {
+      esconderQrDeEspectador(back);
+      return;
+    }
+    // Con el QR ya visto, un cambio de juego o de duración se publica en el mismo enlace si se puede, o en uno nuevo
+    // (`armarQrDeEspectador`). La sala lo anota (`espectadores-de-la-sala.ts`) y graba después de su final: algún
+    // celular puede seguir con el juego de antes.
+    void armarQrDeEspectador(back, datos, app.frozen).then(() => {
+      // El QR llega después de medir la espera y ocupa más que la línea de preparando: se vuelve a medir para que entre.
+      if (back.isConnected) ajusta();
+    });
+  };
+  armarQr();
   // Que entre en la pantalla: ahora, cuando cambia el tamaño (un proyector que se conecta, un zoom) y cuando llegan las letras.
   const ajusta = (): void => ajustar(back);
   ajusta();
@@ -330,6 +381,16 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   let timer = 0;
   let ultimoTic = -1;
 
+  // El cartel y la línea no vienen del markup: se traducen también con la espera abierta.
+  const premioLinea = back.querySelector<HTMLElement>(".espera-premio");
+  onLangChange(() => {
+    if (!back.isConnected) return;
+    const clave = fase === "cuenta" ? (orden ? "espStickerOrden" : "espSticker") : "espStickerYa";
+    if (sticker) sticker.textContent = t(clave);
+    back.setAttribute("aria-label", t(clave));
+    if (premioLinea) premioLinea.innerHTML = orden ? esc(t("cortinaSeOrden")) : `${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b>`;
+  });
+
   /**
    * Cierra la espera. `alShow`: el show ya la tapa y se queda con la pantalla
    * completa, que se suelta al cerrar el resultado en grande. Si no, se suelta la
@@ -345,6 +406,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     removeEventListener("keydown", tecla);
     document.removeEventListener("tinkazo:error", alError);
     document.removeEventListener("tinkazo:sello", alSello);
+    document.removeEventListener("tinkazo:cambio-con-qr", alCambiar);
+    document.removeEventListener("tinkazo:ritmo", alCambiar);
     back.remove();
     if (abierta === yo) abierta = null;
     if (alShow) return;
@@ -365,6 +428,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     const actual = sorteo.juegos().find((j) => j.elegido);
     if (!actual) return;
     for (const el of back.querySelectorAll<HTMLElement>(".espera-juego-n b")) el.textContent = actual.nombre;
+    // El enlace del espectador lleva el juego: si cambió desde la espera, el QR se rearma con el nuevo.
+    armarQr();
   };
   /**
    * El alto de la barra de Sorprendeme y Listo, que va pegada abajo. Lo que se lleva a la vista (la tarjeta donde cae la
@@ -412,6 +477,12 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
   };
+  // El juego o la duración cambiaron desde la página (la duración del selector): el nombre y el QR se rehacen.
+  const alCambiar = (): void => {
+    if (back.isConnected && fase === "cuenta") pintarNombre();
+  };
+  document.addEventListener("tinkazo:cambio-con-qr", alCambiar);
+  document.addEventListener("tinkazo:ritmo", alCambiar);
 
   /* ------------------------------------------------------------- el azar */
   /** El temporizador de la ruleta, y si está corriendo: un toque más no la arranca de nuevo, y cerrarla la para. */
@@ -639,11 +710,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     ajusta();
   };
 
-  /** Lo que se ve mientras llega el número y, con cuenta, se graba: lo mismo que la cortina del sorteo. */
+  /** Lo que se ve mientras llega el número: lo mismo que la cortina del sorteo. La grabación va aparte y no se espera. */
   const sortear = (): void => {
     pasar(
       "sorteando",
-      `<p class="cortina-t" role="status">${esc(t(sorteo.graba ? "cortinaGraba" : "cortinaNumero"))}</p>` +
+      `<p class="cortina-t" role="status">${esc(t("cortinaNumero"))}</p>` +
         `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`,
     );
     // En la demo el sorteo lo lanza la propia demo: apretarlo acá sortearía dos veces.
@@ -681,6 +752,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const alSello = (): void => {
     const pie = back.querySelector<HTMLElement>(".espera-pie");
     if (pie && app.frozen) pie.textContent = pieDeLaEspera(getLang(), app.frozen.names.length, sinSelloAhora(app.frozen));
+    // Ahora el sorteo está sellado: el enlace del espectador lleva su número, y el celular espera lo grabado como la sala.
+    armarQr();
   };
   document.addEventListener("tinkazo:sello", alSello);
 

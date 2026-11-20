@@ -19,6 +19,27 @@ class_name = "Sala"
 name = "CUPOS"
 class_name = "Cupos"
 
+# El envío de correo de Cloudflare, para avisarle a quien gana. Sin restricciones de destino: la sala le escribe a la cuenta que
+# la red dice que ganó. Sin el dominio habilitado en el panel, `send` falla y el aviso se pierde sin romper nada (ver README.md).
+[[send_email]]
+name = "CORREO"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Sala", "Cupos"]
+
+[vars]
+# Los RPC de la red principal donde la sala lee el sello y el resultado: los mismos de RPC_LISTAS.mainnet en src/stellar/config.ts.
+RPC_MAINNET = "https://mainnet.sorobanrpc.com,https://rpc.lightsail.network"
+# La app del proveedor de cuentas de la red principal: el mismo valor público que el portero.
+POLLAR_APP_ID = "cmw6osdl600080imq38rz1vvu"
+# El pase del QR se exige. En "0" se apaga, solo si algo falla el día del evento.
+PASE = "1"
+# "estricto": entra solo quien el proveedor dice, exactamente, que es de Google. Es el valor por defecto: cualquier otro valor
+# (o ninguno) también es estricto. "suave" es solo un interruptor de emergencia: deja entrar y cuenta aparte a quien el
+# proveedor no dice por dónde entró. Una vía que no es Google no entra en ningún modo.
+SOLO_GOOGLE = "estricto"
+# El aviso por correo a quien gana nace apagado: solo con "1" la sala lo manda. El remitente es una dirección del dominio ya
+# habilitado para el envío.
+CORREO_GANADORAS = "1"
+CORREO_DE = "hola@tinkazo.app"

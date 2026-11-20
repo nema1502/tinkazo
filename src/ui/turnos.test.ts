@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 
 /**
- * «Orden de turnos» en la herramienta (`turnos.ts`), con el markup de verdad de `index.html` y el resto de la lista
+ * Orden de turnos en la herramienta (`turnos.ts`), con el markup de verdad de `index.html` y el resto de la lista
  * (`participants.ts`): la cantidad que sigue a la lista, el tope de la red, el borrador y, sobre todo, que sin la
  * bandera y sin el parámetro la herramienta de siempre no cambia en nada.
  */
@@ -84,7 +84,7 @@ describe("el markup de la opción", () => {
     expect(T.en.turnsLimit).toContain("{n}");
   });
 
-  it("la ayuda dice lo de la propuesta y el ejemplo es la única línea con «pasanaku»", () => {
+  it("la ayuda dice lo de la propuesta y el ejemplo es la única línea con pasanaku", () => {
     expect(T.es.turnsOption).toBe("Orden de turnos");
     expect(T.en.turnsOption).toBe("Turn order");
     expect(T.es.turnsHelp).toBe("Salen todos, en orden. Ese orden son los turnos.");
@@ -111,15 +111,16 @@ describe("el markup de la opción", () => {
   });
 });
 
-describe("sin la bandera y sin el parámetro la herramienta es la de siempre", () => {
+describe("con la bandera apagada a propósito (VITE_MODOS=0) la herramienta es la de siempre", () => {
   it("la opción sigue escondida y nada del campo ni de los rótulos cambia", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar(12);
     expect(opcion().hidden).toBe(true);
     expect(campo().disabled).toBe(false);
     expect(campo().value).toBe("1");
     expect(rotulo('label[for="nw"]')).toBe("Cuántos ganan");
     expect(rotulo("#prize-etiqueta")).toBe("¿Qué sorteás? (opcional)");
-    expect(rotulo("#mas-opciones > summary")).toBe("Premio, cuántos ganan y subir CSV");
+    expect(rotulo("#mas-opciones > summary")).toBe("Premio y subir CSV");
     expect($("prize-chips").style.display).toBe("");
     expect($("nw-atajos").style.display).toBe("");
     expect(premio().value).toBe("");
@@ -135,14 +136,16 @@ describe("sin la bandera y sin el parámetro la herramienta es la de siempre", (
     expect(campo().value).toBe("1");
   });
 
-  it("la dirección sin ?modo no prende nada", async () => {
+  it("la dirección sin ?modo no prende nada con la bandera apagada", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { turnos } = await montar(5);
     turnos.abrirConElModoPedido();
     expect(turnos.modoTurnosActivo()).toBe(false);
     expect(campo().disabled).toBe(false);
   });
 
-  it("el borrador es el de siempre, sin el campo del modo", async () => {
+  it("el borrador es el de siempre, sin el campo del modo, con la bandera apagada", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { participants } = await montar(6);
     participants.guardarBorrador();
     const guardado = JSON.parse(sessionStorage.getItem(BORRADOR) as string) as Record<string, unknown>;
@@ -191,7 +194,7 @@ describe("prendido: la cantidad sigue a la lista", () => {
     return m;
   };
 
-  it("al tocar la opción: la cantidad es la de la lista, el campo y los atajos se bloquean, el nombre queda en «Turnos»", async () => {
+  it("al tocar la opción: la cantidad es la de la lista, el campo y los atajos se bloquean, el nombre queda en Turnos", async () => {
     await prender(12);
     expect(boton().getAttribute("aria-pressed")).toBe("true");
     expect(campo().value).toBe("12");
@@ -242,7 +245,7 @@ describe("prendido: la cantidad sigue a la lista", () => {
     expect($("sellar-resumen").textContent).toBe("12 personas, turnos del 1 al 12. Al sellar, la lista queda cerrada.");
     poner(4);
     expect($("sellar-resumen").textContent).toBe("4 personas, turnos del 1 al 4. Al sellar, la lista queda cerrada.");
-    // Si el nombre ya no empieza con «Turnos», el resumen vuelve a ser el de siempre.
+    // Si el nombre ya no empieza con Turnos, el resumen vuelve a ser el de siempre.
     premio().value = "Termo";
     premio().dispatchEvent(new Event("input", { bubbles: true }));
     expect($("sellar-resumen").textContent).toContain("4 personas, 4 ganadores, Termo");
@@ -288,7 +291,7 @@ describe("prendido: la cantidad sigue a la lista", () => {
 });
 
 describe("el nombre de los turnos", () => {
-  it("lo que escribe la persona queda si empieza con «Turnos» o «Turns»; si no, la palabra va por delante", async () => {
+  it("lo que escribe la persona queda si empieza con Turnos o Turns; si no, la palabra va por delante", async () => {
     history.replaceState(null, "", "/?modo=turnos");
     await montar(5);
     boton().click();
@@ -345,7 +348,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     expect(turnos.ordenNoCabe()).toBe(true);
     expect(sellar().disabled).toBe(true);
     expect(nota().hidden).toBe(false);
-    expect(nota().textContent).toBe("En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect(nota().textContent).toBe("El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
     // Los turnos son los de la lista entera: no se recorta a 32 haciéndolo pasar por un orden.
     expect(campo().value).toBe("40");
   });
@@ -353,7 +356,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
   it("con la lista que no entra, el resumen de antes de sellar no promete el sello", async () => {
     await prender(40, 32);
     // Sin la promesa del sello, y con el motivo a la vista junto al botón (el mismo de la nota del pliegue).
-    expect($("sellar-resumen").textContent).toBe("40 personas, turnos del 1 al 40. En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect($("sellar-resumen").textContent).toBe("40 personas, turnos del 1 al 40. El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
     expect($("sellar-resumen").textContent).not.toContain("Al sellar");
     // Con una lista que sí entra, la promesa del sello vuelve.
     poner(20);
@@ -365,13 +368,17 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     expect(T.es.turnsLimit).not.toContain("personas");
     expect(T.en.turnsLimit).toContain("turns");
     expect(T.en.turnsLimit).not.toContain("people");
+    expect(T.es.turnsLimit).toContain("Achicá la lista");
+    expect(T.en.turnsLimit).toContain("Shorten the list");
+    expect(T.es.turnsLimit).not.toMatch(/red/i);
+    expect(T.en.turnsLimit).not.toMatch(/network/i);
     await prender(2, 32);
     const ta = $("ta") as HTMLTextAreaElement;
     ta.value = Array.from({ length: 20 }, (_, i) => [`Persona ${i + 1} (1/2)`, `Persona ${i + 1} (2/2)`]).flat().join("\n");
     ta.dispatchEvent(new Event("input", { bubbles: true }));
     expect(sellar().disabled).toBe(true);
     expect(nota().hidden).toBe(false);
-    expect(nota().textContent).toBe("En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect(nota().textContent).toBe("El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
     expect($("sellar-resumen").textContent).toContain("20 personas, 40 turnos");
   });
 
@@ -379,7 +386,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     for (const lineas of [301, 320]) {
       await prender(lineas, 300);
       const resumen = $("sellar-resumen").textContent ?? "";
-      expect(resumen, `${lineas}`).toBe(`${lineas} personas, turnos del 1 al ${lineas}. En esta red el orden llega hasta 300 turnos: con más, no se puede sellar.`);
+      expect(resumen, `${lineas}`).toBe(`${lineas} personas, turnos del 1 al ${lineas}. El orden llega hasta 300 turnos en este modo. Achicá la lista para poder sellar.`);
       expect(resumen, `${lineas}`).not.toMatch(/ganador|Al sellar/);
       expect(sellar().disabled, `${lineas}`).toBe(true);
     }
@@ -387,7 +394,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
 
   it("justo por encima del tope de una red chica, lo mismo", async () => {
     await prender(33, 32);
-    expect($("sellar-resumen").textContent).toBe("33 personas, turnos del 1 al 33. En esta red el orden llega hasta 32 turnos: con más, no se puede sellar.");
+    expect($("sellar-resumen").textContent).toBe("33 personas, turnos del 1 al 33. El orden llega hasta 32 turnos en este modo. Achicá la lista para poder sellar.");
     expect(sellar().disabled).toBe(true);
   });
 
@@ -418,7 +425,7 @@ describe("el tope de la red: un orden incompleto no se sella", () => {
     await prender(40, 32);
     const { setLang } = await import("../i18n");
     setLang("en");
-    expect(nota().textContent).toBe("On this network the order goes up to 32 turns: with more, it can't be sealed.");
+    expect(nota().textContent).toBe("The order goes up to 32 turns in this mode. Shorten the list to seal it.");
   });
 
   it("con el contrato de 300 una lista de 300 entra", async () => {

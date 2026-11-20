@@ -8,10 +8,11 @@ import { writeStory } from "./drama";
  * El Teleférico.
  *
  * Un convoy de cabinas sube por el cable y en cada estación se baja la mitad
- * de los pasajeros, hasta que una sola cabina llega a la cumbre y abre la
- * puerta. Es el primer juego que se lee de abajo hacia arriba, y por eso el
- * mejor en un celular: el cable cruza la pantalla en diagonal y el progreso es
- * la altura.
+ * de los pasajeros, hasta que solo quedan los que ganan: sus premios se pasan
+ * a una sola cabina (la junta) y es la que llega a la cumbre y abre la puerta,
+ * con exactamente quienes ganan adentro, igual que en el motor nuevo. Es el
+ * primer juego que se lee de abajo hacia arriba, y por eso el mejor en un
+ * celular: el cable cruza la pantalla en diagonal y el progreso es la altura.
  *
  * Tres decisiones que no son de estilo:
  *
@@ -31,6 +32,10 @@ import { writeStory } from "./drama";
  *
  * El juego no decide nada: el orden de bajada sale de la ronda con el ganador
  * puesto al final, y el cable solo lo cuenta.
+ *
+ * El plan —quién baja, en qué cabina va cada uno, los horarios y los giros—
+ * vive en `planCableCarClasico`, al final del archivo: es lo que se prueba
+ * solo, como el `planCableCar` del motor nuevo.
  */
 
 /**
@@ -45,12 +50,18 @@ const LINES = ["#d7263d", "#e9b000", "#2f9e44", "#1c64c8", "#f2771a", "#ececec",
 const MAXC = 5;
 /** Cuántas estaciones como mínimo, contando las de largo. */
 const MIN_STATIONS = 4;
+/** Distancia entre estaciones, en unidades de cable. */
+const D = 1;
 
 /* Los tiempos, en segundos de juego desde el arranque. */
-const T_BOARD = 2.0;
-const T_RUN = 13.4;
-const T_DOCK = 15.8;
-const T_CROWN = 16.4;
+export const T_BOARD = 2.0;
+export const T_RUN = 13.4;
+export const T_DOCK = 15.8;
+export const T_CROWN = 16.4;
+
+/** Cuánto después de la bajada que decide se pasan los demás premios a la cabina del ganador, y lo que tarda cada uno en volar. */
+const JUNTA_ESPERA = 0.45;
+const JUNTA_VUELO = 0.5;
 
 /**
  * Un frenazo en el aire: el tramo viaja normal hasta `a`, frena en `b`
@@ -92,6 +103,8 @@ interface Hop {
   /** Desparramo sobre el andén, sembrado. */
   dx: number;
   hue: string;
+  /** Cabina de destino: en la junta, los premios vuelan a la del ganador. */
+  toCab?: number;
 }
 
 export function cableCar(
@@ -102,7 +115,6 @@ export function cableCar(
 ): void {
   // La animación se centra en el primero; el cartel y el narrador cantan a
   // todos. Con tres premios sorteados, la sala tiene que oír tres nombres.
-  const winnerIdx = winners[0] ?? 0;
   const st = mount(beacon, done, () => skip());
   if (!st) {
     done();
@@ -111,306 +123,16 @@ export function cableCar(
   const { c, W, H, u, rng, color, say, chip, dark, cleanup, run } = st;
   setGameLength(T_CROWN, WINNER_HOLD);
 
-  const n = names.length;
   const lang = getLang();
-
-  /* ------------------------------------------------------ orden de bajada */
-  // Los ganadores van primero y por lo tanto son los últimos en bajarse; el
-  // resto, sembrado. `rank[0]` llega a la cumbre.
-  const rest = names.map((_, i) => i).filter((i) => !winners.includes(i));
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [rest[i], rest[j]] = [rest[j] as number, rest[i] as number];
-  }
-  const rank = [...winners.filter((w) => w >= 0 && w < n), ...rest];
-
-  /** Cuántos quedan después de cada parada: se parte a la mitad hasta uno. */
-  const left: number[] = [n];
-  while ((left[left.length - 1] as number) > 1) left.push(Math.ceil((left[left.length - 1] as number) / 2));
-  const R = left.length - 1;
-
-  /* ------------------------------------------------------------ cabinas */
-  const C = Math.max(1, Math.min(MAXC, n));
-  // Los últimos C en bajarse, uno por cabina, en un orden sorteado del convoy.
-  const perm = Array.from({ length: C }, (_, i) => i);
-  for (let i = C - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [perm[i], perm[j]] = [perm[j] as number, perm[i] as number];
-  }
-  const cabinOf = new Map<number, number>();
-  rank.slice(0, C).forEach((idx, i) => cabinOf.set(idx, perm[i] as number));
-  // El resto, repartido de a uno para que las cabinas vayan parejas.
-  const start = Math.floor(rng() * C);
-  rank.slice(C).forEach((idx, i) => cabinOf.set(idx, (start + i) % C));
-  /** Cuándo se baja cada persona: el índice de la parada, o R si llega arriba. */
-  const offAt = new Map<number, number>();
-  for (let r = 0; r < R; r++) {
-    for (let p = left[r + 1] as number; p < (left[r] as number); p++) offAt.set(rank[p] as number, r);
-  }
-  const pax: number[][] = Array.from({ length: C }, () => []);
-  for (const idx of rank) pax[cabinOf.get(idx) as number]?.push(idx);
-  /** La parada en la que se vacía cada cabina: la de su último pasajero. */
-  const emptiesAt = pax.map((ps) => Math.max(...ps.map((p) => offAt.get(p) ?? R)));
-  const winnerCab = cabinOf.get(winnerIdx) ?? 0;
-
-  /* El director de emoción elige el arco, y en el teleférico cada arco tiene
-     su giro. Siempre pasa algo, pero nunca lo mismo:
-
-     - Susto, la puerta: en la última estación se abre la de una de las dos
-       cabinas que quedan, sorteada; el pasajero se asoma como para bajarse,
-       y la puerta se cierra. El que se baja es el que no gana.
-     - Duelo, la mordaza: en la última estación la cabina de atrás se suelta
-       y resbala cable abajo, hasta que la mordaza la agarra y la vuelve a
-       subir. A veces es la del ganador y a veces la de la otra: la sala no
-       puede aprender que "la del susto se salva".
-     - Tapada, el apagón: justo antes de la última estación se corta la luz,
-       el convoy frena en el aire y se hamaca a oscuras. Vuelve la luz,
-       titilando, y sigue.
-     - Remontada, la ráfaga: a mitad de viaje entra un viento que hamaca a
-       todas las cabinas y hace flamear las banderas. */
-  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
-  const puerta = story.arc === "susto" && R >= 1 && C >= 2;
-  const mordaza = story.arc === "duelo" && R >= 1 && C >= 2;
-  const apagon = story.arc === "tapada" && R >= 1;
-  const rafaga = story.arc === "remontada" || ((story.arc === "susto" || story.arc === "duelo") && !puerta && !mordaza);
+  const {
+    n, rank, left, R, C, cabinOf, pax, winnerIdx, winnerCab, slipCab, doorCab, doorWho,
+    story, puerta, mordaza, apagon, rafaga,
+    S, stopOf, TOP, headAt, stops, passes,
+    corte, quieto, vuelve, luzAt, windAt, rafagaT,
+    mA, mB, slipAt, puertaA, puertaB, puertaAt,
+    junta, tJunta, detachT, leftAt, aboard, slotAt, swingAt,
+  } = planCableCarClasico(names, winners, rng);
   st.canvas.dataset.arco = story.arc;
-  /** En la mordaza, la cabina que se suelta: la de más atrás de las dos que quedan. */
-  const loserCab = cabinOf.get(rank[1] ?? -1) ?? winnerCab;
-  const slipCab = Math.max(winnerCab, loserCab);
-  /**
-   * En la puerta, la cabina que se abre: la del ganador o la del otro que
-   * queda, sorteada, y el relator nombra a su pasajero. Hasta el 21 de octubre
-   * de 2026 era siempre la del ganador: delataba al ganador en todas las
-   * semillas. Si es la del otro, la puerta se cierra sin el "¡se queda!" y el
-   * otro se baja, como siempre.
-   */
-  const doorCab = loserCab !== winnerCab && rng() < 0.5 ? loserCab : winnerCab;
-  const doorWho = doorCab === winnerCab ? winnerIdx : ((rank[1] as number | undefined) ?? winnerIdx);
-
-  /* ---------------------------------------------------------- estaciones */
-  // Con menos paradas que estaciones, las que sobran son de largo. La última
-  // parada es siempre la última estación: ahí se bajan de a uno.
-  const S = Math.max(R, MIN_STATIONS);
-  const stopOf = new Map<number, number>();
-  if (R >= 1) stopOf.set(S, R - 1);
-  const q = R - 1;
-  for (let i = 0; i < q; i++) {
-    const k = R >= S ? i + 1 : 1 + Math.floor(((i + 1) * (S - 1)) / (q + 1));
-    stopOf.set(Math.min(S - 1, k), i);
-  }
-  // Si el reparto hizo chocar dos paradas en la misma estación, se corren.
-  if (stopOf.size < R) {
-    stopOf.clear();
-    for (let i = 0; i < R; i++) stopOf.set(S - R + 1 + i, i);
-  }
-
-  /* --------------------------------------------------------- el horario */
-  // Pesos: viajar a una estación vale 1, una parada 0,8, la última 1,7 porque
-  // ahí está el amague. El total se reparte entre el fin del embarque y el
-  // arranque del último tramo.
-  const wTravel = 1;
-  const wStop = 0.8;
-  // Con la puerta o la mordaza, la última parada se toma más tiempo: primero
-  // el amague. El apagón se lleva su propio pedazo del viaje.
-  const wLast = mordaza ? 2.6 : puerta ? 2.4 : 1.7;
-  const W_STALL = 1.3;
-  let wSum = apagon ? W_STALL : 0;
-  for (let k = 1; k <= S; k++) {
-    wSum += wTravel;
-    const r = stopOf.get(k);
-    if (r !== undefined) wSum += r === R - 1 ? wLast : wStop;
-  }
-  const unit = (T_RUN - T_BOARD) / wSum;
-  /** Distancia entre estaciones, en unidades de cable. */
-  const D = 1;
-  const legs: Leg[] = [];
-  let tt = T_BOARD;
-  let glideFrom = 0;
-  let glideT0 = T_BOARD;
-  for (let k = 1; k <= S; k++) {
-    tt += wTravel * unit;
-    const r = stopOf.get(k);
-    if (r === undefined && k < S) continue;
-    const span = tt - glideT0;
-    if (apagon && k === S) {
-      // El apagón, en el tramo que llega a la última estación: frena cuando
-      // más rápido va, que es cuando más se nota.
-      const lost = W_STALL * unit;
-      const b = Math.min(0.3, lost * 0.2);
-      const b2 = Math.min(0.5, lost * 0.3);
-      const stall = { a: glideT0 + span * 0.42, b, b2, dur: lost - b / 2 - b2 / 2 };
-      legs.push({ kind: "glide", t0: glideT0, t1: tt + lost, from: glideFrom, to: k * D, span, stall });
-      tt += lost;
-    } else {
-      legs.push({ kind: "glide", t0: glideT0, t1: tt, from: glideFrom, to: k * D, span });
-    }
-    if (r !== undefined) {
-      const dur = (r === R - 1 ? wLast : wStop) * unit;
-      legs.push({ kind: "stop", t0: tt, t1: tt + dur, at: k * D, station: k, round: r, last: r === R - 1 });
-      tt += dur;
-    }
-    glideFrom = k * D;
-    glideT0 = tt;
-  }
-  const TOP = (S + 1) * D;
-
-  const inOutQuad = (p: number): number => (p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p));
-
-  /** Dónde está la cabeza del convoy, en unidades de cable, a la hora `x`. */
-  function headAt(x: number): number {
-    if (x <= T_BOARD) return 0;
-    for (const L of legs) {
-      if (x > L.t1) continue;
-      if (L.kind === "stop") return L.at;
-      if (x < L.t0) return L.from;
-      return L.from + (L.to - L.from) * inOutQuad(clamp((tauOf(L, x) - L.t0) / L.span, 0, 1));
-    }
-    if (x < T_RUN) return S * D;
-    if (x < T_DOCK) return S * D + (TOP - S * D) * ease.inOutCubic((x - T_RUN) / (T_DOCK - T_RUN));
-    return TOP;
-  }
-
-  /** Las paradas, en orden, con su hora de bajada y la de soltar cabinas. */
-  const stops = legs.filter((L): L is Extract<Leg, { kind: "stop" }> => L.kind === "stop").map((L) => ({
-    ...L,
-    // La última se toma su tiempo: el latido arranca antes que la bajada.
-    tOff: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta || mordaza ? 0.64 : 0.55) : 0.28),
-    tDetach: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta || mordaza ? 0.84 : 0.78) : 0.62),
-  }));
-
-  /* ------------------------------------------------------------- los giros */
-  /** El tramo del apagón y sus horas: se corta, frena, queda quieto, vuelve. */
-  const stallLeg = legs.find((L): L is Extract<Leg, { kind: "glide" }> => L.kind === "glide" && !!L.stall);
-  const corte = stallLeg?.stall ? stallLeg.stall.a : Infinity;
-  const quieto = stallLeg?.stall ? corte + stallLeg.stall.b : Infinity;
-  // Con muchísima gente el apagón es corto; aun así, entre "se cortó" y "volvió"
-  // el relator se toma su respiro.
-  const vuelve = stallLeg?.stall ? quieto + Math.max(0.3, stallLeg.stall.dur - 0.32) : Infinity;
-  /**
-   * Cuánta luz hay, de 0 a 1. Se corta de golpe y vuelve titilando, como
-   * vuelve la luz de verdad: prende, se apaga, prende, se apaga, y queda.
-   */
-  function luzAt(x: number): number {
-    if (x < corte) return 1;
-    if (x < vuelve) return clamp(1 - (x - corte) / 0.08, 0, 1);
-    const d = x - vuelve;
-    if (d < 0.07) return 1;
-    if (d < 0.16) return 0.1;
-    if (d < 0.22) return 1;
-    if (d < 0.3) return 0.2;
-    return 1;
-  }
-
-  /** La ráfaga: a qué hora entra. Se siembra más abajo, cuando ya se sabe por dónde pasa. */
-  let rafagaT = Infinity;
-  /** El viento, de 0,2 (la brisa de siempre) a 1,2 (la ráfaga). */
-  function windAt(x: number): number {
-    const d = x - rafagaT;
-    if (d < 0 || d > 3.2) return 0.2;
-    const env = d < 0.3 ? d / 0.3 : d < 1.4 ? 1 : 1 - (d - 1.4) / 1.8;
-    return 0.2 + env * (0.9 + 0.1 * Math.sin(d * 11));
-  }
-
-  /** La mordaza, en la última estación: resbala, la agarra, la vuelve a subir. */
-  const ult = stops.find((s) => s.last);
-  const md = ult ? ult.t1 - ult.t0 : 0;
-  const mA = ult && mordaza ? ult.t0 + md * 0.18 : Infinity;
-  const mB = ult && mordaza ? ult.t0 + md * 0.36 : Infinity;
-  const mC = ult && mordaza ? ult.t0 + md * 0.42 : Infinity;
-  const mD = ult && mordaza ? ult.t0 + md * 0.58 : Infinity;
-  /** Cuánto resbaló la cabina, de 0 a 1 del tramo que resbala. */
-  function slipAt(x: number): number {
-    if (x < mA || x > mD) return 0;
-    if (x < mB) {
-      const q = (x - mA) / (mB - mA);
-      return q * q;
-    }
-    if (x < mC) return 1 + Math.sin((x - mB) * 34) * Math.exp(-(x - mB) * 9) * 0.06;
-    return 1 - ease.inOutCubic((x - mC) / (mD - mC));
-  }
-  /** A qué hora pasa la cabeza por cada estación de largo. */
-  const passes: { station: number; t: number }[] = [];
-  for (let k = 1; k <= S; k++) {
-    if (stopOf.has(k)) continue;
-    let a = T_BOARD, b = T_RUN;
-    for (let i = 0; i < 40; i++) {
-      const m = (a + b) / 2;
-      if (headAt(m) >= k * D) b = m;
-      else a = m;
-    }
-    passes.push({ station: k, t: b });
-  }
-  // La ráfaga entra en la mitad del viaje, sembrada, pero no encima de lo que
-  // el relator ya tiene que decir: una estación, una pasada de largo.
-  if (rafaga) {
-    const agenda = [T_BOARD, ...passes.map((p) => p.t), ...stops.flatMap((s) => [s.t0, s.tOff])];
-    rafagaT = T_BOARD + (T_RUN - T_BOARD) * (0.36 + rng() * 0.24);
-    for (let i = 0; i < 24 && agenda.some((a) => Math.abs(a - rafagaT) < 0.7); i++) rafagaT += 0.2;
-  }
-
-  /** Cuándo se suelta cada cabina que se vacía. Infinity si llega arriba. */
-  const detachT = pax.map((_, cab) => {
-    const r = emptiesAt[cab] ?? R;
-    if (cab === winnerCab || r >= R) return Infinity;
-    return stops.find((s) => s.round === r)?.tDetach ?? Infinity;
-  });
-
-  /** Cuántos quedan a la hora `x`: baja en cada parada, cuando se bajan. */
-  function leftAt(x: number): number {
-    let m = n;
-    for (const s of stops) if (x >= s.tOff + 0.35) m = left[s.round + 1] as number;
-    return m;
-  }
-  /** Quiénes siguen arriba de una cabina a la hora `x`. */
-  function aboard(cab: number, x: number): number[] {
-    let done_ = -1;
-    for (const s of stops) if (x >= s.tOff) done_ = s.round;
-    const boarded = x >= T_BOARD ? Infinity : boardedAt(x);
-    return (pax[cab] ?? []).filter((p, i) => (offAt.get(p) ?? R) > done_ && i < boarded);
-  }
-  /** Durante el embarque: cuántos pasajeros subió cada cabina. */
-  function boardedAt(x: number): number {
-    const perCab = Math.ceil(n / C);
-    return Math.floor(clamp((x - 0.25) / (T_BOARD - 0.55), 0, 1) * perCab + 0.001);
-  }
-
-  /** El orden de cada cabina en el convoy, cerrando los huecos de las que se fueron. */
-  function slotAt(cab: number, x: number): number {
-    let s = cab;
-    for (let j = 0; j < cab; j++) {
-      const td = detachT[j] as number;
-      if (x > td) s -= ease.inOutCubic(clamp((x - td - 0.25) / 0.9, 0, 1));
-    }
-    return s;
-  }
-
-  /**
-   * Cuánto se hamaca el convoy. Sale de la aceleración de la cabeza, que es
-   * lo que hace una cabina de verdad: se va para atrás al arrancar y para
-   * adelante al frenar, y después oscila hasta quedarse quieta.
-   */
-  function swingAt(x: number): number {
-    const h = 0.05;
-    const a = (headAt(x + h) - 2 * headAt(x) + headAt(x - h)) / (h * h);
-    let s = -a * 0.1;
-    for (const L of legs) {
-      if (L.kind !== "glide" || x < L.t1) continue;
-      const since = x - L.t1;
-      if (since < 3) s += 0.07 * Math.exp(-since * 2.4) * Math.sin(since * 8);
-    }
-    if (x > T_DOCK) {
-      const since = x - T_DOCK;
-      if (since < 3) s += 0.1 * Math.exp(-since * 2.2) * Math.sin(since * 9);
-    }
-    // El apagón: después del frenazo el convoy queda hamacándose a oscuras.
-    if (x > quieto) {
-      const since = x - quieto;
-      if (since < 4) s += 0.16 * Math.exp(-since * 1.2) * Math.sin(since * 6.5);
-    }
-    // La ráfaga empuja a todas juntas.
-    s += (windAt(x) - 0.2) * 0.18 * Math.sin(x * 5.2);
-    return clamp(s, -0.32, 0.32);
-  }
 
   /* ------------------------------------------------------------- estado */
   let tAll = 0;
@@ -485,8 +207,8 @@ export function cableCar(
           });
         }
         if (s.last) {
-          // Con varios premios, el último que se baja también ganó, y el relator
-          // decía "¡Hasta acá llegó X!" de un ganador.
+          // Con la junta nadie con premio se baja nunca. Si el horario algún
+          // día soltara a un ganador, el relator lo cantaría con premio igual.
           const idx = who[0] as number;
           sayNow((winners.includes(idx) ? T[lang].cTelPrize : T[lang].cTelOff)(names[idx] ?? ""), 0.9);
         } else sayNow(T[lang].cTelStop(s.station, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, R)));
@@ -499,6 +221,12 @@ export function cableCar(
         if (!silent && detachT.some((d) => d === s.tDetach)) beep(note(3), 0.08, "square", 0.036);
       });
     }
+    // La junta: los premios de las otras cabinas vuelan a la del ganador.
+    once("junta", tAll >= tJunta, () => {
+      for (const idx of junta) {
+        hops.push({ cab: cabinOf.get(idx) ?? 0, station: 0, t0: tJunta, dx: 0, hue: color(idx), toCab: winnerCab });
+      }
+    });
     if (puerta) {
       once("puerta", tAll >= puertaA, () => {
         sayNow(T[lang].cTelDoor(names[doorWho] ?? ""), 0.85);
@@ -544,14 +272,15 @@ export function cableCar(
       });
     }
     if (rafaga) {
-      once("rafagaSnd", tAll >= rafagaT, () => {
+      const rt = rafagaT();
+      once("rafagaSnd", tAll >= rt, () => {
         if (silent) return;
         beepFor(note(1), 1.3, "sawtooth", 0.028);
         beepFor(note(3), 0.9, "triangle", 0.03);
       });
       // El relator la canta si no acaba de hablar; si justo estaba diciendo
       // otra cosa, la ráfaga se ve y se oye igual.
-      once("rafaga", tAll >= rafagaT && tAll < rafagaT + 1.4 && tAll - lastSaid > 0.5, () => sayNow(t("cTelWind"), 0.7));
+      once("rafaga", tAll >= rt && tAll < rt + 1.4 && tAll - lastSaid > 0.5, () => sayNow(t("cTelWind"), 0.7));
     }
     once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelClimb"), 0.9));
     if (tAll >= T_DOCK && !didDock) {
@@ -954,15 +683,6 @@ export function cableCar(
     c.textAlign = "left";
   }
 
-  /** La puerta del amague, en la última estación: se abre, se sostiene y se cierra. */
-  const ultima = stops.find((x) => x.last);
-  const puertaA = ultima ? ultima.t0 + (ultima.t1 - ultima.t0) * 0.2 : Infinity;
-  const puertaB = ultima ? ultima.t0 + (ultima.t1 - ultima.t0) * 0.5 : Infinity;
-  function puertaAt(x: number): number {
-    if (!puerta || x < puertaA || x > puertaB) return 0;
-    return clamp(Math.sin((Math.PI * (x - puertaA)) / (puertaB - puertaA)) * 1.6, 0, 1);
-  }
-
   /** Un rectángulo redondeado, o recto en un navegador que no los sabe dibujar. */
   function box(x: number, y: number, w: number, h: number, r: number): void {
     c.beginPath();
@@ -1152,12 +872,22 @@ export function cableCar(
       const p = (tAll - h.t0) / 0.55;
       if (p < 0 || p > 1.6) continue;
       const q = clamp(p, 0, 1);
-      const stop = stops.find((s) => s.station === h.station);
-      if (!stop) continue;
-      const from = onCable(stop.at, slotAt(h.cab, h.t0) * gap);
-      const st_ = station(h.station);
-      const tx = st_.x + h.dx * (st_.bw / 2 - 12 * k);
-      const ty = st_.y0 + st_.bh - 26 * k;
+      let from: { x: number; y: number };
+      let tx: number, ty: number;
+      if (h.toCab !== undefined) {
+        // La junta: de su cabina a la del ganador, que ya va subiendo.
+        from = onCable(headAt(h.t0), slotAt(h.cab, h.t0) * gap);
+        const to = onCable(headAt(tAll), slotAt(h.toCab, tAll) * gap);
+        tx = to.x;
+        ty = to.y + 60 * k;
+      } else {
+        const stop = stops.find((s) => s.station === h.station);
+        if (!stop) continue;
+        from = onCable(stop.at, slotAt(h.cab, h.t0) * gap);
+        const st_ = station(h.station);
+        tx = st_.x + h.dx * (st_.bw / 2 - 12 * k);
+        ty = st_.y0 + st_.bh - 26 * k;
+      }
       const x = from.x + (tx - from.x) * q;
       const y = from.y + 60 * k + (ty - from.y - 60 * k) * q - Math.sin(q * Math.PI) * 80 * k;
       c.globalAlpha = p > 1 ? clamp(1.6 - p, 0, 1) / 0.6 : 1;
@@ -1284,5 +1014,373 @@ export function cableCar(
     }
     if (tHold >= WINNER_HOLD) cleanup();
   });
+}
 
+/**
+ * El plan del teleférico clásico: todo lo que no dibuja.
+ *
+ * Como en el motor nuevo (`pixi/cablecar-plan.ts`), es presentación pura: el
+ * ganador viene de la ronda pública antes de que arranque, y el azar que se
+ * consume acá (el orden de bajada del resto, el puesto de cada cabina, la
+ * historia y el amague de la puerta) sale de la semilla de la ronda y no
+ * cambia el resultado. Vive en este archivo y no en un módulo aparte para que
+ * el motor de respaldo siga siendo el archivo de siempre.
+ *
+ * El final es el del motor nuevo: en cada parada se baja gente hasta que
+ * quedan los que ganan; después de la última parada los premios de las otras
+ * cabinas vuelan a la cabina del ganador (la junta) y las que quedan vacías se
+ * sueltan, y una sola cabina sube a la cumbre con exactamente quienes ganan.
+ */
+export function planCableCarClasico(names: string[], winners: readonly number[], rng: () => number) {
+  const n = names.length;
+  const winnerIdx = winners[0] ?? 0;
+
+  /* ------------------------------------------------------ orden de bajada */
+  // Los ganadores van primero y por lo tanto son los últimos en bajarse; el
+  // resto, sembrado. Nadie con premio se baja nunca: a la cumbre llegan
+  // exactamente quienes ganan. Antes el horario seguía hasta quedar uno solo,
+  // y con varios premios los demás ganadores se bajaban en la última estación
+  // mientras el cartel los cantaba arriba: el respaldo contaba otro final.
+  // Ahora, después de la última parada, los premios de las otras cabinas se
+  // pasan a la del ganador (la junta, más abajo) y sube una sola cabina, como
+  // en el motor nuevo (`pixi/cablecar-plan.ts`).
+  const wins = winners.filter((w, i) => w >= 0 && w < n && winners.indexOf(w) === i);
+  if (!wins.length && n > 0) wins.push(clamp(winnerIdx, 0, n - 1));
+  const rest = names.map((_, i) => i).filter((i) => !wins.includes(i));
+  for (let i = rest.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [rest[i], rest[j]] = [rest[j] as number, rest[i] as number];
+  }
+  const rank = [...wins, ...rest];
+
+  /** Cuántos quedan después de cada parada: se parte a la mitad hasta que quedan los que ganan. */
+  const W = wins.length;
+  const left: number[] = [n];
+  while ((left[left.length - 1] as number) > W) {
+    left.push(Math.max(W, Math.ceil((left[left.length - 1] as number) / 2)));
+  }
+  const R = left.length - 1;
+
+  /* ------------------------------------------------------------ cabinas */
+  const C = Math.max(1, Math.min(MAXC, n));
+  // Los últimos C en bajarse, uno por cabina, en un orden sorteado del convoy.
+  const perm = Array.from({ length: C }, (_, i) => i);
+  for (let i = C - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [perm[i], perm[j]] = [perm[j] as number, perm[i] as number];
+  }
+  const cabinOf = new Map<number, number>();
+  rank.slice(0, C).forEach((idx, i) => cabinOf.set(idx, perm[i] as number));
+  // El resto, repartido de a uno para que las cabinas vayan parejas.
+  const start = Math.floor(rng() * C);
+  rank.slice(C).forEach((idx, i) => cabinOf.set(idx, (start + i) % C));
+  /** Cuándo se baja cada persona: el índice de la parada, o R si llega arriba. */
+  const offAt = new Map<number, number>();
+  for (let r = 0; r < R; r++) {
+    for (let p = left[r + 1] as number; p < (left[r] as number); p++) offAt.set(rank[p] as number, r);
+  }
+  const pax: number[][] = Array.from({ length: C }, () => []);
+  for (const idx of rank) pax[cabinOf.get(idx) as number]?.push(idx);
+  const winnerCab = cabinOf.get(wins[0] ?? winnerIdx) ?? 0;
+
+  /* El director de emoción elige el arco, y en el teleférico cada arco tiene
+     su giro. Siempre pasa algo, pero nunca lo mismo:
+
+     - Susto, la puerta: en la última estación se abre la de una de las dos
+       cabinas que quedan, sorteada; el pasajero se asoma como para bajarse,
+       y la puerta se cierra. El que se baja es el que no gana.
+     - Duelo, la mordaza: en la última estación la cabina de atrás se suelta
+       y resbala cable abajo, hasta que la mordaza la agarra y la vuelve a
+       subir. A veces es la del ganador y a veces la de la otra: la sala no
+       puede aprender que "la del susto se salva".
+     - Tapada, el apagón: justo antes de la última estación se corta la luz,
+       el convoy frena en el aire y se hamaca a oscuras. Vuelve la luz,
+       titilando, y sigue.
+     - Remontada, la ráfaga: a mitad de viaje entra un viento que hamaca a
+       todas las cabinas y hace flamear las banderas. */
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const puerta = story.arc === "susto" && R >= 1 && C >= 2;
+  const mordaza = story.arc === "duelo" && R >= 1 && C >= 2;
+  const apagon = story.arc === "tapada" && R >= 1;
+  const rafaga = story.arc === "remontada" || ((story.arc === "susto" || story.arc === "duelo") && !puerta && !mordaza);
+  /** En la mordaza, la cabina que se suelta: la de más atrás de las dos que quedan. */
+  const loserCab = cabinOf.get(rank[1] ?? -1) ?? winnerCab;
+  const slipCab = Math.max(winnerCab, loserCab);
+  /**
+   * En la puerta, la cabina que se abre: la del ganador o la del otro que
+   * queda, sorteada, y el relator nombra a su pasajero. Hasta el 21 de octubre
+   * de 2026 era siempre la del ganador: delataba al ganador en todas las
+   * semillas. Si es la del otro, la puerta se cierra sin el "¡se queda!" y el
+   * otro se baja, como siempre.
+   */
+  const doorCab = loserCab !== winnerCab && rng() < 0.5 ? loserCab : winnerCab;
+  const doorWho = doorCab === winnerCab ? winnerIdx : ((rank[1] as number | undefined) ?? winnerIdx);
+
+  /* ---------------------------------------------------------- estaciones */
+  // Con menos paradas que estaciones, las que sobran son de largo. La última
+  // parada es siempre la última estación: ahí se bajan de a uno.
+  const S = Math.max(R, MIN_STATIONS);
+  const stopOf = new Map<number, number>();
+  if (R >= 1) stopOf.set(S, R - 1);
+  const q = R - 1;
+  for (let i = 0; i < q; i++) {
+    const k = R >= S ? i + 1 : 1 + Math.floor(((i + 1) * (S - 1)) / (q + 1));
+    stopOf.set(Math.min(S - 1, k), i);
+  }
+  // Si el reparto hizo chocar dos paradas en la misma estación, se corren.
+  if (stopOf.size < R) {
+    stopOf.clear();
+    for (let i = 0; i < R; i++) stopOf.set(S - R + 1 + i, i);
+  }
+
+  /* --------------------------------------------------------- el horario */
+  // Pesos: viajar a una estación vale 1, una parada 0,8, la última 1,7 porque
+  // ahí está el amague. El total se reparte entre el fin del embarque y el
+  // arranque del último tramo.
+  const wTravel = 1;
+  const wStop = 0.8;
+  // Con la puerta o la mordaza, la última parada se toma más tiempo: primero
+  // el amague. El apagón se lleva su propio pedazo del viaje.
+  const wLast = mordaza ? 2.6 : puerta ? 2.4 : 1.7;
+  const W_STALL = 1.3;
+  let wSum = apagon ? W_STALL : 0;
+  for (let k = 1; k <= S; k++) {
+    wSum += wTravel;
+    const r = stopOf.get(k);
+    if (r !== undefined) wSum += r === R - 1 ? wLast : wStop;
+  }
+  const unit = (T_RUN - T_BOARD) / wSum;
+  const legs: Leg[] = [];
+  let tt = T_BOARD;
+  let glideFrom = 0;
+  let glideT0 = T_BOARD;
+  for (let k = 1; k <= S; k++) {
+    tt += wTravel * unit;
+    const r = stopOf.get(k);
+    if (r === undefined && k < S) continue;
+    const span = tt - glideT0;
+    if (apagon && k === S) {
+      // El apagón, en el tramo que llega a la última estación: frena cuando
+      // más rápido va, que es cuando más se nota.
+      const lost = W_STALL * unit;
+      const b = Math.min(0.3, lost * 0.2);
+      const b2 = Math.min(0.5, lost * 0.3);
+      const stall = { a: glideT0 + span * 0.42, b, b2, dur: lost - b / 2 - b2 / 2 };
+      legs.push({ kind: "glide", t0: glideT0, t1: tt + lost, from: glideFrom, to: k * D, span, stall });
+      tt += lost;
+    } else {
+      legs.push({ kind: "glide", t0: glideT0, t1: tt, from: glideFrom, to: k * D, span });
+    }
+    if (r !== undefined) {
+      const dur = (r === R - 1 ? wLast : wStop) * unit;
+      legs.push({ kind: "stop", t0: tt, t1: tt + dur, at: k * D, station: k, round: r, last: r === R - 1 });
+      tt += dur;
+    }
+    glideFrom = k * D;
+    glideT0 = tt;
+  }
+  const TOP = (S + 1) * D;
+
+  const inOutQuad = (p: number): number => (p < 0.5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p));
+
+  /** Dónde está la cabeza del convoy, en unidades de cable, a la hora `x`. */
+  function headAt(x: number): number {
+    if (x <= T_BOARD) return 0;
+    for (const L of legs) {
+      if (x > L.t1) continue;
+      if (L.kind === "stop") return L.at;
+      if (x < L.t0) return L.from;
+      return L.from + (L.to - L.from) * inOutQuad(clamp((tauOf(L, x) - L.t0) / L.span, 0, 1));
+    }
+    if (x < T_RUN) return S * D;
+    if (x < T_DOCK) return S * D + (TOP - S * D) * ease.inOutCubic((x - T_RUN) / (T_DOCK - T_RUN));
+    return TOP;
+  }
+
+  /** Las paradas, en orden, con su hora de bajada y la de soltar cabinas. */
+  const stops = legs.filter((L): L is Extract<Leg, { kind: "stop" }> => L.kind === "stop").map((L) => ({
+    ...L,
+    // La última se toma su tiempo: el latido arranca antes que la bajada.
+    tOff: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta || mordaza ? 0.64 : 0.55) : 0.28),
+    tDetach: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta || mordaza ? 0.84 : 0.78) : 0.62),
+  }));
+
+  /* ------------------------------------------------------------- los giros */
+  /** El tramo del apagón y sus horas: se corta, frena, queda quieto, vuelve. */
+  const stallLeg = legs.find((L): L is Extract<Leg, { kind: "glide" }> => L.kind === "glide" && !!L.stall);
+  const corte = stallLeg?.stall ? stallLeg.stall.a : Infinity;
+  const quieto = stallLeg?.stall ? corte + stallLeg.stall.b : Infinity;
+  // Con muchísima gente el apagón es corto; aun así, entre "se cortó" y "volvió"
+  // el relator se toma su respiro.
+  const vuelve = stallLeg?.stall ? quieto + Math.max(0.3, stallLeg.stall.dur - 0.32) : Infinity;
+  /**
+   * Cuánta luz hay, de 0 a 1. Se corta de golpe y vuelve titilando, como
+   * vuelve la luz de verdad: prende, se apaga, prende, se apaga, y queda.
+   */
+  function luzAt(x: number): number {
+    if (x < corte) return 1;
+    if (x < vuelve) return clamp(1 - (x - corte) / 0.08, 0, 1);
+    const d = x - vuelve;
+    if (d < 0.07) return 1;
+    if (d < 0.16) return 0.1;
+    if (d < 0.22) return 1;
+    if (d < 0.3) return 0.2;
+    return 1;
+  }
+
+  /** La ráfaga: a qué hora entra. Se siembra más abajo, cuando ya se sabe por dónde pasa. */
+  let rafagaT = Infinity;
+  /** El viento, de 0,2 (la brisa de siempre) a 1,2 (la ráfaga). */
+  function windAt(x: number): number {
+    const d = x - rafagaT;
+    if (d < 0 || d > 3.2) return 0.2;
+    const env = d < 0.3 ? d / 0.3 : d < 1.4 ? 1 : 1 - (d - 1.4) / 1.8;
+    return 0.2 + env * (0.9 + 0.1 * Math.sin(d * 11));
+  }
+
+  /** La mordaza, en la última estación: resbala, la agarra, la vuelve a subir. */
+  const ult = stops.find((s) => s.last);
+  const md = ult ? ult.t1 - ult.t0 : 0;
+  const mA = ult && mordaza ? ult.t0 + md * 0.18 : Infinity;
+  const mB = ult && mordaza ? ult.t0 + md * 0.36 : Infinity;
+  const mC = ult && mordaza ? ult.t0 + md * 0.42 : Infinity;
+  const mD = ult && mordaza ? ult.t0 + md * 0.58 : Infinity;
+  /** Cuánto resbaló la cabina, de 0 a 1 del tramo que resbala. */
+  function slipAt(x: number): number {
+    if (x < mA || x > mD) return 0;
+    if (x < mB) {
+      const q = (x - mA) / (mB - mA);
+      return q * q;
+    }
+    if (x < mC) return 1 + Math.sin((x - mB) * 34) * Math.exp(-(x - mB) * 9) * 0.06;
+    return 1 - ease.inOutCubic((x - mC) / (mD - mC));
+  }
+  /** A qué hora pasa la cabeza por cada estación de largo. */
+  const passes: { station: number; t: number }[] = [];
+  for (let k = 1; k <= S; k++) {
+    if (stopOf.has(k)) continue;
+    let a = T_BOARD, b = T_RUN;
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2;
+      if (headAt(m) >= k * D) b = m;
+      else a = m;
+    }
+    passes.push({ station: k, t: b });
+  }
+  // La ráfaga entra en la mitad del viaje, sembrada, pero no encima de lo que
+  // el relator ya tiene que decir: una estación, una pasada de largo.
+  if (rafaga) {
+    const agenda = [T_BOARD, ...passes.map((p) => p.t), ...stops.flatMap((s) => [s.t0, s.tOff])];
+    rafagaT = T_BOARD + (T_RUN - T_BOARD) * (0.36 + rng() * 0.24);
+    for (let i = 0; i < 24 && agenda.some((a) => Math.abs(a - rafagaT) < 0.7); i++) rafagaT += 0.2;
+  }
+
+  /* ------------------------------------------------------------ la junta */
+  // Después de la bajada que decide, los premios que van en otras cabinas
+  // vuelan a la cabina del ganador, y las que quedan vacías se sueltan: una
+  // sola cabina sube a la cumbre, con todos los que ganan. Es el final del
+  // motor nuevo, contado con las cabinas de acá.
+  const esPremio = new Set(wins);
+  const junta = wins.slice(1).filter((p) => cabinOf.get(p) !== winnerCab);
+  // Sin última parada (ganan todos y nadie se baja) la junta va con la subida:
+  // los premios se pasan de cabina cuando el convoy arranca a subir.
+  const tJunta = junta.length ? (ult ? ult.tOff + JUNTA_ESPERA : T_RUN) : Infinity;
+
+  /** Cuándo se suelta cada cabina que se vacía. Infinity si llega arriba. */
+  const detachT = pax.map((ps, cab) => {
+    if (cab === winnerCab) return Infinity;
+    // La de la junta se suelta cuando sus premios aterrizan en la del ganador.
+    const juntaT = ps.some((p) => esPremio.has(p)) ? tJunta + JUNTA_VUELO + 0.1 : -Infinity;
+    // Las demás, al soltarse después de la bajada de su último pasajero.
+    const sinPremio = ps.filter((p) => !esPremio.has(p));
+    const r = sinPremio.length ? Math.max(...sinPremio.map((p) => offAt.get(p) as number)) : -1;
+    const suelta = r >= 0 ? (stops.find((s) => s.round === r)?.tDetach ?? Infinity) : -Infinity;
+    const td = Math.max(juntaT, suelta);
+    return Number.isFinite(td) ? td : Infinity;
+  });
+
+  /** Cuántos quedan a la hora `x`: baja en cada parada, cuando se bajan. */
+  function leftAt(x: number): number {
+    let m = n;
+    for (const s of stops) if (x >= s.tOff + 0.35) m = left[s.round + 1] as number;
+    return m;
+  }
+  /**
+   * Quiénes siguen arriba de una cabina a la hora `x`. Con la junta, los
+   * premios que se pasan van en el aire (`volando`); después, en la del ganador.
+   */
+  function aboard(cab: number, x: number): number[] {
+    let done_ = -1;
+    for (const s of stops) if (x >= s.tOff) done_ = s.round;
+    const boarded = x >= T_BOARD ? Infinity : boardedAt(x);
+    const van = (pax[cab] ?? []).filter((p, i) => (offAt.get(p) ?? R) > done_ && i < boarded);
+    if (x < tJunta) return van;
+    const quedan = van.filter((p) => !junta.includes(p));
+    return cab === winnerCab && x >= tJunta + JUNTA_VUELO ? [...quedan, ...junta] : quedan;
+  }
+  /** Los premios que van en el aire de su cabina a la del ganador, a la hora `x`. */
+  function volando(x: number): number[] {
+    return x >= tJunta && x < tJunta + JUNTA_VUELO ? junta : [];
+  }
+  /** Durante el embarque: cuántos pasajeros subió cada cabina. */
+  function boardedAt(x: number): number {
+    const perCab = Math.ceil(n / C);
+    return Math.floor(clamp((x - 0.25) / (T_BOARD - 0.55), 0, 1) * perCab + 0.001);
+  }
+
+  /** El orden de cada cabina en el convoy, cerrando los huecos de las que se fueron. */
+  function slotAt(cab: number, x: number): number {
+    let s = cab;
+    for (let j = 0; j < cab; j++) {
+      const td = detachT[j] as number;
+      if (x > td) s -= ease.inOutCubic(clamp((x - td - 0.25) / 0.9, 0, 1));
+    }
+    return s;
+  }
+
+  /**
+   * Cuánto se hamaca el convoy. Sale de la aceleración de la cabeza, que es
+   * lo que hace una cabina de verdad: se va para atrás al arrancar y para
+   * adelante al frenar, y después oscila hasta quedarse quieta.
+   */
+  function swingAt(x: number): number {
+    const h = 0.05;
+    const a = (headAt(x + h) - 2 * headAt(x) + headAt(x - h)) / (h * h);
+    let s = -a * 0.1;
+    for (const L of legs) {
+      if (L.kind !== "glide" || x < L.t1) continue;
+      const since = x - L.t1;
+      if (since < 3) s += 0.07 * Math.exp(-since * 2.4) * Math.sin(since * 8);
+    }
+    if (x > T_DOCK) {
+      const since = x - T_DOCK;
+      if (since < 3) s += 0.1 * Math.exp(-since * 2.2) * Math.sin(since * 9);
+    }
+    // El apagón: después del frenazo el convoy queda hamacándose a oscuras.
+    if (x > quieto) {
+      const since = x - quieto;
+      if (since < 4) s += 0.16 * Math.exp(-since * 1.2) * Math.sin(since * 6.5);
+    }
+    // La ráfaga empuja a todas juntas.
+    s += (windAt(x) - 0.2) * 0.18 * Math.sin(x * 5.2);
+    return clamp(s, -0.32, 0.32);
+  }
+
+
+  /** La puerta del amague, en la última estación: se abre, se sostiene y se cierra. */
+  const puertaA = ult ? ult.t0 + (ult.t1 - ult.t0) * 0.2 : Infinity;
+  const puertaB = ult ? ult.t0 + (ult.t1 - ult.t0) * 0.5 : Infinity;
+  function puertaAt(x: number): number {
+    if (!puerta || x < puertaA || x > puertaB) return 0;
+    return clamp(Math.sin((Math.PI * (x - puertaA)) / (puertaB - puertaA)) * 1.6, 0, 1);
+  }
+
+  return {
+    n, rank, left, R, C, cabinOf, pax, winnerIdx, winnerCab, slipCab, doorCab, doorWho,
+    story, puerta, mordaza, apagon, rafaga,
+    S, stopOf, TOP, headAt, stops, passes,
+    corte, quieto, vuelve, luzAt, windAt, rafagaT: () => rafagaT,
+    mA, mB, slipAt, puertaA, puertaB, puertaAt,
+    junta, tJunta, detachT, leftAt, aboard, volando, slotAt, swingAt,
+  };
 }

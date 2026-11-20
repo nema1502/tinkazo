@@ -6,6 +6,7 @@ import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, 
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { avisarCambioConQr } from "./ui/espectadores-de-la-sala";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
@@ -17,16 +18,20 @@ import { montarPremios } from "./ui/premios";
 import { montarGanadores, ponerGanadores } from "./ui/ganadores";
 import { abrirConElModoPedido, montarTurnos } from "./ui/turnos";
 import { MAX_WINNERS } from "./protocol/select";
-import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { network } from "./stellar/config";
+import { limpiarPasoDelCupon } from "./stellar/cupon-paso-guardado";
+import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof, siguientePremio } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { MARCA_INGRESAR, cancelarLaEntrada, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
+import { pintarCancelarEnPortada } from "./ui/cancelar-en-portada";
 import { initOnboarding } from "./ui/onboarding";
 import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { conservarVistaEnLaCabecera } from "./ui/enlaces-cabecera";
 import { equiposActivo } from "./equipos/bandera";
 import { abreLaHerramienta } from "./modos/bandera";
 import { reponerEtiquetas } from "./equipos/etiquetas";
@@ -44,6 +49,7 @@ import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
+import { campanasActivo } from "./campana/bandera";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
@@ -108,9 +114,14 @@ function paceLabels(): void {
 onLangChange(paceLabels);
 paceSel.addEventListener("change", () => {
   setPace(paceSel.value as Pace);
+  // Con el QR de espectadores ya visto, el cambio se anota y se publica (`ui/espectadores-de-la-sala.ts`); la espera,
+  // si está abierta, rehace su QR con la duración nueva.
+  if (!app.drawn) avisarCambioConQr(app.frozen, app.game, currentPace());
+  document.dispatchEvent(new CustomEvent("tinkazo:ritmo"));
   // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
   refrescarRecomendacion();
 });
+
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {
@@ -136,6 +147,8 @@ for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => ele
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 initPlegables();
 $("btn-draw").addEventListener("click", () => void draw());
+// La espera en grande lanza el sorteo unos segundos antes de que nazca el número, para leer la tarjeta mientras tanto (freeze.ts).
+document.addEventListener("tinkazo:adelantar", () => void draw({ adelantado: true }));
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 // Precargada con la página quieta: si se publica una versión nueva con la
@@ -144,7 +157,7 @@ setTimeout(() => void import("./ui/sala").catch(() => undefined), 4000);
 $("btn-reverify").addEventListener("click", () => void reverify());
 $("btn-replay").addEventListener("click", replayAnimation);
 $("btn-otro-juego").addEventListener("click", elegirOtroJuegoParaVer);
-$("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
+$("btn-again-sin").addEventListener("click", () => siguientePremio());
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $("btn-recuperar").addEventListener("click", recuperarLista);
 $("btn-grande").addEventListener("click", mostrarGrande);
@@ -215,13 +228,16 @@ montarPremios();
 montarGanadores();
 // «Orden de turnos»: escondido salvo con la bandera VITE_MODOS o con ?modo=turnos (src/modos/bandera.ts).
 montarTurnos();
-// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
-cerrarSalidaDelStand();
+// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad. La salida dejó
+// la página arriba (`scrollRestoration` en manual): desde acá, recargar vuelve a donde se estaba, como siempre.
+if (cerrarSalidaDelStand()) history.scrollRestoration = "auto";
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 // Con ?modo=turnos la herramienta abre con «Orden de turnos» ya elegido, después del borrador: lo que pide la dirección manda.
 abrirConElModoPedido();
 initVistas();
+// Sortear y Mis sorteos de la cabecera no pierden ?lang= ni ?theme= (enlaces-cabecera.ts).
+conservarVistaEnLaCabecera();
 initWalletUI();
 // El cupón que llegó en el enlace (`#cupon=`): se guarda y se saca de la dirección con la sesión. Sin el acceso por cupón a la vista, no hace nada.
 iniciarCupon();
@@ -239,6 +255,8 @@ initStand();
 iniciarRed({ sellar: (op) => freeze(op) });
 // Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
 iniciarCupo();
+// El campo del cupón pertenece a Oficial: al arrancar en Prueba se olvida un pedido que no se llegó a usar.
+if (network.name === "testnet") limpiarPasoDelCupon();
 ingresarSiLoPidio();
 initMenuMas();
 iniciarFeedback(
@@ -373,9 +391,12 @@ function initVistas(): void {
    * "Conectando…" o "Retomando tu cuenta…", sin la G y sin invitar a tocar otra vez. Lo mismo dice la cabecera.
    */
   const pintarCta = (): void => {
-    const estado = estadoDeLaCuenta().estado;
+    const cuenta = estadoDeLaCuenta();
+    const estado = cuenta.estado;
     const ocupado = estado === "conectando" || estado === "retomando";
-    const clave = estado === "conectando" ? "connecting" : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
+    // Con la ventana de Google ya cerrada y la cuenta creándose, dice "Terminando de entrar…", como la cabecera.
+    const conectandoDice = cuenta.estado === "conectando" && cuenta.terminando ? "loginTerminando" : "connecting";
+    const clave = estado === "conectando" ? conectandoDice : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
     for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
       const boton = el.closest<HTMLElement>("[data-cta-entrar]");
       // El botón no se achica mientras dice "Conectando…": lo que tiene al lado ("Probar con un ejemplo") no salta de
@@ -398,6 +419,8 @@ function initVistas(): void {
         boton.style.minHeight = "";
       }
     }
+    // Terminando de entrar, debajo del botón grande va Cancelar: la puerta con el suyo está en la herramienta y acá no se ve.
+    pintarCancelarEnPortada(document, { terminando: cuenta.estado === "conectando" && cuenta.terminando === true, cancelar: cancelarLaEntrada, tx: t });
     // El estado está pintado: el texto del botón grande puede verse (contra el FOUC de la recarga, estilos-atencion.ts).
     destrabarCtas();
   };
@@ -593,3 +616,15 @@ void cargaOpcional(import("./analytics").then((m) => m.countVisits()));
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);
+// El modo espectador (`ui/espectador.ts`): el enlace del QR de la espera llega a esta misma
+// página con los datos en el fragmento, y abre la vista de solo-lectura. Se baja aparte:
+// quien entra a sortear no lo descarga. Un enlace roto no cae callado en la herramienta: lo dice.
+if (location.hash.startsWith("#espectador=")) {
+  void import("./ui/espectador").then((m) => {
+    const datos = m.datosDelEnlace(location.hash);
+    if (datos) m.abrirEspectador(datos, initialLang());
+    else m.avisarEnlaceRoto(initialLang());
+  });
+}
+// Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
+if (campanasActivo()) void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);

@@ -29,6 +29,45 @@ export function pisadura(a: CajaF, b: CajaF): number {
 /** ¿Esta caja pisa a alguna de las ya puestas más del 10 % de la más chica? */
 export const pisaA = (a: CajaF, puestas: readonly CajaF[]): boolean => puestas.some((b) => pisadura(a, b) > PISA_MAX);
 
+/** Cuánto se corre cada subfila de la línea de su fila... */
+
+/** Cuántos renglones (arriba y abajo) prueba la búsqueda de lugar de las fichas del 3D cuando la fila está llena. */
+export const RENGLONES_FICHA = 5;
+/** Cuántos medios anchos a cada lado prueba la misma búsqueda. */
+export const LADOS_FICHA = 3;
+
+/**
+ * Busca el lugar libre más cercano para una ficha del 3D: primero sobre la cabeza de su llama, después renglones
+ * hacia arriba (dos, como en el 2D) y hacia abajo, y en cada renglón corrida medio ancho a un lado, hasta `lados`
+ * de cada lado. `choca(dx, dy)` dice si la ficha ahí pisa a otra puesta o a un letrero; `cabe(dx, dy)`, si entra en
+ * la pantalla. Devuelve el primer lugar libre en ese orden, o undefined si no hay ninguno. Es pura: la misma llamada
+ * da lo mismo (y no guarda nada entre cuadros).
+ */
+export function buscaLugarFicha(
+  choca: (dx: number, dy: number) => boolean,
+  cabe: (dx: number, dy: number) => boolean,
+  paso: number,
+  w: number,
+  renglones = RENGLONES_FICHA,
+  lados = LADOS_FICHA,
+): { dx: number; dy: number } | undefined {
+  // El orden de los renglones es el de siempre del 3D: el ancla, uno arriba, dos arriba, uno abajo, dos abajo, y de ahí se extiende.
+  const renglon: number[] = [0, -1];
+  if (renglones >= 2) renglon.push(-2);
+  for (let j = 1; j <= Math.min(2, renglones); j++) renglon.push(j);
+  for (let j = 3; j <= renglones; j++) renglon.push(-j, j);
+  const lado: number[] = [0];
+  for (let i = 1; i <= lados; i++) lado.push(-i, i);
+  for (const dj of renglon) {
+    const dy = dj * paso;
+    for (const di of lado) {
+      const dx = (di * w) / 2;
+      if (cabe(dx, dy) && !choca(dx, dy)) return { dx, dy };
+    }
+  }
+  return undefined;
+}
+
 /**
  * Cuánto hay que correr la caja para que entre entera en `lim`. `null` si no cabe (es más grande que lo que se ve) o si habría que
  * correrla más de tres cuartos de su ancho a un costado, o más de dos renglones (de su alto) hacia arriba o abajo.

@@ -50,6 +50,7 @@ beforeEach(() => {
 
 describe("la sala antes de sellar cuenta como el cuadro", () => {
   it("sin modos, un reparto entero dice «2 personas, 5 participaciones» en el cuadro y en la sala", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar("/?lang=es");
     escribir(MESA);
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 2 personas, 5 participaciones");
@@ -57,6 +58,7 @@ describe("la sala antes de sellar cuenta como el cuadro", () => {
   });
 
   it("sin modos, una lista común sigue diciendo una persona por línea", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar("/?lang=es");
     escribir("Grupo 4 (1/2)\nGrupo 4 (2/2)\nAna\nBeto");
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 4 personas");
@@ -67,5 +69,20 @@ describe("la sala antes de sellar cuenta como el cuadro", () => {
     await montar("/?modo=varias&lang=es");
     escribir("Ana (1/3)\nAna (2/3)\nAna (3/3)\nBeto\nCarla");
     expect(await tituloDeLaSala()).toBe("3 personas, 5 participaciones");
+  });
+});
+
+describe("el juego en el enlace de la lista", () => {
+  it("viaja solo con Teleférico, sin alargar los enlaces de los demás juegos", async () => {
+    for (const [juego, esperado] of [["teleferico", "?juego=teleferico"], ["race", ""]] as const) {
+      await montar("/?lang=es");
+      escribir("Ana\nBeto");
+      const { app } = await import("../state");
+      app.game = juego;
+      const { mostrarLista } = await import("./sala");
+      await mostrarLista();
+      const url = document.querySelector<HTMLElement>(".sala")?.dataset.url ?? "";
+      expect(new URL(url).search).toBe(esperado);
+    }
   });
 });

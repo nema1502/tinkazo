@@ -34,6 +34,13 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
+  it("la cuenta de prueba se presenta como Invitado para no repetir el nombre del modo", () => {
+    expect(T.es.cuentaViaPruebaC).toBe("Invitado");
+    expect(T.en.cuentaViaPruebaC).toBe("Guest");
+    expect(T.es.cuentaViaPruebaC).not.toBe(T.es.modeTest);
+    expect(T.en.cuentaViaPruebaC).not.toBe(T.en.modeTest);
+  });
+
   it("Sapo: the drop line names the prize, never the co-winner, the tally counts, 'almost' and the frog's lip exist", () => {
     // Al caer el co-ganador la línea dice su número de premio: no hay nombre que decir.
     expect(T.es.cSapDone(2)).toMatch(/premio 2/i);
@@ -148,7 +155,11 @@ describe("diccionario", () => {
 
   it.runIf(HAY_MODO_OFICIAL)("con contrato en la red real, el diccionario lleva los textos del modo Oficial", () => {
     for (const l of ["es", "en"] as const) {
-      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      for (const k of Object.keys(TEXTOS_MODO_OFICIAL[l])) {
+        // Esta frase depende del modo activo, no solo de que Oficial exista. Tiene su prueba propia abajo.
+        if (k === "cuentaPideGoogle") continue;
+        expect(T[l][k], `${l}.${k}`).toBe(TEXTOS_MODO_OFICIAL[l][k]);
+      }
     }
   });
 
@@ -176,6 +187,37 @@ describe("diccionario", () => {
     });
   });
 
+  describe("la puerta de Google en cada modo", () => {
+    afterEach(() => {
+      vi.doUnmock("./stellar/deployments.json");
+      vi.resetModules();
+      vi.unstubAllGlobals();
+    });
+
+    it("en Oficial pide dejar la cuenta lista y en Prueba conserva el texto de siempre, con el mismo contrato disponible", async () => {
+      expect(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google y dejá tu cuenta lista.");
+      expect(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google and get your account ready.");
+
+      const real = (await import("./stellar/deployments.json")).default;
+      const lista = {
+        ...real,
+        mainnet: { contractId: "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", rpcUrl: "https://rpc.example" },
+      };
+      vi.resetModules();
+      vi.doMock("./stellar/deployments.json", () => ({ default: lista }));
+      vi.stubGlobal("location", { search: "", hash: "" });
+      const { T: enPrueba } = await import("./i18n");
+      expect(enPrueba.es.cuentaPideGoogle).toBe("Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.");
+      expect(enPrueba.en.cuentaPideGoogle).toBe("To draw with your list, sign in with Google: it's free and your account is created for you.");
+
+      vi.resetModules();
+      vi.stubGlobal("location", { search: "?red=oficial", hash: "#sortear" });
+      const { T: enOficial } = await import("./i18n");
+      expect(enOficial.es.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.es.cuentaPideGoogle);
+      expect(enOficial.en.cuentaPideGoogle).toBe(TEXTOS_MODO_OFICIAL.en.cuentaPideGoogle);
+    });
+  });
+
   it("en inglés ningún número se une con \"a\" (\"4 a 30\"): es la palabra del español, y en inglés se lee \"4 to 30\"", () => {
     const sueltas = Object.entries(T.en)
       .flatMap(([k, v]) => (typeof v === "string" ? [[k, v] as const] : Array.isArray(v) ? v.map((x) => [k, x] as const) : []))
@@ -195,12 +237,12 @@ describe("diccionario", () => {
     expect(T.en.freeRule).toContain("/terminos.html");
   });
 
-  it("el rótulo del pliegue de la lista nombra lo que guarda: el premio, cuántos ganan y el CSV", () => {
+  it("el rótulo del pliegue nombra el premio y el CSV, no la cantidad que quedó afuera", () => {
     expect(T.es.masOpciones).toMatch(/premio/i);
-    expect(T.es.masOpciones).toMatch(/ganan/i);
+    expect(T.es.masOpciones).not.toMatch(/ganan/i);
     expect(T.es.masOpciones).toMatch(/CSV/);
     expect(T.en.masOpciones).toMatch(/prize/i);
-    expect(T.en.masOpciones).toMatch(/win/i);
+    expect(T.en.masOpciones).not.toMatch(/win/i);
     expect(T.en.masOpciones).toMatch(/CSV/);
   });
 
@@ -291,4 +333,58 @@ describe("diccionario", () => {
     }
   });
 
+});
+
+describe("el modo espectador", () => {
+  const CLAVES = [
+    "espQrT", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda", "espNoCoincide",
+    "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente", "espVerDeNuevo", "espHacerElTuyo",
+    "espMiraLaSala",
+  ];
+
+  it("sus textos existen en los dos idiomas", () => {
+    for (const k of CLAVES) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect(T.es[k] as string).toBeTruthy();
+      expect(T.en[k] as string).toBeTruthy();
+    }
+  });
+
+  it("sin comillas angulares, sin punto y coma y sin palabras técnicas", () => {
+    for (const k of CLAVES) {
+      for (const lang of ["es", "en"] as const) {
+        const texto = T[lang][k] as string;
+        expect(texto, `${lang}.${k}`).not.toMatch(/[«»;]/);
+        expect(texto, `${lang}.${k}`).not.toMatch(/drand|beacon|hash|firma|signature|blockchain|Stellar|token|rifa|raffle|ticket|boleto|loter/i);
+      }
+    }
+  });
+
+  it("el QR del espectador va solo en la espera: la pantalla del resultado lleva uno solo, el del comprobante", () => {
+    expect(T.es.espQrBoton).toBeUndefined();
+    expect(T.en.espQrBoton).toBeUndefined();
+  });
+});
+
+describe("Siguiente premio de a un lugar (issue #102)", () => {
+  it("los textos nuevos existen en los dos idiomas", () => {
+    expect(T.es.lugarDe(2, 5)).toBe("Lugar 2 de 5");
+    expect(T.en.lugarDe(2, 5)).toBe("Place 2 of 5");
+    expect(T.es.lugaresFijos).toContain("quedaron fijos al nacer el número");
+    expect(T.en.lugaresFijos).toContain("fixed the moment the number was born");
+    expect(T.es.fijosAlNacer).toContain("todos los lugares de una vez");
+    expect(T.en.fijosAlNacer).toContain("every place at once");
+    expect(T.es.againLugarBoton).toBe("Siguiente premio");
+    expect(T.en.againLugarBoton).toBe("Next prize");
+    expect(T.es.againLugar(2, 3)).toContain("lugar 2 de 3");
+    expect(T.en.againLugar(2, 3)).toContain("Place 2 of 3");
+  });
+
+  it("el resumen antes de sellar dice la verdad solo cuando el sello trae varios lugares", () => {
+    expect(T.es.sellarResumen(10, 1, "Termo", 10)).not.toContain("El número elige todos los lugares");
+    expect(T.es.sellarResumen(10, 3, "Termo", 10)).toContain("El número elige todos los lugares de una vez");
+    expect(T.en.sellarResumen(10, 1, "Termo", 10)).not.toContain("picks every place");
+    expect(T.en.sellarResumen(10, 3, "Termo", 10)).toContain("The number picks every place at once");
+  });
 });

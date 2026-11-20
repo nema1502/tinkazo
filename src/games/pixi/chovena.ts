@@ -12,9 +12,10 @@ import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
-import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
+import { FORMA_CHOVENA, decisivoDeLaChovena, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import type { Montaje3D } from "../tres/tipos";
 import type { BailarinEntrada, EntradaChovena, ModoBailarin } from "../tres/chovena-3d-tipos";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
@@ -289,6 +290,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
   const FOCO = tiemposFoco(story.arc);
   setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
+  /**
+   * El momento decisivo (`decisivo.ts`): el último corte de la final, donde uno de los dos se suelta. Con varios premios
+   * salen primero los que no ganan y después los premiados: el corte que deja solo a premiados ya los nombra, desde que
+   * se corta la música en él.
+   */
+  const DECISIVO = decisivoDeLaChovena(n, prized, evs, n >= 2 ? FS0 : FD0);
   /** La hora del golpe en segundos de juego: ahí los que salieron se paran a festejar. */
   const T_GOLPE = T_CROWN + FOCO.golpe / paceFactor();
   const pace = paceFactor();
@@ -653,6 +660,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
 
   /* ------------------------------------------------------------ el relator */
   let tAll = 0, tHold = 0;
+  S.decisivoEn(() => tAll, DECISIVO);
   /** Cuándo fue el último corte: el fogonazo, el cartel y el tambaleo cuentan desde ahí. */
   let stopAt = -9;
   let crowned = false, dead = false;
@@ -761,8 +769,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (x >= e.x0) once(`x${k}`, () => {
         const v = e.victims;
         const prize = v.filter((i) => prized.has(i));
-        if (v.length === 1) say(prized.has(v[0] as number) ? L().cChoPrize(nm(v[0] as number)) : L().cChoOut(nm(v[0] as number)), 0.55 + 0.25 * (1 - remainingAt(x) / n));
-        else if (prize.length === 1 && v.length <= 3) say(L().cChoPrize(nm(prize[0] as number)), 0.7);
+        if (v.length === 1) say(!esResultadoDeTurnos() && prized.has(v[0] as number) ? L().cChoPrize(nm(v[0] as number)) : L().cChoOut(nm(v[0] as number)), 0.55 + 0.25 * (1 - remainingAt(x) / n));
+        else if (!esResultadoDeTurnos() && prize.length === 1 && v.length <= 3) say(L().cChoPrize(nm(prize[0] as number)), 0.7);
         else if (v.length <= 3) say(L().cChoOutN(v.map(nm)), 0.6);
         else say(L().cChoMany(v.length), 0.6);
         beep(note(5), 0.12, "triangle", 0.05);
@@ -830,7 +838,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (story.arc === "susto" && !sustoInStop) say(L().cChoWobble(nm(sustoIdx)), 0.9);
     });
     if (x >= FX0) once("fx", () => {
-      say(prized.has(rivalIdx) ? L().cChoPrize(nm(rivalIdx)) : L().cChoOut(nm(rivalIdx)), 0.95);
+      say(!esResultadoDeTurnos() && prized.has(rivalIdx) ? L().cChoPrize(nm(rivalIdx)) : L().cChoOut(nm(rivalIdx)), 0.95);
       beep(note(5), 0.12, "triangle", 0.055);
       setTimeout(() => beep(note(2), 0.2, "triangle", 0.05), 90);
       cam.shake(6 * S.u());

@@ -43,7 +43,7 @@ vi.mock("./cuenta-lista-flujo", () => ({ abrirSumarSorteos: (...a: unknown[]) =>
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => true, redPrincipalConPollar: () => true, esCuentaDePollar: () => true }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ kind: "external", address: CUENTA }) }));
-vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), puedeCambiarDeModo: () => true }));
+vi.mock("./modo-ui", () => ({ pasarAModo: vi.fn(), puedeCambiarDeModo: () => true, textoCuentaAlCambiar: () => "" }));
 vi.mock("./red", () => ({ mostrarSinPatrocinio: vi.fn(async () => undefined) }));
 vi.mock("../stellar/patrocinador", async (orig) => ({
   ...(await orig<typeof import("../stellar/patrocinador")>()),
@@ -55,7 +55,11 @@ vi.mock("../stellar/patrocinador", async (orig) => ({
  * Lo que ofrece comprar, en los dos idiomas: el primer paquete como opción, sumar sorteos, un precio. «Ya pagaste tu primer
  * paquete» no ofrece nada: por eso «o tu primer paquete».
  */
-const OFRECE = /\bo tu primer paquete|sum[aá] (sorteos|más)|sumar sorteos|d[oó]lar|\bor your first pack|\badd (draws|more)\b|US\$|\{precio\}/i;
+const OFRECE = new RegExp(
+  "\\bo tu primer paquete|comprá|sum[aá] (sorteos|más)|sumar sorteos|d[oó]lar|" +
+    "\\bor your first pack|\\badd (draws|more)\\b|US\\$|\\{precio\\}",
+  "i",
+);
 
 const visible = (el: Element): boolean => !el.closest("[hidden]") && (el as HTMLElement).style?.display !== "none";
 /** Los textos a la vista que ofrecen comprar (no los botones: esos son la compra). */
@@ -169,7 +173,9 @@ describe("con la compra prendida, todo texto que ofrece comprar tiene su botón,
       h.oferta = { alta: ALTA, paquetes: [P10] };
       const srv = await abrirElPaso(m, { compra: true, activacion });
       const textos = ofrecen(raiz());
-      expect(textos.length, activacion).toBeGreaterThan(0);
+      // Con dos pasos pendientes solo se ven las dos filas y el botón. Con uno, también su línea.
+      if (activacion === "lista") expect(textos.length).toBeGreaterThan(0);
+      else expect(textos).toEqual([]);
       const [comprar] = botonesDeComprar(raiz());
       expect(comprar, activacion).toBeTruthy();
       (comprar as HTMLButtonElement).click();

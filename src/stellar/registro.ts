@@ -95,14 +95,18 @@ export function resultadoDe(raw: unknown): Resultado {
 const INTENTOS = 3;
 const ESPERA_MS = 1_200;
 
+/** El RPC dijo que son demasiados pedidos (429): quien lee seguido tiene que espaciar. */
+export const esLimiteDelRpc = (e: unknown): boolean => e instanceof Error && e.message === "rpc 429";
+
 /**
  * Una consulta, con dos reintentos si la red o el RPC fallan (el RPC público
  * corta ráfagas: una verificación con los otros sellos son once consultas). Lo
- * que el RPC contestó bien no se reintenta.
+ * que el RPC contestó bien no se reintenta. Quien vuelve a mirar solo (la vista
+ * de espectador) pide un intento: su vuelta siguiente ya es el reintento.
  */
-async function consultar(url: string, keys: string[], fetchFn: Fetch, esperaMs: number): Promise<{ key: string; xdr: string }[]> {
+async function consultar(url: string, keys: string[], fetchFn: Fetch, esperaMs: number, intentos = INTENTOS): Promise<{ key: string; xdr: string }[]> {
   let ultimo: unknown = null;
-  for (let i = 0; i < INTENTOS; i++) {
+  for (let i = 0; i < intentos; i++) {
     if (i) await new Promise((r) => setTimeout(r, esperaMs * i));
     try {
       return await consultarUnaVez(url, keys, fetchFn);
@@ -141,6 +145,7 @@ export async function leerRegistros(
   ids: readonly string[],
   fetchFn: Fetch = fetch,
   esperaMs = ESPERA_MS,
+  intentos = INTENTOS,
 ): Promise<Map<string, Registro>> {
   const { xdr, Address, scValToNative } = await import("@stellar/stellar-sdk");
   const direccion = new Address(contrato.contractId).toScAddress();
@@ -157,7 +162,7 @@ export async function leerRegistros(
   const pedidas = new Set(claves);
   const valores = new Map<string, XdrNs.ScVal>();
   for (let i = 0; i < claves.length; i += CLAVES_POR_CONSULTA) {
-    for (const e of await consultar(contrato.rpcUrl, claves.slice(i, i + CLAVES_POR_CONSULTA), fetchFn, esperaMs)) {
+    for (const e of await consultar(contrato.rpcUrl, claves.slice(i, i + CLAVES_POR_CONSULTA), fetchFn, esperaMs, intentos)) {
       const data = xdr.LedgerEntryData.fromXdr(e.xdr, "base64");
       if (data.type !== "contractData") throw new RegistroDeforme("entrada");
       // La entrada dice de qué contrato, con qué clave y de qué duración es: tiene
@@ -214,8 +219,8 @@ export async function leerRegistros(
 }
 
 /** El registro de un sorteo. Lanza si no se pudo leer la cadena. */
-export async function leerRegistro(contrato: ContratoOficial, id: string, fetchFn: Fetch = fetch, esperaMs = ESPERA_MS): Promise<Registro> {
-  const r = (await leerRegistros(contrato, [id], fetchFn, esperaMs)).get(id);
+export async function leerRegistro(contrato: ContratoOficial, id: string, fetchFn: Fetch = fetch, esperaMs = ESPERA_MS, intentos = INTENTOS): Promise<Registro> {
+  const r = (await leerRegistros(contrato, [id], fetchFn, esperaMs, intentos)).get(id);
   if (!r) throw new Error("registro-sin-respuesta");
   return r;
 }

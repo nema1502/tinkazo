@@ -124,7 +124,11 @@ export async function verificarFirma(clavePublica: Uint8Array, firma: Uint8Array
  * Suma los pesos de las firmas válidas, cada firmante una sola vez. Mira a lo sumo
  * `MAX_FIRMAS_VERIFICADAS` firmas del sobre: mandar más con la misma pista no cuesta más CPU.
  */
-async function pesoDeLasFirmas(firmas: ReadonlyArray<{ hint: unknown; signature: unknown }>, hash: Uint8Array, aut: Autoridad): Promise<{ peso: number }> {
+export async function pesoDeLasFirmas(
+  firmas: ReadonlyArray<{ hint: unknown; signature: unknown }>,
+  hash: Uint8Array,
+  aut: Autoridad,
+): Promise<{ peso: number }> {
   const contados = new Set<string>();
   let peso = 0;
   for (const f of firmas.slice(0, MAX_FIRMAS_VERIFICADAS)) {

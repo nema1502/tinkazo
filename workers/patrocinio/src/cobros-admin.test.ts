@@ -1,10 +1,11 @@
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it } from "vitest";
-import { type AccionAdmin, TECHO_SORTEOS_DIA, atenderAdmin } from "./admin";
-import { IP } from "./altas-prueba";
-import { AJUSTE_VENTA_PAUSADA } from "./cobros";
-import { IDS, PRECIOS_DE_PRUEBA, montarPagos } from "./cobros-prueba";
+import { type AccionAdmin, Administracion, TECHO_SORTEOS_DIA, atenderAdmin } from "./admin";
+import { IP, SECRETO_CUPON } from "./altas-prueba";
+import { AJUSTE_VENTA_PAUSADA, Cobros, LectorDeCobros } from "./cobros";
+import { COBROS, IDS, PRECIOS_DE_PRUEBA, montarPagos } from "./cobros-prueba";
 import { DIA_MS, leerConfig } from "./config";
+import { UsoDePagos } from "./pagos-uso";
 import { PorIp } from "./por-ip";
 import { atenderAlta } from "./rutas-altas";
 
@@ -299,5 +300,71 @@ describe("las rutas de los pagos en la puerta del Worker", () => {
     const ana = m.persona("usr_ana");
     const r = await m.orden(ana.token, "alta");
     expect((r.cuerpo as { orden: { nota: string } }).orden.nota).toBe(NOTA);
+  });
+});
+
+describe("el costo de un retiro que pagó el portero no se resuelve a mano", () => {
+  const CUENTA_RETIRO = Keypair.random().publicKey();
+  const INTERNA = "a".repeat(64);
+
+  /** El portero con los retiros que paga: ya leyó el costo de uno, que llegó a la cuenta de cobros. */
+  async function conUnCosto() {
+    const m = montarPagos();
+    const uso = new UsoDePagos(m.sql);
+    const registrar = (e: string, d?: Record<string, string | number>) => void m.anotado.push([e, d]);
+    const cobros = new Cobros(m.sql, m.cupos, { idAlAzar: () => ID, costos: uso });
+    const lector = new LectorDeCobros({ cobros, cuenta: COBROS, fetch: m.h.fetch, reloj: m.hora, registrar, cadaMs: 0 });
+    const admin = new Administracion({
+      cfg: m.cfg,
+      cupos: m.cupos,
+      altas: m.altas,
+      cuponSecreto: SECRETO_CUPON,
+      red: m.red,
+      reloj: m.hora,
+      registrar,
+      cobros,
+      lector,
+      compras: m.compras,
+    });
+    const retiro = {
+      hash: INTERNA,
+      envuelta: "b".repeat(64),
+      forma: "retiro" as const,
+      cuenta: CUENTA_RETIRO,
+      delLibro: true,
+      estimado: 30_000,
+      vence: 1,
+      premio: null,
+      costo: 5_000_000,
+    };
+    expect(uso.reservar(retiro, m.hora(), { topePagos: 20_000_000, rechazosPorDia: 20 })).toEqual({ ok: true, yaContado: false });
+    const [operacion] = m.h.sumar({ monto: "0.5000000", de: CUENTA_RETIRO, tx: INTERNA });
+    await lector.leer();
+    return { m, admin, operacion: operacion as string };
+  }
+
+  it("la lista de pagos sueltos no lo muestra y /estado no lo cuenta", async () => {
+    const { m, admin, operacion } = await conUnCosto();
+    expect(m.sueltos()).toEqual([expect.objectContaining({ operacion, motivo: "costo-retiro", estado: "cobrado" })]);
+    expect(await admin.atender("sueltos-lista", {})).toEqual({ estado: 200, cuerpo: { sueltos: [] } });
+    expect(admin.resumen()).toMatchObject({ pagosSueltos: 0 });
+  });
+
+  it("asignarlo a una orden abierta da ya-resuelto y no la toca", async () => {
+    const { m, admin, operacion } = await conUnCosto();
+    const ana = await conOrden(m);
+    const respuesta = await admin.atender("sueltos-asignar", { operacion, orden: ana.id });
+    expect(respuesta).toEqual({ estado: 409, cuerpo: { motivo: "ya-resuelto", estado: "cobrado" } });
+    expect(m.cobros.recibido(ana.id)).toBe(0);
+    expect(m.sueltos()).toEqual([expect.objectContaining({ operacion, motivo: "costo-retiro", estado: "cobrado", orden: null })]);
+  });
+
+  it("marcarlo devuelto da ya-resuelto y sigue cobrado", async () => {
+    const { m, admin, operacion } = await conUnCosto();
+    expect(await admin.atender("sueltos-asignar", { operacion, devuelto: true, ref: "devolucion-0001" })).toEqual({
+      estado: 409,
+      cuerpo: { motivo: "ya-resuelto", estado: "cobrado" },
+    });
+    expect(m.sueltos()).toEqual([expect.objectContaining({ operacion, estado: "cobrado" })]);
   });
 });

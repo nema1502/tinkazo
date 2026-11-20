@@ -1,5 +1,7 @@
+import { esResultadoDeTurnos } from "../../modos/turnos";
 import { normalGuajojo, POR_TANDA, T_AMANECER, T_CANTO, T_CRAC, T_LLAMADA, T_POR_TANDA, T_ULTIMO, TOPE_NORMAL, FIJOS, TARJETA, LISTA_MAX, silencioDe, silenciosPara } from "./guajojo-duracion";
 import { acotar } from "./kit/azar";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "./decisivo";
 import { planoEntero, planoSobre } from "./kit/director";
 import { PRIORIDAD } from "./kit/guion";
 import { lugarDe, type Lugar } from "./kit/respuestas";
@@ -338,6 +340,27 @@ export function tandaDeLista(d: Datos, t: number): number[] {
 /* ------------------------------------------------------------------ el plan */
 type Evento = { desde: number; tipo: TipoPaso; quien?: number };
 
+/**
+ * El momento decisivo del Guajojó (`decisivo.ts`), en segundos de juego. Lo primero de:
+ *
+ * - el último silencio: ahí la mirada va a una, después a la otra, y se queda en la rival hasta que cae;
+ * - el silencio del susto: la mirada se detiene en la ganadora, que tambalea y aguanta;
+ * - con varios premios, el silencio que deja solo a premiados: las dos últimas son la ganadora y la segunda premiada.
+ */
+export function decisivoDelGuajojo(d: Pick<Datos, "ciclos" | "n" | "arco">, ganadores: readonly number[]): number {
+  const ultimo = d.ciclos[d.ciclos.length - 1];
+  const fuera = new Set<number>();
+  const tramos = d.ciclos.map((c) => {
+    for (const v of c.victimas) fuera.add(v);
+    return { desde: c.tSil0, siguen: Array.from({ length: d.n }, (_, i) => i).filter((i) => !fuera.has(i)) };
+  });
+  // El susto es siempre de la ganadora, en el penúltimo silencio (`sustoEn` del plan). Con otro arco, si la mirada se
+  // detiene en ella es por azar, como en cualquiera de los que se salvan: no la nombra.
+  const sustoEn = Math.max(0, d.ciclos.length - 2);
+  const susto = d.arco === "susto" ? d.ciclos.find((c) => c.c === sustoEn && !c.ultimo && !c.practica) : undefined;
+  return momentoDecisivo(ultimo ? ultimo.tSil0 : Infinity, susto ? susto.tSil0 : Infinity, primeraQueDejaSoloPremiados(tramos, new Set(ganadores), d.n));
+}
+
 export function planGuajojo(ctx: Contexto): Plan<Datos> {
   const n = ctx.nombres.length;
   const ganador = ctx.ganadores[0] ?? 0;
@@ -604,7 +627,7 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
     ci.victimas.forEach((i, j) => {
       const tc = ci.tCae[j] as number;
       if (j === 0) {
-        const textos = ci.ultimo && ctx.ganadores.length > 1 ? ctx.txt("conPremio") : ci.victimas.length > 3 ? ctx.txt("varios") : ctx.txt("crac", nom(i));
+        const textos = ci.ultimo && ctx.ganadores.length > 1 && !esResultadoDeTurnos() ? ctx.txt("conPremio") : ci.victimas.length > 3 ? ctx.txt("varios") : ctx.txt("crac", nom(i));
         guion.push({
           t: tc, texto: textos, calor: cal + 0.3, prioridad: PRIORIDAD.importante, hecho: { tipo: "salio", quien: i },
           hacer: (k) => { k.sonido.tono(8, "evento", { dur: 0.05, timbre: "square", vol: 0.055 }); k.sonido.salida(); },
@@ -694,6 +717,7 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
 
   return {
     duracion,
+    decisivo: decisivoDelGuajojo(datos, ctx.ganadores),
     arco,
     sentido: "arriba",
     marcador,

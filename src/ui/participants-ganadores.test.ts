@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_WINNERS } from "../protocol/select";
 
 /**
- * «Cuántos ganan» con el resto de la lista (`participants.ts`): el resumen de «Sellar la lista», el borrador de la
+ * Cuántos ganan con el resto de la lista (`participants.ts`): el resumen de Sellar la lista, el borrador de la
  * pestaña y el bloqueo al sellar, con el markup de verdad de `index.html` y el tope de la red en 300 (el de una red con
  * el contrato nuevo). Con el de testnet de hoy (32) ver `ganadores.test.ts` y `config-tope.test.ts`.
  */
@@ -43,8 +43,8 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
-describe("el resumen de «Sellar la lista» sigue a «Cuántos ganan»", () => {
-  it("con 100 de 150: lo dice, y al teclearlo y con un atajo", async () => {
+describe("el resumen de Sellar la lista sigue a Cuántos ganan", () => {
+  it("con 100 de 150: lo dice con un valor repuesto y con un atajo", async () => {
     await montar(150);
     escribir("100");
     expect(resumen()).toContain("150 personas, 100 ganadores");
@@ -52,6 +52,18 @@ describe("el resumen de «Sellar la lista» sigue a «Cuántos ganan»", () => {
     expect(resumen()).toContain("150 personas, 5 ganadores");
     chip(1).click();
     expect(resumen()).toContain("150 personas, 1 ganador");
+  });
+
+  it("con tres elegidos con el botón de más, lo repite en español y en inglés", async () => {
+    await montar(20);
+    const mas = document.getElementById("nw-mas") as HTMLButtonElement;
+    mas.click();
+    mas.click();
+    expect(resumen()).toContain("20 personas, 3 ganadores");
+    const { setLang } = await import("../i18n");
+    setLang("en");
+    expect(resumen()).toContain("20 people, 3 winners");
+    setLang("es");
   });
 
   it("no pasa de las personas de la lista: pedir 100 con 40 en la lista son 40", async () => {

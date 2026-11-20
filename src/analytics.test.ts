@@ -33,4 +33,9 @@ describe("contar visitas", () => {
     expect(shouldCount({ hostname: "tinkazo.app" }, { doNotTrack: "1" })).toBe(false);
     expect(shouldCount({ hostname: "tinkazo.app" }, { doNotTrack: null, globalPrivacyControl: true })).toBe(false);
   });
+
+  it("una página dentro de un marco no se cuenta", () => {
+    expect(shouldCount({ hostname: "tinkazo.app" }, { doNotTrack: null }, true)).toBe(false);
+    expect(shouldCount({ hostname: "tinkazo.app" }, { doNotTrack: null }, false)).toBe(true);
+  });
 });

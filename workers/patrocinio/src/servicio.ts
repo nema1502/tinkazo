@@ -14,10 +14,11 @@
  */
 import { StrKey, TransactionBuilder, type Transaction } from "@stellar/stellar-sdk/base";
 import { type Config, DIA_MS, sorteosDelMes, topesDeCuenta } from "./config";
-import { type Cupo, type Cupos, type Limites } from "./cupos";
+import { type Cupo, type Cupos, type FilaUso, type Limites } from "./cupos";
 import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
 import type { Planes } from "./plan";
-import { type CuentaEnRed, ErrorDeRed, type Red } from "./red";
+import { type Consulta, type CuentaEnRed, ErrorDeRed, type Red } from "./red";
+import { selloQueEntroTarde } from "./sello-tarde";
 import { CODIGO_RONDA_NO_LISTA, CODIGO_YA_SORTEADO, REINTENTAR_RONDA_MS, type Sorteadora, VENTANA_SORTEO_S, leerFirma, leerNumeroDeSorteo, leerSorteo } from "./sorteadora";
 
 export type Modo = "portero" | "pollar" | "apagado";
@@ -46,11 +47,60 @@ export const ESPERA_RECONCILIAR_MS = 15_000;
  * un RPC atrasado (el segundo de la lista) puede contestar NOT_FOUND por algo que ya entró, y devolver el cupo
  * de algo que se pagó dejaría un pago sin contar.
  */
-const MARGEN_VENCIMIENTO_S = 600;
+export const MARGEN_VENCIMIENTO_S = 600;
+
+/**
+ * Cuántas veces en 24 horas móviles se le devuelve a una cuenta lo que gastó un sello que entró tarde (`sello-tarde.ts`).
+ * Una cuenta de verdad lo ve una vez en una noche mala: el 13 de noviembre de 2026 fue una. Más que esto se parece a
+ * alguien que manda sellos con la ronda justa para hacernos pagar comisiones sin gastar nada, y deja de devolverse.
+ */
+export const DEVOLUCIONES_POR_DIA = 3;
+/**
+ * Cuántas devoluciones de sellos que entraron tarde hace el portero en 24 horas móviles, sumando todas las cuentas. El
+ * tope de arriba es por cuenta: con muchas cuentas del libro, alguien podría provocar sellos tardíos sin perder nada y
+ * que la red nos cobre la comisión de cada uno. Pasado este número no se devuelve solo: queda para devolverlo a mano
+ * (`tope-general` en `devoluciones_pendientes`), así quien de verdad lo perdió no lo pierde.
+ *
+ * De dónde sale: la noche del 13 de noviembre de 2026 hubo un sello tardío en toda la red principal. Veinte cubren una
+ * noche mala con un evento entero (varias mesas sellando a la vez con la red lenta) y acotan lo que se regala: el sello
+ * fallido de esa noche cobró 5.478 stroops, así que veinte son unos 110.000 stroops por día, menos del 0,1 % del tope
+ * general de 15 XLM (`TOPE_GENERAL_STROOPS`).
+ */
+export const DEVOLUCIONES_POR_DIA_EN_TOTAL = 20;
+/** Los dos topes de arriba, como los piden `Cupos.devolverSelloTardio` y `Cupos.topeDeDevoluciones`. */
+const TOPES_DE_DEVOLUCION = { tope: DEVOLUCIONES_POR_DIA, topeGeneral: DEVOLUCIONES_POR_DIA_EN_TOTAL } as const;
+/**
+ * Cuántas veces se prueba un sello fallido cuando el RPC no trajo lo necesario para comprobar por qué falló (`sin-datos`
+ * en `sello-tarde.ts`: sin el sobre, sin el resultado o sin la hora), y cuánto se espera entre una y otra. Con eso se
+ * cubre un RPC que contestó a medias unos minutos. Pasados los intentos, el sello queda para devolverlo a mano.
+ */
+export const INTENTOS_DE_PRUEBA = 6;
+export const ESPERA_ENTRE_PRUEBAS_MS = 60_000;
+/**
+ * Cuánto espera `/cupo` a que la red diga qué fue de los sellos de la cuenta que siguen en el aire. El sitio espera
+ * `/cupo` 6 s (`TOPE_CUPO_MS`, `src/stellar/patrocinador.ts`): con la red lenta se contesta con lo que se sabe y la
+ * alarma lo resuelve después.
+ */
+export const TOPE_ASENTAR_MS = 2_500;
+/** Hasta cuántos sellos en el aire de una cuenta, y de cuánto tiempo atrás, se averiguan antes de contestar. */
+const ASENTAR_MAX = 3;
+const ASENTAR_DESDE_MS = 15 * 60_000;
+/**
+ * Cada cuánto, como mucho, `/cupo` le vuelve a preguntar a la red por el mismo sello en el aire. Un ledger se cierra cada
+ * unos 5 s: preguntar más seguido no trae nada nuevo. `/cupo` es abierto y la cuenta es un dato público, así que sin este
+ * freno cada pedido sobre una cuenta con un sello en el aire era una consulta al RPC. Con él, lo más que se pregunta es
+ * una vez cada 5 s por cada sello que de verdad está en el aire, se pida `/cupo` las veces que se pida.
+ */
+export const ASENTAR_CADA_MS = 5_000;
 
 const r = (estado: number, cuerpo: Record<string, unknown>): Respuesta => ({ estado, cuerpo });
 
 export class Portero {
+  /** Cuándo se le preguntó a la red por última vez por cada sello en el aire (`asentarSellosDe`). Vive en la memoria del objeto. */
+  private readonly preguntadoEn = new Map<string, number>();
+  /** La averiguación en curso de cada cuenta: los `/cupo` que llegan mientras tanto esperan esa misma y no abren otra. */
+  private readonly asentando = new Map<string, Promise<number>>();
+
   constructor(
     private readonly cfg: Config,
     private readonly cupos: Cupos,
@@ -143,9 +193,14 @@ export class Portero {
    *
    * En mainnet con las altas suma `oficial:{acceso, sorteos:{quedan, proximoVence}|null}`, y `sellos.quedan` pasa a ser lo
    * menor entre el mes y los sorteos oficiales: el sitio no pide una firma que el portero va a rechazar.
+   *
+   * Antes de contar se le pregunta a la red por los sellos de la cuenta que siguen en el aire (`asentarSellosDe`): si uno
+   * entró tarde y el contrato lo rechazó, su sorteo vuelve ahora y no recién con la alarma. Es lo que pregunta el sitio
+   * antes de la firma del reintento, segundos después de ver la falla.
    */
   async cupoDe(cuenta: string): Promise<Respuesta> {
     if (!esCuenta(cuenta)) return r(400, { motivo: "cuenta" });
+    await this.asentarSellosDe(cuenta);
     const modo = this.modo();
     const lim = await this.limitesDe(cuenta);
     const ahora = this.reloj();
@@ -164,6 +219,10 @@ export class Portero {
       sorteos: { usados: c.sorteos, max: c.maxSorteos, quedan: c.quedanSorteos },
       liberaEn: c.liberaEn,
       ...(oficial ? { oficial } : {}),
+      // Si el portero devolvería ahora el sorteo de un sello de esta cuenta que entró tarde (`devolverSiEntroTarde`): sí
+      // mientras ni la cuenta ni el portero llegaron a su tope de devoluciones del día. Se mira después de asentar, con lo
+      // que se acaba de cerrar contado. El sitio promete la devolución solo con `true`. Un portero de antes no lo manda.
+      devuelve: this.cupos.topeDeDevoluciones(cuenta, ahora, TOPES_DE_DEVOLUCION) === null,
     });
   }
 
@@ -222,6 +281,7 @@ export class Portero {
     if (!previa || previa.estado === "devuelto") {
       let recursosSimulados = 0;
       let selloHash: string | null = null;
+      let sorteoDelDraw: bigint | null = null;
       try {
         if (!(await this.laAbrioNuestraApp(tx.cuenta, ahora, leer))) return r(403, { motivo: "cuenta-ajena" });
         // En mainnet con las altas, un `draw` se paga solo si su sello lo pagó el portero (con o sin el sorteo del servidor):
@@ -229,6 +289,7 @@ export class Portero {
         // no cuesta nada; si la red no deja leer, 502 red y no se paga.
         if (this.cfg.soloSellosDelPortero && tx.metodo === "draw") {
           const id = tx.sorteo === null ? null : leerNumeroDeSorteo(tx.sorteo);
+          sorteoDelDraw = id;
           const s = id === null ? null : await leerSorteo(this.red, { passphrase: this.cfg.passphrase, contractId: this.cfg.contractId, origen: tx.cuenta }, id);
           selloHash = s ? this.cupos.selloDelPortero(s.organizador, s.huellaLista, s.ronda) : null;
           if (!selloHash) return r(403, { motivo: "no-es-nuestro" });
@@ -246,7 +307,15 @@ export class Portero {
       // Desde acá hasta reservar no hay ningún await: comprobar y reservar es una sola jugada.
       // El estimado sale de la simulación y de nuestra configuración, nunca de lo que declara el cliente.
       const estimado = this.techoDeRecursos(recursosSimulados) + 2 * this.cfg.inclusionBump;
-      const res = this.cupos.reservar({ hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS, ganadores: tx.ganadores, sello: tx.sello, selloHash }, ahora, lim);
+      const pedido = { hash: tx.hash, cuenta: tx.cuenta, metodo: tx.metodo, estimado, vence: tx.venceS, ganadores: tx.ganadores, sello: tx.sello, selloHash };
+      let res = this.cupos.reservar(pedido, ahora, lim);
+      // Un sello sin sorteos (o sin cupo del mes) puede ser el reintento de uno que entró tarde y que la alarma todavía no
+      // cerró: se le pregunta a la red por los de la cuenta y, si alguno vuelve, se reserva otra vez. Es una jugada nueva,
+      // síncrona como la primera.
+      // Pregunta aunque `/cupo` acabe de preguntar (`forzar`): es el reintento de la persona, que firmó con la falla a la vista.
+      if (!res.ok && tx.metodo === "seal" && (res.motivo === "sin-sorteos" || res.motivo === "cupo-cuenta") && (await this.asentarSellosDe(tx.cuenta, true)) > 0) {
+        res = this.cupos.reservar(pedido, ahora, lim);
+      }
       if (!res.ok) {
         if (res.motivo === "sin-sorteos") return r(402, { motivo: "sin-sorteos", vencieron: res.vencieron });
         if (res.motivo === "cupo-cuenta") return r(429, { motivo: "cupo-cuenta", que: res.que, liberaEn: res.liberaEn, max: res.max });
@@ -255,6 +324,9 @@ export class Portero {
       esElPrimero = !res.yaContado;
       quedan = { quedan: res.quedan, quedanSorteos: res.quedanSorteos };
       this.cupos.purgar(ahora);
+      if (selloHash !== null && sorteoDelDraw !== null) {
+        this.atarAlSello(selloHash, sorteoDelDraw, tx.hash, ahora);
+      }
       // La alarma se pide ya, antes de importar la llave, envolver y mandar: si el objeto muere en el medio,
       // la fila `reservado` no queda sin nadie que la mire (la alarma le pregunta a la red y, si no entró, la devuelve).
       if (esElPrimero) {
@@ -277,8 +349,7 @@ export class Portero {
       try {
         const c = await this.red.consultar(tx.hash);
         if (c.status === "SUCCESS" || c.status === "FAILED") {
-          this.registrar("resultado", { hash: corto(tx.hash), estado: c.status === "SUCCESS" ? "ok" : "fallo", real: c.feeCharged ?? 0 });
-          this.cupos.cerrar(tx.hash, c.status === "SUCCESS" ? "ok" : "fallo", c.feeCharged ?? null);
+          this.cerrarConLaRed(tx.hash, c);
           const q = this.cupos.consultar(tx.cuenta, ahora, lim);
           return r(200, { hash: tx.hash, status: "DUPLICATE", estado: c.status === "SUCCESS" ? "ok" : "fallo", quedan: q.quedan, quedanSorteos: q.quedanSorteos });
         }
@@ -411,6 +482,7 @@ export class Portero {
           return r(503, { motivo: "fondo" });
         }
         this.cupos.purgar(ahora);
+        this.atarAlSello(selloHash, id, firmada.hash, ahora);
         this.alQuedarEnElAire();
         this.registrar("sorteo-servidor", { hash: corto(firmada.hash), estimado, intento: intento + 1 });
 
@@ -464,6 +536,21 @@ export class Portero {
   }
 
   /**
+   * Ata el sello a este sorteo si es el primer `draw` que el portero paga con él (`Cupos.atarSorteo`): así un sello pagado
+   * respalda los premios y las altas de quien ganó de un solo sorteo, y no de cada sorteo igual sellado por fuera. Nunca hace
+   * fallar al sorteo: si no se pudo, se anota, y ese sorteo queda sin premios ni altas por el portero (el lado seguro).
+   */
+  private atarAlSello(selloHash: string, sorteo: bigint, draw: string, ahora: number): void {
+    const contrato = this.cfg.contractId;
+    if (contrato === null) {
+      return;
+    }
+    if (!this.cupos.atarSorteo({ sello: selloHash, contrato, sorteo: String(sorteo), draw }, ahora)) {
+      this.registrar("error-interno", { donde: "atar-sorteo", hash: corto(draw) });
+    }
+  }
+
+  /**
    * Si el `draw` de este sello ya va en camino: el mismo hash, sin mandar otro. Uno que ya cerró (bien o mal) no decide
    * nada: si entró, `get_raffle` o la simulación lo dicen (`{ya:true}`); así un sorteo de otro sello que se quedó con lo
    * guardado para este, antes de prender la regla, no lo frena.
@@ -513,8 +600,7 @@ export class Portero {
       try {
         const c = await this.red.consultar(f.hash);
         if (c.status === "SUCCESS" || c.status === "FAILED") {
-          this.cupos.cerrar(f.hash, c.status === "SUCCESS" ? "ok" : "fallo", c.feeCharged ?? null);
-          this.registrar("resultado", { hash: corto(f.hash), estado: c.status === "SUCCESS" ? "ok" : "fallo", real: c.feeCharged ?? 0 });
+          this.cerrarConLaRed(f.hash, c);
         } else if (Math.floor(ahora / 1000) > f.vence + MARGEN_VENCIMIENTO_S) {
           this.cupos.devolver(f.hash);
           this.registrar("devuelto", { hash: corto(f.hash), motivo: "vencida-sin-aparecer" });
@@ -524,10 +610,142 @@ export class Portero {
         // Sin red: se vuelve a intentar en la próxima vuelta.
       }
     }
+    // Los sellos fallidos que no se pudieron probar: se vuelve a preguntar, a lo sumo `INTENTOS_DE_PRUEBA` veces.
+    for (const hash of this.cupos.porProbar(ahora - ESPERA_ENTRE_PRUEBAS_MS)) {
+      try {
+        const c = await this.red.consultar(hash);
+        if (c.status === "FAILED") this.devolverSiEntroTarde(hash, c);
+        else this.anotarSinProbar(hash);
+      } catch (e) {
+        if (!(e instanceof ErrorDeRed)) throw e;
+        // Sin red también es un intento: no se pregunta para siempre.
+        this.anotarSinProbar(hash);
+      }
+    }
     this.cupos.purgar(ahora);
     const quedan = this.cupos.enElAire();
-    this.registrar("alarma", { enElAire: quedan });
-    return quedan > 0;
+    const porProbar = this.cupos.cuantosPorProbar();
+    this.registrar("alarma", { enElAire: quedan, ...(porProbar ? { porProbar } : {}) });
+    return quedan > 0 || porProbar > 0;
+  }
+
+  /** Un intento más de probar un sello fallido (`Cupos.anotarSinProbar`). Si fue el último, queda en el registro. */
+  private anotarSinProbar(hash: string): void {
+    const f = this.cupos.buscar(hash);
+    if (!f) return this.cupos.soltarPendiente(hash);
+    const n = this.cupos.anotarSinProbar(hash, f.cuenta, this.reloj(), INTENTOS_DE_PRUEBA);
+    if (n.agotado) this.registrar("sello-sin-probar", { hash: corto(hash), intentos: n.intentos });
+  }
+
+  /**
+   * Cierra lo que la red dice que entró (bien o mal) y, si es un sello que el contrato rechazó por la ronda muy cerca,
+   * le devuelve a la cuenta lo que gastó (`devolverSiEntroTarde`). Síncrono: lo llaman la alarma, el reenvío del mismo
+   * hash y `/cupo`, cada uno con lo que acaba de contestar la red. Devuelve si hubo devolución.
+   */
+  private cerrarConLaRed(hash: string, c: Consulta): boolean {
+    const estado = c.status === "SUCCESS" ? "ok" : "fallo";
+    this.cupos.cerrar(hash, estado, c.feeCharged ?? null);
+    this.registrar("resultado", { hash: corto(hash), estado, real: c.feeCharged ?? 0 });
+    return estado === "fallo" && this.devolverSiEntroTarde(hash, c);
+  }
+
+  /**
+   * Un sello que entró a un ledger y falló: si lo que guardó la red prueba que el contrato lo rechazó por la ronda muy
+   * cerca (`sello-tarde.ts`), la cuenta vuelve a como estaba antes del intento (`Cupos.devolverSelloTardio`), una sola
+   * vez y dentro de los dos topes del día (el de la cuenta y el de todo el portero). Nunca por lo que diga la página: la
+   * consulta es del portero a su RPC. Queda en el registro (`sorteo-devuelto`, `devolucion-negada` o `sello-fallido` con
+   * su motivo) y en `devueltos24h` del estado. Lo que niega un tope queda para devolverlo a mano.
+   */
+  private devolverSiEntroTarde(hash: string, c: Consulta): boolean {
+    const f = this.cupos.buscar(hash);
+    if (!f || f.metodo !== "seal" || f.estado !== "fallo" || !this.cfg.contractId) return false;
+    const t = selloQueEntroTarde(hash, c, { passphrase: this.cfg.passphrase, contractId: this.cfg.contractId });
+    if (!t.ok) {
+      this.registrar("sello-fallido", { hash: corto(hash), motivo: t.motivo });
+      // Sin los datos para probarlo no se da por perdido: la alarma vuelve a preguntar. Lo demás es definitivo.
+      if (t.motivo === "sin-datos") this.anotarSinProbar(hash);
+      else this.cupos.soltarPendiente(hash);
+      return false;
+    }
+    const d = this.cupos.devolverSelloTardio(hash, this.reloj(), { ronda: t.ronda, faltaban: t.faltaban, ...TOPES_DE_DEVOLUCION });
+    if (d.que === "devuelto") {
+      this.registrar("sorteo-devuelto", { hash: corto(hash), motivo: "ronda-cerca", faltaban: t.faltaban, sorteos: d.sorteos });
+      // Su derecho había vencido (o estaba por vencer): volvió en uno nuevo, para que se pueda usar de verdad.
+      if (d.aNuevo) this.registrar("vencido-al-devolver", { hash: corto(hash), sorteos: d.aNuevo });
+    } else if (d.que === "tope" || d.que === "tope-general") {
+      this.registrar("devolucion-negada", { hash: corto(hash), motivo: d.que });
+      // Queda para devolverlo a mano: en el exporte y en `porDevolver24h` del estado.
+      this.cupos.anotarPorDevolver(hash, f.cuenta, this.reloj(), d.que);
+    }
+    return d.que === "devuelto";
+  }
+
+  /**
+   * Los sellos de esta cuenta que siguen en el aire (a lo sumo 3, de los últimos 15 minutos): se le pregunta a la red por
+   * cada uno y se cierra lo que ya entró, con su devolución si entró tarde. Devuelve cuántos sellos se devolvieron. Sin
+   * sellos en el aire no le pregunta nada a nadie.
+   *
+   * Con freno, porque `/cupo` es abierto: por el mismo sello se pregunta a lo sumo una vez cada `ASENTAR_CADA_MS`, y los
+   * pedidos de una cuenta que llegan mientras hay una averiguación en curso esperan esa misma. `forzar` (el sello nuevo
+   * que llegó sin sorteos) pregunta igual: es el reintento de la persona, y viene firmado por su cuenta.
+   */
+  private asentarSellosDe(cuenta: string, forzar = false): Promise<number> {
+    if (!forzar) {
+      const enCurso = this.asentando.get(cuenta);
+      if (enCurso) return enCurso;
+    }
+    const ahora = this.reloj();
+    const enElAire = this.cupos
+      .sellosEnElAire(cuenta, ahora - ASENTAR_DESDE_MS, ASENTAR_MAX)
+      .filter((f) => forzar || ahora - (this.preguntadoEn.get(f.hash) ?? Number.NEGATIVE_INFINITY) >= ASENTAR_CADA_MS);
+    if (!enElAire.length) return Promise.resolve(0);
+    // Lo que ya no puede estar en el aire (más viejo que lo que se mira) se olvida: la memoria no crece sin fin.
+    for (const [hash, en] of this.preguntadoEn) if (ahora - en > ASENTAR_DESDE_MS) this.preguntadoEn.delete(hash);
+    for (const f of enElAire) this.preguntadoEn.set(f.hash, ahora);
+    const p = this.averiguarConTope(enElAire);
+    if (!forzar) {
+      this.asentando.set(cuenta, p);
+      const soltar = () => {
+        if (this.asentando.get(cuenta) === p) this.asentando.delete(cuenta);
+      };
+      p.then(soltar, soltar);
+    }
+    return p;
+  }
+
+  /**
+   * Le pregunta a la red por estos sellos, uno por uno, y cierra lo que ya entró. Espera a lo sumo `TOPE_ASENTAR_MS`:
+   * pasado eso corta la consulta en curso (no queda colgada en segundo plano), no pregunta por los que faltan y se sigue
+   * con lo que se sabe. Lo demás lo cierra la alarma. Una red que no contesta no cambia nada. Nunca falla.
+   */
+  private async averiguarConTope(filas: FilaUso[]): Promise<number> {
+    const corte = new AbortController();
+    let devueltos = 0;
+    const averiguar = async (): Promise<void> => {
+      for (const f of filas) {
+        if (corte.signal.aborted) return;
+        try {
+          const c = await this.red.consultar(f.hash, corte.signal);
+          if ((c.status === "SUCCESS" || c.status === "FAILED") && this.cerrarConLaRed(f.hash, c)) devueltos++;
+        } catch (e) {
+          // Sin red se sigue con lo que se sabe. Un error nuestro tampoco tumba la consulta del cupo: queda anotado.
+          if (!(e instanceof ErrorDeRed)) this.registrar("error-interno", { donde: "asentar", hash: corto(f.hash), error: String(e).slice(0, 120) });
+        }
+      }
+    };
+    let reloj: ReturnType<typeof setTimeout> | undefined;
+    const tope = new Promise<void>((listo) => {
+      reloj = setTimeout(() => {
+        corte.abort();
+        listo();
+      }, TOPE_ASENTAR_MS);
+    });
+    try {
+      await Promise.race([averiguar(), tope]);
+    } finally {
+      clearTimeout(reloj);
+    }
+    return devueltos;
   }
 
   // ---------- administración ----------
@@ -579,7 +797,7 @@ export class Portero {
 }
 
 /** Los firmantes y el umbral medio de una cuenta leída de la cadena, o null si no se leyó (entonces vale solo su llave, con peso 1). */
-function autoridadDe(c: CuentaEnRed | null): Autoridad | null {
+export function autoridadDe(c: CuentaEnRed | null): Autoridad | null {
   if (!c?.firmantes) return null;
   return { firmantes: c.firmantes, umbral: c.umbralMedio ?? 1 };
 }

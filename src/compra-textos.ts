@@ -238,6 +238,7 @@ export const TEXTOS_COMPRA: { es: Record<string, string>; en: Record<string, str
     compraNotaRotulo: "Nota",
     compraNotaMemo: "En tu app, la nota puede llamarse memo.",
     compraSinDolares: "¿No tenés dólares digitales? Pedile un cupón a quien organiza tu evento.",
+    compraDesdeXlm: "¿Tenés XLM y no USDC? Solo sirve si tu app cambia el XLM a USDC al enviar. Poné esta nota y fijate que llegue en USDC el monto de este pago.",
 
     // Las fallas: una línea, su acción y dónde está el dinero.
     compraSinQrTitulo: "Ahora no hay pago con QR",
@@ -502,6 +503,7 @@ export const TEXTOS_COMPRA: { es: Record<string, string>; en: Record<string, str
     compraNotaRotulo: "Memo",
     compraNotaMemo: "Your app may call it a memo or a note.",
     compraSinDolares: "Don't have digital dollars? Ask whoever runs your event for a coupon.",
+    compraDesdeXlm: "Got XLM instead of USDC? This only works if your app converts XLM to USDC when you send. Add this memo and make sure this payment's amount arrives in USDC.",
 
     compraSinQrTitulo: "QR payment isn't available now",
     compraSinQrLinea: "Try later, or pay with digital dollars.",

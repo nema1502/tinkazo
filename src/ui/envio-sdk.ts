@@ -117,18 +117,39 @@ async function mandarYConfirmar(firmada: NonNullable<TxArmada["signed"]>, onStep
   return { hash, desenlace };
 }
 
+/** La billetera que firma sin patrocinio, y si vota a mano lo que armó la página (issue 180). */
+interface BilleteraQueFirma {
+  signUnsponsored?: (xdr: string) => Promise<string>;
+  votaPorContenido?: () => boolean;
+}
+
 /**
  * Pollar firma la transacción SIN patrocinio (la comisión la paga la cuenta de la persona)
  * y devuelve la firmada; el envío lo hace esta capa, como con Freighter. Es "Sellar pagando
  * con mi cuenta" cuando el sello cuesta más de lo que el patrocinador cubre.
+ *
+ * Con el voto por contenido hay una segunda mirada, acá, donde lo firmado sale hacia el portero: sin la armada no se pide
+ * la firma (no hay con qué comparar), y lo firmado tiene que tener el hash de la armada. Si no lo tiene, ya se votó, así
+ * que es incierto (`pollar-pending`) y nunca "no se hizo nada".
  */
-async function firmarSinPatrocinio(tx: TxArmada, wallet: { signUnsponsored?: (xdr: string) => Promise<string> }): Promise<NonNullable<TxArmada["signed"]> & { timeBounds?: { maxTime?: string | number }; toXDR(): string }> {
+type Firmada = NonNullable<TxArmada["signed"]> & { timeBounds?: { maxTime?: string | number }; toXDR(): string };
+
+async function firmarSinPatrocinio(tx: TxArmada, wallet: BilleteraQueFirma): Promise<Firmada> {
   if (!wallet.signUnsponsored) throw new Error("pollar-sin-pago-propio");
+  const conLaRegla = wallet.votaPorContenido?.() === true;
+  if (conLaRegla && !tx.built) {
+    console.warn("[tinkazo] co-firma no votada: sin-armada");
+    throw new Error((await import("../stellar/cofirma-regla")).COFIRMA_DISTINTA);
+  }
   const firmado = await wallet.signUnsponsored(tx.toXDR());
   const { TransactionBuilder } = await import("@stellar/stellar-sdk");
   const leida = TransactionBuilder.fromXDR(firmado, network.networkPassphrase);
   // Un fee-bump quiere decir que Pollar patrocinó igual: no es lo que se pidió.
   if ("innerTransaction" in leida) throw new Error("pollar-patrocino-no-se-quito");
+  if (conLaRegla && (!tx.built || toHex(leida.hash()) !== toHex(tx.built.hash()))) {
+    console.warn("[tinkazo] co-firma incierta: firmada distinta");
+    throw new Error("pollar-pending");
+  }
   return leida;
 }
 
@@ -203,8 +224,11 @@ async function pollarNoSabe(e: unknown): Promise<boolean> {
  *
  * `antesDeMandar` corre con la transacción recién firmada por Pollar y antes de entregársela al portero. Si lanza, no se
  * le entrega nada y sale ese error: es lo que usa el sello para no mandar una ronda que ya no alcanza (`anchor.ts`).
+ *
+ * `antesDeFirmar` es lo mismo para el camino en que paga Pollar y firma y manda de una vez: corre dentro de la billetera, tras
+ * la puerta del premio y antes de firmar, porque la lectura de la red de esa puerta gasta margen de la ronda.
  */
-export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean; antesDeMandar?: () => void } = {}): Promise<{ hash: string; value: unknown } | null> {
+export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean; yaVolvioAPreguntar?: boolean; antesDeMandar?: () => void; antesDeFirmar?: () => void } = {}): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet"),
     import("../stellar/wallet-pollar"),
@@ -256,7 +280,18 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
       // El portero: Pollar firma sin patrocinio y la transacción firmada va al portero, que la envuelve y paga.
       // Es la misma transacción las veces que haga falta (un reintento no cuenta dos veces: el portero
       // contesta lo mismo para el mismo hash).
-      const firmada = await firmarSinPatrocinio(tx, wallet);
+      const conVoto = wallet.votaPorContenido?.() === true;
+      let firmada: Firmada;
+      try {
+        firmada = await firmarSinPatrocinio(tx, wallet);
+      } catch (e) {
+        // Con el voto por contenido, un voto que no se sabe cómo terminó es un sello incierto: antes de armar otro se
+        // averigua en la red, con el hash de la armada. Sin el voto a mano, como siempre.
+        if (intento && conVoto && /pollar-pending/.test((await import("../stellar/errores")).textoDelError(e))) {
+          throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
+        }
+        throw e;
+      }
       // La firma puede haber tardado (el 13 de noviembre de 2026, medio minuto): quien llama mira si todavía vale mandarla.
       // Lo firmado no sale de acá: si no se le entrega al portero, no llega a la red.
       opciones.antesDeMandar?.();
@@ -306,7 +341,7 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
       };
     } else {
       try {
-        hash = (await patrocinador.mandar(tx.toXDR())).hash;
+        hash = (await patrocinador.mandar(tx.toXDR(), opciones.antesDeFirmar)).hash;
       } catch (e) {
         if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
         throw e;

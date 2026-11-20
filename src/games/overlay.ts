@@ -1,5 +1,6 @@
 import { $ } from "../dom";
 import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../state";
+import { esSoloMirar } from "../solo-mirar";
 import { nameList, setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
 import { mantenerDespierta, soltarDespierta } from "../ui/despierta";
@@ -61,8 +62,9 @@ export const INK = "#191919";
 
 let current: { skip: () => void } | null = null;
 
-/** El botón de saltar de la barra del estadio. */
+/** El botón de saltar de la barra del estadio. En la vista de espectador no salta nada: el celular no corona antes que la sala. */
 export function skipGame(): void {
+  if (esSoloMirar()) return;
   current?.skip();
 }
 

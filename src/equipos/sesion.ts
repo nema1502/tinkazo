@@ -22,12 +22,29 @@ export interface FuentesDeSesion {
   freighter: () => Promise<string | null>;
   /** La cuenta de prueba guardada en este navegador (solo en la red de pruebas). */
   prueba: () => Promise<string | null>;
-  /** Cuánto se espera a cada vía antes de seguir con la siguiente, en milisegundos (por defecto, `ESPERA_MAXIMA_MS`). */
+  /** Cuánto se espera a cada vía antes de seguir con la siguiente, en milisegundos (por defecto, `ESPERA_MAXIMA_MS`, y `ESPERA_GOOGLE_MS` para Google). */
   esperaMaximaMs?: number;
 }
 
 /** Lo que se espera a cada vía: si una extensión no contesta, la página sigue con la otra o con la entrada a mano. */
 export const ESPERA_MAXIMA_MS = 3_000;
+
+/**
+ * Lo que se espera a la cuenta de Google: retomarla puede tardar hasta 8 segundos con la red lenta (`LISTO_MS` en
+ * wallet-pollar.ts, que no se importa para no traer el SDK). Con 3, la página volvía a ofrecer Entrar con Google a quien
+ * ya había entrado (15 de noviembre de 2026).
+ */
+export const ESPERA_GOOGLE_MS = 8_000;
+
+/**
+ * Entra con Google y, si entró, deja guardado el tipo de sesión, como la herramienta (`afterConnect` en wallet-ui.ts):
+ * sin esto, la cabecera de las páginas de lectura y del registro seguía mostrando Entrar a quien entró desde el QR.
+ */
+export async function entrarYRecordar(entrar: () => Promise<string>, recordar: () => void): Promise<string> {
+  const cuenta = await entrar();
+  recordar();
+  return cuenta;
+}
 
 const valida = async (f: () => Promise<string | null>, esperaMs: number): Promise<string | null> => {
   let reloj: ReturnType<typeof setTimeout> | undefined;
@@ -55,6 +72,6 @@ export async function cuentaDeLaSesion(f: FuentesDeSesion): Promise<string | nul
     if (c) return c;
   }
   // Google se mira también sin la marca guardada: es lo que hacía la página antes, y Pollar sabe si hay sesión.
-  if (f.hayPollar) return valida(f.google, espera);
+  if (f.hayPollar) return valida(f.google, f.esperaMaximaMs ?? ESPERA_GOOGLE_MS);
   return null;
 }

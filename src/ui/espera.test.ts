@@ -13,11 +13,16 @@ import { QUEDA_MS, elegirAlAzar, enRueda, type JuegoAzar } from "./azar";
  * ruleta: queda el elegido directo, con la misma marca y la misma espera.
  */
 
-const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race" }));
+const h = vi.hoisted(() => ({ reduce: false, semilla: 0, elegido: "race", armarQr: vi.fn((..._a: unknown[]): any => Promise.resolve(undefined)) }));
 
 vi.mock("../sound", () => ({ beep: () => undefined, note: (n: number) => n }));
 vi.mock("./vista-grande", () => ({ rechazarGrande: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ soltarPantallaCompleta: () => undefined }));
+// El QR del espectador: el lugar y los datos son los de verdad; el dibujo (que pide el enlace corto) se anota.
+vi.mock("./espectador-enlace", async (orig) => ({
+  ...(await orig<typeof import("./espectador-enlace")>()),
+  armarQrDeEspectador: (...a: unknown[]) => h.armarQr(...a),
+}));
 
 const NOMBRES = ["Ana", "Beto", "Cami", "Dani", "Eva", "Fito", "Gaby"];
 
@@ -68,11 +73,11 @@ interface Abierta {
  * Prende la ronda (`app.frozen`) y abre la espera con un `Sorteo` de prueba y el panel de juegos abierto. `premios`: cuántos
  * se sortean. `extra.nombres`: la gente de la lista. `extra.juegos`: los juegos que ofrece el panel.
  */
-async function abrirEspera(premios = 1, extra: { nombres?: string[]; juegos?: typeof BASE } = {}): Promise<Abierta> {
+async function abrirEspera(premios = 1, extra: { nombres?: string[]; juegos?: typeof BASE; raffleId?: bigint } = {}): Promise<Abierta> {
   const { mostrarEspera } = await import("./espera");
   const { app } = await import("../state");
   app.drawn = null;
-  app.frozen = { names: extra.nombres ?? NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1 };
+  app.frozen = { names: extra.nombres ?? NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1, ...(extra.raffleId !== undefined ? { raffleId: extra.raffleId } : {}) };
   app.game = "race";
   const elegirJuego = vi.fn((g: string) => {
     // Como `elegirJuego` de freeze.ts: queda elegido, y `juegos()` lo refleja.
@@ -805,5 +810,112 @@ describe("lo que dice el panel de cada juego", () => {
     await abrirEspera();
     expect(document.querySelector(".espera-juegos")?.textContent).not.toMatch(/azar/i);
     expect(document.querySelector(".espera-juegos")?.textContent).not.toMatch(/[«»;]/);
+  });
+});
+
+describe("el QR del espectador durante la espera", () => {
+  beforeEach(() => h.armarQr.mockClear());
+
+  /** Los datos con los que la espera pidió armar el QR del espectador. */
+  const pedidos = (): Array<{ capa: HTMLElement; datos: Record<string, unknown> }> =>
+    (h.armarQr.mock.calls as unknown as Array<[HTMLElement, Record<string, unknown>]>).map(([capa, datos]) => ({ capa, datos }));
+
+  it("arma el QR del espectador con la ronda, el juego, el pace, los ganadores, los nombres y el número del sello", async () => {
+    await abrirEspera(2, { nombres: ["Ana", "Beto", "Cami"], raffleId: 42n });
+    const p = pedidos();
+    expect(p).toHaveLength(1);
+    expect(p[0]?.capa.classList.contains("espera")).toBe(true);
+    expect(p[0]?.datos).toMatchObject({ r: 1, g: "race", p: "normal", w: 2, z: "Un premio", n: ["Ana", "Beto", "Cami"], net: "testnet", i: "42" });
+    // El lugar del QR está en la espera, junto a la cuenta, aunque el dibujo llegue después.
+    expect(document.querySelector(".espera .espera-qr img")).toBeTruthy();
+  });
+
+  it("en la demo no hay QR: no es un sorteo real", async () => {
+    history.replaceState(null, "", "/?demo=1");
+    try {
+      await abrirEspera();
+      expect(pedidos()).toHaveLength(0);
+      expect(document.querySelector(".espera .espera-qr")).toBeNull();
+    } finally {
+      history.replaceState(null, "", "/");
+    }
+  });
+
+  for (const modo of ["marcarEnsayo", "marcarStand"] as const) {
+    it(`con ${modo === "marcarEnsayo" ? "el ensayo" : "el modo stand"} tampoco: no se graba nada ni se comparte la lista`, async () => {
+      const m = await import("../ensayo-modo");
+      m[modo](true);
+      try {
+        await abrirEspera();
+        expect(pedidos()).toHaveLength(0);
+        expect(document.querySelector(".espera .espera-qr")).toBeNull();
+      } finally {
+        m[modo](false);
+      }
+    });
+  }
+
+  it("sin el número del sorteo en Stellar (el modo libre) no hay QR: el celular no sabría cuándo lo lanza la sala", async () => {
+    await abrirEspera();
+    expect(pedidos()).toHaveLength(0);
+    expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
+  });
+
+  it("con el QR a la vista Cambiar de juego sigue, y el juego nuevo vuelve a publicar el QR con el mismo sello", async () => {
+    h.armarQr.mockResolvedValueOnce("https://tinkazo.app/c/AbCd1234#" + "k".repeat(22));
+    // `abrirEspera` abre el panel de juegos con un toque, y el QR llega después.
+    const { panel, elegirJuego } = await abrirEspera(1, { raffleId: 42n });
+    await vi.advanceTimersByTimeAsync(0);
+    // El panel sigue abierto y Cambiar de juego sigue a la vista: hasta el 16 de noviembre de 2026 se escondía.
+    expect(panel.hidden).toBe(false);
+    const cambiar = [...document.querySelectorAll<HTMLElement>(".espera [data-juego]")];
+    expect(cambiar.length).toBeGreaterThan(0);
+    expect(cambiar.some((b) => !b.hidden)).toBe(true);
+    // Se elige otro juego: queda elegido y el QR se vuelve a publicar con él, para el mismo sello.
+    const otro = panel.querySelector<HTMLButtonElement>('.espera-juego-op:not([aria-pressed="true"])');
+    otro?.click();
+    expect(elegirJuego).toHaveBeenCalledWith(otro?.dataset.game);
+    const { app } = await import("../state");
+    app.game = otro?.dataset.game as never;
+    const ultimo = h.armarQr.mock.calls.at(-1) as unknown as [HTMLElement, Record<string, unknown>, unknown];
+    expect(h.armarQr.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(ultimo[2]).toBe(app.frozen);
+  });
+
+  it("un cambio de duración desde la página, con la espera abierta, rehace el QR", async () => {
+    await abrirEspera(1, { raffleId: 42n });
+    await vi.advanceTimersByTimeAsync(0);
+    const antes = h.armarQr.mock.calls.length;
+    const { setPace } = await import("../state");
+    setPace("rapido");
+    document.dispatchEvent(new CustomEvent("tinkazo:ritmo"));
+    expect(h.armarQr.mock.calls.length).toBe(antes + 1);
+    expect((h.armarQr.mock.calls.at(-1) as unknown as [HTMLElement, Record<string, unknown>])[1]).toMatchObject({ p: "rapido" });
+    setPace("normal");
+  });
+
+  it("mientras llega el enlace corto, el lugar del QR dice que se está preparando y no dibuja nada", async () => {
+    await abrirEspera(1, { raffleId: 42n });
+    const figura = document.querySelector<HTMLElement>(".espera .espera-qr");
+    expect(figura?.dataset.estado).toBe("preparando");
+    expect(figura?.querySelector("img")?.hidden).toBe(true);
+    expect(figura?.querySelector(".espera-qr-estado")?.textContent).toBeTruthy();
+  });
+
+  it("con el sello todavía en camino no hay QR, y aparece cuando el sello entra, con el número del sorteo", async () => {
+    const { app } = await import("../state");
+    const { mostrarEspera } = await import("./espera");
+    app.drawn = null;
+    app.frozen = { names: ["Ana", "Beto", "Cami"], listHash: "ab", ts: 1, at: "", prize: "", round: 1, sinSello: true };
+    mostrarEspera(() => 30, { sortear: vi.fn(), aMano: () => false, graba: false, juegos: (() => juegos()) as never, elegirJuego: vi.fn(), premios: () => 1 });
+    expect(pedidos()).toHaveLength(0);
+    expect(document.querySelector<HTMLElement>(".espera .espera-qr")?.hidden).toBe(true);
+    // Entró el sello: el sorteo pasa a tener número, y el QR se arma con él.
+    const f = app.frozen as { raffleId?: bigint; sinSello?: boolean };
+    f.raffleId = 42n;
+    delete f.sinSello;
+    document.dispatchEvent(new CustomEvent("tinkazo:sello"));
+    expect(pedidos()).toHaveLength(1);
+    expect(pedidos()[0]?.datos).toMatchObject({ i: "42" });
   });
 });

@@ -6,8 +6,8 @@ import { isTurnOrder, ordenSinComprobante } from "../modos/turnos";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
-import { fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
-import { fotoDelJuegoActiva } from "./foto-juego-bandera";
+import { fotoDelJuegoEntra, fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoPara } from "./foto-juego-bandera";
 import { withRepeatCounts } from "./repeated-names";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
@@ -29,10 +29,10 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
  *
  * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
- * tiene ilustración (`foto-fondos.ts`) y la bandera `VITE_FOTO_JUEGO` está
- * prendida (`foto-juego-bandera.ts`, apagada por defecto), van dos fotos lado a
- * lado: la del juego, elegida, y la de siempre. Tocar una la elige, y se
- * comparte, se descarga o se copia solo esa. Mis sorteos, la página de
+ * tiene ilustración (`foto-fondos.ts`), está entre los que pasaron la mirada y
+ * la bandera `VITE_FOTO_JUEGO` no la apaga (`foto-juego-bandera.ts`, prendida
+ * por defecto), van dos fotos lado a lado, con cualquier cantidad de ganadores: la del juego, elegida, y la de
+ * siempre. Tocar una la elige, y se comparte, se descarga o se copia solo esa. Mis sorteos, la página de
  * verificación y los eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
@@ -255,6 +255,17 @@ function numerosDePremio(ganadores: readonly string[], persona: string): string 
   return numeros.length > 3 ? `${numeros.slice(0, 3).join(" ")} …` : numeros.join(" ");
 }
 
+/**
+ * Dónde está la lista completa, para la foto del juego cuando no se ven todos los nombres: el QR (`qr`) o el mensaje
+ * (`mensaje`), y «orden» en lugar de «lista» en un orden de turnos. El QR lleva la lista entera solo si el sorteo está
+ * anclado: sin sello (modo libre, demo, un sorteo que siguió sin sello), el comprobante rehace un solo ganador, y la frase
+ * del QR sería falsa. Ahí dice que está en el mensaje, que nombra a todos.
+ */
+function completaDe(lang: Lang, turnos: boolean, anclado: boolean): { qr: string; mensaje: string } {
+  const mensaje = cad(lang, turnos ? "fotoOrdenEnMensaje" : "fotoListaEnMensaje");
+  return { qr: anclado ? cad(lang, turnos ? "fotoOrdenEnQr" : "fotoListaEnQr") : mensaje, mensaje };
+}
+
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
 export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   // Los nombres ya llegan sin la marca de la línea sellada cuando la lista se lee por persona (`DatosSorteo.ganadores`).
@@ -305,6 +316,7 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
           d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
         ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
+    completa: completaDe(lang, turnos, !d.sinSello && d.numero !== undefined),
     enlace: sinComprobante ? "" : enlace,
     // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
     escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
@@ -465,6 +477,10 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     `<div class="cmp-lado">` +
     `<p class="note cmp-nota" style="display:none"></p>` +
     `<button class="primary cmp-wa" type="button" data-whatsapp disabled>${esc(cad(lang, "cmpPreparando"))}</button>` +
+    `<div class="cmp-mas">` +
+    `<button class="ghost cmp-fb" type="button" data-facebook disabled hidden>${esc(cad(lang, "cmpFb"))}</button>` +
+    `<button class="ghost cmp-ig" type="button" data-instagram disabled hidden>${esc(cad(lang, "cmpIg"))}</button>` +
+    `</div>` +
     `<p class="cmp-aviso" role="status" aria-live="polite"></p>` +
     `<div class="cmp-acc">` +
     `<button class="ghost" type="button" data-bajar disabled>${esc(cad(lang, "cmpBajarFoto"))}</button>` +
@@ -478,6 +494,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const q = <T extends HTMLElement>(sel: string): T => dlg.querySelector(sel) as T;
   const fotos = q<HTMLElement>(".cmp-fotos");
   const wa = q<HTMLButtonElement>("[data-whatsapp]");
+  const fb = q<HTMLButtonElement>("[data-facebook]");
+  const ig = q<HTMLButtonElement>("[data-instagram]");
   const bajar = q<HTMLButtonElement>("[data-bajar]");
   const copiar = q<HTMLButtonElement>("[data-copiar]");
   const txt = q<HTMLTextAreaElement>("#cmp-txt");
@@ -487,6 +505,8 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const urls: string[] = [];
   let archivos: File[] = [];
   let mensaje = "";
+  /** El enlace que se publica en Facebook: el del comprobante (el corto si salió). Sin comprobante, no hay. */
+  let enlaceParaPublicar = "";
   /** Dos fotos para elegir (la del juego y la de siempre): se comparte solo la elegida. */
   let elegir = false;
   let elegida = 0;
@@ -514,6 +534,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     if (!dlg.isConnected) return;
     mensaje = listo.mensaje;
     txt.value = mensaje;
+    enlaceParaPublicar = listo.fotos.find((f) => f.enlace)?.enlace ?? "";
     const ext = listo.fotos.length > 1;
     archivos = pngs.flatMap((png, i) =>
       png ? [new File([png], `${listo.archivo}${ext ? `-${i + 1}` : ""}.png`, { type: "image/png" })] : [],
@@ -570,6 +591,14 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       .join(" ");
     wa.textContent = cad(lang, "cmpWa");
     wa.disabled = false;
+    // Facebook siempre puede (abre el publicador con el enlace); Instagram solo
+    // en móvil, donde su app toma la foto: en computadora no hay camino y no se muestra.
+    // El publicador de Facebook recibe un enlace, no un mensaje: sin enlace (un sorteo sin sello) no se ofrece.
+    fb.disabled = !enlaceParaPublicar;
+    fb.hidden = !enlaceParaPublicar;
+    const celular = matchMedia("(pointer: coarse)").matches;
+    ig.disabled = !celular || !archivos.length;
+    ig.hidden = !celular;
     bajar.disabled = !archivos.length;
     bajar.textContent = cad(lang, elegidos().length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
     copiar.disabled = false;
@@ -581,6 +610,20 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   // Un segundo toque mientras la hoja del sistema está abierta haría fallar al
   // primero y abriría WhatsApp Web encima: se espera a que termine.
   let compartiendo = false;
+  // Facebook: el publicador de la web con el enlace del sorteo (la foto va aparte, copiada o bajada).
+  fb.addEventListener("click", () => {
+    if (!enlaceParaPublicar) return;
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(enlaceParaPublicar)}`, "_blank", "noopener,width=640,height=560");
+    contarCompartido(p, "copy");
+  });
+  // Instagram: en móvil, la foto elegida se baja y se abre Instagram, donde se sube.
+  ig.addEventListener("click", () => {
+    const primera = elegidos()[0];
+    if (primera) descargar(primera);
+    window.open("https://www.instagram.com/", "_blank", "noopener");
+    avisar(cad(lang, "cmpIgAviso"));
+    contarCompartido(p, "copy");
+  });
   wa.addEventListener("click", () => {
     if (compartiendo) return;
     compartiendo = true;
@@ -650,8 +693,9 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
           fotos: [foto],
-          // La misma foto sobre el fondo del juego que se jugó: se ofrece con la bandera prendida y si ese juego tiene ilustración.
-          ...(d.juego && fotoDelJuegoActiva() ? { juego: { ...foto, fondo: d.juego } } : {}),
+          // La misma foto sobre el fondo del juego que se jugó: con la bandera prendida, si el juego está en la lista y tiene
+          // ilustración, con cualquier cantidad de ganadores.
+          ...(d.juego && fotoDelJuegoPara(d.juego) && fotoDelJuegoEntra(foto) ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };

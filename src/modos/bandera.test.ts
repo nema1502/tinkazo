@@ -8,15 +8,15 @@ afterEach(() => {
 });
 
 describe("la bandera de los modos nuevos", () => {
-  it("apagada por defecto: sin la variable y sin parámetro no hay nada a la vista", () => {
-    expect(modesFlagOn()).toBe(false);
+  it("prendida por defecto: sin la variable ni el parámetro, el selector está a la vista", () => {
+    expect(modesFlagOn()).toBe(true);
     expect(requestedMode("")).toBeNull();
-    expect(modesVisible(undefined, "")).toBe(false);
+    expect(modesVisible(undefined, "")).toBe(true);
   });
 
-  it("solo el valor 1 prende la bandera de construcción", () => {
-    expect(modesFlagOn("1")).toBe(true);
-    for (const valor of [undefined, "", "0", "true", "turnos", 1, true]) expect(modesFlagOn(valor), String(valor)).toBe(false);
+  it("solo 0 o false la apagan, para un repliegue de emergencia", () => {
+    for (const valor of [undefined, "", "1", "true", "turnos", 1, true]) expect(modesFlagOn(valor), String(valor)).toBe(true);
+    for (const valor of ["0", "false", 0, false]) expect(modesFlagOn(valor), String(valor)).toBe(false);
   });
 
   it("lee la variable de construcción VITE_MODOS", () => {
@@ -38,8 +38,13 @@ describe("la bandera de los modos nuevos", () => {
   it("un modo que no existe, vacío o repetido en otro parámetro no cuenta", () => {
     for (const busqueda of ["?modo=", "?modo=otro", "?modo=turnos2", "?modos=turnos", "?turnos=1", "?demo=wheel", "?nw=5"]) {
       expect(requestedMode(busqueda), busqueda).toBeNull();
-      expect(modesVisible(undefined, busqueda), busqueda).toBe(false);
+      expect(modesVisible(undefined, busqueda), busqueda).toBe(true);
     }
+  });
+
+  it("el amigo secreto todavía no se puede pedir por la dirección ni mostrar por ese parámetro", () => {
+    expect(requestedMode("?modo=amigo")).toBeNull();
+    expect(abreLaHerramienta("?modo=amigo")).toBe(false);
   });
 
   it("con el parámetro los modos están a la vista aunque la bandera esté apagada", () => {
@@ -69,9 +74,9 @@ describe("la bandera de los modos nuevos", () => {
     expect(modoVigente("")).toBe("turnos");
   });
 
-  it("sin dirección (fuera del navegador) no pide ningún modo", () => {
+  it("sin dirección (fuera del navegador) no pide ningún modo, y el selector está a la vista", () => {
     expect(requestedMode()).toBeNull();
-    expect(modesVisible()).toBe(false);
+    expect(modesVisible()).toBe(true);
   });
 
   it("el enlace de verificación lleva el modo sin tocar el comprobante", () => {

@@ -20,7 +20,7 @@ vi.mock("./wallet-ui", () => ({ canAnchor: () => true, claveDeSellar: () => "fre
 vi.mock("./anchor", () => ({ limpiarDetalle: () => undefined }));
 vi.mock("./detalle-error", () => ({ ponerDetalle: () => undefined }));
 vi.mock("./siguiente", () => ({ verError: () => undefined }));
-vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false }));
+vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enStand: () => false }));
 vi.mock("../stellar/grifo", () => ({ grifoDisponible: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => h.cobro, redPrincipalConPollar: () => true }));
 vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => null, xlmBalance: async () => 0 }));

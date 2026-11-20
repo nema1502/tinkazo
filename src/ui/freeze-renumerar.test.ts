@@ -144,6 +144,7 @@ describe("sellar un reparto al que le borraron una línea a mano", () => {
   });
 
   it("sin los modos, la lista se sella tal cual: nada se reescribe", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     ta().value = LISTA_ROTA;
     h.sealOnChain.mockRejectedValue(new Error("boom"));
     const { freeze } = await import("./freeze");

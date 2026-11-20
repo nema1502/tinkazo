@@ -88,10 +88,11 @@ function dato(contenedor: HTMLElement, o: { dato: string; etiqueta: string; valo
 }
 
 /**
- * El panel, armado una vez por orden: quien lo muestra lo vuelve a usar mientras la orden no cambie. `alCambiar`: el
- * toque de Estoy en Bolivia, si el panel lo ofrece (sin quien lo atienda, no se pinta).
+ * El panel, armado una vez por orden: quien lo muestra lo vuelve a usar mientras no cambie nada de lo que dice (`panelDeLaOrden`).
+ * `alCambiar`: el toque de Estoy en Bolivia, si el panel lo ofrece (sin quien lo atienda, no se pinta). `abierto`: Más
+ * detalles se arma abierto, porque quien lo veía lo había abierto.
  */
-export function armarPanelDePago(p: PanelDePago, o: { alCambiar?: (e: Event) => void } = {}): HTMLDivElement {
+export function armarPanelDePago(p: PanelDePago, o: { alCambiar?: (e: Event) => void; abierto?: boolean } = {}): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "pago-panel";
   el.dataset.pago = "panel";
@@ -155,6 +156,7 @@ export function armarPanelDePago(p: PanelDePago, o: { alCambiar?: (e: Event) => 
   const mas = document.createElement("details");
   mas.className = "mas pago-mas";
   mas.dataset.pago = "detalles";
+  mas.open = o.abierto === true;
   const resumen = document.createElement("summary");
   resumen.textContent = t("pagoMasDetalles");
   mas.append(resumen);
@@ -164,7 +166,35 @@ export function armarPanelDePago(p: PanelDePago, o: { alCambiar?: (e: Event) => 
     parrafo.textContent = poner(x);
     mas.append(parrafo);
   }
+  // La nota numérica de la orden (`memoId`): para quien paga desde un exchange que solo acepta memos de números. Va
+  // plegada porque casi nadie la necesita: la nota de texto es la que vale, y esta no la reemplaza sino que acompaña.
+  dato(mas, { dato: "memoId", etiqueta: t("pagoMemoNumRotulo"), valor: p.memoId, copia: p.memoId });
+  const usoMemo = document.createElement("p");
+  usoMemo.className = "pago-detalle";
+  usoMemo.textContent = t("pagoMemoNumUso");
+  mas.append(usoMemo);
   mas.append(caja, app);
   el.append(mas);
   return el;
+}
+
+/** Un panel ya armado, con lo que lo reconoce: `orden` son los datos de la orden y `clave` es todo lo que muestra. */
+export interface PanelArmado {
+  orden: string;
+  clave: string;
+  el: HTMLElement;
+}
+
+/**
+ * El panel de esta orden: el mismo elemento mientras no cambie nada de lo que muestra (la orden, el idioma, el cambio,
+ * el renglón del saldo y lo plegado en Más detalles). Si cambia algo, por ejemplo cuando después de No llegó se suman
+ * casos a Más detalles, se arma de nuevo, y si es la misma orden, Más detalles queda abierto o cerrado como estaba.
+ * `previo`: el que ya se armó.
+ */
+export function panelDeLaOrden(previo: PanelArmado | null, p: PanelDePago, idioma: string, o: { alCambiar?: (e: Event) => void } = {}): PanelArmado {
+  const orden = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}|${p.memoId}`;
+  const clave = `${orden}|${p.correo}|${p.cambio ? "qr" : ""}|${p.detalles.map((x) => x.clave).join(",")}|${JSON.stringify(p.saldo ?? null)}|${idioma}`;
+  if (previo?.clave === clave) return previo;
+  const abierto = previo?.orden === orden && previo.el.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]')?.open === true;
+  return { orden, clave, el: armarPanelDePago(p, { ...o, abierto }) };
 }

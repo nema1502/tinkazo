@@ -180,13 +180,20 @@ describe("los textos de la compra con QR", () => {
     for (const k of CLAVES) for (const l of IDIOMAS) expect(TEXTOS_COMPRA[l][k], `${l} ${k}`).not.toMatch(/[«»‹›;·•—–―→←↑↓⇒⟶➜!¡]/);
   });
 
-  it("USDC y Stellar solo en el dato de la moneda de Pagá desde tu app", () => {
-    for (const l of IDIOMAS) expect(conClave(/\b(USDC|Stellar)\b/i, l), l).toEqual(["compraDatoMoneda"]);
+  it("USDC y Stellar solo en el dato de la moneda de Pagá desde tu app y en la línea de XLM de Más detalles", () => {
+    for (const l of IDIOMAS) expect(conClave(/\b(USDC|Stellar)\b/i, l), l).toEqual(["compraDatoMoneda", "compraDesdeXlm"]);
+  });
+
+  it("la línea de XLM dice cuándo sirve y no promete a dónde llega ni que el monto sea exacto", () => {
+    expect(TEXTOS_COMPRA.es.compraDesdeXlm).toMatch(/Solo sirve si tu app cambia el XLM a USDC al enviar/);
+    expect(TEXTOS_COMPRA.en.compraDesdeXlm).toMatch(/only works if your app converts XLM to USDC when you send/);
+    expect(TEXTOS_COMPRA.es.compraDesdeXlm).not.toMatch(/tu cuenta|orden|exact/i);
+    expect(TEXTOS_COMPRA.en.compraDesdeXlm).not.toMatch(/your account|order|exact/i);
   });
 
   it("memo, en español solo en el plegado que lo explica, y en inglés donde se nombra la nota", () => {
     expect(conClave(/\bmemo\b/i, "es")).toEqual(["compraNotaMemo"]);
-    expect(conClave(/\bmemo\b/i, "en")).toEqual(["compraAppLinea", "compraNotaMemo", "compraNotaRotulo"]);
+    expect(conClave(/\bmemo\b/i, "en")).toEqual(["compraAppLinea", "compraDesdeXlm", "compraNotaMemo", "compraNotaRotulo"]);
   });
 
   it("dólares digitales solo para el camino de pagar con ellos y en el plegado que explica qué es el saldo: para los montos, dólares", () => {
@@ -222,10 +229,15 @@ describe("los textos de la compra con QR", () => {
     for (const k of [...TITULOS, ...LINEAS]) expect(PLEGADOS_DE_LA_CUENTA_DE_PASO, k).not.toContain(k);
   });
 
-  it("nunca token, hash, transacción, billetera, red, firma, KYC, blockchain, XLM ni drand", () => {
+  it("nunca token, hash, transacción, billetera, red, firma, KYC, blockchain, XLM ni drand, salvo la línea de XLM de Más detalles", () => {
     for (const k of CLAVES) {
-      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\b(token|hash|transacci[oó]n|billetera|wallet|red|redes|firma|firmar|KYC|blockchain|XLM|lumens?|drand|cripto)\b/i);
-      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\b(token|hash|transactions?|wallet|network|signature|sign it|KYC|blockchain|XLM|lumens?|drand|crypto)\b/i);
+      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\b(token|hash|transacci[oó]n|billetera|wallet|red|redes|firma|firmar|KYC|blockchain|lumens?|drand|cripto)\b/i);
+      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\b(token|hash|transactions?|wallet|network|signature|sign it|KYC|blockchain|lumens?|drand|crypto)\b/i);
+    }
+    // XLM solo se nombra en la línea que explica qué pasa con quien tiene XLM y no USDC (`compraDesdeXlm`).
+    for (const k of CLAVES.filter((k) => k !== "compraDesdeXlm")) {
+      expect(TEXTOS_COMPRA.es[k], `es ${k}`).not.toMatch(/\bXLM\b/i);
+      expect(TEXTOS_COMPRA.en[k], `en ${k}`).not.toMatch(/\bXLM\b/i);
     }
   });
 
@@ -428,6 +440,9 @@ describe("cada pantalla dice su texto, palabra por palabra", () => {
     compraDatoMoneda: ["Moneda: USDC en Stellar", "Currency: USDC on Stellar"],
     compraNotaMemo: ["En tu app, la nota puede llamarse memo.", "Your app may call it a memo or a note."],
     compraSinDolares: ["¿No tenés dólares digitales? Pedile un cupón a quien organiza tu evento.", "Don't have digital dollars? Ask whoever runs your event for a coupon."],
+    // La línea de XLM de Más detalles: para quien tiene XLM y no USDC.
+    // Dice la condición (que la app cambie el XLM a USDC al enviar) y no promete a dónde llega ni que el monto sea exacto.
+    compraDesdeXlm: ["¿Tenés XLM y no USDC? Solo sirve si tu app cambia el XLM a USDC al enviar. Poné esta nota y fijate que llegue en USDC el monto de este pago.", "Got XLM instead of USDC? This only works if your app converts XLM to USDC when you send. Add this memo and make sure this payment's amount arrives in USDC."],
     compraSinQrTitulo: ["Ahora no hay pago con QR", "QR payment isn't available now"],
     compraSinQrLinea: ["Probá más tarde, o pagá con dólares digitales.", "Try later, or pay with digital dollars."],
     compraRevisionTitulo: ["Tu verificación está en revisión", "Your check is under review"],

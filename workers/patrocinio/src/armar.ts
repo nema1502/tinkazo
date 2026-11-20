@@ -32,6 +32,8 @@ export interface Variante {
   hashLista?: Uint8Array;
   /** Los ganadores del `seal` (`num_winners`); por defecto 1. */
   ganadores?: number;
+  /** La ronda del `seal`; por defecto 99. */
+  ronda?: bigint;
   /** Un memo de texto (la lista blanca no admite ninguno). */
   memo?: string;
   /** Argumentos a mano, en lugar de los del método. */
@@ -47,7 +49,7 @@ function argumentos(v: Variante): xdr.ScVal[] {
       nativeToScVal(v.hashLista ?? new Uint8Array(32).fill(7), { type: "bytes" }),
       nativeToScVal(5, { type: "u32" }),
       nativeToScVal(v.ganadores ?? 1, { type: "u32" }),
-      nativeToScVal(99n, { type: "u64" }),
+      nativeToScVal(v.ronda ?? 99n, { type: "u64" }),
       nativeToScVal("prueba", { type: "string" }),
     ];
   }
