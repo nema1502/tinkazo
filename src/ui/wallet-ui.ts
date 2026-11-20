@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
-import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress } from "../stellar/config";
-import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
+import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress, type NetworkName } from "../stellar/config";
+import { hasPollarKey } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -9,6 +9,7 @@ import { guardarBorrador } from "./participants";
 import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
+import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
 import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
@@ -238,17 +239,39 @@ let pidiendoEntrar = false;
 let recienEntro = false;
 
 /**
- * Si quedó una sesión guardada en este navegador para esta red: la cuenta de
- * prueba o Freighter (`session-store`), o la marca de Pollar
- * (`tinkazo.pollar.intent`, en wallet-pollar.ts, que no se carga para esto).
+ * Si quedó una sesión guardada en este navegador para esta red: es la misma
+ * pregunta que la hoja de modo le hace al otro modo (`cuenta-guardada.ts`).
  */
 function haySesionGuardada(): boolean {
-  if (loadSessionKind(network.name)) return true;
-  try {
-    return hasPollarKey(network.name) && leerMarcaPollar(localStorage, network.name) !== null;
-  } catch {
-    return false;
-  }
+  return hayCuentaGuardada(network.name);
+}
+
+/**
+ * La cuenta quedó abierta en el otro modo: en cuál, o `null` si esta página no lo dice.
+ *
+ * Sin sesión en este modo (ni volviendo), con modo Oficial para ofrecer en la
+ * dirección que falta y con una marca guardada del otro ·tipo de sesión o
+ * marca de Pollar, en `cuenta-guardada.ts`·. Solo se lee si existe: nunca se
+ * abre acá la sesión de la otra red (nema1502/tinkazo#90); la retoma la página
+ * cuando abre en ese modo.
+ */
+function cuentaEnElOtroModo(): NetworkName | null {
+  if (session || retomando || conectando) return null;
+  const destino: NetworkName = network.name === "mainnet" ? "testnet" : "mainnet";
+  if (destino === "mainnet" && !hayModoOficial) return null;
+  return hayCuentaGuardada(destino) ? destino : null;
+}
+
+/** El nombre visible del otro modo, con la frase de la cuenta abierta y la del botón para ir. */
+function textoDelOtroModo(destino: NetworkName): { linea: string; boton: string; chip: string; aria: string } {
+  const modo = t(modeNameKey(destino));
+  const linea = t("cuentaOtroModo").replace("{modo}", modo);
+  return {
+    linea,
+    boton: t("cuentaOtroModoIr").replace("{modo}", modo),
+    chip: t("cuentaOtroModoChip").replace("{modo}", modo),
+    aria: `${linea} ${t("cuentaOtroModoIr").replace("{modo}", modo)}`,
+  };
 }
 
 /** El navegador de una app, donde Google no deja entrar (src/navegador.ts). */
@@ -697,11 +720,19 @@ function pintarCuenta(): void {
     box.appendChild(net);
   }
 
-  const chip = crearChip(e, { tx: t, recien: recienEntro });
+  const destinoOtroModo = e.estado === "fuera" ? cuentaEnElOtroModo() : null;
+  const chip = crearChip(e, {
+    tx: t,
+    recien: recienEntro,
+    ...(destinoOtroModo ? { enOtroModo: { texto: textoDelOtroModo(destinoOtroModo).chip, aria: textoDelOtroModo(destinoOtroModo).aria } } : {}),
+  });
   if (e.estado === "dentro" && session) {
     // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
     chip.title = `${session.label}: ${session.address}`;
     chip.addEventListener("click", () => void showAccount());
+  } else if (destinoOtroModo) {
+    // La cuenta quedó abierta en el otro modo: tocar el chip manda para allá, y la página de allá retoma la sesión sola.
+    chip.addEventListener("click", () => void import("./modo-ui").then((m) => m.pasarAModo(destinoOtroModo)));
   } else if (e.estado === "fuera") {
     // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
     chip.addEventListener("click", () => void openPicker({ volverA: chip }));
@@ -771,8 +802,10 @@ function applyGate(): void {
     if (!(sellar as HTMLButtonElement).disabled) refreshFreezeLabel();
   }
   // La línea que pedía entrar encima de "Pegar lista" ya no va: el botón de la cabecera y el de sellar lo piden. Queda
-  // solo para lo que pasa ahora: retomar la sesión, conectar, o pedir el toque que el navegador exige.
-  if (!locked || !(retomando || conectando || pidiendoEntrar)) {
+  // solo para lo que pasa ahora: retomar la sesión, conectar, pedir el toque que el navegador exige... o decir en qué
+  // modo quedó la cuenta, con el botón para llegar hasta ella (nema1502/tinkazo#90).
+  const destino = !retomando && !conectando ? cuentaEnElOtroModo() : null;
+  if (!locked || !(retomando || conectando || pidiendoEntrar || destino)) {
     gate.style.display = "none";
     return;
   }
@@ -787,9 +820,12 @@ function applyGate(): void {
   const teniaElFoco = gate.contains(document.activeElement);
   gate.replaceChildren();
   const p = document.createElement("p");
-  // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
+  // Retomando o conectando no se ofrece nada; y si la cuenta quedó abierta en el otro modo, la puerta la nombra:
+  // en vez de pedir entrar como si nunca hubiera entrado, dice dónde está y pone el botón para ir.
   const ocupada = retomando || conectando;
-  p.textContent = t(retomando ? "gateRetomando" : conectando ? (cancelarEntrada ? "loginTerminando" : "connecting") : "cuentaPideGoogle");
+  p.textContent = destino
+    ? textoDelOtroModo(destino).linea
+    : t(retomando ? "gateRetomando" : conectando ? (cancelarEntrada ? "loginTerminando" : "connecting") : "cuentaPideGoogle");
   gate.appendChild(p);
   gate.classList.toggle("retomando", ocupada);
   // Terminando de entrar, lo único que se puede hacer es cancelar: le pide al SDK que pare y la puerta vuelve a como estaba.
@@ -802,10 +838,12 @@ function applyGate(): void {
     if (teniaElFoco || sinFoco()) b.focus({ preventScroll: true });
   }
   if (!ocupada) {
-    const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
-    b.type = "button";
-    gate.appendChild(b);
-    if (teniaElFoco) b.focus({ preventScroll: true });
+    const ir = destino
+      ? button(textoDelOtroModo(destino).boton, "ghost", () => void import("./modo-ui").then((m) => m.pasarAModo(destino)))
+      : button(t("cuentaPideEntrar"), "ghost", () => void entrar());
+    ir.type = "button";
+    gate.appendChild(ir);
+    if (teniaElFoco) ir.focus({ preventScroll: true });
   }
   gate.style.display = "";
 }
