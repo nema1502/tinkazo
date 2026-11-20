@@ -1,5 +1,6 @@
 import { HORIZON_URLS, type NetworkName } from "./config";
-import { type ContratoOficial, contratosOficiales, passphraseDe } from "./oficiales";
+import { type ContratoOficial, contratosOficiales, contratoDePremios, passphraseDe, type TablaDePremios } from "./oficiales";
+import { aceptarSelloDePremios, sobreDeLosArgumentos, type LecturaDeLaPromocion, type PremioDelSello } from "./premios";
 
 /**
  * El sello de un sorteo, leído del historial de transacciones de Stellar.
@@ -38,9 +39,11 @@ type Fetch = typeof fetch;
  *   fuente guarda. No quiere decir que la transacción no exista.
  * - `fallida`: existe, pero la red la rechazó: no selló nada.
  * - `no-es-un-sello`: no es una llamada a `seal`.
- * - `contrato-ajeno`: el contrato no es uno de los oficiales de esa red, o es un anterior y la
+ * - `contrato-ajeno`: el contrato no es uno de los oficiales de esa red, ni uno de los contratos de premios
+ *   designados en `deployments.json` (una campaña sella en su contrato de premios), o es un anterior y la
  *   transacción es posterior a su último sello oficial (`retirado`), o no tiene ese tope (`sinTope`).
- * - `red-caida`: no se pudo hablar con Horizon (corte, tiempo agotado, límite de pedidos o error del servidor).
+ * - `red-caida`: no se pudo hablar con Horizon ni con el RPC del contrato de premios (corte, tiempo agotado, límite de
+ *   pedidos o error del servidor), o no se pudo leer la promoción de una campaña (su estado vence como todo estado).
  * - `respuesta-invalida`: Horizon contestó algo que no es la transacción pedida.
  *
  * Solo `fallida`, `no-es-un-sello` y `contrato-ajeno` son una contradicción: se leyó la transacción y no
@@ -77,6 +80,12 @@ export interface SelloDelHistorial {
   closedAt: number;
   /** El ledger de la transacción: es el `sealed_ledger` del contrato. */
   ledger: number;
+  /**
+   * En el sello de una campaña, la promoción detrás: qué se depositó, las huellas de las bases y de la lista y
+   * el pago de cada premio, leídos de su contrato (`premios.ts`). `contractId` es, en ese caso, el contrato del
+   * sorteo oficial en el que la promoción selló, y `organizer`, la dirección del contrato de premios.
+   */
+  premio?: PremioDelSello;
 }
 
 export type LecturaDelHistorial =
@@ -97,6 +106,10 @@ export interface OpcionesDelHistorial {
   horizon?: string;
   /** Para las pruebas: otra lista de contratos oficiales. */
   contratos?: readonly ContratoOficial[];
+  /** Para las pruebas: otra tabla de contratos de premios (la de `deployments.json` si no se pasa). */
+  premios?: TablaDePremios;
+  /** Para las pruebas: otro lector de la promoción de un contrato de premios (`premios.ts`). */
+  leerPromocion?: (contrato: Parameters<typeof aceptarSelloDePremios>[0]["contrato"], promocionId: string) => Promise<LecturaDeLaPromocion>;
   /** Cuánto se espera cada intento (8 s). */
   tiempoMs?: number;
   /** Lo más que se acepta de una respuesta, en bytes (256 KB: una transacción de sello pesa unos 4). */
@@ -286,12 +299,47 @@ export async function leerHistorial(red: NetworkName, hash: string, op: Opciones
     if (llamada.functionName.toString() !== "seal") return fallo("no-es-un-sello");
 
     const contractId = sdk.Address.fromScAddress(llamada.contractAddress).toString();
-    const oficial = (op.contratos ?? contratosOficiales(red)).find((c) => c.red === red && c.contractId === contractId);
-    if (!oficial) return fallo("contrato-ajeno");
+    const oficiales = op.contratos ?? contratosOficiales(red);
+    const oficial = oficiales.find((c) => c.red === red && c.contractId === contractId);
+    // Una campaña sella en su contrato de premios, que sella adentro en el oficial: la tabla de
+    // `deployments.json` dice en cuáles se cree, y uno que no esté ahí es un contrato ajeno.
+    const dePremios = oficial ? null : contratoDePremios(red, contractId, op.premios);
+    if (!oficial && !dePremios) return fallo("contrato-ajeno");
     // Un contrato anterior sigue abierto: cualquiera puede sellar en él. Vale hasta su último sello oficial.
-    if (!oficial.vigente) {
+    if (oficial && !oficial.vigente) {
       if (!Number.isSafeInteger(oficial.ultimoLedger)) return fallo("contrato-ajeno", { sinTope: true });
       if (r.ledger > (oficial.ultimoLedger as number)) return fallo("contrato-ajeno", { retirado: true });
+    }
+
+    // El sello de una campaña: el sobre trae la promoción, las entradas y la ronda, y el estado de la promoción
+    // dice lo demás (la huella, la cantidad, los premios y en qué sorteo de la red selló).
+    if (dePremios) {
+      const sobre = sobreDeLosArgumentos(llamada.args, sdk.scValToNative);
+      if (!sobre) return fallo("no-es-un-sello");
+      const aceptado = await aceptarSelloDePremios({
+        contrato: dePremios,
+        sobre,
+        raffles: oficiales,
+        ...(op.leerPromocion ? { leer: op.leerPromocion } : {}),
+      });
+      if (!aceptado.ok) return fallo(aceptado.error);
+      return {
+        ok: true,
+        sello: {
+          hash,
+          hashInterior: hashes[1] as string,
+          contractId: aceptado.sello.raffle,
+          organizer: aceptado.sello.organizer,
+          listHash: aceptado.sello.listHash,
+          count: aceptado.sello.count,
+          numWinners: aceptado.sello.numWinners,
+          round: aceptado.sello.round,
+          meta: aceptado.sello.meta,
+          closedAt: cerrado,
+          ledger: r.ledger,
+          premio: aceptado.sello.premio,
+        },
+      };
     }
 
     // seal(organizer: Address, list_hash: BytesN<32>, count: u32, num_winners: u32, round: u64, meta: String)
