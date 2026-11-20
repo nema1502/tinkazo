@@ -752,6 +752,16 @@ describe("la vista del participante", () => {
     }
   });
 
+  it("si el nombre ya está en la sala, lo dice para que pruebe con otro", async () => {
+    h.anotarseEnSala.mockResolvedValue({ ok: false, motivo: "repetido" });
+    abrirParticipante(PARTICIPANTE, "es");
+    input().value = "Ana";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vista().textContent).toContain(T.es.jiPErrRepetido);
+    expect(vista().textContent).not.toContain(T.es.jiPErrOtro);
+  });
+
   it("el cierre de lista se anuncia, y quien no alcanzó a sumarse se queda afuera", async () => {
     abrirParticipante(PARTICIPANTE, "es");
     escucha().alCierre?.();
@@ -784,6 +794,20 @@ describe("la vista del participante", () => {
     expect(vista().textContent).toContain(T.es.jiPGanadores);
   });
 
+  it("el resultado grande lleva la palabra Ejemplo a la vista", async () => {
+    const ronda = { r: 1, randomness: "ab".repeat(32), listHash: bytesToHex(listHash(["Ana", "Beto"])), k: 1 };
+    abrirParticipante(PARTICIPANTE, "es");
+    escucha().alNombre(1, "Ana");
+    input().value = "Beto";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    escucha().alRonda?.(ronda);
+    const marca = vista().querySelector<HTMLElement>(".ji-p-cuerpo .ji-p-marca");
+    expect(marca?.textContent).toBe(T.es.jiPMarcaEjemplo);
+    // Va justo antes del resultado grande, no al pie.
+    expect(marca?.nextElementSibling?.classList.contains("ji-p-resultado")).toBe(true);
+  });
+
   it("si la lista del celular no es la que se selló, no afirma nada", async () => {
     abrirParticipante(PARTICIPANTE, "es");
     escucha().alNombre!(1, "Ana");
@@ -793,6 +817,20 @@ describe("la vista del participante", () => {
     escucha().alRonda?.({ r: 1, randomness: "ab".repeat(32), listHash: "b".repeat(64), k: 1 });
     expect(vista().textContent).toContain(T.es.jiPNoSePudo);
     expect(vista().textContent).not.toContain(T.es.jiPTeToco);
+  });
+
+  it("quien se anota antes de ver a los que entraron un instante antes llega igual a la lista sellada", async () => {
+    // La sala le da el 101 y el celular lo pone enseguida; Ana (1) y Beto (2) recién llegan con el sondeo siguiente.
+    abrirParticipante(PARTICIPANTE, "es");
+    input().value = "Dani";
+    botonSumarme().click();
+    await vi.advanceTimersByTimeAsync(0);
+    escucha().alNombre(1, "Ana");
+    escucha().alNombre(2, "Beto");
+    expect([...vista().querySelectorAll("ol li")].map((li) => li.textContent)).toEqual(["Ana", "Beto", "Dani"]);
+    escucha().alRonda?.({ r: 1, randomness: "ab".repeat(32), listHash: bytesToHex(listHash(["Ana", "Beto", "Dani"])), k: 1 });
+    expect(vista().textContent).not.toContain(T.es.jiPNoSePudo);
+    expect(vista().textContent).toContain(T.es.jiPGanadores);
   });
 
   it("sin haberse sumado, la ronda muestra igual quiénes salieron, y dice que quedó afuera", async () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { crearPanelInteractivo, initOrganizadorInteractivo } from "./organizador";
-import { anotarseEnSala, ganadoresDe, resultadoPersonal, seguirVivo } from "./participante";
+import { anotarseEnSala, ganadoresDe, listaEnOrden, resultadoPersonal, seguirVivo } from "./participante";
 import { bytesToHex } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { t, T } from "../i18n";
@@ -25,15 +25,53 @@ vi.mock("../ui/qr", () => ({
 
 /* --------------------------------------------------- la sala de mentira */
 
-function salaDeMentira() {
+/**
+ * Lo que lee la sala de un alta, como `leerAlta` en workers/sala/src/nombres.ts: una sala nueva (la forma 2, la de toda
+ * sala que se crea hoy) rechaza el texto plano y exige el JSON con el nombre cifrado, su huella y la llave del celular.
+ * Una sala anterior acepta el texto plano o el JSON, del que usa solo `d`.
+ */
+function leerAltaDeMentira(cuerpo: string, nueva: boolean): { d: string; h?: string; llave?: string } | null {
+  let x: unknown = cuerpo.trim();
+  if (cuerpo.trim().startsWith("{")) {
+    try {
+      x = JSON.parse(cuerpo);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof x === "string") return nueva ? null : { d: x };
+  if (typeof x !== "object" || x === null) return null;
+  const o = x as Record<string, unknown>;
+  if (typeof o.d !== "string") return null;
+  if (!nueva) return { d: o.d };
+  if (typeof o.h !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(o.h) || typeof o.llave !== "string" || !/^[A-Za-z0-9_-]{22}$/.test(o.llave)) return null;
+  return { d: o.d, h: o.h, llave: o.llave };
+}
+
+/**
+ * `servicio: "anterior"` es el servicio de antes de los juegos interactivos: no tiene las rutas del cierre, la ronda ni
+ * lo que mira el celular, y a cada una le contesta 404 como a cualquier ruta que no conoce.
+ */
+function salaDeMentira(opciones: { forma?: "nueva" | "vieja"; servicio?: "actual" | "anterior" } = {}) {
   const st = {
     id: "AbCd1234",
     token: "t".repeat(22),
+    nueva: (opciones.forma ?? "nueva") === "nueva",
+    anterior: opciones.servicio === "anterior",
     nombres: new Map<number, string>(),
+    /** La huella de cada nombre y el número de cada llave: con ellas la sala no repite nombres ni personas. */
+    huellas: new Map<number, string>(),
+    llaves: new Map<string, number>(),
     estado: "abierta" as "abierta" | "cerrada",
     ronda: null as { r: number; randomness: string; listHash: string; k: number } | null,
     seq: 0,
     borrada: false,
+  };
+  /** Saca un número de la sala con su huella y su llave, como borrar la fila en la sala de verdad. */
+  const sacar = (n: number): void => {
+    st.nombres.delete(n);
+    st.huellas.delete(n);
+    for (const [llave, m] of st.llaves) if (m === n) st.llaves.delete(llave);
   };
   const sockets: SocketDeMentira[] = [];
   const json = (cuerpo: unknown, status = 200): Response => new Response(JSON.stringify(cuerpo), { status });
@@ -77,14 +115,38 @@ function salaDeMentira() {
     // Un nombre cifrado de un celular.
     if (partes.length === 3 && metodo === "POST") {
       if (st.estado === "cerrada") return json({ error: "cerrada" }, 409);
+      const alta = leerAltaDeMentira(String(init?.body), st.nueva);
+      if (!alta) return json({ error: "forma" }, 400);
+      if (!alta.h || !alta.llave) {
+        const n = ++st.seq;
+        st.nombres.set(n, alta.d);
+        avisar({ t: "nombre", n, d: alta.d });
+        return json({ n }, 201);
+      }
+      const propia = st.llaves.get(alta.llave);
+      // El mismo celular con el mismo nombre: no cambia nada y contesta 200.
+      if (propia !== undefined && st.huellas.get(propia) === alta.h) return json({ n: propia }, 200);
+      if ([...st.huellas].some(([n, h]) => h === alta.h && n !== propia)) return json({ error: "repetido" }, 409);
       const n = ++st.seq;
-      st.nombres.set(n, String(init?.body));
-      avisar({ t: "nombre", n, d: String(init?.body) });
+      st.nombres.set(n, alta.d);
+      st.huellas.set(n, alta.h);
+      if (propia !== undefined) {
+        // Una corrección: el número viejo se va y el nuevo dice a cuál reemplaza.
+        sacar(propia);
+        st.llaves.set(alta.llave, n);
+        avisar({ t: "quitado", n: propia });
+        avisar({ t: "nombre", n, d: alta.d, r: [propia] });
+        return json({ n, r: [propia] }, 200);
+      }
+      st.llaves.set(alta.llave, n);
+      avisar({ t: "nombre", n, d: alta.d });
       return json({ n }, 201);
     }
     if (partes.length === 3 && metodo === "DELETE") {
       st.borrada = true;
       st.nombres.clear();
+      st.huellas.clear();
+      st.llaves.clear();
       return new Response(null, { status: 204 });
     }
     if (partes[3] === "nombres" && partes.length === 4 && metodo === "GET") {
@@ -94,10 +156,11 @@ function salaDeMentira() {
     }
     if (partes[3] === "nombres" && partes.length === 5 && metodo === "DELETE") {
       const n = Number(partes[4]);
-      st.nombres.delete(n);
+      sacar(n);
       avisar({ t: "quitado", n });
       return new Response(null, { status: 204 });
     }
+    if (st.anterior && partes.length === 4 && ["vivo", "ronda", "cierre"].includes(partes[3] ?? "")) return json({ error: "no-existe" }, 404);
     if (partes[3] === "vivo") {
       const desde = Number(u.searchParams.get("desde") ?? 0);
       return json({
@@ -129,6 +192,12 @@ function salaDeMentira() {
 /* ------------------------------------------------------- los ayudantes */
 
 const SERVICIO = "http://sala.test";
+
+/** Las dependencias de un celular: cada uno con su propia llave, como cada teléfono de verdad. */
+const celular = (sala: ReturnType<typeof salaDeMentira>, i: number) => ({
+  fetch: sala.router as unknown as typeof fetch,
+  llave: `celular${i}`.padEnd(22, "x"),
+});
 
 /** El panel, con la sala de mentira por detrás. Devuelve también la clave que salió en el QR. */
 function panelDe(sala: ReturnType<typeof salaDeMentira>) {
@@ -195,8 +264,28 @@ describe("el panel del organizador", () => {
     expect(panel.raiz.textContent).toContain(T.es.standSalaEnVivo);
   });
 
-  it("los nombres que llegan se descifran y se ven; los repetidos van a «Para revisar»", async () => {
+  it("un celular nuevo entra con el JSON de la sala, y la sala nueva rechaza el texto plano y el mismo nombre dos veces", async () => {
     const sala = salaDeMentira();
+    const { panel, clave } = panelDe(sala);
+    panel.abrir();
+    boton(panel.raiz, ".ji-abrir").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const texto = await sala.router(`${SERVICIO}/v1/sala/${sala.st.id}`, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: "A".repeat(60),
+    });
+    expect(texto.status).toBe(400);
+    await expect(anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1))).resolves.toEqual({ ok: true, n: 1 });
+    // El mismo celular que vuelve a mandar su nombre (recargó la página): 200, el mismo número.
+    await expect(anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1))).resolves.toEqual({ ok: true, n: 1 });
+    await expect(anotarseEnSala(sala.st.id, clave(), " ana ", SERVICIO, celular(sala, 2))).resolves.toEqual({ ok: false, motivo: "repetido" });
+    expect([...sala.st.nombres.keys()]).toEqual([1]);
+  });
+
+  it("los nombres que llegan se descifran y se ven; los repetidos van a «Para revisar»", async () => {
+    // Solo una sala anterior a los nombres únicos deja entrar el mismo nombre dos veces: el panel igual lo aparta.
+    const sala = salaDeMentira({ forma: "vieja" });
     const { panel, clave } = panelDe(sala);
     panel.abrir();
     boton(panel.raiz, ".ji-abrir").click();
@@ -204,8 +293,8 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 2));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 1);
     expect([...panel.raiz.querySelectorAll(".ji-nombres .ji-nombre")].map((li) => li.textContent)).toEqual(["Ana"]);
     // El segundo Ana espera en «Para revisar», con su botón para mostrarlo.
@@ -226,7 +315,7 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "mira malo.xyz", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "mira malo.xyz", SERVICIO, celular(sala, 1));
     await hasta(() => sala.st.nombres.size === 0);
     expect(panel.raiz.querySelectorAll(".ji-nombres li").length).toBe(0);
   });
@@ -240,7 +329,7 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 1);
     boton(panel.raiz, ".ji-quitar").click();
     await hasta(() => sala.st.nombres.size === 0);
@@ -256,8 +345,8 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
-    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, celular(sala, 2));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 2);
     // Antes de cerrar la lista no se puede sellar.
     expect(boton(panel.raiz, ".ji-sellar").disabled).toBe(true);
@@ -292,7 +381,7 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 1);
     boton(panel.raiz, ".ji-cerrar-lista").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -311,8 +400,8 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
-    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, celular(sala, 2));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 2);
     boton(panel.raiz, ".ji-cerrar-lista").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -327,6 +416,59 @@ describe("el panel del organizador", () => {
     expect(panel.raiz.textContent).not.toContain(T.es.jiErrRonda);
   });
 
+  it("si el servicio no conoce el cierre (404), lo dice y no da la lista por cerrada", async () => {
+    const sala = salaDeMentira({ servicio: "anterior" });
+    const { panel, clave } = panelDe(sala);
+    panel.abrir();
+    boton(panel.raiz, ".ji-abrir").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
+    socket.emitir("open");
+    await vi.advanceTimersByTimeAsync(0);
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, celular(sala, 2));
+    await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 2);
+    boton(panel.raiz, ".ji-cerrar-lista").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(panel.raiz.textContent).toContain(T.es.jiErrNoDisponible);
+    expect(panel.raiz.querySelector<HTMLElement>(".ji-cerrada")?.hidden).toBe(true);
+    expect(boton(panel.raiz, ".ji-sellar").disabled).toBe(true);
+    // No queda probando: el botón se queda quieto y no sale otro pedido.
+    expect(boton(panel.raiz, ".ji-cerrar-lista").disabled).toBe(true);
+    const cierres = (): number => sala.router.mock.calls.filter(([url]) => String(url).endsWith("/cierre")).length;
+    expect(cierres()).toBe(1);
+    boton(panel.raiz, ".ji-cerrar-lista").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cierres()).toBe(1);
+  });
+
+  it("si la sala no conoce la ronda (404), lo dice una vez y no queda reintentando", async () => {
+    const sala = salaDeMentira();
+    const { panel, clave } = panelDe(sala);
+    panel.abrir();
+    boton(panel.raiz, ".ji-abrir").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
+    socket.emitir("open");
+    await vi.advanceTimersByTimeAsync(0);
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, celular(sala, 2));
+    await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 2);
+    boton(panel.raiz, ".ji-cerrar-lista").click();
+    await vi.advanceTimersByTimeAsync(0);
+    sala.router.mockImplementationOnce(async () => new Response(JSON.stringify({ error: "no-existe" }), { status: 404 }));
+    boton(panel.raiz, ".ji-sellar").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(panel.raiz.textContent).toContain(T.es.jiErrNoDisponible);
+    expect(panel.raiz.textContent).not.toContain(T.es.jiErrRonda);
+    expect(sala.st.ronda).toBeNull();
+    expect(boton(panel.raiz, ".ji-sellar").disabled).toBe(true);
+    const pedidos = sala.router.mock.calls.length;
+    boton(panel.raiz, ".ji-sellar").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sala.router.mock.calls.length).toBe(pedidos);
+  });
+
   it("«Cerrar la sala» borra todo y el panel vuelve al principio", async () => {
     const sala = salaDeMentira();
     const { panel, clave } = panelDe(sala);
@@ -336,7 +478,7 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 1);
     boton(panel.raiz, ".ji-cerrar-sala").click();
     await vi.advanceTimersByTimeAsync(0);
@@ -353,7 +495,7 @@ describe("el panel del organizador", () => {
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, { fetch: sala.router as unknown as typeof fetch });
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 1);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(panel.abierta()).toBe(false);
@@ -392,7 +534,7 @@ describe("el flujo completo: unirse, cerrar, sellar y el resultado personal", ()
     await vi.advanceTimersByTimeAsync(0);
 
     // Los dos celulares: siguen /vivo con el cliente de participante de verdad.
-    const celulares = ["Ana", "Beto"].map((nombre) => {
+    const celulares = ["Ana", "Beto"].map((nombre, i) => {
       const visto = { nombres: new Map<number, string>(), quitados: [] as number[], cerrada: false, ronda: null as null | { r: number; randomness: string; listHash: string; k: number }, vencida: false };
       const s = seguirVivo(sala.st.id, clave(), SERVICIO, {
         alNombre: (n, nom) => void visto.nombres.set(n, nom),
@@ -407,12 +549,12 @@ describe("el flujo completo: unirse, cerrar, sellar y el resultado personal", ()
           visto.vencida = true;
         },
       }, dep);
-      return { nombre, visto, s };
+      return { nombre, llave: celular(sala, i + 1).llave, visto, s };
     });
 
     // Cada uno se anota con su nombre, cifrado con la clave del QR.
     for (const c of celulares) {
-      const r = await anotarseEnSala(sala.st.id, clave(), c.nombre, SERVICIO, dep);
+      const r = await anotarseEnSala(sala.st.id, clave(), c.nombre, SERVICIO, { ...dep, llave: c.llave });
       expect(r.ok).toBe(true);
     }
     // La pantalla los ve llegar (los descifra por el WebSocket).
@@ -448,6 +590,72 @@ describe("el flujo completo: unirse, cerrar, sellar y el resultado personal", ()
     for (const c of celulares) c.s.parar();
   });
 
+  it("un nombre que quedó en «Para revisar» sale de la sala al sellar, y cada celular llega a la lista sellada", async () => {
+    const sala = salaDeMentira();
+    const dep = { fetch: sala.router as unknown as typeof fetch, socket: (u: string) => new sala.SocketDeMentira(u) as unknown as WebSocket };
+    const { panel, clave } = panelDe(sala);
+    panel.abrir();
+    boton(panel.raiz, ".ji-abrir").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
+    socket.emitir("open");
+    await vi.advanceTimersByTimeAsync(0);
+    const celulares = ["Ana", "Beto", "pendejo"].map((nombre, i) => {
+      const visto = { nombres: new Map<number, string>(), alSortear: null as ReturnType<typeof resultadoPersonal> | null };
+      const s = seguirVivo(sala.st.id, clave(), SERVICIO, {
+        alNombre: (n, nom) => void visto.nombres.set(n, nom),
+        alQuitado: (n) => void visto.nombres.delete(n),
+        // Lo que el celular calcula en el momento en que le llega la ronda: es lo que pinta la vista.
+        alRonda: (r) => {
+          visto.alSortear = resultadoPersonal(listaEnOrden(visto.nombres), r, nombre);
+        },
+      }, dep);
+      return { nombre, llave: celular(sala, i + 1).llave, visto, s };
+    });
+    for (const c of celulares) await anotarseEnSala(sala.st.id, clave(), c.nombre, SERVICIO, { ...dep, llave: c.llave });
+    await hasta(() => panel.raiz.querySelectorAll(".ji-revisar-lista .ji-nombre").length === 1);
+    for (const c of celulares) await hasta(() => c.visto.nombres.size === 3);
+    boton(panel.raiz, ".ji-cerrar-lista").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // Quitar y compartir pasan antes del sondeo siguiente: el celular se entera de las dos cosas en la misma respuesta.
+    boton(panel.raiz, ".ji-sellar").click();
+    await vi.advanceTimersByTimeAsync(0);
+    await hasta(() => sala.st.ronda !== null);
+    // La pantalla selló solo a Ana y Beto, y la sala ya no tiene al que esperaba revisión.
+    expect(sala.st.ronda?.listHash).toBe(bytesToHex(listHash(["Ana", "Beto"])));
+    expect([...sala.st.nombres.keys()]).toEqual([1, 2]);
+    for (const c of celulares) await hasta(() => c.visto.alSortear !== null);
+    for (const c of celulares) expect(c.visto.alSortear, c.nombre).not.toBe("lista-distinta");
+    for (const c of celulares) c.s.parar();
+  });
+
+  it("si no se puede sacar de la sala lo que espera revisión, no sella y lo dice", async () => {
+    const sala = salaDeMentira();
+    const { panel, clave } = panelDe(sala);
+    panel.abrir();
+    boton(panel.raiz, ".ji-abrir").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
+    socket.emitir("open");
+    await vi.advanceTimersByTimeAsync(0);
+    for (const [i, nombre] of ["Ana", "Beto", "pendejo"].entries()) await anotarseEnSala(sala.st.id, clave(), nombre, SERVICIO, celular(sala, i + 1));
+    await hasta(() => panel.raiz.querySelectorAll(".ji-revisar-lista .ji-nombre").length === 1);
+    boton(panel.raiz, ".ji-cerrar-lista").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // Sin conexión justo al quitar: la ronda no sale, y el botón sigue para volver a probar.
+    const delServicio = sala.router.getMockImplementation();
+    sala.router.mockImplementation(async (url: string, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "DELETE") throw new TypeError("sin red");
+      return (delServicio as NonNullable<typeof delServicio>)(url, init);
+    });
+    boton(panel.raiz, ".ji-sellar").click();
+    await hasta(() => panel.raiz.textContent?.includes(T.es.standSalaErrQuitar as string) ?? false);
+    expect(sala.st.ronda).toBeNull();
+    expect(sala.st.nombres.size).toBe(3);
+    expect(panel.raiz.textContent).toContain(T.es.standSalaErrQuitar);
+    expect(boton(panel.raiz, ".ji-sellar").disabled).toBe(false);
+  });
+
   it("un celular que entra tarde reconstruye la lista y ve el mismo resultado", async () => {
     const sala = salaDeMentira();
     const dep = { fetch: sala.router as unknown as typeof fetch, socket: (u: string) => new sala.SocketDeMentira(u) as unknown as WebSocket };
@@ -458,8 +666,8 @@ describe("el flujo completo: unirse, cerrar, sellar y el resultado personal", ()
     const socket = sala.sockets.at(-1) as InstanceType<typeof sala.SocketDeMentira>;
     socket.emitir("open");
     await vi.advanceTimersByTimeAsync(0);
-    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, dep);
-    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, dep);
+    await anotarseEnSala(sala.st.id, clave(), "Ana", SERVICIO, celular(sala, 1));
+    await anotarseEnSala(sala.st.id, clave(), "Beto", SERVICIO, celular(sala, 2));
     await hasta(() => panel.raiz.querySelectorAll(".ji-nombres li").length === 2);
     boton(panel.raiz, ".ji-cerrar-lista").click();
     await vi.advanceTimersByTimeAsync(0);

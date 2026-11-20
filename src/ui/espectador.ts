@@ -13,7 +13,15 @@ import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQr } from "./qr";
 import { servicioDeSala } from "../sala/cliente";
 import { revisarNombre } from "../sala/filtro";
-import { anotarseEnSala, seguirVivo, ganadoresDe, resultadoPersonal, type DatosParticipante, type RondaViva } from "../sala/participante";
+import {
+  anotarseEnSala,
+  seguirVivo,
+  ganadoresDe,
+  listaEnOrden,
+  resultadoPersonal,
+  type DatosParticipante,
+  type RondaViva,
+} from "../sala/participante";
 import { etiquetaConCuenta, ponerEtiquetas } from "../equipos/etiquetas";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { hayModoOficial } from "../stellar/config";
@@ -782,7 +790,7 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
     const ol = document.createElement("ol");
     ol.className = "ji-p-lista";
     ol.setAttribute("aria-label", t("jiPListaAria"));
-    for (const nombre of nombres.values()) {
+    for (const nombre of listaEnOrden(nombres)) {
       const li = document.createElement("li");
       li.textContent = nombre;
       ol.append(li);
@@ -792,7 +800,8 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
 
   function pintarResultado(nodo: HTMLElement): void {
     nodo.replaceChildren();
-    const lista = [...nombres.values()];
+    // Por número, como sella la pantalla: el propio nombre entra al mapa antes que los que llegaron un instante antes.
+    const lista = listaEnOrden(nombres);
     const ganadores = ronda ? ganadoresDe(lista, ronda) : null;
     if (!ganadores) {
       const p = document.createElement("p");
@@ -802,6 +811,11 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
       return;
     }
     const estado = resultadoPersonal(lista, ronda as RondaViva, miNombre ?? "");
+    // La palabra Ejemplo va pegada al resultado grande: nadie tiene que leer la línea del pie para saber que no es un sorteo.
+    const marca = document.createElement("span");
+    marca.className = "sticker ji-p-marca";
+    marca.textContent = t("jiPMarcaEjemplo");
+    nodo.append(marca);
     const grande = document.createElement("p");
     grande.className = "ji-p-resultado";
     grande.textContent = t(estado === "te-toco" ? "jiPTeToco" : "jiPNoGano");
@@ -881,7 +895,9 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
           pintar();
           return;
         }
-        aviso.textContent = t(r.motivo === "cerrada" ? "jiPTarde" : r.motivo === "llena" ? "jiPErrLlena" : r.motivo === "red" ? "jiPErrRed" : "jiPErrOtro");
+        // Un nombre que ya está en la sala no entra dos veces: se dice, para que pruebe con otro y no reintente igual.
+        const motivos: Record<string, string> = { cerrada: "jiPTarde", llena: "jiPErrLlena", red: "jiPErrRed", repetido: "jiPErrRepetido" };
+        aviso.textContent = t(motivos[r.motivo] ?? "jiPErrOtro");
         input.focus();
       });
     };

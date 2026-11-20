@@ -937,14 +937,20 @@ export class Sala extends DurableObject<Env> {
     return { ok: true };
   }
 
-  /** Lo que mira el celular del participante, sin token: la lista cifrada, el estado y la ronda compartida. */
-  async vivo(desde: number): Promise<Resultado<{ hay: number; estado: EstadoDeLista; ronda: RondaDeSala | null; nombres: { n: number; d: string }[] }>> {
+  /**
+   * Lo que mira el celular del participante, sin token: la lista cifrada, el estado y la ronda compartida. `ns` son los
+   * números que siguen en la sala: el celular que ya vio uno que falta sabe que lo quitaron, y su lista queda igual a
+   * la que se sella.
+   */
+  async vivo(
+    desde: number,
+  ): Promise<Resultado<{ hay: number; estado: EstadoDeLista; ronda: RondaDeSala | null; ns: number[]; nombres: { n: number; d: string }[] }>> {
     if (!this.dato("huella")) return { ok: false, motivo: "no-existe" };
     const nombres = this.ctx.storage.sql
       .exec<{ n: number; d: string }>("SELECT n, d FROM nombres WHERE n > ? ORDER BY n LIMIT ?", desde, MAX_NOMBRES)
       .toArray();
-    const hay = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM nombres").one().c;
-    return { ok: true, hay, estado: this.estadoDeLista(), ronda: this.ronda(), nombres };
+    const ns = this.ctx.storage.sql.exec<{ n: number }>("SELECT n FROM nombres ORDER BY n").toArray().map((f) => f.n);
+    return { ok: true, hay: ns.length, estado: this.estadoDeLista(), ronda: this.ronda(), ns, nombres };
   }
 
   /** Cierra la sala: avisa a la pantalla, suelta los sockets y borra todo, la alarma también. */
@@ -1566,7 +1572,7 @@ export default {
       if (partes.length === 4 && partes[3] === "vivo" && req.method === "GET") {
         const desde = Math.max(0, Math.floor(Number(url.searchParams.get("desde") ?? "0")) || 0);
         const r = await salaDe(id).vivo(desde);
-        return r.ok ? json({ hay: r.hay, estado: r.estado, ronda: r.ronda, nombres: r.nombres }, 200, h) : falla(r, h);
+        return r.ok ? json({ hay: r.hay, estado: r.estado, ronda: r.ronda, ns: r.ns, nombres: r.nombres }, 200, h) : falla(r, h);
       }
 
       // La pantalla abre su WebSocket. Los navegadores mandan el origen: solo el sitio.
