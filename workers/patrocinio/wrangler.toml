@@ -67,6 +67,12 @@ class_name = "Patrocinio"
 tag = "v1"
 new_sqlite_classes = ["Patrocinio"]
 
+# El envío de correo de Cloudflare, para el correo de bienvenida (el mismo que usa la sala: el envío está habilitado para el
+# dominio, no para un Worker). Sin restricción de destino: el portero le escribe solo a la dirección de la ficha de la persona
+# que recibió el regalo, leída con la sesión ya verificada. No se usa mientras CORREO_BIENVENIDA esté en "0".
+[[env.mainnet.send_email]]
+name = "CORREO"
+
 [env.mainnet.vars]
 RED = "mainnet"
 # La patrocinadora de mainnet (O2), creada el 11 de noviembre de 2026: dos llaves, la fría de quien mantiene el
@@ -175,3 +181,10 @@ RESERVA_REGALO_CREDITOS = "3000"
 ORGANIZADORA_SORTEOS = "3"
 ORGANIZADORA_DIAS = "10"
 ORGANIZADORAS_DIA = "30"
+# El correo de bienvenida: uno solo por persona, unos 20 minutos después de recibir el regalo, desde la alarma del objeto. Nace
+# apagado: solo "1" lo prende, y prenderlo pide desplegar con la palabra de quien mantiene el proyecto, después de una prueba a
+# una casilla propia y con el renglón de los términos ya publicado. La dirección se lee de la ficha de la persona y no se guarda.
+# En caliente: correo_bienvenida_cerrado (1 lo apaga sin desplegar, 0 lo deja salir) y correo_bienvenida_dia (correos por día,
+# de 1 a 1000; 0 vuelve a 25). El remitente es una dirección del dominio habilitado para el envío, como el de la sala.
+CORREO_BIENVENIDA = "0"
+CORREO_DE = "hola@tinkazo.app"

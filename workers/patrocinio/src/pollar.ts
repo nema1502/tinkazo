@@ -2,8 +2,9 @@
  * Lo que el portero de mainnet le pregunta a Pollar con la llave secreta de la app (`POLLAR_SECRETO`): quién es la
  * persona que manda una sesión (`tokens/verify`), cuál es su billetera de Stellar (`users`), cuántos créditos le
  * quedan a la app y qué se cobró en el día (`billing/credits`, para el piso y la vigilancia de firmas), el patrocinio
- * de la app (`treasury/sponsorship`, solo lectura) y, en la fase 2, abrir la cuenta de quien tiene acceso
- * (`wallets/fund`). Nada más.
+ * de la app (`treasury/sponsorship`, solo lectura), en la fase 2, abrir la cuenta de quien tiene acceso
+ * (`wallets/fund`) y, para el correo de bienvenida, el correo, el nombre de pila y el idioma de la fila de la persona
+ * (`users`), que no se guardan. Nada más.
  *
  * - El servidor de Pollar va fijo en el código (`servidores.ts`): ninguna variable puede mandar la llave a otro lado.
  * - Cada llamada espera 8 segundos como máximo. Una falla nunca se toma como un sí.
@@ -14,6 +15,7 @@
  * El reloj y el `fetch` entran como argumentos: las pruebas nunca tocan la red.
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
+import { type IdiomaDelCorreo, MAX_NOMBRE, esCorreo, limpiarTexto } from "./correo-bienvenida";
 import { type Fetch, ServidorAjeno, haciaPollar } from "./servidores";
 import { MAX_MOVIMIENTOS } from "./vigilancia";
 
@@ -46,6 +48,38 @@ export type Apertura = { ok: true; estado: "pedido"; pedido: string } | { ok: tr
 export type Movimientos = { ok: true; movimientos: unknown[] } | { ok: false };
 /** Las banderas del patrocinio de la app (`sponsor_…`). */
 export type Patrocinio = { ok: true; banderas: Record<string, boolean> } | { ok: false };
+/**
+ * Lo que el correo de bienvenida lee de la fila de la persona: vive solo en la memoria del Worker mientras se arma y se
+ * manda el correo. Nunca va a una tabla, al registro, a un error ni a una respuesta. `idioma` null es que la fila no lo dice.
+ */
+export interface DatosParaCorreo {
+  correo: string;
+  nombre: string | null;
+  idioma: IdiomaDelCorreo | null;
+}
+/** Lo más que se espera la ficha de la persona para el correo: menos que las otras llamadas, como en la sala. */
+export const ESPERA_FICHA_MS = 6_000;
+/**
+ * La ficha no se pudo leer por algo que puede andar en un rato (Pollar lento, sin red, con 429 o 5xx, o una respuesta
+ * rara): todavía no se mandó nada, así que se puede volver a intentar sin escribirle dos veces a nadie.
+ */
+export const FICHA_PASAJERA = "pasajera";
+/** Los códigos de la llamada que cuentan como falla pasajera de la ficha. */
+const PASAJERAS: ReadonlySet<string> = new Set(["tiempo", "red", "ajeno", "largo"]);
+
+/**
+ * El idioma de una fila, solo si alguno de los campos que puede traer (`language`, `locale` o `lang`, por confirmar con
+ * una respuesta de verdad) dice español o inglés sin dudas. Lo demás es null, y el correo va en los dos.
+ */
+function idiomaDeLaFila(fila: Record<string, unknown>): IdiomaDelCorreo | null {
+  for (const campo of ["language", "locale", "lang"]) {
+    const valor = fila[campo];
+    if (typeof valor !== "string") continue;
+    const m = /^(en|es)(?:[-_][A-Za-z0-9]{2,4})?$/iu.exec(valor.trim());
+    if (m?.[1]) return m[1].toLowerCase() === "en" ? "en" : "es";
+  }
+  return null;
+}
 
 /** El id de un pedido de Pollar: se guarda en el alta, así que solo lo que tiene forma de id. */
 const PEDIDO = /^[A-Za-z0-9_.:-]{1,200}$/;
@@ -208,15 +242,18 @@ export class Pollar {
     this.memoria = o.memoriaCreditos ?? { leer: () => enMemoria, guardar: (valor, ms) => void (enMemoria = { valor, ms }) };
   }
 
-  /** Un pedido a Pollar con la llave y el tiempo máximo. No lanza: cualquier falla vuelve como `ok:false` con un código fijo. */
-  private async llamar(ruta: string, init: RequestInit = {}): Promise<Lectura> {
+  /**
+   * Un pedido a Pollar con la llave y el tiempo máximo (el de siempre, o uno más corto para la ficha del correo). No lanza:
+   * cualquier falla vuelve como `ok:false` con un código fijo.
+   */
+  private async llamar(ruta: string, init: RequestInit = {}, esperaMs: number = this.esperaMs): Promise<Lectura> {
     const control = new AbortController();
     let temporizador: ReturnType<typeof setTimeout> | undefined;
     const tiempo = new Promise<Lectura>((resolver) => {
       temporizador = setTimeout(() => {
         control.abort();
         resolver({ ok: false, codigo: "tiempo" });
-      }, this.esperaMs);
+      }, esperaMs);
     });
     const pedido = (async (): Promise<Lectura> => {
       try {
@@ -379,6 +416,54 @@ export class Pollar {
       return { ok: false };
     }
     return { ok: true, cuenta: unica([...cuentas]) };
+  }
+
+  /**
+   * Lo que el correo de bienvenida necesita de la persona, leído de su fila en `users` con la llave secreta: la fila que
+   * tiene exactamente este id (el que dio la sesión verificada, nunca algo que mande el navegador), aunque la búsqueda
+   * traiga otras. Su correo tiene que tener forma de correo, el nombre de pila sale limpio y a 40 caracteres, y el idioma
+   * solo si la fila lo dice claro. Sin la fila, con dos filas, sin correo o con Pollar caído, lento o raro: null. Espera
+   * menos que las otras llamadas (`ESPERA_FICHA_MS`). Nunca lanza, nunca guarda lo que leyó y el registro lleva solo
+   * `correo-bienvenida` con un código fijo: nunca la dirección, el nombre ni el id.
+   */
+  async datosParaCorreo(usuario: string): Promise<DatosParaCorreo | null> {
+    const f = await this.fichaParaCorreo(usuario);
+    return f === FICHA_PASAJERA ? null : f;
+  }
+
+  /**
+   * Lo mismo que `datosParaCorreo`, pero dice aparte cuándo la falla es pasajera (`FICHA_PASAJERA`): sin respuesta a tiempo,
+   * sin red, con 429 o 5xx, o con algo inesperado. Con eso el correo vuelve a mirar en un rato en lugar de dar por perdida a
+   * esa persona. Sin fila, con dos, sin correo o con una forma que no se entiende sigue siendo null. El registro, igual.
+   */
+  async fichaParaCorreo(usuario: string): Promise<DatosParaCorreo | typeof FICHA_PASAJERA | null> {
+    const sin = (codigo: string | number): null => {
+      this.registrar("correo-bienvenida", { codigo });
+      return null;
+    };
+    const pasajera = (codigo: string): typeof FICHA_PASAJERA => {
+      this.registrar("correo-bienvenida", { codigo });
+      return FICHA_PASAJERA;
+    };
+    try {
+      if (typeof usuario !== "string" || !USUARIO.test(usuario)) return sin("usuario");
+      const ruta = `/v3/users?q=${encodeURIComponent(usuario)}&limit=200`;
+      const l = await this.llamar(ruta, { method: "GET" }, Math.min(ESPERA_FICHA_MS, this.esperaMs));
+      if (!l.ok) return PASAJERAS.has(l.codigo) ? pasajera(l.codigo) : sin(l.codigo);
+      if (l.estado === 429 || l.estado >= 500) return pasajera("estado");
+      if (l.estado !== 200) return sin("estado");
+      const c = l.cuerpo?.content;
+      const items = c && typeof c === "object" && !Array.isArray(c) ? (c as { items?: unknown }).items : undefined;
+      if (l.cuerpo?.success !== true || l.cuerpo.code !== "SERVER_SDK_USERS_LIST" || !Array.isArray(items)) return sin("forma");
+      const filas = items.filter((x): x is Record<string, unknown> => !!x && typeof x === "object" && (x as { id?: unknown }).id === usuario);
+      if (filas.length !== 1) return sin(filas.length ? "filas-repetidas" : "sin-fila");
+      const fila = filas[0] as Record<string, unknown>;
+      if (!esCorreo(fila.email)) return sin("sin-correo");
+      const nombre = limpiarTexto(fila.first_name, MAX_NOMBRE);
+      return { correo: fila.email, nombre: nombre === "" ? null : nombre, idioma: idiomaDeLaFila(fila) };
+    } catch {
+      return pasajera("inesperado");
+    }
   }
 
   /**

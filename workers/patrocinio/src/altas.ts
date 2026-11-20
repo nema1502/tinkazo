@@ -104,7 +104,17 @@ export type Bienvenida =
  * La referencia del regalo de una persona: la del derecho (única, así el regalo es uno por persona) y la del alta que nace por
  * este camino. Nunca se anota: lleva el id de la persona.
  */
-export const refDeBienvenida = (usuario: string): string => `gratis:${usuario}`;
+const PREFIJO_BIENVENIDA = "gratis:";
+export const refDeBienvenida = (usuario: string): string => `${PREFIJO_BIENVENIDA}${usuario}`;
+
+/** Un regalo de bienvenida, como lo mira el correo: nunca se anota, lleva el id de la persona. */
+export interface RegaloParaCorreo {
+  id: number;
+  usuario: string;
+  sorteos: number;
+  vence: number;
+  creado: number;
+}
 
 export interface EstadoLote {
   lote: string;
@@ -277,6 +287,31 @@ export class Altas {
   /** Si la persona ya recibió el regalo de bienvenida. Solo lee. */
   recibioBienvenida(usuario: string): boolean {
     return this.filas("SELECT 1 AS n FROM derechos WHERE ref = ?", refDeBienvenida(usuario)).length > 0;
+  }
+
+  /**
+   * Los regalos de bienvenida que siguen al derecho `despuesDe` (su id), en el orden en que se dieron y de a `cuantos`: los que
+   * mira el correo de bienvenida. De cada uno, solo lo que el correo necesita: la persona (sale de la referencia
+   * `gratis:<persona>`), sus sorteos, su vencimiento y cuándo se dio. Solo lee.
+   */
+  regalosParaCorreo(despuesDe: number, cuantos: number): RegaloParaCorreo[] {
+    const filas = this.filas(
+      "SELECT id, ref, sorteos, vence, creado FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%' AND id > ? ORDER BY id LIMIT ?",
+      despuesDe,
+      cuantos,
+    );
+    return filas.map((f) => ({
+      id: Number(f.id),
+      usuario: String(f.ref).slice(PREFIJO_BIENVENIDA.length),
+      sorteos: Number(f.sorteos),
+      vence: Number(f.vence),
+      creado: Number(f.creado),
+    }));
+  }
+
+  /** El id del último regalo de bienvenida dado, o 0 si no hay ninguno: desde dónde empieza a mirar el correo al prenderse. */
+  ultimoRegalo(): number {
+    return Number(this.filas("SELECT COALESCE(MAX(id), 0) AS n FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%'")[0]?.n ?? 0);
   }
 
   /** Cuántos regalos de bienvenida se dieron después de `desde` (ms): lo que miran los frenos por día y por hora. */
