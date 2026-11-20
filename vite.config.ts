@@ -4,7 +4,11 @@ import { dirname, resolve } from "node:path";
 import { defineConfig, loadEnv, runnerImport, type Plugin } from "vite";
 import { configDefaults } from "vitest/config";
 import { problemasDeAlta } from "./src/stellar/alta-build";
+import { avisosDelRetiro, problemasDeLaComision, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
+import { comisionDelBuild, costoDelRetiroDelToml, cuentasDelPorteroEnElToml, retirosDelToml } from "./src/stellar/comision-config";
+import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
 import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
+import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
 
 type Dict = Record<string, unknown>;
 
@@ -82,7 +86,7 @@ function textosPorPagina(): Plugin {
 
         const T = await diccionario();
         const claves = new Set<string>();
-        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|i-con-comision|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
         for (const k of delHtml) {
           if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
             this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);
@@ -124,6 +128,30 @@ function validarBanderasDeAlta(): Plugin {
 }
 
 /**
+ * El build no sale con el modo premios (`VITE_RAMPA=premios`) junto con el pago con el saldo o la compra con QR
+ * (`src/stellar/premios-build.ts`): esos dos firman con la cuenta que guarda el premio o le traen dinero, y el modo
+ * promete que solo ve su saldo y recibe. No toca ninguna bandera: obliga a elegir cuál va. Falla antes de armar nada y
+ * sin escribir los valores de las variables. Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ *
+ * Con la misma lectura del entorno frena también el voto por contenido (`VITE_VOTO_POR_CONTENIDO`, issue 180): un valor
+ * que no es 1 ni 0, o el 1 junto con el pago con el saldo, la compra con QR o la carga con bolivianos. Y pagar con Google
+ * (`VITE_PAGAR_CON_GOOGLE`): un valor que no es 1 ni 0, o el 1 sin el voto por contenido, sin el modo premios, sin los premios
+ * pagados, sin el portero de la red principal o junto con la venta que paga con el saldo o con QR.
+ */
+function validarModoPremios(): Plugin {
+  return {
+    name: "tinkazo:modo-premios",
+    apply: "build",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_"]);
+      const problemas = [...problemasDePremios(env), ...problemasDelVoto(env), ...problemasDePagarConGoogle(env)];
+      const dicen = "Hay banderas del modo premios, del voto por contenido o de pagar con Google que no van juntas";
+      if (problemas.length) throw new Error(`${dicen}:\n- ${problemas.join("\n- ")}`);
+    },
+  };
+}
+
+/**
  * La publicación de producción con la compra de sorteos prendida no sale mientras las páginas digan lo de antes: que es
  * gratis para todos, que los precios se publican pronto o que no se venden paquetes, o con lo de la compra todavía en un
  * `<template data-con-cobro>` (`src/alta-textos-con-cobro.ts`). El HTML se cambia en el mismo commit que la prende. Las
@@ -141,6 +169,87 @@ function validarPaginasConCobro(): Plugin {
       );
       const problemas = problemasDeLasPaginasConCobro(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]), paginas);
       if (problemas.length) throw new Error(`Las páginas todavía dicen lo de antes de la compra de sorteos:\n- ${problemas.join("\n- ")}`);
+    },
+  };
+}
+
+/**
+ * La `CUENTA_COBROS` de la red principal del portero, leída de `workers/patrocinio/wrangler.toml`, o `null` si el
+ * archivo no está o no la trae. Es contra la que el control del costo del retiro compara `VITE_RETIRO_CUENTA`.
+ */
+function cuentaDeCobrosDelWrangler(): string | null {
+  try {
+    return cuentaDeCobrosDelPortero(readFileSync(resolve(__dirname, "workers/patrocinio/wrangler.toml"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El build no sale con el costo del retiro a medio poner (`VITE_RETIRO_COSTO` y `VITE_RETIRO_CUENTA`): una de las dos
+ * mal escrita, la cuenta sin el costo, o un costo que se cobra sin las demás piezas que lo sostienen
+ * (`src/stellar/premios-build.ts`). La publicación de producción con el costo prendido tampoco sale mientras la portada
+ * diga que Tinkazo no cobra nada (`src/costo-del-retiro-portada.ts`). Con el costo puesto y sin la cuenta el build sale,
+ * no cobra nada, y lo deja dicho en la bitácora. Falla antes de armar nada y sin escribir los valores de las variables.
+ * Solo al construir: `pnpm dev` y las pruebas no se frenan.
+ */
+function validarCostoDelRetiro(): Plugin {
+  let avisos: string[] = [];
+  return {
+    name: "tinkazo:costo-del-retiro",
+    apply: "build",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]);
+      const portada = { "index.html": readFileSync(resolve(__dirname, "index.html"), "utf8") };
+      const problemas = [
+        ...problemasDelRetiro(env, { cuentaDeCobros: cuentaDeCobrosDelWrangler() }),
+        ...problemasDeLaPortadaConRetiro(env, portada),
+      ];
+      if (problemas.length) throw new Error(`El costo del retiro está a medio poner:\n- ${problemas.join("\n- ")}`);
+      avisos = avisosDelRetiro(env);
+    },
+    buildStart() {
+      for (const aviso of avisos) this.warn(aviso);
+    },
+  };
+}
+
+/** El texto de `workers/patrocinio/wrangler.toml` (solo se lee), o `null` si el archivo no está. */
+function wranglerDelPortero(): string | null {
+  try {
+    return readFileSync(resolve(__dirname, "workers/patrocinio/wrangler.toml"), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * El build no sale con lo que Tinkazo cobra a una campaña a medio poner (`VITE_COMISION_PB`, `VITE_COMISION_MINIMO` y
+ * `VITE_COMISION_CUENTA`): las tres van juntas, bien escritas, con el costo del retiro cobrándose y pagar con Google
+ * prendido, con la cuenta común (no la de cobros ni otra del portero) y con el mismo costo y los retiros prendidos del lado
+ * del portero (`src/stellar/premios-build.ts`). Ningún mensaje escribe el valor de una variable. Con la comisión prendida
+ * el build deja además `comision.json` en la carpeta publicada, con los datos públicos que usa el guion de quien activa
+ * campañas para comprobar que lo que calcula es lo mismo que muestra el sitio.
+ */
+function validarComision(): Plugin {
+  let publicar: Record<string, string> | null = null;
+  return {
+    name: "tinkazo:comision",
+    apply: "build",
+    config(_config, { mode }) {
+      const env = loadEnv(mode, __dirname, ["VITE_"]);
+      const toml = wranglerDelPortero();
+      const problemas = problemasDeLaComision(env, {
+        cuentasDelPortero: toml === null ? null : cuentasDelPorteroEnElToml(toml),
+        costoDelPortero: toml === null ? null : costoDelRetiroDelToml(toml),
+        retirosDelPortero: toml === null ? null : retirosDelToml(toml),
+      });
+      if (problemas.length) throw new Error(`La comisión de las campañas está a medio poner:\n- ${problemas.join("\n- ")}`);
+      const c = comisionDelBuild(env);
+      publicar = c ? { pb: String(c.pb), minimo: String(c.minimo), cuenta: c.cuenta, costo: String(c.costo) } : null;
+    },
+    generateBundle() {
+      if (publicar) this.emitFile({ type: "asset", fileName: "comision.json", source: `${JSON.stringify(publicar)}\n` });
     },
   };
 }
@@ -257,7 +366,17 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [validarBanderasDeAlta(), validarPaginasConCobro(), textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
+  plugins: [
+    validarBanderasDeAlta(),
+    validarModoPremios(),
+    validarCostoDelRetiro(),
+    validarComision(),
+    validarPaginasConCobro(),
+    textosPorPagina(),
+    adelantarLectura(),
+    enlacesCortos(),
+    avisoDeTrozosGrandes(),
+  ],
   build: {
     target: "es2022",
     sourcemap: true,
@@ -282,6 +401,8 @@ export default defineConfig({
         "sorteo-para-eventos": resolve(__dirname, "sorteo-para-eventos.html"),
         lista: resolve(__dirname, "lista.html"),
         equipos: resolve(__dirname, "equipos.html"),
+        participar: resolve(__dirname, "participar.html"),
+        "crear-campana": resolve(__dirname, "crear-campana.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),

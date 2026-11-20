@@ -34,6 +34,8 @@ export interface DatosDeGanadores {
    * varias veces. Quien decide a quién se saca con «No está» usa otra cosa y no pasa por acá.
    */
   porPersona?: boolean;
+  /** Una ronda del stand: nadie gana, salen personas. Solo cambia el título de la lista de más de seis. */
+  stand?: boolean;
 }
 
 /**
@@ -127,7 +129,7 @@ export function htmlDeGanadores(d: DatosDeGanadores): string {
   const premio = d.prize ? `<p class="winner-prize winner-lista-premio"><span>${esc(t("winnersCadaUno"))}</span> ${esc(d.prize)}</p>` : "";
   return (
     tarjeta(d, 0) +
-    `<h3 class="winner-lista-t" id="winner-lista-t">${esc(t("winnersOtros").replace("{n}", String(n - 1)))}</h3>${premio}` +
+    `<h3 class="winner-lista-t" id="winner-lista-t">${esc(t(d.stand ? "standOtros" : "winnersOtros").replace("{n}", String(n - 1)))}</h3>${premio}` +
     `<ol class="winner-lista" aria-labelledby="winner-lista-t" start="2">${d.winners.map((_, k) => (k === 0 ? "" : fila(d, k))).join("")}</ol>` +
     varias
   );

@@ -1,3 +1,4 @@
+import { enStand } from "../../ensayo-modo";
 import type { Textos } from "./kit";
 
 /**
@@ -11,6 +12,10 @@ import type { Textos } from "./kit";
  * En pantalla, «surazo» (en inglés, «the south wind»). Solo exclamaciones y nunca
  * eliminado, perdió, suerte ni el nombre de la leyenda: la leyenda no se cuenta
  * durante el show, va en la tarjeta de después.
+ *
+ * En una ronda del stand nadie se lleva un premio: salen personas. Las frases que hablaban de premios se
+ * eligen al decirlas (un `get` o una función), no al cargar el archivo, porque el stand se prende y se apaga
+ * en la pestaña.
  */
 export const TEXTOS = {
   es: {
@@ -24,7 +29,7 @@ export const TEXTOS = {
     aguanta: "¡Aguantá tu flor!",
     asoma: "¡Se asoma un colibrí!",
     paso: "¡Pasó la ráfaga!",
-    conPremio: (n: string) => `¡Se va ${n}, con premio!`,
+    conPremio: (n: string) => (enStand() ? `¡Se va ${n}, pero sale!` : `¡Se va ${n}, con premio!`),
     hilo: (n: string) => `¡${n} cuelga de un hilo!`,
     engancha: (n: string) => `¡${n} se agarró más abajo!`,
     quedanDos: "¡Quedan las dos últimas!",
@@ -32,8 +37,12 @@ export const TEXTOS = {
     visita: (n: string) => `¿Será ${n}?`,
     visitaSin: "¿Será esta flor?",
     visitaOtra: "¿O será la otra?",
-    ultima: "Una sola se lleva el premio.",
-    ultimaDos: "Las dos se llevan premio.",
+    get ultima() {
+      return enStand() ? "Una sola sale." : "Una sola se lleva el premio.";
+    },
+    get ultimaDos() {
+      return enStand() ? "Salen las dos." : "Las dos se llevan premio.";
+    },
   },
   en: {
     intro: "The toborochi blooms!",
@@ -46,7 +55,7 @@ export const TEXTOS = {
     aguanta: "Hold on, flower!",
     asoma: "A hummingbird peeks in!",
     paso: "The gust has passed!",
-    conPremio: (n: string) => `There goes ${n}, with a prize!`,
+    conPremio: (n: string) => (enStand() ? `There goes ${n}, picked too!` : `There goes ${n}, with a prize!`),
     hilo: (n: string) => `${n} hangs by a thread!`,
     engancha: (n: string) => `${n} caught on lower down!`,
     quedanDos: "The last two remain!",
@@ -54,7 +63,11 @@ export const TEXTOS = {
     visita: (n: string) => `Is it ${n}?`,
     visitaSin: "Is it this flower?",
     visitaOtra: "Or is it the other?",
-    ultima: "Only one takes the prize.",
-    ultimaDos: "Both of them take a prize.",
+    get ultima() {
+      return enStand() ? "Only one is picked." : "Only one takes the prize.";
+    },
+    get ultimaDos() {
+      return enStand() ? "Both are picked." : "Both of them take a prize.";
+    },
   },
 } satisfies Textos;

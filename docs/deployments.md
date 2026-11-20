@@ -21,6 +21,12 @@ Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explo
 | `draw` (verificación BLS + selección) | `39c4fad01488269e…` | 827 191 stroops = **0,083 XLM** |
 | `extend` (renta de instancia y código, 7 → 120 días) | `67e9b763fc86706a…` | 151 530 187 stroops = **15,15 XLM** |
 
+## Contratos de premios
+
+Una campaña con premio no sella en el contrato del sorteo: llama a `seal` de su **contrato de premios**, que sella adentro en el sorteo oficial de esa red (`Config.raffle`). El comprobante acepta ese sello por historial solo si el contrato está designado en la tabla `premios` de `src/stellar/deployments.json`, con la misma forma que el resto de la lista (una entrada por red con `contractId`, `deployedAt` y, si se quiere, `wasmSha256` para comprobar el código que corre la instancia). El mecanismo está completo y probado (`src/stellar/premios.ts`, D-20 y D-30 de [architecture.md](architecture.md), protocolo §7.3).
+
+**La tabla está vacía, en mainnet y en testnet.** La designación oficial de los contratos de premios es el issue **#167**, todavía abierto: hasta que se cierre, ninguna red acepta un sello de premios y el comprobante de una campaña lo informa como un contrato ajeno. Los tres ensayos de testnet (CCJGBEFC…, CD3FDTS7… y CD5UZXNV…) sirven como fixtures de las pruebas con la tabla inyectada, no como designación: no se agregan direcciones que el proyecto no haya elegido. Cerrar el #167 es agregar acá la fila del contrato designado de cada red y la entrada en `deployments.json`, en el mismo commit.
+
 ## Versión 0.2.0, la de mainnet
 
 La versión 0.2.0 del paquete (`contracts/raffle/Cargo.toml`) cambia dos cosas respecto del tag `v0.1.0`: el tope de ganadores sube de 32 a 300 (`MAX_WINNERS`) y las entradas del sorteo (`Raffle`, `Draw`) se renuevan con su propio umbral: cuando les quedan menos de 30 días, `seal`, `draw` y `extend` las dejan en 120 (`TTL_ENTRADA_THRESHOLD` y `TTL_ENTRADA_EXTEND_TO`; el `v0.1.0` usaba 60 y 120, y la variante de testnet del 25 de octubre, 2 y 7). El umbral de 30 es lo que queda de los 120 después de los 90 días que el contrato de premios lee un sorteo desde su `draw`: hasta ahí nadie tiene que renovar nada. Una prueba (`las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30`) comprueba que nacen con 120, que a los 89 días `extend` no las toca y que a los 91 las vuelve a dejar en 120.

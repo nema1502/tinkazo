@@ -14,7 +14,6 @@ import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
 import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
 import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
-import { fijarParaEspectadores, fijoPara } from "./espectador-fijo";
 import { isTurnOrder } from "../modos/turnos";
 
 /**
@@ -45,6 +44,8 @@ import { isTurnOrder } from "../modos/turnos";
  *   salir, la persona dijo que no, y no se le vuelve a forzar en esta sesión.
  * - "Cambiar de juego": el selector está detrás de esta capa, así que el juego
  *   se elige sin salir (secundario: la acción principal sigue siendo una sola).
+ *   Desde el 16 de noviembre de 2026 sigue con el QR de espectadores a la vista:
+ *   el cambio se publica en el mismo enlace o en uno nuevo (`espectador-enlace.ts`).
  * - Si la cuenta pide aprobar cada operación en una ventana (Freighter), el
  *   sorteo no puede arrancar solo: la espera queda abierta con una sola acción
  *   grande, "Lanzar el sorteo". La cuenta de prueba y la de Google (Pollar)
@@ -353,16 +354,12 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       esconderQrDeEspectador(back);
       return;
     }
-    void armarQrDeEspectador(back, datos).then((corto) => {
-      if (!back.isConnected) return;
-      // Desde que el QR se ve, quien escanea juega con este juego y este ritmo: quedan para este sorteo
-      // (`espectador-fijo.ts`). Si cambiaran, el celular coronaría antes que la sala.
-      if (corto) {
-        fijarParaEspectadores(datos.r, datos.g, datos.p);
-        fijarJuego();
-      }
+    // Con el QR ya visto, un cambio de juego o de duración se publica en el mismo enlace si se puede, o en uno nuevo
+    // (`armarQrDeEspectador`). La sala lo anota (`espectadores-de-la-sala.ts`) y graba después de su final: algún
+    // celular puede seguir con el juego de antes.
+    void armarQrDeEspectador(back, datos, app.frozen).then(() => {
       // El QR llega después de medir la espera y ocupa más que la línea de preparando: se vuelve a medir para que entre.
-      ajusta();
+      if (back.isConnected) ajusta();
     });
   };
   armarQr();
@@ -411,6 +408,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     removeEventListener("keydown", tecla);
     document.removeEventListener("tinkazo:error", alError);
     document.removeEventListener("tinkazo:sello", alSello);
+    document.removeEventListener("tinkazo:cambio-con-qr", alCambiar);
+    document.removeEventListener("tinkazo:ritmo", alCambiar);
     back.remove();
     if (abierta === yo) abierta = null;
     if (alShow) return;
@@ -480,13 +479,12 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     for (const b of botonesJuego) b.setAttribute("aria-expanded", "false");
     if (devolverFoco) botonJuego()?.focus({ preventScroll: true });
   };
-  /** Ya se mira en celulares con este juego (`espectador-fijo.ts`): se va el botón de cambiarlo, y el nombre queda. */
-  const fijarJuego = (): void => {
-    cerrarJuegos(false);
-    for (const b of botonesJuego) b.hidden = true;
+  // El juego o la duración cambiaron desde la página (la duración del selector): el nombre y el QR se rehacen.
+  const alCambiar = (): void => {
+    if (back.isConnected && fase === "cuenta") pintarNombre();
   };
-  // Vuelta a la espera de un sorteo que ya se mira en celulares: el juego ya está fijo.
-  if (fijoPara(app.frozen, !!app.drawn)) fijarJuego();
+  document.addEventListener("tinkazo:cambio-con-qr", alCambiar);
+  document.addEventListener("tinkazo:ritmo", alCambiar);
 
   /* ------------------------------------------------------------- el azar */
   /** El temporizador de la ruleta, y si está corriendo: un toque más no la arranca de nuevo, y cerrarla la para. */

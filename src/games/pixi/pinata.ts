@@ -15,6 +15,7 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { decisivo as momentoDecisivo } from "./decisivo";
 import type { Caja, Caramelo3D, EntradaPinata, MontajePinata3D, VistaPinata3D } from "../tres/pinata-3d-tipos";
 import { HOLGURA_3D } from "./ganador-altura";
 
@@ -152,6 +153,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
 
   let phase: Phase = "hang";
   let tAll = 0, acc = 0, tHold = 0, saidUpTo = -1, lastOutSaid = -9, crackLevel = 0;
+  // El momento decisivo (`decisivo.ts`): la rotura, que deja caer a la rival. Hasta ahí quedan dos caramelos adentro, y
+  // el que se asoma en el susto es uno de los dos, mitad y mitad. Los otros premios caen sembrados con todos.
+  S.decisivoEn(() => tAll, momentoDecisivo(T_BREAK - 0.3));
   let lastCreak = -9, creaks = 0, fallNote = 0, landed = false;
   let theta = 0.34, omega = 0, peekSaid = false, lastSaid2 = false, crowned = false, brokeDone = false, rivalDropped = false;
   const inside = (): Candy[] => candies.filter((c) => c.inside);

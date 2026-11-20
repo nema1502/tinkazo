@@ -17,6 +17,8 @@ const h = vi.hoisted(() => ({
   app: { frozen: null as unknown, drawn: null as unknown },
   nombres: [] as string[],
   cargoPaso: false,
+  /** La descarga del paso falla: la importación se rechaza, como con el wifi de un evento cortado. */
+  pasoRoto: false,
   abrir: vi.fn(),
   billetera: null as unknown,
   local: { activacion: "lista", proteccion: "lista" } as { activacion: string; proteccion: string },
@@ -36,10 +38,21 @@ vi.mock("../stellar/config", async (orig) => {
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => h.sinGrabar, enPractica: () => h.practica }));
 vi.mock("../state", () => ({ app: h.app }));
 vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => h.billetera }));
-vi.mock("./cuenta-lista", () => {
-  h.cargoPaso = true;
-  return { abrirCuentaLista: (...a: unknown[]) => h.abrir(...a) };
-});
+/**
+ * El paso. La descarga fallida no se arma con `vi.doMock`, porque eso solo deja el cambio en una cola que aplica la
+ * próxima descarga de cualquier módulo: si otra importación suelta se la lleva y no terminó de registrarla, el caso ve el
+ * simulacro viejo (la falla de a ratos, solo con la máquina cargada). Acá lo decide `h.pasoRoto`, leído en el momento. Al
+ * resolver `await import()` el motor lee `then` del módulo: ahí se anota que se bajó (en cada importación) y, si el paso
+ * está roto, se lanza y la importación se rechaza igual que una descarga cortada.
+ */
+vi.mock("./cuenta-lista", () => ({
+  get then() {
+    h.cargoPaso = true;
+    if (h.pasoRoto) throw new TypeError("Failed to fetch dynamically imported module");
+    return undefined;
+  },
+  abrirCuentaLista: (...a: unknown[]) => h.abrir(...a),
+}));
 vi.mock("../stellar/wallet-pollar", () => ({ pollarWallet: { label: "Google" }, puedeUsarDesbloqueo: async () => false }));
 vi.mock("./wallet-ui", () => ({
   currentSession: () => ({ address: "GAAA", mail: "ana@mail.com" }),
@@ -68,6 +81,7 @@ beforeEach(() => {
   h.app.drawn = null;
   h.nombres = [];
   h.cargoPaso = false;
+  h.pasoRoto = false;
   h.abrir.mockReset();
   h.abrir.mockResolvedValue(true);
   h.estado.mockReset();
@@ -127,20 +141,10 @@ describe("el sello en modo Oficial", () => {
     const volverA = document.createElement("button");
     expect(await f.cuentaListaParaGrabar("sello", { volverA })).toBe(false);
     expect(h.abrir).toHaveBeenCalledTimes(1);
-    const op = h.abrir.mock.calls[0]?.[2] as { para: string; inicial: { proteccion: string }; volverA: unknown; aviso: () => string };
+    const op = h.abrir.mock.calls[0]?.[2] as { para: string; inicial: { proteccion: string }; volverA: unknown };
     expect(op.para).toBe("sello");
     expect(op.inicial.proteccion).toBe("falta");
     expect(op.volverA).toBe(volverA);
-    expect(op.aviso()).toBe("Entraste con Google como Ana.");
-    // La línea se arma en cada pintada: con los botones ES y EN del paso, cambia de idioma con lo demás.
-    const { setLang } = await import("../i18n");
-    setLang("en");
-    try {
-      expect(op.aviso()).not.toBe("Entraste con Google como Ana.");
-      expect(op.aviso()).toContain("Ana");
-    } finally {
-      setLang("es");
-    }
   });
 
   it("si no se pudo saber en 4 segundos, abre el paso igual", async () => {
@@ -277,13 +281,8 @@ describe("si el paso no se puede bajar", () => {
   const aviso = (): HTMLElement | null => document.querySelector(".cl-no-cargo");
   /** La descarga del paso falla, como en el wifi de un evento: el `import()` se rechaza. */
   const romperPaso = (): void => {
-    vi.doMock("./cuenta-lista", () => {
-      throw new TypeError("Failed to fetch dynamically imported module");
-    });
+    h.pasoRoto = true;
   };
-  afterEach(() => {
-    vi.doMock("./cuenta-lista", () => ({ abrirCuentaLista: (...a: unknown[]) => h.abrir(...a) }));
-  });
 
   it("al sellar no sigue, pero lo dice con el aviso de volver a cargar la página", async () => {
     romperPaso();

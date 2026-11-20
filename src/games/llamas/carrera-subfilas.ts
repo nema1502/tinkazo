@@ -250,13 +250,15 @@ function cumpleCarriles(mascara: number, finalistas: readonly number[]): boolean
   return true;
 }
 
-/** Las asignaciones de una fila que empatan en el menor peso, cada una con cuánto alterna por puesto, y la que eligió la moneda. */
+/** Las asignaciones de una fila que empatan en el menor peso, cada una con cuánto alterna por puesto y cuántas quedan solas, y la que eligió la moneda. */
 interface Candidatas {
   /** Las máscaras (un bit prendido es arriba), en el orden en que se encontraron. */
   mascaras: number[];
   /** Cuánto alterna por puesto cada una. */
   alterna: number[];
-  /** La elegida sin mirar las costuras: la que más alterna, y entre ellas la de la moneda. */
+  /** Cuántas finalistas quedan solas de su lado cada una (0 ninguna, 1 alguna). */
+  solas: number[];
+  /** La elegida sin mirar las costuras: la que deja solas menos finalistas, luego la que más alterna, y entre ellas la de la moneda. */
   elegida: number;
   /** El azar de la fila, para volver a elegir entre empatadas. */
   azar: () => number;
@@ -268,6 +270,28 @@ interface Candidatas {
 const signosDeMascara = (mascara: number, k: number): Signo[] => Array.from({ length: k }, (_, i) => ((mascara >> i) & 1 ? -1 : 1));
 
 /**
+ * Si la máscara deja alguna finalista sola de su lado, en filas de tres o más (las dos van a subfilas opuestas y si un
+ * lado queda con una sola, esa es una de ellas): la subfila que queda sola delata a la ganadora, porque la que va sola
+ * de su lado es casi siempre finalista. Con menos de tres en la fila no hay lado solitario que importar (una fila de
+ * una o dos corre en sus subfilas sin quedar sola a la vista) y los lados con alguien que no es finalista no cuentan:
+ * la señal mira a la ganadora, que es finalista.
+ */
+function solasDe(mascara: number, k: number, finalistas: readonly number[]): 0 | 1 {
+  if (k < 3 || finalistas.length === 0) return 0;
+  for (const s of [-1, 1]) {
+    let n = 0;
+    let conFinalista = false;
+    for (let i = 0; i < k; i++) {
+      if (((mascara >> i) & 1 ? -1 : 1) !== s) continue;
+      n++;
+      if (finalistas.includes(i)) conFinalista = true;
+    }
+    if (n === 1 && conFinalista) return 1;
+  }
+  return 0;
+}
+
+/**
  * Las asignaciones de una fila de `k` miembros ordenados por puesto, con sus pesos y sus finalistas (índices en la fila, en orden de
  * carril). Prueba las 2^k máscaras: se queda con las de menor peso entre las del mismo lado y, de esas, la elegida es la que más alterna
  * por puesto; entre las que siguen empatadas elige `azar`, la moneda de la fila. Con menos de dos finalistas, las empatadas vienen de a
@@ -275,7 +299,7 @@ const signosDeMascara = (mascara: number, k: number): Signo[] => Array.from({ le
  */
 function candidatasDeUnaFila(k: number, peso: readonly Float64Array[], finalistas: readonly number[], azar: () => number): Candidatas {
   // Sola en su fila: va en la línea.
-  if (k === 1) return { mascaras: [0], alterna: [0], elegida: 0, azar, fija: [0] };
+  if (k === 1) return { mascaras: [0], alterna: [0], solas: [0], elegida: 0, azar, fija: [0] };
   if (k > FUERZA_BRUTA_MAX) {
     // Alternan por puesto, empezando del lado que diga la moneda, y las finalistas se acomodan al orden de su carril.
     const primera: Signo = azar() < 0.5 ? -1 : 1;
@@ -288,11 +312,12 @@ function candidatasDeUnaFila(k: number, peso: readonly Float64Array[], finalista
         if (s[i] === 1) abajo = true;
       });
     }
-    return { mascaras: [0], alterna: [0], elegida: 0, azar, fija: s };
+    return { mascaras: [0], alterna: [0], solas: [0], elegida: 0, azar, fija: s };
   }
   let mejorPeso = Infinity;
   const mascaras: number[] = [];
   const alternan: number[] = [];
+  const solas: number[] = [];
   // Los pares con peso, armados una sola vez: los que nunca se juntan no cambian el costo de ninguna máscara.
   const pares: number[] = [];
   for (let a = 0; a < k; a++) {
@@ -309,11 +334,19 @@ function candidatasDeUnaFila(k: number, peso: readonly Float64Array[], finalista
       mejorPeso = total;
       mascaras.length = 0;
       alternan.length = 0;
+      solas.length = 0;
     }
     mascaras.push(mascara);
     alternan.push(bits((mascara ^ (mascara >> 1)) & vecinos));
+    solas.push(solasDe(mascara, k, finalistas));
   }
-  return { mascaras, alterna: alternan, elegida: elegirPorAlternancia(mascaras, alternan, azar), azar };
+  // Entre las de menor peso: la que deja menos finalistas solas de su lado, después la que más alterna por puesto,
+  // y entre las que siguen empatadas la moneda.
+  let mejorSolas = 2;
+  for (const s of solas) if (s < mejorSolas) mejorSolas = s;
+  const enSuNivel = mascaras.map((_, i) => i).filter((i) => solas[i] === mejorSolas);
+  const elegida = elegirPorAlternancia(enSuNivel.map((i) => mascaras[i] as number), enSuNivel.map((i) => alternan[i] as number), azar);
+  return { mascaras, alterna: alternan, solas, elegida, azar };
 }
 
 /** De las máscaras dadas, la que más alterna; entre las que empatan, la que diga la moneda. */
@@ -400,6 +433,8 @@ export function signosDeSubfila(d: DatosSubfila, filaDe: (persona: number) => nu
 const COSTO_COSTURA = 1e6;
 const COSTO_CAMBIO = 1e3;
 const COSTO_ALTERNA = 1e-3;
+/** Cuánto cuesta, al acomodar las costuras, una asignación que deja subfilas solas (menos que cambiar de asignación, más que alternar menos). */
+const COSTO_SOLAS = 1;
 const COSTO_MONEDA = 1e-7;
 /** Cuántas asignaciones de una fila se miran al acomodar las costuras: las filas que se abren tienen muchas menos. */
 const CANDIDATAS_COSTURA = 1024;
@@ -450,7 +485,7 @@ function acomodarCosturas(m: MuestrasPlan, umbral: number, filas: readonly numbe
     const usar = idx.length > CANDIDATAS_COSTURA ? [c.mascaras.indexOf(actual), ...idx.filter((i) => c.mascaras[i] !== actual).slice(0, CANDIDATAS_COSTURA - 1)] : c.mascaras.map((_, i) => i);
     return {
       mascaras: usar.map((i) => c.mascaras[i] as number),
-      costo: usar.map((i) => (c.mascaras[i] === actual ? 0 : COSTO_CAMBIO + r + (maxAlt - (c.alterna[i] as number)) * COSTO_ALTERNA + (rango[i] as number) * COSTO_MONEDA)),
+      costo: usar.map((i) => (c.mascaras[i] === actual ? 0 : COSTO_CAMBIO + r + (c.solas?.[i] ?? 0) * COSTO_SOLAS + (maxAlt - (c.alterna[i] as number)) * COSTO_ALTERNA + (rango[i] as number) * COSTO_MONEDA)),
       fija: undefined,
     };
   });

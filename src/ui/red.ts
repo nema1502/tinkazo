@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { getLang, onLangChange, t } from "../i18n";
-import { sinGrabar } from "../ensayo-modo";
+import { enStand, sinGrabar } from "../ensayo-modo";
 import { app } from "../state";
 import { type DetalleDelPatrocinio, type Diagnostico, type FuentesDelChequeo, chequearRed, crearChequeo, llamarRpc, simularConRpc, umbralesDe } from "../stellar/chequeo-red";
 import { network } from "../stellar/config";
@@ -209,7 +209,8 @@ function aplicarAlBoton(): void {
   btn.classList.toggle("red-accion", accion !== "sellar");
   if (accion === "sellar") {
     alApretar = null;
-    btn.dataset.i = claveDeSellar();
+    // La red nunca participa en una ronda de stand: al repintar, conserva su propia acción.
+    btn.dataset.i = enStand() ? "standEmpezar" : claveDeSellar();
     btn.textContent = t(btn.dataset.i);
     // En el modo «Orden de turnos», con una lista que la red no admite, sellar sigue apagado (`turnos.ts`).
     btn.disabled = ordenNoCabe();
