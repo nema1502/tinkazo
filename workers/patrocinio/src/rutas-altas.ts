@@ -49,6 +49,7 @@
  * `503 apagado`. La bitácora nunca lleva el token, el id de la persona, el código ni la cuenta.
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
+import type { PedidoDeOrganizadora } from "./acceso-organizadora";
 import { type Altas, type CausaRegalo, huella, normalizar, SECRETO_MINIMO } from "./altas";
 import { type AltasPorPremio, type PedidoDeAltaPorPremio, cercaDelTope } from "./altas-premio";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type FilaOrden, type LectorDeCobros, enlaceDePago, estaCerrada, memoIdDe, normalizarOrden, notaDe, puedeHonrarse, usdcTexto } from "./cobros";
@@ -1153,6 +1154,45 @@ export class PuertaAltas {
     if (abierta) this.d.cupos.marcarAbierta(usuario, ahora);
     if (!res.repetido) this.registrar("alta-canje", { lote: res.lote, sorteos: res.sorteosSumados, altaNueva: res.altaNueva ? 1 : 0 });
     return r(200, { ok: true, repetido: res.repetido, sorteosSumados: res.sorteosSumados, sorteos: this.sorteos(usuario, cuenta, ahora), sigue: this.sigue(cuenta, abierta) });
+  }
+
+  /**
+   * `POST /v1/alta/organizadora` (lo llama la sala con su secreto, que ya miró el Worker): con la comisión de una campaña pagada,
+   * admite la cuenta de quien organiza en el libro con sus sorteos de `ORGANIZADORA_SORTEOS` por `ORGANIZADORA_DIAS` días. El mismo
+   * evento con la misma cuenta es lo mismo (`ya`), sin sumar. Mira el mismo piso de créditos y la misma pausa que el canje de un
+   * cupón: `503 apagada` si frenan, sin escribir nada. `429 cupo` pasado el tope de cuentas del día, `409 evento-usado` si ese
+   * evento ya dio su acceso a otra cuenta.
+   */
+  async organizadora(p: PedidoDeOrganizadora): Promise<Respuesta> {
+    const { cfg } = this.d;
+    const lim = cfg.organizadoras;
+    if (this.apagado() || !lim) return r(503, { motivo: "apagada" });
+    const abierta = await this.abierta(p.cuenta, this.d.cupos.altaDeCuenta(p.cuenta));
+    // El saldo se lee antes (con su memoria de 60 s); si el acceso resulta repetido, ni se mira.
+    const creditos = await (this.d.pollar as Pollar).creditos();
+
+    // Desde acá, sin await: mirar los topes, el piso y escribir es una sola jugada.
+    const ahora = this.reloj();
+    const pausa: { motivo: MotivoPausa | null } = { motivo: null };
+    const freno = (x: { sorteos: number; altaNueva: boolean }) => {
+      pausa.motivo = this.pausa(creditos, cfg.creditosPorSorteo * x.sorteos + (x.altaNueva ? cfg.creditosPorAlta : 0), ahora);
+      return pausa.motivo ? ("altas-pausadas" as const) : null;
+    };
+    const res = this.d.altas.admitirOrganizadora(
+      { cuenta: p.cuenta, evento: p.evento, sorteos: lim.sorteos, dias: lim.dias, topeDia: lim.porDia, abierta, freno },
+      ahora,
+    );
+    if (!res.ok) {
+      if (res.motivo === "altas-pausadas") {
+        this.registrar("alta-pausa", { motivo: pausa.motivo ?? "piso", donde: "organizadora" });
+        return r(503, { motivo: "apagada", detalle: "pausa" });
+      }
+      if (res.motivo === "evento-usado") return r(409, { motivo: "evento-usado" });
+      return r(429, { motivo: "cupo", liberaEn: res.liberaEn });
+    }
+    // Sin la cuenta ni el evento: nada de esto vuelve al registro.
+    if (!res.ya) this.registrar("alta-organizadora", { altaNueva: res.altaNueva ? 1 : 0 });
+    return r(200, { ok: true, ya: res.ya });
   }
 
   private fallido(usuario: string, ip: string): void {

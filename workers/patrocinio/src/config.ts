@@ -159,6 +159,14 @@ export interface Env {
    * piso. Vacía: 3.000. Hasta 50.000. Mal escrita: vale la de por defecto y se anota. No es un tope de personas.
    */
   RESERVA_REGALO_CREDITOS?: string;
+  /** Los sorteos oficiales que recibe quien organiza una campaña al pagar su comisión (de 1 a 10). Vacía: 3. */
+  ORGANIZADORA_SORTEOS?: string;
+  /** Cuántos días valen esos sorteos (de 1 a 30). Vacía: 7. */
+  ORGANIZADORA_DIAS?: string;
+  /** Cuántas cuentas de quien organiza se admiten en 24 horas, entre todas (de 1 a 300). Vacía: 30. */
+  ORGANIZADORAS_DIA?: string;
+  /** Secreto de 32 caracteres o más: el que manda la sala de las campañas para pedir el acceso de quien organiza. Sin él, la ruta no atiende. */
+  SALA_SECRETO?: string;
   /** Secreto: la llave secreta de la app de mainnet en Pollar. */
   POLLAR_SECRETO?: string;
   /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
@@ -318,8 +326,23 @@ export interface Config {
   bienvenidaPorIp: number | null;
   /** El margen del regalo por encima del piso, en créditos (3.000 por defecto). Un ajuste en caliente lo reemplaza. */
   reservaRegalo: number;
+  /**
+   * Lo que da el acceso automático de quien organiza una campaña (`POST /v1/alta/organizadora`): cuántos sorteos, por cuántos días,
+   * y cuántas cuentas se admiten en 24 horas. Null fuera de mainnet, sin ALTAS o con una variable mal escrita: la ruta no atiende.
+   */
+  organizadoras: OrganizadorasConfig | null;
   /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
   faltaAltas: string[];
+}
+
+/** Lo que se da a quien organiza una campaña cuando su comisión ya está pagada. */
+export interface OrganizadorasConfig {
+  /** Sorteos oficiales por campaña. */
+  sorteos: number;
+  /** Días que valen esos sorteos. */
+  dias: number;
+  /** Cuentas de quien organiza que se admiten en 24 horas, entre todas. */
+  porDia: number;
 }
 
 /** El costo de un retiro: la segunda operación del pago, a la cuenta de cobros. */
@@ -477,6 +500,15 @@ export const RESERVA_REGALO_POR_DEFECTO = 3_000;
 export const TECHO_RESERVA_REGALO = 50_000;
 /** El margen en caliente: un número de 1 al techo manda; `0` lo saca y vuelve a valer el de la variable. */
 export const AJUSTE_RESERVA_REGALO = "reserva_regalo";
+/** Lo que vale cada variable del acceso de quien organiza si queda vacía, y lo más que puede valer. */
+export const ORGANIZADORA_SORTEOS_POR_DEFECTO = 3;
+export const ORGANIZADORA_DIAS_POR_DEFECTO = 7;
+export const ORGANIZADORAS_DIA_POR_DEFECTO = 30;
+export const TECHO_ORGANIZADORA_SORTEOS = 10;
+export const TECHO_ORGANIZADORA_DIAS = 30;
+export const TECHO_ORGANIZADORAS_DIA = 300;
+/** Lo más corto que se acepta de `SALA_SECRETO`. */
+export const SALA_SECRETO_MINIMO = 32;
 
 /** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
@@ -640,6 +672,15 @@ export function leerConfig(env: Partial<Env>): Config {
   const rechazosDia = digitosEnMainnet(env.PAGOS_RECHAZADOS_DIA, PAGOS_RECHAZADOS_DIA_POR_DEFECTO, TECHO_PAGOS_RECHAZADOS_DIA);
   const altasDia = digitosEnMainnet(env.ALTAS_PREMIO_DIA, ALTAS_PREMIO_DIA_POR_DEFECTO, TECHO_ALTAS_PREMIO_DIA);
   const pagosBienEscritos = !topePagos.mal && !rechazosDia.mal;
+  // El acceso de quien organiza una campaña: vacías valen los de por defecto y fuera del rango (un cero de más) se toman como mal escritas.
+  const enRango = (s: string | undefined, porDefecto: number, min: number, techo: number) => {
+    const leido = soloDigitos(s, porDefecto);
+    return leido.mal || leido.valor < min || leido.valor > techo ? { valor: porDefecto, mal: true } : leido;
+  };
+  const orgSorteos = enRango(env.ORGANIZADORA_SORTEOS, ORGANIZADORA_SORTEOS_POR_DEFECTO, 1, TECHO_ORGANIZADORA_SORTEOS);
+  const orgDias = enRango(env.ORGANIZADORA_DIAS, ORGANIZADORA_DIAS_POR_DEFECTO, 1, TECHO_ORGANIZADORA_DIAS);
+  const orgPorDia = enRango(env.ORGANIZADORAS_DIA, ORGANIZADORAS_DIA_POR_DEFECTO, 1, TECHO_ORGANIZADORAS_DIA);
+  const organizadorasMal = orgSorteos.mal || orgDias.mal || orgPorDia.mal;
   const pagosPremio = altas && pidePremio && contractId !== null && pagosBienEscritos;
   const retiros = altas && pideRetiros && cuentaCobros !== null && costoRetiro !== null && pagosBienEscritos;
   const altasPremio = altas && pideAltaPremio && contractId !== null && !altasDia.mal;
@@ -667,6 +708,7 @@ export function leerConfig(env: Partial<Env>): Config {
   // El margen del regalo mal escrito vale el de por defecto y se anota: ni cierra el regalo ni lo deja sin margen.
   const reservaRegalo = digitosEnMainnet(env.RESERVA_REGALO_CREDITOS, RESERVA_REGALO_POR_DEFECTO, TECHO_RESERVA_REGALO);
   anotar(altas && reservaRegalo.mal, "reserva-regalo");
+  anotar(altas && organizadorasMal, "organizadoras");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
@@ -728,6 +770,7 @@ export function leerConfig(env: Partial<Env>): Config {
     bienvenidaHora: frenoHora ?? null,
     bienvenidaPorIp: frenoIp ?? null,
     reservaRegalo: reservaRegalo.valor,
+    organizadoras: altas && !organizadorasMal ? { sorteos: orgSorteos.valor, dias: orgDias.valor, porDia: orgPorDia.valor } : null,
     faltaAltas,
   };
 }
