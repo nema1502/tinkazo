@@ -55,9 +55,20 @@ export interface PollarDeMentira {
   /** Los cuerpos que recibió `wallets/fund`. */
   fondeos: unknown[];
   llamadas: string[];
+  /** Lo que se suma a la fila de `users` de una persona (su correo, su nombre, su idioma). Lo que no está, la fila de siempre. */
+  fichas: Map<string, Record<string, unknown>>;
 }
 
-export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: boolean; cuponSecreto?: string | null; memoriaCreditos?: MemoriaCreditos; sql?: ReturnType<typeof sqlDePrueba> } = {}) {
+export interface OpcionesDelMontaje {
+  sinPollar?: boolean;
+  cuponSecreto?: string | null;
+  memoriaCreditos?: MemoriaCreditos;
+  sql?: ReturnType<typeof sqlDePrueba>;
+  /** Lo que la puerta llama al dar un regalo, para el correo de bienvenida. Sin esto, como siempre. */
+  alRegalar?: () => void;
+}
+
+export function montarAltas(env: Partial<Env> = {}, opciones: OpcionesDelMontaje = {}) {
   let ahora = T0;
   // Un SQLite propio de la prueba (por ejemplo, con datos de antes o uno que falla), o uno nuevo y vacío.
   const sql = opciones.sql ?? sqlDePrueba();
@@ -76,6 +87,7 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
     fondeo: () => ({ status: 202, code: "SERVER_WALLET_ACCOUNT_REQUESTED" }),
     fondeos: [],
     llamadas: [],
+    fichas: new Map(),
   };
   const resp = (status: number, cuerpo: unknown) => new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
   const fetch = async (url: string, init?: RequestInit) => {
@@ -90,7 +102,8 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
     if (u.pathname === "/v3/users") {
       if (pm.usersCaido) return resp(503, { code: "DOWN", success: false });
       const q = u.searchParams.get("q") ?? "";
-      const items = pm.billeteras.has(q) ? [{ id: q, email: "x@y.z", wallet_public_key: null, wallets: pm.billeteras.get(q) ? [{ network: "STELLAR", public_key: pm.billeteras.get(q) }] : [] }] : [];
+      const wallets = pm.billeteras.get(q) ? [{ network: "STELLAR", public_key: pm.billeteras.get(q) }] : [];
+      const items = pm.billeteras.has(q) ? [{ id: q, email: "x@y.z", wallet_public_key: null, wallets, ...(pm.fichas.get(q) ?? {}) }] : [];
       return resp(200, { code: "SERVER_SDK_USERS_LIST", success: true, content: { items, total: items.length, page: 1, limit: 200, totalPages: 1, stats: {} } });
     }
     if (u.pathname === "/v3/billing/credits" && pm.creditosCaido) return resp(503, { code: "DOWN", success: false });
@@ -128,6 +141,7 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
     red,
     reloj: () => ahora,
     registrar: (e, d) => void anotado.push([e, d]),
+    ...(opciones.alRegalar ? { alRegalar: opciones.alRegalar } : {}),
   });
 
   /** Una persona con su sesión y, si se dice, su billetera de Stellar. */

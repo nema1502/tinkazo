@@ -248,6 +248,11 @@ export interface DependenciasAltas {
   leerSorteo?: (origen: string, id: bigint) => Promise<SorteoEnRed | null>;
   /** La cuenta que paga las comisiones: no puede ser la de quien ganó. Las otras dos del portero salen de `cfg`. */
   cuentaPatrocinadora?: string | null;
+  /**
+   * Se llama cuando `/v1/alta/gratis` acaba de dar el regalo (`dado`), para que el objeto pida su alarma para el correo de
+   * bienvenida. Solo existe con el correo prendido. No cambia la respuesta y lo que lance se ataja: nunca frena la activación.
+   */
+  alRegalar?: () => void;
 }
 
 /** Las rutas de la compra con QR (`/v1/compra/empezar`, `/v1/compra/cargar` y `/v1/compra/anular`). */
@@ -779,6 +784,15 @@ export class PuertaAltas {
     return { estado: this.frenoDelRegalo(creditos, grupo, ahora, costoAlta) === null ? "lista" : "llena", sorteos };
   }
 
+  /** Le avisa al objeto que se dio un regalo, para el correo de bienvenida. Lo que lance queda anotado y la respuesta sigue igual. */
+  private avisarRegalo(): void {
+    try {
+      this.d.alRegalar?.();
+    } catch (e) {
+      this.registrar("error-interno", { donde: "al-regalar", error: e instanceof Error ? e.name : "desconocido" });
+    }
+  }
+
   /** Anota la primera vez en el día (UTC) que el regalo no pasa por esta causa, solo con la causa. */
   private anotarRegaloLleno(causa: CausaRegalo | "activar", ahora: number): void {
     const clave = `${new Date(ahora).toISOString().slice(0, 10)}:${causa}`;
@@ -839,6 +853,7 @@ export class PuertaAltas {
       return r(ESTADO_DEL_ERROR[res.motivo] ?? 503, { motivo: res.motivo });
     }
     if (res.regalo === "dado") this.contarRegaloDeConexion(grupo, ahora);
+    if (res.regalo === "dado") this.avisarRegalo();
     if (res.causa) this.anotarRegaloLleno(res.causa, ahora);
     const alta = this.altaQueVale(usuario, cuenta);
     if (abierta && alta) this.d.cupos.marcarAbierta(alta.usuario, ahora);

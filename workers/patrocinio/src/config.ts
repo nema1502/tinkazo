@@ -10,6 +10,7 @@
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
 import deployments from "../../../src/stellar/deployments.json";
+import { esCorreo } from "./correo-bienvenida";
 import { leerCuentaUrl } from "./plan";
 
 export interface Env {
@@ -167,6 +168,13 @@ export interface Env {
   ORGANIZADORAS_DIA?: string;
   /** Secreto de 32 caracteres o más: el que manda la sala de las campañas para pedir el acceso de quien organiza. Sin él, la ruta no atiende. */
   SALA_SECRETO?: string;
+  /**
+   * El correo de bienvenida: solo `1` lo prende (y solo en mainnet con `ALTAS`). Nace en `0`. Sale una vez por persona, unos
+   * 20 minutos después de recibir el regalo, desde la alarma del objeto (ver `correo-envios.ts`).
+   */
+  CORREO_BIENVENIDA?: string;
+  /** El remitente del correo: una dirección del dominio habilitado para el envío. Sin forma de correo, el correo no sale. */
+  CORREO_DE?: string;
   /** Secreto: la llave secreta de la app de mainnet en Pollar. */
   POLLAR_SECRETO?: string;
   /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
@@ -331,6 +339,15 @@ export interface Config {
    * y cuántas cuentas se admiten en 24 horas. Null fuera de mainnet, sin ALTAS o con una variable mal escrita: la ruta no atiende.
    */
   organizadoras: OrganizadorasConfig | null;
+
+  // ---------- el correo de bienvenida ----------
+  /**
+   * El correo de bienvenida prendido por la configuración: en mainnet con `ALTAS=1`, `CORREO_BIENVENIDA=1` y un remitente con
+   * forma de correo. Además hace falta el enlace de envío y la llave de Pollar, y se cierra en caliente (`AJUSTE_CORREO_CERRADO`).
+   */
+  correoBienvenida: boolean;
+  /** El remitente del correo, o null si no tiene forma de correo. */
+  correoDe: string | null;
   /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
   faltaAltas: string[];
 }
@@ -509,6 +526,25 @@ export const TECHO_ORGANIZADORA_DIAS = 30;
 export const TECHO_ORGANIZADORAS_DIA = 300;
 /** Lo más corto que se acepta de `SALA_SECRETO`. */
 export const SALA_SECRETO_MINIMO = 32;
+
+/** El correo de bienvenida en caliente (`PUT /v1/patrocinio/ajustes`): con `1`, `correo_bienvenida_cerrado` lo apaga sin desplegar. */
+export const AJUSTE_CORREO_CERRADO = "correo_bienvenida_cerrado";
+/** Cuántos correos se intentan por día (UTC), entre todos: de 1 a su techo manda; `0` vuelve al de por defecto. */
+export const AJUSTE_CORREO_DIA = "correo_bienvenida_dia";
+/**
+ * Hasta qué regalo ya se miró el correo (el id del último derecho `gratis:` intentado). Lo escribe la alarma, nadie a mano. Es
+ * un ajuste y no una columna: el código de antes lo ignora y la vuelta atrás no cambia ninguna tabla.
+ */
+export const AJUSTE_CORREO_HASTA = "correo_bienvenida_hasta";
+/** Los correos intentados hoy (UTC) y si Cloudflare dijo que se acabó la cuota del día. Solo cifras. */
+export const AJUSTE_CORREO_HOY = "correo_bienvenida_hoy";
+/**
+ * Los correos por día al empezar: pocos, porque la cuota diaria de Cloudflare es una sola para la cuenta y la comparte el aviso
+ * a quien gana una campaña, que va primero. Se sube con datos, nunca a más de un tercio de lo que Cloudflare deje por día.
+ */
+export const CORREO_DIA_POR_DEFECTO = 25;
+/** Lo más que puede valer el tope por día, en caliente: más es un error de tipeo. */
+export const TECHO_CORREO_DIA = 1_000;
 
 /** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
@@ -709,6 +745,12 @@ export function leerConfig(env: Partial<Env>): Config {
   const reservaRegalo = digitosEnMainnet(env.RESERVA_REGALO_CREDITOS, RESERVA_REGALO_POR_DEFECTO, TECHO_RESERVA_REGALO);
   anotar(altas && reservaRegalo.mal, "reserva-regalo");
   anotar(altas && organizadorasMal, "organizadoras");
+  // El correo de bienvenida: solo un "1" con el libro, y con un remitente que tenga forma de correo. Sin remitente bueno no
+  // sale y se anota. Apagado, nada de esto cambia lo que corre.
+  const pideCorreo = altas && prende(env.CORREO_BIENVENIDA);
+  const remitente = (env.CORREO_DE ?? "").trim();
+  const correoDe = enMainnet && esCorreo(remitente) ? remitente : null;
+  anotar(pideCorreo && correoDe === null, "correo-de");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
@@ -771,6 +813,8 @@ export function leerConfig(env: Partial<Env>): Config {
     bienvenidaPorIp: frenoIp ?? null,
     reservaRegalo: reservaRegalo.valor,
     organizadoras: altas && !organizadorasMal ? { sorteos: orgSorteos.valor, dias: orgDias.valor, porDia: orgPorDia.valor } : null,
+    correoBienvenida: pideCorreo && correoDe !== null,
+    correoDe,
     faltaAltas,
   };
 }

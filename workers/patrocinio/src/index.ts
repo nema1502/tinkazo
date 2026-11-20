@@ -46,6 +46,9 @@
  *   POST /v1/admin/ventas/pausar | reanudar   POST /v1/admin/compras/cerrar (con ADMIN_TOKEN)
  *   POST /v1/admin/pagos/pausar | reanudar {"forma"}   POST /v1/admin/pagos/tope   (con ADMIN_TOKEN, también con los pagos apagados)
  *
+ * Solo en mainnet con ALTAS=1 y CORREO_BIENVENIDA=1 (nace en 0): el correo de bienvenida, unos 20 minutos después del regalo,
+ * desde la alarma y después de los sellos y los pagos (`correo-envios.ts`). La dirección se lee de la ficha y no se guarda.
+ *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
  */
@@ -57,7 +60,9 @@ import { AltasPorPremio } from "./altas-premio";
 import { registrador } from "./registrador";
 import { Cobros, LectorDeCobros } from "./cobros";
 import { ComprasQr } from "./compras";
-import { type Config, type Env, leerConfig } from "./config";
+import { AJUSTE_CORREO_CERRADO, AJUSTE_CORREO_DIA, type Config, type Env, leerConfig } from "./config";
+import { esEnlaceDeCorreo, mensajeroDeCloudflare } from "./correo-bienvenida";
+import { EnviosDeBienvenida } from "./correo-envios";
 import { Cupos, type Sql } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
 import type { FormaDePago } from "./pagos-lista";
@@ -65,7 +70,7 @@ import { atenderPagoClasico } from "./pagos-ruta";
 import { type PorteroDePagos, armarPorteroDePagos, pagosPrendidos, vueltaDeAlarma } from "./pagos-servicio";
 import { UsoDePagos } from "./pagos-uso";
 import { Planes } from "./plan";
-import { pollarDe } from "./pollar";
+import { type Pollar, pollarDe } from "./pollar";
 import { PorIp, cupoPorHora } from "./por-ip";
 import { RpcRed } from "./red";
 import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
@@ -87,6 +92,8 @@ const ALARMA_MS = 20_000;
 interface EnvPortero extends Env {
   /** La cuenta patrocinadora (G…): la que paga y reparte el peso de sus llaves. Pública. */
   CUENTA_PATROCINADORA?: string;
+  /** El enlace de envío de correo de Cloudflare (`[[env.mainnet.send_email]]`), para el correo de bienvenida. */
+  CORREO?: unknown;
 }
 
 export class Patrocinio extends DurableObject<EnvPortero> {
@@ -109,6 +116,15 @@ export class Patrocinio extends DurableObject<EnvPortero> {
   private altasPremio: AltasPorPremio | null = null;
   /** Si alguna forma de pago está prendida en la configuración: con todo apagado, el exporte no suma las tablas vacías de los pagos. */
   private pagosEnConfig = false;
+  /**
+   * El correo de bienvenida: solo en mainnet, con `CORREO_BIENVENIDA=1`, el remitente, el enlace de envío y la llave de Pollar.
+   * Null con el correo apagado: entonces ni la alarma, ni `/gratis`, ni `/estado` hacen nada distinto.
+   */
+  private correo: EnviosDeBienvenida | null = null;
+  /** Si la variable del correo está prendida (aunque falte algo): `/estado` muestra su bloque solo así. */
+  private correoEnConfig = false;
+  /** Lo que falta para el correo prendido por la variable, con nombres fijos. */
+  private faltaCorreo: string[] = [];
 
   constructor(ctx: DurableObjectState, env: EnvPortero) {
     super(ctx, env);
@@ -171,6 +187,8 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       const leerElSorteo = contrato
         ? (origen: string, id: bigint) => leerSorteo(red, { passphrase: cfg.passphrase, contractId: contrato, origen }, id)
         : null;
+      // El correo de bienvenida, con su try/catch: apagado (o sin lo que necesita) es null y la puerta no recibe el aviso.
+      this.correo = this.armarCorreo(cfg, pollar, altas);
       this.puerta = new PuertaAltas({
         cfg,
         cupos: this.cupos,
@@ -186,6 +204,7 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         altasPremio: this.altasPremio,
         cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
         ...(leerElSorteo ? { leerSorteo: leerElSorteo } : {}),
+        ...(this.correo ? { alRegalar: () => void this.programarCorreo("regalo") } : {}),
       });
       this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
       this.exportaAltas = true;
@@ -262,14 +281,86 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
+  /**
+   * El correo de bienvenida (solo mainnet): null con la variable apagada, sin remitente, sin el enlace de envío o sin la llave de
+   * Pollar. Lo que falta se anota con nombres fijos. Armarlo nunca tumba al objeto: si algo lanza, el correo queda apagado.
+   */
+  private armarCorreo(cfg: Config, pollar: Pollar | null, altas: Altas): EnviosDeBienvenida | null {
+    this.correoEnConfig = cfg.correoBienvenida;
+    this.faltaCorreo = [];
+    if (!cfg.correoBienvenida || !cfg.correoDe) return null;
+    const enlace = this.env.CORREO;
+    this.faltaCorreo = [...(esEnlaceDeCorreo(enlace) ? [] : ["correo-enlace"]), ...(pollar ? [] : ["pollar-llave"])];
+    if (!esEnlaceDeCorreo(enlace) || !pollar) {
+      console.error(JSON.stringify({ evento: "error-config", faltaCorreo: this.faltaCorreo }));
+      return null;
+    }
+    try {
+      const envios = new EnviosDeBienvenida({
+        cupos: this.cupos,
+        altas,
+        ficha: (usuario) => pollar.fichaParaCorreo(usuario),
+        mensajero: mensajeroDeCloudflare(enlace, cfg.correoDe),
+        reloj: () => Date.now(),
+        registrar,
+      });
+      envios.arrancar();
+      return envios;
+    } catch (e) {
+      this.faltaCorreo = ["correo"];
+      registrar("error-interno", { donde: "armar-correo", error: e instanceof Error ? e.name : "desconocido" });
+      return null;
+    }
+  }
+
+  /**
+   * La alarma de lo que quedó en el aire, a 20 segundos. Si ya hay una antes, queda esa. Si la que hay es la del correo de
+   * bienvenida (más lejos), se adelanta: el correo nunca demora a los sellos ni a los pagos. Sin el correo, toda alarma puesta
+   * está a 20 segundos o menos, así que esto es lo de siempre.
+   */
   private async programar(): Promise<void> {
-    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
+    const actual = await this.ctx.storage.getAlarm();
+    const pronto = Date.now() + ALARMA_MS;
+    if (actual === null || actual > pronto) await this.ctx.storage.setAlarm(pronto);
+  }
+
+  /**
+   * La alarma del correo de bienvenida: al darse un regalo, para cuando toca su correo (20 minutos), y al reabrir el correo o
+   * subir su tope, enseguida. Nunca atrasa una alarma que ya está antes. Nunca lanza: lo que falla queda anotado.
+   */
+  private async programarCorreo(motivo: "regalo" | "ajuste"): Promise<void> {
+    try {
+      const correo = this.correo;
+      if (!correo || correo.cerrado()) return;
+      const ahora = Date.now();
+      const cuando = motivo === "regalo" ? correo.cuandoToca(ahora) : ahora + ALARMA_MS;
+      const actual = await this.ctx.storage.getAlarm();
+      if (actual === null || actual > cuando) await this.ctx.storage.setAlarm(cuando);
+    } catch (e) {
+      registrar("error-interno", { donde: "programar-correo", error: e instanceof Error ? e.name : "desconocido" });
+    }
+  }
+
+  /**
+   * La parte del correo de bienvenida, después de las otras dos y con su propio try/catch: cuándo vuelve a hacer falta (ms), o
+   * null. Con el correo apagado no hace nada. Una falla nunca vuelve a pedir la alarma a cada rato.
+   */
+  private async vueltaDelCorreo(conAlgoEnElAire: boolean): Promise<number | null> {
+    const correo = this.correo;
+    if (!correo) return null;
+    try {
+      return await correo.vuelta({ conAlgoEnElAire });
+    } catch (e) {
+      registrar("error-interno", { donde: "alarma-correo", error: e instanceof Error ? e.name : "desconocido" });
+      return Date.now() + 10 * 60_000;
+    }
   }
 
   /**
    * La alarma cierra lo que quedó en el aire, en dos partes, cada una en su try/catch: los sellos y los sorteos, y los pagos de
    * premios y retiros. Si una lanza, la otra corre igual, queda anotado y se vuelve a pedir la alarma: lo que sigue en el aire
-   * no se queda sin nadie que lo mire.
+   * no se queda sin nadie que lo mire. Con el correo de bienvenida prendido, una tercera parte al final, cuando las otras dos ya
+   * cerraron lo suyo: la alarma vuelve cuando haga falta la primera de las dos cosas.
    */
   override async alarm(): Promise<void> {
     const p = await this.obtener();
@@ -281,7 +372,19 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       ],
       registrar,
     );
-    if (hayQueVolver) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
+    if (!this.correo) {
+      // Sin el correo, lo de siempre.
+      if (hayQueVolver) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
+      return;
+    }
+    const correo = await this.vueltaDelCorreo(hayQueVolver);
+    const ahora = Date.now();
+    const vueltas = [...(hayQueVolver ? [ahora + ALARMA_MS] : []), ...(correo === null ? [] : [Math.max(correo, ahora + 1_000)])];
+    if (!vueltas.length) return;
+    // Mientras el correo esperaba, un sello o un pago pudo pedir la alarma: si quedó antes, se respeta. Una que ya pasó es esta.
+    const actual = await this.ctx.storage.getAlarm();
+    const objetivo = Math.min(...vueltas);
+    if (actual === null || actual <= ahora || actual > objetivo) await this.ctx.storage.setAlarm(objetivo);
   }
 
   async pagar(xdr: string): Promise<Respuesta> {
@@ -463,6 +566,16 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
+  /** El bloque del correo de bienvenida en `/estado`: lo de `EnviosDeBienvenida.resumen` o, si no se pudo armar, qué falta. Solo cifras. */
+  private estadoDelCorreo(): Record<string, unknown> {
+    try {
+      return this.correo ? this.correo.resumen() : { prendido: false, falta: this.faltaCorreo };
+    } catch (e) {
+      registrar("error-interno", { donde: "estado-correo", error: e instanceof Error ? e.name : "desconocido" });
+      return { prendido: false, falta: ["correo"] };
+    }
+  }
+
   async administrar(accion: string, datos?: { clave?: string; valor?: number }): Promise<Respuesta> {
     const p = await this.obtener();
     switch (accion) {
@@ -475,8 +588,13 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       case "pollar":
         p.poner("pollar");
         return { estado: 200, cuerpo: { modo: p.modo() } };
-      case "ajustes":
-        return p.ajustar(String(datos?.clave), Number(datos?.valor)) ? { estado: 200, cuerpo: { ok: true } } : { estado: 400, cuerpo: { motivo: "ajuste" } };
+      case "ajustes": {
+        const clave = String(datos?.clave);
+        if (!p.ajustar(clave, Number(datos?.valor))) return { estado: 400, cuerpo: { motivo: "ajuste" } };
+        // Reabrir el correo o moverle el tope: lo que esperaba sale en la vuelta siguiente, sin esperar otro regalo.
+        if (clave === AJUSTE_CORREO_CERRADO || clave === AJUSTE_CORREO_DIA) await this.programarCorreo("ajuste");
+        return { estado: 200, cuerpo: { ok: true } };
+      }
       case "estado": {
         // En mainnet con las altas, también el saldo de créditos de Pollar y el piso.
         // Y las altas de 24 horas y los cupones de hoy, y la vigilancia de firmas: firmasSinExplicar y patrocinioPollar.
@@ -492,6 +610,8 @@ export class Patrocinio extends DurableObject<EnvPortero> {
             ...(this.administracion?.resumen() ?? {}),
             ...(await this.puerta.vigilancia()),
             ...(pagos ? { pagos } : {}),
+            // El correo de bienvenida, solo con su variable prendida: apagado, el estado es el de siempre.
+            ...(this.correoEnConfig ? { correoBienvenida: this.estadoDelCorreo() } : {}),
           },
         };
       }
