@@ -32,12 +32,13 @@ export class PorIp {
 }
 
 /**
- * Consultas de `GET /v1/patrocinio/cupo` por dirección y por hora. En mainnet, 3.000, como las altas
- * (`ALTAS_POR_IP_HORA`): todo un stand sale por la misma wifi, y el sitio pregunta el cupo antes de cada sello y cada
- * sorteo; con 600, un stand con mucha gente se quedaba una hora sin sellar ni sortear. La ruta es de solo lectura. A
+ * Consultas de `GET /v1/patrocinio/cupo` por dirección y por hora. En mainnet, 20.000, el mismo número que las altas (que
+ * tienen su propio contador, `ALTAS_POR_IP_HORA`): una sala entera sale por la misma wifi, y el sitio pregunta el cupo antes
+ * de cada sello y cada sorteo; con 3.000, 150 personas se quedaban sin patrocinio a las 20 consultas cada una, y un 429 el
+ * sitio lo lee como el patrocinio cerrado. La ruta es de solo lectura. A
  * `/cupo` no lo cubre la regla de límite de Cloudflare: lo limita solo este contador, que vive en memoria y es de cada
  * nodo. En testnet, 600, como siempre.
  */
 export function cupoPorHora(red: string): number {
-  return red === "mainnet" ? 3000 : 600;
+  return red === "mainnet" ? 20000 : 600;
 }

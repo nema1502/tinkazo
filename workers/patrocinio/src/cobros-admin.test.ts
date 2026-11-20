@@ -269,6 +269,8 @@ describe("las rutas de los pagos en la puerta del Worker", () => {
       paquetes: [{ id: "p10", usdc: "10", sorteos: 10, dias: 365 }],
       // Sin la compra con QR prendida no se anuncia su recargo.
       recargoQr: null,
+      // El regalo de bienvenida, abierto por defecto.
+      bienvenida: 3,
     });
     const conLos3 = (await atenderAlta(pedido("/v1/alta/precios", { method: "GET" }), leerConfig({ RED: "mainnet", ALTAS: "1", PRECIOS: PRECIOS_DE_PRUEBA }), nada, new PorIp(), nada)) as Response;
     expect(await conLos3.json()).toMatchObject({ alta: { usdc: "2", sorteos: 3, dias: 365 }, paquetes: [{ id: "p10", usdc: "5" }, { id: "p50", usdc: "20" }] });

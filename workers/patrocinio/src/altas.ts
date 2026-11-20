@@ -80,6 +80,23 @@ export type Canje =
   | { ok: false; motivo: "cupon-no-existe" | "cupon-anulado" | "cupon-usado" | "lote-usado" | "cuenta-de-otro" | MotivoFreno }
   | { ok: false; motivo: "cupon-vencido"; vence: number };
 
+/**
+ * Por qué no se dio el regalo de bienvenida aunque la cuenta quedó activada: un freno puesto a mano, el piso, el margen del
+ * regalo por encima del piso o Pollar sin saldo.
+ */
+export type CausaRegalo = "cerrado" | "dia" | "hora" | "conexion" | "piso" | "margen" | "creditos";
+
+/** Cómo terminó la bienvenida: `dado` (se sumaron los sorteos), `lleno` (activada, sin regalo) o `ya` (ya los había recibido). */
+export type Bienvenida =
+  | { ok: true; regalo: "dado" | "lleno" | "ya"; sorteosSumados: number; altaNueva: boolean; causa: CausaRegalo | null }
+  | { ok: false; motivo: "cuenta-de-otro" | "altas-pausadas" | "bienvenida-llena" };
+
+/**
+ * La referencia del regalo de una persona: la del derecho (única, así el regalo es uno por persona) y la del alta que nace por
+ * este camino. Nunca se anota: lleva el id de la persona.
+ */
+export const refDeBienvenida = (usuario: string): string => `gratis:${usuario}`;
+
 export interface EstadoLote {
   lote: string;
   creados: number;
@@ -180,6 +197,82 @@ export class Altas {
       if (cuenta && this.cupos.atar(usuario, cuenta, ahora) !== "ok") throw new Error("canje-atar");
       return { ok: true, repetido: false, sorteosSumados: sorteos, lote, altaNueva };
     });
+  }
+
+  /**
+   * La bienvenida de una persona que entró con su cuenta (`usuario`, el id que dio Pollar), con su cuenta si ya se sabe. Activar
+   * y regalar van separados, todo en una transacción y sin esperar a nadie:
+   *
+   * - Si ya recibió el regalo (existe el derecho `gratis:<usuario>`): `ya`, sin sumar nada; ata la cuenta si hace falta.
+   * - Con la pausa a mano, nada nuevo: `altas-pausadas`.
+   * - Activar: si no tiene alta (ni la suya ni la de su cuenta, `cuenta:G…`, la de un premio o un alta a mano), nace una con
+   *   el motivo de las altas a mano (`admin`, que el código de antes ya conoce) y la referencia `gratis:<usuario>`, que dice
+   *   que nació por acá. `activar` puede frenarla (el piso de créditos): `bienvenida-llena` sin escribir nada.
+   * - Regalar: `regalar` dice si el regalo no entra ahora (un freno o el piso, que ya cuenta el alta recién creada). Si entra,
+   *   los sorteos van al alta que vale (la nueva, la suya de antes o la de su cuenta) con la referencia `gratis:<usuario>`;
+   *   si no, `lleno` y la cuenta queda activada igual. No mira si tuvo sorteos de otro origen: es uno por persona.
+   * - La cuenta se ata al alta de la persona y entra al libro. Una cuenta que es de otra persona: `cuenta-de-otro`.
+   */
+  darBienvenida(
+    p: {
+      usuario: string;
+      cuenta: string | null;
+      sorteos: number;
+      dias: number;
+      pausada: boolean;
+      activar: () => boolean;
+      regalar: () => CausaRegalo | null;
+    },
+    ahora: number,
+  ): Bienvenida {
+    if (!texto(p.usuario, 200) || p.usuario.startsWith("cuenta:")) throw new Error("bienvenida-usuario");
+    if (p.cuenta !== null && !StrKey.isValidEd25519PublicKey(p.cuenta)) throw new Error("bienvenida-cuenta");
+    if (!entre(p.sorteos, 1, 1000) || !entre(p.dias, 1, 3650)) throw new Error("bienvenida-forma");
+    const { usuario, cuenta } = p;
+    const ref = refDeBienvenida(usuario);
+    return this.cupos.transaccion((): Bienvenida => {
+      if (cuenta && this.cupos.cuentaDeOtro(usuario, cuenta)) return { ok: false, motivo: "cuenta-de-otro" };
+      const suya = this.cupos.altaDe(usuario);
+      // Sin alta propia, la de su cuenta: la que le dio quien organizó un sorteo que ganó, o un alta a mano.
+      const deSuCuenta = !suya && cuenta ? this.cupos.altaDe(`cuenta:${cuenta}`) : null;
+      if (this.recibioBienvenida(usuario)) {
+        if (suya && cuenta && this.cupos.atar(usuario, cuenta, ahora) !== "ok") return { ok: false, motivo: "cuenta-de-otro" };
+        return { ok: true, regalo: "ya", sorteosSumados: 0, altaNueva: false, causa: null };
+      }
+      if (p.pausada) return { ok: false, motivo: "altas-pausadas" };
+      const altaNueva = !suya && !deSuCuenta;
+      if (altaNueva) {
+        if (!p.activar()) return { ok: false, motivo: "bienvenida-llena" };
+        this.sql.exec(
+          "INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada) " +
+            "VALUES (?, 'admin', ?, NULL, NULL, 'autorizada', ?, ?)",
+          usuario,
+          ref,
+          ahora,
+          ahora,
+        );
+      }
+      const causa = p.regalar();
+      if (causa === null) {
+        // A la de su cuenta, con esa cuenta (como el alta a mano); a la suya, sin cuenta: la pone `atar`, enseguida.
+        const dueno = deSuCuenta ? { usuario: deSuCuenta.usuario, cuenta: deSuCuenta.cuenta ?? cuenta } : { usuario, cuenta: null };
+        this.cupos.otorgar({ ...dueno, origen: "gratis", ref, sorteos: p.sorteos, dias: p.dias }, ahora);
+      }
+      // Ya se comprobó que no choca: si igual no ata, se deshace todo.
+      if (!deSuCuenta && cuenta && this.cupos.atar(usuario, cuenta, ahora) !== "ok") throw new Error("bienvenida-atar");
+      if (causa !== null) return { ok: true, regalo: "lleno", sorteosSumados: 0, altaNueva, causa };
+      return { ok: true, regalo: "dado", sorteosSumados: p.sorteos, altaNueva, causa: null };
+    });
+  }
+
+  /** Si la persona ya recibió el regalo de bienvenida. Solo lee. */
+  recibioBienvenida(usuario: string): boolean {
+    return this.filas("SELECT 1 AS n FROM derechos WHERE ref = ?", refDeBienvenida(usuario)).length > 0;
+  }
+
+  /** Cuántos regalos de bienvenida se dieron después de `desde` (ms): lo que miran los frenos por día y por hora. */
+  regalosDesde(desde: number): number {
+    return Number(this.filas("SELECT COUNT(*) AS n FROM derechos WHERE origen = 'gratis' AND ref LIKE 'gratis:%' AND creado > ?", desde)[0]?.n ?? 0);
   }
 
   /** Cómo va un lote, para el informe. null si no existe. Sin códigos, personas ni cuentas: solo cifras. */

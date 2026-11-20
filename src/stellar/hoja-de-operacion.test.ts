@@ -82,6 +82,30 @@ describe("la regla de límite de Cloudflare delante del portero de mainnet", () 
     expect(readme).not.toMatch(/uri\.path eq "\/v1\/patrocinio\/cupo"/);
   });
 
+  it("antes de un evento la regla sube a 1.000 en 10 segundos, se comprueba con una ráfaga y después vuelve a 60", () => {
+    const antes = hoja.slice(hoja.indexOf("## Antes del evento"), hoja.indexOf("## Durante el evento"));
+    const despues = hoja.slice(hoja.indexOf("## Después del evento"), hoja.indexOf("## Cómo cortar"));
+    for (const [nombre, texto] of [
+      ["hoja", antes],
+      ["README", seccionDeLaRegla()],
+    ] as const) {
+      expect(texto, nombre).toContain("quien mantiene el proyecto");
+      expect(texto, nombre).toContain("1.000 pedidos en 10 segundos");
+      expect(texto, nombre).toMatch(/la apaga mientras dure/);
+      expect(texto, nombre).toContain("anota el valor de antes");
+      expect(texto, nombre).toContain("ráfaga de 150 pedidos");
+    }
+    // La ráfaga: 150 pedidos sin Origin desde una conexión, que tienen que volver todos con 403 y ninguno con 429.
+    expect(antes).toContain('seq 150 | xargs -P 30 -I{} curl -s -o /dev/null -w "%{http_code}\\n" -X POST $P/v1/alta/estado | sort | uniq -c');
+    expect(antes).toMatch(/vuelven todos con `403`.*ninguno con `429`/);
+    expect(despues).toContain("**Volver la regla de límite de Cloudflare a 60 pedidos en 10 segundos**");
+    // Sin Origin, el portero contesta 403 antes de contar la dirección y sin llegar al objeto: la ráfaga no gasta ni escribe.
+    const origen = rutasAltas.indexOf('if (!origenPermitido(origen)) return json({ motivo: "origen" }, 403, cabeceras);');
+    const cuenta = rutasAltas.indexOf("if (!porIp.toca(ip, ALTAS_POR_IP_HORA))");
+    expect(origen).toBeGreaterThan(-1);
+    expect(cuenta).toBeGreaterThan(origen);
+  });
+
   it("el comentario de `cupoPorHora` dice lo mismo que los documentos: la regla de Cloudflare no cubre el cupo", () => {
     const comentario = porIp.replace(/\s*\r?\n\s*\*\s?/g, " ");
     expect(comentario).not.toContain("regla de límite de Cloudflare sigue delante");

@@ -140,6 +140,25 @@ export interface Env {
   PAGOS_RECHAZADOS_DIA?: string;
   /** Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos, hasta 300. */
   ALTAS_PREMIO_DIA?: string;
+
+  // ---------- la bienvenida: los sorteos oficiales gratis de quien entra con su cuenta (solo en mainnet, con `ALTAS`) ----------
+  /** Solo `0` cierra el regalo de bienvenida. Vacía o `1`: abierto. La cuenta se puede activar igual. */
+  BIENVENIDA?: string;
+  /** Cuántos sorteos oficiales trae el regalo, de 1 a 10. Vacía: 3. Mal escrita: el regalo queda cerrado y se anota. */
+  BIENVENIDA_SORTEOS?: string;
+  /** Cuántos días valen esos sorteos, de 1 a 365. Vacía: 60. Mal escrita: el regalo queda cerrado y se anota. */
+  BIENVENIDA_DIAS?: string;
+  /** Freno de emergencia: cuántos regalos en 24 horas, entre todos. Vacía o `0`: sin tope. Solo dígitos. */
+  BIENVENIDA_DIA?: string;
+  /** Freno de emergencia: cuántos regalos en una hora, entre todos. Vacía o `0`: sin tope. Solo dígitos. */
+  BIENVENIDA_HORA?: string;
+  /** Freno de emergencia: cuántos regalos por conexión en 24 horas. Vacía o `0`: sin tope (en un evento todos salen por la misma). */
+  BIENVENIDA_POR_IP?: string;
+  /**
+   * El margen del regalo, en créditos de Pollar: el regalo pasa solo si después de darlo quedan estos créditos por encima del
+   * piso. Vacía: 3.000. Hasta 50.000. Mal escrita: vale la de por defecto y se anota. No es un tope de personas.
+   */
+  RESERVA_REGALO_CREDITOS?: string;
   /** Secreto: la llave secreta de la app de mainnet en Pollar. */
   POLLAR_SECRETO?: string;
   /** Secreto: la clave de los cupones, las altas, los derechos, las órdenes pagadas a mano y los pagos sueltos. */
@@ -282,6 +301,23 @@ export interface Config {
   pagosRechazadosDia: number;
   /** Las altas de quien ganó que se aceptan en 24 horas, entre todas las cuentas. Mal escrito, vale el de por defecto y el alta no se prende. */
   altasPremioDia: number;
+
+  // ---------- la bienvenida ----------
+  /**
+   * El regalo de bienvenida abierto por la configuración: en mainnet con `ALTAS=1`, sin `BIENVENIDA=0` y con sus números bien
+   * escritos. Además se cierra en caliente (`AJUSTE_BIENVENIDA_CERRADA`) y con la pausa de las altas.
+   */
+  bienvenida: boolean;
+  /** Los sorteos oficiales del regalo (3 por defecto). */
+  bienvenidaSorteos: number;
+  /** Los días que valen (60 por defecto). */
+  bienvenidaDias: number;
+  /** Los frenos de emergencia de la variable: null es sin tope, que es lo de siempre. Un ajuste en caliente los reemplaza. */
+  bienvenidaDia: number | null;
+  bienvenidaHora: number | null;
+  bienvenidaPorIp: number | null;
+  /** El margen del regalo por encima del piso, en créditos (3.000 por defecto). Un ajuste en caliente lo reemplaza. */
+  reservaRegalo: number;
   /** Lo que falta para lo que se prendió, con nombres fijos y sin valores (para la bitácora). Vacío fuera de mainnet. */
   faltaAltas: string[];
 }
@@ -416,6 +452,31 @@ export const ALTAS_PREMIO_DIA_POR_DEFECTO = 100;
 export const TECHO_TOPE_PAGOS_STROOPS = 100_000_000;
 export const TECHO_PAGOS_RECHAZADOS_DIA = 100;
 export const TECHO_ALTAS_PREMIO_DIA = 300;
+
+/** Lo que trae el regalo de bienvenida si sus variables quedan vacías: 3 sorteos oficiales que valen 60 días. */
+export const BIENVENIDA_SORTEOS_POR_DEFECTO = 3;
+export const BIENVENIDA_DIAS_POR_DEFECTO = 60;
+/** Lo más que pueden valer los sorteos y los días del regalo: más es un error de tipeo y cierra el regalo. */
+export const TECHO_BIENVENIDA_SORTEOS = 10;
+export const TECHO_BIENVENIDA_DIAS = 365;
+/**
+ * Lo más que puede valer un freno de emergencia del regalo (por día, por hora o por conexión), en la variable y en caliente.
+ * Un freno nunca es obligatorio: sin poner no hay tope. El techo solo separa un número de un error de tipeo.
+ */
+export const TECHO_BIENVENIDA_TOPE = 100_000;
+/** Los ajustes en caliente del regalo (`PUT /v1/patrocinio/ajustes`). Con `1`, `bienvenida_cerrada` cierra el regalo sin desplegar. */
+export const AJUSTE_BIENVENIDA_CERRADA = "bienvenida_cerrada";
+/** Los frenos en caliente: un número desde 1 es el tope; `0` lo saca y vuelve a valer el de la variable. */
+export const AJUSTES_BIENVENIDA_TOPE = { dia: "bienvenida_dia", hora: "bienvenida_hora", ip: "bienvenida_ip" } as const;
+/**
+ * El margen del regalo: lo que tiene que quedar por encima del piso después de darlo, para que el regalo no deje sin firma a
+ * quienes ya tienen sorteos (sus cupones, sus premios y sus órdenes miran el piso solo). 3.000 créditos por defecto.
+ */
+export const RESERVA_REGALO_POR_DEFECTO = 3_000;
+/** Lo más que puede valer el margen, en la variable y en caliente: más es un error de tipeo. */
+export const TECHO_RESERVA_REGALO = 50_000;
+/** El margen en caliente: un número de 1 al techo manda; `0` lo saca y vuelve a valer el de la variable. */
+export const AJUSTE_RESERVA_REGALO = "reserva_regalo";
 
 /** La palabra de `COMPRAS_QR_PILOTO` y `ORDEN_USDC_PILOTO` que abre a cualquier cuenta. */
 export const PILOTO_TODOS = "todos";
@@ -594,6 +655,18 @@ export function leerConfig(env: Partial<Env>): Config {
   anotar(altas && topePagos.mal, "tope-pagos");
   anotar(altas && rechazosDia.mal, "pagos-rechazos");
   anotar(altas && altasDia.mal, "altas-premio-dia");
+  // La bienvenida: abierta salvo un "0", con los sorteos y los días entre 1 y su techo. Los frenos sin poner (o en 0) son sin
+  // tope. Los sorteos o los días mal escritos cierran el regalo y se anotan: no se adivina cuánto dar. Un freno mal escrito
+  // solo se suelta y se anota: es de emergencia, y un error de tipeo en él no puede cerrar la entrada de todos.
+  const bienvenidaSorteos = digitosEnMainnet(env.BIENVENIDA_SORTEOS, BIENVENIDA_SORTEOS_POR_DEFECTO, TECHO_BIENVENIDA_SORTEOS);
+  const bienvenidaDias = digitosEnMainnet(env.BIENVENIDA_DIAS, BIENVENIDA_DIAS_POR_DEFECTO, TECHO_BIENVENIDA_DIAS);
+  const frenos = [env.BIENVENIDA_DIA, env.BIENVENIDA_HORA, env.BIENVENIDA_POR_IP].map((v) => digitosEnMainnet(v, 0, TECHO_BIENVENIDA_TOPE));
+  const [frenoDia, frenoHora, frenoIp] = frenos.map((f) => (f.mal || f.valor === 0 ? null : f.valor));
+  const bienvenidaMal = bienvenidaSorteos.mal || bienvenidaDias.mal || bienvenidaSorteos.valor < 1 || bienvenidaDias.valor < 1;
+  anotar(altas && (bienvenidaMal || frenos.some((f) => f.mal)), "bienvenida");
+  // El margen del regalo mal escrito vale el de por defecto y se anota: ni cierra el regalo ni lo deja sin margen.
+  const reservaRegalo = digitosEnMainnet(env.RESERVA_REGALO_CREDITOS, RESERVA_REGALO_POR_DEFECTO, TECHO_RESERVA_REGALO);
+  anotar(altas && reservaRegalo.mal, "reserva-regalo");
   return {
     red,
     passphrase: d?.networkPassphrase ?? (red === "mainnet" ? "Public Global Stellar Network ; September 2015" : "Test SDF Network ; September 2015"),
@@ -648,6 +721,13 @@ export function leerConfig(env: Partial<Env>): Config {
     topePagos: topePagos.valor,
     pagosRechazadosDia: rechazosDia.valor,
     altasPremioDia: altasDia.valor,
+    bienvenida: altas && (env.BIENVENIDA ?? "").trim() !== "0" && !bienvenidaMal,
+    bienvenidaSorteos: bienvenidaSorteos.valor,
+    bienvenidaDias: bienvenidaDias.valor,
+    bienvenidaDia: frenoDia ?? null,
+    bienvenidaHora: frenoHora ?? null,
+    bienvenidaPorIp: frenoIp ?? null,
+    reservaRegalo: reservaRegalo.valor,
     faltaAltas,
   };
 }

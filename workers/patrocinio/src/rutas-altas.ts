@@ -2,16 +2,24 @@
  * Las rutas de las altas del portero de mainnet: con la sesión de Pollar, qué acceso tiene la persona
  * (`POST /v1/alta/estado`) y el canje de un cupón (`POST /v1/alta/cupon`).
  *
- *   POST /v1/alta/estado   {}         200 {acceso, cuenta, abierta, pedido, sorteos:{quedan, proximoVence}, orden, fondeo}
+ *   POST /v1/alta/estado   {}         200 {acceso, cuenta, abierta, pedido, sorteos:{quedan, proximoVence}, orden, fondeo, bienvenida}
+ *        bienvenida: {estado:"lista"|"llena", sorteos} | null (null solo si ya lo recibió: con el regalo cerrado, llena).
+ *        acceso es siempre el motivo guardado: el alta nacida por la bienvenida dice "admin", nunca "gratis".
  *   POST /v1/alta/cupon    {cupon}    200 {ok, repetido, sorteosSumados, sorteos, sigue}
  *        400 forma   404 cupon-no-existe   410 cupon-vencido {vence} | cupon-anulado   409 cupon-usado | lote-usado
+ *   POST /v1/alta/gratis   {}         200 {ok, repetido, sorteosSumados, sorteos, regalo:"dado"|"lleno"|"ya", sigue}
+ *        activa la cuenta (si no tiene alta) y suma el regalo de bienvenida una vez por persona; si el regalo no entra, activa
+ *        igual y contesta regalo "lleno"   409 cuenta-de-otro   503 altas-pausadas | bienvenida-llena (ni se pudo activar)
+ *        El regalo deja su margen (`RESERVA_REGALO_CREDITOS`) por encima del piso. Activar deja solo el lugar de unas pocas
+ *        altas de premio (`ALTAS_PREMIO_GUARDADAS`), nunca más que ese margen: cuando el regalo frena, la cuenta se activa igual.
  *   POST /v1/alta/abrir    {}         200 {estado:"pedido"|"abierta"|"no-hace-falta"}   (fase 2, fondeo diferido)
  *        403 sin-acceso   409 sin-billetera   503 sin-creditos   429 espera {reintentarEn} (una vez por minuto)
  *   POST /v1/alta/orden    {producto} 200 {orden:{id, producto, usdc, sorteos, destino, nota, memoId, enlace, vence}}
  *        503 pago-apagado | venta-pausada | altas-pausadas | fuera-del-piloto   400 producto   409 ya-tiene-acceso
  *   POST /v1/alta/pago     {orden}    200 {pagada:true, sorteos, sigue} | {pagada:false, recibido, total, minimo}
  *        400 forma   404 orden   410 orden-cerrada (cerrada para devolver o reemplazada; contesta después de leer)   502 red
- *   GET  /v1/alta/precios             200 {red, pago, alta:{usdc, sorteos, dias}, paquetes}, abierta y con caché de 5 minutos
+ *   GET  /v1/alta/precios             200 {red, pago, alta:{usdc, sorteos, dias}, paquetes, recargoQr, bienvenida}, abierta y con
+ *        caché de 5 minutos. bienvenida: los sorteos del regalo si está abierto, 0 si no
  *   GET  /v1/carga/cupo               200 {abierta}, abierta como /v1/patrocinio/cupo: si el sitio ofrece la carga con QR
  *   POST /v1/compra/cargar {producto, reemplazar?} 200 {permiso}: el aviso de carga, antes de crear la orden de carga
  *        409 orden-abierta {orden} (una orden viva sin el recargo: se reemplaza solo con reemplazar:true)
@@ -41,11 +49,22 @@
  * `503 apagado`. La bitácora nunca lleva el token, el id de la persona, el código ni la cuenta.
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
-import { type Altas, huella, normalizar, SECRETO_MINIMO } from "./altas";
+import { type Altas, type CausaRegalo, huella, normalizar, SECRETO_MINIMO } from "./altas";
 import { type AltasPorPremio, type PedidoDeAltaPorPremio, cercaDelTope } from "./altas-premio";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type FilaOrden, type LectorDeCobros, enlaceDePago, estaCerrada, memoIdDe, normalizarOrden, notaDe, puedeHonrarse, usdcTexto } from "./cobros";
 import { AVISOS_POR_COMPRA, COMPRAS_POR_PERSONA_DIA, type ComprasQr, FIRMAS_POR_COMPRA, type FilaCompra } from "./compras";
-import { type Config, DIA_MS, type Producto, TECHO_ALTAS_PREMIO_DIA, grupoDeIp } from "./config";
+import {
+  AJUSTE_BIENVENIDA_CERRADA,
+  AJUSTE_RESERVA_REGALO,
+  AJUSTES_BIENVENIDA_TOPE,
+  type Config,
+  DIA_MS,
+  type Producto,
+  TECHO_ALTAS_PREMIO_DIA,
+  TECHO_BIENVENIDA_TOPE,
+  TECHO_RESERVA_REGALO,
+  grupoDeIp,
+} from "./config";
 import { type Cupos, type FilaAlta, type Quedan } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
 import { PUESTO_MAXIMO } from "./pagos-lista";
@@ -72,12 +91,19 @@ export const FALLIDOS_POR_IP_HORA = 200;
  */
 export const TOKENS_NUEVOS_POR_IP_HORA = 200;
 /**
- * Pedidos a `/v1/alta/*` por dirección y por hora, en la puerta del Worker (en memoria de cada nodo). Es para todo un
- * stand junto, que sale por la misma wifi: el freno de lo que se adivina son los topes de intentos, no este.
+ * Pedidos a `/v1/alta/*` por dirección y por hora, en la puerta del Worker (en memoria de cada nodo). Es para una sala
+ * entera junta, que sale por la misma wifi: con el regalo, cada persona que entra pregunta el estado varias veces, activa y
+ * sella. El freno de lo que se adivina son los topes de intentos, no este.
  */
-export const ALTAS_POR_IP_HORA = 3000;
+export const ALTAS_POR_IP_HORA = 20_000;
 /** Lo que el piso guarda siempre, en créditos de Pollar, encima de lo prometido. */
 export const PISO_BASE = 300;
+/**
+ * Las altas de premio que activar sin cupón deja libres encima del piso: el piso no cuenta las que quien organiza todavía
+ * no nombró. Es un lugar chico y fijo, nunca el margen entero del regalo, así una sala que activa sin regalo no se queda
+ * afuera a las pocas personas.
+ */
+export const ALTAS_PREMIO_GUARDADAS = 10;
 /** El ajuste con el que se pausan las altas a mano (`"1"`). */
 export const AJUSTE_PAUSA = "altas_pausadas";
 /** El ajuste donde vive el último saldo de créditos leído, para que sobreviva a un reinicio del objeto. */
@@ -156,7 +182,23 @@ export interface PedidoAlta {
   cuerpo: unknown;
 }
 
-export type AccionAlta = "estado" | "cupon" | "abrir" | "premio";
+export type AccionAlta = "estado" | "cupon" | "abrir" | "premio" | "gratis";
+
+/** Lo que dice `/v1/alta/estado` del regalo de bienvenida cuando todavía no lo recibió y está abierto. */
+export interface VistaBienvenida {
+  estado: "lista" | "llena";
+  sorteos: number;
+}
+
+/**
+ * Un freno del regalo que se mueve en caliente: el ajuste si es un número de 1 hasta el techo y, si no (sin poner, `0` o mal
+ * escrito), el de la variable. null es sin tope.
+ */
+export function frenoEnCaliente(ajuste: string | undefined, deLaVariable: number | null): number | null {
+  if (ajuste === undefined || !/^\d{1,12}$/.test(ajuste)) return deLaVariable;
+  const n = Number(ajuste);
+  return n >= 1 && n <= TECHO_BIENVENIDA_TOPE ? n : deLaVariable;
+}
 /** Las rutas del pago (`/v1/alta/orden` y `/v1/alta/pago`): van aparte para que lo de los cupones no cambie. */
 export type AccionPago = "orden" | "pago";
 
@@ -170,6 +212,7 @@ const ESTADO_DEL_ERROR: Record<string, number> = {
   "lote-usado": 409,
   "cuenta-de-otro": 409,
   "altas-pausadas": 503,
+  "bienvenida-llena": 503,
 };
 
 export interface DependenciasAltas {
@@ -278,6 +321,13 @@ export class PuertaAltas {
    * cuándo cuenta la ventana de 24 horas. Vive en la memoria del objeto: un reinicio la vacía, y el tope vuelve a empezar.
    */
   private readonly consultasPorSorteo = new Map<string, { desde: number; n: number }>();
+  /**
+   * Los regalos de bienvenida dados por conexión (grupo de la dirección) en 24 horas desde el primero, para su freno de
+   * emergencia. En la memoria del objeto: un reinicio la vacía. Solo cuenta si ese freno está puesto.
+   */
+  private readonly regalosPorConexion = new Map<string, { desde: number; n: number }>();
+  /** Las causas por las que el regalo ya no pasó hoy (UTC), para anotarlo una sola vez por día y por causa. */
+  private readonly regaloLlenoAnotado = new Set<string>();
 
   constructor(private readonly d: DependenciasAltas) {
     this.reloj = d.reloj ?? (() => Date.now());
@@ -495,6 +545,7 @@ export class PuertaAltas {
 
   async atender(accion: AccionAlta, p: PedidoAlta): Promise<Respuesta> {
     if (accion === "premio") return this.premio(p);
+    if (accion === "gratis") return this.gratis(p);
     return accion === "cupon" ? this.cupon(p) : accion === "abrir" ? this.abrir(p) : this.estado(p);
   }
 
@@ -615,6 +666,9 @@ export class PuertaAltas {
     // La compra con QR: los créditos se leen solo si la persona podría empezar una (prendida y en el piloto).
     const conCompra = this.d.compras && (this.d.cfg.comprasQr || this.d.compras.tuvo(usuario));
     const creditos = conCompra && this.compraCerrada() === null && this.d.compras?.enPiloto(cuenta) && this.d.pollar ? await this.d.pollar.creditos() : ({ ok: false } as const);
+    // El regalo de bienvenida: los créditos se leen solo si todavía podría recibirlo (con su memoria de 60 s).
+    const podriaRecibir = this.regaloAbierto() && !this.d.altas.recibioBienvenida(usuario);
+    const creditosRegalo = podriaRecibir && this.d.pollar ? await this.d.pollar.creditos() : ({ ok: false } as const);
 
     // Desde acá, sin await: leer y escribir es una sola jugada.
     const ahora = this.reloj();
@@ -632,6 +686,8 @@ export class PuertaAltas {
     }
     const final = alta ? this.d.cupos.altaDe(alta.usuario) : null;
     return r(200, {
+      // El motivo con que quedó guardada el alta. La que nació por la bienvenida dice `admin`, que el sitio de antes y una
+      // pestaña vieja ya conocen: un acceso que no conocen les hace leer mal todo el estado.
       acceso: final ? final.motivo : "ninguno",
       cuenta,
       abierta,
@@ -640,6 +696,160 @@ export class PuertaAltas {
       orden: this.ordenAbierta(usuario, ahora),
       fondeo: this.d.cfg.pollarFondeo,
       ...(conCompra ? { compraQr: this.compraQrDe(usuario, cuenta, creditos, ahora) } : {}),
+      bienvenida: this.bienvenidaDe(usuario, cuenta, grupoDeIp(p.ip), creditosRegalo, ahora),
+    });
+  }
+
+  // ---------- la bienvenida ----------
+
+  /** El regalo abierto: por la variable (`BIENVENIDA`) y sin el interruptor en caliente (`bienvenida_cerrada` en `1`). */
+  private regaloAbierto(): boolean {
+    return this.d.cfg.bienvenida && this.d.cupos.ajuste(AJUSTE_BIENVENIDA_CERRADA) !== "1";
+  }
+
+  /** Lo que dice `GET /v1/alta/precios` en `bienvenida`: los sorteos del regalo si está abierto y sin la pausa a mano, y 0 si no. */
+  bienvenidaPublica(): number {
+    return this.apagado() === null && this.regaloAbierto() && this.d.cupos.ajuste(AJUSTE_PAUSA) !== "1" ? this.d.cfg.bienvenidaSorteos : 0;
+  }
+
+  /** Los frenos de emergencia que valen ahora: el ajuste en caliente o la variable. null es sin tope. */
+  private frenosDelRegalo(): { dia: number | null; hora: number | null; ip: number | null } {
+    const { cfg, cupos } = this.d;
+    return {
+      dia: frenoEnCaliente(cupos.ajuste(AJUSTES_BIENVENIDA_TOPE.dia), cfg.bienvenidaDia),
+      hora: frenoEnCaliente(cupos.ajuste(AJUSTES_BIENVENIDA_TOPE.hora), cfg.bienvenidaHora),
+      ip: frenoEnCaliente(cupos.ajuste(AJUSTES_BIENVENIDA_TOPE.ip), cfg.bienvenidaPorIp),
+    };
+  }
+
+  /** Los regalos dados desde esta conexión en sus últimas 24 horas (en memoria). */
+  private regalosDeConexion(grupo: string, ahora: number): number {
+    const f = this.regalosPorConexion.get(grupo);
+    return f && ahora - f.desde < DIA_MS ? f.n : 0;
+  }
+
+  private contarRegaloDeConexion(grupo: string, ahora: number): void {
+    if (this.regalosPorConexion.size > 5000) {
+      for (const [k, v] of this.regalosPorConexion) if (ahora - v.desde >= DIA_MS) this.regalosPorConexion.delete(k);
+    }
+    const f = this.regalosPorConexion.get(grupo);
+    this.regalosPorConexion.set(grupo, f && ahora - f.desde < DIA_MS ? { desde: f.desde, n: f.n + 1 } : { desde: ahora, n: 1 });
+  }
+
+  /**
+   * El margen del regalo que vale ahora, en créditos: el ajuste en caliente (`reserva_regalo`, de 1 al techo) o, sin poner o
+   * en `0`, el de la variable (`RESERVA_REGALO_CREDITOS`, 3.000 por defecto).
+   */
+  reservaRegalo(): number {
+    return topeEnCaliente(this.d.cupos.ajuste(AJUSTE_RESERVA_REGALO), this.d.cfg.reservaRegalo, TECHO_RESERVA_REGALO);
+  }
+
+  /**
+   * Por qué el regalo no entraría ahora, o null si entra. En orden: el interruptor, los frenos de emergencia (solo si están
+   * puestos), el piso general de créditos (el mismo del canje de un cupón: protege a quienes ya tienen sorteos) y, encima del
+   * piso, el margen del regalo (`reservaRegalo`): después de darlo tiene que quedar ese margen, así el regalo no se come lo
+   * que necesitan los cupones, los premios y las órdenes, que miran el piso solo. `costoExtra` suma lo que el piso todavía no
+   * cuenta (el alta que nacería con el regalo, cuando `/estado` pregunta). Síncrono: se llama en la misma jugada que escribe,
+   * así dos pedidos a la vez no se apoyan en el mismo margen.
+   */
+  private frenoDelRegalo(creditos: Creditos, grupo: string, ahora: number, costoExtra = 0): CausaRegalo | null {
+    if (!this.regaloAbierto()) return "cerrado";
+    const f = this.frenosDelRegalo();
+    if (f.dia !== null && this.d.altas.regalosDesde(ahora - DIA_MS) >= f.dia) return "dia";
+    if (f.hora !== null && this.d.altas.regalosDesde(ahora - HORA_MS) >= f.hora) return "hora";
+    if (f.ip !== null && this.regalosDeConexion(grupo, ahora) >= f.ip) return "conexion";
+    const costo = this.d.cfg.creditosPorSorteo * this.d.cfg.bienvenidaSorteos + costoExtra;
+    const m = this.pausa(creditos, costo, ahora);
+    if (m !== null) return m === "creditos" ? "creditos" : "piso";
+    return this.pausa(creditos, costo, ahora, this.reservaRegalo()) === null ? null : "margen";
+  }
+
+  /**
+   * Lo que `/v1/alta/estado` dice del regalo, sin escribir nada: null solo si ya lo recibió; `lista` si lo puede recibir ahora
+   * (también activar, si no tiene alta); `llena` si no lo recibió y ahora no pasa (el regalo cerrado a propósito, un freno, el
+   * piso o la pausa a mano). Cerrado no es null: así el sitio le sigue ofreciendo activar la cuenta sin cupón, y `/gratis` la
+   * activa con `regalo: "lleno"`.
+   */
+  private bienvenidaDe(usuario: string, cuenta: string | null, grupo: string, creditos: Creditos, ahora: number): VistaBienvenida | null {
+    if (this.d.altas.recibioBienvenida(usuario)) return null;
+    const sorteos = this.d.cfg.bienvenidaSorteos;
+    if (!this.regaloAbierto() || this.d.cupos.ajuste(AJUSTE_PAUSA) === "1") return { estado: "llena", sorteos };
+    const costoAlta = this.altaQueVale(usuario, cuenta) ? 0 : this.d.cfg.creditosPorAlta;
+    return { estado: this.frenoDelRegalo(creditos, grupo, ahora, costoAlta) === null ? "lista" : "llena", sorteos };
+  }
+
+  /** Anota la primera vez en el día (UTC) que el regalo no pasa por esta causa, solo con la causa. */
+  private anotarRegaloLleno(causa: CausaRegalo | "activar", ahora: number): void {
+    const clave = `${new Date(ahora).toISOString().slice(0, 10)}:${causa}`;
+    if (this.regaloLlenoAnotado.has(clave)) return;
+    if (this.regaloLlenoAnotado.size > 100) this.regaloLlenoAnotado.clear();
+    this.regaloLlenoAnotado.add(clave);
+    this.registrar("alta-bienvenida-llena", { causa });
+  }
+
+  /**
+   * `POST /v1/alta/gratis`: la bienvenida de quien entra con su cuenta (Google o correo, cualquier sesión de Pollar). En el
+   * orden del canje de un cupón: la sesión, la cuenta de otro, la cuenta y si ya existe en la red, los créditos y, sin ningún
+   * `await`, `Altas.darBienvenida` en una transacción. Activa siempre que pueda (sin alta, nace una) y suma el regalo una vez
+   * por persona si entra; si no entra, activa igual y contesta `regalo: "lleno"`. Ni la pausa a mano ni el piso tocan lo que ya
+   * se dio: quien ya lo recibió recibe `regalo: "ya"`. La forma es la del canje más `regalo`, y `sigue` es el mismo.
+   */
+  async gratis(p: PedidoAlta): Promise<Respuesta> {
+    const no = this.apagado();
+    if (no) return no;
+    const ses = await this.sesion(p.token, p.ip);
+    if (!ses.ok) return ses.r;
+    const { usuario } = ses.s;
+    const otra = this.cuentaDeOtro(ses.s);
+    if (otra) return otra;
+    const suya = this.d.cupos.altaDe(usuario);
+    const c = await this.cuentaDe(ses.s, suya);
+    if (!c.ok) return r(502, { motivo: "pollar" });
+    const cuenta = c.cuenta;
+    const abierta = await this.abierta(cuenta, suya ?? (cuenta ? this.d.cupos.altaDe(`cuenta:${cuenta}`) : null));
+    // El saldo se lee antes (con su memoria de 60 s); si ya recibió el regalo, ni se mira.
+    const creditos = this.d.altas.recibioBienvenida(usuario) ? ({ ok: false } as const) : await (this.d.pollar as Pollar).creditos();
+
+    // Desde acá, sin await: mirar los frenos y el piso, activar y regalar es una sola jugada.
+    const ahora = this.reloj();
+    const grupo = grupoDeIp(p.ip);
+    const { cfg } = this.d;
+    // Activar sin cupón pide su alta por encima del piso, que ya cuenta los sorteos sin usar y las altas sin abrir de quienes
+    // ya están, más el lugar de unas pocas altas de premio que todavía no se nombraron (el piso no las cuenta). Nunca el
+    // margen entero del regalo: cuando el regalo frena por el margen o está cerrado, la sala se sigue activando. Ese lugar
+    // tampoco pasa del margen del regalo, así activar nunca pide más que regalar.
+    const reserva = Math.min(this.reservaRegalo(), ALTAS_PREMIO_GUARDADAS * cfg.creditosPorAlta);
+    const res = this.d.altas.darBienvenida(
+      {
+        usuario,
+        cuenta,
+        sorteos: cfg.bienvenidaSorteos,
+        dias: cfg.bienvenidaDias,
+        pausada: this.d.cupos.ajuste(AJUSTE_PAUSA) === "1",
+        activar: () => this.pausa(creditos, cfg.creditosPorAlta, ahora, reserva) === null,
+        regalar: () => this.frenoDelRegalo(creditos, grupo, ahora),
+      },
+      ahora,
+    );
+    if (!res.ok) {
+      if (res.motivo === "cuenta-de-otro") this.registrar("error-alta", { motivo: "cuenta-de-otro" });
+      if (res.motivo === "altas-pausadas") this.registrar("alta-pausa", { motivo: "a-mano", donde: "bienvenida" });
+      if (res.motivo === "bienvenida-llena") this.anotarRegaloLleno("activar", ahora);
+      return r(ESTADO_DEL_ERROR[res.motivo] ?? 503, { motivo: res.motivo });
+    }
+    if (res.regalo === "dado") this.contarRegaloDeConexion(grupo, ahora);
+    if (res.causa) this.anotarRegaloLleno(res.causa, ahora);
+    const alta = this.altaQueVale(usuario, cuenta);
+    if (abierta && alta) this.d.cupos.marcarAbierta(alta.usuario, ahora);
+    // Cuando se activó o se regaló algo, solo cifras: ni la persona ni la cuenta.
+    if (res.altaNueva || res.regalo === "dado") this.registrar("alta-bienvenida", { altaNueva: res.altaNueva ? 1 : 0, sorteos: res.sorteosSumados });
+    return r(200, {
+      ok: true,
+      repetido: res.regalo === "ya",
+      sorteosSumados: res.sorteosSumados,
+      sorteos: this.sorteos(usuario, cuenta, ahora),
+      regalo: res.regalo,
+      sigue: this.sigue(cuenta, abierta),
     });
   }
 
@@ -1336,7 +1546,8 @@ export function compraCerradaDe(cfg: Config): "compras-cerradas" | "fondeo-difer
 /**
  * Lo que dice `GET /v1/alta/precios`: los productos que se venden, si el pago está prendido y, con la compra con QR
  * prendida y su recargo bien escrito, lo que suma pagar con QR (`recargoQr`, la primera vez y las siguientes). Sin
- * precios, nada. Sin la compra con QR, `recargoQr: null`: no se anuncia lo que no se vende.
+ * precios, nada. Sin la compra con QR, `recargoQr: null`: no se anuncia lo que no se vende. `bienvenida` son los sorteos del
+ * regalo cuando está abierto y 0 cuando no (la puerta cierra `cfg.bienvenida` si el objeto dice que en caliente está cerrado).
  */
 export function preciosPublicos(cfg: Config): Record<string, unknown> {
   const alta = cfg.precios?.find((p) => p.id === "alta");
@@ -1346,6 +1557,7 @@ export function preciosPublicos(cfg: Config): Record<string, unknown> {
     alta: alta ? { usdc: alta.usdc, sorteos: alta.sorteos, dias: alta.dias } : null,
     paquetes: (cfg.precios ?? []).filter((p) => p.id !== "alta").map((p) => ({ id: p.id, usdc: p.usdc, sorteos: p.sorteos, dias: p.dias })),
     recargoQr: cfg.comprasQr && cfg.recargoQr ? { primera: cfg.recargoQr.primeraUsdc, siguientes: cfg.recargoQr.siguientesUsdc } : null,
+    bienvenida: cfg.bienvenida ? cfg.bienvenidaSorteos : 0,
   };
 }
 
@@ -1378,6 +1590,8 @@ export async function atenderCarga(request: Request, cfg: Config, porIp: PorIp, 
  * siempre). Controla el método, el origen, el tamaño y el cuerpo, saca el token de `Authorization: Bearer` y le pasa
  * el pedido al objeto con `llamar` (o con `llamarPago`, las rutas del pago; sin él, no existen). Nunca pone el token en
  * una dirección ni en la bitácora. `GET /v1/alta/precios` la contesta la puerta sola: es abierta y no toca el objeto.
+ * Lo único que le pregunta, con `consultarBienvenida`, es si el regalo de bienvenida sigue abierto (con el regalo cerrado por la
+ * variable, ni eso). Si el objeto falla, el regalo se dice cerrado.
  */
 export async function atenderAlta(
   request: Request,
@@ -1386,6 +1600,7 @@ export async function atenderAlta(
   porIp: PorIp,
   llamarPago?: (accion: AccionPago, p: PedidoAlta) => Promise<Respuesta>,
   llamarCompra?: (accion: AccionCompra, p: PedidoAlta) => Promise<Respuesta>,
+  consultarBienvenida?: () => Promise<number>,
 ): Promise<Response | null> {
   if (cfg.red !== "mainnet") return null;
   const url = new URL(request.url);
@@ -1394,8 +1609,8 @@ export async function atenderAlta(
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cabeceras });
   const compra = /^\/v1\/compra\/(empezar|cargar|anular)$/.exec(url.pathname)?.[1] as AccionCompra | undefined;
   // La ruta del alta de quien ganó existe solo con `ALTAS_PREMIO` prendida: apagada, sigue dando 404 como siempre.
-  const sinPremio = /^\/v1\/alta\/(estado|cupon|abrir|orden|pago|precios)$/;
-  const conPremio = /^\/v1\/alta\/(estado|cupon|abrir|orden|pago|precios|premio)$/;
+  const sinPremio = /^\/v1\/alta\/(estado|cupon|gratis|abrir|orden|pago|precios)$/;
+  const conPremio = /^\/v1\/alta\/(estado|cupon|gratis|abrir|orden|pago|precios|premio)$/;
   const m = compra ? null : (cfg.altasPremio ? conPremio : sinPremio).exec(url.pathname);
   if (compra ? !llamarCompra : !m?.[1] || ((m[1] === "orden" || m[1] === "pago") && !llamarPago)) return json({ motivo: "no-existe" }, 404, cabeceras);
   if (m?.[1] === "precios") {
@@ -1403,6 +1618,17 @@ export async function atenderAlta(
     if (request.method !== "GET") return json({ motivo: "metodo" }, 405, abiertas);
     if (!cfg.altas) return json({ motivo: "apagado" }, 503, abiertas);
     if (!porIp.toca(request.headers.get("CF-Connecting-IP") ?? "0.0.0.0", ALTAS_POR_IP_HORA)) return json({ motivo: "cupo-ip" }, 429, abiertas);
+    if (cfg.bienvenida && consultarBienvenida) {
+      let abierto = false;
+      try {
+        const n = await consultarBienvenida();
+        abierto = Number.isInteger(n) && n > 0;
+      } catch {
+        abierto = false;
+      }
+      // Lo que dice el objeto (el interruptor en caliente y la pausa a mano) manda sobre la variable.
+      if (!abierto) cfg = { ...cfg, bienvenida: false };
+    }
     return json(preciosPublicos(cfg), 200, { ...abiertas, "Cache-Control": "public, max-age=300" });
   }
   if (request.method !== "POST") return json({ motivo: "metodo" }, 405, cabeceras);

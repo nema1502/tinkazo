@@ -142,6 +142,26 @@ export function montarAltas(env: Partial<Env> = {}, opciones: { sinPollar?: bool
   const cupon = (token: string | null, c: unknown, ip = IP) => puerta.cupon({ token, ip, cuerpo: { cupon: c } });
   const estado = (token: string | null, ip = IP) => puerta.estado({ token, ip, cuerpo: {} });
   const abrir = (token: string | null, ip = IP) => puerta.abrir({ token, ip, cuerpo: {} });
+  const gratis = (token: string | null, ip = IP) => puerta.gratis({ token, ip, cuerpo: {} });
 
-  return { sql, cupos, altas, cfg, pm, pollar, abiertas, red, anotado, puerta, persona, lote, cupon, estado, abrir, mover: (ms: number) => (ahora += ms), hora: () => ahora };
+  return {
+    sql,
+    cupos,
+    altas,
+    cfg,
+    pm,
+    pollar,
+    abiertas,
+    red,
+    anotado,
+    puerta,
+    persona,
+    lote,
+    cupon,
+    estado,
+    abrir,
+    gratis,
+    mover: (ms: number) => (ahora += ms),
+    hora: () => ahora,
+  };
 }

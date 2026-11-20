@@ -15,6 +15,8 @@ import {
   FALLIDOS_POR_USUARIO_HORA,
   PuertaAltas,
   TOKENS_NUEVOS_POR_IP_HORA,
+  type AccionAlta,
+  type PedidoAlta,
   atenderAlta,
 } from "./rutas-altas";
 import type { SorteoEnRed } from "./sorteadora";
@@ -33,7 +35,17 @@ describe("el camino entero, con la cuenta abierta al entrar (fondeo inmediato)",
 
     expect(await m.estado(ana.token)).toEqual({
       estado: 200,
-      cuerpo: { acceso: "ninguno", cuenta: ana.cuenta, abierta: false, pedido: null, sorteos: { quedan: 0, proximoVence: null }, orden: null, fondeo: "inmediato" },
+      cuerpo: {
+        acceso: "ninguno",
+        cuenta: ana.cuenta,
+        abierta: false,
+        pedido: null,
+        sorteos: { quedan: 0, proximoVence: null },
+        orden: null,
+        fondeo: "inmediato",
+        // Sin alta y con créditos de sobra: puede recibir el regalo de bienvenida.
+        bienvenida: { estado: "lista", sorteos: 3 },
+      },
     });
     // Sin acceso no se mete a nadie en el libro.
     expect(m.cupos.estaEnElLibro(ana.cuenta as string)).toBe(false);
@@ -459,8 +471,8 @@ describe("la puerta del Worker (atenderAlta)", () => {
     expect(e.vistos).toHaveLength(0);
   });
 
-  it(`muchos pedidos de una dirección en la hora dan 429 cupo-ip: ${ALTAS_POR_IP_HORA}, para todo un stand que sale por la misma`, async () => {
-    expect(ALTAS_POR_IP_HORA).toBe(3000);
+  it(`muchos pedidos de una dirección en la hora dan 429 cupo-ip: ${ALTAS_POR_IP_HORA}, para una sala que sale por la misma`, async () => {
+    expect(ALTAS_POR_IP_HORA).toBe(20_000);
     const e = espia();
     const porIp = new PorIp();
     let ultimo: Response | null = null;
@@ -468,6 +480,45 @@ describe("la puerta del Worker (atenderAlta)", () => {
     expect(ultimo?.status).toBe(429);
     expect(await ultimo?.json()).toMatchObject({ motivo: "cupo-ip" });
     expect(e.vistos).toHaveLength(ALTAS_POR_IP_HORA);
+  });
+
+  /** Lo que llega al objeto, con cualquier ruta de las altas. */
+  const alObjeto = () => {
+    const vistos: AccionAlta[] = [];
+    return { vistos, llamar: async (accion: AccionAlta, _p: PedidoAlta) => (vistos.push(accion), { estado: 200, cuerpo: { ok: true } }) };
+  };
+  /** Un pedido de una persona de la sala a una ruta de las altas, desde la misma dirección que todas. */
+  const deLaSala = (ruta: string, persona: number) => pedido(ruta, { headers: { Authorization: `Bearer tok_${persona}` }, body: "{}" });
+
+  it("una sala de 150 personas por la misma dirección en una hora: sus 150 pedidos del regalo pasan todos", async () => {
+    let ahora = T0;
+    const porIp = new PorIp(() => ahora);
+    const o = alObjeto();
+    const estados: number[] = [];
+    for (let i = 0; i < 150; i++) {
+      estados.push(((await atenderAlta(deLaSala("/v1/alta/gratis", i), cfgMainnet, o.llamar, porIp)) as Response).status);
+      // Los 150 repartidos en 59 minutos y medio, dentro de la misma hora.
+      ahora += 23_800;
+    }
+    expect(ahora - T0).toBeLessThan(3_600_000);
+    expect(estados).toEqual(Array<number>(150).fill(200));
+    expect(o.vistos).toEqual(Array<AccionAlta>(150).fill("gratis"));
+  });
+
+  it("la misma sala preguntando el estado 40 veces cada una y activando pasa entera, más que el límite de antes", async () => {
+    let ahora = T0;
+    const porIp = new PorIp(() => ahora);
+    const o = alObjeto();
+    let frenados = 0;
+    for (let i = 0; i < 150; i++) {
+      for (let k = 0; k < 40; k++) if ((await atenderAlta(deLaSala("/v1/alta/estado", i), cfgMainnet, o.llamar, porIp))?.status !== 200) frenados++;
+      if ((await atenderAlta(deLaSala("/v1/alta/gratis", i), cfgMainnet, o.llamar, porIp))?.status !== 200) frenados++;
+      ahora += 23_800;
+    }
+    expect(frenados).toBe(0);
+    // 6.150 pedidos en la hora: con las 3.000 de antes, la mitad de la sala se quedaba afuera.
+    expect(o.vistos).toHaveLength(150 * 41);
+    expect(o.vistos.length).toBeGreaterThan(3000);
   });
 });
 

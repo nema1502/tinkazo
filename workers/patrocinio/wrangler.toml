@@ -37,6 +37,14 @@ PATROCINADORES_APP = "GAYWGZ4P5NHJU2UL7TGWSP6ZF5BYEBZ4WP7TZDBDZ3FXUN5DHGAMDGKU,G
 # Vacío: no se pregunta y todas tienen el cupo de siempre. Se carga al desplegar, cuando el Worker de la cuenta ya está arriba.
 # Por ejemplo: CUENTA_URL = "https://cuenta.tinkazo.app"
 CUENTA_URL = ""
+# El regalo de bienvenida existe solo en mainnet con las altas: en testnet estas se ignoran. Los mismos valores que allá.
+BIENVENIDA = "1"
+BIENVENIDA_SORTEOS = "3"
+BIENVENIDA_DIAS = "60"
+BIENVENIDA_DIA = ""
+BIENVENIDA_HORA = ""
+BIENVENIDA_POR_IP = ""
+RESERVA_REGALO_CREDITOS = "3000"
 
 # ---------- El portero de mainnet: otro Worker, en pm.tinkazo.app ----------
 # `npx wrangler@4 deploy --env mainnet`, con la palabra de quien mantiene el proyecto. Las variables y el objeto NO se
@@ -141,3 +149,19 @@ TOPE_PAGOS_STROOPS = "20000000"
 PAGOS_RECHAZADOS_DIA = "20"
 # Cuántas altas de quien ganó se aceptan en 24 horas, entre todas las cuentas. Solo dígitos.
 ALTAS_PREMIO_DIA = "100"
+# El regalo de bienvenida (POST /v1/alta/gratis): quien entra con su cuenta activa y organiza sus primeros sorteos oficiales
+# gratis, una vez por persona. Abierto: solo "0" lo cierra (en caliente, el ajuste bienvenida_cerrada en 1). Si el piso de
+# créditos no deja pasar el regalo, la cuenta se activa igual y lo recibe después.
+BIENVENIDA = "1"
+# Los sorteos del regalo (de 1 a 10) y los días que valen (de 1 a 365).
+BIENVENIDA_SORTEOS = "3"
+BIENVENIDA_DIAS = "60"
+# Frenos de emergencia, todos sueltos: vacíos o en "0" no hay tope. Regalos por día y por hora entre todos, y por conexión
+# en 24 horas (en un evento todos salen por la misma: no se pone). En caliente: bienvenida_dia, bienvenida_hora y bienvenida_ip.
+BIENVENIDA_DIA = ""
+BIENVENIDA_HORA = ""
+BIENVENIDA_POR_IP = ""
+# El margen del regalo, en créditos de Pollar (no es un tope de personas): el regalo pasa solo si después quedan estos
+# créditos por encima del piso, así no deja sin firma a quienes ya tienen sorteos. Sin el regalo, la cuenta se activa igual:
+# activar deja solo el lugar de diez altas de premio. Los cupones, los premios y las órdenes miran el piso solo. Hasta 50000. En caliente: reserva_regalo (de 1 a 50000; 0 vuelve a este valor).
+RESERVA_REGALO_CREDITOS = "3000"

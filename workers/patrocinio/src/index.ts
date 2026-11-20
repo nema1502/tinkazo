@@ -362,6 +362,17 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
+  /** Lo que dice `GET /v1/alta/precios` del regalo de bienvenida: sus sorteos si está abierto, 0 si no o si algo falla. */
+  async bienvenida(): Promise<number> {
+    try {
+      await this.obtener();
+      return this.puerta ? this.puerta.bienvenidaPublica() : 0;
+    } catch (e) {
+      registrar("error-interno", { donde: "bienvenida", error: e instanceof Error ? e.name : "desconocido" });
+      return 0;
+    }
+  }
+
   /** Las rutas del pago, `/v1/alta/orden` y `/v1/alta/pago` (solo mainnet). */
   async pagoAlta(accion: AccionPago, pedido: PedidoAlta): Promise<Respuesta> {
     await this.obtener();
@@ -516,6 +527,7 @@ export default {
         altaPorIp,
         (accion, pedido) => objeto.pagoAlta(accion, pedido),
         (accion, pedido) => objeto.compra(accion, pedido),
+        () => objeto.bienvenida(),
       );
       if (r) return r;
     }
