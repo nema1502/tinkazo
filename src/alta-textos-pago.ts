@@ -13,7 +13,8 @@
  *
  * Solo medios automáticos: ningún texto manda a escribir para pagar ni promete un QR del banco, porque eso dependería de
  * que alguien confirme el pago a mano.
- * `i18n.ts` los suma al diccionario; con la compra de sorteos apagada (`altaPagoActivo()`) no se muestra ninguno.
+ * `i18n.ts` los suma al diccionario; con la compra de sorteos apagada (`altaPagoActivo()`) no se muestra ninguno, salvo los
+ * de «Se te acabaron» y del aviso de premios del final, que no ofrecen comprar y se ven con la venta abierta o cerrada.
  *
  * Reglas de escritura (las comprueban `alta-textos-pago.test.ts` y `ui/pago-poco-texto.test.ts`): las mismas de
  * `alta-textos.ts`, sin comillas angulares ni punto y coma, y además: nunca «token», «hash», «transacción» ni
@@ -95,6 +96,14 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSaldoEt: "Con tu saldo",
     pagoSaldoCorto: "Tenés {tiene} dólares digitales, faltan {falta}",
     pagoSaldoCortoUno: "Tenés 1 dólar digital, faltan {falta}",
+
+    // «Se te acabaron» (`ui/sin-sorteos.ts`): el título de quien nunca tuvo sorteos oficiales y el botón que pasa a
+    // Prueba y entra solo con la cuenta de prueba. Llevan `pago` adelante porque viven en este archivo.
+    pagoNuncaTuvoTitulo: "Todavía no tenés sorteos oficiales",
+    pagoSortearEnPrueba: "Sortear en Prueba",
+    // Junto a Sellar, cuando los premios de a uno piden más sorteos oficiales de los que quedan (`cupo-oficial.ts`).
+    pagoFaltanPremios: "Tu sorteo tiene {p} premios y te quedan {n}.",
+    pagoFaltanPremios1: "Tu sorteo tiene {p} premios y te queda 1.",
   },
   en: {
     pagoNoALaVenta: "This pack isn't on sale right now. What you already bought is still yours.",
@@ -162,5 +171,10 @@ export const TEXTOS_ALTA_PAGO: { es: Record<string, string>; en: Record<string, 
     pagoSaldoEt: "With your balance",
     pagoSaldoCorto: "You have {tiene} digital dollars, {falta} short",
     pagoSaldoCortoUno: "You have 1 digital dollar, {falta} short",
+
+    pagoNuncaTuvoTitulo: "You don't have Live draws yet",
+    pagoSortearEnPrueba: "Run it in Test",
+    pagoFaltanPremios: "Your draw has {p} prizes and you have {n} left.",
+    pagoFaltanPremios1: "Your draw has {p} prizes and you have 1 left.",
   },
 };

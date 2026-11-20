@@ -507,10 +507,25 @@ describe("el regalo de quien entra con su cuenta", () => {
     expect(portadaDe(cero).linea).toBeNull();
   });
 
-  it("la cuenta activada sin el regalo y sin sorteos: el final dice que hoy ya se entregaron", () => {
+  it("la cuenta activada sin el regalo y sin sorteos: el final dice que hoy ya se entregaron y que llegan más tarde", () => {
     const vista = listaCon({ quedan: 0, vence: null, lleno: true });
     expect(vista.final).toBe(true);
-    expect(portadaDe(vista).linea).toEqual({ clave: "altaBienvenidaLlena" });
+    expect(portadaDe(vista).linea).toEqual({ clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } });
+    // Mientras tanto, el enlace chico Sortear en Prueba, con el nombre de «Se te acabaron» (Practicar sin cuenta diría lo
+    // contrario de Tu cuenta está lista). La principal sigue siendo la del final.
+    expect(vista.practicar).toEqual({ accion: "practicar", clave: "pagoSortearEnPrueba", apagado: false });
+    expect(vista.principal?.accion).not.toBe("practicar");
+  });
+
+  it("sin el regalo y con sorteos de antes, o con el cambio de modo cerrado, no hay enlace a Prueba", () => {
+    expect(listaCon({ quedan: 2, vence: null, lleno: true }).practicar).toBeUndefined();
+    expect(listaCon({ quedan: 3, vence: null }).practicar).toBeUndefined();
+    const cerrado = v(
+      { activacion: "lista", proteccion: "lista", puedePasarAPrueba: false },
+      { estado: "con", por: "admin", delRegalo: true, sorteosDelRegalo: { quedan: 0, vence: null, lleno: true } },
+    );
+    expect(cerrado.final).toBe(true);
+    expect(cerrado.practicar).toBeUndefined();
   });
 
   it("la cuenta activada sin el regalo pero con sorteos de antes: el final dice cuántos quedan", () => {

@@ -249,14 +249,18 @@
      redonda, limpia y centrada, con los colores de Tinkazo. Es la única
      tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
      no como una parte más de la página. */
+  /* Anclada arriba y no centrada: al desplegar Otras formas de entrar la lista crece hacia abajo, y lo de arriba (Google y
+     el renglón que se tocó) se queda quieto debajo del dedo. Centrada, toda la ventana subía unos 100 px. */
   .modal-card.login {
-    position: relative; max-width: min(420px, calc(100vw - 28px));
-    max-height: calc(100vh - 2 * var(--modal-pad)); max-height: calc(100dvh - 2 * var(--modal-pad)); overflow-y: auto;
+    --login-arriba: min(6vh, 64px);
+    position: relative; max-width: min(420px, calc(100vw - 28px)); margin: var(--login-arriba) auto auto;
+    max-height: calc(100vh - 2 * var(--modal-pad) - var(--login-arriba));
+    max-height: calc(100dvh - 2 * var(--modal-pad) - var(--login-arriba)); overflow-y: auto;
     border: 0; border-radius: 22px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
     padding: 34px 32px 16px; gap: 0;
   }
   .login-x {
-    position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; display: grid; place-items: center;
+    position: absolute; top: 12px; right: 12px; width: 48px; height: 48px; display: grid; place-items: center;
     background: var(--card); color: var(--ink2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
   }
   .login-x:hover { color: var(--ink); border-color: var(--ink2); }
@@ -308,23 +312,44 @@
   /* La billetera y la cuenta de prueba, plegadas: casi nadie las necesita. */
   .login-mas { margin-top: 18px; }
   .login-mas > summary {
-    display: flex; align-items: center; justify-content: center; min-height: 44px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; min-height: 48px; cursor: pointer;
     color: var(--ink2); font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
   }
   .login-mas[open] > summary { margin-bottom: 10px; }
+  /* Otras formas de entrar: un solo renglón debajo de Google que despliega el correo, la billetera y la cuenta de prueba. */
+  .login-otras {
+    display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; margin-top: 18px; padding: 0;
+    background: none; border: 0; cursor: pointer; font-family: inherit;
+    color: var(--ink2); font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .login-otras[aria-expanded="true"] { margin-bottom: 10px; }
+  .login-otras-lista { display: flex; flex-direction: column; gap: 10px; }
+  .login-otras-lista[hidden] { display: none; }
+  /* Lo que este navegador ya usa, a la vista debajo de Google. */
+  .login-recordadas { margin-top: 10px; }
   /* Desde el navegador de una app: por qué el correo va primero. */
   .login-app { margin: 0 0 14px; padding: 10px 12px; border-left: 6px solid var(--orange); background: var(--field); font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.45; }
   .login-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
   .login-link {
-    min-height: 44px; padding: 0 4px; background: none; border: 0; cursor: pointer;
+    min-height: 48px; padding: 0 4px; background: none; border: 0; cursor: pointer;
     color: var(--ink2); font-family: inherit; font-size: 16px; font-weight: 700; text-decoration: underline;
   }
   .login-link:disabled { opacity: 0.5; cursor: default; }
+  /* Copiar el enlace, pegado al aviso del navegador de una app, y Practicar sin cuenta, debajo de las formas de entrar. */
+  .login-copiar { display: flex; justify-content: center; margin: -8px 0 6px; }
+  /* Practicar sin cuenta no es otra forma de entrar: lleva a Prueba. Más aire arriba y letra sin negrita (de 16 px, el
+     piso de la ventana de ingreso) para que no se lea como un par de Otras formas de entrar. */
+  .login-practicar { display: flex; justify-content: center; margin-top: 20px; }
+  .login-practicar .login-link { font-weight: 400; }
+  /* Si un fallo ya ofrece el botón Practicar en Prueba, el enlace hace lo mismo: se va mientras el botón está y vuelve con él. */
+  .modal-card.login:has([data-salida="practicar"]) .login-practicar { display: none; }
+  /* Tengo un cupón, el enlace chico de Se te acabaron: centrado debajo de los botones del pie. */
+  .dlg-pie > .sin-sorteos-enlace { align-self: center; }
   .login-foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 14px; color: var(--muted); }
   .login-by { display: inline-flex; align-items: center; gap: 6px; }
   .login-by svg { width: 15px; height: 15px; color: var(--purple-ink); }
   .login-by b { color: var(--ink); font-weight: 800; }
-  .login-foot summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--ink2); text-decoration: underline; }
+  .login-foot summary { display: inline-flex; align-items: center; min-height: 48px; cursor: pointer; color: var(--ink2); text-decoration: underline; }
   .login-foot details p { color: var(--ink2); line-height: 1.5; padding-bottom: 6px; }
   @media (max-width: 420px) {
     .modal-card.login { padding: 30px 20px 12px; border-radius: 18px; }

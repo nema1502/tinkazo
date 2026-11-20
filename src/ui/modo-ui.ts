@@ -6,7 +6,7 @@ import { cuponDelFragmento } from "../stellar/cupon-guardado";
 import { limpiarPasoDelCupon } from "../stellar/cupon-paso-guardado";
 import { activeWallet } from "../stellar/wallet-lite";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
-import { MARCA_INGRESAR } from "./cuenta-estado";
+import { MARCA_INGRESAR, MARCA_PRACTICAR } from "./cuenta-estado";
 import { pedirPasoDelCupon } from "./cupon-paso";
 
 /**
@@ -87,6 +87,32 @@ export function pasarAModo(target: NetworkName, o: { cupon?: boolean } = {}): bo
   const ingresar = porLaCuenta && !cuentaEnDestino && !conservarCupon;
   if (conCupon) pedirPasoDelCupon(ingresar);
   else if (ingresar) pedirIngresar();
+  return true;
+}
+
+/**
+ * Practicar en Prueba, de un toque: pasa a Prueba con la herramienta abierta y deja la marca para que la página de allá
+ * entre sola con la cuenta de prueba (`initWalletUI` en wallet-ui.ts), sin la ventana de entrar en el medio. La lista que
+ * se estaba armando viaja con el borrador de la pestaña (`reponerBorrador`). Con la guarda del cambio de modo cerrada no
+ * hace nada, y si la recarga no se pudo pedir no deja la marca. Devuelve si se pidió el cambio.
+ */
+export function practicarEnPrueba(): boolean {
+  if (!puedeCambiarDeModo()) return false;
+  try {
+    sessionStorage.setItem(MARCA_PRACTICAR, "1");
+  } catch {
+    /* sin almacenamiento, la página de Prueba abre con su botón de entrar */
+  }
+  const cambia = changeMode("testnet", "sortear");
+  if (!cambia) {
+    try {
+      sessionStorage.removeItem(MARCA_PRACTICAR);
+    } catch {
+      /* no había nada que borrar */
+    }
+    return false;
+  }
+  limpiarPasoDelCupon();
   return true;
 }
 

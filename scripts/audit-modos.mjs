@@ -43,7 +43,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { esperadoSinElParametro, evaluarRepetidos } from "./lib/modos-comprobaciones.mjs";
 
 const args = process.argv.slice(2);
@@ -148,6 +148,8 @@ async function conectarCuentaDePrueba(page) {
   await page.eval(TOCAR_ENTRAR_JS);
   const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
   if (!ventana.ok) throw new Error("no se abrio la ventana de ingreso");
+  // La cuenta de prueba está detrás de Otras formas de entrar: se despliega antes de buscarla.
+  await page.eval(ABRIR_OTRAS_FORMAS_JS);
   await sleep(300);
   const i = await page.eval("String([...document.querySelectorAll('.login-opt')].findIndex((el) => /prueba|Test account/.test(el.textContent)))");
   if (i === "-1") throw new Error("la ventana de ingreso no ofrece la cuenta de prueba");

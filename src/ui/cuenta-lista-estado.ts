@@ -213,6 +213,8 @@ export type Accion =
   | "salir-y-entrar"
   | "entrar-de-nuevo"
   | "pasar-a-prueba"
+  /** «Sortear en Prueba»: pasa a Prueba y entra solo con la cuenta de prueba, con la lista intacta. */
+  | "practicar"
   | "seguir"
   | "sellar"
   | "sortear"
@@ -322,6 +324,11 @@ export interface Vista {
   primerOficial: boolean;
   /** La línea propia del final cuando la cuenta quedó lista con el regalo: cuántos sorteos quedan y cuándo vencen. */
   linea?: Texto;
+  /**
+   * El enlace chico «Sortear en Prueba» del final, cuando la cuenta quedó activada sin el regalo y sin sorteos: en
+   * Prueba se puede sortear ya, sin esperar. Sin el cambio de modo, no va.
+   */
+  practicar?: Boton;
   /** La línea de estado del pie (`role="status"`). */
   estado: Texto | null;
   notas: string[];
@@ -1053,12 +1060,17 @@ export function vistaDe(entrada: EntradaVista): Vista {
     const conLista = e.para === "entrada-con-lista" || e.para === "sello";
     const p = comoEntrada(e.para) ? boton("seguir", "clSeguir") : e.para === "sorteo" ? boton("sortear", "draw") : boton("sellar", "freeze");
     const delRegalo = accesoDe(e).sorteosDelRegalo;
-    // Con sorteos, cuántos quedan. La cuenta activada sin el regalo y sin sorteos lo dice, así no se entera al sellar.
+    // Con sorteos, cuántos quedan. La cuenta activada sin el regalo y sin sorteos lo dice, así no se entera al sellar, y
+    // que se pueden recibir más tarde. Mientras tanto, el enlace chico para practicar en Prueba.
     const sinElRegalo = delRegalo?.lleno === true && delRegalo.quedan === 0;
     const conSorteos = delRegalo && delRegalo.quedan > 0 ? lineaDelRegalo(delRegalo) : null;
-    const linea = premio || !delRegalo ? null : sinElRegalo ? { clave: "altaBienvenidaLlena" } : conSorteos;
+    const llena: Texto = { clave: "altaBienvenidaLlena", luego: { clave: "altaBienvenidaMasTarde" } };
+    const linea = premio || !delRegalo ? null : sinElRegalo ? llena : conSorteos;
+    // Con el nombre de «Se te acabaron», que lleva a lo mismo: «Practicar sin cuenta» diría lo contrario del título.
+    const practicar = !premio && sinElRegalo && e.puedePasarAPrueba ? boton("practicar", "pagoSortearEnPrueba", e.corre === "cerrando") : null;
     return {
       ...(linea ? { linea } : {}),
+      ...(practicar ? { practicar } : {}),
       final: true,
       titulo: "clListaTitulo",
       // Con el premio, la línea dice para qué quedó lista. Para quien organiza, como siempre, sin línea propia.

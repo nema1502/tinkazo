@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { crearChip } from "../../src/ui/cuenta-chip";
-import { BOTON_ENTRAR_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, BOTON_ENTRAR_JS, HAY_BOTON_ENTRAR_JS, SELECTOR_CHIP_ENTRAR, TOCAR_ENTRAR_JS } from "./entrar.mjs";
 
 /** Evalúa una expresión de las que los auditores le mandan a la página, sobre el documento de la prueba. */
 const evaluar = (expresion) => (0, eval)(expresion);
@@ -170,6 +170,47 @@ describe("ningún guion toca el primer botón de la caja de la cabecera", () => 
       const texto = guiones.find((g) => g.f === f)?.texto ?? "";
       expect(texto, f).toMatch(/from "\.\/lib\/entrar\.mjs"/);
       expect(texto, f).toMatch(/TOCAR_ENTRAR_JS/);
+    }
+  });
+});
+
+describe("Otras formas de entrar, en la ventana de entrar", () => {
+  /** El renglón como lo arma la ventana: un botón con aria-expanded que muestra o esconde su lista. */
+  function armarRenglon(abierto) {
+    document.body.innerHTML = '<button type="button" class="login-otras"></button><div id="login-otras-lista"></div>';
+    const b = document.querySelector(".login-otras");
+    const lista = document.getElementById("login-otras-lista");
+    const poner = (si) => {
+      b.setAttribute("aria-expanded", String(si));
+      lista.hidden = !si;
+    };
+    b.addEventListener("click", () => poner(lista.hidden));
+    poner(abierto);
+    return { b, lista };
+  }
+
+  it("cerrado, lo despliega", () => {
+    const { lista } = armarRenglon(false);
+    expect(evaluar(ABRIR_OTRAS_FORMAS_JS)).toBe(true);
+    expect(lista.hidden).toBe(false);
+  });
+
+  it("abierto, no lo cierra", () => {
+    const { lista } = armarRenglon(true);
+    expect(evaluar(ABRIR_OTRAS_FORMAS_JS)).toBe(false);
+    expect(lista.hidden).toBe(false);
+  });
+
+  it("sin el renglón (sin Google o desde una app) no hace nada", () => {
+    document.body.innerHTML = '<div class="login-opts"></div>';
+    expect(evaluar(ABRIR_OTRAS_FORMAS_JS)).toBe(false);
+  });
+
+  it("los guiones que entran con la cuenta de prueba despliegan el renglón antes de buscarla", () => {
+    const guiones = ["audit-ui.mjs", "audit-modos.mjs", "audit-flujo.mjs", "audit-detalles.mjs", "audit-espectador.mjs", "audit-primer-sorteo.mjs"];
+    for (const f of guiones) {
+      const texto = readFileSync(join(process.cwd(), "scripts", f), "utf8");
+      expect(texto, f).toMatch(/ABRIR_OTRAS_FORMAS_JS|SELECTOR_OTRAS_FORMAS_CERRADO/);
     }
   });
 });

@@ -107,6 +107,7 @@ const salidasFalsas = () => ({
   pasarAPrueba: vi.fn(),
   puedePasarAPrueba: vi.fn(() => true),
   entrarDeNuevo: vi.fn(),
+  practicarEnPrueba: vi.fn(),
 });
 
 const raiz = (): HTMLElement | null => document.querySelector(".cuenta-lista");
@@ -232,8 +233,43 @@ describe("la cadena de «Activar mi cuenta» con el regalo", () => {
     await pasa(PEDIDO_CADA_MS * 2);
     expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
     expect(textoDe()).toContain(t("clListaTitulo"));
-    expect(bajada()).toBe(t("altaBienvenidaLlena"));
+    expect(bajada()).toBe(`${t("altaBienvenidaLlena")} ${t("altaBienvenidaMasTarde")}`);
+    // El final no tiene salidas: se cierra con su principal. Sortear en Prueba queda como enlace chico, con el nombre de
+    // «Se te acabaron»: Practicar sin cuenta diría lo contrario de Tu cuenta está lista.
+    expect(boton(t("pagoSortearEnPrueba")).classList.contains("cl-texto")).toBe(true);
+    expect(visibles().some((b) => b.textContent === t("loginPracticar"))).toBe(false);
+    await pasa();
+    principal().click();
+    await expect(promesa).resolves.toBe(true);
+  });
+
+  it("desde ese final, Sortear en Prueba pasa a Prueba con la cuenta de prueba", async () => {
+    const srv = servidorFalso();
+    srv.s.reclamarImpl = async () => {
+      srv.s.acceso = srv.s.delRegalo;
+      srv.s.bienvenida = null;
+      return ok({ ok: true, repetido: false, sorteosSumados: 0, sorteos: { quedan: 0, proximoVence: null }, regalo: "lleno", sigue: "activar" });
+    };
+    const { salidas, promesa } = await abrir({ srv, inicial: { proteccion: "lista" } });
+    principal().click();
+    await pasa(PEDIDO_CADA_MS * 2);
+    boton(t("pagoSortearEnPrueba")).click();
+    await pasa(10);
+    expect(salidas.practicarEnPrueba).toHaveBeenCalledTimes(1);
+    expect(salidas.pasarAPrueba).not.toHaveBeenCalled();
     // El final no tiene salidas: se cierra con su principal.
+    await pasa();
+    principal().click();
+    await expect(promesa).resolves.toBe(true);
+  });
+
+  it("con el regalo recibido, el final no ofrece Sortear en Prueba", async () => {
+    const { promesa } = await abrir({ inicial: { proteccion: "lista" } });
+    principal().click();
+    await pasa(PEDIDO_CADA_MS * 2);
+    expect(textoDe()).toContain(t("clListaTitulo"));
+    expect(visibles().some((b) => b.textContent === t("pagoSortearEnPrueba"))).toBe(false);
+    expect(visibles().some((b) => b.textContent === t("loginPracticar"))).toBe(false);
     await pasa();
     principal().click();
     await expect(promesa).resolves.toBe(true);

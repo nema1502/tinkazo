@@ -93,6 +93,8 @@ export interface SalidasDelPaso {
   pasarAPrueba(): void;
   puedePasarAPrueba(): boolean;
   entrarDeNuevo(): void | Promise<void>;
+  /** «Sortear en Prueba»: pasa a Prueba y entra solo con la cuenta de prueba. Sin esto, como «Pasar a Prueba». */
+  practicarEnPrueba?(): void;
 }
 
 export interface OpcionesDelPaso {
@@ -544,7 +546,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     `<button type="button" class="cl-texto cl-salida" data-salida="pasar-a-prueba"></button></div>` +
     `<button type="button" class="cl-texto cl-salida" data-salida="cerrar-sesion"></button></div>` +
     `<div class="cl-accion"><p class="cl-estado" role="status" aria-live="polite"></p>` +
-    `<button type="button" class="cl-principal"></button><button type="button" class="cl-texto cl-volver"></button></div></div></div>`;
+    `<button type="button" class="cl-principal"></button><button type="button" class="cl-texto cl-volver"></button>` +
+    `<button type="button" class="cl-texto cl-practicar" hidden></button></div></div></div>`;
   const $ = <T extends HTMLElement>(sel: string): T => raiz.querySelector(sel) as T;
   const titulo = $<HTMLHeadingElement>(".cl-titulo");
   const bajada = $<HTMLParagraphElement>(".cl-bajada");
@@ -558,6 +561,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const estado = $<HTMLParagraphElement>(".cl-estado");
   const principal = $<HTMLButtonElement>(".cl-principal");
   const volver = $<HTMLButtonElement>(".cl-volver");
+  const practicar = $<HTMLButtonElement>(".cl-practicar");
   const accionDelPie = $<HTMLDivElement>(".cl-accion");
 
   // Los campos viven fuera del repintado: así no pierden lo escrito ni el foco.
@@ -893,6 +897,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     volver.hidden = !v.volver;
     volver.textContent = t("clVolver");
     if (v.volver) volver.dataset.accion = "volver";
+    practicar.hidden = !v.practicar;
+    practicar.textContent = v.practicar ? texto(v.practicar) : "";
+    practicar.disabled = !!v.practicar?.apagado;
 
     salidasFila.hidden = !v.salidas;
     aPrueba.textContent = t("modeSwitchToTest");
@@ -2036,6 +2043,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "pasar-a-prueba":
         if (salidas.puedePasarAPrueba()) salidas.pasarAPrueba();
         return;
+      case "practicar":
+        if (!salidas.puedePasarAPrueba()) return;
+        if (salidas.practicarEnPrueba) salidas.practicarEnPrueba();
+        else salidas.pasarAPrueba();
+        return;
       case "salir-y-entrar":
       case "entrar-de-nuevo":
         return salir("entrar");
@@ -2141,6 +2153,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   });
   aPrueba.addEventListener("click", (ev) => {
     if (confiable(ev)) void hacer("pasar-a-prueba");
+  });
+  practicar.addEventListener("click", (ev) => {
+    if (confiable(ev) && !practicar.disabled) void hacer("practicar");
   });
   cerrarSes.addEventListener("click", (ev) => {
     if (confiable(ev)) void salir("nada");

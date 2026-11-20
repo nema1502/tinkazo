@@ -6,7 +6,7 @@ import { network } from "../stellar/config";
 import { enPractica, sinGrabar } from "../ensayo-modo";
 import { activeWallet } from "../stellar/wallet-lite";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
-import type { ReclamoDelRegalo, ResultadoDeAlta } from "../stellar/alta-api";
+import type { Acceso, ReclamoDelRegalo, ResultadoDeAlta } from "../stellar/alta-api";
 import type { Para } from "./cuenta-lista-estado";
 import type { OpcionesDelPaso } from "./cuenta-lista";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
@@ -235,8 +235,10 @@ async function prepararPaso(para: Para, extra: Extra = {}): Promise<Apertura> {
           return ui.cerrarSesion();
         },
         pasarAPrueba: () => void modo.pasarAModo("testnet"),
+        practicarEnPrueba: () => void modo.practicarEnPrueba(),
         puedePasarAPrueba: () => modo.puedeCambiarDeModo(),
-        entrarDeNuevo: () => (porCorreo ? ui.openPicker() : ui.entrar()),
+        // Con el correo, la ventana abre con el correo a la vista (detrás de Otras formas de entrar, desplegado).
+        entrarDeNuevo: () => (porCorreo ? ui.openPicker({ otras: true }) : ui.entrar()),
       },
       {
         para,
@@ -457,30 +459,63 @@ async function accesoConRegalo(): Promise<{ cuenta: string; acceso: import("./cu
   }
 }
 
-/** Lo que se supo del regalo en esta carga de la página, por cuenta: una sola lectura del estado por sesión. */
-let regaloSabido: { cuenta: string; promesa: Promise<number | null> } | null = null;
+/**
+ * Lo que dice del regalo la única lectura del estado por sesión: cuántos sorteos puede recibir ahora (`disponible`, o
+ * `null`) y si se sabe que la cuenta nunca tuvo sorteos oficiales (`nuncaTuvo`, `null` si no se sabe).
+ */
+export interface LecturaDelRegalo {
+  disponible: number | null;
+  nuncaTuvo: boolean | null;
+}
+
+const SIN_LECTURA: LecturaDelRegalo = { disponible: null, nuncaTuvo: null };
+
+/** Los accesos que llegan con sorteos: el cupón y la compra. */
+const LLEGAN_CON_SORTEOS: readonly Acceso[] = ["cupon", "pago"];
+/** Los accesos que nacen sin sorteos: el alta del regalo (`admin`) y la de quien ganó un premio. */
+const NACEN_SIN_SORTEOS: readonly Acceso[] = ["admin", "premio"];
 
 /**
- * Si la persona de esta sesión puede recibir el regalo ahora: cuántos sorteos trae, o `null`. Lo pregunta al servidor una
- * sola vez por cuenta en esta carga de la página (lo llaman la línea del cupo con cero sorteos y «Se te acabaron»). Sin
- * el regalo en el servidor (el de antes, que no lo manda), sin respuesta o con cualquier duda, `null`. Una lectura que
- * no salió (sin red, el servicio) no se recuerda: la próxima vez se pregunta de nuevo. Nunca lanza.
+ * Si la cuenta tuvo sorteos oficiales alguna vez, por el acceso y el regalo. Con el cupón o la compra, sí. Con un alta
+ * que nace sin sorteos y el regalo todavía sin recibir (`bienvenida` en el estado, que el servidor manda hasta que lo
+ * recibe), nunca. Lo demás no se sabe.
  */
-export async function regaloDisponible(): Promise<number | null> {
+function nuncaTuvoSorteos(acceso: Acceso, sinRecibirElRegalo: boolean): boolean | null {
+  if (LLEGAN_CON_SORTEOS.includes(acceso)) return false;
+  return sinRecibirElRegalo && NACEN_SIN_SORTEOS.includes(acceso) ? true : null;
+}
+
+/** Lo que se supo del regalo en esta carga de la página, por cuenta: una sola lectura del estado por sesión. */
+let regaloSabido: { cuenta: string; promesa: Promise<LecturaDelRegalo> } | null = null;
+
+/**
+ * Lo que dice del regalo el servidor para la persona de esta sesión. Lo pregunta una sola vez por cuenta en esta carga
+ * de la página (lo llaman la línea del cupo con cero sorteos y «Se te acabaron»). Sin el regalo en el servidor (el de
+ * antes, que no lo manda), sin respuesta o con cualquier duda, nada se sabe. Una lectura que no salió (sin red, el
+ * servicio) no se recuerda: la próxima vez se pregunta de nuevo. Nunca lanza.
+ */
+export async function leerElRegalo(): Promise<LecturaDelRegalo> {
   const a = await accesoConRegalo();
-  if (!a) return null;
+  if (!a) return SIN_LECTURA;
   if (regaloSabido?.cuenta === a.cuenta) return regaloSabido.promesa;
-  const sabido: { cuenta: string; promesa: Promise<number | null> } = { cuenta: a.cuenta, promesa: Promise.resolve(null) };
-  const olvidar = (): null => {
+  const sabido: { cuenta: string; promesa: Promise<LecturaDelRegalo> } = { cuenta: a.cuenta, promesa: Promise.resolve(SIN_LECTURA) };
+  const olvidar = (): LecturaDelRegalo => {
     if (regaloSabido === sabido) regaloSabido = null;
-    return null;
+    return SIN_LECTURA;
   };
   sabido.promesa = a.acceso.estado().then((r) => {
     if (!r.ok) return olvidar();
-    return r.datos.acceso !== "ninguno" && r.datos.bienvenida?.estado === "lista" ? r.datos.bienvenida.sorteos : null;
+    if (r.datos.acceso === "ninguno") return SIN_LECTURA;
+    const b = r.datos.bienvenida;
+    return { disponible: b?.estado === "lista" ? b.sorteos : null, nuncaTuvo: nuncaTuvoSorteos(r.datos.acceso, b !== undefined) };
   }, olvidar);
   regaloSabido = sabido;
   return sabido.promesa;
+}
+
+/** Si la persona de esta sesión puede recibir el regalo ahora: cuántos sorteos trae, o `null` (`leerElRegalo`). */
+export async function regaloDisponible(): Promise<number | null> {
+  return (await leerElRegalo()).disponible;
 }
 
 /**
@@ -497,8 +532,12 @@ export type ReciboDelRegalo = "dado" | "sin-sorteos" | "error";
 export async function recibirRegalo(): Promise<ReciboDelRegalo> {
   const a = await accesoConRegalo();
   if (!a?.acceso.reclamar) return "error";
-  // Mientras se pide, no se ofrece.
-  const pedido: { cuenta: string; promesa: Promise<number | null> } = { cuenta: a.cuenta, promesa: Promise.resolve(null) };
+  // Mientras se pide, no se ofrece. Si nunca tuvo sorteos, se sigue sabiendo hasta que lleguen.
+  const antes = regaloSabido?.cuenta === a.cuenta ? regaloSabido.promesa : Promise.resolve(SIN_LECTURA);
+  const pedido: { cuenta: string; promesa: Promise<LecturaDelRegalo> } = {
+    cuenta: a.cuenta,
+    promesa: antes.then((l) => ({ disponible: null, nuncaTuvo: l.nuncaTuvo }), () => SIN_LECTURA),
+  };
   regaloSabido = pedido;
   let r: ResultadoDeAlta<ReclamoDelRegalo> | null = null;
   try {
@@ -507,7 +546,11 @@ export async function recibirRegalo(): Promise<ReciboDelRegalo> {
   } catch {
     r = null;
   }
-  if (r?.ok) return r.datos.sorteos.quedan > 0 ? "dado" : "sin-sorteos";
+  if (r?.ok) {
+    if (r.datos.sorteos.quedan <= 0) return "sin-sorteos";
+    if (regaloSabido === pedido) pedido.promesa = Promise.resolve({ disponible: null, nuncaTuvo: false });
+    return "dado";
+  }
   if (regaloSabido === pedido) regaloSabido = null;
   return "error";
 }
@@ -565,7 +608,7 @@ async function compraConQr(
 
 /** Lo que sigue fuera de Tu compra: entrar de nuevo, proteger la cuenta o usar un cupón. Lo demás solo cierra. */
 async function afueraDeLaCompra(accion: import("./compra-qr").AccionDeAfuera, wp: typeof import("../stellar/wallet-pollar"), ui: typeof import("./wallet-ui")): Promise<void> {
-  if (accion === "entrar") return void (wp.pollarWallet.label === "Email" ? ui.openPicker() : ui.entrar());
+  if (accion === "entrar") return void (wp.pollarWallet.label === "Email" ? ui.openPicker({ otras: true }) : ui.entrar());
   if (accion === "proteger") return void (await abrirDesdeTusDolares());
   if (accion === "usar-cupon") return void (await abrirParaElError("sello", null, { cupon: "escribir" }));
 }
