@@ -78,7 +78,11 @@ afterEach(() => {
 
 describe("la ventana Sumar sorteos, pagando con dólares digitales", () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    // La orden de mentira vence 72 h después del reloj de la demo: con Date real, al alcanzarse esa fecha la ventana
+    // deja de pintar el panel (pago-vista.ts vencidaSinPagar) y el test se rompe por la fecha, no por el producto.
+    // Igual que pago-paquete.test.ts:78, se congela también Date en el reloj de la demo.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
+    vi.setSystemTime(ahora);
     document.body.innerHTML = "";
     localStorage.clear();
   });
