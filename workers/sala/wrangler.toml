@@ -43,3 +43,19 @@ SOLO_GOOGLE = "estricto"
 # habilitado para el envío.
 CORREO_GANADORAS = "1"
 CORREO_DE = "hola@tinkazo.app"
+
+# La activación al pagar (POST /v1/activar, ver README.md): la sala firma sola el archivo de una campaña cuando comprueba en la red
+# que la comisión del evento se pagó desde la cuenta de Google de quien organiza. Solo con "1" está prendida.
+ACTIVAR_AL_PAGAR = "1"
+# Lo que se cobra: los mismos números que el sitio (VITE_COMISION_PB, VITE_COMISION_MINIMO, VITE_RETIRO_COSTO).
+COMISION_PB = "200"
+COMISION_MINIMO = "1.50"
+COSTO_RETIRO = "0.50"
+# La cuenta que recibe la comisión: la misma de VITE_COMISION_CUENTA del sitio, que ya es pública en sus páginas. Vacía, la
+# activación queda apagada (503 apagada): nunca mira pagos a una cuenta que no es la que cobra. Escribirla no prende nada por
+# sí sola: sin los secretos CAMPANAS_LLAVE_AUTO y SALA_SECRETO la ruta sigue en 503 sin-llave.
+COMISION_CUENTA = "GDJFIZCMUKQM3GHSIJXZ5CR7S2HRJB5GO5NUA2I55HVUV54FW32M2HYM"
+# El portero de la red principal: la sala le pide que dé acceso a quien organiza antes de firmar.
+PORTERO_URL = "https://pm.tinkazo.app"
+# Secretos (se cargan con `npx wrangler@4 secret put`, nunca en este archivo): CAMPANAS_LLAVE_AUTO (la llave privada Ed25519
+# de la activación automática, 32 bytes en hexadecimal), SALA_SECRETO (el mismo que el portero) y POLLAR_SECRETO.

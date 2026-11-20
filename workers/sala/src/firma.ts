@@ -10,6 +10,8 @@ export const LLAVE_CAMPANAS_HEX: string | null = "a167211f21b2e6a4b68cf094b4ea06
 const ES_HEX_32 = /^[0-9a-f]{64}$/;
 /** 64 bytes en base64url sin relleno. */
 export const ES_FIRMA = /^[A-Za-z0-9_-]{86}$/;
+/** 64 bytes en hexadecimal minúscula: la forma en que contesta la activación automática (`POST /v1/activar`). */
+export const ES_FIRMA_HEX = /^[0-9a-f]{128}$/;
 
 /** Convierte hexadecimal en bytes. La llave ya fue validada antes de llegar acá. */
 export function deHex(hex: string): Uint8Array {
@@ -35,9 +37,11 @@ export function aB64url(bytes: Uint8Array): string {
 /**
  * Los 64 bytes de una firma, o null si la cadena no es su forma canónica. Una firma de 64 bytes ocupa 86 caracteres y el
  * último trae 4 bits de sobra: `atob` los descarta y dos cadenas distintas daban los mismos bytes. Se exige que al
- * volver a codificar los bytes salga la misma cadena, así cada firma tiene una sola escritura.
+ * volver a codificar los bytes salga la misma cadena, así cada firma tiene una sola escritura. La otra escritura que vale
+ * es la hexadecimal en minúscula (128 caracteres), que no tiene bits de sobra: es una sola por construcción.
  */
 export function firmaCanonica(firma: string): Uint8Array | null {
+  if (ES_FIRMA_HEX.test(firma)) return deHex(firma);
   if (!ES_FIRMA.test(firma)) return null;
   try {
     const bytes = deB64url(firma);
@@ -87,4 +91,40 @@ export function llaveDeCampanas(
 ): string | null {
   if (env.VIDA_PRUEBA_MS && env.LLAVE_CAMPANAS_PRUEBA && esPedidoLocal(direccion)) return env.LLAVE_CAMPANAS_PRUEBA;
   return oficial;
+}
+
+/** La variable con la llave privada de la activación automática: 32 bytes en hexadecimal, que se carga como secreto. */
+export interface VariablesDeLlaveAuto {
+  CAMPANAS_LLAVE_AUTO?: string;
+}
+
+/** Los 32 bytes de la llave automática, o null si falta o no tiene la forma (así una llave mal pegada nunca firma nada). */
+function secretoAuto(env: VariablesDeLlaveAuto): Uint8Array | null {
+  const hex = env.CAMPANAS_LLAVE_AUTO;
+  return typeof hex === "string" && ES_HEX_32.test(hex) ? deHex(hex) : null;
+}
+
+/** La llave pública (hexadecimal) que sale de la llave automática. No se escribe en ningún archivo: se deriva en el momento. */
+export function llavePublicaAuto(env: VariablesDeLlaveAuto): string | null {
+  const secreto = secretoAuto(env);
+  if (secreto === null) return null;
+  try {
+    return Array.from(ed25519.getPublicKey(secreto), (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * La firma Ed25519 de los bytes UTF-8 de `texto` con la llave automática, en hexadecimal (128 caracteres). Ed25519 es
+ * determinista: el mismo texto da siempre la misma firma, así repetir un pedido no cambia nada. Null si no hay llave.
+ */
+export function firmarConLlaveAuto(env: VariablesDeLlaveAuto, texto: string): string | null {
+  const secreto = secretoAuto(env);
+  if (secreto === null) return null;
+  try {
+    return Array.from(ed25519.sign(new TextEncoder().encode(texto), secreto), (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return null;
+  }
 }

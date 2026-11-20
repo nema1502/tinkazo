@@ -8,6 +8,9 @@
  *
  *   POST   /v1/campana                     JSON {"texto","firma"} → 201 {"id", "token", "vence"}
  *                                           (reemplazar la sala de ese evento que se cerró o venció pide su token en Authorization)
+ *   POST   /v1/activar                     JSON {"texto","sesion"} → 200 {"texto","firma","evento","organizadora"}
+ *                                           (firma la campaña con la llave automática si la comisión del evento se pagó desde la
+ *                                           cuenta de Google de quien organiza; ver `activar.ts`)
  *   POST   /v1/sala                        → 201 {"id", "token", "vence"}   (solo desde los orígenes permitidos)
  *   POST   /v1/sala/<id>                   JSON {"d","h","llave"}: alta 201 {"n"}, corrección 200 {"n","r"}
  *                                          (una sala anterior a la forma 2 también acepta `d` solo en text/plain)
@@ -151,11 +154,16 @@ import {
 import type { AvisoDeLaSala, EnlaceDeCorreo } from "./correo";
 import type { SelloEnLaRed } from "./cadena";
 import { crearSalaDeCampana } from "./creacion";
-import { llaveDeCampanas } from "./firma";
+import { llaveDeCampanas, llavePublicaAuto } from "./firma";
+import type { VariablesDeLlaveAuto } from "./firma";
+import { MAX_CUERPO_ACTIVAR, activarCampana, configDeActivar } from "./activar";
+import type { VariablesDeActivar } from "./activar";
+import { anotarActivacion, antesDeActivar, contarRechazoDeActivar, crearTablasDeActivar, cupoDeCuenta, tomarNota } from "./activar-cupos";
+import type { AntesDeActivar } from "./activar-cupos";
 import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
 import deployments from "../../../src/stellar/deployments.json";
 
-export interface Env {
+export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto {
   SALA: DurableObjectNamespace<Sala>;
   /** Un solo objeto, "cupos": cuenta las salas nuevas por dirección y por día. */
   CUPOS: DurableObjectNamespace<Cupos>;
@@ -279,18 +287,78 @@ export class Cupos extends DurableObject<Env> {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS cuotas (dia TEXT PRIMARY KEY, n INTEGER NOT NULL)");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS altas (grupo TEXT NOT NULL, hora INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (grupo, hora))");
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sal (hora INTEGER PRIMARY KEY, v TEXT NOT NULL)");
+    // La sal del día para las huellas de las cuentas que activan campañas, y los topes de la activación (`activar-cupos.ts`).
+    ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sal_dia (dia TEXT PRIMARY KEY, v TEXT NOT NULL)");
+    crearTablasDeActivar(this.sql);
   }
 
-  /** La huella de la dirección en esta hora: la sal se inventa la primera vez que se pide. */
-  private async huella(ip: string, hora: number): Promise<string> {
+  /** La sal de esta hora: se inventa la primera vez que se pide. */
+  private salDeLaHora(hora: number): string {
     const sql = this.ctx.storage.sql;
     let sal = sql.exec<{ v: string }>("SELECT v FROM sal WHERE hora = ?", hora).toArray()[0]?.v;
     if (!sal) {
       sal = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
       sql.exec("INSERT INTO sal (hora, v) VALUES (?, ?)", hora, sal);
     }
+    return sal;
+  }
+
+  /** La huella de la dirección en esta hora: la sal se inventa la primera vez que se pide. */
+  private async huella(ip: string, hora: number): Promise<string> {
+    const sal = this.salDeLaHora(hora);
     const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${grupoDeIp(ip)}|${sal}`));
     return Array.from(new Uint8Array(h).subarray(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** La huella de una sesión (su token) con la sal de esta hora: sirve para contar repeticiones y no deja el token guardado. */
+  private async huellaDeSesion(token: string, hora: number): Promise<string> {
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`ficha|${this.salDeLaHora(hora)}|${token}`));
+    return Array.from(new Uint8Array(h).subarray(0, 8), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** La huella de una cuenta con la sal del día: los topes diarios no guardan la cuenta y se borran al día siguiente. */
+  private async huellaDeCuenta(cuenta: string, dia: string): Promise<string> {
+    const sql = this.ctx.storage.sql;
+    let sal = sql.exec<{ v: string }>("SELECT v FROM sal_dia WHERE dia = ?", dia).toArray()[0]?.v;
+    if (!sal) {
+      sal = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+      sql.exec("INSERT INTO sal_dia (dia, v) VALUES (?, ?)", dia, sal);
+      sql.exec("DELETE FROM sal_dia WHERE dia < ?", dia);
+    }
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`cuenta|${sal}|${cuenta}`));
+    return Array.from(new Uint8Array(h).subarray(0, 12), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** Lo que se mira antes de llamar al proveedor de cuentas en una activación: ver `antesDeActivar`. */
+  async activarAntes(ip: string, token: string): Promise<AntesDeActivar> {
+    const ahora = Date.now();
+    const hora = horaUtc(ahora);
+    return antesDeActivar(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), ahora });
+  }
+
+  /** Una sesión que el proveedor rechazó en una activación. */
+  async activarRechazo(ip: string, token: string): Promise<void> {
+    const ahora = Date.now();
+    const hora = horaUtc(ahora);
+    contarRechazoDeActivar(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), ahora });
+  }
+
+  /** Si a esta cuenta le cabe activar este evento hoy (5 campañas distintas por día). */
+  async activarCuenta(cuenta: string, evento: string): Promise<{ ok: true } | { ok: false; esperaS: number }> {
+    const ahora = Date.now();
+    const dia = diaUtc(ahora);
+    return cupoDeCuenta(this.sql, { cuenta: await this.huellaDeCuenta(cuenta, dia), evento, dia, ahora });
+  }
+
+  /** Anota que esta cuenta activó este evento hoy. */
+  async activarAnotar(cuenta: string, evento: string): Promise<void> {
+    const dia = diaUtc(Date.now());
+    anotarActivacion(this.sql, { cuenta: await this.huellaDeCuenta(cuenta, dia), evento, dia });
+  }
+
+  /** Toma la nota de la comisión para este evento: un pago sirve a un solo evento (ver `tomarNota`). */
+  async activarNota(nota: string, evento: string): Promise<boolean> {
+    return tomarNota(this.sql, { nota, evento, ahora: Date.now() });
   }
 
   async permitir(ip: string): Promise<Permiso> {
@@ -1177,10 +1245,11 @@ export default {
       if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
       if (req.method !== "POST") return json({ error: "no-existe" }, 404, h);
       if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
-      const llave = llaveDeCampanas(env, req.url);
-      if (!llave) return json({ error: "sin-llave" }, 503, h);
+      // Vale la llave de siempre y, si el Worker tiene el secreto de la activación automática, la que sale de él.
+      const llaves = [llaveDeCampanas(env, req.url), llavePublicaAuto(env)].filter((llave): llave is string => llave !== null);
+      if (llaves.length === 0) return json({ error: "sin-llave" }, 503, h);
       const cuerpo = await leerJson(req, MAX_CUERPO_CAMPANA);
-      const c = leerCampanaFirmada(cuerpo, llave, Date.now());
+      const c = leerCampanaFirmada(cuerpo, llaves, Date.now());
       if (!c.ok) {
         const estado = c.motivo === "forma" ? 400 : c.motivo === "firma" ? 403 : 409;
         return json({ error: c.motivo }, estado, h);
@@ -1216,6 +1285,32 @@ export default {
         return json({ error: creada.motivo }, estado, extra);
       }
       return json({ id: creada.id, token, vence: (creada.creadaEn ?? Date.now()) + vida }, 201, h);
+    }
+
+    // Activar una campaña al pagar: la sala firma sola si la comisión del evento se pagó desde la cuenta de quien organiza.
+    if (partes[0] === "v1" && partes[1] === "activar" && partes.length === 2) {
+      const h = cors(origen, "POST, OPTIONS");
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+      if (req.method !== "POST") return json({ error: "no-existe" }, 404, h);
+      if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+      if (configDeActivar(env) === null) return json({ error: "apagada" }, 503, h);
+      const cuerpo = await leerJson(req, MAX_CUERPO_ACTIVAR);
+      const cupos = env.CUPOS.get(env.CUPOS.idFromName("cupos"));
+      const r = await activarCampana(cuerpo, {
+        env,
+        ahora: Date.now(),
+        ip: req.headers.get("CF-Connecting-IP") ?? "sin-ip",
+        f: (u, i) => fetch(u, i),
+        proveedor: pollarDeLaSala(env),
+        topes: {
+          antes: (ip, ficha) => cupos.activarAntes(ip, ficha),
+          rechazo: (ip, ficha) => cupos.activarRechazo(ip, ficha),
+          cuenta: (cuenta, evento) => cupos.activarCuenta(cuenta, evento),
+          anotar: (cuenta, evento) => cupos.activarAnotar(cuenta, evento),
+          nota: (nota, evento) => cupos.activarNota(nota, evento),
+        },
+      });
+      return json(r.cuerpo, r.estado, r.esperaS === undefined ? h : { ...h, "Retry-After": String(r.esperaS) });
     }
 
     if (partes[0] === "v1" && partes[1] === "sala") {
