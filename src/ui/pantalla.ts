@@ -5,10 +5,14 @@ import { modesVisible } from "../modos/bandera";
 import { isTurnOrder, turnOrder } from "../modos/turnos";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { etiquetaDe } from "../equipos/etiquetas";
-import { app, avatar } from "../state";
+import { app, avatar, currentPace } from "../state";
+import { sinGrabar } from "../ensayo-modo";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
+// El enlace del espectador exige un sorteo sellado en un contrato oficial (espectador-enlace.ts): se arma con datosDeLaEspera.
+import { datosDeLaEspera } from "./espectador-enlace";
+import { network } from "../stellar/config";
 import { piezaParaLaSala } from "./logo-sorteo";
 
 /**
@@ -83,6 +87,9 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.setAttribute("aria-label", t("pantallaT"));
   back.innerHTML =
     `<div class="sala-top"><span class="sticker">${esc(t("pantallaT"))}</span>` +
+    // El QR del espectador (ui/espectador.ts): quien llegó tarde escanea y ve el mismo show.
+    // Solo en un sorteo real, como el QR de la espera: la demo y el ensayo no comparten nada.
+    (!sinGrabar() ? `<button class="ghost" type="button" data-espectador>${esc(t("espQrBoton"))}</button>` : "") +
     // Lo que sigue, a un toque desde la sala: con gente sin premio, "Siguiente premio" es el botón grande.
     (siguiente ? `<button class="primary pantalla-sig" type="button" data-siguiente>${esc(siguiente)}</button>` : "") +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
@@ -157,6 +164,24 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.querySelector<HTMLButtonElement>("[data-siguiente]")?.addEventListener("click", () => {
     cerrar();
     sig?.click();
+  });
+  // El mismo panel de QR que la espera: con la ronda ya nacida, el espectador arranca el show enseguida.
+  // TODO(merge-115): en guido/final este botón armaba el enlace con la ronda y la lista; al integrar el
+  // espectador de origin/main, el enlace exige un sorteo sellado en un contrato oficial (datosDelEnlace lo
+  // rechaza sin eso), así que se arma con datosDeLaEspera: sin sello no hay QR, como en la espera.
+  back.querySelector<HTMLButtonElement>("[data-espectador]")?.addEventListener("click", () => {
+    const f = app.frozen;
+    const d = app.drawn;
+    if (!f || !d) return;
+    const datos = datosDeLaEspera(f, {
+      juego: d.juego ?? app.game,
+      ritmo: currentPace(),
+      premios: d.winners.length,
+      red: network.name,
+      contrato: network.contractId,
+    });
+    if (!datos) return;
+    void import("./espectador").then((m) => m.abrirPanelQrEspectador(m.enlaceEspectador(datos)));
   });
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
   // Se pide con el clic todavía fresco: pasado ese momento, el navegador la niega.

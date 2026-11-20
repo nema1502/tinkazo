@@ -6,7 +6,7 @@ import { tiene3D } from "./registro";
  * cuando su versión en 3D ganó la comparación a ciegas; hasta entonces su módulo (`<juego>-3d.ts`) existe pero solo se abre
  * con `?motor=3d`. Es la única lista: ni el motor ni el interruptor miran otra cosa.
  */
-export const JUEGOS_CON_3D: readonly Game[] = ["race", "trompo", "pinata", "toborochi", "sapo", "guajojo"];
+export const JUEGOS_CON_3D: readonly Game[] = ["race", "trompo", "pinata", "toborochi", "sapo", "guajojo", "bolillas"];
 
 /** Juegos cuyo 3D no vive en el registro del kit, sino enchufado en el propio juego (la carrera: `llamas/carrera-3d`). */
 const MODULO_APARTE: readonly Game[] = ["race"];

@@ -31,6 +31,7 @@ import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { initStand, salirDelStand } from "./ui/stand";
 import { initStandSala } from "./ui/stand-sala";
+import { initOrganizadorInteractivo } from "./sala/organizador";
 import { conservarVistaEnLaCabecera } from "./ui/enlaces-cabecera";
 import { equiposActivo } from "./equipos/bandera";
 import { abreLaHerramienta } from "./modos/bandera";
@@ -42,15 +43,14 @@ import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { iniciarFeedback, origenDelResultado } from "./feedback";
 import { initMenuMas } from "./ui/menu";
+import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
 import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
 import { logoParaSellar } from "./logo-guardado";
 import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
-import { destrabarCtas, iniciarDestelloPie, iniciarHoverVivo, iniciarTemblorHero } from "./estilos-atencion";
 import { campanasActivo } from "./campana/bandera";
-
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
 const INGRESAR = MARCA_INGRESAR;
 
@@ -245,6 +245,8 @@ iniciarCupon();
 initEnsayo();
 // El modo stand, si se recargó en él.
 initStandSala();
+// Los juegos interactivos (botón de la portada: src/sala/organizador.ts).
+initOrganizadorInteractivo();
 // Los equipos con cupón (bandera VITE_EQUIPOS, apagada por defecto): sin la bandera no se agrega nada.
 if (equiposActivo()) {
   reponerEtiquetas();
@@ -605,7 +607,8 @@ rotateWords();
 // Las animaciones de atención (estilos-atencion.ts): el temblor de los botones
 // del hero tras ~8 s sin interactuar, el destello periódico del pie y el hover
 // vivo en las capturas de la portada. Ninguna decide nada del sorteo. Hoy entran
-// apagadas: cada una tiene su interruptor en ATENCION_PRENDIDA.
+// apagadas: cada una tiene su interruptor en ATENCION_PRENDIDA (ver TODO(merge-115)
+// en estilos-atencion.ts sobre los valores que traía guido/final).
 iniciarTemblorHero();
 iniciarDestelloPie();
 iniciarHoverVivo(".portada-juegos a");
@@ -624,6 +627,15 @@ if (location.hash.startsWith("#espectador=")) {
     const datos = m.datosDelEnlace(location.hash);
     if (datos) m.abrirEspectador(datos, initialLang());
     else m.avisarEnlaceRoto(initialLang());
+  });
+}
+// La vista del participante (juegos interactivos): el QR de la sala llega a esta misma página con el
+// id y la clave en el fragmento, y abre la vista de solo-lectura con su resultado personal. Se baja
+// aparte: quien entra a sortear no lo descarga.
+if (location.hash.startsWith("#participante=")) {
+  void Promise.all([import("./ui/espectador"), import("./sala/participante")]).then(([m, p]) => {
+    const datos = p.datosDeParticipante(location.hash);
+    if (datos) m.abrirParticipante(datos, initialLang());
   });
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.

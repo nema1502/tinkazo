@@ -15,13 +15,19 @@
  *   no hay hover, y no aplica.
  * - `animarEntradaIngreso` / `animarSalidaIngreso`: la ventana de ingreso entra
  *   con fade y el panel sube; al cerrar, sale más corto antes de quitar el
- *   nodo. Todavía sin conectar: `wallet-ui.ts` no las llama, y su CSS no corre.
- * - `destrabarCtas`: marca el botón grande de la portada cuando el JS ya pintó
- *   su texto. La regla que lo escondía hasta entonces está apagada (ver
- *   `styles.css`, interruptor `data-cta-espera`).
+ *   nodo. Las dos clases las conecta `wallet-ui.ts` (al abrir y en `shut`).
+ * - `destrabarCtas`: muestra el texto de sesión del botón grande de la portada
+ *   recién cuando el JS lo decidió (contra el FOUC de la recarga); la regla que
+ *   lo escondía hasta entonces está apagada (ver `styles.css`, interruptor
+ *   `data-cta-espera`).
  *
  * El pase, el temblor, el destello y el hover vivo tienen su interruptor en
  * `ATENCION_PRENDIDA`, y hoy entran apagados.
+ * TODO(merge-115): conflicto de valores por resolver a revisión: guido/final
+ * trae estas animaciones prendidas (su versión no tenía interruptor y siempre
+ * corrían, conectadas desde `wallet-ui.ts` y `main.ts`); origin/main las trae
+ * apagadas por defecto con este interruptor. Se tomó el default de main; para
+ * volver al estado de guido/final, prender las piezas en `ATENCION_PRENDIDA`.
  */
 
 /* -------------------------------------------------- los interruptores */

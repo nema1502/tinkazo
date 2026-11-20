@@ -198,6 +198,21 @@ describe("el pase de tarjetas del selector", () => {
   const viva = (panel: HTMLElement): number =>
     [...panel.querySelectorAll<HTMLElement>("[data-game]")].findIndex((t) => t.classList.contains("pase-viva"));
 
+  it("al cerrar el panel y al cerrar la espera, el pase queda parado sin marcas puestas", async () => {
+    const { panel } = await abrirEspera();
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+    // Cerrar el panel apaga el pase: sin marcas ni bucles colgados.
+    (document.querySelector("[data-juegos-listo]") as HTMLButtonElement).click();
+    expect(panel.classList.contains("pase")).toBe(false);
+    expect(panel.querySelectorAll(".pase-viva, .pase-atras")).toHaveLength(0);
+    // Y al volver a abrirlo, el pase se rearma: a los ~6 s vuelve a entrar.
+    (document.querySelector(".espera [data-juego]") as HTMLButtonElement).click();
+    expect(panel.hidden).toBe(false);
+    vi.advanceTimersByTime(6000);
+    expect(panel.classList.contains("pase")).toBe(true);
+  });
+
   it("tras ~6 s sin tocar el panel, las tarjetas entran en pase y se recorren en bucle", async () => {
     const { panel } = await abrirEspera();
     vi.advanceTimersByTime(5900);
@@ -624,6 +639,7 @@ describe("si nace el número con la ruleta andando", () => {
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
     expect(panel.classList.contains("girando")).toBe(false);
+    // Sin temporizadores de la ruleta: ni a que se venzan vuelve a elegir.
     expect(vi.getTimerCount()).toBe(base);
     vi.advanceTimersByTime(10_000);
     expect(elegirJuego).not.toHaveBeenCalled();
@@ -646,6 +662,7 @@ describe("si nace el número con la ruleta andando", () => {
 
     expect(sortear).toHaveBeenCalledTimes(1);
     expect(panel.hidden).toBe(true);
+    // Sin temporizadores de la ruleta.
     expect(vi.getTimerCount()).toBe(base);
     expect(elegirJuego).toHaveBeenCalledTimes(1);
     expect(h.elegido).toBe(esperado.elegido?.game);

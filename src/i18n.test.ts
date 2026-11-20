@@ -355,9 +355,9 @@ describe("un premio por lugar", () => {
 });
 describe("el modo espectador", () => {
   const CLAVES = [
-    "espQrT", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda", "espNoCoincide",
-    "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente", "espVerDeNuevo", "espHacerElTuyo",
-    "espMiraLaSala",
+    "espQrT", "espQrBoton", "espQrSub", "espVistaEspectador", "espLectura", "espProbar", "espSinNumero", "espTarda",
+    "espNoCoincide", "espQrPreparando", "espQrFallo", "espEnlaceRoto", "espIrALaPagina", "espFinSiguiente",
+    "espVerDeNuevo", "espHacerElTuyo", "espMiraLaSala",
   ];
 
   it("sus textos existen en los dos idiomas", () => {
@@ -367,6 +367,10 @@ describe("el modo espectador", () => {
       expect(T.es[k] as string).toBeTruthy();
       expect(T.en[k] as string).toBeTruthy();
     }
+    // El botón de la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos (ver el
+    // TODO(merge-115) más abajo sobre el botón que origin/main había quitado).
+    expect(T.es.espQrBoton).toBe("QR para ver en vivo");
+    expect(T.en.espQrBoton).toBe("QR to watch live");
   });
 
   it("sin comillas angulares, sin punto y coma y sin palabras técnicas", () => {
@@ -379,9 +383,64 @@ describe("el modo espectador", () => {
     }
   });
 
-  it("el QR del espectador va solo en la espera: la pantalla del resultado lleva uno solo, el del comprobante", () => {
-    expect(T.es.espQrBoton).toBeUndefined();
-    expect(T.en.espQrBoton).toBeUndefined();
+  // TODO(merge-115): decisión de diseño por revisar: origin/main quitó el botón de espectador de la pantalla del
+  // resultado (su prueba exigía `espQrBoton` undefined: la pantalla del resultado lleva un solo QR, el del
+  // comprobante) y guido/final lo trae de vuelta como parte del modo espectador QR. En el árbol combinado
+  // `pantalla.ts` usa el botón y la clave, así que quedó el lado de guido/final; si se prefiere el diseño de main,
+  // quitar el botón en `pantalla.ts` y estas dos expectativas.
+  it("el botón del espectador en la pantalla del resultado se llama igual en los dos idiomas, sin anglicismos sueltos", () => {
+    expect(T.es.espQrBoton).toBe("QR para ver en vivo");
+    expect(T.en.espQrBoton).toBe("QR to watch live");
+  });
+});
+
+describe("el amigo secreto (el juego del sobre del premio)", () => {
+  const CLAVES = ["gameAmigo", "jgAmigoN", "jgAmigoB", "gcAmigo", "gcAmigoMany", "loreAmigoQ", "loreAmigoA"];
+
+  it("sus textos existen en los dos idiomas", () => {
+    for (const k of CLAVES) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect((T.es[k] as string).trim(), `es.${k}`).not.toBe("");
+      expect((T.en[k] as string).trim(), `en.${k}`).not.toBe("");
+    }
+  });
+
+  it("cuentan el modelo del sobre del premio: el show destaca el premio al final, en los dos idiomas", () => {
+    for (const k of ["jgAmigoB", "gcAmigo", "gcAmigoMany"]) {
+      expect(String(T.es[k]), `es.${k}`).toMatch(/premio/i);
+      expect(String(T.en[k]), `en.${k}`).toMatch(/prize/i);
+    }
+  });
+
+  it("la ronda de regalos sale del protocolo, no de un generador propio", () => {
+    expect(String(T.es.jgAmigoB), "es.jgAmigoB").toMatch(/protocolo/i);
+    expect(String(T.en.jgAmigoB), "en.jgAmigoB").toMatch(/protocol/i);
+    expect(String(T.es.jgAmigoB), "es.jgAmigoB").not.toMatch(/faro/i);
+    expect(String(T.en.jgAmigoB), "en.jgAmigoB").not.toMatch(/beacon/i);
+  });
+});
+
+describe("los juegos interactivos", () => {
+  it("sus textos nuevos existen en los dos idiomas", () => {
+    for (const k of [
+      "jiLink", "jiT", "jiB", "jiAbrir", "jiQrSub", "jiCerrarLista", "jiListaCerrada", "jiSellar", "jiAnunciando", "jiPocos",
+      "jiErrRonda", "jiResultadoT", "jiRondaEjemplo", "jiPRotulo", "jiPEstadoEntra", "jiPNombreEt", "jiPNombrePh", "jiPNombreBtn",
+      "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
+      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo",
+    ]) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect((T.es[k] as string).trim(), `es.${k}`).not.toBe("");
+      expect((T.en[k] as string).trim(), `en.${k}`).not.toBe("");
+    }
+    // El resultado personal se llama como lo pidió quien lo pidió, y la honestidad también:
+    // es una ronda de ejemplo, no se puede comprobar y no se promete lo que no es.
+    expect(T.es.jiPTeToco).toMatch(/te tocó/i);
+    expect(T.es.jiRondaEjemplo).toMatch(/no se puede comprobar/i);
+    expect(T.en.jiRondaEjemplo).toMatch(/can't be verified/i);
+    expect(T.es.jiPEjemplo).toMatch(/no queda comprobante/i);
+    expect(T.en.jiPEjemplo).toMatch(/no receipt/i);
   });
 });
 

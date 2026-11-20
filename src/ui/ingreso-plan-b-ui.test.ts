@@ -616,7 +616,8 @@ describe("elegir seguir sin cuenta", () => {
     await esperarError(err);
     await esperarSalida();
     (salida()[0] as HTMLButtonElement).click();
-    expect(document.querySelector(".modal-card.login")).toBeNull();
+    // La ventana sale con su animación corta (~150 ms, estilos-atencion.ts) y el nodo se quita después.
+    await vi.waitFor(() => expect(document.querySelector(".modal-card.login")).toBeNull(), esperar);
     expect(ui.claveDeSellar()).toBe("freeze");
     expect(document.getElementById("sin-cuenta-franja")).not.toBeNull();
   });

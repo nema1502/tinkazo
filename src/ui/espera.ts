@@ -457,6 +457,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (!panel || !lista) return;
     lista.innerHTML = opcionesHtml(sorteo.juegos());
     panel.hidden = false;
+    // El pase de inactividad vuelve a armarse cada vez que el panel abre.
+    armarPase();
     // Sorprendeme solo se ofrece si hay a dónde ir. Con más de doscientas personas no cabe ningún juego, y con uno solo la
     // luz se quedaría quieta en la misma tarjeta: en los dos casos el botón no haría nada.
     const sorprender = panel.querySelector<HTMLElement>("[data-azar]");

@@ -11,6 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * `<source>`, el navegador puede haber pedido ya la versión del sistema y
  * quedarse con esa (las capturas quedaban sin cargar, se vio con sapo,
  * trompo y chovena en juegos.html).
+ *
+ * Y el hover vivo de la página de juegos (`pagina.ts` + `estilos-atencion.ts`):
+ * la captura de la tarjeta bajo el mouse se mueve suave dentro de su marco
+ * (Ken Burns, `styles.css`) mientras el hover dura; en pantalla táctil no hay
+ * hover, y no aplica. La clase la pone y la saca el JS (`hover-vivo`); el CSS
+ * hace el movimiento.
  */
 
 /** Una captura como las de juegos.html: source claro e img de base (oscuro). */
@@ -41,8 +47,23 @@ const fijar = async (tema?: string): Promise<void> => {
 
 const fuentes = (picture: HTMLPictureElement): Element[] => [...picture.querySelectorAll("source")];
 
+const h = vi.hoisted(() => ({ reduce: false, hover: true }));
+
+beforeEach(() => {
+  h.reduce = false;
+  h.hover = true;
+  // jsdom no tiene matchMedia: la página consulta movimiento reducido y hover (estilos-atencion.ts).
+  vi.stubGlobal("matchMedia", (q: string) => ({
+    matches: q.includes("prefers-reduced-motion") ? h.reduce : q.includes("(hover: hover)") ? h.hover : false,
+    media: q,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+});
+
 afterEach(() => {
   vi.resetModules();
+  vi.unstubAllGlobals();
   document.body.innerHTML = "";
   window.history.replaceState(null, "", "/");
 });
@@ -90,16 +111,6 @@ describe("el tema forzado en las páginas de lectura", () => {
     }
   });
 });
-
-/**
- * El hover vivo de la página de juegos (`pagina.ts` + `estilos-atencion.ts`):
- * la captura de la tarjeta bajo el mouse se mueve suave dentro de su marco
- * (Ken Burns, `styles.css`) mientras el hover dura; en pantalla táctil no hay
- * hover, y no aplica. La clase la pone y la saca el JS (`hover-vivo`); el CSS
- * hace el movimiento.
- */
-
-const h = vi.hoisted(() => ({ reduce: false, hover: true }));
 
 describe("el hover vivo de las tarjetas de juego", () => {
   beforeEach(() => {
