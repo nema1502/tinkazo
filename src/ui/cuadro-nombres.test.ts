@@ -51,6 +51,15 @@ describe("la ayuda de la lista vacía", () => {
   it("el markup dice lo mismo que el diccionario en español", () => {
     expect(html).toContain('data-i="pegarAyuda" style="display:none">Pegá tu lista o escribí un nombre.</p>');
   });
+
+  it("va debajo del cuadro, como su pie, justo después de Otro nombre (que con la lista vacía no se ve)", () => {
+    // Del cierre del botón al párrafo de la ayuda no hay ningún otro elemento: solo su comentario.
+    const despues = html.slice(html.indexOf("</button>", html.indexOf('id="btn-otro-nombre"')) + "</button>".length);
+    const sinComentarios = despues.replace(/<!--[\s\S]*?-->/g, "").trimStart();
+    expect(sinComentarios.startsWith('<p class="note pegar-ayuda" id="pegar-ayuda"')).toBe(true);
+    expect(html.indexOf('id="pegar-ayuda"')).toBeGreaterThan(html.indexOf('<textarea id="ta"'));
+    expect(css).toContain(".pegar-ayuda { margin: 8px 0 0; }");
+  });
 });
 
 describe("las líneas de alrededor de la lista, cortas", () => {
