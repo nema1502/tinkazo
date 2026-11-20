@@ -117,3 +117,43 @@ describe("al sellar", () => {
     for (const n of [1, 2, 3, 5, 10]) expect(chip(n).disabled, `atajo ${n}`).toBe(false);
   });
 });
+
+describe("el resumen de Sellar la lista con un premio por lugar", () => {
+  /** Monta también los campos de premio, con tres ganadores pedidos: un campo por lugar. */
+  async function conLugares(): Promise<void> {
+    await montar(6);
+    (await import("./premios")).montarPremios();
+    escribir("3");
+  }
+
+  /** Escribe en el campo de un lugar como el teclado: el valor y el `input` que sube. */
+  const escribirLugar = (n: number, texto: string): void => {
+    const campo = n === 1 ? document.getElementById("prize") : document.querySelector(`#prize-lugares input[data-lugar="${n}"]`);
+    const input = campo as HTMLInputElement;
+    input.value = texto;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  it("con varios premios escritos dice cuántos son, y no solo el primero", async () => {
+    await conLugares();
+    escribirLugar(1, "Bici");
+    escribirLugar(2, "Termo");
+    escribirLugar(3, "Libro");
+    expect(resumen()).toContain("6 personas, 3 ganadores, 3 premios");
+    expect(resumen()).not.toContain("Bici");
+  });
+
+  it("se repinta al escribir en el campo de otro lugar", async () => {
+    await conLugares();
+    escribirLugar(1, "Bici");
+    expect(resumen()).toContain("3 ganadores, Bici");
+    escribirLugar(2, "Termo");
+    expect(resumen()).toContain("3 ganadores, 2 premios");
+  });
+
+  it("con un solo premio escrito lo nombra, como siempre", async () => {
+    await conLugares();
+    escribirLugar(1, "Bici");
+    expect(resumen()).toContain("6 personas, 3 ganadores, Bici");
+  });
+});

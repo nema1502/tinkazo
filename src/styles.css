@@ -612,6 +612,9 @@
     overflow-wrap: anywhere;
   }
   .winner-prize { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  /* "Lugar 2 de 3: Termo", debajo de las tarjetas: la tarjeta va girada, por encima y con sombra, y sin este aire le
+     tapaba la mitad de arriba de las letras. */
+  .lugar-actual { margin-top: 18px; }
   /* "No está", dentro de la tarjeta: siempre tinta sobre amarillo, en los dos
      temas. Chico, para que no le compita al nombre en el proyector. */
   /* `width: 0` con `min-width: 100%`: toma el ancho de la tarjeta sin agrandarla, así la pregunta no empuja a la de al lado. */
@@ -881,8 +884,13 @@
   }
   /* "¿Primera vez?" ya ofrece el ensayo: con ella a la vista, "o probá con un ejemplo" de más abajo sobra. */
   #primera-vez:not([style*="none"]) ~ #btn-ensayo { display: none !important; }
+  /* Con la puerta diciendo que la cuenta está abierta en el otro modo (wallet-ui.ts), "¿Primera vez?" se contradice. */
+  .gate.otro-modo:not([style*="none"]) ~ #primera-vez { display: none !important; }
   .gate p { flex: 1 1 220px; font-size: 16px; font-weight: 700; line-height: 1.45; padding: 4px 0; }
   .gate button { min-height: 44px; }
+  /* "Ir a Oficial", el segundo botón de la puerta: sin el margen desparejo de los enlaces, que lo dejaba 2 px más arriba
+     que Entrar, y con aire hasta el borde derecho. */
+  .gate .enlace { margin: 0 8px 0 0; }
   .gate.retomando p { color: var(--ink2); }
   /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
      armar la lista antes de conectar. El botón de sellar sigue con el color de la
@@ -2248,6 +2256,8 @@
   .pantalla-nombre { font-size: 1em; font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: normal; }
   .pantalla-premio { font-size: max(14px, 0.3em); font-weight: 800; margin-top: 0.12em; }
   .pantalla.varios .pantalla-premio { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; }
+  /* Con un premio por lugar («2.º premio: Termo») el pie es texto, con la letra de siempre: la de máquina queda para «#1». */
+  .pantalla.varios .pantalla-premio.por-lugar { font-family: inherit; letter-spacing: normal; }
   /* Con varios ganadores, lo que se llevan: una vez, arriba de las tarjetas, más grande que el número de cada una. */
   .pantalla-llevan { font-size: max(var(--letra-sala-sec), 0.42em); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
   .pantalla-llevan b { font-weight: 900; }
@@ -2262,6 +2272,8 @@
   .pantalla-fila { display: flex; align-items: baseline; gap: 0.35em; break-inside: avoid; padding: 0.08em 0; border-bottom: 2px solid var(--ink); }
   .pantalla-num { flex: 0 0 auto; min-width: 3.1ch; font: 800 0.55em/1.2 ui-monospace, Consolas, monospace; color: var(--ink2); }
   .pantalla-fila .pantalla-nombre { display: block; flex: 1 1 0; min-width: 0; font-size: 1em; line-height: 1.12; }
+  /* Con un premio por lugar, el de cada renglón, más chico que el nombre y sin empujar la columna. */
+  .pantalla-fila-premio { flex: 0 1 auto; min-width: 0; font-size: 0.55em; font-weight: 800; overflow-wrap: anywhere; }
   /* El orden de turnos en grande: «Turno 12» en lugar de «#12», en columnas un poco más anchas. La etiqueta mide
      9ch, uno más que «Turno 12»: desde «Turno 10» el nombre quedaba pegado a su número y ya no empezaba en la misma
      columna que los de una cifra. */
@@ -2742,6 +2754,16 @@
     .premio-chips { gap: 6px; }
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
+  /* Un campo por lugar cuando ganan varios (premios.ts): cada uno con su lugar a la izquierda, a la vista aunque se
+     escriba, y con aire entre uno y otro. Sin esto eran cuadros pegados con los bordes dobles y sin decir de qué lugar. */
+  .premio-fila { display: flex; align-items: center; gap: 8px; }
+  .premio-fila > input { flex: 1 1 auto; min-width: 0; }
+  .premio-lugar-n { flex: 0 0 auto; min-width: 6.2em; font-size: 14px; font-weight: 800; color: var(--ink); }
+  .premio-lugares { display: grid; gap: 8px; margin-top: 8px; }
+  .premio-lugares[hidden] { display: none; }
+  /* Los premios no entran en lo que se sella: es un aviso, no una ayuda gris, y el campo que no entra queda marcado. */
+  .note.aviso-premio { color: var(--ink); font-weight: 700; border-left: 4px solid var(--orange); padding-left: 10px; }
+  #prize[aria-invalid="true"], .premio-lugares input[aria-invalid="true"] { box-shadow: 0 0 0 3px var(--orange); }
 
   /* Cuántos ganan (src/ui/ganadores.ts), a la vista junto a Sellar la lista. Todo son botones: menos, más y los atajos
      de lo común. El grupo puede bajar de renglón y nunca impone un ancho mayor que su caja, también a 320 px. */

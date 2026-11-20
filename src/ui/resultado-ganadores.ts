@@ -93,11 +93,13 @@ function tarjeta(d: DatosDeGanadores, k: number): string {
   const name = nombreParaMostrar(d, k);
   const varios = d.winners.length > 1;
   const premio = premioDe(d, k);
-  const tag = premio
-    ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(premio)}${varios ? ` #${k + 1}` : ""}</p>`
-    : varios
-      ? `<p class="winner-prize">#${k + 1}</p>`
-      : "";
+  // Con varios y un premio por lugar, el lugar va delante con su rótulo («2.º premio: Termo»): el número pegado detrás
+  // («Termo #2») se leía como el termo número dos. Con un premio para todos, «Se lleva: Termo #2», como siempre.
+  const porLugar = varios && premioDeLugarEn(d.prize, k + 1) !== null;
+  const lleva = porLugar
+    ? `<span>${esc(T[getLang()].prizeLugar(k + 1))}:</span> ${esc(premio)}`
+    : `<span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(premio)}${varios ? ` #${k + 1}` : ""}`;
+  const tag = premio ? `<p class="winner-prize">${lleva}</p>` : varios ? `<p class="winner-prize">#${k + 1}</p>` : "";
   return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
         <img src="${d.avatar(name, 128)}" alt="" />
         <div>

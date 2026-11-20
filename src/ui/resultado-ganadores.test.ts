@@ -266,12 +266,16 @@ describe("con un premio por lugar", () => {
   const TRES = "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro";
   const premios = (c: HTMLElement): string[] => [...c.querySelectorAll(".winner-card .winner-prize")].map((p) => p.textContent ?? "");
 
-  it("cada tarjeta dice el premio de su lugar, en el orden del sorteo", () => {
-    expect(premios(pintar(3, { prize: TRES }))).toEqual(["Se lleva: Bici #1", "Se lleva: Termo #2", "Se lleva: Libro #3"]);
+  it("cada tarjeta dice el premio de su lugar, con el lugar delante, en el orden del sorteo", () => {
+    expect(premios(pintar(3, { prize: TRES }))).toEqual(["1.er premio: Bici", "2.º premio: Termo", "3.er premio: Libro"]);
+  });
+
+  it("el premio de un lugar no lleva un número pegado detrás que se lea como parte del premio", () => {
+    expect(premios(pintar(3, { prize: TRES })).some((p) => /#\d/.test(p))).toBe(false);
   });
 
   it("un lugar sin premio escrito se muestra como siempre, solo con su número", () => {
-    expect(premios(pintar(3, { prize: "1.er premio: Bici, 3.er premio: Libro" }))).toEqual(["Se lleva: Bici #1", "#2", "Se lleva: Libro #3"]);
+    expect(premios(pintar(3, { prize: "1.er premio: Bici, 3.er premio: Libro" }))).toEqual(["1.er premio: Bici", "#2", "3.er premio: Libro"]);
   });
 
   it("con un solo lugar a la vista, la tarjeta dice el premio del primero y no los de todos", () => {
@@ -279,7 +283,7 @@ describe("con un premio por lugar", () => {
   });
 
   it("lo sellado en inglés se lee igual", () => {
-    expect(premios(pintar(2, { prize: "1st prize: Bike, 2nd prize: Mug" }))).toEqual(["Se lleva: Bike #1", "Se lleva: Mug #2"]);
+    expect(premios(pintar(2, { prize: "1st prize: Bike, 2nd prize: Mug" }))).toEqual(["1.er premio: Bike", "2.º premio: Mug"]);
   });
 
   it("sin lugares, todas las tarjetas dicen el premio de siempre", () => {
@@ -290,7 +294,7 @@ describe("con un premio por lugar", () => {
     const lugares = Array.from({ length: 8 }, (_, i) => `${i + 1}.º premio: P${i + 1}`).join(", ");
     const c = pintar(8, { prize: lugares });
     expect(c.querySelector(".winner-lista-premio")).toBeNull();
-    expect(premios(c)).toEqual(["Se lleva: P1 #1"]);
+    expect(premios(c)).toEqual(["1.er premio: P1"]);
     expect([...c.querySelectorAll(".winner-fila .winner-fila-premio")].map((p) => p.textContent)).toEqual(["P2", "P3", "P4", "P5", "P6", "P7", "P8"]);
     // El nombre sigue en su elemento, sin el premio pegado.
     expect(c.querySelector(".winner-fila .winner-name")?.textContent).toBe("Persona <3> & Co");

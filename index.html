@@ -409,13 +409,18 @@
         <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
         <!-- Los que más se sortean y los últimos que usaste: se arman en premios.ts. El cuadro de abajo sigue siendo lo que se sella. -->
         <div class="premio-chips" id="prize-chips" role="group" aria-labelledby="prize-etiqueta"></div>
-        <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
+        <!-- Con más de un ganador, cada campo lleva su lugar a la izquierda, a la vista aunque se escriba: el de este
+             cuadro, «1.er premio», lo pone src/ui/premios.ts y con un solo ganador queda escondido. -->
+        <div class="premio-fila">
+          <span class="premio-lugar-n" id="prize-n1" aria-hidden="true" hidden></span>
+          <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
+        </div>
         <!-- Con más de un ganador, un campo por lugar (1.er premio, 2.º premio y así): los arma src/ui/premios.ts
              y los rearma cuando cambia la cantidad de ganadores o el idioma. El cuadro de arriba queda como el del
              1.er premio, y con un solo ganador esta caja queda vacía y escondida. -->
         <div class="premio-lugares" id="prize-lugares" hidden></div>
         <!-- Si lo escrito no entra entero en lo que se sella, lo dice acá y Sellar la lista no sigue hasta que se acorte. -->
-        <p class="note" id="prize-largo" role="status" hidden></p>
+        <p class="note aviso-premio" id="prize-largo" role="status" hidden></p>
       </div>
       <div class="row mas-fila">
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>

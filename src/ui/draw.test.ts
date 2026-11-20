@@ -196,8 +196,31 @@ describe("un sello con tres lugares y un premio por lugar", () => {
     await vi.waitFor(() => expect(h.juego).toHaveBeenLastCalledWith([P2]));
     h.fin?.();
     await vi.waitFor(() => expect(document.getElementById("lugar-actual")?.textContent).toBe("Lugar 2 de 3: Termo"));
-    expect(cards()).toContain("Se lleva: Termo #2");
+    expect(cards()).toContain("2.º premio: Termo");
+    expect(cards()).not.toContain("#2");
     expect(cards()).not.toContain("Libro");
+  });
+
+  it("la tarjeta de cómo se juega dice el premio del lugar que se juega, no el de los tres", async () => {
+    await sellarCon(3, "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    // El premio es el sexto argumento de `showGameCard`.
+    expect(h.tarjeta.mock.calls[0]?.[5]).toBe("Bici");
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenLastCalledWith([P2]));
+    expect(h.tarjeta.mock.calls.at(-1)?.[5]).toBe("Termo");
+  });
+
+  it("con un solo premio para todos, la tarjeta dice ese premio entero, como siempre", async () => {
+    await sellarCon(3, "Una pizza");
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.tarjeta.mock.calls[0]?.[5]).toBe("Una pizza");
   });
 });
 

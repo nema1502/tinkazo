@@ -1,6 +1,6 @@
 import { esc } from "../dom";
 import { LEGIBLE } from "../games/pixi/letra";
-import { t } from "../i18n";
+import { T, getLang, t } from "../i18n";
 import { modesVisible } from "../modos/bandera";
 import { isTurnOrder, turnOrder } from "../modos/turnos";
 import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
@@ -14,6 +14,7 @@ import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { datosDeLaEspera } from "./espectador-enlace";
 import { network } from "../stellar/config";
 import { piezaParaLaSala } from "./logo-sorteo";
+import { premioDeLugarEn } from "./lugares-de-meta";
 
 /**
  * Lo que el QR espera al enlace corto antes de salir con el largo. Si el corto
@@ -50,6 +51,11 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const { frozen, drawn } = app;
   if (!frozen || !drawn || document.querySelector(".pantalla")) return;
   const premio = frozen.prize;
+  // Lo que se lleva el ganador `k`: con un premio por lugar, el de su lugar, como en la página (`resultado-ganadores.ts`).
+  // Sin lugares (un premio único, un sorteo de antes), el sellado entero, el mismo para todos, como siempre.
+  const premioDe = (k: number): string => premioDeLugarEn(premio, k + 1) ?? premio;
+  // Con lugares no hay un premio para todos: «Se llevan» de arriba anunciaba los de los lugares que todavía no se jugaron.
+  const porLugar = premioDeLugarEn(premio, 1) !== null;
   // Con los lugares de a uno (`revelados`, draw.ts), solo los que la sala ya vio en su show: los que siguen tienen el
   // suyo con «Siguiente premio», y mostrarlos acá contaba el final antes de jugarlo. Sin progresión, todos.
   const ganadores = drawn.winners.slice(0, drawn.revelados ?? drawn.winners.length);
@@ -61,7 +67,8 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // columnas. Hasta el 22 de octubre de 2026 ese premio iba solo en la
   // calcomanía de arriba, en 11 px, y desde el fondo de la sala se leían los
   // nombres pero no qué se llevaban (evaluación de la subida 2, hallazgo 7):
-  // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
+  // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres. Con un premio por lugar no hay uno para
+  // todos: cada tarjeta lleva el de su lugar y esa línea no va.
   const muchos = n > 5;
   // Con más de doce, las tarjetas con cara no entran ni en dos columnas (cien tarjetas son diez pantallas): una lista
   // de renglones cortos, número y nombre, en tantas columnas como entren, con la letra más grande que deje todos a la vista.
@@ -100,24 +107,36 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `<div class="pantalla-ganadores">` +
     (turnos
       ? `<p class="pantalla-llevan" data-i="turnsResultTitle">${esc(t("turnsResultTitle"))}</p>`
-      : varios && premio
+      : varios && premio && !porLugar
         ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>`
         : "") +
     (lista
       ? `<ol class="pantalla-lista">${orden
           .map((nombre, k) => {
             const num = turnos ? `<span data-i="turnsWord">${esc(t("turnsWord"))}</span> ${k + 1}` : `#${k + 1}`;
-            return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(mostrar(etiquetaDe(nombre)))}</span></li>`;
+            // Con un premio por lugar, el de cada renglón va al lado del nombre, en su propio elemento.
+            const suyo = porLugar && !turnos ? premioDe(k) : "";
+            const lleva = suyo ? `<span class="pantalla-fila-premio">${esc(suyo)}</span>` : "";
+            return (
+              `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span>` +
+              `<span class="pantalla-nombre">${esc(mostrar(etiquetaDe(nombre)))}</span>${lleva}</li>`
+            );
           })
           .join("")}</ol>`
       : ganadores
           .map((i, k) => {
             // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
             const nombre = mostrar(etiquetaDe(frozen.names[i] ?? ""));
-            const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
+            const suyo = premioDe(k);
+            // Con varios y un premio por lugar, cada tarjeta dice su lugar y lo que se lleva («2.º premio: Termo»). Con un premio
+            // para todos, o en un lugar sin premio escrito, solo su número, como siempre.
+            const lugar = varios && porLugar && suyo ? `${esc(T[getLang()].prizeLugar(k + 1))}: ${esc(suyo)}` : "";
+            const pie = lugar || (varios ? `#${k + 1}` : suyo ? `${esc(t("winsPrize"))} ${esc(suyo)}` : "");
+            // El pie del lugar se lee como texto, con la letra del premio de un solo ganador: la de máquina es para «#1».
+            const clase = lugar ? "pantalla-premio por-lugar" : "pantalla-premio";
             return (
               `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
-              `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="pantalla-premio">${pie}</p>` : ""}</div></div>`
+              `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="${clase}">${pie}</p>` : ""}</div></div>`
             );
           })
           .join("")) +
@@ -322,12 +341,16 @@ function encajar(back: HTMLElement, n: number): void {
   };
   const listaDeTurnos = celular && back.classList.contains("turnos");
   const ponerLetra = (letra: number): void => caja.style.setProperty("--letra", `${letra}px`);
+  // Las tarjetas van giradas: una tan ancha como la pantalla asoma un par de píxeles por el costado y eso no es un nombre
+  // que no entra. Con un premio largo la tarjeta ocupa siempre todo el ancho y, contado, el nombre bajaba a 14 px.
+  const tarjetas = [...back.querySelectorAll<HTMLElement>(".pantalla-ganador")];
+  const asomaDelGiro = (): number => Math.max(0, ...tarjetas.map((e) => asomaPorElGiro(e.offsetWidth, e.getBoundingClientRect().width)));
   const cabe = (letra: number, exigidos: readonly HTMLElement[]): boolean => {
     ponerLetra(letra);
     return (
       nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
       exigidos.every(enUnRenglon) &&
-      cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
+      cuerpo.scrollWidth <= cuerpo.clientWidth + 1 + asomaDelGiro() &&
       (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1)
     );
   };
@@ -345,6 +368,12 @@ function encajar(back: HTMLElement, n: number): void {
   });
   caja.style.setProperty("--letra", `${letra}px`);
 }
+
+/**
+ * Cuánto asoma por cada costado una tarjeta girada: la mitad de lo que el giro le suma al ancho que ocupa en la
+ * pantalla (`anchoGirada`, con el giro) sobre el suyo (`ancho`, sin él). Sin giro, o sin medidas, nada.
+ */
+export const asomaPorElGiro = (ancho: number, anchoGirada: number): number => Math.max(0, (anchoGirada - ancho) / 2);
 
 /**
  * La letra más chica con la que se busca, en el orden de turnos del celular, que cada nombre entre en un

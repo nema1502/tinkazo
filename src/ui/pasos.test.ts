@@ -53,8 +53,22 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: false })).toBe("sigSellando");
   });
 
+  it("con lugares del mismo sello por mostrar, no dice que ya salieron los ganadores", () => {
+    expect(claveDelPaso(4, { ...ok, ganadores: 3, lugaresPorMostrar: true })).toBe("sigLugarSalio");
+    // Con todos los lugares vistos, como siempre.
+    expect(claveDelPaso(4, { ...ok, ganadores: 3, lugaresPorMostrar: false })).toBe("sigGanaron");
+  });
+
+  it("el lugar que salió se dice con su número y el total, en los dos idiomas", () => {
+    expect(T.es.sigLugarSalio).toBe("Ya salió el lugar {lugar} de {total}");
+    expect(T.en.sigLugarSalio).toBe("Place {lugar} of {total} is out");
+  });
+
   it("todos esos textos existen en los dos idiomas", () => {
-    const claves = ["sigPegar", "sigLista", "sigSellando", "sigTope", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigTurnos", "sigAvisoRonda"];
+    const claves = [
+      ...["sigPegar", "sigLista", "sigSellando", "sigTope", "sigEspera", "sigRonda", "sigSorteando"],
+      ...["sigGano", "sigGanaron", "sigLugarSalio", "sigTurnos", "sigAvisoRonda"],
+    ];
     const faltan = (["es", "en"] as const).flatMap((l) => claves.filter((k) => typeof T[l][k] !== "string" || !(T[l][k] as string).trim()).map((k) => `${l}.${k}`));
     expect(faltan).toEqual([]);
   });
