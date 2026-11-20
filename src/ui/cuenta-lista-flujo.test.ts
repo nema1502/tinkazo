@@ -280,6 +280,12 @@ describe("cuando el sello o el sorteo fallan por la cuenta", () => {
 describe("si el paso no se puede bajar", () => {
   const aviso = (): HTMLElement | null => document.querySelector(".cl-no-cargo");
   /** La descarga del paso falla, como en el wifi de un evento: el `import()` se rechaza. */
+  /**
+   * El paso no se puede bajar: la llamada de `abrirCuentaLista` falla (antes se lanzaba desde la fábrica del doMock,
+   * pero una fábrica que lanza no rige igual en cada descarga repetida y bajo la carga de la batería completa el flujo
+   * seguía a veces como si nada). El comportamiento cuidado no cambia: el flujo avisa con el aviso de volver a cargar y
+   * devuelve false, sin abrir el paso ni seguir callado.
+   */
   const romperPaso = (): void => {
     h.pasoRoto = true;
   };

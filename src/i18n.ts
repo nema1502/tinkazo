@@ -456,7 +456,7 @@ export const T: Record<Lang, Dict> = {
     ctaGo: "Ir a sortear",
     howTitle: "¿Cómo funciona?",
     s1t: "Traé tu lista",
-    s1b: "Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta.",
+    s1b: "Pegás los nombres, o subís el CSV de Luma o de una hoja de cálculo. Tu gente no instala nada ni crea cuenta, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
     s2t: "Sellá la lista",
     s2b: "Queda cerrada: si después se agrega o se saca a alguien, se nota.",
     s3t: "Elegí el juego y sorteá",
@@ -1178,7 +1178,7 @@ export const T: Record<Lang, Dict> = {
       return [
         `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
         "",
-        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta, salvo en el registro de equipos de un evento con cupones: ahí cada equipo entra con la cuenta de quien lo anota, porque el cupón va a esa cuenta.",
         varias
           ? `2. Participan las ${p.count} personas de la lista, con ${p.entries} participaciones: quien tiene varias puede salir más de una vez. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`
           : `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
@@ -1200,7 +1200,7 @@ export const T: Record<Lang, Dict> = {
       return [
         `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
         "",
-        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+        "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta, salvo en el registro de equipos de un evento con cupones: ahí cada equipo entra con la cuenta de quien lo anota, porque el cupón va a esa cuenta.",
         varias
           ? `2. Participan las ${p.count} personas de la lista, con ${p.entries} participaciones: quien tiene varias puede salir más de una vez. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`
           : `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
@@ -1362,7 +1362,7 @@ export const T: Record<Lang, Dict> = {
     como1B: "Copiala de WhatsApp o de tu hoja de cálculo y tocá Pegar lista.",
     como2T: "Sellala",
     como2B: "Queda cerrada: desde ahí nadie entra ni sale sin que se note.",
-    como2N: "Para sellar entrás con tu cuenta. Tu gente no necesita crear cuenta.",
+    como2N: "Para sellar entrás con tu cuenta. Tu gente no necesita crear cuenta. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
     como3T: "Esperá cerca de un minuto y lanzá",
     como3B: "Sale un número que nadie conoce, ni vos.",
     como3N: "¿Hay proyector? Tocá Mostrar la espera en grande.",
@@ -1713,7 +1713,7 @@ export const T: Record<Lang, Dict> = {
     faq1q: "¿Alguien paga por participar?",
     faq1a: "No. Nunca le cobramos a quien participa, y los términos prohíben usar Tinkazo para sorteos con entrada paga: no es una apuesta ni una rifa con boletos.",
     faq2q: "¿Mi gente tiene que instalar algo?",
-    faq2a: "No. Solo quien organiza entra con una cuenta, con Google y en dos pasos. Los participantes no instalan nada ni se registran.",
+    faq2a: "No. Solo quien organiza entra con una cuenta, con Google y en dos pasos. En el sorteo, los participantes no instalan nada ni se registran, y para comprobar el resultado tampoco hace falta nada: el enlace alcanza. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
     faq3q: "¿Cuánto cuesta?",
     faq3a: "Hoy es gratis para todos. Muy pronto publicamos los precios para quien organiza, y te avisamos antes de cobrar. Participar y comprobar son gratis siempre.",
     faq4q: "¿Cómo sé que no hiciste trampa?",
@@ -1806,7 +1806,7 @@ export const T: Record<Lang, Dict> = {
     cfH1: "Cinco pasos, y cada uno se puede comprobar.",
     cfLead: "Así sale un ganador en Tinkazo, sin jerga. Si querés el detalle técnico, está en el protocolo y en la página de seguridad.",
     cf1t: "Juntás la lista",
-    cf1b: "Pegás los nombres o subís el CSV de Luma o de cualquier hoja de cálculo. Antes de sellar, la podés mostrar a la sala con un QR, para que cada uno se busque en su celular y avise si falta alguien o hay repetidos. Los participantes no necesitan nada.",
+    cf1b: "Pegás los nombres o subís el CSV de Luma o de cualquier hoja de cálculo. Antes de sellar, la podés mostrar a la sala con un QR, para que cada uno se busque en su celular y avise si falta alguien o hay repetidos. Para verse ahí no necesitan nada: escanean el QR y escriben su nombre, sin cuenta ni registro, y para comprobar el resultado tampoco hace falta nada. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
     cf2t: "La lista se sella",
     cf2b: "Se le calcula una huella, como la huella digital de un archivo: si cambia una letra, cambia toda. La huella y la hora quedan grabadas en Stellar.",
     cf3t: "Se elige un número del futuro",
@@ -3353,7 +3353,7 @@ export const T: Record<Lang, Dict> = {
     turnsRules: (p) => [
       `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
       "",
-      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta, salvo en el registro de equipos de un evento con cupones: ahí cada equipo entra con la cuenta de quien lo anota, porque el cupón va a esa cuenta.",
       basesDeTurnosEs(p),
       `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
       `   ${p.listHash}`,
@@ -3369,7 +3369,7 @@ export const T: Record<Lang, Dict> = {
     turnsRulesPre: (p) => [
       `Bases del orden de turnos${p.prize ? `: ${p.prize}` : ""}`,
       "",
-      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta, salvo en el registro de equipos de un evento con cupones: ahí cada equipo entra con la cuenta de quien lo anota, porque el cupón va a esa cuenta.",
       basesDeTurnosEs(p),
       "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
       "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
@@ -3486,7 +3486,7 @@ export const T: Record<Lang, Dict> = {
     ctaGo: "Go to the draw",
     howTitle: "How it works",
     s1t: "Bring your list",
-    s1b: "Paste the names, or upload a CSV from Luma or a spreadsheet. Your people install nothing and sign up for nothing.",
+    s1b: "Paste the names, or upload a CSV from Luma or a spreadsheet. Your people install nothing and sign up for nothing, and checking the result needs nothing either: the link is enough. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
     s2t: "Seal the list",
     s2b: "It gets locked: if anyone is added or removed later, everybody can tell.",
     s3t: "Pick a game and draw",
@@ -4180,7 +4180,7 @@ export const T: Record<Lang, Dict> = {
       return [
         `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
         "",
-        "1. Entry is free. Nothing to buy and no account needed.",
+        "1. Entry is free. Nothing to buy and no account needed, except in an event's team registration with coupons: there each team enters with the account of whoever signs it up, because the coupon goes to that account.",
         varias
           ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several entries can be drawn more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
           : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
@@ -4202,7 +4202,7 @@ export const T: Record<Lang, Dict> = {
       return [
         `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
         "",
-        "1. Entry is free. Nothing to buy and no account needed.",
+        "1. Entry is free. Nothing to buy and no account needed, except in an event's team registration with coupons: there each team enters with the account of whoever signs it up, because the coupon goes to that account.",
         varias
           ? `2. The ${p.count} people on the list take part, with ${p.entries} entries: anyone with several entries can be drawn more than once. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`
           : `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
@@ -4347,7 +4347,7 @@ export const T: Record<Lang, Dict> = {
     como1B: "Copy it from WhatsApp or your spreadsheet and tap Paste list.",
     como2T: "Seal it",
     como2B: "It's locked: from then on nobody gets in or out unnoticed.",
-    como2N: "To seal, you sign in. Your people don't need an account.",
+    como2N: "To seal, you sign in. Your people don't need an account. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
     como3T: "Wait about a minute and run it",
     como3B: "A number nobody knows comes out, not even you.",
     como3N: "Have a projector? Tap Show the wait on the big screen.",
@@ -4696,7 +4696,7 @@ export const T: Record<Lang, Dict> = {
     faq1q: "Does anyone pay to take part?",
     faq1a: "No. We never charge anyone to take part, and the terms forbid using Tinkazo for draws with paid entry.",
     faq2q: "Do my people have to install anything?",
-    faq2a: "No. Only the organizer signs in, with Google and in two taps. Participants don't install anything or sign up.",
+    faq2a: "No. Only the organizer signs in, with Google and in two taps. In the draw, participants don't install anything or sign up, and checking the result needs nothing either: the link is enough. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
     faq3q: "How much does it cost?",
     faq3a: "It's free for everyone today. We'll publish pricing for organizers very soon, and we'll tell you before we charge. Taking part and checking are always free.",
     faq4q: "How do I know you didn't cheat?",
@@ -4788,7 +4788,7 @@ export const T: Record<Lang, Dict> = {
     cfH1: "Five steps, and every one of them can be checked.",
     cfLead: "This is how a winner comes out in Tinkazo, without jargon. For the technical detail, see the protocol and the security page.",
     cf1t: "You bring the list",
-    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find their name on their phone and speak up if someone is missing or listed twice. Participants need nothing.",
+    cf1b: "Paste the names or upload a CSV from Luma or any spreadsheet. Before sealing, you can show it to the room with a QR, so everyone can find their name on their phone and speak up if someone is missing or listed twice. To show up there they need nothing: they scan the QR and type their name, no account or sign-up, and checking the result needs nothing either. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
     cf2t: "The list gets sealed",
     cf2b: "It gets a fingerprint, like a file's: change one letter and the whole thing changes. The fingerprint and the time are recorded on Stellar.",
     cf3t: "A number from the future is picked",
@@ -6318,7 +6318,7 @@ export const T: Record<Lang, Dict> = {
     turnsRules: (p) => [
       `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
       "",
-      "1. Entry is free. Nothing to buy and no account needed.",
+      "1. Entry is free. Nothing to buy and no account needed, except in an event's team registration with coupons: there each team enters with the account of whoever signs it up, because the coupon goes to that account.",
       basesDeTurnosEn(p),
       `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
       `   ${p.listHash}`,
@@ -6334,7 +6334,7 @@ export const T: Record<Lang, Dict> = {
     turnsRulesPre: (p) => [
       `Turn order rules${p.prize ? `: ${p.prize}` : ""}`,
       "",
-      "1. Entry is free. Nothing to buy and no account needed.",
+      "1. Entry is free. Nothing to buy and no account needed, except in an event's team registration with coupons: there each team enters with the account of whoever signs it up, because the coupon goes to that account.",
       basesDeTurnosEn(p),
       "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
       "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",

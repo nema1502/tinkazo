@@ -172,6 +172,27 @@ describe("los textos del modo stand y de la sala", () => {
       }
     }
   });
+
+  it("lo que dicen los participantes de una sala y de comprobar un sorteo, en los dos idiomas y en el HTML", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { T } = await import("./i18n");
+    // El texto del HTML de cada página es el mismo que trae el diccionario: cambio en uno, cambio en el otro.
+    for (const [html, clave, claveI18n] of [
+      ["index.html", "faq2a", "faq2a"],
+      ["como-funciona.html", "cf1b", "cf1b"],
+    ] as const) {
+      const enElHtml = readFileSync(html, "utf8").match(new RegExp(`data-i="${clave}">([^<]+)<`))?.[1];
+      expect(enElHtml, html).toBe(T.es[claveI18n]);
+    }
+    // Lo que pide cada cosa: el registro de equipos con cupón pide una cuenta (el cupón va a ella) y verse en la
+    // sala de nombres o comprobar un resultado no pide nada.
+    for (const k of ["faq2a", "cf1b"] as const) {
+      expect(T.es[k], `es.${k}`).toMatch(/cup[óo]n/);
+      expect(T.es[k], `es.${k}`).toMatch(/comprobar/);
+      expect(T.en[k], `en.${k}`).toMatch(/coupon/i);
+      expect(T.en[k], `en.${k}`).toMatch(/check/i);
+    }
+  });
 });
 
 describe("lo que dice el stand de cuántas personas salen", () => {

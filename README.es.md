@@ -25,7 +25,7 @@ Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turn
 
 **El contrato está en la red principal de Stellar desde el 11 de noviembre de 2026**, en [`CANQLUVT…VL3K`](https://stellar.expert/explorer/public/contract/CANQLUVTYYZWHT2L75VDW27CWU2LKWB6EBK2AHSMHGIDRC5XSF2EVL3K). El sitio abre en el modo Prueba, sobre la red de prueba de Stellar, y el modo Oficial se elige en la cabecera.
 
-Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
+Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.
 
 El sorteo es por donde empieza. Para lo que existe Tinkazo es más amplio: que repartir entre la gente sea justo (un premio, un turno para exponer, una beca, un cupo en un viaje), y que cualquiera lo pueda comprobar desde su celular, sin saber que abajo hay una blockchain.
 

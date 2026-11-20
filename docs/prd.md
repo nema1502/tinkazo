@@ -23,7 +23,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, swag. Las herramientas
 
 Tinkazo separa el show de la verdad. El show es una carrera de llamas o una ruleta en pantalla grande. La verdad es matemática: la lista de participantes se sella con un hash antes de que exista la semilla; la semilla la publica un faro público de aleatoriedad que ni quien organiza ni Tinkazo pueden elegir; el ganador es una función determinista de ambos. Con Stellar, el sello y el resultado quedan anclados en una red pública con timestamp, y un contrato verifica por sí mismo la firma del faro. Cualquiera puede leer la cadena y recomputar con sus propias herramientas.
 
-La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga el organizador. Los participantes nunca crean cuenta ni wallet.
+La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga el organizador. En el sorteo clásico a los participantes no se les pide cuenta ni wallet, y comprobar un resultado tampoco pide nada. La excepción es el registro de equipos de un evento con cupones: ahí cada equipo entra con su cuenta de Stellar (con Google), porque el cupón va a esa cuenta y la lista sellada son las cuentas con cupón.
 
 ## 2. Usuario
 
@@ -74,7 +74,7 @@ Ana recibe el enlace de comprobante. Abre la página de verificación, que lee e
 - **Contrato**, El contrato Soroban de Tinkazo en Stellar. Guarda Sellos y Registros y verifica la firma del Faro.
 - **Anclaje**, Un Sorteo cuyo Sello y Registro viven en el Contrato. Lo opuesto es **Modo libre**: el mismo Protocolo, sin Contrato, sellado en el navegador.
 - **Organizador**, Quien crea el Sorteo. En Anclaje, la cuenta de Stellar que firma el Sello.
-- **Participante**, Cada entrada de la Lista canónica. Nunca necesita cuenta ni wallet.
+- **Participante**, Cada entrada de la Lista canónica. En el sorteo clásico nunca necesita cuenta ni wallet. La excepción es el registro de equipos de un evento con cupones: ahí la entrada es la cuenta de quien anota al equipo, que entra con Google, porque el cupón va a esa cuenta.
 - **Verificador**, Cualquier persona o programa que recomputa el resultado. No necesita permiso.
 - **Comprobante**, El enlace o archivo que contiene lo necesario para verificar: `id` del Sorteo, dirección del Contrato, red y Lista canónica.
 - **Protocolo**, La especificación normativa en [protocolo.md](protocolo.md). Versión actual: v2.
@@ -214,7 +214,7 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 ## Requisitos no funcionales transversales
 
 - **NFR-1 Determinismo verificable.** Todo lo que decide un resultado está en el Protocolo y es recomputable con herramientas públicas; ningún paso depende de un servidor de Tinkazo.
-- **NFR-2 Sin servidor para sortear.** El sitio es estático (Vercel) y ningún paso del sorteo ni de su verificación depende de un servidor propio: las dependencias del sorteo en tiempo de ejecución son Stellar RPC, relays de drand y la wallet. La única pieza con servidor, desde el 21 de octubre de 2026, es el servicio de enlaces cortos (`c.tinkazo.app`, D-18 en [architecture.md](architecture.md)): guarda, para compartir, una copia del comprobante cifrada en el navegador, con la clave solo en el enlace, así que Tinkazo no la puede leer. No decide nada, y si no contesta se comparte el enlace largo. No hay base de datos de participantes que Tinkazo pueda leer.
+- **NFR-2 Sin servidor para sortear.** El sitio es estático (Vercel) y ningún paso del sorteo ni de su verificación depende de un servidor propio: las dependencias del sorteo en tiempo de ejecución son Stellar RPC, relays de drand y la wallet. La única pieza con servidor, desde el 21 de octubre de 2026, es el servicio de enlaces cortos (`c.tinkazo.app`, D-18 en [architecture.md](architecture.md)): guarda, para compartir, una copia del comprobante cifrada en el navegador, con la clave solo en el enlace, así que Tinkazo no la puede leer. No decide nada, y si no contesta se comparte el enlace largo. No hay base de datos de participantes que Tinkazo pueda leer: los nombres que llegan por el QR de la sala y los datos de un equipo van cifrados con la clave del QR, que nunca sale del enlace. La misma sala también lleva el registro de equipos de un evento con cupones: de cada equipo guarda la cuenta en claro (es pública: es la que recibe el cupón y la que entra a la lista sellada) y borra todo a las 10 horas; ese registro no es parte del sorteo ni de su verificación.
 - **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,25 XLM al Organizador. **No se cumple hoy en testnet:** el 2026-10-03 se midieron 0,76 XLM, porque subió la renta de la red; en mainnet se mide al desplegar. Medido en testnet el 2026-09-16: 0,18 XLM (≈ US$ 0,03), casi todo renta de almacenamiento por 120 días; la verificación BLS en sí cuesta 0,003 XLM. Mantener el Contrato vivo cuesta al proyecto unos 49 XLM al año y nunca se le cobra a un Organizador (ver [deployments.md](deployments.md)).
 - **NFR-4 Sin secretos en el repo.** Repositorio público: ninguna llave privada, token ni identidad de la CLI se commitea.
 - **NFR-5 Tiempo de sorteo.** Entre "Sellar" y el inicio del Show pasan menos de 90 segundos en condiciones normales.
@@ -224,7 +224,7 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 ## 5. No objetivos
 
 - No custodiamos wallets ni llaves de nadie. No hay "cuenta Tinkazo".
-- No hay backend para sortear, panel de administración ni base de datos de participantes que Tinkazo pueda leer.
+- No hay backend para sortear ni panel de administración. El registro de equipos de un evento con cupones pasa por la sala (`workers/sala`), que guarda la cuenta de cada equipo en claro (es la que recibe el cupón) y los datos del equipo cifrados con la clave del QR, y borra todo a las 10 horas; para el sorteo clásico no hay base de datos de participantes que Tinkazo pueda leer.
 - No hay dinero ni tokens en juego: el Contrato no mueve fondos.
 - No hay integración con Luma, Eventbrite o Meetup en v1.
 - No hay sponsor mode, white label ni cobro en v1.

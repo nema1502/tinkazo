@@ -1,8 +1,10 @@
 /**
  * La sala de Tinkazo: que la gente de un stand escanee un QR, escriba su nombre
- * en el celular y lo vea aparecer en la pantalla grande. Solo alimenta rondas
- * de ejemplo (modo stand): esos nombres nunca van a un sorteo sellado ni a un
- * comprobante.
+ * en el celular y lo vea aparecer en la pantalla grande. Para sumarse así no
+ * hace falta nada: los nombres alimentan rondas de ejemplo (modo stand) y nunca
+ * van a un sorteo sellado ni a un comprobante. La misma sala también lleva el
+ * registro de equipos de un evento con cupones: ahí cada equipo entra con su
+ * cuenta de Stellar, que es la que recibe el cupón y entra a la lista sellada.
  *
  *   POST   /v1/campana                     JSON {"texto","firma"} → 201 {"id", "token", "vence"}
  *                                           (reemplazar la sala de ese evento que se cerró o venció pide su token en Authorization)
