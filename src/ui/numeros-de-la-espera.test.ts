@@ -121,6 +121,13 @@ describe("el render de los números y del contador", () => {
     expect(caja.textContent).toContain(String(T.es.espFaltanN(14)));
   });
 
+  it("entre ficha y ficha va un espacio, sin otros signos", async () => {
+    const { pintarNumerosVistos } = await import("./freeze");
+    const caja = cajaNueva();
+    pintarNumerosVistos(caja, [{ round: 10, hex: "a1b2c3d4" }, { round: 11, hex: "b2c3d4e5" }], 25);
+    expect(caja.querySelector("p")?.textContent).toBe("#10 a1b2c3d4 #11 b2c3d4e5");
+  });
+
   it("el contador va en singular con uno, y sin números vistos arranca en el total del sello", async () => {
     const { pintarNumerosVistos } = await import("./freeze");
     const caja = cajaNueva();

@@ -53,3 +53,7 @@ workers/musica/camas/
 
 # La marca de un despliegue del contrato que no llegó a registrarse (scripts/deploy.sh)
 .despliegue/
+
+# Los videos de vista previa que deja scripts/capturas-video.mjs no se versionan
+/public/juegos/vistas-previas/**/*.mp4
+/public/juegos/vistas-previas/**/*.webm

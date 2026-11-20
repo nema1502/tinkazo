@@ -673,8 +673,11 @@ export function pintarNumerosVistos(caja: HTMLElement | null, vistos: NumeroVist
   const fila = document.createElement("p");
   fila.style.cssText = "margin:0;font-family:ui-monospace,Consolas,monospace;font-size:13px;opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;";
   for (const visto of vistos.slice(-NUMEROS_EN_PANTALLA)) {
-    if (fila.childNodes.length > 0) fila.append(document.createTextNode(" · "));
+    // Entre ficha y ficha, un espacio (para que la fila se corte ahí) y un margen que las separa a la vista.
+    const despues = fila.childNodes.length > 0;
+    if (despues) fila.append(document.createTextNode(" "));
     const chip = document.createElement("span");
+    if (despues) chip.style.marginLeft = "0.6em";
     chip.textContent = `#${visto.round} ${visto.hex}`;
     fila.append(chip);
   }

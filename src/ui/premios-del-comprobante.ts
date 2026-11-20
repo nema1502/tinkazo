@@ -155,8 +155,8 @@ export function htmlDeLosPremios(r: DeLaRevision, idioma: Idioma): string {
   const colon = (etiqueta: string, valor: string, estado = "ok"): string =>
     `<li class="check ${estado}"><b>${esc(etiqueta)}</b><span class="mono">${esc(valor)}</span></li>`;
   const filas = vista.filas.map((f) => {
-    const como = `${f.estado} · ${cortaDireccion(f.ganador)} · ${f.coincide ? t.coincide : t.noCoincide}`;
-    return colon(t.premio.replace("{n}", String(f.puesto + 1)) + ` · ${f.monto}`, como, f.coincide ? "ok" : "bad");
+    const como = `${f.estado}, ${cortaDireccion(f.ganador)}, ${f.coincide ? t.coincide : t.noCoincide}`;
+    return colon(t.premio.replace("{n}", String(f.puesto + 1)) + `, ${f.monto}`, como, f.coincide ? "ok" : "bad");
   });
   return (
     `<div class="premios-del-comprobante">` +
