@@ -80,6 +80,14 @@ export interface Drawn {
    * parte del sorteo: no entra en el comprobante ni en el historial.
    */
   juego?: Game;
+  /**
+   * Issue #102: con más de un lugar sellado, la sala ve un lugar por show y «Siguiente premio»
+   * muestra el lugar que sigue del mismo resultado, con su show y sin sellar de nuevo. Cuántos
+   * lugares se mostraron hasta ahora, siempre al menos 1. Sin esto (la vista de espectador, un
+   * resultado retomado de Mis sorteos, un solo lugar o un orden de turnos) se muestran todos de
+   * una vez, como siempre.
+   */
+  revelados?: number;
 }
 
 /** Estado de la pantalla principal. Un solo sorteo por carga de página. */

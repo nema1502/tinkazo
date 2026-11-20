@@ -271,7 +271,12 @@ async function sortear(adelantado = false): Promise<void> {
     btn.textContent = t("drawnDone");
     // Y la caja de la espera deja de decir "Ya nació. Dale.": ya se sorteó.
     ponerHecho(document.getElementById("wait-left"));
-    app.drawn = { beacon, winners };
+    // Issue #102: con más de un lugar sellado (y sin ser un orden de turnos), la sala ve un lugar
+    // por show y «Siguiente premio» muestra el que sigue del mismo resultado, con su show y sin
+    // sellar de nuevo. El ensayo y el stand terminan a su manera: ahí el resultado sale completo,
+    // como siempre, igual que un resultado retomado de Mis sorteos o la vista de espectador.
+    const deAUno = winners.length > 1 && !orden && !enEnsayo() && !enStand();
+    app.drawn = { beacon, winners, ...(deAUno ? { revelados: 1 } : {}) };
     // Con sello, el sorteo se graba aparte y el show no lo espera. Con la billetera propia, recién después del show:
     // su ventana para aprobar no puede tapar el juego. Con las demás cuentas, ya: la grabación espera sola el margen
     // de la cadena mientras se juega.
@@ -329,7 +334,10 @@ async function sortear(adelantado = false): Promise<void> {
     // La marca del cartel final se pone antes de jugar: los juegos coronan con `cWin` durante la
     // animación, y si la marca recién llega en `reveal` leen la del sorteo anterior.
     setResultadoDeTurnos(isTurnOrder(names.length, winners.length, sello.prize));
-    playGame(names, winners, beacon, finish, orden, tarjeta, terminaEn !== null ? { conHora: { horario: { inicio: terminaEn }, avisos: { alCoronar: coronar } } } : {});
+    // El show, de a un lugar si la sala los ve de a uno (issue #102): el primero ahora, los demás
+    // con «Siguiente premio». Lo grabado y el comprobante siempre llevan los lugares todos.
+    const visibles = app.drawn.revelados ?? winners.length;
+    playGame(names, winners.slice(0, visibles), beacon, finish, orden, tarjeta, terminaEn !== null ? { conHora: { horario: { inicio: terminaEn }, avisos: { alCoronar: coronar } } } : {});
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
     // El show arrancó y el resultado está fijado: este sello ya no está en marcha. Hasta el 16 de noviembre de 2026 la
@@ -657,6 +665,25 @@ function anotarEnMisSorteos(g: PorGrabar, cambios: { porGrabar: boolean; drawTx?
     })
     // Mis sorteos no está en la página (otra vista) o no bajó: lo anotado queda para la próxima vez que se pinte.
     .catch((e: unknown) => console.warn("[tinkazo] Mis sorteos no se pudo anotar", e));
+}
+
+/**
+ * La línea del lugar en pantalla («Lugar 2 de 5»), con el premio de ese lugar si existiera.
+ * reveal la pinta con cada lugar mostrado, y el cambio de idioma la repinta (`onLangChange`).
+ */
+function pintarLugarActual(): void {
+  const lugar = document.getElementById("lugar-actual");
+  if (!lugar) return;
+  const d = app.drawn;
+  if (!d || d.revelados === undefined || d.winners.length < 2) {
+    lugar.style.display = "none";
+    lugar.textContent = "";
+    return;
+  }
+  const cual = Math.min(d.revelados, d.winners.length);
+  const premio = premioDelLugar(cual);
+  lugar.textContent = T[getLang()].lugarDe(cual, d.winners.length) + (premio ? ` · ${premio}` : "");
+  lugar.style.display = "block";
 }
 
 /**
@@ -1106,7 +1133,23 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // Los equipos con cupón se ven por el nombre de su equipo, con la cuenta al lado (`equipos/etiquetas.ts`).
   // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
   // que decide a quién se saca, que sigue siendo `porPersona`.
-  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners, prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()), stand: enStand() });
+  // Issue #102: con la progresión de lugares, las tarjetas muestran hasta donde la sala vio. El
+  // comprobante, el mensaje, la grabación y Mis sorteos llevan siempre los lugares todos: quedaron
+  // fijos al nacer el número y cualquiera los puede calcular desde ese momento (lo dice la línea
+  // de más abajo). Los índices de las tarjetas (`data-k`, para «No está») son los del resultado,
+  // que es un prefijo del orden sellado.
+  const enPantalla = app.drawn?.revelados === undefined ? winners.length : Math.max(1, Math.min(app.drawn.revelados, winners.length));
+  $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners: winners.slice(0, enPantalla), prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()), stand: enStand() });
+  // El lugar que la sala acaba de ver («Lugar 2 de 5») y, si existiera, el premio de ese lugar:
+  // el formato lo define el issue de un premio por lugar (#101). Mientras no exista, el gancho
+  // `premioDelLugar` devuelve "" y la línea no dice premio. Con un solo lugar no se muestra.
+  pintarLugarActual();
+  // La verdad a la sala: nadie elige nada después del número. Con un solo lugar no hace falta decirla.
+  const fijos = document.getElementById("lugares-fijos");
+  if (fijos) {
+    fijos.style.display = winners.length > 1 ? "block" : "none";
+    fijos.textContent = t("lugaresFijos");
+  }
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
@@ -1345,6 +1388,86 @@ function sinGanadores(): string[] {
 }
 
 /**
+ * Issue #102: «Siguiente premio» de a un lugar.
+ *
+ * Un sello con varios ganadores fija todos los lugares de una vez (protocolo §5: el orden de
+ * los elegidos es el orden de los premios) y muestra de a uno: el primer show del primer lugar y
+ * «Siguiente premio» con los que siguen del mismo resultado, con su show y sin volver a sellar.
+ * La progresión vive en `app.drawn.revelados` (state.ts) y la decide `sortear`: solo con más de
+ * un lugar, sin orden de turnos, y fuera del ensayo y del stand.
+ *
+ * Para después (issue #102): sellar también suplentes junto con los ganadores, para reemplazar a
+ * quien no está («No está») sin volver a sellar. No se implementa acá: el reemplazo de hoy pide
+ * su sello (`newDraw("ausente")`).
+ */
+
+/**
+ * Cuántos lugares sellados todavía no vio la sala. Cero cuando la progresión no está en marcha:
+ * la vista de espectador, un resultado retomado de Mis sorteos, un solo lugar o un orden de
+ * turnos muestran todo de una vez, como siempre.
+ */
+export function lugaresSinMostrar(winners: readonly unknown[], revelados: number | undefined): number {
+  if (revelados === undefined) return 0;
+  return Math.max(0, winners.length - revelados);
+}
+
+/** El lugar que sigue, si hay: su índice en `winners` (base 0) y su número para la sala (base 1). */
+export interface LugarQueSigue {
+  indice: number;
+  lugar: number;
+  total: number;
+}
+
+/**
+ * El lugar que sigue del mismo resultado, o `null` cuando ya se mostraron todos — «Siguiente
+ * premio» vuelve a lo de siempre: sellar entre quienes quedan. Con un solo lugar sellado no hay
+ * progresión, y sin `revelados` tampoco (no está en marcha): los dos vuelven a lo de antes.
+ */
+export function lugarQueSigue(winners: readonly unknown[], revelados: number | undefined): LugarQueSigue | null {
+  if (revelados === undefined || winners.length < 2) return null;
+  return revelados < winners.length ? { indice: revelados, lugar: revelados + 1, total: winners.length } : null;
+}
+
+/**
+ * El premio del lugar `lugar` (base 1), cuando existe (issue #101: un premio por lugar).
+ *
+ * El formato exacto lo define ese issue y ese es el único lugar donde entra a la página: junto
+ * al contador de lugares y en la línea de «Siguiente premio». Mientras no esté definido devuelve
+ * "" y la interfaz no dice premio: no se inventa un formato que después hay que cambiar.
+ */
+export function premioDelLugar(_lugar: number): string {
+  return "";
+}
+
+/**
+ * "Siguiente premio" (btn-again-sin, en main.ts).
+ *
+ * Con lugares sellados que la sala todavía no vio, muestra el que sigue del mismo resultado, de
+ * a uno y con su show, sin abrir la lista y sin sello nuevo (issue #102). Cuando se terminan los
+ * lugares sellados, vuelve a lo de hoy: sellar entre quienes quedan (`newDraw`).
+ */
+export function siguientePremio(): void {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn || replaying) return;
+  const sigue = lugarQueSigue(drawn.winners, drawn.revelados);
+  if (!sigue) {
+    newDraw("sinGanadores");
+    return;
+  }
+  if (enDuda()) return;
+  const revelados = sigue.indice + 1;
+  // Un show a la vez: la misma guarda de «Ver de nuevo» (`replaying`) frena un segundo toque.
+  replaying = true;
+  playGame(frozen.names, [drawn.winners[sigue.indice] as number], drawn.beacon, () => {
+    replaying = false;
+    // La pantalla pasó a otra cosa (otro sello, «No está») mientras el show iba: no se pinta encima.
+    if (app.frozen !== frozen || app.drawn !== drawn) return;
+    drawn.revelados = revelados;
+    reveal(frozen.names, drawn.winners, drawn.beacon, frozen.listHash);
+  }, false);
+}
+
+/**
  * Lo que sigue después del ganador, pegado al ganador: cuántos quedan sin
  * premio y qué se hace ahora. Hay una sola acción principal. Si queda con quién
  * sortear, "Siguiente premio" (con cuántas personas quedan); si no, "Compartir
@@ -1357,6 +1480,11 @@ function sinGanadores(): string[] {
  */
 function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
+  // Issue #102: mientras queden lugares sellados que la sala no vio, la fila habla del lugar que
+  // sigue del mismo resultado y no de las personas del próximo sello: todavía no se sella nada.
+  // Cuando se terminan los lugares, `siguientePremio` vuelve a `newDraw` y esto entra al camino
+  // de siempre.
+  const pendiente = app.drawn ? lugarQueSigue(app.drawn.winners, app.drawn.revelados) : null;
   // Los textos hablan de personas: quien salió se va entero, con todas sus participaciones.
   const lineas = sinGanadores();
   const quedan = contarPersonas(lineas, modesVisible()).personas;
@@ -1365,21 +1493,24 @@ function showAgain(): HTMLButtonElement {
   const mostrar = cuentaParaMostrar(lineas, modesVisible()).personas;
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
-  sin.style.display = alcanza ? "" : "none";
-  sin.textContent = L.againSin(mostrar);
-  comprobante.className = alcanza ? "ghost" : "primary";
+  sin.style.display = alcanza || pendiente ? "" : "none";
+  // Con lugares por mostrar el botón no promete el cuadro de personas: sin contador, que todavía no se sella.
+  sin.textContent = pendiente ? L.againLugarBoton : L.againSin(mostrar);
+  comprobante.className = alcanza || pendiente ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector. Solo
   // si no lo está: sacarla y volverla a poner le quita el foco, y esto también
   // corre al cambiar de idioma.
-  const principal = alcanza ? sin : comprobante;
+  const principal = alcanza || pendiente ? sin : comprobante;
   const acciones = $("again-acciones");
   if (acciones.firstElementChild !== principal) acciones.prepend(principal);
   const titulo = $("again-t");
-  titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
+  titulo.dataset.i = alcanza || pendiente ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = alcanza ? L.againLeft(mostrar, selladaEsDeEquipos()) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar, selladaEsDeEquipos());
+  $("again-left").textContent = pendiente
+    ? L.againLugar(pendiente.lugar, pendiente.total)
+    : alcanza ? L.againLeft(mostrar, selladaEsDeEquipos()) : esDeTurnos() ? t("turnsAgainFew") : L.againFew(mostrar, selladaEsDeEquipos());
   // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
   const sigue = $("again-sigue");
   sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
@@ -1416,6 +1547,8 @@ function enfocarDespues(boton: HTMLButtonElement): void {
 }
 onLangChange(() => {
   if (app.drawn && $("again-row").style.display !== "none") showAgain();
+  // La línea del lugar («Lugar 2 de 5») se repinta con el idioma, como la fila del siguiente premio.
+  pintarLugarActual();
 });
 
 /**
