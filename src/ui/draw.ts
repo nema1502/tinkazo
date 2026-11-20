@@ -1788,6 +1788,8 @@ function showAgain(): HTMLButtonElement {
  */
 function enfocarDespues(boton: HTMLButtonElement): void {
   window.setTimeout(() => {
+    // Si la página ya se cerró cuando vence el reloj (pasa al terminar una prueba), no hay a quién darle el foco.
+    if (typeof document === "undefined") return;
     const a = document.activeElement as HTMLElement | null;
     const enNingunLado = !a || a === document.body || (a instanceof HTMLButtonElement && a.disabled) || a.offsetParent === null;
     if (!enNingunLado || !app.drawn || boton.offsetParent === null) return;
