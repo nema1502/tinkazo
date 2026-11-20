@@ -23,7 +23,7 @@ import { crearTrayectorias, type Posicion } from "./carrera-trayectorias";
 import { finDeLaSiembra, sembrarRocas, type Roca } from "./carrera-rocas";
 import { crucesDe, descartarPiedritas, elegirTropiezo, MARCA_TROPIEZO, PIEDRITA_COLOR, piedritaEn, sembrarPiedritas, victimaDelTropiezo, type Tropiezo } from "./carrera-piedritas";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
-import { pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
+import { buscaLugarFicha, pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
 import { PASOS_POR_SEGUNDO, estadoNuevo, pasoDe, pasoFicha, type EstadoFicha } from "./carrera-fichas-mov";
 import { crearLlamaAguayo } from "./llama-aguayo";
 import { FICHA_ECHADA, luzDe } from "./carrera-luz";
@@ -1593,13 +1593,15 @@ const MARGEN_LETRERO_Y = 0.5;
         const choca = (r: { x0: number; y0: number; x1: number; y1: number }): boolean => tapaLetrero(r) || puestas.some((b2) => b2.de !== f.persona && !(f.peso >= 3e6 && b2.cabeza) && r.x0 < b2.x1 - 1 && r.x1 > b2.x0 + 1 && r.y0 < b2.y1 - 1 && r.y1 > b2.y0 + 1);
         const paso = h + 2 * P.u;
         // Primero arriba de su cabeza; si ahí no cabe, un escalón más arriba o abajo, y después corrida medio ancho a un lado.
-        let lugar: { dx: number; dy: number } | undefined;
-        for (const dy of [0, -paso, -2 * paso, paso, 2 * paso]) {
-          for (const dx of [0, -w * 0.5, w * 0.5]) {
-            if (!lugar && !choca(caja(dx, dy)) && y0 + dy - h / 2 > piso - 1 && et.raiz.x + dx - w / 2 > 0 && et.raiz.x + dx + w / 2 < P.w) lugar = { dx, dy };
-          }
-        }
-        if (!lugar && f.peso >= 3e6 && !tapaLetrero(caja(0, 0))) lugar = { dx: 0, dy: 0 };
+        // Cuando el grupo de punta se aprieta en el corte de la cámara la fila queda llena: la búsqueda sube más renglones
+        // y se corre más a los lados hasta encontrar sitio, para que ninguna ficha se quede pisando a otra.
+        const busca = buscaLugarFicha(
+          (dx, dy) => choca(caja(dx, dy)),
+          (dx, dy) => y0 + dy - h / 2 > piso - 1 && et.raiz.x + dx - w / 2 > 0 && et.raiz.x + dx + w / 2 < P.w,
+          paso,
+          w,
+        );
+        const lugar = busca ?? (f.peso >= 3e6 && !tapaLetrero(caja(0, 0)) ? { dx: 0, dy: 0 } : undefined);
         if (!lugar) et.raiz.visible = false;
         else {
           et.raiz.x += lugar.dx;

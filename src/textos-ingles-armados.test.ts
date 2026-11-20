@@ -72,7 +72,10 @@ describe("las bases y el resumen antes de sellar: varias participaciones por per
     expect(en.sellarResumen(2, 1, "Termo", 5)).toBe(
       "2 people, 5 entries, 1 winner, Termo. Anyone with several entries can be drawn more than once. Sealing locks the list.",
     );
-    expect(en.sellarResumen(2, 3, "", 2, false)).toBe("2 people, 3 winners, no prize. Sealing locks the list.");
+    expect(en.sellarResumen(2, 3, "", 2, false)).toBe(
+      // Issue #102: con varios lugares el resumen dice la verdad: un sello, todos los lugares fijos al nacer el número.
+      `2 people, 3 winners, no prize. Sealing locks the list. ${en.fijosAlNacer}`,
+    );
   });
 });
 
@@ -200,12 +203,8 @@ describe("el tope de personas de cada juego: lo que dice la recomendación", () 
 
 describe("la ayuda del botón de desbloqueo al proteger la cuenta", () => {
   it("dice que se desbloquea con lo mismo que abre el celular o la computadora, sin igualar una acción con un objeto", () => {
-    expect(en.clDesbloqueoAyudaCel).toBe(
-      "You unlock with the same thing you use to open your phone: your fingerprint, face or passcode. It never leaves your phone, and Tinkazo doesn't see it.",
-    );
-    expect(en.clDesbloqueoAyudaCompu).toBe(
-      "You unlock with the same thing you use to open your computer: your fingerprint, face or password. It never leaves your computer, and Tinkazo doesn't see it.",
-    );
+    expect(en.clDesbloqueoAyudaCel).toBe("It's your fingerprint, face or phone passcode. Tinkazo never sees it.");
+    expect(en.clDesbloqueoAyudaCompu).toBe("It's your fingerprint, face or computer password. Tinkazo never sees it.");
     for (const clave of ["clDesbloqueoAyudaCel", "clDesbloqueoAyudaCompu"] as const) {
       expect(en[clave], clave).not.toMatch(/^Unlocking is/);
     }

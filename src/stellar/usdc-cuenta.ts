@@ -14,6 +14,10 @@ import { type ActivoDePago, USDC_MAINNET, USDC_TESTNET } from "./pagos";
  * ni DOM, con lo leído y con lo que el sitio sabe de la cuenta (con qué entró, si está protegida, si ya hay una
  * activación esperando). El emisor es siempre el de Circle de la red (`USDC_MAINNET` o `USDC_TESTNET`): no se cambia con
  * ninguna variable.
+ *
+ * La puerta del premio (`puertaDelPremio`, `mirarPuertaDelPremio`) es otra lectura de la misma cuenta, para otra
+ * pregunta: ¿puede guardar dinero? Se hace antes de cada firma del sello y del sorteo con una cuenta de Google o de correo
+ * en el modo `premios` (`wallet-pollar.ts`). No usa `mirarCuenta`: va sin caché, con su propio tope y sobre el JSON crudo.
  */
 
 type Fetch = typeof fetch;
@@ -36,10 +40,18 @@ export interface LineaMirada {
   patrocinador: string | null;
 }
 
+/** Quien puede firmar por una cuenta: su clave y el peso de su firma. */
+export interface Firmante {
+  clave: string;
+  peso: number;
+}
+
 /** Lo que Horizon dice de una cuenta. Lo nuevo (el XLM y las reservas) es `null` si no vino: no es una falla. */
 export interface CuentaMirada {
   secuencia: string;
   saldos: LineaMirada[];
+  /** Quién firma por la cuenta, o `null` si Horizon no lo trajo (o trajo algo que no se lee). Sin decirlo, no se sabe. */
+  firmantes?: Firmante[] | null;
   /** El saldo de XLM, con siete decimales. */
   xlm: string | null;
   /** El XLM comprometido en ofertas de venta (`selling_liabilities`). */
@@ -70,6 +82,31 @@ async function conEspera<T>(ms: number, hacer: (senal: AbortSignal) => Promise<T
 
 const montoDeHorizon = (x: unknown): string | null => (typeof x === "string" && /^\d{1,13}(?:\.\d{1,7})?$/.test(x) ? x : null);
 const cantidad = (x: unknown): number | null => (typeof x === "number" && Number.isSafeInteger(x) && x >= 0 ? x : null);
+
+/** Los firmantes que trae Horizon (`signers`), o `null` si no vinieron o alguno no se lee: nunca una lista a medias. */
+function firmantesDe(x: unknown): Firmante[] | null {
+  if (!Array.isArray(x)) return null;
+  const lista: Firmante[] = [];
+  for (const s of x as unknown[]) {
+    if (typeof s !== "object" || s === null) return null;
+    const { key, weight } = s as Record<string, unknown>;
+    if (typeof key !== "string" || key === "" || typeof weight !== "number" || !Number.isSafeInteger(weight) || weight < 0) return null;
+    lista.push({ clave: key, peso: weight });
+  }
+  return lista;
+}
+
+/**
+ * ¿La cuenta tiene una firma que no es la suya? Se supone que las cuentas del proveedor nacen con su sola llave (la
+ * activación abre el patrocinio, crea la cuenta y lo cierra, sin sumar firmantes), así que cualquier otra clave con peso
+ * sería un cambio que no hizo Tinkazo. La suposición se midió el 18 de noviembre de 2026 en una cuenta real de la red
+ * principal: un solo firmante (su propia clave, con peso 1), umbrales 0, 0 y 0, patrocinada por otra cuenta y sin XLM
+ * (la forma está en `usdc-cuenta.test.ts`). Con una sola cuenta medida, el aviso sigue siendo una línea suelta que no
+ * esconde nada (`saldo.ts`). Sin el dato no se sabe, y no se avisa. No protege nada.
+ */
+export function tieneFirmanteAjeno(c: CuentaMirada, cuenta: string): boolean {
+  return (c.firmantes ?? []).some((f) => f.clave !== cuenta && f.peso > 0);
+}
 
 /**
  * Lee la cuenta en Horizon. `no-existe` con 404; `sin-red` con cualquier otra falla, con el tiempo agotado o con un
@@ -108,6 +145,7 @@ export async function mirarCuenta(red: NetworkName, cuenta: string, op: Opciones
       return {
         secuencia: j.sequence,
         saldos,
+        firmantes: firmantesDe(j.signers),
         xlm,
         xlmComprometido,
         subentradas: cantidad(j.subentry_count),
@@ -286,3 +324,176 @@ export const muestraDireccion = (e: EstadoParaRecibir): boolean => e.estado === 
  */
 export const abrePasoDeLaCuenta = (e: EstadoParaRecibir, red: NetworkName): boolean =>
   red === "mainnet" && (e.estado === "falta-proteger" || e.estado === "creandose");
+
+/* ------------------------------------------------------------ la puerta del premio */
+
+/**
+ * Qué dice la red de si la cuenta puede guardar un premio, justo antes de firmar el sello o el sorteo con una cuenta de
+ * Google o de correo en la red principal en el modo `premios`:
+ * - `libre`: no tiene la línea del dólar digital de Circle ni otra línea con saldo. Se firma como siempre, tenga o no XLM.
+ * - `puede-guardar`: tiene la línea del dólar digital de Circle (con cualquier saldo, también cero) o alguna otra línea con
+ *   saldo mayor que cero. El XLM no cuenta: ver `puertaDelPremio`.
+ * - `no-se-sabe`: la red no contestó o contestó algo que no se lee. No se firma a ciegas.
+ * - `no-existe`: Horizon todavía no conoce la cuenta (la de Google se crea en el paso «Dejá tu cuenta lista», que va
+ *   después de la consulta adelantada de `freeze.ts`). No puede guardar nada y esa consulta la deja pasar. La puerta de
+ *   la firma la trata como `no-se-sabe`: una cuenta que firma ya existe, y `mirarPuertaDelPremio` espera a que Horizon la
+ *   vea antes de darla por no vista.
+ */
+export type PuertaDelPremio = "libre" | "puede-guardar" | "no-se-sabe" | "no-existe";
+
+/**
+ * La decisión de la puerta, sobre el JSON crudo de Horizon y no sobre la `CuentaMirada`: `mirarCuenta` pone `"0"` cuando
+ * a una línea le falta el saldo, y eso abriría la puerta. Una duda de lectura nunca da `libre`.
+ *
+ * Frena desde que la cuenta puede guardar un premio y no desde que lo tiene: el voto del kit firma el hash de cualquier
+ * transacción de la cuenta, y con saldo cero ya puede servir para robar después (un pago guardado, otra firma, un permiso
+ * de gasto). Así una cuenta lista para recibir un premio no vuelve a votar por hash (docs/architecture.md).
+ *
+ * El XLM no frena, con cualquier saldo: en Stellar cualquiera puede mandarle XLM a cualquier cuenta sin su permiso, y la
+ * dirección de quien organiza es pública desde que sella. Frenar por eso dejaría a quien organiza sin poder sellar ni
+ * sortear ese día, con solo recibir unas fracciones de XLM. Para recibir cualquier otro activo la cuenta tiene que haber
+ * abierto su línea, y lo que la puerta cuida es el premio, que llega por la línea de Circle. El XLM de una cuenta de
+ * Google sigue bajo el riesgo aceptado (docs/architecture.md). Se sigue leyendo: sin su entrada nativa, o con un saldo que
+ * no se entiende, la respuesta es `no-se-sabe`, nunca `libre`.
+ */
+export function puertaDelPremio(cuerpo: unknown, red: NetworkName): PuertaDelPremio {
+  const balances = typeof cuerpo === "object" && cuerpo !== null ? (cuerpo as { balances?: unknown }).balances : undefined;
+  if (!Array.isArray(balances)) return "no-se-sabe";
+  const usdc = usdcDeLaRed(red);
+  let nativa = false;
+  let circle = false;
+  let otraConSaldo = false;
+  let otraSinLeer = false;
+  for (const b of balances as unknown[]) {
+    if (typeof b !== "object" || b === null) return "no-se-sabe";
+    const l = b as Record<string, unknown>;
+    const saldo = typeof l.balance === "string" ? stroopsSeguro(l.balance) : null;
+    if (l.asset_type === "native") {
+      // El XLM tiene que leerse (una respuesta que no se entiende nunca da libre), pero su saldo no decide nada.
+      if (saldo === null) return "no-se-sabe";
+      nativa = true;
+      continue;
+    }
+    if (l.asset_code === usdc.code && l.asset_issuer === usdc.issuer) {
+      circle = true;
+      continue;
+    }
+    if (saldo === null) otraSinLeer = true;
+    else if (saldo > 0n) otraConSaldo = true;
+  }
+  if (!nativa) return "no-se-sabe";
+  if (circle || otraConSaldo) return "puede-guardar";
+  return otraSinLeer ? "no-se-sabe" : "libre";
+}
+
+/** Cuánto se espera a Horizon en cada lectura de la puerta. No subirlo sin medir: se suma al margen de la ronda del sello. */
+export const TOPE_DE_LA_PUERTA_MS = 5_000;
+/** Lo más que dura la puerta entera, con sus reintentos. Tampoco se sube sin medir. */
+export const PRESUPUESTO_DE_LA_PUERTA_MS = 7_000;
+/** Cuánto se espera entre una lectura y la siguiente. */
+export const PAUSA_DE_LA_PUERTA_MS = 700;
+/** Cuántas veces más se vuelve a leer ante una duda: tres lecturas como mucho. */
+export const REINTENTOS_DE_LA_PUERTA = 2;
+/** Una lectura nueva solo vale si queda al menos este tiempo para hacerla. */
+const LECTURA_MINIMA_MS = 1_000;
+
+export interface OpcionesDeLaPuerta extends OpcionesDeLectura {
+  /** Cuánto se espera entre una lectura y la siguiente. Sin decirlo, `PAUSA_DE_LA_PUERTA_MS`. */
+  pausaMs?: number;
+  /**
+   * Un 404 se toma como respuesta y no se vuelve a preguntar. Lo usa la consulta adelantada de `freeze.ts`, que deja pasar a
+   * una cuenta que todavía no existe. Sin esto, la puerta de la firma espera a que Horizon la vea.
+   */
+  sinReintentarNoExiste?: boolean;
+}
+
+/** Lo que sale de una lectura de la puerta: qué dice, y si la cuenta ya tiene la línea del dólar digital de Circle. */
+interface LecturaDeLaPuerta {
+  puerta: PuertaDelPremio;
+  conLinea: boolean;
+}
+
+/** ¿La cuenta tiene la línea del dólar digital de Circle de la red, con cualquier saldo? Sobre el mismo JSON crudo. */
+function conLaLineaDeCircle(cuerpo: unknown, red: NetworkName): boolean {
+  const balances = typeof cuerpo === "object" && cuerpo !== null ? (cuerpo as { balances?: unknown }).balances : undefined;
+  if (!Array.isArray(balances)) return false;
+  const usdc = usdcDeLaRed(red);
+  return (balances as unknown[]).some((b) => typeof b === "object" && b !== null && (b as Record<string, unknown>).asset_code === usdc.code && (b as Record<string, unknown>).asset_issuer === usdc.issuer);
+}
+
+/** Una sola lectura de la cuenta en Horizon para la puerta, sin caché. Nunca lanza. */
+async function leerLaPuerta(red: NetworkName, cuenta: string, op: OpcionesDeLectura, tiempoMs: number): Promise<LecturaDeLaPuerta> {
+  const f = op.fetch ?? fetch;
+  const base = op.horizon ?? HORIZON_URLS[red];
+  try {
+    return await conEspera(tiempoMs, async (signal): Promise<LecturaDeLaPuerta> => {
+      const r = await f(`${base}/accounts/${encodeURIComponent(cuenta)}`, { signal, cache: "no-store" });
+      if (r.status === 404) return { puerta: "no-existe", conLinea: false };
+      if (!r.ok) return { puerta: "no-se-sabe", conLinea: false };
+      const cuerpo: unknown = await r.json();
+      return { puerta: puertaDelPremio(cuerpo, red), conLinea: conLaLineaDeCircle(cuerpo, red) };
+    });
+  } catch {
+    return { puerta: "no-se-sabe", conLinea: false };
+  }
+}
+
+/**
+ * Lee la cuenta en Horizon para la puerta: sin caché (una respuesta vieja no sirve) y con su propio tope. Nunca lanza.
+ * Un 404 da `no-existe`. Cualquier otra respuesta que no sea 2xx, un corte, el tope o un cuerpo que no se lee dan
+ * `no-se-sabe`.
+ *
+ * Ante una duda (`no-existe` o `no-se-sabe`) vuelve a leer, hasta dos veces más y dentro de `PRESUPUESTO_DE_LA_PUERTA_MS`:
+ * todavía no se firmó nada, y un Horizon que tropieza o que va unos segundos atrás de la red no tiene por qué dejar al
+ * sorteo sin guardar ni frenar el primer sello de una cuenta nueva. Una respuesta que dice algo (`libre` o
+ * `puede-guardar`) no se repite nunca: si dijo `puede-guardar`, no se pregunta de nuevo a ver si cambia. Si al final sigue
+ * la duda, sale la duda y la puerta cierra.
+ */
+export async function mirarPuertaDelPremio(red: NetworkName, cuenta: string, op: OpcionesDeLaPuerta = {}): Promise<PuertaDelPremio> {
+  return (await mirarLaPuerta(red, cuenta, op)).puerta;
+}
+
+async function mirarLaPuerta(red: NetworkName, cuenta: string, op: OpcionesDeLaPuerta): Promise<LecturaDeLaPuerta> {
+  const pausa = op.pausaMs ?? PAUSA_DE_LA_PUERTA_MS;
+  const inicio = Date.now();
+  const quedan = (): number => PRESUPUESTO_DE_LA_PUERTA_MS - (Date.now() - inicio);
+  for (let i = 0; ; i++) {
+    const lectura = await leerLaPuerta(red, cuenta, op, Math.min(op.tiempoMs ?? TOPE_DE_LA_PUERTA_MS, quedan()));
+    const { puerta } = lectura;
+    if (puerta === "libre" || puerta === "puede-guardar") return lectura;
+    if (puerta === "no-existe" && op.sinReintentarNoExiste) return lectura;
+    if (i >= REINTENTOS_DE_LA_PUERTA || quedan() - pausa < LECTURA_MINIMA_MS) return lectura;
+    if (pausa > 0) await new Promise<void>((seguir) => setTimeout(seguir, pausa));
+  }
+}
+
+/**
+ * Qué hay que saber antes de pedir la línea del dólar digital con una cuenta de Google o de correo en el modo `premios`
+ * (`wallet-pollar.ts`, `activarUsdc`): pedirla es un voto por hash de una transacción nueva, y a una cuenta que ya puede
+ * guardar dinero no se le piden votos así.
+ * - `ya-esta`: la cuenta ya tiene la línea (otra pestaña la activó, o llegó un premio). No hay nada que pedir.
+ * - `libre`: no tiene la línea ni otra línea con saldo (el XLM no cuenta, `puertaDelPremio`), o Horizon todavía no la
+ *   conoce. Se puede pedir.
+ * - `no-se-sabe`: la red no deja saberlo, o tiene otra línea con saldo sin la de Circle. No se pide nada.
+ * Un 404 no se repite: la cuenta que se está creando sigue su camino.
+ */
+export type AntesDeActivar = "ya-esta" | "libre" | "no-se-sabe";
+
+export async function mirarAntesDeActivar(red: NetworkName, cuenta: string, op: OpcionesDeLaPuerta = {}): Promise<AntesDeActivar> {
+  const { puerta, conLinea } = await mirarLaPuerta(red, cuenta, { ...op, sinReintentarNoExiste: true });
+  if (puerta === "libre" || puerta === "no-existe") return "libre";
+  return puerta === "puede-guardar" && conLinea ? "ya-esta" : "no-se-sabe";
+}
+
+/**
+ * La puerta frenó la firma: la cuenta puede guardar dinero, o no se pudo saber. Se reconoce por el nombre y la forma
+ * (`esDelPremio` en `errores.ts`), sin importar este archivo. No lleva causa: no es un corte de la red ni un sello incierto.
+ */
+export class PremioGuardado extends Error {
+  readonly que: "puede-guardar" | "no-se-sabe";
+  constructor(que: "puede-guardar" | "no-se-sabe") {
+    super(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber");
+    this.name = "PremioGuardado";
+    this.que = que;
+  }
+}

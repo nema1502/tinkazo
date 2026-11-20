@@ -113,8 +113,9 @@ describe("el markup de la opción", () => {
   });
 });
 
-describe("sin la bandera y sin el parámetro la herramienta es la de siempre", () => {
+describe("con la bandera apagada a propósito (VITE_MODOS=0) la herramienta es la de siempre", () => {
   it("la opción sigue escondida y nada del campo ni de los rótulos cambia", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar(12);
     expect(opcion().hidden).toBe(true);
     expect(campo().disabled).toBe(false);
@@ -137,14 +138,16 @@ describe("sin la bandera y sin el parámetro la herramienta es la de siempre", (
     expect(campo().value).toBe("1");
   });
 
-  it("la dirección sin ?modo no prende nada", async () => {
+  it("la dirección sin ?modo no prende nada con la bandera apagada", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { turnos } = await montar(5);
     turnos.abrirConElModoPedido();
     expect(turnos.modoTurnosActivo()).toBe(false);
     expect(campo().disabled).toBe(false);
   });
 
-  it("el borrador es el de siempre, sin el campo del modo", async () => {
+  it("el borrador es el de siempre, sin el campo del modo, con la bandera apagada", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { participants } = await montar(6);
     participants.guardarBorrador();
     const guardado = JSON.parse(sessionStorage.getItem(BORRADOR) as string) as Record<string, unknown>;
@@ -540,6 +543,8 @@ describe("el botón de Amigo secreto en el selector (S2)", () => {
   });
 
   it("sin la bandera el botón no está y la herramienta es la de siempre", async () => {
+    // Desde #157 la bandera viene prendida por defecto: para vivir "sin la bandera" hay que apagarla a propósito.
+    vi.stubEnv("VITE_MODOS", "0");
     await montar(5);
     expect(amigoBtn()).toBeNull();
   });

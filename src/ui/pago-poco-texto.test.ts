@@ -167,9 +167,13 @@ describe("comprar se ve simple", () => {
       const plegado = ["pagoParaCuenta", "pagoVence", "compraNotaMemo", "compraSinDolares", "compraDesdeXlm"];
       expect(caja?.textos.map((x) => x.clave)).toEqual(["compraAppLinea"]);
       expect(caja?.pago?.detalles.map((x) => x.clave)).toEqual(plegado);
+      // La nota numérica (#96) no suma nada a la vista ni una clave al pliegue: va como dato del panel, con su fila y su
+      // Copiar dentro de Más detalles (`pago-panel.ts`).
+      expect(caja?.pago).toMatchObject({ memoId: orden().memoId });
       const ventana = vistaDelPaquete({ ...paqueteInicial(l, "a•••@gmail.com"), fase: "pagando", paquetes: [P10], elegido: P10, orden: orden("p10", "9") });
       expect(ventana.textos.map((x) => x.clave)).toEqual(["compraAppLinea"]);
       expect(ventana.panel?.detalles.map((x) => x.clave)).toEqual(plegado);
+      expect(ventana.panel).toMatchObject({ memoId: orden("p10", "9").memoId });
       for (const k of ["pagoCuenta", "pagoMonto", "compraNotaRotulo", "pagoQrAyuda", "pagoMasDetalles"]) expect(palabras(String(T[l][k])), `${l} ${k}`).toBeLessThanOrEqual(6);
     }
   });

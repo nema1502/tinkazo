@@ -13,7 +13,7 @@ import { ponerPremio, sincronizarPremios } from "./premios";
 import { isTurnOrder } from "../modos/turnos";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
 import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
-import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { bloquearGanadores, ganadoresPedidos, lineasDeLaLista, ponerGanadores } from "./ganadores";
 import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
 import { cuadroEsDeEquipos, etiquetaDe } from "../equipos/etiquetas";
@@ -96,6 +96,8 @@ export function renderNames(): void {
     .join("");
   // En el modo «Orden de turnos» la cantidad sigue a la lista, y si la lista pasa de lo que admite la red no se sella.
   seguirLaLista(names.length);
+  // En el stand, Cuántos salen tiene de tope la lista de la ronda (`ganadores.ts`).
+  lineasDeLaLista(names.length);
   $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length);
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   const hint = $("freeze-hint");
@@ -186,13 +188,15 @@ function pintarResumen(): void {
   // Se muestra cuando se puede sellar (la cuenta de siempre) y dice las personas con la regla de la cuenta.
   const nombres = parseNames();
   const n = cuentaParaMostrar(nombres).personas;
-  // En el stand no hay sello, premio ni ganador: solo la cuenta de esta ronda.
+  // En el stand no hay sello, premio ni ganador: la cuenta de esta ronda y cuántas personas salen. Salen las que se
+  // pidieron sin pasar de la lista: la misma cuenta del sello (`freeze.ts`).
   if (enStand()) {
     if (!n || listaCerrada()) {
       el.style.display = "none";
       return;
     }
-    el.textContent = T[getLang()].standResumen(n);
+    const salen = Math.min(ganadoresPedidos(), nombres.length);
+    el.textContent = T[getLang()].standResumen(n, salen, salen >= nombres.length);
     el.style.display = "";
     return;
   }
@@ -951,13 +955,25 @@ export function borradorConNombres(): boolean {
 
 /** Guarda ya lo que hay en el cuadro, el premio y la cantidad. Lo llama también la ventana de ingreso, antes de irse a Google. */
 export function guardarBorrador(): void {
+  escribirBorrador(false);
+}
+
+/**
+ * Al entrar al stand: lo mismo, también con el cuadro y el premio vacíos. Sin esto, un Cuántos ganan o un modo elegidos
+ * antes de pegar la lista se perdían al salir del stand.
+ */
+export function guardarAntesDelStand(): void {
+  escribirBorrador(true);
+}
+
+function escribirBorrador(aunVacio: boolean): void {
   window.clearTimeout(guardarLuego);
   // La lista del ensayo no pisa la que se estaba armando: al salir, vuelve esa.
   if (sinGrabar() || listaCerrada()) return;
   try {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
-    if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
+    if (!aunVacio && !texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
     else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos(), ...(modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {}) }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
@@ -995,32 +1011,33 @@ export function reponerBorrador(): void {
   } catch {
     /* sin almacenamiento, se repone el borrador como siempre */
   }
-  if (listaStand?.trim()) {
-    setList(listaStand);
-    return;
-  }
+  const llevada = listaStand?.trim() ? listaStand : null;
   type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
-  let b: Guardado;
+  let b: Guardado = null;
   try {
     b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
   } catch {
-    return;
+    // Un borrador que no se puede leer no repone nada. La lista llevada del stand entra igual, sola.
+    b = null;
   }
-  if (!b || typeof b.texto !== "string") return;
+  const texto = llevada ?? (b && typeof b.texto === "string" ? b.texto : null);
+  if (texto === null) return;
+  // La lista del stand reemplaza solo a la lista: el modo, el premio y Cuántos ganan del sorteo de verdad vuelven igual.
   // El modo de varias participaciones vuelve con la lista, antes de pintarla: sin él, la lista repartida se
   // contaría por líneas y «No está» sacaría una línea en vez de a la persona entera.
-  if (b.modo === "varias") recordarModo("varias");
+  if (b?.modo === "varias") recordarModo("varias");
   // El orden de turnos también vuelve antes que la lista, y sin la cantidad guardada: en un orden la cantidad es la de la
   // lista. Prendido después de poner la cantidad, el modo la tomaba como la de antes del orden, y volver a Sortear premios
   // dejaba a todos como ganadores.
-  const enTurnos = b.modo === "turnos";
+  const enTurnos = b?.modo === "turnos";
   if (enTurnos) ponerModoTurnos(true);
-  setList(b.texto);
-  if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
-  const nw = Number(b.nw);
+  setList(texto);
+  if (typeof b?.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
+  const nw = Number(b?.nw);
   // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
   if (!enTurnos && Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
-  if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
+  // La lista llevada del stand no se avisa como recuperada: la eligió quien atiende.
+  if (!llevada && canonicalList(texto).length) avisar(() => t("borradorRepuesto"));
 }
 
 function hideSummary(): void {

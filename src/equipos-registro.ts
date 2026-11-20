@@ -9,9 +9,9 @@ import { onLangChange, texto } from "./idioma";
 import { enNavegadorDeApp } from "./navegador";
 import { anotarEquipoEnSala, leerEstadoDeEquipo, leerPublico } from "./sala/equipos";
 import { hayModoOficial, network } from "./stellar/config";
-import { hasPollarKey } from "./stellar/pollar-config";
-import { loadSessionKind } from "./stellar/session-store";
-import { cuentaDeLaSesion } from "./equipos/sesion";
+import { hasPollarKey, leerMarcaPollar } from "./stellar/pollar-config";
+import { loadSessionKind, saveSessionKind } from "./stellar/session-store";
+import { cuentaDeLaSesion, entrarYRecordar } from "./equipos/sesion";
 
 /**
  * La página de registro de un equipo (`equipos.html`): el QR de la pantalla del evento la abre, y el encargado del
@@ -53,9 +53,22 @@ if (raiz) {
         freighter: async () => (await import("./stellar/wallet-lite")).freighterWallet.restore(),
         prueba: async () => (await import("./stellar/wallet")).guestWallet.restore(),
       }),
+    // Lo que se puede retomar sin abrir nada: el tipo de sesión guardado o la marca de Google. Sin eso no se dice
+    // Retomando tu cuenta.
+    hayCuentaGuardada: () => {
+      try {
+        return loadSessionKind(network.name) !== null || (hayPollar && leerMarcaPollar(localStorage, network.name) !== null);
+      } catch {
+        return false;
+      }
+    },
+    // Quien entra desde el QR queda adentro también para la cabecera de las páginas de lectura (`pagina.ts`).
     entrarConGoogle: async () => {
       const { pollarWallet } = await import("./stellar/wallet-pollar");
-      return pollarWallet.connect();
+      return entrarYRecordar(
+        () => pollarWallet.connect(),
+        () => saveSessionKind("google", network.name),
+      );
     },
     leerPublico,
     anotar: anotarEquipoEnSala,

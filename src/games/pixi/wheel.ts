@@ -15,6 +15,7 @@ import { wheelFinalView, wheelInBox, wheelSelectedBody } from "./wheel-zoom-fina
 import { respuestasRuleta } from "./wheel-nino";
 import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { decisivo as momentoDecisivo } from "./decisivo";
 import type { Montaje3D, Vista3D } from "../tres/tipos";
 import type { EntradaRueda, GajoEntrada } from "../tres/wheel-3d"; // solo el tipo: no trae three.js
 
@@ -478,6 +479,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
 
   /* ============================================================ estado */
   let tAll = 0, tHold = 0;
+  // El momento decisivo (`decisivo.ts`): el último tramo, cuando la rueda se arrastra hasta trabarse. Antes gira entera y
+  // lo que le falta recorrer sale de la semilla: no se ve dónde para. La ruleta cuenta solo el primer premio.
+  S.decisivoEn(() => tAll, momentoDecisivo(T_CREEP));
   let rot = -startSeg * A;
   let lastClick = Math.floor(startSeg), lastLap = -1, lastHum = -1, saidUpTo = -1;
   let pegHits = 0, buildTick = 0, holdBeats = 0;

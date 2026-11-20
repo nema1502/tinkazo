@@ -3,6 +3,7 @@ import { hashDeTx, type Proof } from "./proof";
 import { bytesToHex, hexToBytes, randomnessOf, roundTime } from "./quicknet";
 import { MAX_WINNERS, select } from "./select";
 import type { LecturaDelHistorial, SelloDelHistorial } from "../stellar/historial";
+import type { PremioDelSello } from "../stellar/premios";
 import { contratoOficial, type ContratoOficial, type Red } from "../stellar/oficiales";
 
 /**
@@ -197,6 +198,12 @@ export interface Revision {
    * `falta: "sin-historial"` trae por qué no se pudo (`null` si ni siquiera contestó a tiempo).
    */
   historial: LecturaDelHistorial | null;
+  /**
+   * La promoción detrás de un sello de una campaña: el depósito, la huella de las bases y de la lista y el
+   * pago de cada premio, leídos del contrato de premios que selló (`stellar/premios.ts`). Falta (o es `null`)
+   * en un sorteo común (sin premio), que se comprueba exactamente como siempre.
+   */
+  premio?: PremioDelSello | null;
 }
 
 export interface Dependencias {
@@ -359,6 +366,9 @@ export async function revisarComprobante(
 
   // --------------------------------------------------- 2. el ancla y el registro
   const ancla = anclaDe(p);
+  // El número que el comprobante le pone al sorteo: por historial no se comprueba, salvo el de una campaña,
+  // donde el contrato de premios lo guardó al sellar (más abajo).
+  const idDelAncla = ancla.tipo === "oficial" ? ancla.id : null;
   const stx = hashDeTx(p.stx);
   let registro: Registro | null = null;
   // El historial se pide a la vez que el estado, no después: en serie se sumarían sus esperas.
@@ -425,6 +435,10 @@ export async function revisarComprobante(
     historial = sello ? ((await conLimite(lectura, opciones.esperaDelHistorialMs ?? ESPERA_DEL_HISTORIAL_CON_ESTADO_MS)) ?? null) : await lectura;
     if (historial?.ok) {
       const h = historial.sello;
+      // El contrato de premios guarda el número del sorteo que creó al sellar. Por historial un sello directo no
+      // lo trae y el número no se comprueba (`docs/protocolo.md` §7.1); con el de una campaña, sí: si no es el
+      // mismo, el historial no respalda a este sorteo.
+      if (h.premio && idDelAncla !== null && h.premio.sorteoId !== idDelAncla) motivos.add("historial-distinto");
       if (sello) {
         if (camposDistintos(sello, h, contrato.contractId).length) motivos.add("historial-distinto");
       } else if (h.contractId !== contrato.contractId) {
@@ -525,6 +539,7 @@ export async function revisarComprobante(
     registro,
     fuente,
     historial,
+    premio: historial?.ok ? (historial.sello.premio ?? null) : null,
   };
 }
 

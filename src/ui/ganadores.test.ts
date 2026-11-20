@@ -304,3 +304,170 @@ describe("montado en la página", () => {
     expect(avisos).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("el contador en el modo stand", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    document.body.innerHTML = control();
+    h.tope = 32;
+  });
+
+  const control_ = (): HTMLElement => document.getElementById("ganadores-control") as HTMLElement;
+  const rotulo = (): HTMLElement => document.getElementById("nw-etiqueta") as HTMLElement;
+  const atajos_ = (): HTMLElement => document.getElementById("nw-atajos") as HTMLElement;
+  const valor = (): string => document.getElementById("nw-valor")?.textContent ?? "";
+  const menos = (): HTMLButtonElement => document.getElementById("nw-menos") as HTMLButtonElement;
+  const mas = (): HTMLButtonElement => document.getElementById("nw-mas") as HTMLButtonElement;
+  const visibles = (): number[] => [...document.querySelectorAll<HTMLButtonElement>("#nw-atajos button")].filter((b) => !b.hidden).map((b) => Number(b.dataset.n));
+
+  /** El stand como lo arma `montar` de `stand.ts`: el contador prendido y la lista con `lineas` nombres. */
+  const entrar = async (lineas: number): Promise<{ m: typeof import("./ganadores"); i18n: typeof import("../i18n") }> => {
+    const [m, i18n] = await Promise.all([import("./ganadores"), import("../i18n")]);
+    i18n.setLang("es");
+    m.montarGanadores();
+    m.ponerContadorDelStand();
+    m.lineasDeLaLista(lineas);
+    return { m, i18n };
+  };
+
+  it("se llama Cuántos salen y How many are picked, también el aria de los atajos, y arranca en 1", async () => {
+    const { i18n } = await entrar(8);
+    expect(rotulo().dataset.i).toBe("standSalen");
+    expect(rotulo().textContent).toBe("Cuántos salen");
+    expect(atajos_().dataset.iAria).toBe("standSalenAtajos");
+    expect(atajos_().getAttribute("aria-label")).toBe("Atajos para cuántos salen");
+    expect(campo().value).toBe("1");
+    expect(valor()).toBe("1");
+    i18n.setLang("en");
+    expect(rotulo().textContent).toBe("How many are picked");
+    expect(atajos_().getAttribute("aria-label")).toBe("Shortcuts for how many are picked");
+    // Ni el rótulo ni el aria del stand hablan de ganar.
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["standSalen", "standSalenAtajos"]) {
+        expect(T[l][k] as string, `${l}.${k}`).not.toMatch(/gan|win|premio|prize|sell|seal/i);
+      }
+    }
+  });
+
+  it("solo se ve cuando se puede empezar la ronda: con menos de dos nombres no hay un control que no se pueda usar", async () => {
+    const { m } = await entrar(0);
+    expect(control_().hidden).toBe(true);
+    m.lineasDeLaLista(1);
+    expect(control_().hidden).toBe(true);
+    m.lineasDeLaLista(2);
+    expect(control_().hidden).toBe(false);
+    m.lineasDeLaLista(1);
+    expect(control_().hidden).toBe(true);
+  });
+
+  it("el tope es la lista de la ronda: con 3 nombres no se ofrece 5 ni 10, y más se apaga en 3", async () => {
+    const { m } = await entrar(3);
+    expect(visibles()).toEqual([1, 2, 3]);
+    m.ponerGanadores(3);
+    expect(mas().disabled).toBe(true);
+    m.lineasDeLaLista(8);
+    expect(visibles()).toEqual([1, 2, 3, 5]);
+    expect(mas().disabled).toBe(false);
+  });
+
+  it("nunca pasa del tope de la red: con el de la red en 4 y diez nombres el tope es 4", async () => {
+    h.tope = 4;
+    const { m } = await entrar(10);
+    expect(visibles()).toEqual([1, 2, 3]);
+    m.ponerGanadores(4);
+    expect(valor()).toBe("4");
+    expect(mas().disabled).toBe(true);
+    mas().click();
+    expect(campo().value).toBe("4");
+  });
+
+  it("lo pedido se respeta en cada ronda: con la lista más corta muestra y saca las que hay, y al crecer vuelve a lo pedido", async () => {
+    const { m } = await entrar(8);
+    chip(3).click();
+    expect(campo().value).toBe("3");
+    m.lineasDeLaLista(2);
+    expect(valor()).toBe("2");
+    expect(campo().value).toBe("3");
+    expect(mas().disabled).toBe(true);
+    // Otra ronda pasa un instante por la lista vacía: lo pedido no se pierde.
+    m.lineasDeLaLista(0);
+    m.lineasDeLaLista(8);
+    expect(valor()).toBe("3");
+    expect(campo().value).toBe("3");
+    expect(chip(3).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("menos desde una cantidad recortada baja de lo que se ve, no de lo pedido", async () => {
+    const { m } = await entrar(8);
+    m.ponerGanadores(5);
+    m.lineasDeLaLista(2);
+    expect(valor()).toBe("2");
+    menos().click();
+    expect(campo().value).toBe("1");
+    expect(valor()).toBe("1");
+  });
+
+  it("más y los atajos suben hasta la lista y avisan con change", async () => {
+    await entrar(3);
+    const avisos = vi.fn();
+    campo().addEventListener("change", avisos);
+    mas().click();
+    mas().click();
+    expect(campo().value).toBe("3");
+    expect(avisos).toHaveBeenCalledTimes(2);
+    // Con el tope en la lista, más ya no hace nada.
+    expect(mas().disabled).toBe(true);
+    mas().click();
+    expect(campo().value).toBe("3");
+    expect(avisos).toHaveBeenCalledTimes(2);
+    chip(2).click();
+    expect(campo().value).toBe("2");
+    expect(chip(2).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("el aviso del tope de la red no aparece nunca en el stand", async () => {
+    await entrar(8);
+    escribir("400");
+    expect(nota().hidden).toBe(true);
+    expect(nota().textContent).toBe("");
+    salir();
+    expect(nota().hidden).toBe(true);
+  });
+
+  it("con la ronda en marcha (lista cerrada) queda a la vista pero apagado, y se libera con Otra ronda", async () => {
+    const { m } = await entrar(8);
+    chip(3).click();
+    m.bloquearGanadores(true);
+    expect(control_().hidden).toBe(false);
+    expect(mas().disabled).toBe(true);
+    for (const n of ATAJOS) expect(chip(n).disabled, `atajo ${n}`).toBe(true);
+    chip(2).click();
+    expect(campo().value).toBe("3");
+    m.bloquearGanadores(false);
+    expect(mas().disabled).toBe(false);
+    expect(valor()).toBe("3");
+  });
+
+  it("prenderlo otra vez no vuelve la cantidad a 1", async () => {
+    const { m } = await entrar(8);
+    chip(5).click();
+    m.ponerContadorDelStand();
+    expect(campo().value).toBe("5");
+  });
+
+  it("fuera del stand la lista no mueve el tope ni esconde el control: el de la red de siempre", async () => {
+    const m = await import("./ganadores");
+    m.montarGanadores();
+    m.lineasDeLaLista(2);
+    expect(control_().hidden).toBe(false);
+    expect(visibles()).toEqual([1, 2, 3, 5, 10]);
+    expect(rotulo().dataset.i).toBe("winners");
+    mas().click();
+    mas().click();
+    mas().click();
+    expect(campo().value).toBe("4");
+    // El aviso del tope de siempre sigue andando fuera del stand.
+    escribir("400");
+    expect(nota().hidden).toBe(false);
+  });
+});

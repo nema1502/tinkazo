@@ -1,10 +1,21 @@
 import { roundTime } from "../protocol/quicknet";
-import { LECTURA_DE_LA_TARJETA_S, MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S } from "../arranque-del-show";
+import { CUENTA_DE_LA_SALA_S, LECTURA_DE_LA_TARJETA_S, MARGEN_DE_LA_CADENA_S as MARGEN_PARA_GRABAR_S, arranqueDelShow, juegoTrasLaLlegada, lecturaMinimaS } from "../arranque-del-show";
 
 /**
  * Cuándo arranca el show en el celular de quien mira (`espectador.ts`), respecto de la ronda y de la sala.
  *
  * La regla de la decisión: el celular nunca muestra al ganador antes que la sala. Puede ir detrás, nunca adelante.
+ *
+ * **A la par (desde el 16 de noviembre de 2026, el enlace con `h: 1`).** La sala y el celular siguen la misma línea de
+ * tiempo, la del nacimiento del número, cada uno desde la llegada de su propio número (`reloj-de-la-ronda.ts`), que
+ * nunca es antes de que nazca: la sala juega 4,4 s después de su llegada y el celular 5,6 s después de la suya
+ * (`arranque-del-show.ts`). El celular retiene su juego en el momento decisivo (`games/pixi/decisivo.ts`) hasta ver el
+ * sorteo grabado, y la sala, con celulares mirando, graba mientras juega solo si va a la par; si no, después de mostrar
+ * quién gana (`puerta-de-la-grabacion.ts`). Así, ver lo grabado quiere decir que la sala va delante o ya coronó, y el
+ * celular no corona antes. Lo que esto no cubre: `draw` no pide permiso, y otro puede grabar el sorteo antes que una
+ * sala tardía (`docs/amenazas.md`). Las funciones de este camino están al final del archivo.
+ *
+ * **El camino de antes (un enlace sin `h`, de una sala con el sitio de antes)**, que sigue para esas salas:
  *
  * - Sin sello en Stellar (el modo libre), la sala busca el número apenas nace la ronda y juega enseguida
  *   (`draw.ts`, con `secondsToRound` de `freeze.ts` sin margen). El celular, igual.
@@ -175,4 +186,60 @@ export function horaDelFinal(lanzadoMs: number, segundosDelShow: number, termino
   const prometido = lanzadoMs + segundosDelShow * 1000;
   const margen = Math.max(MARGEN_DEL_FINAL_MS, (terminoMs - lanzadoMs) * MARGEN_DEL_FINAL_PARTE);
   return Math.max(prometido, terminoMs + margen);
+}
+
+/* ------------------------------------------------------------------------------------------------ a la par */
+
+/** Cuándo abre su tarjeta el celular, en la hora de la ronda (segundos): la de la sala más su atraso. */
+export function horaDeLaTarjeta(round: number, conCuenta: boolean): number {
+  return arranqueDelShow(round, conCuenta, true).tarjeta;
+}
+
+/**
+ * Cuándo vuelve a leer su enlace el celular (si es uno que puede cambiar), en segundos antes de que nazca el número, con
+ * el desfase al azar más largo de cada lectura (para que los celulares de la sala no lleguen todos juntos). La primera,
+ * con tiempo; la segunda, antes de la tarjeta, con lo último que haya elegido la sala.
+ */
+export const RELECTURAS: readonly { antesS: number; azarS: number }[] = [
+  { antesS: 12, azarS: 1 },
+  { antesS: 1.5, azarS: 0.4 },
+];
+
+/** La hora (reloj monótono, ms) en que arranca el juego del celular, desde la llegada de su número. */
+export function juegoDelCelular(llegada: number, conCuenta: boolean): number {
+  return llegada + juegoTrasLaLlegada(conCuenta, true) * 1000;
+}
+
+/**
+ * El ancla del celular: la más temprana de las llegadas que tiene. Todas son de después de que nació el número (la de su
+ * pedido, la del número que trajo, la del piso de la medida del reloj), así que la más temprana es la más cercana al
+ * nacimiento y ninguna lo pone delante de la sala.
+ */
+export function anclaDelCelular(...llegadas: readonly (number | null | undefined)[]): number | null {
+  const v = llegadas.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
+  return v.length ? Math.min(...v) : null;
+}
+
+/**
+ * Si el celular que llega con el número ya nacido abre la tarjeta: solo si a su juego le falta lo que dura la cuenta y
+ * la lectura más corta (`faltaMs`, en ms). Si no, se pone al día sin ella, como el que llega con el show empezado.
+ */
+export function conTarjeta(faltaMs: number, conCuenta: boolean): boolean {
+  return faltaMs >= ((conCuenta ? CUENTA_DE_LA_SALA_S : 0) + lecturaMinimaS()) * 1000;
+}
+
+/** Los segundos del juego (hasta que se va el cartel), sin la tarjeta ni la cuenta: lo que promete el ritmo, menos eso. */
+export function segundosDelJuego(segundosDelShow: number, conCuenta: boolean): number {
+  return Math.max(0, segundosDelShow - LECTURA_DE_LA_TARJETA_S - (conCuenta ? CUENTA_DE_LA_SALA_S : 0));
+}
+
+/**
+ * Sin show en el celular (pidió menos movimiento, no tiene el motor nuevo, el juego no bajó): Lo que salió no sale antes
+ * de dos cosas, lo grabado visto (`grabadoVisto`, ms, o null si todavía no) y el final de su juego si lo hubiera jugado
+ * (`inicioJuego` más lo que dura, más un segundo). Con la sala a la par, lo grabado llega a mitad del juego y manda el
+ * final; con la sala tardía, lo grabado llega después de que ella mostró quién gana. null mientras no se vio lo grabado.
+ */
+export function horaDeLoQueSalioSinShow(inicioJuego: number, segundosJuego: number, grabadoVisto: number | null): number | null {
+  if (grabadoVisto === null) return null;
+  return Math.max(grabadoVisto, inicioJuego + segundosJuego * 1000 + 1_000);
 }

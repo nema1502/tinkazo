@@ -10,7 +10,10 @@
  *
  * No se reintenta lo que no se arregla esperando: la persona canceló en la
  * billetera, no hay saldo, la cuenta no está lista, el contrato no encuentra el
- * sorteo o no acepta la prueba de la ronda.
+ * sorteo o no acepta la prueba de la ronda, o la cuenta de Google ya puede
+ * guardar un premio (`premioGuardado`). La puerta del premio que no pudo mirar
+ * la cuenta (`premioSinSaber`) sí: sale antes de pedir ninguna firma, y la
+ * próxima lectura puede responder.
  *
  * Hasta el 21 de octubre de 2026 eran cuatro intentos cada cinco segundos, con
  * cualquier error: con Freighter, cancelar abría la ventana de aprobar otras tres
@@ -63,7 +66,7 @@ export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<Fin
 }
 
 /** Las claves de error (`errorKey`) con las que vale la pena volver a probar el sorteo. */
-export const SORTEO_REINTENTABLE = new Set(["rpcDown", "offline", "busy", "unconfirmed", "roundNotReady", "unknown"]);
+export const SORTEO_REINTENTABLE = new Set(["rpcDown", "offline", "busy", "unconfirmed", "roundNotReady", "premioSinSaber", "unknown"]);
 
 /**
  * Si con este error vale la pena volver a pedir la firma del sorteo. Una co-firma pendiente de Pollar

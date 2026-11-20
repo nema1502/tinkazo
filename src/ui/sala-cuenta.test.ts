@@ -50,6 +50,7 @@ beforeEach(() => {
 
 describe("la sala antes de sellar cuenta como el cuadro", () => {
   it("sin modos, un reparto entero dice «2 personas, 5 participaciones» en el cuadro y en la sala", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar("/?lang=es");
     escribir(MESA);
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 2 personas, 5 participaciones");
@@ -57,6 +58,7 @@ describe("la sala antes de sellar cuenta como el cuadro", () => {
   });
 
   it("sin modos, una lista común sigue diciendo una persona por línea", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     await montar("/?lang=es");
     escribir("Grupo 4 (1/2)\nGrupo 4 (2/2)\nAna\nBeto");
     expect(document.getElementById("lista-cuenta")?.textContent).toBe("Lista de 4 personas");

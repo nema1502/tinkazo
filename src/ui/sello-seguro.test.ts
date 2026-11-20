@@ -817,3 +817,46 @@ describe("el intento pendiente se guarda para después de recargar", () => {
     expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toHaveLength(1);
   });
 });
+
+describe("sellarSinDuplicar: la puerta del premio frena antes de mandar", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const intentoDe = (round: number): IntentoDeSello => ({ organizer: ORG, listHash: HUELLA, round, count: 8, numWinners: 1, meta: "premio", desde: 1 });
+
+  for (const que of ["puede-guardar", "no-se-sabe"] as const) {
+    it(`${que}: sale el mismo error, sin otra ronda ni reintento de corte, y el intento guardado se borra`, async () => {
+      const e = escenario([]);
+      const error = premio(que);
+      const sellar = vi.fn(async () => {
+        throw error;
+      });
+      const rondaNueva = vi.fn(e.pasos.rondaNueva);
+      const dormir = vi.fn(async () => undefined);
+      const avisar = vi.fn();
+      const corrida = sellarSinDuplicar(e.inicial(), { ...e.pasos, sellar, rondaNueva, dormir, avisar, intentoDe });
+      await expect(corrida).rejects.toBe(error);
+      expect(sellar).toHaveBeenCalledTimes(1);
+      expect(rondaNueva).not.toHaveBeenCalled();
+      expect(dormir).not.toHaveBeenCalled();
+      expect(avisar).not.toHaveBeenCalled();
+      // Se anotó antes de mandar y se borró al ver que nada salió: no queda un sello que averiguar.
+      expect(e.pendientes).toHaveLength(2);
+      expect(e.pendientes[0]).not.toBeNull();
+      expect(e.pendientes.at(-1)).toBeNull();
+    });
+  }
+
+  it("no se toma por un sello incierto: no se averigua nada en la red", async () => {
+    const e = escenario([]);
+    const resolver = vi.fn(e.pasos.resolver);
+    const corrida = sellarSinDuplicar(e.inicial(), {
+      ...e.pasos,
+      resolver,
+      intentoDe,
+      sellar: async () => {
+        throw premio("no-se-sabe");
+      },
+    });
+    await expect(corrida).rejects.toMatchObject({ name: "PremioGuardado" });
+    expect(resolver).not.toHaveBeenCalled();
+  });
+});

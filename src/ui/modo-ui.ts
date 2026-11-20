@@ -1,10 +1,9 @@
 import { t } from "../i18n";
 import { app } from "../state";
 import { changeMode, hayModoOficial, modeNameKey, network, type NetworkName } from "../stellar/config";
+import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
 import { cuponDelFragmento } from "../stellar/cupon-guardado";
 import { limpiarPasoDelCupon } from "../stellar/cupon-paso-guardado";
-import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
-import { loadSessionKind } from "../stellar/session-store";
 import { activeWallet } from "../stellar/wallet-lite";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
 import { MARCA_INGRESAR } from "./cuenta-estado";
@@ -35,16 +34,6 @@ export function marcarSellandoAhora(v: boolean): void {
  * sello y el aviso de la billetera en otra red. No se cambia mientras se sella ni con un sorteo sellado sin sortear.
  */
 export const puedeCambiarDeModo = (): boolean => !sellandoAhora && !cambioBloqueado(app.frozen, app.drawn);
-
-/** La misma cuenta guardada que sabe retomar la herramienta, pero para el modo de destino. */
-function hayCuentaGuardada(name: NetworkName): boolean {
-  if (loadSessionKind(name)) return true;
-  try {
-    return hasPollarKey(name) && leerMarcaPollar(localStorage, name) !== null;
-  } catch {
-    return false;
-  }
-}
 
 /** Pide la puerta de entrar en la próxima carga. Su destino siempre es `#sortear`. */
 function pedirIngresar(): void {

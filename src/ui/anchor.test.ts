@@ -1652,3 +1652,121 @@ describe("más ganadores de los que admite el contrato de la red", () => {
     expect(await anchorErrorText(simulacionFallida(), "sello")).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
   });
 });
+
+describe("la puerta del premio: el texto del sello y el del sorteo", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const claves = ["errAnchor.premioGuardado", "errAnchor.premioGuardadoSorteo", "errAnchor.premioSinSaber", "errAnchor.premioSinSaberSorteo"] as const;
+
+  it("al sellar: la cuenta puede guardar dinero, o no se pudo comprobar", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(premio("puede-guardar"), "sello")).toBe(T.es["errAnchor.premioGuardado"]);
+    expect(await anchorErrorText(premio("no-se-sabe"), "sello")).toBe(T.es["errAnchor.premioSinSaber"]);
+    // Sin decir el paso, es el del sello.
+    expect(await anchorErrorText(premio("puede-guardar"))).toBe(T.es["errAnchor.premioGuardado"]);
+  });
+
+  it("al sortear, con la lista ya sellada: dice que el ganador no cambia, sin el aviso de Mis sorteos", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    const guardado = await anchorErrorText(premio("puede-guardar"), "sorteo");
+    const sinSaber = await anchorErrorText(premio("no-se-sabe"), "sorteo");
+    expect(guardado).toBe(T.es["errAnchor.premioGuardadoSorteo"]);
+    expect(sinSaber).toBe(T.es["errAnchor.premioSinSaberSorteo"]);
+    for (const texto of [guardado, sinSaber]) {
+      expect(texto).toContain("El ganador no cambia");
+      expect(texto).not.toContain(T.es.sorteoMasTarde as string);
+    }
+    // El de guardado lleva al comprobante, donde se termina de guardar.
+    expect(guardado).toContain(T.es.vFinish as string);
+  });
+
+  it("los cuatro textos existen en los dos idiomas y ninguno dice hash, firma ni wallet", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) {
+        const texto = T[l][clave];
+        expect(typeof texto, `${l}: ${clave}`).toBe("string");
+        expect(texto as string).not.toMatch(/\bhash|\bfirmas?\b|\bsignatures?\b|\bXDR|drand|\bRPC\b/i);
+        if (l === "es") expect(texto as string).not.toMatch(/\bwallet\b/i);
+      }
+    }
+    expect(T.en["errAnchor.premioGuardadoSorteo"]).toContain("The winner stays the same");
+  });
+
+  it("no es un sello que no se grabó: no se reintenta con otra ronda", async () => {
+    const { selloSinGrabar } = await import("./anchor");
+    expect(selloSinGrabar(premio("puede-guardar"))).toBe(false);
+    expect(selloSinGrabar(premio("no-se-sabe"))).toBe(false);
+  });
+});
+
+describe("el voto por contenido que no votó: el texto del sello y el del sorteo", () => {
+  const negativa = new Error("tinkazo-cofirma-distinta");
+  const tope = new Error("tinkazo-cofirma-distinta-tope");
+  const claves = ["errAnchor.cofirmaDistinta", "errAnchor.cofirmaDistintaSorteo", "cofirmaOtraVez", "cofirmaEscribinos"] as const;
+
+  it("al sellar, la primera vez: lo que pasó y probar una vez más", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(negativa, "sello")).toBe(`${T.es["errAnchor.cofirmaDistinta"]} ${T.es.cofirmaOtraVez}`);
+  });
+
+  it("al sellar, con el tope de la pestaña: lo que pasó y escribir, sin invitar a probar de nuevo", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    const texto = await anchorErrorText(tope, "sello");
+    expect(texto).toBe(`${T.es["errAnchor.cofirmaDistinta"]} ${T.es.cofirmaEscribinos}`);
+    expect(texto).not.toContain(T.es.cofirmaOtraVez as string);
+  });
+
+  it("al sortear, la primera vez: el ganador no cambia y probar una vez más", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(negativa, "sorteo")).toBe(`${T.es["errAnchor.cofirmaDistintaSorteo"]} ${T.es.cofirmaOtraVez}`);
+  });
+
+  it("al sortear, con el tope: el ganador no cambia y escribir", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    const { T } = await import("../i18n");
+    expect(await anchorErrorText(tope, "sorteo")).toBe(`${T.es["errAnchor.cofirmaDistintaSorteo"]} ${T.es.cofirmaEscribinos}`);
+  });
+
+  it("los cuatro textos existen en los dos idiomas, con una sola oración cada uno", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) {
+        const texto = T[l][clave];
+        expect(typeof texto, `${l}: ${clave}`).toBe("string");
+        expect((texto as string).split(/(?<=[.:!?])\s+/).filter(Boolean), `${l}: ${clave}`).toHaveLength(1);
+      }
+    }
+  });
+
+  it("ninguno trae punto y coma, comillas angulares, raya larga, punto medio ni signos de exclamación", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) expect(T[l][clave] as string, `${l}: ${clave}`).not.toMatch(/[;«»—·!¡]/);
+    }
+  });
+
+  it("ninguno dice hash, firma, red, co-firma, XDR ni contrato", async () => {
+    const { T } = await import("../i18n");
+    const tecnicas = /\bhash|\bfirmas?\b|\bsignatures?\b|\bred\b|\bnetwork\b|co-?firma|co-?sign|\bXDR|contrato|contract/i;
+    for (const l of ["es", "en"] as const) {
+      for (const clave of claves) expect(T[l][clave] as string, `${l}: ${clave}`).not.toMatch(tecnicas);
+    }
+  });
+
+  it("solo el sello y el sorteo arman la variante: la clave que se cuenta sigue siendo cofirmaDistinta", async () => {
+    const { errorKey } = await import("../stellar/errores");
+    expect(errorKey(negativa)).toBe("cofirmaDistinta");
+    expect(errorKey(tope)).toBe("cofirmaDistinta");
+  });
+});

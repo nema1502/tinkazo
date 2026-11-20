@@ -411,3 +411,25 @@ describe("el modo Amigo secreto (issue #99)", () => {
     expect(T.en.confirmarNota).toMatch(/whole list|full list|whole exchange|entire list/i);
   });
 });
+
+describe("Siguiente premio de a un lugar (issue #102)", () => {
+  it("los textos nuevos existen en los dos idiomas", () => {
+    expect(T.es.lugarDe(2, 5)).toBe("Lugar 2 de 5");
+    expect(T.en.lugarDe(2, 5)).toBe("Place 2 of 5");
+    expect(T.es.lugaresFijos).toContain("quedaron fijos al nacer el número");
+    expect(T.en.lugaresFijos).toContain("fixed the moment the number was born");
+    expect(T.es.fijosAlNacer).toContain("todos los lugares de una vez");
+    expect(T.en.fijosAlNacer).toContain("every place at once");
+    expect(T.es.againLugarBoton).toBe("Siguiente premio");
+    expect(T.en.againLugarBoton).toBe("Next prize");
+    expect(T.es.againLugar(2, 3)).toContain("lugar 2 de 3");
+    expect(T.en.againLugar(2, 3)).toContain("Place 2 of 3");
+  });
+
+  it("el resumen antes de sellar dice la verdad solo cuando el sello trae varios lugares", () => {
+    expect(T.es.sellarResumen(10, 1, "Termo", 10)).not.toContain("El número elige todos los lugares");
+    expect(T.es.sellarResumen(10, 3, "Termo", 10)).toContain("El número elige todos los lugares de una vez");
+    expect(T.en.sellarResumen(10, 1, "Termo", 10)).not.toContain("picks every place");
+    expect(T.en.sellarResumen(10, 3, "Termo", 10)).toContain("The number picks every place at once");
+  });
+});

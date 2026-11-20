@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import vectors from "../../docs/vectors.json";
 import { T } from "../i18n";
 import { type SorteoDelEvento, decodeEvento } from "../protocol/evento";
@@ -105,9 +105,11 @@ describe("desde Mis sorteos: los datos salen del comprobante", () => {
     expect(datosDeComprobante({ ...base, names }, conModo, ["Ana Quispe (2/3)"]).personas).toBe(3);
     // Con la misma regla nombra a la persona, sin la marca de la línea sellada.
     expect(datosDeComprobante({ ...base, names }, conModo, ["Ana Quispe (2/3)"]).ganadores).toEqual(["Ana Quispe"]);
-    // Sin el modo en el enlace, la lista se cuenta como siempre: cada línea, una persona, tal cual se selló.
+    // Sin el modo en el enlace pero con la bandera apagada a propósito, la lista se cuenta como siempre: cada línea, una persona, tal cual se selló.
+    vi.stubEnv("VITE_MODOS", "0");
     expect(datosDeComprobante({ ...base, names }, enlace, ["Ana Quispe (2/3)"]).personas).toBe(5);
     expect(datosDeComprobante({ ...base, names }, enlace, ["Ana Quispe (2/3)"]).ganadores).toEqual(["Ana Quispe (2/3)"]);
+    vi.unstubAllEnvs();
   });
   it("un orden repartido lleva el modo de turnos en el enlace y también cuenta por persona, como la verificación", () => {
     const names = ["Ana Quispe (1/2)", "Ana Quispe (2/2)", "Beto Rojas", "Carla Suarez (1/2)", "Carla Suarez (2/2)"];

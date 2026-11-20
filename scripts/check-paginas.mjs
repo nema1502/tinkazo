@@ -65,6 +65,9 @@ const HERRAMIENTAS = [
   { p: "c", hash: "", listo: "!!document.body.dataset.estado && document.body.dataset.estado !== 'abriendo'" },
   // La vuelta de la verificación de identidad de la compra con QR: suelta, sin nada del sitio, en public/.
   { p: "verificado", hash: "", listo: "document.body.dataset.listo === '1'" },
+  // La página del celular de una campaña, con su demostración: sin sala, sin Google y sin red, y abre aunque la bandera
+  // de las campañas esté apagada. `consulta` suma el parámetro de la demostración a la dirección.
+  { p: "participar", consulta: "&demo=campana", hash: "", listo: "!!document.querySelector('#cmp-saber .primary')" },
 ];
 
 let fallos = 0;
@@ -166,7 +169,7 @@ try {
     check(ingles.length > 0, "inglés: el titular está traducido", ingles);
   }
 
-  for (const { p, hash, listo } of HERRAMIENTAS) {
+  for (const { p, consulta = "", hash, listo } of HERRAMIENTAS) {
     console.log(`\n${p}.html`);
     let titular = "";
     for (const { tema, ancho, alto, como } of VISTAS) {
@@ -177,7 +180,7 @@ try {
       // Estas páginas siguen el idioma del navegador (un enlace compartido se abre
       // en el idioma de quien lo recibe): el castellano se pide explícito, porque
       // el Chrome de la CI está en inglés y el titular salía igual en los dos.
-      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}&lang=es${hash}` });
+      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}&lang=es${consulta}${hash}` });
       await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
       const termino = await page.waitFor(listo, 30000);
       await sleep(500);
@@ -224,7 +227,7 @@ try {
       await page.send("Page.close").catch(() => {});
     }
     // En inglés el titular lo pone el script: tiene que cambiar de idioma.
-    const en = await browser.open(`${base}/${p}.html?lang=en${hash}`);
+    const en = await browser.open(`${base}/${p}.html?lang=en${consulta}${hash}`);
     await en.waitFor(listo, 30000);
     await sleep(500);
     const ingles = await en.eval(`document.querySelector('h1')?.textContent || ''`);

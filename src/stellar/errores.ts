@@ -104,6 +104,12 @@ const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
  * "rejected" o "declined".
  */
 const COFIRMA_NO_APROBADA = /SDK_COSIGN_(?:REJECTED|VERIFICATION_FAILED)/;
+/**
+ * El voto por contenido (issue 180, `cofirma-regla.ts`): no se pudo comprobar que lo que había que aprobar fuera la
+ * transacción que armó la página, y no se votó. Calza también con el tope de la pestaña (`tinkazo-cofirma-distinta-tope`).
+ * Sale solo antes de estampar, así que es un no de verdad: no es un corte ni se reintenta solo, y no es un sello incierto.
+ */
+const COFIRMA_DISTINTA = /tinkazo-cofirma-distinta/;
 const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
 /** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
 const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
@@ -277,6 +283,8 @@ export function textoDelError(e: unknown): string {
  * cuenta aunque diga "cancelled": eso no se reintenta.
  */
 export function esDeRed(e: unknown): boolean {
+  // La puerta del premio no es un corte de la red: ni cambia de RPC ni se reintenta sola (`esDelPremio`).
+  if (esDelPremio(e)) return false;
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
   // El portero que no llegó a la red es un corte más; sus otros no son una respuesta, no un corte.
@@ -284,8 +292,18 @@ export function esDeRed(e: unknown): boolean {
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
-  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto)) return false;
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto) || COFIRMA_NO_APROBADA.test(texto) || COFIRMA_DISTINTA.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
+}
+
+/**
+ * La puerta del premio frenó la firma (`PremioGuardado` en `usdc-cuenta.ts`): la cuenta de Google o de correo puede
+ * guardar dinero, o no se pudo saber. Se reconoce por el nombre y la forma, sin importar ese archivo. Tiene su clave y no
+ * es un corte de red ni un sello incierto: nadie lo reintenta solo ni averigua nada.
+ */
+export function esDelPremio(e: unknown): e is Error & { que: "puede-guardar" | "no-se-sabe" } {
+  const x = e as { name?: unknown; que?: unknown } | null;
+  return !!x && typeof x === "object" && x.name === "PremioGuardado" && (x.que === "puede-guardar" || x.que === "no-se-sabe");
 }
 
 /**
@@ -377,12 +395,16 @@ function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean; cobroPo
  * pasa, se le pregunta al navegador.
  */
 export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean; cobroPorUso?: boolean } = {}): string {
+  // La puerta del premio: `premioGuardado` (la cuenta puede guardar dinero) o `premioSinSaber` (no se pudo comprobar).
+  if (esDelPremio(e)) return e.que === "puede-guardar" ? "premioGuardado" : "premioSinSaber";
   if (esIncierto(e)) return "unconfirmed";
   if (esNoDelPortero(e)) {
     const clave = claveDelPortero(e, contexto);
     if (clave) return clave;
   }
   const texto = textoDelError(e);
+  // El voto por contenido no votó: va antes que todo lo de la co-firma, así un texto del kit que venga en la causa no la tapa.
+  if (COFIRMA_DISTINTA.test(texto)) return "cofirmaDistinta";
   if (RECUPERACION.test(texto)) return "recoveryRequired";
   if (APARATO.test(texto)) return "deviceNotEnrolled";
   if (CONFIRMACION.test(texto)) return "confirmation";
