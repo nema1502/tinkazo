@@ -3708,6 +3708,14 @@
   .pago-nota { color: var(--ink2); border-left: var(--bw) solid var(--yellow); padding-left: 10px; }
   .pago-cierre { color: var(--ink2); border-top: 2px solid var(--ink2); padding-top: 10px; }
   .pago-cuerpo .cl-secundario, .pago-cuerpo .cl-texto, .pago-cuerpo .pago-app { min-height: 48px; }
+  /* El contador del producto por unidad: menos, la cantidad y más. Cada botón, un blanco de 48 por 48 como mínimo. */
+  .pago-contador { display: flex; align-items: center; justify-content: center; gap: 16px; }
+  .pago-contador-boton {
+    min-width: 48px; min-height: 48px; padding: 0 12px; border: 2px solid var(--ink); background: var(--card); color: var(--ink);
+    font: inherit; font-size: 24px; font-weight: 800; line-height: 1; cursor: pointer;
+  }
+  .pago-contador-boton:disabled { color: var(--ink2); border-color: var(--ink2); cursor: default; }
+  .pago-contador-n { min-width: 3ch; text-align: center; font-size: 32px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
   /* El botón de sumar sorteos, junto a la línea del cupo y en «Se te acabaron»: secundario, nunca como la principal. */
   .cupo-sumar { margin: 4px 0 0; min-height: 44px; }
   .cl-paso-cuerpo > .cl-cierre { border-top: 2px solid var(--ink2); padding-top: 10px; }

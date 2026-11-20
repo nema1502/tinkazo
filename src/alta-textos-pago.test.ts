@@ -46,11 +46,15 @@ describe("los textos del pago", () => {
 
   it("los botones no nombran monedas, redes, notas técnicas ni exchanges: eso se dice una vez, en el renglón de cómo pagar", () => {
     const BOTONES = ["pagoMedioApp", "pagoPreparando", "pagoYaPague", "pagoBuscando", "pagoNoLlegoBoton", "pagoOtraNota", "pagoCopiar", "pagoCopiado", "pagoAbrirApp"];
+    // Los del contador y el botón que pasa a pagar, tampoco.
+    BOTONES.push("pagoSeguirTotal", "pagoMenos", "pagoMas");
     for (const k of BOTONES) for (const l of IDIOMAS) expect(TEXTOS_ALTA_PAGO[l][k], `${l} ${k}`).not.toMatch(/\b(USDC|Stellar|memo|exchange|token|hash)\b/i);
     // Dónde sí: cómo pagar y qué apps sirven, la nota, lo que llegó, la red equivocada y el caso sin la nota o con otra.
+    // Y la línea del precio por unidad, que es la que dice en qué se paga antes de pedir la orden.
     const tecnico = /\b(USDC|Stellar|exchange|memo)\b/i;
     const conTecnico = CLAVES.filter((k) => IDIOMAS.some((l) => tecnico.test((TEXTOS_ALTA_PAGO[l][k] as string).replace(/\{\w+\}/g, "")))).sort();
-    expect(conTecnico).toEqual(["pagoComo", "pagoFalta", "pagoNota", "pagoNotaImporta", "pagoOtraNotaEnviada", "pagoRedEquivocada", "pagoSirve", "pagoVence", "pagoVencida"].sort());
+    const lineasDelPago = ["pagoComo", "pagoFalta", "pagoFaltaDados", "pagoNota", "pagoNotaImporta", "pagoOtraNotaEnviada", "pagoRedEquivocada"];
+    expect(conTecnico).toEqual([...lineasDelPago, "pagoSirve", "pagoVence", "pagoVencida", "pagoUnidad", "pagoUnidadDias"].sort());
   });
 
   it("solo medios automáticos: ningún texto manda a escribir para pagar ni promete un QR del banco", () => {

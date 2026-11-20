@@ -162,6 +162,26 @@ describe("el pago", () => {
     expect(await pago(TOKEN, ID, { url: URL, fetch: f })).toEqual({ ok: true, datos: { pagada: false, recibido: "1.5", total: "3", minimo: "2.85" } });
   });
 
+  it("por unidad a medias: también cuántos sorteos ya dio lo que llegó, tal cual", async () => {
+    const { f } = falso(() => responder(200, { pagada: false, recibido: "9", total: "10", minimo: "9.5", sorteosDados: 9 }));
+    const datos = { pagada: false, recibido: "9", total: "10", minimo: "9.5", sorteosDados: 9 };
+    expect(await pago(TOKEN, ID, { url: URL, fetch: f })).toEqual({ ok: true, datos });
+  });
+
+  it("los sorteos dados en 0 se leen como 0", async () => {
+    const datos = { pagada: false, recibido: "0", total: "10", minimo: "9.5", sorteosDados: 0 };
+    const { f } = falso(() => responder(200, datos));
+    expect(await pago(TOKEN, ID, { url: URL, fetch: f })).toEqual({ ok: true, datos });
+  });
+
+  it("unos sorteos dados que no se entienden se dejan de lado, y lo demás se lee igual", async () => {
+    for (const sorteosDados of [-1, 2.5, "9", null, 1001, true]) {
+      const { f } = falso(() => responder(200, { pagada: false, recibido: "9", total: "10", minimo: "9.5", sorteosDados }));
+      const r = await pago(TOKEN, ID, { url: URL, fetch: f });
+      expect(r, String(sorteosDados)).toEqual({ ok: true, datos: { pagada: false, recibido: "9", total: "10", minimo: "9.5" } });
+    }
+  });
+
   it("una respuesta que no se entiende nunca dice que se pagó", async () => {
     const malas: unknown[] = [
       {},

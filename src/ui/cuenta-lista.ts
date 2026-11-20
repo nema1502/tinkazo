@@ -161,8 +161,8 @@ export interface AccesoDelPaso {
   // ellas, el paso no pide órdenes ni pregunta por pagos, y una orden abierta que traiga el estado se deja de lado.
   /** Lo que se vende ahora (`GET /v1/alta/precios`). */
   oferta?(): Promise<Oferta>;
-  /** La orden de un producto (`POST /v1/alta/orden`): la abierta, o una nueva. */
-  orden?(producto: string): Promise<ResultadoDeAlta<OrdenDePago>>;
+  /** La orden de un producto (`POST /v1/alta/orden`): la abierta, o una nueva. `cantidad`, solo el producto por unidad. */
+  orden?(producto: string, cantidad?: number): Promise<ResultadoDeAlta<OrdenDePago>>;
   /** Si una orden ya está pagada (`POST /v1/alta/pago`). */
   pago?(id: string): Promise<ResultadoDeAlta<PagoDeOrden>>;
   /** Pagar con el saldo de la cuenta (`pago-saldo.ts`): solo con `VITE_PAGO_CON_SALDO` y la billetera del proveedor. */

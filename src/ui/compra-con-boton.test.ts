@@ -348,6 +348,10 @@ describe("el diccionario de los textos del cobro", () => {
     cupoOfSumarPaquete: "es el botón",
     pagoDolares: "una pieza del botón",
     pagoUnDolar: "una pieza del botón",
+    // Por unidad, en «Sumar sorteos»: la línea del precio va solo eligiendo cuántos, con el contador y «Seguir con» al
+    // lado (`pago-paquete.test.ts`, el contador del producto por unidad).
+    pagoUnidad: "«Sumar sorteos» por unidad, con el contador y Seguir con el total al lado",
+    pagoUnidadDias: "«Sumar sorteos» por unidad, con el contador y Seguir con el total al lado",
     // Pagar con el saldo de la cuenta: solo dentro de la compra ya empezada (después de tocar su botón), y dicen el
     // saldo o el monto de la orden, cada uno junto a su principal.
     pagoSaldoTenes: "cómo pagar con el saldo, con Pagar con mi saldo al lado",
