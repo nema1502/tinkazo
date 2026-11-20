@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { T } from "../i18n";
 import { type Entry, winnerLabel } from "./history";
 
@@ -70,6 +70,7 @@ describe("Mis sorteos con varias participaciones por persona", () => {
   });
 
   it("sin el modo, o sin la lista en este equipo, cada línea es una persona, como siempre", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { cuentaDeLaEntrada } = await import("./history");
     const comun = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Otro"];
     expect(cuentaDeLaEntrada(entrada({ count: 3, names: comun, proof: "https://tinkazo.app/verificar.html#rX" }))).toBe("3 personas");

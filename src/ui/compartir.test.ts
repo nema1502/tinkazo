@@ -204,16 +204,18 @@ function sorteoGrande(i: number, personas: number): SorteoDelEvento {
 /** Las pruebas que arman enlaces comprimen; bajo carga de la suite entera pasan de los cinco segundos por defecto. */
 const LENTA = 30_000;
 
-describe("la marca de la línea sellada en el evento, sin modos a la vista", () => {
+describe("la marca de la línea sellada en el evento, con los modos apagados a propósito", () => {
   const nombres = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Ana", "Beto"];
   const sorteo = { prize: "Polera", ganadores: ["Grupo 4 (1/2)", "Grupo 4 (2/2)"], names: nombres };
 
   it("sin modo, las líneas del mensaje muestran los nombres tal cual se sellaron", () => {
+    vi.stubEnv("VITE_MODOS", "0");
     expect(lineasDeEvento("es", [sorteo])).toEqual(["Polera: Grupo 4 (1/2) y Grupo 4 (2/2)"]);
     expect(lineasDeEvento("en", [sorteo])).toEqual(["Polera: Grupo 4 (1/2) and Grupo 4 (2/2)"]);
   });
 
   it("sin modo, la foto del evento muestra los nombres tal cual se sellaron", () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const f = fotoDeEvento("es", "Meetup", [{ ...sorteoGrande(1, 3), prize: "Polera", ganadores: sorteo.ganadores, names: nombres }], corto);
     expect(f.filas?.[0]?.ganadores).toBe("Grupo 4 (1/2) y Grupo 4 (2/2)");
   });

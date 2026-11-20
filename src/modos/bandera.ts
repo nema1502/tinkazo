@@ -1,13 +1,14 @@
 /**
- * La bandera de los modos nuevos del sorteo: `VITE_MODOS`. Apagada por defecto.
+ * La bandera de los modos nuevos del sorteo: `VITE_MODOS`. **Prendida por defecto desde el 17 de noviembre de 2026**:
+ * el selector de modos es parte del producto, y una variable solo para apagarlo (`VITE_MODOS=0` al construir) queda
+ * para un repliegue de emergencia, como `VITE_FOTO_JUEGO` (src/ui/foto-juego-bandera.ts).
  *
  * Hoy hay dos modos previstos en la dirección: `turnos` (el orden de turnos, que sortea a todas las personas de la
  * lista en orden) y `varias` (el reparto de participaciones, `src/participaciones.ts`).
  *
- * Los modos están a la vista en tres casos: si el sitio se construyó con la bandera (`VITE_MODOS=1 pnpm build`), si la
- * dirección trae `?modo=turnos` (o `?modo=varias`), o si en esta pestaña ya se eligió un modo y quedó recordado
- * (`recordarModo`). El parámetro sirve para publicar el modo en un grupo y para probarlo sin cambiar lo que ve todo
- * el mundo. Sin la bandera, sin el parámetro y sin un modo recordado en la pestaña, la herramienta es la de siempre.
+ * Los modos están a la vista en tres casos: por defecto (el sitio se construye con ellos), si la dirección trae
+ * `?modo=turnos` (o `?modo=varias`), o si en esta pestaña ya se eligió un modo y quedó recordado (`recordarModo`).
+ * El parámetro sirve para publicar el modo en un grupo y para probarlo sin cambiar lo que ve todo el mundo.
  *
  * No importa `state.ts` a propósito: ese módulo lee la dirección al cargar y esta bandera tiene que poder probarse sola.
  */
@@ -24,9 +25,9 @@ const MODES: readonly ModeName[] = ["turnos", "varias"];
 /** La parte de la dirección que trae los parámetros (`?modo=turnos`), o vacía si no hay dirección (pruebas). */
 const currentSearch = (): string => (typeof location === "undefined" ? "" : location.search);
 
-/** La bandera de construcción: solo el valor `1` la prende. */
+/** La bandera de construcción: prendida por defecto; solo `0` (o `false`) la apaga, para un repliegue de emergencia. */
 export function modesFlagOn(value: unknown = import.meta.env.VITE_MODOS): boolean {
-  return value === "1";
+  return value !== "0" && value !== "false" && value !== 0 && value !== false;
 }
 
 /** El modo que pide la dirección (`?modo=turnos`), o `null` si no pide ninguno o pide uno que no existe. */

@@ -168,6 +168,7 @@ describe("«No está» sobre alguien que salió más de una vez", () => {
 
 describe("sin modos a la vista, la lectura por persona es la de la cuenta", () => {
   async function sinModos(names: string[], winners: number[]): Promise<void> {
+    vi.stubEnv("VITE_MODOS", "0");
     history.replaceState(null, "", "/");
     sessionStorage.clear();
     vi.resetModules();
