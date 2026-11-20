@@ -9,7 +9,7 @@ import { type Table, cleanName, decodeText, dropListHeader, igualesQuitados, par
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
-import { ponerPremio, sincronizarPremios } from "./premios";
+import { ponerPremio, premiosDeLosCampos, reponerLugares, sincronizarPremios } from "./premios";
 import { isTurnOrder } from "../modos/turnos";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
 import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
@@ -973,8 +973,13 @@ function escribirBorrador(aunVacio: boolean): void {
   try {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
+    // Los premios del 2.º lugar en adelante van con el del 1.º, tal como se escribieron: al volver de Google o al recargar
+    // se perdían. Solo si hay alguno escrito, así el borrador de siempre no cambia.
+    const otros = premiosDeLosCampos().slice(1);
+    const lugares = otros.some((p) => p.trim()) ? { lugares: otros } : {};
+    const modo = modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {};
     if (!aunVacio && !texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
-    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos(), ...(modoTurnosActivo() ? { modo: "turnos" } : modoVigente() === "varias" ? { modo: "varias" } : {}) }));
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, ...lugares, nw: ganadoresPedidos(), ...modo }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
   }
@@ -1012,7 +1017,7 @@ export function reponerBorrador(): void {
     /* sin almacenamiento, se repone el borrador como siempre */
   }
   const llevada = listaStand?.trim() ? listaStand : null;
-  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown; modo?: unknown } | null;
+  type Guardado = { texto?: unknown; premio?: unknown; lugares?: unknown; nw?: unknown; modo?: unknown } | null;
   let b: Guardado = null;
   try {
     b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
@@ -1036,6 +1041,9 @@ export function reponerBorrador(): void {
   const nw = Number(b?.nw);
   // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
   if (!enTurnos && Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
+  // Con la cantidad ya puesta (no avisa con un evento), los premios del 2.º lugar en adelante vuelven a sus campos.
+  const lugares: unknown = b?.lugares;
+  if (Array.isArray(lugares)) reponerLugares(lugares as readonly unknown[]);
   // La lista llevada del stand no se avisa como recuperada: la eligió quien atiende.
   if (!llevada && canonicalList(texto).length) avisar(() => t("borradorRepuesto"));
 }

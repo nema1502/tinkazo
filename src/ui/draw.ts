@@ -30,6 +30,8 @@ import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
+import * as premiosModulo from "./premios";
+import { premioDeLugarEn, premiosDeLosLugares } from "./lugares-de-meta";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { turnMessage, turnNotice, amigoMessage } from "../modos/mensajes";
 import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos, turnOrderDisplayNames } from "../modos/turnos";
@@ -696,7 +698,7 @@ function pintarLugarActual(): void {
   }
   const cual = Math.min(d.revelados, d.winners.length);
   const premio = premioDelLugar(cual);
-  lugar.textContent = T[getLang()].lugarDe(cual, d.winners.length) + (premio ? ` · ${premio}` : "");
+  lugar.textContent = T[getLang()].lugarDe(cual, d.winners.length) + (premio ? `: ${premio}` : "");
   lugar.style.display = "block";
 }
 
@@ -1247,9 +1249,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
     // que es un prefijo del orden sellado.
     const enPantalla = app.drawn?.revelados === undefined ? winners.length : Math.max(1, Math.min(app.drawn.revelados, winners.length));
     $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners: winners.slice(0, enPantalla), prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()), stand: enStand() });
-    // El lugar que la sala acaba de ver («Lugar 2 de 5») y, si existiera, el premio de ese lugar:
-    // el formato lo define el issue de un premio por lugar (#101). Mientras no exista, el gancho
-    // `premioDelLugar` devuelve "" y la línea no dice premio. Con un solo lugar no se muestra.
+    // El lugar que la sala acaba de ver («Lugar 2 de 5») y, con un premio por lugar (#101), el de ese
+    // lugar (`premioDelLugar`). Sin lugares la línea no dice premio. Con un solo lugar no se muestra.
     pintarLugarActual();
     // La verdad a la sala: nadie elige nada después del número. Con un solo lugar no hace falta decirla.
     const fijos = document.getElementById("lugares-fijos");
@@ -1558,12 +1559,28 @@ export function lugarQueSigue(winners: readonly unknown[], revelados: number | u
 /**
  * El premio del lugar `lugar` (base 1), cuando existe (issue #101: un premio por lugar).
  *
- * El formato exacto lo define ese issue y ese es el único lugar donde entra a la página: junto
- * al contador de lugares y en la línea de «Siguiente premio». Mientras no esté definido devuelve
- * "" y la interfaz no dice premio: no se inventa un formato que después hay que cambiar.
+ * Lo lee del texto sellado con los rótulos de cada lugar (`premioDeLugarEn`) y va junto al contador de lugares. Sin
+ * lugares (un solo premio, un sorteo de antes) o con ese lugar sin premio escrito devuelve "" y la línea no dice
+ * premio, como antes.
  */
-export function premioDelLugar(_lugar: number): string {
-  return "";
+export function premioDelLugar(lugar: number): string {
+  return premioDeLugarEn(app.frozen?.prize ?? "", lugar) ?? "";
+}
+
+/**
+ * El premio que se pone para sortear de nuevo los lugares de quien no está. Sin lugares, el sellado entero, como
+ * siempre. Con un premio por lugar, el de su lugar, o los de sus lugares armados de nuevo desde el 1.er premio si salió
+ * más de una vez (`armarMeta`). Con el módulo reemplazado de las pruebas, que no trae `armarMeta`, queda el sellado.
+ */
+function premioDelReemplazo(premio: string, lugares: readonly number[]): string {
+  const suyos = premiosDeLosLugares(premio, lugares);
+  if (suyos === null) return premio;
+  if (suyos.length <= 1) return suyos[0] ?? "";
+  try {
+    return premiosModulo.armarMeta?.(suyos, getLang()) ?? premio;
+  } catch {
+    return premio;
+  }
 }
 
 /**
@@ -1720,6 +1737,11 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // Cuántos premios se llevaba quien no está: con varias participaciones pudo salir más de una vez, y se va
   // con todas sus líneas, así que todos sus premios se sortean de nuevo. Sin los modos es siempre uno.
   const premiosDelAusente = modo === "ausente" ? drawn.winners.filter((i) => elNombre(frozen.names[i] ?? "") === ausente).length : 0;
+  // Los lugares de quien no está, contando desde el 1 en el orden que dio el sorteo: con un premio por lugar, se
+  // vuelven a sortear los de esos lugares y no los de todos.
+  const lugaresDelAusente = modo === "ausente"
+    ? drawn.winners.flatMap((i, p) => (elNombre(frozen.names[i] ?? "") === ausente ? [p + 1] : []))
+    : [];
   const premio = frozen.prize;
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
   // equivocado frente a la sala no puede costar la lista de Luma filtrada. Sin
@@ -1735,10 +1757,21 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // premios, el próximo sorteo los premiaba a todos sin avisar.
   if (modo === "ausente") {
     // Se reponen los premios de quien no estaba: uno, o todos los suyos si salió más de una vez. Los
-    // reemplazos se llevan lo mismo. Los otros ganadores se quedan con lo suyo y no entran a este sorteo.
-    ponerGanadores(Math.max(1, Math.min(premiosDelAusente, quedan.length)));
-    ponerPremio(premio);
-  } else if (quedan.length) ponerGanadores(Math.min(ganadoresPedidos(), Math.max(1, quedan.length - 1)));
+    // reemplazos se llevan lo mismo: con un premio por lugar, el de los lugares de quien no está. Los
+    // otros ganadores se quedan con lo suyo y no entran a este sorteo.
+    const reemplazos = Math.max(1, Math.min(premiosDelAusente, quedan.length));
+    ponerGanadores(reemplazos);
+    ponerPremio(premioDelReemplazo(premio, lugaresDelAusente.slice(0, reemplazos)));
+  } else if (quedan.length) {
+    ponerGanadores(Math.min(ganadoresPedidos(), Math.max(1, quedan.length - 1)));
+    // `ponerGanadores` no avisa con un evento: los campos por lugar siguen la cantidad nueva, o un campo de más
+    // quedaba a la vista y su premio se sellaba con menos ganadores. (Las pruebas que reemplazan `premios.ts` no lo traen.)
+    try {
+      premiosModulo.actualizarLugares?.();
+    } catch {
+      /* el módulo reemplazado no lo trae: no hay campos por lugar */
+    }
+  }
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
   const L = T[getLang()];
   const nota = $("again-note");

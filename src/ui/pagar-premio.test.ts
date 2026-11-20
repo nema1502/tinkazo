@@ -256,6 +256,17 @@ describe("el formulario de 'Pagar premio'", () => {
     expect(campos(caja).monto.value).toBe("");
   });
 
+  it("con un premio por lugar, el campo trae el monto del lugar de la fila y no el del primero", () => {
+    // La fila de las pruebas es la del puesto 2: el 3.er lugar.
+    const { caja } = abrir(armar(), { premio: "1.er premio: 50 USDC, 2.º premio: 20 USDC, 3.er premio: 10 USDC" });
+    expect(campos(caja).monto.value).toBe("10");
+  });
+
+  it("con un premio por lugar y el de la fila sin monto, el campo queda vacío", () => {
+    const { caja } = abrir(armar(), { premio: "1.er premio: 50 USDC, 3.er premio: Una polera" });
+    expect(campos(caja).monto.value).toBe("");
+  });
+
   it("Cerrar o Escape lo cierran; tocar 'Pagar premio' otra vez también", () => {
     const dep = armar();
     const a = abrir(dep);
