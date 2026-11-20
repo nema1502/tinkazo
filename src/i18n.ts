@@ -121,6 +121,8 @@ export interface Dict {
   salioVeces: string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
+  /** El contador de números públicos que nacen durante la espera, con el plural en marcha (freeze.ts). */
+  espFaltanN: (n: number) => string;
   cConstPass: (n: string) => string;
   cLanes: (k: number, n: number) => string;
   /** La tarjeta de "cómo se juega": cuántos participan y cuántos premios. */
@@ -1081,6 +1083,8 @@ export const T: Record<Lang, Dict> = {
     waitLineSinSello: "Lo publica una red independiente en unos segundos. Sin sello: este sorteo no se puede comprobar.",
     volAviso: "Subí el volumen del celular: el show tiene música.",
     waitNow: "Ya salió el número. Tocá Lanzar el sorteo.",
+    // El contador de números públicos que van naciendo mientras se espera (issue #79, freeze.ts).
+    espFaltanN: (n) => (n === 1 ? "falta 1 número" : `faltan ${n} números`),
     espSticker: "Todavía nadie sabe quién gana",
     espStickerOrden: "Todavía nadie sabe el orden",
     espFaltan: "para que salga el número del sorteo",
@@ -3997,6 +4001,8 @@ export const T: Record<Lang, Dict> = {
     waitLineSinSello: "An independent network publishes it in a few seconds. No seal: this draw can't be checked.",
     volAviso: "Turn your phone's volume up: the show has music.",
     waitNow: "The number is out. Tap Run the draw.",
+    // The counter of public numbers being born while waiting (issue #79, freeze.ts).
+    espFaltanN: (n) => (n === 1 ? "1 number to go" : `${n} numbers to go`),
     espSticker: "Nobody knows who wins yet",
     espStickerOrden: "Nobody knows the order yet",
     espFaltan: "until the draw number comes out",
