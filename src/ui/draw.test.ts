@@ -25,6 +25,10 @@ const h = vi.hoisted(() => ({
   fin: null as null | (() => void),
   unfreeze: vi.fn(),
   fetchRound: vi.fn(),
+  /** La tarjeta de cómo se juega (`showGameCard`): sus argumentos, y no se muestra. */
+  tarjeta: vi.fn(),
+  /** El sello es el de una campaña (`en-curso.ts`). */
+  campana: false,
 }));
 
 vi.mock("./anchor", () => ({
@@ -64,7 +68,7 @@ vi.mock("./freeze", () => ({
   pintarNotaDelJuego: () => undefined,
 }));
 vi.mock("./pantalla-completa", () => ({ pedirPantallaCompleta: () => undefined, soltarPantallaCompleta: () => undefined }));
-vi.mock("./gamecard", () => ({ CARD_SECONDS: 3.5, showGameCard: () => null }));
+vi.mock("./gamecard", () => ({ CARD_SECONDS: 3.5, showGameCard: (...a: unknown[]) => h.tarjeta(...a) }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ address: "GAAA" }) }));
 vi.mock("./qr", () => ({ pintarQrDelComprobante: async () => true }));
 vi.mock("./leyenda", () => ({ pintarLeyenda: () => undefined }));
@@ -74,6 +78,11 @@ vi.mock("./logo-sorteo", () => ({ pintarLogoEnElResultado: () => undefined, quit
 vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => undefined }));
 vi.mock("./compartir", () => ({ abrirSorteo: () => undefined }));
 vi.mock("./pantalla", () => ({ mostrarResultado: () => undefined }));
+vi.mock("../campana/en-curso", async (orig) => ({
+  ...(await orig<typeof import("../campana/en-curso")>()),
+  esSorteoDeCampana: (raffleId: bigint | undefined) => h.campana && raffleId === 7n,
+}));
+vi.mock("./campana-resultado-real", () => ({ alRevelarReal: () => undefined }));
 vi.mock("../stellar/monedas-eventos", () => ({ acreditarEnSegundoPlano: () => undefined }));
 vi.mock("../games/engine", () => ({ usePixi: () => true }));
 vi.mock("../games/pixi", () => ({
@@ -117,6 +126,8 @@ beforeEach(() => {
   h.juego.mockReset();
   h.unfreeze.mockReset();
   h.fin = null;
+  h.campana = false;
+  h.tarjeta.mockReset().mockReturnValue(null);
   h.fetchRound.mockReset().mockResolvedValue({ round: V.quicknet.round, signature: V.quicknet.signature });
   Element.prototype.scrollIntoView = () => undefined;
   document.body.innerHTML = new DOMParser().parseFromString(pagina, "text/html").body.innerHTML;
@@ -249,6 +260,38 @@ describe("un sello con tres lugares", () => {
     expect((document.getElementById("btn-draw") as HTMLButtonElement).dataset.i).toBe("draw");
   });
 
+  it("la tarjeta del primer show habla de un premio: el cartel del final corona a uno solo", async () => {
+    await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    // La primera es la de `sortear`, antes del número: la que la sala lee mientras espera.
+    expect(h.tarjeta.mock.calls[0]?.[2]).toBe(1);
+  });
+
+  it("desde el segundo lugar, la página encuadra la tarjeta de quien acaba de ganar", async () => {
+    const encuadrados: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      encuadrados.push(this);
+    };
+    await sellarCon(3);
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    h.fin?.();
+    // El primero, como siempre: la sección entera.
+    await vi.waitFor(() => expect(encuadrados.at(-1)?.id).toBe("sec-draw"));
+    const antes = encuadrados.length;
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledTimes(2));
+    h.fin?.();
+    await vi.waitFor(() => expect(encuadrados.length).toBeGreaterThan(antes));
+    const ultimo = encuadrados.at(-1);
+    expect(ultimo?.classList.contains("winner-card")).toBe(true);
+    expect(ultimo?.textContent).toContain(N2);
+    expect(ultimo?.textContent).not.toContain(N1);
+  });
+
   it("la vista de la sala vuelve a «Siguiente premio» de siempre cuando se terminan los lugares", async () => {
     const { app } = await sellarCon(3);
     const { draw, siguientePremio } = await import("./draw");
@@ -267,6 +310,32 @@ describe("un sello con tres lugares", () => {
     const left = document.getElementById("again-left")?.textContent ?? "";
     expect(left).not.toMatch(/de 3/);
     expect(left).toMatch(/quedan|Quedan/);
+  });
+});
+
+describe("el sorteo de una campaña con tres premios", () => {
+  it("se juega en un solo show con los tres lugares: su panel no tiene «Siguiente premio»", async () => {
+    h.campana = true;
+    const { app } = await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.juego).toHaveBeenCalledWith(ESPERADOS);
+    expect(app.drawn?.revelados).toBeUndefined();
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    expect(cards()).toContain(N2);
+    expect(cards()).toContain(N3);
+    expect(document.getElementById("lugar-actual")?.style.display).toBe("none");
+  });
+
+  it("su tarjeta sigue hablando de los tres premios, como el cartel del final", async () => {
+    h.campana = true;
+    await sellarCon(3);
+    const { draw } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    expect(h.tarjeta.mock.calls[0]?.[2]).toBe(3);
   });
 });
 
