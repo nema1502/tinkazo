@@ -155,9 +155,17 @@ beforeEach(() => {
 });
 
 const boton = (raiz: HTMLElement, clase: string): HTMLButtonElement => raiz.querySelector<HTMLButtonElement>(clase) as HTMLButtonElement;
-/** Espera a que algo pase: descifrar nombres usa crypto de verdad, y hay que darle vueltas al bucle. */
+/**
+ * Espera a que algo pase: descifrar nombres usa crypto de verdad, y hay que darle vueltas al bucle. Cada vuelta pasa
+ * también por el mismo grupo de hilos donde corre el descifrado: con la máquina cargada, la espera se estira al mismo
+ * ritmo que el descifrado y no se acaba antes de que lleguen los nombres (con vueltas de reloj falso solamente, se
+ * acababa en unos 20 ms y el celular que entra tarde quedaba con la lista vacía).
+ */
 async function hasta(condicion: () => boolean): Promise<void> {
-  for (let i = 0; i < 200 && !condicion(); i++) await vi.advanceTimersByTimeAsync(50);
+  for (let i = 0; i < 200 && !condicion(); i++) {
+    await vi.advanceTimersByTimeAsync(50);
+    await crypto.subtle.digest("SHA-256", new Uint8Array(0));
+  }
 }
 
 describe("el panel del organizador", () => {
