@@ -430,7 +430,15 @@ export async function abrirSumarSorteos(o: { producto?: string | null } = {}): P
       return false;
     }
     return await paquete.abrirSumarSorteos(
-      { oferta: () => oferta(), orden: (p) => orden(p), pago: (id) => pago(id), refrescarCupo: () => acceso.refrescarCupo(), ...(saldo ? { saldo } : {}), ...(acceso.preguntarAntesDePagar ? { preguntarAntesDePagar: true } : {}) },
+      {
+        oferta: () => oferta(),
+        // La cantidad, solo con el producto por unidad: un paquete fijo se pide como siempre.
+        orden: (p, n) => (n === undefined ? orden(p) : orden(p, n)),
+        pago: (id) => pago(id),
+        refrescarCupo: () => acceso.refrescarCupo(),
+        ...(saldo ? { saldo } : {}),
+        ...(acceso.preguntarAntesDePagar ? { preguntarAntesDePagar: true } : {}),
+      },
       { correo: ocultarCorreo(ui.currentSession()?.mail ?? ""), producto: o.producto ?? null, ...(qr ? { alQr: qr.alQr, medio: qr.medio } : {}) },
     );
   } catch (e) {

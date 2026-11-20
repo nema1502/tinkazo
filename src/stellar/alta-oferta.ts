@@ -23,6 +23,11 @@ export interface ProductoALaVenta {
   usdc: string;
   sorteos: number;
   dias: number;
+  /**
+   * Solo el producto por unidad: `usdc` es el precio de un sorteo (`sorteos` es 1) y la cantidad se elige con el
+   * contador, de `minimo` a `maximo` de a `paso`, como lo dice el servidor. Sin esto, un paquete fijo.
+   */
+  unidad?: { minimo: number; maximo: number; paso: number };
 }
 
 /** Lo que se ofrece: el primer paquete, si se vende, y los paquetes para sumar sorteos. */
@@ -39,13 +44,22 @@ export const CACHE_OFERTA_MS = 300_000;
 
 const sinOferta = (): Oferta => ({ alta: null, paquetes: [] });
 
-/** Lo que se ofrece según lo que contestó el servidor. Sin DOM y sin red. */
+/**
+ * Lo que se ofrece según lo que contestó el servidor. Sin DOM y sin red. El producto por unidad, si se vende, va primero
+ * entre los paquetes (así quien pregunta si hay algo a la venta lo ve igual) y la ventana lo ofrece con el contador.
+ */
 export function ofertaDe(r: ResultadoDeAlta<PreciosDeAlta>): Oferta {
   if (!r.ok || r.datos.red !== "mainnet" || r.datos.pago !== true) return sinOferta();
   const a = r.datos.alta;
+  const u = r.datos.unidad;
+  const unidad: ProductoALaVenta[] =
+    u && !u.pausado ? [{ id: u.id, usdc: u.usdc, sorteos: 1, dias: u.dias, unidad: { minimo: u.minimo, maximo: u.maximo, paso: u.paso } }] : [];
+  const fijos = r.datos.paquetes
+    .filter((p) => !p.pausado && p.id !== "alta" && p.id !== u?.id)
+    .map((p) => ({ id: p.id, usdc: p.usdc, sorteos: p.sorteos, dias: p.dias }));
   return {
     alta: a && !a.pausado ? { id: "alta", usdc: a.usdc, sorteos: a.sorteos, dias: a.dias } : null,
-    paquetes: r.datos.paquetes.filter((p) => !p.pausado && p.id !== "alta").map((p) => ({ id: p.id, usdc: p.usdc, sorteos: p.sorteos, dias: p.dias })),
+    paquetes: [...unidad, ...fijos],
   };
 }
 
@@ -97,7 +111,10 @@ export async function leerOferta(o: OpcionesDeOferta = {}): Promise<Oferta> {
   return copia(await enCamino);
 }
 
-const copia = (x: Oferta): Oferta => ({ alta: x.alta ? { ...x.alta } : null, paquetes: x.paquetes.map((p) => ({ ...p })) });
+const copia = (x: Oferta): Oferta => ({
+  alta: x.alta ? { ...x.alta } : null,
+  paquetes: x.paquetes.map((p) => (p.unidad ? { ...p, unidad: { ...p.unidad } } : { ...p })),
+});
 
 /* ------------------------------------------------------------ el regalo de quien entra */
 
@@ -161,8 +178,65 @@ export function varsDelProducto(p: ProductoALaVenta, idioma: string): { sorteos:
   };
 }
 
-/** La clave del texto que ofrece un producto: el primer paquete, o sumar sorteos. */
-export const claveDelProducto = (p: ProductoALaVenta): string => (p.id === "alta" ? "altaPrimerPaquete" : "cupoOfSumarPaquete");
+/**
+ * La clave del texto que ofrece un producto: el primer paquete, o sumar sorteos. El producto por unidad no tiene una
+ * cantidad que nombrar hasta que se elige: se ofrece como Sumar sorteos.
+ */
+export const claveDelProducto = (p: ProductoALaVenta): string => {
+  if (p.unidad) return "cupoOfSumar";
+  return p.id === "alta" ? "altaPrimerPaquete" : "cupoOfSumarPaquete";
+};
+
+/* ------------------------------------------------------------ el contador */
+
+/** La cantidad con que abre el contador si el servidor la permite (el diseño: menos, 10, más). */
+export const CANTIDAD_INICIAL = 10;
+
+/** Las cantidades que se pueden pedir: desde el mínimo, de a `paso`, sin pasar el máximo. */
+export function cantidadesDe(u: NonNullable<ProductoALaVenta["unidad"]>): number[] {
+  const out: number[] = [];
+  for (let n = u.minimo; n <= u.maximo; n += u.paso) out.push(n);
+  return out;
+}
+
+/** Con qué cantidad abre el contador: 10 si se puede pedir, y si no, el mínimo. */
+export function cantidadInicial(u: NonNullable<ProductoALaVenta["unidad"]>): number {
+  return cantidadesDe(u).includes(CANTIDAD_INICIAL) ? CANTIDAD_INICIAL : u.minimo;
+}
+
+/**
+ * Un toque del contador: la cantidad de al lado (`-1` menos, `1` más), o la misma si ya está en el borde. Una cantidad
+ * que no es de las que se pueden pedir vuelve a la inicial.
+ */
+export function moverCantidad(u: NonNullable<ProductoALaVenta["unidad"]>, n: number, hacia: -1 | 1): number {
+  const lista = cantidadesDe(u);
+  const i = lista.indexOf(n);
+  if (i < 0) return cantidadInicial(u);
+  return lista[Math.min(lista.length - 1, Math.max(0, i + hacia))] ?? n;
+}
+
+const ESCALA = 10_000_000n;
+
+/**
+ * El precio de un sorteo por la cantidad, en el texto del servidor (con punto y sin ceros de más), sin redondear: en
+ * séptimos de centavo, como cuenta el servidor. Es solo para leerlo en el botón: el monto que se paga sale de la orden.
+ */
+export function totalDe(usdc: string, n: number): string {
+  const m = /^(\d+)(?:\.(\d{1,7}))?$/.exec(usdc.trim());
+  if (!m || !Number.isInteger(n) || n < 0) return usdc;
+  const total = (BigInt(m[1] as string) * ESCALA + BigInt((m[2] ?? "").padEnd(7, "0"))) * BigInt(n);
+  const entero = (total / ESCALA).toString();
+  const decimales = (total % ESCALA).toString().padStart(7, "0").replace(/0+$/, "");
+  return decimales ? `${entero}.${decimales}` : entero;
+}
+
+/** Un monto con punto dicho como un precio, como `{precio}` de los productos: «1 dólar», «4,50 dólares», «US$1». */
+export const precioVisible = (usdc: string, idioma: string): string => varsDelProducto({ id: "", usdc, sorteos: 1, dias: 1 }, idioma).precio;
+
+/** Lo que va en `{total}` del botón que sigue a pagar: el total de esa cantidad, dicho como un precio. */
+export function varsDelTotal(p: ProductoALaVenta, n: number, idioma: string): { total: string } {
+  return { total: varsDelProducto({ ...p, usdc: totalDe(p.usdc, n) }, idioma).precio };
+}
 
 /** El texto que ofrece un producto, entero: «3 sorteos oficiales por 2 dólares», «Organizá 10 sorteos oficiales por 9 dólares». */
 export function textoDelProducto(p: ProductoALaVenta, idioma: string): string {

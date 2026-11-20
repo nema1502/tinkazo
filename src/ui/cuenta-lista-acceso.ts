@@ -116,10 +116,11 @@ export function accesoDelServidor(s: SesionDelAcceso, o: OpcionesDeAlta = {}, b:
   const compra: Pick<AccesoDelPaso, "oferta" | "orden" | "pago"> = b.pago
     ? {
         oferta: () => leerOferta({ pago: true, ...o }),
-        async orden(producto: string) {
+        async orden(producto: string, cantidad?: number) {
           const tk = await tokenDe(s);
           if (!tk) return sinToken(s);
-          return orden(tk, producto, { idioma: getLang(), ...o });
+          // La cantidad va solo con el producto por unidad: sin ella, el pedido de siempre.
+          return orden(tk, producto, { idioma: getLang(), ...o, ...(cantidad !== undefined ? { cantidad } : {}) });
         },
         async pago(id: string) {
           const tk = await tokenDe(s);

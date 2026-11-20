@@ -158,6 +158,59 @@ describe("comprar se ve simple", () => {
     expect(filas).toBeGreaterThan(300);
   });
 
+  it("eligiendo cuántos con el producto por unidad: una sola línea corta, el contador y una principal corta", () => {
+    const sorteo: ProductoALaVenta = { id: "sorteo", usdc: "1", sorteos: 1, dias: 365, unidad: { minimo: 5, maximo: 50, paso: 5 } };
+    let filas = 0;
+    for (const l of IDIOMAS)
+      for (const p of [sorteo, { ...sorteo, dias: 180 }, { ...sorteo, usdc: "1.25" }])
+        for (const cantidad of [5, 10, 50])
+          for (const [error] of ERRORES) {
+            const e: EstadoDelPaquete = { ...paqueteInicial(l, "a•••@gmail.com"), fase: "elegir", paquetes: [p], elegido: null, cantidad, error };
+            const v = vistaDelPaquete(e);
+            const quien = JSON.stringify({ l, p, cantidad, error });
+            filas++;
+            const lineas = [...v.textos, ...(v.nota ? [v.nota] : []), ...(v.error ? [v.error] : [])];
+            expect(lineas.length, quien).toBe(1);
+            for (const x of lineas) if (!LARGO_AJENO.has(x.clave)) expect(palabras(poner(l, x)), `${quien} ${poner(l, x)}`).toBeLessThanOrEqual(14);
+            expect(v.contador?.cantidad, quien).toBe(cantidad);
+            expect(v.secundarios, quien).toEqual([]);
+            expect(palabras(poner(l, v.principal)), quien).toBeLessThanOrEqual(8);
+          }
+    expect(filas).toBeGreaterThan(100);
+  });
+
+  it("mirando el pago solo, en cada estado: un título corto, una sola línea, una principal y ninguna repetida", () => {
+    const sorteo: ProductoALaVenta = { id: "sorteo", usdc: "1", sorteos: 1, dias: 365, unidad: { minimo: 5, maximo: 50, paso: 5 } };
+    let filas = 0;
+    for (const l of IDIOMAS)
+      for (const fase of ["pagando", "listo"] as const)
+        for (const marcas of (fase === "pagando" ? MARCAS : [{}]) as Partial<PagoEnLaVista>[])
+          for (const yaPague of [false, true])
+            for (const [error, arreglo] of ERRORES)
+              for (const quedan of fase === "listo" ? [null, 1, 13] : [null]) {
+                const base = { ...paqueteInicial(l, "a•••@gmail.com"), fase, paquetes: [sorteo], elegido: sorteo, cantidad: 10, solo: true };
+                const conOrden = { ...base, yaPague, orden: fase === "pagando" ? orden("sorteo", "10") : null };
+                const e = { ...conOrden, ...marcas, error, arreglo: arreglo === "entrar" ? "ninguno" : arreglo, quedan } as EstadoDelPaquete;
+                const v = vistaDelPaquete(e);
+                const quien = JSON.stringify({ l, fase, marcas, yaPague, error, quedan });
+                filas++;
+                expect(palabras(String(T[l][v.titulo?.clave ?? "cupoOfSumar"])), quien).toBeLessThanOrEqual(6);
+                const lineas = [...v.textos, ...(v.nota ? [v.nota] : []), ...(v.error ? [v.error] : [])];
+                expect(lineas.length, quien).toBeLessThanOrEqual(1);
+                for (const x of lineas) {
+                  if (!LARGO_AJENO.has(x.clave)) expect(palabras(poner(l, x)), `${quien} ${poner(l, x)}`).toBeLessThanOrEqual(14);
+                }
+                expect(v.secundarios.some((s) => s.accion === v.principal.accion), quien).toBe(false);
+                // «Ya pagué» nunca es la principal mientras se mira solo: solo como texto chico, y recién a los 2 minutos.
+                if (fase === "pagando" && marcas.buscando) {
+                  expect(v.principal.apagado, quien).toBe(true);
+                  expect(v.secundarios.map((s) => s.accion), quien).toEqual(yaPague && !marcas.vencida ? ["mirar-ya"] : []);
+                }
+                expect(v.panel?.cambio ?? null, quien).toBeNull();
+              }
+    expect(filas).toBeGreaterThan(300);
+  });
+
   it("pagando, lo que no hace falta para pagar va plegado en Más detalles, y los datos van como datos", () => {
     for (const l of IDIOMAS) {
       const pago: PagoEnLaVista = { ...pagoInicial(l, ALTA), fase: "pagando", orden: orden() };
