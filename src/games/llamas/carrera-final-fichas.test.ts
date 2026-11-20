@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import { tiemposFoco } from "../pixi/foco";
-import { FINISH_POST_FADE_AFTER, FINISH_POST_FADE_BEFORE, FINISH_POST_MIN_OPACITY, finishPostOpacity } from "./carrera-3d-mapa";
+import { FINISH_POST_CARTEL_HASTA, FINISH_POST_CARTEL_MIN, FINISH_POST_CARTEL_VUELVE, FINISH_POST_FADE_BEFORE, finishPostOpacity } from "./carrera-3d-mapa";
 import { FICHA, estadoNuevo, pasoFicha, type EstadoFicha, type ObjetivoFicha } from "./carrera-fichas-mov";
 import { MAX_NARROW_START_CHIPS, START_CHIP_TURN_SECONDS, finalChipDecision, startChipShows } from "./carrera-final-fichas";
 import { ctxDe } from "./carrera-prueba";
@@ -153,16 +153,17 @@ describe("el final de las fichas del 3D", () => {
     expect(fuente3d).toContain("finishPostOpacity(e.corona)");
   });
 
-  it("el poste de la meta se apaga un poco solo en el cruce y vuelve solo, igual para cualquier ganadora", () => {
+  it("el poste de la meta se apaga en el cruce y mientras el cartel de quien ganó está en pantalla, y vuelve solo, igual para cualquier ganadora", () => {
     expect(finishPostOpacity(-FINISH_POST_FADE_BEFORE - 1)).toBe(1);
     expect(finishPostOpacity(-FINISH_POST_FADE_BEFORE)).toBe(1);
-    expect(finishPostOpacity(0)).toBeCloseTo(FINISH_POST_MIN_OPACITY, 9);
-    expect(finishPostOpacity(FINISH_POST_FADE_AFTER / 2)).toBeGreaterThan(FINISH_POST_MIN_OPACITY);
-    expect(finishPostOpacity(FINISH_POST_FADE_AFTER / 2)).toBeLessThan(1);
-    expect(finishPostOpacity(FINISH_POST_FADE_AFTER)).toBe(1);
+    // Desde el cruce hasta que se va el cartel, el poste casi no se ve: la ganadora no queda tapada por el poste en el cartel final.
+    expect(finishPostOpacity(0)).toBeCloseTo(FINISH_POST_CARTEL_MIN, 9);
+    for (const crown of [0.5, 1, 2, 3, FINISH_POST_CARTEL_HASTA]) expect(finishPostOpacity(crown), `crown ${crown}`).toBeCloseTo(FINISH_POST_CARTEL_MIN, 9);
+    // Y después del cartel vuelve a verse entero.
+    expect(finishPostOpacity(FINISH_POST_CARTEL_HASTA + FINISH_POST_CARTEL_VUELVE)).toBe(1);
     expect(finishPostOpacity(10)).toBe(1);
     // La misma hora da la misma opacidad en cualquier camino.
-    for (const crown of [-1, -0.35, 0, 0.7, 1.4, 3]) expect(finishPostOpacity(crown)).toBe(finishPostOpacity(crown));
+    for (const crown of [-1, -0.35, 0, 0.7, 1.4, 3, 5]) expect(finishPostOpacity(crown)).toBe(finishPostOpacity(crown));
   });
 
   for (const n of TAMANOS) {

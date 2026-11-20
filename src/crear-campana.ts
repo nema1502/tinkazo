@@ -1,0 +1,122 @@
+/** Entrada de crear-campana.html: la página donde quien organiza arma la campaña de su empresa por pasos. */
+
+import "./pagina";
+import "./version-nueva";
+import "./campana/campana.css";
+import "./campana/crear.css";
+import { getLang, initialLang, onLangChange, setLang, texto, textos } from "./idioma";
+import { campanasActivo } from "./campana/bandera";
+import { escalaDelCelular, montarCreador, type DepsDelCreador } from "./campana/crear/panel";
+import { achicarLogo, depsDelNavegador } from "./campana/crear/logo";
+import { zonaDelNavegador } from "./campana/crear/horas";
+import { sufijoNuevo } from "./campana/crear/estado";
+import { costoDelRetiroTexto } from "./costo-del-retiro";
+
+const raiz = document.querySelector<HTMLElement>("#ccp");
+const aviso = document.querySelector<HTMLElement>("#ccp-aviso");
+const parametros = new URLSearchParams(location.search);
+const demo = parametros.get("demo") === "1";
+/** Lo más pesado que se abre como campaña: una de verdad pesa menos de 100 KB. */
+const MAXIMO_DEL_ARCHIVO_A_ABRIR = 400_000;
+setLang(initialLang());
+
+/** El almacenamiento local, o null si el navegador lo bloquea. */
+function almacenLocal(): Storage | null {
+  try {
+    return localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Baja un texto como archivo: un enlace con descarga que se suelta enseguida. */
+function bajarTexto(nombre: string, contenido: string): void {
+  const tipo = nombre.endsWith(".txt") ? "text/plain" : "application/json";
+  const direccion = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+  const enlace = document.createElement("a");
+  enlace.href = direccion;
+  enlace.download = nombre;
+  document.body.append(enlace);
+  enlace.click();
+  enlace.remove();
+  window.setTimeout(() => URL.revokeObjectURL(direccion), 10_000);
+}
+
+/** Compartir con la hoja del sistema, solo si el navegador sabe compartir archivos. */
+function compartirConElSistema(): DepsDelCreador["compartir"] {
+  if (typeof navigator.share !== "function" || typeof navigator.canShare !== "function") return null;
+  return {
+    puede: (archivo) => navigator.canShare({ files: [archivo] }),
+    enviar: async (archivo) => {
+      await navigator.share({ files: [archivo] });
+      return true;
+    },
+  };
+}
+
+function depsReales(): DepsDelCreador {
+  return {
+    tx: texto,
+    dic: (idioma, clave) => String(textos(idioma)[clave] ?? clave),
+    idioma: getLang,
+    ahora: () => Date.now(),
+    zona: zonaDelNavegador(),
+    almacen: almacenLocal(),
+    demo,
+    sufijo: sufijoNuevo,
+    achicar: (archivo, opciones) => achicarLogo(archivo, depsDelNavegador(), opciones),
+    leerArchivo: async (archivo) => {
+      if (archivo.size > MAXIMO_DEL_ARCHIVO_A_ABRIR) throw new Error("grande");
+      return archivo.text();
+    },
+    // El validador arrastra los dos lectores de la campaña: se baja recién cuando hay algo que bajar.
+    validar: (campana, ahora) => import("./sala/validar-campana").then((m) => m.validarCampanaParaFirmar(campana, ahora)),
+    descargar: bajarTexto,
+    compartir: compartirConElSistema(),
+    costo: costoDelRetiroTexto,
+    origen: location.origin,
+    tema: parametros.get("theme"),
+    cuadro: (f) => {
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => f());
+      else window.setTimeout(f, 16);
+    },
+    esperar: (f, ms) => {
+      const temporizador = window.setTimeout(f, ms);
+      return () => window.clearTimeout(temporizador);
+    },
+    // La escala sale del alto de la caja y de un 40 % del ancho de la ventana: el ancho de la caja sale de la escala.
+    escala: (caja, alCambiar) => {
+      const medir = (): void => alCambiar(escalaDelCelular(window.innerWidth * 0.4, caja.clientHeight));
+      medir();
+      if (typeof ResizeObserver !== "function") return () => undefined;
+      const mirador = new ResizeObserver(medir);
+      mirador.observe(caja);
+      window.addEventListener("resize", medir);
+      return () => {
+        mirador.disconnect();
+        window.removeEventListener("resize", medir);
+      };
+    },
+  };
+}
+
+function abrir(): void {
+  if (!raiz) return;
+  // Sin la bandera de las campañas la página dice que todavía no están abiertas, salvo con la demostración.
+  if (!campanasActivo() && !demo) {
+    const decir = (): void => {
+      if (aviso) aviso.textContent = texto("cpNoAbierta");
+    };
+    decir();
+    onLangChange(decir);
+    return;
+  }
+  if (demo) {
+    const etiqueta = document.querySelector<HTMLElement>("#cmp-ejemplo");
+    if (etiqueta) etiqueta.hidden = false;
+  }
+  const creador = montarCreador(raiz, depsReales());
+  onLangChange(() => creador.pintar());
+}
+
+abrir();

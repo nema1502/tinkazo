@@ -1,0 +1,80 @@
+entrada | sin acceso dicho | 2748 94d5437e3e0c68a7d8b41cc997ab5582706af25eca448da40bf0e49daa4ad60e
+entrada | libre | 2748 94d5437e3e0c68a7d8b41cc997ab5582706af25eca448da40bf0e49daa4ad60e
+entrada | cerrado | 2748 6f42b5af951573231400a32f87e103d6e73718db5c426b3fc5231c8d15008219
+entrada | servidor ninguno | 2748 a7afb040dd16be7398a7cb2f3ab614c0119214681db761218849c69f930a81bc
+entrada | servidor revisando | 2748 438539a2e0047e142f629d38ca4db3f28ef75ea5b36d291df46f72689fd6d978
+entrada | servidor con por cupon | 2748 19b0b1956a2f30337cb8a1a7e371d5cbd462d816892f195a4c830f72454bd4a3
+entrada | servidor con por pago | 2748 5405bacb6ddcdc9e2c48835285513e9c860e3e5c8fc49442b2463d470aa5889a
+entrada | servidor con por admin | 2748 cbe7bb2b52eecaf71eb78ff913d98a5d5f132f499e11ff40ab3df927db1199d1
+entrada | servidor con pide cupon | 2748 a7afb040dd16be7398a7cb2f3ab614c0119214681db761218849c69f930a81bc
+entrada | servidor con pide cupon canjeado | 2748 19b0b1956a2f30337cb8a1a7e371d5cbd462d816892f195a4c830f72454bd4a3
+entrada | servidor error probar | 2748 66f1712c0b973a3c010d5d03e711ca322cf4bda46aca867cc78689f0943fe09a
+entrada | servidor error entrar | 2748 10d40bb2a3bf8a6319b8501085816ab0153f26e5d91d3f6a85d62f20c9b2ddd8
+entrada | servidor error ninguno | 2748 273d4dae4b0e7408b98948b97466936631067046a967a4cd777da1edd841e3e6
+entrada | servidor cadena | 2748 ce062ce68327b67ddc62039780bcea460804da2ae5bd1c2b6ede6d2d5509a6ed
+entrada | servidor falla tras canje | 2748 d2c68fa9dd084cf29d4f5fe6c0f29b12e9896200d1470ce3a6fdcb0517d2079b
+entrada | servidor escribiendo | 2748 8013b32022ab42d04ebf6c85cf5838387a028a56785b3edf7d131ebf7c017d20
+entrada | servidor cupon en mano | 2748 963554388c341fa2d48baac90e1a4af5edf4ac8968fc7710353582dec3ea977d
+entrada | servidor pago ofrecer | 2748 cdad6f8e9b163507d401e80d632acef583e71652bc0ee20ed0f0a96e4c870631
+entrada | servidor pago elegir | 2748 41219478e6ba70408a85eb9d8f5442525faa166da1eff324b2aa93d51dded482
+entrada | servidor pago ofrecer sin paquete | 2748 3b893be7d18fc08061e223837652f07ac1dd10195cb6d3eaf34151e9a4f47125
+entrada-con-lista | sin acceso dicho | 2748 a82b1f451a4632ee0f3016710ba0285765c5d6d825db96946ac623576bf3738c
+entrada-con-lista | libre | 2748 a82b1f451a4632ee0f3016710ba0285765c5d6d825db96946ac623576bf3738c
+entrada-con-lista | cerrado | 2748 97208908a20153c1d44cab7a404aff6c7abbd92735e745c4e853fa89d6ca38dd
+entrada-con-lista | servidor ninguno | 2748 a7afb040dd16be7398a7cb2f3ab614c0119214681db761218849c69f930a81bc
+entrada-con-lista | servidor revisando | 2748 438539a2e0047e142f629d38ca4db3f28ef75ea5b36d291df46f72689fd6d978
+entrada-con-lista | servidor con por cupon | 2748 81f4e136dc43500f33b9aeec2ff0053194b001ff34267927cd304403da8a52ac
+entrada-con-lista | servidor con por pago | 2748 7ff86c6460b4c6c9f1cf950e67debe58e32f0e4588b937b022a7e65e35537604
+entrada-con-lista | servidor con por admin | 2748 d2b2d8355f9d4b9dd37fb66f14b0c61461649a4ae2793a58887855b1547d2cdd
+entrada-con-lista | servidor con pide cupon | 2748 aa91c900dae95288f6b979df49542d918c0107996cd52b525f9de79a95007967
+entrada-con-lista | servidor con pide cupon canjeado | 2748 726eb380b6227afd54449b00bc803048272080b7ea59190829acf5a8d654157e
+entrada-con-lista | servidor error probar | 2748 66f1712c0b973a3c010d5d03e711ca322cf4bda46aca867cc78689f0943fe09a
+entrada-con-lista | servidor error entrar | 2748 10d40bb2a3bf8a6319b8501085816ab0153f26e5d91d3f6a85d62f20c9b2ddd8
+entrada-con-lista | servidor error ninguno | 2748 273d4dae4b0e7408b98948b97466936631067046a967a4cd777da1edd841e3e6
+entrada-con-lista | servidor cadena | 2748 ce062ce68327b67ddc62039780bcea460804da2ae5bd1c2b6ede6d2d5509a6ed
+entrada-con-lista | servidor falla tras canje | 2748 d2c68fa9dd084cf29d4f5fe6c0f29b12e9896200d1470ce3a6fdcb0517d2079b
+entrada-con-lista | servidor escribiendo | 2748 8013b32022ab42d04ebf6c85cf5838387a028a56785b3edf7d131ebf7c017d20
+entrada-con-lista | servidor cupon en mano | 2748 963554388c341fa2d48baac90e1a4af5edf4ac8968fc7710353582dec3ea977d
+entrada-con-lista | servidor pago ofrecer | 2748 cdad6f8e9b163507d401e80d632acef583e71652bc0ee20ed0f0a96e4c870631
+entrada-con-lista | servidor pago elegir | 2748 41219478e6ba70408a85eb9d8f5442525faa166da1eff324b2aa93d51dded482
+entrada-con-lista | servidor pago ofrecer sin paquete | 2748 3b893be7d18fc08061e223837652f07ac1dd10195cb6d3eaf34151e9a4f47125
+sello | sin acceso dicho | 2748 a82b1f451a4632ee0f3016710ba0285765c5d6d825db96946ac623576bf3738c
+sello | libre | 2748 a82b1f451a4632ee0f3016710ba0285765c5d6d825db96946ac623576bf3738c
+sello | cerrado | 2748 97208908a20153c1d44cab7a404aff6c7abbd92735e745c4e853fa89d6ca38dd
+sello | servidor ninguno | 2748 a7afb040dd16be7398a7cb2f3ab614c0119214681db761218849c69f930a81bc
+sello | servidor revisando | 2748 438539a2e0047e142f629d38ca4db3f28ef75ea5b36d291df46f72689fd6d978
+sello | servidor con por cupon | 2748 81f4e136dc43500f33b9aeec2ff0053194b001ff34267927cd304403da8a52ac
+sello | servidor con por pago | 2748 7ff86c6460b4c6c9f1cf950e67debe58e32f0e4588b937b022a7e65e35537604
+sello | servidor con por admin | 2748 d2b2d8355f9d4b9dd37fb66f14b0c61461649a4ae2793a58887855b1547d2cdd
+sello | servidor con pide cupon | 2748 aa91c900dae95288f6b979df49542d918c0107996cd52b525f9de79a95007967
+sello | servidor con pide cupon canjeado | 2748 726eb380b6227afd54449b00bc803048272080b7ea59190829acf5a8d654157e
+sello | servidor error probar | 2748 66f1712c0b973a3c010d5d03e711ca322cf4bda46aca867cc78689f0943fe09a
+sello | servidor error entrar | 2748 10d40bb2a3bf8a6319b8501085816ab0153f26e5d91d3f6a85d62f20c9b2ddd8
+sello | servidor error ninguno | 2748 273d4dae4b0e7408b98948b97466936631067046a967a4cd777da1edd841e3e6
+sello | servidor cadena | 2748 ce062ce68327b67ddc62039780bcea460804da2ae5bd1c2b6ede6d2d5509a6ed
+sello | servidor falla tras canje | 2748 d2c68fa9dd084cf29d4f5fe6c0f29b12e9896200d1470ce3a6fdcb0517d2079b
+sello | servidor escribiendo | 2748 8013b32022ab42d04ebf6c85cf5838387a028a56785b3edf7d131ebf7c017d20
+sello | servidor cupon en mano | 2748 963554388c341fa2d48baac90e1a4af5edf4ac8968fc7710353582dec3ea977d
+sello | servidor pago ofrecer | 2748 cdad6f8e9b163507d401e80d632acef583e71652bc0ee20ed0f0a96e4c870631
+sello | servidor pago elegir | 2748 41219478e6ba70408a85eb9d8f5442525faa166da1eff324b2aa93d51dded482
+sello | servidor pago ofrecer sin paquete | 2748 3b893be7d18fc08061e223837652f07ac1dd10195cb6d3eaf34151e9a4f47125
+sorteo | sin acceso dicho | 2748 12ffdeb770c8de3ff58902a8eb9ddc5182d43584710e71f41f497012036b4d9b
+sorteo | libre | 2748 12ffdeb770c8de3ff58902a8eb9ddc5182d43584710e71f41f497012036b4d9b
+sorteo | cerrado | 2748 2f2758cfc6ace658ce70a747d6782dc45b44ad46132c7ec4e7259e65a94d83ee
+sorteo | servidor ninguno | 2748 a7afb040dd16be7398a7cb2f3ab614c0119214681db761218849c69f930a81bc
+sorteo | servidor revisando | 2748 438539a2e0047e142f629d38ca4db3f28ef75ea5b36d291df46f72689fd6d978
+sorteo | servidor con por cupon | 2748 da93f889d5e6fccf23e9b5d18852324747fd86d25dcb0a810134eaacf599c8c5
+sorteo | servidor con por pago | 2748 35e12bf5c9f6a3dfe924b781429a9dc2cbd9fdabd7482566baa0eb5317672efd
+sorteo | servidor con por admin | 2748 23635bedf930fb71dd82a667ab52c1f38e03dfb371ea8f013f5496c51fb0d1e7
+sorteo | servidor con pide cupon | 2748 aa91c900dae95288f6b979df49542d918c0107996cd52b525f9de79a95007967
+sorteo | servidor con pide cupon canjeado | 2748 2ec53f4e88891c64241c366ee51c265597dfe922422a03d99e68537b0cef7bfe
+sorteo | servidor error probar | 2748 66f1712c0b973a3c010d5d03e711ca322cf4bda46aca867cc78689f0943fe09a
+sorteo | servidor error entrar | 2748 10d40bb2a3bf8a6319b8501085816ab0153f26e5d91d3f6a85d62f20c9b2ddd8
+sorteo | servidor error ninguno | 2748 273d4dae4b0e7408b98948b97466936631067046a967a4cd777da1edd841e3e6
+sorteo | servidor cadena | 2748 ce062ce68327b67ddc62039780bcea460804da2ae5bd1c2b6ede6d2d5509a6ed
+sorteo | servidor falla tras canje | 2748 d2c68fa9dd084cf29d4f5fe6c0f29b12e9896200d1470ce3a6fdcb0517d2079b
+sorteo | servidor escribiendo | 2748 8013b32022ab42d04ebf6c85cf5838387a028a56785b3edf7d131ebf7c017d20
+sorteo | servidor cupon en mano | 2748 963554388c341fa2d48baac90e1a4af5edf4ac8968fc7710353582dec3ea977d
+sorteo | servidor pago ofrecer | 2748 cdad6f8e9b163507d401e80d632acef583e71652bc0ee20ed0f0a96e4c870631
+sorteo | servidor pago elegir | 2748 41219478e6ba70408a85eb9d8f5442525faa166da1eff324b2aa93d51dded482
+sorteo | servidor pago ofrecer sin paquete | 2748 3b893be7d18fc08061e223837652f07ac1dd10195cb6d3eaf34151e9a4f47125

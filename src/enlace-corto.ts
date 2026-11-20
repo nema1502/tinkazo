@@ -42,8 +42,11 @@ import { requestedMode } from "./modos/bandera";
  * (`workers/enlaces/README.md`).
  */
 
-/** El servicio de enlaces cortos. */
-export const SERVICIO = "https://c.tinkazo.app";
+/**
+ * El servicio de enlaces cortos. Un build propio puede apuntar a otro con `VITE_ENLACES` (por ejemplo el servicio local
+ * de `wrangler dev`, para probar un cambio del servicio antes de desplegarlo). La producción no lo define.
+ */
+export const SERVICIO = (import.meta.env?.VITE_ENLACES as string | undefined) || "https://c.tinkazo.app";
 const VERSION = 1;
 /** Lo que se espera al crear uno antes de compartir el largo. */
 const ESPERA_CREAR_MS = 5_000;
@@ -77,7 +80,12 @@ export interface Opciones {
   fetch?: typeof fetch;
 }
 
-export type Abierto = { ruta: string; corto: Corto; logo?: Logo } | { error: "no-existe" | "red" | "roto" };
+/**
+ * Lo que dio abrir un enlace corto. `cambia`: el servicio dice que ese enlace se puede reescribir (el del QR de
+ * espectadores, `acortarEspectador`); entonces `n` es el contador de su contenido. Solo la vista de espectador abre uno
+ * así: un comprobante o un evento nunca cambian.
+ */
+export type Abierto = { ruta: string; corto: Corto; logo?: Logo; cambia?: boolean; n?: number } | { error: "no-existe" | "red" | "roto" };
 
 /* ------------------------------------------------------------------ formato */
 
@@ -361,11 +369,13 @@ export async function abrir(id: string, secreto: string, op: Opciones = {}): Pro
   if (!ES_ID.test(id) || !ES_CLAVE.test(secreto)) return { error: "roto" };
   const f = op.fetch ?? fetch;
   let bytes: Uint8Array<ArrayBuffer> | null;
+  let cambia = false;
   try {
     bytes = await conEspera(op.espera ?? ESPERA_ABRIR_MS, async (signal) => {
       const r = await f(`${op.servicio ?? SERVICIO}/v1/${id}`, { signal });
       if (r.status === 404) return null;
       if (!r.ok) throw new Error(`corto-${r.status}`);
+      cambia = r.headers.get("X-Enlace-Cambia") === "1";
       return new Uint8Array(await r.arrayBuffer());
     });
   } catch {
@@ -373,8 +383,11 @@ export async function abrir(id: string, secreto: string, op: Opciones = {}): Pro
   }
   if (!bytes) return { error: "no-existe" };
   try {
-    const j = JSON.parse(await descifrar(bytes, deB64url(secreto))) as { v?: unknown; u?: unknown; l?: unknown };
+    const j = JSON.parse(await descifrar(bytes, deB64url(secreto))) as { v?: unknown; u?: unknown; l?: unknown; n?: unknown };
     if (j.v !== VERSION || !esRuta(j.u)) return { error: "roto" };
+    // Un enlace que puede cambiar es solo el de la vista de espectador: si llevara a un comprobante o a un evento, quien
+    // lo armó podría cambiarlo después de compartirlo por el de otro sorteo. No se abre.
+    if (cambia && !ES_RUTA_ESPECTADOR.test(j.u)) return { error: "roto" };
     // El logo, si viene bien: un `l` roto se ignora y el comprobante abre igual.
     const logo = j.l === undefined ? null : (validarLogo(j.l)?.logo ?? null);
     const corto: Corto = { corto: `${op.origen ?? location.origin}/c/${id}#${secreto}`, id, borrar: "" };
@@ -385,9 +398,130 @@ export async function abrir(id: string, secreto: string, op: Opciones = {}): Pro
     } catch {
       /* recordar es para volver a compartirlo; abrirlo no depende de eso */
     }
-    return { ruta: j.u, corto, ...(logo ? { logo } : {}) };
+    return { ruta: j.u, corto, ...(logo ? { logo } : {}), ...(cambia ? { cambia: true, n: contadorDe(j.n) } : {}) };
   } catch {
     return { error: "roto" };
+  }
+}
+
+/* ------------------------------------------- el enlace del QR de espectadores */
+
+/** El contenido de un enlace que puede cambiar se rellena hasta un múltiplo de esto, con esta holgura. */
+const RELLENO = 256;
+const HOLGURA = 64;
+const largoEnBytes = (texto: string): number => new TextEncoder().encode(texto).length;
+/**
+ * El largo fijo del contenido: todas las versiones de un enlace miden lo mismo, así el servicio no ve, por el largo,
+ * qué juego se eligió (el nombre del juego cambia el largo) ni cuándo cambió el estado. Si una versión no entra en el
+ * largo de antes, pasa al siguiente múltiplo.
+ */
+const largoFijo = (texto: string, antes = 0): number => (antes >= largoEnBytes(texto) ? antes : Math.ceil((largoEnBytes(texto) + HOLGURA) / RELLENO) * RELLENO);
+/** El texto con espacios al final hasta el largo fijo: `JSON.parse` no los mira. */
+const rellenar = (texto: string, largo: number): string => texto + " ".repeat(Math.max(0, largo - largoEnBytes(texto)));
+const contadorDe = (n: unknown): number => (typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? n : 0);
+
+/** El enlace corto del QR de espectadores, con lo que hace falta para reescribirlo. */
+export interface CortoQueCambia extends Corto {
+  /** La clave del fragmento (base64url de 16 bytes): las versiones nuevas se cifran con la misma. */
+  clave: string;
+  /** El servicio dijo que se puede reescribir. El de hoy no lo dice, y entonces no se intenta. */
+  cambia: boolean;
+  /** La versión que tiene el servicio: reescribir pide esa y no pisa una más nueva. */
+  version: string | null;
+  /** El largo fijo del contenido. */
+  largo: number;
+  /** El contador del contenido: el celular nunca vuelve a uno menor. */
+  n: number;
+}
+
+/**
+ * El enlace corto del QR de espectadores. Se pide que pueda cambiar (`?cambia=1`): si el servicio lo deja, la sala lo
+ * puede reescribir después con el mismo permiso (`actualizarCorto`) y el QR no cambia. El servicio de hoy no mira el
+ * pedido y lo crea como siempre (`cambia: false`). No pasa por lo que recuerda este equipo: lo anota la sala por sello
+ * (`ui/espectadores-de-la-sala.ts`). null si no sale.
+ */
+export async function acortarEspectador(enlaceLargo: string, op: Opciones = {}): Promise<CortoQueCambia | null> {
+  const ruta = rutaDe(enlaceLargo);
+  if (!ruta || !ES_RUTA_ESPECTADOR.test(ruta)) return null;
+  const f = op.fetch ?? fetch;
+  const secreto = crypto.getRandomValues(new Uint8Array(16));
+  const texto = JSON.stringify({ v: VERSION, u: ruta, n: 1 });
+  const largo = largoFijo(texto);
+  const cuerpo = await cifrar(rellenar(texto, largo), secreto);
+  if (cuerpo.length > MAX_BYTES) return null;
+  try {
+    // Sin Content-Type: el pedido es "simple", sin consulta previa, también con el servicio de hoy.
+    const j = await conEspera(op.espera ?? ESPERA_CREAR_MS, async (signal) => {
+      const r = await f(`${op.servicio ?? SERVICIO}/v1?cambia=1`, { method: "POST", body: cuerpo, signal });
+      return r.status === 201 ? ((await r.json()) as { id?: unknown; borrar?: unknown; cambia?: unknown; version?: unknown }) : null;
+    });
+    if (!j || typeof j.id !== "string" || !ES_ID.test(j.id) || typeof j.borrar !== "string" || !j.borrar) return null;
+    const cambia = j.cambia === true;
+    return {
+      corto: `${op.origen ?? location.origin}/c/${j.id}#${b64url(secreto)}`,
+      id: j.id,
+      borrar: j.borrar,
+      clave: b64url(secreto),
+      cambia,
+      version: cambia && typeof j.version === "string" ? j.version : null,
+      largo,
+      n: 1,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export type Reescritura = { ok: true; version: string | null; n: number; largo: number } | { ok: false; motivo: "version" | "no-cambia" | "red" };
+
+/**
+ * Reescribe el enlace del QR de espectadores con otro contenido (el juego nuevo), con la misma clave y su permiso. Pide
+ * la versión que tiene anotada: si otra pestaña o un reintento ya la cambió, el servicio dice que no (`version`) y no
+ * pisa lo más nuevo. Con el servicio de hoy el navegador frena el pedido (`red`): la sala arma otro QR.
+ */
+export async function actualizarCorto(c: Pick<CortoQueCambia, "id" | "borrar" | "clave" | "version" | "largo" | "n">, enlaceLargo: string, op: Opciones = {}): Promise<Reescritura> {
+  const ruta = rutaDe(enlaceLargo);
+  if (!ruta || !ES_RUTA_ESPECTADOR.test(ruta) || !ES_ID.test(c.id) || !ES_CLAVE.test(c.clave)) return { ok: false, motivo: "red" };
+  const f = op.fetch ?? fetch;
+  const n = c.n + 1;
+  const texto = JSON.stringify({ v: VERSION, u: ruta, n });
+  const largo = largoFijo(texto, c.largo);
+  const cuerpo = await cifrar(rellenar(texto, largo), deB64url(c.clave));
+  if (cuerpo.length > MAX_BYTES) return { ok: false, motivo: "red" };
+  try {
+    const r = await conEspera(op.espera ?? ESPERA_CREAR_MS, (signal) =>
+      f(`${op.servicio ?? SERVICIO}/v1/${c.id}`, {
+        method: "PUT",
+        body: cuerpo,
+        headers: { Authorization: `Bearer ${c.borrar}`, ...(c.version ? { "If-Match": c.version } : {}) },
+        signal,
+      }),
+    );
+    if (r.status === 204) return { ok: true, version: r.headers.get("ETag"), n, largo };
+    if (r.status === 412) return { ok: false, motivo: "version" };
+    if (r.status === 409) return { ok: false, motivo: "no-cambia" };
+    return { ok: false, motivo: "red" };
+  } catch {
+    return { ok: false, motivo: "red" };
+  }
+}
+
+/**
+ * Vuelve a leer el enlace del QR de espectadores, sin caché: lo que dice ahora (la ruta, con el juego que eligió la sala
+ * a último momento), su contador y su versión. null si no contesta o no se entiende: quien mira sigue con lo que tiene.
+ */
+export async function releerCorto(id: string, clave: string, op: Opciones = {}): Promise<{ ruta: string; n: number; version: string | null; cambia: boolean } | null> {
+  if (!ES_ID.test(id) || !ES_CLAVE.test(clave)) return null;
+  const f = op.fetch ?? fetch;
+  try {
+    const r = await conEspera(op.espera ?? ESPERA_ABRIR_MS, (signal) => f(`${op.servicio ?? SERVICIO}/v1/${id}`, { cache: "no-store", signal }));
+    if (!r.ok) return null;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const j = JSON.parse(await descifrar(bytes, deB64url(clave))) as { v?: unknown; u?: unknown; n?: unknown };
+    if (j.v !== VERSION || typeof j.u !== "string" || !ES_RUTA_ESPECTADOR.test(j.u)) return null;
+    return { ruta: j.u, n: contadorDe(j.n), version: r.headers.get("ETag"), cambia: r.headers.get("X-Enlace-Cambia") === "1" };
+  } catch {
+    return null;
   }
 }
 

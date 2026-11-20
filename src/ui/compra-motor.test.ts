@@ -5,7 +5,7 @@ import type { ResultadoDelPagoConSaldo } from "../stellar/pago-con-saldo";
 import { USDC_MAINNET } from "../stellar/pagos";
 import type { PrecioDeCarga, RutaDeBolivia } from "../stellar/rampa-pollar";
 import type { SaldoDeDolares } from "../stellar/saldo-dolares";
-import type { AvisoDeLaCompra } from "../stellar/wallet-pollar";
+import type { AvisoDeLaCompra, ResultadoDeActivarUsdc } from "../stellar/wallet-pollar";
 import { type BilleteraDeLaCompra, CompraDeVerdad, type OpcionesDelMotor, type PorteroDeLaCompra } from "./compra-motor";
 import { type LoQueSeSabe, pantallaDeCompra } from "./compra-qr-estado";
 import type { AvisoDelMotor } from "./compra-qr";
@@ -881,5 +881,32 @@ describe("mirar solo lee", () => {
     const mo = motor(m, { portero: { estado: async () => no(401, "sesion", { clave: "clErrSesion" }) } });
     const s = await mo.mirar(mo.inicio());
     expect(id(s)).toBe("sesion");
+  });
+});
+
+describe("Preparar mi cuenta: la regla de la línea que no votó hace lo mismo que una línea que no salió", () => {
+  /** Lo que queda después de Preparar mi cuenta, con la línea que dio `resultado`, y lo que se llamó. */
+  async function prepararCon(resultado: ResultadoDeActivarUsdc): Promise<{ s: LoQueSeSabe; llamadas: string[] }> {
+    const m = mundoNuevo();
+    const cargaPreparar = vi.fn(async () => ({ estado: "linea" as const, resultado }));
+    const mo = motor(m, { billetera: { cargaPreparar } });
+    const antes = { ...mo.inicio(), cotizacion: { estado: "falta" as const, falta: [{ que: "linea" as const, emisor: CIRCLE }] } };
+    const s = await mo.hacer("preparar", antes, aviso());
+    return { s, llamadas: m.llamadas };
+  }
+
+  it("no-coincide: lo mismo que no-salio, sin cotizar de nuevo", async () => {
+    const igual = await prepararCon("no-salio");
+    const r = await prepararCon("no-coincide");
+    expect(r.s).toEqual(igual.s);
+    expect(r.s.sinRed).toBe(true);
+    expect(r.llamadas).toEqual(igual.llamadas);
+  });
+
+  it("no-coincide-tope: lo mismo que no-salio", async () => {
+    const igual = await prepararCon("no-salio");
+    const r = await prepararCon("no-coincide-tope");
+    expect(r.s).toEqual(igual.s);
+    expect(r.llamadas).toEqual(igual.llamadas);
   });
 });

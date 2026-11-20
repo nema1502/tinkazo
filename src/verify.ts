@@ -36,6 +36,7 @@ import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./co
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 // Solo la bandera: el panel de ganadores y sus textos se cargan únicamente si está prendida.
 import { pagosActivos } from "./stellar/pagos-bandera";
+import { htmlDeLosPremios } from "./ui/premios-del-comprobante";
 
 /**
  * Página de verificación.
@@ -432,6 +433,7 @@ function contar(proof: Proof, r: Revision): void {
   pintarTecnico([]);
   pintarSinSello(proof, r);
   pintarIdentidad(proof, delHistorial);
+  pintarPremios(r);
   // La lista se llama "sellada" solo si la cadena atestiguó que lo es.
   const atestiguado = r.veredicto === "verde" || r.veredicto === "pendiente";
   const cabeza = $("v-list-h");
@@ -562,6 +564,28 @@ function contar(proof: Proof, r: Revision): void {
 function pintarPagos(r: Revision, premio: string): void {
   if (!pagosActivos()) return;
   void import("./ui/pagos-comprobante").then((m) => m.mostrarPagosDelComprobante(r, premio)).catch(() => undefined);
+}
+
+/**
+ * La sección de premios de un comprobante de campaña (`src/ui/premios-del-comprobante.ts`): el depósito, la
+ * huella de las bases y de la lista y el pago de cada premio, tal como los guardó el contrato de premios que
+ * selló. Un sorteo sin premio no la tiene: no se crea ni un marco vacío. La página no trae el contenedor en el
+ * HTML (el comprobante de una campaña es nuevo y el de siempre no lo usa): lo pone acá la primera vez.
+ */
+function pintarPremios(r: Revision): void {
+  const html = htmlDeLosPremios(r, getLang());
+  const caja = document.getElementById("sec-premios");
+  if (!html) {
+    if (caja) caja.innerHTML = "";
+    return;
+  }
+  const seccion = caja ?? document.createElement("section");
+  if (!caja) {
+    seccion.id = "sec-premios";
+    seccion.className = "block";
+    (document.getElementById("sec-pagos") ?? document.getElementById("sec-result"))?.after(seccion);
+  }
+  seccion.innerHTML = html;
 }
 
 /** Cuántos sellos se listan como mucho. Los que repiten la lista entran siempre. */

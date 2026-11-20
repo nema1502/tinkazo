@@ -1,6 +1,7 @@
 import { clamp, ease } from "../overlay";
 import { writeStory, type Story } from "../drama";
 import { cuantosGrupos, GRUPOS, grupoDe } from "../grupos";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "./decisivo";
 
 /**
  * El plan del teleférico por grupos (sección 7.7 del plan de juegos).
@@ -86,6 +87,20 @@ function shuffled<T>(xs: readonly T[], rng: () => number): T[] {
     [a[i], a[j]] = [a[j] as T, a[i] as T];
   }
   return a;
+}
+
+/**
+ * El momento decisivo del teleférico (`decisivo.ts`), en segundos de juego: la primera parada que deja arriba solo a
+ * quienes ganan, desde que el convoy llega a ella. Con un premio, la última estación (antes quedan dos en la cabina, y
+ * el suplente se sorteó a ciegas). Con varios, la misma, o la bajada grande si ninguna cabina con premio lleva suplente.
+ */
+export function decisivoDelTeleferico(P: { n: number; R: number; offAt: ReadonlyMap<number, number>; stops: readonly { t0: number; round: number }[] }, winners: readonly number[]): number {
+  const tramos = P.stops.map((st) => ({
+    desde: st.t0,
+    siguen: Array.from({ length: P.n }, (_, i) => i).filter((i) => (P.offAt.get(i) ?? P.R) > st.round),
+  }));
+  const ultima = P.stops[P.stops.length - 1];
+  return momentoDecisivo(ultima ? ultima.t0 : T_RUN, primeraQueDejaSoloPremiados(tramos, new Set(winners), P.n));
 }
 
 export function planCableCar(names: string[], winners: readonly number[], rng: () => number) {

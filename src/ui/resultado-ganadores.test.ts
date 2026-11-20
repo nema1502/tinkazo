@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { T } from "../i18n";
+import { T, setLang } from "../i18n";
 import { seCuentaPorPersona } from "../participaciones";
 import { MAX_WINNERS } from "../protocol/select";
 import { MAX_TARJETAS, alTocarAusente, enLista, htmlDeGanadores } from "./resultado-ganadores";
@@ -17,16 +17,42 @@ const avatar = (nombre: string): string => `data:cara-${nombre.length}`;
 /** Un toque en ese elemento, como lo recibe el manejador de `#winner-cards`. */
 const toque = (el: Element | null): Event => ({ target: el }) as unknown as Event;
 
-function pintar(n: number, extra: { prize?: string; reemplazo?: boolean } = {}): HTMLElement {
+function pintar(n: number, extra: { prize?: string; reemplazo?: boolean; stand?: boolean } = {}): HTMLElement {
   const caja = document.createElement("div");
   caja.id = "winner-cards";
-  caja.innerHTML = htmlDeGanadores({ names: nombres(n), winners: ganan(n), prize: extra.prize ?? "", reemplazo: extra.reemplazo ?? true, avatar });
+  caja.innerHTML = htmlDeGanadores({ names: nombres(n), winners: ganan(n), prize: extra.prize ?? "", reemplazo: extra.reemplazo ?? true, avatar, ...(extra.stand ? { stand: true } : {}) });
   document.body.replaceChildren(caja);
   return caja;
 }
 
 beforeEach(() => {
   document.body.innerHTML = "";
+  setLang("es");
+});
+
+describe("el final de una ronda del stand con más de seis personas", () => {
+  it("nombra a todas las que salieron y su título no habla de ganadores", () => {
+    const c = pintar(8, { stand: true });
+    expect(c.querySelector(".winner-lista-t")?.textContent).toBe("Los otros 7 que salieron, en orden");
+    // La primera en su tarjeta y las otras siete en la lista: ocho nombres a la vista, y ningún premio.
+    expect(c.querySelectorAll(".winner-card")).toHaveLength(1);
+    expect(c.querySelectorAll(".winner-fila")).toHaveLength(7);
+    expect(c.querySelectorAll(".winner-name")).toHaveLength(8);
+    expect(c.querySelector(".winner-lista-premio")).toBeNull();
+    setLang("en");
+    expect(pintar(8, { stand: true }).querySelector(".winner-lista-t")?.textContent).toBe("The other 7 picked, in order");
+    for (const l of ["es", "en"] as const) expect(T[l].standOtros, l).toContain("{n}");
+    expect(T.es.standOtros).not.toMatch(/gan/i);
+    expect(T.en.standOtros).not.toMatch(/winner/i);
+  });
+
+  it("hasta seis, una tarjeta cada una, como siempre", () => {
+    expect(pintar(6, { stand: true }).querySelectorAll(".winner-card")).toHaveLength(6);
+  });
+
+  it("sin la marca del stand, el título es el de siempre", () => {
+    expect(pintar(8).querySelector(".winner-lista-t")?.textContent).toBe("Los otros 7 ganadores, en orden");
+  });
 });
 
 describe("hasta seis ganadores: una tarjeta cada uno, como siempre", () => {

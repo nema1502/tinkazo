@@ -78,6 +78,8 @@ describe("los números de esta semana en el archivo de la red principal", () => 
     expect(vars.COMPRAS_QR).toBe("0");
     expect(vars.COMPRAS_QR_PILOTO).toBe("");
     expect(vars.COMPRAS_QR_TODOS).toBeUndefined();
+    expect(vars.ORDEN_USDC_TODOS).toBeUndefined();
+    expect(vars.ORDEN_USDC_PILOTO).toBeUndefined();
     // La cuenta de cobros nueva, propia y con su suma de control: con ALTAS_PAGO en "0" no vende, solo se lee.
     expect(vars.CUENTA_COBROS).toBe("GDMIGGM2J7GL24JL3UB5DLSTMMWFP5XTE3SDTTDZSPUFH7VMKFINKAO6");
     expect(vars.ALTAS_PAGO).toBe("0");

@@ -163,6 +163,8 @@ beforeEach(async () => {
   vi.resetModules();
   vi.stubEnv("VITE_ALTA", "1");
   vi.stubEnv("VITE_PATROCINIO_URL_MAINNET", URL);
+  // Fuera de los modos que cuida la puerta del premio (`freeze-premio.test.ts`): esto mira el cobro por uso.
+  vi.stubEnv("VITE_RAMPA", "pollar");
   h.sealOnChain.mockReset();
   h.sealOnChain.mockResolvedValue({ raffleId: 1n, txHash: "H" });
   h.sinPatrocinio.mockReset();

@@ -196,7 +196,10 @@ describe("la cadena de «Activar con mi cupón»", () => {
     expect(textoDe()).toContain(t("altaCuponListo").replace("{codigo}", A_LA_VISTA));
     expect(raiz()?.querySelector(".cl-cupon-listo")?.textContent).toBe(A_LA_VISTA);
     expect(principal().textContent).toBe(t("altaActivarConCupon"));
-    expect(textoDe()).toContain(t("altaNoTengo"));
+    const ayuda = raiz()?.querySelector<HTMLDetailsElement>("details.cl-detalles");
+    expect(ayuda?.open).toBe(false);
+    expect(ayuda?.querySelector("summary")?.textContent).toBe(t("altaNoTengoResumen"));
+    expect(ayuda?.textContent).toContain(t("altaNoTengo"));
     // Nunca «Activar mi cuenta» sin el acceso.
     expect(visibles().some((b) => b.dataset.accion === "activar")).toBe(false);
     expect(srv.acceso.estado).toHaveBeenCalledTimes(1);
@@ -211,8 +214,8 @@ describe("la cadena de «Activar con mi cupón»", () => {
     expect(srv.acceso.refrescarCupo.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(srv.acceso.olvidarCupon).toHaveBeenCalled();
     expect(srv.s.guardado).toBeNull();
-    // La parte 1 lista, y ahora proteger.
-    expect(raiz()?.querySelector('[data-parte="activar"]')?.getAttribute("data-estado")).toBe("lista");
+    // La parte 1 ya no se repite: queda solo proteger.
+    expect(raiz()?.querySelector(".cl-paso")?.getAttribute("data-parte")).toBe("proteger");
     expect(textoDe()).toContain(t("clActivada"));
     expect(principal().dataset.accion).not.toBe("usar-cupon");
   });
@@ -256,9 +259,8 @@ describe("la cadena de «Activar con mi cupón»", () => {
     const srv = servidorFalso({ guardado: CODIGO });
     srv.s.sigue = "lista";
     const { cf, promesa } = await abrir({ acceso: srv, inicial: { activacion: "lista", proteccion: "lista" }, op: { para: "sello" } });
-    expect(textoDe()).toContain(t("altaYaActivada"));
+    expect(textoDe()).toContain(t("altaCuponListo").replace("{codigo}", A_LA_VISTA));
     expect(textoDe()).toContain(t("altaTituloSorteos"));
-    expect(textoDe()).toContain(t("altaBajadaUnPaso"));
     expect(textoDe()).not.toContain(t("clListaTitulo"));
     expect(principal().textContent).toBe(t("cupoOfUsarCupon"));
     principal().click();
@@ -270,11 +272,12 @@ describe("la cadena de «Activar con mi cupón»", () => {
     await expect(promesa).resolves.toBe(true);
   });
 
-  it("con acceso ya confirmado (volvió a abrir), «Activar mi cuenta» con el texto del cupón, y después pregunta otra vez", async () => {
+  it("con acceso ya confirmado (volvió a abrir), Activar mi cuenta es la principal y después pregunta otra vez", async () => {
     const srv = servidorFalso({ acceso: "cupon" });
     const { cf } = await abrir({ acceso: srv });
     expect(principal().textContent).toBe(t("clActivarBoton"));
-    expect(textoDe()).toContain(t("altaActivarCupon"));
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(2);
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clBajada"));
     principal().click();
     await pasa();
     expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
@@ -514,7 +517,7 @@ describe("un error en cada paso", () => {
     await pasa();
     expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(2);
     expect(srv.s.canjes).toEqual([CODIGO]);
-    expect(raiz()?.querySelector('[data-parte="activar"]')?.getAttribute("data-estado")).toBe("lista");
+    expect(raiz()?.querySelector(".cl-paso")?.getAttribute("data-parte")).toBe("proteger");
   });
 
   it("la activación queda pendiente y no entra en un minuto: el cupón quedó, y se puede seguir", async () => {
@@ -560,7 +563,7 @@ describe("un error en cada paso", () => {
     await pasa();
     expect(cf.cuenta.activarCuenta).toHaveBeenCalledTimes(1);
     expect(srv.s.canjes).toEqual([CODIGO]);
-    expect(raiz()?.querySelector('[data-parte="activar"]')?.getAttribute("data-estado")).toBe("lista");
+    expect(raiz()?.querySelector(".cl-paso")?.getAttribute("data-parte")).toBe("proteger");
   });
 });
 
@@ -711,7 +714,8 @@ describe("lo que no se negocia", () => {
     await cerrarElPaso();
     cf.estado.est = { ...cf.estado.est, activacion: "falta" };
     await abrir({ acceso: srv, cuenta: cf });
-    expect(textoDe()).toContain(t("altaActivarCupon"));
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(2);
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clBajada"));
     expect(principal().textContent).toBe(t("clActivarBoton"));
     principal().click();
     await pasa();
@@ -936,7 +940,7 @@ describe("con la wifi lenta de un stand", () => {
     // Y la lectura de después de activar, igual.
     await pasa(11_100);
     expect(alerta()).toBe("");
-    expect(raiz()?.querySelector('[data-parte="activar"]')?.getAttribute("data-estado")).toBe("lista");
+    expect(raiz()?.querySelector(".cl-paso")?.getAttribute("data-parte")).toBe("proteger");
   });
 
   it("el tope de una lectura del servidor sale de los dos de adentro, un segundo detrás", () => {

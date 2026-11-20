@@ -120,7 +120,7 @@ export function crearChip(e: EstadoCuenta, o: OpcionesDelChip): HTMLElement {
   }
 
   if (e.estado === "conectando" || e.estado === "retomando") {
-    const texto = tx(e.estado === "conectando" ? "connecting" : "cuentaRetomando");
+    const texto = tx(e.estado === "conectando" ? (e.terminando ? "loginTerminando" : "connecting") : "cuentaRetomando");
     el.classList.add("mini");
     el.setAttribute("role", "status");
     el.setAttribute("aria-busy", "true");

@@ -34,6 +34,8 @@ import {
   type Texto,
   type Vista,
   activarPermitido,
+  comoEntrada,
+  portadaDe,
   vistaDe,
 } from "./cuenta-lista-estado";
 import type { MotivoDelPago } from "../stellar/pago-con-saldo";
@@ -44,7 +46,6 @@ import { type Sondeo, vigilarPago } from "./pago-sondeo";
 import { MEDIOS_DE_PAGO, type MedioDePago, NO_SE_VENDE, type PanelDePago, faltaDe, textoDelErrorDeLaOrden, textoDelErrorDelPago } from "./pago-vista";
 import { recordarMedio } from "./medio-de-pago";
 import { soltarPantallaCompleta } from "./pantalla-completa";
-import { textoCuentaAlCambiar } from "./modo-ui";
 import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from "./proteger-cuenta";
 
 /**
@@ -60,8 +61,8 @@ import { SIN_RESPUESTA, cancelo, codigoMalo, conTope, mailOk, noPermitido } from
  * para usar un cupón con la cuenta ya activada y protegida, no hay nada a medias: «Volver» (y Escape) vuelven a la página.
  *
  * Es el único lugar que llama a la activación (`activarCuenta`, una prueba lo fija): cada voto cuesta, y sale solo del
- * toque de la persona en «Activar mi cuenta». Lo automático solo lee. Qué se ve en cada estado lo decide `vistaDe`
- * (`cuenta-lista-estado.ts`), sin DOM; esto lo pinta y corre las acciones.
+ * toque de la persona en Activar mi cuenta. Lo automático solo lee. Qué se ve en cada estado lo deciden `vistaDe` y
+ * `portadaDe` (`cuenta-lista-estado.ts`), sin DOM; esto lo pinta y corre las acciones.
  *
  * Lo de proteger reusa lo aprendido en «Protegé tu cuenta» (`proteger-cuenta.ts`): cerrar el cuadro del desbloqueo no
  * es una falla, el navegador que no lo deja abrir tiene su aviso, y una espera sin respuesta tiene tope y deja reintentar.
@@ -95,8 +96,6 @@ export interface OpcionesDelPaso {
   correo?: string | undefined;
   /** Entró con su correo y no con Google. */
   viaCorreo?: boolean | undefined;
-  /** La línea de quién entró («Entraste con Google como Ana.»). Como función, se arma en cada pintada: sigue al idioma. */
-  aviso?: string | (() => string | undefined) | undefined;
   /** A dónde vuelve el foco al cerrar. */
   volverA?: HTMLElement | null | undefined;
   /** Lo que hace el botón del final, dentro de su toque (pedir la pantalla completa, sellar). */
@@ -274,12 +273,12 @@ export function aceptarClicsDePrueba(si: boolean): void {
 
 const LLAMA =
   '<svg viewBox="-1 -3 24 28" aria-hidden="true"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg>';
-const TILDE = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const FOCO = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 /** La pantalla en la que el pie va pegado al contenido y no al borde (la misma condición que en `src/styles.css`). */
 const ANCHA = "(min-width: 760px) and (min-height: 481px)";
 
-const PRIORIDAD: Record<Para, number> = { entrada: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
+// El premio vale lo mismo que la entrada: se reemplazan entre sí, y el sello, el sorteo y la entrada con lista le ganan.
+const PRIORIDAD: Record<Para, number> = { entrada: 0, premio: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
 
 const vacio = (): EstadoOficial => ({ activacion: "no-se-sabe", proteccion: "no-se-sabe", correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null });
 
@@ -452,8 +451,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   let panelArmado: PanelArmado | null = null;
   /** El repintado del momento en que vence la nota que se está mostrando. */
   let relojDelVencimiento: ReturnType<typeof setTimeout> | null = null;
-  /** Más detalles de la caja, abierto por la persona: sigue abierto al repintar. */
-  let detallesAbiertos = false;
+  /** Cada pliegue recuerda por su resumen si está abierto, así uno no abre los demás al repintar. */
+  const detallesAbiertos = new Set<string>();
   /** El cupón guardado en la pestaña, como se muestra, o `null`. */
   const cuponEnMano = (): string | null => {
     try {
@@ -485,6 +484,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   };
   let relojLento: ReturnType<typeof setTimeout> | null = null;
   let tic: ReturnType<typeof setInterval> | null = null;
+  /** Los segundos del código que tenía la última pintada: el tic repinta al cruzar los 20 y los 30, aunque se atrase. */
+  let segundosPintados: number | null = null;
   let sondeoHasta = 0;
   let sondeo: ReturnType<typeof setTimeout> | null = null;
   /** El sondeo sin pedido ya terminó sin encontrarlo: no vuelve a empezar solo, sino con «Probar de nuevo». */
@@ -503,12 +504,15 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     `<div class="cl-barra"><span class="cl-marca">${LLAMA}<span class="cl-nombre">TINKAZO</span></span>` +
     `<span class="netbadge main cl-modo"></span>` +
     `<span class="cl-idiomas"><button type="button" class="cl-idioma" data-lang="es" lang="es">ES</button><button type="button" class="cl-idioma" data-lang="en" lang="en">EN</button></span></div>` +
-    `<div class="cl-cuerpo"><div class="cl-contenido"><div class="cl-cabeza"><p class="cl-quien"></p><h2 id="cl-titulo" class="cl-titulo" tabindex="-1"></h2><p id="cl-bajada" class="cl-bajada"></p></div>` +
+    `<div class="cl-cuerpo"><div class="cl-contenido"><div class="cl-cabeza">` +
+    `<h2 id="cl-titulo" class="cl-titulo" tabindex="-1"></h2><p id="cl-bajada" class="cl-bajada"></p></div>` +
     `<div class="cl-pasos"></div><div class="cl-notas"></div></div></div>` +
-    `<div class="cl-pie"><div class="cl-pie-dentro"><div class="cl-salidas"><div class="cl-salida-prueba"><button type="button" class="cl-texto cl-salida" data-salida="pasar-a-prueba"></button><p class="cl-cuenta-modo"></p></div><button type="button" class="cl-texto cl-salida" data-salida="cerrar-sesion"></button></div>` +
-    `<div class="cl-accion"><p class="cl-primer"></p><p class="cl-estado" role="status" aria-live="polite"></p><button type="button" class="cl-principal"></button><button type="button" class="cl-texto cl-volver"></button></div></div></div>`;
+    `<div class="cl-pie"><div class="cl-pie-dentro"><div class="cl-salidas"><div class="cl-salida-prueba">` +
+    `<button type="button" class="cl-texto cl-salida" data-salida="pasar-a-prueba"></button></div>` +
+    `<button type="button" class="cl-texto cl-salida" data-salida="cerrar-sesion"></button></div>` +
+    `<div class="cl-accion"><p class="cl-estado" role="status" aria-live="polite"></p>` +
+    `<button type="button" class="cl-principal"></button><button type="button" class="cl-texto cl-volver"></button></div></div></div>`;
   const $ = <T extends HTMLElement>(sel: string): T => raiz.querySelector(sel) as T;
-  const quien = $<HTMLParagraphElement>(".cl-quien");
   const titulo = $<HTMLHeadingElement>(".cl-titulo");
   const bajada = $<HTMLParagraphElement>(".cl-bajada");
   const pasos = $<HTMLDivElement>(".cl-pasos");
@@ -517,9 +521,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   const pie = $<HTMLDivElement>(".cl-pie-dentro");
   const salidasFila = $<HTMLDivElement>(".cl-salidas");
   const aPrueba = $<HTMLButtonElement>('[data-salida="pasar-a-prueba"]');
-  const avisoPrueba = $<HTMLParagraphElement>(".cl-cuenta-modo");
   const cerrarSes = $<HTMLButtonElement>('[data-salida="cerrar-sesion"]');
-  const primer = $<HTMLParagraphElement>(".cl-primer");
   const estado = $<HTMLParagraphElement>(".cl-estado");
   const principal = $<HTMLButtonElement>(".cl-principal");
   const volver = $<HTMLButtonElement>(".cl-volver");
@@ -669,20 +671,23 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   }
 
   /**
-   * Lo plegado de una caja, en Más detalles. Se arma de nuevo con cada pintada, así que se recuerda si la persona lo
-   * abrió: un repintado (el idioma, un aviso) no se lo cierra en la cara.
+   * Lo plegado de una caja, con su propio resumen. Se arma de nuevo con cada pintada, así que se recuerda por resumen
+   * si la persona lo abrió: un repintado no se lo cierra en la cara ni abre otro pliegue de la misma pantalla.
    */
-  function pliegue(xs: Texto[]): HTMLDetailsElement {
+  function pliegue(xs: Texto[], resumen = "pagoMasDetalles"): HTMLDetailsElement {
     const d = document.createElement("details");
     d.className = "mas cl-detalles";
-    d.open = detallesAbiertos;
+    d.open = detallesAbiertos.has(resumen);
     const s = document.createElement("summary");
     s.dataset.accion = "mas-detalles";
-    s.textContent = t("pagoMasDetalles");
+    // Cada pliegue se reconoce por su resumen: el foco vuelve a este y no al primero que se llame igual.
+    s.dataset.pliegue = resumen;
+    s.textContent = t(resumen);
     d.append(s);
     for (const x of xs) d.append(parrafo(x, "cl-texto-caja cl-ayuda"));
     d.addEventListener("toggle", () => {
-      detallesAbiertos = d.open;
+      if (d.open) detallesAbiertos.add(resumen);
+      else detallesAbiertos.delete(resumen);
     });
     return d;
   }
@@ -691,51 +696,57 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (cerrado) return;
     const antes = document.activeElement;
     const enfocado = antes instanceof HTMLElement && raiz.contains(antes) ? antes : null;
+    const enfocadoPliegue = enfocado ? (enfocado.dataset.pliegue ?? null) : null;
     const enfocadoAccion = enfocado ? (enfocado.dataset.accion ?? enfocado.dataset.salida ?? null) : null;
-    const v = vistaDe(entrada());
+    const deAhora = entrada();
+    const v = vistaDe(deAhora);
+    segundosPintados = deAhora.codigo?.segundos ?? null;
+    const portada = portadaDe(v);
     vistaActual = v;
 
     raiz.classList.toggle("cl-final", v.final);
     $<HTMLSpanElement>(".cl-modo").textContent = t("netMain");
     for (const b of raiz.querySelectorAll<HTMLButtonElement>(".cl-idioma")) b.setAttribute("aria-pressed", String(b.dataset.lang === getLang()));
-    const quienEntro = typeof op.aviso === "function" ? op.aviso() : op.aviso;
-    quien.textContent = quienEntro ?? "";
-    quien.hidden = !quienEntro;
-    titulo.textContent = t(v.titulo);
-    bajada.textContent = t(v.bajada);
+    titulo.textContent = t(portada.titulo);
+    bajada.replaceChildren();
+    if (portada.linea) {
+      // La línea conserva la negrita del correo o del cupón, sin anidar otro párrafo.
+      const p = parrafo(portada.linea);
+      bajada.append(...Array.from(p.childNodes));
+    }
+    bajada.hidden = !portada.linea;
 
     pasos.replaceChildren(
-      ...v.cajas.map((c) => {
+      ...portada.filas.map((c) => {
         const s = document.createElement("section");
         // El estado va en `data-estado`, no como clase: `.espera` y `.lista` ya son de otras piezas del sitio.
-        s.className = c.abierta ? "cl-paso cl-actual" : "cl-paso";
+        s.className = portada.forma === "uno" ? "cl-paso cl-actual cl-sola" : c.abierta ? "cl-paso cl-actual" : "cl-paso";
         s.dataset.parte = c.parte;
         s.dataset.estado = c.estado;
         if (c.ocupada) s.setAttribute("aria-busy", "true");
-        const cab = document.createElement("div");
-        cab.className = "cl-paso-cab";
-        const circulo = document.createElement("span");
-        circulo.className = "cl-circulo";
-        circulo.setAttribute("aria-hidden", "true");
-        if (c.estado === "lista") circulo.innerHTML = TILDE;
-        else circulo.textContent = c.estado === "no-salio" ? "!" : String(c.numero);
-        const h = document.createElement("h3");
-        h.className = "cl-paso-titulo";
-        const sr = document.createElement("span");
-        sr.className = "sr-only";
-        sr.textContent = `${t("clPasoSr").replace("{n}", String(c.numero))} `;
-        h.append(sr, t(c.titulo));
-        const palabra = document.createElement("span");
-        palabra.className = "cl-palabra";
-        // Sin palabra mientras algo corre: lo dice el botón, y el aro que gira en el círculo.
-        palabra.textContent = c.palabra ? t(c.palabra) : "";
-        palabra.hidden = !c.palabra;
-        cab.append(circulo, h, palabra);
-        s.append(cab);
-        if (!c.abierta) return s;
+        if (portada.forma === "dos") {
+          // Con dos pendientes, cada fila lleva solo su número y su título. La línea larga queda afuera.
+          const cab = document.createElement("div");
+          cab.className = "cl-paso-cab";
+          const circulo = document.createElement("span");
+          circulo.className = "cl-circulo";
+          circulo.setAttribute("aria-hidden", "true");
+          circulo.textContent = String(c.numero);
+          const h = document.createElement("h3");
+          h.className = "cl-paso-titulo";
+          const sr = document.createElement("span");
+          sr.className = "sr-only";
+          sr.textContent = `${t("clPasoSr").replace("{n}", String(c.numero))} `;
+          h.append(sr, t(c.titulo));
+          cab.append(circulo, h);
+          s.append(cab);
+        }
+        if (portada.forma === "dos" && !c.abierta) return s;
         const cuerpo = document.createElement("div");
         cuerpo.className = "cl-paso-cuerpo";
-        for (const x of c.textos) cuerpo.append(parrafo(x));
+        // La primera línea de la caja ya está debajo del título solo si la portada la usó. En la forma de dos no se repiten párrafos.
+        const textosDeLaCaja = portada.forma === "uno" ? (portada.linea ? c.textos.slice(1) : c.textos) : [];
+        for (const x of textosDeLaCaja) cuerpo.append(parrafo(x));
         if (c.nota) {
           const n = parrafo(c.nota, "cl-nota-caja");
           n.setAttribute("role", "status");
@@ -762,7 +773,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           const campo = c.campo === "codigo" ? campoCodigo : c.campo === "cupon" ? campoCupon : campoCorreo;
           etiqueta.htmlFor = campo.id;
           etiqueta.className = "cl-etiqueta";
-          etiqueta.textContent = t(c.campo === "codigo" ? "protCodeLabel" : c.campo === "cupon" ? "altaCuponLabel" : "protMailLabel");
+          etiqueta.textContent = t(c.campo === "codigo" ? "clCodigoLabel" : c.campo === "cupon" ? "altaCuponLabel" : "protMailLabel");
           if (c.campo === "correo") campoCorreo.placeholder = t("protMailLabel");
           campo.disabled = c.ocupada;
           form.append(etiqueta, campo);
@@ -791,23 +802,18 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
           cuerpo.append(form);
         }
         for (const sec of c.secundarios) {
-          if (sec.raya) {
-            const r = document.createElement("p");
-            r.className = "cl-raya";
-            r.textContent = t(sec.raya);
-            cuerpo.append(r);
-          }
           const b = boton(sec, sec.forma === "texto" ? "cl-texto" : "cl-secundario");
           b.addEventListener("click", (ev) => {
             if (!confiable(ev)) return;
             void hacer(sec.accion);
           });
           cuerpo.append(b);
-          if (sec.ayuda) cuerpo.append(parrafo(sec.ayuda, "cl-texto-caja cl-ayuda"));
+          if (sec.ayuda) cuerpo.append(pliegue([sec.ayuda], "clQueEsDesbloqueo"));
         }
-        for (const x of c.cierre ?? []) cuerpo.append(parrafo(x, "cl-texto-caja cl-ayuda cl-cierre"));
+        if (c.ayuda) cuerpo.append(pliegue([c.ayuda], "clQueEsDesbloqueo"));
+        if (c.cierre?.length) cuerpo.append(pliegue(c.cierre, "altaNoTengoResumen"));
         if (c.detalles?.length) cuerpo.append(pliegue(c.detalles));
-        s.append(cuerpo);
+        if (cuerpo.childNodes.length > 0) s.append(cuerpo);
         return s;
       }),
     );
@@ -825,9 +831,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     // El pie: la línea de estado, la principal, y las salidas. Si la línea dice lo mismo que la principal apagada
     // («Activando tu cuenta…»), se la oye pero no se la ve: una vez a la vista alcanza, y es el botón.
     estado.textContent = v.estado ? texto(v.estado) : "";
-    estado.classList.toggle("sr-only", !!v.estado && !!v.principal && v.principal.apagado && v.estado.clave === v.principal.clave);
-    primer.textContent = v.primerOficial ? t("firstOfficialBody") : "";
-    primer.hidden = !v.primerOficial;
+    const repitePrincipal = !!v.estado && !!v.principal && v.principal.apagado && v.estado.clave === v.principal.clave;
+    const soloLectura = v.estado?.clave === "clActivada" || v.estado?.clave === "clProtegida";
+    // Lo que ya se ve debajo del título tampoco se repite en el pie: queda solo para los lectores de pantalla.
+    const yaEnLaLinea = !!v.estado && portada.linea?.clave === v.estado.clave;
+    estado.classList.toggle("sr-only", repitePrincipal || soloLectura || yaEnLaLinea);
     const p = v.principal;
     principal.hidden = !p;
     if (p) {
@@ -845,8 +853,6 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
 
     salidasFila.hidden = !v.salidas;
     aPrueba.textContent = t("modeSwitchToTest");
-    avisoPrueba.hidden = !v.salidas?.prueba;
-    avisoPrueba.textContent = v.salidas?.prueba ? textoCuentaAlCambiar("mainnet", "testnet") : "";
     cerrarSes.textContent = t("acctSignOut");
     aPrueba.hidden = !v.salidas?.prueba;
     aPrueba.disabled = !!v.salidas?.prueba?.apagado;
@@ -859,15 +865,18 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     if (enfocado && (!document.activeElement || !raiz.contains(document.activeElement))) {
       // Un elemento que se volvió a poner (los «Copiar» del panel del pago) recupera el foco tal cual.
       const reusado = !!panelArmado && panelArmado.el.contains(enfocado) && enfocado.isConnected;
+      const porAccion = enfocadoAccion
+        ? raiz.querySelector<HTMLElement>(`[data-accion="${enfocadoAccion}"]:not([disabled]), [data-salida="${enfocadoAccion}"]:not([disabled])`)
+        : null;
       const de = reusado
         ? enfocado
         : enfocado === campoCodigo || enfocado === campoCorreo || enfocado === campoCupon
           ? enfocado.isConnected && !(enfocado as HTMLInputElement).disabled
             ? enfocado
             : null
-          : enfocadoAccion
-            ? raiz.querySelector<HTMLElement>(`[data-accion="${enfocadoAccion}"]:not([disabled]), [data-salida="${enfocadoAccion}"]:not([disabled])`)
-            : null;
+          : enfocadoPliegue
+            ? raiz.querySelector<HTMLElement>(`[data-pliegue="${enfocadoPliegue}"]`)
+            : porAccion;
       (de ?? (principal.disabled || principal.hidden ? titulo : principal)).focus({ preventScroll: true });
     }
     const corriendo = st.codigo && Date.now() - st.codigo.desde < (OTRO_CODIGO_S + 1) * 1000;
@@ -883,7 +892,11 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
   function alTic(): void {
     if (cerrado || !st.codigo) return;
     const s = Math.floor((Date.now() - st.codigo.desde) / 1000);
-    if (s === SPAM_S || s >= OTRO_CODIGO_S) return pintar();
+    // Si el intervalo se atrasa y salta de 19 a 21, también se cruzó el 20: se compara con lo que tenía la última pintada.
+    const antes = segundosPintados ?? s;
+    const cruzo = (marca: number): boolean => antes < marca && s >= marca;
+    // Pasada la ventana (31 segundos) se pinta una vez más: ahí se apaga el intervalo.
+    if (cruzo(SPAM_S) || cruzo(OTRO_CODIGO_S) || s > OTRO_CODIGO_S) return pintar();
     const b = raiz.querySelector<HTMLButtonElement>('[data-accion="otro-codigo"]');
     if (b && b.disabled) b.textContent = t("clOtroCodigoEn").replace("{s}", String(OTRO_CODIGO_S - s));
   }
@@ -942,7 +955,7 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       marcarCodigo(false);
       st.codigo = null;
       st.codigoRecargado = false;
-      if (antes.proteccion === "aparato-nuevo") st.aviso = e.activacion === "lista" ? `clAparatoListo${celular ? "Cel" : "Compu"}` : "clConfirmadoActivar";
+      if (antes.proteccion === "aparato-nuevo") st.aviso = `clAparatoListo${celular ? "Cel" : "Compu"}`;
       else st.aviso = "clProtegida";
     }
     if (e.proteccion !== "lista" && leerMarca() && !st.codigo) st.codigoRecargado = true;
@@ -1895,7 +1908,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "entrar-de-nuevo":
         return salir("entrar");
       case "seguir":
-        op.primerOficial?.marcar();
+        // El primer sello es de quien organiza: el paso del premio no lo da por visto.
+        if (op.para !== "premio") op.primerOficial?.marcar();
         cerrar(true);
         op.alSeguir?.();
         return;
@@ -2081,9 +2095,9 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       ev.preventDefault();
       ev.stopPropagation();
       if (vistaActual?.final || vistaActual?.volver) {
-        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar). Nunca sella ni sortea. Antes del final, solo
-        // cuando el paso se abrió para usar un cupón con la cuenta ya lista: ahí también es «Volver».
-        cerrar(op.para === "entrada");
+        // Al final, Escape es «Volver» (o «Seguir», si se abrió al entrar o para recibir un premio). Nunca sella ni sortea.
+        // Antes del final, solo cuando el paso se abrió para usar un cupón con la cuenta ya lista: ahí también es «Volver».
+        cerrar(comoEntrada(op.para));
         return;
       }
       (aPrueba.hidden || aPrueba.disabled ? cerrarSes : aPrueba).focus({ preventScroll: true });

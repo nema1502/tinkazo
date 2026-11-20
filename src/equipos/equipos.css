@@ -22,10 +22,9 @@
 
 .equipos-panel .ss-error { margin-top: 10px; font-weight: 700; font-size: 16px; line-height: 1.4; }
 .equipos-panel .ss-qr { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; }
-.equipos-panel .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto; }
+.equipos-panel .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto !important; aspect-ratio: 1; }
 .equipos-panel .ss-lado { flex: 1 1 220px; min-width: 0; }
 .equipos-panel .ss-estado { font-weight: 800; font-size: 16px; }
-.equipos-panel .ss-estado[data-estado="sondeo"] { color: var(--bad, #b3261e); }
 .equipos-panel .ss-cuenta { font-size: 28px; font-weight: 900; margin: 6px 0 4px; line-height: 1.15; }
 .eq-resumen { font-size: 16px; line-height: 1.4; margin: 0 0 12px; }
 .eq-acciones { margin: 14px 0 6px; gap: 8px; flex-wrap: wrap; }

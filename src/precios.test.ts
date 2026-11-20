@@ -36,8 +36,8 @@ describe("precios y el detalle plegado", () => {
         // Frase completa: arranca en mayúscula y cierra con punto.
         expect(texto[0], `${idioma} ${clave}`).toMatch(/[A-ZÁÉÍÓÚ]/u);
         expect(texto.endsWith("."), `${idioma} ${clave}`).toBe(true);
-        // Y dice de qué lado está: nunca cobra ni vende, o es gratis.
-        expect(texto, `${idioma} ${clave}`).toMatch(/nunca|gratis|never|free/i);
+        // Y dice de qué lado está: nunca cobra ni vende, es gratis, o el premio llega entero.
+        expect(texto, `${idioma} ${clave}`).toMatch(/nunca|gratis|entero|never|free|in full/i);
       }
     }
   });
