@@ -847,6 +847,14 @@ describe("el QR del espectador durante la espera", () => {
     expect(document.querySelector(".espera .espera-qr img")).toBeTruthy();
   });
 
+  it("la línea de la cuenta va pegada al reloj y el QR después: su leyenda no se lee junto con esa línea", async () => {
+    await abrirEspera(2, { nombres: ["Ana", "Beto", "Cami"], raffleId: 42n });
+    const orden = [...document.querySelectorAll<HTMLElement>(".espera > *")].map((el) => el.className.split(" ")[0]);
+    const reloj = orden.indexOf("espera-reloj");
+    expect(orden.slice(reloj, reloj + 3)).toEqual(["espera-reloj", "espera-sigue", "espera-t"]);
+    expect(orden.indexOf("espera-qr")).toBeGreaterThan(orden.indexOf("espera-t"));
+  });
+
   it("en la demo no hay QR: no es un sorteo real", async () => {
     history.replaceState(null, "", "/?demo=1");
     try {
@@ -934,5 +942,62 @@ describe("el QR del espectador durante la espera", () => {
     document.dispatchEvent(new CustomEvent("tinkazo:sello"));
     expect(pedidos()).toHaveLength(1);
     expect(pedidos()[0]?.datos).toMatchObject({ i: "42" });
+  });
+});
+
+/**
+ * La calcomanía de la sala dice Ya se puede sortear solo cuando hay que tocar Lanzar (la billetera propia). Si el sorteo
+ * arranca solo, o falla, sigue con Todavía nadie sabe quién gana: cambiarla unos segundos antes de que nazca el número
+ * decía algo falso.
+ */
+describe("la calcomanía de la sala cuando nace el número", () => {
+  /** Abre la espera con un sorteo que arranca solo (`aMano` falso) o que pide aprobarlo en la billetera (verdadero). */
+  async function abrirCon(aMano: boolean): Promise<{ nacioElNumero: () => void; sticker: HTMLElement; capa: HTMLElement }> {
+    const { mostrarEspera, nacioElNumero } = await import("./espera");
+    const { app } = await import("../state");
+    app.drawn = null;
+    app.frozen = { names: NOMBRES, listHash: "ab", ts: 1, at: "", prize: "Un premio", round: 1 };
+    app.game = "race";
+    mostrarEspera(() => 30, { sortear: vi.fn(), aMano: () => aMano, graba: false, juegos: (() => juegos()) as never, elegirJuego: vi.fn(), premios: () => 1 });
+    const capa = document.querySelector(".espera") as HTMLElement;
+    return { nacioElNumero, sticker: capa.querySelector(".sticker") as HTMLElement, capa };
+  }
+
+  it("con el sorteo que arranca solo, al pasar a Ya casi la calcomanía y el nombre de la capa no cambian", async () => {
+    const { T } = await import("../i18n");
+    const { nacioElNumero, sticker, capa } = await abrirCon(false);
+    nacioElNumero();
+    expect(capa.querySelector(".espera-sigue .cortina-t")?.textContent).toBe(T.es.cortinaNumero);
+    expect(sticker.textContent).toBe(T.es.espSticker);
+    expect(capa.getAttribute("aria-label")).toBe(T.es.espSticker);
+  });
+
+  it("si el sorteo falla y se ofrece reintentarlo, la calcomanía tampoco cambia", async () => {
+    const { T } = await import("../i18n");
+    const { nacioElNumero, sticker, capa } = await abrirCon(false);
+    nacioElNumero();
+    document.dispatchEvent(new CustomEvent("tinkazo:error", { detail: "Sin red", cancelable: true }));
+    expect(capa.querySelector(".espera-sigue .espera-motivo")?.textContent).toBe("Sin red");
+    expect(sticker.textContent).toBe(T.es.espSticker);
+    expect(capa.getAttribute("aria-label")).toBe(T.es.espSticker);
+  });
+
+  it("con la billetera propia, cuando hay que tocar Lanzar pasa a Ya se puede sortear", async () => {
+    const { T } = await import("../i18n");
+    const { nacioElNumero, sticker, capa } = await abrirCon(true);
+    expect(sticker.textContent).toBe(T.es.espSticker);
+    nacioElNumero();
+    expect(capa.querySelector(".espera-sigue .espera-accion")).not.toBeNull();
+    expect(sticker.textContent).toBe(T.es.espStickerYa);
+    expect(capa.getAttribute("aria-label")).toBe(T.es.espStickerYa);
+  });
+
+  it("con la fase de Lanzar, cambiar de idioma la deja en Ready to draw y no la vuelve atrás", async () => {
+    const { T, setLang } = await import("../i18n");
+    const { nacioElNumero, sticker, capa } = await abrirCon(true);
+    nacioElNumero();
+    setLang("en");
+    expect(sticker.textContent).toBe(T.en.espStickerYa);
+    expect(capa.getAttribute("aria-label")).toBe(T.en.espStickerYa);
   });
 });

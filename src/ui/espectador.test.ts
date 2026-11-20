@@ -340,6 +340,22 @@ describe("la espera del espectador", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(h.verDeNuevo).toHaveBeenCalledTimes(1);
   });
+
+  it("mientras cuenta la calcomanía dice En vivo y late, y al terminar deja de latir y el premio se esconde", async () => {
+    abrir(datos());
+    const sticker = capa().querySelector<HTMLElement>(".espera-top .sticker");
+    expect(sticker?.classList.contains("en-vivo")).toBe(true);
+    expect(sticker?.textContent).toBe(T.es.espVistaEspectador);
+    await vi.advanceTimersByTimeAsync(HASTA_EL_SHOW);
+    const alTerminar = h.jugar.mock.calls[0]?.[0] as () => void;
+    await vi.advanceTimersByTimeAsync(paceSeconds("normal") * 1000);
+    alTerminar();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(capa().querySelector(".espectador-ganadores")).not.toBeNull();
+    expect(sticker?.classList.contains("en-vivo")).toBe(false);
+    expect(sticker?.textContent).toBe(T.es.drawnDone);
+    expect(capa().querySelector<HTMLElement>(".espera-premio")?.hidden).toBe(true);
+  });
 });
 
 describe("el show se mira entero", () => {
@@ -570,6 +586,13 @@ describe("un enlace roto", () => {
     b?.click();
     expect(document.querySelector(".espectador")).toBeNull();
     expect(location.hash).toBe("");
+  });
+
+  it("no se nombra En vivo: la capa lleva el motivo, porque ahí no hay nada en vivo", () => {
+    history.replaceState(null, "", "/#espectador=roto");
+    avisarEnlaceRoto("es");
+    expect(capa().classList.contains("espectador-roto")).toBe(true);
+    expect(capa().getAttribute("aria-label")).toBe(T.es.espEnlaceRoto);
   });
 });
 

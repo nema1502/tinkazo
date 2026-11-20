@@ -7,7 +7,7 @@ import { RANGOS, SELECTOR, cabenLosPremios, rangoParaLeer } from "./recomendar";
 import { entradaDe } from "../games/pixi/kit/catalogo";
 import { QUEDA_MS, elegirAlAzar, enRueda, posiblesDe, type JuegoAzar } from "./azar";
 import { enEnsayo, sinGrabar } from "../ensayo-modo";
-import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
+import { pieDeLaEspera, pieSinGanador, sinSelloAhora } from "./sin-sello-textos";
 import { rechazarGrande } from "./vista-grande";
 import { soltarPantallaCompleta } from "./pantalla-completa";
 import { nombreDelEquipo, paraMostrar } from "../equipos/etiquetas";
@@ -288,6 +288,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   // Un Amigo secreto, con lo sellado si ya está: el orden que va a salir es el reparto entero (issue #99).
   const amigo = isSecretSanta(f.names.length, f.numWinners ?? sorteo.premios(), f.prize);
   const claveDelCartel = orden ? "espStickerOrden" : amigo ? "espStickerAmigo" : "espSticker";
+  // Un orden de turnos y un Amigo secreto no tienen quién gane: el pie y la línea de Nadie elige no hablan de ganar.
+  const sinGanador = orden || amigo;
   const back = document.createElement("div");
   back.className = "espera";
   back.setAttribute("role", "dialog");
@@ -315,21 +317,27 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
         : `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>`
       : "") +
     `<div class="espera-reloj mono">0:00</div>` +
+    // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error. Va pegado al reloj, igual
+    // que la línea de la cuenta: con el QR en el medio, la leyenda del QR y esta línea se leían como una sola frase
+    // (Escaneá y miralo en tu celular para que empiece), y al nacer el número el QR subía al lugar del reloj.
+    `<div class="espera-sigue" hidden></div>` +
+    `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
     // Los números públicos que van naciendo mientras se espera, con el contador de faltantes (issue #79, en freeze.ts).
     `<div class="espera-feed" hidden></div>` +
     // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show. Lleva solo el
     // enlace corto, que llega aparte (enlace-corto.ts): hasta entonces dice que se está preparando.
     (conEspectador ? figuraDelQrHtml() : "") +
-    // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error.
-    `<div class="espera-sigue" hidden></div>` +
-    `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
     `<div class="espera-nombres">${cintas(f.names)}</div>` +
     // Sin sello (la red no dejó sellar) no dice "sellada": la sala lo lee desde el fondo y no debe creer que se puede comprobar.
-    `<p class="espera-pie">${esc(pieDeLaEspera(getLang(), f.names.length, sinSelloAhora(f)))}</p>` +
-    // Para que la sala lo lea y quien organiza lo repita (diseño del onboarding, 22 de octubre de 2026).
-    `<p class="espera-nadie">${esc(t("espNadie"))}</p>` +
-    // El número del sorteo, para las fotos de la sala: si después aparece otro sello, todos tienen el del bueno.
-    (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitId").replace("{n}", String(f.raffleId)))}</p>` : "") +
+    `<p class="espera-pie">${esc(
+      sinGanador ? pieSinGanador(getLang(), f.names.length, sinSelloAhora(f)) : pieDeLaEspera(getLang(), f.names.length, sinSelloAhora(f)),
+    )}</p>` +
+    // Desde el 20 de noviembre de 2026 la sala no la ve (el CSS la esconde): lo dice el pie, y una frase de confianza
+    // por pantalla alcanza. Queda en el código para que su lugar y su texto sigan siendo los del celular de quien mira.
+    `<p class="espera-nadie">${esc(t(sinGanador ? "espNadieSinGanador" : "espNadie"))}</p>` +
+    // El número del sorteo, para las fotos de la sala: si después aparece otro sello, todos tienen el del bueno. Solo el
+    // número, sin pedir que lo anoten: se lee igual desde el fondo y sale en las fotos.
+    (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitIdPagina").replace("{n}", String(f.raffleId)))}</p>` : "") +
     // El juego, para la sala y para quien organiza: el selector queda detrás de esta capa.
     juegoHtml(juegos, "flujo") +
     panelDeJuegosHtml(juegos, f.names.length);
@@ -386,6 +394,9 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   /** El botón que se ve ahora: de las dos filas, el CSS muestra una. */
   const botonJuego = (): HTMLButtonElement | undefined => botonesJuego.find((b) => b.offsetParent !== null) ?? botonesJuego[0];
   let fase: Fase = "cuenta";
+  // La calcomanía dice Ya se puede sortear solo cuando de verdad hay que tocar Lanzar (la billetera propia). Mientras el
+  // sorteo arranca solo o falla sigue con lo de la cuenta: unos segundos antes de que nazca el número sería falso.
+  let listo = false;
   let timer = 0;
   let ultimoTic = -1;
 
@@ -393,7 +404,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const premioLinea = back.querySelector<HTMLElement>(".espera-premio");
   onLangChange(() => {
     if (!back.isConnected) return;
-    const clave = fase === "cuenta" ? claveDelCartel : "espStickerYa";
+    const clave = listo ? "espStickerYa" : claveDelCartel;
     if (sticker) sticker.textContent = t(clave);
     back.setAttribute("aria-label", t(clave));
     if (premioLinea) premioLinea.innerHTML = orden ? esc(t("cortinaSeOrden")) : `${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b>`;
@@ -700,8 +711,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   /** Pasa a otra fase: la cuenta y su línea dejan su lugar a lo que sigue, con el mismo alto (los nombres no saltan). */
   const pasar = (a: Fase, html: string): void => {
     fase = a;
-    if (sticker) sticker.textContent = t("espStickerYa");
-    back.setAttribute("aria-label", t("espStickerYa"));
+    if (a === "lanzar") {
+      listo = true;
+      if (sticker) sticker.textContent = t("espStickerYa");
+      back.setAttribute("aria-label", t("espStickerYa"));
+    }
     // El juego ya no se cambia: el sorteo arranca (o falló, y se reintenta con el que estaba).
     if (a === "sorteando" || a === "fallo") {
       cerrarJuegos(false);
@@ -763,7 +777,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   // El sello entró tarde (el reintento de "Seguir sin sello", `freeze.ts`): el pie deja de decir que no se puede comprobar.
   const alSello = (): void => {
     const pie = back.querySelector<HTMLElement>(".espera-pie");
-    if (pie && app.frozen) pie.textContent = pieDeLaEspera(getLang(), app.frozen.names.length, sinSelloAhora(app.frozen));
+    const pieDe = sinGanador ? pieSinGanador : pieDeLaEspera;
+    if (pie && app.frozen) pie.textContent = pieDe(getLang(), app.frozen.names.length, sinSelloAhora(app.frozen));
     // Ahora el sorteo está sellado: el enlace del espectador lleva su número, y el celular espera lo grabado como la sala.
     armarQr();
   };

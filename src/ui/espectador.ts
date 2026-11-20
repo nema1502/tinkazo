@@ -184,7 +184,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   capa.setAttribute("aria-label", t("espVistaEspectador"));
   capa.tabIndex = -1;
   capa.innerHTML =
-    `<div class="espera-top"><span class="sticker">${esc(t("espVistaEspectador"))}</span>` +
+    // La calcomanía dice En vivo con un punto que late (el CSS lo dibuja): que lo que se ve pasa ahora en la sala.
+    `<div class="espera-top"><span class="sticker en-vivo">${esc(t("espVistaEspectador"))}</span>` +
     // En Prueba la sala ve en qué modo está el sorteo, y el celular también.
     (hayModoOficial && datos.net === "testnet" ? `<span class="espera-prueba">${esc(t("netTest"))}</span>` : "") +
     `</div>` +
@@ -195,7 +196,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     // Lo que pasa cuando nace el número: la línea de lo que se espera, el error con su reintento o el resultado.
     `<div class="espera-sigue" hidden></div>` +
     `<div class="espera-nombres">${cintas(datos.n)}</div>` +
-    `<p class="espera-nadie">${esc(t("espNadie"))}</p>` +
+    // Un orden de turnos no tiene quién gane: la línea de confianza no habla de ganar.
+    `<p class="espera-nadie">${esc(t(orden ? "espNadieSinGanador" : "espNadie"))}</p>` +
     `<p class="espera-id mono">${esc(t("waitIdPagina").replace("{n}", datos.i))}</p>`;
   document.body.appendChild(capa);
   capa.focus({ preventScroll: true });
@@ -273,9 +275,11 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     document.getElementById("st-skip")?.removeAttribute("hidden");
     const d = app.drawn;
     if (!d) return;
+    // Ya no pasa nada en vivo: el punto deja de latir, y el premio que se sorteaba deja su lugar a quién salió.
+    sticker?.classList.remove("en-vivo");
     if (sticker) sticker.textContent = t("drawnDone");
     capa.setAttribute("aria-label", t("pantallaT"));
-    for (const el of capa.querySelectorAll<HTMLElement>(".espera-nombres, .espera-lectura")) el.hidden = true;
+    for (const el of capa.querySelectorAll<HTMLElement>(".espera-premio, .espera-nombres, .espera-lectura")) el.hidden = true;
     const nombres = nombresDeGanadores(datos, d.winners);
     pasar(
       `<p class="espectador-fin-t">${esc(t("pantallaT"))}</p>` +
@@ -681,7 +685,8 @@ export function avisarEnlaceRoto(lang: Lang = getLang()): void {
   capa.className = "espera espectador espectador-roto";
   capa.setAttribute("role", "dialog");
   capa.setAttribute("aria-modal", "true");
-  capa.setAttribute("aria-label", t("espVistaEspectador"));
+  // Acá no hay nada en vivo: la capa se nombra por lo que pasó y la calcomanía En vivo la esconde el CSS.
+  capa.setAttribute("aria-label", t("espEnlaceRoto"));
   capa.tabIndex = -1;
   capa.innerHTML =
     `<div class="espera-top"><span class="sticker">${esc(t("espVistaEspectador"))}</span></div>` +

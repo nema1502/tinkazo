@@ -260,6 +260,17 @@ function frase(clave: string, args: readonly number[] = []): string {
 const premiosElegidos = (n: number): number => Math.min(ganadoresPedidos(), Math.max(1, n));
 
 /**
+ * La clave de la línea bajo la cuenta. Sin sello manda: dice que no se puede comprobar. Con sello, un orden de turnos o un
+ * Amigo secreto no tienen quién gane: dicen que nadie elige el número, como la espera en grande en esos dos modos.
+ */
+function claveDeLaLinea(): string {
+  const f = app.frozen;
+  const ganadores = f ? (f.numWinners ?? premiosElegidos(f.names.length)) : 0;
+  const sinGanador = !!f && (isTurnOrder(f.names.length, ganadores, f.prize) || isSecretSanta(f.names.length, ganadores, f.prize));
+  return sinGanador && !sinSelloAhora(f) ? "espNadieSinGanador" : claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen));
+}
+
+/**
  * El premio que se lee de los campos: con más de un ganador, los lugares armados en un solo texto (`premioActual` de
  * `premios.ts`). Las pruebas de la red y del sello reemplazan `premios.ts` con lo que usaban antes: ahí, y si el
  * módulo no baja, la lectura es la de siempre, el cuadro único.
@@ -581,6 +592,27 @@ export interface NumeroVisto {
 /** Cuántas fichas de números quedan a la vista: las últimas nacidas, no la fila entera. */
 export const NUMEROS_EN_PANTALLA = 12;
 
+/**
+ * La fila de números públicos de la espera (issue #79) queda en el código y apagada desde el 20 de noviembre de 2026:
+ * quien organizaba no entendió qué era faltan 13 números, y la fila repetía el reloj en otra unidad. Apagada no se arma
+ * la fila ni se le pide a la red cada número intermedio. Se prende con `?numeros=1` en el enlace (una charla, alguien
+ * que quiere ver de dónde sale el número) o cambiando esta constante, y `?numeros=0` la apaga aunque esté prendida.
+ */
+export const NUMEROS_PRENDIDOS = false;
+let numerosForzados: boolean | null = null;
+/** Para las pruebas: `true` la prende, `false` la apaga y `null` vuelve a lo que trae el sitio. */
+export function forzarNumeros(v: boolean | null): void {
+  numerosForzados = v;
+}
+/** Si la espera muestra la fila de números: lo que fuerce una prueba, si no el enlace, si no la constante. */
+export function numerosALaVista(): boolean {
+  if (numerosForzados !== null) return numerosForzados;
+  const q = params.get("numeros");
+  if (q === "1") return true;
+  if (q === "0") return false;
+  return NUMEROS_PRENDIDOS;
+}
+
 /** Esperas con demasiadas rondas de por medio no muestran números: cientos de fichas por un sorteo retomado de la memoria no entran en pantalla. */
 const RONDAS_DE_ALCANCE = 40;
 
@@ -672,13 +704,17 @@ export function pintarNumerosVistos(caja: HTMLElement | null, vistos: NumeroVist
   caja.textContent = "";
   const faltan = faltanParaLaRonda(vistos, elegida) ?? inicial;
   const fila = document.createElement("p");
-  fila.style.cssText = "margin:0;font-family:ui-monospace,Consolas,monospace;font-size:13px;opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;";
+  // Letra de 16 px como mínimo en la página, y en la espera en grande la misma que el resto de la sala.
+  const letra = caja.classList.contains("espera-feed") ? "calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1))" : "16px";
+  // Las fichas en fila flexible: la separación es el hueco de la fila, sin ningún signo entre una y otra.
+  fila.style.cssText =
+    "margin:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-family:ui-monospace,Consolas,monospace;" +
+    `font-size:${letra};opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;`;
   for (const visto of vistos.slice(-NUMEROS_EN_PANTALLA)) {
-    // Entre ficha y ficha, un espacio (para que la fila se corte ahí) y un margen que las separa a la vista.
-    const despues = fila.childNodes.length > 0;
-    if (despues) fila.append(document.createTextNode(" "));
+    // Un espacio entre ficha y ficha para quien lee el texto (el lector de pantalla, una copia): en la fila flexible
+    // no se dibuja, la separación la da el hueco.
+    if (fila.childNodes.length > 0) fila.append(document.createTextNode(" "));
     const chip = document.createElement("span");
-    if (despues) chip.style.marginLeft = "0.6em";
     chip.textContent = `#${visto.round} ${visto.hex}`;
     fila.append(chip);
   }
@@ -704,7 +740,7 @@ function pintarFeed(): void {
   pintarNumerosVistos(grande, feed.vistos, feed.elegida, feed.inicial);
 }
 
-/** Se acabó la espera: se corta el pedido en vuelo y las cajas quedan vacías, para que el «Ya salió el número» hable solo. */
+/** Se acabó la espera: se corta el pedido en vuelo y las cajas quedan vacías, para que el Ya se puede sortear hable solo. */
 function pararFeed(): void {
   feedSeñal?.abort();
   feedSeñal = null;
@@ -764,6 +800,8 @@ function startCountdown(): void {
   // El "Ya se sorteó" del sorteo anterior (draw.ts) no sigue: ahora escribe la cuenta.
   if (left) delete left.dataset.i;
   const line = box?.querySelector(".wait-line");
+  // Empieza en: a la vista mientras falta, escondido cuando el número ya salió (ahí cualquiera podría calcularlo).
+  const rotulo = box?.querySelector<HTMLElement>('[data-i="waitTitle"]');
   const grande = document.getElementById("btn-espera");
   if (grande) {
     grande.onclick = () => abrirEspera();
@@ -775,9 +813,14 @@ function startCountdown(): void {
     grandePendiente = false;
     abrirEspera(true);
   }
-  if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
-  // La fila de números públicos que van naciendo mientras se espera (issue #79): no hay en el modo stand.
-  if (app.frozen && !enStand()) armarFeed(app.frozen);
+  // El número de la ronda se sigue escribiendo (varias pruebas lo leen), escondido mientras la fila de números esté apagada.
+  if (num && app.frozen) {
+    num.textContent = `#${app.frozen.round}`;
+    num.hidden = !numerosALaVista();
+  }
+  // La fila de números públicos que van naciendo mientras se espera (issue #79): no hay en el modo stand, y apagada no
+  // se arma ni le pregunta a la red por cada número intermedio.
+  if (app.frozen && !enStand() && numerosALaVista()) armarFeed(app.frozen);
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se
   // levanta el worker que va a verificar la firma (la portada no lo carga).
   // Anclado, también la curva en la página: el contrato pide la firma
@@ -820,9 +863,10 @@ function startCountdown(): void {
       }
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
+      if (rotulo) rotulo.hidden = false;
       if (left) left.textContent = reloj;
       // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
-      if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
+      if (line) line.textContent = t(claveDeLaLinea());
       // El tic del feed de números: pregunta por la ronda que toca, junta la que nació y redibuja.
       if (feed) void ticDeLaEspera(feed, { pintar: pintarFeed, señal: feedSeñal?.signal });
     } else {
@@ -840,6 +884,7 @@ function startCountdown(): void {
       // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
+      if (rotulo) rotulo.hidden = true;
       if (line) line.textContent = "";
       if (grande) grande.style.display = "none";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
@@ -1885,7 +1930,12 @@ function textosDelSello(): void {
     titulo.dataset.i = "standListaT";
     titulo.textContent = t("standListaT");
   }
-  ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
+  // La línea bajo la cuenta, con la clave en data-i para que el cambio de idioma la repinte igual.
+  const linea = document.querySelector<HTMLElement>("#wait-box .wait-line");
+  if (linea) {
+    linea.dataset.i = claveDeLaLinea();
+    linea.textContent = t(linea.dataset.i);
+  }
 }
 
 /**
