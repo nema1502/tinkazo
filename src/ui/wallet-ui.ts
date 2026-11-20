@@ -265,15 +265,9 @@ function cuentaEnElOtroModo(): NetworkName | null {
 }
 
 /** El nombre visible del otro modo, con la frase de la cuenta abierta y la del botón para ir. */
-function textoDelOtroModo(destino: NetworkName): { linea: string; boton: string; chip: string; aria: string } {
+function textoDelOtroModo(destino: NetworkName): { linea: string; boton: string } {
   const modo = t(modeNameKey(destino));
-  const linea = t("cuentaOtroModo").replace("{modo}", modo);
-  return {
-    linea,
-    boton: t("cuentaOtroModoIr").replace("{modo}", modo),
-    chip: t("cuentaOtroModoChip").replace("{modo}", modo),
-    aria: `${linea} ${t("cuentaOtroModoIr").replace("{modo}", modo)}`,
-  };
+  return { linea: t("cuentaOtroModo").replace("{modo}", modo), boton: t("cuentaOtroModoIr").replace("{modo}", modo) };
 }
 
 /** El navegador de una app, donde Google no deja entrar (src/navegador.ts). */
@@ -724,21 +718,14 @@ function pintarCuenta(): void {
     box.appendChild(net);
   }
 
-  const destinoOtroModo = e.estado === "fuera" ? cuentaEnElOtroModo() : null;
-  const chip = crearChip(e, {
-    tx: t,
-    recien: recienEntro,
-    ...(destinoOtroModo ? { enOtroModo: { texto: textoDelOtroModo(destinoOtroModo).chip, aria: textoDelOtroModo(destinoOtroModo).aria } } : {}),
-  });
+  const chip = crearChip(e, { tx: t, recien: recienEntro });
   if (e.estado === "dentro" && session) {
     // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
     chip.title = `${session.label}: ${session.address}`;
     chip.addEventListener("click", () => void showAccount());
-  } else if (destinoOtroModo) {
-    // La cuenta quedó abierta en el otro modo: tocar el chip manda para allá, y la página de allá retoma la sesión sola.
-    chip.addEventListener("click", () => void import("./modo-ui").then((m) => m.pasarAModo(destinoOtroModo)));
   } else if (e.estado === "fuera") {
-    // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
+    // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla. También con la
+    // cuenta abierta en el otro modo: quien está acá puede querer entrar acá, y la puerta del sorteo ofrece ir al otro.
     chip.addEventListener("click", () => void openPicker({ volverA: chip }));
   }
   box.appendChild(chip);
@@ -824,8 +811,8 @@ function applyGate(): void {
   const teniaElFoco = gate.contains(document.activeElement);
   gate.replaceChildren();
   const p = document.createElement("p");
-  // Retomando o conectando no se ofrece nada; y si la cuenta quedó abierta en el otro modo, la puerta la nombra:
-  // en vez de pedir entrar como si nunca hubiera entrado, dice dónde está y pone el botón para ir.
+  // Retomando o conectando no se ofrece nada; y si la cuenta quedó abierta en el otro modo, la puerta lo dice en su
+  // línea: Entrar sigue primero, con el foco, y el botón para ir al otro modo queda segundo, como un enlace.
   const ocupada = retomando || conectando;
   p.textContent = destino
     ? textoDelOtroModo(destino).linea
@@ -842,12 +829,20 @@ function applyGate(): void {
     if (teniaElFoco || sinFoco()) b.focus({ preventScroll: true });
   }
   if (!ocupada) {
-    const ir = destino
-      ? button(textoDelOtroModo(destino).boton, "ghost", () => void import("./modo-ui").then((m) => m.pasarAModo(destino)))
-      : button(t("cuentaPideEntrar"), "ghost", () => void entrar());
+    const ir = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
     ir.type = "button";
     gate.appendChild(ir);
-    if (teniaElFoco) ir.focus({ preventScroll: true });
+    if (destino) {
+      // El segundo botón, secundario: lleva al otro modo, y la página de allá retoma la sesión sola.
+      const otro = document.createElement("button");
+      otro.type = "button";
+      otro.className = "enlace";
+      otro.textContent = textoDelOtroModo(destino).boton;
+      otro.addEventListener("click", () => void import("./modo-ui").then((m) => m.pasarAModo(destino)));
+      gate.appendChild(otro);
+    }
+    // Con la cuenta en el otro modo, Entrar toma el foco si nadie lo tiene: es lo primero que se ofrece.
+    if (teniaElFoco || (destino && sinFoco())) ir.focus({ preventScroll: true });
   }
   gate.style.display = "";
 }
