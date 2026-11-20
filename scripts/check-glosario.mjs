@@ -5,7 +5,8 @@
  * Recorre los textos en español de `src/i18n.ts` y de los HTML de la raíz (sin
  * `historia.html`, donde las palabras de acá son el tema) y falla si aparece
  * alguna de las que `scripts/lib/glosario-neutral.json` manda evitar. Los
- * nombres de los juegos se borran antes de mirar. El voseo se mantiene: lo que
+ * nombres de los juegos y las frases de los stickers (que son parte de su dibujo)
+ * se borran antes de mirar. El voseo se mantiene: lo que
  * se pide neutral es el vocabulario cotidiano.
  *
  * Sin Chrome ni red. La lista se completa en el JSON. Una
@@ -31,6 +32,8 @@ const raiz = resolve(opt("--raiz", join(aqui, "..")));
 const glosario = JSON.parse(readFileSync(resolve(opt("--glosario", join(aqui, "lib", "glosario-neutral.json"))), "utf8"));
 const entradas = compilar(glosario);
 const exentas = new Set(glosario.paginasExentas ?? []);
+/** Lo que se escribe tal cual y no se mira: los nombres de los juegos y las frases de los stickers. */
+const propios = [...(glosario.nombresDeJuegos ?? []), ...(glosario.frasesDeStickers ?? [])];
 const verTodo = args.includes("--todo");
 
 /** Cada archivo con sus textos en español. */
@@ -51,7 +54,7 @@ const checks = [];
 let activas = 0;
 let aAvisar = 0;
 for (const { archivo, textos } of fuentes) {
-  const faltas = buscarFaltas(textos, entradas, glosario.nombresDeJuegos ?? []);
+  const faltas = buscarFaltas(textos, entradas, propios);
   const falla = faltas.filter((f) => f.estado !== "avisar");
   const aviso = faltas.filter((f) => f.estado === "avisar");
   activas += falla.length;

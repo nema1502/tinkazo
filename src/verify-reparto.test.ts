@@ -49,6 +49,7 @@ describe("la lista de la verificación con sufijos", () => {
   });
 
   it("una lista que no es un reparto entero: cada línea tal cual, como siempre", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { renderList } = await montar();
     // «Grupo (1/2)» puede ser solo un nombre: una línea sin sufijo rompe el reparto.
     renderList({ names: ["Grupo (1/2)", "Grupo (2/2)", "Otro"] } as never);
@@ -100,7 +101,8 @@ describe("la lista de la verificación con sufijos", () => {
     expect(filas()[2]?.textContent).toContain("2 participaciones");
   });
 
-  it("la misma lista sin parámetro y sin bandera no agrupa: siete renglones", async () => {
+  it("la misma lista con la bandera apagada a propósito no agrupa: siete renglones", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { renderList } = await montar();
     renderList({ names: ["Ana (1/3)", "Ana (2/3)", "Ana (3/3)", "Beto", "Carla (1/2)", "Carla (2/2)", "Dana"] } as never);
     // Sin el parámetro, una lista con líneas sin sufijo no es un reparto entero: línea por línea.
@@ -196,7 +198,8 @@ describe("la lista de la verificación con sufijos", () => {
     expect(document.getElementById("v-winners")?.textContent).not.toContain("(2/2)");
   });
 
-  it("un orden común con nombres que parecen sufijos, sin modo en el enlace, se muestra tal cual", async () => {
+  it("un orden común con nombres que parecen sufijos, con la bandera apagada y sin modo en el enlace, se muestra tal cual", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     const { renderList, renderResult } = await montar();
     const names = ["Grupo 4 (1/2)", "Grupo 4 (2/2)", "Otro"];
     renderList({ names } as never);
@@ -208,7 +211,8 @@ describe("la lista de la verificación con sufijos", () => {
     expect(turnos).toEqual(["Otro", "Grupo 4 (1/2)", "Grupo 4 (2/2)"]);
   });
 
-  it("un orden sellado sin los modos lleva el enlace de siempre, y su verificación muestra las líneas tal cual", async () => {
+  it("un orden sellado con los modos apagados lleva el enlace de siempre, y su verificación muestra las líneas tal cual", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     // «Turnos de exposición» sin bandera ni parámetro: el enlace se arma con el modo que decide la herramienta.
     const { modoDelComprobante } = await import("./modos/turnos");
     const { withMode } = await import("./modos/bandera");

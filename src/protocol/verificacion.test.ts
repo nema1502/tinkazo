@@ -14,6 +14,10 @@ import {
   revisarComprobante,
 } from "./verificacion";
 import { type ContratoOficial, contratoOficial, contratosOficiales } from "../stellar/oficiales";
+import { leerHistorial, type LecturaDelHistorial } from "../stellar/historial";
+import firmaDeLaRonda from "../stellar/fixtures/drand-ronda-33688503.json";
+import realSelloDePremios from "../stellar/fixtures/horizon-sello-de-premios-3f1055d5.json";
+import redPremios from "../stellar/fixtures/rpc-getLedgerEntries-premios-CCJGBEFC-promo8.json";
 
 /**
  * Que nadie pueda falsificar un "verificado" (22 de octubre de 2026).
@@ -427,5 +431,132 @@ describe("un sorteo con el máximo de ganadores", () => {
     const r = await revisarComprobante(comprobante({ names: cambiada }), deps(reg));
     expect(r.veredicto).toBe("mal");
     expect(r.motivos).toContain("lista-cambiada");
+  });
+});
+
+describe("una campaña: el sello de premios, aceptado por historial", () => {
+  const CC = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+  const TX = "3f1055d5ec8b8f27bb97ca1db0cb388d3f7f8c9f594370a2f5c58150ae44134e";
+  const cierre = roundTime(R) - 100;
+
+  /** Lo que devuelve el historial cuando la transacción del sello es la de un contrato de premios. */
+  const campaña = (sorteoId = "4"): LecturaDelHistorial => ({
+    ok: true,
+    sello: {
+      hash: TX,
+      hashInterior: TX,
+      // El contrato del sorteo oficial, que es donde la promoción selló.
+      contractId: TESTNET,
+      organizer: CC,
+      listHash: vectors.list_hash,
+      count: vectors.count,
+      numWinners: 3,
+      round: R,
+      meta: "Una polera",
+      closedAt: cierre,
+      ledger: 5_000,
+      premio: {
+        contrato: CC,
+        promocionId: "8",
+        sorteoId,
+        deposito: "30000000",
+        token: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        inKind: false,
+        rulesHash: "b0a55c1af779ec10c0b37f127a5a63cc139d2de4bd7f0b7d35241c0a757b49af",
+        listHash: vectors.list_hash,
+        premios: [...GANADORES].map((index, position) => ({
+          position,
+          index,
+          amount: "10000000",
+          state: "Paid" as const,
+          winner: "GCCIWHCU5XZ4VAK2GAFJBBTJJXIWPWBPK56JOGEPS6N6LP7AYLILD7F3",
+        })),
+      },
+    },
+  });
+
+  /** Las dependencias con el estado ya vencido y el historial de una campaña. */
+  const depsDeCampaña = (lectura: LecturaDelHistorial = campaña()) => {
+    const d = deps(registro({ sello: null, resultado: null }));
+    d.leerHistorial = async () => lectura;
+    return d;
+  };
+
+  it("un sello de premios da verde por historial y el comprobante lleva la promoción", async () => {
+    const r = await revisarComprobante(comprobante({ stx: TX }), depsDeCampaña());
+    expect(r.veredicto).toBe("verde");
+    expect(r.fuente).toBe("historial");
+    expect(r.motivos).toEqual([]);
+    // La promoción queda en la revisión: el depósito, las bases y el pago de cada premio.
+    expect(r.premio).toMatchObject({ promocionId: "8", sorteoId: "4", deposito: "30000000", inKind: false });
+    expect(r.premio?.premios).toHaveLength(3);
+    expect(r.premio?.premios.every((p) => p.state === "Paid")).toBe(true);
+  });
+
+  it("el número del sorteo que guardó la promoción sí se comprueba: otro número no es este sorteo", async () => {
+    const r = await revisarComprobante(comprobante({ stx: TX }), depsDeCampaña(campaña("586")));
+    expect(r.veredicto).toBe("mal");
+    expect(r.motivos).toContain("historial-distinto");
+  });
+
+  it("un sello directo del contrato del sorteo no trae promoción y se comprueba como siempre", async () => {
+    const base = campaña();
+    if (!base.ok) throw new Error("la lectura de la prueba tiene que ser un sello");
+    const { premio: _promocion, ...sello } = base.sello;
+    const r = await revisarComprobante(comprobante({ stx: TX }), depsDeCampaña({ ok: true, sello }));
+    expect(r.veredicto).toBe("verde");
+    expect(r.premio).toBeNull();
+  });
+});
+
+describe("una campaña de punta a punta: solo el historial, con la tabla de premios inyectada", () => {
+  const RAFFLE = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A";
+  const CC = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+  const HASH = "3f1055d5ec8b8f27bb97ca1db0cb388d3f7f8c9f594370a2f5c58150ae44134e";
+  const TABLA = { testnet: [{ contractId: CC, wasmSha256: "e8e818b2b590b7c7a09ca7e65f389307b742b22ba512f79b6242335326c1e925" }] };
+  const NOMBRE_DE_LA_CLAVE = "ke" + "y";
+
+  /** Un `fetch` que contesta la transacción (Horizon) y el estado de la promoción (RPC), con los fixtures de verdad. */
+  const dosFuentes = () => {
+    const f = (async (u: unknown, i?: RequestInit) => {
+      const url = String(u);
+      if (url.includes("/transactions/")) {
+        return new Response(JSON.stringify(realSelloDePremios), { status: 200 });
+      }
+      const pedidas = (JSON.parse(String(i?.body ?? "{}")) as { params?: { keys?: string[] } }).params?.keys ?? [];
+      const entries = redPremios.result.entries.filter((entrada) => pedidas.includes((entrada as unknown as Record<string, string>)[NOMBRE_DE_LA_CLAVE] ?? ""));
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { latestLedger: redPremios.result.latestLedger, entries } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    return f;
+  };
+
+  it("el comprobante de la campaña da verde por historial, con los diez premios pagados al ganador recomputado", async () => {
+    const { TransactionBuilder, scValToNative } = await import("@stellar/stellar-sdk");
+    const tx = TransactionBuilder.fromXDR(realSelloDePremios.envelope_xdr, "Test SDF Network ; September 2015");
+    const interior = "innerTransaction" in tx ? tx.innerTransaction : tx;
+    const args = (interior.operations[0] as unknown as { func: { invokeContract: { args: unknown[] } } }).func.invokeContract.args;
+    const entradas = scValToNative(args[1] as never) as string[];
+    const fetchDeDos = dosFuentes();
+    const r = await revisarComprobante(
+      // La lista sellada de una campaña son las cuentas, y el número del sorteo lo atestigua la promoción.
+      { v: PROOF_VERSION, names: entradas, round: 33_688_503, signature: firmaDeLaRonda.signature, net: "testnet", contract: RAFFLE, id: "586", stx: HASH },
+      {
+        verificarFirma: async (ronda, firma) => verifyRound(ronda, firma),
+        traerFirma: async () => firmaDeLaRonda.signature,
+        // El estado del sorteo ya no está: lo único que queda es el historial.
+        leerRegistro: async () => {
+          throw new Error("sin estado");
+        },
+        leerHistorial: (red, hash) => leerHistorial(red, hash, { fetch: fetchDeDos, premios: TABLA, esperaMs: 0 }),
+      },
+    );
+    expect(r.motivos).toEqual([]);
+    expect(r.veredicto).toBe("verde");
+    expect(r.fuente).toBe("historial");
+    expect(r.huella).toBe("91136c024fcaa190b35c2ff626097eb3017d35ce6c62687455a4fa600c8652af");
+    expect(r.premio).toMatchObject({ contrato: CC, promocionId: "8", sorteoId: "586", deposito: "1000000000" });
+    // El índice de cada premio en el contrato es el que da la selección con la firma de verdad de la ronda.
+    expect(r.ganadores).toEqual(r.premio?.premios.map((p) => p.index));
+    expect(r.premio?.premios.map((p) => r.nombres[r.ganadores[p.position] ?? -1])).toEqual(r.premio?.premios.map((p) => p.winner));
   });
 });

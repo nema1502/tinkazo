@@ -21,6 +21,16 @@
  * Solo en mainnet con ALTAS=1 y SORTEO_SERVIDOR=1, abierta desde el sitio, ver `sorteadora.ts`:
  *   POST /v1/sorteo {"sorteo","firma"}   el `draw` de un sello del portero, mandado desde la cuenta sorteadora
  *
+ * Solo en mainnet con ALTAS=1 y PAGOS_PREMIO=1 o RETIROS=1, abierta desde el sitio y sin sesión, ver `pagos-ruta.ts`:
+ *   POST /v1/patrocinio/pago {"forma":"premio"|"retiro","xdr"}   la comisión de un pago de premio o de un retiro con su costo
+ *        200 {hash, forma, vence, status, estado}   Sus errores traen `pudoSalir`. Lo que paga y lo que mira: `pagos-servicio.ts`.
+ *   Con alguna de las dos prendida, `GET /v1/patrocinio/cupo` suma el bloque `pagos` y `/estado` el suyo.
+ *
+ * Solo en mainnet con ALTAS=1 y ALTAS_PREMIO=1, con la sesión de Google de quien organiza, ver `altas-premio.ts` y `rutas-altas.ts`:
+ *   POST /v1/alta/premio {"sorteo","puesto","cuenta"}   quien organiza deja entrar a la cuenta de quien ganó un puesto de su sorteo
+ *        200 {estado:"admitida"|"ya-tiene-acceso"|"no-hace-falta"}   Sin cupón ni sorteos: la cuenta solo puede activarse y recibir.
+ *   Con esa prendida, aunque no lo esté ninguna de las otras dos, `/cupo` y `/estado` también traen el bloque `pagos`.
+ *
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
  *   GET  /v1/patrocinio/estado                         GET /v1/patrocinio/exportar
@@ -30,6 +40,7 @@
  *   POST|GET /v1/admin/cupones   POST /v1/admin/cupones/anular   POST /v1/admin/altas   POST /v1/admin/altas/pausar | reanudar
  *   POST /v1/admin/derechos   POST /v1/admin/ordenes/pagada   GET /v1/admin/sueltos   POST /v1/admin/sueltos/asignar
  *   POST /v1/admin/ventas/pausar | reanudar   POST /v1/admin/compras/cerrar (con ADMIN_TOKEN)
+ *   POST /v1/admin/pagos/pausar | reanudar {"forma"}   POST /v1/admin/pagos/tope   (con ADMIN_TOKEN, también con los pagos apagados)
  *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
@@ -37,19 +48,25 @@
 import { DurableObject } from "cloudflare:workers";
 import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
 import { Altas } from "./altas";
+import { AltasPorPremio } from "./altas-premio";
 import { registrador } from "./registrador";
 import { Cobros, LectorDeCobros } from "./cobros";
 import { ComprasQr } from "./compras";
-import { type Env, leerConfig } from "./config";
+import { type Config, type Env, leerConfig } from "./config";
 import { Cupos, type Sql } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
+import type { FormaDePago } from "./pagos-lista";
+import { atenderPagoClasico } from "./pagos-ruta";
+import { type PorteroDePagos, armarPorteroDePagos, pagosPrendidos, vueltaDeAlarma } from "./pagos-servicio";
+import { UsoDePagos } from "./pagos-uso";
 import { Planes } from "./plan";
 import { pollarDe } from "./pollar";
 import { PorIp, cupoPorHora } from "./por-ip";
 import { RpcRed } from "./red";
 import { type AccionAlta, type AccionCompra, type AccionPago, type PedidoAlta, PuertaAltas, atenderAlta, atenderCarga, memoriaEnAjustes } from "./rutas-altas";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
-import { Sorteadora, atenderSorteo } from "./sorteadora";
+import { haciaHorizon } from "./servidores";
+import { Sorteadora, atenderSorteo, leerSorteo } from "./sorteadora";
 
 /**
  * El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres,
@@ -77,6 +94,16 @@ export class Patrocinio extends DurableObject<EnvPortero> {
   /** La administración de las altas: solo en mainnet. */
   private administracion: Administracion | null = null;
   private exportaAltas = false;
+  /** Lo que guardan los pagos de premios y los retiros: solo en mainnet. Sus tablas se crean aparte, con su propio try/catch. */
+  private usoPagos: UsoDePagos | null = null;
+  /** El portero de los pagos clásicos: solo en mainnet. Null si no se pudo armar: la ruta contesta `503 apagado` y los sellos siguen. */
+  private pagos: PorteroDePagos | null = null;
+  /** Las órdenes y los pagos que llegan a la cuenta de cobros: de acá sale cuántos costos de retiro se cobraron, para `/estado`. */
+  private cobros: Cobros | null = null;
+  /** Lo que guarda el alta de quien ganó: solo mainnet. Su tabla se crea aparte, con su propio try/catch. */
+  private altasPremio: AltasPorPremio | null = null;
+  /** Si alguna forma de pago está prendida en la configuración: con todo apagado, el exporte no suma las tablas vacías de los pagos. */
+  private pagosEnConfig = false;
 
   constructor(ctx: DurableObjectState, env: EnvPortero) {
     super(ctx, env);
@@ -120,15 +147,41 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       // El último saldo de créditos vive en los ajustes: si el objeto arranca de nuevo con Pollar caído, sigue valiendo sus 10 minutos.
       const pollar = pollarDe({ secreto: this.env.POLLAR_SECRETO, appId: cfg.pollarAppId, fetch: (u, i) => fetch(u, i), registrar, memoriaCreditos: memoriaEnAjustes(this.cupos) });
       const altas = new Altas(this.sql, this.cupos);
-      // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual.
-      const cobros = new Cobros(this.sql, this.cupos);
+      // Los pagos de premios y los retiros: sus tablas y su portero, cada uno con su try/catch (lo nuevo no tumba a los sellos).
+      this.armarPagos(cfg, red, this.portero);
+      // La tabla del alta de quien ganó, igual: apagada o no, se crea sin poder tumbar nada.
+      this.armarAltaPremio();
+      // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual. Con las tablas de
+      // los retiros, el costo que paga quien retira se reconoce por su transacción y no cae a los pagos sueltos.
+      const cobros = new Cobros(this.sql, this.cupos, this.usoPagos ? { costos: this.usoPagos } : {});
+      this.cobros = cobros;
       const lector = cfg.cuentaCobros ? new LectorDeCobros({ cobros, cuenta: cfg.cuentaCobros, fetch: (u, i) => fetch(u, i), registrar }) : null;
       // La compra con QR: las compras en curso y sus reservas se leen siempre (también con COMPRAS_QR en "0"), para
       // terminar lo que ya empezó y para el piso.
       const compras = new ComprasQr(this.sql, cfg);
       // Sin la hora del último aviso (no se pudo sumar al arrancar), la vigilancia de firmas cuenta sin ella.
       if (this.cupos.faltaColumna("compras_qr", "avisada")) compras.sinHoraDeAviso();
-      this.puerta = new PuertaAltas({ cfg, cupos: this.cupos, altas, pollar, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
+      // Cómo lee la puerta un sorteo de la red, para el alta de quien ganó: solo existe con el contrato oficial de la red.
+      const contrato = cfg.contractId;
+      const leerElSorteo = contrato
+        ? (origen: string, id: bigint) => leerSorteo(red, { passphrase: cfg.passphrase, contractId: contrato, origen }, id)
+        : null;
+      this.puerta = new PuertaAltas({
+        cfg,
+        cupos: this.cupos,
+        altas,
+        pollar,
+        cuponSecreto: this.env.CUPON_SECRETO ?? null,
+        red,
+        registrar,
+        cobros,
+        lector,
+        compras,
+        pagos: this.usoPagos,
+        altasPremio: this.altasPremio,
+        cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
+        ...(leerElSorteo ? { leerSorteo: leerElSorteo } : {}),
+      });
       this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
       this.exportaAltas = true;
       if (cfg.altas && (this.env.CUPONES_TOKEN ?? "").length >= 32 && this.env.CUPONES_TOKEN === this.env.ADMIN_TOKEN) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["claves-iguales"] }));
@@ -144,25 +197,123 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     const columnas = this.cupos.columnasQueFaltan();
     if (columnas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["columnas-nuevas"], columnas, error: this.cupos.errorDeColumnas() }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
-    if (this.cupos.enElAire() > 0) await this.programar();
+    if (this.cupos.enElAire() > 0 || this.pagosEnElAire() > 0) await this.programar();
     return this.portero;
+  }
+
+  /**
+   * Las tablas y el portero de los pagos de premios y de los retiros (solo mainnet). Cada cosa se arma adentro de su try/catch: un
+   * `CREATE` o una dependencia que lanzaran acá tumbarían el objeto entero, y con él todos los sellos. Si algo falla, lo de los pagos
+   * queda apagado (la ruta contesta `503 apagado`), se anota y el portero de los sellos sigue como siempre.
+   */
+  private armarPagos(cfg: Config, red: RpcRed, portero: Portero): void {
+    this.usoPagos = null;
+    this.pagos = null;
+    this.pagosEnConfig = pagosPrendidos(cfg);
+    try {
+      this.usoPagos = new UsoDePagos(this.sql, registrar);
+    } catch {
+      console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["pagos"] }));
+      return;
+    }
+    const uso = this.usoPagos;
+    this.pagos = armarPorteroDePagos(
+      () => ({
+        cfg,
+        uso,
+        cupos: this.cupos,
+        red,
+        redesSueltas: cfg.rpcUrls.map((url) => new RpcRed([url])),
+        pedirHorizon: haciaHorizon((u, i) => fetch(u, i)),
+        firmante: this.firmante,
+        cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
+        modo: () => portero.modo(),
+        alQuedarEnElAire: () => void this.programar(),
+        registrar,
+      }),
+      registrar,
+    );
+  }
+
+  /**
+   * La tabla del alta de quien ganó (solo mainnet), con su propio try/catch: como las de los pagos, un `CREATE` que lanzara acá
+   * tumbaría el objeto entero y con él todos los sellos. Si algo falla, esa ruta queda apagada (`503 apagado`) y se anota.
+   */
+  private armarAltaPremio(): void {
+    this.altasPremio = null;
+    try {
+      this.altasPremio = new AltasPorPremio(this.sql, this.cupos);
+    } catch {
+      console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["alta-premio"] }));
+    }
+  }
+
+  /** Cuántos pagos de premios y retiros siguen en el aire. Nunca lanza: unas tablas rotas no pueden tumbar el arranque. */
+  private pagosEnElAire(): number {
+    try {
+      return this.usoPagos?.disponible() ? this.usoPagos.enElAire() : 0;
+    } catch {
+      return 0;
+    }
   }
 
   private async programar(): Promise<void> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
   }
 
+  /**
+   * La alarma cierra lo que quedó en el aire, en dos partes, cada una en su try/catch: los sellos y los sorteos, y los pagos de
+   * premios y retiros. Si una lanza, la otra corre igual, queda anotado y se vuelve a pedir la alarma: lo que sigue en el aire
+   * no se queda sin nadie que lo mire.
+   */
   override async alarm(): Promise<void> {
     const p = await this.obtener();
-    if (await p.reconciliar()) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
+    const pagos = this.pagos;
+    const hayQueVolver = await vueltaDeAlarma(
+      [
+        { donde: "alarma-sellos", correr: () => p.reconciliar() },
+        { donde: "alarma-pagos", correr: () => (pagos ? pagos.reconciliar() : Promise.resolve(false)) },
+      ],
+      registrar,
+    );
+    if (hayQueVolver) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
   }
 
   async pagar(xdr: string): Promise<Respuesta> {
     return (await this.obtener()).procesar(xdr);
   }
 
+  /**
+   * `GET /v1/patrocinio/cupo`: lo de siempre y, con alguna forma de pago prendida, el bloque `pagos`. Ese bloque nunca hace fallar
+   * al cupo: si no se puede armar, el cupo sale como antes (y el sitio lo toma como un portero sin pagos).
+   */
   async cupo(cuenta: string): Promise<Respuesta> {
-    return (await this.obtener()).cupoDe(cuenta);
+    const r = await (await this.obtener()).cupoDe(cuenta);
+    if (r.estado !== 200 || !this.pagos) return r;
+    try {
+      const pagos = this.pagos.cupoDe(cuenta);
+      // El alta de quien ganó la conoce la puerta de las altas: dice si la atendería ahora (variable, pausa, configuración y tabla).
+      const altaPremio = this.puerta?.altaPremioAtiende() ?? false;
+      return pagos ? { ...r, cuerpo: { ...r.cuerpo, pagos: { ...pagos, altaPremio } } } : r;
+    } catch (e) {
+      registrar("error-interno", { donde: "cupo-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return r;
+    }
+  }
+
+  /**
+   * `POST /v1/patrocinio/pago` (solo mainnet): la comisión de la red de un pago de premio o de un retiro. Cualquier error que se
+   * escape sale como 500 `interno`, con `pudoSalir` según el hash del sobre: verdadero solo si ese pago sigue reservado o enviado.
+   */
+  async pagoClasico(forma: FormaDePago, xdr: string): Promise<Respuesta> {
+    try {
+      await this.obtener();
+      if (!this.pagos) return { estado: 503, cuerpo: { motivo: "apagado", forma, detalle: "config", pudoSalir: false } };
+      return await this.pagos.procesar(forma, xdr);
+    } catch (e) {
+      registrar("error-interno", { donde: "pago-clasico", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno", pudoSalir: this.pagos?.pudoSalir(xdr) ?? false } };
+    }
   }
 
   /** `POST /v1/sorteo` (solo mainnet): el `draw` mandado desde la cuenta sorteadora. */
@@ -235,6 +386,55 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
+  /** El bloque `pagos` de `/estado`, o null si no hay nada que mostrar. Nunca hace fallar al estado. */
+  private estadoDePagos(): Record<string, unknown> | null {
+    try {
+      const sinCostos = { cuantos: 0, monto: 0 };
+      const bloque = this.pagos?.resumenDeEstado(Date.now(), (desde) => this.cobros?.costosDeRetiro(desde) ?? sinCostos) ?? null;
+      if (!bloque) return null;
+      // El alta de quien ganó la conoce la puerta de las altas: si está prendida y cuántas se dieron en el día. La pausa ya viene.
+      const altaPremio = { ...(bloque.altaPremio as Record<string, unknown>), ...(this.puerta?.altaPremioDelEstado() ?? {}) };
+      return { ...bloque, altaPremio };
+    } catch (e) {
+      registrar("error-interno", { donde: "estado-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return null;
+    }
+  }
+
+  /**
+   * Las tablas de los pagos de premios y retiros, para el exporte: con alguna forma prendida o con algo guardado. Con todo apagado
+   * y sin nada guardado el exporte es el de siempre. Vacío si las tablas no están: unas tablas rotas no tumban el exporte.
+   */
+  private tablasDePagos(): Record<string, Array<Record<string, unknown>>> {
+    try {
+      const uso = this.usoPagos;
+      if (!this.exportaAltas || !uso?.disponible()) return {};
+      const tablas = uso.exportar();
+      const hayDatos = tablas.pagos_portero.length > 0 || tablas.retiros_cobrados.length > 0;
+      return this.pagosEnConfig || hayDatos ? tablas : {};
+    } catch (e) {
+      registrar("error-interno", { donde: "exportar-pagos", error: e instanceof Error ? e.name : "desconocido" });
+      return {};
+    }
+  }
+
+  /**
+   * La tabla del alta de quien ganó, para el exporte: con la forma prendida o con algo guardado. Con todo apagado y sin nada
+   * guardado el exporte es el de siempre. Vacío si la tabla no está: una tabla rota no tumba el exporte.
+   */
+  private tablaDeAltaPremio(): Record<string, Array<Record<string, unknown>>> {
+    try {
+      const altas = this.altasPremio;
+      if (!this.exportaAltas || !altas?.disponible()) return {};
+      const tabla = altas.exportar();
+      const prendida = this.puerta?.altaPremioDelEstado().prendido ?? false;
+      return prendida || tabla.altas_premio.length > 0 ? tabla : {};
+    } catch (e) {
+      registrar("error-interno", { donde: "exportar-alta-premio", error: e instanceof Error ? e.name : "desconocido" });
+      return {};
+    }
+  }
+
   async administrar(accion: string, datos?: { clave?: string; valor?: number }): Promise<Respuesta> {
     const p = await this.obtener();
     switch (accion) {
@@ -252,12 +452,26 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       case "estado": {
         // En mainnet con las altas, también el saldo de créditos de Pollar y el piso.
         // Y las altas de 24 horas y los cupones de hoy, y la vigilancia de firmas: firmasSinExplicar y patrocinioPollar.
+        // Y, con los pagos de premios y retiros prendidos, con algún pago en el día o con alguna pausa puesta, el bloque `pagos`.
         const e = await p.estado();
-        return this.puerta ? { ...e, cuerpo: { ...e.cuerpo, ...(await this.puerta.resumen()), ...(this.administracion?.resumen() ?? {}), ...(await this.puerta.vigilancia()) } } : e;
+        if (!this.puerta) return e;
+        const pagos = this.estadoDePagos();
+        return {
+          ...e,
+          cuerpo: {
+            ...e.cuerpo,
+            ...(await this.puerta.resumen()),
+            ...(this.administracion?.resumen() ?? {}),
+            ...(await this.puerta.vigilancia()),
+            ...(pagos ? { pagos } : {}),
+          },
+        };
       }
-      case "exportar":
-        // En mainnet, también las tablas de las altas.
-        return { estado: 200, cuerpo: { exportado: Date.now(), tablas: this.cupos.exportar(this.exportaAltas) } };
+      case "exportar": {
+        // En mainnet, también las tablas de las altas, las de los pagos de premios y retiros y la del alta de quien ganó.
+        const tablas = { ...this.cupos.exportar(this.exportaAltas), ...this.tablasDePagos(), ...this.tablaDeAltaPremio() };
+        return { estado: 200, cuerpo: { exportado: Date.now(), tablas } };
+      }
       default:
         return { estado: 404, cuerpo: { motivo: "accion" } };
     }
@@ -273,6 +487,8 @@ const pagoPorIp = new PorIp();
 const altaPorIp = new PorIp();
 /** Los pedidos a `/v1/sorteo`, con el suyo. */
 const sorteoPorIp = new PorIp();
+/** Los pedidos a `/v1/patrocinio/pago`, con el suyo: agotar los de los sellos no frena los pagos, ni al revés. */
+const pagoClasicoPorIp = new PorIp();
 /** Las consultas de `/v1/carga/cupo`, con el suyo: consultar la carga no le gasta consultas al cupo. */
 const cargaPorIp = new PorIp();
 
@@ -319,6 +535,13 @@ export default {
     // El tope de la carga con QR, también solo en mainnet: abierta y de solo lectura, como el cupo.
     if (url.pathname === "/v1/carga/cupo" && env.RED === "mainnet") {
       const r = await atenderCarga(request, leerConfig(env), cargaPorIp, () => objeto.carga());
+      if (r) return r;
+    }
+
+    // Los pagos de premios y retiros, también solo en mainnet y con alguna forma prendida: si no, la ruta no existe y el pedido
+    // sigue de largo hasta el 404 del final, como siempre.
+    if (url.pathname === "/v1/patrocinio/pago" && env.RED === "mainnet") {
+      const r = await atenderPagoClasico(request, leerConfig(env), pagoClasicoPorIp, (forma, xdr) => objeto.pagoClasico(forma, xdr));
       if (r) return r;
     }
 

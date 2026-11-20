@@ -262,3 +262,81 @@ describe("sellos_portero", () => {
     expect(cuantasFilas(sql, "sellos_portero")).toBe(0);
   });
 });
+
+describe("a qué sorteo respalda cada sello del portero", () => {
+  const CONTRATO = "C".repeat(56);
+  const enRed = (g: string) => ({ organizador: g, huellaLista: "CD".repeat(32), ronda: 1234 });
+  const conSello = (c: Cupos, g: string, h: string) => {
+    const sello = { huellaLista: "cd".repeat(32), ronda: 1234 };
+    return c.reservar({ hash: h, cuenta: g, metodo: "seal", estimado: 130_000, vence: Math.floor(T0 / 1000) + 240, ganadores: 3, sello }, T0, LIM);
+  };
+  const atar = (c: Cupos, sello: string, sorteo: string) => c.atarSorteo({ sello, contrato: CONTRATO, sorteo, draw: hash() }, T0);
+
+  it("el primer draw ata el sello a su sorteo, y un sorteo gemelo después ya no encuentra sello", () => {
+    const { c } = nuevo();
+    const g = cuenta();
+    dar(c, g, 5, 60);
+    const s = hash();
+    conSello(c, g, s);
+    expect(atar(c, s, "7")).toBe(true);
+    expect(atar(c, s, "8")).toBe(true);
+    expect(c.selloDelSorteo(CONTRATO, "7", enRed(g))).toBe(s);
+    expect(c.selloDelSorteo(CONTRATO, "8", enRed(g))).toBeNull();
+  });
+
+  it("dos sellos iguales pagados por el portero respaldan dos sorteos, uno cada uno, empezando por el más viejo", () => {
+    const { c } = nuevo();
+    const g = cuenta();
+    dar(c, g, 5, 60);
+    const [viejo, nuevoSello] = [hash(), hash()];
+    conSello(c, g, viejo);
+    conSello(c, g, nuevoSello);
+    atar(c, nuevoSello, "7");
+    atar(c, nuevoSello, "8");
+    expect(c.selloDelSorteo(CONTRATO, "7", enRed(g))).toBe(viejo);
+    expect(c.selloDelSorteo(CONTRATO, "8", enRed(g))).toBe(nuevoSello);
+  });
+
+  it("el mismo sorteo que se vuelve a sortear (otro draw) no ata un segundo sello", () => {
+    const { c, sql } = nuevo();
+    const g = cuenta();
+    dar(c, g, 5, 60);
+    const [a, b] = [hash(), hash()];
+    conSello(c, g, a);
+    conSello(c, g, b);
+    atar(c, a, "7");
+    atar(c, b, "7");
+    expect(cuantasFilas(sql, "sorteos_de_sellos")).toBe(1);
+  });
+
+  it("un sello de antes, sin atar, y otro organizador u otra huella no respaldan nada", () => {
+    const { c } = nuevo();
+    const g = cuenta();
+    dar(c, g, 5, 60);
+    const s = hash();
+    conSello(c, g, s);
+    expect(c.selloDelSorteo(CONTRATO, "7", enRed(g))).toBeNull();
+    atar(c, s, "7");
+    expect(c.selloDelSorteo(CONTRATO, "7", enRed(cuenta()))).toBeNull();
+    expect(c.selloDelSorteo(CONTRATO, "7", { ...enRed(g), huellaLista: "ee".repeat(32) })).toBeNull();
+    expect(c.selloDelSorteo("D".repeat(56), "7", enRed(g))).toBeNull();
+  });
+
+  it("sin la tabla (no se pudo crear) nada respalda nada, atar no lanza, y los sellos siguen andando", () => {
+    const base = sqlDePrueba();
+    const roto = {
+      exec: (q: string, ...e: unknown[]) => {
+        if (/sorteos_de_sellos/.test(q)) throw new Error("disco lleno");
+        return base.exec(q, ...e);
+      },
+      transaccion: <T>(fn: () => T): T => base.transaccion(fn),
+    };
+    const c = new Cupos(roto);
+    const g = cuenta();
+    dar(c, g, 5, 60);
+    const s = hash();
+    expect(conSello(c, g, s).ok).toBe(true);
+    expect(atar(c, s, "7")).toBe(false);
+    expect(c.selloDelSorteo(CONTRATO, "7", enRed(g))).toBeNull();
+  });
+});

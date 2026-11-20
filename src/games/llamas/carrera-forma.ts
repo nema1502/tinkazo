@@ -212,16 +212,36 @@ export interface Carriles {
   yPie(carril: number): number;
 }
 
-/** Los carriles de la final: `n` filas parejas, de arriba a abajo. */
+/** Los carriles de la final: `n` filas parejas, de arriba a abajo.
+ *
+ * Con 2 a 5 finalistas (issue 106) la banda se **comprime alrededor del centro**: en vez de repartir toda la pista
+ * entre los carriles, cada uno mide lo que la llama pide (su alto de siempre, con el mismo tope documentado, más el
+ * nombre y el aire; en retrato, su 94 %), y la banda queda centrada en el lugar de siempre. Donde el tope de alto
+ * ya manda (n <= 3 en el proyector, 2 a 5 en el celular parado), la banda se achica y la cámara de la recta, que
+ * encuadra `cajaCarriles`, se acerca sola; el 3D recibe la misma banda comprimida por `geometria3D()` (`carY0`,
+ * `carY1`), así la pista no queda vacía. La llama no cambia de tamaño nunca: `alto` sale de la misma fórmula de
+ * siempre sobre la banda entera. Con 6 carriles o más el resultado es idéntico al de antes.
+ */
 export function carrilesDe(p: Pantalla, n: number, nombrePx: number): Carriles {
   const k = p.u;
   const hud = hudDe(p);
-  const y0 = hud.bajo + 8 * k;
-  const y1 = Math.max(y0 + 60, p.bottom - 4 * k);
+  const y0Llena = hud.bajo + 8 * k;
+  const y1Llena = Math.max(y0Llena + 60, p.bottom - 4 * k);
   const altoNombre = nombrePx * 1.32;
-  const arriba = !p.retrato && (y1 - y0) / Math.max(1, n) >= altoNombre + 40 * k;
-  const altoFila = (y1 - y0) / Math.max(1, n);
-  const alto = arriba ? Math.max(30 * k, Math.min(altoFila - altoNombre - 2 * k, 0.17 * p.h)) : Math.max(22 * k, Math.min(altoFila * 0.94, 0.12 * p.h));
+  const arriba = !p.retrato && (y1Llena - y0Llena) / Math.max(1, n) >= altoNombre + 40 * k;
+  const altoFilaLlena = (y1Llena - y0Llena) / Math.max(1, n);
+  const alto = arriba ? Math.max(30 * k, Math.min(altoFilaLlena - altoNombre - 2 * k, 0.17 * p.h)) : Math.max(22 * k, Math.min(altoFilaLlena * 0.94, 0.12 * p.h));
   const esc = alto / LLAMA_ALTO;
+  let y0 = y0Llena;
+  let y1 = y1Llena;
+  let altoFila = altoFilaLlena;
+  if (n >= 2 && n <= 5) {
+    const pedido = arriba ? alto + altoNombre + 2 * k : alto / 0.94;
+    const banda = Math.min(y1Llena - y0Llena, pedido * n);
+    const centro = (y0Llena + y1Llena) / 2;
+    y0 = centro - banda / 2;
+    y1 = centro + banda / 2;
+    altoFila = banda / n;
+  }
   return { arriba, n, altoFila, alto, esc, largo: LLAMA_LARGO * esc, y0, y1, altoNombre, yPie: (c) => y0 + (c + 1) * altoFila - 2 * k };
 }

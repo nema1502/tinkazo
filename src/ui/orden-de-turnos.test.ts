@@ -258,6 +258,8 @@ describe("la pantalla grande de un orden de turnos", () => {
     } catch {
       /* sin almacenamiento */
     }
+    // El modo se apaga a propósito: la bandera por defecto ya no es la puerta.
+    vi.stubEnv("VITE_MODOS", "0");
   };
 
   it("con los modos apagados, la pantalla grande muestra las líneas tal cual, como la página y la verificación", async () => {

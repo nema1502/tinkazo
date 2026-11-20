@@ -510,6 +510,17 @@ function notaDeGrabar(boton: HTMLElement, texto: string, alerta = true): HTMLEle
   return nota;
 }
 
+/** `premioGuardado` o `premioSinSaber` si el error es el de la puerta del premio, y `null` si es cualquier otro. */
+async function claveDeLaPuertaDelPremio(error: unknown): Promise<"premioGuardado" | "premioSinSaber" | null> {
+  try {
+    const { esDelPremio, errorKey } = await import("../stellar/errores");
+    if (!esDelPremio(error)) return null;
+    return errorKey(error) === "premioGuardado" ? "premioGuardado" : "premioSinSaber";
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Termina de guardar un sorteo desde Mis sorteos (`terminarDeGrabar`) y dice cómo salió, junto al botón. Igual que el
  * sorteo en la pantalla: con la billetera propia dice que hay que aprobarlo en su ventana, y si el servicio que cubre el
@@ -553,7 +564,16 @@ async function grabarLoQueFalta(fila: Entry & { id: string }, boton: HTMLButtonE
   }
   boton.disabled = false;
   boton.textContent = t("pendienteGrabarBtn");
-  const nota = notaDeGrabar(boton, t("grabNoSePudo"));
+  // La puerta del premio (`VITE_RAMPA=premios`): el aviso propio, con lo que se puede hacer, y no el de siempre.
+  const clavePremio = await claveDeLaPuertaDelPremio(fin.error);
+  const nota = notaDeGrabar(boton, clavePremio ? t(`errAnchor.${clavePremio}Sorteo`) : t("grabNoSePudo"));
+  if (clavePremio === "premioGuardado") {
+    // La cuenta ya puede guardar dinero y no firma: volver a probar da lo mismo, y pagar con la cuenta propia no existe con
+    // Google. La acción principal pasa a ser el comprobante, donde cualquiera con una billetera termina el sorteo.
+    boton.classList.replace("primary", "ghost");
+    boton.parentElement?.querySelector("a.ghost.mini[target=_blank]")?.classList.replace("ghost", "primary");
+    return;
+  }
   // El servicio que cubre el costo no pudo: si la cuenta tiene con qué pagar la suya, la segunda salida, como en el
   // sorteo. Hasta el 16 de noviembre de 2026 Mis sorteos solo ofrecía volver a probar, para siempre.
   let puede = false;

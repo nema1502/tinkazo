@@ -33,7 +33,8 @@ export interface SesionVista {
 export type EstadoCuenta =
   | { estado: "fuera" }
   | { estado: "retomando" }
-  | { estado: "conectando" }
+  /** `terminando`: la ventana de Google ya se cerró y la cuenta se está creando o abriendo (dice "Terminando de entrar…"). */
+  | { estado: "conectando"; terminando?: true }
   | {
       estado: "dentro";
       via: Via;
@@ -109,7 +110,7 @@ export function inicialDe(nombre: string | undefined, correo?: string): string {
  * El estado de la cuenta. Con una sesión abierta, dentro: aunque todavía diga "retomando" por la otra vía de
  * retomar (Google y la cuenta de prueba se retoman aparte), la cuenta que ya está manda.
  */
-export function estadoCuenta(e: { sesion: SesionVista | null; retomando: boolean; conectando: boolean }): EstadoCuenta {
+export function estadoCuenta(e: { sesion: SesionVista | null; retomando: boolean; conectando: boolean; terminando?: boolean }): EstadoCuenta {
   const s = e.sesion;
   if (s) {
     const via = viaDe(s.label);
@@ -124,7 +125,7 @@ export function estadoCuenta(e: { sesion: SesionVista | null; retomando: boolean
       direccion: s.address,
     };
   }
-  if (e.conectando) return { estado: "conectando" };
+  if (e.conectando) return e.terminando ? { estado: "conectando", terminando: true } : { estado: "conectando" };
   if (e.retomando) return { estado: "retomando" };
   return { estado: "fuera" };
 }

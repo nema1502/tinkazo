@@ -21,6 +21,11 @@
  *        (no el recargo), hasta 30 minutos desde el último aviso de carga y como mucho dos veces en 7 días
  *        404 sin-compra   409 plazo-vencido | compra-en-curso {permiso} | orden-con-pago | tope-de-anulaciones
  *        502 red   400 producto
+ *   POST /v1/alta/premio   {sorteo, puesto, cuenta}   (solo con ALTAS_PREMIO=1: si no, 404 no-existe)
+ *        200 {estado:"admitida", repetido} | {estado:"ya-tiene-acceso"} | {estado:"no-hace-falta"}: quien organiza deja entrar, sin
+ *        cupón ni sorteos, a la cuenta que salió en un puesto de su sorteo, para que se active y reciba su premio
+ *        400 forma {detalle} | puesto   403 sin-acceso | sorteo-ajeno | no-es-nuestro   409 sin-sortear | puesto-usado | cuenta-de-otro
+ *        429 cupo {que, liberaEn}   502 red   503 apagado {detalle} | altas-pausadas
  *        Comunes: 401 sesion   403 otra-app   502 pollar   503 apagado   429 intentos {reintentarEn}
  *
  * El orden es siempre el mismo: primero todo lo que espera (la sesión con Pollar, la huella del código, la billetera,
@@ -35,16 +40,22 @@
  * Solo en mainnet con `ALTAS=1`: en testnet las rutas no existen (`atenderAlta` devuelve null) y con `ALTAS=0` dan
  * `503 apagado`. La bitácora nunca lleva el token, el id de la persona, el código ni la cuenta.
  */
+import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Altas, huella, normalizar, SECRETO_MINIMO } from "./altas";
+import { type AltasPorPremio, type PedidoDeAltaPorPremio, cercaDelTope } from "./altas-premio";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type FilaOrden, type LectorDeCobros, enlaceDePago, estaCerrada, memoIdDe, normalizarOrden, notaDe, puedeHonrarse, usdcTexto } from "./cobros";
 import { AVISOS_POR_COMPRA, COMPRAS_POR_PERSONA_DIA, type ComprasQr, FIRMAS_POR_COMPRA, type FilaCompra } from "./compras";
-import { type Config, type Producto, grupoDeIp } from "./config";
+import { type Config, DIA_MS, type Producto, TECHO_ALTAS_PREMIO_DIA, grupoDeIp } from "./config";
 import { type Cupos, type FilaAlta, type Quedan } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
+import { PUESTO_MAXIMO } from "./pagos-lista";
+import { pagosPrendidos } from "./pagos-servicio";
+import { AJUSTE_ALTAS_PREMIO_DIA, AJUSTES_DE_PAUSA, type UsoDePagos, topeEnCaliente } from "./pagos-uso";
 import { type Creditos, type MemoriaCreditos, type Pollar, type Sesion, formaDeToken } from "./pollar";
 import { type PorIp, cupoPorHora } from "./por-ip";
-import type { Red } from "./red";
+import { ErrorDeRed, type Red } from "./red";
 import type { Respuesta } from "./servicio";
+import { type SorteoEnRed, leerNumeroDeSorteo } from "./sorteadora";
 import { FIRMAS_SIN_EXPLICAR_MAX, contarFirmas, patrocinioEsperado } from "./vigilancia";
 
 /** Códigos fallidos por persona y por hora. Pasado esto, 429 hasta que pase la hora. */
@@ -75,6 +86,15 @@ export const AJUSTE_CREDITOS = "creditos_ultimo";
 export const ESPERA_ABRIR_MS = 60_000;
 /** La ventana de la vigilancia de firmas: las últimas 24 horas. */
 const VENTANA_FIRMAS_MS = 86_400_000;
+/**
+ * Las respuestas del alta de quien ganó que dicen algo de una cuenta sin dar ningún alta (`ya-tiene-acceso` y `no-hace-falta`),
+ * por sorteo y en 24 horas, además de una por cada ganador del sorteo: quien organiza nombra a cada ganador una vez y le sobran
+ * estas para corregir un error. Sin este tope, con un solo sorteo suyo sorteado por el portero, una cuenta del libro preguntaría
+ * por cualquier cuenta G, sin fin, si usa Tinkazo o si existe en la red, y cada pregunta gastaría lecturas de la red.
+ */
+export const CONSULTAS_PREMIO_DE_MAS = 10;
+/** Desde cuántos sorteos anotados en memoria se limpian los que ya pasaron su ventana. */
+const LIMPIAR_CONSULTAS_DESDE = 5000;
 
 /** Por qué se pausó algo nuevo: el piso, Pollar sin responder (sin un saldo reciente) o a mano. */
 export type MotivoPausa = "piso" | "creditos" | "a-mano";
@@ -136,7 +156,7 @@ export interface PedidoAlta {
   cuerpo: unknown;
 }
 
-export type AccionAlta = "estado" | "cupon" | "abrir";
+export type AccionAlta = "estado" | "cupon" | "abrir" | "premio";
 /** Las rutas del pago (`/v1/alta/orden` y `/v1/alta/pago`): van aparte para que lo de los cupones no cambie. */
 export type AccionPago = "orden" | "pago";
 
@@ -170,10 +190,44 @@ export interface DependenciasAltas {
   lector?: LectorDeCobros | null;
   /** La compra con QR: los permisos, la reserva y la lista del piloto. Sin esto, `/v1/compra/*` da `503 compras-cerradas`. */
   compras?: ComprasQr | null;
+  /**
+   * Lo que guardan los pagos de premios y retiros: las firmas que explican (`firmasPagos` de la vigilancia) y si sus tablas están
+   * (`tablas-pagos` en `faltaAltas`). Sin esto, la vigilancia es la de siempre.
+   */
+  pagos?: Pick<UsoDePagos, "disponible" | "firmas"> | null;
+  /**
+   * Lo que guarda el alta de quien ganó (`POST /v1/alta/premio`) y si su tabla está (`tablas-alta-premio` en `faltaAltas`). Sin esto,
+   * la ruta da `503 apagado`.
+   */
+  altasPremio?: AltasPorPremio | null;
+  /** Lee un sorteo de la red con la cuenta de quien organiza como origen. Sin esto, el alta de quien ganó da `503 apagado`. */
+  leerSorteo?: (origen: string, id: bigint) => Promise<SorteoEnRed | null>;
+  /** La cuenta que paga las comisiones: no puede ser la de quien ganó. Las otras dos del portero salen de `cfg`. */
+  cuentaPatrocinadora?: string | null;
 }
 
 /** Las rutas de la compra con QR (`/v1/compra/empezar`, `/v1/compra/cargar` y `/v1/compra/anular`). */
 export type AccionCompra = "empezar" | "cargar" | "anular";
+
+/** El cuerpo de `POST /v1/alta/premio` ya leído, o qué campo no tiene la forma. */
+type PedidoDePremio =
+  | { ok: true; id: bigint; sorteo: string; puesto: number; cuenta: string }
+  | { ok: false; detalle: "sorteo" | "puesto" | "cuenta" };
+
+/**
+ * Lee `{sorteo, puesto, cuenta}`: el número del sorteo como lo manda el sitio (entero positivo de 64 bits, en decimal), el puesto
+ * (un entero de 0 a `PUESTO_MAXIMO`) y la cuenta de quien ganó (una G válida, nunca una M). Lo que no tiene la forma dice cuál es.
+ */
+function leerPedidoDePremio(cuerpo: unknown): PedidoDePremio {
+  const o = cuerpo && typeof cuerpo === "object" ? (cuerpo as Record<string, unknown>) : {};
+  const id = leerNumeroDeSorteo(o.sorteo);
+  if (id === null) return { ok: false, detalle: "sorteo" };
+  const puesto = o.puesto;
+  if (typeof puesto !== "number" || !Number.isInteger(puesto) || puesto < 0 || puesto > PUESTO_MAXIMO) return { ok: false, detalle: "puesto" };
+  const cuenta = o.cuenta;
+  if (typeof cuenta !== "string" || !StrKey.isValidEd25519PublicKey(cuenta)) return { ok: false, detalle: "cuenta" };
+  return { ok: true, id, sorteo: String(id), puesto, cuenta };
+}
 
 /**
  * Cuánto tiene la persona para anular su compra desde que avisó la carga: lo que tarda en fallar la orden de carga
@@ -219,6 +273,11 @@ export class PuertaAltas {
   private readonly tokensPorIp: Intentos;
   /** Cuándo se le pidió a Pollar abrir la cuenta de cada alta, para hacerlo como mucho una vez por minuto. */
   private readonly aperturas = new Map<string, number>();
+  /**
+   * Por sorteo (`contrato:número`), cuántas respuestas del alta de quien ganó dijeron algo de una cuenta sin darle un alta, y desde
+   * cuándo cuenta la ventana de 24 horas. Vive en la memoria del objeto: un reinicio la vacía, y el tope vuelve a empezar.
+   */
+  private readonly consultasPorSorteo = new Map<string, { desde: number; n: number }>();
 
   constructor(private readonly d: DependenciasAltas) {
     this.reloj = d.reloj ?? (() => Date.now());
@@ -340,13 +399,19 @@ export class PuertaAltas {
   }
 
   /**
-   * Si una orden nueva queda fuera del piloto. Mientras haya una lista puesta, la cuenta tiene que estar en ella: la
-   * lista está puesta con cuentas en `COMPRAS_QR_PILOTO` y también, con la variable vacía, con al menos una cuenta sumada
-   * por administración. Con la variable mal escrita, o `todos` sin confirmar, no entra nadie. Con `todos` confirmado, o
-   * sin ninguna lista (la variable vacía y nadie sumado a mano), la orden no mira el piloto. Síncrono.
+   * Si una orden nueva queda fuera del piloto. La orden en dólares digitales mira su propia variable
+   * (`ORDEN_USDC_PILOTO`): con `todos` confirmado, cualquiera; con una lista puesta, solo esas cuentas, sin mirar al
+   * piloto de la compra con QR; mal escrita, nadie. Sin la variable nueva (o fuera de mainnet) vale lo de siempre:
+   * mientras haya una lista del piloto puesta en `COMPRAS_QR_PILOTO`, la cuenta tiene que estar en ella. La lista
+   * está puesta con cuentas en la variable y también, con la variable vacía, con al menos una cuenta sumada por
+   * administración. Con esa variable mal escrita, o `todos` sin confirmar, no entra nadie. Con `todos` confirmado, o
+   * sin ninguna lista, la orden no mira el piloto. Síncrono.
    */
   private fueraDelPiloto(cuenta: string | null): boolean {
     const { cfg, compras } = this.d;
+    if (cfg.ordenUsdcTodos) return false;
+    if (cfg.ordenUsdcEnVariable === "lista") return !cfg.ordenUsdcPiloto.has(cuenta ?? "");
+    if (cfg.ordenUsdcEnVariable === "mal") return true;
     if (cfg.pilotoEnVariable === "ninguna") return !cfg.comprasQrTodos && !!compras && compras.hayPilotoAMano() && !compras.enPiloto(cuenta);
     if (cfg.pilotoEnVariable === "mal" || !compras) return true;
     return !compras.enPiloto(cuenta);
@@ -391,6 +456,10 @@ export class PuertaAltas {
       ...(pollar ? [] : ["pollar-llave"]),
       ...(cuponSecreto && cuponSecreto.length >= SECRETO_MINIMO ? [] : ["cupon-secreto"]),
       ...(this.sinColumnas() ? ["columnas-nuevas"] : []),
+      // Las tablas de los pagos de premios y retiros que no se pudieron crear: esas formas quedan apagadas y el resto sigue.
+      ...(this.d.pagos && !this.d.pagos.disponible() ? ["tablas-pagos"] : []),
+      // La tabla del alta de quien ganó, igual: esa ruta queda apagada y el resto sigue.
+      ...(this.d.altasPremio && !this.d.altasPremio.disponible() ? ["tablas-alta-premio"] : []),
     ];
   }
 
@@ -425,6 +494,7 @@ export class PuertaAltas {
   }
 
   async atender(accion: AccionAlta, p: PedidoAlta): Promise<Respuesta> {
+    if (accion === "premio") return this.premio(p);
     return accion === "cupon" ? this.cupon(p) : accion === "abrir" ? this.abrir(p) : this.estado(p);
   }
 
@@ -445,7 +515,9 @@ export class PuertaAltas {
     const e = cupos.firmasExplicadas(desde, { sorteos: !cfg.sorteoServidor });
     // La compra con QR: hasta 9 firmas por compra con movimiento en el día y una por cada pago con el saldo propio.
     const q = this.d.compras?.firmas(desde) ?? { compras: 0, pagosConSaldo: 0 };
-    const explicadas = e.sellos + e.sorteos + e.activaciones + FIRMAS_POR_COMPRA * q.compras + q.pagosConSaldo;
+    // Los premios y los retiros que pagó el portero a cuentas del libro: cada uno es una firma de Pollar que se explica.
+    const pg = this.firmasDePagos(desde);
+    const explicadas = e.sellos + e.sorteos + e.activaciones + FIRMAS_POR_COMPRA * q.compras + q.pagosConSaldo + pg.premios + pg.retiros;
     const cobradas = mov.ok ? contarFirmas(mov.movimientos, desde) : null;
     const sinExplicar = cobradas ? Math.max(0, cobradas.firmas - explicadas) : null;
     const patrocinio = pat.ok ? patrocinioEsperado(pat.banderas, cfg.patrocinioPermitido) : null;
@@ -454,8 +526,20 @@ export class PuertaAltas {
     return {
       firmasSinExplicar: sinExplicar,
       firmas: { cobradas: cobradas?.firmas ?? null, explicadas, ...e, ...q, completo: cobradas?.completo ?? null, desde },
+      // Aparte de `firmas`, y solo con los pagos prendidos o con alguno en el día: sin ellos, la vigilancia es la de siempre.
+      ...(pagosPrendidos(cfg) || pg.premios + pg.retiros > 0 ? { firmasPagos: pg } : {}),
       patrocinioPollar: patrocinio,
     };
+  }
+
+  /** Las firmas de premios y retiros de las últimas 24 horas. Sin las tablas, o si no se pueden leer, cero: nunca hace fallar la vigilancia. */
+  private firmasDePagos(desde: number): { premios: number; retiros: number } {
+    const sin = { premios: 0, retiros: 0 };
+    try {
+      return this.d.pagos?.disponible() ? this.d.pagos.firmas(desde) : sin;
+    } catch {
+      return sin;
+    }
   }
 
   /**
@@ -866,6 +950,215 @@ export class PuertaAltas {
     this.codigosPorIp.fallo(grupoDeIp(ip));
   }
 
+  // ---------- el alta de quien ganó ----------
+
+  /**
+   * Por qué el alta de quien ganó no se atendería: `config` (apagada en la configuración, sin el contrato, sin la tabla o sin
+   * cómo leer un sorteo) o `pausado` (la pausa de administración, `pagos/pausar`). null si se atiende.
+   */
+  private porQueNoElPremio(): "config" | "pausado" | null {
+    const { cfg, cupos, altasPremio, leerSorteo } = this.d;
+    if (!cfg.altasPremio || cfg.contractId === null || !altasPremio || !leerSorteo || !altasPremio.disponible()) return "config";
+    return cupos.ajuste(AJUSTES_DE_PAUSA["alta-premio"]) === "1" ? "pausado" : null;
+  }
+
+  /**
+   * Si el portero atendería ahora el alta de quien ganó, con su pausa y con la de las altas a mano (con esa, la ruta contesta
+   * `503 altas-pausadas`). Es lo que le dice `/cupo` al sitio. El piso de créditos no se mira acá: pide leer los créditos.
+   */
+  altaPremioAtiende(): boolean {
+    return this.apagado() === null && this.porQueNoElPremio() === null && this.d.cupos.ajuste(AJUSTE_PAUSA) !== "1";
+  }
+
+  /**
+   * Lo que `/estado` dice del alta de quien ganó: si la configuración la prende, cuántas se dieron en las últimas 24 horas y si
+   * llegaron al 80 por ciento del tope del día (`cercaDelTope`), para subirlo en caliente o mirar quién las pide antes de que los
+   * ganadores de verdad se queden afuera. Sin la tabla, o si no se puede leer, cero: nunca hace fallar al estado.
+   */
+  altaPremioDelEstado(): { prendido: boolean; hoy: number; cercaDelTope: boolean } {
+    const prendido = this.d.cfg.altasPremio;
+    try {
+      const hoy = this.d.altasPremio?.disponible() ? this.d.altasPremio.hoy(this.reloj()) : 0;
+      return { prendido, hoy, cercaDelTope: cercaDelTope(hoy, this.topeDeAltasPremio()) };
+    } catch {
+      return { prendido, hoy: 0, cercaDelTope: false };
+    }
+  }
+
+  /**
+   * Si el alta que se acaba de dar hizo que las del día llegaran al 80 por ciento del tope, lo anota una vez (solo cifras): la
+   * vigilancia y quien opera lo ven sin esperar a mirar `/estado`. Nunca hace fallar al alta.
+   */
+  private avisarSiCruzaElTope(ahora: number, tope: number): void {
+    try {
+      const hoy = this.d.altasPremio?.hoy(ahora) ?? 0;
+      if (cercaDelTope(hoy, tope) && !cercaDelTope(hoy - 1, tope)) {
+        this.registrar("alerta-altas-premio", { hoy, tope });
+      }
+    } catch {
+      // Contar las del día no es razón para que el alta dé error: ya se escribió.
+    }
+  }
+
+  /** El tope de las altas de quien ganó en 24 horas que vale ahora: el ajuste en caliente o la variable, siempre con su techo. */
+  private topeDeAltasPremio(): number {
+    const { cfg, cupos } = this.d;
+    return topeEnCaliente(cupos.ajuste(AJUSTE_ALTAS_PREMIO_DIA), cfg.altasPremioDia, TECHO_ALTAS_PREMIO_DIA);
+  }
+
+  /** Las cuentas del portero, que nunca pueden ser la de quien ganó: la que paga, la sorteadora y la de cobros. */
+  private cuentasDelPortero(): string[] {
+    const { cfg, cuentaPatrocinadora } = this.d;
+    return [cuentaPatrocinadora ?? null, cfg.cuentaSorteadora, cfg.cuentaCobros].filter((c): c is string => c !== null);
+  }
+
+  /**
+   * `POST /v1/alta/premio` `{sorteo, puesto, cuenta}`: quien organiza un sorteo, con su sesión de Google, nombra la cuenta que
+   * salió en un puesto, y esa cuenta entra al libro con un alta propia (motivo `premio`, sin sorteos): puede activarse y recibir
+   * su premio, pero no sellar ni sortear. Solo con `ALTAS_PREMIO=1`. El portero no puede saber quién ganó (el contrato guarda la
+   * huella de la lista, no las cuentas): lo único que comprueba es que quien lo pide organizó ese sorteo, que ya se sorteó, que
+   * el puesto existe y que el sello lo pagó el portero. Una vez por contrato, sorteo y puesto.
+   *
+   * El orden: la forma del cuerpo, la sesión, lo que ya se hizo (una llamada repetida no llega a la red), el sorteo (que sea de
+   * quien pregunta, sorteado, con ese puesto y respaldado por un sello del portero), recién entonces si la cuenta ya tiene acceso
+   * o ya existe en la red (así nadie se entera de eso por un sorteo ajeno, y con su tope por sorteo, `CONSULTAS_PREMIO_DE_MAS`,
+   * así tampoco se pregunta sin fin con uno propio), y los créditos. Después, sin ningún `await`, una sola
+   * transacción mira los topes y el piso de créditos y escribe (`AltasPorPremio.admitir`).
+   */
+  async premio(p: PedidoAlta): Promise<Respuesta> {
+    const no = this.apagado();
+    if (no) return no;
+    const porQue = this.porQueNoElPremio();
+    const { cfg, cupos, altasPremio, leerSorteo } = this.d;
+    const contrato = cfg.contractId;
+    if (porQue || !altasPremio || !leerSorteo || contrato === null) return r(503, { motivo: "apagado", detalle: porQue ?? "config" });
+    const pedido = leerPedidoDePremio(p.cuerpo);
+    if (!pedido.ok) return r(400, { motivo: "forma", detalle: pedido.detalle });
+
+    const ses = await this.sesion(p.token, p.ip);
+    if (!ses.ok) return ses.r;
+    const { usuario } = ses.s;
+    const otra = this.cuentaDeOtro(ses.s);
+    if (otra) return otra;
+    const c = await this.cuentaDe(ses.s, cupos.altaDe(usuario));
+    if (!c.ok) return r(502, { motivo: "pollar" });
+    const organizador = c.cuenta;
+    if (!organizador || !cupos.estaEnElLibro(organizador)) return r(403, { motivo: "sin-acceso" });
+    if (pedido.cuenta === organizador) return r(400, { motivo: "forma", detalle: "propia" });
+    if (this.cuentasDelPortero().includes(pedido.cuenta)) return r(400, { motivo: "forma", detalle: "del-portero" });
+
+    // Lo que ya se hizo se contesta sin ir a la red. Solo vale para quien lo hizo: el sorteo de otro organizador sigue el camino
+    // de abajo y da `sorteo-ajeno`, sin contar si ese puesto ya se dio.
+    const previa = altasPremio.buscar(contrato, pedido.sorteo, pedido.puesto);
+    if (previa && previa.organizador === organizador) {
+      return previa.cuenta === pedido.cuenta ? r(200, { estado: "admitida", repetido: true }) : r(409, { motivo: "puesto-usado" });
+    }
+
+    // Primero el sorteo: que exista, sea de quien pregunta, esté sorteado, tenga ese puesto y lo respalde un sello del portero.
+    // Recién después se dice si la cuenta ya tiene acceso o ya existe en la red: si no, cualquier cuenta del libro sabría, de
+    // cualquier cuenta G, si usa Tinkazo o si existe, y cada pregunta gastaría una lectura de la red.
+    let sorteo: SorteoEnRed | null;
+    try {
+      sorteo = await leerSorteo(organizador, pedido.id);
+    } catch (e) {
+      if (e instanceof ErrorDeRed) return r(502, { motivo: "red" });
+      throw e;
+    }
+    if (sorteo === null) return r(403, { motivo: "sorteo-ajeno", detalle: "no-existe" });
+    if (sorteo.organizador !== organizador) return r(403, { motivo: "sorteo-ajeno", detalle: "otro-organizador" });
+    if (!sorteo.sorteado) return r(409, { motivo: "sin-sortear" });
+    if (pedido.puesto >= sorteo.ganadores) return r(400, { motivo: "puesto" });
+    // El sello tiene que respaldar ESTE sorteo (el portero pagó su `draw` con él): otro sorteo igual sellado por fuera no tiene
+    // sello y da no-es-nuestro. Un sello de antes de que se guardara a qué sorteo respalda tampoco vale. El sello va a la fila.
+    const sello = cupos.selloDelSorteo(contrato, pedido.sorteo, sorteo);
+    if (sello === null) return r(403, { motivo: "no-es-nuestro" });
+
+    // Lo que se dice de una cuenta sin darle un alta tiene su tope por sorteo (`CONSULTAS_PREMIO_DE_MAS`). El lugar se toma antes
+    // de mirar la cuenta, así pedidos a la vez no lo pasan, y vuelve si al final no se dijo nada de ella sin darle un alta.
+    const clave = `${contrato}:${pedido.sorteo}`;
+    if (!this.tomarConsulta(clave, sorteo.ganadores)) return r(429, { motivo: "cupo", que: "sorteo" });
+    const alta = { contrato, sorteo: pedido.sorteo, puesto: pedido.puesto, cuenta: pedido.cuenta, organizador, ganadores: sorteo.ganadores, sello };
+    let revela = false;
+    try {
+      const fin = await this.nombrarGanador(alta, altasPremio);
+      revela = fin.revela;
+      return fin.respuesta;
+    } finally {
+      if (!revela) this.devolverConsulta(clave);
+    }
+  }
+
+  /**
+   * El final del alta de quien ganó, con el sorteo ya comprobado: si la cuenta ya tiene acceso o ya existe en la red, y si no, los
+   * créditos y el alta. `revela` dice si la respuesta contó algo de la cuenta sin darle un alta: eso es lo que gasta el tope por
+   * sorteo de `CONSULTAS_PREMIO_DE_MAS`.
+   */
+  private async nombrarGanador(alta: PedidoDeAltaPorPremio, altasPremio: AltasPorPremio): Promise<{ respuesta: Respuesta; revela: boolean }> {
+    const { cfg, cupos } = this.d;
+    const yaTiene = { respuesta: r(200, { estado: "ya-tiene-acceso" }), revela: true };
+    const fin = (respuesta: Respuesta) => ({ respuesta, revela: false });
+    if (cupos.estaEnElLibro(alta.cuenta) || cupos.altaDeCuenta(alta.cuenta) !== null || cupos.altaDe(`cuenta:${alta.cuenta}`) !== null) {
+      return yaTiene;
+    }
+    // Una cuenta que ya existe en la red no necesita activarse: la línea del dólar digital la pide el proveedor solo. Si la red no
+    // contesta, se toma como que no existe: lo peor es apartar créditos de más.
+    if (await this.abierta(alta.cuenta, null)) return { respuesta: r(200, { estado: "no-hace-falta" }), revela: true };
+    // El saldo se lee antes (con su memoria de 60 s); si el alta resulta repetida, ni se mira.
+    const creditos = await (this.d.pollar as Pollar).creditos();
+
+    // Desde acá, sin await: mirar los topes, el piso y escribir es una sola jugada.
+    const ahora = this.reloj();
+    const pausa: { motivo: MotivoPausa | null } = { motivo: null };
+    const freno = () => {
+      pausa.motivo = this.pausa(creditos, cfg.creditosPorAlta, ahora);
+      return pausa.motivo ? ("altas-pausadas" as const) : null;
+    };
+    const altasPremioDia = this.topeDeAltasPremio();
+    const res = altasPremio.admitir(alta, ahora, { altasPremioDia }, freno);
+    if (!res.ok) {
+      if (res.motivo === "altas-pausadas") {
+        this.registrar("alta-pausa", { motivo: pausa.motivo ?? "piso", donde: "premio" });
+        return fin(r(503, { motivo: "altas-pausadas" }));
+      }
+      if (res.motivo === "puesto-usado") return fin(r(409, { motivo: "puesto-usado" }));
+      return fin(r(429, res.que === "sorteo" ? { motivo: "cupo", que: "sorteo" } : { motivo: "cupo", que: res.que, liberaEn: res.liberaEn }));
+    }
+    if (res.estado === "ya-tiene-acceso") return yaTiene;
+    // Sin la cuenta, el sorteo ni el puesto: nada de esto vuelve a la bitácora.
+    if (!res.repetido) {
+      this.registrar("alta-premio");
+      this.avisarSiCruzaElTope(ahora, altasPremioDia);
+    }
+    return fin(r(200, { estado: "admitida", repetido: res.repetido }));
+  }
+
+  /**
+   * Toma un lugar del tope de lo que se dice de una cuenta sin darle un alta, en ese sorteo: los ganadores más
+   * `CONSULTAS_PREMIO_DE_MAS` en 24 horas desde la primera. false si ya no queda.
+   */
+  private tomarConsulta(clave: string, ganadores: number): boolean {
+    const ahora = this.reloj();
+    if (this.consultasPorSorteo.size > LIMPIAR_CONSULTAS_DESDE) {
+      for (const [k, c] of this.consultasPorSorteo) {
+        if (ahora - c.desde >= DIA_MS) this.consultasPorSorteo.delete(k);
+      }
+    }
+    const previa = this.consultasPorSorteo.get(clave);
+    const actual = previa && ahora - previa.desde < DIA_MS ? previa : { desde: ahora, n: 0 };
+    if (actual.n >= ganadores + CONSULTAS_PREMIO_DE_MAS) {
+      this.consultasPorSorteo.set(clave, actual);
+      return false;
+    }
+    this.consultasPorSorteo.set(clave, { desde: actual.desde, n: actual.n + 1 });
+    return true;
+  }
+
+  /** Devuelve el lugar que tomó `tomarConsulta` cuando la respuesta no dijo nada de la cuenta sin darle un alta. */
+  private devolverConsulta(clave: string): void {
+    const c = this.consultasPorSorteo.get(clave);
+    if (c && c.n > 0) this.consultasPorSorteo.set(clave, { desde: c.desde, n: c.n - 1 });
+  }
+
   // ---------- el pago de quien llega de afuera ----------
 
   async atenderPago(accion: AccionPago, p: PedidoAlta): Promise<Respuesta> {
@@ -917,8 +1210,9 @@ export class PuertaAltas {
    * `POST /v1/alta/orden` `{producto}`: la orden abierta de la persona para ese producto o una nueva, con a qué cuenta
    * pagar, cuánto, la nota y el enlace de pago. Quien ya tiene acceso no compra el primer paquete (le toca uno de 10 o de
    * 50). Una orden nueva no nace con el pago apagado, con la venta pausada ni bajo el piso de créditos más la reserva del
-   * evento (`RESERVA_CARGA_CREDITOS`: la respetan todos los caminos de la venta). Con una lista del piloto puesta (en
-   * `COMPRAS_QR_PILOTO` o, con la variable vacía, sumada por administración), una orden nueva pide además la cuenta en
+   * evento (`RESERVA_CARGA_CREDITOS`: la respetan todos los caminos de la venta). Con una lista del piloto puesta para
+   * la orden (en `ORDEN_USDC_PILOTO`, o con esa variable vacía en el piloto de la compra con QR, sus cuentas de
+   * `COMPRAS_QR_PILOTO` y las sumadas por administración), una orden nueva pide además la cuenta en
    * la lista: si no, `503 fuera-del-piloto` (una que ya existe se sigue devolviendo).
    *
    * Con una compra con QR cargada y sin pagar, la orden lleva su recargo, del producto que sea, y `precio` y `recargo`
@@ -1099,7 +1393,10 @@ export async function atenderAlta(
   const cabeceras = cors(origen, false, true);
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cabeceras });
   const compra = /^\/v1\/compra\/(empezar|cargar|anular)$/.exec(url.pathname)?.[1] as AccionCompra | undefined;
-  const m = compra ? null : /^\/v1\/alta\/(estado|cupon|abrir|orden|pago|precios)$/.exec(url.pathname);
+  // La ruta del alta de quien ganó existe solo con `ALTAS_PREMIO` prendida: apagada, sigue dando 404 como siempre.
+  const sinPremio = /^\/v1\/alta\/(estado|cupon|abrir|orden|pago|precios)$/;
+  const conPremio = /^\/v1\/alta\/(estado|cupon|abrir|orden|pago|precios|premio)$/;
+  const m = compra ? null : (cfg.altasPremio ? conPremio : sinPremio).exec(url.pathname);
   if (compra ? !llamarCompra : !m?.[1] || ((m[1] === "orden" || m[1] === "pago") && !llamarPago)) return json({ motivo: "no-existe" }, 404, cabeceras);
   if (m?.[1] === "precios") {
     const abiertas = cors(origen, true);

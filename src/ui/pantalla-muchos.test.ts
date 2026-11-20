@@ -64,6 +64,7 @@ describe("el resultado en grande según cuántos ganan", () => {
   });
 
   it("sin modos, una lista hecha toda de marcas que cierran se lee sin marca y una común tal cual", async () => {
+    vi.stubEnv("VITE_MODOS", "0");
     sessionStorage.clear();
     history.replaceState(null, "", "/");
     const mesas = await abrir(2, "Termo", ["Mesa 1 (1/2)", "Mesa 1 (2/2)", "Mesa 2 (1/2)", "Mesa 2 (2/2)"], [0, 2]);

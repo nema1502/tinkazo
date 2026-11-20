@@ -71,6 +71,59 @@ describe("la orden en dólares digitales y la lista del piloto", () => {
     expect((await todos.orden(todos.persona("usr_ana", ANA).token, "alta")).estado).toBe(200);
   });
 
+  it("con su propia variable abierta (`todos` confirmado), la orden mira la suya y la compra con QR la suya", async () => {
+    // La lista del QR mal escrita no impide que la orden en USDC se abra con su propia variable.
+    const m = montarPagos({
+      ...PILOTO,
+      COMPRAS_QR_PILOTO: `${ANA},beto`,
+      ORDEN_USDC_PILOTO: "todos",
+      ORDEN_USDC_TODOS: "1",
+    });
+    const [ana, nora] = [m.persona("usr_ana", ANA), m.persona("usr_nora", NORA)];
+    expect((await m.orden(nora.token, "alta")).estado).toBe(200);
+    expect((await m.orden(ana.token, "alta")).estado).toBe(200);
+
+    // Con la lista del QR bien escrita, la orden propia no abre la compra con QR a quien está fuera de ella.
+    const qr = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: "todos", ORDEN_USDC_TODOS: "1" });
+    const [anaQr, noraQr] = [qr.persona("usr_ana", ANA), qr.persona("usr_nora", NORA)];
+    expect(await qr.empezar(noraQr.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    expect((await qr.orden(anaQr.token, "alta")).estado).toBe(200);
+    expect((await qr.empezar(anaQr.token, "alta")).estado).toBe(200);
+  });
+
+  it("con su propia lista puesta, solo esas cuentas crean la orden (ni las del QR); mal escrita, nadie", async () => {
+    const lista = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: NORA });
+    const [ana, nora] = [lista.persona("usr_ana", ANA), lista.persona("usr_nora", NORA)];
+    expect((await lista.orden(nora.token, "alta")).estado).toBe(200);
+    expect(await lista.orden(ana.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    lista.cupos.transaccion(() => lista.compras.sumarPiloto(ANA, lista.hora()));
+    expect(await lista.orden(ana.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    const sinPropia = lista.conVariables({ ORDEN_USDC_PILOTO: "" });
+    expect((await sinPropia.orden(ana.token, "alta")).estado).toBe(200);
+    // Mal escrita: la orden no nace para nadie, aunque esté en el piloto de la compra con QR; la compra sigue por su lista.
+    const mal = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: `${NORA},beto` });
+    const anaMal = mal.persona("usr_ana", ANA);
+    expect(await mal.orden(anaMal.token, "alta")).toEqual({ estado: 503, cuerpo: { motivo: "fuera-del-piloto" } });
+    expect((await mal.empezar(anaMal.token, "alta")).estado).toBe(200);
+  });
+
+  it("una cuenta que ya cargó puede terminar su compra aunque no esté en la lista de la orden", async () => {
+    const lista = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: NORA });
+    const [ana, nora] = [lista.persona("usr_ana", ANA), lista.persona("usr_nora", NORA)];
+    expect((await lista.empezar(ana.token, "alta")).estado).toBe(200);
+    expect((await lista.cargar(ana.token, "alta")).estado).toBe(200);
+    expect(await lista.orden(ana.token, "alta")).toMatchObject({ estado: 200, cuerpo: { orden: { usdc: "8", recargo: "4" } } });
+    const ordenNora = await lista.orden(nora.token, "alta");
+    expect(ordenNora).toMatchObject({ estado: 200, cuerpo: { orden: { usdc: "4" } } });
+    expect(ordenNora.cuerpo).not.toHaveProperty("orden.recargo");
+
+    const mal = montarPagos({ ...PILOTO, ORDEN_USDC_PILOTO: `${NORA},beto` });
+    const anaMal = mal.persona("usr_ana", ANA);
+    expect((await mal.empezar(anaMal.token, "alta")).estado).toBe(200);
+    expect((await mal.cargar(anaMal.token, "alta")).estado).toBe(200);
+    expect(await mal.orden(anaMal.token, "alta")).toMatchObject({ estado: 200, cuerpo: { orden: { usdc: "8", recargo: "4" } } });
+  });
+
   it("una lista mal escrita no deja pasar a nadie, ni a las cuentas bien escritas ni a las sumadas a mano", async () => {
     for (const mal of [`${ANA},beto`, `${ANA};${BETO}`, "todos", "Todos"]) {
       const m = montarPagos({ ...PILOTO, COMPRAS_QR_PILOTO: mal });

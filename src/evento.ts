@@ -15,6 +15,7 @@ import { leerRegistros } from "./stellar/registro";
 import type { ChainRaffle } from "./stellar/seals";
 import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueSinHistorial } from "./verificacion-textos";
 import { fechaLarga } from "./ui/agrupar";
+import { htmlDeLosPremios } from "./ui/premios-del-comprobante";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
@@ -334,6 +335,9 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     `<ul class="checks">${filasHtml.join("")}</ul>` +
     tecnico +
     (nota ? `<p class="note">${esc(nota)}</p>` : "") +
+    // Los premios de una campaña, tal como los guardó su contrato: el depósito, las bases y el pago de cada
+    // premio. Un sorteo sin premio no los tiene y el espacio queda vacío (nada que mostrar).
+    (f ? htmlDeLosPremios(f.r, getLang()) : "") +
     `<div class="row"><a class="ghost" href="${esc(verificar[i] ?? "/verificar.html")}" target="_blank" rel="noopener">${esc(t("evVerificar"))} ↗</a></div>` +
     `</div></section>`
   );

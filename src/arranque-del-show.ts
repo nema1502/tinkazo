@@ -1,15 +1,17 @@
 import { roundTime } from "./protocol/quicknet";
 
 /**
- * Cuándo arranca el show respecto del número que decide, en un solo lugar.
+ * Cuándo arranca el show respecto del número que decide, en un solo lugar: el de la sala y el del celular de quien mira.
  *
  * El resultado lo fijan el sello y el número público de la ronda: apenas el número nace y se comprueba, el navegador
  * calcula quién gana con la misma cuenta del contrato (`sorteo-local.ts`). Por eso el show no espera a que el sorteo
  * quede grabado: la tarjeta de cómo se juega (que no dice quién gana) sale en los últimos segundos de la espera, la
- * sala cuenta 3, 2, 1 apenas hay resultado y el sorteo se graba aparte, cuando la cadena lo acepta.
+ * sala cuenta 3, 2, 1 y el sorteo se graba aparte, cuando la cadena lo acepta.
  *
- * Lo usa la sala, y lo puede usar cualquier otra pantalla que muestre el mismo sorteo (por ejemplo, el celular de
- * quien mira) para no adelantarse a la sala: ninguna puede empezar a contar antes de `cuenta`.
+ * Desde el 16 de noviembre de 2026 hay una sola línea de tiempo, la del nacimiento del número, y cada aparato la sigue
+ * desde la llegada de su propio número (`reloj-de-la-ronda.ts`, el ancla), que nunca es antes de que nazca. La sala
+ * arranca su juego `juegoTrasLaLlegada` después de esa llegada; el celular, lo mismo más `ATRASO_DEL_CELULAR_S`. Así el
+ * celular arranca casi a la par y nunca antes, sin depender del reloj de ninguno de los dos.
  */
 
 /** Lo que dura la lectura de la tarjeta de cómo se juega. */
@@ -19,10 +21,30 @@ export const LECTURA_DE_LA_TARJETA_S = 3.5;
 export const CUENTA_DE_LA_SALA_S = 3;
 
 /**
- * Cuántos segundos después de nacer el número empieza, como muy temprano, el 3, 2, 1. Es cero: la sala empieza a
- * contar en cuanto el número llegó y se comprobó, que suele tardar unas décimas. Nunca antes de que nazca.
+ * Lo que tiene la sala, desde que nace el número, para traerlo, comprobarlo y calcular quién gana antes de empezar a
+ * contar. Suele tardar unas décimas. Si tarda más, la cuenta arranca cuando el resultado está, y la sala ya no va a la
+ * par (`espectadores-de-la-sala.ts`).
  */
-export const CUENTA_TRAS_LA_RONDA_S = 0;
+export const MARGEN_DEL_NUMERO_S = 1.5;
+
+/** Lo que suele tardar el número en llegar después de nacer (medido el 16 de noviembre de 2026: 0,07 a 0,11 s). */
+export const LLEGADA_TIPICA_S = 0.1;
+
+/**
+ * Sin cuenta (Rápido), lo que tiene el estadio para armarse después del resultado: el juego se arma con los ganadores, y
+ * sin la cuenta no hay otro momento para hacerlo.
+ */
+export const MARGEN_DEL_ESTADIO_S = 1.5;
+
+/**
+ * Lo que el celular va detrás de la sala cuando las dos van a la par. Cubre que el número de la sala le haya llegado
+ * hasta la ida y vuelta máxima después de nacer (`IDA_Y_VUELTA_MAX_MS`) y el del celular en el acto, y deja más de
+ * medio segundo de margen. Con los dos números a la vez, el celular arranca 1,2 s detrás: dentro de los 2 s pedidos.
+ */
+export const ATRASO_DEL_CELULAR_S = 1.2;
+
+/** Cuántos segundos después de nacer el número empieza, como muy temprano, el 3, 2, 1, si la sala va a la par. */
+export const CUENTA_TRAS_LA_RONDA_S = MARGEN_DEL_NUMERO_S;
 
 /**
  * Los segundos después de nacer el número en que la cadena ya acepta grabar el sorteo. El contrato compara la hora de
@@ -31,36 +53,52 @@ export const CUENTA_TRAS_LA_RONDA_S = 0;
  */
 export const MARGEN_DE_LA_CADENA_S = 8;
 
-/** Los momentos del show, en segundos Unix (con decimales). */
+/**
+ * Cuántos segundos después de la llegada de su número arranca el juego la sala (o el celular, con `celular`). Con la
+ * cuenta: el margen del número y los 3 s de la cuenta. Sin ella: el margen del número y el del estadio.
+ */
+export function juegoTrasLaLlegada(conCuenta = true, celular = false): number {
+  const sala = MARGEN_DEL_NUMERO_S - LLEGADA_TIPICA_S + (conCuenta ? CUENTA_DE_LA_SALA_S : MARGEN_DEL_ESTADIO_S);
+  return Math.round((sala + (celular ? ATRASO_DEL_CELULAR_S : 0)) * 1000) / 1000;
+}
+
+/**
+ * Una tarjeta que abre con menos de esto de lectura por delante (una compuerta del modo Oficial que tardó, un toque
+ * tarde) no se acorta: lee sus 3,5 s, y esa sala ya no va a la par.
+ */
+export const lecturaMinimaS = (): number => 1.5;
+
+/** Los momentos del show, en segundos Unix (con decimales), con el número llegando a su hora típica. */
 export interface ArranqueDelShow {
   /** Nace el número de la ronda. */
   nace: number;
-  /** Sale la tarjeta de cómo se juega, cuando el sorteo se lanza solo: termina de leerse justo cuando nace el número. */
+  /** Sale la tarjeta de cómo se juega, cuando el sorteo se lanza solo: se lee entera y termina con la cuenta a horario. */
   tarjeta: number;
-  /** Lo más temprano que la sala empieza a contar 3, 2, 1. */
+  /** Empieza el 3, 2, 1 (sin cuenta, arranca el juego). */
   cuenta: number;
-  /** Lo más temprano que arranca el juego. */
+  /** Arranca el juego. */
   juego: number;
   /** Desde cuándo se puede grabar el sorteo. */
   grabable: number;
 }
 
-/** Los momentos del show para una ronda. `conCuenta`: si la duración elegida lleva el 3, 2, 1. */
-export function arranqueDelShow(round: number, conCuenta = true): ArranqueDelShow {
+/** Los momentos del show para una ronda. `conCuenta`: si la duración elegida lleva el 3, 2, 1. `celular`: los del celular. */
+export function arranqueDelShow(round: number, conCuenta = true, celular = false): ArranqueDelShow {
   const nace = roundTime(round);
-  const cuenta = nace + CUENTA_TRAS_LA_RONDA_S;
+  const juego = nace + LLEGADA_TIPICA_S + juegoTrasLaLlegada(conCuenta, celular);
+  const cuenta = juego - (conCuenta ? CUENTA_DE_LA_SALA_S : 0);
   return {
     nace,
-    tarjeta: nace - LECTURA_DE_LA_TARJETA_S,
+    tarjeta: cuenta - LECTURA_DE_LA_TARJETA_S,
     cuenta,
-    juego: cuenta + (conCuenta ? CUENTA_DE_LA_SALA_S : 0),
+    juego,
     grabable: nace + MARGEN_DE_LA_CADENA_S,
   };
 }
 
-/** Cuántos segundos después de nacer el número arranca el juego, como muy temprano. */
+/** Cuántos segundos después de nacer el número arranca el juego de la sala, con el número llegando a su hora típica. */
 export function juegoTrasLaRonda(conCuenta = true): number {
-  return CUENTA_TRAS_LA_RONDA_S + (conCuenta ? CUENTA_DE_LA_SALA_S : 0);
+  return LLEGADA_TIPICA_S + juegoTrasLaLlegada(conCuenta);
 }
 
 /** Milisegundos que faltan para un momento (en segundos Unix). Cero si ya pasó. */

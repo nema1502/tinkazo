@@ -13,7 +13,7 @@ import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
 import { OUT_HOLD, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
-import { planEntrada, type Arch, type Frat } from "./entrada-plan";
+import { decisivoDeLaEntrada, planEntrada, type Arch, type Frat } from "./entrada-plan";
 import { gruposDeOruro, horaDeCaer, respuestasOruro } from "./oruro-nino";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
@@ -365,6 +365,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   /* --------------------------------------------------------------- estado */
   let phase: Phase = "pres";
   let tAll = 0, acc = 0, tHold = 0;
+  S.decisivoEn(() => tAll, decisivoDeLaEntrada(P));
   /** El reloj del paso: corre con la banda y se detiene cuando la banda calla. */
   let beatT = 0;
   let beatsDone = 0;

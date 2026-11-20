@@ -80,6 +80,14 @@ export interface Drawn {
    * parte del sorteo: no entra en el comprobante ni en el historial.
    */
   juego?: Game;
+  /**
+   * Issue #102: con más de un lugar sellado, la sala ve un lugar por show y «Siguiente premio»
+   * muestra el lugar que sigue del mismo resultado, con su show y sin sellar de nuevo. Cuántos
+   * lugares se mostraron hasta ahora, siempre al menos 1. Sin esto (la vista de espectador, un
+   * resultado retomado de Mis sorteos, un solo lugar o un orden de turnos) se muestran todos de
+   * una vez, como siempre.
+   */
+  revelados?: number;
 }
 
 /** Estado de la pantalla principal. Un solo sorteo por carga de página. */
@@ -265,6 +273,13 @@ export const ANCHOR_LEAD_SECONDS = 45;
 export const SIN_SELLO_LEAD_SECONDS = 90;
 
 /**
+ * Margen del sello de una lista de campaña de empresa (`campana/en-curso.ts`). La sala solo acepta el aviso de sellada si
+ * la ronda todavía no salió: a 90 segundos quedan más de 60 para avisarle aunque el wifi del evento falle un rato.
+ * Fuera de una campaña no se usa: el margen es el de siempre.
+ */
+export const CAMPANA_LEAD_SECONDS = 90;
+
+/**
  * Cuánto dura el show, **en segundos**.
  *
  * No es un número fijo porque no hay uno bueno para todos los casos. Un sorteo
@@ -360,6 +375,9 @@ export function setGameLength(nominalSeconds: number, fixedSeconds = 0, normalSe
   fijo = Math.max(0, fixedSeconds);
   normalPropio = normalSeconds;
 }
+
+/** Los segundos de juego del juego en curso hasta el revelado, sin estirar (lo que declaró con `setGameLength`). */
+export const largoNominal = (): number => nominal;
 
 /**
  * Los segundos de la tarjeta de "cómo se juega" que va antes del juego. Son

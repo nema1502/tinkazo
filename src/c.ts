@@ -71,7 +71,10 @@ async function intentar(): Promise<void> {
     const destino = new URL(r.ruta, location.origin);
     // El logo del enlace (si trae uno) viaja a la otra página, atado a la ruta a la que va.
     dejarLogoEntrante(destino.pathname + destino.hash, r.logo);
-    location.replace(`${destino.pathname}${preferencias(requestedMode(destino.search))}${destino.hash}`);
+    // El enlace del QR de espectadores que puede cambiar (la sala cambió el juego con el QR a la vista): la vista lo
+    // vuelve a leer antes del show, así que lleva su referencia y su contador en el fragmento, que no sale del navegador.
+    const hash = r.cambia && destino.hash.startsWith("#espectador=") ? `${destino.hash}.${id}.${clave}.${r.n ?? 0}` : destino.hash;
+    location.replace(`${destino.pathname}${preferencias(requestedMode(destino.search))}${hash}`);
     return;
   }
   estado = r.error;

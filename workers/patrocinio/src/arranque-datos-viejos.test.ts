@@ -6,6 +6,7 @@ import { Cobros } from "./cobros";
 import { ComprasQr } from "./compras";
 import { DIA_MS, leerConfig } from "./config";
 import { Cupos } from "./cupos";
+import { UsoDePagos } from "./pagos-uso";
 import { sqlDePrueba } from "./sqlite-prueba";
 
 /**
@@ -171,5 +172,64 @@ describe("el arranque del objeto con la venta, sobre los datos del portero de an
     expect(compras.reservas(T)).toBe(0);
     expect(compras.tuvo("usr_ana")).toBe(false);
     expect(compras.firmas(T - DIA_MS)).toEqual({ compras: 0, pagosConSaldo: 1 });
+  });
+});
+
+describe("el arranque del objeto con los pagos de premios y retiros, sobre los datos del portero de antes", () => {
+  it("suma sus dos tablas vacías y cada tabla de antes sale igual en la exportación", () => {
+    const db = objetoDeAntes();
+    const sql = sqlDePrueba(db);
+    const cupos = new Cupos(sql);
+    const uso = new UsoDePagos(sql);
+    expect(uso.disponible()).toBe(true);
+    expect(uso.exportar()).toEqual({ pagos_portero: [], retiros_cobrados: [] });
+    const despues = cupos.exportar(true);
+    for (const [tabla, filas] of Object.entries(EXPORTACION.tablas)) {
+      const esperadas = tabla === "ordenes" ? filas.map((f) => ({ ...f, reemplazada: null })) : filas;
+      expect(despues[tabla], tabla).toEqual(esperadas);
+    }
+    // La exportación del libro y los sellos no cambia: las tablas de los pagos van en la suya.
+    expect(Object.keys(despues)).not.toContain("pagos_portero");
+    expect(Object.keys(despues)).not.toContain("retiros_cobrados");
+  });
+
+  it("arrancar dos veces (un reinicio del objeto) no cambia nada ni falla", () => {
+    const sql = sqlDePrueba(objetoDeAntes());
+    new Cupos(sql);
+    const primera = new UsoDePagos(sql);
+    const segunda = new UsoDePagos(sql);
+    expect(segunda.disponible()).toBe(true);
+    expect(segunda.exportar()).toEqual(primera.exportar());
+  });
+
+  it("los accesos, los sorteos y las órdenes siguen: la lectura de los cobros con el costo no toca lo de antes", () => {
+    const sql = sqlDePrueba(objetoDeAntes());
+    const cupos = new Cupos(sql);
+    const cobros = new Cobros(sql, cupos, { costos: new UsoDePagos(sql) });
+    expect(cupos.estaEnElLibro(ANA)).toBe(true);
+    expect(cupos.quedan({ cuenta: ANA }, T).quedan).toBe(2);
+    expect(cobros.ordenAbierta("usr_nora", T)?.id).toBe("K7M29QXA");
+    // Una vuelta de lectura sin pagos nuevos: el suelto de otro activo de antes sigue suelto y nada cambia.
+    expect(cobros.registrarLectura([], null, T)).toEqual([]);
+    expect(cobros.sueltos()).toEqual([expect.objectContaining({ operacion: "op-2", motivo: "otro-activo", estado: "suelto" })]);
+    expect(cobros.sueltosSinResolver()).toBe(1);
+    expect(cobros.costosDeRetiro(0)).toEqual({ cuantos: 0, monto: 0 });
+  });
+
+  it("un pago suelto de USDC de antes, de una transacción que no es de ningún retiro, sigue suelto", () => {
+    const db = objetoDeAntes();
+    const insertar = [
+      "INSERT INTO pagos_sueltos (operacion, tx, de, activo, monto, nota, motivo, estado, orden, ref, ms)",
+      "VALUES (?, ?, ?, 'USDC', ?, NULL, 'sin-nota', 'suelto', NULL, NULL, ?)",
+    ].join(" ");
+    db.prepare(insertar).run("op-3", hex("9"), NORA, 5_000_000, T - 600_000);
+    const sql = sqlDePrueba(db);
+    const cupos = new Cupos(sql);
+    const cobros = new Cobros(sql, cupos, { costos: new UsoDePagos(sql) });
+    cobros.registrarLectura([], null, T);
+    expect(cobros.sueltos().map((s) => [s.operacion, s.motivo, s.estado])).toEqual([
+      ["op-2", "otro-activo", "suelto"],
+      ["op-3", "sin-nota", "suelto"],
+    ]);
   });
 });

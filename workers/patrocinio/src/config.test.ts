@@ -105,6 +105,223 @@ describe("las altas nacen apagadas", () => {
   });
 });
 
+describe("ORDEN_USDC_PILOTO: la lista del piloto de la orden en dólares digitales", () => {
+  const G1 = Keypair.random().publicKey();
+  const G2 = Keypair.random().publicKey();
+
+  it("vacía (o en testnet) no pone lista propia: la orden mira el piloto de la compra con QR, como hoy", () => {
+    for (const vacia of [undefined, "", " , "]) {
+      const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ...(vacia === undefined ? {} : { ORDEN_USDC_PILOTO: vacia }) });
+      expect(cfg.ordenUsdcTodos, JSON.stringify(vacia)).toBe(false);
+      expect([...cfg.ordenUsdcPiloto], JSON.stringify(vacia)).toEqual([]);
+      expect(cfg.ordenUsdcEnVariable, JSON.stringify(vacia)).toBe("ninguna");
+      expect(cfg.faltaAltas, JSON.stringify(vacia)).toEqual([]);
+    }
+    const test = leerConfig({ RED: "testnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: G1 });
+    expect(test).toMatchObject({ ordenUsdcTodos: false, ordenUsdcEnVariable: "ninguna" });
+    expect([...test.ordenUsdcPiloto]).toEqual([]);
+    expect(test.faltaAltas).toEqual([]);
+  });
+
+  it("lista de cuentas bien escritas, con espacios alrededor: esas y solo esas", () => {
+    const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: ` ${G1} , ${G2} ` });
+    expect([...cfg.ordenUsdcPiloto].sort()).toEqual([G1, G2].sort());
+    expect(cfg.ordenUsdcTodos).toBe(false);
+    expect(cfg.ordenUsdcEnVariable).toBe("lista");
+    expect(cfg.faltaAltas).toEqual([]);
+  });
+
+  it("todos abre a cualquiera solo con ORDEN_USDC_TODOS en 1; sin la confirmación cierra y se anota", () => {
+    const base = { RED: "mainnet", ...TODO_PRENDIDO };
+    const abierto = leerConfig({ ...base, ORDEN_USDC_PILOTO: "todos", ORDEN_USDC_TODOS: "1" });
+    expect(abierto.ordenUsdcTodos).toBe(true);
+    expect([...abierto.ordenUsdcPiloto]).toEqual([]);
+    expect(abierto.faltaAltas).toEqual([]);
+    // Con cuentas al lado también; con la confirmación, nada cambia para ellas.
+    const conCuentas = leerConfig({ ...base, ORDEN_USDC_PILOTO: `todos, ${G1} `, ORDEN_USDC_TODOS: "1" });
+    expect(conCuentas.ordenUsdcTodos).toBe(true);
+    expect([...conCuentas.ordenUsdcPiloto]).toEqual([G1]);
+    // Sin la confirmación explícita, `todos` es como una palabra mal escrita.
+    for (const sinEso of [undefined, "0", "true", " 1"]) {
+      const cfg = leerConfig({ ...base, ORDEN_USDC_PILOTO: "todos", ...(sinEso === undefined ? {} : { ORDEN_USDC_TODOS: sinEso }) });
+      expect(cfg.ordenUsdcTodos, JSON.stringify(sinEso)).toBe(false);
+      expect([...cfg.ordenUsdcPiloto], JSON.stringify(sinEso)).toEqual([]);
+      expect(cfg.ordenUsdcEnVariable, JSON.stringify(sinEso)).toBe("mal");
+      expect(cfg.faltaAltas, JSON.stringify(sinEso)).toEqual(["orden-usdc-piloto"]);
+    }
+  });
+
+  it("mal escrita no se toma a medias: se anota con nombre fijo, sin valores, solo si la orden puede nacer", () => {
+    for (const mal of [`${G1},beto`, `${G1};${G2}`, "Todos", "todas", "*"]) {
+      const cfg = leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: mal });
+      expect([...cfg.ordenUsdcPiloto], mal).toEqual([]);
+      expect(cfg.ordenUsdcTodos, mal).toBe(false);
+      expect(cfg.ordenUsdcEnVariable, mal).toBe("mal");
+    }
+    expect(leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ORDEN_USDC_PILOTO: `${G1},beto` }).faltaAltas).toEqual(["orden-usdc-piloto"]);
+    // Con el pago apagado no se usa: no se anota.
+    expect(leerConfig({ RED: "mainnet", ...TODO_PRENDIDO, ALTAS_PAGO: "0", ORDEN_USDC_PILOTO: `${G1},beto` }).faltaAltas).toEqual([]);
+  });
+});
+
+/** Las siete variables de los pagos de premios, los retiros y el alta de quien ganó. */
+const VARIABLES_DE_PAGOS = [
+  "PAGOS_PREMIO",
+  "RETIROS",
+  "ALTAS_PREMIO",
+  "COSTO_RETIRO",
+  "TOPE_PAGOS_STROOPS",
+  "PAGOS_RECHAZADOS_DIA",
+  "ALTAS_PREMIO_DIA",
+];
+/** Los campos de `Config` que trajeron esas variables. */
+const CAMPOS_DE_PAGOS = ["pagosPremio", "retiros", "altasPremio", "costoRetiro", "topePagos", "pagosRechazadosDia", "altasPremioDia"];
+
+describe("los pagos de premios, los retiros y el alta de quien ganó", () => {
+  const BASE = { RED: "mainnet", ...TODO_PRENDIDO };
+  /** Las tres prendidas, con el costo del retiro bien escrito. */
+  const TRES = { PAGOS_PREMIO: "1", RETIROS: "1", ALTAS_PREMIO: "1", COSTO_RETIRO: "0.50" };
+  const formas = (cfg: ReturnType<typeof leerConfig>) => [cfg.pagosPremio, cfg.retiros, cfg.altasPremio];
+
+  it("nacen apagadas, en las dos redes y con todo lo demás prendido, y los topes valen los de siempre", () => {
+    for (const RED of ["testnet", "mainnet"]) {
+      const cfg = leerConfig({ RED, ...TODO_PRENDIDO });
+      expect(formas(cfg), RED).toEqual([false, false, false]);
+      expect(cfg.costoRetiro, RED).toBeNull();
+      expect(cfg.faltaAltas, RED).toEqual([]);
+      expect(cfg, RED).toMatchObject({ topePagos: 20_000_000, pagosRechazadosDia: 20, altasPremioDia: 100 });
+    }
+  });
+
+  it("solo un 1 prende cada una: ni true, ni si, ni un espacio", () => {
+    for (const v of ["true", "si", "yes", " 1", "01", "", "0"]) {
+      const cfg = leerConfig({ ...BASE, PAGOS_PREMIO: v, RETIROS: v, ALTAS_PREMIO: v, COSTO_RETIRO: "0.50" });
+      expect(formas(cfg), JSON.stringify(v)).toEqual([false, false, false]);
+      expect(cfg.faltaAltas, JSON.stringify(v)).toEqual([]);
+    }
+  });
+
+  it("en la red principal, con el libro y todo bien escrito, cada una se prende sola", () => {
+    const todas = leerConfig({ ...BASE, ...TRES });
+    expect(formas(todas)).toEqual([true, true, true]);
+    expect(todas.faltaAltas).toEqual([]);
+    expect(formas(leerConfig({ ...BASE, PAGOS_PREMIO: "1" }))).toEqual([true, false, false]);
+    expect(formas(leerConfig({ ...BASE, RETIROS: "1", COSTO_RETIRO: "0.50" }))).toEqual([false, true, false]);
+    expect(formas(leerConfig({ ...BASE, ALTAS_PREMIO: "1" }))).toEqual([false, false, true]);
+  });
+
+  it("sin ALTAS no se prende ninguna y se dice cuáles faltan", () => {
+    for (const ALTAS of [undefined, "0", "true"]) {
+      const cfg = leerConfig({ RED: "mainnet", ...TRES, ...(ALTAS === undefined ? {} : { ALTAS }) });
+      expect(formas(cfg), String(ALTAS)).toEqual([false, false, false]);
+      expect(cfg.faltaAltas, String(ALTAS)).toEqual(["pagos-premio", "retiros", "alta-premio"]);
+    }
+  });
+
+  it("en testnet se ignoran las tres, también con todo prendido", () => {
+    const cfg = leerConfig({ RED: "testnet", ...TODO_PRENDIDO, ...TRES });
+    expect(formas(cfg)).toEqual([false, false, false]);
+    expect(cfg.costoRetiro).toBeNull();
+    expect(cfg.faltaAltas).toEqual([]);
+  });
+
+  it("el retiro pide una cuenta de cobros propia", () => {
+    const sinCobros = { RED: "mainnet", ALTAS: "1", POLLAR_APP_ID: "app", RETIROS: "1", COSTO_RETIRO: "0.50" };
+    const cfg = leerConfig(sinCobros);
+    expect(cfg.retiros).toBe(false);
+    expect(cfg.faltaAltas).toEqual(["retiros"]);
+    // La de cobros repetida, igual a la que paga las comisiones, no se toma.
+    const g = Keypair.random().publicKey();
+    const repetida = leerConfig({ ...sinCobros, CUENTA_PATROCINADORA: g, CUENTA_COBROS: g });
+    expect(repetida.retiros).toBe(false);
+    expect(repetida.faltaAltas).toEqual(["cuenta-cobros-repetida", "retiros"]);
+  });
+
+  it.each([
+    ["vacío", ""],
+    ["sin poner", undefined],
+    ["en cero", "0"],
+    ["en cero con decimales", "0.00"],
+    ["de menos de un centavo", "0.001"],
+    ["en 6", "6"],
+    ["apenas por encima de 5", "5.0000001"],
+    ["con coma", "0,50"],
+    ["con letras", "cincuenta"],
+    ["con signo", "-1"],
+    ["con la moneda", "$0.50"],
+  ])("un costo %s apaga el retiro y se anota", (_nombre, COSTO_RETIRO) => {
+    const cfg = leerConfig({ ...BASE, RETIROS: "1", ...(COSTO_RETIRO === undefined ? {} : { COSTO_RETIRO }) });
+    expect(cfg.retiros).toBe(false);
+    expect(cfg.costoRetiro).toBeNull();
+    expect(cfg.faltaAltas).toEqual(["costo-retiro"]);
+  });
+
+  it.each([
+    ["0.50", 5_000_000],
+    ["0.5", 5_000_000],
+    ["0.01", 100_000],
+    ["5", 50_000_000],
+    ["5.0000000", 50_000_000],
+    [" 1.25 ", 12_500_000],
+  ])("el costo %j vale %i diezmillonésimas y prende el retiro", (texto, monto) => {
+    const cfg = leerConfig({ ...BASE, RETIROS: "1", COSTO_RETIRO: texto });
+    expect(cfg.retiros).toBe(true);
+    expect(cfg.costoRetiro).toEqual({ usdc: texto.trim(), monto });
+    expect(cfg.faltaAltas).toEqual([]);
+  });
+
+  it("un costo mal escrito se anota aunque el retiro esté apagado; vacío no, y en testnet tampoco", () => {
+    expect(leerConfig({ ...BASE, COSTO_RETIRO: "0,50" }).faltaAltas).toEqual(["costo-retiro"]);
+    expect(leerConfig({ ...BASE, COSTO_RETIRO: "" }).faltaAltas).toEqual([]);
+    expect(leerConfig({ RED: "testnet", COSTO_RETIRO: "0,50" }).faltaAltas).toEqual([]);
+  });
+
+  it.each([
+    ["TOPE_PAGOS_STROOPS", "tope-pagos", "topePagos", 20_000_000],
+    ["PAGOS_RECHAZADOS_DIA", "pagos-rechazos", "pagosRechazadosDia", 20],
+    ["ALTAS_PREMIO_DIA", "altas-premio-dia", "altasPremioDia", 100],
+  ])("%s solo con dígitos: mal escrita se anota aunque la forma esté apagada y vale la de siempre", (variable, nombre, campo, porDefecto) => {
+    for (const mal of ["8.400", "8,400", "8 400", "-5", "1e4", "mucho", "0x10"]) {
+      const cfg = leerConfig({ ...BASE, [variable]: mal });
+      expect(cfg.faltaAltas, mal).toEqual([nombre]);
+      expect(cfg, mal).toMatchObject({ [campo]: porDefecto });
+    }
+    expect(leerConfig({ ...BASE, [variable]: " 15 " })).toMatchObject({ [campo]: 15, faltaAltas: [] });
+    expect(leerConfig({ ...BASE, [variable]: "" })).toMatchObject({ [campo]: porDefecto, faltaAltas: [] });
+    // En testnet no se lee ni se anota nada.
+    expect(leerConfig({ RED: "testnet", [variable]: "mucho" })).toMatchObject({ [campo]: porDefecto, faltaAltas: [] });
+  });
+
+  it("un tope mal escrito apaga lo suyo y deja lo demás", () => {
+    const prendido = { ...BASE, ...TRES };
+    expect(formas(leerConfig({ ...prendido, TOPE_PAGOS_STROOPS: "2,5" }))).toEqual([false, false, true]);
+    expect(formas(leerConfig({ ...prendido, PAGOS_RECHAZADOS_DIA: "veinte" }))).toEqual([false, false, true]);
+    expect(formas(leerConfig({ ...prendido, ALTAS_PREMIO_DIA: "cien" }))).toEqual([true, true, false]);
+  });
+
+  it("los topes bien escritos se leen tal cual", () => {
+    const cfg = leerConfig({ ...BASE, TOPE_PAGOS_STROOPS: "30000000", PAGOS_RECHAZADOS_DIA: "50", ALTAS_PREMIO_DIA: "300" });
+    expect(cfg).toMatchObject({ topePagos: 30_000_000, pagosRechazadosDia: 50, altasPremioDia: 300, faltaAltas: [] });
+  });
+
+  it("cada tope en su techo se lee tal cual: 10 XLM, 100 rechazados y 300 altas", () => {
+    const cfg = leerConfig({ ...BASE, ...TRES, TOPE_PAGOS_STROOPS: "100000000", PAGOS_RECHAZADOS_DIA: "100", ALTAS_PREMIO_DIA: "300" });
+    expect(cfg).toMatchObject({ topePagos: 100_000_000, pagosRechazadosDia: 100, altasPremioDia: 300, faltaAltas: [] });
+    expect(formas(cfg)).toEqual([true, true, true]);
+  });
+
+  it.each([
+    ["TOPE_PAGOS_STROOPS", "200000000", "tope-pagos", "topePagos", 20_000_000, [false, false, true]],
+    ["PAGOS_RECHAZADOS_DIA", "101", "pagos-rechazos", "pagosRechazadosDia", 20, [false, false, true]],
+    ["ALTAS_PREMIO_DIA", "1000", "altas-premio-dia", "altasPremioDia", 100, [true, true, false]],
+  ])("%s por encima de su techo (%s, un cero de más) es mal escrito y apaga lo suyo", (variable, valor, nombre, campo, porDefecto, prendidas) => {
+    const cfg = leerConfig({ ...BASE, ...TRES, [variable]: valor });
+    expect(cfg.faltaAltas).toEqual([nombre]);
+    expect(cfg).toMatchObject({ [campo]: porDefecto });
+    expect(formas(cfg)).toEqual(prendidas);
+  });
+});
+
 describe("PRECIOS", () => {
   it("una cadena con los tres productos los da todos, con el monto en diezmillonésimas", () => {
     expect(leerPrecios("alta:2:3:365,p10:5:10:365,p50:20:50:365")).toEqual([
@@ -319,6 +536,48 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
   it("mainnet fija sus pagos por dirección para un stand que sale por la misma wifi", () => {
     expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"600"');
     expect(valor("vars", "POR_IP_POR_HORA")).toBeUndefined();
+  });
+
+  it("las siete variables de los pagos están solo en mainnet: las tres de prender en 1 y los números de siempre", () => {
+    expect(varsDeMainnet()).toMatchObject({
+      PAGOS_PREMIO: "1",
+      RETIROS: "1",
+      ALTAS_PREMIO: "1",
+      COSTO_RETIRO: "0.50",
+      TOPE_PAGOS_STROOPS: "20000000",
+      PAGOS_RECHAZADOS_DIA: "20",
+      ALTAS_PREMIO_DIA: "100",
+    });
+    // Lo de arriba de todo es la red de prueba: no tiene ninguna.
+    for (const s of VARIABLES_DE_PAGOS) {
+      expect(valor("vars", s), s).toBeUndefined();
+    }
+  });
+
+  it("con las siete líneas, el portero de hoy no falta nada y las tres formas están prendidas", () => {
+    const cfg = leerConfig(varsDeMainnet());
+    expect(cfg.faltaAltas).toEqual([]);
+    expect(cfg).toMatchObject({
+      pagosPremio: true,
+      retiros: true,
+      altasPremio: true,
+      costoRetiro: { usdc: "0.50", monto: 5_000_000 },
+      topePagos: 20_000_000,
+      pagosRechazadosDia: 20,
+      altasPremioDia: 100,
+    });
+  });
+
+  it("con las tres apagadas, la configuración es la misma que sin las siete líneas, salvo los campos nuevos", () => {
+    const vars = varsDeMainnet();
+    const sinLasSiete = Object.fromEntries(Object.entries(vars).filter(([k]) => !VARIABLES_DE_PAGOS.includes(k)));
+    const sinCamposNuevos = (cfg: object) => Object.fromEntries(Object.entries(cfg).filter(([k]) => !CAMPOS_DE_PAGOS.includes(k)));
+    expect(sinCamposNuevos(leerConfig(vars))).toEqual(sinCamposNuevos(leerConfig(sinLasSiete)));
+  });
+
+  it("prender las tres es cambiar variables: con los tres interruptores en 1 se prenden sin que falte nada", () => {
+    const cfg = leerConfig({ ...varsDeMainnet(), PAGOS_PREMIO: "1", RETIROS: "1", ALTAS_PREMIO: "1" });
+    expect(cfg).toMatchObject({ pagosPremio: true, retiros: true, altasPremio: true, faltaAltas: [] });
   });
 
   it("ningún secreto ni dirección de Pollar o de Horizon en el archivo", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type EntradaVista, type Para, vistaDe } from "./cuenta-lista-estado";
+import { ACCESO_LIBRE, type AccesoEnLaVista, type EntradaVista, type Para, pagoInicial, portadaDe, vistaDe } from "./cuenta-lista-estado";
 
 /**
  * Qué muestra «Dejá tu cuenta lista» en cada estado (`vistaDe`), sin DOM. Las reglas que no se negocian: una sola acción
@@ -32,7 +32,8 @@ const base: EntradaVista = {
   puedePasarAPrueba: true,
   primerOficialPendiente: false,
 };
-const v = (o: Partial<EntradaVista> = {}) => vistaDe({ ...base, ...o });
+const v = (o: Partial<EntradaVista> = {}, acceso?: AccesoEnLaVista) => vistaDe({ ...base, ...o, ...(acceso ? { acceso } : {}) });
+const servidor = (o: Partial<AccesoEnLaVista> = {}): AccesoEnLaVista => ({ ...ACCESO_LIBRE, modo: "servidor", estado: "ninguno", ...o });
 const FINAL = new Set(["seguir", "sellar", "sortear"]);
 
 /** Una muestra amplia de entradas: cada estado con cada cosa que puede estar corriendo. */
@@ -120,13 +121,10 @@ describe("vistaDe: activar", () => {
       v({ activacion: "lista", corre: "confirmando", codigo: { a: "n•••@gmail.com", segundos: 3 }, campoOk: true }),
     ];
     for (const vista of ocupadas) {
-      const caja = vista.cajas.find((c) => c.ocupada);
-      expect(caja?.palabra).toBe("");
+      expect(vista.cajas.some((c) => c.ocupada)).toBe(true);
       expect(vista.principal?.apagado).toBe(true);
       expect(vista.principal?.ocupado).toBe(true);
     }
-    // Sin nada corriendo, cada caja dice su palabra.
-    expect(v().cajas.map((c) => c.palabra)).toEqual(["clEstadoFalta", "clEstadoEspera"]);
   });
 
   it("apagada porque corre lo suyo no es lo mismo que apagada porque falta escribir", () => {
@@ -174,8 +172,8 @@ describe("vistaDe: activar", () => {
     for (const falla of ["red", "tarda", "fallo", "rara", "servicio", "sin-pedido"] as const) expect(v({ falla }).principal?.accion).toBe("leer");
   });
 
-  it("lo que dijo «rara» lleva el contacto", () => {
-    expect(v({ falla: "rara" }).cajas[0]?.error?.map((x) => x.clave)).toEqual(["clErrRara", "clContacto"]);
+  it("lo que dijo rara lleva el contacto en una sola frase", () => {
+    expect(v({ falla: "rara" }).cajas[0]?.error?.map((x) => x.clave)).toEqual(["clErrRara"]);
   });
 });
 
@@ -186,8 +184,9 @@ describe("vistaDe: proteger", () => {
     const vista = protegerVista();
     expect(vista.principal).toMatchObject({ accion: "desbloqueo", clave: "clDesbloqueoCel" });
     const caja = vista.cajas[1];
-    expect(caja?.textos.map((x) => x.clave)).toEqual(["clProtegerTextoCel", "clDesbloqueoAyudaCel"]);
-    expect(caja?.secundarios[0]).toMatchObject({ accion: "mandar-codigo", clave: "clMandarA", vars: { mail: "n•••@gmail.com" }, raya: "clCorreoO" });
+    expect(caja?.textos.map((x) => x.clave)).toEqual(["clProtegerTextoCel"]);
+    expect(caja?.ayuda).toEqual({ clave: "clDesbloqueoAyudaCel" });
+    expect(caja?.secundarios[0]).toMatchObject({ accion: "mandar-codigo", clave: "clMandarA", vars: { mail: "n•••@gmail.com" }, forma: "texto" });
   });
 
   it("en la compu, la principal es el correo y el desbloqueo va como secundario", () => {
@@ -198,7 +197,7 @@ describe("vistaDe: proteger", () => {
     // «Mandar el código a otro correo»: todavía no se leyó a qué correo va la principal.
     expect(sec[0]).toMatchObject({ clave: "clOtroCorreo", forma: "texto" });
     // El desbloqueo dice qué es, debajo de su botón.
-    expect(sec[1]).toMatchObject({ clave: "clDesbloqueoCompu", raya: "clOSiPreferis", ayuda: { clave: "clDesbloqueoAyudaCompu" } });
+    expect(sec[1]).toMatchObject({ clave: "clDesbloqueoCompu", forma: "texto", ayuda: { clave: "clDesbloqueoAyudaCompu" } });
     expect(vista.cajas[1]?.textos.map((x) => x.clave)).toEqual(["clProtegerTextoCompu"]);
   });
 
@@ -208,14 +207,17 @@ describe("vistaDe: proteger", () => {
         for (const tieneLlaves of [true, false]) {
           const vista = vistaDe({ ...e, hayDesbloqueo, tieneLlaves });
           for (const caja of vista.cajas) {
-            const ayudaEnLaCaja = caja.textos.some((x) => x.clave.startsWith("clDesbloqueoAyuda"));
-            for (const s of caja.secundarios.filter((x) => x.accion === "desbloqueo")) expect(s.ayuda?.clave, JSON.stringify(e)).toMatch(/^clDesbloqueoAyuda/);
-            if (caja.abierta && vista.principal?.accion === "desbloqueo" && !vista.principal.apagado) expect(ayudaEnLaCaja, JSON.stringify(e)).toBe(true);
+            for (const s of caja.secundarios.filter((x) => x.accion === "desbloqueo")) {
+              expect(s.ayuda?.clave, JSON.stringify(e)).toMatch(/^clDesbloqueoAyuda/);
+            }
+            if (caja.abierta && vista.principal?.accion === "desbloqueo" && !vista.principal.apagado) {
+              expect(caja.ayuda?.clave, JSON.stringify(e)).toMatch(/^clDesbloqueoAyuda/);
+            }
           }
         }
     }
-    // Con el código mandado, también.
-    const codigo = v({ activacion: "lista", celular: false, codigo: { a: "n•••@gmail.com", segundos: 3 } });
+    // Con el código mandado, también, cuando aparece la ayuda a los 20 segundos.
+    const codigo = v({ activacion: "lista", celular: false, codigo: { a: "n•••@gmail.com", segundos: 20 } });
     expect(codigo.cajas[1]?.secundarios.find((s) => s.accion === "desbloqueo")?.ayuda?.clave).toBe("clDesbloqueoAyudaCompu");
   });
 
@@ -253,18 +255,20 @@ describe("vistaDe: proteger", () => {
     expect(a.cajas[1]?.titulo).toBe("protCodeTitulo");
     expect(a.cajas[1]?.campo).toBe("codigo");
     expect(a.principal).toMatchObject({ accion: "confirmar-codigo", clave: "protCodeGo", apagado: true });
-    expect(a.cajas[1]?.secundarios[0]).toMatchObject({ accion: "otro-codigo", clave: "clOtroCodigoEn", vars: { s: "25" }, apagado: true });
-    expect(a.cajas[1]?.textos.map((x) => x.clave)).toEqual(["protCodeLead", "clCorreoLlega"]);
+    expect(a.cajas[1]?.secundarios.map((s) => s.accion)).toEqual(["otro-correo"]);
+    expect(a.cajas[1]?.textos.map((x) => x.clave)).toEqual(["protCodeLead"]);
     const b = protegerVista({ celular: false, codigo: { a: "x", segundos: 21 }, campoOk: true });
     expect(b.cajas[1]?.textos.map((x) => x.clave)).toContain("clCorreoSpam");
+    expect(b.cajas[1]?.secundarios[0]).toMatchObject({ accion: "otro-codigo", clave: "clOtroCodigoEn", vars: { s: "9" }, apagado: true });
+    expect(b.cajas[1]?.secundarios.map((s) => s.accion)).toContain("desbloqueo");
     expect(b.principal?.apagado).toBe(false);
     const c = protegerVista({ celular: false, codigo: { a: "x", segundos: 31 } });
     expect(c.cajas[1]?.secundarios[0]).toMatchObject({ accion: "otro-codigo", clave: "protOtroCodigo", apagado: false });
   });
 
-  it("si entró con su correo, se aclara que es otro código", () => {
+  it("si entró con su correo, la pantalla no repite una explicación de más", () => {
     const vista = protegerVista({ entroConCorreo: true, codigo: { a: "x", segundos: 1 } });
-    expect(vista.cajas[1]?.textos.map((x) => x.clave)).toContain("clCorreoOtroCodigo");
+    expect(vista.cajas[1]?.textos.map((x) => x.clave)).toEqual(["protCodeLead"]);
   });
 
   it("el código vencido o de antes de recargar: la principal pide otro", () => {
@@ -283,10 +287,11 @@ describe("vistaDe: proteger", () => {
     expect(vista.principal?.accion).toBe("mandar-codigo");
   });
 
-  it("la nota de salir sin proteger solo si falta proteger y este es el único navegador", () => {
-    expect(protegerVista().notas).toEqual(["clSalirAvisoCel", "clAPruebaNota"]);
-    expect(protegerVista({ celular: false }).notas[0]).toBe("clSalirAvisoCompu");
-    expect(protegerVista({ unicoNavegador: false }).notas).toEqual(["clAPruebaNota"]);
+  it("no hay notas de más, salvo el motivo cuando no se puede pasar a Prueba", () => {
+    expect(protegerVista().notas).toEqual([]);
+    expect(protegerVista({ celular: false }).notas).toEqual([]);
+    expect(protegerVista({ unicoNavegador: false }).notas).toEqual([]);
+    expect(protegerVista({ puedePasarAPrueba: false }).notas).toEqual(["modeSwitchBlocked"]);
   });
 });
 
@@ -306,7 +311,7 @@ describe("vistaDe: otro celular u otra compu", () => {
     const vista = aparato({ tieneLlaves: true });
     expect(vista.principal).toMatchObject({ accion: "mandar-codigo", clave: "clMandarA", vars: { mail: "c•••@mail.com" } });
     expect(vista.cajas[0]?.secundarios.map((s) => s.accion)).toEqual(["desbloqueo"]);
-    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["clAparatoTextoCel", "clAparatoAjenoCel"]);
+    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["clAparatoTextoCel"]);
     // Sin llaves guardadas, el desbloqueo no se ofrece: no hay con qué.
     expect(aparato({ tieneLlaves: false }).cajas[0]?.secundarios).toEqual([]);
     // Sin campo para escribir otro correo.
@@ -321,7 +326,10 @@ describe("vistaDe: otro celular u otra compu", () => {
 describe("vistaDe: sin forma desde acá", () => {
   it("dice qué hacer, y la principal es «Pasar a Prueba» (o ninguna si no se puede)", () => {
     const vista = v({ activacion: "lista", proteccion: "sin-forma", unicoNavegador: false });
-    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["clSinForma", "clSinFormaPista", "clContacto"]);
+    expect(vista.cajas[0]?.titulo).toBe("clSinFormaTitulo");
+    expect(vista.cajas[0]?.textos.map((x) => x.clave)).toEqual(["clSinForma"]);
+    expect(vista.cajas[0]?.detalles?.map((x) => x.clave)).toEqual(["clSinFormaPista", "clContacto"]);
+    expect(vista.cajas[0]?.sola).toBe(true);
     expect(vista.principal?.accion).toBe("pasar-a-prueba");
     expect(vista.salidas?.prueba).toBeNull();
     const bloqueado = v({ activacion: "lista", proteccion: "sin-forma", puedePasarAPrueba: false });
@@ -357,7 +365,7 @@ describe("vistaDe: el final", () => {
     const vista = v({ activacion: "lista", proteccion: "lista", para: para as Para });
     expect(vista.final).toBe(true);
     expect(vista.titulo).toBe("clListaTitulo");
-    expect(vista.bajada).toBe("clListaTexto");
+    expect(vista.bajada).toBe("");
     expect(vista.principal).toMatchObject({ accion, clave, apagado: false });
     expect(!!vista.volver).toBe(conVolver);
     expect(vista.notas).toEqual([]);
@@ -374,5 +382,152 @@ describe("vistaDe: el final", () => {
     expect(v({ activacion: "lista", proteccion: "lista", para: "entrada-con-lista", primerOficialPendiente: true }).primerOficial).toBe(true);
     expect(v({ activacion: "lista", proteccion: "lista", para: "sorteo", primerOficialPendiente: true }).primerOficial).toBe(false);
     expect(v({ activacion: "lista", proteccion: "lista", para: "sello", primerOficialPendiente: false }).primerOficial).toBe(false);
+  });
+});
+
+describe("portadaDe: la forma de cada estado", () => {
+  const PAQUETE = { id: "alta", usdc: "3", sorteos: 3, dias: 90 } as const;
+  const CASOS = [
+    ["F1 todo listo al entrar", v({ activacion: "lista", proteccion: "lista" }), "final"],
+    ["F2 todo listo para sellar", v({ activacion: "lista", proteccion: "lista", para: "sello", primerOficialPendiente: true }), "final"],
+    ["F3 todo listo para sortear", v({ activacion: "lista", proteccion: "lista", para: "sorteo" }), "final"],
+    ["R1 revisando la cuenta", v({ corre: "revisando" }), "revisando"],
+    ["A1 falta activar y proteger", v(), "dos"],
+    ["A2 falta solo activar", v({ proteccion: "lista" }), "uno"],
+    ["A3 activando", v({ corre: "activando" }), "dos"],
+    ["A5 altas cerradas", v({}, { ...ACCESO_LIBRE, modo: "cerrado" }), "uno"],
+    ["C1 sin cupón y sin compra", v({}, servidor()), "dos"],
+    ["C2 primer paquete a la venta", v({ activacion: "lista", proteccion: "lista" }, servidor({ pago: pagoInicial("es", PAQUETE) })), "uno"],
+    ["C3 con un cupón en mano", v({}, servidor({ cuponEnMano: "K7M2-9QXA-4HTR" })), "uno"],
+    ["C4 escribiendo el cupón", v({}, servidor({ escribiendo: true })), "uno"],
+    ["C5 siguiendo el canje", v({ corre: "activando" }, servidor({ estado: "con", canjeado: 3, cadena: true })), "uno"],
+    ["C7 compra empezada", v({}, servidor({ pago: { ...pagoInicial("es", PAQUETE), fase: "elegir" } })), "uno"],
+    ["P1 proteger en celular con desbloqueo", v({ activacion: "lista" }), "uno"],
+    ["P2 proteger en celular sin desbloqueo", v({ activacion: "lista", hayDesbloqueo: false }), "uno"],
+    ["P3 proteger en compu con desbloqueo", v({ activacion: "lista", celular: false }), "uno"],
+    ["P5 escribiendo otro correo", v({ activacion: "lista", eligioCorreo: true }), "uno"],
+    ["P6 esperando el desbloqueo", v({ activacion: "lista", corre: "desbloqueo" }), "uno"],
+    ["P7 mandando el código", v({ activacion: "lista", corre: "mandando" }), "uno"],
+    ["P8 con el código mandado", v({ activacion: "lista", codigo: { a: "n•••@gmail.com", segundos: 3 } }), "uno"],
+    ["P9 confirmando el código", v({ activacion: "lista", corre: "confirmando", codigo: { a: "n•••@gmail.com", segundos: 3 } }), "uno"],
+    ["O1 confirmar en un celular", v({ activacion: "lista", proteccion: "aparato-nuevo", correoConfirmado: true }), "uno"],
+    ["O2 confirmar y todavía activar", v({ proteccion: "aparato-nuevo", correoConfirmado: true }), "dos"],
+    ["O3 confirmar solo con desbloqueo", v({ activacion: "lista", proteccion: "aparato-nuevo", correoConfirmado: false, tieneLlaves: true }), "uno"],
+    ["O4 sin forma de entrar desde acá", v({ activacion: "lista", proteccion: "sin-forma" }), "uno"],
+  ] as const;
+
+  it.each(CASOS)("%s: %s", (_id, vista, forma) => {
+    expect(portadaDe(vista).forma).toBe(forma);
+  });
+
+  it("con solo activar pendiente, el título y la línea son los de activar y no hay fila de proteger", () => {
+    const portada = portadaDe(v({ proteccion: "lista" }));
+    expect(portada.titulo).toBe("clActivarTitulo");
+    expect(portada.linea).toEqual({ clave: "clActivarTexto" });
+    expect(portada.filas.map((c) => c.parte)).toEqual(["activar"]);
+  });
+
+  it("con solo proteger pendiente, el título y la línea son los de proteger", () => {
+    const portada = portadaDe(v({ activacion: "lista" }));
+    expect(portada.titulo).toBe("clProtegerTitulo");
+    expect(portada.linea).toEqual({ clave: "clProtegerTextoCel" });
+    expect(portada.filas.map((c) => c.parte)).toEqual(["proteger"]);
+  });
+
+  it("con solo confirmar pendiente, el título y la línea son los de confirmar", () => {
+    const portada = portadaDe(v({ activacion: "lista", proteccion: "aparato-nuevo", correoConfirmado: true }));
+    expect(portada.titulo).toBe("clAparatoTitulo");
+    expect(portada.linea).toEqual({ clave: "clAparatoTextoCel" });
+    expect(portada.filas.map((c) => c.parte)).toEqual(["proteger"]);
+  });
+
+  it("con dos pendientes, la línea es común y las dos filas conservan cuál es la actual", () => {
+    const portada = portadaDe(v());
+    expect(portada.titulo).toBe("clTitulo");
+    expect(portada.linea).toEqual({ clave: "clBajada" });
+    expect(portada.filas.map((c) => c.abierta)).toEqual([true, false]);
+  });
+
+  it("en el final, la única línea posible es la del primer sello", () => {
+    const con = portadaDe(v({ activacion: "lista", proteccion: "lista", primerOficialPendiente: true }));
+    expect(con.linea).toEqual({ clave: "clPrimerSello" });
+    expect(con.filas).toEqual([]);
+    const sin = portadaDe(v({ activacion: "lista", proteccion: "lista" }));
+    expect(sin.linea).toBeNull();
+  });
+
+  it("en el final, el aviso del aparato ajeno va debajo del título y el del primer sello tiene prioridad", () => {
+    const ajeno = portadaDe(v({ activacion: "lista", proteccion: "lista", aviso: "clAparatoListoCel" }));
+    expect(ajeno.linea).toEqual({ clave: "clAparatoListoCel" });
+    const sello = portadaDe(v({ activacion: "lista", proteccion: "lista", aviso: "clAparatoListoCel", primerOficialPendiente: true }));
+    expect(sello.linea).toEqual({ clave: "clPrimerSello" });
+    const otro = portadaDe(v({ activacion: "lista", proteccion: "lista", aviso: "clProtegida" }));
+    expect(otro.linea).toBeNull();
+  });
+
+  it("mientras revisa, no hay filas ni una línea que adivine cuántos pasos faltan", () => {
+    const portada = portadaDe(v({ corre: "revisando" }));
+    expect(portada.titulo).toBe("clTitulo");
+    expect(portada.linea).toBeNull();
+    expect(portada.filas).toEqual([]);
+  });
+
+  it("con dos pendientes y un error, se ve solo la caja del error y el error ocupa el lugar de la línea", () => {
+    const portada = portadaDe(v({ falla: "red" }));
+    expect(portada.forma).toBe("uno");
+    expect(portada.linea).toBeNull();
+    expect(portada.filas).toHaveLength(1);
+  });
+
+  it("con dos pendientes y un campo, se ve solo la caja del campo", () => {
+    const portada = portadaDe(v({}, servidor({ escribiendo: true })));
+    expect(portada.forma).toBe("uno");
+    expect(portada.filas[0]?.campo).toBe("cupon");
+  });
+
+  it("con dos pendientes y una nota, se ve solo la caja de la nota", () => {
+    const portada = portadaDe(v({ proteccion: "aparato-nuevo", correoConfirmado: true, falla: "desbloqueo-bloqueado" }));
+    expect(portada.forma).toBe("uno");
+    expect(portada.filas[0]?.nota?.clave).toBe("protPasskeyBloqueada");
+  });
+});
+
+describe("con un error a la vista, la primera línea de la caja sigue", () => {
+  it("con el código mandado y un código malo, la portada dice a qué correo se mandó y la caja trae el error", () => {
+    for (const falla of ["codigo-malo", "codigo-vencido", "codigo-viejo"] as const) {
+      const portada = portadaDe(v({ activacion: "lista", falla, codigo: { a: "n•••@gmail.com", segundos: 5 } }));
+      expect(portada.forma).toBe("uno");
+      expect(portada.linea).toEqual({ clave: "protCodeLead", vars: { mail: "n•••@gmail.com" } });
+      expect(portada.filas[0]?.error?.length).toBe(1);
+    }
+  });
+
+  it("con otro celular y un error, la portada sigue con la línea de confirmar", () => {
+    const portada = portadaDe(v({ activacion: "lista", proteccion: "aparato-nuevo", correoConfirmado: true, falla: "correo-fallo" }));
+    expect(portada.forma).toBe("uno");
+    expect(portada.linea).toEqual({ clave: "clAparatoTextoCel" });
+    expect(portada.filas[0]?.error?.map((x) => x.clave)).toEqual(["protFalla"]);
+  });
+});
+
+describe("con un código que no sirvió, pedir otro no espera a los 20 segundos", () => {
+  const secundarios = (o: Partial<EntradaVista>): string[] => v({ activacion: "lista", ...o }).cajas[1]?.secundarios.map((s) => s.accion) ?? [];
+
+  it("con un código malo a los 5 segundos están otro código y el desbloqueo, con la cuenta de siempre", () => {
+    const vista = v({ activacion: "lista", falla: "codigo-malo", codigo: { a: "x", segundos: 5 } });
+    expect(vista.cajas[1]?.secundarios[0]).toMatchObject({ accion: "otro-codigo", clave: "clOtroCodigoEn", vars: { s: "25" }, apagado: true });
+    expect(secundarios({ falla: "codigo-malo", codigo: { a: "x", segundos: 5 } })).toEqual(["otro-codigo", "otro-correo", "desbloqueo"]);
+    // El aviso de Spam sigue esperando a los 20 segundos.
+    expect(vista.cajas[1]?.textos.map((x) => x.clave)).toEqual(["protCodeLead"]);
+  });
+
+  it("sin error, a los 5 segundos no está", () => {
+    expect(secundarios({ codigo: { a: "x", segundos: 5 } })).toEqual(["otro-correo"]);
+  });
+
+  it("con un código vencido, la principal pide otro y el desbloqueo está enseguida", () => {
+    const vista = v({ activacion: "lista", falla: "codigo-vencido", codigo: { a: "x", segundos: 5 } });
+    expect(vista.principal).toMatchObject({ accion: "otro-codigo", clave: "protOtroCodigo" });
+    expect(vista.cajas[1]?.secundarios.map((s) => s.accion)).toEqual(["otro-correo", "desbloqueo"]);
   });
 });
