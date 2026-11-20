@@ -33,7 +33,7 @@ const PUBLICAS: Record<string, string> = {
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
-const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html", "crear-campana.html"];
+const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html", "crear-campana.html", "confirmar.html"];
 
 /** Las páginas nuevas, con el título y el h1 que se pidieron para cada una. */
 const NUEVAS: Record<string, { titulo: string; h1: string }> = {

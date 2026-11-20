@@ -599,6 +599,27 @@ describe("el botón de Amigo secreto en el selector (S2)", () => {
     expect(premio().value).toBe("Termo");
   });
 
+  it("de Orden de turnos a Amigo secreto el nombre queda Amigo secreto, no Amigo secreto: Turnos", async () => {
+    const { turnos } = await montar(6);
+    turnos.ponerModoTurnos(true);
+    expect(premio().value).toBe("Turnos");
+    turnos.ponerModoAmigo(true);
+    expect(premio().value).toBe("Amigo secreto");
+    turnos.ponerModoTurnos(true);
+    expect(premio().value).toBe("Turnos");
+  });
+
+  it("pasar de un modo al otro y apagar devuelve el nombre y la cantidad del sorteo de premios", async () => {
+    const { turnos } = await montar(12);
+    ganadoresAntes(3);
+    escribirPremio("Termo");
+    turnos.ponerModoTurnos(true);
+    turnos.ponerModoAmigo(true);
+    turnos.ponerModoAmigo(false);
+    expect(campo().value).toBe("3");
+    expect(premio().value).toBe("Termo");
+  });
+
   it("un borrador con el nombre Amigo secreto vuelve al modo amigo, no al de turnos", async () => {
     vi.stubEnv("VITE_MODOS", "1");
     const { participants, turnos } = await montar(8);
@@ -640,6 +661,18 @@ describe("la línea de privacidad antes de sellar (S3)", () => {
     expect(privacidad()?.textContent).not.toMatch(/no hay secreto/i);
   });
 
+  it("no esconde nada: nombra a quien organiza y a la lista con el número, en los dos idiomas", async () => {
+    await prenderAmigo(10);
+    expect(privacidad()?.textContent).toMatch(/quien organiza ve todo el reparto/i);
+    // Con la lista y el número del sorteo alcanza: ese número va a la vista en la espera y dentro de cada enlace.
+    // Decir que hace falta leer el registro público sugería que sin ese paso no se podía.
+    expect(privacidad()?.textContent).toMatch(/la lista y el número del sorteo/i);
+    expect(privacidad()?.textContent).not.toMatch(/registro público/i);
+    expect(T.en.amigoPrivacidad).toMatch(/organizer sees the whole exchange/i);
+    expect(T.en.amigoPrivacidad).toMatch(/the list and the draw number/i);
+    expect(T.en.amigoPrivacidad).not.toMatch(/public record/i);
+  });
+
   it("sin el modo amigo no se ve", async () => {
     vi.stubEnv("VITE_MODOS", "1");
     await montar(10);
@@ -653,3 +686,37 @@ function ganadoresAntes(n: number): void {
   campoNw.value = String(n);
   campoNw.dispatchEvent(new Event("change", { bubbles: true }));
 }
+
+describe("la marca del Amigo secreto en la página (data-modo-lista)", () => {
+  const marca = (): string | undefined => document.documentElement.dataset.modoLista;
+  afterEach(() => {
+    delete document.documentElement.dataset.modoLista;
+  });
+
+  it("se pone al elegir Amigo secreto", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(6);
+    expect(marca()).toBeUndefined();
+    amigoBtn()?.click();
+    expect(marca()).toBe("amigo");
+  });
+
+  it("se va al volver a Sortear premios o al pasar a Orden de turnos", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await montar(6);
+    amigoBtn()?.click();
+    boton().click();
+    expect(marca()).toBeUndefined();
+    amigoBtn()?.click();
+    ($("btn-modo-sorteo") as HTMLButtonElement).click();
+    expect(marca()).toBeUndefined();
+  });
+
+  it("la hoja esconde los juegos y el volumen del paso 2, y la verificación del resultado", () => {
+    const css = readFileSync(join(process.cwd(), "src", "styles.css"), "utf8");
+    const paso2 = /html\[data-modo-lista="amigo"\] :is\(([^)]*)\)\s*\{\s*display: none !important;/.exec(css)?.[1] ?? "";
+    for (const sel of ["#gamepick", "#pick-label", "#lanzar .juego-actual", "#wait-box .wait-vol", "#ver3d-row"]) expect(paso2).toContain(sel);
+    const resultado = /#winner-box\.es-amigo :is\(([^)]*)\)\s*\{\s*display: none !important;/.exec(css)?.[1] ?? "";
+    for (const sel of [".verify", "#lore-box", ".grande-row", "#motion-note"]) expect(resultado).toContain(sel);
+  });
+});

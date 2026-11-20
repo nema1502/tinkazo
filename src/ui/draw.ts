@@ -16,7 +16,8 @@ import { marcarEnMarcha, soltarLaMarcha, sorteoEnMarcha } from "./sorteo-en-marc
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
-import { PROOF_VERSION, type Proof, proofUrl, amigoUrl } from "../protocol/proof";
+import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
+import { copiarEnElGesto, enlacesDelReparto } from "./amigo-enlaces";
 import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
 import { cuentaPatrocinada, escribirError, existenciaDelSorteo, limpiarDetalle, showTxStatus } from "./anchor";
 import type { AccionError } from "./error-accion";
@@ -35,7 +36,7 @@ import { premioDeLugarEn, premiosDeLosLugares } from "./lugares-de-meta";
 import { ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { turnMessage, turnNotice, amigoMessage } from "../modos/mensajes";
 import { isTurnOrder, modoDelComprobante, ordenSinComprobante, setResultadoDeTurnos, turnOrderDisplayNames } from "../modos/turnos";
-import { amigoSinComprobante, isSecretSanta, reparto } from "../modos/amigo";
+import { amigoSinComprobante, isSecretSanta } from "../modos/amigo";
 import { contar as contarPersonas, cuentaParaMostrar, nombreDePersona, seCuentaPorPersona, sinLasPersonasQueSalieron } from "../participaciones";
 import { modesVisible, withMode } from "../modos/bandera";
 import { alCopiarOrden } from "./lista-de-turnos";
@@ -193,7 +194,8 @@ async function sortear(adelantado = false): Promise<void> {
   // Los lugares de a uno (issue #102, ver `deAUno` más abajo): el show es del primer lugar, así que la tarjeta habla de un
   // premio. Con varios prometía que el cartel del final mostraba a los demás, y ese cartel muestra uno solo.
   const deCampana = esSorteoDeCampana(raffleId) || campanaDeLaLista(listHash) !== null;
-  const deAUnoPorElSello = nWinners > 1 && !orden && !enEnsayo() && !enStand() && !deCampana;
+  // Un Amigo secreto tampoco: no hay show ni lugares que mostrar, el resultado es la lista entera con su enlace.
+  const deAUnoPorElSello = nWinners > 1 && !orden && !amigo && !enEnsayo() && !enStand() && !deCampana;
   const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo, undefined, deAUnoPorElSello ? 1 : undefined);
   const tarjeta: Previa | null = card ? { card, game: juego } : null;
   // Sin tarjeta, la cortina mientras llega el número. Desde la espera en grande, ella misma hace de cortina hasta que
@@ -602,6 +604,9 @@ function apagarCompartir(): void {
     const b = document.getElementById(id);
     if (b instanceof HTMLButtonElement) b.disabled = true;
   }
+  // En un Amigo secreto, los enlaces de cada persona y el comprobante: serían de un sorteo que no coincide con lo grabado.
+  const deAmigo = document.querySelectorAll<HTMLButtonElement>("#winner-box [data-amigo-enlace], #winner-box [data-amigo-comprobante]");
+  for (const b of deAmigo) b.disabled = true;
 }
 
 /** No se pudo grabar: el ganador no cambia. Se dice por qué, con el botón para volver a probar. */
@@ -676,8 +681,12 @@ function anotarEnMisSorteos(g: PorGrabar, cambios: { porGrabar: boolean; drawTx?
         round: sello.round,
         sealedAt: sello.ts,
         prize: sello.prize,
-        // En un Amigo secreto, el orden no se anota: `winners` es el orden, y el orden es el reparto (issue #99, S5).
-        ...(isSecretSanta(sello.names.length, g.winners.length, sello.prize) ? {} : { winners: g.winners.map((i) => sello.names[i] ?? "") }),
+        // En un Amigo secreto no van los nombres en el orden sorteado, que es el reparto (issue #99, S5): van los lugares,
+        // que Mis sorteos nunca pinta. Con ellos sabe que ya se sorteó, lo puede terminar de guardar y vuelve a armar los
+        // enlaces si la pestaña se cerró. El comprobante guardado en este mismo navegador ya los lleva.
+        ...(isSecretSanta(sello.names.length, g.winners.length, sello.prize)
+          ? { winnerIdx: [...g.winners] }
+          : { winners: g.winners.map((i) => sello.names[i] ?? "") }),
         ...(sello.logo ? { logo: sello.logo } : {}),
         ...(sello.raffleId !== undefined ? { id: String(sello.raffleId) } : {}),
         ...(sello.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
@@ -1165,75 +1174,99 @@ const esDeAmigo = (): boolean =>
 
 /**
  * El resultado de un Amigo secreto (issue #99, S5): la lista de personas, cada una con su botón Copiar enlace. El
- * enlace abre la página personal (`confirmar.html`), que dice solo a quién le regala, el nombre del sorteo y el
- * número del sello. La pantalla nunca muestra quién le regala a quién: ni el orden, ni el reparto.
+ * enlace abre la página personal (`confirmar.html`), que dice solo a quién le regala esa persona.
  *
- * Los enlaces se arman en segundo plano (comprimir el fragmento es asíncrono); el botón espera el suyo al tocarlo.
- * Los nombres de la lista son los que se ven, sin el sufijo de una línea sellada (`turnOrderDisplayNames`); lo que
- * viaja en el enlace es el nombre sellado, tal cual está en el sello.
+ * Las filas van en el orden de la lista sellada (el que se pegó), nunca en el sorteado: el orden sorteado es el reparto
+ * (quien sale en el lugar j le regala a quien sale en el j + 1), y una lista en ese orden lo mostraba entero en la
+ * pantalla de quien organiza, que a veces está proyectada. Por lo mismo el enlace de cada fila se busca por la posición
+ * de la persona en la lista sellada: ni el DOM guarda el orden sorteado.
+ *
+ * Los enlaces se arman apenas sale el resultado (comprimir el fragmento es asíncrono) y quedan como texto: al tocar
+ * Copiar se copia en el mismo gesto, porque Safari en el iPhone no deja escribir el portapapeles después de un `await`.
+ * Los nombres que se ven van sin el sufijo de una línea sellada (`turnOrderDisplayNames`); lo que viaja en el enlace es
+ * el nombre sellado, tal cual está en el sello.
  */
 let enlacesAmigo: Map<number, Promise<string>> | null = null;
+/** Los enlaces ya armados, por posición en la lista sellada: lo que copia el toque sin esperar nada. */
+let enlacesListos = new Map<number, string>();
 let amigoEnlazado = false;
 
 function pintarAmigo(names: string[], winners: number[]): void {
   const f = app.frozen;
   const round = app.drawn?.beacon.round ?? 0;
-  const orden = turnOrderDisplayNames(names, winners);
-  enlacesAmigo = new Map(
-    reparto(names, winners).map((a, k) => [k, amigoUrl({ round, from: a.from, to: a.to, ...(f?.prize ? { prize: f.prize } : {}) })]),
-  );
+  // Los nombres como se leen, en el orden de la lista sellada: la identidad como «orden» no reordena nada.
+  const visibles = turnOrderDisplayNames(names, names.map((_, i) => i));
+  // El enlace k del reparto es el de quien salió en el lugar k, o sea la persona `winners[k]` de la lista sellada.
+  const mapa = enlacesDelReparto(names, winners, round, f?.prize ?? "");
+  enlacesAmigo = mapa;
+  enlacesListos = new Map();
+  for (const [i, p] of mapa) {
+    void p.then((enlace) => {
+      if (enlacesAmigo === mapa) enlacesListos.set(i, enlace);
+    }).catch(() => undefined);
+  }
   $("winner-cards").innerHTML =
     `<h3 class="winner-lista-t" id="winner-lista-t" data-i="amigoResultadoT">${esc(t("amigoResultadoT"))}</h3>` +
     `<p class="note" data-i="amigoResultadoNota">${esc(t("amigoResultadoNota"))}</p>` +
-    `<ol class="winner-lista amigo-lista" aria-labelledby="winner-lista-t">${orden
+    `<ul class="winner-lista amigo-lista" aria-labelledby="winner-lista-t">${visibles
       .map(
-        (nombre, k) =>
-          `<li class="winner-fila amigo-fila" value="${k + 1}"><span class="winner-name">${esc(nombre)}</span>` +
-          `<button class="ghost mini" type="button" data-amigo-enlace="${k}" data-i="amigoCopiar">${esc(t("amigoCopiar"))}</button></li>`,
+        (nombre, i) =>
+          `<li class="winner-fila amigo-fila"><span class="winner-name">${esc(nombre)}</span>` +
+          `<button class="ghost mini" type="button" data-amigo-enlace="${i}" data-i="amigoCopiar">${esc(t("amigoCopiar"))}</button></li>`,
       )
-      .join("")}</ol>`;
-  // El comprobante completo, ofrecido aparte (S7): lleva el reparto entero, y se comparte después del intercambio.
-  const caja = $("winner-box");
+      .join("")}</ul>`;
+  // El comprobante completo, aparte y chico (S7): lleva el reparto entero, y se comparte después del intercambio. Se
+  // copia, no se abre: abrirlo acá ponía el reparto en una pantalla que puede estar proyectada. Es un enlace de texto y
+  // no un botón igual a los de las filas, para no confundirlo al mandar los enlaces uno por uno.
   let aviso = document.getElementById("amigo-aviso");
   if (!aviso) {
     aviso = document.createElement("aside");
     aviso.id = "amigo-aviso";
     aviso.className = "note amigo-aviso";
-    aviso.innerHTML = `<span data-i="amigoAvisoComprobante"></span> <button class="ghost mini" type="button" data-amigo-comprobante data-i="amigoVerComprobante"></button>`;
+    aviso.innerHTML =
+      `<span data-i="amigoAvisoComprobante"></span> ` +
+      `<button class="enlace amigo-comprobante" type="button" data-amigo-comprobante data-i="amigoVerComprobante"></button>`;
     $("winner-cards").after(aviso);
-    aviso.querySelector("button")?.addEventListener("click", () => {
-      if (proofLink && !enDuda()) location.assign(proofLink);
-    });
+    aviso.querySelector("button")?.addEventListener("click", (e) => alCopiarComprobante(e.currentTarget as HTMLButtonElement));
   }
   aviso.querySelector<HTMLElement>("span")!.textContent = t("amigoAvisoComprobante");
-  aviso.querySelector("button")!.textContent = t("amigoVerComprobante");
+  const comprobante = aviso.querySelector<HTMLButtonElement>("button")!;
+  comprobante.dataset.i = "amigoVerComprobante";
+  comprobante.textContent = t("amigoVerComprobante");
+  comprobante.closest("aside")?.querySelector("textarea")?.remove();
+  // Hasta que esté el comprobante de este resultado (`buildProof`), el botón no copia nada: `proofLink` puede ser el del anterior.
+  comprobante.disabled = true;
+  aviso.classList.remove("copiado");
   aviso.style.display = "block";
   if (!amigoEnlazado) {
     amigoEnlazado = true;
-    $("winner-cards").addEventListener("click", (e) => void alTocarEnlaceAmigo(e));
+    $("winner-cards").addEventListener("click", alTocarEnlaceAmigo);
   }
 }
 
-/** Un toque en «Copiar enlace»: deja el enlace personal de esa persona en el portapapeles. */
-async function alTocarEnlaceAmigo(e: Event): Promise<void> {
+/** Un toque en «Copiar enlace»: deja el enlace personal de esa persona en el portapapeles, con una línea que dice qué es. */
+function alTocarEnlaceAmigo(e: Event): void {
   const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-amigo-enlace]");
-  if (!b) return;
-  const enlace = await enlacesAmigo?.get(Number(b.dataset.amigoEnlace))?.catch(() => "");
-  if (!enlace) return;
-  try {
-    await navigator.clipboard.writeText(enlace);
-    b.textContent = t("copied");
-    setTimeout(() => (b.textContent = t("amigoCopiar")), 1600);
-  } catch {
-    // Sin permiso para el portapapeles, el enlace queda a la vista en un cuadro, ya elegido, para copiarlo a mano.
-    const caja = document.createElement("textarea");
-    caja.className = "turnos-texto";
-    caja.readOnly = true;
-    caja.value = enlace;
-    caja.setAttribute("aria-label", t("amigoResultadoT"));
-    b.after(caja);
-    caja.select();
+  if (!b || b.disabled || enDuda()) return;
+  const i = Number(b.dataset.amigoEnlace);
+  const fila = b.closest<HTMLElement>("li") ?? b;
+  const nombre = fila.querySelector(".winner-name")?.textContent ?? "";
+  const copiar = (enlace: string): void => copiarEnElGesto(t("amigoEnlaceMsg").replace("{enlace}", enlace), b, fila, nombre);
+  const listo = enlacesListos.get(i);
+  if (listo) {
+    copiar(listo);
+    return;
   }
+  // Todavía se está armando (un toque en el primer instante): se copia cuando esté, aunque ya fuera del gesto.
+  void enlacesAmigo?.get(i)?.then((enlace) => {
+    if (!enDuda()) copiar(enlace);
+  }).catch(() => undefined);
+}
+
+/** «Copiar el comprobante»: el enlace largo al portapapeles. No se abre en esta pestaña. */
+function alCopiarComprobante(b: HTMLButtonElement): void {
+  if (b.disabled || !proofLink || enDuda()) return;
+  copiarEnElGesto(proofLink, b, b.closest<HTMLElement>("aside") ?? b, t("amigoVerComprobante"));
 }
 
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
@@ -1241,6 +1274,9 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // personas, cada una con su enlace personal, que dice solo a quién le regala (issue #99, S5).
   const amigo = isSecretSanta(names.length, winners.length, app.frozen?.prize ?? "");
   $("winner-box").style.display = "block";
+  // La marca del resultado de un Amigo secreto: el bloque «Amigo secreto» de styles.css esconde lo que no va (la
+  // verificación con su QR, la historia, la fila de en grande). Se pone y se saca acá, en cada resultado.
+  $("winner-box").classList.toggle("es-amigo", amigo);
   // El logo de la comunidad, en el renglón de "Lo que salió" (src/ui/logo-sorteo.ts). Sin logo, queda como siempre.
   pintarLogoEnElResultado();
   // La demo llegó al ganador: es lo único que se cuenta de ella (src/contar.ts). El ensayo avisa con `tinkazo:ensayo-fin`.
@@ -1313,11 +1349,15 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // En el ensayo, lo que sigue es su final (ensayo.ts): "Probar otro juego", y después "Sortear con mi lista".
   // "Siguiente premio" y compartir no van: no se sorteó nada.
   const siguiente = showAgain();
-  const principal = enStand()
-    ? ((document.getElementById("stand-otra") as HTMLButtonElement | null) ?? siguiente)
-    : enEnsayo()
-      ? ((document.getElementById("ens-otro") as HTMLButtonElement | null) ?? siguiente)
-      : siguiente;
+  // En un Amigo secreto lo que sigue es mandar los enlaces: el foco va al primer «Copiar enlace».
+  const primerCopiar = amigo ? document.querySelector<HTMLButtonElement>("#winner-cards [data-amigo-enlace]") : null;
+  const principal =
+    primerCopiar ??
+    (enStand()
+      ? ((document.getElementById("stand-otra") as HTMLButtonElement | null) ?? siguiente)
+      : enEnsayo()
+        ? ((document.getElementById("ens-otro") as HTMLButtonElement | null) ?? siguiente)
+        : siguiente);
   // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
@@ -1676,25 +1716,39 @@ function showAgain(): HTMLButtonElement {
   const sin = $<HTMLButtonElement>("btn-again-sin");
   const comprobante = $<HTMLButtonElement>("btn-proof");
   // En un Amigo secreto no hay «siguiente premio» (todos salen) ni diálogo de compartir: la foto y el mensaje
-  // llevarían el reparto entero. El comprobante se ofrece aparte, con su aviso (`pintarAmigo`).
+  // llevarían el reparto entero. Lo que sigue es Copiar enlace en cada fila (`pintarAmigo`): de esta fila queda solo
+  // «Usar otra lista», sin título ni línea. Cada cosa se pone en las dos direcciones, porque la misma pestaña puede
+  // seguir con un sorteo común después de «Usar otra lista», y ahí todo vuelve a verse.
   const amigo = esDeAmigo();
   sin.style.display = amigo ? "none" : alcanza || pendiente ? "" : "none";
+  comprobante.style.display = amigo ? "none" : "";
   // Con lugares por mostrar el botón no promete el cuadro de personas: sin contador, que todavía no se sella.
   sin.textContent = amigo || !pendiente ? L.againSin(mostrar) : L.againLugarBoton;
   comprobante.className = alcanza || pendiente || amigo ? "ghost" : "primary";
-  $("btn-again-nueva").className = "ghost";
+  const otra = $<HTMLButtonElement>("btn-again-nueva");
+  otra.className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector. Solo
   // si no lo está: sacarla y volverla a poner le quita el foco, y esto también
-  // corre al cambiar de idioma.
-  const principal = alcanza || pendiente ? sin : comprobante;
+  // corre al cambiar de idioma. En un Amigo secreto «Usar otra lista» sale del pliegue de lo que se usa poco
+  // (`plegable.ts`), que trae copiar el mensaje y el correo y acá no va. Con otro sorteo vuelve a su lugar en el pliegue.
+  const principal = amigo ? otra : alcanza || pendiente ? sin : comprobante;
   const acciones = $("again-acciones");
   if (acciones.firstElementChild !== principal) acciones.prepend(principal);
+  const pliegue = document.getElementById("mas-resultado");
+  if (pliegue) {
+    pliegue.style.display = amigo ? "none" : "";
+    const filaDelPliegue = pliegue.querySelector(".row");
+    if (!amigo && filaDelPliegue && !filaDelPliegue.contains(otra)) filaDelPliegue.prepend(otra);
+  }
   const titulo = $("again-t");
+  titulo.style.display = amigo ? "none" : "";
   titulo.dataset.i = alcanza || pendiente ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   // En un orden de turnos no queda nadie por sortear, y no se habla de ganar ni de premios.
-  $("again-left").textContent = amigo
-    ? t("amigoAgainLeft")
+  const linea = $("again-left");
+  linea.style.display = amigo ? "none" : "";
+  linea.textContent = amigo
+    ? ""
     : pendiente
       ? L.againLugar(pendiente.lugar, pendiente.total)
       : alcanza
@@ -1906,7 +1960,9 @@ let cortoLink = "";
  * guarda nada en ningún lado mientras quien organiza no comparte ni lo muestra.
  * Y nunca en la demo, que no graba nada.
  */
-const puedeAcortar = (): boolean => !sinGrabar() && !!proofLink;
+// En un Amigo secreto tampoco: el corto es una copia del comprobante en el servidor que no vence, y el comprobante es el
+// reparto entero. Quien organiza lo copia largo, a propósito, después del intercambio.
+const puedeAcortar = (): boolean => !sinGrabar() && !!proofLink && !esDeAmigo();
 
 /** Al apoyar el dedo o el mouse en compartir o en grande: para el clic, el corto ya suele estar. */
 export function adelantarCorto(): void {
@@ -1943,6 +1999,12 @@ export function mostrarGrande(): void {
  */
 async function paintQr(link: string): Promise<void> {
   const box = $("qr-box");
+  // En un Amigo secreto no hay QR de comprobar: el comprobante muestra el reparto entero, y un QR en la pantalla de
+  // quien organiza lo deja a un escaneo de cualquiera en la sala. Cubre la llamada de `buildProof` y la de `alAcortar`.
+  if (esDeAmigo()) {
+    box.style.display = "none";
+    return;
+  }
   const img = $<HTMLImageElement>("qr-img");
   try {
     const listo = await pintarQrDelComprobante(img, link);
@@ -2026,9 +2088,16 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     nota.dataset.i = sinComprobante ? (isSecretSanta(names.length, winners.length, f.prize) ? "amigoSinComprobante" : "turnsSinComprobante") : "redSinSelloEtiqueta";
     nota.textContent = t(nota.dataset.i);
   }
-  // El botón de abrir el comprobante del Amigo secreto: sin comprobante, el aviso queda, sin botón.
+  // El botón de copiar el comprobante del Amigo secreto: sin comprobante, el aviso queda, sin botón. Con él, recién
+  // ahora copia: hasta acá `proofLink` era el del resultado anterior.
   const botonComprobante = document.querySelector<HTMLButtonElement>("#amigo-aviso [data-amigo-comprobante]");
-  if (botonComprobante) botonComprobante.hidden = sinComprobante;
+  if (botonComprobante) {
+    botonComprobante.hidden = sinComprobante;
+    botonComprobante.disabled = !proofLink;
+    // Sin comprobante, el aviso tampoco: la línea de sin sello ya dice que no se puede comprobar.
+    const avisoAmigo = document.getElementById("amigo-aviso");
+    if (avisoAmigo && sinComprobante) avisoAmigo.style.display = "none";
+  }
   // Y el QR no invita a comprobar lo que no se puede comprobar: dice que no hay sello y qué se ve al escanearlo.
   ponerTextoDelSello(document.querySelector<HTMLElement>("#qr-box .kicker"), "qrDelResultado", sinSello);
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
@@ -2049,9 +2118,9 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         round: d.beacon.round,
         sealedAt: f2.ts,
         prize: f2.prize,
-        // En un Amigo secreto, el orden no se anota en Mis sorteos: `winners` es el orden, y el orden es el reparto
-        // (issue #99, S5). El sorteo queda anotado igual, con su comprobante.
-        ...(isSecretSanta(names.length, winners.length, f2.prize) ? {} : { winners: winners.map((i) => names[i] ?? "") }),
+        // En un Amigo secreto van los lugares y no los nombres en el orden sorteado (`anotarEnMisSorteos`): Mis sorteos no
+        // los pinta, y con ellos vuelve a armar los enlaces.
+        ...(isSecretSanta(names.length, winners.length, f2.prize) ? { winnerIdx: [...winners] } : { winners: winners.map((i) => names[i] ?? "") }),
         ...(f2.logo ? { logo: f2.logo } : {}),
         // Un orden de turnos sin sello se anota con la ronda: Mis sorteos no le ofrece enlace de verificación.
         proof: sinComprobante ? roundLink : link,

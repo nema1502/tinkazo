@@ -70,6 +70,15 @@ const basesDeTurnosEn = (p: RulesPreParams): string => {
     : `2. The ${p.count} people on the list take part. Everyone comes out, in order: that order is the turns, 1 to ${p.count}.`;
 };
 
+/** El punto 2 de las bases de un Amigo secreto, antes y después de sellar: quién regala a quién. */
+const basesDeAmigoEs = (p: RulesPreParams): string =>
+  `2. Participan las ${p.count} personas de la lista. Salen todas en un orden, ` +
+  "y cada una le regala a la que sigue. La última le regala a la primera.";
+
+const basesDeAmigoEn = (p: RulesPreParams): string =>
+  `2. The ${p.count} people on the list take part. They all come out in an order, ` +
+  "and each one gives a gift to the next. The last one gives to the first.";
+
 /**
  * Diccionario de la interfaz.
  *
@@ -399,6 +408,9 @@ export interface Dict {
   turnsSellarTope: (n: number, personas?: number, tope?: number) => string;
   turnsRules: (p: RulesParams) => string;
   turnsRulesPre: (p: RulesPreParams) => string;
+  /** El modo «Amigo secreto»: las bases, con quién regala a quién y sin ganadores ni premio. */
+  amigoRules: (p: RulesParams) => string;
+  amigoRulesPre: (p: RulesPreParams) => string;
 }
 
 /**
@@ -3398,41 +3410,90 @@ export const T: Record<Lang, Dict> = {
     turnsFotoLinea: "{n} personas, turnos del 1 al {n}",
     turnsFotoLineaPart: "{k} personas, {n} turnos, turnos del 1 al {n}",
     // --- El modo «Amigo secreto» (issue #99, src/ui/turnos.ts y src/modos/amigo.ts): salen todos y cada uno le
-    //     regala a una persona. El reparto entero nunca se muestra: cada persona recibe su enlace (confirmar.html).
+    //     regala a una persona. Ninguna pantalla muestra el reparto, salvo el comprobante: cada persona recibe su enlace
+    //     (confirmar.html), y la línea de privacidad dice lo que el modo no protege.
     //     Sin palabras de ganar ni de premio, como en el orden de turnos.
     amigoOption: "Amigo secreto",
-    amigoSub: "Cada uno le regala a una persona",
+    amigoSub: "Cada uno regala a otro",
     amigoTitulo: "Quiénes participan",
     amigoCount: "Cuántos participan",
     amigoPrizeLabel: "Nombre del amigo secreto (opcional)",
     amigoPrize: "Amigo secreto",
     amigoMas: "Nombre del amigo secreto y subir CSV",
-    amigoHelp: "Salen todos: cada uno le regala a una persona y recibe de otra. El reparto no se muestra en ninguna pantalla.",
+    amigoHelp: "Cada uno recibe un enlace que dice solo a quién le regala.",
     amigoRulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige quién regala a quién antes de que se sepa, y dejan anotado cuál es el sorteo que vale.",
-    // La línea antes de sellar: quien tenga la lista y el número puede calcular el reparto. Con 2 o 3 personas, no hay secreto.
-    amigoPrivacidad: "El reparto no se muestra, pero quien tenga la lista y el número del sorteo puede calcularlo entero. El comprobante completo se comparte después del intercambio.",
-    amigoPrivacidadPoca: "Con 2 o 3 personas no hay secreto: aunque no se muestre el reparto, cada uno puede deducirlo entero.",
-    // Al nacer la ronda: la lista de personas con su enlace, nunca el reparto.
-    amigoResultadoT: "El enlace de cada persona",
-    amigoResultadoNota: "Nadie ve el reparto entero: mandale a cada persona su enlace, que dice solo a quién le toca regalar.",
+    // Las bases que se copian (`copyRules` y `copyRulesPre` de freeze.ts): cómo sale quién regala a quién, sin ganadores ni
+    // premio. Sin el punto del juego en pantalla, porque en este modo no se juega nada.
+    amigoRules: (p) => [
+      `Bases: ${p.prize || "Amigo secreto"}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeAmigoEs(p),
+      `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
+      `   ${p.listHash}`,
+      `4. El reparto sale de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista.`,
+      p.raffleId
+        ? `5. El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
+        : "5. Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo.",
+      "6. Cada persona recibe un enlace que dice solo a quién le regala.",
+      "7. Tinkazo solo hace el reparto. Quien organiza responde por el intercambio.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    amigoRulesPre: (p) => [
+      `Bases: ${p.prize || "Amigo secreto"}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      basesDeAmigoEs(p),
+      "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
+      "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
+      "5. Cada persona recibe un enlace que dice solo a quién le regala.",
+      "6. Tinkazo solo hace el reparto. Quien organiza responde por el intercambio.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    // Debajo de Sellar (participants.ts): cuántas personas y que la lista se cierra. Sin ganadores ni premio.
+    amigoSellarResumen: "{n} personas. Al sellar, la lista queda cerrada.",
+    // La línea antes de sellar, sin esconder nada: quien organiza ve el reparto, y con la lista y el número del sorteo
+    // (va a la vista en la espera y dentro de cada enlace) se calcula. Con 2 o 3 personas, no hay secreto.
+    amigoPrivacidad: "Ojo: quien organiza ve todo el reparto, y quien tenga la lista y el número del sorteo lo puede calcular.",
+    amigoPrivacidadPoca: "Con 2 o 3 personas no hay secreto: cada uno puede adivinar el reparto.",
+    // Alguien dos veces en la lista se podría regalar a sí mismo: no se sella. Va junto a Sellar (participants.ts), y la
+    // barra de lo que sigue lo dice corto (`sigRepetido`), como el tope de los turnos.
+    amigoRepetido: "{nombre} está dos veces. Si son dos personas, agregá una inicial.",
+    sigRepetido: "no se puede sellar, hay un nombre dos veces",
+    // Lo que se anuncia al lector de pantalla al llegar al resultado (`claveDelPaso`, pasos.ts): sin ganadores.
+    sigAmigo: "Ya salió el amigo secreto",
+    // Al nacer la ronda: la lista de personas en el orden pegado, con su enlace, nunca el reparto.
+    amigoResultadoT: "Mandale a cada uno su enlace",
+    amigoResultadoNota: "Por privado: cada enlace dice solo a quién le regala esa persona.",
     amigoCopiar: "Copiar enlace",
-    // El comprobante completo, ofrecido aparte: lleva el orden entero.
-    amigoAvisoComprobante: "El comprobante completo muestra el reparto entero: compartilo recién después del intercambio.",
-    amigoVerComprobante: "Abrir el comprobante",
-    amigoAgainLeft: "El amigo secreto ya salió. Tocá Copiar enlace para mandarle a cada persona el suyo.",
+    // Mis sorteos vuelve a armar los enlaces de cada persona (history.ts), si la pestaña se cerró mientras se mandaban.
+    amigoHistEnlaces: "Ver los enlaces",
+    // Lo que queda en el portapapeles al tocar Copiar enlace: una línea que dice qué es, para que no parezca un enlace suelto.
+    amigoEnlaceMsg: "Tu amigo secreto: {enlace}",
+    // El comprobante completo, ofrecido aparte y chico: lleva el orden entero. Se copia, no se abre en la pantalla.
+    amigoAvisoComprobante: "El comprobante muestra todo el reparto. Compartilo después del intercambio.",
+    amigoVerComprobante: "Copiar el comprobante",
     // El mensaje para el grupo, sin el reparto y sin enlace de verificación: el comprobante lo revela. Con nombre
     // propio, `amigoMsgNombre`; sin él, `amigoMsgCab`.
     amigoMsgCab: "Ya salió el amigo secreto: cada quien va a recibir su enlace con a quién le toca regalar.",
     amigoMsgNombre: "Ya salió {nombre}: cada quien va a recibir su enlace con a quién le toca regalar.",
     amigoMsgPie: "Que nadie comparta su enlace antes del intercambio.",
-    amigoSinComprobante: "Este amigo secreto no se selló antes del sorteo, así que no se puede comprobar.",
-    // La página del enlace de cada persona (confirmar.html): solo a quién le regala, el sorteo y el número del sello.
-    confirmarT: "Te toca regalarle a…",
-    confirmarError: "Este enlace no trae un Amigo secreto.",
-    confirmarPara: "Para:",
-    confirmarSorteo: "Sorteo:",
-    confirmarSello: "Número del sello:",
-    confirmarNota: "Este enlace dice solo a quién le regalás. No lleva la lista entera ni muestra el reparto de los demás.",
+    amigoSinComprobante: "Sin sello: este amigo secreto no se puede comprobar.",
+    // La espera en grande de un Amigo secreto (espera.ts, sin QR ni juegos) y el celular con un enlace viejo (espectador.ts).
+    espStickerAmigo: "Todavía nadie sabe a quién le toca",
+    espAmigoT: "Este amigo secreto no se ve en vivo",
+    espAmigoB: "Cada uno recibe su enlace de quien organiza.",
+    // La página del enlace de cada persona (confirmar.html, src/confirmar.ts): el nombre del sorteo, a quién le regala y
+    // que es secreto. El título y la descripción no llevan nombres. `confirmarT` lleva el de quien abre: lo pone el script.
+    confirmarTitulo: "Tu amigo secreto, en Tinkazo",
+    confirmarDesc: "A quién le regalás en el amigo secreto.",
+    confirmarT: "{nombre}, te toca regalarle a",
+    confirmarNota: "Es secreto: no se lo muestres a nadie.",
+    confirmarError: "Este enlace no funciona",
+    confirmarErrorB: "Pedile a quien organizó que te lo mande de nuevo.",
+    confirmarIr: "Ir a Tinkazo",
     // --- Varias participaciones por persona: se eligen tocando, en el panel de la lista. Solo se ve con la
     //     bandera de los modos o con ?modo= en la dirección (src/modos/bandera.ts).
     partAbrir: "Alguien participa más de una vez",
@@ -6365,41 +6426,87 @@ export const T: Record<Lang, Dict> = {
     turnsFotoLinea: "{n} people, turns 1 to {n}",
     turnsFotoLineaPart: "{k} people, {n} turns, turns 1 to {n}",
     // --- The Secret Santa mode (issue #99, src/ui/turnos.ts and src/modos/amigo.ts): everyone is drawn and each
-    //     person gives a gift to one other person. The whole exchange is never shown: each person gets their own
-    //     link (confirmar.html). No winning or prize words, like the turn order.
+    //     person gives a gift to one other person. No screen shows the exchange except the proof: each person gets their
+    //     own link (confirmar.html), and the privacy line says what the mode doesn't protect. No winning or prize words,
+    //     like the turn order.
     amigoOption: "Secret Santa",
-    amigoSub: "Each person gives to one other person",
+    amigoSub: "Everyone gives to someone",
     amigoTitulo: "Who takes part",
     amigoCount: "How many take part",
     amigoPrizeLabel: "Name for the Secret Santa (optional)",
     amigoPrize: "Secret Santa",
     amigoMas: "Name for the Secret Santa and CSV upload",
-    amigoHelp: "Everyone is drawn: each person gives a gift to one person and receives from another. The exchange is not shown on any screen.",
+    amigoHelp: "Each person gets a link that says only who they give to.",
     amigoRulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the gift exchange is chosen before anyone knows it, and put on record which draw counts.",
-    // The line before sealing: whoever holds the list and the number can work out the whole exchange. With 2 or 3 people, there is no secret.
-    amigoPrivacidad: "The exchange is not shown, but whoever holds the list and the draw number can work it out in full. The full proof is shared after the gift exchange.",
-    amigoPrivacidadPoca: "With 2 or 3 people there is no secret: even without showing the exchange, everyone can work it out in full.",
-    // When the round is born: the list of people with their link, never the exchange.
-    amigoResultadoT: "Each person's link",
-    amigoResultadoNota: "Nobody sees the whole exchange: send each person their link, which says only who they give to.",
+    // The rules that get copied (`copyRules` and `copyRulesPre` in freeze.ts): who gives to whom, no winners or prize.
+    // No point about the game on screen, since nothing is played in this mode.
+    amigoRules: (p) => [
+      `Rules: ${p.prize || "Secret Santa"}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeAmigoEn(p),
+      `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
+      `   ${p.listHash}`,
+      `4. The exchange comes from a random number published on ${p.roundAt} that nobody knew when the list was closed.`,
+      p.raffleId
+        ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
+        : "5. This list was closed in the organizer's browser: nobody else can vouch for when it was closed.",
+      "6. Each person gets a link that says only who they give to.",
+      "7. Tinkazo only makes the exchange. The organizer is responsible for the gift exchange.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    amigoRulesPre: (p) => [
+      `Rules: ${p.prize || "Secret Santa"}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      basesDeAmigoEn(p),
+      "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
+      "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",
+      "5. Each person gets a link that says only who they give to.",
+      "6. Tinkazo only makes the exchange. The organizer is responsible for the gift exchange.",
+      "",
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    // Under Seal (participants.ts): how many people and that the list gets locked. No winners or prize.
+    amigoSellarResumen: "{n} people. Sealing locks the list.",
+    // The line before sealing, hiding nothing: the organizer sees the exchange, and with the list and the draw number
+    // (shown during the wait and inside every link) it can be worked out. With 2 or 3 people, there is no secret.
+    amigoPrivacidad: "Note: the organizer sees the whole exchange, and anyone with the list and the draw number can work it out.",
+    amigoPrivacidadPoca: "With 2 or 3 people there is no secret: everyone can guess the exchange.",
+    amigoRepetido: "{nombre} is on the list twice. If they're two people, add an initial.",
+    sigRepetido: "can't seal, a name is on the list twice",
+    // What the screen reader hears on reaching the result (`claveDelPaso`, pasos.ts): no winners.
+    sigAmigo: "The Secret Santa is drawn",
+    // When the round is born: the list of people in the pasted order, with their link, never the exchange.
+    amigoResultadoT: "Send each person their link",
+    amigoResultadoNota: "Privately: each link says only who that person gives to.",
     amigoCopiar: "Copy link",
-    // The full proof, offered separately: it carries the whole order.
-    amigoAvisoComprobante: "The full proof shows the whole exchange: share it only after the gift exchange.",
-    amigoVerComprobante: "Open the proof",
-    amigoAgainLeft: "The Secret Santa is drawn. Tap Copy link to send each person theirs.",
+    amigoHistEnlaces: "See the links",
+    // What lands on the clipboard on Copy link: a line that says what it is, so it doesn't look like a stray link.
+    amigoEnlaceMsg: "Your Secret Santa: {enlace}",
+    // The full proof, offered separately and small: it carries the whole order. It is copied, not opened on screen.
+    amigoAvisoComprobante: "The proof shows the whole exchange. Share it after the gift exchange.",
+    amigoVerComprobante: "Copy the proof",
     // The message for the group, without the exchange and without a verification link: the proof reveals it.
     // With a custom name, `amigoMsgNombre`; without one, `amigoMsgCab`.
     amigoMsgCab: "The Secret Santa is drawn: each person will get their own link saying who they give to.",
     amigoMsgNombre: "{nombre} is drawn: each person will get their own link saying who they give to.",
     amigoMsgPie: "Nobody should share their link before the exchange.",
-    amigoSinComprobante: "This Secret Santa was not sealed before the draw, so it can't be checked.",
-    // The page behind each person's link (confirmar.html): only who they give to, the draw and the seal number.
-    confirmarT: "You give a gift to…",
-    confirmarError: "This link does not carry a Secret Santa.",
-    confirmarPara: "For:",
-    confirmarSorteo: "Draw:",
-    confirmarSello: "Seal number:",
-    confirmarNota: "This link only says who you give to. It does not carry the whole list or show anyone else's part of the exchange.",
+    amigoSinComprobante: "No seal: this Secret Santa can't be checked.",
+    // The big wait of a Secret Santa (espera.ts, no QR or games) and the phone with an old link (espectador.ts).
+    espStickerAmigo: "Nobody knows who gets whom yet",
+    espAmigoT: "This Secret Santa isn't shown live",
+    espAmigoB: "Each person gets their own link from the organizer.",
+    // The page behind each person's link (confirmar.html, src/confirmar.ts): the draw's name, who they give to and that it
+    // is a secret. The title and description carry no names. `confirmarT` carries the opener's name: the script fills it.
+    confirmarTitulo: "Your Secret Santa, on Tinkazo",
+    confirmarDesc: "Who you give a gift to in the Secret Santa.",
+    confirmarT: "{nombre}, you give a gift to",
+    confirmarNota: "It's a secret: don't show it to anyone.",
+    confirmarError: "This link doesn't work",
+    confirmarErrorB: "Ask the organizer to send it again.",
+    confirmarIr: "Go to Tinkazo",
     // --- Several entries per person: chosen by tapping, in the list panel. Only shown with the modes flag
     //     or with ?modo= in the address (src/modos/bandera.ts).
     partAbrir: "Someone takes part more than once",

@@ -1,7 +1,8 @@
 /**
  * Las páginas de lectura, revisadas como las mira alguien: en los dos temas,
- * en celular y en los dos idiomas. Y las dos que se abren desde un enlace,
- * verificar y evento (ver `HERRAMIENTAS`).
+ * en celular y en los dos idiomas. Y las que se abren desde un enlace:
+ * verificar, evento, el enlace corto y el de cada persona en un Amigo
+ * secreto (ver `HERRAMIENTAS`).
  *
  * Comprueba lo que se rompe en silencio cuando se agrega una sección: una
  * imagen que no está, un texto sin traducir (queda vacío al cambiar de idioma),
@@ -55,6 +56,15 @@ const COMPROBANTE = "r" + Buffer.from(JSON.stringify({
   round: 32254977,
   signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac",
 }), "utf8").toString("base64url");
+/**
+ * El enlace de una persona en un Amigo secreto (confirmar.html): solo su parte, sin comprimir, igual que lo arma la
+ * página sin compresión. Se mira con este enlace bueno y con uno roto (`#rx`). En el bueno el titular grande es el
+ * nombre de a quién le regala, que no cambia con el idioma: lo que se traduce es la línea de arriba (`titular`). En el
+ * roto, el regalo tiene que quedar escondido (`oculto`) y el titular es el del aviso.
+ */
+const ENLACE_AMIGO = "r" + Buffer.from(JSON.stringify({
+  v: 1, kind: "amigo", round: 32254977, from: "Ana Vargas", to: "Jorge Mamani", prize: "Amigo secreto de la oficina",
+}), "utf8").toString("base64url");
 const HERRAMIENTAS = [
   {
     p: "verificar",
@@ -68,6 +78,13 @@ const HERRAMIENTAS = [
   // La página del celular de una campaña, con su demostración: sin sala, sin Google y sin red, y abre aunque la bandera
   // de las campañas esté apagada. `consulta` suma el parámetro de la demostración a la dirección.
   { p: "participar", consulta: "&demo=campana", hash: "", listo: "!!document.querySelector('#cmp-saber .primary')" },
+  { p: "confirmar", hash: `#${ENLACE_AMIGO}`, titular: "#c-para", listo: "!document.getElementById('c-ok').hidden" },
+  {
+    p: "confirmar",
+    hash: "#rx",
+    oculto: "#c-ok",
+    listo: "!document.getElementById('c-error').hidden && document.getElementById('c-ok').hidden",
+  },
 ];
 
 let fallos = 0;
@@ -169,9 +186,11 @@ try {
     check(ingles.length > 0, "inglés: el titular está traducido", ingles);
   }
 
-  for (const { p, consulta = "", hash, listo } of HERRAMIENTAS) {
-    console.log(`\n${p}.html`);
+  for (const { p, consulta = "", hash, listo, titular: deTitular = "h1", oculto = "" } of HERRAMIENTAS) {
+    // Dos filas de la misma página (el enlace bueno y el roto) se distinguen por el principio del fragmento.
+    console.log(`\n${p}.html${hash ? ` ${hash.slice(0, 12)}` : ""}`);
     let titular = "";
+    let titulo = "";
     for (const { tema, ancho, alto, como } of VISTAS) {
       const page = await browser.open("about:blank");
       await page.send("Emulation.setDeviceMetricsOverride", {
@@ -196,7 +215,11 @@ try {
           .map((i) => ((i.getAttribute("src") || "(sin src)").slice(0, 120)));
         return {
           titulo: document.title,
-          titular: document.querySelector('h1')?.textContent || '',
+          titular: document.querySelector(${JSON.stringify(deTitular)})?.textContent || '',
+          oculto: (() => {
+            const e = ${oculto ? `document.querySelector(${JSON.stringify(oculto)})` : "null"};
+            return !e || getComputedStyle(e).display === 'none';
+          })(),
           tema: document.documentElement.dataset.theme || '',
           desborde: document.documentElement.scrollWidth - window.innerWidth,
           total: pedidas.length,
@@ -211,8 +234,10 @@ try {
         };
       })())`));
       if (!titular) titular = r.titular;
+      if (!titulo) titulo = r.titulo;
       const etiqueta = `${tema} ${como}`;
       check(termino.ok, `${etiqueta}: termina de revisar`);
+      if (oculto) check(r.oculto, `${etiqueta}: ${oculto} no se ve`);
       check(!!r.titulo, `${etiqueta}: tiene título`, r.titulo);
       check(r.tema === tema, `${etiqueta}: ?theme= se aplica`, r.tema || "(sin data-theme)");
       check(r.desborde <= 1, `${etiqueta}: sin scroll horizontal`, `${r.desborde}px`);
@@ -230,8 +255,11 @@ try {
     const en = await browser.open(`${base}/${p}.html?lang=en${consulta}${hash}`);
     await en.waitFor(listo, 30000);
     await sleep(500);
-    const ingles = await en.eval(`document.querySelector('h1')?.textContent || ''`);
+    const ingles = await en.eval(`document.querySelector(${JSON.stringify(deTitular)})?.textContent || ''`);
     check(ingles.length > 0 && ingles !== titular, "inglés: el titular está traducido", `${ingles} · en español: ${titular}`);
+    // La que pide su título por clave (data-titulo-clave) lo cambia de idioma: sin la clave quedaba en castellano.
+    const enTitulo = JSON.parse(await en.eval("JSON.stringify([document.title, !!document.documentElement.dataset.tituloClave])"));
+    if (enTitulo[1]) check(enTitulo[0] !== titulo, "inglés: el título de la pestaña está traducido", `${enTitulo[0]} · en español: ${titulo}`);
     await en.send("Page.close").catch(() => {});
   }
 } finally {

@@ -683,6 +683,66 @@
     .winner-turnos .turno-resto .turno-avisar { margin-left: auto; }
   }
   .turnos-texto { display: block; box-sizing: border-box; width: 100%; min-height: 6em; margin-top: 10px; font: inherit; }
+  /* Amigo secreto (src/ui/draw.ts, pintarAmigo y reveal). El resultado lleva la marca #winner-box.es-amigo: se ve la lista
+     de personas en el orden pegado, cada una con Copiar enlace, y el aviso chico del comprobante. Lo demás del resultado
+     no va: la verificación con su QR (el comprobante es el reparto entero), la historia, la leyenda, la nota del
+     movimiento, la fila de en grande y los lugares. Cada regla esconde algo que ya existe: si la marca falla, la
+     pantalla queda como siempre. Va con !important porque varios de estos se muestran con un estilo puesto desde el
+     código, que le gana a la hoja. */
+  #winner-box.es-amigo :is(.verify, #lore-box, #leyenda-box, #motion-note, .grande-row, #lugares-fijos, #lugar-actual) {
+    display: none !important;
+  }
+  /* Con el Amigo secreto elegido o sellado (data-modo-lista en <html>, src/ui/turnos.ts), el paso 2 no ofrece juegos: en
+     este modo no se juega nada. Quedan la caja del número, Lanzar el sorteo y Mostrar la espera en grande. */
+  html[data-modo-lista="amigo"] :is(
+    #pick-label, #rec-head, #rec-sel-nota, #juego-nota, #gamepick, #wheel-cap, #ver3d-row, #lanzar .juego-actual, #wait-box .wait-vol
+  ) {
+    display: none !important;
+  }
+  /* La fila ya copiada queda marcada, para saber a quién ya se le mandó. El cuadro de copiar a mano baja a su renglón. */
+  .amigo-fila { flex-wrap: wrap; }
+  .amigo-fila.copiado { background: var(--paper); color: var(--ink); }
+  .amigo-fila .amigo-a-mano { flex: 1 1 100%; min-height: 3em; margin-top: 4px; }
+  .amigo-aviso { margin-top: 16px; }
+  .amigo-aviso .enlace { margin: 0; }
+  /* Los enlaces de nuevo desde Mis sorteos (src/ui/history.ts): la misma lista, con la letra de la tarjeta. */
+  .hist-card .amigo-lista { grid-template-columns: 1fr; }
+  .hist-card .amigo-fila .winner-name { font-size: 18px; font-weight: 800; }
+  /* Con el Amigo secreto elegido, el paso 1 tampoco ofrece lo que en este modo no sirve: el stand, el registro de equipos
+     con cupón, el logo (no hay show ni foto) y la fila de cuántos (la cantidad sigue a la lista y no se toca). Tampoco
+     el pliegue del sonido y la duración del show, ni el enlace de los juegos interactivos (acá no se juega nada). Cada
+     regla esconde algo que existe: sin la marca, todo sigue igual. */
+  html[data-modo-lista="amigo"] #btn-stand,
+  html[data-modo-lista="amigo"] #btn-equipos,
+  html[data-modo-lista="amigo"] #logo-fila,
+  html[data-modo-lista="amigo"] #ganadores-control,
+  html[data-modo-lista="amigo"] #mas-ajustes,
+  html[data-modo-lista="amigo"] #btn-interactivos {
+    display: none !important;
+  }
+  /* Ya sorteado, la tarjeta de la lista sellada decía Ya se sorteó dos veces: la caja del número y el botón apagado. Queda
+     la caja. */
+  html[data-modo-lista="amigo"] #btn-draw[data-i="drawnDone"] { display: none !important; }
+  /* En el resultado, Usar otra lista va solo, sin el marco grande que en los otros modos junta título, línea y botones. */
+  #winner-box.es-amigo .again { padding: 0; background: none; border: 0; box-shadow: none; }
+  /* En el celular el nombre se lleva el renglón entero y Copiar enlace va debajo, a todo el ancho: al lado, el botón
+     dejaba tan poco lugar que a 360 px Ana Paz se partía en dos renglones. */
+  @media (max-width: 420px) {
+    .amigo-fila .winner-name { flex: 1 1 100%; }
+    .amigo-fila [data-amigo-enlace] { flex: 1 1 100%; }
+  }
+  /* La página del enlace de cada persona (confirmar.html, src/confirmar.ts). Las dos secciones nacen con hidden y el
+     .hero se arma con display:grid, que le ganaría al atributo: sin esta regla el regalo vacío quedaría encima del aviso
+     del enlace roto. El nombre de a quién le regala va grande y, si es muy largo, se parte en vez de salirse. */
+  .hero.confirmar-ok[hidden] { display: none; }
+  .hero.confirmar-ok { padding: 40px 0 8px; }
+  .confirmar-ok .sticker { background: var(--purple); color: var(--on-purple); }
+  .confirmar-ok .confirmar-para { font-weight: 700; }
+  .confirmar-hacia { margin-top: -10px; font-size: clamp(44px, 9vw, 76px); line-height: 1.05; overflow-wrap: anywhere; }
+  .confirmar-como { display: inline-flex; align-items: center; min-height: 44px; color: var(--ink); font-weight: 700; }
+  .confirmar-error { padding-top: 40px; }
+  .confirmar-error h1 { font-size: clamp(30px, 4.4vw, 46px); }
+  .confirmar-ir { margin-top: 20px; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
@@ -1194,10 +1254,12 @@
     position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 6px; padding: 5px;
     background: var(--paper); border: 2px solid var(--ink);
   }
-  /* Con el Amigo secreto activo hay tres botones, la marca mide un tercio y desliza por turnos (mitad) y amigo (final).
-     Sin el Amigo secreto, nada cambia: dos columnas y la marca de la mitad, como siempre. */
-  .modo-botones[data-modo="amigo"] { grid-template-columns: 1fr 1fr 1fr; }
-  .modo-botones[data-modo="amigo"]::before { width: calc((100% - 24px) / 3); }
+  /* Con el tercer botón armado (la clase con-amigo la pone src/ui/turnos.ts apenas existe #btn-amigo) hay tres columnas
+     desde que carga la página, elija lo que se elija: con la regla atada al Amigo secreto elegido, el tercero caía a una
+     segunda fila y la marca morada se estiraba detrás de los dos. La marca mide un tercio (el ancho menos el relleno y
+     los dos huecos) y desliza a turnos (un lugar) y a amigo (dos). Sin el tercer botón, nada cambia: dos columnas. */
+  .modo-botones.con-amigo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .modo-botones.con-amigo::before { width: calc((100% - 22px) / 3); }
   .modo-botones::before {
     content: ""; position: absolute; top: 5px; bottom: 5px; left: 5px; width: calc((100% - 16px) / 2); box-sizing: border-box;
     background: var(--purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -1223,6 +1285,9 @@
   .modo-op:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .modo-op:disabled { cursor: default; }
   .modo-op:disabled[aria-pressed="false"] { color: var(--muted); }
+  /* Con tres botones, los títulos van arriba y no centrados: con un renglón menos, el de Amigo secreto quedaba más
+     abajo que los otros dos. */
+  .modo-botones.con-amigo .modo-op { align-content: start; }
   .modo-ico { grid-area: ico; width: 28px; height: 28px; transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
   .modo-op[aria-pressed="true"] .modo-ico { transform: rotate(-8deg) scale(1.12); }
   .modo-tit { grid-area: tit; font-size: 18px; font-weight: 800; line-height: 1.2; }
@@ -1243,23 +1308,29 @@
     .modo-botones { gap: 4px; padding: 4px; }
     .modo-botones::before { top: 4px; bottom: 4px; left: 4px; width: calc((100% - 12px) / 2); }
     .modo-botones[data-modo="turnos"]::before { transform: translateX(calc(100% + 4px)); }
-    .modo-botones[data-modo="amigo"] { grid-template-columns: 1fr 1fr 1fr; }
-    .modo-botones[data-modo="amigo"]::before { width: calc((100% - 20px) / 3); }
     .modo-botones[data-modo="amigo"]::before { transform: translateX(calc(200% + 8px)); }
     .modo-op { min-height: 48px; grid-template-areas: "ico tit"; column-gap: 6px; padding: 4px 8px; }
     .modo-ico { width: 20px; height: 20px; }
     .modo-tit { font-size: 16px; line-height: 1.1; }
     .modo-elegir .modo-ayuda { margin-top: 6px; line-height: 1.35; }
+    /* Con tres botones, cada uno mide un tercio: el nombre va solo, sin el dibujo, centrado y en dos renglones si hace
+       falta. Con el dibujo al lado, a 360 px a «premios» le quedaban unos 60 px. Las columnas son parejas aunque una
+       palabra sea más larga (minmax(0, 1fr)): con 1fr, a 320 px medían 76, 64 y 70. */
+    .modo-botones.con-amigo { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .modo-botones.con-amigo::before { width: calc((100% - 16px) / 3); }
+    .con-amigo .modo-ico { display: none; }
+    .con-amigo .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; padding: 4px 2px; text-align: center; }
+    .modo-botones.con-amigo .modo-op { align-content: center; }
   }
-  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. */
+  /* En los más angostos (320 px) el nombre no entra al lado del dibujo: va solo. Con tres botones, la letra baja a 15 px:
+     en castellano «Orden de turnos» va en tres renglones, sin cortarse, y Pegar lista sigue a la vista. */
   @media (max-width: 359px) {
     .modo-ico { display: none; }
     .modo-op { grid-template-columns: 1fr; grid-template-areas: "tit"; }
+    .con-amigo .modo-tit { font-size: 15px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .modo-botones::before, .modo-ico, .modo-op, .modo-op[aria-pressed="true"] { transition: none; }
-    /* Con tres modos reduce-motion, la marca salta sin animación: translateX no se anima, pero la regla base con transform vale igual. */
-    .modo-botones[data-modo="amigo"]::before { transform: translateX(calc(200% + 8px)); }
     .modo-cambia { animation: none; }
   }
   /* La barra del scroll propio va en su lugar y no encima del «+». */

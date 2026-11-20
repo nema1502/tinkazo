@@ -711,6 +711,53 @@ describe("'Seguir sin sello' pide confirmar y desalienta", () => {
     expect(boton().textContent).toBe("Seguir sin sello");
     expect(boton().disabled).toBe(false);
   });
+
+  it("con un Amigo secreto con alguien dos veces, 'Seguir sin sello' queda apagado al repintar", async () => {
+    const { r, sellar } = await enRojo();
+    await amigoConRepetido();
+    await r.chequearAntesDeSellar();
+    expect(boton().textContent).toBe("Seguir sin sello");
+    expect(boton().disabled).toBe(true);
+    r.alApretarSellar();
+    expect(boton().textContent).toBe("Seguir igual");
+    expect(boton().disabled).toBe(true);
+    expect(sellar).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Un Amigo secreto con Ana dos veces en el cuadro: la lista de `participants.ts` deja Sellar apagado, y la red, que no
+ * tiene la lista a mano, la lee del mismo cuadro al repintar el botón.
+ */
+async function amigoConRepetido(): Promise<void> {
+  // El documento de mentira no tiene las clases del DOM: con que existan, `instanceof` dice que no son campos.
+  vi.stubGlobal("HTMLInputElement", class {});
+  vi.stubGlobal("HTMLButtonElement", class {});
+  els["ta"] = Object.assign(new El("textarea"), { value: "Ana\nBeto\nana\nCarla" });
+  const { ponerModoAmigo, seguirLaLista } = await import("./turnos");
+  seguirLaLista(4);
+  ponerModoAmigo(true);
+  boton().disabled = true;
+}
+
+describe("un Amigo secreto con alguien dos veces en la lista", () => {
+  it("la red bien, al repintar 'Sellar la lista', no lo vuelve a prender", async () => {
+    red(bien());
+    const { r } = await cargar();
+    await amigoConRepetido();
+    expect(await r.chequearAntesDeSellar()).toBe(true);
+    expect(boton().textContent).toBe("Sellar la lista");
+    expect(boton().disabled).toBe(true);
+  });
+
+  it("sin repetidos, el repintado lo deja prendido como siempre", async () => {
+    red(bien());
+    const { r } = await cargar();
+    await amigoConRepetido();
+    (els["ta"] as El & { value: string }).value = "Ana\nBeto\nCarla\nDiego";
+    await r.chequearAntesDeSellar();
+    expect(boton().disabled).toBe(false);
+  });
 });
 
 describe("después de sellar", () => {
