@@ -28,14 +28,25 @@ afterEach(() => {
 describe("lo que dice la portada", () => {
   it("con 50 centavos, en español", () => {
     expect(textoDeLaPortadaConRetiro(5_000_000n).es).toBe(
-      "Hoy organizar es gratis. Participar, comprobar y recibir un premio son gratis siempre. Retirar dinero de tu cuenta cuesta 50 centavos.",
+      "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar, comprobar y recibir un premio son gratis siempre. Retirar dinero de tu cuenta cuesta 50 centavos.",
     );
   });
 
   it("con 50 centavos, en inglés", () => {
     expect(textoDeLaPortadaConRetiro(5_000_000n).en).toBe(
-      "Organizing is free today. Taking part, checking and receiving a prize are always free. Withdrawing money from your account costs 50 cents.",
+      "Run your first 3 Live draws for free. For more, use a coupon. Taking part, checking and receiving a prize are always free. Withdrawing money from your account costs 50 cents.",
     );
+  });
+
+  it("empieza con la misma frase de Precios sobre los sorteos oficiales gratis, con o sin la comisión", () => {
+    const precios = readFileSync(new URL("../precios.html", import.meta.url), "utf8");
+    const regaloEs = "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón.";
+    expect(precios).toContain(regaloEs);
+    for (const comision of [null, { pb: 200n, minimo: 15_000_000n }]) {
+      const t = textoDeLaPortadaConRetiro(5_000_000n, comision);
+      expect(t.es.startsWith(regaloEs)).toBe(true);
+      expect(t.en.startsWith("Run your first 3 Live draws for free. For more, use a coupon.")).toBe(true);
+    }
   });
 
   it("el monto sale de la configuración: con otro monto, otro texto", () => {
@@ -134,7 +145,7 @@ describe("el diccionario del sitio", () => {
 
 describe("la publicación de producción", () => {
   it("la portada de hoy dice lo que cobra Tinkazo y lo que cuesta retirar", () => {
-    expect(HOY).toContain("data-i=\"faq3a\">Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.<");
+    expect(HOY).toContain("data-i=\"faq3a\">Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.<");
   });
 
   it("con el costo prendido y la portada de hoy, no sale", () => {
@@ -210,16 +221,18 @@ describe("con lo que cobra Tinkazo a una campaña de empresa", () => {
   const frase = textoDeLaPortadaConRetiro(5_000_000n, COMISION);
   const conFrase = (): string => HOY.replace(/(data-i="faq3a">)[^<]*(<)/, `$1${frase.es}$2`);
 
-  it("la respuesta dice que organizar es gratis, lo que paga una empresa y lo que cuesta retirar, en español", () => {
+  it("la respuesta dice los sorteos oficiales gratis, lo que paga una empresa y lo que cuesta retirar, en español", () => {
     expect(frase.es).toBe(
-      "Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. " +
+      "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
+        "Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. " +
         "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.",
     );
   });
 
   it("y en inglés", () => {
     expect(frase.en).toBe(
-      "Organizing is free. If your company gives away prizes in digital dollars, it pays 2% of the prizes. " +
+      "Run your first 3 Live draws for free. For more, use a coupon. " +
+        "If your company gives away prizes in digital dollars, it pays 2% of the prizes. " +
         "Taking part, checking and receiving a prize are always free. Withdrawing costs 50 cents.",
     );
   });

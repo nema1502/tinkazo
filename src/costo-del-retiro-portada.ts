@@ -12,6 +12,8 @@ import { entornoDelBuild, ventaAbiertaATodos } from "./stellar/venta-piloto";
  * respuesta pasa a decir cuánto cuesta retirar. Este archivo tiene el texto y lo que lo exige, sin nada del navegador:
  * lo lee `i18n.ts` para ponerlo encima del diccionario y lo lee también `vite.config.ts`.
  *
+ * - La respuesta empieza con la misma frase de Precios sobre los primeros 3 sorteos oficiales gratis, así que la publicación
+ *   de producción la frena sin `VITE_REGALO=1` (`problemasDelRegaloSinDar`), igual que a las demás páginas.
  * - Sin costo configurado (sin cuenta, o en cero) no hay texto nuevo: la portada queda como estaba.
  * - Con la compra de sorteos a la vista, la portada ya dice otra cosa (`textosConCobro` en `alta-textos-con-cobro.ts`)
  *   y no se pisa: se queda con su texto. Esa combinación todavía no tiene su frase.
@@ -23,8 +25,8 @@ type Entorno = Record<string, unknown>;
 
 /** La respuesta de la portada con el costo. `{c}` es el monto dicho de palabra (`50 centavos`). */
 const FAQ_CON_RETIRO = {
-  es: "Hoy organizar es gratis. Participar, comprobar y recibir un premio son gratis siempre. Retirar dinero de tu cuenta cuesta {c}.",
-  en: "Organizing is free today. Taking part, checking and receiving a prize are always free. Withdrawing money from your account costs {c}.",
+  es: "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Participar, comprobar y recibir un premio son gratis siempre. Retirar dinero de tu cuenta cuesta {c}.",
+  en: "Run your first 3 Live draws for free. For more, use a coupon. Taking part, checking and receiving a prize are always free. Withdrawing money from your account costs {c}.",
 };
 
 /**
@@ -33,10 +35,12 @@ const FAQ_CON_RETIRO = {
  */
 const FAQ_CON_RETIRO_Y_COMISION = {
   es:
-    "Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga {p} de los premios. " +
+    "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
+    "Si tu empresa sortea premios en dólares digitales, paga {p} de los premios. " +
     "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta {c}.",
   en:
-    "Organizing is free. If your company gives away prizes in digital dollars, it pays {p} of the prizes. " +
+    "Run your first 3 Live draws for free. For more, use a coupon. " +
+    "If your company gives away prizes in digital dollars, it pays {p} of the prizes. " +
     "Taking part, checking and receiving a prize are always free. Withdrawing costs {c}.",
 };
 
