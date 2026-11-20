@@ -1,6 +1,8 @@
 import "./styles.css";
 import { cargaOpcional } from "./version-nueva";
 import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
+import { pintarElCostoDelRetiro } from "./costo-del-retiro";
+import { pintarLaComision } from "./comision-texto";
 import { contractUrl, network } from "./stellar/config";
 import { enlazarContrato } from "./enlace-contrato";
 import { leerMarcaPollar } from "./stellar/pollar-config";
@@ -84,6 +86,11 @@ function montarLaCuenta(): void {
 }
 initMenuMas();
 iniciarFeedback();
+// El costo de retirar va en precios y en términos, dentro de un molde que solo se abre con el costo configurado (hoy no
+// lo está, y la página queda como estaba). Se pone después de cada `setLang`, que escribe el texto con su marcador.
+onLangChange(() => pintarElCostoDelRetiro(document));
+// Lo que cobra Tinkazo a una campaña de empresa, igual: dentro de un molde que solo se abre con la comisión configurada (src/comision-texto.ts).
+onLangChange(() => pintarLaComision(document));
 setLang(initialLang());
 // El enlace al contrato sigue el modo de la pestaña (`?red=` o lo guardado): en Prueba es el de siempre, el que trae el
 // HTML. Nunca se fija a mano al de la red principal: los sorteos de Prueba siguen comprobándose ahí hasta que esa red se

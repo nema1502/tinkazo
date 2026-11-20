@@ -8,7 +8,7 @@ import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type FocoAt, type PixiStage } from "./stage";
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
-import { JUNTA_VUELO, LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
+import { JUNTA_VUELO, LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, decisivoDelTeleferico, planCableCar } from "./cablecar-plan";
 import { GRUPOS, grupoDe } from "../grupos";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
@@ -437,6 +437,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
 
   /* ================================================================ estado */
   let tAll = 0, tHold = 0, silent = false, didCrown = false, didDock = false;
+  S.decisivoEn(() => tAll, decisivoDelTeleferico(P, winners));
   let lastHum = -1, boardTicks = 0, beat = -1, beatDark = -1, lastSaid = -99, lastGrind = -1;
   const fired = new Set<string>();
   /** Cuántos se bajaron en cada estación, para el "−N" de su rótulo. */

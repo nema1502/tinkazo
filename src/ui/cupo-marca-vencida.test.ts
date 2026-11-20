@@ -40,7 +40,7 @@ vi.mock("../stellar/alta-oferta", async (orig) => {
   }) as unknown as typeof fetch;
   return { ...real, leerOferta: (o: Parameters<typeof real.leerOferta>[0] = {}) => real.leerOferta({ fetch: porteroFalso, url: PORTERO, ...o }) };
 });
-vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false }));
+vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enPractica: () => false, enStand: () => false }));
 vi.mock("../stellar/cobro-oficial", () => ({ cobroPorUso: () => true, redPrincipalConPollar: () => true, esCuentaDePollar: () => true }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ kind: "external", address: CUENTA }) }));
 vi.mock("../stellar/patrocinador", async (orig) => ({

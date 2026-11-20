@@ -12,6 +12,7 @@ import {
   type Datos,
 } from "./toborochi-plan";
 import { TEXTOS } from "./toborochi-textos";
+import { marcarStand } from "../../ensayo-modo";
 
 const RONDA = "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829";
 const rondaDe = (semilla: number): string => (semilla >>> 0).toString(16).padStart(8, "0") + RONDA.slice(8);
@@ -438,5 +439,39 @@ describe("El Toborochi: los textos", () => {
     expect(en).toMatch(/south wind/i);
     for (const mala of [/eliminad/i, /perdi/i, /suerte/i, /arav/i, /apuest/i, /rifa/i]) expect(es).not.toMatch(mala);
     for (const mala of [/eliminat/i, /lost/i, /luck/i, /arav/i, /bet/i, /raffle/i]) expect(en).not.toMatch(mala);
+  });
+
+  it("en el stand, con una persona y con varias, el guion dice quién sale y no habla de premios ni de ganar", () => {
+    const PROHIBIDO = /\bgan\p{L}*|premio|sell|\bwin(s|ner|ners|ning)?\b|prize|seal/iu;
+    marcarStand(true);
+    try {
+      for (const idioma of ["es", "en"] as const) {
+        for (const n of [3, 8, 18, 60]) {
+          for (const gs of [[1], [2, 0, 1]]) {
+            const c = contexto(n, gs, 5, idioma);
+            const p = planToborochi(c);
+            const dichas = p.guion.map((l) => (typeof l.texto === "function" ? l.texto() : l.texto)).filter((t): t is string => Boolean(t));
+            expect(dichas.length, `${idioma} con ${n}`).toBeGreaterThan(5);
+            expect(dichas.filter((t) => PROHIBIDO.test(t)), `${idioma} con ${n} y ${gs.length}`).toEqual([]);
+            expect(validarGuion(p.guion, p.duracion, { nino: true, nombres: c.nombres }).problemas, `${idioma} con ${n} y ${gs.length}`).toEqual([]);
+          }
+        }
+      }
+      expect(TEXTOS.es.ultima).toBe("Una sola sale.");
+      expect(TEXTOS.es.ultimaDos).toBe("Salen las dos.");
+      expect(TEXTOS.en.ultima).toBe("Only one is picked.");
+      expect(TEXTOS.en.ultimaDos).toBe("Both are picked.");
+      expect((TEXTOS.es.conPremio as (n: string) => string)("Ana")).toBe("¡Se va Ana, pero sale!");
+      expect((TEXTOS.en.conPremio as (n: string) => string)("Ana")).toBe("There goes Ana, picked too!");
+    } finally {
+      marcarStand(false);
+    }
+    // Fuera del stand, las frases de siempre.
+    expect(TEXTOS.es.ultima).toBe("Una sola se lleva el premio.");
+    expect(TEXTOS.es.ultimaDos).toBe("Las dos se llevan premio.");
+    expect(TEXTOS.en.ultima).toBe("Only one takes the prize.");
+    expect(TEXTOS.en.ultimaDos).toBe("Both of them take a prize.");
+    expect((TEXTOS.es.conPremio as (n: string) => string)("Ana")).toBe("¡Se va Ana, con premio!");
+    expect((TEXTOS.en.conPremio as (n: string) => string)("Ana")).toBe("There goes Ana, with a prize!");
   });
 });

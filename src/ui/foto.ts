@@ -2,6 +2,7 @@ import { drawAvatar } from "../avatar";
 import { qrLienzo } from "./qr";
 import { marcarQr } from "../contar";
 import { logoALienzo, type Logo } from "../logo";
+import { GEO, planEscanearArriba, planLista, type EscanearPlan, type Medida, type PlanLista, type Texto } from "./foto-lista";
 
 /**
  * La foto para compartir: quién ganó, qué se lleva y el QR para comprobarlo,
@@ -30,14 +31,16 @@ import { logoALienzo, type Logo } from "../logo";
  * lea igual. Los paneles abrazan su texto y dejan libre la ventana del arte
  * (`ARTE_ARRIBA` a `ARTE_ABAJO`, todo el ancho), donde cada ilustración pone lo
  * suyo: arriba, la marca y el rótulo (en dos renglones si es largo); el medio,
- * más compacto, en su franja (`FRANJA_ARRIBA` a `FRANJA_ABAJO`), y solo si no
- * entra ni con la letra más chica (muchos ganadores, un evento) sube desde
- * abajo. Un solo ganador puede ir en cambio en la columna de la izquierda,
+ * más compacto, en su franja (`FRANJA_ARRIBA` a `FRANJA_ABAJO`). Nada del medio
+ * sube de la franja: la ventana del arte queda libre con cualquier cantidad de
+ * ganadores. Un solo ganador puede ir en cambio en la columna de la izquierda,
  * encima de "Escaneá", si ahí el nombre sale más grande y nada se corta: el
  * nombre tiene que ser lo más grande de la foto. "Escaneá" va más chico que en
- * la de siempre y con su panel alineado con el pie de la tarjeta del QR. Dos o
- * tres ganadores van en esa misma columna, con "Escaneá" en un renglón y más
- * chico que sus nombres; con más, no hay foto del juego (`TOPE_FOTO_JUEGO`).
+ * la de siempre y con su panel alineado con el pie de la tarjeta del QR.
+ * Dos o más ganadores, de cualquier cantidad, los arma `foto-lista.ts`: la
+ * lista en la columna de la izquierda, encima de "Escaneá", o en la columna
+ * entera con "Escaneá" arriba de la tarjeta del QR, y sin QR de lado a lado. Con
+ * muchos, los primeros, "y N más" y dónde está la lista completa (`completa`).
  * El QR va en su tarjeta blanca, en el mismo lugar y del mismo tamaño.
  * Si el juego no tiene ilustración, es la foto de siempre. Sin `fondo`, la de
  * siempre, llamada por llamada (`foto-logo.test.ts`).
@@ -87,16 +90,22 @@ export interface Foto {
   hecho?: string;
   /** El juego que se jugó: la foto va sobre su ilustración, si tiene. Sin él, la foto no cambia. */
   fondo?: string;
+  /**
+   * Dónde está la lista completa, para la foto del juego cuando no se ven todos los nombres: con QR, lo que dice junto
+   * a "y N más" (`qr`) y, sin él, dónde está (`mensaje`). Quien arma el texto sabe si el QR lleva la lista entera. La foto
+   * de siempre no lo usa.
+   */
+  completa?: { qr: string; mensaje: string };
 }
 
-export const ANCHO_FOTO = 1080;
-export const ALTO_FOTO = 1350;
+export const ANCHO_FOTO = GEO.W;
+export const ALTO_FOTO = GEO.H;
 const W = ANCHO_FOTO;
 const H = ALTO_FOTO;
-const M = 84;
+const M = GEO.M;
 const ANCHO = W - 2 * M;
 /** El lado de la tarjeta blanca del QR, con su margen adentro. */
-const QR_LADO = 452;
+const QR_LADO = GEO.QR_LADO;
 const QR_X = W - M - QR_LADO;
 const QR_Y = H - 16 - 66 - QR_LADO;
 /**
@@ -144,17 +153,9 @@ const ESCANEAR_JUEGO = { max: 44, min: 34 } as const;
  * dos, con este mismo tope.
  */
 const ESCANEAR_LISTA = { max: 34, min: 28 } as const;
-/**
- * Hasta cuántos renglones de ganadores lleva la foto del juego. Con más, la lista no entra al lado del dibujo sin
- * achicar los nombres de más, y subía sobre la ventana del arte hasta tapar el juego (con siete, de y=314 a 800 y de
- * lado a lado): se comparte la foto de siempre, sola (`compartir.ts`).
- */
-export const TOPE_FOTO_JUEGO = 3;
-
-/** Si para esta foto se ofrece la del juego: un sorteo de uno a `TOPE_FOTO_JUEGO` ganadores. Un evento, nunca. */
+/** Si para esta foto se ofrece la del juego: un sorteo, con cualquier cantidad de ganadores. Un evento, nunca. */
 export function fotoDelJuegoEntra(f: Pick<Foto, "personas">): boolean {
-  const n = f.personas?.length ?? 0;
-  return n >= 1 && n <= TOPE_FOTO_JUEGO;
+  return (f.personas?.length ?? 0) >= 1;
 }
 
 /** El rótulo de la foto del juego va en dos renglones si en uno haría el panel de arriba más ancho que esto. */
@@ -489,20 +490,18 @@ function nombreGrande(c: Ctx, nombre: string, s: number, cabe?: { alto: number; 
 }
 
 /**
- * Varios ganadores: una fila por persona, con su cara y su número; de siete en
- * adelante, en dos columnas. Con `ajustado` (la foto del juego), una columna
- * abraza sus nombres: el número va a la derecha del nombre más largo y no en
- * el borde de la foto, y el panel deja ver el dibujo a su lado. `ancho` es el
- * de la lista: todo el de la foto, o el de la columna de la izquierda.
+ * Varios ganadores en la foto de siempre: una fila por persona, con su cara y su
+ * número; de siete en adelante, en dos columnas. La foto del juego arma su lista
+ * aparte (`foto-lista.ts`).
  */
-function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number, caras?: readonly string[], ajustado = false, ancho = ANCHO): Bloque {
+function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number, caras?: readonly string[]): Bloque {
   const total = nombres.length;
   const enDos = total > 6;
   const tope = enDos ? 12 : 6;
   const vistos = total > tope ? tope - 1 : total;
   const resto = total - vistos;
   const porColumna = enDos ? Math.ceil((vistos + (resto ? 1 : 0)) / 2) : vistos + (resto ? 1 : 0);
-  const colW = enDos ? (ancho - 40) / 2 : ancho;
+  const colW = enDos ? (ANCHO - 40) / 2 : ANCHO;
   const fila = Math.round((enDos ? 74 : 112) * s);
   const lado = fila - Math.round(18 * s);
   const numTam = Math.round(Math.min(40, fila * 0.34));
@@ -523,20 +522,11 @@ function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number, caras?: 
       break;
     }
   }
-  let usada = colW;
-  if (ajustado && !enDos) {
-    c.font = `900 ${nomTam}px ${SANS}`;
-    const nombre = Math.max(0, ...nombres.slice(0, vistos).map((n) => Math.min(libre, c.measureText(n).width)));
-    c.font = `800 ${Math.round(nomTam * 0.9)}px ${SANS}`;
-    const mas = resto ? c.measureText(f.mas.replace("{n}", String(resto))).width : 0;
-    usada = Math.min(colW, Math.ceil(Math.max(lado + 22 + nombre + 24 + numW, mas)));
-  }
   return {
     alto: porColumna * fila,
     tam: nomTam,
     nombre: true,
     recorta: !entran,
-    ...(ajustado ? { ancho: () => (enDos ? ancho : usada) } : {}),
     dibujar: (y) => {
       for (let k = 0; k < vistos + (resto ? 1 : 0); k++) {
         const x0 = M + (enDos ? Math.floor(k / porColumna) : 0) * (colW + 40);
@@ -561,7 +551,7 @@ function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number, caras?: 
         c.font = `800 ${numTam}px ${MONO}`;
         c.fillStyle = C.magenta;
         c.textAlign = "right";
-        c.fillText(numero(k), x0 + usada, medio + numTam * 0.36);
+        c.fillText(numero(k), x0 + colW, medio + numTam * 0.36);
         c.textAlign = "left";
       }
     },
@@ -719,10 +709,12 @@ function cola(c: Ctx, lineas: string[], s: number, compacto = false, ancho = ANC
 }
 
 /**
- * El medio con la escala `s`. Con `limite` (la foto del juego: el alto que
- * tiene), más compacto: "Ganó" más chico, la mitad de aire entre bloques, y el
- * nombre de un ganador del tamaño que entre en lo que queda, nunca más chico
- * que "Ganó".
+ * El medio con la escala `s`. Con `limite` (la foto del juego con un solo
+ * ganador: el alto que tiene), más compacto: "Ganó" más chico, la mitad de aire
+ * entre bloques, y el nombre del tamaño que entre en lo que queda, nunca más
+ * chico que "Ganó". Con `columna`, en el ancho de la columna de la izquierda.
+ * Varios ganadores en la foto del juego no pasan por acá: los arma
+ * `foto-lista.ts`.
  */
 function medio(c: Ctx, f: Foto, s: number, apretado = false, limite?: number, columna = false): Bloque[] {
   const compacto = limite !== undefined;
@@ -741,10 +733,7 @@ function medio(c: Ctx, f: Foto, s: number, apretado = false, limite?: number, co
     }
     return [titulo(c, f, s, f.caras?.[0] ?? personas[0] ?? ""), separa(34), nombreGrande(c, personas[0] ?? "", s), separa(34), cola(c, f.lineas, s)];
   }
-  // En la columna de la izquierda, la lista del ancho de la columna y el premio y entre cuántos sin achicar: ahí hay
-  // alto, y en el teléfono se leen (en la franja salían a 24 y 18 px).
-  const ancho = columna ? COLUMNA_TEXTO : ANCHO;
-  return [titulo(c, f, s, null, compacto), separa(26), filasDePersonas(c, f, personas, s, f.caras, compacto, ancho), separa(24), cola(c, f.lineas, s, compacto && !columna, ancho)];
+  return [titulo(c, f, s, null), separa(26), filasDePersonas(c, f, personas, s, f.caras), separa(24), cola(c, f.lineas, s)];
 }
 
 /* ------------------------------------------------------------- abajo: el QR */
@@ -787,7 +776,7 @@ function escanear(c: Ctx, f: Foto, delJuego: boolean): { t: { tam: number; linea
   return { t, paso, altoTexto, bloque, y0 };
 }
 
-function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: number }, conPanel: boolean): void {
+function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: number }, conPanel: boolean, arriba: EscanearPlan | null = null): void {
   // La tarjeta blanca, derecha (un QR girado se lee peor), con borde y sombra dura.
   c.fillStyle = C.tinta;
   c.fillRect(QR_X + 14, QR_Y + 14, QR_LADO, QR_LADO);
@@ -801,6 +790,18 @@ function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: numb
   c.imageSmoothingEnabled = false;
   c.drawImage(qr.lienzo, x, y, qr.lado, qr.lado);
   c.imageSmoothingEnabled = true;
+
+  // Con la lista en la columna entera (foto del juego), "Escaneá" y la dirección van en su panel arriba de la tarjeta.
+  if (arriba) {
+    panel(c, arriba.panel.x, arriba.panel.y, arriba.panel.w, arriba.panel.h);
+    c.fillStyle = C.crema;
+    for (const t of arriba.texto) {
+      c.font = `900 ${t.tam}px ${SANS}`;
+      c.fillText(t.t, t.x, t.y);
+    }
+    dominio(c, arriba.dominio.x, arriba.dominio.y, arriba.dominio.h, arriba.dominio.tam);
+    return;
+  }
 
   // A la izquierda: lo que hay que hacer, en grande, y la dirección.
   const e = escanear(c, f, conPanel);
@@ -816,15 +817,16 @@ function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: numb
   dominio(c, M, y0, dirAlto);
 }
 
-/** La calcomanía magenta con "tinkazo.app". */
-function dominio(c: Ctx, x: number, y: number, alto: number): void {
+/** La calcomanía magenta con "tinkazo.app". Con `tam` menor que 42, la letra y el aire se achican en proporción (arreglo B). */
+function dominio(c: Ctx, x: number, y: number, alto: number, tam = 42): void {
   const dir = "tinkazo.app";
-  c.font = `900 42px ${SANS}`;
-  const w = Math.ceil(c.measureText(dir).width) + 44;
+  const aire = Math.round((44 * tam) / 42);
+  c.font = `900 ${tam}px ${SANS}`;
+  const w = Math.ceil(c.measureText(dir).width) + aire;
   calcomania(c, x, y, w, alto, C.magenta, -2, () => {
     c.fillStyle = C.fondo;
-    c.font = `900 42px ${SANS}`;
-    c.fillText(dir, 22, alto / 2 + 15);
+    c.font = `900 ${tam}px ${SANS}`;
+    c.fillText(dir, aire / 2, alto / 2 + Math.round((15 * tam) / 42));
   }, 9);
 }
 
@@ -839,7 +841,16 @@ function abajoSinQr(c: Ctx, f: Foto): void {
   c.strokeStyle = C.crema2;
   c.strokeRect(M + 2, y + 2, ANCHO - 4, alto - 4);
   c.setLineDash([]);
-  const t = encajar(c, f.sinQr, ANCHO - 80, 3, 52, 34, 800);
+  // La letra más grande en la que el texto entra en tres renglones y no llega a la calcomanía de abajo (queda un hueco de
+  // 16 px): un texto largo (un orden de turnos sin sello) a 46 px pasaba por debajo de ella.
+  const hueco = alto - 40 - 72 - 40 - 16;
+  let ajustado: { tam: number; lineas: string[] } | null = null;
+  for (let tam = 52; tam >= 34 && !ajustado; tam -= 2) {
+    c.font = `800 ${tam}px ${SANS}`;
+    const l = partir(c, f.sinQr, ANCHO - 80);
+    if (l.length <= 3 && l.length * Math.round(tam * 1.15) <= hueco) ajustado = { tam, lineas: l };
+  }
+  const t = ajustado ?? encajar(c, f.sinQr, ANCHO - 80, 3, 52, 34, 800);
   const paso = Math.round(t.tam * 1.15);
   c.font = `800 ${t.tam}px ${SANS}`;
   c.fillStyle = C.crema;
@@ -879,46 +890,91 @@ function rotuloEnRenglones(c: Ctx, f: Foto): string[] {
   return [rotulo.slice(0, corte), rotulo.slice(corte + 1)].map((l) => entraEnElAncho(c, l));
 }
 
+/** La letra del lienzo para un texto del plan de la lista: el número va en monoespaciada, lo demás en la letra de la casa. */
+const fuenteDe = (peso: Texto["peso"], tam: number): string => (peso === "mono" ? `800 ${tam}px ${MONO}` : `${peso} ${tam}px ${SANS}`);
+
+/** Lo que mide un texto en este lienzo, para el plan de la lista (`foto-lista.ts`). */
+const medidaDe =
+  (c: Ctx): Medida =>
+  (peso, tam, texto) => {
+    c.font = fuenteDe(peso, tam);
+    return c.measureText(texto).width;
+  };
+
+/** Dibuja la lista que armó el plan: el título, cada fila con su cara, su nombre y su número, y lo que viene debajo. */
+function dibujarPlan(c: Ctx, f: Foto, p: PlanLista): void {
+  const colores = { crema: C.crema, apagado: C.apagado, amarillo: C.amarillo, magenta: C.magenta };
+  const poner = (t: Texto): void => {
+    c.font = fuenteDe(t.peso, t.tam);
+    c.fillStyle = colores[t.color];
+    c.textAlign = t.derecha ? "right" : "left";
+    c.fillText(t.t, t.x, t.y);
+  };
+  poner(p.titulo);
+  for (const fila of p.filas) {
+    const lado = Math.round(fila.cara.w);
+    const rostro = cara(f.caras?.[fila.k] ?? f.personas?.[fila.k] ?? "", lado);
+    calcomania(c, fila.cara.x, fila.cara.y, lado, lado, "#fff", fila.k % 2 ? 2 : -2, () => c.drawImage(rostro, 0, 0, lado, lado), Math.max(4, Math.round(lado / 14)));
+    fila.nombre.forEach(poner);
+    poner(fila.numero);
+  }
+  for (const t of [...(p.mas ? [p.mas] : []), ...p.frase, ...p.cola]) poner(t);
+  c.textAlign = "left";
+}
+
 /**
- * El medio de la foto del juego, con su panel: abraza el texto y termina en
- * `FRANJA_ABAJO`, justo arriba de la tarjeta del QR. Primero se busca la
- * escala con la que entra en la franja, debajo de la ventana del arte; si no
- * entra ni con la más chica, sube lo que haga falta, como mucho hasta debajo
- * del panel de arriba (con un renglón por cosa, si hace falta), antes que
- * achicar la letra de más o pisar el QR. Un solo ganador prueba además la
- * columna de la izquierda, de `FRANJA_ARRIBA` hasta encima de `izquierda` (lo
- * que hay abajo a la izquierda: el panel de "Escaneá" o la tarjeta sin QR), con
- * el panel del ancho de la columna: va ahí si el nombre sale más grande que en
- * la franja, o si en la franja no entraba. Dos o tres ganadores van en esa
- * columna siempre que sus nombres entren enteros, con la escala en que salen
- * más grandes. Devuelve dónde empieza el texto.
+ * El medio de la foto del juego, con su panel. Nada sube de la franja: la
+ * ventana del arte (`ARTE_ARRIBA` a `ARTE_ABAJO`) queda libre con cualquier
+ * cantidad de ganadores. Dos o más los arma `foto-lista.ts`: la lista en la
+ * columna de la izquierda, encima de lo que hay abajo a la izquierda
+ * (`izquierda`: el panel de "Escaneá" o la tarjeta sin QR), o en la columna
+ * entera con "Escaneá" arriba de la tarjeta del QR, o de lado a lado si no hay
+ * QR. Un solo ganador prueba la franja de debajo del dibujo (`FRANJA_ARRIBA` a
+ * `FRANJA_ABAJO`) y la columna de la izquierda, y va donde su nombre sale más
+ * grande y nada se corta. Si no entra entero en ninguna (60 letras seguidas),
+ * va en la columna entera, con lo que no entre recortado con "…". Devuelve
+ * dónde empieza el texto y, si "Escaneá" cambió de lugar, dónde va.
  */
-function medioDelJuego(c: Ctx, f: Foto, izquierda: number): { bloques: Bloque[]; alto: number; y: number } {
+function medioDelJuego(c: Ctx, f: Foto, izquierda: number, conQr: boolean): { bloques: Bloque[]; alto: number; y: number; escanear: EscanearPlan | null } {
+  const n = f.personas?.length ?? 0;
+  // La columna de la izquierda: debajo de la ventana del arte y encima de "Escaneá", del ancho de su panel.
+  const limiteColumna = izquierda - 24 - AIRE_MEDIO - FRANJA_ARRIBA - AIRE_MEDIO;
+  if (n >= 2) {
+    const plan = planLista({
+      medir: medidaDe(c),
+      titulo: f.titulo,
+      nombres: f.personas ?? [],
+      numeros: f.numeros,
+      lineas: f.lineas,
+      mas: f.mas,
+      // Con QR, dónde está la lista según el QR; sin él, en el mensaje.
+      frase: (conQr ? f.completa?.qr : f.completa?.mensaje) ?? "",
+      escanear: f.escanear,
+      conQr,
+      altoA: conQr ? limiteColumna : 0,
+    });
+    panel(c, plan.panel.x, plan.panel.y, plan.panel.w, plan.panel.h);
+    return { bloques: [{ alto: plan.panel.h, dibujar: () => dibujarPlan(c, f, plan) }], alto: plan.panel.h - 2 * AIRE_MEDIO, y: plan.panel.y + AIRE_MEDIO, escanear: plan.escanear };
+  }
   const abajo = FRANJA_ABAJO - AIRE_MEDIO;
-  const intentos: Array<[number, boolean]> = [
-    [abajo - FRANJA_ARRIBA - AIRE_MEDIO, false],
-    [abajo - ARRIBA - AIRE_MEDIO, false],
-    [abajo - ARRIBA - AIRE_MEDIO, true],
-  ];
-  const sumar = (bs: Bloque[]): number => bs.reduce((n, b) => n + b.alto, 0);
+  // Un sorteo no sube de la franja. Un evento (el diálogo no le ofrece la foto del juego) conserva sus tres intentos.
+  const intentos: Array<[number, boolean]> =
+    n === 0
+      ? [
+          [abajo - FRANJA_ARRIBA - AIRE_MEDIO, false],
+          [abajo - ARRIBA - AIRE_MEDIO, false],
+          [abajo - ARRIBA - AIRE_MEDIO, true],
+        ]
+      : [[abajo - FRANJA_ARRIBA - AIRE_MEDIO, false]];
+  const sumar = (bs: Bloque[]): number => bs.reduce((m, b) => m + b.alto, 0);
   const medir = (bs: Bloque[]): number => Math.ceil(Math.max(0, ...bs.map((b) => (b.ancho ? b.ancho() : ANCHO))));
   const tamDelNombre = (bs: Bloque[]): number => bs.find((b) => b.nombre)?.tam ?? 0;
-  // Una lista de hasta seis ganadores que no entra en la franja sube lo menos posible, así se ve más dibujo: con la
-  // escala más grande en que los nombres siguen en unos 37 px (hasta tres, escala 0,7) o 32 px (hasta seis, 0,6).
-  // Desde la escala 1 subía hasta tapar la mitad de la ventana del arte con solo dos nombres. Dos o tres ganadores
-  // van en cambio en la columna de la izquierda (abajo), y la franja queda para cuando un nombre no entra ahí entero.
-  // Esa escala es también el piso de la lista en la franja: más chica, dos nombres entraban sin subir, pero a 30 px y
-  // con la cola a 19 y 14.
-  const n = f.personas?.length ?? 0;
-  const pisoDeLista = n >= 2 && n <= 6 ? (n <= 3 ? 6 : 8) : 0;
-  const desde = (i: number): number => (i > 0 ? pisoDeLista : 0);
-  const hasta = (i: number): number => (i === 0 && pisoDeLista ? pisoDeLista : 9);
   let bloques: Bloque[] = [];
   let alto = 0;
   let enLaFranja = false;
   buscar: for (const [i, [limite, apretado]] of intentos.entries()) {
     // De 1 a 0,55 en pasos enteros: con `s -= 0.05` el error de redondeo deja afuera el 0,55.
-    for (let k = desde(i); k <= hasta(i); k++) {
+    for (let k = 0; k <= 9; k++) {
       const s = 1 - k * 0.05;
       bloques = medio(c, f, s, apretado, limite);
       alto = sumar(bloques);
@@ -930,45 +986,42 @@ function medioDelJuego(c: Ctx, f: Foto, izquierda: number): { bloques: Bloque[];
   }
   let y = abajo - alto;
   let ancho = Math.min(ANCHO, medir(bloques)) + 56;
-  // La columna de la izquierda: debajo de la ventana del arte y encima de "Escaneá", del ancho de su panel.
-  const limiteColumna = izquierda - 24 - AIRE_MEDIO - FRANJA_ARRIBA - AIRE_MEDIO;
-  if (n >= 2 && n <= TOPE_FOTO_JUEGO) {
-    // Dos o tres ganadores van en la misma columna, encima de "Escaneá", con la escala en que los nombres salen más
-    // grandes (con cara y número al lado, el ancho los limita: una escala más chica deja más lugar para la letra) y
-    // enteros. En la franja no entraban y la lista subía sobre el dibujo. Si un nombre no entra entero ni así, la franja.
-    let mejor: { col: Bloque[]; alto: number; tam: number } | null = null;
-    for (let k = 0; k <= 9; k++) {
-      const col = medio(c, f, 1 - k * 0.05, false, limiteColumna, true);
-      const a = sumar(col);
-      if (a > limiteColumna || col.some((b) => b.recorta) || medir(col) > COLUMNA_TEXTO) continue;
-      if (!mejor || tamDelNombre(col) > mejor.tam) mejor = { col, alto: a, tam: tamDelNombre(col) };
-    }
-    if (mejor) {
-      bloques = mejor.col;
-      alto = mejor.alto;
-      y = FRANJA_ARRIBA + AIRE_MEDIO;
-      ancho = COLUMNA_PANEL;
-    }
-  }
+  let escanearArriba: EscanearPlan | null = null;
   // Un solo ganador también puede ir en la columna: va ahí si el nombre sale más grande que en la franja y nada se corta.
   if (n === 1) {
-    const limite = limiteColumna;
+    let enColumna = false;
     for (let k = 0; k <= 9; k++) {
       const s = 1 - k * 0.05;
-      const col = medio(c, f, s, false, limite, true);
+      const col = medio(c, f, s, false, limiteColumna, true);
       const a = sumar(col);
-      if (a > limite || col.some((b) => b.recorta) || medir(col) > COLUMNA_TEXTO) continue;
+      if (a > limiteColumna || col.some((b) => b.recorta) || medir(col) > COLUMNA_TEXTO) continue;
       if (!enLaFranja || tamDelNombre(col) > tamDelNombre(bloques)) {
         bloques = col;
         alto = a;
         y = FRANJA_ARRIBA + AIRE_MEDIO;
         ancho = COLUMNA_PANEL;
+        enColumna = true;
       }
       break;
     }
+    // No entra entero ni en la franja ni en la columna (60 letras seguidas): tampoco sube sobre el dibujo. Con QR va en la
+    // columna entera, con "Escaneá" arriba de la tarjeta del QR; sin él, de lado a lado hasta la tarjeta de abajo. Lo que
+    // aun así no entre queda recortado con "…".
+    if (!enLaFranja && !enColumna) {
+      const limite = conQr ? GEO.PIE - FRANJA_ARRIBA - 2 * AIRE_MEDIO : limiteColumna;
+      for (let k = 0; k <= 9; k++) {
+        const s = 1 - k * 0.05;
+        bloques = medio(c, f, s, false, limite, conQr);
+        alto = sumar(bloques);
+        if (alto <= limite) break;
+      }
+      y = FRANJA_ARRIBA + AIRE_MEDIO;
+      ancho = conQr ? COLUMNA_PANEL : Math.min(ANCHO, medir(bloques)) + 56;
+      if (conQr) escanearArriba = planEscanearArriba(medidaDe(c), f.escanear, tamDelNombre(bloques) || 60);
+    }
   }
   panel(c, M - 28, y - AIRE_MEDIO, ancho, alto + 2 * AIRE_MEDIO);
-  return { bloques, alto, y };
+  return { bloques, alto, y, escanear: escanearArriba };
 }
 
 /** Dibuja la foto. Exportada para las capturas y las pruebas; para compartir, `fotoPng`. */
@@ -1028,9 +1081,10 @@ async function pintar(f: Foto): Promise<{ lienzo: HTMLCanvasElement; conFondo: b
   let bloques: Bloque[] = [];
   let alto = 0;
   let y: number;
+  let escanearArriba: EscanearPlan | null = null;
   // En la foto del juego, lo que hay debajo a la izquierda: el panel de "Escaneá" (empieza 28 px arriba de su texto) o la
   // tarjeta que reemplaza al QR.
-  if (conFondo) ({ bloques, alto, y } = medioDelJuego(c, f, qr ? escanear(c, f, true).y0 - 28 : SIN_QR_Y));
+  if (conFondo) ({ bloques, alto, y, escanear: escanearArriba } = medioDelJuego(c, f, qr ? escanear(c, f, true).y0 - 28 : SIN_QR_Y, !!qr));
   else {
     buscar: for (const apretado of [false, true]) {
       for (let s = 1; s >= 0.55; s -= 0.05) {
@@ -1047,7 +1101,7 @@ async function pintar(f: Foto): Promise<{ lienzo: HTMLCanvasElement; conFondo: b
   }
 
   // Sin QR, la tarjeta que lo reemplaza ya es opaca: sobre la ilustración se lee igual.
-  if (qr) abajoConQr(c, f, qr, conFondo);
+  if (qr) abajoConQr(c, f, qr, conFondo, escanearArriba);
   else abajoSinQr(c, f);
   return { lienzo, conFondo };
 }
@@ -1064,9 +1118,8 @@ export async function fotoPng(f: Foto): Promise<Blob | null> {
 
 /**
  * La foto con el fondo del juego (`fondo`) como PNG, o null si ese juego no
- * tiene ilustración (o no hay `fondo`, son más de `TOPE_FOTO_JUEGO` ganadores,
- * o el navegador no puede dibujarla): entonces no hay segunda foto que
- * ofrecer, y va solo la de siempre.
+ * tiene ilustración (o no hay `fondo`, es un evento o el navegador no puede
+ * dibujarla): entonces no hay segunda foto que ofrecer, y va solo la de siempre.
  */
 export async function fotoDelJuegoPng(f: Foto): Promise<Blob | null> {
   if (!f.fondo || !fotoDelJuegoEntra(f)) return null;

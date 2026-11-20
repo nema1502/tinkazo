@@ -31,10 +31,10 @@ function seccionDeMisSorteos(): string {
 }
 
 /** Mis sorteos con un sorteo jugado que falta guardar. */
-async function pintar(): Promise<void> {
+async function pintar(extra: Record<string, unknown> = {}): Promise<void> {
   const { network } = await import("../stellar/config");
   const hist = await import("./history");
-  hist.remember({ organizer: WHO, listHash: "aa", count: 2, numWinners: 1, round: 100, sealedAt: 1_000, prize: "", names: ["Ana", "Beto"], winners: ["Ana"], id: "7", contract: network.contractId ?? "", porGrabar: true });
+  hist.remember({ organizer: WHO, listHash: "aa", count: 2, numWinners: 1, round: 100, sealedAt: 1_000, prize: "", names: ["Ana", "Beto"], winners: ["Ana"], id: "7", contract: network.contractId ?? "", porGrabar: true, ...extra });
   hist.renderHistory(WHO);
 }
 
@@ -88,6 +88,52 @@ describe("Guardarlo ahora, en Mis sorteos", () => {
     guardar()?.click();
     await vi.waitFor(() => expect(tarjeta()).toContain(T.es.grabNoSePudo));
     expect(document.querySelector("[data-grabar-propio]")).toBeNull();
+  });
+
+  it.each([
+    ["puede-guardar", "premioGuardadoSorteo"],
+    ["no-se-sabe", "premioSinSaberSorteo"],
+  ] as const)("si la puerta del premio frenó la grabación (%s), la nota es el aviso del sorteo y no el de siempre", async (que, clave) => {
+    // Pagar con la cuenta propia no existe con una cuenta de Google en la red principal (`sePuedeSortearPagando`).
+    h.pagando = false;
+    const error = Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+    h.terminar.mockResolvedValue({ estado: "fallo", error });
+    await pintar();
+    guardar()?.click();
+    await vi.waitFor(() => expect(tarjeta()).toContain(T.es[`errAnchor.${clave}`] as string));
+    expect(tarjeta()).not.toContain(T.es.grabNoSePudo);
+    expect(document.querySelector("[data-grabar-propio]")).toBeNull();
+    // El botón queda para volver a probar.
+    expect(guardar()?.textContent).toBe(T.es.pendienteGrabarBtn);
+    expect(guardar()?.disabled).toBe(false);
+  });
+
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+  const comprobante = (): HTMLAnchorElement | null => document.querySelector<HTMLAnchorElement>("a[href^='https://comprobante.test']");
+
+  it("si la cuenta ya puede guardar dinero, volver a probar no es la principal: lo es el comprobante", async () => {
+    h.pagando = false;
+    h.terminar.mockResolvedValue({ estado: "fallo", error: premio("puede-guardar") });
+    await pintar({ proof: "https://comprobante.test/#prueba" });
+    expect(guardar()?.className).toContain("primary");
+    guardar()?.click();
+    await vi.waitFor(() => expect(tarjeta()).toContain(T.es["errAnchor.premioGuardadoSorteo"] as string));
+    expect(guardar()?.className).toContain("ghost");
+    expect(guardar()?.className).not.toContain("primary");
+    expect(comprobante()?.className).toContain("primary");
+    expect(comprobante()?.className).not.toContain("ghost");
+    expect(comprobante()?.textContent).toBe(T.es.histSeeProof);
+    expect(document.querySelector("[data-grabar-propio]")).toBeNull();
+  });
+
+  it("si no se pudo comprobar, probar de nuevo sigue siendo lo principal", async () => {
+    h.pagando = false;
+    h.terminar.mockResolvedValue({ estado: "fallo", error: premio("no-se-sabe") });
+    await pintar({ proof: "https://comprobante.test/#prueba" });
+    guardar()?.click();
+    await vi.waitFor(() => expect(tarjeta()).toContain(T.es["errAnchor.premioSinSaberSorteo"] as string));
+    expect(guardar()?.className).toContain("primary");
+    expect(comprobante()?.className).toContain("ghost");
   });
 
   it("con otra cuenta activa no lo guarda sin avisar: dice que entre con la cuenta del sorteo", async () => {

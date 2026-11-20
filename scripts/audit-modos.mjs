@@ -309,20 +309,20 @@ const barraEntra = (page) =>
     return entra ? 'entra' : 'ancho ' + el.scrollWidth + '/' + el.clientWidth + ' alto ' + el.scrollHeight + '/' + el.clientHeight;
   })()`);
 
-/** El aire entre el botón de más de un turno y el enlace del stand, en píxeles (u «oculto» si el botón no se ve). */
+/** El aire entre el botón de más de un turno y el pliegue de opciones, en píxeles (u oculto si no se ve). */
 const aireBotonEnlace = (page) =>
   page.eval(`(() => {
     const b = document.getElementById('btn-varias');
-    const s = document.getElementById('btn-stand');
+    const s = document.getElementById('mas-opciones');
     if (!b || !s) return 'falta';
     if (getComputedStyle(b).display === 'none') return 'oculto';
     return String(Math.round(s.getBoundingClientRect().top - b.getBoundingClientRect().bottom));
   })()`);
 
 /**
- * Las medidas del botón de más de un turno, su panel y el enlace del stand, en coordenadas de la página (no se
+ * Las medidas del botón de más de un turno, su panel y el pliegue de opciones, en coordenadas de la página (no se
  * mueven si la página se desplaza): el borde de abajo del botón, el de arriba del panel, el alto del panel y el
- * borde de arriba del enlace. El panel cerrado da null.
+ * borde de arriba del pliegue. El panel cerrado da null.
  */
 const medidasDelPanel = async (page) =>
   JSON.parse(
@@ -330,7 +330,7 @@ const medidasDelPanel = async (page) =>
       const y = (el) => el.getBoundingClientRect().top + scrollY;
       const b = document.getElementById('btn-varias');
       const p = document.getElementById('varias-panel');
-      const s = document.getElementById('btn-stand');
+      const s = document.getElementById('mas-opciones');
       if (!b || !p || !s) return null;
       const abierto = getComputedStyle(p).display !== 'none';
       return {
@@ -992,7 +992,11 @@ async function casoD(browser, vista, tema, ctx) {
     const abrio = await page.waitFor("document.getElementById('btn-varias') && getComputedStyle(document.getElementById('btn-varias')).display !== 'none'", 10000);
     check(`${quien}: se ve el boton para poner mas de una participacion`, abrio.ok);
     const aire = await aireBotonEnlace(page);
-    check(`${quien}: entre el boton y el enlace del stand hay 12 px o mas`, aire === "oculto" || (/^\d+$/.test(aire) && Number(aire) >= 12), `${aire}px`);
+    check(
+      `${quien}: entre el boton y el pliegue de opciones hay 12 px o mas`,
+      aire === "oculto" || (/^\d+$/.test(aire) && Number(aire) >= 12),
+      `${aire}px`,
+    );
     const cerrado = await medidasDelPanel(page);
     await page.eval("document.getElementById('btn-varias').click(); true");
     const panel = await page.waitFor("document.querySelectorAll('.varias-mas').length === 3", 10000);

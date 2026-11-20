@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { T } from "./i18n";
+import { nameList } from "./i18n";
+import { setResultadoDeTurnos } from "./modos/turnos";
 import { HAY_MODO_OFICIAL, TEXTOS_MODO_OFICIAL } from "./i18n-modo-oficial";
 
 /**
@@ -380,5 +382,99 @@ describe("el modo espectador", () => {
   it("el QR del espectador va solo en la espera: la pantalla del resultado lleva uno solo, el del comprobante", () => {
     expect(T.es.espQrBoton).toBeUndefined();
     expect(T.en.espQrBoton).toBeUndefined();
+  });
+});
+
+describe("el modo Amigo secreto (issue #99)", () => {
+  const CLAVES = [
+    "amigoOption", "amigoSub", "amigoTitulo", "amigoCount", "amigoPrizeLabel", "amigoPrize", "amigoMas",
+    "amigoHelp", "amigoRulesNote", "amigoPrivacidad", "amigoPrivacidadPoca", "amigoResultadoT", "amigoResultadoNota",
+    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoAgainLeft", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
+    "amigoSinComprobante",
+  ];
+  const CLAVES_CONFIRMAR = ["confirmarT", "confirmarError", "confirmarPara", "confirmarSorteo", "confirmarSello", "confirmarNota"];
+
+  it("sus textos existen en español y en inglés", () => {
+    for (const k of [...CLAVES, ...CLAVES_CONFIRMAR]) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect(T.es[k] as string).toBeTruthy();
+      expect(T.en[k] as string).toBeTruthy();
+    }
+  });
+
+  it("ningún texto del modo usa las palabras de ganar ni de premio", () => {
+    const prohibidas = /ganador|ganan?\b|gané|premio|pozo|suerte|winner|\bwins?\b|\bprize\b|rifa|lotería|raffle|lottery/i;
+    for (const k of CLAVES) {
+      for (const l of ["es", "en"] as const) {
+        expect(T[l][k] as string, `${l}.${k}`).not.toMatch(prohibidas);
+      }
+    }
+  });
+
+  it("la línea de privacidad dice lo que se decidió, y con 2 o 3 personas que no hay secreto", () => {
+    expect(T.es.amigoPrivacidad).toMatch(/calcular/i);
+    expect(T.en.amigoPrivacidad).toMatch(/work (it )?out|calculate|figure out/i);
+    expect(T.es.amigoPrivacidadPoca).toMatch(/no hay secreto/i);
+    expect(T.en.amigoPrivacidadPoca).toMatch(/no secret|not a secret/i);
+  });
+
+  it("el aviso del comprobante pide compartirlo después del intercambio", () => {
+    expect(T.es.amigoAvisoComprobante).toMatch(/después del intercambio/i);
+    expect(T.en.amigoAvisoComprobante).toMatch(/after the (gift )?exchange/i);
+  });
+
+  it("la página del enlace personal no promete la lista entera", () => {
+    expect(T.es.confirmarNota).toMatch(/lista entera|reparto entero/i);
+    expect(T.en.confirmarNota).toMatch(/whole list|full list|whole exchange|entire list/i);
+  });
+});
+
+/**
+ * El relato del cartel del final (`cWin`, por donde pasan todos los juegos) y
+ * la lista del cartel (`stage-cartel.ts`) tienen que contar lo mismo (S5 del
+ * issue 118). En un sorteo de premios los dos cortan en tres: el relato dice
+ * los tres primeros y «y N más», con el mismo N que el renglón del cartel. En
+ * un orden de turnos el relato no nombra a nadie, así que no puede contradecir
+ * un cartel que ahora lista hasta ocho.
+ */
+describe("el relato no contradice al cartel del final", () => {
+  it("en un orden de turnos el relato no nombra a nadie, en ningún idioma", () => {
+    // El import es estático: con `vi.resetModules()` en el archivo, un import dinámico traería otra copia del módulo.
+    setResultadoDeTurnos(true);
+    try {
+      expect(T.es.cWin("Ana, Beto, César y 5 más", true)).toBe("¡El orden quedó listo!");
+      expect(T.en.cWin("Ana, Beto, César and 5 more", true)).toBe("The order is set!");
+    } finally {
+      setResultadoDeTurnos(false);
+    }
+  });
+
+  it("en un sorteo de premios el relato dice los tres primeros y el mismo «N más» que lista el cartel", () => {
+    expect(nameList(["Ana", "Beto", "César"], 2)).toBe("Ana, Beto, César y 2 más");
+    expect(T.es.cWin("Ana, Beto, César y 2 más", true)).toMatch(/Ana, Beto, César y 2 más/);
+    expect(T.en.cWin("Ana, Beto, César and 2 more", true)).toMatch(/Ana, Beto, César and 2 more/);
+  });
+});
+
+describe("Siguiente premio de a un lugar (issue #102)", () => {
+  it("los textos nuevos existen en los dos idiomas", () => {
+    expect(T.es.lugarDe(2, 5)).toBe("Lugar 2 de 5");
+    expect(T.en.lugarDe(2, 5)).toBe("Place 2 of 5");
+    expect(T.es.lugaresFijos).toContain("quedaron fijos al nacer el número");
+    expect(T.en.lugaresFijos).toContain("fixed the moment the number was born");
+    expect(T.es.fijosAlNacer).toContain("todos los lugares de una vez");
+    expect(T.en.fijosAlNacer).toContain("every place at once");
+    expect(T.es.againLugarBoton).toBe("Siguiente premio");
+    expect(T.en.againLugarBoton).toBe("Next prize");
+    expect(T.es.againLugar(2, 3)).toContain("lugar 2 de 3");
+    expect(T.en.againLugar(2, 3)).toContain("Place 2 of 3");
+  });
+
+  it("el resumen antes de sellar dice la verdad solo cuando el sello trae varios lugares", () => {
+    expect(T.es.sellarResumen(10, 1, "Termo", 10)).not.toContain("El número elige todos los lugares");
+    expect(T.es.sellarResumen(10, 3, "Termo", 10)).toContain("El número elige todos los lugares de una vez");
+    expect(T.en.sellarResumen(10, 1, "Termo", 10)).not.toContain("picks every place");
+    expect(T.en.sellarResumen(10, 3, "Termo", 10)).toContain("The number picks every place at once");
   });
 });

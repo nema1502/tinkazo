@@ -491,4 +491,10 @@ describe("PollarWallet: Activar dólares digitales con Google (activarUsdc)", ()
     await expect(pollarWallet.pendienteDeActivacion()).resolves.toBeNull();
     expect(e.registro).toEqual([]);
   });
+
+  it("pendienteDeActivacion: en la red de prueba un pedido de la línea sin voto sigue contando, como siempre", async () => {
+    // El toque vota el pedido que ya espera solo en la red principal: acá el botón no vuelve mientras espere.
+    e.cofirmas = [{ id: "r1", status: "PENDING", operation: "change_trust", activityId: null }];
+    await expect(pollarWallet.pendienteDeActivacion()).resolves.toBe(true);
+  });
 });

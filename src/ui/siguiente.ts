@@ -4,7 +4,7 @@ import { enEnsayo, enStand } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
-import { type Paso, acortarPremio, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
+import { type Paso, acortarPremio, claveDelPaso, claveEnElStand, detalleDeLista, lineaDelPaso, pasoDe, premioLimpio, premioQueEntra, relojDe, unirDetalle } from "./pasos";
 import { esResultadoDeTurnos } from "../modos/turnos";
 import { modesVisible } from "../modos/bandera";
 import { contar, seCuentaPorPersona } from "../participaciones";
@@ -208,7 +208,9 @@ function calcular(): Toca {
   const noCabe = paso === 2 && ordenNoCabe(n);
   const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe;
   const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos(), noCabe });
-  let detalle = clave ? t(clave).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
+  // En el stand nadie gana: el aviso del resultado dice quién salió (la clave del paso no cambia, solo el texto).
+  const delTexto = enStand() ? claveEnElStand(clave, app.drawn?.winners.length ?? 1) : clave;
+  let detalle = delTexto ? t(delTexto).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
   // La frase del tope es larga: en el celular vale hasta dos renglones, como la de las dos cuentas.
   let doble = clave === "sigTope";
   // Con los modos a la vista, o sin ellos con una lista que es un reparto entero (`seCuentaPorPersona` sin modos, como

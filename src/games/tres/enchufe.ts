@@ -1,4 +1,5 @@
 import { auditaCon } from "../../state";
+import { pasoIntermedio } from "../en-hora";
 import { camaraDeEscena } from "./camara";
 import type { EntradaBase, Montaje3D, Vista3D } from "./tipos";
 
@@ -46,7 +47,19 @@ export function enchufar3D<E extends EntradaBase>(S: EstadioEnchufe, montaje: Mo
   }
   const v = vista;
   S.onCleanup(() => v.destruir());
-  return v;
+  // Con el show a horario, un cuadro lento se reparte en varios pasos del juego (`en-hora.ts`): el 3D se dibuja una vez
+  // por cuadro, en el último paso. Lo que dibujó queda: los pasos de en medio no se ven.
+  // Todo lo demás de la vista (lo propio de cada juego, como las cajas de la piñata) pasa igual.
+  const frame = (e: E): void => {
+    if (!pasoIntermedio()) v.frame(e);
+  };
+  return new Proxy(v, {
+    get(destino, clave) {
+      if (clave === "frame") return frame;
+      const valor: unknown = Reflect.get(destino, clave, destino);
+      return typeof valor === "function" ? (valor as (...a: unknown[]) => unknown).bind(destino) : valor;
+    },
+  });
 }
 
 /**

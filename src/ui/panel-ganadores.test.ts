@@ -305,7 +305,7 @@ describe("'Pagar premio' para quien organiza", () => {
       pedidos.push(`${b.nota}${forzar ? "!" : ""}`);
       return { tipo: "no-hay" };
     };
-    let terminar: () => void = () => undefined;
+    let terminar: (yaEstaba?: boolean) => void = () => undefined;
     const llamadas: Array<{ puesto: number; cuenta: string; nombre: string; nota: string; caja: HTMLElement }> = [];
     const { raiz } = montar({
       lector,
@@ -327,6 +327,12 @@ describe("'Pagar premio' para quien organiza", () => {
     expect(pedidos).toEqual([]);
     await vi.advanceTimersByTimeAsync(2600);
     expect(pedidos).toEqual(["tk:premio:777:1!"]);
+    // Un pago que ya estaba en la red se mira al instante, sin esperar los segundos.
+    pedidos.length = 0;
+    terminar(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(pedidos).toEqual(["tk:premio:777:1!"]);
+    vi.useRealTimers();
   });
 });
 

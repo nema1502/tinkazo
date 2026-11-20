@@ -126,8 +126,9 @@ describe("el juego arranca cuando nace el número", () => {
     const { draw } = await import("./draw");
     const sorteo = draw();
     await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
-    // El juego ya tiene a quienes ganan, y la grabación todavía no terminó.
-    expect(h.juego).toHaveBeenCalledWith(ESPERADOS);
+    // El juego ya tiene a quienes ganan, y la grabación todavía no terminó. Con tres lugares
+    // sellados la sala ve de a uno (issue #102): el primer show es el primer lugar.
+    expect(h.juego).toHaveBeenCalledWith([ESPERADOS[0]]);
     await vi.waitFor(() => expect(h.drawOnChain).toHaveBeenCalledTimes(1));
     expect(grab().dataset.grabacion).toBe("guardando");
     expect(grab().textContent).toMatch(/Guardando el sorteo/);
@@ -193,11 +194,13 @@ describe("el juego arranca cuando nace el número", () => {
 
   it("con varios ganadores usa los que se sellaron, aunque el campo diga otra cosa después de una recarga", async () => {
     h.drawOnChain.mockResolvedValue({ winners: ESPERADOS, randomness: V.quicknet.randomness, txHash: TX });
-    await sellar();
+    const { app } = await sellar();
     (document.getElementById("nw") as HTMLInputElement).value = "5";
     const { draw } = await import("./draw");
     await draw();
-    expect(h.juego).toHaveBeenCalledWith(ESPERADOS);
+    // La sala ve de a un lugar (issue #102), pero el resultado es el sellado entero.
+    expect(h.juego).toHaveBeenCalledWith([ESPERADOS[0]]);
+    expect(app.drawn?.winners).toEqual(ESPERADOS);
   });
 
   it("un orden de turnos (todos ganan) sale completo y en el orden del protocolo", async () => {
@@ -232,7 +235,10 @@ describe("lo que no graba", () => {
     const { draw } = await import("./draw");
     await draw();
     // El juego se monta un instante después (se baja aparte), y sin sello no hay nada que esperar.
-    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledWith(ESPERADOS));
+    // La sala ve de a un lugar (issue #102): el primer show es el primer lugar del resultado sellado.
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalledWith([ESPERADOS[0]]));
+    const estado = await import("../state");
+    expect(estado.app.drawn?.winners).toEqual(ESPERADOS);
     expect(h.drawOnChain).not.toHaveBeenCalled();
     expect(grab().style.display).toBe("none");
   });

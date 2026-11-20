@@ -13,11 +13,12 @@
  *   node probar.mjs http://127.0.0.1:8791 --alarma
  *
  * Crea tres salas y no deja nada guardado (las cierra o vencen solas). `--cupos`
- * prueba el tope de salas por dirección (deja esa dirección una hora sin crear;
- * reiniciar `wrangler dev` lo reinicia); `--tope` manda nombres durante unos
- * dos minutos para llegar a 400.
+ * prueba el tope de salas por dirección (deja esa dirección una hora sin crear
+ * después de 30 salas; reiniciar `wrangler dev` lo reinicia); `--tope` manda
+ * nombres durante unos dos minutos para llegar a 400.
  */
 import { gzipSync } from "node:zlib";
+import { ed25519 } from "@noble/curves/ed25519.js";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:8791").replace(/\/$/, "");
 const conCupos = process.argv.includes("--cupos");
@@ -167,7 +168,9 @@ if (soloAlarma) {
   process.exit(fallas ? 1 : 0);
 }
 
-// 3. Los nombres.
+// 3. Los nombres. Se espera al comienzo de un minuto para que las altas de esta parte
+// y las 245 del tope por minuto caigan en la misma ventana, también contra producción.
+await sleep(61_000 - (Date.now() % 60_000));
 check("una forma que no es un alta da 400", (await postPlano(id, "hola mundo!")).status === 400);
 check("un cuerpo demasiado largo da 413", (await postPlano(id, "A".repeat(701))).status === 413);
 check("una sala que no existe da 404", (await post("Zz9Zz9Zz", "Ana")).status === 404);
@@ -219,10 +222,16 @@ check("y ya no está en el objeto", despues.length === 1 && despues[0].n !== nBe
 // 6. Tope por minuto: 240 nombres por sala (ya van 2).
 let ok = 2;
 let rapido = 0;
-for (let i = 0; i < 245; i++) {
-  const r = await post(id, `Persona ${i}`);
-  if (r.status === 201) ok++;
-  else if (r.status === 429 && (await r.json()).error === "rapido") rapido++;
+// De a 25 en paralelo: contra producción cada pedido tarda y, de a uno, la tanda cruzaría el
+// cambio de minuto sin que el tope frene a nadie.
+for (let i = 0; i < 245; i += 25) {
+  const tanda = [];
+  for (let j = i; j < Math.min(245, i + 25); j++) tanda.push(post(id, `Persona ${j}`));
+  const salidas = await Promise.all(tanda);
+  for (const r of salidas) {
+    if (r.status === 201) ok++;
+    else if (r.status === 429 && (await r.json()).error === "rapido") rapido++;
+  }
 }
 // La primera alta, el repetido y la corrección también gastaron tres lugares de esta ventana.
 check("el tope es de 240 nombres por minuto por sala", ok >= 236 && ok <= 240 && rapido >= 7, `entraron ${ok}, frenados ${rapido}`);
@@ -332,6 +341,115 @@ check("el tope es de 240 nombres por minuto por sala", ok >= 236 && ok <= 240 &&
   } else console.log("NO PROBADO el cupón gratis: el cupo de salas no dejó crear otra", r3.status);
 }
 
+// 6c. Las campañas firmadas. Solo en local: ni con la variable puesta se escribe una campaña contra producción.
+const produccion = new URL(base).hostname === "s.tinkazo.app";
+if (process.env.CAMPANA_LLAVE_PRUEBA && !produccion) {
+  const secretoCampana = Buffer.from(process.env.CAMPANA_LLAVE_PRUEBA, "hex");
+  const firmarCampana = (datos) => {
+    const texto = JSON.stringify(datos);
+    const firma = ed25519.sign(new TextEncoder().encode(texto), secretoCampana);
+    return { texto, firma: Buffer.from(firma).toString("base64url") };
+  };
+  const postCampana = (cuerpo, origen = SITIO) =>
+    fetch(`${base}/v1/campana`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...origen },
+      body: JSON.stringify(cuerpo),
+    });
+  const evento = `prueba-${crypto.getRandomValues(new Uint32Array(1))[0]}`;
+  const datos = {
+    v: 1,
+    evento,
+    red: "testnet",
+    cierra_ms: Date.now() + 3_600_000,
+    sorteo_ms: Date.now() + 7_200_000,
+    premios: ["400000000", "200000000"],
+  };
+  const firmada = firmarCampana(datos);
+  check("6c: crear una campaña sin Origin da 403", (await postCampana(firmada, {})).status === 403);
+  const primero = firmada.firma[0];
+  const firmaCambiada = `${primero === "A" ? "B" : "A"}${firmada.firma.slice(1)}`;
+  const cambiada = await postCampana({ ...firmada, firma: firmaCambiada });
+  check(
+    "6c: una firma cambiada da 403 firma",
+    cambiada.status === 403 && (await cambiada.json()).error === "firma",
+  );
+  const vencida = await postCampana(firmarCampana({ ...datos, cierra_ms: Date.now() - 1000 }));
+  check(
+    "6c: una campaña con cierre pasado da 409 vencida",
+    vencida.status === 409 && (await vencida.json()).error === "vencida",
+  );
+  const creada = await postCampana(firmada);
+  const s = await creada.json();
+  check(
+    "6c: una campaña buena da 201 con id, token y vence",
+    creada.status === 201 && /^[0-9A-Za-z]{8}$/.test(s.id) && /^[A-Za-z0-9_-]{22}$/.test(s.token) && Number.isFinite(s.vence),
+  );
+  if (creada.status === 201) {
+    const repetida = await postCampana(firmada);
+    check(
+      "6c: el mismo archivo otra vez da 409 ya-existe",
+      repetida.status === 409 && (await repetida.json()).error === "ya-existe",
+    );
+    const publica = await (await fetch(`${base}/v1/sala/${s.id}/campana`, { headers: SITIO })).json();
+    check(
+      "6c: GET campana devuelve exactamente el texto y la firma",
+      publica.texto === firmada.texto && publica.firma === firmada.firma,
+    );
+    const inicial = await (await fetch(`${base}/v1/sala/${s.id}/campana/estado`, { headers: SITIO })).json();
+    check(
+      "6c: la campaña nace en lista, sin equipos y sin pase presentado",
+      inicial.fase === "lista" && inicial.total === 0 && inicial.pase === "sin",
+    );
+
+    const ponerFase = (fase, token) =>
+      fetch(`${base}/v1/sala/${s.id}/campana/fase`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...(token ? auth(token) : SITIO) },
+        body: JSON.stringify({ fase }),
+      });
+    check("6c: abrir la campaña sin token da 403", (await ponerFase("abierta", null)).status === 403);
+    check("6c: abrir la campaña con token da 204", (await ponerFase("abierta", s.token)).status === 204);
+    const transicion = await ponerFase("sellada", s.token);
+    check(
+      "6c: sellar por esta ruta da 409 transicion",
+      transicion.status === 409 && (await transicion.json()).error === "transicion",
+    );
+
+    const respuestaPase = await fetch(`${base}/v1/sala/${s.id}/campana/pase`, { headers: auth(s.token) });
+    const pase = await respuestaPase.json();
+    check("6c: con token la pantalla recibe un pase de 12 caracteres", /^[A-Za-z0-9_-]{12}$/.test(pase.p));
+    const conPase = await (await fetch(`${base}/v1/sala/${s.id}/campana/estado?p=${pase.p}`, { headers: SITIO })).json();
+    check("6c: el pase entregado vale en el estado público", conPase.pase === "vale");
+    const conOtro = await (await fetch(`${base}/v1/sala/${s.id}/campana/estado?p=AAAAAAAAAAAA`, { headers: SITIO })).json();
+    check("6c: otro pase de 12 caracteres figura vencido", conOtro.pase === "vencido");
+
+    const cerrada = async (r) => r.status === 409 && (await r.json()).error === "campana";
+    const equipo = await fetch(`${base}/v1/sala/${s.id}/equipos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...SITIO },
+      body: JSON.stringify({
+        cuenta: cuentaDePrueba(9),
+        d: await cifrar(clave, JSON.stringify({ n: "Equipo de prueba", i: ["Una", "Otra"] })),
+        llave: nuevaLlave(),
+      }),
+    });
+    check("6c: el alta común de equipos queda cerrada", await cerrada(equipo));
+    const config = await fetch(`${base}/v1/sala/${s.id}/config`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...auth(s.token) },
+      body: JSON.stringify({ modo: "cupon", evento: "feria-del-libro", cuenta: cuentaDePrueba(8) }),
+    });
+    check("6c: la configuración común de equipos queda cerrada", await cerrada(config));
+    check("6c: el alta común de nombres queda cerrada", await cerrada(await post(s.id, "Persona de prueba")));
+    await fetch(`${base}/v1/sala/${s.id}`, { method: "DELETE", headers: auth(s.token) });
+  }
+} else if (process.env.CAMPANA_LLAVE_PRUEBA) {
+  console.log("SALTADO 6c: las campañas de prueba no se crean contra producción");
+} else {
+  console.log("SALTADO 6c: falta CAMPANA_LLAVE_PRUEBA, la llave privada de prueba del Worker local");
+}
+
 // 7. Cerrar la sala.
 check("sin token no se cierra", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: SITIO })).status === 403);
 check("con el token se cierra (204)", (await fetch(`${base}/v1/sala/${id}`, { method: "DELETE", headers: auth(token) })).status === 204);
@@ -346,7 +464,7 @@ await probarAlarma();
 if (conCupos) {
   let creadas = 0;
   let motivo = "";
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 32; i++) {
     const r = await crear();
     if (r.status === 201) {
       creadas++;
@@ -357,7 +475,11 @@ if (conCupos) {
       break;
     }
   }
-  check("más de 5 salas por hora desde una dirección da 429 cupo-ip", motivo === "cupo-ip" && creadas <= 5, `creó ${creadas} más, motivo ${motivo}`);
+  check(
+    "más de 30 salas por hora desde una dirección da 429 cupo-ip",
+    motivo === "cupo-ip" && creadas <= 30,
+    `creó ${creadas} más, motivo ${motivo}`,
+  );
 }
 
 // 10. Tope de 400 por sala (dos minutos).

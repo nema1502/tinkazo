@@ -15,6 +15,10 @@ import { RPC_URLS, type NetworkName } from "./config";
  *
  * Es la fuente única: la usan verificar y evento, y la van a usar la CLI, el SDK
  * y el widget. Sin SDK de Stellar: es una tabla.
+ *
+ * La misma tabla tiene los contratos de premios (`premios`): las campañas que pueden sellar en el
+ * sorteo oficial de su red. Está vacía mientras la designación oficial esté pendiente (#167), y una
+ * red sin entradas no acepta ningún sello de premios.
  */
 
 export type Red = NetworkName;
@@ -60,6 +64,38 @@ interface Despliegue extends Anterior {
   anteriores?: Anterior[];
 }
 
+/**
+ * Un contrato de premios: las campañas de una red que pueden sellar en el sorteo oficial de esa red.
+ *
+ * Una campaña con premio no sella en el contrato del sorteo: llama a `seal` del contrato de premios,
+ * que guarda la promoción (el depósito, las bases, la lista) y sella adentro, en el sorteo oficial que
+ * declara su `Config.raffle`. Por eso el comprobante de una campaña cita una transacción que no es un
+ * `seal` del contrato del sorteo: esta tabla es la que dice en qué contratos de premios se cree, y solo
+ * en esos (`historial.ts` y `premios.ts`).
+ */
+export interface ContratoDePremios {
+  red: Red;
+  contractId: string;
+  /**
+   * sha256 del `.wasm` que tiene que correr la instancia, si la tabla lo declara. Un contrato no puede
+   * cambiar su código: si no coincide, el RPC no está contestando por ese contrato.
+   */
+  wasmSha256?: string;
+  rpcUrl: string;
+  passphrase: string;
+}
+
+interface PremioDesplegado {
+  contractId: string;
+  deployedAt?: string;
+  wasmSha256?: string;
+  rpcUrl?: string;
+  networkPassphrase?: string;
+}
+
+/** La tabla de contratos de premios de `deployments.json`, por red. */
+export type TablaDePremios = Partial<Record<Red, readonly PremioDesplegado[]>>;
+
 const PASSPHRASE: Record<Red, string> = {
   testnet: "Test SDF Network ; September 2015",
   mainnet: "Public Global Stellar Network ; September 2015",
@@ -67,7 +103,42 @@ const PASSPHRASE: Record<Red, string> = {
 
 const DESPLIEGUES = deployments as unknown as Partial<Record<Red, Despliegue | null>>;
 
+/**
+ * La tabla de contratos de premios. Vacía en las dos redes mientras la designación oficial esté
+ * pendiente (issue #167): una red sin entradas no acepta ningún sello de premios.
+ */
+const TABLA_DE_PREMIOS = (deployments as unknown as { premios?: TablaDePremios }).premios ?? {};
+
 const REDES: readonly Red[] = ["testnet", "mainnet"];
+
+/** Los contratos de premios designados, de una red o de todas. */
+export function contratosDePremios(red?: Red, tabla: TablaDePremios = TABLA_DE_PREMIOS): ContratoDePremios[] {
+  const out: ContratoDePremios[] = [];
+  for (const r of red ? [red] : REDES) {
+    for (const p of tabla[r] ?? []) {
+      // Una entrada sin dirección no designa nada: no se acepta un contrato que no está escrito.
+      if (typeof p?.contractId !== "string" || !p.contractId) continue;
+      out.push({
+        red: r,
+        contractId: p.contractId,
+        ...(p.wasmSha256 ? { wasmSha256: p.wasmSha256.toLowerCase() } : {}),
+        rpcUrl: p.rpcUrl ?? RPC_URLS[r],
+        passphrase: p.networkPassphrase ?? PASSPHRASE[r],
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * El contrato de premios que nombra una transacción, o `null` si esa red no lo tiene designado. Compara
+ * el texto exacto, como `contratoOficial`: una dirección con otra letra ya es otro contrato.
+ */
+export function contratoDePremios(net: unknown, contract: unknown, tabla: TablaDePremios = TABLA_DE_PREMIOS): ContratoDePremios | null {
+  if (typeof net !== "string" || typeof contract !== "string") return null;
+  if (!(REDES as readonly string[]).includes(net)) return null;
+  return contratosDePremios(net as Red, tabla).find((c) => c.contractId === contract) ?? null;
+}
 
 /** Todos los contratos oficiales, de una red o de todas. */
 export function contratosOficiales(red?: Red): ContratoOficial[] {

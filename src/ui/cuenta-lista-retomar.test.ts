@@ -153,7 +153,8 @@ describe("con la compra en el build, la orden se retoma", () => {
     expect(srv.estado).toHaveBeenCalledTimes(2);
     expect(principal().dataset.accion).toBe("activar");
     expect(principal().textContent).toBe(t("clActivarBoton"));
-    expect(textoDe()).toContain(t("altaActivarPago"));
+    expect(raiz()?.querySelectorAll(".cl-paso")).toHaveLength(2);
+    expect(raiz()?.querySelector(".cl-bajada")?.textContent).toBe(t("clBajada"));
     expect(textoDe()).toContain(t("pagoListo"));
     expect(cf.cuenta.activarCuenta).not.toHaveBeenCalled();
   });
