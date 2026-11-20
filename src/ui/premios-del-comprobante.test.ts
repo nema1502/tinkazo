@@ -87,11 +87,22 @@ describe("la sección de premios del comprobante", () => {
     expect(html).not.toContain("b0a55c1af779ec10c0b37f127a5a63cc139d2de4bd7f0b7d35241c0a757b49af");
     // Un renglón por premio, con su monto, su estado y a quién se le pagó.
     expect(html.match(/Premio \d/g)).toHaveLength(3);
-    expect(html).toContain("Premio 1 · 10 XLM");
+    expect(html).toContain("Premio 1, 10 XLM");
     expect(html).toContain("Pagado");
     expect(html).toContain("GCCIWHCU…LILD7F3");
     // Y que es el ganador que se rehizo acá, no solo el que dice el contrato.
     expect(html).toContain("es el ganador recomputado");
+  });
+
+  it("el renglón de cada premio separa con comas, sin otros signos, en los dos idiomas", () => {
+    const es = htmlDeLosPremios(revision(promoción()), "es");
+    expect(es).toContain("Premio 1, 10 XLM");
+    expect(es).toContain("Pagado, GCCIWHCU…LILD7F3, es el ganador recomputado");
+    expect(es).not.toContain("·");
+    const en = htmlDeLosPremios(revision(promoción()), "en");
+    expect(en).toContain("Prize 1, 10 XLM");
+    expect(en).toContain("Paid, GCCIWHCU…LILD7F3, is the recomputed winner");
+    expect(en).not.toContain("·");
   });
 
   it("un premio cuyo ganador no es el recomputado se marca, y no dice que coincide", () => {
