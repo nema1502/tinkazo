@@ -49,6 +49,22 @@ const cuentaDeLista = (n: number, k = n): string =>
       : T[getLang()].listaCuentaPart(n, k);
 
 /**
+ * Escribe la cuenta de junto al cuadro con el número en grande: en Lista de 18 personas el 18 se lee de un vistazo, sin
+ * leer la frase. Solo el primer grupo de cifras va en grande. El texto no cambia: lo leen las pruebas y la lista en grande.
+ */
+function pintarCuenta(el: HTMLElement, texto: string): void {
+  const cifras = /\d+/.exec(texto);
+  if (!cifras) {
+    el.textContent = texto;
+    return;
+  }
+  const numero = document.createElement("b");
+  numero.className = "cuenta-num";
+  numero.textContent = cifras[0];
+  el.replaceChildren(texto.slice(0, cifras.index), numero, texto.slice(cifras.index + cifras[0].length));
+}
+
+/**
  * Cierra la lista a los cambios, o la vuelve a abrir.
  *
  * El sello fija lo que dice el cuadro al apretar "Sellar". Hasta el 21 de
@@ -136,10 +152,17 @@ export function renderNames(): void {
   sellar.classList.toggle("ghost", !alcanza);
   const ayuda = document.getElementById("pegar-ayuda");
   if (ayuda) ayuda.style.display = vacia && !enEnsayo() ? "" : "none";
+  // Otro nombre, debajo del cuadro: desde el primer nombre y mientras el cuadro se pueda escribir. Con la lista cerrada,
+  // en el ensayo (el cuadro es de solo lectura) o con una lista de equipos (cada renglón es una cuenta), no hay nombre que sumar.
+  const otro = document.getElementById("btn-otro-nombre");
+  if (otro) {
+    const cuadro = $<HTMLTextAreaElement>("ta");
+    otro.hidden = names.length === 0 || cuadro.disabled || cuadro.readOnly || listaCerrada() || cuadroEsDeEquipos();
+  }
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? cuentaDeLista(cuentaParaMostrar(names).personas, names.length) : "";
+    pintarCuenta(cuenta, names.length ? cuentaDeLista(cuentaParaMostrar(names).personas, names.length) : "");
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
@@ -238,6 +261,24 @@ function pintarResumen(): void {
   el.style.display = "";
 }
 
+/**
+ * Otro nombre, debajo del cuadro: deja el cuadro listo para el nombre siguiente, en un renglón nuevo. Mucha gente no sabe
+ * que para separar los nombres hay que bajar de renglón con Enter. Si el último renglón ya está en blanco no suma otro:
+ * dos toques seguidos no dejan dos renglones vacíos. La lista no cambia, porque un renglón vacío no es nadie.
+ * El foco va dentro del clic, que es lo que el teléfono acepta para abrir el teclado, y el cursor queda al final.
+ */
+function otroNombre(ta: HTMLTextAreaElement): void {
+  if (ta.disabled || ta.readOnly || listaCerrada()) return;
+  const sumar = !/(?:^|\n)[^\S\n]*$/.test(ta.value);
+  if (sumar) ta.value += "\n";
+  ta.focus();
+  const fin = ta.value.length;
+  ta.setSelectionRange(fin, fin);
+  ta.scrollTop = ta.scrollHeight;
+  // El aviso de siempre, como al escribir: siguen el borrador, la cuenta y el resumen de junto a Sellar.
+  if (sumar) ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 export function loadSample(): void {
   if (listaCerrada()) return;
   setList(SAMPLE.join("\n"));
@@ -265,6 +306,8 @@ export function bindParticipants(): void {
     // Para el contador, solo lo que hizo la persona: una lista puesta por el código (el ejemplo, el borrador, la demo) no cuenta.
     if (e.isTrusted) anotarOrigen(pegado ? "paste" : "typed", pegado);
   });
+  // Otro nombre, debajo del cuadro: un renglón nuevo y el cursor listo para escribir (`otroNombre`).
+  document.getElementById("btn-otro-nombre")?.addEventListener("click", () => otroNombre(ta));
   // Una lista escrita a mano se cuenta cuando se deja de escribir; si la página se va antes (el viaje a Google), en ese momento.
   addEventListener("pagehide", contarLista);
   // El borrador sigue al premio y a la cantidad de ganadores, y se escribe del
@@ -314,7 +357,7 @@ export function bindParticipants(): void {
     pintarListaDeEquipos();
     const cuenta = document.getElementById("lista-cuenta");
     const { personas, participaciones } = cuentaParaMostrar(parseNames());
-    if (cuenta && participaciones) cuenta.textContent = cuentaDeLista(personas, participaciones);
+    if (cuenta && participaciones) pintarCuenta(cuenta, cuentaDeLista(personas, participaciones));
   });
   addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
@@ -644,7 +687,7 @@ const tactil = (): boolean => typeof matchMedia === "function" && matchMedia("(p
  */
 const variasALaVista = (): boolean => modesVisible();
 
-/** El texto de ayuda del cuadro vacío: un nombre por línea, como siempre. Las veces se eligen tocando. */
+/** El texto gris del cuadro vacío: tres nombres de ejemplo, uno por renglón. Las veces se eligen tocando. */
 const refreshPlaceholder = (): void => {
   const ta = document.getElementById("ta") as HTMLTextAreaElement | null;
   if (ta) ta.placeholder = t("placeholder");

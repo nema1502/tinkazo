@@ -560,7 +560,7 @@ export const T: Record<Lang, Dict> = {
     musicNo: "Música: no",
     freezeHint: "Hacen falta al menos dos nombres.",
     freezeHintPersonas: "Hacen falta al menos dos personas.",
-    freeRule: 'Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.',
+    freeRule: 'Participar es gratis, siempre. No es para entrada paga ni apuestas. Al sellar aceptás los <a href="/terminos.html">términos</a>.',
     frozenOk: "Lista sellada ✓",
     csvHas: (col, n) => `Con algo en la columna ${col} (${n})`,
     csvIs: (col, v, n) => `${col}: ${v} (${n})`,
@@ -1273,7 +1273,8 @@ export const T: Record<Lang, Dict> = {
     // técnico. "N.º" y no "#": "Sorteo #N" ya es el número del sorteo en Mis
     // sorteos, y este es el del número público que lo decidió.
     src: "fuente: pegado / csv", frozenAt: "sellada:", seed: "número público n.º", drandLink: "ver el número del sorteo ↗", proofOk: "prueba verificada",
-    placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
+    // El cuadro vacío muestra tres nombres de ejemplo, uno por renglón: se ve sin leer que va uno debajo del otro.
+    placeholder: "Ana Quispe\nBeto Mamani\nCarla Flores", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
     drandTry: (i, n) => `Todavía no llega el número del sorteo. Intento ${i} de ${n}…`,
     drawTry: (i, n) => `La red todavía no ve ese número. Reintento ${i} de ${n}…`,
@@ -1353,7 +1354,10 @@ export const T: Record<Lang, Dict> = {
     get yaEntraste() {
       return cuadroEsDeEquipos() ? "Ya entraste. Sellá tu lista de {n} equipos." : "Ya entraste. Sellá tu lista de {n} personas.";
     },
-    pegarAyuda: "Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.",
+    // Con la lista vacía, una sola línea: que va un nombre por renglón ya lo muestran los ejemplos del cuadro.
+    pegarAyuda: "Pegá tu lista o escribí un nombre.",
+    // El botón de debajo del cuadro que baja de renglón: para quien no sabe que cada nombre va en su renglón.
+    otroNombre: "Otro nombre",
     // Sola, junto al cuadro: va con mayúscula. La de la barra (sigLista) va en medio de la línea.
     get listaCuenta() {
       return cuadroEsDeEquipos() ? "Lista de {n} equipos" : "Lista de {n} personas";
@@ -1425,7 +1429,7 @@ export const T: Record<Lang, Dict> = {
     juegoVerDeNuevo: "Tocá un juego y ves este mismo resultado de nuevo con él.",
     feedbackFin: "¿Algo para mejorar? Contanos en 30 segundos",
     ensEstadio: "ENSAYO: no se graba",
-    standLink: "Tengo un stand: rondas rápidas con quienes pasan",
+    standLink: "Tengo un stand",
     standNoSorteo: "Hay un sorteo en curso. Terminalo antes de abrir el stand.",
     standNoEjemplo: "Salí del ejemplo para abrir el stand.",
     standTitulo: "Tu stand",
@@ -1794,7 +1798,7 @@ export const T: Record<Lang, Dict> = {
     salaCopiar: "Copiar el enlace para el grupo",
     salaCopiado: "Copiado ✓",
     vSealsEjemplo: "Es la lista de ejemplo del sitio: la sella cualquiera que lo prueba con su cuenta, así que verla repetida no dice nada.",
-    salaPie: "Si falta alguien o está repetido, se arregla ahora: después de sellar no se puede cambiar.",
+    salaPie: "¿Falta alguien o se repite? Después de sellar no cambia.",
     // La lista ya sellada, en el proyector y en el celular (21 de octubre de 2026).
     salaTSellada: "La lista sellada",
     salaPieSellada: "La lista está sellada y ya no cambia. Buscate mientras sale el número.",
@@ -3658,7 +3662,7 @@ export const T: Record<Lang, Dict> = {
     musicNo: "Music: off",
     freezeHint: "At least two names are needed.",
     freezeHintPersonas: "At least two people are needed.",
-    freeRule: 'Taking part is always free. No paid entry, no gambling. By sealing the list you accept the <a href="/terminos.html">terms</a>.',
+    freeRule: 'Taking part is always free. No paid entry, no gambling. Sealing means you accept the <a href="/terminos.html">terms</a>.',
     frozenOk: "List sealed ✓",
     csvHas: (col, n) => `Something in the ${col} column (${n})`,
     csvIs: (col, v, n) => `${col}: ${v} (${n})`,
@@ -4336,7 +4340,8 @@ export const T: Record<Lang, Dict> = {
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
     builtOn: "Built on",
     src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the draw number ↗", proofOk: "proof verified",
-    placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
+    // The empty box shows three sample names, one per line: you see without reading that each goes on its own line.
+    placeholder: "Ana Quispe\nBen Miller\nCarla Flores", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
     drandTry: (i, n) => `The draw's number hasn't arrived yet. Attempt ${i} of ${n}…`,
     drawTry: (i, n) => `The network doesn't see that number yet. Retry ${i} of ${n}…`,
@@ -4407,7 +4412,10 @@ export const T: Record<Lang, Dict> = {
     get yaEntraste() {
       return cuadroEsDeEquipos() ? "You're in. Seal your list of {n} teams." : "You're in. Seal your list of {n} people.";
     },
-    pegarAyuda: "Paste names from WhatsApp or a spreadsheet, or bring your Luma list.",
+    // With the list empty, a single line: the samples in the box already show one name per line.
+    pegarAyuda: "Paste your list or type a name.",
+    // The button under the box that starts a new line: for whoever doesn't know each name goes on its own line.
+    otroNombre: "Another name",
     // On its own, next to the box: capitalized. The bar's one (sigLista) sits mid-line.
     get listaCuenta() {
       return cuadroEsDeEquipos() ? "List of {n} teams" : "List of {n} people";
@@ -4475,7 +4483,7 @@ export const T: Record<Lang, Dict> = {
     juegoVerDeNuevo: "Tap a game to watch this same result again with it.",
     feedbackFin: "Anything to improve? Tell us in 30 seconds",
     ensEstadio: "REHEARSAL: not recorded",
-    standLink: "I run a booth: quick rounds with whoever stops by",
+    standLink: "I run a booth",
     standNoSorteo: "A draw is in progress. Finish it before opening booth mode.",
     standNoEjemplo: "Leave the example to open booth mode.",
     standTitulo: "Your booth",
@@ -4842,7 +4850,7 @@ export const T: Record<Lang, Dict> = {
     salaCopiar: "Copy the link for the group",
     salaCopiado: "Copied ✓",
     vSealsEjemplo: "This is the site's sample list: anyone trying the site with an account seals it, so seeing it repeated means nothing.",
-    salaPie: "If someone is missing or repeated, fix it now: after sealing, nothing can change.",
+    salaPie: "Someone missing or repeated? After sealing, nothing changes.",
     // The list once sealed, on the projector and on the phone (Oct 21, 2026).
     salaTSellada: "The sealed list",
     salaPieSellada: "The list is sealed and can't change. Find yourself while the number comes out.",

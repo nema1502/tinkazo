@@ -65,7 +65,7 @@ describe("con la bandera apagada a propósito (VITE_MODOS=0), la herramienta es 
     await montar();
     expect(boton().hidden).toBe(true);
     expect(panel().hidden).toBe(true);
-    expect(ta().placeholder).toBe("Un nombre por línea…");
+    expect(ta().placeholder).toBe("Ana Quispe\nBeto Mamani\nCarla Flores");
     escribir("Ana, 3\nBeto, 2");
     expect(aviso().style.display).toBe("none");
     expect(boton().hidden).toBe(true);
