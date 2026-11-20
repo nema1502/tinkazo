@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { isTurnPrize } from "../modos/turnos";
 import { T } from "../i18n";
-import { MAX_META, MAX_RECIENTES, agregarReciente, alternar, armarMeta, etiquetaDeLugar, esElegido, lugaresDeMeta, opciones, recortar } from "./premios";
+import {
+  MAX_META,
+  MAX_RECIENTES,
+  agregarReciente,
+  alternar,
+  armarMeta,
+  etiquetaDeLugar,
+  esElegido,
+  lugaresDeMeta,
+  opciones,
+  primerLugarQueNoEntra,
+  recortar,
+} from "./premios";
 
 describe("premios: los recientes", () => {
   it("el último va primero y no se repite aunque cambie la mayúscula o los espacios", () => {
@@ -89,6 +101,28 @@ describe("premios: un premio por lugar", () => {
     expect(armarMeta([], "es")).toBe("");
   });
 
+  it("un solo premio se sella como se escribió: sin cambiar sus signos ni los espacios de adentro", () => {
+    // Antes del campo por lugar el sello era el cuadro sin los espacios de las puntas, nada más.
+    expect(armarMeta(["Entrada Nº 5"], "es")).toBe("Entrada Nº 5");
+    expect(armarMeta(["  Polera  talle M "], "es")).toBe("Polera  talle M");
+    expect(armarMeta(["", "1ª fila"], "es")).toBe("1ª fila");
+  });
+
+  it("con varios lugares cada premio conserva sus signos, solo sin espacios de más", () => {
+    // El texto sellado no cambia: «Nº», «m²», «½» y la «º» suelta se ven en el cartel como se escribieron.
+    expect(armarMeta(["Entrada Nº 5", "Terreno  200 m²", "Torta ½ kilo", "Termo 2º"], "es")).toBe(
+      "1.er premio: Entrada Nº 5, 2.º premio: Terreno 200 m², 3.er premio: Torta ½ kilo, 4.º premio: Termo 2º",
+    );
+  });
+
+  it("un premio que trae un rótulo escrito a mano no se lee después como otro lugar", () => {
+    const meta = armarMeta(["Bici", "Termo 3º premio: Libro"], "es");
+    expect(lugaresDeMeta(meta)).toEqual([
+      { lugar: 1, premio: "Bici" },
+      { lugar: 2, premio: "Termo 3o premio: Libro" },
+    ]);
+  });
+
   it("con varios lugares, cada premio con su rótulo, en el idioma en que se sella", () => {
     expect(armarMeta(["Bici", "Termo"], "es")).toBe("1.er premio: Bici, 2.º premio: Termo");
     expect(armarMeta(["Bici", "Termo", "Libro"], "es")).toBe("1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
@@ -115,6 +149,33 @@ describe("premios: un premio por lugar", () => {
     expect(meta.startsWith("1.er premio: ")).toBe(true);
     // Un premio solo que no cabe se corta, como se cortaba el del campo único.
     expect(Array.from(armarMeta(["y".repeat(200)], "es")).length).toBe(160);
+  });
+
+  it("lo armado pesa 160 bytes como mucho, como mide el contrato, aunque traiga tildes", () => {
+    // Tres premios de 38 letras con dos tildes: 156 letras pero 163 bytes con los tres. El 3.er no entra.
+    const premio = "Auriculares inalámbricos con micrófono";
+    const meta = armarMeta([premio, premio, premio], "es");
+    expect(new TextEncoder().encode(meta).length).toBeLessThanOrEqual(160);
+    expect(lugaresDeMeta(meta)?.map((l) => l.lugar)).toEqual([1, 2]);
+    expect(primerLugarQueNoEntra([premio, premio, premio], "es")).toBe(3);
+  });
+
+  it("dice cuál es el primer lugar que no entra: con cinco premios de 21 letras, el 5.º", () => {
+    const premios = Array.from({ length: 5 }, () => "Auriculares Bluetooth");
+    expect(primerLugarQueNoEntra(premios, "es")).toBe(5);
+    expect(primerLugarQueNoEntra(premios.slice(0, 4), "es")).toBeNull();
+  });
+
+  it("cuando entran todos no hay ningún lugar fuera", () => {
+    expect(primerLugarQueNoEntra(["Bici", "Termo", "Libro"], "es")).toBeNull();
+    expect(primerLugarQueNoEntra(["", ""], "es")).toBeNull();
+    expect(primerLugarQueNoEntra(["x".repeat(60)], "es")).toBeNull();
+  });
+
+  it("un premio solo que pesa más de 160 bytes tampoco entra, y se corta sin partir una letra", () => {
+    // 41 emojis son 164 bytes: el contrato los rechazaría.
+    expect(primerLugarQueNoEntra(["🦙".repeat(41)], "es")).toBe(1);
+    expect(armarMeta(["🦙".repeat(41)], "es")).toBe("🦙".repeat(40));
   });
 
   it("ida y vuelta: lo armado se lee de vuelta lugar por lugar", () => {
@@ -180,6 +241,17 @@ describe("premios: un premio por lugar", () => {
     }
     expect(T.es.prizeLugar(2)).toBe("2.º premio");
     expect(T.en.prizeLugar(2)).toBe("2nd prize");
+  });
+
+  it("el aviso de que no entran existe en los dos idiomas, corto y sin palabras técnicas", () => {
+    for (const l of ["es", "en"] as const) {
+      for (const varios of [true, false]) {
+        const texto = T[l].prizeNoEntran(varios);
+        expect(texto.length).toBeGreaterThan(0);
+        expect(texto.length).toBeLessThanOrEqual(80);
+        expect(texto).not.toMatch(/[«»;·!—]|byte|caracter|character|contrat|contract/i);
+      }
+    }
   });
 });
 

@@ -4,7 +4,7 @@ import { isSecretSantaPrize, noHaySecreto, secretPrize } from "../modos/amigo";
 import { isTurnPrize, turnPrize } from "../modos/turnos";
 import { topeDeGanadores } from "../stellar/config";
 import { fijarGanadores, ponerGanadores } from "./ganadores";
-import { actualizarLugares, bloquearLugares, ponerPremio } from "./premios";
+import { actualizarLugares, bloquearLugares, ponerPremio, premiosDeLosCampos, reponerLugares } from "./premios";
 
 /**
  * El modo del sorteo, elegido a la vista: el selector de arriba de la lista (`#turnos-opcion` de `index.html`), con tres
@@ -49,6 +49,8 @@ let cerrada = false;
 /** Lo que decían el campo de la cantidad y el nombre antes de prender el modo, para devolverlos al apagarlo. */
 let cantidadAntes = "";
 let premioAntes = "";
+/** Los premios del 2.º lugar en adelante antes de prender el modo: el modo saca sus campos, y al apagarlo vuelven. */
+let lugaresAntes: string[] = [];
 
 const $id = <T extends HTMLElement>(id: string): T | null => document.getElementById(id) as T | null;
 
@@ -248,6 +250,8 @@ export function seguirLaLista(n: number): void {
 function prender(comoAmigo: boolean): void {
   const campo = $id<HTMLInputElement>("nw");
   const premio = $id<HTMLInputElement>("prize");
+  // Se guardan al entrar al modo, no al pasar de un modo al otro: para entonces sus campos ya no estaban.
+  if (!encendido) lugaresAntes = premiosDeLosCampos().slice(1);
   encendido = true;
   amigo = comoAmigo;
   fijarGanadores(true);
@@ -269,8 +273,12 @@ function apagar(): void {
   ponerGanadores(Number(cantidadAntes) || 1);
   // El nombre que puso la persona se queda; el de por defecto se va y vuelve lo que había antes.
   const premio = $id<HTMLInputElement>("prize");
-  if (premio && esElDeSiempre(premio.value)) ponerPremio(esDeAlgunModo(premioAntes) ? "" : premioAntes);
+  const vuelve = premio !== null && esElDeSiempre(premio.value);
+  if (vuelve) ponerPremio(esDeAlgunModo(premioAntes) ? "" : premioAntes);
   pintar();
+  // Con el premio de antes vuelven también los de los lugares siguientes, ya con sus campos armados por `pintar`.
+  if (vuelve) reponerLugares(lugaresAntes);
+  lugaresAntes = [];
   $id("turnos-opcion")?.dispatchEvent(new CustomEvent("tinkazo:modo"));
 }
 

@@ -119,6 +119,8 @@ export interface Dict {
   prizeLugar: (k: number) => string;
   /** El hueco de cada lugar: qué va ahí. */
   prizeLugarPh: string;
+  /** Debajo de los campos, cuando lo escrito no entra entero en lo que se sella: con varios premios o con uno solo. */
+  prizeNoEntran: (varios: boolean) => string;
   /** El nombre con su cuenta cuando una persona sale más de una vez: "Ana (2 veces)". */
   repetidoVeces: string;
   /** El aviso de la verificación, cuyas tarjetas no llevan el número de cada premio: "Ana salió 2 veces.". */
@@ -1081,6 +1083,8 @@ export const T: Record<Lang, Dict> = {
     // Un premio por lugar cuando ganan varios: primero y tercero van con "er", los demás con "º".
     prizeLugar: (k) => `${k}.${k === 1 || k === 3 ? "er" : "º"} premio`,
     prizeLugarPh: "Lo que se lleva este lugar…",
+    prizeNoEntran: (varios) =>
+      varios ? "No entran todos los premios. Acortá alguno para poder sellar." : "El premio es muy largo. Acortalo para poder sellar.",
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
     // La etiqueta de la cuenta sellada cuando las participaciones no son una por persona (freeze.ts).
     kEntriesDe: (n) => `participaciones de ${n === 1 ? "1 persona" : `${n} personas`}`,
@@ -4085,6 +4089,7 @@ export const T: Record<Lang, Dict> = {
     // One prize field per place when several win: 1st, 2nd, 3rd, then -th (and 11th to 13th).
     prizeLugar: (k) => `${k}${k % 100 >= 11 && k % 100 <= 13 ? "th" : ["st", "nd", "rd"][k % 10 - 1] ?? "th"} prize`,
     prizeLugarPh: "What this place takes home…",
+    prizeNoEntran: (varios) => (varios ? "Not all the prizes fit. Shorten one to seal." : "The prize is too long. Shorten it to seal."),
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
     // The sealed-count label when entries are not one per person (freeze.ts).
     kEntriesDe: (n) => `entries from ${n === 1 ? "1 person" : `${n} people`}`,
