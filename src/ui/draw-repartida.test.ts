@@ -8,7 +8,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * línea se va por su cuenta (probado en `src/participaciones.test.ts`).
  */
 
-const h = vi.hoisted(() => ({ unfreeze: vi.fn(), abrirSorteo: vi.fn() }));
+const h = vi.hoisted(() => ({
+  unfreeze: vi.fn(),
+  abrirSorteo: vi.fn(),
+  ponerPremio: vi.fn(),
+  // El armado de varios lugares, a la vista: qué premios se le pasan y en qué orden.
+  armarMeta: vi.fn((lugares: readonly string[]) => lugares.join(" | ")),
+  actualizarLugares: vi.fn(),
+}));
 
 vi.mock("./compartir", () => ({ abrirSorteo: (...a: unknown[]) => h.abrirSorteo(...a) }));
 vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => undefined }));
@@ -61,7 +68,13 @@ vi.mock("./wallet-ui", () => ({ currentSession: () => ({ address: "GAAA" }) }));
 vi.mock("./qr", () => ({ pintarQrDelComprobante: async () => undefined }));
 vi.mock("./leyenda", () => ({ pintarLeyenda: () => undefined }));
 vi.mock("./participants", () => ({ setList: () => undefined, listaVinoDeLuma: () => false }));
-vi.mock("./premios", () => ({ marcarSalio: () => undefined, olvidarSalieron: () => undefined, ponerPremio: () => undefined }));
+vi.mock("./premios", () => ({
+  marcarSalio: () => undefined,
+  olvidarSalieron: () => undefined,
+  ponerPremio: (v: string) => h.ponerPremio(v),
+  armarMeta: (l: readonly string[]) => h.armarMeta(l),
+  actualizarLugares: () => h.actualizarLugares(),
+}));
 vi.mock("./logo-sorteo", () => ({ pintarLogoEnElResultado: () => undefined, quitarLogoDelResultado: () => undefined }));
 vi.mock("../games/engine", () => ({ usePixi: () => false }));
 vi.mock("../games/lore", () => ({ loreFor: () => null }));
@@ -83,6 +96,9 @@ beforeEach(() => {
   vi.resetModules();
   h.unfreeze.mockReset();
   h.abrirSorteo.mockReset();
+  h.ponerPremio.mockReset();
+  h.armarMeta.mockClear();
+  h.actualizarLugares.mockClear();
   // La dirección trae el modo, y jsdom no tiene scrollIntoView.
   history.replaceState(null, "", "/?modo=varias");
   Element.prototype.scrollIntoView = () => undefined;
@@ -163,6 +179,53 @@ describe("«No está» sobre alguien que salió más de una vez", () => {
     newDraw("ausente", 1);
     expect((document.getElementById("nw") as HTMLInputElement).value).toBe("1");
     expect(document.getElementById("again-note")?.textContent).toContain("su premio se sortea de nuevo");
+  });
+});
+
+describe("«No está» con un premio por lugar", () => {
+  const CINCO = ["Ana (1/3)", "Ana (2/3)", "Ana (3/3)", "Beto", "Carla", "Dani", "Eva"];
+  const TRES = "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro";
+
+  async function con(winners: number[], prize: string): Promise<void> {
+    const { app } = await import("../state");
+    app.drawn = { winners, beacon: { round: 1, randomness: "00", signature: "00" } };
+    app.frozen = { names: CINCO, listHash: "00".repeat(32), ts: 1, at: "", prize, round: 1, raffleId: 1n } as never;
+  }
+
+  it("el reemplazo del 2.º lugar se sortea con el premio de ese lugar, no con el de todos", async () => {
+    await con([3, 4, 5], TRES);
+    const { newDraw } = await import("./draw");
+    newDraw("ausente", 1);
+    expect(h.ponerPremio).toHaveBeenLastCalledWith("Termo");
+  });
+
+  it("si el lugar de quien no está quedó sin premio, el reemplazo tampoco lleva premio", async () => {
+    await con([3, 4, 5], "1.er premio: Bici, 3.er premio: Libro");
+    const { newDraw } = await import("./draw");
+    newDraw("ausente", 1);
+    expect(h.ponerPremio).toHaveBeenLastCalledWith("");
+  });
+
+  it("quien salió en el 1.º y en el 3.º lugar repone esos dos premios, en ese orden", async () => {
+    await con([0, 3, 2], TRES);
+    const { newDraw } = await import("./draw");
+    newDraw("ausente", 0);
+    expect(h.armarMeta).toHaveBeenCalledWith(["Bici", "Libro"]);
+    expect(h.ponerPremio).toHaveBeenLastCalledWith("Bici | Libro");
+  });
+
+  it("Siguiente premio rearma los campos por lugar con la cantidad nueva, que no avisa con un evento", async () => {
+    await con([3, 4, 5], TRES);
+    const { newDraw } = await import("./draw");
+    newDraw("sinGanadores");
+    expect(h.actualizarLugares).toHaveBeenCalled();
+  });
+
+  it("sin lugares, el reemplazo se sortea con el premio sellado, como siempre", async () => {
+    await con([3, 4, 5], "Una polera");
+    const { newDraw } = await import("./draw");
+    newDraw("ausente", 1);
+    expect(h.ponerPremio).toHaveBeenLastCalledWith("Una polera");
   });
 });
 

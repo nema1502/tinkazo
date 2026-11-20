@@ -272,6 +272,27 @@ function premioLeido(): string {
   }
 }
 
+/**
+ * Lo escrito en los campos de premio no entra entero en lo que se sella (`premiosNoEntran` de `premios.ts`): no se
+ * sella con un premio de menos ni con uno que la red rechace. Con el módulo reemplazado de las pruebas, entra.
+ */
+function premiosNoEntran(): boolean {
+  try {
+    return premiosModulo.premiosNoEntran?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/** Dice debajo de los campos por qué no se sella y lleva al premio que hay que acortar. */
+function mostrarQueNoEntran(): void {
+  try {
+    premiosModulo.mostrarQueNoEntran?.();
+  } catch {
+    /* el módulo reemplazado no lo trae: no hay campos que mostrar */
+  }
+}
+
 export function pintarRecomendacion(names: readonly string[]): void {
   const n = names.length;
   const botones = new Map<Game, HTMLElement>();
@@ -956,7 +977,10 @@ function puedeSellar(): boolean {
   // modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
   const personas = contarPersonas(names, modesVisible()).personas;
   // En el modo «Orden de turnos», si la lista pasa de lo que admite la red no se sella: un orden incompleto no es un orden.
-  return personas >= 2 && !ordenNoCabe(names.length) && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+  // Y los premios que no entran enteros tampoco: se avisa debajo de los campos hasta que se acorten.
+  return (
+    personas >= 2 && !ordenNoCabe(names.length) && !premiosNoEntran() && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS
+  );
 }
 
 /**
@@ -1157,7 +1181,11 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
 async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   renumerarLaLista();
   const names = parseNames();
-  if (!puedeSellar()) return;
+  if (!puedeSellar()) {
+    // Frenado por los premios: el motivo queda a la vista, en el campo que hay que acortar.
+    if (premiosNoEntran()) mostrarQueNoEntran();
+    return;
+  }
 
   const btn = $<HTMLButtonElement>("btn-freeze");
   const hash = bytesToHex(listHash(names));
@@ -1811,6 +1839,13 @@ export function unfreeze(lista: string): void {
   // Después de soltar el sello, el contador de ganadoras vuelve a ser de quien sortea (el paso de la campaña lo vuelve a fijar).
   if (fijoPorCampana()) fijarPorCampana(false);
   ponerPremio("");
+  // `ponerPremio` vacía solo el 1.er premio: los de los lugares siguientes se borran también, o el próximo sello los
+  // llevaba sin que nadie los volviera a escribir. (Las pruebas que reemplazan `premios.ts` no lo traen.)
+  try {
+    premiosModulo.vaciarLugares?.();
+  } catch {
+    /* el módulo reemplazado no lo trae: no hay campos por lugar */
+  }
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";
   $("btn-draw").classList.remove("lista");
@@ -2012,7 +2047,8 @@ export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   // Para copiar hacen falta dos personas, contadas como siempre; lo que dicen las bases, con la cuenta del cuadro.
   if (contarPersonas(names, modesVisible()).personas < 2) return;
   const { personas: count, participaciones: entries } = cuentaParaMostrar(names, modesVisible());
-  const prize = premioLeido();
+  // Las bases juntan los espacios de adentro, como antes de los campos por lugar: un premio solo llega tal cual se escribió.
+  const prize = premioLeido().replace(/\s+/g, " ");
   const winners = Math.min(ganadoresPedidos(), names.length);
   // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
   // (lo que se sella: cada línea, un turno), no por las personas.

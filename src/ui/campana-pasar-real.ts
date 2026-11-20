@@ -17,7 +17,7 @@ import { app } from "../state";
 import { network } from "../stellar/config";
 import { fijarPorCampana, ponerGanadores } from "./ganadores";
 import { listaBloqueada, parseNames, setList } from "./participants";
-import { ponerPremio } from "./premios";
+import { actualizarLugares, ponerPremio } from "./premios";
 import { modoTurnosActivo, ponerModoTurnos } from "./turnos";
 import { claveDeSellar, currentSession } from "./wallet-ui";
 import { type DepsDelPaso, type PasoDeLaCampana, type ContextoDelPaso, crearPaso } from "./campana-pasar";
@@ -29,6 +29,16 @@ const huellaDe = (lineas: readonly string[]): string => bytesToHex(listHash([...
 function contratoDeLaRed(red: RedDeCampana): string | null {
   const d = deployments as unknown as Record<string, { contractId?: string | null } | null | undefined>;
   return d[red]?.contractId ?? null;
+}
+
+/**
+ * Fija o suelta la cantidad de ganadoras de la campaña, y los campos de premio por lugar la siguen: con la campaña no se
+ * ofrecen (se sella su premio, el que firmó la sala) y sin ella vuelven los de la cantidad de ahora. Fijar la cantidad no
+ * avisa con un evento, así que hay que decírselo a los campos.
+ */
+function fijarCantidadDeLaCampana(si: boolean): void {
+  fijarPorCampana(si);
+  actualizarLugares();
 }
 
 export function depsDelPasoReales(): DepsDelPaso {
@@ -59,7 +69,7 @@ export function depsDelPasoReales(): DepsDelPaso {
     setList: (texto) => setList(texto),
     ponerPremio,
     ponerGanadores,
-    fijarPorCampana,
+    fijarPorCampana: fijarCantidadDeLaCampana,
     entrada: (red, evento) => entradaDelEvento(red, evento),
     guardar: guardarSorteoDeCampana,
     persona: (n) => (TEXTOS_SALA_CAMPANA[getLang()].cpoPersona ?? "").replace("{n}", String(n)),
@@ -95,14 +105,14 @@ function soltarLaListaDelCuadro(): void {
 /** Quien organiza volvió a abrir la inscripción: se corta el paso en curso y se vacía lo que había pasado. */
 export function alReabrirReal(): void {
   pasoReal().cancelar();
-  fijarPorCampana(false);
+  fijarCantidadDeLaCampana(false);
   soltarLaListaDelCuadro();
 }
 
 /** Se dejó la campaña: el cuadro es el de siempre y la cantidad de ganadoras se puede cambiar. */
 export function alOlvidarReal(): void {
   pasoReal().cancelar();
-  fijarPorCampana(false);
+  fijarCantidadDeLaCampana(false);
 }
 
 /** Si lo que está en el cuadro es la lista que esta campaña pasó antes de recargar. */

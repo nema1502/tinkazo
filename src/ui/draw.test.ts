@@ -101,10 +101,10 @@ const N2 = V.list[P2] ?? "";
 const N3 = V.list[P3] ?? "";
 
 /** Un sello confirmado con la lista y la ronda de los vectores, con la cantidad sellada de lugares. */
-async function sellarCon(numWinners: number): Promise<typeof import("../state")> {
+async function sellarCon(numWinners: number, prize = "Una pizza"): Promise<typeof import("../state")> {
   const state = await import("../state");
   state.app.drawn = null;
-  state.app.frozen = { names: [...V.list], listHash: V.list_hash, ts: 1, at: "", prize: "Una pizza", round: V.quicknet.round, numWinners, raffleId: 7n } as never;
+  state.app.frozen = { names: [...V.list], listHash: V.list_hash, ts: 1, at: "", prize, round: V.quicknet.round, numWinners, raffleId: 7n } as never;
   return state;
 }
 
@@ -151,10 +151,42 @@ describe("la lógica pura de la progresión de lugares", () => {
     expect(lugarQueSigue([9], 1)).toBeNull();
   });
 
-  it("el premio de cada lugar queda como gancho (#101): su formato no está definido todavía", async () => {
+  it("sin un sorteo sellado, ningún lugar dice premio", async () => {
     const { premioDelLugar } = await import("./draw");
     expect(premioDelLugar(1)).toBe("");
     expect(premioDelLugar(2)).toBe("");
+  });
+
+  it("con un premio por lugar sellado, cada lugar dice el suyo y uno sin premio no dice nada", async () => {
+    await sellarCon(3, "1.er premio: Bici, 3.er premio: Libro");
+    const { premioDelLugar } = await import("./draw");
+    expect([1, 2, 3].map(premioDelLugar)).toEqual(["Bici", "", "Libro"]);
+  });
+
+  it("con un solo premio para todos, ningún lugar dice premio, como antes", async () => {
+    await sellarCon(3);
+    const { premioDelLugar } = await import("./draw");
+    expect(premioDelLugar(2)).toBe("");
+  });
+});
+
+describe("un sello con tres lugares y un premio por lugar", () => {
+  it("la línea del lugar y la tarjeta dicen el premio del lugar que la sala está viendo", async () => {
+    await sellarCon(3, "1.er premio: Bici, 2.º premio: Termo, 3.er premio: Libro");
+    const { draw, siguientePremio } = await import("./draw");
+    await draw();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenCalled());
+    h.fin?.();
+    await vi.waitFor(() => expect(cards()).toContain(N1));
+    expect(document.getElementById("lugar-actual")?.textContent).toBe("Lugar 1 de 3: Bici");
+    expect(cards()).toContain("Se lleva: Bici");
+    expect(cards()).not.toContain("Termo");
+    siguientePremio();
+    await vi.waitFor(() => expect(h.juego).toHaveBeenLastCalledWith([P2]));
+    h.fin?.();
+    await vi.waitFor(() => expect(document.getElementById("lugar-actual")?.textContent).toBe("Lugar 2 de 3: Termo"));
+    expect(cards()).toContain("Se lleva: Termo #2");
+    expect(cards()).not.toContain("Libro");
   });
 });
 
