@@ -574,8 +574,8 @@ describe("Siguiente premio de a un lugar (issue #102)", () => {
   it("los textos nuevos existen en los dos idiomas", () => {
     expect(T.es.lugarDe(2, 5)).toBe("Lugar 2 de 5");
     expect(T.en.lugarDe(2, 5)).toBe("Place 2 of 5");
-    expect(T.es.lugaresFijos).toContain("quedaron fijos al nacer el número");
-    expect(T.en.lugaresFijos).toContain("fixed the moment the number was born");
+    expect(T.es.lugaresFijos).toContain("ya están decididos");
+    expect(T.en.lugaresFijos).toContain("already decided");
     expect(T.es.fijosAlNacer).toContain("todos los lugares de una vez");
     expect(T.en.fijosAlNacer).toContain("every place at once");
     expect(T.es.againLugarBoton).toBe("Siguiente premio");

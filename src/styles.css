@@ -2862,6 +2862,20 @@
     .winner-box > .again .row { margin-top: 8px; }
   }
 
+  /* El resultado desde el 20 de noviembre de 2026 (docs/ux.md, El resultado): una sola cosa por pantalla. La etiqueta
+     El resultado de arriba del ganador se esconde, porque el nombre ya dice que es el resultado, y la línea de qué sigue
+     para la sala (Para la sala, tocá Mostrar en grande) también: los botones de abajo ya lo dicen. Se esconden y no se
+     borran, y siguen en el diccionario. Con una lista de Luma la línea sí queda, porque es lo único que manda a copiar el
+     mensaje de abajo. El título de la fila de después (¿Pasamos al siguiente premio?) va con sr-only en el HTML, para que
+     el bloque siga con su nombre para el lector de pantalla. */
+  .winner-box > .kicker[data-i="winnerLabel"] { display: none; }
+  /* Con el logo de la comunidad a la derecha del renglón, la etiqueta reservaba su alto para que el logo no pise la
+     tarjeta: sin texto, pero con su lugar. En un celular el logo baja a su propio renglón y ahí no hace falta. */
+  @media (min-width: 521px) and (min-height: 521px) {
+    .winner-box:has(.winner-logo .logo-pieza) > .kicker[data-i="winnerLabel"] { display: block; visibility: hidden; }
+  }
+  #again-sigue:not([data-i="againSigueLuma"]) { display: none; }
+
   /* UX 19-oct: fondos 2 */
   /* ?grifo=0: las insignias de la red van con el borde punteado, además de decir
      "sin grifo". En el celular la de la cabecera no se muestra y el borde de la
@@ -3304,7 +3318,10 @@
      3 px debajo del borde de la barra (audit-flujo, laptop-100, paso 4). */
   @media (max-height: 660px) {
     #sec-draw .body { padding-top: 10px; }
-    .winner-box { padding-top: 6px; }
+    /* Sin la etiqueta El resultado arriba (más abajo en esta hoja, 20 de noviembre de 2026) la esquina de la tarjeta, que
+       va girada, se subía hasta el borde de la caja y la recortaba: 14 px de aire en lugar de 6, todavía unos 13 px menos
+       que cuando la etiqueta ocupaba su renglón. */
+    .winner-box { padding-top: 14px; }
     .winner-card { margin-top: 0; }
   }
   /* Y en una de 520 px o menos (una laptop a 200 % de zoom, 681 x 316), con dos ganadores lado a lado el botón de «¿No está?»
