@@ -427,7 +427,8 @@ describe("los juegos interactivos", () => {
       "jiLink", "jiT", "jiB", "jiAbrir", "jiQrSub", "jiCerrarLista", "jiListaCerrada", "jiSellar", "jiAnunciando", "jiPocos",
       "jiErrRonda", "jiResultadoT", "jiRondaEjemplo", "jiPRotulo", "jiPEstadoEntra", "jiPNombreEt", "jiPNombrePh", "jiPNombreBtn",
       "jiPListo", "jiPListaAria", "jiPCerrada", "jiPTarde", "jiPNoGano", "jiPGanadores", "jiPNoSePudo", "jiPFin",
-      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo",
+      "jiPErrLlena", "jiPErrRed", "jiPErrOtro", "jiPNombreMalo", "jiPEjemplo", "jiPErrRepetido", "jiErrNoDisponible",
+      "jiPMarcaEjemplo",
     ]) {
       expect(typeof T.es[k], `es.${k}`).toBe("string");
       expect(typeof T.en[k], `en.${k}`).toBe("string");

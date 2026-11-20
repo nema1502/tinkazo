@@ -42,7 +42,7 @@ Además del stand, la misma sala sirve para que la gente viva el sorteo desde su
 | --- | --- | --- |
 | `PUT /v1/sala/<id>/ronda` | La pantalla comparte la ronda que decide: `{"r","randomness","listHash","k"}` (el número de 32 bytes en hex, la huella de la lista sellada y cuántos ganadores). Con el token. `204`. Se puede volver a mandar: la última es la que vale | 300 bytes |
 | `POST /v1/sala/<id>/cierre` | Quien organiza cierra la lista desde la pantalla: con el token, `204`. Después ya no entra nadie (`409 {"error":"cerrada"}`) | |
-| `GET /v1/sala/<id>/vivo?desde=N` | Sin token, lo que mira el celular del participante cada 3 s: `{"hay","estado","ronda","nombres"}`. Los nombres siguen cifrados (la clave viaja en el QR); el estado es `abierta` o `cerrada` y la ronda es la compartida, o `null` | |
+| `GET /v1/sala/<id>/vivo?desde=N` | Sin token, lo que mira el celular del participante cada 3 s: `{"hay","estado","ronda","ns","nombres"}`. Los nombres siguen cifrados (la clave viaja en el QR); el estado es `abierta` o `cerrada`, la ronda es la compartida, o `null`, y `ns` son los números que siguen en la sala, para que el celular sepa a quién quitaron | |
 
 Mensajes nuevos del socket hacia la pantalla: `{"t":"ronda","r","randomness","listHash","k"}` (la pantalla la volvió a compartir) y `{"t":"lista-cerrada"}`. Al presentarse, el `listo` trae además `estado` y `ronda`, así que la pantalla que se recarga se pone al día sin pedir nada más.
 

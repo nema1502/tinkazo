@@ -120,6 +120,8 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
   let mensajeError = "";
   let siguienteRonda = 1;
   let qrDe = "";
+  /** La sala contestó 404 al cierre o a la ronda: ese paso no existe acá, así que no se sigue probando. */
+  let sinJuego = false;
 
   const claveDe = (nombre: string): string => nombre.normalize("NFC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
 
@@ -225,6 +227,14 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
     sellando = false;
     siguienteRonda = 1;
     qrDe = "";
+    sinJuego = false;
+  }
+
+  /** El servicio no tiene este paso (o la sala ya no está): se dice una vez y los botones del juego quedan quietos. */
+  function noDisponible(): void {
+    sinJuego = true;
+    mensajeError = tx("jiErrNoDisponible");
+    pintar();
   }
 
   async function abrirSala(): Promise<void> {
@@ -247,11 +257,12 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
 
   async function cerrarLaLista(): Promise<void> {
     const s = sala;
-    if (!s || cerrada) return;
+    if (!s || cerrada || sinJuego) return;
     const boton = q<HTMLButtonElement>(".ji-cerrar-lista");
     boton.disabled = true;
     const bien = await cerrarListaEnSala(s, deps.dep);
     boton.disabled = false;
+    if (bien === "no-existe") return noDisponible();
     if (!bien) {
       mensajeError = tx("standSalaErrCerrar");
       pintar();
@@ -268,7 +279,7 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
 
   async function sellar(): Promise<void> {
     const s = sala;
-    if (!s || !cerrada || compartida || sellando) return;
+    if (!s || !cerrada || compartida || sellando || sinJuego) return;
     const lista = canonicalList(nombresEnLista().join("\n"));
     if (lista.length < 2) {
       mensajeError = tx("jiPocos");
@@ -278,6 +289,19 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
     sellando = true;
     mensajeError = "";
     pintar();
+    // Lo que sigue en «Para revisar» no va a la lista sellada, pero los celulares lo ven en la sala y lo sumarían a la suya:
+    // se quita de la sala antes de compartir la ronda, para que todos lleguen a la misma lista.
+    for (const [n] of [...entradas.entries()].filter(([, e]) => e.estado === "revisar")) {
+      const quitado = await quitarNombreEnSala(s, n, deps.dep);
+      if (sala !== s) return;
+      if (!quitado) {
+        sellando = false;
+        mensajeError = tx("standSalaErrQuitar");
+        pintar();
+        return;
+      }
+      alQuitado(n);
+    }
     const ronda: RondaDeSala = {
       r: siguienteRonda++,
       randomness: semillaNueva(),
@@ -286,6 +310,11 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
     };
     const bien = await compartirRonda(s, ronda, deps.dep);
     sellando = false;
+    if (bien === "no-existe") {
+      // La ronda no llegó a nadie: no existe, y reintentar daría el mismo 404.
+      siguienteRonda--;
+      return noDisponible();
+    }
     if (!bien) {
       // Reintenta con el mismo botón: la ronda que no se compartió no existe para nadie.
       siguienteRonda--;
@@ -379,9 +408,9 @@ export function crearPanelInteractivo(deps: DepsDePanel): PanelInteractivo {
     const cajaRevisar = q<HTMLElement>(".ji-revisar");
     cajaRevisar.hidden = revisar.length === 0;
     fila(q<HTMLOListElement>(".ji-revisar-lista"), revisar, true);
-    q<HTMLButtonElement>(".ji-cerrar-lista").disabled = cerrada || !!compartida;
+    q<HTMLButtonElement>(".ji-cerrar-lista").disabled = cerrada || !!compartida || sinJuego;
     const sellar = q<HTMLButtonElement>(".ji-sellar");
-    sellar.disabled = !cerrada || !!compartida || sellando;
+    sellar.disabled = !cerrada || !!compartida || sellando || sinJuego;
     sellar.textContent = tx(sellando ? "jiAnunciando" : "jiSellar");
     q<HTMLElement>(".ji-cerrada").hidden = !cerrada || !!compartida;
     const cajaRes = q<HTMLElement>(".ji-resultado");
