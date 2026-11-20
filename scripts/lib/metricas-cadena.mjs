@@ -7,6 +7,9 @@
  *
  * Qué se cuenta y cómo (todo sale de transacciones que están en la cadena):
  * - Sorteo sellado: un evento `sealed` del contrato (la llamada a `seal` salió bien).
+ * - Sorteo sellado a través de otro contrato: el mismo evento, pero el `seal` del sorteo quedó
+ *   adentro de la llamada a otro contrato (el de premios sella sus listas así). El organizador
+ *   del evento es ese contrato y la transacción invoca ese contrato: se cuenta marcado, es válido.
  * - Sorteo registrado: un evento `drawn` (la llamada a `draw` salió bien: el contrato
  *   verificó la firma BLS de drand y guardó los ganadores). Es la "comprobación en
  *   cadena" de cada sorteo. Las aperturas de la página de comprobación no pasan por
@@ -20,7 +23,7 @@
  * el ledger de la transacción.
  */
 
-import { Address, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { Address, StrKey, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
 
 export const HORA = 3600;
 
@@ -115,11 +118,15 @@ export function decodificarLlamada(envelopeXdr, passphrase) {
       hash: aHex(tx.hash()),
       hashInterior: aHex(interior.hash()),
     };
-    if (funcion === "seal") {
-      const [organizador, listHash, count, numWinners, round, meta] = ll.args.map((a) => scValToNative(a));
+    const nativos = ll.args.map((a) => scValToNative(a));
+    // El `seal` del sorteo lleva seis argumentos: organizador, huella de la lista, cantidad, ganadores,
+    // ronda y texto. Otro contrato puede tener su propio `seal` con otros argumentos —el de premios lo
+    // tiene, y sella llamando al del sorteo adentro—: esos no se decodifican como si fueran del sorteo.
+    const [organizador, listHash, count, numWinners, round, meta] = nativos;
+    if (funcion === "seal" && nativos.length === 6 && typeof organizador === "string" && listHash instanceof Uint8Array && listHash.length === 32) {
       return {
         ...salida,
-        organizador: String(organizador),
+        organizador,
         listHash: aHex(listHash),
         count: Number(count),
         numWinners: Number(numWinners),
@@ -127,7 +134,7 @@ export function decodificarLlamada(envelopeXdr, passphrase) {
         meta: typeof meta === "string" ? meta : Buffer.from(meta ?? []).toString("utf8"),
       };
     }
-    if (funcion === "draw") return { ...salida, id: Number(scValToNative(ll.args[0])) };
+    if (funcion === "draw") return { ...salida, id: Number(nativos[0]) };
     return salida;
   } catch {
     return null;
@@ -153,6 +160,19 @@ export function resumirTransaccion(rec, passphrase) {
 /* --------------------------------------------------------------- la unión */
 
 /**
+ * El contrato que selló en nombre propio —el sello llegó por una llamada anidada—, o `null` si la
+ * transacción llamó al `seal` del sorteo directo. El `seal` exige la firma del organizador: cuando el
+ * organizador del evento es un contrato y es el mismo contrato que la transacción invocó, el sello salió
+ * de adentro de esa llamada y el sobre no trae los argumentos del `seal` del sorteo, solo los del contrato
+ * que lo llamó. Un evento en cuyo organizador figura una cuenta sigue exigiendo la llamada directa.
+ */
+function contratoQueSella(tx, e) {
+  const ll = tx?.llamada;
+  if (!ll || ll.contrato === e.contrato) return null;
+  return String(e.organizador) === ll.contrato && StrKey.isValidContract(String(e.organizador)) ? ll.contrato : null;
+}
+
+/**
  * Junta eventos y transacciones en un registro por sorteo.
  * `txs` es un objeto `{ [eventoId]: resumen }`. Un `drawn` o un `sealed` sin su
  * transacción se cuenta con la hora que dio el índice (`ts`) y se anota en `sinTransaccion`.
@@ -174,8 +194,11 @@ export function unir(eventos, txs = {}) {
         continue;
       }
       const ll = tx?.llamada;
+      const via = tx ? contratoQueSella(tx, e) : null;
       if (tx) {
-        if (!tx.exitosa || ll?.funcion !== "seal" || ll.contrato !== e.contrato || ll.listHash !== e.listHash || ll.count !== e.count || ll.organizador !== e.organizador) {
+        const directo =
+          ll?.funcion === "seal" && ll.contrato === e.contrato && ll.listHash === e.listHash && ll.count === e.count && ll.organizador === e.organizador;
+        if (!tx.exitosa || (via === null && !directo)) {
           problemas.push(`el sello ${clave(e)} no coincide con su transacción ${tx.hash}`);
         }
       }
@@ -187,7 +210,9 @@ export function unir(eventos, txs = {}) {
         numWinners: e.numWinners,
         round: e.round,
         listHash: e.listHash,
-        meta: ll?.meta ?? "",
+        // El texto del sello solo viaja en la llamada directa: el de otro contrato no se puede leer.
+        meta: via === null ? ll?.meta ?? "" : "",
+        selloViaContrato: via,
         selladoEn: cuando,
         selloTx: tx?.hash ?? null,
         selloComision: tx?.comisionStroops ?? 0,
@@ -224,6 +249,21 @@ export function unir(eventos, txs = {}) {
   return { sorteos: [...porClave.values()], problemas };
 }
 
+/**
+ * Los sellos que llegaron a través de otro contrato: cuántos y desde qué contratos, ordenados.
+ * Son válidos: el contrato del sorteo emitió el `sealed` adentro de la llamada de ese contrato.
+ */
+export function anidadosDe(sorteos) {
+  const contratos = new Set();
+  let sellos = 0;
+  for (const s of sorteos) {
+    if (!s.selloViaContrato) continue;
+    sellos++;
+    contratos.add(s.selloViaContrato);
+  }
+  return { sellos, contratos: [...contratos].sort() };
+}
+
 /* ---------------------------------------------------------------- sumar */
 
 /** La marca corta del `meta` (`#fila`, `#premios=N`): una convención de presentación, no del protocolo. */
@@ -247,6 +287,7 @@ const percentil = (xs, p) => {
 const periodoVacio = () => ({
   sorteosSellados: 0,
   sorteosRegistrados: 0,
+  sellosAnidados: 0,
   organizadoresDistintos: 0,
   organizadoresNuevos: 0,
   lugaresEnListas: 0,
@@ -286,6 +327,7 @@ function sumar(sorteos, ahora) {
       p._org.add(s.organizador);
       if (nuevo) p.organizadoresNuevos++;
       if (sinSortear) p.cierresSinSortear++;
+      if (s.selloViaContrato) p.sellosAnidados++;
       if (marca.fila) p._marcas.fila++;
       if (marca.premios) p._marcas.premios++;
       if (!marca.fila && !marca.premios) p._marcas.sinMarca++;
@@ -306,6 +348,7 @@ function sumar(sorteos, ahora) {
     totales.comisionStroops += s.selloComision;
     if (nuevo) totales.organizadoresNuevos++;
     if (sinSortear) totales.cierresSinSortear++;
+    if (s.selloViaContrato) totales.sellosAnidados++;
     if (marca.fila) totales.marcas.fila++;
     if (marca.premios) totales.marcas.premios++;
     if (!marca.fila && !marca.premios) totales.marcas.sinMarca++;

@@ -1,18 +1,21 @@
-import { Address, nativeToScVal, xdr } from "@stellar/stellar-sdk";
+import { Account, Address, Operation, TransactionBuilder, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { describe, expect, it } from "vitest";
 import {
   actividadDe,
+  anidadosDe,
   calcular,
   compararVentana,
   comprobar,
   datosDesde,
   decodificarEvento,
+  decodificarLlamada,
   dia,
   marcaDe,
   mes,
   mezclarFuentes,
   partesDelId,
   registroDesdeRpc,
+  resumirTransaccion,
   semana,
   unir,
   unirFuentes,
@@ -199,6 +202,96 @@ describe("unir avisa lo que no cuadra", () => {
     const s = sello(1, A, "2026-11-04T10:00:00Z");
     const u = unir([s], { [s.eventoId]: { hash: "x", cerroEn: s.ts, exitosa: true, comisionStroops: 1, cuentaFuente: A, cuentaQuePaga: B, llamada: { funcion: "seal", contrato: C1, listHash: s.listHash, count: s.count, organizador: A, meta: "" } } });
     expect(calcular(u.sorteos, { ahora }).todas.totales.patrocinadas).toBe(1);
+  });
+});
+
+describe("un sello que llega a través de otro contrato", () => {
+  const RED = "Test SDF Network ; September 2015";
+  // Los contratos que sellaron llamando al `seal` del sorteo en testnet (issues #190): el de premios y dos ensayos.
+  const C2 = "CD5UZXNVKZILVXEF2AGZSJUUVUN74AACXZPAZFY7HOPKOHFK6F6Y3PPE";
+  const C3 = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+
+  /** Un sobre de verdad con una sola invocación de contrato, como el que baja Horizon. */
+  const sobre = (contrato, funcion, args) =>
+    new TransactionBuilder(new Account(A, "1"), { fee: "100", networkPassphrase: RED })
+      .addOperation(Operation.invokeContractFunction({ contract: contrato, function: funcion, args }))
+      .setTimeout(0)
+      .build()
+      .toXDR();
+  /** Los seis argumentos del `seal` del sorteo: organizador, huella, cantidad, ganadores, ronda y texto. */
+  const argsDelSorteo = (e, cambios = {}) => {
+    const d = { ...e, meta: "", ...cambios };
+    return [
+      new Address(d.organizador).toScVal(),
+      nativeToScVal(Buffer.from(d.listHash, "hex"), { type: "bytes" }),
+      nativeToScVal(d.count, { type: "u32" }),
+      nativeToScVal(d.numWinners, { type: "u32" }),
+      nativeToScVal(BigInt(d.round), { type: "u64" }),
+      nativeToScVal(d.meta, { type: "string" }),
+    ];
+  };
+  /** Los tres argumentos del `seal` del contrato de premios: su número, la lista de cuentas y la ronda. */
+  const argsDePremios = () => [nativeToScVal(1n, { type: "u64" }), xdr.ScVal.scvVec([new Address(A).toScVal(), new Address(B).toScVal()]), nativeToScVal(33683763n, { type: "u64" })];
+  const resumen = (e, envelope, extra = {}) =>
+    resumirTransaccion(
+      { hash: `tx-${e.id}`, ledger: 5566182, created_at: "2026-11-04T10:00:00Z", successful: true, fee_charged: "1000", source_account: A, fee_account: A, envelope_xdr: envelope, ...extra },
+      RED,
+    );
+
+  it("se reconoce por la llamada y se cuenta marcado, sin problema", () => {
+    const e = sello(571, C2, "2026-11-04T10:00:00Z");
+    const tx = resumen(e, sobre(C2, "seal", argsDePremios()));
+    const u = unir([e], { [e.eventoId]: tx });
+    expect(u.problemas).toEqual([]);
+    expect(u.sorteos[0]).toMatchObject({ id: 571, contrato: C1, organizador: C2, count: 10, selloViaContrato: C2, selloTx: tx.hash });
+    const r = calcular(u.sorteos, { ahora });
+    expect(r.todas.totales).toMatchObject({ sorteosSellados: 1, lugaresEnListas: 10, sellosAnidados: 1, marcas: { fila: 0, premios: 0, sinMarca: 1 } });
+    expect(r.todas.porDia["2026-11-04"].sellosAnidados).toBe(1);
+    expect(anidadosDe(u.sorteos)).toEqual({ sellos: 1, contratos: [C2] });
+  });
+
+  it("el sello directo sigue igual: coincide y no se marca como anidado", () => {
+    const e = sello(1, A, "2026-11-04T10:00:00Z");
+    const tx = resumen(e, sobre(C1, "seal", argsDelSorteo(e, { meta: "#fila" })));
+    const u = unir([e], { [e.eventoId]: tx });
+    expect(u.problemas).toEqual([]);
+    expect(u.sorteos[0]).toMatchObject({ selloViaContrato: null, meta: "#fila" });
+    expect(calcular(u.sorteos, { ahora }).todas.totales.sellosAnidados).toBe(0);
+    expect(anidadosDe(u.sorteos)).toEqual({ sellos: 0, contratos: [] });
+  });
+
+  it("un sello que de verdad no coincide sigue fallando", () => {
+    // La transacción invoca un contrato que no es el organizador del evento.
+    const e = sello(571, C2, "2026-11-04T10:00:00Z");
+    expect(unir([e], { [e.eventoId]: resumen(e, sobre(C3, "seal", argsDePremios())) }).problemas[0]).toMatch(/no coincide/);
+    // Un sello anidado cuya transacción no salió bien tampoco pasa.
+    expect(unir([e], { [e.eventoId]: resumen(e, sobre(C2, "seal", argsDePremios()), { successful: false }) }).problemas[0]).toMatch(/no coincide/);
+    // Un organizador que es una cuenta y no el contrato invocado no se toma como anidado.
+    const org = sello(2, A, "2026-11-04T10:00:00Z");
+    expect(unir([org], { [org.eventoId]: resumen(org, sobre(C3, "seal", argsDePremios())) }).problemas[0]).toMatch(/no coincide/);
+    // Y el sello directo del sorteo con otra lista sigue fallando.
+    const s = sello(3, A, "2026-11-04T10:00:00Z");
+    expect(unir([s], { [s.eventoId]: resumen(s, sobre(C1, "seal", argsDelSorteo(s, { listHash: h("f") }))) }).problemas[0]).toMatch(/no coincide/);
+  });
+
+  it("decodificarLlamada no toma el seal de otro contrato por el del sorteo", () => {
+    const ajena = decodificarLlamada(sobre(C2, "seal", argsDePremios()), RED);
+    expect(ajena).toMatchObject({ contrato: C2, funcion: "seal" });
+    expect(ajena.organizador).toBeUndefined();
+    expect(ajena.listHash).toBeUndefined();
+    expect(ajena.count).toBeUndefined();
+    // El del sorteo se sigue decodificando entero.
+    const e = sello(571, A, "2026-11-04T10:00:00Z");
+    expect(decodificarLlamada(sobre(C1, "seal", argsDelSorteo(e, { meta: "#fila" })), RED)).toMatchObject({
+      contrato: C1,
+      funcion: "seal",
+      organizador: A,
+      listHash: e.listHash,
+      count: e.count,
+      numWinners: e.numWinners,
+      round: e.round,
+      meta: "#fila",
+    });
   });
 });
 
