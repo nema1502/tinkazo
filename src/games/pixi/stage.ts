@@ -15,6 +15,7 @@ import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
 import { esResultadoDeTurnos } from "../../modos/turnos";
+import { altoCartelDe, centroCartel, filasCorona, filasEnCartel, nombresEnCartel } from "./stage-cartel";
 import { rotuloDelPanel } from "./rotulo";
 import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
 import { ajusteGanador, ENTRADA_RELATOR, nombreDeLaFicha, sobrepasoRelator } from "./ganador-altura";
@@ -147,14 +148,10 @@ export const MONO = "ui-monospace, Consolas, monospace";
 export { CHIP_SCALE, escalaChipLegible } from "./letra";
 
 /**
- * Las filas del cartel de la corona con `m` premios: uno solo, grande; o hasta
- * tres nombres y un "y N más". La altura de cada una, en unidades `k`.
+ * Las filas del cartel de la corona y todo lo que se cuenta de él (cuántos
+ * nombres muestra, su alto, dónde va su centro) vive en `stage-cartel.ts`, aparte para poder probarlo sin una placa de video, igual que `letra.ts`.
  */
-export const filasCorona = (m: number, k: number): number[] => {
-  if (m === 1) return [60 * k];
-  const n = m <= 3 ? m : 4;
-  return Array.from({ length: n }, (_, i) => (i === 0 ? 46 : 38) * k * 1.22);
-};
+export { altoCartelDe, centroCartel, filasCorona, filasEnCartel, nombresEnCartel } from "./stage-cartel";
 
 export interface PixiStage {
   app: Application;
@@ -976,6 +973,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
     textoGanador = nombreDeLaFicha(all);
+    /** El modo del sorteo, fijo para toda la corona: el tope de nombres del cartel depende de él. */
+    const deTurnos = esResultadoDeTurnos();
     /** Cuándo entra cada premio después del primero, en segundos de la corona. */
     let entradas: number[] = [];
     const sonados = new Set<number>();
@@ -990,21 +989,26 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
-      // Hasta tres nombres y "y N más", igual que el relator.
-      const resto = all.length - 3;
-      const lines = all.length <= 3 ? all : [...all.slice(0, 3), getLang() === "es" ? `y ${resto} más` : `and ${resto} more`];
+      // El tope de nombres (`nombresEnCartel`, `stage-cartel.ts`): hasta ocho en un orden de turnos — seis en un celular
+      // vertical, donde no caben ocho filas — y tres en un sorteo de premios, como siempre. Con más, los primeros y
+      // «y N más». El relato no contradice: en un orden no nombra a nadie («El orden quedó listo») y en los premios nombra
+      // el mismo tres (`winnersLabel`, `overlay.ts`).
+      const nombres = nombresEnCartel(all.length, deTurnos, portrait());
+      const resto = all.length - nombres;
+      const lines = resto > 0 ? [...all.slice(0, nombres), getLang() === "es" ? `y ${resto} más` : `and ${resto} more`] : all;
       const big = lines.length === 1;
       // Con varios premios, el primero un poco más grande y cada uno con su
       // cara: antes eran renglones chicos e iguales, sin cara, y desde el fondo
-      // no se sabía quién era quién ni cuál era el primero.
-      const conCara = (i: number): boolean => !big && (all.length <= 3 || i < 3);
+      // no se sabía quién era quién ni cuál era el primero. En un orden, cada
+      // nombre del orden lleva su cara; solo el renglón del resto no.
+      const conCara = (i: number): boolean => !big && i < nombres;
       const talla = (i: number): number => (big ? 54 : i === 0 ? 46 : 38) * k * (compartir ? 1.2 : 1);
       const nameTexts = lines.map((n, i) =>
         text(conCara(i) ? `${i + 1}. ${n}` : n, { fontSize: talla(i), fontWeight: "900", fill: INK }),
       );
       const cara = (i: number): number => (conCara(i) ? talla(i) * 1.1 : 0);
       const hueco = (i: number): number => (conCara(i) ? cara(i) + 12 * k : 0);
-      const altos = filasCorona(all.length, k);
+      const altos = filasCorona(filasEnCartel(all.length, deTurnos, portrait()), k);
       // El cartel entra con un rebote (`REBOTE`: la elástica llega a 1,18 de su tamaño) y un poco girado, y a ese tamaño
       // tiene que entrar en la pantalla: en un celular de 390 rebotaba a 414 y se cortaba contra los dos costados. Su ancho
       // máximo sale de ahí (y no del 86 % de la pantalla de antes), descontando su sombra y lo que da el giro.
@@ -1125,7 +1129,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         plate.addChild(fila);
         renglones.push(fila);
       });
-      plate.position.set(sw() / 2, portrait() ? sh() * 0.24 : sh() * 0.26);
+      plate.position.set(sw() / 2, centroCartel(ph, k, sh(), portrait()));
       tl.clear();
       tl.fromTo(flash, { alpha: 0.9 }, { alpha: 0, duration: 0.5, ease: "power2.out" }, 0)
         .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, entraCartel)
@@ -1153,8 +1157,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // selector de duración estira, y en "épico" el tercer premio entraba
       // cuando el cartel ya se iba.
       const real = (s: number): number => s / paceFactor();
-      entradas = big ? [] : renglones.slice(1).map((_, i) => real(0.55 + (i + 1) * 0.35));
-      if (!big) {
+      // En un orden de turnos los renglones no llegan de a uno: es una lista, no premios que se van entregando, y con
+      // ocho turnos el último entraría cuando el cartel ya se va. Cada premio que suena es de los premios.
+      entradas = big || deTurnos ? [] : renglones.slice(1).map((_, i) => real(0.55 + (i + 1) * 0.35));
+      if (!big && !deTurnos) {
         renglones.forEach((fila, i) => {
           if (i === 0) return;
           tl.fromTo(fila, { alpha: 0, x: x0 - 40 * k }, { alpha: 1, x: x0, duration: real(0.35), ease: "back.out(2)" }, real(0.55 + i * 0.35));
@@ -1474,12 +1480,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     placaBajo: (m) => {
       const k = u();
       // El alto de verdad del cartel, si la corona de `m` premios ya se armó; si no, la estimación con las mismas partes.
-      // Hasta el 26 de octubre de 2026 esto era 40k + filas + 16k, de cuando «GANA» era chico: con «GANA» a 48 px en 1080
-      // el cartel bajaba 12 px más de lo que decía, y lo protegido quedaba debajo de él.
+      // El conteo de renglones es el del cartel (`stage-cartel.ts`): en un orden de turnos son muchos más que antes, y la
+      // protección de la cámara tiene que usarlos, para que el cartel no tape a nadie. Hasta el 26 de octubre de 2026 esto
+      // era 40k + filas + 16k, de cuando «GANA» era chico: con «GANA» a 48 px en 1080 el cartel bajaba 12 px más de lo que
+      // decía, y lo protegido quedaba debajo de él.
+      const filas = filasEnCartel(m, esResultadoDeTurnos(), portrait());
       const ph = cartelAlto && cartelAlto.m === m && cartelAlto.k === k
         ? cartelAlto.ph
-        : 18 * k + 1.2 * letra(LEGIBLE.prin) + filasCorona(m, k).reduce((a, h) => a + h, 0) + 20 * k;
-      return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
+        : altoCartelDe(filas, k, 1.2 * letra(LEGIBLE.prin));
+      return centroCartel(ph, k, sh(), portrait()) + ph / 2 + 10 * k;
     },
     ganadorEn(fn, cuerpo, estado) {
       const T = (window as unknown as { __tinkazo?: { ganador: unknown; cuerpoGanador: unknown; estadoGanador: unknown } }).__tinkazo;

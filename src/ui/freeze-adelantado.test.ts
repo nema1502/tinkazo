@@ -151,7 +151,7 @@ let quitar: () => void = () => undefined;
  * La página como la deja `main.ts`, con un sello retomado cuya ronda nace en 5 a 9 segundos, y la espera en grande
  * abierta. Devuelve cuánto falta para que nazca, en milisegundos, a pedido.
  */
-async function montar(): Promise<{ faltaParaNacer: () => number; t: (k: string) => string }> {
+async function montar(): Promise<{ faltaParaNacer: () => number; ronda: number; t: (k: string) => string }> {
   vi.resetModules();
   sessionStorage.clear();
   localStorage.clear();
@@ -175,7 +175,7 @@ async function montar(): Promise<{ faltaParaNacer: () => number; t: (k: string) 
   freeze.resumeFrozen({ names: [...V.list], listHash: V.list_hash, sealedAt: ahora, prize: "Una pizza", round, numWinners: 1, id: "7" });
   $("btn-espera").click();
   await vi.waitFor(() => expect(document.querySelector(".espera")).not.toBeNull());
-  return { faltaParaNacer: () => roundTime(round) * 1000 - Date.now(), t: i18n.t };
+  return { faltaParaNacer: () => roundTime(round) * 1000 - Date.now(), ronda: round, t: i18n.t };
 }
 
 beforeEach(() => {
@@ -205,7 +205,7 @@ describe("el sorteo adelantado que corta en una compuerta del modo Oficial", () 
   it("el acceso que no contesta: la espera ofrece volver a probar, y probar antes de que nazca el número vuelve a preguntar", async () => {
     h.cobro = true;
     h.acceso.mockResolvedValue({ sigue: false, clave: "errAnchor.porteroFondoSorteo" });
-    const { faltaParaNacer } = await montar();
+    const { faltaParaNacer, ronda } = await montar();
     await vi.waitFor(() => expect(accionDeLaEspera()).not.toBeNull(), { timeout: 9000, interval: 50 });
     expect(faltaParaNacer()).toBeGreaterThan(0);
     expect(h.acceso).toHaveBeenCalledTimes(1);
@@ -216,7 +216,9 @@ describe("el sorteo adelantado que corta en una compuerta del modo Oficial", () 
     // Nació el número: el botón de la página se puede tocar, y la espera sigue con su acción.
     expect(boton().disabled).toBe(false);
     expect(accionDeLaEspera()).not.toBeNull();
-    expect(h.fetchRound).not.toHaveBeenCalled();
+    // La ronda elegida nadie la pidió antes de nacer: el feed de números (issue #79) pide las anteriores,
+    // la elegida es del sorteo, y el sorteo no arrancó.
+    expect(h.fetchRound.mock.calls.filter(([r]) => r === ronda)).toHaveLength(0);
     expect(h.juego).not.toHaveBeenCalled();
   }, 20000);
 
@@ -256,12 +258,13 @@ describe("el sorteo adelantado que corta en una compuerta del modo Oficial", () 
 describe("los otros caminos del lanzamiento adelantado", () => {
   it("con la cuenta de prueba el sorteo sale solo cuando nace el número, una sola vez, y el botón no lanza otro", async () => {
     h.red = "testnet";
-    const { faltaParaNacer } = await montar();
+    const { faltaParaNacer, ronda } = await montar();
     await dormir(faltaParaNacer() + 1000);
     expect(h.gate).not.toHaveBeenCalled();
     expect(h.acceso).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(h.juego).toHaveBeenCalledTimes(1), { timeout: 3000 });
-    expect(h.fetchRound).toHaveBeenCalledTimes(1);
+    // El sorteo pidió la ronda elegida una sola vez: el feed de números (issue #79) se detiene en la anterior.
+    expect(h.fetchRound.mock.calls.filter(([r]) => r === ronda)).toHaveLength(1);
     expect(boton().disabled).toBe(true);
     boton().click();
     await dormir(200);
@@ -270,9 +273,10 @@ describe("los otros caminos del lanzamiento adelantado", () => {
 
   it("con la billetera propia no se adelanta: cuando nace el número la espera ofrece lanzarlo, y el toque lo lanza", async () => {
     h.aMano = true;
-    const { faltaParaNacer, t } = await montar();
+    const { faltaParaNacer, ronda, t } = await montar();
     await dormir(faltaParaNacer() - 800);
-    expect(h.fetchRound).not.toHaveBeenCalled();
+    // La ronda elegida nadie la pidió antes de nacer: el feed pide las anteriores, la elegida es del sorteo.
+    expect(h.fetchRound.mock.calls.filter(([r]) => r === ronda)).toHaveLength(0);
     expect(accionDeLaEspera()).toBeNull();
     await dormir(faltaParaNacer() + 700);
     expect(accionDeLaEspera()?.textContent).toBe(t("draw"));

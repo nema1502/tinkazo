@@ -309,6 +309,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
         : `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>`
       : "") +
     `<div class="espera-reloj mono">0:00</div>` +
+    // Los números públicos que van naciendo mientras se espera, con el contador de faltantes (issue #79, en freeze.ts).
+    `<div class="espera-feed" hidden></div>` +
     // El QR del espectador (ui/espectador.ts): quien lo escanea ve la misma cuenta y el mismo show. Lleva solo el
     // enlace corto, que llega aparte (enlace-corto.ts): hasta entonces dice que se está preparando.
     (conEspectador ? figuraDelQrHtml() : "") +
@@ -703,6 +705,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
       sigue.style.minHeight = `${reloj.offsetHeight + (debajo?.offsetHeight ?? 0) + hueco}px`;
       reloj.hidden = true;
       if (debajo) debajo.hidden = true;
+      // Con el número en camino, la fila de números que nacen y su contador dejan su lugar.
+      back.querySelector<HTMLElement>(".espera-feed")?.setAttribute("hidden", "");
     }
     sigue.innerHTML = html;
     sigue.hidden = false;
