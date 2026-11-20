@@ -15,6 +15,25 @@ const h = vi.hoisted(() => ({
   sesion: { kind: "external", address: "GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H" } as { kind: string; address: string; aMano?: boolean } | null,
   estados: [] as unknown[],
   consultas: 0,
+  /** Lo que dice el flujo del regalo: cuántos sorteos puede recibir la cuenta ahora, o `null`. */
+  regalo: null as number | null,
+  preguntasDelRegalo: 0,
+  recibidos: 0,
+  /** Cómo sale «Recibirlos». */
+  recibe: "dado" as "dado" | "sin-sorteos" | "error",
+}));
+
+vi.mock("./cuenta-lista-flujo", () => ({
+  regaloDisponible: async () => {
+    h.preguntasDelRegalo++;
+    return h.regalo;
+  },
+  recibirRegalo: async () => {
+    h.recibidos++;
+    if (h.recibe !== "error") h.regalo = null;
+    return h.recibe;
+  },
+  abrirSumarSorteos: async () => false,
 }));
 
 vi.mock("../ensayo-modo", () => ({ sinGrabar: () => false, enStand: () => false }));
@@ -75,6 +94,10 @@ beforeEach(async () => {
   h.sesion = { kind: "external", address: CUENTA };
   h.estados = [portero(13)];
   h.consultas = 0;
+  h.regalo = null;
+  h.preguntasDelRegalo = 0;
+  h.recibidos = 0;
+  h.recibe = "dado";
   app.frozen = null;
 });
 afterEach(() => {
@@ -184,5 +207,142 @@ describe("el cupo oficial a la vista", () => {
     await esperar();
     expect(texto("cupo-linea")).toBeNull();
     expect(document.getElementById("cupo-uso")).toBeNull();
+  });
+});
+
+describe("«Recibirlos» en la línea del cupo", () => {
+  it("con cero sorteos y el regalo listo: la línea lo ofrece, con «Recibirlos» al lado", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    expect(texto("cupo-linea")).toBe("Ya podés recibir tus 3 sorteos gratis.");
+    expect(texto("cupo-recibir")).toBe("Recibirlos");
+    expect(document.getElementById("cupo-linea")?.nextElementSibling?.id).toBe("cupo-recibir");
+    expect(texto("cupo-sumar")).toBeNull();
+  });
+
+  it("en inglés", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    setLang("en");
+    expect(texto("cupo-linea")).toBe("Your 3 free Live draws are ready.");
+    expect(texto("cupo-recibir")).toBe("Get them");
+    setLang("es");
+  });
+
+  it("se pregunta una sola vez por sesión, por más que la línea se vuelva a pintar", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    expect(h.preguntasDelRegalo).toBe(1);
+    // Las líneas de las pruebas de antes siguen oyendo la página: con el primer aviso, cada una pregunta una vez.
+    const cero = (): void => {
+      document.dispatchEvent(new CustomEvent("tinkazo:patrocinio", { detail: { cuenta: CUENTA, estado: portero(0) } }));
+    };
+    cero();
+    await esperar();
+    const despues = h.preguntasDelRegalo;
+    ganan(2);
+    cero();
+    cero();
+    await esperar();
+    expect(h.preguntasDelRegalo).toBe(despues);
+    expect(texto("cupo-linea")).toBe("Ya podés recibir tus 3 sorteos gratis.");
+  });
+
+  it("con sorteos que quedan no se pregunta nada", async () => {
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    expect(h.preguntasDelRegalo).toBe(0);
+    expect(document.getElementById("cupo-recibir")).toBeNull();
+  });
+
+  it("sin el regalo (el servicio de antes), con cero la línea de siempre y sin «Recibirlos»", async () => {
+    h.estados = [portero(0)];
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    expect(h.preguntasDelRegalo).toBe(1);
+    expect(texto("cupo-linea")).toBe("Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.");
+    expect(document.getElementById("cupo-recibir")).toBeNull();
+  });
+
+  it("con el cobro por uso apagado no se pregunta por el regalo", async () => {
+    h.cobro = false;
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    expect(h.preguntasDelRegalo).toBe(0);
+  });
+
+  it("«Recibirlos» lo pide una vez, vuelve a preguntar el cupo y la línea dice lo que quedó", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    h.estados = [portero(3)];
+    const antes = h.consultas;
+    (document.getElementById("cupo-recibir") as HTMLButtonElement).click();
+    await esperar();
+    await esperar();
+    await esperar();
+    expect(h.recibidos).toBe(1);
+    expect(h.consultas).toBe(antes + 1);
+    expect(texto("cupo-linea")).toBe("Te quedan 3 sorteos oficiales. Vencen el 14 de enero.");
+    expect(texto("cupo-recibir")).toBeNull();
+  });
+
+  it("si no se supo cómo salió, la línea lo dice y «Recibirlos» queda para probar de nuevo", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    h.recibe = "error";
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    h.estados = [portero(0)];
+    (document.getElementById("cupo-recibir") as HTMLButtonElement).click();
+    await esperar();
+    await esperar();
+    await esperar();
+    expect(h.recibidos).toBe(1);
+    expect(texto("cupo-linea")).toBe("No se pudieron recibir tus sorteos gratis, probá de nuevo.");
+    expect(texto("cupo-recibir")).toBe("Recibirlos");
+    h.recibe = "dado";
+    h.estados = [portero(3)];
+    (document.getElementById("cupo-recibir") as HTMLButtonElement).click();
+    await esperar();
+    await esperar();
+    await esperar();
+    expect(h.recibidos).toBe(2);
+    expect(texto("cupo-linea")).toBe("Te quedan 3 sorteos oficiales. Vencen el 14 de enero.");
+    expect(texto("cupo-recibir")).toBeNull();
+  });
+
+  it("si el servidor contestó sin sorteos, no se ofrece más y la línea vuelve a la de cero", async () => {
+    h.estados = [portero(0)];
+    h.regalo = 3;
+    h.recibe = "sin-sorteos";
+    iniciarCupo();
+    await esperar();
+    await esperar();
+    h.estados = [portero(0)];
+    (document.getElementById("cupo-recibir") as HTMLButtonElement).click();
+    await esperar();
+    await esperar();
+    await esperar();
+    expect(texto("cupo-linea")).toBe("Se te acabaron los sorteos oficiales. Usá otro cupón o seguí gratis en Prueba.");
+    expect(texto("cupo-recibir")).toBeNull();
   });
 });

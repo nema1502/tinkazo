@@ -1,6 +1,17 @@
 import { getLang } from "../i18n";
 import { type BanderasDeAlta, banderasDeAlta, pagoConSaldoActivo } from "../stellar/alta-config";
-import { type ErrorDeAlta, type OpcionesDeAlta, anularCompra, canjear, cargarCompra, empezarCompra, estado, orden, pago } from "../stellar/alta-api";
+import {
+  type ErrorDeAlta,
+  type OpcionesDeAlta,
+  anularCompra,
+  canjear,
+  cargarCompra,
+  empezarCompra,
+  estado,
+  orden,
+  pago,
+  reclamar,
+} from "../stellar/alta-api";
 import { leerOferta } from "../stellar/alta-oferta";
 import { network } from "../stellar/config";
 import { cuponGuardado, guardarCupon, olvidarCupon } from "../stellar/cupon-guardado";
@@ -138,6 +149,13 @@ export function accesoDelServidor(s: SesionDelAcceso, o: OpcionesDeAlta = {}, b:
       const tk = await tokenDe(s);
       if (!tk) return sinToken(s);
       return canjear(tk, codigo, { idioma: getLang(), ...o });
+    },
+    // El regalo de quien entra con su cuenta. El paso lo pide solo cuando el estado lo ofrece: con el servicio de antes,
+    // que no lo ofrece, nunca se llama.
+    async reclamar() {
+      const tk = await tokenDe(s);
+      if (!tk) return sinToken(s);
+      return reclamar(tk, { idioma: getLang(), ...o });
     },
     cuenta: () => cuentaDe(s),
     cuponGuardado: () => cuponGuardado(),

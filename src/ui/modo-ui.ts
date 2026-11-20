@@ -152,6 +152,22 @@ export function confirmarPrimerSelloOficial(): Promise<boolean> {
   });
 }
 
+/**
+ * Lo que dice de Oficial la hoja: si el servidor da hoy el regalo a quien entra (`regaloAbierto`, de los precios), que
+ * se organizan esos sorteos gratis. Se pregunta sin hacer esperar a la hoja, y con 0, sin respuesta o con la hoja ya
+ * cerrada, queda lo de siempre.
+ */
+function decirElRegalo(cuerpo: HTMLElement): void {
+  void import("../stellar/alta-oferta")
+    .then((m) => m.regaloAbierto())
+    .then(
+      (n) => {
+        if (n > 0 && cuerpo.isConnected) cuerpo.textContent = t("modeOfficialBodyRegalo").replace("{n}", String(n));
+      },
+      () => undefined,
+    );
+}
+
 /** Abre la hoja del modo. Sin modo Oficial para ofrecer, no hace nada. */
 export function abrirHojaDeModo(): void {
   if (!hayModoOficial || typeof document === "undefined") return;
@@ -179,6 +195,7 @@ export function abrirHojaDeModo(): void {
     nombre.textContent = t(modeNameKey(name));
     const cuerpo = document.createElement("p");
     cuerpo.textContent = t(name === "mainnet" ? "modeOfficialBody" : "modeTestBody");
+    if (name === "mainnet") decirElRegalo(cuerpo);
     opcion.append(nombre, cuerpo);
     if (name === network.name) {
       const actual = document.createElement("p");

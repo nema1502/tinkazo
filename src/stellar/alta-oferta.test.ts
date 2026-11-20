@@ -1,7 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TEXTOS_ALTA } from "../alta-textos";
 import { TEXTOS_ALTA_PAGO } from "../alta-textos-pago";
-import { CACHE_OFERTA_MS, SIN_OFERTA, leerOferta, montoVisible, ofertaDe, olvidarOferta, textoDelProducto, varsDelProducto } from "./alta-oferta";
+import {
+  CACHE_OFERTA_MS,
+  SIN_OFERTA,
+  leerOferta,
+  montoVisible,
+  ofertaDe,
+  olvidarOferta,
+  olvidarRegalo,
+  regaloAbierto,
+  textoDelProducto,
+  varsDelProducto,
+} from "./alta-oferta";
 import type { PreciosDeAlta, ResultadoDeAlta } from "./alta-api";
 import { productoPausado } from "./venta-oficial";
 
@@ -23,7 +34,10 @@ function servidor(cuerpo: () => unknown, estadoHttp = 200) {
   return { f: f as unknown as typeof fetch, espia: f };
 }
 
-beforeEach(() => olvidarOferta());
+beforeEach(() => {
+  olvidarOferta();
+  olvidarRegalo();
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -213,5 +227,46 @@ describe("cómo se dice el precio", () => {
     expect(varsDelProducto({ id: "alta", usdc: "3", sorteos: 3, dias: 90 }, "es")).toEqual({ sorteos: "3 sorteos oficiales", precio: "3 dólares" });
     expect(TEXTOS_ALTA.es.altaPrimerPaquete).toBe("{sorteos} por {precio}");
     expect(TEXTOS_ALTA_PAGO.es.pagoSorteosN).toBe("{n} sorteos oficiales");
+  });
+});
+
+describe("el regalo de quien entra, para la hoja de modo", () => {
+  it("con el regalo abierto, el número del servidor", async () => {
+    const { f } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: f })).toBe(3);
+  });
+
+  it("con 0, sin el campo (el servicio de antes) o mal escrito, 0", async () => {
+    for (const bienvenida of [0, undefined, "3", -2]) {
+      olvidarRegalo();
+      const { f } = servidor(() => ({ ...PRECIOS, bienvenida }));
+      expect(await regaloAbierto({ alta: true, url: URL, fetch: f }), String(bienvenida)).toBe(0);
+    }
+  });
+
+  it("sin el acceso por el servidor en el build no se pregunta nada", async () => {
+    const { f, espia } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: false, url: URL, fetch: f })).toBe(0);
+    expect(espia).not.toHaveBeenCalled();
+  });
+
+  it("sin respuesta o de otra red, 0", async () => {
+    const caido = servidor(() => ({ motivo: "apagado" }), 503);
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: caido.f })).toBe(0);
+    const otra = servidor(() => ({ ...PRECIOS, red: "testnet", bienvenida: 3 }));
+    expect(await regaloAbierto({ alta: true, url: URL, fetch: otra.f })).toBe(0);
+  });
+
+  it("lo leído se recuerda cinco minutos", async () => {
+    const { f, espia } = servidor(() => ({ ...PRECIOS, bienvenida: 3 }));
+    let ahora = 1_000_000;
+    const o = { alta: true, url: URL, fetch: f, ahora: () => ahora };
+    expect(await regaloAbierto(o)).toBe(3);
+    ahora += CACHE_OFERTA_MS - 1;
+    expect(await regaloAbierto(o)).toBe(3);
+    expect(espia).toHaveBeenCalledTimes(1);
+    ahora += 2;
+    await regaloAbierto(o);
+    expect(espia).toHaveBeenCalledTimes(2);
   });
 });

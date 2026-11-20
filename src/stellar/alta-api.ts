@@ -20,9 +20,9 @@ import { configDelPortero } from "./patrocinio-config";
  *   alguien. El sitio nunca arma ninguno de esos datos por su cuenta.
  * - **Sin nada del navegador.** `credentials: "omit"`, sin `Referer`, sin caché.
  *
- * Lo que hay: `estado`, `canjear`, `precios`, `abrir`, `orden` y `pago`, y las de la compra con QR (`/v1/compra/*`):
- * `empezarCompra`, `cargarCompra` y `anularCompra`. Falta a propósito `sortearEnElServidor`: entra con el sorteo por el
- * servidor.
+ * Lo que hay: `estado`, `canjear`, `reclamar` (el regalo de quien entra con su cuenta), `precios`, `abrir`, `orden` y
+ * `pago`, y las de la compra con QR (`/v1/compra/*`): `empezarCompra`, `cargarCompra` y `anularCompra`. Falta a propósito
+ * `sortearEnElServidor`: entra con el sorteo por el servidor.
  */
 
 /** Cuánto se espera cada pedido. */
@@ -30,9 +30,11 @@ export const ESPERA_MS = 8_000;
 
 /**
  * Qué acceso tiene la persona al modo Oficial. `premio`: la cuenta que quien organiza nombró como ganadora de un sorteo suyo
- * ya sorteado. Activa la cuenta, trae cero sorteos y no sirve para organizar.
+ * ya sorteado. Activa la cuenta, trae cero sorteos y no sirve para organizar. Un alta nacida con los sorteos de regalo de
+ * quien entra con su cuenta (`POST /v1/alta/gratis`) llega como `admin`, que también entiende un sitio de antes. `gratis`
+ * se acepta si llega, pero el sitio no depende de él para nada: lo que se ve sale de `bienvenida` y de los sorteos.
  */
-export type Acceso = "ninguno" | "cupon" | "pago" | "admin" | "premio";
+export type Acceso = "ninguno" | "cupon" | "pago" | "admin" | "premio" | "gratis";
 /** Si la cuenta se abre en el momento (`inmediato`) o cuando el servidor lo pide (`diferido`). */
 export type Fondeo = "inmediato" | "diferido";
 /** Qué falta hacer después de un canje. */
@@ -136,6 +138,29 @@ export interface EstadoDeAlta {
   fondeo: Fondeo;
   /** Solo cuando el servidor tiene la compra con QR prendida o la persona tuvo una, y se entiende. */
   compraQr?: CompraQrDelEstado;
+  /**
+   * Los sorteos de regalo de quien entra con su cuenta: solo cuando el servidor los ofrece a esta persona y se entienden.
+   * Sin el campo (el servicio de antes), con `null` o con algo que no se entiende, no viene: el paso de siempre.
+   */
+  bienvenida?: Bienvenida;
+}
+
+/**
+ * Lo que `/v1/alta/estado` dice del regalo: `lista`, se puede recibir ahora; `llena`, no lo recibió y ahora no se da.
+ * `sorteos`: cuántos trae, como lo dice el servidor.
+ */
+export interface Bienvenida {
+  estado: "lista" | "llena";
+  sorteos: number;
+}
+
+/**
+ * Lo que dice `POST /v1/alta/gratis`: la forma del canje de un cupón y qué pasó con el regalo. `dado`: se sumaron en este
+ * pedido; `lleno`: la cuenta quedó con acceso pero el regalo no se dio; `ya`: esa persona ya lo había recibido. Un valor
+ * que no se conoce queda en `null` y el acceso se lee igual: lo que cuentan son los sorteos que dice el servidor.
+ */
+export interface ReclamoDelRegalo extends CanjeDeCupon {
+  regalo: "dado" | "lleno" | "ya" | null;
 }
 
 export interface CanjeDeCupon {
@@ -173,6 +198,11 @@ export interface PreciosDeAlta {
   paquetes: (ProductoDeAlta & { id: string })[];
   /** Solo cuando el servidor tiene prendida la compra con QR y el recargo bien escrito. */
   recargoQr?: RecargoQr;
+  /**
+   * Cuántos sorteos de regalo da hoy el servidor a quien entra, solo cuando los da (un entero desde 1). Con 0, sin el campo
+   * o con algo que no se entiende, no viene: los precios se leen igual.
+   */
+  bienvenida?: number;
 }
 
 export type EstadoDeApertura = "pedido" | "abierta" | "no-hace-falta";
@@ -270,6 +300,21 @@ const CLAVE_EN_EL_PAGO: Readonly<Record<string, string>> = {
   red: "pagoErrRed",
   "orden-cerrada": "pagoErrOrden",
 };
+
+/**
+ * Los motivos propios del regalo. `503 bienvenida-llena` (el servicio no tiene margen ni para activar) y `503
+ * altas-pausadas` (la pausa a mano) quieren decir que la cuenta no se activó: se dice así, no que se acabó el regalo,
+ * porque la persona podría creer que ya está. Los topes de intentos (`429 intentos` y `429 cupo-ip`) siguen con la clave
+ * de siempre, con los minutos que hay que esperar: son pasajeros y el regalo sigue abierto. `409 ya-tiene-acceso` va sin
+ * clave propia: el paso vuelve a leer el estado y sigue solo.
+ */
+const CLAVE_EN_EL_REGALO: Readonly<Record<string, string>> = {
+  "bienvenida-llena": "altaSinActivarAhora",
+  "altas-pausadas": "altaSinActivarAhora",
+};
+
+/** Las claves propias del regalo, para las pruebas. */
+export const CLAVES_DEL_REGALO: Readonly<Record<string, string>> = CLAVE_EN_EL_REGALO;
 
 /** Las claves propias de cada ruta del pago, para las pruebas. */
 export const CLAVES_DEL_PAGO: Readonly<{ orden: Readonly<Record<string, string>>; pago: Readonly<Record<string, string>> }> = { orden: CLAVE_EN_LA_ORDEN, pago: CLAVE_EN_EL_PAGO };
@@ -523,7 +568,18 @@ function leerPago(x: Record<string, unknown>): PagoDeOrden | null {
   return null;
 }
 
-const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin", "premio"];
+const ACCESOS: readonly string[] = ["ninguno", "cupon", "pago", "admin", "premio", "gratis"];
+
+/** Lo más que se acepta como sorteos de regalo: un número que no es razonable no se muestra. */
+const REGALO_MAXIMO = 100;
+const esCantidadDeRegalo = (x: unknown): x is number => esEnteroPositivo(x) && x <= REGALO_MAXIMO;
+
+/** El regalo del estado, o `null` si no viene, viene en `null` o no se entiende (un estado que no se conoce, sin sorteos). */
+function leerBienvenida(x: unknown): Bienvenida | null {
+  const o = objeto(x);
+  if (!o || (o.estado !== "lista" && o.estado !== "llena") || !esCantidadDeRegalo(o.sorteos)) return null;
+  return { estado: o.estado, sorteos: o.sorteos };
+}
 const SIGUE: readonly string[] = ["crear-billetera", "abrir", "activar", "lista"];
 
 function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
@@ -538,13 +594,36 @@ function leerEstado(x: Record<string, unknown>): EstadoDeAlta | null {
   if (x.fondeo !== "inmediato" && x.fondeo !== "diferido") return null;
   // La compra con QR es un dato de más: si no viene o no se entiende, el acceso se lee igual.
   const compraQr = x.compraQr === undefined ? null : leerCompraQr(x.compraQr);
-  return { acceso: x.acceso as Acceso, cuenta: x.cuenta, abierta: x.abierta, pedido: (x.pedido as string | null | undefined) ?? null, sorteos, orden, fondeo: x.fondeo, ...(compraQr ? { compraQr } : {}) };
+  // El regalo también: sin él, o sin entenderlo, el paso es el de siempre.
+  const bienvenida = leerBienvenida(x.bienvenida);
+  return {
+    acceso: x.acceso as Acceso,
+    cuenta: x.cuenta,
+    abierta: x.abierta,
+    pedido: (x.pedido as string | null | undefined) ?? null,
+    sorteos,
+    orden,
+    fondeo: x.fondeo,
+    ...(compraQr ? { compraQr } : {}),
+    ...(bienvenida ? { bienvenida } : {}),
+  };
 }
 
 function leerCanje(x: Record<string, unknown>): CanjeDeCupon | null {
   const sorteos = leerSorteos(x.sorteos);
   if (x.ok !== true || typeof x.repetido !== "boolean" || !esNumero(x.sorteosSumados) || !sorteos || !esTexto(x.sigue) || !SIGUE.includes(x.sigue)) return null;
   return { ok: true, repetido: x.repetido, sorteosSumados: x.sorteosSumados, sorteos, sigue: x.sigue as Sigue };
+}
+
+/** El regalo recibido: la forma del canje, y lo que dijo del regalo si se conoce. */
+function leerReclamo(x: Record<string, unknown>): ReclamoDelRegalo | null {
+  // El servicio manda los sorteos como en el canje (cuántos quedan y el próximo vencimiento). Si llegan solo como cuántos
+  // quedan, se leen igual, sin vencimiento: la persona no se queda sin su acceso por la forma de un dato.
+  const n = x.sorteos;
+  const canje = leerCanje(esNumero(n) && Number.isInteger(n) && n >= 0 ? { ...x, sorteos: { quedan: n, proximoVence: null } } : x);
+  if (!canje) return null;
+  const regalo = x.regalo === "dado" || x.regalo === "lleno" || x.regalo === "ya" ? x.regalo : null;
+  return { ...canje, regalo };
 }
 
 /**
@@ -570,7 +649,9 @@ function leerPrecios(x: Record<string, unknown>): PreciosDeAlta | null {
   }
   // Un recargo mal escrito no rechaza los precios: no se abre el QR, y lo demás se vende igual.
   const recargo = leerRecargoQr(x.recargoQr);
-  return { red: x.red, pago: x.pago, alta, paquetes, ...(recargo ? { recargoQr: recargo } : {}) };
+  // El regalo es un dato de más: con 0, sin él o mal escrito, los precios se leen igual y no viene.
+  const bienvenida = esCantidadDeRegalo(x.bienvenida) ? x.bienvenida : null;
+  return { red: x.red, pago: x.pago, alta, paquetes, ...(recargo ? { recargoQr: recargo } : {}), ...(bienvenida ? { bienvenida } : {}) };
 }
 
 /** Un monto del recargo: con punto, de 0 a 50, como lo acepta el servidor. */
@@ -593,6 +674,14 @@ export function estado(token: string, o: OpcionesDeAlta = {}): Promise<Resultado
 /** `POST /v1/alta/cupon`: canjea un cupón. El código va en el cuerpo, nunca en la dirección. */
 export function canjear(token: string, cupon: string, o: OpcionesDeAlta = {}): Promise<ResultadoDeAlta<CanjeDeCupon>> {
   return llamar("/v1/alta/cupon", "POST", token, { cupon }, o, leerCanje);
+}
+
+/**
+ * `POST /v1/alta/gratis`: activa el acceso de la persona y le da los sorteos de regalo, una sola vez por persona (pedirlo
+ * otra vez no suma nada). El cuerpo va vacío: quién es lo dice la sesión. Contesta con la forma del canje de un cupón.
+ */
+export function reclamar(token: string, o: OpcionesDeAlta = {}): Promise<ResultadoDeAlta<ReclamoDelRegalo>> {
+  return llamar("/v1/alta/gratis", "POST", token, {}, o, leerReclamo, CLAVE_EN_EL_REGALO);
 }
 
 /** `GET /v1/alta/precios`: abierta, sin sesión. */

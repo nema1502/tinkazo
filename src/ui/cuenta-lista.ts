@@ -1,6 +1,7 @@
 import { chooseLang, getLang, onLangChange, t } from "../i18n";
 import { altaLibre } from "../stellar/alta-config";
 import {
+  type Bienvenida,
   type CanjeDeCupon,
   type ErrorDeAlta,
   ESPERA_MS,
@@ -8,7 +9,11 @@ import {
   type OrdenAbierta,
   type OrdenDePago,
   type PagoDeOrden,
+  type ReclamoDelRegalo,
   type ResultadoDeAlta,
+  type Sigue,
+  type SorteosDeAlta,
+  fechaDeAlta,
 } from "../stellar/alta-api";
 import type { Oferta, ProductoALaVenta } from "../stellar/alta-oferta";
 import { network } from "../stellar/config";
@@ -137,6 +142,11 @@ export interface AccesoDelPaso {
   estado(): Promise<ResultadoDeAlta<EstadoDeAlta>>;
   /** Canjea un cupón ya normalizado (`POST /v1/alta/cupon`). */
   canjear(codigo: string): Promise<ResultadoDeAlta<CanjeDeCupon>>;
+  /**
+   * El regalo de quien entra con su cuenta (`POST /v1/alta/gratis`): activa el acceso y suma los sorteos, una vez por
+   * persona. Sin esto, el paso no ofrece el regalo aunque el estado lo traiga.
+   */
+  reclamar?(): Promise<ResultadoDeAlta<ReclamoDelRegalo>>;
   /** El cupón guardado en la pestaña (el del enlace, o uno escrito), normalizado, o `null`. */
   cuponGuardado(): string | null;
   guardarCupon(codigo: string): void;
@@ -240,6 +250,18 @@ function arregloDe(e: ErrorDeAlta): AccesoEnLaVista["arreglo"] {
   return "probar";
 }
 
+/**
+ * Los textos del pedido del regalo que no son los del canje: el de sin servicio y el del tope de intentos hablan de
+ * cupones y pagos, y quien pide el regalo no usó ninguno. Las demás claves, como vienen.
+ */
+const CLAVE_DEL_PEDIDO_DEL_REGALO: Readonly<Record<string, string>> = {
+  altaErrServicio: "clErrFallo",
+  altaErrIntentos: "altaRegaloEspera",
+  altaErrIntentos1: "altaRegaloEspera1",
+};
+const claveDelPedidoDelRegalo = (clave: string): string =>
+  (Object.prototype.hasOwnProperty.call(CLAVE_DEL_PEDIDO_DEL_REGALO, clave) ? CLAVE_DEL_PEDIDO_DEL_REGALO[clave] : undefined) ?? clave;
+
 /** La marca de `sessionStorage` de un código mandado (sin el correo). Es la de `MARCAS_DE_LA_CUENTA.codigo`. */
 export const MARCA_CODIGO = "tinkazo.cl.codigo";
 
@@ -285,7 +307,7 @@ const vacio = (): EstadoOficial => ({ activacion: "no-se-sabe", proteccion: "no-
 function texto(x: Texto): string {
   let s = t(x.clave);
   for (const [k, v] of Object.entries(x.vars ?? {})) s = s.replaceAll(`{${k}}`, v);
-  return s;
+  return x.luego ? `${s} ${texto(x.luego)}` : s;
 }
 
 function leerMarca(): boolean {
@@ -416,6 +438,17 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
      */
     orden: null as OrdenAbierta | null,
     cobro: null as PagoDeOrden | null,
+    /** El regalo, como lo dijo el último estado: solo si el acceso sabe pedirlo (`acceso.reclamar`). */
+    bienvenida: null as Bienvenida | null,
+    /** Los sorteos que dejó el regalo recibido en este paso, para la línea del final. */
+    sorteosDelRegalo: null as SorteosDeAlta | null,
+    /** El servidor activó la cuenta pero el regalo no pasó (`regalo: "lleno"`): el final lo dice. */
+    regaloLleno: false,
+    /**
+     * El acceso de este paso lo trajo el regalo: lo que sigue no nombra ningún cupón. Lo marca el pedido del regalo, nunca
+     * el nombre del acceso que conteste el servidor (que para un alta del regalo es `admin`).
+     */
+    delRegalo: false,
   };
   let lecturasDeAcceso = 0;
   /**
@@ -610,9 +643,19 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       canjeado: acc.canjeado,
       cadena: acc.cadena,
       fallaTrasCanje: acc.fallo !== null,
+      ...(acc.delRegalo ? { delRegalo: true } : {}),
       ...(compraEnElBuild ? { pago: pagoEnLaVista() } : {}),
+      ...(acc.bienvenida ? { bienvenida: { ...acc.bienvenida } } : {}),
+      ...(acc.sorteosDelRegalo ? { sorteosDelRegalo: sorteosParaLaVista(acc.sorteosDelRegalo) } : {}),
     },
   });
+
+  /** Los sorteos del regalo como los dice la línea del final: la fecha, ya en el idioma de la persona. */
+  function sorteosParaLaVista(s: SorteosDeAlta): NonNullable<AccesoEnLaVista["sorteosDelRegalo"]> {
+    const v = s.proximoVence;
+    const fecha = v ? fechaDeAlta(v.fecha, getLang()) : "";
+    return { quedan: s.quedan, vence: v && fecha ? { fecha, cuantos: v.cuantos } : null, ...(acc.regaloLleno ? { lleno: true } : {}) };
+  }
 
   function pagoEnLaVista(): PagoEnLaVista {
     return {
@@ -1129,6 +1172,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       acc.fondeo = r.datos.fondeo;
       acc.error = null;
       acc.arreglo = "probar";
+      // El regalo solo se ofrece si hay cómo pedirlo. Sin el campo (el servicio de antes), nada cambia.
+      acc.bienvenida = acceso?.reclamar ? (r.datos.bienvenida ?? null) : null;
       return;
     }
     acc.estado = "error";
@@ -1625,12 +1670,19 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
     acc.codigoMalo = null;
     acc.estado = "con";
     acc.por = "cupon";
+    acc.delRegalo = false;
     acc.pideCupon = false;
     acc.canjeado = r.datos.sorteosSumados > 0 ? r.datos.sorteosSumados : r.datos.sorteos.quedan;
     acc.escribiendo = false;
     campoCupon.value = "";
-    const sigue = r.datos.sigue;
-    // Crear la billetera y abrir la cuenta desde el servidor todavía no están: el cupón quedó, y se sigue al volver.
+    await seguirTrasElAcceso(r.datos.sigue);
+  }
+
+  /**
+   * Lo que sigue cuando el servidor ya dio el acceso (el canje de un cupón o el regalo), según su `sigue`. Crear la
+   * billetera y abrir la cuenta desde el servidor todavía no están: el acceso quedó, y se sigue al volver.
+   */
+  async function seguirTrasElAcceso(sigue: Sigue): Promise<void> {
     const desde: PasoDelCanje | null = sigue === "lista" ? "estado" : sigue === "activar" && acc.fondeo === "inmediato" ? "pedido" : null;
     if (!desde) {
       acc.fallo = "estado";
@@ -1638,6 +1690,86 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       return;
     }
     await seguirCadena(desde);
+  }
+
+  /**
+   * «Activar mi cuenta» con el regalo a la vista: lo pide al servidor y, con el acceso dado, sigue la misma cadena que el
+   * canje de un cupón (`seguirTrasElAcceso`). Pedirlo otra vez no suma nada (el servidor lo da una vez por persona), así
+   * que un doble toque o volver a abrir el paso no hacen daño; mientras corre, la principal está ocupada.
+   * - `409 ya-tiene-acceso`: se vuelve a leer el estado y, con el acceso, se sigue solo.
+   * - Lo demás: su texto en lugar de la línea y lo que lo arregla. El servicio sin margen o en pausa dice que la cuenta no
+   *   se activó (`altaSinActivarAhora`), un tope de intentos dice cuántos minutos esperar, y sin red, que no se pudo.
+   *   Con todos esos, «Activar mi cuenta» vuelve a probar.
+   */
+  async function usarBienvenida(): Promise<void> {
+    if (!acceso?.reclamar || st.corre !== null || acc.cadena || acc.fallo) return;
+    const pedir = acceso.reclamar;
+    acc.error = null;
+    st.falla = null;
+    st.aviso = null;
+    correr("reclamando");
+    pintar();
+    let r: ResultadoDeAlta<ReclamoDelRegalo>;
+    try {
+      r = await conTopeSimple(pedir.call(acceso), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      r = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+    }
+    if (cerrado) return;
+    correr(null);
+    if (!r.ok) {
+      if (r.motivo === "ya-tiene-acceso") {
+        // El acceso ya estaba (otra pestaña, un toque de antes): lo que sigue es del regalo, sea cual sea su nombre.
+        acc.delRegalo = true;
+        return seguirConElAccesoDeAhora();
+      }
+      // Un servicio que no conoce el regalo (volvió a una versión de antes): la caja del cupón, como antes del regalo.
+      if (r.estado === 404) {
+        acc.bienvenida = null;
+        pintar();
+        return;
+      }
+      // Los textos de sin servicio y del tope de intentos hablan de cupones y pagos: acá lo que no salió es activar la cuenta.
+      acc.error = { clave: claveDelPedidoDelRegalo(r.clave), vars: r.vars };
+      acc.arreglo = arregloDe(r);
+      pintar();
+      return;
+    }
+    // El servidor ya dio el acceso: desde acá, como después de un canje. Por qué lo tiene lo dirá el próximo estado (para
+    // un alta del regalo, `admin`): lo que ve la persona sale de la marca del regalo y de los sorteos que contestó.
+    acceso.refrescarCupo();
+    acc.estado = "con";
+    acc.delRegalo = true;
+    acc.pideCupon = false;
+    acc.bienvenida = null;
+    acc.canjeado = r.datos.sorteosSumados > 0 ? r.datos.sorteosSumados : r.datos.sorteos.quedan;
+    acc.sorteosDelRegalo = r.datos.sorteos;
+    acc.regaloLleno = r.datos.regalo === "lleno";
+    await seguirTrasElAcceso(r.datos.sigue);
+  }
+
+  /**
+   * El servidor dijo que la persona ya tiene acceso: se le pregunta el estado de ahora y, si lo confirma, se sigue la
+   * cadena desde donde está la cuenta (sin pedido de crearla todavía, a esperarlo). Si no lo confirma, la caja que toque.
+   */
+  async function seguirConElAccesoDeAhora(): Promise<void> {
+    if (!acceso) return;
+    correr("revisando");
+    pintar();
+    let e: ResultadoDeAlta<EstadoDeAlta>;
+    try {
+      e = await conTopeSimple(acceso.estado(), TOPE_LECTURA_SERVIDOR_MS);
+    } catch {
+      e = { ok: false, clave: "altaErrServicio", vars: {}, motivo: "sin-red", estado: 0 };
+    }
+    if (cerrado) return;
+    correr(null);
+    aplicarAcceso(e);
+    if (!e.ok || e.datos.acceso === "ninguno") {
+      pintar();
+      return;
+    }
+    await seguirTrasElAcceso(st.est.activacion === "lista" ? "lista" : "activar");
   }
 
   /**
@@ -1940,6 +2072,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
         return;
       case "usar-cupon":
         return usarCupon();
+      case "reclamar":
+        return usarBienvenida();
       case "leer-acceso":
         return leerAcceso();
       case "seguir-cupon":
