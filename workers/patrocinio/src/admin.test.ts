@@ -4,6 +4,7 @@ import { Administracion, TECHO_ALTAS_DIA, TECHO_SORTEOS_DIA, atenderAdmin, type 
 import { LOTE, SECRETO_CUPON, T0, codigo, montarAltas } from "./altas-prueba";
 import { TECHO_CUPONES_DIA, mostrar } from "./altas";
 import { DIA_MS, leerConfig } from "./config";
+import { limitesDePagos, topeEnCaliente } from "./pagos-uso";
 
 const OPERAR = "o".repeat(40);
 const CUPONES = "k".repeat(40);
@@ -320,5 +321,184 @@ describe("la puerta de administración del Worker (atenderAdmin)", () => {
         },
       }),
     ).toEqual([500, { motivo: "interno" }]);
+  });
+
+  it("las rutas de los pagos son de la clave de operar: la de cupones no pausa ni mueve topes, y cada una llega con su acción", async () => {
+    const e = espia();
+    expect(await correr(pedido("/v1/admin/pagos/pausar", CUPONES, { body: "{}" }), e)).toEqual([401, { motivo: "clave" }]);
+    expect(await correr(pedido("/v1/admin/pagos/tope", null, { body: "{}" }), e)).toEqual([401, { motivo: "clave" }]);
+    expect(await correr(pedido("/v1/admin/pagos/pausar", OPERAR, { method: "GET" }), e)).toEqual([405, { motivo: "metodo" }]);
+    expect(e.vistos).toHaveLength(0);
+    await correr(pedido("/v1/admin/pagos/pausar", OPERAR, { body: JSON.stringify({ forma: "retiro" }) }), e);
+    await correr(pedido("/v1/admin/pagos/reanudar", OPERAR, { body: JSON.stringify({ forma: "todas" }) }), e);
+    await correr(pedido("/v1/admin/pagos/tope", OPERAR, { body: JSON.stringify({ presupuestoXlm: 3 }) }), e);
+    expect(e.vistos).toEqual([
+      ["pagos-pausar", { forma: "retiro" }],
+      ["pagos-reanudar", { forma: "todas" }],
+      ["pagos-tope", { presupuestoXlm: 3 }],
+    ]);
+    // Sin la clave de operar cargada, las rutas no existen.
+    expect(await correr(pedido("/v1/admin/pagos/pausar", CUPONES, { body: "{}" }), e, cfg, { CUPONES_TOKEN: CUPONES })).toEqual([
+      404,
+      { motivo: "no-existe" },
+    ]);
+    // Y en testnet siguen sin existir.
+    expect(await correr(pedido("/v1/admin/pagos/pausar", OPERAR, { body: "{}" }), e, leerConfig({ RED: "testnet", ALTAS: "1" }))).toBeNull();
+  });
+});
+
+describe("pausar y reanudar los pagos de premios y retiros", () => {
+  const pausas = (m: ReturnType<typeof montar>) => ["pagos_premio_pausado", "retiros_pausado", "altas_premio_pausado"].map((k) => m.cupos.ajuste(k));
+
+  it("pausa cada forma por separado, con las variables de los pagos apagadas, y la reanuda", async () => {
+    const m = montar();
+    expect(m.cfg.pagosPremio || m.cfg.retiros || m.cfg.altasPremio).toBe(false);
+    expect(await m.admin.atender("pagos-pausar", { forma: "retiro" })).toEqual({
+      estado: 200,
+      cuerpo: { pausadas: { premio: false, retiro: true, "alta-premio": false } },
+    });
+    expect(pausas(m)).toEqual([undefined, "1", undefined]);
+    expect(await m.admin.atender("pagos-pausar", { forma: "premio" })).toMatchObject({
+      estado: 200,
+      cuerpo: { pausadas: { premio: true, retiro: true, "alta-premio": false } },
+    });
+    expect(await m.admin.atender("pagos-pausar", { forma: "alta-premio" })).toMatchObject({
+      cuerpo: { pausadas: { premio: true, retiro: true, "alta-premio": true } },
+    });
+    expect(await m.admin.atender("pagos-reanudar", { forma: "retiro" })).toMatchObject({
+      cuerpo: { pausadas: { premio: true, retiro: false, "alta-premio": true } },
+    });
+    expect(pausas(m)).toEqual(["1", "0", "1"]);
+  });
+
+  it("todas pausa y reanuda las tres juntas, y repetirlo no cambia nada", async () => {
+    const m = montar();
+    const todas = { pausadas: { premio: true, retiro: true, "alta-premio": true } };
+    expect(await m.admin.atender("pagos-pausar", { forma: "todas" })).toEqual({ estado: 200, cuerpo: todas });
+    expect(await m.admin.atender("pagos-pausar", { forma: "todas" })).toEqual({ estado: 200, cuerpo: todas });
+    expect(pausas(m)).toEqual(["1", "1", "1"]);
+    expect(await m.admin.atender("pagos-reanudar", { forma: "todas" })).toEqual({
+      estado: 200,
+      cuerpo: { pausadas: { premio: false, retiro: false, "alta-premio": false } },
+    });
+    expect(pausas(m)).toEqual(["0", "0", "0"]);
+  });
+
+  it("no corta las altas a mano, las ventas ni lo demás: solo mueve sus tres ajustes", async () => {
+    const m = montar();
+    const sinPausas = () => JSON.stringify(m.cupos.exportar(true).ajustes?.filter((a) => !String(a.clave).includes("pausado")));
+    const antes = sinPausas();
+    await m.admin.atender("pagos-pausar", { forma: "todas" });
+    expect(sinPausas()).toBe(antes);
+    expect(m.cupos.ajuste("altas_pausadas")).toBeUndefined();
+    expect(m.cupos.ajuste("modo")).toBeUndefined();
+  });
+
+  it("una forma desconocida, sin forma o que no es un texto da 400 cuerpo y no escribe nada", async () => {
+    const m = montar();
+    for (const malo of [{}, { forma: "otra" }, { forma: "Premio" }, { forma: ["premio"] }, { forma: 1 }, { forma: null }]) {
+      expect(await m.admin.atender("pagos-pausar", malo), JSON.stringify(malo)).toEqual({ estado: 400, cuerpo: { motivo: "cuerpo" } });
+      expect(await m.admin.atender("pagos-reanudar", malo)).toEqual({ estado: 400, cuerpo: { motivo: "cuerpo" } });
+    }
+    expect(pausas(m)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("queda en la bitácora con la forma y nada más", async () => {
+    const m = montar();
+    await m.admin.atender("pagos-pausar", { forma: "retiro" });
+    await m.admin.atender("pagos-reanudar", { forma: "retiro" });
+    expect(m.adminAnotado.filter(([e]) => e === "pagos-pausa")).toEqual([
+      ["pagos-pausa", { forma: "retiro", pausada: 1 }],
+      ["pagos-pausa", { forma: "retiro", pausada: 0 }],
+    ]);
+  });
+
+  it("con las altas apagadas no atiende, como todo lo demás de administración", async () => {
+    const m = montar({ ALTAS: "0" });
+    expect(await m.admin.atender("pagos-pausar", { forma: "todas" })).toEqual({ estado: 503, cuerpo: { motivo: "apagado" } });
+    expect(await m.admin.atender("pagos-tope", { rechazosPorDia: 5 })).toEqual({ estado: 503, cuerpo: { motivo: "apagado" } });
+  });
+});
+
+describe("mover en caliente los topes de los pagos", () => {
+  const ajustes = (m: ReturnType<typeof montar>) => ["tope_pagos_stroops", "pagos_rechazos_dia", "altas_premio_dia"].map((k) => m.cupos.ajuste(k));
+
+  it("sin ajustes valen los de la configuración, y cada campo se mueve solo", async () => {
+    const m = montar();
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 3 })).toEqual({
+      estado: 200,
+      cuerpo: { topeStroops: 30_000_000, rechazosPorDia: 20, altasPremioDia: 100 },
+    });
+    expect(await m.admin.atender("pagos-tope", { rechazosPorDia: 50 })).toEqual({
+      estado: 200,
+      cuerpo: { topeStroops: 30_000_000, rechazosPorDia: 50, altasPremioDia: 100 },
+    });
+    expect(await m.admin.atender("pagos-tope", { altasPremioDia: 250 })).toEqual({
+      estado: 200,
+      cuerpo: { topeStroops: 30_000_000, rechazosPorDia: 50, altasPremioDia: 250 },
+    });
+    expect(ajustes(m)).toEqual(["30000000", "50", "250"]);
+  });
+
+  it("los tres a la vez, y el presupuesto puede traer decimales de XLM", async () => {
+    const m = montar();
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 2.5, rechazosPorDia: 10, altasPremioDia: 30 })).toEqual({
+      estado: 200,
+      cuerpo: { topeStroops: 25_000_000, rechazosPorDia: 10, altasPremioDia: 30 },
+    });
+    expect(m.adminAnotado.filter(([e]) => e === "pagos-tope")).toEqual([
+      ["pagos-tope", { topeStroops: 25_000_000, rechazosPorDia: 10, altasPremioDia: 30 }],
+    ]);
+  });
+
+  it("(ataque) más que su techo (10 XLM, 100 y 300) da 400 techo y no escribe nada, tampoco de los otros campos", async () => {
+    const m = montar();
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 10.5 })).toEqual({
+      estado: 400,
+      cuerpo: { motivo: "techo", que: "presupuesto", max: 10 },
+    });
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 3, rechazosPorDia: 101 })).toEqual({
+      estado: 400,
+      cuerpo: { motivo: "techo", que: "rechazos", max: 100 },
+    });
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 3, altasPremioDia: 301 })).toEqual({
+      estado: 400,
+      cuerpo: { motivo: "techo", que: "altas", max: 300 },
+    });
+    expect(ajustes(m)).toEqual([undefined, undefined, undefined]);
+    // Justo en el techo sí.
+    expect(await m.admin.atender("pagos-tope", { presupuestoXlm: 10, rechazosPorDia: 100, altasPremioDia: 300 })).toEqual({
+      estado: 200,
+      cuerpo: { topeStroops: 100_000_000, rechazosPorDia: 100, altasPremioDia: 300 },
+    });
+  });
+
+  it("un cuerpo sin ningún campo, o con un valor que no es un número entero positivo, da 400 cuerpo y no escribe nada", async () => {
+    const m = montar();
+    const malos = [
+      {},
+      { otra: 1 },
+      { presupuestoXlm: 0 },
+      { presupuestoXlm: -1 },
+      { presupuestoXlm: "3" },
+      { presupuestoXlm: Number.NaN },
+      { presupuestoXlm: null },
+      { rechazosPorDia: 0 },
+      { rechazosPorDia: 2.5 },
+      { rechazosPorDia: "20" },
+      { altasPremioDia: -5 },
+      { presupuestoXlm: 3, altasPremioDia: 1.5 },
+    ];
+    for (const malo of malos) {
+      expect(await m.admin.atender("pagos-tope", malo), JSON.stringify(malo)).toEqual({ estado: 400, cuerpo: { motivo: "cuerpo" } });
+    }
+    expect(ajustes(m)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("lo que se movió lo ve el portero de los pagos", async () => {
+    const m = montar();
+    await m.admin.atender("pagos-tope", { presupuestoXlm: 4, rechazosPorDia: 7 });
+    expect(limitesDePagos(m.cfg, (k) => m.cupos.ajuste(k))).toEqual({ topePagos: 40_000_000, rechazosPorDia: 7 });
+    expect(topeEnCaliente(m.cupos.ajuste("altas_premio_dia"), m.cfg.altasPremioDia, 300)).toBe(100);
   });
 });

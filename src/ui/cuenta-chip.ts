@@ -32,6 +32,11 @@ export interface OpcionesDelChip {
   titulo?: string;
   /** Acaba de entrar: aparece con un pulso corto. */
   recien?: boolean;
+  /**
+   * Sin sesión en este modo, pero la cuenta quedó abierta en el otro (nema1502/tinkazo#90): el chip dice dónde está
+   * (`texto`, con el modo ya puesto), `aria` dice el sentido completo, y tocarlo manda para allá.
+   */
+  enOtroModo?: { texto: string; aria: string } | undefined;
 }
 
 /** Una persona, para "Entrar" y para la cara de una página que no sabe quién es. */
@@ -108,13 +113,14 @@ export function crearChip(e: EstadoCuenta, o: OpcionesDelChip): HTMLElement {
 
   if (e.estado === "fuera") {
     el.classList.add("mini");
-    el.innerHTML = `<span class="cc-ico" aria-hidden="true">${PERSONA}</span><span class="cc-t">${esc(tx("cuentaEntrar"))}</span>`;
-    el.setAttribute("aria-label", tx("cuentaEntrarAria"));
+    const otro = o.enOtroModo;
+    el.innerHTML = `<span class="cc-ico" aria-hidden="true">${PERSONA}</span><span class="cc-t">${esc(otro ? otro.texto : tx("cuentaEntrar"))}</span>`;
+    el.setAttribute("aria-label", otro ? otro.aria : tx("cuentaEntrarAria"));
     return el;
   }
 
   if (e.estado === "conectando" || e.estado === "retomando") {
-    const texto = tx(e.estado === "conectando" ? "connecting" : "cuentaRetomando");
+    const texto = tx(e.estado === "conectando" ? (e.terminando ? "loginTerminando" : "connecting") : "cuentaRetomando");
     el.classList.add("mini");
     el.setAttribute("role", "status");
     el.setAttribute("aria-busy", "true");

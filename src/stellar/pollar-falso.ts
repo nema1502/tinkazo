@@ -4,9 +4,12 @@
  * bolivianos (`wallet-pollar-carga.test.ts`). Imita lo que esas pruebas necesitan de `PollarClient` de `@pollar/core`
  * 0.12.0: la billetera, la red del cliente, la sesión, las suscripciones, `cosign` con su `recovery` y los métodos de la
  * carga, que fallan si la prueba no dice qué contestan. Cada método anota su nombre en `llamadas` (y sus argumentos en
- * `argumentos`), y hace lo que diga `impl[nombre]` o, si no hay, lo de abajo. `approve`, `reject` y `cancel` fallan
- * siempre: la activación nunca los usa. Solo lo usan las pruebas; nada de la página lo importa. No importa
- * `@pollar/core` ni la billetera: se carga dentro de `vi.hoisted`, antes de los `vi.mock`.
+ * `argumentos`), y hace lo que diga `impl[nombre]` o, si no hay, lo de abajo. `approve` y `cancel` fallan siempre, y
+ * `reject` también salvo que la prueba diga qué hace: solo el voto por contenido rechaza, y solo el pedido de su llamada.
+ * Como el kit, copia `cosignManual` de la configuración en `_cosignManual`, salvo con `kitTomaElVotoAMano` en falso (un
+ * kit que ignora el campo). `getTxStatus` y `submitTx` fallan si la prueba no dice qué contestan. Solo lo usan las
+ * pruebas; nada de la página lo importa. No importa `@pollar/core` ni la billetera: se carga dentro de `vi.hoisted`,
+ * antes de los `vi.mock`.
  */
 
 type Impl = (...args: any[]) => unknown;
@@ -41,6 +44,10 @@ export interface EstadoPollarFalso {
   cofirma: { pending: unknown[]; lastResolved?: unknown };
   /** El último estado de la máquina de transacciones: se repite al suscribirse, como en el kit. */
   transaccion: unknown;
+  /** Quien atiende las confirmaciones de firma (`onConfirmationRequest`): la prueba le entrega pedidos, como el kit. */
+  alConfirmar: ((pendientes: unknown[]) => void) | null;
+  /** El kit toma `cosignManual` de la configuración, como 0.12.0. En falso, un kit que lo ignora. */
+  kitTomaElVotoAMano: boolean;
 }
 
 export const PASSPHRASE_MAINNET = "Public Global Stellar Network ; September 2015";
@@ -62,6 +69,8 @@ export function estadoPollarFalso(): EstadoPollarFalso {
     oyentes: { billetera: new Set(), cofirma: new Set(), transaccion: new Set(), sesion: new Set() },
     cofirma: { pending: [] },
     transaccion: null,
+    alConfirmar: null,
+    kitTomaElVotoAMano: true,
   };
 }
 
@@ -86,6 +95,8 @@ export function reiniciar(h: EstadoPollarFalso): void {
   h.oyentes.sesion.clear();
   h.cofirma = { pending: [] };
   h.transaccion = null;
+  h.alConfirmar = null;
+  h.kitTomaElVotoAMano = true;
 }
 
 /** Lo que devuelve `getAuthState()`: el paso, si Pollar ya revalidó la sesión, y su token. */
@@ -146,9 +157,12 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
 
   return class ClienteDePollarFalso {
     apiKeyHash = "huella";
+    /** Como el kit (`this._cosignManual = config.cosignManual === true`), salvo que la prueba diga que no lo toma. */
+    _cosignManual?: boolean;
     constructor(config: Record<string, unknown>) {
       h.construidos++;
       h.config = config;
+      if (h.kitTomaElVotoAMano) this._cosignManual = config.cosignManual === true;
     }
     getWallet(): BilleteraFalsa | null {
       return h.billetera ? { ...h.billetera } : null;
@@ -161,8 +175,11 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     }
     ready = asincrono("ready", () => undefined);
     refreshWalletState = asincrono("refreshWalletState", () => h.billetera?.provisioning ?? null);
-    onConfirmationRequest(): () => void {
-      return () => undefined;
+    onConfirmationRequest(cb?: (pendientes: unknown[]) => void): () => void {
+      h.alConfirmar = cb ?? null;
+      return () => {
+        if (h.alConfirmar === cb) h.alConfirmar = null;
+      };
     }
     onAuthStateChange(cb: (s: unknown) => void): () => void {
       h.oyentes.sesion.add(cb);
@@ -192,6 +209,9 @@ export function clienteFalso(h: EstadoPollarFalso): new (config: Record<string, 
     logout = asincrono("logout", () => undefined);
     signAndSubmitTx = asincrono("signAndSubmitTx", () => ({ status: "success", hash: "deadbeef" }));
     signTx = asincrono("signTx", () => ({ status: "signed", signedXdr: "FIRMADA" }));
+    // El desenlace del voto por contenido: cada prueba dice qué contesta la red.
+    getTxStatus = asincrono("getTxStatus", nuncaSeLlama("getTxStatus"));
+    submitTx = asincrono("submitTx", nuncaSeLlama("submitTx"));
     // La carga con bolivianos (`wallet-pollar-carga.test.ts`): cada prueba dice qué contesta cada una.
     setTrustline = asincrono("setTrustline", nuncaSeLlama("setTrustline"));
     getRampRoutes = asincrono("getRampRoutes", nuncaSeLlama("getRampRoutes"));

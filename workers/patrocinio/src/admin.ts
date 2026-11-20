@@ -20,6 +20,11 @@
  *     POST /v1/admin/compras/cerrar   {compra, ref} | {usuario, ref}       200 {ok, repetido, compra, producto, motivo, cargada, reemplazadas}
  *     POST /v1/admin/compras/soltar   {ref}                                200 {ok, soltadas, reserva}
  *          404 compra   409 orden-con-pago | compra-pagada   502 red   (anula una compra con QR que no se pagó)
+ *     POST /v1/admin/pagos/pausar | reanudar  {forma:"premio"|"retiro"|"alta-premio"|"todas"}   200 {pausadas:{premio, retiro, "alta-premio"}}
+ *          (pausa lo nuevo de esa forma sin desplegar: no corta sellos, sorteos ni el reenvío de lo ya reservado. Anda también con
+ *          las variables de los pagos apagadas: la pausa queda en los ajustes y sobrevive a un despliegue)
+ *     POST /v1/admin/pagos/tope  {presupuestoXlm?, rechazosPorDia?, altasPremioDia?}   200 {topeStroops, rechazosPorDia, altasPremioDia}
+ *          400 techo (10 XLM, 100 y 300: más hay que desplegar)   (mueve en caliente los topes de los pagos)
  *
  * La clave de operar no crea cupones ni da sorteos, y la de cupones no apaga ni pausa nada. Sin la clave de una ruta
  * cargada, esa ruta no existe (404, como las de administración de siempre). Solo en mainnet con `ALTAS=1`: en testnet
@@ -34,9 +39,10 @@ import { StrKey } from "@stellar/stellar-sdk/base";
 import { type Altas, FORMA_LOTE, MAX_CODIGOS_POR_PEDIDO, SECRETO_MINIMO, huella, normalizar } from "./altas";
 import { AJUSTE_VENTA_PAUSADA, type Cobros, type LectorDeCobros, normalizarOrden, usdcTexto } from "./cobros";
 import { type ComprasQr, TECHO_PILOTO } from "./compras";
-import { type Config } from "./config";
+import { type Config, TECHO_ALTAS_PREMIO_DIA, TECHO_PAGOS_RECHAZADOS_DIA, TECHO_TOPE_PAGOS_STROOPS } from "./config";
 import { type Cupos, entre } from "./cupos";
 import { json } from "./http";
+import { AJUSTE_ALTAS_PREMIO_DIA, AJUSTE_RECHAZOS_DIA, AJUSTE_TOPE_PAGOS, AJUSTES_DE_PAUSA, limitesDePagos, topeEnCaliente } from "./pagos-uso";
 import type { Red } from "./red";
 import { AJUSTE_PAUSA } from "./rutas-altas";
 import type { Respuesta } from "./servicio";
@@ -45,6 +51,9 @@ import type { Respuesta } from "./servicio";
 export const TECHO_ALTAS_DIA = 50;
 /** Sorteos oficiales dados a mano por día (UTC). */
 export const TECHO_SORTEOS_DIA = 500;
+/** Las formas que se pausan con `pagos/pausar`. `todas` las junta. */
+const FORMAS_DE_PAUSA = ["premio", "retiro", "alta-premio"] as const;
+const STROOPS_POR_XLM = 10_000_000;
 /** Lo más corto que se acepta de una clave de administración. */
 export const CLAVE_MINIMA = 32;
 /** Un pedido de 500 códigos pesa unos 10 KB. */
@@ -71,7 +80,10 @@ export type AccionAdmin =
   | "piloto-cambiar"
   | "piloto-lista"
   | "compras-cerrar"
-  | "compras-soltar";
+  | "compras-soltar"
+  | "pagos-pausar"
+  | "pagos-reanudar"
+  | "pagos-tope";
 
 /** El id de una operación de Horizon: un entero más grande que uno seguro de JavaScript, siempre en texto. */
 const OPERACION = /^\d{1,30}$/;
@@ -153,9 +165,72 @@ export class Administracion {
         return this.cerrarCompra(o);
       case "compras-soltar":
         return this.soltarCompras(o);
+      case "pagos-pausar":
+      case "pagos-reanudar":
+        return this.pausarPagos(accion === "pagos-pausar", o);
+      case "pagos-tope":
+        return this.topePagos(o);
       default:
         return r(404, { motivo: "accion" });
     }
+  }
+
+  /**
+   * `POST /v1/admin/pagos/pausar` y `reanudar` `{forma}`: pausa o reanuda lo nuevo de una forma de pago (`premio`, `retiro` o
+   * `alta-premio`) o de las tres a la vez (`todas`). Es un ajuste, no una variable: anda sin desplegar y también con las variables
+   * de los pagos apagadas, así el portero puede quedar pausado antes de prender nada. No corta los sellos, los sorteos ni el
+   * reenvío de lo que ya está reservado. Otra vez es lo mismo. La bitácora lleva la forma y nada más.
+   */
+  private pausarPagos(pausar: boolean, o: Record<string, unknown>): Respuesta {
+    const { forma } = o;
+    const formas = forma === "todas" ? FORMAS_DE_PAUSA : FORMAS_DE_PAUSA.filter((f) => f === forma);
+    if (formas.length === 0) return r(400, { motivo: "cuerpo" });
+    const ahora = this.reloj();
+    this.d.cupos.transaccion(() => {
+      for (const f of formas) this.d.cupos.fijarAjuste(AJUSTES_DE_PAUSA[f], pausar ? "1" : "0", ahora);
+    });
+    this.registrar("pagos-pausa", { forma: String(forma), pausada: pausar ? 1 : 0 });
+    const hoy = (f: (typeof FORMAS_DE_PAUSA)[number]) => this.d.cupos.ajuste(AJUSTES_DE_PAUSA[f]) === "1";
+    return r(200, { pausadas: { premio: hoy("premio"), retiro: hoy("retiro"), "alta-premio": hoy("alta-premio") } });
+  }
+
+  /**
+   * `POST /v1/admin/pagos/tope` `{presupuestoXlm?, rechazosPorDia?, altasPremioDia?}`: mueve en caliente los topes de los pagos,
+   * los que valen mientras no se despliegue otra cosa. El presupuesto de las comisiones va en XLM (hasta 10), los pagos que la
+   * red rechazó por forma y por día (hasta 100) y las altas de quien ganó por día (hasta 300). Más que su techo da `400 techo`
+   * y no se escribe nada, tampoco de los otros campos. Contesta los topes que quedan vigentes.
+   */
+  private topePagos(o: Record<string, unknown>): Respuesta {
+    const { presupuestoXlm, rechazosPorDia, altasPremioDia } = o;
+    if (presupuestoXlm === undefined && rechazosPorDia === undefined && altasPremioDia === undefined) return r(400, { motivo: "cuerpo" });
+    const cambios: Array<[clave: string, valor: number]> = [];
+    if (presupuestoXlm !== undefined) {
+      const stroops = typeof presupuestoXlm === "number" && Number.isFinite(presupuestoXlm) ? Math.round(presupuestoXlm * STROOPS_POR_XLM) : 0;
+      if (!Number.isSafeInteger(stroops) || stroops < 1) return r(400, { motivo: "cuerpo" });
+      if (stroops > TECHO_TOPE_PAGOS_STROOPS) return r(400, { motivo: "techo", que: "presupuesto", max: TECHO_TOPE_PAGOS_STROOPS / STROOPS_POR_XLM });
+      cambios.push([AJUSTE_TOPE_PAGOS, stroops]);
+    }
+    const enteros: Array<[valor: unknown, clave: string, techo: number, que: string]> = [
+      [rechazosPorDia, AJUSTE_RECHAZOS_DIA, TECHO_PAGOS_RECHAZADOS_DIA, "rechazos"],
+      [altasPremioDia, AJUSTE_ALTAS_PREMIO_DIA, TECHO_ALTAS_PREMIO_DIA, "altas"],
+    ];
+    for (const [valor, clave, techo, que] of enteros) {
+      if (valor === undefined) continue;
+      if (typeof valor !== "number" || !Number.isInteger(valor) || valor < 1) return r(400, { motivo: "cuerpo" });
+      if (valor > techo) return r(400, { motivo: "techo", que, max: techo });
+      cambios.push([clave, valor]);
+    }
+    const ahora = this.reloj();
+    this.d.cupos.transaccion(() => {
+      for (const [clave, valor] of cambios) this.d.cupos.fijarAjuste(clave, String(valor), ahora);
+    });
+    const vigentes = {
+      topeStroops: limitesDePagos(this.d.cfg, (k) => this.d.cupos.ajuste(k)).topePagos,
+      rechazosPorDia: limitesDePagos(this.d.cfg, (k) => this.d.cupos.ajuste(k)).rechazosPorDia,
+      altasPremioDia: topeEnCaliente(this.d.cupos.ajuste(AJUSTE_ALTAS_PREMIO_DIA), this.d.cfg.altasPremioDia, TECHO_ALTAS_PREMIO_DIA),
+    };
+    this.registrar("pagos-tope", vigentes);
+    return r(200, vigentes);
   }
 
   /**
@@ -432,6 +507,9 @@ const RUTAS: Record<string, { clave: "cupones" | "operar"; metodos: Partial<Reco
   "/v1/admin/compras/piloto": { clave: "cupones", metodos: { POST: "piloto-cambiar", GET: "piloto-lista" } },
   "/v1/admin/compras/cerrar": { clave: "operar", metodos: { POST: "compras-cerrar" } },
   "/v1/admin/compras/soltar": { clave: "operar", metodos: { POST: "compras-soltar" } },
+  "/v1/admin/pagos/pausar": { clave: "operar", metodos: { POST: "pagos-pausar" } },
+  "/v1/admin/pagos/reanudar": { clave: "operar", metodos: { POST: "pagos-reanudar" } },
+  "/v1/admin/pagos/tope": { clave: "operar", metodos: { POST: "pagos-tope" } },
 };
 
 /**

@@ -1,8 +1,24 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
-import { fijoPara } from "./espectador-fijo";
-import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
+import {
+  ANCHOR_LEAD_SECONDS,
+  CAMPANA_LEAD_SECONDS,
+  LEAD_SECONDS,
+  SIN_SELLO_LEAD_SECONDS,
+  WHEEL_MAX,
+  app,
+  conCuenta,
+  currentPace,
+  paceSeconds,
+  params,
+  type Game,
+} from "../state";
+import { campanaDeLaLista, esListaDeCampana, listaCambiadaDeLaCampana } from "../campana/en-curso";
+import { ponerPaso } from "../campana/puente";
+import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
+import { avisarCambioConQr } from "./espectadores-de-la-sala";
+import { ANCLA_ANTES_S, anclaDeLaRondaUnaVez, horaDeLaRonda, medirElReloj } from "../reloj-de-la-ronda";
+import { QUICKNET, bytesToHex, fetchRound, roundAt, roundTime, targetRound } from "../protocol/quicknet";
 import { arranqueDelShow, msHasta } from "../arranque-del-show";
 import { sorteoEnMarcha } from "./sorteo-en-marcha";
 import { listHash } from "../protocol/canonical";
@@ -18,7 +34,8 @@ import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomenda
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, billeteraEnOtraRed, canAnchor, claveDeSellar, currentSession, frenarPorOtraRed } from "./wallet-ui";
+import { apruebaAMano, billeteraEnOtraRed, canAnchor, cerrarSesion, claveDeSellar, currentSession, frenarPorOtraRed, openPicker } from "./wallet-ui";
+import type { AccionError } from "./error-accion";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { contar as contarPersonas, cuentaParaMostrar, renumerarSufijos, seCuentaPorPersona } from "../participaciones";
 import { modesVisible } from "../modos/bandera";
@@ -27,7 +44,7 @@ import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
-import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { fijarPorCampana, fijoPorCampana, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
 import { ajustarPremioDeTurnos, ordenNoCabe, ponerModoTurnos } from "./turnos";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
@@ -40,7 +57,8 @@ import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-te
 import { pintarVer3D } from "./ver3d";
 import { confirmarPrimerSelloOficial, marcarSellandoAhora } from "./modo-ui";
 import { frenarSinElPaso } from "./aviso-no-cargo";
-import { cobroPorUso } from "../stellar/cobro-oficial";
+import { cobroPorUso, redPrincipalConPollar } from "../stellar/cobro-oficial";
+import { PUERTA_DEL_PREMIO_EN, modoDeRampa } from "../stellar/cuenta-config";
 import { avisoTrasFallarEnLaCadena, entroYFalloEnLaCadena } from "./sello-tarde-aviso";
 
 /**
@@ -112,12 +130,6 @@ export function elegirJuego(g: Game): void {
     if (!enShow) alElegirConResultado?.(g);
     return;
   }
-  // Ya se mira en celulares desde el QR, con este juego (`espectador-fijo.ts`): no cambia hasta el resultado, y la
-  // nota de arriba del selector lo dice.
-  if (fijoPara(app.frozen, false)) {
-    pintarNotaDelJuego();
-    return;
-  }
   juegoAMano = true;
   setGame(g);
 }
@@ -131,10 +143,10 @@ function marcarJuego(g: Game): void {
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
-  // Con el sorteo mirándose en celulares, ningún camino cambia su juego (`espectador-fijo.ts`).
-  const fijo = fijoPara(app.frozen, false);
-  if (fijo && g !== fijo.juego) return;
   marcarJuego(g);
+  // Si el sorteo ya se mira en celulares desde el QR, el cambio se anota y se publica (`espectadores-de-la-sala.ts`):
+  // desde el 16 de noviembre de 2026 el juego se puede cambiar con el QR a la vista, hasta que la sala lanza.
+  avisarCambioConQr(app.frozen, g, currentPace());
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
 }
@@ -170,11 +182,7 @@ export function marcarShow(en: boolean): void {
 export function pintarNotaDelJuego(): void {
   const el = document.getElementById("juego-nota");
   if (!el) return;
-  const fijo = fijoPara(app.frozen, false);
-  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : fijo ? "juegoFijoEspectador" : "";
-  // La nota de la duración (`main.ts`) sale cuando se la quiere cambiar con el juego fijo, y se va cuando ya no lo está.
-  const notaDelRitmo = document.getElementById("pace-nota");
-  if (notaDelRitmo && !fijo) notaDelRitmo.hidden = true;
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
   const texto = clave ? t(clave) : "";
   if (el.textContent !== texto) el.textContent = texto;
   el.hidden = !texto;
@@ -378,7 +386,9 @@ export function secondsToRound(): number {
   if (!app.frozen) return 0;
   // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
   if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
-  return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));
+  // Con el reloj de la ronda (`reloj-de-la-ronda.ts`): la cuenta de la sala y la del celular de quien mira dicen lo
+  // mismo aunque el reloj de la compu esté corrido. Sin medir, es el reloj de la compu.
+  return Math.max(0, roundTime(app.frozen.round) - Math.floor(horaDeLaRonda()));
 }
 
 let countdownTimer: number | undefined;
@@ -398,6 +408,20 @@ let grandePendiente = false;
 function soltarLoPedido(): void {
   if (grandePendiente) soltarPantallaCompleta();
   grandePendiente = false;
+}
+
+/**
+ * Una lista de campaña de empresa que no se puede sellar como está: la línea de por qué, en la caja de los errores del sello.
+ * Usa los textos del panel de quien organiza (`campana/textos-sala.ts`), con la cuenta o la cantidad que corresponde.
+ */
+function frenarLaCampana(clave: string, vars: Record<string, string> = {}): void {
+  const status = $("seal-status");
+  status.style.display = "block";
+  status.className = "txstatus bad";
+  let texto = TEXTOS_SALA_CAMPANA[getLang()][clave] ?? "";
+  for (const [k, v] of Object.entries(vars)) texto = texto.replaceAll(`{${k}}`, v);
+  status.textContent = texto;
+  verError(status);
 }
 
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
@@ -458,6 +482,8 @@ function abrirEspera(alSellar = false): void {
     });
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
     if (!abrio && (pedida || alSellar)) soltarPantallaCompleta();
+    // Si abrió, la espera en grande arranca con lo que se vio: los números que ya nacieron y el contador.
+    pintarFeed();
   });
 }
 
@@ -495,6 +521,190 @@ function preconectarDrand(): void {
 }
 
 /**
+ * Los números públicos que nacen mientras se espera (issue #79).
+ *
+ * Quicknet publica un número cada 3 segundos, y la ronda elegida nace al final
+ * de esa fila. Mientras tanto, la sala ve cada número que va naciendo, con su
+ * hex corto, y un contador de cuántos faltan para la ronda elegida: si faltan 15
+ * números, la sala lo ve. Los números se piden con la misma rotación de relays
+ * que el sorteo (`fetchRound`, un intento por tic) pero **no se verifican
+ * aquí**: la firma de la ronda elegida la verifica el sorteo de verdad
+ * (`draw.ts`), y los demás son el stream público, que cualquiera puede
+ * comprobar después. El modo stand no espera ningún número de la red, así que
+ * no hay feed.
+ */
+
+/** Un número público que ya nació, mostrado mientras se espera la ronda elegida. */
+export interface NumeroVisto {
+  round: number;
+  /** Hex corto: los primeros 8 dígitos de la firma que publicó el faro para esa ronda. */
+  hex: string;
+}
+
+/** Cuántas fichas de números quedan a la vista: las últimas nacidas, no la fila entera. */
+export const NUMEROS_EN_PANTALLA = 12;
+
+/** Esperas con demasiadas rondas de por medio no muestran números: cientos de fichas por un sorteo retomado de la memoria no entran en pantalla. */
+const RONDAS_DE_ALCANCE = 40;
+
+/** Junto a la lista un número público recién nacido: una sola vez por ronda, siempre en orden. */
+export function numeroVisto(vistos: NumeroVisto[], round: number, hex: string): NumeroVisto[] {
+  if (vistos.some((v) => v.round === round)) return vistos;
+  return [...vistos, { round, hex }].sort((a, b) => a.round - b.round);
+}
+
+/** Cuántos números faltan para la ronda elegida: la elegida menos la última vista. Sin ninguno visto, `null`. */
+export function faltanParaLaRonda(vistos: NumeroVisto[], elegida: number): number | null {
+  const ultima = vistos[vistos.length - 1];
+  if (!ultima) return null;
+  return Math.max(0, elegida - ultima.round);
+}
+
+/**
+ * El número público de una ronda, pedido al faro con un solo intento: si la ronda todavía no nació, el relay contesta
+ * 404 y el tic vuelve a preguntar. Sale el hex corto de la firma, que es lo que el faro publicó para esa ronda.
+ */
+export async function pedirNumero(round: number, opciones: { fetchFn?: typeof fetch; signal?: AbortSignal } = {}): Promise<NumeroVisto> {
+  const { signature } = await fetchRound(round, { attempts: 1, fetchFn: opciones.fetchFn, signal: opciones.signal });
+  return { round, hex: signature.slice(0, 8) };
+}
+
+/** El estado del feed de números: qué ronda toca pedir, qué se vio y cuándo volver a preguntar. */
+export interface FeedEspera {
+  /** La ronda elegida, la que decide el sorteo. */
+  elegida: number;
+  /** La próxima ronda cuyo número falta pedir: nunca llega a la elegida, esa la pide el sorteo. */
+  siguiente: number;
+  /** Cuántos números van a nacer mientras se espera: el contador arranca aquí, antes de que caiga el primero. */
+  inicial: number;
+  vistos: NumeroVisto[];
+  /** Instante (ms de `Date.now()`) en que se permite el próximo pedido. */
+  cuando: number;
+  enVuelo: boolean;
+}
+
+/**
+ * Un tic del feed. Pide el número público de la ronda que toca y, si el faro ya la trae, lo junta en la lista y
+ * redibuja. Un pedido por vez, y reintentos a un segundo: la ronda tarda unos segundos en propagarse tras nacer, y
+ * mientras no llegue su hora según el propio reloj (`roundTime`), ni se le pregunta al faro. Nunca lanza.
+ */
+export async function ticDeLaEspera(
+  f: FeedEspera,
+  opciones: {
+    /** El reloj, por si el tic viene de una prueba; sin él, el de siempre. */
+    ahora?: number;
+    /** El faro: el de verdad es `pedirNumero`, la prueba manda el suyo. */
+    pedir?: (round: number, opciones: { signal?: AbortSignal }) => Promise<NumeroVisto>;
+    /** Aviso para redibujar con la lista al día. */
+    pintar?: () => void;
+    /** La señal con la que se corta un pedido en vuelo cuando la espera termina. */
+    señal?: AbortSignal;
+  } = {},
+): Promise<NumeroVisto | null> {
+  // La elegida es territorio del sorteo: acá solo los números que nacen mientras se espera.
+  if (f.siguiente >= f.elegida || f.enVuelo) return null;
+  const ahora = opciones.ahora ?? Date.now();
+  if (ahora < f.cuando) return null;
+  // Todavía no es la hora de esa ronda: no se le pregunta al faro (con un segundo de margen para su reloj).
+  if (roundTime(f.siguiente) + 1 > Math.floor(ahora / 1000)) return null;
+  f.enVuelo = true;
+  try {
+    const visto = await (opciones.pedir ?? pedirNumero)(f.siguiente, { signal: opciones.señal });
+    f.vistos = numeroVisto(f.vistos, visto.round, visto.hex);
+    // El número ya nació: el próximo pedido va enseguida, para alcanzar las rondas que nacieron mientras.
+    f.siguiente = visto.round + 1;
+    f.cuando = ahora;
+    opciones.pintar?.();
+    return visto;
+  } catch {
+    // La ronda todavía no está en el relay (contesta 404) o falló: otra vez en un segundo.
+    f.cuando = ahora + 1000;
+    return null;
+  } finally {
+    f.enVuelo = false;
+  }
+}
+
+/**
+ * Los números vistos y el contador, pintados en una caja: la caja chica de la página (`#wait-feed`) y la espera en
+ * grande (`.espera-feed`) pintan lo mismo con esta función. Texto puro por `textContent`: lo que escribió el faro
+ * no debe entrar como HTML.
+ */
+export function pintarNumerosVistos(caja: HTMLElement | null, vistos: NumeroVisto[], elegida: number, inicial = 0): void {
+  if (!caja) return;
+  caja.textContent = "";
+  const faltan = faltanParaLaRonda(vistos, elegida) ?? inicial;
+  const fila = document.createElement("p");
+  fila.style.cssText = "margin:0;font-family:ui-monospace,Consolas,monospace;font-size:13px;opacity:.85;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;";
+  for (const visto of vistos.slice(-NUMEROS_EN_PANTALLA)) {
+    if (fila.childNodes.length > 0) fila.append(document.createTextNode(" · "));
+    const chip = document.createElement("span");
+    chip.textContent = `#${visto.round} ${visto.hex}`;
+    fila.append(chip);
+  }
+  caja.append(fila);
+  if (faltan > 0 || vistos.length > 0) {
+    const cuenta = document.createElement("p");
+    cuenta.style.cssText = "margin:0;font-weight:800;";
+    cuenta.textContent = T[getLang()].espFaltanN(faltan);
+    caja.append(cuenta);
+  }
+}
+
+/** El feed armado para la espera en curso, y la señal que corta el pedido que esté en vuelo. */
+let feed: FeedEspera | null = null;
+let feedSeñal: AbortController | null = null;
+
+/** Pinta el feed en los dos lugares donde se espera: la caja de la página y la espera en grande, si está abierta. */
+function pintarFeed(): void {
+  if (!feed) return;
+  pintarNumerosVistos(document.getElementById("wait-feed"), feed.vistos, feed.elegida, feed.inicial);
+  const grande = document.querySelector<HTMLElement>(".espera .espera-feed");
+  if (grande && grande.hidden) grande.hidden = false;
+  pintarNumerosVistos(grande, feed.vistos, feed.elegida, feed.inicial);
+}
+
+/** Se acabó la espera: se corta el pedido en vuelo y las cajas quedan vacías, para que el «Ya salió el número» hable solo. */
+function pararFeed(): void {
+  feedSeñal?.abort();
+  feedSeñal = null;
+  feed = null;
+  const caja = document.getElementById("wait-feed");
+  if (caja) caja.textContent = "";
+  const grande = document.querySelector<HTMLElement>(".espera .espera-feed");
+  if (grande) grande.textContent = "";
+}
+
+/**
+ * Arma el feed al empezar la cuenta regresiva: los números que van a nacer entre el sello y la ronda elegida.
+ * Con el markup de la espera fuera (la página sin el `wait-main`), o con una espera retomada que ya lleva decenas de
+ * minutos (más rondas que `RONDAS_DE_ALCANCE`), no hay feed. En el modo stand tampoco: no espera ningún número real.
+ */
+function armarFeed(sello: NonNullable<typeof app.frozen>): void {
+  pararFeed();
+  // La primera ronda que nace después del sello.
+  const siguiente = roundAt(sello.ts + 1);
+  const resta = sello.round - siguiente;
+  if (resta < 1 || resta > RONDAS_DE_ALCANCE) return;
+  const main = document.querySelector("#wait-box .wait-main");
+  if (!main) return;
+  let caja = document.getElementById("wait-feed");
+  if (!caja) {
+    caja = document.createElement("div");
+    caja.id = "wait-feed";
+    main.insertBefore(caja, main.querySelector(".wait-line"));
+  }
+  caja.textContent = "";
+  feedSeñal = new AbortController();
+  feed = { elegida: sello.round, siguiente, inicial: resta, vistos: [], cuando: 0, enVuelo: false };
+  pintarFeed();
+}
+
+onLangChange(() => {
+  if (feed) pintarFeed();
+});
+
+/**
  * El botón de sortear muestra la cuenta regresiva y se habilita cuando la
  * ronda existe. Y arriba, el panel que pone la espera en escena.
  *
@@ -526,6 +736,8 @@ function startCountdown(): void {
     abrirEspera(true);
   }
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
+  // La fila de números públicos que van naciendo mientras se espera (issue #79): no hay en el modo stand.
+  if (app.frozen && !enStand()) armarFeed(app.frozen);
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se
   // levanta el worker que va a verificar la firma (la portada no lo carga).
   // Anclado, también la curva en la página: el contrato pide la firma
@@ -533,6 +745,9 @@ function startCountdown(): void {
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
   // El modo stand no pide ni verifica ningún número: nada que preparar ni conexión que abrir.
   if (!enStand()) prepararFirma();
+  // La hora de la ronda, medida con una ronda que nace (`reloj-de-la-ronda.ts`): la cuenta y el lanzamiento desde la
+  // espera la usan. Si no se puede medir, sigue el reloj de la compu.
+  if (!enStand()) void medirElReloj().catch(() => undefined);
   if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
   let preconectado = false;
   const tick = (): void => {
@@ -542,10 +757,13 @@ function startCountdown(): void {
         preconectado = true;
         preconectarDrand();
       }
+      // El ancla del número (`reloj-de-la-ronda.ts`), pedida antes de la tarjeta: en Rápido la tarjeta sale medio segundo
+      // antes del número, y el pedido ya no alcanzaría a esperar su nacimiento. El sorteo lanzado desde la espera la usa.
+      if (app.frozen && !enStand() && roundTime(app.frozen.round) - horaDeLaRonda() <= ANCLA_ANTES_S) void anclaDeLaRondaUnaVez(app.frozen.round);
       // Con la espera en grande, el sorteo se lanza solo: la tarjeta de cómo se juega sale en los últimos segundos y
       // termina de leerse cuando nace el número (`arranque-del-show.ts`). Con la billetera propia sigue el toque.
       if (!seAdelanto && !app.drawn && !enStand() && espera?.esperaAbierta() && !(app.frozen?.raffleId !== undefined && apruebaAMano())) {
-        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round).tarjeta) === 0) {
+        if (app.frozen && msHasta(arranqueDelShow(app.frozen.round, conCuenta()).tarjeta, horaDeLaRonda() * 1000) === 0) {
           seAdelanto = true;
           // La espera pasa a decir que el número llega y lanza el sorteo (`lanzarDesdeLaEspera`): el mismo camino que su
           // Reintentar si una compuerta del modo Oficial corta.
@@ -565,7 +783,11 @@ function startCountdown(): void {
       if (left) left.textContent = reloj;
       // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
       if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
+      // El tic del feed de números: pregunta por la ronda que toca, junta la que nació y redibuja.
+      if (feed) void ticDeLaEspera(feed, { pintar: pintarFeed, señal: feedSeñal?.signal });
     } else {
+      // Nació la ronda elegida: se corta el feed y sus cajas quedan vacías, para que el número del sorteo hable solo.
+      if (feed) pararFeed();
       // Si el sorteo está en marcha (la espera en grande lo lanzó antes de que naciera el número), el botón es de él y
       // no se enciende. Si una compuerta del modo Oficial lo cortó, ya no está en marcha y se enciende para volver a
       // probar: hasta el 16 de noviembre de 2026 quedaba apagado para siempre.
@@ -796,6 +1018,83 @@ async function accesoOficialParaSellar(btn: HTMLButtonElement, ganadores: number
 }
 
 /**
+ * La consulta adelantada de la puerta del premio (en los modos de `PUERTA_DEL_PREMIO_EN`): con una cuenta de Google o de
+ * correo en la red principal, mira si la cuenta puede guardar dinero antes del cupón y de cerrar la lista. Si puede, o si
+ * no se pudo saber, muestra el aviso y devuelve `true` (no se sella). Una cuenta que Horizon todavía no conoce pasa: se
+ * crea en el paso siguiente y la puerta de la firma la mira de nuevo. Fuera del caso no lee ni baja nada. Un sello
+ * pendiente de esta lista se averigua sin firmar: tampoco se frena. Con el voto por contenido la billetera dice `libre`
+ * sin leer (`revisarPuertaDelPremio`), y no se frena.
+ *
+ * La lectura de la red puede tardar unos segundos: mientras corre, el botón se apaga y dice «Revisando tu cuenta…», como
+ * en las otras compuertas del sello, y vuelve a como estaba al terminar.
+ */
+async function frenarPorElPremio(names: string[], btn: HTMLButtonElement): Promise<boolean> {
+  // Lo primero: fuera de los modos que cuida la puerta no se baja ni se lee nada (ni el sello pendiente ni la billetera).
+  if (!PUERTA_DEL_PREMIO_EN.includes(modoDeRampa()) || network.name !== "mainnet" || !redPrincipalConPollar()) return false;
+  let puerta: "libre" | "puede-guardar" | "no-se-sabe" | "no-existe";
+  btn.disabled = true;
+  btn.textContent = t("clRevisando");
+  try {
+    if (await hayUnSelloPendiente(names)) return false;
+    const { pollarWallet } = await import("../stellar/wallet-pollar");
+    puerta = await pollarWallet.revisarPuertaDelPremio();
+  } catch {
+    // Sin poder mirar, no se frena acá: la puerta de la firma mira igual.
+    return false;
+  } finally {
+    btn.disabled = false;
+    btn.dataset.i = claveDeSellar();
+    btn.textContent = t(btn.dataset.i);
+  }
+  if (puerta === "libre" || puerta === "no-existe") return false;
+  const { PremioGuardado } = await import("../stellar/usdc-cuenta");
+  await avisarDelPremio(new PremioGuardado(puerta), Math.min(ganadoresPedidos(), names.length));
+  return true;
+}
+
+/**
+ * El aviso de la puerta del premio, donde van los errores del sello. Con `premioGuardado`, dos salidas dentro del mensaje
+ * (con la forma de «Sortear pagando con mi cuenta»): usar otra cuenta o una billetera propia. Las dos cierran la sesión y
+ * abren la ventana para entrar, con su motivo y el foco de vuelta en «Sellar la lista». No se ofrece mandar el saldo a
+ * ningún lado. Con `premioSinSaber`, Probar de nuevo: «Sellar la lista» sigue encendido y vuelve a mirar.
+ */
+async function avisarDelPremio(e: unknown, numWinners: number): Promise<void> {
+  const status = $("seal-status");
+  status.style.display = "block";
+  status.className = "txstatus bad";
+  await escribirError(status, e, "sello", numWinners);
+  const { errorKey } = await import("../stellar/errores");
+  if (errorKey(e) === "premioSinSaber") {
+    verError(status, { texto: t("clProbarDeNuevo"), ejecutar: () => void freeze() });
+    return;
+  }
+  const salir = (motivo: string) => (): void => {
+    void cerrarSesion()
+      .catch(() => undefined)
+      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze") }));
+  };
+  const salidas: Array<{ id: string; clave: string; motivo: string }> = [
+    { id: "premio-otra-cuenta", clave: "premioOtraCuenta", motivo: "premioMotivoOtra" },
+    { id: "premio-billetera", clave: "premioBilletera", motivo: "premioMotivoBilletera" },
+  ];
+  const acciones: AccionError[] = salidas.map((s) => ({ texto: t(s.clave), ejecutar: salir(s.motivo) }));
+  // Para la espera en grande, primero el aviso; los botones se suman después, para que su texto no entre en él.
+  verError(status, acciones[0], acciones[1]);
+  salidas.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.id = s.id;
+    b.className = "ghost mini";
+    b.dataset.i = s.clave;
+    b.textContent = acciones[i]?.texto ?? t(s.clave);
+    b.style.display = "block";
+    b.style.marginTop = "10px";
+    b.addEventListener("click", () => acciones[i]?.ejecutar());
+    status.append(b);
+  });
+}
+
+/**
  * Hay un sello de esta lista que se cortó y todavía no se sabe si entró. Averiguarlo no pide ninguna firma, y si entró
  * pudo gastar el último sorteo oficial: la compuerta del acceso no lo frena. Si hay que sellar de nuevo, el candado de
  * antes de la firma (`envio-sdk.ts`) vuelve a mirar el acceso.
@@ -846,6 +1145,15 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   if (!puedeSellar()) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
+  const hash = bytesToHex(listHash(names));
+  // La lista de una campaña de empresa (detrás de VITE_CAMPANAS) que se cambió en el cuadro después de pasarla: la sala la
+  // rechazaría y costaría un sorteo de quien organiza. Se frena antes de cualquier firma y se ofrece volver a pasarla.
+  if (!sinGrabar() && listaCambiadaDeLaCampana(hash)) {
+    frenarLaCampana("cpoListaCambio");
+    ponerPaso({ paso: "lista-cambio" });
+    soltarLoPedido();
+    return;
+  }
   // Con el modo Oficial a la vista, una cuenta con la billetera en la otra red no cae callada al modo libre: se frena
   // con el aviso de cómo seguir, como dice la línea de debajo del botón. Sin modo Oficial, como siempre, se sigue sin
   // grabar. La pantalla completa que pidió el toque se suelta: no hay espera que mostrar.
@@ -861,6 +1169,30 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
   const sinSello = conCuenta && !!opciones.sinSello;
   const anchoring = conCuenta && !sinSello;
+  // La lista que pasó el panel de una campaña de empresa (detrás de VITE_CAMPANAS) solo se sortea sellada y con cuenta: sin
+  // sello o sin cuenta (otra red, o seguir sin cuenta) no hay aviso a la sala, los celulares quedarían esperando y el show
+  // tendría un ganador que nadie puede verificar. Cuenta también con un sello dudoso en curso. Fuera de una campaña, nada.
+  if (!sinGrabar() && (!conCuenta || sinSello) && esListaDeCampana(hash)) {
+    frenarLaCampana(conCuenta ? "cpoSinSelloNo" : "cpoSinCuenta");
+    soltarLoPedido();
+    return;
+  }
+  // La campaña puede pedir una cantidad de personas y una cuenta para sellar: se mira antes de las puertas del acceso y de la
+  // cuenta lista, que abren pasos y gastan un sorteo, así quien organiza oye primero con qué cuenta entrar.
+  const deLaCampana = anchoring ? campanaDeLaLista(hash) : null;
+  if (deLaCampana !== null) {
+    if (names.length < deLaCampana.premios) {
+      frenarLaCampana(deLaCampana.premios === 1 ? "cpoPocos" : "cpoPocosPremios", { n: String(deLaCampana.premios) });
+      soltarLoPedido();
+      return;
+    }
+    const quienSella = deLaCampana.organizadora;
+    if (quienSella !== null && quienSella !== currentSession()?.address) {
+      frenarLaCampana("cpoEntraCon", { fin: quienSella.slice(-4) });
+      soltarLoPedido();
+      return;
+    }
+  }
   // Seguir sin sello con un sello de esta misma lista que se mandó y no se sabe si entró: el contrato no impide sellar dos
   // veces la misma lista, así que primero se averigua. Si entró, ese es el sello y se sigue anclado, con su ronda. Si no se
   // puede saber, se sigue sin sello pero no se manda ningún sello más de esa lista, ni ahora ni cada 15 segundos.
@@ -872,6 +1204,12 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       return;
     }
     sinReintento = antes === "no-se-sabe";
+  }
+  // Con `VITE_RAMPA=premios`, una cuenta de Google o de correo que puede guardar dinero no sella: la puerta de `#firmando`
+  // (`wallet-pollar.ts`) es la que cuenta, y esta consulta solo evita gastar el cupón o cerrar la lista para enterarse tarde.
+  if (anchoring && (await frenarPorElPremio(names, btn))) {
+    soltarLoPedido();
+    return;
   }
   // Con el cobro por uso, antes que nada el acceso al modo Oficial y los sorteos que alcancen: sin eso no se firma nada,
   // y el paso de la cuenta, que se abre para conseguirlo, va antes que su compuerta de siempre.
@@ -886,13 +1224,13 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     soltarLoPedido();
     return;
   }
-  const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s (65 si la comisión la paga el portero, más abajo) aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
   // elegir el juego, y la línea que guía dice que de verdad es cerca de un minuto.
+  // Una lista de campaña se sella a 90 segundos: la sala solo acepta el aviso con la ronda por salir.
   const lead = anchoring
-    ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
+    ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS, deLaCampana === null ? 0 : CAMPANA_LEAD_SECONDS)
     : sinSello
       ? SIN_SELLO_LEAD_SECONDS
       : enStand()
@@ -903,7 +1241,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   let round = targetRound(ts, lead);
   // En el modo «Orden de turnos» el nombre tiene que empezar con «Turnos»; fuera del modo es el cuadro, recortado.
   let prize = ajustarPremioDeTurnos();
-  let numWinners = Math.min(ganadoresPedidos(), names.length);
+  // La cantidad de ganadoras de una campaña es la de sus premios firmados: la sala no acepta otra.
+  let numWinners = deLaCampana === null ? Math.min(ganadoresPedidos(), names.length) : deLaCampana.premios;
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -1056,6 +1395,11 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       void import("../stellar/errores")
         .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
         .catch(() => undefined);
+      // La puerta del premio frenó la firma: la cuenta puede guardar dinero, o no se pudo comprobar. Su aviso, con sus salidas.
+      if (await import("../stellar/errores").then((m) => m.esDelPremio(e)).catch(() => false)) {
+        await avisarDelPremio(e, numWinners);
+        return;
+      }
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
       if (esCostoAlto(e)) {
@@ -1143,7 +1487,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ...(sinCuentaElegido() ? { sinCuenta: true } : {}),
     ...(logo ? { logo } : {}),
   };
-  // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.
+  // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso. La cantidad de ganadoras
+  // de una campaña ya quedó sellada: la traba del contador no tiene que sobrevivir a este sorteo.
+  if (fijoPorCampana()) fijarPorCampana(false);
   marcarSellado(false);
   limpiarRed();
 
@@ -1439,6 +1785,8 @@ export function unfreeze(lista: string): void {
   countdownTimer = undefined;
   app.frozen = null;
   cerrarLista(false);
+  // Después de soltar el sello, el contador de ganadoras vuelve a ser de quien sortea (el paso de la campaña lo vuelve a fijar).
+  if (fijoPorCampana()) fijarPorCampana(false);
   ponerPremio("");
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";

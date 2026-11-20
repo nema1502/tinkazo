@@ -437,18 +437,26 @@ describe("las subfilas del grupo", () => {
         const l = fins.map((p) => v[p] as number);
         return l[0] === -1 && l[l.length - 1] === 1 && l.every((x, j) => j === 0 || x >= (l[j - 1] as number));
       };
-      const costo = (v: readonly number[]): [number, number] => {
+      const solasDe = (v: readonly number[]): number => {
+        if (k < 3 || fins.length === 0) return 0;
+        for (const lado of [-1, 1]) {
+          const deEseLado = Array.from({ length: k }, (_, i) => i).filter((i) => v[i] === lado);
+          if (deEseLado.length === 1 && fins.includes(deEseLado[0] as number)) return 1;
+        }
+        return 0;
+      };
+      const costo = (v: readonly number[]): [number, number, number] => {
         let peso = 0, alterna = 0;
         for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) if (v[a] === v[b]) peso += w(a, b);
         for (let a = 0; a + 1 < k; a++) if (v[a] !== v[a + 1]) alterna++;
-        return [peso, alterna];
+        return [peso, solasDe(v), alterna];
       };
-      let mejor: [number, number] = [Infinity, -1];
+      let mejor: [number, number, number] = [Infinity, 2, -1];
       for (let mascara = 0; mascara < 1 << k; mascara++) {
         const v = Array.from({ length: k }, (_, i) => ((mascara >> i) & 1 ? 1 : -1));
         if (!valida(v)) continue;
         const c = costo(v);
-        if (c[0] < mejor[0] || (c[0] === mejor[0] && c[1] > mejor[1])) mejor = c;
+        if (c[0] < mejor[0] || (c[0] === mejor[0] && (c[1] < mejor[1] || (c[1] === mejor[1] && c[2] > mejor[2])))) mejor = c;
       }
       const elegida = Array.from({ length: k }, (_, p) => s.get(p) as number);
       expect(valida(elegida), `caso ${caso}`).toBe(true);
@@ -472,6 +480,38 @@ describe("las subfilas del grupo", () => {
       for (let p = 0; p < k; p++) if (![2, 5, 9].includes(p)) expect(s.get(p)).toBe(p % 2 === 0 ? primera : -primera);
     }
     expect([...primeras].sort()).toEqual([-1, 1]);
+  });
+
+  it("en una fila de tres o más, ninguna finalista queda sola de su lado, salvo en una fila de tres con dos finalistas", () => {
+    // La fila de tres con dos finalistas deja una de las dos sola de su lado SIEMPRE (las dos van a subfilas opuestas y la
+    // tercera cae de un lado), y el reparto por carril no siempre la puede evitar (con todas las filas de tres y ocho
+    // finalistas, ninguna colocación del muestreo la alcanza): esa composición queda a mirar. El resto no puede pasar.
+    let casos = 0;
+    const m = new Map<Datos, ReturnType<typeof muestrasDelPlan>>();
+    for (const [w, h] of [[1366, 768], [844, 390]] as const) {
+      for (const n of [8, 18, 30, 60]) {
+        for (let semilla = 1; semilla <= 10; semilla++) {
+          const d = planCarrera(ctxDe(n, semilla)).datos;
+          const { filaDe, umbral } = geometria(d, w, h);
+          const s = signosDeSubfila(d, filaDe, umbral);
+          const finalistas = new Set(d.lanes);
+          const muestras = m.get(d) ?? muestrasDelPlan(d);
+          m.set(d, muestras);
+          for (const miembros of porFila(d, filaDe).values()) {
+            if (miembros.length < 3) continue;
+            casos++;
+            const conFicha = miembros.filter((q) => finalistas.has(q));
+            const siempreSola = miembros.length === 3 && conFicha.length === 2;
+            const obligada = conFicha.length === 1 && conFicha.every((f) => miembros.filter((q) => q !== f).every((q) => pesoDelPar(muestras, f, q, umbral) > 0));
+            for (const p of conFicha) {
+              const deSuLado = miembros.filter((q) => s.get(q) === s.get(p));
+              expect(deSuLado.length > 1 || siempreSola || obligada, `n ${n} semilla ${semilla} pantalla ${w}x${h}: ${d.names[p]} sola de su lado en una fila de ${miembros.length}`).toBe(true);
+            }
+          }
+        }
+      }
+    }
+    expect(casos).toBeGreaterThan(0);
   });
 
   it("con las subfilas apagadas (SUBFILA en 0) todas quedan en la línea", () => {

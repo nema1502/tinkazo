@@ -36,8 +36,8 @@ export const TEXTOS = {
     boton: "Sumarme",
     aviso: "Tu nombre o apodo se ve en la pantalla grande del stand, en una ronda de ejemplo, y se borra cuando cierran la sala o a las 10 horas. Para sumarte no hace falta nada: ni cuenta, ni aplicación. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.",
     terminos: "Términos",
-    listo: "¡Listo!",
-    listoB: "Si no te ves en la pantalla, tocá Corregir mi nombre o avisale a quien atiende.",
+    listo: "Listo, ya estás en la ronda",
+    listoB: "Mirá la pantalla grande. Si no te ves, tocá Corregir mi nombre o avisale a quien atiende.",
     hace: "Hacé el tuyo, gratis",
     ya: "Desde este celular te anotaste como {nombre}.",
     corregir: "Corregir mi nombre",
@@ -46,7 +46,7 @@ export const TEXTOS = {
     recuerda: "Este celular recuerda tu nombre hasta 12 horas para no anotarte dos veces.",
     sinRecuerdo: "Este celular no puede recordar tu nombre. Desde acá no vas a poder corregirlo después.",
     incompleto: "Este enlace está incompleto. Escaneá el QR de la pantalla otra vez.",
-    cerrada: "Esta sala ya terminó. Pedí que te muestren el QR de la próxima.",
+    cerrada: "Este QR ya se cerró. Pedí el nuevo en el stand.",
     llena: "La sala está llena.",
     rapido: "Hay mucha gente sumándose. Esperá un momento y probá de nuevo.",
     red: "No hay conexión. Probá de nuevo en un momento.",
@@ -62,8 +62,8 @@ export const TEXTOS = {
     boton: "Join",
     aviso: "Your name or nickname shows on the booth's big screen, in a sample round, and is deleted when the room is closed or after 10 hours. Joining needs nothing: no account, no app. Only an event's team registration with a coupon needs an account: whoever signs up their team signs in with Google, because the coupon goes to that account.",
     terminos: "Terms",
-    listo: "Done!",
-    listoB: "If you don't see yourself on the screen, tap Correct my name or tell whoever is running the booth.",
+    listo: "Done, you are in the round",
+    listoB: "Watch the big screen. If you don't see yourself, tap Correct my name or tell whoever is running the booth.",
     hace: "Make your own, free",
     ya: "From this phone, you joined as {nombre}.",
     corregir: "Correct my name",
@@ -72,7 +72,7 @@ export const TEXTOS = {
     recuerda: "This phone remembers your name for up to 12 hours so you don't join twice.",
     sinRecuerdo: "This phone cannot remember your name. You will not be able to correct it from here later.",
     incompleto: "This link is incomplete. Scan the QR on the screen again.",
-    cerrada: "This room has ended. Ask to see the QR for the next one.",
+    cerrada: "This QR is closed. Ask for the new one at the booth.",
     llena: "The room is full.",
     rapido: "Lots of people are joining. Wait a moment and try again.",
     red: "No connection. Try again in a moment.",
@@ -96,13 +96,26 @@ export function paginaCelular(): string {
 <meta name="color-scheme" content="light dark">
 <title>Tinkazo</title>
 <style>
-:root{--fondo:#fff4e6;--tinta:#191919;--tarjeta:#fff;--sombra:#191919;--primario:#ffc533;--enlace:#4b2fd0;--suave:#5a5348;--rosa:#e93d9c}
-@media(prefers-color-scheme:dark){:root{--fondo:#1d1a16;--tinta:#fff4e6;--tarjeta:#2a2620;--sombra:#000;--primario:#ffc533;--enlace:#b4a4ff;--suave:#cfc6b8;--rosa:#ff5cb3}}
+:root{--fondo:#fff6e9;--tinta:#191919;--tarjeta:#fff;--sombra:#191919;--primario:#ffc629;--enlace:#4b2fd0;--suave:#5a5348;--rosa:#e93d9c}
+@media(prefers-color-scheme:dark){
+:root{
+--fondo:#171126;
+--tinta:#f6efe2;
+--tarjeta:#221a33;
+--sombra:#f6efe2;
+--primario:#ffd24d;
+--enlace:#b4a4ff;
+--suave:#cfc6b4;
+--rosa:#ff5cb3
+}
+}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;min-height:100vh;min-height:100dvh;background:var(--fondo);color:var(--tinta);font:18px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 16px}
 main{width:100%;max-width:440px;background:var(--tarjeta);border:3px solid var(--tinta);box-shadow:6px 6px 0 var(--sombra);padding:22px 20px}
 .marca{font-weight:900;letter-spacing:.06em;text-transform:uppercase;font-size:22px;margin:0 0 14px}
+.marca{display:flex;align-items:center;gap:.35em}
+.marca svg{width:1.15em;height:1.15em;fill:var(--tinta);flex:none}
 .marca b{color:var(--rosa)}
 h1{font-size:28px;line-height:1.15;margin:0 0 8px;font-weight:900}
 p{margin:0 0 14px}
@@ -122,7 +135,17 @@ button[disabled]{opacity:.6}
 </head>
 <body>
 <main>
-<p class="marca">Tinka<b>zo</b></p>
+<p class="marca"><svg viewBox="-1 -3 24 28" aria-hidden="true">
+<rect x="2" y="11" width="16" height="7"/>
+<rect x="15" y="3" width="4" height="10"/>
+<rect x="14" y="0" width="8" height="4"/>
+<rect x="20" y="-2" width="2" height="3"/>
+<rect x="3" y="18" width="2.5" height="6"/>
+<rect x="8" y="18" width="2.5" height="6"/>
+<rect x="12.5" y="18" width="2.5" height="6"/>
+<rect x="16" y="18" width="2.5" height="6"/>
+<rect x="0" y="9" width="3" height="4"/>
+</svg><span>Tinka<b>zo</b></span></p>
 <section id="form">
 <h1 id="t"></h1>
 <p id="g"></p>
@@ -169,7 +192,16 @@ function limpiarRecuerdos(){try{for(var i=localStorage.length-1;i>=0;i--){var k=
 function cargar(){try{var x=JSON.parse(localStorage.getItem(CLAVE_LOCAL)||"null");if(x&&typeof x.llave==="string"&&/^[A-Za-z0-9_-]{22}$/.test(x.llave)&&typeof x.nombre==="string"&&typeof x.hora==="number"&&Date.now()-x.hora<=43200000)return x}catch(_){}return null}
 function asegurarLlave(){if(recuerdo)return recuerdo.llave;recuerdo={llave:b64(crypto.getRandomValues(new Uint8Array(16))),nombre:"",hora:Date.now()};guardar();return recuerdo.llave}
 function mostrarHecho(){$("form").hidden=true;$("hecho").hidden=false;$("hy").textContent=X.ya.replace("{nombre}",recuerdo?recuerdo.nombre:"")}
+function revisarAlCargar(){
+fetch("/v1/sala/"+id+"/publico").then(function(r){
+if(r.status!==404)return;
+dec(X.cerrada,1);
+$("n").disabled=true;
+$("b").disabled=true;
+}).catch(function(){});
+}
 limpiarRecuerdos();recuerdo=cargar();if(recuerdo&&recuerdo.nombre)mostrarHecho();
+if(!(recuerdo&&recuerdo.nombre)&&!$("b").disabled)revisarAlCargar();
 $("f").addEventListener("submit",async function(e){
 e.preventDefault();
 var b=$("b");if(b.disabled)return;

@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
-import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress } from "../stellar/config";
-import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
+import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress, type NetworkName } from "../stellar/config";
+import { hasPollarKey } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -9,6 +9,7 @@ import { guardarBorrador } from "./participants";
 import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
+import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
 import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
 import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
@@ -195,6 +196,39 @@ let retomando = false;
 /** Google (o el correo) está abriendo su ventana: la cabecera dice "Conectando…" (`pintarCuenta`). */
 let conectando = false;
 /**
+ * La ventana de Google ya se cerró y la cuenta se está creando o abriendo (`AvisosDeEntrada` en wallet-pollar.ts): la
+ * cabecera y la puerta dicen "Terminando de entrar…" y la puerta ofrece Cancelar, que es esto. Con una cuenta nueva
+ * puede tardar hasta 50 segundos, y antes la pantalla quedaba muda (15 de noviembre de 2026).
+ */
+let cancelarEntrada: (() => void) | null = null;
+const esCancelada = (e: unknown): boolean => e instanceof Error && e.message === "login-cancelled";
+/** La billetera de Google, con lo que avisa mientras entra (`connect` de wallet-pollar.ts), sin traer el módulo. */
+type PollarConAvisos = { connect(avisos: { terminando?: (cancelar: () => void) => void }): Promise<string> };
+
+/** La ventana de Google ya se cerró y falta terminar de entrar: se pinta la cabecera y la puerta con Cancelar. */
+function alTerminar(cancelar: () => void): void {
+  cancelarEntrada = cancelar;
+  pintarCuenta();
+  applyGate();
+  // La puerta y el chip se rearman enteros, y un nodo nuevo no siempre se anuncia: lo dice la región viva de la cabecera.
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo) vivo.textContent = t("loginTerminando");
+}
+
+/** Cancela la entrada que se está terminando: el Cancelar de la portada (`cancelar-en-portada.ts`) es el de la puerta. */
+export function cancelarLaEntrada(): void {
+  cancelarEntrada?.();
+}
+
+/** La entrada terminó sin cuenta (cancelada o con un error): la región viva no queda diciendo Terminando de entrar. */
+function callarTerminando(): void {
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo && vivo.textContent === t("loginTerminando")) vivo.textContent = "";
+}
+
+/** El foco no está en ningún lado: se perdió al rearmarse lo que lo tenía, o se volvió de la ventana de Google. */
+const sinFoco = (): boolean => !document.activeElement || document.activeElement === document.body;
+/**
  * Termina de retomar la sesión guardada, con cuenta o sin ella. Quien toca "Entrar con Google" mientras la sesión
  * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
  */
@@ -205,17 +239,39 @@ let pidiendoEntrar = false;
 let recienEntro = false;
 
 /**
- * Si quedó una sesión guardada en este navegador para esta red: la cuenta de
- * prueba o Freighter (`session-store`), o la marca de Pollar
- * (`tinkazo.pollar.intent`, en wallet-pollar.ts, que no se carga para esto).
+ * Si quedó una sesión guardada en este navegador para esta red: es la misma
+ * pregunta que la hoja de modo le hace al otro modo (`cuenta-guardada.ts`).
  */
 function haySesionGuardada(): boolean {
-  if (loadSessionKind(network.name)) return true;
-  try {
-    return hasPollarKey(network.name) && leerMarcaPollar(localStorage, network.name) !== null;
-  } catch {
-    return false;
-  }
+  return hayCuentaGuardada(network.name);
+}
+
+/**
+ * La cuenta quedó abierta en el otro modo: en cuál, o `null` si esta página no lo dice.
+ *
+ * Sin sesión en este modo (ni volviendo), con modo Oficial para ofrecer en la
+ * dirección que falta y con una marca guardada del otro ·tipo de sesión o
+ * marca de Pollar, en `cuenta-guardada.ts`·. Solo se lee si existe: nunca se
+ * abre acá la sesión de la otra red (nema1502/tinkazo#90); la retoma la página
+ * cuando abre en ese modo.
+ */
+function cuentaEnElOtroModo(): NetworkName | null {
+  if (session || retomando || conectando) return null;
+  const destino: NetworkName = network.name === "mainnet" ? "testnet" : "mainnet";
+  if (destino === "mainnet" && !hayModoOficial) return null;
+  return hayCuentaGuardada(destino) ? destino : null;
+}
+
+/** El nombre visible del otro modo, con la frase de la cuenta abierta y la del botón para ir. */
+function textoDelOtroModo(destino: NetworkName): { linea: string; boton: string; chip: string; aria: string } {
+  const modo = t(modeNameKey(destino));
+  const linea = t("cuentaOtroModo").replace("{modo}", modo);
+  return {
+    linea,
+    boton: t("cuentaOtroModoIr").replace("{modo}", modo),
+    chip: t("cuentaOtroModoChip").replace("{modo}", modo),
+    aria: `${linea} ${t("cuentaOtroModoIr").replace("{modo}", modo)}`,
+  };
 }
 
 /** El navegador de una app, donde Google no deja entrar (src/navegador.ts). */
@@ -265,15 +321,23 @@ export async function entrar(): Promise<void> {
   pintarCuenta();
   try {
     const [w, { pollarWallet }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
-    const address = await pollarWallet.connect();
+    const address = await pollarWallet.connect({ terminando: alTerminar });
     await afterConnect(w, pollarWallet, address, "google", document.createElement("div"), () => undefined);
   } catch (e) {
-    // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
-    void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
+    // Cancelar mientras se terminaba de entrar no es un error: la puerta vuelve a como estaba, sin aviso.
+    if (!esCancelada(e)) {
+      // Primero el aviso, al instante. La salida se suma cuando contesta el chequeo de internet.
+      void sumarSalidaAlAviso(notice(await walletErrorText(e), true), e, "google");
+    }
   } finally {
     conectando = false;
+    const terminaba = cancelarEntrada !== null;
+    cancelarEntrada = null;
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();
+    // La puerta decía "Terminando de entrar…" con Cancelar: vuelve a como estaba.
+    if (terminaba) applyGate();
+    if (terminaba && !session) callarTerminando();
   }
 }
 
@@ -517,6 +581,9 @@ async function restorePollar(): Promise<void> {
     const { setActiveWallet } = await lite();
     if (session) return;
     setActiveWallet(pollarWallet);
+    // Con la cuenta de vuelta, la marca de sesión de Google queda guardada, como al entrar: la cabecera de las páginas de
+    // lectura la mira para no ofrecer Entrar. Sin cuenta no se guarda nada (el borrado de arriba sigue valiendo).
+    saveSessionKind("google", network.name);
     const prof = pollarWallet.profile();
     session = {
       kind: "external",
@@ -604,7 +671,8 @@ const vistaDeLaSesion = (): Parameters<typeof estadoCuenta>[0]["sesion"] =>
     : null;
 
 /** En qué está la cuenta ahora: afuera, conectando, retomando o adentro (`cuenta-estado.ts`). */
-export const estadoDeLaCuenta = (): EstadoCuenta => estadoCuenta({ sesion: vistaDeLaSesion(), retomando: anchoringAvailable && retomando, conectando });
+export const estadoDeLaCuenta = (): EstadoCuenta =>
+  estadoCuenta({ sesion: vistaDeLaSesion(), retomando: anchoringAvailable && retomando, conectando, terminando: cancelarEntrada !== null });
 
 /**
  * La cuenta, siempre a la vista (26 de octubre de 2026). Alguien usó tinkazo.app y no se notaba si había iniciado
@@ -652,11 +720,19 @@ function pintarCuenta(): void {
     box.appendChild(net);
   }
 
-  const chip = crearChip(e, { tx: t, recien: recienEntro });
+  const destinoOtroModo = e.estado === "fuera" ? cuentaEnElOtroModo() : null;
+  const chip = crearChip(e, {
+    tx: t,
+    recien: recienEntro,
+    ...(destinoOtroModo ? { enOtroModo: { texto: textoDelOtroModo(destinoOtroModo).chip, aria: textoDelOtroModo(destinoOtroModo).aria } } : {}),
+  });
   if (e.estado === "dentro" && session) {
     // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
     chip.title = `${session.label}: ${session.address}`;
     chip.addEventListener("click", () => void showAccount());
+  } else if (destinoOtroModo) {
+    // La cuenta quedó abierta en el otro modo: tocar el chip manda para allá, y la página de allá retoma la sesión sola.
+    chip.addEventListener("click", () => void import("./modo-ui").then((m) => m.pasarAModo(destinoOtroModo)));
   } else if (e.estado === "fuera") {
     // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
     chip.addEventListener("click", () => void openPicker({ volverA: chip }));
@@ -726,8 +802,10 @@ function applyGate(): void {
     if (!(sellar as HTMLButtonElement).disabled) refreshFreezeLabel();
   }
   // La línea que pedía entrar encima de "Pegar lista" ya no va: el botón de la cabecera y el de sellar lo piden. Queda
-  // solo para lo que pasa ahora: retomar la sesión, conectar, o pedir el toque que el navegador exige.
-  if (!locked || !(retomando || conectando || pidiendoEntrar)) {
+  // solo para lo que pasa ahora: retomar la sesión, conectar, pedir el toque que el navegador exige... o decir en qué
+  // modo quedó la cuenta, con el botón para llegar hasta ella (nema1502/tinkazo#90).
+  const destino = !retomando && !conectando ? cuentaEnElOtroModo() : null;
+  if (!locked || !(retomando || conectando || pidiendoEntrar || destino)) {
     gate.style.display = "none";
     return;
   }
@@ -742,16 +820,30 @@ function applyGate(): void {
   const teniaElFoco = gate.contains(document.activeElement);
   gate.replaceChildren();
   const p = document.createElement("p");
-  // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
+  // Retomando o conectando no se ofrece nada; y si la cuenta quedó abierta en el otro modo, la puerta la nombra:
+  // en vez de pedir entrar como si nunca hubiera entrado, dice dónde está y pone el botón para ir.
   const ocupada = retomando || conectando;
-  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : "cuentaPideGoogle");
+  p.textContent = destino
+    ? textoDelOtroModo(destino).linea
+    : t(retomando ? "gateRetomando" : conectando ? (cancelarEntrada ? "loginTerminando" : "connecting") : "cuentaPideGoogle");
   gate.appendChild(p);
   gate.classList.toggle("retomando", ocupada);
-  if (!ocupada) {
-    const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
+  // Terminando de entrar, lo único que se puede hacer es cancelar: le pide al SDK que pare y la puerta vuelve a como estaba.
+  const cancelar = conectando ? cancelarEntrada : null;
+  if (cancelar) {
+    const b = button(t("cancel"), "ghost", () => cancelar());
     b.type = "button";
     gate.appendChild(b);
-    if (teniaElFoco) b.focus({ preventScroll: true });
+    // También sin foco en ningún lado: al pasar a Conectando la puerta se rearmó sin botón y el foco se perdió.
+    if (teniaElFoco || sinFoco()) b.focus({ preventScroll: true });
+  }
+  if (!ocupada) {
+    const ir = destino
+      ? button(textoDelOtroModo(destino).boton, "ghost", () => void import("./modo-ui").then((m) => m.pasarAModo(destino)))
+      : button(t("cuentaPideEntrar"), "ghost", () => void entrar());
+    ir.type = "button";
+    gate.appendChild(ir);
+    if (teniaElFoco) ir.focus({ preventScroll: true });
   }
   gate.style.display = "";
 }
@@ -1514,10 +1606,32 @@ async function connect(
   row: HTMLElement,
   done: () => void,
 ): Promise<void> {
+  // Otro toque en el mismo botón mientras entra (el de Google dice Terminando de entrar y se puede tocar de nuevo) no
+  // empieza otra entrada: la que está en curso sigue, y al terminar entra una sola vez.
+  if (row.dataset.entrando) return;
+  row.dataset.entrando = "1";
   const original = row.innerHTML;
   row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
   conectando = true;
   pintarCuenta();
+  // En esta ventana la puerta queda detrás: "Terminando de entrar…" va en el mismo botón, y Cancelar justo debajo.
+  let enlaces: HTMLElement | null = null;
+  const terminando = (cancelar: () => void): void => {
+    // Con el foco en Google (desde el teclado) o en ningún lado, pasa a Cancelar: es lo único que se puede hacer ahora.
+    const llevarFoco = row.contains(document.activeElement) || sinFoco();
+    row.innerHTML = `<span>${esc(t("loginTerminando"))}</span>`;
+    enlaces = document.createElement("div");
+    enlaces.className = "login-links";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "login-link";
+    b.textContent = t("cancel");
+    b.addEventListener("click", () => cancelar(), { once: true });
+    enlaces.appendChild(b);
+    row.after(enlaces);
+    if (llevarFoco) b.focus({ preventScroll: true });
+    alTerminar(cancelar);
+  };
   try {
     const w = await lite();
     // Solo la cuenta de prueba necesita el SDK, para armar su par de llaves.
@@ -1527,17 +1641,30 @@ async function connect(
         : pick === "google"
           ? (await import("../stellar/wallet-pollar")).pollarWallet
           : w.freighterWallet;
-    const address = await wallet.connect();
+    const address = pick === "google" ? await (wallet as PollarConAvisos).connect({ terminando }) : await wallet.connect();
     await afterConnect(w, wallet, address, pick, back, done);
   } catch (e) {
     row.innerHTML = original;
-    const aviso = notice(await walletErrorText(e), true);
-    // Solo el ingreso con Pollar (Google) depende del proveedor que puede quedarse sin cupo: Freighter y la cuenta de prueba, no.
-    if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
+    // Cancelar mientras se terminaba de entrar no es un error: el botón vuelve a como estaba, sin aviso.
+    if (!esCancelada(e)) {
+      const aviso = notice(await walletErrorText(e), true);
+      // Solo el ingreso con Pollar (Google) depende del proveedor que puede quedarse sin cupo: Freighter y la cuenta de prueba, no.
+      if (pick === "google") void sumarSalidaAlAviso(aviso, e, "google", done);
+    }
   } finally {
+    delete row.dataset.entrando;
+    // Si el foco estaba en Cancelar, vuelve al botón de Google: Cancelar se va.
+    const volverAGoogle = (enlaces as HTMLElement | null)?.contains(document.activeElement) === true;
+    (enlaces as HTMLElement | null)?.remove();
+    // Primero deja de conectar y después se pinta la puerta, como en `entrar`: al revés quedaba en Conectando, sin botón.
     conectando = false;
+    const terminaba = cancelarEntrada !== null;
+    cancelarEntrada = null;
+    if (terminaba) applyGate();
     // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
     if (!session) pintarCuenta();
+    if (terminaba && !session) callarTerminando();
+    if (volverAGoogle && row.isConnected) row.focus({ preventScroll: true });
   }
 }
 

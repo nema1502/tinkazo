@@ -5,8 +5,11 @@
  * el gasto; en mainnet con altas, también el libro de cuentas y sus tablas (huellas de
  * cupones, el identificador de Pollar, derechos y pagos). Nada más: ni nombres, ni
  * correos, ni listas, ni direcciones IP, ni códigos en claro. Las clases del objeto
- * solo llaman a estas funciones; ningún SQL queda afuera de este archivo y de
- * `altas.ts` (los cupones), para poder migrar el día que haga falta (ver README.md).
+ * solo llaman a estas funciones y a las de los archivos que tienen su propio SQL:
+ * `altas.ts` (los cupones), `cobros.ts` (las órdenes y los pagos), `compras.ts` (la
+ * compra con QR), `pagos-uso.ts` (los pagos de premios y los retiros) y `altas-premio.ts`
+ * (el alta de quien ganó). Ningún SQL queda afuera de este archivo y de esos cinco, para
+ * poder migrar el día que haga falta (ver README.md).
  *
  * Es código síncrono a propósito: un objeto de Cloudflare atiende de a uno mientras
  * no haya un `await` en el medio, así que comprobar el cupo y reservarlo es una sola
@@ -32,9 +35,9 @@ export interface Sql {
   transaccion<T>(fn: () => T): T;
 }
 
-/** Por qué una cuenta entró al libro: un cupón, un pago o un alta a mano. */
-export type MotivoAlta = "cupon" | "pago" | "admin";
-const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin"];
+/** Por qué una cuenta entró al libro: un cupón, un pago, un alta a mano o el premio de un sorteo (la nombró quien lo organizó). */
+export type MotivoAlta = "cupon" | "pago" | "admin" | "premio";
+const MOTIVOS_ALTA: readonly MotivoAlta[] = ["cupon", "pago", "admin", "premio"];
 
 /**
  * Las tablas de las altas (ver el modelo de datos del diseño de cupones). Viven en el mismo SQLite que los cupos para
@@ -208,6 +211,8 @@ export class Cupos {
   /** Las columnas de `COLUMNAS_NUEVAS` que no se pudieron sumar al arrancar (`tabla.columna`), y el primer error. */
   private readonly faltan: string[] = [];
   private errorAlSumar: string | null = null;
+  /** Si la tabla `sorteos_de_sellos` no se pudo crear al arrancar: sin ella ningún sello respalda un premio ni un alta. */
+  private sinSorteosDeSellos = false;
 
   constructor(private readonly sql: Sql) {
     for (const q of [
@@ -232,6 +237,29 @@ export class Cupos {
       this.sql.exec(q);
     }
     this.sumarColumnas();
+    this.crearSorteosDeSellos();
+  }
+
+  /**
+   * La tabla que ata cada sello del portero a UN sorteo: el primero cuyo `draw` pagó el portero con ese sello. Se crea con su
+   * propio try/catch y no en la lista de arriba: un `CREATE` que lanzara tumbaría el objeto entero, y con él los sellos del
+   * evento. Si falla, los premios y las altas de quien ganó fallan cerrados (`selloDelSorteo` da null) y todo lo demás sigue.
+   */
+  private crearSorteosDeSellos(): void {
+    const consultas = [
+      [
+        "CREATE TABLE IF NOT EXISTS sorteos_de_sellos (sello TEXT PRIMARY KEY, contrato TEXT NOT NULL, sorteo TEXT NOT NULL,",
+        "draw TEXT NOT NULL, ms INTEGER NOT NULL)",
+      ].join(" "),
+      "CREATE UNIQUE INDEX IF NOT EXISTS sorteos_de_sellos_sorteo ON sorteos_de_sellos (contrato, sorteo)",
+    ];
+    try {
+      for (const q of consultas) {
+        this.sql.exec(q);
+      }
+    } catch {
+      this.sinSorteosDeSellos = true;
+    }
   }
 
   /**
@@ -612,6 +640,64 @@ export class Cupos {
    */
   selloDelPortero(organizador: string, huellaLista: string, ronda: number): string | null {
     const f = this.filas("SELECT hash FROM sellos_portero WHERE organizador = ? AND huella_lista = ? AND ronda = ? ORDER BY ms DESC LIMIT 1", organizador, huellaLista.toLowerCase(), ronda)[0];
+    return f ? String(f.hash) : null;
+  }
+
+  /**
+   * Ata un sello del portero a UN sorteo: el del primer `draw` que el portero paga con ese sello (`draw` es su hash). El contrato
+   * deja sellar varias veces la misma lista con la misma ronda y cada sello crea un sorteo nuevo, así que el organizador, la huella
+   * y la ronda no alcanzan para saber cuál de esos sorteos selló el portero: sin esto, un solo sello pagado respaldaría todos los
+   * sorteos iguales que la cuenta sellara por fuera.
+   *
+   * - Si ese sorteo ya está atado a un sello, no cambia nada (un `draw` que se reintenta no ata otro).
+   * - Si no, se ata al sello más viejo con el mismo organizador, huella y ronda que todavía no respalda a ningún sorteo. Un sello
+   *   ya atado nunca se desata ni se ata a otro sorteo.
+   * - Sin un sello libre, no se ata nada: ese sorteo no tiene premios ni altas por el portero.
+   *
+   * Nunca lanza: lo llama el camino del sorteo, que no se puede caer por esto. Devuelve false si la tabla no está o algo falló.
+   */
+  atarSorteo(p: { sello: string; contrato: string; sorteo: string; draw: string }, ahora: number): boolean {
+    if (this.sinSorteosDeSellos) return false;
+    try {
+      const s = this.filas("SELECT organizador, huella_lista, ronda FROM sellos_portero WHERE hash = ?", p.sello)[0];
+      if (!s) return true;
+      if (this.filas("SELECT 1 AS n FROM sorteos_de_sellos WHERE contrato = ? AND sorteo = ?", p.contrato, p.sorteo).length > 0) return true;
+      const libre = this.filas(
+        [
+          "SELECT s.hash AS hash FROM sellos_portero s LEFT JOIN sorteos_de_sellos d ON d.sello = s.hash",
+          "WHERE s.organizador = ? AND s.huella_lista = ? AND s.ronda = ? AND d.sello IS NULL ORDER BY s.ms, s.hash LIMIT 1",
+        ].join(" "),
+        s.organizador,
+        s.huella_lista,
+        s.ronda,
+      )[0];
+      if (!libre) return true;
+      const insertar = "INSERT OR IGNORE INTO sorteos_de_sellos (sello, contrato, sorteo, draw, ms) VALUES (?, ?, ?, ?, ?)";
+      this.sql.exec(insertar, String(libre.hash), p.contrato, p.sorteo, p.draw, ahora);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * El sello del portero que respalda ESTE sorteo (el contrato y el número, en decimal), si el portero pagó su `draw` con un sello
+   * del mismo organizador, huella y ronda que dice la red. null si no lo pagó, si el sello es de un sorteo gemelo, si es un sello
+   * de antes de que se guardara esto o si la tabla no está: el premio y el alta de quien ganó fallan cerrados.
+   */
+  selloDelSorteo(contrato: string, sorteo: string, enRed: { organizador: string; huellaLista: string; ronda: number }): string | null {
+    if (this.sinSorteosDeSellos) return null;
+    const f = this.filas(
+      [
+        "SELECT s.hash AS hash FROM sorteos_de_sellos d JOIN sellos_portero s ON s.hash = d.sello",
+        "WHERE d.contrato = ? AND d.sorteo = ? AND s.organizador = ? AND s.huella_lista = ? AND s.ronda = ? LIMIT 1",
+      ].join(" "),
+      contrato,
+      sorteo,
+      enRed.organizador,
+      enRed.huellaLista.toLowerCase(),
+      enRed.ronda,
+    )[0];
     return f ? String(f.hash) : null;
   }
 

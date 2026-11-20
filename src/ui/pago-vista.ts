@@ -40,6 +40,8 @@ export interface PanelDePago {
   usdc: string;
   monto: string;
   nota: string;
+  /** La nota numérica de la orden (`memoId`, `alta-api.ts`), para las apps que solo aceptan números: se copia tal cual. */
+  memoId: string;
   enlace: string;
   vence: number;
   detalles: Texto[];
@@ -75,8 +77,9 @@ export interface PagandoEnLaVista {
 
 /**
  * Lo plegado en Más detalles: para qué cuenta es, hasta cuándo vale la nota, que en otra app la nota puede llamarse
- * memo, qué hacer sin dólares digitales y qué hacer con XLM. El QR del enlace y Abrir en mi app de pagos van ahí
- * también (`pago-panel.ts`).
+ * memo, qué hacer sin dólares digitales y qué hacer con XLM. La nota numérica de la orden va plegada también, con su
+ * Copiar y cuándo usarla (`pago-panel.ts`), y su dato viaja en el panel (`memoId`). El QR del enlace y Abrir en mi app
+ * de pagos van ahí también (`pago-panel.ts`).
  */
 export function detallesDelPago(o: OrdenDePago, correo: string, idioma: "es" | "en"): Texto[] {
   return [...(correo ? [{ clave: "pagoParaCuenta", vars: { correo } }] : []), { clave: "pagoVence", vars: { fecha: fechaDeAlta(o.vence, idioma) } }, { clave: "compraNotaMemo" }, { clave: "compraSinDolares" }, { clave: "compraDesdeXlm" }];
@@ -96,6 +99,7 @@ export function panelDe(o: OrdenDePago, correo: string, idioma: "es" | "en", sal
     usdc: o.usdc,
     monto: montoVisible(o.usdc, idioma),
     nota: o.nota,
+    memoId: o.memoId,
     enlace: o.enlace,
     vence: o.vence,
     detalles: noLlego ? [...detalles, { clave: "pagoOtraMoneda" }, { clave: "pagoOtraNotaEnviada" }] : detalles,

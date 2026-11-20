@@ -166,6 +166,13 @@ export function armarPanelDePago(p: PanelDePago, o: { alCambiar?: (e: Event) => 
     parrafo.textContent = poner(x);
     mas.append(parrafo);
   }
+  // La nota numérica de la orden (`memoId`): para quien paga desde un exchange que solo acepta memos de números. Va
+  // plegada porque casi nadie la necesita: la nota de texto es la que vale, y esta no la reemplaza sino que acompaña.
+  dato(mas, { dato: "memoId", etiqueta: t("pagoMemoNumRotulo"), valor: p.memoId, copia: p.memoId });
+  const usoMemo = document.createElement("p");
+  usoMemo.className = "pago-detalle";
+  usoMemo.textContent = t("pagoMemoNumUso");
+  mas.append(usoMemo);
   mas.append(caja, app);
   el.append(mas);
   return el;
@@ -179,13 +186,14 @@ export interface PanelArmado {
 }
 
 /**
- * El panel de esta orden: el mismo elemento mientras no cambie nada de lo que muestra (la orden, el idioma, el cambio y
- * lo plegado en Más detalles). Si cambia algo, por ejemplo cuando después de No llegó se suman casos a Más detalles, se
- * arma de nuevo, y si es la misma orden, Más detalles queda abierto o cerrado como estaba. `previo`: el que ya se armó.
+ * El panel de esta orden: el mismo elemento mientras no cambie nada de lo que muestra (la orden, el idioma, el cambio,
+ * el renglón del saldo y lo plegado en Más detalles). Si cambia algo, por ejemplo cuando después de No llegó se suman
+ * casos a Más detalles, se arma de nuevo, y si es la misma orden, Más detalles queda abierto o cerrado como estaba.
+ * `previo`: el que ya se armó.
  */
 export function panelDeLaOrden(previo: PanelArmado | null, p: PanelDePago, idioma: string, o: { alCambiar?: (e: Event) => void } = {}): PanelArmado {
-  const orden = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}`;
-  const clave = `${orden}|${p.correo}|${p.cambio ? "qr" : ""}|${p.detalles.map((x) => x.clave).join(",")}|${idioma}`;
+  const orden = `${p.nota}|${p.destino}|${p.usdc}|${p.enlace}|${p.vence}|${p.memoId}`;
+  const clave = `${orden}|${p.correo}|${p.cambio ? "qr" : ""}|${p.detalles.map((x) => x.clave).join(",")}|${JSON.stringify(p.saldo ?? null)}|${idioma}`;
   if (previo?.clave === clave) return previo;
   const abierto = previo?.orden === orden && previo.el.querySelector<HTMLDetailsElement>('details[data-pago="detalles"]')?.open === true;
   return { orden, clave, el: armarPanelDePago(p, { ...o, abierto }) };

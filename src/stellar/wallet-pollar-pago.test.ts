@@ -142,6 +142,8 @@ const veces = (nombre: string): number => e.llamadas.filter((x) => x === nombre)
 
 beforeEach(() => {
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY_MAINNET", "pub_mainnet_prueba");
+  // La venta vive en el modo pollar, que la puerta del premio no cuida: estas pruebas miran el pago, no la puerta.
+  vi.stubEnv("VITE_RAMPA", "pollar");
   vi.stubGlobal("localStorage", enMemoria());
   vi.stubGlobal("sessionStorage", enMemoria());
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -375,5 +377,25 @@ describe("sin la cuenta de la sesión en la red principal, nada", () => {
     e.redDelCliente = "testnet";
     expect(await pollarWallet.pagarOrden(ORDEN)).toEqual({ estado: "no-salio", motivo: "sin-cuenta" });
     expect(veces("buildTx")).toBe(0);
+  });
+});
+
+describe("en el modo premios el pago con el saldo se niega en la función", () => {
+  it("no arma el cliente, no pide nada al proveedor ni firma, y dice sin-cuenta (el build tampoco deja prender los dos: premios-build.ts)", async () => {
+    vi.stubEnv("VITE_RAMPA", "premios");
+    const pedidos: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL | Request) => {
+        pedidos.push(String(url));
+        throw new Error("el pago con el saldo no pide nada a la red en el modo premios");
+      }),
+    );
+    expect(await pollarWallet.pagarOrden(ORDEN)).toEqual({ estado: "no-salio", motivo: "sin-cuenta" });
+    expect(veces("buildTx")).toBe(0);
+    expect(veces("signTx")).toBe(0);
+    expect(veces("submitTx")).toBe(0);
+    expect(e.construidos).toBe(0);
+    expect(pedidos).toEqual([]);
   });
 });

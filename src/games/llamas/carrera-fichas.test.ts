@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metida, pisadura, pisaA, sitioLibre, type CajaF } from "./carrera-fichas";
+import { metida, pisadura, pisaA, sitioLibre, buscaLugarFicha, type CajaF } from "./carrera-fichas";
 
 const caja = (x0: number, y0: number, w = 100, h = 20): CajaF => ({ x0, y0, x1: x0 + w, y1: y0 + h });
 const PANTALLA = caja(0, 0, 800, 600);
@@ -85,5 +85,57 @@ describe("dónde va la que pisa a otra", () => {
 
   it("es determinista: mismas cajas, mismo sitio", () => {
     expect(sitioLibre(caja(100, 100), [puesta], PANTALLA, true)).toBe(sitioLibre(caja(100, 100), [puesta], PANTALLA, true));
+  });
+});
+
+describe("dónde va la ficha del 3D cuando el grupo de punta se aprieta", () => {
+  const paso = 21;
+  const w = 100;
+  /** Una búsqueda con las cajas bloqueadas que se le pasan: devuelve qué lugar probó o undefined. */
+  const busca = (bloqueadas: Set<string>, cabeMal: Set<string> = new Set(), renglones = 5, lados = 3) =>
+    buscaLugarFicha(
+      (dx, dy) => bloqueadas.has(`${dx},${dy}`),
+      (dx, dy) => !cabeMal.has(`${dx},${dy}`),
+      paso,
+      w,
+      renglones,
+      lados,
+    );
+
+  it("si su lugar está libre, se queda en el ancla", () => {
+    expect(busca(new Set())).toEqual({ dx: 0, dy: 0 });
+  });
+
+  it("si el ancla y los primeros renglones están ocupados, sube lo que haga falta", () => {
+    const bloqueadas = new Set(["0,0", "-50,0", "50,0", "-100,0", "100,0", "-150,0", "150,0", "0,-21", "-50,-21", "50,-21", "-100,-21", "100,-21", "-150,-21", "150,-21"]);
+    expect(busca(bloqueadas)).toEqual({ dx: 0, dy: -42 });
+  });
+
+  it("el orden de los renglones es el de siempre: primero arriba, dos arriba, después abajo", () => {
+    const bloqueadas = new Set(["0,0", "-50,0", "50,0", "-100,0", "100,0", "-150,0", "150,0", "0,-21", "-50,-21", "50,-21", "-100,-21", "100,-21", "-150,-21", "150,-21", "0,-42", "-50,-42", "50,-42", "-100,-42", "100,-42", "-150,-42", "150,-42"]);
+    expect(busca(bloqueadas)).toEqual({ dx: 0, dy: 21 });
+  });
+
+  it("si la columna entera está llena, se corre medio ancho a un lado", () => {
+    const bloqueadas = new Set(["0,0", "0,-21", "0,-42", "0,21", "0,42", "0,-63", "0,63", "0,-84", "0,84", "0,-105", "0,105"]);
+    expect(busca(bloqueadas)).toEqual({ dx: -50, dy: 0 });
+  });
+
+  it("no sale de los renglones y de los lados que se le piden", () => {
+    const todas = new Set<string>();
+    for (let j = -5; j <= 5; j++) for (let i = -3; i <= 3; i++) todas.add(`${(i * w) / 2},${j * paso}`);
+    expect(busca(todas)).toBeUndefined();
+  });
+
+  it("respeta los límites de la pantalla: donde no cabe, no va", () => {
+    // Todo el borde de arriba no cabe (el piso de las fichas): la ficha baja.
+    const cabeMal = new Set<string>();
+    for (const dy of [0, -21, -42, -63, -84, -105]) for (const dx of [-150, -100, -50, 0, 50, 100, 150]) cabeMal.add(`${dx},${dy}`);
+    expect(busca(new Set(), cabeMal)).toEqual({ dx: 0, dy: 21 });
+  });
+
+  it("es determinista: mismas cajas, mismo lugar", () => {
+    const bloqueadas = new Set(["0,0", "0,-21"]);
+    expect(busca(bloqueadas)).toEqual(busca(bloqueadas));
   });
 });

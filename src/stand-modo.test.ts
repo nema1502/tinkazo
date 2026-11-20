@@ -148,17 +148,18 @@ describe("el número de una ronda de stand", () => {
 describe("los textos del modo stand y de la sala", () => {
   it("el final habla de participar, no de entrar, en los dos idiomas", async () => {
     const { T } = await import("./i18n");
-    expect(T.es.standFinB).toContain("Participar es gratis");
-    expect(T.es.standFinB).not.toMatch(/\bEntrar\b/i);
-    expect(T.en.standFinB).toContain("Taking part is free");
-    expect(T.en.standFinB).not.toMatch(/\bJoining\b/i);
+    expect(T.es.standFinNota).toContain("Participar es gratis");
+    expect(T.es.standFinNota).not.toMatch(/\bEntrar\b/i);
+    expect(T.en.standFinNota).toContain("Taking part is free");
+    expect(T.en.standFinNota).not.toMatch(/\bJoining\b/i);
+    for (const texto of [T.es.standFinNota, T.en.standFinNota]) expect(texto).not.toMatch(/gan|premio|prize|win/i);
   });
 
   it("cada clave que usan stand.ts, stand-sala.ts y el HTML existe en español y en inglés, sin punto medio", async () => {
     const { readFileSync } = await import("node:fs");
     const { T } = await import("./i18n");
     const claves = new Set<string>();
-    for (const f of ["src/ui/stand.ts", "src/ui/stand-sala.ts", "index.html"]) {
+    for (const f of ["src/ui/stand.ts", "src/ui/stand-sala.ts", "src/ui/ganadores.ts", "src/ui/resultado-ganadores.ts", "src/ui/pasos.ts", "index.html"]) {
       for (const m of readFileSync(f, "utf8").matchAll(/["']((?:stand|standSala)[A-Za-z0-9]*)["']/g)) claves.add(m[1] as string);
     }
     expect(claves.size).toBeGreaterThan(20);
@@ -191,6 +192,37 @@ describe("los textos del modo stand y de la sala", () => {
       expect(T.en[k], `en.${k}`).toMatch(/coupon/i);
       expect(T.en[k], `en.${k}`).toMatch(/check/i);
     }
+  });
+});
+
+describe("lo que dice el stand de cuántas personas salen", () => {
+  /** Ganar, premio y sello no se dicen en el stand: ahí nadie gana y nada se sella. Palabras enteras, para no tomar «llegan» ni «wind». */
+  const PROHIBIDO = /\bgan\p{L}*|premio|sell|\bwin(s|ner|ners|ning)?\b|prize|seal/iu;
+
+  it("el rótulo, los atajos, el final y el aviso del resultado no hablan de ganar, de premios ni de sellar", async () => {
+    const { T } = await import("./i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["standSalen", "standSalenAtajos", "standOtros", "standSalio", "standSalieron"]) {
+        const v = (T[l] as Record<string, unknown>)[k];
+        expect(typeof v, `${l}.${k}`).toBe("string");
+        expect(v as string, `${l}.${k}`).not.toMatch(PROHIBIDO);
+        expect(v as string, `${l}.${k}`).not.toMatch(/[;·—«»]/);
+      }
+    }
+  });
+
+  it("el resumen de la ronda, en cualquier cantidad, tampoco, y no termina en punto", async () => {
+    const { T } = await import("./i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const [n, k, todas] of [[1, 1, true], [2, 1, false], [2, 2, true], [8, 1, false], [8, 3, false], [8, 8, true]] as const) {
+        const texto = T[l].standResumen(n, k, todas);
+        expect(texto, `${l} ${n} ${k}`).not.toMatch(PROHIBIDO);
+        expect(texto, `${l} ${n} ${k}`).not.toMatch(/[;·—«».]/);
+      }
+    }
+    // Sin cuántas salen, solo la cuenta de siempre.
+    expect(T.es.standResumen(8)).toBe("8 personas en la ronda");
+    expect(T.en.standResumen(8)).toBe("8 people in the round");
   });
 });
 

@@ -83,7 +83,8 @@ describe("textos del logo", () => {
     expect(terminos).toContain(`data-i="tmLogoT">${T.es.tmLogoT as string}</h3>`);
     expect(terminos).toContain(T.es.tmMore4 as string);
     expect(terminos).toContain(T.es.tmMore1 as string);
-    expect(terminos).toContain("tu logo, si subiste uno, y la llave");
+    expect(terminos).toContain("tu logo, si subiste uno,");
+    expect(terminos).toContain("la campaña que estás armando en la página para armar campañas");
     expect(precios).toContain(`data-i="prLogoNota">${T.es.prLogoNota as string}</p>`);
   });
 

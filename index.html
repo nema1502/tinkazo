@@ -77,6 +77,8 @@
       <div class="hero-ctas">
         <a class="primary cta cta-entrar" href="#sortear" data-cta-entrar><span class="g-ico" aria-hidden="true"></span><span class="cta-t" data-i="ctaHero">Entrar y sortear gratis</span></a>
         <button class="ghost" type="button" data-entrar-ensayo data-i="ctaEnsayo">Probar con un ejemplo</button>
+        <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con quienes pasan. No graba nada ni pide cuenta. -->
+        <button class="ghost" type="button" data-entrar-stand data-i="ctaStand">Tengo un stand</button>
       </div>
       <p class="hero-otras"><button class="enlace" type="button" data-otras-formas data-i="ctaOtras">Otras formas de entrar</button></p>
       <p class="hero-note"><a class="enlace" href="#confiar" data-i="ctaJusto">¿Cómo sé que es justo?</a></p>
@@ -150,7 +152,7 @@
     <div class="faq">
       <details><summary data-i="faq1q">¿Alguien paga por participar?</summary><p data-i="faq1a">No. Nunca le cobramos a quien participa, y los términos prohíben usar Tinkazo para sorteos con entrada paga: no es una apuesta ni una rifa con boletos.</p></details>
       <details><summary data-i="faq2q">¿Mi gente tiene que instalar algo?</summary><p data-i="faq2a">No. Solo quien organiza entra con una cuenta, con Google y en dos pasos. En el sorteo, los participantes no instalan nada ni se registran, y para comprobar el resultado tampoco hace falta nada: el enlace alcanza. Solamente el registro de equipos de un evento con cupón pide una cuenta: quien anota a su equipo entra con Google, porque el cupón va a esa cuenta.</p></details>
-      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy Tinkazo no cobra nada. Muy pronto publicamos los precios para quien organiza, y te avisamos antes de cobrar. Participar y comprobar son gratis siempre. En el modo Oficial, con el cupón de tu evento, Tinkazo cubre la comisión de la red. En ese modo, quien entra con su propia billetera la paga de su cuenta.</p></details>
+      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Organizar es gratis. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.</p></details>
       <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i-html="faq5a">Los nombres nunca se publican: quedan en tu equipo y en el comprobante que compartís. De cada sorteo solo queda un registro público, a nombre de tu cuenta y sin nombres. <a href="/como-funciona.html#que-se-guarda">Qué se guarda, en Cómo funciona</a>.</p></details>
     </div>
   </section>
@@ -171,8 +173,8 @@
   </div>
   <!-- El modo stand (src/ui/stand.ts): solo se ve con body[data-stand="1"]. -->
   <div class="stand-banda app-only tab-nuevo" id="stand-banda">
-    <p data-i="standBanda">Ronda de ejemplo: no se puede comprobar</p>
-    <button class="ghost mini" id="stand-salir-banda" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
+    <p data-i="standBandaModo">Modo stand: rondas de ejemplo</p>
+    <button class="ghost mini" id="stand-salir-banda" type="button" data-i="standSalirBanda">Salir del stand</button>
   </div>
   <div class="appbar app-only">
     <div class="appbar-t">
@@ -241,6 +243,8 @@
   </section>
   <!-- La línea que guía el ensayo, debajo de los pasos. Cambia con el paso y nunca bloquea. -->
   <p class="ensayo-guia app-only tab-nuevo" id="ensayo-guia" role="status" aria-live="polite" hidden></p>
+  <!-- Fuera del stand, el motivo por el que no se pudo entrar. Lo escribe stand.ts, sin abrir una ventana. -->
+  <p class="note app-only tab-nuevo" id="stand-aviso" role="status" aria-live="polite" hidden></p>
 
   <!-- 01 Participantes -->
   <section class="block app-only tab-nuevo" id="sec-participants">
@@ -281,20 +285,34 @@
       <section class="stand-sala" id="stand-sala" aria-labelledby="sala-t">
         <h3 id="sala-t" data-i="standSalaT">Que se sumen con el celular</h3>
         <div id="sala-cerrada">
-          <p class="note" data-i="standSalaB">Mostrá un QR: cada persona escribe su nombre en su celular y aparece acá. Si no hay señal, escribilos vos en el cuadro de abajo.</p>
-          <button class="ghost" type="button" id="sala-crear" data-i="standSalaCrear">Que se sumen con un QR</button>
+          <button class="ghost" type="button" id="sala-crear" data-i="standSalaCrear">Mostrar el QR</button>
+          <!-- Sin señal, o para quien prefiere escribir: lleva al cuadro de la lista (stand-sala.ts). -->
+          <button class="enlace" type="button" id="stand-a-mano" data-i="standAMano">Escribir los nombres a mano</button>
         </div>
         <p class="ss-error" id="sala-error" role="status" hidden></p>
+        <!-- Deshacer lo último por 5 segundos (stand-sala.ts). -->
+        <p class="ss-deshacer" id="sala-deshacer" role="status" hidden>
+          <span id="sala-deshacer-t"></span>
+          <button class="enlace" type="button" id="sala-deshacer-b" data-i="standDeshacer">Deshacer</button>
+        </p>
         <div id="sala-abierta" hidden>
-          <p class="ss-titqr" data-i="standSalaTitQr">Escaneá y sumate con tu nombre</p>
+          <!-- El aviso de ejemplo también queda en cualquier foto de la pantalla grande. -->
+          <p class="ss-banda-grande" data-i="standBanda">Ronda de ejemplo: no se puede comprobar</p>
+          <!-- La marca: solo en la pantalla grande (styles.css). -->
+          <p class="ss-marca" aria-hidden="true">
+            <svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg><span>Tinka<b>zo</b></span>
+          </p>
+          <p class="ss-titqr" data-i="standSalaTitQr">Sumate con tu nombre</p>
           <div class="ss-qr">
             <img id="sala-qr-img" alt="" data-i-aria="standSalaQrAlt" aria-label="QR para sumarse a la ronda" />
             <div class="ss-lado">
               <p class="ss-estado" id="sala-estado" role="status" aria-live="polite"></p>
               <p class="ss-cuenta" id="sala-cuenta" aria-live="polite"></p>
               <div class="row">
+                <!-- Solo en la pantalla grande. El texto lo escribe stand-sala.ts: con cuántas personas, o cuántas faltan. -->
+                <button class="primary" type="button" id="sala-empezar">Empezar la ronda</button>
                 <button class="ghost" type="button" id="sala-grande" aria-expanded="false" data-i="standSalaGrande">Ver el QR en grande</button>
-                <button class="ghost" type="button" id="sala-cerrar" data-i="standSalaCerrar">Cerrar la sala</button>
+                <button class="ghost" type="button" id="sala-nueva" data-i="standSalaNueva">Empezar con gente nueva</button>
               </div>
             </div>
           </div>
@@ -304,6 +322,8 @@
             <p class="note" data-i="standSalaRevisarB">Estos nombres tienen algo que conviene mirar antes de mostrarlos en la pantalla.</p>
             <ul id="sala-revisar-lista"></ul>
           </div>
+          <!-- Cerrar el QR: chico y lejos de los botones de todos los días. Se puede deshacer por 5 segundos (stand-sala.ts). -->
+          <button class="enlace ss-cerrar" type="button" id="sala-cerrar" data-i="standSalaCerrar">Cerrar el QR</button>
         </div>
       </section>
       <div class="row origenes" id="origenes" style="margin: 0 0 14px">
@@ -324,6 +344,8 @@
       </div>
       <!-- Con la lista vacía, cómo se hace (participants.ts). -->
       <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.</p>
+      <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
+      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas rápidas con quienes pasan</button>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
         <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
@@ -363,8 +385,6 @@
       </section>
       <!-- Con el cuadro vacío y en una red con contrato, en lugar de "Cargar ejemplo": el ensayo, que no graba nada. -->
       <button class="enlace" type="button" id="btn-ensayo" data-entrar-ensayo data-i="ensayoLink" style="display:none">o probá con un ejemplo, sin grabar nada</button>
-      <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
-      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas de ejemplo con quienes pasan</button>
       <!-- Al volver de entrar con una lista lista: lo que sigue, con el foco en "Sellar la lista". Nunca sella solo. -->
       <p class="ya-entraste" id="ya-entraste" role="status" style="display:none"></p>
       <!-- El premio y el CSV van plegados. Cuántos ganan queda a la vista junto a Sellar la lista y el resumen repite
@@ -400,7 +420,8 @@
       </div>
       <!-- Cuántos ganan (src/ui/ganadores.ts): solo botones, nunca un número para escribir. El campo escondido conserva
            el valor que leen el sello, el borrador y el resumen. El tope de la red lo pone el código al cargar; el del HTML
-           es el del protocolo, MAX_WINNERS, y ganadores.test.ts lo compara. -->
+           es el del protocolo, MAX_WINNERS, y ganadores.test.ts lo compara. En el modo stand es el mismo control con otro
+           rótulo, Cuántos salen: su tope es la lista de la ronda y solo se ve con dos nombres o más. -->
       <div class="sellar-ganadores" id="ganadores-control">
         <div class="nw-grupo">
           <label class="kicker" id="nw-etiqueta" for="nw" data-i="winners">Cuántos ganan</label>
@@ -473,6 +494,8 @@
           <b id="juego-actual">Carrera de llamas</b>
           <button class="ghost mini" id="btn-cambiar" type="button" data-i="cambiarJuego">Cambiar de juego</button>
         </div>
+        <!-- Solo en el modo stand, mientras corre Arranca en 3 (src/ui/stand.ts): frena la ronda y vuelve al cuadro. -->
+        <button class="ghost" id="stand-cambiar" type="button" data-i="standCambiarLista" hidden>Cambiar la lista</button>
       </div>
       <p class="txstatus" id="draw-status" style="display:none"></p>
       <p class="kicker pick-label" id="pick-label" data-i="gameLabel">Juego</p>
@@ -514,8 +537,6 @@
           <option value="epico" data-i="paceEpic">Épica</option>
         </select>
       </div>
-      <!-- Con el sorteo mirándose en celulares desde el QR, la duración no cambia hasta el resultado (ui/espectador-fijo.ts). -->
-      <p class="note" id="pace-nota" aria-live="polite" hidden></p>
       <div class="row rules-row">
         <button class="ghost" id="btn-rules" data-i="copyRules" data-i-title="rulesNote" title="Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.">Copiar las bases</button>
       </div>
@@ -549,6 +570,12 @@
         <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>
         <!-- Con sello, si el sorteo ya quedó guardado: el juego no espera la grabación, que va aparte (src/ui/draw.ts). -->
         <p class="txstatus" id="grab-estado" role="status" aria-live="polite" style="display:none"></p>
+        <!-- Issue #102: el lugar que la sala acaba de ver, cuando el sello trajo varios de una
+             («Lugar 2 de 5», y el premio de ese lugar si existiera). Lo pone draw.ts. Nace escondido. -->
+        <p class="kicker lugar-actual" id="lugar-actual" role="status" style="display:none"></p>
+        <!-- Issue #102: la verdad a la sala: todos los lugares quedaron fijos al nacer el número y
+             cualquiera los puede calcular desde ese momento. Nace escondida. -->
+        <p class="note lugares-fijos" id="lugares-fijos" data-i="lugaresFijos" style="display:none">Todos los lugares quedaron fijos al nacer el número: cualquiera los puede calcular desde ese momento.</p>
         <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
              sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
         <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">
@@ -582,14 +609,17 @@
             <button class="enlace" id="ens-como" type="button" data-i="comoBtn">¿Cómo se usa?</button>
           </div>
         </div>
-        <!-- El final de una ronda de stand (src/ui/stand.ts): no se sorteó nada de verdad. -->
+        <!-- El final de una ronda de stand (src/ui/stand.ts): no se sorteó nada de verdad. Primero Otra ronda, pegada a quien
+             salió. Después una línea chica que lo dice una sola vez y la salida, como enlace. -->
         <div class="stand-fin" id="stand-fin">
-          <h3 data-i="standFinT">Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.</h3>
-          <p data-i="standFinB">Participar es gratis. El sorteo de cierre sí se puede comprobar desde cualquier celular.</p>
           <div class="row">
             <button class="primary" id="stand-otra" type="button" data-i="standOtra">Otra ronda</button>
-            <button class="ghost" id="stand-salir" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
+            <button class="ghost" id="stand-editar" type="button" data-i="standCambiarLista">Cambiar la lista</button>
+            <!-- Con un QR abierto (stand-sala.ts): mostrarlo en grande antes de la ronda que sigue. -->
+            <button class="ghost" id="stand-qr" type="button" data-i="standSalaGrande" hidden>Ver el QR en grande</button>
           </div>
+          <p class="stand-fin-nota" data-i="standBanda">Ronda de ejemplo: no se puede comprobar</p>
+          <button class="enlace" id="stand-salir" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
         </div>
         <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button><button class="ghost" id="btn-otro-juego" type="button" data-i="otroJuegoBtn">Ver de nuevo con otro juego</button></div>
         <p class="note" id="motion-note" style="display:none"><span data-i="motionNote">Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.</span> <button class="ghost" id="btn-replay" data-i="motionReplay">Ver la animación igual</button></p>

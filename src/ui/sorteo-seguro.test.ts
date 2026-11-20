@@ -146,3 +146,56 @@ describe("la co-firma pendiente de Pollar no se reintenta", () => {
     expect(sorteoReintentable(new TypeError("Load failed"))).toBe(true);
   });
 });
+
+describe("la puerta del premio y el sorteo", () => {
+  const premio = (que: "puede-guardar" | "no-se-sabe"): Error => Object.assign(new Error(que === "puede-guardar" ? "premio-guardado" : "premio-sin-saber"), { name: "PremioGuardado", que });
+
+  it("una cuenta que puede guardar dinero no se reintenta; una lectura que no se pudo hacer sí", () => {
+    expect(sorteoReintentable(premio("puede-guardar"))).toBe(false);
+    expect(sorteoReintentable(premio("no-se-sabe"))).toBe(true);
+    expect(SORTEO_REINTENTABLE.has("premioGuardado")).toBe(false);
+    expect(SORTEO_REINTENTABLE.has("premioGuardadoSorteo")).toBe(false);
+    expect(SORTEO_REINTENTABLE.has("premioSinSaber")).toBe(true);
+  });
+
+  it("puede-guardar: el sorteo pide la firma una sola vez y muestra el aviso, sin esperas ni reintentos", async () => {
+    const r = reloj();
+    const error = premio("puede-guardar");
+    const intentar = vi.fn().mockRejectedValue(error);
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin).toEqual({ ok: false, error });
+    expect(intentar).toHaveBeenCalledTimes(1);
+    expect(r.dormir).not.toHaveBeenCalled();
+  });
+
+  it("no-se-sabe: la lectura que falló se vuelve a pedir, y si la segunda sale, el sorteo se guarda", async () => {
+    const r = reloj();
+    const intentar = vi.fn().mockRejectedValueOnce(premio("no-se-sabe")).mockResolvedValue(GANADORES);
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin).toEqual({ ok: true, valor: GANADORES, yaEstaba: false });
+    expect(intentar).toHaveBeenCalledTimes(2);
+    expect(r.dormir.mock.calls.map((c) => c[0])).toEqual([ESPERAS_DEL_SORTEO_MS[0]]);
+  });
+
+  it("no-se-sabe de punta a punta: si la red no deja saberlo en ningún intento, sale el error con sus esperas de siempre", async () => {
+    const r = reloj();
+    const error = premio("no-se-sabe");
+    const intentar = vi.fn().mockRejectedValue(error);
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin).toEqual({ ok: false, error });
+    expect(intentar).toHaveBeenCalledTimes(5);
+  });
+
+  it("una cuenta que pasa de no-se-sabe a puede-guardar corta ahí", async () => {
+    const r = reloj();
+    const error = premio("puede-guardar");
+    const intentar = vi.fn().mockRejectedValueOnce(premio("no-se-sabe")).mockRejectedValue(error);
+    const fin = await sortearConReintentos({ intentar, yaEsta: async () => null, reintentable: sorteoReintentable, ...r });
+    expect(fin).toEqual({ ok: false, error });
+    expect(intentar).toHaveBeenCalledTimes(2);
+  });
+
+  it("el aviso del reintento es el de siempre para lo que no se sabe", () => {
+    expect(avisoDelReintento("premioSinSaber")).toBe("drawTryOtra");
+  });
+});

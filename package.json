@@ -34,7 +34,7 @@
     "metricas:cadena": "node scripts/metricas-cadena.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24 <25"
   },
   "devDependencies": {
     "@types/three": "0.180.0",

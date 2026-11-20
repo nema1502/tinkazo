@@ -1,4 +1,5 @@
 import { arranqueDelShow, msHasta } from "../arranque-del-show";
+import { horaDeLaRonda } from "../reloj-de-la-ronda";
 import { drawOnChain, readDraw, type AnchorStep } from "./anchor";
 import { unaGrabacionALaVez } from "./grabacion-en-curso";
 
@@ -40,6 +41,7 @@ export function mismosGanadores(a: readonly number[], b: readonly number[]): boo
 }
 
 const dormirDeVerdad = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const ahoraDeLaRondaMs = (): number => horaDeLaRonda() * 1000;
 
 /** Lo que guarda Mis sorteos de un sorteo jugado y sin guardar: alcanza para rehacerlo y grabarlo (`history.ts`). */
 export interface SorteoSinGuardar {
@@ -83,8 +85,9 @@ export function grabarElSorteo(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> 
 
 async function grabar(p: PedidoDeGrabacion): Promise<FinDeLaGrabacion> {
   const dormir = p.dormir ?? dormirDeVerdad;
-  // La cadena acepta el sorteo unos segundos después de nacer el número: hasta entonces, nada que mandar.
-  const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? Date.now)());
+  // La cadena acepta el sorteo unos segundos después de nacer el número: hasta entonces, nada que mandar. Con el reloj de
+  // la ronda (`reloj-de-la-ronda.ts`), el mismo de la puerta de la grabación: sin medir, es el de la compu.
+  const falta = msHasta(arranqueDelShow(p.round).grabable, (p.ahora ?? ahoraDeLaRondaMs)());
   if (falta > 0) await dormir(falta);
   const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable }] = await Promise.all([import("../protocol/drand"), import("./sorteo-seguro")]);
   const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({

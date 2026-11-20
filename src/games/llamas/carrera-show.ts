@@ -17,6 +17,7 @@ import { conObstaculos, finDelEfecto, VUELO_ESCUPIDA } from "./carrera-obstaculo
 import { conTopeDeAceleracion } from "./carrera-tope";
 import { AVISO, CARRIL_ANTES, CARRIL_DURA, CUERPO, PUESTOS_AL_90, RASTRO, conMarcha, momentosCiegos, type Causa } from "./carrera-marcha";
 import { programarFinal, sonarEchada, sonarObstaculo, sonarPaso } from "../../sonidos/carrera-ganchos";
+import { decisivo as momentoDecisivo, primeraQueDejaSoloPremiados } from "../pixi/decisivo";
 
 /**
  * El show de la carrera, puro: la salida, el grupo que se va echando, la recta
@@ -297,6 +298,25 @@ function fueraAlT3(p: PlanFinal, soloLaGanadora = false): boolean {
   // Con los señuelos, la regla es para las cuatro del grupo de punta, no solo para la ganadora.
   const grupo = p.marcha?.grupoT3;
   return grupo && !soloLaGanadora ? grupo.some(afuera) : afuera(p.story.winner);
+}
+
+/** Desde cuántos segundos antes de la meta la ganadora deja de ser una más: una de las cuatro de adelante. */
+export const ANTES_DEL_CRUCE = 3;
+
+/**
+ * Las salidas de la carrera, en orden, con quiénes siguen después de cada una: cada tanda desde que empieza (las que pasan
+ * el portón se ven de a una) y cada echada medio segundo antes (se anuncia). Para el momento decisivo (`decisivo.ts`).
+ */
+export function salidasDeLaCarrera(n: number, tandas: readonly Pick<Tanda, "t0" | "noPasan">[], echadas: readonly { t: number; quien: number }[]): { desde: number; siguen: number[] }[] {
+  const fuera = new Set<number>();
+  const eventos = [
+    ...tandas.map((h) => ({ desde: h.t0, salen: h.noPasan })),
+    ...echadas.map((e) => ({ desde: e.t - 0.8, salen: [e.quien] })),
+  ].sort((a, b) => a.desde - b.desde);
+  return eventos.map((e) => {
+    for (const q of e.salen) fuera.add(q);
+    return { desde: e.desde, siguen: Array.from({ length: n }, (_, i) => i).filter((i) => !fuera.has(i)) };
+  });
 }
 
 export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos> {
@@ -947,6 +967,15 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     }
   }
 
+  /* ------------------------------------------------------- el momento decisivo */
+  // A tres segundos de la meta la ganadora es una de las cuatro de adelante, y antes una más (la marcha pareja,
+  // `docs/juegos/carrera.md`): el celular de quien mira no pasa de ahí sin saber que la sala ya pasó. Con tantos premios
+  // como finalistas, quienes llegan a la recta son quienes ganan: la salida que deja solo a ellas ya los nombra.
+  const decisivo = momentoDecisivo(
+    tCrown - ANTES_DEL_CRUCE,
+    primeraQueDejaSoloPremiados(salidasDeLaCarrera(n, tandas, tiempos.echadas), new Set(ctx.ganadores), n),
+  );
+
   const datos: Datos = {
     nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCarriles: t0Carriles, tCrown, tramos,
     dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, marcas, vivas, campeona, fase, sucesos, cursor: (t: number): number => 1 - suave((t - (tCrown - CINTA_SIN_SENALAR - 0.3)) / 0.3), cambiosDePunta: cambios, lineasAdelante, tandas, tanda, causas,
@@ -955,6 +984,7 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   };
   return {
     duracion: tCrown,
+    decisivo,
     arco,
     sentido: "derecha",
     normal: normalDe(n),

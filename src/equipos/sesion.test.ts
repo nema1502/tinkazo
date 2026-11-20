@@ -1,6 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { describe, expect, it, vi } from "vitest";
-import { type FuentesDeSesion, cuentaDeLaSesion } from "./sesion";
+import { ESPERA_GOOGLE_MS, ESPERA_MAXIMA_MS, type FuentesDeSesion, cuentaDeLaSesion, entrarYRecordar } from "./sesion";
 
 /**
  * La página de registro del equipo toma la cuenta de la sesión abierta en ese celular (ensayo del 6 de noviembre de
@@ -72,15 +72,50 @@ describe("la cuenta de la sesión abierta", () => {
     }
   });
 
-  it("si ninguna vía contesta, termina sin cuenta y la página ofrece entrar a mano", async () => {
+  it("si ninguna vía contesta, termina sin cuenta y la página ofrece entrar a mano: 3 s para la prueba y 8 para Google", async () => {
     vi.useFakeTimers();
     try {
       const colgada = (): Promise<string | null> => new Promise(() => undefined);
-      const r = cuentaDeLaSesion(fuentes({ tipo: "guest", hayPollar: true, prueba: colgada, google: colgada }));
-      await vi.advanceTimersByTimeAsync(6_100);
+      let listo = false;
+      const r = cuentaDeLaSesion(fuentes({ tipo: "guest", hayPollar: true, prueba: colgada, google: colgada })).then((c) => ((listo = true), c));
+      await vi.advanceTimersByTimeAsync(10_900);
+      expect(listo).toBe(false);
+      await vi.advanceTimersByTimeAsync(200);
       expect(await r).toBeNull();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("retomar la cuenta de Google puede tardar hasta 8 segundos (con la red lenta): a los 7 todavía se la espera", async () => {
+    vi.useFakeTimers();
+    try {
+      const tarda = (): Promise<string | null> => new Promise((ok) => setTimeout(() => ok(A), 7_000));
+      const r = cuentaDeLaSesion(fuentes({ tipo: "google", hayPollar: true, google: tarda }));
+      await vi.advanceTimersByTimeAsync(7_100);
+      expect(await r).toBe(A);
+      expect(ESPERA_GOOGLE_MS).toBe(8_000);
+      expect(ESPERA_MAXIMA_MS).toBe(3_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("entrar con Google desde el registro", () => {
+  it("deja guardado el tipo de sesión después de entrar, como la herramienta", async () => {
+    const orden: string[] = [];
+    const cuenta = await entrarYRecordar(
+      async () => (orden.push("entrar"), A),
+      () => orden.push("recordar"),
+    );
+    expect(cuenta).toBe(A);
+    expect(orden).toEqual(["entrar", "recordar"]);
+  });
+
+  it("si la entrada falla, no guarda nada y la falla sigue su camino", async () => {
+    const recordar = vi.fn();
+    await expect(entrarYRecordar(async () => Promise.reject(new Error("popup-closed")), recordar)).rejects.toThrow("popup-closed");
+    expect(recordar).not.toHaveBeenCalled();
   });
 });

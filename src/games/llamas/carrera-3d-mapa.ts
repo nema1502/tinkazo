@@ -366,6 +366,12 @@ export const FINISH_POST_MIN_OPACITY = 0.22;
 export const FINISH_POST_FADE_BEFORE = 0.7;
 /** Cuánto después del cruce vuelven a verse enteros los postes de la meta, en segundos. */
 export const FINISH_POST_FADE_AFTER = 1.4;
+/** La opacidad de los postes mientras el cartel de quien ganó está en pantalla: casi no se ve, para que el poste no tape a la ganadora. */
+export const FINISH_POST_CARTEL_MIN = 0.06;
+/** Cuánto después del cruce se va el cartel de quien ganó (sostiene tres segundos desde el golpe, poco después del cruce), en segundos. */
+export const FINISH_POST_CARTEL_HASTA = 4.6;
+/** Cuánto tardan los postes en volver a verse enteros después de que se va el cartel, en segundos. */
+export const FINISH_POST_CARTEL_VUELVE = 1.2;
 
 const smoothFinish = (v: number): number => {
   const x = Math.max(0, Math.min(1, v));
@@ -375,13 +381,20 @@ const smoothFinish = (v: number): number => {
 /**
  * La opacidad de los postes de la meta según los segundos desde el cruce (`crown`, negativo antes).
  * En el cruce el poste de este lado tapaba parte del cuerpo de quien cruzaba: se apaga un poco solo en
- * ese instante y vuelve solo. Es función de esa hora y nada más, y es la misma para cualquier ganadora.
+ * ese instante y vuelve solo. Y mientras el cartel de quien ganó está en pantalla (hasta
+ * `FINISH_POST_CARTEL_HASTA`), casi no se ve: en el festejo el poste de este lado quedaba encima de la
+ * ganadora y su cartel la mostraba tapada por el poste. Es función de esa hora y nada más, y es la misma
+ * para cualquier ganadora.
  */
 export function finishPostOpacity(crown: number): number {
   if (!Number.isFinite(crown)) return 1;
   const fadesIn = smoothFinish((crown + FINISH_POST_FADE_BEFORE) / FINISH_POST_FADE_BEFORE);
   const fadesOut = 1 - smoothFinish(crown / FINISH_POST_FADE_AFTER);
-  return 1 - (1 - FINISH_POST_MIN_OPACITY) * fadesIn * fadesOut;
+  const cruce = 1 - (1 - FINISH_POST_MIN_OPACITY) * fadesIn * fadesOut;
+  const entraCartel = smoothFinish((crown + FINISH_POST_FADE_BEFORE) / FINISH_POST_FADE_BEFORE);
+  const vuelve = 1 - smoothFinish((crown - FINISH_POST_CARTEL_HASTA) / FINISH_POST_CARTEL_VUELVE);
+  const cartel = 1 - (1 - FINISH_POST_CARTEL_MIN) * entraCartel * vuelve;
+  return Math.min(cruce, cartel);
 }
 
 /** Cuánto miden parados los postes del portón de la recta, en unidades del mundo 3D. */

@@ -50,6 +50,13 @@ export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean
 }
 
 /**
+ * En el stand nadie gana: al llegar al resultado, el aviso dice quién salió. Las demás claves quedan como están. Va aparte
+ * de `claveDelPaso` porque la clave del paso la escuchan otros (`tinkazo:paso`) y no cambia: solo cambia el texto.
+ */
+export const claveEnElStand = (clave: string, salieron: number): string =>
+  clave === "sigGano" || clave === "sigGanaron" ? (salieron > 1 ? "standSalieron" : "standSalio") : clave;
+
+/**
  * El detalle del paso 2 dice también qué se sortea: "12 personas, Termo", o
  * "12 personas, sin premio". El premio queda fijado al sellar (va al
  * contrato), y desde la barra se sellaba sin ver el campo: el cartel, Mis

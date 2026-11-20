@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { HORIZON_URLS } from "./config";
 import { crearLectorDeHistorial, leerHistorial } from "./historial";
+import { leerPromocion, type LecturaDeLaPromocion } from "./premios";
 import { contratosOficiales, type ContratoOficial } from "./oficiales";
 import {
   CUENTA,
@@ -17,6 +18,10 @@ import realUltimoDel936 from "./fixtures/horizon-b5075505.json";
 import realUnicoDelOtro from "./fixtures/horizon-2d6b998c.json";
 import realFeeBump from "./fixtures/horizon-5c1eaa8e.json";
 import realFeeBumpPorLaInterior from "./fixtures/horizon-65060673-por-el-hash-interior.json";
+import realSelloDePremios from "./fixtures/horizon-sello-de-premios-3f1055d5.json";
+import realSelloDePremiosOtro from "./fixtures/horizon-sello-de-premios-d2dd1bc5.json";
+import redPremios from "./fixtures/rpc-getLedgerEntries-premios-CCJGBEFC-promo8.json";
+import redPremiosOtro from "./fixtures/rpc-getLedgerEntries-premios-CD3FDTS7-promo1.json";
 
 /**
  * El lector del historial (`historial.ts`), sin red.
@@ -329,6 +334,109 @@ describe("el sello de una transacción, del historial", () => {
     const tx = armarSello(VIGENTE, { ...SELLO, meta, listHash: HUELLA.toUpperCase().toLowerCase() });
     const { r } = await leer(tx.hash, { [tx.hash]: registroDeHorizon(tx) });
     expect(r).toMatchObject({ ok: true, sello: { meta, listHash: HUELLA } });
+  });
+});
+
+const TABLA_DE_PREMIOS = {
+  testnet: [
+    { contractId: "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY", wasmSha256: "e8e818b2b590b7c7a09ca7e65f389307b742b22ba512f79b6242335326c1e925" },
+    { contractId: "CD3FDTS72H5E63UIXSLAFCRBJGFEFS4C7GT6JMMP2ODZJTVO6AS44A7P", wasmSha256: "e8e818b2b590b7c7a09ca7e65f389307b742b22ba512f79b6242335326c1e925" },
+  ],
+};
+
+/**
+ * Un `fetch` que atiende las dos fuentes del camino de una campaña: Horizon (la transacción) y el RPC del
+ * contrato de premios (lo que el contrato guardó). Las dos respuestas son las de verdad, grabadas de
+ * testnet. Sin la tabla, el RPC no se pregunta: el sello no puede ser de una promoción.
+ */
+function dosFuentes(registros: Record<string, unknown>, premios: { result: { latestLedger: number; entries: { key: string }[] } } | null) {
+  const pedidos: string[] = [];
+  const h = horizonFalso(registros);
+  const f = (async (u: unknown, i?: RequestInit) => {
+    const url = String(u);
+    pedidos.push(url);
+    if (url.includes("/transactions/")) return h.fetch(u as never, i);
+    const cuerpo = JSON.parse(String(i?.body ?? "{}")) as { method?: string; params?: { keys?: string[] } };
+    if (cuerpo.method !== "getLedgerEntries") throw new Error(`rpc-falso: método no previsto ${String(cuerpo.method)}`);
+    const pedidas = cuerpo.params?.keys ?? [];
+    const entries = (premios?.result.entries ?? []).filter((e) => pedidas.includes(e.key));
+    return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { latestLedger: premios?.result.latestLedger ?? 1, entries } }), { status: 200 });
+  }) as unknown as typeof fetch;
+  return { fetch: f, pedidos };
+}
+
+describe("el sello de una campaña, del historial", () => {
+  const CC = "CCJGBEFCZZ423RQLFSEAZNQMESBYRJCD2RLHS46RC2ILHRLI3O3ZPBSY";
+  const RAFFLE = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A";
+  const LEER = { ...RONDAS, esperaMs: 0 };
+
+  it("acepta el seal del contrato de premios: la promoción coincide con el sobre y selló en el sorteo oficial", async () => {
+    const hash = realSelloDePremios.hash;
+    const dos = dosFuentes({ [hash]: realSelloDePremios }, redPremios);
+    const r = await leerHistorial("testnet", hash, { fetch: dos.fetch, premios: TABLA_DE_PREMIOS, ...LEER });
+    expect(r).toMatchObject({
+      ok: true,
+      sello: {
+        hash,
+        hashInterior: hash,
+        // El contrato que devuelve es el del sorteo oficial: la promoción selló adentro de él.
+        contractId: RAFFLE,
+        organizer: CC,
+        listHash: "91136c024fcaa190b35c2ff626097eb3017d35ce6c62687455a4fa600c8652af",
+        count: 100,
+        numWinners: 10,
+        round: 33_688_503,
+        meta: "Ensayo tamaño máximo: 100 cuentas, 10 premios de 10 XLM",
+        closedAt: 1_793_868_825,
+        ledger: 5_569_037,
+        premio: { contrato: CC, promocionId: "8", sorteoId: "586", deposito: "1000000000" },
+      },
+    });
+    // Horizon por la transacción, y el RPC por el estado de la promoción.
+    expect(dos.pedidos[0]).toBe(`${HORIZON_URLS.testnet}/transactions/${hash}`);
+    expect(dos.pedidos.slice(1).every((u) => u.includes("soroban-testnet"))).toBe(true);
+  });
+
+  it("otro contrato de premios designado, con el número de sorteo que guardó su promoción", async () => {
+    const hash = realSelloDePremiosOtro.hash;
+    const dos = dosFuentes({ [hash]: realSelloDePremiosOtro }, redPremiosOtro);
+    const r = await leerHistorial("testnet", hash, { fetch: dos.fetch, premios: TABLA_DE_PREMIOS, ...LEER });
+    expect(r.ok && r.sello).toMatchObject({ contractId: RAFFLE, count: 10, numWinners: 1, round: 33_688_752, premio: { sorteoId: "587" } });
+  });
+
+  it("con la tabla de producción, vacía, el mismo sello es de un contrato ajeno y no se le pregunta nada al RPC", async () => {
+    const hash = realSelloDePremios.hash;
+    const dos = dosFuentes({ [hash]: realSelloDePremios }, redPremios);
+    expect(await leerHistorial("testnet", hash, { fetch: dos.fetch, ...LEER })).toEqual({ ok: false, error: "contrato-ajeno" });
+    expect(dos.pedidos).toHaveLength(1);
+  });
+
+  it("un sello de premios que de verdad no coincide sigue fallando", async () => {
+    const hash = realSelloDePremios.hash;
+    const dos = dosFuentes({ [hash]: realSelloDePremios }, redPremios);
+    const real = await leerPromocion(
+      { red: "testnet", contractId: CC, rpcUrl: "https://soroban-testnet.stellar.org", passphrase: "Test SDF Network ; September 2015" },
+      "8",
+      { fetch: dos.fetch, esperaMs: 0 },
+    );
+    if (!real.ok) throw new Error("el fixture tiene que leerse");
+    // Una promoción con otra huella de lista (o de otra promoción, o sin sorteo): no es el sello de este sobre.
+    const conOtra: LecturaDeLaPromocion = { ok: true, promocion: { ...real.promocion, listHash: "0".repeat(64) }, raffle: RAFFLE };
+    const rechazado = await leerHistorial("testnet", hash, { fetch: dos.fetch, premios: TABLA_DE_PREMIOS, ...LEER, leerPromocion: () => Promise.resolve(conOtra) });
+    expect(rechazado).toEqual({ ok: false, error: "no-es-un-sello" });
+    // Lo que no se pudo leer no es una contradicción: no confirmado.
+    const sinEstado = await leerHistorial("testnet", hash, { fetch: dos.fetch, premios: TABLA_DE_PREMIOS, ...LEER, leerPromocion: () => Promise.resolve({ ok: false, error: "sin-estado" }) });
+    expect(sinEstado).toEqual({ ok: false, error: "red-caida" });
+    // La misma transacción pedida como de otra red es otra (la passphrase es parte del hash): ni se pregunta.
+    const enMainnet = await leerHistorial("mainnet", hash, { fetch: dos.fetch, premios: TABLA_DE_PREMIOS, ...LEER });
+    expect(enMainnet).toEqual({ ok: false, error: "respuesta-invalida" });
+  });
+
+  it("un sello directo del contrato del sorteo se lee igual con la tabla de premios puesta", async () => {
+    const hash = realVigente.hash;
+    const { r } = await leer(hash, { [hash]: realVigente }, { premios: TABLA_DE_PREMIOS });
+    expect(r).toMatchObject({ ok: true, sello: { contractId: VIGENTE, count: 3, round: 33_376_937 } });
+    expect(r.ok && "premio" in r.sello).toBe(false);
   });
 });
 

@@ -7,6 +7,9 @@
  *
  * Qué se cuenta y cómo (todo sale de transacciones que están en la cadena):
  * - Sorteo sellado: un evento `sealed` del contrato (la llamada a `seal` salió bien).
+ * - Sorteo sellado a través de otro contrato: el mismo evento, pero el `seal` del sorteo quedó
+ *   adentro de la llamada a otro contrato (el de premios sella sus listas así). El organizador
+ *   del evento es ese contrato y la transacción invoca ese contrato: se cuenta marcado, es válido.
  * - Sorteo registrado: un evento `drawn` (la llamada a `draw` salió bien: el contrato
  *   verificó la firma BLS de drand y guardó los ganadores). Es la "comprobación en
  *   cadena" de cada sorteo. Las aperturas de la página de comprobación no pasan por
@@ -20,7 +23,7 @@
  * el ledger de la transacción.
  */
 
-import { Address, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
+import { Address, StrKey, TransactionBuilder, scValToNative, xdr } from "@stellar/stellar-sdk";
 
 export const HORA = 3600;
 
@@ -115,11 +118,15 @@ export function decodificarLlamada(envelopeXdr, passphrase) {
       hash: aHex(tx.hash()),
       hashInterior: aHex(interior.hash()),
     };
-    if (funcion === "seal") {
-      const [organizador, listHash, count, numWinners, round, meta] = ll.args.map((a) => scValToNative(a));
+    const nativos = ll.args.map((a) => scValToNative(a));
+    // El `seal` del sorteo lleva seis argumentos: organizador, huella de la lista, cantidad, ganadores,
+    // ronda y texto. Otro contrato puede tener su propio `seal` con otros argumentos —el de premios lo
+    // tiene, y sella llamando al del sorteo adentro—: esos no se decodifican como si fueran del sorteo.
+    const [organizador, listHash, count, numWinners, round, meta] = nativos;
+    if (funcion === "seal" && nativos.length === 6 && typeof organizador === "string" && listHash instanceof Uint8Array && listHash.length === 32) {
       return {
         ...salida,
-        organizador: String(organizador),
+        organizador,
         listHash: aHex(listHash),
         count: Number(count),
         numWinners: Number(numWinners),
@@ -127,7 +134,7 @@ export function decodificarLlamada(envelopeXdr, passphrase) {
         meta: typeof meta === "string" ? meta : Buffer.from(meta ?? []).toString("utf8"),
       };
     }
-    if (funcion === "draw") return { ...salida, id: Number(scValToNative(ll.args[0])) };
+    if (funcion === "draw") return { ...salida, id: Number(nativos[0]) };
     return salida;
   } catch {
     return null;
@@ -153,6 +160,19 @@ export function resumirTransaccion(rec, passphrase) {
 /* --------------------------------------------------------------- la unión */
 
 /**
+ * El contrato que selló en nombre propio —el sello llegó por una llamada anidada—, o `null` si la
+ * transacción llamó al `seal` del sorteo directo. El `seal` exige la firma del organizador: cuando el
+ * organizador del evento es un contrato y es el mismo contrato que la transacción invocó, el sello salió
+ * de adentro de esa llamada y el sobre no trae los argumentos del `seal` del sorteo, solo los del contrato
+ * que lo llamó. Un evento en cuyo organizador figura una cuenta sigue exigiendo la llamada directa.
+ */
+function contratoQueSella(tx, e) {
+  const ll = tx?.llamada;
+  if (!ll || ll.contrato === e.contrato) return null;
+  return String(e.organizador) === ll.contrato && StrKey.isValidContract(String(e.organizador)) ? ll.contrato : null;
+}
+
+/**
  * Junta eventos y transacciones en un registro por sorteo.
  * `txs` es un objeto `{ [eventoId]: resumen }`. Un `drawn` o un `sealed` sin su
  * transacción se cuenta con la hora que dio el índice (`ts`) y se anota en `sinTransaccion`.
@@ -174,8 +194,11 @@ export function unir(eventos, txs = {}) {
         continue;
       }
       const ll = tx?.llamada;
+      const via = tx ? contratoQueSella(tx, e) : null;
       if (tx) {
-        if (!tx.exitosa || ll?.funcion !== "seal" || ll.contrato !== e.contrato || ll.listHash !== e.listHash || ll.count !== e.count || ll.organizador !== e.organizador) {
+        const directo =
+          ll?.funcion === "seal" && ll.contrato === e.contrato && ll.listHash === e.listHash && ll.count === e.count && ll.organizador === e.organizador;
+        if (!tx.exitosa || (via === null && !directo)) {
           problemas.push(`el sello ${clave(e)} no coincide con su transacción ${tx.hash}`);
         }
       }
@@ -187,7 +210,9 @@ export function unir(eventos, txs = {}) {
         numWinners: e.numWinners,
         round: e.round,
         listHash: e.listHash,
-        meta: ll?.meta ?? "",
+        // El texto del sello solo viaja en la llamada directa: el de otro contrato no se puede leer.
+        meta: via === null ? ll?.meta ?? "" : "",
+        selloViaContrato: via,
         selladoEn: cuando,
         selloTx: tx?.hash ?? null,
         selloComision: tx?.comisionStroops ?? 0,
@@ -224,6 +249,21 @@ export function unir(eventos, txs = {}) {
   return { sorteos: [...porClave.values()], problemas };
 }
 
+/**
+ * Los sellos que llegaron a través de otro contrato: cuántos y desde qué contratos, ordenados.
+ * Son válidos: el contrato del sorteo emitió el `sealed` adentro de la llamada de ese contrato.
+ */
+export function anidadosDe(sorteos) {
+  const contratos = new Set();
+  let sellos = 0;
+  for (const s of sorteos) {
+    if (!s.selloViaContrato) continue;
+    sellos++;
+    contratos.add(s.selloViaContrato);
+  }
+  return { sellos, contratos: [...contratos].sort() };
+}
+
 /* ---------------------------------------------------------------- sumar */
 
 /** La marca corta del `meta` (`#fila`, `#premios=N`): una convención de presentación, no del protocolo. */
@@ -247,6 +287,7 @@ const percentil = (xs, p) => {
 const periodoVacio = () => ({
   sorteosSellados: 0,
   sorteosRegistrados: 0,
+  sellosAnidados: 0,
   organizadoresDistintos: 0,
   organizadoresNuevos: 0,
   lugaresEnListas: 0,
@@ -286,6 +327,7 @@ function sumar(sorteos, ahora) {
       p._org.add(s.organizador);
       if (nuevo) p.organizadoresNuevos++;
       if (sinSortear) p.cierresSinSortear++;
+      if (s.selloViaContrato) p.sellosAnidados++;
       if (marca.fila) p._marcas.fila++;
       if (marca.premios) p._marcas.premios++;
       if (!marca.fila && !marca.premios) p._marcas.sinMarca++;
@@ -306,6 +348,7 @@ function sumar(sorteos, ahora) {
     totales.comisionStroops += s.selloComision;
     if (nuevo) totales.organizadoresNuevos++;
     if (sinSortear) totales.cierresSinSortear++;
+    if (s.selloViaContrato) totales.sellosAnidados++;
     if (marca.fila) totales.marcas.fila++;
     if (marca.premios) totales.marcas.premios++;
     if (!marca.fila && !marca.premios) totales.marcas.sinMarca++;
@@ -482,6 +525,11 @@ export async function traerTransaccion(horizon, idEvento, { fetch: f = fetch } =
   return rec;
 }
 
+/** La transacción de un evento que llegó por el RPC, por su hash (el id sintético del RPC no trae `toid`). */
+export async function traerTransaccionPorHash(horizon, hash, { fetch: f = fetch } = {}) {
+  return pedirJson(`${horizon}/transactions/${hash}`, { fetch: f });
+}
+
 /** El `next_id` del contrato, leído de su instancia en el RPC (el mismo número que devuelve `next_id()`). */
 export async function leerNextId(rpc, contrato, { fetch: f = fetch } = {}) {
   const clave = xdr.LedgerKey.contractData(
@@ -524,7 +572,9 @@ export async function traerEventosRpc(rpc, contrato, { fetch: f = fetch } = {}) 
       if (e.inSuccessfulContractCall === false) continue;
       const tema = scValToNative(xdr.ScVal.fromXDR(e.topic[0], "base64"));
       if (tema !== "sealed" && tema !== "drawn") continue;
-      eventos.push({ tipo: tema, id: Number(scValToNative(xdr.ScVal.fromXDR(e.topic[1], "base64"))), ledger: e.ledger, txHash: e.txHash });
+      // El crudo del RPC viaja con el evento (topic, value, hora de cierre): `registroDesdeRpc` lo
+      // convierte en el registro que se une al resto de las fuentes.
+      eventos.push({ ...e, tipo: tema, id: Number(scValToNative(xdr.ScVal.fromXDR(e.topic[1], "base64"))), ledger: Number(e.ledger), txHash: e.txHash });
     }
     // El RPC mira un tramo de ledgers por pedido y puede contestar vacío con un cursor: se sigue hasta alcanzar el último ledger.
     if (!r?.cursor) break;
@@ -533,6 +583,118 @@ export async function traerEventosRpc(rpc, contrato, { fetch: f = fetch } = {}) 
     cursor = r.cursor;
   }
   return { desdeLedger: salud.oldestLedger + 1, eventos };
+}
+
+/**
+ * Un evento crudo de la respuesta `getEvents` del RPC → el mismo registro crudo que entiende
+ * `decodificarEvento`. El id es sintético (el RPC no da el `toid` de Horizon): lo forman el ledger,
+ * el hash de la transacción y el tipo del evento, y es estable entre corridas para que el caché de
+ * transacciones y la unión de fuentes funcionen igual que con el índice.
+ */
+export function registroDesdeRpc(e, contrato = e.contractId) {
+  const toid = BigInt(e.ledger) << 32n;
+  const tema = String(scValToNative(xdr.ScVal.fromXDR(e.topic[0], "base64")));
+  const marca = tema === "sealed" ? "s" : tema === "drawn" ? "d" : "x";
+  return {
+    id: `${toid}-${e.txHash}${marca}`,
+    ts: Math.floor(Date.parse(e.ledgerClosedAt) / 1000),
+    contract: contrato,
+    rpc: true, // queda en los crudos: al recargar, la unión sabe que esta copia vino por el RPC
+    txHash: e.txHash,
+    topicsXdr: e.topic,
+    bodyXdr: e.value,
+  };
+}
+
+/**
+ * Une los eventos que llegaron por fuentes distintas: el índice de StellarExpert, los crudos
+ * guardados de corridas anteriores y el RPC (esos traen `fuenteRpc: true`). El mismo evento —
+ * mismo contrato, tipo e id de sorteo— se cuenta una vez, y manda la primera copia que aparezca
+ * (el script pasa primero el índice, después los crudos, después el RPC). Dos copias que no
+ * vienen del RPC y con `eventoId` distinto no son una duplicación de fuente sino una anomalía
+ * real: se dejan las dos para que `unir` la marque.
+ */
+export function unirFuentes(eventos) {
+  const salida = [];
+  const vistas = new Map();
+  const clave = (e) => `${e.contrato}|${e.tipo}|${e.id}`;
+  for (const e of eventos) {
+    const k = clave(e);
+    const previa = vistas.get(k);
+    if (!previa) {
+      vistas.set(k, e);
+      salida.push(e);
+      continue;
+    }
+    // La misma copia vista dos veces cae.
+    if (previa.eventoId === e.eventoId) continue;
+    if (previa.fuenteRpc !== e.fuenteRpc) {
+      // Cruce de fuentes: el mismo evento por el RPC y por el índice o los crudos. Manda la copia
+      // que no es del RPC: con su id real se puede buscar su transacción en Horizon.
+      if (previa.fuenteRpc) {
+        vistas.set(k, e);
+        salida[salida.indexOf(previa)] = e;
+      }
+      continue;
+    }
+    salida.push(e); // anomalía: queda para el recuento de problemas de `unir`
+  }
+  return salida;
+}
+
+/** Mezcla las fuentes crudas, sin red, y conserva el índice para la comprobación reciente. */
+export function mezclarFuentes({
+  registrosIndice = [],
+  crudos = {},
+  registrosRpc = [],
+  red,
+  contratos,
+  corteLedger,
+}) {
+  const contratosValidos = new Set(contratos.map((c) => c.contractId ?? c));
+  const dentro = (r) => contratosValidos.has(r.contract) && partesDelId(r.id).ledger <= corteLedger;
+  const crudosRed = !crudos.red || crudos.red === red;
+  const crudosFiltrados = crudosRed ? (crudos.eventos ?? []).filter(dentro) : [];
+  const registros = [...registrosIndice.filter(dentro), ...crudosFiltrados, ...registrosRpc.filter(dentro)];
+  const unicos = [...new Map(registros.map((r) => [r.id, r])).values()];
+  const decodificados = unicos
+    .map((r) => {
+      const e = decodificarEvento(r);
+      return e ? { ...e, ...(r.rpc ? { fuenteRpc: true } : {}) } : null;
+    })
+    .filter(Boolean);
+  const eventos = unirFuentes(decodificados);
+  const sinRpc = unirFuentes(decodificados.filter((e) => !e.fuenteRpc));
+  const hashRpc = new Map(unicos.filter((r) => r.rpc && r.txHash).map((r) => [r.id, r.txHash]));
+  return {
+    registrosEventos: unicos,
+    eventos,
+    eventosSinRpc: sinRpc,
+    hashRpc,
+    crudosDescartados: crudosRed
+      ? (crudos.eventos ?? []).length - crudosFiltrados.length
+      : (crudos.eventos ?? []).length,
+    fuentes: { indice: registrosIndice.some(dentro), crudos: crudosFiltrados.length > 0, rpc: registrosRpc.some(dentro) },
+  };
+}
+
+/** Fecha UTC del primer evento, o `null` cuando no hay datos. */
+export function datosDesde(eventos) {
+  if (!eventos.length) return null;
+  return new Date(Math.min(...eventos.map((e) => e.ts)) * 1000).toISOString().replace(".000Z", "Z");
+}
+
+/** Compara los eventos recientes del RPC con la copia que no viene del RPC. */
+export function compararVentana(eventosRpc, eventosIndice) {
+  const cuenta = (xs, tipo) => xs.filter((e) => e.tipo === tipo).length;
+  const rpc = { sealed: cuenta(eventosRpc, "sealed"), drawn: cuenta(eventosRpc, "drawn") };
+  const indice = { sealed: cuenta(eventosIndice, "sealed"), drawn: cuenta(eventosIndice, "drawn") };
+  return {
+    rpc,
+    indice,
+    rpcAtrasado: rpc.sealed < indice.sealed || rpc.drawn < indice.drawn,
+    indiceAtrasado: rpc.sealed > indice.sealed || rpc.drawn > indice.drawn,
+  };
 }
 
 /* ------------------------------------------------------------- comprobar */

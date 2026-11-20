@@ -104,10 +104,10 @@ async function leerAcotado(res: Response, max: number): Promise<string | null> {
   return texto.length > max ? null : texto;
 }
 
-type Pedido = { tipo: "ok"; json: unknown } | { tipo: "no-existe" | "falla" };
+export type Pedido = { tipo: "ok"; json: unknown } | { tipo: "no-existe" | "falla" };
 
 /** Un pedido que devuelve JSON. Un 404 es "no existe"; todo lo demás que no sea 200 es una falla. */
-async function pedir(url: string, init: RequestInit | undefined, op: OpcionesDeLectura): Promise<Pedido> {
+export async function pedir(url: string, init: RequestInit | undefined, op: OpcionesDeLectura): Promise<Pedido> {
   const f = op.fetch ?? fetch;
   try {
     return await conEspera(op.tiempoMs ?? TIEMPO_MS, async (signal) => {
