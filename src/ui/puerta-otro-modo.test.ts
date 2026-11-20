@@ -147,6 +147,20 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     await vi.waitFor(() => expect(h.pasar).toHaveBeenCalledWith("testnet"));
   });
 
+  it("quien pasó a Oficial para entrar ve Entrar con el foco, aunque quede la cuenta de Prueba guardada", async () => {
+    // Pasar a Oficial deja la marca de entrar y, al recargar, la página llama a pedirEntrar (main.ts).
+    h.red = "mainnet";
+    h.pollar = true;
+    localStorage.setItem("tinkazo.session.kind.testnet", "google");
+    const { ui, t } = await alAbrir();
+    ui.pedirEntrar();
+    await vi.waitFor(() => expect(puerta().botones).toEqual([t("cuentaPideEntrar")]));
+    expect(puerta().texto).toContain(t("cuentaPideGoogle"));
+    expect(document.activeElement?.textContent).toBe(t("cuentaPideEntrar"));
+    expect(chip().texto).toContain(t("cuentaEntrar"));
+    expect(chip().texto).not.toContain(t("netTest"));
+  });
+
   it("sin cuenta guardada en el otro modo, la puerta no aparece y la cabecera pide entrar, como siempre", async () => {
     const { t } = await alAbrir();
     expect(puerta().texto).toBe("");

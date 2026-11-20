@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   orden: [] as string[],
   sealOnChain: vi.fn(),
   contar: vi.fn(),
+  /** Escribir en el cuadro de la lista: si sellar lo llama con una lista de campaña, cambió lo que pasó el panel. */
+  setList: vi.fn(),
   /** La puerta de la cuenta lista: si se abre antes de comprobar la cuenta nombrada, el sello ya gastó un paso. */
   cuentaLista: vi.fn(),
   pedir: vi.fn(),
@@ -96,7 +98,7 @@ vi.mock("./participants", () => ({
   cerrarLista: () => undefined,
   olvidarBorrador: () => undefined,
   parseNames: () => h.nombres,
-  setList: () => undefined,
+  setList: (...a: unknown[]) => h.setList(...a),
 }));
 vi.mock("./red", () => ({
   chequearAntesDeSellar: async () => {
@@ -141,7 +143,7 @@ function armarPagina(): void {
     "wait-round", "wait-left", "rules-text", "rules-pre-text", "entities", "gamepick",
   ];
   document.body.innerHTML =
-    '<button id="btn-freeze"></button><p id="sellar-modo" style="display:none"></p><input id="prize" value="Una pizza">' +
+    '<button id="btn-freeze"></button><p id="sellar-modo" style="display:none"></p><input id="prize" value="Una pizza"><textarea id="ta"></textarea>' +
     '<input id="nw" type="number" value="1"><div id="seal-status"></div>' +
     '<textarea id="ta"></textarea>' +
     ids.map((id) => `<div id="${id}"></div>`).join("") +
@@ -192,6 +194,7 @@ beforeEach(() => {
   h.sealOnChain.mockReset();
   h.sealOnChain.mockResolvedValue({ raffleId: 1n, txHash: "H" });
   h.contar.mockReset();
+  h.setList.mockReset();
   h.cuentaLista.mockReset();
   h.cuentaLista.mockResolvedValue(true);
   h.pedir.mockReset();
@@ -379,6 +382,41 @@ describe("la lista de una campaña sin cuenta o sin sello", () => {
     const { app } = await import("../state");
     expect(app.frozen).toBeNull();
     expect(document.getElementById("seal-status")?.textContent).toBe("Una campaña no sigue sin sello. Sellá la lista de nuevo.");
+  });
+});
+
+describe("la lista que pasó el panel de una campaña", () => {
+  const CUENTAS = ["A", "B", "C"].map((letra) => "G" + letra.repeat(55));
+
+  /** Pasa la lista al cuadro como lo hace el panel: las cuentas ordenadas, una por línea y sin sufijos. */
+  async function pasarLaLista(): Promise<string> {
+    const { listHash } = await import("../protocol/canonical");
+    const { bytesToHex } = await import("../protocol/quicknet");
+    const huella = bytesToHex(listHash(CUENTAS));
+    h.nombres = CUENTAS;
+    (document.getElementById("ta") as HTMLTextAreaElement).value = CUENTAS.join("\n");
+    await conCampana({ premios: 3, huella });
+    return huella;
+  }
+
+  it("sellar no cambia ni un carácter de la lista, con los modos a la vista", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    await pasarLaLista();
+    const { freeze } = await import("./freeze");
+    await freeze();
+    expect(h.sealOnChain).toHaveBeenCalledTimes(1);
+    expect(h.setList).not.toHaveBeenCalled();
+    expect((document.getElementById("ta") as HTMLTextAreaElement).value).toBe(CUENTAS.join("\n"));
+  });
+
+  it("la huella que se sella es la misma que pasó el panel", async () => {
+    vi.stubEnv("VITE_MODOS", "1");
+    const huella = await pasarLaLista();
+    const { freeze } = await import("./freeze");
+    await freeze();
+    const { bytesToHex } = await import("../protocol/quicknet");
+    const sellada = (h.sealOnChain.mock.calls[0]?.[0] as { listHash: Uint8Array }).listHash;
+    expect(bytesToHex(sellada)).toBe(huella);
   });
 });
 

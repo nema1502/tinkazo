@@ -257,7 +257,9 @@ function haySesionGuardada(): boolean {
  * cuando abre en ese modo.
  */
 function cuentaEnElOtroModo(): NetworkName | null {
-  if (session || retomando || conectando) return null;
+  // Quien llegó con ganas de entrar (pasó de modo para entrar, o terminó la demo) viene a entrar acá: el aviso del otro
+  // modo le ponía el foco en "Ir a…" y lo mandaba de vuelta al modo del que venía.
+  if (session || retomando || conectando || pidiendoEntrar) return null;
   const destino: NetworkName = network.name === "mainnet" ? "testnet" : "mainnet";
   if (destino === "mainnet" && !hayModoOficial) return null;
   return hayCuentaGuardada(destino) ? destino : null;
@@ -359,6 +361,8 @@ export function pedirEntrar(): void {
     if (retomando) await retomaTerminada;
     if (session) return;
     pidiendoEntrar = true;
+    // La cabecera también: sin repintarla, el chip seguía diciendo en qué otro modo está la cuenta.
+    pintarCuenta();
     applyGate();
     document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
   })();
