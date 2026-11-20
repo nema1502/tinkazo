@@ -134,13 +134,16 @@ vi.mock("./history", () => ({ remember: () => undefined, renderHistory: () => un
 vi.mock("./sin-sello-textos", () => ({ claveDelSello: () => "", ponerTextoDelSello: () => undefined, sinSelloAhora: () => false }));
 
 function armarPagina(): void {
+  // `ta` va aparte: en index.html:354 es un <textarea>, y el value de un <div> es undefined. Con los modos prendidos por
+  // defecto (#157), renumerarLaLista corre al sellar y renumerarSufijos recibía undefined (TypeError en canonicalList).
   const ids = [
     "freeze-hint", "free-rule", "sec-frozen", "k-n", "k-digest", "k-status", "k-entries", "frozen-ts", "wheel-cap", "wait-box",
-    "wait-round", "wait-left", "rules-text", "rules-pre-text", "entities", "gamepick", "ta",
+    "wait-round", "wait-left", "rules-text", "rules-pre-text", "entities", "gamepick",
   ];
   document.body.innerHTML =
     '<button id="btn-freeze"></button><p id="sellar-modo" style="display:none"></p><input id="prize" value="Una pizza">' +
     '<input id="nw" type="number" value="1"><div id="seal-status"></div>' +
+    '<textarea id="ta"></textarea>' +
     ids.map((id) => `<div id="${id}"></div>`).join("") +
     '<button id="btn-draw"></button><button id="g-wheel"></button>';
   Element.prototype.scrollIntoView = () => undefined;
