@@ -93,6 +93,11 @@ export interface ContextoDeComision {
   almacen: Almacen | null;
   /** Hay una forma de cambiar de cuenta o entrar. */
   puedeEntrar: () => boolean;
+  /**
+   * La campaña es un borrador sin firma: el pago tiene que salir de la cuenta de Google de quien organiza y la sala lo comprueba
+   * en la red. Pagar desde otra billetera no sirve, así que no se ofrece el plegado. Sin esto, la campaña viene firmada.
+   */
+  conBorrador?: () => boolean;
 }
 
 export type AccionDeComision = "cargar" | "pagar" | "mirar" | "entrar";
@@ -122,7 +127,8 @@ export interface ControlDeComision {
   /** Mira la red, el saldo y el servicio. */
   mirar: () => Promise<void>;
   pagar: () => Promise<void>;
-  cargar: () => void;
+  /** Abre la ventana de los dólares. Al cerrarla vuelve a mirar y después avisa con `despues`. */
+  cargar: (despues?: () => void) => void;
   descripcion: () => DescripcionDeComision;
   /** Todo lo que cambia lo que se dibuja, para saber si hay que repintar los botones. */
   firma: () => string;
@@ -434,9 +440,13 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     ctx.aviso(ctx.tx(salida.tipo === "recargar" ? "cpoCmRecargar" : "cpoCmNoSalio"));
   }
 
-  function cargar(): void {
+  function cargar(despues?: () => void): void {
     const cuenta = ctx.cuenta();
-    if (cuenta !== null) deps.cargar(cuenta, () => void mirar());
+    if (cuenta !== null) {
+      deps.cargar(cuenta, () => {
+        void mirar().then(() => despues?.());
+      });
+    }
   }
 
   /* --- lo que se dibuja --- */
@@ -451,6 +461,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     const tx = ctx.tx;
     const fmt = (clave: string, v: Record<string, string | number>): string => rellenar(tx(clave), v);
     const n = numeros(cfg, c);
+    // Con un borrador el pago sale de la cuenta de Google y de ninguna otra: no se ofrece pagar a mano desde otra billetera.
+    const borrador = ctx.conBorrador?.() === true;
     const mirarBoton = (apagado = false): NonNullable<DescripcionDeComision["principal"]> => ({ texto: tx("cpoCmMirar"), accion: "mirar", apagado });
     switch (e.tipo) {
       case "pagada":
@@ -495,7 +507,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
             : fmt("cpoCmCargarFalta", { saldo: montoTexto(e.saldo, idioma), premios, servicio }),
           principal: { texto: tx("cpoCmCargar"), accion: "cargar", apagado: false },
           secundario: null,
-          plegado: "cerrado",
+          plegado: borrador ? null : "cerrado",
         };
       }
       case "lista":
@@ -513,7 +525,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
           linea: fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoTexto(e.monto, idioma) }),
           principal: e.entrar ? { texto: tx("cpoCmEntrar"), accion: "entrar", apagado: false } : mirarBoton(),
           secundario: e.entrar ? { texto: tx("cpoCmMirar"), accion: "mirar" } : null,
-          plegado: e.entrar ? "cerrado" : "abierto",
+          plegado: borrador ? null : e.entrar ? "cerrado" : "abierto",
         };
       case "otra-cuenta": {
         const pide = ctx.pide() ?? "";
@@ -528,10 +540,10 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       case "ahora-no":
         return {
           titulo: tx("cpoCmOtraT"),
-          linea: tx("cpoCmAhoraNoL"),
+          linea: tx(borrador ? "cpoAcAhoraNoL" : "cpoCmAhoraNoL"),
           principal: mirarBoton(),
           secundario: null,
-          plegado: "abierto",
+          plegado: borrador ? null : "abierto",
         };
     }
   }

@@ -132,9 +132,10 @@ describe("los moldes de una página", () => {
 });
 
 describe.each([
-  { pagina: "terminos.html", titulo: "tmComisionT", texto: "tmComisionB" },
-  { pagina: "precios.html", titulo: "prComisionT", texto: "prComision" },
-])("$pagina", ({ pagina, titulo, texto }) => {
+  { pagina: "terminos.html", titulo: "tmComisionT", texto: "tmComisionB", enlaces: [] as string[] },
+  // En precios, el bloque lleva además el enlace a armar la campaña de la empresa.
+  { pagina: "precios.html", titulo: "prComisionT", texto: "prComision", enlaces: ["prComisionLink"] },
+])("$pagina", ({ pagina, titulo, texto, enlaces }) => {
   const montar = (): void => {
     document.body.innerHTML = cuerpo(pagina);
   };
@@ -144,7 +145,7 @@ describe.each([
     const moldes = document.querySelectorAll<HTMLTemplateElement>("template[data-con-comision]");
     expect(moldes).toHaveLength(1);
     const claves = [...(moldes[0]?.content.querySelectorAll<HTMLElement>("[data-i]") ?? [])].map((el) => el.dataset.i);
-    expect(claves).toEqual([titulo, texto]);
+    expect(claves).toEqual([titulo, texto, ...enlaces]);
   });
 
   it("el molde trae el texto en español del diccionario, con marcadores y sin el porcentaje ni el mínimo escritos", () => {
