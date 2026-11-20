@@ -47,7 +47,8 @@ import { ponerPremio, recordarPremio } from "./premios";
 import * as premiosModulo from "./premios";
 import { fijarPorCampana, fijoPorCampana, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { isTurnOrder } from "../modos/turnos";
-import { ajustarPremioDeTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos } from "./turnos";
+import { ajustarPremioDeTurnos, amigoRepetido, modoTurnosActivo, ordenNoCabe, ponerModoAmigo, ponerModoTurnos } from "./turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { sinCuentaElegido } from "./sin-cuenta";
 import { logoParaSellar } from "../logo-guardado";
@@ -980,9 +981,14 @@ function puedeSellar(): boolean {
   // modos ni `?modo=`, la lista es la de siempre: cada línea, una persona.
   const personas = contarPersonas(names, modesVisible()).personas;
   // En el modo «Orden de turnos», si la lista pasa de lo que admite la red no se sella: un orden incompleto no es un orden.
-  // Y los premios que no entran enteros tampoco: se avisa debajo de los campos hasta que se acorten.
+  // Y los premios que no entran enteros tampoco: se avisa debajo de los campos hasta que se acorten. En un Amigo secreto,
+  // tampoco con una persona dos veces en la lista.
   return (
-    personas >= 2 && !ordenNoCabe(names.length) && !premiosNoEntran() && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS
+    personas >= 2 &&
+    !ordenNoCabe(names.length) &&
+    !premiosNoEntran() &&
+    !amigoRepetido(names) &&
+    performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS
   );
 }
 
@@ -1795,7 +1801,9 @@ export function resumeFrozen(e: {
   // El modo de la pantalla pasa a ser el del sorteo sellado. Una recarga vuelve a Sortear premios aunque se haya sellado
   // un orden, y el selector de modo sigue a mano hasta retomar: un orden se retoma como orden, y un sorteo común no queda
   // con la cantidad de la lista porque antes se tocó Orden de turnos.
-  ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
+  // Un Amigo secreto se retoma como Amigo secreto: con el modo apagado, el paso 2 volvía a ofrecer los juegos.
+  if (isSecretSanta(e.names.length, e.numWinners, e.prize)) ponerModoAmigo(true);
+  else ponerModoTurnos(isTurnOrder(e.names.length, e.numWinners, e.prize));
   ponerPremio(e.prize);
   ponerGanadores(e.numWinners);
   // Los campos por lugar del sorteo retomado: con la cantidad ya puesta, cada premio vuelve a su campo.
@@ -1985,8 +1993,10 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
   // Con varias participaciones por persona, las bases dicen las dos cuentas, con la misma regla que la
   // verificación y la espera (`seCuentaPorPersona`).
   const { personas, participaciones } = contarPersonas(f.names, seCuentaPorPersona(f.names, modesVisible()));
-  // Un orden de turnos tiene sus bases, sin ganadores ni premio.
-  const bases = isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
+  // Un orden de turnos y un Amigo secreto tienen sus bases, sin ganadores ni premio.
+  const bases = isSecretSanta(f.names.length, winners, f.prize)
+    ? T[lang].amigoRules
+    : isTurnOrder(f.names.length, winners, f.prize) ? T[lang].turnsRules : T[lang].rules;
   const text = bases({
     prize: f.prize,
     count: personas,
@@ -2053,9 +2063,11 @@ export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
   // Las bases juntan los espacios de adentro, como antes de los campos por lugar: un premio solo llega tal cual se escribió.
   const prize = premioLeido().replace(/\s+/g, " ");
   const winners = Math.min(ganadoresPedidos(), names.length);
-  // Un orden de turnos tiene sus bases, sin ganadores ni premio. Se decide por las líneas de la lista
-  // (lo que se sella: cada línea, un turno), no por las personas.
-  const basesPre = isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
+  // Un orden de turnos y un Amigo secreto tienen sus bases, sin ganadores ni premio. Se decide por las líneas de la
+  // lista (lo que se sella: cada línea, un lugar), no por las personas.
+  const basesPre = isSecretSanta(names.length, winners, prize)
+    ? T[lang].amigoRulesPre
+    : isTurnOrder(names.length, winners, prize) ? T[lang].turnsRulesPre : T[lang].rulesPre;
   const text = basesPre({
     prize,
     count,

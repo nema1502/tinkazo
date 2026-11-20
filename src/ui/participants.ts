@@ -12,10 +12,11 @@ import { parecidos } from "../buscar";
 import { ponerPremio, premiosDeLosCampos, reponerLugares, sincronizarPremios } from "./premios";
 import { premioDelResumen } from "./premios-escritos";
 import { isTurnOrder } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
 import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
 import { bloquearGanadores, ganadoresPedidos, lineasDeLaLista, ponerGanadores } from "./ganadores";
-import { bloquearTurnos, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
+import { amigoRepetido, bloquearTurnos, modoAmigoActivo, modoTurnosActivo, ordenNoCabe, ponerModoTurnos, seguirLaLista } from "./turnos";
 import { contarUnaVez } from "../contar";
 import { cuadroEsDeEquipos, etiquetaDe } from "../equipos/etiquetas";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
@@ -99,7 +100,8 @@ export function renderNames(): void {
   seguirLaLista(names.length);
   // En el stand, Cuántos salen tiene de tope la lista de la ronda (`ganadores.ts`).
   lineasDeLaLista(names.length);
-  $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length);
+  // En un Amigo secreto, alguien dos veces en la lista se podría regalar a sí mismo: no se sella (`amigoRepetido`).
+  $<HTMLButtonElement>("btn-freeze").disabled = personas < 2 || listaCerrada() || ordenNoCabe(names.length) || !!amigoRepetido(names);
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   const hint = $("freeze-hint");
   hint.style.display = personas < 2 && !app.frozen ? "block" : "none";
@@ -220,11 +222,19 @@ function pintarResumen(): void {
   // Una lista de más de 300 líneas no entra en ninguna red: «Cuántos ganan» se recorta a 300 y `k` ya no es igual a
   // las líneas. Con el modo prendido eso se decide por el modo (`ordenNoCabe`) y no por el recorte: sigue siendo un
   // orden que no se puede sellar, y no un sorteo común con ganadores.
-  el.textContent = ordenNoCabe(entradas)
-    ? L.turnsSellarTope(entradas, n, topeDeGanadores())
-    : isTurnOrder(entradas, k, premio)
-      ? L.turnsSellarResumen(entradas, n)
-      : L.sellarResumen(n, k, enEnsayo() && !escrito ? null : escrito, entradas);
+  // En un Amigo secreto con alguien dos veces, esta línea pegada a Sellar dice por qué no se puede sellar y cómo seguir.
+  // Sin repetidos, un Amigo secreto dice cuántas personas y que la lista se cierra: nadie gana nada. El nombre entra como
+  // función para que un $$ o un $& escrito en la lista no se lea como patrón del reemplazo.
+  const repetido = amigoRepetido(nombres);
+  el.textContent = repetido
+    ? t("amigoRepetido").replace("{nombre}", () => repetido)
+    : ordenNoCabe(entradas)
+      ? L.turnsSellarTope(entradas, n, topeDeGanadores())
+      : isSecretSanta(entradas, k, premio)
+        ? t("amigoSellarResumen").replace("{n}", String(n))
+        : isTurnOrder(entradas, k, premio)
+          ? L.turnsSellarResumen(entradas, n)
+          : L.sellarResumen(n, k, enEnsayo() && !escrito ? null : escrito, entradas);
   el.style.display = "";
 }
 
@@ -692,7 +702,8 @@ function pintarVarias(): void {
   const boton = document.getElementById("btn-varias") as HTMLButtonElement | null;
   const panel = document.getElementById("varias-panel");
   if (!boton || !panel) return;
-  const puede = variasALaVista() && !listaCerrada() && parseNames().length >= 2;
+  // En un Amigo secreto cada persona va una vez: varias participaciones harían que alguien se regale a sí mismo.
+  const puede = variasALaVista() && !listaCerrada() && parseNames().length >= 2 && !modoAmigoActivo();
   const turnos = modoTurnosActivo();
   boton.hidden = !puede;
   boton.textContent = t(turnos ? "partAbrirTurnos" : "partAbrir");
@@ -793,7 +804,9 @@ function pintarPreguntaDeNumeros(): void {
   const aviso = document.getElementById("participaciones-aviso");
   if (!aviso) return;
   const texto = $<HTMLTextAreaElement>("ta").value;
-  const numeros = variasALaVista() && !listaCerrada() && texto !== listaSinUsarNumeros && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
+  // En un Amigo secreto tampoco se pregunta: un número al lado del nombre no puede ser cuántas veces participa.
+  const sePregunta = variasALaVista() && !listaCerrada() && !modoAmigoActivo() && texto !== listaSinUsarNumeros;
+  const numeros = sePregunta && sonVecesQueParticipa(texto) ? numerosDeLaLista(texto) : [];
   aviso.style.display = numeros.length ? "" : "none";
   if (!numeros.length) return;
   const pregunta = document.getElementById("part-pregunta-texto");

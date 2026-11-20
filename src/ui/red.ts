@@ -13,7 +13,7 @@ import { limpiarDetalle } from "./anchor";
 import { ponerDetalle } from "./detalle-error";
 import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, patrocinioQueFrena, respuestaDelBoton } from "./red-acciones";
 import { verError } from "./siguiente";
-import { ordenNoCabe } from "./turnos";
+import { amigoRepetidoEnElCuadro, ordenNoCabe } from "./turnos";
 import { canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 
 /**
@@ -212,16 +212,17 @@ function aplicarAlBoton(): void {
     // La red nunca participa en una ronda de stand: al repintar, conserva su propia acción.
     btn.dataset.i = enStand() ? "standEmpezar" : claveDeSellar();
     btn.textContent = t(btn.dataset.i);
-    // En el modo «Orden de turnos», con una lista que la red no admite, sellar sigue apagado (`turnos.ts`).
-    btn.disabled = ordenNoCabe();
+    // En el modo «Orden de turnos», con una lista que la red no admite, sellar sigue apagado (`turnos.ts`). Lo mismo en
+    // un Amigo secreto con alguien dos veces: la línea de junto a Sellar dice por qué.
+    btn.disabled = ordenNoCabe() || !!amigoRepetidoEnElCuadro();
     return;
   }
   const texto = clave ?? TEXTO_DE_ACCION(accion, network.name);
   btn.dataset.i = texto;
   btn.textContent = t(texto);
   // En el modo «Orden de turnos», con una lista que la red no admite, «Seguir sin sello» tampoco se aprieta:
-  // un orden incompleto no se sella de otra manera.
-  btn.disabled = accion === "seguir-sin-sello" && ordenNoCabe();
+  // un orden incompleto no se sella de otra manera, ni un Amigo secreto donde alguien se puede regalar a sí mismo.
+  btn.disabled = accion === "seguir-sin-sello" && (ordenNoCabe() || !!amigoRepetidoEnElCuadro());
   alApretar = vista.tipo === "confirmar" ? () => void seguirSinSello() : () => hacer(accion);
 }
 

@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
-import { isTurnOrder, ordenGuardadoSinSello } from "../modos/turnos";
+import { isTurnOrder, ordenGuardadoSinSello, turnOrderDisplayNames } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { hayModoOficial, network, txUrl } from "../stellar/config";
 import { logoComun, logoPorHuella } from "../logo-guardado";
@@ -8,6 +9,7 @@ import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
 import { cuentaDeLaEntrada, cuentasDe } from "./cuenta-entrada";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
+import { copiarEnElGesto, enlacesDelReparto } from "./amigo-enlaces";
 import { compartirEvento, compartirSorteo } from "./compartir";
 import { alTerminarDeGrabar, seEstaGrabando } from "./grabacion-en-curso";
 import {
@@ -275,6 +277,13 @@ const fmtDate = (secs: number): string =>
 /** ¿El sorteo de esa entrada es un orden de turnos? Ganan tantas personas como hay en la lista y el nombre empieza con «Turnos». */
 const esDeTurnos = (e: Entry | undefined): e is Entry => !!e && isTurnOrder(e.count, e.numWinners, e.prize);
 
+/**
+ * ¿Es un Amigo secreto? Salen todas las personas y el nombre empieza con Amigo secreto o Secret Santa. Sus lugares
+ * (`winnerIdx`, de este equipo o de la cadena) son el reparto: se guardan para saber que se sorteó y para volver a armar
+ * los enlaces, pero Mis sorteos no los pinta, ni en la tarjeta ni en el archivo, y el sorteo no entra a un evento.
+ */
+const esDeAmigo = (e: Entry): boolean => isSecretSanta(e.count, e.numWinners, e.prize);
+
 export { cuentaDeLaEntrada };
 
 /** La cantidad de personas, en lugar de los nombres unidos con comas: el título de la tarjeta ya dice Turnos. Repartido, también los turnos. */
@@ -285,9 +294,13 @@ function turnosDe(e: Entry): string {
     : t("turnsHistPart").replace("{n}", String(personas)).replace("{k}", String(participaciones));
 }
 
-/** Quién ganó, dicho con lo que se tenga: los nombres o el puesto en la lista. Un orden de turnos, cuántas personas tiene. */
+/**
+ * Quién ganó, dicho con lo que se tenga: los nombres o el puesto en la lista. Un orden de turnos, cuántas personas tiene.
+ * Un Amigo secreto ya sorteado, también: sus lugares son el reparto. Sorteado es que tiene los lugares o la grabación.
+ */
 export function winnerLabel(e: Entry): string {
   if (esDeTurnos(e) && (e.winners?.length || e.winnerIdx?.length)) return turnosDe(e);
+  if (esDeAmigo(e) && (e.winners?.length || e.winnerIdx?.length || e.drawTx)) return turnosDe(e);
   if (e.winners?.length) return e.winners.join(", ");
   if (e.winnerIdx?.length) return t("histWinnerAt").replace("{n}", e.winnerIdx.map((i) => i + 1).join(", "));
   return t("histPending");
@@ -345,9 +358,10 @@ const avisar = (texto: string): void => {
  * no tiene comprobante (`ordenGuardadoSinSello`, la misma regla del panel de la cuenta y del archivo CSV). Tampoco el de
  * un resultado en duda (`noCoincide`): no se comparte hasta revisarlo, ni en su tarjeta, ni en el evento de su día, ni
  * sumado a uno con nombre. Hasta el 16 de noviembre de 2026 solo lo frenaba su tarjeta, y entraba al grupo del día con
- * Compartir el evento.
+ * Compartir el evento. Tampoco el de un Amigo secreto: su comprobante es el reparto entero, y el evento listaría a todos
+ * en el orden sorteado. Se ve desde su tarjeta, con «Ver comprobante», y nada más.
  */
-const conComprobante = (e: Entry): boolean => tieneComprobante(e) && !ordenGuardadoSinSello(e) && !e.noCoincide;
+const conComprobante = (e: Entry): boolean => tieneComprobante(e) && !ordenGuardadoSinSello(e) && !e.noCoincide && !esDeAmigo(e);
 
 /** El comprobante es el de un sorteo en duda de este equipo (`noCoincide`): un evento con nombre no lo comparte. */
 const enlaceEnDuda = (enlace: string): boolean => readAll().some((e) => e.proof === enlace && e.noCoincide);
@@ -481,7 +495,15 @@ async function retomar(fila: Entry & { names: string[] }): Promise<void> {
  * y guardarlo no pide nada a quien organiza (cualquiera lo puede mandar).
  */
 export const falteGrabar = (e: Entry): e is Entry & { id: string } =>
-  !!(e.porGrabar && !e.noCoincide && e.id && !e.drawTx && e.winners?.length && (!e.contract || e.contract === network.contractId));
+  !!(
+    e.porGrabar &&
+    !e.noCoincide &&
+    e.id &&
+    !e.drawTx &&
+    // Un Amigo secreto no guarda los nombres en el orden sorteado: que se jugó lo dicen sus lugares.
+    (e.winners?.length || (esDeAmigo(e) && e.winnerIdx?.length)) &&
+    (!e.contract || e.contract === network.contractId)
+  );
 
 /** Los sorteos que se pintaron mientras se grababan: cuando termina esa grabación, Mis sorteos se vuelve a pintar una vez. */
 const vigilados = new Set<string>();
@@ -601,6 +623,17 @@ function enlazarRearmado(): void {
     if (r) {
       const fila = pintadas[Number(r.dataset.retomar)];
       if (fila?.names?.length) void retomar(fila as Entry & { names: string[] });
+      return;
+    }
+    const ver = el.closest<HTMLButtonElement>("[data-amigo-enlaces]");
+    if (ver) {
+      const fila = pintadas[Number(ver.dataset.amigoEnlaces)];
+      if (fila && conEnlaces(fila)) void abrirEnlaces(fila);
+      return;
+    }
+    const copiar = el.closest<HTMLButtonElement>("[data-amigo-copiar]");
+    if (copiar) {
+      copiarEnlaceDeMisSorteos(copiar);
       return;
     }
     const g = el.closest<HTMLButtonElement>("[data-grabar]");
@@ -832,7 +865,10 @@ const marcaSinSello = (e: Entry | undefined): string =>
 function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   const titulo = e.prize || t("histDraw");
   const ganadores = e.winners ?? [];
-  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${esDeTurnos(e) ? `<b>${esc(turnosDe(e))}</b>` : `${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`}`;
+  // Un orden de turnos o un Amigo secreto cuentan a las personas: sus nombres en orden son el orden, o el reparto.
+  const cuenta = esDeTurnos(e) || esDeAmigo(e);
+  const gano = `${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
+  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${cuenta ? `<b>${esc(turnosDe(e))}</b>` : gano}`;
   const nombre = t("evnSumarA").replace("{s}", titulo).replace("{e}", ev.nombre);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
@@ -861,7 +897,11 @@ function filaDeEvento(ev: EventoGuardado, s: SorteoGuardado, k: number, list: En
   const e = list.find((x) => x.proof === s.enlace);
   const titulo = e?.prize || t("histDraw");
   const fecha = e ? fmtDate(e.sealedAt) : "";
-  const quien = esDeTurnos(e) ? `<b>${esc(turnosDe(e))}</b>` : `${t(s.ganadores.length > 1 ? "histWonMany" : "histWon")} <b>${esc(s.ganadores.join(", "))}</b>`;
+  // Un orden de turnos o un Amigo secreto cuentan a las personas: sus nombres en orden son el orden, o el reparto.
+  const quien =
+    esDeTurnos(e) || (e && esDeAmigo(e))
+      ? `<b>${esc(turnosDe(e))}</b>`
+      : `${t(s.ganadores.length > 1 ? "histWonMany" : "histWon")} <b>${esc(s.ganadores.join(", "))}</b>`;
   const clave = esc(`${ev.id}|${k}`);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b>${fecha ? ` <span class="hc-fecha">${esc(fecha)}</span>` : ""}</div>` +
@@ -1092,6 +1132,79 @@ let eventosPintados: Entry[][] = [];
 /** De cada sorteo pintado, el número de su evento. */
 let eventoDe = new Map<Entry, number>();
 
+/** El detalle de la tarjeta, después del número: cuántas personas y, en un sorteo común ya hecho, quién ganó. */
+function detalleDeLaTarjeta(e: Entry, hecho: boolean): string {
+  if (hecho && (esDeTurnos(e) || esDeAmigo(e))) return `<b>${esc(winnerLabel(e))}</b>`;
+  const gano = hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : "";
+  return `${esc(cuentaDeLaEntrada(e))}${gano}`;
+}
+
+/** Lo que hace falta para volver a armar los enlaces de un Amigo secreto: su lista y sus lugares, en este equipo. */
+const conEnlaces = (e: Entry): e is Entry & { names: string[]; winnerIdx: number[] } =>
+  esDeAmigo(e) && !e.noCoincide && e.names?.length === e.count && e.winnerIdx?.length === e.count;
+
+/** El sorteo, para los enlaces: la huella de la lista y la ronda, como lo reconoce `remember`. */
+const claveAmigo = (e: Entry): string => `${e.listHash}:${e.round}`;
+
+/**
+ * Los Amigo secreto con los enlaces a la vista: sus enlaces ya armados, por posición en la lista sellada, o `null`
+ * mientras se arman. Y a quiénes ya se les copió, para que sigan en Copiado si Mis sorteos se vuelve a pintar (la
+ * respuesta de la cadena lo repinta). Duran lo que dura la página: nada de esto se guarda.
+ */
+const enlacesAbiertos = new Map<string, Map<number, string> | null>();
+const enlacesCopiados = new Map<string, Set<number>>();
+
+/** La lista de personas en el orden pegado, cada una con Copiar enlace: la misma del resultado (`pintarAmigo`). */
+function listaDeEnlaces(e: Entry & { names: string[] }, clave: string): string {
+  const listos = enlacesAbiertos.get(clave) ?? null;
+  const copiados = enlacesCopiados.get(clave) ?? new Set<number>();
+  // La identidad como «orden» no reordena nada: solo saca el sufijo de una línea sellada, como en el resultado.
+  const visibles = turnOrderDisplayNames(e.names, e.names.map((_, k) => k));
+  const filas = visibles.map((nombre, k) => {
+    const rotulo = copiados.has(k) ? "copied" : "amigoCopiar";
+    const apagado = listos ? "" : " disabled";
+    return (
+      `<li class="winner-fila amigo-fila${copiados.has(k) ? " copiado" : ""}"><span class="winner-name">${esc(nombre)}</span>` +
+      `<button class="ghost mini" type="button" data-amigo-copiar="${k}" data-i="${rotulo}"${apagado}>${esc(t(rotulo))}</button></li>`
+    );
+  });
+  return `<ul class="winner-lista amigo-lista" data-amigo-clave="${esc(clave)}">${filas.join("")}</ul>`;
+}
+
+/** «Ver los enlaces»: arma los enlaces de cada persona (sin red: salen de la lista, los lugares y la ronda) y los muestra. */
+async function abrirEnlaces(e: Entry & { names: string[]; winnerIdx: number[] }): Promise<void> {
+  const clave = claveAmigo(e);
+  if (enlacesAbiertos.has(clave)) return;
+  enlacesAbiertos.set(clave, null);
+  if (shown) paint(shown);
+  try {
+    const listos = new Map<number, string>();
+    for (const [k, p] of enlacesDelReparto(e.names, e.winnerIdx, e.round, e.prize)) listos.set(k, await p);
+    enlacesAbiertos.set(clave, listos);
+  } catch (error) {
+    // No se pudieron armar: el botón vuelve, para probar de nuevo.
+    console.warn("[tinkazo] los enlaces del amigo secreto no se pudieron armar", error);
+    enlacesAbiertos.delete(clave);
+  }
+  if (!shown) return;
+  paint(shown);
+  // La clave es la huella en hexadecimal y la ronda: entra tal cual en el selector.
+  document.querySelector<HTMLButtonElement>(`[data-amigo-clave="${clave}"] [data-amigo-copiar]`)?.focus();
+}
+
+/** Un toque en Copiar enlace de Mis sorteos: copia en el mismo gesto, con la línea que dice qué es. */
+function copiarEnlaceDeMisSorteos(b: HTMLButtonElement): void {
+  const clave = b.closest<HTMLElement>("[data-amigo-clave]")?.dataset.amigoClave ?? "";
+  const k = Number(b.dataset.amigoCopiar);
+  const enlace = enlacesAbiertos.get(clave)?.get(k);
+  if (!enlace || b.disabled) return;
+  const fila = b.closest<HTMLElement>("li") ?? b;
+  const nombre = fila.querySelector(".winner-name")?.textContent ?? "";
+  copiarEnElGesto(t("amigoEnlaceMsg").replace("{enlace}", enlace), b, fila, nombre, () => {
+    enlacesCopiados.set(clave, new Set([...(enlacesCopiados.get(clave) ?? []), k]));
+  });
+}
+
 /** Una tarjeta: el estado, el premio, cuántos y quién ganó, y una acción principal. */
 function tarjetaDeSorteo(e: Entry, i: number): string {
   const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
@@ -1112,6 +1225,12 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   // Si lo guardado no coincide con lo que se vio, no se comparte hasta revisarlo.
   const compartible = !!(e.proof && conComprobante(e) && e.winners?.length && !e.noCoincide);
   if (compartible) acciones.push(`<button ${comoPrincipal(`compartir:${i}`)} type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
+  // Un Amigo secreto con su lista y sus lugares en este equipo: los enlaces de cada persona se vuelven a armar acá, si la
+  // pestaña se cerró o se recargó mientras se mandaban. Sin abrir el comprobante, que muestra el reparto entero.
+  const amigo = conEnlaces(e) ? claveAmigo(e) : "";
+  if (amigo && !enlacesAbiertos.has(amigo)) {
+    acciones.push(`<button class="ghost mini" type="button" data-amigo-enlaces="${i}">${esc(t("amigoHistEnlaces"))}</button>`);
+  }
   // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
   // está en la cadena. Con la lista a mano se rearma.
   if (e.proof && !ordenGuardadoSinSello(e)) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
@@ -1135,9 +1254,11 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
     (e.noCoincide ? `<p class="hc-en hc-sin-sello" role="alert">${esc(t("grabNoCoincide"))}</p>` : "") +
-    // El título ya dice Turnos: el detalle cuenta a las personas, no muestra los nombres ni dice que ganaron.
-    `<p class="hc-meta">${esc(id)}, ${hecho && esDeTurnos(e) ? `<b>${esc(winnerLabel(e))}</b>` : `${esc(cuentaDeLaEntrada(e))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}`}${origen}</p>` +
+    // El título ya dice Turnos o Amigo secreto: el detalle cuenta a las personas, no muestra los nombres, ni los lugares
+    // (en un Amigo secreto son el reparto), ni dice que ganaron.
+    `<p class="hc-meta">${esc(id)}, ${detalleDeLaTarjeta(e, hecho)}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
+    (amigo && enlacesAbiertos.has(amigo) && conEnlaces(e) ? listaDeEnlaces(e, amigo) : "") +
     `</article>`
   );
 }
@@ -1180,8 +1301,9 @@ export function toCsv(organizer: string): string {
       q(e.listHash),
       q(e.count),
       // Sin nombres, el puesto en la lista, contado desde uno como lo cuenta
-      // una persona.
-      q(e.winners?.join(" | ") ?? e.winnerIdx?.map((i) => `#${i + 1}`).join(" | ") ?? ""),
+      // una persona. En un Amigo secreto, nada: los puestos son el reparto. El comprobante sí queda, como registro de
+      // quien organiza, y lo dice su aviso en la pantalla del resultado.
+      q(esDeAmigo(e) ? "" : (e.winners?.join(" | ") ?? e.winnerIdx?.map((i) => `#${i + 1}`).join(" | ") ?? "")),
       q(e.round),
       q(e.prize),
       q(e.sealTx ?? ""),

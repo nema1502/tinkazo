@@ -173,6 +173,28 @@ describe("retomar un sorteo sellado con el modo de la pantalla distinto", () => 
     expect(app.frozen?.numWinners).toBe(3);
   });
 
+  it("un Amigo secreto sellado se retoma como Amigo secreto, con la marca que esconde los juegos", async () => {
+    const m = await montar();
+    expect(m.modo.modoAmigoActivo()).toBe(false);
+    m.freeze.resumeFrozen(m.fila(nombres(6), "Amigo secreto: Navidad", 6));
+    expect(m.modo.modoAmigoActivo()).toBe(true);
+    expect(document.documentElement.dataset.modoLista).toBe("amigo");
+    expect(document.getElementById("btn-amigo")?.getAttribute("aria-pressed")).toBe("true");
+    expect($("modo-botones").dataset.modo).toBe("amigo");
+    expect(campo().value).toBe("6");
+    expect(premio().value).toBe("Amigo secreto: Navidad");
+    delete document.documentElement.dataset.modoLista;
+  });
+
+  it("un Amigo secreto se retoma como tal aunque antes se haya tocado Orden de turnos", async () => {
+    const m = await montar();
+    turnos().click();
+    m.freeze.resumeFrozen(m.fila(nombres(6), "Amigo secreto", 6));
+    expect(m.modo.modoAmigoActivo()).toBe(true);
+    expect(document.documentElement.dataset.modoLista).toBe("amigo");
+    delete document.documentElement.dataset.modoLista;
+  });
+
   it("el sorteo común de siempre se retoma igual que antes", async () => {
     const m = await montar();
     m.freeze.resumeFrozen(m.fila(nombres(8), "Termo", 2));

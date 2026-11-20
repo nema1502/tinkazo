@@ -4,6 +4,7 @@ import { RPC_LISTAS } from "../stellar/config";
 // Sin el SDK de Stellar arriba: `leerRegistro` lo pide recién al leer.
 import { esLimiteDelRpc, leerRegistro } from "../stellar/registro";
 import { reglaDelShow } from "./espectador-regla";
+import { isSecretSanta } from "../modos/amigo";
 
 /**
  * La vista de espectador y lo que quedó grabado en Stellar.
@@ -51,7 +52,18 @@ export class NoCoincide extends Error {
   }
 }
 
-/** Lo sellado es lo del enlace. Lanza `NoCoincide` con lo primero que no da. */
+/**
+ * Lo sellado es un Amigo secreto: no se mira en vivo, porque el orden es el reparto entero (issue #99). Se decide con lo
+ * que guarda el sello y no con lo que dice el enlace: uno armado a mano sin el nombre pasaría las demás comprobaciones.
+ */
+export class EsAmigoSecreto extends Error {
+  constructor() {
+    super("amigo-secreto");
+    this.name = "EsAmigoSecreto";
+  }
+}
+
+/** Lo sellado es lo del enlace. Lanza `NoCoincide` con lo primero que no da, y `EsAmigoSecreto` si lo sellado es uno. */
 export function revisarSello(sello: Sello, s: SorteoDelEnlace): void {
   if (sello.id !== s.id) throw new NoCoincide("número");
   if (sello.listHash.toLowerCase() !== s.listHash.toLowerCase()) throw new NoCoincide("lista");
@@ -60,6 +72,7 @@ export function revisarSello(sello: Sello, s: SorteoDelEnlace): void {
   if (sello.round !== s.round) throw new NoCoincide("ronda");
   // Sin premio, el sello guarda un texto de siempre y el celular no muestra ninguno: no hay nada que comparar.
   if (s.premio && sello.meta !== s.premio.slice(0, 160)) throw new NoCoincide("premio");
+  if (isSecretSanta(sello.count, sello.numWinners, sello.meta)) throw new EsAmigoSecreto();
 }
 
 /** Lo grabado es lo calculado. Lanza `NoCoincide` con lo primero que no da. */

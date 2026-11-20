@@ -44,6 +44,12 @@ describe("de qué se trata cada paso", () => {
     expect(claveDelPaso(4, { ...ok, ganadores: 12, turnos: true })).toBe("sigTurnos");
   });
 
+  it("un Amigo secreto tampoco tiene ganadores: lo que se anuncia dice que ya salió", () => {
+    expect(claveDelPaso(4, { ...ok, ganadores: 12, amigo: true })).toBe("sigAmigo");
+    expect(T.es.sigAmigo).toBe("Ya salió el amigo secreto");
+    expect(T.en.sigAmigo).toBe("The Secret Santa is drawn");
+  });
+
   it("un orden que no entra en la red no está sellando, aunque el botón esté apagado: dice el tope", () => {
     expect(claveDelPaso(2, { ...ok, apagado: true, noCabe: true })).toBe("sigTope");
     // Aunque el botón se viera prendido, si no entra no se puede sellar.

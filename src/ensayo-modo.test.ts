@@ -178,7 +178,8 @@ describe("cada lugar que graba pregunta lo mismo", () => {
   it("el sorteo no anota en Mis sorteos ni arma el enlace corto", () => {
     const d = fuente("./ui/draw.ts");
     expect(d).toContain("const who = sinGrabar() ? undefined : currentSession()?.address;");
-    expect(d).toContain("const puedeAcortar = (): boolean => !sinGrabar() && !!proofLink;");
+    // El Amigo secreto suma su propia guarda (el enlace corto llevaría el reparto), sin aflojar la del ensayo.
+    expect(d).toContain("const puedeAcortar = (): boolean => !sinGrabar() && !!proofLink && !esDeAmigo();");
     expect(d).toContain("corto: !sinGrabar()");
     // `params.has("demo")` queda solo para lo que es de la demo sola (contar que llegó al ganador), nunca para no grabar.
     const deLaDemo = d.split(/\r?\n/).filter((l) => /params\.has\("demo"\)/.test(l));

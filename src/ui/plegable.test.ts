@@ -39,6 +39,49 @@ describe("el pliegue de las opciones", () => {
   });
 });
 
+/** Con un modo elegido arriba, su nombre de siempre lo pone la herramienta: eso no abre el pliegue, un nombre escrito sí. */
+describe("el pliegue de las opciones con un modo elegido", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    delete document.documentElement.dataset.modoLista;
+    document.body.innerHTML =
+      '<button id="btn-turnos" aria-pressed="false"></button>' +
+      '<div><details id="mas-opciones"><summary>Nombre y subir CSV</summary><input id="prize" /></details></div>';
+  });
+
+  /** Arranca el pliegue con `nombre` ya puesto en el campo, como lo deja el selector de modos. */
+  async function abrirCon(nombre: string): Promise<HTMLDetailsElement> {
+    (document.getElementById("prize") as HTMLInputElement).value = nombre;
+    const { initPlegables } = await import("./plegable");
+    initPlegables();
+    return document.getElementById("mas-opciones") as HTMLDetailsElement;
+  }
+
+  it("con Orden de turnos, el nombre Turnos no lo abre", async () => {
+    document.getElementById("btn-turnos")?.setAttribute("aria-pressed", "true");
+    expect((await abrirCon("Turnos")).open).toBe(false);
+  });
+
+  it("con Amigo secreto, el nombre Amigo secreto no lo abre", async () => {
+    document.documentElement.dataset.modoLista = "amigo";
+    expect((await abrirCon("Amigo secreto")).open).toBe(false);
+  });
+
+  it("con Amigo secreto en inglés, el nombre Secret Santa no lo abre", async () => {
+    document.documentElement.dataset.modoLista = "amigo";
+    expect((await abrirCon("Secret Santa")).open).toBe(false);
+  });
+
+  it("con Amigo secreto, un nombre escrito sí lo abre", async () => {
+    document.documentElement.dataset.modoLista = "amigo";
+    expect((await abrirCon("Amigo secreto: Navidad")).open).toBe(true);
+  });
+
+  it("sin el modo del amigo, Amigo secreto es un premio escrito y lo abre", async () => {
+    expect((await abrirCon("Amigo secreto")).open).toBe(true);
+  });
+});
+
 describe("el pliegue del resultado", () => {
   // Con jsdom, import.meta.url no es una URL de archivo: las rutas salen de la raíz del proyecto.
   const fuente = readFileSync(join(process.cwd(), "src", "ui", "plegable.ts"), "utf8");

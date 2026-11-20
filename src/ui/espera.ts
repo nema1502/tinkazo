@@ -15,6 +15,7 @@ import { hayModoOficial, network } from "../stellar/config";
 import { atencionPrendida } from "../estilos-atencion";
 import { armarQrDeEspectador, datosDeLaEspera, esconderQrDeEspectador, figuraDelQrHtml } from "./espectador-enlace";
 import { isTurnOrder } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -284,19 +285,24 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   if (!f || app.drawn || abierta || segundos() <= 0) return false;
   // Todavía no hay ganadores: con la cantidad elegida alcanza para saber si la lista sellada es un orden.
   const orden = isTurnOrder(f.names.length, sorteo.premios(), f.prize);
+  // Un Amigo secreto, con lo sellado si ya está: el orden que va a salir es el reparto entero (issue #99).
+  const amigo = isSecretSanta(f.names.length, f.numWinners ?? sorteo.premios(), f.prize);
+  const claveDelCartel = orden ? "espStickerOrden" : amigo ? "espStickerAmigo" : "espSticker";
   const back = document.createElement("div");
   back.className = "espera";
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
-  back.setAttribute("aria-label", t(orden ? "espStickerOrden" : "espSticker"));
+  back.setAttribute("aria-label", t(claveDelCartel));
   back.tabIndex = -1;
   // El QR del espectador, solo en un sorteo real: la demo, el ensayo y el stand no comparten número ni lista
-  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar.
-  const conEspectador = !sinGrabar();
-  const juegos = sorteo.juegos();
+  // (el faro del stand no comparte semilla), y el comprobante de un ensayo no se puede comprobar. En un Amigo secreto
+  // tampoco: el celular que lo escanea mostraría el orden, y el orden es el reparto.
+  const conEspectador = !sinGrabar() && !amigo;
+  // En un Amigo secreto no se juega nada: sin el juego de la barra ni el panel para cambiarlo.
+  const juegos = amigo ? [] : sorteo.juegos();
   back.innerHTML =
     `<div class="espera-top">` +
-    `<span class="sticker">${esc(t(orden ? "espStickerOrden" : "espSticker"))}</span>` +
+    `<span class="sticker">${esc(t(claveDelCartel))}</span>` +
     // En Prueba, la sala entera ve en qué modo está el sorteo; en Oficial, nada.
     (hayModoOficial && network.name === "testnet" ? `<span class="espera-prueba">${esc(t("netTest"))}</span>` : "") +
     `<div class="espera-top-acc">${juegoHtml(juegos, "barra")}<button class="ghost" type="button" data-volver data-i-aria="espVolver" aria-label="${esc(t("espVolver"))}"><span class="espera-volver-largo" data-i="espVolver">${esc(t("espVolver"))}</span><span class="espera-volver-corto" data-i="espVolverCorto">${esc(t("espVolverCorto"))}</span></button></div>` +
@@ -387,7 +393,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const premioLinea = back.querySelector<HTMLElement>(".espera-premio");
   onLangChange(() => {
     if (!back.isConnected) return;
-    const clave = fase === "cuenta" ? (orden ? "espStickerOrden" : "espSticker") : "espStickerYa";
+    const clave = fase === "cuenta" ? claveDelCartel : "espStickerYa";
     if (sticker) sticker.textContent = t(clave);
     back.setAttribute("aria-label", t(clave));
     if (premioLinea) premioLinea.innerHTML = orden ? esc(t("cortinaSeOrden")) : `${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b>`;

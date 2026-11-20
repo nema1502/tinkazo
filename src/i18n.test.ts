@@ -481,10 +481,13 @@ describe("el modo Amigo secreto (issue #99)", () => {
   const CLAVES = [
     "amigoOption", "amigoSub", "amigoTitulo", "amigoCount", "amigoPrizeLabel", "amigoPrize", "amigoMas",
     "amigoHelp", "amigoRulesNote", "amigoPrivacidad", "amigoPrivacidadPoca", "amigoResultadoT", "amigoResultadoNota",
-    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoAgainLeft", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
-    "amigoSinComprobante",
+    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
+    "amigoSinComprobante", "amigoEnlaceMsg", "espStickerAmigo", "espAmigoT", "espAmigoB", "amigoHistEnlaces",
+    "amigoRepetido", "sigRepetido", "amigoSellarResumen", "sigAmigo",
   ];
-  const CLAVES_CONFIRMAR = ["confirmarT", "confirmarError", "confirmarPara", "confirmarSorteo", "confirmarSello", "confirmarNota"];
+  const CLAVES_CONFIRMAR = [
+    "confirmarTitulo", "confirmarDesc", "confirmarT", "confirmarNota", "confirmarError", "confirmarErrorB", "confirmarIr",
+  ];
 
   it("sus textos existen en español y en inglés", () => {
     for (const k of [...CLAVES, ...CLAVES_CONFIRMAR]) {
@@ -511,14 +514,31 @@ describe("el modo Amigo secreto (issue #99)", () => {
     expect(T.en.amigoPrivacidadPoca).toMatch(/no secret|not a secret/i);
   });
 
+  it("lo que se copia con Copiar enlace lleva el enlace, en los dos idiomas", () => {
+    expect(T.es.amigoEnlaceMsg).toContain("{enlace}");
+    expect(T.en.amigoEnlaceMsg).toContain("{enlace}");
+  });
+
   it("el aviso del comprobante pide compartirlo después del intercambio", () => {
     expect(T.es.amigoAvisoComprobante).toMatch(/después del intercambio/i);
     expect(T.en.amigoAvisoComprobante).toMatch(/after the (gift )?exchange/i);
   });
 
-  it("la página del enlace personal no promete la lista entera", () => {
-    expect(T.es.confirmarNota).toMatch(/lista entera|reparto entero/i);
-    expect(T.en.confirmarNota).toMatch(/whole list|full list|whole exchange|entire list/i);
+  it("la página del enlace personal pide guardar el secreto", () => {
+    expect(T.es.confirmarNota).toMatch(/secreto/i);
+    expect(T.en.confirmarNota).toMatch(/secret/i);
+  });
+
+  it("la línea del enlace personal lleva el nombre de quien abre, en los dos idiomas", () => {
+    expect(T.es.confirmarT).toContain("{nombre}");
+    expect(T.en.confirmarT).toContain("{nombre}");
+  });
+
+  it("la página del enlace personal ya no dice el número del sello ni repite para quién es", () => {
+    for (const k of ["confirmarPara", "confirmarSorteo", "confirmarSello"]) {
+      expect(T.es[k], `es.${k}`).toBeUndefined();
+      expect(T.en[k], `en.${k}`).toBeUndefined();
+    }
   });
 });
 

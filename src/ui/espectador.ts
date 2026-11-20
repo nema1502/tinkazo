@@ -19,9 +19,10 @@ import { nombreDePersona, seCuentaPorPersona } from "../participaciones";
 import { hayModoOficial } from "../stellar/config";
 import { modesVisible } from "../modos/bandera";
 import { isTurnOrder } from "../modos/turnos";
+import { isSecretSanta } from "../modos/amigo";
 import { PLAZO_DEL_RELAY_MS, conPlazo } from "../pedido-con-plazo";
 import { desfaseDelReloj } from "./espectador-reloj";
-import { NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
+import { EsAmigoSecreto, NoCoincide, esperarElGrabado, mirarUnaVez, type Leer, type SorteoDelEnlace } from "./espectador-cadena";
 import {
   RELECTURAS,
   anclaDelCelular,
@@ -131,6 +132,12 @@ function mismoSorteo(a: DatosEspectador, b: DatosEspectador): boolean {
  */
 export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), op: OpcionesDeLaVista = {}): boolean {
   if (document.querySelector(".espectador")) return false;
+  // Un Amigo secreto no se mira en vivo: el orden que saldría es el reparto entero. La espera ya no muestra el QR, pero
+  // un enlace viejo o armado a mano no abre la vista, ni calcula el orden ni juega (issue #99).
+  if (isSecretSanta(datos.n.length, datos.w, datos.z ?? "")) {
+    avisarAmigoSinVivo(lang);
+    return false;
+  }
   const contrato = contratoDelEnlace(datos);
   if (!contrato) {
     avisarEnlaceRoto(lang);
@@ -371,6 +378,10 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
     } catch (e) {
       show?.cancelar();
       if (este !== intento) return;
+      if (e instanceof EsAmigoSecreto) {
+        pasarAAmigo();
+        return;
+      }
       if (e instanceof NoCoincide) fallar("espNoCoincide", false);
       else fallar(e instanceof Error && e.message === "bad-signature" ? "badSig" : orden ? "espSinNumeroOrden" : "espSinNumero", true);
     }
@@ -547,9 +558,34 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
       intento++;
       show?.cancelar();
       jugando = false;
+      if (e instanceof EsAmigoSecreto) {
+        pasarAAmigo();
+        return;
+      }
       if (e instanceof NoCoincide) fallar("espNoCoincide", false);
       else fallar(e instanceof Error && e.message === "bad-signature" ? "badSig" : orden ? "espSinNumeroOrden" : "espSinNumero", true);
     }
+  };
+
+  /**
+   * Lo sellado en Stellar es un Amigo secreto aunque el enlace no lo diga (uno armado a mano, sin el nombre): la vista
+   * se cierra sin mostrar el orden, que es el reparto, y queda la capa que lo explica. Corta la cuenta, el show y lo
+   * que estaba por pasar, y olvida lo calculado.
+   */
+  const pasarAAmigo = (): void => {
+    intento++;
+    fase = "fallo";
+    window.clearInterval(timer);
+    for (const p of pendientes) window.clearTimeout(p);
+    showActual?.cancelar();
+    destapar();
+    obs?.disconnect();
+    removeEventListener("keydown", tecla);
+    capa.remove();
+    app.frozen = null;
+    app.drawn = null;
+    setSoloMirar(false);
+    avisarAmigoSinVivo(getLang());
   };
 
   // El reloj del teléfono contra el de la ronda. Hasta saberlo (como mucho unos segundos), la cuenta corre con el del
@@ -584,7 +620,8 @@ export function abrirEspectador(datos: DatosEspectador, lang: Lang = getLang(), 
   // Un enlace que no es de este sorteo se dice enseguida, sin hacer esperar la cuenta. De paso baja lo que hace falta
   // para leer la cadena, y cuando nazca el número ya está.
   void mirarUnaVez(sorteo, op.leer).catch((e: unknown) => {
-    if (e instanceof NoCoincide && fase === "cuenta") fallar("espNoCoincide", false);
+    if (e instanceof EsAmigoSecreto) pasarAAmigo();
+    else if (e instanceof NoCoincide && fase === "cuenta") fallar("espNoCoincide", false);
   });
 
   // Las relecturas del enlace que puede cambiar, antes de la tarjeta, cada una con su desfase al azar.
@@ -900,4 +937,25 @@ export function abrirParticipante(d: DatosParticipante, lang: Lang = getLang()):
   });
   pintar();
   return true;
+}
+
+/**
+ * Un Amigo secreto no se ve en vivo (issue #99): un título, una línea y el enlace para hacer el propio sorteo. Sin la
+ * lista, sin la cuenta y sin el orden. Los textos llevan su clave, así que el cambio de idioma los sigue.
+ */
+export function avisarAmigoSinVivo(lang: Lang = getLang()): void {
+  if (document.querySelector(".espectador")) return;
+  setLang(lang);
+  const capa = document.createElement("div");
+  capa.className = "espera espectador espectador-amigo";
+  capa.setAttribute("role", "dialog");
+  capa.setAttribute("aria-modal", "true");
+  capa.setAttribute("aria-labelledby", "espectador-amigo-t");
+  capa.tabIndex = -1;
+  capa.innerHTML =
+    `<p class="espectador-fin-t" id="espectador-amigo-t" data-i="espAmigoT">${esc(t("espAmigoT"))}</p>` +
+    `<p class="espera-t" data-i="espAmigoB">${esc(t("espAmigoB"))}</p>` +
+    `<div class="espectador-acc"><a class="espectador-propio" href="/" data-i="espHacerElTuyo">${esc(t("espHacerElTuyo"))}</a></div>`;
+  document.body.appendChild(capa);
+  capa.querySelector<HTMLElement>("a")?.focus({ preventScroll: true });
 }
