@@ -136,10 +136,11 @@ export type Reservado =
 
 /**
  * De dónde salen unos sorteos oficiales. `gratis` es el regalo de bienvenida: el código de antes lo lee sin romper (un sorteo
- * devuelto de un origen que no conoce vuelve como `admin`, y lo demás no mira el origen).
+ * devuelto de un origen que no conoce vuelve como `admin`, y lo demás no mira el origen). `campana` son los de quien organiza
+ * una campaña, que pide la sala con su secreto.
  */
-export type OrigenDerecho = "cupon" | "alta" | "paquete" | "admin" | "gratis";
-const ORIGENES: readonly OrigenDerecho[] = ["cupon", "alta", "paquete", "admin", "gratis"];
+export type OrigenDerecho = "cupon" | "alta" | "paquete" | "admin" | "gratis" | "campana";
+const ORIGENES: readonly OrigenDerecho[] = ["cupon", "alta", "paquete", "admin", "gratis", "campana"];
 
 /**
  * Pasados estos días sin abrir, un alta autorizada o pedida deja de apartar créditos en el piso, ella y sus sorteos: quien

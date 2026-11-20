@@ -69,6 +69,15 @@ export type AltaAMano = { ok: true; repetido: boolean; altaNueva: boolean } | { 
 /** Cómo terminó dar sorteos a mano a una cuenta del libro. */
 export type DadoAMano = { ok: true; repetido: boolean } | { ok: false; motivo: "fuera-del-libro" | "ref-usado" | "techo-sorteos" };
 
+/** Cómo terminó el acceso de quien organiza una campaña. `liberaEn` es cuándo se libera el lugar más viejo del tope del día. */
+export type AccesoOrganizadora =
+  | { ok: true; ya: boolean; altaNueva: boolean }
+  | { ok: false; motivo: "evento-usado" | MotivoFreno }
+  | { ok: false; motivo: "cupo"; liberaEn: number };
+
+/** El prefijo del `ref` de los sorteos de quien organiza: `campana:<evento>`. Con el evento, cada campaña da sus sorteos una sola vez. */
+export const REF_CAMPANA = "campana:";
+
 /** El día UTC de un instante, `AAAA-MM-DD`: la clave de los techos diarios. */
 const diaUtc = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -335,6 +344,72 @@ export class Altas {
       if (altaNueva) this.cupos.fijarAjuste(`altas_dia:${dia}`, String(altasHoy + 1), ahora);
       this.cupos.fijarAjuste(`derechos_dia:${dia}`, String(sorteosHoy + p.sorteos), ahora);
       return { ok: true, repetido: false, altaNueva };
+    });
+  }
+
+  /**
+   * El acceso de quien organiza una campaña con la comisión pagada (`POST /v1/alta/organizadora`): mete su cuenta en el libro y le da
+   * `sorteos` sorteos oficiales por `dias` días, con `ref` `campana:<evento>`. Todo en una transacción y sin esperar a nadie. Es el
+   * mismo camino del alta a mano: si la cuenta ya es de un alta (de una persona con cupón, o de otra campaña), los sorteos van a esa
+   * alta; si no, nace un alta `cuenta:<G>` con motivo `admin` (el sitio solo entiende ese acceso, con sorteos para organizar), `abierta`
+   * si la cuenta ya existe en la red. Lo que distingue estos sorteos es su `ref` y su origen `campana`.
+   *
+   * - El mismo evento con la misma cuenta otra vez: `ya`, sin sumar nada y sin mirar topes ni freno. Con otra cuenta: `evento-usado`.
+   * - Tope del día: como mucho `topeDia` campañas nuevas en 24 horas entre todas las cuentas (`cupo`, con la hora en que se libera).
+   * - `freno` (el piso de créditos, la pausa a mano) puede parar el alta antes de escribir: no queda nada.
+   */
+  admitirOrganizadora(
+    p: {
+      cuenta: string;
+      evento: string;
+      sorteos: number;
+      dias: number;
+      topeDia: number;
+      abierta: boolean;
+      freno?: (c: { sorteos: number; altaNueva: boolean }) => MotivoFreno | null;
+    },
+    ahora: number,
+  ): AccesoOrganizadora {
+    if (!StrKey.isValidEd25519PublicKey(p.cuenta)) throw new Error("organizadora-cuenta");
+    if (!entre(p.sorteos, 1, 1000) || !entre(p.dias, 1, 3650) || !entre(p.topeDia, 1, 100_000) || !texto(p.evento, 64)) {
+      throw new Error("organizadora-forma");
+    }
+    const ref = `${REF_CAMPANA}${p.evento}`;
+    return this.cupos.transaccion((): AccesoOrganizadora => {
+      const previo = this.filas("SELECT cuenta FROM derechos WHERE ref = ?", ref)[0];
+      if (previo) {
+        if (previo.cuenta !== p.cuenta) return { ok: false, motivo: "evento-usado" };
+        this.cupos.admitir(p.cuenta, "admin", ahora);
+        return { ok: true, ya: true, altaNueva: false };
+      }
+      // Las campañas de las últimas 24 horas, por el rango de `ref` (`campana:` a `campana;`) para usar el índice de su clave única.
+      const hoy = this.filas(
+        "SELECT COUNT(*) AS n, MIN(creado) AS vieja FROM derechos WHERE ref >= 'campana:' AND ref < 'campana;' AND creado > ?",
+        ahora - DIA_MS,
+      )[0];
+      if (Number(hoy?.n ?? 0) >= p.topeDia) return { ok: false, motivo: "cupo", liberaEn: Number(hoy?.vieja ?? ahora) + DIA_MS };
+      const duena = this.cupos.altaDeCuenta(p.cuenta);
+      const altaNueva = duena === null;
+      const frenado = p.freno?.({ sorteos: p.sorteos, altaNueva }) ?? null;
+      if (frenado) return { ok: false, motivo: frenado };
+      const usuario = duena?.usuario ?? `cuenta:${p.cuenta}`;
+      if (!duena) {
+        this.sql.exec(
+          [
+            "INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada)",
+            "VALUES (?, 'admin', ?, ?, NULL, ?, ?, ?) ON CONFLICT(usuario) DO NOTHING",
+          ].join(" "),
+          usuario,
+          ref,
+          p.cuenta,
+          p.abierta ? "abierta" : "autorizada",
+          ahora,
+          ahora,
+        );
+      } else if (p.abierta) this.cupos.marcarAbierta(duena.usuario, ahora);
+      this.cupos.admitir(p.cuenta, "admin", ahora);
+      this.cupos.otorgar({ usuario, cuenta: p.cuenta, origen: "campana", ref, sorteos: p.sorteos, dias: p.dias }, ahora);
+      return { ok: true, ya: false, altaNueva };
     });
   }
 

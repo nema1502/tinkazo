@@ -31,6 +31,10 @@
  *        200 {estado:"admitida"|"ya-tiene-acceso"|"no-hace-falta"}   Sin cupón ni sorteos: la cuenta solo puede activarse y recibir.
  *   Con esa prendida, aunque no lo esté ninguna de las otras dos, `/cupo` y `/estado` también traen el bloque `pagos`.
  *
+ * Solo en mainnet con ALTAS=1 y el secreto SALA_SECRETO, lo llama la sala de las campañas (cabecera x-sala-secreto), ver `acceso-organizadora.ts`:
+ *   POST /v1/alta/organizadora {"cuenta","evento"}   admite a quien organiza una campaña con su comisión pagada, con sus sorteos de la campaña
+ *        200 {ok:true, ya}   Sin el secreto cargado contesta 503 apagada. Idempotente por evento.
+ *
  * Con la clave de administración (Authorization: Bearer <ADMIN_TOKEN>):
  *   POST /v1/patrocinio/apagar | encender | pollar     PUT /v1/patrocinio/ajustes {"clave","valor"}
  *   GET  /v1/patrocinio/estado                         GET /v1/patrocinio/exportar
@@ -46,6 +50,7 @@
  * Comprobar un sorteo no depende de este servicio.
  */
 import { DurableObject } from "cloudflare:workers";
+import { type PedidoDeOrganizadora, atenderOrganizadora } from "./acceso-organizadora";
 import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
 import { Altas } from "./altas";
 import { AltasPorPremio } from "./altas-premio";
@@ -339,6 +344,18 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     }
   }
 
+  /** `POST /v1/alta/organizadora` (solo mainnet): el acceso de quien organiza con su comisión pagada. El secreto ya lo miró el Worker. */
+  async organizadora(pedido: PedidoDeOrganizadora): Promise<Respuesta> {
+    await this.obtener();
+    if (!this.puerta) return { estado: 503, cuerpo: { motivo: "apagada" } };
+    try {
+      return await this.puerta.organizadora(pedido);
+    } catch (e) {
+      registrar("error-interno", { donde: "organizadora", error: e instanceof Error ? e.name : "desconocido" });
+      return { estado: 500, cuerpo: { motivo: "interno" } };
+    }
+  }
+
   /** Las rutas de la compra con QR, `/v1/compra/empezar` y `/v1/compra/cargar` (solo mainnet). */
   async compra(accion: AccionCompra, pedido: PedidoAlta): Promise<Respuesta> {
     await this.obtener();
@@ -517,6 +534,13 @@ export default {
     const url = new URL(request.url);
     const origen = request.headers.get("Origin");
     const objeto = env.PATROCINIO.get(env.PATROCINIO.idFromName(env.RED === "mainnet" ? "mainnet" : "testnet")) as unknown as DurableObjectStub<Patrocinio>;
+
+    // El acceso de quien organiza una campaña, también solo en mainnet y con el secreto de la sala: va antes del resto de `/v1/alta/`
+    // porque no es una ruta del navegador (sin origen, sin sesión de Pollar), y si no atiende, sigue de largo al 404 de siempre.
+    if (url.pathname === "/v1/alta/organizadora" && env.RED === "mainnet") {
+      const r = await atenderOrganizadora(request, leerConfig(env), env.SALA_SECRETO, (pedido) => objeto.organizadora(pedido));
+      if (r) return r;
+    }
 
     // Las rutas de altas y de la compra con QR existen solo en mainnet; en testnet siguen sin existir, como siempre.
     if ((url.pathname.startsWith("/v1/alta/") || url.pathname.startsWith("/v1/compra/")) && env.RED === "mainnet") {

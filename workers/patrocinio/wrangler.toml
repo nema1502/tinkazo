@@ -50,8 +50,9 @@ RESERVA_REGALO_CREDITOS = "3000"
 # `npx wrangler@4 deploy --env mainnet`, con la palabra de quien mantiene el proyecto. Las variables y el objeto NO se
 # heredan de lo de arriba: se escriben todos acá. El objeto es el mismo código con otro espacio de nombres, así que el
 # SQLite de mainnet no comparte nada con el de testnet. Los secretos van con `npx wrangler@4 secret put <NOMBRE> --env
-# mainnet`: CLAVE_PATROCINADOR, ADMIN_TOKEN (operar), CUPONES_TOKEN (cupones y altas), POLLAR_SECRETO, CUPON_SECRETO y,
-# con el sorteo del servidor, CLAVE_SORTEADORA. Ninguno va en este archivo.
+# mainnet`: CLAVE_PATROCINADOR, ADMIN_TOKEN (operar), CUPONES_TOKEN (cupones y altas), POLLAR_SECRETO, CUPON_SECRETO, SALA_SECRETO
+# (el que manda la sala de las campañas, el mismo en los dos Workers) y, con el sorteo del servidor, CLAVE_SORTEADORA. Ninguno va
+# en este archivo.
 [env.mainnet]
 name = "tinkazo-patrocinio-mainnet"
 workers_dev = false
@@ -166,3 +167,11 @@ BIENVENIDA_POR_IP = ""
 # créditos por encima del piso, así no deja sin firma a quienes ya tienen sorteos. Sin el regalo, la cuenta se activa igual:
 # activar deja solo el lugar de diez altas de premio. Los cupones, los premios y las órdenes miran el piso solo. Hasta 50000. En caliente: reserva_regalo (de 1 a 50000; 0 vuelve a este valor).
 RESERVA_REGALO_CREDITOS = "3000"
+# El acceso automático de quien organiza una campaña (POST /v1/alta/organizadora, que llama la sala con su secreto SALA_SECRETO
+# cuando comprueba que la comisión del evento se pagó): cuántos sorteos recibe por campaña, por cuántos días valen y cuántas
+# cuentas se admiten en 24 horas entre todas. Sin SALA_SECRETO cargado la ruta contesta 503 apagada. Los días son 10 y no 7: una
+# campaña que se activa sola cierra hasta 7 días después y sortea hasta un día más tarde, y los sorteos tienen que llegar vivos
+# a ese día con margen (una prueba lo exige). Con las variables vacías valen 3 sorteos, 7 días y 30 cuentas.
+ORGANIZADORA_SORTEOS = "3"
+ORGANIZADORA_DIAS = "10"
+ORGANIZADORAS_DIA = "30"

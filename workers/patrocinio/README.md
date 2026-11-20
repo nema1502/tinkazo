@@ -304,6 +304,24 @@ En el orden del canje de un cupón: la sesión, la cuenta de otro, la cuenta, si
 **Los frenos**, ninguno prendido: `BIENVENIDA = "0"` (o el ajuste `bienvenida_cerrada` en 1) cierra el regalo; `BIENVENIDA_DIA`, `BIENVENIDA_HORA` y `BIENVENIDA_POR_IP` (regalos en 24 horas, en una hora y por conexión en 24 horas) vacíos o en 0 son sin tope, y en caliente se ponen con `bienvenida_dia`, `bienvenida_hora` y `bienvenida_ip` (0 los saca). El de conexión vive en memoria y en un evento todos salen por la misma: no se pone. Un freno mal escrito en su variable queda suelto (sin tope) y `faltaAltas` dice `bienvenida`. Los sorteos o los días mal escritos cierran el regalo. La pausa a mano de las altas frena también esto.
 
 `POST /v1/alta/estado` suma `bienvenida: {estado:"lista"|"llena", sorteos}` o `null` (solo si ya lo recibió), sin escribir nada. Con el regalo cerrado a propósito (la variable o el ajuste en caliente), quien todavía no lo recibió ve `llena`, no `null`: el sitio le sigue ofreciendo activar la cuenta sin cupón, y `POST /v1/alta/gratis` la activa y contesta `regalo: "lleno"`. Lo único que frena también activar es la pausa a mano de las altas. `GET /v1/alta/precios` suma `bienvenida`: los sorteos del regalo si está abierto y sin la pausa a mano, 0 si no. Se anota `alta-bienvenida` (`altaNueva`, `sorteos`) y, la primera vez en el día por cada causa, `alta-bienvenida-llena` (`causa`: `cerrado`, `dia`, `hora`, `conexion`, `piso`, `margen`, `creditos` o `activar`), solo con cifras.
+### `POST /v1/alta/organizadora`
+
+El acceso automático de quien organiza una campaña. No es una ruta del navegador: la llama la sala de las campañas (`workers/sala`, `POST /v1/activar`) cuando comprueba en la red que la comisión del evento se pagó desde la cuenta de Google de quien organiza, y antes de firmar el archivo de la campaña. Sin sesión de Pollar y sin CORS: se autoriza con la cabecera `x-sala-secreto`, que tiene que ser el secreto `SALA_SECRETO` del Worker (la misma cadena en la sala), comparado en tiempo constante.
+
+`{"cuenta":"G...","evento":"<id del evento>"}`. Admite la cuenta como lo hace el alta a mano (`Altas.admitirOrganizadora`): la mete en el libro y le da `ORGANIZADORA_SORTEOS` sorteos oficiales por `ORGANIZADORA_DIAS` días, con `ref` `campana:<evento>` (origen `campana`) y, si la cuenta no tenía alta, una `cuenta:<G>` con motivo `admin`, que es el único acceso con sorteos que entiende el sitio. Es idempotente por ese `ref`: repetir el mismo evento con la misma cuenta contesta `ya: true` y no suma nada. Mira el mismo piso de créditos y la misma pausa que el canje de un cupón.
+
+| Estado | `motivo` | Cuándo |
+| --- | --- | --- |
+| 200 | `{ok: true, ya}` | Admitida, o ya lo estaba para ese evento |
+| 400 | `forma` | Cuerpo que no es JSON, de más de 1 KB, cuenta que no es una G válida o evento que no tiene la forma de siempre (3 a 40 letras minúsculas, números y guiones) |
+| 401 | `secreto` | La cabecera falta o no es el secreto de la sala |
+| 405 | `metodo` | No es un POST |
+| 409 | `evento-usado` | Ese evento ya dio su acceso a otra cuenta |
+| 429 | `cupo` con `liberaEn` (ms) | `ORGANIZADORAS_DIA` campañas nuevas en 24 horas entre todas las cuentas |
+| 503 | `apagada` | Sin `ALTAS`, sin `SALA_SECRETO` de 32 caracteres o más, con una variable de abajo mal escrita, sin la llave de Pollar, o con el piso de créditos o las altas pausadas a mano (`detalle: "pausa"`): no se escribió nada |
+| 500 | `interno` | Un error nuestro |
+
+Las variables, en `[env.mainnet.vars]`: `ORGANIZADORA_SORTEOS` (3, de 1 a 10), `ORGANIZADORA_DIAS` (7, de 1 a 30) y `ORGANIZADORAS_DIA` (30, de 1 a 300), solo con dígitos; vacías valen lo que está entre paréntesis y mal escritas apagan la ruta y se anotan como `organizadoras`. El secreto va con `npx wrangler@4 secret put SALA_SECRETO --env mainnet` y, igual, en la sala. Sin ese secreto la ruta existe pero contesta `503 apagada`, y todo lo demás del portero queda como estaba. En testnet no existe.
 
 ### Antes de pedir una firma: `/cupo`
 
