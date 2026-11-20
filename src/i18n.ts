@@ -3135,7 +3135,6 @@ export const T: Record<Lang, Dict> = {
     // ponen el botón para ir, en vez de pedir entrar como si nunca hubiera entrado.
     cuentaOtroModo: "Tu cuenta está abierta en el modo {modo}.",
     cuentaOtroModoIr: "Ir a {modo}",
-    cuentaOtroModoChip: "Cuenta en {modo}",
     acctCargando: "Leyendo el saldo…",
     cuentaSinSesion: "No pudimos abrir la entrada con Google. Probá de nuevo o entrá con tu correo.",
     cuentaViaPruebaC: "Invitado",
@@ -6104,7 +6103,6 @@ export const T: Record<Lang, Dict> = {
     cuentaPideEntrar: "Sign in with Google",
     cuentaOtroModo: "Your account is open in {modo}.",
     cuentaOtroModoIr: "Go to {modo}",
-    cuentaOtroModoChip: "Account in {modo}",
     acctCargando: "Reading the balance…",
     cuentaSinSesion: "We couldn't start the Google sign-in. Try again or sign in with your email.",
     cuentaViaPruebaC: "Guest",
