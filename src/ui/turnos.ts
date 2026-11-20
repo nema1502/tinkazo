@@ -27,9 +27,11 @@ import { actualizarLugares, bloquearLugares, ponerPremio, premiosDeLosCampos, re
  * - Si la lista pasa de lo que admite el contrato de esta red, no se puede sellar: un orden incompleto nunca se presenta
  *   como un orden, ni un Amigo secreto a medias como un Amigo secreto. No es un aviso, es que el botón de sellar queda
  *   apagado (`ordenNoCabe`).
- * - El título del paso y la ayuda de debajo del selector dicen lo que va a pasar. En el Amigo secreto, una línea más
- *   (`#amigo-privacidad`) dice lo que el modo no protege: quien organiza ve el reparto, y quien tenga la lista y el
- *   número del sorteo lo puede calcular. Con 2 o 3 personas no hay secreto (S3).
+ * - El título del paso dice lo que va a pasar. Lo que hace el modo elegido va plegado detrás de la i de debajo del
+ *   selector (`#btn-modo-info`, desde el 20 de noviembre de 2026: dos párrafos a la vista eran demasiado texto en el
+ *   celular). En el Amigo secreto el pliegue trae una línea más (`#amigo-privacidad`), lo que el modo no protege: quien
+ *   organiza ve el reparto, y quien tenga la lista y el número del sorteo lo puede calcular. Que con 2 o 3 personas no
+ *   hay secreto (S3) no se pliega: sale a la vista en la nota del selector (`#turnos-nota`), igual que el tope.
  *
  * El botón del Amigo secreto se arma acá y no en el HTML porque el selector vive en `index.html`, que es de producción:
  * así el markup de siempre no cambia y el modo entra con su propia pieza.
@@ -103,7 +105,7 @@ const nombreDelModo = (texto: string): string => (amigo ? secretPrize(texto, t("
 
 /**
  * Los rótulos que cambian con el modo: se cambia la clave (`data-i`) y el cambio de idioma los sigue traduciendo. El
- * título del paso y la ayuda de debajo del selector dicen lo que va a pasar. [selector, apagado, turnos, amigo].
+ * título del paso y la ayuda del pliegue de la i dicen lo que va a pasar. [selector, apagado, turnos, amigo].
  */
 const ROTULOS: ReadonlyArray<readonly [selector: string, apagado: string, turnos: string, amigo: string]> = [
   ['label[for="nw"]', "winners", "turnsCount", "amigoCount"],
@@ -180,7 +182,10 @@ function elegirAmigo(desde: HTMLButtonElement): void {
   animarElCambio();
 }
 
-/** La línea de privacidad antes de sellar (S3). Se arma una vez, junto a la ayuda del selector. */
+/**
+ * La línea de privacidad antes de sellar (S3). Se arma una vez, junto a la ayuda del selector y dentro de su pliegue:
+ * es una explicación y no un aviso, así que no se anuncia sola (el de 2 o 3 personas va en `#turnos-nota`).
+ */
 function armarLineaDePrivacidad(): HTMLElement | null {
   let el = $id<HTMLElement>("amigo-privacidad");
   if (el) return el;
@@ -189,7 +194,6 @@ function armarLineaDePrivacidad(): HTMLElement | null {
   el = document.createElement("p");
   el.id = "amigo-privacidad";
   el.className = "note amigo-privacidad";
-  el.setAttribute("role", "status");
   el.hidden = true;
   ayuda.after(el);
   return el;
@@ -251,20 +255,64 @@ function animarElCambio(): void {
   }
 }
 
-/** El orden y el Amigo secreto llegan hasta N en este modo. El aviso sale solo cuando la lista no entra: cuenta las líneas, no las personas. */
+/**
+ * La nota del selector, a la vista y nunca plegada, sale solo cuando pasa algo que hay que saber antes de sellar: que
+ * la lista no entra en lo que admite esta red (el orden y el Amigo secreto llegan hasta N: cuenta las líneas, no las
+ * personas) o, en un Amigo secreto, que con 2 o 3 personas no hay secreto. Lo que el modo no protege con 4 o más va
+ * en el pliegue de la i, junto a la ayuda.
+ */
 function pintarAviso(): void {
   const nota = $id("turnos-nota");
   if (nota) {
     const excede = ordenNoCabe();
-    nota.textContent = excede ? t("turnsLimit").replace("{n}", String(topeDeGanadores())) : "";
-    nota.hidden = !excede;
+    const sinSecreto = encendido && amigo && noHaySecreto(personas);
+    nota.textContent = excede
+      ? t("turnsLimit").replace("{n}", String(topeDeGanadores()))
+      : sinSecreto
+        ? t("amigoPrivacidadPoca")
+        : "";
+    nota.hidden = !excede && !sinSecreto;
   }
-  // La línea de privacidad (S3): con el Amigo secreto elegido, lo que se decidió. Con 2 o 3 personas, que no hay secreto.
+  // La línea de privacidad (S3), en el pliegue: con el Amigo secreto elegido, lo que se decidió.
   const linea = armarLineaDePrivacidad();
   if (linea) {
-    linea.textContent = amigo ? t(noHaySecreto(personas) ? "amigoPrivacidadPoca" : "amigoPrivacidad") : "";
+    linea.textContent = amigo ? t("amigoPrivacidad") : "";
     linea.hidden = !amigo;
   }
+}
+
+/**
+ * La i de debajo del selector despliega y pliega lo que hace el modo elegido (`#modo-info`). Nace cerrada y no guarda
+ * nada. El panel va debajo de la i: al abrirlo no se corre nada de lo que está arriba, ni la i misma. Abierto o
+ * cerrado, al cambiar de modo los textos ya son los del modo nuevo (`ROTULOS` y `pintarAviso`). Escape lo cierra con
+ * el foco en el selector, y el foco queda en la i.
+ *
+ * Al abrirlo, si el panel termina debajo de la pantalla o donde entra la barra de lo que sigue, la página baja lo justo
+ * para verlo entero: el alto de la barra va en su `scroll-margin-bottom` (styles.css). A 320 px el panel empujaba
+ * Pegar lista fuera de la pantalla, entraba la barra y lo tapaba entero: la i se llenaba y no se leía nada. Si ya se ve,
+ * no se mueve nada.
+ */
+function montarLaI(opcion: HTMLElement): void {
+  const i = $id<HTMLButtonElement>("btn-modo-info");
+  const panel = $id("modo-info");
+  if (!i || !panel) return;
+  const poner = (abierto: boolean): void => {
+    panel.hidden = !abierto;
+    i.setAttribute("aria-expanded", String(abierto));
+  };
+  poner(false);
+  i.addEventListener("click", () => {
+    const abrir = panel.hasAttribute("hidden");
+    poner(abrir);
+    if (!abrir) return;
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollIntoView?.({ block: "nearest", behavior: reducido ? "auto" : "smooth" });
+  });
+  opcion.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || panel.hasAttribute("hidden")) return;
+    poner(false);
+    i.focus({ preventScroll: true });
+  });
 }
 
 /**
@@ -396,6 +444,7 @@ export function montarTurnos(): void {
   montado = true;
   opcion.hidden = !modesVisible();
   armarLineaDePrivacidad();
+  montarLaI(opcion);
   rotularElPliegue();
   // Cada botón elige su modo. Tocar el que ya está elegido no hace nada: no es un interruptor.
   const elegir = (modo: "turnos" | "amigo", desde: HTMLButtonElement): void => {

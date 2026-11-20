@@ -288,7 +288,22 @@
             <span class="modo-sub" data-i="turnsExample">Para un pasanaku o exposiciones</span>
           </button>
         </div>
-        <p class="note modo-ayuda" id="turnos-ayuda" data-i="modoSorteoAyuda">De la lista salen quienes ganan. Vos elegís cuántos.</p>
+        <!-- Lo que hace el modo elegido va plegado detrás de una i, pegada al marco y a la derecha (src/ui/turnos.ts): debajo de
+             los tres botones no queda ningún párrafo a la vista. El panel se abre debajo de la i, así nada de lo que se toca
+             se corre. El aviso que frena algo (#turnos-nota) no se pliega: sale a la vista cuando pasa. -->
+        <div class="modo-pie">
+          <button type="button" class="modo-i" id="btn-modo-info" aria-expanded="false" aria-controls="modo-info"
+            aria-label="Qué hace esta opción" data-i-aria="modoInfo" data-i-title="modoInfo" title="Qué hace esta opción">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle class="modo-i-aro" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
+              <path class="modo-i-letra" d="M12 11v6" stroke-width="2.4" stroke-linecap="round" />
+              <circle class="modo-i-punto" cx="12" cy="7.3" r="1.5" />
+            </svg>
+          </button>
+        </div>
+        <div class="modo-info" id="modo-info" hidden>
+          <p class="note modo-ayuda" id="turnos-ayuda" data-i="modoSorteoAyuda">De la lista salen quienes ganan. Vos elegís cuántos.</p>
+        </div>
         <p class="note nw-nota" id="turnos-nota" role="status" hidden></p>
       </div>
       <!-- La sala por QR del modo stand (src/ui/stand-sala.ts): solo se ve con body[data-stand="1"]. Alimenta rondas de ejemplo, nunca un sorteo sellado. -->
@@ -352,8 +367,6 @@
         </ol>
         <p class="note" data-i="lumaNota">El archivo se lee en tu navegador y no se sube a ningún lado.</p>
       </div>
-      <!-- Con la lista vacía, cómo se hace (participants.ts). -->
-      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá tu lista o escribí un nombre.</p>
       <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
       <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand</button>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
@@ -367,6 +380,9 @@
            primer nombre, mientras el cuadro se puede escribir, y nunca es el botón de color. El texto va en su span para
            que la traducción no borre el dibujo. -->
       <button class="ghost mini otro-nombre" type="button" id="btn-otro-nombre" hidden><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span data-i="otroNombre">Otro nombre</span></button>
+      <!-- Con la lista vacía, cómo se hace (participants.ts). Va como pie del cuadro (Otro nombre no se ve con la lista
+           vacía): arriba de él lo dejaba fuera de la pantalla en un celular de 360 x 780. -->
+      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá tu lista o escribí un nombre.</p>
       <!-- Si una lista pegada ya trae un número al lado de los nombres, se pregunta y no se toca nada hasta que
            la persona responde (src/participaciones.ts). Solo con la bandera de los modos nuevos o con ?modo=
            en la dirección (src/modos/bandera.ts). -->

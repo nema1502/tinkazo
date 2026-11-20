@@ -644,21 +644,26 @@ describe("la línea de privacidad antes de sellar (S3)", () => {
     return m;
   };
 
-  it("con el modo amigo dice que quien tiene la lista podría calcular el reparto", async () => {
+  it("con el modo amigo, el pliegue de la i dice que quien tiene la lista podría calcular el reparto", async () => {
     await prenderAmigo(10);
     const linea = privacidad();
     expect(linea).toBeTruthy();
     expect(linea?.hidden).toBe(false);
+    // Desde el 20 de noviembre de 2026 es una explicación del modo: va en el pliegue de la i, no a la vista.
+    expect($("modo-info").contains(linea)).toBe(true);
     expect(linea?.textContent).toMatch(/calcular/i);
   });
 
-  it("con 2 o 3 personas dice que no hay secreto", async () => {
+  it("con 2 o 3 personas dice que no hay secreto, a la vista en la nota del selector y fuera del pliegue", async () => {
     for (const n of [2, 3]) {
       await prenderAmigo(n);
-      expect(privacidad()?.textContent, `${n} personas`).toMatch(/no hay secreto/i);
+      expect(nota().hidden, `${n} personas`).toBe(false);
+      expect(nota().textContent, `${n} personas`).toMatch(/no hay secreto/i);
+      expect($("modo-info").contains(nota()), `${n} personas`).toBe(false);
     }
     await prenderAmigo(4);
-    expect(privacidad()?.textContent).not.toMatch(/no hay secreto/i);
+    expect(nota().hidden).toBe(true);
+    expect(nota().textContent).not.toMatch(/no hay secreto/i);
   });
 
   it("no esconde nada: nombra a quien organiza y a la lista con el número, en los dos idiomas", async () => {

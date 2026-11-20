@@ -3369,11 +3369,13 @@ export const T: Record<Lang, Dict> = {
     turnsPrizeLabel: "Nombre de los turnos (opcional)",
     turnsPrize: "Turnos",
     turnsMas: "Nombre de los turnos y subir CSV",
-    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo.
+    // El selector de modo, arriba de la lista (src/ui/turnos.ts): la otra opción y la ayuda que cambia con el modo. La
+    // ayuda va plegada detrás de la i de debajo del selector, y modoInfo es el nombre de esa i para el lector de pantalla.
     modoRotulo: "¿Qué vas a hacer?",
     modoSorteo: "Sortear premios",
     modoSorteoSub: "Gana una persona o varias",
     modoSorteoAyuda: "De la lista salen quienes ganan. Vos elegís cuántos.",
+    modoInfo: "Qué hace esta opción",
     turnsLimit: "El orden llega hasta {n} turnos en este modo. Achicá la lista para poder sellar.",
     turnsWord: "Turno",
     turnsResultTitle: "El orden de los turnos",
@@ -3477,9 +3479,10 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     // Debajo de Sellar (participants.ts): cuántas personas y que la lista se cierra. Sin ganadores ni premio.
     amigoSellarResumen: "{n} personas. Al sellar, la lista queda cerrada.",
-    // La línea antes de sellar, sin esconder nada: quien organiza ve el reparto, y con la lista y el número del sorteo
-    // (va a la vista en la espera y dentro de cada enlace) se calcula. Con 2 o 3 personas, no hay secreto.
-    amigoPrivacidad: "Ojo: quien organiza ve todo el reparto, y quien tenga la lista y el número del sorteo lo puede calcular.",
+    // Lo que el modo no protege, sin esconder nada: quien organiza ve el reparto, y con la lista y el número del sorteo
+    // (va a la vista en la espera y dentro de cada enlace) se calcula. Va en el pliegue de la i, junto a amigoHelp. Con
+    // 2 o 3 personas no hay secreto: ese aviso no se pliega, sale a la vista debajo del selector.
+    amigoPrivacidad: "Quien organiza ve todo el reparto, y quien tenga la lista y el número del sorteo lo puede calcular.",
     amigoPrivacidadPoca: "Con 2 o 3 personas no hay secreto: cada uno puede adivinar el reparto.",
     // Alguien dos veces en la lista se podría regalar a sí mismo: no se sella. Va junto a Sellar (participants.ts), y la
     // barra de lo que sigue lo dice corto (`sigRepetido`), como el tope de los turnos.
@@ -6407,6 +6410,7 @@ export const T: Record<Lang, Dict> = {
     modoSorteo: "Draw prizes",
     modoSorteoSub: "One or more people win",
     modoSorteoAyuda: "The winners come out of the list. You choose how many.",
+    modoInfo: "What this option does",
     turnsLimit: "The order goes up to {n} turns in this mode. Shorten the list to seal it.",
     turnsWord: "Turn",
     turnsResultTitle: "The turn order",
@@ -6510,9 +6514,9 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     // Under Seal (participants.ts): how many people and that the list gets locked. No winners or prize.
     amigoSellarResumen: "{n} people. Sealing locks the list.",
-    // The line before sealing, hiding nothing: the organizer sees the exchange, and with the list and the draw number
-    // (shown during the wait and inside every link) it can be worked out. With 2 or 3 people, there is no secret.
-    amigoPrivacidad: "Note: the organizer sees the whole exchange, and anyone with the list and the draw number can work it out.",
+    // What the mode does not protect, hiding nothing: the organizer sees the exchange, and with the list and the draw
+    // number (shown during the wait and inside every link) it can be worked out. It goes behind the i, with amigoHelp.
+    amigoPrivacidad: "The organizer sees the whole exchange, and anyone with the list and the draw number can work it out.",
     amigoPrivacidadPoca: "With 2 or 3 people there is no secret: everyone can guess the exchange.",
     amigoRepetido: "{nombre} is on the list twice. If they're two people, add an initial.",
     sigRepetido: "can't seal, a name is on the list twice",

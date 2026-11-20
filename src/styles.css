@@ -1317,14 +1317,49 @@
   .modo-op[aria-pressed="true"] .modo-ico { transform: rotate(-8deg) scale(1.12); }
   .modo-tit { grid-area: tit; font-size: 18px; font-weight: 800; line-height: 1.2; }
   .modo-sub { grid-area: sub; font-size: 16px; font-weight: 600; line-height: 1.25; }
-  .modo-elegir .modo-ayuda { margin-top: 8px; color: var(--ink2); text-wrap: balance; }
+  /* La i (src/ui/turnos.ts, 20 de noviembre de 2026): lo que hace el modo elegido va plegado detrás de ella, y debajo de
+     los tres botones no queda ningún párrafo a la vista. Va pegada al marco, abajo a la derecha: al costado le quitaba
+     ancho a los tres botones en el celular, y arriba, junto al rótulo, el panel abría lejos de ella o corría los botones.
+     Así el panel abre justo debajo y nada de lo que se toca se mueve. El blanco de toque es de 48 px y el dibujo de 24,
+     con el borde del círculo alineado con el del marco. Abierta, el círculo se llena.
+     Su renglón no ocupa alto (.modo-pie mide 0): la i cuelga en el aire de debajo del marco, sobre el costado derecho de
+     Pegar lista, que le deja ese lado libre. En su propio renglón se comía 48 px, y a 360 x 780 los nombres de ejemplo
+     del cuadro quedaban debajo de la pantalla. El panel abierto empieza donde termina la i. */
+  .modo-pie { display: flex; justify-content: flex-end; align-items: flex-start; height: 0; }
+  .modo-i {
+    position: relative; z-index: 2; width: 48px; height: 48px; margin: -4px -12px 0 0; padding: 0; display: grid;
+    place-items: center; color: var(--ink2); background: transparent; border: 0; cursor: pointer;
+  }
+  /* Lo que va debajo del selector con el panel cerrado deja libre el costado de la i: la nota de los avisos y los
+     orígenes, que además no pasan del ancho del selector (en el escritorio la i queda a 640 px, en medio del renglón). */
+  .modo-info[hidden] + .nw-nota { padding-right: 40px; }
+  .modo-elegir:not([hidden]) ~ #origenes { max-width: 640px; padding-right: 40px; box-sizing: border-box; }
+  .modo-i svg { width: 24px; height: 24px; overflow: visible; }
+  .modo-i-aro { fill: none; }
+  .modo-i-letra { stroke: currentColor; }
+  .modo-i-punto { fill: currentColor; }
+  .modo-i:hover .modo-i-aro { fill: var(--card); }
+  .modo-i[aria-expanded="true"] { color: var(--ink); }
+  .modo-i[aria-expanded="true"] .modo-i-aro { fill: currentColor; }
+  .modo-i[aria-expanded="true"] .modo-i-letra { stroke: var(--paper); }
+  .modo-i[aria-expanded="true"] .modo-i-punto { fill: var(--paper); }
+  .modo-i:focus-visible { outline: 3px solid var(--ink); outline-offset: -4px; }
+  /* Al abrirlo, turnos.ts lo lleva a la vista lo justo: abajo deja el alto de la barra de lo que sigue y un poco de aire,
+     que si no lo tapaba entero a 320 px. */
+  .modo-info {
+    margin-top: 44px; padding: 10px 14px; background: var(--card); border: 2px dashed var(--ink2);
+    scroll-margin-bottom: calc(var(--sig-alto, 0px) + 12px);
+  }
+  .modo-info[hidden] { display: none; }
+  .modo-info .note { margin: 0; color: var(--ink2); text-wrap: pretty; }
+  .modo-info .note + .note:not([hidden]) { margin-top: 6px; }
   .lista-cerrada .modo-botones { border-style: dashed; }
   /* El título del paso y la ayuda entran con un movimiento corto cada vez que cambia el modo. */
   .modo-cambia { animation: modo-entra 200ms ease-out; }
   span.modo-cambia { display: inline-block; }
   @keyframes modo-entra { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
   /* En el celular el selector va compacto: los dos botones lado a lado, cada uno con su dibujo y su nombre (que puede ir
-     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice la ayuda de abajo, que cambia
+     en dos renglones), sin el rótulo y sin para qué sirve. Lo que hace cada modo lo dice el pliegue de la i, que cambia
      con él. Uno debajo del otro y con todo medía 231 px (271 a 360 px de ancho), y con las barras del navegador
      (390 x 664) sacaba Pegar lista de la pantalla. Así mide 109. */
   @media (max-width: 460px) {
@@ -1337,7 +1372,7 @@
     .modo-op { min-height: 48px; grid-template-areas: "ico tit"; column-gap: 6px; padding: 4px 8px; }
     .modo-ico { width: 20px; height: 20px; }
     .modo-tit { font-size: 16px; line-height: 1.1; }
-    .modo-elegir .modo-ayuda { margin-top: 6px; line-height: 1.35; }
+    .modo-info .note { line-height: 1.35; }
     /* Con tres botones, cada uno mide un tercio: el nombre va solo, sin el dibujo, centrado y en dos renglones si hace
        falta. Con el dibujo al lado, a 360 px a «premios» le quedaban unos 60 px. Las columnas son parejas aunque una
        palabra sea más larga (minmax(0, 1fr)): con 1fr, a 320 px medían 76, 64 y 70. */
@@ -1449,7 +1484,9 @@
     /* La X está centrada en sus 44 px: el texto puede entrar en la parte vacía de su izquierda. */
     .primera-vez p { margin-right: -20px; }
   }
-  .pegar-ayuda { margin: -4px 0 10px; }
+  /* Va debajo del cuadro, como su pie: arriba, entre los orígenes y el stand, sumaba 30 px y a 360 x 780 los nombres de
+     ejemplo quedaban fuera de la pantalla. Solo con la lista vacía, así que nunca está junto a Otro nombre. */
+  .pegar-ayuda { margin: 8px 0 0; }
   /* Otro nombre, pegado debajo del cuadro y a la izquierda: un botón blanco con su más dibujado (participants.ts). */
   .otro-nombre { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; margin-top: 8px; }
   .otro-nombre svg { width: 18px; height: 18px; flex: none; }
