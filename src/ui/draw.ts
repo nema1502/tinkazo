@@ -190,7 +190,11 @@ async function sortear(adelantado = false): Promise<void> {
   let hayResultado: (hora?: { terminaEn: number }) => void = () => undefined;
   const resultadoListo = new Promise<{ terminaEn: number } | undefined>((r) => (hayResultado = r));
   const juego = juegoDe(names.length, nWinners);
-  const card = abrirTarjeta(juego, names.length, nWinners, orden, resultadoListo);
+  // Los lugares de a uno (issue #102, ver `deAUno` más abajo): el show es del primer lugar, así que la tarjeta habla de un
+  // premio. Con varios prometía que el cartel del final mostraba a los demás, y ese cartel muestra uno solo.
+  const deCampana = esSorteoDeCampana(raffleId) || campanaDeLaLista(listHash) !== null;
+  const deAUnoPorElSello = nWinners > 1 && !orden && !enEnsayo() && !enStand() && !deCampana;
+  const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo);
   const tarjeta: Previa | null = card ? { card, game: juego } : null;
   // Sin tarjeta, la cortina mientras llega el número. Desde la espera en grande, ella misma hace de cortina hasta que
   // el show la tapa (espera.ts), y si algo falla se queda, con la pantalla completa. En un Amigo secreto, ninguna de
@@ -284,7 +288,9 @@ async function sortear(adelantado = false): Promise<void> {
     // por show y «Siguiente premio» muestra el que sigue del mismo resultado, con su show y sin
     // sellar de nuevo. El ensayo y el stand terminan a su manera: ahí el resultado sale completo,
     // como siempre, igual que un resultado retomado de Mis sorteos o la vista de espectador.
-    const deAUno = winners.length > 1 && !orden && !enEnsayo() && !enStand();
+    // El sorteo de una campaña tampoco (`deCampana`, arriba): su panel esconde «Siguiente premio» y avisa a los celulares
+    // con los lugares todos al revelar, así que la sala ve sus premios en un solo show. Es la misma pregunta que hace `reveal`.
+    const deAUno = winners.length > 1 && deAUnoPorElSello;
     app.drawn = { beacon, winners, ...(deAUno ? { revelados: 1 } : {}) };
     // Con sello, el sorteo se graba aparte y el show no lo espera. Con la billetera propia, recién después del show:
     // su ventana para aprobar no puede tapar el juego. Con las demás cuentas, ya: la grabación espera sola el margen
@@ -1240,14 +1246,15 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // A las tarjetas va la lectura por persona, la de la cuenta (`seCuentaPorPersona`): no es la misma variable
   // que decide a quién se saca, que sigue siendo `porPersona`.
   // En un Amigo secreto, la lista de personas con su enlace de cada una: ni el reparto ni el orden, tampoco acá.
+  // Issue #102: con la progresión de lugares, las tarjetas muestran hasta donde la sala vio. El
+  // comprobante, el mensaje, la grabación y Mis sorteos llevan siempre los lugares todos: quedaron
+  // fijos al nacer el número y cualquiera los puede calcular desde ese momento (lo dice la línea
+  // de más abajo). Los índices de las tarjetas (`data-k`, para «No está») son los del resultado,
+  // que es un prefijo del orden sellado. Se calcula antes de elegir qué se pinta porque también
+  // decide, más abajo, qué tarjeta se encuadra.
+  const enPantalla = app.drawn?.revelados === undefined ? winners.length : Math.max(1, Math.min(app.drawn.revelados, winners.length));
   if (amigo) pintarAmigo(names, winners);
   else {
-    // Issue #102: con la progresión de lugares, las tarjetas muestran hasta donde la sala vio. El
-    // comprobante, el mensaje, la grabación y Mis sorteos llevan siempre los lugares todos: quedaron
-    // fijos al nacer el número y cualquiera los puede calcular desde ese momento (lo dice la línea
-    // de más abajo). Los índices de las tarjetas (`data-k`, para «No está») son los del resultado,
-    // que es un prefijo del orden sellado.
-    const enPantalla = app.drawn?.revelados === undefined ? winners.length : Math.max(1, Math.min(app.drawn.revelados, winners.length));
     $("winner-cards").innerHTML = htmlDeGanadores({ names: names.map(etiquetaConCuenta), winners: winners.slice(0, enPantalla), prize, reemplazo, avatar, porPersona: seCuentaPorPersona(names, modesVisible()), stand: enStand() });
     // El lugar que la sala acaba de ver («Lugar 2 de 5») y, con un premio por lugar (#101), el de ese
     // lugar (`premioDelLugar`). Sin lugares la línea no dice premio. Con un solo lugar no se muestra.
@@ -1293,7 +1300,12 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
-  requestAnimationFrame(() => $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" }));
+  // Con los lugares de a uno, desde el segundo se encuadra la tarjeta de quien acaba de ganar: las tarjetas van de la #1
+  // hacia abajo, y en 1366 x 768 la última quedaba fuera de la pantalla. En un Amigo secreto no hay tarjetas de lugar.
+  const recien = !amigo && enPantalla > 1 && app.drawn?.revelados !== undefined
+    ? ($("winner-cards").querySelector(`#wn-${enPantalla - 1}`)?.closest<HTMLElement>(".winner-card, .winner-fila") ?? null)
+    : null;
+  requestAnimationFrame(() => (recien ?? $("sec-draw")).scrollIntoView({ behavior: "smooth", block: recien ? "center" : "start" }));
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
   const enlace = buildProof(names, winners, url);

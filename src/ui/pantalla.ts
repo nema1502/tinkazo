@@ -46,7 +46,10 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const { frozen, drawn } = app;
   if (!frozen || !drawn || document.querySelector(".pantalla")) return;
   const premio = frozen.prize;
-  const n = drawn.winners.length;
+  // Con los lugares de a uno (`revelados`, draw.ts), solo los que la sala ya vio en su show: los que siguen tienen el
+  // suyo con «Siguiente premio», y mostrarlos acá contaba el final antes de jugarlo. Sin progresión, todos.
+  const ganadores = drawn.winners.slice(0, drawn.revelados ?? drawn.winners.length);
+  const n = ganadores.length;
   const varios = n > 1;
   // Con varios, el premio va una vez, arriba de las tarjetas, y cada tarjeta
   // lleva su número: repetido en cada una, partía los nombres y no entraban
@@ -68,7 +71,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // Los nombres en el orden del sorteo, tal cual salieron (`turnOrder`): la sala lee este arreglo, y cada renglón
   // pasa una sola vez por `mostrar`. Sin la lectura por persona (`seCuentaPorPersona`) cada línea queda tal cual se
   // selló, como en el resultado y la verificación.
-  const orden = turnOrder(frozen.names, drawn.winners);
+  const orden = turnOrder(frozen.names, ganadores);
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -100,7 +103,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
             return `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">${num}</span><span class="pantalla-nombre">${esc(mostrar(etiquetaDe(nombre)))}</span></li>`;
           })
           .join("")}</ol>`
-      : drawn.winners
+      : ganadores
           .map((i, k) => {
             // Con equipos con cupón, la sala lee el nombre del equipo y no 56 letras de una cuenta.
             const nombre = mostrar(etiquetaDe(frozen.names[i] ?? ""));

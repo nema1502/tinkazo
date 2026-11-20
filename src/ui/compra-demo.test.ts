@@ -78,7 +78,9 @@ afterEach(() => {
 
 describe("la ventana Sumar sorteos, pagando con dólares digitales", () => {
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    // También el reloj de pared: la orden de mentira vence a los 3 días de `ahora` y la ventana la compara con Date.now(), así
+    // que con el reloj real la prueba se rompía sola cuando pasaban esos 3 días.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"], now: ahora });
     document.body.innerHTML = "";
     localStorage.clear();
   });
