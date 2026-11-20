@@ -11,6 +11,7 @@ import { contar, seCuentaPorPersona } from "../participaciones";
 import { canonicalList } from "../protocol/canonical";
 import { topeDeGanadores } from "../stellar/config";
 import { ordenNoCabe } from "./turnos";
+import { premioDelResumen, premiosEscritos } from "./premios-escritos";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -207,10 +208,20 @@ function calcular(): Toca {
   // y la barra lo dice con el tope. Se cuenta con la misma regla que apaga el botón (`ordenNoCabe`, participants.ts).
   const noCabe = paso === 2 && ordenNoCabe(n);
   const apagado = (boton?.disabled ?? false) && !faltaOtraPersona && !noCabe;
-  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: app.drawn?.winners.length ?? 1, turnos: esResultadoDeTurnos(), noCabe });
+  // Los lugares de a uno (`revelados`, draw.ts): mientras la sala no vio todos, no salieron los ganadores, salió un lugar.
+  const total = app.drawn?.winners.length ?? 1;
+  const vistos = app.drawn?.revelados;
+  const lugaresPorMostrar = vistos !== undefined && total > 1 && vistos < total;
+  const clave = claveDelPaso(paso, { segundos: restan, apagado, ganadores: total, turnos: esResultadoDeTurnos(), noCabe, lugaresPorMostrar });
   // En el stand nadie gana: el aviso del resultado dice quién salió (la clave del paso no cambia, solo el texto).
-  const delTexto = enStand() ? claveEnElStand(clave, app.drawn?.winners.length ?? 1) : clave;
-  let detalle = delTexto ? t(delTexto).replace("{n}", String(n)).replace("{tope}", String(topeDeGanadores())) : "";
+  const delTexto = enStand() ? claveEnElStand(clave, total) : clave;
+  let detalle = delTexto
+    ? t(delTexto)
+        .replace("{n}", String(n))
+        .replace("{tope}", String(topeDeGanadores()))
+        .replace("{lugar}", String(vistos ?? 1))
+        .replace("{total}", String(total))
+    : "";
   // La frase del tope es larga: en el celular vale hasta dos renglones, como la de las dos cuentas.
   let doble = clave === "sigTope";
   // Con los modos a la vista, o sin ellos con una lista que es un reparto entero (`seCuentaPorPersona` sin modos, como
@@ -236,9 +247,12 @@ function calcular(): Toca {
   let premio: Toca["premio"] = null;
   if (clave === "sigLista" && !enStand() && !turnosActivo) {
     const lista = detalle;
-    const texto = premioLimpio((document.getElementById("prize") as HTMLInputElement | null)?.value ?? "");
+    // Con varios premios escritos (uno por lugar), cuántos son: nombrar solo el primero hacía creer que todos se lo llevaban.
+    // Esa cuenta va entera o no va: cortada quedaba «3…».
+    const varios = premiosEscritos().length > 1;
+    const texto = premioLimpio(premioDelResumen());
     detalle = detalleDeLista(lista, texto, enEnsayo() ? null : t("sigSinPremio"), Infinity);
-    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, p) };
+    if (texto) premio = { texto, detalleCon: (p) => unirDetalle(lista, varios && p !== texto ? null : p) };
   }
   return { paso, boton, clave, detalle, doble, reloj: restan > 0 ? relojDe(restan) : "", premio };
 }
@@ -519,6 +533,8 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   // El premio está en la línea del paso 2: se rehace al escribirlo, al tocar uno de los premios o cuando la página lo pone.
   $("prize").addEventListener("input", render);
   $("prize").addEventListener("tinkazo:premio", render);
+  // Los campos de cada lugar también: con varios premios escritos, la línea dice cuántos son.
+  document.getElementById("prize-lugares")?.addEventListener("input", render);
   $("prize-chips").addEventListener("click", () => queueMicrotask(render));
   // El sello se apaga y se prende sin cambiar de botón; la puerta, al conectar la cuenta.
   general.observe($("sec-participants"), { attributes: true, subtree: true, attributeFilter: ["class"] });

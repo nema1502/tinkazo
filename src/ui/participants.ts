@@ -10,6 +10,7 @@ import { type ImportResult, type ImportState, initialState, openImporter } from 
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
 import { ponerPremio, premiosDeLosCampos, reponerLugares, sincronizarPremios } from "./premios";
+import { premioDelResumen } from "./premios-escritos";
 import { isTurnOrder } from "../modos/turnos";
 import { modesVisible, modoVigente, recordarModo } from "../modos/bandera";
 import { TOPE_POR_PERSONA, contar, cuentaParaMostrar as cuentaParaMostrarSinSellar, nombreDePersona, personasDelCuadro, ponerParticipaciones, repartir, seCuentaPorPersona, terminaEnNumero } from "../participaciones";
@@ -209,6 +210,8 @@ function pintarResumen(): void {
   const entradas = parseNames().length;
   const k = Math.min(ganadoresPedidos(), entradas);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
+  // Lo que se nombra: con varios premios escritos (uno por lugar), cuántos son, y no solo el primero.
+  const escrito = premioDelResumen();
   // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
   // Un orden de turnos dice «12 personas, turnos del 1 al 12», no cuántos ganan. Se decide por las líneas
   // de la lista (lo que se sella: cada línea, un turno), no por las personas: una lista repartida de 2
@@ -221,7 +224,7 @@ function pintarResumen(): void {
     ? L.turnsSellarTope(entradas, n, topeDeGanadores())
     : isTurnOrder(entradas, k, premio)
       ? L.turnsSellarResumen(entradas, n)
-      : L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio, entradas);
+      : L.sellarResumen(n, k, enEnsayo() && !escrito ? null : escrito, entradas);
   el.style.display = "";
 }
 
@@ -263,6 +266,8 @@ export function bindParticipants(): void {
   // El resumen de junto a "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
+  // Y a los campos de cada lugar: con varios premios escritos, el resumen dice cuántos son (`premioDelResumen`).
+  document.getElementById("prize-lugares")?.addEventListener("input", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
   for (const evento of ["input", "change"]) $("nw").addEventListener(evento, () => pintarResumen());
   // Prender o apagar «Orden de turnos» cambia la cantidad y si se puede sellar: la lista se vuelve a pintar y se guarda el borrador.

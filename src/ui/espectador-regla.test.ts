@@ -36,7 +36,10 @@ describe("cuándo arranca el show del espectador", () => {
   it("con el sorteo sellado, el celular espera lo grabado, que la sala manda recién con su resultado a la vista", () => {
     // En la sala, la tarjeta espera el resultado y no lo grabado. La grabación arranca después del resultado: ya, o con
     // la billetera propia al terminar el show. Lo grabado nunca existe antes de que la sala tenga su resultado.
-    expect(draw).toContain("const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo);");
+    expect(draw).toContain(
+      "const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo, " +
+        "undefined, deAUnoPorElSello ? 1 : undefined);",
+    );
     expect(draw).toMatch(/hayResultado\(terminaEn !== null \? \{ terminaEn \} : undefined\);[\s\S]*?if \(graba && !despuesDelShow\) grabando = grabarAparte\(graba, puerta\);[\s\S]*?playGame\(names, winners\.slice\(0, visibles\), beacon, finish, orden, tarjeta, /);
     expect(draw).toMatch(/const finish = \(\): void => \{\s*reveal\(names, winners, beacon, listHash\);\s*coronar\(\);\s*if \(graba && despuesDelShow\) void grabarAparte\(graba\);/);
     // Ningún otro lugar de la sala graba el sorteo. Las seis: la declaración, el reintento del botón con el sorteo ya

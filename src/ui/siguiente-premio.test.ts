@@ -182,6 +182,39 @@ describe("la línea del paso 2 con un premio largo", () => {
   });
 });
 
+describe("la línea del paso 2 con un premio por lugar", () => {
+  /** La barra con los campos de cada lugar ya armados: el 1.º es el cuadro de siempre. */
+  async function conLugares(premios: string[], pantalla: Pantalla): Promise<void> {
+    const [primero = "", ...resto] = premios;
+    const campos = resto.map((p, i) => `<input data-lugar="${i + 2}" value="${p}">`).join("");
+    document.body.innerHTML = CUERPO(primero) + `<div id="prize-lugares">${campos}</div>`;
+    simular(pantalla);
+    await import("../i18n");
+    const { initSiguiente } = await import("./siguiente");
+    initSiguiente({ segundos: () => 0 });
+  }
+
+  it("con varios premios escritos dice cuántos son, y no solo el primero", async () => {
+    await conLugares(["Bici", "Termo", "Libro"], { lugar: 900, medidas: 0 });
+    expect(linea()).toBe("Paso 2 de 4: lista de 4 personas, 3 premios");
+  });
+
+  it("si la cuenta de premios no entra, queda la lista sola y nunca la cuenta cortada", async () => {
+    // 34 letras de la lista y 9 de la cuenta: con 40 no entra entera.
+    await conLugares(["Bici", "Termo", "Libro"], { lugar: 40 * PX, medidas: 0 });
+    expect(linea()).toBe("Paso 2 de 4: lista de 4 personas");
+  });
+
+  it("se repinta al escribir en el campo de otro lugar", async () => {
+    await conLugares(["Bici", ""], { lugar: 900, medidas: 0 });
+    expect(linea()).toBe("Paso 2 de 4: lista de 4 personas, Bici");
+    const segundo = document.querySelector<HTMLInputElement>('#prize-lugares input[data-lugar="2"]') as HTMLInputElement;
+    segundo.value = "Termo";
+    segundo.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(linea()).toBe("Paso 2 de 4: lista de 4 personas, 2 premios");
+  });
+});
+
 describe("la barra vuelve a medir cuando cambia lo que decide", () => {
   it("al cambiar el ancho de la ventana", async () => {
     const pantalla = { lugar: 44 * PX, medidas: 0 };
@@ -257,5 +290,32 @@ describe("lo que anuncia el lector de pantalla", () => {
     actualizarPaso();
     expect(byId("sig-aviso").textContent).toContain(PREMIO);
     expect(linea()).toBe("Paso 2 de 4: lista de 4 personas, ¿Quién…");
+  });
+});
+
+describe("la línea del paso 4 con los lugares de a uno", () => {
+  /** El resultado a la vista con tres lugares sellados, de los que la sala vio `vistos`. */
+  async function conResultado(vistos: number | undefined): Promise<void> {
+    document.body.innerHTML =
+      CUERPO("Termo") + '<div id="again-row"><button id="btn-again-sin">Siguiente premio</button></div><button id="btn-proof"></button>';
+    byId("winner-box").style.display = "block";
+    simular({ lugar: 900, medidas: 0 });
+    await import("../i18n");
+    const { app } = await import("../state");
+    app.frozen = { names: ["Ana", "Beto", "Carla", "Dora"], listHash: "00".repeat(32), ts: 1, at: "", prize: "Termo", round: 1 } as never;
+    const beacon = { round: 1, randomness: "00".repeat(32), signature: "" };
+    app.drawn = { beacon, winners: [0, 1, 2], ...(vistos === undefined ? {} : { revelados: vistos }) } as never;
+    const { initSiguiente } = await import("./siguiente");
+    initSiguiente({ segundos: () => 0 });
+  }
+
+  it("con lugares por mostrar dice qué lugar salió, no que ya salieron los ganadores", async () => {
+    await conResultado(1);
+    expect(linea()).toBe("Paso 4 de 4: ya salió el lugar 1 de 3");
+  });
+
+  it("con los tres lugares vistos, como siempre", async () => {
+    await conResultado(3);
+    expect(linea()).toBe("Paso 4 de 4: ya salieron los ganadores");
   });
 });

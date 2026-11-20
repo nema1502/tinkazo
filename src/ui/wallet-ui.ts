@@ -797,6 +797,9 @@ function applyGate(): void {
   // solo para lo que pasa ahora: retomar la sesión, conectar, pedir el toque que el navegador exige... o decir en qué
   // modo quedó la cuenta, con el botón para llegar hasta ella (nema1502/tinkazo#90).
   const destino = !retomando && !conectando ? cuentaEnElOtroModo() : null;
+  // Con la puerta diciendo que la cuenta ya está abierta en el otro modo, la invitación de primera vez de abajo se
+  // contradice: la esconde styles.css con esta marca.
+  gate.classList.toggle("otro-modo", !!destino);
   if (!locked || !(retomando || conectando || pidiendoEntrar || destino)) {
     gate.style.display = "none";
     return;

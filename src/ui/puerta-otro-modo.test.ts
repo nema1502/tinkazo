@@ -183,6 +183,17 @@ describe("la puerta del sorteo con la cuenta abierta en el otro modo", () => {
     expect(chip().texto).toContain(t("cuentaEntrar"));
   });
 
+  it("con la cuenta en el otro modo, la puerta lleva la marca que esconde la invitación de primera vez", async () => {
+    conMarcaDelOtroModo();
+    await alAbrir();
+    expect(document.getElementById("gate")?.classList.contains("otro-modo")).toBe(true);
+  });
+
+  it("sin cuenta en el otro modo, la puerta no lleva esa marca y la invitación sigue como siempre", async () => {
+    await alAbrir();
+    expect(document.getElementById("gate")?.classList.contains("otro-modo")).toBe(false);
+  });
+
   it("sin modo Oficial para ofrecer, la puerta y la cabecera se quedan como siempre", async () => {
     h.hayModo = false;
     localStorage.setItem("tinkazo.session.kind.mainnet", "guest");

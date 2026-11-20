@@ -211,6 +211,35 @@ const cajaLugares = (): HTMLElement | null => document.getElementById("prize-lug
 /** Los campos por lugar que hay ahora, con lo que cada uno dice. */
 const camposDeLugares = (): HTMLInputElement[] => [...(cajaLugares()?.querySelectorAll<HTMLInputElement>("input[data-lugar]") ?? [])];
 
+/** El rótulo de un lugar a la vista, a la izquierda de su campo: no se va al escribir, como el texto de ayuda. */
+function rotuloDeLugar(lugar: number): HTMLSpanElement {
+  const rotulo = document.createElement("span");
+  rotulo.className = "premio-lugar-n";
+  // El campo ya lo dice con su nombre accesible: el lector de pantalla no lo lee dos veces.
+  rotulo.setAttribute("aria-hidden", "true");
+  rotulo.textContent = etiquetaDeLugar(lugar, getLang());
+  return rotulo;
+}
+
+/**
+ * El cuadro de siempre es el del 1.er premio cuando ganan varios y hay premio escrito en otro lugar: lleva su rótulo a
+ * la vista (`#prize-n1`) y ese nombre. Con un solo ganador, o con los demás lugares vacíos, ni rótulo ni nombre de
+ * lugar, como siempre: lo escrito ahí se lo llevan todos, y «1.er premio» decía que era solo del primero.
+ */
+function rotularElPrimero(): void {
+  const caja = cajaLugares();
+  const varios = !!caja && !caja.hidden && camposDeLugares().some((i) => i.value.trim() !== "");
+  const rotulo = document.getElementById("prize-n1");
+  if (rotulo) {
+    rotulo.hidden = !varios;
+    rotulo.textContent = varios ? etiquetaDeLugar(1, getLang()) : "";
+  }
+  const campo = document.getElementById("prize");
+  if (!campo) return;
+  if (varios) campo.setAttribute("aria-label", etiquetaDeLugar(1, getLang()));
+  else campo.removeAttribute("aria-label");
+}
+
 /** Arma `cuantos - 1` campos por lugar, conservando lo que ya estaba escrito. */
 function armarCampos(cuantos: number): void {
   const caja = cajaLugares();
@@ -230,13 +259,15 @@ function armarCampos(cuantos: number): void {
       input.maxLength = 60;
       input.autocomplete = "off";
       input.dataset.lugar = String(i + 2);
-      // En renglón, como el cuadro de arriba: cada lugar debajo del otro.
-      input.style.display = "block";
       input.placeholder = t("prizeLugarPh");
       input.setAttribute("aria-label", etiquetaDeLugar(i + 2, getLang()));
       input.value = valores[i] ?? "";
       input.disabled = campo instanceof HTMLInputElement ? campo.disabled : false;
-      return input;
+      // Cada lugar en su renglón, con su rótulo a la izquierda, como el cuadro de arriba.
+      const fila = document.createElement("div");
+      fila.className = "premio-fila";
+      fila.append(rotuloDeLugar(i + 2), input);
+      return fila;
     }),
   );
   pintarLargo();
@@ -293,29 +324,47 @@ export const premiosNoEntran = (): boolean => lugarQueNoEntra() !== null;
 /**
  * La línea de debajo de los campos (`#prize-largo`): dice que los premios no entran y que hay que acortar. La llaman
  * cada letra que se escribe, el cambio de la cantidad y del idioma (los rótulos cambian de largo) y `ponerPremio`.
+ * De paso pone o saca el rótulo del cuadro de arriba, que depende de lo mismo: si hay premio en otro lugar.
  */
 function pintarLargo(): void {
+  rotularElPrimero();
   const linea = document.getElementById("prize-largo");
   if (!linea) return;
-  const noEntra = lugarQueNoEntra() !== null;
+  const fuera = lugarQueNoEntra();
+  const noEntra = fuera !== null;
   const varios = premiosDeLosCampos().filter((p) => p.trim() !== "").length > 1;
   const texto = noEntra ? T[getLang()].prizeNoEntran(varios) : "";
   if (linea.textContent !== texto) linea.textContent = texto;
   linea.hidden = !noEntra;
+  // El campo que no entra queda marcado (`aria-invalid`, con su borde en styles.css): se ve cuál acortar sin leer el aviso.
+  for (const campo of campoDeCadaLugar()) {
+    if (campo.lugar === fuera) campo.input.setAttribute("aria-invalid", "true");
+    else campo.input.removeAttribute("aria-invalid");
+  }
+}
+
+/** El campo de cada lugar con su número: el cuadro de siempre es el 1 y los demás dicen el suyo en `data-lugar`. */
+function campoDeCadaLugar(): { lugar: number; input: HTMLInputElement }[] {
+  const primero = document.getElementById("prize");
+  const resto = camposDeLugares().map((input) => ({ lugar: Number(input.dataset.lugar), input }));
+  return primero instanceof HTMLInputElement ? [{ lugar: 1, input: primero }, ...resto] : resto;
 }
 
 /**
  * Al tocar Sellar la lista con premios que no entran: la línea a la vista, con el pliegue abierto, y el cursor en el
- * campo del primer lugar que no entra, para acortarlo ahí.
+ * campo del primer lugar que no entra, para acortarlo ahí. Se encuadra la línea, no el campo: el foco solo dejaba el
+ * campo justo encima de la barra de abajo, y la línea quedaba tapada por ella en el celular.
  */
 export function mostrarQueNoEntran(): void {
   pintarLargo();
   const fuera = lugarQueNoEntra();
   if (fuera === null) return;
-  const pliegue = document.getElementById("prize-largo")?.closest("details");
+  const linea = document.getElementById("prize-largo");
+  const pliegue = linea?.closest("details");
   if (pliegue) pliegue.open = true;
   const campo = fuera === 1 ? document.getElementById("prize") : cajaLugares()?.querySelector(`input[data-lugar="${fuera}"]`);
-  if (campo instanceof HTMLInputElement) campo.focus();
+  if (campo instanceof HTMLInputElement) campo.focus({ preventScroll: true });
+  linea?.scrollIntoView?.({ block: "center" });
 }
 
 /** Los premios que ya salieron en esta sentada: se marcan para no repetir sin querer. */

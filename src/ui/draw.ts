@@ -194,7 +194,7 @@ async function sortear(adelantado = false): Promise<void> {
   // premio. Con varios prometía que el cartel del final mostraba a los demás, y ese cartel muestra uno solo.
   const deCampana = esSorteoDeCampana(raffleId) || campanaDeLaLista(listHash) !== null;
   const deAUnoPorElSello = nWinners > 1 && !orden && !enEnsayo() && !enStand() && !deCampana;
-  const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo);
+  const card = abrirTarjeta(juego, names.length, deAUnoPorElSello ? 1 : nWinners, orden, resultadoListo, undefined, deAUnoPorElSello ? 1 : undefined);
   const tarjeta: Previa | null = card ? { card, game: juego } : null;
   // Sin tarjeta, la cortina mientras llega el número. Desde la espera en grande, ella misma hace de cortina hasta que
   // el show la tapa (espera.ts), y si algo falla se queda, con la pantalla completa. En un Amigo secreto, ninguna de
@@ -965,10 +965,23 @@ const selloDeAmigo = (): boolean => {
  * 990 Hz de antes era un si, fuera de la escala de los juegos.
  * En un Amigo secreto, ninguna: no hay juego que jugar, y el juego mostraría el orden (issue #99, S4).
  */
-function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean, espera?: Promise<unknown>, textoDeEspera?: string): GameCard | null {
+function abrirTarjeta(
+  game: Game,
+  people: number,
+  prizes: number,
+  orden: boolean,
+  espera?: Promise<unknown>,
+  textoDeEspera?: string,
+  lugar?: number,
+): GameCard | null {
   if (skipMotion() || selloDeAmigo()) return null;
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
-  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera, orden, textoDeEspera, enStand());
+  // El show de un lugar (los lugares de a uno) dice el premio de ese lugar, no el texto de todos. Sin lugares sellados
+  // (`premioDeLugarEn` da null) o sin `lugar`, el premio sellado entero, como siempre.
+  const sellado = app.frozen?.prize ?? "";
+  const premio = lugar === undefined ? sellado : premioDeLugarEn(sellado, lugar) ?? sellado;
+  const sonar = (n: number): void => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07);
+  return showGameCard(game, people, prizes, cuenta, sonar, premio, espera, orden, textoDeEspera, enStand());
 }
 
 /**
@@ -987,8 +1000,17 @@ function abrirTarjeta(game: Game, people: number, prizes: number, orden: boolean
  * `extra.espectador`: el show del celular. Cuenta siempre la tarjeta en la duración, como la sala, aunque no la muestre
  * (el que entra tarde): si no, el juego duraría otra cosa y no quedaría a la par. Y sin el motor nuevo no hay show: el de
  * respaldo no sigue horario ni retiene el final, y podría coronar antes que la sala.
+ * `extra.lugar`: el show es de ese lugar solo («Siguiente premio» de a uno), y la tarjeta dice el premio de ese lugar.
  */
-function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, orden: boolean, previa: Previa | null = null, extra: { conHora?: { horario: Horario; avisos: Avisos } | null; espectador?: boolean } = {}): void {
+function playGame(
+  names: string[],
+  winners: number[],
+  beacon: Beacon,
+  finish: () => void,
+  orden: boolean,
+  previa: Previa | null = null,
+  extra: { conHora?: { horario: Horario; avisos: Avisos } | null; espectador?: boolean; lugar?: number } = {},
+): void {
   const conHora = extra.conHora ?? null;
   // Los equipos con cupón se ven por el nombre de su equipo; la lista sellada y el comprobante siguen con las cuentas.
   names = paraMostrar(names);
@@ -1002,7 +1024,11 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   if (previa && previa.game !== game) previa.card.update(game);
-  const card = previa ? previa.card : extra.espectador ? null : abrirTarjeta(game, names.length, winners.length, orden);
+  const card = previa
+    ? previa.card
+    : extra.espectador
+      ? null
+      : abrirTarjeta(game, names.length, winners.length, orden, undefined, undefined, extra.lugar);
   setCardSeconds(card || extra.espectador ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);
@@ -1620,7 +1646,7 @@ export function siguientePremio(): void {
     if (app.frozen !== frozen || app.drawn !== drawn) return;
     drawn.revelados = revelados;
     reveal(frozen.names, drawn.winners, drawn.beacon, frozen.listHash);
-  }, false);
+  }, false, null, { lugar: sigue.lugar });
 }
 
 /**
