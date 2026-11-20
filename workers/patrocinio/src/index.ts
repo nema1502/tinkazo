@@ -49,6 +49,9 @@
  * Solo en mainnet con ALTAS=1 y CORREO_BIENVENIDA=1 (nace en 0): el correo de bienvenida, unos 20 minutos después del regalo,
  * desde la alarma y después de los sellos y los pagos (`correo-envios.ts`). La dirección se lee de la ficha y no se guarda.
  *
+ * Solo en mainnet con la venta por unidad (`sorteo` en `PRECIOS`): la alarma lee sola los pagos mientras haya órdenes vivas
+ * (`VigilanteDeCobros`), con su propio try/catch, y `/estado` suma el bloque `cobros`.
+ *
  * No guarda nombres ni listas ni direcciones IP: ver `cupos.ts` y README.md.
  * Comprobar un sorteo no depende de este servicio.
  */
@@ -58,9 +61,9 @@ import { type AccionAdmin, Administracion, atenderAdmin } from "./admin";
 import { Altas } from "./altas";
 import { AltasPorPremio } from "./altas-premio";
 import { registrador } from "./registrador";
-import { Cobros, LectorDeCobros } from "./cobros";
+import { Cobros, type Conversion, LectorDeCobros, VIGILAR_DESPUES_MS, VigilanteDeCobros } from "./cobros";
 import { ComprasQr } from "./compras";
-import { AJUSTE_CORREO_CERRADO, AJUSTE_CORREO_DIA, type Config, type Env, leerConfig } from "./config";
+import { AJUSTE_CORREO_CERRADO, AJUSTE_CORREO_DIA, type Config, type Env, leerConfig, unidadDe } from "./config";
 import { esEnlaceDeCorreo, mensajeroDeCloudflare } from "./correo-bienvenida";
 import { EnviosDeBienvenida } from "./correo-envios";
 import { Cupos, type Sql } from "./cupos";
@@ -125,6 +128,13 @@ export class Patrocinio extends DurableObject<EnvPortero> {
   private correoEnConfig = false;
   /** Lo que falta para el correo prendido por la variable, con nombres fijos. */
   private faltaCorreo: string[] = [];
+  /** Quien lee los pagos de la cuenta de cobros (solo mainnet, con `CUENTA_COBROS`). */
+  private lector: LectorDeCobros | null = null;
+  /**
+   * La alarma de cobros: solo con la venta por unidad en `PRECIOS`. Null sin ella: entonces ni la alarma, ni `/orden`, ni
+   * `/estado` hacen nada distinto.
+   */
+  private vigilante: VigilanteDeCobros | null = null;
 
   constructor(ctx: DurableObjectState, env: EnvPortero) {
     super(ctx, env);
@@ -174,9 +184,30 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       this.armarAltaPremio();
       // Los pagos: las órdenes nuevas solo con ALTAS_PAGO=1, pero los pagos de las que ya existen se leen igual. Con las tablas de
       // los retiros, el costo que paga quien retira se reconoce por su transacción y no cae a los pagos sueltos.
-      const cobros = new Cobros(this.sql, this.cupos, this.usoPagos ? { costos: this.usoPagos } : {});
+      // Con la venta por unidad en `PRECIOS`, lo que llega de más o dos veces a una de sus órdenes se convierte en sorteos con los
+      // frenos de la puerta, y cada lectura refresca antes el saldo que miran. Sin el producto, la lectura de siempre.
+      const unidad = unidadDe(cfg);
+      const conversion: Conversion | null = unidad
+        ? { precio: () => unidad, permite: (c, ahora) => this.puerta?.permiteConvertir(c, ahora) ?? false }
+        : null;
+      // Con la venta por unidad, además, la lectura nueva: los pagos chicos sin orden no escriben fila, se pone al día con muchas
+      // páginas y la alarma lee sola mientras haya órdenes vivas (`VigilanteDeCobros`).
+      const vigilante = unidad !== null;
+      const opcionesCobros = {
+        ...(this.usoPagos ? { costos: this.usoPagos } : {}),
+        ...(conversion ? { conversion } : {}),
+        ...(vigilante ? { vigilante } : {}),
+      };
+      const cobros = new Cobros(this.sql, this.cupos, opcionesCobros);
       this.cobros = cobros;
-      const lector = cfg.cuentaCobros ? new LectorDeCobros({ cobros, cuenta: cfg.cuentaCobros, fetch: (u, i) => fetch(u, i), registrar }) : null;
+      const antes = unidad && pollar ? { antes: () => pollar.creditos() } : {};
+      const alDia = vigilante ? { alDia: true } : {};
+      const cuentaCobros = cfg.cuentaCobros;
+      const lector = cuentaCobros
+        ? new LectorDeCobros({ cobros, cuenta: cuentaCobros, fetch: (u, i) => fetch(u, i), registrar, ...antes, ...alDia })
+        : null;
+      this.lector = lector;
+      this.vigilante = vigilante && lector ? new VigilanteDeCobros({ cobros, lector }) : null;
       // La compra con QR: las compras en curso y sus reservas se leen siempre (también con COMPRAS_QR en "0"), para
       // terminar lo que ya empezó y para el piso.
       const compras = new ComprasQr(this.sql, cfg);
@@ -205,6 +236,8 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         cuentaPatrocinadora: this.env.CUENTA_PATROCINADORA || null,
         ...(leerElSorteo ? { leerSorteo: leerElSorteo } : {}),
         ...(this.correo ? { alRegalar: () => void this.programarCorreo("regalo") } : {}),
+        // Con la alarma de cobros, crear una orden la pide: el pago se acredita aunque la persona cierre la pantalla.
+        ...(this.vigilante ? { alCrearOrden: () => void this.programar() } : {}),
       });
       this.administracion = new Administracion({ cfg, cupos: this.cupos, altas, cuponSecreto: this.env.CUPON_SECRETO ?? null, red, registrar, cobros, lector, compras });
       this.exportaAltas = true;
@@ -221,8 +254,53 @@ export class Patrocinio extends DurableObject<EnvPortero> {
     const columnas = this.cupos.columnasQueFaltan();
     if (columnas.length) console.error(JSON.stringify({ evento: "error-config", faltaAltas: ["columnas-nuevas"], columnas, error: this.cupos.errorDeColumnas() }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
-    if (this.cupos.enElAire() > 0 || this.pagosEnElAire() > 0) await this.programar();
+    if (this.cupos.enElAire() > 0 || this.pagosEnElAire() > 0 || this.cobrosVivos()) await this.programar();
     return this.portero;
+  }
+
+  /** Si la alarma de cobros tiene órdenes vivas que mirar. Sin la venta por unidad, nunca. Nunca lanza. */
+  private cobrosVivos(): boolean {
+    try {
+      return this.vigilante?.hayQueVigilar() ?? false;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * La parte de cobros de la alarma, con su propio try/catch: cuándo vuelve a hacer falta (ms), o null sin órdenes vivas o con
+   * la venta por unidad apagada. Si falla, se anota y se vuelve a mirar en 5 minutos: nunca pide la alarma a cada rato.
+   */
+  private async vueltaDeCobros(): Promise<number | null> {
+    const vigilante = this.vigilante;
+    if (!vigilante) return null;
+    try {
+      return await vigilante.vuelta();
+    } catch (e) {
+      registrar("error-interno", { donde: "alarma-cobros", error: e instanceof Error ? e.name : "desconocido" });
+      return Date.now() + VIGILAR_DESPUES_MS;
+    }
+  }
+
+  /**
+   * El bloque `cobros` de `/estado`, con la venta por unidad: órdenes vivas, los sorteos que reservan en el piso, pagos chicos de
+   * hoy y el atraso. Solo cifras.
+   */
+  private estadoDeCobros(): Record<string, unknown> | null {
+    try {
+      const ahora = Date.now();
+      const cobros = this.cobros;
+      if (!this.vigilante || !cobros) return null;
+      return {
+        ordenesVivas: cobros.ordenesVivas(ahora),
+        sorteosEnOrdenes: cobros.sorteosEnOrdenesVivas(ahora),
+        pagosChicosHoy: cobros.pagosChicosHoy(ahora),
+        ...(this.lector?.atraso() ?? {}),
+      };
+    } catch (e) {
+      registrar("error-interno", { donde: "estado-cobros", error: e instanceof Error ? e.name : "desconocido" });
+      return null;
+    }
   }
 
   /**
@@ -359,8 +437,9 @@ export class Patrocinio extends DurableObject<EnvPortero> {
   /**
    * La alarma cierra lo que quedó en el aire, en dos partes, cada una en su try/catch: los sellos y los sorteos, y los pagos de
    * premios y retiros. Si una lanza, la otra corre igual, queda anotado y se vuelve a pedir la alarma: lo que sigue en el aire
-   * no se queda sin nadie que lo mire. Con el correo de bienvenida prendido, una tercera parte al final, cuando las otras dos ya
-   * cerraron lo suyo: la alarma vuelve cuando haga falta la primera de las dos cosas.
+   * no se queda sin nadie que lo mire. Con la venta por unidad, la parte de cobros, que lee los pagos mientras haya órdenes
+   * vivas. Con el correo de bienvenida prendido, una parte más al final, cuando las otras ya cerraron lo suyo. Cada una con su
+   * try/catch: ninguna frena a las otras. La alarma vuelve cuando haga falta la primera de las cosas.
    */
   override async alarm(): Promise<void> {
     const p = await this.obtener();
@@ -372,14 +451,19 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       ],
       registrar,
     );
-    if (!this.correo) {
-      // Sin el correo, lo de siempre.
+    const cobros = await this.vueltaDeCobros();
+    if (!this.correo && cobros === null) {
+      // Sin el correo y sin órdenes que mirar, lo de siempre.
       if (hayQueVolver) await this.ctx.storage.setAlarm(Date.now() + ALARMA_MS);
       return;
     }
-    const correo = await this.vueltaDelCorreo(hayQueVolver);
+    const correo = this.correo ? await this.vueltaDelCorreo(hayQueVolver) : null;
     const ahora = Date.now();
-    const vueltas = [...(hayQueVolver ? [ahora + ALARMA_MS] : []), ...(correo === null ? [] : [Math.max(correo, ahora + 1_000)])];
+    const vueltas = [
+      ...(hayQueVolver ? [ahora + ALARMA_MS] : []),
+      ...(correo === null ? [] : [Math.max(correo, ahora + 1_000)]),
+      ...(cobros === null ? [] : [Math.max(cobros, ahora + 1_000)]),
+    ];
     if (!vueltas.length) return;
     // Mientras el correo esperaba, un sello o un pago pudo pedir la alarma: si quedó antes, se respeta. Una que ya pasó es esta.
     const actual = await this.ctx.storage.getAlarm();
@@ -602,6 +686,7 @@ export class Patrocinio extends DurableObject<EnvPortero> {
         const e = await p.estado();
         if (!this.puerta) return e;
         const pagos = this.estadoDePagos();
+        const cobros = this.estadoDeCobros();
         return {
           ...e,
           cuerpo: {
@@ -612,6 +697,8 @@ export class Patrocinio extends DurableObject<EnvPortero> {
             ...(pagos ? { pagos } : {}),
             // El correo de bienvenida, solo con su variable prendida: apagado, el estado es el de siempre.
             ...(this.correoEnConfig ? { correoBienvenida: this.estadoDelCorreo() } : {}),
+            // La lectura de los pagos, solo con la venta por unidad: apagada, el estado es el de siempre.
+            ...(cobros ? { cobros } : {}),
           },
         };
       }

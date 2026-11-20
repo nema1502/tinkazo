@@ -34,7 +34,7 @@
  * `fetch` entran como argumentos: las pruebas nunca tocan la red.
  */
 import { StrKey } from "@stellar/stellar-sdk/base";
-import type { Producto } from "./config";
+import { type Producto, UNIDAD_MAXIMO, UNIDAD_MINIMO, UNIDAD_PASO } from "./config";
 import { ALFABETO } from "./cupon-codigo";
 import { type Cupos, type Sql, texto } from "./cupos";
 import type { UsoDePagos } from "./pagos-uso";
@@ -78,6 +78,32 @@ export const PAGINAS = 5;
 export const AJUSTE_CURSOR = "cobros_cursor";
 /** Con `"1"`, no se crean órdenes nuevas (la red en amarillo, o a mano). Las abiertas siguen. */
 export const AJUSTE_VENTA_PAUSADA = "venta_pausada";
+/** Lo más que se convierte en sorteos de un solo pago que llegó de más o dos veces: el resto queda suelto, para devolverlo. */
+export const CONVERSION_MAXIMA = 50;
+/**
+ * Con la venta por unidad, un pago chico sin orden no escribe fila: USDC por debajo de 0,50 (estricto: el costo de un retiro de
+ * 0,50 se sigue anotando) y otra moneda por debajo de 1 unidad. Suma al contador del día y el cursor pasa por encima.
+ */
+export const CHICO_USDC = 5_000_000;
+export const CHICO_OTRO = 10_000_000;
+/** El ajuste con los pagos chicos sin fila del día (UTC): `{"dia":"AAAA-MM-DD","n":…}`. Solo cifras. */
+export const AJUSTE_PAGOS_CHICOS = "cobros_chicos_dia";
+/** Con la venta por unidad, los costos de retiro que quedaron sueltos se buscan solo en las últimas 72 horas. */
+export const RECLASIFICAR_MS = 72 * 3_600_000;
+/**
+ * La alarma de cobros, con la venta por unidad: mientras la orden viva más nueva tenga menos de `VIGILAR_PRIMERO_MS`, lee los
+ * pagos cada `VIGILAR_CADA_MS`. Después, cada `VIGILAR_DESPUES_MS`, hasta que vence. Sin órdenes vivas, no lee.
+ */
+export const VIGILAR_PRIMERO_MS = 30 * 60_000;
+export const VIGILAR_CADA_MS = 20_000;
+export const VIGILAR_DESPUES_MS = 5 * 60_000;
+/**
+ * Con la venta por unidad, una orden sin pagar reserva sus sorteos en el piso mientras tenga menos de esto: es cuando se paga
+ * casi siempre (la pantalla mira sola esa media hora). Pasado eso deja de reservar, así una orden olvidada no frena la venta.
+ */
+export const RESERVA_ORDEN_MS = VIGILAR_PRIMERO_MS;
+/** Cuando una lectura termina con todas sus páginas llenas, se lee otra enseguida, sin pasar de estas páginas por minuto. */
+export const PAGINAS_POR_MINUTO = 20;
 
 const TIPOS = new Set(["payment", "path_payment_strict_send", "path_payment_strict_receive"]);
 const DIGITOS = /^\d{1,30}$/;
@@ -276,7 +302,22 @@ export function pagoDe(r: unknown, cuenta: string): PagoLeido | null {
  */
 export type LecturaHorizon = { ok: true; pagos: PagoLeido[]; cursor: string | null; completo: boolean } | { ok: false };
 
-export async function leerPagos(pedir: (ruta: string, init?: RequestInit) => Promise<Response>, cuenta: string, cursor: string | null, esperaMs = ESPERA_HORIZON_MS): Promise<LecturaHorizon> {
+/**
+ * Lo que `leerPagos` cuenta de una lectura, si se le pasa: cuántas páginas pidió con respuesta y si la última vino llena (con
+ * el cursor movido), o sea que puede haber más. Así el lector sabe si tiene que ponerse al día.
+ */
+export interface MedidaDeLectura {
+  paginas: number;
+  llena: boolean;
+}
+
+export async function leerPagos(
+  pedir: (ruta: string, init?: RequestInit) => Promise<Response>,
+  cuenta: string,
+  cursor: string | null,
+  esperaMs = ESPERA_HORIZON_MS,
+  medida?: MedidaDeLectura,
+): Promise<LecturaHorizon> {
   if (!StrKey.isValidEd25519PublicKey(cuenta)) return { ok: false };
   let ultimo = cursor !== null && DIGITOS.test(cursor) ? cursor : null;
   const pagos: PagoLeido[] = [];
@@ -300,8 +341,13 @@ export async function leerPagos(pedir: (ruta: string, init?: RequestInit) => Pro
       const p = pagoDe(r, cuenta);
       if (p) pagos.push(p);
     }
+    const llena = registros.length >= POR_PAGINA && ultimo !== antes;
+    if (medida) {
+      medida.paginas += 1;
+      medida.llena = llena;
+    }
     // Una página corta es la última; una que no movió el cursor no se vuelve a pedir.
-    if (registros.length < POR_PAGINA || ultimo === antes) break;
+    if (!llena) break;
   }
   return { ok: true, pagos, cursor: ultimo, completo: true };
 }
@@ -374,14 +420,42 @@ function filaOrden(f: Record<string, unknown>): FilaOrden {
 export type OrdenCreada = { ok: true; orden: FilaOrden; nueva: boolean } | { ok: false; motivo: "venta-pausada" | "altas-pausadas" | "fuera-del-piloto" | "compra-en-curso" };
 
 /**
+ * La orden por unidad de `cantidad` sorteos: el precio de uno por la cantidad, los mismos días. null si la cantidad no es un
+ * entero de `UNIDAD_MINIMO` a `UNIDAD_MAXIMO` de a `UNIDAD_PASO`, o si `unidad` no es el producto por unidad. El monto lo arma
+ * siempre el servidor: el sitio manda solo la cantidad.
+ */
+export function productoPorUnidad(unidad: Producto, cantidad: unknown): Producto | null {
+  if (unidad.id !== "sorteo" || unidad.sorteos !== 1) return null;
+  if (typeof cantidad !== "number" || !Number.isInteger(cantidad) || cantidad < UNIDAD_MINIMO || cantidad > UNIDAD_MAXIMO) return null;
+  if ((cantidad - UNIDAD_MINIMO) % UNIDAD_PASO !== 0) return null;
+  const monto = unidad.monto * cantidad;
+  return { id: "sorteo", usdc: usdcTexto(monto), monto, sorteos: cantidad, dias: unidad.dias };
+}
+
+/**
+ * Lo que mira `Cobros` para convertir en sorteos lo que llegó de más o dos veces a una orden por unidad. Lo arma la puerta de
+ * las altas: `precio` es el producto por unidad de hoy (null si hoy no se vende por unidad) y `permite` dice, sin esperar nada,
+ * si hoy se vende: la venta prendida y sin pausar, la persona dentro del piloto y los créditos guardados por encima del piso con
+ * la reserva de la venta. Sin esto, nada se convierte y todo va a los sueltos, como siempre.
+ */
+export interface Conversion {
+  precio(): Producto | null;
+  permite(c: { usuario: string; sorteos: number; altaNueva: boolean }, ahora: number): boolean;
+}
+
+/**
  * Lo que pasó en una vuelta de lectura, para la bitácora: sin personas, cuentas, notas ni ids de orden. `orden-honrada`
  * va junto con `alta-pago` cuando la orden pagada estaba reemplazada y el pago ya estaba en camino.
  */
 export type EventoCobro =
   | { evento: "alta-pago" | "orden-honrada"; producto: string }
+  /** `orden-parte`: una orden por unidad dio parte de sus sorteos. `orden-convertida`: lo de más o repetido se volvió sorteos. */
+  | { evento: "orden-parte" | "orden-convertida"; producto: string }
   | { evento: "pago-suelto"; motivo: MotivoSuelto }
   /** El costo de un retiro que pagó el portero, reconocido por su transacción: no es un suelto ni una orden. */
-  | { evento: "costo-retiro" };
+  | { evento: "costo-retiro" }
+  /** Cuántos pagos chicos sin orden de esta vuelta no escribieron fila (con la venta por unidad). Solo la cifra. */
+  | { evento: "pagos-chicos"; cuantos: number };
 
 /**
  * Por qué un pago quedó suelto. `repetido`: llegó a una orden ya pagada (no da otro paquete). `cerrada`: a una cerrada.
@@ -408,7 +482,11 @@ export interface FilaSuelto {
   ms: number;
 }
 
-export type Asignado = { ok: true; pagada: boolean; sobrante: number } | { ok: false; motivo: "suelto" | "orden" | "no-asignable" | "orden-pagada" | "orden-cerrada" } | { ok: false; motivo: "ya-resuelto"; estado: string };
+/** `orden-posterior`: con la venta por unidad, la orden se creó después de la hora del pago y no puede ser la suya. */
+export type Asignado =
+  | { ok: true; pagada: boolean; sobrante: number }
+  | { ok: false; motivo: "suelto" | "orden" | "no-asignable" | "orden-pagada" | "orden-cerrada" | "orden-posterior" }
+  | { ok: false; motivo: "ya-resuelto"; estado: string };
 export type Devuelto = { ok: true; repetido: boolean } | { ok: false; motivo: "suelto" } | { ok: false; motivo: "ya-resuelto"; estado: string };
 export type PagadaAMano = { ok: true; repetido: boolean } | { ok: false; motivo: "orden" | "orden-cerrada" | "techo-altas" | "techo-sorteos" };
 /** Lo que llegó a una orden y hay que devolver: cada operación con quién la mandó. */
@@ -418,10 +496,24 @@ export interface ParaDevolver {
   monto: number;
   tx: string;
 }
-export type Cerrada = { ok: true; repetido: boolean; recibido: number; devolver: ParaDevolver[] } | { ok: false; motivo: "orden" | "orden-pagada" | "sin-pagos" };
+/** `con-sorteos`: una orden por unidad que ya dio parte de sus sorteos no se cierra para devolver: se resuelve a mano. */
+export type Cerrada =
+  | { ok: true; repetido: boolean; recibido: number; devolver: ParaDevolver[] }
+  | { ok: false; motivo: "orden" | "orden-pagada" | "sin-pagos" | "con-sorteos" };
 
 /** El día UTC de un instante, `AAAA-MM-DD`: la clave de los techos diarios (los mismos de `altas.ts`). */
 const diaUtc = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * Lo que dejó atar un pago a su orden: si la orden quedó pagada (`concedido`), si una orden por unidad dio parte de sus sorteos
+ * sin completarse (`parte`) y lo que no entró en la orden (`sobrante`), con por qué.
+ */
+interface Atribucion {
+  concedido: boolean;
+  parte: boolean;
+  sobrante: number;
+  motivo: "sobrante" | "repetido" | "cerrada";
+}
 
 /** Un pago a punto de atarse a una orden: el de Horizon o uno suelto que se asigna a mano. */
 interface Operacion {
@@ -439,18 +531,63 @@ export type CostosDeRetiro = Pick<UsoDePagos, "disponible" | "costoDeRetiro">;
 export class Cobros {
   private readonly idAlAzar: () => string;
   private readonly costos: CostosDeRetiro | undefined;
+  private readonly conversion: Conversion | undefined;
+  private readonly vigilante: boolean;
 
   /**
    * `sql` es el mismo SQLite de `cupos`, que ya creó las tablas. `costos` es opcional: sin él, o con sus tablas rotas, un
-   * costo de retiro se lee como cualquier otro pago (`registrarLectura`).
+   * costo de retiro se lee como cualquier otro pago (`registrarLectura`). `conversion` también: sin ella, lo que llega de
+   * más o dos veces a una orden por unidad va a los sueltos, como en las demás órdenes. `vigilante` (con la venta por unidad):
+   * los pagos chicos sin orden no escriben fila, los costos sueltos se buscan en 72 horas y asignar a mano mira la hora del pago.
    */
   constructor(
     private readonly sql: Sql,
     private readonly cupos: Cupos,
-    opciones: { idAlAzar?: () => string; costos?: CostosDeRetiro } = {},
+    opciones: { idAlAzar?: () => string; costos?: CostosDeRetiro; conversion?: Conversion; vigilante?: boolean } = {},
   ) {
     this.idAlAzar = opciones.idAlAzar ?? ordenAlAzar;
     this.costos = opciones.costos;
+    this.conversion = opciones.conversion;
+    this.vigilante = opciones.vigilante === true;
+  }
+
+  /**
+   * Cada cuánto conviene leer los pagos, para la alarma: `VIGILAR_CADA_MS` si la orden viva más nueva (sin pagar, sin cerrar y
+   * sin vencer) nació hace menos de `VIGILAR_PRIMERO_MS`, `VIGILAR_DESPUES_MS` si es más vieja, y null sin órdenes vivas.
+   */
+  cadaCuantoVigilar(ahora: number): number | null {
+    const f = this.filas("SELECT MAX(creada) AS nueva FROM ordenes WHERE pagada IS NULL AND metodo IS NULL AND vence > ?", ahora)[0];
+    if (f?.nueva === null || f?.nueva === undefined) return null;
+    return ahora - Number(f.nueva) < VIGILAR_PRIMERO_MS ? VIGILAR_CADA_MS : VIGILAR_DESPUES_MS;
+  }
+
+  /** Cuántas órdenes vivas hay (sin pagar, sin cerrar y sin vencer), para `/estado`. */
+  ordenesVivas(ahora: number): number {
+    return Number(this.filas("SELECT COUNT(*) AS n FROM ordenes WHERE pagada IS NULL AND metodo IS NULL AND vence > ?", ahora)[0]?.n ?? 0);
+  }
+
+  /**
+   * Los sorteos que prometen las órdenes vivas (sin pagar, sin cerrar y sin vencer) nacidas hace menos de `RESERVA_ORDEN_MS`,
+   * menos los que ya dieron por unidad (esos ya cuentan en el piso como derechos). Sin las de `excluirUsuario`: su orden nueva
+   * reemplaza a la abierta. Para que muchas órdenes abiertas a la vez no prometan más de lo que Pollar puede patrocinar.
+   * Síncrono: se llama adentro de la transacción que crea la orden.
+   */
+  sorteosEnOrdenesVivas(ahora: number, excluirUsuario: string | null = null): number {
+    const dados = "COALESCE((SELECT SUM(d.sorteos) FROM derechos d WHERE d.ref LIKE 'orden:' || o.id || ':%'), 0)";
+    const consulta =
+      `SELECT COALESCE(SUM(MAX(0, o.sorteos - ${dados})), 0) AS n FROM ordenes o ` +
+      "WHERE o.pagada IS NULL AND o.metodo IS NULL AND o.vence > ? AND o.creada > ? AND (? IS NULL OR o.usuario <> ?)";
+    return Number(this.filas(consulta, ahora, ahora - RESERVA_ORDEN_MS, excluirUsuario, excluirUsuario)[0]?.n ?? 0);
+  }
+
+  /** Cuántos pagos chicos sin orden no escribieron fila hoy (UTC). */
+  pagosChicosHoy(ahora: number): number {
+    try {
+      const o = JSON.parse(this.cupos.ajuste(AJUSTE_PAGOS_CHICOS) ?? "null") as { dia?: unknown; n?: unknown } | null;
+      return o && o.dia === diaUtc(ahora) && typeof o.n === "number" && Number.isSafeInteger(o.n) ? o.n : 0;
+    } catch {
+      return 0;
+    }
   }
 
   private filas(consulta: string, ...enlaces: unknown[]): Array<Record<string, unknown>> {
@@ -553,11 +690,15 @@ export class Cobros {
       const abierta = this.ordenAbierta(p.usuario, ahora, p.producto.id);
       const lleva = abierta ? this.recargoDe(abierta.id) : null;
       const coincide = (lleva?.compra ?? null) === (quiere?.compra ?? null);
-      if (abierta && coincide && abierta.vence <= ahora) {
+      // Por unidad, la abierta vale para la misma cantidad. Con otra, se reemplaza si no recibió nada. Si ya recibió algo,
+      // vuelve la abierta: la cantidad nunca cambia a mitad de un pago.
+      const otraCantidad = abierta !== null && p.producto.id === "sorteo" && abierta.sorteos !== p.producto.sorteos;
+      const sigue = abierta !== null && coincide && (!otraCantidad || this.recibido(abierta.id) > 0);
+      if (abierta && sigue && abierta.vence <= ahora) {
         this.sql.exec("UPDATE ordenes SET vence = ? WHERE id = ? AND pagada IS NULL", ahora + ORDEN_VIVE_MS, abierta.id);
         return { ok: true, orden: this.orden(abierta.id) as FilaOrden, nueva: false };
       }
-      if (abierta && coincide) return { ok: true, orden: abierta, nueva: false };
+      if (abierta && sigue) return { ok: true, orden: abierta, nueva: false };
       if (!p.sinFrenos) {
         if (this.cupos.ajuste(AJUSTE_VENTA_PAUSADA) === "1") return { ok: false, motivo: "venta-pausada" };
         const frenado = p.freno?.({ sorteos: p.producto.sorteos, altaNueva: this.cupos.altaDe(p.usuario) === null }) ?? null;
@@ -676,18 +817,21 @@ export class Cobros {
    * exacto. Cubre lo que leyó una versión del código sin este reconocimiento, que no se vuelve a leer (`visto`). No toca lo ya
    * atado a una orden. Si la consulta falla no hace nada: la lectura sigue.
    */
-  private reclasificarCostos(): void {
+  private reclasificarCostos(ahora: number): void {
     const costos = this.costos;
     if (!costos?.disponible()) {
       return;
     }
     try {
+      // Con la venta por unidad, solo lo de las últimas 72 horas: lo viejo ya se miró y no atrasa cada lectura.
+      const reciente = this.vigilante ? " AND ms > ?" : "";
       const candidatos = this.filas(
         [
           "SELECT operacion, tx, de, monto FROM pagos_sueltos",
-          "WHERE estado = 'suelto' AND activo = 'USDC' AND orden IS NULL AND motivo IN ('sin-nota','nota-desconocida')",
+          `WHERE estado = 'suelto' AND activo = 'USDC' AND orden IS NULL AND motivo IN ('sin-nota','nota-desconocida')${reciente}`,
           "ORDER BY ms, operacion LIMIT 500",
         ].join(" "),
+        ...(this.vigilante ? [ahora - RECLASIFICAR_MS] : []),
       );
       for (const c of candidatos) {
         if (costos.costoDeRetiro([String(c.tx)], String(c.de), Number(c.monto))) {
@@ -717,11 +861,17 @@ export class Cobros {
   registrarLectura(pagos: readonly PagoLeido[], cursor: string | null, ahora: number): EventoCobro[] {
     return this.cupos.transaccion(() => {
       const eventos: EventoCobro[] = [];
+      let chicos = 0;
       for (const p of pagos) {
         if (this.visto(p.operacion)) continue;
         const nota = p.memo ? (p.memo.tipo === "otro" ? `(${p.memo.valor})` : p.memo.valor) : null;
         const base = { operacion: p.operacion, tx: p.tx, de: p.de, activo: p.activo, monto: p.monto, nota };
         if (!p.esUsdc) {
+          // Con la venta por unidad, menos de una unidad de otra moneda es basura: no escribe fila y no tapa los sueltos.
+          if (this.vigilante && p.monto < CHICO_OTRO) {
+            chicos += 1;
+            continue;
+          }
           this.suelto(base, "otro-activo", null, p.ms);
           eventos.push({ evento: "pago-suelto", motivo: "otro-activo" });
           continue;
@@ -734,20 +884,34 @@ export class Cobros {
         const id = ordenDeNota(p.memo);
         const o = id ? this.orden(id) : null;
         if (!o) {
+          // Lo mismo con el USDC chico sin orden. El costo de un retiro ya se reconoció arriba, por su transacción.
+          if (this.vigilante && p.monto < CHICO_USDC) {
+            chicos += 1;
+            continue;
+          }
           const motivo = p.memo ? "nota-desconocida" : "sin-nota";
           this.suelto(base, motivo, null, p.ms);
           eventos.push({ evento: "pago-suelto", motivo });
           continue;
         }
         const r = this.atribuir(o, p, ahora);
-        if (r.sobrante > 0) {
-          this.suelto({ ...base, monto: r.sobrante }, r.motivo, o.id, p.ms);
+        // Lo de más o repetido de una orden por unidad se vuelve sorteos, con los frenos de la venta de hoy. El resto, suelto.
+        const convertido = r.sobrante > 0 ? this.convertir(o, r.motivo, p, r.sobrante, ahora) : 0;
+        const queda = r.sobrante - convertido;
+        if (queda > 0) {
+          this.suelto({ ...base, monto: queda }, r.motivo, o.id, p.ms);
           eventos.push({ evento: "pago-suelto", motivo: r.motivo });
         }
+        if (convertido > 0) eventos.push({ evento: "orden-convertida", producto: o.producto });
+        if (r.parte) eventos.push({ evento: "orden-parte", producto: o.producto });
         if (r.concedido) eventos.push({ evento: "alta-pago", producto: o.producto });
         if (r.concedido && estaCerrada(o)) eventos.push({ evento: "orden-honrada", producto: o.producto });
       }
-      this.reclasificarCostos();
+      if (chicos > 0) {
+        this.cupos.fijarAjuste(AJUSTE_PAGOS_CHICOS, JSON.stringify({ dia: diaUtc(ahora), n: this.pagosChicosHoy(ahora) + chicos }), ahora);
+        eventos.push({ evento: "pagos-chicos", cuantos: chicos });
+      }
+      this.reclasificarCostos(ahora);
       // El cursor va después de los pagos, en la misma transacción: si no se puede escribir, no queda ningún pago.
       const nuevo = mayor(this.cursor(), cursor);
       if (nuevo !== null && nuevo !== this.cursor()) this.cupos.fijarAjuste(AJUSTE_CURSOR, nuevo, ahora);
@@ -765,18 +929,75 @@ export class Cobros {
    * - Cerrada para devolver: tampoco da nada, y el pago entero va a los sueltos como `cerrada`.
    * - Reemplazada: lo mismo, salvo un pago que ya estaba en camino (`honra`): ese la deja pagada y da lo suyo, como si
    *   no se hubiera reemplazado. La hora del reemplazo queda escrita.
+   * - Por unidad y sin pagar: con cada pago da los sorteos de lo que llegó (`floor(recibido / precio)`, todos desde el 95 %),
+   *   la diferencia con lo ya dado (`parte`). Queda pagada recién al llegar al 95 %. Lo que falta sigue con la misma nota.
    */
-  private atribuir(o: FilaOrden, op: Operacion, ahora: number): { concedido: boolean; sobrante: number; motivo: "sobrante" | "repetido" | "cerrada" } {
-    if (estaCerrada(o) && !this.honra(o, op)) return { concedido: false, sobrante: op.monto, motivo: "cerrada" };
-    if (o.pagada !== null) return { concedido: false, sobrante: op.monto, motivo: "repetido" };
+  private atribuir(o: FilaOrden, op: Operacion, ahora: number): Atribucion {
+    if (estaCerrada(o) && !this.honra(o, op)) return { concedido: false, parte: false, sobrante: op.monto, motivo: "cerrada" };
+    if (o.pagada !== null) return { concedido: false, parte: false, sobrante: op.monto, motivo: "repetido" };
     const previo = this.recibido(o.id);
     const parte = Math.min(op.monto, Math.max(0, o.monto - previo));
     if (parte > 0) this.sql.exec("INSERT INTO pagos (operacion, paging_token, tx, orden, de, monto, ms) VALUES (?, ?, ?, ?, ?, ?, ?)", op.operacion, op.pagingToken, op.tx, o.id, op.de, parte, op.ms);
     const sobrante = op.monto - parte;
-    if (previo + parte < this.minimoDeOrden(o)) return { concedido: false, sobrante, motivo: "sobrante" };
-    this.sql.exec("UPDATE ordenes SET pagada = ?, metodo = 'usdc', ref = ? WHERE id = ? AND pagada IS NULL", ahora, `usdc:${op.operacion}`, o.id);
+    const completa = previo + parte >= this.minimoDeOrden(o);
+    const pagada = "UPDATE ordenes SET pagada = ?, metodo = 'usdc', ref = ? WHERE id = ? AND pagada IS NULL";
+    if (o.producto === "sorteo") {
+      const dio = this.darUnidades(o, previo + parte, completa, `orden:${o.id}:${op.operacion}`, ahora);
+      if (completa) this.sql.exec(pagada, ahora, `usdc:${op.operacion}`, o.id);
+      return { concedido: completa, parte: dio && !completa, sobrante, motivo: "sobrante" };
+    }
+    if (!completa) return { concedido: false, parte: false, sobrante, motivo: "sobrante" };
+    this.sql.exec(pagada, ahora, `usdc:${op.operacion}`, o.id);
     this.conceder(o, `orden:${o.id}`, ahora);
-    return { concedido: true, sobrante, motivo: "sobrante" };
+    return { concedido: true, parte: false, sobrante, motivo: "sobrante" };
+  }
+
+  /**
+   * Los sorteos que ya dio una orden por unidad: los derechos con `ref` `orden:<id>:…` (cada pago que dio algo deja el suyo).
+   * Las demás órdenes dan todo de una vez con `ref` `orden:<id>`, que no entra acá.
+   */
+  dadosDeOrden(id: string): number {
+    return Number(this.filas("SELECT COALESCE(SUM(sorteos), 0) AS n FROM derechos WHERE ref LIKE ?", `orden:${id}:%`)[0]?.n ?? 0);
+  }
+
+  /**
+   * Da lo que le toca a una orden por unidad con `recibido` (lo atado a ella): todos sus sorteos si `completa`, y si no uno por
+   * cada precio entero que llegó, sin contar el recargo del QR. Otorga solo la diferencia con lo ya dado, con `ref`. Devuelve si
+   * dio algo. Sin abrir transacción: quien llama ya está adentro.
+   */
+  private darUnidades(o: FilaOrden, recibido: number, completa: boolean, ref: string, ahora: number): boolean {
+    const recargo = this.recargoDe(o.id)?.recargo ?? 0;
+    const precio = Math.floor((o.monto - recargo) / o.sorteos);
+    const tocan = completa ? o.sorteos : precio > 0 ? Math.min(o.sorteos, Math.floor(Math.max(0, recibido - recargo) / precio)) : 0;
+    const faltan = tocan - this.dadosDeOrden(o.id);
+    if (faltan < 1) return false;
+    this.conceder(o, ref, ahora, faltan);
+    return true;
+  }
+
+  /**
+   * Convierte en sorteos lo que llegó de más (`sobrante`), dos veces (`repetido`) o a una orden reemplazada (`cerrada`) de una
+   * orden por unidad: `floor(monto / precio de hoy)`, como mucho `CONVERSION_MAXIMA`, con `ref` `conv:<operacion>` y origen
+   * `paquete`. Solo si hoy se vende por unidad y la conversión lo permite (`Conversion.permite`). Una orden cerrada para
+   * devolver nunca convierte. Devuelve lo que se convirtió, en diezmillonésimas: el resto queda suelto, como siempre.
+   */
+  private convertir(o: FilaOrden, motivo: "sobrante" | "repetido" | "cerrada", op: Operacion, monto: number, ahora: number): number {
+    if (o.producto !== "sorteo" || !this.conversion) return 0;
+    if (motivo === "cerrada" && o.metodo !== "reemplazada") return 0;
+    const unidad = this.conversion.precio();
+    if (!unidad || unidad.id !== "sorteo" || unidad.sorteos !== 1 || unidad.monto <= 0) return 0;
+    const sorteos = Math.min(CONVERSION_MAXIMA, Math.floor(monto / unidad.monto));
+    if (sorteos < 1) return 0;
+    const alta = this.cupos.altaDe(o.usuario);
+    if (!this.conversion.permite({ usuario: o.usuario, sorteos, altaNueva: alta === null }, ahora)) return 0;
+    const nueva = [
+      "INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada)",
+      "VALUES (?, 'pago', ?, NULL, NULL, 'autorizada', ?, ?)",
+    ].join(" ");
+    if (!alta) this.sql.exec(nueva, o.usuario, `orden:${o.id}`, ahora, ahora);
+    const ref = `conv:${op.operacion}`;
+    const derecho = { usuario: o.usuario, cuenta: alta?.cuenta ?? null, origen: "paquete" as const, ref, sorteos, dias: unidad.dias };
+    return this.cupos.otorgar(derecho, ahora).repetido ? 0 : sorteos * unidad.monto;
   }
 
   /**
@@ -792,12 +1013,14 @@ export class Cobros {
   /**
    * Lo que da una orden pagada: el alta si la persona no tenía (un pago siempre cubre la activación) y los sorteos de la
    * orden, que vencen a los días de la orden desde ahora. Si la persona ya tiene su cuenta atada, cuentan para esa cuenta;
-   * si no, se atan cuando el servidor sepa su cuenta (`/v1/alta/estado` o `/v1/alta/pago`).
+   * si no, se atan cuando el servidor sepa su cuenta (`/v1/alta/estado` o `/v1/alta/pago`). `sorteos` es para la orden por
+   * unidad, que da de a partes: sin él, los de la orden.
    */
-  private conceder(o: FilaOrden, ref: string, ahora: number): void {
+  private conceder(o: FilaOrden, ref: string, ahora: number, sorteos = o.sorteos): void {
     const alta = this.cupos.altaDe(o.usuario);
     if (!alta) this.sql.exec("INSERT INTO altas (usuario, motivo, ref, cuenta, pedido, estado, creada, actualizada) VALUES (?, 'pago', ?, NULL, NULL, 'autorizada', ?, ?)", o.usuario, `orden:${o.id}`, ahora, ahora);
-    this.cupos.otorgar({ usuario: o.usuario, cuenta: alta?.cuenta ?? null, origen: o.producto === "alta" ? "alta" : "paquete", ref, sorteos: o.sorteos, dias: o.dias }, ahora);
+    const origen = o.producto === "alta" ? "alta" : "paquete";
+    this.cupos.otorgar({ usuario: o.usuario, cuenta: alta?.cuenta ?? null, origen, ref, sorteos, dias: o.dias }, ahora);
   }
 
   /**
@@ -818,7 +1041,9 @@ export class Cobros {
       if (altaNueva && altasHoy + 1 > p.techoAltas) return { ok: false, motivo: "techo-altas" };
       if (sorteosHoy + o.sorteos > p.techoSorteos) return { ok: false, motivo: "techo-sorteos" };
       this.sql.exec("UPDATE ordenes SET pagada = ?, metodo = ?, ref = ? WHERE id = ? AND pagada IS NULL", ahora, p.metodo, `${p.metodo}:${p.ref}`, o.id);
-      this.conceder(o, `orden:${o.id}`, ahora);
+      // Por unidad, lo que ya dio con cada pago no se da otra vez: solo lo que falta.
+      if (o.producto === "sorteo") this.darUnidades(o, o.monto, true, `orden:${o.id}:${p.metodo}`, ahora);
+      else this.conceder(o, `orden:${o.id}`, ahora);
       if (altaNueva) this.cupos.fijarAjuste(`altas_dia:${dia}`, String(altasHoy + 1), ahora);
       this.cupos.fijarAjuste(`derechos_dia:${dia}`, String(sorteosHoy + o.sorteos), ahora);
       return { ok: true, repetido: false };
@@ -872,6 +1097,8 @@ export class Cobros {
       if (!o) return { ok: false, motivo: "orden" };
       if (estaCerrada(o)) return { ok: false, motivo: "orden-cerrada" };
       if (o.pagada !== null) return { ok: false, motivo: "orden-pagada" };
+      // Con la venta por unidad, solo a una orden creada antes del pago: una de después no puede ser la que se quiso pagar.
+      if (this.vigilante && o.creada > s.ms) return { ok: false, motivo: "orden-posterior" };
       const r = this.atribuir(o, { operacion: s.operacion, pagingToken: s.operacion, tx: s.tx, de: s.de, monto: s.monto, ms: s.ms }, ahora);
       if (r.sobrante > 0) this.sql.exec("UPDATE pagos_sueltos SET monto = ?, motivo = ?, orden = ? WHERE operacion = ?", r.sobrante, r.motivo, o.id, s.operacion);
       else this.sql.exec("UPDATE pagos_sueltos SET estado = 'asignado', orden = ? WHERE operacion = ?", o.id, s.operacion);
@@ -893,6 +1120,8 @@ export class Cobros {
       if (!repetido && o.pagada !== null) return { ok: false, motivo: "orden-pagada" };
       const devolver = this.filas("SELECT operacion, de, monto, tx FROM pagos WHERE orden = ? ORDER BY ms, operacion", o.id).map((f) => ({ operacion: String(f.operacion), de: String(f.de), monto: Number(f.monto), tx: String(f.tx) }));
       if (!devolver.length) return { ok: false, motivo: "sin-pagos" };
+      // Una orden por unidad que ya dio sorteos con lo que llegó: devolverlo todo dejaría esos sorteos sin pagar.
+      if (!repetido && o.producto === "sorteo" && this.dadosDeOrden(o.id) > 0) return { ok: false, motivo: "con-sorteos" };
       if (!repetido) this.sql.exec("UPDATE ordenes SET metodo = 'devuelta', ref = ? WHERE id = ? AND pagada IS NULL AND metodo IS NULL", `devuelta:${p.ref}`, o.id);
       return { ok: true, repetido, recibido: devolver.reduce((a, x) => a + x.monto, 0), devolver };
     });
@@ -925,6 +1154,16 @@ export interface OpcionesLector {
   registrar?: Registrar;
   cadaMs?: number;
   esperaMs?: number;
+  /**
+   * Lo que se hace antes de cada lectura de Horizon, con la venta por unidad: refrescar el saldo de créditos guardado, que es
+   * lo que mira la conversión. Lo que falle acá no frena la lectura. Sin esto, la lectura de siempre.
+   */
+  antes?: () => Promise<unknown>;
+  /**
+   * Con la venta por unidad: si una lectura termina con todas sus páginas llenas, se lee otra enseguida, sin pasar de
+   * `PAGINAS_POR_MINUTO` páginas en un minuto, y el atraso queda para `/estado` (`atraso`). Sin esto, cinco páginas por vuelta.
+   */
+  alDia?: boolean;
 }
 
 /**
@@ -939,6 +1178,11 @@ export class LectorDeCobros {
   private ultima = Number.NEGATIVE_INFINITY;
   private ultimo: { ok: boolean } = { ok: false };
   private enCurso: Promise<{ ok: boolean }> | null = null;
+  /** Cuándo se pidió cada página del último minuto, para el tope de `PAGINAS_POR_MINUTO`. En memoria. */
+  private paginas: number[] = [];
+  /** Si la última lectura quedó con páginas por leer (o no se pudo terminar), y cuándo terminó. En memoria. */
+  private atrasado = false;
+  private terminada: number | null = null;
 
   constructor(private readonly o: OpcionesLector) {
     this.pedir = haciaHorizon(o.fetch);
@@ -947,22 +1191,79 @@ export class LectorDeCobros {
     this.cadaMs = o.cadaMs ?? HORIZON_CADA_MS;
   }
 
+  /** Las páginas pedidas en el último minuto. */
+  private paginasDelMinuto(): number {
+    const desde = this.reloj() - 60_000;
+    this.paginas = this.paginas.filter((t) => t > desde);
+    return this.paginas.length;
+  }
+
+  private contar(n: number): void {
+    const ahora = this.reloj();
+    for (let i = 0; i < n; i++) this.paginas.push(ahora);
+  }
+
+  /** Anota lo leído: los pagos y el cursor en una transacción, y sus hechos en el registro de sucesos (sin personas ni notas). */
+  private anotar(l: Extract<LecturaHorizon, { ok: true }>): void {
+    const eventos = this.o.cobros.registrarLectura(l.pagos, l.cursor, this.reloj());
+    for (const e of eventos) {
+      const datos = "producto" in e ? { producto: e.producto } : "motivo" in e ? { motivo: e.motivo } : "cuantos" in e ? { cuantos: e.cuantos } : {};
+      this.registrar(e.evento, datos);
+    }
+  }
+
+  /** Para `/estado`, con la venta por unidad: si la lectura va atrasada, las páginas del último minuto y cuándo terminó la última. */
+  atraso(): { atrasado: boolean; paginasMinuto: number; ultimaLectura: number | null } {
+    return { atrasado: this.atrasado, paginasMinuto: this.paginasDelMinuto(), ultimaLectura: this.terminada };
+  }
+
   leer(): Promise<{ ok: boolean }> {
     if (this.enCurso) return this.enCurso;
     if (this.reloj() - this.ultima < this.cadaMs) return Promise.resolve(this.ultimo);
     this.ultima = this.reloj();
     this.enCurso = (async () => {
       try {
-        const l = await leerPagos(this.pedir, this.o.cuenta, this.o.cobros.cursor(), this.o.esperaMs);
+        if (this.o.antes) {
+          try {
+            await this.o.antes();
+          } catch {
+            // Sin el saldo fresco, la conversión mira el que había: lo peor es que lo de más quede suelto.
+          }
+        }
+        let medida: MedidaDeLectura = { paginas: 0, llena: false };
+        const l = await leerPagos(this.pedir, this.o.cuenta, this.o.cobros.cursor(), this.o.esperaMs, medida);
+        this.contar(medida.paginas);
         if (!l.ok) {
           this.registrar("error-horizon", { donde: "cobros" });
+          this.atrasado = this.o.alDia === true;
           return (this.ultimo = { ok: false });
         }
         // Desde acá, sin await: los pagos y el cursor, en una transacción.
-        const eventos = this.o.cobros.registrarLectura(l.pagos, l.cursor, this.reloj());
-        for (const e of eventos) this.registrar(e.evento, "producto" in e ? { producto: e.producto } : "motivo" in e ? { motivo: e.motivo } : {});
+        this.anotar(l);
         if (!l.completo) this.registrar("error-horizon", { donde: "cobros", completo: 0 });
-        return (this.ultimo = { ok: l.completo });
+        let completo = l.completo;
+        // Ponerse al día: con todas las páginas llenas puede haber más (mil pagos chicos delante de uno de verdad). Se sigue
+        // leyendo mientras el tope por minuto deje otra lectura entera. Lo que quede, en la vuelta siguiente.
+        while (this.o.alDia && completo && medida.llena && this.paginasDelMinuto() + PAGINAS <= PAGINAS_POR_MINUTO) {
+          medida = { paginas: 0, llena: false };
+          const otra = await leerPagos(this.pedir, this.o.cuenta, this.o.cobros.cursor(), this.o.esperaMs, medida);
+          this.contar(medida.paginas);
+          if (!otra.ok) {
+            this.registrar("error-horizon", { donde: "cobros" });
+            completo = false;
+            break;
+          }
+          this.anotar(otra);
+          if (!otra.completo) {
+            this.registrar("error-horizon", { donde: "cobros", completo: 0 });
+            completo = false;
+          }
+        }
+        if (this.o.alDia) {
+          this.atrasado = !completo || medida.llena;
+          this.terminada = this.reloj();
+        }
+        return (this.ultimo = { ok: completo });
       } catch (e) {
         this.registrar("error-horizon", { donde: "cobros", error: e instanceof Error ? e.name : "desconocido" });
         return (this.ultimo = { ok: false });
@@ -971,5 +1272,37 @@ export class LectorDeCobros {
       }
     })();
     return this.enCurso;
+  }
+}
+
+/**
+ * La parte de cobros de la alarma, con la venta por unidad: mientras haya órdenes vivas, lee los pagos sola (también con la
+ * pantalla de la persona cerrada), cada vuelta en la primera media hora de la orden más nueva y cada 5 minutos después. Sin
+ * órdenes vivas no lee ni pide otra vuelta. La lectura es la del lector, compartida con las rutas (como mucho una cada 5 s).
+ */
+export class VigilanteDeCobros {
+  private readonly reloj: () => number;
+  /** Cuándo leyó la última vez esta parte. En memoria: un reinicio lee en la primera vuelta. */
+  private leido = Number.NEGATIVE_INFINITY;
+
+  constructor(private readonly o: { cobros: Cobros; lector: LectorDeCobros; reloj?: () => number }) {
+    this.reloj = o.reloj ?? (() => Date.now());
+  }
+
+  /** Si hay órdenes vivas: si hace falta la alarma por los cobros. */
+  hayQueVigilar(): boolean {
+    return this.o.cobros.cadaCuantoVigilar(this.reloj()) !== null;
+  }
+
+  /** Una vuelta: lee si ya toca y devuelve cuándo vuelve a tocar (ms), o null sin órdenes vivas. */
+  async vuelta(): Promise<number | null> {
+    const ahora = this.reloj();
+    const cada = this.o.cobros.cadaCuantoVigilar(ahora);
+    if (cada === null) return null;
+    if (ahora - this.leido >= cada) {
+      this.leido = ahora;
+      await this.o.lector.leer();
+    }
+    return this.leido + cada;
   }
 }

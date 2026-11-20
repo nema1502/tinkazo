@@ -16,6 +16,8 @@
  *        403 sin-acceso   409 sin-billetera   503 sin-creditos   429 espera {reintentarEn} (una vez por minuto)
  *   POST /v1/alta/orden    {producto} 200 {orden:{id, producto, usdc, sorteos, destino, nota, memoId, enlace, vence}}
  *        503 pago-apagado | venta-pausada | altas-pausadas | fuera-del-piloto   400 producto   409 ya-tiene-acceso
+ *        Por unidad (con `sorteo` en `PRECIOS`): {producto:"sorteo", cantidad} con la cantidad de 5 a 50 de a 5, si no 400 forma.
+ *        `/pago` de una orden por unidad sin completar suma `sorteosDados`, y `/precios` suma `unidad`.
  *   POST /v1/alta/pago     {orden}    200 {pagada:true, sorteos, sigue} | {pagada:false, recibido, total, minimo}
  *        400 forma   404 orden   410 orden-cerrada (cerrada para devolver o reemplazada; contesta después de leer)   502 red
  *   GET  /v1/alta/precios             200 {red, pago, alta:{usdc, sorteos, dias}, paquetes, recargoQr, bienvenida}, abierta y con
@@ -52,7 +54,20 @@ import { StrKey } from "@stellar/stellar-sdk/base";
 import type { PedidoDeOrganizadora } from "./acceso-organizadora";
 import { type Altas, type CausaRegalo, huella, normalizar, SECRETO_MINIMO } from "./altas";
 import { type AltasPorPremio, type PedidoDeAltaPorPremio, cercaDelTope } from "./altas-premio";
-import { AJUSTE_VENTA_PAUSADA, type Cobros, type FilaOrden, type LectorDeCobros, enlaceDePago, estaCerrada, memoIdDe, normalizarOrden, notaDe, puedeHonrarse, usdcTexto } from "./cobros";
+import {
+  AJUSTE_VENTA_PAUSADA,
+  type Cobros,
+  type FilaOrden,
+  type LectorDeCobros,
+  enlaceDePago,
+  estaCerrada,
+  memoIdDe,
+  normalizarOrden,
+  notaDe,
+  productoPorUnidad,
+  puedeHonrarse,
+  usdcTexto,
+} from "./cobros";
 import { AVISOS_POR_COMPRA, COMPRAS_POR_PERSONA_DIA, type ComprasQr, FIRMAS_POR_COMPRA, type FilaCompra } from "./compras";
 import {
   AJUSTE_BIENVENIDA_CERRADA,
@@ -64,7 +79,11 @@ import {
   TECHO_ALTAS_PREMIO_DIA,
   TECHO_BIENVENIDA_TOPE,
   TECHO_RESERVA_REGALO,
+  UNIDAD_MAXIMO,
+  UNIDAD_MINIMO,
+  UNIDAD_PASO,
   grupoDeIp,
+  unidadDe,
 } from "./config";
 import { type Cupos, type FilaAlta, type Quedan } from "./cupos";
 import { cors, json, origenPermitido } from "./http";
@@ -253,6 +272,11 @@ export interface DependenciasAltas {
    * bienvenida. Solo existe con el correo prendido. No cambia la respuesta y lo que lance se ataja: nunca frena la activación.
    */
   alRegalar?: () => void;
+  /**
+   * Se llama cada vez que `/v1/alta/orden` devuelve una orden, para que el objeto pida la alarma que lee los pagos sola. Solo
+   * existe con la venta por unidad. No cambia la respuesta y lo que lance se ataja.
+   */
+  alCrearOrden?: () => void;
 }
 
 /** Las rutas de la compra con QR (`/v1/compra/empezar`, `/v1/compra/cargar` y `/v1/compra/anular`). */
@@ -290,6 +314,8 @@ export const ANULAR_COMPRA_MS = 30 * 60_000;
 export const AVISO_ESPERA_MS = 3 * 60_000;
 /** Los productos que puede nombrar `/v1/compra/anular`, se vendan hoy o no. */
 const PRODUCTOS_DE_COMPRA: ReadonlySet<string> = new Set(["alta", "p10", "p50"]);
+/** Lo que se compra con QR: los paquetes fijos. El producto por unidad se paga solo en USDC, con su cantidad. */
+const deCompraQr = (p: Producto): boolean => p.id !== "sorteo";
 
 /** Por qué no se da (o no sigue) una compra con QR. */
 export type MotivoCompra = "compras-cerradas" | "fondeo-diferido" | "fuera-del-piloto" | "tope-del-dia" | "sin-lugar" | "ya-tiene-acceso" | "compra-en-curso" | "producto";
@@ -471,6 +497,35 @@ export class PuertaAltas {
     if (cfg.pilotoEnVariable === "ninguna") return !cfg.comprasQrTodos && !!compras && compras.hayPilotoAMano() && !compras.enPiloto(cuenta);
     if (cfg.pilotoEnVariable === "mal" || !compras) return true;
     return !compras.enPiloto(cuenta);
+  }
+
+  /**
+   * Si hoy se puede convertir en sorteos lo que llegó de más o dos veces a una orden por unidad: los frenos de una orden nueva.
+   * La venta por unidad prendida (`ALTAS_PAGO` y el producto en `PRECIOS`) y sin pausar, la persona dentro del piloto (con la
+   * cuenta de su alta) y el último saldo guardado de créditos, menos lo que cuestan esos sorteos, por encima del piso con la
+   * reserva de la venta. Síncrono y sin escribir nada: lo llama la lectura de los pagos adentro de su transacción.
+   */
+  permiteConvertir(c: { usuario: string; sorteos: number; altaNueva: boolean }, ahora: number): boolean {
+    const { cfg, cupos, pollar } = this.d;
+    if (cfg.red !== "mainnet" || !cfg.altas || !cfg.altasPago || !unidadDe(cfg) || !pollar || this.sinColumnas()) return false;
+    if (cupos.ajuste(AJUSTE_VENTA_PAUSADA) === "1") return false;
+    if (this.fueraDelPiloto(cupos.altaDe(c.usuario)?.cuenta ?? null)) return false;
+    const costo = cfg.creditosPorSorteo * c.sorteos + (c.altaNueva ? cfg.creditosPorAlta : 0);
+    const pausa = this.pausa(pollar.creditosGuardados(), costo, ahora, this.reservaDeVenta(ahora, null));
+    if (pausa) this.registrar("alta-pausa", { motivo: pausa, donde: "conversion" });
+    return pausa === null;
+  }
+
+  /**
+   * Lo que la venta guarda encima del piso: la reserva del evento (`RESERVA_CARGA_CREDITOS`) y, con la venta por unidad, lo que
+   * prometen las órdenes vivas de la última media hora (`Cobros.sorteosEnOrdenesVivas`) sin las de `excluirUsuario`. Así muchas
+   * órdenes abiertas a la vez no venden más sorteos de los que Pollar puede patrocinar: lo pagado en dólares se acredita sin
+   * volver a mirar el piso. Sin la venta por unidad, solo la reserva del evento, como siempre. Síncrono.
+   */
+  private reservaDeVenta(ahora: number, excluirUsuario: string | null): number {
+    const { cfg, cobros } = this.d;
+    const enOrdenes = unidadDe(cfg) && cobros ? cobros.sorteosEnOrdenesVivas(ahora, excluirUsuario) : 0;
+    return cfg.reservaCargaCreditos + cfg.creditosPorSorteo * enOrdenes;
   }
 
   /**
@@ -931,7 +986,7 @@ export class PuertaAltas {
     const compras = this.d.compras as ComprasQr;
     const activa = compras.activa(usuario, ahora);
     const precios = this.d.cfg.precios ?? [];
-    const id = activa?.producto ?? (this.altaQueVale(usuario, cuenta) ? precios.find((p) => p.id !== "alta")?.id : "alta");
+    const id = activa?.producto ?? (this.altaQueVale(usuario, cuenta) ? precios.find((p) => p.id !== "alta" && deCompraQr(p))?.id : "alta");
     const e = this.evaluarCompra(usuario, cuenta, precios.find((p) => p.id === id), creditos, ahora);
     const pendiente = compras.pendiente(usuario);
     return {
@@ -968,7 +1023,7 @@ export class PuertaAltas {
     const otra = this.cuentaDeOtro(ses.s);
     if (otra) return otra;
     const pedido = p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { producto?: unknown }).producto : undefined;
-    const producto = typeof pedido === "string" ? this.d.cfg.precios?.find((x) => x.id === pedido) : undefined;
+    const producto = typeof pedido === "string" ? this.d.cfg.precios?.find((x) => x.id === pedido && deCompraQr(x)) : undefined;
     if (!producto) return r(400, { motivo: "producto" });
     const c = await this.cuentaDe(ses.s, this.d.cupos.altaDe(usuario));
     if (!c.ok) return r(502, { motivo: "pollar" });
@@ -1026,7 +1081,7 @@ export class PuertaAltas {
     const otra = this.cuentaDeOtro(ses.s);
     if (otra) return otra;
     const pedido = p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { producto?: unknown }).producto : undefined;
-    const producto = typeof pedido === "string" ? this.d.cfg.precios?.find((x) => x.id === pedido) : undefined;
+    const producto = typeof pedido === "string" ? this.d.cfg.precios?.find((x) => x.id === pedido && deCompraQr(x)) : undefined;
     if (!producto) return r(400, { motivo: "producto" });
     // Solo un `true` de verdad: la persona dijo que no pagó su orden de antes.
     const conReemplazo = p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { reemplazar?: unknown }).reemplazar === true : false;
@@ -1496,9 +1551,13 @@ export class PuertaAltas {
     const ses = await this.sesion(p.token, p.ip);
     if (!ses.ok) return ses.r;
     const { usuario } = ses.s;
-    const pedido = p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { producto?: unknown }).producto : undefined;
-    const producto = typeof pedido === "string" ? cfg.precios?.find((x) => x.id === pedido) : undefined;
-    if (!producto) return r(400, { motivo: "producto" });
+    const cuerpo = p.cuerpo && typeof p.cuerpo === "object" ? (p.cuerpo as { producto?: unknown; cantidad?: unknown }) : {};
+    const pedido = cuerpo.producto;
+    const elegido = typeof pedido === "string" ? cfg.precios?.find((x) => x.id === pedido) : undefined;
+    if (!elegido) return r(400, { motivo: "producto" });
+    // Por unidad, el monto lo arma el servidor con la cantidad: de 5 a 50, de a 5. Lo demás es `400 forma`.
+    const producto = elegido.id === "sorteo" ? productoPorUnidad(elegido, cuerpo.cantidad) : elegido;
+    if (!producto) return r(400, { motivo: "forma" });
     // Un pago que todavía no se leyó no tiene que terminar en una orden nueva.
     await this.leerPagosDe(usuario);
     const c = await this.cuentaDe(ses.s, this.d.cupos.altaDe(usuario));
@@ -1518,7 +1577,8 @@ export class PuertaAltas {
         producto,
         freno: (x) => {
           if (fuera) return "fuera-del-piloto";
-          pausa.motivo = this.pausa(creditos, cfg.creditosPorSorteo * x.sorteos + (x.altaNueva ? cfg.creditosPorAlta : 0), ahora, cfg.reservaCargaCreditos);
+          const costo = cfg.creditosPorSorteo * x.sorteos + (x.altaNueva ? cfg.creditosPorAlta : 0);
+          pausa.motivo = this.pausa(creditos, costo, ahora, this.reservaDeVenta(ahora, usuario));
           return pausa.motivo ? "altas-pausadas" : null;
         },
         recargo: pendiente ? { compra: pendiente.id, recargo: pendiente.recargo } : null,
@@ -1530,6 +1590,11 @@ export class PuertaAltas {
     if (pausa.motivo) this.registrar("alta-pausa", { motivo: pausa.motivo, donde: "orden" });
     if (!res.ok) return r(res.motivo === "compra-en-curso" ? 409 : 503, { motivo: res.motivo });
     if (res.nueva) this.registrar("alta-orden", { producto: producto.id });
+    try {
+      this.d.alCrearOrden?.();
+    } catch {
+      // Sin la alarma, el pago se acredita igual cuando la persona vuelve a preguntar: lo de siempre.
+    }
     return r(200, { orden: this.vistaDeOrden(res.orden, destino) });
   }
 
@@ -1562,7 +1627,10 @@ export class PuertaAltas {
     if (estaCerrada(o)) return !lectura.ok && puedeHonrarse(o) ? r(502, { motivo: "red" }) : r(410, { motivo: "orden-cerrada" });
     if (o.pagada === null) {
       if (!lectura.ok) return r(502, { motivo: "red" });
-      return r(200, { pagada: false, recibido: usdcTexto(cobros.recibido(id)), total: usdcTexto(o.monto), minimo: usdcTexto(cobros.minimoDeOrden(o)) });
+      // Por unidad, además cuántos sorteos ya dio con lo que llegó: lo que falta se completa con la misma nota.
+      const dados = o.producto === "sorteo" ? { sorteosDados: cobros.dadosDeOrden(id) } : {};
+      const minimo = usdcTexto(cobros.minimoDeOrden(o));
+      return r(200, { pagada: false, recibido: usdcTexto(cobros.recibido(id)), total: usdcTexto(o.monto), minimo, ...dados });
     }
     // Pagada: si se sabe la cuenta, se ata. Si Pollar no contesta ahora, se ata en el próximo `/estado`.
     const suya = this.d.cupos.altaDe(usuario);
@@ -1606,13 +1674,20 @@ export function compraCerradaDe(cfg: Config): "compras-cerradas" | "fondeo-difer
  */
 export function preciosPublicos(cfg: Config): Record<string, unknown> {
   const alta = cfg.precios?.find((p) => p.id === "alta");
+  const unidad = unidadDe(cfg);
+  const fijos = (cfg.precios ?? []).filter((p) => p.id !== "alta" && p.id !== "sorteo");
+  // El producto por unidad, solo si `PRECIOS` lo trae: el precio de un sorteo y la cantidad que se puede pedir en un pago.
+  const porUnidad = unidad
+    ? { producto: unidad.id, usdc: unidad.usdc, minimo: UNIDAD_MINIMO, maximo: UNIDAD_MAXIMO, paso: UNIDAD_PASO, dias: unidad.dias }
+    : null;
   return {
     red: cfg.red,
     pago: cfg.altasPago,
     alta: alta ? { usdc: alta.usdc, sorteos: alta.sorteos, dias: alta.dias } : null,
-    paquetes: (cfg.precios ?? []).filter((p) => p.id !== "alta").map((p) => ({ id: p.id, usdc: p.usdc, sorteos: p.sorteos, dias: p.dias })),
+    paquetes: fijos.map((p) => ({ id: p.id, usdc: p.usdc, sorteos: p.sorteos, dias: p.dias })),
     recargoQr: cfg.comprasQr && cfg.recargoQr ? { primera: cfg.recargoQr.primeraUsdc, siguientes: cfg.recargoQr.siguientesUsdc } : null,
     bienvenida: cfg.bienvenida ? cfg.bienvenidaSorteos : 0,
+    ...(porUnidad ? { unidad: porUnidad } : {}),
   };
 }
 

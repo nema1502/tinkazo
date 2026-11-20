@@ -102,6 +102,12 @@ CUENTA_COBROS = "GDMIGGM2J7GL24JL3UB5DLSTMMWFP5XTE3SDTTDZSPUFH7VMKFINKAO6"
 CUENTA_SORTEADORA = ""
 # producto:usdc:sorteos:dias. Mal escrito, no se vende nada. Los de la venta con la persona firmando su sorteo: 3 sorteos
 # por 4 USDC a 90 días y 10 por 10 USDC a un año, sin el de 50.
+# La venta por unidad se prende con el producto por unidad solo, PRECIOS = "sorteo:1:1:365" (1 USDC por sorteo, de 5 a
+# 50 por pago, que valen un año), junto con ALTAS_PAGO = "1". Sin alta ni p10, porque las páginas públicas dicen
+# que cada sorteo se paga y vale un año, y con paquetes mezclados eso sería falso. Lo que eso apaga es a propósito: el
+# primer paquete pago deja de ofrecerse (ya no hace falta, porque los primeros 3 sorteos se regalan al activar la cuenta)
+# y la compra con QR queda sin producto hasta que se rehaga para vender por unidad.
+# Mientras no esté "sorteo" acá, la venta, la lectura de los pagos y la alarma son las de siempre.
 PRECIOS = "alta:4:3:90,p10:10:10:365"
 # El piso de créditos de Pollar: 40 por sorteo mientras la persona firma el sorteo (20 con el sorteo del servidor) y
 # 30 por alta con la billetera creada al entrar (45 cuando se crea a pedido).

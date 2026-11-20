@@ -371,7 +371,8 @@ export interface CostoRetiro {
 }
 
 export type Fondeo = "inmediato" | "diferido";
-export type IdProducto = "alta" | "p10" | "p50";
+/** `sorteo` es el producto por unidad: un precio por sorteo y la cantidad la elige la persona (`UNIDAD_MINIMO` a `UNIDAD_MAXIMO`). */
+export type IdProducto = "alta" | "p10" | "p50" | "sorteo";
 
 export interface Producto {
   id: IdProducto;
@@ -389,16 +390,27 @@ export interface Producto {
  * así perdería. Son también los que valen si `PRECIOS` queda vacía: un precio que pierde nunca entra por defecto.
  */
 export const PRECIOS_POR_DEFECTO = "alta:4:3:90,p10:10:10:365";
-const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50"];
+const PRODUCTOS: readonly IdProducto[] = ["alta", "p10", "p50", "sorteo"];
 /** Lo más que se acepta en un producto: un número más grande es un error de tipeo, no un precio. */
 const MAX_SORTEOS_PRODUCTO = 1000;
 const MAX_DIAS_PRODUCTO = 3650;
+/**
+ * El producto por unidad (`sorteo:1:1:365`): cuántos sorteos se pueden pedir en un pago, de `UNIDAD_MINIMO` a `UNIDAD_MAXIMO`
+ * y de a `UNIDAD_PASO`. Fijos en el código: el sitio los lee de `GET /v1/alta/precios` y nunca los inventa.
+ */
+export const UNIDAD_MINIMO = 5;
+export const UNIDAD_MAXIMO = 50;
+export const UNIDAD_PASO = 5;
+
+/** El producto por unidad de la configuración, o null si `PRECIOS` no lo trae: entonces la venta es la de los paquetes. */
+export const unidadDe = (cfg: Pick<Config, "precios">): Producto | null => cfg.precios?.find((p) => p.id === "sorteo") ?? null;
 
 /**
  * Lee `PRECIOS`: `producto:usdc:sorteos:dias` separados por coma, por ejemplo `alta:2:3:365,p10:5:10:365`.
- * El producto es `alta`, `p10` o `p50`, sin repetir, y `alta` tiene que estar. El monto es positivo, con punto y
- * hasta 7 decimales. Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza
- * todo** (devuelve null): un precio a medias no se vende.
+ * El producto es `alta`, `p10`, `p50` o `sorteo`, sin repetir, y `alta` o `sorteo` tiene que estar. `sorteo` es el precio
+ * de un sorteo y por eso lleva 1 en sorteos (`sorteo:1:1:365`). El monto es positivo, con punto y hasta 7 decimales.
+ * Sorteos de 1 a 1.000 y días de 1 a 3.650, enteros. **Cualquier cosa mal escrita rechaza todo** (devuelve null): un
+ * precio a medias no se vende.
  */
 export function leerPrecios(s: string): Producto[] | null {
   const productos: Producto[] = [];
@@ -414,9 +426,11 @@ export function leerPrecios(s: string): Producto[] | null {
     const ns = Number(sorteos);
     const nd = Number(dias);
     if (monto <= 0 || ns < 1 || ns > MAX_SORTEOS_PRODUCTO || nd < 1 || nd > MAX_DIAS_PRODUCTO) return null;
+    // El precio por unidad es de un sorteo: otro número ahí es un error de tipeo, no un paquete.
+    if (id === "sorteo" && ns !== 1) return null;
     productos.push({ id: id as IdProducto, usdc, monto, sorteos: ns, dias: nd });
   }
-  return productos.some((p) => p.id === "alta") ? productos : null;
+  return productos.some((p) => p.id === "alta" || p.id === "sorteo") ? productos : null;
 }
 
 /** El recargo por pagar con QR: la primera vez de cada persona (con su verificación) y las siguientes. */

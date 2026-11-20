@@ -484,6 +484,15 @@ La orden queda pagada cuando llega al menos el 95 % del monto (lo que `sueltos` 
 
 En el exporte (`GET /v1/patrocinio/exportar`), la tabla `ordenes` suma `usuario` (el identificador de Pollar), `creada`, `pagada` (cuándo), `metodo` (`usdc` si se reconoció sola, `devuelta` si se cerró para devolver, `reemplazada` si la cerró el aviso de una compra con QR o una anulación) y `ref`. Cada pago atado a una orden está en `pagos`, con la cuenta que lo mandó (`de`) y su transacción (`tx`). Los montos de esas tablas van en diezmillonésimas: 4 USDC es `40000000`.
 
+### La venta por unidad
+
+Se prende con el producto por unidad solo, `PRECIOS = "sorteo:1:1:365"`, y con `ALTAS_PAGO = "1"`: 1 USDC por sorteo, de 5 a 50 por pago y de a 5, que valen un año. Sin `alta` ni `p10`, porque las páginas públicas dicen que cada sorteo se paga y vale un año, y con paquetes mezclados eso sería falso. Lo que eso apaga es a propósito: el primer paquete pago deja de ofrecerse (ya no hace falta, porque los primeros 3 sorteos se regalan al activar la cuenta) y la compra con QR queda sin producto hasta que se rehaga para vender por unidad. Mientras `PRECIOS` no traiga `sorteo`, todo sigue como arriba. La persona elige la cantidad en el sitio y el servidor arma el total. Lo que cambia para operar:
+
+- **Lo que llega de menos se cuenta por dólar.** Una orden de 10 que recibe 9 da 9 sorteos en esa misma lectura y queda abierta con la misma nota: el dólar que falta la completa a 10. Desde el 95 % (9,50 de 10) da los 10. Por eso una orden por unidad pagada a medias casi nunca hay que devolverla: ya dio lo suyo. `cerrar` no la cierra si ya dio sorteos (`409 con-sorteos`). Si la persona pide la devolución de lo que no le dio sorteos, se resuelve a mano, con quien dirige el proyecto.
+- **Lo que llega de más o dos veces se convierte en sorteos**, a 1 dólar cada uno y como mucho 50 por pago: 12,40 sobre una orden de 10 dan 12 sorteos y 0,40 quedan en sueltos como `sobrante`. Un segundo pago de 10 a la misma orden da 10 sorteos más. Un pago a una orden que la persona reemplazó al cambiar la cantidad también da sus sorteos. No se convierte (y va a sueltos como siempre) si la venta está pausada, si la persona no está en el piloto, si los créditos no pasan el piso o si Pollar no contestó en los últimos 10 minutos. Una orden cerrada para devolver nunca convierte. Si alguien prefiere la devolución de lo convertido y no lo usó, se le devuelve a mano y se anota.
+- **En el exporte**, cada parte que dio una orden por unidad es un derecho con `ref` `orden:<id>:<operación>`, y cada conversión uno con `ref` `conv:<operación>`. En el registro de sucesos salen `orden-parte` y `orden-convertida`.
+- **Nadie tiene que tocar Ya pagué.** Mientras haya órdenes vivas, la alarma del portero lee los pagos sola: cada 20 segundos en la primera media hora de la orden más nueva y después cada 5 minutos, hasta que vence. El pago se acredita aunque la persona haya cerrado la pantalla, y cuando vuelve ya tiene sus sorteos. En `estado`, el bloque `cobros` dice cuántas órdenes vivas hay (`ordenesVivas`), cuántos sorteos reservan en el piso las de la última media hora (`sorteosEnOrdenes`, a 40 créditos cada uno: si `margen` no los cubre, una orden nueva de otra persona espera), los pagos chicos del día (`pagosChicosHoy`), si la lectura va atrasada (`atrasado`, con muchas páginas por leer o Horizon caído), cuántas páginas leyó en el último minuto y cuándo terminó la última lectura. Si `atrasado` sigue en `true` más de unos minutos, mirar en el registro de sucesos `error-horizon` y `alarma-cobros`.
+
 ### Qué mirar cada día
 
 1. `node scripts/cupones.mjs sueltos`. Lee antes los pagos nuevos y lista los pagos sueltos sin resolver y las órdenes pagadas a medias. Si dice que Horizon no contestó, lo que muestra es lo que ya se sabía.
@@ -507,6 +516,15 @@ Un pago que llegó a `CUENTA_COBROS` y no se pudo atar a una orden, o la parte q
 Un suelto de exactamente el costo de un retiro, que viene de una cuenta que hizo otro pago en la misma transacción, es el costo de un retiro y no se devuelve ni se asigna. Con el reconocimiento por la transacción no debería aparecer: si aparece, falló ese reconocimiento y se avisa.
 
 Asignar: `node scripts/cupones.mjs asignar --operacion <operación> --orden <id>`. Ata el pago a una orden abierta. Si con eso llega al 95 %, la orden queda pagada y da sus sorteos, y lo que sobre vuelve a los sueltos como `sobrante`. A una orden pagada o cerrada no se asigna nada: contesta `409 orden-pagada` u `orden-cerrada` y el suelto queda como estaba.
+
+**La regla para asignar a mano.** Un suelto se asigna solo con una de estas dos pruebas, nunca por lo que la persona cuente:
+
+1. La constancia de retiro del exchange o de la app, con el hash de la transacción, y ese hash coincide con el `tx` que muestra `sueltos`.
+2. Si no tiene el hash: el monto exacto, la hora al minuto y la cuenta de cobros a la que mandó, y las tres coinciden con el suelto.
+
+Y solo a una orden de esa misma persona creada **antes** de la hora del pago. Con la venta por unidad prendida, el portero lo exige solo: una orden creada después del pago contesta `409 orden-posterior` y el suelto queda como estaba. Sin la venta por unidad se mira a mano, comparando la fecha del suelto con la `creada` de la orden en el exporte. **Ante la duda, se devuelve**: un pago devuelto a su cuenta nunca es una pérdida, uno asignado a quien no era sí.
+
+Con la venta por unidad, además, un pago sin orden de menos de 0,50 USDC (o de menos de 1 unidad de otra moneda) no aparece en `sueltos`: es basura de quien manda centavos a cualquier cuenta. Solo se cuenta, en `estado`, como `cobros.pagosChicosHoy`. Si alguien dice que mandó menos de 0,50 por error, se mira la cuenta de cobros en un explorador y se decide a mano.
 
 ### Cómo se devuelve
 

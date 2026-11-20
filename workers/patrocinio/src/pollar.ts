@@ -489,6 +489,16 @@ export class Pollar {
   }
 
   /**
+   * El último saldo guardado, sin preguntar nada: vale lo mismo que `creditos` con Pollar caído (el último valor durante 10
+   * minutos) y, si no hay o es más viejo, `ok: false`. Para mirar el piso adentro de una transacción, sin esperar a nadie.
+   */
+  creditosGuardados(): Creditos {
+    const ultimo = this.memoria.leer();
+    if (!ultimo || this.reloj() - ultimo.ms >= ULTIMO_CREDITOS_MS) return { ok: false };
+    return { ok: true, disponibles: ultimo.valor, leido: ultimo.ms, deMemoria: true };
+  }
+
+  /**
    * Fase 2: le pide a Pollar que abra la cuenta de Stellar de esta billetera (`POST /v3/wallets/fund`). Con una billetera
    * de Turnkey no se abre sola: queda un pedido (202, con su `requestId`) que la persona aprueba en su sesión; pedirlo de
    * nuevo con el pedido abierto devuelve el mismo. 200 o `409 WALLET_ALREADY_FUNDED`: ya está abierta. 402: faltan
