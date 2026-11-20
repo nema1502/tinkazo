@@ -234,7 +234,7 @@ Los topes que se cambian pidiendo un despliegue (están en el código) y los que
 | Pagos en el aire a la vez, por forma y entre todos (sin contar los que ya vencieron) | 60 | el código |
 | Altas de quien ganó por sorteo, en 24 horas | el menor entre los ganadores y 50 (y 50 por sello del portero) | el código |
 | Altas de quien ganó por quien organiza, en 24 horas | el menor entre 30 y una quinta parte del tope del día (20 con 100), y 3 cuando las del día pasaron las cuatro quintas partes | el código, y se mueve con el tope del día |
-| Pedidos de pagos por dirección y por hora | 600, con su propio contador | `POR_IP_POR_HORA` |
+| Pedidos de pagos por dirección y por hora | 3.000 (una sala entera por la misma wifi activa, sella y sortea), con su propio contador | `POR_IP_POR_HORA` |
 
 **Qué mirar en `estado`.** El bloque `pagos`, que aparece con alguna forma prendida, con algún pago o alta en el día o con alguna pausa: `premio`, `retiro` y `altaPremio`, cada uno con si está prendido y pausado y, además, `enElAire`, `ok24h` y `fallo24h` en los dos pagos y `hoy` y `cercaDelTope` en el alta (`true` cuando las altas del día llegaron al 80 por ciento de `altasPremioDia`: se sube el tope en caliente o se mira quién las pide, y la bitácora lo anota una vez con `alerta-altas-premio`), y también `gasto24h` contra `topeStroops`, `rechazosPorDia`, `altasPremioDia`, y `costosRetiro24h` y `cobradoRetiros24h`, que cuentan los costos de retiro que reconoció la cuenta de cobros. Aparte de `firmas` va `firmasPagos`: las firmas de Pollar que explican los premios y los retiros pagados a cuentas del libro, así `firmasSinExplicar` sigue midiendo solo lo que alguien firma por fuera. Si aparece `faltaAltas`, lo que nombra quedó apagado.
 

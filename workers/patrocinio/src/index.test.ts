@@ -94,7 +94,7 @@ function montar(extra: Record<string, unknown> = {}, sql = sqlDePrueba()) {
     COSTO_RETIRO: "0.50",
     ADMIN_TOKEN: "o".repeat(40),
     CUPON_SECRETO: "c".repeat(32),
-    POR_IP_POR_HORA: "600",
+    POR_IP_POR_HORA: "3000",
     PAGOS_PREMIO: "1",
     RETIROS: "1",
     ...extra,
