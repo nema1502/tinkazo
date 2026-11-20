@@ -10,6 +10,8 @@
 
 /* Con el panel de la campaña en pantalla, el cuadro de la lista de siempre no estorba: queda solo el panel y su principal. */
 body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta) { display: none !important; }
+/* Sin el cuadro tampoco va Otro nombre, que baja de renglón en él. */
+body:has(#cpo-panel) #btn-otro-nombre { display: none !important; }
 /* Elegir, vista previa y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo (stand, premio y CSV,
    logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y rodeaban el cobro de texto. */
 body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) :is(

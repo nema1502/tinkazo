@@ -353,15 +353,20 @@
         <p class="note" data-i="lumaNota">El archivo se lee en tu navegador y no se sube a ningún lado.</p>
       </div>
       <!-- Con la lista vacía, cómo se hace (participants.ts). -->
-      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.</p>
+      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá tu lista o escribí un nombre.</p>
       <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
-      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas rápidas con quienes pasan</button>
+      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand</button>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
         <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
       </div>
       <p class="again-note" id="again-note" style="display:none" aria-live="polite"></p>
-      <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
+      <!-- El teclado del celular: mayúscula en cada palabra, sin corregir apellidos y con la tecla de bajar de renglón. -->
+      <textarea id="ta" spellcheck="false" autocapitalize="words" autocorrect="off" enterkeyhint="enter" placeholder="Ana Quispe&#10;Beto Mamani&#10;Carla Flores"></textarea>
+      <!-- Otro nombre (participants.ts): baja de renglón y deja el cursor listo para escribir el siguiente. Se ve desde el
+           primer nombre, mientras el cuadro se puede escribir, y nunca es el botón de color. El texto va en su span para
+           que la traducción no borre el dibujo. -->
+      <button class="ghost mini otro-nombre" type="button" id="btn-otro-nombre" hidden><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span data-i="otroNombre">Otro nombre</span></button>
       <!-- Si una lista pegada ya trae un número al lado de los nombres, se pregunta y no se toca nada hasta que
            la persona responde (src/participaciones.ts). Solo con la bandera de los modos nuevos o con ?modo=
            en la dirección (src/modos/bandera.ts). -->
@@ -479,7 +484,7 @@
       </div>
       <pre class="entity rules-text" id="rules-pre-text" style="display:none"></pre>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
-      <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
+      <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre. No es para entrada paga ni apuestas. Al sellar aceptás los <a href="/terminos.html">términos</a>.</p>
       <!-- "¿La red está bien?": un toque antes de empezar un evento; dice verde, amarillo o rojo con la razón. Solo con cuenta. -->
       <div class="red-fila" id="red-fila" style="display:none">
         <button class="ghost mini" type="button" id="btn-red"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg><span id="btn-red-txt" data-i="redBtn">¿La red está bien?</span></button>

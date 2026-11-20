@@ -1450,7 +1450,15 @@
     .primera-vez p { margin-right: -20px; }
   }
   .pegar-ayuda { margin: -4px 0 10px; }
+  /* Otro nombre, pegado debajo del cuadro y a la izquierda: un botón blanco con su más dibujado (participants.ts). */
+  .otro-nombre { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; margin-top: 8px; }
+  .otro-nombre svg { width: 18px; height: 18px; flex: none; }
+  /* En el stand la pantalla lleva solo lo de la ronda, con una acción por paso: los nombres llegan por el QR. */
+  body[data-stand="1"] #btn-otro-nombre { display: none !important; }
   .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); text-wrap: balance; }
+  /* El número de la cuenta, en grande: cuántos hay se lee sin leer la frase (participants.ts, pintarCuenta). */
+  .lista-cuenta .cuenta-num { font-size: 28px; line-height: 1; }
+  @media (min-width: 761px) { .lista-cuenta .cuenta-num { font-size: 32px; } }
   .lista-cuenta-nota { margin: 2px 0 8px; }
   /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
   .sellar-resumen { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }
@@ -2893,6 +2901,11 @@
   /* Un campo de menos de 16 px hace que el iPhone agrande la página al tocarlo. */
   textarea, input, select, input[type="text"], input[type="search"], input[type="email"] { font-size: 16px; }
   textarea { line-height: 1.5; }
+  /* El cuadro de la lista: cuatro renglones a la vista y un poco del quinto (1,5 em cada uno, más el relleno de 12 px y el
+     borde de 2 px de cada lado), para que los tres nombres de ejemplo se lean enteros y se vea que entran más. Los
+     ejemplos van en gris, más claros que un nombre escrito: así no se leen como una lista ya cargada. */
+  #ta { min-height: calc(7em + 28px); }
+  #ta::placeholder { color: var(--muted); opacity: 1; }
 
   /* Sin esperar el doble toque, sin el fogonazo gris al tocar y sin seleccionar por accidente
      lo que se proyecta. */
