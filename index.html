@@ -618,13 +618,13 @@
         <!-- Issue #102: el lugar que la sala acaba de ver, cuando el sello trajo varios de una
              («Lugar 2 de 5», y el premio de ese lugar si existiera). Lo pone draw.ts. Nace escondido. -->
         <p class="kicker lugar-actual" id="lugar-actual" role="status" style="display:none"></p>
-        <!-- Issue #102: la verdad a la sala: todos los lugares quedaron fijos al nacer el número y
-             cualquiera los puede calcular desde ese momento. Nace escondida. -->
-        <p class="note lugares-fijos" id="lugares-fijos" data-i="lugaresFijos" style="display:none">Todos los lugares quedaron fijos al nacer el número: cualquiera los puede calcular desde ese momento.</p>
+        <!-- Issue #102: la verdad a la sala, en corto: todos los lugares ya están decididos (quedaron
+             fijos al nacer el número y nadie los elige después). Nace escondida. -->
+        <p class="note lugares-fijos" id="lugares-fijos" data-i="lugaresFijos" style="display:none">Todos los lugares ya están decididos.</p>
         <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
              sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
         <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">
-          <h3 id="again-t" data-i="againTitle">¿Pasamos al siguiente premio?</h3>
+          <h3 id="again-t" class="sr-only" data-i="againTitle">¿Pasamos al siguiente premio?</h3>
           <p class="again-left" id="again-left"></p>
           <div class="row" id="again-acciones">
             <button class="primary" id="btn-again-sin">Siguiente premio</button>
@@ -645,8 +645,8 @@
         </div>
         <!-- El final del ensayo (src/ui/ensayo.ts): nada se sorteó, y lo que sigue es sortear con la lista propia. -->
         <div class="ensayo-fin" id="ensayo-fin">
-          <h3 data-i="ensFinT">Era un ensayo: quien salió es de mentira y no se grabó nada.</h3>
-          <p data-i="ensFinB">Así se sortea. En vivo, entrá y pegá tu lista antes de proyectar: la espera es de cerca de un minuto.</p>
+          <h3 data-i="ensFinT">Era un ensayo. Quien salió no vale.</h3>
+          <p data-i="ensFinB">En un sorteo de verdad, se espera cerca de un minuto.</p>
           <div class="row">
             <button class="primary" id="ens-otro" type="button" data-i="ensOtroJuego">Probar otro juego</button>
             <button class="ghost" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>

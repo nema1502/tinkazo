@@ -239,10 +239,10 @@ describe("un sello con tres lugares", () => {
     expect(cards()).not.toContain(N2);
     expect(document.getElementById("lugar-actual")?.textContent).toMatch(/1 de 3/);
     expect(document.getElementById("lugar-actual")?.style.display).not.toBe("none");
-    // La verdad a la sala: los lugares quedaron fijos al nacer el número y cualquiera los puede calcular.
+    // La verdad a la sala, en corto: los lugares ya están decididos, nadie los elige después.
     const fijos = document.getElementById("lugares-fijos");
     expect(fijos?.style.display).not.toBe("none");
-    expect(fijos?.textContent).toMatch(/quedaron fijos al nacer el número/);
+    expect(fijos?.textContent).toMatch(/ya están decididos/);
     // El comprobante ya lleva los tres lugares, en el orden de la sala.
     expect(document.getElementById("proof")?.textContent).toContain(`winners=[${ESPERADOS.join(",")}]`);
     // La fila de lo que sigue habla del lugar que viene, no de las personas del próximo sello.

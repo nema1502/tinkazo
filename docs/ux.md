@@ -190,6 +190,21 @@ Un orden de turnos y un Amigo secreto no tienen quién gane: su pie con sello y 
 
 Lo que deja de verse se esconde por CSS o deja de pintarse, y ninguna clave sale del diccionario. La fila de números vuelve con `?numeros=1` (y `?numeros=0` la apaga aunque el interruptor esté prendido): para mirarla, no para el evento.
 
+## El resultado y las pantallas sueltas (20 de noviembre de 2026)
+
+Mismo pedido que la espera: menos texto, sin cambiar ningún camino. Los mismos botones hacen lo mismo.
+
+| Pieza | Decisión |
+|---|---|
+| "El resultado", arriba del ganador | Se esconde por CSS: el nombre ya dice que es el resultado. Con el logo de la comunidad al costado conserva su alto, sin texto, para que el logo no pise la tarjeta |
+| Línea de qué sigue para la sala, debajo de los botones | Se esconde por CSS. Con una lista de Luma se queda, porque es lo único que manda a copiar el mensaje del pliegue |
+| "¿Pasamos al siguiente premio?" | Lleva `sr-only`: el bloque sigue con su nombre para el lector de pantalla |
+| Tarjeta del juego con varios premios | "Hay 3 premios. Al final se ven todos." |
+| Celular de quien mira, al final | "¿Otro premio? Escaneá el QR nuevo." |
+| Final del ensayo | "Era un ensayo. Quien salió no vale." y "En un sorteo de verdad, se espera cerca de un minuto." Conserva que quien salió no vale: el cartel puede circular como foto |
+
+Ninguna clave sale del diccionario. Lo fija `src/ui/resultado-recorte.test.ts`.
+
 ## Cambiar de juego, y verlo de nuevo con otro (4 de noviembre de 2026)
 
 El reporte: "le das a sellar en el ensayo y te pone en pantalla grande, y no te deja cambiar de juego". Eran tres cosas, y las tres tenían causa en el código:
