@@ -319,6 +319,25 @@ export async function faltaDeTamano(texto: string, campana: Record<string, unkno
   return { paso: pasoQueMasPesa(campana), clave: "ccDemasiado" };
 }
 
+/** Lo más pesado que acepta la sala al activar, pedido entero en bytes: es menos que al crear, porque la sesión también viaja. */
+export const MAX_CUERPO_DE_ACTIVAR = 24_000;
+/** Lo que se reserva para el token de la sesión y la cuenta de quien organiza, que se suman al activar. */
+const RESERVA_AL_ACTIVAR = 4_000;
+
+/** Los bytes del pedido de activar con este texto: lo que de verdad recibe la sala, con la sesión y la cuenta todavía por sumar. */
+export function bytesDelPedidoDeActivar(texto: string): number {
+  const cuerpo = JSON.stringify({ texto, sesion: "A".repeat(RESERVA_AL_ACTIVAR) });
+  return new TextEncoder().encode(cuerpo).length;
+}
+
+/**
+ * Si la campaña no entra en lo que la sala acepta para activarla. Una con logo grande o bases largas se puede bajar, pero no
+ * activar desde acá: se queda en el último paso, donde está Descargar, y dice qué achicar.
+ */
+export function faltaDeTamanoParaActivar(texto: string): Falta | null {
+  return bytesDelPedidoDeActivar(texto) <= MAX_CUERPO_DE_ACTIVAR ? null : { paso: 6, clave: "ccDemasiadoActivar" };
+}
+
 /** El mismo objeto con las claves en orden y sin espacios: sirve para saber si dos archivos dicen lo mismo. */
 export function canonico(valor: unknown): string {
   if (Array.isArray(valor)) return `[${valor.map(canonico).join(",")}]`;

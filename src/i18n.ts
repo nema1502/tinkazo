@@ -1757,6 +1757,7 @@ export const T: Record<Lang, Dict> = {
     faq5q: "¿Qué queda guardado y dónde?",
     faq5a: 'Los nombres nunca se publican: quedan en tu equipo y en el comprobante que compartís. De cada sorteo solo queda un registro público, a nombre de tu cuenta y sin nombres. <a href="/como-funciona.html#que-se-guarda">Qué se guarda, en Cómo funciona</a>.',
     finT: "¿Lo usamos en tu próximo evento?",
+    ctaEmpresa: "¿Sos una empresa? Armá tu campaña",
     appTitle: "Tu sorteo",
     histNoAcct: "Entrá con tu cuenta para ver tus sorteos. Los que registraste aparecen en cualquier equipo donde entres.",
     histNone: "Todavía no hay sorteos con esta cuenta. El primero aparece acá en cuanto sellás una lista.",
@@ -2439,6 +2440,7 @@ export const T: Record<Lang, Dict> = {
     // Lo que cobra Tinkazo a una campaña de empresa, dicho en precios y en los términos. {p} es el porcentaje, {m} el mínimo y
     // {e} lo que carga una empresa que reparte 120 (src/comision-texto.ts). Solo entran con la comisión configurada.
     prComisionT: "Lo que cuesta una campaña de empresa",
+    prComisionLink: "Armá la campaña de tu empresa →",
     prComision:
       "Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}. " +
       "Se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.",
@@ -4803,6 +4805,7 @@ export const T: Record<Lang, Dict> = {
     faq5q: "What gets saved, and where?",
     faq5a: 'Names are never published: they stay on your device and in the receipt you share. Each draw leaves only a public record, under your account and without names. <a href="/como-funciona.html#que-se-guarda">What is kept, in How it works</a>.',
     finT: "Use it at your next event.",
+    ctaEmpresa: "Are you a company? Build your campaign",
     appTitle: "Your draw",
     histNoAcct: "Sign in to see your draws. The ones you recorded show up on any device you sign in from.",
     histNone: "No draws with this account yet. The first one shows up here as soon as you seal a list.",
@@ -5481,6 +5484,7 @@ export const T: Record<Lang, Dict> = {
     // What Tinkazo charges a company campaign, said on pricing and in the terms. {p} is the percentage, {m} the minimum and {e}
     // what a company giving away 120 loads (src/comision-texto.ts). They only appear with the charge configured.
     prComisionT: "What a company campaign costs",
+    prComisionLink: "Build your company's campaign →",
     prComision:
       "When a company gives away prizes in digital dollars, it pays Tinkazo {p} of the prize total, with a minimum of {m}. " +
       "It is added to what the company loads and never comes out of the prize: to give away 120, it loads {e}. " +

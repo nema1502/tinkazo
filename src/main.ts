@@ -640,4 +640,8 @@ if (location.hash.startsWith("#participante=")) {
   });
 }
 // Las campañas de empresas (detrás de VITE_CAMPANAS): la entrada de quien ganó y la pestaña que deja la ventana de Google.
-if (campanasActivo()) void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
+if (campanasActivo()) {
+  // El enlace de la portada a armar la campaña de una empresa se ve solo con las campañas abiertas.
+  for (const enlace of document.querySelectorAll<HTMLElement>("[data-campana-enlace]")) enlace.hidden = false;
+  void import("./ui/campana-arranque").then((m) => m.arrancar()).catch(() => undefined);
+}
