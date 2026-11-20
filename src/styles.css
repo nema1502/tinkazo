@@ -2718,7 +2718,7 @@
      para la sala está en grande en esa ventana, no hace falta acá. */
   .wait {
     margin: 0; padding: 14px 18px; display: grid; align-items: start; gap: 4px 18px;
-    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k b" "n b" "i i" "l l";
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k b" "n b" "i i" "l l" "v v";
   }
   .wait-main, .wait-row { display: contents; }
   .wait .kicker { grid-area: k; }
@@ -2729,7 +2729,7 @@
   .wait-line { grid-area: l; max-width: 92ch; font-size: 16px; line-height: 1.45; }
   #btn-espera { grid-area: b; align-self: start; }
   @media (max-width: 560px) {
-    .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b"; padding: 12px 14px; }
+    .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b" "v"; padding: 12px 14px; }
     #btn-espera { justify-self: start; margin-top: 6px; }
   }
 
@@ -2940,6 +2940,11 @@
   }
   .gamepick[inert] { opacity: 0.55; cursor: not-allowed; }
   #rec-head { font-size: 16px; }
+  /* La página que espera, desde el 20 de noviembre de 2026: un título, el reloj, una línea y el botón. Dejan de verse
+     el rótulo Juego elegido (queda el nombre del juego con Cambiar de juego) y la cabecera del selector (Para 18
+     personas. Duración: Normal, 41 s). La hora del sello ya no se ve desde antes (.head #frozen-ts, más arriba). Se
+     esconden y no se borran: el código los escribe y las pruebas leen su texto. */
+  .juego-actual .kicker, #rec-head { display: none; }
   .ajustes button, .ajustes select { font-size: 16px; }
 
   /* Para el pulgar: 48 px en las pantallas táctiles. */
@@ -3015,6 +3020,21 @@
   .espera-nadie { font-size: calc(clamp(20px, 2.4vw, 38px) * var(--ajuste, 1)); }
   .espera-id { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
   .espera-ensayo { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+  /* La espera desde el 20 de noviembre de 2026 (docs/ux.md, La espera): una sola frase de confianza por pantalla. En la
+     sala la dice el pie, así que la línea de Nadie elige se esconde ahí y queda en el celular de quien mira. En ese
+     celular la explicación de que no se maneja desde ahí se esconde (no se borra: las pruebas la leen), porque ya lo
+     dice la calcomanía En vivo con su punto que late. Con el enlace roto no hay nada en vivo y la calcomanía no se ve.
+     La leyenda del QR crece para leerse desde el fondo de la sala. */
+  .espera:not(.espectador) .espera-nadie { display: none; }
+  .espectador .espera-lectura { display: none; }
+  .espectador-roto .sticker { display: none; }
+  .espera-qr figcaption { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+  .sticker.en-vivo::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 0.5em; vertical-align: 0.1em;
+    border-radius: 50%; background: currentColor; animation: en-vivo-late 1.2s ease-in-out infinite;
+  }
+  @keyframes en-vivo-late { 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) { .sticker.en-vivo::before { animation: none; } }
 
   /* El juego, en la espera en grande: "Juego: Carrera de llamas" y, aparte, "Cambiar de juego" (secundario: la acción
      principal sigue siendo una sola). El selector queda detrás de esta capa y se elige sin salir (26 de octubre de 2026). */
@@ -3248,8 +3268,9 @@
   .pantalla .pantalla-sig { margin-left: auto; font-size: clamp(20px, 2.4vw, 38px); min-height: 64px; padding: 10px 32px; max-width: 100%; text-wrap: balance; }
   @media (max-width: 700px) { .pantalla .pantalla-sig { margin-left: 0; width: 100%; } }
 
-  /* El volumen: el navegador no sabe si el celular está en silencio, así que, solo en pantallas táctiles, se recuerda. */
-  .wait-vol { display: none; margin-top: 8px; font-size: 17px; font-weight: 800; }
+  /* El volumen: el navegador no sabe si el celular está en silencio, así que, solo en pantallas táctiles, se recuerda.
+     Tiene su fila al final de la caja: sin ella, al esconderse Empieza en el aviso subía a ese lugar, arriba de todo. */
+  .wait-vol { grid-area: v; display: none; margin-top: 8px; font-size: 17px; font-weight: 800; }
   @media (pointer: coarse) { .wait-vol { display: block; } }
 
   /* La cinta de la espera: cada nombre con su cara. */

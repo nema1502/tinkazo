@@ -47,6 +47,13 @@ export const pieDeLaEspera = (lang: Lang, n: number, sinSello: boolean): string 
   sinSello ? T[lang].espPieSinSello(n) : T[lang].espPie(n);
 
 /**
+ * El pie de la espera en grande de un orden de turnos o un Amigo secreto: nadie gana, así que con sello no dice que
+ * nadie elige quién gana. Sin sello dice lo mismo que cualquier sorteo: que no se puede comprobar.
+ */
+export const pieSinGanador = (lang: Lang, n: number, sinSello: boolean): string =>
+  sinSello ? T[lang].espPieSinSello(n) : T[lang].espPieSinGanador(n);
+
+/**
  * Pone en un texto de la página el que corresponde, y deja la clave nueva en `data-i`
  * para que el cambio de idioma lo repinte con la misma versión.
  */

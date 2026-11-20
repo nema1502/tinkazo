@@ -158,29 +158,84 @@ describe("el render de los números y del contador", () => {
   });
 });
 
-describe("la espera de verdad junta los números que nacen", () => {
-  const montar = async (lead: number): Promise<{ ronda: number; resta: number }> => {
-    const freeze = await import("./freeze");
-    const { targetRound, roundAt } = await import("../protocol/quicknet");
-    const { listHash } = await import("../protocol/canonical");
-    const { bytesToHex } = await import("@noble/hashes/utils.js");
-    const nombres = ["Ana", "Beto", "Caro"];
-    const ahora = Math.floor(Date.now() / 1000);
-    const ronda = targetRound(ahora, lead);
-    freeze.resumeFrozen({ names: nombres, listHash: bytesToHex(listHash(nombres)), sealedAt: ahora, prize: "Una pizza", round: ronda, numWinners: 1 });
-    return { ronda, resta: Math.max(0, ronda - roundAt(ahora + 1)) };
-  };
+/** Sella una lista de tres con la ronda a `lead` segundos, por el mismo camino que la espera de verdad. */
+const montar = async (lead: number): Promise<{ ronda: number; resta: number }> => {
+  const freeze = await import("./freeze");
+  const { targetRound, roundAt } = await import("../protocol/quicknet");
+  const { listHash } = await import("../protocol/canonical");
+  const { bytesToHex } = await import("@noble/hashes/utils.js");
+  const nombres = ["Ana", "Beto", "Caro"];
+  const ahora = Math.floor(Date.now() / 1000);
+  const ronda = targetRound(ahora, lead);
+  const sello = { names: nombres, listHash: bytesToHex(listHash(nombres)), sealedAt: ahora, prize: "Una pizza", round: ronda, numWinners: 1 };
+  freeze.resumeFrozen(sello);
+  return { ronda, resta: Math.max(0, ronda - roundAt(ahora + 1)) };
+};
 
+/** La página entera de `index.html`, con lo que jsdom no trae. */
+const paginaDeVerdad = (): void => {
+  history.replaceState(null, "", "/?lead=5");
+  const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
+  document.body.innerHTML = new DOMParser().parseFromString(pagina, "text/html").body.innerHTML;
+  Element.prototype.scrollIntoView = () => undefined;
+  const nada = (): undefined => undefined;
+  window.matchMedia = ((q: string) => ({
+    matches: false,
+    media: q,
+    addEventListener: nada,
+    removeEventListener: nada,
+    addListener: nada,
+    removeListener: nada,
+  })) as unknown as typeof window.matchMedia;
+};
+
+describe("sin el interruptor, la espera no arma la fila de números", () => {
   beforeEach(() => {
-    history.replaceState(null, "", "/?lead=5");
-    document.body.innerHTML = new DOMParser().parseFromString(readFileSync(join(process.cwd(), "index.html"), "utf8"), "text/html").body.innerHTML;
-    Element.prototype.scrollIntoView = () => undefined;
-    window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener: () => undefined, removeEventListener: () => undefined, addListener: () => undefined, removeListener: () => undefined })) as unknown as typeof window.matchMedia;
+    vi.useFakeTimers({ now: new Date("2026-11-21T20:00:00Z") });
+    paginaDeVerdad();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    h.faro = null;
+    history.replaceState(null, "", "/");
+  });
+
+  it("no hay fila en la página ni pedidos a la red por los números intermedios", async () => {
+    const pedidos: number[] = [];
+    h.faro = async (round: number) => {
+      pedidos.push(round);
+      return { round, signature: firma(round) };
+    };
+    // Cualquier otro pedido a la red también queda anotado: ninguno puede ser por una ronda anterior a la elegida.
+    const red = vi.fn<(url: RequestInfo | URL) => Promise<Response>>(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", red);
+    const { ronda } = await montar(5);
+    expect(document.getElementById("wait-feed")).toBeNull();
+    // Toda la espera, hasta que nace la ronda elegida, con el reloj de la prueba.
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(document.getElementById("wait-left")?.textContent).toBe(T.es.waitNow);
+    expect(document.getElementById("wait-feed")).toBeNull();
+    expect(pedidos.filter((r) => r < ronda)).toEqual([]);
+    const rondasPedidas = red.mock.calls.map(([url]) => Number(/\/public\/(\d+)/.exec(String(url))?.[1] ?? Number.NaN));
+    expect(rondasPedidas.filter((r) => r < ronda)).toEqual([]);
+  });
+});
+
+describe("la espera de verdad junta los números que nacen", () => {
+  beforeEach(async () => {
+    paginaDeVerdad();
+    // La fila está apagada en el sitio: estas pruebas miran cómo anda prendida.
+    const { forzarNumeros } = await import("./freeze");
+    forzarNumeros(true);
     // El faro de la prueba: sirve cada ronda con su firma en cuanto se le pregunta.
     h.faro = async (round: number) => ({ round, signature: firma(round) });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { forzarNumeros } = await import("./freeze");
+    forzarNumeros(null);
     h.faro = null;
     history.replaceState(null, "", "/");
   });
