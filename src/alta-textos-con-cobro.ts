@@ -1,3 +1,4 @@
+import { parseModeValue } from "./stellar/modo-valor";
 import { banderasDeVenta, entornoDelBuild, ventaAbiertaATodos } from "./stellar/venta-piloto";
 
 /**
@@ -205,6 +206,35 @@ export const FRASES_SIN_COBRO: readonly RegExp[] = [
   /Hoy (Tinkazo )?es gratis|Hoy Tinkazo no cobra/,
   /Today Tinkazo is free|Tinkazo is free today|free for everyone today|charges nothing for now/i,
 ];
+
+/**
+ * Lo que dicen hoy las páginas y deja de ser cierto cuando el sitio abre en Oficial para todos: que el modo Oficial es
+ * gratis con el cupón de tu evento. Con el regalo de los primeros sorteos nadie necesita un cupón para entrar, y el
+ * cupón queda para sumar más. No toca lo que se guarda al canjear un cupón ni el registro de equipos con cupón, que
+ * siguen valiendo.
+ */
+export const FRASES_CUPON_DE_ENTRADA: readonly RegExp[] = [/cup[oó]n de tu evento/i, /coupon from your event/i];
+
+/** Las páginas que ve primero quien llega al sitio en Oficial, y que no pueden pedirle un cupón para entrar. */
+export const PAGINAS_SIN_CUPON_DE_ENTRADA: readonly string[] = ["precios.html", "terminos.html", "index.html", "como-funciona.html"];
+
+/**
+ * Lo que frena la publicación de producción que abre en Oficial (`VITE_STELLAR_NETWORK` en `mainnet` u `oficial`): que
+ * esas páginas todavía digan que Oficial es gratis con el cupón de tu evento. Fuera de producción o sin la variable en
+ * Oficial nunca frena: hoy el sitio abre en Prueba y esas páginas dicen la verdad.
+ */
+export function problemasDeLasPaginasEnOficial(env: Record<string, string | undefined>, paginas: Readonly<Record<string, string>>): string[] {
+  if (env.VERCEL_ENV !== "production" || parseModeValue(env.VITE_STELLAR_NETWORK) !== "mainnet") return [];
+  const problemas: string[] = [];
+  for (const pagina of PAGINAS_SIN_CUPON_DE_ENTRADA) {
+    const html = paginas[pagina];
+    if (html === undefined) continue;
+    for (const frase of FRASES_CUPON_DE_ENTRADA) {
+      if (frase.test(html)) problemas.push(`${pagina} todavía dice que el modo Oficial pide el cupón de tu evento (${frase.source}).`);
+    }
+  }
+  return problemas;
+}
 
 /**
  * Lo que frena la publicación de producción con la compra abierta para todos: que el HTML todavía diga lo de antes.

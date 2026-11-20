@@ -897,7 +897,7 @@ async function run() {
             screenWidth: p.w, screenHeight: p.h,
           });
           await sinSesionGuardada(sinCuenta);
-          await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
           await sinCuenta.waitFor(`${HAY_BOTON_ENTRAR_JS} && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
@@ -1111,7 +1111,7 @@ async function run() {
         try {
           await z.send("Emulation.setDeviceMetricsOverride", { width: 681, height: 316, deviceScaleFactor: 2, mobile: false, screenWidth: 681, screenHeight: 316 });
           await sinSesionGuardada(z);
-          await z.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await z.send("Page.navigate", { url: `${base}/?theme=${tema}&red=prueba#sortear` });
           await z.waitFor("document.readyState === 'complete' && !!document.getElementById('btn-sample')", 20000);
           await z.eval("document.getElementById('btn-sample').click(); true");
           await sleep(900);

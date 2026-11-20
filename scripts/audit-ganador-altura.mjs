@@ -82,7 +82,7 @@ try {
         if (fase === 'estadio-lista') await page.addInitScript(() => {
           window.__PIXI_APP_INIT__ = app => { window.__app = app; };
         });
-        await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara#sortear`, motor));
+        await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara&red=prueba#sortear`, motor));
         await page.waitForSelector('#ta');
         await page.locator('#ta').fill('María Fernanda Guadalupe Quispe Mamani Zu\nMaximiliano Alexander Constantino Rosario\nAna María de los Ángeles Condori Flores\nCarlos Alberto Gutiérrez Fernández\nLucía Alejandra Mendoza Vargas\nRodrigo Sebastián Flores Mamani');
         await page.evaluate(j => {

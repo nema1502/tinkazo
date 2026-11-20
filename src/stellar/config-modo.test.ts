@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import deployments from "./deployments.json";
 import { CLAVE_PASO_CUPON } from "./cupon-paso-guardado";
@@ -62,11 +63,119 @@ describe("el modo que se decide al cargar", () => {
     expect(network.contractId).toBe(deployments.testnet.contractId);
   });
 
-  it.runIf(hayModoOficial)("con contrato en la red real, Oficial existe y el sitio sigue abriendo en Prueba", () => {
+  it.runIf(hayModoOficial)("con contrato en la red real, Oficial existe y sin la variable del build el sitio abre en Prueba", () => {
     expect((deployments as unknown as { mainnet: { contractId?: string } | null }).mainnet?.contractId).toMatch(/^C[A-Z2-7]{55}$/);
     expect(hayModoOficial).toBe(true);
     expect(network.name).toBe("testnet");
     expect(network.contractId).toBe(deployments.testnet.contractId);
+  });
+});
+
+/**
+ * La tabla de casos del sitio abriendo en Oficial (`VITE_STELLAR_NETWORK=mainnet` en la publicación de producción).
+ * Cada caso da lo mismo que hoy salvo quien llega sin nada guardado, que entra en Oficial. La demo y la escena fija
+ * siguen en Prueba.
+ */
+describe("con el sitio abriendo en Oficial", () => {
+  const oficial = (env: { search?: string; hash?: string; stored?: string; hasOfficialContract?: boolean }) =>
+    resolveNetworkName({ build: "mainnet", hasOfficialContract: true, ...env });
+
+  it("quien llega sin nada guardado entra en Oficial", () => {
+    expect(oficial({})).toBe("mainnet");
+  });
+
+  it("quien ya eligió Prueba en esta pestaña sigue en Prueba", () => {
+    expect(oficial({ stored: "prueba" })).toBe("testnet");
+  });
+
+  it("quien ya eligió Oficial en esta pestaña sigue en Oficial", () => {
+    expect(oficial({ stored: "oficial" })).toBe("mainnet");
+  });
+
+  it("un enlace con ?red=prueba abre en Prueba aunque la pestaña diga Oficial", () => {
+    expect(oficial({ search: "?red=prueba", stored: "oficial" })).toBe("testnet");
+  });
+
+  it("un enlace con ?red=oficial abre en Oficial aunque la pestaña diga Prueba", () => {
+    expect(oficial({ search: "?red=oficial", stored: "prueba" })).toBe("mainnet");
+  });
+
+  it("un enlace de cupón abre en Oficial", () => {
+    expect(oficial({ hash: "#cupon=K7M29QXA4HTR", stored: "prueba" })).toBe("mainnet");
+  });
+
+  it("un cupón con Prueba pedida en la dirección queda en Prueba", () => {
+    expect(oficial({ search: "?red=prueba", hash: "#cupon=K7M29QXA4HTR" })).toBe("testnet");
+  });
+
+  it("una demo en pestaña nueva abre en Prueba", () => {
+    expect(oficial({ search: "?demo=race" })).toBe("testnet");
+  });
+
+  it("una demo desde una pestaña en Oficial sigue en Oficial, igual que hoy", () => {
+    expect(oficial({ search: "?demo=race", stored: "oficial" })).toBe("mainnet");
+  });
+
+  it("una demo desde una pestaña en Prueba sigue en Prueba", () => {
+    expect(oficial({ search: "?demo=race", stored: "prueba" })).toBe("testnet");
+  });
+
+  it("una demo con Oficial pedido en la dirección abre en Oficial", () => {
+    expect(oficial({ search: "?demo=race&red=oficial" })).toBe("mainnet");
+  });
+
+  it("la escena fija de las capturas abre en Prueba", () => {
+    expect(oficial({ search: "?pose=1" })).toBe("testnet");
+  });
+
+  it("la demo de la campaña y la del comprobante abren en Prueba", () => {
+    expect(oficial({ search: "https://tinkazo.app/participar.html?demo=campana" })).toBe("testnet");
+    expect(oficial({ search: "/verificar.html?demo=1" })).toBe("testnet");
+  });
+
+  it("un comprobante en pestaña nueva abre en Oficial: la comprobación usa la red del comprobante, no el modo", () => {
+    expect(oficial({ search: "", hash: "#v2.abc" })).toBe("mainnet");
+  });
+
+  it("la campaña y el registro de equipos de Prueba abren en Prueba por el red= de su enlace", () => {
+    expect(oficial({ search: "/participar.html?c=ABC&red=prueba" })).toBe("testnet");
+    expect(oficial({ search: "/equipos.html?sala=ABCD1234&red=prueba" })).toBe("testnet");
+  });
+
+  it("quien ganó un premio entra en Oficial", () => {
+    expect(oficial({ search: "?red=oficial&premio=1" })).toBe("mainnet");
+  });
+
+  it("sin contrato oficial en la lista, todo abre en Prueba", () => {
+    expect(oficial({ hasOfficialContract: false })).toBe("testnet");
+  });
+
+  it("el build se lee con las palabras de ?red=: oficial, live y Mainnet dan Oficial", () => {
+    for (const build of ["oficial", "live", "Mainnet", " mainnet "]) {
+      expect(resolveNetworkName({ build, hasOfficialContract: true }), build).toBe("mainnet");
+    }
+  });
+
+  it("un build con algo que no se entiende abre en Prueba (y el build no sale con eso)", () => {
+    expect(resolveNetworkName({ build: "red-principal", hasOfficialContract: true })).toBe("testnet");
+  });
+
+  it("sin la variable del build, como en las pruebas y las vistas previas, abre en Prueba", () => {
+    expect(resolveNetworkName({ build: "", hasOfficialContract: true })).toBe("testnet");
+    expect(resolveNetworkName({ build: undefined, hasOfficialContract: true })).toBe("testnet");
+  });
+});
+
+describe("las pruebas no dependen del entorno de la máquina", () => {
+  it("vite.config.ts fija VITE_STELLAR_NETWORK vacía en el entorno de las pruebas", () => {
+    // Vitest corre desde la raíz del repositorio (en jsdom, `import.meta.url` no es una dirección de archivo).
+    const config = readFileSync("vite.config.ts", "utf8");
+    const pruebas = config.slice(config.indexOf("  test: {"));
+    expect(pruebas).toMatch(/^\s*env: \{ VITE_STELLAR_NETWORK: "" \},/m);
+  });
+
+  it("en las pruebas la variable llega vacía aunque un .env.local diga otra cosa", () => {
+    expect(import.meta.env.VITE_STELLAR_NETWORK ?? "").toBe("");
   });
 });
 
@@ -181,6 +290,7 @@ describe("con una lista que trae contrato en mainnet (simulada)", () => {
     vi.doUnmock("./deployments.json");
     vi.resetModules();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     sessionStorage.clear();
   });
 
@@ -232,6 +342,28 @@ describe("con una lista que trae contrato en mainnet (simulada)", () => {
     expect(config.network.name).toBe("testnet");
     expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBe("1");
     expect(sessionStorage.getItem("tinkazo.ingresar")).toBe("1");
+  });
+
+  it("con la variable del build en Oficial, quien llega sin nada abre en Oficial y la pestaña no guarda nada", async () => {
+    vi.stubEnv("VITE_STELLAR_NETWORK", "mainnet");
+    const { config } = await cargar("");
+    expect(config.network.name).toBe("mainnet");
+    expect(config.network.contractId).toBe(ENTRADA_SIMULADA.contractId);
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("con la variable del build en Oficial, una demo abre en Prueba", async () => {
+    vi.stubEnv("VITE_STELLAR_NETWORK", "mainnet");
+    const { config } = await cargar("?demo=race");
+    expect(config.network.name).toBe("testnet");
+    expect(sessionStorage.getItem(MODE_STORAGE_KEY)).toBeNull();
+  });
+
+  it("con la variable del build en Oficial, la pestaña que eligió Prueba sigue en Prueba", async () => {
+    vi.stubEnv("VITE_STELLAR_NETWORK", "mainnet");
+    sessionStorage.setItem(MODE_STORAGE_KEY, "prueba");
+    const { config } = await cargar("");
+    expect(config.network.name).toBe("testnet");
   });
 
   it("con ?red=prueba y un cupón válido queda en Prueba", async () => {

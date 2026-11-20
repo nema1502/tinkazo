@@ -178,7 +178,7 @@ export async function auditarTransicion(page, { base, out, juego, vista, relator
     capturas.push({ archivo, antes, despues });
   };
   try {
-    await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara&lang=${lang}#sortear`, motor));
+    await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara&lang=${lang}&red=prueba#sortear`, motor));
     // Lectura del estado de la UI real, solo en el servidor Vite de auditoría.
     // No se reemplazan beacon, selección, nombres finales, sello ni comprobante.
     await page.evaluate(async () => {
