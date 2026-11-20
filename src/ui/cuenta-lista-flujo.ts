@@ -6,6 +6,7 @@ import { network } from "../stellar/config";
 import { enPractica, sinGrabar } from "../ensayo-modo";
 import { activeWallet } from "../stellar/wallet-lite";
 import type { EstadoOficial } from "../stellar/wallet-pollar";
+import type { ReclamoDelRegalo, ResultadoDeAlta } from "../stellar/alta-api";
 import type { Para } from "./cuenta-lista-estado";
 import type { OpcionesDelPaso } from "./cuenta-lista";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
@@ -434,6 +435,86 @@ export async function abrirSumarSorteos(o: { producto?: string | null } = {}): P
     console.warn("[tinkazo] no se pudo abrir la ventana de sumar sorteos", e);
     return false;
   }
+}
+
+/**
+ * El acceso del servidor con la sesión de ahora, solo si sabe pedir el regalo; si no, `null`. Fuera de Oficial con una
+ * cuenta de Google o de correo, o si no se pudo bajar, también `null`. Nunca lanza.
+ */
+async function accesoConRegalo(): Promise<{ cuenta: string; acceso: import("./cuenta-lista").AccesoDelPaso } | null> {
+  if (!aplica()) return null;
+  try {
+    const [wp, ui, { fuenteDelAcceso }] = await Promise.all([
+      import("../stellar/wallet-pollar"),
+      import("./wallet-ui"),
+      import("./cuenta-lista-acceso"),
+    ]);
+    const cuenta = ui.currentSession()?.address ?? null;
+    const acceso = fuenteDelAcceso(sesionDelAcceso(wp, ui));
+    return cuenta && typeof acceso === "object" && acceso.reclamar ? { cuenta, acceso } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Lo que se supo del regalo en esta carga de la página, por cuenta: una sola lectura del estado por sesión. */
+let regaloSabido: { cuenta: string; promesa: Promise<number | null> } | null = null;
+
+/**
+ * Si la persona de esta sesión puede recibir el regalo ahora: cuántos sorteos trae, o `null`. Lo pregunta al servidor una
+ * sola vez por cuenta en esta carga de la página (lo llaman la línea del cupo con cero sorteos y «Se te acabaron»). Sin
+ * el regalo en el servidor (el de antes, que no lo manda), sin respuesta o con cualquier duda, `null`. Una lectura que
+ * no salió (sin red, el servicio) no se recuerda: la próxima vez se pregunta de nuevo. Nunca lanza.
+ */
+export async function regaloDisponible(): Promise<number | null> {
+  const a = await accesoConRegalo();
+  if (!a) return null;
+  if (regaloSabido?.cuenta === a.cuenta) return regaloSabido.promesa;
+  const sabido: { cuenta: string; promesa: Promise<number | null> } = { cuenta: a.cuenta, promesa: Promise.resolve(null) };
+  const olvidar = (): null => {
+    if (regaloSabido === sabido) regaloSabido = null;
+    return null;
+  };
+  sabido.promesa = a.acceso.estado().then((r) => {
+    if (!r.ok) return olvidar();
+    return r.datos.acceso !== "ninguno" && r.datos.bienvenida?.estado === "lista" ? r.datos.bienvenida.sorteos : null;
+  }, olvidar);
+  regaloSabido = sabido;
+  return sabido.promesa;
+}
+
+/**
+ * Cómo salió «Recibirlos»: `dado` con sorteos para sellar, `sin-sorteos` si el servidor contestó pero no quedaron (hoy
+ * no se da, o ya lo había recibido), y `error` si no se supo (sin red, el servicio, o no hay cómo pedirlo).
+ */
+export type ReciboDelRegalo = "dado" | "sin-sorteos" | "error";
+
+/**
+ * «Recibirlos»: pide el regalo para la cuenta que ya tiene el acceso y vuelve a preguntar el cupo (la línea se entera
+ * sola). Si el servidor contestó, en esta carga no se vuelve a ofrecer: lo da una vez por persona, y si hoy no se da, la
+ * línea vuelve a la de siempre. Si no se supo, se puede ofrecer otra vez (la próxima lectura pregunta). Nunca lanza.
+ */
+export async function recibirRegalo(): Promise<ReciboDelRegalo> {
+  const a = await accesoConRegalo();
+  if (!a?.acceso.reclamar) return "error";
+  // Mientras se pide, no se ofrece.
+  const pedido: { cuenta: string; promesa: Promise<number | null> } = { cuenta: a.cuenta, promesa: Promise.resolve(null) };
+  regaloSabido = pedido;
+  let r: ResultadoDeAlta<ReclamoDelRegalo> | null = null;
+  try {
+    r = await a.acceso.reclamar();
+    a.acceso.refrescarCupo();
+  } catch {
+    r = null;
+  }
+  if (r?.ok) return r.datos.sorteos.quedan > 0 ? "dado" : "sin-sorteos";
+  if (regaloSabido === pedido) regaloSabido = null;
+  return "error";
+}
+
+/** Olvida lo que se supo del regalo (las pruebas). */
+export function olvidarElRegalo(): void {
+  regaloSabido = null;
 }
 
 /**

@@ -367,7 +367,9 @@ describe("el acceso al modo Oficial que recibe el paso (W3)", () => {
     await f.abrirParaElError("sello", null, { cupon: "escribir" });
     const op = h.abrir.mock.calls[0]?.[2] as { acceso: unknown; cupon: unknown };
     expect(typeof op.acceso).toBe("object");
-    expect(Object.keys(op.acceso as object).sort()).toEqual(["canjear", "cuenta", "cuponGuardado", "estado", "guardarCupon", "olvidarCupon", "refrescarCupo"]);
+    // `reclamar`: el regalo de quien entra con su cuenta, que el paso pide solo si el estado lo ofrece.
+    const claves = ["canjear", "cuenta", "cuponGuardado", "estado", "guardarCupon", "olvidarCupon", "reclamar", "refrescarCupo"];
+    expect(Object.keys(op.acceso as object).sort()).toEqual(claves);
     expect(op.cupon).toBe("escribir");
   });
 

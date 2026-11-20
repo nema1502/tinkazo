@@ -1,7 +1,8 @@
 import { TEXTOS_ALTA } from "../alta-textos";
 import { TEXTOS_ALTA_PAGO } from "../alta-textos-pago";
 import { type OpcionesDeAlta, type PreciosDeAlta, type RecargoQr, type ResultadoDeAlta, precios } from "./alta-api";
-import { altaPagoActivo } from "./alta-config";
+import { altaPagoActivo, banderasDeAlta } from "./alta-config";
+import { configDelPortero } from "./patrocinio-config";
 
 /**
  * Qué paquetes de sorteos oficiales se pueden comprar ahora, y cómo se dice su precio. Todo sale de
@@ -97,6 +98,38 @@ export async function leerOferta(o: OpcionesDeOferta = {}): Promise<Oferta> {
 }
 
 const copia = (x: Oferta): Oferta => ({ alta: x.alta ? { ...x.alta } : null, paquetes: x.paquetes.map((p) => ({ ...p })) });
+
+/* ------------------------------------------------------------ el regalo de quien entra */
+
+export interface OpcionesDelRegalo extends OpcionesDeAlta {
+  /** El acceso por el servidor en el build de la red principal. Sin decirlo, el de este sitio. */
+  alta?: boolean;
+}
+
+let regaloRecordado: { n: number; ms: number } | null = null;
+
+/** Olvida lo leído del regalo (las pruebas). */
+export function olvidarRegalo(): void {
+  regaloRecordado = null;
+}
+
+/**
+ * Cuántos sorteos de regalo da hoy el servidor a quien entra a Oficial (`bienvenida` de `GET /v1/alta/precios`), para lo
+ * que dice la hoja de cambio de modo. Se pregunta al portero de la red principal aunque la página esté en Prueba: es una
+ * ruta abierta, sin sesión. Sin el acceso por el servidor en el build, sin respuesta, de otra red o sin el campo (el
+ * servicio de antes), 0. Lo que salió bien se recuerda 5 minutos. Nunca lanza.
+ */
+export async function regaloAbierto(o: OpcionesDelRegalo = {}): Promise<number> {
+  if (!(o.alta ?? banderasDeAlta(undefined, "mainnet").alta)) return 0;
+  const ahora = (o.ahora ?? Date.now)();
+  if (regaloRecordado && ahora - regaloRecordado.ms < CACHE_OFERTA_MS && ahora >= regaloRecordado.ms) return regaloRecordado.n;
+  const url = o.url !== undefined ? o.url : configDelPortero({ red: "mainnet" }).url;
+  const r = await precios({ ...o, url }).catch(() => null);
+  if (!r?.ok) return 0;
+  const n = r.datos.red === "mainnet" ? (r.datos.bienvenida ?? 0) : 0;
+  regaloRecordado = { n, ms: ahora };
+  return n;
+}
 
 /* ------------------------------------------------------------ cómo se dice */
 

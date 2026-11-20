@@ -1,5 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLAVES_DE_MOTIVO, ESPERA_MS, abrir, canjear, estado, fechaDeAlta, minutosDeEspera, precios, textoDelError, type ErrorDeAlta } from "./alta-api";
+import {
+  CLAVES_DE_MOTIVO,
+  CLAVES_DEL_REGALO,
+  ESPERA_MS,
+  abrir,
+  canjear,
+  estado,
+  fechaDeAlta,
+  minutosDeEspera,
+  precios,
+  reclamar,
+  textoDelError,
+  type ErrorDeAlta,
+} from "./alta-api";
 
 const URL = "https://pm.example";
 const TOKEN = "eyJhbGciOiJFUzI1NiJ9.cuerpo-del-token_secreto.firma-del-token-1234567890";
@@ -325,5 +338,171 @@ describe("los datos del texto", () => {
     const e2 = fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: g, ahora: () => 1_800_000_000_000 }));
     expect(textoDelError(e2, (k) => String(T.es[k]))).toBe("Hay una pausa con los cupones, probá de nuevo en 2 minutos.");
     expect(textoDelError(e2, (k) => String(T.en[k]))).toBe("Coupons are paused for now, try again in 2 minutes.");
+  });
+});
+
+describe("el regalo de quien entra con su cuenta", () => {
+  const reclamoBueno = { ...canjeBueno, regalo: "dado" };
+  const estadoSinAcceso = { ...estadoBueno, acceso: "ninguno", sorteos: { quedan: 0, proximoVence: null } };
+
+  it("el estado del servicio de antes, sin el campo, se lee igual y sin regalo", async () => {
+    const { f } = falso(() => responder(200, estadoSinAcceso));
+    const r = await estado(TOKEN, { url: URL, fetch: f });
+    expect(r.ok).toBe(true);
+    expect(r.ok && "bienvenida" in r.datos).toBe(false);
+  });
+
+  it("el estado con el regalo listo lo trae con el número del servidor", async () => {
+    const { f } = falso(() => responder(200, { ...estadoSinAcceso, bienvenida: { estado: "lista", sorteos: 3 } }));
+    const r = await estado(TOKEN, { url: URL, fetch: f });
+    expect(r).toMatchObject({ ok: true, datos: { acceso: "ninguno", bienvenida: { estado: "lista", sorteos: 3 } } });
+  });
+
+  it("el estado con el regalo lleno lo trae como lleno", async () => {
+    const { f } = falso(() => responder(200, { ...estadoSinAcceso, bienvenida: { estado: "llena", sorteos: 3 } }));
+    expect(await estado(TOKEN, { url: URL, fetch: f })).toMatchObject({ ok: true, datos: { bienvenida: { estado: "llena", sorteos: 3 } } });
+  });
+
+  it("el estado con el regalo en null se lee igual y sin regalo", async () => {
+    const { f } = falso(() => responder(200, { ...estadoSinAcceso, bienvenida: null }));
+    const r = await estado(TOKEN, { url: URL, fetch: f });
+    expect(r.ok && "bienvenida" in r.datos).toBe(false);
+  });
+
+  it("un regalo mal formado o con un estado que no se conoce no rompe el estado: se deja de lado", async () => {
+    const malos: unknown[] = [
+      "lista",
+      3,
+      [],
+      { estado: "solo-google", sorteos: 3 },
+      { estado: "otro", sorteos: 3 },
+      { estado: "lista" },
+      { estado: "lista", sorteos: 0 },
+      { estado: "lista", sorteos: -3 },
+      { estado: "lista", sorteos: 2.5 },
+      { estado: "lista", sorteos: "3" },
+      { estado: "lista", sorteos: 1_000 },
+    ];
+    for (const b of malos) {
+      const { f } = falso(() => responder(200, { ...estadoSinAcceso, bienvenida: b }));
+      const r = await estado(TOKEN, { url: URL, fetch: f });
+      expect(r.ok, JSON.stringify(b)).toBe(true);
+      expect(r.ok && "bienvenida" in r.datos, JSON.stringify(b)).toBe(false);
+    }
+  });
+
+  it("el acceso gratis, si llega, se tolera y se lee como tal", async () => {
+    const { f } = falso(() => responder(200, { ...estadoBueno, acceso: "gratis" }));
+    expect(await estado(TOKEN, { url: URL, fetch: f })).toMatchObject({ ok: true, datos: { acceso: "gratis", cuenta: CUENTA, sorteos } });
+  });
+
+  it("el alta que nació del regalo llega como admin, con sus sorteos y sin el regalo", async () => {
+    const { f } = falso(() => responder(200, { ...estadoBueno, acceso: "admin", bienvenida: null }));
+    const r = await estado(TOKEN, { url: URL, fetch: f });
+    expect(r).toMatchObject({ ok: true, datos: { acceso: "admin", cuenta: CUENTA, sorteos } });
+    expect(r.ok && "bienvenida" in r.datos).toBe(false);
+  });
+
+  it("reclamar pide la ruta del regalo con la sesión, con el cuerpo vacío", async () => {
+    const { f, llamadas } = falso(() => responder(200, reclamoBueno));
+    await reclamar(TOKEN, { url: URL, fetch: f });
+    expect(llamadas[0]?.url).toBe(`${URL}/v1/alta/gratis`);
+    expect(llamadas[0]?.init.method).toBe("POST");
+    expect(llamadas[0]?.init.headers).toMatchObject({ Authorization: `Bearer ${TOKEN}` });
+    expect(JSON.parse(String(llamadas[0]?.init.body))).toEqual({});
+    expect(llamadas[0]?.url).not.toContain(TOKEN);
+  });
+
+  it("reclamar trae la forma del canje y lo que pasó con el regalo", async () => {
+    for (const regalo of ["dado", "lleno", "ya"]) {
+      const { f } = falso(() => responder(200, { ...reclamoBueno, regalo }));
+      expect(await reclamar(TOKEN, { url: URL, fetch: f })).toEqual({ ok: true, datos: { ...canjeBueno, regalo } });
+    }
+  });
+
+  it("reclamar con un regalo que no se conoce, o sin él, se lee igual con el regalo en null", async () => {
+    for (const regalo of ["otro", 3, null, undefined]) {
+      const { f } = falso(() => responder(200, { ...canjeBueno, regalo }));
+      expect(await reclamar(TOKEN, { url: URL, fetch: f })).toEqual({ ok: true, datos: { ...canjeBueno, regalo: null } });
+    }
+  });
+
+  it("reclamar con los sorteos como un número los lee como cuántos quedan, sin vencimiento", async () => {
+    const { f } = falso(() => responder(200, { ...reclamoBueno, sorteos: 3 }));
+    const r = await reclamar(TOKEN, { url: URL, fetch: f });
+    expect(r).toMatchObject({ ok: true, datos: { sorteos: { quedan: 3, proximoVence: null }, regalo: reclamoBueno.regalo } });
+  });
+
+  it("reclamar con los sorteos como un número que no es un entero desde 0 es el error de servicio", async () => {
+    for (const sorteos of [-1, 2.5, Number.NaN]) {
+      const { f } = falso(() => responder(200, { ...reclamoBueno, sorteos }));
+      expect(fallo(await reclamar(TOKEN, { url: URL, fetch: f })), String(sorteos)).toMatchObject({ clave: "altaErrServicio", motivo: "respuesta" });
+    }
+  });
+
+  it("reclamar con una respuesta que no tiene la forma del canje es el error de servicio", async () => {
+    const { f } = falso(() => responder(200, { ok: true, regalo: "dado" }));
+    expect(fallo(await reclamar(TOKEN, { url: URL, fetch: f }))).toMatchObject({ clave: "altaErrServicio", motivo: "respuesta" });
+  });
+
+  it("sin margen o en pausa, el regalo dice que la cuenta no se activó, no que se acabó", async () => {
+    for (const motivo of ["bienvenida-llena", "altas-pausadas"]) {
+      const { f } = falso(() => responder(503, { motivo }));
+      const e = fallo(await reclamar(TOKEN, { url: URL, fetch: f }));
+      expect(e, motivo).toEqual({ ok: false, clave: "altaSinActivarAhora", vars: {}, motivo, estado: 503 });
+    }
+    expect(Object.keys(CLAVES_DEL_REGALO).sort()).toEqual(["altas-pausadas", "bienvenida-llena"]);
+  });
+
+  it("el tope de intentos en el regalo dice los minutos que hay que esperar, como en el canje", async () => {
+    const { f } = falso(() => responder(429, { motivo: "intentos", reintentarEn: 1_800_000_000_000 + 7 * 60_000 }));
+    const e = fallo(await reclamar(TOKEN, { url: URL, fetch: f, ahora: () => 1_800_000_000_000 }));
+    expect(e).toEqual({ ok: false, clave: "altaErrIntentos", vars: { min: "7" }, motivo: "intentos", estado: 429 });
+  });
+
+  it("el tope por dirección en el regalo dice la hora entera, como en el canje", async () => {
+    const { f } = falso(() => responder(429, { motivo: "cupo-ip" }));
+    const e = fallo(await reclamar(TOKEN, { url: URL, fetch: f }));
+    expect(e).toEqual({ ok: false, clave: "altaErrIntentos", vars: { min: "60" }, motivo: "cupo-ip", estado: 429 });
+  });
+
+  it("la cuenta de otra persona da la clave de siempre", async () => {
+    const { f } = falso(() => responder(409, { motivo: "cuenta-de-otro" }));
+    const e = fallo(await reclamar(TOKEN, { url: URL, fetch: f }));
+    expect(e).toMatchObject({ clave: "altaErrCuentaDeOtro", motivo: "cuenta-de-otro", estado: 409 });
+  });
+
+  it("ya tiene acceso llega con su motivo, para que el paso relea el estado", async () => {
+    const { f } = falso(() => responder(409, { motivo: "ya-tiene-acceso" }));
+    expect(fallo(await reclamar(TOKEN, { url: URL, fetch: f }))).toMatchObject({ motivo: "ya-tiene-acceso", estado: 409 });
+  });
+
+  it("en el canje, los mismos motivos siguen con sus claves de siempre", async () => {
+    const { f } = falso(() => responder(503, { motivo: "altas-pausadas" }));
+    expect(fallo(await canjear(TOKEN, CODIGO, { url: URL, fetch: f }))).toMatchObject({ clave: "altaErrServicio" });
+  });
+
+  it("reclamar sin red es el error de servicio, sin lanzar", async () => {
+    const f = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const e = fallo(await reclamar(TOKEN, { url: URL, fetch: f as unknown as typeof fetch }));
+    expect(e).toMatchObject({ clave: "altaErrServicio", motivo: "sin-red", estado: 0 });
+  });
+
+  const preciosBase = { red: "mainnet", pago: false, alta: null, paquetes: [] };
+
+  it("los precios con el regalo abierto lo traen", async () => {
+    const { f } = falso(() => responder(200, { ...preciosBase, bienvenida: 3 }));
+    expect(await precios({ url: URL, fetch: f })).toMatchObject({ ok: true, datos: { bienvenida: 3 } });
+  });
+
+  it("los precios con el regalo en 0, sin él o mal escrito se leen igual y sin regalo", async () => {
+    for (const bienvenida of [0, undefined, null, "3", -1, 2.5, 1_000]) {
+      const { f } = falso(() => responder(200, { ...preciosBase, bienvenida }));
+      const r = await precios({ url: URL, fetch: f });
+      expect(r.ok, String(bienvenida)).toBe(true);
+      expect(r.ok && "bienvenida" in r.datos, String(bienvenida)).toBe(false);
+    }
   });
 });

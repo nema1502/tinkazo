@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { T, setLang } from "../i18n";
 import { app } from "../state";
 import { saveSessionKind } from "../stellar/session-store";
@@ -13,6 +13,16 @@ const h = vi.hoisted(() => ({
   destinos: [] as (string | undefined)[],
   cambia: true,
   tipo: "sin" as "sin" | "propia" | "sitio" | "prueba",
+}));
+
+/** Cuántos sorteos de regalo dice el servidor que da hoy (`regaloAbierto`, de los precios). */
+const regalo = vi.hoisted(() => ({ n: 0, preguntas: 0 }));
+vi.mock("../stellar/alta-oferta", async (orig) => ({
+  ...(await orig<typeof import("../stellar/alta-oferta")>()),
+  regaloAbierto: async () => {
+    regalo.preguntas++;
+    return regalo.n;
+  },
 }));
 
 vi.mock("../stellar/config", async (orig) => {
@@ -228,5 +238,47 @@ describe("la guarda del cambio de modo, en un solo lugar", () => {
     h.red = "mainnet";
     abrirHojaDeModo();
     expect(document.querySelector(".modo-card .modo-cupon")).toBeNull();
+  });
+});
+
+describe("lo que dice de Oficial la hoja, con el regalo", () => {
+  /** El párrafo de Oficial en la hoja: la primera opción es la de la red principal. */
+  const deOficial = (): string => document.querySelectorAll(".modo-card .modo-opcion p")[0]?.textContent ?? "";
+  const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+  /** La primera vez el módulo de los precios se baja entero: puede tardar más que la espera de siempre. */
+  const ESPERA = { timeout: 5_000 };
+  // El módulo de los precios, ya bajado: la hoja lo pide aparte y así ninguna prueba espera su primera carga.
+  beforeAll(async () => {
+    const m = await import("../stellar/alta-oferta");
+    expect(typeof m.regaloAbierto).toBe("function");
+  });
+  /** Abre la hoja y espera a que el regalo se haya preguntado y contestado (el módulo se baja aparte). */
+  const abrirYEsperar = async (): Promise<void> => {
+    const antes = regalo.preguntas;
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(regalo.preguntas).toBeGreaterThan(antes), ESPERA);
+    await esperar();
+  };
+
+  it("con el regalo abierto, dice que se organizan esos sorteos gratis, con el número del servidor", async () => {
+    regalo.n = 3;
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(deOficial()).toBe("Para los sorteos que cuentan. Organizás 3 gratis."), ESPERA);
+    regalo.n = 0;
+  });
+
+  it("en inglés", async () => {
+    regalo.n = 3;
+    setLang("en");
+    abrirHojaDeModo();
+    await vi.waitFor(() => expect(deOficial()).toBe("For the draws that count. Run 3 for free."), ESPERA);
+    setLang("es");
+    regalo.n = 0;
+  });
+
+  it("con el regalo en 0 (o sin el campo, el servicio de antes), lo de siempre", async () => {
+    regalo.n = 0;
+    await abrirYEsperar();
+    expect(deOficial()).toBe(T.es.modeOfficialBody);
   });
 });
