@@ -195,6 +195,7 @@ Las rutas nuevas:
 - **No prender los pagos de premios, los retiros ni el alta de quien ganó el día de un evento.** Prenderlos pide desplegar, y un despliegue reinicia el objeto.
 - **No volver a una versión anterior del portero con pagos en el aire.** La versión de antes no ve las tablas nuevas, y un costo de retiro que no se leyó todavía se podría atar a una orden abierta. El orden para volver está en la sección de los pagos.
 - **No vaciar `VITE_ALTA` en Vercel antes de revertir los textos.** Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis, y la publicación de producción (`VERCEL_ENV=production`) no sale sin `VITE_ALTA=1` (`src/stellar/alta-build.ts`): con la variable vacía el build falla y queda la publicación anterior. Para quitar el acceso por cupón, primero se revierte el commit que puso esos textos y después se vacía la variable.
+- **No publicar los textos del regalo antes de que el portero lo dé.** Las páginas que prometen los primeros 3 sorteos oficiales gratis se leen aunque el sitio abra en Prueba, y la publicación de producción no sale con esas frases sin `VITE_REGALO=1` (`src/alta-textos-con-cobro.ts`): el build falla y queda la publicación anterior. El orden: desplegar el portero con el regalo, probarlo con una cuenta nueva del equipo, poner `VITE_REGALO=1` en Production y después unir los textos.
 
 ## Los pagos de premios, los retiros y el alta de quien ganó
 

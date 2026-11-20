@@ -2449,7 +2449,7 @@ export const T: Record<Lang, Dict> = {
       "Cuando una empresa sortea premios en dólares digitales, paga a Tinkazo {p} del total de los premios, con un mínimo de {m}. " +
       "Se suma a lo que carga y no sale del premio: para repartir 120, carga {e}. Quien gana recibe el premio entero y anotarse es gratis.",
     prNoteComision:
-      "El modo Prueba es gratis, y el Oficial también con el cupón de tu evento. " +
+      "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
       "Las campañas de empresa con premios pagan un porcentaje. Participar y comprobar es gratis, siempre.",
     tmComisionT: "Si tu empresa sortea premios",
     tmComisionB:
@@ -5501,7 +5501,7 @@ export const T: Record<Lang, Dict> = {
       "It is added to what the company loads and never comes out of the prize: to give away 120, it loads {e}. " +
       "The winner gets the full prize and signing up is free.",
     prNoteComision:
-      "Test mode is free, and so is Live mode with your event coupon. " +
+      "Run your first 3 Live draws for free. For more, use a coupon. " +
       "Company campaigns with prizes pay a percentage. Taking part and checking are always free.",
     tmComisionT: "If your company gives away prizes",
     tmComisionB:
@@ -6655,7 +6655,7 @@ T.es.pagoMemoNumUso = "Si tu app pide solo números, usá esta nota en vez de la
 T.en.pagoMemoNumRotulo = "Numeric memo";
 T.en.pagoMemoNumUso = "If your app only takes numbers, use this memo instead of the other one.";
 // Con el modo Oficial a la vista, los nombres Prueba y Oficial reemplazan al de siempre, y las páginas de lectura dicen
-// que con un cupón de evento el modo Oficial es gratis (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
+// que los primeros 3 sorteos oficiales son gratis y que para más se usa un cupón (`i18n-modo-oficial.ts`). La puerta es la excepción: el diccionario
 // existe en los dos modos, pero su frase sobre dejar la cuenta lista solo vale cuando la persona está en Oficial.
 if (HAY_MODO_OFICIAL) {
   const { cuentaPideGoogle: puertaOficialEs, ...textosOficialesEs } = TEXTOS_MODO_OFICIAL.es;

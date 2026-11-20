@@ -237,6 +237,32 @@ export function problemasDeLasPaginasEnOficial(env: Record<string, string | unde
 }
 
 /**
+ * Lo que dicen las páginas y los diccionarios desde que prometen el regalo de bienvenida: los primeros 3 sorteos
+ * oficiales gratis. El diccionario del modo Oficial se aplica siempre que haya contrato en la red real, no cuando el sitio
+ * abre en Oficial, así que estas frases se leen en producción apenas se publican, aunque el sitio siga abriendo en Prueba.
+ */
+export const FRASES_DEL_REGALO: readonly RegExp[] = [/3 sorteos oficiales gratis/i, /first 3 Live draws for free/i, /3 free Live draws/i];
+
+/**
+ * Lo que frena la publicación de producción que promete el regalo antes de que el portero lo dé: una frase del regalo en
+ * `textos` (las páginas de la raíz y las fuentes de los diccionarios, por nombre) sin `VITE_REGALO=1`, que se pone recién
+ * con el regalo desplegado y probado. Con `VITE_REGALO=1` pide también `VITE_ALTA=1`, porque los sorteos gratis se
+ * reciben en el paso de la cuenta. Fuera de producción nunca frena: las vistas previas y la CI sirven para probarlo.
+ */
+export function problemasDelRegaloSinDar(env: Record<string, string | undefined>, textos: Readonly<Record<string, string>>): string[] {
+  if (env.VERCEL_ENV !== "production") return [];
+  if (env.VITE_REGALO === "1") {
+    return env.VITE_ALTA === "1" ? [] : ["VITE_REGALO=1 pide VITE_ALTA=1: los sorteos gratis se reciben en el paso de la cuenta."];
+  }
+  const problemas: string[] = [];
+  for (const [nombre, texto] of Object.entries(textos)) {
+    const frase = FRASES_DEL_REGALO.find((f) => f.test(texto));
+    if (frase) problemas.push(`${nombre} promete los sorteos oficiales gratis (${frase.source}) sin VITE_REGALO=1, que va con el regalo desplegado.`);
+  }
+  return problemas;
+}
+
+/**
  * Lo que frena la publicación de producción con la compra abierta para todos: que el HTML todavía diga lo de antes.
  * Recibe el entorno del build (`VITE_*` y `VERCEL_ENV`) y las páginas de la raíz (nombre y HTML). Vacío: puede salir.
  * Fuera de producción, con la compra apagada o con la venta en piloto (sin `VITE_VENTA_ABIERTA=1`), nunca frena: las
