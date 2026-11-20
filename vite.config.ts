@@ -7,7 +7,7 @@ import { problemasDeAlta } from "./src/stellar/alta-build";
 import { avisosDelRetiro, problemasDeLaComision, problemasDePagarConGoogle, problemasDePremios, problemasDelRetiro, problemasDelVoto } from "./src/stellar/premios-build";
 import { comisionDelBuild, costoDelRetiroDelToml, cuentasDelPorteroEnElToml, retirosDelToml } from "./src/stellar/comision-config";
 import { cuentaDeCobrosDelPortero } from "./src/stellar/retiro-config";
-import { problemasDeLasPaginasConCobro } from "./src/alta-textos-con-cobro";
+import { problemasDeLasPaginasConCobro, problemasDeLasPaginasEnOficial } from "./src/alta-textos-con-cobro";
 import { problemasDeLaPortadaConRetiro } from "./src/costo-del-retiro-portada";
 
 type Dict = Record<string, unknown>;
@@ -156,6 +156,9 @@ function validarModoPremios(): Plugin {
  * gratis para todos, que los precios se publican pronto o que no se venden paquetes, o con lo de la compra todavía en un
  * `<template data-con-cobro>` (`src/alta-textos-con-cobro.ts`). El HTML se cambia en el mismo commit que la prende. Las
  * vistas previas, la CI y los builds locales no se frenan: ahí se prueba la compra.
+ *
+ * Con la misma lectura frena la publicación de producción que abre en Oficial (`VITE_STELLAR_NETWORK`) mientras las
+ * páginas que ve primero quien llega digan que Oficial pide el cupón de tu evento (`problemasDeLasPaginasEnOficial`).
  */
 function validarPaginasConCobro(): Plugin {
   return {
@@ -169,6 +172,8 @@ function validarPaginasConCobro(): Plugin {
       );
       const problemas = problemasDeLasPaginasConCobro(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]), paginas);
       if (problemas.length) throw new Error(`Las páginas todavía dicen lo de antes de la compra de sorteos:\n- ${problemas.join("\n- ")}`);
+      const oficial = problemasDeLasPaginasEnOficial(loadEnv(mode, __dirname, ["VITE_", "VERCEL_ENV"]), paginas);
+      if (oficial.length) throw new Error(`Las páginas todavía dicen lo de antes de abrir en Oficial:\n- ${oficial.join("\n- ")}`);
     },
   };
 }
@@ -417,6 +422,9 @@ export default defineConfig({
     // `pnpm test` corría también las pruebas a medias de otra copia y
     // fallaba por trabajo ajeno (18 de octubre de 2026).
     exclude: [...configDefaults.exclude, "**/worktrees/**"],
+    // Las pruebas corren siempre con el sitio abriendo en Prueba: un `.env.local` traído de Vercel con
+    // `VITE_STELLAR_NETWORK=mainnet` no puede cambiar la red de cientos de pruebas que hoy dan Prueba por sentado.
+    env: { VITE_STELLAR_NETWORK: "" },
     // Con la máquina cargada, las pruebas que verifican firmas reales o cargan el SDK de Stellar pasan de 5 segundos,
     // y las que simulan cientos de carreras enteras pasan de 30 cuando el procesador trabaja en modo silencioso o
     // hay otras tareas al lado. Subir el margen no esconde fallas: deja de confundir la carga con un error.

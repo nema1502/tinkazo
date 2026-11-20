@@ -72,7 +72,7 @@ const browser = await launch({ width: 1280, height: 800 });
 try {
   const pantalla = await browser.open("about:blank");
   await pantalla.send("Network.enable");
-  await pantalla.send("Page.navigate", { url: `${base}/?lang=es&sala=${encodeURIComponent(viaIntermediario)}` });
+  await pantalla.send("Page.navigate", { url: `${base}/?lang=es&red=prueba&sala=${encodeURIComponent(viaIntermediario)}` });
   await pantalla.waitFor("document.getElementById('btn-stand')", 20000);
   await sleep(1200);
   await pantalla.eval(`document.getElementById('btn-stand').click()`);

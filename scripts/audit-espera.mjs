@@ -185,7 +185,7 @@ async function sellar(page, v) {
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
   // Diez segundos de margen: desde el 16 de noviembre de 2026 la espera en grande lanza el sorteo 3,5 s antes de que nazca
   // el número, y con `?lead=3` ya estaba lanzado al abrirla. El caso de la espera cerrada la cierra antes de ese momento.
-  await page.send("Page.navigate", { url: `${base}/?lead=10&pace=rapido&theme=${tema}&lang=${lang}#sortear` });
+  await page.send("Page.navigate", { url: `${base}/?lead=10&pace=rapido&theme=${tema}&lang=${lang}&red=prueba#sortear` });
   await page.waitFor("document.readyState === 'complete'", 20000);
   await sleep(900);
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
@@ -374,7 +374,7 @@ async function abrirSinSellar(browser, v, { modo = "normal", url = "?lead=40&pac
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: INSTRUMENTO(modo) });
-  await page.send("Page.navigate", { url: `${base}/${url}${url.includes("?") ? "&" : "?"}theme=${tema}&lang=${lang}#sortear` });
+  await page.send("Page.navigate", { url: `${base}/${url}${url.includes("?") ? "&" : "?"}theme=${tema}&lang=${lang}&red=prueba#sortear` });
   await page.waitFor("document.readyState === 'complete'", 20000);
   await sleep(900);
   if (ensayo) {

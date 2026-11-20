@@ -197,10 +197,10 @@ describe("la guarda del cambio de modo, en un solo lugar", () => {
   });
 
   it.each([
-    ["es", "testnet", "Cada modo tiene su propia cuenta. En Oficial vas a entrar una vez más, y tu cuenta de Prueba sigue acá cuando vuelvas."],
-    ["es", "mainnet", "Cada modo tiene su propia cuenta. En Prueba vas a entrar una vez más, y tu cuenta de Oficial sigue acá cuando vuelvas."],
-    ["en", "testnet", "Each mode has its own account. You'll sign in once more in Live, and your Test account will still be here when you come back."],
-    ["en", "mainnet", "Each mode has its own account. You'll sign in once more in Test, and your Live account will still be here when you come back."],
+    ["es", "testnet", "En Oficial entrás de nuevo. Tu cuenta de Prueba te espera."],
+    ["es", "mainnet", "En Prueba entrás de nuevo. Tu cuenta de Oficial te espera."],
+    ["en", "testnet", "In Live you sign in again. Your Test account will be waiting."],
+    ["en", "mainnet", "In Test you sign in again. Your Live account will be waiting."],
   ] as const)("la hoja avisa la cuenta del otro modo en %s desde %s", (lang, red, texto) => {
     h.tipo = "sitio";
     h.red = red;

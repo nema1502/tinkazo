@@ -1,19 +1,24 @@
 import deployments from "./deployments.json";
 import { MAX_WINNERS } from "../protocol/select";
 import { cuponDelFragmento } from "./cupon-guardado";
+import { parseModeValue, type NetworkName } from "./modo-valor";
 
 /**
  * Configuración de red. El modo se decide una sola vez al cargar la página:
  * primero manda `?red=` de la dirección, después un cupón bien formado en
- * `#cupon=`, la elección de esta pestaña y por último el modo con el que abre
- * el sitio (`VITE_STELLAR_NETWORK`, con Prueba por defecto). Si el modo elegido
- * es Oficial pero todavía no hay contrato en la lista oficial, abre en Prueba.
+ * `#cupon=`, la elección de esta pestaña, y por último el modo con el que abre
+ * el sitio (`VITE_STELLAR_NETWORK`: Oficial con `mainnet` u `oficial`, Prueba sin
+ * la variable). La demo y la escena fija (`?demo=`, `?pose=`) no graban nada y
+ * sin otra indicación abren en Prueba, aunque el sitio abra en Oficial. Si el
+ * modo elegido es Oficial pero todavía no hay contrato en la lista oficial,
+ * abre en Prueba.
  *
  * La app declara contra qué contrato habla. Nunca deduce la red de la wallet:
  * si la wallet está en otra, se avisa y se bloquea el sellado.
  */
 
-export type NetworkName = "testnet" | "mainnet";
+export type { NetworkName };
+export { parseModeValue };
 
 /**
  * Los puntos de entrada a la cadena, en un solo lugar.
@@ -111,14 +116,6 @@ const NETWORKS: Record<NetworkName, NetworkConfig> = {
 /** La elección de modo de esta pestaña. Dura hasta cerrarla y no pasa a otra visita. */
 export const MODE_STORAGE_KEY = "tinkazo.red";
 
-/** El valor de `?red=` o de la pestaña, en la red que nombra, o `null` si no dice nada que se entienda. */
-export function parseModeValue(raw: string | null | undefined): NetworkName | null {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "oficial" || value === "live" || value === "mainnet") return "mainnet";
-  if (value === "prueba" || value === "test" || value === "testnet") return "testnet";
-  return null;
-}
-
 export interface ModeEnvironment {
   /** La parte de la dirección donde viaja `red`, o la dirección entera. */
   search?: string | null | undefined;
@@ -145,10 +142,27 @@ const modeFromSearch = (search: string | null | undefined): NetworkName | null =
 /** Un cupón bien formado en la dirección pide Oficial, igual que `?red=oficial`. */
 const modeFromCoupon = (hash: string | null | undefined): NetworkName | null => (cuponDelFragmento(hash ?? "").codigo ? "mainnet" : null);
 
+/**
+ * La demo y la escena fija nunca graban: sin `?red=` ni elección de la pestaña abren en Prueba, aunque el sitio abra en
+ * Oficial. Así una demo compartida no lleva a nadie a la red principal sin que lo pida.
+ */
+const pideDemo = (search: string | null | undefined): boolean => {
+  if (!search) return false;
+  try {
+    const query = search.includes("?") ? search.slice(search.indexOf("?")) : search;
+    const q = new URLSearchParams(query.split("#")[0] ?? "");
+    return q.has("demo") || q.has("pose");
+  } catch {
+    return false;
+  }
+};
+
 /** Las reglas del modo, en orden, sin tocar el navegador: así se prueban. */
 export function resolveNetworkName(env: ModeEnvironment = {}): NetworkName {
   const hash = env.hash ?? (env.search?.includes("#") ? env.search.slice(env.search.indexOf("#")) : null);
-  const chosen = modeFromSearch(env.search) ?? modeFromCoupon(hash) ?? parseModeValue(env.stored) ?? (env.build === "mainnet" ? "mainnet" : "testnet");
+  // El build se lee con las mismas palabras que `?red=`. Un valor que no se entiende abre en Prueba, y el build no sale con él.
+  const porDefecto: NetworkName = pideDemo(env.search) ? "testnet" : (parseModeValue(env.build) ?? "testnet");
+  const chosen = modeFromSearch(env.search) ?? modeFromCoupon(hash) ?? parseModeValue(env.stored) ?? porDefecto;
   if (chosen === "mainnet" && !env.hasOfficialContract) return "testnet";
   return chosen;
 }

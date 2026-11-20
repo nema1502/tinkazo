@@ -1,3 +1,4 @@
+import { parseModeValue } from "./modo-valor";
 import { NOMBRES_DE_LA_VENTA, banderasDeVenta, ventaAbiertaATodos } from "./venta-piloto";
 
 /**
@@ -12,6 +13,12 @@ import { NOMBRES_DE_LA_VENTA, banderasDeVenta, ventaAbiertaATodos } from "./vent
  * publicación de producción. Las páginas de lectura dicen que con un cupón de evento el modo Oficial es gratis
  * (`i18n-modo-oficial.ts`), y sin `VITE_ALTA=1` el sitio no tiene dónde canjearlo: esa publicación no sale. La CI, las
  * vistas previas y los builds locales no se frenan por esto.
+ *
+ * Y mira el modo con el que abre el sitio (`VITE_STELLAR_NETWORK`, que se lee con las palabras de `?red=`): un valor que
+ * no se entiende abriría en Prueba sin aviso, así que el build no sale. Con la publicación de producción abriendo en
+ * Oficial, toda persona nueva llega a la red principal: hace falta el paso de la cuenta con el portero de esa red y la
+ * llave de Pollar de esa red, sin la cual no hay entrada con Google. Lo que dicen las páginas lo mira
+ * `problemasDeLasPaginasEnOficial` (`alta-textos-con-cobro.ts`).
  */
 
 /**
@@ -85,6 +92,30 @@ export function problemasDeAlta(env: Record<string, string | undefined>): string
     problemas.push(
       "La publicación de producción necesita VITE_ALTA=1: las páginas dicen que con un cupón de evento el modo Oficial es gratis, y sin esa bandera el sitio no tiene dónde canjearlo. Para volver atrás se revierte primero el cambio que puso esos textos y después se vacía la variable: vaciarla antes deja la publicación sin salir.",
     );
+  }
+  // El modo con el que abre el sitio: vacía es Prueba. Un valor que no se entiende (red-principal, main) también daría
+  // Prueba, sin que nadie se enterara de que la publicación no abre donde se quiso.
+  const red = (env.VITE_STELLAR_NETWORK ?? "").trim();
+  if (red !== "" && !parseModeValue(red)) {
+    problemas.push(
+      "VITE_STELLAR_NETWORK tiene que ser mainnet u oficial, o testnet o prueba (vacía es Prueba): con otro valor el sitio abre en Prueba sin aviso.",
+    );
+  }
+  // La publicación de producción que abre en Oficial: el paso de la cuenta (con su portero, que mira el renglón de
+  // arriba) y la entrada con Google de la red principal tienen que estar, porque los ve toda persona nueva.
+  if (env.VERCEL_ENV === "production" && parseModeValue(red) === "mainnet") {
+    if (!uno("VITE_ALTA")) {
+      problemas.push(
+        "La publicación de producción que abre en Oficial necesita VITE_ALTA=1 con el portero de la red principal: " +
+          "toda persona nueva deja su cuenta lista ahí.",
+      );
+    }
+    if ((env.VITE_POLLAR_PUBLISHABLE_KEY_MAINNET ?? "").trim() === "") {
+      problemas.push(
+        "La publicación de producción que abre en Oficial necesita VITE_POLLAR_PUBLISHABLE_KEY_MAINNET: " +
+          "sin ella el modo Oficial no ofrece entrar con Google.",
+      );
+    }
   }
   // Pagar con el saldo es un medio de la compra: sin la compra prendida no hay orden que pagar.
   if (venta.saldo && !venta.pago) problemas.push("VITE_PAGO_CON_SALDO=1 necesita VITE_ALTA_PAGO=1: pagar con el saldo de la cuenta es un medio de la compra de sorteos.");

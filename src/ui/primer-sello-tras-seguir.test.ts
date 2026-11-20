@@ -9,7 +9,7 @@ import { FIRST_OFFICIAL_KEY, confirmarPrimerSelloOficial, haceFaltaConfirmar, ma
 /**
  * La pantalla que el issue #82 quita entre el cupón y el primer sello: al entrar sin lista, el final del paso
  * («Tu cuenta está lista») muestra el texto del registro público del primer sello y Seguir lo marca visto. Así el
- * primer sello sigue sin otra confirmación: se ahorra el toque de «Vas a sellar en modo Oficial → Sellar».
+ * primer sello sigue sin otra confirmación: se ahorra el toque de «Este sorteo cuenta → Sellar».
  *
  * Acá el cable es el de verdad (el de `cuenta-lista-flujo.ts`): `pendiente` y `marcar` son los de modo-ui, no
  * simulacros. La mitad del paso está en `cuenta-lista.test.ts` (con un `marcar` propio) y la del diálogo en
@@ -117,7 +117,7 @@ describe("una pantalla menos entre el cupón y el primer sello", () => {
     principal().click();
     await expect(promesa).resolves.toBe(true);
     expect(localStorage.getItem(FIRST_OFFICIAL_KEY)).toBeNull();
-    // Toque 2: «Vas a sellar en modo Oficial → Sellar».
+    // Toque 2: «Este sorteo cuenta → Sellar».
     const sello = confirmarPrimerSelloOficial();
     expect(dialogo()).not.toBeNull();
     expect(document.querySelector(".dlg-h")?.textContent).toBe(t("firstOfficialTitle"));

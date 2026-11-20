@@ -66,7 +66,7 @@ try {
     console.log(`\n== ${vista} (${VISTAS[vista].w}x${VISTAS[vista].h})`);
     const resultado = [];
     // El flujo, con el show saltado: lo que se ve en la página.
-    let page = await pagina(browser, vista, `${BASE}/?lead=6&instant=1`);
+    let page = await pagina(browser, vista, `${BASE}/?lead=6&instant=1&red=prueba`);
     try {
       await page.waitFor("document.readyState === 'complete' && document.querySelector('.hero')", 30000);
       await sleep(1500);

@@ -69,7 +69,7 @@ async function abrir(browser, v, tema, query = "", hash = "#sortear") {
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
   const sep = query ? "&" : "?";
-  await page.send("Page.navigate", { url: `${base}/${query}${sep}theme=${tema}&lang=es${hash}` });
+  await page.send("Page.navigate", { url: `${base}/${query}${sep}theme=${tema}&lang=es&red=prueba${hash}` });
   await page.waitFor("document.readyState === 'complete'", 20000);
   await sleep(900);
   return page;
@@ -463,7 +463,7 @@ const DETALLES = {
           { organizer: addr, listHash: "b".repeat(64), count: 11, numWinners: 1, round: 33000101, sealedAt: ahora - 3000, prize: "Polera", winners: ["Luis Mamani"], proof: "https://tinkazo.app/verificar.html#p=dos" },
         ];
         await page.eval(`localStorage.setItem('tinkazo.history.testnet', ${js(JSON.stringify(filas))}); localStorage.removeItem('tinkazo.eventos.testnet'); true`);
-        await page.send("Page.navigate", { url: `${base}/?grifo=0&theme=${tema}&lang=es#mis-sorteos` });
+        await page.send("Page.navigate", { url: `${base}/?grifo=0&theme=${tema}&lang=es&red=prueba#mis-sorteos` });
         await page.waitFor("document.readyState === 'complete'", 20000);
         const hay = await page.waitFor("document.querySelector('[data-nombrar]')", 30000);
         if (!hay.ok) throw new Error('no apareció "Ponerle nombre"');
