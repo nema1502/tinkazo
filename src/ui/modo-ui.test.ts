@@ -3,9 +3,18 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { T, setLang } from "../i18n";
 import { app } from "../state";
 import { saveSessionKind } from "../stellar/session-store";
-import { MARCA_INGRESAR } from "./cuenta-estado";
+import { MARCA_INGRESAR, MARCA_PRACTICAR } from "./cuenta-estado";
 import { CLAVE_PASO_CUPON } from "../stellar/cupon-paso-guardado";
-import { abrirHojaDeModo, cambioBloqueado, haceFaltaConfirmar, marcarSellandoAhora, otroModo, pasarAModo, puedeCambiarDeModo } from "./modo-ui";
+import {
+  abrirHojaDeModo,
+  cambioBloqueado,
+  haceFaltaConfirmar,
+  marcarSellandoAhora,
+  otroModo,
+  pasarAModo,
+  practicarEnPrueba,
+  puedeCambiarDeModo,
+} from "./modo-ui";
 
 const h = vi.hoisted(() => ({
   red: "testnet" as "mainnet" | "testnet",
@@ -280,5 +289,51 @@ describe("lo que dice de Oficial la hoja, con el regalo", () => {
     regalo.n = 0;
     await abrirYEsperar();
     expect(deOficial()).toBe(T.es.modeOfficialBody);
+  });
+});
+
+describe("Practicar en Prueba, de un toque", () => {
+  beforeEach(() => {
+    h.red = "mainnet";
+    h.cambios = [];
+    h.destinos = [];
+    h.cambia = true;
+    h.tipo = "sin";
+    app.frozen = null;
+    app.drawn = null;
+    marcarSellandoAhora(false);
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("pasa a Prueba con la herramienta abierta y deja la marca de entrar con la cuenta de prueba", () => {
+    expect(practicarEnPrueba()).toBe(true);
+    expect(h.cambios).toEqual(["testnet"]);
+    expect(h.destinos).toEqual(["sortear"]);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBe("1");
+  });
+
+  it("no pide la ventana de entrar: la página de Prueba entra sola", () => {
+    practicarEnPrueba();
+    expect(sessionStorage.getItem(MARCA_INGRESAR)).toBeNull();
+  });
+
+  it("limpia un campo del cupón que no se llegó a usar", () => {
+    sessionStorage.setItem(CLAVE_PASO_CUPON, "1");
+    practicarEnPrueba();
+    expect(sessionStorage.getItem(CLAVE_PASO_CUPON)).toBeNull();
+  });
+
+  it("con un sorteo sellado esperando su número no hace nada ni deja la marca", () => {
+    app.frozen = { names: ["Ana", "Beto"] } as unknown as typeof app.frozen;
+    expect(practicarEnPrueba()).toBe(false);
+    expect(h.cambios).toEqual([]);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBeNull();
+  });
+
+  it("si el cambio no recarga, no deja la marca", () => {
+    h.cambia = false;
+    expect(practicarEnPrueba()).toBe(false);
+    expect(sessionStorage.getItem(MARCA_PRACTICAR)).toBeNull();
   });
 });

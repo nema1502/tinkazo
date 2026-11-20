@@ -22,6 +22,7 @@ const h = vi.hoisted(() => ({
   nombres: ["Ana", "Beto"] as string[],
   sellandoAhora: [] as boolean[],
   cambio: vi.fn(),
+  practicar: vi.fn(),
   pendiente: null as unknown,
   // Si paga el portero y qué error cuenta como un sello que no quedó grabado (se prueba con otra ronda).
   conPortero: false,
@@ -85,6 +86,7 @@ vi.mock("./modo-ui", () => ({
   marcarSellandoAhora: (v: boolean) => void h.sellandoAhora.push(v),
   puedeCambiarDeModo: () => h.sellandoAhora.at(-1) !== true,
   pasarAModo: (...a: unknown[]) => h.cambio(...a),
+  practicarEnPrueba: () => h.practicar(),
 }));
 vi.mock("./participants", () => ({
   cerrarLista: () => undefined,
@@ -176,6 +178,7 @@ beforeEach(async () => {
   h.confirmar.mockReset();
   h.confirmar.mockResolvedValue(true);
   h.cambio.mockReset();
+  h.practicar.mockReset();
   h.billetera = { submitsItself: true };
   h.nombres = ["Ana", "Beto"];
   h.sellandoAhora = [];
@@ -195,7 +198,7 @@ afterEach(() => {
 });
 
 describe("la compuerta del sello con el cobro por uso", () => {
-  it("con 0 sorteos no se pide la firma: sale «Se te acabaron», con «Usar un cupón» como principal", async () => {
+  it("con 0 sorteos no se pide la firma: sale «Se te acabaron», sin venta con «Sortear en Prueba» como principal", async () => {
     portero(cupo(conSorteos(0), 0));
     const { freeze } = await import("./freeze");
     const { t } = await import("../i18n");
@@ -204,18 +207,23 @@ describe("la compuerta del sello con el cobro por uso", () => {
     expect(h.sealOnChain).not.toHaveBeenCalled();
     const v = ventana() as HTMLElement;
     expect(v.textContent).toContain(t("cupoOfCeroTitulo"));
-    expect(v.textContent).toContain(t("cupoOfCeroTexto"));
+    expect(v.textContent).toContain(t("cupoOfCeroTextoSinVenta"));
     const principal = v.querySelector<HTMLButtonElement>(".dlg-main");
-    expect(principal?.textContent).toBe(t("cupoOfUsarCupon"));
+    expect(principal?.textContent).toBe(t("pagoSortearEnPrueba"));
     expect(v.querySelectorAll(".dlg-main")).toHaveLength(1);
-    // Ningún cobro como principal: puede estar proyectada frente a la sala.
+    // Ningún cobro a la vista: puede estar proyectada frente a la sala.
     expect(v.textContent).not.toMatch(/dólares|US\$/);
-    principal?.click();
+    // El cupón va como enlace chico, y abre el paso de la cuenta directo en el campo del cupón.
+    const cupon = v.querySelector<HTMLButtonElement>('[data-accion="cupon"]');
+    expect(cupon?.textContent).toBe(t("altaTengoCupon"));
+    expect(cupon?.classList.contains("dlg-main")).toBe(false);
+    cupon?.click();
     await p.catch(() => undefined);
-    // «Usar un cupón» abre el paso de la cuenta, directo en el campo del cupón; la persona salió, y no se selló nada.
+    // La persona salió del paso, y no se selló nada.
     expect(h.paso).toHaveBeenCalledWith("sello", expect.anything(), { cupon: "escribir" });
     expect(h.sealOnChain).not.toHaveBeenCalled();
     expect(h.confirmar).not.toHaveBeenCalled();
+    expect(h.practicar).not.toHaveBeenCalled();
   });
 
   it("con 1 sorteo sí se pide la firma", async () => {
@@ -314,7 +322,7 @@ describe("la compuerta del sello con el cobro por uso", () => {
     expect(h.sinPatrocinio).toHaveBeenCalledWith({ motivo: "cupo-cuenta", que: "sellos", liberaEn: Date.UTC(2026, 11, 1) });
   });
 
-  it("un 402 que igual llega muestra la ventana, y «Pasar a Prueba» puede cambiar de modo", async () => {
+  it("un 402 que igual llega muestra la ventana, y «Sortear en Prueba» pasa a Prueba con la cuenta de prueba", async () => {
     portero(cupo(conSorteos(1), 1));
     h.sealOnChain.mockRejectedValue(errorDeRespuesta(402, { motivo: "sin-sorteos", vencieron: 0 }));
     const { freeze } = await import("./freeze");
@@ -323,11 +331,13 @@ describe("la compuerta del sello con el cobro por uso", () => {
     await esperar(() => ventana() !== null);
     expect(h.sealOnChain).toHaveBeenCalledTimes(1);
     const prueba = ventana()?.querySelector<HTMLButtonElement>('[data-accion="prueba"]');
-    expect(prueba?.textContent).toBe(t("modeSwitchToTest"));
+    expect(prueba?.textContent).toBe(t("pagoSortearEnPrueba"));
     expect(prueba?.disabled).toBe(false);
     prueba?.click();
     await p.catch(() => undefined);
-    expect(h.cambio).toHaveBeenCalledWith("testnet");
+    // El sello ya terminó: la guarda del cambio de modo está abierta (el botón se muestra) y el toque pasa a Prueba.
+    expect(h.practicar).toHaveBeenCalledTimes(1);
+    expect(h.cambio).not.toHaveBeenCalled();
     expect(h.sinPatrocinio).not.toHaveBeenCalled();
   });
 });

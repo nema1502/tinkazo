@@ -224,3 +224,50 @@ describe("el regalo fuera del paso", () => {
     expect(h.estados).toBe(1);
   });
 });
+
+describe("si la cuenta nunca tuvo sorteos oficiales, de la misma lectura", () => {
+  it.each([
+    // El alta del regalo y la de quien ganó nacen sin sorteos: con el regalo sin recibir, nunca tuvo.
+    ["admin", { estado: "lista", sorteos: 3 }, true],
+    ["admin", { estado: "llena", sorteos: 3 }, true],
+    ["premio", { estado: "llena", sorteos: 3 }, true],
+    // Con el regalo ya recibido (o el servicio de antes, sin el campo), no se sabe.
+    ["admin", null, null],
+    // El cupón y la compra traen sorteos: tuvo, aunque el regalo siga sin recibir.
+    ["cupon", { estado: "lista", sorteos: 3 }, false],
+    ["pago", null, false],
+    // Lo que no se conoce no se adivina.
+    ["gratis", { estado: "lista", sorteos: 3 }, null],
+    ["ninguno", { estado: "lista", sorteos: 3 }, null],
+  ] as const)("con el acceso %s y el regalo %j: %s", async (acceso, bienvenida, nunca) => {
+    h.accesoDelEstado = acceso;
+    h.bienvenida = bienvenida;
+    const f = await flujo();
+    expect((await f.leerElRegalo()).nuncaTuvo).toBe(nunca);
+    // Una sola lectura del estado para las dos preguntas.
+    await f.regaloDisponible();
+    expect(h.estados).toBe(1);
+  });
+
+  it("fuera de Oficial no se sabe y no pregunta nada", async () => {
+    h.red = "testnet";
+    h.accesoDelEstado = "admin";
+    const f = await flujo();
+    expect(await f.leerElRegalo()).toEqual({ disponible: null, nuncaTuvo: null });
+    expect(h.estados).toBe(0);
+  });
+
+  it("al recibir el regalo ya tuvo, y si no llegó sigue sin tener", async () => {
+    h.accesoDelEstado = "admin";
+    const f = await flujo();
+    expect((await f.leerElRegalo()).nuncaTuvo).toBe(true);
+    expect(await f.recibirRegalo()).toBe("dado");
+    expect(await f.leerElRegalo()).toEqual({ disponible: null, nuncaTuvo: false });
+    vi.resetModules();
+    h.reclamo = "lleno";
+    const g = await flujo();
+    expect((await g.leerElRegalo()).nuncaTuvo).toBe(true);
+    expect(await g.recibirRegalo()).toBe("sin-sorteos");
+    expect(await g.leerElRegalo()).toEqual({ disponible: null, nuncaTuvo: true });
+  });
+});

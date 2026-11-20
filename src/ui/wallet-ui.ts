@@ -1,7 +1,17 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
-import { anchoringAvailable, accountUrl, hayModoOficial, modeNameKey, network, networkOfPassphrase, shortAddress, type NetworkName } from "../stellar/config";
-import { hasPollarKey } from "../stellar/pollar-config";
+import {
+  anchoringAvailable,
+  accountUrl,
+  hayModoOficial,
+  modeNameKey,
+  network,
+  networkOfPassphrase,
+  shortAddress,
+  urlForMode,
+  type NetworkName,
+} from "../stellar/config";
+import { hasPollarKey, leerMarcaPollar } from "../stellar/pollar-config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
@@ -12,9 +22,10 @@ import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from 
 import { hayCuentaGuardada } from "../stellar/cuenta-guardada";
 import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
-import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
+import { MARCA_INGRESAR, MARCA_PRACTICAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 import { errorDeCodigo } from "./ingreso-errores";
-import { type PasoDelIngreso, type TituloDelAviso, ofrecerSalida, tituloDelAviso } from "./ingreso-plan-b";
+import { type PasoDelIngreso, type TituloDelAviso, ofrecerPractica, ofrecerSalida, tituloDelAviso } from "./ingreso-plan-b";
+import { copiarTexto } from "./copiar-texto";
 import { AVISO_SIN_CUENTA, elegirSinCuenta, salirDeSinCuenta, sinCuentaElegido } from "./sin-cuenta";
 import { anunciarFranja, pintarFranja } from "./sin-cuenta-franja";
 import { esDeRed } from "../stellar/errores";
@@ -376,7 +387,7 @@ export function initWalletUI(): void {
   document.addEventListener(AVISO_SIN_CUENTA, () => {
     applyGate();
     refreshFreezeLabel();
-    pintarFranja(() => void openPicker());
+    pintarFranja(() => void openPicker({ otras: true }));
   });
   const fin = (): void => {
     if (!retomando) return;
@@ -387,6 +398,9 @@ export function initWalletUI(): void {
   void Promise.allSettled([restorePollar(), restoreSession()]).then(fin);
   // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
   setTimeout(fin, 12_000);
+  // Llegó de Practicar en Prueba (modo-ui.ts): la marca se consume ahora, una sola vez, y al terminar de retomar entra con
+  // la cuenta de prueba sin abrir la ventana. Si volvió una sesión guardada, entra con esa.
+  if (tomarMarcaDePractica()) void retomaTerminada.then(() => entrarAPracticar());
   // Sellar o sortear no pudo pagar la comisión y no había cómo ayudar solo
   // (ver `conFondos` en anchor.ts): la caja de fondos aparece pegada al botón,
   // como último recurso.
@@ -455,6 +469,64 @@ async function restoreSession(): Promise<void> {
   } catch {
     clearSessionKind(network.name);
   }
+}
+
+/** La marca de Practicar en Prueba: se lee y se borra al cargar, así vale para esta carga y para ninguna más. */
+function tomarMarcaDePractica(): boolean {
+  try {
+    const hay = sessionStorage.getItem(MARCA_PRACTICAR) === "1";
+    sessionStorage.removeItem(MARCA_PRACTICAR);
+    return hay;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Practicar en Prueba, ya en Prueba: entra con la cuenta de prueba, el mismo camino que elegirla en la ventana, sin abrir
+ * la ventana. La cabecera y la puerta dicen Conectando mientras tanto. Con una sesión que ya volvió, en la demo, el ensayo
+ * o el stand, o donde no hay cuenta de prueba, no hace nada. Si falla, el aviso de siempre con su Otra forma de entrar.
+ */
+async function entrarAPracticar(): Promise<void> {
+  if (session || conectando || !anchoringAvailable || network.name !== "testnet" || sinGrabar()) return;
+  const w = await lite();
+  if (!w.guestAvailable() || session) return;
+  marcarQueVaASortear();
+  conectando = true;
+  pintarCuenta();
+  applyGate();
+  try {
+    const wallet = (await loadWallets()).guestWallet;
+    const address = await wallet.connect();
+    await afterConnect(w, wallet, address, "guest", document.createElement("div"), () => undefined);
+  } catch (e) {
+    notice(await walletErrorText(e), true);
+  } finally {
+    conectando = false;
+    if (!session) pintarCuenta();
+    applyGate();
+  }
+}
+
+/**
+ * Practicar en Prueba se ofrece en Oficial, fuera de la demo, el ensayo y el stand (que no graban y tienen su propia
+ * forma de probar), y solo si ahora se puede cambiar de modo: nunca un botón que no hace nada.
+ */
+async function sePuedePracticar(): Promise<boolean> {
+  if (network.name !== "mainnet" || !hayModoOficial || sinGrabar()) return false;
+  try {
+    return (await import("./modo-ui")).puedeCambiarDeModo();
+  } catch {
+    return false;
+  }
+}
+
+/** Va a practicar: el aviso y la ventana se van, y la página recarga en Prueba con la cuenta de prueba. Con cuenta abierta, nada. */
+function irAPracticar(cerrarVentana?: () => void): void {
+  if (session) return;
+  document.querySelector(".wallet-notice")?.remove();
+  cerrarVentana?.();
+  void import("./modo-ui").then((m) => m.practicarEnPrueba());
 }
 
 /** Deja la wallet como activa y pinta la sesión. Lo comparten conectar y retomar. */
@@ -631,7 +703,7 @@ function render(): void {
     quitarSalidasViejas();
   }
   applyGate();
-  pintarFranja(() => void openPicker());
+  pintarFranja(() => void openPicker({ otras: true }));
   // La página decide con esto si muestra la portada o la herramienta.
   document.dispatchEvent(new CustomEvent<string | null>("tinkazo:sesion", { detail: session?.address ?? null }));
   // Mis sorteos, recién con una cuenta. Sin ella no hay nada que mostrar: la
@@ -1047,25 +1119,30 @@ function button(label: string, extra: string, onClick: () => void): HTMLButtonEl
 /* -------------------------------------------------- plan B del ingreso */
 
 /**
- * Lo que suma un aviso de ingreso que falló por culpa del proveedor cuando el plan B del ingreso está prendido: una
- * acción para seguir sin cuenta (`ingreso-plan-b.ts`). Nunca se elige sola.
+ * Lo que suma un aviso de ingreso que falló por culpa del proveedor: en Prueba, con el plan B del ingreso prendido, una
+ * acción para seguir sin cuenta; en Oficial, donde sin cuenta no se sortea, Practicar en Prueba (`ingreso-plan-b.ts`).
+ * Nunca se elige sola.
  */
 interface Salida {
+  tipo: "sin-cuenta" | "practicar";
   elegir: () => void;
   /** El título del aviso: neutro si venció el plazo, y solo si el proveedor contestó con un error, el que lo señala. */
   titulo: TituloDelAviso;
 }
 
-/** ¿Este fallo del ingreso con Pollar ofrece seguir sin cuenta? `cerrarVentana` cierra la ventana de ingreso si estaba abierta. */
+/** ¿Este fallo del ingreso con Pollar ofrece una salida? `cerrarVentana` cierra la ventana de ingreso si estaba abierta. */
 async function salidaDe(e: unknown, paso: PasoDelIngreso, cerrarVentana?: () => void): Promise<Salida | undefined> {
   // Quien ya siguió sin cuenta no necesita que se lo ofrezcan de nuevo si un intento de entrar vuelve a fallar.
   if (sinCuentaElegido()) return undefined;
   try {
-    if (!(await ofrecerSalida(e, paso))) return undefined;
+    if (await ofrecerSalida(e, paso)) return { tipo: "sin-cuenta", elegir: () => seguirSinCuenta(cerrarVentana), titulo: tituloDelAviso(e) };
+    if ((await sePuedePracticar()) && (await ofrecerPractica(e, paso))) {
+      return { tipo: "practicar", elegir: () => irAPracticar(cerrarVentana), titulo: tituloDelAviso(e) };
+    }
   } catch {
     return undefined;
   }
-  return { elegir: () => seguirSinCuenta(cerrarVentana), titulo: tituloDelAviso(e) };
+  return undefined;
 }
 
 /**
@@ -1086,11 +1163,14 @@ function seguirSinCuenta(cerrarVentana?: () => void): void {
 }
 
 function botonDeSalida(salida: Salida): HTMLButtonElement {
-  const b = button(t("sinCuentaBoton"), "ghost login-salida-b", () => salida.elegir());
+  const b = button(t(salida.tipo === "practicar" ? "ingresoPracticar" : "sinCuentaBoton"), "ghost login-salida-b", () => salida.elegir());
   b.type = "button";
-  b.dataset.salida = "sin-cuenta";
+  b.dataset.salida = salida.tipo;
   return b;
 }
+
+/** La línea de debajo del título: qué pasa si se toma la salida. */
+const lineaDeSalida = (salida: Salida): string => t(salida.tipo === "practicar" ? "ingresoPracticarLinea" : "ingresoCaidoLinea");
 
 function spanDe(clase: string, texto: string): HTMLSpanElement {
   const s = document.createElement("span");
@@ -1132,7 +1212,7 @@ function sumarSalidaAlAviso(aviso: HTMLElement, e: unknown, paso: PasoDelIngreso
     titulo.textContent = t(salida.titulo);
     const linea = document.createElement("p");
     linea.className = "ingreso-salida-l";
-    linea.textContent = t("ingresoCaidoLinea");
+    linea.textContent = lineaDeSalida(salida);
     frase.replaceWith(titulo, linea);
     acciones.insertBefore(botonDeSalida(salida), acciones.lastElementChild);
   });
@@ -1144,16 +1224,16 @@ async function sumarSalidaAlError(err: HTMLElement, e: unknown, paso: PasoDelIng
   const salida = await salidaDe(e, paso, cerrarVentana);
   if (!salida || versionDe(err) !== version || err.hidden || !err.isConnected || session || sinCuentaElegido()) return;
   quitarSalida(err);
-  err.replaceChildren(spanDe("ingreso-salida-t", t(salida.titulo)), spanDe("ingreso-salida-l", t("ingresoCaidoLinea")));
+  err.replaceChildren(spanDe("ingreso-salida-t", t(salida.titulo)), spanDe("ingreso-salida-l", lineaDeSalida(salida)));
   const caja = document.createElement("div");
   caja.className = "login-salida";
   caja.append(botonDeSalida(salida));
   err.after(caja);
 }
 
-/** Con una cuenta abierta, los avisos viejos que ofrecían seguir sin cuenta se van: ya no tienen sentido. */
+/** Con una cuenta abierta, los avisos viejos que ofrecían seguir sin cuenta o practicar se van: ya no tienen sentido. */
 function quitarSalidasViejas(): void {
-  for (const boton of document.querySelectorAll('[data-salida="sin-cuenta"]')) {
+  for (const boton of document.querySelectorAll('[data-salida="sin-cuenta"], [data-salida="practicar"]')) {
     const aviso = boton.closest(".wallet-notice");
     if (aviso) {
       aviso.remove();
@@ -1210,6 +1290,11 @@ const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.tr
 export interface Pedido {
   motivo?: string;
   volverA?: HTMLElement;
+  /**
+   * La ventana abre con Otras formas de entrar desplegadas: la persona las pidió (el enlace de la portada), el ingreso de
+   * antes falló, o lo que sigue es entrar con el correo o con una billetera propia.
+   */
+  otras?: boolean;
 }
 
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
@@ -1275,8 +1360,43 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
     options.push({ label: t("guestWallet"), small: t("loginTestnet"), hint: t("guestHint"), icon: "test", pick: "guest" });
   }
 
-  // El correo también es de Pollar: va solo si Pollar está configurado.
-  showModal(options, pollar, pedido);
+  // El correo también es de Pollar: va solo si Pollar está configurado. En Oficial no hay cuenta de prueba: va el enlace
+  // chico para practicar en Prueba.
+  const recordadas = await formasRecordadas(w, pollar, conFreighter);
+  showModal(options, pollar, pedido, { practicar: await sePuedePracticar(), recordadas });
+}
+
+/** Una forma de entrar que no es Google: la que se pliega detrás de Otras formas de entrar. */
+type FormaRecordable = "correo" | "freighter" | "guest";
+
+/**
+ * Las formas de entrar que este navegador ya usa en este modo: no se le esconden a quien vuelve. La cuenta de prueba
+ * guardada o de la última sesión, Varial si fue la última sesión o ya le dio permiso al sitio, y el correo si la marca de
+ * Pollar dice que se entró con correo. A Varial se le pregunta con un tope corto, para no demorar la ventana.
+ */
+async function formasRecordadas(w: LiteModule, pollar: boolean, conFreighter: boolean): Promise<Set<FormaRecordable>> {
+  const formas = new Set<FormaRecordable>();
+  const ultima = loadSessionKind(network.name);
+  if (w.guestAvailable() && (w.guestStored() || ultima === "guest")) formas.add("guest");
+  if (conFreighter) {
+    const sinRespuesta = new Promise<boolean>((r) => setTimeout(() => r(false), 400));
+    const conPermiso = ultima === "freighter" || (await Promise.race([w.freighterAllowed().catch(() => false), sinRespuesta]));
+    if (conPermiso) formas.add("freighter");
+  }
+  try {
+    if (pollar && leerMarcaPollar(localStorage, network.name) === "email") formas.add("correo");
+  } catch {
+    /* sin almacenamiento no hay marca */
+  }
+  return formas;
+}
+
+/** Lo que la ventana de ingreso suma debajo de las formas de entrar. */
+interface ExtrasDeLaVentana {
+  /** El enlace chico Practicar sin cuenta (solo en Oficial, `sePuedePracticar`). */
+  practicar: boolean;
+  /** Lo que este navegador ya usa: queda a la vista aunque Google vaya primero (`formasRecordadas`). */
+  recordadas: Set<FormaRecordable>;
 }
 
 /**
@@ -1287,7 +1407,12 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
  * El correo tiene dos pasos dentro de la misma ventana: se pide el código y se
  * escribe el código. La sesión que queda es de Pollar, igual que con Google.
  */
-function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): void {
+function showModal(
+  options: Option[],
+  emailOn: boolean,
+  pedido: Pedido = {},
+  extras: ExtrasDeLaVentana = { practicar: false, recordadas: new Set() },
+): void {
   const back = document.createElement("div");
   back.className = "modal-back";
   const card = document.createElement("div");
@@ -1357,33 +1482,82 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
    * experiencia, hallazgo 7).
    */
   /**
-   * Desde el 22 de octubre de 2026 (diseño del onboarding): Google primero y
-   * grande, que es lo que va a tomar casi todo el mundo; después "o con tu
-   * correo"; y la billetera y la cuenta de prueba plegadas en "Más formas de
-   * entrar". Antes eran cuatro caminos a la vista, el correo primero y con el
-   * foco, y en el celular el teclado tapaba a Google. Desde el navegador de una
-   * app, donde Google no deja entrar, el correo va primero y una línea lo dice.
-   * Sin Pollar (local, vistas previas) no hay Google ni correo: las dos que
-   * quedan van a la vista.
+   * Desde el 20 de noviembre de 2026, para que casi todos entren con Google: Entrar con Google es el único botón
+   * principal, a la vista y con el foco, y el correo, la billetera y la cuenta de prueba quedan plegados detrás de un solo
+   * renglón, Otras formas de entrar, cerrado salvo que se pida abierto (`otrasAbiertas`). Lo que este navegador ya usa no
+   * se esconde (`formasRecordadas`). Desde el navegador de una app, donde Google no deja entrar, sigue como antes: el
+   * correo primero, una línea que lo dice y la billetera en Más formas de entrar. Sin Pollar (local, vistas previas) no
+   * hay Google ni correo: las que quedan van a la vista.
    */
-  function home(mail = ""): void {
+  function home(mail = "", otrasAbiertas = pedido.otras === true): void {
     body.replaceChildren();
     head("Tinkazo", [pedido.motivo ?? t("loginTitle")]);
     const conGoogle = options.find((o) => o.pick === "google");
     const otras = options.filter((o) => o !== conGoogle);
-    const enApp = enNavegadorDeApp();
-    if (conGoogle && enApp) {
+    if (conGoogle && !enNavegadorDeApp()) googlePrimero(conGoogle, otras, mail, otrasAbiertas);
+    else comoAntes(conGoogle, otras, mail);
+    if (extras.practicar) body.appendChild(practicarSinCuenta());
+  }
+
+  /** Google a la vista, lo que ya se usa debajo y el resto detrás de Otras formas de entrar. */
+  function googlePrimero(google: Option, otras: Option[], mail: string, abierta: boolean): void {
+    body.appendChild(opcion(google, "login-google"));
+    const correoALaVista = emailOn && extras.recordadas.has("correo");
+    const aLaVista = otras.filter((o) => (o.pick === "freighter" || o.pick === "guest") && extras.recordadas.has(o.pick));
+    const plegadas = otras.filter((o) => !aLaVista.includes(o));
+    if (correoALaVista) {
+      separador(t("loginCorreoO"));
+      correo(mail);
+    }
+    if (aLaVista.length) {
+      const recordadas = document.createElement("div");
+      recordadas.className = "login-opts login-recordadas";
+      for (const o of aLaVista) recordadas.appendChild(opcion(o));
+      body.appendChild(recordadas);
+    }
+    const correoPlegado = emailOn && !correoALaVista;
+    if (!correoPlegado && plegadas.length === 0) return;
+    // Un botón con aria-expanded y no un details: el lector de pantalla dice si está abierto, y el foco va de Google al
+    // renglón y del renglón a lo de adentro.
+    const lista = document.createElement("div");
+    lista.className = "login-otras-lista";
+    lista.id = "login-otras-lista";
+    const renglon = document.createElement("button");
+    renglon.type = "button";
+    renglon.className = "login-otras";
+    renglon.textContent = t("loginOtras");
+    renglon.setAttribute("aria-controls", lista.id);
+    const abrir = (si: boolean): void => {
+      renglon.setAttribute("aria-expanded", String(si));
+      lista.hidden = !si;
+    };
+    renglon.addEventListener("click", () => abrir(renglon.getAttribute("aria-expanded") !== "true"));
+    abrir(abierta);
+    body.append(renglon, lista);
+    if (correoPlegado) correo(mail, lista);
+    if (plegadas.length) {
+      const opts = document.createElement("div");
+      opts.className = "login-opts";
+      for (const o of plegadas) opts.appendChild(opcion(o));
+      lista.appendChild(opts);
+    }
+  }
+
+  /**
+   * Sin Google, o desde el navegador de una app, la ventana de antes: el aviso de la app con su botón para copiar el
+   * enlace, el correo primero, Google después de "o seguí con" y la billetera en Más formas de entrar. Sin Google, lo que
+   * queda va a la vista.
+   */
+  function comoAntes(conGoogle: Option | undefined, otras: Option[], mail: string): void {
+    if (conGoogle) {
       const aviso = document.createElement("p");
       aviso.className = "login-app";
       aviso.textContent = t("loginEnApp");
       body.appendChild(aviso);
-    }
-    if (conGoogle && !enApp) {
-      body.appendChild(opcion(conGoogle, "login-google"));
-      if (emailOn) separador(t("loginCorreoO"));
+      body.appendChild(copiarElEnlace());
     }
     if (emailOn) correo(mail);
-    if (conGoogle && enApp) {
+    if (conGoogle) {
       separador(t("loginOr"));
       body.appendChild(opcion(conGoogle, "login-google"));
     }
@@ -1398,6 +1572,45 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       mas.append(s, list);
       body.appendChild(mas);
     } else body.appendChild(list);
+  }
+
+  /**
+   * Desde el navegador de una app, junto al aviso: copia la dirección de esta página, con su modo, para pegarla en el
+   * navegador. Dice Copiado un momento y vuelve a su texto.
+   */
+  function copiarElEnlace(): HTMLElement {
+    const fila = document.createElement("p");
+    fila.className = "login-copiar";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "login-link";
+    b.textContent = t("loginCopiarEnlace");
+    let reloj: ReturnType<typeof setTimeout> | undefined;
+    b.addEventListener("click", () => {
+      void copiarTexto(urlForMode(location.href, network.name)).then((ok) => {
+        if (!ok) return;
+        b.textContent = t("errCopiado");
+        clearTimeout(reloj);
+        reloj = setTimeout(() => {
+          b.textContent = t("loginCopiarEnlace");
+        }, 2_500);
+      });
+    });
+    fila.appendChild(b);
+    return fila;
+  }
+
+  /** El enlace chico de Oficial: pasa a Prueba y entra solo con la cuenta de prueba, con la lista que se estaba armando. */
+  function practicarSinCuenta(): HTMLElement {
+    const fila = document.createElement("p");
+    fila.className = "login-practicar";
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "login-link";
+    b.textContent = t("loginPracticar");
+    b.addEventListener("click", () => irAPracticar(shut));
+    fila.appendChild(b);
+    return fila;
   }
 
   /** La raya con una palabra en el medio: "o con tu correo". */
@@ -1426,8 +1639,8 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     return row;
   }
 
-  /** El correo, en dos pasos dentro de la misma ventana: se pide el código y se escribe el código. */
-  function correo(mail = ""): void {
+  /** El correo, en dos pasos dentro de la misma ventana: se pide el código y se escribe el código. `donde` es su lugar. */
+  function correo(mail = "", donde: HTMLElement = body): void {
     const form = document.createElement("form");
     form.className = "login-form";
     form.noValidate = true;
@@ -1449,7 +1662,7 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       e.preventDefault();
       void sendCode(input.value.trim(), go, err);
     });
-    body.appendChild(form);
+    donde.appendChild(form);
   }
 
   async function sendCode(mail: string, go: HTMLButtonElement, err: HTMLElement): Promise<void> {
@@ -1548,7 +1761,8 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
     other.className = "login-link";
     other.textContent = t("loginOtherMail");
     other.addEventListener("click", () => {
-      home(mail);
+      // Vuelve a escribir el correo: el campo tiene que estar a la vista, así que Otras formas de entrar abre desplegado.
+      home(mail, true);
       card.querySelector<HTMLInputElement>("#login-mail")?.focus();
     });
     links.append(again, other);
@@ -1566,9 +1780,10 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       return;
     }
     if (e.key !== "Tab") return;
+    // Solo lo que se ve: lo que está detrás de Otras formas de entrar, cerrado, no recibe el foco.
     const focusable = [
       ...card.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input, summary"),
-    ];
+    ].filter((el) => !el.closest("[hidden]"));
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) return;
@@ -1794,11 +2009,13 @@ function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = t
       acciones.append(button(t("loginRecargar"), "ghost", () => { el.remove(); reintentar(); }));
     } else if (otraVia && !login) {
       // Con la ventana de ingreso abierta las otras formas ya están ahí, a la vista: el aviso solo se cierra.
-      acciones.append(button(t("loginOtraVia"), "ghost", () => { el.remove(); void openPicker(); }));
+      acciones.append(button(t("loginOtraVia"), "ghost", () => { el.remove(); void openPicker({ otras: true }); }));
     }
     acciones.append(button(t("loginClose"), "ghost", () => el.remove()));
     el.append(frase, acciones);
     if (login) {
+      // El ingreso falló con la ventana abierta: las otras formas de entrar se despliegan, para que estén a la vista.
+      login.querySelector<HTMLButtonElement>('.login-otras[aria-expanded="false"]')?.click();
       // Dentro de la tarjeta y no flotando: arriba tapaba la X para cerrarla, abajo el campo del correo.
       el.classList.add("en-tarjeta");
       // Pegado debajo del botón de Google: arriba empujaba la tarjeta y a 320 px había que scrollear para volver al botón.

@@ -32,7 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
+import { ABRIR_OTRAS_FORMAS_JS, HAY_BOTON_ENTRAR_JS, TOCAR_ENTRAR_JS } from "./lib/entrar.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -133,6 +133,8 @@ async function cuentaDePrueba(page) {
   await page.waitFor(HAY_BOTON_ENTRAR_JS, 20000);
   await page.eval(TOCAR_ENTRAR_JS);
   await page.waitFor("document.querySelector('.login-opt')", 15000);
+  // La cuenta de prueba está detrás de Otras formas de entrar: se despliega antes de buscarla.
+  await page.eval(ABRIR_OTRAS_FORMAS_JS);
   await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
   const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
   if (!entro.ok) throw new Error("no entró la cuenta de prueba");

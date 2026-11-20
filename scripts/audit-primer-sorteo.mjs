@@ -33,7 +33,7 @@
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { SELECTOR_CHIP_ENTRAR } from "./lib/entrar.mjs";
+import { SELECTOR_CHIP_ENTRAR, SELECTOR_OTRAS_FORMAS_CERRADO } from "./lib/entrar.mjs";
 
 const args = process.argv.slice(2);
 const arg = (k, def) => {
@@ -224,10 +224,15 @@ const sinJergaBasica = (s, quien) => {
   check(`${quien}: sin "ronda", "faro" ni "transacción" a la vista`, j.length === 0, JSON.stringify(j));
 };
 
-/** La cuenta de prueba desde la ventana de ingreso: "Más formas de entrar" (si está plegada) y la opción. */
+/**
+ * La cuenta de prueba desde la ventana de ingreso: "Otras formas de entrar" (el renglón debajo de Google, si está
+ * cerrado), o "Más formas de entrar" desde el navegador de una app, y la opción.
+ */
 async function cuentaDePrueba(m, page) {
   await page.waitFor("document.querySelector('.login-opt')", 20000);
   await sleep(500);
+  const cerrada = await page.eval(`!!document.querySelector(${JSON.stringify(SELECTOR_OTRAS_FORMAS_CERRADO)})`);
+  if (cerrada) await m.tocar(SELECTOR_OTRAS_FORMAS_CERRADO, "Otras formas de entrar");
   const plegada = await page.eval("!!document.querySelector('.login-mas') && !document.querySelector('.login-mas').open");
   if (plegada) await m.tocar(".login-mas > summary", "Más formas de entrar");
   await sleep(300);

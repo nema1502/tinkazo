@@ -1,3 +1,4 @@
+import { sorteosDelSello } from "./acceso-oficial";
 import { type EstadoDelPatrocinio, fechaOCercana } from "./patrocinador";
 
 /**
@@ -83,6 +84,24 @@ export function notaDeUsoOficial(estado: EstadoDelPatrocinio | null, ganadores: 
   const s = sorteosDe(estado);
   if (!s || s.quedan <= 0) return null;
   return ganadores > GANADORES_DE_UN_SORTEO ? decir("cupoOfDoble") : decir("cupoOfUnoPorPremio");
+}
+
+/**
+ * El aviso antes de sellar cuando los premios que se van a sortear de a uno, cada uno con su sello, piden más sorteos
+ * oficiales de los que quedan: «Tu sorteo tiene 5 premios y te quedan 3.» Así la falta se ve antes de empezar, y no en
+ * el cuarto premio con la sala mirando.
+ *
+ * `sellos` dice cuántos ganan en cada sello que se va a hacer: cinco premios de a uno son `[1, 1, 1, 1, 1]`, y cinco
+ * iguales con «Cuántos ganan» son `[5]`, un solo sello. Los premios de cada lugar van en el mismo sello que sus
+ * ganadores, así que también son uno solo. Nada con un solo sello (si no alcanza, lo dice la compuerta del sello), sin
+ * sorteos (ya lo dice la línea del cupo) ni cuando alcanzan.
+ */
+export function avisoDePremiosDeAUno(estado: EstadoDelPatrocinio | null, sellos: readonly number[], decir: Decir): string | null {
+  const s = sorteosDe(estado);
+  if (!s || s.quedan <= 0 || sellos.length <= 1) return null;
+  const hacenFalta = sellos.reduce((suma, ganadores) => suma + sorteosDelSello(ganadores), 0);
+  if (hacenFalta <= s.quedan) return null;
+  return poner(decir(s.quedan === 1 ? "pagoFaltanPremios1" : "pagoFaltanPremios"), { p: sellos.length, n: s.quedan });
 }
 
 /** Junto a «Siguiente premio (quedan N)»: cuántos sorteos oficiales le quedan para ese premio. */

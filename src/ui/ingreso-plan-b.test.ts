@@ -2,7 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { WALLET_ERRORS } from "../stellar/wallet-lite";
 import { AUTH_ERROR_CODES } from "@pollar/core";
 import { problemasDeAlta } from "../stellar/alta-build";
-import { ESPERA_INTERNET_MS, PERSONA_ENTRADA, hayInternet, ingresoPlanB, ingresoPlanBPrendida, ofrecerSalida, quienFalla, tituloDelAviso, type PasoDelIngreso } from "./ingreso-plan-b";
+import {
+  ESPERA_INTERNET_MS,
+  PERSONA_ENTRADA,
+  hayInternet,
+  ingresoPlanB,
+  ingresoPlanBPrendida,
+  ofrecerPractica,
+  ofrecerSalida,
+  quienFalla,
+  tituloDelAviso,
+  type PasoDelIngreso,
+} from "./ingreso-plan-b";
 
 /**
  * El plan B del ingreso: cuándo está prendido y de quién es la culpa de que entrar falle.
@@ -229,6 +240,32 @@ describe("ofrecer la salida", () => {
     await ofrecerSalida(err("SESSION_CREATE_FAILED"), "enviar", { env: {}, red: "testnet", hayInternet: pregunta });
     await ofrecerSalida(err("SESSION_CREATE_FAILED"), "enviar", { env: conPlanB, red: "mainnet", hayInternet: pregunta });
     await ofrecerSalida(err("EMAIL_CODE_INVALID"), "verificar", { env: conPlanB, red: "testnet", hayInternet: pregunta });
+    expect(pregunta).not.toHaveBeenCalled();
+  });
+});
+
+describe("ofrecer Practicar en Prueba, la salida de Oficial", () => {
+  const enLinea = async () => true;
+  const sinLinea = async () => false;
+  it("en Oficial, una falla del proveedor la ofrece, sin bandera", async () => {
+    expect(await ofrecerPractica(err("SESSION_CREATE_FAILED"), "enviar", { red: "mainnet", hayInternet: enLinea })).toBe(true);
+  });
+  it("en Oficial, un plazo vencido también la ofrece", async () => {
+    expect(await ofrecerPractica(err("LOGIN_TIMEOUT"), "google", { red: "mainnet", hayInternet: enLinea })).toBe(true);
+  });
+  it("en Oficial, una falla de la persona no la ofrece", async () => {
+    expect(await ofrecerPractica(err("popup-closed"), "google", { red: "mainnet", hayInternet: enLinea })).toBe(false);
+  });
+  it("en Oficial, sin internet tampoco", async () => {
+    expect(await ofrecerPractica(err("SESSION_CREATE_FAILED"), "enviar", { red: "mainnet", hayInternet: sinLinea })).toBe(false);
+  });
+  it("en Prueba nunca: ahí la salida es la del plan B", async () => {
+    expect(await ofrecerPractica(err("SESSION_CREATE_FAILED"), "enviar", { red: "testnet", hayInternet: enLinea })).toBe(false);
+  });
+  it("en Prueba o ante una falla de la persona no se hace ni el pedido", async () => {
+    const pregunta = vi.fn(async () => true);
+    await ofrecerPractica(err("SESSION_CREATE_FAILED"), "enviar", { red: "testnet", hayInternet: pregunta });
+    await ofrecerPractica(err("EMAIL_CODE_INVALID"), "verificar", { red: "mainnet", hayInternet: pregunta });
     expect(pregunta).not.toHaveBeenCalled();
   });
 });

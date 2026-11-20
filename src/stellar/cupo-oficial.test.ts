@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { TEXTOS_ALTA } from "../alta-textos";
 import { T } from "../i18n";
-import { GANADORES_DE_UN_SORTEO, fechaDeVencimiento, lineaDeSiguientePremio, lineaDelCupoOficial, notaDeUsoOficial } from "./cupo-oficial";
+import {
+  GANADORES_DE_UN_SORTEO,
+  avisoDePremiosDeAUno,
+  fechaDeVencimiento,
+  lineaDeSiguientePremio,
+  lineaDelCupoOficial,
+  notaDeUsoOficial,
+} from "./cupo-oficial";
 import { GANADORES_POR_SORTEO } from "./acceso-oficial";
 import type { EstadoDelPatrocinio } from "./patrocinador";
 
@@ -98,6 +105,40 @@ describe("la nota de cuánto gasta cada premio", () => {
     expect(notaDeUsoOficial(estado({ quedan: 0 }), 1, es)).toBeNull();
     expect(notaDeUsoOficial(estado({ acceso: false }), 1, es)).toBeNull();
     expect(notaDeUsoOficial(null, 1, es)).toBeNull();
+  });
+});
+
+describe("el aviso de premios de a uno antes de sellar", () => {
+  const deAUno = (n: number): number[] => Array.from({ length: n }, () => 1);
+
+  it("cinco premios de a uno con tres sorteos: avisa, en los dos idiomas", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 3 }), deAUno(5), es)).toBe("Tu sorteo tiene 5 premios y te quedan 3.");
+    expect(avisoDePremiosDeAUno(estado({ quedan: 3 }), deAUno(5), en)).toBe("Your draw has 5 prizes and you have 3 left.");
+  });
+
+  it("tres premios de a uno con tres sorteos: alcanzan, no avisa", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 3 }), deAUno(3), es)).toBeNull();
+  });
+
+  it("cinco premios iguales con «Cuántos ganan» son un solo sello: no avisa", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 3 }), [5], es)).toBeNull();
+    expect(avisoDePremiosDeAUno(estado({ quedan: 1 }), [5], es)).toBeNull();
+  });
+
+  it("con uno solo que queda, en singular", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 1 }), deAUno(2), es)).toBe("Tu sorteo tiene 2 premios y te queda 1.");
+    expect(avisoDePremiosDeAUno(estado({ quedan: 1 }), deAUno(2), en)).toBe("Your draw has 2 prizes and you have 1 left.");
+  });
+
+  it("un sello de más de 50 ganadores cuenta como dos", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 2 }), [60, 1], es)).toBe("Tu sorteo tiene 2 premios y te quedan 2.");
+    expect(avisoDePremiosDeAUno(estado({ quedan: 3 }), [60, 1], es)).toBeNull();
+  });
+
+  it("sin sorteos, sin acceso o sin lo oficial, nada: ya lo dice la línea del cupo", () => {
+    expect(avisoDePremiosDeAUno(estado({ quedan: 0 }), deAUno(5), es)).toBeNull();
+    expect(avisoDePremiosDeAUno(estado({ acceso: false }), deAUno(20), es)).toBeNull();
+    expect(avisoDePremiosDeAUno(null, deAUno(5), es)).toBeNull();
   });
 });
 

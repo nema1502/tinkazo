@@ -365,7 +365,8 @@ function initVistas(): void {
     b.addEventListener("click", () => {
       history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
       setVista("app", "nuevo");
-      void openPicker();
+      // Las pidió: la ventana abre con Otras formas de entrar desplegadas.
+      void openPicker({ otras: true });
     });
   }
   // El mismo botón al final de la demo navega (sale de `?demo=`), y caía en la

@@ -1119,7 +1119,8 @@ async function avisarDelPremio(e: unknown, numWinners: number): Promise<void> {
   const salir = (motivo: string) => (): void => {
     void cerrarSesion()
       .catch(() => undefined)
-      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze") }));
+      // Otra cuenta de correo o una billetera propia: la ventana abre con Otras formas de entrar desplegadas.
+      .then(() => openPicker({ motivo: t(motivo), volverA: $("btn-freeze"), otras: true }));
   };
   const salidas: Array<{ id: string; clave: string; motivo: string }> = [
     { id: "premio-otra-cuenta", clave: "premioOtraCuenta", motivo: "premioMotivoOtra" },
@@ -1178,7 +1179,7 @@ async function siSeAcabaronLosSorteos(e: unknown, btn: HTMLButtonElement): Promi
   try {
     const m = await import("./sin-sorteos");
     if (!m.esSinSorteos(e)) return false;
-    // Ya no se está sellando: «Pasar a Prueba» de la ventana tiene que poder cambiar de modo.
+    // Ya no se está sellando: «Sortear en Prueba» de la ventana tiene que poder cambiar de modo.
     marcarMandandoElSello(false);
     await m.alQuedarseSinSorteos({ volverA: btn });
     return true;

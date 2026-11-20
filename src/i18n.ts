@@ -1377,7 +1377,16 @@ export const T: Record<Lang, Dict> = {
     loginCorreoO: "o con tu correo",
     loginGoogle: "Entrar con Google",
     loginMas: "Más formas de entrar",
+    // El renglón que pliega el correo, la billetera y la cuenta de prueba debajo de Entrar con Google (src/ui/wallet-ui.ts).
+    loginOtras: "Otras formas de entrar",
     loginEnApp: "Desde esta app, Google no deja entrar. Usá tu correo, o abrí la página en el navegador.",
+    // Junto al aviso de arriba: copia la dirección de la página para pegarla en el navegador (src/ui/wallet-ui.ts).
+    loginCopiarEnlace: "Copiar el enlace",
+    // En Oficial, debajo de las formas de entrar: pasa a Prueba y entra solo con la cuenta de prueba (practicarEnPrueba).
+    loginPracticar: "Practicar sin cuenta",
+    // En Oficial, un ingreso que falló por el proveedor ofrece practicar en Prueba (src/ui/ingreso-plan-b.ts).
+    ingresoPracticar: "Practicar en Prueba",
+    ingresoPracticarLinea: "En Prueba funciona igual, pero no cuenta y se borra el 16 de diciembre.",
     comoT: "Cómo se usa, en 4 pasos",
     comoAca: "Estás acá",
     como1T: "Pegá la lista",
@@ -4417,7 +4426,12 @@ export const T: Record<Lang, Dict> = {
     loginCorreoO: "or with your email",
     loginGoogle: "Sign in with Google",
     loginMas: "More ways to sign in",
+    loginOtras: "Other ways to sign in",
     loginEnApp: "Google sign-in doesn't work inside this app. Use your email, or open the page in your browser.",
+    loginCopiarEnlace: "Copy the link",
+    loginPracticar: "Practice without an account",
+    ingresoPracticar: "Practice in Test",
+    ingresoPracticarLinea: "In Test it works the same, but it doesn't count and is wiped on December 16.",
     comoT: "How to use it, in 4 steps",
     comoAca: "You are here",
     como1T: "Paste the list",
