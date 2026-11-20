@@ -134,9 +134,19 @@ export type Reservado =
   /** No le quedan sorteos oficiales que alcancen. `vencieron`: los que se le vencieron sin usar. */
   | { ok: false; motivo: "sin-sorteos"; vencieron: number };
 
-/** De dónde salen unos sorteos oficiales. */
-export type OrigenDerecho = "cupon" | "alta" | "paquete" | "admin";
-const ORIGENES: readonly OrigenDerecho[] = ["cupon", "alta", "paquete", "admin"];
+/**
+ * De dónde salen unos sorteos oficiales. `gratis` es el regalo de bienvenida: el código de antes lo lee sin romper (un sorteo
+ * devuelto de un origen que no conoce vuelve como `admin`, y lo demás no mira el origen).
+ */
+export type OrigenDerecho = "cupon" | "alta" | "paquete" | "admin" | "gratis";
+const ORIGENES: readonly OrigenDerecho[] = ["cupon", "alta", "paquete", "admin", "gratis"];
+
+/**
+ * Pasados estos días sin abrir, un alta autorizada o pedida deja de apartar créditos en el piso, ella y sus sorteos: quien
+ * entró y nunca activó no frena a los demás para siempre. Si vuelve y activa, su firma sale del margen: el piso es un
+ * colchón, no una cuenta exacta.
+ */
+export const ALTA_SIN_ABRIR_DIAS = 7;
 
 /** Lo que le queda a una cuenta (o a una persona) de sorteos oficiales sin vencer. */
 export interface Quedan {
@@ -843,12 +853,21 @@ export class Cupos {
 
   /**
    * Lo que ya se prometió y todavía le puede costar créditos de Pollar a Tinkazo: los sorteos oficiales sin usar de
-   * derechos sin vencer, y las altas que todavía no se activaron. Es la base del piso de créditos.
+   * derechos sin vencer, y las altas que todavía no se activaron. Es la base del piso de créditos. Un alta autorizada o
+   * pedida que no se movió en `ALTA_SIN_ABRIR_DIAS` días ya no cuenta, ni ella ni los sorteos de su dueño.
    */
   prometido(ahora: number): { sorteos: number; altas: number } {
+    const desde = ahora - ALTA_SIN_ABRIR_DIAS * DIA_MS;
+    // COALESCE: un derecho sin alta (la unión da NULL) cuenta siempre.
+    const dormida = "COALESCE(a.estado IN ('autorizada','pedida') AND a.actualizada <= ?, 0)";
     return {
-      sorteos: this.numero("SELECT COALESCE(SUM(sorteos - usados), 0) AS n FROM derechos WHERE vence > ? AND usados < sorteos", ahora),
-      altas: this.numero("SELECT COUNT(*) AS n FROM altas WHERE estado IN ('autorizada','pedida')"),
+      sorteos: this.numero(
+        "SELECT COALESCE(SUM(d.sorteos - d.usados), 0) AS n FROM derechos d LEFT JOIN altas a ON a.usuario = d.usuario " +
+          `WHERE d.vence > ? AND d.usados < d.sorteos AND NOT ${dormida}`,
+        ahora,
+        desde,
+      ),
+      altas: this.numero("SELECT COUNT(*) AS n FROM altas WHERE estado IN ('autorizada','pedida') AND actualizada > ?", desde),
     };
   }
 

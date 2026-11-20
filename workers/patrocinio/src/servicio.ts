@@ -13,7 +13,17 @@
  *   7. envolver en un fee-bump, firmar con la llave acotada y mandar
  */
 import { StrKey, TransactionBuilder, type Transaction } from "@stellar/stellar-sdk/base";
-import { type Config, DIA_MS, sorteosDelMes, topesDeCuenta } from "./config";
+import {
+  AJUSTE_BIENVENIDA_CERRADA,
+  AJUSTE_RESERVA_REGALO,
+  AJUSTES_BIENVENIDA_TOPE,
+  type Config,
+  DIA_MS,
+  TECHO_BIENVENIDA_TOPE,
+  TECHO_RESERVA_REGALO,
+  sorteosDelMes,
+  topesDeCuenta,
+} from "./config";
 import { type Cupo, type Cupos, type FilaUso, type Limites } from "./cupos";
 import { type Autoridad, esCuenta, evaluar } from "./lista-blanca";
 import type { Planes } from "./plan";
@@ -755,7 +765,15 @@ export class Portero {
   }
 
   ajustar(clave: string, valor: number): boolean {
-    if (!["max_sellos_mes", "tope_general_stroops", "tope_tx_stroops"].includes(clave) || !Number.isFinite(valor) || valor < 0) return false;
+    // El regalo de bienvenida: su interruptor (0 abierto, 1 cerrado) y sus frenos (0 saca el de caliente), sin desplegar.
+    if (clave === AJUSTE_BIENVENIDA_CERRADA && valor !== 0 && valor !== 1) return false;
+    const deBienvenida = clave === AJUSTE_BIENVENIDA_CERRADA || (Object.values(AJUSTES_BIENVENIDA_TOPE) as string[]).includes(clave);
+    if (deBienvenida && !(Number.isInteger(valor) && valor >= 0 && valor <= TECHO_BIENVENIDA_TOPE)) return false;
+    // El margen del regalo, en créditos: de 1 a su techo manda; 0 lo saca y vuelve a valer el de la variable.
+    const esReserva = clave === AJUSTE_RESERVA_REGALO;
+    if (esReserva && !(Number.isInteger(valor) && valor >= 0 && valor <= TECHO_RESERVA_REGALO)) return false;
+    if (!deBienvenida && !esReserva && !["max_sellos_mes", "tope_general_stroops", "tope_tx_stroops"].includes(clave)) return false;
+    if (!Number.isFinite(valor) || valor < 0) return false;
     // Un techo duro en el código: con la clave de administración filtrada no se sube el tope general a lo que sea.
     if (clave === "tope_general_stroops" && valor > TECHO_TOPE_GENERAL_STROOPS) return false;
     if (clave === "tope_tx_stroops" && valor > this.cfg.topeTx) return false;

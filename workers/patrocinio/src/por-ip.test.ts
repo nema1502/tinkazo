@@ -29,12 +29,19 @@ describe("el tope por dirección", () => {
 });
 
 describe("las consultas del cupo por dirección (GET /v1/patrocinio/cupo)", () => {
-  it("en mainnet, 3.000 por hora, como las altas: todo un stand sale por la misma wifi", () => {
-    expect(cupoPorHora("mainnet")).toBe(3000);
+  it("en mainnet, 20.000 por hora, el mismo número que las altas, cada una con su contador: toda una sala sale por la misma wifi", () => {
+    expect(cupoPorHora("mainnet")).toBe(20_000);
     expect(cupoPorHora("mainnet")).toBe(ALTAS_POR_IP_HORA);
     // Un stand de 100 personas que miran el cupo 25 veces cada una en la hora sigue sellando y sorteando.
     const c = new PorIp(() => 0);
     for (let i = 1; i <= 2500; i++) expect(c.toca("200.87.1.1", cupoPorHora("mainnet")), `consulta ${i}`).toBe(true);
+  });
+
+  it("una sala de 150 personas que mira el cupo 100 veces cada una en la hora sigue con patrocinio, y la siguiente consulta no", () => {
+    const c = new PorIp(() => 0);
+    for (let i = 1; i <= 150 * 100; i++) expect(c.toca("200.87.1.1", cupoPorHora("mainnet")), `consulta ${i}`).toBe(true);
+    for (let i = 150 * 100 + 1; i <= 20_000; i++) c.toca("200.87.1.1", cupoPorHora("mainnet"));
+    expect(c.toca("200.87.1.1", cupoPorHora("mainnet"))).toBe(false);
   });
 
   it("en testnet no cambia: 600", () => {
