@@ -10,6 +10,8 @@
  * guarda sin comprimir y el enlace sigue funcionando, solo más largo.
  */
 
+import "../version-nueva";
+
 /** Versión del formato. Sube si cambia la forma, no si cambia el contenido. */
 export const PROOF_VERSION = 2;
 
@@ -207,6 +209,51 @@ export async function decodePreview(fragment: string): Promise<ListPreview> {
     throw new Error("preview-malformed");
   }
   return v as ListPreview;
+}
+
+/**
+ * El enlace personal de un Amigo secreto (issue #99).
+ *
+ * Cada persona recibe uno que dice solo a quién le regala, el nombre del sorteo y el número del sello. Viaja en el
+ * fragmento de la URL, igual que el comprobante y la lista: no pasa por ningún servidor, y sobre todo no lleva la
+ * lista entera — el orden completo del reparto nunca sale del navegador de quien organiza.
+ */
+export interface AmigoLink {
+  v: 1;
+  kind: "amigo";
+  /** La ronda de quicknet que decidió el orden: es el número del sello que dice la página. */
+  round: number;
+  /** Quien abre el enlace. */
+  from: string;
+  /** A quién le regala. */
+  to: string;
+  /** El nombre del sorteo, si el organizador lo escribió. */
+  prize?: string;
+  /** Cuándo se armó el enlace, en segundos. */
+  at?: number;
+}
+
+/** El enlace personal de una persona: `{base}/confirmar.html#…`, con su parte en el fragmento. */
+export async function amigoUrl(l: Omit<AmigoLink, "v" | "kind">, base = location.origin): Promise<string> {
+  const p: AmigoLink = { v: 1, kind: "amigo", at: Math.floor(Date.now() / 1000), ...l };
+  return `${base}/confirmar.html#${await encodeFragment(p)}`;
+}
+
+/** Lee un enlace personal. Lanza si el enlace no trae uno, o si le falta a quién le regala. */
+export async function decodeAmigo(fragment: string): Promise<AmigoLink> {
+  const v = (await decodeFragment(fragment)) as Partial<AmigoLink> | null;
+  if (
+    !v ||
+    v.kind !== "amigo" ||
+    typeof v.round !== "number" ||
+    typeof v.from !== "string" ||
+    typeof v.to !== "string" ||
+    !v.from ||
+    !v.to
+  ) {
+    throw new Error("amigo-malformed");
+  }
+  return v as AmigoLink;
 }
 
 /**

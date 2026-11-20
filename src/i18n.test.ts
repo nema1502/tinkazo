@@ -369,6 +369,51 @@ describe("el modo espectador", () => {
   });
 });
 
+describe("el modo Amigo secreto (issue #99)", () => {
+  const CLAVES = [
+    "amigoOption", "amigoSub", "amigoTitulo", "amigoCount", "amigoPrizeLabel", "amigoPrize", "amigoMas",
+    "amigoHelp", "amigoRulesNote", "amigoPrivacidad", "amigoPrivacidadPoca", "amigoResultadoT", "amigoResultadoNota",
+    "amigoCopiar", "amigoAvisoComprobante", "amigoVerComprobante", "amigoAgainLeft", "amigoMsgCab", "amigoMsgNombre", "amigoMsgPie",
+    "amigoSinComprobante",
+  ];
+  const CLAVES_CONFIRMAR = ["confirmarT", "confirmarError", "confirmarPara", "confirmarSorteo", "confirmarSello", "confirmarNota"];
+
+  it("sus textos existen en español y en inglés", () => {
+    for (const k of [...CLAVES, ...CLAVES_CONFIRMAR]) {
+      expect(typeof T.es[k], `es.${k}`).toBe("string");
+      expect(typeof T.en[k], `en.${k}`).toBe("string");
+      expect(T.es[k] as string).toBeTruthy();
+      expect(T.en[k] as string).toBeTruthy();
+    }
+  });
+
+  it("ningún texto del modo usa las palabras de ganar ni de premio", () => {
+    const prohibidas = /ganador|ganan?\b|gané|premio|pozo|suerte|winner|\bwins?\b|\bprize\b|rifa|lotería|raffle|lottery/i;
+    for (const k of CLAVES) {
+      for (const l of ["es", "en"] as const) {
+        expect(T[l][k] as string, `${l}.${k}`).not.toMatch(prohibidas);
+      }
+    }
+  });
+
+  it("la línea de privacidad dice lo que se decidió, y con 2 o 3 personas que no hay secreto", () => {
+    expect(T.es.amigoPrivacidad).toMatch(/calcular/i);
+    expect(T.en.amigoPrivacidad).toMatch(/work (it )?out|calculate|figure out/i);
+    expect(T.es.amigoPrivacidadPoca).toMatch(/no hay secreto/i);
+    expect(T.en.amigoPrivacidadPoca).toMatch(/no secret|not a secret/i);
+  });
+
+  it("el aviso del comprobante pide compartirlo después del intercambio", () => {
+    expect(T.es.amigoAvisoComprobante).toMatch(/después del intercambio/i);
+    expect(T.en.amigoAvisoComprobante).toMatch(/after the (gift )?exchange/i);
+  });
+
+  it("la página del enlace personal no promete la lista entera", () => {
+    expect(T.es.confirmarNota).toMatch(/lista entera|reparto entero/i);
+    expect(T.en.confirmarNota).toMatch(/whole list|full list|whole exchange|entire list/i);
+  });
+});
+
 /**
  * El relato del cartel del final (`cWin`, por donde pasan todos los juegos) y
  * la lista del cartel (`stage-cartel.ts`) tienen que contar lo mismo (S5 del

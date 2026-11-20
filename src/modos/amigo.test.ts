@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../docs/vectors.json";
-import { isSecretSanta, isSecretSantaPrize, paraQuien, reparto } from "./amigo";
+import { amigoSinComprobante, isSecretSanta, isSecretSantaPrize, noHaySecreto, paraQuien, reparto, secretPrize } from "./amigo";
+import { decodeAmigo, amigoUrl } from "../protocol/proof";
 import { isTurnOrder, isTurnPrize } from "./turnos";
 
 describe("el nombre de un Amigo secreto", () => {
@@ -115,5 +116,62 @@ describe("el reparto del orden sellado", () => {
     expect(reparto(names, winners)).toEqual(reparto(names, winners));
     expect(names).toEqual(namesBefore);
     expect(winners).toEqual(winnersBefore);
+  });
+});
+
+describe("el nombre que queda en un Amigo secreto", () => {
+  it("lo que escribe la persona queda si empieza con Amigo secreto o Secret Santa; si no, la frase va por delante", () => {
+    expect(secretPrize("Amigo secreto de la oficina", "Amigo secreto")).toBe("Amigo secreto de la oficina");
+    expect(secretPrize("secret santa for the lab", "Secret Santa")).toBe("secret santa for the lab");
+    expect(secretPrize("Navidad", "Amigo secreto")).toBe("Amigo secreto: Navidad");
+    expect(secretPrize("", "Amigo secreto")).toBe("Amigo secreto");
+    expect(secretPrize("   ", "Secret Santa")).toBe("Secret Santa");
+    expect(secretPrize("Secret Santas", "Secret Santa")).toBe("Secret Santa: Secret Santas");
+    expect(secretPrize("Turnos de limpieza", "Amigo secreto")).toBe("Amigo secreto: Turnos de limpieza");
+  });
+
+  it("no pasa del máximo de caracteres, como el nombre de un orden", () => {
+    const larga = "Amigo secreto de la oficina con un nombre muchísimo más largo que el campo";
+    expect(Array.from(secretPrize(larga, "Amigo secreto")).length).toBeLessThanOrEqual(60);
+    expect(Array.from(secretPrize("Navidad", "Amigo secreto", 10)).length).toBeLessThanOrEqual(10);
+  });
+});
+
+describe("el secreto según la cantidad", () => {
+  it("con 2 o 3 personas no hay secreto; con 4 o más sí", () => {
+    expect(noHaySecreto(2)).toBe(true);
+    expect(noHaySecreto(3)).toBe(true);
+    expect(noHaySecreto(1)).toBe(false);
+    expect(noHaySecreto(4)).toBe(false);
+    expect(noHaySecreto(0)).toBe(false);
+    expect(noHaySecreto(18)).toBe(false);
+  });
+
+  it("un Amigo secreto sin sello no tiene comprobante, como un orden de turnos", () => {
+    expect(amigoSinComprobante(12, 12, "Amigo secreto", true)).toBe(true);
+    expect(amigoSinComprobante(12, 12, "Secret Santa", true)).toBe(true);
+    expect(amigoSinComprobante(12, 12, "Amigo secreto", false)).toBe(false);
+    expect(amigoSinComprobante(12, 11, "Amigo secreto", true)).toBe(false);
+    expect(amigoSinComprobante(12, 12, "Turnos", true)).toBe(false);
+  });
+});
+
+describe("el enlace de cada persona", () => {
+  it("abre la página del enlace y trae solo a quién le regala, el sorteo y el número del sello", async () => {
+    const enlace = await amigoUrl({ round: 91234, from: "Ana", to: "Beto", prize: "Amigo secreto: oficina" }, "https://tinkazo.app");
+    expect(enlace.startsWith("https://tinkazo.app/confirmar.html#")).toBe(true);
+    const leido = await decodeAmigo(enlace.slice(enlace.indexOf("#")));
+    expect(leido).toMatchObject({ kind: "amigo", v: 1, round: 91234, from: "Ana", to: "Beto", prize: "Amigo secreto: oficina" });
+  });
+
+  it("nunca lleva la lista entera", async () => {
+    const enlace = await amigoUrl({ round: 91234, from: "Ana", to: "Beto" }, "https://tinkazo.app");
+    const leido = await decodeAmigo(enlace.slice(enlace.indexOf("#")));
+    expect(JSON.stringify(leido)).not.toContain("Carla");
+    expect(leido).not.toHaveProperty("names");
+  });
+
+  it("un enlace que no trae un Amigo secreto no se lee", async () => {
+    await expect(decodeAmigo("#")).rejects.toThrow();
   });
 });
