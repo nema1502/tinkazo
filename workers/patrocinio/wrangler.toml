@@ -125,8 +125,9 @@ RECARGO_QR = "4:0.50"
 PATROCINIO_PERMITIDO = "sponsor_transfer_cosigned,sponsor_trustlines"
 # Sellos oficiales por cuenta y por mes; en mainnet los sorteos del mes son tantos como los sellos.
 MAX_SELLOS_MES = "100"
-# Pagos por dirección y por hora (en testnet, 240): en un evento todo el stand sale por la misma wifi.
-POR_IP_POR_HORA = "600"
+# Pagos por dirección y por hora (en testnet, 240): en un evento toda la sala sale por la misma wifi, y cada persona
+# activa su cuenta, sella y sortea varias veces en una hora.
+POR_IP_POR_HORA = "3000"
 # 15 XLM en 24 horas; el viernes se sube a 45 por la ruta de ajustes.
 TOPE_GENERAL_STROOPS = "150000000"
 # Lo guardado para el draw de cada sello: el de mainnet (unos 824.000 stroops) más la mitad.

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { Keypair } from "@stellar/stellar-sdk/base";
 import { describe, expect, it, vi } from "vitest";
 import { PRECIOS_POR_DEFECTO, leerConfig, leerPrecios } from "./config";
+import { PorIp } from "./por-ip";
 import { HORIZON_MAINNET, POLLAR_SERVIDOR, ServidorAjeno, haciaHorizon, haciaPollar } from "./servidores";
 
 /** Todas las variables nuevas prendidas y bien escritas: lo que diría el portero de mainnet el día que se use todo. */
@@ -533,9 +534,19 @@ describe("wrangler.toml: el portero de testnet no cambia y el de mainnet es otro
     expect(valor("vars", "SOLO_SELLOS_PORTERO")).toBeUndefined();
   });
 
-  it("mainnet fija sus pagos por dirección para un stand que sale por la misma wifi", () => {
-    expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"600"');
+  it("mainnet fija sus pagos por dirección para una sala que sale por la misma wifi", () => {
+    expect(valor("env.mainnet.vars", "POR_IP_POR_HORA")).toBe('"3000"');
     expect(valor("vars", "POR_IP_POR_HORA")).toBeUndefined();
+    // El valor por defecto del código no cambia: es el de testnet.
+    expect(leerConfig({ RED: "mainnet" }).porIpPorHora).toBe(240);
+  });
+
+  it("una sala de 150 personas por la misma wifi activa, sella y sortea veinte veces cada una en la hora", () => {
+    const cfg = leerConfig({ RED: "mainnet", POR_IP_POR_HORA: varsDeMainnet().POR_IP_POR_HORA });
+    expect(cfg.porIpPorHora).toBe(3000);
+    const porIp = new PorIp();
+    for (let i = 0; i < 150 * 20; i++) expect(porIp.toca("190.129.10.20", cfg.porIpPorHora)).toBe(true);
+    expect(porIp.toca("190.129.10.20", cfg.porIpPorHora)).toBe(false);
   });
 
   it("las siete variables de los pagos están solo en mainnet: las tres de prender en 1 y los números de siempre", () => {
