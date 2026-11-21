@@ -521,7 +521,7 @@ export const T: Record<Lang, Dict> = {
     modeOfficial: "Oficial",
     modeOfficialBody: "Para los sorteos que cuentan. El sello queda registrado en Stellar y cualquiera puede rehacer la cuenta con el comprobante.",
     modeTest: "Prueba",
-    modeTestBody: "Para practicar gratis. Funciona igual, pero se borra el 16 de diciembre.",
+    modeTestBody: "Para practicar. Funciona igual, pero se borra el 16 de diciembre.",
     modeCurrent: "Estás en este modo",
     modeSwitchToOfficial: "Pasar a Oficial",
     modeSwitchToTest: "Pasar a Prueba",
@@ -1340,7 +1340,7 @@ export const T: Record<Lang, Dict> = {
     // --- El primer sorteo, "¿Cómo se usa?" y el ensayo (onboarding, 22 de octubre
     //     de 2026; la regla, en docs/ux.md, "El primer sorteo y el tutorial"). Sin
     //     tecnicismos: ni ronda, ni faro, ni transacción.
-    ctaGoogle: "Entrar con Google y sortear",
+    ctaGoogle: "Entrar con Google y sortear gratis",
     ctaOtras: "Otras formas de entrar",
     ctaEnsayo: "Probar con un ejemplo",
     ctaStand: "Tengo un stand",
@@ -3627,7 +3627,7 @@ export const T: Record<Lang, Dict> = {
     modeOfficial: "Live",
     modeOfficialBody: "For the draws that count. The seal stays recorded on Stellar and anyone can redo the math with the receipt.",
     modeTest: "Test",
-    modeTestBody: "To practice for free. It works the same, but it is wiped on December 16.",
+    modeTestBody: "To practice. It works the same, but it is wiped on December 16.",
     modeCurrent: "You are in this mode",
     modeSwitchToOfficial: "Switch to Live",
     modeSwitchToTest: "Switch to Test",
@@ -4402,7 +4402,7 @@ export const T: Record<Lang, Dict> = {
     imgPremio: "Prize:",
     imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
     // --- The first draw, "How to use it" and the rehearsal (onboarding, October 22, 2026).
-    ctaGoogle: "Sign in with Google and draw",
+    ctaGoogle: "Sign in with Google and draw for free",
     ctaOtras: "Other ways to sign in",
     ctaEnsayo: "Try it with a sample",
     ctaStand: "I run a booth",

@@ -234,7 +234,8 @@ export function abrirHojaDeModo(): void {
 
   const boton = document.createElement("button");
   boton.type = "button";
-  boton.className = "primary modo-cambiar";
+  // El botón principal queda solo para pasar a Oficial: pasar a Prueba es la acción secundaria de la hoja.
+  boton.className = `${otro === "mainnet" ? "primary" : "ghost"} modo-cambiar`;
   boton.textContent = t(otro === "mainnet" ? "modeSwitchToOfficial" : "modeSwitchToTest");
   boton.disabled = bloqueado;
   boton.addEventListener("click", () => pasarAModo(otro));
