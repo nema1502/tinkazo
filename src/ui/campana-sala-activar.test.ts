@@ -35,6 +35,7 @@ import {
   texto,
   vistaDe,
 } from "./campana-sala-mundo";
+import { cabeAbrirYa } from "./campana-sala";
 
 const d = (dolares: number): bigint => BigInt(Math.round(dolares * 100)) * CENTAVO;
 const ORIGEN = cuentaDePrueba(5);
@@ -337,6 +338,60 @@ describe("pagar y activarse sola", () => {
     expect(x.activaciones).toHaveLength(2);
     expect(x.m.creadas).toHaveLength(1);
     expect(x.hecho).toEqual(["pagar", "activar", "activar"]);
+  });
+
+  /** Una campaña que abre en 8 horas y sortea en 10: falta para la hora, pero el sorteo entra en la vida de la sala. */
+  const borradorDeHoyMasTarde = (): string => {
+    const abre = AHORA + 8 * 3_600_000;
+    return borradorDe({ abre_ms: abre, cierra_ms: abre + 3_600_000, sorteo_ms: abre + 7_200_000, recibir_hasta_ms: abre + 9 * 86_400_000 });
+  };
+
+  it("con la apertura lejos pero el sorteo dentro del día, la inscripción se puede abrir ya con un toque", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    const crudo = borradorDeHoyMasTarde();
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    expect(texto(p, "#cpo-linea")).toMatch(/^Abrila ahora, o volvé el .+ desde las .+\.$/u);
+    expect(principales(p).map((b) => [b.textContent, b.disabled])).toEqual([["Abrir la inscripción ahora", false]]);
+    // Sin el toque no se crea nada: la sala sigue esperando su hora.
+    expect(x.m.creadas).toEqual([]);
+    boton(p, "Abrir la inscripción ahora").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(x.activaciones).toHaveLength(2);
+    expect(x.m.creadas).toHaveLength(1);
+    expect(x.m.fases[0]?.[0]).toBe("abierta");
+    // Abrir ya no cobra de nuevo: un solo pago, y después solo activar.
+    expect(x.hecho).toEqual(["pagar", "activar", "activar"]);
+    expect(botonesDe(p).some((t) => t.startsWith("Pagar"))).toBe(false);
+  });
+
+  it("si la sala falla al abrir ya, probar de nuevo abre igual y no vuelve a la espera", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    const crudo = borradorDeHoyMasTarde();
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, crudo);
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    x.respuestas.push({ ok: false, motivo: "sin-respuesta" });
+    boton(p, "Abrir la inscripción ahora").click();
+    await vi.waitFor(() => expect(botonesDe(p)).toContain("Probar de nuevo"));
+    expect(x.m.creadas).toEqual([]);
+    expect(botonesDe(p).some((t) => t.startsWith("Pagar"))).toBe(false);
+    boton(p, "Probar de nuevo").click();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(x.m.creadas).toHaveLength(1);
+    expect(x.hecho).toEqual(["pagar", "activar", "activar", "activar"]);
+  });
+
+  it("abrir ya se ofrece solo si a la sala le quedan seis horas después del sorteo", () => {
+    const hora = 3_600_000;
+    expect(cabeAbrirYa(AHORA + 18 * hora, AHORA)).toBe(true);
+    expect(cabeAbrirYa(AHORA + 18 * hora + 1, AHORA)).toBe(false);
+    expect(cabeAbrirYa(AHORA + 2 * 86_400_000, AHORA)).toBe(false);
   });
 
   it("ya pagado, se activa solo al elegir el borrador y no pide pagar", async () => {
