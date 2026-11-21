@@ -297,13 +297,23 @@ type Activacion =
   | { tipo: "activando" }
   | { tipo: "error"; motivo: MotivoDeActivar; campo?: string }
   | { tipo: "hecha" }
-  | { tipo: "temprano"; abreMs: number };
+  | { tipo: "temprano"; abreMs: number; sorteoMs: number };
 
 /**
  * Cuánto antes de abrir se crea la sala de un borrador activado. La sala vive 24 horas desde que se crea y del abrir al sorteo
  * hay como mucho 12: creada 6 horas antes, llega al sorteo con margen. Activada antes, la campaña queda firmada y la sala espera.
  */
 export const ANTICIPO_DE_LA_SALA_MS = 6 * 3_600_000;
+
+/** Lo que vive la sala desde que se crea, y lo que tiene que quedarle después del sorteo para avisar y pagar los premios. */
+const VIDA_DE_LA_SALA_MS = 24 * 3_600_000;
+export const MARGEN_TRAS_EL_SORTEO_MS = 6 * 3_600_000;
+
+/**
+ * Si una campaña activada antes de tiempo se puede abrir ya: el sorteo tiene que caer dentro de la vida de la sala creada
+ * ahora, con el mismo margen que le deja la espera de siempre. Con el sorteo más lejos, abrir ya la dejaría sin lista.
+ */
+export const cabeAbrirYa = (sorteoMs: number, ahora: number): boolean => sorteoMs + MARGEN_TRAS_EL_SORTEO_MS <= ahora + VIDA_DE_LA_SALA_MS;
 
 /** El aviso de una campaña que cierra a más de una semana: no se activa todavía, y su borrador se guarda. */
 const MUY_LEJOS = "cpoAcMuyLejos";
@@ -312,7 +322,7 @@ const MUY_LEJOS = "cpoAcMuyLejos";
 interface PasoDeActivar {
   titulo: string;
   linea: string;
-  principal: { texto: string; accion: "activar" | "cargar" | "entrar" | "armar" | "preguntar"; apagado: boolean };
+  principal: { texto: string; accion: "activar" | "cargar" | "entrar" | "armar" | "preguntar" | "abrir-ya"; apagado: boolean };
 }
 
 const TEXTO_DE_FALLA_AL_CREAR: Record<FallaAlCrear, string> = {
@@ -452,6 +462,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let salaDeActivar: "preguntando" | "lista" | "no" = "lista";
   /** Para la espera hasta la hora de crear la sala de un borrador activado antes de tiempo. */
   let pararTemprano: (() => void) | null = null;
+  /** Quien organiza pidió abrir ya una campaña activada antes de tiempo. Vale hasta que se abre o cambia el borrador. */
+  let abrirYa = false;
   /** La fase en que la sala dijo que está: lo que se guarda para retomar. */
   let faseSala: FaseDeSala = "lista";
   let cierraMs = 0;
@@ -879,6 +891,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function soltarElBorrador(): void {
     pararTemprano?.();
     pararTemprano = null;
+    abrirYa = false;
     if (borrador === null) return;
     borrador = null;
     activacion = { tipo: "esperando" };
@@ -931,6 +944,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     sala = null;
     borrador = limpio;
     activacion = { tipo: "esperando" };
+    abrirYa = false;
     salaDeActivar = deps.salaLista ? "preguntando" : "lista";
     cm?.reiniciar();
     mensaje = "";
@@ -985,8 +999,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     // La sala vive 24 horas desde que se crea: con la apertura lejos, queda activada (el acceso y el pago ya están vistos) y
     // la sala se crea más cerca de la hora. Volver a activar ese día es gratis: la firma de un mismo texto es la misma.
     const desde = lectura.campana.abreMs - ANTICIPO_DE_LA_SALA_MS;
-    if (desde > deps.ahora()) {
-      activacion = { tipo: "temprano", abreMs: lectura.campana.abreMs };
+    // Quien organiza puede pedir abrirla ya: vale mientras el sorteo entre en la vida de la sala creada ahora.
+    const yaPedido = abrirYa && cabeAbrirYa(lectura.campana.sorteoMs, deps.ahora());
+    if (desde > deps.ahora() && !yaPedido) {
+      abrirYa = false;
+      activacion = { tipo: "temprano", abreMs: lectura.campana.abreMs, sorteoMs: lectura.campana.sorteoMs };
       pararTemprano?.();
       pararTemprano = deps.esperar(() => {
         pararTemprano = null;
@@ -995,6 +1012,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       pintar();
       return;
     }
+    abrirYa = false;
     archivo = r.archivo;
     intento = null;
     campana = lectura.campana;
@@ -1007,6 +1025,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   /** Llegó la hora de crear la sala de un borrador activado antes de tiempo: se vuelve a activar y sigue el camino de siempre. */
   function volverDeTemprano(): void {
     if (borrador === null || activacion.tipo !== "temprano" || activacion.abreMs - ANTICIPO_DE_LA_SALA_MS > deps.ahora()) return;
+    activacion = { tipo: "esperando" };
+    pintar();
+    quizasActivar();
+  }
+
+  /**
+   * Quien organiza toca abrir ya una campaña activada antes de tiempo. Se vuelve a activar (gratis: la firma de un mismo texto
+   * es la misma) y sigue el camino de siempre: crear la sala y abrir la inscripción. Si la sala falla, el pedido se recuerda y
+   * probar de nuevo abre igual.
+   */
+  function abrirAntesDeTiempo(): void {
+    if (borrador === null || activacion.tipo !== "temprano" || !cabeAbrirYa(activacion.sorteoMs, deps.ahora())) return;
+    pararTemprano?.();
+    pararTemprano = null;
+    abrirYa = true;
     activacion = { tipo: "esperando" };
     pintar();
     quizasActivar();
@@ -1043,10 +1076,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const desde = a.abreMs - ANTICIPO_DE_LA_SALA_MS;
       const zona = campana?.zona ?? "UTC";
       const idioma = deps.idioma();
+      // Mientras el sorteo entre en la vida de la sala, la inscripción se puede abrir ya con un toque, sin esperar la hora.
+      const ya = cabeAbrirYa(a.sorteoMs, deps.ahora());
       return {
         titulo: tx("cpoAcTempranoT"),
-        linea: fmt("cpoAcTempranoL", { fecha: fechaTexto(desde, zona, idioma), hora: horaTexto(desde, zona, idioma) }),
-        principal: { texto: tx("cpoAbrir"), accion: "activar", apagado: true },
+        linea: fmt(ya ? "cpoAcTempranoYaL" : "cpoAcTempranoL", { fecha: fechaTexto(desde, zona, idioma), hora: horaTexto(desde, zona, idioma) }),
+        principal: ya ? { texto: tx("cpoAbrirYa"), accion: "abrir-ya", apagado: false } : { texto: tx("cpoAbrir"), accion: "activar", apagado: true },
       };
     }
     if (a.tipo !== "error") {
@@ -1083,6 +1118,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function hacerDelPasoDeActivar(accion: PasoDeActivar["principal"]["accion"]): void {
     if (accion === "activar") void activar();
+    else if (accion === "abrir-ya") abrirAntesDeTiempo();
     else if (accion === "preguntar") void preguntarALaSala();
     else if (accion === "cargar") cm?.cargar(() => void activar());
     else if (accion === "entrar") deps.cambiarDeCuenta?.();
