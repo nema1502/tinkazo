@@ -28,6 +28,11 @@ export type EstadoDeComision =
   | { tipo: "otra-billetera"; monto: bigint; entrar: boolean }
   /** La campaña pide sellar con otra cuenta que la de esta sesión. */
   | { tipo: "otra-cuenta" }
+  /**
+   * Un borrador con una cuenta que entró con correo: la sala solo activa campañas de cuentas que entraron con Google, así que
+   * no se ofrece cargar ni pagar. Lo pagado desde esta cuenta no activaría nada.
+   */
+  | { tipo: "solo-google" }
   /** El servicio no atiende ahora y no se arregla solo: queda el pago desde otra billetera. */
   | { tipo: "ahora-no"; monto: bigint };
 
@@ -40,8 +45,13 @@ export interface EntradaDeComision {
   pagando: boolean;
   /** Hay un pago en el aire que puede entrar todavía. */
   marcaViva: boolean;
-  /** Con qué se entra: una cuenta de Google que vota por contenido, u otra cosa (o nada). */
-  billetera: "google" | "otra";
+  /**
+   * Con qué se entra: una cuenta de Google que vota por contenido, una cuenta del mismo proveedor que entró con correo, u otra
+   * cosa (o nada). La de correo paga con un toque solo un archivo ya firmado: un borrador lo activa la sala, y pide Google.
+   */
+  billetera: "google" | "correo" | "otra";
+  /** La campaña es un borrador que activa la sala: solo con una cuenta que entró con Google. */
+  soloGoogle?: boolean;
   /** La campaña pide una cuenta organizadora y la sesión es otra. */
   cuentaEquivocada: boolean;
   /** Si hay una forma de cambiar de cuenta o entrar. */
@@ -82,6 +92,9 @@ export function estadoDeComision(e: EntradaDeComision): EstadoDeComision {
   // Lo que se le pide a otra billetera: la comisión entera menos lo que ya llegó.
   const monto = e.comision > llegado ? e.comision - llegado : e.comision;
   if (e.cuentaEquivocada) return { tipo: "otra-cuenta" };
+  // Una cuenta de correo nunca llega a cargar ni a pagar un borrador: la sala no lo activaría y el pago quedaría sin campaña.
+  // Con un archivo ya firmado no hay sala que pida Google, y paga con un toque como antes.
+  if (e.billetera === "correo" && e.soloGoogle === true) return { tipo: "solo-google" };
   if (e.billetera === "otra") return { tipo: "otra-billetera", monto, entrar: e.puedeEntrar };
   const sale = loQueSale(e, llegado);
   // Un resto de menos de 1 dólar no se puede pagar con la cuenta: queda el pago desde otra billetera.

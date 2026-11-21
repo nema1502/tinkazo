@@ -23,6 +23,8 @@ const h = vi.hoisted(() => ({
   pagos: { tipo: "pagos", pagos: { premio: true, retiro: true, costoRetiro: 5_000_000n, enCurso: null } } as unknown,
   cuentaMirada: { secuencia: "1000", saldos: [] } as unknown,
   rpc: "no-se-sabe" as string,
+  /** La billetera entrada: por defecto una sin nada que la haga pagar con un toque. */
+  billetera: { address: "x" } as Record<string, unknown> | null,
 }));
 
 vi.mock("./mandar-usdc", () => ({
@@ -40,8 +42,19 @@ vi.mock("./mandar-usdc", () => ({
     },
   }),
 }));
-vi.mock("../stellar/wallet-pollar", () => ({ MARCA_DEL_RETIRO: "marca", leerMarcaDeLaCuenta: () => h.marca, submitsItself: () => true }));
-vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => ({ address: "x" }) }));
+vi.mock("../stellar/wallet-pollar", () => ({
+  MARCA_DEL_RETIRO: "marca",
+  leerMarcaDeLaCuenta: () => h.marca,
+  submitsItself: (w: Record<string, unknown>) => w.submitsItself === true,
+}));
+vi.mock("../stellar/wallet-lite", () => ({ activeWallet: () => h.billetera }));
+vi.mock("./wallet-ui", () => ({
+  cerrarSesion: async () => {
+    h.llamadas.push("cerrar");
+    // Cerrar la sesión deja sin billetera, como la de verdad.
+    h.billetera = null;
+  },
+}));
 vi.mock("../stellar/patrocinio-config", () => ({ configDelPortero: () => ({ url: "https://portero.ejemplo", porDefecto: false }) }));
 vi.mock("../stellar/pago-portero", () => ({ mirarPagos: async () => h.pagos }));
 vi.mock("../stellar/usdc-cuenta", () => ({ mirarCuenta: async () => h.cuentaMirada }));
@@ -57,7 +70,7 @@ vi.mock("../campana/comision-red", async (original) => ({
 
 import { network } from "../stellar/config";
 import type { PedidoDePagoDeComision } from "./campana-comision";
-import { depsDeComisionReales } from "./campana-comision-real";
+import { cambiarDeCuentaReal, depsDeComisionReales } from "./campana-comision-real";
 
 const ORIGEN = cuentaDePrueba(5);
 const CUENTA = cuentaDePrueba(2);
@@ -101,6 +114,7 @@ beforeEach(() => {
   h.pagos = { tipo: "pagos", pagos: { premio: true, retiro: true, costoRetiro: 5_000_000n, enCurso: null } };
   h.cuentaMirada = { secuencia: "1000", saldos: [] };
   h.rpc = "no-se-sabe";
+  h.billetera = { address: "x" };
 });
 
 describe("pagar con la cuenta", () => {
@@ -265,6 +279,51 @@ describe("el respaldo y la configuración", () => {
     expect(await depsDeComisionReales().confirmar("e".repeat(64))).toBe(false);
     h.rpc = "no-esta";
     expect(await depsDeComisionReales().confirmar("e".repeat(64))).toBeNull();
+  });
+
+  it("solo la cuenta que entró con Google paga con un toque: la que entró con correo es otra cosa", async () => {
+    const delProveedor = (label: string): Record<string, unknown> => ({ address: ORIGEN, label, submitsItself: true, votaPorContenido: () => true });
+    h.billetera = delProveedor("Google");
+    expect(await depsDeComisionReales().billetera()).toBe("google");
+    h.billetera = delProveedor("Email");
+    expect(await depsDeComisionReales().billetera()).toBe("correo");
+  });
+
+  it("las billeteras que firman en su ventana, sin el voto a mano o sin entrar siguen siendo otra", async () => {
+    h.billetera = { address: ORIGEN, label: "Varial" };
+    expect(await depsDeComisionReales().billetera()).toBe("otra");
+    h.billetera = { address: ORIGEN, label: "Google", submitsItself: true, votaPorContenido: () => false };
+    expect(await depsDeComisionReales().billetera()).toBe("otra");
+    h.billetera = null;
+    expect(await depsDeComisionReales().billetera()).toBe("otra");
+  });
+
+  it("entrar con Google desde una cuenta de correo cierra antes esa sesión: el panel no vuelve a ver la de correo como de Google", async () => {
+    h.billetera = { address: ORIGEN, label: "Email", submitsItself: true, votaPorContenido: () => true };
+    expect(await depsDeComisionReales().billetera()).toBe("correo");
+    let alAbrir: string | null = null;
+    await cambiarDeCuentaReal(async () => {
+      h.llamadas.push("abrir");
+      alAbrir = await depsDeComisionReales().billetera();
+    });
+    expect(h.llamadas).toEqual(["cerrar", "abrir"]);
+    // Con la ventana abierta ya no hay cuenta de correo que se pueda cobrar: hasta que entre Google, no es google.
+    expect(alAbrir).toBe("otra");
+  });
+
+  it("con la cuenta de Google también cierra antes, para que elegir otra cuenta no devuelva la misma", async () => {
+    h.billetera = { address: ORIGEN, label: "Google", submitsItself: true, votaPorContenido: () => true };
+    await cambiarDeCuentaReal(async () => void h.llamadas.push("abrir"));
+    expect(h.llamadas).toEqual(["cerrar", "abrir"]);
+  });
+
+  it("con las demás billeteras solo abre la ventana, como antes", async () => {
+    for (const b of [{ address: ORIGEN, label: "Varial" }, null]) {
+      h.llamadas = [];
+      h.billetera = b;
+      await cambiarDeCuentaReal(async () => void h.llamadas.push("abrir"));
+      expect(h.llamadas).toEqual(["abrir"]);
+    }
   });
 
   it("fuera de la red principal la comisión está apagada", () => {

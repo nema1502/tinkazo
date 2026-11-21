@@ -170,6 +170,36 @@ describe("un borrador sin firma", () => {
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
   });
 
+  it("con una cuenta que entró con correo dice que hace falta Google y nunca ofrece cargar ni pagar", async () => {
+    for (const saldo of [0n, d(150)]) {
+      const x = armar({ saldo });
+      x.m.deps.comision = { ...(x.m.deps.comision as DepsDeComision), billetera: async () => "correo" };
+      document.body.innerHTML = "";
+      const p = nuevoPanel(x.m);
+      await eligiendo(x, p);
+      expect(texto(p, "#cpo-h")).toBe("Hace falta una cuenta de Google");
+      expect(texto(p, "#cpo-linea")).toBe("Entrá con Google para activar tu campaña.");
+      expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
+      expect(botonesDe(p).join("|")).not.toMatch(/Pagar|Cargar/);
+      expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
+      expect(x.hecho).toEqual([]);
+      cerrarTodos();
+    }
+  });
+
+  it("con la cuenta de Google sí ofrece cargar y pagar", async () => {
+    const sinSaldo = armar({ saldo: 0n });
+    const p = nuevoPanel(sinSaldo.m);
+    await eligiendo(sinSaldo, p);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
+    cerrarTodos();
+    document.body.innerHTML = "";
+    const conSaldo = armar();
+    const q = nuevoPanel(conSaldo.m);
+    await eligiendo(conSaldo, q);
+    expect(principales(q).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+  });
+
   it("con el servicio sin atender dice que pruebe más tarde y no manda a otra billetera", async () => {
     const x = armar();
     x.m.deps.comision = { ...(x.m.deps.comision as DepsDeComision), portero: async () => "no" };
@@ -537,7 +567,7 @@ describe("cuando la sala dice que no", () => {
   });
 
   it("en ningún error se ofrece pagar de nuevo", async () => {
-    const motivos: MotivoDeActivar[] = ["no-pagada", "red", "sin-fondos", "sesion", "forma", "limite", "apagada", "sin-respuesta"];
+    const motivos: MotivoDeActivar[] = ["no-pagada", "red", "sin-fondos", "sesion", "no-google", "organizadora", "forma", "limite", "apagada", "sin-respuesta"];
     for (const motivo of motivos) {
       const x = pagado();
       x.respuestas.push(falla(motivo));

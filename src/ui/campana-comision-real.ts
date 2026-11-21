@@ -61,13 +61,31 @@ async function porteroDeLaComision(cuenta: string, costo: bigint): Promise<"atie
   return pagos.enCurso === null ? "atiende" : "sin-respuesta";
 }
 
+/**
+ * Entrar con otra cuenta desde el panel de la campaña. Con una cuenta del proveedor abierta (Google o correo), primero se
+ * cierra esa sesión: si no, elegir Google devolvía la misma cuenta de antes y el panel volvía a ofrecer cargar y pagar con la
+ * cuenta de correo. Con las demás billeteras se abre la ventana como siempre. `abrir` es la ventana de entrar (`openPicker`).
+ */
+export async function cambiarDeCuentaReal(abrir: () => Promise<void>): Promise<void> {
+  const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+  const w = activeWallet();
+  if (w !== null && submitsItself(w)) {
+    const { cerrarSesion } = await import("./wallet-ui");
+    await cerrarSesion().catch(() => undefined);
+  }
+  await abrir();
+}
+
 export function depsDeComisionReales(): DepsDeComision {
   return {
     comision: () => (network.name === "mainnet" ? comisionDelBuild(entornoDelBuild()) : null),
     billetera: async () => {
       const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
       const w = activeWallet();
-      return w !== null && submitsItself(w) && w.votaPorContenido?.() === true ? "google" : "otra";
+      if (w === null || !submitsItself(w) || w.votaPorContenido?.() !== true) return "otra";
+      // La cuenta del proveedor dice por dónde entró (`label`, que sale de la marca que se guarda al entrar y se lee al
+      // retomar): la que entró con correo no es de Google, y la sala no activa sus campañas.
+      return w.label === "Email" ? "correo" : "google";
     },
     mirarRed: (b, umbral) => mirarLaComisionEnLaRed(b, umbral),
     saldo: async (cuenta) => {
