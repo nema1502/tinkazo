@@ -15,6 +15,16 @@ export interface RelojDeCarga {
 }
 
 /**
+ * El reloj del navegador, envuelto. En un navegador, `setTimeout` y `clearTimeout` llamados como método de otro objeto
+ * tiran `Illegal invocation`: guardarlos sueltos en un objeto rompía la página del celular apenas cargaba. Node no lo exige,
+ * así que solo se ve en un navegador de verdad.
+ */
+export const RELOJ_DEL_NAVEGADOR: RelojDeCarga = {
+  setTimeout: (handler, timeout) => setTimeout(handler, timeout),
+  clearTimeout: (id) => clearTimeout(id),
+};
+
+/**
  * Pide la campaña a su sala con un límite de ocho segundos y valida su cuerpo. La sala la guarda como la firmó quien la
  * creó: el cuerpo es `{ texto, firma }` y el texto es el JSON de la campaña. El celular no verifica la firma, porque la
  * sala ya lo hizo antes de guardarla. Si la campaña es de otro evento que el del enlace, es `mal`.
@@ -24,7 +34,7 @@ export async function cargarCampana(
   servicio: string,
   sala: string,
   evento: string,
-  reloj: RelojDeCarga = { setTimeout, clearTimeout },
+  reloj: RelojDeCarga = RELOJ_DEL_NAVEGADOR,
 ): Promise<ResultadoDeCarga> {
   const controlador = new AbortController();
   const tiempo = reloj.setTimeout(() => controlador.abort(), 8000);

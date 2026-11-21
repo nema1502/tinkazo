@@ -240,4 +240,6 @@ onLangChange(() => {
   pintarUltimoAviso();
 });
 
-void cargar();
+// Si algo inesperado corta la carga, la pantalla no se queda esperando para siempre: lo dice y deja probar de nuevo.
+const cargarConRed = (): void => void cargar().catch(() => mostrarCarga("sin-red", cargarConRed));
+cargarConRed();
