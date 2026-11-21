@@ -31,6 +31,7 @@ import { costoDeLaCampana, type ComisionDelArmado } from "./costo";
 import {
   CLAVE_DE_GUARDADO,
   COLORES_EN_ORDEN,
+  MAXIMO_DE_GANAN,
   MAXIMO_DEL_LUGAR,
   MAXIMO_DEL_NOMBRE,
   MAXIMO_DEL_PEDIDO,
@@ -349,14 +350,23 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     return b;
   }
 
-  function contador(valor: number, alBajar: () => void, alSubir: () => void, ids: { menos: string; mas: string; numero: string }): HTMLElement {
+  function contador(
+    valor: number,
+    alBajar: () => void,
+    alSubir: () => void,
+    ids: { menos: string; mas: string; numero: string },
+    limites: { minimo: number; maximo: number },
+  ): HTMLElement {
     const fila = el("div", "ccp-contador");
     const menos = boton("−", "ccp-paso-contador", alBajar, ids.menos);
     menos.setAttribute("aria-label", tx("ccMenos"));
+    // En el borde, el botón que ya no mueve nada queda apagado.
+    menos.disabled = valor <= limites.minimo;
     const numero = el("output", "ccp-numero", String(valor));
     numero.id = ids.numero;
     const mas = boton("+", "ccp-paso-contador", alSubir, ids.mas);
     mas.setAttribute("aria-label", tx("ccMasUno"));
+    mas.disabled = valor >= limites.maximo;
     fila.append(menos, numero, mas);
     return fila;
   }
@@ -389,7 +399,9 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     if (!id) return;
     const nuevo = document.getElementById(id);
     if (!(nuevo instanceof HTMLElement)) return;
-    nuevo.focus();
+    // Un contador que llegó al borde apaga su botón: el foco pasa al otro de la misma fila y no se pierde.
+    const apagado = nuevo instanceof HTMLButtonElement && nuevo.disabled;
+    (apagado ? (nuevo.parentElement?.querySelector<HTMLElement>("button:not([disabled])") ?? nuevo) : nuevo).focus();
     if (nuevo instanceof HTMLInputElement && desde !== null && hasta !== null && nuevo.type === "text") nuevo.setSelectionRange(desde, hasta);
   }
 
@@ -569,6 +581,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
           () => cambiar({ t: "otro-menos" }),
           () => cambiar({ t: "otro-mas" }),
           { menos: "ccp-otro-menos", mas: "ccp-otro-mas", numero: "ccp-otro-numero" },
+          OTRO_MONTO,
         ),
         el("span", "ccp-unidad", tx("ccDolares")),
       );
@@ -582,10 +595,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
         () => cambiar({ t: "ganan-menos" }),
         () => cambiar({ t: "ganan-mas" }),
         { menos: "ccp-ganan-menos", mas: "ccp-ganan-mas", numero: "ccp-ganan-numero" },
+        { minimo: 1, maximo: MAXIMO_DE_GANAN },
       ),
     );
     b.append(cuantos);
-    const resumen = el("p", f.monto === null ? "ccp-premio ccp-muestra" : "ccp-premio", premiosTexto(premios(), deps.idioma()));
+    // Sin monto elegido no se muestra un monto inventado: el renglón queda vacío hasta que se elija.
+    const resumen = el("p", f.monto === null ? "ccp-premio ccp-muestra" : "ccp-premio", f.monto === null ? "" : premiosTexto(premios(), deps.idioma()));
     resumen.id = "ccp-premio";
     resumen.setAttribute("aria-live", "polite");
     b.append(resumen);
@@ -645,7 +660,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     horas.append(
       hora("abre", "ccAbre", false),
       hora("cierra", "ccCierra", t?.cierraMasUno === true),
-      hora("sorteo", "ccSorteo", t?.sorteoMasUno === true),
+      // Con el cierre mal escrito, el sorteo no se marca +1 día: esa cuenta sale de un cierre que no vale.
+      hora("sorteo", "ccSorteo", t?.sorteoMasUno === true && malaHora !== "ccp-cierra"),
     );
     b.append(horas);
     if (malaHora !== null && faltaVisible) {
