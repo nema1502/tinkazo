@@ -13,6 +13,7 @@ import { sufijoNuevo } from "./campana/crear/estado";
 import { costoDelRetiroTexto } from "./costo-del-retiro";
 import { guardarBorrador } from "./campana/borrador";
 import { comisionDelBuild } from "./stellar/comision-config";
+import { comisionDelArmado } from "./campana/crear/costo";
 import { entornoDelBuild } from "./stellar/venta-piloto";
 
 const raiz = document.querySelector<HTMLElement>("#ccp");
@@ -68,6 +69,8 @@ function activarEnElPanel(texto: string): boolean {
 }
 
 function depsReales(): DepsDelCreador {
+  // Lo que cobra Tinkazo, el mismo cobro que después pide el panel de la portada.
+  const cobro = comisionDelBuild(entornoDelBuild());
   return {
     tx: texto,
     dic: (idioma, clave) => String(textos(idioma)[clave] ?? clave),
@@ -89,7 +92,9 @@ function depsReales(): DepsDelCreador {
     costo: costoDelRetiroTexto,
     // Activar solo se ofrece con lo que cobra Tinkazo configurado: es el mismo cobro que después pide el panel. Sin eso, la
     // página es la de siempre y solo baja la campaña.
-    activar: comisionDelBuild(entornoDelBuild()) === null ? undefined : activarEnElPanel,
+    activar: cobro === null ? undefined : activarEnElPanel,
+    // El resumen dice el servicio y el total a poner antes de pedir nada, calculados para esta campaña.
+    comision: comisionDelArmado(cobro),
     origen: location.origin,
     tema: parametros.get("theme"),
     cuadro: (f) => {

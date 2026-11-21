@@ -2,6 +2,7 @@
 /** La página para armar campañas por dentro: los seis pasos, la vista, el guardado y la descarga, con todo inyectado. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { comisionDelArmado } from "./costo";
 import { validarCampanaParaFirmar } from "../../sala/validar-campana";
 import { network } from "../../stellar/config";
 import { TEXTOS_CAMPANA } from "../textos";
@@ -760,19 +761,19 @@ describe("el último paso", () => {
     expect([...q(".ccp-botones").children].map((b) => b.id)).toEqual(["ccp-seguir", "ccp-ver-vista"]);
   });
 
-  it("con una comisión el resumen muestra los premios, la comisión y el total a poner sin que la cuenta se rompa", () => {
-    crear({ comision: { dolares: 5 } });
+  it("con el cobro el resumen muestra los premios, el servicio de esta campaña y el total a poner", () => {
+    crear({ comision: comisionDelArmado({ pb: 200n, minimo: 15_000_000n }) });
     llenarHastaElFinal();
     const premio = [...document.querySelectorAll(".ccp-resumen")][1]?.textContent ?? "";
     expect(premio).toContain("En total 120 dólares digitales (3 por 40)");
-    expect(premio).toContain("Comisión: 5 dólares digitales");
-    expect(premio).toContain("Total a poner: 125 dólares digitales");
+    expect(premio).toContain("Servicio de Tinkazo: 2,40 dólares digitales");
+    expect(premio).toContain("Total a poner: 122,40 dólares digitales");
   });
 
-  it("sin comisión no hay renglón de comisión ni de total a poner", () => {
+  it("sin cobro no hay renglón del servicio ni de total a poner", () => {
     crear();
     llenarHastaElFinal();
-    expect(document.body.textContent).not.toContain("Comisión");
+    expect(document.body.textContent).not.toContain("Servicio de Tinkazo");
     expect(document.body.textContent).not.toContain("Total a poner");
   });
 

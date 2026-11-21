@@ -145,7 +145,7 @@ describe("el diccionario del sitio", () => {
 
 describe("la publicación de producción", () => {
   it("la portada de hoy dice lo que cobra Tinkazo y lo que cuesta retirar", () => {
-    expect(HOY).toContain("data-i=\"faq3a\">Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.<");
+    expect(HOY).toContain("data-i=\"faq3a\">Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios, con un mínimo de 1,50 dólares digitales. Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.<");
   });
 
   it("con el costo prendido y la portada de hoy, no sale", () => {
@@ -224,7 +224,7 @@ describe("con lo que cobra Tinkazo a una campaña de empresa", () => {
   it("la respuesta dice los sorteos oficiales gratis, lo que paga una empresa y lo que cuesta retirar, en español", () => {
     expect(frase.es).toBe(
       "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
-        "Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios. " +
+        "Si tu empresa sortea premios en dólares digitales, paga 2 % de los premios, con un mínimo de 1,50 dólares digitales. " +
         "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta 50 centavos.",
     );
   });
@@ -232,7 +232,7 @@ describe("con lo que cobra Tinkazo a una campaña de empresa", () => {
   it("y en inglés", () => {
     expect(frase.en).toBe(
       "Run your first 3 Live draws for free. For more, use a coupon. " +
-        "If your company gives away prizes in digital dollars, it pays 2% of the prizes. " +
+        "If your company gives away prizes in digital dollars, it pays 2% of the prizes, with a minimum of 1.50 digital dollars. " +
         "Taking part, checking and receiving a prize are always free. Withdrawing costs 50 cents.",
     );
   });
