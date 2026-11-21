@@ -89,8 +89,8 @@ export interface FormularioDeCampana {
   origen: OrigenDelArchivo | null;
 }
 
-export const MONTOS = [10, 20, 40, 50, 100, 200, 500] as const;
-export const OTRO_MONTO = { minimo: 5, maximo: 1000, inicial: 100 } as const;
+export const MONTOS = [5, 10, 20, 40, 50, 100, 200] as const;
+export const OTRO_MONTO = { minimo: 5, maximo: 1000, inicial: 10 } as const;
 export const MAXIMO_DE_GANAN = 10;
 export const MAXIMO_DEL_NOMBRE = 40;
 export const MAXIMO_DEL_LUGAR = 60;

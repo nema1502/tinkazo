@@ -39,7 +39,7 @@ describe("el premio", () => {
   });
 
   it("otro monto arranca en el último monto elegido con un botón, o en 100 si no se eligió ninguno", () => {
-    expect(aplicar(inicial(), { t: "otro-monto" }).monto).toBe(100);
+    expect(aplicar(inicial(), { t: "otro-monto" }).monto).toBe(10);
     expect(aplicar(inicial(), { t: "monto", valor: 20 }, { t: "otro-monto" }).monto).toBe(20);
   });
 
