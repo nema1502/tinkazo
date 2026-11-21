@@ -60,7 +60,7 @@ import { network } from "../stellar/config";
 import { activeWallet } from "../stellar/wallet-lite";
 import { type PantallaGrande, crearPantallaGrande, rellenar } from "./campana-grande";
 import { type AccionDeComision, type ControlDeComision, type DepsDeComision, crearControlDeComision } from "./campana-comision";
-import { depsDeComisionReales } from "./campana-comision-real";
+import { cambiarDeCuentaReal, depsDeComisionReales } from "./campana-comision-real";
 import type { ContextoDelPaso } from "./campana-pasar";
 import { alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
 import { claveDeSellar, entrar, openPicker } from "./wallet-ui";
@@ -228,7 +228,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     // El sello que la sala no aceptó se suelta también con el show ya hecho (`soltarParaSellarDeNuevo`), sin cortar un juego en marcha.
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
     alRetomar: () => void import("./campana-resultado-real").then((m) => m.alRetomarReal()).catch(() => undefined),
-    cambiarDeCuenta: () => void openPicker(),
+    cambiarDeCuenta: () => void cambiarDeCuentaReal(openPicker),
     entrar: () => void entrar(),
     comision: depsDeComisionReales(),
     activar: (pedido) => activarCampana(pedido),

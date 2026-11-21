@@ -57,8 +57,8 @@ export type ResultadoDelPagoDeComision =
 export interface DepsDeComision {
   /** Lo que se cobra, o `null` si la comisión está apagada (sin las tres variables, o fuera de la red principal). */
   comision: () => ConfigDeComision | null;
-  /** Con qué se entra: una cuenta de Google que vota por contenido, u otra cosa. */
-  billetera: () => Promise<"google" | "otra">;
+  /** Con qué se entra: una cuenta de Google que vota por contenido, una del mismo proveedor que entró con correo, u otra cosa. */
+  billetera: () => Promise<"google" | "correo" | "otra">;
   mirarRed: (b: BusquedaDeComision, umbral: bigint) => Promise<LecturaDeComision>;
   saldo: (cuenta: string) => Promise<bigint | "sin-red">;
   portero: (cuenta: string, costo: bigint) => Promise<PorteroDeComision>;
@@ -150,7 +150,7 @@ export const enlaceDePagoDeLaComision = (cuenta: string, monto: bigint, nota: st
 
 export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComision): ControlDeComision {
   let red: LecturaDeComision | null = null;
-  let billetera: "google" | "otra" = "otra";
+  let billetera: "google" | "correo" | "otra" = "otra";
   let saldo: bigint | "sin-red" | null = null;
   let portero: PorteroDeComision = null;
   let pagadaAca = false;
@@ -252,6 +252,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       pagando,
       marcaViva: marcaViva(c.evento) !== null,
       billetera,
+      soloGoogle: ctx.conBorrador?.() === true,
       cuentaEquivocada: pide !== null && ctx.cuenta() !== pide,
       puedeEntrar: ctx.puedeEntrar(),
       saldo,
@@ -308,8 +309,10 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     const cuenta = ctx.cuenta();
     const quien = await deps.billetera();
     if (mia !== mirada) return;
-    billetera = quien === "google" && cuenta !== null ? "google" : "otra";
-    const origen = billetera === "google" ? cuenta : null;
+    billetera = cuenta === null ? "otra" : quien;
+    // La de correo también es una cuenta del proveedor: con un archivo firmado paga con un toque, y con un borrador el estado
+    // la frena antes de ofrecer cargar o pagar (`solo-google`).
+    const origen = billetera !== "otra" ? cuenta : null;
     const marca = leerMarca(c.evento);
     const [lectura, elSaldo, elPortero] = await Promise.all([
       deps.mirarRed({ cuenta: cfg.cuenta, nota: n.nota, desde: n.desde, origen }, n.umbral),
@@ -545,6 +548,15 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
           plegado: null,
         };
       }
+      case "solo-google":
+        // Lo mismo que dice la activación cuando la sala pide Google, pero antes de cargar y de pagar: nada se cobra.
+        return {
+          titulo: tx("cpoAcGoogleT"),
+          linea: tx("cpoAcGoogleL"),
+          principal: ctx.puedeEntrar() ? { texto: tx("cpoCmEntrar"), accion: "entrar", apagado: false } : mirarBoton(),
+          secundario: null,
+          plegado: null,
+        };
       case "ahora-no":
         return {
           titulo: tx("cpoCmOtraT"),

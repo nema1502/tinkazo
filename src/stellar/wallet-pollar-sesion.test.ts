@@ -31,6 +31,8 @@ const h = vi.hoisted(() => ({
   contarLanza: false,
   /** Cuántas veces se le pidió al SDK que empiece una entrada. */
   logins: 0,
+  /** La cuenta que llega al verificar el código del correo. */
+  delCorreo: "",
 }));
 
 vi.mock("../contar", async (orig) => ({
@@ -84,6 +86,21 @@ vi.mock("@pollar/core", () => ({
       h.logins++;
       h.alLogin?.(this as unknown as Record<string, unknown>);
     }
+    /** La entrada con correo, como el SDK: cada paso avisa a quien escucha. */
+    #avisar(step: string): void {
+      this.paso = step;
+      for (const f of this.oyentes) f({ step });
+    }
+    beginEmailLogin(): void {
+      this.#avisar("entering_email");
+    }
+    sendEmailCode(): void {
+      this.#avisar("entering_code");
+    }
+    verifyEmailCode(): void {
+      this.wallet = { address: h.delCorreo };
+      this.#avisar("authenticated");
+    }
     logout = vi.fn(async (): Promise<void> => undefined);
   },
   // Una sesión del SDK parece buena si trae su identificador: lo único que esta prueba necesita.
@@ -119,6 +136,7 @@ beforeEach(() => {
   h.contados = [];
   h.contarLanza = false;
   h.logins = 0;
+  h.delCorreo = "";
   vi.stubEnv("VITE_POLLAR_PUBLISHABLE_KEY", "pub_testnet_prueba");
 });
 afterEach(() => {
@@ -825,6 +843,69 @@ describe("entrar con Google", () => {
     await vi.advanceTimersByTimeAsync(21_000);
     expect(await r2).toBe(DIR);
     expect(h.contados).toEqual([]);
+  });
+});
+
+describe("por dónde entró la sesión", () => {
+  const MARCA = "tinkazo.pollar.intent.testnet";
+  const DIR_CORREO = "GCORREOABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQ";
+
+  it("con una sesión de correo abierta, tocar Entrar con Google no la rotula como de Google, ni al recargar", async () => {
+    vi.useFakeTimers();
+    const datos = almacen({ [MARCA]: "email" });
+    h.billetera = { address: DIR_CORREO };
+    vi.stubGlobal("window", { open: vi.fn(() => null), setInterval, clearInterval, setTimeout, clearTimeout });
+    const { pollarWallet } = await modulo();
+    expect(await pollarWallet.restore()).toBe(DIR_CORREO);
+    expect(pollarWallet.label).toBe("Email");
+    // El SDK devuelve enseguida la cuenta que ya tiene abierta: es la del correo.
+    const r = pollarWallet.connect().then(
+      (d) => d,
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await r).toBe(DIR_CORREO);
+    expect(pollarWallet.label).toBe("Email");
+    expect(datos.get(MARCA)).toBe("email");
+  });
+
+  it("sin sesión abierta, entrar con Google la deja como de Google", async () => {
+    vi.useFakeTimers();
+    const datos = almacen();
+    vi.stubGlobal("window", { open: vi.fn(), setInterval, clearInterval, setTimeout, clearTimeout });
+    h.alLogin = (c) => {
+      setTimeout(() => {
+        (c as unknown as { wallet: { address: string } }).wallet = { address: DIR };
+        for (const f of (c as unknown as { oyentes: Set<(s: { step: string }) => void> }).oyentes) f({ step: "authenticated" });
+      }, 20);
+    };
+    const { pollarWallet } = await modulo();
+    const r = pollarWallet.connect();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(await r).toBe(DIR);
+    expect(pollarWallet.label).toBe("Google");
+    expect(datos.get(MARCA)).toBe("google");
+  });
+
+  it("pedir un código de correo con la sesión de Google abierta y no usarlo la deja como de Google", async () => {
+    const datos = almacen({ [MARCA]: "google" });
+    h.billetera = { address: DIR };
+    const { pollarWallet } = await modulo();
+    await pollarWallet.restore();
+    await pollarWallet.sendEmailCode("empresa@ejemplo.com");
+    expect(pollarWallet.label).toBe("Google");
+    expect(datos.get(MARCA)).toBe("google");
+  });
+
+  it("con el correo, la marca se pone recién cuando llega la cuenta", async () => {
+    const datos = almacen();
+    h.delCorreo = DIR_CORREO;
+    const { pollarWallet } = await modulo();
+    await pollarWallet.sendEmailCode("empresa@ejemplo.com");
+    expect(datos.has(MARCA)).toBe(false);
+    expect(await pollarWallet.verifyEmailCode("123456")).toBe(DIR_CORREO);
+    expect(pollarWallet.label).toBe("Email");
+    expect(datos.get(MARCA)).toBe("email");
   });
 });
 
