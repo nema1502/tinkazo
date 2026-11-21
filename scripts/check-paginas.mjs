@@ -24,7 +24,7 @@ const base = (() => {
   return i >= 0 && args[i + 1] ? args[i + 1] : "http://localhost:4173";
 })();
 
-const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "ruleta-de-nombres", "sorteo-para-eventos", "marca"];
+const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "ruleta-de-nombres", "sorteo-para-eventos", "marca", "empresa"];
 const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },
