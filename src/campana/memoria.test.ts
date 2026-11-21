@@ -1,4 +1,4 @@
-/** Pruebas del recuerdo local, limitado a una semana y a datos no personales. */
+/** Pruebas del recuerdo local, limitado a una semana: cuenta, fase, resultado, comprobante, nombre y número. */
 
 import { describe, expect, it } from "vitest";
 import {
@@ -34,17 +34,40 @@ function recuerdo(): MemoriaDeCampana {
     fase: "abierta",
     resultado: null,
     comprobante: null,
+    nombre: null,
+    total: null,
     guardado: AHORA,
   };
 }
 
 describe("la memoria de una campaña", () => {
-  it("guarda y lee los mismos cinco datos, y vence a los siete días y un milisegundo", () => {
+  it("guarda y lee los mismos siete datos, y vence a los siete días y un milisegundo", () => {
     const valores = almacen();
-    guardarMemoria(valores, SALA, recuerdo());
-    expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_MS)).toEqual(recuerdo());
+    guardarMemoria(valores, SALA, { ...recuerdo(), nombre: "Ana P.", total: 12 });
+    expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_MS)).toEqual({ ...recuerdo(), nombre: "Ana P.", total: 12 });
     expect(leerMemoria(valores, SALA, AHORA + VIDA_MEMORIA_MS + 1)).toBeNull();
     expect(valores.getItem(claveDeMemoria(SALA))).toBeNull();
+  });
+
+  it("guarda el nombre y el número solo con su forma", () => {
+    const valores = almacen();
+    guardarMemoria(valores, SALA, { ...recuerdo(), nombre: "Ana P.", total: 12 });
+    expect(leerMemoria(valores, SALA, AHORA)).toEqual({ ...recuerdo(), nombre: "Ana P.", total: 12 });
+    guardarMemoria(valores, SALA, { ...recuerdo(), nombre: "Ana P.", total: -3 });
+    expect(leerMemoria(valores, SALA, AHORA)?.total).toBeNull();
+    guardarMemoria(valores, SALA, { ...recuerdo(), nombre: undefined as unknown as string, total: undefined as unknown as number });
+    const vacio = leerMemoria(valores, SALA, AHORA);
+    expect(vacio?.nombre).toBeNull();
+    expect(vacio?.total).toBeNull();
+  });
+
+  it("un recuerdo viejo, sin nombre ni número, abre igual", () => {
+    const valores = almacen();
+    valores.setItem(
+      claveDeMemoria(SALA),
+      JSON.stringify({ cuenta: CUENTA, fase: "abierta", resultado: null, comprobante: null, guardado: AHORA }),
+    );
+    expect(leerMemoria(valores, SALA, AHORA)).toEqual(recuerdo());
   });
 
   it("rechaza una cuenta con otra forma y un contenido que no sea JSON", () => {
@@ -57,7 +80,7 @@ describe("la memoria de una campaña", () => {
 
   it("no conserva campos adicionales aunque lleguen en el objeto recibido", () => {
     const valores = almacen();
-    const amplia = { ...recuerdo(), correo: "ana@example.com", nombre: "Ana", token: "secreto" };
+    const amplia = { ...recuerdo(), correo: "ana@example.com", token: "secreto" };
     guardarMemoria(valores, SALA, amplia);
     const crudo = valores.getItem(claveDeMemoria(SALA)) ?? "";
     expect(Object.keys(JSON.parse(crudo) as Record<string, unknown>).sort()).toEqual([
@@ -65,10 +88,12 @@ describe("la memoria de una campaña", () => {
       "cuenta",
       "fase",
       "guardado",
+      "nombre",
       "resultado",
+      "total",
     ]);
     expect(crudo).not.toContain("correo");
-    expect(crudo).not.toContain("token");
+    expect(crudo).not.toContain("secreto");
   });
 
   it("un almacenamiento bloqueado no rompe ninguna operación", () => {

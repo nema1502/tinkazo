@@ -1,11 +1,15 @@
 import type { Fase } from "./celular";
 
-/** Lo que el celular recuerda de una campaña. Nunca el correo, el token ni el nombre. */
+/** Lo que el celular recuerda de una campaña: la cuenta, el punto del sorteo y, para la pantalla del celular, su nombre y su número. Nunca el correo ni el token. */
 export interface MemoriaDeCampana {
   cuenta: string;
   fase: Fase;
   resultado: "gano" | "otra" | null;
   comprobante: string | null;
+  /** El nombre con que sale en la pantalla: el que la persona vio al anotarse. Sin él se saluda igual. */
+  nombre: string | null;
+  /** El número de personas que había en la lista cuando se guardó: es lo primero que vuelve a verse. */
+  total: number | null;
   guardado: number;
 }
 
@@ -49,6 +53,9 @@ export function leerMemoria(almacen: Storage | null, sala: string, ahora: number
       fase: valor.fase,
       resultado: valor.resultado,
       comprobante: valor.comprobante,
+      // El nombre y el número son ajenos: si no están, o tienen otra cosa, la memoria sigue sirviendo sin ellos.
+      nombre: typeof valor.nombre === "string" ? valor.nombre : null,
+      total: typeof valor.total === "number" && Number.isSafeInteger(valor.total) && valor.total >= 0 ? valor.total : null,
       guardado: valor.guardado,
     };
   } catch {
@@ -64,6 +71,8 @@ export function guardarMemoria(almacen: Storage | null, sala: string, m: Memoria
     fase: m.fase,
     resultado: m.resultado,
     comprobante: m.comprobante,
+    nombre: m.nombre,
+    total: m.total,
     guardado: m.guardado,
   };
   try {

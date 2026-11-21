@@ -275,7 +275,7 @@ export function pintarAdentro(
 export function pintarGano(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { avisado: boolean; comprobante: string | null },
+  datos: { avisado: boolean; comprobante: string | null; comprobado?: "esta" | "no-esta" | null },
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", "cmp-estado cmp-gano cmp-dos");
   if (!raiz) return;
@@ -287,6 +287,8 @@ export function pintarGano(
     premio,
     empresa: deps.campana.empresa.nombre,
   }), "cmp-premio-resultado");
+  // La comprobación que el celular hizo por su cuenta, de la que sale la lista sellada de la red.
+  if (datos.comprobado) parrafo(izq, deps.tx(datos.comprobado === "esta" ? "cpMiSelloEsta" : "cpMiSelloNo"), "cmp-apoyo");
   // El enlace para ver cómo se eligió va al pie del bloque, y el cartel del stand arriba del bloque.
   if (datos.comprobante) enlaceComprobante(izq, deps, datos.comprobante);
   if (datos.avisado) {
@@ -305,7 +307,7 @@ export function pintarGano(
 function pintarResultado(
   raizPrincipal: HTMLElement,
   clase: string,
-  lineas: { titulo: string; rotulos?: string[]; apoyo: string[]; problema?: boolean },
+  lineas: { titulo: string; rotulos?: string[]; apoyo: string[]; nota?: string; problema?: boolean },
   accion: { texto: string; enlace: string } | null,
 ): void {
   const raiz = seccion(raizPrincipal, "#cmp-estado", `${clase} cmp-solo`);
@@ -315,6 +317,7 @@ function pintarResultado(
   hero.append(llama());
   titulo(hero, lineas.titulo);
   for (const linea of lineas.apoyo) parrafo(hero, linea, "cmp-apoyo");
+  if (lineas.nota) parrafo(hero, lineas.nota, "cmp-apoyo");
   raiz.append(hero);
   if (!accion) return;
   const barra = caja("cmp-accion");
@@ -330,12 +333,16 @@ function pintarResultado(
 export function pintarOtra(
   raizPrincipal: HTMLElement,
   deps: DepsDelCelular,
-  datos: { comprobante: string | null },
+  datos: { comprobante: string | null; comprobado?: "esta" | "no-esta" | null },
 ): void {
   pintarResultado(
     raizPrincipal,
     "cmp-estado cmp-otra",
-    { titulo: deps.tx("cpOtraPersona"), apoyo: [deps.tx("cpGracias")] },
+    {
+      titulo: deps.tx("cpOtraPersona"),
+      apoyo: [deps.tx("cpGracias")],
+      nota: datos.comprobado ? deps.tx(datos.comprobado === "esta" ? "cpMiSelloEsta" : "cpMiSelloNo") : undefined,
+    },
     datos.comprobante ? { texto: deps.tx("cpComoSeEligio"), enlace: datos.comprobante } : null,
   );
 }

@@ -25,6 +25,10 @@ import {
 import type { NetworkName } from "../stellar/config";
 import { cargarCampana, type ResultadoDeCarga } from "./carga";
 import type { DepsDelCelular, EstadoPublico, MotivoDeAlta, ResultadoDelAlta, SesionDelCelular } from "./celular";
+// El paso «Dejá tu cuenta lista» y la comprobación propia del sello: se bajan solo cuando hacen falta (vuelo del wifi de
+// un evento) y las pruebas los reemplazan por piezas falsas.
+import { pasoDeLaCuenta, type BilleteraDeLaCuenta } from "./cuenta";
+import { comprobarMiCuenta } from "./comprobar";
 import type { Campana } from "./modelo";
 import { leerMemoria } from "./memoria";
 import type { SesionDeGoogle } from "./sesion";
@@ -220,6 +224,30 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
     entrar: async () => {
       olvidarRechazos();
       return recordar(await p.google.entrar());
+    },
+    // Con la sesión ya abierta, la cuenta se deja lista antes del saludo: en la red de prueba el paso no se abre y no
+    // baja nada: no hay nada que activar ni proteger.
+    cuentaLista: async () => {
+      if (p.red !== "mainnet") return true;
+      const [{ abrirCuentaLista }, wp] = await Promise.all([import("../ui/cuenta-lista"), import("../stellar/wallet-pollar")]);
+      // La activación lee la transacción con el SDK de Stellar: se baja mientras la persona mira el paso.
+      void import("@stellar/stellar-sdk").catch(() => undefined);
+      return pasoDeLaCuenta({
+        red: p.red,
+        billetera: () => (wp.pollarWallet.address ? Promise.resolve(wp.pollarWallet as unknown as BilleteraDeLaCuenta) : Promise.resolve(null)),
+        salidas: { cerrarSesion: () => p.google.salir() },
+        // La sesión de la campaña no puede abrir la entrada: en el paso, entrar de nuevo es recargar la página.
+        recargar: () => location.reload(),
+        abrir: abrirCuentaLista,
+      })();
+    },
+    // El celular no se cree la sala cuando dice que ganó o que terminó: comprueba el sello en la red por su cuenta.
+    comprobar: async ({ comprobante, cuenta, contrato }) => {
+      const [{ crearLectorDeHistorial }] = await Promise.all([import("../stellar/historial")]);
+      const lector = crearLectorDeHistorial();
+      return comprobarMiCuenta({ comprobante, cuenta, red: p.red, contrato }, {
+        leer: (red, hash) => lector(red as NetworkName, hash),
+      });
     },
     // El toque se cuenta desde que este celular tiene el candado: esperar a que otra pestaña termine no gasta el tiempo del toque.
     anotar: (nombre, alReintentar) =>

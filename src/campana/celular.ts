@@ -89,8 +89,7 @@ export interface DepsDelCelular {
   anotar: (
     nombre: string | null,
     alReintentar: (motivo: "mucha" | "creando") => void,
-  ) => Promise<ResultadoDelAlta>;
-  /** Lo que la sala sabe de este celular. */
+  ) => Promise<ResultadoDelAlta>;  /** Lo que la sala sabe de este celular. */
   yo: () => Promise<EstadoPropio | "red" | "terminada">;
   /** Las cuentas elegidas y el enlace al comprobante, o null si todavía no hay resultado. */
   resultado: () => Promise<{ ganadoras: string[]; comprobante: string | null } | null | "red">;
@@ -98,6 +97,19 @@ export interface DepsDelCelular {
   recibir: () => void;
   /** Cierra la sesión de Google. */
   salir: () => Promise<void>;
+  /**
+   * El paso «Dejá tu cuenta lista» en la red principal, con la sesión ya abierta: activar y proteger la cuenta antes de
+   * anotarse, con el paso que existe para quien organiza (`campana/cuenta.ts`). Devuelva `true` si se siguió con la
+   * cuenta lista, y `false` cuando la persona no siguió: en ese caso se cierra la sesión y se vuelve a la pantalla
+   * previa. Solo lo arma la página de verdad, en la red principal: en la demo y en la red de prueba no está.
+   */
+  cuentaLista?: () => Promise<boolean>;
+  /**
+   * La comprobación propia del sello (`campana/comprobar.ts`): el celular lee en la red la transacción del sello y
+   * comprueba él mismo que su cuenta está en la lista, sin creerle al servidor. `"esta"` y `"no-esta"` son lo que la red
+   * atestigua; `null` es que no se pudo comprobar, y la pantalla no dice nada.
+   */
+  comprobar?: (o: { comprobante: string; cuenta: string; contrato: string | null }) => Promise<"esta" | "no-esta" | null>;
   /** El costo de retirar, ya escrito para mostrar, o null si no hay costo. */
   costoDelRetiro: () => string | null;
   enlace: () => string;
@@ -146,6 +158,12 @@ interface EstadoInterno {
   avisado: boolean;
   motivoSalida: MotivoDeSalida;
   festejoGrandeHecho: boolean;
+  /** Lo que la comprobación propia del sello dijo de la cuenta de este celular, y con qué comprobante. */
+  sello: "esta" | "no-esta" | null;
+  selloDe: string | null;
+  corriendoElSello: boolean;
+  /** Mientras el paso de la cuenta lista espera a la persona, la entrada no se vuelve a abrir. */
+  esperandoLaCuenta: boolean;
 }
 
 /** El festejo chico dura menos de un segundo: repintar antes lo borraría. */
@@ -169,6 +187,10 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     avisado: false,
     motivoSalida: "otro",
     festejoGrandeHecho: false,
+    sello: null,
+    selloDe: null,
+    corriendoElSello: false,
+    esperandoLaCuenta: false,
   };
   let desmontado = false;
   let consultando = false;
@@ -235,7 +257,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       limpiarPintura = pintarLaCampana(raiz, depsDeLaPrevia, estado.publico, (sesion) => {
         estado.sesion = sesion;
         estado.errorAlta = null;
-        ir("hola");
+        void seguirTrasEntrar();
       }, entrada);
       return;
     }
@@ -272,7 +294,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "gano") {
-      pintarGano(raiz, deps, { avisado: estado.avisado, comprobante: estado.comprobante });
+      pintarGano(raiz, deps, { avisado: estado.avisado, comprobante: estado.comprobante, comprobado: selloComprobado() });
       if (!estado.festejoGrandeHecho) {
         estado.festejoGrandeHecho = true;
         const seccion = raiz.querySelector<HTMLElement>("#cmp-estado");
@@ -287,7 +309,7 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       return;
     }
     if (estado.pantalla === "otra") {
-      pintarOtra(raiz, deps, { comprobante: estado.comprobante });
+      pintarOtra(raiz, deps, { comprobante: estado.comprobante, comprobado: selloComprobado() });
       return;
     }
     if (estado.pantalla === "salio") {
@@ -353,6 +375,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       comprobante: cambios.comprobante === undefined
         ? anterior?.comprobante ?? null
         : cambios.comprobante,
+      // El nombre con que la pantalla la saludó y el número de la lista, tal como se vieron al guardarlo.
+      nombre: cambios.nombre ?? anterior?.nombre ?? null,
+      total: cambios.total ?? anterior?.total ?? null,
       guardado: deps.ahora(),
     };
     estado.memoria = memoria;
@@ -410,13 +435,15 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
       });
       if (gano) {
         ir("gano");
+        void comprobarElSello();
         if (estado.avisado && !avisadoAntes) deps.vibrar([60, 40, 60]);
       } else {
         ir("otra");
+        void comprobarElSello();
       }
       return;
     }
-    guardar({ fase: propio.fase });
+    guardar({ fase: propio.fase, total: propio.total });
     if (estado.pantalla === "adentro") pintar();
     else ir("adentro");
     if (estado.pantalla === "gano" && propio.avisado && !avisadoAntes) {
@@ -450,15 +477,18 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.ya = true;
     estado.propio = {
       fase: memoria.fase,
-      total: estado.publico?.total ?? 0,
+      // El número que el celular guardó se ve enseguida, y la primer consulta lo pone al dia.
+      total: memoria.total ?? estado.publico?.total ?? 0,
       cierraMs: estado.publico?.cierraMs ?? deps.campana.cierraMs,
       anotada: true,
     };
     if (memoria.resultado === "gano") {
       estado.festejoGrandeHecho = true;
       ir("gano");
+      void comprobarElSello();
     } else if (memoria.resultado === "otra") {
       ir("otra");
+      void comprobarElSello();
     } else {
       ir("adentro");
     }
@@ -523,8 +553,9 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         await aplicarPropio(propio);
         return;
       }
-      if (publico.fase === "abierta") ir("hola");
-      else await mostrarFasePublica(publico.fase);
+      if (publico.fase === "abierta") {
+        void seguirTrasEntrar();
+      } else await mostrarFasePublica(publico.fase);
       return;
     }
     await mostrarFasePublica(publico.fase);
@@ -597,7 +628,13 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
         cierraMs: estado.publico?.cierraMs ?? deps.campana.cierraMs,
         anotada: true,
       };
-      guardar({ fase: "abierta", resultado: null, comprobante: null });
+      guardar({
+        fase: "abierta",
+        resultado: null,
+        comprobante: null,
+        nombre: estado.sesion?.nombre ?? null,
+        total: (estado.publico?.total ?? 0) + (resultado.ya ? 0 : 1),
+      });
       ir("adentro");
       if (!resultado.ya) {
         const seccion = raiz.querySelector<HTMLElement>("#cmp-adentro");
@@ -654,9 +691,67 @@ export function montarCelular(raiz: HTMLElement, deps: DepsDelCelular): VistaDel
     estado.propio = null;
     estado.errorAlta = null;
     estado.festejoGrandeHecho = false;
+    estado.sello = null;
+    estado.selloDe = null;
+    estado.corriendoElSello = false;
+    estado.esperandoLaCuenta = false;
     entrada.desde = null;
     entrada.falla = null;
     ir("previa");
+  }
+
+  /** La entrada con Google siguió (la pantalla previa pone la sesión): la cuenta tiene que quedar lista antes del saludo. */
+  async function seguirTrasEntrar(): Promise<void> {
+    if (!estado.sesion || estado.esperandoLaCuenta) return;
+    estado.esperandoLaCuenta = true;
+    let lista = true;
+    try {
+      if (deps.cuentaLista) lista = await deps.cuentaLista();
+    } catch {
+      // Lo que no se pudo mirar no frena: el alta ya sabe decir cuándo la cuenta no termina de estar lista.
+      lista = true;
+    } finally {
+      estado.esperandoLaCuenta = false;
+    }
+    if (desmontado) return;
+    if (!lista) {
+      // La persona no siguió (Volver o cerrar la sesión en el paso): la pantalla queda como al entrar, sin sesión.
+      await salir();
+      return;
+    }
+    // Volver al saludo, sea desde la entrada por toque (pantalla previa) o desde la sesión ya retomada (página nueva).
+    if (estado.pantalla === "previa" || estado.pantalla === "inicial") ir("hola");
+  }
+
+  /** La comprobación propia del sello, una sola vez por comprobante, en las pantallas del resultado. */
+  async function comprobarElSello(): Promise<void> {
+    if (desmontado || estado.corriendoElSello) return;
+    const dep = deps.comprobar;
+    const cuenta = estado.sesion?.cuenta ?? estado.memoria?.cuenta;
+    const comprobante = estado.comprobante;
+    if (!dep || !comprobante || !cuenta) return;
+    if (estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
+    if (estado.selloDe === comprobante) return;
+    estado.corriendoElSello = true;
+    let r: "esta" | "no-esta" | null = null;
+    try {
+      r = await dep({ comprobante, cuenta, contrato: deps.campana.contrato });
+    } catch {
+      r = null;
+    }
+    estado.corriendoElSello = false;
+    if (desmontado) return;
+    if (estado.pantalla !== "gano" && estado.pantalla !== "otra") return;
+    // El comprobante pudo cambiar mientras la comprobación andaba: lo que se dice tiene que ser de este.
+    if (estado.comprobante !== comprobante) return;
+    estado.sello = r;
+    estado.selloDe = comprobante;
+    pintar();
+  }
+
+  /** Qué se le dice a la persona de la comprobación en esta pantalla: nada si el comprobante cambió o no comprobó. */
+  function selloComprobado(): "esta" | "no-esta" | null {
+    return estado.comprobante !== null && estado.comprobante === estado.selloDe ? estado.sello : null;
   }
 
   const cancelarVuelta = deps.alVolver(() => {
