@@ -18,6 +18,7 @@ import { zonaDelNavegador } from "../campana/crear/horas";
 import { aprobarYEnviar, LAB_FIRMAR } from "../equipos/envio";
 import { getLang, initialLang, onLangChange, setLang } from "../idioma";
 import "../pagina";
+import "../version-nueva";
 import {
   DEPARTAMENTOS,
   HORAS_DE_CIERRE,
