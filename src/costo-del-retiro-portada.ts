@@ -36,11 +36,11 @@ const FAQ_CON_RETIRO = {
 const FAQ_CON_RETIRO_Y_COMISION = {
   es:
     "Organizá tus primeros 3 sorteos oficiales gratis. Para más, usá un cupón. " +
-    "Si tu empresa sortea premios en dólares digitales, paga {p} de los premios. " +
+    "Si tu empresa sortea premios en dólares digitales, paga {p} de los premios, con un mínimo de {m}. " +
     "Participar, comprobar y recibir un premio son gratis siempre. Retirar cuesta {c}.",
   en:
     "Run your first 3 Live draws for free. For more, use a coupon. " +
-    "If your company gives away prizes in digital dollars, it pays {p} of the prizes. " +
+    "If your company gives away prizes in digital dollars, it pays {p} of the prizes, with a minimum of {m}. " +
     "Taking part, checking and receiving a prize are always free. Withdrawing costs {c}.",
 };
 

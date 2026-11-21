@@ -27,7 +27,7 @@ import {
 } from "./armar";
 import { basesAutomaticas, basesFinales, type DatosDeLasBases } from "./bases";
 import { UNIDADES_POR_DOLAR } from "./constantes";
-import { costoDeLaCampana, type ComisionDeLaCampana } from "./costo";
+import { costoDeLaCampana, type ComisionDelArmado } from "./costo";
 import {
   CLAVE_DE_GUARDADO,
   COLORES_EN_ORDEN,
@@ -77,8 +77,11 @@ export interface DepsDelCreador {
   origen: string;
   /** El tema forzado por la dirección de la página, para que la vista lo repita. */
   tema: string | null;
-  /** Lo que cobra Tinkazo por activar la campaña. Hoy no se cobra: sin esto, el resumen no tiene renglón de comisión. */
-  comision?: ComisionDeLaCampana | null;
+  /**
+   * Lo que cobra Tinkazo por activar la campaña, según sus premios (`comisionDelArmado`, la misma cuenta con que cobra el
+   * panel). Sin esto, el resumen no tiene renglón del servicio ni del total.
+   */
+  comision?: ComisionDelArmado | null;
   /** Agenda un envío al próximo cuadro: varios cambios en el mismo cuadro salen en un solo mensaje. */
   cuadro: (f: () => void) => void;
   /** Espera antes de guardar: devuelve cómo cancelar. */
@@ -794,10 +797,16 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     const premio = el("div", "ccp-resumen");
     premio.append(el("strong", "", premiosTexto(premios(), idioma)));
     if (f.monto !== null) {
-      const costo = costoDeLaCampana({ premios: { monto: f.monto, ganan: f.ganan }, comision: deps.comision ?? null });
+      const premiosElegidos = { monto: f.monto, ganan: f.ganan };
+      const costo = costoDeLaCampana({ premios: premiosElegidos, comision: deps.comision?.(premiosElegidos) ?? null });
       premio.append(el("span", "ccp-total", fmt("ccTotal", { total: String(costo.premios), n: String(f.ganan), monto: String(f.monto) })));
       if (costo.comision !== null) {
-        const renglon = (clave: string, valor: number): HTMLElement => el("span", "ccp-total", `${tx(clave)}: ${valor} ${tx("ccDolares")}`);
+        // Con centavos, siempre dos decimales: 1,50 y no 1,5.
+        const dinero = (valor: number): string => {
+          const escrito = Number.isInteger(valor) ? String(valor) : valor.toFixed(2);
+          return idioma === "es" ? escrito.replace(".", ",") : escrito;
+        };
+        const renglon = (clave: string, valor: number): HTMLElement => el("span", "ccp-total", `${tx(clave)}: ${dinero(valor)} ${tx("ccDolares")}`);
         premio.append(renglon("ccCostoComision", costo.comision), renglon("ccCostoTotal", costo.total));
       }
     }
