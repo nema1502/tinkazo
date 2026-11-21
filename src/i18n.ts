@@ -1723,6 +1723,7 @@ export const T: Record<Lang, Dict> = {
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Sortear",
     navComo: "Cómo funciona",
+    navEmpresas: "Para empresas",
     navMis: "Mis sorteos",
     // En el celular, lo que no entra en la fila de la cabecera (Juegos, Cómo funciona, Seguridad, Precios).
     navMas: "Más",
@@ -4778,6 +4779,7 @@ export const T: Record<Lang, Dict> = {
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Draw",
     navComo: "How it works",
+    navEmpresas: "For companies",
     navMis: "My draws",
     // On a phone, what does not fit in the header row (Games, How it works, Security, Pricing).
     navMas: "More",

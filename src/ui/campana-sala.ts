@@ -63,7 +63,7 @@ import { type AccionDeComision, type ControlDeComision, type DepsDeComision, cre
 import { depsDeComisionReales } from "./campana-comision-real";
 import type { ContextoDelPaso } from "./campana-pasar";
 import { alCerrarReal, alOlvidarReal, alReabrirReal, listaPasadaReal, listaTrabadaReal } from "./campana-pasar-real";
-import { claveDeSellar, openPicker } from "./wallet-ui";
+import { claveDeSellar, entrar, openPicker } from "./wallet-ui";
 import { pintarQr } from "./qr";
 
 /**
@@ -154,6 +154,11 @@ export interface DepsDelPanelDeCampana {
   /** Abre la ventana para entrar con otra cuenta. */
   cambiarDeCuenta?: () => void;
   /**
+   * Entra con Google como el botón principal de la portada (`entrar` de `wallet-ui.ts`). Lo usa la campaña por activar sin
+   * sesión. Sin esto se abre la ventana de siempre (`cambiarDeCuenta`).
+   */
+  entrar?: () => void;
+  /**
    * Lo que cobra Tinkazo antes de abrir la inscripción (`campana-comision.ts`). Sin esto, o con `comision()` en `null`, el
    * panel es el de siempre: no mira nada y no cambia ninguna pantalla.
    */
@@ -224,6 +229,7 @@ export function depsReales(): DepsDelPanelDeCampana {
     soltarElSello: () => import("./campana-resultado-real").then((m) => m.soltarParaSellarDeNuevo()),
     alRetomar: () => void import("./campana-resultado-real").then((m) => m.alRetomarReal()).catch(() => undefined),
     cambiarDeCuenta: () => void openPicker(),
+    entrar: () => void entrar(),
     comision: depsDeComisionReales(),
     activar: (pedido) => activarCampana(pedido),
     salaLista: () => salaPuedeActivar(),
@@ -405,6 +411,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   const tituloEl = q("cpo-h");
   /** La marca de servicio pagado: se arma recién cuando hace falta, así con el cobro apagado el DOM es el de siempre. */
   let marcaEl: HTMLElement | null = null;
+  /** De quién es la campaña por activar, arriba del título, con la sesión puesta: el título ya es lo que falta. */
+  let deEl: HTMLElement | null = null;
   const lineaEl = q("cpo-linea");
   const avisoEl = q("cpo-aviso");
   const conexionEl = q("cpo-conexion");
@@ -1009,6 +1017,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (borrador !== null && archivo === null && vista === "previa" && activacion.tipo === "esperando" && cm?.estado().tipo === "pagada") {
       void activar();
     }
+  }
+
+  /** Un borrador de crear-campana.html en la vista previa, sin pagar y sin nadie adentro: lo que se ve antes de entrar con Google. */
+  function porActivarSinSesion(): boolean {
+    return borrador !== null && archivo === null && vista === "previa" && campana !== null && deps.cuenta() === null && pasoDeActivar() === null;
   }
 
   /** La pantalla de un borrador ya pagado, o `null` si no corresponde (no es un borrador, no se pagó, o ya tiene su archivo). */
@@ -1634,6 +1647,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       listaTrabada(),
       vista === "previa" ? (cm?.firma() ?? "") : "",
       vista === "previa" && borrador !== null ? `${archivo === null ? "b" : "f"}${JSON.stringify(activacion)}${salaDeActivar}` : "",
+      porActivarSinSesion(),
+      vista === "elegir" && borradorGuardado(),
     ].join("|");
     if (firma === firmaDeAcciones) return;
     firmaDeAcciones = firma;
@@ -1653,6 +1668,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       armar.href = "/crear-campana.html";
       armar.textContent = tx("cpoArmala");
       botones.push(armar);
+      // Un borrador guardado que el panel no tomó (todavía lejos, o en el stand): también se puede dejar desde acá.
+      if (borradorGuardado()) botones.push(boton(tx("cpoDejar"), "enlace", () => dejarLaCampana()));
     } else if (vista === "previa") {
       // Con el cobro prendido y sin pagar, el botón es el del estado del cobro en lugar de Abrir la inscripción.
       const d = cm?.activo() ? cm.descripcion() : null;
@@ -1667,6 +1684,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         // Un borrador pagado: un solo botón, el de lo que pasa ahora. Nunca se ofrece pagar de nuevo.
         const { texto, accion, apagado } = deActivar.principal;
         botones.push(principal(texto, () => hacerDelPasoDeActivar(accion), apagado));
+      } else if (d?.principal && d.principal.accion === "entrar" && porActivarSinSesion()) {
+        // La campaña por activar, sin sesión: un solo botón, el mismo ingreso que el botón principal de la portada.
+        botones.push(principal(d.principal.texto, () => (deps.entrar ?? deps.cambiarDeCuenta)?.()));
       } else if (d?.principal) {
         const { texto, accion, apagado } = d.principal;
         botones.push(principal(texto, () => hacer(accion), apagado));
@@ -1680,7 +1700,9 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
       const tipoDelCobro = cm?.estado().tipo;
       if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda" && activacion.tipo !== "activando") {
-        botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : volverAElegir())));
+        // El borrador que dejó crear-campana.html no vino de un archivo: dejarlo se dice así, con o sin sesión.
+        const deCrear = borrador !== null && archivo === null;
+        botones.push(boton(tx(deCrear ? "cpoDejar" : "cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : deCrear ? dejarLaCampana() : volverAElegir())));
       }
     } else if (vista === "abierta") {
       const abrirGrande = (b: HTMLButtonElement): void => grande.abrir(b);
@@ -1727,6 +1749,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     archivoEl.click();
   }
 
+  /** Si este navegador guarda una campaña por activar (la que dejó crear-campana.html), la haya tomado el panel o no. */
+  function borradorGuardado(): boolean {
+    return leerBorrador(deps.almacen) !== null;
+  }
+
+  /**
+   * Deja la campaña por activar: se borra el borrador y se vuelve a la portada de siempre. Quien la armó nunca tuvo un archivo
+   * firmado, así que la vista de elegirlo no le dice nada.
+   */
+  function dejarLaCampana(): void {
+    volverAElegir();
+    borrarBorrador(deps.almacen);
+    deps.ir?.("/");
+  }
+
   function volverAElegir(): void {
     soltarElBorrador();
     archivo = null;
@@ -1771,6 +1808,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       const d = cm?.activo() ? cm.descripcion() : null;
       if (d?.titulo != null) titulo = d.titulo;
       if (d?.linea != null) linea = d.linea;
+      // La campaña por activar, sin sesión: el título la nombra, y la línea del cobro dice lo que sigue y lo que cuesta.
+      if (porActivarSinSesion()) titulo = fmt("cpoBorradorT", { empresa: campana.empresa.nombre });
       // Con el borrador ya pagado, la pantalla dice cómo va la activación.
       const deActivar = pasoDeActivar();
       if (deActivar) {
@@ -1783,6 +1822,17 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     }
     tituloEl.textContent = titulo;
     lineaEl.textContent = linea;
+    const deQuien = campana !== null && vista === "previa" && borrador !== null && archivo === null && !porActivarSinSesion();
+    if (deQuien && !deEl) {
+      deEl = document.createElement("p");
+      deEl.id = "cpo-de";
+      deEl.className = "cpo-de";
+      tituloEl.before(deEl);
+    }
+    if (deEl) {
+      deEl.hidden = !deQuien;
+      deEl.textContent = campana ? fmt("cpoDeLaCampana", { empresa: campana.empresa.nombre }) : "";
+    }
     // Con el cobro prendido y pagado, el panel lo dice: sin la marca se vería igual al que nunca cobró.
     // Si la sala todavía no ve el pago de un borrador, la marca de pagado se contradice con el título: no se muestra.
     const sinVerElPago = borrador !== null && archivo === null && activacion.tipo === "error" && activacion.motivo === "no-pagada";
@@ -2028,6 +2078,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   function pintar(): void {
     raiz.dataset.vista = vista;
+    // La campaña por activar (campana-sala.css): en su vista previa lo único en pantalla es el panel.
+    raiz.toggleAttribute("data-borrador", borrador !== null && archivo === null);
     // Solo con el cobro prendido: apagado, el panel no lleva este atributo.
     if (vista === "previa" && cm?.activo()) raiz.dataset.comision = cm.estado().tipo;
     else if (raiz.dataset.comision !== undefined) delete raiz.dataset.comision;
