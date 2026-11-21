@@ -151,7 +151,7 @@ describe("falta cargar", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p);
     expect(c.llamadas).toContain("red");
-    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
     expect(texto(p, "#cpo-linea")).toBe("120 de premio y 2,40 del servicio de Tinkazo.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
     expect(botonesDe(p)).not.toContain("Abrir la inscripción");
@@ -162,7 +162,7 @@ describe("falta cargar", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p, { premios: ["120000000"] });
     // 12 de premios: la comisión es el mínimo (1,50) y se cargan 13,50.
-    expect(texto(p, "#cpo-h")).toBe("Cargá 13,50");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 13,50 dólares digitales");
     expect(texto(p, "#cpo-linea")).toBe("12 de premio y 1,50 del servicio de Tinkazo.");
   });
 
@@ -170,7 +170,7 @@ describe("falta cargar", () => {
     const { m } = armar({ saldo: d(100) });
     const p = nuevoPanel(m);
     await eligiendo(m, p, { premios: ["1000000000"] });
-    expect(texto(p, "#cpo-h")).toBe("Cargá 2 más");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 2 dólares digitales más");
     expect(texto(p, "#cpo-linea")).toBe("Tenés 100. Son 100 de premio y 2 del servicio.");
   });
 
@@ -221,7 +221,7 @@ describe("listo para pagar", () => {
     const { m } = armar({ saldo: d(2.49) });
     const p = nuevoPanel(m);
     await eligiendo(m, p, { premios: ["10000000"] });
-    expect(texto(p, "#cpo-h")).toBe("Cargá 0,01 más");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 0,01 dólares digitales más");
   });
 
   it("un premio con fracción de centavo no se acepta", async () => {
@@ -511,7 +511,7 @@ describe("lo que sale mal al pagar", () => {
     c.saldo = d(10);
     boton(p, "Pagar 2,40").click();
     await suelta(8);
-    expect(texto(p, "#cpo-h")).toBe("Cargá 112,40 más");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 112,40 dólares digitales más");
   });
 
   it("una red atrasada o sin respuesta antes de mandar deja Sin conexión y nunca Pagar", async () => {
@@ -768,7 +768,7 @@ describe("en inglés", () => {
     m.idioma = "en";
     const p = nuevoPanel(m);
     await eligiendo(m, p);
-    expect(texto(p, "#cpo-h")).toBe("Load 122.40");
+    expect(texto(p, "#cpo-h")).toBe("Load 122.40 digital dollars");
     expect(texto(p, "#cpo-linea")).toBe("120 for the prize and 2.40 for Tinkazo's service.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Add digital dollars"]);
   });
@@ -856,7 +856,7 @@ describe("lo que dice el panel de cada estado", () => {
     const { m } = armar({ saldo: d(120) });
     const p = nuevoPanel(m);
     await eligiendo(m, p);
-    expect(texto(p, "#cpo-h")).toBe("Cargá 2,40 más");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 2,40 dólares digitales más");
     expect(texto(p, "#cpo-linea")).toBe("Tenés 120. Son 120 de premio y 2,40 del servicio.");
   });
 });

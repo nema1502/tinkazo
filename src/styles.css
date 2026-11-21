@@ -1782,6 +1782,10 @@
      la fila lleva cuatro entradas y esta sobra. menu.ts lo sigue agregando siempre
      y acá se esconde, así el texto no se pierde. */
   @media (min-width: 761px) { .topnav .mas-lista a[href="/#como-se-usa"] { display: none; } }
+  /* Para empresas va solo en Más del celular, y solo con las campañas abiertas (el atributo hidden lo saca main.ts). En la
+     laptop la fila no tiene Más ni lugar para una quinta entrada: ahí la invitación es la del final de la portada. */
+  .topnav .mas-lista a[data-campana-enlace][hidden] { display: none; }
+  @media (min-width: 761px) { .topnav .mas-lista a[data-campana-enlace] { display: none; } }
   /* En la fila quedan cuatro: Sortear, Mis sorteos, Juegos y Cómo funciona (8 de noviembre
      de 2026; Seguridad y Precios bajaron al pie). Con las siete de antes, entre 1101 y
      1279 px y con la cuenta abierta, se apretaban contra el nombre. Un poco menos de aire

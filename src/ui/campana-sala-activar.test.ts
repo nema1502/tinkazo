@@ -145,7 +145,7 @@ describe("un borrador sin firma", () => {
     const p = nuevoPanel(x.m);
     await eligiendo(x, p);
     expect(vistaDe(p)).toBe("previa");
-    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
     expect(x.m.creadas).toEqual([]);
     expect(x.activaciones).toEqual([]);
@@ -163,7 +163,9 @@ describe("un borrador sin firma", () => {
     x.m.cuenta = null;
     const p = nuevoPanel(x.m);
     await eligiendo(x, p);
-    expect(texto(p, "#cpo-h")).toBe("Falta pagar a Tinkazo");
+    // Sin sesión el título nombra la campaña y la línea dice lo que sigue y lo que cuesta.
+    expect(texto(p, "#cpo-h")).toBe("La campaña de Alcancía Andina está lista");
+    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120 de premio y 2,40 del servicio.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
   });
@@ -234,6 +236,11 @@ describe("un borrador sin firma", () => {
     await suelta(10);
     expect(texto(p, "#cpo-aviso")).toBe("Se activa hasta una semana antes del cierre. Volvé más cerca de la fecha.");
     expect(guardado(x.m)).toBe(crudo);
+    // Se puede dejar desde ahí mismo: borra el borrador y vuelve a la portada.
+    boton(p, "Dejar esta campaña").click();
+    await suelta(4);
+    expect(guardado(x.m)).toBeNull();
+    expect(x.irA).toEqual(["/"]);
   });
 
   it("sin el cobro prendido un archivo sin firma sigue siendo un archivo que no es una campaña", async () => {
@@ -551,7 +558,7 @@ describe("retomar un borrador", () => {
     const p = nuevoPanel(x.m);
     await suelta(10);
     expect(vistaDe(p)).toBe("previa");
-    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
   });
 
   it("uno vencido o que no sirve se saca y se dice por qué", async () => {
@@ -602,15 +609,34 @@ describe("retomar un borrador", () => {
     expect(guardado(x.m)).not.toBeNull();
   });
 
-  it("Elegir otro archivo deja el borrador y no vuelve", async () => {
+  it("Dejar esta campaña deja el borrador y no vuelve", async () => {
     const x = armar({ saldo: 0n });
     x.m.almacen.setItem(CLAVE_DEL_BORRADOR, borradorDe());
     const p = nuevoPanel(x.m);
     await suelta(10);
-    boton(p, "Elegir otro archivo").click();
+    boton(p, "Dejar esta campaña").click();
     await suelta(4);
     expect(vistaDe(p)).toBe("elegir");
     expect(guardado(x.m)).toBeNull();
+  });
+
+  it("Dejar esta campaña vuelve a la portada: no le pide un archivo a quien nunca tuvo uno", async () => {
+    const x = armar({ saldo: 0n });
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, borradorDe());
+    const p = nuevoPanel(x.m);
+    await suelta(10);
+    boton(p, "Dejar esta campaña").click();
+    await suelta(4);
+    expect(guardado(x.m)).toBeNull();
+    expect(x.irA).toEqual(["/"]);
+  });
+
+  it("sin borrador guardado, la vista de elegir no ofrece dejar nada", async () => {
+    const x = armar();
+    const p = nuevoPanel(x.m);
+    await suelta(10);
+    expect(vistaDe(p)).toBe("elegir");
+    expect(botonesDe(p)).not.toContain("Dejar esta campaña");
   });
 });
 
@@ -631,5 +657,56 @@ describe("los textos de la activación", () => {
         expect(t, `${idioma}.${k}`).not.toMatch(/\b(?:memo|red|firma|hash|transacci[oó]n|network|signature|transaction|blockchain|token)\b/iu);
       }
     }
+  });
+});
+
+describe("la campaña por activar, sin sesión", () => {
+  /** Sin nadie adentro: la billetera no es la de Google y el panel ofrece entrar. */
+  function sinSesion(): { x: Mundillo; entradas: string[] } {
+    const x = armar();
+    x.m.cuenta = null;
+    const entradas: string[] = [];
+    x.m.deps.entrar = () => void entradas.push("entrar");
+    x.m.deps.cambiarDeCuenta = () => void entradas.push("ventana");
+    x.m.deps.comision = { ...(x.m.deps.comision as DepsDeComision), billetera: async () => (x.m.cuenta === null ? "otra" : "google") };
+    x.m.almacen.setItem(CLAVE_DEL_BORRADOR, borradorDe());
+    return { x, entradas };
+  }
+
+  it("la nombra, dice lo que sigue y lo que cuesta, y deja un solo botón principal y Dejar esta campaña", async () => {
+    const { x } = sinSesion();
+    const p = nuevoPanel(x.m);
+    await suelta(10);
+    const empresa = (JSON.parse(borradorDe()) as { empresa: { nombre: string } }).empresa.nombre;
+    expect(texto(p, "#cpo-h")).toBe(`La campaña de ${empresa} está lista`);
+    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120 de premio y 2,40 del servicio.");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
+    expect(botonesDe(p)).toEqual(["Entrar con Google", "Dejar esta campaña"]);
+    expect(p.raiz.hasAttribute("data-borrador")).toBe(true);
+    // El título ya la nombra: arriba no se repite.
+    expect($<HTMLElement>(p, "#cpo-de")?.hidden ?? true).toBe(true);
+  });
+
+  it("Entrar con Google usa el ingreso de la portada, no la ventana de siempre", async () => {
+    const { x, entradas } = sinSesion();
+    const p = nuevoPanel(x.m);
+    await suelta(10);
+    boton(p, "Entrar con Google").click();
+    expect(entradas).toEqual(["entrar"]);
+  });
+
+  it("al entrar, el título deja de pedir que entre y pide el pago", async () => {
+    const { x } = sinSesion();
+    const p = nuevoPanel(x.m);
+    await suelta(10);
+    x.m.cuenta = ORIGEN;
+    document.dispatchEvent(new CustomEvent("tinkazo:sesion", { detail: ORIGEN }));
+    await suelta(10);
+    expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+    // De quién es la campaña sigue a la vista, arriba del título.
+    const empresa = (JSON.parse(borradorDe()) as { empresa: { nombre: string } }).empresa.nombre;
+    expect(texto(p, "#cpo-de")).toBe(`La campaña de ${empresa}`);
+    expect($<HTMLElement>(p, "#cpo-de")?.hidden).toBe(false);
   });
 });

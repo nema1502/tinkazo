@@ -522,7 +522,15 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
         return {
           titulo: tx("cpoCmOtraT"),
           // Si se puede entrar con Google, la línea dice lo mismo que el botón y pagar a mano queda plegado.
-          linea: fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoTexto(e.monto, idioma) }),
+          // Con un borrador, antes de entrar: lo que va a poner en total, premios y servicio, como lo dijo el armado.
+          linea:
+            e.entrar && borrador
+              ? fmt("cpoCmBorradorEntrarL", {
+                  total: montoTexto(n.premios + e.monto, idioma),
+                  premios: montoTexto(n.premios, idioma),
+                  servicio: montoTexto(e.monto, idioma),
+                })
+              : fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoTexto(e.monto, idioma) }),
           principal: e.entrar ? { texto: tx("cpoCmEntrar"), accion: "entrar", apagado: false } : mirarBoton(),
           secundario: e.entrar ? { texto: tx("cpoCmMirar"), accion: "mirar" } : null,
           plegado: borrador ? null : e.entrar ? "cerrado" : "abierto",
