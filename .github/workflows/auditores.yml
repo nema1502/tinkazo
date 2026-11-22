@@ -16,7 +16,7 @@
 # (`audit-flujo.mjs`, `audit-modos.mjs`, `audit-detalles.mjs`) y los que miden fluidez, sonido o
 # física con la placa de video (`audit-rigor.mjs`, `audit-emocion.mjs`, `audit-tacto.mjs`,
 # `audit-sound.mjs`, `audit-mezcla.mjs`, `audit-choques.mjs`, `audit-fisica.mjs`): esos se
-# siguen corriendo en la máquina de quien desarrolla (ver CLAUDE.md y docs/juegos.md).
+# siguen corriendo en la máquina de quien desarrolla (ver docs/juegos.md).
 #
 # Dos grupos:
 #   - Los de siempre cuentan: si fallan, la corrida queda en rojo. Son las palabras que el

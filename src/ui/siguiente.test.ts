@@ -73,6 +73,37 @@ describe("la barra entera, con el panel de equipos", () => {
   });
 });
 
+describe("el paso que la barra deja a la vista de la hoja de estilos", () => {
+  it("lo escribe en la barra y lo cambia con la lista: la hoja esconde el paso 1 cuando hay una campaña", async () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    document.body.dataset.vista = "app";
+    document.body.dataset.tab = "nuevo";
+    delete document.body.dataset.demo;
+    document.body.innerHTML =
+      `<div id="stadium" style="display:none"></div><div id="winner-box" style="display:none"></div>` +
+      `<ol id="pasos">${[1, 2, 3, 4].map((n) => `<li data-paso="${n}"><span class="p-n"></span><span class="p-e"></span></li>`).join("")}</ol>` +
+      `<div id="names"></div><button id="btn-pegar" type="button">Pegar lista</button><button id="btn-freeze" type="button"></button><button id="btn-draw" type="button"></button>` +
+      `<div id="again-row" style="display:none"><button id="btn-again-sin" type="button"></button></div><button id="btn-proof" type="button"></button>` +
+      `<input id="prize" /><div id="prize-chips"></div><section id="sec-participants"></section>` +
+      `<div id="siguiente"><p id="sig-paso"></p><button id="sig-btn" type="button"></button></div><div id="sig-aviso"></div>`;
+    initSiguiente({ segundos: () => 0 });
+    const barra = document.getElementById("siguiente") as HTMLElement;
+    expect(barra.dataset.paso).toBe("1");
+    document.getElementById("names")?.append(document.createElement("i"), document.createElement("i"));
+    actualizarPaso();
+    expect(barra.dataset.paso).toBe("2");
+    await new Promise((r) => setTimeout(r, 10));
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("con el paso «Dejá tu cuenta lista» abierto", () => {
   it("la barra de lo que sigue no se ve: el paso tapa todo y tiene su propia acción", async () => {
     let alVer: (entradas: Array<{ isIntersecting: boolean; intersectionRatio: number }>) => void = () => undefined;

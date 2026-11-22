@@ -58,6 +58,13 @@ body:has(#cpo-panel:is([data-vista="cerrada"], [data-vista="sellada"], [data-vis
   ) {
   display: none !important;
 }
+/* Con la lista sellada o sorteada el sello ya está hecho: el botón de sellar del editor, la nota de su modo y la de los términos
+   serían otra acción que contradice al panel, y apretarlo sellaría una lista vacía. Lo que sigue lo dice el panel. */
+body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) :is(#btn-freeze, #sellar-modo, #free-rule) {
+  display: none !important;
+}
+/* Y la barra de abajo tampoco ofrece Entrar para sellar (el paso 2) ahí: ya sellada, lo que sigue es la espera de la ronda (paso 3). */
+body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #siguiente[data-paso="2"] { display: none !important; }
 /* La campaña por activar que dejó crear-campana.html: sin el título Tu sorteo, los pasos, la puerta de la cuenta ni el
    selector de modos, que competían con su botón principal. Con o sin sesión, la acción es la del panel. */
 body:has(#cpo-panel[data-borrador][data-vista="previa"]) :is(
@@ -97,6 +104,9 @@ body:has(#cpo-panel[data-borrador][data-vista="previa"]) #sec-participants { mar
 /* La barra de lo que sigue solo se esconde mientras el panel tiene su propia acción principal: una sola a la vista. Con la lista
    cerrada o sellada la barra sigue ahí: es lo único que lleva a Lanzar el sorteo durante la cuenta regresiva. */
 body:has(#cpo-panel:not([data-vista="cerrada"]):not([data-vista="sellada"]), #cpo-panel button.primary) #siguiente { display: none !important; }
+/* Con el panel de una campaña la lista es la del panel: la barra nunca ofrece Pegar lista (el paso 1). Pasa mientras se lee la lista
+   cerrada o se avisa a los celulares, cuando el cuadro del editor todavía está vacío y la fila viva dice que el panel trabaja. */
+body:has(#cpo-panel) #siguiente[data-paso="1"] { display: none !important; }
 /* Con la lista sellada o sorteada, Siguiente premio arma otro sorteo que no cuenta para la campaña: no es lo que sigue. */
 body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-again-sin { display: none !important; }
 

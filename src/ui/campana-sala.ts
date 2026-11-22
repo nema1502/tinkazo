@@ -505,6 +505,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   let trabajando = false;
   /** En qué va la activación y la apertura de la inscripción: lo que dice la fila viva. */
   let etapa: "activando" | "sala" | "abriendo" | null = null;
+  /**
+   * La sala ya firmó el borrador y falta crear la sala y abrir la inscripción. La pantalla sigue siendo la de la activación
+   * (mismo título, mismo panel solo, sin la barra de pasos) hasta que la inscripción abre: el archivo y el borrador cambian a mitad
+   * de camino, pero lo que se ve no salta.
+   */
+  let activandoLaSala = false;
   /** Se está leyendo la lista completa de la sala, antes de pasarla al sorteo: la fila lo dice mientras tarda. */
   let leyendoLaLista = false;
   /** El cobro estaba esperándose cuando se pintó la última vez: si ahora está pagado, el tilde de la marca salta una vez. */
@@ -982,6 +988,11 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     borrarBorrador(deps.almacen);
   }
 
+  /** ¿La pantalla es la de un borrador por activar? Lo es con el borrador sin archivo y mientras la sala firmada se crea y se abre. */
+  function esDeBorrador(): boolean {
+    return archivo === null ? borrador !== null : activandoLaSala;
+  }
+
   /**
    * Toma un borrador como la campaña de esta pantalla y empieza a mirar el cobro. `null` si quedó, y si no, qué se le dice a
    * quien organiza. Lo que la sala va a exigir se comprueba acá, antes de cobrar: un borrador que no sirve no llega a pagarse.
@@ -1112,13 +1123,20 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     reintentosAutomaticos = 0;
     pararTemprano?.();
     pararTemprano = null;
+    activandoLaSala = true;
     archivo = r.archivo;
     intento = null;
     campana = lectura.campana;
     pide = r.organizadora;
     activacion = { tipo: "hecha" };
     pintar();
-    await abrirInscripcion();
+    try {
+      await abrirInscripcion();
+    } finally {
+      // Con la inscripción abierta ya no hay nada que mirar. Si falló, el panel pasa al de una campaña con su archivo y lo dice.
+      activandoLaSala = false;
+      pintar();
+    }
   }
 
   /** Llegó la hora de crear la sala de un borrador activado antes de tiempo: se vuelve a activar y sigue el camino de siempre. */
@@ -1181,7 +1199,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
 
   /** La pantalla de un borrador ya pagado, o `null` si no corresponde (no es un borrador, no se pagó, o ya tiene su archivo). */
   function pasoDeActivar(): PasoDeActivar | null {
-    if (borrador === null || archivo !== null || vista !== "previa" || !cm?.activo()) return null;
+    if (!esDeBorrador() || vista !== "previa" || !cm?.activo()) return null;
     const con = (t: string, l: string, texto: string, accion: PasoDeActivar["principal"]["accion"]): PasoDeActivar => ({
       titulo: tx(t),
       linea: tx(l),
@@ -1342,18 +1360,21 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   async function crearLaSala(): Promise<string | null> {
     if (sala) return null;
     if (!archivo || !campana) return tx("cpoNoEsCampana");
-    const anterior = tokenDeEvento(deps.almacen, campana.evento);
+    const { evento, red } = campana;
+    const anterior = tokenDeEvento(deps.almacen, evento);
     // El intento se guarda antes de pedir: si la respuesta se pierde y la pestaña se recarga, el mismo archivo lo repite.
-    intento ??= intentoDeArchivo(deps.almacen, campana.evento, archivo.firma) ?? generarClave();
-    guardarIntentoDeArchivo(deps.almacen, { evento: campana.evento, firma: archivo.firma, intento });
-    const r = await deps.crear(archivo, { evento: campana.evento, red: campana.red, anterior, intento });
+    intento ??= intentoDeArchivo(deps.almacen, evento, archivo.firma) ?? generarClave();
+    guardarIntentoDeArchivo(deps.almacen, { evento, firma: archivo.firma, intento });
+    const r = await deps.crear(archivo, { evento, red, anterior, intento });
     if (!r.ok) return tx(TEXTO_DE_FALLA_AL_CREAR[r.motivo]);
+    // Si mientras se creaba se dejó la campaña, esta sala ya no es de esta pantalla: no se toma ni se sigue.
+    if (!archivo || !campana) return tx("cpoNoEsCampana");
     sala = r.sala;
     marca++;
     faseSala = "lista";
     // El token de la sala se guarda aparte: sin él, el mismo archivo no vuelve a abrir una sala que ya se cerró.
     guardarTokenDeEvento(deps.almacen, { evento: r.sala.evento, token: r.sala.token });
-    olvidarIntentoDeArchivo(deps.almacen, campana.evento);
+    olvidarIntentoDeArchivo(deps.almacen, evento);
     // Con la sala creada, la memoria de esta compu ya retoma la campaña: el borrador cumplió y no vuelve a aparecer.
     soltarElBorrador();
     recordar();
@@ -1371,6 +1392,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     if (!sala && !archivo) return terminar();
     const falla = await crearLaSala();
     if (falla !== null) return terminar(falla);
+    // Si se dejó la campaña mientras se creaba la sala, no hay nada que abrir.
+    if (!campana) return terminar();
     const s = sala;
     if (!s) return terminar();
     etapa = "abriendo";
@@ -1737,6 +1760,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     campana = null;
     pide = null;
     cm?.reiniciar();
+    activandoLaSala = false;
     soltarElBorrador();
     archivo = null;
     intento = null;
@@ -1878,6 +1902,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       listaTrabada(),
       vista === "previa" ? (cm?.firma() ?? "") : "",
       vista === "previa" && borrador !== null ? `${archivo === null ? "b" : "f"}${JSON.stringify(activacion)}${salaDeActivar}` : "",
+      activandoLaSala,
       porActivarSinSesion(),
       vista === "elegir" && borradorGuardado(),
       // El botón Abrir de una campaña activada antes de tiempo cambia solo al cruzar la hora en que ya cabe abrirla.
@@ -1950,7 +1975,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
       }
       // Mientras se paga o se duda de un pago no se deja la campaña: el pago ya salió con esta pantalla.
       const tipoDelCobro = cm?.estado().tipo;
-      if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda" && activacion.tipo !== "activando") {
+      // Tampoco mientras se crea la sala o se abre la inscripción: la campaña ya se pagó y soltarla a mitad de camino la perdería.
+      if (tipoDelCobro !== "pagando" && tipoDelCobro !== "duda" && activacion.tipo !== "activando" && !activandoLaSala && !trabajando) {
         // El borrador que dejó crear-campana.html no vino de un archivo: dejarlo se dice así, con o sin sesión.
         const deCrear = borrador !== null && archivo === null;
         botones.push(boton(tx(deCrear ? "cpoDejar" : "cpoOtroArchivo"), "enlace", () => (sala ? pedirOlvidar() : deCrear ? dejarLaCampana() : volverAElegir())));
@@ -1987,6 +2013,12 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     } else if (vista === "sellada" || vista === "sorteada") {
       const delBoton = principalDelPaso();
       if (delBoton) botones.push(delBoton);
+      else if (vista === "sorteada" && paso.paso === "resultado") {
+        // Avisar a quien ganó y todavía no sabe es la acción principal, arriba de la lista: con varias ganadoras, el botón dentro de
+        // su fila quedaba más abajo de la pantalla del celular.
+        const g = paso.filas.find((f) => !f.avisada);
+        if (g) botones.push(principal(fmt("cpoAvisarA", { nombre: g.nombre }), () => accionesDelPuente().avisarA?.(g.cuenta)));
+      }
       // Los celulares todavía leen el resultado: la sala no se borra, solo se deja de recordar en esta compu.
       botones.push(boton(tx("cpoOtroArchivo"), "enlace", () => olvidar()));
     } else if (vista === "sin-red") {
@@ -2021,6 +2053,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   }
 
   function volverAElegir(): void {
+    activandoLaSala = false;
     soltarElBorrador();
     archivo = null;
     intento = null;
@@ -2079,7 +2112,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     }
     tituloEl.textContent = titulo;
     lineaEl.textContent = linea;
-    const deQuien = campana !== null && vista === "previa" && borrador !== null && archivo === null && !porActivarSinSesion();
+    const deQuien = campana !== null && vista === "previa" && esDeBorrador() && !porActivarSinSesion();
     if (deQuien && !deEl) {
       deEl = document.createElement("p");
       deEl.id = "cpo-de";
@@ -2122,7 +2155,10 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const ver = vista === "sorteada" && paso.paso === "resultado";
     ganadorasEl.hidden = !ver;
     if (!ver || paso.paso !== "resultado") return ganadorasEl.replaceChildren();
-    const filasDeGanadoras = paso.filas.map((g) => {
+    // Quien ganó y todavía no sabe: avisarle es lo que sigue, y es el botón principal del panel, que va arriba de la lista
+    // (pintarAcciones): su fila no lo repite. Las demás quedan con su botón de apoyo.
+    const primeraPorAvisar = paso.filas.findIndex((g) => !g.avisada);
+    const filasDeGanadoras = paso.filas.map((g, i) => {
       const li = document.createElement("li");
       li.className = "cpo-fila";
       const nombre = document.createElement("span");
@@ -2135,7 +2171,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
         dicho.textContent = tx("cpoAvisada");
         li.append(dicho);
       } else {
-        li.append(boton(fmt("cpoAvisarA", { nombre: g.nombre }), "ghost", () => accionesDelPuente().avisarA?.(g.cuenta)));
+        if (i !== primeraPorAvisar) li.append(boton(fmt("cpoAvisarA", { nombre: g.nombre }), "ghost", () => accionesDelPuente().avisarA?.(g.cuenta)));
       }
       if (g.alta !== "esperando" && g.alta.estado === "puede") {
         const marca = document.createElement("span");
@@ -2159,7 +2195,8 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
     const verLista = vista === "abierta" || vista === "cerrada";
     previaEl.hidden = vista !== "previa" || !campana;
     if (campana && vista === "previa") {
-      premioEl.textContent = premiosTexto(campana.premios, deps.idioma());
+      // Con el cobro prendido todos los montos del panel llevan dos decimales: el premio también (120,00 y no 120).
+      premioEl.textContent = premiosTexto(campana.premios, deps.idioma(), cm?.activo() === true);
       const logo = campana.empresa.logo;
       logoEl.hidden = logo === null;
       if (logo) logoEl.src = `data:${logo.tipo};base64,${logo.datos}`;
@@ -2350,7 +2387,7 @@ export function crearPanelDeCampana(deps: DepsDelPanelDeCampana): { raiz: HTMLEl
   function pintar(): void {
     raiz.dataset.vista = vista;
     // La campaña por activar (campana-sala.css): en su vista previa lo único en pantalla es el panel.
-    raiz.toggleAttribute("data-borrador", borrador !== null && archivo === null);
+    raiz.toggleAttribute("data-borrador", esDeBorrador());
     // Solo con el cobro prendido: apagado, el panel no lleva este atributo.
     if (vista === "previa" && cm?.activo()) raiz.dataset.comision = cm.estado().tipo;
     else if (raiz.dataset.comision !== undefined) delete raiz.dataset.comision;

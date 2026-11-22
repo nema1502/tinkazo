@@ -293,6 +293,36 @@ describe("lo que anuncia el lector de pantalla", () => {
   });
 });
 
+describe("el premio de una campaña en la barra", () => {
+  const PREMIO_CAMPANA = "40 dólares digitales";
+
+  it("en inglés la barra lo dice en inglés y el cuadro sigue en español, que es lo que se sella", async () => {
+    const { actualizarPaso } = await abrir(PREMIO_CAMPANA, { lugar: 900, medidas: 0 });
+    const { fijarPorCampana } = await import("./ganadores");
+    fijarPorCampana(true);
+    const { setLang } = await import("../idioma");
+    setLang("en");
+    actualizarPaso();
+    expect(linea()).toBe("Step 2 of 4: list of 4 people, 40 digital dollars");
+    expect((byId("prize") as HTMLInputElement).value).toBe(PREMIO_CAMPANA);
+  });
+
+  it("en español la barra dice lo mismo que el cuadro", async () => {
+    const { actualizarPaso } = await abrir(PREMIO_CAMPANA, { lugar: 900, medidas: 0 });
+    const { fijarPorCampana } = await import("./ganadores");
+    fijarPorCampana(true);
+    actualizarPaso();
+    expect(linea()).toBe(`Paso 2 de 4: lista de 4 personas, ${PREMIO_CAMPANA}`);
+  });
+
+  it("sin campaña, un premio escrito a mano no se toca aunque se parezca", async () => {
+    await abrir(PREMIO_CAMPANA, { lugar: 900, medidas: 0 });
+    const { setLang } = await import("../idioma");
+    setLang("en");
+    expect(linea()).toBe(`Step 2 of 4: list of 4 people, ${PREMIO_CAMPANA}`);
+  });
+});
+
 describe("la línea del paso 4 con los lugares de a uno", () => {
   /** El resultado a la vista con tres lugares sellados, de los que la sala vio `vistos`. */
   async function conResultado(vistos: number | undefined): Promise<void> {

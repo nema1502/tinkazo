@@ -152,6 +152,14 @@ describe("un borrador sin firma", () => {
     expect(x.activaciones).toEqual([]);
   });
 
+  it("escribe el premio con dos decimales, igual que todos los demás montos de plata del panel", async () => {
+    const x = armar({ saldo: 0n });
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
+    expect(texto(p, "#cpo-premio")).toBe("120,00 dólares digitales");
+  });
+
   it("no ofrece pagar desde otra billetera: el pago tiene que salir de la cuenta de Google", async () => {
     const x = armar({ saldo: 0n });
     const p = nuevoPanel(x.m);
@@ -527,6 +535,8 @@ describe("pagar y activarse sola", () => {
     await eligiendo(x, p);
     expect(texto(p, "#cpo-h")).toBe("Activando tu campaña");
     expect(texto(p, "#cpo-linea")).toBe("Ya pagaste. No pagues de nuevo.");
+    // El premio grande dice lo mismo que los demás montos: 120,00 y no 120.
+    expect(texto(p, "#cpo-premio")).toBe("120,00 dólares digitales");
     // El botón apagado cede su lugar a la fila viva, que dice la etapa.
     expect(botonesDe(p)).toEqual([]);
     expect(texto(p, "#cpo-fila")).toBe("Activando");
@@ -563,6 +573,56 @@ describe("pagar y activarse sola", () => {
     soltarFase();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
     expect(texto(p, "#cpo-fila")).toBe("");
+  });
+
+  it("al pasar de Activando a Creando la sala y a Abriendo, el panel no salta: mismo título, mismo modo y sin enlace para soltarla", async () => {
+    const x = armar({ red: { tipo: "pagada", suma: d(1.9) } });
+    let soltarCrear: () => void = () => undefined;
+    let soltarFase: () => void = () => undefined;
+    const crear = x.m.deps.crear;
+    const fase = x.m.deps.fase;
+    x.m.deps.crear = async (a, b) => {
+      await new Promise<void>((r) => {
+        soltarCrear = r;
+      });
+      return crear(a, b);
+    };
+    x.m.deps.fase = async (s, f, c) => {
+      await new Promise<void>((r) => {
+        soltarFase = r;
+      });
+      return fase(s, f, c);
+    };
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    const igual = (fila: string): void => {
+      expect(texto(p, "#cpo-fila")).toBe(fila);
+      expect(texto(p, "#cpo-h")).toBe("Activando tu campaña");
+      expect(texto(p, "#cpo-linea")).toBe("Ya pagaste. No pagues de nuevo.");
+      expect(p.raiz.hasAttribute("data-borrador")).toBe(true);
+      expect(texto(p, "#cpo-marca")).toBe("Servicio pagado");
+      // Ni Elegir otro archivo ni Dejar esta campaña: la campaña ya se pagó.
+      expect(botonesDe(p)).toEqual([]);
+    };
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Creando la sala"));
+    igual("Creando la sala");
+    soltarCrear();
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Abriendo la inscripción"));
+    igual("Abriendo la inscripción");
+    soltarFase();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(p.raiz.hasAttribute("data-borrador")).toBe(false);
+  });
+
+  it("si la sala no se puede crear, el panel deja el modo del borrador y dice por qué", async () => {
+    const x = armar({ red: { tipo: "pagada", suma: d(1.9) } });
+    x.m.deps.crear = async () => ({ ok: false, motivo: "red" });
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe(""));
+    expect(vistaDe(p)).toBe("previa");
+    expect(p.raiz.hasAttribute("data-borrador")).toBe(false);
+    expect(texto(p, "#cpo-aviso").length).toBeGreaterThan(0);
   });
 
   it("no pide activar dos veces aunque el cobro avise más de una vez", async () => {
