@@ -155,6 +155,26 @@ describe("el panel de quien organiza", () => {
     );
   });
 
+  it("con el panel de una campaña la barra no ofrece Pegar lista: la lista es la del panel", () => {
+    // Mientras se lee la lista cerrada el cuadro del editor está vacío y la barra decía Paso 1 de 4 contra la fila viva del panel.
+    expect(css).toContain('body:has(#cpo-panel) #siguiente[data-paso="1"] { display: none !important; }');
+  });
+
+  it("con la lista sellada o sorteada no queda el botón de sellar del editor ni las notas de su modo y de los términos", () => {
+    const abre = 'body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) :is(';
+    const inicio = css.indexOf(abre);
+    expect(inicio).toBeGreaterThan(-1);
+    const regla = css.slice(inicio, css.indexOf("}", inicio));
+    for (const id of ["#btn-freeze", "#sellar-modo", "#free-rule"]) expect(regla, id).toContain(id);
+    expect(regla).toContain("display: none !important");
+    // Con la lista cerrada el botón de sellar es la acción que sigue: ahí se queda.
+    expect(regla).not.toContain("cerrada");
+    // La barra de abajo tampoco ofrece sellar (el paso 2) con la lista ya sellada o sorteada.
+    expect(css).toContain(
+      'body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #siguiente[data-paso="2"] { display: none !important; }',
+    );
+  });
+
   it("con la lista sellada o sorteada el botón de Siguiente premio no se ve", () => {
     expect(css).toContain(
       'body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-again-sin { display: none !important; }',

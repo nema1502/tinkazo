@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEXTOS_CAMPANA } from "./textos";
-import { fechaTexto, horaTexto, montoConCentavos, montoTexto, premiosTexto } from "./formato";
+import { fechaTexto, horaTexto, montoConCentavos, montoTexto, premioDelCuadroEnIdioma, premioParaElCuadro, premiosTexto } from "./formato";
 
 const DIA = Date.UTC(2025, 10, 30, 2, 30);
 const CIERRE = Date.UTC(2025, 10, 30, 1, 0);
@@ -86,6 +86,18 @@ describe("premiosTexto", () => {
     expect(premiosTexto(premios, "es")).toBe("Premios para 3 personas: 40, 20 y 10 dólares digitales.");
   });
 
+  it("con centavos escribe cada monto con dos decimales, con coma en español y punto en inglés", () => {
+    expect(premiosTexto([1200000000n], "es", true)).toBe("120,00 dólares digitales");
+    expect(premiosTexto([1200000000n], "en", true)).toBe("120.00 digital dollars");
+    expect(premiosTexto([1200000000n, 1200000000n], "en", true)).toBe("2 prizes of 120.00 digital dollars");
+    expect(premiosTexto([400000000n, 200000000n], "es", true)).toBe("Premios para 2 personas: 40,00 / 20,00 dólares digitales.");
+  });
+
+  it("sin pedir centavos no cambia: un monto entero va sin decimales", () => {
+    expect(premiosTexto([1200000000n], "es", false)).toBe("120 dólares digitales");
+    expect(premiosTexto([1200000000n], "en")).toBe("120 digital dollars");
+  });
+
   it("separa con barras una lista española que tiene decimales", () => {
     const premios = [125000000n, 200000000n, 100000000n];
     expect(premiosTexto(premios, "es")).toBe(
@@ -152,5 +164,23 @@ describe("TEXTOS_CAMPANA", () => {
   it("no usa tecnicismos para explicar qué datos se guardan", () => {
     expect(TEXTOS_CAMPANA.es.cpQueGuardamos).not.toContain("cifrado");
     expect(TEXTOS_CAMPANA.en.cpQueGuardamos).not.toContain("encrypted");
+  });
+});
+
+describe("premioDelCuadroEnIdioma", () => {
+  it("en español el texto del cuadro vuelve igual", () => {
+    expect(premioDelCuadroEnIdioma("40 dólares digitales", "es")).toBe("40 dólares digitales");
+  });
+
+  it("en inglés dice el mismo premio en inglés, con punto para los centavos", () => {
+    expect(premioDelCuadroEnIdioma("40 dólares digitales", "en")).toBe("40 digital dollars");
+    expect(premioDelCuadroEnIdioma("12,50 dólares digitales", "en")).toBe("12.50 digital dollars");
+    expect(premioDelCuadroEnIdioma(premioParaElCuadro(125_000_000n), "en")).toBe("12.50 digital dollars");
+  });
+
+  it("un texto que no es el del cuadro de una campaña vuelve igual", () => {
+    expect(premioDelCuadroEnIdioma("Una notebook", "en")).toBe("Una notebook");
+    expect(premioDelCuadroEnIdioma("", "en")).toBe("");
+    expect(premioDelCuadroEnIdioma("dos mil dólares digitales", "en")).toBe("dos mil dólares digitales");
   });
 });

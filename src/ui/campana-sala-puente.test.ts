@@ -197,14 +197,14 @@ describe("el panel y el paso de pasar la lista", () => {
     expect(principales(p)).toHaveLength(0);
   });
 
-  it("después de pasar dice cuántas personas hay, con qué botón seguir y que el show empieza en pantalla completa", async () => {
+  it("después de pasar dice cuántas personas hay y que al sellar el show empieza en pantalla completa", async () => {
     const m = mundo();
     m.deps.botonDeSellar = () => "Sellar la lista";
     espiar(m);
     const p = nuevoPanel(m);
     await cerrarConDos(m, p);
     ponerPaso({ paso: "en-el-sorteo", n: 2 });
-    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Con Sellar la lista empieza el show en pantalla completa.");
+    expect(texto(p, "#cpo-linea")).toBe("2 personas en el sorteo. Al sellar, empieza el show en pantalla completa.");
   });
 });
 
@@ -410,6 +410,58 @@ describe("el resultado en el panel", () => {
     const lista = texto(p, "#cpo-ganadoras");
     expect(lista).toContain("Le avisamos en su celular.");
     expect(lista).toContain("Puede recibir");
+  });
+
+  it("la primera ganadora por avisar lleva el botón principal del panel y las demás quedan como apoyo", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    const filas = (avisadas: [boolean, boolean, boolean]): void =>
+      ponerPaso({
+        paso: "resultado",
+        otraBilletera: false,
+        filas: [
+          { cuenta: "GA", nombre: "Ana", avisada: avisadas[0], alta: "esperando" },
+          { cuenta: "GB", nombre: "Beto", avisada: avisadas[1], alta: "esperando" },
+          { cuenta: "GC", nombre: "Carla", avisada: avisadas[2], alta: "esperando" },
+        ],
+      });
+    filas([true, false, false]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Avisar a Beto"]);
+    expect(boton(p, "Avisar a Carla").classList.contains("primary")).toBe(false);
+    // Al avisarle a Beto, lo principal pasa a quien sigue.
+    filas([true, true, false]);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Avisar a Carla"]);
+    // Con todas avisadas no queda ninguna acción principal.
+    filas([true, true, true]);
+    expect(principales(p)).toHaveLength(0);
+  });
+
+  it("el botón principal de avisar va arriba de la lista, con las acciones, y su fila no lo repite", async () => {
+    const m = mundo();
+    guardarOrg(m.almacen, { sala: SALA, fase: "sorteada" });
+    m.sala.fase = "sorteada";
+    const p = nuevoPanel(m);
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("sorteada"));
+    ponerPaso({
+      paso: "resultado",
+      otraBilletera: false,
+      filas: [
+        { cuenta: "GA", nombre: "Ana", avisada: true, alta: "esperando" },
+        { cuenta: "GB", nombre: "Beto", avisada: false, alta: "esperando" },
+        { cuenta: "GC", nombre: "Carla", avisada: false, alta: "esperando" },
+      ],
+    });
+    const acciones = p.raiz.querySelector("#cpo-acciones") as HTMLElement;
+    expect([...acciones.querySelectorAll("button.primary")].map((b) => b.textContent)).toEqual(["Avisar a Beto"]);
+    // Las acciones van antes que la lista de ganadoras: así el principal queda a la vista antes que las filas.
+    const lista = p.raiz.querySelector("#cpo-ganadoras") as HTMLElement;
+    expect(acciones.compareDocumentPosition(lista) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Beto no repite su botón en la fila, y Carla conserva el de apoyo.
+    expect([...lista.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Avisar a Carla"]);
+    expect(lista.textContent).toContain("Beto");
   });
 
   it("con otra billetera la línea de apoyo es una sola: avisarle a Tinkazo", async () => {

@@ -51,6 +51,22 @@ export function premioParaElCuadro(unidades: bigint): string {
   return (TEXTOS_CAMPANA.es.cpPremio1 ?? "").replace("{monto}", monto);
 }
 
+/**
+ * El premio que `premioParaElCuadro` puso en el cuadro (siempre en español, es lo que se sella), dicho en el idioma de la pantalla.
+ * Solo para mostrarlo, por ejemplo en la barra de abajo: lo que se sella no cambia. Un texto que no tiene esa forma vuelve igual.
+ */
+export function premioDelCuadroEnIdioma(texto: string, idioma: Lang): string {
+  if (idioma === "es") return texto;
+  const molde = (TEXTOS_CAMPANA.es.cpPremio1 ?? "").split("{monto}");
+  if (molde.length !== 2) return texto;
+  const [antes = "", despues = ""] = molde;
+  const t = texto.trim();
+  if (!t.startsWith(antes) || !t.endsWith(despues) || t.length < antes.length + despues.length) return texto;
+  const monto = t.slice(antes.length, t.length - despues.length);
+  if (!/^[0-9]+(,[0-9]{2})?$/.test(monto)) return texto;
+  return (TEXTOS_CAMPANA[idioma].cpPremio1 ?? "").replace("{monto}", monto.replace(",", "."));
+}
+
 /** Junta montos sin coma de serie en inglés y sin ambigüedad entre decimales en español. */
 function listaDeMontos(montos: readonly string[], idioma: Lang): string {
   if (montos.length < 2) return montos[0] ?? "";
@@ -60,9 +76,12 @@ function listaDeMontos(montos: readonly string[], idioma: Lang): string {
   return `${iniciales} ${idioma === "es" ? "y" : "and"} ${ultimo}`;
 }
 
-/** Arma el texto del premio según la cantidad y si todos los montos coinciden. */
-export function premiosTexto(premios: readonly bigint[], idioma: Lang): string {
-  const montos = premios.map((premio) => montoTexto(premio, idioma));
+/**
+ * Arma el texto del premio según la cantidad y si todos los montos coinciden. Con "conCentavos" cada monto lleva dos decimales,
+ * como los demás montos de plata del panel del servicio. Sin él, como siempre: un monto entero no lleva decimales.
+ */
+export function premiosTexto(premios: readonly bigint[], idioma: Lang, conCentavos = false): string {
+  const montos = premios.map((premio) => (conCentavos ? montoConCentavos(premio, idioma) : montoTexto(premio, idioma)));
   const lista = listaDeMontos(montos, idioma);
   const clave = premios.length === 1
     ? "cpPremio1"
