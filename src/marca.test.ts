@@ -63,7 +63,7 @@ describe("recursos públicos de marca", () => {
         expect(textos?.[lang]?.[clave]).toBe(T[lang][clave]);
       }
       // Con los stickers, los impresos, el kit de sponsors y la serie departamental la página usa varios cientos de claves: sigue lejos del diccionario entero.
-      expect(Object.keys(textos![lang]!).length).toBeLessThan(510);
+      expect(Object.keys(textos![lang]!).length).toBeLessThan(530);
       expect(Object.keys(textos![lang]!).length).toBeLessThan(Object.keys(T[lang]).length / 3);
     }
   });
@@ -702,7 +702,8 @@ const SPONSOR_REDES = [["sponsor-post", 1080, 1350], ["sponsor-historia", 1080, 
 const SPONSOR_REDES_ARCHIVOS = SPONSOR_REDES.flatMap(([id]) => TEMAS_K.flatMap(t => LANGS_K.map(l => `redes-${id}-${t}-${l}`)));
 const IMPRESOS_ZIP = IMPRESOS.length + JUEGOS_FOTO.length; // los SVG y las fotos que enlazan: los PDF pesados se bajan sueltos
 // Cada logo de pared en SVG, PNG, PNG de 2400 px y PDF; las imágenes; los textos y las preguntas para coordinar.
-const SPONSOR_ZIP = PARED.length * 4 + SPONSOR_REDES_ARCHIVOS.length + 2;
+// Más los seis PNG con fondo de 2400 px (tres cuadrados y tres horizontales).
+const SPONSOR_ZIP = PARED.length * 4 + SPONSOR_REDES_ARCHIVOS.length + 2 + 6;
 const SVGS_NUEVOS = IMPRESOS.length + VISTAS.length + PARED.length;
 /** Las coordenadas y de un trazado de SVG (pares x y). */
 const ysDe = (d: string): number[] => [...d.matchAll(/-?\d+(?:\.\d+)?/g)].map(m => Number(m[0])).filter((_, i) => i % 2 === 1);
@@ -919,6 +920,262 @@ describe("kit de marca: impresos y sponsors", () => {
       if (k !== "maImpRoll") expect(T.en[k], k).not.toBe(T.es[k]);
     }
     expect(leer("src/marca.ts")).toContain("data-copiar");
+  });
+});
+
+// Los logos cuadrados y con fondo, las fotos de perfil y tinkazo-logos.zip.
+const FONDOS_LOGO = [["crema", [255, 246, 233]], ["blanco", [255, 255, 255]], ["oscuro", [23, 17, 38]]] as const;
+const PERFILES = [["amarillo", [255, 198, 41]], ["crema", [255, 246, 233]], ["oscuro", [23, 17, 38]]] as const;
+const CUADRADOS_FONDO = FONDOS_LOGO.flatMap(([id]) => [1080, 2400].map(lado => `logo-cuadrado-fondo-${id}-${lado}`));
+const HORIZONTALES_FONDO = FONDOS_LOGO.map(([id]) => `logo-horizontal-fondo-${id}-2400`);
+const SIN_FONDO_ZIP = [["", "para-fondo-claro"], ["-oscuro", "para-fondo-oscuro"], ["-negro", "negro"], ["-blanco", "blanco"]] as const;
+/** Un PNG RGB de los nuestros (tipo 2, sin filtros): ancho, alto y los píxeles de tres en tres. */
+function leerRgb(b: Buffer): { w: number; h: number; tipo: number; px: Uint8Array } {
+  const w = b.readUInt32BE(16), h = b.readUInt32BE(20), tipo = b[25]!;
+  const idat: Buffer[] = [];
+  for (let i = 8; i < b.length;) { const n = b.readUInt32BE(i); if (b.toString("ascii", i + 4, i + 8) === "IDAT") idat.push(b.subarray(i + 8, i + 8 + n)); i += n + 12; }
+  const raw = inflateSync(Buffer.concat(idat));
+  const px = new Uint8Array(w * h * 3);
+  for (let y = 0; y < h; y++) {
+    if (raw[y * (w * 3 + 1)] !== 0) throw new Error("filtro inesperado");
+    px.set(raw.subarray(y * (w * 3 + 1) + 1, (y + 1) * (w * 3 + 1)), y * w * 3);
+  }
+  return { w, h, tipo, px };
+}
+const igual = (px: Uint8Array, i: number, c: readonly number[]): boolean => px[i] === c[0] && px[i + 1] === c[1] && px[i + 2] === c[2];
+/** La caja de lo que no es del color de fondo, y cuántos píxeles son de un color exacto con su centro de masa. */
+function medirLogo(img: { w: number; h: number; px: Uint8Array }, fondo: readonly number[], color: readonly number[]): { x0: number; x1: number; y0: number; y1: number; n: number; cx: number; cy: number } {
+  let x0 = img.w, x1 = -1, y0 = img.h, y1 = -1, n = 0, sx = 0, sy = 0;
+  for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) {
+    const i = (y * img.w + x) * 3;
+    if (igual(img.px, i, fondo)) continue;
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    if (igual(img.px, i, color)) { n++; sx += x; sy += y; }
+  }
+  return { x0, x1, y0, y1, n, cx: sx / n, cy: sy / n };
+}
+
+describe("logos cuadrados y con fondo", () => {
+  it("las fotos de perfil, los cuadrados y los horizontales miden lo que dicen y no tienen canal de transparencia", () => {
+    for (const [id] of PERFILES) { const b = publico(`perfil-${id}-1080.png`); expect([b.readUInt32BE(16), b.readUInt32BE(20), b[24], b[25]], id).toEqual([1080, 1080, 8, 2]); }
+    for (const n of CUADRADOS_FONDO) { const b = publico(`${n}.png`); const lado = Number(n.split("-").pop()); expect([b.readUInt32BE(16), b.readUInt32BE(20), b[24], b[25]], n).toEqual([lado, lado, 8, 2]); }
+    for (const n of HORIZONTALES_FONDO) { const b = publico(`${n}.png`); expect([b.readUInt32BE(16), b.readUInt32BE(20), b[24], b[25]], n).toEqual([2400, 1200, 8, 2]); }
+  });
+  it("el fondo es el color exacto de la marca en las cuatro esquinas", () => {
+    const casos: Array<[string, readonly number[]]> = [
+      ...PERFILES.map(([id, c]) => [`perfil-${id}-1080`, c] as [string, readonly number[]]),
+      ...FONDOS_LOGO.flatMap(([id, c]) => [`logo-cuadrado-fondo-${id}-1080`, `logo-cuadrado-fondo-${id}-2400`, `logo-horizontal-fondo-${id}-2400`].map(n => [n, c] as [string, readonly number[]])),
+    ];
+    for (const [n, c] of casos) {
+      const img = leerRgb(publico(`${n}.png`));
+      expect(img.tipo, n).toBe(2);
+      for (const [x, y] of [[0, 0], [img.w - 1, 0], [0, img.h - 1], [img.w - 1, img.h - 1]] as const) expect(igual(img.px, (y * img.w + x) * 3, c), `${n} ${x},${y}`).toBe(true);
+    }
+  });
+  it("el logo se ve entero y centrado, con aire alrededor (la composición de la pared de sponsors)", () => {
+    for (const [id, c] of FONDOS_LOGO) for (const lado of [1080, 2400]) {
+      const img = leerRgb(publico(`logo-cuadrado-fondo-${id}-${lado}.png`));
+      const m = medirLogo(img, c, id === "oscuro" ? [255, 92, 179] : [233, 61, 156]);
+      expect(m.n, `${id} ${lado}`).toBeGreaterThan(0);
+      expect(Math.abs((m.x0 + m.x1) / 2 - lado / 2), `${id} ${lado} centrado en x`).toBeLessThan(lado * 0.01);
+      expect(m.x0, `${id} ${lado} aire a la izquierda`).toBeGreaterThanOrEqual(lado * 0.09);
+      expect(m.y0, `${id} ${lado} aire arriba`).toBeGreaterThanOrEqual(lado * 0.09);
+      expect(lado - m.y1, `${id} ${lado} aire abajo`).toBeGreaterThanOrEqual(lado * 0.09);
+    }
+  });
+  it("las fotos de perfil crema y oscura llevan la llama sola, centrada y con un alto del 54 % del lado", () => {
+    for (const [id, c] of PERFILES.filter(([id]) => id !== "amarillo")) {
+      const m = medirLogo(leerRgb(publico(`perfil-${id}-1080.png`)), c, id === "oscuro" ? [255, 92, 179] : [233, 61, 156]);
+      expect(m.y1 - m.y0 + 1, id).toBeGreaterThanOrEqual(582);
+      expect(m.y1 - m.y0 + 1, id).toBeLessThanOrEqual(585);
+      expect(Math.abs((m.y0 + m.y1) / 2 - 539.5), `${id} centrado en y`).toBeLessThan(1.5);
+      expect(Math.abs((m.x0 + m.x1) / 2 - 539.5), `${id} centrado en x`).toBeLessThan(1.5);
+    }
+  });
+  it("la foto de perfil amarilla es la que la marca ya usa: llama inclinada 3 grados y sombra dura de tinta", () => {
+    const img = leerRgb(publico("perfil-amarillo-1080.png"));
+    const m = medirLogo(img, [255, 198, 41], [233, 61, 156]);
+    // Medidas tomadas en la foto de perfil en uso (1080 por 1080): unos 129.500 píxeles de magenta y su centro de masa.
+    expect(m.n).toBeGreaterThan(127_500);
+    expect(m.n).toBeLessThan(131_500);
+    expect(m.cx).toBeGreaterThan(587);
+    expect(m.cx).toBeLessThan(591);
+    expect(m.cy).toBeGreaterThan(574);
+    expect(m.cy).toBeLessThan(578);
+    for (const [real, esperado] of [[m.x0, 309], [m.x1, 808], [m.y0, 214], [m.y1, 834]] as const) expect(Math.abs(real - esperado)).toBeLessThanOrEqual(12);
+    const tinta = medirLogo(img, [255, 198, 41], [25, 25, 25]);
+    expect(tinta.n).toBeGreaterThan(11_500);
+    expect(tinta.n).toBeLessThan(14_500);
+    // La sombra queda abajo y a la derecha de la llama: su centro de masa corre en los dos ejes.
+    expect(tinta.cx).toBeGreaterThan(m.cx);
+    expect(tinta.cy).toBeGreaterThan(m.cy);
+    // Y la llama está inclinada: el borde de arriba del cuerpo no es horizontal (más alto a la derecha que a la izquierda).
+    const arriba = (x: number): number => { for (let y = 0; y < 1080; y++) if (igual(img.px, (y * 1080 + x) * 3, [233, 61, 156])) return y; return -1; };
+    expect(arriba(400)).toBeGreaterThan(arriba(600));
+  });
+  it("tinkazo-logos.zip trae exactamente la lista de carpetas y los mismos bytes que public/marca, y pesa menos de 4 MB", () => {
+    const bytes = publico("tinkazo-logos.zip");
+    expect(bytes.length).toBeLessThan(4 * 1024 * 1024);
+    const zip = leerZip(bytes);
+    const r = "tinkazo-logos/";
+    const pares: Array<[string, string]> = [
+      ...PERFILES.map(([id]) => [`redes/tinkazo-perfil-${id}-1080.png`, `perfil-${id}-1080.png`] as [string, string]),
+      ...FONDOS_LOGO.flatMap(([id]) => [
+        [`redes/tinkazo-logo-cuadrado-fondo-${id}-1080.png`, `logo-cuadrado-fondo-${id}-1080.png`],
+        [`sponsors/cuadrado-con-fondo/tinkazo-logo-cuadrado-fondo-${id}-2400.png`, `logo-cuadrado-fondo-${id}-2400.png`],
+        [`sponsors/horizontal-con-fondo/tinkazo-logo-horizontal-fondo-${id}-2400.png`, `logo-horizontal-fondo-${id}-2400.png`],
+      ] as Array<[string, string]>),
+      ...["cuadrado", "horizontal"].flatMap(forma => SIN_FONDO_ZIP.flatMap(([suf, nombre]) => [
+        [`sponsors/${forma}-sin-fondo/tinkazo-logo-${forma}-${nombre}-2400.png`, `logo-pared-${forma}${suf}-2400.png`],
+        [`sponsors/vectores/tinkazo-logo-${forma}-${nombre}.svg`, `logo-pared-${forma}${suf}.svg`],
+        [`sponsors/vectores/tinkazo-logo-${forma}-${nombre}.pdf`, `logo-pared-${forma}${suf}.pdf`],
+      ] as Array<[string, string]>)),
+      ...SIN_FONDO_ZIP.slice(0, 2).flatMap(([suf, nombre]) => [
+        [`sponsors/llama-sin-fondo/tinkazo-llama-${nombre}-2048.png`, `llama${suf}.png`],
+        [`sponsors/vectores/tinkazo-llama-${nombre}.svg`, `llama${suf}.svg`],
+      ] as Array<[string, string]>),
+    ];
+    expect([...zip.keys()].sort()).toEqual([`${r}LEEME.txt`, ...pares.map(([ruta]) => r + ruta)].sort());
+    expect(zip.size).toBe(41);
+    for (const [ruta, archivo] of pares) {
+      const dentro = zip.get(r + ruta)!;
+      // Los SVG se guardan tal como los dejó el generador en esta máquina (el fin de línea cambia con el sistema).
+      if (archivo.endsWith(".svg")) expect(dentro.toString("utf8").replace(/\r\n/g, "\n"), ruta).toBe(publico(archivo).toString("utf8").replace(/\r\n/g, "\n"));
+      else expect(dentro.equals(publico(archivo)), ruta).toBe(true);
+    }
+  });
+  it("el .gitignore deja pasar cada ZIP de marca que se versiona, el de logos incluido", () => {
+    const ignorado = leer(".gitignore");
+    for (const z of ["tinkazo-kit-marca.zip", "tinkazo-kit-sponsor.zip", "tinkazo-kit-impresos.zip", "tinkazo-logos.zip"]) expect(ignorado, z).toContain(`!public/marca/${z}`);
+  });
+  it("el LEEME del paquete está en español y en inglés y sigue las reglas de escritura", () => {
+    const leeme = leerZip(publico("tinkazo-logos.zip")).get("tinkazo-logos/LEEME.txt")!.toString("utf8");
+    expect(leeme).toContain("LOGOS DE TINKAZO");
+    expect(leeme).toContain("TINKAZO LOGOS (English)");
+    for (const frag of ["perfil", "logo-cuadrado-fondo", "cuadrado-con-fondo", "horizontal-sin-fondo", "vectores", "para-fondo-claro", "#e93d9c", "#ffc629", "Se escribe Tinkazo, todo junto y con la T mayúscula.", "It is written Tinkazo, one word, with a capital T.", "https://tinkazo.app", "@tinkazo.app"]) expect(leeme, frag).toContain(frag);
+    expect(leeme).toContain("\r\n");
+    expect(leeme).not.toMatch(/[«»;—–→←↔·"]/);
+    expect(leeme).not.toMatch(/\b(rifa|loter[ií]a|raffle|ticket|boleto|apuesta)/i);
+    for (const linea of leeme.split("\r\n")) expect(linea.length, linea).toBeLessThan(140);
+    // Las medidas dicen lo que hay: logos de 2400, llama de 2048 y vectores sin medida.
+    expect(leeme).toContain("Los logos van en 2400 px, la llama en 2048 y los vectores se agrandan sin perder nada.");
+    expect(leeme).toContain("The logos are 2400 px, the llama is 2048 px and the vectors scale up without losing anything.");
+    expect(leeme).not.toContain("Todo en 2400 px");
+    expect(leeme).not.toContain("Everything at 2400 px");
+    // La aclaración del blanco está en los dos idiomas.
+    expect(leeme).toContain("El blanco no se ve en la vista previa de Windows. Es normal.");
+    expect(leeme).toContain("The white one does not show in the Windows preview. That is normal.");
+  });
+  it("el kit para sponsors suma los seis PNG con fondo de 2400 en su carpeta logos, y el kit completo no los duplica", () => {
+    const zip = leerZip(publico("tinkazo-kit-sponsor.zip"));
+    const completo = leerZip(publico("tinkazo-kit-marca.zip"));
+    for (const n of [...FONDOS_LOGO.map(([id]) => `logo-cuadrado-fondo-${id}-2400`), ...HORIZONTALES_FONDO]) {
+      expect(zip.get(`tinkazo-kit-sponsor/logos/tinkazo-${n}.png`)?.equals(publico(`${n}.png`)), n).toBe(true);
+      expect(completo.get(`tinkazo-kit-marca/sponsor/logos/tinkazo-${n}.png`), n).toBeUndefined();
+    }
+    expect(publico("tinkazo-kit-sponsor.zip").length).toBeLessThan(3_000_000);
+    expect(publico("tinkazo-kit-marca.zip").length).toBeLessThan(4 * 1024 * 1024);
+  });
+  it("la portada ofrece el ZIP de logos como primer botón blanco, con un solo botón sólido: el kit para sponsors", () => {
+    const html = leer("marca.html");
+    const acciones = html.split('class="marca-hero-acciones"')[1]!.split("</div>")[0]!;
+    const botones = [...acciones.matchAll(/<a class="mini( solid marca-zip-btn)?" href="([^"]+)"[^>]*data-i="([^"]+)">([^<]*)</g)].map(m => ({ solido: !!m[1], href: m[2]!, clave: m[3]!, texto: m[4]! }));
+    expect(botones.map(b => b.href)).toEqual(["/marca/tinkazo-kit-sponsor.zip", "/marca/tinkazo-logos.zip", "/marca/coleccion/tinkazo-stickers.zip", "/marca/triptico/tinkazo-triptico.docx"]);
+    expect(botones.map(b => b.solido)).toEqual([true, false, false, false]);
+    // Usa la misma clave de texto que el botón de la sección Logos, en los dos idiomas.
+    expect(botones[1]!.clave).toBe("maLgZip");
+    expect(botones[1]!.texto).toBe(T.es.maLgZip);
+    expect(acciones).toContain('download="tinkazo-logos.zip"');
+  });
+  it("cada atajo del índice de la portada deja el título de su parte con aire al llegar (scroll-margin-top)", () => {
+    const html = leer("marca.html");
+    const indice = html.split('class="marca-ir"')[1]!.split("</nav>")[0]!;
+    const ids = [...indice.matchAll(/<a href="#([^"]+)"/g)].map(m => m[1]!);
+    expect(ids[0]).toBe("logos");
+    expect(ids.length).toBeGreaterThanOrEqual(10);
+    const css = leer("src/marca.css").replace(/\r\n/g, "\n");
+    const regla = css.match(/^([#a-z, -]+) \{ scroll-margin-top: (\d+)px; \}$/m);
+    expect(regla, "la regla de scroll-margin-top de las anclas").not.toBeNull();
+    const cubiertos = regla![1]!.split(",").map(t => t.trim());
+    for (const id of ids) {
+      expect(html, id).toContain(`id="${id}"`);
+      expect(cubiertos, `#${id} sin scroll-margin-top`).toContain(`#${id}`);
+    }
+    expect(Number(regla![2])).toBeGreaterThanOrEqual(16);
+  });
+  it("docs/marca.md dice un solo peso para el kit de sponsors, el real, y nombra los seis PNG con fondo", () => {
+    const doc = leer("docs/marca.md");
+    const real = (publico("tinkazo-kit-sponsor.zip").length / 1e6).toFixed(1).replace(".", ",");
+    const pesos = [...doc.matchAll(/`tinkazo-kit-sponsor\.zip`\*{0,2} \((\d+,\d) MB/g)].map(m => m[1]);
+    expect(pesos.length).toBeGreaterThanOrEqual(2);
+    for (const peso of pesos) expect(peso).toBe(real);
+    const descripcion = doc.split("- **`tinkazo-kit-sponsor.zip`**")[1]!.split("\n")[0]!;
+    expect(descripcion).toContain("seis PNG con fondo de 2400 px");
+  });
+  it("la página tiene la sección Logos justo después de la portada, con su enlace primero en el índice y cada archivo para bajar", () => {
+    const html = leer("marca.html");
+    expect(html).toContain('id="logos"');
+    expect(html.indexOf('id="logos"')).toBeGreaterThan(html.indexOf('class="marca-intro marca-hero"'));
+    expect(html.indexOf('id="logos"')).toBeLessThan(html.indexOf('id="frase"'));
+    const indice = html.split('class="marca-ir"')[1]!.split("</nav>")[0]!;
+    expect(indice.match(/<a href="([^"]+)"/)![1]).toBe("#logos");
+    expect(indice).toContain('data-i="maIrLg"');
+    const seccion = html.split('id="logos"')[1]!.split("</section>")[0]!;
+    expect(seccion).toContain('href="/marca/tinkazo-logos.zip" download="tinkazo-logos.zip"');
+    const archivos = [
+      ...PERFILES.map(([id]) => `perfil-${id}-1080.png`),
+      ...CUADRADOS_FONDO.map(n => `${n}.png`),
+      ...HORIZONTALES_FONDO.map(n => `${n}.png`),
+    ];
+    for (const n of archivos) {
+      // Cada archivo se baja con su nombre y su descripción. Se ve el de 1080 (los cuadrados) o el único que hay.
+      if (!n.includes("-2400.png") || n.includes("horizontal")) expect(seccion, n).toContain(`<img src="/marca/${n}"`);
+      expect(seccion, n).toMatch(new RegExp(`href="/marca/${n}" download="tinkazo-${n}" aria-describedby="lg-[a-z]+"`));
+    }
+    const imgs = [...seccion.matchAll(/<img [^>]+>/g)].map(m => m[0]);
+    expect(imgs.length).toBe(9);
+    for (const img of imgs) { expect(img).toMatch(/width="\d+" height="\d+"/); expect(img).toContain('loading="lazy"'); }
+    expect(seccion.match(/aria-describedby="(lg-[a-z]+)"/g)!.length).toBe(3 + 6 + 3);
+    for (const m of seccion.matchAll(/aria-describedby="(lg-[a-z]+)"/g)) expect(seccion, m[1]).toContain(`id="${m[1]}"`);
+    expect(seccion).toContain('href="#sponsors"');
+    // En el celular los tres grupos van en tres columnas, sin tarjeta sola en la última fila.
+    expect(leer("src/marca.css")).toMatch(/@media \(max-width: 760px\) \{\s*\/\*[^*]*\*\/\s*\.marca-lg-grid \{ grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+    expect(html).toContain('id="sponsors"');
+    // Los PNG que ofrece son los que el generador dejó en public/marca.
+    for (const n of archivos) expect(existsSync(new URL(`../public/marca/${n}`, import.meta.url)), n).toBe(true);
+  });
+  it("cada texto de Logos está en español y en inglés, el español es el del HTML y las notas dicen cuánto pesa de verdad", () => {
+    const html = leer("marca.html");
+    const claves = Object.keys(T.es).filter(k => /^ma(Lg|IrLg)/.test(k));
+    expect(claves.length).toBe(21);
+    for (const k of claves) {
+      expect(html, k).toContain(`data-i="${k}"`);
+      for (const lang of ["es", "en"] as const) {
+        const t = String(T[lang][k]);
+        expect(t, `${lang}.${k}`).toBeTruthy();
+        expect(t, `${lang}.${k}`).not.toMatch(/[«»;—–→←↔·"]|drand|hash|WebGL|Worker|bytes|blockchain/i);
+        expect(t, `${lang}.${k}`).not.toMatch(/\b(rifa|loter[ií]a|raffle|ticket|boleto|apuesta)/i);
+      }
+      // Los botones llevan el mismo texto corto en los dos idiomas (PNG, PNG 1080, PNG 2400): así entran tres por fila en el celular.
+      if (!["maIrLg", "maLgT", "maLgPng", "maLgPng1080", "maLgPng2400"].includes(k)) expect(T.en[k], k).not.toBe(T.es[k]);
+    }
+    for (const m of html.split('id="logos"')[1]!.split("</section>")[0]!.matchAll(/data-i="([^"]+)"[^>]*>([^<]*)</g)) expect(T.es[m[1]!], m[1]).toBe(m[2]);
+    expect(T.es.maLgT).toBe("Logos");
+    expect(T.es.maLgB).toBe("Cuadrados y horizontales, con fondo o transparentes, para redes y para sponsors.");
+    expect(T.en.maLgB).toBe("Square and horizontal, with a background or transparent, for social media and sponsors.");
+    expect(T.es.maLgZip).toBe("Descargar los logos (ZIP)");
+    expect(T.en.maLgZip).toBe("Download the logos (ZIP)");
+    expect(T.en.maLgSin).toBe("Transparent, single color, SVG and PDF");
+    // Textos cortos de los botones y de los pies, para que los tres de cada grupo entren en una fila a 320 px.
+    expect([T.es.maLgPng, T.es.maLgPng1080, T.es.maLgPng2400]).toEqual(["PNG", "PNG 1080", "PNG 2400"]);
+    expect([T.en.maLgPng, T.en.maLgPng1080, T.en.maLgPng2400]).toEqual(["PNG", "PNG 1080", "PNG 2400"]);
+    expect(["maLgPA", "maLgPC", "maLgPO", "maLgCC", "maLgCB", "maLgCO", "maLgHC", "maLgHB", "maLgHO"].map(k => T.es[k])).toEqual(["Amarillo", "Crema", "Oscuro", "Crema", "Blanco", "Oscuro", "Crema", "Blanco", "Oscuro"]);
+    expect(["maLgPA", "maLgPC", "maLgPO", "maLgCC", "maLgCB", "maLgCO", "maLgHC", "maLgHB", "maLgHO"].map(k => T.en[k])).toEqual(["Yellow", "Cream", "Dark", "Cream", "White", "Dark", "Cream", "White", "Dark"]);
+    const mb = (n: string): [string, string] => { const v = (publico(n).length / 1e6).toFixed(1); return [v.replace(".", ","), v]; };
+    expect(T.es.maLgZipNota).toContain(`Pesa ${mb("tinkazo-logos.zip")[0]} MB`);
+    expect(T.en.maLgZipNota).toContain(`It is ${mb("tinkazo-logos.zip")[1]} MB`);
+    expect(T.es.maSpZipNota).toContain(`Pesa ${mb("tinkazo-kit-sponsor.zip")[0]} MB`);
+    expect(T.en.maSpZipNota).toContain(`It is ${mb("tinkazo-kit-sponsor.zip")[1]} MB`);
   });
 });
 

@@ -224,7 +224,8 @@
 .marca-ir a { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 11px; border: 2px solid var(--ink); background: var(--card); color: var(--ink); font-weight: 800; text-decoration: none; box-shadow: var(--sh-sm); }
 .marca-ir a:hover { background: var(--yellow, #ffc83d); color: #191919; }
 .marca-ir a:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
-#sponsors, #coleccion, #impresos, #qr, #creadores, #mas { scroll-margin-top: 16px; }
+/* Cada atajo del índice de arriba deja el título de su parte con aire: en la cabecera fija de escritorio (que html ya esquiva con scroll-padding-top) y contra el borde en el celular. */
+#logos, #frase, #eventos, #sponsors, #coleccion, #impresos, #departamentos, #qr, #creadores, #mas { scroll-margin-top: 16px; }
 /* Las imágenes anchas (cabeceras y banners) ocupan toda la fila: a media columna no se leía lo que dicen. */
 .marca-redes .marca-ancha { grid-column: 1 / -1; }
 .marca .marca-red-ancha { height: auto; }
@@ -355,4 +356,24 @@
   .marca-qr-mas { gap: 8px 12px; }
   .marca-qr-codigo { padding: 6px; }
   .marca .marca-qr-tar .mini, .marca .marca-qr-extra .mini { font-size: 15px; padding: 5px 8px; }
+}
+
+/* Logos: cuadrados y horizontales con su propio fondo, para redes y para sponsors. */
+.marca-lg-zip { display: grid; gap: 10px; justify-items: start; margin: 14px 0 4px; }
+.marca-lg-zip p { margin: 0; }
+.marca-lg-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 16px; align-items: start; }
+.marca-lg-grid .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+/* El archivo ya trae su fondo: la vista es la imagen entera con su borde, para que el blanco y el crema no se pierdan contra la página. */
+.marca-lg-vista { padding: 0; line-height: 0; overflow: hidden; }
+.marca-lg-vista img { width: 100%; height: auto; display: block; }
+.marca-lg-grid .marca-descargas { grid-template-columns: repeat(auto-fit, minmax(8.5em, 1fr)); }
+.marca p.marca-lg-sin { margin: 18px 0 0; }
+.marca-lg-sin .mini { margin-top: 0; }
+@media (max-width: 760px) {
+  /* Tres vistas chicas en una fila, parejas: los textos de los botones y de los pies son cortos para que entren. */
+  .marca-lg-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; }
+  .marca-lg-grid .marca-descargas { grid-template-columns: 1fr; gap: 8px; }
+  .marca-lg-grid .marca-descargas .mini { padding: 5px 2px; font-size: 14px; white-space: nowrap; }
+  .marca-lg-grid .marca-par figcaption { font-size: 15px; }
+  .marca-lg-zip .marca-zip-btn { width: 100%; }
 }

@@ -47,6 +47,7 @@ workers/musica/camas/
 !public/marca/coleccion/tinkazo-stickers.zip
 !public/marca/tinkazo-kit-sponsor.zip
 !public/marca/tinkazo-kit-impresos.zip
+!public/marca/tinkazo-logos.zip
 
 # Los archivos sueltos de imprenta se vuelven a generar con node scripts/marca/departamentos.mjs
 /public/marca/departamentos/imprenta/
