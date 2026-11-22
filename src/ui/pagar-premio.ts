@@ -9,13 +9,14 @@ import {
   esDireccionG,
   montoDelPremio,
   montoDePago,
-  montoLegible,
   notaDelPremio,
   stroopsDe,
 } from "../stellar/pagos";
 import { type DatosDelPago, type Envio, type MotivoDeRechazo, type MotivoSinPago, mandarPago, prepararPago } from "../stellar/pagos-envio";
 import { type BusquedaDePago, buscarPago } from "../stellar/pagos-red";
 import { mirarCuenta, usdcDeLaRed } from "../stellar/usdc-cuenta";
+import { montoConCentavos } from "../campana/formato";
+import { crearFilaViva } from "./fila-viva";
 import { type ManejadorDePagar, alCambiarDeIdioma, el, textoDePagos as tx } from "./panel-ganadores";
 import { premioDeLugarEn } from "./lugares-de-meta";
 
@@ -216,9 +217,15 @@ export function montoEnTexto(stroops: bigint): string {
   return `${stroops / UN_DOLAR}.${(stroops % UN_DOLAR).toString().padStart(7, "0")}`;
 }
 
-/** Un monto en stroops como se lee en el idioma de ahora ("12,5" en español, "12.5" en inglés), hasta siete decimales. */
+/** Un monto en stroops como se lee en el idioma de ahora ("12,50" en español, "12.50" en inglés): dos decimales, y más solo si el monto los tiene. */
 export function formatoDeMonto(stroops: bigint): string {
-  return new Intl.NumberFormat(getLang(), { maximumFractionDigits: 7 }).format(Number(stroops) / 1e7);
+  return montoConCentavos(stroops, getLang(), "exacto");
+}
+
+/** Un monto escrito con punto ("50.0000000" o "12.5") como se lee en el idioma de ahora. Si no es un monto, se deja como vino. */
+function montoParaLeer(monto: string): string {
+  const valido = montoDePago(monto);
+  return valido === null ? monto : formatoDeMonto(stroopsDe(valido));
 }
 
 /* ------------------------------------------------------------------ los pasos */
@@ -388,7 +395,7 @@ export function mensajeDe(r: Resultado, c: { quien: string; red: NetworkName; mo
 }
 
 function mensajeBase(r: Resultado, c: { quien: string; red: NetworkName; monto: string; google?: boolean }): Omit<Mensaje, "cargar"> {
-  const v: Record<string, string> = { quien: c.quien, red: c.red, monto: montoLegible(montoDePago(c.monto) ?? c.monto) };
+  const v: Record<string, string> = { quien: c.quien, red: c.red, monto: montoParaLeer(c.monto) };
   const g = c.google === true;
   switch (r.tipo) {
     case "monto-malo":
@@ -409,7 +416,7 @@ function mensajeBase(r: Resultado, c: { quien: string; red: NetworkName; monto: 
           return { clave: "pgSinLineaPropia", vars: v, avisar: false, error: true };
         case "origen-sin-saldo":
           if (g) return { clave: "pgGoogleNoAlcanza", vars: { ...v, ...cuantoFalta(c.monto, r.saldo) }, avisar: false, error: true };
-          return { clave: "pgSinSaldo", vars: { ...v, saldo: montoLegible(r.saldo ?? "0") }, avisar: false, error: true };
+          return { clave: "pgSinSaldo", vars: { ...v, saldo: formatoDeMonto(stroopsDe(r.saldo ?? "0")) }, avisar: false, error: true };
         case "sin-red":
           return { clave: "pgSinRed", vars: v, avisar: false, error: true };
         default:
@@ -449,6 +456,10 @@ function cuantoFalta(monto: string, saldo: string | undefined): Record<string, s
   const tiene = stroopsDe(saldo ?? "0");
   return { saldo: formatoDeMonto(tiene), monto: formatoDeMonto(quiere), falta: formatoDeMonto(quiere > tiene ? quiere - tiene : 0n) };
 }
+
+/** Los mensajes que son una espera (la ruedita) y los que dicen que el pago ya salió (el tilde). */
+const DE_ESPERA = new Set(["pgDudaMirando", "pgGoogleDudaMirando"]);
+const DE_LISTO = new Set(["pgListo", "pgYaPagado"]);
 
 /** El texto de cada paso mientras se paga. Con la cuenta que paga sola, mirar y pagar tienen su propia frase. */
 function claveDelPaso(paso: "mirando" | "firmando" | "enviando" | "pagando", conLaCuenta: boolean): string {
@@ -586,6 +597,9 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
 
     const msg = el("p", "gan-msg");
     msg.setAttribute("role", "status");
+    // La línea de mensaje es una fila viva: la ruedita mientras trabaja y el tilde cuando el pago salió. Solo cambia cómo se ve
+    // lo que ya se decía: cuándo se puede pagar, pagar de nuevo o reintentar lo deciden los mismos candados de siempre.
+    const filaMsg = crearFilaViva(msg);
     const avisar = el("button", "ghost");
     avisar.type = "button";
     avisar.hidden = true;
@@ -647,10 +661,23 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
     let cargarPorMensaje = false;
     let lecturas = 0;
 
+    /** Escribe lo que dice la línea: una espera lleva la ruedita, un pago hecho el tilde, y lo demás es texto solo. */
+    const escribir = (texto: string, modo: "espera" | "listo" | "texto"): void => {
+      if (modo === "espera") filaMsg.revisando(texto);
+      else if (modo === "listo") filaMsg.llego(texto);
+      else {
+        filaMsg.limpiar();
+        msg.textContent = texto;
+      }
+    };
+    const escribirClave = (clave: string, texto: string): void =>
+      escribir(texto, DE_LISTO.has(clave) ? "listo" : DE_ESPERA.has(clave) ? "espera" : "texto");
+
     const decir = (clave: string | null, vars: Record<string, string> = {}, error = false, rehacer?: () => Record<string, string>): void => {
       dicho = clave ? { clave, vars, ...(rehacer ? { rehacer } : {}) } : null;
-      msg.textContent = clave ? tx(clave, vars) : "";
       msg.classList.toggle("bad", error);
+      if (clave) escribirClave(clave, tx(clave, vars));
+      else escribir("", "texto");
     };
 
     /**
@@ -741,8 +768,8 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
       avisar.textContent = tx("pgAvisar");
       resumen.textContent = tx("pgXdrResumen");
       copiarXdr.textContent = tx("pgCopiar");
-      if (dicho) msg.textContent = tx(dicho.clave, dicho.rehacer ? dicho.rehacer() : dicho.vars);
-      if (progreso) msg.textContent = tx(progreso);
+      if (dicho) escribirClave(dicho.clave, tx(dicho.clave, dicho.rehacer ? dicho.rehacer() : dicho.vars));
+      if (progreso) escribir(tx(progreso), "espera");
       pintarSola();
       pintarAcciones();
     };
@@ -969,7 +996,7 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
               progreso = claveDelPaso(paso, conLaCuenta);
               dicho = null;
               msg.classList.remove("bad");
-              msg.textContent = tx(progreso);
+              escribir(tx(progreso), "espera");
             },
           },
           {
@@ -986,7 +1013,7 @@ export function pagarPremioEn(ctx: ContextoDePago): ManejadorDePagar {
           },
         );
         progreso = null;
-        montoAviso = montoLegible(montoDePago(montoTexto) ?? montoTexto);
+        montoAviso = montoParaLeer(montoTexto);
         const contexto = { quien: fila.nombre, red: ctx.red, monto: montoTexto, google: conLaCuenta };
         const m = mensajeDe(r, contexto);
         if (conLaCuenta && r.tipo === "no-se-puede" && r.motivo === "origen-sin-saldo" && r.saldo !== undefined) {

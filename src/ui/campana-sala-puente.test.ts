@@ -208,6 +208,81 @@ describe("el panel y el paso de pasar la lista", () => {
   });
 });
 
+describe("lo que pasa por detrás no queda mudo", () => {
+  it("leyendo, avisando, comprobando y guardando el resultado: la fila dice qué pasa y no se repite en la línea", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await cerrarConDos(m, p);
+    const casos = [
+      [{ paso: "leyendo" }, "Leyendo la lista completa…"],
+      [{ paso: "avisando" }, "Avisando a los celulares…"],
+      [{ paso: "comprobando" }, "Comprobando si los celulares ya lo saben…"],
+      [{ paso: "mandando" }, "Guardando el resultado para los celulares"],
+    ] as const;
+    for (const [paso, dicho] of casos) {
+      ponerPaso(paso);
+      expect(texto(p, "#cpo-fila"), paso.paso).toBe(dicho);
+      expect(document.querySelector("#cpo-fila.fv-revisando .cc-gira"), paso.paso).not.toBeNull();
+      // La fila ocupa el lugar de la línea: el mismo texto no aparece dos veces.
+      expect(texto(p, "#cpo-linea"), paso.paso).toBe("");
+    }
+    // Con un paso que no es una espera, la fila se va.
+    ponerPaso({ paso: "en-el-sorteo", n: 2 });
+    expect(texto(p, "#cpo-fila")).toBe("");
+    expect(texto(p, "#cpo-linea")).toMatch(/^2 personas en el sorteo./);
+  });
+
+  it("al cerrar la lista, la fila dice Cerrando la lista y no quedan botones apagados", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(document.querySelectorAll("#cpo-ul > li")).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    let soltar: () => void = () => undefined;
+    const fase = m.deps.fase;
+    m.deps.fase = async (s, f, c) => {
+      await new Promise<void>((r) => {
+        soltar = r;
+      });
+      return fase(s, f, c);
+    };
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Cerrando la lista"));
+    expect(p.raiz.querySelectorAll("#cpo-acciones button")).toHaveLength(0);
+    soltar();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("cerrada"));
+  });
+
+  it("mientras lee la lista completa antes de pasarla, la fila lo dice y no ofrece otro botón", async () => {
+    const m = mundo();
+    espiar(m);
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(document.querySelectorAll("#cpo-ul > li")).toHaveLength(2));
+    boton(p, "Cerrar la lista").click();
+    let soltar: () => void = () => undefined;
+    const estado = m.deps.estado;
+    m.deps.estado = async (s) => {
+      await new Promise<void>((r) => {
+        soltar = r;
+      });
+      return estado(s);
+    };
+    await confirmarCierre(m, p, "Cerrar con 2 personas");
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Leyendo la lista completa…"));
+    expect(vistaDe(p)).toBe("cerrada");
+    expect(principales(p)).toEqual([]);
+    soltar();
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe(""));
+  });
+});
+
 describe("la lista trabada", () => {
   it("con la lista sellándose no ofrece Quitar ni Volver a abrir", async () => {
     const m = mundo();

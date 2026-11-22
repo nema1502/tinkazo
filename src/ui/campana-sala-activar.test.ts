@@ -166,7 +166,7 @@ describe("un borrador sin firma", () => {
     await eligiendo(x, p);
     // Sin sesión el título nombra la campaña y la línea dice lo que sigue y lo que cuesta.
     expect(texto(p, "#cpo-h")).toBe("La campaña de Alcancía Andina está lista");
-    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120 de premio y 2,40 del servicio.");
+    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120,00 de premio y 2,40 del servicio.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
   });
@@ -527,10 +527,42 @@ describe("pagar y activarse sola", () => {
     await eligiendo(x, p);
     expect(texto(p, "#cpo-h")).toBe("Activando tu campaña");
     expect(texto(p, "#cpo-linea")).toBe("Ya pagaste. No pagues de nuevo.");
-    expect(botonesDe(p)).toEqual(["Activando…"]);
-    expect(botones(p)[0]?.disabled).toBe(true);
+    // El botón apagado cede su lugar a la fila viva, que dice la etapa.
+    expect(botonesDe(p)).toEqual([]);
+    expect(texto(p, "#cpo-fila")).toBe("Activando");
     soltar();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+  });
+
+  it("después de activar, la fila dice cada etapa en orden: Creando la sala y Abriendo la inscripción", async () => {
+    const x = armar({ red: { tipo: "pagada", suma: d(1.9) } });
+    let soltarCrear: () => void = () => undefined;
+    let soltarFase: () => void = () => undefined;
+    const crear = x.m.deps.crear;
+    const fase = x.m.deps.fase;
+    x.m.deps.crear = async (a, b) => {
+      await new Promise<void>((r) => {
+        soltarCrear = r;
+      });
+      return crear(a, b);
+    };
+    x.m.deps.fase = async (s, f, c) => {
+      await new Promise<void>((r) => {
+        soltarFase = r;
+      });
+      return fase(s, f, c);
+    };
+    const p = nuevoPanel(x.m);
+    await eligiendo(x, p);
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Creando la sala"));
+    expect(principales(p)).toEqual([]);
+    expect(x.hecho).toEqual(["activar"]);
+    soltarCrear();
+    await vi.waitFor(() => expect(texto(p, "#cpo-fila")).toBe("Abriendo la inscripción"));
+    expect(principales(p)).toEqual([]);
+    soltarFase();
+    await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
+    expect(texto(p, "#cpo-fila")).toBe("");
   });
 
   it("no pide activar dos veces aunque el cobro avise más de una vez", async () => {
@@ -574,16 +606,15 @@ describe("antes de cobrar, la sala dice si puede activar", () => {
     expect(x.hecho).toEqual(["pagar", "activar"]);
   });
 
-  it("mientras pregunta deja un solo botón apagado y no ofrece pagar", async () => {
+  it("mientras pregunta la fila dice que revisa, sin botón apagado, y no ofrece pagar", async () => {
     const x = armar();
     let responder: (si: boolean) => void = () => undefined;
     x.m.deps.salaLista = () => new Promise<boolean>((r) => (responder = r));
     const p = nuevoPanel(x.m);
     await eligiendo(x, p);
     expect(texto(p, "#cpo-h")).toBe("Un momento…");
-    const unico = principales(p);
-    expect(unico).toHaveLength(1);
-    expect(unico[0]?.disabled).toBe(true);
+    expect(texto(p, "#cpo-fila")).toBe("Revisando que todo esté listo");
+    expect(principales(p)).toEqual([]);
     expect(botonesDe(p).some((t) => t.startsWith("Pagar"))).toBe(false);
     responder(true);
     await suelta(8);
@@ -882,7 +913,7 @@ describe("la campaña por activar, sin sesión", () => {
     await suelta(10);
     const empresa = (JSON.parse(borradorDe()) as { empresa: { nombre: string } }).empresa.nombre;
     expect(texto(p, "#cpo-h")).toBe(`La campaña de ${empresa} está lista`);
-    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120 de premio y 2,40 del servicio.");
+    expect(texto(p, "#cpo-linea")).toBe("Entrá con Google y poné 122,40 dólares digitales: 120,00 de premio y 2,40 del servicio.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Entrar con Google"]);
     expect(botonesDe(p)).toEqual(["Entrar con Google", "Dejar esta campaña"]);
     expect(p.raiz.hasAttribute("data-borrador")).toBe(true);

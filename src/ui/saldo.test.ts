@@ -125,7 +125,7 @@ describe("la ventana", () => {
 
   it("al abrir: el saldo arriba, una línea y Ya tengo dólares digitales, sin Meru ni flechas", async () => {
     await abrir(mundo());
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,5 dólares digitales.");
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 12,50 dólares digitales.");
     expect(cuerpo()).toContain(t("saldoLead"));
     expect(principal().textContent).toBe("Ya tengo dólares digitales");
     expect(document.body.innerHTML).not.toMatch(/meru|↗|→/i);
@@ -166,7 +166,7 @@ describe("la ventana", () => {
   it("en inglés dice lo mismo", async () => {
     setLang("en");
     await aTraer(mundo());
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.5 digital dollars.");
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("You have 12.50 digital dollars.");
     expect(principal().textContent).toBe("I've sent it");
     expect(cuerpo()).toContain(T.en.saldoRecibirOjo as string);
   });
@@ -262,7 +262,7 @@ describe("Ya tengo dólares digitales", () => {
     { nombre: "falta activar, sin saber si la paga la app", m: () => mundo({ lectura: mirada(), catalogo: async () => null }), dice: "saldoNoSeSabe", boton: "saldoVolverAMirar", directo: true },
     { nombre: "la app no la paga", m: () => mundo({ lectura: mirada(), catalogo: async () => "no-patrocinada" }), dice: "saldoNoPuedeApp", boton: "acctClose" },
     { nombre: "billetera propia sin la línea", m: () => mundo({ billetera: async () => ({ tipo: "propia", red: "mainnet" }), lectura: mirada() }), dice: "saldoActivarPropio", boton: "saldoActivarBtn" },
-    { nombre: "billetera propia sin XLM", m: () => mundo({ billetera: async () => ({ tipo: "propia", red: "mainnet" }), lectura: mirada({ xlm: "1.2000000" }) }), dice: "0,5001 XLM libres y tiene 0,2", boton: "saldoVolverAMirar" },
+    { nombre: "billetera propia sin XLM", m: () => mundo({ billetera: async () => ({ tipo: "propia", red: "mainnet" }), lectura: mirada({ xlm: "1.2000000" }) }), dice: "0,51 XLM libres y tiene 0,20", boton: "saldoVolverAMirar" },
   ];
 
   it.each(casos)("$nombre: dice qué falta, una sola acción y nunca la dirección", async (c) => {
@@ -321,7 +321,7 @@ describe("Ya tengo dólares digitales", () => {
   it("en la práctica, en la red de prueba, avisa que es de prueba", async () => {
     await abrir(mundo({ red: "testnet", practica: true, lectura: conUsdc("3.0000000", {}, "testnet") }));
     expect(cuerpo()).toContain(t("saldoPractica"));
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 3 dólares digitales de prueba.");
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 3,00 dólares digitales de prueba.");
   });
 });
 
@@ -364,7 +364,7 @@ describe("Activar dólares digitales con una billetera propia", () => {
     });
     await aTraer(m);
     principal().click();
-    await vi.waitFor(() => expect(cuerpo()).toContain("0,5001 XLM libres y tiene 0,2"));
+    await vi.waitFor(() => expect(cuerpo()).toContain("0,51 XLM libres y tiene 0,20"));
     expect(principal().textContent).toBe(t("saldoVolverAMirar"));
   });
 
@@ -479,15 +479,18 @@ describe("Ya lo mandé", () => {
     expect(s.replace(t("saldoEsperaNoMandes"), "")).not.toMatch(/mand(a|á|alo|álo)\b|de nuevo|otra vez/i);
   };
 
-  it("lo que llegó después de abrir la ventana es nuevo: lo dice y la principal pasa a Cerrar", async () => {
+  it("lo que llegó después de abrir la ventana es nuevo: lo dice y la principal pasa a Seguir", async () => {
     const m = mundo({ lista: [pago(TX("a"))] });
     await aTraer(m);
     m.lista = [pago(TX("b"), { monto: 100_000_000n }), pago(TX("a"))];
     m.lectura = conUsdc("22.5000000");
     principal().click();
-    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10 dólares digitales."));
-    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 22,5 dólares digitales.");
-    expect(principal().textContent).toBe(t("acctClose"));
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10,00 dólares digitales."));
+    expect(document.querySelector('[data-saldo="total"]')?.textContent).toBe("Tenés 22,50 dólares digitales.");
+    // Llegó: el tilde y cuánto llegó, y la ventana espera a que la persona toque Seguir.
+    expect(document.querySelector(".dlg-estado.fv-llego")).not.toBeNull();
+    expect(dialogo()).not.toBeNull();
+    expect(principal().textContent).toBe(t("saldoSeguir"));
     principal().click();
     expect(dialogo()).toBeNull();
   });
@@ -497,7 +500,7 @@ describe("Ya lo mandé", () => {
     const m = mundo({ lista: [pago(TX("b"), { monto: 50_000_000n }), pago(TX("a"))] });
     await aTraer(m);
     principal().click();
-    await vi.waitFor(() => expect(estado()).toBe("Llegaron 5 dólares digitales."));
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 5,00 dólares digitales."));
   });
 
   it("sin nada nuevo: el último que llegó, con su fecha, y que no lo mande de nuevo", async () => {
@@ -506,7 +509,7 @@ describe("Ya lo mandé", () => {
     principal().click();
     await vi.waitFor(() => expect(estado()).toContain(t("saldoNoVemosNuevo")));
     noInvitaAMandar(estado());
-    expect(document.querySelector('[data-saldo="ultimo"]')?.textContent).toMatch(/^El último llegó el .+: 3 dólares digitales\.$/);
+    expect(document.querySelector('[data-saldo="ultimo"]')?.textContent).toMatch(/^El último llegó el .+: 3,00 dólares digitales\.$/);
     expect(principal().textContent).toBe(t("saldoYaMande"));
   });
 
@@ -566,7 +569,7 @@ describe("Ya lo mandé", () => {
     await aTraer(m);
     m.lista = [pago(TX("e"))];
     principal().click();
-    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10 dólares digitales. Sumaste 50 monedas de regalo."));
+    await vi.waitFor(() => expect(estado()).toBe("Llegaron 10,00 dólares digitales. Sumaste 50 monedas de regalo."));
     expect(pedidos.some((u) => u.startsWith("https://cuenta.example.org"))).toBe(true);
   });
 });

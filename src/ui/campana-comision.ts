@@ -1,7 +1,7 @@
 import { comisionDe, enlaceDePago, notaDeLaComision, totalDePremios, umbralPagado } from "../campana/comision";
 import { type EstadoDeComision, type PorteroDeComision, RECHAZOS_QUE_SE_AGUANTAN, estadoDeComision, loQueSale } from "../campana/comision-panel";
 import type { BusquedaDeComision, LecturaDeComision } from "../campana/comision-red";
-import { horaTexto, montoTexto } from "../campana/formato";
+import { horaTexto, montoConCentavos } from "../campana/formato";
 import type { Campana } from "../campana/modelo";
 import type { Lang } from "../idioma";
 import type { ConfigDeComision } from "../stellar/comision-config";
@@ -22,6 +22,11 @@ type Almacen = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 /** Cuánto vive la marca de un pago en el aire: lo que dura el pago (240 s) y el margen de la regla (300 s), más un minuto. */
 export const VIDA_DE_LA_MARCA_MS = 360_000;
+/**
+ * Con un pago en el aire el panel mira solo cada tanto si entró, en lugar de esperar los seis minutos de la marca. Es solo
+ * lectura (la misma mirada de Volver a mirar), no toca la marca ni el botón de pagar, y con la pestaña oculta no pregunta.
+ */
+export const MIRAR_LA_DUDA_CADA_MS = 12_000;
 /** La búsqueda no baja más de 30 días antes de abrirse la campaña: la nota sale del evento y un pago viejo de otro no vale. */
 const MARGEN_DE_LA_BUSQUEDA_S = 30 * 86_400;
 
@@ -91,6 +96,10 @@ export interface ContextoDeComision {
   idioma: () => Lang;
   ahora: () => number;
   esperar: (f: () => void, ms: number) => () => void;
+  /** ¿Se ve la pestaña? Con la pestaña oculta la mirada sola de la duda no pregunta. Sin esto, siempre se ve. */
+  visible?: () => boolean;
+  /** Se llama cada vez que termina de mirar la red, para que la pantalla pueda decir que sigue mirando. */
+  alMirar?: () => void;
   almacen: Almacen | null;
   /** Hay una forma de cambiar de cuenta o entrar. */
   puedeEntrar: () => boolean;
@@ -100,6 +109,13 @@ export interface ContextoDeComision {
    */
   conBorrador?: () => boolean;
 }
+
+/**
+ * Lo que la persona ya tiene o ya puso (el saldo, los premios) se dice hacia abajo; lo que tiene que mandar o cargar, hacia
+ * arriba: el número que se lee nunca queda por debajo de lo que sale de la cuenta.
+ */
+const montoTiene = (unidades: bigint, idioma: Lang): string => montoConCentavos(unidades, idioma, "abajo");
+const montoSale = (unidades: bigint, idioma: Lang): string => montoConCentavos(unidades, idioma, "arriba");
 
 export type AccionDeComision = "cargar" | "pagar" | "mirar" | "entrar";
 
@@ -127,6 +143,8 @@ export interface ControlDeComision {
   bloqueaElAbrir: () => boolean;
   /** Mira la red, el saldo y el servicio. */
   mirar: () => Promise<void>;
+  /** En qué va el pago mientras se manda: armándolo, o ya mandado y esperando que la red lo confirme. */
+  etapaDelPago: () => "armando" | "mandado" | null;
   pagar: () => Promise<void>;
   /** Abre la ventana de los dólares. Al cerrarla vuelve a mirar y después avisa con `despues`. */
   cargar: (despues?: () => void) => void;
@@ -158,9 +176,13 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   let pagando = false;
   let rechazos = 0;
   let mirada = 0;
+  /** Sube al reiniciar o detener: una vuelta de la duda que ya estaba en el aire no vuelve a armar la mirada. */
+  let epoca = 0;
   /** La marca cuando el almacén no deja guardar: vive lo que vive la pestaña. */
   let marcaEnMemoria: Marca | null = null;
   let pararEspera: (() => void) | null = null;
+  let pararDuda: (() => void) | null = null;
+  let etapaDelPago: "armando" | "mandado" | null = null;
   const premiosDe = (c: Campana): bigint => totalDePremios(c.premios);
 
   /* --- lo guardado --- */
@@ -273,6 +295,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     pararEspera?.();
     pararEspera = null;
     const m = marcaViva(evento);
+    programarLaMirada(evento);
     if (!m) return;
     pararEspera = ctx.esperar(() => {
       pararEspera = null;
@@ -280,7 +303,31 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     }, Math.max(1_000, m.hasta - ctx.ahora() + 1_000));
   }
 
-  async function mirar(): Promise<void> {
+  /**
+   * Mientras la marca de un pago en el aire siga viva, mira sola cada tanto si ya entró. Mira en silencio: no vuelve a
+   * Un momento ni toca nada más que lo que la red dice. Al vencer la marca queda la mirada de siempre, la de `programarLaEspera`.
+   */
+  function programarLaMirada(evento: string): void {
+    pararDuda?.();
+    pararDuda = null;
+    if (marcaViva(evento) === null) return;
+    pararDuda = ctx.esperar(() => {
+      pararDuda = null;
+      void vueltaDeLaDuda(evento);
+    }, MIRAR_LA_DUDA_CADA_MS);
+  }
+
+  async function vueltaDeLaDuda(evento: string): Promise<void> {
+    const c = ctx.campana();
+    if (!c || c.evento !== evento || !ctx.enPrevia() || pagando || marcaViva(evento) === null) return;
+    const mi = epoca;
+    // Con la pestaña oculta no se pregunta: la próxima vuelta mira si ya se volvió a verla.
+    if (ctx.visible?.() !== false) await mirar(true);
+    if (mi === epoca && c === ctx.campana() && pararDuda === null) programarLaMirada(evento);
+  }
+
+  /** `callado`: la mirada que corre sola en la duda no borra lo que se sabía, así la pantalla no parpadea en Un momento. */
+  async function mirar(callado = false): Promise<void> {
     const cfg = deps.comision();
     const c = ctx.campana();
     if (!cfg || !c || !ctx.enPrevia() || pagando) return;
@@ -291,16 +338,20 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       ctx.alCambiar();
       return;
     }
-    red = null;
-    saldo = null;
-    portero = null;
-    ctx.alCambiar();
+    if (!callado) {
+      red = null;
+      saldo = null;
+      portero = null;
+      ctx.alCambiar();
+    }
     try {
       await mirarDesdeCero(mia, cfg, c, n);
     } catch {
       // Algo que no se esperaba (un pedazo del sitio que no bajó, una respuesta que rompe): no se queda en Un momento con el
       // botón apagado. Se dice que no se pudo ver, con Volver a mirar, y no se ofrece pagar ni abrir.
       if (mia !== mirada) return;
+      // La mirada sola de la duda no cambia nada si falla: la próxima vuelta lo intenta de nuevo.
+      if (callado) return;
       red = { tipo: "sin-consulta" };
       ctx.alCambiar();
     }
@@ -345,6 +396,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     saldo = elSaldo;
     portero = elPortero;
     programarLaEspera(c.evento);
+    ctx.alMirar?.();
     ctx.alCambiar();
   }
 
@@ -358,6 +410,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     if (!cfg || !c || !origen || e.tipo !== "lista") return;
     const n = numeros(cfg, c);
     pagando = true;
+    etapaDelPago = "armando";
     ctx.aviso("");
     ctx.alCambiar();
     type Salida = ResultadoDelPagoDeComision | { tipo: "duda" } | { tipo: "sala"; texto: string };
@@ -381,12 +434,23 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
             mandado = true;
             ponerMarca(c.evento, { hasta: ctx.ahora() + VIDA_DE_LA_MARCA_MS, seq, hash });
             programarLaEspera(c.evento);
+            // Solo se dice en pantalla que ya salió: no cambia nada de lo que se manda. El dibujo va después de que el envío
+            // arranca y un fallo suyo no lo frena: el pago nunca depende de lo que se pinta.
+            etapaDelPago = "mandado";
+            queueMicrotask(() => {
+              try {
+                ctx.alCambiar();
+              } catch {
+                /* la pantalla se corrige en el próximo cambio */
+              }
+            });
           },
         });
       })
       // Un error después de la marca puede haber mandado el pago: es una duda. Antes de la marca no salió nada.
       .catch((): Salida => (mandado ? { tipo: "en-curso", hasta: null } : { tipo: "no-salio" }));
     pagando = false;
+    etapaDelPago = null;
     if (salida.tipo === "duda") return void mirar();
     if (salida.tipo === "sala") {
       ctx.aviso(salida.texto);
@@ -449,7 +513,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     if (cuenta !== null) {
       // Lo que falta mandar, si ya se sabe: la ventana de la dirección lo dice en su título.
       const e = estado();
-      const falta = e.tipo === "falta-cargar" ? montoTexto(e.falta, ctx.idioma()) : undefined;
+      const falta = e.tipo === "falta-cargar" ? montoSale(e.falta, ctx.idioma()) : undefined;
       deps.cargar(
         cuenta,
         () => {
@@ -485,8 +549,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
         const llegado = red !== null && red.tipo !== "sin-consulta" ? red.suma : 0n;
         const sale = loQueSale({ comision: n.comision, umbral: n.umbral, costo: cfg.costo }, llegado) ?? n.comision;
         return {
-          titulo: fmt("cpoCmPagandoT", { c: montoTexto(sale, idioma) }),
-          linea: fmt("cpoCmPagandoL", { premios: montoTexto(n.premios, idioma) }),
+          titulo: fmt("cpoCmPagandoT", { c: montoSale(sale, idioma) }),
+          linea: fmt("cpoCmPagandoL", { premios: montoTiene(n.premios, idioma) }),
           principal: { texto: tx("cpoCmPagando"), accion: "pagar", apagado: true },
           secundario: null,
           plegado: null,
@@ -506,16 +570,16 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
         return { titulo: tx("cpoSinConexionT"), linea: tx("cpoCmSinMirarL"), principal: mirarBoton(), secundario: null, plegado: null };
       case "falta-cargar": {
         // El título dice cuánto cargar y la línea la cuenta: cuánto es del premio y cuánto del servicio.
-        const premios = montoTexto(n.premios, idioma);
-        const servicio = montoTexto(e.sale, idioma);
+        const premios = montoTiene(n.premios, idioma);
+        const servicio = montoSale(e.sale, idioma);
         const sinSaldo = e.saldo === 0n;
         return {
           titulo: sinSaldo
-            ? fmt("cpoCmCargarT", { total: montoTexto(e.cargar, idioma) })
-            : fmt("cpoCmCargarFaltaT", { falta: montoTexto(e.falta, idioma) }),
+            ? fmt("cpoCmCargarT", { total: montoSale(e.cargar, idioma) })
+            : fmt("cpoCmCargarFaltaT", { falta: montoSale(e.falta, idioma) }),
           linea: sinSaldo
             ? fmt("cpoCmCargarL", { premios, servicio })
-            : fmt("cpoCmCargarFalta", { saldo: montoTexto(e.saldo, idioma), premios, servicio }),
+            : fmt("cpoCmCargarFalta", { saldo: montoTiene(e.saldo, idioma), premios, servicio }),
           principal: { texto: tx("cpoCmCargar"), accion: "cargar", apagado: false },
           secundario: null,
           plegado: borrador ? null : "cerrado",
@@ -523,9 +587,9 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
       }
       case "lista":
         return {
-          titulo: fmt("cpoCmListaT", { c: montoTexto(e.sale, idioma) }),
-          linea: fmt("cpoCmListaL", { saldo: montoTexto(e.saldo, idioma), premios: montoTexto(n.premios, idioma) }),
-          principal: { texto: fmt("cpoCmPagar", { c: montoTexto(e.sale, idioma) }), accion: "pagar", apagado: false },
+          titulo: fmt("cpoCmListaT", { c: montoSale(e.sale, idioma) }),
+          linea: fmt("cpoCmListaL", { saldo: montoTiene(e.saldo, idioma), premios: montoTiene(n.premios, idioma) }),
+          principal: { texto: fmt("cpoCmPagar", { c: montoSale(e.sale, idioma) }), accion: "pagar", apagado: false },
           secundario: null,
           plegado: null,
         };
@@ -537,11 +601,11 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
           linea:
             e.entrar && borrador
               ? fmt("cpoCmBorradorEntrarL", {
-                  total: montoTexto(n.premios + e.monto, idioma),
-                  premios: montoTexto(n.premios, idioma),
-                  servicio: montoTexto(e.monto, idioma),
+                  total: montoSale(n.premios + e.monto, idioma),
+                  premios: montoTiene(n.premios, idioma),
+                  servicio: montoSale(e.monto, idioma),
                 })
-              : fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoTexto(e.monto, idioma) }),
+              : fmt(e.entrar ? "cpoCmOtraEntrarL" : "cpoCmOtraL", { c: montoSale(e.monto, idioma) }),
           principal: e.entrar ? { texto: tx("cpoCmEntrar"), accion: "entrar", apagado: false } : mirarBoton(),
           secundario: e.entrar ? { texto: tx("cpoCmMirar"), accion: "mirar" } : null,
           plegado: borrador ? null : e.entrar ? "cerrado" : "abierto",
@@ -591,13 +655,17 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     const e = estado();
     const c = ctx.campana();
     const hasta = c ? (marcaViva(c.evento)?.hasta ?? 0) : 0;
-    return [activo(), JSON.stringify(e, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), hasta, ctx.idioma(), ctx.puedeEntrar()].join("|");
+    return [activo(), JSON.stringify(e, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), hasta, ctx.idioma(), ctx.puedeEntrar(), etapaDelPago].join("|");
   }
 
   function reiniciar(): void {
     mirada++;
+    epoca++;
     pararEspera?.();
     pararEspera = null;
+    pararDuda?.();
+    pararDuda = null;
+    etapaDelPago = null;
     red = null;
     saldo = null;
     portero = null;
@@ -612,7 +680,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     activo,
     estado,
     bloqueaElAbrir: () => activo() && estado().tipo !== "pagada",
-    mirar,
+    mirar: () => mirar(),
+    etapaDelPago: () => etapaDelPago,
     pagar,
     cargar,
     descripcion,
@@ -620,8 +689,11 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     reiniciar,
     detener: () => {
       mirada++;
+      epoca++;
       pararEspera?.();
       pararEspera = null;
+      pararDuda?.();
+      pararDuda = null;
     },
     datosDelPlegado,
   };

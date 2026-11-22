@@ -156,7 +156,7 @@ describe("falta cargar", () => {
     await eligiendo(m, p);
     expect(c.llamadas).toContain("red");
     expect(texto(p, "#cpo-h")).toBe("Cargá 122,40 dólares digitales");
-    expect(texto(p, "#cpo-linea")).toBe("120 de premio y 2,40 del servicio de Tinkazo.");
+    expect(texto(p, "#cpo-linea")).toBe("120,00 de premio y 2,40 del servicio de Tinkazo.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
     expect(botonesDe(p)).not.toContain("Abrir la inscripción");
   });
@@ -167,15 +167,15 @@ describe("falta cargar", () => {
     await eligiendo(m, p, { premios: ["120000000"] });
     // 12 de premios: la comisión es el mínimo (1,50) y se cargan 13,50.
     expect(texto(p, "#cpo-h")).toBe("Cargá 13,50 dólares digitales");
-    expect(texto(p, "#cpo-linea")).toBe("12 de premio y 1,50 del servicio de Tinkazo.");
+    expect(texto(p, "#cpo-linea")).toBe("12,00 de premio y 1,50 del servicio de Tinkazo.");
   });
 
   it("con un saldo que no alcanza, dice cuánto tiene y cuánto falta, un solo número de carga", async () => {
     const { m } = armar({ saldo: d(100) });
     const p = nuevoPanel(m);
     await eligiendo(m, p, { premios: ["1000000000"] });
-    expect(texto(p, "#cpo-h")).toBe("Cargá 2 dólares digitales más");
-    expect(texto(p, "#cpo-linea")).toBe("Tenés 100. Son 100 de premio y 2 del servicio.");
+    expect(texto(p, "#cpo-h")).toBe("Cargá 2,00 dólares digitales más");
+    expect(texto(p, "#cpo-linea")).toBe("Tenés 100,00. Son 100,00 de premio y 2,00 del servicio.");
   });
 
   it("Cargar abre la ventana con la cuenta y, al cerrarla, vuelve a mirar", async () => {
@@ -203,9 +203,9 @@ describe("falta cargar", () => {
     const conAlgo = armar({ saldo: d(100) });
     const p2 = nuevoPanel(conAlgo.m);
     await eligiendo(conAlgo.m, p2, { premios: ["1000000000"] });
-    expect(texto(p2, "#cpo-h")).toBe("Cargá 2 dólares digitales más");
+    expect(texto(p2, "#cpo-h")).toBe("Cargá 2,00 dólares digitales más");
     boton(p2, "Cargar dólares digitales").click();
-    expect(conAlgo.c.faltas).toEqual(["2"]);
+    expect(conAlgo.c.faltas).toEqual(["2,00"]);
   });
 
   it("deja abierto el pago desde otra billetera, plegado", async () => {
@@ -224,7 +224,7 @@ describe("listo para pagar", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p);
     expect(texto(p, "#cpo-h")).toBe("Pagá 2,40 a Tinkazo");
-    expect(texto(p, "#cpo-linea")).toBe("Tenés 150. Es el servicio. Los 120 quedan para el premio.");
+    expect(texto(p, "#cpo-linea")).toBe("Tenés 150,00. Es el servicio. Los 120,00 quedan para el premio.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
     expect(botonesDe(p)).not.toContain("Abrir la inscripción");
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
@@ -344,7 +344,7 @@ describe("pagar", () => {
     expect(m.fases).toEqual([]);
   });
 
-  it("mientras paga, el botón dice Pagando y no deja dejar la campaña", async () => {
+  it("mientras paga, la fila viva dice que espera a la red y no deja dejar la campaña", async () => {
     const { m, c } = armar();
     let soltar: (() => void) | null = null;
     c.deps.pagar = (p) => {
@@ -358,11 +358,73 @@ describe("pagar", () => {
     boton(p, "Pagar 2,40").click();
     await suelta(8);
     expect(texto(p, "#cpo-h")).toBe("Pagando 2,40 a Tinkazo");
-    expect(texto(p, "#cpo-linea")).toBe("Los 120 quedan para el premio.");
-    expect(botonesDe(p)).toEqual(["Pagando…"]);
+    expect(texto(p, "#cpo-linea")).toBe("Los 120,00 quedan para el premio.");
+    // El botón apagado cede su lugar a la fila viva: ya mandó el pago y espera que la red lo confirme.
+    expect(botonesDe(p)).toEqual([]);
+    expect(texto(p, "#cpo-fila")).toBe("Esperando que la red lo confirme");
+    expect($<HTMLElement>(p, "#cpo-fila")?.classList.contains("fv-revisando")).toBe(true);
     (soltar as (() => void) | null)?.();
     await suelta(8);
     expect(principales(p).map((b) => b.textContent)).toEqual(["Abrir la inscripción"]);
+    // Pagado: la fila se va y queda la marca con su tilde, que salta una vez porque se estaba esperando.
+    expect(texto(p, "#cpo-fila")).toBe("");
+    expect($<HTMLElement>(p, "#cpo-marca")?.textContent).toBe("Servicio pagado");
+    expect($<HTMLElement>(p, "#cpo-marca")?.getAttribute("role")).toBe("status");
+    expect($<HTMLElement>(p, "#cpo-marca")?.classList.contains("recien")).toBe(true);
+  });
+
+  it("si dibujar que ya mandó falla, el pago igual sale y la marca queda como corresponde", async () => {
+    const { m, c } = armar();
+    let enviado = false;
+    c.deps.pagar = async (p) => {
+      p.alMandar("1001", "b".repeat(64));
+      enviado = true;
+      return { tipo: "listo", hash: "b".repeat(64) };
+    };
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    // Un texto que falta justo en el dibujo de «ya mandó»: ese repintado lanza.
+    const tx = m.deps.tx;
+    m.deps.tx = (clave) => {
+      if (clave === "cpoFvRed") throw new Error("falta el texto");
+      return tx(clave);
+    };
+    boton(p, "Pagar 2,40").click();
+    await suelta(8);
+    expect(enviado).toBe(true);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Abrir la inscripción"]);
+  });
+
+  it("antes de armar el pago, la fila dice que arma el pago", async () => {
+    const { m, c } = armar();
+    let seguir: (() => void) | null = null;
+    c.deps.pagar = () =>
+      new Promise((r) => {
+        seguir = () => r({ tipo: "listo", hash: null });
+      });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    boton(p, "Pagar 2,40").click();
+    await suelta(8);
+    expect(texto(p, "#cpo-fila")).toBe("Armando el pago");
+    expect(botonesDe(p)).toEqual([]);
+    (seguir as (() => void) | null)?.();
+    await suelta(8);
+  });
+});
+
+describe("mirando", () => {
+  it("mientras mira la red, la fila dice qué revisa en lugar de un botón gris", async () => {
+    const { m, c } = armar();
+    c.deps.mirarRed = () => new Promise(() => undefined);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    expect(texto(p, "#cpo-h")).toBe("Un momento…");
+    expect(texto(p, "#cpo-fila")).toBe("Revisando tu saldo");
+    expect(principales(p)).toEqual([]);
+    expect($<HTMLElement>(p, "#cpo-fila .cc-gira")).not.toBeNull();
+    // El panel anuncia lo que cambia desde un solo lugar.
+    expect($<HTMLElement>(p, "#cpo-fila")?.getAttribute("role")).toBe("status");
   });
 });
 
@@ -383,6 +445,96 @@ describe("la duda", () => {
     // En la duda no se invita a empezar de nuevo: solo Volver a mirar.
     expect(botonesDe(p)).toEqual(["Volver a mirar"]);
     expect($<HTMLElement>(p, "#cpo-comision")).toBeNull();
+    // Y la fila dice que el panel mira solo: no hace falta tocar nada.
+    expect(texto(p, "#cpo-fila")).toBe("Mirando si el pago llegó");
+  });
+
+  const rojas = (c: Cobro): number => c.llamadas.filter((x) => x === "red").length;
+
+  it("en la duda mira sola cada 12 segundos, sin pasar por Un momento y sin ofrecer pagar", async () => {
+    const { m, c, p } = await conPagoEnCurso();
+    const marca = m.almacen.getItem("tinkazo.comision.marca.evento-uno");
+    expect(marca).not.toBeNull();
+    const antes = rojas(c);
+    await m.correr(11_000);
+    expect(rojas(c)).toBe(antes);
+    await m.correr(1_500);
+    await suelta(8);
+    expect(rojas(c)).toBe(antes + 1);
+    expect(texto(p, "#cpo-h")).toBe("Todavía no sabemos si se pagó");
+    expect(botonesDe(p)).toEqual(["Volver a mirar"]);
+    await m.correr(12_000);
+    await suelta(8);
+    expect(rojas(c)).toBe(antes + 2);
+    // Lo que decide el dinero queda como estaba: la marca sigue y no se invita a pagar de nuevo.
+    expect(m.almacen.getItem("tinkazo.comision.marca.evento-uno")).toBe(marca);
+    expect(c.llamadas.filter((x) => x === "pagar")).toHaveLength(1);
+  });
+
+  it("cuando la red ve el pago, la mirada sola lo da por pagado: Servicio pagado y la fila se va", async () => {
+    const { m, c, p } = await conPagoEnCurso();
+    c.red = { tipo: "pagada", suma: d(1.9) };
+    await m.correr(12_500);
+    await suelta(8);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Abrir la inscripción"]);
+    expect(texto(p, "#cpo-fila")).toBe("");
+    expect(texto(p, "#cpo-marca")).toBe("Servicio pagado");
+    expect(m.almacen.getItem("tinkazo.comision.marca.evento-uno")).toBeNull();
+  });
+
+  it("con la pestaña oculta no mira, y al volver a verse mira en la vuelta siguiente", async () => {
+    const { m, c } = await conPagoEnCurso();
+    let visibilidad: DocumentVisibilityState = "hidden";
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => visibilidad });
+    try {
+      const antes = rojas(c);
+      await m.correr(40_000);
+      await suelta(8);
+      expect(rojas(c)).toBe(antes);
+      visibilidad = "visible";
+      await m.correr(13_000);
+      await suelta(8);
+      expect(rojas(c)).toBe(antes + 1);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it("una falla de la mirada sola no cambia lo que se ve: sigue en duda", async () => {
+    const { m, c, p } = await conPagoEnCurso();
+    c.deps.mirarRed = async () => {
+      throw new Error("sin red");
+    };
+    await m.correr(12_500);
+    await suelta(8);
+    expect(texto(p, "#cpo-h")).toBe("Todavía no sabemos si se pagó");
+    expect(botonesDe(p)).toEqual(["Volver a mirar"]);
+  });
+
+  it("si se detiene el panel con una mirada de la duda en el aire, no vuelve a armar la mirada", async () => {
+    const { m, c, p } = await conPagoEnCurso();
+    let soltar: (() => void) | null = null;
+    const normal = c.deps.mirarRed;
+    c.deps.mirarRed = (...a) => {
+      c.llamadas.push("red");
+      return new Promise((r) => {
+        soltar = () => r(c.red);
+      });
+    };
+    // La vuelta de los 12 segundos queda esperando a la red.
+    await m.correr(12_500);
+    await suelta(8);
+    expect(soltar).not.toBeNull();
+    // Se cierra el panel antes de que conteste, y recién ahí contesta.
+    p.detener();
+    (soltar as (() => void) | null)?.();
+    await suelta(8);
+    c.deps.mirarRed = normal;
+    const antes = rojas(c);
+    await m.correr(60_000);
+    await suelta(8);
+    expect(rojas(c)).toBe(antes);
+    expect(m.esperasEn().filter((x) => x > m.ahora)).toEqual([]);
   });
 
   it("recargar sigue en duda: un panel nuevo con el mismo almacén", async () => {
@@ -667,6 +819,22 @@ describe("el pago a medias", () => {
     expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 1,60"]);
   });
 
+  it("lo que hay que mandar se dice hacia arriba y lo que ya se tiene, hacia abajo", async () => {
+    // Llegó 0,8000005: lo que sale es 1,5999995 y se lee 1,60, nunca 1,59. El saldo, en cambio, se lee hacia abajo.
+    const { m } = armar({ red: { tipo: "no-pagada", suma: d(0.8) + 5n }, saldo: d(500) + 9_999_999n });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 1,60"]);
+    expect(texto(p, "#cpo-h")).toBe("Pagá 1,60 a Tinkazo");
+    expect(texto(p, "#cpo-linea")).toContain("Tenés 500,99.");
+    // Y la mitad que se pide a otra billetera, con el mismo número.
+    const otra = armar({ billetera: "otra", red: { tipo: "no-pagada", suma: d(0.8) + 5n } });
+    const q = nuevoPanel(otra.m);
+    await eligiendo(otra.m, q);
+    expect(texto(q, "#cpo-linea")).toContain("1,60");
+    expect(texto(q, "#cpo-linea")).not.toContain("1,59");
+  });
+
   it("con un resto de menos de un dólar solo queda el pago desde otra billetera", async () => {
     const { m } = armar({ red: { tipo: "no-pagada", suma: d(1.0) }, saldo: d(500) });
     const p = nuevoPanel(m);
@@ -789,7 +957,7 @@ describe("en inglés", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p);
     expect(texto(p, "#cpo-h")).toBe("Load 122.40 digital dollars");
-    expect(texto(p, "#cpo-linea")).toBe("120 for the prize and 2.40 for Tinkazo's service.");
+    expect(texto(p, "#cpo-linea")).toBe("120.00 for the prize and 2.40 for Tinkazo's service.");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Add digital dollars"]);
   });
 
@@ -845,6 +1013,15 @@ describe("lo que dice el panel de cada estado", () => {
     expect(principales(p).map((b) => b.textContent)).toEqual(["Abrir la inscripción"]);
   });
 
+  it("con el servicio ya pagado al abrir, el tilde de la marca queda quieto", async () => {
+    const { m } = armar({ red: { tipo: "pagada", suma: d(1.9) } });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    const marca = $<HTMLElement>(p, "#cpo-marca");
+    expect(marca.textContent).toBe("Servicio pagado");
+    expect(marca.classList.contains("recien")).toBe(false);
+  });
+
   it("sin pagar no hay marca de pagado", async () => {
     const { m } = armar();
     const p = nuevoPanel(m);
@@ -877,7 +1054,7 @@ describe("lo que dice el panel de cada estado", () => {
     const p = nuevoPanel(m);
     await eligiendo(m, p);
     expect(texto(p, "#cpo-h")).toBe("Cargá 2,40 dólares digitales más");
-    expect(texto(p, "#cpo-linea")).toBe("Tenés 120. Son 120 de premio y 2,40 del servicio.");
+    expect(texto(p, "#cpo-linea")).toBe("Tenés 120,00. Son 120,00 de premio y 2,40 del servicio.");
   });
 });
 

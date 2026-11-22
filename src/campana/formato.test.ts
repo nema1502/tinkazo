@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { TEXTOS_CAMPANA } from "./textos";
-import { fechaTexto, horaTexto, montoTexto, premiosTexto } from "./formato";
+import { fechaTexto, horaTexto, montoConCentavos, montoTexto, premiosTexto } from "./formato";
 
 const DIA = Date.UTC(2025, 10, 30, 2, 30);
 const CIERRE = Date.UTC(2025, 10, 30, 1, 0);
@@ -32,6 +32,36 @@ describe("montoTexto", () => {
   it("un centavo exacto se muestra como un centavo", () => {
     expect(montoTexto(100000n, "es")).toBe("0,01");
     expect(montoTexto(100000n, "en")).toBe("0.01");
+  });
+});
+
+describe("montoConCentavos", () => {
+  it("siempre lleva dos decimales, con coma en español y punto en inglés", () => {
+    expect(montoConCentavos(1200000000n, "es")).toBe("120,00");
+    expect(montoConCentavos(1200000000n, "en")).toBe("120.00");
+    expect(montoConCentavos(15000000n, "es")).toBe("1,50");
+    expect(montoConCentavos(15000000n, "en")).toBe("1.50");
+    expect(montoConCentavos(0n, "es")).toBe("0,00");
+  });
+
+  it("recorta hacia abajo por defecto: nunca suma lo que no llegó", () => {
+    expect(montoConCentavos(12345678n, "es")).toBe("1,23");
+    expect(montoConCentavos(12999999n, "en")).toBe("1.29");
+  });
+
+  it("lo que hay que mandar se redondea hacia arriba, para no quedarse corto", () => {
+    expect(montoConCentavos(5001000n, "es", "arriba")).toBe("0,51");
+    expect(montoConCentavos(5000000n, "es", "arriba")).toBe("0,50");
+  });
+
+  it("exacto muestra más decimales solo si el monto los tiene", () => {
+    expect(montoConCentavos(125000000n, "es", "exacto")).toBe("12,50");
+    expect(montoConCentavos(12345678n, "en", "exacto")).toBe("1.2345678");
+  });
+
+  it("un monto menor que un centavo no se dice como cero", () => {
+    expect(montoConCentavos(5000n, "es")).toBe("0,0005");
+    expect(montoConCentavos(5000n, "en")).toBe("0.0005");
   });
 });
 
