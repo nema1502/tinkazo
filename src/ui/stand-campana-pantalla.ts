@@ -1,4 +1,5 @@
 import { MOTIVOS, type MotivoDeSalida } from "../sala/campana-org";
+import "./stand-campana.css";
 import type { AvisoDelStand, DatosDelProyector } from "./stand-campana";
 
 /**
@@ -28,45 +29,6 @@ export interface PantallaDeCampana {
   pintar: (aviso: AvisoDelStand) => void;
 }
 
-const ESTILO = `
-  .scp { position: fixed; inset: 0; z-index: 3000; background: #fff; color: #111;
-    display: grid; grid-template-columns: 1fr 1.2fr; font: 16px/1.4 system-ui, sans-serif; overflow: auto; }
-  .scp-izq { padding: 4vmin; display: flex; flex-direction: column; align-items: flex-start; gap: 1.2vmin; }
-  .scp-marca { display: flex; align-items: center; gap: .6vmin; font-size: 2.6vmin; color: #003a70; }
-  .scp-marca svg { width: 3vmin; height: 3.6vmin; fill: #003a70; }
-  .scp-marca b { color: #f5a800; }
-  .scp-titulo { font-size: 5vmin; margin: 0; }
-  .scp-logo { max-height: 14vmin; max-width: 60%; object-fit: contain; }
-  .scp-premio, .scp-cierre, .scp-van { margin: 0; font-size: 3vmin; }
-  .scp-van { font-size: 4.4vmin; font-weight: 700; }
-  .scp-qr { margin-top: auto; display: flex; flex-direction: column; align-items: flex-start; gap: .8vmin; }
-  .scp-qr-img { width: 30vmin; height: 30vmin; image-rendering: pixelated; }
-  .scp-ayuda-qr { margin: 0; font-size: 1.9vmin; color: #555; }
-  .scp-der { padding: 4vmin; border-left: 1px solid #ddd; display: flex; flex-direction: column; gap: 1.4vmin; min-width: 0; }
-  .scp-datos { margin: 0; font-size: 2.7vmin; color: #b00; }
-  .scp-lista, .scp-revisar { margin: 0; padding: 0; list-style: none; overflow: auto; font-size: 3vmin; }
-  .scp-bloque-r { margin-top: 1.4vmin; }
-  .scp-revisar-t { margin: 0 0 .6vmin; font-size: 2.2vmin; font-weight: 700; color: #a27000; }
-  .scp-linea { display: flex; align-items: center; gap: 1vmin; padding: .4vmin 0; border-bottom: 1px solid #eee; min-width: 0; }
-  .scp-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .scp-linea button { font-size: 1.9vmin; padding: .3vmin 1vmin; cursor: pointer; }
-  .scp-quitar { background: none; border: 1px solid #b00; color: #b00; border-radius: .5vmin; }
-  .scp-ghost { background: none; border: 1px solid #999; color: #333; border-radius: .5vmin; }
-  .scp-motivos { display: flex; flex-wrap: wrap; gap: .6vmin; align-items: center; font-size: 1.9vmin; }
-  .scp-motivos p { margin: 0; width: 100%; }
-  .scp-vacia { margin: 0; color: #777; font-size: 2.4vmin; }
-  .scp-aviso { margin: 0; color: #b00; font-size: 2.2vmin; }
-  .scp-cerrar-zona { margin-top: auto; }
-  .scp-cerrar-b { font-size: 2.2vmin; padding: .6vmin 2vmin; background: none; border: 1px solid #333; color: #111; border-radius: .6vmin; cursor: pointer; }
-  .scp-confirmar { border: 1px solid #b00; border-radius: .8vmin; padding: 1.4vmin; margin-top: 1vmin; display: flex; flex-direction: column; gap: .8vmin; }
-  .scp-cerrar-titulo { margin: 0; font-size: 2.6vmin; font-weight: 700; }
-  .scp-cerrar-linea { margin: 0; font-size: 2vmin; }
-  .scp-confirmar-opciones { display: flex; gap: 1vmin; }
-  .scp-fallo { margin: auto; padding: 6vmin; font-size: 4vmin; text-align: center; max-width: 60ch; }
-
-  @media (prefers-reduced-motion: no-preference) { .scp { animation: scp-sale .25s ease-out; } }
-  @keyframes scp-sale { from { opacity: 0; } to { opacity: 1; } }
-`;
 
 const LLAMA =
   '<svg viewBox="-1 -3 24 28" aria-hidden="true"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg>';
@@ -79,10 +41,6 @@ export function crearPantallaDeCampana(deps: DepsDePantallaDeCampana): PantallaD
   raiz.setAttribute("aria-modal", "true");
   raiz.setAttribute("aria-labelledby", "scp-t");
   raiz.innerHTML =
-    document.getElementById("scp-estilos") === null
-      ? `<style id="scp-estilos">${ESTILO}</style>`
-      : "";
-  raiz.innerHTML +=
     `<div class="scp-izq" hidden>` +
     `<span class="scp-marca" aria-hidden="true">${LLAMA}<span>Tinka<b>zo</b></span></span>` +
     `<h2 class="scp-titulo" id="scp-t"></h2>` +
