@@ -101,15 +101,15 @@ con los bits sobrantes del final distintos de cero no es canónica y no verifica
 | --- | --- | --- |
 | `POST /v1/campana` | Crea la sala: `201 {"id","token","vence"}` | Una sala viva por evento y 20 creadas por día UTC, fuera del cupo general |
 | `GET /v1/sala/<id>/campana` | Devuelve `{"texto","firma"}`, exactamente como llegaron | Sin token |
-| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}` | Sin token |
+| `GET /v1/sala/<id>/campana/estado?p=P` | Devuelve `{"fase","total","cierraMs","pase","quitadas","correo"}`. Con la lista sellada o sorteada suma `"sorteo"` (el número) y `"ronda"` (la del sello, si la sala la guardó). Con un token suma `"tuya"`: verdadero si es el vigente, falso si otra compu ya tomó la campaña | Sin token. Sin pase y sin token se recuerda 2 segundos en el borde |
 | `GET /v1/sala/<id>/campana/pase` | Devuelve `{"p","hasta"}` para la pantalla | Con el token |
 | `PUT /v1/sala/<id>/campana/fase` | JSON `{"fase","cierraMs"?}`. Cambia la fase y avisa por el socket | Con el token. Hasta 200 bytes. `204` |
 | `PUT /v1/sala/<id>/campana/resultado` | Comprueba el resultado en la red y guarda las ganadoras. `204` | Con el token |
-| `GET /v1/sala/<id>/campana/resultado` | Devuelve `{"sorteo","ganadoras","comprobante"}` | Sin token |
+| `GET /v1/sala/<id>/campana/resultado` | Devuelve `{"sorteo","ganadoras","comprobante"}`, o `404` mientras no hay | Sin token. Se recuerda 2 segundos en el borde |
 | `POST /v1/sala/<id>/campana/quitar` | JSON `{"n","motivo"}`: saca a una persona antes del sello. `204` | Con el token. Hasta 200 bytes |
 | `POST /v1/sala/<id>/campana/avisar` | JSON `{"cuenta"}`: avisa a una ganadora después del sorteo. `204` | Con el token. Hasta 200 bytes |
-| `POST /v1/sala/<id>/campana/alta` | Sesión, datos cifrados, llave y pase. `201`, o `200` si ya estaba | Desde el sitio. Hasta 6.000 bytes |
-| `POST /v1/sala/<id>/campana/yo` | `{"cuenta","llave"}`: fase, total, cierre y si ese celular está anotado | Solo lectura. Hasta 300 bytes |
+| `POST /v1/sala/<id>/campana/alta` | Sesión, datos cifrados, llave y pase. `201`, o `200` si ya estaba. Si ya estaba y la lista todavía acepta altas, el nombre cifrado de su fila pasa al nuevo (con la clave de la compu nueva) y sube su versión | Desde el sitio. Hasta 6.000 bytes |
+| `POST /v1/sala/<id>/campana/yo` | `{"cuenta","llave"}`: fase, total, cierre y si ese celular está anotado. Con la lista sellada o sorteada suma `"sorteo"` y `"ronda"`, como el estado | Solo lectura. Hasta 300 bytes. Con `"c": true` y la marca prendida (ver abajo) deja de ser lectura y pide un origen del sitio |
 
 El permiso del evento se da en dos tiempos en el objeto de cupos: se reserva antes de crear la sala y se confirma, con el id de
 la sala, recién cuando quedó creada. Si la creación falla (`503 {"error":"ocupado"}`, un corte), la reserva se suelta y el mismo
@@ -279,10 +279,14 @@ El orden va de lo más barato a lo más caro y nada se firma con la duda:
    también mira antes de cobrar. Si no, `400 {"error":"forma","campo"}`.
 3. Los topes: los de rechazos por conexión (300) y por sesión (5) de la lista de la sala, 60 pedidos por conexión cada 10 minutos
    y 5 campañas distintas por cuenta y por día (`429` con `Retry-After`: `rechazos`, `cupo-conexion`, `cupo-cuenta`). Repetir un
-   evento que ya se activó hoy no gasta lugar. Viven en el objeto `Cupos` y no guardan la cuenta ni la sesión en claro.
+   evento que ya se activó hoy no gasta lugar. Viven en el objeto `Cupos`: ni la sesión ni la dirección se guardan en claro, y los
+   topes diarios de la activación guardan la cuenta como huella con sal del día.
 4. La sesión, con el mismo código del alta de quien participa (`pollar.ts`): `401 sesion` (cuenta como rechazo), `403 no-google`
    (siempre en modo estricto, aunque `SOLO_GOOGLE` diga `suave`; también cuenta como rechazo), `403 organizadora` si la cuenta de
    la sesión no es la que nombra el archivo, `502 red` si el proveedor no contesta y `503 sin-pollar` si falta `POLLAR_SECRETO`.
+   Estos pasos viven en `verificarQuienOrganiza` (`activar.ts`), que usan también las rutas de Tus campañas.
+4b. El evento tiene una sola dueña (ver Tus campañas, abajo): si ya es de otra cuenta, `409 {"error":"evento-ajeno"}` sin mirar
+   la red.
 5. El pago, en Horizon de la red principal (solo lectura, sin llave, 8 segundos por pedido y 1 MB por respuesta), en la historia
    de la cuenta de la sesión (la de Tinkazo la puede llenar cualquiera con pagos chicos): pagos de USDC de Circle a
    `COMISION_CUENTA`, exitosos, de una transacción con nota `id` igual a la nota del evento (`notaDeLaComision`), que salgan de
@@ -298,7 +302,8 @@ El orden va de lo más barato a lo más caro y nada se firma con la duda:
    `{"cuenta","evento"}`. Es idempotente. Con el tope del día del portero lleno (`429 cupo`), `429 cupo-portero` con
    `Retry-After` hasta que se libera el lugar más viejo. Si no contesta o rechaza de otra forma (también con `409 evento-usado`,
    cuando ese evento ya le dio acceso a otra cuenta), `502 acceso` y no firma.
-9. La firma.
+9. La firma y, antes de contestar, guardar la campaña de la cuenta para Tus campañas (`503 ocupado` si la escritura falla: activar
+   de nuevo es gratis).
 
 La pregunta del panel antes de cobrar es el mismo pedido con el cuerpo vacío (`{}`): no mira la red, ni el proveedor, ni gasta
 un tope. Con todo listo contesta `400 {"error":"forma","campo":"texto"}`. Antes de eso dice `503 apagada` o `503 sin-llave` como
@@ -316,6 +321,101 @@ del sitio) y `PORTERO_URL = "https://pm.tinkazo.app"`. Secretos, con `npx wrangl
 privada Ed25519 de la activación automática, 32 bytes en hexadecimal), `SALA_SECRETO` (el mismo secreto que carga el portero, de 32 caracteres o más) y
 `POLLAR_SECRETO` (ya existe). Quien tenga la llave automática puede firmar campañas: vive solo como secreto de Cloudflare, y lo único que la
 mueve es una comisión pagada.
+
+### Tus campañas: lo que el servidor guarda de cada cuenta
+
+Desde esta versión el objeto `Cupos` guarda, por cuenta de quien organiza y por evento, el texto firmado de su campaña y su
+firma, para que la misma cuenta la encuentre desde cualquier navegador. Es un dato nuevo y se dice por escrito:
+
+- **La cuenta va en claro.** El texto firmado ya la trae escrita, así que una huella no escondería nada. Se guarda hasta 30 días
+  después de la hora del sorteo que dice ese texto, también antes de que exista la sala, y como mucho 50 campañas por cuenta (al
+  guardar la 51 se borra la de sorteo más cercano). No se guarda cuándo se listó ni desde dónde: las direcciones siguen como
+  siempre, con sal de la hora, y la sesión nunca se guarda.
+- **Tablas** (todas con `CREATE ... IF NOT EXISTS` en el constructor de `Cupos`, sobre datos que ya existen): `campanas_de_cuenta`
+  (una fila por cuenta y evento, con índice único por evento: un evento tiene una sola cuenta), `eventos_sellados` (el evento que
+  ya se selló no se reabre ni se reemplaza, tampoco con el token de su sala; vive hasta 30 días después del sorteo del texto
+  firmado, no de la clave `sorteo` de la sala), `tomas` y `cuenta_ritmo`. A `eventos_campana` se le suman, con
+  `ALTER TABLE ... ADD COLUMN` solo si faltan, `duena` (la cuenta que nombra el texto firmado de la sala) y `revisada`.
+- **Quién es la dueña de un evento:** `eventos_campana.duena` y, si todavía no hay sala, la cuenta que activó primero.
+  Activar contesta `409 evento-ajeno` si el evento es de otra cuenta. Al crear una sala con un archivo que nombra a su cuenta,
+  esa cuenta pasa a ser la dueña y su campaña entra a la lista (cubre lo firmado a mano).
+- **El barrido.** Las campañas creadas antes de que hubiera dueña no la tienen: en cada pedido de activar, el Worker mira hasta 10
+  salas así (`Sala.campana()`, el archivo público) y, si la sala vive y su texto nombra una cuenta, la anota como dueña y la
+  agrega a la lista. Si esa sala ya estaba sellada, anota también su evento como sellado: así, aunque se cierre después, el evento
+  no se reabre ni se reemplaza (lo comprobó `prueba-local/almacen-viejo.mjs`). Mientras una sala sin dueña no se revisó, su evento
+  cuenta como ajeno. Una sala muerta sin dueña queda como estaba: nadie la recupera.
+- **Topes de las rutas de la lista** (`verificarCuentaDeCampanas`): sin forma de token no se cuenta nada ni se llama a nadie
+  (`401 sesion`); un grupo de ritmo propio por conexión de 300 pedidos cada 10 minutos que no gasta el de activar y que una sesión
+  ya conocida por el proveedor no suma; los rechazos siguen en las tablas y los topes de siempre; y, ya verificada la cuenta,
+  30 listados y 10 tomas por cuenta cada 10 minutos (`429 cupo-cuenta`).
+- **Pasar la campaña a otra compu (la toma)** es un cambio de token sin carreras, en tres pasos que las rutas de la lista
+  encadenan: `Cupos.prepararToma` (en un solo bloque: vuelve a comprobar la dueña, respeta una pausa de 60 segundos entre dos tomas
+  de la misma campaña y anota una generación nueva con la huella del token nuevo), `Sala.cambiarToken` (sin esperas entre leer y
+  escribir: solo la cuenta que nombra el texto firmado de la sala, no una sala sellada, y solo con una generación mayor que la
+  última; cierra con `4001 tomada` los sockets presentados y dice la fase y cuándo vence la sala) y `Cupos.confirmarToma` (guarda la
+  huella en el evento solo si esa generación sigue siendo la última). Con dos tomas a la vez, la sala y el evento terminan con la
+  misma huella, la de la generación mayor. Para que un pedido que esperaba con el token viejo no pase después de una toma, la sala
+  lee la huella DESPUÉS de esperar el SHA-256 y compara en el mismo tramo sin esperas. Desde la toma el token viejo no vale en
+  ninguna ruta (pase, fase, quitar, avisar, nombres, equipos, sellada, resultado, cierre ni el socket).
+
+### Listar las campañas de una cuenta (`POST /v1/mis-campanas`)
+
+Es lo que lee Tus campañas para mostrarle a quien organiza lo que activó o abrió desde otro navegador. Atiende solo con la variable `TUS_CAMPANAS` en `"1"`: si no, contesta `503 {"error":"apagada"}`. Cambiarla es publicar otra vez, con el mismo corte de sockets, así que no es un botón para un evento en curso. **Toda respuesta lleva los permisos de origen**, también los rechazos y los `404` propios de la ruta: sin ellos el navegador los ve como una falla de red y no puede leer el motivo.
+
+Pedido: `{"sesion": "<token de la sesión de Google>"}`, de hasta 6.000 bytes. La cuenta sale siempre del proveedor de cuentas, nunca del pedido, y solo entra quien el proveedor dice que entró por Google. Antes de llamar a nadie, una sesión sin forma de token es `401 sesion` y no gasta ningún cupo.
+
+Respuesta `200`:
+
+```json
+{ "campanas": [ { "evento": "feria-sc-28nov-ab12", "empresa": "Nombre de la empresa", "zona": "America/La_Paz",
+                  "abreMs": 1764340200000, "cierraMs": 1764351000000, "sorteoMs": 1764352800000,
+                  "estado": "viva", "fase": "abierta", "total": 37 } ] }
+```
+
+El `estado` se calcula en este orden y la sala viva siempre gana:
+
+1. `viva`: el evento tiene una sala que vive y su organizadora es la cuenta de la sesión. Trae su `fase` y `total` (cuántas personas hay), también en `sorteada`.
+2. `terminada`: el evento se selló, o no hay sala viva y el cierre ya pasó.
+3. `activada`: no hay sala viva y el cierre está por delante.
+
+Una sala viva que nombra a otra cuenta, o a ninguna, no sale en la lista. Una fila cuyo evento tiene otra dueña tampoco. Primero van las `viva`, después las `activada` por hora de apertura y al final las `terminada`, las más nuevas primero, hasta 20. La respuesta **nunca** trae el texto firmado, la firma, el id de la sala ni su token. Una cuenta sin campañas y una que nunca existió reciben lo mismo: `{"campanas":[]}`. Antes de leer, el Worker mira hasta 10 salas anteriores a la dueña (el barrido), así la campaña creada antes de esta versión aparece sin que su panel vuelva a consultar.
+
+| Estado | Cuerpo | Cuándo |
+| --- | --- | --- |
+| `400` | `{"error":"forma","campo":"cuerpo"\|"sesion"}` | Sin JSON o sin `sesion` de texto |
+| `401` | `{"error":"sesion"}` | Sin forma de token (no se cuenta), o el proveedor no la reconoce (se cuenta un rechazo) |
+| `403` | `{"error":"origen"}` o `{"error":"no-google"}` | Fuera del sitio, o no entró por Google |
+| `409` | `{"error":"sin-billetera"}` | La sesión no tiene cuenta |
+| `429` | `{"error":"rechazos"\|"cupo-conexion"\|"cupo-cuenta"}` y `Retry-After` | Topes de la conexión o de la cuenta (30 listados cada 10 minutos) |
+| `502` | `{"error":"red"}` | El proveedor no contesta |
+| `503` | `{"error":"apagada"\|"sin-pollar"\|"ocupado"}` | Interruptor apagado, sin proveedor, o una falla inesperada del servidor |
+
+### Usar una campaña en esta compu (`POST /v1/campana/recuperar`)
+
+Con el mismo interruptor, los mismos permisos de origen y la misma verificación que la lista (el tope por cuenta es de 10 tomas cada 10 minutos). Pedido: `{"sesion", "evento"}`, con el evento con la forma de siempre (`400 {"error":"forma","campo":"evento"}` si no). Busca la campaña de la cuenta con ese evento y la mira por dentro:
+
+| La campaña está | Respuesta |
+| --- | --- |
+| Sin sala, o con una reserva vieja que nunca se confirmó | `200 {"estado":"activada","texto","firma"}`, o `409 {"error":"terminada"}` si el evento se selló o el cierre pasó. El sitio crea la sala por el camino de siempre |
+| Con una reserva reciente (se está creando la sala) | `409 {"error":"ocupado"}` |
+| Con una sala viva | La toma: `200 {"estado":"viva","id","token","vence","fase"}`. El token anterior deja de valer |
+| Con una sala viva en `sellada` | `409 {"error":"sellada"}`. Una sala sellada no se toma: su sorteo se hace en la compu donde se selló |
+| Con una sala muerta, el cierre por delante y la dueña igual | `200 {"estado":"activada","texto","firma","anterior"}`: `anterior` es el token con el que `POST /v1/campana` reemplaza esa sala sin pedir el viejo |
+| Con una sala muerta y el evento sellado o el cierre pasado | `409 {"error":"terminada"}` |
+| Con una sala muerta cuya dueña no es la cuenta (o no dejó dueña) | `404 {"error":"no-existe"}` |
+
+**`404 no-existe`** es la misma respuesta para una campaña de otra cuenta, un evento que no existe y uno que ya venció: no se puede usar para averiguar nada. Un evento sellado no se reabre por ningún camino, tampoco con el token de su sala vieja. Además: `429 {"error":"pausa"}` con `Retry-After` si pasaron menos de 60 segundos desde la toma anterior de esa campaña, y `409 {"error":"ocupado"}` si la toma perdió contra otra.
+
+**La toma, sin carreras**, en tres pasos: `Cupos.prepararToma` (dueña, pausa, generación), `Sala.cambiarToken` (sin esperas entre leer y escribir) y `Cupos.confirmarToma`. Si la sala murió en el medio, se sigue por la rama de la sala muerta. Si la sala dice que no existe pero sigue viva, nombra a otra cuenta: `404`, y el token no cambia. Repetir el pedido es inofensivo: hace otro token y el anterior también queda sin efecto, pasada la pausa. La clave que descifra los nombres nunca pasa por el servidor: quien toma la campaña inventa una nueva en su navegador.
+
+**Aviso por correo de cada toma.** Con una sala viva y una toma buena, el Worker le escribe a la cuenta de la sesión (sin que la respuesta lo espere): "Tu campaña de la empresa se abrió con tu cuenta en otra compu a las 11:00", con la hora en la zona de la campaña. Como mucho uno por campaña cada 10 minutos. Es la defensa de quien perdió su sesión: quien robe la sesión puede tomar la campaña, pero no sellar ni pagar. Pide `CORREO_TOMA = "1"` además de todo lo que pide el correo a quien gana, y **va prendido en `wrangler.toml` junto con `TUS_CAMPANAS`: las dos rutas y este aviso se publican en la misma publicación**. Sin el aviso, quien robe una sesión de Google puede tomar la campaña de una empresa (cerrar la lista, quitar gente, borrar la sala) sin que la dueña se entere. Si todavía no se aprobó mandar ese correo, se publican las dos variables en `"0"` y se prenden juntas después, para no pagar dos cortes de sockets. No guarda la dirección ni el nombre, y el registro lleva solo un código fijo (`correo-toma`).
+
+### Lo público del momento del resultado
+
+- **El número del sorteo y la ronda** salen en el estado y en la consulta propia solo con la lista `sellada` o `sorteada`. Antes del sello la clave `sorteo` de la sala guarda la hora del sorteo, no el número, y no se manda en ninguna otra fase. La ronda del sello se escribe junto con el sello (clave `ronda_sello`). Una sala sellada antes de esta versión trae el número y no la ronda: el celular hace lo de siempre.
+- **`tuya`** solo llega si el pedido trajo un token. Es lo que le dice a una compu, ya en su primer pedido, que otra tomó la campaña.
+- **La caché del borde** (`cache.ts`): `GET campana/estado` sin pase y sin token, y `GET campana/resultado`, se recuerdan 2 segundos con la caché de Cloudflare de ese mismo dominio. Se guarda solo el estado y el cuerpo, nunca las cabeceras de origen (cada pedido recibe las suyas), solo 200 y 404, y con el camino como clave: un parámetro inventado no la esquiva. El `404 sin-resultado` (todavía no hay resultado) no se guarda nunca, ni en el borde ni en el navegador (`Cache-Control: no-store`): es lo que cambia justo cuando quien organiza lo lee. Un pedido con pase o con token ni se sirve de ahí ni se guarda. Sin la caché (Node, o un entorno que no la tiene) todo sigue como siempre. La respuesta puede atrasar dos segundos un cambio de fase, nunca adelantarlo.
+- **El reingreso** de quien ya estaba anotada reemplaza el nombre cifrado de su fila por el que trae el alta nuevo, y le avisa a la pantalla. Es lo que le devuelve su nombre a quien vuelve a escanear el QR cuando la campaña pasó a otra compu y su clave es otra. Mientras la fase no acepte altas solo cambia la llave del celular, como antes. La clave que descifra los nombres nunca llega al servidor.
 
 ### El aviso por correo a quien gana
 
@@ -347,6 +447,16 @@ Cómo funciona:
   y no vuelven en ninguna respuesta. El registro lleva solo códigos fijos (`correo-busqueda`, `correo-envio`, `correo-fin`).
 - Sale en el idioma de la fila (español salvo que diga inglés) con el nombre y el premio de la campaña. El nombre de la empresa,
   el de la persona y el premio van escapados en el HTML y sin saltos de línea en el asunto.
+- **Dos versiones del pedido y la ayuda.** La **versión 1** es cierta siempre: la cuenta reconoce el navegador y no el aparato, así
+  que pide abrir el enlace en el mismo celular o compu, y en el mismo navegador, donde la persona se anotó, y ofrece responder el
+  correo si no puede. La **versión 2** dice que se abre desde cualquier aparato y que otro aparato pide un código al correo: solo es
+  cierta si la cuenta quedó protegida y el correo es el de la sesión. La variable `CORREO_VERSION` elige la de todas: solo el valor
+  exacto `"2"` es la 2, cualquier otro es la 1. **No se prende** hasta que anotarse deje la cuenta protegida para todas las personas
+  y no quede ninguna campaña viva con gente anotada antes de ese cambio, porque el servidor no sabe quién protegió su cuenta.
+- **La marca de correo confirmado** (`CORREO_MARCA`, nace en `"0"`): el celular puede sumar `"c": true` a la consulta propia (`campana/yo`)
+  cuando su correo de la sesión está confirmado. Con la marca prendida, la sala la acepta solo con la llave del propio celular y un
+  origen del sitio, escribe una sola vez por cuenta (`confirmo:<cuenta>`) y a esa cuenta le sale la versión 2 aunque la general sea la 1.
+  Apagada, se ignora: ni da error ni escribe. Si alguien la manda sin ser verdad, solo cambia el texto de su propio correo.
 
 Para prenderlo:
 
@@ -409,6 +519,32 @@ La llave de prueba se usa únicamente cuando también está puesta `VIDA_PRUEBA_
 `CAMPANA_LLAVE_PRUEBA`, el bloque 6c se saltea y lo avisa. Contra `s.tinkazo.app` no corre ni siquiera con la variable puesta:
 allá solo vale la llave pública de verdad.
 
+### Tus campañas y la toma, en el motor real
+
+Las rutas de Tus campañas piden una sesión que el proveedor de cuentas verifica por la red, y el sello se lee de la red de Stellar.
+Para probarlas sin salir de la máquina, `prueba-local/` levanta el Worker con `wrangler dev` y le pone una puerta de entrada de
+prueba (`entrada.mjs`): reexporta los mismos objetos y el mismo `fetch`, y solo imita lo de afuera. El proveedor contesta las
+sesiones que la prueba registra, el RPC contesta el sello que la prueba arma, y cualquier otra salida a internet se rechaza y se
+anota (la prueba comprueba que no salió nada). La configuración sale de `wrangler.toml` sin la cuenta ni el dominio. Los secretos
+son inventados en cada corrida y las llaves de firma salen al azar. Nada de esto se despliega: el despliegue usa `src/index.ts`.
+
+```bash
+node workers/sala/prueba-local/correr.mjs              # lo de Tus campañas: unos 3 minutos
+node workers/sala/prueba-local/correr.mjs --completo   # la prueba de siempre y además lo de Tus campañas: unos 6 minutos
+node workers/sala/prueba-local/almacen-viejo.mjs --desde <rama o commit>   # el código de ahora sobre un almacén hecho por esa versión
+```
+
+`correr.mjs` cubre la toma, el cierre 4001 de la pantalla vieja (y que una conexión sin presentar no se toca), el token viejo en
+cada ruta, el `vence`, la pausa de 60 segundos, los topes por cuenta, la sellada que no se toma, el sellado que no se reemplaza,
+la sala muerta que se recupera con `anterior`, la sala sin organizadora, la caché de 2 segundos y dos carreras (toma contra toma
+y toma contra sello). `almacen-viejo.mjs` saca con `git archive` el código de la versión que se le pide con `--desde` (la que
+hay publicada), crea campañas con él, las deja en disco y arranca el código de ahora sobre ese mismo almacén: comprueba el `ALTER TABLE` y el `PRAGMA table_info` del motor real, el barrido, la toma sobre filas viejas, que una
+sellada de antes no se reabre y que un segundo arranque no repite el `ALTER`.
+
+Hace falta un wrangler a mano. Se busca en `WRANGLER_JS`, en `node_modules` del repositorio y, por último, en la memoria de npx de
+la máquina (se corre con `node`, sin instalar nada global). Si no hay, `npx wrangler@4 --version` una vez lo deja en esa memoria.
+El almacén y las salidas quedan en `.wrangler/prueba-local/`, que git ignora.
+
 ## Limitaciones conocidas de esta versión
 
 - En una ronda de ejemplo, el cartel final dice «Salió», pero las tarjetas de los juegos y parte del relato todavía dicen «Gana». Es solo presentación; no cambia nada de lo que se elige.
@@ -428,5 +564,16 @@ npx wrangler@4 deploy
 # 2. Probarlo contra producción (crea dos salas y las cierra o vencen solas):
 node probar.mjs https://s.tinkazo.app
 ```
+
+### Publicar Tus campañas (la sala con las rutas nuevas)
+
+Publicar necesita la palabra expresa del dueño. Ventana: sin ninguna campaña en `abierta`, `cerrada` o `sellada`, y antes del próximo evento.
+
+1. **El sitio primero.** Contra el servidor de hoy, el sitio nuevo se porta bien: una vez por pestaña le pregunta a la sala si tiene Tus campañas (`POST /v1/mis-campanas` con `{}` y exige `400 forma` con permisos de origen) y, si no la tiene, no muestra las líneas, los enlaces ni los botones de Tus campañas. Una pestaña abierta antes del sitio nuevo necesita recargar.
+2. **Las variables de `wrangler.toml`, todas a la vez.** `TUS_CAMPANAS = "1"` y `CORREO_TOMA = "1"` van juntas (ver arriba). `CORREO_VERSION = "1"` (el correo a quien gana, versión siempre cierta), `CORREO_MARCA = "0"` (la marca de correo confirmado, apagada) y `CORREO_GANADORAS = "1"`. Ningún secreto nuevo. Esta rama trae además la caché de 2 segundos de `cache.ts`, que no tiene variable: se publica con el código.
+3. **Antes de publicar, la privacidad.** La página de términos (`terminos.html`, en español y en inglés) y `docs/architecture.md` (D-26) dicen que el servidor guarda la cuenta de quien organiza junto con el texto firmado de su campaña hasta 30 días después del sorteo, también antes de que exista la sala. Salen con el sitio, que va primero. No se publica el servidor si esos textos no están en producción.
+4. **Sin gastar nada.** `pnpm test`; `node workers/sala/prueba-local/correr.mjs --completo`; `node workers/sala/prueba-local/almacen-viejo.mjs --desde <lo publicado>`; y `npx wrangler@4 deploy --dry-run`.
+5. **Publicar y comprobar.** `npx wrangler@4 deploy` desde esta carpeta reinicia los objetos y corta los sockets de las pantallas, que reconectan o sondean. Después: el estado de la campaña de hoy contesta como antes; `POST /v1/mis-campanas` con `{}` da `400 forma` y con una sesión sin forma de token da `401` sin llamar a nadie; una sesión con forma de token y falsa da `401 sesion` (prueba que `Cupos` arrancó con las tablas nuevas); `POST /v1/activar` con `{}` da `400 forma`. La caché: dos `GET campana/estado` seguidos sin pase ni token (el segundo trae `Cache-Control: public, max-age=2`), que con token no se guarde, y que `GET campana/resultado` sin resultado conteste `404` con `no-store` y apenas haya resultado conteste `200`. Una sola prueba real con la sesión del dueño: listar.
+6. **Volver atrás** (`npx wrangler@4 rollback`) deja huecos, y se dicen: el código viejo ignora `eventos_sellados`, así que un evento ya sellado se puede reabrir con el token de su sala mientras tanto; lo que se tomó no se devuelve (la compu que perdió su token por una toma no lo recupera, y un token entregado sigue valiendo porque la huella quedó escrita); y una pestaña que ya preguntó que la sala tenía Tus campañas ofrece Usar en esta compu contra una ruta que ya no existe hasta que recargue (la falla se dice en la misma tarjeta, no se pierde nada). Apagar con `TUS_CAMPANAS = "0"` también es publicar otra vez, con el mismo corte de sockets: no se hace con una campaña abierta.
 
 Corre en el plan gratis de Workers. Cada dirección puede crear pocas salas por hora (`Cupos`), y si alguna vez hiciera falta cuidar el cupo diario de la cuenta, la regla de límite de Cloudflare delante de `s.tinkazo.app` es lo que sirve.

@@ -4,7 +4,7 @@
  * la página (`arrancarElPuente`), con la bandera de campañas prendida, y no depende de que el panel se monte: un aviso
  * pendiente sale igual después de una recarga o de volver de la ventana de Google sin `?campana`.
  */
-import { type EstadoDeAltaPremio, entradaDelEvento, guardarSorteoDeCampana } from "../campana/en-curso";
+import { type EstadoDeAltaPremio, cuentaConectada, entradaDelEvento, guardarSorteoDeCampana } from "../campana/en-curso";
 import { registrarAcciones, ponerPaso } from "../campana/puente";
 import { nombreDelEquipo } from "../equipos/etiquetas";
 import { sinGrabar } from "../ensayo-modo";
@@ -13,13 +13,16 @@ import { bytesToHex } from "../protocol/quicknet";
 import { horaDeLaRonda, relojComprobado } from "../reloj-de-la-ronda";
 import {
   type FaseDeSala,
+  type MemoriaDeOrg,
   type SalaDeCampana,
   avisarEnSala,
   estadoConToken,
   guardarOrg,
+  completarLaCuentaDeLaMemoria,
   guardarResultadoEnSala,
   leerOrg,
   ponerSellada,
+  puedeMoverLaSala,
   resultadoDeSala,
 } from "../sala/campana-org";
 import { app } from "../state";
@@ -62,8 +65,19 @@ function ahoraDeLaRonda(): number {
   return Math.max(propia, horaDeLaSala.ms + (performance.now() - horaDeLaSala.marca));
 }
 
+/**
+ * La memoria de la sala solo si esta cuenta la puede mover: la que la organiza, o la campaña no nombra a nadie. Sin la cuenta
+ * dueña conectada no sale ningún aviso de sellada ni de resultado con el token guardado, y una memoria de antes (sin cuenta
+ * guardada) espera a que el panel la complete con la sesión.
+ */
+function memoriaPropia(): MemoriaDeOrg | null {
+  const conectada = cuentaConectada();
+  const memoria = leerOrg(almacen(), Date.now(), network.name, conectada);
+  return memoria && puedeMoverLaSala(memoria.cuenta, conectada) ? memoria : null;
+}
+
 function salaGuardada(): SalaDeCampana | null {
-  return leerOrg(almacen(), Date.now(), network.name)?.sala ?? null;
+  return memoriaPropia()?.sala ?? null;
 }
 
 const cuentaCorta = (cuenta: string): string => `${cuenta.slice(0, 4)}…${cuenta.slice(-4)}`;
@@ -119,9 +133,9 @@ let depsUnicas: DepsDelResultado | null = null;
 export function depsDelResultadoReales(): DepsDelResultado {
   depsUnicas ??= {
     sala: salaGuardada,
-    faseDeLaSala: () => leerOrg(almacen(), Date.now(), network.name)?.fase ?? null,
+    faseDeLaSala: () => memoriaPropia()?.fase ?? null,
     fijarFase: (fase) => {
-      const memoria = leerOrg(almacen(), Date.now(), network.name);
+      const memoria = memoriaPropia();
       if (memoria && ORDEN_DE_FASES.indexOf(memoria.fase) < ORDEN_DE_FASES.indexOf(fase)) guardarOrg(almacen(), { ...memoria, fase });
     },
     entrada: entradaActual,
@@ -153,6 +167,12 @@ export function depsDelResultadoReales(): DepsDelResultado {
     sePuedeSoltar: () => app.frozen !== null && app.drawn === null && !sorteoEnMarcha(app.frozen) && !document.fullscreenElement,
     soltarElSello: soltarParaSellarDeNuevo,
     nombreDe: (cuenta) => nombreDelEquipo(cuenta) ?? cuentaCorta(cuenta),
+    sinPoderMoverLaSala: () => {
+      const conectada = cuentaConectada();
+      const memoria = leerOrg(almacen(), Date.now(), network.name, conectada);
+      return memoria !== null && !puedeMoverLaSala(memoria.cuenta, conectada);
+    },
+    completarLaCuenta: () => completarLaCuentaDeLaMemoria(almacen(), Date.now(), network.name, cuentaConectada()),
     otraBilletera: () => sesionDeGoogle() === null,
     // Tras una recarga la sesión se retoma aparte (`wallet-ui.ts`): sin billetera activa todavía no se sabe cuál es.
     billeteraPendiente: () => activeWallet() === null,
@@ -192,6 +212,8 @@ export function arrancarElPuente(): void {
     },
   });
   document.addEventListener("tinkazo:comprobante", () => altasReales?.alGuardarElSorteo());
+  // Sin la cuenta dueña conectada no se mueve nada: cuando llega la sesión se retoma lo que quedó esperando.
+  document.addEventListener("tinkazo:sesion", () => alRetomarReal());
   retomarAlArrancar(d);
   void revisarElSelloPorConfirmar();
 }
@@ -223,7 +245,7 @@ async function revisarElSelloPorConfirmar(): Promise<void> {
     const paso = pasoDelSelloPorConfirmar({
       huellaDelCuadro: bytesToHex(listHash(parseNames())),
       entrada: e,
-      fase: leerOrg(almacen(), Date.now(), network.name)?.fase ?? null,
+      fase: memoriaPropia()?.fase ?? null,
       intento: pendiente ? { round: pendiente.intento.round } : null,
       ahora: ahoraDeLaRonda(),
     });

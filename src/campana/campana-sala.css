@@ -14,9 +14,11 @@ body:has(#cpo-panel) :is(#origenes, #pegar-ayuda, #ta, #lista-cuenta, #lista-cue
 body:has(#cpo-panel) #btn-otro-nombre { display: none !important; }
 /* Elegir, vista previa, inscripción abierta y confirmar: lo único que hay para tocar es el panel. Sin el editor de la lista debajo
    (stand, premio y CSV, logo, cuántos ganan, sellar) ni el título Participantes encima, que competían con el botón principal y
-   rodeaban el cobro de texto. Con la inscripción abierta el cuadro está vacío: un Sellar la lista ahí no haría nada. */
+   rodeaban el cobro de texto. Con la inscripción abierta el cuadro está vacío: un Sellar la lista ahí no haría nada. Lo mismo en
+   Tus campañas, en la pregunta de si se usa la campaña en esta compu y en el aviso de que la campaña sigue en otra compu. */
 body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="abierta"], [data-vista="confirmar"],
-    [data-vista="cargando"], [data-vista="sin-red"], [data-vista="olvidar"], [data-vista="otra-pestana"]
+    [data-vista="cargando"], [data-vista="sin-red"], [data-vista="olvidar"], [data-vista="otra-pestana"],
+    [data-vista="tus"], [data-vista="seguir"], [data-vista="tomada"]
   )) :is(
     #btn-stand, #mas-opciones, #logo-fila, #ganadores-control, .sellar-acciones, #sellar-modo, #freeze-hint, #free-rule,
     #sellar-sin-cuenta, #sec-participants > .head
@@ -35,6 +37,13 @@ body:has(#cpo-panel:is([data-vista="abierta"], [data-vista="confirmar"],
    el recuadro de primera vez, el selector de modo ni la ayuda de cómo se usa, que le ofrecían a quien organiza otros tres caminos.
    La puerta de la cuenta se queda: es lo que deja entrar para abrir la inscripción. */
 body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"])) :is(
+    #btn-ensayo, #btn-interactivos, #primera-vez, #turnos-opcion, #como-panel
+  ) {
+  display: none !important;
+}
+/* Lo mismo en Tus campañas, en la pregunta de si se usa la campaña en esta compu y en el aviso de que sigue en otra compu: el panel
+   tiene su acción principal. La puerta de la cuenta también se queda: es la cuenta la que deja usar la campaña acá. */
+body:has(#cpo-panel:is([data-vista="tus"], [data-vista="seguir"], [data-vista="tomada"])) :is(
     #btn-ensayo, #btn-interactivos, #primera-vez, #turnos-opcion, #como-panel
   ) {
   display: none !important;
@@ -126,7 +135,7 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
   .cpo-panel { padding: 0; border: 0; box-shadow: none; background: none; }
   /* Elegir, vista previa y confirmar: lo esencial arriba y el botón principal pegado abajo, al alcance del pulgar. El panel no
      fija su alto: arranca donde lo deja la cabecera, y un alto contado desde otro lugar lo empujaba fuera de la pantalla. */
-  .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"]) > .cpo-acciones {
+  .cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"], [data-vista="tus"], [data-vista="seguir"]) > .cpo-acciones {
     position: sticky;
     bottom: 0;
     z-index: 2;
@@ -135,12 +144,12 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
     background: var(--paper);
   }
   /* En esas tres pantallas la tarjeta Participantes no encierra al panel: sin borde ni relleno de más, a 16 px del borde. */
-  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) #sec-participants {
+  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"], [data-vista="tus"], [data-vista="seguir"])) #sec-participants {
     border: 0;
     box-shadow: none;
     background: none;
   }
-  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"])) #sec-participants > .body {
+  body:has(#cpo-panel:is([data-vista="elegir"], [data-vista="previa"], [data-vista="confirmar"], [data-vista="tus"], [data-vista="seguir"])) #sec-participants > .body {
     padding-left: 0;
     padding-right: 0;
   }
@@ -227,6 +236,28 @@ body:has(#cpo-panel:is([data-vista="sellada"], [data-vista="sorteada"])) #btn-ag
 .cpo-cm-et { flex: 0 0 auto; font-weight: 800; }
 .cpo-cm-dato { flex: 1 1 0; min-width: 0; font-family: ui-monospace, monospace; font-size: 15px; overflow-wrap: anywhere; }
 .cpo-comision img { display: block; width: 200px; max-width: 100%; height: auto; margin: 8px auto 0; background: #fff; border: var(--bw) solid var(--ink); image-rendering: pixelated; }
+
+/* Tus campañas: cada fila lleva el nombre de la empresa, su línea y su botón, y la tarjeta ocupa la pantalla sola. */
+.cpo-tus { margin: 0 0 12px; }
+.cpo-tus-fila { padding: 12px 0; border-bottom: 2px solid var(--ink); }
+.cpo-tus-fila:first-child { padding-top: 0; }
+/* Con más de una campaña que se puede usar, la del botón principal de la barra de abajo lleva una marca al costado. */
+.cpo-tus-fila:not(:only-of-type).cpo-tus-primera { border-left: 6px solid var(--magenta); padding-left: 10px; }
+.cpo-tus-nombre { margin: 0 0 2px; font-size: 22px; font-weight: 900; line-height: 1.15; overflow-wrap: anywhere; }
+.cpo-tus-fila .cpo-linea { margin-bottom: 8px; }
+.cpo-tus-acc { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.cpo-tus-acc:empty { display: none; }
+.cpo-tus-acc .primary { flex: 1 1 100%; }
+.cpo-tus-acc .ghost { flex: 1 1 100%; }
+.cpo-tus-acc .enlace { min-height: 44px; display: inline-flex; align-items: center; }
+/* Hacer otro sorteo, cuando la principal de la barra de abajo es usar una campaña: el enlace del final de la lista. */
+.cpo-tus-otro { padding: 12px 0 0; }
+.cpo-tus-otro .enlace, .cpo-tus-buscar .enlace { min-height: 44px; display: inline-flex; align-items: center; }
+/* Ver tus campañas en la vista de siempre: un renglón de la página, no de la barra de abajo. */
+.cpo-tus-buscar { margin: 0 0 12px; }
+.cpo-tus-buscar[hidden] { display: none; }
+/* En la vista de siempre el aviso de lo que pasó va dentro de la barra, arriba del botón: es lo único que se ve en una pantalla chica. */
+.cpo-acciones > .cpo-aviso { flex: 1 1 100%; margin: 0; }
 
 /* La lista: cada fila se toca con el dedo, 44 px como mínimo, y lo mismo los botones de los motivos. */
 .cpo-ul { list-style: none; margin: 0; padding: 0; }

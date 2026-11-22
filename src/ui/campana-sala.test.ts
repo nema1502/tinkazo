@@ -779,7 +779,7 @@ describe("cerrar la lista", () => {
     await confirmarCierre(m, p, "Cerrar con 2 personas");
     await vi.waitFor(() => expect(m.cerradas).toHaveLength(1));
     expect(m.fases[m.fases.length - 1]).toEqual(["cerrada", null]);
-    expect(leerOrg(m.almacen, AHORA, "testnet")?.fase).toBe("cerrada");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("cerrada");
     expect(m.cerradas[0]?.filas.map((f) => [f.n, f.nombre])).toEqual([[2, "Nora"], [1, "Ana"]]);
     expect(texto(p, "#cpo-h")).toBe("Lista cerrada");
     expect(principales(p)).toHaveLength(0);
@@ -907,7 +907,8 @@ describe("retomar después de recargar", () => {
 
   it("con la sala cerrada abre cerrada, con Pasar la lista al sorteo como única acción principal", async () => {
     const m = mundo();
-    guardarOrg(m.almacen, { sala: SALA, fase: "cerrada" });
+    // Una sala cuya campaña no nombra a nadie queda a cargo de quien tenga el token, también sin sesión.
+    guardarOrg(m.almacen, { sala: SALA, cuenta: null, fase: "cerrada" });
     m.sala.fase = "cerrada";
     m.paginas.push([await equipoDe(m, 1, "Ana"), await equipoDe(m, 2, "Nora")]);
     const p = nuevoPanel(m);
@@ -1005,7 +1006,7 @@ describe("retomar después de recargar", () => {
     m.escucha().alCerrada?.();
     await suelta();
     expect(vistaDe(p)).toBe("abierta");
-    expect(leerOrg(m.almacen, AHORA, "testnet")?.fase).toBe("abierta");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("abierta");
     expect(m.escuchas).toBe(2);
   });
 
@@ -1018,7 +1019,7 @@ describe("retomar después de recargar", () => {
     await vi.waitFor(() => expect(vistaDe(p)).toBe("sin-red"));
     expect(texto(p, "#cpo-h")).toBe("Sin conexión");
     expect(principales(p).map((b) => b.textContent)).toEqual(["Probar de nuevo"]);
-    expect(leerOrg(m.almacen, AHORA, "testnet")).not.toBeNull();
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)).not.toBeNull();
     boton(p, "Probar de nuevo").click();
     await vi.waitFor(() => expect(vistaDe(p)).toBe("abierta"));
   });
@@ -1055,8 +1056,8 @@ describe("una campaña de cada modo", () => {
     expect(m.almacen.getItem(CLAVE_ORG)).toBe(antes);
     expect(principales(p).map((b) => b.textContent)).toEqual(["Elegir el archivo"]);
     await abrirInscripcion(m, p);
-    expect(leerOrg(m.almacen, AHORA, "mainnet")?.sala.red).toBe("mainnet");
-    expect(leerOrg(m.almacen, AHORA, "testnet")?.fase).toBe("abierta");
+    expect(leerOrg(m.almacen, AHORA, "mainnet", null)?.sala.red).toBe("mainnet");
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)?.fase).toBe("abierta");
   });
 
   it("con el sorteo ya hecho se puede elegir otro archivo y se abre otra sala", async () => {
@@ -1070,7 +1071,7 @@ describe("una campaña de cada modo", () => {
     boton(p, "Elegir otro archivo").click();
     expect(vistaDe(p)).toBe("elegir");
     expect(m.borradas).toBe(0);
-    expect(leerOrg(m.almacen, AHORA, "testnet")).toBeNull();
+    expect(leerOrg(m.almacen, AHORA, "testnet", null)).toBeNull();
     m.sala.fase = "lista";
     await abrirInscripcion(m, p);
     expect(m.creadas).toHaveLength(1);

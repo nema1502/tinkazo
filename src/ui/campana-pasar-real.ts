@@ -109,6 +109,18 @@ export function alReabrirReal(): void {
   soltarLaListaDelCuadro();
 }
 
+/**
+ * Entró otra cuenta y la campaña salió de la vista: se corta el paso en curso y, si la lista que había en el cuadro era la que
+ * esta campaña pasó, se vacía, así la otra cuenta no ve los nombres de una lista que no es suya. Lo guardado de la campaña (la
+ * sala, su token y lo recordado del sorteo) no se toca: al volver la cuenta dueña se retoma.
+ */
+export function alApartarReal(s: SalaDeCampana): void {
+  pasoReal().cancelar();
+  fijarCantidadDeLaCampana(false);
+  const e = entradaDelEvento(s.red, s.evento, undefined, null);
+  if (e !== null && e.huella !== "" && e.huella === huellaDe(parseNames()) && !listaBloqueada()) setList("");
+}
+
 /** Se dejó la campaña: el cuadro es el de siempre y la cantidad de ganadoras se puede cambiar. */
 export function alOlvidarReal(): void {
   pasoReal().cancelar();

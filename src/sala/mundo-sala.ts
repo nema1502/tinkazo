@@ -33,10 +33,35 @@ export interface ProveedorFalso {
 export const APP_DE_PRUEBA = "app_mainnet_inventada";
 const SECRETO_DE_PRUEBA = "sec_mainnet_prueba_inventada_0000000000";
 
+/** Un WebSocket de mentira: guarda lo que se le adjunta, lo que se le manda y cómo lo cerraron. */
+export interface SocketFalso {
+  cierres: { codigo: number | undefined; razon: string | undefined }[];
+  mensajes: string[];
+  serializeAttachment(valor: unknown): void;
+  deserializeAttachment(): unknown;
+  close(codigo?: number, razon?: string): void;
+  send(texto: string): void;
+}
+
+/** Un socket que ya se presentó con el token (`presentado`) o que todavía no. */
+export function socketFalso(presentado: boolean): SocketFalso {
+  let adjunto: unknown = { ok: presentado, desde: 0 };
+  const socket: SocketFalso = {
+    cierres: [],
+    mensajes: [],
+    serializeAttachment: (valor) => void (adjunto = valor),
+    deserializeAttachment: () => adjunto,
+    close: (codigo, razon) => void socket.cierres.push({ codigo, razon }),
+    send: (texto) => void socket.mensajes.push(texto),
+  };
+  return socket;
+}
+
 /** El estado de un objeto persistente: un SQLite en memoria con la misma forma de uso que el de Cloudflare. */
 function estadoFalso() {
   let db = new DatabaseSync(":memory:");
   let alarma: number | null = null;
+  const sockets: SocketFalso[] = [];
   return {
     storage: {
       sql: {
@@ -54,6 +79,9 @@ function estadoFalso() {
       async setAlarm(ms: number) {
         alarma = ms;
       },
+      async getAlarm() {
+        return alarma;
+      },
       async deleteAlarm() {
         alarma = null;
       },
@@ -63,7 +91,8 @@ function estadoFalso() {
       },
     },
     setWebSocketAutoResponse() {},
-    getWebSockets: () => [] as unknown[],
+    getWebSockets: () => sockets,
+    sockets,
     alarma: () => alarma,
   };
 }
@@ -71,6 +100,13 @@ function estadoFalso() {
 /** Lo que las pruebas le piden a un objeto de sala, como llamadas y respuestas. */
 export interface ObjetoDeSala {
   viva(): Promise<boolean>;
+  paseDeLaPantalla(token: string): Promise<{ ok: boolean; motivo?: string }>;
+  cambiarToken(
+    cuenta: string,
+    huellaNueva: string,
+    gen: number,
+  ): Promise<{ ok: true; fase: string; vence: number } | { ok: false; motivo: string }>;
+  sellarCampana(token: string, sorteo: string, sello: unknown): Promise<{ ok: boolean; evento?: string | null; sorteoMs?: number | null; motivo?: string }>;
   /** Lo que corre cuando vence la vida de la sala: borra todo. */
   alarm(): Promise<void>;
 }
@@ -78,6 +114,16 @@ export interface ObjetoDeSala {
 /** Lo que las pruebas le piden al objeto de cupos. */
 export interface ObjetoDeCupos {
   reservarCampana(evento: string, reemplazo: { sala: string; huella: string } | null): Promise<unknown>;
+  duenaDelEvento(evento: string): Promise<string | null>;
+  marcarSellado(evento: string, sorteoMs: number): Promise<void>;
+  pendientesDeBarrido(): Promise<{ evento: string; sala: string }[]>;
+  prepararToma(
+    cuenta: string,
+    evento: string,
+    huellaNueva: string,
+  ): Promise<{ ok: true; gen: number } | { ok: false; motivo: "no-existe" | "pausa"; esperaS?: number }>;
+  confirmarToma(evento: string, gen: number): Promise<boolean>;
+  salaDelIntento(evento: string, huella: string): Promise<{ sala: string; enMs: number } | null>;
 }
 
 interface ModuloDeLaSala {
@@ -99,6 +145,10 @@ export interface MundoDeSala {
   cupos(): ObjetoDeCupos;
   /** Si una sala conserva su alarma programada (se borra sola al vencer). */
   alarmaDe(id: string): number | null;
+  /** Conecta a una sala un socket de mentira: ya presentado con el token, o sin presentarse todavía. */
+  agregarSocket(id: string, presentado: boolean): SocketFalso;
+  /** Corre una consulta SQL directo en el almacén de un objeto ("cupos" o "sala:<id>"): para mirar o dejar un estado de antes. */
+  ejecutar(objeto: string, consulta: string, ...parametros: Valor[]): Record<string, Valor>[];
   /** Hace fallar la creación de salas: `ocupado` da siempre un id ya usado y `corte` lanza un error, como un corte de red. */
   fallas: { crearCampana: "no" | "ocupado" | "corte" };
 }
@@ -221,6 +271,19 @@ export async function montarMundo(extra: Record<string, string> = {}): Promise<M
     sala: (id) => (env.SALA as ReturnType<typeof espacio>).get(`sala:${id}`) as ObjetoDeSala,
     cupos: () => (env.CUPOS as ReturnType<typeof espacio>).get("cupos:cupos") as ObjetoDeCupos,
     alarmaDe: (id) => objetos.get(`sala:${id}`)?.estado.alarma() ?? null,
+    agregarSocket(id, presentado) {
+      (env.SALA as ReturnType<typeof espacio>).get(`sala:${id}`);
+      const socket = socketFalso(presentado);
+      objetos.get(`sala:${id}`)?.estado.sockets.push(socket);
+      return socket;
+    },
+    ejecutar(objeto, consulta, ...parametros) {
+      const clave = objeto === "cupos" ? "cupos:cupos" : objeto;
+      (env[clave.startsWith("cupos") ? "CUPOS" : "SALA"] as ReturnType<typeof espacio>).get(clave);
+      const hay = objetos.get(clave);
+      if (!hay) throw new Error(`no hay un objeto ${objeto}`);
+      return hay.estado.storage.sql.exec(consulta, ...parametros).toArray() as Record<string, Valor>[];
+    },
     fallas,
   };
 }

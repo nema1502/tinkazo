@@ -382,3 +382,26 @@ describe("la marca de que el panel viene (para que el editor no se pinte antes)"
     expect(marca()).toBe(false);
   });
 });
+
+describe("el borrador de otra cuenta", () => {
+  const BORRADOR = JSON.stringify({ evento: "panaderia-la-estrella-x", empresa: { nombre: "Panadería La Estrella" } });
+
+  it("la clave de la cuenta del borrador es la misma que usa borrador.ts", async () => {
+    const { CLAVE_DE_LA_CUENTA_DEL_BORRADOR } = await import("../campana/borrador");
+    const { CLAVE_DE_LA_CUENTA_DEL_BORRADOR_AQUI } = await import("./campana-arranque");
+    expect(CLAVE_DE_LA_CUENTA_DEL_BORRADOR_AQUI).toBe(CLAVE_DE_LA_CUENTA_DEL_BORRADOR);
+  });
+
+  it("anotado a una cuenta no cuenta para otra, y sin sesión o con la dueña sí", async () => {
+    const { hayBorrador } = await import("./campana-arranque");
+    localStorage.setItem("tinkazo.campana.borrador", BORRADOR);
+    localStorage.setItem("tinkazo.campana.borrador.cuenta", "cuenta-a");
+    expect(hayBorrador("cuenta-a")).toBe(true);
+    expect(hayBorrador("cuenta-b")).toBe(false);
+    expect(hayBorrador(null)).toBe(true);
+    // Sin dueña anotada vale para quien entre primero.
+    localStorage.removeItem("tinkazo.campana.borrador.cuenta");
+    expect(hayBorrador("cuenta-b")).toBe(true);
+    expect(localStorage.getItem("tinkazo.campana.borrador")).toBe(BORRADOR);
+  });
+});

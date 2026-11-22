@@ -11,6 +11,10 @@
  *   POST   /v1/activar                     JSON {"texto","sesion"} → 200 {"texto","firma","evento","organizadora"}
  *                                           (firma la campaña con la llave automática si la comisión del evento se pagó desde la
  *                                           cuenta de Google de quien organiza; ver `activar.ts`)
+ *   POST   /v1/mis-campanas                JSON {"sesion"} → 200 {"campanas":[...]}   (Tus campañas: las de la cuenta de la sesión;
+ *                                           solo con TUS_CAMPANAS en "1"; ver `tus-campanas.ts`)
+ *   POST   /v1/campana/recuperar           JSON {"sesion","evento"} → 200 {"estado":"viva","id","token","vence","fase"} (toma la sala)
+ *                                           o {"estado":"activada","texto","firma","anterior"?} (para crear la sala en esta compu)
  *   POST   /v1/sala                        → 201 {"id", "token", "vence"}   (solo desde los orígenes permitidos)
  *   POST   /v1/sala/<id>                   JSON {"d","h","llave"}: alta 201 {"n"}, corrección 200 {"n","r"}
  *                                          (una sala anterior a la forma 2 también acepta `d` solo en text/plain)
@@ -34,16 +38,19 @@
  *
  * Las salas de campaña, creadas solo con un archivo firmado por Tinkazo:
  *   GET    /v1/sala/<id>/campana           el texto firmado y su firma → 200 {"texto","firma"}
- *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0) y si hay aviso por correo
+ *   GET    /v1/sala/<id>/campana/estado?p=P  sin token: fase, total, cierre, si el pase vale (siempre, con PASE en 0) y si hay aviso por correo;
+ *                                           con la lista sellada o sorteada, también "sorteo" (el número) y "ronda" (la del sello, si se guardó);
+ *                                           con el token de la sala: "tuya" (true si es el vigente, false si ya lo tomó otra compu).
+ *                                           Sin pase y sin token se recuerda 2 segundos en el borde (cache.ts)
  *   GET    /v1/sala/<id>/campana/pase      Authorization: Bearer <token> → 200 {"p","hasta"}
  *   PUT    /v1/sala/<id>/campana/fase      Authorization: Bearer <token> JSON {"fase","cierraMs"?,"sorteo"?} → 204
  *   PUT    /v1/sala/<id>/campana/resultado Authorization: Bearer <token> JSON {"sorteo","comprobante"} → 204
  *                                           (con el correo prendido, además le avisa a quien ganó, sin que la respuesta lo espere)
- *   GET    /v1/sala/<id>/campana/resultado sin token → 200 {"sorteo","ganadoras","comprobante"}
+ *   GET    /v1/sala/<id>/campana/resultado sin token → 200 {"sorteo","ganadoras","comprobante"} (se recuerda 2 segundos en el borde)
  *   POST   /v1/sala/<id>/campana/quitar    Authorization: Bearer <token> JSON {"n","motivo"} → 204
  *   POST   /v1/sala/<id>/campana/avisar    Authorization: Bearer <token> JSON {"cuenta"} → 204
  *   POST   /v1/sala/<id>/campana/alta      JSON {"token","d","llave","p"?} → 201 {"cuenta"} o 200 {"cuenta","ya"}
- *   POST   /v1/sala/<id>/campana/yo        JSON {"cuenta","llave"} → 200 {"fase","total","cierraMs","anotada"}
+ *   POST   /v1/sala/<id>/campana/yo        JSON {"cuenta","llave"} → 200 {"fase","total","cierraMs","anotada"} más "sorteo" y "ronda" con la lista sellada o sorteada
  *
  * Un Durable Object por sala, con SQLite: guarda los nombres CIFRADOS (la clave
  * viaja en el fragmento del QR y nunca llega acá), sus huellas HMAC para no
@@ -112,6 +119,7 @@ import {
   cierreValido,
   confirmarEventoSql,
   contarRechazo,
+  crearTablaDeEventos,
   crearTablasDeCampana,
   esFase,
   esMotivoDeSalida,
@@ -123,7 +131,10 @@ import {
   huellaDeFicha,
   huellaDeLlave,
   huellaDePersona,
+  eventoYSorteoDelTexto,
   leerCampanaFirmada,
+  leerDatosDeLista,
+  marcarCorreoConfirmado,
   modoSoloGoogle,
   paseDe,
   paseValido,
@@ -135,6 +146,7 @@ import {
   reservarAvisosPorCorreo,
   reservarEventoSql,
   salaDelIntentoSql,
+  selloPublico,
   sellar as sellarEnCampana,
   soltarEventoSql,
   ventanaDelPase,
@@ -143,13 +155,19 @@ import {
 } from "./campana";
 import type { CampanaFirmada, EstadoDeCelular, Fase, MotivoDeSalida, ReemplazoDeSala, ReservaDeEvento } from "./campana";
 import { leerSorteoEnLaRed } from "./cadena";
+import { CABECERA_DE_CACHE, esCacheable, esSinResultado, guardar as guardarEnLaCache, leerGuardada } from "./cache";
 import {
   avisarPorCorreo,
+  correoDeTomaPrendido,
   correoPrendido,
   datosDeLaCampana,
   enlaceDeRecibir,
+  horaDeLaToma,
   llamarAlProveedor,
+  marcaDeCorreoPrendida,
   mensajeroDeCloudflare,
+  textoDelCorreoDeToma,
+  versionDelCorreo,
 } from "./correo";
 import type { AvisoDeLaSala, EnlaceDeCorreo } from "./correo";
 import type { SelloEnLaRed } from "./cadena";
@@ -158,8 +176,46 @@ import { llaveDeCampanas, llavePublicaAuto } from "./firma";
 import type { VariablesDeLlaveAuto } from "./firma";
 import { MAX_CUERPO_ACTIVAR, activarCampana, configDeActivar } from "./activar";
 import type { VariablesDeActivar } from "./activar";
-import { anotarActivacion, antesDeActivar, contarRechazoDeActivar, crearTablasDeActivar, cupoDeCuenta, tomarNota } from "./activar-cupos";
-import type { AntesDeActivar } from "./activar-cupos";
+import {
+  anotarActivacion,
+  anotarBarrido,
+  antesDeActivar,
+  antesDeCuenta,
+  barrerSalasViejas,
+  campanaDeLaCuenta,
+  campanasDeLaCuenta,
+  confirmarToma,
+  contarRechazoDeActivar,
+  crearTablasDeActivar,
+  cupoDeCuenta,
+  duenaDelEvento,
+  eventoLibre,
+  guardarCampanaDeCuenta,
+  marcarEventoSellado,
+  pendientesDeBarrido,
+  prepararToma,
+  reescribirHuellaDeEvento,
+  reservarCorreoDeToma,
+  tomarNota,
+  topeDeCuenta,
+} from "./activar-cupos";
+import type {
+  AntesDeActivar,
+  CampanaParaGuardar,
+  FichaDeCampana,
+  FilaDeLaLista,
+  PreparacionDeToma,
+  PuertoDeBarrido,
+  TipoDeTope,
+} from "./activar-cupos";
+import {
+  MAX_CUERPO_TUS_CAMPANAS,
+  leerPedidoDeTus,
+  listarCampanas,
+  recuperarCampana,
+  tusCampanasPrendido,
+} from "./tus-campanas";
+import type { AvisoDeToma, DepsDeTus, ResumenDeSala } from "./tus-campanas";
 import { Pollar, formaDeToken, pollarDe } from "../../patrocinio/src/pollar";
 import deployments from "../../../src/stellar/deployments.json";
 
@@ -193,6 +249,14 @@ export interface Env extends VariablesDeActivar, VariablesDeLlaveAuto {
   CORREO_DE?: string;
   /** El interruptor: solo con "1" la sala le avisa por correo a quien gana. Por defecto "0". */
   CORREO_GANADORAS?: string;
+  /** Las rutas de Tus campañas (listar y usar en esta compu): solo con "1" atienden. Cambiarla es publicar otra vez. */
+  TUS_CAMPANAS?: string;
+  /** El aviso por correo de cada toma de una campaña: solo con "1" (y con el correo prendido). Nace apagado. */
+  CORREO_TOMA?: string;
+  /** La versión del correo a quien gana que se manda a todas: solo "2" elige la B. Cualquier otro valor es la A. */
+  CORREO_VERSION?: string;
+  /** La marca de correo confirmado que manda el celular: solo con "1" la sala la acepta. Nace apagada. */
+  CORREO_MARCA?: string;
 }
 
 /** Solo códigos fijos del proveedor: nunca una sesión, un id, un nombre, un correo ni una cuenta. */
@@ -289,6 +353,8 @@ export class Cupos extends DurableObject<Env> {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sal (hora INTEGER PRIMARY KEY, v TEXT NOT NULL)");
     // La sal del día para las huellas de las cuentas que activan campañas, y los topes de la activación (`activar-cupos.ts`).
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS sal_dia (dia TEXT PRIMARY KEY, v TEXT NOT NULL)");
+    // La tabla de eventos (con sus columnas nuevas) y las de Tus campañas nacen con el objeto, no la primera vez que alguien las usa.
+    crearTablaDeEventos(this.sql);
     crearTablasDeActivar(this.sql);
   }
 
@@ -343,6 +409,26 @@ export class Cupos extends DurableObject<Env> {
     contarRechazoDeActivar(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), ahora });
   }
 
+  /**
+   * Lo que se mira antes de llamar al proveedor en las rutas de Tus campañas: los rechazos y el ritmo propio de la conexión.
+   * Una sesión conocida no suma al ritmo (ver `antesDeCuenta`).
+   */
+  async cuentaAntes(ip: string, token: string, conocida: boolean): Promise<AntesDeActivar> {
+    const ahora = Date.now();
+    const hora = horaUtc(ahora);
+    return antesDeCuenta(this.sql, { grupo: await this.huella(ip, hora), ficha: await this.huellaDeSesion(token, hora), conocida, ahora });
+  }
+
+  /** Una sesión que el proveedor rechazó en las rutas de Tus campañas: las mismas tablas de rechazos que activar. */
+  async cuentaRechazo(ip: string, token: string): Promise<void> {
+    return this.activarRechazo(ip, token);
+  }
+
+  /** Cuenta un listado o una toma de esta cuenta, ya verificada: 30 listados y 10 tomas cada 10 minutos. */
+  async cuentaTope(cuenta: string, tipo: TipoDeTope): Promise<{ ok: true } | { ok: false; esperaS: number }> {
+    return topeDeCuenta(this.sql, { tipo, cuenta, ahora: Date.now() });
+  }
+
   /** Si a esta cuenta le cabe activar este evento hoy (5 campañas distintas por día). */
   async activarCuenta(cuenta: string, evento: string): Promise<{ ok: true } | { ok: false; esperaS: number }> {
     const ahora = Date.now();
@@ -354,6 +440,66 @@ export class Cupos extends DurableObject<Env> {
   async activarAnotar(cuenta: string, evento: string): Promise<void> {
     const dia = diaUtc(Date.now());
     anotarActivacion(this.sql, { cuenta: await this.huellaDeCuenta(cuenta, dia), evento, dia });
+  }
+
+  /** Si el evento no tiene otra dueña que esta cuenta (ver `eventoLibre`). */
+  async eventoLibre(cuenta: string, evento: string): Promise<boolean> {
+    return eventoLibre(this.sql, { cuenta, evento, ahora: Date.now() });
+  }
+
+  /** La dueña del evento, o null si nadie lo tiene. */
+  async duenaDelEvento(evento: string): Promise<string | null> {
+    return duenaDelEvento(this.sql, evento);
+  }
+
+  /** Guarda la campaña de una cuenta para Tus campañas. Dice `ajeno` si el evento ya es de otra. */
+  async guardarCampana(c: Omit<CampanaParaGuardar, "ahora">): Promise<{ ok: true } | { ok: false; motivo: "ajeno" }> {
+    return guardarCampanaDeCuenta(this.sql, { ...c, ahora: Date.now() });
+  }
+
+  /** El primer paso de pasar una campaña a otra compu: dueña, pausa de 60 segundos y generación nueva (ver `prepararToma`). */
+  async prepararToma(cuenta: string, evento: string, huellaNueva: string): Promise<PreparacionDeToma> {
+    return prepararToma(this.sql, { cuenta, evento, huellaNueva, ahora: Date.now() });
+  }
+
+  /** El último paso: el evento guarda la huella del token nuevo si esta generación sigue siendo la última. */
+  async confirmarToma(evento: string, gen: number): Promise<boolean> {
+    return confirmarToma(this.sql, { evento, gen });
+  }
+
+  /** Las campañas de la cuenta para Tus campañas, sin lo que no sale del servidor (ver `campanasDeLaCuenta`). */
+  async campanasDeCuenta(cuenta: string): Promise<FilaDeLaLista[]> {
+    return campanasDeLaCuenta(this.sql, { cuenta, ahora: Date.now() });
+  }
+
+  /** La campaña de la cuenta con este evento, o null si no la tiene o la dueña del evento es otra (ver `campanaDeLaCuenta`). */
+  async campanaDeCuenta(cuenta: string, evento: string): Promise<FichaDeCampana | null> {
+    return campanaDeLaCuenta(this.sql, { cuenta, evento, ahora: Date.now() });
+  }
+
+  /** Cambia la huella del token de la sala muerta de un evento, para que su dueña la reemplace con el mismo archivo. */
+  async reescribirHuella(evento: string, sala: string, huella: string): Promise<boolean> {
+    return reescribirHuellaDeEvento(this.sql, { evento, sala, huella });
+  }
+
+  /** Si toca mandar el aviso por correo de esta toma: uno por campaña cada 10 minutos. */
+  async reservarCorreoDeToma(evento: string): Promise<boolean> {
+    return reservarCorreoDeToma(this.sql, { evento, ahora: Date.now() });
+  }
+
+  /** Anota que el evento se selló: no se reabre ni se reemplaza (ver `marcarEventoSellado`). */
+  async marcarSellado(evento: string, sorteoMs: number): Promise<void> {
+    marcarEventoSellado(this.sql, { evento, sorteoMs, ahora: Date.now() });
+  }
+
+  /** Las salas anteriores a la dueña que todavía no se miraron: hasta 10 por pedido. */
+  async pendientesDeBarrido(): Promise<{ evento: string; sala: string }[]> {
+    return pendientesDeBarrido(this.sql);
+  }
+
+  /** Lo que se vio al mirar una sala vieja (ver `anotarBarrido`). */
+  async anotarBarrido(evento: string, sala: string, campana: { texto: string; firma: string; sellada?: boolean } | null): Promise<void> {
+    anotarBarrido(this.sql, { evento, sala, campana, ahora: Date.now() });
   }
 
   /** Toma la nota de la comisión para este evento: un pago sirve a un solo evento (ver `tomarNota`). */
@@ -391,9 +537,38 @@ export class Cupos extends DurableObject<Env> {
     return reservarEventoSql(this.sql, evento, Date.now(), reemplazo);
   }
 
-  /** Confirma la reserva con el id de la sala ya creada y la huella de su token. Recién entonces cuenta para el cupo del día. */
-  async confirmarCampana(evento: string, reserva: string, sala: string, huella: string): Promise<boolean> {
-    return confirmarEventoSql(this.sql, evento, { reserva, sala, huella, ahora: Date.now() });
+  /**
+   * Confirma la reserva con el id de la sala ya creada y la huella de su token. Recién entonces cuenta para el cupo del día.
+   * La cuenta que nombra el archivo firmado pasa a ser la dueña del evento y su campaña entra a Tus campañas: así también
+   * quedan las campañas firmadas a mano y las activadas antes de que existiera la lista.
+   */
+  async confirmarCampana(evento: string, reserva: string, sala: string, huella: string, c: CampanaFirmada): Promise<boolean> {
+    const ahora = Date.now();
+    const confirmada = confirmarEventoSql(this.sql, evento, { reserva, sala, huella, ahora, organizadora: c.organizadora });
+    if (confirmada && c.organizadora !== null) {
+      const datos = leerDatosDeLista(c.texto);
+      if (datos.ok) {
+        try {
+          guardarCampanaDeCuenta(this.sql, {
+            cuenta: c.organizadora,
+            evento,
+            texto: c.texto,
+            firma: c.firma,
+            empresa: datos.empresa,
+            zona: datos.zona,
+            abreMs: datos.abreMs,
+            cierraMs: datos.cierraMs,
+            sorteoMs: datos.sorteoMs,
+            ahora,
+          });
+        } catch {
+          // La sala ya existe y su permiso está confirmado: que la lista no la pueda anotar no la tumba. Pasa, por ejemplo, si
+          // otra cuenta ya tenía una fila de este evento escrita a mano.
+          registrar("lista-sin-fila", { codigo: "conflicto" });
+        }
+      }
+    }
+    return confirmada;
   }
 
   /** La sala confirmada del evento si su token tiene esa huella: el pedido repetido de quien no recibió la respuesta. */
@@ -424,6 +599,8 @@ export type Resultado<T = object> =
       motivo:
         | "no-existe"
         | "token"
+        | "sellada"
+        | "vieja"
         | "llena"
         | "rapido"
         | "sin-registro"
@@ -492,10 +669,16 @@ export class Sala extends DurableObject<Env> {
     }
   }
 
+  /**
+   * Si el token es el de la sala. La huella se lee DESPUÉS de esperar el SHA-256 y se compara en el mismo tramo sin esperas:
+   * un pedido que esperaba con el token viejo mientras otra compu tomaba la campaña ya no pasa, porque mira la huella de
+   * después de la toma.
+   */
   private async tokenValido(token: string): Promise<boolean> {
+    if (!ES_TOKEN.test(token)) return false;
+    const calculada = await sha256Hex(token);
     const huella = this.dato("huella");
-    if (!huella || !ES_TOKEN.test(token)) return false;
-    return iguales(huella, await sha256Hex(token));
+    return !!huella && iguales(huella, calculada);
   }
 
   private esCampana(): boolean {
@@ -559,6 +742,19 @@ export class Sala extends DurableObject<Env> {
     return this.dato("huella") !== null;
   }
 
+  /**
+   * Lo que Tus campañas necesita de la sala: si vive y, de ser así, su fase, cuántas personas hay y la cuenta que nombra su
+   * texto firmado. Barato (dos lecturas y un conteo) y de solo lectura. Lo pide el Worker, que decide qué le muestra a cada
+   * cuenta: nunca devuelve el texto, la firma, el id ni el token.
+   */
+  async resumenDeCampana(): Promise<ResumenDeSala> {
+    if (!this.dato("huella") || !this.esCampana()) return { viva: false };
+    const fase = this.dato("fase");
+    if (!esFase(fase)) return { viva: false };
+    const total = this.ctx.storage.sql.exec<{ c: number }>("SELECT COUNT(*) AS c FROM equipos").one().c;
+    return { viva: true, fase, total, organizadora: this.dato("organizadora") };
+  }
+
   /** El archivo público de la campaña, exactamente como fue firmado. */
   async campana(): Promise<Resultado<{ texto: string; firma: string }>> {
     const texto = this.dato("campana");
@@ -580,6 +776,9 @@ export class Sala extends DurableObject<Env> {
       pase: "vale" | "vencido";
       quitadas: Record<MotivoDeSalida, number>;
       vias?: { google: number; sinDato: number };
+      tuya?: boolean;
+      sorteo?: string;
+      ronda?: number;
     }>
   > {
     if (!this.esCampana()) return { ok: false, motivo: "no-existe" };
@@ -601,6 +800,10 @@ export class Sala extends DurableObject<Env> {
       pase: vale ? "vale" : "vencido",
       quitadas: quitadasPorMotivo(this.sql),
       ...(vias ? { vias } : {}),
+      // Solo si llegó un token: así la compu que perdió la campaña lo sabe ya en su primer retomar. Sin token no se dice nada.
+      ...(token !== null && token !== "" ? { tuya: conToken } : {}),
+      // El número del sorteo y la ronda, solo con la lista sellada o sorteada.
+      ...selloPublico(this.sql, fase),
     };
   }
 
@@ -616,6 +819,7 @@ export class Sala extends DurableObject<Env> {
     exigirPase: boolean,
     token: string,
     llave: string,
+    d?: string,
   ): Promise<Resultado<{ cuenta: string | null }>> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const ahora = Date.now();
@@ -623,7 +827,22 @@ export class Sala extends DurableObject<Env> {
     const ficha = await huellaDeFicha(this.sql, token);
     const huella = await huellaDeLlave(llave);
     const paseVale = !exigirPase || (await paseValido(this.dato("pase") ?? "", p, ahora));
-    return prealtaDeCampana(this.sql, this.fichasVerificadas, { grupo, ficha, llave: huella, paseVale, ahora });
+    const r = prealtaDeCampana(this.sql, this.fichasVerificadas, {
+      grupo,
+      ficha,
+      llave: huella,
+      paseVale,
+      ahora,
+      ...(d !== undefined ? { d } : {}),
+    });
+    if (r.ok && r.nombre) this.avisarNombre(r.cuenta, r.nombre);
+    return r.ok ? { ok: true, cuenta: r.cuenta } : r;
+  }
+
+  /** Le dice a la pantalla que el nombre de una persona ya anotada cambió (volvió a escanear con la clave nueva). */
+  private avisarNombre(cuenta: string | null, nombre: { n: number; v: number; d: string; estado: string }): void {
+    if (cuenta === null) return;
+    this.avisar({ t: "equipo", v: nombre.v, n: nombre.n, cuenta, d: nombre.d, estado: nombre.estado });
   }
 
   /**
@@ -649,6 +868,7 @@ export class Sala extends DurableObject<Env> {
     ip: string,
     token: string,
     vence: number,
+    d?: string,
   ): Promise<Resultado<{ cuenta: string | null }>> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const persona = await huellaDePersona(this.sql, usuario);
@@ -656,9 +876,18 @@ export class Sala extends DurableObject<Env> {
     const grupo = await grupoDeConexion(this.sql, ip);
     const ficha = await huellaDeFicha(this.sql, token);
     const ahora = Date.now();
-    const r = reingresoDeCampana(this.sql, this.fichasVerificadas, { persona, llave: huella, grupo, ahora, ficha, vence });
+    const r = reingresoDeCampana(this.sql, this.fichasVerificadas, {
+      persona,
+      llave: huella,
+      grupo,
+      ahora,
+      ficha,
+      vence,
+      ...(d !== undefined ? { d } : {}),
+    });
     if (r === null) return { ok: true, cuenta: null };
     if (!r.ok) return r;
+    if (r.nombre) this.avisarNombre(r.cuenta, r.nombre);
     return { ok: true, cuenta: r.cuenta };
   }
 
@@ -695,7 +924,8 @@ export class Sala extends DurableObject<Env> {
     if (!r.ok) return r;
     this.fichasVerificadas.recordar(ficha, persona, ahora, alta.vence);
     if (!r.ya) this.avisar({ t: "equipo", v: r.v, n: r.n, cuenta: r.cuenta, d: alta.d, estado: "aceptado" });
-    return r;
+    else if (r.nombre) this.avisarNombre(r.cuenta, { n: r.n, v: r.v, ...r.nombre });
+    return { ok: true, cuenta: r.cuenta, ya: r.ya, v: r.v, n: r.n };
   }
 
   /** Saca a una persona antes del sello y avisa a la pantalla con el mensaje que ya entiende. */
@@ -716,9 +946,11 @@ export class Sala extends DurableObject<Env> {
   }
 
   /** El celular pregunta por sí mismo con su llave; la respuesta nunca incluye su número de anotación. */
-  async estadoDeCelular(cuenta: string, llave: string): Promise<Resultado<EstadoDeCelular>> {
+  async estadoDeCelular(cuenta: string, llave: string, confirmo = false): Promise<Resultado<EstadoDeCelular>> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     const huella = await huellaDeLlave(llave);
+    // La marca de correo confirmado: solo si el Worker la acepta, con la llave del propio celular y si hay algo nuevo que escribir.
+    if (confirmo && marcaDeCorreoPrendida(this.env)) marcarCorreoConfirmado(this.sql, cuenta, huella);
     return { ok: true, ...leerEstadoDeCelular(this.sql, cuenta, huella) };
   }
 
@@ -729,6 +961,43 @@ export class Sala extends DurableObject<Env> {
     const ahora = Date.now();
     const p = await paseDe(this.dato("pase") ?? "", ventanaDelPase(ahora));
     return { ok: true, p, hasta: hastaDelPase(ahora) };
+  }
+
+  /**
+   * Pasa la campaña a otra compu: cambia el token por el de la huella nueva y cierra la pantalla que estaba presentada. SIN
+   * ninguna espera entre leer y escribir. Solo la cuenta que nombra el texto firmado de la sala puede (una sala firmada a mano
+   * sin cuenta queda en manos de quien tiene el token, como siempre), una sala sellada no se toma, y la generación tiene que ser
+   * mayor que la de la última toma: con dos a la vez gana la mayor, lleguen en el orden que lleguen.
+   */
+  async cambiarToken(
+    cuenta: string,
+    huellaNueva: string,
+    gen: number,
+  ): Promise<Resultado<{ fase: Fase; vence: number }>> {
+    if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
+    if (!/^[0-9a-f]{64}$/.test(huellaNueva) || !Number.isSafeInteger(gen) || gen < 1) return { ok: false, motivo: "forma" };
+    const organizadora = this.dato("organizadora");
+    if (organizadora === null || !iguales(organizadora, cuenta)) return { ok: false, motivo: "no-existe" };
+    const fase = this.dato("fase");
+    if (!esFase(fase)) return { ok: false, motivo: "no-existe" };
+    if (fase === "sellada") return { ok: false, motivo: "sellada" };
+    if (!(gen > Number(this.dato("gen") ?? 0))) return { ok: false, motivo: "vieja" };
+    this.ctx.storage.sql.exec(
+      "INSERT INTO sala (k, v) VALUES ('huella', ?), ('gen', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+      huellaNueva,
+      String(gen),
+    );
+    // La pantalla que estaba presentada deja de valer: su token ya no es el de la sala.
+    for (const ws of this.ctx.getWebSockets()) {
+      if ((ws.deserializeAttachment() as Presentacion | null)?.ok) {
+        try {
+          ws.close(4001, "tomada");
+        } catch {
+          /* ya cerrado */
+        }
+      }
+    }
+    return { ok: true, fase, vence: (await this.ctx.storage.getAlarm()) ?? Date.now() };
   }
 
   /** Cambia la fase dentro de las transiciones permitidas y conserva el cierre si no se manda uno nuevo. */
@@ -759,13 +1028,19 @@ export class Sala extends DurableObject<Env> {
    * Sella solo con los datos que el Worker ya leyó del contrato; la decisión y la escritura no tienen esperas. La hora se
    * toma acá, después de la última espera: la ronda del sello tiene que estar todavía por salir en el momento de sellar.
    */
-  async sellarCampana(token: string, sorteo: string, sello: SelloEnLaRed): Promise<Resultado> {
+  async sellarCampana(
+    token: string,
+    sorteo: string,
+    sello: SelloEnLaRed,
+  ): Promise<Resultado<{ evento: string | null; sorteoMs: number | null }>> {
     if (!this.dato("huella") || !this.esCampana()) return { ok: false, motivo: "no-existe" };
     if (!(await this.tokenValido(token))) return { ok: false, motivo: "token" };
     const r = sellarEnCampana(this.sql, sorteo, sello, Date.now());
     if (!r.ok) return r;
     this.avisar({ t: "fase", fase: "sellada" });
-    return r;
+    // El evento y la hora del sorteo salen del texto firmado, nunca de la clave `sorteo`, que ahora guarda el número del sorteo.
+    const delTexto = eventoYSorteoDelTexto(this.dato("campana"));
+    return { ok: true, evento: delTexto?.evento ?? null, sorteoMs: delTexto?.sorteoMs ?? null };
   }
 
   /** Guarda las cuentas que la propia sala traduce desde los índices leídos en la red. */
@@ -780,7 +1055,14 @@ export class Sala extends DurableObject<Env> {
     this.avisar({ t: "fase", fase: "sorteada" });
     // Las cuentas a las que se les escribe las reserva la propia sala, de lo que guardó, en este mismo bloque sin esperas.
     // Con el correo apagado no reserva nada, así que un interruptor que se prende después todavía puede avisar.
-    const cuentas = correoPrendido(this.env) ? reservarAvisosPorCorreo(this.sql, Date.now()) : [];
+    // Cada una sale con la versión del correo que le toca: la B para todas con CORREO_VERSION en "2", o para quien mandó su marca
+    // de correo confirmado si la marca está prendida. Sin nada de eso, la A, que es cierta siempre.
+    const paraTodas = versionDelCorreo(this.env) === "2";
+    const cuentas = correoPrendido(this.env)
+      ? reservarAvisosPorCorreo(this.sql, Date.now(), { marca: marcaDeCorreoPrendida(this.env) }).map((c) =>
+          paraTodas ? { ...c, confirmo: true as const } : c,
+        )
+      : [];
     const campana = cuentas.length > 0 ? datosDeLaCampana(this.dato("campana")) : { empresa: "", premios: [] };
     return { ...r, correo: { cuentas, ...campana } };
   }
@@ -1169,12 +1451,91 @@ async function avisarGanadorasPorCorreo(
   }
 }
 
+/**
+ * Le avisa por correo a quien organiza que su campaña se abrió en otra compu. Todo se traga: lo que falla deja solo un código
+ * fijo en el registro, nunca la dirección, el nombre ni la cuenta. Sale aparte de la respuesta y solo con el aviso prendido.
+ */
+async function avisarTomaPorCorreo(env: Env, sesion: string, aviso: AvisoDeToma): Promise<void> {
+  try {
+    if (!correoDeTomaPrendido(env) || !env.CORREO || !env.CORREO_DE) return;
+    const proveedor = pollarDeLaSala(env);
+    if (!proveedor) return;
+    // La sesión que acaba de pasar la verificación sigue en la memoria del proveedor: no vuelve a llamar a nadie.
+    const quien = await proveedor.verificar(sesion);
+    if (!quien.ok) {
+      registrar("correo-toma", { codigo: "sesion" });
+      return;
+    }
+    const persona = await proveedor.datosParaCorreo(quien.usuario);
+    if (!persona) {
+      registrar("correo-toma", { codigo: "sin-ficha" });
+      return;
+    }
+    const idioma = persona.idioma ?? "es";
+    const contenido = textoDelCorreoDeToma(idioma, {
+      nombre: persona.nombre,
+      empresa: aviso.empresa,
+      hora: horaDeLaToma(aviso.ahora, aviso.zona, idioma),
+    });
+    const salio = await mensajeroDeCloudflare(env.CORREO, env.CORREO_DE, registrar).mandar(persona.correo, contenido);
+    registrar("correo-toma", { codigo: salio ? "enviado" : "no-salio" });
+  } catch {
+    registrar("correo-toma", { codigo: "inesperado" });
+  }
+}
+
+/** Lo que las rutas de Tus campañas le piden al resto del Worker, armado con los objetos de verdad. */
+function depsDeTus(env: Env, ip: string, ahora: number): DepsDeTus {
+  const cupos = env.CUPOS.get(env.CUPOS.idFromName("cupos"));
+  return {
+    verificar: {
+      ip,
+      ahora,
+      proveedor: pollarDeLaSala(env),
+      topes: {
+        antes: (conexion, ficha, conocida) => cupos.cuentaAntes(conexion, ficha, conocida),
+        rechazo: (conexion, ficha) => cupos.cuentaRechazo(conexion, ficha),
+        tope: (cuenta, tipo) => cupos.cuentaTope(cuenta, tipo),
+      },
+    },
+    cupos: {
+      campanasDeCuenta: (cuenta) => cupos.campanasDeCuenta(cuenta),
+      campanaDeCuenta: (cuenta, evento) => cupos.campanaDeCuenta(cuenta, evento),
+      prepararToma: (cuenta, evento, huella) => cupos.prepararToma(cuenta, evento, huella),
+      confirmarToma: (evento, gen) => cupos.confirmarToma(evento, gen),
+      reescribirHuella: (evento, sala, huella) => cupos.reescribirHuella(evento, sala, huella),
+      reservarCorreoDeToma: (evento) => cupos.reservarCorreoDeToma(evento),
+    },
+    sala: (id) => env.SALA.get(env.SALA.idFromName(id)),
+    // Antes de leer, se mira de quién son las salas anteriores a la dueña (hasta 10 por pedido).
+    barrer: () => barrerSalasViejas(puertoDeBarrido(env, cupos)),
+    nuevoToken: () => base64url(crypto.getRandomValues(new Uint8Array(16))),
+    huellaDe: sha256Hex,
+    avisoDeTomaPrendido: correoDeTomaPrendido(env),
+  };
+}
+
 function rpcsDe(env: Env, red: "mainnet" | "testnet"): string[] {
   if (red === "testnet") return [deployments.testnet.rpcUrl];
   return (env.RPC_MAINNET ?? "")
     .split(",")
     .map((rpc) => rpc.trim())
     .filter((rpc) => rpc.length > 0);
+}
+
+/** El barrido de las salas anteriores a la dueña: pregunta el archivo público de cada una (`Sala.campana`) y anota lo que vio. */
+function puertoDeBarrido(env: Env, cupos: Pick<Cupos, "pendientesDeBarrido" | "anotarBarrido">): PuertoDeBarrido {
+  return {
+    pendientes: () => cupos.pendientesDeBarrido(),
+    campana: async (sala) => {
+      const objeto = env.SALA.get(env.SALA.idFromName(sala));
+      const r = await objeto.campana();
+      if (!r.ok) return null;
+      const resumen = await objeto.resumenDeCampana();
+      return { texto: r.texto, firma: r.firma, sellada: resumen.viva && (resumen.fase === "sellada" || resumen.fase === "sorteada") };
+    },
+    anotar: (evento, sala, campana) => cupos.anotarBarrido(evento, sala, campana),
+  };
 }
 
 /** El cuerpo de un pedido como JSON, o `null` si no es JSON o pasa del tope. */
@@ -1238,6 +1599,32 @@ export default {
     const origen = req.headers.get("Origin");
     const partes = url.pathname.split("/").filter(Boolean);
     const salaDe = (id: string) => env.SALA.get(env.SALA.idFromName(id));
+
+    // Tus campañas: la lista de una cuenta y usar una en esta compu. Toda respuesta lleva los permisos de origen, también los
+    // rechazos: sin ellos el navegador los ve como una falla de red y no puede leer el motivo.
+    const listar = partes[0] === "v1" && partes[1] === "mis-campanas" && partes.length === 2;
+    const recuperar = partes[0] === "v1" && partes[1] === "campana" && partes[2] === "recuperar" && partes.length === 3;
+    if (listar || recuperar) {
+      const h = cors(origen, "POST, OPTIONS");
+      if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+      if (req.method !== "POST") return json({ error: "no-existe" }, 404, h);
+      if (!tusCampanasPrendido(env)) return json({ error: "apagada" }, 503, h);
+      if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+      const pedido = leerPedidoDeTus(await leerJson(req, MAX_CUERPO_TUS_CAMPANAS), recuperar);
+      const responder = (r: { estado: number; cuerpo: Record<string, unknown>; esperaS?: number }): Response =>
+        json(r.cuerpo, r.estado, r.esperaS === undefined ? h : { ...h, "Retry-After": String(r.esperaS) });
+      if (!pedido.ok) return responder(pedido.respuesta);
+      try {
+        const deps = depsDeTus(env, req.headers.get("CF-Connecting-IP") ?? "sin-ip", Date.now());
+        if (listar) return responder(await listarCampanas(pedido.sesion, deps));
+        const r = await recuperarCampana(pedido.sesion, pedido.evento ?? "", deps);
+        if (r.aviso) ctx.waitUntil(avisarTomaPorCorreo(env, pedido.sesion, r.aviso));
+        return responder(r.respuesta);
+      } catch {
+        registrar("tus-campanas", { codigo: "inesperado" });
+        return json({ error: "ocupado" }, 503, h);
+      }
+    }
 
     // Una campaña nace solo con el texto firmado por Tinkazo. Su cupo no gasta el de las salas comunes.
     if (partes[0] === "v1" && partes[1] === "campana" && partes.length === 2) {
@@ -1308,7 +1695,14 @@ export default {
           cuenta: (cuenta, evento) => cupos.activarCuenta(cuenta, evento),
           anotar: (cuenta, evento) => cupos.activarAnotar(cuenta, evento),
           nota: (nota, evento) => cupos.activarNota(nota, evento),
+          // Antes de decir de quién es un evento, se mira de quién son las salas anteriores a la dueña (hasta 10 por pedido).
+          eventoLibre: async (cuenta, evento) => {
+            await barrerSalasViejas(puertoDeBarrido(env, cupos));
+            return cupos.eventoLibre(cuenta, evento);
+          },
+          guardarCampana: (campana) => cupos.guardarCampana(campana),
         },
+        registrar,
       });
       return json(r.cuerpo, r.estado, r.esperaS === undefined ? h : { ...h, "Retry-After": String(r.esperaS) });
     }
@@ -1389,23 +1783,36 @@ export default {
         const presentado = url.searchParams.get("p");
         const p = presentado === null || ES_PASE.test(presentado) ? presentado : "";
         const token = bearer(req);
+        // Sin pase y sin token es lo mismo para todos: se recuerda unos segundos en el borde (ver cache.ts).
+        const deLaCache = esCacheable(url, token);
+        if (deLaCache) {
+          const guardada = await leerGuardada(url);
+          if (guardada) return json(guardada.cuerpo, guardada.estado, { ...h, "Cache-Control": CABECERA_DE_CACHE });
+        }
         const r = await salaDe(id).estadoDeCampana(p, env.PASE !== "0", token || null);
-        return r.ok
-          ? json(
-              {
-                fase: r.fase,
-                total: r.total,
-                cierraMs: r.cierraMs,
-                pase: r.pase,
-                quitadas: r.quitadas,
-                // Si la sala le avisa por correo a quien gana: la pantalla de quien se anota lo dice solo si es verdad.
-                correo: correoPrendido(env),
-                ...(r.vias ? { vias: r.vias } : {}),
-              },
-              200,
-              h,
-            )
-          : falla(r, h);
+        if (!r.ok) {
+          const sinSala = falla(r, h);
+          if (deLaCache) ctx.waitUntil(guardarEnLaCache(url, sinSala.status, { error: r.motivo }));
+          return sinSala;
+        }
+        const cuerpoDeEstado = {
+          fase: r.fase,
+          total: r.total,
+          cierraMs: r.cierraMs,
+          pase: r.pase,
+          quitadas: r.quitadas,
+          // Si la sala le avisa por correo a quien gana: la pantalla de quien se anota lo dice solo si es verdad.
+          correo: correoPrendido(env),
+          ...(r.vias ? { vias: r.vias } : {}),
+          // `tuya` solo llega si el pedido trajo un token, y entonces la respuesta nunca se guarda en la caché.
+          ...(r.tuya !== undefined ? { tuya: r.tuya } : {}),
+          // El número del sorteo y la ronda, solo con la lista sellada o sorteada.
+          ...(r.sorteo !== undefined ? { sorteo: r.sorteo } : {}),
+          ...(r.ronda !== undefined ? { ronda: r.ronda } : {}),
+        };
+        if (!deLaCache) return json(cuerpoDeEstado, 200, h);
+        ctx.waitUntil(guardarEnLaCache(url, 200, cuerpoDeEstado));
+        return json(cuerpoDeEstado, 200, { ...h, "Cache-Control": CABECERA_DE_CACHE });
       }
       if (partes[3] === "campana" && partes[4] === "pase" && partes.length === 5 && req.method === "GET") {
         const r = await salaDe(id).paseDeLaPantalla(bearer(req));
@@ -1435,6 +1842,14 @@ export default {
           if (!r.ok) {
             const estado = r.motivo === "no-existe" ? 404 : r.motivo === "token" ? 403 : 409;
             return json({ error: r.motivo }, estado, h);
+          }
+          // Un evento sellado no se reabre: queda anotado. Si la anotación falla, el sello ya es válido y no se le quita.
+          if (r.evento !== null && r.sorteoMs !== null) {
+            try {
+              await env.CUPOS.get(env.CUPOS.idFromName("cupos")).marcarSellado(r.evento, r.sorteoMs);
+            } catch {
+              registrar("sellado-sin-marca", { codigo: "cupos" });
+            }
           }
           return new Response(null, { status: 204, headers: h });
         }
@@ -1484,9 +1899,24 @@ export default {
         return new Response(null, { status: 204, headers: h });
       }
       if (partes[3] === "campana" && partes[4] === "resultado" && partes.length === 5 && req.method === "GET") {
+        // Es público y es igual para todos: con cientos de celulares preguntando a la vez, el borde lo recuerda unos segundos.
+        // Lo que todavía no existe (`sin-resultado`) nunca se recuerda ni en el borde ni en el navegador: es lo único que cambia
+        // en el momento del resultado, y quien organiza lo lee apenas la sala lo guarda. Un 404 de ese tipo guardado le taparía
+        // las ganadoras y el aviso de premio justo después de que la sala dijo que sí.
+        const guardada = await leerGuardada(url);
+        if (guardada && !esSinResultado(guardada)) {
+          return json(guardada.cuerpo, guardada.estado, { ...h, "Cache-Control": CABECERA_DE_CACHE });
+        }
         const r = await salaDe(id).resultadoDeCampana();
-        if (!r.ok) return json({ error: r.motivo }, 404, h);
-        return json({ sorteo: r.sorteo, ganadoras: r.ganadoras, comprobante: r.comprobante }, 200, h);
+        if (!r.ok) {
+          const cuerpoSinResultado = { error: r.motivo };
+          if (r.motivo === "sin-resultado") return json(cuerpoSinResultado, 404, { ...h, "Cache-Control": "no-store" });
+          ctx.waitUntil(guardarEnLaCache(url, 404, cuerpoSinResultado));
+          return json(cuerpoSinResultado, 404, { ...h, "Cache-Control": CABECERA_DE_CACHE });
+        }
+        const cuerpoDelResultado = { sorteo: r.sorteo, ganadoras: r.ganadoras, comprobante: r.comprobante };
+        ctx.waitUntil(guardarEnLaCache(url, 200, cuerpoDelResultado));
+        return json(cuerpoDelResultado, 200, { ...h, "Cache-Control": CABECERA_DE_CACHE });
       }
 
       // Quitar deja constancia del motivo y avisar marca a una ganadora. Las dos escrituras piden el token.
@@ -1542,7 +1972,7 @@ export default {
         const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
         const sala = salaDe(id);
         // Antes de llamar al proveedor: fase, pase, topes de rechazos y, si la ficha ya se verificó hace poco, el reingreso.
-        const antes = await sala.prealta(ip, p, exigirPase, token, llave);
+        const antes = await sala.prealta(ip, p, exigirPase, token, llave, d);
         if (!antes.ok) return falla(antes, h);
         if (antes.cuenta !== null) return json({ cuenta: antes.cuenta, ya: true }, 200, h);
         const proveedor = pollarDeLaSala(env);
@@ -1559,7 +1989,7 @@ export default {
           await sala.rechazo(ip, token);
           return falla({ motivo: "solo-google" }, h);
         }
-        const anterior = await sala.yaEsta(sesion.usuario, llave, ip, token, sesion.vence);
+        const anterior = await sala.yaEsta(sesion.usuario, llave, ip, token, sesion.vence, d);
         if (!anterior.ok) return falla(anterior, h);
         if (anterior.cuenta !== null) return json({ cuenta: anterior.cuenta, ya: true }, 200, h);
         let cuenta = sesion.cuenta;
@@ -1591,11 +2021,18 @@ export default {
 
       // Consulta de solo lectura: no exige origen, pero sin la llave del celular no dice si la cuenta está anotada.
       if (partes[3] === "campana" && partes[4] === "yo" && partes.length === 5 && req.method === "POST") {
-        const cuerpo = (await leerJson(req, 300)) as { cuenta?: unknown; llave?: unknown } | null;
+        const cuerpo = (await leerJson(req, 300)) as { cuenta?: unknown; llave?: unknown; c?: unknown } | null;
         if (!cuerpo || !esCuentaValida(cuerpo.cuenta) || typeof cuerpo.llave !== "string" || !ES_LLAVE.test(cuerpo.llave)) {
           return json({ error: "forma" }, 400, h);
         }
-        const r = await salaDe(id).estadoDeCelular(cuerpo.cuenta, cuerpo.llave);
+        // La marca de correo confirmado deja de ser una lectura: con la marca prendida pide un origen del sitio. Apagada, se ignora.
+        let confirmo = false;
+        if (cuerpo.c !== undefined && marcaDeCorreoPrendida(env)) {
+          if (cuerpo.c !== true) return json({ error: "forma" }, 400, h);
+          if (!origenPermitido(origen)) return json({ error: "origen" }, 403, h);
+          confirmo = true;
+        }
+        const r = await salaDe(id).estadoDeCelular(cuerpo.cuenta, cuerpo.llave, confirmo);
         return r.ok
           ? json(
               {
@@ -1603,6 +2040,8 @@ export default {
                 total: r.total,
                 cierraMs: r.cierraMs,
                 anotada: r.anotada,
+                ...(r.sorteo !== undefined ? { sorteo: r.sorteo } : {}),
+                ...(r.ronda !== undefined ? { ronda: r.ronda } : {}),
                 ...(r.quitada ? { quitada: r.quitada } : {}),
                 ...(r.gano !== undefined ? { gano: r.gano } : {}),
                 ...(r.puesto !== undefined ? { puesto: r.puesto } : {}),

@@ -18,7 +18,8 @@ import type { CampanaFirmada, ReemplazoDeSala, ReservaDeEvento } from "./campana
 /** Lo que se le pide al objeto de cupos. */
 export interface PuertoDeCupos {
   reservarCampana(evento: string, reemplazo: ReemplazoDeSala | null): Promise<ReservaDeEvento>;
-  confirmarCampana(evento: string, reserva: string, sala: string, huella: string): Promise<boolean>;
+  /** Confirma la sala creada. Con el archivo firmado: de él salen la dueña del evento y la fila de Tus campañas. */
+  confirmarCampana(evento: string, reserva: string, sala: string, huella: string, c: CampanaFirmada): Promise<boolean>;
   /** La sala confirmada del evento si su token tiene esta huella, con el instante en que se reservó. */
   salaDelIntento(evento: string, huella: string): Promise<{ sala: string; enMs: number } | null>;
   soltarCampana(evento: string, reserva: string): Promise<void>;
@@ -83,7 +84,7 @@ export async function crearSalaDeCampana(a: {
     await a.cupos.soltarCampana(a.c.evento, permiso.reserva);
     return { ok: false, motivo: "ocupado" };
   }
-  if (!(await a.cupos.confirmarCampana(a.c.evento, permiso.reserva, creada, huella))) {
+  if (!(await a.cupos.confirmarCampana(a.c.evento, permiso.reserva, creada, huella, a.c))) {
     // Otro pedido tomó el evento mientras tanto: esta sala sobra y su token no se entrega.
     await a.salas.cerrar(creada, a.token);
     return { ok: false, motivo: "ya-existe" };

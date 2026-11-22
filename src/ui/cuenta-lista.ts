@@ -308,8 +308,8 @@ const FOCO = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]
 /** La pantalla en la que el pie va pegado al contenido y no al borde (la misma condición que en `src/styles.css`). */
 const ANCHA = "(min-width: 760px) and (min-height: 481px)";
 
-// El premio vale lo mismo que la entrada: se reemplazan entre sí, y el sello, el sorteo y la entrada con lista le ganan.
-const PRIORIDAD: Record<Para, number> = { entrada: 0, premio: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
+// El premio y el pago valen lo mismo que la entrada: se reemplazan entre sí, y el sello, el sorteo y la entrada con lista le ganan.
+const PRIORIDAD: Record<Para, number> = { entrada: 0, premio: 0, pago: 0, "entrada-con-lista": 1, sorteo: 2, sello: 3 };
 
 const vacio = (): EstadoOficial => ({ activacion: "no-se-sabe", proteccion: "no-se-sabe", correoConfirmado: false, tieneLlaves: false, unicoNavegador: false, correoDeLaCuenta: null });
 
@@ -2069,8 +2069,8 @@ export function abrirCuentaLista(cuenta: CuentaDelPaso, salidas: SalidasDelPaso,
       case "entrar-de-nuevo":
         return salir("entrar");
       case "seguir":
-        // El primer sello es de quien organiza: el paso del premio no lo da por visto.
-        if (op.para !== "premio") op.primerOficial?.marcar();
+        // El primer sello es de quien organiza y se confirma al sellar: ni el paso del premio ni el del pago lo dan por visto.
+        if (op.para !== "premio" && op.para !== "pago") op.primerOficial?.marcar();
         cerrar(true);
         op.alSeguir?.();
         return;

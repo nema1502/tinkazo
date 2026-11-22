@@ -1085,3 +1085,116 @@ describe("los textos nuevos", () => {
     }
   });
 });
+
+describe("la cuenta lista antes de pagar", () => {
+  /** Arma el cobro con la compuerta de la cuenta: lo que contesta cada toque, y el orden en que pasan las cosas. */
+  function conCompuerta(respuestas: ("lista" | "paso" | "no" | "falla")[], cambios: Partial<Cobro> = {}): { m: Mundo; c: Cobro; orden: string[] } {
+    const x = armar(cambios);
+    const orden: string[] = [];
+    const crear = x.m.deps.crear;
+    x.m.deps.crear = async (a, de) => {
+      orden.push("sala");
+      return crear(a, de);
+    };
+    const pagar = x.c.deps.pagar;
+    x.c.deps.pagar = async (p) => {
+      orden.push("pago");
+      return pagar(p);
+    };
+    x.c.deps.cuentaLista = async () => {
+      orden.push("cuenta");
+      const r = respuestas.shift() ?? "lista";
+      if (r === "falla") throw new Error("no cargó");
+      return r;
+    };
+    return { ...x, orden };
+  }
+
+  const tocarPagar = async (p: Panel): Promise<void> => {
+    boton(p, "Pagar 2,40").click();
+    await suelta(8);
+  };
+
+  it("con la cuenta lista, mira la cuenta primero y después crea la sala y paga, en el mismo toque", async () => {
+    const { m, c, orden } = conCompuerta(["lista"]);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    await tocarPagar(p);
+    expect(orden).toEqual(["cuenta", "sala", "pago"]);
+    expect(c.pedidos).toHaveLength(1);
+  });
+
+  it("si hubo que dejar la cuenta lista, no crea la sala ni paga: el pago sale con el toque que sigue", async () => {
+    const { m, c, orden } = conCompuerta(["paso", "lista"]);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    await tocarPagar(p);
+    expect(orden).toEqual(["cuenta"]);
+    expect(m.creadas).toHaveLength(0);
+    expect(c.pedidos).toHaveLength(0);
+    expect(m.almacen.getItem(CLAVE_ORG)).toBeNull();
+    // Vuelve a la vista de pagar, con el mismo botón y sin marca de pago en el aire.
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+    expect(texto(p, "#cpo-aviso")).toBe("");
+    await tocarPagar(p);
+    expect(orden).toEqual(["cuenta", "cuenta", "sala", "pago"]);
+    expect(c.pedidos).toHaveLength(1);
+  });
+
+  it("si la persona dejó el paso, no se toca nada y se puede volver a tocar Pagar", async () => {
+    const { m, c, orden } = conCompuerta(["no", "lista"]);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    await tocarPagar(p);
+    expect(orden).toEqual(["cuenta"]);
+    expect(m.creadas).toHaveLength(0);
+    expect(c.pedidos).toHaveLength(0);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Pagar 2,40"]);
+    await tocarPagar(p);
+    expect(c.pedidos).toHaveLength(1);
+  });
+
+  it("si la compuerta falla por dentro, no deja a nadie sin poder pagar", async () => {
+    const { m, c } = conCompuerta(["falla"]);
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    await tocarPagar(p);
+    expect(c.pedidos).toHaveLength(1);
+  });
+
+  it("mientras se mira la cuenta, otro toque en Pagar no empieza otro", async () => {
+    const x = conCompuerta(["lista"]);
+    let seguir: (r: "lista") => void = () => undefined;
+    x.c.deps.cuentaLista = () =>
+      new Promise<"lista">((r) => {
+        x.orden.push("cuenta");
+        seguir = r;
+      });
+    const p = nuevoPanel(x.m);
+    await eligiendo(x.m, p);
+    boton(p, "Pagar 2,40").click();
+    boton(p, "Pagar 2,40").click();
+    await suelta(4);
+    expect(x.orden).toEqual(["cuenta"]);
+    seguir("lista");
+    await suelta(8);
+    expect(x.orden).toEqual(["cuenta", "sala", "pago"]);
+    expect(x.c.pedidos).toHaveLength(1);
+  });
+
+  it("no cambia cuándo se paga: sin saldo sigue sin ofrecer Pagar y la compuerta no se mira", async () => {
+    const { m, orden } = conCompuerta([], { saldo: 0n });
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    expect(principales(p).map((b) => b.textContent)).toEqual(["Cargar dólares digitales"]);
+    expect(orden).toEqual([]);
+  });
+
+  it("sin la compuerta (el panel de siempre) se paga como antes", async () => {
+    const { m, c } = armar();
+    const p = nuevoPanel(m);
+    await eligiendo(m, p);
+    await tocarPagar(p);
+    expect(c.pedidos).toHaveLength(1);
+  });
+});

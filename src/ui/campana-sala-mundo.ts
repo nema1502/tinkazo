@@ -105,6 +105,10 @@ export interface Mundo {
   enEnsayo: boolean;
   conDemo: boolean;
   cuenta: string | null;
+  /** La cuenta que nombra el texto firmado de la sala (`null` si no nombra a nadie), o por qué no se pudo leer. */
+  organizadora: string | null | FallaDeSala;
+  /** Las salas que el panel apartó de la vista porque entró otra cuenta. */
+  apartadas: SalaDeCampana[];
   contenido: string;
   sala: EstadoDeLaSalaFalsa;
   almacen: Storage;
@@ -161,6 +165,8 @@ export function mundo(opciones: { canal?: () => CanalDeCampana | null; almacen?:
     enEnsayo: false,
     conDemo: false,
     cuenta: null,
+    organizadora: null,
+    apartadas: [],
     contenido: "",
     sala: { fase: "lista", cierraMs: AHORA + 3 * 3_600_000, enSala: new Set(), viva: false, intento: null },
     almacen: opciones.almacen ?? almacenFalso(),
@@ -306,6 +312,8 @@ export function mundo(opciones: { canal?: () => CanalDeCampana | null; almacen?:
     origen: () => "https://tinkazo.app",
     canal: opciones.canal ?? (() => null),
     alCerrar: (sala, filas) => void m.cerradas.push({ sala, filas }),
+    alApartar: (s) => void m.apartadas.push(s),
+    organizadoraDeSala: async () => m.organizadora,
   };
   return m;
 }

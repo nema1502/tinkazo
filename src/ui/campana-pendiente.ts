@@ -1,6 +1,7 @@
 import "../campana/campana-sala.css";
 import { borrarBorrador, leerBorrador } from "../campana/borrador";
 import { DIRECCION_DE_LA_CAMPANA, direccionDelPanel } from "../campana/direccion-del-panel";
+import { cuentaConectada } from "../campana/en-curso";
 import { TEXTOS_SALA_CAMPANA } from "../campana/textos-sala";
 import { getLang, onLangChange } from "../i18n";
 
@@ -19,6 +20,8 @@ export interface DepsDelAviso {
   ir: (direccion: string) => void;
   /** La consulta de esta página (`location.search`): de ahí salen el idioma y el tema que pasan a la campaña. Sin ella, ninguno. */
   consulta?: string;
+  /** La cuenta con que se entró, o `null` sin sesión: el borrador de otra cuenta no se avisa. Sin esto, se avisa. */
+  cuenta?: () => string | null;
 }
 
 export { DIRECCION_DE_LA_CAMPANA };
@@ -41,7 +44,7 @@ export function empresaDelBorrador(crudo: string): string | null {
  * línea y un botón, y Dejar esta campaña chico debajo, que borra el borrador. Devuelve el aviso, o `null` sin borrador.
  */
 export function pintarAvisoEnPrueba(doc: Document, d: DepsDelAviso): { raiz: HTMLElement; pintar: () => void } | null {
-  const crudo = leerBorrador(d.almacen);
+  const crudo = leerBorrador(d.almacen, d.cuenta?.() ?? null);
   if (crudo === null || doc.getElementById("cpo-pendiente")) return null;
   // Un borrador que no se lee como campaña no es de nadie: no se avisa nada.
   const empresa = empresaDelBorrador(crudo);
@@ -92,11 +95,26 @@ export function avisarEnPrueba(): void {
   } catch {
     almacen = null;
   }
-  const aviso = pintarAvisoEnPrueba(document, {
+  const deps: DepsDelAviso = {
     almacen,
     tx: (clave) => TEXTOS_SALA_CAMPANA[getLang()][clave] ?? clave,
     ir: (direccion) => location.assign(direccion),
     consulta: location.search,
-  });
+    cuenta: cuentaConectada,
+  };
+  const aviso = pintarAvisoEnPrueba(document, deps);
   if (aviso) onLangChange(() => aviso.pintar());
+  // Al llegar la sesión se vuelve a mirar de quién es el borrador: otra cuenta no lo ve, y la dueña que vuelve sí.
+  document.addEventListener("tinkazo:sesion", () => {
+    const hay = leerBorrador(almacen, cuentaConectada()) !== null;
+    const puesto = document.getElementById("cpo-pendiente");
+    if (!hay && puesto) {
+      puesto.remove();
+      const portada = document.querySelector<HTMLElement>(".hero-portada");
+      if (portada) portada.style.display = "";
+    } else if (hay && !puesto) {
+      const nuevo = pintarAvisoEnPrueba(document, deps);
+      if (nuevo) onLangChange(() => nuevo.pintar());
+    }
+  });
 }

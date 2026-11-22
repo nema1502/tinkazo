@@ -27,6 +27,8 @@ import { pideElPremioAqui } from "./premio-pide";
  *   dice que está lista;
  * - al sortear (`cuentaListaParaGrabar("sorteo")`), solo con la memoria y sin red: el sorteo se lanza solo desde la
  *   espera;
+ * - al tocar «Pagar» el servicio de una campaña de empresa (`cuentaListaParaGrabar("pago")`), revisando igual que al sellar:
+ *   así la cuenta queda lista y protegida en esta compu antes de cobrar, y no después, en otra compu sin saber cómo entrar;
  * - cuando el sello o el sorteo fallan por la cuenta (`abrirParaElError`, desde `proteger-flujo.ts`).
  *
  * Quien participó en el sorteo de una empresa (la marca de invitada de `src/campana/invitada.ts`) no organiza: lo que se
@@ -346,12 +348,13 @@ export interface ParaGrabar {
 }
 
 /**
- * La compuerta del sello y del sorteo: `true` si se puede seguir en Oficial. Fuera del modo Oficial o sin cuenta de
- * Pollar, siempre `true` y sin esperar nada. Con todo listo en memoria, `true` sin esperar. Para el sello, si la memoria
- * no lo sabe, revisa con tope de 4 segundos; para el sorteo, solo la memoria. Si falta algo o no se pudo saber, abre el
- * paso y devuelve lo que la persona eligió en él.
+ * La compuerta del sello, del sorteo y del pago: `true` si se puede seguir en Oficial. Fuera del modo Oficial o sin cuenta
+ * de Pollar, siempre `true` y sin esperar nada. Con todo listo en memoria, `true` sin esperar. Para el sello y el pago, si
+ * la memoria no lo sabe, revisa con tope de 4 segundos; para el sorteo, solo la memoria. Si falta algo o no se pudo saber,
+ * abre el paso y devuelve lo que la persona eligió en él. Con el pago el paso termina en Seguir y no paga nada: quien llama
+ * decide si sigue (`alAbrir` le avisa que se abrió).
  */
-export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGrabar = {}): Promise<boolean> {
+export async function cuentaListaParaGrabar(para: "sello" | "sorteo" | "pago", o: ParaGrabar = {}): Promise<boolean> {
   if (!aplica()) return true;
   const w = billetera();
   if (!w) return true;
@@ -372,7 +375,7 @@ export async function cuentaListaParaGrabar(para: "sello" | "sorteo", o: ParaGra
     o.alRevisar?.(false);
   }
   if (e && e.activacion === "lista" && e.proteccion === "lista") return true;
-  return abrirPaso("sello", { ...o, inicial: e });
+  return abrirPaso(para, { ...o, inicial: e });
 }
 
 /**

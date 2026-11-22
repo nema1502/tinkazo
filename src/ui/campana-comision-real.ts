@@ -139,5 +139,13 @@ export function depsDeComisionReales(): DepsDeComision {
       const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
       return locks ? locks.request(nombre, { mode: "exclusive" }, f) : f();
     },
+    cuentaLista: async () => {
+      // El cobro solo existe en la red principal: fuera de ahí no se baja nada.
+      if (network.name !== "mainnet") return "lista";
+      const { cuentaListaParaGrabar } = await import("./cuenta-lista-flujo");
+      let abrio = false;
+      const sigue = await cuentaListaParaGrabar("pago", { alAbrir: () => void (abrio = true) });
+      return !sigue ? "no" : abrio ? "paso" : "lista";
+    },
   };
 }

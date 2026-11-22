@@ -98,8 +98,8 @@ describe("el alta de campaña y el proveedor", () => {
     const sinBilletera = ruta.indexOf('falla({ motivo: "sin-billetera" }, h)');
     expect(ruta.lastIndexOf(".rechazo(ip, token)", sinBilletera)).toBeGreaterThan(ruta.indexOf("billetera.cuenta === null"));
     expect(ruta.indexOf(".prealta(")).toBeLessThan(ruta.indexOf(".verificar("));
-    expect(ruta).toContain(".prealta(ip, p, exigirPase, token, llave)");
-    expect(ruta).toContain(".yaEsta(sesion.usuario, llave, ip, token, sesion.vence)");
+    expect(ruta).toContain(".prealta(ip, p, exigirPase, token, llave, d)");
+    expect(ruta).toContain(".yaEsta(sesion.usuario, llave, ip, token, sesion.vence, d)");
   });
 
   it("ninguna respuesta JSON menciona la llave secreta del proveedor", () => {

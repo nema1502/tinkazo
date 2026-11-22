@@ -398,3 +398,72 @@ describe("el acceso al modo Oficial que recibe el paso (W3)", () => {
     expect((h.abrir.mock.calls[0]?.[2] as { acceso: unknown }).acceso).toBe("libre");
   });
 });
+
+describe("el pago del servicio de una campaña en modo Oficial", () => {
+  it("con todo listo en memoria, sigue sin preguntar nada ni abrir el paso", async () => {
+    const f = await flujo();
+    const alAbrir = vi.fn();
+    expect(await f.cuentaListaParaGrabar("pago", { alAbrir })).toBe(true);
+    expect(h.estado).not.toHaveBeenCalled();
+    expect(h.abrir).not.toHaveBeenCalled();
+    expect(alAbrir).not.toHaveBeenCalled();
+  });
+
+  it("sin memoria, revisa y sigue si la cuenta está lista", async () => {
+    h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
+    const f = await flujo();
+    expect(await f.cuentaListaParaGrabar("pago")).toBe(true);
+    expect(h.estado).toHaveBeenCalledTimes(1);
+    expect(h.abrir).not.toHaveBeenCalled();
+  });
+
+  it.each(["falta", "aparato-nuevo", "sin-forma"])("con la protección en %s abre el paso para el pago y devuelve lo que la persona eligió", async (proteccion) => {
+    h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
+    h.estado.mockResolvedValue({ ...TODO, proteccion });
+    h.abrir.mockResolvedValue(true);
+    const f = await flujo();
+    const alAbrir = vi.fn();
+    expect(await f.cuentaListaParaGrabar("pago", { alAbrir })).toBe(true);
+    expect(h.abrir).toHaveBeenCalledTimes(1);
+    const op = h.abrir.mock.calls[0]?.[2] as { para: string; inicial: { proteccion: string }; alAbrir: unknown };
+    expect(op.para).toBe("pago");
+    expect(op.inicial.proteccion).toBe(proteccion);
+    expect(op.alAbrir).toBe(alAbrir);
+  });
+
+  it("con la cuenta sin activar abre el paso, y si la persona lo deja, devuelve falso", async () => {
+    h.billetera = pollar({ activacion: "falta", proteccion: "no-se-sabe" });
+    h.estado.mockResolvedValue({ ...TODO, activacion: "falta", proteccion: "falta" });
+    h.abrir.mockResolvedValue(false);
+    const f = await flujo();
+    expect(await f.cuentaListaParaGrabar("pago")).toBe(false);
+    expect((h.abrir.mock.calls[0]?.[2] as { para: string }).para).toBe("pago");
+  });
+
+  it("si no se pudo saber en 4 segundos, abre el paso igual", async () => {
+    vi.useFakeTimers();
+    h.billetera = pollar({ activacion: "lista", proteccion: "no-se-sabe" });
+    h.estado.mockReturnValue(new Promise(() => undefined));
+    const f = await flujo();
+    const p = f.cuentaListaParaGrabar("pago");
+    await vi.advanceTimersByTimeAsync(4_100);
+    await p;
+    expect(h.abrir).toHaveBeenCalledTimes(1);
+    expect((h.abrir.mock.calls[0]?.[2] as { para: string; inicial: unknown }).para).toBe("pago");
+  });
+
+  it.each([
+    ["en Prueba", () => (h.red = "testnet")],
+    ["con Freighter", () => (h.billetera = freighter)],
+    ["en la demo o el ensayo", () => (h.sinGrabar = true)],
+    ["sin sesión", () => (h.billetera = null)],
+  ])("%s: sigue sin preguntar nada y sin bajar el paso", async (_, armar) => {
+    armar();
+    h.billetera = h.billetera === freighter || h.billetera === null ? h.billetera : pollar({ activacion: "falta", proteccion: "no-se-sabe" });
+    const f = await flujo();
+    expect(await f.cuentaListaParaGrabar("pago")).toBe(true);
+    expect(h.estado).not.toHaveBeenCalled();
+    expect(h.abrir).not.toHaveBeenCalled();
+    expect(h.cargoPaso).toBe(false);
+  });
+});

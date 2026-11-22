@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { Keypair } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLAVE_ORG, type MemoriaDeOrg, type FaseDeSala, borrarOrg, guardarOrg } from "../sala/campana-org";
 import { network } from "../stellar/config";
+import { type WalletAdapter, setActiveWallet } from "../stellar/wallet-lite";
 import {
   CLAVE_DE_LA_SALA,
   CLAVE_SORTEOS,
@@ -9,6 +11,7 @@ import {
   VIDA_CAMPANA_MS,
   type SorteoDeCampana,
   campanaDeLaLista,
+  cuentaConectada,
   entradaDelEvento,
   esListaDeCampana,
   esSorteoDeCampana,
@@ -298,5 +301,93 @@ describe("la campaña activa", () => {
     expect(hayCampanaActiva(AHORA)).toBe(false);
     vi.stubEnv("VITE_CAMPANAS", "1");
     expect(salaDeCampanaActiva(network.name === "mainnet" ? "testnet" : "mainnet", AHORA)).toBeNull();
+  });
+});
+
+describe("de quién es la campaña que recuerda la compu", () => {
+  const CUENTA_A = Keypair.random().publicKey();
+  const CUENTA_B = Keypair.random().publicKey();
+  const conCuenta = (cuenta: string | null): void =>
+    setActiveWallet(cuenta === null ? null : ({ kind: "guest", label: "prueba", address: cuenta } as unknown as WalletAdapter));
+  afterEach(() => setActiveWallet(null));
+
+  const salaDe = (cuenta: string | null | undefined, fase: FaseDeSala = "cerrada"): void => {
+    const memoria: MemoriaDeOrg = { sala: sala(), fase };
+    if (cuenta !== undefined) memoria.cuenta = cuenta;
+    guardarOrg(localStorage, memoria);
+  };
+
+  it("con otra cuenta conectada la sala no cuenta como activa, y sigue guardada", () => {
+    salaDe(CUENTA_A);
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_A)).not.toBeNull();
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).toBeNull();
+    expect(hayCampanaActiva(AHORA, localStorage, CUENTA_B)).toBe(false);
+    expect(hayCampanaActiva(AHORA, localStorage, CUENTA_A)).toBe(true);
+    expect(localStorage.getItem(CLAVE_ORG)).toContain(TOKEN);
+  });
+
+  it("la sala de una cuenta que otra apartó al crear la suya sigue contando como activa para ella", () => {
+    salaDe(CUENTA_A, "sellada");
+    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "lista", cuenta: CUENTA_B });
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_A)).toEqual({ evento: sala().evento, fase: "sellada" });
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).toBeNull();
+    guardarOrg(localStorage, { sala: { ...sala(), evento: "evento-de-b", token: "B".repeat(22) }, fase: "abierta", cuenta: CUENTA_B });
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).toEqual({ evento: "evento-de-b", fase: "abierta" });
+  });
+
+  it("sin sesión la sala cuenta como activa, y la memoria de antes o sin organizadora, con cualquier cuenta", () => {
+    salaDe(CUENTA_A);
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, null)).not.toBeNull();
+    salaDe(undefined);
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).not.toBeNull();
+    salaDe(null);
+    expect(salaDeCampanaActiva(network.name, AHORA, localStorage, CUENTA_B)).not.toBeNull();
+  });
+
+  it("la cuenta conectada es la de la billetera activa", () => {
+    expect(cuentaConectada()).toBeNull();
+    conCuenta(CUENTA_B);
+    expect(cuentaConectada()).toBe(CUENTA_B);
+    salaDe(CUENTA_A);
+    expect(hayCampanaActiva(AHORA)).toBe(false);
+    conCuenta(CUENTA_A);
+    expect(hayCampanaActiva(AHORA)).toBe(true);
+  });
+
+  it("la entrada del sorteo de una cuenta no se ofrece a otra, y guardar la de una no pisa la de la otra", () => {
+    guardarSorteoDeCampana(entrada({ organizadora: CUENTA_A, sorteo: "777", mandados: ["777"] }));
+    guardarSorteoDeCampana(entrada({ evento: "evento-dos", organizadora: CUENTA_B, huella: "cd".repeat(32) }));
+    expect(leerSorteosDeCampana(localStorage, CUENTA_A).map((e) => e.evento)).toEqual(["evento-uno"]);
+    expect(leerSorteosDeCampana(localStorage, CUENTA_B).map((e) => e.evento)).toEqual(["evento-dos"]);
+    expect(entradaDelEvento(network.name, "evento-uno", localStorage, CUENTA_B)).toBeNull();
+    expect(entradaDelEvento(network.name, "evento-uno", localStorage, CUENTA_A)?.sorteo).toBe("777");
+    // Sin sesión se ve todo, y una entrada sin organizadora la ve cualquiera.
+    expect(leerSorteosDeCampana(localStorage, null)).toHaveLength(2);
+    guardarSorteoDeCampana(entrada({ evento: "evento-tres", organizadora: null }));
+    expect(leerSorteosDeCampana(localStorage, CUENTA_B).map((e) => e.evento).sort()).toEqual(["evento-dos", "evento-tres"]);
+  });
+
+  it("con otra cuenta conectada el sorteo de la campaña no es de la campaña y su lista no se ofrece", () => {
+    salaDe(CUENTA_A);
+    guardarSorteoDeCampana(entrada({ organizadora: CUENTA_A, sorteo: "777", mandados: ["777"] }));
+    conCuenta(CUENTA_A);
+    expect(esSorteoDeCampana(777n)).toBe(true);
+    conCuenta(CUENTA_B);
+    expect(esSorteoDeCampana(777n)).toBe(false);
+    conCuenta(CUENTA_A);
+    expect(esSorteoDeCampana(777n)).toBe(true);
+
+    guardarSorteoDeCampana(entrada({ organizadora: CUENTA_A }));
+    expect(campanaDeLaLista(HUELLA, AHORA)).not.toBeNull();
+    expect(esListaDeCampana(HUELLA, AHORA)).toBe(true);
+    expect(listaCambiadaDeLaCampana("00".repeat(32), AHORA)).toBe(true);
+    conCuenta(CUENTA_B);
+    expect(campanaDeLaLista(HUELLA, AHORA)).toBeNull();
+    expect(esListaDeCampana(HUELLA, AHORA)).toBe(false);
+    expect(listaCambiadaDeLaCampana("00".repeat(32), AHORA)).toBe(false);
+    expect(leerSorteosDeCampana(localStorage)).toEqual([]);
+    // Nada se borró: al volver la dueña está todo.
+    conCuenta(CUENTA_A);
+    expect(campanaDeLaLista(HUELLA, AHORA)).not.toBeNull();
   });
 });

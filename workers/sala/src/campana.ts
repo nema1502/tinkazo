@@ -10,6 +10,7 @@ import type { Ejecutar } from "./registro";
 import { deHex, esPedidoLocal, verificarFirma } from "./firma";
 import type { VariablesDePrueba } from "./firma";
 import type { SelloEnLaRed } from "./cadena";
+import { limpiarTexto } from "./correo";
 
 export const VIDA_CAMPANA_MS = 24 * 3_600_000;
 /**
@@ -110,6 +111,85 @@ export function leerTextoDeCampana(texto: string, ahora: number): LecturaDelText
   if (organizadora !== null && !esCuentaValida(organizadora)) return forma("organizadora");
   if (cierraMs <= ahora) return { ok: false, motivo: "vencida", campo: "cierra_ms" };
   return { ok: true, evento, red, cierraMs, sorteoMs, premios: premios.length, organizadora };
+}
+
+/** Lo más largo que se guarda del nombre de la empresa en la lista de Tus campañas. */
+export const MAX_EMPRESA_EN_LISTA = 60;
+/** El instante más lejano que acepta un Date. El mismo tope que el lector del sitio (`src/campana/modelo.ts`). */
+const MAXIMO_DE_FECHA = 8_640_000_000_000_000;
+
+/** Lo que Tus campañas necesita de un texto firmado, además de lo que ya lee la sala. */
+export interface DatosDeLista {
+  evento: string;
+  /** La cuenta que nombra el texto, si la nombra. Sin ella el evento no tiene dueña conocida. */
+  organizadora: string | null;
+  empresa: string;
+  zona: string;
+  abreMs: number;
+  cierraMs: number;
+  sorteoMs: number;
+}
+export type LecturaDeLista = ({ ok: true } & DatosDeLista) | { ok: false; campo: string };
+
+const esInstante = (x: unknown): x is number => typeof x === "number" && Number.isSafeInteger(x) && x > 0 && x <= MAXIMO_DE_FECHA;
+
+/**
+ * Lee de un texto firmado lo que hace falta para la lista de Tus campañas: la hora de abrir, la zona, el nombre de la empresa
+ * y las horas de cierre y sorteo. Lo comparten activar y la creación de la sala. No mira si el cierre ya pasó: una sala viva
+ * después del cierre sigue siendo la campaña de esa cuenta. Las reglas son las del sitio (`src/campana/modelo.ts`): la zona
+ * tiene que ser una que `Intl` acepte y el nombre de la empresa, de 1 a 60 caracteres ya limpios. `campo` dice cuál no sirvió.
+ */
+export function leerDatosDeLista(texto: string): LecturaDeLista {
+  const forma = (campo: string): LecturaDeLista => ({ ok: false, campo });
+  if (typeof texto !== "string" || texto.length < 1 || texto.length > MAX_TEXTO_CAMPANA) return forma("texto");
+  let datos: unknown;
+  try {
+    datos = JSON.parse(texto);
+  } catch {
+    return forma("texto");
+  }
+  if (typeof datos !== "object" || datos === null || Array.isArray(datos)) return forma("texto");
+  const c = datos as Record<string, unknown>;
+  if (typeof c.evento !== "string" || !ES_EVENTO_CAMPANA.test(c.evento)) return forma("evento");
+  const organizadora = c.organizadora ?? null;
+  if (organizadora !== null && !esCuentaValida(organizadora)) return forma("organizadora");
+  if (!esInstante(c.abre_ms)) return forma("abre_ms");
+  if (!esInstante(c.cierra_ms)) return forma("cierra_ms");
+  if (!esInstante(c.sorteo_ms)) return forma("sorteo_ms");
+  const zona = c.zona;
+  if (typeof zona !== "string" || zona.length < 1 || zona.length > 64) return forma("zona");
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: zona }).format(0);
+  } catch {
+    return forma("zona");
+  }
+  const empresa = typeof c.empresa === "object" && c.empresa !== null ? (c.empresa as Record<string, unknown>).nombre : null;
+  const nombre = limpiarTexto(empresa, MAX_EMPRESA_EN_LISTA);
+  if (nombre === "") return forma("empresa.nombre");
+  return { ok: true, evento: c.evento, organizadora, empresa: nombre, zona, abreMs: c.abre_ms, cierraMs: c.cierra_ms, sorteoMs: c.sorteo_ms };
+}
+
+/** El evento y la hora del sorteo del texto firmado de una sala, o null si no se leen. Nunca de la clave `sorteo` de la sala. */
+export function eventoYSorteoDelTexto(texto: string | null): { evento: string; sorteoMs: number } | null {
+  if (texto === null) return null;
+  try {
+    const c = JSON.parse(texto) as { evento?: unknown; sorteo_ms?: unknown } | null;
+    if (!c || typeof c.evento !== "string" || !ES_EVENTO_CAMPANA.test(c.evento) || !esInstante(c.sorteo_ms)) return null;
+    return { evento: c.evento, sorteoMs: c.sorteo_ms };
+  } catch {
+    return null;
+  }
+}
+
+/** La cuenta que nombra el texto firmado de una sala, o null si no la nombra o no se lee. */
+export function organizadoraDelTexto(texto: string | null): string | null {
+  if (texto === null) return null;
+  try {
+    const c = JSON.parse(texto) as { organizadora?: unknown } | null;
+    return c && esCuentaValida(c.organizadora) ? c.organizadora : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -215,10 +295,11 @@ export function sellar(
     return { ok: false, motivo: "lista-distinta" };
   }
   sql(
-    "INSERT INTO sala (k, v) VALUES ('fase', 'sellada'), ('sorteo', ?), ('lista', ?) " +
+    "INSERT INTO sala (k, v) VALUES ('fase', 'sellada'), ('sorteo', ?), ('lista', ?), ('ronda_sello', ?) " +
       "ON CONFLICT(k) DO UPDATE SET v = excluded.v",
     sorteo,
     JSON.stringify(lista),
+    String(sello.ronda),
   );
   return { ok: true };
 }
@@ -316,11 +397,23 @@ export const hastaDelPase = (ahora: number): number => (ventanaDelPase(ahora) + 
 export function crearTablaDeEventos(sql: Ejecutar): void {
   sql(
     "CREATE TABLE IF NOT EXISTS eventos_campana " +
-      "(evento TEXT PRIMARY KEY, dia TEXT NOT NULL, sala TEXT, huella TEXT, reserva TEXT NOT NULL, en_ms INTEGER NOT NULL)",
+      "(evento TEXT PRIMARY KEY, dia TEXT NOT NULL, sala TEXT, huella TEXT, reserva TEXT NOT NULL, en_ms INTEGER NOT NULL, " +
+      "duena TEXT, revisada INTEGER NOT NULL DEFAULT 0)",
   );
+  // Un `CREATE TABLE IF NOT EXISTS` no agrega columnas a una tabla que ya existe: las campañas que se crearon antes de que
+  // hubiera dueña tienen la tabla sin `duena` ni `revisada`, y se las suma una vez, sin tocar sus filas.
+  const columnas = sql<{ name: string }>("PRAGMA table_info(eventos_campana)").map((columna) => columna.name);
+  if (!columnas.includes("duena")) sql("ALTER TABLE eventos_campana ADD COLUMN duena TEXT");
+  if (!columnas.includes("revisada")) sql("ALTER TABLE eventos_campana ADD COLUMN revisada INTEGER NOT NULL DEFAULT 0");
   // Las salas que de verdad se crearon por día, aunque después se cierren: es lo que gasta el cupo.
   sql("CREATE TABLE IF NOT EXISTS campanas_creadas (dia TEXT PRIMARY KEY, n INTEGER NOT NULL)");
+  // Los eventos que ya se sellaron: no se reabren ni se reemplazan, tampoco con el token de su sala. Viven hasta 30 días
+  // después de la hora del sorteo que dice el texto firmado.
+  sql("CREATE TABLE IF NOT EXISTS eventos_sellados (evento TEXT PRIMARY KEY, en_ms INTEGER NOT NULL, hasta_ms INTEGER NOT NULL)");
 }
+
+/** Cuánto se recuerda un evento sellado, y una campaña en Tus campañas, después de la hora del sorteo: 30 días. */
+export const DIAS_DE_LA_LISTA = 30;
 
 export type ReservaDeEvento =
   | { ok: true; reserva: string }
@@ -351,6 +444,10 @@ export function reservarEventoSql(
     "SELECT sala, huella, en_ms FROM eventos_campana WHERE evento = ?",
     evento,
   )[0];
+  // Un evento sellado no se reabre por ningún camino: ni con el archivo público ni con el token de su sala vieja.
+  if (sql("SELECT 1 FROM eventos_sellados WHERE evento = ? AND hasta_ms >= ?", evento, ahora).length > 0) {
+    return { ok: false, motivo: "ya-existe", sala: hay?.sala ?? null };
+  }
   if (hay) {
     // Una reserva sin confirmar y vieja es un corte entre reservar y crear: el archivo todavía no se mostró en ninguna sala.
     // Una sala confirmada solo se reemplaza si quien llama comprobó que esa misma sala ya no existe y trae su token.
@@ -406,7 +503,7 @@ export function salaDelIntentoSql(sql: Ejecutar, evento: string, huella: string)
 export function confirmarEventoSql(
   sql: Ejecutar,
   evento: string,
-  a: { reserva: string; sala: string; huella: string; ahora: number },
+  a: { reserva: string; sala: string; huella: string; ahora: number; organizadora?: string | null },
 ): boolean {
   crearTablaDeEventos(sql);
   // La fila puede traer la sala muerta que esta reserva viene a reemplazar: manda la reserva, no que no tenga sala.
@@ -415,13 +512,17 @@ export function confirmarEventoSql(
   const ahora = a.ahora;
   const dia = diaUtc(ahora);
   // La reserva usada se cambia: no sirve para confirmar otra vez. En un reemplazo, `en_ms` pasa a ser el de la sala nueva.
+  // La dueña del evento es la cuenta que nombra el texto firmado de esta sala (null si no la nombra), y ya se sabe: no hay nada
+  // que revisar después.
   sql(
-    "UPDATE eventos_campana SET sala = ?, huella = ?, dia = ?, reserva = ?, en_ms = CASE WHEN sala IS NULL THEN en_ms ELSE ? END WHERE evento = ?",
+    "UPDATE eventos_campana SET sala = ?, huella = ?, dia = ?, reserva = ?, en_ms = CASE WHEN sala IS NULL THEN en_ms ELSE ? END, " +
+      "duena = ?, revisada = 1 WHERE evento = ?",
     a.sala,
     a.huella,
     dia,
     nuevaReserva(),
     ahora,
+    a.organizadora ?? null,
     evento,
   );
   sql("INSERT INTO campanas_creadas (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
@@ -610,7 +711,7 @@ export class FichasVerificadas {
 }
 
 export type PrealtaDeCampana =
-  | { ok: true; cuenta: string | null }
+  | { ok: true; cuenta: string | null; nombre?: { n: number; v: number; d: string; estado: string } }
   | { ok: false; motivo: "cerrada" | "pase" | "quitada" }
   | { ok: false; motivo: "rechazos" | "cupo-conexion"; esperaS: number };
 
@@ -624,7 +725,7 @@ export type PrealtaDeCampana =
 export function prealtaDeCampana(
   sql: Ejecutar,
   fichas: FichasVerificadas,
-  a: { grupo: string; ficha: string; llave: string; paseVale: boolean; ahora: number },
+  a: { grupo: string; ficha: string; llave: string; paseVale: boolean; ahora: number; d?: string },
 ): PrealtaDeCampana {
   const persona = fichas.personaDe(a.ficha, a.ahora);
   const antes = antesDeVerificar(sql, { ...a, reconocida: persona !== null });
@@ -633,13 +734,13 @@ export function prealtaDeCampana(
   if (sql("SELECT persona FROM campana_quitadas WHERE persona = ? LIMIT 1", persona)[0]) {
     return { ok: false, motivo: "quitada" };
   }
-  const anterior = siYaEsta(sql, { persona, llave: a.llave, grupo: a.grupo, ahora: a.ahora });
+  const anterior = siYaEsta(sql, { persona, llave: a.llave, grupo: a.grupo, ahora: a.ahora, ...(a.d !== undefined ? { d: a.d } : {}) });
   if (anterior === null) {
     // La persona ya no está y no salió con motivo: hay que llamar al proveedor, así que vale el tope de la conexión.
     const tope = topeDeConexion(sql, a.grupo, a.ahora);
     return tope.ok ? { ok: true, cuenta: null } : tope;
   }
-  return anterior.ok ? { ok: true, cuenta: anterior.cuenta } : anterior;
+  return anterior;
 }
 
 /**
@@ -702,20 +803,30 @@ interface Reingreso {
   llave: string;
   grupo: string;
   ahora: number;
+  /**
+   * El nombre cifrado que trae el alta. Con el servidor de tu campaña en otra compu, quien vuelve a escanear el QR nuevo trae su
+   * nombre con la clave nueva: mientras la fase acepte altas reemplaza al de su fila. Sin él, el reingreso solo cambia la llave.
+   */
+  d?: string;
 }
 
 const HORA_MS = 3_600_000;
 
-type Reanotada = { ok: true; cuenta: string; n: number; v: number } | { ok: false; esperaS: number };
+/** `nombre` viene solo cuando el reingreso cambió el nombre cifrado de la fila: la pantalla se entera con eso. */
+type Reanotada =
+  | { ok: true; cuenta: string; n: number; v: number; nombre?: { d: string; estado: string } }
+  | { ok: false; esperaS: number };
 
 /**
  * Reconoce a la persona y cambia la huella de su celular sin crear otra fila ni alterar sus datos cifrados. Cada persona
  * puede reingresar `REINGRESOS_POR_PERSONA_POR_HORA` veces por hora: pasado el tope no se escribe nada, así nadie gira la
- * llave de su otro celular ni llena el almacén repitiendo el alta.
+ * llave de su otro celular ni llena el almacén repitiendo el alta. Si el alta trae su nombre cifrado y la fase todavía acepta
+ * altas, la fila pasa también al nombre nuevo (con la clave de la compu nueva): sube `v` igual y la clave nunca viaja.
  */
 function reanotar(sql: Ejecutar, a: Reingreso): Reanotada | null {
-  const hay = sql<{ cuenta: string; n: number }>(
-    "SELECT p.cuenta AS cuenta, e.n AS n FROM personas p JOIN equipos e ON e.cuenta = p.cuenta WHERE p.persona = ?",
+  const hay = sql<{ cuenta: string; n: number; d: string; estado: string }>(
+    "SELECT p.cuenta AS cuenta, e.n AS n, e.d AS d, e.estado AS estado " +
+      "FROM personas p JOIN equipos e ON e.cuenta = p.cuenta WHERE p.persona = ?",
     a.persona,
   )[0];
   if (!hay) return null;
@@ -731,13 +842,20 @@ function reanotar(sql: Ejecutar, a: Reingreso): Reanotada | null {
     hora,
   );
   const v = siguienteVersion(sql);
-  sql("UPDATE equipos SET llave = ?, v = ? WHERE n = ?", a.llave, v, hay.n);
+  const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
+  const nombreNuevo = a.d !== undefined && fase === "abierta";
+  if (nombreNuevo && a.d !== undefined) sql("UPDATE equipos SET llave = ?, d = ?, v = ? WHERE n = ?", a.llave, a.d, v, hay.n);
+  else sql("UPDATE equipos SET llave = ?, v = ? WHERE n = ?", a.llave, v, hay.n);
   const ventana = Math.floor(a.ahora / VENTANA_CAMPANA_MS);
   contarEnvio(sql, a.grupo, ventana, false);
-  return { ok: true, cuenta: hay.cuenta, n: hay.n, v };
+  const nombre = nombreNuevo && a.d !== undefined && a.d !== hay.d ? { d: a.d, estado: hay.estado } : undefined;
+  return { ok: true, cuenta: hay.cuenta, n: hay.n, v, ...(nombre ? { nombre } : {}) };
 }
 
-export type ReingresoDePersona = { ok: true; cuenta: string } | { ok: false; motivo: "cupo-conexion"; esperaS: number };
+/** `nombre` viene solo si el reingreso cambió el nombre cifrado de la fila (con `v` y `n` para avisar a la pantalla). */
+export type ReingresoDePersona =
+  | { ok: true; cuenta: string; nombre?: { n: number; v: number; d: string; estado: string } }
+  | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
 /**
  * Si la persona ya está anotada: su cuenta, y la llave de este celular pasa a ser la suya (es ella en otro celular).
@@ -746,7 +864,8 @@ export type ReingresoDePersona = { ok: true; cuenta: string } | { ok: false; mot
 export function siYaEsta(sql: Ejecutar, a: Reingreso): ReingresoDePersona | null {
   const r = reanotar(sql, a);
   if (r === null) return null;
-  return r.ok ? { ok: true, cuenta: r.cuenta } : { ok: false, motivo: "cupo-conexion", esperaS: r.esperaS };
+  if (!r.ok) return { ok: false, motivo: "cupo-conexion", esperaS: r.esperaS };
+  return r.nombre ? { ok: true, cuenta: r.cuenta, nombre: { n: r.n, v: r.v, ...r.nombre } } : { ok: true, cuenta: r.cuenta };
 }
 
 export interface AltaDePersona extends Reingreso {
@@ -756,7 +875,7 @@ export interface AltaDePersona extends Reingreso {
 }
 
 export type ResultadoDeAltaDePersona =
-  | { ok: true; cuenta: string; ya: boolean; v: number; n: number }
+  | { ok: true; cuenta: string; ya: boolean; v: number; n: number; nombre?: { d: string; estado: string } }
   | { ok: false; motivo: "cerrada" | "quitada" | "ajena" | "rapido" | "llena" }
   | { ok: false; motivo: "cupo-conexion"; esperaS: number };
 
@@ -784,7 +903,9 @@ export function anotarPersona(
   // Se repite la consulta después de la espera del proveedor: dos celulares de la misma persona no se duplican.
   const existente = reanotar(sql, alta);
   if (existente?.ok === false) return { ok: false, motivo: "cupo-conexion", esperaS: existente.esperaS };
-  if (existente) return { ok: true, cuenta: existente.cuenta, n: existente.n, v: existente.v, ya: true };
+  if (existente) {
+    return { ok: true, cuenta: existente.cuenta, n: existente.n, v: existente.v, ya: true, ...(existente.nombre ? { nombre: existente.nombre } : {}) };
+  }
   if (sql("SELECT cuenta FROM equipos WHERE cuenta = ?", alta.cuenta)[0]) {
     contarEnvio(sql, alta.grupo, ritmo.ventana, false);
     return { ok: false, motivo: "ajena" };
@@ -909,12 +1030,16 @@ function horaDeReserva(marca: string): number | null {
  * terminó, porque el trabajo en segundo plano se cortó o el Worker se reinició, vuelve a reservarse pasado
  * `VIDA_DE_RESERVA_DE_AVISO_MS`, así que a esa cuenta se le avisa la próxima vez que llegue el resultado.
  */
-export function reservarAvisosPorCorreo(sql: Ejecutar, ahora: number): { cuenta: string; puesto: number }[] {
+export function reservarAvisosPorCorreo(
+  sql: Ejecutar,
+  ahora: number,
+  opciones: { marca?: boolean } = {},
+): { cuenta: string; puesto: number; confirmo?: true }[] {
   const fase = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'fase'")[0]?.v;
   if (fase !== "sorteada") return [];
   const premios = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'premios'")[0]?.v);
   if (!Number.isSafeInteger(premios) || premios < 1) return [];
-  const reservadas: { cuenta: string; puesto: number }[] = [];
+  const reservadas: { cuenta: string; puesto: number; confirmo?: true }[] = [];
   const ganadoras = ganadorasGuardadas(sql).slice(0, premios);
   ganadoras.forEach((cuenta, puesto) => {
     const clave = `correo:${cuenta}`;
@@ -928,9 +1053,26 @@ export function reservarAvisosPorCorreo(sql: Ejecutar, ahora: number): { cuenta:
       clave,
       `${AVISO_RESERVADO}${ahora}`,
     );
-    reservadas.push({ cuenta, puesto });
+    // La marca de correo confirmado solo se mira si el Worker la acepta: con ella apagada, nadie sale con la versión B por esto.
+    const confirmo = opciones.marca === true && sql<{ v: string }>("SELECT v FROM sala WHERE k = ?", `confirmo:${cuenta}`)[0]?.v === "1";
+    reservadas.push(confirmo ? { cuenta, puesto, confirmo: true } : { cuenta, puesto });
   });
   return reservadas;
+}
+
+/**
+ * Anota que el celular de esta cuenta dice que su correo es el de la sesión y está confirmado. Solo la deja quien presenta la
+ * llave de su propio celular (una cuenta anotada, sin motivo de salida), y escribe solo si hay algo nuevo que escribir: 300
+ * celulares repitiéndola no suman escrituras. Si alguien la manda sin ser verdad, solo cambia el texto de su propio correo.
+ */
+export function marcarCorreoConfirmado(sql: Ejecutar, cuenta: string, llave: string): boolean {
+  const equipo = sql<{ llave: string }>("SELECT llave FROM equipos WHERE cuenta = ?", cuenta)[0];
+  if (equipo === undefined || !iguales(equipo.llave, llave)) return false;
+  if (sql("SELECT cuenta FROM campana_quitadas WHERE cuenta = ?", cuenta)[0]) return false;
+  const clave = `confirmo:${cuenta}`;
+  if (sql<{ v: string }>("SELECT v FROM sala WHERE k = ?", clave)[0]?.v === "1") return false;
+  sql("INSERT INTO sala (k, v) VALUES (?, '1') ON CONFLICT(k) DO NOTHING", clave);
+  return true;
 }
 
 /** Deja la marca de una cuenta en "hecha": su aviso ya se intentó y no se repite. Solo toca una reserva que existe. */
@@ -948,11 +1090,26 @@ export function avisarGanadora(sql: Ejecutar, cuenta: string): { ok: true } | { 
   return { ok: true };
 }
 
+/**
+ * El número del sorteo y la ronda de drand del sello, solo con la lista sellada o sorteada. Antes del sello la clave `sorteo`
+ * guarda la HORA del sorteo, no el número: por eso nunca se manda en otra fase. Los dos son públicos en la cadena desde el sello.
+ * Una sala sellada antes de que se guardara la ronda trae el número y no la ronda (el celular hace lo de siempre).
+ */
+export function selloPublico(sql: Ejecutar, fase: Fase): { sorteo?: string; ronda?: number } {
+  if (fase !== "sellada" && fase !== "sorteada") return {};
+  const sorteo = sql<{ v: string }>("SELECT v FROM sala WHERE k = 'sorteo'")[0]?.v;
+  if (sorteo === undefined || !/^[0-9]{1,20}$/.test(sorteo)) return {};
+  const ronda = Number(sql<{ v: string }>("SELECT v FROM sala WHERE k = 'ronda_sello'")[0]?.v);
+  return Number.isSafeInteger(ronda) && ronda >= 1 ? { sorteo, ronda } : { sorteo };
+}
+
 export interface EstadoDeCelular {
   fase: Fase;
   total: number;
   cierraMs: number;
   anotada: boolean;
+  sorteo?: string;
+  ronda?: number;
   quitada?: MotivoDeSalida;
   gano?: boolean;
   puesto?: number;
@@ -972,12 +1129,14 @@ export function estadoDeCelular(sql: Ejecutar, cuenta: string, llave: string): E
   )[0];
   const llaveDeEquipo = equipo !== undefined && iguales(equipo.llave, llave);
   const salidaPropia = salida !== undefined && iguales(salida.llave, llave) ? salida : undefined;
-  if (!llaveDeEquipo && !salidaPropia) return { fase: valor, total, cierraMs, anotada: false };
+  const sello = selloPublico(sql, valor);
+  if (!llaveDeEquipo && !salidaPropia) return { fase: valor, total, cierraMs, anotada: false, ...sello };
   const estado: EstadoDeCelular = {
     fase: valor,
     total,
     cierraMs,
     anotada: llaveDeEquipo && salidaPropia === undefined,
+    ...sello,
   };
   if (salidaPropia && esMotivoDeSalida(salidaPropia.motivo)) estado.quitada = salidaPropia.motivo;
   if (valor === "sorteada") {

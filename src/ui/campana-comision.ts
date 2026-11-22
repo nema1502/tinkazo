@@ -77,6 +77,12 @@ export interface DepsDeComision {
   cargar: (cuenta: string, alCerrar: () => void, falta?: string) => void;
   /** Corre `f` con un candado entre pestañas. Sin candados en el navegador, corre `f` solo. */
   candado: <T>(nombre: string, f: () => Promise<T>) => Promise<T>;
+  /**
+   * La cuenta lista para pagar desde esta compu (`cuenta-lista-flujo.ts`, `cuentaListaParaGrabar("pago")`), antes de armar nada:
+   * `lista` si ya lo estaba y se puede pagar en este mismo toque, `paso` si hubo que dejarla lista (se abrió el paso y la persona
+   * lo terminó: vuelve a tocar Pagar), `no` si no se pudo o se dejó. Sin esto, no se mira nada y se paga como siempre.
+   */
+  cuentaLista?: () => Promise<"lista" | "paso" | "no">;
 }
 
 /** Lo que el controlador le pide al panel. */
@@ -174,6 +180,8 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
   let portero: PorteroDeComision = null;
   let pagadaAca = false;
   let pagando = false;
+  /** Mientras se mira la cuenta (o está abierto el paso de dejarla lista), otro toque en Pagar no empieza otro. */
+  let revisandoLaCuenta = false;
   let rechazos = 0;
   let mirada = 0;
   /** Sube al reiniciar o detener: una vuelta de la duda que ya estaba en el aire no vuelve a armar la mirada. */
@@ -406,8 +414,21 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     const cfg = deps.comision();
     const c = ctx.campana();
     const origen = ctx.cuenta();
+    if (!cfg || !c || !origen || estado().tipo !== "lista" || revisandoLaCuenta) return;
+    // Antes de cobrar, la cuenta tiene que poder pagar desde esta compu: si falta confirmarla o protegerla, se hace acá y no
+    // después, en otra compu donde nadie sabría entrar. No cambia cuándo se paga: solo pone el paso delante.
+    if (deps.cuentaLista) {
+      revisandoLaCuenta = true;
+      const cuenta = await deps.cuentaLista().catch((): "lista" => "lista");
+      revisandoLaCuenta = false;
+      if (cuenta === "no") return;
+      // El paso terminó: lo que se sabe de la cuenta cambió y el pago sale con el toque que sigue, no con este.
+      if (cuenta === "paso") return void mirar();
+    }
+    // Lo que se mira de nuevo: durante la revisión de la cuenta la pantalla pudo cambiar.
     const e = estado();
-    if (!cfg || !c || !origen || e.tipo !== "lista") return;
+    const origenAhora = ctx.cuenta();
+    if (ctx.campana() !== c || origenAhora !== origen || e.tipo !== "lista") return;
     const n = numeros(cfg, c);
     pagando = true;
     etapaDelPago = "armando";
@@ -672,6 +693,7 @@ export function crearControlDeComision(deps: DepsDeComision, ctx: ContextoDeComi
     billetera = "otra";
     pagadaAca = false;
     pagando = false;
+    revisandoLaCuenta = false;
     rechazos = 0;
     marcaEnMemoria = null;
   }

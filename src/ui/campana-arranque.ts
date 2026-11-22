@@ -1,4 +1,5 @@
-import { hayCampanaActiva } from "../campana/en-curso";
+import { seVeDesde } from "../campana/de-quien";
+import { cuentaConectada, hayCampanaActiva } from "../campana/en-curso";
 import { t } from "../i18n";
 import { avisarQueNoCargo } from "./aviso-no-cargo";
 import { atenderVentanaDeGoogle, cerrarVentana, pintarCapa } from "./campana-ventana";
@@ -106,15 +107,19 @@ export function arrancar(): void {
 
 /** La clave de `borrador.ts`, escrita acá para no bajar ese módulo a quien no armó ninguna campaña (la prueba las ata). */
 export const CLAVE_DEL_BORRADOR_AQUI = "tinkazo.campana.borrador";
+/** La cuenta a la que se anotó el borrador (`CLAVE_DE_LA_CUENTA_DEL_BORRADOR` de `borrador.ts`, que una prueba ata). */
+export const CLAVE_DE_LA_CUENTA_DEL_BORRADOR_AQUI = "tinkazo.campana.borrador.cuenta";
 
 /**
- * Si este navegador guarda una campaña por activar: la deja crear-campana.html al tocar Activar mi campaña. Solo cuenta un
- * borrador que se lee como campaña (con su evento y el nombre de la empresa): uno roto o de otra versión no cambia nada.
+ * Si este navegador guarda una campaña por activar que se ve desde la cuenta conectada: la deja crear-campana.html al tocar
+ * Activar mi campaña. Solo cuenta un borrador que se lee como campaña (con su evento y el nombre de la empresa): uno roto o
+ * de otra versión no cambia nada. El de otra cuenta no cuenta, y tampoco se borra.
  */
-export function hayBorrador(): boolean {
+export function hayBorrador(cuenta: string | null = cuentaConectada()): boolean {
   try {
     const crudo = localStorage.getItem(CLAVE_DEL_BORRADOR_AQUI);
     if (crudo === null || crudo === "" || crudo.length > 200_000) return false;
+    if (!seVeDesde(localStorage.getItem(CLAVE_DE_LA_CUENTA_DEL_BORRADOR_AQUI) || null, cuenta)) return false;
     const x: unknown = JSON.parse(crudo);
     if (typeof x !== "object" || x === null) return false;
     const { evento, empresa } = x as { evento?: unknown; empresa?: unknown };

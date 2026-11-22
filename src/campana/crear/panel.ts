@@ -74,6 +74,11 @@ export interface DepsDelCreador {
    * panel que cobra, activa y abre la inscripción. `false` si no se pudo guardar. Sin esto, solo se baja la campaña.
    */
   activar?: (texto: string) => boolean;
+  /**
+   * Si la sala de afuera tiene Tus campañas: los enlaces a Tus campañas aparecen recién cuando contesta que sí. Sin esta función
+   * (las pruebas de siempre) están desde el principio. Una sala que todavía no la tiene los deja sin mostrar.
+   */
+  tusDisponible?: () => Promise<boolean | null>;
   /** El origen con que se habla con la vista. */
   origen: string;
   /** El tema forzado por la dirección de la página, para que la vista lo repita. */
@@ -163,6 +168,8 @@ const CLAVE_DE_PESTANA: Record<PantallaDeVista, string> = {
   ganaste: "ccTabGano",
 };
 const CORREO_DE_CONTACTO = "hola@tinkazo.app";
+/** El panel de quien organiza en el modo oficial, donde está Tus campañas: la misma dirección a la que lleva Activar mi campaña. */
+export const DIRECCION_DE_TUS_CAMPANAS = "/?campana&red=oficial";
 const MS_DE_ESPERA_PARA_GUARDAR = 300;
 const FONDO_CLARO = "#ffffff";
 const FONDO_OSCURO = "#1b1530";
@@ -207,6 +214,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
   let cancelarGuardado: (() => void) | null = null;
   let pendienteDeGuardar = false;
   let desmontado = false;
+  /** Si los enlaces a Tus campañas se muestran: desde el principio, o cuando la sala dice que tiene la función. */
+  let tusHay = deps.tusDisponible === undefined;
 
   /** Se puede activar desde esta página: hay con qué guardar el borrador y no es la demostración, que no guarda nada. */
   const puedeActivar = (): boolean => deps.activar !== undefined && !deps.demo;
@@ -435,6 +444,24 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     llevarALaVista(nuevo.closest("li") ?? nuevo);
   }
 
+  /* --- el enlace a Tus campañas, solo si la sala tiene la función --- */
+
+  function enlaceDeTusCampanas(clase: string, id: string): HTMLAnchorElement {
+    const a = el("a", clase, tx("ccTusCampanas"));
+    a.href = DIRECCION_DE_TUS_CAMPANAS;
+    a.id = id;
+    return a;
+  }
+
+  /** La sala contestó que sí: los enlaces se suman sin dibujar de nuevo los pasos, que perdería el teclado de quien escribe. */
+  function mostrarTusCampanas(): void {
+    if (tusHay || desmontado) return;
+    tusHay = true;
+    pintarArriba();
+    const yaTengo = raiz.querySelector("#ccp-ya-tengo");
+    if (yaTengo && !raiz.querySelector("#ccp-tus")) yaTengo.after(enlaceDeTusCampanas("ccp-enlace ccp-tus", "ccp-tus"));
+  }
+
   /* --- arriba: en qué paso está --- */
 
   function pintarArriba(): void {
@@ -487,6 +514,7 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
         }, "ccp-empezar"),
       );
     }
+    if (tusHay) lista.append(enlaceDeTusCampanas("ccp-enlace", "ccp-tus-mas"));
     lista.append(terminos);
     mas.append(lista);
     arriba.append(dicho, pasos, mas);
@@ -556,6 +584,8 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
     b.append(colores);
     if (f.nombre === "" && f.logo === null && f.monto === null && f.pasos.length === 0 && f.origen === null) {
       b.append(boton(tx("ccYaTenes"), "ccp-enlace ccp-ya-tengo", () => entradaDeArchivo.click(), "ccp-ya-tengo"));
+      // Quien llega a otra compu: sus campañas ya activadas se piden desde el panel, con la misma cuenta.
+      if (tusHay) b.append(enlaceDeTusCampanas("ccp-enlace ccp-tus", "ccp-tus"));
     }
     return b;
   }
@@ -1224,6 +1254,12 @@ export function montarCreador(raiz: HTMLElement, deps: DepsDelCreador): Creador 
 
   // La vista avisa cuando está lista y recién ahí se le manda el estado: antes de eso no hay quién escuche.
   pintarTodo();
+  if (deps.tusDisponible) {
+    void deps
+      .tusDisponible()
+      .then((hay) => (hay === true ? mostrarTusCampanas() : undefined))
+      .catch(() => undefined);
+  }
 
   return {
     pintar: () => {

@@ -1020,3 +1020,40 @@ describe("la campaña por activar, sin sesión", () => {
     expect($<HTMLElement>(p, "#cpo-de")?.hidden).toBe(false);
   });
 });
+
+describe("la campaña activada antes de tiempo, con Tus campañas", () => {
+  const conApertura = async (conTus: boolean, salaConLaFuncion: boolean | null = true): Promise<string> => {
+    const x = armar();
+    x.m.red = "mainnet";
+    if (conTus) {
+      x.m.deps.tus = {
+        alAbrir: () => false,
+        disponible: async () => salaConLaFuncion,
+        listar: async () => ({ ok: true, campanas: [] }),
+        recuperar: async () => ({ ok: false, motivo: "red" }),
+        armarSorteo: async () => true,
+        ayuda: () => "mailto:ayuda@prueba.test",
+      };
+    }
+    const p = nuevoPanel(x.m);
+    const abre = AHORA + 2 * 86_400_000;
+    const crudo = borradorDe({ abre_ms: abre, cierra_ms: abre + 3_600_000, sorteo_ms: abre + 7_200_000, recibir_hasta_ms: abre + 9 * 86_400_000 });
+    await eligiendo(x, p, crudo);
+    boton(p, "Pagar 2,40").click();
+    await vi.waitFor(() => expect(texto(p, "#cpo-h")).toBe("Tu campaña ya está activada"));
+    return texto(p, "#cpo-linea");
+  };
+
+  it("la línea suma cómo seguir en otra compu", async () => {
+    expect(await conApertura(true)).toMatch(/^Volvé el .+ desde las .+ para abrir la inscripción. En otra compu, entrá con esta misma cuenta y tocá Tus campañas.$/u);
+  });
+
+  it("sin Tus campañas es la línea de siempre", async () => {
+    expect(await conApertura(false)).toMatch(/^Volvé el .+ desde las .+ para abrir la inscripción.$/u);
+  });
+
+  it("con una sala que todavía no tiene la función, o que no contestó, no promete Tus campañas", async () => {
+    expect(await conApertura(true, false)).toMatch(/^Volvé el .+ desde las .+ para abrir la inscripción.$/u);
+    expect(await conApertura(true, null)).toMatch(/^Volvé el .+ desde las .+ para abrir la inscripción.$/u);
+  });
+});

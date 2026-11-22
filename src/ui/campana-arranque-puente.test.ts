@@ -101,3 +101,44 @@ describe("el arranque del sorteo de una empresa", () => {
     expect(h.arrancarPremio).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("la campaña de otra cuenta", () => {
+  const A = "G" + "A".repeat(55);
+  const B = "G" + "B".repeat(55);
+  const ponerSalaDe = (cuenta: string, red: string): void => {
+    ponerSala("abierta", red);
+    const todo = JSON.parse(localStorage.getItem("tinkazo.campana.org") ?? "{}") as Record<string, Record<string, unknown>>;
+    todo[red] = { ...todo[red], cuenta };
+    localStorage.setItem("tinkazo.campana.org", JSON.stringify(todo));
+  };
+  const conectar = async (cuenta: string | null): Promise<void> => {
+    const { setActiveWallet } = await import("../stellar/wallet-lite");
+    setActiveWallet(cuenta === null ? null : ({ kind: "guest", label: "prueba", address: cuenta } as never));
+  };
+
+  it("con otra cuenta conectada no monta el panel y no borra lo guardado", async () => {
+    const { network } = await import("../stellar/config");
+    ponerSalaDe(A, network.name);
+    await conectar(B);
+    await arrancar();
+    await dejarCorrer();
+    expect(h.panel).not.toHaveBeenCalled();
+    expect(localStorage.getItem("tinkazo.campana.org")).toContain("T".repeat(22));
+    await conectar(null);
+  });
+
+  it("con la cuenta dueña, o sin sesión todavía, monta el panel", async () => {
+    const { network } = await import("../stellar/config");
+    ponerSalaDe(A, network.name);
+    await conectar(A);
+    await arrancar();
+    await dejarCorrer();
+    expect(h.panel).toHaveBeenCalledTimes(1);
+    h.panel.mockReset();
+    vi.resetModules();
+    await conectar(null);
+    await arrancar();
+    await dejarCorrer();
+    expect(h.panel).toHaveBeenCalledTimes(1);
+  });
+});

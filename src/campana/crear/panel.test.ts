@@ -12,7 +12,8 @@ import { armarCampana } from "./armar";
 import { basesAutomaticas } from "./bases";
 import { CLAVE_DE_GUARDADO, formularioInicial, type FormularioDeCampana } from "./estado";
 import { instanteDe } from "./horas";
-import { accionesDelFinal, escalaDelCelular, montarCreador, pestanaDelPaso, type Creador, type DepsDelCreador } from "./panel";
+import { DIRECCION_DE_TUS_CAMPANAS, accionesDelFinal, escalaDelCelular, montarCreador, pestanaDelPaso, type Creador, type DepsDelCreador } from "./panel";
+import { DIRECCION_DE_LA_CAMPANA } from "../../ui/campana-pendiente";
 
 const AHORA = Date.UTC(2026, 10, 18, 15, 0);
 const LA_PAZ = "America/La_Paz";
@@ -743,6 +744,58 @@ describe("abrir una campaña", () => {
     clic("ccp-bajar-borrador");
     expect(m.bajadas[0]?.nombre).toBe("campana-k3f9.txt");
     expect(JSON.parse(m.bajadas[0]?.texto ?? "{}")).toMatchObject({ nombre: "Nora Café", sufijo: "k3f9" });
+  });
+
+  it("Tus campañas lleva al panel de quien organiza en el modo oficial, la misma dirección de Activar mi campaña", () => {
+    expect(DIRECCION_DE_TUS_CAMPANAS).toBe(DIRECCION_DE_LA_CAMPANA);
+    crear();
+    const enlace = q<HTMLAnchorElement>("#ccp-tus");
+    expect(enlace.getAttribute("href")).toBe("/?campana&red=oficial");
+    expect(enlace.textContent).toBe("Tus campañas");
+    expect(enlace.className).toContain("ccp-enlace");
+    // También está en el menú de los tres puntos, con cualquier cosa cargada.
+    expect(q<HTMLAnchorElement>("#ccp-tus-mas").getAttribute("href")).toBe("/?campana&red=oficial");
+    escribir("ccp-nombre", "Nora Café");
+    clic("ccp-seguir");
+    clic("ccp-ir-1");
+    expect(existe("#ccp-tus")).toBe(false);
+    expect(q<HTMLAnchorElement>("#ccp-tus-mas").textContent).toBe("Tus campañas");
+  });
+
+  it("con la sala que todavía no tiene Tus campañas, los dos enlaces no aparecen, y con la que sí, se suman sin dibujar los pasos", async () => {
+    // Una sala sin la función (contesta que no) o que no contestó: ningún enlace que lleve a algo que no existe.
+    for (const respuesta of [false, null]) {
+      document.body.innerHTML = "";
+      crear({ tusDisponible: () => Promise.resolve(respuesta) });
+      await asentar();
+      expect(existe("#ccp-tus")).toBe(false);
+      expect(existe("#ccp-tus-mas")).toBe(false);
+    }
+    document.body.innerHTML = "";
+    let responder: (hay: boolean) => void = () => undefined;
+    crear({ tusDisponible: () => new Promise<boolean>((seguir) => (responder = seguir)) });
+    expect(existe("#ccp-tus")).toBe(false);
+    // Quien está escribiendo no pierde el campo cuando llega la respuesta.
+    escribir("ccp-nombre", "Nora");
+    const campo = q<HTMLInputElement>("#ccp-nombre");
+    responder(true);
+    await asentar();
+    expect(q<HTMLInputElement>("#ccp-nombre")).toBe(campo);
+    expect(q<HTMLAnchorElement>("#ccp-tus-mas").getAttribute("href")).toBe("/?campana&red=oficial");
+  });
+
+  it("el enlace del primer paso aparece con la sala que la tiene y con el formulario vacío", async () => {
+    crear({ tusDisponible: () => Promise.resolve(true) });
+    await asentar();
+    expect(q<HTMLAnchorElement>("#ccp-tus").getAttribute("href")).toBe("/?campana&red=oficial");
+    expect(document.querySelectorAll("#ccp-tus")).toHaveLength(1);
+  });
+
+  it("en inglés el enlace a Tus campañas sale en inglés", () => {
+    h.lang = "en";
+    crear();
+    expect(q<HTMLAnchorElement>("#ccp-tus").textContent).toBe("Your campaigns");
+    h.lang = "es";
   });
 
   it("con el formulario vacío el paso 1 ofrece abrir una campaña, y con algo cargado ya no", () => {

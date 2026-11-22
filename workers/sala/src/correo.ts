@@ -48,6 +48,10 @@ export interface VariablesDeCorreo {
   CORREO_DE?: string;
   CORREO_GANADORAS?: string;
   POLLAR_SECRETO?: string;
+  /** Qué versión del correo a quien gana se manda a todas. Solo "2" elige la B (ver `versionDelCorreo`). */
+  CORREO_VERSION?: string;
+  /** Con "1" la sala acepta la marca de correo confirmado del celular (ver `marcaDeCorreoPrendida`). Nace apagada. */
+  CORREO_MARCA?: string;
 }
 
 /** Lo que se sabe de una cuenta ganadora para escribirle: solo para armar el correo, nunca se guarda. */
@@ -61,6 +65,8 @@ export interface DatosDeLaPersona {
 export interface CuentaParaAvisar {
   cuenta: string;
   puesto: number;
+  /** Su correo salió con la versión B: la cuenta quedó protegida y el correo es el de la sesión. Sin esto, la versión A. */
+  confirmo?: boolean;
 }
 
 /** Lo que la sala le da al Worker para avisar: las cuentas reservadas y lo que dice la campaña firmada. */
@@ -240,20 +246,43 @@ const PALABRAS = {
     saludo: "Hola {nombre}.",
     saludoSinNombre: "Hola.",
     ganaste: "Ganaste {premio} en el sorteo de {empresa}.",
-    pedido: "Para recibirlo, abrí este enlace y entrá con la misma cuenta de Google con la que te anotaste:",
+    // Versión A, la que es cierta siempre: la cuenta reconoce el navegador y no el aparato, así que abrirlo desde otra
+    // aplicación (la del correo, por ejemplo) no alcanza.
+    pedido:
+      "Para recibirlo, abrí este enlace en el mismo celular o compu, y en el mismo navegador, donde te anotaste. " +
+      "Entrá con la misma cuenta de Google:",
+    ayuda: "Si no podés abrirlo ahí, respondé este correo.",
+    // Versión B, cierta solo si la cuenta quedó protegida y el correo es el de la sesión: otro aparato pide un código.
+    pedidoConfirmado:
+      "Para recibirlo, abrí este enlace desde cualquier celular o compu y entrá con la misma cuenta de Google con la que te anotaste:",
+    ayudaConfirmado: "Si entrás desde otro lado, te llega un código a este correo para confirmar que sos vos.",
     boton: "Recibir tu premio",
     cierre: "Recibir tu premio es gratis. Tinkazo nunca te pide una contraseña ni un pago.",
     dinero: "{monto} dólares digitales",
+    asuntoToma: "Tu campaña de {empresa} se abrió en otra compu",
+    toma: "Tu campaña de {empresa} se abrió con tu cuenta en otra compu a las {hora}.",
+    tomaSiNo: "Si fuiste vos, no hace falta hacer nada. Si no fuiste vos, respondé este correo.",
+    cierreToma: "Tinkazo nunca te pide una contraseña ni un pago.",
   },
   en: {
     asunto: "You won the {empresa} draw",
     saludo: "Hi {nombre}.",
     saludoSinNombre: "Hi.",
     ganaste: "You won {premio} in the {empresa} draw.",
-    pedido: "To receive it, open this link and sign in with the same Google account you signed up with:",
+    pedido:
+      "To receive it, open this link on the same phone or computer, and in the same browser, where you signed up. " +
+      "Sign in with the same Google account:",
+    ayuda: "If you can't open it there, reply to this email.",
+    pedidoConfirmado:
+      "To receive it, open this link on any phone or computer and sign in with the same Google account you signed up with:",
+    ayudaConfirmado: "If it's a different one, a code will come to this email to confirm it's you.",
     boton: "Get your prize",
     cierre: "Receiving your prize is free. Tinkazo never asks you for a password or a payment.",
     dinero: "{monto} digital dollars",
+    asuntoToma: "Your {empresa} campaign was opened on another computer",
+    toma: "Your {empresa} campaign was opened with your account on another computer at {hora}.",
+    tomaSiNo: "If it was you, there's nothing to do. If it wasn't you, reply to this email.",
+    cierreToma: "Tinkazo never asks you for a password or a payment.",
   },
 } as const;
 
@@ -296,18 +325,38 @@ export interface DatosDelTexto {
   premio: string;
   empresa: string;
   enlace: string;
+  /**
+   * La versión B del pedido y la ayuda: solo si se sabe que la cuenta quedó protegida y que el correo es el de la sesión. Sin
+   * esto, o en falso, sale la versión A, que es cierta siempre.
+   */
+  confirmo?: boolean;
+}
+
+/** La versión del correo a quien gana que se manda a todas: solo el valor exacto "2" elige la B. Cualquier otro es la A. */
+export function versionDelCorreo(env: { CORREO_VERSION?: string }): "1" | "2" {
+  return env.CORREO_VERSION === "2" ? "2" : "1";
+}
+
+/**
+ * Si el Worker acepta la marca de correo confirmado que manda el celular. Nace apagada: con "0" o sin la variable, la marca
+ * se ignora y a cada cuenta le sale la versión que dice `CORREO_VERSION`. Además de "1" pide todo lo que pide el correo.
+ */
+export function marcaDeCorreoPrendida(env: VariablesDeCorreo): boolean {
+  return env.CORREO_MARCA === "1" && correoPrendido(env);
 }
 
 /** El asunto, el texto plano y el HTML. El HTML lleva todo escapado, sin imágenes de afuera y sin nada que rastree. */
 export function textoDelCorreo(idioma: IdiomaDelCorreo, datos: DatosDelTexto): ContenidoDelCorreo {
   const p = PALABRAS[idioma];
+  const pedido = datos.confirmo === true ? p.pedidoConfirmado : p.pedido;
+  const ayuda = datos.confirmo === true ? p.ayudaConfirmado : p.ayuda;
   const empresa = limpiarTexto(datos.empresa, MAX_EMPRESA) || NOMBRE_DEL_REMITENTE;
   const nombre = limpiarTexto(datos.nombre, MAX_NOMBRE);
   const premio = limpiarTexto(datos.premio, MAX_EMPRESA);
   const asunto = llenar(p.asunto, { empresa });
   const saludo = nombre === "" ? p.saludoSinNombre : llenar(p.saludo, { nombre });
   const ganaste = llenar(p.ganaste, { premio, empresa });
-  const texto = [saludo, "", ganaste, "", p.pedido, datos.enlace, "", p.cierre].join("\n");
+  const texto = [saludo, "", ganaste, "", pedido, datos.enlace, "", ayuda, "", p.cierre].join("\n");
   const enlace = escaparHtml(datos.enlace);
   const parrafo = "font-size:17px;line-height:1.5;margin:0 0 16px;";
   const chico = "font-size:14px;line-height:1.5;margin:0 0 16px;";
@@ -323,15 +372,81 @@ export function textoDelCorreo(idioma: IdiomaDelCorreo, datos: DatosDelTexto): C
     '<div style="max-width:480px;margin:0 auto;background:#ffffff;padding:24px;border-radius:12px;">',
     `<p style="${parrafo}">${escaparHtml(saludo)}</p>`,
     `<p style="${parrafo}">${escaparHtml(ganaste)}</p>`,
-    `<p style="${parrafo}">${escaparHtml(p.pedido)}</p>`,
+    `<p style="${parrafo}">${escaparHtml(pedido)}</p>`,
     `<p style="margin:24px 0;"><a href="${enlace}" style="${boton}">${escaparHtml(p.boton)}</a></p>`,
     `<p style="${chico}word-break:break-all;"><a href="${enlace}" style="color:#1f1b16;">${enlace}</a></p>`,
+    `<p style="${chico}">${escaparHtml(ayuda)}</p>`,
     `<p style="${chico}color:#5b554c;">${escaparHtml(p.cierre)}</p>`,
     "</div>",
     "</body>",
     "</html>",
   ].join("\n");
   return { asunto, texto, html };
+}
+
+/** Los datos del aviso de que la campaña se abrió en otra compu. La hora ya viene escrita, en la zona de la campaña. */
+export interface DatosDelAvisoDeToma {
+  nombre: string | null;
+  empresa: string;
+  hora: string;
+}
+
+/** La hora de un instante en la zona de la campaña, de 00:00 a 23:59, como la escribe la pantalla de la campaña. */
+export function horaDeLaToma(ms: number, zona: string, idioma: IdiomaDelCorreo): string {
+  try {
+    return new Intl.DateTimeFormat(idioma === "es" ? "es-BO" : "en-US", {
+      timeZone: zona,
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(ms);
+  } catch {
+    // Una zona que el motor no acepta no tiene que perder el aviso: la hora queda en la del servidor.
+    return new Intl.DateTimeFormat(idioma === "es" ? "es-BO" : "en-US", {
+      timeZone: "UTC",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(ms);
+  }
+}
+
+/**
+ * El correo corto a quien organiza cuando su campaña se abre en otra compu: es la defensa de quien perdió su
+ * sesión. Sin enlaces ni botones, y sin dirección escrita: "respondé este correo" llega a la casilla de contacto.
+ */
+export function textoDelCorreoDeToma(idioma: IdiomaDelCorreo, datos: DatosDelAvisoDeToma): ContenidoDelCorreo {
+  const p = PALABRAS[idioma];
+  const empresa = limpiarTexto(datos.empresa, MAX_EMPRESA) || NOMBRE_DEL_REMITENTE;
+  const nombre = limpiarTexto(datos.nombre, MAX_NOMBRE);
+  const hora = limpiarTexto(datos.hora, 20);
+  const asunto = llenar(p.asuntoToma, { empresa });
+  const saludo = nombre === "" ? p.saludoSinNombre : llenar(p.saludo, { nombre });
+  const toma = llenar(p.toma, { empresa, hora });
+  const texto = [saludo, "", toma, "", p.tomaSiNo, "", p.cierreToma].join("\n");
+  const parrafo = "font-size:17px;line-height:1.5;margin:0 0 16px;";
+  const chico = "font-size:14px;line-height:1.5;margin:0 0 16px;";
+  const html = [
+    "<!doctype html>",
+    `<html lang="${idioma}">`,
+    '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+    `<title>${escaparHtml(asunto)}</title></head>`,
+    '<body style="margin:0;padding:24px;background:#f6f4ef;font-family:Arial,Helvetica,sans-serif;color:#1f1b16;">',
+    '<div style="max-width:480px;margin:0 auto;background:#ffffff;padding:24px;border-radius:12px;">',
+    `<p style="${parrafo}">${escaparHtml(saludo)}</p>`,
+    `<p style="${parrafo}">${escaparHtml(toma)}</p>`,
+    `<p style="${parrafo}">${escaparHtml(p.tomaSiNo)}</p>`,
+    `<p style="${chico}color:#5b554c;">${escaparHtml(p.cierreToma)}</p>`,
+    "</div>",
+    "</body>",
+    "</html>",
+  ].join("\n");
+  return { asunto, texto, html };
+}
+
+/** El interruptor del aviso de toma: nace apagado, y además de "1" pide todo lo que pide el correo a quien gana. */
+export function correoDeTomaPrendido(env: VariablesDeCorreo & { CORREO_TOMA?: string }): boolean {
+  return env.CORREO_TOMA === "1" && correoPrendido(env);
 }
 
 /**
@@ -412,7 +527,7 @@ async function conTope<T>(promesa: Promise<T>, ms: number): Promise<T | typeof T
  * Avisa por correo a una cuenta reservada: busca su correo, arma el texto y lo manda. Devuelve si salió un correo.
  * Nunca lanza: lo que falla deja solo un código fijo en el registro.
  */
-async function avisarACuenta(pedido: PedidoDeAviso, { cuenta, puesto }: CuentaParaAvisar): Promise<boolean> {
+async function avisarACuenta(pedido: PedidoDeAviso, { cuenta, puesto, confirmo }: CuentaParaAvisar): Promise<boolean> {
   const registrar = pedido.registrar ?? (() => {});
   try {
     const persona = await correoDeLaCuenta(cuenta, pedido.llamar, registrar);
@@ -422,6 +537,7 @@ async function avisarACuenta(pedido: PedidoDeAviso, { cuenta, puesto }: CuentaPa
       premio: premioDelPuesto(pedido.aviso.premios, puesto, persona.idioma),
       empresa: pedido.aviso.empresa,
       enlace: pedido.enlace,
+      confirmo: confirmo === true,
     });
     return await pedido.mensajero.mandar(persona.correo, contenido);
   } catch {
