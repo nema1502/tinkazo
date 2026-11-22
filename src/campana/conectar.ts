@@ -24,6 +24,7 @@ import {
 } from "../sala/campana";
 import type { NetworkName } from "../stellar/config";
 import { cargarCampana, type ResultadoDeCarga } from "./carga";
+import { abrirElPremioDeLaCampana } from "../ui/participar";
 import type { DepsDelCelular, EstadoPublico, MotivoDeAlta, ResultadoDelAlta, SesionDelCelular } from "./celular";
 // El paso «Dejá tu cuenta lista» y la comprobación propia del sello: se bajan solo cuando hacen falta (vuelo del wifi de
 // un evento) y las pruebas los reemplazan por piezas falsas.
@@ -262,7 +263,12 @@ export function depsConectadas(p: PiezasDelCelular): DepsDelCelular {
       // El celular ya llega a Terminó por el estado y por `yo`: acá solo le sirve lo que se pudo leer.
       return r === "terminada" ? "red" : r;
     },
-    recibir: () => p.ir(destinoDeRecibir(p.red)),
+    // El gancho «si ganó» abre la pantalla del ganador de la pieza #175 con los datos de la campaña y la
+    // cuenta de la sesión; sin la bandera o sin pieza, sigue como siempre: la ventana de saldo con ?premio=1.
+    recibir: () => {
+      if (!abrirElPremioDeLaCampana({ campana: p.campana, cuenta: cuentaActual() }))
+        p.ir(destinoDeRecibir(p.red));
+    },
     salir: async () => {
       actual = null;
       olvidarRechazos();
