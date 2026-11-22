@@ -62,7 +62,8 @@ export interface DepsDelPaso {
   huella: (lineas: readonly string[]) => string;
   modoTurnos: () => boolean;
   ponerModoTurnos: (si: boolean) => void;
-  ponerEtiquetas: (e: ReadonlyMap<string, string>) => void;
+  /** Las etiquetas de la lista, con la palabra de lo que cuentan: las de una campaña son de personas. */
+  ponerEtiquetas: (e: ReadonlyMap<string, string>, de?: "equipos" | "personas") => void;
   setList: (texto: string) => void;
   ponerPremio: (texto: string) => void;
   ponerGanadores: (n: number) => void;
@@ -205,7 +206,7 @@ export function crearPaso(d: DepsDelPaso): PasoDeLaCampana {
 
     // Con el orden de turnos prendido, el premio se cambia al sellar: se apaga antes de poner el premio de la campaña.
     if (d.modoTurnos()) d.ponerModoTurnos(false);
-    d.ponerEtiquetas(armada.etiquetas);
+    d.ponerEtiquetas(armada.etiquetas, "personas");
     d.setList(armada.lineas.join("\n"));
     d.ponerPremio(d.premioEnEspanol(campana.premios[0] ?? 0n));
     d.ponerGanadores(premios);

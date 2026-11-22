@@ -340,3 +340,45 @@ describe("la campaña por activar que dejó crear-campana.html", () => {
     expect(h.montar).not.toHaveBeenCalled();
   });
 });
+describe("la marca de que el panel viene (para que el editor no se pinte antes)", () => {
+  const marca = (): boolean => document.documentElement.hasAttribute("data-campana");
+  afterEach(() => document.documentElement.removeAttribute("data-campana"));
+
+  it("con ?campana queda puesta desde que arranca y se saca cuando el panel ya está montado", async () => {
+    history.replaceState(null, "", "/?campana&red=oficial");
+    let enElMontaje: boolean | null = null;
+    h.montar.mockImplementation(() => void (enElMontaje = marca()));
+    await arrancar();
+    expect(marca()).toBe(true);
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    // Al montar todavía está: se saca recién después, así no hay un cuadro sin ninguna de las dos cosas.
+    expect(enElMontaje).toBe(true);
+    await vi.waitFor(() => expect(marca()).toBe(false));
+  });
+
+  it("si el panel no se puede montar, la marca se saca igual y el editor no queda escondido", async () => {
+    history.replaceState(null, "", "/?campana&red=oficial");
+    h.montar.mockImplementation(() => {
+      throw new Error("no cargó");
+    });
+    await arrancar();
+    expect(marca()).toBe(true);
+    await vi.waitFor(() => expect(h.montar).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(marca()).toBe(false));
+  });
+
+  it("con la campaña recordada en esta compu también se pone", async () => {
+    localStorage.setItem("tinkazo.campana.borrador", JSON.stringify({ evento: "panaderia-la-estrella-x", empresa: { nombre: "La Estrella" } }));
+    await arrancar();
+    expect(marca()).toBe(true);
+    await vi.waitFor(() => expect(marca()).toBe(false));
+  });
+
+  it("sin campaña, o con una demostración, no se pone nunca", async () => {
+    await arrancar();
+    expect(marca()).toBe(false);
+    history.replaceState(null, "", "/?campana&demo=race");
+    await arrancar();
+    expect(marca()).toBe(false);
+  });
+});

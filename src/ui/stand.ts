@@ -11,6 +11,7 @@ import { GUARDA_DESPUES_DE_SOLTAR_MS, refreshFreezeLabel, rotarJuego, unfreeze }
 import { newDraw } from "./draw";
 import { actualizarPaso } from "./siguiente";
 import { abrirDialogo, botonPrincipal } from "./dialogo";
+import { campanaNoSePisa } from "./campana-no-pisa";
 
 /**
  * El modo stand, en la página: rondas de ejemplo con los nombres de quienes
@@ -114,6 +115,8 @@ function avisarQueNoSeEntra(clave: string): void {
 /** Entra al modo stand. Nunca con un sorteo sellado esperando ni en camino, ni en la demo, ni en el ensayo. */
 export function entrarAlStand(): void {
   if (enStand()) return;
+  // Con una campaña viva el cuadro es el suyo: el stand lo vaciaría (campana-no-pisa.ts).
+  if (campanaNoSePisa()) return;
   if (app.frozen || listaBloqueada()) {
     avisarQueNoSeEntra("standNoSorteo");
     return;

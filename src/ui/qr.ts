@@ -44,11 +44,57 @@ export async function qrDataUrl(text: string): Promise<string | null> {
  * 140 px quedaba en 1,2 px por módulo y no lo leía ningún celular (revisión
  * del 16 de octubre de 2026). `ancho` es lo que se quiere ocupar, en px de CSS.
  */
-export async function pintarQr(img: HTMLImageElement, text: string, ancho = SIZE): Promise<boolean> {
+export async function pintarQr(img: HTMLImageElement, text: string, ancho = SIZE, fijo = false): Promise<boolean> {
+  if (fijo) return pintarQrFijo(img, text, ancho);
   const qr = await dibujar(text, ancho);
   if (!qr) return false;
   img.src = qr.url;
   img.style.width = img.style.height = `${qr.lado}px`;
+  return true;
+}
+
+/** Lo menos que mide un módulo del QR fijo: en px de CSS al elegir el tamaño y en px del equipo al dibujarlo. */
+const MODULO_FIJO_MIN = 3;
+
+/**
+ * Las medidas del QR de tamaño fijo, para un QR de `total` módulos (con su margen) en un espacio de `disponible` px de CSS.
+ *
+ * - El tamaño en pantalla (`lado`) es un número entero de px de CSS por módulo y NO mira la densidad de la pantalla: con
+ *   el zoom o en otra pantalla el QR mide lo mismo.
+ * - El lienzo se dibuja con `cell` px del equipo por módulo, que alcanza para la densidad de ahora (nunca menos de 3). Con una
+ *   densidad entera es exacto: cada módulo cae en píxeles enteros y nada se reescala.
+ */
+export function medidasFijas(total: number, disponible: number, dpr: number): { modulo: number; lado: number; cell: number } {
+  const modulo = Math.max(MODULO_FIJO_MIN, Math.floor(disponible / total));
+  return { modulo, lado: modulo * total, cell: Math.max(MODULO_FIJO_MIN, Math.ceil(modulo * dpr)) };
+}
+
+/** Cuánto lugar tiene el QR en su recuadro, en px de CSS: lo que mide el recuadro menos el borde, y como mucho `tope`. */
+function lugarDelQr(img: HTMLImageElement, tope: number): number {
+  const caja = img.parentElement;
+  const ancho = caja ? caja.clientWidth : 0;
+  if (!(ancho > 0)) return tope;
+  const borde = (Number.parseFloat(getComputedStyle(img).borderLeftWidth) || 0) * 2;
+  return Math.max(0, Math.min(tope, ancho - borde));
+}
+
+/**
+ * El QR de un panel que se queda a la vista: mide siempre lo mismo en pantalla, aunque cambie el zoom o la densidad de la
+ * pantalla, y se dibuja nítido para la densidad de ese momento. Quien lo llama lo vuelve a pedir cuando cambia la ventana.
+ * El tamaño se pone antes que la imagen, para que nada se mueva mientras carga.
+ */
+export async function pintarQrFijo(img: HTMLImageElement, text: string, ancho = SIZE): Promise<boolean> {
+  const turno = String(Number(img.dataset.qrTurno ?? "0") + 1);
+  img.dataset.qrTurno = turno;
+  const qr = await armar(text);
+  // Otro dibujo más nuevo ya salió: este no pisa a ese.
+  if (!qr || img.dataset.qrTurno !== turno) return false;
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  const m = medidasFijas(qr.total, lugarDelQr(img, ancho), dpr);
+  const canvas = cuadro(qr, m.cell);
+  if (!canvas) return false;
+  img.style.width = img.style.height = `${m.lado}px`;
+  img.src = canvas.toDataURL("image/png");
   return true;
 }
 
@@ -77,6 +123,25 @@ export async function qrLienzo(
   ancho: number,
   dpr = Math.min(window.devicePixelRatio || 1, 3),
 ): Promise<{ canvas: HTMLCanvasElement; lado: number; modulo: number; modulos: number } | null> {
+  const qr = await armar(text);
+  if (!qr) return null;
+  // Cada módulo es un número entero de píxeles del equipo, y nunca menos de
+  // dos: si no, el redondeo deja costuras y los lectores se confunden. Se
+  // muestra a ese mismo tamaño (`lado`), sin que el navegador lo estire.
+  const cell = Math.max(2, Math.floor((ancho * dpr) / qr.total));
+  const canvas = cuadro(qr, cell);
+  if (!canvas) return null;
+  return { canvas, lado: canvas.width / dpr, modulo: cell / dpr, modulos: qr.total };
+}
+
+/** Un QR ya armado: cuántos módulos mide de lado con su margen, y cuáles son oscuros. */
+interface QrArmado {
+  count: number;
+  total: number;
+  oscuro: (fila: number, columna: number) => boolean;
+}
+
+async function armar(text: string): Promise<QrArmado | null> {
   const { default: qrcode } = await import("qrcode-generator");
   let qr: ReturnType<typeof qrcode>;
   try {
@@ -91,15 +156,13 @@ export async function qrLienzo(
   } catch {
     return null;
   }
-
   const count = qr.getModuleCount();
-  const total = count + QUIET * 2;
-  // Cada módulo es un número entero de píxeles del equipo, y nunca menos de
-  // dos: si no, el redondeo deja costuras y los lectores se confunden. Se
-  // muestra a ese mismo tamaño (`lado`), sin que el navegador lo estire.
-  const cell = Math.max(2, Math.floor((ancho * dpr) / total));
-  const side = cell * total;
+  return { count, total: count + QUIET * 2, oscuro: (r, c) => qr.isDark(r, c) };
+}
 
+/** El QR dibujado con `cell` píxeles del equipo por módulo. */
+function cuadro(q: QrArmado, cell: number): HTMLCanvasElement | null {
+  const side = cell * q.total;
   const canvas = document.createElement("canvas");
   canvas.width = side;
   canvas.height = side;
@@ -113,13 +176,13 @@ export async function qrLienzo(
   c.fillStyle = "#ffffff";
   c.fillRect(0, 0, side, side);
   c.fillStyle = "#191919";
-  for (let r = 0; r < count; r++) {
-    for (let col = 0; col < count; col++) {
-      if (!qr.isDark(r, col)) continue;
+  for (let r = 0; r < q.count; r++) {
+    for (let col = 0; col < q.count; col++) {
+      if (!q.oscuro(r, col)) continue;
       c.fillRect((col + QUIET) * cell, (r + QUIET) * cell, cell, cell);
     }
   }
-  return { canvas, lado: side / dpr, modulo: cell / dpr, modulos: total };
+  return canvas;
 }
 
 async function dibujar(text: string, ancho: number): Promise<{ url: string; lado: number } | null> {

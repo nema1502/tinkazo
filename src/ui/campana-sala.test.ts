@@ -349,6 +349,57 @@ describe("abrir la inscripción", () => {
 });
 
 describe("el pase del QR", () => {
+  it("pide el QR de tamaño fijo y lo dibuja de nuevo al cambiar la ventana, sin esperar el próximo pase", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    expect(m.qrs).toHaveLength(1);
+    expect(m.qrs[0]?.fijo).toBe(true);
+    // Un zoom o una ventana que cambia de pantalla dispara varios avisos seguidos: sale un solo dibujo.
+    window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new Event("resize"));
+    await m.correr(300);
+    expect(m.qrs).toHaveLength(2);
+    expect(m.qrs[1]).toEqual({ texto: m.qrs[0]?.texto, ancho: 300, fijo: true });
+  });
+
+  it("con el panel cerrado el cambio de ventana no dibuja nada", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    cerrarTodos();
+    window.dispatchEvent(new Event("resize"));
+    await m.correr(300);
+    expect(m.qrs).toHaveLength(1);
+  });
+
+  it("no dibuja el QR mientras su recuadro está escondido y lo dibuja de nuevo al volver a verse", async () => {
+    const m = mundo();
+    const p = nuevoPanel(m);
+    await abrirInscripcion(m, p);
+    await alta(m, 1, "Ana");
+    await alta(m, 2, "Nora");
+    await vi.waitFor(() => expect(texto(p, "#cpo-n")).toBe("2"));
+    expect(m.qrs).toHaveLength(1);
+    boton(p, "Cerrar la lista").click();
+    expect(vistaDe(p)).toBe("confirmar");
+    expect($(p, "#cpo-qr").hidden).toBe(true);
+    // El pase se renueva con el recuadro escondido: no hay dónde medir, así que no se dibuja nada.
+    await m.correr(120_000);
+    expect(m.pases).toBe(2);
+    expect(m.qrs).toHaveLength(1);
+    // Un cambio de ventana con el recuadro escondido tampoco dibuja.
+    window.dispatchEvent(new Event("resize"));
+    await m.correr(300);
+    expect(m.qrs).toHaveLength(1);
+    // Al volver a abierta el recuadro se ve y el QR se dibuja ahí, ya medido, con el enlace del pase nuevo.
+    boton(p, "Seguir abierta").click();
+    expect($(p, "#cpo-qr").hidden).toBe(false);
+    expect(m.qrs).toHaveLength(2);
+    expect(new URL(m.qrs[1]?.texto ?? "").searchParams.get("p")).toBe("PASE00000002");
+    expect(m.qrs[1]?.fijo).toBe(true);
+  });
+
   it("en el instante en que vence se pide otro y el QR cambia", async () => {
     const m = mundo();
     const p = nuevoPanel(m);

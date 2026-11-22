@@ -130,7 +130,7 @@ export interface Mundo {
   respuestaAlEstado: Resultado<EstadoDeSala>[];
   borradas: number;
   cerradas: { sala: SalaDeCampana; filas: readonly FilaDeCampana[] }[];
-  qrs: { texto: string; ancho: number }[];
+  qrs: { texto: string; ancho: number; fijo?: boolean }[];
   /** Las páginas que entrega cada `consultar`, en orden. */
   paginas: EquipoDeSala[][];
   consultas: number;
@@ -289,8 +289,8 @@ export function mundo(opciones: { canal?: () => CanalDeCampana | null; almacen?:
       };
     },
     descifrar: descifrarEquipo,
-    qr: async (_img, texto, ancho) => {
-      m.qrs.push({ texto, ancho });
+    qr: async (_img, texto, ancho, fijo) => {
+      m.qrs.push({ texto, ancho, fijo });
       return true;
     },
     almacen: m.almacen,
